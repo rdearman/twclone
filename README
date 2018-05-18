@@ -1,0 +1,40 @@
+Readme for TWClone
+Website: http://twclone.sourceforge.net
+
+Instructions on installation can be found in the INSTALL file.
+
+Files to note:
+
+1) PROTOCOL
+	This file lists the various commands to and from the server.
+	Good thing to read for those who are interested in helping,
+	or making their own clients. Don't forget about UPDATE
+	It's what allows for real time messages and movement.
+2) INSTALL
+	How to install.
+3) LICENSE
+	The GNU Public License
+
+Note on data files:
+	If you want to edit the data files by hand look at the header(.h) files.
+	They should explain in what order the data is stored. Also if your editor
+	of choice has a REPLACE option for editing files, use it lest BadThings(tm)
+	happen.
+
+Quick Install
+=============
+$ ./configure
+$ make
+$ make install
+
+Developers
+==========
+Run "./gen" to generate Makefile.in, configure, and other files.  Note
+that if you run "make" and Makefile.am or configure.in have been
+changed, autoconf and automake will be automatically run, so there is
+really no need to do this.
+
+Run "./cvs2cl" to generate the ChangeLog file off of the CVS log
+messages.  Something that bears noting: when checking in the ChangeLog,
+please do not use a message.  Otherwise, the ChangeLog will turn into
+some recursive nightmare filled with messages about itself.

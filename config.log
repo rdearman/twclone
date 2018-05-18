@@ -1,0 +1,79 @@
+This file contains any messages produced by compilers while
+running configure, to aid debugging if configure makes a mistake.
+
+configure:563: checking for a BSD compatible install
+configure:616: checking whether build environment is sane
+configure:687: checking for mawk
+configure:717: checking whether make sets ${MAKE}
+configure:849: checking host system type
+configure:882: checking for a BSD compatible install
+configure:937: checking for gcc
+configure:1050: checking whether the C compiler (gcc  ) works
+configure:1066: gcc -o conftest    conftest.c  1>&5
+configure:1063:1: warning: return type defaults to 'int' [-Wimplicit-int]
+ main(){return(0);}
+ ^
+configure:1092: checking whether the C compiler (gcc  ) is a cross-compiler
+configure:1097: checking whether we are using GNU C
+configure:1106: gcc -E conftest.c
+configure:1125: checking whether gcc accepts -g
+configure:1164: checking for style of include used by make
+configure:1198: checking dependency style of gcc
+configure:1266: checking for pow in -lm
+configure:1285: gcc -o conftest -g -O2   conftest.c -lm   1>&5
+configure:1278:6: warning: conflicting types for built-in function 'pow'
+ char pow();
+      ^
+configure:1314: checking for pthread_create in -lpthread
+configure:1333: gcc -o conftest -g -O2   conftest.c -lpthread  -lm  1>&5
+configure:1364: checking how to run the C preprocessor
+configure:1385: gcc -E  conftest.c >/dev/null 2>conftest.out
+configure:1444: checking for ANSI C header files
+configure:1457: gcc -E  conftest.c >/dev/null 2>conftest.out
+configure:1524: gcc -o conftest -g -O2   conftest.c -lpthread -lm  1>&5
+configure: In function 'main':
+configure:1519:67: warning: implicit declaration of function 'exit' [-Wimplicit-function-declaration]
+ if (XOR (islower (i), ISLOWER (i)) || toupper (i) != TOUPPER (i)) exit(2);
+                                                                   ^
+configure:1519:67: warning: incompatible implicit declaration of built-in function 'exit'
+configure:1519:67: note: include '<stdlib.h>' or provide a declaration of 'exit'
+configure:1520:1: warning: incompatible implicit declaration of built-in function 'exit'
+ exit (0); }
+ ^
+configure:1520:1: note: include '<stdlib.h>' or provide a declaration of 'exit'
+configure:1554: checking for ctype.h
+configure:1564: gcc -E  conftest.c >/dev/null 2>conftest.out
+configure:1554: checking for errno.h
+configure:1564: gcc -E  conftest.c >/dev/null 2>conftest.out
+configure:1554: checking for math.h
+configure:1564: gcc -E  conftest.c >/dev/null 2>conftest.out
+configure:1554: checking for netdb.h
+configure:1564: gcc -E  conftest.c >/dev/null 2>conftest.out
+configure:1554: checking for netinet/in.h
+configure:1564: gcc -E  conftest.c >/dev/null 2>conftest.out
+configure:1554: checking for pthread.h
+configure:1564: gcc -E  conftest.c >/dev/null 2>conftest.out
+configure:1554: checking for stdio.h
+configure:1564: gcc -E  conftest.c >/dev/null 2>conftest.out
+configure:1554: checking for stdlib.h
+configure:1564: gcc -E  conftest.c >/dev/null 2>conftest.out
+configure:1554: checking for string.h
+configure:1564: gcc -E  conftest.c >/dev/null 2>conftest.out
+configure:1554: checking for sys/ipc.h
+configure:1564: gcc -E  conftest.c >/dev/null 2>conftest.out
+configure:1554: checking for sys/msg.h
+configure:1564: gcc -E  conftest.c >/dev/null 2>conftest.out
+configure:1554: checking for sys/poll.h
+configure:1564: gcc -E  conftest.c >/dev/null 2>conftest.out
+configure:1554: checking for sys/socket.h
+configure:1564: gcc -E  conftest.c >/dev/null 2>conftest.out
+configure:1554: checking for sys/time.h
+configure:1564: gcc -E  conftest.c >/dev/null 2>conftest.out
+configure:1554: checking for sys/types.h
+configure:1564: gcc -E  conftest.c >/dev/null 2>conftest.out
+configure:1554: checking for termios.h
+configure:1564: gcc -E  conftest.c >/dev/null 2>conftest.out
+configure:1554: checking for time.h
+configure:1564: gcc -E  conftest.c >/dev/null 2>conftest.out
+configure:1554: checking for unistd.h
+configure:1564: gcc -E  conftest.c >/dev/null 2>conftest.out

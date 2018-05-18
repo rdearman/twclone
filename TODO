@@ -1,0 +1,62 @@
+Current things todo:
+[] Ensure all the commanline options for bigbang are working
+[] Change the string pop function to allow character strings of
+   variable sizes.
+
+
+
+Possible future enhancements, which the original game lacked.
+
+
+- create the ships listed in the stardock library so that people can
+  find them
+
+- upgrade cidadel above level 6. 
+	* Allow planet cloaking.
+	* Allow funds transfer between cidadels
+	* transport colonists between planets.
+
+- have a built in "best trade" system in computer which will show you
+  paired ports from the places you have already visited 
+
+- Give users the ability to write a "module" to add in other aliens,
+  ships, etc without having to hack code. Possibly a perl or python
+  type interface, or maybe simple XML definitions.
+
+- Create a "master server" which all launched servers will report
+  themselves to. (Similar to Quake) Modify the server to allow the
+  user to define the master server to report to. Have a default value
+  for the master server. The server would update the master server on
+  start up and every 24 hours. The Master would then be able to
+  produce a report similar to the one below from the original game as
+  an HTML page for each reported server.
+	
+--------------------------------------------------------------------
+Version          : 3.11.55 Gold         Host type           : TWGS
+Age of game      : 32 days              Days since BIGBANG  : 32 days
+Delete if idle   : 30 days
+
+Players in game  : 32   of max 200      Percent good        : 84%
+Ports in game    : 9509 of max 10000    Value of ports      : 486749766
+Planets in game  : 116  of max 4000     Percent w/ Citadels : 31%
+Ships in game    : 43   of max 800      Corps in game       : 5
+Figs in game     : 557762               Mines in game       : 2650
+
+Game type        : Open                 Turns per day       : 2000
+Planetary Trade %: 60%                  Steal from BUY port : Yes
+Initial fighters : 30                   Clear Busts Every   : 7 Days
+Initial credits  : 300                  Last Bust Clear     : 4 Days Ago
+Initial holds    : 20                   Multiple Photon fire: No
+Sectors in game  : 20000                Display StarDock    : Yes
+Ship delay factor: None                 Local display on    : Yes
+Start with planet: No                   Classic Ferrengi    : No
+Production Rate  : 25% / Day            Max Regen per Visit : 100%
+Rob/steal delay  : Yes                  Invincible Ferrengal: No
+Tournament Mode  : Off
+--------------------------------------------------------------------
+
+
+
+
+
+
