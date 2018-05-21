@@ -1,8 +1,12 @@
-server.o: server.c /usr/include/stdc-predef.h /usr/include/pthread.h \
+server.o: server.c /usr/include/stdc-predef.h /usr/include/errno.h \
  /usr/include/features.h /usr/include/x86_64-linux-gnu/sys/cdefs.h \
  /usr/include/x86_64-linux-gnu/bits/wordsize.h \
  /usr/include/x86_64-linux-gnu/gnu/stubs.h \
- /usr/include/x86_64-linux-gnu/gnu/stubs-64.h /usr/include/endian.h \
+ /usr/include/x86_64-linux-gnu/gnu/stubs-64.h \
+ /usr/include/x86_64-linux-gnu/bits/errno.h /usr/include/linux/errno.h \
+ /usr/include/x86_64-linux-gnu/asm/errno.h \
+ /usr/include/asm-generic/errno.h /usr/include/asm-generic/errno-base.h \
+ /usr/include/pthread.h /usr/include/endian.h \
  /usr/include/x86_64-linux-gnu/bits/endian.h \
  /usr/include/x86_64-linux-gnu/bits/byteswap.h \
  /usr/include/x86_64-linux-gnu/bits/types.h \
@@ -62,7 +66,7 @@ server.o: server.c /usr/include/stdc-predef.h /usr/include/pthread.h \
 
 /usr/include/stdc-predef.h:
 
-/usr/include/pthread.h:
+/usr/include/errno.h:
 
 /usr/include/features.h:
 
@@ -73,6 +77,18 @@ server.o: server.c /usr/include/stdc-predef.h /usr/include/pthread.h \
 /usr/include/x86_64-linux-gnu/gnu/stubs.h:
 
 /usr/include/x86_64-linux-gnu/gnu/stubs-64.h:
+
+/usr/include/x86_64-linux-gnu/bits/errno.h:
+
+/usr/include/linux/errno.h:
+
+/usr/include/x86_64-linux-gnu/asm/errno.h:
+
+/usr/include/asm-generic/errno.h:
+
+/usr/include/asm-generic/errno-base.h:
+
+/usr/include/pthread.h:
 
 /usr/include/endian.h:
 

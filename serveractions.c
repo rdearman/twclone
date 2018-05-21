@@ -2953,7 +2953,8 @@ void buildnewplayer (struct player *curplayer, char *shipname)
                 (struct ship *) insert (shipname, ship, symbols, HASH_LENGTH)) == NULL)
     {
         fprintf (stderr, "buildnewplayer: duplicate shipname");
-        exit (-1);
+	// Just need to return BAD not bomb out completely!
+        return (-1);
     }
     curship->number = i + 1;
     curship->name = (char *) malloc (strlen (shipname) + 1);

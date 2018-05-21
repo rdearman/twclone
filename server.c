@@ -19,17 +19,8 @@
 */
 
 
-/* Modification History **
-**************************
-** 
-** LAST MODIFICATION DATE: 22 June 2002
-** Author: Rick Dearman
-** 1) Modified arguments to use getopt
-**
-*/
-
-
 #define _REENTRANT
+#include <errno.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -66,7 +57,7 @@ int WARP_WAIT = 1;
 int main (int argc, char *argv[])
 {
   int c;
-  int sockid, port, msgidin, msgidout, senderid;
+  int sockid, port, msgidin, msgidout, senderid, rc;
   pthread_t threadid;
   struct connectinfo *threadinfo =
     (struct connectinfo *) malloc (sizeof (struct connectinfo));

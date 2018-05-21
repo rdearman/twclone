@@ -218,7 +218,7 @@ void init_playerinfo (char *filename)
         {
 	  fprintf (stderr, "init_playerinfo: duplicate player name '%s'\n",
 		   name);
-	  exit (-1);
+	  return (-1000);
         }
 
       curplayer->sector = popint(buffer, ":");
@@ -251,7 +251,7 @@ void init_playerinfo (char *filename)
         {
 	  fprintf (stderr,
 		   "init_playinfo: duplicate player numbers, exiting...\n");
-	  exit (-1);
+	  return (-1500);
         }
       if (curplayer->ship == 0)
 	{
@@ -276,7 +276,7 @@ void init_playerinfo (char *filename)
 			   (curplayer->sector ==
 			    0) ? ships[curplayer->ship -
 				       1]->location : (curplayer->sector));
-		  exit (-1);
+		  return (-2000);
 		}
 	    }
 
