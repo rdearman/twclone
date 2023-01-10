@@ -1,4 +1,3 @@
-# Generated automatically from Makefile.in by configure.
 # Makefile.in generated automatically by automake 1.5 from Makefile.am.
 
 # Copyright 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001
@@ -35,10 +34,11 @@
 # Alternatively, the GPL can be found at 
 # http://www.gnu.org/copyleft/gpl.html
 
-SHELL = /bin/sh
+SHELL = /bin/bash
 
 srcdir = .
 top_srcdir = .
+
 prefix = /usr/local
 exec_prefix = ${prefix}
 
@@ -50,8 +50,8 @@ sysconfdir = ${prefix}/etc
 sharedstatedir = ${prefix}/com
 localstatedir = ${prefix}/var
 libdir = ${exec_prefix}/lib
-infodir = ${prefix}/info
-mandir = ${prefix}/man
+infodir = ${prefix}/share/info
+mandir = ${prefix}/share/man
 includedir = ${prefix}/include
 oldincludedir = /usr/include
 pkgdatadir = $(datadir)/twclone
@@ -59,15 +59,15 @@ pkglibdir = $(libdir)/twclone
 pkgincludedir = $(includedir)/twclone
 top_builddir = .
 
-ACLOCAL = ${SHELL} /home/rick/Downloads/twclone-source-0.14/missing --run aclocal
-AUTOCONF = ${SHELL} /home/rick/Downloads/twclone-source-0.14/missing --run autoconf
-AUTOMAKE = ${SHELL} /home/rick/Downloads/twclone-source-0.14/missing --run automake
-AUTOHEADER = ${SHELL} /home/rick/Downloads/twclone-source-0.14/missing --run autoheader
+ACLOCAL = aclocal-1.16
+AUTOCONF = autoconf
+AUTOMAKE = automake-1.16
+AUTOHEADER = autoheader
 
 INSTALL = /usr/bin/install -c
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_DATA = ${INSTALL} -m 644
-INSTALL_SCRIPT = ${INSTALL_PROGRAM}
+INSTALL_SCRIPT = ${INSTALL}
 INSTALL_HEADER = $(INSTALL_DATA)
 transform = s,x,x,
 NORMAL_INSTALL = :
@@ -76,32 +76,32 @@ POST_INSTALL = :
 NORMAL_UNINSTALL = :
 PRE_UNINSTALL = :
 POST_UNINSTALL = :
-host_alias = x86_64-unknown-linux-gnu
+host_alias = 
 host_triplet = x86_64-unknown-linux-gnu
-AMTAR = ${SHELL} /home/rick/Downloads/twclone-source-0.14/missing --run tar
+AMTAR = $${TAR-tar}
 AWK = mawk
 CC = gcc
 DEPDIR = .deps
 EXEEXT = 
-INSTALL_STRIP_PROGRAM = ${SHELL} $(install_sh) -c -s
-ISODATE = 2018-05-15
+INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
+ISODATE = 2023-01-10
 OBJEXT = o
 PACKAGE = twclone
 VERSION = 0.0.1
 am__include = include
 am__quote = 
-install_sh = /home/rick/Downloads/twclone-source-0.14/install-sh
+install_sh = ${SHELL} /home/rick/tmp/twclone/install-sh
 
 EXTRA_DIST = \
+	config.data \
 	planettypes.data \
 	shiptypes.data
-#	config.data \
 
 
 pkgdata_DATA = \
+	config.data \
 	planettypes.data \
 	shiptypes.data
-#	config.data \
 
 
 bin_PROGRAMS = \
@@ -116,8 +116,8 @@ bigbang_SOURCES = \
 	bigbang.c \
 	config.c \
 	config.h \
-	getopt.c \
-	getopt.h \
+//	getopt.c \
+//	getopt.h \
 	namegen.c \
 	namegen.h \
 	parse.c \
@@ -187,7 +187,7 @@ bin_PROGRAMS = bigbang$(EXEEXT) client$(EXEEXT) server$(EXEEXT) \
 	test_client$(EXEEXT) test_server$(EXEEXT)
 PROGRAMS = $(bin_PROGRAMS)
 
-am_bigbang_OBJECTS = bigbang.$(OBJEXT) config.$(OBJEXT) getopt.$(OBJEXT) \
+am_bigbang_OBJECTS = bigbang.$(OBJEXT) config.$(OBJEXT)  \
 	namegen.$(OBJEXT) parse.$(OBJEXT) planet.$(OBJEXT)
 bigbang_OBJECTS = $(am_bigbang_OBJECTS)
 bigbang_LDADD = $(LDADD)
@@ -227,7 +227,7 @@ LIBS = -lpthread -lm
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 DEP_FILES = $(DEPDIR)/bigbang.Po $(DEPDIR)/boxmuller.Po \
 	$(DEPDIR)/client.Po $(DEPDIR)/common.Po \
-	$(DEPDIR)/config.Po $(DEPDIR)/getopt.Po \
+	$(DEPDIR)/config.Po  \
 	$(DEPDIR)/hashtable.Po $(DEPDIR)/maint.Po \
 	$(DEPDIR)/msgqueue.Po $(DEPDIR)/namegen.Po \
 	$(DEPDIR)/parse.Po $(DEPDIR)/planet.Po \
@@ -247,7 +247,7 @@ DATA = $(pkgdata_DATA)
 
 DIST_COMMON = README ./stamp-h.in AUTHORS COPYING ChangeLog INSTALL \
 	Makefile.am Makefile.in NEWS THANKS TODO aclocal.m4 \
-	autoconf.h.in config.guess config.sub configure configure.in \
+	autoconf.h.in config.guess config.sub configure configure.ac \
 	depcomp install-sh missing mkinstalldirs
 SOURCES = $(bigbang_SOURCES) $(client_SOURCES) $(server_SOURCES) $(test_client_SOURCES) $(test_server_SOURCES)
 
@@ -256,7 +256,7 @@ all: autoconf.h
 
 .SUFFIXES:
 .SUFFIXES: .c .o .obj
-$(srcdir)/Makefile.in:  Makefile.am  $(top_srcdir)/configure.in $(ACLOCAL_M4)
+$(srcdir)/Makefile.in:  Makefile.am  $(top_srcdir)/configure.ac $(ACLOCAL_M4)
 	cd $(top_srcdir) && \
 	  $(AUTOMAKE) --gnits  Makefile
 Makefile:  $(srcdir)/Makefile.in  $(top_builddir)/config.status
@@ -266,10 +266,10 @@ Makefile:  $(srcdir)/Makefile.in  $(top_builddir)/config.status
 
 $(top_builddir)/config.status: $(srcdir)/configure $(CONFIG_STATUS_DEPENDENCIES)
 	$(SHELL) ./config.status --recheck
-$(srcdir)/configure:  $(srcdir)/configure.in $(ACLOCAL_M4) $(CONFIGURE_DEPENDENCIES)
+$(srcdir)/configure:  $(srcdir)/configure.ac $(ACLOCAL_M4) $(CONFIGURE_DEPENDENCIES)
 	cd $(srcdir) && $(AUTOCONF)
 
-$(ACLOCAL_M4):  configure.in 
+$(ACLOCAL_M4):  configure.ac 
 	cd $(srcdir) && $(ACLOCAL) $(ACLOCAL_AMFLAGS)
 autoconf.h: stamp-h
 	@if test ! -f $@; then \
@@ -288,7 +288,7 @@ $(srcdir)/autoconf.h.in:  $(srcdir)/./stamp-h.in
 		rm -f $(srcdir)/./stamp-h.in; \
 		$(MAKE) $(srcdir)/./stamp-h.in; \
 	else :; fi
-$(srcdir)/./stamp-h.in: $(top_srcdir)/configure.in $(ACLOCAL_M4) 
+$(srcdir)/./stamp-h.in: $(top_srcdir)/configure.ac $(ACLOCAL_M4) 
 	@rm -f $(srcdir)/./stamp-h.in $(srcdir)/./stamp-h.inT
 	@echo timestamp > $(srcdir)/./stamp-h.inT 2> /dev/null
 	cd $(top_srcdir) && $(AUTOHEADER)
@@ -346,7 +346,6 @@ include $(DEPDIR)/boxmuller.Po
 include $(DEPDIR)/client.Po
 include $(DEPDIR)/common.Po
 include $(DEPDIR)/config.Po
-include $(DEPDIR)/getopt.Po
 include $(DEPDIR)/hashtable.Po
 include $(DEPDIR)/maint.Po
 include $(DEPDIR)/msgqueue.Po

@@ -116,8 +116,8 @@ bigbang_SOURCES = \
 	bigbang.c \
 	config.c \
 	config.h \
-	getopt.c \
-	getopt.h \
+//	getopt.c \
+//	getopt.h \
 	namegen.c \
 	namegen.h \
 	parse.c \
@@ -187,7 +187,7 @@ bin_PROGRAMS = bigbang$(EXEEXT) client$(EXEEXT) server$(EXEEXT) \
 	test_client$(EXEEXT) test_server$(EXEEXT)
 PROGRAMS = $(bin_PROGRAMS)
 
-am_bigbang_OBJECTS = bigbang.$(OBJEXT) config.$(OBJEXT) getopt.$(OBJEXT) \
+am_bigbang_OBJECTS = bigbang.$(OBJEXT) config.$(OBJEXT)  \
 	namegen.$(OBJEXT) parse.$(OBJEXT) planet.$(OBJEXT)
 bigbang_OBJECTS = $(am_bigbang_OBJECTS)
 bigbang_LDADD = $(LDADD)
@@ -227,7 +227,7 @@ LIBS = @LIBS@
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 @AMDEP_TRUE@DEP_FILES = $(DEPDIR)/bigbang.Po $(DEPDIR)/boxmuller.Po \
 @AMDEP_TRUE@	$(DEPDIR)/client.Po $(DEPDIR)/common.Po \
-@AMDEP_TRUE@	$(DEPDIR)/config.Po $(DEPDIR)/getopt.Po \
+@AMDEP_TRUE@	$(DEPDIR)/config.Po  \
 @AMDEP_TRUE@	$(DEPDIR)/hashtable.Po $(DEPDIR)/maint.Po \
 @AMDEP_TRUE@	$(DEPDIR)/msgqueue.Po $(DEPDIR)/namegen.Po \
 @AMDEP_TRUE@	$(DEPDIR)/parse.Po $(DEPDIR)/planet.Po \
@@ -247,7 +247,7 @@ DATA = $(pkgdata_DATA)
 
 DIST_COMMON = README ./stamp-h.in AUTHORS COPYING ChangeLog INSTALL \
 	Makefile.am Makefile.in NEWS THANKS TODO aclocal.m4 \
-	autoconf.h.in config.guess config.sub configure configure.in \
+	autoconf.h.in config.guess config.sub configure configure.ac \
 	depcomp install-sh missing mkinstalldirs
 SOURCES = $(bigbang_SOURCES) $(client_SOURCES) $(server_SOURCES) $(test_client_SOURCES) $(test_server_SOURCES)
 
@@ -256,7 +256,7 @@ all: autoconf.h
 
 .SUFFIXES:
 .SUFFIXES: .c .o .obj
-$(srcdir)/Makefile.in:  Makefile.am  $(top_srcdir)/configure.in $(ACLOCAL_M4)
+$(srcdir)/Makefile.in:  Makefile.am  $(top_srcdir)/configure.ac $(ACLOCAL_M4)
 	cd $(top_srcdir) && \
 	  $(AUTOMAKE) --gnits  Makefile
 Makefile:  $(srcdir)/Makefile.in  $(top_builddir)/config.status
@@ -266,10 +266,10 @@ Makefile:  $(srcdir)/Makefile.in  $(top_builddir)/config.status
 
 $(top_builddir)/config.status: $(srcdir)/configure $(CONFIG_STATUS_DEPENDENCIES)
 	$(SHELL) ./config.status --recheck
-$(srcdir)/configure:  $(srcdir)/configure.in $(ACLOCAL_M4) $(CONFIGURE_DEPENDENCIES)
+$(srcdir)/configure:  $(srcdir)/configure.ac $(ACLOCAL_M4) $(CONFIGURE_DEPENDENCIES)
 	cd $(srcdir) && $(AUTOCONF)
 
-$(ACLOCAL_M4):  configure.in 
+$(ACLOCAL_M4):  configure.ac 
 	cd $(srcdir) && $(ACLOCAL) $(ACLOCAL_AMFLAGS)
 autoconf.h: stamp-h
 	@if test ! -f $@; then \
@@ -288,7 +288,7 @@ $(srcdir)/autoconf.h.in:  $(srcdir)/./stamp-h.in
 		rm -f $(srcdir)/./stamp-h.in; \
 		$(MAKE) $(srcdir)/./stamp-h.in; \
 	else :; fi
-$(srcdir)/./stamp-h.in: $(top_srcdir)/configure.in $(ACLOCAL_M4) 
+$(srcdir)/./stamp-h.in: $(top_srcdir)/configure.ac $(ACLOCAL_M4) 
 	@rm -f $(srcdir)/./stamp-h.in $(srcdir)/./stamp-h.inT
 	@echo timestamp > $(srcdir)/./stamp-h.inT 2> /dev/null
 	cd $(top_srcdir) && $(AUTOHEADER)
@@ -346,7 +346,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@$(DEPDIR)/client.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@$(DEPDIR)/common.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@$(DEPDIR)/config.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@$(DEPDIR)/getopt.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@$(DEPDIR)/hashtable.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@$(DEPDIR)/maint.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@$(DEPDIR)/msgqueue.Po@am__quote@

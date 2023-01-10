@@ -48,7 +48,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
-#include <getopt.h>
+//#include <getopt.h>
 #include "config.h"
 #include "universe.h"
 // #include "namegen.h"
