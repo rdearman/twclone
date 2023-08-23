@@ -40,8 +40,6 @@ bigbang_SOURCES = \
 	bigbang.c \
 	config.c \
 	config.h \
-//	getopt.c \
-//	getopt.h \
 	namegen.c \
 	namegen.h \
 	parse.c \
