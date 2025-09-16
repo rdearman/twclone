@@ -129,6 +129,6 @@ enum porttype
   pn_travel
 };
 
-int *usedNames;
+extern int *usedNames;
 
 #endif
