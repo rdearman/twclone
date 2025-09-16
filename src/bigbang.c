@@ -127,7 +127,8 @@ int freewarp (int sector);
 int warpsfull (int sector);
 int numwarps (int sector);
 int innode(int sector);
-void makeports ();
+//void makeports ();
+void makeports(totalsectors);
 void sectorsort (struct sector *base[maxWarps], int elements);
 extern char *randomname (char *name);
 extern char *consellationName (char *name);
@@ -528,7 +529,8 @@ main (int argc, char **argv)
 
   printf ("Creating %d ports...", numPorts);
   fflush(stdout);
-  makeports ();
+  // makeports ();
+  makeports(totalsectors);    
   printf ("done.\n");
   fflush(stdout);
 
@@ -830,7 +832,7 @@ void sectorsort (struct sector *base[maxWarps], int elements)
 }
 
 void
-makeports ()
+makeports(totalsectors)
 {
   struct port *curport;
   struct port *ckPort;
@@ -866,7 +868,8 @@ makeports ()
 
       curport = (struct port *) malloc (sizeof (struct port));
       curport->number = loop + 1;
-      curport->name = (char *) malloc (sizeof (char) * (strlen(tmpname) + 1));
+      // curport->name = (char *) malloc (sizeof (char) * (strlen(tmpname) + 1));
+      curport->name = (char *) malloc (strlen(tmpname) + 1);
       strcpy (name, "\0");
 
       if (loop == 0)
@@ -874,6 +877,7 @@ makeports ()
 	  strcpy (curport->name, "Sol");
 	  type = 0;
         }
+      /*
       else if (loop == 1)
         {
 	  strcpy (curport->name, "Alpha Centauri");
@@ -892,6 +896,29 @@ makeports ()
 	  curport->maxproduct[1] = randomnum (2800, 3000);
 	  curport->maxproduct[2] = randomnum (2800, 3000);
         }
+      */
+      else if (loop == 1)
+        {
+          curport->name = realloc(curport->name, strlen("Alpha Centauri") + 1);
+          strcpy (curport->name, "Alpha Centauri");
+          type = 0;
+        }
+      else if (loop == 2)
+        {
+          curport->name = realloc(curport->name, strlen("Rylos") + 1);
+          strcpy (curport->name, "Rylos");
+          type = 0;
+        }
+      else if (loop == 3)
+        {
+          curport->name = realloc(curport->name, strlen("Stargate Alpha I") + 1);
+          strcpy (curport->name, "Stargate Alpha I");
+          type = 9;
+          curport->maxproduct[0] = randomnum (2800, 3000);
+          curport->maxproduct[1] = randomnum (2800, 3000);
+          curport->maxproduct[2] = randomnum (2800, 3000);
+        }
+      // 
       else if ((loop <= numNodes+3) && numNodes > 1)
 	{
 	  if (loop == 4)
@@ -967,20 +994,20 @@ makeports ()
 	    {
 	      sector = randomnum (0, numSectors - 1);
 	      while (sectorlist[sector]->portptr != NULL)
-		sector = randomnum (0, numSectors - 1);
+		sector = randomnum (0, totalsectors - 1);
 	      portlist[loop]->location = sector + 1;
 	    }
 	  else if ((loop > 3) && (loop <= numNodes+3))
 	    {
 	      //fprintf(stderr, "Inserting type 10 port into node %d\n", loop-3);
 	      fflush(stdout);
-	      sector = randomnum(0, numSectors - 1);
+	      sector = randomnum (0, totalsectors - 1);
 	      curnode = innode(sector+1);
 	      while ((curnode != (loop-3)))
 		{
 		  do
 		    {
-		      sector = randomnum(0, numSectors - 1);
+		      sector = randomnum (0, totalsectors - 1);
 		      curnode = innode(sector+1);
 		    }while(sectorlist[sector]->portptr!=NULL);
 		}
@@ -991,7 +1018,7 @@ makeports ()
 	      //fprintf(stderr, "looking to place port %d in a sector\n", loop+1);
 	      sector = randomnum (0, numSectors - 1);
 	      while (sectorlist[sector]->portptr != NULL)
-		sector = randomnum (0, NUMSECTORS - 1);
+		sector = randomnum (0, totalsectors - 1);		
 	      portlist[loop]->location = sector + 1;
 	    }
         }
