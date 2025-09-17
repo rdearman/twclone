@@ -3,6 +3,8 @@
 
 #define SHIP_TYPE_COUNT 15
 #define MAX_SHIP_NAME_LENGTH 40
+#define S_LANDED 1
+
 
 struct sp_shipinfo
 {
@@ -10,6 +12,9 @@ struct sp_shipinfo
   int basecost;
   int maxattack;
   int initialholds;
+  int hull;
+  int fuel;
+  int torps;
   int maxholds;
   int maxfighters;
   int turns;
@@ -27,6 +32,6 @@ struct sp_shipinfo
 };
 
 void init_shiptypeinfo (char *filename);
-void saveshiptypeinfo(char *filename);
+void saveshiptypeinfo (char *filename);
 
 #endif

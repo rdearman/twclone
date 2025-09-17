@@ -76,9 +76,9 @@ extern planetClass **planetTypes;
 extern struct planet **planets;
 
 int init_planets (char *filename);
-void saveplanets(char *filename);
-void init_planetinfo(char *filename);
-void save_planetinfo(char *filename);
+void saveplanets (char *filename);
+void init_planetinfo (char *filename);
+void save_planetinfo (char *filename);
 int insert_planet (struct planet *p, struct sector *s, int playernumber);
 
 #endif

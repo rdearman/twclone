@@ -98,7 +98,8 @@
  /usr/include/x86_64-linux-gnu/bits/stdio2.h /usr/include/string.h \
  /usr/include/strings.h \
  /usr/include/x86_64-linux-gnu/bits/strings_fortified.h \
- /usr/include/x86_64-linux-gnu/bits/string_fortified.h ../src/parse.h \
+ /usr/include/x86_64-linux-gnu/bits/string_fortified.h \
+ /usr/include/jansson.h /usr/include/jansson_config.h ../src/parse.h \
  ../src/msgqueue.h /usr/include/x86_64-linux-gnu/sys/ipc.h \
  /usr/include/x86_64-linux-gnu/bits/ipctypes.h \
  /usr/include/x86_64-linux-gnu/bits/ipc.h \
@@ -237,6 +238,8 @@
 /usr/include/strings.h:
 /usr/include/x86_64-linux-gnu/bits/strings_fortified.h:
 /usr/include/x86_64-linux-gnu/bits/string_fortified.h:
+/usr/include/jansson.h:
+/usr/include/jansson_config.h:
 ../src/parse.h:
 ../src/msgqueue.h:
 /usr/include/x86_64-linux-gnu/sys/ipc.h:

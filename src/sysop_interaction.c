@@ -28,7 +28,8 @@
 #include "sysop_interaction.h"
 extern int WARP_WAIT;
 
-void *getsysopcommands (void *threadinfo)
+void *
+getsysopcommands (void *threadinfo)
 {
   int msgidin = ((struct connectinfo *) threadinfo)->msgidin;
   struct msgcommand data;
@@ -54,12 +55,12 @@ void *getsysopcommands (void *threadinfo)
 	  senddata (msgidin, &data, pthread_self ());
 	  break;
 	}
-      if (strcmp(buffer, "WARP_WAIT") == 0)
+      if (strcmp (buffer, "WARP_WAIT") == 0)
 	{
 	  WARP_WAIT = 1;
 	  printf ("WARP WAIT ON\n");
 	}
-      if (strcmp(buffer, "NOWARP_WAIT") == 0)
+      if (strcmp (buffer, "NOWARP_WAIT") == 0)
 	{
 	  WARP_WAIT = 0;
 	  printf ("WARP WAIT OFF\n");

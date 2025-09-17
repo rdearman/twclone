@@ -31,6 +31,7 @@ char good_ranks[23][50] = { "Civilian", "Private", "Private 1st Class",
   "Captain", "Commodore", "Rear Admiral", "Vice Admiral", "Admiral",
   "Fleet Admiral"
 };
+
 char evil_ranks[23][50] = { "Civilian", "Nuisance 3rd Class",
   "Nuisance 2nd Class", "Nuisance 1st Class", "Menace 3rd Class",
   "Menace 2nd Class", "Menace 1st Class", "Smuggler 3rd Class",
@@ -149,41 +150,44 @@ int printsector (struct sector *cursector);
 int movesector (char *holder, int sockid, int current,
 		struct sector *cursector);
 int dologin (int sockid);
-void dogenesis(int sockid, struct player *curplayer);
+void dogenesis (int sockid, struct player *curplayer);
 char *prompttype (enum prompts type, int sector_or_porttype, int sockid);
 int getyes (char *answer);
 void psinfo (int sockid, int pnumb, struct player *p);
 void clearplayer (struct player *curplayer);
-void newfree(void *item);
+void newfree (void *item);
 void getmyinfo (int sockid, struct player *curplayer);
 void printmyinfo (struct player *curplayer);
-void dogameinfo(int sockid);
+void dogameinfo (int sockid);
 void printhelp ();
-void print_stardock_help();
-void print_node_help();
-void print_shipyard_help();
-void print_bank_help();
-void do_stardock_menu(int sockid, struct player *curplayer);
-void do_node_menu(int sockid, struct player *curplayer);
-void do_noderelay_menu(int sockid, struct player *curplayer);
-int do_planet_select(int sockid, struct player *curplayer, struct sector *cursector);
-int do_planet_menu(int sockid, struct player *curplayer);
-void citadelupgrade(int sockid, struct planet *curplanet);
-int do_citadel_menu(int sockid, struct player *curplayer, struct planet *curplanet);
-void treasury(int sockid, struct player *curplayer, int pcredits);
-void change_stuff(int sockid, struct player *curplayer, int type);
-void print_citadel_help();
-void getplanetinfo(int sockid, struct planet *curplanet);
-void do_planet_display(int sockid, struct player *curplayer, struct planet *curplanet);
-void print_planet_help();
-void do_shipyard_menu(int sockid, struct player *curplayer);
-void buyship(int sockid, struct player *curplayer);
-int dlen(int input); 
-size_t slen(const char *string);
-char *spaces(int numspaces);
-void do_bank_menu(int sockid, struct player *curplayer);
+void print_stardock_help ();
+void print_node_help ();
+void print_shipyard_help ();
+void print_bank_help ();
+void do_stardock_menu (int sockid, struct player *curplayer);
+void do_node_menu (int sockid, struct player *curplayer);
+void do_noderelay_menu (int sockid, struct player *curplayer);
+int do_planet_select (int sockid, struct player *curplayer,
+		      struct sector *cursector);
+int do_planet_menu (int sockid, struct player *curplayer);
+void citadelupgrade (int sockid, struct planet *curplanet);
+int do_citadel_menu (int sockid, struct player *curplayer,
+		     struct planet *curplanet);
+void treasury (int sockid, struct player *curplayer, int pcredits);
+void change_stuff (int sockid, struct player *curplayer, int type);
+void print_citadel_help ();
+void getplanetinfo (int sockid, struct planet *curplanet);
+void do_planet_display (int sockid, struct player *curplayer,
+			struct planet *curplanet);
+void print_planet_help ();
+void do_shipyard_menu (int sockid, struct player *curplayer);
+void buyship (int sockid, struct player *curplayer);
+int dlen (int input);
+size_t slen (const char *string);
+char *spaces (int numspaces);
+void do_bank_menu (int sockid, struct player *curplayer);
 void printwelcome ();
-void do_ship_upgrade(int sockid, struct player *curplayer);
+void do_ship_upgrade (int sockid, struct player *curplayer);
 void doporting (int sockid, struct player *curplayer);
 void debugmode (int sockid);
 void getmessages (char *buffer);

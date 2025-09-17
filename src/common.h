@@ -1,23 +1,6 @@
-/*
-Copyright (C) 2000 Jason C. Garcowski(jcg5@po.cwru.edu), 
-                   Ryan Glasnapp(rglasnap@nmt.edu)
+#include <netinet/in.h>
+#include <string.h>
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
-
-*/
-// New Defines
 
 #ifndef TURNS_PER_DAY
 #define TURNS_PER_DAY 100
@@ -101,12 +84,16 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 int init_sockaddr (int, struct sockaddr_in *);
 int init_clientnetwork (char *hostname, int port);
-int sendinfo (int sockid, char *buffer);
-int recvinfo (int sockid, char *buffer);
+
+int init_sockaddr (int, struct sockaddr_in *);
+int init_clientnetwork (char *hostname, int port);
+
+//int sendinfo (int sockid, char *buffer);
+//int recvinfo (int sockid, char *buffer);
 int acceptnewconnection (int sockid);
-int randomnum(int min, int max);
-int min(int a, int b);
-int max(int a, int b);
+int randomnum (int min, int max);
+int min (int a, int b);
+int max (int a, int b);
 enum porttype
 {
   p_trade,

@@ -1,48 +1,15 @@
-/*
-Copyright (C) 2000 Jason C. Garcowski(jcg5@po.cwru.edu), 
-                   Ryan Glasnapp(rglasnap@nmt.edu)
-
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
-
-*/
-
-/* Modification History **
-**************************
-** 
-** LAST MODIFICATION DATE: 11 June 2002
-** Author: Rick Dearman
-** 1) Modified Planet struct to hold more information about colonist.
-**
-** 2) Modified all comments from // to C comments in case a users complier isn't C99 
-**    compliant. (like some older Sun or HP compilers)
-**
-** 3) Added additional planetType struct.
-** 
-*/
-
-
 #ifndef UNIVERSE_H
 #define UNIVERSE_H
 
 #include "common.h"
+#include "types.h"
+#include "hashtable.h"
 
 #define NUMBER_OF_PLANET_TYPES 8
 #define MAX_CITADEL_LEVEL 7
 
 //Here go flags for ships
-#define S_INTRANSIT 1 
+#define S_INTRANSIT 1
 #define S_PORTED 2
 #define S_STARDOCK 4
 #define S_NODE 8
@@ -60,6 +27,8 @@ struct port
   int number;
   char *name;			//I don't know what else to put in here
   int location;
+  int size;
+  int techlevel;
   int maxproduct[3];		//0 for ore, 1 organics, 2 for equipment
   int product[3];		//Same as above
   unsigned long credits;
@@ -94,19 +63,27 @@ struct player
   int experience;
   int alignment;
   int turns;
-  unsigned long credits;
-  unsigned long bank_balance;
+  long credits;
+  long bank_balance;
   int flags;
-  //int credits;
-  //int bank_balance;
   int lastprice;		/* Last price offered by a port. */
   int firstprice;		/* first price offered by a port */
+  int integrity;
+  int login_time;
+  int last_update;
   unsigned short intransit;	/* Is the player moving? */
   long beginmove;		/* At what time the player began moving */
-  struct realtimemessage *messages;	/* Holds realtime messages */
   int movingto;			/* What sector the player is moving to */
   unsigned short loggedin;	/* This is not in the file */
-  int lastplanet;   /*This is the last planet type that they created! */
+  int lastplanet;		/*This is the last planet type that they created! */
+  int score;
+  int kills;
+  int cloaked;
+  int remote;
+  long int fighters;
+  long int holds;
+  struct realtimemessage *messages;	/* Holds realtime messages */
+  struct player *nextplayer;
 };
 
 struct realtimemessage
@@ -121,6 +98,12 @@ struct ship
   int number;
   char *name;
   int type;			/* Index + 1 of shipinfo array */
+  int attack;
+  int holds_used;
+  int mines;
+  int fighters_used;
+  int genesis;
+  int photons;
   int location;
   int fighters;
   int shields;
@@ -137,27 +120,27 @@ struct ship
 
 enum planettype
 {
-  TERRA,			/* 
-				   ** Special case since terra has almost 
-				   ** limitless supply of colonists. 
+  TERRA,			/*
+				 ** Special case since terra has almost
+				 ** limitless supply of colonists.
 				 */
-  M,				/* Earth type 
-				   ** 
+  M,				/* Earth type
+				 **
 				 */
-  L,				/* Mountainous 
-				   ** F=2,o=5,e=20
+  L,				/* Mountainous
+				 ** F=2,o=5,e=20
 				 */
-  O,				/* Oceanic 
-				   ** f=20,o=2,100
+  O,				/* Oceanic
+				 ** f=20,o=2,100
 				 */
-  K,				/* Desert Wasteland 
-				   ** f=2,o=100,e=500
+  K,				/* Desert Wasteland
+				 ** f=2,o=100,e=500
 				 */
-  H,				/* Volcanic 
-				   ** f=1,o=N/A,e=500
+  H,				/* Volcanic
+				 ** f=1,o=N/A,e=500
 				 */
-  U,				/* Gaseous 
-				   ** f=N/A,o=N/A,e=N/A
+  U,				/* Gaseous
+				 ** f=N/A,o=N/A,e=N/A
 				 */
   C				/* Glacial/Ice  */
 };
@@ -193,11 +176,15 @@ struct planet
   int sector;
   char *name;
   int owner;
+  unsigned long int population;
+  unsigned long int minerals;
+  unsigned long int ore;
+  unsigned long int energy;
   enum planettype type;
   char *creator;
   int fuelColonist;		/* Amount of people assigned (All go to fuel by default) */
   int organicsColonist;		/* Amount of people assigned */
-  int equipmentColonist;		/* Amount of people assigned */
+  int equipmentColonist;	/* Amount of people assigned */
   int fuel;			/* Amount actually on the planet. */
   int organics;
   int equipment;
@@ -218,21 +205,14 @@ struct citadel
   int interdictor;
   float upgradePercent;		/* how far along your upgrade is */
   int upgradestart;
-};
-
-enum listtype
-{
-  player,
-  planet,
-  port,
-  ship
-};
-
-struct list
-{
-  void *item;
-  enum listtype type;
-  struct list *listptr;
+  int owner;
+  int shields;
+  int torps;
+  int fighters;
+  int qtorps;
+  int qcannon;
+  int qcannontype;
+  int qtorpstype;
 };
 
 /* It is in this order in universe.data */
@@ -243,17 +223,17 @@ struct sector
   char *beacontext;		/* Test of a Beacon, NULL, if there is no beacon */
   char *nebulae;		/* I guess this stores the name, I dont know */
   struct list *playerlist[2];	/* The list of players in the sector */
-  struct list *shiplist[2]; /*The list of unmanned ships in the sector */
+  struct list *shiplist[2];	/*The list of unmanned ships in the sector */
   struct port *portptr;		/* Pointer to ports in the sector */
   struct list *planets;		/* Pointer to list of planets in sector */
 };
 
 struct node
 {
-	int number;
-	struct port *portptr;
-	int min;
-	int max;
+  int number;
+  struct port *portptr;
+  int min;
+  int max;
 };
 
 int init_universe (char *filename, struct sector ***array);
@@ -263,5 +243,15 @@ void init_playerinfo (char *filename);
 void init_shipinfo (char *filename);
 void init_portinfo (char *filename);
 void init_planetClassification (void);
-void init_nodes(int numsectors);
+void init_nodes (int numsectors);
+
+// Global arrays
+extern struct list *symbols[HASH_LENGTH];
+extern struct player **players;
+extern struct ship **ships;
+extern struct planet **planets;
+extern struct port **ports;
+extern struct sector **sectors;
+extern struct config *configdata;
+
 #endif

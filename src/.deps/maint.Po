@@ -90,8 +90,9 @@
  /usr/include/asm-generic/sockios.h \
  /usr/include/x86_64-linux-gnu/bits/types/struct_osockaddr.h \
  /usr/include/x86_64-linux-gnu/bits/socket2.h \
- /usr/include/x86_64-linux-gnu/bits/in.h ../src/shipinfo.h \
- ../src/hashtable.h ../src/maint.h ../src/config.h ../src/msgqueue.h \
+ /usr/include/x86_64-linux-gnu/bits/in.h ../src/types.h \
+ ../src/hashtable.h ../src/shipinfo.h ../src/maint.h ../src/config.h \
+ ../src/msgqueue.h /usr/include/jansson.h /usr/include/jansson_config.h \
  /usr/include/x86_64-linux-gnu/sys/ipc.h \
  /usr/include/x86_64-linux-gnu/bits/ipctypes.h \
  /usr/include/x86_64-linux-gnu/bits/ipc.h \
@@ -204,11 +205,14 @@
 /usr/include/x86_64-linux-gnu/bits/types/struct_osockaddr.h:
 /usr/include/x86_64-linux-gnu/bits/socket2.h:
 /usr/include/x86_64-linux-gnu/bits/in.h:
-../src/shipinfo.h:
+../src/types.h:
 ../src/hashtable.h:
+../src/shipinfo.h:
 ../src/maint.h:
 ../src/config.h:
 ../src/msgqueue.h:
+/usr/include/jansson.h:
+/usr/include/jansson_config.h:
 /usr/include/x86_64-linux-gnu/sys/ipc.h:
 /usr/include/x86_64-linux-gnu/bits/ipctypes.h:
 /usr/include/x86_64-linux-gnu/bits/ipc.h:

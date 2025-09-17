@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "common.h"
 
+
 struct config
 {
   int turnsperday;		//In this order in config.data
@@ -44,9 +45,19 @@ struct config
   int ship_type_count;
   unsigned long bangdate;
   int numnodes;
+  int server_port;
+  int hash_length;
+  int default_port;
+  int default_nodes;
+  int warps_per_sector;
+  int buff_size;
+  int max_name_length;
+  int planet_type_count;
+
 };
 
 int init_config (char *filename);
-int saveconfig(char *filename);
+int saveconfig (char *filename);
+
 
 #endif

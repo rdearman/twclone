@@ -100,6 +100,7 @@ char *nameCollection[] = { "Uncharted Space",
   "Wazn", "Wezen", "Yed Prior", "Yed Posterior", "Zaniah", "Zaurac",
   "Zavijava", "Zubenelgenubi", "Zubeneshamali"
 };
+
 // int *usedNames;
 int nameCount;
 
@@ -116,6 +117,7 @@ char *firstSyllable[] = {	/* 100 */
   "D'al", "Fl'a", "L'Dre", "Ra", "Rea", "Og", "O'g", "Ndea", "Faw", "Cef",
   "Cyth", "Wyh", "Gyh", "G'As", "Red", "Aas", "Aaw", "Ewwa", "Syw"
 };
+
 char *middleSyllable[] = {	/* 50 */
   "a", "ase", "ae", "ae", "au", "ao", "are", "ale", "ali", "ay", "ardo", "e",
   "ere", "ehe", "eje", "eo", "ei", "ea", "ea", "eye", "eri", "era", "ela",
@@ -124,6 +126,7 @@ char *middleSyllable[] = {	/* 50 */
   "ira", "ila", "ili", "illi", "ira", "igo", "o", "oje", "oli", "olye",
   "ua", "ue", "uyye", "oa", "oi", "oe", "ore"
 };
+
 char *lastSyllable[] = {	/* 100 */
   "and", "be", "bwyn", "baen", "bard", "ctred", "cred", "ch", "can", "dan",
   "don", "der", "dric", "dfrid", "dus", "gord", "gan", "li", "le", "lgrin",

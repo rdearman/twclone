@@ -1,339 +1,252 @@
-/*
-  Copyright (C) 2000 Jason C. Garcowski(jcg5@po.cwru.edu), 
-  Ryan Glasnapp(rglasnap@nmt.edu)
-
-  This program is free software; you can redistribute it and/or
-  modify it under the terms of the GNU General Public License
-  as published by the Free Software Foundation; either version 2
-  of the License, or (at your option) any later version.
-
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
-
-*/
-
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <stdio.h>
-#include <errno.h>
-#include <math.h>
-#include "universe.h"
 #include "hashtable.h"
+#include "universe.h"
 
-/*********************************************\
- * init_hash_table                            |
- *                                            |
- * description: sets the pointer at every     |
- * location in the hash_table to NULL         |
-\*********************************************/
-
-void init_hash_table (struct list *hash_table[], int hash_length)
+int
+hash (const char *symbol, int hash_length)
 {
-  int x;
-  for (x = 0; x < hash_length; x++)
-    hash_table[x] = NULL;
+  int hashval;
+  int a = 31415, b = 27183;
 
-  return;
+  for (hashval = 0; *symbol != '\0'; symbol++)
+    {
+      hashval = (a * hashval + *symbol) % hash_length;
+      a = a * b % (hash_length - 1);
+    }
+
+  return hashval;
 }
 
-
-/*********************************************\
- * find                                       |
- *                                            | 
- * desription: returns pointer to the         | 
- * location of the attributes of the input    |
- * symbol in the hash_table                   |
-\*********************************************/
+void
+init_hash_table (struct list *hash_table[], int hash_length)
+{
+  int i;
+  for (i = 0; i < hash_length; i++)
+    {
+      hash_table[i] = NULL;
+    }
+}
 
 void *
 find (const char *symbol, enum listtype type, struct list *hash_table[],
       int hash_length)
 {
-  struct list *temp_element = hash_table[hash (symbol, hash_length)];
-  while (temp_element != NULL)
+  struct list *curlist;
+  curlist = hash_table[hash (symbol, hash_length)];
+  while (curlist != NULL)
     {
-      if (temp_element->type == type)
+      if (curlist->type == type)
 	{
 	  switch (type)
 	    {
 	    case player:
-	      if (strcmp
-		  (((struct player *) (temp_element->item))->name,
-		   symbol) == 0)
-		return temp_element->item;
+	      if (strcmp (((struct player *) curlist->item)->name,
+			  symbol) == 0)
+		return curlist->item;
 	      break;
 	    case planet:
-	      if (strcmp
-		  (((struct planet *) (temp_element->item))->name,
-		   symbol) == 0)
-		return temp_element->item;
+	      if (strcmp (((struct planet *) curlist->item)->name,
+			  symbol) == 0)
+		return curlist->item;
 	      break;
 	    case port:
-	      if (strcmp
-		  (((struct port *) (temp_element->item))->name, symbol) == 0)
-		return temp_element->item;
+	      if (strcmp (((struct port *) curlist->item)->name, symbol) == 0)
+		return curlist->item;
 	      break;
 	    case ship:
-	      if (strcmp
-		  (((struct ship *) (temp_element->item))->name, symbol) == 0)
-		return temp_element->item;
+	      if (strcmp (((struct ship *) curlist->item)->name, symbol) == 0)
+		return curlist->item;
 	      break;
 	    }
 	}
-      else
-	temp_element = temp_element->listptr;
+      curlist = curlist->listptr;
     }
   return NULL;
 }
 
-/*********************************************\
- * insert                                     |
- *                                            |
- * description: adds an entry to the          |
- * hash_table for the input symbol and        |
- * return a pointer to the location of the    |
- * attributes of said symbol, if symbol is    |
- * already there returns a NULL               |
-\*********************************************/
 
 void *
 insert (const char *symbol, enum listtype type, struct list *hash_table[],
 	int hash_length)
 {
-  void *item = NULL;
+  struct list *newlist;
+  int hashval;
+
+  newlist = (struct list *) malloc (sizeof (struct list));
+
+  newlist->type = type;
 
   switch (type)
     {
     case player:
-      item = malloc (sizeof (struct player));
-      ((struct player *) (item))->name =
-	(char *) malloc (strlen (symbol) + 1);
-      strcpy (((struct player *) (item))->name, symbol);
+      newlist->item = malloc (sizeof (struct player));
+      ((struct player *) newlist->item)->name = strdup (symbol);
       break;
     case planet:
-      item = malloc (sizeof (struct planet));
-      ((struct planet *) (item))->name =
-	(char *) malloc (strlen (symbol) + 1);
-      strcpy (((struct planet *) (item))->name, symbol);
+      newlist->item = malloc (sizeof (struct planet));
+      ((struct planet *) newlist->item)->name = strdup (symbol);
       break;
     case port:
-      item = malloc (sizeof (struct port));
-      ((struct port *) (item))->name = (char *) malloc (strlen (symbol) + 1);
-      strcpy (((struct port *) (item))->name, symbol);
+      newlist->item = malloc (sizeof (struct port));
+      ((struct port *) newlist->item)->name = strdup (symbol);
       break;
     case ship:
-      item = malloc (sizeof (struct ship));
-      ((struct ship *) (item))->name = (char *) malloc (strlen (symbol) + 1);
-      strcpy (((struct ship *) (item))->name, symbol);
+      newlist->item = malloc (sizeof (struct ship));
+      ((struct ship *) newlist->item)->name = strdup (symbol);
       break;
     }
 
-  return insertitem (item, type, hash_table, hash_length);
+  hashval = hash (symbol, hash_length);
+  newlist->listptr = hash_table[hashval];
+  hash_table[hashval] = newlist;
+  return newlist->item;
 }
 
 
-//This does not free the item, it just removes it from the list.
 void *
 delete (const char *symbol, enum listtype type, struct list *hash_table[],
 	int hash_length)
 {
-  struct list *temp_element =
-    hash_table[hash (symbol, hash_length)], *tobedeleted;
-  void *temp;
+  struct list *curlist, *prevlist;
+  void *delitem;
+  int hashval;
 
-  if (temp_element == NULL)
-    return NULL;
-
-  if (temp_element->type == type)
+  hashval = hash (symbol, hash_length);
+  curlist = hash_table[hashval];
+  prevlist = curlist;
+  while (curlist != NULL)
     {
-      switch (type)
-	{
-	case player:
-	  if (strcmp (((struct player *) (temp_element->item))->name, symbol)
-	      == 0)
-	    {
-	      temp = temp_element->item;
-	      tobedeleted = temp_element;
-	      hash_table[hash (symbol, hash_length)] = temp_element->listptr;
-	      free (tobedeleted);
-	      return temp;
-	    }
-	  break;
-	case planet:
-	  if (strcmp (((struct planet *) (temp_element->item))->name, symbol)
-	      == 0)
-	    {
-	      temp = temp_element->item;
-	      tobedeleted = temp_element;
-	      hash_table[hash (symbol, hash_length)] = temp_element->listptr;
-	      free (tobedeleted);
-	      return temp;
-	    }
-	  break;
-	case port:
-	  if (strcmp (((struct port *) (temp_element->item))->name, symbol) ==
-	      0)
-	    {
-	      temp = temp_element->item;
-	      tobedeleted = temp_element;
-	      hash_table[hash (symbol, hash_length)] = temp_element->listptr;
-	      free (tobedeleted);
-	      return temp;
-	    }
-	  break;
-	case ship:
-	  if (strcmp (((struct ship *) (temp_element->item))->name, symbol) ==
-	      0)
-	    {
-	      temp = temp_element->item;
-	      tobedeleted = temp_element;
-	      hash_table[hash (symbol, hash_length)] = temp_element->listptr;
-	      free (tobedeleted);
-	      return temp;
-	    }
-	  break;
-	}
-    }
-
-  while (temp_element->listptr != NULL)
-    {
-      if (temp_element->listptr->type == type)
+      if (curlist->type == type)
 	{
 	  switch (type)
 	    {
 	    case player:
-	      if (strcmp
-		  (((struct player *) (temp_element->listptr->item))->name,
-		   symbol) == 0)
-		{
-		  temp = temp_element->listptr->item;
-		  tobedeleted = temp_element->listptr;
-		  temp_element->listptr = temp_element->listptr->listptr;
-		  free (tobedeleted);
-		  return temp;
-		}
+	      if (strcmp (((struct player *) curlist->item)->name,
+			  symbol) == 0)
+		goto found;
 	      break;
 	    case planet:
-	      if (strcmp
-		  (((struct planet *) (temp_element->listptr->item))->name,
-		   symbol) == 0)
-		{
-		  temp = temp_element->listptr->item;
-		  tobedeleted = temp_element->listptr;
-		  temp_element->listptr = temp_element->listptr->listptr;
-		  free (tobedeleted);
-		  return temp;
-		}
+	      if (strcmp (((struct planet *) curlist->item)->name,
+			  symbol) == 0)
+		goto found;
 	      break;
 	    case port:
-	      if (strcmp
-		  (((struct port *) (temp_element->listptr->item))->name,
-		   symbol) == 0)
-		{
-		  temp = temp_element->listptr->item;
-		  tobedeleted = temp_element->listptr;
-		  temp_element->listptr = temp_element->listptr->listptr;
-		  free (tobedeleted);
-		  return temp;
-		}
+	      if (strcmp (((struct port *) curlist->item)->name, symbol) == 0)
+		goto found;
 	      break;
 	    case ship:
-	      if (strcmp
-		  (((struct ship *) (temp_element->listptr->item))->name,
-		   symbol) == 0)
-		{
-		  temp = temp_element->listptr->item;
-		  tobedeleted = temp_element->listptr;
-		  temp_element->listptr = temp_element->listptr->listptr;
-		  free (tobedeleted);
-		  return temp;
-		}
+	      if (strcmp (((struct ship *) curlist->item)->name, symbol) == 0)
+		goto found;
 	      break;
 	    }
-	  if (temp_element->listptr != NULL)
-	    temp_element = temp_element->listptr;
 	}
-      else
-	temp_element = temp_element->listptr;
+      prevlist = curlist;
+      curlist = curlist->listptr;
     }
   return NULL;
-}
 
-//Returns NULL if the addition is not made, and item if it is
-void * insertitem (void *item, enum listtype type, struct list *hash_table[],
-		   int hash_length)
-{
-  int key;
-  struct list *new_element = (struct list *) malloc (sizeof (struct list *));
-  struct list *e_pointer;
-  char *symbol;
-
-  new_element->item = item;
-  new_element->type = type;
-  new_element->listptr = NULL;
-
-
-  //since all objects have name members, no need for mult. casts
-  symbol = ((struct player *) item)->name;
-  key = hash (symbol, hash_length);
-
-  e_pointer = hash_table[key];
-  while (1)
+found:
+  if (curlist == prevlist)
     {
-      if (e_pointer == NULL)
-	{
-	  hash_table[key] = new_element;
-	  return new_element->item;
-	}
-      else
-	{
-	  if (((struct player *) (e_pointer->item))->name != NULL
-	      && symbol != NULL)
-	    {
-	      if (strcmp (((struct player *) (e_pointer->item))->name, symbol) ==
-		  0)
-		{
-		  free (new_element);
-		  return NULL;
-		}
-	      if (e_pointer->listptr != NULL)
-		e_pointer = e_pointer->listptr;
-	      else
-		{
-		  e_pointer->listptr = new_element;
-		  return new_element->item;
-		}
-	    }
-	}
+      hash_table[hashval] = curlist->listptr;
     }
-  perror ("this is a chaining HT, this should never be reached\n");
-  return NULL;
+  else
+    {
+      prevlist->listptr = curlist->listptr;
+    }
+  delitem = curlist->item;
+  free (curlist->item);
+  free (curlist);
+  return delitem;
 }
 
 
-/*********************************************\
- * hash                                       |
- *                                            |
- * description: returns the location in the   |
- * hash table based on the input, adds up the |
- * value of all the characters in string, and |
- * outputs it mod hash_length                 |
-\*********************************************/
-
-int
-hash (const char *symbol, int hash_length)
+void *
+insertitem (void *item, enum listtype type, struct list *hash_table[],
+	    int hash_length)
 {
-  int x = 0;
-  int temp_int = 0;
+  struct list *newlist;
+  int hashval;
+  char *name;
 
-  while (symbol[x] != '\0')
-    temp_int += (int) symbol[x++] * pow (2, x);
+  newlist = (struct list *) malloc (sizeof (struct list));
 
-  return (temp_int % hash_length);
+  newlist->type = type;
+  newlist->item = item;
+
+  switch (type)
+    {
+    case player:
+      name = ((struct player *) item)->name;
+      break;
+    case planet:
+      name = ((struct planet *) item)->name;
+      break;
+    case port:
+      name = ((struct port *) item)->name;
+      break;
+    case ship:
+      name = ((struct ship *) item)->name;
+      break;
+    }
+
+  hashval = hash (name, hash_length);
+  newlist->listptr = hash_table[hashval];
+  hash_table[hashval] = newlist;
+
+  return newlist->item;
+}
+
+
+void *
+deleteitem (void *item, enum listtype type, struct list *hash_table[],
+	    int hash_length)
+{
+  struct list *curlist, *prevlist;
+  void *delitem;
+  int hashval;
+  char *name;
+
+  switch (type)
+    {
+    case player:
+      name = ((struct player *) item)->name;
+      break;
+    case planet:
+      name = ((struct planet *) item)->name;
+      break;
+    case port:
+      name = ((struct port *) item)->name;
+      break;
+    case ship:
+      name = ((struct ship *) item)->name;
+      break;
+    }
+
+  hashval = hash (name, hash_length);
+  curlist = hash_table[hashval];
+  prevlist = curlist;
+  while (curlist != NULL)
+    {
+      if (curlist->type == type && curlist->item == item)
+	goto found;
+      prevlist = curlist;
+      curlist = curlist->listptr;
+    }
+  return NULL;
+
+found:
+  if (curlist == prevlist)
+    {
+      hash_table[hashval] = curlist->listptr;
+    }
+  else
+    {
+      prevlist->listptr = curlist->listptr;
+    }
+  delitem = curlist->item;
+  free (curlist);
+  return delitem;
 }

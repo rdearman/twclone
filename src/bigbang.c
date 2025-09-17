@@ -94,21 +94,19 @@ int maxWarps = 0;
 
 /*  THESE ARE THE SET-IN-STONE FEDSPACE LINKS */
 /*  DON'T EVEN THINK ABOUT TOUCHING THESE... */
-const int fedspace[10][6] =
+const int fedspace[10][6] = {
   {
-    {
-      2, 3, 4, 5, 6, 7
-    },
-    {1, 3, 7, 8, 9, 10},
-    {1, 2, 4, 0, 0, 0},
-    {1, 3, 5, 0, 0, 0},
-    {1, 4, 6, 0, 0, 0},
-    {1, 5, 7, 0, 0, 0},
-    {1, 2, 6, 8, 0, 0},
-    {2, 7, 0, 0, 0, 0},
-    {2, 10, 0, 0, 0, 0},
-    {2, 9, 0, 0, 0, 0}
-  };
+   2, 3, 4, 5, 6, 7},
+  {1, 3, 7, 8, 9, 10},
+  {1, 2, 4, 0, 0, 0},
+  {1, 3, 5, 0, 0, 0},
+  {1, 4, 6, 0, 0, 0},
+  {1, 5, 7, 0, 0, 0},
+  {1, 2, 6, 8, 0, 0},
+  {2, 7, 0, 0, 0, 0},
+  {2, 10, 0, 0, 0, 0},
+  {2, 9, 0, 0, 0, 0}
+};
 
 struct sector **sectorlist;
 struct sector **bigsectorlist;
@@ -126,9 +124,9 @@ void secjump (int from, int to);
 int freewarp (int sector);
 int warpsfull (int sector);
 int numwarps (int sector);
-int innode(int sector);
+int innode (int sector);
 //void makeports ();
-void makeports(totalsectors);
+void makeports (int totalsectors);
 void sectorsort (struct sector *base[maxWarps], int elements);
 extern char *randomname (char *name);
 extern char *consellationName (char *name);
@@ -152,11 +150,10 @@ main (int argc, char **argv)
   FILE *file;
   FILE *planetfile;
   struct sector *secptr;
-  char *terraInfo = malloc(sizeof(char)*400);
-  "1:1:terra:1:-1:Unknown:3000:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:"
-    ;
-  char *ferrinfo = malloc(sizeof(char)*400);
-  char *plout = malloc(sizeof(char)*400);
+  char *terraInfo = malloc (sizeof (char) * 400);
+  "1:1:terra:1:-1:Unknown:3000:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:";
+  char *ferrinfo = malloc (sizeof (char) * 400);
+  char *plout = malloc (sizeof (char) * 400);
   char *randomPlanetInfo;
   int ferringhiSector;
   time_t datenow;
@@ -169,59 +166,58 @@ main (int argc, char **argv)
     "Usage: bigbang [options]\n    Options:-t < integer >\n    indicate the max length of tunnels and dead ends.(default /minimum 6)\n    -s < integer >\n    indicate the max number of sectors.(default /minimum 500)\n    -p < integer >\n    indicate the max number of ports which MUST be at least 10 LESS than the\n    number of sectors.(default /minimum 190)\n    -o < integer >\n    indicate the percentage chance that a final jump will be a one -\n    way.(default /minimum 3)\n    -d < integer >\n    indicate the percentage chance that a tunnel will be a dead end.\n    (default /minimum 30)\n    -g < integer > generate a number of random planets.(default 0) \n     -n < integer > indicate number of Nodes in universe(default 1).\n       Nodes are partially disconnected subuniverses that are only connected \n       from certain ports.\n";
   /* This has to be taken out because of the knockon affect it was having with the rest of the program.
      -j <integer>  indicate the percentage of sectors that will have the maximum number of warps in them. (must be between 3 and 7) 
-  */
+   */
   opterr = 0;
 
-  strcpy(terraInfo,"1:1:terra:1:-1:Unknown:3000:0:0:0:0:0:0:0:0:0:0:0:0:0:0:");
+  strcpy (terraInfo,
+	  "1:1:terra:1:-1:Unknown:3000:0:0:0:0:0:0:0:0:0:0:0:0:0:0:");
 
   /* Setup the defaults before finding the arguments. */
-  maxTunnel = MAXTUNLEN; 
+  maxTunnel = MAXTUNLEN;
   numSectors = NUMSECTORS;
-  numPorts = NUMPORTS; 
+  numPorts = NUMPORTS;
   percentJump = MAXJUMPPERCENT;
-  percentDeadend = DEADENDPERCENT; 
-  percentOneway = ONEWAYJUMPPERCENT ;
-  numRandomPlanets = numRandomPlanets ; 
-  numNodes =  NUMNODES; 
-    
+  percentDeadend = DEADENDPERCENT;
+  percentOneway = ONEWAYJUMPPERCENT;
+  numRandomPlanets = numRandomPlanets;
+  numNodes = NUMNODES;
+
   /*    while ((c = getopt (argc, argv, "t:s:p:j:d:o:")) != -1) */
   while ((c = getopt (argc, argv, "t:s:p:d:o:g:n:")) != -1)
     {
       switch (c)
-        {
-        case 't':
+	{
+	case 't':
 	  maxTunnel = (MAXTUNLEN > atoi (optarg)) ? MAXTUNLEN : atoi (optarg);
 	  break;
-        case 's':
+	case 's':
 	  numSectors =
 	    (NUMSECTORS > atoi (optarg)) ? NUMSECTORS : atoi (optarg);
 	  break;
-        case 'p':
+	case 'p':
 	  numPorts = (NUMPORTS > atoi (optarg)) ? NUMPORTS : atoi (optarg);
 	  break;
 	  /*        case 'j': */
 	  /*          percentJump = (MAXJUMPPERCENT > atoi(optarg)) ? MAXJUMPPERCENT : atoi(optarg); */
 	  /*          percentJump = (7 > percentJump) ? 7 : percentJump; */
 	  /*          break; */
-        case 'd':
+	case 'd':
 	  percentDeadend =
 	    (DEADENDPERCENT > atoi (optarg)) ? DEADENDPERCENT : atoi (optarg);
 	  break;
-        case 'o':
+	case 'o':
 	  percentOneway =
 	    (ONEWAYJUMPPERCENT >
 	     atoi (optarg)) ? ONEWAYJUMPPERCENT : atoi (optarg);
 	  break;
-        case 'g':
+	case 'g':
 	  numRandomPlanets =
 	    (numRandomPlanets >
 	     atoi (optarg)) ? numRandomPlanets : atoi (optarg);
-        case 'n':
-	  numNodes =
-	    (NUMNODES >
-	     atoi (optarg)) ? NUMNODES : atoi( optarg);
+	case 'n':
+	  numNodes = (NUMNODES > atoi (optarg)) ? NUMNODES : atoi (optarg);
 	  break;
-        case '?':
+	case '?':
 	  if (isprint (optopt))
 	    fprintf (stderr, "Unknown option `-%c'.\n\n%s", optopt,
 		     usageinfo);
@@ -232,7 +228,7 @@ main (int argc, char **argv)
 	  return 1;
 	  //default:
 
-        }
+	}
     }
 
 
@@ -243,7 +239,7 @@ main (int argc, char **argv)
       exit (0);
     }
 
-  usedNames = (int *) malloc( numSectors * sizeof(int) );
+  usedNames = (int *) malloc (numSectors * sizeof (int));
   tmpname = malloc (sizeof (strNameLength));
 
   /*  Seed our randomizer */
@@ -262,13 +258,13 @@ main (int argc, char **argv)
   sectorlist = (struct sector **)
     malloc (numSectors * sizeof (struct sector *));
   bigsectorlist = (struct sector **)
-    malloc(numSectors * sizeof(struct sector *));
+    malloc (numSectors * sizeof (struct sector *));
   for (x = 0; x < numSectors; x++)
     {
       sectorlist[x] = NULL;
       bigsectorlist[x] = NULL;
     }
-	 
+
   sectors = sectorlist;
 
   printf ("Creating port array...");
@@ -282,44 +278,46 @@ main (int argc, char **argv)
   totalsectors = numSectors;
   for (counter = 1; counter <= numNodes; counter++)
     {
-      numSectors = totalsectors/numNodes;
-      if ((counter == numNodes) && ((totalsectorsdone + numSectors) < totalsectors))
+      numSectors = totalsectors / numNodes;
+      if ((counter == numNodes)
+	  && ((totalsectorsdone + numSectors) < totalsectors))
 	{
 	  numSectors = totalsectors - totalsectorsdone;
 	}
       if (numNodes != 1)
-	fprintf(stderr, "Now creating a node with %d sectors in it!\n", numSectors);
+	fprintf (stderr, "Now creating a node with %d sectors in it!\n",
+		 numSectors);
       if (counter != 1)
 	{
 	  numSectors = numSectors + 10;
 	}
-		  
+
       maxjumpsize = (int) (numSectors * ((double) percentJump / 100));
       randsectornum = (int *) malloc ((numSectors - 11) * sizeof (int));
 
       for (x = 0; x < numSectors; x++)
 	{
 	  sectorlist[x] = malloc (sizeof (struct sector));
-	  for (y=0; y <= maxWarps; y++)
+	  for (y = 0; y <= maxWarps; y++)
 	    {
 	      sectorlist[x]->sectorptr[y] = NULL;
 	    }
-	}	
+	}
       /*  Fills in the randsectornum array with numbers 10 to (numsectors - 1) */
       for (x = 0; x < numSectors - 10; x++)
 	randsectornum[x] = x + 10;
 
-        
+
       usedsecptr = numSectors - 11;
       printf ("Randomly picking sector numbers...");
       /*  Randomly creates sector numbers to use: */
       for (x = numSectors - 11; x > 0; x--)
-        {
+	{
 	  randint = randomnum (0, x);
 	  tempint = randsectornum[randint];
 	  randsectornum[randint] = randsectornum[x];
 	  randsectornum[x] = tempint;
-        }
+	}
       printf ("done.\n");
 
       /*  Initalize sectorlist with data */
@@ -329,29 +327,29 @@ main (int argc, char **argv)
       printf ("Creating Fedspace...");
       /*  Sets up Fed Space */
       for (x = 0; x < 10; x++)
-        {
+	{
 	  for (y = 0; y < 6; y++)
 	    if (fedspace[x][y] != 0)
 	      sectorlist[x]->sectorptr[y] = sectorlist[(fedspace[x][y]) - 1];
 	  sectorlist[x]->beacontext = "The Federation -- Do Not Dump!";
 	  sectorlist[x]->nebulae = "The Federation";
-        }
+	}
       printf ("done.\n");
 
       printf ("Setting up links from FedSpace out to other sectors...");
       /*  Sets up 13 jumps from Fed Space to 6jump sectors  */
       for (x = 0; x <= 13; x++)
-        {
+	{
 	  randint = randomnum (1, 5);
 	  do
-            {
+	    {
 	      fromsector = randomnum (2, 9);
-            }
+	    }
 	  while (warpsfull (fromsector));
 	  jumpsize = randjump (3);
 
 	  for (y = 0; y < jumpsize; y++)
-            {
+	    {
 	      tempint = randomnum (maxjumpsize, usedsecptr);
 	      tosector = randsectornum[tempint];
 	      randsectornum[tempint] = randsectornum[usedsecptr];
@@ -360,28 +358,28 @@ main (int argc, char **argv)
 	      secjump (fromsector, tosector);
 	      secjump (tosector, fromsector);
 	      fromsector = tosector;
-            }
+	    }
 	  if (randint < 4)
-            {
+	    {
 	      secjump (fromsector, x);
 	      secjump (x, fromsector);
-            }
-        }
+	    }
+	}
       printf ("done.\n");
 
       printf ("Setting up the max warp sectors...");
-      fflush(stdout);
+      fflush (stdout);
       /*  Sets up rest of links for the maxwarp sectors (the meat and potatoes) */
       for (x = 0; x < maxjumpsize; x++)
-        {
+	{
 	  for (y = freewarp (x); y < maxWarps; y++)
-            {
+	    {
 	      randint = randomnum (1, 100);
 	      jumpsize = randjump (maxTunnel);
 	      startsec = randsectornum[x];
 	      fromsector = startsec;
 	      for (z = 0; z < jumpsize; z++)
-                {
+		{
 		  tempint = randomnum (maxjumpsize, usedsecptr);
 		  tosector = randsectornum[tempint];
 		  randsectornum[tempint] = randsectornum[usedsecptr];
@@ -391,48 +389,50 @@ main (int argc, char **argv)
 		  secjump (fromsector, tosector);
 		  secjump (tosector, fromsector);
 		  fromsector = tosector;
-                }
+		}
 	      if (randint <= (100 - percentDeadend))
-                {
+		{
 		  do
-                    {
-		      tosector = randsectornum[randomnum (0, maxjumpsize - 1)];
-                    }
+		    {
+		      tosector =
+			randsectornum[randomnum (0, maxjumpsize - 1)];
+		    }
 		  while (tosector == startsec);
 		  secjump (fromsector, tosector);
 		  if (randomnum (1, 100) <= (100 - percentOneway)
 		      && !warpsfull (tosector))
 		    secjump (tosector, fromsector);
-                }
-            }
-        }
+		}
+	    }
+	}
       printf ("done.\n");
-      fflush(stdout);
+      fflush (stdout);
 
       for (x = 0; x < maxjumpsize; x++)
-        {
+	{
 	  tempint = randsectornum[x];
 	  randsectornum[x] = randsectornum[usedsecptr];
 	  randsectornum[usedsecptr] = tempint;
 	  usedsecptr--;
-        }
+	}
 
       printf ("Using up leftover sector numbers...");
-      fflush(stdout);
+      fflush (stdout);
       while (usedsecptr >= 0)	/*  finishes up creating other sector links... */
-        {
+	{
 	  randint = randomnum (1, 100);
 	  tempint = maxTunnel;
 	  if (usedsecptr + 1 < maxTunnel)
 	    tempint = usedsecptr + 1;
 	  jumpsize = randjump (tempint);
-	  startsec = randsectornum[randomnum (usedsecptr + 1, numSectors - 11)];
+	  startsec =
+	    randsectornum[randomnum (usedsecptr + 1, numSectors - 11)];
 	  if (freewarp (startsec))
-            {
+	    {
 	      fromsector = startsec;
 	      secptrcpy = usedsecptr;
 	      for (z = 0; z < jumpsize; z++)
-                {
+		{
 		  tempint = randomnum (0, usedsecptr);
 		  tosector = randsectornum[tempint];
 
@@ -443,49 +443,53 @@ main (int argc, char **argv)
 		  secjump (fromsector, tosector);
 		  secjump (tosector, fromsector);
 		  fromsector = tosector;
-                }
+		}
 	      if (randint <= (100 - percentDeadend))
-                {
+		{
 		  do
-                    {
+		    {
 		      tosector = randsectornum[randomnum (0, secptrcpy)];
-                    }
+		    }
 		  while (tosector == startsec || warpsfull (tosector));
 		  secjump (fromsector, tosector);
 		  if (randomnum (1, 100) <= (100 - percentOneway))
 		    secjump (tosector, fromsector);
-                }
-            }
-        }
+		}
+	    }
+	}
       printf ("done.\n");
-      fflush(stdout);
+      fflush (stdout);
       if (counter == 1)
 	{
-	  for (x=0; x < numSectors ; x++)
+	  for (x = 0; x < numSectors; x++)
 	    {
 	      bigsectorlist[x + totalsectorsdone] = sectorlist[x];
 	      //fprintf(stderr, "Linking sector %d to sector %d\n", x+totalsectorsdone+1, x+1);
-	      bigsectorlist[x + totalsectorsdone]->number = 
-		bigsectorlist[x + totalsectorsdone]->number + totalsectorsdone;
+	      bigsectorlist[x + totalsectorsdone]->number =
+		bigsectorlist[x + totalsectorsdone]->number +
+		totalsectorsdone;
 	    }
 	}
       else
 	{
-	  for (x=0; x < (numSectors - 10); x++)
+	  for (x = 0; x < (numSectors - 10); x++)
 	    {
 	      if (x + totalsectorsdone >= totalsectors)
 		{
-		  x = numSectors+12;
+		  x = numSectors + 12;
 		}
 	      else
 		{
-		  if (x < 10) //Make sure links to fedspace are dealt with correctly
-		    sectorlist[x]->number = sectorlist[x]->number + totalsectorsdone;
+		  if (x < 10)	//Make sure links to fedspace are dealt with correctly
+		    sectorlist[x]->number =
+		      sectorlist[x]->number + totalsectorsdone;
 		  //fprintf(stderr,"Linking sector %d to sector %d numSectors is %d x is %d\n", x+11, x+totalsectorsdone+1, numSectors, x);
-		  sectorlist[x+10]->number = sectorlist[x+10]->number - 10;
-		  bigsectorlist[x + totalsectorsdone] = sectorlist[x+10];
-		  bigsectorlist[x + totalsectorsdone]->number = 
-		    bigsectorlist[x + totalsectorsdone]->number + totalsectorsdone;
+		  sectorlist[x + 10]->number =
+		    sectorlist[x + 10]->number - 10;
+		  bigsectorlist[x + totalsectorsdone] = sectorlist[x + 10];
+		  bigsectorlist[x + totalsectorsdone]->number =
+		    bigsectorlist[x + totalsectorsdone]->number +
+		    totalsectorsdone;
 		}
 	    }
 	}
@@ -495,44 +499,45 @@ main (int argc, char **argv)
 	totalsectorsdone = totalsectorsdone + numSectors - 10;
       if (numNodes != 1)
 	{
-	  printf("Now finishing Node %d. With %d sectors complete.\n\n", counter,
-		 totalsectorsdone);
+	  printf ("Now finishing Node %d. With %d sectors complete.\n\n",
+		  counter, totalsectorsdone);
 	}
-      fflush(stdout);
-		  
+      fflush (stdout);
+
     }
   sectorlist = bigsectorlist;
   numSectors = totalsectors;
-  for (counter=0; counter < numSectors; counter++)
+  for (counter = 0; counter < numSectors; counter++)
     {
       if (sectorlist[counter] == NULL)
 	{
 	  //fprintf(stderr, "Sector %d is null!\n", counter+1);
-	  sectorlist[counter] = (struct sector *)malloc(sizeof(struct sector));
+	  sectorlist[counter] =
+	    (struct sector *) malloc (sizeof (struct sector));
 	  sectorlist[counter]->portptr = NULL;
-	  for (x=0; x< maxWarps; x++)
+	  for (x = 0; x < maxWarps; x++)
 	    sectorlist[counter]->sectorptr[x] = NULL;
 	  sectorlist[counter]->sectorptr[0] = sectorlist[0];
 	}
-      else 
+      else
 	{
 	  if (sectorlist[counter]->portptr != NULL)
 	    sectorlist[counter]->portptr = NULL;
 	  if (sectorlist[counter]->sectorptr[0] == NULL)
 	    {
 	      //fprintf(stderr, "\nSector %d has no warps!\n", counter+1);
-	      fflush(stderr);
+	      fflush (stderr);
 	      sectorlist[counter]->sectorptr[0] = sectorlist[0];
 	    }
 	}
     }
 
   printf ("Creating %d ports...", numPorts);
-  fflush(stdout);
+  fflush (stdout);
   // makeports ();
-  makeports(totalsectors);    
+  makeports (totalsectors);
   printf ("done.\n");
-  fflush(stdout);
+  fflush (stdout);
 
 
   printf ("Creating Ferringhi home sector...");
@@ -543,35 +548,39 @@ main (int argc, char **argv)
 
   printf ("Creating planets...");
   planetfile = fopen ("./planets.data", "w");
-  for (loop = 1; loop <= 299 - strlen(terraInfo); loop++)
-    strcat(terraInfo, " ");
-  strcat(terraInfo, "\n");
+  for (loop = 1; loop <= 299 - strlen (terraInfo); loop++)
+    strcat (terraInfo, " ");
+  strcat (terraInfo, "\n");
   fprintf (planetfile, "%s", terraInfo);
-  sprintf (ferrinfo, "%d:%d:Ferringhi:1:-2:Unknown:1000:1000:1000:0:0:0:0:3:100000:20:30:10:0:0:0:0:", 2, ferringhiSector);
-  for (loop = 1; loop <= 299 - strlen(ferrinfo); loop++)
-    strcat(ferrinfo, " ");
-  strcat(ferrinfo, "\n");
-  fprintf(planetfile,"%s", ferrinfo);
+  sprintf (ferrinfo,
+	   "%d:%d:Ferringhi:1:-2:Unknown:1000:1000:1000:0:0:0:0:3:100000:20:30:10:0:0:0:0:",
+	   2, ferringhiSector);
+  for (loop = 1; loop <= 299 - strlen (ferrinfo); loop++)
+    strcat (ferrinfo, " ");
+  strcat (ferrinfo, "\n");
+  fprintf (planetfile, "%s", ferrinfo);
   randomPlanetInfo = malloc (sizeof (strNameLength));
   if (numRandomPlanets > 0)
     {
       c = 3;
       for (x = 0; x < numRandomPlanets; x++)
-        {
+	{
 	  tempint = randomnum (21, (numSectors - 1));
 	  while (tempint == ferringhiSector || tempint < 10)
-            {
+	    {
 	      tempint = randomnum (21, (numSectors - 1));
-            }
-	  sprintf (ferrinfo, "%d:%d:%s:%d:0:Unknown:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:"
-		   , c, tempint, randomname (randomPlanetInfo), randomnum(1,5));
-	  for (loop = 1; loop <= 299 - strlen(ferrinfo); loop++)
-	    strcat(ferrinfo, " ");
-	  strcat(ferrinfo, "\n");
-	  fprintf(planetfile,"%s", ferrinfo);
+	    }
+	  sprintf (ferrinfo,
+		   "%d:%d:%s:%d:0:Unknown:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:",
+		   c, tempint, randomname (randomPlanetInfo), randomnum (1,
+									 5));
+	  for (loop = 1; loop <= 299 - strlen (ferrinfo); loop++)
+	    strcat (ferrinfo, " ");
+	  strcat (ferrinfo, "\n");
+	  fprintf (planetfile, "%s", ferrinfo);
 
 	  c++;
-        }
+	}
     }
 
   printf ("done.\n");
@@ -584,13 +593,13 @@ main (int argc, char **argv)
   if (numPorts > configdata->max_ports)
     {
       if (numPorts <= numSectors)
-	configdata->max_ports = (numSectors + numPorts)/2;
+	configdata->max_ports = (numSectors + numPorts) / 2;
     }
-  printf("Saving config data to file...");
-  datenow = time(NULL);
-  configdata->bangdate = (unsigned long)datenow;
+  printf ("Saving config data to file...");
+  datenow = time (NULL);
+  configdata->bangdate = (unsigned long) datenow;
   configdata->numnodes = numNodes;
-  saveconfig("config.data");
+  saveconfig ("config.data");
 
 
   /*  Sorts each sector's warps into numeric order */
@@ -610,22 +619,22 @@ main (int argc, char **argv)
     {
       sprintf (fileline, "%d", (x + 1));
       fileline = strcat (fileline, ":");
-      for (y = 0; y < numwarps(x); y++)
-        {
+      for (y = 0; y < numwarps (x); y++)
+	{
 	  secptr = sectorlist[x]->sectorptr[y];
 	  sprintf (tempstr, "%d", secptr->number);
 	  fileline = strcat (fileline, tempstr);
-	  if ((y+1) < numwarps(x))
+	  if ((y + 1) < numwarps (x))
 	    fileline = strcat (fileline, ",");
-        }
+	}
       fileline = strcat (fileline, ":");
       /* Adds in names for sectors */
       if (sectorlist[x]->nebulae == NULL)
-        {
+	{
 	  sectorlist[x]->nebulae = malloc (sizeof (strNameLength));
 	  tmpname = consellationName (tmpname);
 	  sectorlist[x]->nebulae = tmpname;
-        }
+	}
       if (sectorlist[x]->beacontext != NULL)
 	fileline = strcat (fileline, sectorlist[x]->beacontext);
       fileline = strcat (fileline, ":");
@@ -662,7 +671,7 @@ main (int argc, char **argv)
       for (y = 0; y <= 99 - len; y++)
 	strcat (fileline, " ");
       strcat (fileline, "\n");
-      fprintf (file, "%s",fileline);
+      fprintf (file, "%s", fileline);
     }
   fclose (file);
 
@@ -684,7 +693,8 @@ compsec (const void *cmp1, const void *cmp2)
   return 0;
 }
 
-int randjump (int maxjumplen)
+int
+randjump (int maxjumplen)
 {
   if (maxjumplen > 2)
     {
@@ -734,7 +744,8 @@ secjump (int from, int to)
     sectorlist[from]->sectorptr[y] = sectorlist[to];
 }
 
-int freewarp (int sector)
+int
+freewarp (int sector)
 {
   int x;
   for (x = 0; x < maxWarps; x++)
@@ -753,7 +764,8 @@ warpsfull (int sector)
   return 0;
 }
 
-int innode(int sector)
+int
+innode (int sector)
 {
   int counter;
   int nodemin;
@@ -763,18 +775,20 @@ int innode(int sector)
     {
       return 1;
     }
-  for (counter=1; counter <= numNodes; counter++)
+  for (counter = 1; counter <= numNodes; counter++)
     {
-      nodemin = (int)(counter - 1.0)*(float)(numSectors)/(float)numNodes + 1.0;
-      nodemax = (int)counter*(float)numSectors/(float)numNodes;
+      nodemin =
+	(int) (counter - 1.0) * (float) (numSectors) / (float) numNodes + 1.0;
+      nodemax = (int) counter *(float) numSectors / (float) numNodes;
       if (sector >= nodemin && sector <= nodemax)
-        {
-	  return(counter);
-        }
+	{
+	  return (counter);
+	}
     }
 }
 
-int numwarps (int sector)
+int
+numwarps (int sector)
 {
   int x = freewarp (sector);
   if (x == -1)
@@ -782,7 +796,8 @@ int numwarps (int sector)
   return x;
 }
 
-void sectorsort (struct sector *base[maxWarps], int elements)
+void
+sectorsort (struct sector *base[maxWarps], int elements)
 {
   struct sector *holdersector;
   int x = 0;
@@ -793,11 +808,11 @@ void sectorsort (struct sector *base[maxWarps], int elements)
   if (elements == 2)
     {
       if (base[0]->number > base[1]->number)
-        {
+	{
 	  holdersector = base[0];
 	  base[0] = base[1];
 	  base[1] = holdersector;
-        }
+	}
       return;
 
     }
@@ -805,34 +820,34 @@ void sectorsort (struct sector *base[maxWarps], int elements)
     {
       alldone = 1;
       for (x = 0; x < (elements / 2 - 1 + elements % 2); x++)
-        {
+	{
 	  if (base[2 * x]->number > base[2 * x + 1]->number)
-            {
+	    {
 	      holdersector = base[2 * x];
 	      base[2 * x] = base[2 * x + 1];
 	      base[2 * x + 1] = holdersector;
-            }
-        }
+	    }
+	}
       for (x = 1; x <= (elements / 2 - 1 + elements % 2); x++)
-        {
+	{
 	  if (base[2 * x - 1]->number > base[2 * x]->number)
-            {
+	    {
 	      alldone = 0;
 	      done = 0;
 	      holdersector = base[2 * x - 1];
 	      base[2 * x - 1] = base[2 * x];
 	      base[2 * x] = holdersector;
-            }
+	    }
 	  else if (alldone != 0)
 	    done = 1;
-        }
+	}
       if (done != 0)
 	break;
     }
 }
 
 void
-makeports(totalsectors)
+makeports (totalsectors)
 {
   struct port *curport;
   struct port *ckPort;
@@ -851,16 +866,16 @@ makeports(totalsectors)
     {
       tmpname = randomname (tmpname);
       // Sanity Check Port Names and make sure there are no duplicates.
-      for (int sanity_ck =0; sanity_ck < loop; sanity_ck++)
+      for (int sanity_ck = 0; sanity_ck < loop; sanity_ck++)
 	{
 	  ckPort = portlist[sanity_ck];
-	  if (strcmp(tmpname,ckPort->name ) == 0)
+	  if (strcmp (tmpname, ckPort->name) == 0)
 	    {
 	      expandedtmpname = malloc (sizeof (tmpname) + 50);
-	      strcpy(expandedtmpname,  "\0");
-	      sprintf(expandedtmpname, "%s%s", tmpname,  "I");
-	      tmpname = realloc (tmpname, strlen(expandedtmpname) + 1);
-	      sprintf(tmpname, "%s", expandedtmpname);
+	      strcpy (expandedtmpname, "\0");
+	      sprintf (expandedtmpname, "%s%s", tmpname, "I");
+	      tmpname = realloc (tmpname, strlen (expandedtmpname) + 1);
+	      sprintf (tmpname, "%s", expandedtmpname);
 	      //fprintf(stdout, "PortName:%s\n",expandedtmpname);
 	      //break;
 	    }
@@ -869,82 +884,84 @@ makeports(totalsectors)
       curport = (struct port *) malloc (sizeof (struct port));
       curport->number = loop + 1;
       // curport->name = (char *) malloc (sizeof (char) * (strlen(tmpname) + 1));
-      curport->name = (char *) malloc (strlen(tmpname) + 1);
+      curport->name = (char *) malloc (strlen (tmpname) + 1);
       strcpy (name, "\0");
 
       if (loop == 0)
-        {
+	{
 	  strcpy (curport->name, "Sol");
 	  type = 0;
-        }
+	}
       /*
+         else if (loop == 1)
+         {
+         strcpy (curport->name, "Alpha Centauri");
+         type = 0;
+         }
+         else if (loop == 2)
+         {
+         strcpy (curport->name, "Rylos");
+         type = 0;
+         }
+         else if (loop == 3)
+         {
+         strcpy (curport->name, "Stargate Alpha I");
+         type = 9;
+         curport->maxproduct[0] = randomnum (2800, 3000);
+         curport->maxproduct[1] = randomnum (2800, 3000);
+         curport->maxproduct[2] = randomnum (2800, 3000);
+         }
+       */
       else if (loop == 1)
-        {
+	{
+	  curport->name =
+	    realloc (curport->name, strlen ("Alpha Centauri") + 1);
 	  strcpy (curport->name, "Alpha Centauri");
 	  type = 0;
-        }
+	}
       else if (loop == 2)
-        {
+	{
+	  curport->name = realloc (curport->name, strlen ("Rylos") + 1);
 	  strcpy (curport->name, "Rylos");
 	  type = 0;
-        }
+	}
       else if (loop == 3)
-        {
+	{
+	  curport->name =
+	    realloc (curport->name, strlen ("Stargate Alpha I") + 1);
 	  strcpy (curport->name, "Stargate Alpha I");
 	  type = 9;
 	  curport->maxproduct[0] = randomnum (2800, 3000);
 	  curport->maxproduct[1] = randomnum (2800, 3000);
 	  curport->maxproduct[2] = randomnum (2800, 3000);
-        }
-      */
-      else if (loop == 1)
-        {
-          curport->name = realloc(curport->name, strlen("Alpha Centauri") + 1);
-          strcpy (curport->name, "Alpha Centauri");
-          type = 0;
-        }
-      else if (loop == 2)
-        {
-          curport->name = realloc(curport->name, strlen("Rylos") + 1);
-          strcpy (curport->name, "Rylos");
-          type = 0;
-        }
-      else if (loop == 3)
-        {
-          curport->name = realloc(curport->name, strlen("Stargate Alpha I") + 1);
-          strcpy (curport->name, "Stargate Alpha I");
-          type = 9;
-          curport->maxproduct[0] = randomnum (2800, 3000);
-          curport->maxproduct[1] = randomnum (2800, 3000);
-          curport->maxproduct[2] = randomnum (2800, 3000);
-        }
+	}
       // 
-      else if ((loop <= numNodes+3) && numNodes > 1)
+      else if ((loop <= numNodes + 3) && numNodes > 1)
 	{
 	  if (loop == 4)
 	    {
-	      tmpname = realloc (tmpname, strlen("Terra Node") + 1);
-	      sprintf(tmpname, "Terra Node");
+	      tmpname = realloc (tmpname, strlen ("Terra Node") + 1);
+	      sprintf (tmpname, "Terra Node");
 	    }
-	    else
+	  else
 	    {
-	      tmpname = realloc (tmpname, strlen(tmpname) + 7);
-	      strcat(tmpname, " Node");
+	      tmpname = realloc (tmpname, strlen (tmpname) + 7);
+	      strcat (tmpname, " Node");
 	    }
 	  type = 10;
-	  strcpy(curport->name, tmpname);
+	  strcpy (curport->name, tmpname);
 	  curport->maxproduct[0] = randomnum (2800, 3000);
 	  curport->maxproduct[1] = randomnum (2800, 3000);
 	  curport->maxproduct[2] = randomnum (2800, 3000);
 	}
-      else 
-        {
+      else
+	{
 	  strcpy (curport->name, tmpname);
 	  curport->maxproduct[0] = randomnum (2800, 3000);
 	  curport->maxproduct[1] = randomnum (2800, 3000);
 	  curport->maxproduct[2] = randomnum (2800, 3000);
 	  type = randomnum (1, 8);
-        }
+	}
       curport->type = type;
       curport->product[0] = 0;
       curport->product[1] = 0;
@@ -954,42 +971,42 @@ makeports(totalsectors)
 
 
       switch (type)
-        {
-        case 1:
+	{
+	case 1:
 	  curport->product[2] = curport->maxproduct[2];
 	  break;
-        case 2:
+	case 2:
 	  curport->product[1] = curport->maxproduct[1];
 	  break;
-        case 3:
-	  curport->product[1] = curport->maxproduct[1];
-	  curport->product[2] = curport->maxproduct[2];
-	  break;
-        case 4:
-	  curport->product[0] = curport->maxproduct[0];
-	  break;
-        case 5:
-	  curport->product[0] = curport->maxproduct[0];
-	  curport->product[2] = curport->maxproduct[2];
-	  break;
-        case 6:
-	  curport->product[0] = curport->maxproduct[0];
-	  curport->product[1] = curport->maxproduct[1];
-	  break;
-        case 7:
-	  curport->product[0] = curport->maxproduct[0];
+	case 3:
 	  curport->product[1] = curport->maxproduct[1];
 	  curport->product[2] = curport->maxproduct[2];
 	  break;
-        default:
+	case 4:
+	  curport->product[0] = curport->maxproduct[0];
 	  break;
-        }
+	case 5:
+	  curport->product[0] = curport->maxproduct[0];
+	  curport->product[2] = curport->maxproduct[2];
+	  break;
+	case 6:
+	  curport->product[0] = curport->maxproduct[0];
+	  curport->product[1] = curport->maxproduct[1];
+	  break;
+	case 7:
+	  curport->product[0] = curport->maxproduct[0];
+	  curport->product[1] = curport->maxproduct[1];
+	  curport->product[2] = curport->maxproduct[2];
+	  break;
+	default:
+	  break;
+	}
       portlist[loop] = curport;
       curport = NULL;
 
       /*  Now for assigning the port to a sector */
       if (loop != 0)
-        {
+	{
 	  if (numNodes == 1)
 	    {
 	      sector = randomnum (0, numSectors - 1);
@@ -997,19 +1014,20 @@ makeports(totalsectors)
 		sector = randomnum (0, totalsectors - 1);
 	      portlist[loop]->location = sector + 1;
 	    }
-	  else if ((loop > 3) && (loop <= numNodes+3))
+	  else if ((loop > 3) && (loop <= numNodes + 3))
 	    {
 	      //fprintf(stderr, "Inserting type 10 port into node %d\n", loop-3);
-	      fflush(stdout);
+	      fflush (stdout);
 	      sector = randomnum (0, totalsectors - 1);
-	      curnode = innode(sector+1);
-	      while ((curnode != (loop-3)))
+	      curnode = innode (sector + 1);
+	      while ((curnode != (loop - 3)))
 		{
 		  do
 		    {
 		      sector = randomnum (0, totalsectors - 1);
-		      curnode = innode(sector+1);
-		    }while(sectorlist[sector]->portptr!=NULL);
+		      curnode = innode (sector + 1);
+		    }
+		  while (sectorlist[sector]->portptr != NULL);
 		}
 	      portlist[loop]->location = sector + 1;
 	    }
@@ -1018,10 +1036,10 @@ makeports(totalsectors)
 	      //fprintf(stderr, "looking to place port %d in a sector\n", loop+1);
 	      sector = randomnum (0, numSectors - 1);
 	      while (sectorlist[sector]->portptr != NULL)
-		sector = randomnum (0, totalsectors - 1);		
+		sector = randomnum (0, totalsectors - 1);
 	      portlist[loop]->location = sector + 1;
 	    }
-        }
+	}
       else
 	portlist[loop]->location = 1;
       sectorlist[sector]->portptr = portlist[loop];

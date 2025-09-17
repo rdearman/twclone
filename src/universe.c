@@ -82,7 +82,7 @@ init_universe (char *filename, struct sector ***array)
 	break;
 
       if (sectornum > sectorcount)
-        {
+	{
 	  //allocate enough pointers in the array
 	  (*array) =
 	    (struct sector **) realloc ((*array),
@@ -93,12 +93,12 @@ init_universe (char *filename, struct sector ***array)
 	    (*array)[i] = (struct sector *) malloc (sizeof (struct sector));
 
 	  sectorcount = sectornum;
-        }
+	}
       pos = len;
 
       (*array)[sectornum - 1]->number = sectornum;
       //make sure all of the sector links are null
-      for ( i = 0; i < MAX_WARPS_PER_SECTOR; i++)
+      for (i = 0; i < MAX_WARPS_PER_SECTOR; i++)
 	(*array)[sectornum - 1]->sectorptr[i] = NULL;
 
       sctptrcount = 0;
@@ -107,14 +107,15 @@ init_universe (char *filename, struct sector ***array)
 
       while ((tempsector = popint (temp, ",")) != 0
 	     && sctptrcount < MAX_WARPS_PER_SECTOR)
-        {
+	{
 	  //fprintf(stderr, "init_universe: tempsector = %d, sectornum = %d\n", tempsector, sectornum);
 	  if (tempsector > sectorcount)
-            {
+	    {
 	      //allocate enough pointers in the array
 	      (*array) =
-		(struct sector **) realloc ((*array), 
-					    tempsector * sizeof (struct sector *));
+		(struct sector **) realloc ((*array),
+					    tempsector *
+					    sizeof (struct sector *));
 
 	      //attach the newly allocated sectors to the array
 	      for (i = sectorcount; i < tempsector; i++)
@@ -125,22 +126,22 @@ init_universe (char *filename, struct sector ***array)
 
 	      /*I set it to zero now so I can test to make sure it has its own entry */
 	      (*array)[tempsector - 1]->number = 0;
-            }
+	    }
 
 	  /*make the link from our current sector to where it points. */
 	  (*array)[sectornum - 1]->sectorptr[sctptrcount++] =
 	    (*array)[tempsector - 1];
-        }
+	}
 
       /*set the last pointer to NULL if applicable */
       if (sctptrcount < MAX_WARPS_PER_SECTOR)
 	(*array)[sectornum - 1]->sectorptr[sctptrcount] = NULL;
       /*copy the beacon info over */
       if (strncmp (buffer, ":", 1) != 0)
-        {	/* This is in case there are is no nebulaes since popstring doesn't
-      		 * differentiate between ":<stuff>: and <stuff>: It thinks that its 
-      		 * the same thing.
-      		 */
+	{			/* This is in case there are is no nebulaes since popstring doesn't
+				 * differentiate between ":<stuff>: and <stuff>: It thinks that its 
+				 * the same thing.
+				 */
 	  popstring (buffer, temp, ":", BUFF_SIZE);
 	  (*array)[sectornum - 1]->beacontext =
 	    (char *) malloc (strlen (temp) + 1);
@@ -149,15 +150,15 @@ init_universe (char *filename, struct sector ***array)
 	  (*array)[sectornum - 1]->beacontext[strlen (temp)] = '\0';
 	  if (strlen (temp) == 0)
 	    strcpy ((*array)[sectornum - 1]->beacontext, "\0");
-        }
+	}
       else
-        {
+	{
 	  for (loop = 0; loop < strlen (buffer); loop++)
 	    buffer[loop] = buffer[loop + 1];
 	  (*array)[sectornum - 1]->beacontext =
 	    (char *) malloc (strlen ("\0") + 1);
 	  strcpy ((*array)[sectornum - 1]->beacontext, "\0");
-        }
+	}
 
       /*copy the nebulae info over */
       popstring (buffer, temp, ":", BUFF_SIZE);
@@ -178,7 +179,8 @@ init_universe (char *filename, struct sector ***array)
   return sectorcount;
 }
 
-void init_playerinfo (char *filename)
+void
+init_playerinfo (char *filename)
 {
   FILE *playerinfo;
   char name[MAX_NAME_LENGTH], passwd[MAX_NAME_LENGTH];
@@ -189,7 +191,7 @@ void init_playerinfo (char *filename)
   struct player *curplayer;
 
   players = (struct player **)
-    malloc(sizeof(struct player *)*configdata->max_players);
+    malloc (sizeof (struct player *) * configdata->max_players);
   for (playernum = 0; playernum < configdata->max_players; playernum++)
     players[playernum] = NULL;
 
@@ -215,24 +217,24 @@ void init_playerinfo (char *filename)
       if ((curplayer =
 	   (struct player *) insert (name, player, symbols,
 				     HASH_LENGTH)) == NULL)
-        {
+	{
 	  fprintf (stderr, "init_playerinfo: duplicate player name '%s'\n",
 		   name);
 	  return (-1000);
-        }
+	}
 
-      curplayer->sector = popint(buffer, ":");
-      curplayer->ship = popint(buffer, ":");
+      curplayer->sector = popint (buffer, ":");
+      curplayer->ship = popint (buffer, ":");
       curplayer->number = playernum;
-      curplayer->experience = popint(buffer, ":");
-      curplayer->alignment = popint(buffer, ":");
-      curplayer->turns = popint(buffer, ":");
-      popstring(buffer, credits, ":", 100);
-      curplayer->credits = strtoul(credits,NULL,10);
+      curplayer->experience = popint (buffer, ":");
+      curplayer->alignment = popint (buffer, ":");
+      curplayer->turns = popint (buffer, ":");
+      popstring (buffer, credits, ":", 100);
+      curplayer->credits = strtoul (credits, NULL, 10);
       //curplayer->credits = popint(buffer, ":");
-      popstring(buffer, balance, ":", 100);
-      curplayer->bank_balance = strtoul(balance,NULL,10);
-      curplayer->flags = popint(buffer, ":");
+      popstring (buffer, balance, ":", 100);
+      curplayer->bank_balance = strtoul (balance, NULL, 10);
+      curplayer->flags = popint (buffer, ":");
       //curplayer->bank_balance = popint(buffer, ":");
       curplayer->name = (char *) malloc (strlen (name) + 1);
       curplayer->passwd = (char *) malloc (strlen (passwd) + 1);
@@ -248,27 +250,27 @@ void init_playerinfo (char *filename)
       curplayer->lastplanet = 0;
 
       if (players[playernum - 1] != NULL)
-        {
+	{
 	  fprintf (stderr,
 		   "init_playinfo: duplicate player numbers, exiting...\n");
 	  return (-1500);
-        }
+	}
       if (curplayer->ship == 0)
 	{
-	  players[playernum - 1]=NULL;
-	  curplayer = delete(name, player, symbols, HASH_LENGTH);
+	  players[playernum - 1] = NULL;
+	  curplayer = delete (name, player, symbols, HASH_LENGTH);
 	}
       else
 	{
 	  players[playernum - 1] = curplayer;
 
-	  if (ships[curplayer->ship-1]->onplanet == 0)
+	  if (ships[curplayer->ship - 1]->onplanet == 0)
 	    {
 	      if (insertitem (curplayer, player,
 			      sectors[(curplayer->sector == 0) ?
-				      ships[curplayer->ship - 1]->location - 1 :
-				      (curplayer->sector - 1)]->playerlist,
-			      1) == NULL)
+				      ships[curplayer->ship - 1]->location -
+				      1 : (curplayer->sector -
+					   1)]->playerlist, 1) == NULL)
 		{
 		  fprintf (stderr,
 			   "init_playerinfo: unable to add player '%s'to playerlist in sector %d!\n",
@@ -291,7 +293,8 @@ void init_playerinfo (char *filename)
   fclose (playerinfo);
 }
 
-void init_shipinfo (char *filename)
+void
+init_shipinfo (char *filename)
 {
   FILE *shipfile;
   char buffer[BUFF_SIZE];
@@ -300,7 +303,7 @@ void init_shipinfo (char *filename)
   struct ship *curship;
 
   ships = (struct ship **)
-    malloc(sizeof(struct ship *)*configdata->max_ships);
+    malloc (sizeof (struct ship *) * configdata->max_ships);
   for (x = 0; x < configdata->max_ships; x++)
     ships[x] = NULL;
 
@@ -320,19 +323,19 @@ void init_shipinfo (char *filename)
       popstring (buffer, name, ":", MAX_NAME_LENGTH);
       if ((curship =
 	   (struct ship *) insert (name, ship, symbols, HASH_LENGTH)) == NULL)
-        {
+	{
 	  fprintf (stderr, "init_shipinfo: duplicate shipname '%s'\n", name);
 	  exit (-1);
-        }
+	}
       curship->number = x;
       curship->name = (char *) malloc (strlen (name) + 1);
       strcpy (curship->name, name);
-      if ((curship->type = popint (buffer, ":")) > 
+      if ((curship->type = popint (buffer, ":")) >
 	  configdata->ship_type_count)
-        {
+	{
 	  fprintf (stderr, "init_shipinfo: bad ship type number\n");
 	  exit (-1);
-        }
+	}
       curship->location = popint (buffer, ":");
       curship->fighters = popint (buffer, ":");
       curship->shields = popint (buffer, ":");
@@ -342,18 +345,18 @@ void init_shipinfo (char *filename)
       curship->organics = popint (buffer, ":");
       curship->ore = popint (buffer, ":");
       curship->owner = popint (buffer, ":");
-      curship->flags = popint(buffer, ":");
-      curship->onplanet = popint(buffer, ":");
+      curship->flags = popint (buffer, ":");
+      curship->onplanet = popint (buffer, ":");
       if (ships[x - 1] != NULL)
-        {
+	{
 	  fprintf (stderr,
 		   "init_shipinfo: duplicate ship numbers, exiting...\n");
 	  exit (-1);
-        }
+	}
       if (curship->location == 0)
 	{
 	  ships[x - 1] = NULL;
-	  curship = delete(name,ship,symbols,HASH_LENGTH);
+	  curship = delete (name, ship, symbols, HASH_LENGTH);
 	}
       else
 	{
@@ -365,7 +368,8 @@ void init_shipinfo (char *filename)
   return;
 }
 
-void init_portinfo (char *filename)
+void
+init_portinfo (char *filename)
 {
 
   FILE *portfile;
@@ -378,7 +382,7 @@ void init_portinfo (char *filename)
 
   struct port *curport;
   ports = (struct port **)
-    malloc(sizeof(struct port *)*configdata->max_ports + 10);
+    malloc (sizeof (struct port *) * configdata->max_ports + 10);
 
   for (counter = 0; counter <= configdata->max_ports; counter++)
     ports[counter] = NULL;
@@ -392,7 +396,7 @@ void init_portinfo (char *filename)
     }
 
 
-  while (fgets (buffer, maxStringSize, portfile) != NULL )
+  while (fgets (buffer, maxStringSize, portfile) != NULL)
     {
       //tmpname = malloc (sizeof (maxStringSize));
       counter = popint (buffer, ":");
@@ -403,10 +407,10 @@ void init_portinfo (char *filename)
       popstring (buffer, name, ":", maxStringSize);
       if ((curport =
 	   (struct port *) insert (name, port, symbols, HASH_LENGTH)) == NULL)
-        {
+	{
 	  fprintf (stderr, "init_portinfo: duplicate portname '%s'\n", name);
 	  exit (-1);
-        }
+	}
       curport->number = counter;
       curport->location = popint (buffer, ":");
       curport->maxproduct[0] = popint (buffer, ":");	//MaxOre
@@ -422,11 +426,11 @@ void init_portinfo (char *filename)
       strcpy (curport->name, name);
 
       if (ports[counter - 1] != NULL)
-        {
+	{
 	  fprintf (stderr,
 		   "init_portinfo: Duplicate port numbers, exiting...\n");
 	  exit (-1);
-        }
+	}
       ports[counter - 1] = curport;
       sectors[curport->location - 1]->portptr = curport;
     }
@@ -434,30 +438,36 @@ void init_portinfo (char *filename)
 
 }
 
-void init_nodes(int numsectors)
+void
+init_nodes (int numsectors)
 {
   int counter;
   int portcount;
 
-  nodes = (struct node **)malloc(sizeof(struct node *)*configdata->numnodes);
+  nodes =
+    (struct node **) malloc (sizeof (struct node *) * configdata->numnodes);
   if (configdata->numnodes == 1)
     {
-      nodes[0] = (struct node *)malloc(sizeof (struct node));
+      nodes[0] = (struct node *) malloc (sizeof (struct node));
       nodes[0]->number = 1;
       nodes[0]->min = 1;
       nodes[0]->max = numsectors;
       return;
     }
-  for (counter=0; counter < configdata->numnodes; counter++)
+  for (counter = 0; counter < configdata->numnodes; counter++)
     {
-      nodes[counter] = (struct node *)malloc(sizeof(struct node));
-      nodes[counter]->number = counter+1;
-      nodes[counter]->min = (int)(counter)*(float)(numsectors)/(float)configdata->numnodes + 1.0;
-      nodes[counter]->max = (int)(counter + 1.0)*(float)(numsectors)/(float)configdata->numnodes;
+      nodes[counter] = (struct node *) malloc (sizeof (struct node));
+      nodes[counter]->number = counter + 1;
+      nodes[counter]->min =
+	(int) (counter) * (float) (numsectors) /
+	(float) configdata->numnodes + 1.0;
+      nodes[counter]->max =
+	(int) (counter +
+	       1.0) * (float) (numsectors) / (float) configdata->numnodes;
       nodes[counter]->portptr = NULL;
       for (portcount = 0; portcount < configdata->max_ports; portcount++)
 	{
-	  if (ports[portcount]!=NULL)
+	  if (ports[portcount] != NULL)
 	    {
 	      if (ports[portcount]->type == 10)
 		{
@@ -465,25 +475,27 @@ void init_nodes(int numsectors)
 		      (ports[portcount]->location <= nodes[counter]->max))
 		    {
 		      nodes[counter]->portptr = ports[portcount];
-		      portcount = configdata->max_ports+1;
+		      portcount = configdata->max_ports + 1;
 		    }
 		}
 	    }
 	}
     }
 }
+
 //This stuff isn't used right now.
-int verify_universe (struct sector **array, int sectorcount)
+int
+verify_universe (struct sector **array, int sectorcount)
 {
   int i;
 
   for (i = 0; i < sectorcount; i++)
     {
       if (array[i] == NULL)
-        {
+	{
 	  printf (" Sector %d does not exist!...", i + 1);
 	  return -1;
-        }
+	}
       else if (verify_sector_links (array[i]) == -1)
 	return -1;
     }
@@ -491,7 +503,8 @@ int verify_universe (struct sector **array, int sectorcount)
   return 0;
 }
 
-int verify_sector_links (struct sector *test)
+int
+verify_sector_links (struct sector *test)
 {
   int i, j, good;
 
@@ -506,23 +519,23 @@ int verify_sector_links (struct sector *test)
       if (test->sectorptr[i] == NULL)
 	break;
       else
-        {
+	{
 	  good = 0;
 	  for (j = 0; j < MAX_WARPS_PER_SECTOR; j++)
-            {
+	    {
 	      if (test->sectorptr[i]->sectorptr[j] == NULL)
 		break;
 	      else if (test->sectorptr[i]->sectorptr[j] == test)
 		good = 1;
-            }
+	    }
 	  if (good == 0)
-            {
+	    {
 	      printf
-                ("Sector %d is linked to Sector %d, but not vice versa!...",
-                 test->number, test->sectorptr[i]->number);
+		("Sector %d is linked to Sector %d, but not vice versa!...",
+		 test->number, test->sectorptr[i]->number);
 	      return -1;
-            }
-        }
+	    }
+	}
     }
 
   return 0;

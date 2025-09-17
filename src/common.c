@@ -152,30 +152,33 @@ acceptnewconnection (int sockid)
   return sockaid;
 }
 
-int randomnum(int min, int max)
+int
+randomnum (int min, int max)
 {
-	  return (min +
+  return (min +
 	  ((int)
 	   ((double) rand () / ((double) RAND_MAX + 1) * (1 + max - min))));
 
 }
 
-int min(int a, int b)
+int
+min (int a, int b)
 {
-	if (a>b)
-		return(b);
-	else if (a<b)
-		return(a);
-	else
-		return(0);
+  if (a > b)
+    return (b);
+  else if (a < b)
+    return (a);
+  else
+    return (0);
 }
 
-int max(int a, int b)
+int
+max (int a, int b)
 {
-	if (a>b)
-		return(a);
-	else if (b>a)
-		return(b);
-	else
-		return(0);
+  if (a > b)
+    return (a);
+  else if (b > a)
+    return (b);
+  else
+    return (0);
 }
