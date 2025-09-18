@@ -110,8 +110,8 @@ const int fedspace[10][6] = {
 
 struct sector **sectorlist;
 struct sector **bigsectorlist;
-struct sector **sectors;
-struct config *configdata;
+extern struct sector **sectors;
+extern struct config *configdata;
 /*  struct port *portlist[NUMPORTS]; */
 struct port **portlist;
 /*  int randsectornum[NUMSECTORS-10]; */

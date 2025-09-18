@@ -50,6 +50,9 @@ void sell (struct player *curplayer, struct port *curport,
 //void buyhardware (char *buffer, struct player *curplayer);
 
 // Forward declarations for functions not shown in the snippets but used here
+// void builddescription (int sector, char *buffer, int playernum);
+
+json_t *builddescription_json(int sector, int playernum);
 void buildnewplayer (struct player *curplayer, char *shipname);
 json_t *move_player(json_t *request_json);
 json_t *buildplayerinfo_json (struct player *curplayer);
@@ -579,7 +582,8 @@ processcommand (int client_socket, json_t *json_data, char *response_buffer, siz
 	  (struct player *) find (name, player, symbols, HASH_LENGTH);
 	if (curplayer)
 	  {
-	    builddescription (curplayer->sector,  curplayer->number);
+	    builddescription (curplayer->sector, response_buffer,
+			      curplayer->number);
 	  }
 	else
 	  {
@@ -2934,7 +2938,7 @@ json_t *move_player(json_t *request_json)
     insertitem(p, player, sectors[destination_sector - 1]->playerlist, 1);
 
     // 6. Build the successful JSON response
-    json_t *sector_info_json = builddescription(destination_sector, p->number);
+    json_t *sector_info_json = builddescription_json(destination_sector, p->number);
     if (sector_info_json == NULL)
     {
         // Handle case where building description fails

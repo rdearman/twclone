@@ -133,8 +133,9 @@
  /usr/include/x86_64-linux-gnu/bits/mathcalls-helper-functions.h \
  /usr/include/x86_64-linux-gnu/bits/mathcalls.h /usr/include/jansson.h \
  /usr/include/jansson_config.h /usr/include/ctype.h \
- ../src/player_interaction.h ../src/hashtable.h ../src/types.h \
- ../src/msgqueue.h /usr/include/x86_64-linux-gnu/sys/ipc.h \
+ ../src/player_interaction.h ../src/universe.h ../src/common.h \
+ ../src/types.h ../src/hashtable.h ../src/msgqueue.h \
+ /usr/include/x86_64-linux-gnu/sys/ipc.h \
  /usr/include/x86_64-linux-gnu/bits/ipctypes.h \
  /usr/include/x86_64-linux-gnu/bits/ipc.h \
  /usr/include/x86_64-linux-gnu/bits/ipc-perm.h \
@@ -142,8 +143,8 @@
  /usr/include/x86_64-linux-gnu/bits/msq.h \
  /usr/include/x86_64-linux-gnu/bits/types/struct_msqid_ds.h \
  /usr/include/x86_64-linux-gnu/bits/types/struct_msqid64_ds.h \
- ../src/common.h ../src/universe.h ../src/serveractions.h ../src/config.h \
- ../src/shipinfo.h ../src/portinfo.h ../src/planet.h
+ ../src/serveractions.h ../src/config.h ../src/shipinfo.h \
+ ../src/portinfo.h ../src/planet.h ../src/globals.h
 /usr/include/stdc-predef.h:
 /usr/include/stdio.h:
 /usr/include/x86_64-linux-gnu/bits/libc-header-start.h:
@@ -295,8 +296,10 @@
 /usr/include/jansson_config.h:
 /usr/include/ctype.h:
 ../src/player_interaction.h:
-../src/hashtable.h:
+../src/universe.h:
+../src/common.h:
 ../src/types.h:
+../src/hashtable.h:
 ../src/msgqueue.h:
 /usr/include/x86_64-linux-gnu/sys/ipc.h:
 /usr/include/x86_64-linux-gnu/bits/ipctypes.h:
@@ -306,10 +309,9 @@
 /usr/include/x86_64-linux-gnu/bits/msq.h:
 /usr/include/x86_64-linux-gnu/bits/types/struct_msqid_ds.h:
 /usr/include/x86_64-linux-gnu/bits/types/struct_msqid64_ds.h:
-../src/common.h:
-../src/universe.h:
 ../src/serveractions.h:
 ../src/config.h:
 ../src/shipinfo.h:
 ../src/portinfo.h:
 ../src/planet.h:
+../src/globals.h:

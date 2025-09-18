@@ -124,16 +124,17 @@ CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
 am__dirstamp = $(am__leading_dot)dirstamp
-am_bigbang_OBJECTS = ../src/bigbang.$(OBJEXT) ../src/config.$(OBJEXT) \
-	../src/namegen.$(OBJEXT) ../src/parse.$(OBJEXT) \
-	../src/planet.$(OBJEXT)
+am_bigbang_OBJECTS = ../src/globals.$(OBJEXT) ../src/bigbang.$(OBJEXT) \
+	../src/config.$(OBJEXT) ../src/namegen.$(OBJEXT) \
+	../src/parse.$(OBJEXT) ../src/planet.$(OBJEXT)
 bigbang_OBJECTS = $(am_bigbang_OBJECTS)
 bigbang_LDADD = $(LDADD)
-am_client_OBJECTS = ../src/client.$(OBJEXT) ../src/common.$(OBJEXT) \
-	../src/parse.$(OBJEXT)
+am_client_OBJECTS = ../src/globals.$(OBJEXT) ../src/client.$(OBJEXT) \
+	../src/common.$(OBJEXT) ../src/parse.$(OBJEXT)
 client_OBJECTS = $(am_client_OBJECTS)
 client_LDADD = $(LDADD)
-am_server_OBJECTS = ../src/boxmuller.$(OBJEXT) ../src/common.$(OBJEXT) \
+am_server_OBJECTS = ../src/globals.$(OBJEXT) \
+	../src/boxmuller.$(OBJEXT) ../src/common.$(OBJEXT) \
 	../src/config.$(OBJEXT) ../src/hashtable.$(OBJEXT) \
 	../src/maint.$(OBJEXT) ../src/msgqueue.$(OBJEXT) \
 	../src/parse.$(OBJEXT) ../src/planet.$(OBJEXT) \
@@ -141,13 +142,13 @@ am_server_OBJECTS = ../src/boxmuller.$(OBJEXT) ../src/common.$(OBJEXT) \
 	../src/serveractions.$(OBJEXT) ../src/shipinfo.$(OBJEXT) \
 	../src/sysop_interaction.$(OBJEXT) ../src/universe.$(OBJEXT)
 server_OBJECTS = $(am_server_OBJECTS)
-server_LDADD = $(LDADD)
-am_test_client_OBJECTS = ../src/common.$(OBJEXT) \
-	../src/test_client.$(OBJEXT)
+server_DEPENDENCIES =
+am_test_client_OBJECTS = ../src/globals.$(OBJEXT) \
+	../src/common.$(OBJEXT) ../src/test_client.$(OBJEXT)
 test_client_OBJECTS = $(am_test_client_OBJECTS)
 test_client_LDADD = $(LDADD)
-am_test_server_OBJECTS = ../src/common.$(OBJEXT) \
-	../src/test_server.$(OBJEXT)
+am_test_server_OBJECTS = ../src/globals.$(OBJEXT) \
+	../src/common.$(OBJEXT) ../src/test_server.$(OBJEXT)
 test_server_OBJECTS = $(am_test_server_OBJECTS)
 test_server_LDADD = $(LDADD)
 AM_V_P = $(am__v_P_$(V))
@@ -168,9 +169,10 @@ am__maybe_remake_depfiles = depfiles
 am__depfiles_remade = ../src/$(DEPDIR)/bigbang.Po \
 	../src/$(DEPDIR)/boxmuller.Po ../src/$(DEPDIR)/client.Po \
 	../src/$(DEPDIR)/common.Po ../src/$(DEPDIR)/config.Po \
-	../src/$(DEPDIR)/hashtable.Po ../src/$(DEPDIR)/maint.Po \
-	../src/$(DEPDIR)/msgqueue.Po ../src/$(DEPDIR)/namegen.Po \
-	../src/$(DEPDIR)/parse.Po ../src/$(DEPDIR)/planet.Po \
+	../src/$(DEPDIR)/globals.Po ../src/$(DEPDIR)/hashtable.Po \
+	../src/$(DEPDIR)/maint.Po ../src/$(DEPDIR)/msgqueue.Po \
+	../src/$(DEPDIR)/namegen.Po ../src/$(DEPDIR)/parse.Po \
+	../src/$(DEPDIR)/planet.Po \
 	../src/$(DEPDIR)/player_interaction.Po \
 	../src/$(DEPDIR)/server.Po ../src/$(DEPDIR)/serveractions.Po \
 	../src/$(DEPDIR)/shipinfo.Po \
@@ -244,7 +246,7 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-ISODATE = 2025-09-16
+ISODATE = 2025-09-18
 LDFLAGS = 
 LIBOBJS = 
 LIBS = -lpthread -lm 
@@ -315,66 +317,48 @@ target_alias =
 top_build_prefix = ../
 top_builddir = ..
 top_srcdir = ..
+server_LDADD = -ljansson
 AUTOMAKE_OPTIONS = subdir-objects
 bigbang_SOURCES = \
-        ../src/bigbang.c \
-        ../src/config.c \
-        ../src/config.h \
-        ../src/namegen.c \
-        ../src/namegen.h \
-        ../src/parse.c \
-        ../src/parse.h \
-        ../src/planet.c \
-        ../src/planet.h
+	../src/globals.c \
+	../src/bigbang.c \
+	../src/config.c \
+	../src/namegen.c \
+	../src/parse.c \
+	../src/planet.c
 
 client_SOURCES = \
-        ../src/ansi.h \
-        ../src/client.c \
-        ../src/client.h \
-        ../src/common.c \
-        ../src/common.h \
-        ../src/parse.c \
-        ../src/parse.h
+	../src/globals.c \
+	../src/client.c \
+	../src/common.c \
+	../src/parse.c
 
 server_SOURCES = \
-        ../src/boxmuller.c \
-        ../src/boxmuller.h \
-        ../src/common.c \
-        ../src/common.h \
-        ../src/config.c \
-        ../src/config.h \
-        ../src/hashtable.c \
-        ../src/hashtable.h \
-        ../src/maint.c \
-        ../src/maint.h \
-        ../src/msgqueue.c \
-        ../src/msgqueue.h \
-        ../src/parse.c \
-        ../src/parse.h \
-        ../src/planet.c \
-        ../src/planet.h \
-        ../src/player_interaction.c \
-        ../src/player_interaction.h \
-        ../src/portinfo.h \
-        ../src/server.c \
-        ../src/serveractions.c \
-        ../src/serveractions.h \
-        ../src/shipinfo.c \
-        ../src/shipinfo.h \
-        ../src/sysop_interaction.c \
-        ../src/sysop_interaction.h \
-        ../src/universe.c \
-        ../src/universe.h
+	../src/globals.c \
+	../src/boxmuller.c \
+	../src/common.c \
+	../src/config.c \
+	../src/hashtable.c \
+	../src/maint.c \
+	../src/msgqueue.c \
+	../src/parse.c \
+	../src/planet.c \
+	../src/player_interaction.c \
+	../src/server.c \
+	../src/serveractions.c \
+	../src/shipinfo.c \
+	../src/sysop_interaction.c \
+	../src/universe.c
 
 test_client_SOURCES = \
-        ../src/common.c \
-        ../src/common.h \
-        ../src/test_client.c
+	../src/globals.c \
+	../src/common.c \
+	../src/test_client.c
 
 test_server_SOURCES = \
-        ../src/common.c \
-        ../src/common.h \
-        ../src/test_server.c
+	../src/globals.c \
+	../src/common.c \
+	../src/test_server.c
 
 all: all-am
 
@@ -457,6 +441,8 @@ clean-binPROGRAMS:
 ../src/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) ../src/$(DEPDIR)
 	@: > ../src/$(DEPDIR)/$(am__dirstamp)
+../src/globals.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/bigbang.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/config.$(OBJEXT): ../src/$(am__dirstamp) \
@@ -528,6 +514,7 @@ include ../src/$(DEPDIR)/boxmuller.Po # am--include-marker
 include ../src/$(DEPDIR)/client.Po # am--include-marker
 include ../src/$(DEPDIR)/common.Po # am--include-marker
 include ../src/$(DEPDIR)/config.Po # am--include-marker
+include ../src/$(DEPDIR)/globals.Po # am--include-marker
 include ../src/$(DEPDIR)/hashtable.Po # am--include-marker
 include ../src/$(DEPDIR)/maint.Po # am--include-marker
 include ../src/$(DEPDIR)/msgqueue.Po # am--include-marker
@@ -698,6 +685,7 @@ distclean: distclean-am
 	-rm -f ../src/$(DEPDIR)/client.Po
 	-rm -f ../src/$(DEPDIR)/common.Po
 	-rm -f ../src/$(DEPDIR)/config.Po
+	-rm -f ../src/$(DEPDIR)/globals.Po
 	-rm -f ../src/$(DEPDIR)/hashtable.Po
 	-rm -f ../src/$(DEPDIR)/maint.Po
 	-rm -f ../src/$(DEPDIR)/msgqueue.Po
@@ -762,6 +750,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/$(DEPDIR)/client.Po
 	-rm -f ../src/$(DEPDIR)/common.Po
 	-rm -f ../src/$(DEPDIR)/config.Po
+	-rm -f ../src/$(DEPDIR)/globals.Po
 	-rm -f ../src/$(DEPDIR)/hashtable.Po
 	-rm -f ../src/$(DEPDIR)/maint.Po
 	-rm -f ../src/$(DEPDIR)/msgqueue.Po

@@ -68,8 +68,8 @@
  /usr/include/strings.h \
  /usr/include/x86_64-linux-gnu/bits/strings_fortified.h \
  /usr/include/x86_64-linux-gnu/bits/string_fortified.h ../src/shipinfo.h \
- ../src/parse.h ../src/hashtable.h ../src/universe.h ../src/common.h \
- /usr/include/netinet/in.h \
+ ../src/parse.h ../src/hashtable.h ../src/types.h ../src/universe.h \
+ ../src/common.h /usr/include/netinet/in.h \
  /usr/include/x86_64-linux-gnu/bits/stdint-uintn.h \
  /usr/include/x86_64-linux-gnu/sys/socket.h \
  /usr/include/x86_64-linux-gnu/bits/types/struct_iovec.h \
@@ -168,6 +168,7 @@
 ../src/shipinfo.h:
 ../src/parse.h:
 ../src/hashtable.h:
+../src/types.h:
 ../src/universe.h:
 ../src/common.h:
 /usr/include/netinet/in.h:

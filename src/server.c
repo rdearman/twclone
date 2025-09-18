@@ -22,6 +22,7 @@
 #include "shipinfo.h"
 #include "portinfo.h"
 #include "planet.h"
+#include "globals.h"
 
 // Extern declarations for global variables used in this file
 extern struct sp_shipinfo **shiptypes;
@@ -51,136 +52,113 @@ void save_planetinfo (char *filename);
 int saveconfig (char *filename);
 void saveallports (char *filename);
 void saveplanets (char *filename);
-
-
-int threadid = 0;
-int client_sock = 0;
-int threadcount = 0;
-int msgidin = 0;
-int msgidout = 0;
-int shutdown_flag = 0;
-time_t next_process = 0;
-
 void quit_handler (int);
 
-void *
-makeplayerthreads (void *threadinfo)
-{
-  int newsock;
-  struct sockaddr_in clientname;
-  int size = sizeof (clientname);
-  pthread_t newthread;
-  struct connectinfo *newconnect;
-
-  newconnect = (struct connectinfo *) threadinfo;
-
-  listen (newconnect->sockid, 5);
-  while (1)
-    {
-      newsock =
-	accept (newconnect->sockid, (struct sockaddr *) &clientname, &size);
-      if (newsock > 0)
-	{
-	  threadcount++;
-	  newconnect->sockid = newsock;
-	  pthread_create (&newthread, NULL, handle_player, newconnect);
-	}
-    }
-}
 
 
+/* void * */
+/* makeplayerthreads (void *threadinfo) */
+/* { */
+/*   int newsock; */
+/*   struct sockaddr_in clientname; */
+/*   int size = sizeof (clientname); */
+/*   pthread_t newthread; */
+/*   struct connectinfo *newconnect; */
+
+/*   newconnect = (struct connectinfo *) threadinfo; */
+
+/*   listen (newconnect->sockid, 5); */
+/*   while (1) */
+/*     { */
+/*       newsock = */
+/* 	accept (newconnect->sockid, (struct sockaddr *) &clientname, &size); */
+/*       if (newsock > 0) */
+/* 	{ */
+/* 	  threadcount++; */
+/* 	  newconnect->sockid = newsock; */
+/* 	  pthread_create (&newthread, NULL, handle_player, newconnect); */
+/* 	} */
+/*     } */
+/* } */
 
 
-/*
+/* void * */
+/* handle_player (void *threadinfo) */
+/* { */
+/*   struct connectinfo *newconnect; */
+/*   char *response_buffer = NULL; */
+/*   size_t buffer_size = BUFF_SIZE; */
 
-  Correct JSON Function Calls: Replace the incorrect calls to json_string() with the correct jansson function call.
+/*   newconnect = (struct connectinfo *) threadinfo; */
 
-Change json_object_set_new(response_json, "status", json_string("OK")); to json_object_set_new(response_json, "status", json_string("OK"));.
+/*   int senderid = threadid++; */
+/*   int n = 0; */
 
-Change json_object_set_new(response_json, "response", json_string("Quitting.")); to json_object_set_new(response_json, "response", json_string("Quitting."));.
+/*   response_buffer = (char *) malloc (buffer_size); */
+/*   if (response_buffer == NULL) */
+/*     { */
+/*       perror ("handle_player: Failed to allocate response buffer"); */
+/*       pthread_exit (NULL); */
+/*     } */
 
-Change json_object_set_new(response_json, "response", json_string(response_buffer)); to json_object_set_new(response_json, "response", json_string(response_buffer));.
+/*   while (1) */
+/*     { */
+/*       char *json_data_string = getmsg (newconnect->msgidin, senderid, &n); */
+/*       if (json_data_string == NULL) */
+/* 	{ */
+/* 	  fprintf (stderr, */
+/* 		   "handle_player: Failed to get message from queue for senderid %d\n", */
+/* 		   senderid); */
+/* 	  // In a real application, you might want a more robust error handling */
+/* 	  // or retry mechanism here. For this example, we'll just break. */
+/* 	  break; */
+/* 	} */
 
- */
+/*       json_t *json_data = json_loads (json_data_string, 0, NULL); */
+/*       free (json_data_string);	// Free the string returned by getmsg */
+/*       if (!json_data) */
+/* 	{ */
+/* 	  fprintf (stderr, */
+/* 		   "handle_player: Failed to parse JSON message for senderid %d\n", */
+/* 		   senderid); */
+/* 	  continue;		// Skip to the next message */
+/* 	} */
 
+/*       // Check for quit command */
+/*       json_t *command_obj = json_object_get (json_data, "command"); */
+/*       if (json_is_string (command_obj) */
+/* 	  && strcmp (json_string_value (command_obj), "ct_quit") == 0) */
+/* 	{ */
+/* 	  // Acknowledge the quit command */
+/* 	  json_t *response_json = json_object (); */
 
-void *
-handle_player (void *threadinfo)
-{
-  struct connectinfo *newconnect;
-  char *response_buffer = NULL;
-  size_t buffer_size = BUFF_SIZE;
+/* 	  //////////////////////////////////////////////////////////////////// */
+/* 	  json_object_set_new (response_json, "status", json_string ("OK")); */
+/* 	  json_object_set_new (response_json, "response", */
+/* 			       json_string ("Quitting.")); */
+/* 	  ////////////////////////////////////////////////////////////////////// */
+/* 	  sendmesg (newconnect->msgidout, response_json, 1, senderid); */
+/* 	  json_decref (response_json); */
+/* 	  json_decref (json_data); */
+/* 	  break; */
+/* 	} */
 
-  newconnect = (struct connectinfo *) threadinfo;
+/*       processcommand (newconnect, json_data, response_buffer, buffer_size); */
 
-  int senderid = threadid++;
-  int n = 0;
+/*       json_t *response_json = json_object (); */
+/*       json_object_set_new (response_json, "response", */
+/* 			   json_string (response_buffer)); */
+/*       sendmesg (newconnect->msgidout, response_json, 1, senderid); */
 
-  response_buffer = (char *) malloc (buffer_size);
-  if (response_buffer == NULL)
-    {
-      perror ("handle_player: Failed to allocate response buffer");
-      pthread_exit (NULL);
-    }
+/*       json_decref (response_json); */
+/*       json_decref (json_data); */
 
-  while (1)
-    {
-      char *json_data_string = getmsg (newconnect->msgidin, senderid, &n);
-      if (json_data_string == NULL)
-	{
-	  fprintf (stderr,
-		   "handle_player: Failed to get message from queue for senderid %d\n",
-		   senderid);
-	  // In a real application, you might want a more robust error handling
-	  // or retry mechanism here. For this example, we'll just break.
-	  break;
-	}
+/*       memset (response_buffer, 0, BUFF_SIZE); */
+/*     } */
 
-      json_t *json_data = json_loads (json_data_string, 0, NULL);
-      free (json_data_string);	// Free the string returned by getmsg
-      if (!json_data)
-	{
-	  fprintf (stderr,
-		   "handle_player: Failed to parse JSON message for senderid %d\n",
-		   senderid);
-	  continue;		// Skip to the next message
-	}
-
-      // Check for quit command
-      json_t *command_obj = json_object_get (json_data, "command");
-      if (json_is_string (command_obj)
-	  && strcmp (json_string_value (command_obj), "ct_quit") == 0)
-	{
-	  // Acknowledge the quit command
-	  json_t *response_json = json_object ();
-
-	  ////////////////////////////////////////////////////////////////////
-	  json_object_set_new (response_json, "status", json_string ("OK"));
-	  json_object_set_new (response_json, "response",
-			       json_string ("Quitting."));
-	  //////////////////////////////////////////////////////////////////////
-	  sendmesg (newconnect->msgidout, response_json, 1, senderid);
-	  json_decref (response_json);
-	  json_decref (json_data);
-	  break;
-	}
-
-      processcommand (json_data, response_buffer, buffer_size);
-
-      json_t *response_json = json_object ();
-      json_object_set_new (response_json, "response",
-			   json_string (response_buffer));
-      sendmesg (newconnect->msgidout, response_json, 1, senderid);
-
-      json_decref (response_json);
-      json_decref (json_data);
-
-      memset (response_buffer, 0, BUFF_SIZE);
-    }
-
-  free (response_buffer);
-  pthread_exit (NULL);
-}
+/*   free (response_buffer); */
+/*   pthread_exit (NULL); */
+/* } */
 
 
 void *
@@ -225,7 +203,8 @@ main (int argc, char **argv)
   char response_buffer[BUFF_SIZE];	// Define a response buffer
   if (json_data)
     {
-      processcommand (json_data, response_buffer, sizeof (response_buffer));
+      processcommand(newconnect, json_data, response_buffer, sizeof(response_buffer));
+      // processcommand (json_data, response_buffer, sizeof (response_buffer));
       json_decref (json_data);	// Free the JSON object after use
     }
 
@@ -377,8 +356,8 @@ main (int argc, char **argv)
       char response_buffer[BUFF_SIZE];
       if (json_data)
 	{
-	  processcommand (json_data, response_buffer,
-			  sizeof (response_buffer));
+	  processcommand(newconnect, json_data, response_buffer, sizeof(response_buffer));
+	  //	  processcommand (json_data, response_buffer,			  sizeof (response_buffer));
 	  json_decref (json_data);
 	}
       sendmesg (msgidout, buffer, senderid);

@@ -4,9 +4,8 @@
 #include "msgqueue.h"
 #include <jansson.h>
 
-void processcommand (json_t * json_data, char *response_buffer,
-		     size_t buffer_size);
-void builddescription (int sector, char *buffer, int playernum);
+void processcommand (int client_socket, json_t *json_data, char *response_buffer, size_t buffer_size);
+json_t *builddescription(int sector, int playernum);
 void findautoroute (int from, int to, char *buffer);
 void planetupgrade (char *buffer, struct planet *curplanet);
 void planettake (char *buffer, struct player *curplayer);
@@ -22,7 +21,8 @@ void do_ship_upgrade (struct player *curplayer, char *buffer,
 void trading (struct player *curplayer, struct port *curport, char *buffer,
 	      struct ship *curship);
 void buildnewplayer (struct player *curplayer, char *shipname);
-int move_player (struct player *p, json_t * json_data, char *buffer);
+// int move_player (struct player *p, json_t * json_data, char *buffer);
+json_t *move_player(json_t *request_json);
 void buildportinfo (int portnumb, char *buffer);
 int intransit (json_t * json_data);
 void fedcommlink (int playernum, char *message);

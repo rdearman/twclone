@@ -127,7 +127,8 @@
  /usr/include/asm-generic/sockios.h \
  /usr/include/x86_64-linux-gnu/bits/types/struct_osockaddr.h \
  /usr/include/x86_64-linux-gnu/bits/socket2.h \
- /usr/include/x86_64-linux-gnu/bits/in.h ../src/player_interaction.h
+ /usr/include/x86_64-linux-gnu/bits/in.h ../src/player_interaction.h \
+ ../src/universe.h ../src/types.h ../src/hashtable.h
 /usr/include/stdc-predef.h:
 /usr/include/pthread.h:
 /usr/include/features.h:
@@ -273,3 +274,6 @@
 /usr/include/x86_64-linux-gnu/bits/socket2.h:
 /usr/include/x86_64-linux-gnu/bits/in.h:
 ../src/player_interaction.h:
+../src/universe.h:
+../src/types.h:
+../src/hashtable.h:

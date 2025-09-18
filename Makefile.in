@@ -120,7 +120,7 @@ am__CONFIG_DISTCLEAN_FILES = config.status config.cache config.log \
  configure.lineno config.status.lineno
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = autoconf.h
-CONFIG_CLEAN_FILES = bin/Makefile
+CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
@@ -206,9 +206,9 @@ am__define_uniq_tagged_files = \
   done | $(am__uniquify_input)`
 DIST_SUBDIRS = $(SUBDIRS)
 am__DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/autoconf.h.in \
-	$(top_srcdir)/bin/Makefile.in AUTHORS COPYING ChangeLog \
-	INSTALL NEWS README THANKS TODO ar-lib compile config.guess \
-	config.sub depcomp install-sh missing
+	AUTHORS COPYING ChangeLog INSTALL NEWS README THANKS TODO \
+	ar-lib compile config.guess config.sub depcomp install-sh \
+	missing
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 distdir = $(PACKAGE)-$(VERSION)
 top_distdir = $(distdir)
@@ -414,8 +414,6 @@ $(srcdir)/autoconf.h.in:  $(am__configure_deps)
 
 distclean-hdr:
 	-rm -f autoconf.h stamp-h1
-bin/Makefile: $(top_builddir)/config.status $(top_srcdir)/bin/Makefile.in
-	cd $(top_builddir) && $(SHELL) ./config.status $@
 install-pkgdataDATA: $(pkgdata_DATA)
 	@$(NORMAL_INSTALL)
 	@list='$(pkgdata_DATA)'; test -n "$(pkgdatadir)" || list=; \

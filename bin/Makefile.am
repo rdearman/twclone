@@ -19,71 +19,53 @@
 # Alternatively, the GPL can be found at
 # http://www.gnu.org/copyleft/gpl.html
 
+server_LDADD = -ljansson
 AUTOMAKE_OPTIONS = subdir-objects
 
 bin_PROGRAMS = \
-        bigbang \
-        client \
-        server \
-        test_client \
-        test_server
+	bigbang \
+	client \
+	server \
+	test_client \
+	test_server
 
 bigbang_SOURCES = \
-        ../src/bigbang.c \
-        ../src/config.c \
-        ../src/config.h \
-        ../src/namegen.c \
-        ../src/namegen.h \
-        ../src/parse.c \
-        ../src/parse.h \
-        ../src/planet.c \
-        ../src/planet.h
+	../src/globals.c \
+	../src/bigbang.c \
+	../src/config.c \
+	../src/namegen.c \
+	../src/parse.c \
+	../src/planet.c
 
 client_SOURCES = \
-        ../src/ansi.h \
-        ../src/client.c \
-        ../src/client.h \
-        ../src/common.c \
-        ../src/common.h \
-        ../src/parse.c \
-        ../src/parse.h
+	../src/globals.c \
+	../src/client.c \
+	../src/common.c \
+	../src/parse.c
 
 server_SOURCES = \
-        ../src/boxmuller.c \
-        ../src/boxmuller.h \
-        ../src/common.c \
-        ../src/common.h \
-        ../src/config.c \
-        ../src/config.h \
-        ../src/hashtable.c \
-        ../src/hashtable.h \
-        ../src/maint.c \
-        ../src/maint.h \
-        ../src/msgqueue.c \
-        ../src/msgqueue.h \
-        ../src/parse.c \
-        ../src/parse.h \
-        ../src/planet.c \
-        ../src/planet.h \
-        ../src/player_interaction.c \
-        ../src/player_interaction.h \
-        ../src/portinfo.h \
-        ../src/server.c \
-        ../src/serveractions.c \
-        ../src/serveractions.h \
-        ../src/shipinfo.c \
-        ../src/shipinfo.h \
-        ../src/sysop_interaction.c \
-        ../src/sysop_interaction.h \
-        ../src/universe.c \
-        ../src/universe.h
+	../src/globals.c \
+	../src/boxmuller.c \
+	../src/common.c \
+	../src/config.c \
+	../src/hashtable.c \
+	../src/maint.c \
+	../src/msgqueue.c \
+	../src/parse.c \
+	../src/planet.c \
+	../src/player_interaction.c \
+	../src/server.c \
+	../src/serveractions.c \
+	../src/shipinfo.c \
+	../src/sysop_interaction.c \
+	../src/universe.c
 
 test_client_SOURCES = \
-        ../src/common.c \
-        ../src/common.h \
-        ../src/test_client.c
+	../src/globals.c \
+	../src/common.c \
+	../src/test_client.c
 
 test_server_SOURCES = \
-        ../src/common.c \
-        ../src/common.h \
-        ../src/test_server.c
+	../src/globals.c \
+	../src/common.c \
+	../src/test_server.c

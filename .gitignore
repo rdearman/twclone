@@ -37,6 +37,8 @@ Makefile.in
 
 # Build directories
 /build/
+/hold/
+/bin/
 */.deps/
 */.libs/
 

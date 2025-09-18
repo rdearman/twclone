@@ -71,6 +71,7 @@
  /usr/include/x86_64-linux-gnu/bits/stdlib-bsearch.h \
  /usr/include/x86_64-linux-gnu/bits/stdlib-float.h \
  /usr/include/x86_64-linux-gnu/bits/stdlib.h ../src/msgqueue.h \
+ /usr/include/jansson.h /usr/include/jansson_config.h \
  /usr/include/x86_64-linux-gnu/sys/ipc.h \
  /usr/include/x86_64-linux-gnu/bits/ipctypes.h \
  /usr/include/x86_64-linux-gnu/bits/ipc.h \
@@ -99,6 +100,7 @@
  /usr/include/x86_64-linux-gnu/bits/types/struct_osockaddr.h \
  /usr/include/x86_64-linux-gnu/bits/socket2.h \
  /usr/include/x86_64-linux-gnu/bits/in.h ../src/player_interaction.h \
+ ../src/universe.h ../src/types.h ../src/hashtable.h \
  ../src/sysop_interaction.h
 /usr/include/stdc-predef.h:
 /usr/include/pthread.h:
@@ -181,6 +183,8 @@
 /usr/include/x86_64-linux-gnu/bits/stdlib-float.h:
 /usr/include/x86_64-linux-gnu/bits/stdlib.h:
 ../src/msgqueue.h:
+/usr/include/jansson.h:
+/usr/include/jansson_config.h:
 /usr/include/x86_64-linux-gnu/sys/ipc.h:
 /usr/include/x86_64-linux-gnu/bits/ipctypes.h:
 /usr/include/x86_64-linux-gnu/bits/ipc.h:
@@ -212,4 +216,7 @@
 /usr/include/x86_64-linux-gnu/bits/socket2.h:
 /usr/include/x86_64-linux-gnu/bits/in.h:
 ../src/player_interaction.h:
+../src/universe.h:
+../src/types.h:
+../src/hashtable.h:
 ../src/sysop_interaction.h:

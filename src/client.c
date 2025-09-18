@@ -1,32 +1,3 @@
-/*
-Copyright (C) 2000 Jason C. Garcowski(jcg5@po.cwru.edu), 
-                   Ryan Glasnapp(rglasnap@nmt.edu)
- 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
- 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
- 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
- 
-*/
-
-/* twclone Program. client.c
- *
- * This program interfaces with the server and producs nice looking output
- * for the user.
- *   
- * $Revision: 1.54 $
- * Last Modified: $Date: 2004/01/21 04:16:55 $
- */
-
 /* Normal Libary Includes */
 #include <stdio.h>
 #include <termios.h>		//for inv. pw
@@ -37,8 +8,24 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <unistd.h>
 #include <ctype.h>
 #include <math.h>
+#include "ansi.h"
+#include "common.h"
+#include "parse.h"
+#include "client.h"
+#include "portinfo.h"
+#include "globals.h"
 
-struct timeval t, end;
+extern int threadid;
+extern int client_sock;
+extern int threadcount;
+extern int msgidin;
+extern int msgidout;
+extern int shutdown_flag;
+extern time_t next_process;
+extern int sectorcount;
+extern int WARP_WAIT;
+extern struct timeval begin, end, t;
+
 static char CVS_REVISION[50] = "$Revision: 1.54 $\0";
 static char LAST_MODIFIED[50] = "$Date: 2004/01/21 04:16:55 $\0";
 int MAXWARPS = 5000;
@@ -48,12 +35,6 @@ int MAX_PLANETS = 500;
 static struct termios orig, new;
 static int peek = -1;
 
-/* My Headers */
-#include "ansi.h"
-#include "common.h"
-#include "parse.h"
-#include "client.h"
-#include "portinfo.h"
 
 int
 main (int argc, char *argv[])

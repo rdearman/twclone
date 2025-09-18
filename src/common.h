@@ -2,18 +2,6 @@
 #include <string.h>
 
 
-#ifndef TURNS_PER_DAY
-#define TURNS_PER_DAY 100
-#endif
-
-#ifndef MAX_WARPS
-#define MAX_WARPS 6
-#endif
-
-#ifndef START_CREDITS
-#define START_CREDITS 2000
-#endif
-
 #ifndef START_FIGHTERS
 #define START_FIGHTERS 20
 #endif

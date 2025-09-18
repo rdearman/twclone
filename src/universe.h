@@ -213,6 +213,7 @@ struct citadel
   int qcannon;
   int qcannontype;
   int qtorpstype;
+  int military;  
 };
 
 /* It is in this order in universe.data */

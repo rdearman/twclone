@@ -7,12 +7,11 @@
 #include "universe.h"
 
 // Provide the single definition for the variables.
-planetClass **planetTypes = NULL;
-struct planet **planets = NULL;
-
-
+extern planetClass **planetTypes;
+extern struct planet **planets;
 extern struct config *configdata;
 extern struct sector **sectors;
+
 /*
  *	init_planets(filename, secarray)
  *	loads planet info from file.  returns number
