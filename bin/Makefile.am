@@ -19,7 +19,7 @@
 # Alternatively, the GPL can be found at
 # http://www.gnu.org/copyleft/gpl.html
 
-server_LDADD = -ljansson
+server_LDADD = -ljansson -lsqlite3
 AUTOMAKE_OPTIONS = subdir-objects
 
 bin_PROGRAMS = \
@@ -31,6 +31,7 @@ bin_PROGRAMS = \
 
 bigbang_SOURCES = \
 	../src/globals.c \
+	../src/database.c \
 	../src/bigbang.c \
 	../src/config.c \
 	../src/namegen.c \
@@ -39,12 +40,14 @@ bigbang_SOURCES = \
 
 client_SOURCES = \
 	../src/globals.c \
+	../src/database.c \
 	../src/client.c \
 	../src/common.c \
 	../src/parse.c
 
 server_SOURCES = \
 	../src/globals.c \
+	../src/database.c \
 	../src/boxmuller.c \
 	../src/common.c \
 	../src/config.c \
@@ -62,10 +65,12 @@ server_SOURCES = \
 
 test_client_SOURCES = \
 	../src/globals.c \
+	../src/database.c \
 	../src/common.c \
 	../src/test_client.c
 
 test_server_SOURCES = \
 	../src/globals.c \
+	../src/database.c \
 	../src/common.c \
 	../src/test_server.c
