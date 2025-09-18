@@ -51,7 +51,7 @@ void sell (struct player *curplayer, struct port *curport,
 
 // Forward declarations for functions not shown in the snippets but used here
 void buildnewplayer (struct player *curplayer, char *shipname);
-json_t *move_player(json_t *request_json);
+json_t *move_player (json_t * request_json);
 json_t *buildplayerinfo_json (struct player *curplayer);
 json_t *buildshipinfo_json (struct ship *curship);
 //void trading (struct player *curplayer, struct port *curport, struct ship *curship, json_t *json_data, char *buffer);
@@ -60,7 +60,7 @@ void trading (struct player *curplayer, struct port *curport, char *buffer,
 json_t *buildportinfo_json (struct port *curport);
 json_t *totalplanetinfo_json (struct planet *curplanet);
 //void buildtotalinfo (int pnumb, char *buffer, json_t * json_data);
-json_t * buildtotalinfo (int pnumb);
+json_t *buildtotalinfo (int pnumb);
 void listships (char *buffer);
 void buyship (char *buffer, struct player *curplayer);
 void sell (struct player *curplayer, struct port *curport,
@@ -70,10 +70,11 @@ void buy (struct player *curplayer, struct port *curport,
 
 
 
-void send_json_response (int sockid, json_t *response)
+void
+send_json_response (int sockid, json_t *response)
 {
   // Placeholder. This function would serialize the JSON and send it over the socket.
-  json_decref(response); // Clean up the JSON object.
+  json_decref (response);	// Clean up the JSON object.
 }
 
 
@@ -201,7 +202,7 @@ void send_json_response (int sockid, json_t *response)
 /* 	// Now, you can use the response_json object. */
 /* 	// Assuming you have a function to send the response back to the client. */
 /* 	send_json_response(client_socket, response_json); */
-    
+
 /* 	// Remember to decrease the reference count when you're done with the object */
 /* 	json_decref(response_json); */
 /*       } */
@@ -451,7 +452,8 @@ void send_json_response (int sockid, json_t *response)
 
 // Corrected processcommand function
 void
-processcommand (int client_socket, json_t *json_data, char *response_buffer, size_t buffer_size)
+processcommand (int client_socket, json_t *json_data, char *response_buffer,
+		size_t buffer_size)
 {
   // A local JSON object to build the response
   json_t *response_json = json_object ();
@@ -567,19 +569,19 @@ processcommand (int client_socket, json_t *json_data, char *response_buffer, siz
 
     case ct_move:
       {
-	json_t *response_json = move_player(json_data);
-	send_json_response(client_socket, response_json);
-	json_decref(response_json);
+	json_t *response_json = move_player (json_data);
+	send_json_response (client_socket, response_json);
+	json_decref (response_json);
       }
       break;
-    
+
     case ct_describe:
       {
 	struct player *curplayer =
 	  (struct player *) find (name, player, symbols, HASH_LENGTH);
 	if (curplayer)
 	  {
-	    builddescription (curplayer->sector,  curplayer->number);
+	    builddescription (curplayer->sector, curplayer->number);
 	  }
 	else
 	  {
@@ -644,8 +646,8 @@ processcommand (int client_socket, json_t *json_data, char *response_buffer, siz
 		     ships[curplayer->ship - 1]);
 	    break;
 	  case ct_list_hardware:
-	    json_t *hardware_json = list_hardware(NULL, curplayer);
-	    json_decref(hardware_json);
+	    json_t * hardware_json = list_hardware (NULL, curplayer);
+	    json_decref (hardware_json);
 	    break;
 	  case ct_buy_hardware:
 	    buyhardware (response_buffer, curplayer);
@@ -818,83 +820,95 @@ processcommand (int client_socket, json_t *json_data, char *response_buffer, siz
 
 
 /* JSON-native replacement for builddescription */
-json_t *builddescription(int sector, int playernum)
+json_t *
+builddescription (int sector, int playernum)
 {
-    json_t *root = json_object();
+  json_t *root = json_object ();
 
-    /* Sector number */
-    json_object_set_new(root, "sector", json_integer(sector));
+  /* Sector number */
+  json_object_set_new (root, "sector", json_integer (sector));
 
-    /* Warp links */
-    json_t *warps = json_array();
-    int linknum = 1;
-    while (linknum < MAX_WARPS_PER_SECTOR &&
-           sectors[sector - 1]->sectorptr[linknum] != NULL) {
-        json_array_append_new(warps,
-            json_integer(sectors[sector - 1]->sectorptr[linknum++ - 1]->number));
+  /* Warp links */
+  json_t *warps = json_array ();
+  int linknum = 1;
+  while (linknum < MAX_WARPS_PER_SECTOR &&
+	 sectors[sector - 1]->sectorptr[linknum] != NULL)
+    {
+      json_array_append_new (warps,
+			     json_integer (sectors[sector - 1]->sectorptr
+					   [linknum++ - 1]->number));
     }
-    /* Add the last warp as in original */
-    if (sectors[sector - 1]->sectorptr[linknum - 1] != NULL) {
-        json_array_append_new(warps,
-            json_integer(sectors[sector - 1]->sectorptr[linknum - 1]->number));
+  /* Add the last warp as in original */
+  if (sectors[sector - 1]->sectorptr[linknum - 1] != NULL)
+    {
+      json_array_append_new (warps,
+			     json_integer (sectors[sector - 1]->sectorptr
+					   [linknum - 1]->number));
     }
-    json_object_set_new(root, "warps", warps);
+  json_object_set_new (root, "warps", warps);
 
-    /* Beacon text */
-    json_object_set_new(root, "beacon", 
-        json_string(sectors[sector - 1]->beacontext));
+  /* Beacon text */
+  json_object_set_new (root, "beacon",
+		       json_string (sectors[sector - 1]->beacontext));
 
-    /* Nebulae */
-    if (strlen(sectors[sector - 1]->nebulae) <= 1)
-        json_object_set_new(root, "nebulae", json_string(""));
-    else
-        json_object_set_new(root, "nebulae",
-            json_string(sectors[sector - 1]->nebulae));
+  /* Nebulae */
+  if (strlen (sectors[sector - 1]->nebulae) <= 1)
+    json_object_set_new (root, "nebulae", json_string (""));
+  else
+    json_object_set_new (root, "nebulae",
+			 json_string (sectors[sector - 1]->nebulae));
 
-    /* Port */
-    if (sectors[sector - 1]->portptr != NULL &&
-        sectors[sector - 1]->portptr->invisible == 0) {
-        json_t *port = json_object();
-        json_object_set_new(port, "name",
-            json_string(sectors[sector - 1]->portptr->name));
-        json_object_set_new(port, "type",
-            json_integer(sectors[sector - 1]->portptr->type));
-        json_object_set_new(root, "port", port);
-    } else {
-        json_object_set_new(root, "port", json_null());
+  /* Port */
+  if (sectors[sector - 1]->portptr != NULL &&
+      sectors[sector - 1]->portptr->invisible == 0)
+    {
+      json_t *port = json_object ();
+      json_object_set_new (port, "name",
+			   json_string (sectors[sector - 1]->portptr->name));
+      json_object_set_new (port, "type",
+			   json_integer (sectors[sector - 1]->portptr->type));
+      json_object_set_new (root, "port", port);
+    }
+  else
+    {
+      json_object_set_new (root, "port", json_null ());
     }
 
-    /* Players in sector (excluding current) */
-    json_t *players = json_array();
-    struct list *element = sectors[sector - 1]->playerlist[0];
-    while (element != NULL) {
-        struct player *pl = (struct player *)element->item;
-        if (pl->number != playernum) {
-            json_array_append_new(players, json_integer(pl->number));
-        }
-        element = element->listptr;
+  /* Players in sector (excluding current) */
+  json_t *players = json_array ();
+  struct list *element = sectors[sector - 1]->playerlist[0];
+  while (element != NULL)
+    {
+      struct player *pl = (struct player *) element->item;
+      if (pl->number != playernum)
+	{
+	  json_array_append_new (players, json_integer (pl->number));
+	}
+      element = element->listptr;
     }
-    json_object_set_new(root, "players", players);
+  json_object_set_new (root, "players", players);
 
-    /* Fighters (original code left blank placeholders) */
-    json_object_set_new(root, "fighters", json_integer(0));
-    json_object_set_new(root, "fighter_mode", json_string(""));
+  /* Fighters (original code left blank placeholders) */
+  json_object_set_new (root, "fighters", json_integer (0));
+  json_object_set_new (root, "fighter_mode", json_string (""));
 
-    /* Planets */
-    json_t *planets = json_array();
-    element = sectors[sector - 1]->planets;
-    while (element != NULL) {
-        struct planet *pl = (struct planet *)element->item;
-        json_t *planet = json_object();
-        json_object_set_new(planet, "num", json_integer(pl->num));
-        json_object_set_new(planet, "name", json_string(pl->name));
-        json_object_set_new(planet, "class", json_string(pl->pClass->typeClass));
-        json_array_append_new(planets, planet);
-        element = element->listptr;
+  /* Planets */
+  json_t *planets = json_array ();
+  element = sectors[sector - 1]->planets;
+  while (element != NULL)
+    {
+      struct planet *pl = (struct planet *) element->item;
+      json_t *planet = json_object ();
+      json_object_set_new (planet, "num", json_integer (pl->num));
+      json_object_set_new (planet, "name", json_string (pl->name));
+      json_object_set_new (planet, "class",
+			   json_string (pl->pClass->typeClass));
+      json_array_append_new (planets, planet);
+      element = element->listptr;
     }
-    json_object_set_new(root, "planets", planets);
+  json_object_set_new (root, "planets", planets);
 
-    return root;
+  return root;
 }
 
 
@@ -1990,41 +2004,87 @@ buildgameinfo (char *buffer)
 json_t *
 buildtotalinfo (int pnumb)
 {
-  json_t *json_obj = json_object();
-  if (!json_obj) {
-    fprintf(stderr, "Failed to create JSON object.\n");
-    return NULL;
-  }
+  json_t *json_obj = json_object ();
+  if (!json_obj)
+    {
+      fprintf (stderr, "Failed to create JSON object.\n");
+      return NULL;
+    }
 
   // Add player information
-  json_object_set_new(json_obj, "player_number", json_integer(players[pnumb - 1]->number));
-  json_object_set_new(json_obj, "player_name", json_string(players[pnumb - 1]->name));
-  json_object_set_new(json_obj, "ship_number", json_integer(players[pnumb - 1]->ship));
-  json_object_set_new(json_obj, "experience", json_integer(players[pnumb - 1]->experience));
-  json_object_set_new(json_obj, "alignment", json_integer(players[pnumb - 1]->alignment));
-  json_object_set_new(json_obj, "turns", json_integer(players[pnumb - 1]->turns));
-  json_object_set_new(json_obj, "credits", json_integer(players[pnumb - 1]->credits));
-  
-  // Add ship information
-  json_object_set_new(json_obj, "ship_number", json_integer(ships[players[pnumb - 1]->ship - 1]->number));
-  json_object_set_new(json_obj, "ship_name", json_string(ships[players[pnumb - 1]->ship - 1]->name));
-  json_object_set_new(json_obj, "ship_type_name", json_string(shiptypes[ships[players[pnumb - 1]->ship - 1]->type - 1]->name));
-  json_object_set_new(json_obj, "fighters", json_integer(ships[players[pnumb - 1]->ship - 1]->fighters));
-  json_object_set_new(json_obj, "shields", json_integer(ships[players[pnumb - 1]->ship - 1]->shields));
-  json_object_set_new(json_obj, "holds", json_integer(ships[players[pnumb - 1]->ship - 1]->holds));
-  json_object_set_new(json_obj, "colonists", json_integer(ships[players[pnumb - 1]->ship - 1]->colonists));
-  json_object_set_new(json_obj, "equipment", json_integer(ships[players[pnumb - 1]->ship - 1]->equipment));
-  json_object_set_new(json_obj, "organics", json_integer(ships[players[pnumb - 1]->ship - 1]->organics));
-  json_object_set_new(json_obj, "ore", json_integer(ships[players[pnumb - 1]->ship - 1]->ore));
-  json_object_set_new(json_obj, "owner", json_integer(ships[players[pnumb - 1]->ship - 1]->owner));
-  
-  if (intransit(NULL)) {
-    json_object_set_new(json_obj, "location", json_integer(0));
-  } else {
-    json_object_set_new(json_obj, "location", json_integer(ships[players[pnumb - 1]->ship - 1]->location));
-  }
+  json_object_set_new (json_obj, "player_number",
+		       json_integer (players[pnumb - 1]->number));
+  json_object_set_new (json_obj, "player_name",
+		       json_string (players[pnumb - 1]->name));
+  json_object_set_new (json_obj, "ship_number",
+		       json_integer (players[pnumb - 1]->ship));
+  json_object_set_new (json_obj, "experience",
+		       json_integer (players[pnumb - 1]->experience));
+  json_object_set_new (json_obj, "alignment",
+		       json_integer (players[pnumb - 1]->alignment));
+  json_object_set_new (json_obj, "turns",
+		       json_integer (players[pnumb - 1]->turns));
+  json_object_set_new (json_obj, "credits",
+		       json_integer (players[pnumb - 1]->credits));
 
-  json_object_set_new(json_obj, "ship_type_turns", json_integer(shiptypes[ships[players[pnumb - 1]->ship - 1]->type - 1]->turns));
+  // Add ship information
+  json_object_set_new (json_obj, "ship_number",
+		       json_integer (ships
+				     [players[pnumb - 1]->ship - 1]->number));
+  json_object_set_new (json_obj, "ship_name",
+		       json_string (ships
+				    [players[pnumb - 1]->ship - 1]->name));
+  json_object_set_new (json_obj, "ship_type_name",
+		       json_string (shiptypes
+				    [ships[players[pnumb - 1]->ship - 1]->type
+				     - 1]->name));
+  json_object_set_new (json_obj, "fighters",
+		       json_integer (ships
+				     [players[pnumb - 1]->ship -
+				      1]->fighters));
+  json_object_set_new (json_obj, "shields",
+		       json_integer (ships
+				     [players[pnumb - 1]->ship -
+				      1]->shields));
+  json_object_set_new (json_obj, "holds",
+		       json_integer (ships
+				     [players[pnumb - 1]->ship - 1]->holds));
+  json_object_set_new (json_obj, "colonists",
+		       json_integer (ships
+				     [players[pnumb - 1]->ship -
+				      1]->colonists));
+  json_object_set_new (json_obj, "equipment",
+		       json_integer (ships
+				     [players[pnumb - 1]->ship -
+				      1]->equipment));
+  json_object_set_new (json_obj, "organics",
+		       json_integer (ships
+				     [players[pnumb - 1]->ship -
+				      1]->organics));
+  json_object_set_new (json_obj, "ore",
+		       json_integer (ships
+				     [players[pnumb - 1]->ship - 1]->ore));
+  json_object_set_new (json_obj, "owner",
+		       json_integer (ships
+				     [players[pnumb - 1]->ship - 1]->owner));
+
+  if (intransit (NULL))
+    {
+      json_object_set_new (json_obj, "location", json_integer (0));
+    }
+  else
+    {
+      json_object_set_new (json_obj, "location",
+			   json_integer (ships
+					 [players[pnumb - 1]->ship -
+					  1]->location));
+    }
+
+  json_object_set_new (json_obj, "ship_type_turns",
+		       json_integer (shiptypes
+				     [ships
+				      [players[pnumb - 1]->ship - 1]->type -
+				      1]->turns));
 
   return json_obj;
 }
@@ -2847,110 +2907,105 @@ buildnewplayer (struct player *curplayer, char *shipname)
 }
 
 
-json_t *move_player(json_t *request_json)
+json_t *
+move_player (json_t *request_json)
 {
-    const char *player_name;
-    int destination_sector;
-    struct player *p;
-    char buffer[1024];
+  const char *player_name;
+  int destination_sector;
+  struct player *p;
+  char buffer[1024];
 
-    // 1. Validate the input JSON request
-    json_t *name_json = json_object_get(request_json, "name");
-    json_t *dest_json = json_object_get(request_json, "to");
+  // 1. Validate the input JSON request
+  json_t *name_json = json_object_get (request_json, "name");
+  json_t *dest_json = json_object_get (request_json, "to");
 
-    if (!json_is_string(name_json) || !json_is_integer(dest_json))
+  if (!json_is_string (name_json) || !json_is_integer (dest_json))
     {
-        return json_pack("{s:s, s:i, s:s}",
-                         "status", "error",
-                         "error_code", 1180, // Invalid command
-                         "message", "Invalid 'move' command format.");
+      return json_pack ("{s:s, s:i, s:s}", "status", "error", "error_code", 1180,	// Invalid command
+			"message", "Invalid 'move' command format.");
     }
 
-    player_name = json_string_value(name_json);
-    destination_sector = json_integer_value(dest_json);
+  player_name = json_string_value (name_json);
+  destination_sector = json_integer_value (dest_json);
 
-    // 2. Find the player based on the name from the JSON request
-    p = (struct player *)find(player_name, player, symbols, HASH_LENGTH);
-    if (p == NULL)
+  // 2. Find the player based on the name from the JSON request
+  p = (struct player *) find (player_name, player, symbols, HASH_LENGTH);
+  if (p == NULL)
     {
-        return json_pack("{s:s, s:i, s:s}",
-                         "status", "error",
-                         "error_code", 1230, // Unknown Player
-                         "message", "Unknown Player.");
+      return json_pack ("{s:s, s:i, s:s}", "status", "error", "error_code", 1230,	// Unknown Player
+			"message", "Unknown Player.");
     }
 
-    // 3. Check for movement errors (e.g., already moving, invalid destination)
-    int current_sector = (p->sector == 0) ? ships[p->ship - 1]->location : p->sector;
-    int link_found = 0;
-    for (int i = 0; i < MAX_WARPS_PER_SECTOR; ++i)
+  // 3. Check for movement errors (e.g., already moving, invalid destination)
+  int current_sector =
+    (p->sector == 0) ? ships[p->ship - 1]->location : p->sector;
+  int link_found = 0;
+  for (int i = 0; i < MAX_WARPS_PER_SECTOR; ++i)
     {
-        if (sectors[current_sector - 1]->sectorptr[i] == NULL)
-        {
-            break;
-        }
-        if (sectors[current_sector - 1]->sectorptr[i]->number == destination_sector)
-        {
-            link_found = 1;
-            break;
-        }
+      if (sectors[current_sector - 1]->sectorptr[i] == NULL)
+	{
+	  break;
+	}
+      if (sectors[current_sector - 1]->sectorptr[i]->number ==
+	  destination_sector)
+	{
+	  link_found = 1;
+	  break;
+	}
     }
 
-    if (!link_found)
+  if (!link_found)
     {
-        return json_pack("{s:s, s:i, s:s}",
-                         "status", "error",
-                         "error_code", 1400, // Intransit Error
-                         "message", "Invalid destination or no direct warp link exists.");
-    }
-    
-    // 4. Check if the player has enough turns to move
-    int turns_needed = shiptypes[ships[p->ship - 1]->type - 1]->turns;
-    if (p->turns < turns_needed)
-    {
-        return json_pack("{s:s, s:i, s:s}",
-                         "status", "error",
-                         "error_code", 1110, // Insufficient Turns
-                         "message", "Insufficient turns.");
+      return json_pack ("{s:s, s:i, s:s}", "status", "error", "error_code", 1400,	// Intransit Error
+			"message",
+			"Invalid destination or no direct warp link exists.");
     }
 
-    // 5. All checks passed, perform the move
-    
-    // Remove player from the current sector's player list
-    if (p->sector == 0)
+  // 4. Check if the player has enough turns to move
+  int turns_needed = shiptypes[ships[p->ship - 1]->type - 1]->turns;
+  if (p->turns < turns_needed)
     {
-        delete(p->name, player, sectors[ships[p->ship - 1]->location - 1]->playerlist, 1);
-        ships[p->ship - 1]->location = destination_sector;
-    }
-    else
-    {
-        delete(p->name, player, sectors[p->sector - 1]->playerlist, 1);
-        p->sector = destination_sector;
+      return json_pack ("{s:s, s:i, s:s}", "status", "error", "error_code", 1110,	// Insufficient Turns
+			"message", "Insufficient turns.");
     }
 
-    // Deduct turns
-    p->turns -= turns_needed;
+  // 5. All checks passed, perform the move
 
-    // Add player to the new sector's player list
-    insertitem(p, player, sectors[destination_sector - 1]->playerlist, 1);
-
-    // 6. Build the successful JSON response
-    json_t *sector_info_json = builddescription(destination_sector, p->number);
-    if (sector_info_json == NULL)
+  // Remove player from the current sector's player list
+  if (p->sector == 0)
     {
-        // Handle case where building description fails
-        return json_pack("{s:s, s:i, s:s}",
-                         "status", "error",
-                         "error_code", 1100, // Undefined Error
-                         "message", "Failed to build sector description.");
+      delete (p->name, player,
+	      sectors[ships[p->ship - 1]->location - 1]->playerlist, 1);
+      ships[p->ship - 1]->location = destination_sector;
+    }
+  else
+    {
+      delete (p->name, player, sectors[p->sector - 1]->playerlist, 1);
+      p->sector = destination_sector;
     }
 
-    // Create the final response object
-    json_t *response_json = json_object();
-    json_object_set_new(response_json, "status", json_string("ok"));
-    json_object_set_new(response_json, "type", json_string("move_result"));
-    json_object_set_new(response_json, "data", sector_info_json);
+  // Deduct turns
+  p->turns -= turns_needed;
 
-    return response_json;
+  // Add player to the new sector's player list
+  insertitem (p, player, sectors[destination_sector - 1]->playerlist, 1);
+
+  // 6. Build the successful JSON response
+  json_t *sector_info_json = builddescription (destination_sector, p->number);
+  if (sector_info_json == NULL)
+    {
+      // Handle case where building description fails
+      return json_pack ("{s:s, s:i, s:s}", "status", "error", "error_code", 1100,	// Undefined Error
+			"message", "Failed to build sector description.");
+    }
+
+  // Create the final response object
+  json_t *response_json = json_object ();
+  json_object_set_new (response_json, "status", json_string ("ok"));
+  json_object_set_new (response_json, "type", json_string ("move_result"));
+  json_object_set_new (response_json, "data", sector_info_json);
+
+  return response_json;
 }
 
 
@@ -3198,8 +3253,10 @@ totalplanetinfo_json (struct planet *curplanet)
   if (curplanet->citdl != NULL)
     {
       json_t *citadel_json = json_object ();
-      json_object_set_new (citadel_json, "owner", json_string (curplanet->citdl->owner));
-      json_object_set_new (citadel_json, "military",  json_integer (curplanet->citdl->military));
+      json_object_set_new (citadel_json, "owner",
+			   json_string (curplanet->citdl->owner));
+      json_object_set_new (citadel_json, "military",
+			   json_integer (curplanet->citdl->military));
       json_object_set_new (citadel_json, "qcannon",
 			   json_integer (curplanet->citdl->qcannon));
       json_object_set_new (planet_json, "citadel", citadel_json);

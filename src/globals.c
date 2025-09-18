@@ -156,7 +156,7 @@ int shutdown_flag = 0;
 time_t next_process = 0;
 int sectorcount;
 int WARP_WAIT;
-struct timeval begin, end, t; 
+struct timeval begin, end, t;
 
 
 // Global arrays originally defined in universe.h

@@ -19,7 +19,12 @@
 # Alternatively, the GPL can be found at
 # http://www.gnu.org/copyleft/gpl.html
 
-server_LDADD = -ljansson -lsqlite3
+server_LDADD   = -ljansson -lsqlite3
+bigbang_LDADD  = -ljansson -lsqlite3
+client_LDADD   = -ljansson -lsqlite3
+test_client_LDADD = -ljansson -lsqlite3
+test_server_LDADD = -ljansson -lsqlite3
+
 AUTOMAKE_OPTIONS = subdir-objects
 
 bin_PROGRAMS = \
@@ -57,7 +62,7 @@ server_SOURCES = \
 	../src/parse.c \
 	../src/planet.c \
 	../src/player_interaction.c \
-	../src/server.c \
+	../src/server_main.c \
 	../src/serveractions.c \
 	../src/shipinfo.c \
 	../src/sysop_interaction.c \
