@@ -1,54 +1,9 @@
-/*
-  Copyright (C) 2002 Scott Long (link@kansastubacrew.com)
- 
-  This program is free software; you can redistribute it and/or
-  modify it under the terms of the GNU General Public License
-  as published by the Free Software Foundation; either version 2
-  of the License, or (at your option) any later version.
- 
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
- 
-  You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
- 
-*/
-
-/* Modification History **
-**************************
-** 
-** LAST MODIFICATION DATE: 10 June 2002
-** Author: Rick Dearman
-** 1) Modified all defined items to allow them to be user defined instead. 
-**    With one exception which was the MAXJUMPPERCENT which was caused problems
-**    with other defined items in the universe.h file. 
-**
-** 2) Modified all comments from // to C comments in case a users complier isn't C99 
-**    complilant. (like some older Sun or HP compilers)
-**
-** 3) Added random name generation for the ports.
-** 
-** 4) Added consellation names for sectors.
-**
-** 5) Added randomly placed Ferringhi sector.
-**
-** 6) Now creates the planet.data file with terra and ferringhi planets
-** included by default.
-**
-** 7) Creates any number of random planets input by the user.
-**
-*/
-
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
-//#include <getopt.h>
 #include "config.h"
 #include "universe.h"
 // #include "namegen.h"

@@ -1,4 +1,5 @@
 import socket
+import json
 
 # --- Test Data Configuration ---
 # You can modify these dictionaries to test different scenarios.
@@ -32,37 +33,45 @@ TIMEOUT = 5
 
 # --- Utility Functions ---
 
-def send_and_receive(sock, message):
-    """Sends a message and returns the server's response."""
+def send_and_receive(sock, message_dict):
+    """Sends a JSON message and returns the server's response dictionary."""
     try:
-        sock.sendall(f"{message}\n".encode())
-        response = sock.recv(4096).decode('utf-8').strip()
-        return response
-    except socket.timeout:
-        return "TIMEOUT"
-    except Exception as e:
-        return f"ERROR: {e}"
+        # Serialize the dictionary to a JSON string and encode it to bytes
+        json_message = json.dumps(message_dict) + '\n'
+        sock.sendall(json_message.encode('utf-8'))
 
-def run_test(test_name, sock, message, expected_starts_with=None):
+        # Receive the JSON response
+        response_bytes = sock.recv(4096)
+        response_string = response_bytes.decode('utf-8').strip()
+
+        # Deserialize the JSON string back to a dictionary
+        response_dict = json.loads(response_string)
+        return response_dict
+
+    except socket.timeout:
+        return {"status": "TIMEOUT"}
+    except json.JSONDecodeError:
+        return {"status": "ERROR", "message": "Invalid JSON response from server"}
+    except Exception as e:
+        return {"status": "ERROR", "message": str(e)}
+
+def run_test(test_name, sock, message_dict, expected_status=None):
     """
-    Runs a single test case and prints the result.
+    Runs a single test case with a JSON message and prints the result.
     Args:
         test_name (str): The name of the test.
         sock (socket.socket): The socket to use.
-        message (str): The message to send to the server.
-        expected_starts_with (str, optional): The expected start of the response.
-                                              If None, any response is considered successful.
+        message_dict (dict): The message to send as a Python dictionary.
+        expected_status (str, optional): The expected status field in the response.
     """
     print(f"TRIED: {test_name}")
-    response = send_and_receive(sock, message)
+    response = send_and_receive(sock, message_dict)
     print(f"RETURNED: {response}")
 
     test_status = "PASS"
-    if expected_starts_with and not response.startswith(expected_starts_with):
+    if expected_status and response.get("status") != expected_status:
         test_status = "FAIL"
-    elif not expected_starts_with and response == "BAD":
-        test_status = "FAIL"
-    elif response == "TIMEOUT" or "ERROR" in response:
+    elif response.get("status") in ["TIMEOUT", "ERROR"]:
         test_status = "FAIL"
 
     print(f"TEST: {test_status}")
@@ -72,53 +81,76 @@ def run_test(test_name, sock, message, expected_starts_with=None):
 # --- Test Functions ---
 
 def test_login(sock, user_data):
-    """Tests the USER login command."""
+    """Tests the USER login command using JSON."""
     test_name = f"USER login for '{user_data['player_name']}'"
-    command = f"USER {user_data['player_name']}:{user_data['password']}:"
-    run_test(test_name, sock, command, ":")
+    command_dict = {
+        "command": "USER",
+        "player_name": user_data['player_name'],
+        "password": user_data['password']
+    }
+    run_test(test_name, sock, command_dict, "OK")
 
 def test_new_user(sock, user_data):
-    """Tests the NEW user command."""
+    """Tests the NEW user command using JSON."""
     test_name = f"NEW user creation for '{user_data['player_name']}'"
-    command = f"NEW {user_data['player_name']}:{user_data['password']}:{user_data['ship_name']}:"
-    run_test(test_name, sock, command, "OK")
+    command_dict = {
+        "command": "NEW",
+        "player_name": user_data['player_name'],
+        "password": user_data['password'],
+        "ship_name": user_data['ship_name']
+    }
+    run_test(test_name, sock, command_dict, "OK")
 
 def test_description_command(sock):
-    """Tests the DESCRIPTION command."""
+    """Tests the DESCRIPTION command using JSON."""
     test_name = "DESCRIPTION"
-    run_test(test_name, sock, "DESCRIPTION", ":")
+    command_dict = {"command": "DESCRIPTION"}
+    run_test(test_name, sock, command_dict, "OK")
 
 def test_move_command(sock, sector_num):
-    """Tests the move command <#>."""
+    """Tests the MOVE command using JSON."""
     test_name = f"Move to sector {sector_num}"
-    run_test(test_name, sock, str(sector_num), ":")
+    command_dict = {
+        "command": "MOVE",
+        "sector_num": sector_num
+    }
+    run_test(test_name, sock, command_dict, "OK")
 
 def test_myinfo_command(sock):
-    """Tests the MYINFO command."""
+    """Tests the MYINFO command using JSON."""
     test_name = "MYINFO"
-    run_test(test_name, sock, "MYINFO", ":")
+    command_dict = {"command": "MYINFO"}
+    run_test(test_name, sock, command_dict, "OK")
 
 def test_playerinfo_command(sock, player_num):
-    """Tests the PLAYERINFO command."""
+    """Tests the PLAYERINFO command using JSON."""
     test_name = f"PLAYERINFO for player {player_num}"
-    command = f"PLAYERINFO {player_num}:"
-    run_test(test_name, sock, command, ":")
+    command_dict = {
+        "command": "PLAYERINFO",
+        "player_num": player_num
+    }
+    run_test(test_name, sock, command_dict, "OK")
 
 def test_shipinfo_command(sock, ship_num):
-    """Tests the SHIPINFO command."""
+    """Tests the SHIPINFO command using JSON."""
     test_name = f"SHIPINFO for ship {ship_num}"
-    command = f"SHIPINFO {ship_num}:"
-    run_test(test_name, sock, command, ":")
+    command_dict = {
+        "command": "SHIPINFO",
+        "ship_num": ship_num
+    }
+    run_test(test_name, sock, command_dict, "OK")
 
 def test_quit_command(sock):
-    """Tests the QUIT command."""
+    """Tests the QUIT command using JSON."""
     test_name = "QUIT"
-    run_test(test_name, sock, "QUIT", "OK")
+    command_dict = {"command": "QUIT"}
+    run_test(test_name, sock, command_dict, "OK")
 
 def test_online_command(sock):
-    """Tests the ONLINE command."""
+    """Tests the ONLINE command using JSON."""
     test_name = "ONLINE"
-    run_test(test_name, sock, "ONLINE", ":")
+    command_dict = {"command": "ONLINE"}
+    run_test(test_name, sock, command_dict, "OK")
 
 # --- Main Execution ---
 
@@ -131,24 +163,23 @@ if __name__ == "__main__":
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(TIMEOUT)
             s.connect((HOST, PORT))
-            
+
             # Run test suite for a valid user
             print("\nAttempting to log in with valid credentials...")
             test_login(s, VALID_USER)
-            
+
             print("\nRunning post-login commands:")
             test_description_command(s)
             test_myinfo_command(s)
             test_playerinfo_command(s, VALID_USER['player_num'])
             test_shipinfo_command(s, VALID_USER['ship_num'])
             test_online_command(s)
-            
+
             # Test some invalid commands after login
             print("\nTesting known-bad commands after login:")
-            run_test("Invalid command", s, "INVALID_COMMAND", "BAD")
-            run_test("Malformed PORT command", s, "PORT:", "BAD")
-            run_test("Malformed PLAYERINFO command", s, "PLAYERINFO:", "BAD")
-
+            run_test("Invalid command", s, {"command": "INVALID_COMMAND"}, "BAD_COMMAND")
+            run_test("Malformed PLAYERINFO command", s, {"command": "PLAYERINFO"}, "BAD_COMMAND")
+            
             test_quit_command(s)
 
     except ConnectionRefusedError:
@@ -159,7 +190,7 @@ if __name__ == "__main__":
     print("\n" + "=" * 40)
     print("--- Running TWClone Protocol Tests ---")
     print("--- Testing with INVALID User Data ---")
-    
+
     try:
         # Create a new socket for the next test
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -171,14 +202,14 @@ if __name__ == "__main__":
             test_login(s, INVALID_USER)
 
             test_new_user(s, INVALID_USER)
-            
+
             # Test commands without being logged in (should fail)
             print("\nRunning commands before logging in:")
-            run_test("MYINFO (pre-login)", s, "MYINFO", "BAD")
-            run_test("DESCRIPTION (pre-login)", s, "DESCRIPTION", "BAD")
-            
+            run_test("MYINFO (pre-login)", s, {"command": "MYINFO"}, "BAD_AUTH")
+            run_test("DESCRIPTION (pre-login)", s, {"command": "DESCRIPTION"}, "BAD_AUTH")
+
             test_quit_command(s)
-            
+
     except ConnectionRefusedError:
         print(f"\nERROR: Could not connect to {HOST}:{PORT}. Make sure the server is running.")
     except Exception as e:
