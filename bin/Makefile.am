@@ -20,7 +20,7 @@
 # http://www.gnu.org/copyleft/gpl.html
 
 server_LDADD   = -ljansson -lsqlite3
-bigbang_LDADD  = -ljansson -lsqlite3
+# bigbang_LDADD  = -ljansson -lsqlite3
 client_LDADD   = -ljansson -lsqlite3
 test_bang_LDADD = -lsqlite3
 
@@ -31,7 +31,6 @@ bin_PROGRAMS = \
 	server \
 	test_bang
 
-
 client_SOURCES = \
 	../src/globals.c \
 	../src/database.c \
@@ -40,39 +39,26 @@ client_SOURCES = \
 	../src/parse.c
 
 server_SOURCES = \
-        ../src/server_main.c \
+	../src/server_main.c \
 	../src/namegen.c \
-        ../src/server_loop.c \
-        ../src/server_universe.c \
-        ../src/server_bigbang.c \
+	../src/server_loop.c \
+	../src/server_universe.c \
+	../src/server_bigbang.c \
 	../src/globals.c \
 	../src/database.c \
-	../src/boxmuller.c \
-	../src/common.c \
-	../src/config.c \
-	../src/hashtable.c \
-	../src/maint.c \
-	../src/msgqueue.c \
-	../src/parse.c \
-	../src/planet.c \
-        ../src/server_config.c \
-	../src/player_interaction.c \
-	../src/serveractions.c \
-	../src/shipinfo.c \
+	../src/server_config.c \
 	../src/server_warp_post_processing.c \
-	../src/sysop_interaction.c \
-	../src/universe.c
-
+	../src/common.c
 
 test_bang_SOURCES = \
-    ../src/database.c \
-    ../src/namegen.c \
-    ../src/server_bigbang.c \
-    ../src/server_config.c \
-    ../src/server_warp_post_processing.c \
-    ../src/test_bang.c \
-    ../src/globals.c \
-    ../src/common.c
+	../src/database.c \
+	../src/namegen.c \
+	../src/server_bigbang.c \
+	../src/server_config.c \
+	../src/server_warp_post_processing.c \
+	../src/test_bang.c \
+	../src/globals.c \
+	../src/common.c
 
 
 

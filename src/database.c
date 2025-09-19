@@ -50,7 +50,7 @@ const char *create_table_sql[] = {
   "CREATE TABLE IF NOT EXISTS port_trade ("
     "id INTEGER PRIMARY KEY AUTOINCREMENT, "
     "port_id INTEGER NOT NULL, "
-    "maxproduct INTEGER, "  
+    "maxproduct INTEGER, "
     "commodity TEXT CHECK(commodity IN ('ore','organics','equipment')), "
     "mode TEXT CHECK(mode IN ('buy','sell')), "
     "FOREIGN KEY (port_id) REFERENCES ports(id));",
@@ -159,195 +159,185 @@ const char *create_table_sql[] = {
     "JOIN outdeg d_exit ON d_exit.id = r.curr\n"
     "WHERE d_exit.deg <> 1 AND r.steps >= 2\n"
     "ORDER BY r.steps DESC, r.entry, r.curr;"
-
 //////////////////////////////////////////////////////////////////////
 /// CREATE VIEWS 
 //////////////////////////////////////////////////////////////////////
-
-  /* ===================== GRAPH / TOPOLOGY ===================== */
-
+    /* ===================== GRAPH / TOPOLOGY ===================== */
 /* 1) Degrees per sector (base for several views) */
-"CREATE VIEW IF NOT EXISTS sector_degrees AS\n"
-"WITH outdeg AS (\n"
-"  SELECT s.id, COUNT(w.to_sector) AS outdeg\n"
-"  FROM sectors s\n"
-"  LEFT JOIN sector_warps w ON w.from_sector = s.id\n"
-"  GROUP BY s.id\n"
-"), indeg AS (\n"
-"  SELECT s.id, COUNT(w.from_sector) AS indeg\n"
-"  FROM sectors s\n"
-"  LEFT JOIN sector_warps w ON w.to_sector = s.id\n"
-"  GROUP BY s.id\n"
-")\n"
-"SELECT o.id AS sector_id, o.outdeg, i.indeg\n"
-"FROM outdeg o JOIN indeg i USING(id);",
+    "CREATE VIEW IF NOT EXISTS sector_degrees AS\n"
+    "WITH outdeg AS (\n"
+    "  SELECT s.id, COUNT(w.to_sector) AS outdeg\n"
+    "  FROM sectors s\n"
+    "  LEFT JOIN sector_warps w ON w.from_sector = s.id\n"
+    "  GROUP BY s.id\n"
+    "), indeg AS (\n"
+    "  SELECT s.id, COUNT(w.from_sector) AS indeg\n"
+    "  FROM sectors s\n"
+    "  LEFT JOIN sector_warps w ON w.to_sector = s.id\n"
+    "  GROUP BY s.id\n"
+    ")\n"
+    "SELECT o.id AS sector_id, o.outdeg, i.indeg\n"
+    "FROM outdeg o JOIN indeg i USING(id);",
 
 /* 2) Dead-out (no outgoing) */
-"CREATE VIEW IF NOT EXISTS sectors_dead_out AS\n"
-"SELECT sector_id FROM sector_degrees WHERE outdeg = 0;",
+  "CREATE VIEW IF NOT EXISTS sectors_dead_out AS\n"
+    "SELECT sector_id FROM sector_degrees WHERE outdeg = 0;",
 
 /* 3) Dead-in (no incoming) */
-"CREATE VIEW IF NOT EXISTS sectors_dead_in AS\n"
-"SELECT sector_id FROM sector_degrees WHERE indeg = 0;",
+  "CREATE VIEW IF NOT EXISTS sectors_dead_in AS\n"
+    "SELECT sector_id FROM sector_degrees WHERE indeg = 0;",
 
 /* 4) Isolated (no in, no out) */
-"CREATE VIEW IF NOT EXISTS sectors_isolated AS\n"
-"SELECT sector_id FROM sector_degrees WHERE outdeg = 0 AND indeg = 0;",
+  "CREATE VIEW IF NOT EXISTS sectors_isolated AS\n"
+    "SELECT sector_id FROM sector_degrees WHERE outdeg = 0 AND indeg = 0;",
 
 /* 5) One-way edges (no reverse) */
-"CREATE VIEW IF NOT EXISTS one_way_edges AS\n"
-"SELECT s.from_sector, s.to_sector\n"
-"FROM sector_warps s\n"
-"LEFT JOIN sector_warps r\n"
-"  ON r.from_sector = s.to_sector AND r.to_sector = s.from_sector\n"
-"WHERE r.from_sector IS NULL;",
+  "CREATE VIEW IF NOT EXISTS one_way_edges AS\n"
+    "SELECT s.from_sector, s.to_sector\n"
+    "FROM sector_warps s\n"
+    "LEFT JOIN sector_warps r\n"
+    "  ON r.from_sector = s.to_sector AND r.to_sector = s.from_sector\n"
+    "WHERE r.from_sector IS NULL;",
 
 /* 6) Bidirectional edges (dedup pairs) */
-"CREATE VIEW IF NOT EXISTS bidirectional_edges AS\n"
-"SELECT s.from_sector, s.to_sector\n"
-"FROM sector_warps s\n"
-"JOIN sector_warps r\n"
-"  ON r.from_sector = s.to_sector AND r.to_sector = s.from_sector\n"
-"WHERE s.from_sector < s.to_sector;",
+  "CREATE VIEW IF NOT EXISTS bidirectional_edges AS\n"
+    "SELECT s.from_sector, s.to_sector\n"
+    "FROM sector_warps s\n"
+    "JOIN sector_warps r\n"
+    "  ON r.from_sector = s.to_sector AND r.to_sector = s.from_sector\n"
+    "WHERE s.from_sector < s.to_sector;",
 
 /* 7) Sector adjacency list (CSV) */
-"CREATE VIEW IF NOT EXISTS sector_adjacency AS\n"
-"SELECT s.id AS sector_id,\n"
-"       COALESCE(GROUP_CONCAT(w.to_sector, ','), '') AS neighbors\n"
-"FROM sectors s\n"
-"LEFT JOIN sector_warps w ON w.from_sector = s.id\n"
-"GROUP BY s.id;",
+  "CREATE VIEW IF NOT EXISTS sector_adjacency AS\n"
+    "SELECT s.id AS sector_id,\n"
+    "       COALESCE(GROUP_CONCAT(w.to_sector, ','), '') AS neighbors\n"
+    "FROM sectors s\n"
+    "LEFT JOIN sector_warps w ON w.from_sector = s.id\n" "GROUP BY s.id;",
 
 /* 8) Sector summary (depends on sector_degrees) */
-"CREATE VIEW IF NOT EXISTS sector_summary AS\n"
-"WITH pc AS (\n"
-"  SELECT sector AS sector_id, COUNT(*) AS planet_count\n"
-"  FROM planets GROUP BY sector\n"
-"), prt AS (\n"
-"  SELECT location AS sector_id, COUNT(*) AS port_count\n"
-"  FROM ports GROUP BY location\n"
-")\n"
-"SELECT s.id AS sector_id,\n"
-"       COALESCE(d.outdeg,0) AS outdeg,\n"
-"       COALESCE(d.indeg,0) AS indeg,\n"
-"       COALESCE(prt.port_count,0) AS ports,\n"
-"       COALESCE(pc.planet_count,0) AS planets\n"
-"FROM sectors s\n"
-"LEFT JOIN sector_degrees d ON d.sector_id = s.id\n"
-"LEFT JOIN prt ON prt.sector_id = s.id\n"
-"LEFT JOIN pc  ON pc.sector_id  = s.id;",
+  "CREATE VIEW IF NOT EXISTS sector_summary AS\n"
+    "WITH pc AS (\n"
+    "  SELECT sector AS sector_id, COUNT(*) AS planet_count\n"
+    "  FROM planets GROUP BY sector\n"
+    "), prt AS (\n"
+    "  SELECT location AS sector_id, COUNT(*) AS port_count\n"
+    "  FROM ports GROUP BY location\n"
+    ")\n"
+    "SELECT s.id AS sector_id,\n"
+    "       COALESCE(d.outdeg,0) AS outdeg,\n"
+    "       COALESCE(d.indeg,0) AS indeg,\n"
+    "       COALESCE(prt.port_count,0) AS ports,\n"
+    "       COALESCE(pc.planet_count,0) AS planets\n"
+    "FROM sectors s\n"
+    "LEFT JOIN sector_degrees d ON d.sector_id = s.id\n"
+    "LEFT JOIN prt ON prt.sector_id = s.id\n"
+    "LEFT JOIN pc  ON pc.sector_id  = s.id;",
 
 /* ===================== PORTS & TRADE ===================== */
 
 /* 9) Compact trade code per port (B/S over ore|organics|equipment) */
-"CREATE VIEW IF NOT EXISTS port_trade_code AS\n"
-"WITH m AS (\n"
-"  SELECT p.id AS port_id,\n"
-"         MAX(CASE WHEN t.commodity='ore'       THEN (CASE t.mode WHEN 'buy' THEN 'B' ELSE 'S' END) END) AS ore,\n"
-"         MAX(CASE WHEN t.commodity='organics'  THEN (CASE t.mode WHEN 'buy' THEN 'B' ELSE 'S' END) END) AS org,\n"
-"         MAX(CASE WHEN t.commodity='equipment' THEN (CASE t.mode WHEN 'buy' THEN 'B' ELSE 'S' END) END) AS eqp\n"
-"  FROM ports p\n"
-"  LEFT JOIN port_trade t ON t.port_id = p.id\n"
-"  GROUP BY p.id\n"
-")\n"
-"SELECT p.id, p.number, p.name, p.location AS sector_id, p.size, p.techlevel, p.credits,\n"
-"       COALESCE(m.ore,'-') || COALESCE(m.org,'-') || COALESCE(m.eqp,'-') AS trade_code\n"
-"FROM ports p\n"
-"LEFT JOIN m ON m.port_id = p.id;",
+  "CREATE VIEW IF NOT EXISTS port_trade_code AS\n"
+    "WITH m AS (\n"
+    "  SELECT p.id AS port_id,\n"
+    "         MAX(CASE WHEN t.commodity='ore'       THEN (CASE t.mode WHEN 'buy' THEN 'B' ELSE 'S' END) END) AS ore,\n"
+    "         MAX(CASE WHEN t.commodity='organics'  THEN (CASE t.mode WHEN 'buy' THEN 'B' ELSE 'S' END) END) AS org,\n"
+    "         MAX(CASE WHEN t.commodity='equipment' THEN (CASE t.mode WHEN 'buy' THEN 'B' ELSE 'S' END) END) AS eqp\n"
+    "  FROM ports p\n"
+    "  LEFT JOIN port_trade t ON t.port_id = p.id\n"
+    "  GROUP BY p.id\n"
+    ")\n"
+    "SELECT p.id, p.number, p.name, p.location AS sector_id, p.size, p.techlevel, p.credits,\n"
+    "       COALESCE(m.ore,'-') || COALESCE(m.org,'-') || COALESCE(m.eqp,'-') AS trade_code\n"
+    "FROM ports p\n" "LEFT JOIN m ON m.port_id = p.id;",
 
 /* 10) Ports grouped by sector (depends on port_trade_code) */
-"CREATE VIEW IF NOT EXISTS sector_ports AS\n"
-"SELECT s.id AS sector_id,\n"
-"       COUNT(p.id) AS port_count,\n"
-"       COALESCE(GROUP_CONCAT(p.name || ':' || pt.trade_code, ' | '), '') AS ports\n"
-"FROM sectors s\n"
-"LEFT JOIN port_trade_code pt ON pt.sector_id = s.id\n"
-"LEFT JOIN ports p ON p.id = pt.id\n"
-"GROUP BY s.id;",
+  "CREATE VIEW IF NOT EXISTS sector_ports AS\n"
+    "SELECT s.id AS sector_id,\n"
+    "       COUNT(p.id) AS port_count,\n"
+    "       COALESCE(GROUP_CONCAT(p.name || ':' || pt.trade_code, ' | '), '') AS ports\n"
+    "FROM sectors s\n"
+    "LEFT JOIN port_trade_code pt ON pt.sector_id = s.id\n"
+    "LEFT JOIN ports p ON p.id = pt.id\n" "GROUP BY s.id;",
 
 /* 11) Stardock location (by type=9 or name) */
-"CREATE VIEW IF NOT EXISTS stardock_location AS\n"
-"SELECT id AS port_id, number, name, location AS sector_id\n"
-"FROM ports\n"
-"WHERE type = 9 OR name LIKE '%Stardock%';",
+  "CREATE VIEW IF NOT EXISTS stardock_location AS\n"
+    "SELECT id AS port_id, number, name, location AS sector_id\n"
+    "FROM ports\n" "WHERE type = 9 OR name LIKE '%Stardock%';",
 
 /* ===================== PLANETS / CITADELS ===================== */
 
 /* 12) Planet + citadel (with optional owner) */
-"CREATE VIEW IF NOT EXISTS planet_citadels AS\n"
-"SELECT c.id AS citadel_id,\n"
-"       c.level AS citadel_level,\n"
-"       p.id AS planet_id,\n"
-"       p.name AS planet_name,\n"
-"       p.sector AS sector_id,\n"
-"       c.owner AS owner_id,\n"
-"       pl.name AS owner_name\n"
-"FROM citadels c\n"
-"JOIN planets  p  ON p.id = c.planet_id\n"
-"LEFT JOIN players pl ON pl.id = c.owner;",
+  "CREATE VIEW IF NOT EXISTS planet_citadels AS\n"
+    "SELECT c.id AS citadel_id,\n"
+    "       c.level AS citadel_level,\n"
+    "       p.id AS planet_id,\n"
+    "       p.name AS planet_name,\n"
+    "       p.sector AS sector_id,\n"
+    "       c.owner AS owner_id,\n"
+    "       pl.name AS owner_name\n"
+    "FROM citadels c\n"
+    "JOIN planets  p  ON p.id = c.planet_id\n"
+    "LEFT JOIN players pl ON pl.id = c.owner;",
 
 /* 13) Planets grouped by sector */
-"CREATE VIEW IF NOT EXISTS sector_planets AS\n"
-"SELECT s.id AS sector_id,\n"
-"       COUNT(p.id) AS planet_count,\n"
-"       COALESCE(GROUP_CONCAT(p.name, ', '), '') AS planets\n"
-"FROM sectors s\n"
-"LEFT JOIN planets p ON p.sector = s.id\n"
-"GROUP BY s.id;",
+  "CREATE VIEW IF NOT EXISTS sector_planets AS\n"
+    "SELECT s.id AS sector_id,\n"
+    "       COUNT(p.id) AS planet_count,\n"
+    "       COALESCE(GROUP_CONCAT(p.name, ', '), '') AS planets\n"
+    "FROM sectors s\n"
+    "LEFT JOIN planets p ON p.sector = s.id\n" "GROUP BY s.id;",
 
 /* ===================== RUNTIME SNAPSHOTS ===================== */
 
 /* 14) Player locations */
-"CREATE VIEW IF NOT EXISTS player_locations AS\n"
-"SELECT id AS player_id, name AS player_name,\n"
-"       sector AS sector_id,\n"
-"       ship   AS ship_number,\n"
-"       CASE WHEN sector IS NULL OR sector=0 THEN 'in_ship' ELSE 'in_sector' END AS location_kind\n"
-"FROM players;",
+  "CREATE VIEW IF NOT EXISTS player_locations AS\n"
+    "SELECT id AS player_id, name AS player_name,\n"
+    "       sector AS sector_id,\n"
+    "       ship   AS ship_number,\n"
+    "       CASE WHEN sector IS NULL OR sector=0 THEN 'in_ship' ELSE 'in_sector' END AS location_kind\n"
+    "FROM players;",
 
 /* 15) Ships by sector */
-"CREATE VIEW IF NOT EXISTS ships_by_sector AS\n"
-"SELECT s.id AS sector_id,\n"
-"       COALESCE(GROUP_CONCAT(sh.name || '#' || sh.number, ', '), '') AS ships,\n"
-"       COUNT(sh.id) AS ship_count\n"
-"FROM sectors s\n"
-"LEFT JOIN ships sh ON sh.location = s.id\n"
-"GROUP BY s.id;",
+  "CREATE VIEW IF NOT EXISTS ships_by_sector AS\n"
+    "SELECT s.id AS sector_id,\n"
+    "       COALESCE(GROUP_CONCAT(sh.name || '#' || sh.number, ', '), '') AS ships,\n"
+    "       COUNT(sh.id) AS ship_count\n"
+    "FROM sectors s\n"
+    "LEFT JOIN ships sh ON sh.location = s.id\n" "GROUP BY s.id;",
 
 /* ===================== OPS DASHBOARDS ===================== */
 
 /* 16) Sector ops (depends on sector_summary, sector_ports, sector_planets, ships_by_sector) */
-"CREATE VIEW IF NOT EXISTS sector_ops AS\n"
-"SELECT ss.sector_id,\n"
-"       ss.outdeg, ss.indeg,\n"
-"       sp.port_count,\n"
-"       spp.planet_count,\n"
-"       sbs.ship_count\n"
-"FROM sector_summary ss\n"
-"LEFT JOIN sector_ports    sp  ON sp.sector_id  = ss.sector_id\n"
-"LEFT JOIN sector_planets  spp ON spp.sector_id = ss.sector_id\n"
-"LEFT JOIN ships_by_sector sbs ON sbs.sector_id = ss.sector_id;",
+  "CREATE VIEW IF NOT EXISTS sector_ops AS\n"
+    "SELECT ss.sector_id,\n"
+    "       ss.outdeg, ss.indeg,\n"
+    "       sp.port_count,\n"
+    "       spp.planet_count,\n"
+    "       sbs.ship_count\n"
+    "FROM sector_summary ss\n"
+    "LEFT JOIN sector_ports    sp  ON sp.sector_id  = ss.sector_id\n"
+    "LEFT JOIN sector_planets  spp ON spp.sector_id = ss.sector_id\n"
+    "LEFT JOIN ships_by_sector sbs ON sbs.sector_id = ss.sector_id;",
 
 /* 17) World summary (one row) */
-"CREATE VIEW IF NOT EXISTS world_summary AS\n"
-"WITH a AS (SELECT COUNT(*) AS sectors FROM sectors),\n"
-"     b AS (SELECT COUNT(*) AS warps   FROM sector_warps),\n"
-"     c AS (SELECT COUNT(*) AS ports   FROM ports),\n"
-"     d AS (SELECT COUNT(*) AS planets FROM planets),\n"
-"     e AS (SELECT COUNT(*) AS players FROM players),\n"
-"     f AS (SELECT COUNT(*) AS ships   FROM ships)\n"
-"SELECT a.sectors, b.warps, c.ports, d.planets, e.players, f.ships\n"
-"FROM a,b,c,d,e,f;",
+  "CREATE VIEW IF NOT EXISTS world_summary AS\n"
+    "WITH a AS (SELECT COUNT(*) AS sectors FROM sectors),\n"
+    "     b AS (SELECT COUNT(*) AS warps   FROM sector_warps),\n"
+    "     c AS (SELECT COUNT(*) AS ports   FROM ports),\n"
+    "     d AS (SELECT COUNT(*) AS planets FROM planets),\n"
+    "     e AS (SELECT COUNT(*) AS players FROM players),\n"
+    "     f AS (SELECT COUNT(*) AS ships   FROM ships)\n"
+    "SELECT a.sectors, b.warps, c.ports, d.planets, e.players, f.ships\n"
+    "FROM a,b,c,d,e,f;",
 
-"CREATE VIEW IF NOT EXISTS v_bidirectional_warps AS\n"
-"SELECT\n"
-"  CASE WHEN w1.from_sector < w1.to_sector THEN w1.from_sector ELSE w1.to_sector END AS a,\n"
-"  CASE WHEN w1.from_sector < w1.to_sector THEN w1.to_sector ELSE w1.from_sector END AS b\n"
-"FROM sector_warps AS w1\n"
-"JOIN sector_warps AS w2\n"
-"  ON w1.from_sector = w2.to_sector\n"
-" AND w1.to_sector   = w2.from_sector\n"
-"GROUP BY a, b;",
+  "CREATE VIEW IF NOT EXISTS v_bidirectional_warps AS\n"
+    "SELECT\n"
+    "  CASE WHEN w1.from_sector < w1.to_sector THEN w1.from_sector ELSE w1.to_sector END AS a,\n"
+    "  CASE WHEN w1.from_sector < w1.to_sector THEN w1.to_sector ELSE w1.from_sector END AS b\n"
+    "FROM sector_warps AS w1\n"
+    "JOIN sector_warps AS w2\n"
+    "  ON w1.from_sector = w2.to_sector\n"
+    " AND w1.to_sector   = w2.from_sector\n" "GROUP BY a, b;",
 
 
 
@@ -356,22 +346,14 @@ const char *create_table_sql[] = {
 //////////////////////////////////////////////////////////////////////
 /* ===================== INDEXES ===================== */
 
-"CREATE INDEX IF NOT EXISTS idx_warps_from ON sector_warps(from_sector);",
-"CREATE INDEX IF NOT EXISTS idx_warps_to   ON sector_warps(to_sector);",
-"CREATE INDEX IF NOT EXISTS idx_ports_loc  ON ports(location);",
-"CREATE INDEX IF NOT EXISTS idx_planets_sector ON planets(sector);",
-"CREATE INDEX IF NOT EXISTS idx_citadels_planet ON citadels(planet_id);",
-"CREATE INDEX IF NOT EXISTS ix_warps_from_to ON sector_warps(from_sector, to_sector);",
+  "CREATE INDEX IF NOT EXISTS idx_warps_from ON sector_warps(from_sector);",
+  "CREATE INDEX IF NOT EXISTS idx_warps_to   ON sector_warps(to_sector);",
+  "CREATE INDEX IF NOT EXISTS idx_ports_loc  ON ports(location);",
+  "CREATE INDEX IF NOT EXISTS idx_planets_sector ON planets(sector);",
+  "CREATE INDEX IF NOT EXISTS idx_citadels_planet ON citadels(planet_id);",
+  "CREATE INDEX IF NOT EXISTS ix_warps_from_to ON sector_warps(from_sector, to_sector);",
 
 };
-
-
-
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-
 
 
 const char *insert_default_sql[] = {
@@ -745,8 +727,6 @@ db_init (void)
 
   return 0;
 }
-
-
 
 int
 db_create_tables (void)

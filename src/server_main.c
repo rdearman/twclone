@@ -1,17 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
-#include <unistd.h>
+#include "config.h"		/* int load_config(void);   (1 = success, 0 = fail) */
+#include "database.h"		/* int db_init(void); void db_close(void); */
+#include "universe.h"		/* int universe_init(void); void universe_shutdown(void); */
+#include "server_loop.h"	/* int server_loop(volatile sig_atomic_t *running); */
 
-#include "database.h"
-#include "server_loop.h"
-#include "universe.h"
-#include "config.h"
+int load_config (void);
 
-/* Global running flag */
-static int running = 1;
+static volatile sig_atomic_t running = 1;
 
-/* Signal handler */
 static void
 handle_signal (int sig)
 {
@@ -19,52 +17,81 @@ handle_signal (int sig)
   running = 0;
 }
 
-int
-main (int argc, char *argv[])
+static void
+install_signal_handlers (void)
 {
-  /* Install signal handlers */
-  signal (SIGINT, handle_signal);
-  signal (SIGTERM, handle_signal);
+  struct sigaction sa = { 0 };
+  sa.sa_handler = handle_signal;
+  sigemptyset (&sa.sa_mask);
+  /* No SA_RESTART: let blocking syscalls return EINTR */
+  sigaction (SIGINT, &sa, NULL);
+  sigaction (SIGTERM, &sa, NULL);
+  sigaction (SIGHUP, &sa, NULL);
+}
 
-  /* Initialise database */
-  if (db_init () != 0)
+int
+main (void)
+{
+  /* load_config(): returns 1 on success, 0 on failure (per your definition) */
+  if (load_config () == 0)
     {
-      fprintf (stderr, "Failed to initialise database.\n");
-      return EXIT_FAILURE;
-    }
-
-  if (universe_init () != 0)
-    {
-      fprintf (stderr, "Failed to initialise universe.\n");
-      db_close ();
-      return EXIT_FAILURE;
-    }
-
-  if (config_load () != 0)
-    {
-      fprintf (stderr, "No config found, inserting defaults.\n");
-      if (initconfig () != 0)
+      /* Can't read config/db — bootstrap it */
+      if (db_init () != 0)
 	{
-	  fprintf (stderr, "Failed to insert default config.\n");
+	  fprintf (stderr, "Failed to init DB.\n");
+	  return EXIT_FAILURE;
+	}
+      if (universe_init () != 0)
+	{
+	  fprintf (stderr, "Failed to init universe.\n");
 	  db_close ();
 	  return EXIT_FAILURE;
 	}
     }
 
-  /* Main server loop */
-  while (running)
-    {
-      if (server_loop () != 0)
-	{
-	  fprintf (stderr, "server_loop() returned error, aborting.\n");
-	  break;
-	}
-    }
+  install_signal_handlers ();
 
-  /* Shutdown subsystems */
+  int rc = server_loop (&running);
+
   universe_shutdown ();
   db_close ();
 
-  fprintf (stderr, "Server shutdown complete.\n");
-  return EXIT_SUCCESS;
+  return (rc == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
+
+
+/* Returns 1 if we can open twconfig.db and read at least one row from config; else 0. */
+int
+load_config (void)
+{
+  sqlite3 *db = NULL;
+  sqlite3_stmt *stmt = NULL;
+  int rc;
+
+  rc = sqlite3_open ("twconfig.db", &db);
+  if (rc != SQLITE_OK)
+    {
+      /* fprintf(stderr, "sqlite3_open: %s\n", sqlite3_errmsg(db)); */
+      if (db)
+	sqlite3_close (db);
+      return 0;
+    }
+
+  rc =
+    sqlite3_prepare_v2 (db, "SELECT 1 FROM config LIMIT 1;", -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      /* fprintf(stderr, "sqlite3_prepare_v2: %s\n", sqlite3_errmsg(db)); */
+      sqlite3_close (db);
+      return 0;
+    }
+
+  rc = sqlite3_step (stmt);
+  /* SQLITE_ROW means at least one row exists */
+  int ok = (rc == SQLITE_ROW) ? 1 : 0;
+
+  sqlite3_finalize (stmt);
+  sqlite3_close (db);
+  return ok;
+}
+

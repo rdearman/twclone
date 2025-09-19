@@ -18,13 +18,13 @@
 
 
 /* Initialise and populate the universe if missing */
-int bigbang(void);
+int bigbang (void);
 
 /* Internal helpers */
-int create_sectors(void);
-int create_ports(void);
-int create_ferringhi(void);
-int create_planets(void);
-extern int create_complex_warps(sqlite3 *db, int numSectors);
+int create_sectors (void);
+int create_ports (void);
+int create_ferringhi (void);
+int create_planets (void);
+extern int create_complex_warps (sqlite3 * db, int numSectors);
 
 #endif /* SERVER_BIGBANG_H */

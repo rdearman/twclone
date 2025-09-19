@@ -25,18 +25,21 @@ char *
 consellationName (char *name)
 {
   int randIndex;
-  
-  if (randomnum(0, 1) == 0) {
-    // 50% chance to return a constellation name
-    randIndex = randomnum(1, 400);
-  } else {
-    // 50% chance to return "Uncharted Space"
-    randIndex = 0;
-  }
-  
+
+  if (randomnum (0, 1) == 0)
+    {
+      // 50% chance to return a constellation name
+      randIndex = randomnum (1, 400);
+    }
+  else
+    {
+      // 50% chance to return "Uncharted Space"
+      randIndex = 0;
+    }
+
   // Copy the name at the random index to the buffer.
-  sprintf(name, "%s", nameCollection[randIndex]);
-  
+  sprintf (name, "%s", nameCollection[randIndex]);
+
   return name;
 }
 
