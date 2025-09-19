@@ -272,18 +272,29 @@ int create_sectors(void) {
 
     char sql[256];
     char name_buffer[50]; // Buffer to hold the generated name
+    char neb_name_buffer[50]; // Buffer to hold the generated name
+    char beacon[50] = "Brackus was here!"; // Buffer to hold the generated name        
 
     // This is the single loop that correctly creates the desired number of sectors.
     for (int i = 11; i <= numSectors; i++)
     {
         // Generate a new name for the sector
         consellationName(name_buffer);
-        
+	consellationName(neb_name_buffer);
+        if (i % 64)
+	  {
         snprintf(sql, sizeof(sql),
                  "INSERT INTO sectors (name, beacon, nebulae) "
-                 "VALUES ('%s', '', '');",
-                 name_buffer);
-
+                 "VALUES ('%s', '', '%s');",
+                 name_buffer,neb_name_buffer);
+	  }
+	else
+	  {
+        snprintf(sql, sizeof(sql),
+                 "INSERT INTO sectors (name, beacon, nebulae) "
+                 "VALUES ('%s', '%s', '%s');",
+                 name_buffer,beacon,neb_name_buffer);
+	  }
         if (sqlite3_exec(db, sql, NULL, NULL, NULL) != SQLITE_OK)
         {
             fprintf(stderr, "create_sectors failed at %d: %s\n", i, sqlite3_errmsg(db));
@@ -293,106 +304,6 @@ int create_sectors(void) {
     return 0;
 }
 
-
-
-/* int create_sectors(void) { */
-/*     sqlite3 *db = db_get_handle(); */
-/*     struct twconfig *cfg = config_load(); */
-/*     if (!cfg) { */
-/*         fprintf(stderr, "create_sectors: could not load config\n"); */
-/*         return -1; */
-/*     } */
-
-/*     int numSectors = cfg->default_nodes; */
-/*     free(cfg); */
-
-/*     fprintf(stderr, "BIGBANG: Creating %d sectors (1–10 reserved for Fedspace).\n", numSectors); */
-
-/*     char sql[256]; */
-/*     for (int i = 11; i <= numSectors; i++) */
-/*       { */
-/* 	char name_buffer[50]; // Buffer to hold the generated name */
-/* 	for (int i = 11; i <= numSectors; i++) */
-/* 	  { */
-/* 	  // Generate a new name for the sector */
-/* 	  consellationName(name_buffer); */
-/* 	  snprintf(sql, sizeof(sql), */
-/* 		   "INSERT INTO sectors (name, beacon, nebulae) " */
-/* 		   "VALUES ('%s', '', '');", */
-/* 		   name_buffer); */
- 
-
-/* 	  if (sqlite3_exec(db, sql, NULL, NULL, NULL) != SQLITE_OK) */
-/* 	    { */
-/*             fprintf(stderr, "create_sectors failed at %d: %s\n", i, sqlite3_errmsg(db)); */
-/*             return -1; */
-/* 	    } */
-/* 	  } */
-/*       } */
-/*     return 0; */
-/* } */
-
-
-
-/* int create_ports(void) { */
-/*     sqlite3 *db = db_get_handle(); */
-/*     struct twconfig *cfg = config_load(); */
-/*     if (!cfg) { */
-/*         fprintf(stderr, "create_ports: could not load config\n"); */
-/*         return -1; */
-/*     } */
-
-/*     int numSectors = cfg->default_nodes; */
-/*     int maxPorts = cfg->max_ports; */
-/*     free(cfg); */
-
-/*     if (maxPorts < 1) { */
-/*         fprintf(stderr, "create_ports: max_ports < 1 in config\n"); */
-/*         return 0; */
-/*     } */
-
-/*     char sql[512]; */
-
-/*     /\* Stardock (Port 1) *\/ */
-/*     int stardock_sector = 0; */
-/*     if (numSectors > 11) { */
-/*       stardock_sector = (rand() % (numSectors - 10)) + 11; */
-/*     } else { */
-/*       stardock_sector = 11; */
-/*     } */
-
-/*     snprintf(sql, sizeof(sql), */
-/*         "INSERT INTO ports (number, name, location, size, techlevel, credits, type, invisible) " */
-/*         "VALUES (%d, 'Stardock', %d, 50, 10, 1000000, 9, 0);", */
-/*         1, stardock_sector); */
-/*     if (sqlite3_exec(db, sql, NULL, NULL, NULL) != SQLITE_OK) { */
-/*         fprintf(stderr, "create_ports failed (Stardock): %s\n", sqlite3_errmsg(db)); */
-/*         return -1; */
-/*     } */
-
-/*     /\* Rest of the ports *\/ */
-/*     for (int i = 2; i <= maxPorts; i++) { */
-/*         int sector; */
-/* 	char name_buffer[50]; // Buffer to hold the generated name	 */
-/*         do { */
-/*             sector = 11 + (rand() % (numSectors - 10)); */
-/*         } while (sector == stardock_sector); */
-
-/*         int type_id = (rand() % 8) + 1; */
-/* 	randomname(name_buffer);     */
-/*         snprintf(sql, sizeof(sql), */
-/*             "INSERT INTO ports (number, name, location, size, techlevel, credits, type, invisible) " */
-/*             "VALUES (%d, 'Port %s', %d, 10, 1, 1000, %d, 0);", */
-/*             i, name_buffer, sector, type_id); */
-/*         if (sqlite3_exec(db, sql, NULL, NULL, NULL) != SQLITE_OK) { */
-/*             fprintf(stderr, "create_ports failed at %d: %s\n", i, sqlite3_errmsg(db)); */
-/*             return -1; */
-/*         } */
-/*     } */
-
-/*     fprintf(stderr, "create_ports: Stardock at sector %d, plus %d normal ports\n", stardock_sector, maxPorts - 1); */
-/*     return 0; */
-/* } */
 
 int create_ports(void) {
     sqlite3 *db = db_get_handle();
@@ -412,7 +323,7 @@ int create_ports(void) {
     }
 
     char name_buffer[50];
-    
+
     /* Stardock (Port 1) */
     int stardock_sector = 0;
     if (numSectors > 11) {
@@ -420,29 +331,66 @@ int create_ports(void) {
     } else {
       stardock_sector = 11;
     }
-
-    // Use prepared statements for the rest of the ports
-    const char *port_sql = "INSERT INTO ports (number, name, location, size, techlevel, credits, type, invisible) VALUES (?, 'Port ' || ?, ?, 10, 1, 1000, ?, 0);";
+    
+    // Prepare statements for efficiency
+    const char *port_sql = "INSERT INTO ports (number, name, location, size, techlevel, credits, type, invisible) VALUES (?, 'Port ' || ?, ?, ?, ?, ?, ?, 0);";
     sqlite3_stmt *port_stmt;
     if (sqlite3_prepare_v2(db, port_sql, -1, &port_stmt, NULL) != SQLITE_OK) {
         fprintf(stderr, "create_ports prepare failed: %s\n", sqlite3_errmsg(db));
         return -1;
     }
-    
+
+    const char *trade_sql = "INSERT INTO port_trade (port_id, commodity, mode, maxproduct) VALUES (?, ?, ?, ?);";
+    sqlite3_stmt *trade_stmt;
+    if (sqlite3_prepare_v2(db, trade_sql, -1, &trade_stmt, NULL) != SQLITE_OK) {
+        fprintf(stderr, "create_ports prepare failed for trade data: %s\n", sqlite3_errmsg(db));
+        sqlite3_finalize(port_stmt);
+        return -1;
+    }
+
+    // --- Create and populate Stardock ---
     // Bind values for the Stardock port
     sqlite3_bind_int(port_stmt, 1, 1);
     sqlite3_bind_text(port_stmt, 2, "Stardock", -1, SQLITE_STATIC);
     sqlite3_bind_int(port_stmt, 3, stardock_sector);
-    sqlite3_bind_int(port_stmt, 4, 9);
+    sqlite3_bind_int(port_stmt, 4, 10);
+    sqlite3_bind_int(port_stmt, 5, 5);
+    sqlite3_bind_int(port_stmt, 6, 1000000);
+    sqlite3_bind_int(port_stmt, 7, 9); // Type ID for Stardock
 
     if (sqlite3_step(port_stmt) != SQLITE_DONE) {
         fprintf(stderr, "create_ports failed (Stardock): %s\n", sqlite3_errmsg(db));
         sqlite3_finalize(port_stmt);
+        sqlite3_finalize(trade_stmt);
         return -1;
     }
     sqlite3_reset(port_stmt);
+    sqlite3_int64 stardock_id = sqlite3_last_insert_rowid(db);
 
-    /* Rest of the ports */
+    // Populate trade data for Stardock (type 9: Buy all)
+    int maxproduct_amount = 5000;
+    sqlite3_bind_int(trade_stmt, 1, stardock_id);
+    sqlite3_bind_text(trade_stmt, 2, "ore", -1, SQLITE_STATIC);
+    sqlite3_bind_text(trade_stmt, 3, "buy", -1, SQLITE_STATIC);
+    sqlite3_bind_int(trade_stmt, 4, maxproduct_amount);
+    sqlite3_step(trade_stmt);
+    sqlite3_reset(trade_stmt);
+    
+    sqlite3_bind_int(trade_stmt, 1, stardock_id);
+    sqlite3_bind_text(trade_stmt, 2, "organics", -1, SQLITE_STATIC);
+    sqlite3_bind_text(trade_stmt, 3, "buy", -1, SQLITE_STATIC);
+    sqlite3_bind_int(trade_stmt, 4, maxproduct_amount);
+    sqlite3_step(trade_stmt);
+    sqlite3_reset(trade_stmt);
+
+    sqlite3_bind_int(trade_stmt, 1, stardock_id);
+    sqlite3_bind_text(trade_stmt, 2, "equipment", -1, SQLITE_STATIC);
+    sqlite3_bind_text(trade_stmt, 3, "buy", -1, SQLITE_STATIC);
+    sqlite3_bind_int(trade_stmt, 4, maxproduct_amount);
+    sqlite3_step(trade_stmt);
+    sqlite3_reset(trade_stmt);
+
+    // --- Create and populate the rest of the ports ---
     for (int i = 2; i <= maxPorts; i++) {
         int sector;
         do {
@@ -451,26 +399,226 @@ int create_ports(void) {
 
         int type_id = (rand() % 8) + 1;
         randomname(name_buffer);
-        
-        // Bind values for the rest of the ports
+
+        int size = 5;
+        int techlevel = 3;
+        int credits = 500000;
+
+        // Special case for Ferrengi homeworld
+        if (i == 7) {
+            snprintf(name_buffer, sizeof(name_buffer), "Ferrengi Home");
+            size = 10;
+            techlevel = 5;
+            credits = 500000;
+        }
+
+        // Bind values for the port
         sqlite3_bind_int(port_stmt, 1, i);
         sqlite3_bind_text(port_stmt, 2, name_buffer, -1, SQLITE_STATIC);
         sqlite3_bind_int(port_stmt, 3, sector);
-        sqlite3_bind_int(port_stmt, 4, type_id);
-        
+        sqlite3_bind_int(port_stmt, 4, size);
+        sqlite3_bind_int(port_stmt, 5, techlevel);
+        sqlite3_bind_int(port_stmt, 6, credits);
+        sqlite3_bind_int(port_stmt, 7, type_id);
+
         if (sqlite3_step(port_stmt) != SQLITE_DONE) {
             fprintf(stderr, "create_ports failed at %d: %s\n", i, sqlite3_errmsg(db));
             sqlite3_finalize(port_stmt);
+            sqlite3_finalize(trade_stmt);
             return -1;
         }
         sqlite3_reset(port_stmt);
+
+        sqlite3_int64 port_id = sqlite3_last_insert_rowid(db);
+        maxproduct_amount = (rand() % 1000) + 1000;
+
+        // Populate trade data based on type_id
+        switch (type_id) {
+            case 1: // BBS: Buy Ore and Organics, Sell Equipment
+                sqlite3_bind_int(trade_stmt, 1, port_id);
+                sqlite3_bind_text(trade_stmt, 2, "ore", -1, SQLITE_STATIC);
+                sqlite3_bind_text(trade_stmt, 3, "buy", -1, SQLITE_STATIC);
+                sqlite3_bind_int(trade_stmt, 4, maxproduct_amount);
+                sqlite3_step(trade_stmt);
+                sqlite3_reset(trade_stmt);
+
+                sqlite3_bind_int(trade_stmt, 1, port_id);
+                sqlite3_bind_text(trade_stmt, 2, "organics", -1, SQLITE_STATIC);
+                sqlite3_bind_text(trade_stmt, 3, "buy", -1, SQLITE_STATIC);
+                sqlite3_bind_int(trade_stmt, 4, maxproduct_amount);
+                sqlite3_step(trade_stmt);
+                sqlite3_reset(trade_stmt);
+
+                sqlite3_bind_int(trade_stmt, 1, port_id);
+                sqlite3_bind_text(trade_stmt, 2, "equipment", -1, SQLITE_STATIC);
+                sqlite3_bind_text(trade_stmt, 3, "sell", -1, SQLITE_STATIC);
+                sqlite3_bind_int(trade_stmt, 4, maxproduct_amount);
+                sqlite3_step(trade_stmt);
+                sqlite3_reset(trade_stmt);
+                break;
+            case 2: // BSB: Buy Ore and Equipment, Sell Organics
+                sqlite3_bind_int(trade_stmt, 1, port_id);
+                sqlite3_bind_text(trade_stmt, 2, "ore", -1, SQLITE_STATIC);
+                sqlite3_bind_text(trade_stmt, 3, "buy", -1, SQLITE_STATIC);
+                sqlite3_bind_int(trade_stmt, 4, maxproduct_amount);
+                sqlite3_step(trade_stmt);
+                sqlite3_reset(trade_stmt);
+                
+                sqlite3_bind_int(trade_stmt, 1, port_id);
+                sqlite3_bind_text(trade_stmt, 2, "equipment", -1, SQLITE_STATIC);
+                sqlite3_bind_text(trade_stmt, 3, "buy", -1, SQLITE_STATIC);
+                sqlite3_bind_int(trade_stmt, 4, maxproduct_amount);
+                sqlite3_step(trade_stmt);
+                sqlite3_reset(trade_stmt);
+
+                sqlite3_bind_int(trade_stmt, 1, port_id);
+                sqlite3_bind_text(trade_stmt, 2, "organics", -1, SQLITE_STATIC);
+                sqlite3_bind_text(trade_stmt, 3, "sell", -1, SQLITE_STATIC);
+                sqlite3_bind_int(trade_stmt, 4, maxproduct_amount);
+                sqlite3_step(trade_stmt);
+                sqlite3_reset(trade_stmt);
+                break;
+            case 3: // BSS: Buy Ore, Sell Organics and Equipment
+                sqlite3_bind_int(trade_stmt, 1, port_id);
+                sqlite3_bind_text(trade_stmt, 2, "ore", -1, SQLITE_STATIC);
+                sqlite3_bind_text(trade_stmt, 3, "buy", -1, SQLITE_STATIC);
+                sqlite3_bind_int(trade_stmt, 4, maxproduct_amount);
+                sqlite3_step(trade_stmt);
+                sqlite3_reset(trade_stmt);
+                
+                sqlite3_bind_int(trade_stmt, 1, port_id);
+                sqlite3_bind_text(trade_stmt, 2, "organics", -1, SQLITE_STATIC);
+                sqlite3_bind_text(trade_stmt, 3, "sell", -1, SQLITE_STATIC);
+                sqlite3_bind_int(trade_stmt, 4, maxproduct_amount);
+                sqlite3_step(trade_stmt);
+                sqlite3_reset(trade_stmt);
+
+                sqlite3_bind_int(trade_stmt, 1, port_id);
+                sqlite3_bind_text(trade_stmt, 2, "equipment", -1, SQLITE_STATIC);
+                sqlite3_bind_text(trade_stmt, 3, "sell", -1, SQLITE_STATIC);
+                sqlite3_bind_int(trade_stmt, 4, maxproduct_amount);
+                sqlite3_step(trade_stmt);
+                sqlite3_reset(trade_stmt);
+                break;
+            case 4: // SBB: Sell Ore, Buy Organics and Equipment
+                sqlite3_bind_int(trade_stmt, 1, port_id);
+                sqlite3_bind_text(trade_stmt, 2, "ore", -1, SQLITE_STATIC);
+                sqlite3_bind_text(trade_stmt, 3, "sell", -1, SQLITE_STATIC);
+                sqlite3_bind_int(trade_stmt, 4, maxproduct_amount);
+                sqlite3_step(trade_stmt);
+                sqlite3_reset(trade_stmt);
+                
+                sqlite3_bind_int(trade_stmt, 1, port_id);
+                sqlite3_bind_text(trade_stmt, 2, "organics", -1, SQLITE_STATIC);
+                sqlite3_bind_text(trade_stmt, 3, "buy", -1, SQLITE_STATIC);
+                sqlite3_bind_int(trade_stmt, 4, maxproduct_amount);
+                sqlite3_step(trade_stmt);
+                sqlite3_reset(trade_stmt);
+
+                sqlite3_bind_int(trade_stmt, 1, port_id);
+                sqlite3_bind_text(trade_stmt, 2, "equipment", -1, SQLITE_STATIC);
+                sqlite3_bind_text(trade_stmt, 3, "buy", -1, SQLITE_STATIC);
+                sqlite3_bind_int(trade_stmt, 4, maxproduct_amount);
+                sqlite3_step(trade_stmt);
+                sqlite3_reset(trade_stmt);
+                break;
+            case 5: // SBS: Sell Ore and Equipment, Buy Organics
+                sqlite3_bind_int(trade_stmt, 1, port_id);
+                sqlite3_bind_text(trade_stmt, 2, "ore", -1, SQLITE_STATIC);
+                sqlite3_bind_text(trade_stmt, 3, "sell", -1, SQLITE_STATIC);
+                sqlite3_bind_int(trade_stmt, 4, maxproduct_amount);
+                sqlite3_step(trade_stmt);
+                sqlite3_reset(trade_stmt);
+
+                sqlite3_bind_int(trade_stmt, 1, port_id);
+                sqlite3_bind_text(trade_stmt, 2, "equipment", -1, SQLITE_STATIC);
+                sqlite3_bind_text(trade_stmt, 3, "sell", -1, SQLITE_STATIC);
+                sqlite3_bind_int(trade_stmt, 4, maxproduct_amount);
+                sqlite3_step(trade_stmt);
+                sqlite3_reset(trade_stmt);
+                
+                sqlite3_bind_int(trade_stmt, 1, port_id);
+                sqlite3_bind_text(trade_stmt, 2, "organics", -1, SQLITE_STATIC);
+                sqlite3_bind_text(trade_stmt, 3, "buy", -1, SQLITE_STATIC);
+                sqlite3_bind_int(trade_stmt, 4, maxproduct_amount);
+                sqlite3_step(trade_stmt);
+                sqlite3_reset(trade_stmt);
+                break;
+            case 6: // SSB: Sell Ore and Organics, Buy Equipment
+                sqlite3_bind_int(trade_stmt, 1, port_id);
+                sqlite3_bind_text(trade_stmt, 2, "ore", -1, SQLITE_STATIC);
+                sqlite3_bind_text(trade_stmt, 3, "sell", -1, SQLITE_STATIC);
+                sqlite3_bind_int(trade_stmt, 4, maxproduct_amount);
+                sqlite3_step(trade_stmt);
+                sqlite3_reset(trade_stmt);
+                
+                sqlite3_bind_int(trade_stmt, 1, port_id);
+                sqlite3_bind_text(trade_stmt, 2, "organics", -1, SQLITE_STATIC);
+                sqlite3_bind_text(trade_stmt, 3, "sell", -1, SQLITE_STATIC);
+                sqlite3_bind_int(trade_stmt, 4, maxproduct_amount);
+                sqlite3_step(trade_stmt);
+                sqlite3_reset(trade_stmt);
+
+                sqlite3_bind_int(trade_stmt, 1, port_id);
+                sqlite3_bind_text(trade_stmt, 2, "equipment", -1, SQLITE_STATIC);
+                sqlite3_bind_text(trade_stmt, 3, "buy", -1, SQLITE_STATIC);
+                sqlite3_bind_int(trade_stmt, 4, maxproduct_amount);
+                sqlite3_step(trade_stmt);
+                sqlite3_reset(trade_stmt);
+                break;
+            case 7: // SSS: Sell All
+                sqlite3_bind_int(trade_stmt, 1, port_id);
+                sqlite3_bind_text(trade_stmt, 2, "ore", -1, SQLITE_STATIC);
+                sqlite3_bind_text(trade_stmt, 3, "sell", -1, SQLITE_STATIC);
+                sqlite3_bind_int(trade_stmt, 4, maxproduct_amount);
+                sqlite3_step(trade_stmt);
+                sqlite3_reset(trade_stmt);
+                
+                sqlite3_bind_int(trade_stmt, 1, port_id);
+                sqlite3_bind_text(trade_stmt, 2, "organics", -1, SQLITE_STATIC);
+                sqlite3_bind_text(trade_stmt, 3, "sell", -1, SQLITE_STATIC);
+                sqlite3_bind_int(trade_stmt, 4, maxproduct_amount);
+                sqlite3_step(trade_stmt);
+                sqlite3_reset(trade_stmt);
+
+                sqlite3_bind_int(trade_stmt, 1, port_id);
+                sqlite3_bind_text(trade_stmt, 2, "equipment", -1, SQLITE_STATIC);
+                sqlite3_bind_text(trade_stmt, 3, "sell", -1, SQLITE_STATIC);
+                sqlite3_bind_int(trade_stmt, 4, maxproduct_amount);
+                sqlite3_step(trade_stmt);
+                sqlite3_reset(trade_stmt);
+                break;
+            case 8: // BBB: Buy All
+                sqlite3_bind_int(trade_stmt, 1, port_id);
+                sqlite3_bind_text(trade_stmt, 2, "ore", -1, SQLITE_STATIC);
+                sqlite3_bind_text(trade_stmt, 3, "buy", -1, SQLITE_STATIC);
+                sqlite3_bind_int(trade_stmt, 4, maxproduct_amount);
+                sqlite3_step(trade_stmt);
+                sqlite3_reset(trade_stmt);
+                
+                sqlite3_bind_int(trade_stmt, 1, port_id);
+                sqlite3_bind_text(trade_stmt, 2, "organics", -1, SQLITE_STATIC);
+                sqlite3_bind_text(trade_stmt, 3, "buy", -1, SQLITE_STATIC);
+                sqlite3_bind_int(trade_stmt, 4, maxproduct_amount);
+                sqlite3_step(trade_stmt);
+                sqlite3_reset(trade_stmt);
+
+                sqlite3_bind_int(trade_stmt, 1, port_id);
+                sqlite3_bind_text(trade_stmt, 2, "equipment", -1, SQLITE_STATIC);
+                sqlite3_bind_text(trade_stmt, 3, "buy", -1, SQLITE_STATIC);
+                sqlite3_bind_int(trade_stmt, 4, maxproduct_amount);
+                sqlite3_step(trade_stmt);
+                sqlite3_reset(trade_stmt);
+                break;
+            default:
+                break;
+        }
     }
     sqlite3_finalize(port_stmt);
-
+    sqlite3_finalize(trade_stmt);
     fprintf(stderr, "create_ports: Stardock at sector %d, plus %d normal ports\n", stardock_sector, maxPorts - 1);
     return 0;
 }
-
 
 
 int create_ferringhi(void) {
@@ -516,7 +664,7 @@ int create_ferringhi(void) {
 
     char sql_sector[256];
     snprintf(sql_sector, sizeof(sql_sector),
-             "UPDATE sectors SET beacon='Ferringhi', nebulae='Ferringhi' WHERE id=%d;",
+             "UPDATE sectors SET beacon='Ferringhi SPACE, Leave Now!', nebulae='Ferringhi' WHERE id=%d;",
              longest_tunnel_sector);
 
     if (sqlite3_exec(db, sql_sector, NULL, NULL, NULL) != SQLITE_OK) {
