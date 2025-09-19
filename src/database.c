@@ -50,6 +50,7 @@ const char *create_table_sql[] = {
   "CREATE TABLE IF NOT EXISTS port_trade ("
     "id INTEGER PRIMARY KEY AUTOINCREMENT, "
     "port_id INTEGER NOT NULL, "
+    "maxproduct INTEGER, "  
     "commodity TEXT CHECK(commodity IN ('ore','organics','equipment')), "
     "mode TEXT CHECK(mode IN ('buy','sell')), "
     "FOREIGN KEY (port_id) REFERENCES ports(id));",
@@ -338,6 +339,18 @@ const char *create_table_sql[] = {
 "SELECT a.sectors, b.warps, c.ports, d.planets, e.players, f.ships\n"
 "FROM a,b,c,d,e,f;",
 
+"CREATE VIEW IF NOT EXISTS v_bidirectional_warps AS\n"
+"SELECT\n"
+"  CASE WHEN w1.from_sector < w1.to_sector THEN w1.from_sector ELSE w1.to_sector END AS a,\n"
+"  CASE WHEN w1.from_sector < w1.to_sector THEN w1.to_sector ELSE w1.from_sector END AS b\n"
+"FROM sector_warps AS w1\n"
+"JOIN sector_warps AS w2\n"
+"  ON w1.from_sector = w2.to_sector\n"
+" AND w1.to_sector   = w2.from_sector\n"
+"GROUP BY a, b;",
+
+
+
 //////////////////////////////////////////////////////////////////////
 /// CREATE INDEX
 //////////////////////////////////////////////////////////////////////
@@ -348,7 +361,7 @@ const char *create_table_sql[] = {
 "CREATE INDEX IF NOT EXISTS idx_ports_loc  ON ports(location);",
 "CREATE INDEX IF NOT EXISTS idx_planets_sector ON planets(sector);",
 "CREATE INDEX IF NOT EXISTS idx_citadels_planet ON citadels(planet_id);",
-
+"CREATE INDEX IF NOT EXISTS ix_warps_from_to ON sector_warps(from_sector, to_sector);",
 
 };
 

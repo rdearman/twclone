@@ -6,6 +6,9 @@
 #include "database.h"
 #include "server_config.h"
 #include "server_bigbang.h"
+#include "namegen.h"
+
+
 
 /* Define constants for random warp generation */
 #define DEFAULT_PERCENT_DEADEND 25
@@ -183,6 +186,9 @@ int bigbang(void) {
         return -1;
     }
 
+    int numSectors = cfg->default_nodes;
+    int maxWarps = cfg->maxwarps_per_sector;    
+
     fprintf(stderr, "BIGBANG: Creating universe...\n");
 
     // Create tables and insert defaults first
@@ -208,6 +214,13 @@ int bigbang(void) {
         free(cfg);
         return -1;
     }
+
+    fprintf(stderr, "BIGBANG: Creating complex warps...\n");    
+    // Call the warp post-processing function here
+    if (create_complex_warps(db, numSectors) != 0) {
+        fprintf(stderr, "Failed to create complex warps.\n");
+        return -1;
+    }    
 
     fprintf(stderr, "BIGBANG: Creating ports...\n");
     if (create_ports() != 0) {
@@ -242,6 +255,8 @@ int bigbang(void) {
 /* ----------------------------------------------------
  * Universe population functions
  * ---------------------------------------------------- */
+
+
 int create_sectors(void) {
     sqlite3 *db = db_get_handle();
     struct twconfig *cfg = config_load();
@@ -256,18 +271,128 @@ int create_sectors(void) {
     fprintf(stderr, "BIGBANG: Creating %d sectors (1–10 reserved for Fedspace).\n", numSectors);
 
     char sql[256];
-    for (int i = 11; i <= numSectors; i++) {
+    char name_buffer[50]; // Buffer to hold the generated name
+
+    // This is the single loop that correctly creates the desired number of sectors.
+    for (int i = 11; i <= numSectors; i++)
+    {
+        // Generate a new name for the sector
+        consellationName(name_buffer);
+        
         snprintf(sql, sizeof(sql),
-                 "INSERT INTO sectors (id, name, beacon, nebulae) "
-                 "VALUES (%d, 'Sector %d', '', '');",
-                 i, i);
-        if (sqlite3_exec(db, sql, NULL, NULL, NULL) != SQLITE_OK) {
+                 "INSERT INTO sectors (name, beacon, nebulae) "
+                 "VALUES ('%s', '', '');",
+                 name_buffer);
+
+        if (sqlite3_exec(db, sql, NULL, NULL, NULL) != SQLITE_OK)
+        {
             fprintf(stderr, "create_sectors failed at %d: %s\n", i, sqlite3_errmsg(db));
             return -1;
         }
     }
     return 0;
 }
+
+
+
+/* int create_sectors(void) { */
+/*     sqlite3 *db = db_get_handle(); */
+/*     struct twconfig *cfg = config_load(); */
+/*     if (!cfg) { */
+/*         fprintf(stderr, "create_sectors: could not load config\n"); */
+/*         return -1; */
+/*     } */
+
+/*     int numSectors = cfg->default_nodes; */
+/*     free(cfg); */
+
+/*     fprintf(stderr, "BIGBANG: Creating %d sectors (1–10 reserved for Fedspace).\n", numSectors); */
+
+/*     char sql[256]; */
+/*     for (int i = 11; i <= numSectors; i++) */
+/*       { */
+/* 	char name_buffer[50]; // Buffer to hold the generated name */
+/* 	for (int i = 11; i <= numSectors; i++) */
+/* 	  { */
+/* 	  // Generate a new name for the sector */
+/* 	  consellationName(name_buffer); */
+/* 	  snprintf(sql, sizeof(sql), */
+/* 		   "INSERT INTO sectors (name, beacon, nebulae) " */
+/* 		   "VALUES ('%s', '', '');", */
+/* 		   name_buffer); */
+ 
+
+/* 	  if (sqlite3_exec(db, sql, NULL, NULL, NULL) != SQLITE_OK) */
+/* 	    { */
+/*             fprintf(stderr, "create_sectors failed at %d: %s\n", i, sqlite3_errmsg(db)); */
+/*             return -1; */
+/* 	    } */
+/* 	  } */
+/*       } */
+/*     return 0; */
+/* } */
+
+
+
+/* int create_ports(void) { */
+/*     sqlite3 *db = db_get_handle(); */
+/*     struct twconfig *cfg = config_load(); */
+/*     if (!cfg) { */
+/*         fprintf(stderr, "create_ports: could not load config\n"); */
+/*         return -1; */
+/*     } */
+
+/*     int numSectors = cfg->default_nodes; */
+/*     int maxPorts = cfg->max_ports; */
+/*     free(cfg); */
+
+/*     if (maxPorts < 1) { */
+/*         fprintf(stderr, "create_ports: max_ports < 1 in config\n"); */
+/*         return 0; */
+/*     } */
+
+/*     char sql[512]; */
+
+/*     /\* Stardock (Port 1) *\/ */
+/*     int stardock_sector = 0; */
+/*     if (numSectors > 11) { */
+/*       stardock_sector = (rand() % (numSectors - 10)) + 11; */
+/*     } else { */
+/*       stardock_sector = 11; */
+/*     } */
+
+/*     snprintf(sql, sizeof(sql), */
+/*         "INSERT INTO ports (number, name, location, size, techlevel, credits, type, invisible) " */
+/*         "VALUES (%d, 'Stardock', %d, 50, 10, 1000000, 9, 0);", */
+/*         1, stardock_sector); */
+/*     if (sqlite3_exec(db, sql, NULL, NULL, NULL) != SQLITE_OK) { */
+/*         fprintf(stderr, "create_ports failed (Stardock): %s\n", sqlite3_errmsg(db)); */
+/*         return -1; */
+/*     } */
+
+/*     /\* Rest of the ports *\/ */
+/*     for (int i = 2; i <= maxPorts; i++) { */
+/*         int sector; */
+/* 	char name_buffer[50]; // Buffer to hold the generated name	 */
+/*         do { */
+/*             sector = 11 + (rand() % (numSectors - 10)); */
+/*         } while (sector == stardock_sector); */
+
+/*         int type_id = (rand() % 8) + 1; */
+/* 	randomname(name_buffer);     */
+/*         snprintf(sql, sizeof(sql), */
+/*             "INSERT INTO ports (number, name, location, size, techlevel, credits, type, invisible) " */
+/*             "VALUES (%d, 'Port %s', %d, 10, 1, 1000, %d, 0);", */
+/*             i, name_buffer, sector, type_id); */
+/*         if (sqlite3_exec(db, sql, NULL, NULL, NULL) != SQLITE_OK) { */
+/*             fprintf(stderr, "create_ports failed at %d: %s\n", i, sqlite3_errmsg(db)); */
+/*             return -1; */
+/*         } */
+/*     } */
+
+/*     fprintf(stderr, "create_ports: Stardock at sector %d, plus %d normal ports\n", stardock_sector, maxPorts - 1); */
+/*     return 0; */
+/* } */
 
 int create_ports(void) {
     sqlite3 *db = db_get_handle();
@@ -286,8 +411,8 @@ int create_ports(void) {
         return 0;
     }
 
-    char sql[512];
-
+    char name_buffer[50];
+    
     /* Stardock (Port 1) */
     int stardock_sector = 0;
     if (numSectors > 11) {
@@ -296,14 +421,26 @@ int create_ports(void) {
       stardock_sector = 11;
     }
 
-    snprintf(sql, sizeof(sql),
-        "INSERT INTO ports (number, name, location, size, techlevel, credits, type, invisible) "
-        "VALUES (%d, 'Stardock', %d, 50, 10, 1000000, 9, 0);",
-        1, stardock_sector);
-    if (sqlite3_exec(db, sql, NULL, NULL, NULL) != SQLITE_OK) {
-        fprintf(stderr, "create_ports failed (Stardock): %s\n", sqlite3_errmsg(db));
+    // Use prepared statements for the rest of the ports
+    const char *port_sql = "INSERT INTO ports (number, name, location, size, techlevel, credits, type, invisible) VALUES (?, 'Port ' || ?, ?, 10, 1, 1000, ?, 0);";
+    sqlite3_stmt *port_stmt;
+    if (sqlite3_prepare_v2(db, port_sql, -1, &port_stmt, NULL) != SQLITE_OK) {
+        fprintf(stderr, "create_ports prepare failed: %s\n", sqlite3_errmsg(db));
         return -1;
     }
+    
+    // Bind values for the Stardock port
+    sqlite3_bind_int(port_stmt, 1, 1);
+    sqlite3_bind_text(port_stmt, 2, "Stardock", -1, SQLITE_STATIC);
+    sqlite3_bind_int(port_stmt, 3, stardock_sector);
+    sqlite3_bind_int(port_stmt, 4, 9);
+
+    if (sqlite3_step(port_stmt) != SQLITE_DONE) {
+        fprintf(stderr, "create_ports failed (Stardock): %s\n", sqlite3_errmsg(db));
+        sqlite3_finalize(port_stmt);
+        return -1;
+    }
+    sqlite3_reset(port_stmt);
 
     /* Rest of the ports */
     for (int i = 2; i <= maxPorts; i++) {
@@ -313,19 +450,28 @@ int create_ports(void) {
         } while (sector == stardock_sector);
 
         int type_id = (rand() % 8) + 1;
-        snprintf(sql, sizeof(sql),
-            "INSERT INTO ports (number, name, location, size, techlevel, credits, type, invisible) "
-            "VALUES (%d, 'Port %d', %d, 10, 1, 1000, %d, 0);",
-            i, i, sector, type_id);
-        if (sqlite3_exec(db, sql, NULL, NULL, NULL) != SQLITE_OK) {
+        randomname(name_buffer);
+        
+        // Bind values for the rest of the ports
+        sqlite3_bind_int(port_stmt, 1, i);
+        sqlite3_bind_text(port_stmt, 2, name_buffer, -1, SQLITE_STATIC);
+        sqlite3_bind_int(port_stmt, 3, sector);
+        sqlite3_bind_int(port_stmt, 4, type_id);
+        
+        if (sqlite3_step(port_stmt) != SQLITE_DONE) {
             fprintf(stderr, "create_ports failed at %d: %s\n", i, sqlite3_errmsg(db));
+            sqlite3_finalize(port_stmt);
             return -1;
         }
+        sqlite3_reset(port_stmt);
     }
+    sqlite3_finalize(port_stmt);
 
     fprintf(stderr, "create_ports: Stardock at sector %d, plus %d normal ports\n", stardock_sector, maxPorts - 1);
     return 0;
 }
+
+
 
 int create_ferringhi(void) {
     sqlite3 *db = db_get_handle();

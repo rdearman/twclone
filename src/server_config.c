@@ -82,8 +82,9 @@ struct twconfig *config_load(void) {
         cfg->max_name_length        = sqlite3_column_int(stmt, 17);
         cfg->planet_type_count      = sqlite3_column_int(stmt, 18);
 
-        fprintf(stderr, "DEBUG: maxwarps_per_sector = %d\n",
-                cfg->maxwarps_per_sector);
+        // fprintf(stderr, "DEBUG: maxwarps_per_sector = %d\n",
+        //        cfg->maxwarps_per_sector);
+
     } else {
         free(cfg);
         cfg = NULL;
