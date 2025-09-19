@@ -33,11 +33,12 @@ main (int argc, char *argv[])
       return EXIT_FAILURE;
     }
 
-  if (universe_init() != 0) {
-    fprintf(stderr, "Failed to initialise universe.\n");
-    db_close();
-    return EXIT_FAILURE;
-  }
+  if (universe_init () != 0)
+    {
+      fprintf (stderr, "Failed to initialise universe.\n");
+      db_close ();
+      return EXIT_FAILURE;
+    }
 
   if (config_load () != 0)
     {

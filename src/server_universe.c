@@ -4,11 +4,14 @@
 #include "database.h"
 #include "universe.h"
 
+
 int universe_init(void) {
+    sqlite3 *handle = db_get_handle();   /* <-- accessor */
     sqlite3_stmt *stmt;
+
     const char *sql = "SELECT COUNT(*) FROM sectors;";
-    if (sqlite3_prepare_v2(db_handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
-        fprintf(stderr, "DB universe_init error: %s\n", sqlite3_errmsg(db_handle));
+    if (sqlite3_prepare_v2(handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        fprintf(stderr, "DB universe_init error: %s\n", sqlite3_errmsg(handle));
         return -1;
     }
 

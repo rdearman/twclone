@@ -13,6 +13,11 @@ static const size_t create_table_count =
 static const size_t insert_default_count =
   sizeof (insert_default_sql) / sizeof (insert_default_sql[0]);
 
+sqlite3 *
+db_get_handle (void)
+{
+  return db_handle;
+}
 
 int
 db_init (void)

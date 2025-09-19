@@ -22,8 +22,7 @@
 server_LDADD   = -ljansson -lsqlite3
 bigbang_LDADD  = -ljansson -lsqlite3
 client_LDADD   = -ljansson -lsqlite3
-test_client_LDADD = -ljansson -lsqlite3
-test_server_LDADD = -ljansson -lsqlite3
+test_bang_LDADD = -lsqlite3
 
 AUTOMAKE_OPTIONS = subdir-objects
 
@@ -31,8 +30,7 @@ bin_PROGRAMS = \
 	bigbang \
 	client \
 	server \
-	test_client \
-	test_server
+	test_bang
 
 bigbang_SOURCES = \
 	../src/globals.c \
@@ -51,6 +49,10 @@ client_SOURCES = \
 	../src/parse.c
 
 server_SOURCES = \
+        ../src/server_main.c \
+        ../src/server_loop.c \
+        ../src/server_universe.c \
+        ../src/server_bigbang.c \
 	../src/globals.c \
 	../src/database.c \
 	../src/boxmuller.c \
@@ -61,21 +63,18 @@ server_SOURCES = \
 	../src/msgqueue.c \
 	../src/parse.c \
 	../src/planet.c \
+        ../src/server_config.c \
 	../src/player_interaction.c \
-	../src/server_main.c \
 	../src/serveractions.c \
 	../src/shipinfo.c \
 	../src/sysop_interaction.c \
 	../src/universe.c
 
-test_client_SOURCES = \
-	../src/globals.c \
-	../src/database.c \
-	../src/common.c \
-	../src/test_client.c
+test_bang_SOURCES = \
+    ../src/database.c \
+    ../src/server_bigbang.c \
+    ../src/server_config.c \
+    ../src/test_bang.c
 
-test_server_SOURCES = \
-	../src/globals.c \
-	../src/database.c \
-	../src/common.c \
-	../src/test_server.c
+
+
