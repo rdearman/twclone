@@ -47,6 +47,7 @@ server_SOURCES = \
 	../src/server_bigbang.c \
 	../src/globals.c \
 	../src/database.c \
+	../src/schemas.c \
 	../src/server_config.c \
 	../src/server_warp_post_processing.c \
 	../src/common.c

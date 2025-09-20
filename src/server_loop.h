@@ -3,8 +3,6 @@
 #pragma once
 #include <signal.h>
 
-
-
 int server_loop (volatile sig_atomic_t * running);
 
 #include "database.h"		/* for db_handle, etc. */

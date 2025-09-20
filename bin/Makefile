@@ -132,7 +132,8 @@ am_server_OBJECTS = ../src/server_main.$(OBJEXT) \
 	../src/server_cmds.$(OBJEXT) ../src/namegen.$(OBJEXT) \
 	../src/server_loop.$(OBJEXT) ../src/server_universe.$(OBJEXT) \
 	../src/server_bigbang.$(OBJEXT) ../src/globals.$(OBJEXT) \
-	../src/database.$(OBJEXT) ../src/server_config.$(OBJEXT) \
+	../src/database.$(OBJEXT) ../src/schemas.$(OBJEXT) \
+	../src/server_config.$(OBJEXT) \
 	../src/server_warp_post_processing.$(OBJEXT) \
 	../src/common.$(OBJEXT)
 server_OBJECTS = $(am_server_OBJECTS)
@@ -163,7 +164,8 @@ am__maybe_remake_depfiles = depfiles
 am__depfiles_remade = ../src/$(DEPDIR)/client.Po \
 	../src/$(DEPDIR)/common.Po ../src/$(DEPDIR)/database.Po \
 	../src/$(DEPDIR)/globals.Po ../src/$(DEPDIR)/namegen.Po \
-	../src/$(DEPDIR)/parse.Po ../src/$(DEPDIR)/server_bigbang.Po \
+	../src/$(DEPDIR)/parse.Po ../src/$(DEPDIR)/schemas.Po \
+	../src/$(DEPDIR)/server_bigbang.Po \
 	../src/$(DEPDIR)/server_cmds.Po \
 	../src/$(DEPDIR)/server_config.Po \
 	../src/$(DEPDIR)/server_loop.Po \
@@ -329,6 +331,7 @@ server_SOURCES = \
 	../src/server_bigbang.c \
 	../src/globals.c \
 	../src/database.c \
+	../src/schemas.c \
 	../src/server_config.c \
 	../src/server_warp_post_processing.c \
 	../src/common.c
@@ -450,6 +453,8 @@ client$(EXEEXT): $(client_OBJECTS) $(client_DEPENDENCIES) $(EXTRA_client_DEPENDE
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_bigbang.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
+../src/schemas.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_config.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_warp_post_processing.$(OBJEXT): ../src/$(am__dirstamp) \
@@ -478,6 +483,7 @@ include ../src/$(DEPDIR)/database.Po # am--include-marker
 include ../src/$(DEPDIR)/globals.Po # am--include-marker
 include ../src/$(DEPDIR)/namegen.Po # am--include-marker
 include ../src/$(DEPDIR)/parse.Po # am--include-marker
+include ../src/$(DEPDIR)/schemas.Po # am--include-marker
 include ../src/$(DEPDIR)/server_bigbang.Po # am--include-marker
 include ../src/$(DEPDIR)/server_cmds.Po # am--include-marker
 include ../src/$(DEPDIR)/server_config.Po # am--include-marker
@@ -643,6 +649,7 @@ distclean: distclean-am
 	-rm -f ../src/$(DEPDIR)/globals.Po
 	-rm -f ../src/$(DEPDIR)/namegen.Po
 	-rm -f ../src/$(DEPDIR)/parse.Po
+	-rm -f ../src/$(DEPDIR)/schemas.Po
 	-rm -f ../src/$(DEPDIR)/server_bigbang.Po
 	-rm -f ../src/$(DEPDIR)/server_cmds.Po
 	-rm -f ../src/$(DEPDIR)/server_config.Po
@@ -702,6 +709,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/$(DEPDIR)/globals.Po
 	-rm -f ../src/$(DEPDIR)/namegen.Po
 	-rm -f ../src/$(DEPDIR)/parse.Po
+	-rm -f ../src/$(DEPDIR)/schemas.Po
 	-rm -f ../src/$(DEPDIR)/server_bigbang.Po
 	-rm -f ../src/$(DEPDIR)/server_cmds.Po
 	-rm -f ../src/$(DEPDIR)/server_config.Po

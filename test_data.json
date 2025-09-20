@@ -21,9 +21,34 @@
     "expect": { "status": "error", "code": 1300 }
   },
   {
+    "name": "System: Capabilities",
+    "command": { "command": "system.hello" },
+    "expect": { "status": "ok", "type": "system.capabilities" }
+  },
+  {
+    "name": "Schema: List",
+    "command": { "command": "system.describe_schema" },
+    "expect": { "status": "ok", "type": "system.schema_list" }
+  },
+  {
+    "name": "Schema: Get auth.login",
+    "command": { "command": "system.describe_schema", "data": { "key": "auth.login" } },
+    "expect": { "status": "ok", "type": "system.schema" }
+  },
+  {
     "name": "Get Player Info",
     "command": { "command": "player.my_info" },
     "expect": { "status": "ok", "type": "player.info" }
+  },
+  {
+    "name": "Ship Info",
+    "command": { "command": "ship.info" },
+    "expect": { "status": "ok", "type": "ship.info" }
+  },
+  {
+    "name": "List Online Players",
+    "command": { "command": "player.list_online" },
+    "expect": { "status": "ok", "type": "player.list_online" }
   },
   {
     "name": "Describe Current Sector",
@@ -48,5 +73,10 @@
     "name": "Movement: Warp (Refused - No Link)",
     "command": { "command": "move.warp", "data": { "to_sector_id": 9999 } },
     "expect": { "status": "refused", "code": 1402 }
+  },
+  {
+    "name": "System: Disconnect",
+    "command": { "command": "system.disconnect" },
+    "expect": { "status": "ok", "type": "system.goodbye" }
   }
 ]
