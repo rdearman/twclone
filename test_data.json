@@ -12,7 +12,23 @@
     },
     "expect": { "status": "ok", "type": "auth.session" }
   },
-  {
+{
+  "name": "RateLimit: ping #1",
+  "command": { "command": "system.hello" },
+  "expect": { "status": "ok", "type": "system.capabilities" }
+},
+{
+  "name": "RateLimit: ping #2",
+  "command": { "command": "system.hello" },
+  "expect": { "status": "ok", "type": "system.capabilities" }
+},
+{
+  "name": "RateLimit: ping #3",
+  "command": { "command": "system.hello" },
+  "expect": { "status": "ok", "type": "system.capabilities" }
+},
+
+    {
     "name": "Login (Invalid Credentials)",
     "command": {
       "command": "auth.login",

@@ -29,24 +29,35 @@
     do { send_enveloped_error(ctx->fd, root, (_code), (_msg)); goto trade_buy_done; } while (0)
 
 
-
-/* forward declaration to avoid implicit extern */
-static void send_all_json (int fd, json_t * obj);
-int db_player_info_json (int player_id, json_t ** out);
-
-typedef struct
-{
+typedef struct {
   int fd;
   volatile sig_atomic_t *running;
   struct sockaddr_in peer;
-  uint64_t cid;			/* connection id assigned on accept */
-  int player_id;		/* 0 = not authenticated */
-  int sector_id;		/* current sector; default to 1 until loaded */
+  uint64_t cid;
+  int player_id;
+  int sector_id;
+
+  /* --- rate limit hints --- */
+  time_t rl_window_start;   /* epoch sec when current window began */
+  int    rl_count;          /* responses sent in this window */
+  int    rl_limit;          /* max responses per window */
+  int    rl_window_sec;     /* window length in seconds */
 } client_ctx_t;
 
 static _Atomic uint64_t g_conn_seq = 0;
 /* global (file-scope) counter for server message ids */
 static _Atomic uint64_t g_msg_seq = 0;
+static __thread client_ctx_t *g_ctx_for_send = NULL;
+/* forward declaration to avoid implicit extern */
+static void send_all_json (int fd, json_t * obj);
+int db_player_info_json (int player_id, json_t ** out);
+/* rate-limit helper prototypes (defined later) */
+static void attach_rate_limit_meta(json_t *env, client_ctx_t *ctx);
+static void rl_tick(client_ctx_t *ctx);
+/* Provided elsewhere; needed here for correct prototype */
+// void send_enveloped_error (int fd, json_t *root, int code, const char *msg);
+
+
 
 
 /* ------------------------ idempotency helpers  ------------------------ */
@@ -203,69 +214,84 @@ make_base_envelope (json_t *req /* may be NULL */ )
   return env;			/* caller owns */
 }
 
+/* Send {"status":"error","type":"error","error":{code,message},...} (+data=null) */
 static void
 send_enveloped_refused (int fd, json_t *root, int code, const char *msg, json_t *data_opt)
 {
+  json_t *env = json_object();
+  json_object_set_new(env, "id", json_string("srv-refuse"));
+  json_object_set(env, "reply_to", json_object_get(root, "id"));
+  char ts[32]; iso8601_utc(ts);
+  json_object_set_new(env, "ts", json_string(ts));
+  json_object_set_new(env, "status", json_string("refused"));
+  json_object_set_new(env, "type", json_string("error"));
+  json_t *err = json_pack("{s:i, s:s}", "code", code, "message", msg ? msg : "");
+  json_object_set_new(env, "error", err);
+  json_object_set(env, "data", data_opt ? data_opt : json_null());
+
+  attach_rate_limit_meta(env, g_ctx_for_send);
+  rl_tick(g_ctx_for_send);
+
+  send_all_json(fd, env);
+  json_decref(env);
+}
+
+
+/* Send {"status":"ok","type":<type>,"data":<data>,"error":null} */
+static void
+send_enveloped_ok (int fd, json_t *root, const char *type, json_t *data)
+{
   json_t *env = json_object ();
-  json_object_set_new (env, "id", json_string ("srv-refuse"));
+  json_object_set_new (env, "id", json_string ("srv-ok"));
   json_object_set (env, "reply_to", json_object_get (root, "id"));
+  char ts[32]; iso8601_utc(ts);
+  json_object_set_new (env, "ts", json_string (ts));
+  json_object_set_new (env, "status", json_string ("ok"));
+  json_object_set_new (env, "type", json_string (type));
+  json_object_set_new (env, "data", data ? data : json_null ());
+  json_object_set_new (env, "error", json_null ());
+
+  /* NEW: attach rate-limit meta and tick */
+  //  attach_rate_limit_meta(env, ctx);   /* <-- add this line (requires ctx in scope; see note) */
+  //  rl_tick(ctx);
+  attach_rate_limit_meta(env, g_ctx_for_send);
+  rl_tick(g_ctx_for_send);
+  
+  send_all_json (fd, env);
+  json_decref (env);
+}
+
+/* Send {"status":"error","type":"error","error":{code,message}, "data": null } */
+static void
+send_enveloped_error (int fd, json_t *root, int code, const char *msg)
+{
+  json_t *env = json_object ();
+  json_object_set_new (env, "id", json_string ("srv-err"));
+
+  if (root && json_is_object (root))
+    json_object_set (env, "reply_to", json_object_get (root, "id"));
+  else
+    json_object_set_new (env, "reply_to", json_null ());
 
   char ts[32];
   iso8601_utc (ts);
   json_object_set_new (env, "ts", json_string (ts));
 
-  json_object_set_new (env, "status", json_string ("refused"));
+  json_object_set_new (env, "status", json_string ("error"));
   json_object_set_new (env, "type", json_string ("error"));
 
   json_t *err = json_pack ("{s:i, s:s}", "code", code, "message", msg ? msg : "");
   json_object_set_new (env, "error", err);
-
-  /* allow an optional hint payload on refused */
-  if (data_opt)
-    json_object_set (env, "data", data_opt);
-  else
-    json_object_set_new (env, "data", json_null ());
-
-  send_all_json (fd, env);
-  json_decref (env);
-}
-
-
-/* Send {"status":"error","type":"error","error":{code,message},...} (+data=null) */
-static void
-send_enveloped_error (int fd, json_t *req, int code, const char *message)
-{
-  json_t *env = make_base_envelope (req);
-  json_object_set_new (env, "status", json_string ("error"));
-  json_object_set_new (env, "type", json_string ("error"));
-
-  json_t *err = json_object ();
-  json_object_set_new (err, "code", json_integer (code));
-  json_object_set_new (err, "message", json_string (message));
-  json_object_set_new (env, "error", err);	/* env owns err */
   json_object_set_new (env, "data", json_null ());
 
-  send_all_json (fd, env);
-  json_decref (env);
-}
-
-/* Send {"status":"ok","type":<type>,"data":<data>,"error":null} */
-static void
-send_enveloped_ok (int fd, json_t *req, const char *type,
-		   json_t *data /* may be NULL */ )
-{
-  json_t *env = make_base_envelope (req);
-  json_object_set_new (env, "status", json_string ("ok"));
-  json_object_set_new (env, "type", json_string (type ? type : "ok"));
-  if (data)
-    json_object_set (env, "data", data);
-  else
-    json_object_set_new (env, "data", json_object ());
-  json_object_set_new (env, "error", json_null ());
+  /* rate-limit hints (uses thread-local set in process_message) */
+  attach_rate_limit_meta (env, g_ctx_for_send);
+  rl_tick (g_ctx_for_send);
 
   send_all_json (fd, env);
   json_decref (env);
 }
+
 
 static void
 send_all_json (int fd, json_t *obj)
@@ -386,6 +412,44 @@ validate_trade_buy_rule (int player_id, int port_id, const char *commodity,
   return ok ();
 }
 
+/* ------------------------ rate limit helpers ------------------------ */
+
+/* Roll the window and increment count for this response */
+static void rl_tick(client_ctx_t *ctx) {
+  if (!ctx) return;
+  time_t now = time(NULL);
+  if (ctx->rl_limit <= 0) { ctx->rl_limit = 60; }              /* safety */
+  if (ctx->rl_window_sec <= 0) { ctx->rl_window_sec = 60; }
+  if (now - ctx->rl_window_start >= ctx->rl_window_sec) {
+    ctx->rl_window_start = now;
+    ctx->rl_count = 0;
+  }
+  ctx->rl_count++;
+}
+
+/* Build {limit, remaining, reset} */
+static json_t *rl_build_meta(const client_ctx_t *ctx) {
+  if (!ctx) return json_null();
+  time_t now = time(NULL);
+  int reset = (int)(ctx->rl_window_start + ctx->rl_window_sec - now);
+  if (reset < 0) reset = 0;
+  int remaining = ctx->rl_limit - ctx->rl_count;
+  if (remaining < 0) remaining = 0;
+  return json_pack("{s:i,s:i,s:i}", "limit", ctx->rl_limit, "remaining", remaining, "reset", reset);
+}
+
+/* Ensure env.meta exists and add meta.rate_limit */
+static void attach_rate_limit_meta(json_t *env, client_ctx_t *ctx) {
+  if (!env || !ctx) return;
+  json_t *meta = json_object_get(env, "meta");
+  if (!json_is_object(meta)) {
+    meta = json_object();
+    json_object_set_new(env, "meta", meta);
+  }
+  json_t *rl = rl_build_meta(ctx);
+  json_object_set_new(meta, "rate_limit", rl);
+}
+
 
 /* ------------------------ message processor (stub dispatcher) ------------------------ */
 /* Single responsibility: receive one parsed JSON object and produce one reply. */
@@ -393,9 +457,11 @@ validate_trade_buy_rule (int player_id, int port_id, const char *commodity,
 static void
 process_message (client_ctx_t *ctx, json_t *root)
 {
+  /* Make ctx visible to send helpers for rate-limit meta */
+  g_ctx_for_send = ctx;
   json_t *cmd = json_object_get (root, "command");
   json_t *evt = json_object_get (root, "event");
-
+  
   /* Auto-auth from meta.session_token (transport-agnostic clients) */
   json_t *jmeta = json_object_get (root, "meta");
   const char *session_token = NULL;
@@ -436,6 +502,12 @@ process_message (client_ctx_t *ctx, json_t *root)
       return;
     }
 
+  /* Rate-limit defaults: 60 responses / 60 seconds */
+  ctx->rl_limit = 60;
+  ctx->rl_window_sec = 60;
+  ctx->rl_window_start = time(NULL);
+  ctx->rl_count = 0;
+  
   const char *c = json_string_value (cmd);
 
   if (strcmp (c, "login") == 0 || strcmp (c, "auth.login") == 0)
