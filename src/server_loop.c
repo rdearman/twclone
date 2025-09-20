@@ -7,6 +7,7 @@
 #include <signal.h>
 #include <unistd.h>
 #include <poll.h>
+#include <time.h>
 #include <pthread.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -29,7 +30,8 @@
     do { send_enveloped_error(ctx->fd, root, (_code), (_msg)); goto trade_buy_done; } while (0)
 
 
-typedef struct {
+typedef struct
+{
   int fd;
   volatile sig_atomic_t *running;
   struct sockaddr_in peer;
@@ -38,10 +40,10 @@ typedef struct {
   int sector_id;
 
   /* --- rate limit hints --- */
-  time_t rl_window_start;   /* epoch sec when current window began */
-  int    rl_count;          /* responses sent in this window */
-  int    rl_limit;          /* max responses per window */
-  int    rl_window_sec;     /* window length in seconds */
+  time_t rl_window_start;	/* epoch sec when current window began */
+  int rl_count;			/* responses sent in this window */
+  int rl_limit;			/* max responses per window */
+  int rl_window_sec;		/* window length in seconds */
 } client_ctx_t;
 
 static _Atomic uint64_t g_conn_seq = 0;
@@ -52,11 +54,66 @@ static __thread client_ctx_t *g_ctx_for_send = NULL;
 static void send_all_json (int fd, json_t * obj);
 int db_player_info_json (int player_id, json_t ** out);
 /* rate-limit helper prototypes (defined later) */
-static void attach_rate_limit_meta(json_t *env, client_ctx_t *ctx);
-static void rl_tick(client_ctx_t *ctx);
+static void attach_rate_limit_meta (json_t * env, client_ctx_t * ctx);
+static void rl_tick (client_ctx_t * ctx);
+int db_sector_basic_json (int sector_id, json_t ** out_obj);
+int db_adjacent_sectors_json (int sector_id, json_t ** out_array);
+int db_ports_at_sector_json (int sector_id, json_t ** out_array);
+int db_players_at_sector_json (int sector_id, json_t ** out_array);
+int db_beacons_at_sector_json (int sector_id, json_t ** out_array);
+int db_planets_at_sector_json (int sector_id, json_t ** out_array);
+
+
 /* Provided elsewhere; needed here for correct prototype */
 // void send_enveloped_error (int fd, json_t *root, int code, const char *msg);
 
+/* ----------------------------- */
+/* Helpers for session endpoints */
+/* ----------------------------- */
+static json_t *
+make_session_hello_payload (int is_authed, int player_id, int sector_id)
+{
+  return json_pack ("{s:s s:i s:o s:o s:o}",
+		    "protocol_version", "1.0",
+		    "server_time_unix", (int) time (NULL),
+		    "authenticated", is_authed ? json_true () : json_false (),
+		    "player_id", (is_authed
+				  && player_id >
+				  0) ? json_integer (player_id) :
+		    json_null (), "current_sector", (is_authed
+						     && sector_id >
+						     0) ?
+		    json_integer (sector_id) : json_null ());
+}
+
+static int
+resolve_current_sector_from_info (json_t *info_obj, int fallback)
+{
+  if (!json_is_object (info_obj))
+    return fallback;
+
+  /* Preferred flat field */
+  json_t *j = json_object_get (info_obj, "current_sector");
+  if (json_is_integer (j))
+    return (int) json_integer_value (j);
+
+  /* Common alternates */
+  json_t *ship = json_object_get (info_obj, "ship");
+  if (json_is_object (ship))
+    {
+      j = json_object_get (ship, "sector_id");
+      if (json_is_integer (j))
+	return (int) json_integer_value (j);
+    }
+  json_t *player = json_object_get (info_obj, "player");
+  if (json_is_object (player))
+    {
+      j = json_object_get (player, "sector_id");
+      if (json_is_integer (j))
+	return (int) json_integer_value (j);
+    }
+  return fallback;
+}
 
 
 
@@ -216,24 +273,27 @@ make_base_envelope (json_t *req /* may be NULL */ )
 
 /* Send {"status":"error","type":"error","error":{code,message},...} (+data=null) */
 static void
-send_enveloped_refused (int fd, json_t *root, int code, const char *msg, json_t *data_opt)
+send_enveloped_refused (int fd, json_t *root, int code, const char *msg,
+			json_t *data_opt)
 {
-  json_t *env = json_object();
-  json_object_set_new(env, "id", json_string("srv-refuse"));
-  json_object_set(env, "reply_to", json_object_get(root, "id"));
-  char ts[32]; iso8601_utc(ts);
-  json_object_set_new(env, "ts", json_string(ts));
-  json_object_set_new(env, "status", json_string("refused"));
-  json_object_set_new(env, "type", json_string("error"));
-  json_t *err = json_pack("{s:i, s:s}", "code", code, "message", msg ? msg : "");
-  json_object_set_new(env, "error", err);
-  json_object_set(env, "data", data_opt ? data_opt : json_null());
+  json_t *env = json_object ();
+  json_object_set_new (env, "id", json_string ("srv-refuse"));
+  json_object_set (env, "reply_to", json_object_get (root, "id"));
+  char ts[32];
+  iso8601_utc (ts);
+  json_object_set_new (env, "ts", json_string (ts));
+  json_object_set_new (env, "status", json_string ("refused"));
+  json_object_set_new (env, "type", json_string ("error"));
+  json_t *err =
+    json_pack ("{s:i, s:s}", "code", code, "message", msg ? msg : "");
+  json_object_set_new (env, "error", err);
+  json_object_set (env, "data", data_opt ? data_opt : json_null ());
 
-  attach_rate_limit_meta(env, g_ctx_for_send);
-  rl_tick(g_ctx_for_send);
+  attach_rate_limit_meta (env, g_ctx_for_send);
+  rl_tick (g_ctx_for_send);
 
-  send_all_json(fd, env);
-  json_decref(env);
+  send_all_json (fd, env);
+  json_decref (env);
 }
 
 
@@ -244,7 +304,8 @@ send_enveloped_ok (int fd, json_t *root, const char *type, json_t *data)
   json_t *env = json_object ();
   json_object_set_new (env, "id", json_string ("srv-ok"));
   json_object_set (env, "reply_to", json_object_get (root, "id"));
-  char ts[32]; iso8601_utc(ts);
+  char ts[32];
+  iso8601_utc (ts);
   json_object_set_new (env, "ts", json_string (ts));
   json_object_set_new (env, "status", json_string ("ok"));
   json_object_set_new (env, "type", json_string (type));
@@ -254,9 +315,9 @@ send_enveloped_ok (int fd, json_t *root, const char *type, json_t *data)
   /* NEW: attach rate-limit meta and tick */
   //  attach_rate_limit_meta(env, ctx);   /* <-- add this line (requires ctx in scope; see note) */
   //  rl_tick(ctx);
-  attach_rate_limit_meta(env, g_ctx_for_send);
-  rl_tick(g_ctx_for_send);
-  
+  attach_rate_limit_meta (env, g_ctx_for_send);
+  rl_tick (g_ctx_for_send);
+
   send_all_json (fd, env);
   json_decref (env);
 }
@@ -280,7 +341,8 @@ send_enveloped_error (int fd, json_t *root, int code, const char *msg)
   json_object_set_new (env, "status", json_string ("error"));
   json_object_set_new (env, "type", json_string ("error"));
 
-  json_t *err = json_pack ("{s:i, s:s}", "code", code, "message", msg ? msg : "");
+  json_t *err =
+    json_pack ("{s:i, s:s}", "code", code, "message", msg ? msg : "");
   json_object_set_new (env, "error", err);
   json_object_set_new (env, "data", json_null ());
 
@@ -415,40 +477,170 @@ validate_trade_buy_rule (int player_id, int port_id, const char *commodity,
 /* ------------------------ rate limit helpers ------------------------ */
 
 /* Roll the window and increment count for this response */
-static void rl_tick(client_ctx_t *ctx) {
-  if (!ctx) return;
-  time_t now = time(NULL);
-  if (ctx->rl_limit <= 0) { ctx->rl_limit = 60; }              /* safety */
-  if (ctx->rl_window_sec <= 0) { ctx->rl_window_sec = 60; }
-  if (now - ctx->rl_window_start >= ctx->rl_window_sec) {
-    ctx->rl_window_start = now;
-    ctx->rl_count = 0;
-  }
+static void
+rl_tick (client_ctx_t *ctx)
+{
+  if (!ctx)
+    return;
+  time_t now = time (NULL);
+  if (ctx->rl_limit <= 0)
+    {
+      ctx->rl_limit = 60;
+    }				/* safety */
+  if (ctx->rl_window_sec <= 0)
+    {
+      ctx->rl_window_sec = 60;
+    }
+  if (now - ctx->rl_window_start >= ctx->rl_window_sec)
+    {
+      ctx->rl_window_start = now;
+      ctx->rl_count = 0;
+    }
   ctx->rl_count++;
 }
 
 /* Build {limit, remaining, reset} */
-static json_t *rl_build_meta(const client_ctx_t *ctx) {
-  if (!ctx) return json_null();
-  time_t now = time(NULL);
-  int reset = (int)(ctx->rl_window_start + ctx->rl_window_sec - now);
-  if (reset < 0) reset = 0;
+static json_t *
+rl_build_meta (const client_ctx_t *ctx)
+{
+  if (!ctx)
+    return json_null ();
+  time_t now = time (NULL);
+  int reset = (int) (ctx->rl_window_start + ctx->rl_window_sec - now);
+  if (reset < 0)
+    reset = 0;
   int remaining = ctx->rl_limit - ctx->rl_count;
-  if (remaining < 0) remaining = 0;
-  return json_pack("{s:i,s:i,s:i}", "limit", ctx->rl_limit, "remaining", remaining, "reset", reset);
+  if (remaining < 0)
+    remaining = 0;
+  return json_pack ("{s:i,s:i,s:i}", "limit", ctx->rl_limit, "remaining",
+		    remaining, "reset", reset);
 }
 
 /* Ensure env.meta exists and add meta.rate_limit */
-static void attach_rate_limit_meta(json_t *env, client_ctx_t *ctx) {
-  if (!env || !ctx) return;
-  json_t *meta = json_object_get(env, "meta");
-  if (!json_is_object(meta)) {
-    meta = json_object();
-    json_object_set_new(env, "meta", meta);
-  }
-  json_t *rl = rl_build_meta(ctx);
-  json_object_set_new(meta, "rate_limit", rl);
+static void
+attach_rate_limit_meta (json_t *env, client_ctx_t *ctx)
+{
+  if (!env || !ctx)
+    return;
+  json_t *meta = json_object_get (env, "meta");
+  if (!json_is_object (meta))
+    {
+      meta = json_object ();
+      json_object_set_new (env, "meta", meta);
+    }
+  json_t *rl = rl_build_meta (ctx);
+  json_object_set_new (meta, "rate_limit", rl);
 }
+
+
+
+/* Build a full sector snapshot for sector.info */
+static json_t *
+build_sector_info_json (int sector_id)
+{
+  json_t *root = json_object ();
+  if (!root)
+    return NULL;
+
+  /* Basic info (id/name) */
+  json_t *basic = NULL;
+  if (db_sector_basic_json (sector_id, &basic) == SQLITE_OK && basic)
+    {
+      json_t *sid = json_object_get (basic, "sector_id");
+      json_t *name = json_object_get (basic, "name");
+      if (sid)
+	json_object_set (root, "sector_id", sid);
+      if (name)
+	json_object_set (root, "name", name);
+      json_decref (basic);
+    }
+  else
+    {
+      json_object_set_new (root, "sector_id", json_integer (sector_id));
+    }
+
+  /* Adjacent warps */
+  json_t *adj = NULL;
+  if (db_adjacent_sectors_json (sector_id, &adj) == SQLITE_OK && adj)
+    {
+      json_object_set_new (root, "adjacent", adj);
+      json_object_set_new (root, "adjacent_count",
+			   json_integer ((int) json_array_size (adj)));
+    }
+  else
+    {
+      json_object_set_new (root, "adjacent", json_array ());
+      json_object_set_new (root, "adjacent_count", json_integer (0));
+    }
+
+  /* Ports */
+  json_t *ports = NULL;
+  if (db_ports_at_sector_json (sector_id, &ports) == SQLITE_OK && ports)
+    {
+      json_object_set_new (root, "ports", ports);
+      json_object_set_new (root, "has_port",
+			   json_array_size (ports) >
+			   0 ? json_true () : json_false ());
+    }
+  else
+    {
+      json_object_set_new (root, "ports", json_array ());
+      json_object_set_new (root, "has_port", json_false ());
+    }
+
+  /* Players */
+  json_t *players = NULL;
+  if (db_players_at_sector_json (sector_id, &players) == SQLITE_OK && players)
+    {
+      json_object_set_new (root, "players", players);
+      json_object_set_new (root, "players_count",
+			   json_integer ((int) json_array_size (players)));
+    }
+  else
+    {
+      json_object_set_new (root, "players", json_array ());
+      json_object_set_new (root, "players_count", json_integer (0));
+    }
+
+  /* ---- PLACE THESE NEW SECTIONS HERE ---- */
+
+  /* Planets */
+  json_t *planets = NULL;
+  if (db_planets_at_sector_json (sector_id, &planets) == SQLITE_OK && planets)
+    {
+      json_object_set_new (root, "planets", planets);	/* takes ownership */
+      json_object_set_new (root, "has_planet",
+			   json_array_size (planets) >
+			   0 ? json_true () : json_false ());
+      json_object_set_new (root, "planets_count",
+			   json_integer ((int) json_array_size (planets)));
+    }
+  else
+    {
+      json_object_set_new (root, "planets", json_array ());
+      json_object_set_new (root, "has_planet", json_false ());
+      json_object_set_new (root, "planets_count", json_integer (0));
+    }
+
+  /* Beacons (always include array) */
+  json_t *beacons = NULL;
+  if (db_beacons_at_sector_json (sector_id, &beacons) == SQLITE_OK && beacons)
+    {
+      json_object_set_new (root, "beacons", beacons);
+      json_object_set_new (root, "beacons_count",
+			   json_integer ((int) json_array_size (beacons)));
+    }
+  else
+    {
+      json_object_set_new (root, "beacons", json_array ());
+      json_object_set_new (root, "beacons_count", json_integer (0));
+    }
+
+  return root;
+}
+
+
+
 
 
 /* ------------------------ message processor (stub dispatcher) ------------------------ */
@@ -461,7 +653,7 @@ process_message (client_ctx_t *ctx, json_t *root)
   g_ctx_for_send = ctx;
   json_t *cmd = json_object_get (root, "command");
   json_t *evt = json_object_get (root, "event");
-  
+
   /* Auto-auth from meta.session_token (transport-agnostic clients) */
   json_t *jmeta = json_object_get (root, "meta");
   const char *session_token = NULL;
@@ -505,10 +697,48 @@ process_message (client_ctx_t *ctx, json_t *root)
   /* Rate-limit defaults: 60 responses / 60 seconds */
   ctx->rl_limit = 60;
   ctx->rl_window_sec = 60;
-  ctx->rl_window_start = time(NULL);
+  ctx->rl_window_start = time (NULL);
   ctx->rl_count = 0;
-  
+
   const char *c = json_string_value (cmd);
+
+  /* ----------------------- */
+/* Session ping / handshake */
+/* ----------------------- */
+  if (strcmp (c, "session.ping") == 0)
+    {
+      /* Echo back whatever is in data (or {}) */
+      json_t *jdata = json_object_get (root, "data");
+      json_t *echo =
+	json_is_object (jdata) ? json_incref (jdata) : json_object ();
+      send_enveloped_ok (ctx->fd, root, "session.pong", echo);
+      json_decref (echo);
+      return;
+    }
+  else if (strcmp (c, "session.hello") == 0)
+    {
+      int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 0;
+
+      if (ctx->player_id > 0)
+	{
+	  json_t *info = NULL;
+	  int rc = db_player_info_json (ctx->player_id, &info);
+	  if (rc == SQLITE_OK && info)
+	    {
+	      sector_id = resolve_current_sector_from_info (info, sector_id);
+	      json_decref (info);
+	    }
+	}
+
+      json_t *payload = make_session_hello_payload ((ctx->player_id > 0),
+						    ctx->player_id,
+						    (sector_id >
+						     0) ? sector_id : 0);
+      send_enveloped_ok (ctx->fd, root, "session.hello", payload);
+      json_decref (payload);
+      return;
+    }
+
 
   if (strcmp (c, "login") == 0 || strcmp (c, "auth.login") == 0)
     {
@@ -539,15 +769,29 @@ process_message (client_ctx_t *ctx, json_t *root)
 	  int rc = play_login (name, pass, &player_id);
 	  if (rc == AUTH_OK)
 	    {
-	      /* Optional: mark session on ctx */
-	      /* ctx->player_id = player_id; ctx->is_logged_in = 1; */
+	      /* Determine current sector: prefer DB truth, fall back to ctx, else 1 */
+	      int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 0;
 
-	      json_t *data = json_pack ("{s:i}", "player_id", player_id);
+	      json_t *pinfo = NULL;
+	      int prc = db_player_info_json (player_id, &pinfo);
+	      if (prc == SQLITE_OK && pinfo)
+		{
+		  sector_id =
+		    resolve_current_sector_from_info (pinfo, sector_id);
+		  json_decref (pinfo);
+		}
+	      if (sector_id <= 0)
+		sector_id = 1;
+
+	      json_t *data = json_pack ("{s:i, s:i}",
+					"player_id", player_id,
+					"current_sector", sector_id);
+
 	      /* Mark connection as authenticated */
 	      ctx->player_id = player_id;
-	      /* Safe default until you load from DB */
 	      if (ctx->sector_id <= 0)
-		ctx->sector_id = 1;
+		ctx->sector_id = sector_id;
+
 	      send_enveloped_ok (ctx->fd, root, "auth.session", data);
 	      json_decref (data);
 	    }
@@ -608,7 +852,8 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       if (ctx->player_id <= 0)
 	{
-	  send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+	  send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated",
+				  NULL);
 	  //send_enveloped_error (ctx->fd, root, 1401, "Not authenticated");
 	}
       else
@@ -626,29 +871,31 @@ process_message (client_ctx_t *ctx, json_t *root)
 	    }
 	}
     }
-else if (strcmp(c, "move.describe_sector") == 0) {
-    int sector_id = ctx->sector_id;
+  else if (strcmp (c, "move.describe_sector") == 0)
+    {
+      /* Determine sector_id from ctx or request data */
+      int sector_id = ctx->sector_id > 0 ? ctx->sector_id : 0;
+      json_t *jdata = json_object_get (root, "data");
+      json_t *jsec =
+	json_is_object (jdata) ? json_object_get (jdata, "sector_id") : NULL;
+      if (json_is_integer (jsec))
+	sector_id = (int) json_integer_value (jsec);
+      if (sector_id <= 0)
+	sector_id = 1;		/* safe default */
 
-    /* If client provided a sector_id explicitly, allow it (optional) */
-    json_t *jdata = json_object_get(root, "data");
-    if (json_is_object(jdata)) {
-        json_t *jsid = json_object_get(jdata, "sector_id");
-        if (json_is_integer(jsid)) sector_id = (int)json_integer_value(jsid);
+      json_t *payload = build_sector_info_json (sector_id);
+      if (!payload)
+	{
+	  send_enveloped_error (ctx->fd, root, 1500,
+				"Out of memory building sector info");
+	}
+      else
+	{
+	  send_enveloped_ok (ctx->fd, root, "sector.info", payload);
+	  json_decref (payload);
+	}
     }
 
-    if (sector_id <= 0) {
-        send_enveloped_error(ctx->fd, root, 1301, "Missing required field");
-    } else {
-        json_t *info = NULL;
-        int rc = db_sector_info_json(sector_id, &info);
-        if (rc == SQLITE_OK && info) {
-            send_enveloped_ok(ctx->fd, root, "sector.info", info);
-            json_decref(info);
-        } else {
-            send_enveloped_error(ctx->fd, root, 1500, "Database error");
-        }
-    }
-}
 
   else if (strcmp (c, "trade.buy") == 0)
     {
@@ -673,9 +920,9 @@ else if (strcmp(c, "move.describe_sector") == 0) {
 
 	  if (!commodity || port_id <= 0 || qty <= 0)
 	    {
-	      RULE_ERROR(ERR_BAD_REQUEST, "Missing required field");
-	      //	      send_enveloped_error (ctx->fd, root, 1301,
-	      //			    "Missing required field");
+	      RULE_ERROR (ERR_BAD_REQUEST, "Missing required field");
+	      //              send_enveloped_error (ctx->fd, root, 1301,
+	      //                            "Missing required field");
 	      /* no idempotency processing if invalid */
 	    }
 	  else
@@ -776,7 +1023,7 @@ else if (strcmp(c, "move.describe_sector") == 0) {
 	      iso8601_utc (ts);
 	      json_object_set_new (env, "ts", json_string (ts));
 	      json_object_set_new (env, "status", json_string ("ok"));
-	      trade_buy_done:
+	    trade_buy_done:
 	      ;
 	      json_object_set_new (env, "type",
 				   json_string ("trade.accepted"));
@@ -864,7 +1111,8 @@ else if (strcmp(c, "move.describe_sector") == 0) {
     {
       if (ctx->player_id <= 0)
 	{
-	  send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+	  send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated",
+				  NULL);
 	  //send_enveloped_error (ctx->fd, root, 1401, "Not authenticated");
 	}
       else

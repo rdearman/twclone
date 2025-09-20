@@ -1,0 +1,213 @@
+*** a/server_loop.c
+--- b/server_loop.c
+***************
+*** 1,12 ****
+  #include <stdatomic.h>
+  #include <inttypes.h>
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <string.h>
+  #include <errno.h>
+  #include <signal.h>
+  #include <unistd.h>
+  #include <poll.h>
+  #include <pthread.h>
+  #include <sys/types.h>
+  #include <sys/socket.h>
+  #include <netinet/in.h>
+  #include <arpa/inet.h>
+  #include <jansson.h>		/* -ljansson */
+--- 1,14 ----
+  #include <stdatomic.h>
+  #include <inttypes.h>
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <string.h>
+  #include <errno.h>
+  #include <signal.h>
+  #include <unistd.h>
+  #include <poll.h>
+  #include <pthread.h>
++ #include <time.h>
+  #include <sys/types.h>
+  #include <sys/socket.h>
+  #include <netinet/in.h>
+  #include <arpa/inet.h>
+  #include <jansson.h>		/* -ljansson */
+***************
+*** 1200,1205 ****
+--- 1202,1278 ----
+  //void buyhardware (char *buffer, struct player *curplayer);
+  
+  // Forward declarations for functions not shown in the snippets but used here
+  void buildnewplayer (struct player *curplayer, char *shipname);
+  json_t *move_player (json_t * request_json);
+  json_t *buildplayerinfo_json (struct player *curplayer);
+  json_t *buildshipinfo_json (struct ship *curship);
+  //void trading (struct player *curplayer, struct port *curport, struct ship *curship, json_t *json_data, char *buffer);
+  void trading (struct player *curplayer, struct port *curport, char *buffer,
+  	      struct ship *curship);
+  json_t *buildportinfo_json (struct port *curport);
+  json_t *totalplanetinf
++
++ /* ----------------------------- */
++ /* Helpers for session endpoints */
++ /* ----------------------------- */
++ static json_t *make_session_hello_payload(int is_authed, int player_id, int sector_id) {
++     /* Keep this lean; clients just need a quick server sanity-check */
++     return json_pack(
++         "{s:s s:i s: I s:o s:o}",
++         "protocol_version", "1.0",
++         "server_time_unix", (int)time(NULL),
++         "authenticated", is_authed ? json_true() : json_false(),
++         "player_id", is_authed && player_id > 0 ? json_integer(player_id) : json_null(),
++         "current_sector", is_authed && sector_id > 0 ? json_integer(sector_id) : json_null()
++     );
++ }
++
++ static int resolve_current_sector_from_info(json_t *info_obj, int fallback) {
++     /* Try to read current sector from a DB info blob if available */
++     if (!json_is_object(info_obj)) return fallback;
++     json_t *j = json_object_get(info_obj, "current_sector");
++     if (json_is_integer(j)) return (int)json_integer_value(j);
++     /* Some schemas keep position under ship or player sub-objects; try common alternates */
++     json_t *ship = json_object_get(info_obj, "ship");
++     if (json_is_object(ship)) {
++         j = json_object_get(ship, "sector_id");
++         if (json_is_integer(j)) return (int)json_integer_value(j);
++     }
++     json_t *player = json_object_get(info_obj, "player");
++     if (json_is_object(player)) {
++         j = json_object_get(player, "sector_id");
++         if (json_is_integer(j)) return (int)json_integer_value(j);
++     }
++     return fallback;
++ }
+***************
+*** 1409,1449 ****
+    const char *c = json_string_value (cmd);
+  
+    if (strcmp (c, "login") == 0 || strcmp (c, "auth.login") == 0)
+      {
+        /* NEW: pull fields from the "data" object, not the root */
+        json_t *jdata = json_object_get (root, "data");
+        const char *name = NULL, *pass = NULL;
+  
+        if (json_is_object (jdata))
+  	{
+--- 1482,1564 ----
+    const char *c = json_string_value (cmd);
+  
++   /* ----------------------- */
++   /* Session ping / handshake */
++   /* ----------------------- */
++   if (strcmp(c, "session.ping") == 0) {
++     /* Echo either "data" or an empty object back, wrapped as OK. */
++     json_t *jdata = json_object_get(root, "data");
++     json_t *echo = json_is_object(jdata) ? json_incref(jdata) : json_object();
++     send_enveloped_ok(ctx->fd, root, "session.pong", echo);
++     json_decref(echo);
++   }
++   else if (strcmp(c, "session.hello") == 0) {
++     int sector_id = ctx->sector_id > 0 ? ctx->sector_id : 0;
++     /* If authenticated and we can cheaply read player info, try to refine sector. */
++     if (ctx->player_id > 0) {
++       json_t *info = NULL;
++       int rc = db_player_info_json(ctx->player_id, &info);
++       if (rc == SQLITE_OK && info) {
++         sector_id = resolve_current_sector_from_info(info, sector_id);
++         json_decref(info);
++       }
++     }
++     json_t *payload = make_session_hello_payload(
++       ctx->player_id > 0, ctx->player_id, sector_id > 0 ? sector_id : 0
++     );
++     send_enveloped_ok(ctx->fd, root, "session.hello", payload);
++     json_decref(payload);
++   }
++   else
++   /* ----------------------- */
++   /* Authentication */
++   /* ----------------------- */
++   if (strcmp (c, "login") == 0 || strcmp (c, "auth.login") == 0)
++     {
++       /* NEW: pull fields from the "data" object, not the root */
++       json_t *jdata = json_object_get (root, "data");
++       const char *name = NULL, *pass = NULL;
++ 
++       if (json_is_object (jdata))
++ 	{
+***************
+*** 1477,1496 ****
+  	  if (rc == AUTH_OK)
+  	    {
+  	      /* Optional: mark session on ctx */
+  	      /* ctx->player_id = player_id; ctx->is_logged_in = 1; */
+  
+- 	      json_t *data = json_pack ("{s:i}", "player_id", player_id);
++ 	      /* Determine current sector: prefer DB truth, fall back to ctx, else 1 */
++ 	      int sector_id = ctx->sector_id > 0 ? ctx->sector_id : 0;
++ 	      json_t *pinfo = NULL;
++ 	      int prc = db_player_info_json(player_id, &pinfo);
++ 	      if (prc == SQLITE_OK && pinfo) {
++ 	        sector_id = resolve_current_sector_from_info(pinfo, sector_id);
++ 	        json_decref(pinfo);
++ 	      }
++ 	      if (sector_id <= 0) sector_id = 1;
++ 
++ 	      json_t *data = json_pack ("{s:i, s:i}",
++ 	                                 "player_id", player_id,
++ 	                                 "current_sector", sector_id);
+  	      /* Mark connection as authenticated */
+  	      ctx->player_id = player_id;
+  	      /* Safe default until you load from DB */
+- 	      if (ctx->sector_id <= 0)
+- 		ctx->sector_id = 1;
++ 	      if (ctx->sector_id <= 0) ctx->sector_id = sector_id;
+  	      send_enveloped_ok (ctx->fd, root, "auth.session", data);
+  	      json_decref (data);
+  	    }
+  	  else if (rc == AUTH_ERR_INVALID_CRED)
+  	    {
+***************
+*** 1698,1715 ****
+        }
+      }
+    else if (strcmp (c, "player.my_info") == 0)
+      {
+        if (ctx->player_id <= 0)
+  	{
+  	  send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+  	  //send_enveloped_error (ctx->fd, root, 1401, "Not authenticated");
+  	}
+        else
+  	{
+  	  json_t *info = NULL;
+  	  int rc = db_player_info_json (ctx->player_id, &info);
+  	  if (rc == SQLITE_OK && info)
+  	    {
+  	      send_enveloped_ok (ctx->fd, root, "player.info", info);
+  	      json_decref (info);
+  	    }
+--- 1816,1844 ----
+        }
+      }
+    else if (strcmp (c, "player.my_info") == 0)
+      {
+        if (ctx->player_id <= 0)
+  	{
+  	  send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+  	  //send_enveloped_error (ctx->fd, root, 1401, "Not authenticated");
+  	}
+        else
+  	{
+  	  json_t *info = NULL;
+  	  int rc = db_player_info_json (ctx->player_id, &info);
+  	  if (rc == SQLITE_OK && info)
+  	    {
++ 	      /* Opportunistically keep ctx->sector_id fresh for later fast paths */
++ 	      int resolved = resolve_current_sector_from_info(info, ctx->sector_id);
++ 	      if (resolved > 0) ctx->sector_id = resolved;
+  	      send_enveloped_ok (ctx->fd, root, "player.info", info);
+  	      json_decref (info);
+  	    }
