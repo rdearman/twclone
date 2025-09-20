@@ -6,10 +6,13 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <time.h>
+#include <jansson.h>
 
 
 static sqlite3 *db_handle = NULL;
 const char *DEFAULT_DB_NAME = "twconfig.db";
+/* Forward declaration so we can call it before the definition */
+static json_t *parse_neighbors_csv(const unsigned char *txt);
 
 ////////////////////
 
@@ -1290,4 +1293,360 @@ db_idemp_store_response (const char *key, const char *response_json)
   rc = sqlite3_step (st);
   sqlite3_finalize (st);
   return (rc == SQLITE_DONE) ? SQLITE_OK : SQLITE_ERROR;
+}
+
+/* Helper: prepare, bind one int, and return stmt or NULL */
+static sqlite3_stmt* prep1i(sqlite3 *db, const char *sql, int v) {
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK) return NULL;
+    sqlite3_bind_int(st, 1, v);
+    return st;
+}
+
+#if 0 /* old db_sector_info_json */
+int db_sector_info_json(int sector_id, json_t **out)
+{
+    if (out) *out = NULL;
+    sqlite3 *db = db_get_handle();
+    if (!db) return SQLITE_ERROR;
+
+    json_t *root = json_object();
+    json_object_set_new(root, "sector_id", json_integer(sector_id));
+
+    /* 1) Sector core (id, name, security level, safe flag, beacon text/author) */
+    {
+        /* Adjust column names to your actual schema:
+           - sectors(id INTEGER PK, name TEXT, security_level INT, safe_zone INT, beacon_text TEXT, beacon_by INT)
+           If some columns don’t exist, this SELECT still works for the ones that do. */
+        const char *sql =
+            "SELECT name,"
+            "       COALESCE(security_level, 0),"
+            "       COALESCE(safe_zone, 0),"
+            "       COALESCE(beacon_text, ''),"
+            "       COALESCE(beacon_by, 0)"
+            "  FROM sectors WHERE id=?1;";
+        sqlite3_stmt *st = prep1i(db, sql, sector_id);
+        if (st) {
+            if (sqlite3_step(st) == SQLITE_ROW) {
+                const char *nm = (const char*)sqlite3_column_text(st, 0);
+                int sec_level  = sqlite3_column_int(st, 1);
+                int safe       = sqlite3_column_int(st, 2);
+                const char *btxt = (const char*)sqlite3_column_text(st, 3);
+                int bby        = sqlite3_column_int(st, 4);
+
+                if (nm) json_object_set_new(root, "name", json_string(nm));
+
+                json_t *sec = json_pack("{s:i, s:b}", "level", sec_level, "is_safe_zone", safe ? 1 : 0);
+                json_object_set_new(root, "security", sec);
+
+                if (btxt && btxt[0]) {
+                    json_t *b = json_pack("{s:s, s:i}", "text", btxt, "by_player_id", bby);
+                    json_object_set_new(root, "beacon", b);
+                }
+            }
+            sqlite3_finalize(st);
+        }
+    }
+
+    /* 2) Adjacency (warps): warps(from_sector, to_sector) */
+    {
+        const char *sql = "SELECT to_sector FROM warps WHERE from_sector=?1 ORDER BY to_sector;";
+        sqlite3_stmt *st = prep1i(db, sql, sector_id);
+        if (st) {
+            json_t *adj = json_array();
+            while (sqlite3_step(st) == SQLITE_ROW) {
+                int to = sqlite3_column_int(st, 0);
+                json_array_append_new(adj, json_integer(to));
+            }
+            sqlite3_finalize(st);
+            if (json_array_size(adj) > 0) json_object_set_new(root, "adjacent", adj);
+            else json_decref(adj);
+        }
+    }
+
+    /* 3) Port (at most one per sector in classic TW; adapt if you support multiple) */
+    {
+        /* Example columns: ports(id, sector_id, name, type_code, is_open) */
+        const char *sql =
+            "SELECT id, name, COALESCE(type_code,''), COALESCE(is_open,1)"
+            "  FROM ports WHERE sector_id=?1 LIMIT 1;";
+        sqlite3_stmt *st = prep1i(db, sql, sector_id);
+        if (st) {
+            if (sqlite3_step(st) == SQLITE_ROW) {
+                int pid = sqlite3_column_int(st, 0);
+                const char *pname = (const char*)sqlite3_column_text(st, 1);
+                const char *ptype = (const char*)sqlite3_column_text(st, 2);
+                int is_open = sqlite3_column_int(st, 3);
+
+                json_t *port = json_object();
+                json_object_set_new(port, "id", json_integer(pid));
+                if (pname) json_object_set_new(port, "name", json_string(pname));
+                if (ptype) json_object_set_new(port, "type", json_string(ptype));
+                json_object_set_new(port, "status", json_string(is_open ? "open" : "closed"));
+                json_object_set_new(root, "port", port);
+            }
+            sqlite3_finalize(st);
+        }
+    }
+
+    /* 4) Planets (optional) — planets(id, sector_id, name, owner_id) */
+    {
+        const char *sql =
+            "SELECT id, name, COALESCE(owner_id,0)"
+            "  FROM planets WHERE sector_id=?1 ORDER BY id;";
+        sqlite3_stmt *st = prep1i(db, sql, sector_id);
+        if (st) {
+            json_t *arr = json_array();
+            while (sqlite3_step(st) == SQLITE_ROW) {
+                int id = sqlite3_column_int(st, 0);
+                const char *nm = (const char*)sqlite3_column_text(st, 1);
+                int owner = sqlite3_column_int(st, 2);
+                json_t *pl = json_pack("{s:i, s:i}", "id", id, "owner_id", owner);
+                if (nm) json_object_set_new(pl, "name", json_string(nm));
+                json_array_append_new(arr, pl);
+            }
+            sqlite3_finalize(st);
+            if (json_array_size(arr) > 0) json_object_set_new(root, "planets", arr);
+            else json_decref(arr);
+        }
+    }
+
+    /* 5) Entities (optional) — entities(id, sector_id, kind, name) */
+    {
+        const char *sql =
+            "SELECT id, COALESCE(kind,''), COALESCE(name,'')"
+            "  FROM entities WHERE sector_id=?1 ORDER BY id;";
+        sqlite3_stmt *st = prep1i(db, sql, sector_id);
+        if (st) {
+            json_t *arr = json_array();
+            while (sqlite3_step(st) == SQLITE_ROW) {
+                int id = sqlite3_column_int(st, 0);
+                const char *kind = (const char*)sqlite3_column_text(st, 1);
+                const char *nm   = (const char*)sqlite3_column_text(st, 2);
+                json_t *e = json_pack("{s:i}", "id", id);
+                if (kind && *kind) json_object_set_new(e, "kind", json_string(kind));
+                if (nm && *nm)   json_object_set_new(e, "name", json_string(nm));
+                json_array_append_new(arr, e);
+            }
+            sqlite3_finalize(st);
+            if (json_array_size(arr) > 0) json_object_set_new(root, "entities", arr);
+            else json_decref(arr);
+        }
+    }
+
+    if (out) *out = root; else json_decref(root);
+    return SQLITE_OK;
+}
+#endif /* old db_sector_info_json */
+
+int db_sector_info_json(int sector_id, json_t **out)
+{
+    if (out) *out = NULL;
+    sqlite3 *db = db_get_handle();
+    if (!db) return SQLITE_ERROR;
+
+    json_t *root = json_object();
+    json_object_set_new(root, "sector_id", json_integer(sector_id));
+
+    /* 0) Sector core: name (+ optional beacon if present in schema) */
+    {
+        /* Adjust these column names if your sectors table differs; unknown columns will cause prepare to fail,
+           so we try a minimal SELECT first (name only), then a richer one if available. */
+
+        const char *sql_min = "SELECT name FROM sectors WHERE id=?1;";
+        sqlite3_stmt *st = NULL;
+        if (sqlite3_prepare_v2(db, sql_min, -1, &st, NULL) == SQLITE_OK) {
+            sqlite3_bind_int(st, 1, sector_id);
+            if (sqlite3_step(st) == SQLITE_ROW) {
+                const char *nm = (const char*)sqlite3_column_text(st, 0);
+                if (nm) json_object_set_new(root, "name", json_string(nm));
+            }
+            sqlite3_finalize(st);
+        }
+
+        /* Optional richer fields (beacon/security) – try only if columns exist.
+           This SELECT will fail silently if your schema doesn’t have those columns, which is OK. */
+        const char *sql_rich =
+            "SELECT "
+            "  COALESCE(beacon_text, ''), COALESCE(beacon_by, 0), "
+            "  COALESCE(security_level, 0), COALESCE(safe_zone, 0) "
+            "FROM sectors WHERE id=?1;";
+        if (sqlite3_prepare_v2(db, sql_rich, -1, &st, NULL) == SQLITE_OK) {
+            sqlite3_bind_int(st, 1, sector_id);
+            if (sqlite3_step(st) == SQLITE_ROW) {
+                const char *btxt = (const char*)sqlite3_column_text(st, 0);
+                int bby          = sqlite3_column_int(st, 1);
+                int sec_level    = sqlite3_column_int(st, 2);
+                int safe         = sqlite3_column_int(st, 3);
+
+                if (btxt && btxt[0]) {
+                    json_t *b = json_pack("{s:s, s:i}", "text", btxt, "by_player_id", bby);
+                    json_object_set_new(root, "beacon", b);
+                }
+                /* Only add security if at least one of these is non-default */
+                if (sec_level != 0 || safe != 0) {
+                    json_t *sec = json_pack("{s:i, s:b}", "level", sec_level, "is_safe_zone", safe ? 1 : 0);
+                    json_object_set_new(root, "security", sec);
+                }
+            }
+            sqlite3_finalize(st);
+        }
+    }
+
+/* 1) Adjacency via sector_adjacency(neighbors CSV) */
+{
+    const char *sql = "SELECT neighbors FROM sector_adjacency WHERE sector_id=?1;";
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) == SQLITE_OK) {
+        sqlite3_bind_int(st, 1, sector_id);
+        if (sqlite3_step(st) == SQLITE_ROW) {
+            const unsigned char *neighbors = sqlite3_column_text(st, 0);
+            json_t *adj = parse_neighbors_csv(neighbors);
+            if (json_array_size(adj) > 0)
+                json_object_set_new(root, "adjacent", adj);
+            else
+                json_decref(adj);
+        }
+        sqlite3_finalize(st);
+    }
+}
+
+    /* 2) Port (first port in sector, if any) via sector_ports */
+    {
+        const char *sql =
+            "SELECT port_id, port_name, COALESCE(type_code,''), COALESCE(is_open,1) "
+            "FROM sector_ports WHERE sector_id=?1 ORDER BY port_id LIMIT 1;";
+        sqlite3_stmt *st = NULL;
+        if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) == SQLITE_OK) {
+            sqlite3_bind_int(st, 1, sector_id);
+            if (sqlite3_step(st) == SQLITE_ROW) {
+                int pid = sqlite3_column_int(st, 0);
+                const char *pname = (const char*)sqlite3_column_text(st, 1);
+                const char *ptype = (const char*)sqlite3_column_text(st, 2);
+                int is_open = sqlite3_column_int(st, 3);
+
+                json_t *port = json_object();
+                json_object_set_new(port, "id", json_integer(pid));
+                if (pname) json_object_set_new(port, "name", json_string(pname));
+                if (ptype) json_object_set_new(port, "type", json_string(ptype));
+                json_object_set_new(port, "status", json_string(is_open ? "open" : "closed"));
+                json_object_set_new(root, "port", port);
+            }
+            sqlite3_finalize(st);
+        }
+    }
+
+    /* 3) Planets via sector_planets */
+    {
+        const char *sql =
+            "SELECT planet_id, planet_name, COALESCE(owner_id,0) "
+            "FROM sector_planets WHERE sector_id=?1 ORDER BY planet_id;";
+        sqlite3_stmt *st = NULL;
+        if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) == SQLITE_OK) {
+            sqlite3_bind_int(st, 1, sector_id);
+            json_t *arr = json_array();
+            while (sqlite3_step(st) == SQLITE_ROW) {
+                int id = sqlite3_column_int(st, 0);
+                const char *nm = (const char*)sqlite3_column_text(st, 1);
+                int owner = sqlite3_column_int(st, 2);
+                json_t *pl = json_pack("{s:i, s:i}", "id", id, "owner_id", owner);
+                if (nm) json_object_set_new(pl, "name", json_string(nm));
+                json_array_append_new(arr, pl);
+            }
+            sqlite3_finalize(st);
+            if (json_array_size(arr) > 0) json_object_set_new(root, "planets", arr);
+            else json_decref(arr);
+        }
+    }
+
+    /* 4) Entities via ships_by_sector (treat them as 'ship' entities) */
+    {
+        const char *sql =
+            "SELECT ship_id, COALESCE(ship_name,''), COALESCE(owner_player_id,0) "
+            "FROM ships_by_sector WHERE sector_id=?1 ORDER BY ship_id;";
+        sqlite3_stmt *st = NULL;
+        if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) == SQLITE_OK) {
+            sqlite3_bind_int(st, 1, sector_id);
+            json_t *arr = json_array();
+            while (sqlite3_step(st) == SQLITE_ROW) {
+                int id = sqlite3_column_int(st, 0);
+                const char *nm = (const char*)sqlite3_column_text(st, 1);
+                int owner = sqlite3_column_int(st, 2);
+                json_t *e = json_pack("{s:i, s:s, s:i}", "id", id, "kind", "ship", "owner_id", owner);
+                if (nm && *nm) json_object_set_new(e, "name", json_string(nm));
+                json_array_append_new(arr, e);
+            }
+            sqlite3_finalize(st);
+            if (json_array_size(arr) > 0) json_object_set_new(root, "entities", arr);
+            else json_decref(arr);
+        }
+    }
+
+    /* 5) Security/topology flags via sector_summary (if present) */
+    {
+        /* sector_summary columns vary; this query safely tries a few common ones */
+        const char *sql =
+            "SELECT "
+            "  COALESCE(degree, NULL), "
+            "  COALESCE(dead_in, NULL), "
+            "  COALESCE(dead_out, NULL), "
+            "  COALESCE(is_isolated, NULL) "
+            "FROM sector_summary WHERE sector_id=?1;";
+        sqlite3_stmt *st = NULL;
+        if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) == SQLITE_OK) {
+            sqlite3_bind_int(st, 1, sector_id);
+            if (sqlite3_step(st) == SQLITE_ROW) {
+                int has_any = 0;
+                json_t *sec = json_object();
+
+                if (sqlite3_column_type(st, 0) != SQLITE_NULL) {
+                    json_object_set_new(sec, "degree", json_integer(sqlite3_column_int(st, 0)));
+                    has_any = 1;
+                }
+                if (sqlite3_column_type(st, 1) != SQLITE_NULL) {
+                    json_object_set_new(sec, "dead_in", json_integer(sqlite3_column_int(st, 1)));
+                    has_any = 1;
+                }
+                if (sqlite3_column_type(st, 2) != SQLITE_NULL) {
+                    json_object_set_new(sec, "dead_out", json_integer(sqlite3_column_int(st, 2)));
+                    has_any = 1;
+                }
+                if (sqlite3_column_type(st, 3) != SQLITE_NULL) {
+                    json_object_set_new(sec, "is_isolated", sqlite3_column_int(st, 3) ? json_true() : json_false());
+                    has_any = 1;
+                }
+                if (has_any) json_object_set_new(root, "security", sec);
+                else json_decref(sec);
+            }
+            sqlite3_finalize(st);
+        }
+    }
+
+    if (out) *out = root; else json_decref(root);
+    return SQLITE_OK;
+}
+
+/* Parse "2,3,4,5" -> [2,3,4,5] */
+static json_t *parse_neighbors_csv(const unsigned char *txt)
+{
+    json_t *arr = json_array();
+    if (!txt) return arr;
+    const char *p = (const char *)txt;
+
+    while (*p) {
+        while (*p == ' ' || *p == '\t') p++;           /* trim left */
+        const char *start = p;
+        while (*p && *p != ',') p++;
+        int len = (int)(p - start);
+        if (len > 0) {
+            char buf[32];
+            if (len >= (int)sizeof(buf)) len = (int)sizeof(buf) - 1; /* defensive */
+            memcpy(buf, start, len);
+            buf[len] = '\0';
+            int id = atoi(buf);
+            if (id > 0) json_array_append_new(arr, json_integer(id));
+        }
+        if (*p == ',') p++;                             /* skip comma */
+    }
+    return arr;
 }

@@ -70,6 +70,6 @@ int db_idemp_fetch (const char *key, char **out_cmd, char **out_req_fp,
    Returns SQLITE_OK on success. */
 int db_idemp_store_response (const char *key, const char *response_json);
 
-
+int db_sector_info_json(int sector_id, json_t **out);
 
 #endif /* DATABASE_H */

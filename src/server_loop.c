@@ -626,13 +626,29 @@ process_message (client_ctx_t *ctx, json_t *root)
 	    }
 	}
     }
-  else if (strcmp (c, "move.describe_sector") == 0)
-    {
-      /* Minimal pass: echo current sector; expand later with ports/warps/planets */
-      json_t *data = json_pack ("{s:i}", "sector_id", ctx->sector_id);
-      send_enveloped_ok (ctx->fd, root, "sector.info", data);
-      json_decref (data);
+else if (strcmp(c, "move.describe_sector") == 0) {
+    int sector_id = ctx->sector_id;
+
+    /* If client provided a sector_id explicitly, allow it (optional) */
+    json_t *jdata = json_object_get(root, "data");
+    if (json_is_object(jdata)) {
+        json_t *jsid = json_object_get(jdata, "sector_id");
+        if (json_is_integer(jsid)) sector_id = (int)json_integer_value(jsid);
     }
+
+    if (sector_id <= 0) {
+        send_enveloped_error(ctx->fd, root, 1301, "Missing required field");
+    } else {
+        json_t *info = NULL;
+        int rc = db_sector_info_json(sector_id, &info);
+        if (rc == SQLITE_OK && info) {
+            send_enveloped_ok(ctx->fd, root, "sector.info", info);
+            json_decref(info);
+        } else {
+            send_enveloped_error(ctx->fd, root, 1500, "Database error");
+        }
+    }
+}
 
   else if (strcmp (c, "trade.buy") == 0)
     {
