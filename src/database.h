@@ -25,10 +25,31 @@ int db_delete (const char *table, int id);
 void db_close (void);
 
 extern sqlite3 *db_get_handle (void);
-int db_player_info_json(int player_id, json_t **out);
+int db_player_info_json (int player_id, json_t ** out);
 ////////////////////
 
 extern const char *create_table_sql[];
 extern const char *insert_default_sql[];
+
+
+/* Forward declare jansson type (avoid including jansson in header) */
+typedef struct json_t json_t;
+
+/* Sessions (opaque tokens) */
+int db_ensure_auth_schema (void);
+
+/* Create a new session for player_id, TTL seconds. token_out must be >= 65 bytes (hex-64 + NUL). */
+int db_session_create (int player_id, int ttl_seconds, char token_out[65]);
+
+/* Look up a session token. Returns SQLITE_OK and sets *out_player_id and *out_expires_epoch. */
+int db_session_lookup (const char *token, int *out_player_id,
+		       long long *out_expires_epoch);
+
+/* Revoke (delete) a session token. Returns SQLITE_OK if deleted or not found. */
+int db_session_revoke (const char *token);
+
+/* Rotate: verify old token, create new one (revoking old). */
+int db_session_refresh (const char *old_token, int ttl_seconds,
+			char token_out[65], int *out_player_id);
 
 #endif /* DATABASE_H */

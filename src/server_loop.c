@@ -150,23 +150,25 @@ make_base_envelope (json_t *req /* may be NULL */ )
   return env;			/* caller owns */
 }
 
-static void send_enveloped_refused(int fd, json_t *root, int code, const char *msg)
+static void
+send_enveloped_refused (int fd, json_t *root, int code, const char *msg)
 {
-    json_t *env = json_object();
-    json_object_set_new(env, "id", json_string("srv-refuse"));
-    json_object_set(env, "reply_to", json_object_get(root, "id"));
+  json_t *env = json_object ();
+  json_object_set_new (env, "id", json_string ("srv-refuse"));
+  json_object_set (env, "reply_to", json_object_get (root, "id"));
 
-    char ts[32];
-    iso8601_utc(ts);
-    json_object_set_new(env, "ts", json_string(ts));
+  char ts[32];
+  iso8601_utc (ts);
+  json_object_set_new (env, "ts", json_string (ts));
 
-    json_object_set_new(env, "status", json_string("refused"));
-    json_object_set_new(env, "type", json_string("error"));
-    json_t *err = json_pack("{s:i, s:s}", "code", code, "message", msg ? msg : "");
-    json_object_set_new(env, "error", err);
-    json_object_set_new(env, "data", json_null());
-    send_all_json(fd, env);
-    json_decref(env);
+  json_object_set_new (env, "status", json_string ("refused"));
+  json_object_set_new (env, "type", json_string ("error"));
+  json_t *err =
+    json_pack ("{s:i, s:s}", "code", code, "message", msg ? msg : "");
+  json_object_set_new (env, "error", err);
+  json_object_set_new (env, "data", json_null ());
+  send_all_json (fd, env);
+  json_decref (env);
 }
 
 
@@ -249,6 +251,29 @@ process_message (client_ctx_t *ctx, json_t *root)
   json_t *cmd = json_object_get (root, "command");
   json_t *evt = json_object_get (root, "event");
 
+  /* Auto-auth from meta.session_token (transport-agnostic clients) */
+  json_t *jmeta = json_object_get (root, "meta");
+  const char *session_token = NULL;
+  if (json_is_object (jmeta))
+    {
+      json_t *jtok = json_object_get (jmeta, "session_token");
+      if (json_is_string (jtok))
+	session_token = json_string_value (jtok);
+    }
+  if (ctx->player_id == 0 && session_token)
+    {
+      int pid = 0;
+      long long exp = 0;
+      int rc = db_session_lookup (session_token, &pid, &exp);
+      if (rc == SQLITE_OK && pid > 0)
+	{
+	  ctx->player_id = pid;
+	  if (ctx->sector_id <= 0)
+	    ctx->sector_id = 1;	/* or load from DB */
+	}
+      /* If invalid/expired, we silently ignore; individual commands can refuse with 1401 */
+    }
+
   if (ctx->player_id == 0 && ctx->sector_id <= 0)
     {
       ctx->sector_id = 1;
@@ -259,6 +284,7 @@ process_message (client_ctx_t *ctx, json_t *root)
       send_enveloped_error (ctx->fd, root, 1300, "Invalid request schema");
       return;
     }
+
   if (evt && json_is_string (evt))
     {
       send_enveloped_error (ctx->fd, root, 1300, "Invalid request schema");
@@ -458,97 +484,288 @@ process_message (client_ctx_t *ctx, json_t *root)
 	  json_decref (data);
 	}
     }
-else if (strcmp(c, "ship.info") == 0) {
-    if (ctx->player_id <= 0) {
-        send_enveloped_error(ctx->fd, root, 1401, "Not authenticated");
-    } else {
-        json_t *info = NULL;
-        int rc = db_player_info_json(ctx->player_id, &info);
-        if (rc == SQLITE_OK && info) {
-            /* Build a ship-only view from the player_info payload */
-            json_t *data = json_pack("{s:i, s:i, s:s, s:i, s:s, s:i, s:i}",
-                "ship_number",   json_integer_value(json_object_get(info, "ship_number")),
-                "ship_id",       json_integer_value(json_object_get(info, "ship_id")),
-                "ship_name",     json_string_value (json_object_get(info, "ship_name")),
-                "ship_type_id",  json_integer_value(json_object_get(info, "ship_type_id")),
-                "ship_type_name",json_string_value (json_object_get(info, "ship_type_name")),
-                "ship_holds",    json_integer_value(json_object_get(info, "ship_holds")),
-                "ship_fighters", json_integer_value(json_object_get(info, "ship_fighters"))
-            );
-            json_decref(info);
-            send_enveloped_ok(ctx->fd, root, "ship.info", data);
-            json_decref(data);
-        } else {
-            send_enveloped_error(ctx->fd, root, 1500, "Database error");
-        }
-    }
-}
-else if (strcmp(c, "player.list_online") == 0) {
-  /*Until you maintain a global connection registry,
-    return the current player only (it unblocks clients and is safe).
-    You can upgrade later to a real list.*/
-
-  json_t *arr = json_array();
-    if (ctx->player_id > 0) {
-        json_array_append_new(arr, json_pack("{s:i}", "player_id", ctx->player_id));
-    }
-    json_t *data = json_pack("{s:o}", "players", arr);
-    send_enveloped_ok(ctx->fd, root, "player.list_online", data);
-    json_decref(data);
-}
-
-else if (strcmp(c, "system.disconnect") == 0) {
-    json_t *data = json_pack("{s:s}", "message", "Goodbye");
-    send_enveloped_ok(ctx->fd, root, "system.goodbye", data);
-    json_decref(data);
-
-    shutdown(ctx->fd, SHUT_RDWR);
-    close(ctx->fd);
-    return; /* or break your per-connection loop appropriately */
-}
-else if (strcmp(c, "system.hello") == 0) {
-    json_t *data = capabilities_build();   /* never NULL in our stub */
-    if (!data) {
-        send_enveloped_error(ctx->fd, root, 1102, "Service unavailable");
-    } else {
-        send_enveloped_ok(ctx->fd, root, "system.capabilities", data);
-        json_decref(data);
-    }
-}
-else if (strcmp(c, "system.describe_schema") == 0) {
-    json_t *jdata = json_object_get(root, "data");
-    const char *key = NULL;
-    if (json_is_object(jdata)) {
-        json_t *jkey = json_object_get(jdata, "key");
-        if (json_is_string(jkey)) key = json_string_value(jkey);
+  else if (strcmp (c, "ship.info") == 0)
+    {
+      if (ctx->player_id <= 0)
+	{
+	  send_enveloped_error (ctx->fd, root, 1401, "Not authenticated");
+	}
+      else
+	{
+	  json_t *info = NULL;
+	  int rc = db_player_info_json (ctx->player_id, &info);
+	  if (rc == SQLITE_OK && info)
+	    {
+	      /* Build a ship-only view from the player_info payload */
+	      json_t *data = json_pack ("{s:i, s:i, s:s, s:i, s:s, s:i, s:i}",
+					"ship_number",
+					json_integer_value (json_object_get
+							    (info,
+							     "ship_number")),
+					"ship_id",
+					json_integer_value (json_object_get
+							    (info,
+							     "ship_id")),
+					"ship_name",
+					json_string_value (json_object_get
+							   (info,
+							    "ship_name")),
+					"ship_type_id",
+					json_integer_value (json_object_get
+							    (info,
+							     "ship_type_id")),
+					"ship_type_name",
+					json_string_value (json_object_get
+							   (info,
+							    "ship_type_name")),
+					"ship_holds",
+					json_integer_value (json_object_get
+							    (info,
+							     "ship_holds")),
+					"ship_fighters",
+					json_integer_value (json_object_get
+							    (info,
+							     "ship_fighters")));
+	      json_decref (info);
+	      send_enveloped_ok (ctx->fd, root, "ship.info", data);
+	      json_decref (data);
+	    }
+	  else
+	    {
+	      send_enveloped_error (ctx->fd, root, 1500, "Database error");
+	    }
+	}
     }
 
-    if (!key) {
-        /* Return the list of keys we have */
-        json_t *data = json_pack("{s:o}", "available", schema_keys());
-        send_enveloped_ok(ctx->fd, root, "system.schema_list", data);
-        json_decref(data);
-    } else {
-        json_t *schema = schema_get(key);
-        if (!schema) {
-            send_enveloped_error(ctx->fd, root, 1306, "Schema not found");
-        } else {
-            json_t *data = json_pack("{s:s, s:o}", "key", key, "schema", schema);
-            send_enveloped_ok(ctx->fd, root, "system.schema", data);
-            json_decref(schema);
-            json_decref(data);
-        }
+  else if (strcmp (c, "player.list_online") == 0)
+    {
+      /*Until you maintain a global connection registry,
+         return the current player only (it unblocks clients and is safe).
+         You can upgrade later to a real list. */
+
+      json_t *arr = json_array ();
+      if (ctx->player_id > 0)
+	{
+	  json_array_append_new (arr,
+				 json_pack ("{s:i}", "player_id",
+					    ctx->player_id));
+	}
+      json_t *data = json_pack ("{s:o}", "players", arr);
+      send_enveloped_ok (ctx->fd, root, "player.list_online", data);
+      json_decref (data);
     }
-}
 
+  else if (strcmp (c, "system.disconnect") == 0)
+    {
+      json_t *data = json_pack ("{s:s}", "message", "Goodbye");
+      send_enveloped_ok (ctx->fd, root, "system.goodbye", data);
+      json_decref (data);
 
-  
+      shutdown (ctx->fd, SHUT_RDWR);
+      close (ctx->fd);
+      return;			/* or break your per-connection loop appropriately */
+    }
+  else if (strcmp (c, "system.hello") == 0)
+    {
+      json_t *data = capabilities_build ();	/* never NULL in our stub */
+      if (!data)
+	{
+	  send_enveloped_error (ctx->fd, root, 1102, "Service unavailable");
+	}
+      else
+	{
+	  send_enveloped_ok (ctx->fd, root, "system.capabilities", data);
+	  json_decref (data);
+	}
+    }
+  else if (strcmp (c, "system.describe_schema") == 0)
+    {
+      json_t *jdata = json_object_get (root, "data");
+      const char *key = NULL;
+      if (json_is_object (jdata))
+	{
+	  json_t *jkey = json_object_get (jdata, "key");
+	  if (json_is_string (jkey))
+	    key = json_string_value (jkey);
+	}
+
+      if (!key)
+	{
+	  /* Return the list of keys we have */
+	  json_t *data = json_pack ("{s:o}", "available", schema_keys ());
+	  send_enveloped_ok (ctx->fd, root, "system.schema_list", data);
+	  json_decref (data);
+	}
+      else
+	{
+	  json_t *schema = schema_get (key);
+	  if (!schema)
+	    {
+	      send_enveloped_error (ctx->fd, root, 1306, "Schema not found");
+	    }
+	  else
+	    {
+	      json_t *data =
+		json_pack ("{s:s, s:o}", "key", key, "schema", schema);
+	      send_enveloped_ok (ctx->fd, root, "system.schema", data);
+	      json_decref (schema);
+	      json_decref (data);
+	    }
+	}
+    }
+  else if (strcmp (c, "auth.register") == 0)
+    {
+      json_t *jdata = json_object_get (root, "data");
+      const char *name = NULL, *pass = NULL;
+      if (json_is_object (jdata))
+	{
+	  json_t *jn = json_object_get (jdata, "user_name");
+	  json_t *jp = json_object_get (jdata, "password");
+	  if (!json_is_string (jn))
+	    jn = json_object_get (jdata, "player_name");
+	  name = json_is_string (jn) ? json_string_value (jn) : NULL;
+	  pass = json_is_string (jp) ? json_string_value (jp) : NULL;
+	}
+      if (!name || !pass)
+	{
+	  send_enveloped_error (ctx->fd, root, 1301,
+				"Missing required field");
+	}
+      else
+	{
+	  int player_id = 0;
+	  int rc = user_create (name, pass, &player_id);
+	  if (rc == AUTH_OK)
+	    {
+	      /* issue a session token (24h = 86400s) */
+	      char tok[65];
+	      if (db_session_create (player_id, 86400, tok) != SQLITE_OK)
+		{
+		  send_enveloped_error (ctx->fd, root, 1500,
+					"Database error");
+		}
+	      else
+		{
+		  ctx->player_id = player_id;
+		  if (ctx->sector_id <= 0)
+		    ctx->sector_id = 1;
+		  json_t *data =
+		    json_pack ("{s:i, s:s}", "player_id", player_id,
+			       "session_token", tok);
+		  send_enveloped_ok (ctx->fd, root, "auth.session", data);
+		  json_decref (data);
+		}
+	    }
+	  else if (rc == AUTH_ERR_NAME_TAKEN)
+	    {
+	      send_enveloped_error (ctx->fd, root, AUTH_ERR_NAME_TAKEN,
+				    "Username already exists");
+	    }
+	  else
+	    {
+	      send_enveloped_error (ctx->fd, root, AUTH_ERR_DB,
+				    "Database error");
+	    }
+	}
+    }
+  else if (strcmp (c, "auth.refresh") == 0)
+    {
+      /* Try data.session_token */
+      json_t *jdata = json_object_get (root, "data");
+      const char *tok = NULL;
+      if (json_is_object (jdata))
+	{
+	  json_t *jt = json_object_get (jdata, "session_token");
+	  if (json_is_string (jt))
+	    tok = json_string_value (jt);
+	}
+
+      /* Try meta.session_token */
+      if (!tok)
+	{
+	  json_t *jmeta = json_object_get (root, "meta");
+	  if (json_is_object (jmeta))
+	    {
+	      json_t *jt = json_object_get (jmeta, "session_token");
+	      if (json_is_string (jt))
+		tok = json_string_value (jt);
+	    }
+	}
+
+      /* If still no token, fall back to the connection’s logged-in player */
+      if (!tok && ctx->player_id > 0)
+	{
+	  char newtok[65];
+	  if (db_session_create (ctx->player_id, 86400, newtok) != SQLITE_OK)
+	    {
+	      send_enveloped_error (ctx->fd, root, 1500, "Database error");
+	    }
+	  else
+	    {
+	      json_t *data =
+		json_pack ("{s:i, s:s}", "player_id", ctx->player_id,
+			   "session_token", newtok);
+	      send_enveloped_ok (ctx->fd, root, "auth.session", data);
+	      json_decref (data);
+	    }
+	}
+      else if (tok)
+	{
+	  /* Rotate provided token */
+	  char newtok[65];
+	  int pid = 0;
+	  int rc = db_session_refresh (tok, 86400, newtok, &pid);
+	  if (rc == SQLITE_OK)
+	    {
+	      ctx->player_id = pid;
+	      if (ctx->sector_id <= 0)
+		ctx->sector_id = 1;
+	      json_t *data =
+		json_pack ("{s:i, s:s}", "player_id", pid, "session_token",
+			   newtok);
+	      send_enveloped_ok (ctx->fd, root, "auth.session", data);
+	      json_decref (data);
+	    }
+	  else
+	    {
+	      send_enveloped_error (ctx->fd, root, 1401,
+				    "Invalid or expired session");
+	    }
+	}
+      else
+	{
+	  /* Not logged in and no token supplied */
+	  send_enveloped_error (ctx->fd, root, 1301,
+				"Missing required field");
+	}
+    }
+
+  else if (strcmp (c, "auth.logout") == 0)
+    {
+      json_t *jdata = json_object_get (root, "data");
+      const char *tok = NULL;
+      if (json_is_object (jdata))
+	{
+	  json_t *jt = json_object_get (jdata, "session_token");
+	  if (json_is_string (jt))
+	    tok = json_string_value (jt);
+	}
+      /* If no token provided, log out the connection; if token given, revoke it. */
+      if (tok)
+	(void) db_session_revoke (tok);
+      ctx->player_id = 0;	/* drop connection auth state */
+
+      json_t *data = json_pack ("{s:s}", "message", "Logged out");
+      send_enveloped_ok (ctx->fd, root, "auth.logged_out", data);
+      json_decref (data);
+    }
   else
     {
       /* Unknown command -> 1101 Not implemented (per catalogue) */
       send_enveloped_error (ctx->fd, root, 1101, "Not implemented");
     }
 }
+
 
 
 /* ------------------------ per-connection loop (thread body) ------------------------ */

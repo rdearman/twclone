@@ -3,6 +3,10 @@
 #include <string.h>
 #include <sqlite3.h>
 #include "database.h"
+#include <fcntl.h>
+#include <unistd.h>
+#include <time.h>
+
 
 static sqlite3 *db_handle = NULL;
 const char *DEFAULT_DB_NAME = "twconfig.db";
@@ -115,6 +119,19 @@ const char *create_table_sql[] = {
     "FOREIGN KEY (planet_id) REFERENCES planets(id) ON DELETE CASCADE, "
     "FOREIGN KEY (owner) REFERENCES players(id)" ");",
 
+  "CREATE TABLE IF NOT EXISTS sessions (" "  token       TEXT PRIMARY KEY,"	/* 64-hex opaque */
+    "  player_id   INTEGER NOT NULL," "  expires     INTEGER NOT NULL,"	/* epoch seconds (UTC) */
+    "  created_at  INTEGER NOT NULL"	/* epoch seconds */
+    ");"
+    "CREATE INDEX IF NOT EXISTS idx_sessions_player ON sessions(player_id);"
+    "CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires);",
+
+
+  //////////////////////////////////////////////////////////////////////
+/// CREATE VIEWS 
+//////////////////////////////////////////////////////////////////////
+
+
   /* --- longest_tunnels view (array item ends with a comma, not semicolon) --- */
   "CREATE VIEW IF NOT EXISTS longest_tunnels AS\n"
     "WITH\n"
@@ -159,9 +176,6 @@ const char *create_table_sql[] = {
     "JOIN outdeg d_exit ON d_exit.id = r.curr\n"
     "WHERE d_exit.deg <> 1 AND r.steps >= 2\n"
     "ORDER BY r.steps DESC, r.entry, r.curr;"
-//////////////////////////////////////////////////////////////////////
-/// CREATE VIEWS 
-//////////////////////////////////////////////////////////////////////
     /* ===================== GRAPH / TOPOLOGY ===================== */
 /* 1) Degrees per sector (base for several views) */
     "CREATE VIEW IF NOT EXISTS sector_degrees AS\n"
@@ -708,6 +722,41 @@ db_get_handle (void)
   return db_handle;
 }
 
+
+static int
+urandom_bytes (void *buf, size_t n)
+{
+  int fd = open ("/dev/urandom", O_RDONLY);
+  if (fd < 0)
+    return -1;
+  ssize_t rd = read (fd, buf, n);
+  close (fd);
+  return (rd == (ssize_t) n) ? 0 : -1;
+}
+
+static void
+to_hex (const unsigned char *in, size_t n, char out_hex[ /*2n+1 */ ])
+{
+  static const char hexd[] = "0123456789abcdef";
+  for (size_t i = 0; i < n; ++i)
+    {
+      out_hex[2 * i + 0] = hexd[(in[i] >> 4) & 0xF];
+      out_hex[2 * i + 1] = hexd[(in[i]) & 0xF];
+    }
+  out_hex[2 * n] = '\0';
+}
+
+static int
+gen_session_token (char out64[65])
+{
+  unsigned char rnd[32];
+  if (urandom_bytes (rnd, sizeof (rnd)) != 0)
+    return -1;
+  to_hex (rnd, sizeof (rnd), out64);
+  return 0;
+}
+
+
 int
 db_init (void)
 {
@@ -717,6 +766,8 @@ db_init (void)
       fprintf (stderr, "DB init error: %s\n", sqlite3_errmsg (db_handle));
       return -1;
     }
+
+  (void) db_ensure_auth_schema ();
 
   /* Step 2: check if config table exists */
   const char *sql =
@@ -922,4 +973,175 @@ db_player_info_json (int player_id, json_t **out)
 
   sqlite3_finalize (st);
   return (rc == SQLITE_DONE) ? SQLITE_NOTFOUND : rc;
+}
+
+
+int
+db_ensure_auth_schema (void)
+{
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return SQLITE_ERROR;
+
+  char *errmsg = NULL;
+  int rc = sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK)
+    goto fail;
+
+  /* Table */
+  rc = sqlite3_exec (db, "CREATE TABLE IF NOT EXISTS sessions (" "  token       TEXT PRIMARY KEY," "  player_id   INTEGER NOT NULL," "  expires     INTEGER NOT NULL,"	/* epoch seconds */
+		     "  created_at  INTEGER NOT NULL"	/* epoch seconds */
+		     ");", NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK)
+    goto rollback;
+
+  /* Indexes */
+  rc = sqlite3_exec (db,
+		     "CREATE INDEX IF NOT EXISTS idx_sessions_player  ON sessions(player_id);",
+		     NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK)
+    goto rollback;
+
+  rc = sqlite3_exec (db,
+		     "CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires);",
+		     NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK)
+    goto rollback;
+
+  rc = sqlite3_exec (db, "COMMIT;", NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK)
+    goto fail;
+
+  return SQLITE_OK;
+
+rollback:
+  sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+fail:
+  if (errmsg)
+    {
+      fprintf (stderr, "[DB] auth schema: %s\n", errmsg);
+      sqlite3_free (errmsg);
+    }
+  return rc;
+}
+
+
+
+/* Create */
+int
+db_session_create (int player_id, int ttl_seconds, char token_out[65])
+{
+  if (!token_out || player_id <= 0 || ttl_seconds <= 0)
+    return SQLITE_MISUSE;
+  if (gen_session_token (token_out) != 0)
+    return SQLITE_ERROR;
+
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return SQLITE_ERROR;
+
+  time_t now = time (NULL);
+  long long exp = (long long) now + ttl_seconds;
+
+  const char *sql =
+    "INSERT INTO sessions(token, player_id, expires, created_at) VALUES(?1, ?2, ?3, ?4);";
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    return rc;
+
+  sqlite3_bind_text (st, 1, token_out, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int (st, 2, player_id);
+  sqlite3_bind_int64 (st, 3, exp);
+  sqlite3_bind_int64 (st, 4, (sqlite3_int64) now);
+
+  rc = sqlite3_step (st);
+  sqlite3_finalize (st);
+  return (rc == SQLITE_DONE) ? SQLITE_OK : SQLITE_ERROR;
+}
+
+/* Lookup */
+int
+db_session_lookup (const char *token, int *out_player_id,
+		   long long *out_expires_epoch)
+{
+  if (!token)
+    return SQLITE_MISUSE;
+  if (out_player_id)
+    *out_player_id = 0;
+  if (out_expires_epoch)
+    *out_expires_epoch = 0;
+
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return SQLITE_ERROR;
+
+  const char *sql = "SELECT player_id, expires FROM sessions WHERE token=?1;";
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    return rc;
+
+  sqlite3_bind_text (st, 1, token, -1, SQLITE_TRANSIENT);
+  rc = sqlite3_step (st);
+  if (rc == SQLITE_ROW)
+    {
+      int pid = sqlite3_column_int (st, 0);
+      long long exp = sqlite3_column_int64 (st, 1);
+      sqlite3_finalize (st);
+      time_t now = time (NULL);
+      if (exp <= (long long) now)
+	return SQLITE_NOTFOUND;	/* expired */
+      if (out_player_id)
+	*out_player_id = pid;
+      if (out_expires_epoch)
+	*out_expires_epoch = exp;
+      return SQLITE_OK;
+    }
+  sqlite3_finalize (st);
+  return SQLITE_NOTFOUND;
+}
+
+/* Revoke */
+int
+db_session_revoke (const char *token)
+{
+  if (!token)
+    return SQLITE_MISUSE;
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return SQLITE_ERROR;
+  const char *sql = "DELETE FROM sessions WHERE token=?1;";
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    return rc;
+  sqlite3_bind_text (st, 1, token, -1, SQLITE_TRANSIENT);
+  rc = sqlite3_step (st);
+  sqlite3_finalize (st);
+  return (rc == SQLITE_DONE) ? SQLITE_OK : rc;
+}
+
+/* Refresh (rotate token) */
+int
+db_session_refresh (const char *old_token, int ttl_seconds,
+		    char token_out[65], int *out_player_id)
+{
+  if (!old_token || !token_out)
+    return SQLITE_MISUSE;
+
+  int pid = 0;
+  long long exp = 0;
+  int rc = db_session_lookup (old_token, &pid, &exp);
+  if (rc != SQLITE_OK)
+    return rc;
+
+  rc = db_session_revoke (old_token);
+  if (rc != SQLITE_OK)
+    return rc;
+
+  rc = db_session_create (pid, ttl_seconds, token_out);
+  if (rc == SQLITE_OK && out_player_id)
+    *out_player_id = pid;
+  return rc;
 }

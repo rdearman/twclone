@@ -74,9 +74,27 @@
     "command": { "command": "move.warp", "data": { "to_sector_id": 9999 } },
     "expect": { "status": "refused", "code": 1402 }
   },
+{
+  "name": "Auth: Register New",
+  "command": { "command": "auth.register", "data": { "user_name": "newguy", "password": "pass123" } },
+  "expect": { "status": "ok", "type": "auth.session" }
+},
+{
+  "name": "Auth: Refresh",
+  "command": { "command": "auth.refresh" },
+  "expect": { "status": "ok", "type": "auth.session" }
+},
+{
+  "name": "Auth: Logout",
+  "command": { "command": "auth.logout" },
+  "expect": { "status": "ok", "type": "auth.logged_out" }
+},
   {
     "name": "System: Disconnect",
     "command": { "command": "system.disconnect" },
     "expect": { "status": "ok", "type": "system.goodbye" }
-  }
+  }  
+
+
 ]
+
