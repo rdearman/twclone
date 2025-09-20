@@ -1,5 +1,10 @@
 [
   {
+    "name": "Unauthenticated: Player Info (Refused)",
+    "command": { "command": "player.my_info" },
+    "expect": { "status": "refused", "code": 1401 }
+  },
+  {
     "name": "Login (Valid)",
     "command": {
       "command": "auth.login",
@@ -74,55 +79,94 @@
     "command": { "command": "move.warp", "data": { "to_sector_id": 9999 } },
     "expect": { "status": "refused", "code": 1402 }
   },
-{
-  "name": "Idempotency: trade.buy first-run",
-  "command": {
-    "command": "trade.buy",
-    "data": { "port_id": 7, "commodity": "ore", "quantity": 10 },
-    "meta": { "idempotency_key": "buy-ore-repeat-1" }
+  {
+    "name": "Refused: Trade not enough credits",
+    "command": {
+      "command": "trade.buy",
+      "data": { "port_id": 7, "commodity": "ore", "quantity": 999999 }
+    },
+    "expect": { "status": "refused", "code": 1410 }
   },
-  "expect": { "status": "ok", "type": "trade.accepted" }
-},
-{
-  "name": "Idempotency: trade.buy replay same key+payload",
-  "command": {
-    "command": "trade.buy",
-    "data": { "port_id": 7, "commodity": "ore", "quantity": 10 },
-    "meta": { "idempotency_key": "buy-ore-repeat-1" }
+  {
+    "name": "Refused: Trade not enough holds",
+    "command": {
+      "command": "trade.buy",
+      "data": { "port_id": 7, "commodity": "ore", "quantity": 100 }
+    },
+    "expect": { "status": "refused", "code": 1411 }
   },
-  "expect": { "status": "ok", "type": "trade.accepted" }
-},
-{
-  "name": "Idempotency: key reused with different payload",
-  "command": {
-    "command": "trade.buy",
-    "data": { "port_id": 7, "commodity": "ore", "quantity": 20 },
-    "meta": { "idempotency_key": "buy-ore-repeat-1" }
+  {
+    "name": "Idempotency: trade.buy first-run (key1)",
+    "command": {
+      "command": "trade.buy",
+      "data": { "port_id": 7, "commodity": "ore", "quantity": 10 },
+      "meta": { "idempotency_key": "buy-ore-repeat-1" }
+    },
+    "expect": { "status": "ok", "type": "trade.accepted" }
   },
-  "expect": { "status": "error", "code": 1105 }
-},
-
-    {
-  "name": "Auth: Register New",
-  "command": { "command": "auth.register", "data": { "user_name": "newguy", "password": "pass123" } },
-  "expect": { "status": "ok", "type": "auth.session" }
-},
-{
-  "name": "Auth: Refresh",
-  "command": { "command": "auth.refresh" },
-  "expect": { "status": "ok", "type": "auth.session" }
-},
-{
-  "name": "Auth: Logout",
-  "command": { "command": "auth.logout" },
-  "expect": { "status": "ok", "type": "auth.logged_out" }
-},
+  {
+    "name": "Idempotency: trade.buy replay same key+payload (key1)",
+    "command": {
+      "command": "trade.buy",
+      "data": { "port_id": 7, "commodity": "ore", "quantity": 10 },
+      "meta": { "idempotency_key": "buy-ore-repeat-1" }
+    },
+    "expect": { "status": "ok", "type": "trade.accepted" }
+  },
+  {
+    "name": "Idempotency: key reused with different payload (key1)",
+    "command": {
+      "command": "trade.buy",
+      "data": { "port_id": 7, "commodity": "ore", "quantity": 20 },
+      "meta": { "idempotency_key": "buy-ore-repeat-1" }
+    },
+    "expect": { "status": "error", "code": 1105 }
+  },
+  {
+    "name": "Idempotency: trade.buy first-run (key2)",
+    "command": {
+      "command": "trade.buy",
+      "data": { "port_id": 7, "commodity": "ore", "quantity": 10 },
+      "meta": { "idempotency_key": "buy-ore-repeat-2" }
+    },
+    "expect": { "status": "ok", "type": "trade.accepted" }
+  },
+  {
+    "name": "Idempotency: trade.buy replay same key+payload (key2)",
+    "command": {
+      "command": "trade.buy",
+      "data": { "port_id": 7, "commodity": "ore", "quantity": 10 },
+      "meta": { "idempotency_key": "buy-ore-repeat-2" }
+    },
+    "expect": { "status": "ok", "type": "trade.accepted" }
+  },
+  {
+    "name": "Idempotency: key reused with different payload (key2)",
+    "command": {
+      "command": "trade.buy",
+      "data": { "port_id": 7, "commodity": "ore", "quantity": 20 },
+      "meta": { "idempotency_key": "buy-ore-repeat-2" }
+    },
+    "expect": { "status": "error", "code": 1105 }
+  },
+  {
+    "name": "Auth: Register New",
+    "command": { "command": "auth.register", "data": { "user_name": "newguy", "password": "pass123" } },
+    "expect": { "status": "ok", "type": "auth.session" }
+  },
+  {
+    "name": "Auth: Refresh",
+    "command": { "command": "auth.refresh" },
+    "expect": { "status": "ok", "type": "auth.session" }
+  },
+  {
+    "name": "Auth: Logout",
+    "command": { "command": "auth.logout" },
+    "expect": { "status": "ok", "type": "auth.logged_out" }
+  },
   {
     "name": "System: Disconnect",
     "command": { "command": "system.disconnect" },
     "expect": { "status": "ok", "type": "system.goodbye" }
-  }  
-
-
+  }
 ]
-

@@ -28,8 +28,40 @@ extern "C"
   int user_create (const char *player_name,
 		   const char *password, int *out_player_id);
 
+
+  typedef enum
+  { DEC_OK = 0, DEC_REFUSED = 1, DEC_ERROR = 2 } decision_status_t;
+
+  typedef struct
+  {
+    decision_status_t status;
+    int code;			/* for REFUSED/ERROR */
+    const char *message;	/* short msg */
+  } decision_t;
+
+  static inline decision_t ok (void)
+  {
+    return (decision_t)
+    {
+    DEC_OK, 0, NULL};
+  }
+  static inline decision_t refused (int code, const char *m)
+  {
+    return (decision_t)
+    {
+    DEC_REFUSED, code, m};
+  }
+  static inline decision_t err (int code, const char *m)
+  {
+    return (decision_t)
+    {
+    DEC_ERROR, code, m};
+  }
+
+
+
 #ifdef __cplusplus
 }
 #endif
 
-#endif				/* SERVER_CMDS_H */
+#endif /* SERVER_CMDS_H */
