@@ -1,5 +1,5 @@
-/* server_loop.c — poll() based echo + schema guard on port 1234 */
-
+#include <stdatomic.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,22 +7,37 @@
 #include <signal.h>
 #include <unistd.h>
 #include <poll.h>
+#include <pthread.h>
+
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-#include <jansson.h>   /* -ljansson */
+#include <jansson.h>        /* -ljansson */
 
 #define LISTEN_PORT 1234
-#define MAX_CLIENTS 64
 #define BUF_SIZE    8192
 
+/* forward declaration to avoid implicit extern */
+static void send_all_json(int fd, json_t *obj);
+
 typedef struct {
-    int   fd;
-    size_t len;
-    char  buf[BUF_SIZE];
-} client_t;
+    int fd;
+    volatile sig_atomic_t *running;
+    struct sockaddr_in peer;
+    uint64_t cid;                 /* connection id assigned on accept */
+    /* per-thread resources later */
+} client_ctx_t;
+
+static _Atomic uint64_t g_conn_seq = 0;
+/* global (file-scope) counter for server message ids */
+static _Atomic uint64_t g_msg_seq = 0;
+
+
+/* ------------------------ socket helpers ------------------------ */
+
+
 
 static int set_reuseaddr(int fd) {
     int yes = 1;
@@ -41,21 +56,9 @@ static int make_listen_socket(uint16_t port) {
     sa.sin_addr.s_addr = htonl(INADDR_ANY);
     sa.sin_port        = htons(port);
 
-    if (bind(fd, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
-        perror("bind"); close(fd); return -1;
-    }
-    if (listen(fd, 128) < 0) {
-        perror("listen"); close(fd); return -1;
-    }
+    if (bind(fd, (struct sockaddr *)&sa, sizeof(sa)) < 0) { perror("bind"); close(fd); return -1; }
+    if (listen(fd, 128) < 0) { perror("listen"); close(fd); return -1; }
     return fd;
-}
-
-static void remove_client(struct pollfd *pfds, client_t *clients, int *nfds, int idx) {
-    close(pfds[idx].fd);
-    /* compact arrays: move last into idx (never move pfds[0]) */
-    pfds[idx]    = pfds[*nfds - 1];
-    clients[idx] = clients[*nfds - 1];
-    (*nfds)--;
 }
 
 static int send_all(int fd, const void *buf, size_t n) {
@@ -72,23 +75,69 @@ static int send_all(int fd, const void *buf, size_t n) {
     return 0;
 }
 
-/* Send {"status":"error","code":1300,"error":"invalid request schema"}\n */
-static void send_invalid_schema(int fd) {
-    json_t *obj = json_object();
-    json_object_set_new(obj, "status", json_string("error"));
-    json_object_set_new(obj, "code",   json_integer(1300));
-    json_object_set_new(obj, "error",  json_string("invalid request schema"));
+/* ------------------------ JSON reply helpers ------------------------ */
 
-    char *s = json_dumps(obj, JSON_COMPACT);
-    json_decref(obj);
-    if (s) {
-        (void)send_all(fd, s, strlen(s));
-        (void)send_all(fd, "\n", 1);
-        free(s);
-    }
+/* RFC3339 UTC "YYYY-MM-DDThh:mm:ssZ" (seconds precision) */
+static void iso8601_utc(char out[32]) {
+    time_t now = time(NULL);
+    struct tm tm;
+    gmtime_r(&now, &tm);
+    strftime(out, 32, "%Y-%m-%dT%H:%M:%SZ", &tm);
 }
 
-/* --- replace your handle_line() with this --- */
+/* server-generated message id "srv-<seq>" */
+static void next_msg_id(char out[32]) {
+    uint64_t n = atomic_fetch_add(&g_msg_seq, 1) + 1;
+    snprintf(out, 32, "srv-%" PRIu64, n);
+}
+
+/* Build base envelope: id, ts, optional reply_to */
+static json_t *make_base_envelope(json_t *req /* may be NULL */) {
+    char ts[32], mid[32];
+    iso8601_utc(ts);
+    next_msg_id(mid);
+
+    json_t *env = json_object();
+    json_object_set_new(env, "id", json_string(mid));
+    json_object_set_new(env, "ts", json_string(ts));
+
+    if (req && json_is_object(req)) {
+        json_t *rid = json_object_get(req, "id");
+        if (rid && json_is_string(rid)) {
+            json_object_set(env, "reply_to", rid); /* borrow */
+        }
+    }
+    return env; /* caller owns */
+}
+
+/* Send {"status":"error","type":"error","error":{code,message},...} (+data=null) */
+static void send_enveloped_error(int fd, json_t *req, int code, const char *message) {
+    json_t *env = make_base_envelope(req);
+    json_object_set_new(env, "status", json_string("error"));
+    json_object_set_new(env, "type",   json_string("error"));
+
+    json_t *err = json_object();
+    json_object_set_new(err, "code",    json_integer(code));
+    json_object_set_new(err, "message", json_string(message));
+    json_object_set_new(env, "error", err);  /* env owns err */
+    json_object_set_new(env, "data", json_null());
+
+    send_all_json(fd, env);
+    json_decref(env);
+}
+
+/* Send {"status":"ok","type":<type>,"data":<data>,"error":null} */
+static void send_enveloped_ok(int fd, json_t *req, const char *type, json_t *data /* may be NULL */) {
+    json_t *env = make_base_envelope(req);
+    json_object_set_new(env, "status", json_string("ok"));
+    json_object_set_new(env, "type",   json_string(type ? type : "ok"));
+    if (data) json_object_set(env, "data", data); else json_object_set_new(env, "data", json_object());
+    json_object_set_new(env, "error", json_null());
+
+    send_all_json(fd, env);
+    json_decref(env);
+}
+
 static void send_all_json(int fd, json_t *obj) {
     char *s = json_dumps(obj, JSON_COMPACT);
     if (s) { (void)send_all(fd, s, strlen(s)); (void)send_all(fd, "\n", 1); free(s); }
@@ -111,82 +160,165 @@ static void send_ok_json(int fd, json_t *data /* may be NULL */) {
     json_decref(o);
 }
 
-static void handle_line(int fd, const char *line, size_t len) {
-    /* strip CR/LF for parsing */
-    const char *start = line;
-    size_t plen = len;
-    while (plen && (start[plen - 1] == '\n' || start[plen - 1] == '\r')) plen--;
+/* ------------------------ message processor (stub dispatcher) ------------------------ */
+/* Single responsibility: receive one parsed JSON object and produce one reply. */
 
-    json_error_t jerr;
-    json_t *root = json_loadb(start, plen, 0, &jerr);
-    if (!root || !json_is_object(root)) {
-        if (root) json_decref(root);
-        send_error_json(fd, 1300, "invalid request schema");
-        return;
-    }
-
+static void process_message(client_ctx_t *ctx, json_t *root) {
     json_t *cmd = json_object_get(root, "command");
     json_t *evt = json_object_get(root, "event");
+
     if (!(cmd && json_is_string(cmd)) && !(evt && json_is_string(evt))) {
-        json_decref(root);
-        send_error_json(fd, 1300, "invalid request schema");
+        send_enveloped_error(ctx->fd, root, 1300, "Invalid request schema");
+        return;
+    }
+    if (evt && json_is_string(evt)) {
+        send_enveloped_error(ctx->fd, root, 1300, "Invalid request schema");
         return;
     }
 
-    /* Only process client commands here */
-    if (cmd && json_is_string(cmd)) {
-        const char *c = json_string_value(cmd);
+    const char *c = json_string_value(cmd);
 
-        /* Very small dispatcher to demonstrate error mapping */
-        if (strcmp(c, "login") == 0) {
-            json_t *name = json_object_get(root, "player_name");
-            json_t *pass = json_object_get(root, "password");
-            if (!json_is_string(name) || !json_is_string(pass)) {
-                send_error_json(fd, 1201, "missing required fields");
-            } else {
-                /* TODO: authenticate; for now, stub success */
-                send_ok_json(fd, NULL);
-            }
+    if (strcmp(c, "login") == 0) {
+        json_t *name = json_object_get(root, "player_name");
+        json_t *pass = json_object_get(root, "password");
+        if (!json_is_string(name) || !json_is_string(pass)) {
+            send_enveloped_error(ctx->fd, root, 1301, "Missing required field");
+        } else {
+            /* TODO: real auth; if invalid -> 1220 Invalid credentials */
+            /* Minimal OK payload type per protocol */
+            json_t *data = json_object(); /* empty for now */
+            send_enveloped_ok(ctx->fd, root, "auth.session", data);
+            json_decref(data);
         }
-        else if (strcmp(c, "PLAYERINFO") == 0) {
-            json_t *pn = json_object_get(root, "player_num");
-            if (!json_is_integer(pn)) {
-                send_error_json(fd, 1201, "missing required fields");
-            } else {
-                /* TODO: fetch; stub OK */
-                send_ok_json(fd, NULL);
-            }
-        }
-        else if (strcmp(c, "SHIPINFO") == 0) {
-            json_t *sn = json_object_get(root, "ship_num");
-            if (!json_is_integer(sn)) {
-                send_error_json(fd, 1201, "missing required fields");
-            } else {
-                send_ok_json(fd, NULL);
-            }
-        }
-        else if (strcmp(c, "DESCRIPTION") == 0 ||
-                 strcmp(c, "MYINFO") == 0 ||
-                 strcmp(c, "ONLINE") == 0 ||
-                 strcmp(c, "QUIT") == 0) {
-            /* Stubs; plug auth checks later (->1101) */
-            send_ok_json(fd, NULL);
-        }
-        else {
-            /* Unknown command */
-            send_error_json(fd, 1400, "unknown command");
-        }
-        json_decref(root);
-        return;
     }
-
-    /* If it's an 'event' from client (unexpected), reject */
-    send_error_json(fd, 1300, "invalid request schema");
-    json_decref(root);
+    else if (strcmp(c, "PLAYERINFO") == 0) {
+        json_t *pn = json_object_get(root, "player_num");
+        if (!json_is_integer(pn)) {
+            send_enveloped_error(ctx->fd, root, 1301, "Missing required field");
+        } else {
+            /* TODO: fill data: player + ship */
+            json_t *data = json_object();
+            send_enveloped_ok(ctx->fd, root, "player.info", data);
+            json_decref(data);
+        }
+    }
+    else if (strcmp(c, "SHIPINFO") == 0) {
+        json_t *sn = json_object_get(root, "ship_num");
+        if (!json_is_integer(sn)) {
+            send_enveloped_error(ctx->fd, root, 1301, "Missing required field");
+        } else {
+            json_t *data = json_object();
+            send_enveloped_ok(ctx->fd, root, "ship.info", data);
+            json_decref(data);
+        }
+    }
+    else if (strcmp(c, "DESCRIPTION") == 0) {
+        json_t *data = json_object();
+        send_enveloped_ok(ctx->fd, root, "system.description", data);
+        json_decref(data);
+    }
+    else if (strcmp(c, "MYINFO") == 0) {
+        json_t *data = json_object();
+        send_enveloped_ok(ctx->fd, root, "player.info", data);
+        json_decref(data);
+    }
+    else if (strcmp(c, "ONLINE") == 0) {
+        json_t *data = json_object();
+        send_enveloped_ok(ctx->fd, root, "player.list_online", data);
+        json_decref(data);
+    }
+    else if (strcmp(c, "QUIT") == 0) {
+        json_t *data = json_object();
+        send_enveloped_ok(ctx->fd, root, "system.goodbye", data);
+        json_decref(data);
+    }
+    else {
+        /* Unknown command -> 1101 Not implemented (per catalogue) */
+        send_enveloped_error(ctx->fd, root, 1101, "Not implemented");
+    }
 }
+
+
+/* ------------------------ per-connection loop (thread body) ------------------------ */
+
+static void *connection_thread(void *arg) {
+    client_ctx_t *ctx = (client_ctx_t *)arg;
+    int fd = ctx->fd;
+
+    /* Per-thread initialisation (DB/session/etc.) goes here */
+    /* ctx->db = thread_db_open(); */
+
+    /* Make recv interruptible via timeout so we can stop promptly */
+    struct timeval tv = { .tv_sec = 1, .tv_usec = 0 };
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
+    char buf[BUF_SIZE];
+    size_t have = 0;
+
+    for (;;) {
+        if (!*ctx->running) break;
+
+        ssize_t n = recv(fd, buf + have, sizeof(buf) - have, 0);
+        if (n > 0) {
+            have += (size_t)n;
+
+            /* Process complete lines (newline-terminated frames) */
+            size_t start = 0;
+            for (size_t i = 0; i < have; ++i) {
+                if (buf[i] == '\n') {
+                    /* Trim optional CR */
+                    size_t linelen = i - start;
+                    const char *line = buf + start;
+                    while (linelen && line[linelen - 1] == '\r') linelen--;
+
+                    /* Parse and dispatch */
+                    json_error_t jerr;
+                    json_t *root = json_loadb(line, linelen, 0, &jerr);
+
+		    if (!root || !json_is_object(root)) {
+		      send_enveloped_error(fd, NULL, 1300, "Invalid request schema");
+		    } else {
+		      process_message(ctx, root);
+		    }
+		    
+                    start = i + 1;
+                }
+            }
+            /* Shift any partial line to front */
+            if (start > 0) {
+                memmove(buf, buf + start, have - start);
+                have -= start;
+            }
+            /* Overflow without newline → guard & reset */
+            if (have == sizeof(buf)) {
+                send_error_json(fd, 1300, "invalid request schema");
+                have = 0;
+            }
+        } else if (n == 0) {
+            /* peer closed */
+            break;
+        } else {
+            if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) continue;
+            /* hard error */
+            break;
+        }
+    }
+
+    /* Per-thread teardown */
+    /* thread_db_close(ctx->db); */
+    close(fd);
+    free(ctx);
+    return NULL;
+}
+
+/* ------------------------ accept loop (spawns thread per client) ------------------------ */
 
 int server_loop(volatile sig_atomic_t *running) {
     fprintf(stderr, "Server loop starting...\n");
+
+#ifdef SIGPIPE
+    signal(SIGPIPE, SIG_IGN); /* don’t die on write to closed socket */
+#endif
 
     int listen_fd = make_listen_socket(LISTEN_PORT);
     if (listen_fd < 0) {
@@ -195,99 +327,59 @@ int server_loop(volatile sig_atomic_t *running) {
     }
     fprintf(stderr, "Listening on 0.0.0.0:%d\n", LISTEN_PORT);
 
-    struct pollfd pfds[1 + MAX_CLIENTS];
-    client_t      clients[1 + MAX_CLIENTS];
-    int nfds = 1;
+    struct pollfd pfd = { .fd = listen_fd, .events = POLLIN, .revents = 0 };
 
-    pfds[0].fd      = listen_fd;
-    pfds[0].events  = POLLIN;
-    pfds[0].revents = 0;
-
-    /* clients[0] is unused (slot 0 reserved for listen_fd) */
-    memset(&clients, 0, sizeof(clients));
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
     while (*running) {
-        int rc = poll(pfds, nfds, 1000);
+        int rc = poll(&pfd, 1, 1000); /* 1s tick re-checks *running */
         if (rc < 0) {
             if (errno == EINTR) continue;
-            perror("poll"); break;
+            perror("poll");
+            break;
         }
         if (rc == 0) continue;
 
-        /* New connection */
-        if (pfds[0].revents & POLLIN) {
-            struct sockaddr_in cli;
-            socklen_t clilen = sizeof(cli);
-            int cfd = accept(listen_fd, (struct sockaddr *)&cli, &clilen);
-            if (cfd >= 0) {
-                if (nfds >= 1 + MAX_CLIENTS) {
-                    close(cfd);
-                } else {
-                    char ip[INET_ADDRSTRLEN];
-                    inet_ntop(AF_INET, &cli.sin_addr, ip, sizeof(ip));
-                    fprintf(stderr, "Client connected: %s:%u (fd=%d)\n",
-                            ip, (unsigned)ntohs(cli.sin_port), cfd);
-                    pfds[nfds].fd      = cfd;
-                    pfds[nfds].events  = POLLIN;
-                    pfds[nfds].revents = 0;
-                    clients[nfds].fd   = cfd;
-                    clients[nfds].len  = 0;
-                    nfds++;
-                }
-            }
-        }
+        if (pfd.revents & POLLIN) {
+            client_ctx_t *ctx = calloc(1, sizeof(*ctx));
+            if (!ctx) { fprintf(stderr, "malloc failed\n"); continue; }
 
-        /* Client I/O */
-        for (int i = nfds - 1; i >= 1; --i) {
-            if (!(pfds[i].revents & (POLLIN | POLLERR | POLLHUP | POLLNVAL)))
-                continue;
-
-            if (pfds[i].revents & (POLLERR | POLLHUP | POLLNVAL)) {
-                remove_client(pfds, clients, &nfds, i);
+            socklen_t sl = sizeof(ctx->peer);
+            int cfd = accept(listen_fd, (struct sockaddr *)&ctx->peer, &sl);
+            if (cfd < 0) {
+                free(ctx);
+                if (errno == EINTR) continue;
+                if (errno == EAGAIN || errno == EWOULDBLOCK) continue;
+                perror("accept");
                 continue;
             }
 
-            if (pfds[i].revents & POLLIN) {
-                char tmp[BUF_SIZE];
-                ssize_t n = read(pfds[i].fd, tmp, sizeof(tmp));
-                if (n <= 0) {
-                    remove_client(pfds, clients, &nfds, i);
-                    continue;
-                }
+            ctx->fd = cfd;
+            ctx->running = running;
 
-                /* Append to client buffer; drop if overflow */
-                client_t *cl = &clients[i];
-                size_t avail = sizeof(cl->buf) - cl->len;
-                size_t take  = (n <= (ssize_t)avail) ? (size_t)n : avail;
-                memcpy(cl->buf + cl->len, tmp, take);
-                cl->len += take;
+            char ip[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, &ctx->peer.sin_addr, ip, sizeof(ip));
+            fprintf(stderr, "Client connected: %s:%u (fd=%d)\n",
+                    ip, (unsigned)ntohs(ctx->peer.sin_port), cfd);
 
-                /* Process complete lines */
-                size_t start = 0;
-                for (size_t k = 0; k < cl->len; ++k) {
-                    if (cl->buf[k] == '\n') {
-                        size_t linelen = (k + 1) - start;
-                        handle_line(pfds[i].fd, cl->buf + start, linelen);
-                        start = k + 1;
-                    }
-                }
+	    // after filling ctx->fd, ctx->running, ctx->peer, and assigning ctx->cid
+	    pthread_t th;
+	    int prc = pthread_create(&th, &attr, connection_thread, ctx);
+	    if (prc == 0) {
+	      fprintf(stderr, "[cid=%" PRIu64 "] thread created (pthread=%lu)\n",
+		      ctx->cid, (unsigned long)th);
+	    } else {
+	      fprintf(stderr, "pthread_create: %s\n", strerror(prc));
+	      close(cfd);
+	      free(ctx);
+	    }
 
-                /* Shift remaining partial line to front */
-                if (start > 0) {
-                    memmove(cl->buf, cl->buf + start, cl->len - start);
-                    cl->len -= start;
-                }
-
-                /* If buffer is full and no newline seen, force an error reply and reset */
-                if (cl->len == sizeof(cl->buf)) {
-                    send_invalid_schema(pfds[i].fd);
-                    cl->len = 0;
-                }
-            }
         }
     }
 
-    for (int i = 1; i < nfds; ++i) close(pfds[i].fd);
+    pthread_attr_destroy(&attr);
     close(listen_fd);
     fprintf(stderr, "Server loop exiting...\n");
     return 0;

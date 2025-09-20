@@ -1,0 +1,52 @@
+[
+  {
+    "name": "Login (Valid)",
+    "command": {
+      "command": "auth.login",
+      "data": { "user_name": "thor", "password": "hammer" }
+    },
+    "expect": { "status": "ok", "type": "auth.session" }
+  },
+  {
+    "name": "Login (Invalid Credentials)",
+    "command": {
+      "command": "auth.login",
+      "data": { "user_name": "loki", "password": "lie" }
+    },
+    "expect": { "status": "error", "code": 1220 }
+  },
+  {
+    "name": "Schema Guard (Missing Command)",
+    "command": { "data": { "user_name": "thor" } },
+    "expect": { "status": "error", "code": 1300 }
+  },
+  {
+    "name": "Get Player Info",
+    "command": { "command": "player.my_info" },
+    "expect": { "status": "ok", "type": "player.info" }
+  },
+  {
+    "name": "Describe Current Sector",
+    "command": { "command": "move.describe_sector" },
+    "expect": { "status": "ok", "type": "sector.info" }
+  },
+  {
+    "name": "Trade: Buy Ore",
+    "command": {
+      "command": "trade.buy",
+      "data": { "port_id": 7, "commodity": "ore", "quantity": 10 },
+      "meta": { "idempotency_key": "buy-ore-1" }
+    },
+    "expect": { "status": "ok" }
+  },
+  {
+    "name": "Movement: Warp",
+    "command": { "command": "move.warp", "data": { "to_sector_id": 43 } },
+    "expect": { "status": "ok", "type": "move.result" }
+  },
+  {
+    "name": "Movement: Warp (Refused - No Link)",
+    "command": { "command": "move.warp", "data": { "to_sector_id": 9999 } },
+    "expect": { "status": "refused", "code": 1402 }
+  }
+]

@@ -19,10 +19,10 @@
 # Alternatively, the GPL can be found at
 # http://www.gnu.org/copyleft/gpl.html
 
-server_LDADD   = -ljansson -lsqlite3
+server_LDADD   = -ljansson -lsqlite3 -lpthread
 # bigbang_LDADD  = -ljansson -lsqlite3
-client_LDADD   = -ljansson -lsqlite3
-test_bang_LDADD = -lsqlite3
+client_LDADD   = -ljansson -lsqlite3 -lpthread
+test_bang_LDADD = -lsqlite3 -lpthread
 
 AUTOMAKE_OPTIONS = subdir-objects
 

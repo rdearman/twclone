@@ -307,10 +307,10 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-server_LDADD = -ljansson -lsqlite3
+server_LDADD = -ljansson -lsqlite3 -lpthread
 # bigbang_LDADD  = -ljansson -lsqlite3
-client_LDADD = -ljansson -lsqlite3
-test_bang_LDADD = -lsqlite3
+client_LDADD = -ljansson -lsqlite3 -lpthread
+test_bang_LDADD = -lsqlite3 -lpthread
 AUTOMAKE_OPTIONS = subdir-objects
 client_SOURCES = \
 	../src/globals.c \
