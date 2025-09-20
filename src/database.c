@@ -768,6 +768,7 @@ db_init (void)
     }
 
   (void) db_ensure_auth_schema ();
+  (void)db_ensure_idempotency_schema();
 
   /* Step 2: check if config table exists */
   const char *sql =
@@ -1144,4 +1145,118 @@ db_session_refresh (const char *old_token, int ttl_seconds,
   if (rc == SQLITE_OK && out_player_id)
     *out_player_id = pid;
   return rc;
+}
+
+int db_ensure_idempotency_schema(void)
+{
+    sqlite3 *db = db_get_handle();
+    if (!db) return SQLITE_ERROR;
+
+    char *errmsg = NULL;
+    int rc = sqlite3_exec(db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg);
+    if (rc != SQLITE_OK) goto fail;
+
+    rc = sqlite3_exec(db,
+        "CREATE TABLE IF NOT EXISTS idempotency ("
+        "  key         TEXT PRIMARY KEY,"
+        "  cmd         TEXT NOT NULL,"
+        "  req_fp      TEXT NOT NULL,"
+        "  response    TEXT,"                 /* JSON of full envelope we sent */
+        "  created_at  INTEGER NOT NULL,"     /* epoch seconds */
+        "  updated_at  INTEGER"
+        ");", NULL, NULL, &errmsg);
+    if (rc != SQLITE_OK) { sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL); goto fail; }
+
+    rc = sqlite3_exec(db,
+        "CREATE INDEX IF NOT EXISTS idx_idemp_cmd ON idempotency(cmd);",
+        NULL, NULL, &errmsg);
+    if (rc != SQLITE_OK) { sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL); goto fail; }
+
+    rc = sqlite3_exec(db, "COMMIT;", NULL, NULL, &errmsg);
+    if (rc != SQLITE_OK) goto fail;
+    return SQLITE_OK;
+
+fail:
+    if (errmsg) { fprintf(stderr, "[DB] idempotency schema: %s\n", errmsg); sqlite3_free(errmsg); }
+    return rc;
+}
+int db_idemp_try_begin(const char *key, const char *cmd, const char *req_fp)
+{
+    if (!key || !cmd || !req_fp) return SQLITE_MISUSE;
+    sqlite3 *db = db_get_handle();
+    if (!db) return SQLITE_ERROR;
+
+    time_t now = time(NULL);
+    const char *sql =
+        "INSERT INTO idempotency(key, cmd, req_fp, created_at) VALUES(?1, ?2, ?3, ?4);";
+    sqlite3_stmt *st = NULL;
+    int rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) return rc;
+
+    sqlite3_bind_text(st, 1, key, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(st, 2, cmd, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(st, 3, req_fp, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int64(st, 4, (sqlite3_int64)now);
+
+    rc = sqlite3_step(st);
+    sqlite3_finalize(st);
+
+    if (rc == SQLITE_DONE) return SQLITE_OK;
+    if (rc == SQLITE_CONSTRAINT) return SQLITE_CONSTRAINT;
+    return SQLITE_ERROR;
+}
+
+int db_idemp_fetch(const char *key, char **out_cmd, char **out_req_fp, char **out_response_json)
+{
+    if (!key) return SQLITE_MISUSE;
+    sqlite3 *db = db_get_handle();
+    if (!db) return SQLITE_ERROR;
+
+    const char *sql = "SELECT cmd, req_fp, response FROM idempotency WHERE key=?1;";
+    sqlite3_stmt *st = NULL;
+    int rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) return rc;
+
+    sqlite3_bind_text(st, 1, key, -1, SQLITE_TRANSIENT);
+    rc = sqlite3_step(st);
+    if (rc == SQLITE_ROW) {
+        if (out_cmd) {
+            const unsigned char *t = sqlite3_column_text(st, 0);
+            *out_cmd = t ? strdup((const char*)t) : NULL;
+        }
+        if (out_req_fp) {
+            const unsigned char *t = sqlite3_column_text(st, 1);
+            *out_req_fp = t ? strdup((const char*)t) : NULL;
+        }
+        if (out_response_json) {
+            const unsigned char *t = sqlite3_column_text(st, 2);
+            *out_response_json = t ? strdup((const char*)t) : NULL;
+        }
+        sqlite3_finalize(st);
+        return SQLITE_OK;
+    }
+    sqlite3_finalize(st);
+    return SQLITE_NOTFOUND;
+}
+
+int db_idemp_store_response(const char *key, const char *response_json)
+{
+    if (!key || !response_json) return SQLITE_MISUSE;
+    sqlite3 *db = db_get_handle();
+    if (!db) return SQLITE_ERROR;
+
+    time_t now = time(NULL);
+    const char *sql =
+        "UPDATE idempotency SET response=?1, updated_at=?2 WHERE key=?3;";
+    sqlite3_stmt *st = NULL;
+    int rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) return rc;
+
+    sqlite3_bind_text(st, 1, response_json, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int64(st, 2, (sqlite3_int64)now);
+    sqlite3_bind_text(st, 3, key, -1, SQLITE_TRANSIENT);
+
+    rc = sqlite3_step(st);
+    sqlite3_finalize(st);
+    return (rc == SQLITE_DONE) ? SQLITE_OK : SQLITE_ERROR;
 }

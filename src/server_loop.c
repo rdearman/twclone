@@ -41,6 +41,36 @@ static _Atomic uint64_t g_conn_seq = 0;
 static _Atomic uint64_t g_msg_seq = 0;
 
 
+/* ------------------------ idempotency helpers  ------------------------ */
+
+
+/* FNV-1a 64-bit */
+static uint64_t fnv1a64(const unsigned char *s, size_t n) {
+    uint64_t h = 1469598103934665603ULL;
+    for (size_t i = 0; i < n; ++i) {
+        h ^= (uint64_t)s[i];
+        h *= 1099511628211ULL;
+    }
+    return h;
+}
+
+static void hex64(uint64_t v, char out[17]) {
+    static const char hexd[] = "0123456789abcdef";
+    for (int i = 15; i >= 0; --i) { out[i] = hexd[v & 0xF]; v >>= 4; }
+    out[16] = '\0';
+}
+
+/* Canonicalize a JSON object (sorted keys, compact) then FNV-1a */
+static void idemp_fingerprint_json(json_t *obj, char out[17]) {
+    char *s = json_dumps(obj, JSON_COMPACT | JSON_SORT_KEYS);
+    if (!s) { strcpy(out, "0"); return; }
+    uint64_t h = fnv1a64((const unsigned char*)s, strlen(s));
+    free(s);
+    hex64(h, out);
+}
+
+
+
 /* ------------------------ socket helpers ------------------------ */
 
 static int
@@ -242,6 +272,31 @@ send_ok_json (int fd, json_t *data /* may be NULL */ )
   json_decref (o);
 }
 
+
+
+/* Build a minimal, stable JSON for fingerprinting (cmd + data subset) */
+static json_t* build_trade_buy_fp_obj(const char *cmd, json_t *jdata) {
+    /* Expect: port_id (int), commodity (str), quantity (int).
+       Ignore meta and unrelated keys. */
+    json_t *fp = json_object();
+    json_object_set_new(fp, "command", json_string(cmd));
+
+    int port_id = 0, qty = 0; const char *commodity = NULL;
+    json_t *jport = json_object_get(jdata, "port_id");
+    json_t *jcomm = json_object_get(jdata, "commodity");
+    json_t *jqty  = json_object_get(jdata, "quantity");
+    if (json_is_integer(jport)) port_id = (int)json_integer_value(jport);
+    if (json_is_integer(jqty))  qty     = (int)json_integer_value(jqty);
+    if (json_is_string(jcomm))  commodity = json_string_value(jcomm);
+
+    json_object_set_new(fp, "port_id", json_integer(port_id));
+    json_object_set_new(fp, "quantity", json_integer(qty));
+    json_object_set_new(fp, "commodity", json_string(commodity ? commodity : ""));
+    return fp; /* caller must json_decref */
+}
+
+
+
 /* ------------------------ message processor (stub dispatcher) ------------------------ */
 /* Single responsibility: receive one parsed JSON object and produce one reply. */
 
@@ -415,43 +470,127 @@ process_message (client_ctx_t *ctx, json_t *root)
       send_enveloped_ok (ctx->fd, root, "sector.info", data);
       json_decref (data);
     }
-  else if (strcmp (c, "trade.buy") == 0)
-    {
-      json_t *jdata = json_object_get (root, "data");
-      if (!json_is_object (jdata))
-	{
-	  send_enveloped_error (ctx->fd, root, 1301,
-				"Missing required field");
-	}
-      else
-	{
-	  json_t *jport = json_object_get (jdata, "port_id");
-	  json_t *jcomm = json_object_get (jdata, "commodity");
-	  json_t *jqty = json_object_get (jdata, "quantity");
-	  const char *commodity =
-	    json_is_string (jcomm) ? json_string_value (jcomm) : NULL;
-	  int port_id =
-	    json_is_integer (jport) ? (int) json_integer_value (jport) : 0;
-	  int qty =
-	    json_is_integer (jqty) ? (int) json_integer_value (jqty) : 0;
+else if (strcmp(c, "trade.buy") == 0) {
+    json_t *jdata = json_object_get(root, "data");
+    if (!json_is_object(jdata)) {
+        send_enveloped_error(ctx->fd, root, 1301, "Missing required field");
+    } else {
+        /* Extract fields */
+        json_t *jport = json_object_get(jdata, "port_id");
+        json_t *jcomm = json_object_get(jdata, "commodity");
+        json_t *jqty  = json_object_get(jdata, "quantity");
+        const char *commodity = json_is_string(jcomm) ? json_string_value(jcomm) : NULL;
+        int port_id = json_is_integer(jport) ? (int)json_integer_value(jport) : 0;
+        int qty     = json_is_integer(jqty)  ? (int)json_integer_value(jqty)  : 0;
 
-	  if (!commodity || port_id <= 0 || qty <= 0)
-	    {
-	      send_enveloped_error (ctx->fd, root, 1301,
-				    "Missing required field");
-	    }
-	  else
-	    {
-	      /* Stub success: your test only checks status == ok */
-	      json_t *data = json_pack ("{s:i, s:s, s:i}",
-					"port_id", port_id,
-					"commodity", commodity,
-					"quantity", qty);
-	      send_enveloped_ok (ctx->fd, root, "trade.accepted", data);
-	      json_decref (data);
-	    }
-	}
+        if (!commodity || port_id <= 0 || qty <= 0) {
+            send_enveloped_error(ctx->fd, root, 1301, "Missing required field");
+            /* no idempotency processing if invalid */
+        } else {
+            /* Pull idempotency key if present */
+            const char *idem_key = NULL;
+            json_t *jmeta = json_object_get(root, "meta");
+            if (json_is_object(jmeta)) {
+                json_t *jk = json_object_get(jmeta, "idempotency_key");
+                if (json_is_string(jk)) idem_key = json_string_value(jk);
+            }
+
+            /* Build fingerprint */
+            char fp[17]; fp[0] = 0;
+            json_t *fpobj = build_trade_buy_fp_obj(c, jdata);
+            idemp_fingerprint_json(fpobj, fp);
+            json_decref(fpobj);
+
+            if (idem_key && *idem_key) {
+                /* Try to begin idempotent op */
+                int rc = db_idemp_try_begin(idem_key, c, fp);
+                if (rc == SQLITE_CONSTRAINT) {
+                    /* Existing key: fetch */
+                    char *ecmd = NULL, *efp = NULL, *erst = NULL;
+                    if (db_idemp_fetch(idem_key, &ecmd, &efp, &erst) == SQLITE_OK) {
+                        int fp_match = (efp && strcmp(efp, fp) == 0);
+                        if (!fp_match) {
+                            /* Key reused with different payload */
+                            send_enveloped_error(ctx->fd, root, 1105, "Duplicate request (idempotency key reused)");
+                        } else if (erst) {
+                            /* Replay stored response exactly */
+                            json_error_t jerr;
+                            json_t *env = json_loads(erst, 0, &jerr);
+                            if (env) {
+                                send_all_json(ctx->fd, env);
+                                json_decref(env);
+                            } else {
+                                /* Corrupt stored response; treat as server error */
+                                send_enveloped_error(ctx->fd, root, 1500, "Idempotency replay error");
+                            }
+                        } else {
+                            /* Record exists but no stored response (in-flight/crash before store).
+                               For now, treat as duplicate; later you could block/wait or retry op safely. */
+                            send_enveloped_error(ctx->fd, root, 1105, "Duplicate request (pending)");
+                        }
+                        free(ecmd); free(efp); free(erst);
+                        /* Done */
+                        goto done_trade_buy;
+                    } else {
+                        /* Couldn’t fetch; treat as server error */
+                        send_enveloped_error(ctx->fd, root, 1500, "Database error");
+                        goto done_trade_buy;
+                    }
+                } else if (rc != SQLITE_OK) {
+                    send_enveloped_error(ctx->fd, root, 1500, "Database error");
+                    goto done_trade_buy;
+                }
+                /* If SQLITE_OK, we “own” this key now and should execute then store. */
+            }
+
+            /* === Perform the actual operation (your existing stub) === */
+            json_t *data = json_pack("{s:i, s:s, s:i}",
+                                     "port_id", port_id,
+                                     "commodity", commodity,
+                                     "quantity", qty);
+
+            /* Build the final envelope so we can persist exactly what we send */
+            json_t *env = json_object();
+            json_object_set_new(env, "id", json_string("srv-trade"));
+            json_object_set(env, "reply_to", json_object_get(root, "id"));
+            char ts[32]; iso8601_utc(ts);
+            json_object_set_new(env, "ts", json_string(ts));
+            json_object_set_new(env, "status", json_string("ok"));
+            json_object_set_new(env, "type", json_string("trade.accepted"));
+            json_object_set_new(env, "data", data);
+            json_object_set_new(env, "error", json_null());
+
+            /* Optional meta: signal replay=false on first-run */
+            json_t *meta = json_object();
+            if (idem_key && *idem_key) {
+                json_object_set_new(meta, "idempotent_replay", json_false());
+                json_object_set_new(meta, "idempotency_key", json_string(idem_key));
+            }
+            if (json_object_size(meta) > 0) json_object_set_new(env, "meta", meta);
+            else json_decref(meta);
+
+            /* If we’re idempotent, store the envelope JSON BEFORE sending */
+            if (idem_key && *idem_key) {
+                char *env_json = json_dumps(env, JSON_COMPACT | JSON_SORT_KEYS);
+                if (!env_json || db_idemp_store_response(idem_key, env_json) != SQLITE_OK) {
+                    if (env_json) free(env_json);
+                    json_decref(env);
+                    send_enveloped_error(ctx->fd, root, 1500, "Database error");
+                    goto done_trade_buy;
+                }
+                free(env_json);
+            }
+
+            /* Send */
+            send_all_json(ctx->fd, env);
+            json_decref(env);
+
+        done_trade_buy:
+            (void)0;
+        }
     }
+}
+
   else if (strcmp (c, "move.warp") == 0)
     {
       json_t *jdata = json_object_get (root, "data");

@@ -51,5 +51,24 @@ int db_session_revoke (const char *token);
 /* Rotate: verify old token, create new one (revoking old). */
 int db_session_refresh (const char *old_token, int ttl_seconds,
 			char token_out[65], int *out_player_id);
+/* Idempotency storage */
+int db_ensure_idempotency_schema(void);
+
+/* Return codes:
+   - SQLITE_OK: created a new placeholder row for key (begin ok)
+   - SQLITE_CONSTRAINT: key already exists (caller should fetch and compare)
+   - other sqlite codes: error
+*/
+int db_idemp_try_begin(const char *key, const char *cmd, const char *req_fp);
+
+/* Fetch existing record; any out param may be NULL.
+   Returns SQLITE_OK if found; SQLITE_NOTFOUND if missing. */
+int db_idemp_fetch(const char *key, char **out_cmd, char **out_req_fp, char **out_response_json);
+
+/* Store final response JSON for a key (after a successful op).
+   Returns SQLITE_OK on success. */
+int db_idemp_store_response(const char *key, const char *response_json);
+
+
 
 #endif /* DATABASE_H */
