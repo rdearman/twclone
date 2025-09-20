@@ -4,7 +4,8 @@
 #include <jansson.h>		/* for json_t */
 #include <sqlite3.h>		/* for sqlite3 */
 
-
+/* Forward declare to avoid including jansson here */
+typedef struct json_t json_t;
 /* Initialise database (creates file if not exists) */
 int db_init ();
 
@@ -24,7 +25,7 @@ int db_delete (const char *table, int id);
 void db_close (void);
 
 extern sqlite3 *db_get_handle (void);
-
+int db_player_info_json(int player_id, json_t **out);
 ////////////////////
 
 extern const char *create_table_sql[];

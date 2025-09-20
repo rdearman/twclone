@@ -129,8 +129,8 @@ am_client_OBJECTS = ../src/globals.$(OBJEXT) ../src/database.$(OBJEXT) \
 client_OBJECTS = $(am_client_OBJECTS)
 client_DEPENDENCIES =
 am_server_OBJECTS = ../src/server_main.$(OBJEXT) \
-	../src/namegen.$(OBJEXT) ../src/server_loop.$(OBJEXT) \
-	../src/server_universe.$(OBJEXT) \
+	../src/server_cmds.$(OBJEXT) ../src/namegen.$(OBJEXT) \
+	../src/server_loop.$(OBJEXT) ../src/server_universe.$(OBJEXT) \
 	../src/server_bigbang.$(OBJEXT) ../src/globals.$(OBJEXT) \
 	../src/database.$(OBJEXT) ../src/server_config.$(OBJEXT) \
 	../src/server_warp_post_processing.$(OBJEXT) \
@@ -164,6 +164,7 @@ am__depfiles_remade = ../src/$(DEPDIR)/client.Po \
 	../src/$(DEPDIR)/common.Po ../src/$(DEPDIR)/database.Po \
 	../src/$(DEPDIR)/globals.Po ../src/$(DEPDIR)/namegen.Po \
 	../src/$(DEPDIR)/parse.Po ../src/$(DEPDIR)/server_bigbang.Po \
+	../src/$(DEPDIR)/server_cmds.Po \
 	../src/$(DEPDIR)/server_config.Po \
 	../src/$(DEPDIR)/server_loop.Po \
 	../src/$(DEPDIR)/server_main.Po \
@@ -307,10 +308,10 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-server_LDADD = -ljansson -lsqlite3 -lpthread
-# bigbang_LDADD  = -ljansson -lsqlite3
-client_LDADD = -ljansson -lsqlite3 -lpthread
-test_bang_LDADD = -lsqlite3 -lpthread
+server_LDADD = -ljansson -lsqlite3 -lpthread -lm
+# bigbang_LDADD  = -ljansson -lsqlite3 -lpthread -lm
+client_LDADD = -ljansson -lsqlite3 -lpthread -lm
+test_bang_LDADD = -ljansson -lsqlite3 -lpthread -lm
 AUTOMAKE_OPTIONS = subdir-objects
 client_SOURCES = \
 	../src/globals.c \
@@ -321,6 +322,7 @@ client_SOURCES = \
 
 server_SOURCES = \
 	../src/server_main.c \
+	../src/server_cmds.c \
 	../src/namegen.c \
 	../src/server_loop.c \
 	../src/server_universe.c \
@@ -438,6 +440,8 @@ client$(EXEEXT): $(client_OBJECTS) $(client_DEPENDENCIES) $(EXTRA_client_DEPENDE
 	$(AM_V_CCLD)$(LINK) $(client_OBJECTS) $(client_LDADD) $(LIBS)
 ../src/server_main.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_cmds.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/namegen.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_loop.$(OBJEXT): ../src/$(am__dirstamp) \
@@ -475,6 +479,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/namegen.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/parse.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_bigbang.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_cmds.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_config.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_loop.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_main.Po@am__quote@ # am--include-marker
@@ -639,6 +644,7 @@ distclean: distclean-am
 	-rm -f ../src/$(DEPDIR)/namegen.Po
 	-rm -f ../src/$(DEPDIR)/parse.Po
 	-rm -f ../src/$(DEPDIR)/server_bigbang.Po
+	-rm -f ../src/$(DEPDIR)/server_cmds.Po
 	-rm -f ../src/$(DEPDIR)/server_config.Po
 	-rm -f ../src/$(DEPDIR)/server_loop.Po
 	-rm -f ../src/$(DEPDIR)/server_main.Po
@@ -697,6 +703,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/$(DEPDIR)/namegen.Po
 	-rm -f ../src/$(DEPDIR)/parse.Po
 	-rm -f ../src/$(DEPDIR)/server_bigbang.Po
+	-rm -f ../src/$(DEPDIR)/server_cmds.Po
 	-rm -f ../src/$(DEPDIR)/server_config.Po
 	-rm -f ../src/$(DEPDIR)/server_loop.Po
 	-rm -f ../src/$(DEPDIR)/server_main.Po

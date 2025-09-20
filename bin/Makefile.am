@@ -19,10 +19,10 @@
 # Alternatively, the GPL can be found at
 # http://www.gnu.org/copyleft/gpl.html
 
-server_LDADD   = -ljansson -lsqlite3 -lpthread
-# bigbang_LDADD  = -ljansson -lsqlite3
-client_LDADD   = -ljansson -lsqlite3 -lpthread
-test_bang_LDADD = -lsqlite3 -lpthread
+server_LDADD   = -ljansson -lsqlite3 -lpthread -lm
+# bigbang_LDADD  = -ljansson -lsqlite3 -lpthread -lm
+client_LDADD   = -ljansson -lsqlite3 -lpthread -lm
+test_bang_LDADD = -ljansson -lsqlite3 -lpthread -lm
 
 AUTOMAKE_OPTIONS = subdir-objects
 
@@ -40,6 +40,7 @@ client_SOURCES = \
 
 server_SOURCES = \
 	../src/server_main.c \
+	../src/server_cmds.c \
 	../src/namegen.c \
 	../src/server_loop.c \
 	../src/server_universe.c \

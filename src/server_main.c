@@ -5,6 +5,7 @@
 #include "database.h"		/* int db_init(void); void db_close(void); */
 #include "universe.h"		/* int universe_init(void); void universe_shutdown(void); */
 #include "server_loop.h"	/* int server_loop(volatile sig_atomic_t *running); */
+#include <sqlite3.h>
 
 int load_config (void);
 
@@ -32,21 +33,21 @@ install_signal_handlers (void)
 int
 main (void)
 {
-  /* load_config(): returns 1 on success, 0 on failure (per your definition) */
-  if (load_config () == 0)
+/* Always open the global DB handle (creates schema/defaults if missing). */
+  if (db_init () != 0)
     {
-      /* Can't read config/db — bootstrap it */
-      if (db_init () != 0)
-	{
-	  fprintf (stderr, "Failed to init DB.\n");
-	  return EXIT_FAILURE;
-	}
-      if (universe_init () != 0)
-	{
-	  fprintf (stderr, "Failed to init universe.\n");
-	  db_close ();
-	  return EXIT_FAILURE;
-	}
+      fprintf (stderr, "Failed to init DB.\n");
+      return EXIT_FAILURE;
+    }
+
+  /* Optional: keep a sanity check/log, but don't gate db_init() on it. */
+  (void) load_config ();
+
+  if (universe_init () != 0)
+    {
+      fprintf (stderr, "Failed to init universe.\n");
+      db_close ();
+      return EXIT_FAILURE;
     }
 
   install_signal_handlers ();
@@ -94,4 +95,3 @@ load_config (void)
   sqlite3_close (db);
   return ok;
 }
-

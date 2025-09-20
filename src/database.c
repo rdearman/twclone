@@ -340,18 +340,47 @@ const char *create_table_sql[] = {
     " AND w1.to_sector   = w2.from_sector\n" "GROUP BY a, b;",
 
 
+  /* --- player_info_v1 view and indexes --- */
+  "CREATE VIEW IF NOT EXISTS player_info_v1 AS\n"
+    "SELECT\n"
+    "  p.id         AS player_id,\n"
+    "  p.name       AS player_name,\n"
+    "  p.number     AS player_number,\n"
+    "  p.sector     AS sector_id,\n"
+    "  sctr.name    AS sector_name,\n"
+    "  p.credits    AS credits,\n"
+    "  p.alignment  AS alignment,\n"
+    "  p.experience AS experience,\n"
+    "  p.ship       AS ship_number,\n"
+    "  sh.id        AS ship_id,\n"
+    "  sh.name      AS ship_name,\n"
+    "  sh.type      AS ship_type_id,\n"
+    "  st.name      AS ship_type_name,\n"
+    "  sh.holds     AS ship_holds,\n"
+    "  sh.fighters  AS ship_fighters,\n"
+    "  (COALESCE(p.credits,0) + COALESCE(sh.fighters,0)*2) AS approx_worth\n"
+    "FROM players p\n"
+    "LEFT JOIN ships      sh   ON sh.number = p.ship\n"
+    "LEFT JOIN shiptypes  st   ON st.id     = sh.type\n"
+  "LEFT JOIN sectors    sctr ON sctr.id   = p.sector;",
 
 //////////////////////////////////////////////////////////////////////
 /// CREATE INDEX
 //////////////////////////////////////////////////////////////////////
 /* ===================== INDEXES ===================== */
 
-  "CREATE INDEX IF NOT EXISTS idx_warps_from ON sector_warps(from_sector);",
-  "CREATE INDEX IF NOT EXISTS idx_warps_to   ON sector_warps(to_sector);",
-  "CREATE INDEX IF NOT EXISTS idx_ports_loc  ON ports(location);",
-  "CREATE INDEX IF NOT EXISTS idx_planets_sector ON planets(sector);",
-  "CREATE INDEX IF NOT EXISTS idx_citadels_planet ON citadels(planet_id);",
-  "CREATE INDEX IF NOT EXISTS ix_warps_from_to ON sector_warps(from_sector, to_sector);",
+"CREATE INDEX IF NOT EXISTS idx_warps_from ON sector_warps(from_sector);",
+    "CREATE INDEX IF NOT EXISTS idx_warps_to   ON sector_warps(to_sector);",
+    "CREATE INDEX IF NOT EXISTS idx_ports_loc  ON ports(location);",
+    "CREATE INDEX IF NOT EXISTS idx_planets_sector ON planets(sector);",
+    "CREATE INDEX IF NOT EXISTS idx_citadels_planet ON citadels(planet_id);",
+    "CREATE INDEX IF NOT EXISTS ix_warps_from_to ON sector_warps(from_sector, to_sector);",
+    "CREATE INDEX IF NOT EXISTS idx_players_name     ON players(name);",
+    "CREATE INDEX IF NOT EXISTS idx_players_sector   ON players(sector);",
+    "CREATE INDEX IF NOT EXISTS idx_players_ship     ON players(ship);",
+    "CREATE INDEX IF NOT EXISTS idx_ships_number     ON ships(number);",
+    "CREATE INDEX IF NOT EXISTS idx_ships_id         ON ships(id);",
+    "CREATE INDEX IF NOT EXISTS idx_sectors_id       ON sectors(id);",
 
 };
 
@@ -818,4 +847,72 @@ db_delete (const char *table, int id)
   /* TODO: Prepare DELETE ... WHERE id=? */
   fprintf (stderr, "db_delete(%s, %d) called (not implemented)\n", table, id);
   return 0;
+}
+
+/* Helper: safe text access (returns "" if NULL) */
+static const char *col_text_or_empty(sqlite3_stmt *st, int col) {
+    const unsigned char *t = sqlite3_column_text(st, col);
+    return t ? (const char *)t : "";
+}
+
+/* Returns:
+ *   SQLITE_OK        -> *out is a JSON object with player info
+ *   SQLITE_NOTFOUND  -> no such player_id (out == NULL)
+ *   other sqlite code -> error (out == NULL)
+ */
+int db_player_info_json(int player_id, json_t **out)
+{
+    if (!out) return SQLITE_MISUSE;
+    *out = NULL;
+
+    sqlite3 *db = db_get_handle();
+    if (!db) return SQLITE_ERROR;
+
+    /* Must match the columns in your player_info_v1 view */
+    static const char *SQL =
+        "SELECT player_id, player_name, player_number, "
+        "       sector_id, sector_name, credits, alignment, experience, "
+        "       ship_number, ship_id, ship_name, ship_type_id, ship_type_name, "
+        "       ship_holds, ship_fighters, approx_worth "
+        "FROM player_info_v1 WHERE player_id=?1;";
+
+    sqlite3_stmt *st = NULL;
+    int rc = sqlite3_prepare_v2(db, SQL, -1, &st, NULL);
+    if (rc != SQLITE_OK) return rc;
+
+    sqlite3_bind_int(st, 1, player_id);
+
+    rc = sqlite3_step(st);
+    if (rc == SQLITE_ROW) {
+        json_t *j = json_pack(
+            "{s:i, s:s, s:i, s:i, s:s, s:i, s:i, s:i, s:i, s:i, s:s, s:i, s:s, s:i, s:i, s:i}",
+            "player_id",     sqlite3_column_int(st, 0),
+            "player_name",   col_text_or_empty(st, 1),
+            "player_number", sqlite3_column_int(st, 2),
+
+            "sector_id",     sqlite3_column_int(st, 3),
+            "sector_name",   col_text_or_empty(st, 4),
+
+            "credits",       sqlite3_column_int(st, 5),
+            "alignment",     sqlite3_column_int(st, 6),
+            "experience",    sqlite3_column_int(st, 7),
+
+            "ship_number",   sqlite3_column_int(st, 8),
+            "ship_id",       sqlite3_column_int(st, 9),
+            "ship_name",     col_text_or_empty(st, 10),
+            "ship_type_id",  sqlite3_column_int(st, 11),
+            "ship_type_name",col_text_or_empty(st, 12),
+
+            "ship_holds",    sqlite3_column_int(st, 13),
+            "ship_fighters", sqlite3_column_int(st, 14),
+
+            "approx_worth",  sqlite3_column_int(st, 15)
+        );
+        sqlite3_finalize(st);
+        *out = j;
+        return SQLITE_OK;
+    }
+
+    sqlite3_finalize(st);
+    return (rc == SQLITE_DONE) ? SQLITE_NOTFOUND : rc;
 }
