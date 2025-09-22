@@ -26,5 +26,6 @@ int create_ports (void);
 int create_ferringhi (void);
 int create_planets (void);
 extern int create_complex_warps (sqlite3 * db, int numSectors);
-
+// static int create_ports (sqlite3 * db, const char *path_to_db, int num_ports);
+  
 #endif /* SERVER_BIGBANG_H */

@@ -25,4 +25,8 @@
 #define ERR_DB                 1500
 #define ERR_SERVICE_UNAVAILABLE 1102
 
+/* Other */
+#define ERR_NO_MEM              1501
+#define ERR_BAD_STATE 	 	1502	
+#define ERR_DATABASE		1503
 #endif

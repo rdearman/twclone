@@ -146,17 +146,17 @@ def print_help() -> None:
     print("  me                   Show my player info")
     print("  ship                 Show my ship info")
     print("  online               List online players")
-    print("  buy <port> <com> <q> Trade: buy (ore|organics|equipment)")
+    print("  port_info            Show details and prices of the port in this sector")
+    print("  buy <com> <q>        Trade: buy (ore|organics|equipment)")
     print("  ibuy <key> <port> <com> <q>  Buy with idempotency key")
     print("  force_move <id>      Warp without adjacency check (expect refused)")
     print("  register <user> <pass>  Create new account")
     print("  refresh              Refresh auth session")
-    print("  sync              Refresh current sector from server")    
+    print("  sync                 Refresh current sector from server")
     print("  logout               Logout")
     print("  disconnect           Disconnect from server")
 
-
-def show_extras(desc_json):
+def show_extras(desc_json: Dict[str, Any]):
     node = (desc_json or {}).get("data", {})
 
     # Ports
@@ -224,12 +224,27 @@ def show_extras(desc_json):
     else:
         print("Beacon: none")
 
-
+    # Ships
+    ships = node.get("ships") or []
+    if ships:
+        print("Ships here:")
+        for ship in ships:
+            if isinstance(ship, dict):
+                ship_name = ship.get("ship_name", "Unknown Ship")
+                ship_type = ship.get("ship_type", "Unknown Type")
+                owner = ship.get("owner", "Unknown Owner")
+                print(f"  - {ship_name} ({ship_type}), owner: {owner}")
+    else:
+        print("Ships here: none")
     
-# ---------------- interactive ----------------
+
 
 def describe_sector(conn: Conn, sector_id: int) -> Dict[str, Any]:
     return conn.rpc("move.describe_sector", {"sector_id": sector_id})
+
+
+# ---------------- interactive ----------------
+
 
 def interactive_loop(conn: Conn, current_sector: int) -> None:
     last_desc: Optional[Dict[str, Any]] = None
@@ -257,13 +272,14 @@ def interactive_loop(conn: Conn, current_sector: int) -> None:
             line = "desc"
 
         parts = line.split()
+        if not parts:
+            continue
         cmd = parts[0].lower()
 
         # NEW: typing just a number means "move <number>"
         if len(parts) == 1 and parts[0].isdigit():
             parts = ["move", parts[0]]
             cmd = "move"
-
 
         if cmd in ("q", "quit", "exit"):
             print("Goodbye.")
@@ -363,12 +379,33 @@ def interactive_loop(conn: Conn, current_sector: int) -> None:
             print(f"\nArrived sector {current_sector}{' — ' + name if name else ''}.")
             print(f"Adjacent sectors: {', '.join(map(str, warps)) if warps else '(none)'}")
             show_extras(last_desc)
+        
+        # New command to get port info automatically
+        elif cmd == "port_info":
+            if len(parts) > 1:
+                print("Usage: port_info (no arguments)")
+                continue
+            
+            port_id = None
+            if last_desc:
+                ports = get_data(last_desc).get("ports", [])
+                if ports:
+                    # Use the ID of the first port found
+                    port_id = ports[0].get("id")
+            
+            if port_id is None:
+                print("No port found in the current sector. Cannot get port info.")
+                continue
+
+            r = conn.rpc("trade.port_info", {"port_id": port_id})
+            print(json.dumps(r, ensure_ascii=False, indent=2))
 
         # -------- extra commands matching unit-tests --------
-
+        
         elif cmd == "cap":
-            print(json.dumps(conn.rpc("system.hello", {}), ensure_ascii=False, indent=2))
-
+            r = conn.rpc("system.hello", {})
+            print(json.dumps(r, ensure_ascii=False, indent=2))
+            
         elif cmd == "capspam":
             n = int(parts[1]) if len(parts) > 1 else 3
             for i in range(n):
@@ -383,10 +420,12 @@ def interactive_loop(conn: Conn, current_sector: int) -> None:
             print(json.dumps(r, ensure_ascii=False, indent=2))
 
         elif cmd == "me":
-            print(json.dumps(conn.rpc("player.my_info", {}), ensure_ascii=False, indent=2))
+            r = conn.rpc("player.my_info", {})
+            print(json.dumps(r, ensure_ascii=False, indent=2))
 
         elif cmd == "ship":
-            print(json.dumps(conn.rpc("ship.info", {}), ensure_ascii=False, indent=2))
+            r = conn.rpc("ship.info", {})
+            print(json.dumps(r, ensure_ascii=False, indent=2))
 
         elif cmd == "online":
             r = conn.rpc("player.list_online", {})
@@ -397,15 +436,30 @@ def interactive_loop(conn: Conn, current_sector: int) -> None:
                 print("Online:", ", ".join(n for n in names if isinstance(n, str)))
 
         elif cmd == "buy":
-            if len(parts) != 4:
-                print("Usage: buy <port_id> <commodity> <qty>")
+            # Check for exactly 3 parts: 'buy', 'commodity', 'qty'
+            if len(parts) != 3:
+                print("Usage: buy <commodity> <qty>")
                 continue
+            
+            # Extract port_id from last describe
+            port_id = None
+            if last_desc:
+                ports = get_data(last_desc).get("ports", [])
+                if ports:
+                    # Get the ID of the first port found
+                    port_id = ports[0].get("id")
+
+            if port_id is None:
+                print("No port found in the current sector. Cannot buy.")
+                continue
+
             try:
-                port_id = int(parts[1]); qty = int(parts[3])
+                commodity = parts[1]
+                qty = int(parts[2])
             except ValueError:
-                print("port_id and qty must be integers")
+                print("qty must be an integer")
                 continue
-            commodity = parts[2]
+
             r = conn.rpc("trade.buy", {"port_id": port_id, "commodity": commodity, "quantity": qty})
             print(json.dumps(r, ensure_ascii=False, indent=2))
 
@@ -445,17 +499,22 @@ def interactive_loop(conn: Conn, current_sector: int) -> None:
             print(json.dumps(r, ensure_ascii=False, indent=2))
 
         elif cmd == "refresh":
-            print(json.dumps(conn.rpc("auth.refresh", {}), ensure_ascii=False, indent=2))
+            r = conn.rpc("auth.refresh", {})
+            print(json.dumps(r, ensure_ascii=False, indent=2))
 
         elif cmd == "logout":
-            print(json.dumps(conn.rpc("auth.logout", {}), ensure_ascii=False, indent=2))
+            r = conn.rpc("auth.logout", {})
+            print(json.dumps(r, ensure_ascii=False, indent=2))
 
         elif cmd == "disconnect":
-            print(json.dumps(conn.rpc("system.disconnect", {}), ensure_ascii=False, indent=2))
+            r = conn.rpc("system.disconnect", {})
+            print(json.dumps(r, ensure_ascii=False, indent=2))
             return
 
         else:
             print("Unknown command. Type 'help'.")
+
+
 
 # ---------------- main ----------------
 
@@ -464,10 +523,12 @@ def main() -> int:
     ap.add_argument("--host", default=HOST)
     ap.add_argument("--port", type=int, default=PORT)
     ap.add_argument("--debug", action="store_true", help="print raw send/recv lines")
+    ap.add_argument("--user", help="Login user name")
+    ap.add_argument("--passwd", help="Login password")
     args = ap.parse_args()
 
-    user = input("Username: ").strip()
-    passwd = getpass.getpass("Password: ")
+    user = args.user or input("Username: ").strip()
+    passwd = args.passwd or getpass.getpass("Password: ")
 
     print_banner(args.host, args.port)
 
@@ -511,3 +572,4 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\nInterrupted.")
         sys.exit(130)
+        

@@ -14,6 +14,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <jansson.h>		/* -ljansson */
+#include <stdbool.h>
 #include "server_cmds.h"
 #include <sqlite3.h>
 #include "database.h"
@@ -64,6 +65,8 @@ int db_beacons_at_sector_json (int sector_id, json_t ** out_array);
 int db_planets_at_sector_json (int sector_id, json_t ** out_array);
 int db_player_set_sector (int player_id, int sector_id);
 int db_player_get_sector (int player_id, int *out_sector);
+static void handle_sector_info (int fd, json_t *root, int sector_id, int player_id);
+
 
 /* Provided elsewhere; needed here for correct prototype */
 // void send_enveloped_error (int fd, json_t *root, int code, const char *msg);
@@ -71,6 +74,9 @@ int db_player_get_sector (int player_id, int *out_sector);
 /* ----------------------------- */
 /* Helpers for session endpoints */
 /* ----------------------------- */
+
+
+
 static json_t *
 make_session_hello_payload (int is_authed, int player_id, int sector_id)
 {
@@ -535,7 +541,7 @@ attach_rate_limit_meta (json_t *env, client_ctx_t *ctx)
 
 
 
-/* Build a full sector snapshot for sector.info */
+/* /\* Build a full sector snapshot for sector.info *\/ */
 static json_t *
 build_sector_info_json (int sector_id)
 {
@@ -574,14 +580,14 @@ build_sector_info_json (int sector_id)
       json_object_set_new (root, "adjacent_count", json_integer (0));
     }
 
-  /* Ports */
+/* Ports */
   json_t *ports = NULL;
   if (db_ports_at_sector_json (sector_id, &ports) == SQLITE_OK && ports)
     {
       json_object_set_new (root, "ports", ports);
       json_object_set_new (root, "has_port",
-			   json_array_size (ports) >
-			   0 ? json_true () : json_false ());
+                           json_array_size (ports) >
+                           0 ? json_true () : json_false ());
     }
   else
     {
@@ -595,7 +601,7 @@ build_sector_info_json (int sector_id)
     {
       json_object_set_new (root, "players", players);
       json_object_set_new (root, "players_count",
-			   json_integer ((int) json_array_size (players)));
+                           json_integer ((int) json_array_size (players)));
     }
   else
     {
@@ -603,18 +609,26 @@ build_sector_info_json (int sector_id)
       json_object_set_new (root, "players_count", json_integer (0));
     }
 
-  /* ---- PLACE THESE NEW SECTIONS HERE ---- */
+  /* Beacons (always include array) */
+  json_t *beacons = NULL;
+  if (db_beacons_at_sector_json (sector_id, &beacons) == SQLITE_OK && beacons)
+    {
+      json_object_set_new (root, "beacons", beacons);
+      json_object_set_new (root, "beacons_count", json_integer ((int) json_array_size (beacons)));
+    }
+  else
+    {
+      json_object_set_new (root, "beacons", json_array ());
+      json_object_set_new (root, "beacons_count", json_integer (0));
+    }
 
   /* Planets */
   json_t *planets = NULL;
   if (db_planets_at_sector_json (sector_id, &planets) == SQLITE_OK && planets)
     {
-      json_object_set_new (root, "planets", planets);	/* takes ownership */
-      json_object_set_new (root, "has_planet",
-			   json_array_size (planets) >
-			   0 ? json_true () : json_false ());
-      json_object_set_new (root, "planets_count",
-			   json_integer ((int) json_array_size (planets)));
+      json_object_set_new (root, "planets", planets); /* takes ownership */
+      json_object_set_new (root, "has_planet", json_array_size (planets) > 0 ? json_true () : json_false ());
+      json_object_set_new (root, "planets_count", json_integer ((int) json_array_size (planets)));
     }
   else
     {
@@ -623,8 +637,10 @@ build_sector_info_json (int sector_id)
       json_object_set_new (root, "planets_count", json_integer (0));
     }
 
+
+  
   /* Beacons (always include array) */
-  json_t *beacons = NULL;
+  // json_t *beacons = NULL;
   if (db_beacons_at_sector_json (sector_id, &beacons) == SQLITE_OK && beacons)
     {
       json_object_set_new (root, "beacons", beacons);
@@ -739,7 +755,6 @@ process_message (client_ctx_t *ctx, json_t *root)
       json_decref (payload);
       return;
     }
-
 
   if (strcmp (c, "login") == 0 || strcmp (c, "auth.login") == 0)
     {
@@ -865,41 +880,18 @@ process_message (client_ctx_t *ctx, json_t *root)
 	  json_decref (pinfo);
 	}
     }
-  else if (strcmp (c, "move.describe_sector") == 0)
-    {
-      /* Determine sector_id from ctx or request data */
-      int sector_id = ctx->sector_id > 0 ? ctx->sector_id : 0;
-      json_t *jdata = json_object_get (root, "data");
-      json_t *jsec =
-	json_is_object (jdata) ? json_object_get (jdata, "sector_id") : NULL;
-      if (json_is_integer (jsec))
-	sector_id = (int) json_integer_value (jsec);
-      if (sector_id <= 0)
-	sector_id = 1;		/* safe default */
+else if (strcmp (c, "move.describe_sector") == 0 || strcmp (c, "sector.info") == 0)
+{
+    int sector_id = ctx->sector_id > 0 ? ctx->sector_id : 0;
+    json_t *jdata = json_object_get (root, "data");
+    json_t *jsec = json_is_object (jdata) ? json_object_get (jdata, "sector_id") : NULL;
+    if (json_is_integer (jsec))
+        sector_id = (int) json_integer_value (jsec);
+    if (sector_id <= 0)
+        sector_id = 1;
 
-      json_t *payload = build_sector_info_json (sector_id);
-      if (!payload)
-	{
-	  send_enveloped_error (ctx->fd, root, 1500,
-				"Out of memory building sector info");
-	}
-      else
-	{
-	  /* Inline sector beacon (single string in sectors.beacon) */
-	  char *btxt = NULL;
-	  if (db_sector_beacon_text(sector_id, &btxt) == SQLITE_OK && btxt && *btxt) {
-	    json_object_set_new(payload, "beacon", json_string(btxt));     // <-- payload, not root
-	    json_object_set_new(payload, "has_beacon", json_true());       // <-- payload, not root
-	  } else {
-	    json_object_set_new(payload, "beacon", json_null());           // <-- payload, not root
-	    json_object_set_new(payload, "has_beacon", json_false());      // <-- payload, not root
-	  }
-	  free(btxt);
-
-	  send_enveloped_ok(ctx->fd, root, "sector.info", payload);
-	  json_decref(payload);
-	}
-    }
+    handle_sector_info (ctx->fd, root, sector_id, ctx->player_id);
+}
   else if (strcmp (c, "trade.buy") == 0)
     {
       json_t *jdata = json_object_get (root, "data");
@@ -1126,7 +1118,52 @@ process_message (client_ctx_t *ctx, json_t *root)
 	  json_decref (data);
 	}
     }
+else if (strcmp(json_string_value(cmd), "port_info") == 0) {
+    json_t *data_in = json_object_get(root, "data");
+    int port_id = -1;
 
+    // We can allow either `{"port_id":...}` or just assume the first port
+    // in the sector, as the client will do.
+    if (data_in) {
+      json_t *j_pid = json_object_get(data_in, "port_id");
+      if (json_is_integer(j_pid)) {
+	port_id = json_integer_value(j_pid);
+      }
+    }
+
+    if (port_id == -1) {
+      // Fallback to finding the port in the current sector
+      json_t *ports_at_sector = NULL;
+      db_ports_at_sector_json(ctx->sector_id, &ports_at_sector);
+      if (ports_at_sector && json_array_size(ports_at_sector) > 0) {
+	json_t *first_port = json_array_get(ports_at_sector, 0);
+	json_t *first_port_id_json = json_object_get(first_port, "id");
+	if (first_port_id_json) {
+	  port_id = json_integer_value(first_port_id_json);
+	}
+      }
+      json_decref(ports_at_sector);
+    }
+
+    if (port_id == -1) {
+      // Still no port found.
+      send_enveloped_refused(ctx->fd, root, ERR_BAD_STATE, "No port found in this sector.", NULL);
+      goto trade_port_info_done;
+    }
+
+    json_t *port_info = NULL;
+    int rc = db_port_info_json(port_id, &port_info);
+    if (rc != SQLITE_OK) {
+      send_enveloped_error(ctx->fd, root, ERR_DATABASE, "Could not fetch port info.");
+      goto trade_port_info_done;
+    }
+
+    send_enveloped_ok(ctx->fd, root, "trade.port_info", port_info);
+    json_decref(port_info);
+
+  trade_port_info_done:
+    json_decref(root);
+  }
 
   else if (strcmp (c, "ship.info") == 0)
     {
@@ -1596,4 +1633,43 @@ server_loop (volatile sig_atomic_t *running)
   close (listen_fd);
   fprintf (stderr, "Server loop exiting...\n");
   return 0;
+}
+
+
+static void handle_sector_info (int fd, json_t *root, int sector_id, int player_id)
+{
+    json_t *payload = build_sector_info_json (sector_id);
+    if (!payload)
+    {
+        send_enveloped_error (fd, root, 1500,
+                              "Out of memory building sector info");
+        return;
+    }
+
+    // Add beacon info
+    char *btxt = NULL;
+    if (db_sector_beacon_text (sector_id, &btxt) == SQLITE_OK && btxt && *btxt)
+    {
+        json_object_set_new (payload, "beacon", json_string (btxt));
+        json_object_set_new (payload, "has_beacon", json_true ());
+    }
+    else
+    {
+        json_object_set_new (payload, "beacon", json_null ());
+        json_object_set_new (payload, "has_beacon", json_false ());
+    }
+    free (btxt);
+
+    // Add ships info
+    json_t *ships = NULL;
+    int rc = db_ships_at_sector_json (player_id, sector_id, &ships);
+    if (rc == SQLITE_OK)
+    {
+        json_object_set_new (payload, "ships", ships ? ships : json_array ());
+        json_object_set_new (payload, "ships_count",
+                             json_integer (json_array_size (ships)));
+    }
+
+    send_enveloped_ok (fd, root, "sector.info", payload);
+    json_decref (payload);
 }

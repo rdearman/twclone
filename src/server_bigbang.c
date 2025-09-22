@@ -43,7 +43,7 @@ static int get_out_degree (sqlite3 * db, int sector);
 static int insert_warp_unique (sqlite3 * db, int from, int to);
 static int create_random_warps (sqlite3 * db, int numSectors, int maxWarps);
 int create_imperial (void);	// Declared here for the compiler
-
+static int ensure_all_sectors_have_exits (sqlite3 * db);
 
 // A simple struct to hold warp data in memory
 typedef struct
@@ -56,20 +56,22 @@ typedef struct
  * Small helpers / guards
  * ---------------------------------------------------- */
 
-static void prune_tunnel_edges(sqlite3 *db) {
-    /* Remove edges from tunnels to non-tunnel nodes */
-    sqlite3_exec(db,
-        "DELETE FROM sector_warps "
-        "WHERE from_sector IN (SELECT used FROM used_sectors) "
-        "  AND to_sector   NOT IN (SELECT used FROM used_sectors);",
-        NULL,NULL,NULL);
+static void
+prune_tunnel_edges (sqlite3 *db)
+{
+  /* Remove edges from tunnels to non-tunnel nodes */
+  sqlite3_exec (db,
+		"DELETE FROM sector_warps "
+		"WHERE from_sector IN (SELECT used FROM used_sectors) "
+		"  AND to_sector   NOT IN (SELECT used FROM used_sectors);",
+		NULL, NULL, NULL);
 
-    /* And the reverse direction */
-    sqlite3_exec(db,
-        "DELETE FROM sector_warps "
-        "WHERE to_sector   IN (SELECT used FROM used_sectors) "
-        "  AND from_sector NOT IN (SELECT used FROM used_sectors);",
-        NULL,NULL,NULL);
+  /* And the reverse direction */
+  sqlite3_exec (db,
+		"DELETE FROM sector_warps "
+		"WHERE to_sector   IN (SELECT used FROM used_sectors) "
+		"  AND from_sector NOT IN (SELECT used FROM used_sectors);",
+		NULL, NULL, NULL);
 }
 
 
@@ -374,7 +376,7 @@ bigbang_create_tunnels (void)
 
       //fprintf (stderr, "BIGBANG: Proposed tunnel: %d", nodes[0]);
       /* for (int i = 1; i < path_len; i++) */
-      /* 	fprintf (stderr, "->%d", nodes[i]); */
+      /*        fprintf (stderr, "->%d", nodes[i]); */
       /* fprintf (stderr, "\n"); */
 
       sqlite3_exec (db, "SAVEPOINT tunnel;", NULL, NULL, NULL);
@@ -430,7 +432,7 @@ bigbang_create_tunnels (void)
       sqlite3_exec (db, "RELEASE SAVEPOINT tunnel;", NULL, NULL, NULL);
       //fprintf (stderr, "BIGBANG: Created tunnel: %d", nodes[0]);
       /* for (int i = 1; i < path_len; i++) */
-      /* 	fprintf (stderr, "->%d", nodes[i]); */
+      /*        fprintf (stderr, "->%d", nodes[i]); */
       /* fprintf (stderr, "\n"); */
 
       for (int i = 0; i < path_len; i++)
@@ -474,79 +476,88 @@ create_sectors (void)
 
   if (cfg->default_nodes <= 0)
     {
-      fprintf (stderr, "BIGBANG: num_sectors is invalid: %d\n", cfg->default_nodes);
-      free(cfg);
+      fprintf (stderr, "BIGBANG: num_sectors is invalid: %d\n",
+	       cfg->default_nodes);
+      free (cfg);
       return -1;
     }
 
   printf ("BIGBANG: Creating %d sectors...\n", cfg->default_nodes);
   char *errmsg = NULL;
-  
+
   // Begin transaction for performance
   int rc = sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg);
   if (rc != SQLITE_OK)
     {
       fprintf (stderr, "BIGBANG: BEGIN failed: %s\n", errmsg);
       if (errmsg)
-        sqlite3_free (errmsg);
-      free(cfg);
+	sqlite3_free (errmsg);
+      free (cfg);
       return -1;
     }
 
   // Use a prepared statement to prevent SQL injection
-  const char *sql_insert = "INSERT INTO sectors (name, beacon, nebulae) VALUES (?, ?, ?);";
+  const char *sql_insert =
+    "INSERT INTO sectors (name, beacon, nebulae) VALUES (?, ?, ?);";
   sqlite3_stmt *stmt = NULL;
-  rc = sqlite3_prepare_v2(db, sql_insert, -1, &stmt, NULL);
-  if (rc != SQLITE_OK) {
-      fprintf(stderr, "BIGBANG: Failed to prepare statement: %s\n", sqlite3_errmsg(db));
-      sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
-      free(cfg);
+  rc = sqlite3_prepare_v2 (db, sql_insert, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      fprintf (stderr, "BIGBANG: Failed to prepare statement: %s\n",
+	       sqlite3_errmsg (db));
+      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      free (cfg);
       return -1;
-  }
-  
+    }
+
   for (int i = 1; i <= cfg->default_nodes; i++)
     {
       char name[128];
       char neb[128];
-      
+
       consellationName (name);
       consellationName (neb);
-      
-      sqlite3_bind_text(stmt, 1, name, -1, SQLITE_STATIC);
-      
+
+      sqlite3_bind_text (stmt, 1, name, -1, SQLITE_STATIC);
+
       // The old logic for adding "System" as a beacon
-      if ((i % 64) == 0) {
-          sqlite3_bind_text(stmt, 2, "System", -1, SQLITE_STATIC);
-      } else {
-          sqlite3_bind_text(stmt, 2, "", -1, SQLITE_STATIC);
-      }
-      
-      sqlite3_bind_text(stmt, 3, neb, -1, SQLITE_STATIC);
-      
-      rc = sqlite3_step(stmt);
-      if (rc != SQLITE_DONE) {
-          fprintf(stderr, "BIGBANG: Failed to insert sector %d: %s\n", i, sqlite3_errmsg(db));
-          sqlite3_finalize(stmt);
-          sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
-          free(cfg);
-          return -1;
-      }
-      
-      sqlite3_reset(stmt);
+      if ((i % 64) == 0)
+	{
+	  sqlite3_bind_text (stmt, 2, "System", -1, SQLITE_STATIC);
+	}
+      else
+	{
+	  sqlite3_bind_text (stmt, 2, "", -1, SQLITE_STATIC);
+	}
+
+      sqlite3_bind_text (stmt, 3, neb, -1, SQLITE_STATIC);
+
+      rc = sqlite3_step (stmt);
+      if (rc != SQLITE_DONE)
+	{
+	  fprintf (stderr, "BIGBANG: Failed to insert sector %d: %s\n", i,
+		   sqlite3_errmsg (db));
+	  sqlite3_finalize (stmt);
+	  sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+	  free (cfg);
+	  return -1;
+	}
+
+      sqlite3_reset (stmt);
     }
-  
-  sqlite3_finalize(stmt);
+
+  sqlite3_finalize (stmt);
 
   rc = sqlite3_exec (db, "COMMIT;", NULL, NULL, &errmsg);
   if (rc != SQLITE_OK)
     {
       fprintf (stderr, "BIGBANG: COMMIT failed: %s\n", errmsg);
       if (errmsg)
-        sqlite3_free (errmsg);
-      free(cfg);
+	sqlite3_free (errmsg);
+      free (cfg);
       return -1;
     }
-  
+
   free (cfg);
   return 0;
 }
@@ -665,8 +676,17 @@ bigbang (void)
       return -1;
     }
 
-  prune_tunnel_edges(db);
+  prune_tunnel_edges (db);
 
+  printf ("BIGBANG: Ensuring all sectors have exits...\n");
+  fflush(stdout);
+  int rc = 0;
+  
+  rc = ensure_all_sectors_have_exits(db);
+  if (rc != SQLITE_OK) {
+    fprintf(stderr, "error ensuring all sectors have exits: %s\n", sqlite3_errmsg(db));
+    return rc;
+  }
   
   fprintf (stderr, "BIGBANG: Creating ports...\n");
   if (create_ports () != 0)
@@ -1064,6 +1084,12 @@ get_out_degree (sqlite3 *db, int sector)
 
 
 int
+create_planets (void)
+{
+  return 0;
+}
+
+int
 create_ports (void)
 {
   sqlite3 *db = db_get_handle ();
@@ -1233,6 +1259,7 @@ create_ports (void)
 	   stardock_sector, maxPorts - 1);
   return 0;
 }
+
 
 
 int
@@ -1409,13 +1436,7 @@ create_ferringhi (void)
   return 0;
 }
 
-int
-create_planets (void)
-{
-  // The provided planet creation logic is incomplete and has a simple error.
-  // Earth is already created by the schema, so this function is intentionally empty.
-  return 0;
-}
+
 
 int
 create_imperial (void)
@@ -1479,34 +1500,8 @@ create_imperial (void)
   return 0;
 }
 
-/* ---------- small helpers ---------- */
+/* /\* ---------- small helpers ---------- *\/ */
 
-static int
-has_column (sqlite3 *db, const char *table, const char *column)
-{
-  int rc;
-  sqlite3_stmt *st = NULL;
-  char sql[256];
-  snprintf (sql, sizeof (sql), "PRAGMA table_info(%s);", table);
-  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
-  if (rc != SQLITE_OK)
-    return 0;
-
-  int found = 0;
-  while ((rc = sqlite3_step (st)) == SQLITE_ROW)
-    {
-      const unsigned char *name = sqlite3_column_text (st, 1);	/* col 1 = name */
-      if (name && strcasecmp ((const char *) name, column) == 0)
-	{
-	  found = 1;
-	  break;
-	}
-    }
-  sqlite3_finalize (st);
-  return found;
-}
-
-/* Try to prepare one of a few alternatives; return first that compiles */
 static int
 prepare_first_ok (sqlite3 *db, sqlite3_stmt **stmt,
 		  const char *const *candidates)
@@ -1550,252 +1545,61 @@ rand_incl (int lo, int hi)
   return lo + (int) (rand () % (hi - lo + 1));
 }
 
-/* ---------- main function ---------- */
-
-int
-create_derelicts (void)
+static int create_imperial_ship(sqlite3 *db, int starting_sector_id)
 {
-  sqlite3 *db = db_get_handle ();
-  if (!db)
-    {
-      fprintf (stderr, "[create_derelicts] no DB handle\n");
-      return 1;
+    const char *sql_select = "SELECT id FROM sectors WHERE id >= ? ORDER BY RANDOM() LIMIT 1;";
+    const char *sql_update_ship_sector = "UPDATE ships SET sector_id = ? WHERE ship_name = 'Imperial Starship';";
+    
+    sqlite3_stmt *stmt_select = NULL;
+    sqlite3_stmt *stmt_update = NULL;
+    int rc;
+
+    rc = sqlite3_prepare_v2(db, sql_select, -1, &stmt_select, NULL);
+    if (rc != SQLITE_OK) return rc;
+
+    rc = sqlite3_prepare_v2(db, sql_update_ship_sector, -1, &stmt_update, NULL);
+    if (rc != SQLITE_OK) {
+        sqlite3_finalize(stmt_select);
+        return rc;
     }
 
-  int rc = 0;
-  char *errmsg = NULL;
+    int imperial_sector_id = 0;
+    do {
+        // Find a random sector that is NOT in Fedspace (sectors 1-10)
+        sqlite3_bind_int(stmt_select, 1, 11);
+        rc = sqlite3_step(stmt_select);
+        if (rc == SQLITE_ROW) {
+            imperial_sector_id = sqlite3_column_int(stmt_select, 0);
+        }
+        sqlite3_reset(stmt_select);
+    } while (imperial_sector_id >= 1 && imperial_sector_id <= 10);
 
-  /* Seed RNG once per process. If you seed elsewhere, you can remove this. */
-  static int seeded = 0;
-  if (!seeded)
-    {
-      srand ((unsigned) time (NULL));
-      seeded = 1;
+    sqlite3_finalize(stmt_select);
+
+    if (imperial_sector_id == 0) {
+        return -1;
     }
 
-  /* Detect column names on ships table */
-  const char *col_type =
-    has_column (db, "ships", "shiptype_id") ? "shiptype_id" : has_column (db,
-									  "ships",
-									  "type_id")
-    ? "type_id" : has_column (db, "ships", "type") ? "type" : "type";
+    sqlite3_exec(db, "BEGIN TRANSACTION;", NULL, NULL, NULL);
 
-  /* sector/location column – your schema has 'location' */
-  const char *col_sector = has_column (db, "ships", "location") ? "location" :
-    has_column (db, "ships", "sector_id") ? "sector_id" :
-    has_column (db, "ships", "sector") ? "sector" : "location";
-
-  /* optional columns (may not exist in your schema) */
-  int have_owner = 0;
-  const char *col_owner = NULL;
-  if (has_column (db, "ships", "owner_id"))
-    {
-      col_owner = "owner_id";
-      have_owner = 1;
-    }
-  else if (has_column (db, "ships", "owner"))
-    {
-      col_owner = "owner";
-      have_owner = 1;
-    }
-  else if (has_column (db, "ships", "player_id"))
-    {
-      col_owner = "player_id";
-      have_owner = 1;
+    sqlite3_bind_int(stmt_update, 1, imperial_sector_id);
+    rc = sqlite3_step(stmt_update);
+    if (rc != SQLITE_DONE) {
+        fprintf(stderr, "SQLite error updating imperial ship sector: %s\n", sqlite3_errmsg(db));
+        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+        sqlite3_finalize(stmt_update);
+        return rc;
     }
 
-  int have_derelict = 0;
-  const char *col_der = NULL;
-  if (has_column (db, "ships", "is_derelict"))
-    {
-      col_der = "is_derelict";
-      have_derelict = 1;
-    }
-  else if (has_column (db, "ships", "derelict"))
-    {
-      col_der = "derelict";
-      have_derelict = 1;
-    }
+    sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL);
 
-  /* Build a flexible INSERT for ships:
-     Always insert (name, type, <sector>), and append owner/derelict if present.
-     We'll bind ?1=name, ?2=type, ?3=sector, and set owner=NULL, derelict=1 as literals. */
-  char insert_sql[512];
-  if (have_owner && have_derelict)
-    {
-      snprintf (insert_sql, sizeof (insert_sql),
-		"INSERT INTO ships (%s, %s, %s, %s, %s) VALUES (?1, ?2, ?3, NULL, 1);",
-		"name", col_type, col_sector, col_owner, col_der);
-    }
-  else if (have_owner)
-    {
-      snprintf (insert_sql, sizeof (insert_sql),
-		"INSERT INTO ships (%s, %s, %s, %s) VALUES (?1, ?2, ?3, NULL);",
-		"name", col_type, col_sector, col_owner);
-    }
-  else if (have_derelict)
-    {
-      snprintf (insert_sql, sizeof (insert_sql),
-		"INSERT INTO ships (%s, %s, %s, %s) VALUES (?1, ?2, ?3, 1);",
-		"name", col_type, col_sector, col_der);
-    }
-  else
-    {
-      /* Minimal insert – your schema allows NULLs for the rest */
-      snprintf (insert_sql, sizeof (insert_sql),
-		"INSERT INTO ships (%s, %s, %s) VALUES (?1, ?2, ?3);",
-		"name", col_type, col_sector);
-    }
+    sqlite3_finalize(stmt_update);
 
-  sqlite3_stmt *ins = NULL;
-  rc = sqlite3_prepare_v2 (db, insert_sql, -1, &ins, NULL);
-  if (rc != SQLITE_OK)
-    {
-      fprintf (stderr, "[create_derelicts] prepare insert failed: %s\n",
-	       sqlite3_errmsg (db));
-      return 1;
-    }
-
-  /* Prepare SELECT of shiptypes (id + type name) with fallbacks */
-  sqlite3_stmt *sel = NULL;
-  const char *const select_candidates[] = {
-    "SELECT id, name FROM shiptypes;",
-    "SELECT id, typeName FROM shiptypes;",
-    "SELECT id, '' AS name FROM shiptypes;",	/* last resort: blank, we'll synthesize name */
-    NULL
-  };
-  rc = prepare_first_ok (db, &sel, select_candidates);
-  if (rc != SQLITE_OK)
-    {
-      fprintf (stderr,
-	       "[create_derelicts] could not prepare shiptypes SELECT.\n");
-      sqlite3_finalize (ins);
-      return 1;
-    }
-
-  /* Transaction for speed/atomicity */
-  rc = sqlite3_exec (db, "BEGIN IMMEDIATE TRANSACTION;", NULL, NULL, &errmsg);
-  if (rc != SQLITE_OK)
-    {
-      fprintf (stderr, "[create_derelicts] begin transaction failed: %s\n",
-	       errmsg ? errmsg : "(unknown)");
-      sqlite3_free (errmsg);
-      sqlite3_finalize (ins);
-      sqlite3_finalize (sel);
-      return 1;
-    }
-
-  /* Keep sectors unique if possible (only ~14–16 inserts, so easy). */
-  int used[501] = { 0 };	/* we only care up to 500; index = sector id. */
-
-  /* Iterate shiptypes */
-  while ((rc = sqlite3_step (sel)) == SQLITE_ROW)
-    {
-      int st_id = sqlite3_column_int (sel, 0);
-      const unsigned char *stype_name_uc = sqlite3_column_text (sel, 1);
-      const char *stype_name =
-	(const char *) (stype_name_uc ? stype_name_uc : "");
-
-      /* Build derelict display name */
-      char dname[128];
-      if (stype_name && stype_name[0] != '\0')
-	{
-	  snprintf (dname, sizeof (dname), "Derelict %s", stype_name);
-	}
-      else
-	{
-	  snprintf (dname, sizeof (dname), "Derelict Type %d", st_id);
-	}
-
-      /* Pick a valid existing sector in [11,500], re-rolling a few times if needed */
-      int sector = 0;
-      int attempts = 0;
-      while (attempts < 32)
-	{
-	  int candidate = rand_incl (11, 500);
-	  if (!used[candidate] && sector_exists (db, candidate))
-	    {
-	      sector = candidate;
-	      break;
-	    }
-	  attempts++;
-	}
-      if (sector == 0)
-	{
-	  /* As a fallback, accept a duplicate sector if needed */
-	  attempts = 0;
-	  while (attempts < 128)
-	    {
-	      int candidate = rand_incl (11, 500);
-	      if (sector_exists (db, candidate))
-		{
-		  sector = candidate;
-		  break;
-		}
-	      attempts++;
-	    }
-	}
-      if (sector == 0)
-	{
-	  fprintf (stderr,
-		   "[create_derelicts] WARNING: could not find an existing sector in [11,500] for shiptype %d; skipping.\n",
-		   st_id);
-	  continue;
-	}
-
-      used[sector] = 1;
-
-      /* Bind and insert */
-      sqlite3_reset (ins);
-      sqlite3_clear_bindings (ins);
-
-      /* (?1 name, ?2 shiptype_id, ?3 sector_id) */
-      sqlite3_bind_text (ins, 1, dname, -1, SQLITE_TRANSIENT);
-      sqlite3_bind_int (ins, 2, st_id);
-      sqlite3_bind_int (ins, 3, sector);
-
-      int irc = sqlite3_step (ins);
-      if (irc != SQLITE_DONE)
-	{
-	  fprintf (stderr,
-		   "[create_derelicts] insert failed for shiptype %d (%s) into sector %d: %s\n",
-		   st_id, dname, sector, sqlite3_errmsg (db));
-	  sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-	  sqlite3_finalize (ins);
-	  sqlite3_finalize (sel);
-	  return 1;
-	}
-      /* loop continues */
-    }
-
-  if (rc != SQLITE_DONE)
-    {
-      fprintf (stderr,
-	       "[create_derelicts] shiptypes SELECT ended unexpectedly: %s\n",
-	       sqlite3_errmsg (db));
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      sqlite3_finalize (ins);
-      sqlite3_finalize (sel);
-      return 1;
-    }
-
-  /* Commit */
-  rc = sqlite3_exec (db, "COMMIT;", NULL, NULL, &errmsg);
-  if (rc != SQLITE_OK)
-    {
-      fprintf (stderr, "[create_derelicts] commit failed: %s\n",
-	       errmsg ? errmsg : "(unknown)");
-      sqlite3_free (errmsg);
-      sqlite3_finalize (ins);
-      sqlite3_finalize (sel);
-      return 1;
-    }
-
-  sqlite3_finalize (ins);
-  sqlite3_finalize (sel);
-
-  return 0;
+    printf("BIGBANG: Imperial Starship placed at sector %d.\n", imperial_sector_id);
+    return SQLITE_OK;
 }
+
+
 
 /* Ensure there is at least one exit from Fedspace (2..10) to 11..500.
    If none exists, create one (and optionally the return edge). */
@@ -1862,4 +1666,379 @@ ensure_fedspace_exit (sqlite3 *db, int outer_min, int outer_max,
 
   sqlite3_finalize (ins);
   return (rc == SQLITE_DONE || rc == SQLITE_OK) ? SQLITE_OK : rc;
+}
+
+/* A simple utility to check if a column exists. */
+static bool
+has_column (sqlite3 *db, const char *table, const char *column)
+{
+  char sql[256];
+  snprintf (sql, sizeof (sql), "PRAGMA table_info(%s);", table);
+  sqlite3_stmt *st = NULL;
+  if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
+    {
+      return false;
+    }
+  bool found = false;
+  while (sqlite3_step (st) == SQLITE_ROW)
+    {
+      if (strcmp ((const char *) sqlite3_column_text (st, 1), column) == 0)
+	{
+	  found = true;
+	  break;
+	}
+    }
+  sqlite3_finalize (st);
+  return found;
+}
+
+int
+create_derelicts (void)
+{
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    {
+      fprintf (stderr, "[create_derelicts] no DB handle\n");
+      return 1;
+    }
+
+  int rc = 0;
+  char *errmsg = NULL;
+
+  /* Seed RNG once per process. If you seed elsewhere, you can remove this. */
+  static int seeded = 0;
+  if (!seeded)
+    {
+      srand ((unsigned) time (NULL));
+      seeded = 1;
+    }
+
+  /* Dynamically build the INSERT statement based on existing columns in your schema */
+  char insert_sql[1024];
+  char cols[512] = "";
+  char vals[512] = "";
+
+  // Add the core columns that are always present
+  strncat (cols, "name, type, location, holds, fighters, shields",
+	   sizeof (cols) - strlen (cols) - 1);
+  strncat (vals, "?, ?, ?, ?, ?, ?", sizeof (vals) - strlen (vals) - 1);
+
+  // Dynamic cargo and equipment columns based on your schema
+  if (has_column (db, "ships", "holds_used"))
+    {
+      strncat (cols, ", holds_used", sizeof (cols) - strlen (cols) - 1);
+      strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
+    }
+  if (has_column (db, "ships", "fighters_used"))
+    {
+      strncat (cols, ", fighters_used", sizeof (cols) - strlen (cols) - 1);
+      strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
+    }
+  if (has_column (db, "ships", "organics"))
+    {
+      strncat (cols, ", organics", sizeof (cols) - strlen (cols) - 1);
+      strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
+    }
+  if (has_column (db, "ships", "equipment"))
+    {
+      strncat (cols, ", equipment", sizeof (cols) - strlen (cols) - 1);
+      strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
+    }
+  if (has_column (db, "ships", "ore"))
+    {
+      strncat (cols, ", ore", sizeof (cols) - strlen (cols) - 1);
+      strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
+    }
+  if (has_column (db, "ships", "colonists"))
+    {
+      strncat (cols, ", colonists", sizeof (cols) - strlen (cols) - 1);
+      strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
+    }
+  if (has_column (db, "ships", "mines"))
+    {
+      strncat (cols, ", mines", sizeof (cols) - strlen (cols) - 1);
+      strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
+    }
+  if (has_column (db, "ships", "genesis"))
+    {
+      strncat (cols, ", genesis", sizeof (cols) - strlen (cols) - 1);
+      strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
+    }
+  if (has_column (db, "ships", "photons"))
+    {
+      strncat (cols, ", photons", sizeof (cols) - strlen (cols) - 1);
+      strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
+    }
+
+  // Add columns with a fixed default value
+  strncat (cols, ", number, flags, ported, onplanet",
+	   sizeof (cols) - strlen (cols) - 1);
+  strncat (vals, ", ?, ?, ?, ?", sizeof (vals) - strlen (vals) - 1);
+
+  snprintf (insert_sql, sizeof (insert_sql),
+	    "INSERT INTO ships (%s) VALUES (%s);", cols, vals);
+
+  sqlite3_stmt *ins = NULL;
+  rc = sqlite3_prepare_v2 (db, insert_sql, -1, &ins, NULL);
+  if (rc != SQLITE_OK)
+    {
+      fprintf (stderr, "[create_derelicts] prepare insert failed: %s\n",
+	       sqlite3_errmsg (db));
+      return 1;
+    }
+
+  /* Select statement based on your shiptypes schema */
+  sqlite3_stmt *sel = NULL;
+  const char *select_candidates[] = {
+    "SELECT id, name, maxholds, maxfighters, maxshields FROM shiptypes;",
+    NULL
+  };
+  rc = prepare_first_ok (db, &sel, select_candidates);
+  if (rc != SQLITE_OK)
+    {
+      fprintf (stderr,
+	       "[create_derelicts] could not prepare shiptypes SELECT.\n");
+      sqlite3_finalize (ins);
+      return 1;
+    }
+
+  /* Transaction for speed/atomicity */
+  rc = sqlite3_exec (db, "BEGIN IMMEDIATE TRANSACTION;", NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK)
+    {
+      fprintf (stderr, "[create_derelicts] begin transaction failed: %s\n",
+	       errmsg ? errmsg : "(unknown)");
+      sqlite3_free (errmsg);
+      sqlite3_finalize (ins);
+      sqlite3_finalize (sel);
+      return 1;
+    }
+
+  /* Iterate shiptypes */
+  while ((rc = sqlite3_step (sel)) == SQLITE_ROW)
+    {
+      int st_id = sqlite3_column_int (sel, 0);
+      const unsigned char *stype_name_uc = sqlite3_column_text (sel, 1);
+      const char *stype_name =
+	(const char *) (stype_name_uc ? stype_name_uc : "");
+
+      /* Build derelict display name */
+      char dname[128];
+      if (stype_name && stype_name[0] != '\0')
+	{
+	  snprintf (dname, sizeof (dname), "Derelict %s", stype_name);
+	}
+      else
+	{
+	  snprintf (dname, sizeof (dname), "Derelict Type %d", st_id);
+	}
+
+      /* Pick a random sector in the range 11 to 500 */
+      int sector = 11 + (rand () % 490);
+
+      /* Fetch max capacities from shiptypes table */
+      int max_holds = sqlite3_column_int (sel, 2);
+      int max_fighters = sqlite3_column_int (sel, 3);
+      int max_shields = sqlite3_column_int (sel, 4);
+
+      /* Set random values for cargo and equipment */
+#define MIN_FILL_PCT 25
+#define MAX_FILL_PCT 75
+      int fill_pct =
+	MIN_FILL_PCT + (rand () % (MAX_FILL_PCT - MIN_FILL_PCT + 1));
+
+      int holds_used = (int) (max_holds * (fill_pct / 100.0));
+      int fighters_used = (int) (max_fighters * (fill_pct / 100.0));
+
+      // Bind the values in the correct order
+      int current_bind_idx = 1;
+      sqlite3_bind_text (ins, current_bind_idx++, dname, -1,
+			 SQLITE_TRANSIENT);
+      sqlite3_bind_int (ins, current_bind_idx++, st_id);
+      sqlite3_bind_int (ins, current_bind_idx++, sector);
+      sqlite3_bind_int (ins, current_bind_idx++, max_holds);
+      sqlite3_bind_int (ins, current_bind_idx++, max_fighters);
+      sqlite3_bind_int (ins, current_bind_idx++, max_shields);
+
+      // Bind dynamic cargo and equipment columns if they exist
+      if (has_column (db, "ships", "holds_used"))
+	{
+	  sqlite3_bind_int (ins, current_bind_idx++, holds_used);
+	}
+      if (has_column (db, "ships", "fighters_used"))
+	{
+	  sqlite3_bind_int (ins, current_bind_idx++, fighters_used);
+	}
+      if (has_column (db, "ships", "organics"))
+	{
+	  sqlite3_bind_int (ins, current_bind_idx++, 0);
+	}
+      if (has_column (db, "ships", "equipment"))
+	{
+	  sqlite3_bind_int (ins, current_bind_idx++, 0);
+	}
+      if (has_column (db, "ships", "ore"))
+	{
+	  sqlite3_bind_int (ins, current_bind_idx++, 0);
+	}
+      if (has_column (db, "ships", "colonists"))
+	{
+	  sqlite3_bind_int (ins, current_bind_idx++, 0);
+	}
+      if (has_column (db, "ships", "mines"))
+	{
+	  sqlite3_bind_int (ins, current_bind_idx++, 0);
+	}
+      if (has_column (db, "ships", "genesis"))
+	{
+	  sqlite3_bind_int (ins, current_bind_idx++, 0);
+	}
+      if (has_column (db, "ships", "photons"))
+	{
+	  sqlite3_bind_int (ins, current_bind_idx++, 0);
+	}
+
+      // Bind fixed columns with a default value
+      sqlite3_bind_int (ins, current_bind_idx++, 0);	// number
+      sqlite3_bind_int (ins, current_bind_idx++, 0);	// flags
+      sqlite3_bind_int (ins, current_bind_idx++, 0);	// ported
+      sqlite3_bind_int (ins, current_bind_idx++, 0);	// onplanet
+
+      int irc = sqlite3_step (ins);
+      if (irc != SQLITE_DONE)
+	{
+	  fprintf (stderr,
+		   "[create_derelicts] insert failed for shiptype %d (%s) into sector %d: %s\n",
+		   st_id, dname, sector, sqlite3_errmsg (db));
+	  sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+	  sqlite3_finalize (ins);
+	  sqlite3_finalize (sel);
+	  return 1;
+	}
+      sqlite3_reset (ins);
+    }
+
+  if (rc != SQLITE_DONE)
+    {
+      fprintf (stderr,
+	       "[create_derelicts] shiptypes SELECT ended unexpectedly: %s\n",
+	       sqlite3_errmsg (db));
+      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      sqlite3_finalize (ins);
+      sqlite3_finalize (sel);
+      return 1;
+    }
+
+  /* Commit */
+  rc = sqlite3_exec (db, "COMMIT;", NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK)
+    {
+      fprintf (stderr, "[create_derelicts] commit failed: %s\n",
+	       errmsg ? errmsg : "(unknown)");
+      sqlite3_free (errmsg);
+      sqlite3_finalize (ins);
+      sqlite3_finalize (sel);
+      return 1;
+    }
+
+  /* Delete all ships with class 17 (NPC Imperial Warship) */
+  rc =
+    sqlite3_exec (db, "DELETE FROM ships where type=17;", NULL, NULL,
+		  &errmsg);
+  if (rc != SQLITE_OK)
+    {
+      fprintf (stderr, "[create_derelicts] DELETE FROM ships failed: %s\n",
+	       errmsg ? errmsg : "(unknown)");
+      sqlite3_free (errmsg);
+    }
+  sqlite3_finalize (ins);
+  sqlite3_finalize (sel);
+
+  return 0;
+}
+
+static int ensure_all_sectors_have_exits (sqlite3 * db)
+{
+    const char *sql_select_all = "SELECT id FROM sectors;";
+    const char *sql_select_outgoing = "SELECT COUNT(*) FROM sector_warps WHERE from_sector=?;";
+    const char *sql_select_incoming = "SELECT from_sector FROM sector_warps WHERE to_sector=?;"; // This line was the problem
+    const char *sql_insert_warp = "INSERT INTO sector_warps (from_sector, to_sector) VALUES (?, ?);";
+    
+    sqlite3_stmt *stmt_all = NULL;
+    sqlite3_stmt *stmt_outgoing = NULL;
+    sqlite3_stmt *stmt_incoming = NULL;
+    sqlite3_stmt *stmt_insert = NULL;
+
+    int rc;
+    int sectors_fixed = 0;
+
+    sqlite3_exec(db, "BEGIN TRANSACTION;", NULL, NULL, NULL);
+
+    rc = sqlite3_prepare_v2(db, sql_select_all, -1, &stmt_all, NULL);
+    if (rc != SQLITE_OK) {
+        return rc;
+    }
+
+    rc = sqlite3_prepare_v2(db, sql_select_outgoing, -1, &stmt_outgoing, NULL);
+    if (rc != SQLITE_OK) {
+        sqlite3_finalize(stmt_all);
+        return rc;
+    }
+
+    rc = sqlite3_prepare_v2(db, sql_select_incoming, -1, &stmt_incoming, NULL);
+    if (rc != SQLITE_OK) {
+        sqlite3_finalize(stmt_all);
+        sqlite3_finalize(stmt_outgoing);
+        return rc;
+    }
+
+    rc = sqlite3_prepare_v2(db, sql_insert_warp, -1, &stmt_insert, NULL);
+    if (rc != SQLITE_OK) {
+        sqlite3_finalize(stmt_all);
+        sqlite3_finalize(stmt_outgoing);
+        sqlite3_finalize(stmt_incoming);
+        return rc;
+    }
+
+    while ((rc = sqlite3_step(stmt_all)) == SQLITE_ROW) {
+        int sector_id = sqlite3_column_int(stmt_all, 0);
+
+        // Check if the sector has any outgoing warps
+        sqlite3_bind_int(stmt_outgoing, 1, sector_id);
+        sqlite3_step(stmt_outgoing);
+        int outgoing_count = sqlite3_column_int(stmt_outgoing, 0);
+        sqlite3_reset(stmt_outgoing);
+
+        if (outgoing_count == 0) {
+            // This is a one-way trap. Find a sector that warps here.
+            int from_sector_id = -1;
+            sqlite3_bind_int(stmt_incoming, 1, sector_id);
+            if (sqlite3_step(stmt_incoming) == SQLITE_ROW) {
+                from_sector_id = sqlite3_column_int(stmt_incoming, 0);
+            }
+            sqlite3_reset(stmt_incoming);
+
+            if (from_sector_id != -1) {
+                // Create a return warp back to the originating sector
+	        //  printf("Sector %d is a one-way trap. Adding a return warp to sector %d.\n", sector_id, from_sector_id);
+                
+                sqlite3_bind_int(stmt_insert, 1, sector_id);
+                sqlite3_bind_int(stmt_insert, 2, from_sector_id);
+                sqlite3_step(stmt_insert);
+                sqlite3_reset(stmt_insert);
+
+                sectors_fixed++;
+            }
+        }
+    }
+
+    sqlite3_finalize(stmt_all);
+    sqlite3_finalize(stmt_outgoing);
+    sqlite3_finalize(stmt_incoming);
+    sqlite3_finalize(stmt_insert);
+
+    sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL);
+
+    printf("BIGBANG: Fixed %d one-way sectors.\n", sectors_fixed);
+    return SQLITE_OK;
 }

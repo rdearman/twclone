@@ -64,4 +64,8 @@ extern "C"
 }
 #endif
 
+// Add this line with the other database function declarations
+int db_port_info_json (int port_id, json_t ** out_obj);
+
+
 #endif /* SERVER_CMDS_H */
