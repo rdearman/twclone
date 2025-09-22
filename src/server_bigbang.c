@@ -55,6 +55,24 @@ typedef struct
 /* ----------------------------------------------------
  * Small helpers / guards
  * ---------------------------------------------------- */
+
+static void prune_tunnel_edges(sqlite3 *db) {
+    /* Remove edges from tunnels to non-tunnel nodes */
+    sqlite3_exec(db,
+        "DELETE FROM sector_warps "
+        "WHERE from_sector IN (SELECT used FROM used_sectors) "
+        "  AND to_sector   NOT IN (SELECT used FROM used_sectors);",
+        NULL,NULL,NULL);
+
+    /* And the reverse direction */
+    sqlite3_exec(db,
+        "DELETE FROM sector_warps "
+        "WHERE to_sector   IN (SELECT used FROM used_sectors) "
+        "  AND from_sector NOT IN (SELECT used FROM used_sectors);",
+        NULL,NULL,NULL);
+}
+
+
 static int
 insert_warp_unique (sqlite3 *db, int from, int to)
 {
@@ -354,10 +372,10 @@ bigbang_create_tunnels (void)
 	  nodes[n++] = s;
 	}
 
-      fprintf (stderr, "BIGBANG: Proposed tunnel: %d", nodes[0]);
-      for (int i = 1; i < path_len; i++)
-	fprintf (stderr, "->%d", nodes[i]);
-      fprintf (stderr, "\n");
+      //fprintf (stderr, "BIGBANG: Proposed tunnel: %d", nodes[0]);
+      /* for (int i = 1; i < path_len; i++) */
+      /* 	fprintf (stderr, "->%d", nodes[i]); */
+      /* fprintf (stderr, "\n"); */
 
       sqlite3_exec (db, "SAVEPOINT tunnel;", NULL, NULL, NULL);
       int failed = 0;
@@ -410,10 +428,10 @@ bigbang_create_tunnels (void)
 	}
 
       sqlite3_exec (db, "RELEASE SAVEPOINT tunnel;", NULL, NULL, NULL);
-      fprintf (stderr, "BIGBANG: Created tunnel: %d", nodes[0]);
-      for (int i = 1; i < path_len; i++)
-	fprintf (stderr, "->%d", nodes[i]);
-      fprintf (stderr, "\n");
+      //fprintf (stderr, "BIGBANG: Created tunnel: %d", nodes[0]);
+      /* for (int i = 1; i < path_len; i++) */
+      /* 	fprintf (stderr, "->%d", nodes[i]); */
+      /* fprintf (stderr, "\n"); */
 
       for (int i = 0; i < path_len; i++)
 	{
@@ -647,6 +665,9 @@ bigbang (void)
       return -1;
     }
 
+  prune_tunnel_edges(db);
+
+  
   fprintf (stderr, "BIGBANG: Creating ports...\n");
   if (create_ports () != 0)
     {
@@ -1208,7 +1229,7 @@ create_ports (void)
   sqlite3_finalize (port_stmt);
   sqlite3_finalize (trade_stmt);
   fprintf (stderr,
-	   "create_ports: Stardock at sector %d, plus %d normal ports\n",
+	   "BIGBANG: Stardock at sector %d, plus %d normal ports\n",
 	   stardock_sector, maxPorts - 1);
   return 0;
 }
@@ -1382,7 +1403,7 @@ create_ferringhi (void)
     }
 
   fprintf (stderr,
-	   "create_ferringhi: Placed at sector %d (end of a long tunnel).\n",
+	   "BIGBANG: Placed Ferringhi at sector %d (end of a long tunnel).\n",
 	   longest_tunnel_sector);
 
   return 0;
@@ -1452,7 +1473,7 @@ create_imperial (void)
     }
 
   fprintf (stderr,
-	   "create_imperial: Imperial Starship placed at sector %d.\n",
+	   "BIGBANG: Imperial Starship placed at sector %d.\n",
 	   imperial_sector);
 
   return 0;
