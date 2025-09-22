@@ -1,3 +1,4 @@
+#include <string.h>  
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,6 +38,11 @@ const char *create_table_sql[] = {
     " default_nodes INTEGER,"
     " buff_size INTEGER,"
     " max_name_length INTEGER," " planet_type_count INTEGER" ");",
+
+  "CREATE TABLE IF NOT EXISTS used_sectors (used);",
+
+  
+  "CREATE TABLE IF NOT EXISTS npc_shipnames (id INTEGER, name TEXT);",
 
   "CREATE TABLE IF NOT EXISTS planettypes (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE, typeDescription TEXT, typeName TEXT, citadelUpgradeTime_lvl1 INTEGER, citadelUpgradeTime_lvl2 INTEGER, citadelUpgradeTime_lvl3 INTEGER, citadelUpgradeTime_lvl4 INTEGER, citadelUpgradeTime_lvl5 INTEGER, citadelUpgradeTime_lvl6 INTEGER, citadelUpgradeOre_lvl1 INTEGER, citadelUpgradeOre_lvl2 INTEGER, citadelUpgradeOre_lvl3 INTEGER, citadelUpgradeOre_lvl4 INTEGER, citadelUpgradeOre_lvl5 INTEGER, citadelUpgradeOre_lvl6 INTEGER, citadelUpgradeOrganics_lvl1 INTEGER, citadelUpgradeOrganics_lvl2 INTEGER, citadelUpgradeOrganics_lvl3 INTEGER, citadelUpgradeOrganics_lvl4 INTEGER, citadelUpgradeOrganics_lvl5 INTEGER, citadelUpgradeOrganics_lvl6 INTEGER, citadelUpgradeEquipment_lvl1 INTEGER, citadelUpgradeEquipment_lvl2 INTEGER, citadelUpgradeEquipment_lvl3 INTEGER, citadelUpgradeEquipment_lvl4 INTEGER, citadelUpgradeEquipment_lvl5 INTEGER, citadelUpgradeEquipment_lvl6 INTEGER, citadelUpgradeColonist_lvl1 INTEGER, citadelUpgradeColonist_lvl2 INTEGER, citadelUpgradeColonist_lvl3 INTEGER, citadelUpgradeColonist_lvl4 INTEGER, citadelUpgradeColonist_lvl5 INTEGER, citadelUpgradeColonist_lvl6 INTEGER, maxColonist_ore INTEGER, maxColonist_organics INTEGER, maxColonist_equipment INTEGER, fighters INTEGER, fuelProduction INTEGER, organicsProduction INTEGER, equipmentProduction INTEGER, fighterProduction INTEGER, maxore INTEGER, maxorganics INTEGER, maxequipment INTEGER, maxfighters INTEGER, breeding REAL);",
 
@@ -87,8 +93,10 @@ const char *create_table_sql[] = {
   "CREATE TABLE IF NOT EXISTS ships (" "id INTEGER PRIMARY KEY AUTOINCREMENT, " "number INTEGER, "	/* legacy ID */
     "name TEXT NOT NULL, " "type INTEGER, "	/* FK to shiptypes.id (Index+1 from shipinfo array) */
     "attack INTEGER, " "holds_used INTEGER, " "mines INTEGER, " "fighters_used INTEGER, " "genesis INTEGER, " "photons INTEGER, " "location INTEGER, "	/* FK to sectors.id */
-    "fighters INTEGER, " "shields INTEGER, " "holds INTEGER, " "colonists INTEGER, " "equipment INTEGER, " "organics INTEGER, " "ore INTEGER, " "owner INTEGER, "	/* FK to players.id */
-    "flags INTEGER, " "ported INTEGER, " "onplanet INTEGER" ");",
+    "fighters INTEGER, " "shields INTEGER, " "holds INTEGER, "
+    "colonists INTEGER, " "equipment INTEGER, " "organics INTEGER, "
+    "ore INTEGER, " "flags INTEGER, " "ported INTEGER, " "onplanet INTEGER"
+    ");",
 
 
   "CREATE TABLE IF NOT EXISTS shiptypes (" "id INTEGER PRIMARY KEY AUTOINCREMENT, " "name TEXT NOT NULL, "	/* Coloured name string */
@@ -98,6 +106,10 @@ const char *create_table_sql[] = {
     "photons INTEGER,"		/* Photon torpedo count */
     "can_purchase INTEGER"	/* Can be bought at a port */
     ");",
+
+  "CREATE TABLE IF NOT EXISTS player_ships ( player_id INTEGER DEFAULT 0, ship_id INTEGER DEFAULT 0, role INTEGER DEFAULT 1, is_active INTEGER DEFAULT 1);",
+  "CREATE TABLE IF NOT EXISTS ship_roles ( role_id INTEGER DEFAULT 0, role INTEGER DEFAULT 1, role_description INTEGER DEFAULT 1);",
+
 
   "CREATE TABLE IF NOT EXISTS planets (" "id INTEGER PRIMARY KEY AUTOINCREMENT, " "num INTEGER, "	/* legacy planet ID */
     "sector INTEGER NOT NULL, "	/* FK to sectors.id */
@@ -457,6 +469,15 @@ const char *insert_default_sql[] = {
   "INSERT OR IGNORE INTO shiptypes (name, basecost, maxattack, initialholds, maxholds, maxfighters, turns, mines, genesis, twarp, transportrange, maxshields, offense, defense, beacons, holo, planet, photons, can_purchase) "
     "VALUES ('Imperial Starship (NPC)', 329000, 10000, 40, 150, 50000, 4, 125, 10, 1, 15, 2000, 15, 15, 150, 1, 1, 1, 0);",
 
+  "INSERT OR IGNORE INTO ship_roles (role_id, role, role_description) VALUES (1, 'owner',   'Legal owner; can sell/rename, set availability, assign others');",
+  "INSERT OR IGNORE INTO ship_roles (role_id, role, role_description) VALUES (2, 'pilot',   'Currently flying the ship; usually the active ship for the player');",
+  "INSERT OR IGNORE INTO ship_roles (role_id, role, role_description) VALUES (3, 'crew',    'Can board and use limited functions (e.g., scan, fire fighters)');",
+  "INSERT OR IGNORE INTO ship_roles (role_id, role, role_description) VALUES (4, 'leasee',  'Temporary control with limits; can pilot but not sell/rename');",
+  "INSERT OR IGNORE INTO ship_roles (role_id, role, role_description) VALUES (5, 'lender',  'Party that lent/leased the ship; can revoke lease');",
+  "INSERT OR IGNORE INTO ship_roles (role_id, role, role_description) VALUES (6, 'corp',    'Corporate ownership/control (for future org/corp features)');",
+  "INSERT OR IGNORE INTO ship_roles (role_id, role, role_description) VALUES (7, 'manager', 'Delegated admin; can assign crew/pilot but not sell');",
+
+
   /* ---------- PORTS ---------- */
   "INSERT OR IGNORE INTO ports (id, number, name, location, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
     "VALUES (1, 1, 'Port Type 1 (BBS)', 1, 5, 3, 10000, 10000, 10000, 5000, 5000, 5000, 500000, 0);",
@@ -711,9 +732,73 @@ const char *insert_default_sql[] = {
   "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (10,2);",
   "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (10,9);",
 
-  "INSERT INTO players (number, name, passwd, sector) VALUES (7, 'newguy', 'pass123',1);"
+  "INSERT INTO shiptypes\n"
+    "(name, basecost, maxattack, initialholds, maxholds, maxfighters,"
+    " turns, mines, genesis, twarp, transportrange, maxshields,"
+    " offense, defense, beacons, holo, planet, photons, can_purchase)\n"
+    " SELECT"
+    " 'Mary Celeste Class', basecost, maxattack, initialholds, maxholds, maxfighters,"
+    " turns, mines, genesis, twarp, transportrange, maxshields,"
+    " offense, defense, beacons, holo, planet, photons, 0\n"
+    " FROM shiptypes "
+    "WHERE name='Corporate Flagship'"
+    "  AND NOT EXISTS (SELECT 1 FROM shiptypes WHERE name='Mary Celeste Class');",
 
 
+  "INSERT INTO npc_shipnames (id, name) VALUES\n"
+    "(1, 'Starlight Voyager'),\n"
+    "(2, 'Iron Sentinel'),\n"
+    "(3, 'Crimson Horizon'),\n"
+    "(4, 'The Unrelenting'),\n"
+    "(5, 'Vanguard of Sol'),\n"
+    "(6, 'Aether''s Echo'),\n"
+    "(7, 'Voiddrifter'),\n"
+    "(8, 'Celestia'),\n"
+    "(9, 'The Final Word'),\n"
+    "(10, 'Sovereign''s Might'),\n"
+    "(11, 'The Silence'),\n"
+    "(12, 'Ghost of Proxima'),\n"
+    "(13, 'Harbinger of Ruin'),\n"
+    "(14, 'Blackstar'),\n"
+    "(15, 'Fallen Angel'),\n"
+    "(16, 'Grave Digger'),\n"
+    "(17, 'The Empty Sky'),\n"
+    "(18, 'Cinderclaw'),\n"
+    "(19, 'Whisper of the Abyss'),\n"
+    "(20, 'The Nameless Dread'),\n"
+    "(21, 'Not My Fault'),\n"
+    "(22, 'Totally Not a Trap'),\n"
+    "(23, 'The Gravitational Pull'),\n"
+    "(24, 'Unlicensed & Uninsured'),\n"
+    "(25, 'Ship Happens'),\n"
+    "(26, 'The Loan Shark''s Repossession'),\n"
+    "(27, 'Where Are We Going?'),\n"
+    "(28, 'Taxes Included'),\n"
+    "(29, 'Error 404: Ship Not Found'),\n"
+    "(30, 'The Padded Cell'),\n"
+    "(31, 'Quantum Leap'),\n"
+    "(32, 'The Data Stream'),\n"
+    "(33, 'Sub-Light Cruiser'),\n"
+    "(34, 'Temporal Paradox'),\n"
+    "(35, 'Neon Genesis'),\n"
+    "(36, 'The Warp Core'),\n"
+    "(37, 'The Nanite Swarm'),\n"
+    "(38, 'Synthetic Dream'),\n"
+    "(39, 'The Singularity'),\n"
+    "(40, 'Blink Drive'),\n"
+    "(41, 'The Last Endeavor'),\n"
+    "(42, 'Odyssey''s End'),\n"
+    "(43, 'The Magellan'),\n"
+    "(44, 'Star''s Fury'),\n"
+    "(45, 'Cosmic Drifter'),\n"
+    "(46, 'The Old Dog'),\n"
+    "(47, 'The Wayfinder'),\n"
+    "(48, 'The Horizon Breaker'),\n"
+    "(49, 'Stormchaser'),\n" "(50, 'Beyond the Veil');\n",
+
+
+  "INSERT INTO ships (name, type, attack, holds_used, mines, fighters_used, genesis, photons, location, fighters, shields, holds, colonists,equipment, organics, ore, flags, ported, onplanet) VALUES ('Bit Banger',1, 110, 20, 25, 10, 0, 1,  87, 2300, 400, 20, 0,10,5, 5, 0, 1, 1);",
+  "INSERT INTO players (number, name, passwd, sector, ship) VALUES (7, 'newguy', 'pass123',1,1);"
 };
 
 /* Number of tables */
@@ -921,67 +1006,67 @@ col_text_or_empty (sqlite3_stmt *st, int col)
  *   SQLITE_NOTFOUND  -> no such player_id (out == NULL)
  *   other sqlite code -> error (out == NULL)
  */
-int
-db_player_info_json (int player_id, json_t **out)
-{
-  if (!out)
-    return SQLITE_MISUSE;
-  *out = NULL;
+/* int */
+/* db_player_info_json (int player_id, json_t **out) */
+/* { */
+/*   if (!out) */
+/*     return SQLITE_MISUSE; */
+/*   *out = NULL; */
 
-  sqlite3 *db = db_get_handle ();
-  if (!db)
-    return SQLITE_ERROR;
+/*   sqlite3 *db = db_get_handle (); */
+/*   if (!db) */
+/*     return SQLITE_ERROR; */
 
-  /* Must match the columns in your player_info_v1 view */
-  static const char *SQL =
-    "SELECT player_id, player_name, player_number, "
-    "       sector_id, sector_name, credits, alignment, experience, "
-    "       ship_number, ship_id, ship_name, ship_type_id, ship_type_name, "
-    "       ship_holds, ship_fighters, approx_worth "
-    "FROM player_info_v1 WHERE player_id=?1;";
+/*   /\* Must match the columns in your player_info_v1 view *\/ */
+/*   static const char *SQL = */
+/*     "SELECT player_id, player_name, player_number, " */
+/*     "       sector_id, sector_name, credits, alignment, experience, " */
+/*     "       ship_number, ship_id, ship_name, ship_type_id, ship_type_name, " */
+/*     "       ship_holds, ship_fighters, approx_worth " */
+/*     "FROM player_info_v1 WHERE player_id=?1;"; */
 
-  sqlite3_stmt *st = NULL;
-  int rc = sqlite3_prepare_v2 (db, SQL, -1, &st, NULL);
-  if (rc != SQLITE_OK)
-    return rc;
+/*   sqlite3_stmt *st = NULL; */
+/*   int rc = sqlite3_prepare_v2 (db, SQL, -1, &st, NULL); */
+/*   if (rc != SQLITE_OK) */
+/*     return rc; */
 
-  sqlite3_bind_int (st, 1, player_id);
+/*   sqlite3_bind_int (st, 1, player_id); */
 
-  rc = sqlite3_step (st);
-  if (rc == SQLITE_ROW)
-    {
-      json_t *j =
-	json_pack
-	("{s:i, s:s, s:i, s:i, s:s, s:i, s:i, s:i, s:i, s:i, s:s, s:i, s:s, s:i, s:i, s:i}",
-	 "player_id", sqlite3_column_int (st, 0),
-	 "player_name", col_text_or_empty (st, 1),
-	 "player_number", sqlite3_column_int (st, 2),
+/*   rc = sqlite3_step (st); */
+/*   if (rc == SQLITE_ROW) */
+/*     { */
+/*       json_t *j = */
+/* 	json_pack */
+/* 	("{s:i, s:s, s:i, s:i, s:s, s:i, s:i, s:i, s:i, s:i, s:s, s:i, s:s, s:i, s:i, s:i}", */
+/* 	 "player_id", sqlite3_column_int (st, 0), */
+/* 	 "player_name", col_text_or_empty (st, 1), */
+/* 	 "player_number", sqlite3_column_int (st, 2), */
 
-	 "sector_id", sqlite3_column_int (st, 3),
-	 "sector_name", col_text_or_empty (st, 4),
+/* 	 "sector_id", sqlite3_column_int (st, 3), */
+/* 	 "sector_name", col_text_or_empty (st, 4), */
 
-	 "credits", sqlite3_column_int (st, 5),
-	 "alignment", sqlite3_column_int (st, 6),
-	 "experience", sqlite3_column_int (st, 7),
+/* 	 "credits", sqlite3_column_int (st, 5), */
+/* 	 "alignment", sqlite3_column_int (st, 6), */
+/* 	 "experience", sqlite3_column_int (st, 7), */
 
-	 "ship_number", sqlite3_column_int (st, 8),
-	 "ship_id", sqlite3_column_int (st, 9),
-	 "ship_name", col_text_or_empty (st, 10),
-	 "ship_type_id", sqlite3_column_int (st, 11),
-	 "ship_type_name", col_text_or_empty (st, 12),
+/* 	 "ship_number", sqlite3_column_int (st, 8), */
+/* 	 "ship_id", sqlite3_column_int (st, 9), */
+/* 	 "ship_name", col_text_or_empty (st, 10), */
+/* 	 "ship_type_id", sqlite3_column_int (st, 11), */
+/* 	 "ship_type_name", col_text_or_empty (st, 12), */
 
-	 "ship_holds", sqlite3_column_int (st, 13),
-	 "ship_fighters", sqlite3_column_int (st, 14),
+/* 	 "ship_holds", sqlite3_column_int (st, 13), */
+/* 	 "ship_fighters", sqlite3_column_int (st, 14), */
 
-	 "approx_worth", sqlite3_column_int (st, 15));
-      sqlite3_finalize (st);
-      *out = j;
-      return SQLITE_OK;
-    }
+/* 	 "approx_worth", sqlite3_column_int (st, 15)); */
+/*       sqlite3_finalize (st); */
+/*       *out = j; */
+/*       return SQLITE_OK; */
+/*     } */
 
-  sqlite3_finalize (st);
-  return (rc == SQLITE_DONE) ? SQLITE_NOTFOUND : rc;
-}
+/*   sqlite3_finalize (st); */
+/*   return (rc == SQLITE_DONE) ? SQLITE_NOTFOUND : rc; */
+/* } */
 
 
 int
@@ -2078,4 +2163,146 @@ db_planets_at_sector_json (int sector_id, json_t **out_array)
     }
   json_decref (arr);
   return rc;
+}
+
+int
+db_player_set_sector (int player_id, int sector_id)
+{
+  sqlite3 *dbh = db_get_handle ();
+  if (!dbh)
+    return SQLITE_ERROR;
+
+  sqlite3_stmt *st = NULL;
+  const char *sql = "UPDATE players SET sector=? WHERE id=?";
+  int rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    return rc;
+
+  sqlite3_bind_int (st, 1, sector_id);
+  sqlite3_bind_int (st, 2, player_id);
+
+  rc = sqlite3_step (st);
+  sqlite3_finalize (st);
+
+  return (rc == SQLITE_DONE) ? SQLITE_OK : rc;
+}
+
+int
+db_player_get_sector (int player_id, int *out_sector)
+{
+  if (out_sector)
+    *out_sector = 0;
+  sqlite3 *dbh = db_get_handle ();
+  if (!dbh)
+    return SQLITE_ERROR;
+
+  const char *sql = "SELECT sector FROM players WHERE id=?";
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    return rc;
+
+  sqlite3_bind_int (st, 1, player_id);
+  rc = sqlite3_step (st);
+  if (rc == SQLITE_ROW && out_sector)
+    {
+      *out_sector = sqlite3_column_type (st, 0) == SQLITE_NULL
+	? 0 : sqlite3_column_int (st, 0);
+    }
+  sqlite3_finalize (st);
+  return (rc == SQLITE_ROW || rc == SQLITE_DONE) ? SQLITE_OK : rc;
+}
+
+int
+db_player_info_json (int player_id, json_t **out)
+{
+  if (out)
+    *out = NULL;
+  sqlite3 *dbh = db_get_handle ();
+  if (!dbh)
+    return SQLITE_ERROR;
+
+  const char *sql = "SELECT " "  p.id, p.number, p.name, p.sector, " "  s.id    AS ship_id, " "  COALESCE(s.number, 0) AS ship_number, " "  COALESCE(s.name, '')  AS ship_name, " "  COALESCE(s.type, 0)   AS ship_type_id, " "  COALESCE(st.name, '') AS ship_type_name, " "  COALESCE(s.holds, 0)  AS ship_holds, " "  COALESCE(s.fighters, 0) AS ship_fighters " "FROM players p " "LEFT JOIN ships s      ON s.id = p.ship "	/* <-- key fix */
+    "LEFT JOIN shiptypes st ON st.id = s.type " "WHERE p.id = ?";
+
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    return rc;
+
+  sqlite3_bind_int (st, 1, player_id);
+
+  rc = sqlite3_step (st);
+  if (rc != SQLITE_ROW)
+    {
+      sqlite3_finalize (st);
+      return (rc == SQLITE_DONE) ? SQLITE_OK : rc;
+    }
+
+  int pid = sqlite3_column_int (st, 0);
+  int pnum = sqlite3_column_int (st, 1);
+  const char *pname = (const char *) sqlite3_column_text (st, 2);
+  int psector =
+    sqlite3_column_type (st, 3) == SQLITE_NULL ? 0 : sqlite3_column_int (st,
+									 3);
+
+  int ship_id =
+    sqlite3_column_type (st, 4) == SQLITE_NULL ? 0 : sqlite3_column_int (st,
+									 4);
+  int ship_number = sqlite3_column_int (st, 5);
+  const char *sname = (const char *) sqlite3_column_text (st, 6);
+  int stype_id = sqlite3_column_int (st, 7);
+  const char *stype = (const char *) sqlite3_column_text (st, 8);
+  int sholds = sqlite3_column_int (st, 9);
+  int sfighters = sqlite3_column_int (st, 10);
+
+  json_t *obj = json_pack ("{s:i s:s s:i s:i s:s s:i s:i s:s s:i s:i s:i}",
+			   "player_id", pid,
+			   "player_name", pname ? pname : "",
+			   "player_number", pnum,
+			   "sector_id", psector,
+			   "sector_name", psector == 1 ? "Fedspace 1" : "Uncharted Space",	/* swap in your real sector-name helper if you have one */
+			   "ship_id", ship_id,
+			   "ship_number", ship_number,
+			   "ship_name", sname ? sname : "",
+			   "ship_type_id", stype_id,
+			   "ship_holds", sholds,
+			   "ship_fighters", sfighters);
+  /* add type name if you like */
+  json_object_set_new (obj, "ship_type_name",
+		       json_string (stype ? stype : ""));
+
+  sqlite3_finalize (st);
+  if (!obj)
+    return SQLITE_NOMEM;
+  if (out)
+    *out = obj;
+  else
+    json_decref (obj);
+  return SQLITE_OK;
+}
+
+
+
+int db_sector_beacon_text(int sector_id, char **out_text) {
+    if (out_text) *out_text = NULL;
+    sqlite3 *dbh = db_get_handle();
+    if (!dbh) return SQLITE_ERROR;
+
+    const char *sql = "SELECT beacon FROM sectors WHERE id=?";
+    sqlite3_stmt *st = NULL;
+    int rc = sqlite3_prepare_v2(dbh, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) return rc;
+
+    sqlite3_bind_int(st, 1, sector_id);
+    rc = sqlite3_step(st);
+    if (rc == SQLITE_ROW) {
+        const unsigned char *txt = sqlite3_column_text(st, 0);
+        if (txt && *txt) {
+            const char *c = (const char *)txt;
+            if (out_text) *out_text = strdup(c);
+        }
+    }
+    sqlite3_finalize(st);
+    return (rc == SQLITE_ROW || rc == SQLITE_DONE) ? SQLITE_OK : rc;
 }

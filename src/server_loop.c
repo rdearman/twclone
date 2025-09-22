@@ -62,7 +62,8 @@ int db_ports_at_sector_json (int sector_id, json_t ** out_array);
 int db_players_at_sector_json (int sector_id, json_t ** out_array);
 int db_beacons_at_sector_json (int sector_id, json_t ** out_array);
 int db_planets_at_sector_json (int sector_id, json_t ** out_array);
-
+int db_player_set_sector (int player_id, int sector_id);
+int db_player_get_sector (int player_id, int *out_sector);
 
 /* Provided elsewhere; needed here for correct prototype */
 // void send_enveloped_error (int fd, json_t *root, int code, const char *msg);
@@ -769,29 +770,25 @@ process_message (client_ctx_t *ctx, json_t *root)
 	  int rc = play_login (name, pass, &player_id);
 	  if (rc == AUTH_OK)
 	    {
-	      /* Determine current sector: prefer DB truth, fall back to ctx, else 1 */
-	      int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 0;
-
-	      json_t *pinfo = NULL;
-	      int prc = db_player_info_json (player_id, &pinfo);
-	      if (prc == SQLITE_OK && pinfo)
-		{
-		  sector_id =
-		    resolve_current_sector_from_info (pinfo, sector_id);
-		  json_decref (pinfo);
-		}
-	      if (sector_id <= 0)
+	      /* Read canonical sector from DB; fall back to 1 if missing/NULL */
+	      int sector_id = 0;
+	      if (db_player_get_sector (player_id, &sector_id) != SQLITE_OK
+		  || sector_id <= 0)
 		sector_id = 1;
 
+	      /* Mark connection as authenticated and sync session state */
+	      ctx->player_id = player_id;
+	      ctx->sector_id = sector_id;	/* <-- set unconditionally on login */
+
+	      /* Reply with session info, including current_sector */
 	      json_t *data = json_pack ("{s:i, s:i}",
 					"player_id", player_id,
 					"current_sector", sector_id);
-
-	      /* Mark connection as authenticated */
-	      ctx->player_id = player_id;
-	      if (ctx->sector_id <= 0)
-		ctx->sector_id = sector_id;
-
+	      if (!data)
+		{
+		  send_enveloped_error (ctx->fd, root, 1500, "Out of memory");
+		  return;
+		}
 	      send_enveloped_ok (ctx->fd, root, "auth.session", data);
 	      json_decref (data);
 	    }
@@ -854,21 +851,18 @@ process_message (client_ctx_t *ctx, json_t *root)
 	{
 	  send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated",
 				  NULL);
-	  //send_enveloped_error (ctx->fd, root, 1401, "Not authenticated");
 	}
       else
 	{
-	  json_t *info = NULL;
-	  int rc = db_player_info_json (ctx->player_id, &info);
-	  if (rc == SQLITE_OK && info)
+	  json_t *pinfo = NULL;
+	  int prc = db_player_info_json (ctx->player_id, &pinfo);
+	  if (prc != SQLITE_OK || !pinfo)
 	    {
-	      send_enveloped_ok (ctx->fd, root, "player.info", info);
-	      json_decref (info);
+	      send_enveloped_error (ctx->fd, root, 1503, "Database error");
+	      return;
 	    }
-	  else
-	    {
-	      send_enveloped_error (ctx->fd, root, 1500, "Database error");
-	    }
+	  send_enveloped_ok (ctx->fd, root, "player.info", pinfo);
+	  json_decref (pinfo);
 	}
     }
   else if (strcmp (c, "move.describe_sector") == 0)
@@ -891,12 +885,21 @@ process_message (client_ctx_t *ctx, json_t *root)
 	}
       else
 	{
-	  send_enveloped_ok (ctx->fd, root, "sector.info", payload);
-	  json_decref (payload);
+	  /* Inline sector beacon (single string in sectors.beacon) */
+	  char *btxt = NULL;
+	  if (db_sector_beacon_text(sector_id, &btxt) == SQLITE_OK && btxt && *btxt) {
+	    json_object_set_new(payload, "beacon", json_string(btxt));     // <-- payload, not root
+	    json_object_set_new(payload, "has_beacon", json_true());       // <-- payload, not root
+	  } else {
+	    json_object_set_new(payload, "beacon", json_null());           // <-- payload, not root
+	    json_object_set_new(payload, "has_beacon", json_false());      // <-- payload, not root
+	  }
+	  free(btxt);
+
+	  send_enveloped_ok(ctx->fd, root, "sector.info", payload);
+	  json_decref(payload);
 	}
     }
-
-
   else if (strcmp (c, "trade.buy") == 0)
     {
       json_t *jdata = json_object_get (root, "data");
@@ -1072,9 +1075,6 @@ process_message (client_ctx_t *ctx, json_t *root)
 	    }
 	}
     }
-
-
-
   else if (strcmp (c, "move.warp") == 0)
     {
       json_t *jdata = json_object_get (root, "data");
@@ -1098,14 +1098,35 @@ process_message (client_ctx_t *ctx, json_t *root)
       else
 	{
 	  int from = ctx->sector_id;
+
+	  /* Persist new sector for this player */
+	  int prc = db_player_set_sector (ctx->player_id, to);
+	  if (prc != SQLITE_OK)
+	    {
+	      send_enveloped_error (ctx->fd, root, 1502,
+				    "Failed to persist player sector");
+	      return;
+	    }
+
+	  /* Update session state */
 	  ctx->sector_id = to;
-	  json_t *data =
-	    json_pack ("{s:i, s:i, s:i}", "player_id", ctx->player_id,
-		       "from_sector_id", from, "to_sector_id", to);
+
+	  /* Reply (include current_sector for clients) */
+	  json_t *data = json_pack ("{s:i, s:i, s:i, s:i}",
+				    "player_id", ctx->player_id,
+				    "from_sector_id", from,
+				    "to_sector_id", to,
+				    "current_sector", to);
+	  if (!data)
+	    {
+	      send_enveloped_error (ctx->fd, root, 1500, "Out of memory");
+	      return;
+	    }
 	  send_enveloped_ok (ctx->fd, root, "move.result", data);
 	  json_decref (data);
 	}
     }
+
 
   else if (strcmp (c, "ship.info") == 0)
     {

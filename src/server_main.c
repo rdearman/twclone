@@ -7,9 +7,18 @@
 #include "server_loop.h"	/* int server_loop(volatile sig_atomic_t *running); */
 #include <sqlite3.h>
 
+// If these exist elsewhere, keep them; otherwise these prototypes silence warnings
+int universe_init (void);
+void universe_shutdown (void);
 int load_config (void);
 
 static volatile sig_atomic_t running = 1;
+
+
+/* forward decl: your bigbang entry point (adjust name/signature if different) */
+static int bigbang (sqlite3 * db);	/* if your function is named differently, change this */
+
+/*------------------- Signal helpers ---------------------------------*/
 
 static void
 handle_signal (int sig)
@@ -30,6 +39,72 @@ install_signal_handlers (void)
   sigaction (SIGHUP, &sa, NULL);
 }
 
+/*-------------------  Bigbang ---------------------------------*/
+
+// Return first column of first row as int, or -1 on error
+static int
+get_scalar_int (const char *sql)
+{
+  sqlite3 *dbh = db_get_handle ();
+  if (!dbh)
+    return -1;
+  sqlite3_stmt *st = NULL;
+  if (sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL) != SQLITE_OK)
+    return -1;
+  int rc = sqlite3_step (st);
+  int v = (rc == SQLITE_ROW) ? sqlite3_column_int (st, 0) : -1;
+  sqlite3_finalize (st);
+  return v;
+}
+
+// Decide if we need to run bigbang on this DB
+static int
+needs_bigbang (void)
+{
+  // Primary flag: PRAGMA user_version
+  int uv = get_scalar_int ("PRAGMA user_version");
+  if (uv > 0)
+    return 0;			// already seeded
+
+  // Belt-and-braces: look at contents in case user_version wasn't set
+  int sectors = get_scalar_int ("SELECT COUNT(*) FROM sectors");
+  int warps = get_scalar_int ("SELECT COUNT(*) FROM sector_warps");
+  int ports = get_scalar_int ("SELECT COUNT(*) FROM ports");
+
+  if (sectors <= 10)
+    return 1;			// only the 10 Fedspace rows exist
+  if (warps == 0)
+    return 1;
+  if (ports == 0)
+    return 1;
+
+  return 0;
+}
+
+// Run bigbang once; mark DB as seeded so we never do it again
+static int
+run_bigbang_if_needed (void)
+{
+  if (!needs_bigbang ())
+    return 0;
+
+  sqlite3 *dbh = db_get_handle ();
+  if (!dbh)
+    {
+      fprintf (stderr, "BIGBANG: DB handle unavailable.\n");
+      return -1;
+    }
+
+  fprintf (stderr, "BIGBANG: Universe appears empty — seeding now...\n");
+  if (bigbang (dbh) != 0)
+    {
+      fprintf (stderr, "BIGBANG: Failed.\n");
+      return -1;
+    }
+
+}
+
+
 int
 main (void)
 {
@@ -48,6 +123,11 @@ main (void)
       fprintf (stderr, "Failed to init universe.\n");
       db_close ();
       return EXIT_FAILURE;
+    }
+
+  if (run_bigbang_if_needed () != 0)
+    {
+      return EXIT_FAILURE;	// or your project’s error path
     }
 
   install_signal_handlers ();

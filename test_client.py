@@ -2,29 +2,17 @@
 """
 Interactive TW JSON client
 
-Protocol used:
-  - Request envelope: {"id":"<cli-seq>", "command":"<action>", "data":{...}}
+Envelope:
+  {"id":"<cli-seq>", "command":"<action>", "data":{...}}
+Common commands:
   - session.ping / session.hello
-  - auth.login expects {"user_name": "...", "password": "..."} (fallback: {"player_name": "...", "password": "..."})
-  - move.describe_sector expects/accepts {"sector_id": <int>}
-  - move.warp expects {"to_sector_id": <int>}
+  - auth.login {"user_name": "...", "password": "..."} (fallback: {"player_name": "...", "password": "..."})
+  - move.describe_sector {"sector_id": <int>}
+  - move.warp {"to_sector_id": <int>}
 
-Features:
-  - Shows sector name, adjacent sectors, ports, players, and beacons (if provided by server)
-  - Client enforces adjacency before warping
-  - Debug mode prints raw send/recv lines
-  - Extra commands: 'raw', 'raw desc <id>' to dump server replies
-
-Commands:
-  help                 Show help
-  where                Show current sector id
-  desc                 Re-describe current sector (and list warps/ports/players/beacons)
-  desc <id>            Peek at another sector's info & warps without moving
-  warps                List adjacent sector ids for current sector
-  move <id>            Move to adjacent sector <id>
-  raw                  Dump last describe JSON
-  raw desc <id>        Dump raw JSON for that sector
-  q | quit | exit      Quit
+New interactive commands (type 'help' inside the client):
+  cap, capspam, schema, me, ship, online, buy, ibuy, force_move,
+  register, refresh, logout, disconnect
 """
 
 import argparse
@@ -36,7 +24,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 HOST, PORT = "127.0.0.1", 1234
 
-# -------------- transport --------------
+# ---------------- transport ----------------
 
 class Conn:
     def __init__(self, sock: socket.socket, debug: bool = False):
@@ -69,7 +57,7 @@ class Conn:
         self.send(env)
         return self.recv()
 
-# -------------- helpers --------------
+# ---------------- helpers ----------------
 
 def get_data(obj: Dict[str, Any]) -> Dict[str, Any]:
     d = obj.get("data")
@@ -95,7 +83,6 @@ def _normalise_warp_list(warps: Any) -> List[int]:
             if isinstance(w, int):
                 ids.append(w)
             elif isinstance(w, dict):
-                # accept several common keys
                 for key in ("to_sector_id", "to", "dest", "destination", "sector_id", "id"):
                     v = w.get(key)
                     if isinstance(v, int):
@@ -147,53 +134,101 @@ def print_help() -> None:
     print("Commands:")
     print("  help                 Show this help")
     print("  where                Show current sector id")
-    print("  desc                 Re-describe current sector (and list warps/ports/players/beacons)")
+    print("  desc                 Re-describe current sector (and list warps/ports/players/planets/beacons)")
     print("  desc <id>            Peek at another sector's info & warps without moving")
     print("  warps                List adjacent sector ids")
     print("  move <id>            Move to adjacent sector <id>")
     print("  raw                  Dump last describe JSON")
     print("  raw desc <id>        Dump raw JSON for that sector")
-    print("  q | quit | exit      Quit")
+    print("  cap                  Show system capabilities (system.hello)")
+    print("  capspam [n]          Call system.hello n times (rate-limit tests)")
+    print("  schema [key]         List schemas or show one schema by key")
+    print("  me                   Show my player info")
+    print("  ship                 Show my ship info")
+    print("  online               List online players")
+    print("  buy <port> <com> <q> Trade: buy (ore|organics|equipment)")
+    print("  ibuy <key> <port> <com> <q>  Buy with idempotency key")
+    print("  force_move <id>      Warp without adjacency check (expect refused)")
+    print("  register <user> <pass>  Create new account")
+    print("  refresh              Refresh auth session")
+    print("  sync              Refresh current sector from server")    
+    print("  logout               Logout")
+    print("  disconnect           Disconnect from server")
 
-def show_extras(desc: Dict[str, Any]) -> None:
-    node = get_data(desc)
+
+def show_extras(desc_json):
+    node = (desc_json or {}).get("data", {})
 
     # Ports
     ports = node.get("ports") or []
-    if isinstance(ports, list) and ports:
-        names = [p.get("name") for p in ports if isinstance(p, dict) and isinstance(p.get("name"), str)]
+    if ports:
+        names = [p.get("name") for p in ports if isinstance(p, dict) and p.get("name")]
         if names:
             print(f"Ports here: {', '.join(names)}")
+        else:
+            print("Ports here: (unknown)")
+    else:
+        print("Ports here: none")
 
     # Players
     players = node.get("players") or []
-    if isinstance(players, list) and players:
-        pnames = [p.get("name") for p in players if isinstance(p, dict) and isinstance(p.get("name"), str)]
-        if pnames:
-            print(f"Players here: {', '.join(pnames)}")
+    if players:
+        plist = []
+        for p in players:
+            if isinstance(p, dict):
+                nm = p.get("name") or p.get("player_name") or "?"
+                plist.append(nm)
+        if plist:
+            print(f"Players here: {', '.join(plist)}")
+        else:
+            print("Players here: (unknown)")
+    else:
+        print("Players here: none")
 
-    # Planets  ← NEW
+    # Planets
     planets = node.get("planets") or []
-    if isinstance(planets, list) and planets:
-        pnames = [p.get("name") for p in planets if isinstance(p, dict) and isinstance(p.get("name"), str)]
+    if planets:
+        pnames = []
+        for pl in planets:
+            if isinstance(pl, dict) and pl.get("name"):
+                pnames.append(pl["name"])
         if pnames:
-            print(f"Planets here: {', '.join(pnames)}")
+            print(f"Planets: {', '.join(pnames)}")
+        else:
+            print("Planets: (unknown)")
+    else:
+        print("Planets: none")
 
-    # Beacons (always show something)
-    beacons = node.get("beacons")
-    if isinstance(beacons, list):
-        if beacons:
+    # Beacon (prefer single-string field)
+    beacon_txt = node.get("beacon")
+    if isinstance(beacon_txt, str) and beacon_txt.strip():
+        print(f"Beacon: {beacon_txt.strip()}")
+        return  # done; don't print the array form too
+
+    # Fallback: legacy beacons array (if server ever sends entries there)
+    beacons_arr = node.get("beacons")
+    msgs = []
+    if isinstance(beacons_arr, list):
+        for b in beacons_arr:
+            if isinstance(b, dict) and "message" in b and isinstance(b["message"], str):
+                msgs.append(b["message"].strip())
+            elif isinstance(b, str):
+                msgs.append(b.strip())
+    if msgs:
+        if len(msgs) == 1:
+            print(f"Beacon: {msgs[0]}")
+        else:
             print("Beacons:")
-            for b in beacons:
-                if isinstance(b, dict):
-                    msg = b.get("message")
-                    if isinstance(msg, str) and msg.strip():
-                        print(f"  - {msg.strip()}")
+            for m in msgs:
+                print(f"  - {m}")
+    else:
+        print("Beacon: none")
 
-    # -------------- interactive --------------
+
+    
+# ---------------- interactive ----------------
 
 def describe_sector(conn: Conn, sector_id: int) -> Dict[str, Any]:
-    # Always send sector explicitly so server returns adjacency & extras
     return conn.rpc("move.describe_sector", {"sector_id": sector_id})
 
 def interactive_loop(conn: Conn, current_sector: int) -> None:
@@ -224,9 +259,24 @@ def interactive_loop(conn: Conn, current_sector: int) -> None:
         parts = line.split()
         cmd = parts[0].lower()
 
+        # NEW: typing just a number means "move <number>"
+        if len(parts) == 1 and parts[0].isdigit():
+            parts = ["move", parts[0]]
+            cmd = "move"
+
+
         if cmd in ("q", "quit", "exit"):
             print("Goodbye.")
             return
+        elif cmd == "sync":
+            info = conn.rpc("player.my_info", {})
+            print(json.dumps(info, ensure_ascii=False, indent=2))
+            new_cur = extract_current_sector(info)
+            if isinstance(new_cur, int):
+                current_sector = new_cur
+                print(f"Synced. Current sector: {current_sector}")
+            else:
+                print("Could not determine current sector from server.")
 
         elif cmd == "help":
             print_help()
@@ -314,10 +364,100 @@ def interactive_loop(conn: Conn, current_sector: int) -> None:
             print(f"Adjacent sectors: {', '.join(map(str, warps)) if warps else '(none)'}")
             show_extras(last_desc)
 
+        # -------- extra commands matching unit-tests --------
+
+        elif cmd == "cap":
+            print(json.dumps(conn.rpc("system.hello", {}), ensure_ascii=False, indent=2))
+
+        elif cmd == "capspam":
+            n = int(parts[1]) if len(parts) > 1 else 3
+            for i in range(n):
+                r = conn.rpc("system.hello", {})
+                print(f"[{i+1}] {r.get('status')} {r.get('type')}")
+
+        elif cmd == "schema":
+            if len(parts) == 1:
+                r = conn.rpc("system.describe_schema", {})
+            else:
+                r = conn.rpc("system.describe_schema", {"key": parts[1]})
+            print(json.dumps(r, ensure_ascii=False, indent=2))
+
+        elif cmd == "me":
+            print(json.dumps(conn.rpc("player.my_info", {}), ensure_ascii=False, indent=2))
+
+        elif cmd == "ship":
+            print(json.dumps(conn.rpc("ship.info", {}), ensure_ascii=False, indent=2))
+
+        elif cmd == "online":
+            r = conn.rpc("player.list_online", {})
+            print(json.dumps(r, ensure_ascii=False, indent=2))
+            data = get_data(r)
+            names = [p.get("name") for p in (data.get("players") or []) if isinstance(p, dict)]
+            if names:
+                print("Online:", ", ".join(n for n in names if isinstance(n, str)))
+
+        elif cmd == "buy":
+            if len(parts) != 4:
+                print("Usage: buy <port_id> <commodity> <qty>")
+                continue
+            try:
+                port_id = int(parts[1]); qty = int(parts[3])
+            except ValueError:
+                print("port_id and qty must be integers")
+                continue
+            commodity = parts[2]
+            r = conn.rpc("trade.buy", {"port_id": port_id, "commodity": commodity, "quantity": qty})
+            print(json.dumps(r, ensure_ascii=False, indent=2))
+
+        elif cmd == "ibuy":
+            if len(parts) != 5:
+                print("Usage: ibuy <key> <port_id> <commodity> <qty>")
+                continue
+            try:
+                idem = parts[1]; port_id = int(parts[2]); commodity = parts[3]; qty = int(parts[4])
+            except ValueError:
+                print("port_id and qty must be integers")
+                continue
+            env = {"id": conn._next_id(), "command": "trade.buy",
+                   "data": {"port_id": port_id, "commodity": commodity, "quantity": qty},
+                   "meta": {"idempotency_key": idem}}
+            conn.send(env)
+            print(json.dumps(conn.recv(), ensure_ascii=False, indent=2))
+
+        elif cmd == "force_move":
+            if len(parts) != 2:
+                print("Usage: force_move <sector_id>")
+                continue
+            try:
+                target = int(parts[1])
+            except ValueError:
+                print("sector_id must be an integer")
+                continue
+            r = conn.rpc("move.warp", {"to_sector_id": target})
+            print(json.dumps(r, ensure_ascii=False, indent=2))
+
+        elif cmd == "register":
+            if len(parts) < 3:
+                print("Usage: register <user> <pass>")
+                continue
+            user2 = parts[1]; pass2 = parts[2]
+            r = conn.rpc("auth.register", {"user_name": user2, "password": pass2})
+            print(json.dumps(r, ensure_ascii=False, indent=2))
+
+        elif cmd == "refresh":
+            print(json.dumps(conn.rpc("auth.refresh", {}), ensure_ascii=False, indent=2))
+
+        elif cmd == "logout":
+            print(json.dumps(conn.rpc("auth.logout", {}), ensure_ascii=False, indent=2))
+
+        elif cmd == "disconnect":
+            print(json.dumps(conn.rpc("system.disconnect", {}), ensure_ascii=False, indent=2))
+            return
+
         else:
             print("Unknown command. Type 'help'.")
 
-# -------------- main --------------
+# ---------------- main ----------------
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Interactive TW JSON client")
@@ -341,7 +481,6 @@ def main() -> int:
             login = conn.rpc("auth.login", {"user_name": user, "password": passwd})
             print("[auth] login:", json.dumps(login, ensure_ascii=False))
             if login.get("status") in ("error", "refused"):
-                # Optional fallback accepted by some builds
                 fallback = conn.rpc("auth.login", {"player_name": user, "password": passwd})
                 print("[auth] login (fallback):", json.dumps(fallback, ensure_ascii=False))
                 login = fallback
