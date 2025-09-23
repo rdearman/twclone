@@ -15,11 +15,13 @@
 #include <arpa/inet.h>
 #include <jansson.h>		/* -ljansson */
 #include <stdbool.h>
-#include "server_cmds.h"
 #include <sqlite3.h>
+/* local includes */
 #include "database.h"
 #include "schemas.h"
 #include "errors.h"
+#include "config.h"
+#include "server_cmds.h"
 
 
 #define LISTEN_PORT 1234
@@ -66,6 +68,8 @@ int db_planets_at_sector_json (int sector_id, json_t ** out_array);
 int db_player_set_sector (int player_id, int sector_id);
 int db_player_get_sector (int player_id, int *out_sector);
 static void handle_sector_info (int fd, json_t *root, int sector_id, int player_id);
+static void send_enveloped_ok (int fd, json_t *root, const char *type, json_t *data);
+
 
 
 /* Provided elsewhere; needed here for correct prototype */
@@ -75,7 +79,11 @@ static void handle_sector_info (int fd, json_t *root, int sector_id, int player_
 /* Helpers for session endpoints */
 /* ----------------------------- */
 
-
+// Define the handler function
+static void handle_system_capabilities (int fd, json_t *root)
+{
+  send_enveloped_ok(fd, root, "system.capabilities", json_incref(g_capabilities));
+}
 
 static json_t *
 make_session_hello_payload (int is_authed, int player_id, int sector_id)
@@ -720,9 +728,15 @@ process_message (client_ctx_t *ctx, json_t *root)
   const char *c = json_string_value (cmd);
 
   /* ----------------------- */
-/* Session ping / handshake */
-/* ----------------------- */
-  if (strcmp (c, "session.ping") == 0)
+  /* Session ping / handshake */
+  /* ----------------------- */
+
+  // Check for the new command before others
+  if (strcmp (c, "system.capabilities") == 0)
+    {
+      handle_system_capabilities (ctx->fd, root);
+    }
+  else if (strcmp (c, "session.ping") == 0)
     {
       /* Echo back whatever is in data (or {}) */
       json_t *jdata = json_object_get (root, "data");
@@ -1165,7 +1179,7 @@ else if (strcmp(json_string_value(cmd), "port_info") == 0) {
     json_decref(root);
   }
 
-  else if (strcmp (c, "ship.info") == 0)
+else if (strcmp (c, "ship.info") == 0 || strcmp (c, "ship.status") == 0)
     {
       if (ctx->player_id <= 0)
 	{
@@ -1209,9 +1223,31 @@ else if (strcmp(json_string_value(cmd), "port_info") == 0) {
 					json_integer_value (json_object_get
 							    (info,
 							     "ship_fighters")));
+	      /* json_decref (info); */
+	      /* send_enveloped_ok (ctx->fd, root, "ship.info", data); */
+	      /* json_decref (data); */
 	      json_decref (info);
-	      send_enveloped_ok (ctx->fd, root, "ship.info", data);
-	      json_decref (data);
+
+	      json_t *env = make_base_envelope(root);
+	      json_object_set_new(env, "status", json_string("ok"));
+	      json_object_set_new(env, "type", json_string("ship.info"));
+	      json_object_set_new(env, "data", data); // takes ownership of data
+
+	      json_t *meta = json_object();
+	      if (strcmp(c, "ship.info") == 0) {
+		json_object_set_new(meta, "deprecated", json_true());
+	      }
+	      if (json_object_size(meta) > 0) {
+		json_object_set_new(env, "meta", meta);
+	      } else {
+		json_decref(meta);
+	      }
+
+	      attach_rate_limit_meta(env, ctx);
+	      rl_tick(ctx);
+	      send_all_json(ctx->fd, env);
+	      json_decref(env);
+
 	    }
 	  else
 	    {

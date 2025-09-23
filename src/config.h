@@ -22,6 +22,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define CONFIG_H
 
 #include "common.h"
+#include <jansson.h>		/* -ljansson */
+#include <stdbool.h>
 
 
 struct config
@@ -58,6 +60,6 @@ struct config
 
 int init_config (char *filename);
 int saveconfig (char *filename);
-
+static json_t *g_capabilities = NULL;
 
 #endif

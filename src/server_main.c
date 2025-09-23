@@ -1,11 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
+#include <sqlite3.h>
 #include "config.h"		/* int load_config(void);   (1 = success, 0 = fail) */
 #include "database.h"		/* int db_init(void); void db_close(void); */
 #include "universe.h"		/* int universe_init(void); void universe_shutdown(void); */
 #include "server_loop.h"	/* int server_loop(volatile sig_atomic_t *running); */
-#include <sqlite3.h>
+
 
 // If these exist elsewhere, keep them; otherwise these prototypes silence warnings
 int universe_init (void);
@@ -13,7 +14,6 @@ void universe_shutdown (void);
 int load_config (void);
 
 static volatile sig_atomic_t running = 1;
-
 
 /* forward decl: your bigbang entry point (adjust name/signature if different) */
 static int bigbang (sqlite3 * db);	/* if your function is named differently, change this */
@@ -130,12 +130,34 @@ main (void)
       return EXIT_FAILURE;	// or your project’s error path
     }
 
+  g_capabilities = json_object();
+  json_t *limits = json_object();
+  json_object_set_new(limits, "max_bulk", json_integer(100));
+  json_object_set_new(limits, "max_page_size", json_integer(50));
+  json_object_set_new(limits, "max_beacon_len", json_integer(256));
+  json_object_set_new(g_capabilities, "limits", limits);
+
+  json_t *features = json_object();
+  json_object_set_new(features, "auth", json_true());
+  json_object_set_new(features, "warp", json_true());
+  json_object_set_new(features, "sector.describe", json_true());
+  json_object_set_new(features, "trade.buy", json_true());
+  json_object_set_new(g_capabilities, "features", features);
+
+  json_object_set_new(g_capabilities, "version", json_string("1.0.0-alpha"));
+
+  
   install_signal_handlers ();
 
   int rc = server_loop (&running);
 
   universe_shutdown ();
   db_close ();
+
+  // Clean up the global capabilities object when the server exits
+  if (g_capabilities) {
+    json_decref(g_capabilities);
+  }
 
   return (rc == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
