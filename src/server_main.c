@@ -130,23 +130,24 @@ main (void)
       return EXIT_FAILURE;	// or your project’s error path
     }
 
-  g_capabilities = json_object();
-  json_t *limits = json_object();
-  json_object_set_new(limits, "max_bulk", json_integer(100));
-  json_object_set_new(limits, "max_page_size", json_integer(50));
-  json_object_set_new(limits, "max_beacon_len", json_integer(256));
-  json_object_set_new(g_capabilities, "limits", limits);
+  g_capabilities = json_object ();
+  json_t *limits = json_object ();
+  json_object_set_new (limits, "max_bulk", json_integer (100));
+  json_object_set_new (limits, "max_page_size", json_integer (50));
+  json_object_set_new (limits, "max_beacon_len", json_integer (256));
+  json_object_set_new (g_capabilities, "limits", limits);
 
-  json_t *features = json_object();
-  json_object_set_new(features, "auth", json_true());
-  json_object_set_new(features, "warp", json_true());
-  json_object_set_new(features, "sector.describe", json_true());
-  json_object_set_new(features, "trade.buy", json_true());
-  json_object_set_new(g_capabilities, "features", features);
+  json_t *features = json_object ();
+  json_object_set_new (features, "auth", json_true ());
+  json_object_set_new (features, "warp", json_true ());
+  json_object_set_new (features, "sector.describe", json_true ());
+  json_object_set_new (features, "trade.buy", json_true ());
+  json_object_set_new (g_capabilities, "features", features);
 
-  json_object_set_new(g_capabilities, "version", json_string("1.0.0-alpha"));
+  json_object_set_new (g_capabilities, "version",
+		       json_string ("1.0.0-alpha"));
 
-  
+
   install_signal_handlers ();
 
   int rc = server_loop (&running);
@@ -155,9 +156,10 @@ main (void)
   db_close ();
 
   // Clean up the global capabilities object when the server exits
-  if (g_capabilities) {
-    json_decref(g_capabilities);
-  }
+  if (g_capabilities)
+    {
+      json_decref (g_capabilities);
+    }
 
   return (rc == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

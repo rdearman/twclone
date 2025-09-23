@@ -27,6 +27,6 @@
 
 /* Other */
 #define ERR_NO_MEM              1501
-#define ERR_BAD_STATE 	 	1502	
+#define ERR_BAD_STATE 	 	1502
 #define ERR_DATABASE		1503
 #endif

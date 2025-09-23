@@ -67,8 +67,11 @@ int db_beacons_at_sector_json (int sector_id, json_t ** out_array);
 int db_planets_at_sector_json (int sector_id, json_t ** out_array);
 int db_player_set_sector (int player_id, int sector_id);
 int db_player_get_sector (int player_id, int *out_sector);
-static void handle_sector_info (int fd, json_t *root, int sector_id, int player_id);
-static void send_enveloped_ok (int fd, json_t *root, const char *type, json_t *data);
+static void handle_sector_info (int fd, json_t * root, int sector_id,
+				int player_id);
+static void send_enveloped_ok (int fd, json_t * root, const char *type,
+			       json_t * data);
+static void handle_sector_set_beacon (client_ctx_t *ctx, json_t *root);
 
 
 
@@ -80,9 +83,11 @@ static void send_enveloped_ok (int fd, json_t *root, const char *type, json_t *d
 /* ----------------------------- */
 
 // Define the handler function
-static void handle_system_capabilities (int fd, json_t *root)
+static void
+handle_system_capabilities (int fd, json_t *root)
 {
-  send_enveloped_ok(fd, root, "system.capabilities", json_incref(g_capabilities));
+  send_enveloped_ok (fd, root, "system.capabilities",
+		     json_incref (g_capabilities));
 }
 
 static json_t *
@@ -594,8 +599,8 @@ build_sector_info_json (int sector_id)
     {
       json_object_set_new (root, "ports", ports);
       json_object_set_new (root, "has_port",
-                           json_array_size (ports) >
-                           0 ? json_true () : json_false ());
+			   json_array_size (ports) >
+			   0 ? json_true () : json_false ());
     }
   else
     {
@@ -609,7 +614,7 @@ build_sector_info_json (int sector_id)
     {
       json_object_set_new (root, "players", players);
       json_object_set_new (root, "players_count",
-                           json_integer ((int) json_array_size (players)));
+			   json_integer ((int) json_array_size (players)));
     }
   else
     {
@@ -622,7 +627,8 @@ build_sector_info_json (int sector_id)
   if (db_beacons_at_sector_json (sector_id, &beacons) == SQLITE_OK && beacons)
     {
       json_object_set_new (root, "beacons", beacons);
-      json_object_set_new (root, "beacons_count", json_integer ((int) json_array_size (beacons)));
+      json_object_set_new (root, "beacons_count",
+			   json_integer ((int) json_array_size (beacons)));
     }
   else
     {
@@ -634,9 +640,12 @@ build_sector_info_json (int sector_id)
   json_t *planets = NULL;
   if (db_planets_at_sector_json (sector_id, &planets) == SQLITE_OK && planets)
     {
-      json_object_set_new (root, "planets", planets); /* takes ownership */
-      json_object_set_new (root, "has_planet", json_array_size (planets) > 0 ? json_true () : json_false ());
-      json_object_set_new (root, "planets_count", json_integer ((int) json_array_size (planets)));
+      json_object_set_new (root, "planets", planets);	/* takes ownership */
+      json_object_set_new (root, "has_planet",
+			   json_array_size (planets) >
+			   0 ? json_true () : json_false ());
+      json_object_set_new (root, "planets_count",
+			   json_integer ((int) json_array_size (planets)));
     }
   else
     {
@@ -646,7 +655,7 @@ build_sector_info_json (int sector_id)
     }
 
 
-  
+
   /* Beacons (always include array) */
   // json_t *beacons = NULL;
   if (db_beacons_at_sector_json (sector_id, &beacons) == SQLITE_OK && beacons)
@@ -894,18 +903,20 @@ process_message (client_ctx_t *ctx, json_t *root)
 	  json_decref (pinfo);
 	}
     }
-else if (strcmp (c, "move.describe_sector") == 0 || strcmp (c, "sector.info") == 0)
-{
-    int sector_id = ctx->sector_id > 0 ? ctx->sector_id : 0;
-    json_t *jdata = json_object_get (root, "data");
-    json_t *jsec = json_is_object (jdata) ? json_object_get (jdata, "sector_id") : NULL;
-    if (json_is_integer (jsec))
-        sector_id = (int) json_integer_value (jsec);
-    if (sector_id <= 0)
-        sector_id = 1;
+  else if (strcmp (c, "move.describe_sector") == 0
+	   || strcmp (c, "sector.info") == 0)
+    {
+      int sector_id = ctx->sector_id > 0 ? ctx->sector_id : 0;
+      json_t *jdata = json_object_get (root, "data");
+      json_t *jsec =
+	json_is_object (jdata) ? json_object_get (jdata, "sector_id") : NULL;
+      if (json_is_integer (jsec))
+	sector_id = (int) json_integer_value (jsec);
+      if (sector_id <= 0)
+	sector_id = 1;
 
-    handle_sector_info (ctx->fd, root, sector_id, ctx->player_id);
-}
+      handle_sector_info (ctx->fd, root, sector_id, ctx->player_id);
+    }
   else if (strcmp (c, "trade.buy") == 0)
     {
       json_t *jdata = json_object_get (root, "data");
@@ -1132,54 +1143,64 @@ else if (strcmp (c, "move.describe_sector") == 0 || strcmp (c, "sector.info") ==
 	  json_decref (data);
 	}
     }
-else if (strcmp(json_string_value(cmd), "port_info") == 0) {
-    json_t *data_in = json_object_get(root, "data");
-    int port_id = -1;
+  else if (strcmp (json_string_value (cmd), "port_info") == 0)
+    {
+      json_t *data_in = json_object_get (root, "data");
+      int port_id = -1;
 
-    // We can allow either `{"port_id":...}` or just assume the first port
-    // in the sector, as the client will do.
-    if (data_in) {
-      json_t *j_pid = json_object_get(data_in, "port_id");
-      if (json_is_integer(j_pid)) {
-	port_id = json_integer_value(j_pid);
-      }
-    }
-
-    if (port_id == -1) {
-      // Fallback to finding the port in the current sector
-      json_t *ports_at_sector = NULL;
-      db_ports_at_sector_json(ctx->sector_id, &ports_at_sector);
-      if (ports_at_sector && json_array_size(ports_at_sector) > 0) {
-	json_t *first_port = json_array_get(ports_at_sector, 0);
-	json_t *first_port_id_json = json_object_get(first_port, "id");
-	if (first_port_id_json) {
-	  port_id = json_integer_value(first_port_id_json);
+      // We can allow either `{"port_id":...}` or just assume the first port
+      // in the sector, as the client will do.
+      if (data_in)
+	{
+	  json_t *j_pid = json_object_get (data_in, "port_id");
+	  if (json_is_integer (j_pid))
+	    {
+	      port_id = json_integer_value (j_pid);
+	    }
 	}
-      }
-      json_decref(ports_at_sector);
+
+      if (port_id == -1)
+	{
+	  // Fallback to finding the port in the current sector
+	  json_t *ports_at_sector = NULL;
+	  db_ports_at_sector_json (ctx->sector_id, &ports_at_sector);
+	  if (ports_at_sector && json_array_size (ports_at_sector) > 0)
+	    {
+	      json_t *first_port = json_array_get (ports_at_sector, 0);
+	      json_t *first_port_id_json = json_object_get (first_port, "id");
+	      if (first_port_id_json)
+		{
+		  port_id = json_integer_value (first_port_id_json);
+		}
+	    }
+	  json_decref (ports_at_sector);
+	}
+
+      if (port_id == -1)
+	{
+	  // Still no port found.
+	  send_enveloped_refused (ctx->fd, root, ERR_BAD_STATE,
+				  "No port found in this sector.", NULL);
+	  goto trade_port_info_done;
+	}
+
+      json_t *port_info = NULL;
+      int rc = db_port_info_json (port_id, &port_info);
+      if (rc != SQLITE_OK)
+	{
+	  send_enveloped_error (ctx->fd, root, ERR_DATABASE,
+				"Could not fetch port info.");
+	  goto trade_port_info_done;
+	}
+
+      send_enveloped_ok (ctx->fd, root, "trade.port_info", port_info);
+      json_decref (port_info);
+
+    trade_port_info_done:
+      json_decref (root);
     }
 
-    if (port_id == -1) {
-      // Still no port found.
-      send_enveloped_refused(ctx->fd, root, ERR_BAD_STATE, "No port found in this sector.", NULL);
-      goto trade_port_info_done;
-    }
-
-    json_t *port_info = NULL;
-    int rc = db_port_info_json(port_id, &port_info);
-    if (rc != SQLITE_OK) {
-      send_enveloped_error(ctx->fd, root, ERR_DATABASE, "Could not fetch port info.");
-      goto trade_port_info_done;
-    }
-
-    send_enveloped_ok(ctx->fd, root, "trade.port_info", port_info);
-    json_decref(port_info);
-
-  trade_port_info_done:
-    json_decref(root);
-  }
-
-else if (strcmp (c, "ship.info") == 0 || strcmp (c, "ship.status") == 0)
+  else if (strcmp (c, "ship.info") == 0 || strcmp (c, "ship.status") == 0)
     {
       if (ctx->player_id <= 0)
 	{
@@ -1228,25 +1249,29 @@ else if (strcmp (c, "ship.info") == 0 || strcmp (c, "ship.status") == 0)
 	      /* json_decref (data); */
 	      json_decref (info);
 
-	      json_t *env = make_base_envelope(root);
-	      json_object_set_new(env, "status", json_string("ok"));
-	      json_object_set_new(env, "type", json_string("ship.info"));
-	      json_object_set_new(env, "data", data); // takes ownership of data
+	      json_t *env = make_base_envelope (root);
+	      json_object_set_new (env, "status", json_string ("ok"));
+	      json_object_set_new (env, "type", json_string ("ship.info"));
+	      json_object_set_new (env, "data", data);	// takes ownership of data
 
-	      json_t *meta = json_object();
-	      if (strcmp(c, "ship.info") == 0) {
-		json_object_set_new(meta, "deprecated", json_true());
-	      }
-	      if (json_object_size(meta) > 0) {
-		json_object_set_new(env, "meta", meta);
-	      } else {
-		json_decref(meta);
-	      }
+	      json_t *meta = json_object ();
+	      if (strcmp (c, "ship.info") == 0)
+		{
+		  json_object_set_new (meta, "deprecated", json_true ());
+		}
+	      if (json_object_size (meta) > 0)
+		{
+		  json_object_set_new (env, "meta", meta);
+		}
+	      else
+		{
+		  json_decref (meta);
+		}
 
-	      attach_rate_limit_meta(env, ctx);
-	      rl_tick(ctx);
-	      send_all_json(ctx->fd, env);
-	      json_decref(env);
+	      attach_rate_limit_meta (env, ctx);
+	      rl_tick (ctx);
+	      send_all_json (ctx->fd, env);
+	      json_decref (env);
 
 	    }
 	  else
@@ -1255,7 +1280,10 @@ else if (strcmp (c, "ship.info") == 0 || strcmp (c, "ship.status") == 0)
 	    }
 	}
     }
-
+  else if (strcmp (c, "sector.set_beacon") == 0)
+    {
+      handle_sector_set_beacon (ctx, root);
+    }
   else if (strcmp (c, "player.list_online") == 0)
     {
       /*Until you maintain a global connection registry,
@@ -1672,40 +1700,112 @@ server_loop (volatile sig_atomic_t *running)
 }
 
 
-static void handle_sector_info (int fd, json_t *root, int sector_id, int player_id)
+static void
+handle_sector_info (int fd, json_t *root, int sector_id, int player_id)
 {
-    json_t *payload = build_sector_info_json (sector_id);
-    if (!payload)
+  json_t *payload = build_sector_info_json (sector_id);
+  if (!payload)
     {
-        send_enveloped_error (fd, root, 1500,
-                              "Out of memory building sector info");
-        return;
+      send_enveloped_error (fd, root, 1500,
+			    "Out of memory building sector info");
+      return;
     }
 
-    // Add beacon info
-    char *btxt = NULL;
-    if (db_sector_beacon_text (sector_id, &btxt) == SQLITE_OK && btxt && *btxt)
+  // Add beacon info
+  char *btxt = NULL;
+  if (db_sector_beacon_text (sector_id, &btxt) == SQLITE_OK && btxt && *btxt)
     {
-        json_object_set_new (payload, "beacon", json_string (btxt));
-        json_object_set_new (payload, "has_beacon", json_true ());
+      json_object_set_new (payload, "beacon", json_string (btxt));
+      json_object_set_new (payload, "has_beacon", json_true ());
     }
-    else
+  else
     {
-        json_object_set_new (payload, "beacon", json_null ());
-        json_object_set_new (payload, "has_beacon", json_false ());
+      json_object_set_new (payload, "beacon", json_null ());
+      json_object_set_new (payload, "has_beacon", json_false ());
     }
-    free (btxt);
+  free (btxt);
 
-    // Add ships info
-    json_t *ships = NULL;
-    int rc = db_ships_at_sector_json (player_id, sector_id, &ships);
-    if (rc == SQLITE_OK)
+  // Add ships info
+  json_t *ships = NULL;
+  int rc = db_ships_at_sector_json (player_id, sector_id, &ships);
+  if (rc == SQLITE_OK)
     {
-        json_object_set_new (payload, "ships", ships ? ships : json_array ());
-        json_object_set_new (payload, "ships_count",
-                             json_integer (json_array_size (ships)));
+      json_object_set_new (payload, "ships", ships ? ships : json_array ());
+      json_object_set_new (payload, "ships_count",
+			   json_integer (json_array_size (ships)));
     }
 
-    send_enveloped_ok (fd, root, "sector.info", payload);
-    json_decref (payload);
+  send_enveloped_ok (fd, root, "sector.info", payload);
+  json_decref (payload);
+}
+
+
+
+// In server_loop.c
+static void
+handle_sector_set_beacon (client_ctx_t *ctx, json_t *root)
+{
+  json_t *jdata = json_object_get (root, "data");
+  json_t *jsector_id = json_object_get (jdata, "sector_id");
+  json_t *jtext = json_object_get (jdata, "text");
+
+  // Guard 1: Check if the player is in the specified sector
+  int req_sector_id = json_integer_value (jsector_id);
+  if (ctx->sector_id != req_sector_id)
+    {
+      send_enveloped_error (ctx->fd, root, 1400,
+			    "Player is not in the specified sector.");
+      return;
+    }
+
+  // Guard 2: Check if the sector is a FedSpace sector (1-10)
+  if (req_sector_id >= 1 && req_sector_id <= 10)
+    {
+      send_enveloped_error (ctx->fd, root, 1403,
+			    "Cannot set a beacon in FedSpace.");
+      return;
+    }
+
+  // Guard 3: Check if the player has a beacon on their ship
+  // (This requires a new DB function or a check against player inventory/ship state)
+  // For this example, let's assume a function `db_player_has_beacon_on_ship` exists.
+  // If you need to implement this, let me know.
+  if (!db_player_has_beacon_on_ship (ctx->player_id))
+    {
+      send_enveloped_error (ctx->fd, root, 1401,
+			    "Player does not have a beacon on their ship.");
+      return;
+    }
+
+  // Guard 4: Check if a beacon already exists in the sector
+  if (db_sector_has_beacon (req_sector_id))
+    {
+      send_enveloped_error (ctx->fd, root, 1402,
+			    "A beacon already exists in this sector.");
+      return;
+    }
+
+  // Trim and bound text length (e.g., 0-80 chars)
+  const char *beacon_text = json_string_value (jtext);
+  if (strlen (beacon_text) > 80)
+    {
+      send_enveloped_error (ctx->fd, root, 1400,
+			    "Beacon text is too long (max 80 characters).");
+      return;
+    }
+
+  // All guards passed, perform the update
+  int rc = db_sector_set_beacon (req_sector_id, beacon_text);
+  if (rc != SQLITE_OK)
+    {
+      send_enveloped_error (ctx->fd, root, 1500,
+			    "Database error updating beacon.");
+      return;
+    }
+
+  // Decrement player's beacon count
+  db_player_decrement_beacon_count (ctx->player_id);
+
+  // Return the new sector state
+  handle_sector_info (ctx->fd, root, req_sector_id, ctx->player_id);
 }

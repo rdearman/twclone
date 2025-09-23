@@ -93,7 +93,7 @@ const char *create_table_sql[] = {
   "CREATE TABLE IF NOT EXISTS ships (" "id INTEGER PRIMARY KEY AUTOINCREMENT, " "number INTEGER, "	/* legacy ID */
     "name TEXT NOT NULL, " "type INTEGER, "	/* FK to shiptypes.id (Index+1 from shipinfo array) */
     "attack INTEGER, " "holds_used INTEGER, " "mines INTEGER, " "fighters_used INTEGER, " "genesis INTEGER, " "photons INTEGER, " "location INTEGER, "	/* FK to sectors.id */
-    "fighters INTEGER, " "shields INTEGER, " "holds INTEGER, "
+    "fighters INTEGER, " "shields INTEGER, " "holds INTEGER, " "beacons INTEGER, "
     "colonists INTEGER, " "equipment INTEGER, " "organics INTEGER, "
     "ore INTEGER, " "flags INTEGER, " "ported INTEGER, " "onplanet INTEGER"
     ");",
@@ -1926,61 +1926,80 @@ db_adjacent_sectors_json (int sector_id, json_t **out_array)
 
 /* ---------- PORTS AT SECTOR (visible only) ---------- */
 
-int db_port_info_json (int port_id, json_t ** out_obj) {
-    *out_obj = NULL;
-    json_t *port = json_object();
-    if (!port) {
-        return SQLITE_NOMEM;
+int
+db_port_info_json (int port_id, json_t **out_obj)
+{
+  *out_obj = NULL;
+  json_t *port = json_object ();
+  if (!port)
+    {
+      return SQLITE_NOMEM;
     }
 
-    // First, get the basic port info
-    const char *port_sql = "SELECT id, name, type, tech_level, credits, sector FROM ports WHERE id=?;";
-    sqlite3_stmt *st = NULL;
-    int rc = sqlite3_prepare_v2(db_get_handle(), port_sql, -1, &st, NULL);
-    if (rc != SQLITE_OK) {
-        json_decref(port);
-        return rc;
+  // First, get the basic port info
+  const char *port_sql =
+    "SELECT id, name, type, tech_level, credits, sector FROM ports WHERE id=?;";
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2 (db_get_handle (), port_sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      json_decref (port);
+      return rc;
     }
 
-    sqlite3_bind_int(st, 1, port_id);
-    if (sqlite3_step(st) != SQLITE_ROW) {
-        sqlite3_finalize(st);
-        json_decref(port);
-        return SQLITE_NOTFOUND;
+  sqlite3_bind_int (st, 1, port_id);
+  if (sqlite3_step (st) != SQLITE_ROW)
+    {
+      sqlite3_finalize (st);
+      json_decref (port);
+      return SQLITE_NOTFOUND;
     }
 
-    json_object_set_new(port, "id", json_integer(sqlite3_column_int(st, 0)));
-    json_object_set_new(port, "name", json_string((const char*)sqlite3_column_text(st, 1)));
-    json_object_set_new(port, "type", json_string((const char*)sqlite3_column_text(st, 2))); // Assuming type is stored as a string name
-    json_object_set_new(port, "tech_level", json_integer(sqlite3_column_int(st, 3)));
-    json_object_set_new(port, "credits", json_integer(sqlite3_column_int(st, 4)));
-    json_object_set_new(port, "sector_id", json_integer(sqlite3_column_int(st, 5)));
+  json_object_set_new (port, "id", json_integer (sqlite3_column_int (st, 0)));
+  json_object_set_new (port, "name",
+		       json_string ((const char *)
+				    sqlite3_column_text (st, 1)));
+  json_object_set_new (port, "type", json_string ((const char *) sqlite3_column_text (st, 2)));	// Assuming type is stored as a string name
+  json_object_set_new (port, "tech_level",
+		       json_integer (sqlite3_column_int (st, 3)));
+  json_object_set_new (port, "credits",
+		       json_integer (sqlite3_column_int (st, 4)));
+  json_object_set_new (port, "sector_id",
+		       json_integer (sqlite3_column_int (st, 5)));
 
-    sqlite3_finalize(st);
+  sqlite3_finalize (st);
 
-    // Now, get the commodities info
-    const char *stock_sql = "SELECT commodity, quantity, buy_price, sell_price FROM port_stock WHERE port_id=?;";
-    rc = sqlite3_prepare_v2(db_get_handle(), stock_sql, -1, &st, NULL);
-    if (rc != SQLITE_OK) {
-        json_decref(port);
-        return rc;
+  // Now, get the commodities info
+  const char *stock_sql =
+    "SELECT commodity, quantity, buy_price, sell_price FROM port_stock WHERE port_id=?;";
+  rc = sqlite3_prepare_v2 (db_get_handle (), stock_sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      json_decref (port);
+      return rc;
     }
 
-    sqlite3_bind_int(st, 1, port_id);
-    json_t *commodities = json_array();
-    while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
-        json_t *commodity = json_object();
-        json_object_set_new(commodity, "commodity", json_string((const char*)sqlite3_column_text(st, 0)));
-        json_object_set_new(commodity, "quantity", json_integer(sqlite3_column_int(st, 1)));
-        json_object_set_new(commodity, "buy_price", json_integer(sqlite3_column_int(st, 2)));
-        json_object_set_new(commodity, "sell_price", json_integer(sqlite3_column_int(st, 3)));
-        json_array_append_new(commodities, commodity);
+  sqlite3_bind_int (st, 1, port_id);
+  json_t *commodities = json_array ();
+  while ((rc = sqlite3_step (st)) == SQLITE_ROW)
+    {
+      json_t *commodity = json_object ();
+      json_object_set_new (commodity, "commodity",
+			   json_string ((const char *)
+					sqlite3_column_text (st, 0)));
+      json_object_set_new (commodity, "quantity",
+			   json_integer (sqlite3_column_int (st, 1)));
+      json_object_set_new (commodity, "buy_price",
+			   json_integer (sqlite3_column_int (st, 2)));
+      json_object_set_new (commodity, "sell_price",
+			   json_integer (sqlite3_column_int (st, 3)));
+      json_array_append_new (commodities, commodity);
     }
-    sqlite3_finalize(st);
-    
-    json_object_set_new(port, "commodities", commodities);
-    *out_obj = port;
-    return SQLITE_OK;
+  sqlite3_finalize (st);
+
+  json_object_set_new (port, "commodities", commodities);
+  *out_obj = port;
+  return SQLITE_OK;
 }
 
 
@@ -2374,100 +2393,199 @@ db_sector_beacon_text (int sector_id, char **out_text)
   return (rc == SQLITE_ROW || rc == SQLITE_DONE) ? SQLITE_OK : rc;
 }
 
-int db_ships_at_sector_json(int player_id, int sector_id, json_t ** out) {
-    *out = NULL;
-    json_t *ships = json_array();
-    if (!ships) {
-        return SQLITE_NOMEM;
+int
+db_ships_at_sector_json (int player_id, int sector_id, json_t **out)
+{
+  *out = NULL;
+  json_t *ships = json_array ();
+  if (!ships)
+    {
+      return SQLITE_NOMEM;
     }
 
-    const char *sql =
-        "SELECT T1.name, T2.name, T3.name, T1.id "
-        "FROM ships T1 "
-        "LEFT JOIN shiptypes T2 ON T1.type = T2.id "
-        "LEFT JOIN players T3 ON T1.id = T3.ship "
-        "WHERE T1.location=?;";
+  const char *sql =
+    "SELECT T1.name, T2.name, T3.name, T1.id "
+    "FROM ships T1 "
+    "LEFT JOIN shiptypes T2 ON T1.type = T2.id "
+    "LEFT JOIN players T3 ON T1.id = T3.ship " "WHERE T1.location=?;";
 
-    sqlite3_stmt *st = NULL;
-    int rc = sqlite3_prepare_v2(db_get_handle(), sql, -1, &st, NULL);
-    if (rc != SQLITE_OK) {
-        json_decref(ships);
-        return rc;
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2 (db_get_handle (), sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      json_decref (ships);
+      return rc;
     }
 
-    sqlite3_bind_int(st, 1, sector_id);
+  sqlite3_bind_int (st, 1, sector_id);
 
-    while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
-        const char *ship_name = (const char *) sqlite3_column_text(st, 0);
-        const char *ship_type_name = (const char *) sqlite3_column_text(st, 1);
-        const char *owner_name = (const char *) sqlite3_column_text(st, 2);
-        int ship_id = sqlite3_column_int(st, 3);
+  while ((rc = sqlite3_step (st)) == SQLITE_ROW)
+    {
+      const char *ship_name = (const char *) sqlite3_column_text (st, 0);
+      const char *ship_type_name = (const char *) sqlite3_column_text (st, 1);
+      const char *owner_name = (const char *) sqlite3_column_text (st, 2);
+      int ship_id = sqlite3_column_int (st, 3);
 
-        json_t *ship = json_object();
-        if (!ship) {
-            json_decref(ships);
-            sqlite3_finalize(st);
-            return SQLITE_NOMEM;
-        }
+      json_t *ship = json_object ();
+      if (!ship)
+	{
+	  json_decref (ships);
+	  sqlite3_finalize (st);
+	  return SQLITE_NOMEM;
+	}
 
-        json_object_set_new(ship, "ship_name", json_string(ship_name));
-        json_object_set_new(ship, "ship_type", json_string(ship_type_name));
+      json_object_set_new (ship, "ship_name", json_string (ship_name));
+      json_object_set_new (ship, "ship_type", json_string (ship_type_name));
 
-        // Use the owner's name if it exists, otherwise default to "derelict"
-        if (owner_name != NULL && strlen(owner_name) > 0) {
-            json_object_set_new(ship, "owner", json_string(owner_name));
-        } else {
-            json_object_set_new(ship, "owner", json_string("derelict"));
-        }
+      // Use the owner's name if it exists, otherwise default to "derelict"
+      if (owner_name != NULL && strlen (owner_name) > 0)
+	{
+	  json_object_set_new (ship, "owner", json_string (owner_name));
+	}
+      else
+	{
+	  json_object_set_new (ship, "owner", json_string ("derelict"));
+	}
 
-        json_array_append_new(ships, ship);
+      json_array_append_new (ships, ship);
     }
 
-    sqlite3_finalize(st);
-    *out = ships;
-    return SQLITE_OK;
+  sqlite3_finalize (st);
+  *out = ships;
+  return SQLITE_OK;
 }
 
-int db_ports_at_sector_json (int sector_id, json_t ** out_array)
+int
+db_ports_at_sector_json (int sector_id, json_t **out_array)
 {
-    *out_array = NULL;
-    json_t *ports = json_array();
-    if (!ports) {
-        return SQLITE_NOMEM;
+  *out_array = NULL;
+  json_t *ports = json_array ();
+  if (!ports)
+    {
+      return SQLITE_NOMEM;
     }
 
-    const char *sql =
-        "SELECT id, name, type FROM ports WHERE sector=?;";
-    sqlite3_stmt *st = NULL;
+  const char *sql = "SELECT id, name, type FROM ports WHERE sector=?;";
+  sqlite3_stmt *st = NULL;
 
-    int rc = sqlite3_prepare_v2(db_get_handle(), sql, -1, &st, NULL);
+  int rc = sqlite3_prepare_v2 (db_get_handle (), sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      json_decref (ports);
+      return rc;
+    }
+
+  sqlite3_bind_int (st, 1, sector_id);
+
+  while ((rc = sqlite3_step (st)) == SQLITE_ROW)
+    {
+      int port_id = sqlite3_column_int (st, 0);
+      const char *port_name = (const char *) sqlite3_column_text (st, 1);
+      const char *port_type = (const char *) sqlite3_column_text (st, 2);
+
+      json_t *port = json_object ();
+      if (!port)
+	{
+	  json_decref (ports);
+	  sqlite3_finalize (st);
+	  return SQLITE_NOMEM;
+	}
+
+      json_object_set_new (port, "id", json_integer (port_id));
+      json_object_set_new (port, "name", json_string (port_name));
+      json_object_set_new (port, "type", json_string (port_type));
+
+      json_array_append_new (ports, port);
+    }
+
+  sqlite3_finalize (st);
+  *out_array = ports;
+  return SQLITE_OK;
+}
+
+// In database.c
+int
+db_sector_has_beacon (int sector_id)
+{
+  sqlite3_stmt *stmt;
+  const char *sql = "SELECT beacon FROM sectors WHERE id = ?;";
+  if (sqlite3_prepare_v2 (db_get_handle (), sql, -1, &stmt, NULL) != SQLITE_OK)
+    {
+      fprintf (stderr, "SQL error in db_sector_has_beacon: %s\n",
+	       sqlite3_errmsg (db_get_handle ()));
+      return -1;		// Indicates an error
+    }
+
+  sqlite3_bind_int (stmt, 1, sector_id);
+
+  int rc = sqlite3_step (stmt);
+  int has_beacon = 0;
+  if (rc == SQLITE_ROW)
+    {
+      if (sqlite3_column_text (stmt, 0) != NULL)
+	{
+	  has_beacon = 1;
+	}
+    }
+
+  sqlite3_finalize (stmt);
+  return has_beacon;
+}
+
+int
+db_sector_set_beacon (int sector_id, const char *beacon_text)
+{
+  sqlite3_stmt *stmt;
+  const char *sql = "UPDATE sectors SET beacon = ? WHERE id = ?;";
+  int rc = sqlite3_prepare_v2 (db_get_handle (), sql, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      return rc;
+    }
+
+  sqlite3_bind_text (stmt, 1, beacon_text, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int (stmt, 2, sector_id);
+  rc = sqlite3_step (stmt);
+  sqlite3_finalize (stmt);
+  return rc;
+}
+
+
+// In database.c
+int db_player_has_beacon_on_ship(int player_id)
+{
+    sqlite3_stmt *stmt;
+    const char *sql = "SELECT T2.beacons FROM players AS T1 JOIN ships AS T2 ON T1.ship = T2.id WHERE T1.id = ?;";
+    int rc = sqlite3_prepare_v2(db_get_handle (), sql, -1, &stmt, NULL);
     if (rc != SQLITE_OK) {
-        json_decref(ports);
+        return 0; // SQL error, assume no beacon
+    }
+
+    sqlite3_bind_int(stmt, 1, player_id);
+    
+    int has_beacon = 0;
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        if (sqlite3_column_int(stmt, 0) > 0) {
+            has_beacon = 1;
+        }
+    }
+
+    sqlite3_finalize(stmt);
+    return has_beacon;
+}
+
+// In database.c
+int db_player_decrement_beacon_count(int player_id)
+{
+    sqlite3_stmt *stmt;
+    const char *sql = "UPDATE ships SET beacons = beacons - 1 WHERE id = (SELECT ship FROM players WHERE id = ?);";
+    int rc = sqlite3_prepare_v2(db_get_handle (), sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
         return rc;
     }
-
-    sqlite3_bind_int(st, 1, sector_id);
-
-    while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
-        int port_id = sqlite3_column_int(st, 0);
-        const char *port_name = (const char *)sqlite3_column_text(st, 1);
-        const char *port_type = (const char *)sqlite3_column_text(st, 2);
-
-        json_t *port = json_object();
-        if (!port) {
-            json_decref(ports);
-            sqlite3_finalize(st);
-            return SQLITE_NOMEM;
-        }
-
-        json_object_set_new(port, "id", json_integer(port_id));
-        json_object_set_new(port, "name", json_string(port_name));
-        json_object_set_new(port, "type", json_string(port_type));
-
-        json_array_append_new(ports, port);
-    }
     
-    sqlite3_finalize(st);
-    *out_array = ports;
-    return SQLITE_OK;
+    sqlite3_bind_int(stmt, 1, player_id);
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    return rc;
 }

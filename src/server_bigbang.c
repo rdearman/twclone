@@ -679,15 +679,17 @@ bigbang (void)
   prune_tunnel_edges (db);
 
   printf ("BIGBANG: Ensuring all sectors have exits...\n");
-  fflush(stdout);
+  fflush (stdout);
   int rc = 0;
-  
-  rc = ensure_all_sectors_have_exits(db);
-  if (rc != SQLITE_OK) {
-    fprintf(stderr, "error ensuring all sectors have exits: %s\n", sqlite3_errmsg(db));
-    return rc;
-  }
-  
+
+  rc = ensure_all_sectors_have_exits (db);
+  if (rc != SQLITE_OK)
+    {
+      fprintf (stderr, "error ensuring all sectors have exits: %s\n",
+	       sqlite3_errmsg (db));
+      return rc;
+    }
+
   fprintf (stderr, "BIGBANG: Creating ports...\n");
   if (create_ports () != 0)
     {
@@ -1545,58 +1547,71 @@ rand_incl (int lo, int hi)
   return lo + (int) (rand () % (hi - lo + 1));
 }
 
-static int create_imperial_ship(sqlite3 *db, int starting_sector_id)
+static int
+create_imperial_ship (sqlite3 *db, int starting_sector_id)
 {
-    const char *sql_select = "SELECT id FROM sectors WHERE id >= ? ORDER BY RANDOM() LIMIT 1;";
-    const char *sql_update_ship_sector = "UPDATE ships SET sector_id = ? WHERE ship_name = 'Imperial Starship';";
-    
-    sqlite3_stmt *stmt_select = NULL;
-    sqlite3_stmt *stmt_update = NULL;
-    int rc;
+  const char *sql_select =
+    "SELECT id FROM sectors WHERE id >= ? ORDER BY RANDOM() LIMIT 1;";
+  const char *sql_update_ship_sector =
+    "UPDATE ships SET sector_id = ? WHERE ship_name = 'Imperial Starship';";
 
-    rc = sqlite3_prepare_v2(db, sql_select, -1, &stmt_select, NULL);
-    if (rc != SQLITE_OK) return rc;
+  sqlite3_stmt *stmt_select = NULL;
+  sqlite3_stmt *stmt_update = NULL;
+  int rc;
 
-    rc = sqlite3_prepare_v2(db, sql_update_ship_sector, -1, &stmt_update, NULL);
-    if (rc != SQLITE_OK) {
-        sqlite3_finalize(stmt_select);
-        return rc;
+  rc = sqlite3_prepare_v2 (db, sql_select, -1, &stmt_select, NULL);
+  if (rc != SQLITE_OK)
+    return rc;
+
+  rc =
+    sqlite3_prepare_v2 (db, sql_update_ship_sector, -1, &stmt_update, NULL);
+  if (rc != SQLITE_OK)
+    {
+      sqlite3_finalize (stmt_select);
+      return rc;
     }
 
-    int imperial_sector_id = 0;
-    do {
-        // Find a random sector that is NOT in Fedspace (sectors 1-10)
-        sqlite3_bind_int(stmt_select, 1, 11);
-        rc = sqlite3_step(stmt_select);
-        if (rc == SQLITE_ROW) {
-            imperial_sector_id = sqlite3_column_int(stmt_select, 0);
-        }
-        sqlite3_reset(stmt_select);
-    } while (imperial_sector_id >= 1 && imperial_sector_id <= 10);
+  int imperial_sector_id = 0;
+  do
+    {
+      // Find a random sector that is NOT in Fedspace (sectors 1-10)
+      sqlite3_bind_int (stmt_select, 1, 11);
+      rc = sqlite3_step (stmt_select);
+      if (rc == SQLITE_ROW)
+	{
+	  imperial_sector_id = sqlite3_column_int (stmt_select, 0);
+	}
+      sqlite3_reset (stmt_select);
+    }
+  while (imperial_sector_id >= 1 && imperial_sector_id <= 10);
 
-    sqlite3_finalize(stmt_select);
+  sqlite3_finalize (stmt_select);
 
-    if (imperial_sector_id == 0) {
-        return -1;
+  if (imperial_sector_id == 0)
+    {
+      return -1;
     }
 
-    sqlite3_exec(db, "BEGIN TRANSACTION;", NULL, NULL, NULL);
+  sqlite3_exec (db, "BEGIN TRANSACTION;", NULL, NULL, NULL);
 
-    sqlite3_bind_int(stmt_update, 1, imperial_sector_id);
-    rc = sqlite3_step(stmt_update);
-    if (rc != SQLITE_DONE) {
-        fprintf(stderr, "SQLite error updating imperial ship sector: %s\n", sqlite3_errmsg(db));
-        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
-        sqlite3_finalize(stmt_update);
-        return rc;
+  sqlite3_bind_int (stmt_update, 1, imperial_sector_id);
+  rc = sqlite3_step (stmt_update);
+  if (rc != SQLITE_DONE)
+    {
+      fprintf (stderr, "SQLite error updating imperial ship sector: %s\n",
+	       sqlite3_errmsg (db));
+      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      sqlite3_finalize (stmt_update);
+      return rc;
     }
 
-    sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL);
+  sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
 
-    sqlite3_finalize(stmt_update);
+  sqlite3_finalize (stmt_update);
 
-    printf("BIGBANG: Imperial Starship placed at sector %d.\n", imperial_sector_id);
-    return SQLITE_OK;
+  printf ("BIGBANG: Imperial Starship placed at sector %d.\n",
+	  imperial_sector_id);
+  return SQLITE_OK;
 }
 
 
@@ -1957,88 +1972,99 @@ create_derelicts (void)
   return 0;
 }
 
-static int ensure_all_sectors_have_exits (sqlite3 * db)
+static int
+ensure_all_sectors_have_exits (sqlite3 *db)
 {
-    const char *sql_select_all = "SELECT id FROM sectors;";
-    const char *sql_select_outgoing = "SELECT COUNT(*) FROM sector_warps WHERE from_sector=?;";
-    const char *sql_select_incoming = "SELECT from_sector FROM sector_warps WHERE to_sector=?;"; // This line was the problem
-    const char *sql_insert_warp = "INSERT INTO sector_warps (from_sector, to_sector) VALUES (?, ?);";
-    
-    sqlite3_stmt *stmt_all = NULL;
-    sqlite3_stmt *stmt_outgoing = NULL;
-    sqlite3_stmt *stmt_incoming = NULL;
-    sqlite3_stmt *stmt_insert = NULL;
+  const char *sql_select_all = "SELECT id FROM sectors;";
+  const char *sql_select_outgoing =
+    "SELECT COUNT(*) FROM sector_warps WHERE from_sector=?;";
+  const char *sql_select_incoming = "SELECT from_sector FROM sector_warps WHERE to_sector=?;";	// This line was the problem
+  const char *sql_insert_warp =
+    "INSERT INTO sector_warps (from_sector, to_sector) VALUES (?, ?);";
 
-    int rc;
-    int sectors_fixed = 0;
+  sqlite3_stmt *stmt_all = NULL;
+  sqlite3_stmt *stmt_outgoing = NULL;
+  sqlite3_stmt *stmt_incoming = NULL;
+  sqlite3_stmt *stmt_insert = NULL;
 
-    sqlite3_exec(db, "BEGIN TRANSACTION;", NULL, NULL, NULL);
+  int rc;
+  int sectors_fixed = 0;
 
-    rc = sqlite3_prepare_v2(db, sql_select_all, -1, &stmt_all, NULL);
-    if (rc != SQLITE_OK) {
-        return rc;
+  sqlite3_exec (db, "BEGIN TRANSACTION;", NULL, NULL, NULL);
+
+  rc = sqlite3_prepare_v2 (db, sql_select_all, -1, &stmt_all, NULL);
+  if (rc != SQLITE_OK)
+    {
+      return rc;
     }
 
-    rc = sqlite3_prepare_v2(db, sql_select_outgoing, -1, &stmt_outgoing, NULL);
-    if (rc != SQLITE_OK) {
-        sqlite3_finalize(stmt_all);
-        return rc;
+  rc = sqlite3_prepare_v2 (db, sql_select_outgoing, -1, &stmt_outgoing, NULL);
+  if (rc != SQLITE_OK)
+    {
+      sqlite3_finalize (stmt_all);
+      return rc;
     }
 
-    rc = sqlite3_prepare_v2(db, sql_select_incoming, -1, &stmt_incoming, NULL);
-    if (rc != SQLITE_OK) {
-        sqlite3_finalize(stmt_all);
-        sqlite3_finalize(stmt_outgoing);
-        return rc;
+  rc = sqlite3_prepare_v2 (db, sql_select_incoming, -1, &stmt_incoming, NULL);
+  if (rc != SQLITE_OK)
+    {
+      sqlite3_finalize (stmt_all);
+      sqlite3_finalize (stmt_outgoing);
+      return rc;
     }
 
-    rc = sqlite3_prepare_v2(db, sql_insert_warp, -1, &stmt_insert, NULL);
-    if (rc != SQLITE_OK) {
-        sqlite3_finalize(stmt_all);
-        sqlite3_finalize(stmt_outgoing);
-        sqlite3_finalize(stmt_incoming);
-        return rc;
+  rc = sqlite3_prepare_v2 (db, sql_insert_warp, -1, &stmt_insert, NULL);
+  if (rc != SQLITE_OK)
+    {
+      sqlite3_finalize (stmt_all);
+      sqlite3_finalize (stmt_outgoing);
+      sqlite3_finalize (stmt_incoming);
+      return rc;
     }
 
-    while ((rc = sqlite3_step(stmt_all)) == SQLITE_ROW) {
-        int sector_id = sqlite3_column_int(stmt_all, 0);
+  while ((rc = sqlite3_step (stmt_all)) == SQLITE_ROW)
+    {
+      int sector_id = sqlite3_column_int (stmt_all, 0);
 
-        // Check if the sector has any outgoing warps
-        sqlite3_bind_int(stmt_outgoing, 1, sector_id);
-        sqlite3_step(stmt_outgoing);
-        int outgoing_count = sqlite3_column_int(stmt_outgoing, 0);
-        sqlite3_reset(stmt_outgoing);
+      // Check if the sector has any outgoing warps
+      sqlite3_bind_int (stmt_outgoing, 1, sector_id);
+      sqlite3_step (stmt_outgoing);
+      int outgoing_count = sqlite3_column_int (stmt_outgoing, 0);
+      sqlite3_reset (stmt_outgoing);
 
-        if (outgoing_count == 0) {
-            // This is a one-way trap. Find a sector that warps here.
-            int from_sector_id = -1;
-            sqlite3_bind_int(stmt_incoming, 1, sector_id);
-            if (sqlite3_step(stmt_incoming) == SQLITE_ROW) {
-                from_sector_id = sqlite3_column_int(stmt_incoming, 0);
-            }
-            sqlite3_reset(stmt_incoming);
+      if (outgoing_count == 0)
+	{
+	  // This is a one-way trap. Find a sector that warps here.
+	  int from_sector_id = -1;
+	  sqlite3_bind_int (stmt_incoming, 1, sector_id);
+	  if (sqlite3_step (stmt_incoming) == SQLITE_ROW)
+	    {
+	      from_sector_id = sqlite3_column_int (stmt_incoming, 0);
+	    }
+	  sqlite3_reset (stmt_incoming);
 
-            if (from_sector_id != -1) {
-                // Create a return warp back to the originating sector
-	        //  printf("Sector %d is a one-way trap. Adding a return warp to sector %d.\n", sector_id, from_sector_id);
-                
-                sqlite3_bind_int(stmt_insert, 1, sector_id);
-                sqlite3_bind_int(stmt_insert, 2, from_sector_id);
-                sqlite3_step(stmt_insert);
-                sqlite3_reset(stmt_insert);
+	  if (from_sector_id != -1)
+	    {
+	      // Create a return warp back to the originating sector
+	      //  printf("Sector %d is a one-way trap. Adding a return warp to sector %d.\n", sector_id, from_sector_id);
 
-                sectors_fixed++;
-            }
-        }
+	      sqlite3_bind_int (stmt_insert, 1, sector_id);
+	      sqlite3_bind_int (stmt_insert, 2, from_sector_id);
+	      sqlite3_step (stmt_insert);
+	      sqlite3_reset (stmt_insert);
+
+	      sectors_fixed++;
+	    }
+	}
     }
 
-    sqlite3_finalize(stmt_all);
-    sqlite3_finalize(stmt_outgoing);
-    sqlite3_finalize(stmt_incoming);
-    sqlite3_finalize(stmt_insert);
+  sqlite3_finalize (stmt_all);
+  sqlite3_finalize (stmt_outgoing);
+  sqlite3_finalize (stmt_incoming);
+  sqlite3_finalize (stmt_insert);
 
-    sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL);
+  sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
 
-    printf("BIGBANG: Fixed %d one-way sectors.\n", sectors_fixed);
-    return SQLITE_OK;
+  printf ("BIGBANG: Fixed %d one-way sectors.\n", sectors_fixed);
+  return SQLITE_OK;
 }
