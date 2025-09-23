@@ -9,13 +9,91 @@
 #include <time.h>
 #include <jansson.h>
 #include <stdbool.h>
+#include <pthread.h>
+
+/* Define and initialize the mutex for the database handle */
+pthread_mutex_t db_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static sqlite3 *db_handle = NULL;
 const char *DEFAULT_DB_NAME = "twconfig.db";
+
 /* Forward declaration so we can call it before the definition */
 static json_t *parse_neighbors_csv (const unsigned char *txt);
 
 ////////////////////
+
+/**
+ * @brief Thread-safe wrapper for a simple column update.
+ *
+ * This function acquires a lock before executing the query and releases
+ * the lock afterwards.
+ *
+ * @param table The name of the table to update.
+ * @param id The ID of the row to update.
+ * @param column The name of the column to update.
+ * @param value A JSON value containing the data to set.
+ * @return SQLITE_OK on success, or an SQLite error code.
+ */
+int db_thread_safe_update_single_column(const char *table, int id, const char *column, json_t *value) {
+    int rc = -1;
+    char *sql = NULL;
+    sqlite3_stmt *stmt = NULL;
+
+    // 1. Acquire the lock before accessing the shared database handle
+    pthread_mutex_lock(&db_mutex);
+
+    // Build the SQL query string
+    const char *template = "UPDATE %s SET %s = ? WHERE id = ?;";
+    sql = sqlite3_mprintf(template, table, column);
+    if (!sql) {
+        pthread_mutex_unlock(&db_mutex);
+        return SQLITE_NOMEM;
+    }
+
+    // 2. Prepare the SQL statement
+    rc = sqlite3_prepare_v2(db_get_handle(), sql, -1, &stmt, NULL);
+    sqlite3_free(sql);
+
+    if (rc != SQLITE_OK) {
+        goto cleanup;
+    }
+
+    // 3. Bind the value based on its type
+    if (json_is_integer(value)) {
+        sqlite3_bind_int(stmt, 1, (int)json_integer_value(value));
+    } else if (json_is_string(value)) {
+        sqlite3_bind_text(stmt, 1, json_string_value(value), -1, SQLITE_STATIC);
+    } else if (json_is_real(value)) {
+        sqlite3_bind_double(stmt, 1, json_real_value(value));
+    } else {
+        rc = SQLITE_ERROR;
+        goto cleanup;
+    }
+
+    sqlite3_bind_int(stmt, 2, id);
+
+    // 4. Execute the statement
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        goto cleanup;
+    }
+
+    rc = SQLITE_OK;
+
+cleanup:
+    if (stmt) {
+        sqlite3_finalize(stmt);
+    }
+    
+    // 5. Release the lock before the function returns
+    pthread_mutex_unlock(&db_mutex);
+
+    return rc;
+}
+
+////////////////////
+
+
 
 const char *create_table_sql[] = {
   "CREATE TABLE IF NOT EXISTS config ("
@@ -852,148 +930,297 @@ gen_session_token (char out64[65])
 int
 db_init (void)
 {
+  sqlite3_stmt *stmt = NULL;
+  int ret_code = -1; // Default to error
+  int rc;
+  
+  // 1. Acquire the lock FIRST to protect the shared db_handle.
+  pthread_mutex_lock (&db_mutex);
+
+  // If the database is already initialized, just return success.
+  if (db_handle) {
+    ret_code = 0;
+    goto cleanup;
+  }
+
   /* Step 1: open or create DB file */
-  if (sqlite3_open (DEFAULT_DB_NAME, &db_handle) != SQLITE_OK)
+  rc = sqlite3_open (DEFAULT_DB_NAME, &db_handle);
+  if (rc != SQLITE_OK)
     {
       fprintf (stderr, "DB init error: %s\n", sqlite3_errmsg (db_handle));
-      return -1;
+      // NOTE: sqlite3_open failed, so db_handle might be NULL or an invalid handle.
+      // In this case, there's nothing to close, so we can just set the error code and cleanup.
+      ret_code = -1;
+      goto cleanup;
     }
 
+  // Ensure mandatory schemas are always present (even on existing DBs)
   (void) db_ensure_auth_schema ();
   (void) db_ensure_idempotency_schema ();
-
+  
   /* Step 2: check if config table exists */
   const char *sql =
     "SELECT name FROM sqlite_master WHERE type='table' AND name='config';";
-  sqlite3_stmt *stmt = NULL;
-  int rc = sqlite3_prepare_v2 (db_handle, sql, -1, &stmt, NULL);
+  
+  rc = sqlite3_prepare_v2 (db_handle, sql, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
-      fprintf (stderr, "DB check error: %s\n", sqlite3_errmsg (db_handle));
-      sqlite3_close (db_handle);
-      db_handle = NULL;
-      return -1;
+      fprintf (stderr, "DB prepare check error: %s\n", sqlite3_errmsg (db_handle));
+      ret_code = -1;
+      goto cleanup;
     }
 
   rc = sqlite3_step (stmt);
-  int table_exists = (rc == SQLITE_ROW);	/* row means table found */
-  sqlite3_finalize (stmt);
-
+  int table_exists = (rc == SQLITE_ROW);
+  
+  // If the query failed for some reason, `rc` will not be SQLITE_ROW or SQLITE_DONE.
+  // We should treat this as an error.
+  if (rc != SQLITE_ROW && rc != SQLITE_DONE) {
+      fprintf (stderr, "DB step check error: %s\n", sqlite3_errmsg (db_handle));
+      ret_code = -1;
+      goto cleanup;
+  }
+  
   /* Step 3: if no config table, create schema + defaults */
   if (!table_exists)
     {
       fprintf (stderr,
-	       "No schema detected – creating tables and inserting defaults...\n");
-
+               "No schema detected -- creating tables and inserting defaults...\n");
+      
       if (db_create_tables () != 0)
-	{
-	  fprintf (stderr, "Failed to create tables\n");
-	  return -1;
-	}
+        {
+          fprintf (stderr, "Failed to create tables\n");
+          ret_code = -1;
+          goto cleanup;
+        }
 
       if (db_insert_defaults () != 0)
-	{
-	  fprintf (stderr, "Failed to insert default data\n");
-	  return -1;
-	}
+        {
+          fprintf (stderr, "Failed to insert default data\n");
+          ret_code = -1;
+          goto cleanup;
+        }
     }
+    
+  // If we've made it here, all steps were successful.
+  ret_code = 0;
 
-  return 0;
+cleanup:
+  /* Step 4: Finalize the statement if it was successfully prepared. */
+  if (stmt)
+    {
+      sqlite3_finalize (stmt);
+    }
+  
+  /* Step 5: If an error occurred, clean up the database handle. */
+  if (ret_code != 0)
+    {
+      // Only close if the handle is valid
+      if (db_handle) {
+         sqlite3_close (db_handle);
+         db_handle = NULL;
+      }
+    }
+  
+  // 6. Release the lock at the end.
+  pthread_mutex_unlock (&db_mutex);
+
+  return ret_code;
 }
+
 
 int
 db_create_tables (void)
 {
   char *errmsg = NULL;
+  int ret_code = -1; // Default to error
+  
+  pthread_mutex_lock (&db_mutex);
+
+  // You should check if the db_handle is valid here, although db_init
+  // should ensure it's not NULL before calling this function.
+  if (!db_handle) {
+      goto cleanup;
+  }
 
   for (size_t i = 0; i < create_table_count; i++)
     {
       if (sqlite3_exec (db_handle, create_table_sql[i], NULL, NULL, &errmsg)
-	  != SQLITE_OK)
-	{
-	  fprintf (stderr, "DB create_tables error (%zu): %s\n", i, errmsg);
-	  sqlite3_free (errmsg);
-	  return -1;
-	}
+          != SQLITE_OK)
+        {
+          fprintf (stderr, "DB create_tables error (%zu): %s\n", i, errmsg);
+          // Don't free errmsg here, the cleanup section handles it.
+          goto cleanup;
+        }
     }
+  
+  // Success, set return code to 0
+  ret_code = 0;
 
-  return 0;
+cleanup:
+  if (errmsg)
+    {
+      sqlite3_free (errmsg);
+    }
+  
+  pthread_mutex_unlock (&db_mutex);
+  
+  return ret_code;
 }
-
 
 
 int
 db_insert_defaults (void)
 {
   char *errmsg = NULL;
+  int ret_code = -1; // Default to error
+  
+  pthread_mutex_lock (&db_mutex);
+  
+  if (!db_handle) {
+      goto cleanup;
+  }
 
   for (size_t i = 0; i < insert_default_count; i++)
     {
       if (sqlite3_exec (db_handle, insert_default_sql[i], NULL, NULL, &errmsg)
-	  != SQLITE_OK)
-	{
-	  fprintf (stderr, "DB insert_defaults error (%zu): %s\n", i, errmsg);
-	  sqlite3_free (errmsg);
-	  return -1;
-	}
+          != SQLITE_OK)
+        {
+          fprintf (stderr, "DB insert_defaults error (%zu): %s\n", i, errmsg);
+          goto cleanup;
+        }
     }
+  
+  ret_code = 0;
 
-  return 0;
+cleanup:
+  if (errmsg)
+    {
+      sqlite3_free (errmsg);
+    }
+    
+  pthread_mutex_unlock (&db_mutex);
+  
+  return ret_code;
 }
 
-
-
-/* Close database */
 void
 db_close (void)
 {
+  // 1. Acquire the lock to prevent any other thread from using the handle
+  // while we are closing it and setting it to NULL.
+  pthread_mutex_lock (&db_mutex);
+
   if (db_handle)
     {
       sqlite3_close (db_handle);
       db_handle = NULL;
     }
+
+  // 2. Release the lock.
+  pthread_mutex_unlock (&db_mutex);
 }
 
-////////////////////////////////////////////
-
-/* Create row in table from JSON */
 int
 db_create (const char *table, json_t *row)
 {
+  int ret_code = -1; // Default to error
+
+  // 1. Acquire the lock before accessing the database.
+  pthread_mutex_lock (&db_mutex);
+
+  if (!db_handle) {
+      goto cleanup;
+  }
+  
   /* TODO: Build INSERT SQL dynamically based on JSON keys/values */
   fprintf (stderr, "db_create(%s, row) called (not implemented)\n", table);
-  return 0;
+  
+  ret_code = 0; // Assuming success for the placeholder
+
+cleanup:
+  // 2. Release the lock at the end.
+  pthread_mutex_unlock (&db_mutex);
+  
+  return ret_code;
 }
 
-/* Read row by id into JSON */
 json_t *
 db_read (const char *table, int id)
 {
+  json_t *result = NULL;
+
+  // 1. Acquire the lock before accessing the database.
+  pthread_mutex_lock (&db_mutex);
+
+  if (!db_handle) {
+      goto cleanup;
+  }
+
   /* TODO: Prepare SELECT ... WHERE id=? and return json_t * */
   fprintf (stderr, "db_read(%s, %d) called (not implemented)\n", table, id);
-  return NULL;
+  
+  // result should be set here on success
+
+cleanup:
+  // 2. Release the lock at the end.
+  pthread_mutex_unlock (&db_mutex);
+  
+  return result;
 }
 
-/* Update row by id with new JSON */
 int
 db_update (const char *table, int id, json_t *row)
 {
+  int ret_code = -1; // Default to error
+
+  // 1. Acquire the lock before accessing the database.
+  pthread_mutex_lock (&db_mutex);
+
+  if (!db_handle) {
+      goto cleanup;
+  }
+
   /* TODO: Build UPDATE SQL dynamically */
   fprintf (stderr, "db_update(%s, %d, row) called (not implemented)\n", table,
-	   id);
-  return 0;
+           id);
+           
+  ret_code = 0; // Assuming success for the placeholder
+
+cleanup:
+  // 2. Release the lock at the end.
+  pthread_mutex_unlock (&db_mutex);
+  
+  return ret_code;
 }
 
-/* Delete row by id */
 int
 db_delete (const char *table, int id)
 {
+  int ret_code = -1; // Default to error
+
+  // 1. Acquire the lock before accessing the database.
+  pthread_mutex_lock (&db_mutex);
+
+  if (!db_handle) {
+      goto cleanup;
+  }
+
   /* TODO: Prepare DELETE ... WHERE id=? */
   fprintf (stderr, "db_delete(%s, %d) called (not implemented)\n", table, id);
-  return 0;
+  
+  ret_code = 0; // Assuming success for the placeholder
+
+cleanup:
+  // 2. Release the lock at the end.
+  pthread_mutex_unlock (&db_mutex);
+  
+  return ret_code;
 }
 
 /* Helper: safe text access (returns "" if NULL) */
+// This function is already fine as-is because it doesn't access the global
+// database handle, only the statement passed to it.
 static const char *
 col_text_or_empty (sqlite3_stmt *st, int col)
 {
@@ -1001,103 +1228,50 @@ col_text_or_empty (sqlite3_stmt *st, int col)
   return t ? (const char *) t : "";
 }
 
-/* Returns:
- *   SQLITE_OK        -> *out is a JSON object with player info
- *   SQLITE_NOTFOUND  -> no such player_id (out == NULL)
- *   other sqlite code -> error (out == NULL)
- */
-/* int */
-/* db_player_info_json (int player_id, json_t **out) */
-/* { */
-/*   if (!out) */
-/*     return SQLITE_MISUSE; */
-/*   *out = NULL; */
-
-/*   sqlite3 *db = db_get_handle (); */
-/*   if (!db) */
-/*     return SQLITE_ERROR; */
-
-/*   /\* Must match the columns in your player_info_v1 view *\/ */
-/*   static const char *SQL = */
-/*     "SELECT player_id, player_name, player_number, " */
-/*     "       sector_id, sector_name, credits, alignment, experience, " */
-/*     "       ship_number, ship_id, ship_name, ship_type_id, ship_type_name, " */
-/*     "       ship_holds, ship_fighters, approx_worth " */
-/*     "FROM player_info_v1 WHERE player_id=?1;"; */
-
-/*   sqlite3_stmt *st = NULL; */
-/*   int rc = sqlite3_prepare_v2 (db, SQL, -1, &st, NULL); */
-/*   if (rc != SQLITE_OK) */
-/*     return rc; */
-
-/*   sqlite3_bind_int (st, 1, player_id); */
-
-/*   rc = sqlite3_step (st); */
-/*   if (rc == SQLITE_ROW) */
-/*     { */
-/*       json_t *j = */
-/* 	json_pack */
-/* 	("{s:i, s:s, s:i, s:i, s:s, s:i, s:i, s:i, s:i, s:i, s:s, s:i, s:s, s:i, s:i, s:i}", */
-/* 	 "player_id", sqlite3_column_int (st, 0), */
-/* 	 "player_name", col_text_or_empty (st, 1), */
-/* 	 "player_number", sqlite3_column_int (st, 2), */
-
-/* 	 "sector_id", sqlite3_column_int (st, 3), */
-/* 	 "sector_name", col_text_or_empty (st, 4), */
-
-/* 	 "credits", sqlite3_column_int (st, 5), */
-/* 	 "alignment", sqlite3_column_int (st, 6), */
-/* 	 "experience", sqlite3_column_int (st, 7), */
-
-/* 	 "ship_number", sqlite3_column_int (st, 8), */
-/* 	 "ship_id", sqlite3_column_int (st, 9), */
-/* 	 "ship_name", col_text_or_empty (st, 10), */
-/* 	 "ship_type_id", sqlite3_column_int (st, 11), */
-/* 	 "ship_type_name", col_text_or_empty (st, 12), */
-
-/* 	 "ship_holds", sqlite3_column_int (st, 13), */
-/* 	 "ship_fighters", sqlite3_column_int (st, 14), */
-
-/* 	 "approx_worth", sqlite3_column_int (st, 15)); */
-/*       sqlite3_finalize (st); */
-/*       *out = j; */
-/*       return SQLITE_OK; */
-/*     } */
-
-/*   sqlite3_finalize (st); */
-/*   return (rc == SQLITE_DONE) ? SQLITE_NOTFOUND : rc; */
-/* } */
 
 
 int
 db_ensure_auth_schema (void)
 {
-  sqlite3 *db = db_get_handle ();
-  if (!db)
-    return SQLITE_ERROR;
-
+  sqlite3 *db = NULL;
   char *errmsg = NULL;
-  int rc = sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg);
+  int rc = -1; // Default to error
+
+  // 1. Acquire the lock FIRST to ensure thread safety for the entire transaction.
+  pthread_mutex_lock (&db_mutex);
+
+  db = db_get_handle ();
+  if (!db)
+    {
+      rc = SQLITE_ERROR;
+      goto cleanup;
+    }
+
+  rc = sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg);
   if (rc != SQLITE_OK)
     goto fail;
 
   /* Table */
-  rc = sqlite3_exec (db, "CREATE TABLE IF NOT EXISTS sessions (" "  token       TEXT PRIMARY KEY," "  player_id   INTEGER NOT NULL," "  expires     INTEGER NOT NULL,"	/* epoch seconds */
-		     "  created_at  INTEGER NOT NULL"	/* epoch seconds */
-		     ");", NULL, NULL, &errmsg);
+  rc = sqlite3_exec (db,
+                     "CREATE TABLE IF NOT EXISTS sessions ("
+                     "  token      TEXT PRIMARY KEY,"
+                     "  player_id  INTEGER NOT NULL,"
+                     "  expires    INTEGER NOT NULL," /* epoch seconds */
+                     "  created_at INTEGER NOT NULL"  /* epoch seconds */
+                     ");", NULL, NULL, &errmsg);
   if (rc != SQLITE_OK)
     goto rollback;
 
   /* Indexes */
   rc = sqlite3_exec (db,
-		     "CREATE INDEX IF NOT EXISTS idx_sessions_player  ON sessions(player_id);",
-		     NULL, NULL, &errmsg);
+                     "CREATE INDEX IF NOT EXISTS idx_sessions_player  ON sessions(player_id);",
+                     NULL, NULL, &errmsg);
   if (rc != SQLITE_OK)
     goto rollback;
 
   rc = sqlite3_exec (db,
-		     "CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires);",
-		     NULL, NULL, &errmsg);
+                     "CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires);",
+                     NULL, NULL, &errmsg);
   if (rc != SQLITE_OK)
     goto rollback;
 
@@ -1105,27 +1279,294 @@ db_ensure_auth_schema (void)
   if (rc != SQLITE_OK)
     goto fail;
 
-  return SQLITE_OK;
+  rc = SQLITE_OK;
 
 rollback:
-  sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+  if (rc != SQLITE_OK) {
+    sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+  }
+
 fail:
   if (errmsg)
     {
       fprintf (stderr, "[DB] auth schema: %s\n", errmsg);
       sqlite3_free (errmsg);
     }
+    
+cleanup:
+  // 2. Release the lock at the end.
+  pthread_mutex_unlock (&db_mutex);
+  
   return rc;
 }
 
 
 
-/* Create */
 int
 db_session_create (int player_id, int ttl_seconds, char token_out[65])
 {
+  sqlite3 *db = NULL;
+  sqlite3_stmt *st = NULL;
+  int rc = SQLITE_ERROR; // Default to error
+  
+  // 1. Acquire the lock FIRST.
+  pthread_mutex_lock (&db_mutex);
+
+  if (!token_out || player_id <= 0 || ttl_seconds <= 0)
+    {
+      rc = SQLITE_MISUSE;
+      goto cleanup;
+    }
+
+  if (gen_session_token (token_out) != 0)
+    {
+      rc = SQLITE_ERROR;
+      goto cleanup;
+    }
+
+  db = db_get_handle ();
+  if (!db)
+    {
+      rc = SQLITE_ERROR;
+      goto cleanup;
+    }
+
+  time_t now = time (NULL);
+  long long exp = (long long) now + ttl_seconds;
+
+  const char *sql =
+    "INSERT INTO sessions(token, player_id, expires, created_at) VALUES(?1, ?2, ?3, ?4);";
+  
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    goto cleanup;
+
+  sqlite3_bind_text (st, 1, token_out, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int (st, 2, player_id);
+  sqlite3_bind_int64 (st, 3, exp);
+  sqlite3_bind_int64 (st, 4, (sqlite3_int64) now);
+
+  rc = sqlite3_step (st);
+  
+  // Check if the step was successful
+  if (rc == SQLITE_DONE) {
+      rc = SQLITE_OK;
+  } else {
+      rc = SQLITE_ERROR;
+  }
+
+cleanup:
+  if (st)
+    {
+      sqlite3_finalize (st);
+    }
+  // 2. Release the lock at the end.
+  pthread_mutex_unlock (&db_mutex);
+  
+  return rc;
+}
+
+
+
+int
+db_session_lookup (const char *token, int *out_player_id,
+                   long long *out_expires_epoch)
+{
+  sqlite3 *db = NULL;
+  sqlite3_stmt *st = NULL;
+  int rc = SQLITE_ERROR; // Default to error
+  
+  // 1. Acquire the lock before any database access
+  pthread_mutex_lock (&db_mutex);
+  
+  // Sanity checks
+  if (!token)
+    {
+      rc = SQLITE_MISUSE;
+      goto cleanup;
+    }
+
+  // Initialize output variables
+  if (out_player_id)
+    *out_player_id = 0;
+  if (out_expires_epoch)
+    *out_expires_epoch = 0;
+
+  db = db_get_handle ();
+  if (!db)
+    {
+      rc = SQLITE_ERROR;
+      goto cleanup;
+    }
+
+  const char *sql = "SELECT player_id, expires FROM sessions WHERE token=?1;";
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    goto cleanup;
+
+  sqlite3_bind_text (st, 1, token, -1, SQLITE_TRANSIENT);
+  rc = sqlite3_step (st);
+
+  if (rc == SQLITE_ROW)
+    {
+      int pid = sqlite3_column_int (st, 0);
+      long long exp = sqlite3_column_int64 (st, 1);
+      
+      time_t now = time (NULL);
+      if (exp <= (long long) now)
+        {
+          rc = SQLITE_NOTFOUND; // Token expired
+          goto cleanup;
+        }
+
+      if (out_player_id)
+        *out_player_id = pid;
+      if (out_expires_epoch)
+        *out_expires_epoch = exp;
+      
+      rc = SQLITE_OK;
+    }
+  else
+    {
+      // No row found or an error occurred during step
+      rc = SQLITE_NOTFOUND;
+    }
+
+cleanup:
+  // 2. Finalize the statement if it was prepared
+  if (st)
+    {
+      sqlite3_finalize (st);
+    }
+    
+  // 3. Release the lock before returning
+  pthread_mutex_unlock (&db_mutex);
+  
+  return rc;
+}
+
+/* Revoke */
+int
+db_session_revoke (const char *token)
+{
+  sqlite3 *db = NULL;
+  sqlite3_stmt *st = NULL;
+  int rc = SQLITE_ERROR; // Default to error
+  
+  // 1. Acquire the lock FIRST to ensure thread safety
+  pthread_mutex_lock (&db_mutex);
+  
+  if (!token)
+    {
+      rc = SQLITE_MISUSE;
+      goto cleanup;
+    }
+    
+  db = db_get_handle ();
+  if (!db)
+    {
+      rc = SQLITE_ERROR;
+      goto cleanup;
+    }
+
+  const char *sql = "DELETE FROM sessions WHERE token=?1;";
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    goto cleanup;
+    
+  sqlite3_bind_text (st, 1, token, -1, SQLITE_TRANSIENT);
+  
+  rc = sqlite3_step (st);
+  
+  if (rc == SQLITE_DONE)
+    {
+      rc = SQLITE_OK;
+    }
+  
+cleanup:
+  // 2. Finalize the statement if it was prepared
+  if (st)
+    {
+      sqlite3_finalize (st);
+    }
+    
+  // 3. Release the lock at the end
+  pthread_mutex_unlock (&db_mutex);
+  
+  return rc;
+}
+
+/* Revoke - Internal Unlocked Helper */
+static int
+db_session_revoke_unlocked (const char *token)
+{
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return SQLITE_ERROR;
+
+  const char *sql = "DELETE FROM sessions WHERE token=?1;";
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    return rc;
+
+  sqlite3_bind_text (st, 1, token, -1, SQLITE_TRANSIENT);
+  rc = sqlite3_step (st);
+  sqlite3_finalize (st);
+  return (rc == SQLITE_DONE) ? SQLITE_OK : rc;
+}
+
+/* Lookup - Internal Unlocked Helper */
+static int
+db_session_lookup_unlocked (const char *token, int *out_player_id,
+                            long long *out_expires_epoch)
+{
+  if (!token)
+    return SQLITE_MISUSE;
+
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return SQLITE_ERROR;
+
+  const char *sql = "SELECT player_id, expires FROM sessions WHERE token=?1;";
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    return rc;
+
+  sqlite3_bind_text (st, 1, token, -1, SQLITE_TRANSIENT);
+  rc = sqlite3_step (st);
+  
+  if (rc == SQLITE_ROW)
+    {
+      int pid = sqlite3_column_int (st, 0);
+      long long exp = sqlite3_column_int64 (st, 1);
+      
+      sqlite3_finalize (st);
+      
+      time_t now = time (NULL);
+      if (exp <= (long long) now)
+        return SQLITE_NOTFOUND; /* expired */
+        
+      if (out_player_id)
+        *out_player_id = pid;
+      if (out_expires_epoch)
+        *out_expires_epoch = exp;
+        
+      return SQLITE_OK;
+    }
+  
+  sqlite3_finalize (st);
+  return SQLITE_NOTFOUND;
+}
+
+/* Create - Internal Unlocked Helper */
+static int
+db_session_create_unlocked (int player_id, int ttl_seconds, char token_out[65])
+{
   if (!token_out || player_id <= 0 || ttl_seconds <= 0)
     return SQLITE_MISUSE;
+
   if (gen_session_token (token_out) != 0)
     return SQLITE_ERROR;
 
@@ -1153,152 +1594,138 @@ db_session_create (int player_id, int ttl_seconds, char token_out[65])
   return (rc == SQLITE_DONE) ? SQLITE_OK : SQLITE_ERROR;
 }
 
-/* Lookup */
-int
-db_session_lookup (const char *token, int *out_player_id,
-		   long long *out_expires_epoch)
-{
-  if (!token)
-    return SQLITE_MISUSE;
-  if (out_player_id)
-    *out_player_id = 0;
-  if (out_expires_epoch)
-    *out_expires_epoch = 0;
-
-  sqlite3 *db = db_get_handle ();
-  if (!db)
-    return SQLITE_ERROR;
-
-  const char *sql = "SELECT player_id, expires FROM sessions WHERE token=?1;";
-  sqlite3_stmt *st = NULL;
-  int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
-  if (rc != SQLITE_OK)
-    return rc;
-
-  sqlite3_bind_text (st, 1, token, -1, SQLITE_TRANSIENT);
-  rc = sqlite3_step (st);
-  if (rc == SQLITE_ROW)
-    {
-      int pid = sqlite3_column_int (st, 0);
-      long long exp = sqlite3_column_int64 (st, 1);
-      sqlite3_finalize (st);
-      time_t now = time (NULL);
-      if (exp <= (long long) now)
-	return SQLITE_NOTFOUND;	/* expired */
-      if (out_player_id)
-	*out_player_id = pid;
-      if (out_expires_epoch)
-	*out_expires_epoch = exp;
-      return SQLITE_OK;
-    }
-  sqlite3_finalize (st);
-  return SQLITE_NOTFOUND;
-}
-
-/* Revoke */
-int
-db_session_revoke (const char *token)
-{
-  if (!token)
-    return SQLITE_MISUSE;
-  sqlite3 *db = db_get_handle ();
-  if (!db)
-    return SQLITE_ERROR;
-  const char *sql = "DELETE FROM sessions WHERE token=?1;";
-  sqlite3_stmt *st = NULL;
-  int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
-  if (rc != SQLITE_OK)
-    return rc;
-  sqlite3_bind_text (st, 1, token, -1, SQLITE_TRANSIENT);
-  rc = sqlite3_step (st);
-  sqlite3_finalize (st);
-  return (rc == SQLITE_DONE) ? SQLITE_OK : rc;
-}
-
-/* Refresh (rotate token) */
+/* The public, thread-safe session refresh function */
 int
 db_session_refresh (const char *old_token, int ttl_seconds,
-		    char token_out[65], int *out_player_id)
+                    char token_out[65], int *out_player_id)
 {
   if (!old_token || !token_out)
     return SQLITE_MISUSE;
 
   int pid = 0;
   long long exp = 0;
-  int rc = db_session_lookup (old_token, &pid, &exp);
-  if (rc != SQLITE_OK)
-    return rc;
+  int rc = SQLITE_ERROR;
 
-  rc = db_session_revoke (old_token);
-  if (rc != SQLITE_OK)
-    return rc;
+  // 1. Acquire the lock to make the entire sequence atomic.
+  pthread_mutex_lock (&db_mutex);
 
-  rc = db_session_create (pid, ttl_seconds, token_out);
+  // 2. Perform all operations using the unlocked helpers.
+  rc = db_session_lookup_unlocked (old_token, &pid, &exp);
+  if (rc != SQLITE_OK)
+    goto cleanup;
+
+  rc = db_session_revoke_unlocked (old_token);
+  if (rc != SQLITE_OK)
+    goto cleanup;
+
+  rc = db_session_create_unlocked (pid, ttl_seconds, token_out);
   if (rc == SQLITE_OK && out_player_id)
     *out_player_id = pid;
+
+cleanup:
+  // 3. Release the lock before returning.
+  pthread_mutex_unlock (&db_mutex);
+  
   return rc;
 }
+
 
 int
 db_ensure_idempotency_schema (void)
 {
-  sqlite3 *db = db_get_handle ();
-  if (!db)
-    return SQLITE_ERROR;
-
+  sqlite3 *db = NULL;
   char *errmsg = NULL;
-  int rc = sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg);
+  int rc = SQLITE_ERROR; // Default to error
+  
+  // 1. Acquire the lock FIRST to ensure thread safety
+  pthread_mutex_lock (&db_mutex);
+
+  db = db_get_handle ();
+  if (!db)
+    goto cleanup;
+
+  rc = sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg);
   if (rc != SQLITE_OK)
     goto fail;
 
-  rc = sqlite3_exec (db, "CREATE TABLE IF NOT EXISTS idempotency (" "  key         TEXT PRIMARY KEY," "  cmd         TEXT NOT NULL," "  req_fp      TEXT NOT NULL," "  response    TEXT,"	/* JSON of full envelope we sent */
-		     "  created_at  INTEGER NOT NULL,"	/* epoch seconds */
-		     "  updated_at  INTEGER" ");", NULL, NULL, &errmsg);
+  rc = sqlite3_exec (db,
+                     "CREATE TABLE IF NOT EXISTS idempotency ("
+                     "  key       TEXT PRIMARY KEY,"
+                     "  cmd       TEXT NOT NULL,"
+                     "  req_fp    TEXT NOT NULL,"
+                     "  response  TEXT," /* JSON of full envelope we sent */
+                     "  created_at  INTEGER NOT NULL," /* epoch seconds */
+                     "  updated_at  INTEGER"
+                     ");",
+                     NULL, NULL, &errmsg);
   if (rc != SQLITE_OK)
-    {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      goto fail;
-    }
+    goto rollback;
 
   rc = sqlite3_exec (db,
-		     "CREATE INDEX IF NOT EXISTS idx_idemp_cmd ON idempotency(cmd);",
-		     NULL, NULL, &errmsg);
+                     "CREATE INDEX IF NOT EXISTS idx_idemp_cmd ON idempotency(cmd);",
+                     NULL, NULL, &errmsg);
   if (rc != SQLITE_OK)
-    {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      goto fail;
-    }
+    goto rollback;
 
   rc = sqlite3_exec (db, "COMMIT;", NULL, NULL, &errmsg);
   if (rc != SQLITE_OK)
     goto fail;
-  return SQLITE_OK;
+    
+  // Success
+  rc = SQLITE_OK;
+  goto cleanup;
+
+rollback:
+  // An error occurred after BEGIN, so we must ROLLBACK
+  sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
 
 fail:
+  // Fallthrough to handle both rollback and other failures
   if (errmsg)
     {
       fprintf (stderr, "[DB] idempotency schema: %s\n", errmsg);
       sqlite3_free (errmsg);
+      errmsg = NULL; // Prevent double-free
     }
+  
+cleanup:
+  // 2. Release the lock at the end
+  pthread_mutex_unlock (&db_mutex);
+  
   return rc;
 }
+
 
 int
 db_idemp_try_begin (const char *key, const char *cmd, const char *req_fp)
 {
+  sqlite3 *db = NULL;
+  sqlite3_stmt *st = NULL;
+  int rc = SQLITE_ERROR; // Default to error
+  
+  // 1. Acquire the lock before accessing the database
+  pthread_mutex_lock (&db_mutex);
+
   if (!key || !cmd || !req_fp)
-    return SQLITE_MISUSE;
-  sqlite3 *db = db_get_handle ();
+    {
+      rc = SQLITE_MISUSE;
+      goto cleanup;
+    }
+    
+  db = db_get_handle ();
   if (!db)
-    return SQLITE_ERROR;
+    {
+      rc = SQLITE_ERROR;
+      goto cleanup;
+    }
 
   time_t now = time (NULL);
   const char *sql =
     "INSERT INTO idempotency(key, cmd, req_fp, created_at) VALUES(?1, ?2, ?3, ?4);";
-  sqlite3_stmt *st = NULL;
-  int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
-    return rc;
+    goto cleanup;
 
   sqlite3_bind_text (st, 1, key, -1, SQLITE_TRANSIENT);
   sqlite3_bind_text (st, 2, cmd, -1, SQLITE_TRANSIENT);
@@ -1306,87 +1733,175 @@ db_idemp_try_begin (const char *key, const char *cmd, const char *req_fp)
   sqlite3_bind_int64 (st, 4, (sqlite3_int64) now);
 
   rc = sqlite3_step (st);
-  sqlite3_finalize (st);
 
   if (rc == SQLITE_DONE)
-    return SQLITE_OK;
-  if (rc == SQLITE_CONSTRAINT)
-    return SQLITE_CONSTRAINT;
-  return SQLITE_ERROR;
+    {
+      rc = SQLITE_OK;
+    }
+  else if (rc == SQLITE_CONSTRAINT)
+    {
+      rc = SQLITE_CONSTRAINT;
+    }
+  else
+    {
+      rc = SQLITE_ERROR;
+    }
+
+cleanup:
+  // 2. Finalize the statement if it was prepared
+  if (st)
+    {
+      sqlite3_finalize (st);
+    }
+    
+  // 3. Release the lock before returning
+  pthread_mutex_unlock (&db_mutex);
+  
+  return rc;
 }
+
 
 int
 db_idemp_fetch (const char *key, char **out_cmd, char **out_req_fp,
-		char **out_response_json)
+                char **out_response_json)
 {
+  sqlite3 *db = NULL;
+  sqlite3_stmt *st = NULL;
+  int rc = SQLITE_ERROR; // Default to error
+  
+  // 1. Acquire the lock FIRST to ensure thread safety
+  pthread_mutex_lock (&db_mutex);
+
   if (!key)
-    return SQLITE_MISUSE;
-  sqlite3 *db = db_get_handle ();
+    {
+      rc = SQLITE_MISUSE;
+      goto cleanup;
+    }
+    
+  // Ensure output pointers are NULL on failure
+  if (out_cmd) *out_cmd = NULL;
+  if (out_req_fp) *out_req_fp = NULL;
+  if (out_response_json) *out_response_json = NULL;
+
+  db = db_get_handle ();
   if (!db)
-    return SQLITE_ERROR;
+    {
+      rc = SQLITE_ERROR;
+      goto cleanup;
+    }
 
   const char *sql =
     "SELECT cmd, req_fp, response FROM idempotency WHERE key=?1;";
-  sqlite3_stmt *st = NULL;
-  int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
-    return rc;
+    goto cleanup;
 
   sqlite3_bind_text (st, 1, key, -1, SQLITE_TRANSIENT);
+  
   rc = sqlite3_step (st);
+  
   if (rc == SQLITE_ROW)
     {
       if (out_cmd)
-	{
-	  const unsigned char *t = sqlite3_column_text (st, 0);
-	  *out_cmd = t ? strdup ((const char *) t) : NULL;
-	}
+        {
+          const unsigned char *t = sqlite3_column_text (st, 0);
+          *out_cmd = t ? strdup ((const char *) t) : NULL;
+        }
       if (out_req_fp)
-	{
-	  const unsigned char *t = sqlite3_column_text (st, 1);
-	  *out_req_fp = t ? strdup ((const char *) t) : NULL;
-	}
+        {
+          const unsigned char *t = sqlite3_column_text (st, 1);
+          *out_req_fp = t ? strdup ((const char *) t) : NULL;
+        }
       if (out_response_json)
-	{
-	  const unsigned char *t = sqlite3_column_text (st, 2);
-	  *out_response_json = t ? strdup ((const char *) t) : NULL;
-	}
-      sqlite3_finalize (st);
-      return SQLITE_OK;
+        {
+          const unsigned char *t = sqlite3_column_text (st, 2);
+          *out_response_json = t ? strdup ((const char *) t) : NULL;
+        }
+      
+      rc = SQLITE_OK;
     }
-  sqlite3_finalize (st);
-  return SQLITE_NOTFOUND;
+  else
+    {
+      rc = SQLITE_NOTFOUND;
+    }
+
+cleanup:
+  // 2. Finalize the statement if it was prepared
+  if (st)
+    {
+      sqlite3_finalize (st);
+    }
+    
+  // 3. Release the lock before returning
+  pthread_mutex_unlock (&db_mutex);
+  
+  return rc;
 }
 
 int
 db_idemp_store_response (const char *key, const char *response_json)
 {
+  sqlite3 *db = NULL;
+  sqlite3_stmt *st = NULL;
+  int rc = SQLITE_ERROR; // Default to error
+  
+  // 1. Acquire the lock FIRST to ensure thread safety
+  pthread_mutex_lock (&db_mutex);
+
   if (!key || !response_json)
-    return SQLITE_MISUSE;
-  sqlite3 *db = db_get_handle ();
+    {
+      rc = SQLITE_MISUSE;
+      goto cleanup;
+    }
+    
+  db = db_get_handle ();
   if (!db)
-    return SQLITE_ERROR;
+    {
+      rc = SQLITE_ERROR;
+      goto cleanup;
+    }
 
   time_t now = time (NULL);
   const char *sql =
     "UPDATE idempotency SET response=?1, updated_at=?2 WHERE key=?3;";
-  sqlite3_stmt *st = NULL;
-  int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
-    return rc;
+    goto cleanup;
 
   sqlite3_bind_text (st, 1, response_json, -1, SQLITE_TRANSIENT);
   sqlite3_bind_int64 (st, 2, (sqlite3_int64) now);
   sqlite3_bind_text (st, 3, key, -1, SQLITE_TRANSIENT);
 
   rc = sqlite3_step (st);
-  sqlite3_finalize (st);
-  return (rc == SQLITE_DONE) ? SQLITE_OK : SQLITE_ERROR;
+  
+  if (rc == SQLITE_DONE)
+    {
+      rc = SQLITE_OK;
+    }
+  else
+    {
+      rc = SQLITE_ERROR;
+    }
+
+cleanup:
+  // 2. Finalize the statement if it was prepared
+  if (st)
+    {
+      sqlite3_finalize (st);
+    }
+    
+  // 3. Release the lock before returning
+  pthread_mutex_unlock (&db_mutex);
+  
+  return rc;
 }
 
 /* Helper: prepare, bind one int, and return stmt or NULL */
+// This is now an internal helper. The caller must hold the mutex.
 static sqlite3_stmt *
-prep1i (sqlite3 *db, const char *sql, int v)
+prep1i_unlocked (sqlite3 *db, const char *sql, int v)
 {
   sqlite3_stmt *st = NULL;
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
@@ -1395,209 +1910,44 @@ prep1i (sqlite3 *db, const char *sql, int v)
   return st;
 }
 
-#if 0				/* old db_sector_info_json */
-int
-db_sector_info_json (int sector_id, json_t **out)
-{
-  if (out)
-    *out = NULL;
-  sqlite3 *db = db_get_handle ();
-  if (!db)
-    return SQLITE_ERROR;
-
-  json_t *root = json_object ();
-  json_object_set_new (root, "sector_id", json_integer (sector_id));
-
-  /* 1) Sector core (id, name, security level, safe flag, beacon text/author) */
-  {
-    /* Adjust column names to your actual schema:
-       - sectors(id INTEGER PK, name TEXT, security_level INT, safe_zone INT, beacon_text TEXT, beacon_by INT)
-       If some columns don’t exist, this SELECT still works for the ones that do. */
-    const char *sql =
-      "SELECT name,"
-      "       COALESCE(security_level, 0),"
-      "       COALESCE(safe_zone, 0),"
-      "       COALESCE(beacon_text, ''),"
-      "       COALESCE(beacon_by, 0)" "  FROM sectors WHERE id=?1;";
-    sqlite3_stmt *st = prep1i (db, sql, sector_id);
-    if (st)
-      {
-	if (sqlite3_step (st) == SQLITE_ROW)
-	  {
-	    const char *nm = (const char *) sqlite3_column_text (st, 0);
-	    int sec_level = sqlite3_column_int (st, 1);
-	    int safe = sqlite3_column_int (st, 2);
-	    const char *btxt = (const char *) sqlite3_column_text (st, 3);
-	    int bby = sqlite3_column_int (st, 4);
-
-	    if (nm)
-	      json_object_set_new (root, "name", json_string (nm));
-
-	    json_t *sec =
-	      json_pack ("{s:i, s:b}", "level", sec_level, "is_safe_zone",
-			 safe ? 1 : 0);
-	    json_object_set_new (root, "security", sec);
-
-	    if (btxt && btxt[0])
-	      {
-		json_t *b =
-		  json_pack ("{s:s, s:i}", "text", btxt, "by_player_id", bby);
-		json_object_set_new (root, "beacon", b);
-	      }
-	  }
-	sqlite3_finalize (st);
-      }
-  }
-
-  /* 2) Adjacency (warps): warps(from_sector, to_sector) */
-  {
-    const char *sql =
-      "SELECT to_sector FROM warps WHERE from_sector=?1 ORDER BY to_sector;";
-    sqlite3_stmt *st = prep1i (db, sql, sector_id);
-    if (st)
-      {
-	json_t *adj = json_array ();
-	while (sqlite3_step (st) == SQLITE_ROW)
-	  {
-	    int to = sqlite3_column_int (st, 0);
-	    json_array_append_new (adj, json_integer (to));
-	  }
-	sqlite3_finalize (st);
-	if (json_array_size (adj) > 0)
-	  json_object_set_new (root, "adjacent", adj);
-	else
-	  json_decref (adj);
-      }
-  }
-
-  /* 3) Port (at most one per sector in classic TW; adapt if you support multiple) */
-  {
-    /* Example columns: ports(id, sector_id, name, type_code, is_open) */
-    const char *sql =
-      "SELECT id, name, COALESCE(type_code,''), COALESCE(is_open,1)"
-      "  FROM ports WHERE sector_id=?1 LIMIT 1;";
-    sqlite3_stmt *st = prep1i (db, sql, sector_id);
-    if (st)
-      {
-	if (sqlite3_step (st) == SQLITE_ROW)
-	  {
-	    int pid = sqlite3_column_int (st, 0);
-	    const char *pname = (const char *) sqlite3_column_text (st, 1);
-	    const char *ptype = (const char *) sqlite3_column_text (st, 2);
-	    int is_open = sqlite3_column_int (st, 3);
-
-	    json_t *port = json_object ();
-	    json_object_set_new (port, "id", json_integer (pid));
-	    if (pname)
-	      json_object_set_new (port, "name", json_string (pname));
-	    if (ptype)
-	      json_object_set_new (port, "type", json_string (ptype));
-	    json_object_set_new (port, "status",
-				 json_string (is_open ? "open" : "closed"));
-	    json_object_set_new (root, "port", port);
-	  }
-	sqlite3_finalize (st);
-      }
-  }
-
-  /* 4) Planets (optional) — planets(id, sector_id, name, owner_id) */
-  {
-    const char *sql =
-      "SELECT id, name, COALESCE(owner_id,0)"
-      "  FROM planets WHERE sector_id=?1 ORDER BY id;";
-    sqlite3_stmt *st = prep1i (db, sql, sector_id);
-    if (st)
-      {
-	json_t *arr = json_array ();
-	while (sqlite3_step (st) == SQLITE_ROW)
-	  {
-	    int id = sqlite3_column_int (st, 0);
-	    const char *nm = (const char *) sqlite3_column_text (st, 1);
-	    int owner = sqlite3_column_int (st, 2);
-	    json_t *pl =
-	      json_pack ("{s:i, s:i}", "id", id, "owner_id", owner);
-	    if (nm)
-	      json_object_set_new (pl, "name", json_string (nm));
-	    json_array_append_new (arr, pl);
-	  }
-	sqlite3_finalize (st);
-	if (json_array_size (arr) > 0)
-	  json_object_set_new (root, "planets", arr);
-	else
-	  json_decref (arr);
-      }
-  }
-
-  /* 5) Entities (optional) — entities(id, sector_id, kind, name) */
-  {
-    const char *sql =
-      "SELECT id, COALESCE(kind,''), COALESCE(name,'')"
-      "  FROM entities WHERE sector_id=?1 ORDER BY id;";
-    sqlite3_stmt *st = prep1i (db, sql, sector_id);
-    if (st)
-      {
-	json_t *arr = json_array ();
-	while (sqlite3_step (st) == SQLITE_ROW)
-	  {
-	    int id = sqlite3_column_int (st, 0);
-	    const char *kind = (const char *) sqlite3_column_text (st, 1);
-	    const char *nm = (const char *) sqlite3_column_text (st, 2);
-	    json_t *e = json_pack ("{s:i}", "id", id);
-	    if (kind && *kind)
-	      json_object_set_new (e, "kind", json_string (kind));
-	    if (nm && *nm)
-	      json_object_set_new (e, "name", json_string (nm));
-	    json_array_append_new (arr, e);
-	  }
-	sqlite3_finalize (st);
-	if (json_array_size (arr) > 0)
-	  json_object_set_new (root, "entities", arr);
-	else
-	  json_decref (arr);
-      }
-  }
-
-  if (out)
-    *out = root;
-  else
-    json_decref (root);
-  return SQLITE_OK;
-}
-#endif /* old db_sector_info_json */
 
 int
 db_sector_info_json (int sector_id, json_t **out)
 {
+  sqlite3 *db = NULL;
+  sqlite3_stmt *st = NULL;
+  json_t *root = NULL;
+  int rc = SQLITE_ERROR; // Default to error
+  
+  // 1. Acquire the lock FIRST to ensure thread safety
+  pthread_mutex_lock (&db_mutex);
+
   if (out)
     *out = NULL;
-  sqlite3 *db = db_get_handle ();
-  if (!db)
-    return SQLITE_ERROR;
 
-  json_t *root = json_object ();
+  db = db_get_handle ();
+  if (!db)
+    goto cleanup;
+  
+  root = json_object ();
   json_object_set_new (root, "sector_id", json_integer (sector_id));
 
   /* 0) Sector core: name (+ optional beacon if present in schema) */
   {
-    /* Adjust these column names if your sectors table differs; unknown columns will cause prepare to fail,
-       so we try a minimal SELECT first (name only), then a richer one if available. */
-
     const char *sql_min = "SELECT name FROM sectors WHERE id=?1;";
-    sqlite3_stmt *st = NULL;
     if (sqlite3_prepare_v2 (db, sql_min, -1, &st, NULL) == SQLITE_OK)
       {
-	sqlite3_bind_int (st, 1, sector_id);
-	if (sqlite3_step (st) == SQLITE_ROW)
-	  {
-	    const char *nm = (const char *) sqlite3_column_text (st, 0);
-	    if (nm)
-	      json_object_set_new (root, "name", json_string (nm));
-	  }
-	sqlite3_finalize (st);
+        sqlite3_bind_int (st, 1, sector_id);
+        if (sqlite3_step (st) == SQLITE_ROW)
+          {
+            const char *nm = (const char *) sqlite3_column_text (st, 0);
+            if (nm)
+              json_object_set_new (root, "name", json_string (nm));
+          }
+        sqlite3_finalize (st);
+        st = NULL;
       }
 
-    /* Optional richer fields (beacon/security) – try only if columns exist.
-       This SELECT will fail silently if your schema doesn’t have those columns, which is OK. */
     const char *sql_rich =
       "SELECT "
       "  COALESCE(beacon_text, ''), COALESCE(beacon_by, 0), "
@@ -1605,51 +1955,50 @@ db_sector_info_json (int sector_id, json_t **out)
       "FROM sectors WHERE id=?1;";
     if (sqlite3_prepare_v2 (db, sql_rich, -1, &st, NULL) == SQLITE_OK)
       {
-	sqlite3_bind_int (st, 1, sector_id);
-	if (sqlite3_step (st) == SQLITE_ROW)
-	  {
-	    const char *btxt = (const char *) sqlite3_column_text (st, 0);
-	    int bby = sqlite3_column_int (st, 1);
-	    int sec_level = sqlite3_column_int (st, 2);
-	    int safe = sqlite3_column_int (st, 3);
+        sqlite3_bind_int (st, 1, sector_id);
+        if (sqlite3_step (st) == SQLITE_ROW)
+          {
+            const char *btxt = (const char *) sqlite3_column_text (st, 0);
+            int bby = sqlite3_column_int (st, 1);
+            int sec_level = sqlite3_column_int (st, 2);
+            int safe = sqlite3_column_int (st, 3);
 
-	    if (btxt && btxt[0])
-	      {
-		json_t *b =
-		  json_pack ("{s:s, s:i}", "text", btxt, "by_player_id", bby);
-		json_object_set_new (root, "beacon", b);
-	      }
-	    /* Only add security if at least one of these is non-default */
-	    if (sec_level != 0 || safe != 0)
-	      {
-		json_t *sec =
-		  json_pack ("{s:i, s:b}", "level", sec_level, "is_safe_zone",
-			     safe ? 1 : 0);
-		json_object_set_new (root, "security", sec);
-	      }
-	  }
-	sqlite3_finalize (st);
+            if (btxt && btxt[0])
+              {
+                json_t *b =
+                  json_pack ("{s:s, s:i}", "text", btxt, "by_player_id", bby);
+                json_object_set_new (root, "beacon", b);
+              }
+            if (sec_level != 0 || safe != 0)
+              {
+                json_t *sec =
+                  json_pack ("{s:i, s:b}", "level", sec_level, "is_safe_zone",
+                             safe ? 1 : 0);
+                json_object_set_new (root, "security", sec);
+              }
+          }
+        sqlite3_finalize (st);
+        st = NULL;
       }
   }
-
 /* 1) Adjacency via sector_adjacency(neighbors CSV) */
   {
     const char *sql =
       "SELECT neighbors FROM sector_adjacency WHERE sector_id=?1;";
-    sqlite3_stmt *st = NULL;
     if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) == SQLITE_OK)
       {
-	sqlite3_bind_int (st, 1, sector_id);
-	if (sqlite3_step (st) == SQLITE_ROW)
-	  {
-	    const unsigned char *neighbors = sqlite3_column_text (st, 0);
-	    json_t *adj = parse_neighbors_csv (neighbors);
-	    if (json_array_size (adj) > 0)
-	      json_object_set_new (root, "adjacent", adj);
-	    else
-	      json_decref (adj);
-	  }
-	sqlite3_finalize (st);
+        sqlite3_bind_int (st, 1, sector_id);
+        if (sqlite3_step (st) == SQLITE_ROW)
+          {
+            const unsigned char *neighbors = sqlite3_column_text (st, 0);
+            json_t *adj = parse_neighbors_csv (neighbors);
+            if (json_array_size (adj) > 0)
+              json_object_set_new (root, "adjacent", adj);
+            else
+              json_decref (adj);
+          }
+        sqlite3_finalize (st);
+        st = NULL;
       }
   }
 
@@ -1658,28 +2007,28 @@ db_sector_info_json (int sector_id, json_t **out)
     const char *sql =
       "SELECT port_id, port_name, COALESCE(type_code,''), COALESCE(is_open,1) "
       "FROM sector_ports WHERE sector_id=?1 ORDER BY port_id LIMIT 1;";
-    sqlite3_stmt *st = NULL;
     if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) == SQLITE_OK)
       {
-	sqlite3_bind_int (st, 1, sector_id);
-	if (sqlite3_step (st) == SQLITE_ROW)
-	  {
-	    int pid = sqlite3_column_int (st, 0);
-	    const char *pname = (const char *) sqlite3_column_text (st, 1);
-	    const char *ptype = (const char *) sqlite3_column_text (st, 2);
-	    int is_open = sqlite3_column_int (st, 3);
+        sqlite3_bind_int (st, 1, sector_id);
+        if (sqlite3_step (st) == SQLITE_ROW)
+          {
+            int pid = sqlite3_column_int (st, 0);
+            const char *pname = (const char *) sqlite3_column_text (st, 1);
+            const char *ptype = (const char *) sqlite3_column_text (st, 2);
+            int is_open = sqlite3_column_int (st, 3);
 
-	    json_t *port = json_object ();
-	    json_object_set_new (port, "id", json_integer (pid));
-	    if (pname)
-	      json_object_set_new (port, "name", json_string (pname));
-	    if (ptype)
-	      json_object_set_new (port, "type", json_string (ptype));
-	    json_object_set_new (port, "status",
-				 json_string (is_open ? "open" : "closed"));
-	    json_object_set_new (root, "port", port);
-	  }
-	sqlite3_finalize (st);
+            json_t *port = json_object ();
+            json_object_set_new (port, "id", json_integer (pid));
+            if (pname)
+              json_object_set_new (port, "name", json_string (pname));
+            if (ptype)
+              json_object_set_new (port, "type", json_string (ptype));
+            json_object_set_new (port, "status",
+                                 json_string (is_open ? "open" : "closed"));
+            json_object_set_new (root, "port", port);
+          }
+        sqlite3_finalize (st);
+        st = NULL;
       }
   }
 
@@ -1688,27 +2037,28 @@ db_sector_info_json (int sector_id, json_t **out)
     const char *sql =
       "SELECT planet_id, planet_name, COALESCE(owner_id,0) "
       "FROM sector_planets WHERE sector_id=?1 ORDER BY planet_id;";
-    sqlite3_stmt *st = NULL;
     if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) == SQLITE_OK)
       {
-	sqlite3_bind_int (st, 1, sector_id);
-	json_t *arr = json_array ();
-	while (sqlite3_step (st) == SQLITE_ROW)
-	  {
-	    int id = sqlite3_column_int (st, 0);
-	    const char *nm = (const char *) sqlite3_column_text (st, 1);
-	    int owner = sqlite3_column_int (st, 2);
-	    json_t *pl =
-	      json_pack ("{s:i, s:i}", "id", id, "owner_id", owner);
-	    if (nm)
-	      json_object_set_new (pl, "name", json_string (nm));
-	    json_array_append_new (arr, pl);
-	  }
-	sqlite3_finalize (st);
-	if (json_array_size (arr) > 0)
-	  json_object_set_new (root, "planets", arr);
-	else
-	  json_decref (arr);
+        sqlite3_bind_int (st, 1, sector_id);
+        json_t *arr = json_array ();
+        while (sqlite3_step (st) == SQLITE_ROW)
+          {
+            int id = sqlite3_column_int (st, 0);
+            const char *nm = (const char *) sqlite3_column_text (st, 1);
+            int owner = sqlite3_column_int (st, 2);
+            json_t *pl =
+              json_pack ("{s:i, s:i}", "id", id, "owner_id", owner);
+            if (nm)
+              json_object_set_new (pl, "name", json_string (nm));
+            json_array_append_new (arr, pl);
+          }
+        sqlite3_finalize (st);
+        st = NULL;
+
+        if (json_array_size (arr) > 0)
+          json_object_set_new (root, "planets", arr);
+        else
+          json_decref (arr);
       }
   }
 
@@ -1717,34 +2067,34 @@ db_sector_info_json (int sector_id, json_t **out)
     const char *sql =
       "SELECT ship_id, COALESCE(ship_name,''), COALESCE(owner_player_id,0) "
       "FROM ships_by_sector WHERE sector_id=?1 ORDER BY ship_id;";
-    sqlite3_stmt *st = NULL;
     if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) == SQLITE_OK)
       {
-	sqlite3_bind_int (st, 1, sector_id);
-	json_t *arr = json_array ();
-	while (sqlite3_step (st) == SQLITE_ROW)
-	  {
-	    int id = sqlite3_column_int (st, 0);
-	    const char *nm = (const char *) sqlite3_column_text (st, 1);
-	    int owner = sqlite3_column_int (st, 2);
-	    json_t *e =
-	      json_pack ("{s:i, s:s, s:i}", "id", id, "kind", "ship",
-			 "owner_id", owner);
-	    if (nm && *nm)
-	      json_object_set_new (e, "name", json_string (nm));
-	    json_array_append_new (arr, e);
-	  }
-	sqlite3_finalize (st);
-	if (json_array_size (arr) > 0)
-	  json_object_set_new (root, "entities", arr);
-	else
-	  json_decref (arr);
+        sqlite3_bind_int (st, 1, sector_id);
+        json_t *arr = json_array ();
+        while (sqlite3_step (st) == SQLITE_ROW)
+          {
+            int id = sqlite3_column_int (st, 0);
+            const char *nm = (const char *) sqlite3_column_text (st, 1);
+            int owner = sqlite3_column_int (st, 2);
+            json_t *e =
+              json_pack ("{s:i, s:s, s:i}", "id", id, "kind", "ship",
+                         "owner_id", owner);
+            if (nm && *nm)
+              json_object_set_new (e, "name", json_string (nm));
+            json_array_append_new (arr, e);
+          }
+        sqlite3_finalize (st);
+        st = NULL;
+
+        if (json_array_size (arr) > 0)
+          json_object_set_new (root, "entities", arr);
+        else
+          json_decref (arr);
       }
   }
 
   /* 5) Security/topology flags via sector_summary (if present) */
   {
-    /* sector_summary columns vary; this query safely tries a few common ones */
     const char *sql =
       "SELECT "
       "  COALESCE(degree, NULL), "
@@ -1752,59 +2102,69 @@ db_sector_info_json (int sector_id, json_t **out)
       "  COALESCE(dead_out, NULL), "
       "  COALESCE(is_isolated, NULL) "
       "FROM sector_summary WHERE sector_id=?1;";
-    sqlite3_stmt *st = NULL;
     if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) == SQLITE_OK)
       {
-	sqlite3_bind_int (st, 1, sector_id);
-	if (sqlite3_step (st) == SQLITE_ROW)
-	  {
-	    int has_any = 0;
-	    json_t *sec = json_object ();
+        sqlite3_bind_int (st, 1, sector_id);
+        if (sqlite3_step (st) == SQLITE_ROW)
+          {
+            int has_any = 0;
+            json_t *sec = json_object ();
 
-	    if (sqlite3_column_type (st, 0) != SQLITE_NULL)
-	      {
-		json_object_set_new (sec, "degree",
-				     json_integer (sqlite3_column_int
-						   (st, 0)));
-		has_any = 1;
-	      }
-	    if (sqlite3_column_type (st, 1) != SQLITE_NULL)
-	      {
-		json_object_set_new (sec, "dead_in",
-				     json_integer (sqlite3_column_int
-						   (st, 1)));
-		has_any = 1;
-	      }
-	    if (sqlite3_column_type (st, 2) != SQLITE_NULL)
-	      {
-		json_object_set_new (sec, "dead_out",
-				     json_integer (sqlite3_column_int
-						   (st, 2)));
-		has_any = 1;
-	      }
-	    if (sqlite3_column_type (st, 3) != SQLITE_NULL)
-	      {
-		json_object_set_new (sec, "is_isolated",
-				     sqlite3_column_int (st,
-							 3) ? json_true () :
-				     json_false ());
-		has_any = 1;
-	      }
-	    if (has_any)
-	      json_object_set_new (root, "security", sec);
-	    else
-	      json_decref (sec);
-	  }
-	sqlite3_finalize (st);
+            if (sqlite3_column_type (st, 0) != SQLITE_NULL)
+              {
+                json_object_set_new (sec, "degree",
+                                     json_integer (sqlite3_column_int (st, 0)));
+                has_any = 1;
+              }
+            if (sqlite3_column_type (st, 1) != SQLITE_NULL)
+              {
+                json_object_set_new (sec, "dead_in",
+                                     json_integer (sqlite3_column_int (st, 1)));
+                has_any = 1;
+              }
+            if (sqlite3_column_type (st, 2) != SQLITE_NULL)
+              {
+                json_object_set_new (sec, "dead_out",
+                                     json_integer (sqlite3_column_int (st, 2)));
+                has_any = 1;
+              }
+            if (sqlite3_column_type (st, 3) != SQLITE_NULL)
+              {
+                json_object_set_new (sec, "is_isolated",
+                                     sqlite3_column_int (st, 3) ? json_true () : json_false ());
+                has_any = 1;
+              }
+            if (has_any)
+              json_object_set_new (root, "security", sec);
+            else
+              json_decref (sec);
+          }
+        sqlite3_finalize (st);
+        st = NULL;
       }
   }
 
   if (out)
-    *out = root;
+    {
+      *out = root;
+      rc = SQLITE_OK;
+    }
   else
-    json_decref (root);
-  return SQLITE_OK;
+    {
+      json_decref (root);
+      root = NULL;
+      rc = SQLITE_OK;
+    }
+
+cleanup:
+  if (st)
+    sqlite3_finalize (st);
+  
+  pthread_mutex_unlock (&db_mutex);
+  
+  return rc;
 }
+
 
 /* Parse "2,3,4,5" -> [2,3,4,5] */
 static json_t *
@@ -1841,19 +2201,30 @@ parse_neighbors_csv (const unsigned char *txt)
 }
 
 /* ---------- BASIC SECTOR (id + name) ---------- */
+
+
 int
 db_sector_basic_json (int sector_id, json_t **out_obj)
 {
-  *out_obj = NULL;
-  sqlite3 *dbh = db_get_handle ();
-  if (!dbh)
-    return SQLITE_ERROR;
-
+  sqlite3 *dbh = NULL;
   sqlite3_stmt *st = NULL;
+  int rc = SQLITE_ERROR; // Default to error
+  
+  // Acquire the lock first
+  pthread_mutex_lock (&db_mutex);
+
+  if (!out_obj)
+    goto cleanup; // Nothing to return the data to
+  
+  *out_obj = NULL;
+  dbh = db_get_handle ();
+  if (!dbh)
+    goto cleanup;
+
   const char *sql = "SELECT id, name FROM sectors WHERE id = ?";
-  int rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
+  rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
-    return rc;
+    goto cleanup;
 
   sqlite3_bind_int (st, 1, sector_id);
 
@@ -1861,351 +2232,511 @@ db_sector_basic_json (int sector_id, json_t **out_obj)
   if (rc == SQLITE_ROW)
     {
       *out_obj = json_pack ("{s:i s:s}",
-			    "sector_id", sqlite3_column_int (st, 0),
-			    "name", (const char *) sqlite3_column_text (st,
-									1));
-      sqlite3_finalize (st);
-      return *out_obj ? SQLITE_OK : SQLITE_NOMEM;
+                           "sector_id", sqlite3_column_int (st, 0),
+                           "name", (const char *) sqlite3_column_text (st, 1));
+      rc = *out_obj ? SQLITE_OK : SQLITE_NOMEM;
     }
-  sqlite3_finalize (st);
+  else
+    {
+      // If sector not found, still return an object with sector_id
+      *out_obj = json_pack ("{s:i}", "sector_id", sector_id);
+      rc = *out_obj ? SQLITE_OK : SQLITE_NOMEM;
+    }
 
-  /* If sector not found, still return an object with sector_id */
-  *out_obj = json_pack ("{s:i}", "sector_id", sector_id);
-  return SQLITE_OK;
+cleanup:
+  // Finalize the statement if it was prepared
+  if (st)
+    {
+      sqlite3_finalize (st);
+    }
+    
+  // Release the lock
+  pthread_mutex_unlock (&db_mutex);
+  
+  return rc;
 }
 
+
 /* ---------- ADJACENT WARPS (from sector_warps) ---------- */
+
+
+/**
+ * @brief Retrieves a list of adjacent sectors for a given sector, returning them as a JSON array.
+ * * This function is thread-safe as all database operations are protected by a mutex lock.
+ * It queries the database for adjacent sectors, trying a standard schema first and
+ * falling back to a schema with quoted reserved words if necessary.
+ *
+ * @param sector_id The ID of the sector to query.
+ * @param out_array A pointer to a json_t* where the resulting JSON array will be stored.
+ * @return SQLITE_OK on success, or an SQLite error code on failure.
+ */
 int
 db_adjacent_sectors_json (int sector_id, json_t **out_array)
 {
-  *out_array = NULL;
-  sqlite3 *dbh = db_get_handle ();
-  if (!dbh)
-    return SQLITE_ERROR;
-
+  sqlite3 *dbh = NULL;
   sqlite3_stmt *st = NULL;
+  json_t *arr = NULL;
+  int rc = SQLITE_ERROR; // Default to a failure state
+
+  // 1. Acquire the lock FIRST
+  pthread_mutex_lock (&db_mutex);
+
+  if (!out_array)
+    goto cleanup;
+
+  *out_array = NULL;
+
+  dbh = db_get_handle ();
+  if (!dbh)
+    goto cleanup;
 
   /* Preferred column names (common schema) */
   const char *sql =
     "SELECT to_sector FROM sector_warps WHERE from_sector = ? ORDER BY to_sector";
-  int rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
+  rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
 
   /* Fallback for schemas that use reserved words "from"/"to" */
   if (rc != SQLITE_OK)
     {
       const char *sql2 =
-	"SELECT \"to\" FROM sector_warps WHERE \"from\" = ? ORDER BY \"to\"";
+        "SELECT \"to\" FROM sector_warps WHERE \"from\" = ? ORDER BY \"to\"";
       rc = sqlite3_prepare_v2 (dbh, sql2, -1, &st, NULL);
       if (rc != SQLITE_OK)
-	return rc;
+        goto cleanup;
     }
 
   sqlite3_bind_int (st, 1, sector_id);
 
-  json_t *arr = json_array ();
+  arr = json_array ();
   if (!arr)
     {
-      sqlite3_finalize (st);
-      return SQLITE_NOMEM;
+      rc = SQLITE_NOMEM;
+      goto cleanup;
     }
 
   while ((rc = sqlite3_step (st)) == SQLITE_ROW)
     {
       json_array_append_new (arr, json_integer (sqlite3_column_int (st, 0)));
     }
-  sqlite3_finalize (st);
 
   if (rc == SQLITE_DONE)
     {
       *out_array = arr;
-      return SQLITE_OK;
+      rc = SQLITE_OK;
     }
-  json_decref (arr);
+  else
+    {
+      json_decref (arr); // Clean up on error
+      arr = NULL;
+    }
+
+cleanup:
+  // Finalize the statement
+  if (st)
+    sqlite3_finalize (st);
+  
+  // 2. Release the lock LAST
+  pthread_mutex_unlock (&db_mutex);
+  
   return rc;
 }
 
 /* ---------- PORTS AT SECTOR (visible only) ---------- */
 
+
 int
 db_port_info_json (int port_id, json_t **out_obj)
 {
+  sqlite3_stmt *st = NULL;
+  json_t *port = NULL;
+  json_t *commodities = NULL;
+  int rc = SQLITE_ERROR; // Default to error
+  sqlite3 *dbh = NULL;
+
+  pthread_mutex_lock (&db_mutex);
+
+  if (!out_obj)
+    goto cleanup;
+
   *out_obj = NULL;
-  json_t *port = json_object ();
+  
+  dbh = db_get_handle ();
+  if (!dbh)
+    goto cleanup;
+  
+  port = json_object ();
   if (!port)
     {
-      return SQLITE_NOMEM;
+      rc = SQLITE_NOMEM;
+      goto cleanup;
     }
 
   // First, get the basic port info
   const char *port_sql =
     "SELECT id, name, type, tech_level, credits, sector FROM ports WHERE id=?;";
-  sqlite3_stmt *st = NULL;
-  int rc = sqlite3_prepare_v2 (db_get_handle (), port_sql, -1, &st, NULL);
+  rc = sqlite3_prepare_v2 (dbh, port_sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
-    {
-      json_decref (port);
-      return rc;
-    }
+    goto cleanup;
 
   sqlite3_bind_int (st, 1, port_id);
   if (sqlite3_step (st) != SQLITE_ROW)
     {
-      sqlite3_finalize (st);
-      json_decref (port);
-      return SQLITE_NOTFOUND;
+      rc = SQLITE_NOTFOUND;
+      goto cleanup;
     }
 
   json_object_set_new (port, "id", json_integer (sqlite3_column_int (st, 0)));
   json_object_set_new (port, "name",
-		       json_string ((const char *)
-				    sqlite3_column_text (st, 1)));
-  json_object_set_new (port, "type", json_string ((const char *) sqlite3_column_text (st, 2)));	// Assuming type is stored as a string name
+                       json_string ((const char *)
+                                    sqlite3_column_text (st, 1)));
+  json_object_set_new (port, "type", json_string ((const char *) sqlite3_column_text (st, 2)));
   json_object_set_new (port, "tech_level",
-		       json_integer (sqlite3_column_int (st, 3)));
+                       json_integer (sqlite3_column_int (st, 3)));
   json_object_set_new (port, "credits",
-		       json_integer (sqlite3_column_int (st, 4)));
+                       json_integer (sqlite3_column_int (st, 4)));
   json_object_set_new (port, "sector_id",
-		       json_integer (sqlite3_column_int (st, 5)));
+                       json_integer (sqlite3_column_int (st, 5)));
 
   sqlite3_finalize (st);
+  st = NULL;
 
   // Now, get the commodities info
   const char *stock_sql =
     "SELECT commodity, quantity, buy_price, sell_price FROM port_stock WHERE port_id=?;";
-  rc = sqlite3_prepare_v2 (db_get_handle (), stock_sql, -1, &st, NULL);
+  rc = sqlite3_prepare_v2 (dbh, stock_sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
-    {
-      json_decref (port);
-      return rc;
-    }
+    goto cleanup;
 
   sqlite3_bind_int (st, 1, port_id);
-  json_t *commodities = json_array ();
+  commodities = json_array ();
+  if (!commodities)
+    {
+      rc = SQLITE_NOMEM;
+      goto cleanup;
+    }
+
   while ((rc = sqlite3_step (st)) == SQLITE_ROW)
     {
       json_t *commodity = json_object ();
       json_object_set_new (commodity, "commodity",
-			   json_string ((const char *)
-					sqlite3_column_text (st, 0)));
+                           json_string ((const char *)
+                                        sqlite3_column_text (st, 0)));
       json_object_set_new (commodity, "quantity",
-			   json_integer (sqlite3_column_int (st, 1)));
+                           json_integer (sqlite3_column_int (st, 1)));
       json_object_set_new (commodity, "buy_price",
-			   json_integer (sqlite3_column_int (st, 2)));
+                           json_integer (sqlite3_column_int (st, 2)));
       json_object_set_new (commodity, "sell_price",
-			   json_integer (sqlite3_column_int (st, 3)));
+                           json_integer (sqlite3_column_int (st, 3)));
       json_array_append_new (commodities, commodity);
     }
-  sqlite3_finalize (st);
+  
+  rc = SQLITE_OK;
 
-  json_object_set_new (port, "commodities", commodities);
-  *out_obj = port;
-  return SQLITE_OK;
+cleanup:
+  if (st)
+    sqlite3_finalize (st);
+    
+  if (rc == SQLITE_OK)
+    {
+      json_object_set_new (port, "commodities", commodities);
+      *out_obj = port;
+    }
+  else
+    {
+      if (port) json_decref(port);
+      if (commodities) json_decref(commodities);
+    }
+
+  pthread_mutex_unlock (&db_mutex);
+
+  return rc;
 }
 
-
-
 /* ---------- PLAYERS AT SECTOR (lightweight: id + name) ---------- */
+
 int
 db_players_at_sector_json (int sector_id, json_t **out_array)
 {
-  *out_array = NULL;
-  sqlite3 *dbh = db_get_handle ();
-  if (!dbh)
-    return SQLITE_ERROR;
-
+  sqlite3 *dbh = NULL;
   sqlite3_stmt *st = NULL;
+  json_t *arr = NULL;
+  int rc = SQLITE_ERROR; // Default to error
+
+  // 1. Acquire the lock FIRST
+  pthread_mutex_lock (&db_mutex);
+
+  if (!out_array)
+    goto cleanup;
+
+  *out_array = NULL;
+  dbh = db_get_handle ();
+  if (!dbh)
+    goto cleanup;
 
   /* Prefer explicit 'sector' and 'name' columns */
   const char *sql =
     "SELECT id, COALESCE(name, player_name) AS pname FROM players WHERE sector = ? ORDER BY id";
-  int rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
+  rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
       /* Fallback if some builds use 'location' instead of 'sector' */
       const char *sql2 =
-	"SELECT id, COALESCE(name, player_name) AS pname FROM players WHERE location = ? ORDER BY id";
+        "SELECT id, COALESCE(name, player_name) AS pname FROM players WHERE location = ? ORDER BY id";
       rc = sqlite3_prepare_v2 (dbh, sql2, -1, &st, NULL);
       if (rc != SQLITE_OK)
-	return rc;
+        goto cleanup;
     }
 
   sqlite3_bind_int (st, 1, sector_id);
 
-  json_t *arr = json_array ();
+  arr = json_array ();
   if (!arr)
     {
-      sqlite3_finalize (st);
-      return SQLITE_NOMEM;
+      rc = SQLITE_NOMEM;
+      goto cleanup;
     }
 
   while ((rc = sqlite3_step (st)) == SQLITE_ROW)
     {
       const unsigned char *nm = sqlite3_column_text (st, 1);
       json_t *o = json_pack ("{s:i s:s}",
-			     "id", sqlite3_column_int (st, 0),
-			     "name", nm ? (const char *) nm : "");
+                             "id", sqlite3_column_int (st, 0),
+                             "name", nm ? (const char *) nm : "");
       if (!o)
-	{
-	  json_decref (arr);
-	  sqlite3_finalize (st);
-	  return SQLITE_NOMEM;
-	}
+        {
+          rc = SQLITE_NOMEM;
+          goto cleanup;
+        }
       json_array_append_new (arr, o);
     }
-  sqlite3_finalize (st);
-
+  
   if (rc == SQLITE_DONE)
     {
       *out_array = arr;
-      return SQLITE_OK;
+      rc = SQLITE_OK;
     }
-  json_decref (arr);
+  else
+    {
+      json_decref (arr);
+      arr = NULL;
+    }
+
+cleanup:
+  if (st)
+    sqlite3_finalize (st);
+    
+  // 2. Release the lock LAST
+  pthread_mutex_unlock (&db_mutex);
+  
   return rc;
 }
 
+
 /* ---------- BEACONS AT SECTOR (optional table) ---------- */
+
 int
 db_beacons_at_sector_json (int sector_id, json_t **out_array)
 {
-  *out_array = NULL;
-  sqlite3 *dbh = db_get_handle ();
-  if (!dbh)
-    return SQLITE_ERROR;
-
+  sqlite3 *dbh = NULL;
   sqlite3_stmt *st = NULL;
+  json_t *arr = NULL;
+  int rc = SQLITE_ERROR;
+
+  // 1. Acquire the lock FIRST
+  pthread_mutex_lock (&db_mutex);
+
+  if (!out_array)
+    goto cleanup;
+  
+  *out_array = NULL;
+  
+  dbh = db_get_handle ();
+  if (!dbh)
+    goto cleanup;
+
   const char *sql =
     "SELECT id, owner_id, message "
     "FROM beacons WHERE sector_id = ? ORDER BY id";
 
-  int rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
+  rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
-    return rc;			/* If table doesn't exist, caller can treat as 'none' */
+    goto cleanup;
 
   sqlite3_bind_int (st, 1, sector_id);
 
-  json_t *arr = json_array ();
+  arr = json_array ();
   if (!arr)
     {
-      sqlite3_finalize (st);
-      return SQLITE_NOMEM;
+      rc = SQLITE_NOMEM;
+      goto cleanup;
     }
 
   while ((rc = sqlite3_step (st)) == SQLITE_ROW)
     {
       json_t *o = json_pack ("{s:i s:i s:s}",
-			     "id", sqlite3_column_int (st, 0),
-			     "owner_id", sqlite3_column_int (st, 1),
-			     "message",
-			     (const char *) sqlite3_column_text (st, 2));
+                             "id", sqlite3_column_int (st, 0),
+                             "owner_id", sqlite3_column_int (st, 1),
+                             "message",
+                             (const char *) sqlite3_column_text (st, 2));
       if (!o)
-	{
-	  json_decref (arr);
-	  sqlite3_finalize (st);
-	  return SQLITE_NOMEM;
-	}
+        {
+          rc = SQLITE_NOMEM;
+          json_decref (arr);
+          arr = NULL;
+          goto cleanup;
+        }
       json_array_append_new (arr, o);
     }
-  sqlite3_finalize (st);
-
+  
   if (rc == SQLITE_DONE)
     {
       *out_array = arr;
-      return SQLITE_OK;
+      rc = SQLITE_OK;
     }
-  json_decref (arr);
+  else
+    {
+      json_decref (arr);
+      arr = NULL;
+    }
+
+cleanup:
+  if (st)
+    sqlite3_finalize (st);
+    
+  // 2. Release the lock LAST
+  pthread_mutex_unlock (&db_mutex);
+  
   return rc;
 }
 
 
+/* ---------- PLANETS AT SECTOR ---------- */
+
 int
 db_planets_at_sector_json (int sector_id, json_t **out_array)
 {
-  *out_array = NULL;
-  sqlite3 *dbh = db_get_handle ();
-  if (!dbh)
-    return SQLITE_ERROR;
-
+  sqlite3 *dbh = NULL;
   sqlite3_stmt *st = NULL;
+  json_t *arr = NULL;
+  int rc = SQLITE_ERROR; // Default to error
 
-  /* Prefer 'planets(location, name, class, owner_id, fighters, colonists)' */
+  // 1. Acquire the lock FIRST
+  pthread_mutex_lock (&db_mutex);
+
+  if (!out_array)
+    goto cleanup;
+
+  *out_array = NULL;
+  
+  dbh = db_get_handle ();
+  if (!dbh)
+    goto cleanup;
+
   const char *sql =
-    "SELECT id, COALESCE(name, planet_name) AS pname, "
-    "       COALESCE(class, clazz) AS pclass, "
-    "       owner_id, fighters, colonists "
-    "FROM planets " "WHERE COALESCE(location, sector) = ? " "ORDER BY id";
+    "SELECT id, name, owner, fighters, fuelColonist, organicsColonist, equipmentColonist,"
+    "fuel, organics, equipment, citadel_level FROM planets WHERE sector = ? ORDER BY id;";
 
-  int rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
+  rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
-    return rc;
+    goto cleanup;
 
   sqlite3_bind_int (st, 1, sector_id);
 
-  json_t *arr = json_array ();
+  arr = json_array ();
   if (!arr)
     {
-      sqlite3_finalize (st);
-      return SQLITE_NOMEM;
+      rc = SQLITE_NOMEM;
+      goto cleanup;
     }
 
   while ((rc = sqlite3_step (st)) == SQLITE_ROW)
     {
-      const unsigned char *nm = sqlite3_column_text (st, 1);
-      const unsigned char *cl = sqlite3_column_text (st, 2);
-      json_t *o = json_pack ("{s:i s:s s:s s:o s:o s:o}",
-			     "id", sqlite3_column_int (st, 0),
-			     "name", nm ? (const char *) nm : "",
-			     "class", cl ? (const char *) cl : "",
-			     "owner_id", sqlite3_column_type (st,
-							      3) ==
-			     SQLITE_NULL ? json_null () :
-			     json_integer (sqlite3_column_int (st, 3)),
-			     "fighters", sqlite3_column_type (st,
-							      4) ==
-			     SQLITE_NULL ? json_null () :
-			     json_integer (sqlite3_column_int (st, 4)),
-			     "colonists", sqlite3_column_type (st,
-							       5) ==
-			     SQLITE_NULL ? json_null () :
-			     json_integer (sqlite3_column_int (st, 5)));
-      if (!o)
-	{
-	  json_decref (arr);
-	  sqlite3_finalize (st);
-	  return SQLITE_NOMEM;
-	}
-      json_array_append_new (arr, o);
-    }
-  sqlite3_finalize (st);
+      json_t *o_planet = json_object();
+      if (!o_planet) {
+        rc = SQLITE_NOMEM;
+        goto cleanup;
+      }
 
-  if (rc == SQLITE_DONE)
-    {
-      *out_array = arr;
-      return SQLITE_OK;
+      json_object_set_new(o_planet, "id", json_integer(sqlite3_column_int(st, 0)));
+      json_object_set_new(o_planet, "name", json_string((const char*)sqlite3_column_text(st, 1)));
+      json_object_set_new(o_planet, "owner_id", (sqlite3_column_type(st, 2) == SQLITE_NULL) ? json_null() : json_integer(sqlite3_column_int(st, 2)));
+      json_object_set_new(o_planet, "fighters", (sqlite3_column_type(st, 3) == SQLITE_NULL) ? json_null() : json_integer(sqlite3_column_int(st, 3)));
+      
+      json_t *colonists = json_object();
+      if (!colonists) { json_decref(o_planet); rc = SQLITE_NOMEM; goto cleanup; }
+      json_object_set_new(colonists, "fuel", (sqlite3_column_type(st, 4) == SQLITE_NULL) ? json_null() : json_integer(sqlite3_column_int(st, 4)));
+      json_object_set_new(colonists, "organics", (sqlite3_column_type(st, 5) == SQLITE_NULL) ? json_null() : json_integer(sqlite3_column_int(st, 5)));
+      json_object_set_new(colonists, "equipment", (sqlite3_column_type(st, 6) == SQLITE_NULL) ? json_null() : json_integer(sqlite3_column_int(st, 6)));
+      json_object_set_new(o_planet, "colonists", colonists);
+
+      json_t *resources = json_object();
+      if (!resources) { json_decref(o_planet); rc = SQLITE_NOMEM; goto cleanup; }
+      json_object_set_new(resources, "fuel", (sqlite3_column_type(st, 7) == SQLITE_NULL) ? json_null() : json_integer(sqlite3_column_int(st, 7)));
+      json_object_set_new(resources, "organics", (sqlite3_column_type(st, 8) == SQLITE_NULL) ? json_null() : json_integer(sqlite3_column_int(st, 8)));
+      json_object_set_new(resources, "equipment", (sqlite3_column_type(st, 9) == SQLITE_NULL) ? json_null() : json_integer(sqlite3_column_int(st, 9)));
+      json_object_set_new(o_planet, "resources", resources);
+
+      json_object_set_new(o_planet, "citadel_level", (sqlite3_column_type(st, 10) == SQLITE_NULL) ? json_null() : json_integer(sqlite3_column_int(st, 10)));
+      
+      json_array_append_new (arr, o_planet);
     }
-  json_decref (arr);
+  
+  if (rc != SQLITE_DONE) {
+    json_decref(arr);
+    arr = NULL;
+    goto cleanup;
+  }
+  
+  *out_array = arr;
+  rc = SQLITE_OK;
+
+cleanup:
+  if (st)
+    sqlite3_finalize (st);
+    
+  // 2. Release the lock LAST
+  pthread_mutex_unlock (&db_mutex);
+  
   return rc;
 }
 
 int
 db_player_set_sector (int player_id, int sector_id)
 {
-  sqlite3 *dbh = db_get_handle ();
-  if (!dbh)
-    return SQLITE_ERROR;
+  sqlite3 *dbh = NULL;
+  sqlite3_stmt *st_find_ship = NULL;
+  sqlite3_stmt *st_update_player = NULL;
+  sqlite3_stmt *st_update_ship = NULL;
 
-  // Start a transaction to ensure both updates succeed or fail together
-  int rc = sqlite3_exec (dbh, "BEGIN;", NULL, NULL, NULL);
+  int ret_code = SQLITE_ERROR;
+  int rc;
+  bool transaction_started = false;
+
+  // 1. Acquire the lock at the beginning of the function.
+  pthread_mutex_lock (&db_mutex);
+
+  dbh = db_get_handle ();
+  if (!dbh)
+    {
+      goto cleanup;
+    }
+
+  // 2. Start the transaction. This is the first database command.
+  rc = sqlite3_exec (dbh, "BEGIN;", NULL, NULL, NULL);
   if (rc != SQLITE_OK)
-    return rc;
+    {
+      ret_code = rc;
+      goto cleanup;
+    }
+  transaction_started = true; // Mark transaction as started
 
   // First, get the player's active ship ID
-  sqlite3_stmt *st_find_ship = NULL;
   const char *sql_find_ship = "SELECT ship FROM players WHERE id=?;";
   rc = sqlite3_prepare_v2 (dbh, sql_find_ship, -1, &st_find_ship, NULL);
   if (rc != SQLITE_OK)
     {
-      sqlite3_exec (dbh, "ROLLBACK;", NULL, NULL, NULL);
-      return rc;
+      ret_code = rc;
+      goto cleanup;
     }
   sqlite3_bind_int (st_find_ship, 1, player_id);
   rc = sqlite3_step (st_find_ship);
@@ -2213,194 +2744,375 @@ db_player_set_sector (int player_id, int sector_id)
   if (rc == SQLITE_ROW)
     {
       ship_id = sqlite3_column_int (st_find_ship, 0);
-    }
-  sqlite3_finalize (st_find_ship);
-  if (rc != SQLITE_ROW)
-    {				// Player not found or other error
-      sqlite3_exec (dbh, "ROLLBACK;", NULL, NULL, NULL);
-      return rc;
+      rc = sqlite3_step (st_find_ship); // Move past the single row
     }
 
+  if (rc != SQLITE_DONE)
+    {
+      // Player not found or other error. rc holds the step result.
+      if (rc == SQLITE_DONE) {
+         ret_code = SQLITE_NOTFOUND; // You might define this custom error code.
+      } else {
+         ret_code = rc;
+      }
+      goto cleanup;
+    }
+
+
   // Update the player's location
-  sqlite3_stmt *st_update_player = NULL;
   const char *sql_update_player = "UPDATE players SET sector=? WHERE id=?;";
-  rc =
-    sqlite3_prepare_v2 (dbh, sql_update_player, -1, &st_update_player, NULL);
+  rc = sqlite3_prepare_v2 (dbh, sql_update_player, -1, &st_update_player, NULL);
   if (rc != SQLITE_OK)
     {
-      sqlite3_exec (dbh, "ROLLBACK;", NULL, NULL, NULL);
-      return rc;
+      ret_code = rc;
+      goto cleanup;
     }
   sqlite3_bind_int (st_update_player, 1, sector_id);
   sqlite3_bind_int (st_update_player, 2, player_id);
   rc = sqlite3_step (st_update_player);
-  sqlite3_finalize (st_update_player);
   if (rc != SQLITE_DONE)
     {
-      sqlite3_exec (dbh, "ROLLBACK;", NULL, NULL, NULL);
-      return rc;
+      ret_code = rc;
+      goto cleanup;
     }
 
   // Update the ship's location using the retrieved ship ID
-  sqlite3_stmt *st_update_ship = NULL;
   const char *sql_update_ship = "UPDATE ships SET location=? WHERE id=?;";
   rc = sqlite3_prepare_v2 (dbh, sql_update_ship, -1, &st_update_ship, NULL);
   if (rc != SQLITE_OK)
     {
-      sqlite3_exec (dbh, "ROLLBACK;", NULL, NULL, NULL);
-      return rc;
+      ret_code = rc;
+      goto cleanup;
     }
   sqlite3_bind_int (st_update_ship, 1, sector_id);
   sqlite3_bind_int (st_update_ship, 2, ship_id);
   rc = sqlite3_step (st_update_ship);
-  sqlite3_finalize (st_update_ship);
   if (rc != SQLITE_DONE)
     {
-      sqlite3_exec (dbh, "ROLLBACK;", NULL, NULL, NULL);
-      return rc;
+      ret_code = rc;
+      goto cleanup;
     }
 
-  // Commit the transaction
-  return sqlite3_exec (dbh, "COMMIT;", NULL, NULL, NULL);
-}
+  // All operations succeeded, set the return code to OK.
+  ret_code = SQLITE_OK;
 
+cleanup:
+  // 3. Finalize all prepared statements.
+  if (st_find_ship)
+    sqlite3_finalize (st_find_ship);
+  if (st_update_player)
+    sqlite3_finalize (st_update_player);
+  if (st_update_ship)
+    sqlite3_finalize (st_update_ship);
+
+  // 4. Handle the transaction based on the final status.
+  if (transaction_started)
+    {
+      if (ret_code == SQLITE_OK)
+        {
+          sqlite3_exec (dbh, "COMMIT;", NULL, NULL, NULL);
+        }
+      else
+        {
+          sqlite3_exec (dbh, "ROLLBACK;", NULL, NULL, NULL);
+        }
+    }
+
+  // 5. Release the lock at the very end.
+  pthread_mutex_unlock (&db_mutex);
+
+  return ret_code;
+}
 
 int
 db_player_get_sector (int player_id, int *out_sector)
 {
+  sqlite3_stmt *st = NULL;
+  int ret_code = SQLITE_ERROR;
+  int rc; // For SQLite's intermediate return codes.
+
+  // 1. Acquire the lock at the very beginning of the function.
+  pthread_mutex_lock (&db_mutex);
+
+  // Initialize the output value to a safe default.
   if (out_sector)
     *out_sector = 0;
+
   sqlite3 *dbh = db_get_handle ();
   if (!dbh)
-    return SQLITE_ERROR;
+    {
+      // The database handle is not valid, set return code and go to cleanup.
+      goto cleanup;
+    }
 
   const char *sql = "SELECT sector FROM players WHERE id=?";
-  sqlite3_stmt *st = NULL;
-  int rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
+
+  // 2. Prepare the statement. This is the first point of failure.
+  rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
-    return rc;
+    {
+      ret_code = rc;
+      goto cleanup;
+    }
 
   sqlite3_bind_int (st, 1, player_id);
+
+  // 3. Step the statement.
   rc = sqlite3_step (st);
-  if (rc == SQLITE_ROW && out_sector)
+  if (rc == SQLITE_ROW)
     {
-      *out_sector = sqlite3_column_type (st, 0) == SQLITE_NULL
-	? 0 : sqlite3_column_int (st, 0);
+      // A row was returned successfully.
+      if (out_sector)
+        {
+          *out_sector = sqlite3_column_type (st, 0) == SQLITE_NULL ? 0 : sqlite3_column_int (st, 0);
+        }
+      ret_code = SQLITE_OK;
     }
-  sqlite3_finalize (st);
-  return (rc == SQLITE_ROW || rc == SQLITE_DONE) ? SQLITE_OK : rc;
+  else if (rc == SQLITE_DONE)
+    {
+      // Query completed with no rows, which is a successful result.
+      ret_code = SQLITE_OK;
+    }
+  else
+    {
+      // An error occurred during the step.
+      ret_code = rc;
+    }
+
+cleanup:
+  // 4. Finalize the statement. This must be done whether the function succeeded or failed.
+  if (st)
+    {
+      sqlite3_finalize (st);
+    }
+    
+  // 5. Release the lock. This is the final step before returning.
+  pthread_mutex_unlock (&db_mutex);
+  
+  // 6. Return the final status code from a single point.
+  return ret_code;
 }
 
 int
 db_player_info_json (int player_id, json_t **out)
 {
+  sqlite3_stmt *st = NULL;
+  json_t *obj = NULL;
+  int ret_code = SQLITE_ERROR;
+  
+  // 1. Acquire the lock at the beginning of the function.
+  pthread_mutex_lock (&db_mutex);
+
+  // Initialize the output pointer.
   if (out)
     *out = NULL;
+  
+  // Get the database handle.
   sqlite3 *dbh = db_get_handle ();
   if (!dbh)
-    return SQLITE_ERROR;
-
-  const char *sql = "SELECT " "  p.id, p.number, p.name, p.sector, " "  s.id    AS ship_id, " "  COALESCE(s.number, 0) AS ship_number, " "  COALESCE(s.name, '')  AS ship_name, " "  COALESCE(s.type, 0)   AS ship_type_id, " "  COALESCE(st.name, '') AS ship_type_name, " "  COALESCE(s.holds, 0)  AS ship_holds, " "  COALESCE(s.fighters, 0) AS ship_fighters " "FROM players p " "LEFT JOIN ships s      ON s.id = p.ship "	/* <-- key fix */
-    "LEFT JOIN shiptypes st ON st.id = s.type " "WHERE p.id = ?";
-
-  sqlite3_stmt *st = NULL;
-  int rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
-  if (rc != SQLITE_OK)
-    return rc;
-
-  sqlite3_bind_int (st, 1, player_id);
-
-  rc = sqlite3_step (st);
-  if (rc != SQLITE_ROW)
     {
-      sqlite3_finalize (st);
-      return (rc == SQLITE_DONE) ? SQLITE_OK : rc;
+      goto cleanup;
     }
 
-  int pid = sqlite3_column_int (st, 0);
-  int pnum = sqlite3_column_int (st, 1);
-  const char *pname = (const char *) sqlite3_column_text (st, 2);
-  int psector =
-    sqlite3_column_type (st, 3) == SQLITE_NULL ? 0 : sqlite3_column_int (st,
-									 3);
+  // --- REFACTORED SQL QUERY ---
+  // We now LEFT JOIN with the 'sectors' table to get the sector name directly from the database.
+  const char *sql = "SELECT "
+    " p.id, p.number, p.name, p.sector, "
+    " s.id         AS ship_id, "
+    " COALESCE(s.number, 0) AS ship_number, "
+    " COALESCE(s.name, '')  AS ship_name, "
+    " COALESCE(s.type, 0)   AS ship_type_id, "
+    " COALESCE(st.name, '') AS ship_type_name, "
+    " COALESCE(s.holds, 0)  AS ship_holds, "
+    " COALESCE(s.fighters, 0) AS ship_fighters, "
+    " COALESCE(sectors.name, 'Unknown') AS sector_name " // <--- NEW COLUMN
+    "FROM players p "
+    "LEFT JOIN ships s       ON s.id = p.ship "
+    "LEFT JOIN shiptypes st ON st.id = s.type "
+    "LEFT JOIN sectors       ON sectors.id = p.sector " // <--- NEW JOIN
+    "WHERE p.id = ?";
 
-  int ship_id =
-    sqlite3_column_type (st, 4) == SQLITE_NULL ? 0 : sqlite3_column_int (st,
-									 4);
-  int ship_number = sqlite3_column_int (st, 5);
-  const char *sname = (const char *) sqlite3_column_text (st, 6);
-  int stype_id = sqlite3_column_int (st, 7);
-  const char *stype = (const char *) sqlite3_column_text (st, 8);
-  int sholds = sqlite3_column_int (st, 9);
-  int sfighters = sqlite3_column_int (st, 10);
+  // 2. Prepare the statement. Check for errors and jump to cleanup.
+  int rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      ret_code = rc;
+      goto cleanup;
+    }
+  
+  // 3. Bind the parameter.
+  sqlite3_bind_int (st, 1, player_id);
 
-  json_t *obj = json_pack ("{s:i s:s s:i s:i s:s s:i s:i s:s s:i s:i s:i}",
-			   "player_id", pid,
-			   "player_name", pname ? pname : "",
-			   "player_number", pnum,
-			   "sector_id", psector,
-			   "sector_name", psector == 1 ? "Fedspace 1" : "Uncharted Space",	/* swap in your real sector-name helper if you have one */
-			   "ship_id", ship_id,
-			   "ship_number", ship_number,
-			   "ship_name", sname ? sname : "",
-			   "ship_type_id", stype_id,
-			   "ship_holds", sholds,
-			   "ship_fighters", sfighters);
-  /* add type name if you like */
-  json_object_set_new (obj, "ship_type_name",
-		       json_string (stype ? stype : ""));
+  // 4. Get results and create the JSON object.
+  rc = sqlite3_step (st);
+  if (rc == SQLITE_ROW)
+    {
+      int pid = sqlite3_column_int (st, 0);
+      int pnum = sqlite3_column_int (st, 1);
+      const char *pname = (const char *) sqlite3_column_text (st, 2);
+      int psector = sqlite3_column_int (st, 3);
+      int ship_id = sqlite3_column_int (st, 4);
+      int ship_number = sqlite3_column_int (st, 5);
+      const char *sname = (const char *) sqlite3_column_text (st, 6);
+      int stype_id = sqlite3_column_int (st, 7);
+      const char *stype = (const char *) sqlite3_column_text (st, 8);
+      int sholds = sqlite3_column_int (st, 9);
+      int sfighters = sqlite3_column_int (st, 10);
+      const char *sector_name = (const char *) sqlite3_column_text(st, 11); // <--- NEW VARIABLE
+      
+      obj = json_pack ("{s:i, s:s, s:i, s:i, s:s, s:i, s:i, s:s, s:i, s:i, s:i, s:s}",
+                        "player_id", pid,
+                        "player_name", pname ? pname : "",
+                        "player_number", pnum,
+                        "sector_id", psector,
+                        "sector_name", sector_name ? sector_name : "Unknown", // <--- USE THE NEW VARIABLE
+                        "ship_id", ship_id,
+                        "ship_number", ship_number,
+                        "ship_name", sname ? sname : "",
+                        "ship_type_id", stype_id,
+                        "ship_holds", sholds,
+                        "ship_fighters", sfighters,
+                        "ship_type_name", stype ? stype : ""); // Corrected placement.
 
-  sqlite3_finalize (st);
-  if (!obj)
-    return SQLITE_NOMEM;
-  if (out)
-    *out = obj;
+      ret_code = SQLITE_OK;
+    }
+  else if (rc == SQLITE_DONE)
+    {
+      ret_code = SQLITE_OK;
+      obj = json_object();
+    }
   else
-    json_decref (obj);
-  return SQLITE_OK;
-}
+    {
+      ret_code = rc;
+    }
 
+cleanup:
+  // 5. Always finalize the SQLite statement if it was created.
+  if (st)
+    {
+      sqlite3_finalize (st);
+    }
+  
+  // 6. Set the output pointer and ensure proper JSON cleanup.
+  if (ret_code == SQLITE_OK)
+    {
+      if (out)
+        *out = obj;
+      else
+        json_decref(obj);
+    }
+  else
+    {
+      if (obj)
+        json_decref(obj);
+    }
+  
+  // 7. Always release the lock at the very end.
+  pthread_mutex_unlock (&db_mutex);
+
+  // 8. Single point of return.
+  return ret_code;
+}
 
 
 int
 db_sector_beacon_text (int sector_id, char **out_text)
 {
+  // Initialize all pointers to NULL for a clean slate.
+  sqlite3_stmt *st = NULL;
+
+  // The final return code for the function.
+  int ret_code = SQLITE_ERROR;
+  
+  // 1. Acquire the lock at the beginning of the function.
+  pthread_mutex_lock (&db_mutex);
+
+  // Initialize the output pointer.
   if (out_text)
     *out_text = NULL;
+  
+  // Get the database handle.
   sqlite3 *dbh = db_get_handle ();
   if (!dbh)
-    return SQLITE_ERROR;
+    {
+      ret_code = SQLITE_ERROR;
+      goto cleanup;
+    }
 
   const char *sql = "SELECT beacon FROM sectors WHERE id=?";
-  sqlite3_stmt *st = NULL;
+  
+  // 2. Prepare the statement. Check for errors and jump to cleanup if needed.
   int rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
-    return rc;
+    {
+      ret_code = rc;
+      goto cleanup;
+    }
 
+  // 3. Bind the parameter.
   sqlite3_bind_int (st, 1, sector_id);
+
+  // 4. Get results. A successful step will return SQLITE_ROW.
   rc = sqlite3_step (st);
   if (rc == SQLITE_ROW)
     {
       const unsigned char *txt = sqlite3_column_text (st, 0);
       if (txt && *txt)
-	{
-	  const char *c = (const char *) txt;
-	  if (out_text)
-	    *out_text = strdup (c);
-	}
+        {
+          const char *c = (const char *) txt;
+          if (out_text)
+            {
+              // The caller is now responsible for freeing this memory.
+              *out_text = strdup (c);
+            }
+        }
+      ret_code = SQLITE_OK;
     }
-  sqlite3_finalize (st);
-  return (rc == SQLITE_ROW || rc == SQLITE_DONE) ? SQLITE_OK : rc;
+  else if (rc == SQLITE_DONE)
+    {
+      // No rows were returned, which is a successful query.
+      ret_code = SQLITE_OK;
+    }
+  else
+    {
+      // An error occurred during sqlite3_step.
+      ret_code = rc;
+    }
+
+cleanup:
+  // 5. Always finalize the SQLite statement if it was created.
+  if (st)
+    {
+      sqlite3_finalize (st);
+    }
+
+  // 6. Always release the lock at the very end.
+  pthread_mutex_unlock (&db_mutex);
+  
+  // 7. A single return statement, as per the pattern.
+  return ret_code;
 }
+
 
 int
 db_ships_at_sector_json (int player_id, int sector_id, json_t **out)
 {
+  // Initialize all pointers to NULL for a clean slate.
+  json_t *ports = NULL;
+  sqlite3_stmt *st = NULL;
   *out = NULL;
+
+  int sqrc; // For SQLite return codes.
+  int ret_code = -1; // The final return code for the function.
+  
+  // 1. Acquire the lock at the beginning of the function.
+  pthread_mutex_lock (&db_mutex);
+  
   json_t *ships = json_array ();
   if (!ships)
     {
-      return SQLITE_NOMEM;
+      ret_code = SQLITE_NOMEM;
+      goto cleanup;
     }
 
   const char *sql =
@@ -2409,16 +3121,19 @@ db_ships_at_sector_json (int player_id, int sector_id, json_t **out)
     "LEFT JOIN shiptypes T2 ON T1.type = T2.id "
     "LEFT JOIN players T3 ON T1.id = T3.ship " "WHERE T1.location=?;";
 
-  sqlite3_stmt *st = NULL;
+  // 2. Prepare the statement. Check for errors and jump to cleanup if needed.
+  
   int rc = sqlite3_prepare_v2 (db_get_handle (), sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
-      json_decref (ships);
-      return rc;
+      ret_code = rc;
+      goto cleanup;      
     }
 
   sqlite3_bind_int (st, 1, sector_id);
 
+  // 3. Loop through the results. If an error occurs (e.g., failed json_object() allocation),
+  // we jump to cleanup to free all resources and the mutex.
   while ((rc = sqlite3_step (st)) == SQLITE_ROW)
     {
       const char *ship_name = (const char *) sqlite3_column_text (st, 0);
@@ -2429,9 +3144,9 @@ db_ships_at_sector_json (int player_id, int sector_id, json_t **out)
       json_t *ship = json_object ();
       if (!ship)
 	{
-	  json_decref (ships);
 	  sqlite3_finalize (st);
-	  return SQLITE_NOMEM;
+          ret_code = SQLITE_NOMEM;
+          goto cleanup;
 	}
 
       json_object_set_new (ship, "ship_name", json_string (ship_name));
@@ -2450,33 +3165,66 @@ db_ships_at_sector_json (int player_id, int sector_id, json_t **out)
       json_array_append_new (ships, ship);
     }
 
-  sqlite3_finalize (st);
+  // 4. If the loop finished, set the final return code to success.
+  ret_code = SQLITE_OK;
   *out = ships;
-  return SQLITE_OK;
+
+  cleanup:
+  // 5. Always finalize the SQLite statement if it was created.
+  if (st)
+    {
+      sqlite3_finalize (st);
+    }
+  
+  // 6. Always clean up the `ports` array if it was allocated but not returned.
+  if (ships)
+    {
+      json_decref (ships);
+    }
+
+  // 7. Always release the lock at the very end.
+  pthread_mutex_unlock (&db_mutex);
+  
+  return ret_code;return SQLITE_OK;
 }
+
 
 int
 db_ports_at_sector_json (int sector_id, json_t **out_array)
 {
+  // Initialize all pointers to NULL for a clean slate.
   *out_array = NULL;
-  json_t *ports = json_array ();
-  if (!ports)
-    {
-      return SQLITE_NOMEM;
-    }
-
-  const char *sql = "SELECT id, name, type FROM ports WHERE sector=?;";
+  json_t *ports = NULL;
   sqlite3_stmt *st = NULL;
 
-  int rc = sqlite3_prepare_v2 (db_get_handle (), sql, -1, &st, NULL);
+  int rc; // For SQLite return codes.
+  int ret_code = -1; // The final return code for the function.
+
+  // 1. Acquire the lock at the beginning of the function.
+  pthread_mutex_lock (&db_mutex);
+
+  // Allocate the JSON array. If this fails, we jump to cleanup.
+  ports = json_array ();
+  if (!ports)
+    {
+      ret_code = SQLITE_NOMEM;
+      goto cleanup;
+    }
+
+  const char *sql = "SELECT id, name, type FROM ports WHERE location=?;";
+  
+  // 2. Prepare the statement. Check for errors and jump to cleanup if needed.
+  rc = sqlite3_prepare_v2 (db_get_handle (), sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
-      json_decref (ports);
-      return rc;
+      ret_code = rc;
+      goto cleanup;
     }
 
   sqlite3_bind_int (st, 1, sector_id);
 
+  // 3. Loop through the results. If an error occurs (e.g., failed json_object() allocation),
+  // we jump to cleanup to free all resources and the mutex.
   while ((rc = sqlite3_step (st)) == SQLITE_ROW)
     {
       int port_id = sqlite3_column_int (st, 0);
@@ -2485,11 +3233,10 @@ db_ports_at_sector_json (int sector_id, json_t **out_array)
 
       json_t *port = json_object ();
       if (!port)
-	{
-	  json_decref (ports);
-	  sqlite3_finalize (st);
-	  return SQLITE_NOMEM;
-	}
+        {
+          ret_code = SQLITE_NOMEM;
+          goto cleanup;
+        }
 
       json_object_set_new (port, "id", json_integer (port_id));
       json_object_set_new (port, "name", json_string (port_name));
@@ -2497,27 +3244,103 @@ db_ports_at_sector_json (int sector_id, json_t **out_array)
 
       json_array_append_new (ports, port);
     }
-
-  sqlite3_finalize (st);
+  
+  // 4. If the loop finished, set the final return code to success.
+  ret_code = SQLITE_OK;
   *out_array = ports;
-  return SQLITE_OK;
+  ports = NULL; // We've transferred ownership, so set to NULL to prevent freeing in cleanup.
+
+cleanup:
+  // 5. Always finalize the SQLite statement if it was created.
+  if (st)
+    {
+      sqlite3_finalize (st);
+    }
+  
+  // 6. Always clean up the `ports` array if it was allocated but not returned.
+  if (ports)
+    {
+      json_decref (ports);
+    }
+
+  // 7. Always release the lock at the very end.
+  pthread_mutex_unlock (&db_mutex);
+  
+  return ret_code;
 }
+
+/* int */
+/* db_ports_at_sector_json (int sector_id, json_t **out_array) */
+/* { */
+/*   *out_array = NULL; */
+/*   json_t *ports = json_array (); */
+/*   if (!ports) */
+/*     { */
+/*       return SQLITE_NOMEM; */
+/*     } */
+
+/*   const char *sql = "SELECT id, name, type FROM ports WHERE location=?;"; */
+/*   sqlite3_stmt *st = NULL; */
+
+/*   int rc = sqlite3_prepare_v2 (db_get_handle (), sql, -1, &st, NULL); */
+/*   if (rc != SQLITE_OK) */
+/*     { */
+/*       json_decref (ports); */
+/*       return rc; */
+/*     } */
+
+/*   sqlite3_bind_int (st, 1, sector_id); */
+
+/*   while ((rc = sqlite3_step (st)) == SQLITE_ROW) */
+/*     { */
+/*       int port_id = sqlite3_column_int (st, 0); */
+/*       const char *port_name = (const char *) sqlite3_column_text (st, 1); */
+/*       const char *port_type = (const char *) sqlite3_column_text (st, 2); */
+
+/*       json_t *port = json_object (); */
+/*       if (!port) */
+/* 	{ */
+/* 	  json_decref (ports); */
+/* 	  sqlite3_finalize (st); */
+/* 	  return SQLITE_NOMEM; */
+/* 	} */
+
+/*       json_object_set_new (port, "id", json_integer (port_id)); */
+/*       json_object_set_new (port, "name", json_string (port_name)); */
+/*       json_object_set_new (port, "type", json_string (port_type)); */
+
+/*       json_array_append_new (ports, port); */
+/*     } */
+
+/*   sqlite3_finalize (st); */
+/*   *out_array = ports; */
+/*   return SQLITE_OK; */
+/* } */
 
 // In database.c
 int
 db_sector_has_beacon (int sector_id)
 {
   sqlite3_stmt *stmt;
+    // 1. Acquire the lock before any database interaction.
+  pthread_mutex_lock(&db_mutex);
+    // 2. Prepare the statement. This is the first place an error could occur.
   const char *sql = "SELECT beacon FROM sectors WHERE id = ?;";
+
+
   if (sqlite3_prepare_v2 (db_get_handle (), sql, -1, &stmt, NULL) != SQLITE_OK)
     {
-      fprintf (stderr, "SQL error in db_sector_has_beacon: %s\n",
-	       sqlite3_errmsg (db_get_handle ()));
-      return -1;		// Indicates an error
+      /* fprintf (stderr, "SQL error in db_sector_has_beacon: %s\n", */
+      /* 	       sqlite3_errmsg (db_get_handle ())); */
+      /* return -1;		// Indicates an error */
+	// If preparation fails, we jump to the cleanup block to release the lock.
+        goto cleanup;
     }
 
+  // 3. Bind the parameter.
   sqlite3_bind_int (stmt, 1, sector_id);
 
+    // 4. Execute the statement.
   int rc = sqlite3_step (stmt);
   int has_beacon = 0;
   if (rc == SQLITE_ROW)
@@ -2527,26 +3350,48 @@ db_sector_has_beacon (int sector_id)
 	  has_beacon = 1;
 	}
     }
+    // The cleanup label is the single point of exit.
+cleanup:
+    // 5. Finalize the statement if it was successfully prepared.
+    if (stmt) {
+        sqlite3_finalize(stmt);
+    }
 
-  sqlite3_finalize (stmt);
-  return has_beacon;
+    // 6. Release the lock at the end of the function, regardless of success or failure.
+    pthread_mutex_unlock(&db_mutex);
+    return has_beacon;
 }
 
 int
 db_sector_set_beacon (int sector_id, const char *beacon_text)
 {
   sqlite3_stmt *stmt;
-  const char *sql = "UPDATE sectors SET beacon = ? WHERE id = ?;";
-  int rc = sqlite3_prepare_v2 (db_get_handle (), sql, -1, &stmt, NULL);
+    // 1. Acquire the lock before any database interaction.
+    pthread_mutex_lock(&db_mutex);
+    // 2. Prepare the statement. This is the first place an error could occur.
+    const char *sql = "UPDATE sectors SET beacon = ? WHERE id = ?;";
+
+    int rc = sqlite3_prepare_v2 (db_get_handle (), sql, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
-      return rc;
+	// If preparation fails, we jump to the cleanup block to release the lock.
+        goto cleanup;
     }
-
+    // 3. Bind the parameter.
   sqlite3_bind_text (stmt, 1, beacon_text, -1, SQLITE_TRANSIENT);
   sqlite3_bind_int (stmt, 2, sector_id);
   rc = sqlite3_step (stmt);
-  sqlite3_finalize (stmt);
+
+  // The cleanup label is the single point of exit.
+cleanup:
+  // 5. Finalize the statement if it was successfully prepared.
+    if (stmt) {
+        sqlite3_finalize(stmt);
+    }
+
+    // 6. Release the lock at the end of the function, regardless of success or failure.
+    pthread_mutex_unlock(&db_mutex);
+
   return rc;
 }
 
@@ -2555,37 +3400,76 @@ db_sector_set_beacon (int sector_id, const char *beacon_text)
 int db_player_has_beacon_on_ship(int player_id)
 {
     sqlite3_stmt *stmt;
+    // 1. Acquire the lock before any database interaction.
+    pthread_mutex_lock(&db_mutex);
+ 
     const char *sql = "SELECT T2.beacons FROM players AS T1 JOIN ships AS T2 ON T1.ship = T2.id WHERE T1.id = ?;";
+
+    // 2. Prepare the statement. This is the first place an error could occur.
     int rc = sqlite3_prepare_v2(db_get_handle (), sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
-        return 0; // SQL error, assume no beacon
+    if (rc != SQLITE_OK)
+      {
+	// If preparation fails, we jump to the cleanup block to release the lock.
+        goto cleanup;
     }
 
+    // 3. Bind the parameter.
     sqlite3_bind_int(stmt, 1, player_id);
-    
+
+    // 4. Execute the statement.
     int has_beacon = 0;
     if (sqlite3_step(stmt) == SQLITE_ROW) {
         if (sqlite3_column_int(stmt, 0) > 0) {
             has_beacon = 1;
         }
     }
+    // The cleanup label is the single point of exit.
+cleanup:
+    // 5. Finalize the statement if it was successfully prepared.
+    if (stmt) {
+        sqlite3_finalize(stmt);
+    }
 
-    sqlite3_finalize(stmt);
+    // 6. Release the lock at the end of the function, regardless of success or failure.
+    pthread_mutex_unlock(&db_mutex);
+    // sqlite3_finalize(stmt);
     return has_beacon;
 }
 
-// In database.c
-int db_player_decrement_beacon_count(int player_id)
-{
-    sqlite3_stmt *stmt;
+
+// This is the correct, thread-safe way to implement the function.
+int db_player_decrement_beacon_count(int player_id) {
+    sqlite3_stmt *stmt = NULL;
+    int rc = -1; // Initialize return code to a non-OK value.
+
+    // 1. Acquire the lock before any database interaction.
+    pthread_mutex_lock(&db_mutex);
+
     const char *sql = "UPDATE ships SET beacons = beacons - 1 WHERE id = (SELECT ship FROM players WHERE id = ?);";
-    int rc = sqlite3_prepare_v2(db_get_handle (), sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
-        return rc;
-    }
     
+    // 2. Prepare the statement. This is the first place an error could occur.
+    rc = sqlite3_prepare_v2(db_get_handle(), sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        // If preparation fails, we jump to the cleanup block to release the lock.
+        goto cleanup;
+    }
+
+    // 3. Bind the parameter.
     sqlite3_bind_int(stmt, 1, player_id);
+    
+    // 4. Execute the statement.
     rc = sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
+    
+    // The cleanup label is the single point of exit.
+cleanup:
+    // 5. Finalize the statement if it was successfully prepared.
+    if (stmt) {
+        sqlite3_finalize(stmt);
+    }
+
+    // 6. Release the lock at the end of the function, regardless of success or failure.
+    pthread_mutex_unlock(&db_mutex);
+
     return rc;
 }
+

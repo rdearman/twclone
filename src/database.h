@@ -3,6 +3,10 @@
 
 #include <jansson.h>		/* for json_t */
 #include <sqlite3.h>		/* for sqlite3 */
+#include <pthread.h>		/* for pthread_mutex_t */
+
+/* External declaration for the mutex */
+extern pthread_mutex_t db_mutex;
 
 /* Forward declare to avoid including jansson here */
 typedef struct json_t json_t;

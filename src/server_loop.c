@@ -1735,6 +1735,38 @@ handle_sector_info (int fd, json_t *root, int sector_id, int player_id)
 			   json_integer (json_array_size (ships)));
     }
 
+  // Add port info
+  json_t *ports = NULL;
+  int pt = db_ports_at_sector_json (sector_id, &ports);
+  if (pt == SQLITE_OK)
+    {
+      json_object_set_new (payload, "ports", ports ? ports : json_array ());
+      json_object_set_new (payload, "ports_count",
+			   json_integer (json_array_size (ports)));
+    }
+ 
+  // Add planet info
+  json_t *planets = NULL;
+  int plt = db_planets_at_sector_json (sector_id, &planets);
+  if (plt == SQLITE_OK)
+    {
+      json_object_set_new (payload, "planets", planets ? planets : json_array ());
+      json_object_set_new (payload, "planets_count",
+			   json_integer (json_array_size (planets)));
+    }
+
+  // Add planet info
+  json_t *players = NULL;
+  int py = db_players_at_sector_json (sector_id, &players);
+  if (py == SQLITE_OK)
+    {
+      json_object_set_new (payload, "players", players ? players : json_array ());
+      json_object_set_new (payload, "players_count",
+			   json_integer (json_array_size (players)));
+    }
+
+
+  
   send_enveloped_ok (fd, root, "sector.info", payload);
   json_decref (payload);
 }
