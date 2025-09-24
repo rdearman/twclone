@@ -6,7 +6,7 @@
 #include "database.h"		/* int db_init(void); void db_close(void); */
 #include "universe.h"		/* int universe_init(void); void universe_shutdown(void); */
 #include "server_loop.h"	/* int server_loop(volatile sig_atomic_t *running); */
-
+#include <pthread.h>		/* for pthread_mutex_t */
 
 // If these exist elsewhere, keep them; otherwise these prototypes silence warnings
 int universe_init (void);

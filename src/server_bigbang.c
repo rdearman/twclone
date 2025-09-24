@@ -520,10 +520,9 @@ create_sectors (void)
 
       sqlite3_bind_text (stmt, 1, name, -1, SQLITE_STATIC);
 
-      // The old logic for adding "System" as a beacon
       if ((i % 64) == 0)
 	{
-	  sqlite3_bind_text (stmt, 2, "System", -1, SQLITE_STATIC);
+	  sqlite3_bind_text (stmt, 2, "Barreik was here!", -1, SQLITE_STATIC);
 	}
       else
 	{
@@ -690,6 +689,14 @@ bigbang (void)
       return rc;
     }
 
+  printf ("BIGBANG: Chaining isolated sectors and bridges...\n");
+  // After all sectors/warps are generated:
+  int ferringhi = db_chain_traps_and_bridge(10);  // 1..10 are FedSpace by convention
+  // It returns the first isolated sector it found. So we pass that to the
+  // create_ferringhi function which will use it if it isn't equal to zero and
+  // the create_ferringhi function can't find a long tunnel.
+  // might want to change that later. 
+ 
   fprintf (stderr, "BIGBANG: Creating ports...\n");
   if (create_ports () != 0)
     {
@@ -698,7 +705,7 @@ bigbang (void)
     }
 
   fprintf (stderr, "BIGBANG: Creating Ferringhi home sector...\n");
-  if (create_ferringhi () != 0)
+  if (create_ferringhi (ferringhi) != 0)
     {
       free (cfg);
       return -1;
@@ -1265,8 +1272,10 @@ create_ports (void)
 
 
 int
-create_ferringhi (void)
+create_ferringhi (int ferringhi_sector)
 {
+  if (ferringhi_sector == 0) { ferringhi_sector = 20; } // just make it a default value
+  
   sqlite3 *db = db_get_handle ();
   if (!db)
     {
@@ -1318,7 +1327,7 @@ create_ferringhi (void)
     {
       fprintf (stderr,
 	       "create_ferringhi: No tunnels of length >= 2 found. Defaulting to sector 20.\n");
-      longest_tunnel_sector = 20;
+      longest_tunnel_sector = ferringhi_sector;
     }
 
   char sql_sector[256];

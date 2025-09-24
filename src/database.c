@@ -19,6 +19,11 @@ const char *DEFAULT_DB_NAME = "twconfig.db";
 
 /* Forward declaration so we can call it before the definition */
 static json_t *parse_neighbors_csv (const unsigned char *txt);
+/* Unlocked helpers (call only when db_mutex is already held) */
+static int db_ensure_auth_schema_unlocked(void);
+static int db_ensure_idempotency_schema_unlocked(void);
+static int db_create_tables_unlocked(void);
+static int db_insert_defaults_unlocked(void);
 
 ////////////////////
 
@@ -954,9 +959,14 @@ db_init (void)
       goto cleanup;
     }
 
-  // Ensure mandatory schemas are always present (even on existing DBs)
-  (void) db_ensure_auth_schema ();
-  (void) db_ensure_idempotency_schema ();
+  /* // Ensure mandatory schemas are always present (even on existing DBs) */
+  /* (void) db_ensure_auth_schema (); */
+  /* (void) db_ensure_idempotency_schema (); */
+
+  // Ensure mandatory schemas (we already hold db_mutex)
+  (void) db_ensure_auth_schema_unlocked();
+  (void) db_ensure_idempotency_schema_unlocked();
+
   
   /* Step 2: check if config table exists */
   const char *sql =
@@ -987,14 +997,14 @@ db_init (void)
       fprintf (stderr,
                "No schema detected -- creating tables and inserting defaults...\n");
       
-      if (db_create_tables () != 0)
+      if (db_create_tables_unlocked () != 0)
         {
           fprintf (stderr, "Failed to create tables\n");
           ret_code = -1;
           goto cleanup;
         }
 
-      if (db_insert_defaults () != 0)
+      if (db_insert_defaults_unlocked () != 0)
         {
           fprintf (stderr, "Failed to insert default data\n");
           ret_code = -1;
@@ -1029,80 +1039,144 @@ cleanup:
 }
 
 
-int
-db_create_tables (void)
+/* int */
+/* db_create_tables (void) */
+/* { */
+/*   char *errmsg = NULL; */
+/*   int ret_code = -1; // Default to error */
+  
+/*   pthread_mutex_lock (&db_mutex); */
+
+/*   // You should check if the db_handle is valid here, although db_init */
+/*   // should ensure it's not NULL before calling this function. */
+/*   if (!db_handle) { */
+/*       goto cleanup; */
+/*   } */
+
+/*   for (size_t i = 0; i < create_table_count; i++) */
+/*     { */
+/*       if (sqlite3_exec (db_handle, create_table_sql[i], NULL, NULL, &errmsg) */
+/*           != SQLITE_OK) */
+/*         { */
+/*           fprintf (stderr, "DB create_tables error (%zu): %s\n", i, errmsg); */
+/*           // Don't free errmsg here, the cleanup section handles it. */
+/*           goto cleanup; */
+/*         } */
+/*     } */
+  
+/*   // Success, set return code to 0 */
+/*   ret_code = 0; */
+
+/* cleanup: */
+/*   if (errmsg) */
+/*     { */
+/*       sqlite3_free (errmsg); */
+/*     } */
+  
+/*   pthread_mutex_unlock (&db_mutex); */
+  
+/*   return ret_code; */
+/* } */
+
+/* Public, thread-safe wrapper */
+int db_create_tables(void)
+{
+  int rc;
+  pthread_mutex_lock(&db_mutex);
+  rc = db_create_tables_unlocked();
+  pthread_mutex_unlock(&db_mutex);
+  return rc;
+}
+
+/* Actual work; assumes db_mutex is already held */
+static int db_create_tables_unlocked(void)
 {
   char *errmsg = NULL;
-  int ret_code = -1; // Default to error
-  
-  pthread_mutex_lock (&db_mutex);
+  int ret_code = -1;
+  sqlite3 *db = db_get_handle();
+  if (!db) return -1;
 
-  // You should check if the db_handle is valid here, although db_init
-  // should ensure it's not NULL before calling this function.
-  if (!db_handle) {
+  for (size_t i = 0; i < create_table_count; i++) {
+    if (sqlite3_exec(db, create_table_sql[i], NULL, NULL, &errmsg) != SQLITE_OK) {
+      fprintf(stderr, "DB create_tables error (%zu): %s\n", i, errmsg);
       goto cleanup;
+    }
   }
-
-  for (size_t i = 0; i < create_table_count; i++)
-    {
-      if (sqlite3_exec (db_handle, create_table_sql[i], NULL, NULL, &errmsg)
-          != SQLITE_OK)
-        {
-          fprintf (stderr, "DB create_tables error (%zu): %s\n", i, errmsg);
-          // Don't free errmsg here, the cleanup section handles it.
-          goto cleanup;
-        }
-    }
-  
-  // Success, set return code to 0
   ret_code = 0;
-
 cleanup:
-  if (errmsg)
-    {
-      sqlite3_free (errmsg);
-    }
-  
-  pthread_mutex_unlock (&db_mutex);
-  
+  if (errmsg) sqlite3_free(errmsg);
   return ret_code;
 }
 
 
-int
-db_insert_defaults (void)
-{
-  char *errmsg = NULL;
-  int ret_code = -1; // Default to error
+/* int */
+/* db_insert_defaults (void) */
+/* { */
+/*   char *errmsg = NULL; */
+/*   int ret_code = -1; // Default to error */
   
-  pthread_mutex_lock (&db_mutex);
+/*   pthread_mutex_lock (&db_mutex); */
   
-  if (!db_handle) {
-      goto cleanup;
-  }
+/*   if (!db_handle) { */
+/*       goto cleanup; */
+/*   } */
 
-  for (size_t i = 0; i < insert_default_count; i++)
-    {
-      if (sqlite3_exec (db_handle, insert_default_sql[i], NULL, NULL, &errmsg)
-          != SQLITE_OK)
-        {
-          fprintf (stderr, "DB insert_defaults error (%zu): %s\n", i, errmsg);
-          goto cleanup;
-        }
-    }
+/*   for (size_t i = 0; i < insert_default_count; i++) */
+/*     { */
+/*       if (sqlite3_exec (db_handle, insert_default_sql[i], NULL, NULL, &errmsg) */
+/*           != SQLITE_OK) */
+/*         { */
+/*           fprintf (stderr, "DB insert_defaults error (%zu): %s\n", i, errmsg); */
+/*           goto cleanup; */
+/*         } */
+/*     } */
   
-  ret_code = 0;
+/*   ret_code = 0; */
 
-cleanup:
-  if (errmsg)
-    {
-      sqlite3_free (errmsg);
-    }
+/* cleanup: */
+/*   if (errmsg) */
+/*     { */
+/*       sqlite3_free (errmsg); */
+/*     } */
     
-  pthread_mutex_unlock (&db_mutex);
+/*   pthread_mutex_unlock (&db_mutex); */
   
+/*   return ret_code; */
+/* } */
+
+/* Public, thread-safe wrapper */
+int db_insert_defaults(void)
+{
+  int rc;
+  pthread_mutex_lock(&db_mutex);
+  rc = db_insert_defaults_unlocked();
+  pthread_mutex_unlock(&db_mutex);
+  return rc;
+}
+
+/* Actual work; assumes db_mutex is already held */
+static int db_insert_defaults_unlocked(void)
+{
+  char *errmsg = NULL;
+  int ret_code = -1;
+  sqlite3 *db = db_get_handle();
+  if (!db) return -1;
+
+  for (size_t i = 0; i < insert_default_count; i++) {
+    if (sqlite3_exec(db, insert_default_sql[i], NULL, NULL, &errmsg) != SQLITE_OK) {
+      fprintf(stderr, "DB insert_defaults error (%zu): %s\n", i, errmsg);
+      goto cleanup;
+    }
+  }
+  ret_code = 0;
+cleanup:
+  if (errmsg) sqlite3_free(errmsg);
   return ret_code;
 }
+
+
+
+
 
 void
 db_close (void)
@@ -1230,75 +1304,130 @@ col_text_or_empty (sqlite3_stmt *st, int col)
 
 
 
-int
-db_ensure_auth_schema (void)
-{
-  sqlite3 *db = NULL;
-  char *errmsg = NULL;
-  int rc = -1; // Default to error
+/* int */
+/* db_ensure_auth_schema (void) */
+/* { */
+/*   sqlite3 *db = NULL; */
+/*   char *errmsg = NULL; */
+/*   int rc = -1; // Default to error */
 
-  // 1. Acquire the lock FIRST to ensure thread safety for the entire transaction.
-  pthread_mutex_lock (&db_mutex);
+/*   // 1. Acquire the lock FIRST to ensure thread safety for the entire transaction. */
+/*   pthread_mutex_lock (&db_mutex); */
 
-  db = db_get_handle ();
-  if (!db)
-    {
-      rc = SQLITE_ERROR;
-      goto cleanup;
-    }
+/*   db = db_get_handle (); */
+/*   if (!db) */
+/*     { */
+/*       rc = SQLITE_ERROR; */
+/*       goto cleanup; */
+/*     } */
 
-  rc = sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg);
-  if (rc != SQLITE_OK)
-    goto fail;
+/*   rc = sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg); */
+/*   if (rc != SQLITE_OK) */
+/*     goto fail; */
 
-  /* Table */
-  rc = sqlite3_exec (db,
-                     "CREATE TABLE IF NOT EXISTS sessions ("
-                     "  token      TEXT PRIMARY KEY,"
-                     "  player_id  INTEGER NOT NULL,"
-                     "  expires    INTEGER NOT NULL," /* epoch seconds */
-                     "  created_at INTEGER NOT NULL"  /* epoch seconds */
-                     ");", NULL, NULL, &errmsg);
-  if (rc != SQLITE_OK)
-    goto rollback;
+/*   /\* Table *\/ */
+/*   rc = sqlite3_exec (db, */
+/*                      "CREATE TABLE IF NOT EXISTS sessions (" */
+/*                      "  token      TEXT PRIMARY KEY," */
+/*                      "  player_id  INTEGER NOT NULL," */
+/*                      "  expires    INTEGER NOT NULL," /\* epoch seconds *\/ */
+/*                      "  created_at INTEGER NOT NULL"  /\* epoch seconds *\/ */
+/*                      ");", NULL, NULL, &errmsg); */
+/*   if (rc != SQLITE_OK) */
+/*     goto rollback; */
 
-  /* Indexes */
-  rc = sqlite3_exec (db,
-                     "CREATE INDEX IF NOT EXISTS idx_sessions_player  ON sessions(player_id);",
-                     NULL, NULL, &errmsg);
-  if (rc != SQLITE_OK)
-    goto rollback;
+/*   /\* Indexes *\/ */
+/*   rc = sqlite3_exec (db, */
+/*                      "CREATE INDEX IF NOT EXISTS idx_sessions_player  ON sessions(player_id);", */
+/*                      NULL, NULL, &errmsg); */
+/*   if (rc != SQLITE_OK) */
+/*     goto rollback; */
 
-  rc = sqlite3_exec (db,
-                     "CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires);",
-                     NULL, NULL, &errmsg);
-  if (rc != SQLITE_OK)
-    goto rollback;
+/*   rc = sqlite3_exec (db, */
+/*                      "CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires);", */
+/*                      NULL, NULL, &errmsg); */
+/*   if (rc != SQLITE_OK) */
+/*     goto rollback; */
 
-  rc = sqlite3_exec (db, "COMMIT;", NULL, NULL, &errmsg);
-  if (rc != SQLITE_OK)
-    goto fail;
+/*   rc = sqlite3_exec (db, "COMMIT;", NULL, NULL, &errmsg); */
+/*   if (rc != SQLITE_OK) */
+/*     goto fail; */
 
-  rc = SQLITE_OK;
+/*   rc = SQLITE_OK; */
 
-rollback:
-  if (rc != SQLITE_OK) {
-    sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-  }
+/* rollback: */
+/*   if (rc != SQLITE_OK) { */
+/*     sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL); */
+/*   } */
 
-fail:
-  if (errmsg)
-    {
-      fprintf (stderr, "[DB] auth schema: %s\n", errmsg);
-      sqlite3_free (errmsg);
-    }
+/* fail: */
+/*   if (errmsg) */
+/*     { */
+/*       fprintf (stderr, "[DB] auth schema: %s\n", errmsg); */
+/*       sqlite3_free (errmsg); */
+/*     } */
     
-cleanup:
-  // 2. Release the lock at the end.
-  pthread_mutex_unlock (&db_mutex);
+/* cleanup: */
+/*   // 2. Release the lock at the end. */
+/*   pthread_mutex_unlock (&db_mutex); */
   
+/*   return rc; */
+/* } */
+
+
+/* Public, thread-safe wrapper */
+int db_ensure_auth_schema(void)
+{
+  int rc;
+  pthread_mutex_lock(&db_mutex);
+  rc = db_ensure_auth_schema_unlocked();
+  pthread_mutex_unlock(&db_mutex);
   return rc;
 }
+
+/* Actual work; assumes db_mutex is already held */
+static int db_ensure_auth_schema_unlocked(void)
+{
+  sqlite3 *db = db_get_handle();
+  char *errmsg = NULL;
+  int rc = SQLITE_ERROR;
+
+  if (!db) return SQLITE_ERROR;
+
+  rc = sqlite3_exec(db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK) goto fail;
+
+  rc = sqlite3_exec(db,
+    "CREATE TABLE IF NOT EXISTS sessions ("
+    "  token      TEXT PRIMARY KEY,"
+    "  player_id  INTEGER NOT NULL,"
+    "  expires    INTEGER NOT NULL,"
+    "  created_at INTEGER NOT NULL"
+    ");", NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK) goto rollback;
+
+  rc = sqlite3_exec(db,
+    "CREATE INDEX IF NOT EXISTS idx_sessions_player  ON sessions(player_id);",
+    NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK) goto rollback;
+
+  rc = sqlite3_exec(db,
+    "CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires);",
+    NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK) goto rollback;
+
+  rc = sqlite3_exec(db, "COMMIT;", NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK) goto fail;
+
+  rc = SQLITE_OK;
+rollback:
+  if (rc != SQLITE_OK) sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+fail:
+  if (errmsg) { fprintf(stderr, "[DB] auth schema: %s\n", errmsg); sqlite3_free(errmsg); }
+  return rc;
+}
+
+
 
 
 
@@ -1630,68 +1759,119 @@ cleanup:
 }
 
 
-int
-db_ensure_idempotency_schema (void)
-{
-  sqlite3 *db = NULL;
-  char *errmsg = NULL;
-  int rc = SQLITE_ERROR; // Default to error
+/* int */
+/* db_ensure_idempotency_schema (void) */
+/* { */
+/*   sqlite3 *db = NULL; */
+/*   char *errmsg = NULL; */
+/*   int rc = SQLITE_ERROR; // Default to error */
   
-  // 1. Acquire the lock FIRST to ensure thread safety
-  pthread_mutex_lock (&db_mutex);
+/*   // 1. Acquire the lock FIRST to ensure thread safety */
+/*   pthread_mutex_lock (&db_mutex); */
 
-  db = db_get_handle ();
-  if (!db)
-    goto cleanup;
+/*   db = db_get_handle (); */
+/*   if (!db) */
+/*     goto cleanup; */
 
-  rc = sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg);
-  if (rc != SQLITE_OK)
-    goto fail;
+/*   rc = sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg); */
+/*   if (rc != SQLITE_OK) */
+/*     goto fail; */
 
-  rc = sqlite3_exec (db,
-                     "CREATE TABLE IF NOT EXISTS idempotency ("
-                     "  key       TEXT PRIMARY KEY,"
-                     "  cmd       TEXT NOT NULL,"
-                     "  req_fp    TEXT NOT NULL,"
-                     "  response  TEXT," /* JSON of full envelope we sent */
-                     "  created_at  INTEGER NOT NULL," /* epoch seconds */
-                     "  updated_at  INTEGER"
-                     ");",
-                     NULL, NULL, &errmsg);
-  if (rc != SQLITE_OK)
-    goto rollback;
+/*   rc = sqlite3_exec (db, */
+/*                      "CREATE TABLE IF NOT EXISTS idempotency (" */
+/*                      "  key       TEXT PRIMARY KEY," */
+/*                      "  cmd       TEXT NOT NULL," */
+/*                      "  req_fp    TEXT NOT NULL," */
+/*                      "  response  TEXT," /\* JSON of full envelope we sent *\/ */
+/*                      "  created_at  INTEGER NOT NULL," /\* epoch seconds *\/ */
+/*                      "  updated_at  INTEGER" */
+/*                      ");", */
+/*                      NULL, NULL, &errmsg); */
+/*   if (rc != SQLITE_OK) */
+/*     goto rollback; */
 
-  rc = sqlite3_exec (db,
-                     "CREATE INDEX IF NOT EXISTS idx_idemp_cmd ON idempotency(cmd);",
-                     NULL, NULL, &errmsg);
-  if (rc != SQLITE_OK)
-    goto rollback;
+/*   rc = sqlite3_exec (db, */
+/*                      "CREATE INDEX IF NOT EXISTS idx_idemp_cmd ON idempotency(cmd);", */
+/*                      NULL, NULL, &errmsg); */
+/*   if (rc != SQLITE_OK) */
+/*     goto rollback; */
 
-  rc = sqlite3_exec (db, "COMMIT;", NULL, NULL, &errmsg);
-  if (rc != SQLITE_OK)
-    goto fail;
+/*   rc = sqlite3_exec (db, "COMMIT;", NULL, NULL, &errmsg); */
+/*   if (rc != SQLITE_OK) */
+/*     goto fail; */
     
-  // Success
+/*   // Success */
+/*   rc = SQLITE_OK; */
+/*   goto cleanup; */
+
+/* rollback: */
+/*   // An error occurred after BEGIN, so we must ROLLBACK */
+/*   sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL); */
+
+/* fail: */
+/*   // Fallthrough to handle both rollback and other failures */
+/*   if (errmsg) */
+/*     { */
+/*       fprintf (stderr, "[DB] idempotency schema: %s\n", errmsg); */
+/*       sqlite3_free (errmsg); */
+/*       errmsg = NULL; // Prevent double-free */
+/*     } */
+  
+/* cleanup: */
+/*   // 2. Release the lock at the end */
+/*   pthread_mutex_unlock (&db_mutex); */
+  
+/*   return rc; */
+/* } */
+
+
+/* Public, thread-safe wrapper */
+int db_ensure_idempotency_schema(void)
+{
+  int rc;
+  pthread_mutex_lock(&db_mutex);
+  rc = db_ensure_idempotency_schema_unlocked();
+  pthread_mutex_unlock(&db_mutex);
+  return rc;
+}
+
+/* Actual work; assumes db_mutex is already held */
+static int db_ensure_idempotency_schema_unlocked(void)
+{
+  sqlite3 *db = db_get_handle();
+  char *errmsg = NULL;
+  int rc = SQLITE_ERROR;
+
+  if (!db) return SQLITE_ERROR;
+
+  rc = sqlite3_exec(db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK) goto fail;
+
+  rc = sqlite3_exec(db,
+    "CREATE TABLE IF NOT EXISTS idempotency ("
+    "  key       TEXT PRIMARY KEY,"
+    "  cmd       TEXT NOT NULL,"
+    "  req_fp    TEXT NOT NULL,"
+    "  response  TEXT,"
+    "  created_at  INTEGER NOT NULL,"
+    "  updated_at  INTEGER"
+    ");",
+    NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK) goto rollback;
+
+  rc = sqlite3_exec(db,
+    "CREATE INDEX IF NOT EXISTS idx_idemp_cmd ON idempotency(cmd);",
+    NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK) goto rollback;
+
+  rc = sqlite3_exec(db, "COMMIT;", NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK) goto fail;
+
   rc = SQLITE_OK;
-  goto cleanup;
-
 rollback:
-  // An error occurred after BEGIN, so we must ROLLBACK
-  sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-
+  if (rc != SQLITE_OK) sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
 fail:
-  // Fallthrough to handle both rollback and other failures
-  if (errmsg)
-    {
-      fprintf (stderr, "[DB] idempotency schema: %s\n", errmsg);
-      sqlite3_free (errmsg);
-      errmsg = NULL; // Prevent double-free
-    }
-  
-cleanup:
-  // 2. Release the lock at the end
-  pthread_mutex_unlock (&db_mutex);
-  
+  if (errmsg) { fprintf(stderr, "[DB] idempotency schema: %s\n", errmsg); sqlite3_free(errmsg); }
   return rc;
 }
 
@@ -3097,96 +3277,85 @@ cleanup:
 int
 db_ships_at_sector_json (int player_id, int sector_id, json_t **out)
 {
-  // Initialize all pointers to NULL for a clean slate.
-  json_t *ports = NULL;
   sqlite3_stmt *st = NULL;
-  *out = NULL;
+  int ret_code = SQLITE_ERROR;     /* default to error until succeeded */
+  if (out) *out = NULL;
 
-  int sqrc; // For SQLite return codes.
-  int ret_code = -1; // The final return code for the function.
-  
-  // 1. Acquire the lock at the beginning of the function.
-  pthread_mutex_lock (&db_mutex);
-  
-  json_t *ships = json_array ();
-  if (!ships)
-    {
-      ret_code = SQLITE_NOMEM;
-      goto cleanup;
-    }
+  /* 1) Lock DB */
+  pthread_mutex_lock(&db_mutex);
 
+  /* 2) Result array */
+  json_t *ships = json_array();
+  if (!ships) {
+    ret_code = SQLITE_NOMEM;
+    goto cleanup;
+  }
+
+  /* 3) Query: ship name, type name, owner name, ship id (by sector) */
   const char *sql =
     "SELECT T1.name, T2.name, T3.name, T1.id "
     "FROM ships T1 "
     "LEFT JOIN shiptypes T2 ON T1.type = T2.id "
-    "LEFT JOIN players T3 ON T1.id = T3.ship " "WHERE T1.location=?;";
+    "LEFT JOIN players  T3 ON T1.id = T3.ship "
+    "WHERE T1.location=?;";  /* sector_id */
 
-  // 2. Prepare the statement. Check for errors and jump to cleanup if needed.
-  
-  int rc = sqlite3_prepare_v2 (db_get_handle (), sql, -1, &st, NULL);
-  if (rc != SQLITE_OK)
-    {
-      ret_code = rc;
-      goto cleanup;      
+  int rc = sqlite3_prepare_v2(db_get_handle(), sql, -1, &st, NULL);
+  if (rc != SQLITE_OK) {
+    ret_code = rc;
+    goto cleanup;
+  }
+
+  sqlite3_bind_int(st, 1, sector_id);
+
+  /* 4) Build JSON rows */
+  while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
+    const char *ship_name       = (const char *)sqlite3_column_text(st, 0);
+    const char *ship_type_name  = (const char *)sqlite3_column_text(st, 1);
+    const char *owner_name      = (const char *)sqlite3_column_text(st, 2);
+    int         ship_id         = sqlite3_column_int(st, 3);
+
+    json_t *ship = json_object();
+    if (!ship) {
+      ret_code = SQLITE_NOMEM;
+      goto cleanup;
     }
 
-  sqlite3_bind_int (st, 1, sector_id);
+    /* Optional generic keys for client consistency (match ports): */
+    json_object_set_new(ship, "id",   json_integer(ship_id));
+    json_object_set_new(ship, "name", json_string(ship_name ? ship_name : ""));
+    json_object_set_new(ship, "type", json_string(ship_type_name ? ship_type_name : ""));
 
-  // 3. Loop through the results. If an error occurs (e.g., failed json_object() allocation),
-  // we jump to cleanup to free all resources and the mutex.
-  while ((rc = sqlite3_step (st)) == SQLITE_ROW)
-    {
-      const char *ship_name = (const char *) sqlite3_column_text (st, 0);
-      const char *ship_type_name = (const char *) sqlite3_column_text (st, 1);
-      const char *owner_name = (const char *) sqlite3_column_text (st, 2);
-      int ship_id = sqlite3_column_int (st, 3);
+    /* Legacy / verbose keys you were already using: */
+    json_object_set_new(ship, "ship_name", json_string(ship_name ? ship_name : ""));
+    json_object_set_new(ship, "ship_type", json_string(ship_type_name ? ship_type_name : ""));
 
-      json_t *ship = json_object ();
-      if (!ship)
-	{
-	  sqlite3_finalize (st);
-          ret_code = SQLITE_NOMEM;
-          goto cleanup;
-	}
-
-      json_object_set_new (ship, "ship_name", json_string (ship_name));
-      json_object_set_new (ship, "ship_type", json_string (ship_type_name));
-
-      // Use the owner's name if it exists, otherwise default to "derelict"
-      if (owner_name != NULL && strlen (owner_name) > 0)
-	{
-	  json_object_set_new (ship, "owner", json_string (owner_name));
-	}
-      else
-	{
-	  json_object_set_new (ship, "owner", json_string ("derelict"));
-	}
-
-      json_array_append_new (ships, ship);
+    /* Owner: default to "derelict" when NULL/empty */
+    if (owner_name && *owner_name) {
+      json_object_set_new(ship, "owner", json_string(owner_name));
+    } else {
+      json_object_set_new(ship, "owner", json_string("derelict"));
     }
 
-  // 4. If the loop finished, set the final return code to success.
+    json_array_append_new(ships, ship);
+  }
+
+  /* 5) Success path */
   ret_code = SQLITE_OK;
-  *out = ships;
+  if (out) {
+    *out = ships;        /* transfer ownership */
+    ships = NULL;        /* prevent cleanup from freeing it */
+  }
 
-  cleanup:
-  // 5. Always finalize the SQLite statement if it was created.
-  if (st)
-    {
-      sqlite3_finalize (st);
-    }
-  
-  // 6. Always clean up the `ports` array if it was allocated but not returned.
-  if (ships)
-    {
-      json_decref (ships);
-    }
+cleanup:
+  if (st) sqlite3_finalize(st);
 
-  // 7. Always release the lock at the very end.
-  pthread_mutex_unlock (&db_mutex);
-  
-  return ret_code;return SQLITE_OK;
+  /* Only free if we did NOT transfer ownership */
+  if (ships) json_decref(ships);
+
+  pthread_mutex_unlock(&db_mutex);
+  return ret_code;
 }
+
 
 
 int
@@ -3362,36 +3531,51 @@ cleanup:
     return has_beacon;
 }
 
+
 int
 db_sector_set_beacon (int sector_id, const char *beacon_text)
 {
-  sqlite3_stmt *stmt;
-    // 1. Acquire the lock before any database interaction.
-    pthread_mutex_lock(&db_mutex);
-    // 2. Prepare the statement. This is the first place an error could occur.
-    const char *sql = "UPDATE sectors SET beacon = ? WHERE id = ?;";
+  sqlite3 *dbh = db_get_handle();
+  sqlite3_stmt *st_sel = NULL, *st_upd = NULL;
+  int rc = SQLITE_ERROR, had_beacon = 0;
 
-    int rc = sqlite3_prepare_v2 (db_get_handle (), sql, -1, &stmt, NULL);
-  if (rc != SQLITE_OK)
-    {
-	// If preparation fails, we jump to the cleanup block to release the lock.
-        goto cleanup;
-    }
-    // 3. Bind the parameter.
-  sqlite3_bind_text (stmt, 1, beacon_text, -1, SQLITE_TRANSIENT);
-  sqlite3_bind_int (stmt, 2, sector_id);
-  rc = sqlite3_step (stmt);
+  pthread_mutex_lock(&db_mutex);
 
-  // The cleanup label is the single point of exit.
+  const char *sql_sel = "SELECT beacon FROM sectors WHERE id=?1;";
+  rc = sqlite3_prepare_v2(dbh, sql_sel, -1, &st_sel, NULL);
+  if (rc != SQLITE_OK) goto cleanup;
+
+  sqlite3_bind_int(st_sel, 1, sector_id);
+  rc = sqlite3_step(st_sel);
+  if (rc == SQLITE_ROW) {
+    const unsigned char *txt = sqlite3_column_text(st_sel, 0);
+    had_beacon = (txt && txt[0]) ? 1 : 0;
+  } else if (rc != SQLITE_DONE) {
+    goto cleanup;
+  }
+  sqlite3_finalize(st_sel); st_sel = NULL;
+
+  const char *sql_upd = "UPDATE sectors SET beacon=?1 WHERE id=?2;";
+  rc = sqlite3_prepare_v2(dbh, sql_upd, -1, &st_upd, NULL);
+  if (rc != SQLITE_OK) goto cleanup;
+
+  if (had_beacon) {
+    sqlite3_bind_null(st_upd, 1); /* explode → leave none */
+  } else {
+    if (beacon_text && *beacon_text)
+      sqlite3_bind_text(st_upd, 1, beacon_text, -1, SQLITE_TRANSIENT);
+    else
+      sqlite3_bind_null(st_upd, 1);
+  }
+  sqlite3_bind_int(st_upd, 2, sector_id);
+
+  rc = sqlite3_step(st_upd);
+  if (rc == SQLITE_DONE) rc = SQLITE_OK;
+
 cleanup:
-  // 5. Finalize the statement if it was successfully prepared.
-    if (stmt) {
-        sqlite3_finalize(stmt);
-    }
-
-    // 6. Release the lock at the end of the function, regardless of success or failure.
-    pthread_mutex_unlock(&db_mutex);
-
+  if (st_sel) sqlite3_finalize(st_sel);
+  if (st_upd) sqlite3_finalize(st_upd);
+  pthread_mutex_unlock(&db_mutex);
   return rc;
 }
 
@@ -3471,5 +3655,142 @@ cleanup:
     pthread_mutex_unlock(&db_mutex);
 
     return rc;
+}
+
+
+// Post-bigbang fix: chain trap sectors and bridge to the main graph.
+// Returns SQLITE_OK on success (or no work to do), otherwise an SQLite error code.
+int db_chain_traps_and_bridge(int fedspace_max /* typically 10 */)
+{
+  sqlite3 *dbh = db_get_handle();
+  if (!dbh) return SQLITE_ERROR;
+
+  pthread_mutex_lock(&db_mutex);
+
+  int rc = SQLITE_ERROR;
+  sqlite3_stmt *st_traps = NULL;
+  sqlite3_stmt *st_ins  = NULL;
+  sqlite3_stmt *st_anchor = NULL;
+
+  // We do everything atomically.
+  if (sqlite3_exec(dbh, "BEGIN IMMEDIATE;", NULL, NULL, NULL) != SQLITE_OK)
+    goto cleanup;
+
+  // 1) Collect trap sector ids (id > fedspace_max), i.e., sectors with 0 in and 0 out.
+  //    NB: Uses the sector_warps indexes you already create. :contentReference[oaicite:0]{index=0}
+  const char *sql_traps =
+    "WITH ow AS (SELECT from_sector AS id, COUNT(*) AS c FROM sector_warps GROUP BY from_sector),"
+    "     iw AS (SELECT to_sector   AS id, COUNT(*) AS c FROM sector_warps GROUP BY to_sector) "
+    "SELECT s.id "
+    "FROM sectors s "
+    "LEFT JOIN ow ON ow.id = s.id "
+    "LEFT JOIN iw ON iw.id = s.id "
+    "WHERE s.id > ?1 AND COALESCE(ow.c,0)=0 AND COALESCE(iw.c,0)=0 "
+    "ORDER BY s.id;";
+
+  rc = sqlite3_prepare_v2(dbh, sql_traps, -1, &st_traps, NULL);
+  if (rc != SQLITE_OK) goto cleanup;
+
+  sqlite3_bind_int(st_traps, 1, fedspace_max);
+
+  // We’ll store trap ids in memory first.
+  int cap = 64, n = 0;
+  int *traps = (int*) malloc(sizeof(int) * cap);
+  if (!traps) { rc = SQLITE_NOMEM; goto cleanup; }
+
+  while ((rc = sqlite3_step(st_traps)) == SQLITE_ROW) {
+    if (n == cap) {
+      cap *= 2;
+      int *tmp = (int*) realloc(traps, sizeof(int) * cap);
+      if (!tmp) { free(traps); rc = SQLITE_NOMEM; goto cleanup; }
+      traps = tmp;
+    }
+    traps[n++] = sqlite3_column_int(st_traps, 0);
+  }
+  if (rc != SQLITE_DONE) { free(traps); goto cleanup; }
+
+  // Nothing to do? Just commit and leave OK.
+  if (n == 0) {
+    sqlite3_exec(dbh, "COMMIT;", NULL, NULL, NULL);
+    rc = SQLITE_OK;
+    goto cleanup_unlock_only;
+  }
+
+  // 2) Chain them bidirectionally: (a<->b), (b<->c), ...
+  const char *sql_ins =
+    "INSERT OR IGNORE INTO sector_warps(from_sector, to_sector) VALUES (?1, ?2);";
+  rc = sqlite3_prepare_v2(dbh, sql_ins, -1, &st_ins, NULL);
+  if (rc != SQLITE_OK) { free(traps); goto cleanup; }
+
+  for (int i = 0; i + 1 < n; ++i) {
+    // forward
+    sqlite3_bind_int(st_ins, 1, traps[i]);
+    sqlite3_bind_int(st_ins, 2, traps[i+1]);
+    if ((rc = sqlite3_step(st_ins)) != SQLITE_DONE) { free(traps); goto cleanup; }
+    sqlite3_reset(st_ins);
+
+    // reverse
+    sqlite3_bind_int(st_ins, 1, traps[i+1]);
+    sqlite3_bind_int(st_ins, 2, traps[i]);
+    if ((rc = sqlite3_step(st_ins)) != SQLITE_DONE) { free(traps); goto cleanup; }
+    sqlite3_reset(st_ins);
+  }
+
+  // 3) Pick a random “anchor” sector that looks like it’s in the main graph:
+  //    any non-FedSpace sector that already participates in at least one warp
+  //    (incoming OR outgoing). Then bridge anchor <-> first_trap.
+  const char *sql_anchor =
+    "WITH x AS ("
+    "  SELECT s.id "
+    "  FROM sectors s "
+    "  WHERE s.id > ?1 AND EXISTS ("
+    "    SELECT 1 FROM sector_warps w "
+    "    WHERE w.from_sector = s.id OR w.to_sector = s.id"
+    "  )"
+    ") SELECT id FROM x ORDER BY RANDOM() LIMIT 1;";
+
+  rc = sqlite3_prepare_v2(dbh, sql_anchor, -1, &st_anchor, NULL);
+  if (rc != SQLITE_OK) { free(traps); goto cleanup; }
+  sqlite3_bind_int(st_anchor, 1, fedspace_max);
+
+  int anchor = 0;
+  rc = sqlite3_step(st_anchor);
+  if (rc == SQLITE_ROW) { anchor = sqlite3_column_int(st_anchor, 0); rc = SQLITE_OK; }
+  else if (rc == SQLITE_DONE) { anchor = 0; rc = SQLITE_OK; } // no candidate
+  else { free(traps); goto cleanup; }
+
+  // If we didn’t find any anchor (e.g., no other warps were built yet),
+  // fall back to FedSpace 1 as the anchor (if allowed by your rules).
+  if (anchor == 0) anchor = fedspace_max + 1; // very small fallback; adjust if needed.
+
+  // Bridge: anchor <-> traps[0]
+  sqlite3_bind_int(st_ins, 1, anchor);
+  sqlite3_bind_int(st_ins, 2, traps[0]);
+  if ((rc = sqlite3_step(st_ins)) != SQLITE_DONE) { free(traps); goto cleanup; }
+  sqlite3_reset(st_ins);
+
+  sqlite3_bind_int(st_ins, 1, traps[0]);
+  sqlite3_bind_int(st_ins, 2, anchor);
+  if ((rc = sqlite3_step(st_ins)) != SQLITE_DONE) { free(traps); goto cleanup; }
+  sqlite3_reset(st_ins);
+  int ferringhi = traps[0];
+  free(traps);
+
+  // All good.
+  sqlite3_exec(dbh, "COMMIT;", NULL, NULL, NULL);
+  rc = SQLITE_OK;
+  goto cleanup_unlock_only;
+
+cleanup:
+  // If we started a txn, roll it back.
+  sqlite3_exec(dbh, "ROLLBACK;", NULL, NULL, NULL);
+
+cleanup_unlock_only:
+  if (st_traps)  sqlite3_finalize(st_traps);
+  if (st_ins)    sqlite3_finalize(st_ins);
+  if (st_anchor) sqlite3_finalize(st_anchor);
+  pthread_mutex_unlock(&db_mutex);
+  // return rc;
+  return ferringhi;
 }
 

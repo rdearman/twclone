@@ -358,118 +358,461 @@ def testing_menu(conn: Conn, current_sector: int) -> int:
 
     return current_sector
 
+
+
+def enter_ship_menu(conn: Conn, current_sector: int, desc: Optional[Dict[str, Any]]) -> int:
+    """
+    Enter Ship Menu (custom): appears when a boardable ship is present.
+    Boardable rule (client-side): owner is missing/empty or equals 'derelict' (case-insensitive).
+    """
+    data = get_data(desc or {})
+    ships = data.get("ships") or []
+
+    # Filter potential targets
+    boardable = []
+    for s in ships:
+        owner = (s.get("owner") or "").strip().lower()
+        if not owner or owner == "derelict":
+            boardable.append(s)
+
+    if not boardable:
+        print("No boardable ships here.")
+        return current_sector
+
+    # Let player pick a target (if more than one)
+    print("\nBoardable ships in this sector:")
+    for idx, s in enumerate(boardable, 1):
+        nm = s.get("name") or s.get("ship_name") or "Unnamed"
+        tp = s.get("ship_type") or s.get("type") or "?"
+        ow = s.get("owner") or "derelict"
+        print(f" {idx}) {nm}  [{tp}]  owner={ow}")
+
+    target = boardable[0]
+    if len(boardable) > 1:
+        sel = input("Choose ship (number): ").strip()
+        try:
+            i = int(sel)
+            if 1 <= i <= len(boardable):
+                target = boardable[i-1]
+        except ValueError:
+            pass
+
+    ship_id = target.get("id") or target.get("ship_id")
+
+    while True:
+        print("\n--- Enter Ship Menu ---")
+        print(" (I) Inspect Ship")
+        print(" (B) Board / Claim")
+        print(" (R) Rename / Re-register")
+        print(" (P) Set Primary")
+        print(" (Q) Quit to Main Menu")
+        cmd = input("Enter-Ship Command: ").strip().lower()
+
+        if cmd == "q":
+            return current_sector
+
+        elif cmd == "i":
+            try:
+                r = conn.rpc("ship.inspect", {"ship_id": ship_id})
+            except Exception:
+                r = {"status": "ok", "type": "ship.inspect", "data": target}
+            print(json.dumps(r, ensure_ascii=False, indent=2))
+
+        elif cmd == "b":
+            try:
+                r = conn.rpc("ship.board", {"ship_id": ship_id})
+                print(json.dumps(r, ensure_ascii=False, indent=2))
+                _ = describe_sector(conn, current_sector)
+                return current_sector
+            except Exception as e:
+                print(f"Board failed: {e}")
+
+        elif cmd == "r":
+            new_name = input("New ship name (registration): ").strip()
+            if not new_name:
+                print("Name cannot be empty.")
+                continue
+            try:
+                r = conn.rpc("ship.rename", {"ship_id": ship_id, "name": new_name})
+                print(json.dumps(r, ensure_ascii=False, indent=2))
+                _ = describe_sector(conn, current_sector)
+            except Exception as e:
+                print(f"Rename failed: {e}")
+
+        elif cmd == "p":
+            try:
+                r = conn.rpc("ship.set_primary", {"ship_id": ship_id})
+                print(json.dumps(r, ensure_ascii=False, indent=2))
+                _ = describe_sector(conn, current_sector)
+            except Exception as e:
+                print(f"Set Primary failed: {e}")
+
+        else:
+            print("Invalid command. Please try again.")
+
+
+def render_sector_view(desc: Dict[str, Any]) -> None:
+    """Print the canonical sector header block used at login, re-display, and after moves."""
+    sid, name, warps = extract_sector_overview(desc)
+    data = get_data(desc) or {}
+    adj = data.get("adjacent") or warps or []
+    ports = data.get("ports") or []
+    ships = data.get("ships") or []
+    planets = data.get("planets") or []
+    beacon = data.get("beacon")
+
+    print(f"\nYou are in sector {sid} — {name}.")
+    print(f"Adjacent sectors: {', '.join(map(str, adj)) if adj else 'none'}")
+
+    if ports:
+        port_lines = []
+        for p in ports:
+            pname = p.get("name") or "Unknown"
+            ptype = p.get("type") or "?"
+            # show ONLY name and type to stay consistent
+            port_lines.append(f"{pname} ({ptype})")
+        print("Ports here: " + ", ".join(port_lines))
+    else:
+        print("Ports here: none")
+
+
+    if ships:
+        names = []
+        for s in ships:
+            nm = s.get("name") or s.get("ship_name") or s.get("player_name") or "Unnamed"
+            names.append(nm)
+        print("Ships here: " + ", ".join(names))
+    else:
+        print("Ships here: none")
+
+    if planets:
+        print("Planets: " + ", ".join(pl.get("name") or "Unnamed" for pl in planets))
+    else:
+        print("Planets: none")
+
+    print("Beacon: " + (beacon if beacon else "none"))
+
+
+
+def get_my_player_name(conn) -> Optional[str]:
+    """Best-effort extraction of the player's display name."""
+    try:
+        r = conn.rpc("player.my_info", {})
+        d = get_data(r) or {}
+    except Exception:
+        return None
+
+    for key in ("name", "player_name", "display_name", "username"):
+        val = d.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    for key in ("player", "me"):
+        obj = d.get(key)
+        if isinstance(obj, dict):
+            for k in ("name", "player_name", "display_name", "username"):
+                val = obj.get(k)
+                if isinstance(val, str) and val.strip():
+                    return val.strip()
+    return None
+
+
+
+def get_my_ship_id(conn) -> Optional[int]:
+    """Best-effort extraction of the player's current ship id from player.my_info."""
+    try:
+        r = conn.rpc("player.my_info", {})
+        d = get_data(r) or {}
+    except Exception:
+        return None
+
+    # Common shapes to try:
+    for key in ("ship_id", "current_ship_id"):
+        if isinstance(d.get(key), int):
+            return d[key]
+
+    # Nested structures we might see:
+    for key in ("ship", "current_ship", "vessel", "active_ship"):
+        obj = d.get(key)
+        if isinstance(obj, dict):
+            sid = obj.get("id") or obj.get("ship_id")
+            if isinstance(sid, int):
+                return sid
+
+    # Last resort: scan shallow dict values for an object that looks like a ship
+    for v in d.values():
+        if isinstance(v, dict) and ("type" in v or "ship_type" in v):
+            sid = v.get("id") or v.get("ship_id")
+            if isinstance(sid, int):
+                return sid
+    return None
+
+
+def has_boardable_ship(ships, my_ship_id: Optional[int] = None, my_name: Optional[str] = None) -> bool:
+    """
+    True if there is a boardable ship (owner empty/None/'derelict'), excluding:
+      - your current ship (id == my_ship_id)
+      - ships owned by you (owner == my_name)
+    """
+    my_name_lc = (my_name or "").strip().lower()
+    for s in ships or []:
+        sid = s.get("id") or s.get("ship_id")
+        owner_lc = (s.get("owner") or "").strip().lower()
+        is_derelict = (not owner_lc) or owner_lc == "derelict"
+        if not is_derelict:
+            continue
+        if my_ship_id is not None and isinstance(sid, int) and sid == my_ship_id:
+            continue
+        if my_name_lc and owner_lc == my_name_lc:
+            continue
+        return True
+    return False
+
+def can_set_beacon_here(desc: Dict[str, Any]) -> bool:
+    """Quick client-side check: not FedSpace (1–10) and no existing beacon."""
+    data = desc.get("data", {}) or {}
+    sid = data.get("sector_id")
+    has_beacon = bool(data.get("has_beacon")) or bool(data.get("beacon"))
+    if isinstance(sid, int) and 1 <= sid <= 10:
+        return False
+    return not has_beacon
+
+def _extract_beacon_count(d: Dict[str, Any]) -> Optional[int]:
+    """Try common shapes that might hold the player's marker beacon count."""
+    # Flat keys (most likely)
+    for k in ("beacons", "beacon_count", "marker_beacons", "marker_beacon_count"):
+        v = d.get(k)
+        if isinstance(v, int):
+            return v
+    # Nested inventory dicts
+    for k in ("inventory", "cargo", "hold", "items", "equipment", "hardware"):
+        inv = d.get(k)
+        if isinstance(inv, dict):
+            for key in ("beacon", "beacons", "marker_beacon", "marker_beacons"):
+                v = inv.get(key)
+                if isinstance(v, int):
+                    return v
+    # Sometimes the server nests under 'player' or 'me'
+    for outer in ("player", "me"):
+        obj = d.get(outer)
+        if isinstance(obj, dict):
+            c = _extract_beacon_count(obj)
+            if isinstance(c, int):
+                return c
+    return None
+
+
+def get_my_beacon_count(conn) -> Optional[int]:
+    """RPC to fetch player.my_info and extract marker beacon count, if available."""
+    try:
+        r = conn.rpc("player.my_info", {})
+        d = r.get("data") or {}
+        return _extract_beacon_count(d)
+    except Exception:
+        return None
+
+def set_beacon_flow(conn: Conn, current_sector: int, last_desc: Dict[str, Any]) -> int:
+    data = last_desc.get("data", {}) or {}
+    sid = data.get("sector_id")
+    name = data.get("name") or ""
+    has_beacon = bool(data.get("has_beacon")) or bool(data.get("beacon"))
+    beacon_text = data.get("beacon") or None
+
+    if not isinstance(sid, int):
+        print("Can't determine sector id.")
+        return current_sector
+
+    # FedSpace prohibition (canon)
+    if 1 <= sid <= 10:
+        print("FedSpace (1–10): You cannot set a beacon here.")
+        return current_sector
+
+    # NEW: query and show my beacon count; block if zero
+    my_count = get_my_beacon_count(conn)
+    if isinstance(my_count, int):
+        print(f"Marker beacons aboard: {my_count}")
+        if my_count <= 0:
+            print("You have no marker beacons. Buy one at StarDock (Hardware) or acquire one by other means.")
+            return current_sector
+
+    # Canon warning if one already exists (explode both)
+    if has_beacon:
+        print(f"A beacon already exists here: {beacon_text!r}")
+        yn = input("Launching another will destroy BOTH beacons, leaving NO beacon. Proceed? (y/N): ").strip().lower()
+        if yn != "y":
+            print("Cancelled.")
+            return current_sector
+
+    print(f"\nSet beacon for sector {sid} — {name}")
+    text = input("Beacon text (max 80 chars, blank to cancel): ").strip()
+    if not text:
+        print("Cancelled.")
+        return current_sector
+    if len(text) > 80:
+        print("Too long (max 80).")
+        return current_sector
+
+    try:
+        resp = conn.rpc("sector.set_beacon", {"sector_id": sid, "text": text})
+        if isinstance(resp, dict) and resp.get("status") == "ok" and resp.get("type") == "sector.info" :
+            globals()["last_desc"] = resp  # refresh view on next loop
+            # If the server’s meta.message is present, show it; otherwise show generic success
+            meta = resp.get("meta") or {}
+            msg = meta.get("message")
+            print(msg or "Beacon deployed.")
+        else:
+            print(json.dumps(resp, ensure_ascii=False, indent=2))
+    except Exception as e:
+        print(f"Set beacon failed: {e}")
+
+    return current_sector
+
+
+
 def main_menu(conn: Conn, current_sector: int) -> int:
     global last_desc
+
+    # Ensure we have fresh sector info and render the canonical header
+    if not last_desc:
+        last_desc = describe_sector(conn, current_sector)
+    render_sector_view(last_desc)
+
+    data = last_desc.get("data", {}) or {}
+    ships = data.get("ships") or []
+
+    my_ship_id = get_my_ship_id(conn)
+    my_name    = get_my_player_name(conn)
+
+    boardable_exists = has_boardable_ship(ships, my_ship_id=my_ship_id, my_name=my_name)
+    towable_exists   = has_tow_target(ships, my_ship_id=my_ship_id)
+    can_beacon    = can_set_beacon_here(last_desc)  # FedSpace check only
+    beacon_count  = get_my_beacon_count(conn)       # may be None if server doesn't expose it
+    beacon_label  = "(R) Release Beacon"
+    
+    if isinstance(beacon_count, int):
+        beacon_label = f"(R) Release Beacon [{beacon_count}]"
+
+    def _menu_row(left: str, right: str, width: int = 28):
+        print(f" {left:<{width}}| {right}")
+
+    rows = [
+        ("(M) Move to a Sector",       "(D) Re-display Sector"),
+        ("(P) Port & Trade",           "(L) Land on a Planet"),
+        ("(C) Ship's Computer",        "(V) View Game Status"),
+    ]
+    right4 = []
+    if towable_exists:
+        right4.append("(W) Tow SpaceCraft")
+    if boardable_exists:
+        right4.append("(E) Enter Ship*")
+    rows.append((beacon_label, "   ".join(right4)))  # ← use the label with count
+    rows.append(("(Y) Testing Menu", "(H) Help"))
+    rows.append(("(Q) Quit", ""))
+
+
     print(f"\n--- Main Menu (Sector {current_sector}) ---")
-    print(" (W) Warp to a sector         | (L) Leave Sector")
-    print(" (D) Describe current sector  | (M) Move")
-    print(" (P) Planet Menu              | (O) Orbital Planet Scan")
-    print(" (S) Stardock Menu            | (R) Repair")
-    print(" (T) Trade Menu               | (V) View Map")
-    print(" (B) Set Beacon               | (X) Exit")
-    print(" (C) Compute                  | (Z) Zarkonian Commands")
-    print(" (E) Enter Ship               | (H) Help")
-    print(" (F) Fix                      | (Q) Quit")
-    print(" (I) Interdict                | (K) Klingon Commands")
-    print(" (J) Jettison                 | (Y) Testing Menu")
+    for left, right in rows:
+        _menu_row(left, right)
 
     cmd = input("Command: ").strip().lower()
 
-    if cmd == "q" or cmd == "x":
+    if cmd == "q":
         return -1
-    elif cmd == "w":
-        to_sector_id_str = input("Warp to sector: ")
+
+    elif cmd == "m":
+        to_sector_id_str = input("Move to sector: ").strip()
         try:
             to_sector_id = int(to_sector_id_str)
-            if not last_desc:
-                last_desc = describe_sector(conn, current_sector)
-            _, _, warps = extract_sector_overview(last_desc)
+            # Validate adjacency from current last_desc
+            cur_data = last_desc.get("data", {}) or {}
+            warps = cur_data.get("adjacent") or []
             if to_sector_id not in warps:
-                print(f"{to_sector_id} is not adjacent. Valid: {', '.join(map(str, warps))}")
+                print(f"{to_sector_id} is not adjacent. Valid: {', '.join(map(str, warps)) if warps else '(none)'}")
             else:
                 moved = conn.rpc("move.warp", {"to_sector_id": to_sector_id})
-                new_cur = extract_current_sector(moved)
-                current_sector = new_cur if isinstance(new_cur, int) else to_sector_id
-                last_desc = describe_sector(conn, current_sector)
-                sid, name, warps = extract_sector_overview(last_desc)
+                # Now refresh last_desc but don't print here; next loop prints header+menu
+                last_desc = describe_sector(conn, to_sector_id)
+                # Update sector id for the next loop
+                md = last_desc.get("data", {}) or {}
+                sid = md.get("sector_id")
                 if isinstance(sid, int):
                     current_sector = sid
-                print(f"\nArrived sector {current_sector}{' — ' + name if name else ''}.")
-                print(f"Adjacent sectors: {', '.join(map(str, warps)) if warps else '(none)'}")
-                show_extras(last_desc)
+                else:
+                    current_sector = to_sector_id
         except ValueError:
             print("Invalid sector ID.")
         except Exception as e:
             print(f"An error occurred: {e}")
+
     elif cmd == "d":
-        print(f"[move] describe_sector: {current_sector}")
-        desc = describe_sector(conn, current_sector)
-        sid, name, warps = extract_sector_overview(desc)
-        if isinstance(sid, int):
-            current_sector = sid
-        print(f"\nSector {current_sector}{' — ' + name if name else ''}")
-        print(f"Adjacent sectors: {', '.join(map(str, warps)) if warps else '(none)'}")
-        show_extras(desc)
+        last_desc = describe_sector(conn, current_sector)
+
     elif cmd == "p":
-        current_sector = planet_menu(conn, current_sector)
-    elif cmd == "s":
-        current_sector = stardock_menu(conn, current_sector)
-    elif cmd == "t":
         current_sector = trade_menu(conn, current_sector)
-    elif cmd == "k":
-        current_sector = klingon_menu(conn, current_sector)
-    elif cmd == "z":
-        current_sector = zarkonian_menu(conn, current_sector)
-    elif cmd == "b":
-        print("Not Implemented: Set Beacon")
-    elif cmd == "c":
-        print("Not Implemented: Compute")
-    elif cmd == "e":
-        print("Not Implemented: Enter Ship")
-    elif cmd == "f":
-        print("Not Implemented: Fix")
-    elif cmd == "i":
-        print("Not Implemented: Interdict")
-    elif cmd == "j":
-        print("Not Implemented: Jettison")
+
     elif cmd == "l":
-        print("Not Implemented: Leave Sector")
-    elif cmd == "m":
-        print("Not Implemented: Move")
-    elif cmd == "o":
-        print("Not Implemented: Orbital Planet Scan")
-    elif cmd == "r":
-        print("Not Implemented: Repair")
+        current_sector = planet_menu(conn, current_sector)
+
+    elif cmd == "c":
+        print("Not Implemented: Ship's Computer")
+
     elif cmd == "v":
-        print("Not Implemented: View Map")
+        print("Not Implemented: View Game Status")
+
+    elif cmd == "r":
+        current_sector = set_beacon_flow(conn, current_sector, last_desc)
+
+    elif cmd == "w":
+        if not towable_exists:
+            print("No towable targets in this sector.")
+        else:
+            print("Not Implemented: Tow SpaceCraft")
+
+    elif cmd == "e":
+        if not boardable_exists:
+            print("No boardable ships in this sector.")
+        else:
+            current_sector = enter_ship_menu(conn, current_sector, last_desc)
+            # enter_ship_menu may change ownership/ships; header will refresh next loop
+
     elif cmd == "y":
         current_sector = testing_menu(conn, current_sector)
+
     elif cmd == "h":
         print("--- Help ---")
-        print("Warp: Move to an adjacent sector.")
-        print("Describe: Get detailed info on your current sector.")
-        print("Planet Menu: Interact with planets.")
-        print("Stardock Menu: Interact with star docks.")
-        print("Trade Menu: Trade with ports.")
-        print("Set Beacon: Leave a public message in the sector.")
-        print("Compute: Perform calculations.")
-        print("Enter Ship: Board a ship.")
-        print("Fix: Fix your ship.")
-        print("Interdict: Interdict a target.")
-        print("Jettison: Jettison cargo.")
-        print("Klingon Commands: Access Klingon-specific actions.")
-        print("Leave Sector: Leave the current sector.")
-        print("Move: Move your ship.")
-        print("Orbital Planet Scan: Scan a planet from orbit.")
-        print("Repair: Repair your ship.")
-        print("View Map: View the sector map.")
-        print("Zarkonian Commands: Access Zarkonian-specific actions.")
-        print("Testing Menu: Access developer-level commands.")
-        print("Quit: Disconnect and exit.")
+        print("M: Move to an adjacent sector")
+        print("D: Re-display current sector info")
+        print("P: Port & Trade (port/stardock flows inside)")
+        print("L: Land on a Planet (opens Planet Menu)")
+        print("C: Ship's Computer (canon submenu, TBD)")
+        print("V: View Game Status (canon)")
+        print("R: Release Beacon (canon)")
+        if towable_exists:
+            print("W: Tow SpaceCraft (canon) — shown only when another ship is present")
+        if boardable_exists:
+            print("E: Enter Ship (custom) — shown only when a boardable derelict is present (not yours)")
+        print("Y: Testing/Developer menu (custom)")
+        print("Q: Quit and disconnect")
+
     else:
         print("Invalid command. Please try again.")
 
     return current_sector
+
+
+def has_tow_target(ships, my_ship_id=None) -> bool:
+    # Simplest rule: show Tow if there is ANY ship here that isn't your own.
+    # If you can fetch the player’s current ship id from session, pass it in.
+    for s in ships or []:
+        sid = s.get("id") or s.get("ship_id")
+        if sid is None or sid != my_ship_id:
+            return True
+    return False
+
+
+def _menu_row(left: str, right: str, width: int = 28):
+    print(f" {left:<{width}}| {right}")
+
+
 
 def interactive_loop(conn: Conn, current_sector: int) -> None:
     global last_desc
@@ -496,9 +839,13 @@ def interactive_loop(conn: Conn, current_sector: int) -> None:
 
     ships = data.get("ships", [])
     if ships:
-        print("Players here:", ", ".join(s.get("player_name", "Unknown Player") for s in ships))
+        names = []
+        for s in ships:
+            nm = s.get("name") or s.get("ship_name") or s.get("player_name") or "Unnamed"
+            names.append(nm)
+        print("Ships here:", ", ".join(names))
     else:
-        print("Players here: none")
+        print("Ships here: none")
 
     planets = data.get("planets", [])
     if planets:

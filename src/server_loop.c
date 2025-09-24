@@ -1766,78 +1766,134 @@ handle_sector_info (int fd, json_t *root, int sector_id, int player_id)
     }
 
 
-  
   send_enveloped_ok (fd, root, "sector.info", payload);
   json_decref (payload);
 }
 
 
-
-// In server_loop.c
 static void
 handle_sector_set_beacon (client_ctx_t *ctx, json_t *root)
 {
-  json_t *jdata = json_object_get (root, "data");
+  if (!ctx || !root) return;
+
+  json_t *jdata      = json_object_get (root, "data");
   json_t *jsector_id = json_object_get (jdata, "sector_id");
-  json_t *jtext = json_object_get (jdata, "text");
+  json_t *jtext      = json_object_get (jdata, "text");
 
-  // Guard 1: Check if the player is in the specified sector
-  int req_sector_id = json_integer_value (jsector_id);
-  if (ctx->sector_id != req_sector_id)
-    {
-      send_enveloped_error (ctx->fd, root, 1400,
-			    "Player is not in the specified sector.");
-      return;
-    }
+  /* Guard 0: schema */
+  if (!json_is_integer (jsector_id) || !json_is_string (jtext)) {
+    send_enveloped_error (ctx->fd, root, 1300, "Invalid request schema");
+    return;
+  }
 
-  // Guard 2: Check if the sector is a FedSpace sector (1-10)
-  if (req_sector_id >= 1 && req_sector_id <= 10)
-    {
-      send_enveloped_error (ctx->fd, root, 1403,
-			    "Cannot set a beacon in FedSpace.");
-      return;
-    }
+  /* Guard 1: player must be in that sector */
+  int req_sector_id = (int)json_integer_value (jsector_id);
+  if (ctx->sector_id != req_sector_id) {
+    send_enveloped_error (ctx->fd, root, 1400, "Player is not in the specified sector.");
+    return;
+  }
 
-  // Guard 3: Check if the player has a beacon on their ship
-  // (This requires a new DB function or a check against player inventory/ship state)
-  // For this example, let's assume a function `db_player_has_beacon_on_ship` exists.
-  // If you need to implement this, let me know.
-  if (!db_player_has_beacon_on_ship (ctx->player_id))
-    {
-      send_enveloped_error (ctx->fd, root, 1401,
-			    "Player does not have a beacon on their ship.");
-      return;
-    }
+  /* Guard 2: FedSpace 1–10 is forbidden */
+  if (req_sector_id >= 1 && req_sector_id <= 10) {
+    send_enveloped_error (ctx->fd, root, 1403, "Cannot set a beacon in FedSpace.");
+    return;
+  }
 
-  // Guard 4: Check if a beacon already exists in the sector
-  if (db_sector_has_beacon (req_sector_id))
-    {
-      send_enveloped_error (ctx->fd, root, 1402,
-			    "A beacon already exists in this sector.");
-      return;
-    }
+  /* Guard 3: player must have a beacon on the ship */
+  if (!db_player_has_beacon_on_ship (ctx->player_id)) {
+    send_enveloped_error (ctx->fd, root, 1401, "Player does not have a beacon on their ship.");
+    return;
+  }
 
-  // Trim and bound text length (e.g., 0-80 chars)
+  /* NOTE: Canon behavior: if a beacon already exists, launching another destroys BOTH.
+     So we DO NOT reject here. We only check 'had_beacon' to craft a user message. */
+  int had_beacon = db_sector_has_beacon (req_sector_id);
+
+  /* Text length guard (<=80) */
   const char *beacon_text = json_string_value (jtext);
-  if (strlen (beacon_text) > 80)
-    {
-      send_enveloped_error (ctx->fd, root, 1400,
-			    "Beacon text is too long (max 80 characters).");
-      return;
-    }
+  if (!beacon_text) beacon_text = "";
+  if ((int)strlen (beacon_text) > 80) {
+    send_enveloped_error (ctx->fd, root, 1400, "Beacon text is too long (max 80 characters).");
+    return;
+  }
 
-  // All guards passed, perform the update
+  /* Perform the update:
+     - if none existed → set text
+     - if one existed  → clear (explode both) */
   int rc = db_sector_set_beacon (req_sector_id, beacon_text);
-  if (rc != SQLITE_OK)
-    {
-      send_enveloped_error (ctx->fd, root, 1500,
-			    "Database error updating beacon.");
-      return;
-    }
+  if (rc != SQLITE_OK) {
+    send_enveloped_error (ctx->fd, root, 1500, "Database error updating beacon.");
+    return;
+  }
 
-  // Decrement player's beacon count
+  /* Consume the player's beacon (canon: you used it either way) */
   db_player_decrement_beacon_count (ctx->player_id);
 
-  // Return the new sector state
-  handle_sector_info (ctx->fd, root, req_sector_id, ctx->player_id);
+  /* ===== Build sector.info payload (same fields as handle_sector_info) ===== */
+  json_t *payload = build_sector_info_json (req_sector_id);
+  if (!payload) {
+    send_enveloped_error (ctx->fd, root, 1500, "Out of memory building sector info");
+    return;
+  }
+
+  /* Beacon text */
+  char *btxt = NULL;
+  if (db_sector_beacon_text (req_sector_id, &btxt) == SQLITE_OK && btxt && *btxt) {
+    json_object_set_new (payload, "beacon", json_string (btxt));
+    json_object_set_new (payload, "has_beacon", json_true ());
+  } else {
+    json_object_set_new (payload, "beacon", json_null ());
+    json_object_set_new (payload, "has_beacon", json_false ());
+  }
+  free (btxt);
+
+  /* Ships */
+  json_t *ships = NULL;
+  rc = db_ships_at_sector_json (ctx->player_id, req_sector_id, &ships);
+  if (rc == SQLITE_OK) {
+    json_object_set_new (payload, "ships", ships ? ships : json_array ());
+    json_object_set_new (payload, "ships_count", json_integer ((int)json_array_size (ships)));
+  }
+
+  /* Ports */
+  json_t *ports = NULL;
+  int pt = db_ports_at_sector_json (req_sector_id, &ports);
+  if (pt == SQLITE_OK) {
+    json_object_set_new (payload, "ports", ports ? ports : json_array ());
+    json_object_set_new (payload, "ports_count", json_integer ((int)json_array_size (ports)));
+  }
+
+  /* Planets */
+  json_t *planets = NULL;
+  int plt = db_planets_at_sector_json (req_sector_id, &planets);
+  if (plt == SQLITE_OK) {
+    json_object_set_new (payload, "planets", planets ? planets : json_array ());
+    json_object_set_new (payload, "planets_count", json_integer ((int)json_array_size (planets)));
+  }
+
+  /* Players */
+  json_t *players = NULL;
+  int py = db_players_at_sector_json (req_sector_id, &players);
+  if (py == SQLITE_OK) {
+    json_object_set_new (payload, "players", players ? players : json_array ());
+    json_object_set_new (payload, "players_count", json_integer ((int)json_array_size (players)));
+  }
+
+  /* ===== Send envelope with a nice meta.message ===== */
+  json_t *env = make_base_envelope (root);
+  json_object_set_new (env, "status", json_string ("ok"));
+  json_object_set_new (env, "type", json_string ("sector.info"));
+  json_object_set_new (env, "data", payload); /* take ownership */
+
+  json_t *meta = json_object ();
+  json_object_set_new (meta, "message",
+    json_string (had_beacon
+      ? "Two marker beacons collided and exploded — the sector now has no beacon."
+      : "Beacon deployed."));
+  json_object_set_new (env, "meta", meta);
+
+  attach_rate_limit_meta (env, ctx);
+  rl_tick (ctx);
+  send_all_json (ctx->fd, env);
+  json_decref (env);
 }
