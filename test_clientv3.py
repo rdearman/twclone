@@ -35,7 +35,8 @@ def parse_args():
     p.add_argument("--user", help="Player name for login.")
     p.add_argument("--passwd", help="Password for login.")
     p.add_argument("--debug", action="store_true", help="Enable debug output")
-    p.add_argument("--menus", help="Path to menus.json (data-driven menus). If omitted, built-in fallback is used.")
+    p.add_argument("--menus", default="./menus.json",
+                   help="Path to menus.json (default: ./menus.json)")
     return p.parse_args()
 
 # ---------------------------
