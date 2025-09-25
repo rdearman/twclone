@@ -186,19 +186,22 @@ max (int a, int b)
 
 
 // Placeholder functions to satisfy the linker
-void getdata (int sockid, char *buffer, int maxlen)
+void
+getdata (int sockid, char *buffer, int maxlen)
 {
   // This function is called but not implemented.
   // It's a placeholder to satisfy the linker.
   // In a real application, it would get data from a socket.
 }
 
-void senddata (int sockid, char *buffer)
+void
+senddata (int sockid, char *buffer)
 {
   // Placeholder. In a real application, this would send data over a socket.
 }
 
-void doprocess ()
+void
+doprocess ()
 {
   // Placeholder for a function that handles processing.
 }

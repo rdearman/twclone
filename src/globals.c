@@ -156,7 +156,7 @@ int shutdown_flag = 0;
 time_t next_process = 0;
 int sectorcount;
 int WARP_WAIT;
-struct timeval begin, end, t; 
+struct timeval begin, end, t;
 
 
 // Global arrays originally defined in universe.h
@@ -186,5 +186,5 @@ const char portconversion[11][3] = {
   "BBB"
 };
 
-const float buy_base_prices[3] = { 53.2, 76.5, 147.5 };
 const float sell_base_prices[3] = { 4.8, 21.6, 63.4 };
+const float buy_base_prices[3] = { 53.2, 76.5, 147.5 };

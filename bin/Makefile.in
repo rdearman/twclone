@@ -109,8 +109,7 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-bin_PROGRAMS = bigbang$(EXEEXT) client$(EXEEXT) server$(EXEEXT) \
-	test_client$(EXEEXT) test_server$(EXEEXT)
+bin_PROGRAMS = client$(EXEEXT) server$(EXEEXT) test_bang$(EXEEXT)
 subdir = bin
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/configure.ac
@@ -124,33 +123,29 @@ CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
 am__dirstamp = $(am__leading_dot)dirstamp
-am_bigbang_OBJECTS = ../src/globals.$(OBJEXT) ../src/bigbang.$(OBJEXT) \
-	../src/config.$(OBJEXT) ../src/namegen.$(OBJEXT) \
-	../src/parse.$(OBJEXT) ../src/planet.$(OBJEXT)
-bigbang_OBJECTS = $(am_bigbang_OBJECTS)
-bigbang_LDADD = $(LDADD)
-am_client_OBJECTS = ../src/globals.$(OBJEXT) ../src/client.$(OBJEXT) \
-	../src/common.$(OBJEXT) ../src/parse.$(OBJEXT)
+am_client_OBJECTS = ../src/globals.$(OBJEXT) ../src/database.$(OBJEXT) \
+	../src/client.$(OBJEXT) ../src/common.$(OBJEXT) \
+	../src/parse.$(OBJEXT)
 client_OBJECTS = $(am_client_OBJECTS)
-client_LDADD = $(LDADD)
-am_server_OBJECTS = ../src/globals.$(OBJEXT) \
-	../src/boxmuller.$(OBJEXT) ../src/common.$(OBJEXT) \
-	../src/config.$(OBJEXT) ../src/hashtable.$(OBJEXT) \
-	../src/maint.$(OBJEXT) ../src/msgqueue.$(OBJEXT) \
-	../src/parse.$(OBJEXT) ../src/planet.$(OBJEXT) \
-	../src/player_interaction.$(OBJEXT) ../src/server.$(OBJEXT) \
-	../src/serveractions.$(OBJEXT) ../src/shipinfo.$(OBJEXT) \
-	../src/sysop_interaction.$(OBJEXT) ../src/universe.$(OBJEXT)
+client_DEPENDENCIES =
+am_server_OBJECTS = ../src/server_main.$(OBJEXT) \
+	../src/server_cmds.$(OBJEXT) ../src/namegen.$(OBJEXT) \
+	../src/server_loop.$(OBJEXT) ../src/server_universe.$(OBJEXT) \
+	../src/server_bigbang.$(OBJEXT) ../src/globals.$(OBJEXT) \
+	../src/database.$(OBJEXT) ../src/schemas.$(OBJEXT) \
+	../src/server_config.$(OBJEXT) \
+	../src/server_warp_post_processing.$(OBJEXT) \
+	../src/common.$(OBJEXT)
 server_OBJECTS = $(am_server_OBJECTS)
 server_DEPENDENCIES =
-am_test_client_OBJECTS = ../src/globals.$(OBJEXT) \
-	../src/common.$(OBJEXT) ../src/test_client.$(OBJEXT)
-test_client_OBJECTS = $(am_test_client_OBJECTS)
-test_client_LDADD = $(LDADD)
-am_test_server_OBJECTS = ../src/globals.$(OBJEXT) \
-	../src/common.$(OBJEXT) ../src/test_server.$(OBJEXT)
-test_server_OBJECTS = $(am_test_server_OBJECTS)
-test_server_LDADD = $(LDADD)
+am_test_bang_OBJECTS = ../src/database.$(OBJEXT) \
+	../src/namegen.$(OBJEXT) ../src/server_bigbang.$(OBJEXT) \
+	../src/server_config.$(OBJEXT) \
+	../src/server_warp_post_processing.$(OBJEXT) \
+	../src/test_bang.$(OBJEXT) ../src/globals.$(OBJEXT) \
+	../src/common.$(OBJEXT)
+test_bang_OBJECTS = $(am_test_bang_OBJECTS)
+test_bang_DEPENDENCIES =
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -166,19 +161,18 @@ am__v_at_1 =
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__maybe_remake_depfiles = depfiles
-am__depfiles_remade = ../src/$(DEPDIR)/bigbang.Po \
-	../src/$(DEPDIR)/boxmuller.Po ../src/$(DEPDIR)/client.Po \
-	../src/$(DEPDIR)/common.Po ../src/$(DEPDIR)/config.Po \
-	../src/$(DEPDIR)/globals.Po ../src/$(DEPDIR)/hashtable.Po \
-	../src/$(DEPDIR)/maint.Po ../src/$(DEPDIR)/msgqueue.Po \
-	../src/$(DEPDIR)/namegen.Po ../src/$(DEPDIR)/parse.Po \
-	../src/$(DEPDIR)/planet.Po \
-	../src/$(DEPDIR)/player_interaction.Po \
-	../src/$(DEPDIR)/server.Po ../src/$(DEPDIR)/serveractions.Po \
-	../src/$(DEPDIR)/shipinfo.Po \
-	../src/$(DEPDIR)/sysop_interaction.Po \
-	../src/$(DEPDIR)/test_client.Po \
-	../src/$(DEPDIR)/test_server.Po ../src/$(DEPDIR)/universe.Po
+am__depfiles_remade = ../src/$(DEPDIR)/client.Po \
+	../src/$(DEPDIR)/common.Po ../src/$(DEPDIR)/database.Po \
+	../src/$(DEPDIR)/globals.Po ../src/$(DEPDIR)/namegen.Po \
+	../src/$(DEPDIR)/parse.Po ../src/$(DEPDIR)/schemas.Po \
+	../src/$(DEPDIR)/server_bigbang.Po \
+	../src/$(DEPDIR)/server_cmds.Po \
+	../src/$(DEPDIR)/server_config.Po \
+	../src/$(DEPDIR)/server_loop.Po \
+	../src/$(DEPDIR)/server_main.Po \
+	../src/$(DEPDIR)/server_universe.Po \
+	../src/$(DEPDIR)/server_warp_post_processing.Po \
+	../src/$(DEPDIR)/test_bang.Po
 am__mv = mv -f
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
@@ -192,10 +186,9 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(bigbang_SOURCES) $(client_SOURCES) $(server_SOURCES) \
-	$(test_client_SOURCES) $(test_server_SOURCES)
-DIST_SOURCES = $(bigbang_SOURCES) $(client_SOURCES) $(server_SOURCES) \
-	$(test_client_SOURCES) $(test_server_SOURCES)
+SOURCES = $(client_SOURCES) $(server_SOURCES) $(test_bang_SOURCES)
+DIST_SOURCES = $(client_SOURCES) $(server_SOURCES) \
+	$(test_bang_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -317,48 +310,41 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-server_LDADD = -ljansson
+server_LDADD = -ljansson -lsqlite3 -lpthread -lm
+# bigbang_LDADD  = -ljansson -lsqlite3 -lpthread -lm
+client_LDADD = -ljansson -lsqlite3 -lpthread -lm
+test_bang_LDADD = -ljansson -lsqlite3 -lpthread -lm
 AUTOMAKE_OPTIONS = subdir-objects
-bigbang_SOURCES = \
-	../src/globals.c \
-	../src/bigbang.c \
-	../src/config.c \
-	../src/namegen.c \
-	../src/parse.c \
-	../src/planet.c
-
 client_SOURCES = \
 	../src/globals.c \
+	../src/database.c \
 	../src/client.c \
 	../src/common.c \
 	../src/parse.c
 
 server_SOURCES = \
+	../src/server_main.c \
+	../src/server_cmds.c \
+	../src/namegen.c \
+	../src/server_loop.c \
+	../src/server_universe.c \
+	../src/server_bigbang.c \
 	../src/globals.c \
-	../src/boxmuller.c \
-	../src/common.c \
-	../src/config.c \
-	../src/hashtable.c \
-	../src/maint.c \
-	../src/msgqueue.c \
-	../src/parse.c \
-	../src/planet.c \
-	../src/player_interaction.c \
-	../src/server.c \
-	../src/serveractions.c \
-	../src/shipinfo.c \
-	../src/sysop_interaction.c \
-	../src/universe.c
+	../src/database.c \
+	../src/schemas.c \
+	../src/server_config.c \
+	../src/server_warp_post_processing.c \
+	../src/common.c
 
-test_client_SOURCES = \
+test_bang_SOURCES = \
+	../src/database.c \
+	../src/namegen.c \
+	../src/server_bigbang.c \
+	../src/server_config.c \
+	../src/server_warp_post_processing.c \
+	../src/test_bang.c \
 	../src/globals.c \
-	../src/common.c \
-	../src/test_client.c
-
-test_server_SOURCES = \
-	../src/globals.c \
-	../src/common.c \
-	../src/test_server.c
+	../src/common.c
 
 all: all-am
 
@@ -443,64 +429,46 @@ clean-binPROGRAMS:
 	@: > ../src/$(DEPDIR)/$(am__dirstamp)
 ../src/globals.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/bigbang.$(OBJEXT): ../src/$(am__dirstamp) \
+../src/database.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/config.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/namegen.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/parse.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/planet.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-
-bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEPENDENCIES) 
-	@rm -f bigbang$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(bigbang_OBJECTS) $(bigbang_LDADD) $(LIBS)
 ../src/client.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/common.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
+../src/parse.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 
 client$(EXEEXT): $(client_OBJECTS) $(client_DEPENDENCIES) $(EXTRA_client_DEPENDENCIES) 
 	@rm -f client$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(client_OBJECTS) $(client_LDADD) $(LIBS)
-../src/boxmuller.$(OBJEXT): ../src/$(am__dirstamp) \
+../src/server_main.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/hashtable.$(OBJEXT): ../src/$(am__dirstamp) \
+../src/server_cmds.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/maint.$(OBJEXT): ../src/$(am__dirstamp) \
+../src/namegen.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/msgqueue.$(OBJEXT): ../src/$(am__dirstamp) \
+../src/server_loop.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/player_interaction.$(OBJEXT): ../src/$(am__dirstamp) \
+../src/server_universe.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/server.$(OBJEXT): ../src/$(am__dirstamp) \
+../src/server_bigbang.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/serveractions.$(OBJEXT): ../src/$(am__dirstamp) \
+../src/schemas.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/shipinfo.$(OBJEXT): ../src/$(am__dirstamp) \
+../src/server_config.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/sysop_interaction.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/universe.$(OBJEXT): ../src/$(am__dirstamp) \
+../src/server_warp_post_processing.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 
 server$(EXEEXT): $(server_OBJECTS) $(server_DEPENDENCIES) $(EXTRA_server_DEPENDENCIES) 
 	@rm -f server$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(server_OBJECTS) $(server_LDADD) $(LIBS)
-../src/test_client.$(OBJEXT): ../src/$(am__dirstamp) \
+../src/test_bang.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 
-test_client$(EXEEXT): $(test_client_OBJECTS) $(test_client_DEPENDENCIES) $(EXTRA_test_client_DEPENDENCIES) 
-	@rm -f test_client$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(test_client_OBJECTS) $(test_client_LDADD) $(LIBS)
-../src/test_server.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-
-test_server$(EXEEXT): $(test_server_OBJECTS) $(test_server_DEPENDENCIES) $(EXTRA_test_server_DEPENDENCIES) 
-	@rm -f test_server$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(test_server_OBJECTS) $(test_server_LDADD) $(LIBS)
+test_bang$(EXEEXT): $(test_bang_OBJECTS) $(test_bang_DEPENDENCIES) $(EXTRA_test_bang_DEPENDENCIES) 
+	@rm -f test_bang$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_bang_OBJECTS) $(test_bang_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -509,26 +477,21 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/bigbang.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/boxmuller.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/client.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/common.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/config.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/database.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/globals.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/hashtable.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/maint.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/msgqueue.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/namegen.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/parse.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/planet.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/player_interaction.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/serveractions.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/shipinfo.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/sysop_interaction.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/test_client.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/test_server.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/universe.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/schemas.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_bigbang.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_cmds.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_config.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_loop.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_main.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_universe.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_warp_post_processing.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/test_bang.Po@am__quote@ # am--include-marker
 
 $(am__depfiles_remade):
 	@$(MKDIR_P) $(@D)
@@ -680,26 +643,21 @@ clean: clean-am
 clean-am: clean-binPROGRAMS clean-generic mostlyclean-am
 
 distclean: distclean-am
-		-rm -f ../src/$(DEPDIR)/bigbang.Po
-	-rm -f ../src/$(DEPDIR)/boxmuller.Po
-	-rm -f ../src/$(DEPDIR)/client.Po
+		-rm -f ../src/$(DEPDIR)/client.Po
 	-rm -f ../src/$(DEPDIR)/common.Po
-	-rm -f ../src/$(DEPDIR)/config.Po
+	-rm -f ../src/$(DEPDIR)/database.Po
 	-rm -f ../src/$(DEPDIR)/globals.Po
-	-rm -f ../src/$(DEPDIR)/hashtable.Po
-	-rm -f ../src/$(DEPDIR)/maint.Po
-	-rm -f ../src/$(DEPDIR)/msgqueue.Po
 	-rm -f ../src/$(DEPDIR)/namegen.Po
 	-rm -f ../src/$(DEPDIR)/parse.Po
-	-rm -f ../src/$(DEPDIR)/planet.Po
-	-rm -f ../src/$(DEPDIR)/player_interaction.Po
-	-rm -f ../src/$(DEPDIR)/server.Po
-	-rm -f ../src/$(DEPDIR)/serveractions.Po
-	-rm -f ../src/$(DEPDIR)/shipinfo.Po
-	-rm -f ../src/$(DEPDIR)/sysop_interaction.Po
-	-rm -f ../src/$(DEPDIR)/test_client.Po
-	-rm -f ../src/$(DEPDIR)/test_server.Po
-	-rm -f ../src/$(DEPDIR)/universe.Po
+	-rm -f ../src/$(DEPDIR)/schemas.Po
+	-rm -f ../src/$(DEPDIR)/server_bigbang.Po
+	-rm -f ../src/$(DEPDIR)/server_cmds.Po
+	-rm -f ../src/$(DEPDIR)/server_config.Po
+	-rm -f ../src/$(DEPDIR)/server_loop.Po
+	-rm -f ../src/$(DEPDIR)/server_main.Po
+	-rm -f ../src/$(DEPDIR)/server_universe.Po
+	-rm -f ../src/$(DEPDIR)/server_warp_post_processing.Po
+	-rm -f ../src/$(DEPDIR)/test_bang.Po
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -745,26 +703,21 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
-		-rm -f ../src/$(DEPDIR)/bigbang.Po
-	-rm -f ../src/$(DEPDIR)/boxmuller.Po
-	-rm -f ../src/$(DEPDIR)/client.Po
+		-rm -f ../src/$(DEPDIR)/client.Po
 	-rm -f ../src/$(DEPDIR)/common.Po
-	-rm -f ../src/$(DEPDIR)/config.Po
+	-rm -f ../src/$(DEPDIR)/database.Po
 	-rm -f ../src/$(DEPDIR)/globals.Po
-	-rm -f ../src/$(DEPDIR)/hashtable.Po
-	-rm -f ../src/$(DEPDIR)/maint.Po
-	-rm -f ../src/$(DEPDIR)/msgqueue.Po
 	-rm -f ../src/$(DEPDIR)/namegen.Po
 	-rm -f ../src/$(DEPDIR)/parse.Po
-	-rm -f ../src/$(DEPDIR)/planet.Po
-	-rm -f ../src/$(DEPDIR)/player_interaction.Po
-	-rm -f ../src/$(DEPDIR)/server.Po
-	-rm -f ../src/$(DEPDIR)/serveractions.Po
-	-rm -f ../src/$(DEPDIR)/shipinfo.Po
-	-rm -f ../src/$(DEPDIR)/sysop_interaction.Po
-	-rm -f ../src/$(DEPDIR)/test_client.Po
-	-rm -f ../src/$(DEPDIR)/test_server.Po
-	-rm -f ../src/$(DEPDIR)/universe.Po
+	-rm -f ../src/$(DEPDIR)/schemas.Po
+	-rm -f ../src/$(DEPDIR)/server_bigbang.Po
+	-rm -f ../src/$(DEPDIR)/server_cmds.Po
+	-rm -f ../src/$(DEPDIR)/server_config.Po
+	-rm -f ../src/$(DEPDIR)/server_loop.Po
+	-rm -f ../src/$(DEPDIR)/server_main.Po
+	-rm -f ../src/$(DEPDIR)/server_universe.Po
+	-rm -f ../src/$(DEPDIR)/server_warp_post_processing.Po
+	-rm -f ../src/$(DEPDIR)/test_bang.Po
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 

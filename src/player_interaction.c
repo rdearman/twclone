@@ -775,13 +775,15 @@ handle_player (void *threadinfo)
 }
 
 
-json_t *list_hardware (json_t * json_data, struct player *curplayer)
+json_t *
+list_hardware (json_t *json_data, struct player *curplayer)
 {
   // Placeholder to satisfy the linker.
   return NULL;
 }
 
-json_t *buyhardware (json_t * json_data, struct player *curplayer)
+json_t *
+buyhardware (json_t *json_data, struct player *curplayer)
 {
   // Placeholder to satisfy the linker.
   return NULL;

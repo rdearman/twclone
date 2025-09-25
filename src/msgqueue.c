@@ -122,29 +122,34 @@ sendmesg (int msgid, json_t *message, long mtype, long senderid)
   free ((void *) json_string);
 }
 
-json_t *getdata_json(int msgid, long *senderid)
+json_t *
+getdata_json (int msgid, long *senderid)
 {
-    int n;
-    char *buffer = getmsg(msgid, 0, &n);
-    if (!buffer) {
-        return NULL;
+  int n;
+  char *buffer = getmsg (msgid, 0, &n);
+  if (!buffer)
+    {
+      return NULL;
     }
 
-    // The 'senderid' will be stored in 'n'
-    *senderid = (long)n;
+  // The 'senderid' will be stored in 'n'
+  *senderid = (long) n;
 
-    json_error_t error;
-    json_t *root = json_loads(buffer, 0, &error);
-    free(buffer); // free the buffer allocated by getmsg
+  json_error_t error;
+  json_t *root = json_loads (buffer, 0, &error);
+  free (buffer);		// free the buffer allocated by getmsg
 
-    if (!root) {
-        fprintf(stderr, "JSON decode error: on line %d: %s\n", error.line, error.text);
-        return NULL;
+  if (!root)
+    {
+      fprintf (stderr, "JSON decode error: on line %d: %s\n", error.line,
+	       error.text);
+      return NULL;
     }
-    return root;
+  return root;
 }
 
-void senddata_json(int msgid, json_t *message, long mtype)
+void
+senddata_json (int msgid, json_t *message, long mtype)
 {
-    sendmesg(msgid, message, mtype, 0); // Assuming 0 for senderid
+  sendmesg (msgid, message, mtype, 0);	// Assuming 0 for senderid
 }

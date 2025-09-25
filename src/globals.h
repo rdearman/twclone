@@ -1,7 +1,7 @@
 #ifndef GLOBALS_H
 #define GLOBALS_H
 
-#include <time.h> // You need this for the time_t type
+#include <time.h>		// You need this for the time_t type
 
 extern int threadid;
 extern int threadcount;

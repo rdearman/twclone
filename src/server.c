@@ -203,7 +203,8 @@ main (int argc, char **argv)
   char response_buffer[BUFF_SIZE];	// Define a response buffer
   if (json_data)
     {
-      processcommand(newconnect, json_data, response_buffer, sizeof(response_buffer));
+      processcommand (newconnect, json_data, response_buffer,
+		      sizeof (response_buffer));
       // processcommand (json_data, response_buffer, sizeof (response_buffer));
       json_decref (json_data);	// Free the JSON object after use
     }
@@ -356,8 +357,9 @@ main (int argc, char **argv)
       char response_buffer[BUFF_SIZE];
       if (json_data)
 	{
-	  processcommand(newconnect, json_data, response_buffer, sizeof(response_buffer));
-	  //	  processcommand (json_data, response_buffer,			  sizeof (response_buffer));
+	  processcommand (newconnect, json_data, response_buffer,
+			  sizeof (response_buffer));
+	  //      processcommand (json_data, response_buffer,                     sizeof (response_buffer));
 	  json_decref (json_data);
 	}
       sendmesg (msgidout, buffer, senderid);

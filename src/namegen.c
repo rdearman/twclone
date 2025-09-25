@@ -1,25 +1,3 @@
-/* Copyright (c) 2002 Rick Dearman <rick@ricken.demon.co.uk>
-*
-* Permission is hereby granted, free of charge, to any person obtaining
-* a copy of this software and associated documentation files (the
-* "Software"), to deal in the Software without restriction, including
-* without limitation the rights to use, copy, modify, merge, publish,
-* distribute, sublicense, and/or sell copies of the Software, and to
-* permit persons to whom the Software is furnished to do so, subject to
-* the following conditions:
-*
-* The above copyright notice and this permission notice shall be
-* included in all copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
-* LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-* OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
-* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdio.h>
@@ -27,12 +5,10 @@
 #include <string.h>
 #include "namegen.h"
 #include "common.h"
+#include "globals.h"
 
-// The single, global definition.
-int *usedNames;
 
 extern int randomnum (int min, int max);
-int flip = 1;
 
 char *
 randomname (char *name)
@@ -48,28 +24,71 @@ randomname (char *name)
 char *
 consellationName (char *name)
 {
-  char nm[50];
   int randIndex;
-  flip *= -1;
-  if (flip > 0)
+
+  if (randomnum (0, 1) == 0)
     {
-      randIndex = randomnum (0, 400);
+      // 50% chance to return a constellation name
+      randIndex = randomnum (1, 400);
     }
   else
     {
+      // 50% chance to return "Uncharted Space"
       randIndex = 0;
     }
-  strcpy (nm, nameCollection[randIndex]);
-  nameCount++;
-  usedNames[nameCount] = randIndex;
-  sprintf (name, "%s", nm);
+
+  // Copy the name at the random index to the buffer.
+  sprintf (name, "%s", nameCollection[randIndex]);
+
   return name;
 }
 
-void
-init_usedNames ()
-{
-  int a;
-  for (a = 0; a < 500; a++)
-    usedNames[a] = -1;
-}
+
+
+/* char * */
+/* consellationName (char *name) */
+/* { */
+/*   char nm[50]; */
+/*   int randIndex; */
+/*   flip *= -1; */
+/*   if (flip > 0) */
+/*     { */
+/*       randIndex = randomnum (0, 400); */
+/*     } */
+/*   else */
+/*     { */
+/*       randIndex = randomnum (0, nameCount); */
+/*     } */
+
+/*   if (usedNames[randIndex] == -1) */
+/*     { */
+/*       usedNames[randIndex] = randIndex; */
+/*       nameCount++; */
+/*     } */
+/*   else */
+/*     { */
+/*       randIndex = randomnum (0, 400); */
+/*       while (usedNames[randIndex] != -1) */
+/*         { */
+/*           randIndex = randomnum (0, 400); */
+/*         } */
+/*       usedNames[randIndex] = randIndex; */
+/*       nameCount++; */
+/*     } */
+/*   sprintf (name, "%s", nameCollection[randIndex]); */
+/*   return name; */
+/* } */
+
+
+/* void */
+/* init_usedNames (void) */
+/* { */
+/*   int a; */
+/*   usedNames = (int *) malloc (500 * sizeof (int)); */
+/*   if (usedNames == NULL) { */
+/*     // Handle error if malloc fails */
+/*     exit(1); */
+/*   } */
+/*   for (a = 0; a < 500; a++) */
+/*     usedNames[a] = -1; */
+/* } */

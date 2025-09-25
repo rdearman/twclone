@@ -1,0 +1,549 @@
+{
+  "menus": {
+    "MAIN": {
+      "title": "--- Main Menu (Sector {{sector_id}}) ---",
+      "options": [
+        {
+          "key": "m",
+          "label": "(M) Move to a Sector",
+          "action": {
+            "submenu": "MOVE"
+          }
+        },
+        {
+          "key": "d",
+          "label": "(D) Re-display Sector",
+          "action": {
+            "pycall": "redisplay_sector"
+          }
+        },
+        {
+          "key": "p",
+          "label": "(P) Port & Trade",
+          "action": {
+            "submenu": "DOCK"
+          },
+          "show_if": [
+            "has_port"
+          ]
+        },
+        {
+          "key": "l",
+          "label": "(L) Land on a Planet",
+          "action": {
+            "submenu": "PLANET"
+          },
+          "show_if": [
+            "has_planet"
+          ]
+        },
+        {
+          "key": "c",
+          "label": "(C) Ship's Computer",
+          "action": {
+            "submenu": "COMPUTER"
+          }
+        },
+        {
+          "key": "v",
+          "label": "(V) View Game Status",
+          "action": {
+            "submenu": "GAME_STATUS"
+          }
+        },
+        {
+          "key": "r",
+          "label": "(R) Release Beacon",
+          "action": {
+            "pycall": "set_beacon_flow"
+          },
+          "show_if": [
+            "can_set_beacon"
+          ]
+        },
+        {
+          "key": "w",
+          "label": "(W) Tow SpaceCraft",
+          "action": {
+            "pycall": "tow_flow"
+          },
+          "show_if": [
+            "has_tow_target"
+          ]
+        },
+        {
+          "key": "e",
+          "label": "(E) Enter Ship*",
+          "action": {
+            "pycall": "enter_ship_menu"
+          },
+          "show_if": [
+            "has_boardable"
+          ]
+        },
+        {
+          "key": "y",
+          "label": "(Y) Testing Menu",
+          "action": {
+            "submenu": "TESTING"
+          }
+        },
+        {
+          "key": "h",
+          "label": "(H) Help",
+          "action": {
+            "pycall": "help_main"
+          }
+        },
+        {
+          "key": "q",
+          "label": "(Q) Quit",
+          "action": {
+            "pycall": "quit_client"
+          }
+        }
+      ]
+    },
+    "TESTING": {
+      "title": "--- Testing Menu ---",
+      "options": [
+        {
+          "key": "c",
+          "label": "(C) Capabilities (cap)",
+          "action": {
+            "rpc": {
+              "command": "system.hello",
+              "data": {}
+            }
+          }
+        },
+        {
+          "key": "x",
+          "label": "(X) Cap Spam (capspam)",
+          "action": {
+            "pycall": "cap_spam_handler"
+          }
+        },
+        {
+          "key": "s",
+          "label": "(S) Schema",
+          "action": {
+            "rpc": {
+              "command": "system.describe_schema",
+              "data": {
+                "key": "<prompt:str:Schema key (optional)>"
+              }
+            }
+          }
+        },
+        {
+          "key": "m",
+          "label": "(M) My Info (me)",
+          "action": {
+            "rpc": {
+              "command": "player.my_info",
+              "data": {}
+            }
+          }
+        },
+        {
+          "key": "h",
+          "label": "(H) Ship Info (ship)",
+          "action": {
+            "rpc": {
+              "command": "ship.info",
+              "data": {}
+            }
+          }
+        },
+        {
+          "key": "o",
+          "label": "(O) Online Players (online)",
+          "action": {
+            "rpc": {
+              "command": "player.list_online",
+              "data": {}
+            }
+          }
+        },
+        {
+          "key": "b",
+          "label": "(B) Buy (buy)",
+          "action": {
+            "pycall": "simple_buy_handler"
+          }
+        },
+        {
+          "key": "i",
+          "label": "(I) Interactive Buy (ibuy)",
+          "action": {
+            "pycall": "interactive_buy_handler"
+          }
+        },
+        {
+          "key": "f",
+          "label": "(F) Force Move (force_move)",
+          "action": {
+            "rpc": {
+              "command": "move.warp",
+              "data": {
+                "to_sector_id": "<prompt:int:Target sector ID>"
+              }
+            }
+          }
+        },
+        {
+          "key": "r",
+          "label": "(R) Register Player (register)",
+          "action": {
+            "rpc": {
+              "command": "auth.register",
+              "data": {
+                "user_name": "<prompt:str:Username>",
+                "password": "<prompt:str:Password>"
+              }
+            }
+          }
+        },
+        {
+          "key": "e",
+          "label": "(E) Refresh Player (refresh)",
+          "action": {
+            "rpc": {
+              "command": "auth.refresh",
+              "data": {}
+            }
+          }
+        },
+        {
+          "key": "l",
+          "label": "(L) Logout",
+          "action": {
+            "rpc": {
+              "command": "auth.logout",
+              "data": {}
+            }
+          }
+        },
+        {
+          "key": "d",
+          "label": "(D) Disconnect",
+          "action": {
+            "rpc": {
+              "command": "system.disconnect",
+              "data": {}
+            }
+          }
+        },
+        {
+          "key": "j",
+          "label": "(J) Raw JSON command",
+          "action": {
+            "pycall": "raw_json_handler"
+          }
+        },
+        {
+          "key": "q",
+          "label": "(Q) Back to Main Menu",
+          "action": {
+            "back": true
+          }
+        }
+      ]
+    },
+    "MOVE": {
+      "title": "--- Move Menu ({{sector_id}}) ---",
+      "options": [
+        {
+          "key": "g",
+          "label": "(G) Go to Adjacent Sector",
+          "action": {
+            "pycall": "move_to_adjacent"
+          }
+        },
+        {
+          "key": "w",
+          "label": "(W) Warp to Sector",
+          "action": {
+            "pycall": "warp_flow"
+          }
+        },
+        {
+          "key": "i",
+          "label": "(I) Intercept Ship",
+          "action": {
+            "pycall": "intercept_flow"
+          }
+        },
+        {
+          "key": "a",
+          "label": "(A) Autopilot",
+          "action": {
+            "pycall": "autopilot_flow"
+          }
+        },
+        {
+          "key": "b",
+          "label": "(B) Back",
+          "action": {
+            "back": true
+          }
+        }
+      ]
+    },
+    "PLANET": {
+      "title": "--- Planet Menu ---\n(You are at a planet)",
+      "options": [
+        {
+          "key": "l",
+          "label": "(L) Land",
+          "action": {
+            "pycall": "land_flow"
+          }
+        },
+        {
+          "key": "b",
+          "label": "(B) Back",
+          "action": {
+            "back": true
+          }
+        }
+      ]
+    },
+    "COMPUTER": {
+      "title": "--- Ship's Computer ---",
+      "options": [
+        {
+          "key": "s",
+          "label": "(S) Ship Info",
+          "action": {
+            "rpc": {
+              "command": "ship.info",
+              "data": {}
+            }
+          }
+        },
+        {
+          "key": "a",
+          "label": "(A) Autopilot",
+          "action": {
+            "submenu": "MOVE"
+          }
+        },
+        {
+          "key": "g",
+          "label": "(G) Get game clock",
+          "action": {
+            "rpc": {
+              "command": "game.get_clock",
+              "data": {}
+            }
+          }
+        },
+        {
+          "key": "p",
+          "label": "(P) Planet Info",
+          "action": {
+            "rpc": {
+              "command": "planet.info",
+              "data": {
+                "planet_id": "<prompt:int:Planet ID>"
+              }
+            }
+          }
+        },
+        {
+          "key": "d",
+          "label": "(D) Describe Sector",
+          "action": {
+            "rpc": {
+              "command": "move.describe_sector",
+              "data": {
+                "sector_id": "<prompt:int:Sector ID>"
+              }
+            }
+          }
+        },
+        {
+          "key": "m",
+          "label": "(M) Map",
+          "action": {
+            "pycall": "map_flow"
+          }
+        },
+        {
+          "key": "t",
+          "label": "(T) Target Info",
+          "action": {
+            "pycall": "target_info_flow"
+          }
+        },
+        {
+          "key": "w",
+          "label": "(W) Warp to sector",
+          "action": {
+            "pycall": "warp_flow"
+          }
+        },
+        {
+          "key": "b",
+          "label": "(B) Back",
+          "action": {
+            "back": true
+          }
+        }
+      ]
+    },
+    "DOCK": {
+      "title": "--- Dock Menu ({{port_name}}) ---",
+      "options": [
+        {
+          "key": "t",
+          "label": "Trade",
+          "action": {
+            "pycall": "raw_json_handler"
+          }
+        },
+        {
+          "key": "s",
+          "label": "Shipyard",
+          "action": {
+            "submenu": "SHIPYARD"
+          }
+        },
+        {
+          "key": "b",
+          "label": "Bank",
+          "action": {
+            "submenu": "BANK"
+          }
+        },
+        {
+          "key": "l",
+          "label": "(L) Leave",
+          "action": {
+            "back": true
+          }
+        }
+      ]
+    },
+    "SHIPYARD": {
+      "title": "--- Shipyard Menu ---",
+      "options": [
+        {
+          "key": "b",
+          "label": "(B) Buy Ship",
+          "action": {
+            "pycall": "buy_ship_flow"
+          }
+        },
+        {
+          "key": "u",
+          "label": "(U) Upgrade Ship",
+          "action": {
+            "pycall": "upgrade_ship_flow"
+          }
+        },
+        {
+          "key": "d",
+          "label": "(D) Downgrade Ship",
+          "action": {
+            "pycall": "downgrade_ship_flow"
+          }
+        },
+        {
+          "key": "s",
+          "label": "(S) Sell Ship",
+          "action": {
+            "pycall": "sell_ship_flow"
+          }
+        },
+        {
+          "key": "r",
+          "label": "(R) Rename Ship",
+          "action": {
+            "pycall": "rename_ship_flow"
+          }
+        },
+        {
+          "key": "l",
+          "label": "(L) Leave",
+          "action": {
+            "back": true
+          }
+        }
+      ]
+    },
+    "BANK": {
+      "title": "--- Bank Menu ---",
+      "options": [
+        {
+          "key": "d",
+          "label": "Deposit",
+          "action": {
+            "rpc": {
+              "command": "dock.bank.deposit",
+              "data": {
+                "amount": "<prompt:int:Amount>"
+              }
+            }
+          }
+        },
+        {
+          "key": "t",
+          "label": "Transfer funds",
+          "action": {
+            "rpc": {
+              "command": "dock.bank.transfer",
+              "data": {
+                "to": "<prompt:str:To whom?>",
+                "amount": "<prompt:int:Amount>"
+              }
+            }
+          }
+        },
+        {
+          "key": "w",
+          "label": "Withdraw",
+          "action": {
+            "rpc": {
+              "command": "dock.bank.withdraw",
+              "data": {
+                "amount": "<prompt:int:Amount>"
+              }
+            }
+          }
+        },
+        {
+          "key": "l",
+          "label": "Leave",
+          "action": {
+            "back": true
+          }
+        }
+      ]
+    },
+    "GAME_STATUS": {
+      "title": "--- Game Status ---",
+      "options": [
+        {
+          "key": "d",
+          "label": "Display status",
+          "action": {
+            "rpc": {
+              "command": "game.status",
+              "data": {}
+            }
+          }
+        },
+        {
+          "key": "b",
+          "label": "Back",
+          "action": {
+            "back": true
+          }
+        }
+      ]
+    }
+  }
+}

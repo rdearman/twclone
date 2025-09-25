@@ -82,7 +82,7 @@
  /usr/include/asm-generic/sockios.h \
  /usr/include/x86_64-linux-gnu/bits/types/struct_osockaddr.h \
  /usr/include/x86_64-linux-gnu/bits/socket2.h \
- /usr/include/x86_64-linux-gnu/bits/in.h
+ /usr/include/x86_64-linux-gnu/bits/in.h ../src/globals.h
 /usr/include/stdc-predef.h:
 /usr/include/stdlib.h:
 /usr/include/x86_64-linux-gnu/bits/libc-header-start.h:
@@ -177,3 +177,4 @@
 /usr/include/x86_64-linux-gnu/bits/types/struct_osockaddr.h:
 /usr/include/x86_64-linux-gnu/bits/socket2.h:
 /usr/include/x86_64-linux-gnu/bits/in.h:
+../src/globals.h:

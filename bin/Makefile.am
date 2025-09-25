@@ -19,53 +19,49 @@
 # Alternatively, the GPL can be found at
 # http://www.gnu.org/copyleft/gpl.html
 
-server_LDADD = -ljansson
+server_LDADD   = -ljansson -lsqlite3 -lpthread -lm
+# bigbang_LDADD  = -ljansson -lsqlite3 -lpthread -lm
+client_LDADD   = -ljansson -lsqlite3 -lpthread -lm
+test_bang_LDADD = -ljansson -lsqlite3 -lpthread -lm
+
 AUTOMAKE_OPTIONS = subdir-objects
 
 bin_PROGRAMS = \
-	bigbang \
 	client \
 	server \
-	test_client \
-	test_server
-
-bigbang_SOURCES = \
-	../src/globals.c \
-	../src/bigbang.c \
-	../src/config.c \
-	../src/namegen.c \
-	../src/parse.c \
-	../src/planet.c
+	test_bang
 
 client_SOURCES = \
 	../src/globals.c \
+	../src/database.c \
 	../src/client.c \
 	../src/common.c \
 	../src/parse.c
 
 server_SOURCES = \
+	../src/server_main.c \
+	../src/server_cmds.c \
+	../src/namegen.c \
+	../src/server_loop.c \
+	../src/server_universe.c \
+	../src/server_bigbang.c \
 	../src/globals.c \
-	../src/boxmuller.c \
-	../src/common.c \
-	../src/config.c \
-	../src/hashtable.c \
-	../src/maint.c \
-	../src/msgqueue.c \
-	../src/parse.c \
-	../src/planet.c \
-	../src/player_interaction.c \
-	../src/server.c \
-	../src/serveractions.c \
-	../src/shipinfo.c \
-	../src/sysop_interaction.c \
-	../src/universe.c
+	../src/database.c \
+	../src/schemas.c \
+	../src/server_config.c \
+	../src/server_warp_post_processing.c \
+	../src/common.c
 
-test_client_SOURCES = \
+test_bang_SOURCES = \
+	../src/database.c \
+	../src/namegen.c \
+	../src/server_bigbang.c \
+	../src/server_config.c \
+	../src/server_warp_post_processing.c \
+	../src/test_bang.c \
 	../src/globals.c \
-	../src/common.c \
-	../src/test_client.c
+	../src/common.c
 
-test_server_SOURCES = \
-	../src/globals.c \
-	../src/common.c \
-	../src/test_server.c
+
+
+
