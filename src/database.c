@@ -190,9 +190,10 @@ const char *create_table_sql[] = {
   "CREATE TABLE IF NOT EXISTS sector_warps (from_sector INTEGER, to_sector INTEGER, PRIMARY KEY (from_sector, to_sector), FOREIGN KEY (from_sector) REFERENCES sectors(id) ON DELETE CASCADE, FOREIGN KEY (to_sector) REFERENCES sectors(id) ON DELETE CASCADE);",
 
 
-  "CREATE TABLE IF NOT EXISTS ships (" "id INTEGER PRIMARY KEY AUTOINCREMENT, " "number INTEGER, "	/* legacy ID */
-    "name TEXT NOT NULL, " "type INTEGER, "	/* FK to shiptypes.id (Index+1 from shipinfo array) */
-    "attack INTEGER, " "holds_used INTEGER, " "mines INTEGER, " "fighters_used INTEGER, " "genesis INTEGER, " "photons INTEGER, " "location INTEGER, "	/* FK to sectors.id */
+  "CREATE TABLE IF NOT EXISTS ships (" "id INTEGER PRIMARY KEY AUTOINCREMENT, " 
+    "name TEXT NOT NULL, " "type INTEGER, "	
+    "attack INTEGER, " "holds_used INTEGER, " "mines INTEGER, "
+  "fighters_used INTEGER, " "genesis INTEGER, " "photons INTEGER, " "location INTEGER, "	/* FK to sectors.id */
     "fighters INTEGER, " "shields INTEGER, " "holds INTEGER, "
     "beacons INTEGER, " "colonists INTEGER, " "equipment INTEGER, "
     "organics INTEGER, " "ore INTEGER, " "flags INTEGER, " "ported INTEGER, "
@@ -445,7 +446,7 @@ const char *create_table_sql[] = {
 /* 15) Ships by sector */
   "CREATE VIEW IF NOT EXISTS ships_by_sector AS\n"
     "SELECT s.id AS sector_id,\n"
-    "       COALESCE(GROUP_CONCAT(sh.name || '#' || sh.number, ', '), '') AS ships,\n"
+"COALESCE(GROUP_CONCAT(sh.name || '#' || sh.id, ', '), '') AS ships,\n"
     "       COUNT(sh.id) AS ship_count\n"
     "FROM sectors s\n"
     "LEFT JOIN ships sh ON sh.location = s.id\n" "GROUP BY s.id;",
@@ -505,7 +506,7 @@ const char *create_table_sql[] = {
     "  sh.fighters  AS ship_fighters,\n"
     "  (COALESCE(p.credits,0) + COALESCE(sh.fighters,0)*2) AS approx_worth\n"
     "FROM players p\n"
-    "LEFT JOIN ships      sh   ON sh.number = p.ship\n"
+    "LEFT JOIN ships      sh   ON sh.id = p.ship\n"
     "LEFT JOIN shiptypes  st   ON st.id     = sh.type\n"
     "LEFT JOIN sectors    sctr ON sctr.id   = p.sector;",
 
@@ -523,7 +524,6 @@ const char *create_table_sql[] = {
   "CREATE INDEX IF NOT EXISTS idx_players_name     ON players(name);",
   "CREATE INDEX IF NOT EXISTS idx_players_sector   ON players(sector);",
   "CREATE INDEX IF NOT EXISTS idx_players_ship     ON players(ship);",
-  "CREATE INDEX IF NOT EXISTS idx_ships_number     ON ships(number);",
   "CREATE INDEX IF NOT EXISTS idx_ships_id         ON ships(id);",
   "CREATE INDEX IF NOT EXISTS idx_sectors_id       ON sectors(id);",
 
@@ -914,7 +914,10 @@ const char *insert_default_sql[] = {
 
 
   "INSERT INTO ships (name, type, attack, holds_used, mines, fighters_used, genesis, photons, location, fighters, shields, holds, colonists,equipment, organics, ore, flags, ported, onplanet) VALUES ('Bit Banger',1, 110, 20, 25, 10, 0, 1,  87, 2300, 400, 20, 0,10,5, 5, 0, 1, 1);",
-  "INSERT INTO players (number, name, passwd, sector, ship) VALUES (7, 'newguy', 'pass123',1,1);"
+  "INSERT INTO players (number, name, passwd, sector, ship) VALUES (7, 'newguy', 'pass123',1,1);",
+
+  "INSERT INTO ship_ownership (player_id, ship_id, is_primary, role_id) VALUES (1,1,1,0);"
+
 };
 
 /* Number of tables */
@@ -1148,46 +1151,13 @@ db_create_tables_unlocked (void)
     }
   ret_code = 0;
 cleanup:
-  if (errmsg)
-    sqlite3_free (errmsg);
+  if (errmsg) sqlite3_free(errmsg);
+  if (ret_code == 0) {
+    int rc2 = db_ensure_ship_perms_column();
+    if (rc2 != SQLITE_OK) return -1;
+  }
   return ret_code;
 }
-
-
-/* int */
-/* db_insert_defaults (void) */
-/* { */
-/*   char *errmsg = NULL; */
-/*   int ret_code = -1; // Default to error */
-
-/*   pthread_mutex_lock (&db_mutex); */
-
-/*   if (!db_handle) { */
-/*       goto cleanup; */
-/*   } */
-
-/*   for (size_t i = 0; i < insert_default_count; i++) */
-/*     { */
-/*       if (sqlite3_exec (db_handle, insert_default_sql[i], NULL, NULL, &errmsg) */
-/*           != SQLITE_OK) */
-/*         { */
-/*           fprintf (stderr, "DB insert_defaults error (%zu): %s\n", i, errmsg); */
-/*           goto cleanup; */
-/*         } */
-/*     } */
-
-/*   ret_code = 0; */
-
-/* cleanup: */
-/*   if (errmsg) */
-/*     { */
-/*       sqlite3_free (errmsg); */
-/*     } */
-
-/*   pthread_mutex_unlock (&db_mutex); */
-
-/*   return ret_code; */
-/* } */
 
 /* Public, thread-safe wrapper */
 int
@@ -1225,9 +1195,6 @@ cleanup:
     sqlite3_free (errmsg);
   return ret_code;
 }
-
-
-
 
 
 void
@@ -3241,7 +3208,7 @@ db_player_info_json (int player_id, json_t **out)
 
   // --- REFACTORED SQL QUERY ---
   // We now LEFT JOIN with the 'sectors' table to get the sector name directly from the database.
-  const char *sql = "SELECT " " p.id, p.number, p.name, p.sector, " " s.id         AS ship_id, " " COALESCE(s.number, 0) AS ship_number, " " COALESCE(s.name, '')  AS ship_name, " " COALESCE(s.type, 0)   AS ship_type_id, " " COALESCE(st.name, '') AS ship_type_name, " " COALESCE(s.holds, 0)  AS ship_holds, " " COALESCE(s.fighters, 0) AS ship_fighters, " " COALESCE(sectors.name, 'Unknown') AS sector_name "	// <--- NEW COLUMN
+  const char *sql = "SELECT " " p.id, p.number, p.name, p.sector, " " s.id         AS ship_id, " " COALESCE(s.id, 0) AS ship_number, " " COALESCE(s.name, '')  AS ship_name, " " COALESCE(s.type, 0)   AS ship_type_id, " " COALESCE(st.name, '') AS ship_type_name, " " COALESCE(s.holds, 0)  AS ship_holds, " " COALESCE(s.fighters, 0) AS ship_fighters, " " COALESCE(sectors.name, 'Unknown') AS sector_name "	// <--- NEW COLUMN
     "FROM players p " "LEFT JOIN ships s       ON s.id = p.ship " "LEFT JOIN shiptypes st ON st.id = s.type " "LEFT JOIN sectors       ON sectors.id = p.sector "	// <--- NEW JOIN
     "WHERE p.id = ?";
 
@@ -3737,8 +3704,7 @@ db_player_has_beacon_on_ship (int player_id)
   pthread_mutex_lock (&db_mutex);
 
   const char *sql =
-    "SELECT T2.beacons FROM players AS T1 JOIN ships AS T2 ON T1.ship = T2.id WHERE T1.id = ?;";
-
+  "SELECT T2.beacons FROM players AS T1 JOIN ships AS T2 ON T1.ship = T2.id WHERE T1.id = ?;";
   // 2. Prepare the statement. This is the first place an error could occur.
   int rc = sqlite3_prepare_v2 (db_get_handle (), sql, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
@@ -4012,8 +3978,6 @@ cleanup_unlock_only:
 }
 
 
-
-
 int
 db_ships_inspectable_at_sector_json (int player_id, int sector_id,
 				     json_t **out_array)
@@ -4032,7 +3996,7 @@ db_ships_inspectable_at_sector_json (int player_id, int sector_id,
     "  own.player_id AS owner_id, "
     "  COALESCE( (SELECT name FROM players WHERE id = own.player_id), 'derelict') AS owner_name, "
     /* derelict/boardable == unpiloted, regardless of owner */
-    "  CASE WHEN pil.id IS NULL THEN 1 ELSE 0 END AS is_derelict, " "  s.fighters, s.shields, " "  s.holds AS holds_total, (s.holds - s.holds_used) AS holds_free, " "  s.ore, s.organics, s.equipment, s.colonists, " "  COALESCE(s.flags,0) AS flags, s.number AS registration " "FROM ships s " "LEFT JOIN shiptypes      st  ON st.id = s.type " "LEFT JOIN ship_ownership own ON own.ship_id = s.id " "LEFT JOIN players        pil ON pil.ship = s.id "	/* current pilot (if any) */
+    "  CASE WHEN pil.id IS NULL THEN 1 ELSE 0 END AS is_derelict, " "  s.fighters, s.shields, " "  s.holds AS holds_total, (s.holds - s.holds_used) AS holds_free, " "  s.ore, s.organics, s.equipment, s.colonists, " "  COALESCE(s.flags,0) AS flags, s.id AS registration, COALESCE(s.perms, 731) AS perms " "FROM ships s " "LEFT JOIN shiptypes      st  ON st.id = s.type " "LEFT JOIN ship_ownership own ON own.ship_id = s.id " "LEFT JOIN players pil ON pil.ship = s.id "	/* current pilot (if any) */
     "WHERE s.location = ? "
     "  AND (pil.id IS NULL OR pil.id != ?) "
     "ORDER BY is_derelict DESC, s.id ASC;";
@@ -4089,34 +4053,26 @@ db_ships_inspectable_at_sector_json (int player_id, int sector_id,
       const char *reg = (const char *) sqlite3_column_text (stmt, c++);
       if (!reg)
 	reg = "";
+      int perms = sqlite3_column_int (stmt, c++);
+      char perm_str[8];
+      snprintf(perm_str, sizeof(perm_str), "%03d", perms);
 
-      json_t *row = json_pack ("{s:i s:s s:o s:i s:o s:o s:o s:o s:s}",
-			       "id", ship_id,
-			       "name", ship_nm,
-			       "type", json_pack ("{s:i s:s}", "id", type_id,
-						  "name", type_nm),
-			       "sector_id", sector_row,
-			       "owner", json_pack ("{s:i s:s}", "id",
-						   owner_id, "name",
-						   owner_nm),
-			       "flags", json_pack ("{s:b s:b s:i}",
-						   "derelict",
-						   is_derelict != 0,
-						   "boardable",
-						   is_derelict != 0,
-						   "raw", flags),
-			       "defence", json_pack ("{s:i s:i}", "shields",
-						     shields, "fighters",
-						     fighters),
-			       "holds", json_pack ("{s:i s:i}", "total",
-						   holds_total, "free",
-						   holds_free),
-			       "cargo", json_pack ("{s:i s:i s:i s:i}", "ore",
-						   ore, "organics", organics,
-						   "equipment", equipment,
-						   "colonists", colonists),
-			       "registration", reg);
-      if (!row)
+      json_t *row = json_pack(
+			      "{s:i s:s s:o s:i s:o s:o s:o s:o s:o s:s}",
+			      "id", ship_id,
+			      "name", ship_nm,
+			      "type",       json_pack("{s:i s:s}", "id", type_id, "name", type_nm),
+			      "sector_id",  sector_row,
+			      "owner",      json_pack("{s:i s:s}", "id", owner_id, "name", owner_nm),
+			      "flags",      json_pack("{s:b s:b s:i}", "derelict", is_derelict!=0, "boardable", is_derelict!=0, "raw", flags),
+			      "defence",    json_pack("{s:i s:i}", "shields", shields, "fighters", fighters),
+			      "holds",      json_pack("{s:i s:i}", "total", holds_total, "free", holds_free),
+			      "cargo",      json_pack("{s:i s:i s:i s:i}", "ore", ore, "organics", organics, "equipment", equipment, "colonists", colonists),
+			      "perms",      json_pack("{s:i s:s}", "value", perms, "octal", perm_str),
+			      "registration", reg
+			      );
+
+ if (!row)
 	{
 	  rc = SQLITE_NOMEM;
 	  goto fail_locked;
@@ -4213,7 +4169,7 @@ out_unlock:
 }
 
 
-
+//////////////////////////////////////////////////////
 int
 db_ship_claim (int player_id, int sector_id, int ship_id, json_t **out_ship)
 {
@@ -4221,7 +4177,7 @@ db_ship_claim (int player_id, int sector_id, int ship_id, json_t **out_ship)
     return SQLITE_MISUSE;
   *out_ship = NULL;
 
-  const int LOCK_MASK = SHIPF_LOCKED;	/* if you defined flags; else 0 */
+  // const int LOCK_MASK = SHIPF_LOCKED;	/* if you defined flags; else 0 */
   int rc = SQLITE_OK;
   sqlite3_stmt *stmt = NULL;
 
@@ -4231,19 +4187,18 @@ db_ship_claim (int player_id, int sector_id, int ship_id, json_t **out_ship)
   if (rc != SQLITE_OK)
     goto out_unlock;
 
-  /* Verify claimable: unpiloted + not locked; ownership ignored by design */
-  static const char *SQL_CHECK =
+static const char *SQL_CHECK =
     "SELECT s.id FROM ships s "
-    "LEFT JOIN players pil ON pil.ship = s.id "
+    "LEFT JOIN players pil ON pil.ship = s.id "  // Changed from s.number to s.id
     "WHERE s.id=? AND s.location=? "
-    "  AND pil.id IS NULL " "  AND (COALESCE(s.flags,0) & ?) = 0;";
-  rc = sqlite3_prepare_v2 (db_handle, SQL_CHECK, -1, &stmt, NULL);
-  if (rc != SQLITE_OK)
-    goto rollback;
-  sqlite3_bind_int (stmt, 1, ship_id);
-  sqlite3_bind_int (stmt, 2, sector_id);
-  sqlite3_bind_int (stmt, 3, LOCK_MASK);
+    "  AND pil.id IS NULL AND (s.perms % 10) >= 1;";
+ 
+rc = sqlite3_prepare_v2 (db_handle, SQL_CHECK, -1, &stmt, NULL);
+if (rc != SQLITE_OK) goto rollback;
 
+sqlite3_bind_int (stmt, 1, ship_id);
+sqlite3_bind_int (stmt, 2, sector_id);
+ 
   rc = sqlite3_step (stmt);
   sqlite3_finalize (stmt);
   stmt = NULL;
@@ -4268,7 +4223,9 @@ db_ship_claim (int player_id, int sector_id, int ship_id, json_t **out_ship)
 
   /* Switch current pilot */
   static const char *SQL_SET_PLAYER_SHIP =
-    "UPDATE players SET ship=? WHERE id=?;";
+    "UPDATE players "
+  "SET ship = ? "
+  "WHERE id = ?;";
   rc = sqlite3_prepare_v2 (db_handle, SQL_SET_PLAYER_SHIP, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     goto rollback;
@@ -4281,34 +4238,33 @@ db_ship_claim (int player_id, int sector_id, int ship_id, json_t **out_ship)
     goto rollback;
 
 
-/* Grant ownership to the claimer and mark as primary */
-static const char *SQL_CLR_OLD_PRIMARY =
-  "UPDATE ship_ownership SET is_primary=0 WHERE player_id=?;";
-rc = sqlite3_prepare_v2(db_handle, SQL_CLR_OLD_PRIMARY, -1, &stmt, NULL);
-if (rc != SQLITE_OK) goto rollback;
-sqlite3_bind_int(stmt, 1, player_id);
-rc = sqlite3_step(stmt);
-sqlite3_finalize(stmt);
-stmt = NULL;
-if (rc != SQLITE_DONE) goto rollback;
+  /* Grant ownership to the claimer and mark as primary */
+  static const char *SQL_CLR_OLD_PRIMARY =
+    "UPDATE ship_ownership SET is_primary=0 WHERE player_id=?;";
+  rc = sqlite3_prepare_v2(db_handle, SQL_CLR_OLD_PRIMARY, -1, &stmt, NULL);
+  if (rc != SQLITE_OK) goto rollback;
+  sqlite3_bind_int(stmt, 1, player_id);
+  rc = sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+  stmt = NULL;
+  if (rc != SQLITE_DONE) goto rollback;
 
-/* role_id=1 => 'owner' (see ship_roles defaults) */
-static const char *SQL_UPSERT_OWN =
-  "INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary, acquired_at) "
-  "VALUES (?, ?, 1, 1, strftime('%s','now')) "
-  "ON CONFLICT(ship_id) DO UPDATE SET "
-  "  player_id=excluded.player_id, role_id=1, is_primary=1, acquired_at=excluded.acquired_at;";
-rc = sqlite3_prepare_v2(db_handle, SQL_UPSERT_OWN, -1, &stmt, NULL);
-if (rc != SQLITE_OK) goto rollback;
-sqlite3_bind_int(stmt, 1, ship_id);
-sqlite3_bind_int(stmt, 2, player_id);
-rc = sqlite3_step(stmt);
-sqlite3_finalize(stmt);
-stmt = NULL;
-if (rc != SQLITE_DONE) goto rollback;
+  /* role_id=1 => 'owner' (see ship_roles defaults) */
+  static const char *SQL_UPSERT_OWN =
+    "INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary, acquired_at) "
+    "VALUES (?, ?, 1, 1, strftime('%s','now')) "
+    "ON CONFLICT(ship_id) DO UPDATE SET "
+    "  player_id=excluded.player_id, role_id=1, is_primary=1, acquired_at=excluded.acquired_at;";
+  rc = sqlite3_prepare_v2(db_handle, SQL_UPSERT_OWN, -1, &stmt, NULL);
+  if (rc != SQLITE_OK) goto rollback;
+  sqlite3_bind_int(stmt, 1, ship_id);
+  sqlite3_bind_int(stmt, 2, player_id);
+  rc = sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+  stmt = NULL;
+  if (rc != SQLITE_DONE) goto rollback;
 
-
-  
+ 
   /* Fetch snapshot for reply (owner from ship_ownership, pilot = you now) */
   static const char *SQL_FETCH =
     "SELECT s.id AS ship_id, "
@@ -4321,7 +4277,7 @@ if (rc != SQLITE_DONE) goto rollback;
     "       s.fighters, s.shields, "
     "       s.holds AS holds_total, (s.holds - s.holds_used) AS holds_free, "
     "       s.ore, s.organics, s.equipment, s.colonists, "
-    "       COALESCE(s.flags,0) AS flags, s.number AS registration "
+    "       COALESCE(s.flags,0) AS flags, s.id AS registration, COALESCE(s.perms, 731) AS perms "
     "FROM ships s "
     "LEFT JOIN shiptypes st      ON st.id = s.type "
     "LEFT JOIN ship_ownership own ON own.ship_id = s.id " "WHERE s.id=?;";
@@ -4369,52 +4325,68 @@ if (rc != SQLITE_DONE) goto rollback;
   if (!reg)
     reg = "";
 
-  json_t *ship = json_pack ("{s:i s:s s:o s:i s:o s:o s:o s:o s:s}",
-			    "id", ship_id_row,
-			    "name", ship_nm,
-			    "type", json_pack ("{s:i s:s}", "id", type_id,
-					       "name", type_nm),
-			    "sector_id", sector_row,
-			    "owner", json_pack ("{s:i s:s}", "id", owner_id,
-						"name", owner_nm),
-			    "flags", json_pack ("{s:b s:b s:i}",
-						"derelict", is_derelict != 0,
-						"boardable", is_derelict != 0,
-						"raw", flags),
-			    "defence", json_pack ("{s:i s:i}", "shields",
-						  shields, "fighters",
-						  fighters),
-			    "holds", json_pack ("{s:i s:i}", "total",
-						holds_total, "free",
-						holds_free),
-			    "cargo", json_pack ("{s:i s:i s:i s:i}", "ore",
-						ore, "organics", organics,
-						"equipment", equipment,
-						"colonists", colonists),
-			    "registration", reg);
+  /* build the JSON for the claimed ship */
+  int perms = sqlite3_column_int (stmt, c++);
+  char perm_str[8];
+  snprintf(perm_str, sizeof(perm_str), "%03d", perms);
+
+  json_t *ship_json = json_pack(
+				"{s:i s:s s:o s:i s:o s:o s:o s:o s:o s:s}",
+				"id",         ship_id_row,  /* <-- use the value from the SELECT row */
+				"name",       ship_nm,
+				"type",       json_pack("{s:i s:s}", "id", type_id, "name", type_nm),
+				"sector_id",  sector_row,
+				"owner",      json_pack("{s:i s:s}", "id", owner_id, "name", owner_nm),
+				"flags",      json_pack("{s:b s:b s:i}",
+							"derelict",  is_derelict!=0,
+							"boardable", is_derelict!=0,
+							"raw",       flags),
+				"defence",    json_pack("{s:i s:i}", "shields", shields, "fighters", fighters),
+				"holds",      json_pack("{s:i s:i}", "total", holds_total, "free", holds_free),
+				"cargo",      json_pack("{s:i s:i s:i s:i}", "ore", ore, "organics", organics, "equipment", equipment, "colonists", colonists),
+				"perms",      json_pack("{s:i s:s}", "value", perms, "octal", perm_str),
+				"registration", reg
+				);
 
   sqlite3_finalize (stmt);
   stmt = NULL;
-  if (!ship)
-    {
-      rc = SQLITE_NOMEM;
-      goto rollback;
-    }
 
-  sqlite3_exec (db_handle, "COMMIT", NULL, NULL, NULL);
+  if (!ship_json) {
+    rc = SQLITE_NOMEM;
+    goto rollback;
+  }
+
+  rc = sqlite3_exec (db_handle, "COMMIT", NULL, NULL, NULL);
+  if (rc != SQLITE_OK) {
+    json_decref(ship_json);
+    pthread_mutex_unlock (&db_mutex);
+    return rc;
+  }
+
   pthread_mutex_unlock (&db_mutex);
-
-  *out_ship = ship;
+  *out_ship = ship_json;   /* return the single ship object */
   return SQLITE_OK;
 
+
 rollback:
-  sqlite3_exec (db_handle, "ROLLBACK", NULL, NULL, NULL);
-out_unlock:
-  pthread_mutex_unlock (&db_mutex);
+  /* We only come here after BEGIN succeeded */
+  char *err = sqlite3_errmsg(db_handle);
+  fprintf(stderr, err); 
+  sqlite3_exec(db_handle, "ROLLBACK", NULL, NULL, NULL);
+  if (stmt) { sqlite3_finalize(stmt); stmt = NULL; }
+  pthread_mutex_unlock(&db_mutex);
   return rc;
+
+out_unlock:
+  /* We come here if BEGIN failed or after a failed COMMIT */
+  if (stmt) { sqlite3_finalize(stmt); stmt = NULL; }
+  pthread_mutex_unlock(&db_mutex);
+  return rc;
+
+
 }
 
-
+////////////////////////////////////////////////////////////////////
 int
 db_ship_rename_if_owner (int player_id, int ship_id, const char *new_name)
 {
@@ -4542,3 +4514,35 @@ int db_apply_lock_policy_for_pilot (int ship_id, int new_pilot_player_id_or_0)
   return rc;
 }
 
+
+/* Ensure ships.perms exists; default 731 (owner:7, group:3, others:1) */
+static int column_exists(sqlite3 *db, const char *table, const char *col) {
+  sqlite3_stmt *st = NULL;
+  int exists = 0;
+  char sql[256];
+  snprintf(sql, sizeof(sql), "PRAGMA table_info(%s);", table);
+  if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK) return 0;
+  while (sqlite3_step(st) == SQLITE_ROW) {
+    const unsigned char *name = sqlite3_column_text(st, 1);
+    if (name && strcmp((const char*)name, col) == 0) { exists = 1; break; }
+  }
+  sqlite3_finalize(st);
+  return exists;
+}
+
+int db_ensure_ship_perms_column(void) {
+  int rc = SQLITE_OK;
+  sqlite3 *db = db_get_handle();
+  if (!db) return SQLITE_ERROR;
+
+  if (!column_exists(db, "ships", "perms")) {
+    char *errmsg = NULL;
+    rc = sqlite3_exec(db, "ALTER TABLE ships ADD COLUMN perms INTEGER NOT NULL DEFAULT 731;", NULL, NULL, &errmsg);
+    if (rc != SQLITE_OK) {
+      fprintf(stderr, "ALTER TABLE ships ADD COLUMN perms failed: %s\n", errmsg ? errmsg : "(unknown)");
+      sqlite3_free(errmsg);
+      return rc;
+    }
+  }
+  return SQLITE_OK;
+}

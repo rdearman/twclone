@@ -1798,9 +1798,9 @@ create_derelicts (void)
     }
 
   // Add columns with a fixed default value
-  strncat (cols, ", number, flags, ported, onplanet",
+  strncat (cols, ", flags, ported, onplanet",
 	   sizeof (cols) - strlen (cols) - 1);
-  strncat (vals, ", ?, ?, ?, ?", sizeof (vals) - strlen (vals) - 1);
+  strncat (vals, ", ?, ?, ?", sizeof (vals) - strlen (vals) - 1);
 
   snprintf (insert_sql, sizeof (insert_sql),
 	    "INSERT INTO ships (%s) VALUES (%s);", cols, vals);
@@ -1926,7 +1926,7 @@ create_derelicts (void)
 	}
 
       // Bind fixed columns with a default value
-      sqlite3_bind_int (ins, current_bind_idx++, 0);	// number
+      // sqlite3_bind_int (ins, current_bind_idx++, 0);	// number
       sqlite3_bind_int (ins, current_bind_idx++, 0);	// flags
       sqlite3_bind_int (ins, current_bind_idx++, 0);	// ported
       sqlite3_bind_int (ins, current_bind_idx++, 0);	// onplanet
