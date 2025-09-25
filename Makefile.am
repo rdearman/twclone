@@ -23,12 +23,3 @@ AUTOMAKE_OPTIONS = subdir-objects
 
 SUBDIRS = bin
 
-EXTRA_DIST = \
-        config.data \
-        planettypes.data \
-        shiptypes.data
-
-pkgdata_DATA = \
-        config.data \
-        planettypes.data \
-        shiptypes.data

@@ -282,6 +282,27 @@ def compute_flags(ctx: Context) -> Dict[str, bool]:
     }
     return flags
 
+
+@register("print_last_rpc")
+def print_last_rpc(ctx):
+    resp = ctx.state.get("last_rpc")
+    if resp is None:
+        print("[no response captured]")
+        return
+    print(json.dumps(resp, ensure_ascii=False, indent=2))
+@register("disconnect_and_quit")
+
+def disconnect_and_quit(ctx):
+    try:
+        resp = ctx.conn.rpc("system.disconnect", {})
+        ctx.state["last_rpc"] = resp
+        print(json.dumps(resp, ensure_ascii=False, indent=2))
+    except Exception as e:
+        print(f"disconnect error: {e}")
+    sys.exit(0)
+
+
+
 # ---------------------------
 # Placeholder & prompt resolution
 # ---------------------------
@@ -526,6 +547,84 @@ def set_beacon_flow(ctx: Context):
 # ---------------------------
 # Enter ship menu
 # ---------------------------
+
+def _fmt_int(n):
+    try:
+        return f"{int(n):,}"
+    except Exception:
+        return str(n)
+
+def _bool_flags(d: dict) -> str:
+    if not isinstance(d, dict):
+        return ""
+    on = []
+    for k, v in d.items():
+        if k == "raw":  # internal bitset, noisy
+            continue
+        if bool(v):
+            on.append(k)
+    return ", ".join(on) if on else "none"
+
+def _render_cargo(cargo) -> str:
+    # Server sometimes returns "" or {} or dict of commodities
+    if cargo in ("", None):
+        return "none"
+    if isinstance(cargo, dict) and cargo:
+        parts = []
+        for k, v in cargo.items():
+            parts.append(f"{k}: {_fmt_int(v)}")
+        return ", ".join(parts)
+    return str(cargo)
+
+def render_ship_card(ship: dict) -> str:
+    """Return a pretty printable card for a ship dict from ship.inspect."""
+    sid   = ship.get("id") or ship.get("ship_id") or "?"
+    name  = ship.get("name") or ship.get("ship_name") or "Unnamed"
+    stype = (ship.get("type") or {}).get("name") or ship.get("ship_type") or "?"
+    sector_id = ship.get("sector_id") or ship.get("sector") or "?"
+    owner = (ship.get("owner") or {}).get("name") if isinstance(ship.get("owner"), dict) else ship.get("owner")
+    owner = owner or "unknown"
+    flags = _bool_flags(ship.get("flags") or {})
+    shields = _fmt_int((ship.get("defence") or {}).get("shields") or 0)
+    fighters = _fmt_int((ship.get("defence") or {}).get("fighters") or 0)
+    holds_total = (ship.get("holds") or {}).get("total") or 0
+    holds_free  = (ship.get("holds") or {}).get("free") or 0
+    holds_used  = max(0, int(holds_total) - int(holds_free)) if isinstance(holds_total, int) and isinstance(holds_free, int) else "?"
+    holds_line  = f"{_fmt_int(holds_used)} used / {_fmt_int(holds_total)} total"
+    cargo = _render_cargo(ship.get("cargo"))
+
+    lines = []
+    lines.append(f"\n┌─ Ship: {name}  (ID {sid})")
+    lines.append(f"│   Type: {stype}")
+    lines.append(f"│   Sector: {sector_id}    Owner: {owner}")
+    lines.append(f"│   Flags: {flags}")
+    lines.append(f"│   Defence: Shields {_fmt_int(shields)}, Fighters {_fmt_int(fighters)}")
+    lines.append(f"│   Holds:   {holds_line}")
+    lines.append(f"│   Cargo:   {cargo}")
+    lines.append("└────────────────────────────────────────────")
+    return "\n".join(lines)
+
+def print_inspect_response_pretty(resp: dict):
+    """Pretty-print ship.inspect response; fall back to JSON if shape unexpected."""
+    try:
+        data = (resp or {}).get("data") or {}
+        ships = data.get("ships") or []
+        if not isinstance(ships, list) or not ships:
+            # Some servers return a single 'ship' object
+            ship = data.get("ship")
+            if isinstance(ship, dict):
+                print(render_ship_card(ship))
+                return
+            raise ValueError("No ships found in response.")
+        for ship in ships:
+            print(render_ship_card(ship))
+        return
+    except Exception:
+        # Fall back to raw JSON dump if structure differs
+        print(json.dumps(resp, ensure_ascii=False, indent=2))
+
+
+
 @register("enter_ship_menu")
 def enter_ship_menu(ctx: Context):
     d = ctx.last_sector_desc or {}
@@ -533,85 +632,116 @@ def enter_ship_menu(ctx: Context):
     my_ship_id = get_my_ship_id(ctx.conn)
     my_name = get_my_player_name(ctx.conn)
 
+    # Build list of boardable ships
     boardable = []
     for s in ships:
         owner = (s.get("owner") or "").strip().lower()
         sid = s.get("id") or s.get("ship_id")
-        if (not owner or owner == "derelict") and (sid != my_ship_id) and (owner != (my_name or "").lower()):
+        is_derelict = (not owner) or owner == "derelict"
+        if is_derelict and (sid != my_ship_id) and (owner != (my_name or "").lower()):
             boardable.append(s)
 
     if not boardable:
-        print("No boardable ships here."); return
+        print("No boardable ships here.")
+        return
 
-    print("\nBoardable ships in this sector:")
-    for idx, s in enumerate(boardable, 1):
+    def show_boardables():
+        print("\nBoardable ships in this sector:")
+        for idx, s in enumerate(boardable, 1):
+            nm = s.get("name") or s.get("ship_name") or "Unnamed"
+            tp = s.get("ship_type") or s.get("type") or "?"
+            ow = s.get("owner") or "derelict"
+            print(f" {idx}) {nm}  [{tp}]  owner={ow}")
+
+    def current_target(idx: int):
+        s = boardable[idx]
         nm = s.get("name") or s.get("ship_name") or "Unnamed"
         tp = s.get("ship_type") or s.get("type") or "?"
-        ow = s.get("owner") or "derelict"
-        print(f" {idx}) {nm}  [{tp}]  owner={ow}")
+        sid = s.get("id") or s.get("ship_id")
+        return s, nm, tp, sid
 
-    target = boardable[0]
-    if len(boardable) > 1:
-        sel = input("Choose ship (number): ").strip()
+    # Initial selection (ask user even if there's only one)
+    show_boardables()
+    target_idx = 0
+    sel = input("Choose ship number (default 1): ").strip()
+    if sel:
         try:
             i = int(sel)
             if 1 <= i <= len(boardable):
-                target = boardable[i-1]
+                target_idx = i - 1
         except ValueError:
             pass
 
-    ship_id = target.get("id") or target.get("ship_id")
-
     while True:
+        target, nm, tp, ship_id = current_target(target_idx)
         print("\n--- Enter Ship Menu ---")
+        print(f" Target: #{target_idx+1} \"{nm}\" [{tp}] (ship_id={ship_id})")
         print(" (I) Inspect Ship")
-        print(" (B) Board / Claim")
-        print(" (R) Rename / Re-register")
+        print(" (C) Claim")
+        #print(" (R) Rename / Re-register")
         print(" (P) Set Primary")
+        #print(" (S) Select a different ship")
         print(" (Q) Quit to Previous Menu")
         cmd = input("Enter-Ship Command: ").strip().lower()
 
         if cmd == "q":
             return
 
-        elif cmd == "i":
+        if cmd == "s":
+            # re-prompt selection
+            show_boardables()
+            sel = input("Choose ship number: ").strip()
             try:
-                r = ctx.conn.rpc("ship.inspect", {"ship_id": ship_id})
-            except Exception:
-                r = {"status": "ok", "type": "ship.inspect", "data": target}
-            print(json.dumps(r, ensure_ascii=False, indent=2))
+                i = int(sel)
+                if 1 <= i <= len(boardable):
+                    target_idx = i - 1
+            except ValueError:
+                print("Invalid selection.")
+            continue
 
-        elif cmd == "b":
-            try:
-                r = ctx.conn.rpc("ship.board", {"ship_id": ship_id})
-                print(json.dumps(r, ensure_ascii=False, indent=2))
+        # Confirm current target before any action
+        confirm = input(f'Operate on #{target_idx+1} "{nm}" [{tp}] (ship_id={ship_id})? (y/N): ').strip().lower()
+        if confirm != "y":
+            print("Cancelled.")
+            continue
+
+        elif cmd == "i":
+            resp = ctx.conn.rpc("ship.inspect", {"ship_id": ship_id})
+            print_inspect_response_pretty(resp)
+
+        elif cmd == "c":
+            # Claim an unpiloted ship in this sector
+            payload = {"ship_id": ship_id}
+            resp = ctx.conn.rpc("ship.claim", payload)
+            print(json.dumps(resp, ensure_ascii=False, indent=2))
+
+            if resp.get("status") == "ok":
+                # Optional: update client’s idea of current ship (if you track it)
+                try:
+                    claimed = resp.get("data", {}).get("ship", {})
+                    ctx.current_ship_id = claimed.get("id", ctx.current_ship_id)
+                except Exception:
+                    pass
+
+                # Refresh sector after claiming (your old ship remains derelict here)
                 new = ctx.conn.rpc("move.describe_sector", {"sector_id": d.get("id")})
                 ctx.last_sector_desc = normalize_sector(get_data(new))
                 return
-            except Exception as e:
-                print(f"Board failed: {e}")
+            else:
+                # Nicer errors for common cases
+                err = (resp.get("error") or {}).get("message") or "Claim failed"
+                print(f"⚠ {err}")
 
-        elif cmd == "r":
-            new_name = input("New ship name (registration): ").strip()
-            if not new_name:
-                print("Name cannot be empty."); continue
-            try:
-                r = ctx.conn.rpc("ship.rename", {"ship_id": ship_id, "name": new_name})
-                print(json.dumps(r, ensure_ascii=False, indent=2))
-                new = ctx.conn.rpc("move.describe_sector", {"sector_id": d.get("id")})
-                ctx.last_sector_desc = normalize_sector(get_data(new))
-            except Exception as e:
-                print(f"Rename failed: {e}")
 
+                
         elif cmd == "p":
-            try:
-                r = ctx.conn.rpc("ship.set_primary", {"ship_id": ship_id})
-                print(json.dumps(r, ensure_ascii=False, indent=2))
-            except Exception as e:
-                print(f"Set Primary failed: {e}")
+            resp = ctx.conn.rpc("ship.set_primary", {"ship_id": ship_id})
+            print(json.dumps(resp, ensure_ascii=False, indent=2))
 
         else:
             print("Invalid command. Please try again.")
+
+
 
 # ---------------------------
 # Tow (placeholder like v2)
@@ -789,17 +919,63 @@ def sell_ship_flow(ctx: Context):
     r = ctx.conn.rpc("dock.ship.sell", {"ship_id": ship_id})
     print(json.dumps(r, ensure_ascii=False, indent=2))
 
+
+
+
 @register("rename_ship_flow")
 def rename_ship_flow(ctx: Context):
+    """
+    Rename/re-register *your current ship* without asking for a ship id.
+    - Resolves current ship_id from player.my_info
+    - Shows current name, prompts for new name (default = keep)
+    - Confirms, then calls ship.rename
+    """
+    # Resolve current ship id
+    ship_id = get_my_ship_id(ctx.conn)
+    if not isinstance(ship_id, int):
+        print("Could not determine your current ship id.")
+        return
+
+    # Try to fetch current ship name for a nice prompt
+    current_name = None
     try:
-        ship_id = int(input("Ship ID: ").strip())
-    except ValueError:
-        print("Invalid ship id."); return
-    name = input("New name: ").strip()
-    if not name:
-        print("Name cannot be empty."); return
-    r = ctx.conn.rpc("dock.ship.rename", {"ship_id": ship_id, "name": name})
-    print(json.dumps(r, ensure_ascii=False, indent=2))
+        info = ctx.conn.rpc("ship.info", {})
+        data = (info or {}).get("data") or {}
+        # common shapes: { data: { name: ... } } or { data: { ship: { name: ... } } }
+        current_name = data.get("name") \
+                       or (data.get("ship") or {}).get("name")
+    except Exception:
+        pass
+
+    # Prompt for new name (default keeps current)
+    if not current_name:
+        current_name = "(unnamed)"
+    new_name = input(f'New ship name (current: "{current_name}") [Enter to cancel]: ').strip()
+    if not new_name:
+        print("Rename cancelled.")
+        return
+
+    # Confirm
+    confirm = input(f'Rename current ship (id={ship_id}) to "{new_name}"? (y/N): ').strip().lower()
+    if confirm != "y":
+        print("Cancelled.")
+        return
+
+    # Do it
+    resp = ctx.conn.rpc("ship.rename", {"ship_id": ship_id, "new_name": new_name})
+    print(json.dumps(resp, ensure_ascii=False, indent=2))
+
+    # Optional: refresh sector view if the server shows ship names there
+    try:
+        sid = ctx.current_sector_id
+        if isinstance(sid, int):
+            desc = ctx.conn.rpc("move.describe_sector", {"sector_id": sid})
+            ctx.last_sector_desc = normalize_sector((desc or {}).get("data") or {})
+    except Exception:
+        pass
+
+    
+
 
 # ---------------------------
 # Testing menu helpers (cap spam, buy, raw JSON) to support menus.json

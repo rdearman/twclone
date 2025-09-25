@@ -51,6 +51,7 @@
             "submenu": "GAME_STATUS"
           }
         },
+	  
         {
           "key": "r",
           "label": "(R) Release Beacon",
@@ -114,7 +115,8 @@
             "rpc": {
               "command": "system.hello",
               "data": {}
-            }
+            },
+            "post": "print_last_rpc"
           }
         },
         {
@@ -130,10 +132,9 @@
           "action": {
             "rpc": {
               "command": "system.describe_schema",
-              "data": {
-                "key": "<prompt:str:Schema key (optional)>"
-              }
-            }
+              "data": {}
+            },
+            "post": "print_last_rpc"
           }
         },
         {
@@ -143,7 +144,8 @@
             "rpc": {
               "command": "player.my_info",
               "data": {}
-            }
+            },
+            "post": "print_last_rpc"
           }
         },
         {
@@ -153,7 +155,8 @@
             "rpc": {
               "command": "ship.info",
               "data": {}
-            }
+            },
+            "post": "print_last_rpc"
           }
         },
         {
@@ -163,14 +166,8 @@
             "rpc": {
               "command": "player.list_online",
               "data": {}
-            }
-          }
-        },
-        {
-          "key": "b",
-          "label": "(B) Buy (buy)",
-          "action": {
-            "pycall": "simple_buy_handler"
+            },
+            "post": "print_last_rpc"
           }
         },
         {
@@ -283,8 +280,8 @@
           }
         },
         {
-          "key": "b",
-          "label": "(B) Back",
+          "key": "q",
+          "label": "(Q) Back to Main Menu",
           "action": {
             "back": true
           }
@@ -302,8 +299,8 @@
           }
         },
         {
-          "key": "b",
-          "label": "(B) Back",
+          "key": "q",
+          "label": "(Q) Back to Main Menu",
           "action": {
             "back": true
           }
@@ -386,8 +383,16 @@
           }
         },
         {
-          "key": "b",
-          "label": "(B) Back",
+          "key": "r",
+          "label": "(R) Rename Ship",
+          "action": {
+            "pycall": "rename_ship_flow"
+          }
+        },
+	  
+        {
+          "key": "q",
+          "label":  "(Q) Back to Main Menu",
           "action": {
             "back": true
           }
@@ -399,28 +404,35 @@
       "options": [
         {
           "key": "t",
-          "label": "Trade",
+            "label": "(T) Trade",
           "action": {
             "pycall": "raw_json_handler"
           }
         },
         {
+          "key": "b",
+          "label": "(B) Buy (buy)",
+          "action": {
+            "pycall": "simple_buy_handler"
+          }
+        },
+        {
           "key": "s",
-          "label": "Shipyard",
+            "label": "(S) Shipyard",
           "action": {
             "submenu": "SHIPYARD"
           }
         },
         {
           "key": "b",
-          "label": "Bank",
+            "label": "(B) Bank",
           "action": {
             "submenu": "BANK"
           }
         },
         {
-          "key": "l",
-          "label": "(L) Leave",
+          "key": "q",
+          "label": "(Q) Back to Main Menu",
           "action": {
             "back": true
           }
@@ -459,15 +471,8 @@
           }
         },
         {
-          "key": "r",
-          "label": "(R) Rename Ship",
-          "action": {
-            "pycall": "rename_ship_flow"
-          }
-        },
-        {
-          "key": "l",
-          "label": "(L) Leave",
+          "key": "q",
+          "label": "(Q) Back to Main Menu",
           "action": {
             "back": true
           }
@@ -479,7 +484,7 @@
       "options": [
         {
           "key": "d",
-          "label": "Deposit",
+            "label": "(D) Deposit",
           "action": {
             "rpc": {
               "command": "dock.bank.deposit",
@@ -491,7 +496,7 @@
         },
         {
           "key": "t",
-          "label": "Transfer funds",
+            "label": "(T) Transfer funds",
           "action": {
             "rpc": {
               "command": "dock.bank.transfer",
@@ -504,7 +509,7 @@
         },
         {
           "key": "w",
-          "label": "Withdraw",
+            "label": "(W) Withdraw",
           "action": {
             "rpc": {
               "command": "dock.bank.withdraw",
@@ -515,8 +520,8 @@
           }
         },
         {
-          "key": "l",
-          "label": "Leave",
+          "key": "q",
+          "label": "(Q) Back to Main Menu",
           "action": {
             "back": true
           }
@@ -528,7 +533,7 @@
       "options": [
         {
           "key": "d",
-          "label": "Display status",
+            "label": "(D) Display status",
           "action": {
             "rpc": {
               "command": "game.status",
@@ -537,8 +542,8 @@
           }
         },
         {
-          "key": "b",
-          "label": "Back",
+          "key": "q",
+          "label": "(Q) Back to Main Menu",
           "action": {
             "back": true
           }

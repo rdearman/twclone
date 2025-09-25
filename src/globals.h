@@ -10,4 +10,5 @@ extern int msgidout;
 extern int shutdown_flag;
 extern time_t next_process;
 
+
 #endif // GLOBALS_H

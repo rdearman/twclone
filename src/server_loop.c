@@ -71,8 +71,7 @@ static void handle_sector_info (int fd, json_t * root, int sector_id,
 				int player_id);
 static void send_enveloped_ok (int fd, json_t * root, const char *type,
 			       json_t * data);
-static void handle_sector_set_beacon (client_ctx_t *ctx, json_t *root);
-
+static void handle_sector_set_beacon (client_ctx_t * ctx, json_t * root);
 
 
 /* Provided elsewhere; needed here for correct prototype */
@@ -1199,6 +1198,153 @@ process_message (client_ctx_t *ctx, json_t *root)
     trade_port_info_done:
       json_decref (root);
     }
+  else if (strcmp (c, "ship.inspect") == 0)
+    {
+      if (ctx->player_id <= 0)
+	{
+	  send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated",
+				  NULL);
+	}
+      else
+	{
+	  /* Which sector? default to session sector; allow override via data.sector_id */
+	  int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 1;
+	  json_t *jdata = json_object_get (root, "data");
+	  if (json_is_object (jdata))
+	    {
+	      json_t *jsec = json_object_get (jdata, "sector_id");
+	      if (json_is_integer (jsec))
+		{
+		  int s = (int) json_integer_value (jsec);
+		  if (s > 0)
+		    sector_id = s;
+		}
+	    }
+
+	  json_t *ships = NULL;
+	  int rc =
+	    db_ships_inspectable_at_sector_json (ctx->player_id, sector_id,
+						 &ships);
+	  if (rc != SQLITE_OK || !ships)
+	    {
+	      send_enveloped_error (ctx->fd, root, 1500, "Database error");
+	    }
+	  else
+	    {
+	      json_t *payload = json_pack ("{s:i s:o}", "sector", sector_id, "ships", ships);	/* takes ownership */
+	      send_enveloped_ok (ctx->fd, root, "ship.inspect", payload);
+	      json_decref (payload);
+	    }
+	}
+    }
+
+  else if (strcmp (c, "ship.rename") == 0
+	   || strcmp (c, "ship.reregister") == 0)
+    {
+      if (ctx->player_id <= 0)
+	{
+	  send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated",
+				  NULL);
+	}
+      else
+	{
+	  int ship_id = 0;
+	  const char *new_name = NULL;
+	  json_t *jdata = json_object_get (root, "data");
+	  if (json_is_object (jdata))
+	    {
+	      json_t *js = json_object_get (jdata, "ship_id");
+	      if (json_is_integer (js))
+		ship_id = (int) json_integer_value (js);
+	      json_t *jn = json_object_get (jdata, "new_name");
+	      if (json_is_string (jn))
+		new_name = json_string_value (jn);
+	    }
+
+	  if (ship_id <= 0 || !new_name || !*new_name)
+	    {
+	      send_enveloped_error (ctx->fd, root, 1301,
+				    "Missing required field");
+	    }
+	  else
+	    {
+	      int rc =
+		db_ship_rename_if_owner (ctx->player_id, ship_id, new_name);
+	      if (rc == SQLITE_OK)
+		{
+		  json_t *data =
+		    json_pack ("{s:i s:s}", "ship_id", ship_id, "name",
+			       new_name);
+		  send_enveloped_ok (ctx->fd, root, "ship.renamed", data);
+		  json_decref (data);
+		}
+	      else if (rc == SQLITE_CONSTRAINT)
+		{
+		  send_enveloped_refused (ctx->fd, root, 1111,
+					  "Permission denied", NULL);
+		}
+	      else
+		{
+		  send_enveloped_error (ctx->fd, root, 1500,
+					"Database error");
+		}
+	    }
+	}
+    }
+
+  else if (strcmp (c, "ship.claim") == 0)
+    {
+      if (ctx->player_id <= 0)
+	{
+	  send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated",
+				  NULL);
+	}
+      else
+	{
+	  /* parse target ship_id from data */
+	  int ship_id = 0;
+	  int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 1;
+
+	  json_t *jdata = json_object_get (root, "data");
+	  if (json_is_object (jdata))
+	    {
+	      json_t *js = json_object_get (jdata, "ship_id");
+	      if (json_is_integer (js))
+		ship_id = (int) json_integer_value (js);
+	      json_t *jsec = json_object_get (jdata, "sector_id");
+	      if (json_is_integer (jsec))
+		{
+		  int s = (int) json_integer_value (jsec);
+		  if (s > 0)
+		    sector_id = s;
+		}
+	    }
+
+	  if (ship_id <= 0)
+	    {
+	      send_enveloped_refused (ctx->fd, root, 1103, "No ship selected",
+				      NULL);
+	    }
+	  else
+	    {
+	      json_t *ship = NULL;
+	      int rc =
+		db_ship_claim (ctx->player_id, sector_id, ship_id, &ship);
+	      if (rc == SQLITE_OK && ship)
+		{
+		  json_t *payload = json_pack ("{s:o}", "ship", ship);	/* takes ref */
+		  send_enveloped_ok (ctx->fd, root, "ship.claim", payload);
+		  json_decref (payload);
+		}
+	      else
+		{
+		  send_enveloped_refused (ctx->fd, root, 1104,
+					  "Ship not claimable", NULL);
+		}
+	    }
+	}
+    }
+
 
   else if (strcmp (c, "ship.info") == 0 || strcmp (c, "ship.status") == 0)
     {
@@ -1744,13 +1890,14 @@ handle_sector_info (int fd, json_t *root, int sector_id, int player_id)
       json_object_set_new (payload, "ports_count",
 			   json_integer (json_array_size (ports)));
     }
- 
+
   // Add planet info
   json_t *planets = NULL;
   int plt = db_planets_at_sector_json (sector_id, &planets);
   if (plt == SQLITE_OK)
     {
-      json_object_set_new (payload, "planets", planets ? planets : json_array ());
+      json_object_set_new (payload, "planets",
+			   planets ? planets : json_array ());
       json_object_set_new (payload, "planets_count",
 			   json_integer (json_array_size (planets)));
     }
@@ -1760,7 +1907,8 @@ handle_sector_info (int fd, json_t *root, int sector_id, int player_id)
   int py = db_players_at_sector_json (sector_id, &players);
   if (py == SQLITE_OK)
     {
-      json_object_set_new (payload, "players", players ? players : json_array ());
+      json_object_set_new (payload, "players",
+			   players ? players : json_array ());
       json_object_set_new (payload, "players_count",
 			   json_integer (json_array_size (players)));
     }
@@ -1774,36 +1922,44 @@ handle_sector_info (int fd, json_t *root, int sector_id, int player_id)
 static void
 handle_sector_set_beacon (client_ctx_t *ctx, json_t *root)
 {
-  if (!ctx || !root) return;
+  if (!ctx || !root)
+    return;
 
-  json_t *jdata      = json_object_get (root, "data");
+  json_t *jdata = json_object_get (root, "data");
   json_t *jsector_id = json_object_get (jdata, "sector_id");
-  json_t *jtext      = json_object_get (jdata, "text");
+  json_t *jtext = json_object_get (jdata, "text");
 
   /* Guard 0: schema */
-  if (!json_is_integer (jsector_id) || !json_is_string (jtext)) {
-    send_enveloped_error (ctx->fd, root, 1300, "Invalid request schema");
-    return;
-  }
+  if (!json_is_integer (jsector_id) || !json_is_string (jtext))
+    {
+      send_enveloped_error (ctx->fd, root, 1300, "Invalid request schema");
+      return;
+    }
 
   /* Guard 1: player must be in that sector */
-  int req_sector_id = (int)json_integer_value (jsector_id);
-  if (ctx->sector_id != req_sector_id) {
-    send_enveloped_error (ctx->fd, root, 1400, "Player is not in the specified sector.");
-    return;
-  }
+  int req_sector_id = (int) json_integer_value (jsector_id);
+  if (ctx->sector_id != req_sector_id)
+    {
+      send_enveloped_error (ctx->fd, root, 1400,
+			    "Player is not in the specified sector.");
+      return;
+    }
 
   /* Guard 2: FedSpace 1–10 is forbidden */
-  if (req_sector_id >= 1 && req_sector_id <= 10) {
-    send_enveloped_error (ctx->fd, root, 1403, "Cannot set a beacon in FedSpace.");
-    return;
-  }
+  if (req_sector_id >= 1 && req_sector_id <= 10)
+    {
+      send_enveloped_error (ctx->fd, root, 1403,
+			    "Cannot set a beacon in FedSpace.");
+      return;
+    }
 
   /* Guard 3: player must have a beacon on the ship */
-  if (!db_player_has_beacon_on_ship (ctx->player_id)) {
-    send_enveloped_error (ctx->fd, root, 1401, "Player does not have a beacon on their ship.");
-    return;
-  }
+  if (!db_player_has_beacon_on_ship (ctx->player_id))
+    {
+      send_enveloped_error (ctx->fd, root, 1401,
+			    "Player does not have a beacon on their ship.");
+      return;
+    }
 
   /* NOTE: Canon behavior: if a beacon already exists, launching another destroys BOTH.
      So we DO NOT reject here. We only check 'had_beacon' to craft a user message. */
@@ -1811,85 +1967,107 @@ handle_sector_set_beacon (client_ctx_t *ctx, json_t *root)
 
   /* Text length guard (<=80) */
   const char *beacon_text = json_string_value (jtext);
-  if (!beacon_text) beacon_text = "";
-  if ((int)strlen (beacon_text) > 80) {
-    send_enveloped_error (ctx->fd, root, 1400, "Beacon text is too long (max 80 characters).");
-    return;
-  }
+  if (!beacon_text)
+    beacon_text = "";
+  if ((int) strlen (beacon_text) > 80)
+    {
+      send_enveloped_error (ctx->fd, root, 1400,
+			    "Beacon text is too long (max 80 characters).");
+      return;
+    }
 
   /* Perform the update:
      - if none existed → set text
      - if one existed  → clear (explode both) */
   int rc = db_sector_set_beacon (req_sector_id, beacon_text);
-  if (rc != SQLITE_OK) {
-    send_enveloped_error (ctx->fd, root, 1500, "Database error updating beacon.");
-    return;
-  }
+  if (rc != SQLITE_OK)
+    {
+      send_enveloped_error (ctx->fd, root, 1500,
+			    "Database error updating beacon.");
+      return;
+    }
 
   /* Consume the player's beacon (canon: you used it either way) */
   db_player_decrement_beacon_count (ctx->player_id);
 
   /* ===== Build sector.info payload (same fields as handle_sector_info) ===== */
   json_t *payload = build_sector_info_json (req_sector_id);
-  if (!payload) {
-    send_enveloped_error (ctx->fd, root, 1500, "Out of memory building sector info");
-    return;
-  }
+  if (!payload)
+    {
+      send_enveloped_error (ctx->fd, root, 1500,
+			    "Out of memory building sector info");
+      return;
+    }
 
   /* Beacon text */
   char *btxt = NULL;
-  if (db_sector_beacon_text (req_sector_id, &btxt) == SQLITE_OK && btxt && *btxt) {
-    json_object_set_new (payload, "beacon", json_string (btxt));
-    json_object_set_new (payload, "has_beacon", json_true ());
-  } else {
-    json_object_set_new (payload, "beacon", json_null ());
-    json_object_set_new (payload, "has_beacon", json_false ());
-  }
+  if (db_sector_beacon_text (req_sector_id, &btxt) == SQLITE_OK && btxt
+      && *btxt)
+    {
+      json_object_set_new (payload, "beacon", json_string (btxt));
+      json_object_set_new (payload, "has_beacon", json_true ());
+    }
+  else
+    {
+      json_object_set_new (payload, "beacon", json_null ());
+      json_object_set_new (payload, "has_beacon", json_false ());
+    }
   free (btxt);
 
   /* Ships */
   json_t *ships = NULL;
   rc = db_ships_at_sector_json (ctx->player_id, req_sector_id, &ships);
-  if (rc == SQLITE_OK) {
-    json_object_set_new (payload, "ships", ships ? ships : json_array ());
-    json_object_set_new (payload, "ships_count", json_integer ((int)json_array_size (ships)));
-  }
+  if (rc == SQLITE_OK)
+    {
+      json_object_set_new (payload, "ships", ships ? ships : json_array ());
+      json_object_set_new (payload, "ships_count",
+			   json_integer ((int) json_array_size (ships)));
+    }
 
   /* Ports */
   json_t *ports = NULL;
   int pt = db_ports_at_sector_json (req_sector_id, &ports);
-  if (pt == SQLITE_OK) {
-    json_object_set_new (payload, "ports", ports ? ports : json_array ());
-    json_object_set_new (payload, "ports_count", json_integer ((int)json_array_size (ports)));
-  }
+  if (pt == SQLITE_OK)
+    {
+      json_object_set_new (payload, "ports", ports ? ports : json_array ());
+      json_object_set_new (payload, "ports_count",
+			   json_integer ((int) json_array_size (ports)));
+    }
 
   /* Planets */
   json_t *planets = NULL;
   int plt = db_planets_at_sector_json (req_sector_id, &planets);
-  if (plt == SQLITE_OK) {
-    json_object_set_new (payload, "planets", planets ? planets : json_array ());
-    json_object_set_new (payload, "planets_count", json_integer ((int)json_array_size (planets)));
-  }
+  if (plt == SQLITE_OK)
+    {
+      json_object_set_new (payload, "planets",
+			   planets ? planets : json_array ());
+      json_object_set_new (payload, "planets_count",
+			   json_integer ((int) json_array_size (planets)));
+    }
 
   /* Players */
   json_t *players = NULL;
   int py = db_players_at_sector_json (req_sector_id, &players);
-  if (py == SQLITE_OK) {
-    json_object_set_new (payload, "players", players ? players : json_array ());
-    json_object_set_new (payload, "players_count", json_integer ((int)json_array_size (players)));
-  }
+  if (py == SQLITE_OK)
+    {
+      json_object_set_new (payload, "players",
+			   players ? players : json_array ());
+      json_object_set_new (payload, "players_count",
+			   json_integer ((int) json_array_size (players)));
+    }
 
   /* ===== Send envelope with a nice meta.message ===== */
   json_t *env = make_base_envelope (root);
   json_object_set_new (env, "status", json_string ("ok"));
   json_object_set_new (env, "type", json_string ("sector.info"));
-  json_object_set_new (env, "data", payload); /* take ownership */
+  json_object_set_new (env, "data", payload);	/* take ownership */
 
   json_t *meta = json_object ();
   json_object_set_new (meta, "message",
-    json_string (had_beacon
-      ? "Two marker beacons collided and exploded — the sector now has no beacon."
-      : "Beacon deployed."));
+		       json_string (had_beacon
+				    ?
+				    "Two marker beacons collided and exploded — the sector now has no beacon."
+				    : "Beacon deployed."));
   json_object_set_new (env, "meta", meta);
 
   attach_rate_limit_meta (env, ctx);

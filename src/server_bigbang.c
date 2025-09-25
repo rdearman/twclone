@@ -691,12 +691,12 @@ bigbang (void)
 
   printf ("BIGBANG: Chaining isolated sectors and bridges...\n");
   // After all sectors/warps are generated:
-  int ferringhi = db_chain_traps_and_bridge(10);  // 1..10 are FedSpace by convention
+  int ferringhi = db_chain_traps_and_bridge (10);	// 1..10 are FedSpace by convention
   // It returns the first isolated sector it found. So we pass that to the
   // create_ferringhi function which will use it if it isn't equal to zero and
   // the create_ferringhi function can't find a long tunnel.
   // might want to change that later. 
- 
+
   fprintf (stderr, "BIGBANG: Creating ports...\n");
   if (create_ports () != 0)
     {
@@ -1274,8 +1274,11 @@ create_ports (void)
 int
 create_ferringhi (int ferringhi_sector)
 {
-  if (ferringhi_sector == 0) { ferringhi_sector = 20; } // just make it a default value
-  
+  if (ferringhi_sector == 0)
+    {
+      ferringhi_sector = 20;
+    }				// just make it a default value
+
   sqlite3 *db = db_get_handle ();
   if (!db)
     {

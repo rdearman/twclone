@@ -91,9 +91,9 @@ background_maint (void *threadinfo)
 		  if (planets[loop]->citdl->upgradestart != 0)
 		    {
 		      if ((curtime - planets[loop]->citdl->upgradestart) >
-			  (planets[loop]->pClass->
-			   citadelUpgradeTime[planets[loop]->citdl->level] *
-			   (24 * 3600)))
+			  (planets[loop]->
+			   pClass->citadelUpgradeTime[planets[loop]->citdl->
+						      level] * (24 * 3600)))
 			{
 			  planets[loop]->citdl->upgradestart = 0;
 			  planets[loop]->citdl->level =
@@ -191,9 +191,9 @@ background_maint (void *threadinfo)
 		  if (planets[loop]->citdl->upgradestart != 0)
 		    {
 		      if ((curtime - planets[loop]->citdl->upgradestart) >
-			  (planets[loop]->pClass->
-			   citadelUpgradeTime[planets[loop]->citdl->level] *
-			   (24 * 3600)))
+			  (planets[loop]->
+			   pClass->citadelUpgradeTime[planets[loop]->citdl->
+						      level] * (24 * 3600)))
 			{
 			  planets[loop]->citdl->upgradestart = 0;
 			  planets[loop]->citdl->level =
