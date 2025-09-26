@@ -10,6 +10,7 @@
 /* Auth */
 #define ERR_NOT_AUTHENTICATED  1401	/* REFUSED if action requires auth */
 #define ERR_INVALID_CREDENTIAL 1220
+#define AUTH_ERR_IS_NPC	       1221	
 
 /* Movement / rules */
 #define REF_NO_WARP_LINK       1402	/* REFUSED */
