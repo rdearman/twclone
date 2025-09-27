@@ -128,18 +128,21 @@ am_client_OBJECTS = ../src/globals.$(OBJEXT) ../src/database.$(OBJEXT) \
 	../src/parse.$(OBJEXT)
 client_OBJECTS = $(am_client_OBJECTS)
 client_DEPENDENCIES =
-am_server_OBJECTS = ../src/server_main.$(OBJEXT) \
-	../src/server_cmds.$(OBJEXT) ../src/server_ships.$(OBJEXT) \
-	../src/namegen.$(OBJEXT) ../src/server_loop.$(OBJEXT) \
-	../src/server_universe.$(OBJEXT) \
-	../src/server_bigbang.$(OBJEXT) ../src/globals.$(OBJEXT) \
-	../src/database.$(OBJEXT) ../src/schemas.$(OBJEXT) \
-	../src/server_config.$(OBJEXT) \
+am_server_OBJECTS = ../src/server_bigbang.$(OBJEXT) \
+	../src/server_cmds.$(OBJEXT) ../src/server_envelope.$(OBJEXT) \
+	../src/server_auth.$(OBJEXT) ../src/server_config.$(OBJEXT) \
+	../src/server_engine.$(OBJEXT) ../src/server_loop.$(OBJEXT) \
+	../src/server_main.$(OBJEXT) ../src/server_planets.$(OBJEXT) \
+	../src/server_players.$(OBJEXT) ../src/server_ports.$(OBJEXT) \
+	../src/server_ships.$(OBJEXT) ../src/server_universe.$(OBJEXT) \
 	../src/server_warp_post_processing.$(OBJEXT) \
+	../src/namegen.$(OBJEXT) ../src/globals.$(OBJEXT) \
+	../src/database.$(OBJEXT) ../src/schemas.$(OBJEXT) \
 	../src/common.$(OBJEXT)
 server_OBJECTS = $(am_server_OBJECTS)
 server_DEPENDENCIES =
 am_test_bang_OBJECTS = ../src/database.$(OBJEXT) \
+	../src/schemas.$(OBJEXT) ../src/server_envelope.$(OBJEXT) \
 	../src/namegen.$(OBJEXT) ../src/server_bigbang.$(OBJEXT) \
 	../src/server_config.$(OBJEXT) \
 	../src/server_warp_post_processing.$(OBJEXT) \
@@ -166,11 +169,17 @@ am__depfiles_remade = ../src/$(DEPDIR)/client.Po \
 	../src/$(DEPDIR)/common.Po ../src/$(DEPDIR)/database.Po \
 	../src/$(DEPDIR)/globals.Po ../src/$(DEPDIR)/namegen.Po \
 	../src/$(DEPDIR)/parse.Po ../src/$(DEPDIR)/schemas.Po \
+	../src/$(DEPDIR)/server_auth.Po \
 	../src/$(DEPDIR)/server_bigbang.Po \
 	../src/$(DEPDIR)/server_cmds.Po \
 	../src/$(DEPDIR)/server_config.Po \
+	../src/$(DEPDIR)/server_engine.Po \
+	../src/$(DEPDIR)/server_envelope.Po \
 	../src/$(DEPDIR)/server_loop.Po \
 	../src/$(DEPDIR)/server_main.Po \
+	../src/$(DEPDIR)/server_planets.Po \
+	../src/$(DEPDIR)/server_players.Po \
+	../src/$(DEPDIR)/server_ports.Po \
 	../src/$(DEPDIR)/server_ships.Po \
 	../src/$(DEPDIR)/server_universe.Po \
 	../src/$(DEPDIR)/server_warp_post_processing.Po \
@@ -325,22 +334,30 @@ client_SOURCES = \
 	../src/parse.c
 
 server_SOURCES = \
-	../src/server_main.c \
-	../src/server_cmds.c \
-	../src/server_ships.c \
-	../src/namegen.c \
-	../src/server_loop.c \
-	../src/server_universe.c \
 	../src/server_bigbang.c \
+	../src/server_cmds.c \
+	../src/server_envelope.c \
+	../src/server_auth.c \
+	../src/server_config.c \
+	../src/server_engine.c \
+	../src/server_loop.c \
+	../src/server_main.c \
+	../src/server_planets.c \
+	../src/server_players.c \
+	../src/server_ports.c \
+	../src/server_ships.c \
+	../src/server_universe.c \
+	../src/server_warp_post_processing.c \
+	../src/namegen.c \
 	../src/globals.c \
 	../src/database.c \
 	../src/schemas.c \
-	../src/server_config.c \
-	../src/server_warp_post_processing.c \
 	../src/common.c
 
 test_bang_SOURCES = \
 	../src/database.c \
+	../src/schemas.c \
+	../src/server_envelope.c \
 	../src/namegen.c \
 	../src/server_bigbang.c \
 	../src/server_config.c \
@@ -444,25 +461,37 @@ clean-binPROGRAMS:
 client$(EXEEXT): $(client_OBJECTS) $(client_DEPENDENCIES) $(EXTRA_client_DEPENDENCIES) 
 	@rm -f client$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(client_OBJECTS) $(client_LDADD) $(LIBS)
-../src/server_main.$(OBJEXT): ../src/$(am__dirstamp) \
+../src/server_bigbang.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_cmds.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/server_ships.$(OBJEXT): ../src/$(am__dirstamp) \
+../src/server_envelope.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/namegen.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/server_loop.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/server_universe.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/server_bigbang.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/schemas.$(OBJEXT): ../src/$(am__dirstamp) \
+../src/server_auth.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_config.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_engine.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_loop.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_main.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_planets.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_players.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_ports.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_ships.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_universe.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_warp_post_processing.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
+../src/namegen.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
+../src/schemas.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 
 server$(EXEEXT): $(server_OBJECTS) $(server_DEPENDENCIES) $(EXTRA_server_DEPENDENCIES) 
@@ -489,11 +518,17 @@ include ../src/$(DEPDIR)/globals.Po # am--include-marker
 include ../src/$(DEPDIR)/namegen.Po # am--include-marker
 include ../src/$(DEPDIR)/parse.Po # am--include-marker
 include ../src/$(DEPDIR)/schemas.Po # am--include-marker
+include ../src/$(DEPDIR)/server_auth.Po # am--include-marker
 include ../src/$(DEPDIR)/server_bigbang.Po # am--include-marker
 include ../src/$(DEPDIR)/server_cmds.Po # am--include-marker
 include ../src/$(DEPDIR)/server_config.Po # am--include-marker
+include ../src/$(DEPDIR)/server_engine.Po # am--include-marker
+include ../src/$(DEPDIR)/server_envelope.Po # am--include-marker
 include ../src/$(DEPDIR)/server_loop.Po # am--include-marker
 include ../src/$(DEPDIR)/server_main.Po # am--include-marker
+include ../src/$(DEPDIR)/server_planets.Po # am--include-marker
+include ../src/$(DEPDIR)/server_players.Po # am--include-marker
+include ../src/$(DEPDIR)/server_ports.Po # am--include-marker
 include ../src/$(DEPDIR)/server_ships.Po # am--include-marker
 include ../src/$(DEPDIR)/server_universe.Po # am--include-marker
 include ../src/$(DEPDIR)/server_warp_post_processing.Po # am--include-marker
@@ -656,11 +691,17 @@ distclean: distclean-am
 	-rm -f ../src/$(DEPDIR)/namegen.Po
 	-rm -f ../src/$(DEPDIR)/parse.Po
 	-rm -f ../src/$(DEPDIR)/schemas.Po
+	-rm -f ../src/$(DEPDIR)/server_auth.Po
 	-rm -f ../src/$(DEPDIR)/server_bigbang.Po
 	-rm -f ../src/$(DEPDIR)/server_cmds.Po
 	-rm -f ../src/$(DEPDIR)/server_config.Po
+	-rm -f ../src/$(DEPDIR)/server_engine.Po
+	-rm -f ../src/$(DEPDIR)/server_envelope.Po
 	-rm -f ../src/$(DEPDIR)/server_loop.Po
 	-rm -f ../src/$(DEPDIR)/server_main.Po
+	-rm -f ../src/$(DEPDIR)/server_planets.Po
+	-rm -f ../src/$(DEPDIR)/server_players.Po
+	-rm -f ../src/$(DEPDIR)/server_ports.Po
 	-rm -f ../src/$(DEPDIR)/server_ships.Po
 	-rm -f ../src/$(DEPDIR)/server_universe.Po
 	-rm -f ../src/$(DEPDIR)/server_warp_post_processing.Po
@@ -717,11 +758,17 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/$(DEPDIR)/namegen.Po
 	-rm -f ../src/$(DEPDIR)/parse.Po
 	-rm -f ../src/$(DEPDIR)/schemas.Po
+	-rm -f ../src/$(DEPDIR)/server_auth.Po
 	-rm -f ../src/$(DEPDIR)/server_bigbang.Po
 	-rm -f ../src/$(DEPDIR)/server_cmds.Po
 	-rm -f ../src/$(DEPDIR)/server_config.Po
+	-rm -f ../src/$(DEPDIR)/server_engine.Po
+	-rm -f ../src/$(DEPDIR)/server_envelope.Po
 	-rm -f ../src/$(DEPDIR)/server_loop.Po
 	-rm -f ../src/$(DEPDIR)/server_main.Po
+	-rm -f ../src/$(DEPDIR)/server_planets.Po
+	-rm -f ../src/$(DEPDIR)/server_players.Po
+	-rm -f ../src/$(DEPDIR)/server_ports.Po
 	-rm -f ../src/$(DEPDIR)/server_ships.Po
 	-rm -f ../src/$(DEPDIR)/server_universe.Po
 	-rm -f ../src/$(DEPDIR)/server_warp_post_processing.Po

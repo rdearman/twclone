@@ -24,6 +24,10 @@
 #include "server_cmds.h"
 #include "server_ships.h"
 #include "common.h"
+#include "server_envelope.h"
+#include "server_players.h"
+#include "server_ports.h"   // at top of server_loop.c
+#include "server_auth.h"
 
 
 #define LISTEN_PORT 1234
@@ -41,7 +45,7 @@ static _Atomic uint64_t g_conn_seq = 0;
 static _Atomic uint64_t g_msg_seq = 0;
 static __thread client_ctx_t *g_ctx_for_send = NULL;
 /* forward declaration to avoid implicit extern */
- void send_all_json (int fd, json_t * obj);
+void send_all_json (int fd, json_t * obj);
 int db_player_info_json (int player_id, json_t ** out);
 /* rate-limit helper prototypes (defined later) */
  void attach_rate_limit_meta (json_t * env, client_ctx_t * ctx);
@@ -55,14 +59,14 @@ int db_beacons_at_sector_json (int sector_id, json_t ** out_array);
 int db_planets_at_sector_json (int sector_id, json_t ** out_array);
 int db_player_set_sector (int player_id, int sector_id);
 int db_player_get_sector (int player_id, int *out_sector);
- void handle_sector_info (int fd, json_t * root, int sector_id,
+void handle_sector_info (int fd, json_t * root, int sector_id,
 				int player_id);
- void send_enveloped_ok (int fd, json_t * root, const char *type,
-			       json_t * data);
- void handle_sector_set_beacon (client_ctx_t * ctx, json_t * root);
+void handle_sector_set_beacon (client_ctx_t * ctx, json_t * root);
 /* Fast sector scan handler (IDs+counts only) */
- void handle_move_scan (client_ctx_t *ctx, json_t *root);
+void handle_move_scan (client_ctx_t *ctx, json_t *root);
 void handle_move_pathfind (client_ctx_t *ctx, json_t *root);
+void send_enveloped_ok (int fd, json_t * root, const char *type,
+			       json_t * data);
 
 
 /* Provided elsewhere; needed here for correct prototype */
@@ -72,58 +76,7 @@ void handle_move_pathfind (client_ctx_t *ctx, json_t *root);
 /* Helpers for session endpoints */
 /* ----------------------------- */
 
-// Define the handler function
-static void
-handle_system_capabilities (int fd, json_t *root)
-{
-  send_enveloped_ok (fd, root, "system.capabilities",
-		     json_incref (g_capabilities));
-}
 
-static json_t *
-make_session_hello_payload (int is_authed, int player_id, int sector_id)
-{
-  return json_pack ("{s:s s:i s:o s:o s:o}",
-		    "protocol_version", "1.0",
-		    "server_time_unix", (int) time (NULL),
-		    "authenticated", is_authed ? json_true () : json_false (),
-		    "player_id", (is_authed
-				  && player_id >
-				  0) ? json_integer (player_id) :
-		    json_null (), "current_sector", (is_authed
-						     && sector_id >
-						     0) ?
-		    json_integer (sector_id) : json_null ());
-}
-
-static int
-resolve_current_sector_from_info (json_t *info_obj, int fallback)
-{
-  if (!json_is_object (info_obj))
-    return fallback;
-
-  /* Preferred flat field */
-  json_t *j = json_object_get (info_obj, "current_sector");
-  if (json_is_integer (j))
-    return (int) json_integer_value (j);
-
-  /* Common alternates */
-  json_t *ship = json_object_get (info_obj, "ship");
-  if (json_is_object (ship))
-    {
-      j = json_object_get (ship, "sector_id");
-      if (json_is_integer (j))
-	return (int) json_integer_value (j);
-    }
-  json_t *player = json_object_get (info_obj, "player");
-  if (json_is_object (player))
-    {
-      j = json_object_get (player, "sector_id");
-      if (json_is_integer (j))
-	return (int) json_integer_value (j);
-    }
-  return fallback;
-}
 
 
 
@@ -156,8 +109,7 @@ hex64 (uint64_t v, char out[17])
 }
 
 /* Canonicalize a JSON object (sorted keys, compact) then FNV-1a */
-static void
-idemp_fingerprint_json (json_t *obj, char out[17])
+void idemp_fingerprint_json (json_t *obj, char out[17])
 {
   char *s = json_dumps (obj, JSON_COMPACT | JSON_SORT_KEYS);
   if (!s)
@@ -239,232 +191,6 @@ send_all (int fd, const void *buf, size_t n)
 }
 
 /* ------------------------ JSON reply helpers ------------------------ */
-
-/* RFC3339 UTC "YYYY-MM-DDThh:mm:ssZ" (seconds precision) */
-static void
-iso8601_utc (char out[32])
-{
-  time_t now = time (NULL);
-  struct tm tm;
-  gmtime_r (&now, &tm);
-  strftime (out, 32, "%Y-%m-%dT%H:%M:%SZ", &tm);
-}
-
-/* server-generated message id "srv-<seq>" */
-static void
-next_msg_id (char out[32])
-{
-  uint64_t n = atomic_fetch_add (&g_msg_seq, 1) + 1;
-  snprintf (out, 32, "srv-%" PRIu64, n);
-}
-
-/* Build base envelope: id, ts, optional reply_to */
- json_t *
-make_base_envelope (json_t *req /* may be NULL */ )
-{
-  char ts[32], mid[32];
-  iso8601_utc (ts);
-  next_msg_id (mid);
-
-  json_t *env = json_object ();
-  json_object_set_new (env, "id", json_string (mid));
-  json_object_set_new (env, "ts", json_string (ts));
-
-  if (req && json_is_object (req))
-    {
-      json_t *rid = json_object_get (req, "id");
-      if (rid && json_is_string (rid))
-	{
-	  json_object_set (env, "reply_to", rid);	/* borrow */
-	}
-    }
-  return env;			/* caller owns */
-}
-
-/* Send {"status":"error","type":"error","error":{code,message},...} (+data=null) */
- void
-send_enveloped_refused (int fd, json_t *root, int code, const char *msg,
-			json_t *data_opt)
-{
-  json_t *env = json_object ();
-  json_object_set_new (env, "id", json_string ("srv-refuse"));
-  json_object_set (env, "reply_to", json_object_get (root, "id"));
-  char ts[32];
-  iso8601_utc (ts);
-  json_object_set_new (env, "ts", json_string (ts));
-  json_object_set_new (env, "status", json_string ("refused"));
-  json_object_set_new (env, "type", json_string ("error"));
-  json_t *err =
-    json_pack ("{s:i, s:s}", "code", code, "message", msg ? msg : "");
-  json_object_set_new (env, "error", err);
-  json_object_set (env, "data", data_opt ? data_opt : json_null ());
-
-  attach_rate_limit_meta (env, g_ctx_for_send);
-  rl_tick (g_ctx_for_send);
-
-  send_all_json (fd, env);
-  json_decref (env);
-}
-
-void
-send_enveloped_ok (int fd, json_t *req, const char *type, json_t *data)
-{
-  json_t *resp = json_object();
-
-  // id/correlation
-  json_object_set_new(resp, "id", json_string("srv-ok"));
-  const char *req_id = NULL;
-  if (req && json_is_object(req)) {
-    json_t *jid = json_object_get(req, "id");
-    if (json_is_string(jid)) req_id = json_string_value(jid);
-  }
-  if (req_id) json_object_set_new(resp, "reply_to", json_string(req_id));
-
-  // timestamp
-  char tsbuf[32]; iso8601_utc(tsbuf);
-  json_object_set_new(resp, "ts", json_string(tsbuf));
-
-  // status/type
-  json_object_set_new(resp, "status", json_string("ok"));
-  json_object_set_new(resp, "type", json_string(type ? type : "ok"));
-
-  // data (attach payload; steals ref if _set_new)
-  if (data) json_object_set_new(resp, "data", data);
-  else      json_object_set_new(resp, "data", json_null());
-
-  // error is null on ok
-  json_object_set_new(resp, "error", json_null());
-
-  // meta.rate_limit (inline default so we don't need ctx here)
-  json_t *rate = json_object();
-  json_object_set_new(rate, "limit",     json_integer(60));
-  json_object_set_new(rate, "remaining", json_integer(60));
-  json_object_set_new(rate, "reset",     json_integer(60)); // seconds
-
-  json_t *meta = json_object();
-  json_object_set_new(meta, "rate_limit", rate);
-  json_object_set_new(resp, "meta", meta);
-
-  // write one line to socket
-  char *s = json_dumps(resp, JSON_COMPACT);
-  if (s) {
-    size_t len = strlen(s);
-    if (len) (void)write(fd, s, len);
-    (void)write(fd, "\n", 1);
-    free(s);
-  }
-  json_decref(resp);
-}
-
-void
-send_enveloped_error (int fd, json_t *req, int code, const char *message)
-{
-  json_t *resp = json_object();
-
-  json_object_set_new(resp, "id", json_string("srv-err"));
-  const char *req_id = NULL;
-  if (req && json_is_object(req)) {
-    json_t *jid = json_object_get(req, "id");
-    if (json_is_string(jid)) req_id = json_string_value(jid);
-  }
-  if (req_id) json_object_set_new(resp, "reply_to", json_string(req_id));
-
-  char tsbuf[32]; iso8601_utc(tsbuf);
-  json_object_set_new(resp, "ts", json_string(tsbuf));
-  json_object_set_new(resp, "status", json_string("error"));
-  json_object_set_new(resp, "type", json_string("error"));
-
-  json_t *err = json_object();
-  json_object_set_new(err, "code", json_integer(code));
-  json_object_set_new(err, "message", json_string(message ? message : "Error"));
-  json_object_set_new(resp, "error", err);
-
-  json_object_set_new(resp, "data", json_null());
-
-  // meta.rate_limit default
-  json_t *rate = json_object();
-  json_object_set_new(rate, "limit",     json_integer(60));
-  json_object_set_new(rate, "remaining", json_integer(60));
-  json_object_set_new(rate, "reset",     json_integer(60));
-
-  json_t *meta = json_object();
-  json_object_set_new(meta, "rate_limit", rate);
-  json_object_set_new(resp, "meta", meta);
-
-  char *s = json_dumps(resp, JSON_COMPACT);
-  if (s) {
-    size_t len = strlen(s);
-    if (len) (void)write(fd, s, len);
-    (void)write(fd, "\n", 1);
-    free(s);
-  }
-  json_decref(resp);
-}
-
-
- void
-send_all_json (int fd, json_t *obj)
-{
-  char *s = json_dumps (obj, JSON_COMPACT);
-  if (s)
-    {
-      (void) send_all (fd, s, strlen (s));
-      (void) send_all (fd, "\n", 1);
-      free (s);
-    }
-}
-
- void
-send_error_json (int fd, int code, const char *msg)
-{
-  json_t *o = json_object ();
-  json_object_set_new (o, "status", json_string ("error"));
-  json_object_set_new (o, "code", json_integer (code));
-  json_object_set_new (o, "error", json_string (msg));
-  send_all_json (fd, o);
-  json_decref (o);
-}
-
- void
-send_ok_json (int fd, json_t *data /* may be NULL */ )
-{
-  json_t *o = json_object ();
-  json_object_set_new (o, "status", json_string ("OK"));
-  if (data)
-    json_object_set (o, "data", data);	/* borrowed */
-  send_all_json (fd, o);
-  json_decref (o);
-}
-
-
-
-/* Build a minimal, stable JSON for fingerprinting (cmd + data subset) */
-static json_t *
-build_trade_buy_fp_obj (const char *cmd, json_t *jdata)
-{
-  /* Expect: port_id (int), commodity (str), quantity (int).
-     Ignore meta and unrelated keys. */
-  json_t *fp = json_object ();
-  json_object_set_new (fp, "command", json_string (cmd));
-
-  int port_id = 0, qty = 0;
-  const char *commodity = NULL;
-  json_t *jport = json_object_get (jdata, "port_id");
-  json_t *jcomm = json_object_get (jdata, "commodity");
-  json_t *jqty = json_object_get (jdata, "quantity");
-  if (json_is_integer (jport))
-    port_id = (int) json_integer_value (jport);
-  if (json_is_integer (jqty))
-    qty = (int) json_integer_value (jqty);
-  if (json_is_string (jcomm))
-    commodity = json_string_value (jcomm);
-
-  json_object_set_new (fp, "port_id", json_integer (port_id));
-  json_object_set_new (fp, "quantity", json_integer (qty));
-  json_object_set_new (fp, "commodity",
-		       json_string (commodity ? commodity : ""));
-  return fp;			/* caller must json_decref */
-}
 
 
 /* Return REFUSED(1402) if no link; otherwise OK.
@@ -762,153 +488,33 @@ process_message (client_ctx_t *ctx, json_t *root)
   ctx->rl_count = 0;
 
   const char *c = json_string_value (cmd);
-
-  /* ----------------------- */
-  /* Session ping / handshake */
-  /* ----------------------- */
-
-  // Check for the new command before others
-  if (strcmp (c, "system.capabilities") == 0)
-    {
-      handle_system_capabilities (ctx->fd, root);
-    }
-  else if (strcmp (c, "session.ping") == 0)
-    {
-      /* Echo back whatever is in data (or {}) */
-      json_t *jdata = json_object_get (root, "data");
-      json_t *echo =
-	json_is_object (jdata) ? json_incref (jdata) : json_object ();
-      send_enveloped_ok (ctx->fd, root, "session.pong", echo);
-      json_decref (echo);
-      return;
-    }
-  else if (strcmp (c, "session.hello") == 0)
-    {
-      int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 0;
-
-      if (ctx->player_id > 0)
-	{
-	  json_t *info = NULL;
-	  int rc = db_player_info_json (ctx->player_id, &info);
-	  if (rc == SQLITE_OK && info)
-	    {
-	      sector_id = resolve_current_sector_from_info (info, sector_id);
-	      json_decref (info);
-	    }
-	}
-
-      json_t *payload = make_session_hello_payload ((ctx->player_id > 0),
-						    ctx->player_id,
-						    (sector_id >
-						     0) ? sector_id : 0);
-      send_enveloped_ok (ctx->fd, root, "session.hello", payload);
-      json_decref (payload);
-      return;
-    }
-
+  int rc;
+  
   if (strcmp (c, "login") == 0 || strcmp (c, "auth.login") == 0)
     {
-      /* NEW: pull fields from the "data" object, not the root */
-      json_t *jdata = json_object_get (root, "data");
-      const char *name = NULL, *pass = NULL;
-
-      if (json_is_object (jdata))
-	{
-	  /* Accept both "user_name" (new) and "player_name" (legacy) */
-	  json_t *jname = json_object_get (jdata, "user_name");
-	  if (!json_is_string (jname))
-	    jname = json_object_get (jdata, "player_name");
-	  json_t *jpass = json_object_get (jdata, "password");
-
-	  name = json_is_string (jname) ? json_string_value (jname) : NULL;
-	  pass = json_is_string (jpass) ? json_string_value (jpass) : NULL;
-	}
-
-      if (!name || !pass)
-	{
-	  send_enveloped_error (ctx->fd, root, AUTH_ERR_BAD_REQUEST,
-				"Missing required field");
-	}
-      else
-	{
-	  int player_id = 0;
-	  int rc = play_login (name, pass, &player_id);
-	  if (rc == AUTH_OK)
-	    {
-	      /* Read canonical sector from DB; fall back to 1 if missing/NULL */
-	      int sector_id = 0;
-	      if (db_player_get_sector (player_id, &sector_id) != SQLITE_OK
-		  || sector_id <= 0)
-		sector_id = 1;
-
-	      /* Mark connection as authenticated and sync session state */
-	      ctx->player_id = player_id;
-	      ctx->sector_id = sector_id;	/* <-- set unconditionally on login */
-
-	      /* Reply with session info, including current_sector */
-	      json_t *data = json_pack ("{s:i, s:i}",
-					"player_id", player_id,
-					"current_sector", sector_id);
-	      if (!data)
-		{
-		  send_enveloped_error (ctx->fd, root, 1500, "Out of memory");
-		  return;
-		}
-	      send_enveloped_ok (ctx->fd, root, "auth.session", data);
-	      json_decref (data);
-	    }
-	  else if (rc == AUTH_ERR_INVALID_CRED)
-	    {
-	      send_enveloped_error (ctx->fd, root, AUTH_ERR_INVALID_CRED,
-				    "Invalid credentials");
-	    }
-	  else
-	    {
-	      send_enveloped_error (ctx->fd, root, AUTH_ERR_DB,
-				    "Database error");
-	    }
-	}
+       rc = cmd_auth_login(ctx, root);
     }
+  else if (!strcmp(c, "system.capabilities")) {
+     rc = cmd_system_capabilities(ctx, root);
+  }
+  else if (!strcmp(c, "system.describe_schema")) {
+     rc = cmd_system_describe_schema(ctx, root);
+  }
+  else if (!strcmp(c, "session.ping")) {
+    rc = cmd_session_ping(ctx, root);
+  }
+  else if (!strcmp(c, "session.hello")) {
+    rc = cmd_session_hello(ctx, root);
+  }
+  else if (strcmp(c, "auth.register") == 0) {
+     rc = cmd_auth_register(ctx, root);
+  }
+  else if (!strcmp(c, "auth.logout")) {
+     rc = cmd_auth_logout(ctx, root);
+  }
   else if (strcmp (c, "user.create") == 0 || strcmp (c, "new.user") == 0)
     {
-      json_t *jdata = json_object_get (root, "data");
-      const char *name = NULL, *pass = NULL;
-      if (json_is_object (jdata))
-	{
-	  json_t *jname = json_object_get (jdata, "user_name");
-	  if (!json_is_string (jname))
-	    jname = json_object_get (jdata, "player_name");
-	  json_t *jpass = json_object_get (jdata, "password");
-	  name = json_is_string (jname) ? json_string_value (jname) : NULL;
-	  pass = json_is_string (jpass) ? json_string_value (jpass) : NULL;
-	}
-
-      if (!name || !pass)
-	{
-	  send_enveloped_error (ctx->fd, root, AUTH_ERR_BAD_REQUEST,
-				"Missing required field");
-	}
-      else
-	{
-	  int player_id = 0;
-	  int rc = user_create (name, pass, &player_id);
-	  if (rc == AUTH_OK)
-	    {
-	      json_t *data = json_pack ("{s:i}", "player_id", player_id);
-	      send_enveloped_ok (ctx->fd, root, "user.created", data);
-	      json_decref (data);
-	    }
-	  else if (rc == AUTH_ERR_NAME_TAKEN)
-	    {
-	      send_enveloped_error (ctx->fd, root, AUTH_ERR_NAME_TAKEN,
-				    "Username already exists");
-	    }
-	  else
-	    {
-	      send_enveloped_error (ctx->fd, root, AUTH_ERR_DB,
-				    "Database error");
-	    }
-	}
+      rc = cmd_user_create(ctx, root);
     }
   else if (strcmp (c, "player.my_info") == 0)
     {
@@ -952,181 +558,23 @@ process_message (client_ctx_t *ctx, json_t *root)
 
       handle_sector_info (ctx->fd, root, sector_id, ctx->player_id);
     }
-  else if (strcmp (c, "trade.buy") == 0)
-    {
-      json_t *jdata = json_object_get (root, "data");
-      if (!json_is_object (jdata))
-	{
-	  send_enveloped_error (ctx->fd, root, 1301,
-				"Missing required field");
-	}
-      else
-	{
-	  /* Extract fields */
-	  json_t *jport = json_object_get (jdata, "port_id");
-	  json_t *jcomm = json_object_get (jdata, "commodity");
-	  json_t *jqty = json_object_get (jdata, "quantity");
-	  const char *commodity =
-	    json_is_string (jcomm) ? json_string_value (jcomm) : NULL;
-	  int port_id =
-	    json_is_integer (jport) ? (int) json_integer_value (jport) : 0;
-	  int qty =
-	    json_is_integer (jqty) ? (int) json_integer_value (jqty) : 0;
+  else if (strcmp(c, "port.info") == 0 || strcmp(c, "port.status") == 0) {
+     rc = cmd_port_info(ctx, root);
+  }
+  else if (strcmp(c, "trade.buy") == 0) {
+     rc = cmd_trade_buy(ctx, root);
+  }
+  else if (strcmp(c, "trade.sell") == 0) {
+    //  rc = cmd_trade_sell(ctx, root);
+  }
+  /* optional, if present in your code */
+  else if (strcmp(c, "trade.quote") == 0) {
+    //  rc = cmd_trade_quote(ctx, root);
+  }
+  else if (strcmp(c, "trade.jettison") == 0) {
+    // rc = cmd_trade_jettison(ctx, root);
+  }
 
-	  if (!commodity || port_id <= 0 || qty <= 0)
-	    {
-	      RULE_ERROR (ERR_BAD_REQUEST, "Missing required field");
-	      //              send_enveloped_error (ctx->fd, root, 1301,
-	      //                            "Missing required field");
-	      /* no idempotency processing if invalid */
-	    }
-	  else
-	    {
-	      /* Pull idempotency key if present */
-	      const char *idem_key = NULL;
-	      json_t *jmeta = json_object_get (root, "meta");
-	      if (json_is_object (jmeta))
-		{
-		  json_t *jk = json_object_get (jmeta, "idempotency_key");
-		  if (json_is_string (jk))
-		    idem_key = json_string_value (jk);
-		}
-
-	      /* Build fingerprint */
-	      char fp[17];
-	      fp[0] = 0;
-	      json_t *fpobj = build_trade_buy_fp_obj (c, jdata);
-	      idemp_fingerprint_json (fpobj, fp);
-	      json_decref (fpobj);
-
-	      if (idem_key && *idem_key)
-		{
-		  /* Try to begin idempotent op */
-		  int rc = db_idemp_try_begin (idem_key, c, fp);
-		  if (rc == SQLITE_CONSTRAINT)
-		    {
-		      /* Existing key: fetch */
-		      char *ecmd = NULL, *efp = NULL, *erst = NULL;
-		      if (db_idemp_fetch (idem_key, &ecmd, &efp, &erst) ==
-			  SQLITE_OK)
-			{
-			  int fp_match = (efp && strcmp (efp, fp) == 0);
-			  if (!fp_match)
-			    {
-			      /* Key reused with different payload */
-			      send_enveloped_error (ctx->fd, root, 1105,
-						    "Duplicate request (idempotency key reused)");
-			    }
-			  else if (erst)
-			    {
-			      /* Replay stored response exactly */
-			      json_error_t jerr;
-			      json_t *env = json_loads (erst, 0, &jerr);
-			      if (env)
-				{
-				  send_all_json (ctx->fd, env);
-				  json_decref (env);
-				}
-			      else
-				{
-				  /* Corrupt stored response; treat as server error */
-				  send_enveloped_error (ctx->fd, root, 1500,
-							"Idempotency replay error");
-				}
-			    }
-			  else
-			    {
-			      /* Record exists but no stored response (in-flight/crash before store).
-			         For now, treat as duplicate; later you could block/wait or retry op safely. */
-			      send_enveloped_error (ctx->fd, root, 1105,
-						    "Duplicate request (pending)");
-			    }
-			  free (ecmd);
-			  free (efp);
-			  free (erst);
-			  /* Done */
-			  goto done_trade_buy;
-			}
-		      else
-			{
-			  /* Couldn’t fetch; treat as server error */
-			  send_enveloped_error (ctx->fd, root, 1500,
-						"Database error");
-			  goto done_trade_buy;
-			}
-		    }
-		  else if (rc != SQLITE_OK)
-		    {
-		      send_enveloped_error (ctx->fd, root, 1500,
-					    "Database error");
-		      goto done_trade_buy;
-		    }
-		  /* If SQLITE_OK, we “own” this key now and should execute then store. */
-		}
-
-	      /* === Perform the actual operation (your existing stub) === */
-	      json_t *data = json_pack ("{s:i, s:s, s:i}",
-					"port_id", port_id,
-					"commodity", commodity,
-					"quantity", qty);
-
-	      /* Build the final envelope so we can persist exactly what we send */
-	      json_t *env = json_object ();
-	      json_object_set_new (env, "id", json_string ("srv-trade"));
-	      json_object_set (env, "reply_to", json_object_get (root, "id"));
-	      char ts[32];
-	      iso8601_utc (ts);
-	      json_object_set_new (env, "ts", json_string (ts));
-	      json_object_set_new (env, "status", json_string ("ok"));
-	    trade_buy_done:
-	      ;
-	      json_object_set_new (env, "type",
-				   json_string ("trade.accepted"));
-	      json_object_set_new (env, "data", data);
-	      json_object_set_new (env, "error", json_null ());
-
-	      /* Optional meta: signal replay=false on first-run */
-	      json_t *meta = json_object ();
-	      if (idem_key && *idem_key)
-		{
-		  json_object_set_new (meta, "idempotent_replay",
-				       json_false ());
-		  json_object_set_new (meta, "idempotency_key",
-				       json_string (idem_key));
-		}
-	      if (json_object_size (meta) > 0)
-		json_object_set_new (env, "meta", meta);
-	      else
-		json_decref (meta);
-
-	      /* If we’re idempotent, store the envelope JSON BEFORE sending */
-	      if (idem_key && *idem_key)
-		{
-		  char *env_json =
-		    json_dumps (env, JSON_COMPACT | JSON_SORT_KEYS);
-		  if (!env_json
-		      || db_idemp_store_response (idem_key,
-						  env_json) != SQLITE_OK)
-		    {
-		      if (env_json)
-			free (env_json);
-		      json_decref (env);
-		      send_enveloped_error (ctx->fd, root, 1500,
-					    "Database error");
-		      goto done_trade_buy;
-		    }
-		  free (env_json);
-		}
-
-	      /* Send */
-	      send_all_json (ctx->fd, env);
-	      json_decref (env);
-
-	    done_trade_buy:
-	      (void) 0;
-	    }
-	}
-    }
   else if (strcmp (c, "move.warp") == 0)
     {
       json_t *jdata = json_object_get (root, "data");
@@ -1178,515 +626,40 @@ process_message (client_ctx_t *ctx, json_t *root)
 	  json_decref (data);
 	}
     }
-  else if (strcmp (json_string_value (cmd), "port_info") == 0)
-    {
-      json_t *data_in = json_object_get (root, "data");
-      int port_id = -1;
-
-      // We can allow either `{"port_id":...}` or just assume the first port
-      // in the sector, as the client will do.
-      if (data_in)
-	{
-	  json_t *j_pid = json_object_get (data_in, "port_id");
-	  if (json_is_integer (j_pid))
-	    {
-	      port_id = json_integer_value (j_pid);
-	    }
-	}
-
-      if (port_id == -1)
-	{
-	  // Fallback to finding the port in the current sector
-	  json_t *ports_at_sector = NULL;
-	  db_ports_at_sector_json (ctx->sector_id, &ports_at_sector);
-	  if (ports_at_sector && json_array_size (ports_at_sector) > 0)
-	    {
-	      json_t *first_port = json_array_get (ports_at_sector, 0);
-	      json_t *first_port_id_json = json_object_get (first_port, "id");
-	      if (first_port_id_json)
-		{
-		  port_id = json_integer_value (first_port_id_json);
-		}
-	    }
-	  json_decref (ports_at_sector);
-	}
-
-      if (port_id == -1)
-	{
-	  // Still no port found.
-	  send_enveloped_refused (ctx->fd, root, ERR_BAD_STATE,
-				  "No port found in this sector.", NULL);
-	  goto trade_port_info_done;
-	}
-
-      json_t *port_info = NULL;
-      int rc = db_port_info_json (port_id, &port_info);
-      if (rc != SQLITE_OK)
-	{
-	  send_enveloped_error (ctx->fd, root, ERR_DATABASE,
-				"Could not fetch port info.");
-	  goto trade_port_info_done;
-	}
-
-      send_enveloped_ok (ctx->fd, root, "trade.port_info", port_info);
-      json_decref (port_info);
-
-    trade_port_info_done:
-      json_decref (root);
-    }
-  else if (strcmp (c, "ship.inspect") == 0)
-    {
-      if (ctx->player_id <= 0)
-	{
-	  send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated",
-				  NULL);
-	}
-      else
-	{
-	  /* Which sector? default to session sector; allow override via data.sector_id */
-	  int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 1;
-	  json_t *jdata = json_object_get (root, "data");
-	  if (json_is_object (jdata))
-	    {
-	      json_t *jsec = json_object_get (jdata, "sector_id");
-	      if (json_is_integer (jsec))
-		{
-		  int s = (int) json_integer_value (jsec);
-		  if (s > 0)
-		    sector_id = s;
-		}
-	    }
-
-	  json_t *ships = NULL;
-	  int rc =
-	    db_ships_inspectable_at_sector_json (ctx->player_id, sector_id,
-						 &ships);
-	  if (rc != SQLITE_OK || !ships)
-	    {
-	      send_enveloped_error (ctx->fd, root, 1500, "Database error");
-	    }
-	  else
-	    {
-	      json_t *payload = json_pack ("{s:i s:o}", "sector", sector_id, "ships", ships);	/* takes ownership */
-	      send_enveloped_ok (ctx->fd, root, "ship.inspect", payload);
-	      json_decref (payload);
-	    }
-	}
-    }
-
-  else if (strcmp (c, "ship.rename") == 0
-	   || strcmp (c, "ship.reregister") == 0)
-    {
-      if (ctx->player_id <= 0)
-	{
-	  send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated",
-				  NULL);
-	}
-      else
-	{
-	  int ship_id = 0;
-	  const char *new_name = NULL;
-	  json_t *jdata = json_object_get (root, "data");
-	  if (json_is_object (jdata))
-	    {
-	      json_t *js = json_object_get (jdata, "ship_id");
-	      if (json_is_integer (js))
-		ship_id = (int) json_integer_value (js);
-	      json_t *jn = json_object_get (jdata, "new_name");
-	      if (json_is_string (jn))
-		new_name = json_string_value (jn);
-	    }
-
-	  if (ship_id <= 0 || !new_name || !*new_name)
-	    {
-	      send_enveloped_error (ctx->fd, root, 1301,
-				    "Missing required field");
-	    }
-	  else
-	    {
-	      int rc =
-		db_ship_rename_if_owner (ctx->player_id, ship_id, new_name);
-	      if (rc == SQLITE_OK)
-		{
-		  json_t *data =
-		    json_pack ("{s:i s:s}", "ship_id", ship_id, "name",
-			       new_name);
-		  send_enveloped_ok (ctx->fd, root, "ship.renamed", data);
-		  json_decref (data);
-		}
-	      else if (rc == SQLITE_CONSTRAINT)
-		{
-		  send_enveloped_refused (ctx->fd, root, 1111,
-					  "Permission denied", NULL);
-		}
-	      else
-		{
-		  send_enveloped_error (ctx->fd, root, 1500,
-					"Database error");
-		}
-	    }
-	}
-    }
-
-  else if (strcmp (c, "ship.claim") == 0)
-    {
-      if (ctx->player_id <= 0)
-	{
-	  send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated",
-				  NULL);
-	}
-      else
-	{
-	  /* parse target ship_id from data */
-	  int ship_id = 0;
-	  int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 1;
-
-	  json_t *jdata = json_object_get (root, "data");
-	  if (json_is_object (jdata))
-	    {
-	      json_t *js = json_object_get (jdata, "ship_id");
-	      if (json_is_integer (js))
-		ship_id = (int) json_integer_value (js);
-	      json_t *jsec = json_object_get (jdata, "sector_id");
-	      if (json_is_integer (jsec))
-		{
-		  int s = (int) json_integer_value (jsec);
-		  if (s > 0)
-		    sector_id = s;
-		}
-	    }
-
-	  if (ship_id <= 0)
-	    {
-	      send_enveloped_refused (ctx->fd, root, 1103, "No ship selected",
-				      NULL);
-	    }
-	  else
-	    {
-	      json_t *ship = NULL;
-	      int rc =
-		db_ship_claim (ctx->player_id, sector_id, ship_id, &ship);
-	      if (rc == SQLITE_OK && ship)
-		{
-		  json_t *payload = json_pack ("{s:o}", "ship", ship);	/* takes ref */
-		  send_enveloped_ok (ctx->fd, root, "ship.claim", payload);
-		  json_decref (payload);
-		}
-	      else
-		{
-		  send_enveloped_refused (ctx->fd, root, 1104,
-					  "Ship not claimable", NULL);
-		}
-	    }
-	}
-    }
-
-
-  else if (strcmp (c, "ship.info") == 0 || strcmp (c, "ship.status") == 0)
-    {
-      if (ctx->player_id <= 0)
-	{
-	  send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated",
-				  NULL);
-	  //send_enveloped_error (ctx->fd, root, 1401, "Not authenticated");
-	}
-      else
-	{
-	  json_t *info = NULL;
-	  int rc = db_player_info_json (ctx->player_id, &info);
-	  if (rc == SQLITE_OK && info)
-	    {
-	      /* Build a ship-only view from the player_info payload */
-	      json_t *data = json_pack ("{s:i, s:i, s:s, s:i, s:s, s:i, s:i}",
-					"ship_number",
-					json_integer_value (json_object_get
-							    (info,
-							     "ship_number")),
-					"ship_id",
-					json_integer_value (json_object_get
-							    (info,
-							     "ship_id")),
-					"ship_name",
-					json_string_value (json_object_get
-							   (info,
-							    "ship_name")),
-					"ship_type_id",
-					json_integer_value (json_object_get
-							    (info,
-							     "ship_type_id")),
-					"ship_type_name",
-					json_string_value (json_object_get
-							   (info,
-							    "ship_type_name")),
-					"ship_holds",
-					json_integer_value (json_object_get
-							    (info,
-							     "ship_holds")),
-					"ship_fighters",
-					json_integer_value (json_object_get
-							    (info,
-							     "ship_fighters")));
-	      /* json_decref (info); */
-	      /* send_enveloped_ok (ctx->fd, root, "ship.info", data); */
-	      /* json_decref (data); */
-	      json_decref (info);
-
-	      json_t *env = make_base_envelope (root);
-	      json_object_set_new (env, "status", json_string ("ok"));
-	      json_object_set_new (env, "type", json_string ("ship.info"));
-	      json_object_set_new (env, "data", data);	// takes ownership of data
-
-	      json_t *meta = json_object ();
-	      if (strcmp (c, "ship.info") == 0)
-		{
-		  json_object_set_new (meta, "deprecated", json_true ());
-		}
-	      if (json_object_size (meta) > 0)
-		{
-		  json_object_set_new (env, "meta", meta);
-		}
-	      else
-		{
-		  json_decref (meta);
-		}
-
-	      attach_rate_limit_meta (env, ctx);
-	      rl_tick (ctx);
-	      send_all_json (ctx->fd, env);
-	      json_decref (env);
-
-	    }
-	  else
-	    {
-	      send_enveloped_error (ctx->fd, root, 1500, "Database error");
-	    }
-	}
-    }
+  else if (strcmp(c, "ship.inspect") == 0) {
+     rc = cmd_ship_inspect(ctx, root);
+  }
+  else if (strcmp(c, "ship.rename") == 0) {
+     rc = cmd_ship_rename(ctx, root);
+  }
+  else if (strcmp(c, "ship.reregister") == 0) {
+     rc = cmd_ship_rename(ctx, root);   // alias
+  }
+  else if (strcmp(c, "ship.claim") == 0) {
+     rc = cmd_ship_claim(ctx, root);
+  }
+  else if (strcmp(c, "ship.status") == 0) {
+     rc = cmd_ship_status(ctx, root);
+  }
+  else if (strcmp(c, "ship.info") == 0) {
+     rc = cmd_ship_info_compat(ctx, root); // legacy alias
+  }
   else if (strcmp (c, "sector.set_beacon") == 0)
     {
       handle_sector_set_beacon (ctx, root);
     }
   else if (strcmp (c, "player.list_online") == 0)
     {
-      /*Until you maintain a global connection registry,
-         return the current player only (it unblocks clients and is safe).
-         You can upgrade later to a real list. */
-
-      json_t *arr = json_array ();
-      if (ctx->player_id > 0)
-	{
-	  json_array_append_new (arr,
-				 json_pack ("{s:i}", "player_id",
-					    ctx->player_id));
-	}
-      json_t *data = json_pack ("{s:o}", "players", arr);
-      send_enveloped_ok (ctx->fd, root, "player.list_online", data);
-      json_decref (data);
+       rc = cmd_player_list_online(ctx, root);
     }
 
   else if (strcmp (c, "system.disconnect") == 0)
     {
-      json_t *data = json_pack ("{s:s}", "message", "Goodbye");
-      send_enveloped_ok (ctx->fd, root, "system.goodbye", data);
-      json_decref (data);
-
-      shutdown (ctx->fd, SHUT_RDWR);
-      close (ctx->fd);
-      return;			/* or break your per-connection loop appropriately */
+       rc = cmd_session_disconnect(ctx, root);
     }
   else if (strcmp (c, "system.hello") == 0)
     {
-      json_t *data = capabilities_build ();	/* never NULL in our stub */
-      if (!data)
-	{
-	  send_enveloped_error (ctx->fd, root, 1102, "Service unavailable");
-	}
-      else
-	{
-	  send_enveloped_ok (ctx->fd, root, "system.capabilities", data);
-	  json_decref (data);
-	}
-    }
-  else if (strcmp (c, "system.describe_schema") == 0)
-    {
-      json_t *jdata = json_object_get (root, "data");
-      const char *key = NULL;
-      if (json_is_object (jdata))
-	{
-	  json_t *jkey = json_object_get (jdata, "key");
-	  if (json_is_string (jkey))
-	    key = json_string_value (jkey);
-	}
-
-      if (!key)
-	{
-	  /* Return the list of keys we have */
-	  json_t *data = json_pack ("{s:o}", "available", schema_keys ());
-	  send_enveloped_ok (ctx->fd, root, "system.schema_list", data);
-	  json_decref (data);
-	}
-      else
-	{
-	  json_t *schema = schema_get (key);
-	  if (!schema)
-	    {
-	      send_enveloped_error (ctx->fd, root, 1306, "Schema not found");
-	    }
-	  else
-	    {
-	      json_t *data =
-		json_pack ("{s:s, s:o}", "key", key, "schema", schema);
-	      send_enveloped_ok (ctx->fd, root, "system.schema", data);
-	      json_decref (schema);
-	      json_decref (data);
-	    }
-	}
-    }
-  else if (strcmp (c, "auth.register") == 0)
-    {
-      json_t *jdata = json_object_get (root, "data");
-      const char *name = NULL, *pass = NULL;
-      if (json_is_object (jdata))
-	{
-	  json_t *jn = json_object_get (jdata, "user_name");
-	  json_t *jp = json_object_get (jdata, "password");
-	  if (!json_is_string (jn))
-	    jn = json_object_get (jdata, "player_name");
-	  name = json_is_string (jn) ? json_string_value (jn) : NULL;
-	  pass = json_is_string (jp) ? json_string_value (jp) : NULL;
-	}
-      if (!name || !pass)
-	{
-	  send_enveloped_error (ctx->fd, root, 1301,
-				"Missing required field");
-	}
-      else
-	{
-	  int player_id = 0;
-	  int rc = user_create (name, pass, &player_id);
-	  if (rc == AUTH_OK)
-	    {
-	      /* issue a session token (24h = 86400s) */
-	      char tok[65];
-	      if (db_session_create (player_id, 86400, tok) != SQLITE_OK)
-		{
-		  send_enveloped_error (ctx->fd, root, 1500,
-					"Database error");
-		}
-	      else
-		{
-		  ctx->player_id = player_id;
-		  if (ctx->sector_id <= 0)
-		    ctx->sector_id = 1;
-		  json_t *data =
-		    json_pack ("{s:i, s:s}", "player_id", player_id,
-			       "session_token", tok);
-		  send_enveloped_ok (ctx->fd, root, "auth.session", data);
-		  json_decref (data);
-		}
-	    }
-	  else if (rc == AUTH_ERR_NAME_TAKEN)
-	    {
-	      send_enveloped_error (ctx->fd, root, AUTH_ERR_NAME_TAKEN,
-				    "Username already exists");
-	    }
-	  else
-	    {
-	      send_enveloped_error (ctx->fd, root, AUTH_ERR_DB,
-				    "Database error");
-	    }
-	}
-    }
-  else if (strcmp (c, "auth.refresh") == 0)
-    {
-      /* Try data.session_token */
-      json_t *jdata = json_object_get (root, "data");
-      const char *tok = NULL;
-      if (json_is_object (jdata))
-	{
-	  json_t *jt = json_object_get (jdata, "session_token");
-	  if (json_is_string (jt))
-	    tok = json_string_value (jt);
-	}
-
-      /* Try meta.session_token */
-      if (!tok)
-	{
-	  json_t *jmeta = json_object_get (root, "meta");
-	  if (json_is_object (jmeta))
-	    {
-	      json_t *jt = json_object_get (jmeta, "session_token");
-	      if (json_is_string (jt))
-		tok = json_string_value (jt);
-	    }
-	}
-
-      /* If still no token, fall back to the connection’s logged-in player */
-      if (!tok && ctx->player_id > 0)
-	{
-	  char newtok[65];
-	  if (db_session_create (ctx->player_id, 86400, newtok) != SQLITE_OK)
-	    {
-	      send_enveloped_error (ctx->fd, root, 1500, "Database error");
-	    }
-	  else
-	    {
-	      json_t *data =
-		json_pack ("{s:i, s:s}", "player_id", ctx->player_id,
-			   "session_token", newtok);
-	      send_enveloped_ok (ctx->fd, root, "auth.session", data);
-	      json_decref (data);
-	    }
-	}
-      else if (tok)
-	{
-	  /* Rotate provided token */
-	  char newtok[65];
-	  int pid = 0;
-	  int rc = db_session_refresh (tok, 86400, newtok, &pid);
-	  if (rc == SQLITE_OK)
-	    {
-	      ctx->player_id = pid;
-	      if (ctx->sector_id <= 0)
-		ctx->sector_id = 1;
-	      json_t *data =
-		json_pack ("{s:i, s:s}", "player_id", pid, "session_token",
-			   newtok);
-	      send_enveloped_ok (ctx->fd, root, "auth.session", data);
-	      json_decref (data);
-	    }
-	  else
-	    {
-	      send_enveloped_error (ctx->fd, root, 1401,
-				    "Invalid or expired session");
-	    }
-	}
-      else
-	{
-	  /* Not logged in and no token supplied */
-	  send_enveloped_error (ctx->fd, root, 1301,
-				"Missing required field");
-	}
-    }
-
-  else if (strcmp (c, "auth.logout") == 0)
-    {
-      json_t *jdata = json_object_get (root, "data");
-      const char *tok = NULL;
-      if (json_is_object (jdata))
-	{
-	  json_t *jt = json_object_get (jdata, "session_token");
-	  if (json_is_string (jt))
-	    tok = json_string_value (jt);
-	}
-      /* If no token provided, log out the connection; if token given, revoke it. */
-      if (tok)
-	(void) db_session_revoke (tok);
-      ctx->player_id = 0;	/* drop connection auth state */
-
-      json_t *data = json_pack ("{s:s}", "message", "Logged out");
-      send_enveloped_ok (ctx->fd, root, "auth.logged_out", data);
-      json_decref (data);
+       rc = cmd_session_hello(ctx, root);
     }
   else
     {

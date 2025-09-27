@@ -39,22 +39,30 @@ client_SOURCES = \
 	../src/parse.c
 
 server_SOURCES = \
-	../src/server_main.c \
-	../src/server_cmds.c \
-	../src/server_ships.c \
-	../src/namegen.c \
-	../src/server_loop.c \
-	../src/server_universe.c \
 	../src/server_bigbang.c \
+	../src/server_cmds.c \
+	../src/server_envelope.c \
+	../src/server_auth.c \
+	../src/server_config.c \
+	../src/server_engine.c \
+	../src/server_loop.c \
+	../src/server_main.c \
+	../src/server_planets.c \
+	../src/server_players.c \
+	../src/server_ports.c \
+	../src/server_ships.c \
+	../src/server_universe.c \
+	../src/server_warp_post_processing.c \
+	../src/namegen.c \
 	../src/globals.c \
 	../src/database.c \
 	../src/schemas.c \
-	../src/server_config.c \
-	../src/server_warp_post_processing.c \
 	../src/common.c
 
 test_bang_SOURCES = \
 	../src/database.c \
+	../src/schemas.c \
+	../src/server_envelope.c \
 	../src/namegen.c \
 	../src/server_bigbang.c \
 	../src/server_config.c \
