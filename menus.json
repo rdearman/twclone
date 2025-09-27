@@ -148,6 +148,14 @@
             "post": "print_last_rpc"
           }
         },
+	  {
+	      "key": "v",
+	      "label": "(V) move.scan (raw)",
+	      "action": {
+		  "rpc": { "command": "move.scan", "data": {} },
+		  "post": "print_last_rpc"
+	      }
+	  },
         {
           "key": "h",
           "label": "(H) Ship Info (ship)",
@@ -361,6 +369,11 @@
             }
           }
         },
+	  {
+	      "key": "f",
+	      "label": "(F) Fast Scan (move.scan)",
+	      "action": { "pycall": "scan_sector" }
+	  },
         {
           "key": "m",
           "label": "(M) Map",

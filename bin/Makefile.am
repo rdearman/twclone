@@ -41,6 +41,7 @@ client_SOURCES = \
 server_SOURCES = \
 	../src/server_main.c \
 	../src/server_cmds.c \
+	../src/server_ships.c \
 	../src/namegen.c \
 	../src/server_loop.c \
 	../src/server_universe.c \

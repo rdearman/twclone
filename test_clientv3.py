@@ -477,6 +477,126 @@ def redisplay_sector(ctx: Context):
 
     print("Beacon: " + (beacon if beacon else "none"))
 
+def _render_scan_card(scan: dict) -> str:
+    """
+    Pretty-print the server's move.scan response.
+    Robust against partial/misaligned payloads (missing sector_id, flat counts, etc).
+    """
+    try:
+        # Basic shape checks
+        if not isinstance(scan, dict):
+            return str(scan)
+
+        # Error envelope -> show code/message
+        if scan.get("status") == "error":
+            err = scan.get("error") or {}
+            code = err.get("code")
+            msg = err.get("message") or "Unknown error"
+            return f"\n── Fast Scan: ERROR {code} — {msg}"
+
+        d = scan.get("data") or {}
+        if not isinstance(d, dict):
+            return "\n── Fast Scan: (no data)"
+
+        # Core fields (tolerant fallbacks)
+        sid = d.get("sector_id") or d.get("id")
+        name = d.get("name") or "Unknown"
+
+        sec = d.get("security") or {}
+        fed = bool(sec.get("fedspace"))
+        safe = bool(sec.get("safe_zone"))
+        locked = bool(sec.get("combat_locked"))
+
+        adj = d.get("adjacent") or []
+        if not isinstance(adj, list):
+            adj = []
+
+        port = d.get("port") or {}
+        port_present = bool(port.get("present"))
+
+        # Counts: prefer nested object; else reconstruct from flat fields
+        counts = d.get("counts")
+        if isinstance(counts, dict):
+            ships = int(counts.get("ships") or 0)
+            planets = int(counts.get("planets") or 0)
+            mines = int(counts.get("mines") or 0)
+            fighters = int(counts.get("fighters") or 0)
+        else:
+            ships = int((d.get("ships") or d.get("ship_count") or d.get("ships_count") or 0) or 0)
+            planets = int((d.get("planets") or d.get("planet_count") or d.get("planets_count") or 0) or 0)
+            mines = int(d.get("mines") or 0)
+            fighters = int(d.get("fighters") or 0)
+
+        beacon = d.get("beacon")
+        # normalise beacon: allow string or explicit null
+        beacon_str = beacon if isinstance(beacon, str) and beacon.strip() else None
+
+        # Render
+        lines = []
+        lines.append(f"\n── Fast Scan: Sector {sid if sid is not None else '∅'} — {name}")
+        lines.append(f"   Adjacent: {', '.join(map(str, adj)) if adj else 'none'}")
+        lines.append(f"   Security: fedspace={fed}, safe_zone={safe}, combat_locked={locked}")
+        lines.append(f"   Port: {'present' if port_present else 'none'}")
+        lines.append(f"   Counts: ships={ships}, planets={planets}, mines={mines}, fighters={fighters}")
+        lines.append(f"   Beacon: {beacon_str if beacon_str else 'none'}")
+        return "\n".join(lines)
+
+    except Exception as e:
+        # Last-resort: dump raw for debugging
+        try:
+            import json
+            return "\n── Fast Scan (raw) ──\n" + json.dumps(scan, ensure_ascii=False, indent=2)
+        except Exception:
+            return f"\n── Fast Scan: <unrenderable> ({e})"
+
+
+    
+@register("scan_sector")
+def scan_sector(ctx: "Context"):
+    # Call the server
+    resp = ctx.conn.rpc("move.scan", {})
+    ctx.state["last_rpc"] = resp
+
+    # Pretty print the scan
+    try:
+        print(_render_scan_card(resp))
+    except Exception:
+        print(json.dumps(resp, ensure_ascii=False, indent=2))
+
+    # Optional: lightly merge a few fields into our cached view WITHOUT
+    # wiping richer objects from describe_sector (ships/planets lists, etc.)
+    try:
+        d = (resp or {}).get("data") or {}
+        if not isinstance(d, dict):
+            return
+        cur = ctx.last_sector_desc or {}
+        merged = dict(cur)
+
+        if isinstance(d.get("sector_id"), int):
+            merged["id"] = d["sector_id"]
+        if isinstance(d.get("name"), str):
+            merged["name"] = d["name"]
+        if isinstance(d.get("adjacent"), list):
+            merged["adjacent"] = d["adjacent"]
+
+        # Represent scan’s port presence as a minimal port object
+        port = d.get("port") or {}
+        if isinstance(port, dict):
+            merged["port"] = {"present": bool(port.get("present"))}
+            # keep old 'class' if we had one previously
+            if isinstance(cur.get("port"), dict) and "class" in cur["port"]:
+                merged["port"]["class"] = cur["port"]["class"]
+
+        # Beacon string if present
+        if d.get("beacon"):
+            merged["beacon"] = d["beacon"]
+
+        ctx.last_sector_desc = merged
+    except Exception:
+        pass
+
+
+    
 # ---------------------------
 # Help
 # ---------------------------

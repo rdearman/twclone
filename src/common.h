@@ -1,3 +1,27 @@
+#include <stdatomic.h>
+#include <inttypes.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <signal.h>
+#include <unistd.h>
+#include <poll.h>
+#include <time.h>
+#include <pthread.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <jansson.h>		/* -ljansson */
+#include <stdbool.h>
+#include <sqlite3.h>
+/* local includes */
+#include "database.h"
+#include "schemas.h"
+#include "errors.h"
+#include "config.h"
+#include <stdatomic.h>
 #include <netinet/in.h>
 #include <string.h>
 
@@ -135,6 +159,21 @@ ship_clr_flag (int flags, int mask)
 }
 
 
+typedef struct
+{
+  int fd;
+  volatile sig_atomic_t *running;
+  struct sockaddr_in peer;
+  uint64_t cid;
+  int player_id;
+  int sector_id;
+
+  /* --- rate limit hints --- */
+  time_t rl_window_start;	/* epoch sec when current window began */
+  int rl_count;			/* responses sent in this window */
+  int rl_limit;			/* max responses per window */
+  int rl_window_sec;		/* window length in seconds */
+} client_ctx_t;
 
 
 #endif

@@ -129,8 +129,9 @@ am_client_OBJECTS = ../src/globals.$(OBJEXT) ../src/database.$(OBJEXT) \
 client_OBJECTS = $(am_client_OBJECTS)
 client_DEPENDENCIES =
 am_server_OBJECTS = ../src/server_main.$(OBJEXT) \
-	../src/server_cmds.$(OBJEXT) ../src/namegen.$(OBJEXT) \
-	../src/server_loop.$(OBJEXT) ../src/server_universe.$(OBJEXT) \
+	../src/server_cmds.$(OBJEXT) ../src/server_ships.$(OBJEXT) \
+	../src/namegen.$(OBJEXT) ../src/server_loop.$(OBJEXT) \
+	../src/server_universe.$(OBJEXT) \
 	../src/server_bigbang.$(OBJEXT) ../src/globals.$(OBJEXT) \
 	../src/database.$(OBJEXT) ../src/schemas.$(OBJEXT) \
 	../src/server_config.$(OBJEXT) \
@@ -170,6 +171,7 @@ am__depfiles_remade = ../src/$(DEPDIR)/client.Po \
 	../src/$(DEPDIR)/server_config.Po \
 	../src/$(DEPDIR)/server_loop.Po \
 	../src/$(DEPDIR)/server_main.Po \
+	../src/$(DEPDIR)/server_ships.Po \
 	../src/$(DEPDIR)/server_universe.Po \
 	../src/$(DEPDIR)/server_warp_post_processing.Po \
 	../src/$(DEPDIR)/test_bang.Po
@@ -239,7 +241,7 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-ISODATE = 2025-09-25
+ISODATE = 2025-09-27
 LDFLAGS = 
 LIBOBJS = 
 LIBS = -lpthread -lm 
@@ -325,6 +327,7 @@ client_SOURCES = \
 server_SOURCES = \
 	../src/server_main.c \
 	../src/server_cmds.c \
+	../src/server_ships.c \
 	../src/namegen.c \
 	../src/server_loop.c \
 	../src/server_universe.c \
@@ -445,6 +448,8 @@ client$(EXEEXT): $(client_OBJECTS) $(client_DEPENDENCIES) $(EXTRA_client_DEPENDE
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_cmds.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_ships.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/namegen.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_loop.$(OBJEXT): ../src/$(am__dirstamp) \
@@ -489,6 +494,7 @@ include ../src/$(DEPDIR)/server_cmds.Po # am--include-marker
 include ../src/$(DEPDIR)/server_config.Po # am--include-marker
 include ../src/$(DEPDIR)/server_loop.Po # am--include-marker
 include ../src/$(DEPDIR)/server_main.Po # am--include-marker
+include ../src/$(DEPDIR)/server_ships.Po # am--include-marker
 include ../src/$(DEPDIR)/server_universe.Po # am--include-marker
 include ../src/$(DEPDIR)/server_warp_post_processing.Po # am--include-marker
 include ../src/$(DEPDIR)/test_bang.Po # am--include-marker
@@ -655,6 +661,7 @@ distclean: distclean-am
 	-rm -f ../src/$(DEPDIR)/server_config.Po
 	-rm -f ../src/$(DEPDIR)/server_loop.Po
 	-rm -f ../src/$(DEPDIR)/server_main.Po
+	-rm -f ../src/$(DEPDIR)/server_ships.Po
 	-rm -f ../src/$(DEPDIR)/server_universe.Po
 	-rm -f ../src/$(DEPDIR)/server_warp_post_processing.Po
 	-rm -f ../src/$(DEPDIR)/test_bang.Po
@@ -715,6 +722,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/$(DEPDIR)/server_config.Po
 	-rm -f ../src/$(DEPDIR)/server_loop.Po
 	-rm -f ../src/$(DEPDIR)/server_main.Po
+	-rm -f ../src/$(DEPDIR)/server_ships.Po
 	-rm -f ../src/$(DEPDIR)/server_universe.Po
 	-rm -f ../src/$(DEPDIR)/server_warp_post_processing.Po
 	-rm -f ../src/$(DEPDIR)/test_bang.Po

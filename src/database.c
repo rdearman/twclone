@@ -113,9 +113,6 @@ cleanup:
   return rc;
 }
 
-////////////////////
-
-
 
 const char *create_table_sql[] = {
   "CREATE TABLE IF NOT EXISTS config ("
@@ -1108,45 +1105,6 @@ cleanup:
 }
 
 
-/* int */
-/* db_create_tables (void) */
-/* { */
-/*   char *errmsg = NULL; */
-/*   int ret_code = -1; // Default to error */
-
-/*   pthread_mutex_lock (&db_mutex); */
-
-/*   // You should check if the db_handle is valid here, although db_init */
-/*   // should ensure it's not NULL before calling this function. */
-/*   if (!db_handle) { */
-/*       goto cleanup; */
-/*   } */
-
-/*   for (size_t i = 0; i < create_table_count; i++) */
-/*     { */
-/*       if (sqlite3_exec (db_handle, create_table_sql[i], NULL, NULL, &errmsg) */
-/*           != SQLITE_OK) */
-/*         { */
-/*           fprintf (stderr, "DB create_tables error (%zu): %s\n", i, errmsg); */
-/*           // Don't free errmsg here, the cleanup section handles it. */
-/*           goto cleanup; */
-/*         } */
-/*     } */
-
-/*   // Success, set return code to 0 */
-/*   ret_code = 0; */
-
-/* cleanup: */
-/*   if (errmsg) */
-/*     { */
-/*       sqlite3_free (errmsg); */
-/*     } */
-
-/*   pthread_mutex_unlock (&db_mutex); */
-
-/*   return ret_code; */
-/* } */
-
 /* Public, thread-safe wrapper */
 int
 db_create_tables (void)
@@ -1188,8 +1146,6 @@ cleanup:
 	if (rc2 != SQLITE_OK) return -1;
       }
   }
-
-
 
   return ret_code;
 }
@@ -1429,6 +1385,87 @@ fail:
 }
 
 
+///////////////////////
+/// Helpers
+
+/* ---------- db_sector_scan_snapshot: thread-safe, single statement ---------- */
+/* Out shape (core fields only; handler will add adjacency + flags):
+   {
+     "name": TEXT,
+     "safe_zone": INTEGER,          // 0/1 from sectors.safe_zone
+     "port_present": INTEGER,       // 0/1 (COUNT>0)
+     "ships": INTEGER,
+     "planets": INTEGER,
+     "mines": INTEGER,              // 0 for now (placeholder)
+     "fighters": INTEGER,           // 0 for now (placeholder)
+     "beacon": TEXT or NULL
+   }
+*/
+int
+db_sector_scan_snapshot (int sector_id, json_t **out_core)
+{
+  if (out_core) *out_core = NULL;
+
+  sqlite3 *db = db_get_handle ();
+  if (!db) return SQLITE_ERROR;
+
+  const char *sql =
+    "SELECT s.name, COALESCE(s.safe_zone,0) AS safe_zone, "
+    "  (SELECT CASE WHEN COUNT(1)>0 THEN 1 ELSE 0 END FROM ports    p  WHERE p.sector_id = s.id) AS port_present, "
+    "  (SELECT COUNT(1)                        FROM ships    sh WHERE sh.sector_id = s.id) AS ships, "
+    "  (SELECT COUNT(1)                        FROM planets  pl WHERE pl.sector_id = s.id) AS planets, "
+    "  0 AS mines, 0 AS fighters, "
+    "  (SELECT b.text FROM beacons b WHERE b.sector_id = s.id LIMIT 1) AS beacon "
+    "FROM sectors s WHERE s.id = ?1";
+
+  int rc = SQLITE_ERROR;
+  sqlite3_stmt *st = NULL;
+
+  pthread_mutex_lock (&db_mutex);
+
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK) goto done;
+
+  sqlite3_bind_int (st, 1, sector_id);
+
+  rc = sqlite3_step (st);
+  if (rc == SQLITE_ROW)
+    {
+      const char *name   = (const char *) sqlite3_column_text (st, 0);
+      int safe_zone      = sqlite3_column_int (st, 1);
+      int port_present   = sqlite3_column_int (st, 2);
+      int ships          = sqlite3_column_int (st, 3);
+      int planets        = sqlite3_column_int (st, 4);
+      int mines          = sqlite3_column_int (st, 5);
+      int fighters       = sqlite3_column_int (st, 6);
+      const char *beacon = (const char *) sqlite3_column_text (st, 7);
+
+      json_t *core = json_object ();
+      json_object_set_new (core, "name",         json_string (name ? name : "Unknown"));
+      json_object_set_new (core, "safe_zone",    json_integer (safe_zone));
+      json_object_set_new (core, "port_present", json_integer (port_present));
+      json_object_set_new (core, "ships",        json_integer (ships));
+      json_object_set_new (core, "planets",      json_integer (planets));
+      json_object_set_new (core, "mines",        json_integer (mines));
+      json_object_set_new (core, "fighters",     json_integer (fighters));
+      if (beacon && *beacon)
+        json_object_set_new (core, "beacon", json_string (beacon));
+      else
+        json_object_set_new (core, "beacon", json_null ());
+
+      if (out_core) *out_core = core;
+      rc = SQLITE_OK;
+    }
+  else
+    {
+      rc = SQLITE_ERROR; /* caller maps to 1401 */
+    }
+
+done:
+  if (st) sqlite3_finalize (st);
+  pthread_mutex_unlock (&db_mutex);
+  return rc;
+}
 
 
 
@@ -2409,76 +2446,45 @@ cleanup:
  * @param out_array A pointer to a json_t* where the resulting JSON array will be stored.
  * @return SQLITE_OK on success, or an SQLite error code on failure.
  */
+//////////////////
 int
 db_adjacent_sectors_json (int sector_id, json_t **out_array)
 {
-  sqlite3 *dbh = NULL;
+  if (out_array) *out_array = NULL;
+  sqlite3 *db = db_get_handle();
+  if (!db) return SQLITE_ERROR;
+
+  const char *sql = "SELECT to_sector FROM sector_warps WHERE from_sector = ?1 ORDER BY to_sector";
   sqlite3_stmt *st = NULL;
-  json_t *arr = NULL;
-  int rc = SQLITE_ERROR;	// Default to a failure state
+  int rc = SQLITE_ERROR;
 
-  // 1. Acquire the lock FIRST
-  pthread_mutex_lock (&db_mutex);
+  pthread_mutex_lock(&db_mutex);
 
-  if (!out_array)
-    goto cleanup;
+  rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK) goto done;
 
-  *out_array = NULL;
+  sqlite3_bind_int(st, 1, sector_id);
 
-  dbh = db_get_handle ();
-  if (!dbh)
-    goto cleanup;
+  json_t *arr = json_array();
+  while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
+    int to = sqlite3_column_int(st, 0);
+    json_array_append_new(arr, json_integer(to));
+  }
+  if (rc == SQLITE_DONE) {
+    if (out_array) *out_array = arr;
+    rc = SQLITE_OK;
+  } else {
+    json_decref(arr);
+    rc = SQLITE_ERROR;
+  }
 
-  /* Preferred column names (common schema) */
-  const char *sql =
-    "SELECT to_sector FROM sector_warps WHERE from_sector = ? ORDER BY to_sector";
-  rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
-
-  /* Fallback for schemas that use reserved words "from"/"to" */
-  if (rc != SQLITE_OK)
-    {
-      const char *sql2 =
-	"SELECT \"to\" FROM sector_warps WHERE \"from\" = ? ORDER BY \"to\"";
-      rc = sqlite3_prepare_v2 (dbh, sql2, -1, &st, NULL);
-      if (rc != SQLITE_OK)
-	goto cleanup;
-    }
-
-  sqlite3_bind_int (st, 1, sector_id);
-
-  arr = json_array ();
-  if (!arr)
-    {
-      rc = SQLITE_NOMEM;
-      goto cleanup;
-    }
-
-  while ((rc = sqlite3_step (st)) == SQLITE_ROW)
-    {
-      json_array_append_new (arr, json_integer (sqlite3_column_int (st, 0)));
-    }
-
-  if (rc == SQLITE_DONE)
-    {
-      *out_array = arr;
-      rc = SQLITE_OK;
-    }
-  else
-    {
-      json_decref (arr);	// Clean up on error
-      arr = NULL;
-    }
-
-cleanup:
-  // Finalize the statement
-  if (st)
-    sqlite3_finalize (st);
-
-  // 2. Release the lock LAST
-  pthread_mutex_unlock (&db_mutex);
-
+done:
+  if (st) sqlite3_finalize(st);
+  pthread_mutex_unlock(&db_mutex);
   return rc;
 }
+
+////////////////
 
 /* ---------- PORTS AT SECTOR (visible only) ---------- */
 
@@ -4575,4 +4581,78 @@ static int db_ensure_ship_perms_column_unlocked(void)
   return SQLITE_OK;
 }
 
+/* ---------- SECTOR SCAN CORE (thread-safe, single statement) ---------- */
+/* Shape returned via *out_obj:
+   {
+     "name": TEXT,
+     "safe_zone": INT,
+     "port_count": INT,
+     "ship_count": INT,
+     "planet_count": INT,
+     "beacon_text": TEXT
+   }
+*/
+int
+db_sector_scan_core (int sector_id, json_t **out_obj)
+{
+  if (out_obj) *out_obj = NULL;
 
+  sqlite3 *db = db_get_handle ();
+  if (!db) return SQLITE_ERROR;
+
+  const char *sql =
+    "SELECT s.name, "
+    "       0 AS safe_zone, "
+    "       (SELECT COUNT(1) FROM ports   p  WHERE p.location  = s.id) AS port_count, "
+    "       (SELECT COUNT(1) FROM ships   sh WHERE sh.location = s.id) AS ship_count, "
+    "       (SELECT COUNT(1) FROM planets pl WHERE pl.sector  = s.id) AS planet_count, "
+    "       s.beacon AS beacon_text "
+    "FROM sectors s WHERE s.id = ?1";
+
+  int rc = SQLITE_ERROR;
+  sqlite3_stmt *st = NULL;
+
+  /* Full critical section: prepare → bind → step → finalize */
+  pthread_mutex_lock (&db_mutex);
+
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK) {
+    fprintf(stderr, "[scan_core] prepare failed (sector=%d): %s\n",
+	    sector_id, sqlite3_errmsg(db));
+    goto done;
+  }
+
+
+  sqlite3_bind_int (st, 1, sector_id);
+
+  rc = sqlite3_step (st);
+  if (rc == SQLITE_ROW)
+    {
+      const char *name = (const char *) sqlite3_column_text (st, 0);
+      int safe_zone     = sqlite3_column_int (st, 1);
+      int port_count    = sqlite3_column_int (st, 2);
+      int ship_count    = sqlite3_column_int (st, 3);
+      int planet_count  = sqlite3_column_int (st, 4);
+      const char *btxt  = (const char *) sqlite3_column_text (st, 5);
+
+      json_t *o = json_object ();
+      json_object_set_new (o, "name",         json_string (name ? name : "Unknown"));
+      json_object_set_new (o, "safe_zone",    json_integer (safe_zone));
+      json_object_set_new (o, "port_count",   json_integer (port_count));
+      json_object_set_new (o, "ship_count",   json_integer (ship_count));
+      json_object_set_new (o, "planet_count", json_integer (planet_count));
+      json_object_set_new (o, "beacon_text",  json_string (btxt ? btxt : ""));
+
+      if (out_obj) *out_obj = o;
+      rc = SQLITE_OK;
+    }
+  else
+    {
+      rc = SQLITE_ERROR; /* no row → sector missing */
+    }
+
+done:
+  if (st) sqlite3_finalize (st);
+  pthread_mutex_unlock (&db_mutex);
+  return rc;
+}

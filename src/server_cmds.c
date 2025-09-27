@@ -147,3 +147,4 @@ user_create (const char *player_name, const char *password,
 
     return AUTH_OK;
 }
+
