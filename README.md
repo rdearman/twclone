@@ -6,6 +6,7 @@ I was working with two other developers who did most of the other work outside o
 The changes I've made which required an entire rewrite was to put all the data into an SQLite DB file, and to change the protocol to JSON. The benefit of this is that I don't really need to write a client since a client could be written in any language which supports JSON. I've developed a test client in python which will be extended to a full client after I've implemented all the systems on the server. Because of this the code is 100% focused on building the server. THe reason for moving to JSON was that I wanted to train an AI to play TW2002, but after a lot of messing around decided to come back to this project and roll my own server. 
 
 Any AI player will not need a client and can just parse and send JSON, so while I need a client for testing, I'm not focused on it. 
+
 ---
 
 # twclone
@@ -311,7 +312,7 @@ Examples (request/response pairs), error codes (e.g., `1401 Player does not have
 
 ## Licence
 
-MIT (or project’s chosen licence—update this section accordingly).
+MIT 
 
 ---
 
