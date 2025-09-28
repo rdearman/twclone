@@ -25,7 +25,7 @@ static int db_ensure_auth_schema_unlocked (void);
 static int db_ensure_idempotency_schema_unlocked (void);
 static int db_create_tables_unlocked (void);
 static int db_insert_defaults_unlocked (void);
-static int db_ensure_ship_perms_column_unlocked(void);
+static int db_ensure_ship_perms_column_unlocked (void);
 
 ////////////////////
 
@@ -1141,11 +1141,13 @@ cleanup:
     sqlite3_free (errmsg);
   if (ret_code == 0)
     {
-      if (ret_code == 0) {
-	int rc2 = db_ensure_ship_perms_column_unlocked();
-	if (rc2 != SQLITE_OK) return -1;
-      }
-  }
+      if (ret_code == 0)
+	{
+	  int rc2 = db_ensure_ship_perms_column_unlocked ();
+	  if (rc2 != SQLITE_OK)
+	    return -1;
+	}
+    }
 
   return ret_code;
 }
@@ -1404,10 +1406,12 @@ fail:
 int
 db_sector_scan_snapshot (int sector_id, json_t **out_core)
 {
-  if (out_core) *out_core = NULL;
+  if (out_core)
+    *out_core = NULL;
 
   sqlite3 *db = db_get_handle ();
-  if (!db) return SQLITE_ERROR;
+  if (!db)
+    return SQLITE_ERROR;
 
   const char *sql =
     "SELECT s.name, COALESCE(s.safe_zone,0) AS safe_zone, "
@@ -1424,45 +1428,49 @@ db_sector_scan_snapshot (int sector_id, json_t **out_core)
   pthread_mutex_lock (&db_mutex);
 
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
-  if (rc != SQLITE_OK) goto done;
+  if (rc != SQLITE_OK)
+    goto done;
 
   sqlite3_bind_int (st, 1, sector_id);
 
   rc = sqlite3_step (st);
   if (rc == SQLITE_ROW)
     {
-      const char *name   = (const char *) sqlite3_column_text (st, 0);
-      int safe_zone      = sqlite3_column_int (st, 1);
-      int port_present   = sqlite3_column_int (st, 2);
-      int ships          = sqlite3_column_int (st, 3);
-      int planets        = sqlite3_column_int (st, 4);
-      int mines          = sqlite3_column_int (st, 5);
-      int fighters       = sqlite3_column_int (st, 6);
+      const char *name = (const char *) sqlite3_column_text (st, 0);
+      int safe_zone = sqlite3_column_int (st, 1);
+      int port_present = sqlite3_column_int (st, 2);
+      int ships = sqlite3_column_int (st, 3);
+      int planets = sqlite3_column_int (st, 4);
+      int mines = sqlite3_column_int (st, 5);
+      int fighters = sqlite3_column_int (st, 6);
       const char *beacon = (const char *) sqlite3_column_text (st, 7);
 
       json_t *core = json_object ();
-      json_object_set_new (core, "name",         json_string (name ? name : "Unknown"));
-      json_object_set_new (core, "safe_zone",    json_integer (safe_zone));
+      json_object_set_new (core, "name",
+			   json_string (name ? name : "Unknown"));
+      json_object_set_new (core, "safe_zone", json_integer (safe_zone));
       json_object_set_new (core, "port_present", json_integer (port_present));
-      json_object_set_new (core, "ships",        json_integer (ships));
-      json_object_set_new (core, "planets",      json_integer (planets));
-      json_object_set_new (core, "mines",        json_integer (mines));
-      json_object_set_new (core, "fighters",     json_integer (fighters));
+      json_object_set_new (core, "ships", json_integer (ships));
+      json_object_set_new (core, "planets", json_integer (planets));
+      json_object_set_new (core, "mines", json_integer (mines));
+      json_object_set_new (core, "fighters", json_integer (fighters));
       if (beacon && *beacon)
-        json_object_set_new (core, "beacon", json_string (beacon));
+	json_object_set_new (core, "beacon", json_string (beacon));
       else
-        json_object_set_new (core, "beacon", json_null ());
+	json_object_set_new (core, "beacon", json_null ());
 
-      if (out_core) *out_core = core;
+      if (out_core)
+	*out_core = core;
       rc = SQLITE_OK;
     }
   else
     {
-      rc = SQLITE_ERROR; /* caller maps to 1401 */
+      rc = SQLITE_ERROR;	/* caller maps to 1401 */
     }
 
 done:
-  if (st) sqlite3_finalize (st);
+  if (st)
+    sqlite3_finalize (st);
   pthread_mutex_unlock (&db_mutex);
   return rc;
 }
@@ -2450,37 +2458,47 @@ cleanup:
 int
 db_adjacent_sectors_json (int sector_id, json_t **out_array)
 {
-  if (out_array) *out_array = NULL;
-  sqlite3 *db = db_get_handle();
-  if (!db) return SQLITE_ERROR;
+  if (out_array)
+    *out_array = NULL;
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return SQLITE_ERROR;
 
-  const char *sql = "SELECT to_sector FROM sector_warps WHERE from_sector = ?1 ORDER BY to_sector";
+  const char *sql =
+    "SELECT to_sector FROM sector_warps WHERE from_sector = ?1 ORDER BY to_sector";
   sqlite3_stmt *st = NULL;
   int rc = SQLITE_ERROR;
 
-  pthread_mutex_lock(&db_mutex);
+  pthread_mutex_lock (&db_mutex);
 
-  rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
-  if (rc != SQLITE_OK) goto done;
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    goto done;
 
-  sqlite3_bind_int(st, 1, sector_id);
+  sqlite3_bind_int (st, 1, sector_id);
 
-  json_t *arr = json_array();
-  while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
-    int to = sqlite3_column_int(st, 0);
-    json_array_append_new(arr, json_integer(to));
-  }
-  if (rc == SQLITE_DONE) {
-    if (out_array) *out_array = arr;
-    rc = SQLITE_OK;
-  } else {
-    json_decref(arr);
-    rc = SQLITE_ERROR;
-  }
+  json_t *arr = json_array ();
+  while ((rc = sqlite3_step (st)) == SQLITE_ROW)
+    {
+      int to = sqlite3_column_int (st, 0);
+      json_array_append_new (arr, json_integer (to));
+    }
+  if (rc == SQLITE_DONE)
+    {
+      if (out_array)
+	*out_array = arr;
+      rc = SQLITE_OK;
+    }
+  else
+    {
+      json_decref (arr);
+      rc = SQLITE_ERROR;
+    }
 
 done:
-  if (st) sqlite3_finalize(st);
-  pthread_mutex_unlock(&db_mutex);
+  if (st)
+    sqlite3_finalize (st);
+  pthread_mutex_unlock (&db_mutex);
   return rc;
 }
 
@@ -4524,11 +4542,13 @@ db_rand_npc_shipname (char *out, size_t out_sz)
 }
 
 
-int db_ensure_ship_perms_column(void) {
+int
+db_ensure_ship_perms_column (void)
+{
   int rc;
-  pthread_mutex_lock(&db_mutex);
-  rc = db_ensure_ship_perms_column_unlocked();
-  pthread_mutex_unlock(&db_mutex);
+  pthread_mutex_lock (&db_mutex);
+  rc = db_ensure_ship_perms_column_unlocked ();
+  pthread_mutex_unlock (&db_mutex);
   return rc;
 }
 
@@ -4536,48 +4556,62 @@ int db_ensure_ship_perms_column(void) {
 /////////////////////////////////
 
 /* Unlocked: caller MUST already hold db_mutex */
-static int column_exists_unlocked(sqlite3 *db, const char *table, const char *col) {
+static int
+column_exists_unlocked (sqlite3 *db, const char *table, const char *col)
+{
   sqlite3_stmt *st = NULL;
   int exists = 0;
   char sql[256];
-  snprintf(sql, sizeof(sql), "PRAGMA table_info(%s);", table);
-  if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK) return 0;
-  while (sqlite3_step(st) == SQLITE_ROW) {
-    const unsigned char *name = sqlite3_column_text(st, 1);
-    if (name && strcmp((const char*)name, col) == 0) { exists = 1; break; }
-  }
-  sqlite3_finalize(st);
+  snprintf (sql, sizeof (sql), "PRAGMA table_info(%s);", table);
+  if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
+    return 0;
+  while (sqlite3_step (st) == SQLITE_ROW)
+    {
+      const unsigned char *name = sqlite3_column_text (st, 1);
+      if (name && strcmp ((const char *) name, col) == 0)
+	{
+	  exists = 1;
+	  break;
+	}
+    }
+  sqlite3_finalize (st);
   return exists;
 }
 
 /* Optional wrapper for callers that do NOT already hold db_mutex */
-static int column_exists(sqlite3 *db, const char *table, const char *col) {
+static int
+column_exists (sqlite3 *db, const char *table, const char *col)
+{
   int ret;
-  pthread_mutex_lock(&db_mutex);
-  ret = column_exists_unlocked(db, table, col);
-  pthread_mutex_unlock(&db_mutex);
+  pthread_mutex_lock (&db_mutex);
+  ret = column_exists_unlocked (db, table, col);
+  pthread_mutex_unlock (&db_mutex);
   return ret;
 }
 
 /* Unlocked: caller already holds db_mutex */
-static int db_ensure_ship_perms_column_unlocked(void)
+static int
+db_ensure_ship_perms_column_unlocked (void)
 {
   int rc = SQLITE_OK;
-  sqlite3 *db = db_get_handle();
-  if (!db) return SQLITE_ERROR;
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return SQLITE_ERROR;
 
-  if (!column_exists_unlocked(db, "ships", "perms")) {
-    char *errmsg = NULL;
-    rc = sqlite3_exec(db,
-      "ALTER TABLE ships ADD COLUMN perms INTEGER NOT NULL DEFAULT 731;",
-      NULL, NULL, &errmsg);
-    if (rc != SQLITE_OK) {
-      fprintf(stderr, "ALTER TABLE ships ADD COLUMN perms failed: %s\n",
-              errmsg ? errmsg : "(unknown)");
-      sqlite3_free(errmsg);
-      return rc;
+  if (!column_exists_unlocked (db, "ships", "perms"))
+    {
+      char *errmsg = NULL;
+      rc = sqlite3_exec (db,
+			 "ALTER TABLE ships ADD COLUMN perms INTEGER NOT NULL DEFAULT 731;",
+			 NULL, NULL, &errmsg);
+      if (rc != SQLITE_OK)
+	{
+	  fprintf (stderr, "ALTER TABLE ships ADD COLUMN perms failed: %s\n",
+		   errmsg ? errmsg : "(unknown)");
+	  sqlite3_free (errmsg);
+	  return rc;
+	}
     }
-  }
   return SQLITE_OK;
 }
 
@@ -4595,10 +4629,12 @@ static int db_ensure_ship_perms_column_unlocked(void)
 int
 db_sector_scan_core (int sector_id, json_t **out_obj)
 {
-  if (out_obj) *out_obj = NULL;
+  if (out_obj)
+    *out_obj = NULL;
 
   sqlite3 *db = db_get_handle ();
-  if (!db) return SQLITE_ERROR;
+  if (!db)
+    return SQLITE_ERROR;
 
   const char *sql =
     "SELECT s.name, "
@@ -4606,8 +4642,7 @@ db_sector_scan_core (int sector_id, json_t **out_obj)
     "       (SELECT COUNT(1) FROM ports   p  WHERE p.location  = s.id) AS port_count, "
     "       (SELECT COUNT(1) FROM ships   sh WHERE sh.location = s.id) AS ship_count, "
     "       (SELECT COUNT(1) FROM planets pl WHERE pl.sector  = s.id) AS planet_count, "
-    "       s.beacon AS beacon_text "
-    "FROM sectors s WHERE s.id = ?1";
+    "       s.beacon AS beacon_text " "FROM sectors s WHERE s.id = ?1";
 
   int rc = SQLITE_ERROR;
   sqlite3_stmt *st = NULL;
@@ -4616,11 +4651,12 @@ db_sector_scan_core (int sector_id, json_t **out_obj)
   pthread_mutex_lock (&db_mutex);
 
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
-  if (rc != SQLITE_OK) {
-    fprintf(stderr, "[scan_core] prepare failed (sector=%d): %s\n",
-	    sector_id, sqlite3_errmsg(db));
-    goto done;
-  }
+  if (rc != SQLITE_OK)
+    {
+      fprintf (stderr, "[scan_core] prepare failed (sector=%d): %s\n",
+	       sector_id, sqlite3_errmsg (db));
+      goto done;
+    }
 
 
   sqlite3_bind_int (st, 1, sector_id);
@@ -4629,30 +4665,32 @@ db_sector_scan_core (int sector_id, json_t **out_obj)
   if (rc == SQLITE_ROW)
     {
       const char *name = (const char *) sqlite3_column_text (st, 0);
-      int safe_zone     = sqlite3_column_int (st, 1);
-      int port_count    = sqlite3_column_int (st, 2);
-      int ship_count    = sqlite3_column_int (st, 3);
-      int planet_count  = sqlite3_column_int (st, 4);
-      const char *btxt  = (const char *) sqlite3_column_text (st, 5);
+      int safe_zone = sqlite3_column_int (st, 1);
+      int port_count = sqlite3_column_int (st, 2);
+      int ship_count = sqlite3_column_int (st, 3);
+      int planet_count = sqlite3_column_int (st, 4);
+      const char *btxt = (const char *) sqlite3_column_text (st, 5);
 
       json_t *o = json_object ();
-      json_object_set_new (o, "name",         json_string (name ? name : "Unknown"));
-      json_object_set_new (o, "safe_zone",    json_integer (safe_zone));
-      json_object_set_new (o, "port_count",   json_integer (port_count));
-      json_object_set_new (o, "ship_count",   json_integer (ship_count));
+      json_object_set_new (o, "name", json_string (name ? name : "Unknown"));
+      json_object_set_new (o, "safe_zone", json_integer (safe_zone));
+      json_object_set_new (o, "port_count", json_integer (port_count));
+      json_object_set_new (o, "ship_count", json_integer (ship_count));
       json_object_set_new (o, "planet_count", json_integer (planet_count));
-      json_object_set_new (o, "beacon_text",  json_string (btxt ? btxt : ""));
+      json_object_set_new (o, "beacon_text", json_string (btxt ? btxt : ""));
 
-      if (out_obj) *out_obj = o;
+      if (out_obj)
+	*out_obj = o;
       rc = SQLITE_OK;
     }
   else
     {
-      rc = SQLITE_ERROR; /* no row → sector missing */
+      rc = SQLITE_ERROR;	/* no row → sector missing */
     }
 
 done:
-  if (st) sqlite3_finalize (st);
+  if (st)
+    sqlite3_finalize (st);
   pthread_mutex_unlock (&db_mutex);
   return rc;
 }

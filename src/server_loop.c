@@ -26,9 +26,12 @@
 #include "common.h"
 #include "server_envelope.h"
 #include "server_players.h"
-#include "server_ports.h"   // at top of server_loop.c
+#include "server_ports.h"	// at top of server_loop.c
 #include "server_auth.h"
-
+#include "server_s2s.h"
+#include "server_universe.h"
+#include "server_config.h"
+#include "server_communication.h"
 
 #define LISTEN_PORT 1234
 #define BUF_SIZE    8192
@@ -38,8 +41,6 @@
 #define RULE_ERROR(_code,_msg) \
     do { send_enveloped_error(ctx->fd, root, (_code), (_msg)); goto trade_buy_done; } while (0)
 
-
-
 static _Atomic uint64_t g_conn_seq = 0;
 /* global (file-scope) counter for server message ids */
 static _Atomic uint64_t g_msg_seq = 0;
@@ -48,36 +49,28 @@ static __thread client_ctx_t *g_ctx_for_send = NULL;
 void send_all_json (int fd, json_t * obj);
 int db_player_info_json (int player_id, json_t ** out);
 /* rate-limit helper prototypes (defined later) */
- void attach_rate_limit_meta (json_t * env, client_ctx_t * ctx);
- void rl_tick (client_ctx_t * ctx);
+void attach_rate_limit_meta (json_t * env, client_ctx_t * ctx);
+void rl_tick (client_ctx_t * ctx);
 int db_sector_basic_json (int sector_id, json_t ** out_obj);
 int db_adjacent_sectors_json (int sector_id, json_t ** out_array);
 int db_ports_at_sector_json (int sector_id, json_t ** out_array);
-int db_sector_scan_core (int sector_id, json_t **out_obj);
+int db_sector_scan_core (int sector_id, json_t ** out_obj);
 int db_players_at_sector_json (int sector_id, json_t ** out_array);
 int db_beacons_at_sector_json (int sector_id, json_t ** out_array);
 int db_planets_at_sector_json (int sector_id, json_t ** out_array);
 int db_player_set_sector (int player_id, int sector_id);
 int db_player_get_sector (int player_id, int *out_sector);
-void handle_sector_info (int fd, json_t * root, int sector_id,
-				int player_id);
+void handle_sector_info (int fd, json_t * root, int sector_id, int player_id);
 void handle_sector_set_beacon (client_ctx_t * ctx, json_t * root);
 /* Fast sector scan handler (IDs+counts only) */
-void handle_move_scan (client_ctx_t *ctx, json_t *root);
-void handle_move_pathfind (client_ctx_t *ctx, json_t *root);
+void handle_move_scan (client_ctx_t * ctx, json_t * root);
+void handle_move_pathfind (client_ctx_t * ctx, json_t * root);
 void send_enveloped_ok (int fd, json_t * root, const char *type,
-			       json_t * data);
-
+			json_t * data);
+json_t *build_sector_info_json (int sector_id);
 
 /* Provided elsewhere; needed here for correct prototype */
 // void send_enveloped_error (int fd, json_t *root, int code, const char *msg);
-
-/* ----------------------------- */
-/* Helpers for session endpoints */
-/* ----------------------------- */
-
-
-
 
 
 /* ------------------------ idempotency helpers  ------------------------ */
@@ -109,7 +102,8 @@ hex64 (uint64_t v, char out[17])
 }
 
 /* Canonicalize a JSON object (sorted keys, compact) then FNV-1a */
-void idemp_fingerprint_json (json_t *obj, char out[17])
+void
+idemp_fingerprint_json (json_t *obj, char out[17])
 {
   char *s = json_dumps (obj, JSON_COMPACT | JSON_SORT_KEYS);
   if (!s)
@@ -121,8 +115,6 @@ void idemp_fingerprint_json (json_t *obj, char out[17])
   free (s);
   hex64 (h, out);
 }
-
-
 
 /* ------------------------ socket helpers ------------------------ */
 
@@ -193,38 +185,6 @@ send_all (int fd, const void *buf, size_t n)
 /* ------------------------ JSON reply helpers ------------------------ */
 
 
-/* Return REFUSED(1402) if no link; otherwise OK.
-   Later: SELECT 1 FROM warps WHERE from=? AND to=?; */
-static decision_t
-validate_warp_rule (int from_sector, int to_sector)
-{
-  if (to_sector <= 0)
-    return err (ERR_BAD_REQUEST, "Missing required field");
-  if (to_sector == 9999)
-    return refused (REF_NO_WARP_LINK, "No warp link");	/* your test case */
-  /* TODO: if (no_row_in_warps_table) return refused(REF_NO_WARP_LINK, "No warp link"); */
-  return ok ();
-}
-
-/* Example snapshot lookups (stub values for now). Later, read from DB. */
-static int
-player_credits (int player_id)
-{
-  return 1000;
-}
-
-static int
-cargo_space_free (int player_id)
-{
-  return 50;
-}
-
-static int
-port_is_open (int port_id, const char *commodity)
-{
-  return 1;
-}				/* 0=closed */
-
 static decision_t
 validate_trade_buy_rule (int player_id, int port_id, const char *commodity,
 			 int qty)
@@ -250,7 +210,7 @@ validate_trade_buy_rule (int player_id, int port_id, const char *commodity,
 /* ------------------------ rate limit helpers ------------------------ */
 
 /* Roll the window and increment count for this response */
- void
+void
 rl_tick (client_ctx_t *ctx)
 {
   if (!ctx)
@@ -290,7 +250,7 @@ rl_build_meta (const client_ctx_t *ctx)
 }
 
 /* Ensure env.meta exists and add meta.rate_limit */
- void
+void
 attach_rate_limit_meta (json_t *env, client_ctx_t *ctx)
 {
   if (!env || !ctx)
@@ -304,130 +264,6 @@ attach_rate_limit_meta (json_t *env, client_ctx_t *ctx)
   json_t *rl = rl_build_meta (ctx);
   json_object_set_new (meta, "rate_limit", rl);
 }
-
-
-
-/* /\* Build a full sector snapshot for sector.info *\/ */
-static json_t *
-build_sector_info_json (int sector_id)
-{
-  json_t *root = json_object ();
-  if (!root)
-    return NULL;
-
-  /* Basic info (id/name) */
-  json_t *basic = NULL;
-  if (db_sector_basic_json (sector_id, &basic) == SQLITE_OK && basic)
-    {
-      json_t *sid = json_object_get (basic, "sector_id");
-      json_t *name = json_object_get (basic, "name");
-      if (sid)
-	json_object_set (root, "sector_id", sid);
-      if (name)
-	json_object_set (root, "name", name);
-      json_decref (basic);
-    }
-  else
-    {
-      json_object_set_new (root, "sector_id", json_integer (sector_id));
-    }
-
-  /* Adjacent warps */
-  json_t *adj = NULL;
-  if (db_adjacent_sectors_json (sector_id, &adj) == SQLITE_OK && adj)
-    {
-      json_object_set_new (root, "adjacent", adj);
-      json_object_set_new (root, "adjacent_count",
-			   json_integer ((int) json_array_size (adj)));
-    }
-  else
-    {
-      json_object_set_new (root, "adjacent", json_array ());
-      json_object_set_new (root, "adjacent_count", json_integer (0));
-    }
-
-/* Ports */
-  json_t *ports = NULL;
-  if (db_ports_at_sector_json (sector_id, &ports) == SQLITE_OK && ports)
-    {
-      json_object_set_new (root, "ports", ports);
-      json_object_set_new (root, "has_port",
-			   json_array_size (ports) >
-			   0 ? json_true () : json_false ());
-    }
-  else
-    {
-      json_object_set_new (root, "ports", json_array ());
-      json_object_set_new (root, "has_port", json_false ());
-    }
-
-  /* Players */
-  json_t *players = NULL;
-  if (db_players_at_sector_json (sector_id, &players) == SQLITE_OK && players)
-    {
-      json_object_set_new (root, "players", players);
-      json_object_set_new (root, "players_count",
-			   json_integer ((int) json_array_size (players)));
-    }
-  else
-    {
-      json_object_set_new (root, "players", json_array ());
-      json_object_set_new (root, "players_count", json_integer (0));
-    }
-
-  /* Beacons (always include array) */
-  json_t *beacons = NULL;
-  if (db_beacons_at_sector_json (sector_id, &beacons) == SQLITE_OK && beacons)
-    {
-      json_object_set_new (root, "beacons", beacons);
-      json_object_set_new (root, "beacons_count",
-			   json_integer ((int) json_array_size (beacons)));
-    }
-  else
-    {
-      json_object_set_new (root, "beacons", json_array ());
-      json_object_set_new (root, "beacons_count", json_integer (0));
-    }
-
-  /* Planets */
-  json_t *planets = NULL;
-  if (db_planets_at_sector_json (sector_id, &planets) == SQLITE_OK && planets)
-    {
-      json_object_set_new (root, "planets", planets);	/* takes ownership */
-      json_object_set_new (root, "has_planet",
-			   json_array_size (planets) >
-			   0 ? json_true () : json_false ());
-      json_object_set_new (root, "planets_count",
-			   json_integer ((int) json_array_size (planets)));
-    }
-  else
-    {
-      json_object_set_new (root, "planets", json_array ());
-      json_object_set_new (root, "has_planet", json_false ());
-      json_object_set_new (root, "planets_count", json_integer (0));
-    }
-
-
-
-  /* Beacons (always include array) */
-  // json_t *beacons = NULL;
-  if (db_beacons_at_sector_json (sector_id, &beacons) == SQLITE_OK && beacons)
-    {
-      json_object_set_new (root, "beacons", beacons);
-      json_object_set_new (root, "beacons_count",
-			   json_integer ((int) json_array_size (beacons)));
-    }
-  else
-    {
-      json_object_set_new (root, "beacons", json_array ());
-      json_object_set_new (root, "beacons_count", json_integer (0));
-    }
-
-  return root;
-}
-
-
-
 
 
 /* ------------------------ message processor (stub dispatcher) ------------------------ */
@@ -488,186 +324,360 @@ process_message (client_ctx_t *ctx, json_t *root)
   ctx->rl_count = 0;
 
   const char *c = json_string_value (cmd);
-  int rc;
-  
-  if (strcmp (c, "login") == 0 || strcmp (c, "auth.login") == 0)
-    {
-       rc = cmd_auth_login(ctx, root);
-    }
-  else if (!strcmp(c, "system.capabilities")) {
-     rc = cmd_system_capabilities(ctx, root);
-  }
-  else if (!strcmp(c, "system.describe_schema")) {
-     rc = cmd_system_describe_schema(ctx, root);
-  }
-  else if (!strcmp(c, "session.ping")) {
-    rc = cmd_session_ping(ctx, root);
-  }
-  else if (!strcmp(c, "session.hello")) {
-    rc = cmd_session_hello(ctx, root);
-  }
-  else if (strcmp(c, "auth.register") == 0) {
-     rc = cmd_auth_register(ctx, root);
-  }
-  else if (!strcmp(c, "auth.logout")) {
-     rc = cmd_auth_logout(ctx, root);
-  }
-  else if (strcmp (c, "user.create") == 0 || strcmp (c, "new.user") == 0)
-    {
-      rc = cmd_user_create(ctx, root);
-    }
-  else if (strcmp (c, "player.my_info") == 0)
-    {
-      if (ctx->player_id <= 0)
-	{
-	  send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated",
-				  NULL);
-	}
-      else
-	{
-	  json_t *pinfo = NULL;
-	  int prc = db_player_info_json (ctx->player_id, &pinfo);
-	  if (prc != SQLITE_OK || !pinfo)
-	    {
-	      send_enveloped_error (ctx->fd, root, 1503, "Database error");
-	      return;
-	    }
-	  send_enveloped_ok (ctx->fd, root, "player.info", pinfo);
-	  json_decref (pinfo);
-	}
-    }
-  else if (strcmp(c, "move.pathfind") == 0)
-    {
-      handle_move_pathfind(ctx, root);
-    }  
-  else if (strcmp (c, "move.scan") == 0)
-    {
-      handle_move_scan (ctx, root);
-    }
-  else if (strcmp (c, "move.describe_sector") == 0
-	   || strcmp (c, "sector.info") == 0)
-    {
-      int sector_id = ctx->sector_id > 0 ? ctx->sector_id : 0;
-      json_t *jdata = json_object_get (root, "data");
-      json_t *jsec =
-	json_is_object (jdata) ? json_object_get (jdata, "sector_id") : NULL;
-      if (json_is_integer (jsec))
-	sector_id = (int) json_integer_value (jsec);
-      if (sector_id <= 0)
-	sector_id = 1;
+  int rc = 0;
 
-      handle_sector_info (ctx->fd, root, sector_id, ctx->player_id);
-    }
-  else if (strcmp(c, "port.info") == 0 || strcmp(c, "port.status") == 0) {
-     rc = cmd_port_info(ctx, root);
-  }
-  else if (strcmp(c, "trade.buy") == 0) {
-     rc = cmd_trade_buy(ctx, root);
-  }
-  else if (strcmp(c, "trade.sell") == 0) {
-    //  rc = cmd_trade_sell(ctx, root);
-  }
-  /* optional, if present in your code */
-  else if (strcmp(c, "trade.quote") == 0) {
-    //  rc = cmd_trade_quote(ctx, root);
-  }
-  else if (strcmp(c, "trade.jettison") == 0) {
-    // rc = cmd_trade_jettison(ctx, root);
-  }
-
-  else if (strcmp (c, "move.warp") == 0)
+/* ---------- AUTH / USER ---------- */
+  if (!strcmp (c, "login") || !strcmp (c, "auth.login"))
     {
-      json_t *jdata = json_object_get (root, "data");
-      int to = 0;
-      if (json_is_object (jdata))
-	{
-	  json_t *jto = json_object_get (jdata, "to_sector_id");
-	  if (json_is_integer (jto))
-	    to = (int) json_integer_value (jto);
-	}
-
-      decision_t d = validate_warp_rule (ctx->sector_id, to);
-      if (d.status == DEC_ERROR)
-	{
-	  send_enveloped_error (ctx->fd, root, d.code, d.message);
-	}
-      else if (d.status == DEC_REFUSED)
-	{
-	  send_enveloped_refused (ctx->fd, root, d.code, d.message, NULL);
-	}
-      else
-	{
-	  int from = ctx->sector_id;
-
-	  /* Persist new sector for this player */
-	  int prc = db_player_set_sector (ctx->player_id, to);
-	  if (prc != SQLITE_OK)
-	    {
-	      send_enveloped_error (ctx->fd, root, 1502,
-				    "Failed to persist player sector");
-	      return;
-	    }
-
-	  /* Update session state */
-	  ctx->sector_id = to;
-
-	  /* Reply (include current_sector for clients) */
-	  json_t *data = json_pack ("{s:i, s:i, s:i, s:i}",
-				    "player_id", ctx->player_id,
-				    "from_sector_id", from,
-				    "to_sector_id", to,
-				    "current_sector", to);
-	  if (!data)
-	    {
-	      send_enveloped_error (ctx->fd, root, 1500, "Out of memory");
-	      return;
-	    }
-	  send_enveloped_ok (ctx->fd, root, "move.result", data);
-	  json_decref (data);
-	}
+      rc = cmd_auth_login (ctx, root);
     }
-  else if (strcmp(c, "ship.inspect") == 0) {
-     rc = cmd_ship_inspect(ctx, root);
-  }
-  else if (strcmp(c, "ship.rename") == 0) {
-     rc = cmd_ship_rename(ctx, root);
-  }
-  else if (strcmp(c, "ship.reregister") == 0) {
-     rc = cmd_ship_rename(ctx, root);   // alias
-  }
-  else if (strcmp(c, "ship.claim") == 0) {
-     rc = cmd_ship_claim(ctx, root);
-  }
-  else if (strcmp(c, "ship.status") == 0) {
-     rc = cmd_ship_status(ctx, root);
-  }
-  else if (strcmp(c, "ship.info") == 0) {
-     rc = cmd_ship_info_compat(ctx, root); // legacy alias
-  }
-  else if (strcmp (c, "sector.set_beacon") == 0)
+  else if (!strcmp (c, "auth.register"))
     {
-      handle_sector_set_beacon (ctx, root);
+      rc = cmd_auth_register (ctx, root);
     }
-  else if (strcmp (c, "player.list_online") == 0)
+  else if (!strcmp (c, "auth.logout"))
     {
-       rc = cmd_player_list_online(ctx, root);
+      rc = cmd_auth_logout (ctx, root);
+    }
+  else if (!strcmp (c, "user.create") || !strcmp (c, "new.user"))
+    {
+      rc = cmd_user_create (ctx, root);
+    }
+  else if (!strcmp (c, "auth.refresh"))
+    {
+      rc = cmd_auth_refresh (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "auth.mfa.totp.verify"))
+    {
+      rc = cmd_auth_mfa_totp_verify (ctx, root);	/* NIY stub */
     }
 
-  else if (strcmp (c, "system.disconnect") == 0)
+/* ---------- SYSTEM / SESSION ---------- */
+  else if (!strcmp (c, "system.capabilities"))
     {
-       rc = cmd_session_disconnect(ctx, root);
+      rc = cmd_system_capabilities (ctx, root);
     }
-  else if (strcmp (c, "system.hello") == 0)
+  else if (!strcmp (c, "system.describe_schema"))
     {
-       rc = cmd_session_hello(ctx, root);
+      rc = cmd_system_describe_schema (ctx, root);
     }
+  else if (!strcmp (c, "session.ping"))
+    {
+      rc = cmd_session_ping (ctx, root);
+    }
+  else if (!strcmp (c, "session.hello"))
+    {
+      rc = cmd_session_hello (ctx, root);
+    }
+  else if (!strcmp (c, "system.hello"))
+    {
+      rc = cmd_system_hello (ctx, root);	/* optional alias NIY */
+    }
+  else if (!strcmp (c, "session.disconnect")
+	   || !strcmp (c, "system.disconnect"))
+    {
+      rc = cmd_session_disconnect (ctx, root);	/* NIY stub */
+    }
+
+/* ---------- PLAYER ---------- */
+  else if (!strcmp (c, "player.my_info"))
+    {
+      rc = cmd_player_my_info (ctx, root);
+    }
+  else if (!strcmp (c, "player.list_online"))
+    {
+      rc = cmd_player_list_online (ctx, root);
+    }
+  else if (!strcmp (c, "player.rankings"))
+    {
+      rc = cmd_player_rankings (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "player.set_prefs"))
+    {
+      rc = cmd_player_set_prefs (ctx, root);	/* NIY stub */
+    }
+
+/* ---------- SHIP ---------- */
+  else if (!strcmp (c, "ship.inspect"))
+    {
+      rc = cmd_ship_inspect (ctx, root);
+    }
+  else if (!strcmp (c, "ship.rename") || !strcmp (c, "ship.reregister"))
+    {
+      rc = cmd_ship_rename (ctx, root);
+    }
+  else if (!strcmp (c, "ship.claim"))
+    {
+      rc = cmd_ship_claim (ctx, root);
+    }
+  else if (!strcmp (c, "ship.status"))
+    {
+      rc = cmd_ship_status (ctx, root);
+    }
+  else if (!strcmp (c, "ship.info"))
+    {
+      rc = cmd_ship_info_compat (ctx, root);	/* legacy alias */
+    }
+  else if (!strcmp (c, "ship.transfer_cargo"))
+    {
+      rc = cmd_ship_transfer_cargo (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "ship.jettison"))
+    {
+      rc = cmd_ship_jettison (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "ship.upgrade"))
+    {
+      rc = cmd_ship_upgrade (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "ship.repair"))
+    {
+      rc = cmd_ship_repair (ctx, root);	/* NIY stub */
+    }
+
+/* ---------- PORTS / TRADE ---------- */
+  else if (!strcmp (c, "port.info") || !strcmp (c, "port.status")
+	   || !strcmp (c, "port.describe"))
+    {
+      rc = cmd_port_info (ctx, root);
+    }
+  else if (!strcmp (c, "trade.buy"))
+    {
+      rc = cmd_trade_buy (ctx, root);
+    }
+  else if (!strcmp (c, "trade.sell"))
+    {
+      rc = cmd_trade_sell (ctx, root);	/* NIY stub (or real) */
+    }
+  else if (!strcmp (c, "trade.quote"))
+    {
+      rc = cmd_trade_quote (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "trade.jettison"))
+    {
+      rc = cmd_trade_jettison (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "trade.offer"))
+    {
+      rc = cmd_trade_offer (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "trade.accept"))
+    {
+      rc = cmd_trade_accept (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "trade.cancel"))
+    {
+      rc = cmd_trade_cancel (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "trade.history"))
+    {
+      rc = cmd_trade_history (ctx, root);	/* NIY stub */
+    }
+
+/* ---------- UNIVERSE / SECTOR / MOVE ---------- */
+  else if (!strcmp (c, "move.describe_sector") || !strcmp (c, "sector.info"))
+    {
+      rc = cmd_move_describe_sector (ctx, root);	/* NIY or real */
+    }
+  else if (!strcmp (c, "move.scan"))
+    {
+      rc = cmd_move_scan (ctx, root);	/* NIY or real */
+    }
+  else if (!strcmp (c, "move.warp"))
+    {
+      rc = cmd_move_warp (ctx, root);	/* NIY or real */
+    }
+  else if (!strcmp (c, "move.pathfind"))
+    {
+      rc = cmd_move_pathfind (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "move.autopilot.start"))
+    {
+      rc = cmd_move_autopilot_start (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "move.autopilot.stop"))
+    {
+      rc = cmd_move_autopilot_stop (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "move.autopilot.status"))
+    {
+      rc = cmd_move_autopilot_status (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "sector.search"))
+    {
+      rc = cmd_sector_search (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "sector.set_beacon"))
+    {
+      rc = cmd_sector_set_beacon (ctx, root);	/* NIY or real */
+    }
+
+/* ---------- PLANETS / CITADEL ---------- */
+  else if (!strcmp (c, "planet.genesis"))
+    {
+      rc = cmd_planet_genesis (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "planet.info"))
+    {
+      rc = cmd_planet_info (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "planet.rename"))
+    {
+      rc = cmd_planet_rename (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "planet.land"))
+    {
+      rc = cmd_planet_land (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "planet.launch"))
+    {
+      rc = cmd_planet_launch (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "planet.transfer_ownership"))
+    {
+      rc = cmd_planet_transfer_ownership (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "planet.harvest"))
+    {
+      rc = cmd_planet_harvest (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "planet.deposit"))
+    {
+      rc = cmd_planet_deposit (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "planet.withdraw"))
+    {
+      rc = cmd_planet_withdraw (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "citadel.build"))
+    {
+      rc = cmd_citadel_build (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "citadel.upgrade"))
+    {
+      rc = cmd_citadel_upgrade (ctx, root);	/* NIY stub */
+    }
+
+/* ---------- COMBAT ---------- */
+  else if (!strcmp (c, "combat.attack"))
+    {
+      rc = cmd_combat_attack (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "combat.deploy_fighters"))
+    {
+      rc = cmd_combat_deploy_fighters (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "combat.lay_mines"))
+    {
+      rc = cmd_combat_lay_mines (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "combat.sweep_mines"))
+    {
+      rc = cmd_combat_sweep_mines (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "combat.status"))
+    {
+      rc = cmd_combat_status (ctx, root);	/* NIY stub */
+    }
+
+/* ---------- CHAT ---------- */
+  else if (!strcmp (c, "chat.send"))
+    {
+      rc = cmd_chat_send (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "chat.broadcast"))
+    {
+      rc = cmd_chat_broadcast (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "chat.history"))
+    {
+      rc = cmd_chat_history (ctx, root);	/* NIY stub */
+    }
+
+/* ---------- MAIL ---------- */
+  else if (!strcmp (c, "mail.send"))
+    {
+      rc = cmd_mail_send (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "mail.inbox"))
+    {
+      rc = cmd_mail_inbox (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "mail.read"))
+    {
+      rc = cmd_mail_read (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "mail.delete"))
+    {
+      rc = cmd_mail_delete (ctx, root);	/* NIY stub */
+    }
+
+/* ---------- SUBSCRIBE ---------- */
+  else if (!strcmp (c, "subscribe.add"))
+    {
+      rc = cmd_subscribe_add (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "subscribe.remove"))
+    {
+      rc = cmd_subscribe_remove (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "subscribe.list"))
+    {
+      rc = cmd_subscribe_list (ctx, root);	/* NIY stub */
+    }
+
+/* ---------- BULK ---------- */
+  else if (!strcmp (c, "bulk.execute"))
+    {
+      rc = cmd_bulk_execute (ctx, root);	/* NIY stub */
+    }
+
+/* ---------- ADMIN ---------- */
+  else if (!strcmp (c, "admin.notice"))
+    {
+      rc = cmd_admin_notice (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "admin.shutdown_warning"))
+    {
+      rc = cmd_admin_shutdown_warning (ctx, root);	/* NIY stub */
+    }
+
+/* ---------- S2S ---------- */
+  else if (!strcmp (c, "s2s.planet.genesis"))
+    {
+      rc = cmd_s2s_planet_genesis (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "s2s.planet.transfer"))
+    {
+      rc = cmd_s2s_planet_transfer (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "s2s.player.migrate"))
+    {
+      rc = cmd_s2s_player_migrate (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "s2s.port.restock"))
+    {
+      rc = cmd_s2s_port_restock (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "s2s.event.relay"))
+    {
+      rc = cmd_s2s_event_relay (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "s2s.replication.heartbeat"))
+    {
+      rc = cmd_s2s_replication_heartbeat (ctx, root);	/* NIY stub */
+    }
+
+/* ---------- FALLBACK ---------- */
   else
     {
-      /* Unknown command -> 1101 Not implemented (per catalogue) */
-      send_enveloped_error (ctx->fd, root, 1101, "Not implemented");
+      send_enveloped_error (ctx->fd, root, 1400, "Unknown command");
+      rc = 0;
     }
-}
 
+  return rc;
+
+}
 
 
 /* ------------------------ per-connection loop (thread body) ------------------------ */
@@ -855,316 +865,3 @@ server_loop (volatile sig_atomic_t *running)
 }
 
 
- void
-handle_sector_info (int fd, json_t *root, int sector_id, int player_id)
-{
-  json_t *payload = build_sector_info_json (sector_id);
-  if (!payload)
-    {
-      send_enveloped_error (fd, root, 1500,
-			    "Out of memory building sector info");
-      return;
-    }
-
-  // Add beacon info
-  char *btxt = NULL;
-  if (db_sector_beacon_text (sector_id, &btxt) == SQLITE_OK && btxt && *btxt)
-    {
-      json_object_set_new (payload, "beacon", json_string (btxt));
-      json_object_set_new (payload, "has_beacon", json_true ());
-    }
-  else
-    {
-      json_object_set_new (payload, "beacon", json_null ());
-      json_object_set_new (payload, "has_beacon", json_false ());
-    }
-  free (btxt);
-
-  // Add ships info
-  json_t *ships = NULL;
-  int rc = db_ships_at_sector_json (player_id, sector_id, &ships);
-  if (rc == SQLITE_OK)
-    {
-      json_object_set_new (payload, "ships", ships ? ships : json_array ());
-      json_object_set_new (payload, "ships_count",
-			   json_integer (json_array_size (ships)));
-    }
-
-  // Add port info
-  json_t *ports = NULL;
-  int pt = db_ports_at_sector_json (sector_id, &ports);
-  if (pt == SQLITE_OK)
-    {
-      json_object_set_new (payload, "ports", ports ? ports : json_array ());
-      json_object_set_new (payload, "ports_count",
-			   json_integer (json_array_size (ports)));
-    }
-
-  // Add planet info
-  json_t *planets = NULL;
-  int plt = db_planets_at_sector_json (sector_id, &planets);
-  if (plt == SQLITE_OK)
-    {
-      json_object_set_new (payload, "planets",
-			   planets ? planets : json_array ());
-      json_object_set_new (payload, "planets_count",
-			   json_integer (json_array_size (planets)));
-    }
-
-  // Add planet info
-  json_t *players = NULL;
-  int py = db_players_at_sector_json (sector_id, &players);
-  if (py == SQLITE_OK)
-    {
-      json_object_set_new (payload, "players",
-			   players ? players : json_array ());
-      json_object_set_new (payload, "players_count",
-			   json_integer (json_array_size (players)));
-    }
-
-
-  send_enveloped_ok (fd, root, "sector.info", payload);
-  json_decref (payload);
-}
-
-
- void
-handle_sector_set_beacon (client_ctx_t *ctx, json_t *root)
-{
-  if (!ctx || !root)
-    return;
-
-  json_t *jdata = json_object_get (root, "data");
-  json_t *jsector_id = json_object_get (jdata, "sector_id");
-  json_t *jtext = json_object_get (jdata, "text");
-
-  /* Guard 0: schema */
-  if (!json_is_integer (jsector_id) || !json_is_string (jtext))
-    {
-      send_enveloped_error (ctx->fd, root, 1300, "Invalid request schema");
-      return;
-    }
-
-  /* Guard 1: player must be in that sector */
-  int req_sector_id = (int) json_integer_value (jsector_id);
-  if (ctx->sector_id != req_sector_id)
-    {
-      send_enveloped_error (ctx->fd, root, 1400,
-			    "Player is not in the specified sector.");
-      return;
-    }
-
-  /* Guard 2: FedSpace 1–10 is forbidden */
-  if (req_sector_id >= 1 && req_sector_id <= 10)
-    {
-      send_enveloped_error (ctx->fd, root, 1403,
-			    "Cannot set a beacon in FedSpace.");
-      return;
-    }
-
-  /* Guard 3: player must have a beacon on the ship */
-  if (!db_player_has_beacon_on_ship (ctx->player_id))
-    {
-      send_enveloped_error (ctx->fd, root, 1401,
-			    "Player does not have a beacon on their ship.");
-      return;
-    }
-
-  /* NOTE: Canon behavior: if a beacon already exists, launching another destroys BOTH.
-     So we DO NOT reject here. We only check 'had_beacon' to craft a user message. */
-  int had_beacon = db_sector_has_beacon (req_sector_id);
-
-  /* Text length guard (<=80) */
-  const char *beacon_text = json_string_value (jtext);
-  if (!beacon_text)
-    beacon_text = "";
-  if ((int) strlen (beacon_text) > 80)
-    {
-      send_enveloped_error (ctx->fd, root, 1400,
-			    "Beacon text is too long (max 80 characters).");
-      return;
-    }
-
-  /* Perform the update:
-     - if none existed → set text
-     - if one existed  → clear (explode both) */
-  int rc = db_sector_set_beacon (req_sector_id, beacon_text);
-  if (rc != SQLITE_OK)
-    {
-      send_enveloped_error (ctx->fd, root, 1500,
-			    "Database error updating beacon.");
-      return;
-    }
-
-  /* Consume the player's beacon (canon: you used it either way) */
-  db_player_decrement_beacon_count (ctx->player_id);
-
-  /* ===== Build sector.info payload (same fields as handle_sector_info) ===== */
-  json_t *payload = build_sector_info_json (req_sector_id);
-  if (!payload)
-    {
-      send_enveloped_error (ctx->fd, root, 1500,
-			    "Out of memory building sector info");
-      return;
-    }
-
-  /* Beacon text */
-  char *btxt = NULL;
-  if (db_sector_beacon_text (req_sector_id, &btxt) == SQLITE_OK && btxt
-      && *btxt)
-    {
-      json_object_set_new (payload, "beacon", json_string (btxt));
-      json_object_set_new (payload, "has_beacon", json_true ());
-    }
-  else
-    {
-      json_object_set_new (payload, "beacon", json_null ());
-      json_object_set_new (payload, "has_beacon", json_false ());
-    }
-  free (btxt);
-
-  /* Ships */
-  json_t *ships = NULL;
-  rc = db_ships_at_sector_json (ctx->player_id, req_sector_id, &ships);
-  if (rc == SQLITE_OK)
-    {
-      json_object_set_new (payload, "ships", ships ? ships : json_array ());
-      json_object_set_new (payload, "ships_count",
-			   json_integer ((int) json_array_size (ships)));
-    }
-
-  /* Ports */
-  json_t *ports = NULL;
-  int pt = db_ports_at_sector_json (req_sector_id, &ports);
-  if (pt == SQLITE_OK)
-    {
-      json_object_set_new (payload, "ports", ports ? ports : json_array ());
-      json_object_set_new (payload, "ports_count",
-			   json_integer ((int) json_array_size (ports)));
-    }
-
-  /* Planets */
-  json_t *planets = NULL;
-  int plt = db_planets_at_sector_json (req_sector_id, &planets);
-  if (plt == SQLITE_OK)
-    {
-      json_object_set_new (payload, "planets",
-			   planets ? planets : json_array ());
-      json_object_set_new (payload, "planets_count",
-			   json_integer ((int) json_array_size (planets)));
-    }
-
-  /* Players */
-  json_t *players = NULL;
-  int py = db_players_at_sector_json (req_sector_id, &players);
-  if (py == SQLITE_OK)
-    {
-      json_object_set_new (payload, "players",
-			   players ? players : json_array ());
-      json_object_set_new (payload, "players_count",
-			   json_integer ((int) json_array_size (players)));
-    }
-
-  /* ===== Send envelope with a nice meta.message ===== */
-  json_t *env = make_base_envelope (root);
-  json_object_set_new (env, "status", json_string ("ok"));
-  json_object_set_new (env, "type", json_string ("sector.info"));
-  json_object_set_new (env, "data", payload);	/* take ownership */
-
-  json_t *meta = json_object ();
-  json_object_set_new (meta, "message",
-		       json_string (had_beacon
-				    ?
-				    "Two marker beacons collided and exploded — the sector now has no beacon."
-				    : "Beacon deployed."));
-  json_object_set_new (env, "meta", meta);
-
-  attach_rate_limit_meta (env, ctx);
-  rl_tick (ctx);
-  send_all_json (ctx->fd, env);
-  json_decref (env);
-}
-
-/* -------- move.scan: fast, side-effect-free snapshot (defensive build) -------- */
- void
-handle_move_scan (client_ctx_t *ctx, json_t *root)
-{
-  if (!ctx) return;
-
-  /* Resolve sector id (default to 1 if session is unset) */
-  int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 1;
-  fprintf(stderr, "[move.scan] sector_id=%d\n", sector_id);
-
-  /* 1) Core snapshot from DB (uses sectors.name/beacon; ports.location; ships.location; planets.sector) */
-  json_t *core = NULL;
-  if (db_sector_scan_core(sector_id, &core) != SQLITE_OK || !core) {
-    send_enveloped_error(ctx->fd, root, 1401, "Sector not found");
-    return;
-  }
-
-  /* 2) Adjacent IDs (array) */
-  json_t *adj = NULL;
-  if (db_adjacent_sectors_json(sector_id, &adj) != SQLITE_OK || !adj) {
-    adj = json_array(); /* never null */
-  }
-
-  /* 3) Security flags */
-  int in_fed = (sector_id >= 1 && sector_id <= 10);
-  int safe_zone = json_integer_value(json_object_get(core, "safe_zone")); /* 0 with your schema */
-  json_t *security = json_object();
-  if (!security) { json_decref(core); json_decref(adj); send_enveloped_error(ctx->fd, root, 1500, "OOM"); return; }
-  json_object_set_new(security, "fedspace",      json_boolean(in_fed));
-  json_object_set_new(security, "safe_zone",     json_boolean(in_fed ? 1 : (safe_zone != 0)));
-  json_object_set_new(security, "combat_locked", json_boolean(in_fed ? 1 : 0));
-
-  /* 4) Port summary (presence only) */
-  int port_cnt = json_integer_value(json_object_get(core, "port_count"));
-  json_t *port = json_object();
-  if (!port) { json_decref(core); json_decref(adj); json_decref(security); send_enveloped_error(ctx->fd, root, 1500, "OOM"); return; }
-  json_object_set_new(port, "present", json_boolean(port_cnt > 0));
-  json_object_set_new(port, "class",   json_null());
-  json_object_set_new(port, "stance",  json_null());
-
-  /* 5) Counts object */
-  int ships   = json_integer_value(json_object_get(core, "ship_count"));
-  int planets = json_integer_value(json_object_get(core, "planet_count"));
-  json_t *counts = json_object();
-  if (!counts) { json_decref(core); json_decref(adj); json_decref(security); json_decref(port); send_enveloped_error(ctx->fd, root, 1500, "OOM"); return; }
-  json_object_set_new(counts, "ships",    json_integer(ships));
-  json_object_set_new(counts, "planets",  json_integer(planets));
-  json_object_set_new(counts, "mines",    json_integer(0));
-  json_object_set_new(counts, "fighters", json_integer(0));
-
-  /* 6) Beacon (string or null) */
-  const char *btxt = json_string_value(json_object_get(core, "beacon_text"));
-  json_t *beacon = (btxt && *btxt) ? json_string(btxt) : json_null();
-  if (!beacon) { /* json_string can OOM */ beacon = json_null(); }
-
-  /* 7) Name */
-  const char *name = json_string_value(json_object_get(core, "name"));
-
-  /* 8) Build data object explicitly (no json_pack; no chance of NULL from format mismatch) */
-  json_t *data = json_object();
-  if (!data) {
-    json_decref(core); json_decref(adj); json_decref(security); json_decref(port); json_decref(counts); if (beacon) json_decref(beacon);
-    send_enveloped_error(ctx->fd, root, 1500, "OOM");
-    return;
-  }
-  json_object_set_new(data, "sector_id", json_integer(sector_id));
-  json_object_set_new(data, "name",      json_string(name ? name : "Unknown"));
-  json_object_set_new(data, "security",  security);  /* transfers ownership */
-  json_object_set_new(data, "adjacent",  adj);       /* transfers ownership */
-  json_object_set_new(data, "port",      port);      /* transfers ownership */
-  json_object_set_new(data, "counts",    counts);    /* transfers ownership */
-  json_object_set_new(data, "beacon",    beacon);    /* transfers ownership */
-
-  /* Optional debug: confirm non-NULL before sending */
-  fprintf(stderr, "[move.scan] built data=%p (sector_id=%d)\n", (void*)data, sector_id);
-
-  /* 9) Send envelope (your send_enveloped_ok steals the 'data' ref via _set_new) */
-  send_enveloped_ok(ctx->fd, root, "sector.scan_v1", data);
-
-  /* 10) Clean up */
-  json_decref(core);
-  /* 'data' members already owned by 'data' -> envelope stole 'data' */
-}

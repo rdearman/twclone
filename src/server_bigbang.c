@@ -1791,92 +1791,107 @@ rand_incl (int lo, int hi)
 /* Ensure there are at least N exits from Fedspace (2..10) to [outer_min..outer_max].
    If fewer exist, create more (and optionally the return edge). */
 static int
-ensure_fedspace_exit (sqlite3 *db, int outer_min, int outer_max, int add_return_edge)
+ensure_fedspace_exit (sqlite3 *db, int outer_min, int outer_max,
+		      int add_return_edge)
 {
-  if (!db) return SQLITE_ERROR;
+  if (!db)
+    return SQLITE_ERROR;
 
-  const int required_exits = 3;      /* <- change this if you want a different minimum */
-  const int max_attempts    = 100;   /* avoid infinite loops on tiny maps */
+  const int required_exits = 3;	/* <- change this if you want a different minimum */
+  const int max_attempts = 100;	/* avoid infinite loops on tiny maps */
 
   int rc = SQLITE_OK;
   sqlite3_stmt *st_count = NULL;
-  sqlite3_stmt *st_ins   = NULL;
+  sqlite3_stmt *st_ins = NULL;
 
   /* Prepare COUNT(*) of existing exits 2..10 -> [outer_min..outer_max] */
-  rc = sqlite3_prepare_v2(
-        db,
-        "SELECT COUNT(*) "
-        "FROM sector_warps "
-        "WHERE from_sector BETWEEN 2 AND 10 "
-        "  AND to_sector   BETWEEN ?1 AND ?2;",
-        -1, &st_count, NULL);
-  if (rc != SQLITE_OK) goto done;
+  rc = sqlite3_prepare_v2 (db,
+			   "SELECT COUNT(*) "
+			   "FROM sector_warps "
+			   "WHERE from_sector BETWEEN 2 AND 10 "
+			   "  AND to_sector   BETWEEN ?1 AND ?2;",
+			   -1, &st_count, NULL);
+  if (rc != SQLITE_OK)
+    goto done;
 
-  sqlite3_bind_int(st_count, 1, outer_min);
-  sqlite3_bind_int(st_count, 2, outer_max);
+  sqlite3_bind_int (st_count, 1, outer_min);
+  sqlite3_bind_int (st_count, 2, outer_max);
 
-  rc = sqlite3_step(st_count);
-  int have = (rc == SQLITE_ROW) ? sqlite3_column_int(st_count, 0) : 0;
-  sqlite3_reset(st_count);
+  rc = sqlite3_step (st_count);
+  int have = (rc == SQLITE_ROW) ? sqlite3_column_int (st_count, 0) : 0;
+  sqlite3_reset (st_count);
 
-  if (have >= required_exits) { rc = SQLITE_OK; goto done; }
+  if (have >= required_exits)
+    {
+      rc = SQLITE_OK;
+      goto done;
+    }
 
   /* Prepare INSERT (idempotent) */
-  rc = sqlite3_prepare_v2(
-        db,
-        "INSERT OR IGNORE INTO sector_warps(from_sector,to_sector) VALUES(?,?);",
-        -1, &st_ins, NULL);
-  if (rc != SQLITE_OK) goto done;
+  rc = sqlite3_prepare_v2 (db,
+			   "INSERT OR IGNORE INTO sector_warps(from_sector,to_sector) VALUES(?,?);",
+			   -1, &st_ins, NULL);
+  if (rc != SQLITE_OK)
+    goto done;
 
   /* Try to add exits until we reach required_exits or hit attempt cap */
   int attempts = 0;
-  while (have < required_exits && attempts < max_attempts) {
-    ++attempts;
+  while (have < required_exits && attempts < max_attempts)
+    {
+      ++attempts;
 
-    /* Pick random FedSpace source 2..10 and random outer destination [outer_min..outer_max] */
-    int from = 2 + (rand() % 9);  /* 2..10 inclusive */
-    int span = (outer_max >= outer_min) ? (outer_max - outer_min + 1) : 1;
-    int to   = outer_min + (rand() % span);
+      /* Pick random FedSpace source 2..10 and random outer destination [outer_min..outer_max] */
+      int from = 2 + (rand () % 9);	/* 2..10 inclusive */
+      int span = (outer_max >= outer_min) ? (outer_max - outer_min + 1) : 1;
+      int to = outer_min + (rand () % span);
 
-    if (to == from) to = (to < outer_max) ? (to + 1) : outer_min;  /* avoid self-edge */
+      if (to == from)
+	to = (to < outer_max) ? (to + 1) : outer_min;	/* avoid self-edge */
 
-    /* Insert forward edge */
-    sqlite3_clear_bindings(st_ins);
-    sqlite3_bind_int(st_ins, 1, from);
-    sqlite3_bind_int(st_ins, 2, to);
-    int rc1 = sqlite3_step(st_ins);
-    sqlite3_reset(st_ins);
+      /* Insert forward edge */
+      sqlite3_clear_bindings (st_ins);
+      sqlite3_bind_int (st_ins, 1, from);
+      sqlite3_bind_int (st_ins, 2, to);
+      int rc1 = sqlite3_step (st_ins);
+      sqlite3_reset (st_ins);
 
-    /* Optional return edge (keeps it safe from one-way pruning) */
-    if (add_return_edge) {
-      sqlite3_clear_bindings(st_ins);
-      sqlite3_bind_int(st_ins, 1, to);
-      sqlite3_bind_int(st_ins, 2, from);
-      (void)sqlite3_step(st_ins);
-      sqlite3_reset(st_ins);
+      /* Optional return edge (keeps it safe from one-way pruning) */
+      if (add_return_edge)
+	{
+	  sqlite3_clear_bindings (st_ins);
+	  sqlite3_bind_int (st_ins, 1, to);
+	  sqlite3_bind_int (st_ins, 2, from);
+	  (void) sqlite3_step (st_ins);
+	  sqlite3_reset (st_ins);
+	}
+
+      /* Re-count to see if we actually increased the number of exits */
+      sqlite3_reset (st_count);
+      rc = sqlite3_step (st_count);
+      have = (rc == SQLITE_ROW) ? sqlite3_column_int (st_count, 0) : have;
+      sqlite3_reset (st_count);
     }
 
-    /* Re-count to see if we actually increased the number of exits */
-    sqlite3_reset(st_count);
-    rc = sqlite3_step(st_count);
-    have = (rc == SQLITE_ROW) ? sqlite3_column_int(st_count, 0) : have;
-    sqlite3_reset(st_count);
-  }
-
   /* If we ran out of attempts without reaching the target, still OK but report */
-  if (have < required_exits) {
-    fprintf(stderr, "FED EXIT: only %d/%d exits created after %d attempts\n",
-            have, required_exits, attempts);
-  } else {
-    fprintf(stderr, "FED EXIT: ensured %d exits from 2..10 to [%d..%d]\n",
-            have, outer_min, outer_max);
-  }
+  if (have < required_exits)
+    {
+      fprintf (stderr,
+	       "FED EXIT: only %d/%d exits created after %d attempts\n", have,
+	       required_exits, attempts);
+    }
+  else
+    {
+      fprintf (stderr, "FED EXIT: ensured %d exits from 2..10 to [%d..%d]\n",
+	       have, outer_min, outer_max);
+    }
 
   rc = SQLITE_OK;
 
 done:
-  if (st_ins)   sqlite3_finalize(st_ins);
-  if (st_count) sqlite3_finalize(st_count);
+  if (st_ins)
+    sqlite3_finalize (st_ins);
+  if (st_count)
+    sqlite3_finalize (st_count);
   return rc;
 }
 

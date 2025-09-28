@@ -111,8 +111,8 @@ int db_ship_rename_if_owner (int player_id, int ship_id,
 int db_ship_claim (int player_id, int sector_id, int ship_id,
 		   json_t ** out_ship);
 int db_ensure_ship_perms_column (void);
-int db_sector_scan_core (int sector_id, json_t **out_obj);
-int db_sector_scan_snapshot (int sector_id, json_t **out_core);
+int db_sector_scan_core (int sector_id, json_t ** out_obj);
+int db_sector_scan_snapshot (int sector_id, json_t ** out_core);
 
 
 #endif /* DATABASE_H */

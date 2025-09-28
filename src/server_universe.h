@@ -4,12 +4,12 @@
 #include "config.h"
 
 /* Insert default config values into DB if missing */
-int initconfig(void);
+int initconfig (void);
 
 /* Initialise universe (check DB, run bigbang if needed) */
-int universe_init(void);
+int universe_init (void);
 
 /* Shutdown universe (cleanup hooks if needed) */
-void universe_shutdown(void);
+void universe_shutdown (void);
 
 #endif /* SERVER_UNIVERSE_H */

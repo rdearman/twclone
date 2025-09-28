@@ -20,31 +20,63 @@
 #include "schemas.h"
 #include "server_cmds.h"
 #include "server_loop.h"
-#include "server_ships.h"   
+#include "server_ships.h"
 #include "database.h"
 #include "errors.h"
 #include "config.h"
 #include "common.h"
 #include "server_envelope.h"
-
+#include "server_rules.h"
 
 #define ERR_NOT_IMPLEMENTED 9999
 
-void handle_move_pathfind (client_ctx_t *ctx, json_t *root);
+void handle_move_pathfind (client_ctx_t * ctx, json_t * root);
 
-void send_enveloped_ok(int fd, json_t *root, const char *type, json_t *data);
-void send_enveloped_error(int fd, json_t *root, int code, const char *msg);
-void send_enveloped_refused(int fd, json_t *root, int code, const char *msg, json_t *data_opt);
+void send_enveloped_ok (int fd, json_t * root, const char *type,
+			json_t * data);
+void send_enveloped_error (int fd, json_t * root, int code, const char *msg);
+void send_enveloped_refused (int fd, json_t * root, int code, const char *msg,
+			     json_t * data_opt);
+
+
+int
+cmd_ship_transfer_cargo (client_ctx_t *ctx, json_t *root)
+{
+  STUB_NIY (ctx, root, "ship.transfer_cargo");
+}
+
+int
+cmd_ship_jettison (client_ctx_t *ctx, json_t *root)
+{
+  STUB_NIY (ctx, root, "ship.jettison");
+}
+
+int
+cmd_ship_upgrade (client_ctx_t *ctx, json_t *root)
+{
+  STUB_NIY (ctx, root, "ship.upgrade");
+}
+
+int
+cmd_ship_repair (client_ctx_t *ctx, json_t *root)
+{
+  STUB_NIY (ctx, root, "ship.repair");
+}
 
 
 
-static void mark_deprecated(json_t* res) {
-  json_t* meta = json_object_get(res, "meta");
-  if (!meta) {
-    meta = json_object();
-    json_object_set_new(res, "meta", meta);
-  }
-  json_object_set_new(meta, "deprecated", json_true());
+
+
+static void
+mark_deprecated (json_t *res)
+{
+  json_t *meta = json_object_get (res, "meta");
+  if (!meta)
+    {
+      meta = json_object ();
+      json_object_set_new (res, "meta", meta);
+    }
+  json_object_set_new (meta, "deprecated", json_true ());
 }
 
 
@@ -52,347 +84,181 @@ static void mark_deprecated(json_t* res) {
 
 
 /* ship.inspect */
-int cmd_ship_inspect(client_ctx_t *ctx, json_t *root) {
-  if (ctx->player_id <= 0) {
-    send_enveloped_refused(ctx->fd, root, 1401, "Not authenticated", NULL);
-    return 0;
-  }
+int
+cmd_ship_inspect (client_ctx_t *ctx, json_t *root)
+{
+  if (ctx->player_id <= 0)
+    {
+      send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+      return 0;
+    }
 
   int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 1;
-  json_t *jdata = json_object_get(root, "data");
-  if (json_is_object(jdata)) {
-    json_t *jsec = json_object_get(jdata, "sector_id");
-    if (json_is_integer(jsec)) {
-      int s = (int)json_integer_value(jsec);
-      if (s > 0) sector_id = s;
+  json_t *jdata = json_object_get (root, "data");
+  if (json_is_object (jdata))
+    {
+      json_t *jsec = json_object_get (jdata, "sector_id");
+      if (json_is_integer (jsec))
+	{
+	  int s = (int) json_integer_value (jsec);
+	  if (s > 0)
+	    sector_id = s;
+	}
     }
-  }
 
   json_t *ships = NULL;
-  int rc = db_ships_inspectable_at_sector_json(ctx->player_id, sector_id, &ships);
-  if (rc != SQLITE_OK || !ships) {
-    send_enveloped_error(ctx->fd, root, 1500, "Database error");
-    return 0;
-  }
+  int rc =
+    db_ships_inspectable_at_sector_json (ctx->player_id, sector_id, &ships);
+  if (rc != SQLITE_OK || !ships)
+    {
+      send_enveloped_error (ctx->fd, root, 1500, "Database error");
+      return 0;
+    }
 
-  json_t *payload = json_pack("{s:i s:o}", "sector", sector_id, "ships", ships);
-  send_enveloped_ok(ctx->fd, root, "ship.inspect", payload);
-  json_decref(payload);
+  json_t *payload =
+    json_pack ("{s:i s:o}", "sector", sector_id, "ships", ships);
+  send_enveloped_ok (ctx->fd, root, "ship.inspect", payload);
+  json_decref (payload);
   return 0;
 }
 
 /* ship.rename + ship.reregister */
-int cmd_ship_rename(client_ctx_t *ctx, json_t *root) {
-  if (ctx->player_id <= 0) {
-    send_enveloped_refused(ctx->fd, root, 1401, "Not authenticated", NULL);
-    return 0;
-  }
-  json_t *data = json_object_get(root, "data");
-  if (!json_is_object(data)) {
-    send_enveloped_refused(ctx->fd, root, 1400, "Bad request", NULL);
-    return 0;
-  }
-  json_t *j_ship = json_object_get(data, "ship_id");
-  json_t *j_name = json_object_get(data, "new_name");
-  if (!json_is_integer(j_ship) || !json_is_string(j_name)) {
-    send_enveloped_refused(ctx->fd, root, 1400, "Missing ship_id/new_name", NULL);
-    return 0;
-  }
-  int ship_id = (int)json_integer_value(j_ship);
-  const char *new_name = json_string_value(j_name);
+int
+cmd_ship_rename (client_ctx_t *ctx, json_t *root)
+{
+  if (ctx->player_id <= 0)
+    {
+      send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+      return 0;
+    }
+  json_t *data = json_object_get (root, "data");
+  if (!json_is_object (data))
+    {
+      send_enveloped_refused (ctx->fd, root, 1400, "Bad request", NULL);
+      return 0;
+    }
+  json_t *j_ship = json_object_get (data, "ship_id");
+  json_t *j_name = json_object_get (data, "new_name");
+  if (!json_is_integer (j_ship) || !json_is_string (j_name))
+    {
+      send_enveloped_refused (ctx->fd, root, 1400, "Missing ship_id/new_name",
+			      NULL);
+      return 0;
+    }
+  int ship_id = (int) json_integer_value (j_ship);
+  const char *new_name = json_string_value (j_name);
 
-  int rc = db_ship_rename_if_owner(ctx->player_id, ship_id, new_name);
-  if (rc == SQLITE_CONSTRAINT) {
-    send_enveloped_refused(ctx->fd, root, 1403, "Permission denied", NULL);
-    return 0;
-  }
-  if (rc != SQLITE_OK) {
-    send_enveloped_error(ctx->fd, root, 1500, "Database error");
-    return 0;
-  }
+  int rc = db_ship_rename_if_owner (ctx->player_id, ship_id, new_name);
+  if (rc == SQLITE_CONSTRAINT)
+    {
+      send_enveloped_refused (ctx->fd, root, 1403, "Permission denied", NULL);
+      return 0;
+    }
+  if (rc != SQLITE_OK)
+    {
+      send_enveloped_error (ctx->fd, root, 1500, "Database error");
+      return 0;
+    }
 
-  json_t *payload = json_pack("{s:i s:s}", "ship_id", ship_id, "name", new_name);
-  send_enveloped_ok(ctx->fd, root, "ship.renamed", payload);
-  json_decref(payload);
+  json_t *payload =
+    json_pack ("{s:i s:s}", "ship_id", ship_id, "name", new_name);
+  send_enveloped_ok (ctx->fd, root, "ship.renamed", payload);
+  json_decref (payload);
   return 0;
 }
 
 /* ship.claim */
-int cmd_ship_claim(client_ctx_t *ctx, json_t *root) {
-  if (ctx->player_id <= 0) {
-    send_enveloped_refused(ctx->fd, root, 1401, "Not authenticated", NULL);
-    return 0;
-  }
+int
+cmd_ship_claim (client_ctx_t *ctx, json_t *root)
+{
+  if (ctx->player_id <= 0)
+    {
+      send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+      return 0;
+    }
 
   int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 1;
-  json_t *data = json_object_get(root, "data");
-  if (json_is_object(data)) {
-    json_t *jsec = json_object_get(data, "sector_id");
-    if (json_is_integer(jsec)) {
-      int s = (int)json_integer_value(jsec);
-      if (s > 0) sector_id = s;
+  json_t *data = json_object_get (root, "data");
+  if (json_is_object (data))
+    {
+      json_t *jsec = json_object_get (data, "sector_id");
+      if (json_is_integer (jsec))
+	{
+	  int s = (int) json_integer_value (jsec);
+	  if (s > 0)
+	    sector_id = s;
+	}
     }
-  }
 
   int ship_id = -1;
-  if (json_is_object(data)) {
-    json_t *j_ship = json_object_get(data, "ship_id");
-    if (json_is_integer(j_ship)) ship_id = (int)json_integer_value(j_ship);
-  }
-  if (ship_id <= 0) {
-    send_enveloped_refused(ctx->fd, root, 1400, "Missing ship_id", NULL);
-    return 0;
-  }
+  if (json_is_object (data))
+    {
+      json_t *j_ship = json_object_get (data, "ship_id");
+      if (json_is_integer (j_ship))
+	ship_id = (int) json_integer_value (j_ship);
+    }
+  if (ship_id <= 0)
+    {
+      send_enveloped_refused (ctx->fd, root, 1400, "Missing ship_id", NULL);
+      return 0;
+    }
 
   json_t *ship = NULL;
-  int rc = db_ship_claim(ctx->player_id, sector_id, ship_id, &ship);
-  if (rc != SQLITE_OK || !ship) {
-    send_enveloped_refused(ctx->fd, root, 1406, "Ship not claimable", NULL);
-    return 0;
-  }
+  int rc = db_ship_claim (ctx->player_id, sector_id, ship_id, &ship);
+  if (rc != SQLITE_OK || !ship)
+    {
+      send_enveloped_refused (ctx->fd, root, 1406, "Ship not claimable",
+			      NULL);
+      return 0;
+    }
 
-  json_t *payload = json_pack("{s:o}", "ship", ship);
-  send_enveloped_ok(ctx->fd, root, "ship.claimed", payload);
-  json_decref(payload);
+  json_t *payload = json_pack ("{s:o}", "ship", ship);
+  send_enveloped_ok (ctx->fd, root, "ship.claimed", payload);
+  json_decref (payload);
   return 0;
 }
 
 /* ship.status (canonical) */
-int cmd_ship_status(client_ctx_t *ctx, json_t *root) {
-  if (ctx->player_id <= 0) {
-    send_enveloped_refused(ctx->fd, root, 1401, "Not authenticated", NULL);
-    return 0;
-  }
+int
+cmd_ship_status (client_ctx_t *ctx, json_t *root)
+{
+  if (ctx->player_id <= 0)
+    {
+      send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+      return 0;
+    }
 
   json_t *player_info = NULL;
-  if (db_player_info_json(ctx->player_id, &player_info) != SQLITE_OK || !player_info) {
-    send_enveloped_error(ctx->fd, root, 1500, "Database error");
-    return 0;
-  }
+  if (db_player_info_json (ctx->player_id, &player_info) != SQLITE_OK
+      || !player_info)
+    {
+      send_enveloped_error (ctx->fd, root, 1500, "Database error");
+      return 0;
+    }
 
   // Extract ship-only view from player_info (adjust keys to match your schema)
-  json_t *ship = json_object_get(player_info, "ship");
-  if (!json_is_object(ship)) {
-    json_decref(player_info);
-    send_enveloped_error(ctx->fd, root, 1500, "No ship info");
-    return 0;
-  }
+  json_t *ship = json_object_get (player_info, "ship");
+  if (!json_is_object (ship))
+    {
+      json_decref (player_info);
+      send_enveloped_error (ctx->fd, root, 1500, "No ship info");
+      return 0;
+    }
   // Build payload (clone or pack fields as needed)
-  json_t *payload = json_pack("{s:O}", "ship", ship);
-  send_enveloped_ok(ctx->fd, root, "ship.status", payload);
-  json_decref(payload);
-  json_decref(player_info);
+  json_t *payload = json_pack ("{s:O}", "ship", ship);
+  send_enveloped_ok (ctx->fd, root, "ship.status", payload);
+  json_decref (payload);
+  json_decref (player_info);
   return 0;
 }
 
 /* ship.info legacy alias → call status then mark deprecated (in envelope meta) */
-int cmd_ship_info_compat(client_ctx_t *ctx, json_t *root) {
+int
+cmd_ship_info_compat (client_ctx_t *ctx, json_t *root)
+{
   // Call canonical
-  int rc = cmd_ship_status(ctx, root);
+  int rc = cmd_ship_status (ctx, root);
   // If your envelope code supports meta injection per request, you can set it there.
   // Otherwise leave as-is; the handler name + docs indicate deprecation.
   return rc;
 }
-
-
-
-
-
-/* -------- move.pathfind: BFS path A->B with avoid list -------- */
- void
-handle_move_pathfind (client_ctx_t *ctx, json_t *root)
-{
-  if (!ctx) return;
-
-  /* Parse request data */
-  json_t *data = root ? json_object_get(root, "data") : NULL;
-
-  /* from: null -> current sector */
-  int from = (ctx->sector_id > 0) ? ctx->sector_id : 1;
-  if (data) {
-    json_t *jfrom = json_object_get(data, "from");
-    if (jfrom && json_is_integer(jfrom)) from = (int)json_integer_value(jfrom);
-    /* if null or missing, keep default */
-  }
-
-  /* to: required */
-  int to = -1;
-  if (data) {
-    json_t *jto = json_object_get(data, "to");
-    if (jto && json_is_integer(jto)) to = (int)json_integer_value(jto);
-  }
-  if (to <= 0) {
-    send_enveloped_error(ctx->fd, root, 1401, "Target sector not specified");
-    return;
-  }
-
-  /* Build avoid set (optional) */
-  /* We’ll size bitsets by max sector id */
-  sqlite3 *db = db_get_handle();
-  int max_id = 0;
-  sqlite3_stmt *st = NULL;
-
-  pthread_mutex_lock(&db_mutex);
-  if (sqlite3_prepare_v2(db, "SELECT MAX(id) FROM sectors", -1, &st, NULL) == SQLITE_OK &&
-      sqlite3_step(st) == SQLITE_ROW) {
-    max_id = sqlite3_column_int(st, 0);
-  }
-  if (st) { sqlite3_finalize(st); st = NULL; }
-  pthread_mutex_unlock(&db_mutex);
-
-  if (max_id <= 0) {
-    send_enveloped_error(ctx->fd, root, 1401, "No sectors");
-    return;
-  }
-
-  /* Clamp from/to to valid range quickly */
-  if (from <= 0 || from > max_id || to > max_id) {
-    send_enveloped_error(ctx->fd, root, 1401, "Sector not found");
-    return;
-  }
-
-  /* allocate simple arrays sized max_id+1 */
-  size_t N = (size_t)max_id + 1;
-  unsigned char *avoid = (unsigned char*)calloc(N, 1);
-  int *prev = (int*)malloc(N * sizeof(int));
-  unsigned char *seen = (unsigned char*)calloc(N, 1);
-  int *queue = (int*)malloc(N * sizeof(int));
-
-  if (!avoid || !prev || !seen || !queue) {
-    free(avoid); free(prev); free(seen); free(queue);
-    send_enveloped_error(ctx->fd, root, 1500, "Out of memory");
-    return;
-  }
-
-  /* Fill avoid */
-  if (data) {
-    json_t *javoid = json_object_get(data, "avoid");
-    if (javoid && json_is_array(javoid)) {
-      size_t i, len = json_array_size(javoid);
-      for (i = 0; i < len; ++i) {
-        json_t *v = json_array_get(javoid, i);
-        if (json_is_integer(v)) {
-          int sid = (int)json_integer_value(v);
-          if (sid > 0 && sid <= max_id) avoid[sid] = 1;
-        }
-      }
-    }
-  }
-
-  /* If target or source is avoided, unreachable */
-  if (avoid[to] || avoid[from]) {
-    free(avoid); free(prev); free(seen); free(queue);
-    send_enveloped_error(ctx->fd, root, 1406, "Path not found");
-    return;
-  }
-
-  /* Trivial path */
-  if (from == to) {
-    json_t *steps = json_array();
-    json_array_append_new(steps, json_integer(from));
-    json_t *out = json_object();
-    json_object_set_new(out, "steps", steps);
-    json_object_set_new(out, "total_cost", json_integer(0));
-    send_enveloped_ok(ctx->fd, root, "move.path_v1", out);
-    free(avoid); free(prev); free(seen); free(queue);
-    return;
-  }
-
-  /* Prepare neighbor query once */
-  pthread_mutex_lock(&db_mutex);
-  int rc = sqlite3_prepare_v2(db,
-      "SELECT to_sector FROM sector_warps WHERE from_sector = ?1",
-      -1, &st, NULL);
-  pthread_mutex_unlock(&db_mutex);
-
-  if (rc != SQLITE_OK || !st) {
-    free(avoid); free(prev); free(seen); free(queue);
-    send_enveloped_error(ctx->fd, root, 1500, "Pathfind init failed");
-    return;
-  }
-
-  /* BFS */
-  for (int i = 0; i <= max_id; ++i) prev[i] = -1;
-  int qh = 0, qt = 0;
-  queue[qt++] = from;
-  seen[from] = 1;
-
-  int found = 0;
-
-  while (qh < qt) {
-    int u = queue[qh++];
-
-    /* fetch neighbors of u */
-    pthread_mutex_lock(&db_mutex);
-    sqlite3_reset(st);
-    sqlite3_clear_bindings(st);
-    sqlite3_bind_int(st, 1, u);
-    while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
-      int v = sqlite3_column_int(st, 0);
-      if (v <= 0 || v > max_id) continue;
-      if (avoid[v] || seen[v]) continue;
-      seen[v] = 1;
-      prev[v] = u;
-      queue[qt++] = v;
-      if (v == to) {
-        found = 1;
-        /* still finish stepping rows to keep stmt sane */
-        /* break after unlock */
-      }
-    }
-    pthread_mutex_unlock(&db_mutex);
-    if (found) break;
-  }
-
-  /* finalize stmt */
-  pthread_mutex_lock(&db_mutex);
-  sqlite3_finalize(st);
-  pthread_mutex_unlock(&db_mutex);
-
-  if (!found) {
-    free(avoid); free(prev); free(seen); free(queue);
-    send_enveloped_error(ctx->fd, root, 1406, "Path not found");
-    return;
-  }
-
-  /* Reconstruct path */
-  json_t *steps = json_array();
-  int cur = to;
-  int hops = 0;
-  /* backtrack into a simple stack (we can append to a temp C array then JSON) */
-  int *stack = (int*)malloc(N * sizeof(int));
-  if (!stack) {
-    free(avoid); free(prev); free(seen); free(queue);
-    send_enveloped_error(ctx->fd, root, 1500, "Out of memory");
-    return;
-  }
-
-  int sp = 0;
-  while (cur != -1) {
-    stack[sp++] = cur;
-    if (cur == from) break;
-    cur = prev[cur];
-  }
-  /* If we didn’t reach 'from', something’s off */
-  if (stack[sp-1] != from) {
-    free(stack); free(avoid); free(prev); free(seen); free(queue);
-    send_enveloped_error(ctx->fd, root, 1406, "Path not found");
-    return;
-  }
-  /* reverse into JSON steps: from .. to */
-  for (int i = sp - 1; i >= 0; --i) {
-    json_array_append_new(steps, json_integer(stack[i]));
-  }
-  hops = sp - 1;
-  free(stack);
-
-  /* Build rootponse */
-  json_t *out = json_object();
-  json_object_set_new(out, "steps", steps);
-  json_object_set_new(out, "total_cost", json_integer(hops));
-
-  send_enveloped_ok(ctx->fd, root, "move.path_v1", out);
-
-  free(avoid); free(prev); free(seen); free(queue);
-}
-

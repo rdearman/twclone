@@ -12,36 +12,44 @@
 #include "schemas.h"
 
 
-static int send_all(int fd, const char *buf, size_t len) {
+static int
+send_all (int fd, const char *buf, size_t len)
+{
   size_t off = 0;
-  while (off < len) {
-    ssize_t n = write(fd, buf + off, len - off);
-    if (n < 0) {
-      if (errno == EINTR) continue;
-      if (errno == EAGAIN || errno == EWOULDBLOCK) {
-        // caller can decide whether to retry later; treat as partial send success
-        return -1;
-      }
-      return -1;
+  while (off < len)
+    {
+      ssize_t n = write (fd, buf + off, len - off);
+      if (n < 0)
+	{
+	  if (errno == EINTR)
+	    continue;
+	  if (errno == EAGAIN || errno == EWOULDBLOCK)
+	    {
+	      // caller can decide whether to retry later; treat as partial send success
+	      return -1;
+	    }
+	  return -1;
+	}
+      off += (size_t) n;
     }
-    off += (size_t)n;
-  }
   return 0;
 }
 
 
 /* Simple process-local counter for message ids. Thread-safe enough via GCC builtin. */
-const char *next_msg_id(void) {
+const char *
+next_msg_id (void)
+{
   static __thread char buf[32];
   static unsigned long long seq = 0;
 #if defined(__GNUC__) || defined(__clang__)
-  unsigned long long n = __sync_add_and_fetch(&seq, 1ULL);
+  unsigned long long n = __sync_add_and_fetch (&seq, 1ULL);
 #else
   // fallback (not thread-safe)
   unsigned long long n = ++seq;
 #endif
   // "srv-<number>"
-  snprintf(buf, sizeof(buf), "srv-%llu", n);
+  snprintf (buf, sizeof (buf), "srv-%llu", n);
   return buf;
 }
 
@@ -54,7 +62,8 @@ const char *next_msg_id(void) {
 /* } */
 
 /* RFC3339 UTC "YYYY-MM-DDThh:mm:ssZ" (seconds precision) */
-void iso8601_utc (char out[32])
+void
+iso8601_utc (char out[32])
 {
   time_t now = time (NULL);
   struct tm tm;
@@ -86,28 +95,34 @@ void iso8601_utc (char out[32])
 /*   return env;			/\* caller owns *\/ */
 /* } */
 
-json_t *make_base_envelope(json_t *req, const char *type) {
+json_t *
+make_base_envelope (json_t *req, const char *type)
+{
   char ts[32];
-  iso8601_utc(ts);
+  iso8601_utc (ts);
 
-  json_t *meta = json_object();
-  json_object_set_new(meta, "id",    json_string(next_msg_id()));
-  json_object_set_new(meta, "ts",    json_string(ts));
+  json_t *meta = json_object ();
+  json_object_set_new (meta, "id", json_string (next_msg_id ()));
+  json_object_set_new (meta, "ts", json_string (ts));
 
-  json_t *env = json_object();
-  json_object_set_new(env, "type", json_string(type));
-  json_object_set_new(env, "meta", meta);
+  json_t *env = json_object ();
+  json_object_set_new (env, "type", json_string (type));
+  json_object_set_new (env, "meta", meta);
 
   // If request has meta.id, echo it as in_reply_to (best-effort)
   const char *in_reply_to = NULL;
-  if (req && json_is_object(req)) {
-    json_t *m = json_object_get(req, "meta");
-    if (json_is_object(m)) {
-      json_t *rid = json_object_get(m, "id");
-      if (json_is_string(rid)) in_reply_to = json_string_value(rid);
+  if (req && json_is_object (req))
+    {
+      json_t *m = json_object_get (req, "meta");
+      if (json_is_object (m))
+	{
+	  json_t *rid = json_object_get (m, "id");
+	  if (json_is_string (rid))
+	    in_reply_to = json_string_value (rid);
+	}
     }
-  }
-  if (in_reply_to) json_object_set_new(env, "in_reply_to", json_string(in_reply_to));
+  if (in_reply_to)
+    json_object_set_new (env, "in_reply_to", json_string (in_reply_to));
 
   return env;
 }
@@ -235,44 +250,61 @@ json_t *make_base_envelope(json_t *req, const char *type) {
 
 
 
-void send_enveloped_refused(int fd, json_t *req, int code, const char *msg, json_t *data_opt) {
-  json_t *err = json_pack("{s:i s:s}", "code", code, "message", msg ? msg : "");
-  if (data_opt) json_object_set(err, "data", data_opt); // borrow
+void
+send_enveloped_refused (int fd, json_t *req, int code, const char *msg,
+			json_t *data_opt)
+{
+  json_t *err =
+    json_pack ("{s:i s:s}", "code", code, "message", msg ? msg : "");
+  if (data_opt)
+    json_object_set (err, "data", data_opt);	// borrow
 
-  json_t *env = make_base_envelope(req, "refused");
-  json_object_set_new(env, "error", err);
+  json_t *env = make_base_envelope (req, "refused");
+  json_object_set_new (env, "error", err);
 
-  char *s = json_dumps(env, JSON_COMPACT);
-  size_t len = s ? strlen(s) : 0;
-  if (len) (void)send_all(fd, s, len);
-  if (s) free(s);
-  json_decref(env);
+  char *s = json_dumps (env, JSON_COMPACT);
+  size_t len = s ? strlen (s) : 0;
+  if (len)
+    (void) send_all (fd, s, len);
+  if (s)
+    free (s);
+  json_decref (env);
 }
 
-void send_enveloped_error(int fd, json_t *req, int code, const char *msg) {
-  json_t *err = json_pack("{s:i s:s}", "code", code, "message", msg ? msg : "");
-  json_t *env = make_base_envelope(req, "error");
-  json_object_set_new(env, "error", err);
+void
+send_enveloped_error (int fd, json_t *req, int code, const char *msg)
+{
+  json_t *err =
+    json_pack ("{s:i s:s}", "code", code, "message", msg ? msg : "");
+  json_t *env = make_base_envelope (req, "error");
+  json_object_set_new (env, "error", err);
 
-  char *s = json_dumps(env, JSON_COMPACT);
-  size_t len = s ? strlen(s) : 0;
-  if (len) (void)send_all(fd, s, len);
-  if (s) free(s);
-  json_decref(env);
+  char *s = json_dumps (env, JSON_COMPACT);
+  size_t len = s ? strlen (s) : 0;
+  if (len)
+    (void) send_all (fd, s, len);
+  if (s)
+    free (s);
+  json_decref (env);
 }
 
-void send_enveloped_ok(int fd, json_t *req, const char *type, json_t *data) {
-  json_t *env = make_base_envelope(req, type ? type : "ok");
-  if (data) json_object_set_new(env, "data", data); // takes ownership
+void
+send_enveloped_ok (int fd, json_t *req, const char *type, json_t *data)
+{
+  json_t *env = make_base_envelope (req, type ? type : "ok");
+  if (data)
+    json_object_set_new (env, "data", data);	// takes ownership
 
-  char *s = json_dumps(env, JSON_COMPACT);
-  size_t len = s ? strlen(s) : 0;
-  if (len) (void)send_all(fd, s, len);
-  if (s) free(s);
-  json_decref(env);
+  char *s = json_dumps (env, JSON_COMPACT);
+  size_t len = s ? strlen (s) : 0;
+  if (len)
+    (void) send_all (fd, s, len);
+  if (s)
+    free (s);
+  json_decref (env);
 }
 
- void
+void
 send_all_json (int fd, json_t *obj)
 {
   char *s = json_dumps (obj, JSON_COMPACT);
@@ -284,7 +316,7 @@ send_all_json (int fd, json_t *obj)
     }
 }
 
- void
+void
 send_error_json (int fd, int code, const char *msg)
 {
   json_t *o = json_object ();
@@ -295,7 +327,7 @@ send_error_json (int fd, int code, const char *msg)
   json_decref (o);
 }
 
- void
+void
 send_ok_json (int fd, json_t *data /* may be NULL */ )
 {
   json_t *o = json_object ();
@@ -305,6 +337,3 @@ send_ok_json (int fd, json_t *data /* may be NULL */ )
   send_all_json (fd, o);
   json_decref (o);
 }
-
-
-

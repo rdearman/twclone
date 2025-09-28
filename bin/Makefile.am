@@ -22,14 +22,14 @@
 server_LDADD   = -ljansson -lsqlite3 -lpthread -lm
 # bigbang_LDADD  = -ljansson -lsqlite3 -lpthread -lm
 client_LDADD   = -ljansson -lsqlite3 -lpthread -lm
-test_bang_LDADD = -ljansson -lsqlite3 -lpthread -lm
+bigbang_LDADD = -ljansson -lsqlite3 -lpthread -lm
 
 AUTOMAKE_OPTIONS = subdir-objects
 
 bin_PROGRAMS = \
 	client \
 	server \
-	test_bang
+	bigbang
 
 client_SOURCES = \
 	../src/globals.c \
@@ -39,8 +39,12 @@ client_SOURCES = \
 	../src/parse.c
 
 server_SOURCES = \
+        ../src/server_communication.c \
+        ../src/server_bulk.c \
+	../src/server_combat.c  \
 	../src/server_bigbang.c \
 	../src/server_cmds.c \
+	../src/server_citadel.c \
 	../src/server_envelope.c \
 	../src/server_auth.c \
 	../src/server_config.c \
@@ -52,6 +56,7 @@ server_SOURCES = \
 	../src/server_ports.c \
 	../src/server_ships.c \
 	../src/server_universe.c \
+	../src/server_s2s.c \
 	../src/server_warp_post_processing.c \
 	../src/namegen.c \
 	../src/globals.c \
@@ -59,7 +64,7 @@ server_SOURCES = \
 	../src/schemas.c \
 	../src/common.c
 
-test_bang_SOURCES = \
+bigbang_SOURCES = \
 	../src/database.c \
 	../src/schemas.c \
 	../src/server_envelope.c \
