@@ -21,22 +21,21 @@
 
 server_LDADD   = -ljansson -lsqlite3 -lpthread -lm
 # bigbang_LDADD  = -ljansson -lsqlite3 -lpthread -lm
-client_LDADD   = -ljansson -lsqlite3 -lpthread -lm
+# client_LDADD   = -ljansson -lsqlite3 -lpthread -lm
 bigbang_LDADD = -ljansson -lsqlite3 -lpthread -lm
 
 AUTOMAKE_OPTIONS = subdir-objects
 
 bin_PROGRAMS = \
-	client \
 	server \
 	bigbang
 
-client_SOURCES = \
-	../src/globals.c \
-	../src/database.c \
-	../src/client.c \
-	../src/common.c \
-	../src/parse.c
+# client_SOURCES = \
+# 	../src/globals.c \
+# 	../src/database.c \
+# 	../src/client.c \
+# 	../src/common.c \
+# 	../src/parse.c
 
 server_SOURCES = \
         ../src/server_communication.c \

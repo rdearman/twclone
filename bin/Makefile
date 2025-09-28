@@ -109,7 +109,7 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = x86_64-pc-linux-gnu
 host_triplet = x86_64-pc-linux-gnu
-bin_PROGRAMS = client$(EXEEXT) server$(EXEEXT) bigbang$(EXEEXT)
+bin_PROGRAMS = server$(EXEEXT) bigbang$(EXEEXT)
 subdir = bin
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/configure.ac
@@ -132,11 +132,6 @@ am_bigbang_OBJECTS = ../src/database.$(OBJEXT) \
 	../src/common.$(OBJEXT)
 bigbang_OBJECTS = $(am_bigbang_OBJECTS)
 bigbang_DEPENDENCIES =
-am_client_OBJECTS = ../src/globals.$(OBJEXT) ../src/database.$(OBJEXT) \
-	../src/client.$(OBJEXT) ../src/common.$(OBJEXT) \
-	../src/parse.$(OBJEXT)
-client_OBJECTS = $(am_client_OBJECTS)
-client_DEPENDENCIES =
 am_server_OBJECTS = ../src/server_communication.$(OBJEXT) \
 	../src/server_bulk.$(OBJEXT) ../src/server_combat.$(OBJEXT) \
 	../src/server_bigbang.$(OBJEXT) ../src/server_cmds.$(OBJEXT) \
@@ -169,10 +164,9 @@ am__v_at_1 =
 DEFAULT_INCLUDES = -I. -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__maybe_remake_depfiles = depfiles
-am__depfiles_remade = ../src/$(DEPDIR)/client.Po \
-	../src/$(DEPDIR)/common.Po ../src/$(DEPDIR)/database.Po \
-	../src/$(DEPDIR)/globals.Po ../src/$(DEPDIR)/namegen.Po \
-	../src/$(DEPDIR)/parse.Po ../src/$(DEPDIR)/schemas.Po \
+am__depfiles_remade = ../src/$(DEPDIR)/common.Po \
+	../src/$(DEPDIR)/database.Po ../src/$(DEPDIR)/globals.Po \
+	../src/$(DEPDIR)/namegen.Po ../src/$(DEPDIR)/schemas.Po \
 	../src/$(DEPDIR)/server_auth.Po \
 	../src/$(DEPDIR)/server_bigbang.Po \
 	../src/$(DEPDIR)/server_bulk.Po \
@@ -206,8 +200,8 @@ AM_V_CCLD = $(am__v_CCLD_$(V))
 am__v_CCLD_ = $(am__v_CCLD_$(AM_DEFAULT_VERBOSITY))
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(bigbang_SOURCES) $(client_SOURCES) $(server_SOURCES)
-DIST_SOURCES = $(bigbang_SOURCES) $(client_SOURCES) $(server_SOURCES)
+SOURCES = $(bigbang_SOURCES) $(server_SOURCES)
+DIST_SOURCES = $(bigbang_SOURCES) $(server_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -331,16 +325,16 @@ top_builddir = ..
 top_srcdir = ..
 server_LDADD = -ljansson -lsqlite3 -lpthread -lm
 # bigbang_LDADD  = -ljansson -lsqlite3 -lpthread -lm
-client_LDADD = -ljansson -lsqlite3 -lpthread -lm
+# client_LDADD   = -ljansson -lsqlite3 -lpthread -lm
 bigbang_LDADD = -ljansson -lsqlite3 -lpthread -lm
 AUTOMAKE_OPTIONS = subdir-objects
-client_SOURCES = \
-	../src/globals.c \
-	../src/database.c \
-	../src/client.c \
-	../src/common.c \
-	../src/parse.c
 
+# client_SOURCES = \
+# 	../src/globals.c \
+# 	../src/database.c \
+# 	../src/client.c \
+# 	../src/common.c \
+# 	../src/parse.c
 server_SOURCES = \
         ../src/server_communication.c \
         ../src/server_bulk.c \
@@ -484,14 +478,6 @@ clean-binPROGRAMS:
 bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEPENDENCIES) 
 	@rm -f bigbang$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(bigbang_OBJECTS) $(bigbang_LDADD) $(LIBS)
-../src/client.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/parse.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-
-client$(EXEEXT): $(client_OBJECTS) $(client_DEPENDENCIES) $(EXTRA_client_DEPENDENCIES) 
-	@rm -f client$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(client_OBJECTS) $(client_LDADD) $(LIBS)
 ../src/server_communication.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_bulk.$(OBJEXT): ../src/$(am__dirstamp) \
@@ -534,12 +520,10 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-include ../src/$(DEPDIR)/client.Po # am--include-marker
 include ../src/$(DEPDIR)/common.Po # am--include-marker
 include ../src/$(DEPDIR)/database.Po # am--include-marker
 include ../src/$(DEPDIR)/globals.Po # am--include-marker
 include ../src/$(DEPDIR)/namegen.Po # am--include-marker
-include ../src/$(DEPDIR)/parse.Po # am--include-marker
 include ../src/$(DEPDIR)/schemas.Po # am--include-marker
 include ../src/$(DEPDIR)/server_auth.Po # am--include-marker
 include ../src/$(DEPDIR)/server_bigbang.Po # am--include-marker
@@ -712,12 +696,10 @@ clean: clean-am
 clean-am: clean-binPROGRAMS clean-generic mostlyclean-am
 
 distclean: distclean-am
-		-rm -f ../src/$(DEPDIR)/client.Po
-	-rm -f ../src/$(DEPDIR)/common.Po
+		-rm -f ../src/$(DEPDIR)/common.Po
 	-rm -f ../src/$(DEPDIR)/database.Po
 	-rm -f ../src/$(DEPDIR)/globals.Po
 	-rm -f ../src/$(DEPDIR)/namegen.Po
-	-rm -f ../src/$(DEPDIR)/parse.Po
 	-rm -f ../src/$(DEPDIR)/schemas.Po
 	-rm -f ../src/$(DEPDIR)/server_auth.Po
 	-rm -f ../src/$(DEPDIR)/server_bigbang.Po
@@ -784,12 +766,10 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
-		-rm -f ../src/$(DEPDIR)/client.Po
-	-rm -f ../src/$(DEPDIR)/common.Po
+		-rm -f ../src/$(DEPDIR)/common.Po
 	-rm -f ../src/$(DEPDIR)/database.Po
 	-rm -f ../src/$(DEPDIR)/globals.Po
 	-rm -f ../src/$(DEPDIR)/namegen.Po
-	-rm -f ../src/$(DEPDIR)/parse.Po
 	-rm -f ../src/$(DEPDIR)/schemas.Po
 	-rm -f ../src/$(DEPDIR)/server_auth.Po
 	-rm -f ../src/$(DEPDIR)/server_bigbang.Po

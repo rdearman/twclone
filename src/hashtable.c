@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include "hashtable.h"
-#include "universe.h"
+//#include "universe.h"
 
 int
 hash (const char *symbol, int hash_length)

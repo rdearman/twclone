@@ -1,9 +1,9 @@
 #include <sys/time.h>
 #include "common.h"
 #include "types.h"
-#include "universe.h"
-#include "shipinfo.h"
-#include "planet.h"
+#include "server_universe.h"
+// #include "shipinfo.h"
+// #include "planet.h"
 #include "config.h"
 #include "hashtable.h"
 #include "globals.h"

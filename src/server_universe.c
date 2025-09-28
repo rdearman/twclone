@@ -5,7 +5,6 @@
 #include <sqlite3.h>
 #include "server_universe.h"
 #include "database.h"
-#include "server_universe.h"
 #include "server_cmds.h"
 #include "server_rules.h"
 #include "common.h"
