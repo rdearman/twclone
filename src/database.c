@@ -136,6 +136,13 @@ const char *create_table_sql[] = {
     " buff_size INTEGER,"
     " max_name_length INTEGER," " planet_type_count INTEGER" ");",
 
+  "CREATE TABLE IF NOT EXISTS trade_idempotency ("
+  "key          TEXT PRIMARY KEY,"
+  "player_id    INTEGER NOT NULL,"
+  "sector_id    INTEGER NOT NULL,"
+  "request_json TEXT NOT NULL,"
+  "response_json TEXT NOT NULL,"
+  "created_at   INTEGER NOT NULL );",
 
   "CREATE TABLE IF NOT EXISTS used_sectors (used);",
 

@@ -182,32 +182,6 @@ send_all (int fd, const void *buf, size_t n)
   return 0;
 }
 
-/* ------------------------ JSON reply helpers ------------------------ */
-
-
-static decision_t
-validate_trade_buy_rule (int player_id, int port_id, const char *commodity,
-			 int qty)
-{
-  if (!commodity || port_id <= 0 || qty <= 0)
-    return err (ERR_BAD_REQUEST, "Missing required field");
-
-  if (!port_is_open (port_id, commodity))
-    return refused (REF_PORT_CLOSED, "Port is closed");
-
-  /* Example rule checks */
-  int price_per = 10;		/* stub */
-  long long cost = (long long) price_per * qty;
-  if (player_credits (player_id) < cost)
-    return refused (REF_NOT_ENOUGH_CREDITS, "Not enough credits");
-
-  if (cargo_space_free (player_id) < qty)
-    return refused (REF_NOT_ENOUGH_HOLDS, "Not enough cargo holds");
-
-  return ok ();
-}
-
-/* ------------------------ rate limit helpers ------------------------ */
 
 /* Roll the window and increment count for this response */
 void
@@ -436,7 +410,7 @@ process_message (client_ctx_t *ctx, json_t *root)
     }
 
 /* ---------- PORTS / TRADE ---------- */
-  else if (!strcmp (c, "port.info") || !strcmp (c, "port.status")
+  else if (!strcmp (c, "port.info") || !strcmp (c, "port.status") || !strcmp (c, "trade.port_info")
 	   || !strcmp (c, "port.describe"))
     {
       rc = cmd_port_info (ctx, root);
