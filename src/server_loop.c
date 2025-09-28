@@ -675,8 +675,6 @@ process_message (client_ctx_t *ctx, json_t *root)
       rc = 0;
     }
 
-  return rc;
-
 }
 
 

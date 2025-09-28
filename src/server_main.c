@@ -142,6 +142,7 @@ main (void)
   json_object_set_new (features, "warp", json_true ());
   json_object_set_new (features, "sector.describe", json_true ());
   json_object_set_new (features, "trade.buy", json_true ());
+  json_object_set_new(features, "server_autopilot", json_false());
   json_object_set_new (g_capabilities, "features", features);
 
   json_object_set_new (g_capabilities, "version",
