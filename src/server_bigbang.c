@@ -4,7 +4,6 @@
 #include <sqlite3.h>
 #include <string.h>
 #include <stdbool.h>
-
 #include "database.h"
 #include "server_config.h"
 #include "server_bigbang.h"
@@ -47,6 +46,89 @@ static int ensure_all_sectors_have_exits (sqlite3 * db);
 
 static bool has_column (sqlite3 * db, const char *table, const char *column);
 
+struct twconfig * config_load (void)
+{
+  fprintf (stderr, "config_load start\n");
+
+  const char *sql =
+    "SELECT turnsperday, "
+    "       maxwarps_per_sector, "
+    "       startingcredits, "
+    "       startingfighters, "
+    "       startingholds, "
+    "       processinterval, "
+    "       autosave, "
+    "       max_ports, "
+    "       max_planets_per_sector, "
+    "       max_total_planets, "
+    "       max_citadel_level, "
+    "       number_of_planet_types, "
+    "       max_ship_name_length, "
+    "       ship_type_count, "
+    "       hash_length, "
+    "       default_nodes, "
+    "       buff_size, "
+    "       max_name_length, "
+    "       planet_type_count " "FROM config WHERE id=1;";
+
+    fprintf (stderr, "config_load SQL prepare\n");
+
+  sqlite3_stmt *stmt;
+  if (sqlite3_prepare_v2 (db_get_handle (), sql, -1, &stmt, NULL) !=
+      SQLITE_OK)
+    {
+      fprintf (stderr, "config_load prepare error: %s\n",
+	       sqlite3_errmsg (db_get_handle ()));
+      return NULL;
+    }
+
+    fprintf (stderr, "config_load cfg malloc\n");  
+
+  struct twconfig *cfg = malloc (sizeof (struct twconfig));
+  if (!cfg)
+    {
+      sqlite3_finalize (stmt);
+      return NULL;
+    }
+
+    fprintf (stderr, "config_load SQLITE_ROW\n");    
+
+  if (sqlite3_step (stmt) == SQLITE_ROW)
+    {
+      cfg->turnsperday = sqlite3_column_int (stmt, 0);
+      cfg->maxwarps_per_sector = sqlite3_column_int (stmt, 1);
+      cfg->startingcredits = sqlite3_column_int (stmt, 2);
+      cfg->startingfighters = sqlite3_column_int (stmt, 3);
+      cfg->startingholds = sqlite3_column_int (stmt, 4);
+      cfg->processinterval = sqlite3_column_int (stmt, 5);
+      cfg->autosave = sqlite3_column_int (stmt, 6);
+      cfg->max_ports = sqlite3_column_int (stmt, 7);
+      cfg->max_planets_per_sector = sqlite3_column_int (stmt, 8);
+      cfg->max_total_planets = sqlite3_column_int (stmt, 9);
+      cfg->max_citadel_level = sqlite3_column_int (stmt, 10);
+      cfg->number_of_planet_types = sqlite3_column_int (stmt, 11);
+      cfg->max_ship_name_length = sqlite3_column_int (stmt, 12);
+      cfg->ship_type_count = sqlite3_column_int (stmt, 13);
+      cfg->hash_length = sqlite3_column_int (stmt, 14);
+      cfg->default_nodes = sqlite3_column_int (stmt, 15);
+      cfg->buff_size = sqlite3_column_int (stmt, 16);
+      cfg->max_name_length = sqlite3_column_int (stmt, 17);
+      cfg->planet_type_count = sqlite3_column_int (stmt, 18);
+
+      // fprintf(stderr, "DEBUG: maxwarps_per_sector = %d\n",
+      //        cfg->maxwarps_per_sector);
+
+    }
+  else
+    {
+      free (cfg);
+      cfg = NULL;
+    }
+      fprintf (stderr, "config_load finalise\n");    
+
+  sqlite3_finalize (stmt);
+  return cfg;
+}
 
 
 // A simple struct to hold warp data in memory
@@ -475,6 +557,7 @@ create_sectors (void)
   int sector_count = get_sector_count ();
 
   struct twconfig *cfg = config_load ();
+  
   if (!cfg)
     return -1;
 

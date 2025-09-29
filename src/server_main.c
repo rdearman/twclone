@@ -7,6 +7,8 @@
 // #include "universe.h"		/* int universe_init(void); void universe_shutdown(void); */
 #include "server_loop.h"	/* int server_loop(volatile sig_atomic_t *running); */
 #include <pthread.h>		/* for pthread_mutex_t */
+#include "server_config.h"
+
 
 // If these exist elsewhere, keep them; otherwise these prototypes silence warnings
 int universe_init (void);
@@ -16,7 +18,7 @@ int load_config (void);
 static volatile sig_atomic_t running = 1;
 
 /* forward decl: your bigbang entry point (adjust name/signature if different) */
-static int bigbang (sqlite3 * db);	/* if your function is named differently, change this */
+static int bigbang ();	/* if your function is named differently, change this */
 
 /*------------------- Signal helpers ---------------------------------*/
 
@@ -96,7 +98,7 @@ run_bigbang_if_needed (void)
     }
 
   fprintf (stderr, "BIGBANG: Universe appears empty — seeding now...\n");
-  if (bigbang (dbh) != 0)
+  if (bigbang () != 0)
     {
       fprintf (stderr, "BIGBANG: Failed.\n");
       return -1;
@@ -174,7 +176,7 @@ load_config (void)
   sqlite3_stmt *stmt = NULL;
   int rc;
 
-  rc = sqlite3_open ("twconfig.db", &db);
+  rc = sqlite3_open (DEFAULT_DB_NAME, &db);
   if (rc != SQLITE_OK)
     {
       /* fprintf(stderr, "sqlite3_open: %s\n", sqlite3_errmsg(db)); */

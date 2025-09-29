@@ -6,13 +6,14 @@
 #include "server_envelope.h"	// send_enveloped_* prototypes
 #include "database.h"		// if your moved bodies call db_*
 // #include "schemas.h"      // uncomment if you wire system.describe_schema to schemas.c
+#define DEFAULT_DB_NAME "twconfig.db"
+struct twconfig;        
+struct twconfig * config_load (void);
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
-
-
 
   struct twconfig
   {
@@ -42,8 +43,6 @@ extern "C"
     int planet_type_count;
   };
 
-  struct twconfig *config_load (void);
-  //void initconfig (void);
   int cmd_system_capabilities (client_ctx_t * ctx, json_t * root);
   int cmd_system_describe_schema (client_ctx_t * ctx, json_t * root);	// optional, if you expose it
   int cmd_session_ping (client_ctx_t * ctx, json_t * root);
