@@ -269,9 +269,266 @@ const char *create_table_sql[] = {
     "  FOREIGN KEY (player) REFERENCES players(id) ON DELETE CASCADE );"
     /// Add this in later when the client can deal with hashes?
     /// "ALTER TABLE players RENAME COLUMN passwd TO password_hash;"
-    //////////////////////////////////////////////////////////////////////
-/// CREATE VIEWS 
-//////////////////////////////////////////////////////////////////////
+
+
+  // "--========================"
+  // "-- Core: players (assumed)"
+  // "--========================"
+  // "-- players(id INTEGER PK, name TEXT, ...)"
+
+  // "--========================"
+  // "-- MAIL (private messages)"
+  // "--========================"
+"CREATE TABLE IF NOT EXISTS mail ("
+"  id              INTEGER PRIMARY KEY AUTOINCREMENT,"
+"  thread_id       INTEGER,                     -- optional, for future threading"
+"  sender_id       INTEGER NOT NULL,"
+"  recipient_id    INTEGER NOT NULL,"
+"  subject         TEXT,"
+"  body            TEXT NOT NULL,"
+"  sent_at         DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),"
+"  read_at         DATETIME,                    -- null = unread"
+"  archived        INTEGER NOT NULL DEFAULT 0,  -- 0/1"
+"  deleted         INTEGER NOT NULL DEFAULT 0,  -- soft delete (per-recipient copy)"
+"  idempotency_key TEXT,                        -- for mail.send replay safety"
+"  FOREIGN KEY(sender_id)   REFERENCES players(id) ON DELETE CASCADE,"
+"  FOREIGN KEY(recipient_id)REFERENCES players(id) ON DELETE CASCADE"
+  ");",
+
+"CREATE UNIQUE INDEX IF NOT EXISTS idx_mail_idem_recipient"
+"  ON mail(idempotency_key, recipient_id)"
+  "  WHERE idempotency_key IS NOT NULL;",
+
+  "CREATE INDEX IF NOT EXISTS idx_mail_inbox ON mail(recipient_id, deleted, archived, sent_at DESC);",
+  "CREATE INDEX IF NOT EXISTS idx_mail_unread ON mail(recipient_id, read_at);",
+  "CREATE INDEX IF NOT EXISTS idx_mail_sender ON mail(sender_id, sent_at DESC);",
+
+  // "--============================"
+  // "-- SUBSPACE (global broadcasts)"
+  // "--============================"
+"CREATE TABLE IF NOT EXISTS subspace ("
+"  id           INTEGER PRIMARY KEY AUTOINCREMENT, -- monotonically increasing offset"
+"  sender_id    INTEGER,                           -- NULL for system"
+"  message      TEXT NOT NULL,"
+"  kind         TEXT NOT NULL DEFAULT 'chat',      -- 'chat' | 'system' | 'notice'"
+"  posted_at    DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),"
+"  FOREIGN KEY(sender_id) REFERENCES players(id) ON DELETE SET NULL"
+  ");",
+
+  "CREATE INDEX IF NOT EXISTS idx_subspace_time ON subspace(posted_at DESC);",
+
+  // "-- Track each player’s last consumed subspace id for catch-up"
+"CREATE TABLE IF NOT EXISTS subspace_cursors ("
+"  player_id   INTEGER PRIMARY KEY,"
+"  last_seen_id INTEGER NOT NULL DEFAULT 0,"
+"  FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE"
+  ");",
+
+// "--================================="
+// "-- CORPORATIONS (if not already set)"
+// "--================================="
+
+// "--=========================="
+// "-- CORP MAIL (group channel)"
+// "--=========================="
+"CREATE TABLE IF NOT EXISTS corp_mail ("
+"  id           INTEGER PRIMARY KEY AUTOINCREMENT,"
+"  corp_id      INTEGER NOT NULL,"
+"  sender_id    INTEGER,                           -- NULL for system"
+"  subject      TEXT,"
+"  body         TEXT NOT NULL,"
+"  posted_at    DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),"
+"  FOREIGN KEY(corp_id)  REFERENCES corporations(id) ON DELETE CASCADE,"
+"  FOREIGN KEY(sender_id)REFERENCES players(id) ON DELETE SET NULL"
+  ");",
+
+  "CREATE INDEX IF NOT EXISTS idx_corp_mail_corp ON corp_mail(corp_id, posted_at DESC);",
+
+  // "-- Optional per-member read markers (like subspace cursors)"
+"CREATE TABLE IF NOT EXISTS corp_mail_cursors ("
+"  corp_id       INTEGER NOT NULL,"
+"  player_id     INTEGER NOT NULL,"
+"  last_seen_id  INTEGER NOT NULL DEFAULT 0,"
+"  PRIMARY KEY (corp_id, player_id),"
+"  FOREIGN KEY(corp_id)  REFERENCES corporations(id) ON DELETE CASCADE,"
+"  FOREIGN KEY(player_id)REFERENCES players(id) ON DELETE CASCADE"
+  ");",
+
+// "--=========================="
+// "-- CORP ACTIVITY / OPS LOGS"
+// "--=========================="
+"CREATE TABLE IF NOT EXISTS corp_log ("
+"  id           INTEGER PRIMARY KEY AUTOINCREMENT,"
+"  corp_id      INTEGER NOT NULL,"
+"  actor_id     INTEGER,                  -- the member who did it (nullable for system)"
+"  event_type   TEXT NOT NULL,            -- 'deposit','withdraw','defence_up','planet_move',..."
+"  payload      TEXT NOT NULL,            -- JSON with details (sector, amounts, etc.)"
+"  created_at   DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),"
+"  FOREIGN KEY(corp_id) REFERENCES corporations(id) ON DELETE CASCADE,"
+"  FOREIGN KEY(actor_id)REFERENCES players(id) ON DELETE SET NULL"
+  ");",
+
+  "CREATE INDEX IF NOT EXISTS idx_corp_log_corp_time ON corp_log(corp_id, created_at DESC);",
+  "CREATE INDEX IF NOT EXISTS idx_corp_log_type ON corp_log(event_type, created_at DESC);",
+
+  // "--=========================="
+  // "-- SYSTEM / EVENT MESSAGES"
+  // "--=========================="
+"CREATE TABLE IF NOT EXISTS system_events ("
+"  id           INTEGER PRIMARY KEY AUTOINCREMENT,"
+"  scope        TEXT NOT NULL,            -- 'global' | 'player:<id>' | 'corp:<id>'"
+"  event_type   TEXT NOT NULL,            -- 'ship_destroyed','ferrengi_sighted','bounty_set', ..."
+"  payload      TEXT NOT NULL,            -- JSON blob (sector, amounts, names, etc.)"
+"  created_at   DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))"
+  ");",
+
+  "CREATE INDEX IF NOT EXISTS idx_sys_events_time ON system_events(created_at DESC);",
+  "CREATE INDEX IF NOT EXISTS idx_sys_events_scope ON system_events(scope);",
+
+
+  // "--=========================="
+  // "-- SUBSCRIPTIONS / FILTERS"
+  // "--=========================="
+"CREATE TABLE IF NOT EXISTS subscriptions ("
+"  id           INTEGER PRIMARY KEY AUTOINCREMENT,"
+"  player_id    INTEGER NOT NULL,"
+"  event_type   TEXT NOT NULL,            -- e.g. 'bounty','port_activity','planet_shield_change'"
+"  delivery     TEXT NOT NULL,            -- 'mail' | 'subspace' | 'none'"
+"  filter_json  TEXT,                     -- optional: sectors list, thresholds, etc."
+"  enabled      INTEGER NOT NULL DEFAULT 1,"
+"  UNIQUE(player_id, event_type),"
+  "  FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE",
+");"
+
+  "CREATE INDEX IF NOT EXISTS idx_subscriptions_player ON subscriptions(player_id, enabled);",
+
+// --========================"
+// -- Corporations"
+// --========================"
+"CREATE TABLE IF NOT EXISTS corporations ("
+"  id           INTEGER PRIMARY KEY,"
+"  name         TEXT NOT NULL COLLATE NOCASE,      -- case-insensitive"
+"  owner_id     INTEGER,                           -- must also exist in corp_members"
+"  tag          TEXT COLLATE NOCASE,               -- e.g., 2–5 chars, unique"
+"  description  TEXT,"
+"  created_at   DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),"
+"  updated_at   DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),"
+"  FOREIGN KEY (owner_id) REFERENCES players(id) ON DELETE SET NULL ON UPDATE CASCADE"
+");",
+
+// -- Unique constraints (case-insensitive)"
+"CREATE UNIQUE INDEX IF NOT EXISTS ux_corporations_name_nocase ON corporations(name);",
+"CREATE UNIQUE INDEX IF NOT EXISTS ux_corporations_tag_nocase  ON corporations(tag) WHERE tag IS NOT NULL;",
+
+// -- Fast lookups"
+"CREATE INDEX IF NOT EXISTS ix_corporations_owner ON corporations(owner_id);",
+
+// -- Optional: normalise/guard TAG to A–Z/0–9 and 2–5 chars"
+"CREATE TRIGGER IF NOT EXISTS corporations_tag_normalise"
+"BEFORE INSERT ON corporations"
+"FOR EACH ROW"
+"WHEN NEW.tag IS NOT NULL"
+"BEGIN"
+"  SELECT"
+"    CASE"
+"      WHEN length(NEW.tag) < 2 OR length(NEW.tag) > 5"
+"        OR NEW.tag GLOB '*[^A-Za-z0-9]*'"
+"      THEN RAISE(ABORT, 'corp tag must be 2–5 alnum chars')"
+"    END;"
+"  -- Force upper-case"
+"  SET NEW.tag = upper(NEW.tag);"
+"END;",
+
+// -- Keep updated_at fresh"
+"CREATE TRIGGER IF NOT EXISTS corporations_touch_updated"
+"AFTER UPDATE ON corporations"
+"FOR EACH ROW"
+"BEGIN"
+"  UPDATE corporations SET updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')"
+"  WHERE id = NEW.id;"
+"END;",
+
+// --========================"
+// -- Membership (many-to-many)"
+// --========================"
+"CREATE TABLE IF NOT EXISTS corp_members ("
+"  corp_id     INTEGER NOT NULL,"
+"  player_id   INTEGER NOT NULL,"
+"  role        TEXT NOT NULL DEFAULT 'Member',     -- 'Leader' | 'Officer' | 'Member'"
+"  join_date   DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),"
+"  PRIMARY KEY (corp_id, player_id),"
+"  FOREIGN KEY (corp_id)   REFERENCES corporations(id) ON DELETE CASCADE ON UPDATE CASCADE,"
+"  FOREIGN KEY (player_id) REFERENCES players(id)      ON DELETE CASCADE ON UPDATE CASCADE,"
+"  CHECK (role IN ('Leader','Officer','Member'))"
+");",
+
+"// -- Fast lookups both ways"
+"CREATE INDEX IF NOT EXISTS ix_corp_members_player ON corp_members(player_id);",
+"CREATE INDEX IF NOT EXISTS ix_corp_members_role   ON corp_members(corp_id, role);",
+
+// -- Invariants:"
+// -- 1) The owner must be a member."
+"CREATE TRIGGER IF NOT EXISTS corp_owner_must_be_member_insert"
+"AFTER INSERT ON corporations"
+"FOR EACH ROW"
+"WHEN NEW.owner_id IS NOT NULL"
+"AND NOT EXISTS (SELECT 1 FROM corp_members"
+"                WHERE corp_id = NEW.id AND player_id = NEW.owner_id)"
+"BEGIN"
+"  INSERT INTO corp_members(corp_id, player_id, role)"
+"  VALUES(NEW.id, NEW.owner_id, 'Leader');"
+"END;",
+
+"CREATE TRIGGER IF NOT EXISTS corp_owner_must_be_member_update"
+"AFTER UPDATE OF owner_id ON corporations"
+"FOR EACH ROW"
+"WHEN NEW.owner_id IS NOT NULL"
+"AND NOT EXISTS (SELECT 1 FROM corp_members"
+"                WHERE corp_id = NEW.id AND player_id = NEW.owner_id)"
+"BEGIN"
+"  INSERT INTO corp_members(corp_id, player_id, role)"
+"  VALUES(NEW.id, NEW.owner_id, 'Leader');"
+"END;",
+
+// -- 2) Only one Leader per corp (owner == Leader)."
+"CREATE TRIGGER IF NOT EXISTS corp_one_leader_guard"
+"BEFORE INSERT ON corp_members"
+"FOR EACH ROW"
+"WHEN NEW.role = 'Leader'"
+"AND EXISTS (SELECT 1 FROM corp_members WHERE corp_id = NEW.corp_id AND role = 'Leader')"
+"BEGIN"
+"  SELECT RAISE(ABORT, 'corp may have only one Leader');"
+"END;",
+
+"CREATE TRIGGER IF NOT EXISTS corp_owner_leader_sync"
+"AFTER UPDATE OF owner_id ON corporations"
+"FOR EACH ROW"
+"BEGIN"
+"  -- Demote any existing Leader to Officer"
+"  UPDATE corp_members SET role='Officer'"
+"  WHERE corp_id = NEW.id AND role='Leader' AND player_id <> NEW.owner_id;"
+
+"  -- Promote owner to Leader"
+"  INSERT INTO corp_members(corp_id, player_id, role)"
+"  VALUES(NEW.id, NEW.owner_id, 'Leader')"
+"  ON CONFLICT(corp_id, player_id) DO UPDATE SET role='Leader';"
+"END;",
+
+// -- 3) Prevent removing the owner from the corp_members table"
+"CREATE TRIGGER IF NOT EXISTS corp_prevent_owner_remove"
+"BEFORE DELETE ON corp_members"
+"FOR EACH ROW"
+"WHEN EXISTS (SELECT 1 FROM corporations c"
+"             WHERE c.id = OLD.corp_id AND c.owner_id = OLD.player_id)"
+"BEGIN"
+"  SELECT RAISE(ABORT, 'cannot remove the owner from corp_members; change owner first');"
+"END;",
+
+
+
+  //////////////////////////////////////////////////////////////////////
+  /// CREATE VIEWS 
+  //////////////////////////////////////////////////////////////////////
     /* --- longest_tunnels view (array item ends with a comma, not semicolon) --- */
     "CREATE VIEW IF NOT EXISTS longest_tunnels AS\n"
     "WITH\n"
