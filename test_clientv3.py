@@ -1123,7 +1123,7 @@ def cap_spam_handler(ctx: Context) -> None:
     n_str = input("How many times? (default 3): ")
     n = int(n_str) if n_str.isdigit() else 3
     for i in range(n):
-        r = ctx.conn.rpc("system.hello", {})
+        r = ctx.conn.rpc("system.capabilities", {})  # was system.hello
         print(f"[{i+1}] {r.get('status')} {r.get('type')}")
 
 @register("simple_buy_handler")

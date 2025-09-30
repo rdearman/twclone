@@ -161,17 +161,44 @@
       "TESTING": {
       "title": "--- Testing Menu ---",
       "options": [
-        {
-          "key": "c",
-          "label": "(C) Capabilities (cap)",
-          "action": {
-            "rpc": {
-              "command": "system.hello",
-              "data": {}
-            },
-            "post": "print_last_rpc"
-          }
-        },
+
+	  {
+	      "key": "c",
+	      "label": "(C) Capabilities (cap)",
+	      "action": {
+		  "rpc": { "command": "system.capabilities", "data": {} },
+		  "post": "print_last_rpc"
+	      }
+	  },
+	  {
+	      "key": "l",
+	      "label": "(L) List Schemas",
+	      "action": {
+		  "rpc": { "command": "system.schema_list", "data": {} },
+		  "post": "print_last_rpc"
+	      }
+	  },
+	  {
+	      "key": "s",
+	      "label": "(S) Describe Schema",
+	      "action": {
+		  "rpc": {
+		      "command": "system.describe_schema",
+		      "data": { "name": "<prompt:str:Schema prefix (e.g., move, auth, trade)>" }
+		  },
+		  "post": "print_last_rpc"
+	      }
+	  },
+	  {
+	      "key": "a",
+	      "label": "(A) All Commands (cmd_list)",
+	      "action": {
+		  "rpc": { "command": "system.cmd_list", "data": {} },
+		  "post": "print_last_rpc"
+	      }
+	  },
+
+
 	  {
 	      "key": "t",
 	      "label": "(T) Subscribe tools",
@@ -183,17 +210,6 @@
           "label": "(X) Cap Spam (capspam)",
           "action": {
             "pycall": "cap_spam_handler"
-          }
-        },
-        {
-          "key": "s",
-          "label": "(S) Schema",
-          "action": {
-            "rpc": {
-              "command": "system.describe_schema",
-              "data": {}
-            },
-            "post": "print_last_rpc"
           }
         },
         {
