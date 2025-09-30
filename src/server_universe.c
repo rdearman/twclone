@@ -327,6 +327,67 @@ cmd_move_describe_sector (client_ctx_t *ctx, json_t *root)
   cmd_sector_info (ctx->fd, root, sector_id, ctx->player_id);
 }
 
+
+
+/* int */
+/* cmd_move_warp (client_ctx_t *ctx, json_t *root) */
+/* { */
+/*   json_t *jdata = json_object_get (root, "data"); */
+/*   int to = 0; */
+/*   if (json_is_object (jdata)) */
+/*     { */
+/*       json_t *jto = json_object_get (jdata, "to_sector_id"); */
+/*       if (json_is_integer (jto)) */
+/* 	to = (int) json_integer_value (jto); */
+/*     } */
+
+/*   // inside handle_move_warp(...) or similar */
+/*   decision_t d; */
+/*   d = validate_warp_rule (ctx->sector_id, to); */
+
+/*   // decision_t d = validate_warp_rule (ctx->sector_id, to); */
+/*   if (d.status == DEC_ERROR) */
+/*     { */
+/*       send_enveloped_error (ctx->fd, root, d.code, d.message); */
+/*     } */
+/*   else if (d.status == DEC_REFUSED) */
+/*     { */
+/*       send_enveloped_refused (ctx->fd, root, d.code, d.message, NULL); */
+/*     } */
+/*   else */
+/*     { */
+/*       int from = ctx->sector_id; */
+
+/*       /\* Persist new sector for this player *\/ */
+/*       int prc = db_player_set_sector (ctx->player_id, to); */
+/*       if (prc != SQLITE_OK) */
+/* 	{ */
+/* 	  send_enveloped_error (ctx->fd, root, 1502, */
+/* 				"Failed to persist player sector"); */
+/* 	  return 1; */
+/* 	} */
+
+/*       /\* Update session state *\/ */
+/*       ctx->sector_id = to; */
+
+/*       /\* Reply (include current_sector for clients) *\/ */
+/*       json_t *data = json_pack ("{s:i, s:i, s:i, s:i}", */
+/* 				"player_id", ctx->player_id, */
+/* 				"from_sector_id", from, */
+/* 				"to_sector_id", to, */
+/* 				"current_sector", to); */
+/*       if (!data) */
+/* 	{ */
+/* 	  send_enveloped_error (ctx->fd, root, 1500, "Out of memory"); */
+/* 	  return 1; */
+/* 	} */
+/*       send_enveloped_ok (ctx->fd, root, "move.result", data); */
+/*       json_decref (data); */
+/*     } */
+
+/* } */
+
+
 int
 cmd_move_warp (client_ctx_t *ctx, json_t *root)
 {
@@ -336,53 +397,57 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
     {
       json_t *jto = json_object_get (jdata, "to_sector_id");
       if (json_is_integer (jto))
-	to = (int) json_integer_value (jto);
+        to = (int) json_integer_value (jto);
     }
 
-  // inside handle_move_warp(...) or similar
-  decision_t d;
-  d = validate_warp_rule (ctx->sector_id, to);
-
-  // decision_t d = validate_warp_rule (ctx->sector_id, to);
+  decision_t d = validate_warp_rule (ctx->sector_id, to);
   if (d.status == DEC_ERROR)
     {
       send_enveloped_error (ctx->fd, root, d.code, d.message);
+      return 0;
     }
-  else if (d.status == DEC_REFUSED)
+  if (d.status == DEC_REFUSED)
     {
       send_enveloped_refused (ctx->fd, root, d.code, d.message, NULL);
+      return 0;
     }
-  else
+
+  int from = ctx->sector_id;
+
+  /* Persist & update session */
+  int prc = db_player_set_sector (ctx->player_id, to);
+  if (prc != SQLITE_OK)
     {
-      int from = ctx->sector_id;
-
-      /* Persist new sector for this player */
-      int prc = db_player_set_sector (ctx->player_id, to);
-      if (prc != SQLITE_OK)
-	{
-	  send_enveloped_error (ctx->fd, root, 1502,
-				"Failed to persist player sector");
-	  return 1;
-	}
-
-      /* Update session state */
-      ctx->sector_id = to;
-
-      /* Reply (include current_sector for clients) */
-      json_t *data = json_pack ("{s:i, s:i, s:i, s:i}",
-				"player_id", ctx->player_id,
-				"from_sector_id", from,
-				"to_sector_id", to,
-				"current_sector", to);
-      if (!data)
-	{
-	  send_enveloped_error (ctx->fd, root, 1500, "Out of memory");
-	  return 1;
-	}
-      send_enveloped_ok (ctx->fd, root, "move.result", data);
-      json_decref (data);
+      send_enveloped_error (ctx->fd, root, 1502, "Failed to persist player sector");
+      return 0;
     }
+  ctx->sector_id = to;
 
+  /* 1) Send the direct reply for the actor */
+  json_t *resp = json_object();
+  json_object_set_new(resp, "player_id", json_integer(ctx->player_id));
+  json_object_set_new(resp, "from_sector_id", json_integer(from));
+  json_object_set_new(resp, "to_sector_id", json_integer(to));
+  json_object_set_new(resp, "current_sector", json_integer(ctx->sector_id));
+  send_enveloped_ok(ctx->fd, root, "move.result", resp);
+
+  /* 2) Broadcast LEFT (from) then ENTERED (to) to subscribers */
+
+  /* LEFT event: sector = 'from' */
+  json_t *left = json_object();
+  json_object_set_new(left, "player_id",      json_integer(ctx->player_id));
+  json_object_set_new(left, "sector_id",      json_integer(from));
+  json_object_set_new(left, "to_sector_id",   json_integer(to));
+  comm_publish_sector_event(from, "sector.player_left", left);
+
+  /* ENTERED event: sector = 'to' */
+  json_t *entered = json_object();
+  json_object_set_new(entered, "player_id",        json_integer(ctx->player_id));
+  json_object_set_new(entered, "sector_id",        json_integer(to));
+  json_object_set_new(entered, "from_sector_id",   json_integer(from));
+  comm_publish_sector_event(to, "sector.player_entered", entered);
+
+  return 0;
 }
 
 
@@ -391,7 +456,7 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
 int cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
 {
   if (!ctx)
-    return;
+    return 1;
 
   /* Parse request data */
   json_t *data = root ? json_object_get (root, "data") : NULL;
@@ -418,7 +483,7 @@ int cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
     {
       send_enveloped_error (ctx->fd, root, 1401,
 			    "Target sector not specified");
-      return;
+      return 1;
     }
 
   /* Build avoid set (optional) */
@@ -443,14 +508,14 @@ int cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
   if (max_id <= 0)
     {
       send_enveloped_error (ctx->fd, root, 1401, "No sectors");
-      return;
+      return 1;
     }
 
   /* Clamp from/to to valid range quickly */
   if (from <= 0 || from > max_id || to > max_id)
     {
       send_enveloped_error (ctx->fd, root, 1401, "Sector not found");
-      return;
+      return 1;
     }
 
   /* allocate simple arrays sized max_id+1 */
@@ -467,7 +532,7 @@ int cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
       free (seen);
       free (queue);
       send_enveloped_error (ctx->fd, root, 1500, "Out of memory");
-      return;
+      return 1;
     }
 
   /* Fill avoid */
@@ -498,7 +563,7 @@ int cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
       free (seen);
       free (queue);
       send_enveloped_error (ctx->fd, root, 1406, "Path not found");
-      return;
+      return 1;
     }
 
   /* Trivial path */
@@ -514,7 +579,7 @@ int cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
       free (prev);
       free (seen);
       free (queue);
-      return;
+      return 1;
     }
 
   /* Prepare neighbor query once */
@@ -531,7 +596,7 @@ int cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
       free (seen);
       free (queue);
       send_enveloped_error (ctx->fd, root, 1500, "Pathfind init failed");
-      return;
+      return 1;
     }
 
   /* BFS */
@@ -586,7 +651,7 @@ int cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
       free (seen);
       free (queue);
       send_enveloped_error (ctx->fd, root, 1406, "Path not found");
-      return;
+      return 1;
     }
 
   /* Reconstruct path */
@@ -602,7 +667,7 @@ int cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
       free (seen);
       free (queue);
       send_enveloped_error (ctx->fd, root, 1500, "Out of memory");
-      return;
+      return 1;
     }
 
   int sp = 0;
@@ -622,7 +687,7 @@ int cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
       free (seen);
       free (queue);
       send_enveloped_error (ctx->fd, root, 1406, "Path not found");
-      return;
+      return 1;
     }
   /* reverse into JSON steps: from .. to */
   for (int i = sp - 1; i >= 0; --i)
@@ -653,7 +718,7 @@ cmd_sector_info (int fd, json_t *root, int sector_id, int player_id)
     {
       send_enveloped_error (fd, root, 1500,
 			    "Out of memory building sector info");
-      return;
+      return 1;
     }
 
   // Add beacon info
@@ -853,7 +918,7 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
   if (db_sector_scan_core (sector_id, &core) != SQLITE_OK || !core)
     {
       send_enveloped_error (ctx->fd, root, 1401, "Sector not found");
-      return;
+      return ;
     }
 
   /* 2) Adjacent IDs (array) */
@@ -872,7 +937,7 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
       json_decref (core);
       json_decref (adj);
       send_enveloped_error (ctx->fd, root, 1500, "OOM");
-      return;
+      return 1;
     }
   json_object_set_new (security, "fedspace", json_boolean (in_fed));
   json_object_set_new (security, "safe_zone",
@@ -889,7 +954,7 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
       json_decref (adj);
       json_decref (security);
       send_enveloped_error (ctx->fd, root, 1500, "OOM");
-      return;
+      return ;
     }
   json_object_set_new (port, "present", json_boolean (port_cnt > 0));
   json_object_set_new (port, "class", json_null ());
@@ -906,7 +971,7 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
       json_decref (security);
       json_decref (port);
       send_enveloped_error (ctx->fd, root, 1500, "OOM");
-      return;
+      return ;
     }
   json_object_set_new (counts, "ships", json_integer (ships));
   json_object_set_new (counts, "planets", json_integer (planets));
@@ -937,7 +1002,7 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
       if (beacon)
 	json_decref (beacon);
       send_enveloped_error (ctx->fd, root, 1500, "OOM");
-      return;
+      return 1;
     }
   json_object_set_new (data, "sector_id", json_integer (sector_id));
   json_object_set_new (data, "name", json_string (name ? name : "Unknown"));
@@ -975,7 +1040,6 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
       send_enveloped_error (ctx->fd, root, 1300, "Invalid request schema");
       return 1;
     }
-
   /* Guard 1: player must be in that sector */
   int req_sector_id = (int) json_integer_value (jsector_id);
   if (ctx->sector_id != req_sector_id)

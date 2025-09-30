@@ -355,6 +355,10 @@ process_message (client_ctx_t *ctx, json_t *root)
   if (!strcmp (c, "login") || !strcmp (c, "auth.login"))
     {
       rc = cmd_auth_login (ctx, root);
+      if (rc)
+	{
+	  push_unseen_notices_for_player(ctx, ctx->player_id);
+	}
     }
   else if (!strcmp (c, "auth.register"))
     {

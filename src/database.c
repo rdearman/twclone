@@ -381,7 +381,32 @@ const char *create_table_sql[] = {
    "   FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE " 
    " ); " ,
 
+  "CREATE TABLE IF NOT EXISTS player_block ("
+  "  blocker_id   INTEGER NOT NULL,"
+  "  blocked_id   INTEGER NOT NULL,"
+  "  created_at   INTEGER NOT NULL,"
+  "  PRIMARY KEY (blocker_id, blocked_id)"
+  ");",
 
+
+  "CREATE TABLE IF NOT EXISTS notice_seen ("
+  "  notice_id  INTEGER NOT NULL,"
+  "  player_id  INTEGER NOT NULL,"
+  "  seen_at    INTEGER NOT NULL,"
+  "  PRIMARY KEY (notice_id, player_id)"
+  ");",
+
+
+  "CREATE TABLE IF NOT EXISTS system_notice ("
+  "  id         INTEGER PRIMARY KEY,"
+  "  created_at INTEGER NOT NULL,"
+  "  title      TEXT NOT NULL,"
+  "  body       TEXT NOT NULL,"
+  "  severity   TEXT NOT NULL CHECK(severity IN ('info','warn','error')),"
+  "  expires_at INTEGER"
+  ");",
+
+   
 
   //////////////////////////////////////////////////////////////////////
   /// CREATE VIEWS 
@@ -637,6 +662,18 @@ const char *create_table_sql[] = {
 //////////////////////////////////////////////////////////////////////
 /* ===================== INDEXES ===================== */
 
+
+  "CREATE INDEX IF NOT EXISTS idx_player_block_blocked "
+  "ON player_block (blocked_id);",
+
+  "CREATE INDEX IF NOT EXISTS idx_notice_seen_player "
+  "ON notice_seen (player_id, seen_at DESC);",
+
+  "CREATE INDEX IF NOT EXISTS idx_system_notice_active "
+  "ON system_notice (expires_at, created_at DESC);",
+
+
+  
   "CREATE INDEX IF NOT EXISTS idx_warps_from ON sector_warps(from_sector);",
   "CREATE INDEX IF NOT EXISTS idx_warps_to   ON sector_warps(to_sector);",
   "CREATE INDEX IF NOT EXISTS idx_ports_loc  ON ports(location);",
@@ -4908,4 +4945,102 @@ done:
     sqlite3_finalize (st);
   pthread_mutex_unlock (&db_mutex);
   return rc;
+}
+
+
+
+int
+db_notice_create (const char *title, const char *body,
+                  const char *severity, time_t expires_at)
+{
+  static const char *SQL =
+    "INSERT INTO system_notice (created_at, title, body, severity, expires_at) "
+    "VALUES (strftime('%s','now'), ?1, ?2, ?3, ?4);";
+
+  sqlite3 *db = db_get_handle();
+  if (!db) return -1;
+
+  sqlite3_stmt *stmt = NULL;
+  if (sqlite3_prepare_v2(db, SQL, -1, &stmt, NULL) != SQLITE_OK) return -1;
+
+  sqlite3_bind_text(stmt, 1, title ? title : "", -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 2, body ? body : "", -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 3, severity ? severity : "info", -1, SQLITE_TRANSIENT);
+  if (expires_at > 0) sqlite3_bind_int64(stmt, 4, (sqlite3_int64)expires_at);
+  else                sqlite3_bind_null(stmt, 4);
+
+  int rc = sqlite3_step(stmt);
+  int ok = (rc == SQLITE_DONE);
+  sqlite3_finalize(stmt);
+
+  if (!ok) return -1;
+  return (int) sqlite3_last_insert_rowid(db);
+}
+
+json_t *
+db_notice_list_unseen_for_player (int player_id)
+{
+  static const char *SQL =
+    "SELECT n.id, n.created_at, n.title, n.body, n.severity, n.expires_at "
+    "FROM system_notice AS n "
+    "LEFT JOIN notice_seen AS ns "
+    "  ON ns.notice_id = n.id AND ns.player_id = ?1 "
+    "WHERE (n.expires_at IS NULL OR n.expires_at > strftime('%s','now')) "
+    "  AND ns.notice_id IS NULL "
+    "ORDER BY n.created_at DESC;";
+
+  sqlite3 *db = db_get_handle();
+  if (!db) return NULL;
+
+  sqlite3_stmt *stmt = NULL;
+  if (sqlite3_prepare_v2(db, SQL, -1, &stmt, NULL) != SQLITE_OK) return NULL;
+
+  sqlite3_bind_int(stmt, 1, player_id);
+
+  json_t *arr = json_array();
+  if (!arr) { sqlite3_finalize(stmt); return NULL; }
+
+  while (sqlite3_step(stmt) == SQLITE_ROW)
+    {
+      int id           = sqlite3_column_int(stmt, 0);
+      time_t created   = (time_t) sqlite3_column_int64(stmt, 1);
+      const unsigned char *title = sqlite3_column_text(stmt, 2);
+      const unsigned char *body  = sqlite3_column_text(stmt, 3);
+      const unsigned char *sev   = sqlite3_column_text(stmt, 4);
+      sqlite3_int64 expires_i64  = sqlite3_column_type(stmt, 5) == SQLITE_NULL
+                                   ? 0 : sqlite3_column_int64(stmt, 5);
+
+      json_t *obj = json_pack("{s:i, s:i, s:s, s:s, s:s, s:i}",
+                              "id", id,
+                              "created_at", (int)created,
+                              "title", title ? (const char*)title : "",
+                              "body",  body  ? (const char*)body  : "",
+                              "severity", sev ? (const char*)sev : "info",
+                              "expires_at", (int)expires_i64);
+      if (obj) json_array_append_new(arr, obj);
+    }
+
+  sqlite3_finalize(stmt);
+  return arr;
+}
+
+int
+db_notice_mark_seen (int notice_id, int player_id)
+{
+  static const char *SQL =
+    "INSERT OR REPLACE INTO notice_seen (notice_id, player_id, seen_at) "
+    "VALUES (?1, ?2, strftime('%s','now'));";
+
+  sqlite3 *db = db_get_handle();
+  if (!db) return -1;
+
+  sqlite3_stmt *stmt = NULL;
+  if (sqlite3_prepare_v2(db, SQL, -1, &stmt, NULL) != SQLITE_OK) return -1;
+
+  sqlite3_bind_int(stmt, 1, notice_id);
+  sqlite3_bind_int(stmt, 2, player_id);
+
+  int rc = sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+  return (rc == SQLITE_DONE) ? 0 : -1;
 }
