@@ -28,11 +28,15 @@ uname -v = #84-Ubuntu SMP PREEMPT_DYNAMIC Fri Sep  5 22:36:38 UTC 2025
 /bin/universe          = unknown
 
 PATH: /usr/local/bin/
+PATH: /home/rick/.cargo/bin/
+PATH: /home/rick/.cargo/bin/
+PATH: /home/rick/flutter/bin/
+PATH: /usr/local/bin/
+PATH: /home/rick/.grit/bin/
+PATH: /home/rick/.cargo/bin/
 PATH: /home/rick/.nvm/versions/node/v20.10.0/bin/
 PATH: /home/rick/anaconda3/bin/
 PATH: /home/rick/.sdkman/candidates/kotlin/current/bin/
-PATH: /home/rick/.grit/bin/
-PATH: /home/rick/.cargo/bin/
 PATH: /usr/local/sbin/
 PATH: /usr/local/bin/
 PATH: /usr/sbin/
@@ -395,7 +399,7 @@ INSTALL_DATA='${INSTALL} -m 644'
 INSTALL_PROGRAM='${INSTALL}'
 INSTALL_SCRIPT='${INSTALL}'
 INSTALL_STRIP_PROGRAM='$(install_sh) -c -s'
-ISODATE='2025-09-28'
+ISODATE='2025-09-30'
 LDFLAGS=''
 LIBOBJS=''
 LIBS='-lpthread -lm '

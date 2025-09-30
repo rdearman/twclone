@@ -47,7 +47,6 @@ server_SOURCES = \
 	../src/server_envelope.c \
 	../src/server_auth.c \
 	../src/server_config.c \
-	../src/server_engine.c \
 	../src/server_loop.c \
 	../src/server_main.c \
 	../src/server_planets.c \
@@ -61,7 +60,10 @@ server_SOURCES = \
 	../src/globals.c \
 	../src/database.c \
 	../src/schemas.c \
-	../src/common.c
+	../src/common.c \
+	../src/engine_main.c
+
+
 
 bigbang_SOURCES = \
 	../src/database.c \

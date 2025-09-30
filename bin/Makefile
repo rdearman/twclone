@@ -137,16 +137,15 @@ am_server_OBJECTS = ../src/server_communication.$(OBJEXT) \
 	../src/server_bigbang.$(OBJEXT) ../src/server_cmds.$(OBJEXT) \
 	../src/server_citadel.$(OBJEXT) \
 	../src/server_envelope.$(OBJEXT) ../src/server_auth.$(OBJEXT) \
-	../src/server_config.$(OBJEXT) ../src/server_engine.$(OBJEXT) \
-	../src/server_loop.$(OBJEXT) ../src/server_main.$(OBJEXT) \
-	../src/server_planets.$(OBJEXT) \
+	../src/server_config.$(OBJEXT) ../src/server_loop.$(OBJEXT) \
+	../src/server_main.$(OBJEXT) ../src/server_planets.$(OBJEXT) \
 	../src/server_players.$(OBJEXT) ../src/server_ports.$(OBJEXT) \
 	../src/server_ships.$(OBJEXT) ../src/server_universe.$(OBJEXT) \
 	../src/server_s2s.$(OBJEXT) \
 	../src/server_warp_post_processing.$(OBJEXT) \
 	../src/namegen.$(OBJEXT) ../src/globals.$(OBJEXT) \
 	../src/database.$(OBJEXT) ../src/schemas.$(OBJEXT) \
-	../src/common.$(OBJEXT)
+	../src/common.$(OBJEXT) ../src/engine_main.$(OBJEXT)
 server_OBJECTS = $(am_server_OBJECTS)
 server_DEPENDENCIES =
 AM_V_P = $(am__v_P_$(V))
@@ -165,9 +164,9 @@ DEFAULT_INCLUDES = -I. -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__maybe_remake_depfiles = depfiles
 am__depfiles_remade = ../src/$(DEPDIR)/common.Po \
-	../src/$(DEPDIR)/database.Po ../src/$(DEPDIR)/globals.Po \
-	../src/$(DEPDIR)/namegen.Po ../src/$(DEPDIR)/schemas.Po \
-	../src/$(DEPDIR)/server_auth.Po \
+	../src/$(DEPDIR)/database.Po ../src/$(DEPDIR)/engine_main.Po \
+	../src/$(DEPDIR)/globals.Po ../src/$(DEPDIR)/namegen.Po \
+	../src/$(DEPDIR)/schemas.Po ../src/$(DEPDIR)/server_auth.Po \
 	../src/$(DEPDIR)/server_bigbang.Po \
 	../src/$(DEPDIR)/server_bulk.Po \
 	../src/$(DEPDIR)/server_citadel.Po \
@@ -175,7 +174,6 @@ am__depfiles_remade = ../src/$(DEPDIR)/common.Po \
 	../src/$(DEPDIR)/server_combat.Po \
 	../src/$(DEPDIR)/server_communication.Po \
 	../src/$(DEPDIR)/server_config.Po \
-	../src/$(DEPDIR)/server_engine.Po \
 	../src/$(DEPDIR)/server_envelope.Po \
 	../src/$(DEPDIR)/server_loop.Po \
 	../src/$(DEPDIR)/server_main.Po \
@@ -252,7 +250,7 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-ISODATE = 2025-09-28
+ISODATE = 2025-09-30
 LDFLAGS = 
 LIBOBJS = 
 LIBS = -lpthread -lm 
@@ -345,7 +343,6 @@ server_SOURCES = \
 	../src/server_envelope.c \
 	../src/server_auth.c \
 	../src/server_config.c \
-	../src/server_engine.c \
 	../src/server_loop.c \
 	../src/server_main.c \
 	../src/server_planets.c \
@@ -359,7 +356,8 @@ server_SOURCES = \
 	../src/globals.c \
 	../src/database.c \
 	../src/schemas.c \
-	../src/common.c
+	../src/common.c \
+	../src/engine_main.c
 
 bigbang_SOURCES = \
 	../src/database.c \
@@ -490,8 +488,6 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_auth.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/server_engine.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_loop.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_main.$(OBJEXT): ../src/$(am__dirstamp) \
@@ -508,6 +504,8 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_s2s.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
+../src/engine_main.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
 
 server$(EXEEXT): $(server_OBJECTS) $(server_DEPENDENCIES) $(EXTRA_server_DEPENDENCIES) 
 	@rm -f server$(EXEEXT)
@@ -522,6 +520,7 @@ distclean-compile:
 
 include ../src/$(DEPDIR)/common.Po # am--include-marker
 include ../src/$(DEPDIR)/database.Po # am--include-marker
+include ../src/$(DEPDIR)/engine_main.Po # am--include-marker
 include ../src/$(DEPDIR)/globals.Po # am--include-marker
 include ../src/$(DEPDIR)/namegen.Po # am--include-marker
 include ../src/$(DEPDIR)/schemas.Po # am--include-marker
@@ -533,7 +532,6 @@ include ../src/$(DEPDIR)/server_cmds.Po # am--include-marker
 include ../src/$(DEPDIR)/server_combat.Po # am--include-marker
 include ../src/$(DEPDIR)/server_communication.Po # am--include-marker
 include ../src/$(DEPDIR)/server_config.Po # am--include-marker
-include ../src/$(DEPDIR)/server_engine.Po # am--include-marker
 include ../src/$(DEPDIR)/server_envelope.Po # am--include-marker
 include ../src/$(DEPDIR)/server_loop.Po # am--include-marker
 include ../src/$(DEPDIR)/server_main.Po # am--include-marker
@@ -698,6 +696,7 @@ clean-am: clean-binPROGRAMS clean-generic mostlyclean-am
 distclean: distclean-am
 		-rm -f ../src/$(DEPDIR)/common.Po
 	-rm -f ../src/$(DEPDIR)/database.Po
+	-rm -f ../src/$(DEPDIR)/engine_main.Po
 	-rm -f ../src/$(DEPDIR)/globals.Po
 	-rm -f ../src/$(DEPDIR)/namegen.Po
 	-rm -f ../src/$(DEPDIR)/schemas.Po
@@ -709,7 +708,6 @@ distclean: distclean-am
 	-rm -f ../src/$(DEPDIR)/server_combat.Po
 	-rm -f ../src/$(DEPDIR)/server_communication.Po
 	-rm -f ../src/$(DEPDIR)/server_config.Po
-	-rm -f ../src/$(DEPDIR)/server_engine.Po
 	-rm -f ../src/$(DEPDIR)/server_envelope.Po
 	-rm -f ../src/$(DEPDIR)/server_loop.Po
 	-rm -f ../src/$(DEPDIR)/server_main.Po
@@ -768,6 +766,7 @@ installcheck-am:
 maintainer-clean: maintainer-clean-am
 		-rm -f ../src/$(DEPDIR)/common.Po
 	-rm -f ../src/$(DEPDIR)/database.Po
+	-rm -f ../src/$(DEPDIR)/engine_main.Po
 	-rm -f ../src/$(DEPDIR)/globals.Po
 	-rm -f ../src/$(DEPDIR)/namegen.Po
 	-rm -f ../src/$(DEPDIR)/schemas.Po
@@ -779,7 +778,6 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/$(DEPDIR)/server_combat.Po
 	-rm -f ../src/$(DEPDIR)/server_communication.Po
 	-rm -f ../src/$(DEPDIR)/server_config.Po
-	-rm -f ../src/$(DEPDIR)/server_engine.Po
 	-rm -f ../src/$(DEPDIR)/server_envelope.Po
 	-rm -f ../src/$(DEPDIR)/server_loop.Po
 	-rm -f ../src/$(DEPDIR)/server_main.Po

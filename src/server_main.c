@@ -8,6 +8,15 @@
 #include "server_loop.h"	/* int server_loop(volatile sig_atomic_t *running); */
 #include <pthread.h>		/* for pthread_mutex_t */
 #include "server_config.h"
+#include <sys/types.h>
+#include <sys/wait.h>
+#include "engine_main.h"
+
+// server_main.c (add globals near 'running')
+static pid_t g_engine_pid = -1;
+static int   g_engine_shutdown_fd = -1;
+
+
 
 
 // If these exist elsewhere, keep them; otherwise these prototypes silence warnings
@@ -110,7 +119,9 @@ run_bigbang_if_needed (void)
 int
 main (void)
 {
-/* Always open the global DB handle (creates schema/defaults if missing). */
+
+
+  /* Always open the global DB handle (creates schema/defaults if missing). */
   if (db_init () != 0)
     {
       fprintf (stderr, "Failed to init DB.\n");
@@ -132,6 +143,35 @@ main (void)
       return EXIT_FAILURE;	// or your project’s error path
     }
 
+// server_main.c (in main(), after run_bigbang_if_needed() and before server_loop)
+  // 1) Start the engine as its own process
+  if (engine_spawn(&g_engine_pid, &g_engine_shutdown_fd) != 0) {
+    fprintf(stderr, "Failed to start engine; continuing without it.\n");
+    // optional: you can decide to exit here instead
+  }
+
+  install_signal_handlers();
+
+  // 2) Run the server loop (unchanged)
+  int rc = server_loop(&running);
+
+  // 3) On exit, request engine shutdown and reap it
+  if (g_engine_shutdown_fd >= 0) {
+    engine_request_shutdown(g_engine_shutdown_fd); // close pipe -> child exits
+    g_engine_shutdown_fd = -1;
+  }
+  if (g_engine_pid > 0) {
+    int waited = engine_wait(g_engine_pid, 3000); // wait up to 3s
+    if (waited == 1) {
+      // still alive; be decisive
+      fprintf(stderr, "[server] engine still running; sending SIGTERM.\n");
+      kill(g_engine_pid, SIGTERM);
+      (void)engine_wait(g_engine_pid, 2000);
+    }
+    g_engine_pid = -1;
+  }
+
+  
   g_capabilities = json_object ();
   json_t *limits = json_object ();
   json_object_set_new (limits, "max_bulk", json_integer (100));
@@ -153,7 +193,7 @@ main (void)
 
   install_signal_handlers ();
 
-  int rc = server_loop (&running);
+  rc = server_loop (&running);
 
   universe_shutdown ();
   db_close ();
