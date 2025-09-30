@@ -1,0 +1,53 @@
+[
+{
+  "name": "hello/capabilities",
+  "command": { "command": "system.hello", "data": { "client": "tw-tests", "version": "0.1" } },
+  "expect": { "status": "ok", "type": "session.hello" }
+},
+
+  {
+    "name": "auth/register (fresh user)",
+    "command": { "command": "auth.register", "data": { "user_name": "TestSub3", "password": "secret" } },
+    "expect": { "status": "ok", "type": "auth.session" }
+  },
+
+  {
+    "name": "subscribe.add system.notice",
+    "command": { "command": "subscribe.add", "data": { "topic": "system.notice" } },
+    "expect": { "status": "ok" }
+  },
+  {
+    "name": "subscribe.add sector.42",
+    "command": { "command": "subscribe.add", "data": { "topic": "sector.42" } },
+    "expect": { "status": "ok" }
+  },
+  {
+    "name": "subscribe.add sector.*",
+    "command": { "command": "subscribe.add", "data": { "topic": "sector.*" } },
+    "expect": { "status": "ok" }
+  },
+
+  {
+    "name": "subscribe.list (after adds)",
+    "command": { "command": "subscribe.list" },
+    "expect": { "status": "ok", "type": "subscribe.list_v1" }
+  },
+
+  {
+    "name": "subscribe.remove sector.42",
+    "command": { "command": "subscribe.remove", "data": { "topic": "sector.42" } },
+    "expect": { "status": "ok" }
+  },
+
+  {
+    "name": "subscribe.list (after remove)",
+    "command": { "command": "subscribe.list" },
+    "expect": { "status": "ok", "type": "subscribe.list_v1" }
+  },
+
+  {
+    "name": "subscribe.add invalid topic → refused 1403",
+    "command": { "command": "subscribe.add", "data": { "topic": "nonsense.topic" } },
+    "expect": { "status": "refused", "code": 1403 }
+  }
+]
