@@ -1,19 +1,17 @@
----
-I've moved this project from sourceforge to github. Nobody had done anything with it since 2002, so I decided to pick back up where I left off and try to get it going.
-
-I was working with two other developers who did most of the other work outside of the bigbang(). I've rewritten basically everything in order to support DB storage of data rather than the old text file system. The old system was mostly GNU license except the bits I wrote which were MIT. I've replaced all the old code now, and I've changed the license for all the stuff I've written to MIT. But I still wanted to give a shout out to the guys I used to work on this with. You can get the original code from sourceforge.
-
-The changes I've made which required an entire rewrite was to put all the data into an SQLite DB file, and to change the protocol to JSON. The benefit of this is that I don't really need to write a client since a client could be written in any language which supports JSON. I've developed a test client in python which will be extended to a full client after I've implemented all the systems on the server. Because of this the code is 100% focused on building the server. THe reason for moving to JSON was that I wanted to train an AI to play TW2002, but after a lot of messing around decided to come back to this project and roll my own server. 
-
-Any AI player will not need a client and can just parse and send JSON, so while I need a client for testing, I'm not focused on it. 
-
----
 
 # twclone
 
-A modern, C-based recreation of classic BBS-era space-trading gameplay (in the spirit of TradeWars 2002). **twclone** provides a headless server, a terminal client, and a deterministic “Big Bang” universe generator, backed by SQLite.
+A modern, C-based recreation of classic BBS-era space-trading gameplay (in the spirit of TradeWars 2002). **twclone** provides a headless server, a terminal client, and a deterministic “Big Bang” universe generator—now backed by **SQLite** with a **JSON** protocol that makes writing clients (or AI bots) straightforward.
 
-> Sectors `1–10` are reserved **FedSpace**. Universe content is generated reproducibly per-game, and you can wipe the SQLite DB to start a fresh universe at any time.
+> **What’s new (2025):**
+>
+> * Full **SQLite** data model (no flat files)
+> * **JSON** protocol for client & bot compatibility
+> * A separate **Game Engine** process (forked) that runs clocks, economy, maintenance, NPC stubs, and enforcement via **durable DB rails** and a **TCP S2S** control channel
+> * **DB-backed configuration** & secrets with live reload
+> * Cleaner broadcast pipeline to players
+
+If you’re here from SourceForge: welcome back! The original code (largely GPL-era) is still available there; this repo is a ground-up rewrite focused on DB storage and JSON I/O. Portions I authored are now under **MIT**. Big thanks to the original collaborators; see **Credits** at the end.
 
 ---
 
@@ -25,11 +23,10 @@ A modern, C-based recreation of classic BBS-era space-trading gameplay (in the s
 * [Running the server](#running-the-server)
 * [Running the client](#running-the-client)
 * [Universe generation (“Big Bang”)](#universe-generation-big-bang)
-* [Gameplay snapshot](#gameplay-snapshot)
-* [Configuration & defaults](#configuration--defaults)
-* [Menus JSON](#menus-json)
-* [Database](#database)
+* [Game Engine (overview)](#game-engine-overview)
+* [Configuration (DB-backed)](#configuration-db-backed)
 * [Protocol](#protocol)
+* [Database](#database)
 * [Security](#security)
 * [Roadmap](#roadmap)
 * [Contributing](#contributing)
@@ -43,10 +40,10 @@ A modern, C-based recreation of classic BBS-era space-trading gameplay (in the s
 ```
 twclone/
 ├─ bin/                 # Built artefacts: server, client, test_bang
-├─ src/                 # C sources (server_loop.c, globals.c, …)
+├─ src/                 # C sources (server_loop.c, engine/*.c, …)
 ├─ data/                # menus.json and other runtime data
-├─ docs/                # PROTOCOL.md, SYSOP.md, design notes
-├─ Makefile.am / etc.   # Autotools build files
+├─ docs/                # ENGINE.md, PROTOCOL.md, SYSOP.md, design notes
+├─ Makefile.am …        # Autotools build files
 └─ README.md            # This file
 ```
 
@@ -58,37 +55,34 @@ twclone/
 # 1) Build
 make clean && make -j
 
-# 2) Create a fresh universe (SQLite DB will be created/seeded)
-delete the twconfig.db file and the server will create a new universe on startup. 
+# 2) Create a fresh universe (SQLite DB will be created/seeded on first run)
+rm -f twclone.db
 
 # 3) Start the server
 ./bin/server --host 0.0.0.0 --port 1234
 
-# 4) Connect with the client (uses menus.json)
+# 4) (Optional) Start the engine if not auto-forked by the server in your build
+# See docs/ENGINE.md for lifecycle; some builds fork the engine automatically.
+
+# 5) Connect with the client (renders from menus.json)
 ./bin/client --host localhost --port 1234 --menus ./data/menus.json
 ```
 
-> Tip: Delete the DB file (typically `twconfig.db` in the working directory) to reset the universe.
+> Tip: Deleting `twclone.db` resets the universe. Some older builds used `twconfig.db`; remove whichever DB file your build created.
 
 ---
 
 ## Build from source
 
-### Prerequisites
-
-* GCC or Clang
-* GNU make & autotools (if regenerating build files)
-* SQLite3 (dev headers and CLI recommended)
-* POSIX environment (Linux / WSL / macOS)
-
-### Build
+**Prereqs:** GCC/Clang, GNU make, SQLite3 (lib & CLI), POSIX (Linux/WSL/macOS).
+**Build:**
 
 ```bash
 make clean && make -j
 # Artefacts land in ./bin
 ```
 
-If you prefer explicit compile logs:
+Verbose:
 
 ```bash
 make V=1
@@ -102,50 +96,33 @@ make V=1
 ./bin/server --host 0.0.0.0 --port 1234
 ```
 
-**Flags**
+* `--host <addr>` (default `0.0.0.0`)
+* `--port <port>` (default `1234`)
 
-* `--host <addr>`: Bind address (default `0.0.0.0`)
-* `--port <port>`: Listen port (default `1234`)
-
-Log output example:
+Typical logs:
 
 ```
-Server loop starting...
-Listening on 0.0.0.0:1234
+server: starting…
+server: listening on 0.0.0.0:1234
 ```
 
 ---
 
 ## Running the client
-Look for a python test client in the directory. Or write your own. 
+
+A simple terminal client is included for testing. You can also write your own in any language that speaks JSON.
 
 ```bash
-./bin/client \
-  --host localhost \
-  --port 1234 \
-  --menus ./data/menus.json
+./bin/client --host localhost --port 1234 --menus ./data/menus.json
 ```
 
-**Flags**
-
-* `--host <addr>`: Server host (default `localhost`)
-* `--port <port>`: Server port (default `1234`)
-* `--menus <file>`: Menus definition JSON (default `./data/menus.json`)
-
-To make those the *project defaults*, you can simply run:
-
-```bash
-./bin/client
-```
-
-…and ensure `menus.json` is present at `./data/menus.json`.
-(If you want hard defaults compiled in, set the fallback values in the client’s argument-parsing code to `localhost`, `1234`, and `./data/menus.json` respectively.)
+If you place `menus.json` at `./data/menus.json`, you can usually just run `./bin/client`.
 
 ---
 
 ## Universe generation (“Big Bang”)
 
-The **Big Bang** utility creates a new universe and seeds gameplay entities.
+Create/seed a fresh universe:
 
 ```bash
 ./bin/test_bang
@@ -154,97 +131,60 @@ The **Big Bang** utility creates a new universe and seeds gameplay entities.
 Typical log:
 
 ```
-BIGBANG: Creating universe...
-BIGBANG: Creating sectors...
-BIGBANG: Creating 500 sectors (1–10 reserved for Fedspace).
-BIGBANG: Creating random warps...
-BIGBANG: Ensuring FedSpace Exits...
-BIGBANG: Creating complex warps...
-BIGBANG: Creating 250 one-way warps...
-BIGBANG: Creating 125 dead-end warps...
-BIGBANG: Ensuring sector exits...
+BIGBANG: Creating universe…
+BIGBANG: Creating 500 sectors (1–10 reserved for FedSpace)…
+BIGBANG: Warps, tunnels, one-ways, dead-ends…
 ```
 
-### Key generation rules
-
-* **FedSpace**: sectors `1–10` are protected; content generators skip/avoid overwriting them.
-* **Warps graph**: mixture of bidirectional links, one-ways, and purposeful dead-ends.
-* **“Tunnels”**: short chains of unique sectors (length 4–8 by default) providing defensible corridors; typically 15 attempts with back-off to avoid duplicates.
-* **Derelicts & NPCs** (WIP): scattered across sectors `11–500`. Ferrengi homeworld and traders are seeded together.
+* **FedSpace:** sectors `1–10` are protected and reserved.
+* **Graph:** mix of bidirectional links, one-ways, dead-ends, and short “tunnels”.
 
 ---
 
-## Gameplay snapshot
+## Game Engine (overview)
 
-Example sector view from the client:
+The **engine** is a separate process responsible for clocks, economy, maintenance, NPC scaffolding, and Imperial enforcement.
 
-```
-You are in sector 238 — Alpha Lyr.
-Adjacent sectors: 263
-Ports here: none
-Ships here: Bit Banger
-Planets: none
-Beacon: none
+* Communicates with the server over **TCP** using a small, versioned **S2S** protocol (length-prefixed JSON + HMAC).
+* Uses the database as **source of truth**, with two durable rails:
 
---- Main Menu (Sector 238) ---
- (M) Move to a Sector        | (D) Re-display Sector
- (P) Port & Trade            | (L) Land on a Planet
- (C) Ship's Computer         | (V) View Game Status
- (R) Release Beacon          |
- (Y) Testing Menu            | (H) Help
- (Q) Quit                    |
-```
+  * **events** (server→engine): facts that happened.
+  * **commands** (engine→server): requested mutations.
+* Drives a **short-tick loop** and **cron** jobs (daily/periodic).
+* Publishes **system notices**; the server’s broadcast pump delivers them to online players.
 
-Beacons, ports, trading, and ship/sector queries flow over the JSON protocol described in `docs/PROTOCOL.md`.
+🔗 See **[`docs/ENGINE.md`](./docs/ENGINE.md)** for the full design, schemas, idempotency, poison handling, retention, and protocol message catalog.
 
 ---
 
-## Configuration & defaults
+## Configuration (DB-backed)
 
-* **Server defaults**: `--host 0.0.0.0`, `--port 1234`
-* **Client defaults**: `--host localhost`, `--port 1234`, `--menus ./data/menus.json`
-* **Resetting the game**: remove the SQLite DB file and run `./bin/test_bang` again.
+All configuration lives in the database:
 
-To make the client flags *effectively default* without typing them:
+* `config` (typed key/values by scope), `config_version` (live reload), `config_audit` (history), and `s2s_keys` (HMAC secrets).
+* The server/engine load config at startup, validate types/ranges, and can **live-reload** after a version bump.
 
-* Keep `./data/menus.json` in place, and
-* Launch `./bin/client` with no flags.
-
-If you want *compiled-in* defaults, set them in the client’s arg-parser (e.g., fallback strings in `argv` handling).
+Initial seeds are created on first run; see **ENGINE.md** for the exact table definitions and reload messages.
 
 ---
 
-## Menus JSON
+## Protocol
 
-The client renders menus from a JSON definition. A minimal example:
+All client↔server interactions use JSON. The engine↔server (S2S) control channel also uses JSON over TCP with a small envelope.
 
-```json
-{
-  "main": {
-    "title": "Main Menu",
-    "items": [
-      { "key": "M", "label": "Move to a Sector", "action": "move.prompt" },
-      { "key": "D", "label": "Re-display Sector", "action": "sector.info" },
-      { "key": "P", "label": "Port & Trade", "action": "port.menu" },
-      { "key": "C", "label": "Ship's Computer", "action": "ship.status" },
-      { "key": "V", "label": "View Game Status", "action": "game.status" },
-      { "key": "R", "label": "Release Beacon", "action": "beacon.set" },
-      { "key": "H", "label": "Help", "action": "help.show" },
-      { "key": "Q", "label": "Quit", "action": "client.quit" }
-    ]
-  }
-}
-```
+* **Client protocol:** request/response envelopes, errors, deprecations.
+* **Engine↔Server (S2S):** `s2s.health.check`, `s2s.broadcast.sweep`, `s2s.command.push`, `s2s.config.bump`, `s2s.engine.shutdown`.
 
-> Note: `ship.status` is the unified command name; `ship.info` is supported as an alias for backwards compatibility.
+🔗 See **[`docs/PROTOCOL.md`](./docs/PROTOCOL.md)** for structures and examples.
+🔗 Engine S2S specifics are also summarized in **[`docs/ENGINE.md`](./docs/ENGINE.md)**.
 
 ---
 
 ## Database
 
-* **Engine**: SQLite (single file in the working directory).
-* **Schema**: created on first run; `./bin/test_bang` ensures all tables and defaults exist.
-* **Reset**: delete the DB file; rerun `./bin/test_bang`.
+* **Engine:** SQLite single-file DB (`./twclone.db` by default).
+* **Schema:** created/verified at first run (or by `test_bang`).
+* **Reset:** delete `twclone.db` and re-run `test_bang` (or start the server to re-seed essentials).
 
 Handy CLI:
 
@@ -255,50 +195,39 @@ sqlite3 twclone.db "SELECT * FROM sectors LIMIT 10;"
 
 ---
 
-## Protocol
-
-All client–server interactions use a simple JSON protocol. See:
-
-* `docs/PROTOCOL.md` — message envelope, IDs, types, common errors
-* `docs/SYSOP.md` — operational notes and server admin guidelines
-
-Examples (request/response pairs), error codes (e.g., `1401 Player does not have a beacon on their ship.`), and deprecations (e.g., `ship.info → ship.status`) are documented there.
-
----
-
 ## Security
 
-* **Current**: usernames/passwords may be transmitted in plaintext on LAN for dev convenience.
-* **Target**: move to **hashed passwords** in DB (e.g., Argon2id) and **TLS** transport (e.g., `stunnel` or built-in TLS).
-* **Action items** (server):
+**Now:** LAN-friendly for development.
+**Target hardening:**
 
-  * Store `password_hash`, not plaintext.
-  * Add rate limiting and lockout on failed logins.
-  * Add transport encryption or proxy behind a TLS terminator.
+* Store **password hashes** (e.g., Argon2id) instead of plaintext.
+* Gate brute force with rate limits/lockouts.
+* Add transport encryption (TLS terminator or built-in TLS).
+* Keep **HMAC keys** for S2S in `s2s_keys` (DB), never in logs.
 
 ---
 
 ## Roadmap
 
-* [ ] Finish parity with Version 2 client features (see project thread & v2 audit).
-* [ ] Ports/trade loops and economy balancing.
-* [ ] NPCs: Ferrengi homeworld + traders seeded together; Imperial warship behaviour.
-* [ ] Derelict ships for each shiptype (seeded in 11–500).
-* [ ] Robust beacon inventory checks and messages.
-* [ ] Save-safe command aliases (`ship.status` everywhere; `ship.info` deprecated).
-* [ ] Proper auth: Argon2id password hashing, salt & pepper, TLS.
-* [ ] Admin/sysop commands for resets, seeds, and diagnostics.
-* [ ] Unit tests for generators (warps, tunnels, one-ways, dead-ends).
-* [ ] CI: build + lint on pushes.
+* [ ] Finish parity with legacy client features.
+* [ ] Economy loops (ports, stock/price updates), Terra/planet growth.
+* [ ] NPC scaffold (Ferrengi/Imperials) + encounter hooks.
+* [ ] Imperial enforcement (warn/dispatch/destroy) golden path end-to-end.
+* [ ] Broadcast pump & ephemeral TTLs.
+* [ ] Robust auth (Argon2id, TLS), admin/sysop ops.
+* [ ] Tests (idempotency, crash-resume, load/priority).
+* [ ] CI build & lint.
+
+For deep technical detail and task breakdowns, see **ENGINE.md** and GitHub Issues/Epics (Engine Process & IPC, Durable Rails, Scheduler, Broadcasts, NPC/Enforcement, Reliability & Ops).
 
 ---
 
 ## Contributing
 
-1. **Discuss** the change in an issue or the project thread (especially protocol changes).
-2. **Keep functionality intact** unless the change is explicitly scoped (Rick’s rule).
-3. Code style: readable C, clear error handling, comments in `/* ... */` style.
-4. Run:
+1. Open or reference a **GitHub issue** (especially for protocol changes).
+2. Keep functionality intact unless the change is explicitly scoped.
+3. Write clear, readable C; prefer short transactions; log errors.
+4. Before a PR:
 
    ```bash
    make clean && make -j
@@ -306,22 +235,25 @@ Examples (request/response pairs), error codes (e.g., `1401 Player does not have
    ./bin/server --host 0.0.0.0 --port 1234
    ./bin/client --host localhost --port 1234 --menus ./data/menus.json
    ```
-5. Include tests or a reproducible scenario where sensible.
+5. Include tests or a reproducible scenario where it makes sense.
 
 ---
 
 ## Licence
 
-MIT 
+**MIT**
+
+* Historic SourceForge material contained GPL’d portions; this rewrite replaces those systems with a DB-backed, JSON-speaking implementation. Newly authored code in this repo is under **MIT**.
 
 ---
 
-### Credits
+## Credits
 
-Inspired by BBS classics. Built with love for terminal games and systems thinking.
+Huge thanks to the original contributors and community that kept the TW flame alive.
 
-Website: http://twclone.sourceforge.net
-Copyright (C) 2000 Jason C. Garcowski(jcg5@po.cwru.edu),
-Copyright (C) 2002 Ryan Glasnapp(rglasnap@nmt.edu)
+* Website (historical): `http://twclone.sourceforge.net`
+* © 2000 Jason C. Garcowski ([jcg5@po.cwru.edu](mailto:jcg5@po.cwru.edu))
+* © 2002 Ryan Glasnapp ([rglasnap@nmt.edu](mailto:rglasnap@nmt.edu))
 
+This GitHub edition is an independent rewrite with modern plumbing (SQLite + JSON + engine/server split). Shout-out to the original team—your work inspired this revival.
 
