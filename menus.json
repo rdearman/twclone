@@ -105,7 +105,60 @@
         }
       ]
     },
-    "TESTING": {
+"SUBSCRIBE": {
+  "title": "--- Subscribe Tools ---",
+  "options": [
+    {
+      "key": "a",
+      "label": "(A) Add topic",
+      "action": {
+        "rpc": {
+          "command": "subscribe.add",
+          "data": { "topic": "<prompt:str:Topic to subscribe (e.g., sector.42 or sector.*)>" }
+        },
+        "post": "print_last_rpc"
+      }
+    },
+    {
+      "key": "h",
+      "label": "(H) Help: list available topics",
+      "action": {
+        "rpc": { "command": "subscribe.catalog", "data": {} },
+        "post": "print_last_rpc"
+      }
+    },
+    {
+      "key": "r",
+      "label": "(R) Remove topic",
+      "action": {
+        "rpc": {
+          "command": "subscribe.remove",
+          "data": { "topic": "<prompt:str:Topic to remove>" }
+        },
+        "post": "print_last_rpc"
+      }
+    },
+    {
+      "key": "l",
+      "label": "(L) List topics",
+      "action": {
+        "rpc": { "command": "subscribe.list", "data": {} },
+        "post": "print_last_rpc"
+      }
+    },
+    {
+      "key": "i",
+      "label": "(I) Add invalid (expect 1403)",
+      "action": {
+        "rpc": { "command": "subscribe.add", "data": { "topic": "invalid topic" } },
+        "post": "print_last_rpc"
+      }
+    },
+    { "key": "q", "label": "(Q) Back", "action": { "back": true } }
+  ]
+},
+
+      "TESTING": {
       "title": "--- Testing Menu ---",
       "options": [
         {
@@ -119,6 +172,12 @@
             "post": "print_last_rpc"
           }
         },
+	  {
+	      "key": "t",
+	      "label": "(T) Subscribe tools",
+	      "action": { "submenu": "SUBSCRIBE" }
+	  },
+	  
         {
           "key": "x",
           "label": "(X) Cap Spam (capspam)",

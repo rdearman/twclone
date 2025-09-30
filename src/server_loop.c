@@ -32,6 +32,8 @@
 #include "server_universe.h"
 #include "server_config.h"
 #include "server_communication.h"
+#include "server_config.h"  // keep whatever includes you already had
+
 
 #define LISTEN_PORT 1234
 #define BUF_SIZE    8192
@@ -69,8 +71,60 @@ void send_enveloped_ok (int fd, json_t * root, const char *type,
 			json_t * data);
 json_t *build_sector_info_json (int sector_id);
 
-/* Provided elsewhere; needed here for correct prototype */
-// void send_enveloped_error (int fd, json_t *root, int code, const char *msg);
+// Single source of truth for schema/introspection.
+// Keep in sync with your if/else chain in process_message().
+
+// --- Supported commands used for schema/introspection ---
+
+// ===== Introspection plumbing (local, with weak fallback) =====
+
+// Local list used by the weak fallback below.
+// Keep this in sync with your if/else chain.
+static const cmd_desc_t k_supported_cmds_fallback[] = {
+  // --- session / system ---
+  { "session.hello",          "Handshake / hello" },
+  { "session.ping",           "Ping" },
+  { "session.goodbye",        "Client disconnect" },
+
+  { "system.schema_list",     "List schema namespaces" },
+  { "system.describe_schema", "Describe commands in a schema" },
+  { "system.capabilities",    "Feature flags, schemas, counts" },
+  { "system.cmd_list",        "Flat list of all commands" },
+
+  // --- auth ---
+  { "auth.login",             "Authenticate" },
+  { "auth.logout",            "Log out" },
+  { "auth.mfa",               "Second-factor code" },
+  { "auth.register",          "Create a new player" },
+
+  // --- players / ship ---
+  { "players.me",             "Current player info" },
+  { "players.online",         "List online players" },
+  { "players.refresh",        "Refresh player state" },
+  { "ship.info",              "Ship information" },
+
+  // --- sector / movement ---
+  { "sector.info",            "Describe current sector" },
+  { "sector.set_beacon",      "Set or clear sector beacon" },
+
+  { "move.warp",              "Warp to sector" },
+  { "move.scan",              "Scan adjacent sectors" },
+  { "move.pathfind",          "Find path between sectors" },
+  { "move.force_move",        "Admin: force-move a ship" },
+
+  // --- trade ---
+  { "trade.port_info",        "Port prices/stock in sector" },
+  { "trade.buy",              "Buy from port" },
+  { "trade.sell",             "Sell to port" },
+};
+
+// Weak fallback: satisfies server_envelope.o at link time.
+// If server_loop.c defines a strong version, it will override this.
+__attribute__((weak))
+void loop_get_supported_commands(const cmd_desc_t **out_tbl, size_t *out_n) {
+  if (out_tbl) *out_tbl = k_supported_cmds_fallback;
+  if (out_n)   *out_n   = sizeof(k_supported_cmds_fallback) / sizeof(k_supported_cmds_fallback[0]);
+}
 
 
 /* ------------------------ idempotency helpers  ------------------------ */
@@ -240,9 +294,6 @@ attach_rate_limit_meta (json_t *env, client_ctx_t *ctx)
 }
 
 
-/* ------------------------ message processor (stub dispatcher) ------------------------ */
-/* Single responsibility: receive one parsed JSON object and produce one reply. */
-
 static void
 process_message (client_ctx_t *ctx, json_t *root)
 {
@@ -352,6 +403,11 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       rc = cmd_session_disconnect (ctx, root);	/* NIY stub */
     }
+  else if (strcmp(cmd, "system.cmd_list") == 0)        return cmd_system_cmd_list(ctx, root);
+  else if (strcmp(cmd, "system.describe_schema") == 0) return cmd_system_describe_schema(ctx, root);
+  // (If not already present:)
+  else if (strcmp(cmd, "system.schema_list") == 0)     return cmd_system_schema_list(ctx, root);
+  else if (strcmp(cmd, "system.capabilities") == 0)    return cmd_system_capabilities(ctx, root);
 
 /* ---------- PLAYER ---------- */
   else if (!strcmp (c, "player.my_info"))
@@ -599,6 +655,10 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       rc = cmd_subscribe_list (ctx, root);	/* NIY stub */
     }
+  else if (strcmp(c, "subscribe.catalog") == 0)
+    {
+    return cmd_subscribe_catalog(ctx, root);
+  }
 
 /* ---------- BULK ---------- */
   else if (!strcmp (c, "bulk.execute"))

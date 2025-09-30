@@ -301,6 +301,20 @@ def disconnect_and_quit(ctx):
         print(f"disconnect error: {e}")
     sys.exit(0)
 
+# add near the top of the file (or just before dispatch_action)
+def _run_post(ctx, post):
+    if not post:
+        return
+    if isinstance(post, str):
+        # call a named handler like "print_last_rpc"
+        call_handler(post, ctx)
+    elif isinstance(post, dict):
+        # allow a nested action, e.g. {"rpc": {...}, "post": "print_last_rpc"}
+        dispatch_action(ctx, post)
+    elif isinstance(post, list):
+        for item in post:
+            _run_post(ctx, item)
+    # else: ignore unknown types
 
 
 # ---------------------------
@@ -415,10 +429,14 @@ def dispatch_action(ctx: Context, action: Dict[str, Any]):
         ctx.push(action["submenu"]); return
     if action.get("back"):
         ctx.pop(); return
+    # if "pycall" in action:
+    #     call_handler(action["pycall"], ctx)
+    #     if post := action.get("post"):
+    #         call_handler(post, ctx)
+    #     return
     if "pycall" in action:
         call_handler(action["pycall"], ctx)
-        if post := action.get("post"):
-            call_handler(post, ctx)
+        _run_post(ctx, action.get("post"))   # <-- was call_handler(post, ctx)
         return
     if "flow" in action:
         call_handler(action["flow"], ctx)
@@ -433,9 +451,9 @@ def dispatch_action(ctx: Context, action: Dict[str, Any]):
             print("Cancelled."); return
         resp = ctx.conn.rpc(cmd, data)
         ctx.state["last_rpc"] = resp
-        if post := action.get("post"):
-            call_handler(post, ctx)
+        _run_post(ctx, action.get("post"))
         return
+
     print("[Warn] No action defined.")
 
 # ---------------------------

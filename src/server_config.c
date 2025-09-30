@@ -23,21 +23,15 @@
 #include "config.h"
 #include "schemas.h"
 #include "server_envelope.h"
-
-
-
-
-int
-cmd_system_hello (client_ctx_t *ctx, json_t *root)
-{
-  // Minimal alias to session.hello until/unless you split behavior
-  return cmd_session_hello (ctx, root);
-}
+#include "server_config.h"
 
 
 
 void send_enveloped_ok (int fd, json_t * root, const char *type,
 			json_t * data);
+
+// exported by server_loop.c
+void loop_get_supported_commands(const cmd_desc_t **out_tbl, size_t *out_n);
 
 
 static int
@@ -69,23 +63,35 @@ resolve_current_sector_from_info (json_t *info_obj, int fallback)
   return fallback;
 }
 
+/////////////////////////// NEW 
 
 static json_t *
 make_session_hello_payload (int is_authed, int player_id, int sector_id)
 {
-  return json_pack ("{s:s s:i s:o s:o s:o}",
-		    "protocol_version", "1.0",
-		    "server_time_unix", (int) time (NULL),
-		    "authenticated", is_authed ? json_true () : json_false (),
-		    "player_id", (is_authed
-				  && player_id >
-				  0) ? json_integer (player_id) :
-		    json_null (), "current_sector", (is_authed
-						     && sector_id >
-						     0) ?
-		    json_integer (sector_id) : json_null ());
+  json_t *payload = json_object();
+  json_object_set_new(payload, "protocol_version", json_string("1.0"));
+  json_object_set_new(payload, "server_time_unix", json_integer((json_int_t)time(NULL)));
+  json_object_set_new(payload, "authenticated", is_authed ? json_true() : json_false());
+  if (is_authed) {
+    json_object_set_new(payload, "player_id", json_integer(player_id));
+    json_object_set_new(payload, "current_sector", sector_id > 0 ? json_integer(sector_id) : json_null());
+  } else {
+    json_object_set_new(payload, "player_id", json_null());
+    json_object_set_new(payload, "current_sector", json_null());
+  }
+  return payload;
 }
 
+
+/* ---------- system.hello ---------- */
+int
+cmd_system_hello (client_ctx_t *ctx, json_t *root)
+{
+  // alias to session.hello
+  return cmd_session_hello(ctx, root);
+}
+
+//////////////////
 
 // Define the handler function
 static void
@@ -95,53 +101,46 @@ handle_system_capabilities (int fd, json_t *root)
 		     json_incref (g_capabilities));
 }
 
-/* ---------- system.capabilities ---------- */
-int
-cmd_system_capabilities (client_ctx_t *ctx, json_t *root)
-{
-  handle_system_capabilities (ctx->fd, root);
-  return 0;
-}
 
-/* ---------- system.describe_schema (optional) ---------- */
-int
-cmd_system_describe_schema (client_ctx_t *ctx, json_t *root)
-{
-  json_t *jdata = json_object_get (root, "data");
-  const char *key = NULL;
-  if (json_is_object (jdata))
-    {
-      json_t *jkey = json_object_get (jdata, "key");
-      if (json_is_string (jkey))
-	key = json_string_value (jkey);
-    }
+/* /\* ---------- system.describe_schema (optional) ---------- *\/ */
+/* int */
+/* cmd_system_describe_schema (client_ctx_t *ctx, json_t *root) */
+/* { */
+/*   json_t *jdata = json_object_get (root, "data"); */
+/*   const char *key = NULL; */
+/*   if (json_is_object (jdata)) */
+/*     { */
+/*       json_t *jkey = json_object_get (jdata, "key"); */
+/*       if (json_is_string (jkey)) */
+/* 	key = json_string_value (jkey); */
+/*     } */
 
-  if (!key)
-    {
-      /* Return the list of keys we have */
-      json_t *data = json_pack ("{s:o}", "available", schema_keys ());
-      send_enveloped_ok (ctx->fd, root, "system.schema_list", data);
-      json_decref (data);
-    }
-  else
-    {
-      json_t *schema = schema_get (key);
-      if (!schema)
-	{
-	  send_enveloped_error (ctx->fd, root, 1306, "Schema not found");
-	}
-      else
-	{
-	  json_t *data =
-	    json_pack ("{s:s, s:o}", "key", key, "schema", schema);
-	  send_enveloped_ok (ctx->fd, root, "system.schema", data);
-	  json_decref (schema);
-	  json_decref (data);
-	}
-    }
+/*   if (!key) */
+/*     { */
+/*       /\* Return the list of keys we have *\/ */
+/*       json_t *data = json_pack ("{s:o}", "available", schema_keys ()); */
+/*       send_enveloped_ok (ctx->fd, root, "system.schema_list", data); */
+/*       json_decref (data); */
+/*     } */
+/*   else */
+/*     { */
+/*       json_t *schema = schema_get (key); */
+/*       if (!schema) */
+/* 	{ */
+/* 	  send_enveloped_error (ctx->fd, root, 1306, "Schema not found"); */
+/* 	} */
+/*       else */
+/* 	{ */
+/* 	  json_t *data = */
+/* 	    json_pack ("{s:s, s:o}", "key", key, "schema", schema); */
+/* 	  send_enveloped_ok (ctx->fd, root, "system.schema", data); */
+/* 	  json_decref (schema); */
+/* 	  json_decref (data); */
+/* 	} */
+/*     } */
 
-  return 0;
-}
+/*   return 0; */
+/* } */
 
 /* ---------- session.ping ---------- */
 int
@@ -156,31 +155,20 @@ cmd_session_ping (client_ctx_t *ctx, json_t *root)
   return 0;
 }
 
-/* ---------- session.hello ---------- */
-int
-cmd_session_hello (client_ctx_t *ctx, json_t *root)
-{
-  int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 0;
 
-  if (ctx->player_id > 0)
-    {
-      json_t *info = NULL;
-      int rc = db_player_info_json (ctx->player_id, &info);
-      if (rc == SQLITE_OK && info)
-	{
-	  sector_id = resolve_current_sector_from_info (info, sector_id);
-	  json_decref (info);
-	}
-    }
+int cmd_session_hello(client_ctx_t *ctx, json_t *root) {
+  const char *req_id = json_string_value(json_object_get(root, "id"));
 
-  json_t *payload = make_session_hello_payload ((ctx->player_id > 0),
-						ctx->player_id,
-						(sector_id >
-						 0) ? sector_id : 0);
-  send_enveloped_ok (ctx->fd, root, "session.hello", payload);
-  json_decref (payload);
+  json_t *payload = make_session_hello_payload((ctx->player_id > 0),
+                                               ctx->player_id,
+                                               ctx->sector_id);
 
-  return 0;
+  // Use ONE helper that builds a proper envelope including reply_to + status.
+  // If your send_enveloped_ok doesn't add reply_to, fix it (next section).
+  send_enveloped_ok(ctx->fd, root, "session.hello", payload);
+
+  json_decref(payload);
+  return 0;      // IMPORTANT: do not send another frame after this
 }
 
 int

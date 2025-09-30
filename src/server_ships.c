@@ -64,9 +64,6 @@ cmd_ship_repair (client_ctx_t *ctx, json_t *root)
 }
 
 
-
-
-
 static void
 mark_deprecated (json_t *res)
 {
