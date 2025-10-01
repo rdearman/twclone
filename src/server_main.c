@@ -1,27 +1,28 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
-#include <sqlite3.h>
-#include "config.h"		/* int load_config(void);   (1 = success, 0 = fail) */
-#include "database.h"		/* int db_init(void); void db_close(void); */
-// #include "universe.h"                /* int universe_init(void); void universe_shutdown(void); */
-#include "server_loop.h"	/* int server_loop(volatile sig_atomic_t *running); */
 #include <pthread.h>		/* for pthread_mutex_t */
-#include "server_config.h"
+#include <sqlite3.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include "engine_main.h"
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <time.h>
 #include <jansson.h>
+#include <inttypes.h>  
+/* local includes */
+#include "server_loop.h"	/* int server_loop(volatile sig_atomic_t *running); */
+#include "server_config.h"
 #include "s2s_transport.h"
 #include "s2s_keyring.h" 
 #include "s2s_transport.h"
-#include <inttypes.h>  
-#include <signal.h>
+#include "engine_main.h"
+#include "server_s2s.h"
+#include "config.h"		/* int load_config(void);   (1 = success, 0 = fail) */
+#include "database.h"		/* int db_init(void); void db_close(void); */
+
 
 static pid_t g_engine_pid = -1;
 static int   g_engine_shutdown_fd = -1;
@@ -351,6 +352,9 @@ main (void)
           json_decref (ack);
 
           fprintf (stderr, "[server] Return Ping\n");
+	  if (server_s2s_start(conn, &g_s2s_thr, &g_running) != 0) {
+	    fprintf(stderr, "[server] failed to start s2s control thread\n");
+	  }
         }
       else
         {
@@ -416,6 +420,10 @@ shutdown_and_exit:
   /* 8) Capabilities cleanup */
   if (g_capabilities) { json_decref (g_capabilities); g_capabilities = NULL; }
 
+  if (conn) { s2s_close(conn); conn = NULL; }
+  server_s2s_stop(g_s2s_thr);
+  g_s2s_thr = 0;
+  
   return (rc == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 

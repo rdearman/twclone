@@ -129,5 +129,9 @@ json_t *db_notice_list_unseen_for_player (int player_id);
 /* Mark a notice as seen by a player; returns 0 ok, -1 error */
 int db_notice_mark_seen (int notice_id, int player_id);
 
+// database.h (prototype)
+int db_commands_accept(const char *cmd_type, const char *idem_key, json_t *payload,
+                       int *out_cmd_id, int *out_duplicate, int *out_due_at);
+
 
 #endif /* DATABASE_H */

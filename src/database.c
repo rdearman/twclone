@@ -31,6 +31,89 @@ static int db_ensure_ship_perms_column_unlocked (void);
 
 
 
+#include "database.h"
+#include <sqlite3.h>
+
+int db_commands_accept(const char *cmd_type,
+                       const char *idem_key,
+                       json_t *payload,
+                       int *out_cmd_id,
+                       int *out_duplicate,
+                       int *out_due_at)
+{
+  if (!cmd_type || !idem_key || !payload) return -1;
+
+  // Ensure idempotency index exists once (no-op if already there)
+  sqlite3_exec(db_handle,
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_engine_cmds_idem "
+    "ON engine_commands(idem_key);",
+    NULL,NULL,NULL);
+
+  const char *SQL_INS =
+    "INSERT INTO engine_commands("
+    "  type, payload, status, priority, attempts, created_at, due_at, idem_key"
+    ") VALUES ("
+    "  ?,    json(?), 'ready', 100,      0,        strftime('%s','now'), strftime('%s','now'), ?"
+    ");";
+
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2(db_handle, SQL_INS, -1, &st, NULL);
+  if (rc != SQLITE_OK) return -2;
+
+  char *payload_str = json_dumps(payload, JSON_COMPACT);
+  sqlite3_bind_text(st, 1, cmd_type,    -1, SQLITE_STATIC);
+  sqlite3_bind_text(st, 2, payload_str, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(st, 3, idem_key,    -1, SQLITE_STATIC);
+
+  int dup = 0, cmd_id = 0, due_at = 0;
+
+  rc = sqlite3_step(st);
+  if (rc == SQLITE_DONE) {
+    cmd_id = (int)sqlite3_last_insert_rowid(db_handle);
+    dup = 0;
+  } else if (rc == SQLITE_CONSTRAINT) {
+    // Duplicate: fetch existing id + due_at
+    const char *SQL_GET =
+      "SELECT id, COALESCE(due_at, strftime('%s','now')) "
+      "FROM engine_commands WHERE idem_key = ?;";
+    sqlite3_stmt *gt = NULL;
+    sqlite3_prepare_v2(db_handle, SQL_GET, -1, &gt, NULL);
+    sqlite3_bind_text(gt, 1, idem_key, -1, SQLITE_STATIC);
+    if (sqlite3_step(gt) == SQLITE_ROW) {
+      cmd_id = sqlite3_column_int(gt, 0);
+      due_at = sqlite3_column_int(gt, 1);
+    }
+    sqlite3_finalize(gt);
+    dup = 1;
+  } else {
+    sqlite3_finalize(st);
+    free(payload_str);
+    return -3;
+  }
+
+  sqlite3_finalize(st);
+  free(payload_str);
+
+  // For new rows, read due_at
+  if (!dup) {
+    const char *SQL_DUE =
+      "SELECT COALESCE(due_at, strftime('%s','now')) "
+      "FROM engine_commands WHERE id = ?;";
+    sqlite3_stmt *sd = NULL;
+    sqlite3_prepare_v2(db_handle, SQL_DUE, -1, &sd, NULL);
+    sqlite3_bind_int(sd, 1, cmd_id);
+    if (sqlite3_step(sd) == SQLITE_ROW) {
+      due_at = sqlite3_column_int(sd, 0);
+    }
+    sqlite3_finalize(sd);
+  }
+
+  if (out_cmd_id)    *out_cmd_id    = cmd_id;
+  if (out_duplicate) *out_duplicate = dup;
+  if (out_due_at)    *out_due_at    = due_at;
+  return 0;
+}
+
 
 ////////////////////
 

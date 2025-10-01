@@ -18,16 +18,114 @@
 #include <inttypes.h>
 /* local includes */
 #include "engine_main.h"
-#include "database.h"
-#include "s2s_transport.h"   // s2s_conn_t, s2s_recv_json, s2s_send_json
-#include "s2s_transport.h"
 #include "s2s_keyring.h"
 #include "s2s_transport.h"
 #include "database.h"
+#include "server_envelope.h"
+#include "s2s_transport.h"
+
+
+#include "server_envelope.h"
+
+/* Returns a new env (caller must json_decref(result)). */
+json_t *engine_build_command_push(const char *cmd_type,
+                                  const char *idem_key,
+                                  json_t *payload_obj,           /* owned by caller */
+                                  const char *correlation_id,   /* may be NULL */
+                                  int priority)                 /* <=0 -> default 100 */
+{
+  if (!cmd_type || !idem_key || !payload_obj) return NULL;
+  if (priority <= 0) priority = 100;
+
+  json_t *pl = json_pack("{s:s,s:s,s:o,s:i}",
+                         "cmd_type", cmd_type,
+                         "idem_key", idem_key,
+                         "payload",  payload_obj,
+                         "priority", priority);
+  if (correlation_id)
+    json_object_set_new(pl, "correlation_id", json_string(correlation_id));
+
+  json_t *env = s2s_make_env("s2s.command.push", "engine", "server", pl);
+  json_decref(pl);
+  return env;
+}
+
+
+
+
+static int engine_demo_push(s2s_conn_t *c) {
+  /* build the command payload */
+  json_t *cmdpl = json_pack("{s:s,s:s,s:s,s:i,s:o}",
+                            "cmd_type","notice.publish",
+                            "idem_key","player:42:hello:001",   // keep identical to test idempotency
+                            "correlation_id","demo-001",
+                            "priority",100,
+                            "payload", json_pack("{s:s,s:i,s:s,s:i}",
+                                                 "scope","player",
+                                                 "player_id",42,
+                                                 "message","Hello captain!",
+                                                 "ttl_seconds",3600));
+
+  json_t *env = s2s_make_env("s2s.command.push", "engine", "server", cmdpl);
+  json_decref(cmdpl);
+
+  int rc = s2s_send_env(c, env, 3000);
+  json_decref(env);
+  fprintf(stderr, "[engine] command.push send rc=%d\n", rc);
+  if (rc != 0) return rc;
+
+  json_t *resp = NULL;
+  rc = s2s_recv_env(c, &resp, 3000);
+  fprintf(stderr, "[engine] command.push recv rc=%d\n", rc);
+  if (rc == 0 && resp) {
+    const char *ty = s2s_env_type(resp);
+    if (ty && strcmp(ty,"s2s.ack")==0) {
+      json_t *ackpl = s2s_env_payload(resp);
+      json_t *dup = json_object_get(ackpl,"duplicate");
+      fprintf(stderr, "[engine] ack duplicate=%s\n",
+              (dup && json_is_true(dup)) ? "true" : "false");
+    } else {
+      fprintf(stderr, "[engine] got non-ack (%s)\n", ty?ty:"null");
+    }
+    json_decref(resp);
+  }
+  return rc;
+}
+
+
 
 /////////////////////////
+static int engine_send_notice_publish(s2s_conn_t *c, int player_id, const char *msg, int ttl_seconds)
+{
+  json_t *pl = json_pack("{s:s,s:s,s:s,s:i,s:o}",
+                         "cmd_type", "notice.publish",
+                         "idem_key", "player:42:msg:abc",   /* TODO: make this unique per message */
+                         "correlation_id", "engine-demo-1",
+                         "priority", 100,
+                         "payload", json_pack("{s:s,s:i,s:s}",
+                                              "scope","player",
+                                              "player_id", player_id,
+                                              "message", msg));
+  json_t *env = s2s_make_env("s2s.command.push", "engine", "server", pl);
+  json_decref(pl);
 
+  int rc = s2s_send_env(c, env, 3000);
+  json_decref(env);
+  if (rc != 0) return rc;
 
+  json_t *resp = NULL;
+  rc = s2s_recv_env(c, &resp, 3000);
+  if (rc == 0 && resp) {
+    // log ack/error minimally
+    const char *ty = s2s_env_type(resp);
+    if (ty && strcmp(ty, "s2s.ack")==0) fprintf(stderr, "[engine] command.push ack\n");
+    else                                fprintf(stderr, "[engine] command.push err\n");
+    json_decref(resp);
+  }
+  return rc;
+}
+
+/////////////////////////
 static void log_s2s_metrics(const char *who) {
   uint64_t sent=0, recv=0, auth_fail=0, too_big=0;
   s2s_get_counters(&sent, &recv, &auth_fail, &too_big);
@@ -235,7 +333,8 @@ engine_main_loop (int shutdown_fd)
     json_decref(msg);
   }
 
-  
+   fprintf(stderr, "[engine] Running Smoke Test\n");
+   (void)engine_demo_push(conn);  
 
   static time_t last_metrics = 0;  
   for (;;)
