@@ -69,6 +69,8 @@ bigbang_SOURCES = \
 	../src/database.c \
 	../src/schemas.c \
 	../src/server_envelope.c \
+	../src/s2s_transport.c \
+	../src/s2s_keyring.c \
 	../src/namegen.c \
 	../src/server_bigbang.c \
 	../src/server_config.c \
@@ -76,6 +78,7 @@ bigbang_SOURCES = \
 	../src/test_bang.c \
 	../src/globals.c \
 	../src/common.c
+
 
 
 

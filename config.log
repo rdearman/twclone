@@ -297,6 +297,7 @@ config.status:876: creating autoconf.h
 config.status:1057: autoconf.h is unchanged
 config.status:1105: executing depfiles commands
 config.status:1182: cd bin       && sed -e '/# am--include-marker/d' Makefile         | make -f - am--depfiles
+make: Nothing to be done for 'am--depfiles'.
 config.status:1187: $? = 0
 
 ## ---------------- ##

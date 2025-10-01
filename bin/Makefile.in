@@ -125,6 +125,7 @@ PROGRAMS = $(bin_PROGRAMS)
 am__dirstamp = $(am__leading_dot)dirstamp
 am_bigbang_OBJECTS = ../src/database.$(OBJEXT) \
 	../src/schemas.$(OBJEXT) ../src/server_envelope.$(OBJEXT) \
+	../src/s2s_transport.$(OBJEXT) ../src/s2s_keyring.$(OBJEXT) \
 	../src/namegen.$(OBJEXT) ../src/server_bigbang.$(OBJEXT) \
 	../src/server_config.$(OBJEXT) \
 	../src/server_warp_post_processing.$(OBJEXT) \
@@ -368,6 +369,8 @@ bigbang_SOURCES = \
 	../src/database.c \
 	../src/schemas.c \
 	../src/server_envelope.c \
+	../src/s2s_transport.c \
+	../src/s2s_keyring.c \
 	../src/namegen.c \
 	../src/server_bigbang.c \
 	../src/server_config.c \
@@ -463,6 +466,10 @@ clean-binPROGRAMS:
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_envelope.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
+../src/s2s_transport.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
+../src/s2s_keyring.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/namegen.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_bigbang.$(OBJEXT): ../src/$(am__dirstamp) \
@@ -510,10 +517,6 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 ../src/server_s2s.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/engine_main.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/s2s_transport.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/s2s_keyring.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 
 server$(EXEEXT): $(server_OBJECTS) $(server_DEPENDENCIES) $(EXTRA_server_DEPENDENCIES) 
