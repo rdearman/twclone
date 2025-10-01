@@ -1,5 +1,3 @@
----
-
 # ENGINE.md — Game Engine (Forked Process)
 
 ## 1) Purpose & scope
