@@ -7,20 +7,21 @@
 #include "database.h"		// if your moved bodies call db_*
 // #include "schemas.h"      // uncomment if you wire system.describe_schema to schemas.c
 #define DEFAULT_DB_NAME "twconfig.db"
-struct twconfig;        
-struct twconfig * config_load (void);
+struct twconfig;
+struct twconfig *config_load (void);
 
 
 #ifndef TW_CMD_DESC_T_DEFINED
 #define TW_CMD_DESC_T_DEFINED
-typedef struct cmd_desc_s {
-  const char *name;     // e.g. "move.warp"
-  const char *summary;  // optional; may be ""
+typedef struct cmd_desc_s
+{
+  const char *name;		// e.g. "move.warp"
+  const char *summary;		// optional; may be ""
 } cmd_desc_t;
 #endif
 
 // Exported by server_loop.c (or weak-fallback elsewhere)
-void loop_get_supported_commands(const cmd_desc_t **out_tbl, size_t *out_n);
+void loop_get_supported_commands (const cmd_desc_t ** out_tbl, size_t *out_n);
 
 #ifdef __cplusplus
 extern "C"

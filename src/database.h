@@ -4,6 +4,10 @@
 #include <jansson.h>		/* for json_t */
 #include <sqlite3.h>		/* for sqlite3 */
 #include <pthread.h>		/* for pthread_mutex_t */
+#include <sqlite3.h>
+
+
+sqlite3 *db_get_handle(void);
 
 /* External declaration for the mutex */
 extern pthread_mutex_t db_mutex;
@@ -116,14 +120,14 @@ int db_sector_scan_snapshot (int sector_id, json_t ** out_core);
 
 
 /* Insert a persistent notice; returns row id (>=1) or -1 on error */
-int db_notice_create(const char *title, const char *body,
-                     const char *severity, time_t expires_at);
+int db_notice_create (const char *title, const char *body,
+		      const char *severity, time_t expires_at);
 
 /* Return unseen notices for a player as a JSON array (caller owns ref) */
-json_t *db_notice_list_unseen_for_player(int player_id);
+json_t *db_notice_list_unseen_for_player (int player_id);
 
 /* Mark a notice as seen by a player; returns 0 ok, -1 error */
-int db_notice_mark_seen(int notice_id, int player_id);
+int db_notice_mark_seen (int notice_id, int player_id);
 
 
 #endif /* DATABASE_H */

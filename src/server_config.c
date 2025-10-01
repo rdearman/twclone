@@ -31,7 +31,7 @@ void send_enveloped_ok (int fd, json_t * root, const char *type,
 			json_t * data);
 
 // exported by server_loop.c
-void loop_get_supported_commands(const cmd_desc_t **out_tbl, size_t *out_n);
+void loop_get_supported_commands (const cmd_desc_t ** out_tbl, size_t *out_n);
 
 
 static int
@@ -68,17 +68,24 @@ resolve_current_sector_from_info (json_t *info_obj, int fallback)
 static json_t *
 make_session_hello_payload (int is_authed, int player_id, int sector_id)
 {
-  json_t *payload = json_object();
-  json_object_set_new(payload, "protocol_version", json_string("1.0"));
-  json_object_set_new(payload, "server_time_unix", json_integer((json_int_t)time(NULL)));
-  json_object_set_new(payload, "authenticated", is_authed ? json_true() : json_false());
-  if (is_authed) {
-    json_object_set_new(payload, "player_id", json_integer(player_id));
-    json_object_set_new(payload, "current_sector", sector_id > 0 ? json_integer(sector_id) : json_null());
-  } else {
-    json_object_set_new(payload, "player_id", json_null());
-    json_object_set_new(payload, "current_sector", json_null());
-  }
+  json_t *payload = json_object ();
+  json_object_set_new (payload, "protocol_version", json_string ("1.0"));
+  json_object_set_new (payload, "server_time_unix",
+		       json_integer ((json_int_t) time (NULL)));
+  json_object_set_new (payload, "authenticated",
+		       is_authed ? json_true () : json_false ());
+  if (is_authed)
+    {
+      json_object_set_new (payload, "player_id", json_integer (player_id));
+      json_object_set_new (payload, "current_sector",
+			   sector_id >
+			   0 ? json_integer (sector_id) : json_null ());
+    }
+  else
+    {
+      json_object_set_new (payload, "player_id", json_null ());
+      json_object_set_new (payload, "current_sector", json_null ());
+    }
   return payload;
 }
 
@@ -88,7 +95,7 @@ int
 cmd_system_hello (client_ctx_t *ctx, json_t *root)
 {
   // alias to session.hello
-  return cmd_session_hello(ctx, root);
+  return cmd_session_hello (ctx, root);
 }
 
 //////////////////
@@ -156,19 +163,21 @@ cmd_session_ping (client_ctx_t *ctx, json_t *root)
 }
 
 
-int cmd_session_hello(client_ctx_t *ctx, json_t *root) {
-  const char *req_id = json_string_value(json_object_get(root, "id"));
+int
+cmd_session_hello (client_ctx_t *ctx, json_t *root)
+{
+  const char *req_id = json_string_value (json_object_get (root, "id"));
 
-  json_t *payload = make_session_hello_payload((ctx->player_id > 0),
-                                               ctx->player_id,
-                                               ctx->sector_id);
+  json_t *payload = make_session_hello_payload ((ctx->player_id > 0),
+						ctx->player_id,
+						ctx->sector_id);
 
   // Use ONE helper that builds a proper envelope including reply_to + status.
   // If your send_enveloped_ok doesn't add reply_to, fix it (next section).
-  send_enveloped_ok(ctx->fd, root, "session.hello", payload);
+  send_enveloped_ok (ctx->fd, root, "session.hello", payload);
 
-  json_decref(payload);
-  return 0;      // IMPORTANT: do not send another frame after this
+  json_decref (payload);
+  return 0;			// IMPORTANT: do not send another frame after this
 }
 
 int

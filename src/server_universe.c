@@ -27,98 +27,125 @@
 json_t *build_sector_info_json (int sector_id);
 
 
-static int parse_sector_search_input(json_t *root,
-                                     char **q_out,
-                                     int *type_any, int *type_sector, int *type_port,
-                                     int *limit_out, int *offset_out)
+static int
+parse_sector_search_input (json_t *root,
+			   char **q_out,
+			   int *type_any, int *type_sector, int *type_port,
+			   int *limit_out, int *offset_out)
 {
   *q_out = NULL;
   *type_any = *type_sector = *type_port = 0;
   *limit_out = SEARCH_DEFAULT_LIMIT;
   *offset_out = 0;
 
-  json_t *data = json_object_get(root, "data");
-  if (!json_is_object(data)) return -1;
+  json_t *data = json_object_get (root, "data");
+  if (!json_is_object (data))
+    return -1;
 
   // q (optional, empty means “match all”)
-  json_t *jq = json_object_get(data, "q");
-  if (json_is_string(jq)) {
-    const char *qs = json_string_value(jq);
-    *q_out = strdup(qs ? qs : "");
-  } else {
-    *q_out = strdup("");
-  }
-  if (!*q_out) return -2;
+  json_t *jq = json_object_get (data, "q");
+  if (json_is_string (jq))
+    {
+      const char *qs = json_string_value (jq);
+      *q_out = strdup (qs ? qs : "");
+    }
+  else
+    {
+      *q_out = strdup ("");
+    }
+  if (!*q_out)
+    return -2;
 
   // type
   const char *type = "any";
-  json_t *jtype = json_object_get(data, "type");
-  if (json_is_string(jtype)) type = json_string_value(jtype);
+  json_t *jtype = json_object_get (data, "type");
+  if (json_is_string (jtype))
+    type = json_string_value (jtype);
 
-  if (!type || strcmp(type, "any")==0) *type_any = 1;
-  else if (strcmp(type, "sector")==0)  *type_sector = 1;
-  else if (strcmp(type, "port")==0)    *type_port = 1;
-  else {
-    free(*q_out);
-    return -3;
-  }
+  if (!type || strcmp (type, "any") == 0)
+    *type_any = 1;
+  else if (strcmp (type, "sector") == 0)
+    *type_sector = 1;
+  else if (strcmp (type, "port") == 0)
+    *type_port = 1;
+  else
+    {
+      free (*q_out);
+      return -3;
+    }
 
   // limit
-  json_t *jlimit = json_object_get(data, "limit");
-  if (json_is_integer(jlimit)) {
-    int lim = (int)json_integer_value(jlimit);
-    if (lim <= 0) lim = SEARCH_DEFAULT_LIMIT;
-    if (lim > SEARCH_MAX_LIMIT) lim = SEARCH_MAX_LIMIT;
-    *limit_out = lim;
-  }
+  json_t *jlimit = json_object_get (data, "limit");
+  if (json_is_integer (jlimit))
+    {
+      int lim = (int) json_integer_value (jlimit);
+      if (lim <= 0)
+	lim = SEARCH_DEFAULT_LIMIT;
+      if (lim > SEARCH_MAX_LIMIT)
+	lim = SEARCH_MAX_LIMIT;
+      *limit_out = lim;
+    }
 
   // cursor (offset)
-  json_t *jcur = json_object_get(data, "cursor");
-  if (json_is_integer(jcur)) {
-    *offset_out = (int)json_integer_value(jcur);
-    if (*offset_out < 0) *offset_out = 0;
-  } else if (json_is_string(jcur)) {
-    // allow stringified integers too
-    const char *s = json_string_value(jcur);
-    if (s && *s) {
-      *offset_out = atoi(s);
-      if (*offset_out < 0) *offset_out = 0;
+  json_t *jcur = json_object_get (data, "cursor");
+  if (json_is_integer (jcur))
+    {
+      *offset_out = (int) json_integer_value (jcur);
+      if (*offset_out < 0)
+	*offset_out = 0;
     }
-  }
+  else if (json_is_string (jcur))
+    {
+      // allow stringified integers too
+      const char *s = json_string_value (jcur);
+      if (s && *s)
+	{
+	  *offset_out = atoi (s);
+	  if (*offset_out < 0)
+	    *offset_out = 0;
+	}
+    }
 
   return 0;
 }
 
-int cmd_sector_search (client_ctx_t *ctx, json_t *root)
+int
+cmd_sector_search (client_ctx_t *ctx, json_t *root)
 {
-  UNUSED(ctx);
-  if (!root) return -1;
+  UNUSED (ctx);
+  if (!root)
+    return -1;
 
   char *q = NULL;
-  int type_any=0, type_sector=0, type_port=0;
-  int limit=0, offset=0;
+  int type_any = 0, type_sector = 0, type_port = 0;
+  int limit = 0, offset = 0;
 
-  int prc = parse_sector_search_input(root, &q, &type_any, &type_sector, &type_port, &limit, &offset);
-  if (prc != 0) {
-    free(q);
-    send_enveloped_error(ctx, 400, "bad_request",
-      "Expected data { q:string?, type:'sector'|'port'|'any', limit?:int, cursor?:int|string }.");
-  }
+  int prc =
+    parse_sector_search_input (root, &q, &type_any, &type_sector, &type_port,
+			       &limit, &offset);
+  if (prc != 0)
+    {
+      free (q);
+      send_enveloped_error (ctx, 400, "bad_request",
+			    "Expected data { q:string?, type:'sector'|'port'|'any', limit?:int, cursor?:int|string }.");
+    }
 
   // If 'any', we’ll union both; otherwise pick a branch.
   int do_sector = type_any || type_sector;
-  int do_port   = type_any || type_port;
+  int do_port = type_any || type_port;
 
-  sqlite3 *db = db_get_handle();
-  if (!db) {
-    free(q);
-    send_enveloped_error(ctx, 500, "db_unavailable", "No database handle.");
-  }
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    {
+      free (q);
+      send_enveloped_error (ctx, 500, "db_unavailable",
+			    "No database handle.");
+    }
 
   // Build LIKE pattern for case-insensitive contains
   // Use COLLATE NOCASE in SQL so we don't need to lower() both sides
   char likepat[512];
-  snprintf(likepat, sizeof(likepat), "%%%s%%", q ? q : "");
+  snprintf (likepat, sizeof (likepat), "%%%s%%", q ? q : "");
 
   // We fetch limit+1 rows to determine if there's a next page
   int fetch = limit + 1;
@@ -154,94 +181,102 @@ int cmd_sector_search (client_ctx_t *ctx, json_t *root)
     "WHERE ( (?1 = '') OR (s.name LIKE ?2 COLLATE NOCASE) )";
 
   // Compose SQL
-  if (do_sector && do_port) {
-    snprintf(sql, sizeof(sql),
-      "%s UNION ALL %s "
-      "ORDER BY kind, name, id "
-      "LIMIT ?3 OFFSET ?4",
-      sector_select, port_select);
-  } else if (do_sector) {
-    snprintf(sql, sizeof(sql),
-      "%s "
-      "ORDER BY name, id "
-      "LIMIT ?3 OFFSET ?4",
-      sector_select);
-  } else { // ports only
-    snprintf(sql, sizeof(sql),
-      "%s "
-      "ORDER BY name, id "
-      "LIMIT ?3 OFFSET ?4",
-      port_select);
-  }
+  if (do_sector && do_port)
+    {
+      snprintf (sql, sizeof (sql),
+		"%s UNION ALL %s "
+		"ORDER BY kind, name, id "
+		"LIMIT ?3 OFFSET ?4", sector_select, port_select);
+    }
+  else if (do_sector)
+    {
+      snprintf (sql, sizeof (sql),
+		"%s "
+		"ORDER BY name, id " "LIMIT ?3 OFFSET ?4", sector_select);
+    }
+  else
+    {				// ports only
+      snprintf (sql, sizeof (sql),
+		"%s " "ORDER BY name, id " "LIMIT ?3 OFFSET ?4", port_select);
+    }
 
   // Prepare and bind
   sqlite3_stmt *st = NULL;
-  int rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
-  if (rc != SQLITE_OK) {
-    free(q);
-    send_enveloped_error(ctx, 500, "sql_error", sqlite3_errmsg(db));
-  }
+  int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      free (q);
+      send_enveloped_error (ctx, 500, "sql_error", sqlite3_errmsg (db));
+    }
 
   // Bind parameters:
   // ?1 = empty string check
   // ?2 = like pattern
   // ?3 = limit+1 (fetch)
   // ?4 = offset
-  sqlite3_bind_text(st, 1, q ? q : "", -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text(st, 2, likepat, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text (st, 1, q ? q : "", -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text (st, 2, likepat, -1, SQLITE_TRANSIENT);
   sqlite3_bind_int (st, 3, fetch);
   sqlite3_bind_int (st, 4, offset);
 
-  json_t *items = json_array();
+  json_t *items = json_array ();
   int row_count = 0;
 
-  while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
-    const char *kind = (const char *)sqlite3_column_text(st, 0);
-    int id           = sqlite3_column_int(st, 1);
-    const char *name = (const char *)sqlite3_column_text(st, 2);
-    int sector_id    = sqlite3_column_int(st, 3);
-    const char *sector_name = (const char *)sqlite3_column_text(st, 4);
+  while ((rc = sqlite3_step (st)) == SQLITE_ROW)
+    {
+      const char *kind = (const char *) sqlite3_column_text (st, 0);
+      int id = sqlite3_column_int (st, 1);
+      const char *name = (const char *) sqlite3_column_text (st, 2);
+      int sector_id = sqlite3_column_int (st, 3);
+      const char *sector_name = (const char *) sqlite3_column_text (st, 4);
 
-    if (row_count < limit) {
-      json_t *it = json_object();
-      json_object_set_new(it, "kind",        json_string(kind ? kind : ""));
-      json_object_set_new(it, "id",          json_integer(id));
-      json_object_set_new(it, "name",        json_string(name ? name : ""));
-      json_object_set_new(it, "sector_id",   json_integer(sector_id));
-      json_object_set_new(it, "sector_name", json_string(sector_name ? sector_name : ""));
-      json_array_append_new(items, it);
+      if (row_count < limit)
+	{
+	  json_t *it = json_object ();
+	  json_object_set_new (it, "kind", json_string (kind ? kind : ""));
+	  json_object_set_new (it, "id", json_integer (id));
+	  json_object_set_new (it, "name", json_string (name ? name : ""));
+	  json_object_set_new (it, "sector_id", json_integer (sector_id));
+	  json_object_set_new (it, "sector_name",
+			       json_string (sector_name ? sector_name : ""));
+	  json_array_append_new (items, it);
+	}
+      row_count++;
+
+      if (row_count >= fetch)
+	break;			// we only need to know if there’s one extra
     }
-    row_count++;
 
-    if (row_count >= fetch) break; // we only need to know if there’s one extra
-  }
-
-  sqlite3_finalize(st);
-  free(q);
+  sqlite3_finalize (st);
+  free (q);
 
   // Pagination: if we fetched more than 'limit', expose a next cursor (offset+limit)
-  json_t *jdata = json_object();
-  json_object_set_new(jdata, "items", items);
+  json_t *jdata = json_object ();
+  json_object_set_new (jdata, "items", items);
 
-  if (row_count > limit) {
-    json_object_set_new(jdata, "next_cursor", json_integer(offset + limit));
-  } else {
-    json_object_set_new(jdata, "next_cursor", json_null());
-  }
+  if (row_count > limit)
+    {
+      json_object_set_new (jdata, "next_cursor",
+			   json_integer (offset + limit));
+    }
+  else
+    {
+      json_object_set_new (jdata, "next_cursor", json_null ());
+    }
 
   // Echo back what we actually applied (optional but handy)
   // json_object_set_new(jdata, "applied_limit", json_integer(limit));
   // json_object_set_new(jdata, "applied_offset", json_integer(offset));
 
   //send_enveloped_ok (ctx->fd, root, "move.result", data);
-  send_enveloped_ok(ctx->fd, root, "sector.search_results_v1", jdata);
+  send_enveloped_ok (ctx->fd, root, "sector.search_results_v1", jdata);
 }
 
 
 int
 cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
 {
-  return cmd_move_pathfind(ctx, root);
+  return cmd_move_pathfind (ctx, root);
 }
 
 int
@@ -397,7 +432,7 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
     {
       json_t *jto = json_object_get (jdata, "to_sector_id");
       if (json_is_integer (jto))
-        to = (int) json_integer_value (jto);
+	to = (int) json_integer_value (jto);
     }
 
   decision_t d = validate_warp_rule (ctx->sector_id, to);
@@ -418,34 +453,35 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
   int prc = db_player_set_sector (ctx->player_id, to);
   if (prc != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, 1502, "Failed to persist player sector");
+      send_enveloped_error (ctx->fd, root, 1502,
+			    "Failed to persist player sector");
       return 0;
     }
   ctx->sector_id = to;
 
   /* 1) Send the direct reply for the actor */
-  json_t *resp = json_object();
-  json_object_set_new(resp, "player_id", json_integer(ctx->player_id));
-  json_object_set_new(resp, "from_sector_id", json_integer(from));
-  json_object_set_new(resp, "to_sector_id", json_integer(to));
-  json_object_set_new(resp, "current_sector", json_integer(ctx->sector_id));
-  send_enveloped_ok(ctx->fd, root, "move.result", resp);
+  json_t *resp = json_object ();
+  json_object_set_new (resp, "player_id", json_integer (ctx->player_id));
+  json_object_set_new (resp, "from_sector_id", json_integer (from));
+  json_object_set_new (resp, "to_sector_id", json_integer (to));
+  json_object_set_new (resp, "current_sector", json_integer (ctx->sector_id));
+  send_enveloped_ok (ctx->fd, root, "move.result", resp);
 
   /* 2) Broadcast LEFT (from) then ENTERED (to) to subscribers */
 
   /* LEFT event: sector = 'from' */
-  json_t *left = json_object();
-  json_object_set_new(left, "player_id",      json_integer(ctx->player_id));
-  json_object_set_new(left, "sector_id",      json_integer(from));
-  json_object_set_new(left, "to_sector_id",   json_integer(to));
-  comm_publish_sector_event(from, "sector.player_left", left);
+  json_t *left = json_object ();
+  json_object_set_new (left, "player_id", json_integer (ctx->player_id));
+  json_object_set_new (left, "sector_id", json_integer (from));
+  json_object_set_new (left, "to_sector_id", json_integer (to));
+  comm_publish_sector_event (from, "sector.player_left", left);
 
   /* ENTERED event: sector = 'to' */
-  json_t *entered = json_object();
-  json_object_set_new(entered, "player_id",        json_integer(ctx->player_id));
-  json_object_set_new(entered, "sector_id",        json_integer(to));
-  json_object_set_new(entered, "from_sector_id",   json_integer(from));
-  comm_publish_sector_event(to, "sector.player_entered", entered);
+  json_t *entered = json_object ();
+  json_object_set_new (entered, "player_id", json_integer (ctx->player_id));
+  json_object_set_new (entered, "sector_id", json_integer (to));
+  json_object_set_new (entered, "from_sector_id", json_integer (from));
+  comm_publish_sector_event (to, "sector.player_entered", entered);
 
   return 0;
 }
@@ -453,7 +489,8 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
 
 
 /* -------- move.pathfind: BFS path A->B with avoid list -------- */
-int cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
+int
+cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
 {
   if (!ctx)
     return 1;
@@ -918,7 +955,7 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
   if (db_sector_scan_core (sector_id, &core) != SQLITE_OK || !core)
     {
       send_enveloped_error (ctx->fd, root, 1401, "Sector not found");
-      return ;
+      return;
     }
 
   /* 2) Adjacent IDs (array) */
@@ -954,7 +991,7 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
       json_decref (adj);
       json_decref (security);
       send_enveloped_error (ctx->fd, root, 1500, "OOM");
-      return ;
+      return;
     }
   json_object_set_new (port, "present", json_boolean (port_cnt > 0));
   json_object_set_new (port, "class", json_null ());
@@ -971,7 +1008,7 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
       json_decref (security);
       json_decref (port);
       send_enveloped_error (ctx->fd, root, 1500, "OOM");
-      return ;
+      return;
     }
   json_object_set_new (counts, "ships", json_integer (ships));
   json_object_set_new (counts, "planets", json_integer (planets));

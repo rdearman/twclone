@@ -3,14 +3,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sqlite3.h>
-#include "database.h" 
+#include "database.h"
 #include <fcntl.h>
 #include <unistd.h>
 #include <time.h>
 #include <jansson.h>
 #include <stdbool.h>
 #include <pthread.h>
-#include  "common.h" 
+#include  "common.h"
 #include "server_config.h"
 
 
@@ -28,6 +28,9 @@ static int db_ensure_idempotency_schema_unlocked (void);
 static int db_create_tables_unlocked (void);
 static int db_insert_defaults_unlocked (void);
 static int db_ensure_ship_perms_column_unlocked (void);
+
+
+
 
 ////////////////////
 
@@ -55,7 +58,7 @@ db_thread_safe_update_single_column (const char *table, int id,
   pthread_mutex_lock (&db_mutex);
 
   // Build the SQL query string
-  const char *template =  " UPDATE %s SET %s = ? WHERE id = ?; " ;
+  const char *template = " UPDATE %s SET %s = ? WHERE id = ?; ";
   sql = sqlite3_mprintf (template, table, column);
   if (!sql)
     {
@@ -117,319 +120,314 @@ cleanup:
 
 
 const char *create_table_sql[] = {
-   " CREATE TABLE IF NOT EXISTS config ( " 
-     "  id INTEGER PRIMARY KEY CHECK (id = 1), " 
-     "  turnsperday INTEGER, " 
-     "  maxwarps_per_sector INTEGER, " 
-     "  startingcredits INTEGER, " 
-     "  startingfighters INTEGER, " 
-     "  startingholds INTEGER, " 
-     "  processinterval INTEGER, " 
-     "  autosave INTEGER, " 
-     "  max_ports INTEGER, " 
-     "  max_planets_per_sector INTEGER, " 
-     "  max_total_planets INTEGER, " 
-     "  max_citadel_level INTEGER, " 
-     "  number_of_planet_types INTEGER, " 
-     "  max_ship_name_length INTEGER, " 
-     "  ship_type_count INTEGER, " 
-     "  hash_length INTEGER, " 
-     "  default_nodes INTEGER, " 
-     "  buff_size INTEGER, " 
-     "  max_name_length INTEGER, "   "  planet_type_count INTEGER "   " ); " ,
+  " CREATE TABLE IF NOT EXISTS config ( "
+    "  id INTEGER PRIMARY KEY CHECK (id = 1), "
+    "  turnsperday INTEGER, "
+    "  maxwarps_per_sector INTEGER, "
+    "  startingcredits INTEGER, "
+    "  startingfighters INTEGER, "
+    "  startingholds INTEGER, "
+    "  processinterval INTEGER, "
+    "  autosave INTEGER, "
+    "  max_ports INTEGER, "
+    "  max_planets_per_sector INTEGER, "
+    "  max_total_planets INTEGER, "
+    "  max_citadel_level INTEGER, "
+    "  number_of_planet_types INTEGER, "
+    "  max_ship_name_length INTEGER, "
+    "  ship_type_count INTEGER, "
+    "  hash_length INTEGER, "
+    "  default_nodes INTEGER, "
+    "  buff_size INTEGER, "
+    "  max_name_length INTEGER, " "  planet_type_count INTEGER " " ); ",
 
-   " CREATE TABLE IF NOT EXISTS trade_idempotency ( " 
-   " key          TEXT PRIMARY KEY, " 
-   " player_id    INTEGER NOT NULL, " 
-   " sector_id    INTEGER NOT NULL, " 
-   " request_json TEXT NOT NULL, " 
-   " response_json TEXT NOT NULL, " 
-   " created_at   INTEGER NOT NULL ); " ,
+  " CREATE TABLE IF NOT EXISTS trade_idempotency ( "
+    " key          TEXT PRIMARY KEY, "
+    " player_id    INTEGER NOT NULL, "
+    " sector_id    INTEGER NOT NULL, "
+    " request_json TEXT NOT NULL, "
+    " response_json TEXT NOT NULL, " " created_at   INTEGER NOT NULL ); ",
 
-   " CREATE TABLE IF NOT EXISTS used_sectors (used INTEGER); " ,
-
-
-   " CREATE TABLE IF NOT EXISTS npc_shipnames (id INTEGER, name TEXT); " ,
-
-   " CREATE TABLE IF NOT EXISTS planettypes (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE, typeDescription TEXT, typeName TEXT, citadelUpgradeTime_lvl1 INTEGER, citadelUpgradeTime_lvl2 INTEGER, citadelUpgradeTime_lvl3 INTEGER, citadelUpgradeTime_lvl4 INTEGER, citadelUpgradeTime_lvl5 INTEGER, citadelUpgradeTime_lvl6 INTEGER, citadelUpgradeOre_lvl1 INTEGER, citadelUpgradeOre_lvl2 INTEGER, citadelUpgradeOre_lvl3 INTEGER, citadelUpgradeOre_lvl4 INTEGER, citadelUpgradeOre_lvl5 INTEGER, citadelUpgradeOre_lvl6 INTEGER, citadelUpgradeOrganics_lvl1 INTEGER, citadelUpgradeOrganics_lvl2 INTEGER, citadelUpgradeOrganics_lvl3 INTEGER, citadelUpgradeOrganics_lvl4 INTEGER, citadelUpgradeOrganics_lvl5 INTEGER, citadelUpgradeOrganics_lvl6 INTEGER, citadelUpgradeEquipment_lvl1 INTEGER, citadelUpgradeEquipment_lvl2 INTEGER, citadelUpgradeEquipment_lvl3 INTEGER, citadelUpgradeEquipment_lvl4 INTEGER, citadelUpgradeEquipment_lvl5 INTEGER, citadelUpgradeEquipment_lvl6 INTEGER, citadelUpgradeColonist_lvl1 INTEGER, citadelUpgradeColonist_lvl2 INTEGER, citadelUpgradeColonist_lvl3 INTEGER, citadelUpgradeColonist_lvl4 INTEGER, citadelUpgradeColonist_lvl5 INTEGER, citadelUpgradeColonist_lvl6 INTEGER, maxColonist_ore INTEGER, maxColonist_organics INTEGER, maxColonist_equipment INTEGER, fighters INTEGER, fuelProduction INTEGER, organicsProduction INTEGER, equipmentProduction INTEGER, fighterProduction INTEGER, maxore INTEGER, maxorganics INTEGER, maxequipment INTEGER, maxfighters INTEGER, breeding REAL); " ,
-
-   " CREATE TABLE IF NOT EXISTS ports ( "   " id INTEGER PRIMARY KEY AUTOINCREMENT,  "   " number INTEGER,  "   " name TEXT NOT NULL,  "   " location INTEGER NOT NULL,  " 	/* FK to sectors.id */
-     " size INTEGER,  " 
-     " techlevel INTEGER,  " 
-     " max_ore INTEGER,  " 
-     " max_organics INTEGER,  " 
-     " max_equipment INTEGER,  " 
-     " product_ore INTEGER,  " 
-     " product_organics INTEGER,  " 
-     " product_equipment INTEGER,  " 
-     " credits INTEGER,  " 
-     " invisible INTEGER DEFAULT 0,  " 
-     " type INTEGER DEFAULT 1,  " 
-     " FOREIGN KEY (location) REFERENCES sectors(id)); " ,
-
-   " CREATE TABLE IF NOT EXISTS port_trade ( " 
-     " id INTEGER PRIMARY KEY AUTOINCREMENT,  " 
-     " port_id INTEGER NOT NULL,  " 
-     " maxproduct INTEGER,  " 
-     " commodity TEXT CHECK(commodity IN ('ore','organics','equipment')),  " 
-     " mode TEXT CHECK(mode IN ('buy','sell')),  " 
-     " FOREIGN KEY (port_id) REFERENCES ports(id)); " ,
+  " CREATE TABLE IF NOT EXISTS used_sectors (used INTEGER); ",
 
 
-   " CREATE TABLE IF NOT EXISTS players ( "   " id INTEGER PRIMARY KEY AUTOINCREMENT,  "   " type INTEGER DEFAULT 2,  "   " number INTEGER,  " 	/* legacy player ID */
-     " name TEXT NOT NULL,  "   " passwd TEXT NOT NULL,  " 	/* hashed password */
-     " sector INTEGER,  " 		/* 0 if in a ship */
-     " ship INTEGER,  " 		/* ship number */
-     " experience INTEGER,  "   " alignment INTEGER,  "   " credits INTEGER,  "   " bank_balance INTEGER,  "   " flags INTEGER,  " 	/* bitfield: P_LOGGEDIN, P_STARDOCK, etc. */
-     " lastprice INTEGER,  "   " firstprice INTEGER,  "   " integrity INTEGER,  "   " login_time INTEGER,  "   " last_update INTEGER,  "   " intransit INTEGER,  " 	/* 0/1 boolean */
-     " beginmove INTEGER,  " 	/* timestamp */
-     " movingto INTEGER,  " 	/* sector destination */
-     " loggedin INTEGER,  " 	/* runtime only, but persisted if desired */
-     " lastplanet INTEGER,  " 	/* last planet created */
-     " score INTEGER,  " 
-     " kills INTEGER,  " 
-     " cloaked INTEGER,  " 
-     " remote INTEGER,  "   " fighters INTEGER,  "   " holds INTEGER "   " ); " ,
+  " CREATE TABLE IF NOT EXISTS npc_shipnames (id INTEGER, name TEXT); ",
 
-   " CREATE TABLE IF NOT EXISTS player_types (type INTEGER PRIMARY KEY AUTOINCREMENT, description TEXT); " ,
+  " CREATE TABLE IF NOT EXISTS planettypes (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE, typeDescription TEXT, typeName TEXT, citadelUpgradeTime_lvl1 INTEGER, citadelUpgradeTime_lvl2 INTEGER, citadelUpgradeTime_lvl3 INTEGER, citadelUpgradeTime_lvl4 INTEGER, citadelUpgradeTime_lvl5 INTEGER, citadelUpgradeTime_lvl6 INTEGER, citadelUpgradeOre_lvl1 INTEGER, citadelUpgradeOre_lvl2 INTEGER, citadelUpgradeOre_lvl3 INTEGER, citadelUpgradeOre_lvl4 INTEGER, citadelUpgradeOre_lvl5 INTEGER, citadelUpgradeOre_lvl6 INTEGER, citadelUpgradeOrganics_lvl1 INTEGER, citadelUpgradeOrganics_lvl2 INTEGER, citadelUpgradeOrganics_lvl3 INTEGER, citadelUpgradeOrganics_lvl4 INTEGER, citadelUpgradeOrganics_lvl5 INTEGER, citadelUpgradeOrganics_lvl6 INTEGER, citadelUpgradeEquipment_lvl1 INTEGER, citadelUpgradeEquipment_lvl2 INTEGER, citadelUpgradeEquipment_lvl3 INTEGER, citadelUpgradeEquipment_lvl4 INTEGER, citadelUpgradeEquipment_lvl5 INTEGER, citadelUpgradeEquipment_lvl6 INTEGER, citadelUpgradeColonist_lvl1 INTEGER, citadelUpgradeColonist_lvl2 INTEGER, citadelUpgradeColonist_lvl3 INTEGER, citadelUpgradeColonist_lvl4 INTEGER, citadelUpgradeColonist_lvl5 INTEGER, citadelUpgradeColonist_lvl6 INTEGER, maxColonist_ore INTEGER, maxColonist_organics INTEGER, maxColonist_equipment INTEGER, fighters INTEGER, fuelProduction INTEGER, organicsProduction INTEGER, equipmentProduction INTEGER, fighterProduction INTEGER, maxore INTEGER, maxorganics INTEGER, maxequipment INTEGER, maxfighters INTEGER, breeding REAL); ",
 
-   " CREATE TABLE IF NOT EXISTS sectors (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, beacon TEXT, nebulae TEXT); " ,
+  " CREATE TABLE IF NOT EXISTS ports ( " " id INTEGER PRIMARY KEY AUTOINCREMENT,  " " number INTEGER,  " " name TEXT NOT NULL,  " " location INTEGER NOT NULL,  "	/* FK to sectors.id */
+    " size INTEGER,  "
+    " techlevel INTEGER,  "
+    " max_ore INTEGER,  "
+    " max_organics INTEGER,  "
+    " max_equipment INTEGER,  "
+    " product_ore INTEGER,  "
+    " product_organics INTEGER,  "
+    " product_equipment INTEGER,  "
+    " credits INTEGER,  "
+    " invisible INTEGER DEFAULT 0,  "
+    " type INTEGER DEFAULT 1,  "
+    " FOREIGN KEY (location) REFERENCES sectors(id)); ",
 
-   " CREATE TABLE IF NOT EXISTS sector_warps (from_sector INTEGER, to_sector INTEGER, PRIMARY KEY (from_sector, to_sector), FOREIGN KEY (from_sector) REFERENCES sectors(id) ON DELETE CASCADE, FOREIGN KEY (to_sector) REFERENCES sectors(id) ON DELETE CASCADE); " ,
-
-
-   " CREATE TABLE IF NOT EXISTS ships ( "   " id INTEGER PRIMARY KEY AUTOINCREMENT,  "   " name TEXT NOT NULL,  "   " type INTEGER,  "   " attack INTEGER,  "   " holds_used INTEGER,  "   " mines INTEGER,  "   " fighters_used INTEGER,  "   " genesis INTEGER,  "   " photons INTEGER,  "   " location INTEGER,  " 	/* FK to sectors.id */
-     " fighters INTEGER,  "   " shields INTEGER,  "   " holds INTEGER,  " 
-     " beacons INTEGER,  "   " colonists INTEGER,  "   " equipment INTEGER,  " 
-     " organics INTEGER,  "   " ore INTEGER,  "   " flags INTEGER,  "   " ported INTEGER,  " 
-     " onplanet INTEGER "   " ); " ,
+  " CREATE TABLE IF NOT EXISTS port_trade ( "
+    " id INTEGER PRIMARY KEY AUTOINCREMENT,  "
+    " port_id INTEGER NOT NULL,  "
+    " maxproduct INTEGER,  "
+    " commodity TEXT CHECK(commodity IN ('ore','organics','equipment')),  "
+    " mode TEXT CHECK(mode IN ('buy','sell')),  "
+    " FOREIGN KEY (port_id) REFERENCES ports(id)); ",
 
 
-   " CREATE TABLE IF NOT EXISTS shiptypes ( "   " id INTEGER PRIMARY KEY AUTOINCREMENT,  "   " name TEXT NOT NULL,  " 	/* Coloured name string */
-     " basecost INTEGER,  "   " maxattack INTEGER,  "   " initialholds INTEGER,  "   " maxholds INTEGER,  "   " maxfighters INTEGER,  "   " turns INTEGER,  "   " mines INTEGER,  "   " genesis INTEGER,  "   " twarp INTEGER,  " 	/* Transwarp capability (0/1) */
-     " transportrange INTEGER,  "   " maxshields INTEGER,  "   " offense INTEGER,  "   " defense INTEGER,  "   " beacons INTEGER,  "   " holo INTEGER,  " 	/* Holo scanner (0/1) */
-     " planet INTEGER,  " 		/* Can land on planets (0/1) */
-     " photons INTEGER, " 		/* Photon torpedo count */
-     " can_purchase INTEGER " 	/* Can be bought at a port */
-     " ); " ,
+  " CREATE TABLE IF NOT EXISTS players ( " " id INTEGER PRIMARY KEY AUTOINCREMENT,  " " type INTEGER DEFAULT 2,  " " number INTEGER,  "	/* legacy player ID */
+    " name TEXT NOT NULL,  " " passwd TEXT NOT NULL,  "	/* hashed password */
+    " sector INTEGER,  "	/* 0 if in a ship */
+    " ship INTEGER,  "		/* ship number */
+    " experience INTEGER,  " " alignment INTEGER,  " " credits INTEGER,  " " bank_balance INTEGER,  " " flags INTEGER,  "	/* bitfield: P_LOGGEDIN, P_STARDOCK, etc. */
+    " lastprice INTEGER,  " " firstprice INTEGER,  " " integrity INTEGER,  " " login_time INTEGER,  " " last_update INTEGER,  " " intransit INTEGER,  "	/* 0/1 boolean */
+    " beginmove INTEGER,  "	/* timestamp */
+    " movingto INTEGER,  "	/* sector destination */
+    " loggedin INTEGER,  "	/* runtime only, but persisted if desired */
+    " lastplanet INTEGER,  "	/* last planet created */
+    " score INTEGER,  "
+    " kills INTEGER,  "
+    " cloaked INTEGER,  "
+    " remote INTEGER,  " " fighters INTEGER,  " " holds INTEGER " " ); ",
 
-   " CREATE TABLE IF NOT EXISTS player_ships ( player_id INTEGER DEFAULT 0, ship_id INTEGER DEFAULT 0, role INTEGER DEFAULT 1, is_active INTEGER DEFAULT 1); " ,
-   " CREATE TABLE IF NOT EXISTS ship_roles ( role_id INTEGER PRIMARY KEY, role INTEGER DEFAULT 1, role_description TEXT DEFAULT 1); " ,
+  " CREATE TABLE IF NOT EXISTS player_types (type INTEGER PRIMARY KEY AUTOINCREMENT, description TEXT); ",
+
+  " CREATE TABLE IF NOT EXISTS sectors (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, beacon TEXT, nebulae TEXT); ",
+
+  " CREATE TABLE IF NOT EXISTS sector_warps (from_sector INTEGER, to_sector INTEGER, PRIMARY KEY (from_sector, to_sector), FOREIGN KEY (from_sector) REFERENCES sectors(id) ON DELETE CASCADE, FOREIGN KEY (to_sector) REFERENCES sectors(id) ON DELETE CASCADE); ",
 
 
-   " CREATE TABLE IF NOT EXISTS planets ( "   " id INTEGER PRIMARY KEY AUTOINCREMENT,  "   " num INTEGER,  " 	/* legacy planet ID */
-     " sector INTEGER NOT NULL,  " 	/* FK to sectors.id */
-     " name TEXT NOT NULL,  "   " owner INTEGER,  " 	/* FK to players.id */
-     " population INTEGER,  "   " minerals INTEGER,  "   " ore INTEGER,  "   " energy INTEGER,  "   " type INTEGER,  " 	/* FK to planettypes.id */
-     " creator TEXT,  "   " fuelColonist INTEGER,  "   " organicsColonist INTEGER,  "   " equipmentColonist INTEGER,  "   " fuel INTEGER,  "   " organics INTEGER,  "   " equipment INTEGER,  "   " fighters INTEGER,  "   " citadel_level INTEGER DEFAULT 0,  " 	/* replaces pointer to citadel struct */
-     " FOREIGN KEY (sector) REFERENCES sectors(id),  " 
-     " FOREIGN KEY (owner) REFERENCES players(id),  " 
-     " FOREIGN KEY (type) REFERENCES planettypes(id) "   " ); " ,
+  " CREATE TABLE IF NOT EXISTS ships ( " " id INTEGER PRIMARY KEY AUTOINCREMENT,  " " name TEXT NOT NULL,  " " type INTEGER,  " " attack INTEGER,  " " holds_used INTEGER,  " " mines INTEGER,  " " fighters_used INTEGER,  " " genesis INTEGER,  " " photons INTEGER,  " " location INTEGER,  "	/* FK to sectors.id */
+    " fighters INTEGER,  " " shields INTEGER,  " " holds INTEGER,  "
+    " beacons INTEGER,  " " colonists INTEGER,  " " equipment INTEGER,  "
+    " organics INTEGER,  " " ore INTEGER,  " " flags INTEGER,  "
+    " ported INTEGER,  " " onplanet INTEGER " " ); ",
+
+
+  " CREATE TABLE IF NOT EXISTS shiptypes ( " " id INTEGER PRIMARY KEY AUTOINCREMENT,  " " name TEXT NOT NULL,  "	/* Coloured name string */
+    " basecost INTEGER,  " " maxattack INTEGER,  " " initialholds INTEGER,  " " maxholds INTEGER,  " " maxfighters INTEGER,  " " turns INTEGER,  " " mines INTEGER,  " " genesis INTEGER,  " " twarp INTEGER,  "	/* Transwarp capability (0/1) */
+    " transportrange INTEGER,  " " maxshields INTEGER,  " " offense INTEGER,  " " defense INTEGER,  " " beacons INTEGER,  " " holo INTEGER,  "	/* Holo scanner (0/1) */
+    " planet INTEGER,  "	/* Can land on planets (0/1) */
+    " photons INTEGER, "	/* Photon torpedo count */
+    " can_purchase INTEGER "	/* Can be bought at a port */
+    " ); ",
+
+  " CREATE TABLE IF NOT EXISTS player_ships ( player_id INTEGER DEFAULT 0, ship_id INTEGER DEFAULT 0, role INTEGER DEFAULT 1, is_active INTEGER DEFAULT 1); ",
+  " CREATE TABLE IF NOT EXISTS ship_roles ( role_id INTEGER PRIMARY KEY, role INTEGER DEFAULT 1, role_description TEXT DEFAULT 1); ",
+
+
+  " CREATE TABLE IF NOT EXISTS planets ( " " id INTEGER PRIMARY KEY AUTOINCREMENT,  " " num INTEGER,  "	/* legacy planet ID */
+    " sector INTEGER NOT NULL,  "	/* FK to sectors.id */
+    " name TEXT NOT NULL,  " " owner INTEGER,  "	/* FK to players.id */
+    " population INTEGER,  " " minerals INTEGER,  " " ore INTEGER,  " " energy INTEGER,  " " type INTEGER,  "	/* FK to planettypes.id */
+    " creator TEXT,  " " fuelColonist INTEGER,  " " organicsColonist INTEGER,  " " equipmentColonist INTEGER,  " " fuel INTEGER,  " " organics INTEGER,  " " equipment INTEGER,  " " fighters INTEGER,  " " citadel_level INTEGER DEFAULT 0,  "	/* replaces pointer to citadel struct */
+    " FOREIGN KEY (sector) REFERENCES sectors(id),  "
+    " FOREIGN KEY (owner) REFERENCES players(id),  "
+    " FOREIGN KEY (type) REFERENCES planettypes(id) " " ); ",
 
   /* --- citadels table (fixed, closed properly) --- */
-   " CREATE TABLE IF NOT EXISTS citadels ( "   " id INTEGER PRIMARY KEY AUTOINCREMENT,  "   " planet_id INTEGER UNIQUE NOT NULL,  " 	/* 1:1 link to planets.id */
-     " level INTEGER,  "   " treasury INTEGER,  "   " militaryReactionLevel INTEGER,  "   " qCannonAtmosphere INTEGER,  "   " qCannonSector INTEGER,  "   " planetaryShields INTEGER,  "   " transporterlvl INTEGER,  "   " interdictor INTEGER,  "   " upgradePercent REAL,  "   " upgradestart INTEGER,  "   " owner INTEGER,  " 	/* FK to players.id */
-     " shields INTEGER,  " 
-     " torps INTEGER,  " 
-     " fighters INTEGER,  " 
-     " qtorps INTEGER,  " 
-     " qcannon INTEGER,  " 
-     " qcannontype INTEGER,  " 
-     " qtorpstype INTEGER,  " 
-     " military INTEGER,  " 
-     " FOREIGN KEY (planet_id) REFERENCES planets(id) ON DELETE CASCADE,  " 
-     " FOREIGN KEY (owner) REFERENCES players(id) "   " ); " ,
+  " CREATE TABLE IF NOT EXISTS citadels ( " " id INTEGER PRIMARY KEY AUTOINCREMENT,  " " planet_id INTEGER UNIQUE NOT NULL,  "	/* 1:1 link to planets.id */
+    " level INTEGER,  " " treasury INTEGER,  " " militaryReactionLevel INTEGER,  " " qCannonAtmosphere INTEGER,  " " qCannonSector INTEGER,  " " planetaryShields INTEGER,  " " transporterlvl INTEGER,  " " interdictor INTEGER,  " " upgradePercent REAL,  " " upgradestart INTEGER,  " " owner INTEGER,  "	/* FK to players.id */
+    " shields INTEGER,  "
+    " torps INTEGER,  "
+    " fighters INTEGER,  "
+    " qtorps INTEGER,  "
+    " qcannon INTEGER,  "
+    " qcannontype INTEGER,  "
+    " qtorpstype INTEGER,  "
+    " military INTEGER,  "
+    " FOREIGN KEY (planet_id) REFERENCES planets(id) ON DELETE CASCADE,  "
+    " FOREIGN KEY (owner) REFERENCES players(id) " " ); ",
 
-   " CREATE TABLE IF NOT EXISTS sessions ( "   "   token       TEXT PRIMARY KEY, " 	/* 64-hex opaque */
-     "   player_id   INTEGER NOT NULL, "   "   expires     INTEGER NOT NULL, " 	/* epoch seconds (UTC) */
-     "   created_at  INTEGER NOT NULL " 	/* epoch seconds */
-     " ); " 
-     " CREATE INDEX IF NOT EXISTS idx_sessions_player ON sessions(player_id); " 
-     " CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires); " ,
-
-
-   " CREATE TABLE ship_ownership ( " 
-     " ship_id     INTEGER NOT NULL, " 
-     " player_id   INTEGER NOT NULL, " 
-     " role_id     INTEGER NOT NULL, " 
-     " is_primary  INTEGER NOT NULL DEFAULT 0, " 
-     " acquired_at INTEGER NOT NULL DEFAULT (strftime('%s','now')), " 
-     " PRIMARY KEY (ship_id, player_id, role_id), " 
-     " FOREIGN KEY(ship_id)  REFERENCES ships(id), " 
-     " FOREIGN KEY(player_id) REFERENCES players(id)); " ,
+  " CREATE TABLE IF NOT EXISTS sessions ( " "   token       TEXT PRIMARY KEY, "	/* 64-hex opaque */
+    "   player_id   INTEGER NOT NULL, " "   expires     INTEGER NOT NULL, "	/* epoch seconds (UTC) */
+    "   created_at  INTEGER NOT NULL "	/* epoch seconds */
+    " ); "
+    " CREATE INDEX IF NOT EXISTS idx_sessions_player ON sessions(player_id); "
+    " CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires); ",
 
 
+  " CREATE TABLE ship_ownership ( "
+    " ship_id     INTEGER NOT NULL, "
+    " player_id   INTEGER NOT NULL, "
+    " role_id     INTEGER NOT NULL, "
+    " is_primary  INTEGER NOT NULL DEFAULT 0, "
+    " acquired_at INTEGER NOT NULL DEFAULT (strftime('%s','now')), "
+    " PRIMARY KEY (ship_id, player_id, role_id), "
+    " FOREIGN KEY(ship_id)  REFERENCES ships(id), "
+    " FOREIGN KEY(player_id) REFERENCES players(id)); ",
 
-   " DROP TABLE IF EXISTS turns; " 
-     " CREATE TABLE turns( " 
-     "   player INTEGER NOT NULL, " 
-     "   turns_remaining INTEGER NOT NULL, " 
-     "   last_update TIMESTAMP NOT NULL, " 
-     "   PRIMARY KEY (player), " 
-   "   FOREIGN KEY (player) REFERENCES players(id) ON DELETE CASCADE ); " ,
 
-   " CREATE TABLE IF NOT EXISTS mail ( " 
-   "   id INTEGER PRIMARY KEY AUTOINCREMENT,  " 
-   "   thread_id INTEGER,  " 
-   "   sender_id INTEGER NOT NULL,  " 
-   "   recipient_id INTEGER NOT NULL,  " 
-   "   subject TEXT,  " 
-   "   body TEXT NOT NULL,  " 
-   "   sent_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),  " 
-   "   read_at DATETIME,  " 
-   "   archived INTEGER NOT NULL DEFAULT 0,  " 
-   "   deleted INTEGER NOT NULL DEFAULT 0,  " 
-   "   idempotency_key TEXT,  " 
-   "   FOREIGN KEY(sender_id) REFERENCES players(id) ON DELETE CASCADE,  " 
-   "   FOREIGN KEY(recipient_id) REFERENCES players(id) ON DELETE CASCADE " 
-   " ); " ,
+
+  " DROP TABLE IF EXISTS turns; "
+    " CREATE TABLE turns( "
+    "   player INTEGER NOT NULL, "
+    "   turns_remaining INTEGER NOT NULL, "
+    "   last_update TIMESTAMP NOT NULL, "
+    "   PRIMARY KEY (player), "
+    "   FOREIGN KEY (player) REFERENCES players(id) ON DELETE CASCADE ); ",
+
+  " CREATE TABLE IF NOT EXISTS mail ( "
+    "   id INTEGER PRIMARY KEY AUTOINCREMENT,  "
+    "   thread_id INTEGER,  "
+    "   sender_id INTEGER NOT NULL,  "
+    "   recipient_id INTEGER NOT NULL,  "
+    "   subject TEXT,  "
+    "   body TEXT NOT NULL,  "
+    "   sent_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),  "
+    "   read_at DATETIME,  "
+    "   archived INTEGER NOT NULL DEFAULT 0,  "
+    "   deleted INTEGER NOT NULL DEFAULT 0,  "
+    "   idempotency_key TEXT,  "
+    "   FOREIGN KEY(sender_id) REFERENCES players(id) ON DELETE CASCADE,  "
+    "   FOREIGN KEY(recipient_id) REFERENCES players(id) ON DELETE CASCADE "
+    " ); ",
 
   /* SUBSPACE (global chat + cursor) */
-   " CREATE TABLE IF NOT EXISTS subspace ( " 
-   "   id INTEGER PRIMARY KEY AUTOINCREMENT,  " 
-   "   sender_id INTEGER,  " 
-   "   message TEXT NOT NULL,  " 
-   "   kind TEXT NOT NULL DEFAULT 'chat',  " 
-   "   posted_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),  " 
-   "   FOREIGN KEY(sender_id) REFERENCES players(id) ON DELETE SET NULL " 
-   " ); " ,
+  " CREATE TABLE IF NOT EXISTS subspace ( "
+    "   id INTEGER PRIMARY KEY AUTOINCREMENT,  "
+    "   sender_id INTEGER,  "
+    "   message TEXT NOT NULL,  "
+    "   kind TEXT NOT NULL DEFAULT 'chat',  "
+    "   posted_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),  "
+    "   FOREIGN KEY(sender_id) REFERENCES players(id) ON DELETE SET NULL "
+    " ); ",
 
-   " CREATE TABLE IF NOT EXISTS subspace_cursors ( " 
-   "   player_id INTEGER PRIMARY KEY,  " 
-   "   last_seen_id INTEGER NOT NULL DEFAULT 0,  " 
-   "   FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE " 
-   " ); " ,
+  " CREATE TABLE IF NOT EXISTS subspace_cursors ( "
+    "   player_id INTEGER PRIMARY KEY,  "
+    "   last_seen_id INTEGER NOT NULL DEFAULT 0,  "
+    "   FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE "
+    " ); ",
 
   /* CORPORATIONS + MEMBERS */
-   " CREATE TABLE IF NOT EXISTS corporations ( " 
-   "   id INTEGER PRIMARY KEY,  " 
-   "   name TEXT NOT NULL COLLATE NOCASE,  " 
-   "   owner_id INTEGER,  " 
-   "   tag TEXT COLLATE NOCASE,  " 
-   "   description TEXT,  " 
-   "   created_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),  " 
-   "   updated_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),  " 
-   "   FOREIGN KEY(owner_id) REFERENCES players(id) ON DELETE SET NULL ON UPDATE CASCADE,  " 
-   "   CHECK (tag IS NULL OR (length(tag) BETWEEN 2 AND 5 AND tag GLOB '[A-Za-z0-9]*')) " 
-   " ); " ,
+  " CREATE TABLE IF NOT EXISTS corporations ( "
+    "   id INTEGER PRIMARY KEY,  "
+    "   name TEXT NOT NULL COLLATE NOCASE,  "
+    "   owner_id INTEGER,  "
+    "   tag TEXT COLLATE NOCASE,  "
+    "   description TEXT,  "
+    "   created_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),  "
+    "   updated_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),  "
+    "   FOREIGN KEY(owner_id) REFERENCES players(id) ON DELETE SET NULL ON UPDATE CASCADE,  "
+    "   CHECK (tag IS NULL OR (length(tag) BETWEEN 2 AND 5 AND tag GLOB '[A-Za-z0-9]*')) "
+    " ); ",
 
 
-   " CREATE TABLE IF NOT EXISTS corp_members ( " 
-   "   corp_id INTEGER NOT NULL,  " 
-   "   player_id INTEGER NOT NULL,  " 
-   "   role TEXT NOT NULL DEFAULT 'Member',  " 
-   "   join_date DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),  " 
-   "   PRIMARY KEY (corp_id, player_id),  " 
-   "   FOREIGN KEY(corp_id) REFERENCES corporations(id) ON DELETE CASCADE ON UPDATE CASCADE,  " 
-   "   FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE ON UPDATE CASCADE,  " 
-   "   CHECK (role IN ('Leader','Officer','Member')) " 
-   " ); " ,
+  " CREATE TABLE IF NOT EXISTS corp_members ( "
+    "   corp_id INTEGER NOT NULL,  "
+    "   player_id INTEGER NOT NULL,  "
+    "   role TEXT NOT NULL DEFAULT 'Member',  "
+    "   join_date DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),  "
+    "   PRIMARY KEY (corp_id, player_id),  "
+    "   FOREIGN KEY(corp_id) REFERENCES corporations(id) ON DELETE CASCADE ON UPDATE CASCADE,  "
+    "   FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE ON UPDATE CASCADE,  "
+    "   CHECK (role IN ('Leader','Officer','Member')) " " ); ",
 
 
   /* CORP MAIL + LOGS */
-   " CREATE TABLE IF NOT EXISTS corp_mail ( " 
-   "   id INTEGER PRIMARY KEY AUTOINCREMENT,  " 
-   "   corp_id INTEGER NOT NULL,  " 
-   "   sender_id INTEGER,  " 
-   "   subject TEXT,  " 
-   "   body TEXT NOT NULL,  " 
-   "   posted_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),  " 
-   "   FOREIGN KEY(corp_id) REFERENCES corporations(id) ON DELETE CASCADE,  " 
-   "   FOREIGN KEY(sender_id) REFERENCES players(id) ON DELETE SET NULL " 
-   " ); " ,
+  " CREATE TABLE IF NOT EXISTS corp_mail ( "
+    "   id INTEGER PRIMARY KEY AUTOINCREMENT,  "
+    "   corp_id INTEGER NOT NULL,  "
+    "   sender_id INTEGER,  "
+    "   subject TEXT,  "
+    "   body TEXT NOT NULL,  "
+    "   posted_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),  "
+    "   FOREIGN KEY(corp_id) REFERENCES corporations(id) ON DELETE CASCADE,  "
+    "   FOREIGN KEY(sender_id) REFERENCES players(id) ON DELETE SET NULL "
+    " ); ",
 
 
-   " CREATE TABLE IF NOT EXISTS corp_mail_cursors ( " 
-   "   corp_id INTEGER NOT NULL,  " 
-   "   player_id INTEGER NOT NULL,  " 
-   "   last_seen_id INTEGER NOT NULL DEFAULT 0,  " 
-   "   PRIMARY KEY (corp_id, player_id),  " 
-   "   FOREIGN KEY(corp_id) REFERENCES corporations(id) ON DELETE CASCADE,  " 
-   "   FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE " 
-   " ); " ,
+  " CREATE TABLE IF NOT EXISTS corp_mail_cursors ( "
+    "   corp_id INTEGER NOT NULL,  "
+    "   player_id INTEGER NOT NULL,  "
+    "   last_seen_id INTEGER NOT NULL DEFAULT 0,  "
+    "   PRIMARY KEY (corp_id, player_id),  "
+    "   FOREIGN KEY(corp_id) REFERENCES corporations(id) ON DELETE CASCADE,  "
+    "   FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE "
+    " ); ",
 
-   " CREATE TABLE IF NOT EXISTS corp_log ( " 
-   "   id INTEGER PRIMARY KEY AUTOINCREMENT,  " 
-   "   corp_id INTEGER NOT NULL,  " 
-   "   actor_id INTEGER,  " 
-   "   event_type TEXT NOT NULL,  " 
-   "   payload TEXT NOT NULL,  " 
-   "   created_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),  " 
-   "   FOREIGN KEY(corp_id) REFERENCES corporations(id) ON DELETE CASCADE,  " 
-   "   FOREIGN KEY(actor_id) REFERENCES players(id) ON DELETE SET NULL " 
-   " ); " ,
+  " CREATE TABLE IF NOT EXISTS corp_log ( "
+    "   id INTEGER PRIMARY KEY AUTOINCREMENT,  "
+    "   corp_id INTEGER NOT NULL,  "
+    "   actor_id INTEGER,  "
+    "   event_type TEXT NOT NULL,  "
+    "   payload TEXT NOT NULL,  "
+    "   created_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),  "
+    "   FOREIGN KEY(corp_id) REFERENCES corporations(id) ON DELETE CASCADE,  "
+    "   FOREIGN KEY(actor_id) REFERENCES players(id) ON DELETE SET NULL "
+    " ); ",
 
 
   /* SYSTEM EVENTS + SUBSCRIPTIONS */
-   " CREATE TABLE IF NOT EXISTS system_events ( " 
-   "   id INTEGER PRIMARY KEY AUTOINCREMENT,  " 
-   "   scope TEXT NOT NULL,  " 
-   "   event_type TEXT NOT NULL,  " 
-   "   payload TEXT NOT NULL,  " 
-   "   created_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')) " 
-   " ); " ,
+  " CREATE TABLE IF NOT EXISTS system_events ( "
+    "   id INTEGER PRIMARY KEY AUTOINCREMENT,  "
+    "   scope TEXT NOT NULL,  "
+    "   event_type TEXT NOT NULL,  "
+    "   payload TEXT NOT NULL,  "
+    "   created_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')) "
+    " ); ",
 
 
-   " CREATE TABLE IF NOT EXISTS subscriptions ( " 
-   "   id INTEGER PRIMARY KEY AUTOINCREMENT,  " 
-   "   player_id INTEGER NOT NULL,  " 
-   "   event_type TEXT NOT NULL,  " 
-   "   delivery TEXT NOT NULL,  " 
-   "   filter_json TEXT,  " 
-   "   enabled INTEGER NOT NULL DEFAULT 1,  " 
-   "   UNIQUE(player_id, event_type),  " 
-   "   FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE " 
-   " ); " ,
+  " CREATE TABLE IF NOT EXISTS subscriptions ( "
+    "   id INTEGER PRIMARY KEY AUTOINCREMENT,  "
+    "   player_id INTEGER NOT NULL,  "
+    "   event_type TEXT NOT NULL,  "
+    "   delivery TEXT NOT NULL,  "
+    "   filter_json TEXT,  "
+    "   enabled INTEGER NOT NULL DEFAULT 1,  "
+    "   UNIQUE(player_id, event_type),  "
+    "   FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE "
+    " ); ",
 
   "CREATE TABLE IF NOT EXISTS player_block ("
-  "  blocker_id   INTEGER NOT NULL,"
-  "  blocked_id   INTEGER NOT NULL,"
-  "  created_at   INTEGER NOT NULL,"
-  "  PRIMARY KEY (blocker_id, blocked_id)"
-  ");",
+    "  blocker_id   INTEGER NOT NULL,"
+    "  blocked_id   INTEGER NOT NULL,"
+    "  created_at   INTEGER NOT NULL,"
+    "  PRIMARY KEY (blocker_id, blocked_id)" ");",
 
 
   "CREATE TABLE IF NOT EXISTS notice_seen ("
-  "  notice_id  INTEGER NOT NULL,"
-  "  player_id  INTEGER NOT NULL,"
-  "  seen_at    INTEGER NOT NULL,"
-  "  PRIMARY KEY (notice_id, player_id)"
-  ");",
+    "  notice_id  INTEGER NOT NULL,"
+    "  player_id  INTEGER NOT NULL,"
+    "  seen_at    INTEGER NOT NULL,"
+    "  PRIMARY KEY (notice_id, player_id)" ");",
 
 
   "CREATE TABLE IF NOT EXISTS system_notice ("
-  "  id         INTEGER PRIMARY KEY,"
-  "  created_at INTEGER NOT NULL,"
-  "  title      TEXT NOT NULL,"
-  "  body       TEXT NOT NULL,"
-  "  severity   TEXT NOT NULL CHECK(severity IN ('info','warn','error')),"
-  "  expires_at INTEGER"
-  ");",
+    "  id         INTEGER PRIMARY KEY,"
+    "  created_at INTEGER NOT NULL,"
+    "  title      TEXT NOT NULL,"
+    "  body       TEXT NOT NULL,"
+    "  severity   TEXT NOT NULL CHECK(severity IN ('info','warn','error')),"
+    "  expires_at INTEGER" ");",
 
-   
+
 
   //////////////////////////////////////////////////////////////////////
   /// CREATE VIEWS 
   //////////////////////////////////////////////////////////////////////
-    /* --- longest_tunnels view (array item ends with a comma, not semicolon) --- */
-     " CREATE VIEW IF NOT EXISTS longest_tunnels AS\n " 
-     " WITH\n " 
-     " all_sectors AS (\n " 
-     "   SELECT from_sector AS id FROM sector_warps\n " 
-     "   UNION\n " 
-     "   SELECT to_sector   AS id FROM sector_warps\n " 
-     " ),\n " 
-     " outdeg AS (\n " 
-     "   SELECT a.id, COALESCE(COUNT(w.to_sector),0) AS deg\n " 
-     "   FROM all_sectors a\n " 
-     "   LEFT JOIN sector_warps w ON w.from_sector = a.id\n " 
-     "   GROUP BY a.id\n " 
-     " ),\n " 
-     " edges AS (\n " 
-     "   SELECT from_sector, to_sector FROM sector_warps\n " 
-     " ),\n " 
-     " entry AS (\n " 
-     "   SELECT e.from_sector AS entry, e.to_sector AS next\n " 
+  /* --- longest_tunnels view (array item ends with a comma, not semicolon) --- */
+  " CREATE VIEW IF NOT EXISTS longest_tunnels AS\n "
+    " WITH\n "
+    " all_sectors AS (\n "
+    "   SELECT from_sector AS id FROM sector_warps\n "
+    "   UNION\n "
+    "   SELECT to_sector   AS id FROM sector_warps\n "
+    " ),\n "
+    " outdeg AS (\n "
+    "   SELECT a.id, COALESCE(COUNT(w.to_sector),0) AS deg\n "
+    "   FROM all_sectors a\n "
+    "   LEFT JOIN sector_warps w ON w.from_sector = a.id\n "
+    "   GROUP BY a.id\n "
+    " ),\n "
+    " edges AS (\n "
+    "   SELECT from_sector, to_sector FROM sector_warps\n "
+    " ),\n "
+    " entry AS (\n "
+    "   SELECT e.from_sector AS entry, e.to_sector AS next\n "
     "  FROM edges e\n"
     "  JOIN outdeg df ON df.id = e.from_sector AND df.deg > 1\n"
     "  JOIN outdeg dn ON dn.id = e.to_sector  AND dn.deg = 1\n"
@@ -664,16 +662,16 @@ const char *create_table_sql[] = {
 
 
   "CREATE INDEX IF NOT EXISTS idx_player_block_blocked "
-  "ON player_block (blocked_id);",
+    "ON player_block (blocked_id);",
 
   "CREATE INDEX IF NOT EXISTS idx_notice_seen_player "
-  "ON notice_seen (player_id, seen_at DESC);",
+    "ON notice_seen (player_id, seen_at DESC);",
 
   "CREATE INDEX IF NOT EXISTS idx_system_notice_active "
-  "ON system_notice (expires_at, created_at DESC);",
+    "ON system_notice (expires_at, created_at DESC);",
 
 
-  
+
   "CREATE INDEX IF NOT EXISTS idx_warps_from ON sector_warps(from_sector);",
   "CREATE INDEX IF NOT EXISTS idx_warps_to   ON sector_warps(to_sector);",
   "CREATE INDEX IF NOT EXISTS idx_ports_loc  ON ports(location);",
@@ -708,98 +706,96 @@ const char *create_table_sql[] = {
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_ports_loc_number ON ports(location, number);",
 
 
-   " CREATE UNIQUE INDEX IF NOT EXISTS idx_mail_idem_recipient  " 
-   " ON mail(idempotency_key, recipient_id)  " 
-   " WHERE idempotency_key IS NOT NULL; " ,
+  " CREATE UNIQUE INDEX IF NOT EXISTS idx_mail_idem_recipient  "
+    " ON mail(idempotency_key, recipient_id)  "
+    " WHERE idempotency_key IS NOT NULL; ",
 
-   " CREATE INDEX IF NOT EXISTS idx_mail_inbox   " 
-   " ON mail(recipient_id, deleted, archived, sent_at DESC); " ,
+  " CREATE INDEX IF NOT EXISTS idx_mail_inbox   "
+    " ON mail(recipient_id, deleted, archived, sent_at DESC); ",
 
-   " CREATE INDEX IF NOT EXISTS idx_mail_unread  " 
-   " ON mail(recipient_id, read_at); " ,
+  " CREATE INDEX IF NOT EXISTS idx_mail_unread  "
+    " ON mail(recipient_id, read_at); ",
 
-   " CREATE INDEX IF NOT EXISTS idx_mail_sender  " 
-   " ON mail(sender_id, sent_at DESC); " ,
-   " CREATE INDEX IF NOT EXISTS idx_subspace_time  " 
-   " ON subspace(posted_at DESC); " ,
+  " CREATE INDEX IF NOT EXISTS idx_mail_sender  "
+    " ON mail(sender_id, sent_at DESC); ",
+  " CREATE INDEX IF NOT EXISTS idx_subspace_time  "
+    " ON subspace(posted_at DESC); ",
 
-   " CREATE UNIQUE INDEX IF NOT EXISTS ux_corp_name_uc  " 
-   " ON corporations(upper(name)); " ,
+  " CREATE UNIQUE INDEX IF NOT EXISTS ux_corp_name_uc  "
+    " ON corporations(upper(name)); ",
 
-   " CREATE UNIQUE INDEX IF NOT EXISTS ux_corp_tag_uc  " 
-   " ON corporations(upper(tag)) WHERE tag IS NOT NULL; " ,
+  " CREATE UNIQUE INDEX IF NOT EXISTS ux_corp_tag_uc  "
+    " ON corporations(upper(tag)) WHERE tag IS NOT NULL; ",
 
-   " CREATE INDEX IF NOT EXISTS ix_corporations_owner  " 
-   " ON corporations(owner_id); " ,
-
-   
-   " CREATE INDEX IF NOT EXISTS idx_ship_own_player ON ship_ownership(player_id); " ,
-
-   " CREATE INDEX IF NOT EXISTS ix_corp_members_player  " 
-   " ON corp_members(player_id); " ,
-
-   " CREATE INDEX IF NOT EXISTS ix_corp_members_role  " 
-   " ON corp_members(corp_id, role); " ,
-
-      " CREATE INDEX IF NOT EXISTS idx_corp_mail_corp  " 
-   " ON corp_mail(corp_id, posted_at DESC); " ,
-
-   " CREATE INDEX IF NOT EXISTS idx_corp_log_corp_time  " 
-   " ON corp_log(corp_id, created_at DESC); " ,
-
-   " CREATE INDEX IF NOT EXISTS idx_corp_log_type  " 
-   " ON corp_log(event_type, created_at DESC); " ,
-   
-   " CREATE INDEX IF NOT EXISTS idx_sys_events_time  " 
-   " ON system_events(created_at DESC); " ,
-
-   " CREATE INDEX IF NOT EXISTS idx_sys_events_scope  " 
-   " ON system_events(scope); " ,
-
-   " CREATE INDEX IF NOT EXISTS idx_subscriptions_player  " 
-   " ON subscriptions(player_id, enabled); " ,
-   
-
-   ///////////////// TRIGGERS /////////////////////
+  " CREATE INDEX IF NOT EXISTS ix_corporations_owner  "
+    " ON corporations(owner_id); ",
 
 
-   " CREATE TRIGGER IF NOT EXISTS corporations_touch_updated  " 
-   " AFTER UPDATE ON corporations  " 
-   " FOR EACH ROW  " 
-   " BEGIN  " 
-   "   UPDATE corporations  " 
-   "     SET updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')  " 
-   "   WHERE id = NEW.id; " 
-   " END; " ,
+  " CREATE INDEX IF NOT EXISTS idx_ship_own_player ON ship_ownership(player_id); ",
 
-   " CREATE TRIGGER IF NOT EXISTS corp_owner_must_be_member_insert  " 
-   " AFTER INSERT ON corporations  " 
-   " FOR EACH ROW  " 
-   " WHEN NEW.owner_id IS NOT NULL  " 
-   " AND NOT EXISTS (SELECT 1 FROM corp_members WHERE corp_id=NEW.id AND player_id=NEW.owner_id)  " 
-   " BEGIN  " 
-   "   INSERT INTO corp_members(corp_id, player_id, role) VALUES(NEW.id, NEW.owner_id, 'Leader'); " 
-   " END; " ,
+  " CREATE INDEX IF NOT EXISTS ix_corp_members_player  "
+    " ON corp_members(player_id); ",
 
-   " CREATE TRIGGER IF NOT EXISTS corp_one_leader_guard  " 
-   " BEFORE INSERT ON corp_members  " 
-   " FOR EACH ROW  " 
-   " WHEN NEW.role='Leader'  " 
-   " AND EXISTS (SELECT 1 FROM corp_members WHERE corp_id=NEW.corp_id AND role='Leader')  " 
-   " BEGIN  " 
-   "   SELECT RAISE(ABORT, 'corp may have only one Leader'); " 
-   " END; " ,
+  " CREATE INDEX IF NOT EXISTS ix_corp_members_role  "
+    " ON corp_members(corp_id, role); ",
 
-   " CREATE TRIGGER IF NOT EXISTS corp_owner_leader_sync  " 
-   " AFTER UPDATE OF owner_id ON corporations  " 
-   " FOR EACH ROW  " 
-   " BEGIN  " 
-   "   UPDATE corp_members SET role='Officer'  " 
-   "    WHERE corp_id=NEW.id AND role='Leader' AND player_id<>NEW.owner_id;  " 
-   "   INSERT INTO corp_members(corp_id, player_id, role)  " 
-   "   VALUES(NEW.id, NEW.owner_id, 'Leader')  " 
-   "   ON CONFLICT(corp_id, player_id) DO UPDATE SET role='Leader'; " 
-   " END; " ,   
+  " CREATE INDEX IF NOT EXISTS idx_corp_mail_corp  "
+    " ON corp_mail(corp_id, posted_at DESC); ",
+
+  " CREATE INDEX IF NOT EXISTS idx_corp_log_corp_time  "
+    " ON corp_log(corp_id, created_at DESC); ",
+
+  " CREATE INDEX IF NOT EXISTS idx_corp_log_type  "
+    " ON corp_log(event_type, created_at DESC); ",
+
+  " CREATE INDEX IF NOT EXISTS idx_sys_events_time  "
+    " ON system_events(created_at DESC); ",
+
+  " CREATE INDEX IF NOT EXISTS idx_sys_events_scope  "
+    " ON system_events(scope); ",
+
+  " CREATE INDEX IF NOT EXISTS idx_subscriptions_player  "
+    " ON subscriptions(player_id, enabled); ",
+
+
+  ///////////////// TRIGGERS /////////////////////
+
+
+  " CREATE TRIGGER IF NOT EXISTS corporations_touch_updated  "
+    " AFTER UPDATE ON corporations  "
+    " FOR EACH ROW  "
+    " BEGIN  "
+    "   UPDATE corporations  "
+    "     SET updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')  "
+    "   WHERE id = NEW.id; " " END; ",
+
+  " CREATE TRIGGER IF NOT EXISTS corp_owner_must_be_member_insert  "
+    " AFTER INSERT ON corporations  "
+    " FOR EACH ROW  "
+    " WHEN NEW.owner_id IS NOT NULL  "
+    " AND NOT EXISTS (SELECT 1 FROM corp_members WHERE corp_id=NEW.id AND player_id=NEW.owner_id)  "
+    " BEGIN  "
+    "   INSERT INTO corp_members(corp_id, player_id, role) VALUES(NEW.id, NEW.owner_id, 'Leader'); "
+    " END; ",
+
+  " CREATE TRIGGER IF NOT EXISTS corp_one_leader_guard  "
+    " BEFORE INSERT ON corp_members  "
+    " FOR EACH ROW  "
+    " WHEN NEW.role='Leader'  "
+    " AND EXISTS (SELECT 1 FROM corp_members WHERE corp_id=NEW.corp_id AND role='Leader')  "
+    " BEGIN  "
+    "   SELECT RAISE(ABORT, 'corp may have only one Leader'); " " END; ",
+
+  " CREATE TRIGGER IF NOT EXISTS corp_owner_leader_sync  "
+    " AFTER UPDATE OF owner_id ON corporations  "
+    " FOR EACH ROW  "
+    " BEGIN  "
+    "   UPDATE corp_members SET role='Officer'  "
+    "    WHERE corp_id=NEW.id AND role='Leader' AND player_id<>NEW.owner_id;  "
+    "   INSERT INTO corp_members(corp_id, player_id, role)  "
+    "   VALUES(NEW.id, NEW.owner_id, 'Leader')  "
+    "   ON CONFLICT(corp_id, player_id) DO UPDATE SET role='Leader'; "
+    " END; ",
 
 };
 
@@ -1032,7 +1028,8 @@ const char *insert_default_sql[] = {
     "300,100,400,2000,1200,2000, "
     "600,400,1500,2500,2000,5000, "
     "800000,1600000,4400000,7000000,10000000,7000000, "
-    "1000000,10000,10000, " "0,0,0,0,0, " "1000000,10000,100000,1000000,0.30);",
+    "1000000,10000,10000, " "0,0,0,0,0, "
+    "1000000,10000,100000,1000000,0.30);",
 
   /* Gaseous (U) */
   "INSERT OR IGNORE INTO planettypes (code, typeDescription, typeName, "
@@ -1195,6 +1192,119 @@ const char *insert_default_sql[] = {
     "INSERT INTO player_types (description) VALUES ('Human Player');"
 };
 
+
+///////////// S2S /////////////////////////
+
+static const char *ENGINE_BOOTSTRAP_SQL =
+"BEGIN IMMEDIATE;\n"
+/* --- S2S keyring (HMAC) --- */
+"CREATE TABLE IF NOT EXISTS s2s_keys(\n"
+"  key_id TEXT PRIMARY KEY,\n"
+"  key_b64 TEXT NOT NULL,\n"
+"  is_default_tx INTEGER NOT NULL DEFAULT 0,\n"
+"  active INTEGER NOT NULL DEFAULT 1,\n"
+"  created_ts INTEGER NOT NULL\n"
+");\n"
+"INSERT OR IGNORE INTO s2s_keys(key_id,key_b64,is_default_tx,active,created_ts)\n"
+"VALUES('k0','c3VwZXJzZWNyZXRrZXlzZWNyZXRrZXlzZWNyZXQxMjM0NTY3OA==',1,1,strftime('%s','now'));\n"
+"\n"
+/* --- Engine cron/scheduling --- */
+"CREATE TABLE IF NOT EXISTS cron_tasks(\n"
+"  id INTEGER PRIMARY KEY,\n"
+"  name TEXT UNIQUE NOT NULL,\n"
+"  schedule TEXT NOT NULL,\n"
+"  last_run_at INTEGER,\n"
+"  next_due_at INTEGER NOT NULL,\n"
+"  enabled INTEGER NOT NULL DEFAULT 1,\n"
+"  payload TEXT\n"
+");\n"
+"INSERT OR IGNORE INTO cron_tasks(name,schedule,last_run_at,next_due_at,enabled,payload) VALUES\n"
+"('daily_turn_reset','daily@03:00Z',NULL,strftime('%s','now'),1,NULL),\n"
+"('terra_replenish','daily@04:00Z',NULL,strftime('%s','now'),1,NULL),\n"
+"('port_reprice','daily@05:00Z',NULL,strftime('%s','now'),1,NULL),\n"
+"('planet_growth','every:10m',NULL,strftime('%s','now'),1,NULL),\n"
+"('fedspace_cleanup','every:1m',NULL,strftime('%s','now'),1,NULL),\n"
+"('autouncloak_sweeper','every:1m',NULL,strftime('%s','now'),1,NULL),\n"
+"('traps_process','every:1s',NULL,strftime('%s','now'),1,NULL),\n"
+"('npc_step','every:2s',NULL,strftime('%s','now'),1,NULL),\n"
+"('broadcast_ttl_cleanup','every:5m',NULL,strftime('%s','now'),1,NULL);\n"
+"\n"
+/* --- Server→Engine event rail (separate from your existing system_events) --- */
+"CREATE TABLE IF NOT EXISTS engine_events(\n"
+"  id INTEGER PRIMARY KEY,\n"
+"  ts INTEGER NOT NULL,\n"
+"  type TEXT NOT NULL,\n"
+"  actor_player_id INTEGER,\n"
+"  sector_id INTEGER,\n"
+"  payload TEXT NOT NULL,\n"
+"  idem_key TEXT\n"
+");\n"
+"CREATE UNIQUE INDEX IF NOT EXISTS idx_engine_events_idem ON engine_events(idem_key) WHERE idem_key IS NOT NULL;\n"
+"CREATE INDEX IF NOT EXISTS idx_engine_events_ts ON engine_events(ts);\n"
+"CREATE INDEX IF NOT EXISTS idx_engine_events_actor_ts ON engine_events(actor_player_id, ts);\n"
+"CREATE INDEX IF NOT EXISTS idx_engine_events_sector_ts ON engine_events(sector_id, ts);\n"
+"\n"
+/* --- Engine watermark --- */
+"CREATE TABLE IF NOT EXISTS engine_offset(\n"
+"  key TEXT PRIMARY KEY,\n"
+"  last_event_id INTEGER NOT NULL,\n"
+"  last_event_ts INTEGER NOT NULL\n"
+");\n"
+"INSERT OR IGNORE INTO engine_offset(key,last_event_id,last_event_ts) VALUES('events',0,0);\n"
+"\n"
+/* --- Deadletter for bad events --- */
+"CREATE TABLE IF NOT EXISTS engine_events_deadletter(\n"
+"  id INTEGER PRIMARY KEY,\n"
+"  ts INTEGER NOT NULL,\n"
+"  type TEXT NOT NULL,\n"
+"  payload TEXT NOT NULL,\n"
+"  error TEXT NOT NULL,\n"
+"  moved_at INTEGER NOT NULL\n"
+");\n"
+"\n"
+/* --- Engine→Server command rail --- */
+"CREATE TABLE IF NOT EXISTS engine_commands(\n"
+"  id INTEGER PRIMARY KEY,\n"
+"  type TEXT NOT NULL,\n"
+"  payload TEXT NOT NULL,\n"
+"  status TEXT NOT NULL DEFAULT 'ready',\n"
+"  priority INTEGER NOT NULL DEFAULT 100,\n"
+"  attempts INTEGER NOT NULL DEFAULT 0,\n"
+"  created_at INTEGER NOT NULL,\n"
+"  due_at INTEGER NOT NULL,\n"
+"  started_at INTEGER,\n"
+"  finished_at INTEGER,\n"
+"  worker TEXT,\n"
+"  idem_key TEXT\n"
+");\n"
+"CREATE UNIQUE INDEX IF NOT EXISTS idx_engine_cmds_idem ON engine_commands(idem_key) WHERE idem_key IS NOT NULL;\n"
+"CREATE INDEX IF NOT EXISTS idx_engine_cmds_status_due ON engine_commands(status, due_at);\n"
+"CREATE INDEX IF NOT EXISTS idx_engine_cmds_prio_due ON engine_commands(priority, due_at);\n"
+"\n"
+/* --- Engine audit trail --- */
+"CREATE TABLE IF NOT EXISTS engine_audit(\n"
+"  id INTEGER PRIMARY KEY,\n"
+"  ts INTEGER NOT NULL,\n"
+"  cmd_type TEXT NOT NULL,\n"
+"  correlation_id TEXT,\n"
+"  actor_player_id INTEGER,\n"
+"  details TEXT\n"
+");\n"
+"\n"
+"COMMIT;\n";
+
+
+int db_engine_bootstrap(sqlite3 *db) {
+  char *err = NULL;
+  int rc = sqlite3_exec(db, ENGINE_BOOTSTRAP_SQL, NULL, NULL, &err);
+  if (rc != SQLITE_OK) {
+    fprintf(stderr, "[db] engine bootstrap failed: %s\n", err ? err : "(unknown)");
+    sqlite3_free(err);
+    return -1;
+  }
+  return 0;
+}
+
 /* Number of tables */
 static const size_t create_table_count =
   sizeof (create_table_sql) / sizeof (create_table_sql[0]);
@@ -1264,8 +1374,9 @@ db_init (void)
   if (rc != SQLITE_OK)
     {
       // This message is critical!
-      fprintf(stderr, "FATAL ERROR: Could not open database! Code: %d, Message: %s\n", 
-	      rc, sqlite3_errmsg(db_handle));
+      fprintf (stderr,
+	       "FATAL ERROR: Could not open database! Code: %d, Message: %s\n",
+	       rc, sqlite3_errmsg (db_handle));
       // Check where your code returns/exits here.
       return -1;
     }
@@ -1320,9 +1431,10 @@ db_init (void)
 	  ret_code = -1;
 	  goto cleanup;
 	}
-      
-    }
 
+    }
+  db_engine_bootstrap(db_handle);
+  
   // If we've made it here, all steps were successful.
   ret_code = 0;
 
@@ -1374,18 +1486,18 @@ db_create_tables_unlocked (void)
 
   int rc;
 
-  fprintf(stderr, "DEBUG: create_table_count is %zu\n", create_table_count);
   for (size_t i = 0; i < create_table_count; i++)
     {
       rc = sqlite3_exec (db_handle, create_table_sql[i], 0, 0, &errmsg);
-      if (rc != SQLITE_OK) {
-	fprintf(stderr, "SQL error at step %zu: %s\n", i, errmsg);
-	fprintf(stderr, "Failing SQL: %s\n", create_table_sql[i]);
-	sqlite3_free(errmsg);
-	return -1;
-      }
+      if (rc != SQLITE_OK)
+	{
+	  fprintf (stderr, "SQL error at step %zu: %s\n", i, errmsg);
+	  fprintf (stderr, "Failing SQL: %s\n", create_table_sql[i]);
+	  sqlite3_free (errmsg);
+	  return -1;
+	}
     }
-  
+
   ret_code = 0;
 cleanup:
   if (errmsg)
@@ -1399,7 +1511,7 @@ cleanup:
 	    return -1;
 	}
     }
-  sqlite3_exec(db, "COMMIT;", 0, 0, 0);
+  sqlite3_exec (db, "COMMIT;", 0, 0, 0);
 
   return ret_code;
 }
@@ -4951,30 +5063,36 @@ done:
 
 int
 db_notice_create (const char *title, const char *body,
-                  const char *severity, time_t expires_at)
+		  const char *severity, time_t expires_at)
 {
   static const char *SQL =
     "INSERT INTO system_notice (created_at, title, body, severity, expires_at) "
     "VALUES (strftime('%s','now'), ?1, ?2, ?3, ?4);";
 
-  sqlite3 *db = db_get_handle();
-  if (!db) return -1;
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return -1;
 
   sqlite3_stmt *stmt = NULL;
-  if (sqlite3_prepare_v2(db, SQL, -1, &stmt, NULL) != SQLITE_OK) return -1;
+  if (sqlite3_prepare_v2 (db, SQL, -1, &stmt, NULL) != SQLITE_OK)
+    return -1;
 
-  sqlite3_bind_text(stmt, 1, title ? title : "", -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text(stmt, 2, body ? body : "", -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text(stmt, 3, severity ? severity : "info", -1, SQLITE_TRANSIENT);
-  if (expires_at > 0) sqlite3_bind_int64(stmt, 4, (sqlite3_int64)expires_at);
-  else                sqlite3_bind_null(stmt, 4);
+  sqlite3_bind_text (stmt, 1, title ? title : "", -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text (stmt, 2, body ? body : "", -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text (stmt, 3, severity ? severity : "info", -1,
+		     SQLITE_TRANSIENT);
+  if (expires_at > 0)
+    sqlite3_bind_int64 (stmt, 4, (sqlite3_int64) expires_at);
+  else
+    sqlite3_bind_null (stmt, 4);
 
-  int rc = sqlite3_step(stmt);
+  int rc = sqlite3_step (stmt);
   int ok = (rc == SQLITE_DONE);
-  sqlite3_finalize(stmt);
+  sqlite3_finalize (stmt);
 
-  if (!ok) return -1;
-  return (int) sqlite3_last_insert_rowid(db);
+  if (!ok)
+    return -1;
+  return (int) sqlite3_last_insert_rowid (db);
 }
 
 json_t *
@@ -4986,41 +5104,47 @@ db_notice_list_unseen_for_player (int player_id)
     "LEFT JOIN notice_seen AS ns "
     "  ON ns.notice_id = n.id AND ns.player_id = ?1 "
     "WHERE (n.expires_at IS NULL OR n.expires_at > strftime('%s','now')) "
-    "  AND ns.notice_id IS NULL "
-    "ORDER BY n.created_at DESC;";
+    "  AND ns.notice_id IS NULL " "ORDER BY n.created_at DESC;";
 
-  sqlite3 *db = db_get_handle();
-  if (!db) return NULL;
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return NULL;
 
   sqlite3_stmt *stmt = NULL;
-  if (sqlite3_prepare_v2(db, SQL, -1, &stmt, NULL) != SQLITE_OK) return NULL;
+  if (sqlite3_prepare_v2 (db, SQL, -1, &stmt, NULL) != SQLITE_OK)
+    return NULL;
 
-  sqlite3_bind_int(stmt, 1, player_id);
+  sqlite3_bind_int (stmt, 1, player_id);
 
-  json_t *arr = json_array();
-  if (!arr) { sqlite3_finalize(stmt); return NULL; }
-
-  while (sqlite3_step(stmt) == SQLITE_ROW)
+  json_t *arr = json_array ();
+  if (!arr)
     {
-      int id           = sqlite3_column_int(stmt, 0);
-      time_t created   = (time_t) sqlite3_column_int64(stmt, 1);
-      const unsigned char *title = sqlite3_column_text(stmt, 2);
-      const unsigned char *body  = sqlite3_column_text(stmt, 3);
-      const unsigned char *sev   = sqlite3_column_text(stmt, 4);
-      sqlite3_int64 expires_i64  = sqlite3_column_type(stmt, 5) == SQLITE_NULL
-                                   ? 0 : sqlite3_column_int64(stmt, 5);
-
-      json_t *obj = json_pack("{s:i, s:i, s:s, s:s, s:s, s:i}",
-                              "id", id,
-                              "created_at", (int)created,
-                              "title", title ? (const char*)title : "",
-                              "body",  body  ? (const char*)body  : "",
-                              "severity", sev ? (const char*)sev : "info",
-                              "expires_at", (int)expires_i64);
-      if (obj) json_array_append_new(arr, obj);
+      sqlite3_finalize (stmt);
+      return NULL;
     }
 
-  sqlite3_finalize(stmt);
+  while (sqlite3_step (stmt) == SQLITE_ROW)
+    {
+      int id = sqlite3_column_int (stmt, 0);
+      time_t created = (time_t) sqlite3_column_int64 (stmt, 1);
+      const unsigned char *title = sqlite3_column_text (stmt, 2);
+      const unsigned char *body = sqlite3_column_text (stmt, 3);
+      const unsigned char *sev = sqlite3_column_text (stmt, 4);
+      sqlite3_int64 expires_i64 = sqlite3_column_type (stmt, 5) == SQLITE_NULL
+	? 0 : sqlite3_column_int64 (stmt, 5);
+
+      json_t *obj = json_pack ("{s:i, s:i, s:s, s:s, s:s, s:i}",
+			       "id", id,
+			       "created_at", (int) created,
+			       "title", title ? (const char *) title : "",
+			       "body", body ? (const char *) body : "",
+			       "severity", sev ? (const char *) sev : "info",
+			       "expires_at", (int) expires_i64);
+      if (obj)
+	json_array_append_new (arr, obj);
+    }
+
+  sqlite3_finalize (stmt);
   return arr;
 }
 
@@ -5031,16 +5155,18 @@ db_notice_mark_seen (int notice_id, int player_id)
     "INSERT OR REPLACE INTO notice_seen (notice_id, player_id, seen_at) "
     "VALUES (?1, ?2, strftime('%s','now'));";
 
-  sqlite3 *db = db_get_handle();
-  if (!db) return -1;
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return -1;
 
   sqlite3_stmt *stmt = NULL;
-  if (sqlite3_prepare_v2(db, SQL, -1, &stmt, NULL) != SQLITE_OK) return -1;
+  if (sqlite3_prepare_v2 (db, SQL, -1, &stmt, NULL) != SQLITE_OK)
+    return -1;
 
-  sqlite3_bind_int(stmt, 1, notice_id);
-  sqlite3_bind_int(stmt, 2, player_id);
+  sqlite3_bind_int (stmt, 1, notice_id);
+  sqlite3_bind_int (stmt, 2, player_id);
 
-  int rc = sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
+  int rc = sqlite3_step (stmt);
+  sqlite3_finalize (stmt);
   return (rc == SQLITE_DONE) ? 0 : -1;
 }

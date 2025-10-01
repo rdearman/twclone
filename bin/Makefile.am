@@ -19,10 +19,10 @@
 # Alternatively, the GPL can be found at
 # http://www.gnu.org/copyleft/gpl.html
 
-server_LDADD   = -ljansson -lsqlite3 -lpthread -lm
+server_LDADD   	= -ljansson -lsqlite3 -lcrypto -lpthread -lm
 # bigbang_LDADD  = -ljansson -lsqlite3 -lpthread -lm
 # client_LDADD   = -ljansson -lsqlite3 -lpthread -lm
-bigbang_LDADD = -ljansson -lsqlite3 -lpthread -lm
+bigbang_LDADD 	= -ljansson -lsqlite3 -lcrypto -lpthread -lm
 
 AUTOMAKE_OPTIONS = subdir-objects
 
@@ -38,7 +38,7 @@ bin_PROGRAMS = \
 # 	../src/parse.c
 
 server_SOURCES = \
-        ../src/server_communication.c \
+	../src/server_communication.c \
         ../src/server_bulk.c \
 	../src/server_combat.c  \
 	../src/server_bigbang.c \
@@ -61,9 +61,9 @@ server_SOURCES = \
 	../src/database.c \
 	../src/schemas.c \
 	../src/common.c \
-	../src/engine_main.c
-
-
+	../src/engine_main.c \
+	../src/s2s_transport.c \
+	../src/s2s_keyring.c
 
 bigbang_SOURCES = \
 	../src/database.c \

@@ -46,10 +46,9 @@ static int ensure_all_sectors_have_exits (sqlite3 * db);
 
 static bool has_column (sqlite3 * db, const char *table, const char *column);
 
-struct twconfig * config_load (void)
+struct twconfig *
+config_load (void)
 {
-  fprintf (stderr, "config_load start\n");
-
   const char *sql =
     "SELECT turnsperday, "
     "       maxwarps_per_sector, "
@@ -71,7 +70,7 @@ struct twconfig * config_load (void)
     "       max_name_length, "
     "       planet_type_count " "FROM config WHERE id=1;";
 
-    fprintf (stderr, "config_load SQL prepare\n");
+
 
   sqlite3_stmt *stmt;
   if (sqlite3_prepare_v2 (db_get_handle (), sql, -1, &stmt, NULL) !=
@@ -82,8 +81,6 @@ struct twconfig * config_load (void)
       return NULL;
     }
 
-    fprintf (stderr, "config_load cfg malloc\n");  
-
   struct twconfig *cfg = malloc (sizeof (struct twconfig));
   if (!cfg)
     {
@@ -91,7 +88,6 @@ struct twconfig * config_load (void)
       return NULL;
     }
 
-    fprintf (stderr, "config_load SQLITE_ROW\n");    
 
   if (sqlite3_step (stmt) == SQLITE_ROW)
     {
@@ -115,7 +111,7 @@ struct twconfig * config_load (void)
       cfg->max_name_length = sqlite3_column_int (stmt, 17);
       cfg->planet_type_count = sqlite3_column_int (stmt, 18);
 
-      // fprintf(stderr, "DEBUG: maxwarps_per_sector = %d\n",
+      // fprintf(stderr, "DEBUG:
       //        cfg->maxwarps_per_sector);
 
     }
@@ -124,7 +120,6 @@ struct twconfig * config_load (void)
       free (cfg);
       cfg = NULL;
     }
-      fprintf (stderr, "config_load finalise\n");    
 
   sqlite3_finalize (stmt);
   return cfg;
@@ -557,7 +552,7 @@ create_sectors (void)
   int sector_count = get_sector_count ();
 
   struct twconfig *cfg = config_load ();
-  
+
   if (!cfg)
     return -1;
 
@@ -1959,12 +1954,12 @@ ensure_fedspace_exit (sqlite3 *db, int outer_min, int outer_max,
   if (have < required_exits)
     {
       fprintf (stderr,
-	       "FED EXIT: only %d/%d exits created after %d attempts\n", have,
+	       "BIGBANG: only %d/%d exits created after %d attempts\n", have,
 	       required_exits, attempts);
     }
   else
     {
-      fprintf (stderr, "FED EXIT: ensured %d exits from 2..10 to [%d..%d]\n",
+      fprintf (stderr, "BIGBANG: ensured %d exits from 2..10 to [%d..%d]\n",
 	       have, outer_min, outer_max);
     }
 

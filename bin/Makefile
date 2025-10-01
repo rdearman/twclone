@@ -145,7 +145,8 @@ am_server_OBJECTS = ../src/server_communication.$(OBJEXT) \
 	../src/server_warp_post_processing.$(OBJEXT) \
 	../src/namegen.$(OBJEXT) ../src/globals.$(OBJEXT) \
 	../src/database.$(OBJEXT) ../src/schemas.$(OBJEXT) \
-	../src/common.$(OBJEXT) ../src/engine_main.$(OBJEXT)
+	../src/common.$(OBJEXT) ../src/engine_main.$(OBJEXT) \
+	../src/s2s_transport.$(OBJEXT) ../src/s2s_keyring.$(OBJEXT)
 server_OBJECTS = $(am_server_OBJECTS)
 server_DEPENDENCIES =
 AM_V_P = $(am__v_P_$(V))
@@ -166,7 +167,9 @@ am__maybe_remake_depfiles = depfiles
 am__depfiles_remade = ../src/$(DEPDIR)/common.Po \
 	../src/$(DEPDIR)/database.Po ../src/$(DEPDIR)/engine_main.Po \
 	../src/$(DEPDIR)/globals.Po ../src/$(DEPDIR)/namegen.Po \
-	../src/$(DEPDIR)/schemas.Po ../src/$(DEPDIR)/server_auth.Po \
+	../src/$(DEPDIR)/s2s_keyring.Po \
+	../src/$(DEPDIR)/s2s_transport.Po ../src/$(DEPDIR)/schemas.Po \
+	../src/$(DEPDIR)/server_auth.Po \
 	../src/$(DEPDIR)/server_bigbang.Po \
 	../src/$(DEPDIR)/server_bulk.Po \
 	../src/$(DEPDIR)/server_citadel.Po \
@@ -250,7 +253,7 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-ISODATE = 2025-09-30
+ISODATE = 2025-10-01
 LDFLAGS = 
 LIBOBJS = 
 LIBS = -lpthread -lm 
@@ -321,10 +324,10 @@ target_alias =
 top_build_prefix = ../
 top_builddir = ..
 top_srcdir = ..
-server_LDADD = -ljansson -lsqlite3 -lpthread -lm
+server_LDADD = -ljansson -lsqlite3 -lcrypto -lpthread -lm
 # bigbang_LDADD  = -ljansson -lsqlite3 -lpthread -lm
 # client_LDADD   = -ljansson -lsqlite3 -lpthread -lm
-bigbang_LDADD = -ljansson -lsqlite3 -lpthread -lm
+bigbang_LDADD = -ljansson -lsqlite3 -lcrypto -lpthread -lm
 AUTOMAKE_OPTIONS = subdir-objects
 
 # client_SOURCES = \
@@ -334,7 +337,7 @@ AUTOMAKE_OPTIONS = subdir-objects
 # 	../src/common.c \
 # 	../src/parse.c
 server_SOURCES = \
-        ../src/server_communication.c \
+	../src/server_communication.c \
         ../src/server_bulk.c \
 	../src/server_combat.c  \
 	../src/server_bigbang.c \
@@ -357,7 +360,9 @@ server_SOURCES = \
 	../src/database.c \
 	../src/schemas.c \
 	../src/common.c \
-	../src/engine_main.c
+	../src/engine_main.c \
+	../src/s2s_transport.c \
+	../src/s2s_keyring.c
 
 bigbang_SOURCES = \
 	../src/database.c \
@@ -506,6 +511,10 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/engine_main.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
+../src/s2s_transport.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
+../src/s2s_keyring.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
 
 server$(EXEEXT): $(server_OBJECTS) $(server_DEPENDENCIES) $(EXTRA_server_DEPENDENCIES) 
 	@rm -f server$(EXEEXT)
@@ -523,6 +532,8 @@ include ../src/$(DEPDIR)/database.Po # am--include-marker
 include ../src/$(DEPDIR)/engine_main.Po # am--include-marker
 include ../src/$(DEPDIR)/globals.Po # am--include-marker
 include ../src/$(DEPDIR)/namegen.Po # am--include-marker
+include ../src/$(DEPDIR)/s2s_keyring.Po # am--include-marker
+include ../src/$(DEPDIR)/s2s_transport.Po # am--include-marker
 include ../src/$(DEPDIR)/schemas.Po # am--include-marker
 include ../src/$(DEPDIR)/server_auth.Po # am--include-marker
 include ../src/$(DEPDIR)/server_bigbang.Po # am--include-marker
@@ -699,6 +710,8 @@ distclean: distclean-am
 	-rm -f ../src/$(DEPDIR)/engine_main.Po
 	-rm -f ../src/$(DEPDIR)/globals.Po
 	-rm -f ../src/$(DEPDIR)/namegen.Po
+	-rm -f ../src/$(DEPDIR)/s2s_keyring.Po
+	-rm -f ../src/$(DEPDIR)/s2s_transport.Po
 	-rm -f ../src/$(DEPDIR)/schemas.Po
 	-rm -f ../src/$(DEPDIR)/server_auth.Po
 	-rm -f ../src/$(DEPDIR)/server_bigbang.Po
@@ -769,6 +782,8 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/$(DEPDIR)/engine_main.Po
 	-rm -f ../src/$(DEPDIR)/globals.Po
 	-rm -f ../src/$(DEPDIR)/namegen.Po
+	-rm -f ../src/$(DEPDIR)/s2s_keyring.Po
+	-rm -f ../src/$(DEPDIR)/s2s_transport.Po
 	-rm -f ../src/$(DEPDIR)/schemas.Po
 	-rm -f ../src/$(DEPDIR)/server_auth.Po
 	-rm -f ../src/$(DEPDIR)/server_bigbang.Po
