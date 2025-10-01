@@ -62,6 +62,7 @@ server_SOURCES = \
 	../src/schemas.c \
 	../src/common.c \
 	../src/engine_main.c \
+	../src/engine_consumer.c \
 	../src/s2s_transport.c \
 	../src/s2s_keyring.c
 

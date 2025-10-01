@@ -23,9 +23,25 @@
 #include "database.h"
 #include "server_envelope.h"
 #include "s2s_transport.h"
+#include "engine_consumer.h"
 
 
-#include "server_envelope.h"
+
+static eng_consumer_cfg_t G_CFG = {
+    .batch_size = 200,
+    .backlog_prio_threshold = 5000,
+    .priority_types_csv = "s2s.broadcast.sweep,player.login",
+    .consumer_key = "game_engine"
+};
+
+void engine_tick(sqlite3 *db) {
+    eng_consumer_metrics_t m;
+    if (engine_consume_tick(db, &G_CFG, &m) == SQLITE_OK) {
+        fprintf(stderr, "[engine] events: processed=%d quarantined=%d last_id=%lld lag=%lld\n",
+                m.processed, m.quarantined, m.last_event_id, m.lag);
+    }
+}
+
 
 /* Returns a new env (caller must json_decref(result)). */
 json_t *engine_build_command_push(const char *cmd_type,
@@ -346,7 +362,8 @@ engine_main_loop (int shutdown_fd)
 	{
 	log_s2s_metrics("engine");
 	last_metrics = now;
-      }
+	engine_tick(db_handle);
+	}
 
       // Sleep until next tick or until shutdown pipe changes
       int rc = poll (&pfd, 1, tick_ms);

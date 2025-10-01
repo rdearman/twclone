@@ -13,15 +13,15 @@
 #include <jansson.h>
 #include <inttypes.h>  
 /* local includes */
-#include "server_loop.h"	/* int server_loop(volatile sig_atomic_t *running); */
+#include "server_loop.h"
 #include "server_config.h"
-#include "s2s_transport.h"
 #include "s2s_keyring.h" 
 #include "s2s_transport.h"
 #include "engine_main.h"
 #include "server_s2s.h"
-#include "config.h"		/* int load_config(void);   (1 = success, 0 = fail) */
-#include "database.h"		/* int db_init(void); void db_close(void); */
+#include "config.h"	
+#include "database.h"	
+#include "server_bigbang.h"
 
 
 static pid_t g_engine_pid = -1;
@@ -201,11 +201,12 @@ s2s_listen_4321 (void)
 int universe_init (void);
 void universe_shutdown (void);
 int load_config (void);
+int load_eng_config (void);
 
 static volatile sig_atomic_t running = 1;
 
 /* forward decl: your bigbang entry point (adjust name/signature if different) */
-static int bigbang ();		/* if your function is named differently, change this */
+int bigbang (void);		/* if your function is named differently, change this */
 
 
 /*-------------------  Bigbang ---------------------------------*/
@@ -285,6 +286,31 @@ main (void)
       fprintf (stderr, "Failed to init DB.\n");
       return EXIT_FAILURE;
     }
+
+  /* Optional: keep a sanity check/log, but don't gate db_init() on it. */
+  (void) load_config ();
+
+  
+  if (universe_init () != 0)
+    {
+      fprintf (stderr, "Failed to init universe.\n");
+      db_close ();
+      return EXIT_FAILURE;
+    }
+
+  if (run_bigbang_if_needed () != 0)
+    {
+      return EXIT_FAILURE;	// or your project’s error path
+    }
+
+  /* // --print-config handling */
+  /* if (argc > 1 && strcmp(argv[1], "--print-config") == 0) { */
+  /*   if (!load_eng_config()) return 2; */
+  /*   print_effective_config_redacted(); */
+  /*   return 0; */
+  /* } */
+  // normal startup
+  if (!load_eng_config()) return 2;
 
   /* 0.1) Capabilities (restored) */
   build_capabilities();                 /* rebuilds g_capabilities */

@@ -1279,102 +1279,207 @@ const char *insert_default_sql[] = {
 ///////////// S2S /////////////////////////
 
 static const char *ENGINE_BOOTSTRAP_SQL =
-"BEGIN IMMEDIATE;\n"
-/* --- S2S keyring (HMAC) --- */
-"CREATE TABLE IF NOT EXISTS s2s_keys(\n"
-"  key_id TEXT PRIMARY KEY,\n"
-"  key_b64 TEXT NOT NULL,\n"
-"  is_default_tx INTEGER NOT NULL DEFAULT 0,\n"
-"  active INTEGER NOT NULL DEFAULT 1,\n"
-"  created_ts INTEGER NOT NULL\n"
-");\n"
-"INSERT OR IGNORE INTO s2s_keys(key_id,key_b64,is_default_tx,active,created_ts)\n"
-"VALUES('k0','c3VwZXJzZWNyZXRrZXlzZWNyZXRrZXlzZWNyZXQxMjM0NTY3OA==',1,1,strftime('%s','now'));\n"
-"\n"
-/* --- Engine cron/scheduling --- */
-"CREATE TABLE IF NOT EXISTS cron_tasks(\n"
-"  id INTEGER PRIMARY KEY,\n"
-"  name TEXT UNIQUE NOT NULL,\n"
-"  schedule TEXT NOT NULL,\n"
-"  last_run_at INTEGER,\n"
-"  next_due_at INTEGER NOT NULL,\n"
-"  enabled INTEGER NOT NULL DEFAULT 1,\n"
-"  payload TEXT\n"
-");\n"
-"INSERT OR IGNORE INTO cron_tasks(name,schedule,last_run_at,next_due_at,enabled,payload) VALUES\n"
-"('daily_turn_reset','daily@03:00Z',NULL,strftime('%s','now'),1,NULL),\n"
-"('terra_replenish','daily@04:00Z',NULL,strftime('%s','now'),1,NULL),\n"
-"('port_reprice','daily@05:00Z',NULL,strftime('%s','now'),1,NULL),\n"
-"('planet_growth','every:10m',NULL,strftime('%s','now'),1,NULL),\n"
-"('fedspace_cleanup','every:1m',NULL,strftime('%s','now'),1,NULL),\n"
-"('autouncloak_sweeper','every:1m',NULL,strftime('%s','now'),1,NULL),\n"
-"('traps_process','every:1s',NULL,strftime('%s','now'),1,NULL),\n"
-"('npc_step','every:2s',NULL,strftime('%s','now'),1,NULL),\n"
-"('broadcast_ttl_cleanup','every:5m',NULL,strftime('%s','now'),1,NULL);\n"
-"\n"
-/* --- Server→Engine event rail (separate from your existing system_events) --- */
-"CREATE TABLE IF NOT EXISTS engine_events(\n"
-"  id INTEGER PRIMARY KEY,\n"
-"  ts INTEGER NOT NULL,\n"
-"  type TEXT NOT NULL,\n"
-"  actor_player_id INTEGER,\n"
-"  sector_id INTEGER,\n"
-"  payload TEXT NOT NULL,\n"
-"  idem_key TEXT\n"
-");\n"
-"CREATE UNIQUE INDEX IF NOT EXISTS idx_engine_events_idem ON engine_events(idem_key) WHERE idem_key IS NOT NULL;\n"
-"CREATE INDEX IF NOT EXISTS idx_engine_events_ts ON engine_events(ts);\n"
-"CREATE INDEX IF NOT EXISTS idx_engine_events_actor_ts ON engine_events(actor_player_id, ts);\n"
-"CREATE INDEX IF NOT EXISTS idx_engine_events_sector_ts ON engine_events(sector_id, ts);\n"
-"\n"
-/* --- Engine watermark --- */
-"CREATE TABLE IF NOT EXISTS engine_offset(\n"
-"  key TEXT PRIMARY KEY,\n"
-"  last_event_id INTEGER NOT NULL,\n"
-"  last_event_ts INTEGER NOT NULL\n"
-");\n"
-"INSERT OR IGNORE INTO engine_offset(key,last_event_id,last_event_ts) VALUES('events',0,0);\n"
-"\n"
-/* --- Deadletter for bad events --- */
-"CREATE TABLE IF NOT EXISTS engine_events_deadletter(\n"
-"  id INTEGER PRIMARY KEY,\n"
-"  ts INTEGER NOT NULL,\n"
-"  type TEXT NOT NULL,\n"
-"  payload TEXT NOT NULL,\n"
-"  error TEXT NOT NULL,\n"
-"  moved_at INTEGER NOT NULL\n"
-");\n"
-"\n"
-/* --- Engine→Server command rail --- */
-"CREATE TABLE IF NOT EXISTS engine_commands(\n"
-"  id INTEGER PRIMARY KEY,\n"
-"  type TEXT NOT NULL,\n"
-"  payload TEXT NOT NULL,\n"
-"  status TEXT NOT NULL DEFAULT 'ready',\n"
-"  priority INTEGER NOT NULL DEFAULT 100,\n"
-"  attempts INTEGER NOT NULL DEFAULT 0,\n"
-"  created_at INTEGER NOT NULL,\n"
-"  due_at INTEGER NOT NULL,\n"
-"  started_at INTEGER,\n"
-"  finished_at INTEGER,\n"
-"  worker TEXT,\n"
-"  idem_key TEXT\n"
-");\n"
-"CREATE UNIQUE INDEX IF NOT EXISTS idx_engine_cmds_idem ON engine_commands(idem_key) WHERE idem_key IS NOT NULL;\n"
-"CREATE INDEX IF NOT EXISTS idx_engine_cmds_status_due ON engine_commands(status, due_at);\n"
-"CREATE INDEX IF NOT EXISTS idx_engine_cmds_prio_due ON engine_commands(priority, due_at);\n"
-"\n"
-/* --- Engine audit trail --- */
-"CREATE TABLE IF NOT EXISTS engine_audit(\n"
-"  id INTEGER PRIMARY KEY,\n"
-"  ts INTEGER NOT NULL,\n"
-"  cmd_type TEXT NOT NULL,\n"
-"  correlation_id TEXT,\n"
-"  actor_player_id INTEGER,\n"
-"  details TEXT\n"
-");\n"
-"\n"
-"COMMIT;\n";
+  "BEGIN IMMEDIATE;\n"
+  /* --- S2S keyring (HMAC) --- */
+  "CREATE TABLE IF NOT EXISTS s2s_keys(\n"
+  "  key_id TEXT PRIMARY KEY,\n"
+  "  key_b64 TEXT NOT NULL,\n"
+  "  is_default_tx INTEGER NOT NULL DEFAULT 0,\n"
+  "  active INTEGER NOT NULL DEFAULT 1,\n"
+  "  created_ts INTEGER NOT NULL\n"
+  ");\n"
+  "INSERT OR IGNORE INTO s2s_keys(key_id,key_b64,is_default_tx,active,created_ts)\n"
+  "VALUES('k0','c3VwZXJzZWNyZXRrZXlzZWNyZXRrZXlzZWNyZXQxMjM0NTY3OA==',1,1,strftime('%s','now'));\n"
+  "\n"
+  /* --- Engine cron/scheduling --- */
+  "CREATE TABLE IF NOT EXISTS cron_tasks(\n"
+  "  id INTEGER PRIMARY KEY,\n"
+  "  name TEXT UNIQUE NOT NULL,\n"
+  "  schedule TEXT NOT NULL,\n"
+  "  last_run_at INTEGER,\n"
+  "  next_due_at INTEGER NOT NULL,\n"
+  "  enabled INTEGER NOT NULL DEFAULT 1,\n"
+  "  payload TEXT\n"
+  ");\n"
+  "INSERT OR IGNORE INTO cron_tasks(name,schedule,last_run_at,next_due_at,enabled,payload) VALUES\n"
+  "('daily_turn_reset','daily@03:00Z',NULL,strftime('%s','now'),1,NULL),\n"
+  "('terra_replenish','daily@04:00Z',NULL,strftime('%s','now'),1,NULL),\n"
+  "('port_reprice','daily@05:00Z',NULL,strftime('%s','now'),1,NULL),\n"
+  "('planet_growth','every:10m',NULL,strftime('%s','now'),1,NULL),\n"
+  "('fedspace_cleanup','every:1m',NULL,strftime('%s','now'),1,NULL),\n"
+  "('autouncloak_sweeper','every:1m',NULL,strftime('%s','now'),1,NULL),\n"
+  "('traps_process','every:1s',NULL,strftime('%s','now'),1,NULL),\n"
+  "('npc_step','every:2s',NULL,strftime('%s','now'),1,NULL),\n"
+  "('broadcast_ttl_cleanup','every:5m',NULL,strftime('%s','now'),1,NULL);\n"
+  "\n"
+  /* --- Server→Engine event rail (separate from your existing system_events) --- */
+  "CREATE TABLE IF NOT EXISTS engine_events(\n"
+  "  id INTEGER PRIMARY KEY,\n"
+  "  ts INTEGER NOT NULL,\n"
+  "  type TEXT NOT NULL,\n"
+  "  actor_player_id INTEGER,\n"
+  "  sector_id INTEGER,\n"
+  "  payload TEXT NOT NULL,\n"
+  "  idem_key TEXT\n"
+  ");\n"
+  "CREATE UNIQUE INDEX IF NOT EXISTS idx_engine_events_idem ON engine_events(idem_key) WHERE idem_key IS NOT NULL;\n"
+  "CREATE INDEX IF NOT EXISTS idx_engine_events_ts ON engine_events(ts);\n"
+  "CREATE INDEX IF NOT EXISTS idx_engine_events_actor_ts ON engine_events(actor_player_id, ts);\n"
+  "CREATE INDEX IF NOT EXISTS idx_engine_events_sector_ts ON engine_events(sector_id, ts);\n"
+  "\n"
+  /* --- Engine watermark --- */
+  "CREATE TABLE IF NOT EXISTS engine_offset(\n"
+  "  key TEXT PRIMARY KEY,\n"
+  "  last_event_id INTEGER NOT NULL,\n"
+  "  last_event_ts INTEGER NOT NULL\n"
+  ");\n"
+  "INSERT OR IGNORE INTO engine_offset(key,last_event_id,last_event_ts) VALUES('events',0,0);\n"
+  "\n"
+  /* --- Deadletter for bad events --- */
+  "CREATE TABLE IF NOT EXISTS engine_events_deadletter(\n"
+  "  id INTEGER PRIMARY KEY,\n"
+  "  ts INTEGER NOT NULL,\n"
+  "  type TEXT NOT NULL,\n"
+  "  payload TEXT NOT NULL,\n"
+  "  error TEXT NOT NULL,\n"
+  "  moved_at INTEGER NOT NULL\n"
+  ");\n"
+  "\n"
+  /* --- Engine→Server command rail --- */
+  "CREATE TABLE IF NOT EXISTS engine_commands(\n"
+  "  id INTEGER PRIMARY KEY,\n"
+  "  type TEXT NOT NULL,\n"
+  "  payload TEXT NOT NULL,\n"
+  "  status TEXT NOT NULL DEFAULT 'ready',\n"
+  "  priority INTEGER NOT NULL DEFAULT 100,\n"
+  "  attempts INTEGER NOT NULL DEFAULT 0,\n"
+  "  created_at INTEGER NOT NULL,\n"
+  "  due_at INTEGER NOT NULL,\n"
+  "  started_at INTEGER,\n"
+  "  finished_at INTEGER,\n"
+  "  worker TEXT,\n"
+  "  idem_key TEXT\n"
+  ");\n"
+  "CREATE UNIQUE INDEX IF NOT EXISTS idx_engine_cmds_idem ON engine_commands(idem_key) WHERE idem_key IS NOT NULL;\n"
+  "CREATE INDEX IF NOT EXISTS idx_engine_cmds_status_due ON engine_commands(status, due_at);\n"
+  "CREATE INDEX IF NOT EXISTS idx_engine_cmds_prio_due ON engine_commands(priority, due_at);\n"
+  "\n"
+  /* --- Engine audit trail --- */
+  "CREATE TABLE IF NOT EXISTS engine_audit(\n"
+  "  id INTEGER PRIMARY KEY,\n"
+  "  ts INTEGER NOT NULL,\n"
+  "  cmd_type TEXT NOT NULL,\n"
+  "  correlation_id TEXT,\n"
+  "  actor_player_id INTEGER,\n"
+  "  details TEXT\n"
+  ");\n"
+  "\n"
+  "COMMIT;\n";
+
+static const char *MIGRATE_A_SQL =
+  "BEGIN IMMEDIATE;"
+
+  /* engine_offset (consumer high-water mark) */
+  "CREATE TABLE IF NOT EXISTS engine_offset ("
+  "  key TEXT PRIMARY KEY,"
+  "  last_event_id INTEGER NOT NULL,"
+  "  last_event_ts INTEGER NOT NULL"
+  ");"
+
+  /* engine_events (durable rail) — keep your existing table; create if missing */
+  "CREATE TABLE IF NOT EXISTS engine_events ("
+  "  id              INTEGER PRIMARY KEY,"
+  "  ts              INTEGER NOT NULL,"
+  "  type            TEXT NOT NULL,"
+  "  actor_player_id INTEGER,"
+  "  sector_id       INTEGER,"
+  "  payload         JSON NOT NULL,"  /* JSON is stored as TEXT in SQLite */
+  "  idem_key        TEXT"
+  ");"
+
+  /* Indices per acceptance criteria */
+  "CREATE UNIQUE INDEX IF NOT EXISTS ux_engine_events_idem_key "
+  "  ON engine_events(idem_key);"
+  "CREATE INDEX IF NOT EXISTS ix_engine_events_ts "
+  "  ON engine_events(ts);"
+  "CREATE INDEX IF NOT EXISTS ix_engine_events_type "
+  "  ON engine_events(type);"
+  "CREATE INDEX IF NOT EXISTS ix_engine_events_actor_ts "
+  "  ON engine_events(actor_player_id, ts);"
+  "CREATE INDEX IF NOT EXISTS ix_engine_events_sector_ts "
+  "  ON engine_events(sector_id, ts);"
+
+  /* Forward-compat view named exactly 'events' */
+  "DROP VIEW IF EXISTS events;"
+  "CREATE VIEW events AS "
+  "  SELECT id, ts, type, actor_player_id, sector_id, payload, idem_key "
+  "  FROM engine_events;"
+
+  "COMMIT;";
+
+    static const char *MIGRATE_B_SQL =
+        "BEGIN IMMEDIATE;"
+
+        /* High-water mark for the engine consumer */
+        "CREATE TABLE IF NOT EXISTS engine_offset("
+        "  key TEXT PRIMARY KEY,"
+        "  last_event_id INTEGER NOT NULL,"
+        "  last_event_ts INTEGER NOT NULL"
+        ");"
+
+        /* Durable rail backing table */
+        "CREATE TABLE IF NOT EXISTS engine_events("
+        "  id              INTEGER PRIMARY KEY,"
+        "  ts              INTEGER NOT NULL,"
+        "  type            TEXT NOT NULL,"
+        "  actor_player_id INTEGER,"
+        "  sector_id       INTEGER,"
+        "  payload         JSON NOT NULL,"
+        "  idem_key        TEXT"
+        ");"
+
+        /* Indices per AC */
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_engine_events_idem_key "
+        "  ON engine_events(idem_key);"
+        "CREATE INDEX IF NOT EXISTS ix_engine_events_ts "
+        "  ON engine_events(ts);"
+        "CREATE INDEX IF NOT EXISTS ix_engine_events_type "
+        "  ON engine_events(type);"
+        "CREATE INDEX IF NOT EXISTS ix_engine_events_actor_ts "
+        "  ON engine_events(actor_player_id, ts);"
+        "CREATE INDEX IF NOT EXISTS ix_engine_events_sector_ts "
+        "  ON engine_events(sector_id, ts);"
+
+        /* Forward-compat view named exactly `events` */
+        "DROP VIEW IF EXISTS events;"
+        "CREATE VIEW events AS "
+        "  SELECT id, ts, type, actor_player_id, sector_id, payload, idem_key "
+        "  FROM engine_events;"
+
+        /* Make the view writable (append-only) */
+        "DROP TRIGGER IF EXISTS events_insert;"
+        "CREATE TRIGGER IF NOT EXISTS events_insert "
+        "INSTEAD OF INSERT ON events "
+        "BEGIN "
+        "  INSERT INTO engine_events(id, ts, type, actor_player_id, sector_id, payload, idem_key) "
+        "  VALUES (NEW.id, NEW.ts, NEW.type, NEW.actor_player_id, NEW.sector_id, NEW.payload, NEW.idem_key);"
+        "END;"
+
+        "DROP TRIGGER IF EXISTS events_update;"
+        "CREATE TRIGGER IF NOT EXISTS events_update "
+        "INSTEAD OF UPDATE ON events "
+        "BEGIN "
+        "  SELECT RAISE(ABORT, 'events is append-only');"
+        "END;"
+
+        "DROP TRIGGER IF EXISTS events_delete;"
+        "CREATE TRIGGER IF NOT EXISTS events_delete "
+        "INSTEAD OF DELETE ON events "
+        "BEGIN "
+        "  SELECT RAISE(ABORT, 'events is append-only');"
+        "END;"
+
+        "COMMIT;";
 
 
 int db_engine_bootstrap(sqlite3 *db) {
@@ -1385,6 +1490,23 @@ int db_engine_bootstrap(sqlite3 *db) {
     sqlite3_free(err);
     return -1;
   }
+  // MIGRATE_A_SQL
+   rc = sqlite3_exec(db, MIGRATE_A_SQL , NULL, NULL, &err);
+  if (rc != SQLITE_OK) {
+    fprintf(stderr, "[db] Engine table update failed: %s\n", err ? err : "(unknown)");
+    sqlite3_free(err);
+    return -1;
+  }  
+
+  // MIGRATE_B_SQL
+   rc = sqlite3_exec(db, MIGRATE_B_SQL , NULL, NULL, &err);
+  if (rc != SQLITE_OK) {
+    fprintf(stderr, "[db] Engine table update failed: %s\n", err ? err : "(unknown)");
+    sqlite3_free(err);
+    return -1;
+  }  
+  
+  
   return 0;
 }
 
@@ -1517,6 +1639,7 @@ db_init (void)
 
     }
   db_engine_bootstrap(db_handle);
+ 
   
   // If we've made it here, all steps were successful.
   ret_code = 0;
