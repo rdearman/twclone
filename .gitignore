@@ -50,6 +50,7 @@ tests/*.trs
 
 # Editor / IDE / OS cruft
 *~
+src/*~
 *.swp
 *.swo
 .DS_Store
