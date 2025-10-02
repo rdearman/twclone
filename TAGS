@@ -81,7 +81,7 @@ addint 47,1277
 popstring 67,1666
 popint 97,2391
 
-hold/server_loop.c,1404
+hold/server_loop.c,1325
 #define LISTEN_PORT 25,484
 #define BUF_SIZE 26,509
 #define RULE_REFUSE(27,534
@@ -115,21 +115,18 @@ send_enveloped_refused 281,7003
 send_enveloped_ok 307,7882
 send_enveloped_error 332,8825
 send_all_json 364,9765
-send_error_json 376,9979
-send_ok_json 387,10293
-build_trade_buy_fp_obj 401,10642
-validate_warp_rule 431,11729
-player_credits 443,12162
-cargo_space_free 449,12224
-port_is_open 455,12286
-validate_trade_buy_rule 461,12389
-rl_tick 486,13184
-rl_build_meta 509,13623
-attach_rate_limit_meta 526,14098
-process_message 655,18362
-connection_thread 1445,41225
-server_loop 1536,43189
-static void handle_sector_info 1627,45329
+send_ok_json 387,10353
+build_trade_buy_fp_obj 401,10702
+validate_warp_rule 431,11789
+player_credits 443,12222
+cargo_space_free 449,12284
+port_is_open 455,12346
+validate_trade_buy_rule 461,12449
+rl_build_meta 509,13819
+process_message 655,18650
+connection_thread 1445,41513
+server_loop 1536,43477
+static void handle_sector_info 1627,45617
 
 hold/universe.h,4726
 #define UNIVERSE_H2,19
@@ -691,38 +688,38 @@ cmd_planet_harvest 43,729
 cmd_planet_deposit 49,833
 cmd_planet_withdraw 55,937
 
-src/server_universe.h,881
+src/server_universe.h,888
 #define SERVER_UNIVERSE_H2,26
-#define MAX_CITADEL_LEVEL 26,793
-struct planetType_struct28,822
-  char *typeDescription;typeDescription30,849
-  char *typeClass;typeClass31,874
-  char *typeName;typeName32,893
-  int citadelUpgradeTime[citadelUpgradeTime33,911
-  int citadelUpgradeOre[citadelUpgradeOre34,956
-  int citadelUpgradeOrganics[citadelUpgradeOrganics35,1000
-  int citadelUpgradeEquipment[citadelUpgradeEquipment36,1049
-  int citadelUpgradeColonist[citadelUpgradeColonist37,1099
-  int maxColonist[maxColonist38,1148
-  int fighters;39,1211
-  int fuelProduction;40,1227
-  int organicsProduction;41,1249
-  int equipmentProduction;42,1275
-  int fighterProduction;43,1302
-  int maxore;44,1327
-  int maxorganics;45,1341
-  int maxequipment;46,1360
-  int maxfighters;47,1380
-  float breeding;48,1399
-typedef struct planetType_struct planetClass;51,1421
+#define MAX_CITADEL_LEVEL 30,1047
+struct planetType_struct32,1076
+  char *typeDescription;typeDescription34,1103
+  char *typeClass;typeClass35,1128
+  char *typeName;typeName36,1147
+  int citadelUpgradeTime[citadelUpgradeTime37,1165
+  int citadelUpgradeOre[citadelUpgradeOre38,1210
+  int citadelUpgradeOrganics[citadelUpgradeOrganics39,1254
+  int citadelUpgradeEquipment[citadelUpgradeEquipment40,1303
+  int citadelUpgradeColonist[citadelUpgradeColonist41,1353
+  int maxColonist[maxColonist42,1402
+  int fighters;43,1465
+  int fuelProduction;44,1481
+  int organicsProduction;45,1503
+  int equipmentProduction;46,1529
+  int fighterProduction;47,1556
+  int maxore;48,1581
+  int maxorganics;49,1595
+  int maxequipment;50,1614
+  int maxfighters;51,1634
+  float breeding;52,1653
+typedef struct planetType_struct planetClass;55,1675
 
 src/server_communication.h,184
 #define SERVER_COMMUNICATION_H2,31
-    COMM_SCOPE_GLOBAL 46,1684
-    COMM_SCOPE_SECTOR,47,1741
-    COMM_SCOPE_CORP,48,1794
-    COMM_SCOPE_PLAYER	49,1845
-  } comm_scope_t;50,1897
+    COMM_SCOPE_GLOBAL 52,1960
+    COMM_SCOPE_SECTOR,53,2017
+    COMM_SCOPE_CORP,54,2070
+    COMM_SCOPE_PLAYER	55,2121
+  } comm_scope_t;56,2173
 
 src/server_auth.h,27
 #define SERVER_AUTH_H2,22
@@ -753,23 +750,23 @@ src/server_players.c,715
 cmd_player_my_info 29,1081
 cmd_player_list_online 49,1565
 cmd_player_set_settings 67,2236
-cmd_player_get_settings(73,2350
-cmd_player_set_prefs 87,2866
-cmd_player_get_prefs(93,2974
-cmd_player_set_topics 110,3541
-cmd_player_get_topics(116,3651
-cmd_player_set_bookmarks 133,4238
-cmd_player_get_bookmarks(139,4354
-cmd_player_set_avoids 156,4954
-cmd_player_get_avoids(162,5064
-cmd_player_get_notes(179,5634
-static int _include_wanted(195,6243
-players_build_settings(207,6651
-static json_t* players_get_prefs(235,7672
-static json_t* players_get_subscriptions(246,8100
-static json_t* players_list_bookmarks(260,8570
-static json_t* players_list_avoid(265,8668
-static json_t* players_list_notes(270,8762
+cmd_player_get_settings(73,2351
+cmd_player_set_prefs 87,2871
+cmd_player_get_prefs(93,2980
+cmd_player_set_topics 109,3548
+cmd_player_get_topics(115,3658
+cmd_player_set_bookmarks 132,4253
+cmd_player_get_bookmarks(138,4369
+cmd_player_set_avoids 154,4976
+cmd_player_get_avoids(160,5086
+cmd_player_get_notes(177,5657
+static int _include_wanted(193,6275
+players_build_settings(205,6683
+static json_t* players_get_prefs(233,7704
+static json_t* players_get_subscriptions(244,8132
+static json_t* players_list_bookmarks(258,8602
+static json_t* players_list_avoid(263,8700
+static json_t* players_list_notes(268,8794
 
 src/server_rules.h,51
 #define SERVER_RULES_H2,23
@@ -1052,29 +1049,29 @@ struct json_msgbuffer122,1801
   long mtype;124,1825
   char buffer[buffer125,1839
 
-src/server_loop.c,709
-#define streq(39,930
-#define LISTEN_PORT 42,978
-#define BUF_SIZE 43,1003
-#define RULE_REFUSE(44,1028
-#define RULE_ERROR(47,1186
-static _Atomic uint64_t g_conn_seq 50,1316
-static _Atomic uint64_t g_msg_seq 52,1413
-static __thread client_ctx_t *g_ctx_for_send g_ctx_for_send53,1452
-static const cmd_desc_t k_supported_cmds_fallback[k_supported_cmds_fallback87,3165
-     loop_get_supported_commands 129,4577
-fnv1a64 145,4946
-hex64 157,5159
-idemp_fingerprint_json 170,5426
-set_reuseaddr 186,5781
-make_listen_socket 193,5907
-send_all 231,6593
-rl_tick 252,6955
-rl_build_meta 275,7394
-attach_rate_limit_meta 292,7862
-process_message 308,8218
-connection_thread 809,22835
-server_loop 900,24799
+src/server_loop.c,710
+#define streq(43,970
+#define LISTEN_PORT 45,1037
+#define BUF_SIZE 46,1062
+#define RULE_REFUSE(47,1087
+#define RULE_ERROR(50,1245
+static _Atomic uint64_t g_conn_seq 53,1375
+static _Atomic uint64_t g_msg_seq 55,1472
+static __thread client_ctx_t *g_ctx_for_send g_ctx_for_send56,1511
+static const cmd_desc_t k_supported_cmds_fallback[k_supported_cmds_fallback90,3224
+     loop_get_supported_commands 132,4636
+fnv1a64 148,5005
+hex64 160,5218
+idemp_fingerprint_json 173,5485
+set_reuseaddr 189,5840
+make_listen_socket 196,5966
+send_all 234,6652
+rl_tick 255,7014
+rl_build_meta 278,7453
+attach_rate_limit_meta 295,7921
+process_message 311,8277
+connection_thread 858,22875
+server_loop 949,24839
 
 src/server_config.h,1962
 #define SERVER_CONFIG_H2,24
@@ -1328,26 +1325,26 @@ handle_event 145,4225
 engine_consume_tick 161,4721
 
 src/server_universe.c,617
-#define UNUSED(13,239
-#define SEARCH_DEFAULT_LIMIT 17,303
-#define SEARCH_MAX_LIMIT 18,335
-#define PORTS_HAVE_CLASS_TABLE 24,603
-make_player_object 35,848
-parse_sector_search_input 49,1259
-cmd_sector_search 131,3076
-cmd_move_autopilot_start 295,8268
-cmd_move_autopilot_stop 301,8376
-cmd_move_autopilot_status 307,8490
-universe_init 314,8609
-universe_shutdown 345,9279
-validate_warp_rule 355,9515
-cmd_move_describe_sector 369,9901
-cmd_move_warp 445,12122
-cmd_move_pathfind 524,15117
-cmd_sector_info 782,21217
-build_sector_info_json 856,23361
-cmd_move_scan 975,26935
-cmd_sector_set_beacon 1096,31182
+#define UNUSED(18,356
+#define SEARCH_DEFAULT_LIMIT 22,420
+#define SEARCH_MAX_LIMIT 23,452
+#define PORTS_HAVE_CLASS_TABLE 29,720
+make_player_object 40,965
+parse_sector_search_input 54,1376
+cmd_sector_search 136,3193
+cmd_move_autopilot_start 298,8357
+cmd_move_autopilot_stop 304,8465
+cmd_move_autopilot_status 310,8579
+universe_init 317,8698
+universe_shutdown 348,9368
+validate_warp_rule 358,9604
+cmd_move_describe_sector 372,9990
+cmd_move_warp 388,10449
+cmd_move_pathfind 467,13444
+cmd_sector_info 725,19544
+build_sector_info_json 799,21687
+cmd_move_scan 918,25261
+cmd_sector_set_beacon 1039,29505
 
 src/server_ships.h,63
 #define SERVER_SHIPS_H2,23
@@ -1364,11 +1361,11 @@ deleteitem 204,4292
 
 src/server_auth.c,164
 cmd_auth_login 11,166
-cmd_auth_register 79,2122
-cmd_auth_logout 134,3669
-cmd_user_create 156,4313
-cmd_auth_refresh 199,5502
-cmd_auth_mfa_totp_verify 272,7317
+cmd_auth_register 79,2124
+cmd_auth_logout 134,3671
+cmd_user_create 156,4315
+cmd_auth_refresh 199,5504
+cmd_auth_mfa_totp_verify 272,7319
 
 src/server_config.c,442
 server_config_t g_cfg;34,704
@@ -1419,21 +1416,21 @@ send_error_json 352,9157
 send_ok_json 363,9464
 make_default_meta 376,9816
 send_enveloped_ok 390,10240
-send_enveloped_error 440,11543
-send_enveloped_refused 484,12826
-urand_bytes 534,14210
-gen_uuid_v4 556,14613
-borrow_or_empty_obj 583,15272
-s2s_make_env 596,15521
-s2s_make_ack 625,16191
-s2s_make_error 654,16795
-s2s_env_type 698,17803
-s2s_env_id 705,17953
-s2s_env_payload 713,18151
-dupmsg 725,18523
-s2s_env_validate_min 735,18660
-s2s_send_env 803,20179
-s2s_recv_env 810,20351
+send_enveloped_error 441,11555
+send_enveloped_refused 485,12849
+urand_bytes 535,14244
+gen_uuid_v4 557,14647
+borrow_or_empty_obj 584,15306
+s2s_make_env 597,15555
+s2s_make_ack 626,16225
+s2s_make_error 655,16829
+s2s_env_type 699,17837
+s2s_env_id 706,17987
+s2s_env_payload 714,18185
+dupmsg 726,18557
+s2s_env_validate_min 736,18694
+s2s_send_env 804,20213
+s2s_recv_env 811,20385
 
 src/server_envelope.h,31
 #define SERVER_ENVELOPE_H3,47
@@ -1601,19 +1598,19 @@ db_ships_inspectable_at_sector_json 4489,150367
 db_ship_flags_set 4627,154989
 db_ship_flags_clear 4660,155780
 db_ship_claim 4695,156630
-db_ship_rename_if_owner 4937,164334
-db_is_npc_player 5000,165995
-db_apply_lock_policy_for_pilot 5024,166764
-db_rand_npc_shipname 5083,168435
-db_ensure_ship_perms_column 5129,169400
-column_exists_unlocked 5143,169678
-column_exists 5166,170289
-db_ensure_ship_perms_column_unlocked 5177,170559
-db_sector_scan_core 5213,171389
-db_notice_create 5284,173500
-db_notice_list_unseen_for_player 5318,174473
-db_notice_mark_seen 5371,176120
-db_player_name 5396,176754
+db_ship_rename_if_owner 4937,164348
+db_is_npc_player 5000,166009
+db_apply_lock_policy_for_pilot 5024,166778
+db_rand_npc_shipname 5083,168449
+db_ensure_ship_perms_column 5130,169485
+column_exists_unlocked 5144,169763
+column_exists 5167,170374
+db_ensure_ship_perms_column_unlocked 5178,170644
+db_sector_scan_core 5214,171474
+db_notice_create 5285,173585
+db_notice_list_unseen_for_player 5319,174558
+db_notice_mark_seen 5372,176205
+db_player_name 5397,176839
 
 src/config.c,114
 #define init_config_cleanup(46,1219
@@ -1634,50 +1631,50 @@ src/server_bigbang.c,1737
 #define DEF_PORT_PROD_ORG 27,882
 #define DEF_PORT_PROD_EQU 28,918
 #define DEF_PORT_CREDITS 29,954
-static const char *SQL_INSERT_WARP SQL_INSERT_WARP35,1118
-static const char *SQL_INSERT_USED_SECTOR SQL_INSERT_USED_SECTOR38,1232
-config_load 50,1735
-  int from;132,4196
-  int to;133,4208
-} Warp;134,4218
-prune_tunnel_edges 141,4381
-insert_warp_unique 160,4904
-sector_degree 190,5707
-get_sector_count 206,6114
-is_sector_used 223,6494
-create_random_warps 243,7020
-ensure_sector_exits 315,8684
-bigbang_create_tunnels 401,10815
-create_sectors 546,14456
-trade_code_for_type 650,16927
-random_port_type_1_to_8 676,17285
-seed_port_trade_rows 682,17360
-bigbang 694,17617
-has_warp 825,20728
-sector_degree_in_memory 839,21003
-sw_add_edge 857,21305
-pick_sector_in_range 877,21855
-count_edges 906,22466
-insert_bidirectional 930,22951
-get_sector_degree_count 969,23815
-sw_has_edge 991,24414
-create_full_port 1019,25232
-get_npc_shiptype_id_by_name 1087,27376
-get_purchasable_shiptype_id_by_name 1117,28169
-get_out_degree 1148,29000
-create_planets 1178,29672
-create_ports 1184,29715
-create_ferringhi 1356,34724
-create_imperial 1741,48722
-prepare_first_ok 1825,51462
-sector_exists 1838,51767
-rand_incl 1862,52233
-ensure_fedspace_exit 1872,52479
-has_column 1980,55581
-create_derelicts 2006,56130
-#define MIN_FILL_PCT 2181,61783
-#define MAX_FILL_PCT 2182,61807
-ensure_all_sectors_have_exits 2326,66254
+static const char *SQL_INSERT_WARP SQL_INSERT_WARP38,1156
+static const char *SQL_INSERT_USED_SECTOR SQL_INSERT_USED_SECTOR41,1270
+config_load 53,1773
+  int from;135,4234
+  int to;136,4246
+} Warp;137,4256
+prune_tunnel_edges 144,4419
+insert_warp_unique 163,4942
+sector_degree 193,5745
+get_sector_count 209,6152
+is_sector_used 226,6532
+create_random_warps 246,7058
+ensure_sector_exits 318,8722
+bigbang_create_tunnels 404,10853
+create_sectors 549,14494
+trade_code_for_type 653,16965
+random_port_type_1_to_8 679,17323
+seed_port_trade_rows 685,17398
+bigbang 697,17655
+has_warp 828,20766
+sector_degree_in_memory 842,21041
+sw_add_edge 860,21343
+pick_sector_in_range 880,21893
+count_edges 909,22504
+insert_bidirectional 933,22989
+get_sector_degree_count 972,23853
+sw_has_edge 994,24452
+create_full_port 1022,25270
+get_npc_shiptype_id_by_name 1090,27414
+get_purchasable_shiptype_id_by_name 1120,28207
+get_out_degree 1151,29038
+create_planets 1181,29710
+create_ports 1187,29753
+create_ferringhi 1359,34762
+create_imperial 1744,48760
+prepare_first_ok 1828,51500
+sector_exists 1841,51805
+rand_incl 1865,52271
+ensure_fedspace_exit 1875,52517
+has_column 1983,55619
+create_derelicts 2009,56168
+#define MIN_FILL_PCT 2184,61897
+#define MAX_FILL_PCT 2185,61921
+ensure_all_sectors_have_exits 2329,66368
 
 src/server_bigbang.h,145
 #define SERVER_BIGBANG_H2,25
@@ -1698,12 +1695,12 @@ cmd_trade_history 87,2032
 json_equal_strict 98,2274
 bind_text_or_null 110,2614
 cmd_trade_sell 120,2875
-build_trade_buy_fp_obj 604,17282
-cmd_trade_buy 635,18285
-json_get_int_field 810,23369
-cmd_port_info 821,23611
-cmd_trade_quote 868,24807
-cmd_trade_jettison 880,25090
+build_trade_buy_fp_obj 591,17107
+cmd_trade_buy 622,18110
+json_get_int_field 799,23333
+cmd_port_info 810,23575
+cmd_trade_quote 857,24771
+cmd_trade_jettison 869,25054
 
 src/globals.h,23
 #define GLOBALS_H2,18
