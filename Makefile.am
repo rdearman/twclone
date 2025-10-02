@@ -19,7 +19,9 @@
 # Alternatively, the GPL can be found at
 # http://www.gnu.org/copyleft/gpl.html
 
+
 AUTOMAKE_OPTIONS = subdir-objects
 
-SUBDIRS = bin
-
+SUBDIRS = bin \
+          src \
+          client

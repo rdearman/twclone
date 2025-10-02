@@ -249,7 +249,7 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-ISODATE = 2025-10-01
+ISODATE = 2025-10-02
 LDFLAGS = 
 LIBOBJS = 
 LIBS = -lpthread -lm 
@@ -321,7 +321,10 @@ top_build_prefix =
 top_builddir = .
 top_srcdir = .
 AUTOMAKE_OPTIONS = subdir-objects
-SUBDIRS = bin
+SUBDIRS = bin \
+          src \
+          client
+
 all: autoconf.h
 	$(MAKE) $(AM_MAKEFLAGS) all-recursive
 
