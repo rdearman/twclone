@@ -4908,8 +4908,8 @@ db_ship_claim (int player_id, int sector_id, int ship_id, json_t **out_ship)
 
 rollback:
   /* We only come here after BEGIN succeeded */
-  char *err = sqlite3_errmsg (db_handle);
-  fprintf (stderr, err);
+  const char *err = sqlite3_errmsg (db_handle);
+  fprintf (stderr, "%s\n", err);
   sqlite3_exec (db_handle, "ROLLBACK", NULL, NULL, NULL);
   if (stmt)
     {
@@ -5101,7 +5101,8 @@ db_rand_npc_shipname (char *out, size_t out_sz)
       if (rc == SQLITE_ROW)
 	{
 	  const unsigned char *uc = sqlite3_column_text (st, 0);
-	  const char *name = (const char *) (uc ? uc : "");
+	  const char *name = (const char *) (uc ? (const char *) uc : "");
+	  // const char *name = (const char *) (uc ? uc : "");
 	  if (out && out_sz)
 	    {
 	      /* safe copy; always NUL-terminated */

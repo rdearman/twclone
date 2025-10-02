@@ -30,9 +30,6 @@ bin_PROGRAMS = \
 	server \
 	bigbang
 
-clean-local:
-	find $(srcdir) -name '*~' -delete
-
 # client_SOURCES = \
 # 	../src/globals.c \
 # 	../src/database.c \

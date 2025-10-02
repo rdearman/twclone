@@ -16,6 +16,10 @@ extern "C"
   int cmd_auth_logout (client_ctx_t * ctx, json_t * root);	// "auth.logout"
   int cmd_user_create (client_ctx_t * ctx, json_t * root);	// "user.create", legacy "new.user"
 
+  int cmd_auth_refresh (client_ctx_t *ctx, json_t *root);
+  int cmd_auth_mfa_totp_verify (client_ctx_t *ctx, json_t *root);
+
+
 #ifdef __cplusplus
 }
 #endif

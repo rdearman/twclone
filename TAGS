@@ -1,0 +1,1788 @@
+
+hold/player_interaction.c,97
+makeplayerthreads 22,459
+handle_player 67,1568
+list_hardware 779,25561
+buyhardware 786,25690
+
+hold/planet.h,86
+#define PLANET_H_60,1562
+#define RAND_MAX 65,1621
+#define MAX_SAFE_PLANETS 68,1648
+
+hold/shipinfo.c,52
+saveshiptypeinfo 12,182
+init_shiptypeinfo 54,1969
+
+hold/client.c,1495
+static char CVS_REVISION[CVS_REVISION29,609
+static char LAST_MODIFIED[LAST_MODIFIED30,663
+int MAXWARPS 31,729
+int MAX_PLANETS 32,750
+static struct termios orig,35,810
+static struct termios orig, new;35,810
+static int peek 36,843
+main 40,871
+printwelcome 327,8288
+fedcommlink 340,8609
+whosplaying 357,8999
+debugmode 402,10187
+getintstuff 442,11194
+junkline 455,11334
+printhelp 470,11468
+dogameinfo 544,15128
+getmyinfo 625,17638
+printmyinfo 697,20458
+psinfo 756,22664
+getsectorinfo 862,25706
+printsector 1093,32531
+clearplayer 1201,35658
+newfree 1213,35901
+print_stardock_help 1220,35969
+print_node_help 1250,37331
+print_shipyard_help 1283,38799
+print_bank_help 1309,39918
+do_stardock_menu 1330,40718
+do_node_menu 1375,41584
+do_planet_select 1424,42519
+do_citadel_menu 1460,43401
+treasury 1552,45455
+do_planet_menu 1578,46246
+citadelupgrade 1659,47943
+change_stuff 1827,53139
+getplanetinfo 1921,55569
+do_planet_display 1985,57625
+print_citadel_help 2119,62668
+print_planet_help 2166,64706
+do_noderelay_menu 2199,66250
+do_shipyard_menu 2283,68124
+buyship 2322,68761
+dlen 2540,74339
+slen 2549,74501
+spaces 2580,75064
+do_bank_menu 2595,75350
+do_ship_upgrade 2687,77699
+doporting 2820,81542
+movesector 3071,89609
+prompttype 3277,95062
+dogenesis 3385,97771
+dologin 3419,98798
+getyes 3531,101750
+getmessages 3544,101965
+init_nowait_io 3607,103627
+done_nowait_io 3621,103851
+kbhit 3629,103941
+readch 3652,104229
+get_invis_password 3671,104497
+
+hold/parse.c,69
+addstring 27,880
+addint 47,1277
+popstring 67,1666
+popint 97,2391
+
+hold/server_loop.c,1404
+#define LISTEN_PORT 25,484
+#define BUF_SIZE 26,509
+#define RULE_REFUSE(27,534
+#define RULE_ERROR(30,692
+  int fd;36,840
+  volatile sig_atomic_t *running;running37,850
+  struct sockaddr_in peer;38,884
+  uint64_t cid;39,911
+  int player_id;40,927
+  int sector_id;41,944
+  time_t rl_window_start;44,995
+  int rl_count;45,1063
+  int rl_limit;46,1117
+  int rl_window_sec;47,1166
+} client_ctx_t;48,1219
+static _Atomic uint64_t g_conn_seq 50,1236
+static _Atomic uint64_t g_msg_seq 52,1333
+static __thread client_ctx_t *g_ctx_for_send g_ctx_for_send53,1372
+make_session_hello_payload 79,2529
+resolve_current_sector_from_info 95,3034
+fnv1a64 130,3909
+hex64 142,4122
+idemp_fingerprint_json 155,4396
+set_reuseaddr 173,4753
+make_listen_socket 180,4879
+send_all 218,5565
+iso8601_utc 240,6010
+next_msg_id 250,6217
+make_base_envelope 258,6412
+send_enveloped_refused 281,7003
+send_enveloped_ok 307,7882
+send_enveloped_error 332,8825
+send_all_json 364,9765
+send_error_json 376,9979
+send_ok_json 387,10293
+build_trade_buy_fp_obj 401,10642
+validate_warp_rule 431,11729
+player_credits 443,12162
+cargo_space_free 449,12224
+port_is_open 455,12286
+validate_trade_buy_rule 461,12389
+rl_tick 486,13184
+rl_build_meta 509,13623
+attach_rate_limit_meta 526,14098
+process_message 655,18362
+connection_thread 1445,41225
+server_loop 1536,43189
+static void handle_sector_info 1627,45329
+
+hold/universe.h,4726
+#define UNIVERSE_H2,19
+#define NUMBER_OF_PLANET_TYPES 8,102
+#define MAX_CITADEL_LEVEL 9,135
+#define S_INTRANSIT 12,190
+#define S_PORTED 13,212
+#define S_STARDOCK 14,231
+#define S_NODE 15,252
+#define S_PLANET 16,269
+#define S_CITADEL 17,289
+#define S_MAX 18,310
+#define P_LOGGEDIN 20,354
+#define P_STARDOCK 21,375
+#define P_COMMISIONED 22,396
+#define P_MAX 23,420
+struct port25,437
+  int number;27,451
+  char *name;name28,465
+  int location;29,521
+  int size;30,537
+  int techlevel;31,549
+  int maxproduct[maxproduct32,566
+  int product[product33,629
+  unsigned long credits;34,664
+  int type;35,689
+  unsigned short invisible;36,701
+struct player56,969
+  int number;58,985
+  char *name;name59,999
+  char *passwd;passwd60,1013
+  int sector;61,1029
+  int ship;62,1088
+  int experience;63,1152
+  int alignment;64,1170
+  int turns;65,1187
+  long credits;66,1200
+  long bank_balance;67,1216
+  int flags;68,1237
+  int lastprice;69,1250
+  int firstprice;70,1304
+  int integrity;71,1359
+  int login_time;72,1376
+  int last_update;73,1394
+  unsigned short intransit;74,1413
+  long beginmove;75,1469
+  int movingto;76,1531
+  unsigned short loggedin;77,1591
+  int lastplanet;78,1648
+  int score;79,1720
+  int kills;80,1733
+  int cloaked;81,1746
+  int remote;82,1761
+  long int fighters;83,1775
+  long int holds;84,1796
+  struct realtimemessage *messages;messages85,1814
+  struct player *nextplayer;nextplayer86,1880
+struct realtimemessage89,1913
+  struct realtimemessage *nextmessage;nextmessage91,1938
+  char *message;message92,1977
+struct ship96,2041
+  int number;98,2055
+  char *name;name99,2069
+  int type;100,2083
+  int attack;101,2131
+  int holds_used;102,2145
+  int mines;103,2163
+  int fighters_used;104,2176
+  int genesis;105,2197
+  int photons;106,2212
+  int location;107,2227
+  int fighters;108,2243
+  int shields;109,2259
+  int holds;110,2274
+  int colonists;111,2287
+  int equipment;112,2304
+  int organics;113,2321
+  int ore;114,2337
+  int owner;115,2388
+  int flags;116,2401
+  int ported;117,2414
+  int onplanet;118,2428
+enum planettype121,2448
+  TERRA,123,2466
+  M,127,2571
+  L,130,2609
+  O,133,2661
+  K,136,2709
+  H,139,2769
+  U,142,2821
+  C	145,2874
+struct planetType_struct148,2904
+  char *typeDescription;typeDescription150,2931
+  char *typeClass;typeClass151,2956
+  char *typeName;typeName152,2975
+  int citadelUpgradeTime[citadelUpgradeTime153,2993
+  int citadelUpgradeOre[citadelUpgradeOre154,3038
+  int citadelUpgradeOrganics[citadelUpgradeOrganics155,3082
+  int citadelUpgradeEquipment[citadelUpgradeEquipment156,3131
+  int citadelUpgradeColonist[citadelUpgradeColonist157,3181
+  int maxColonist[maxColonist158,3230
+  int fighters;159,3293
+  int fuelProduction;160,3309
+  int organicsProduction;161,3331
+  int equipmentProduction;162,3357
+  int fighterProduction;163,3384
+  int maxore;164,3409
+  int maxorganics;165,3423
+  int maxequipment;166,3442
+  int maxfighters;167,3462
+  float breeding;168,3481
+typedef struct planetType_struct planetClass;171,3503
+struct planet173,3550
+  int num;175,3566
+  int sector;176,3577
+  char *name;name177,3591
+  int owner;178,3605
+  unsigned long int population;179,3618
+  unsigned long int minerals;180,3650
+  unsigned long int ore;181,3680
+  unsigned long int energy;182,3705
+  enum planettype type;183,3733
+  char *creator;creator184,3757
+  int fuelColonist;185,3774
+  int organicsColonist;186,3855
+  int equipmentColonist;187,3912
+  int fuel;188,3969
+  int organics;189,4020
+  int equipment;190,4036
+  int fighters;191,4053
+  planetClass *pClass;pClass192,4069
+  struct citadel *citdl;citdl193,4092
+struct citadel196,4121
+  int level;198,4138
+  unsigned long treasury;199,4151
+  int militaryReactionLevel;200,4177
+  int qCannonAtmosphere;201,4236
+  int qCannonSector;202,4315
+  int planetaryShields;203,4387
+  int transporterlvl;204,4446
+  int interdictor;205,4468
+  float upgradePercent;206,4487
+  int upgradestart;207,4548
+  int owner;208,4568
+  int shields;209,4581
+  int torps;210,4596
+  int fighters;211,4609
+  int qtorps;212,4625
+  int qcannon;213,4639
+  int qcannontype;214,4654
+  int qtorpstype;215,4673
+  int military;216,4691
+struct sector220,4754
+  int number;222,4770
+  struct sector *sectorptr[sectorptr223,4817
+  char *beacontext;beacontext224,4906
+  char *nebulae;nebulae225,4979
+  struct list *playerlist[playerlist226,5045
+  struct list *shiplist[shiplist227,5115
+  struct port *portptr;portptr228,5189
+  struct list *planets;planets229,5251
+struct node232,5323
+  int number;234,5337
+  struct port *portptr;portptr235,5351
+  int min;236,5375
+  int max;237,5386
+
+hold/serveractions.h,30
+#define SERVER_ACTIONS_H2,25
+
+hold/serveractions.c,928
+send_json_response 74,2432
+processcommand 455,15561
+builddescription 824,25927
+bank_deposit 1039,32810
+bank_balance 1061,33323
+bank_withdrawl 1070,33496
+whosonline 1090,33948
+intransit 1111,34287
+findautoroute 1175,35816
+saveplayer 1302,39057
+saveship 1393,41760
+saveallports 1474,44423
+planettake 1522,46212
+planetleave 1695,50829
+planetupgrade 1861,55461
+buildgameinfo 1935,57669
+buildtotalinfo 2005,59786
+sellship 2093,62624
+priceship 2123,63408
+listships 2178,65161
+buyship 2189,65427
+do_ship_upgrade 2281,67876
+trading 2438,72322
+buildnewplanet 2759,80942
+buildnewplayer 2851,84137
+move_player 2911,85800
+fedcommlink 3013,88980
+sendtoallonline 3036,89539
+addmessage 3051,89790
+sendtosector 3078,90585
+innode 3121,91567
+listnodes 3144,91954
+nodetravel 3160,92299
+buildplayerinfo_json 3195,93073
+buildshipinfo_json 3211,93710
+buildportinfo_json 3230,94511
+totalplanetinfo_json 3240,94796
+
+hold/server_warp_post_processing.c,111
+static int get_high_degree_sector(19,595
+static int get_tunnel_end(49,1720
+int create_complex_warps(86,3426
+
+hold/boxmuller.c,19
+box_muller 29,694
+
+hold/universe.c,178
+init_universe 58,1517
+init_playerinfo 183,5401
+init_shipinfo 297,8829
+init_portinfo 372,10809
+init_nodes 442,13028
+verify_universe 488,14293
+verify_sector_links 507,14595
+
+hold/planet.c,118
+saveplanets 22,463
+init_planets 82,2800
+insert_planet 165,5796
+save_planetinfo 200,6554
+init_planetinfo 290,9675
+
+hold/player_interaction.h,237
+#define PLAYER_INTERACTION_H3,30
+struct connectinfo10,126
+  int sockid;12,147
+  int msgidin;13,161
+  int msgidout;14,176
+struct hardware24,474
+  int id;26,492
+  const char *name;name27,502
+  int price;28,522
+  int size;29,535
+
+hold/client.h,1897
+#define CLIENT_H2,17
+char porttypes[porttypes9,121
+enum prompts16,442
+  command,18,457
+  computer,19,468
+  quit,20,480
+  pt_port,21,488
+  autopilot,22,499
+  move,23,512
+  pl_menu,24,520
+  pl_lmenu,25,531
+  pl_cmenu,26,543
+  debug27,555
+struct sector30,567
+  int number;32,583
+  int warps[warps33,597
+  char *beacontext;beacontext34,632
+  char *nebulae;nebulae35,652
+  struct player *players;players36,669
+  struct port *ports;ports37,695
+  struct planet *planets;planets38,717
+  struct ship *ships;ships39,743
+struct player42,769
+  int number;44,785
+  char *name;name45,799
+  int shipnumb;46,813
+  unsigned long exper;47,829
+  long align;48,852
+  int turns;49,866
+  int credits;50,879
+  int rank;51,894
+  char *title;title52,906
+  struct player *next;next53,921
+  struct ship *pship;pship54,944
+  int blownup;55,966
+struct ship59,986
+  int number;61,1000
+  char *name;name62,1014
+  char *type;type63,1028
+  int fighters;64,1042
+  int shields;65,1058
+  int holds;66,1073
+  int colonists;67,1086
+  int equipment;68,1103
+  int organics;69,1120
+  int ore;70,1136
+  int ownedby;71,1147
+  int location;72,1162
+  int turnsperwarp;73,1178
+  struct ship *next;next74,1198
+  int ported;75,1219
+  int emptyholds;76,1233
+  int kills;77,1251
+struct port80,1268
+  char *name;name82,1282
+  int type;83,1296
+  int maxproduct[maxproduct84,1308
+  int product[product85,1329
+  int credits;86,1347
+struct planet89,1366
+  int number;91,1382
+  char *name;name92,1396
+  char *type;type93,1410
+  struct planet *next;next94,1424
+  int credits;95,1447
+  int mrl;96,1462
+  int colonists;97,1473
+  int ore;98,1490
+  int organics;99,1501
+  int equipment;100,1517
+  int fighters;101,1534
+  int level;102,1550
+  int qsect;103,1563
+  int qatmos;104,1576
+  int shields;105,1590
+  int transporter;106,1605
+  int interdictor;107,1624
+
+hold/server_cmds.c,57
+ct_str_eq 8,201
+play_login 27,837
+user_create 74,2058
+
+hold/bigbang.c,879
+#define MAXTUNLEN	13,240
+int maxTunnel 14,261
+#define NUMSECTORS	18,393
+int numSectors 19,417
+#define NUMPORTS	22,483
+int numPorts 23,505
+#define MAXJUMPPERCENT	26,612
+int percentJump 28,661
+#define ONEWAYJUMPPERCENT	31,757
+int percentDeadend 32,785
+#define DEADENDPERCENT	35,884
+int percentOneway 36,911
+#define NUMNODES 39,1016
+int numNodes 40,1035
+int strNameLength 43,1115
+int numRandomPlanets 45,1140
+int maxWarps 48,1235
+const int fedspace[fedspace52,1351
+struct sector **sectorlist;sectorlist66,1610
+struct sector **bigsectorlist;bigsectorlist67,1638
+struct port **portlist;portlist71,1775
+int *randsectornum;randsectornum73,1840
+main 94,2436
+compsec 639,18900
+randjump 652,19160
+randomnum 687,19933
+secjump 695,20068
+freewarp 703,20199
+warpsfull 715,20360
+innode 723,20449
+numwarps 746,20872
+sectorsort 755,20981
+makeports 805,22132
+
+hold/parse.h,23
+#define PARSE_H22,812
+
+hold/test_client.c,13
+main 30,941
+
+hold/hardware.h,25
+#define _HARDWARE_H2,20
+
+hold/shipinfo.h,653
+#define SHIP_INFO_H2,20
+#define SHIP_TYPE_COUNT 4,41
+#define MAX_SHIP_NAME_LENGTH 5,68
+#define S_LANDED 6,100
+struct sp_shipinfo9,121
+  char name[name11,142
+  int basecost;12,177
+  int maxattack;13,193
+  int initialholds;14,210
+  int hull;15,230
+  int fuel;16,242
+  int torps;17,254
+  int maxholds;18,267
+  int maxfighters;19,283
+  int turns;20,302
+  int mines;21,315
+  int genesis;22,328
+  unsigned short twarp;23,343
+  int transportrange;24,367
+  int maxshields;25,389
+  int offense;26,407
+  int defense;27,469
+  int beacons;28,531
+  unsigned short holo;29,546
+  unsigned short planet;30,569
+  unsigned short photons;31,594
+
+hold/maint.h,23
+#define MAINT_H21,754
+
+hold/server_bigbang.c,1709
+#define MIN_TUNNELS_TARGET 18,390
+#define MIN_TUNNEL_LEN 19,460
+#define TUNNEL_REFILL_MAX_ATTEMPTS 20,534
+#define DEF_PORT_SIZE 23,671
+#define DEF_PORT_TECHLEVEL 24,704
+#define DEF_PORT_MAX_ORE 25,737
+#define DEF_PORT_MAX_ORG 26,774
+#define DEF_PORT_MAX_EQU 27,811
+#define DEF_PORT_PROD_ORE 28,848
+#define DEF_PORT_PROD_ORG 29,884
+#define DEF_PORT_PROD_EQU 30,920
+#define DEF_PORT_CREDITS 31,956
+static const char *SQL_INSERT_WARP SQL_INSERT_WARP37,1120
+static const char *SQL_INSERT_USED_SECTOR SQL_INSERT_USED_SECTOR40,1234
+  int from;56,1820
+  int to;57,1832
+} Warp;58,1842
+prune_tunnel_edges 65,2005
+insert_warp_unique 84,2528
+sector_degree 114,3331
+get_sector_count 130,3738
+is_sector_used 147,4118
+create_random_warps 167,4644
+ensure_sector_exits 239,6308
+bigbang_create_tunnels 325,8439
+create_sectors 470,12080
+trade_code_for_type 573,14550
+random_port_type_1_to_8 599,14908
+seed_port_trade_rows 605,14983
+bigbang 617,15240
+has_warp 748,18351
+sector_degree_in_memory 762,18626
+sw_add_edge 780,18928
+pick_sector_in_range 800,19478
+count_edges 829,20089
+insert_bidirectional 853,20574
+get_sector_degree_count 892,21438
+sw_has_edge 914,22037
+create_full_port 942,22855
+get_npc_shiptype_id_by_name 1010,24999
+get_purchasable_shiptype_id_by_name 1040,25792
+get_out_degree 1071,26623
+create_planets 1101,27295
+create_ports 1107,27338
+create_ferringhi 1279,32347
+create_imperial 1664,46345
+prepare_first_ok 1748,49085
+sector_exists 1761,49390
+rand_incl 1785,49856
+ensure_fedspace_exit 1795,50102
+has_column 1903,53206
+create_derelicts 1929,53755
+#define MIN_FILL_PCT 2104,59408
+#define MAX_FILL_PCT 2105,59432
+ensure_all_sectors_have_exits 2249,63879
+
+hold/maint.c,59
+time_t *timeptr;timeptr46,1349
+background_maint 49,1374
+
+hold/server.c,277
+process_commands 165,5079
+main 190,5515
+quit_handler 422,11430
+loadconfig 429,11539
+initconfig 441,11791
+loadshiptypeinfo 470,12693
+loadallports 490,13185
+loadplanets 509,13643
+loadnodes 528,14106
+load_planetinfo 536,14315
+loadplayers 555,14776
+loadships 574,15239
+
+config.h,1020
+#define HAVE_CTYPE_H 5,181
+#define HAVE_ERRNO_H 8,262
+#define HAVE_INTTYPES_H 11,346
+#define HAVE_LIBM 14,426
+#define HAVE_LIBPTHREAD 17,512
+#define HAVE_MATH_H 20,595
+#define HAVE_NETDB_H 23,675
+#define HAVE_NETINET_IN_H 26,761
+#define HAVE_PTHREAD_H 29,849
+#define HAVE_STDINT_H 32,933
+#define HAVE_STDIO_H 35,1015
+#define HAVE_STDLIB_H 38,1097
+#define HAVE_STRINGS_H 41,1181
+#define HAVE_STRING_H 44,1265
+#define HAVE_SYS_IPC_H 47,1349
+#define HAVE_SYS_MSG_H 50,1434
+#define HAVE_SYS_POLL_H 53,1520
+#define HAVE_SYS_SOCKET_H 56,1609
+#define HAVE_SYS_STAT_H 59,1698
+#define HAVE_SYS_TIME_H 62,1785
+#define HAVE_SYS_TYPES_H 65,1873
+#define HAVE_TERMIOS_H 68,1960
+#define HAVE_TIME_H 71,2042
+#define HAVE_UNISTD_H 74,2123
+#define PACKAGE 77,2170
+#define PACKAGE_BUGREPORT 80,2276
+#define PACKAGE_NAME 83,2353
+#define PACKAGE_STRING 86,2444
+#define PACKAGE_TARNAME 89,2543
+#define PACKAGE_URL 92,2626
+#define PACKAGE_VERSION 95,2695
+#define STDC_HEADERS 100,2930
+#define VERSION 103,2986
+
+src/msgqueue.c,126
+init_msgqueue 8,167
+clean_msgqueues 20,375
+getmsg 52,1173
+sendmesg 89,2418
+getdata_json 126,3368
+senddata_json 152,3865
+
+src/sysop_interaction.h,33
+#define SYSOP_INTERACTION_H3,29
+
+src/s2s_keyring.c,108
+b64_compact 9,160
+b64_decode_strict 19,380
+s2s_load_default_key 43,981
+s2s_install_default_key 113,2940
+
+src/hashtable.h,26
+#define HASH_TABLE_H2,21
+
+src/server_bulk.c,23
+cmd_bulk_execute 6,60
+
+src/server_ships.c,306
+#define ERR_NOT_IMPLEMENTED 31,650
+cmd_ship_transfer_cargo 43,1023
+cmd_ship_jettison 49,1137
+cmd_ship_upgrade 55,1239
+cmd_ship_repair 61,1339
+mark_deprecated 68,1446
+cmd_ship_inspect 85,1733
+cmd_ship_rename 124,2722
+cmd_ship_claim 169,4026
+cmd_ship_status 220,5301
+cmd_ship_info_compat 254,6327
+
+src/server_planets.c,245
+cmd_planet_genesis 7,99
+cmd_planet_info 13,203
+cmd_planet_rename 19,301
+cmd_planet_land 25,403
+cmd_planet_launch 31,501
+cmd_planet_transfer_ownership 37,603
+cmd_planet_harvest 43,729
+cmd_planet_deposit 49,833
+cmd_planet_withdraw 55,937
+
+src/server_universe.h,881
+#define SERVER_UNIVERSE_H2,26
+#define MAX_CITADEL_LEVEL 26,793
+struct planetType_struct28,822
+  char *typeDescription;typeDescription30,849
+  char *typeClass;typeClass31,874
+  char *typeName;typeName32,893
+  int citadelUpgradeTime[citadelUpgradeTime33,911
+  int citadelUpgradeOre[citadelUpgradeOre34,956
+  int citadelUpgradeOrganics[citadelUpgradeOrganics35,1000
+  int citadelUpgradeEquipment[citadelUpgradeEquipment36,1049
+  int citadelUpgradeColonist[citadelUpgradeColonist37,1099
+  int maxColonist[maxColonist38,1148
+  int fighters;39,1211
+  int fuelProduction;40,1227
+  int organicsProduction;41,1249
+  int equipmentProduction;42,1275
+  int fighterProduction;43,1302
+  int maxore;44,1327
+  int maxorganics;45,1341
+  int maxequipment;46,1360
+  int maxfighters;47,1380
+  float breeding;48,1399
+typedef struct planetType_struct planetClass;51,1421
+
+src/server_communication.h,184
+#define SERVER_COMMUNICATION_H2,31
+    COMM_SCOPE_GLOBAL 46,1684
+    COMM_SCOPE_SECTOR,47,1741
+    COMM_SCOPE_CORP,48,1794
+    COMM_SCOPE_PLAYER	49,1845
+  } comm_scope_t;50,1897
+
+src/server_auth.h,27
+#define SERVER_AUTH_H2,22
+
+src/server_combat.h,29
+#define SERVER_COMBAT_H2,24
+
+src/server_cmds.h,599
+#define SERVER_CMDS_H2,22
+    AUTH_OK 15,288
+    AUTH_ERR_BAD_REQUEST 16,305
+    AUTH_ERR_INVALID_CRED 17,370
+    AUTH_ERR_NAME_TAKEN 18,430
+    AUTH_ERR_DB 19,492
+  { DEC_OK 33,942
+  { DEC_OK = 0, DEC_REFUSED 33,942
+  { DEC_OK = 0, DEC_REFUSED = 1, DEC_ERROR 33,942
+  { DEC_OK = 0, DEC_REFUSED = 1, DEC_ERROR = 2 } decision_status_t;33,942
+    decision_status_t status;37,1032
+    int code;38,1062
+    const char *message;message39,1102
+  } decision_t;40,1143
+  static inline decision_t ok 42,1160
+  static inline decision_t refused 48,1257
+  static inline decision_t err 54,1383
+
+src/server_players.c,715
+cmd_player_my_info 29,1081
+cmd_player_list_online 49,1565
+cmd_player_set_settings 67,2236
+cmd_player_get_settings(73,2350
+cmd_player_set_prefs 87,2866
+cmd_player_get_prefs(93,2974
+cmd_player_set_topics 110,3541
+cmd_player_get_topics(116,3651
+cmd_player_set_bookmarks 133,4238
+cmd_player_get_bookmarks(139,4354
+cmd_player_set_avoids 156,4954
+cmd_player_get_avoids(162,5064
+cmd_player_get_notes(179,5634
+static int _include_wanted(195,6243
+players_build_settings(207,6651
+static json_t* players_get_prefs(235,7672
+static json_t* players_get_subscriptions(246,8100
+static json_t* players_list_bookmarks(260,8570
+static json_t* players_list_avoid(265,8668
+static json_t* players_list_notes(270,8762
+
+src/server_rules.h,51
+#define SERVER_RULES_H2,23
+#define STUB_NIY(5,76
+
+src/s2s_transport.c,790
+set_nodelay 24,455
+set_nodelay 31,578
+struct s2s_conn39,637
+  int fd;41,655
+  s2s_role_t role;42,665
+  uint64_t sent_ok,48,734
+  uint64_t sent_ok, recv_ok,48,734
+  uint64_t sent_ok, recv_ok, auth_fail,48,734
+  uint64_t sent_ok, recv_ok, auth_fail, toolarge;48,734
+} g_ctr;49,784
+s2s_get_counters 52,799
+static s2s_key_t g_keys[g_keys65,1031
+static size_t g_key_count 66,1059
+s2s_debug_dump_conn 72,1139
+s2s_set_keyring 93,1774
+find_key 107,2018
+set_cloexec 120,2369
+poll_wait 126,2448
+read_n 148,2886
+write_n 172,3335
+hmac_sha256_hex 195,3807
+s2s_tcp_server_listen 214,4361
+s2s_tcp_server_accept 238,5027
+s2s_tcp_client_connect 257,5481
+s2s_close 290,6286
+ensure_hmac_on_send 304,6513
+verify_hmac_on_recv 333,7301
+s2s_send_json 370,8319
+s2s_recv_json 407,9127
+
+src/ansi.h,699
+#define _ANSI_H7,141
+#define KNRM 9,158
+#define KBLD 10,181
+#define KRVS 11,206
+#define KRED 12,229
+#define KGRN 13,255
+#define KYLW 14,281
+#define KBLU 15,307
+#define KMAG 16,333
+#define KCYN 17,359
+#define KGRY 18,385
+#define KLTRED 20,411
+#define KLTGRN 21,439
+#define KLTYLW 22,467
+#define KLTBLU 23,495
+#define KLTMAG 24,523
+#define KLTCYN 25,551
+#define KBRED 27,580
+#define KBGRN 28,607
+#define KBYLW 29,634
+#define KBBLU 30,661
+#define KBMAG 31,688
+#define KBCYN 32,715
+#define KBWHT 33,742
+#define KBGRY 34,769
+#define KFRED 36,797
+#define KFGRN 37,822
+#define KFYLW 38,847
+#define KFBLU 39,872
+#define KFMAG 40,897
+#define KFCYN 41,922
+#define KFWHT 42,947
+
+src/server_citadel.c,86
+niy 9,201
+require_auth 18,467
+cmd_citadel_build 28,692
+cmd_citadel_upgrade 39,954
+
+src/engine_main.c,452
+static eng_consumer_cfg_t G_CFG 30,580
+engine_tick 38,772
+engine_build_command_push 52,1133
+engine_demo_push 78,1836
+engine_send_notice_publish 128,3206
+log_s2s_metrics 165,4254
+engine_s2s_drain_once 176,4586
+send_all 227,6177
+send_cstr 248,6652
+recv_line 259,6998
+#define GAME_TICK_INTERVAL_SEC 310,7780
+s2s_connect_4321 316,7883
+engine_main_loop 335,8346
+engine_spawn 450,11561
+engine_request_shutdown 498,12454
+engine_wait 507,12643
+
+src/server_communication.c,1299
+static const char *ALLOWED_TOPICS[ALLOWED_TOPICS10,259
+typedef struct sub_node20,591
+  char *topic;topic22,617
+  struct sub_node *next;next23,632
+} sub_node_t;24,657
+typedef struct sub_map26,672
+  client_ctx_t *ctx;ctx28,697
+  sub_node_t *head;head29,718
+  struct sub_map *next;next30,738
+} sub_map_t;31,762
+static sub_map_t *g_submaps g_submaps34,777
+submap_get 39,876
+matches_pattern 57,1245
+is_valid_topic 68,1553
+comm_broadcast_message 82,1813
+comm_publish_sector_event 185,4322
+broadcast_system_notice 254,6309
+push_unseen_notices_for_player 303,7592
+cmd_admin_notice_create 367,9598
+cmd_notice_dismiss 410,10840
+require_auth 450,11848
+niy 459,12045
+cmd_chat_send 469,12302
+cmd_chat_broadcast 478,12496
+cmd_chat_history 487,12693
+cmd_mail_send 498,12962
+cmd_mail_inbox 507,13160
+cmd_mail_read 516,13346
+cmd_mail_delete 525,13540
+sub_contains 539,13795
+sub_add 548,13975
+sub_remove 567,14360
+static const char *ALLOWED_TOPICS[ALLOWED_TOPICS588,14886
+comm_clear_subscriptions 605,15229
+cmd_subscribe_add 631,15653
+cmd_subscribe_remove 675,16788
+cmd_subscribe_list 701,17475
+require_admin 728,18147
+cmd_admin_notice 738,18395
+cmd_admin_shutdown_warning 747,18594
+topic_desc 759,18903
+catalog_topics_json 779,19645
+cmd_subscribe_catalog 830,20908
+
+src/globals.c,1161
+char good_ranks[good_ranks12,265
+char evil_ranks[evil_ranks21,673
+char *nameCollection[nameCollection30,1067
+char *firstSyllable[firstSyllable111,6132
+char *middleSyllable[middleSyllable124,6897
+char *lastSyllable[lastSyllable133,7352
+int threadid 150,8293
+int client_sock;151,8311
+int threadcount 152,8328
+int msgidin;153,8349
+int msgidout;154,8362
+int shutdown_flag 155,8376
+time_t next_process 156,8399
+int sectorcount;157,8424
+int WARP_WAIT;158,8441
+struct timeval begin,159,8456
+struct timeval begin, end,159,8456
+struct timeval begin, end, t;159,8456
+struct list *symbols[symbols163,8538
+struct player **players;players164,8573
+struct ship **ships;ships165,8598
+struct planet **planets;planets166,8619
+struct port **ports;ports167,8644
+struct sector **sectors;sectors168,8665
+struct config *configdata;configdata169,8690
+struct sp_shipinfo **shiptypes;shiptypes170,8717
+planetClass **planetTypes;planetTypes171,8749
+struct node **nodes;nodes172,8776
+const char portconversion[portconversion175,8799
+const float sell_base_prices[sell_base_prices189,8938
+const float buy_base_prices[buy_base_prices190,8993
+
+src/engine_main.h,27
+#define ENGINE_MAIN_H3,41
+
+src/test_bang.c,53
+dump_sectors 7,103
+dump_warps 32,702
+main 57,1290
+
+src/msgqueue.h,2314
+#define MSG_QUEUE_H2,20
+enum commandtype16,230
+  pl_display,18,249
+  pl_ownership,19,263
+  pl_destroy,20,279
+  pl_take,21,293
+  pl_leave,22,304
+  pl_citadel,23,316
+  pl_rest,24,330
+  pl_militarylvl,25,341
+  pl_qcannon,26,359
+  pl_evict,27,373
+  pl_swap,28,385
+  pl_upgrade,29,396
+  pl_cquit,30,410
+  pl_quit,31,422
+  ct_leave,32,433
+  ct_buy,33,445
+  ct_sell,34,455
+  ct_buy_hardware,35,466
+  ct_sellship,36,485
+  ct_buyship,37,500
+  ct_whosonline,38,514
+  ct_list_hardware,39,531
+  ct_quit,40,551
+  ct_describe,41,562
+  ct_move,42,577
+  ct_login,43,588
+  ct_newplayer,44,600
+  ct_logout,45,616
+  ct_playerinfo,46,629
+  ct_shipinfo,47,646
+  ct_port,48,661
+  ct_info,49,672
+  ct_portinfo,50,683
+  ct_gameinfo,51,698
+  ct_update,52,713
+  ct_fedcomm,53,726
+  ct_online,54,740
+  ct_stardock,55,753
+  ct_node,56,768
+  ct_planet,57,779
+  ct_onplanet,58,792
+  ct_land,59,807
+  ct_scan,60,818
+  ct_beacon,61,829
+  ct_tow,62,842
+  ct_listnav,63,852
+  ct_transporter,64,866
+  ct_genesis,65,884
+  ct_jettison,66,898
+  ct_interdict,67,913
+  ct_attack,68,929
+  ct_etherprobe,69,942
+  ct_fighters,70,959
+  ct_listfighters,71,974
+  ct_mines,72,993
+  ct_listmines,73,1005
+  ct_portconstruction,74,1021
+  ct_setnavs,75,1044
+  ct_gamestatus,76,1058
+  ct_hail,77,1075
+  ct_subspace,78,1086
+  ct_listwarps,79,1101
+  ct_cim,80,1117
+  ct_avoid,81,1127
+  ct_listavoids,82,1139
+  ct_selfdestruct,83,1156
+  ct_listsettings,84,1175
+  ct_updatesettings,85,1194
+  ct_dailyannouncement,86,1215
+  ct_firephoton,87,1239
+  ct_readmail,88,1256
+  ct_sendmail,89,1271
+  ct_shiptime,90,1286
+  ct_usedisruptor,91,1301
+  ct_dailylog,92,1320
+  ct_alienranks,93,1335
+  ct_listplayers,94,1352
+  ct_listplanets,95,1370
+  ct_listships,96,1388
+  ct_listcorps,97,1404
+  ct_joincorp,98,1420
+  ct_makecorp,99,1435
+  ct_credittransfer,100,1450
+  ct_fightertransfer,101,1471
+  ct_minetransfer,102,1493
+  ct_shieldtransfer,103,1512
+  ct_quitcorp,104,1533
+  ct_listcorpplanets,105,1548
+  ct_showassets,106,1570
+  ct_corpmemo,107,1587
+  ct_dropmember,108,1602
+  ct_corppassword,109,1619
+struct msgcommand114,1644
+  int command;116,1664
+  char argument_string[argument_string117,1679
+struct json_msgbuffer122,1801
+  long mtype;124,1825
+  char buffer[buffer125,1839
+
+src/server_loop.c,709
+#define streq(39,930
+#define LISTEN_PORT 42,978
+#define BUF_SIZE 43,1003
+#define RULE_REFUSE(44,1028
+#define RULE_ERROR(47,1186
+static _Atomic uint64_t g_conn_seq 50,1316
+static _Atomic uint64_t g_msg_seq 52,1413
+static __thread client_ctx_t *g_ctx_for_send g_ctx_for_send53,1452
+static const cmd_desc_t k_supported_cmds_fallback[k_supported_cmds_fallback87,3165
+     loop_get_supported_commands 129,4577
+fnv1a64 145,4946
+hex64 157,5159
+idemp_fingerprint_json 170,5426
+set_reuseaddr 186,5781
+make_listen_socket 193,5907
+send_all 231,6593
+rl_tick 252,6955
+rl_build_meta 275,7394
+attach_rate_limit_meta 292,7862
+process_message 308,8218
+connection_thread 809,22835
+server_loop 900,24799
+
+src/server_config.h,1962
+#define SERVER_CONFIG_H2,24
+#define DEFAULT_DB_NAME 12,355
+#define TW_CMD_DESC_T_DEFINED18,479
+typedef struct cmd_desc_s19,509
+  const char *name;name21,537
+  const char *summary;summary22,578
+} cmd_desc_t;23,625
+  struct twconfig34,825
+    int turnsperday;36,847
+    int maxwarps_per_sector;37,868
+    int startingcredits;38,897
+    int startingfighters;39,922
+    int startingholds;40,948
+    int processinterval;41,971
+    int autosave;42,996
+    int max_players;43,1014
+    int max_ships;44,1035
+    int max_ports;45,1054
+    int max_planets_per_sector;46,1073
+    int max_total_planets;47,1105
+    int max_safe_planets;48,1132
+    int max_citadel_level;49,1158
+    int number_of_planet_types;50,1185
+    int max_ship_name_length;51,1217
+    int ship_type_count;52,1247
+    int hash_length;53,1272
+    int default_port;54,1293
+    int default_nodes;55,1315
+    int warps_per_sector;56,1338
+    int buff_size;57,1364
+    int max_name_length;58,1383
+    int planet_type_count;59,1408
+      int tick_ms;66,1479
+      int daily_align_sec;67,1498
+    } engine;68,1525
+      int event_batch;71,1556
+      int command_batch;72,1579
+      int broadcast_batch;73,1604
+    } batching;74,1631
+      int default_command_weight;77,1664
+      int default_event_weight;78,1698
+    } priorities;79,1730
+      char transport[transport82,1765
+      char uds_path[uds_path83,1810
+      char tcp_host[tcp_host84,1836
+      int tcp_port;85,1862
+      int frame_size_limit;86,1882
+    } s2s;87,1922
+      int connect_ms,90,1950
+      int connect_ms, handshake_ms,90,1950
+      int connect_ms, handshake_ms, rpc_ms;90,1950
+      int backoff_initial_ms,91,1994
+      int backoff_initial_ms, backoff_max_ms;91,1994
+      double backoff_factor;92,2040
+    } safety;93,2069
+      char key_id[key_id96,2100
+      unsigned char key[key97,2160
+      int key_len;98,2223
+    } secrets;99,2242
+  } server_config_t;100,2257
+
+src/s2s_transport.h,635
+#define S2S_TRANSPORT_H2,24
+#define S2S_MAX_FRAME 10,143
+#define S2S_DEFAULT_TIMEOUT_MS 11,208
+#define S2S_BACKOFF_MIN_MS 12,244
+#define S2S_BACKOFF_MAX_MS 13,279
+typedef struct s2s_conn s2s_conn_t;16,340
+  char key_id[key_id21,423
+  uint8_t key[key22,465
+  size_t key_len;23,506
+} s2s_key_t;24,553
+  S2S_OK 29,603
+  S2S_E_TIMEOUT 30,617
+  S2S_E_CLOSED 31,639
+  S2S_E_IO 32,660
+  S2S_E_TOOLARGE 33,677
+  S2S_E_BADJSON 34,700
+  S2S_E_AUTH_REQUIRED 35,722
+  S2S_E_AUTH_BAD 36,750
+{ S2S_ROLE_SERVER 41,811
+{ S2S_ROLE_SERVER = 1, S2S_ROLE_CLIENT 41,811
+{ S2S_ROLE_SERVER = 1, S2S_ROLE_CLIENT = 2 } s2s_role_t;41,811
+
+src/errors.h,629
+#define ERRORS_H2,17
+#define ERR_INVALID_SCHEMA 5,57
+#define ERR_BAD_REQUEST 6,93
+#define ERR_SCHEMA_NOT_FOUND 7,129
+#define ERR_DUPLICATE_REQUEST 8,165
+#define ERR_NOT_AUTHENTICATED 11,213
+#define ERR_INVALID_CREDENTIAL 12,287
+#define AUTH_ERR_IS_NPC	13,323
+#define REF_NO_WARP_LINK 16,383
+#define REF_SAFE_ZONE_DENY 17,433
+#define REF_NOT_ENOUGH_TURNS 18,483
+#define REF_NOT_ENOUGH_CREDITS 21,554
+#define REF_NOT_ENOUGH_HOLDS 22,604
+#define REF_PORT_CLOSED 23,654
+#define ERR_DB 26,718
+#define ERR_SERVICE_UNAVAILABLE 27,754
+#define ERR_NO_MEM 30,804
+#define ERR_BAD_STATE 31,841
+#define ERR_DATABASE	32,871
+
+src/namegen.h,23
+#define NAMEGEN_H2,18
+
+src/server_combat.c,182
+require_auth 9,200
+niy 18,397
+cmd_combat_attack 27,598
+cmd_combat_deploy_fighters 37,873
+cmd_combat_lay_mines 47,1156
+cmd_combat_sweep_mines 57,1410
+cmd_combat_status 67,1678
+
+src/common.h,1414
+#define START_FIGHTERS 30,590
+#define START_HOLDS 34,644
+#define PROCESS_INTERVAL 38,700
+#define AUTOSAVE 42,752
+#define MAX_SHIP_NAME 46,802
+#define SHIP_TYPES 50,854
+#define DEFAULT_NODES 54,906
+#define MAX_PLAYERS 60,971
+#define MAX_SHIPS 64,1021
+#define MAX_PORTS 68,1070
+#define MAX_TOTAL_PLANETS 72,1126
+#define MAX_WARPS_PER_SECTOR 76,1193
+#define DEFAULT_PORT 80,1253
+#define BUFF_SIZE 84,1305
+#define MAX_NAME_LENGTH 88,1360
+#define COMMON_H92,1412
+enum porttype109,1879
+  p_trade,111,1895
+  p_land,112,1906
+  p_upgrade,113,1916
+  p_negotiate,114,1929
+  p_rob,115,1944
+  p_smuggle,116,1953
+  p_attack,117,1966
+  p_quit,118,1978
+  p_buyship,119,1988
+  p_sellship,120,2001
+  p_priceship,121,2015
+  p_listships,122,2030
+  p_deposit,123,2045
+  p_withdraw,124,2058
+  p_balance,125,2072
+  p_buyhardware,126,2085
+  pn_listnodes,127,2102
+  pn_travel128,2118
+#define SHIPF_FOR_SALE 137,2210
+#define SHIPF_LOCKED 138,2282
+#define SHIPF_NO_TRADE 139,2370
+#define SHIPF_NPC 140,2442
+ship_has_flag 144,2556
+ship_set_flag 150,2645
+ship_clr_flag 156,2727
+  int fd;164,2810
+  volatile sig_atomic_t *running;running165,2820
+  struct sockaddr_in peer;166,2854
+  uint64_t cid;167,2881
+  int player_id;168,2897
+  int sector_id;169,2914
+  time_t rl_window_start;172,2965
+  int rl_count;173,3033
+  int rl_limit;174,3087
+  int rl_window_sec;175,3136
+} client_ctx_t;176,3189
+
+src/schemas.h,23
+#define SCHEMAS_H2,18
+
+src/server_loop.h,27
+#define SERVER_LOOP_H2,22
+
+src/server_warp_post_processing.c,85
+get_high_degree_sector 21,663
+get_tunnel_end 53,1536
+create_complex_warps 83,2416
+
+src/database.h,99
+#define DATABASE_H2,19
+typedef struct json_t json_t;16,350
+typedef struct json_t json_t;44,1112
+
+src/engine_consumer.h,338
+  int batch_size;8,101
+  int backlog_prio_threshold;9,168
+  const char *priority_types_csv;priority_types_csv10,246
+  const char *consumer_key;consumer_key11,328
+} eng_consumer_cfg_t;12,404
+  long long last_event_id;17,476
+  long long lag;18,551
+  int processed;19,617
+  int quarantined;20,683
+} eng_consumer_metrics_t;21,751
+
+src/namegen.c,44
+randomname 14,209
+consellationName 25,450
+
+src/config.h,891
+#define CONFIG_H22,813
+struct config29,912
+  int turnsperday;31,928
+  int maxwarps;32,979
+  int startingcredits;33,995
+  int startingfighters;34,1018
+  int startingholds;35,1042
+  int processinterval;36,1063
+  int autosave;37,1118
+  int max_players;38,1166
+  int max_ships;39,1185
+  int max_ports;40,1202
+  int max_planets;41,1219
+  int max_total_planets;42,1238
+  int max_safe_planets;43,1263
+  int max_citadel_level;44,1287
+  int number_of_planet_types;45,1312
+  int max_ship_name_length;46,1342
+  int ship_type_count;47,1370
+  unsigned long bangdate;48,1393
+  int numnodes;49,1419
+  int server_port;50,1435
+  int hash_length;51,1454
+  int default_port;52,1473
+  int default_nodes;53,1493
+  int warps_per_sector;54,1514
+  int buff_size;55,1538
+  int max_name_length;56,1555
+  int planet_type_count;57,1578
+static json_t *g_capabilities g_capabilities63,1675
+
+src/test_server.c,13
+main 29,918
+
+src/engine_consumer.c,244
+get_now_epoch 9,180
+csv_contains 15,241
+load_watermark 36,679
+save_watermark 64,1337
+fetch_max_event_id 84,1998
+quarantine 102,2412
+static const char *BASE_SELECT BASE_SELECT132,3762
+handle_event 145,4225
+engine_consume_tick 161,4721
+
+src/server_universe.c,617
+#define UNUSED(13,239
+#define SEARCH_DEFAULT_LIMIT 17,303
+#define SEARCH_MAX_LIMIT 18,335
+#define PORTS_HAVE_CLASS_TABLE 24,603
+make_player_object 35,848
+parse_sector_search_input 49,1259
+cmd_sector_search 131,3076
+cmd_move_autopilot_start 295,8268
+cmd_move_autopilot_stop 301,8376
+cmd_move_autopilot_status 307,8490
+universe_init 314,8609
+universe_shutdown 345,9279
+validate_warp_rule 355,9515
+cmd_move_describe_sector 369,9901
+cmd_move_warp 445,12122
+cmd_move_pathfind 524,15117
+cmd_sector_info 782,21217
+build_sector_info_json 856,23361
+cmd_move_scan 975,26935
+cmd_sector_set_beacon 1096,31182
+
+src/server_ships.h,63
+#define SERVER_SHIPS_H2,23
+  typedef struct ctx ctx_t;16,415
+
+src/hashtable.c,124
+hash 8,111
+init_hash_table 23,378
+find 33,536
+insert 71,1400
+delete 109,2387
+insertitem 167,3564
+deleteitem 204,4292
+
+src/server_auth.c,164
+cmd_auth_login 11,166
+cmd_auth_register 79,2122
+cmd_auth_logout 134,3669
+cmd_user_create 156,4313
+cmd_auth_refresh 199,5502
+cmd_auth_mfa_totp_verify 272,7317
+
+src/server_config.c,442
+server_config_t g_cfg;34,704
+sqlite3 *g_db g_db37,798
+set_defaults 42,899
+validate_cfg 75,1751
+print_effective_config_redacted 118,2915
+apply_db 152,4236
+apply_env 223,7056
+load_eng_config 228,7137
+resolve_current_sector_from_info 249,7586
+make_session_hello_payload 280,8394
+cmd_system_hello 306,9231
+handle_system_capabilities 316,9418
+cmd_session_ping 365,10811
+cmd_session_hello 378,11145
+cmd_session_disconnect 395,11705
+
+src/sysop_interaction.c,26
+getsysopcommands 32,1018
+
+src/server_bulk.h,27
+#define SERVER_BULK_H2,22
+
+src/server_cmds.c,57
+ct_str_eq 9,198
+play_login 25,630
+user_create 91,2365
+
+src/server_players.h,30
+#define SERVER_PLAYERS_H2,25
+
+src/server_envelope.c,861
+     void loop_get_supported_commands 23,565
+get_cmd_table 76,2254
+have_cmd 82,2376
+collect_schema_names 96,2631
+cmd_system_cmd_list 142,3727
+cmd_system_describe_schema 168,4526
+cmd_system_schema_list 208,5648
+cmd_system_capabilities 218,6007
+send_all 248,6779
+next_msg_id 273,7309
+iso8601_utc 298,7951
+make_base_envelope 307,8109
+send_all_json 339,8949
+send_error_json 352,9157
+send_ok_json 363,9464
+make_default_meta 376,9816
+send_enveloped_ok 390,10240
+send_enveloped_error 440,11543
+send_enveloped_refused 484,12826
+urand_bytes 534,14210
+gen_uuid_v4 556,14613
+borrow_or_empty_obj 583,15272
+s2s_make_env 596,15521
+s2s_make_ack 625,16191
+s2s_make_error 654,16795
+s2s_env_type 698,17803
+s2s_env_id 705,17953
+s2s_env_payload 713,18151
+dupmsg 725,18523
+s2s_env_validate_min 735,18660
+s2s_send_env 803,20179
+s2s_recv_env 810,20351
+
+src/server_envelope.h,31
+#define SERVER_ENVELOPE_H3,47
+
+src/types.h,237
+#define TYPES_H2,16
+#define HASH_LENGTH 4,33
+enum listtype6,58
+  player,8,74
+  planet,9,84
+  port,10,94
+  ship11,102
+struct list14,113
+  void *item;item16,127
+  enum listtype type;17,141
+  struct list *listptr;listptr18,163
+
+src/portinfo.h,25
+#define PORT_INFO_H2,20
+
+src/server_s2s.c,562
+handle_command_push 21,438
+handle_broadcast_sweep 61,1751
+handle_health_check 80,2342
+server_s2s_dispatch 100,2801
+  s2s_conn_t *conn;conn138,3857
+  volatile sig_atomic_t *running_flag;running_flag139,3877
+} s2s_thr_ctx_t;140,3916
+s2s_control_thread_fn 143,3948
+server_s2s_start 175,4626
+server_s2s_stop 189,5010
+require_s2s 204,5390
+niy 232,6058
+cmd_s2s_planet_genesis 241,6264
+cmd_s2s_planet_transfer 256,6668
+cmd_s2s_player_migrate 271,7082
+cmd_s2s_port_restock 286,7480
+cmd_s2s_event_relay 301,7879
+cmd_s2s_replication_heartbeat 316,8296
+
+src/server_ports.h,28
+#define SERVER_PORTS_H2,23
+
+src/server_planets.h,30
+#define SERVER_PLANETS_H3,45
+
+src/server_citadel.h,30
+#define SERVER_CITADEL_H2,25
+
+src/server_main.c,759
+static pid_t g_engine_pid 27,570
+static int g_engine_shutdown_fd 28,602
+static int s2s_listen_fd 29,640
+static int s2s_conn_fd 30,671
+static s2s_conn_t *g_s2s_conn g_s2s_conn32,705
+static pthread_t g_s2s_thr;33,743
+static volatile int g_s2s_run 34,771
+volatile sig_atomic_t g_running 36,807
+static volatile sig_atomic_t g_saw_signal 37,882
+on_signal 40,942
+install_signal_handlers 48,1059
+build_capabilities 62,1413
+log_s2s_metrics 88,2343
+s2s_control_thread 98,2676
+s2s_accept_once 158,4133
+send_all 166,4293
+recv_line 180,4512
+send_cstr 202,4912
+s2s_listen_4321 212,5051
+static volatile sig_atomic_t running 235,5679
+get_scalar_int 245,6022
+needs_bigbang 261,6418
+run_bigbang_if_needed 285,7072
+main 308,7514
+load_config 675,19215
+
+src/common.c,221
+init_sockaddr 19,371
+init_clientnetwork 51,983
+sendinfo 87,1741
+recvinfo 100,1932
+acceptnewconnection 117,2241
+randomnum 135,2567
+min 144,2702
+max 155,2816
+getdata 169,2980
+senddata 177,3195
+doprocess 183,3318
+
+src/schemas.c,226
+why_dup 8,98
+schema_validate_payload 18,236
+capabilities_build 137,2787
+schema_envelope 159,3622
+schema_auth_login 169,4092
+schema_move_warp 183,4533
+schema_trade_buy 197,4949
+schema_get 213,5435
+schema_keys 230,5841
+
+src/database.c,2857
+pthread_mutex_t db_mutex 19,355
+static sqlite3 *db_handle db_handle21,410
+db_commands_accept 34,949
+db_thread_safe_update_single_column 140,3903
+const char *create_table_sql[create_table_sql212,5401
+const char *insert_default_sql[insert_default_sql931,38481
+static const char *ENGINE_BOOTSTRAP_SQL ENGINE_BOOTSTRAP_SQL1326,69419
+static const char *MIGRATE_A_SQL MIGRATE_A_SQL1416,73475
+static const char *MIGRATE_B_SQL MIGRATE_B_SQL1441,74867
+db_engine_bootstrap 1491,76937
+static const size_t create_table_count 1527,77785
+static const size_t insert_default_count 1530,77918
+db_get_handle 1534,78036
+urandom_bytes 1541,78094
+to_hex 1552,78307
+gen_session_token 1564,78613
+db_init 1575,78793
+db_create_tables 1687,81420
+db_create_tables_unlocked 1698,81642
+db_insert_defaults 1740,82455
+db_insert_defaults_unlocked 1751,82681
+db_close 1777,83165
+db_create 1794,83502
+db_read 1819,84051
+db_update 1844,84549
+db_delete 1870,85087
+col_text_or_empty 1898,85801
+db_ensure_auth_schema 1908,85986
+db_ensure_auth_schema_unlocked 1919,86218
+db_sector_scan_snapshot 1990,88037
+db_session_create 2064,90418
+db_session_lookup 2133,91759
+db_session_revoke 2211,93330
+db_session_revoke_unlocked 2262,94273
+db_session_lookup_unlocked 2282,94785
+db_session_create_unlocked 2326,95793
+db_session_refresh 2361,96773
+db_ensure_idempotency_schema 2397,97623
+db_ensure_idempotency_schema_unlocked 2408,97869
+db_idemp_try_begin 2458,99022
+db_idemp_fetch 2523,100338
+db_idemp_store_response 2604,101980
+prep1i_unlocked 2665,103294
+db_sector_info_json 2676,103510
+parse_neighbors_csv 2937,110715
+db_sector_basic_json 2973,111439
+db_adjacent_sectors_json 3042,113303
+db_port_info_json 3094,114336
+db_players_at_sector_json 3208,117191
+db_beacons_at_sector_json 3288,118932
+db_planets_at_sector_json 3366,120345
+db_player_set_sector 3496,123811
+db_player_get_sector 3624,126993
+db_player_info_json 3696,128673
+db_sector_beacon_text 3795,132058
+db_ships_at_sector_json 3874,133852
+db_ports_at_sector_json 3970,136446
+db_sector_has_beacon 4099,140108
+db_sector_set_beacon 4146,141393
+db_player_has_beacon_on_ship 4207,142843
+db_player_decrement_beacon_count 4252,144082
+db_chain_traps_and_bridge 4295,145329
+db_ships_inspectable_at_sector_json 4489,150367
+db_ship_flags_set 4627,154989
+db_ship_flags_clear 4660,155780
+db_ship_claim 4695,156630
+db_ship_rename_if_owner 4937,164334
+db_is_npc_player 5000,165995
+db_apply_lock_policy_for_pilot 5024,166764
+db_rand_npc_shipname 5083,168435
+db_ensure_ship_perms_column 5129,169400
+column_exists_unlocked 5143,169678
+column_exists 5166,170289
+db_ensure_ship_perms_column_unlocked 5177,170559
+db_sector_scan_core 5213,171389
+db_notice_create 5284,173500
+db_notice_list_unseen_for_player 5318,174473
+db_notice_mark_seen 5371,176120
+db_player_name 5396,176754
+
+src/config.c,114
+#define init_config_cleanup(46,1219
+#define init_config_error(55,1395
+init_config 63,1527
+saveconfig 145,4815
+
+src/server_bigbang.c,1737
+#define MIN_TUNNELS_TARGET 16,388
+#define MIN_TUNNEL_LEN 17,458
+#define TUNNEL_REFILL_MAX_ATTEMPTS 18,532
+#define DEF_PORT_SIZE 21,669
+#define DEF_PORT_TECHLEVEL 22,702
+#define DEF_PORT_MAX_ORE 23,735
+#define DEF_PORT_MAX_ORG 24,772
+#define DEF_PORT_MAX_EQU 25,809
+#define DEF_PORT_PROD_ORE 26,846
+#define DEF_PORT_PROD_ORG 27,882
+#define DEF_PORT_PROD_EQU 28,918
+#define DEF_PORT_CREDITS 29,954
+static const char *SQL_INSERT_WARP SQL_INSERT_WARP35,1118
+static const char *SQL_INSERT_USED_SECTOR SQL_INSERT_USED_SECTOR38,1232
+config_load 50,1735
+  int from;132,4196
+  int to;133,4208
+} Warp;134,4218
+prune_tunnel_edges 141,4381
+insert_warp_unique 160,4904
+sector_degree 190,5707
+get_sector_count 206,6114
+is_sector_used 223,6494
+create_random_warps 243,7020
+ensure_sector_exits 315,8684
+bigbang_create_tunnels 401,10815
+create_sectors 546,14456
+trade_code_for_type 650,16927
+random_port_type_1_to_8 676,17285
+seed_port_trade_rows 682,17360
+bigbang 694,17617
+has_warp 825,20728
+sector_degree_in_memory 839,21003
+sw_add_edge 857,21305
+pick_sector_in_range 877,21855
+count_edges 906,22466
+insert_bidirectional 930,22951
+get_sector_degree_count 969,23815
+sw_has_edge 991,24414
+create_full_port 1019,25232
+get_npc_shiptype_id_by_name 1087,27376
+get_purchasable_shiptype_id_by_name 1117,28169
+get_out_degree 1148,29000
+create_planets 1178,29672
+create_ports 1184,29715
+create_ferringhi 1356,34724
+create_imperial 1741,48722
+prepare_first_ok 1825,51462
+sector_exists 1838,51767
+rand_incl 1862,52233
+ensure_fedspace_exit 1872,52479
+has_column 1980,55581
+create_derelicts 2006,56130
+#define MIN_FILL_PCT 2181,61783
+#define MAX_FILL_PCT 2182,61807
+ensure_all_sectors_have_exits 2326,66254
+
+src/server_bigbang.h,145
+#define SERVER_BIGBANG_H2,25
+#define DEFAULT_PERCENT_DEADEND 9,148
+#define DEFAULT_PERCENT_ONEWAY 12,221
+#define DEFAULT_PERCENT_JUMP 15,291
+
+src/server_ports.c,494
+#define UNUSED(18,365
+#define RULE_REFUSE(22,402
+#define RULE_ERROR(25,560
+cmd_trade_port_info 34,854
+validate_trade_buy_rule 43,1038
+cmd_trade_offer 69,1734
+cmd_trade_accept 75,1832
+cmd_trade_cancel 81,1932
+cmd_trade_history 87,2032
+json_equal_strict 98,2274
+bind_text_or_null 110,2614
+cmd_trade_sell 120,2875
+build_trade_buy_fp_obj 604,17282
+cmd_trade_buy 635,18285
+json_get_int_field 810,23369
+cmd_port_info 821,23611
+cmd_trade_quote 868,24807
+cmd_trade_jettison 880,25090
+
+src/globals.h,23
+#define GLOBALS_H2,18
+
+src/autoconf.h,1020
+#define HAVE_CTYPE_H 5,187
+#define HAVE_ERRNO_H 8,268
+#define HAVE_INTTYPES_H 11,352
+#define HAVE_LIBM 14,432
+#define HAVE_LIBPTHREAD 17,518
+#define HAVE_MATH_H 20,601
+#define HAVE_NETDB_H 23,681
+#define HAVE_NETINET_IN_H 26,767
+#define HAVE_PTHREAD_H 29,855
+#define HAVE_STDINT_H 32,939
+#define HAVE_STDIO_H 35,1021
+#define HAVE_STDLIB_H 38,1103
+#define HAVE_STRINGS_H 41,1187
+#define HAVE_STRING_H 44,1271
+#define HAVE_SYS_IPC_H 47,1355
+#define HAVE_SYS_MSG_H 50,1440
+#define HAVE_SYS_POLL_H 53,1526
+#define HAVE_SYS_SOCKET_H 56,1615
+#define HAVE_SYS_STAT_H 59,1704
+#define HAVE_SYS_TIME_H 62,1791
+#define HAVE_SYS_TYPES_H 65,1879
+#define HAVE_TERMIOS_H 68,1966
+#define HAVE_TIME_H 71,2048
+#define HAVE_UNISTD_H 74,2129
+#define PACKAGE 77,2176
+#define PACKAGE_BUGREPORT 80,2282
+#define PACKAGE_NAME 83,2359
+#define PACKAGE_STRING 86,2450
+#define PACKAGE_TARNAME 89,2549
+#define PACKAGE_URL 92,2632
+#define PACKAGE_VERSION 95,2701
+#define STDC_HEADERS 100,2936
+#define VERSION 103,2992
+
+src/server_s2s.h,26
+#define SERVER_S2S_H2,21
+
+autoconf.h,1020
+#define HAVE_CTYPE_H 5,187
+#define HAVE_ERRNO_H 8,268
+#define HAVE_INTTYPES_H 11,352
+#define HAVE_LIBM 14,432
+#define HAVE_LIBPTHREAD 17,518
+#define HAVE_MATH_H 20,601
+#define HAVE_NETDB_H 23,681
+#define HAVE_NETINET_IN_H 26,767
+#define HAVE_PTHREAD_H 29,855
+#define HAVE_STDINT_H 32,939
+#define HAVE_STDIO_H 35,1021
+#define HAVE_STDLIB_H 38,1103
+#define HAVE_STRINGS_H 41,1187
+#define HAVE_STRING_H 44,1271
+#define HAVE_SYS_IPC_H 47,1355
+#define HAVE_SYS_MSG_H 50,1440
+#define HAVE_SYS_POLL_H 53,1526
+#define HAVE_SYS_SOCKET_H 56,1615
+#define HAVE_SYS_STAT_H 59,1704
+#define HAVE_SYS_TIME_H 62,1791
+#define HAVE_SYS_TYPES_H 65,1879
+#define HAVE_TERMIOS_H 68,1966
+#define HAVE_TIME_H 71,2048
+#define HAVE_UNISTD_H 74,2129
+#define PACKAGE 77,2176
+#define PACKAGE_BUGREPORT 80,2282
+#define PACKAGE_NAME 83,2359
+#define PACKAGE_STRING 86,2450
+#define PACKAGE_TARNAME 89,2549
+#define PACKAGE_URL 92,2632
+#define PACKAGE_VERSION 95,2701
+#define STDC_HEADERS 100,2936
+#define VERSION 103,2992
+
+src/s2s_keyring.h,0
+
+hold/boxmuller.h,0
+
+hold/hardware.c,0

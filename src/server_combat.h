@@ -15,6 +15,8 @@ extern "C"
   int cmd_combat_sweep_mines (client_ctx_t * ctx, json_t * root);	// "combat.sweep_mines"
   int cmd_combat_status (client_ctx_t * ctx, json_t * root);	// "combat.status"
 
+
+  
 #ifdef __cplusplus
 }
 #endif

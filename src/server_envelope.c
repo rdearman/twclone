@@ -424,12 +424,13 @@ send_enveloped_ok (int fd, json_t *req, const char *type, json_t *data)
 
   // write one line
   char *s = json_dumps (resp, JSON_COMPACT);
+  int toss;
   if (s)
     {
       size_t len = strlen (s);
       if (len)
-	(void) write (fd, s, len);
-      (void) write (fd, "\n", 1);
+	toss = write (fd, s, len);
+      toss = write (fd, "\n", 1);
       free (s);
     }
   json_decref (resp);
@@ -466,14 +467,14 @@ send_enveloped_error (int fd, json_t *req, int code, const char *message)
 
   json_object_set_new (resp, "data", json_null ());
   json_object_set_new (resp, "meta", make_default_meta ());
-
+  int toss;
   char *s = json_dumps (resp, JSON_COMPACT);
   if (s)
     {
       size_t len = strlen (s);
       if (len)
-	(void) write (fd, s, len);
-      (void) write (fd, "\n", 1);
+	toss = write (fd, s, len);
+      toss = write (fd, "\n", 1);
       free (s);
     }
   json_decref (resp);
@@ -511,14 +512,14 @@ send_enveloped_refused (int fd, json_t *req, int code, const char *msg,
 
   json_object_set_new (resp, "data", json_null ());
   json_object_set_new (resp, "meta", make_default_meta ());
-
+  int toss;
   char *s = json_dumps (resp, JSON_COMPACT);
   if (s)
     {
       size_t len = strlen (s);
       if (len)
-	(void) write (fd, s, len);
-      (void) write (fd, "\n", 1);
+	toss = write (fd, s, len);
+      toss = write (fd, "\n", 1);
       free (s);
     }
   json_decref (resp);

@@ -22,6 +22,4 @@
 
 AUTOMAKE_OPTIONS = subdir-objects
 
-SUBDIRS = bin \
-          src \
-          client
+SUBDIRS = bin

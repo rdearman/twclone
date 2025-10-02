@@ -19,7 +19,13 @@ extern "C"
   int cmd_ship_claim (client_ctx_t * ctx, json_t * root);
   int cmd_ship_status (client_ctx_t * ctx, json_t * root);
   int cmd_ship_info_compat (client_ctx_t * ctx, json_t * root);
+  int cmd_ship_transfer_cargo (client_ctx_t *ctx, json_t *root);
+  int cmd_ship_jettison (client_ctx_t *ctx, json_t *root);
+  int cmd_ship_upgrade (client_ctx_t *ctx, json_t *root);
+  int cmd_ship_repair (client_ctx_t *ctx, json_t *root);
 
+
+  
 #ifdef __cplusplus
 }
 #endif

@@ -18,13 +18,19 @@ extern "C"
 /* Trading */
   int cmd_trade_buy (client_ctx_t * ctx, json_t * root);
   int cmd_trade_sell (client_ctx_t * ctx, json_t * root);
+  int cmd_trade_offer (client_ctx_t *ctx, json_t *root);
+  int cmd_trade_accept (client_ctx_t *ctx, json_t *root);
+  int cmd_trade_cancel (client_ctx_t *ctx, json_t *root);
+  int cmd_trade_history (client_ctx_t *ctx, json_t *root);
 
 /* Optional if your loop implements them */
   int cmd_trade_quote (client_ctx_t * ctx, json_t * root);
   int cmd_trade_jettison (client_ctx_t * ctx, json_t * root);
   int cmd_trade_port_info (client_ctx_t * ctx, json_t * root);
 
-
+  int player_credits (int player_id);
+  int cargo_space_free (int player_id);
+  int port_is_open (int port_id, const char *commodity);
 
 
 #ifdef __cplusplus

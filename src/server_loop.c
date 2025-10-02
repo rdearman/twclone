@@ -32,13 +32,16 @@
 #include "server_universe.h"
 #include "server_config.h"
 #include "server_communication.h"
-#include "server_config.h"	// keep whatever includes you already had
 #include "server_players.h"
+#include "server_planets.h"
+#include "server_citadel.h"
+#include "server_combat.h"
+#include "server_bulk.h"
+
 
 #ifndef streq
-#define streq(a,b) (strcmp((a),(b))==0)
+#define streq(a,b) (strcmp(json_string_value((a)), (b))==0)
 #endif
-
 #define LISTEN_PORT 1234
 #define BUF_SIZE    8192
 #define RULE_REFUSE(_code,_msg,_hint_json) \
@@ -417,47 +420,93 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       rc = cmd_session_disconnect (ctx, root);	/* NIY stub */
     }
-  else if (strcmp (cmd, "system.cmd_list") == 0)
-    return cmd_system_cmd_list (ctx, root);
-  else if (strcmp (cmd, "system.describe_schema") == 0)
-    return cmd_system_describe_schema (ctx, root);
+  else if (streq(cmd, "system.cmd_list"))
+    {
+    cmd_system_cmd_list (ctx, root);
+    }
+  else if (streq(cmd, "system.describe_schema"))
+    {
+      cmd_system_describe_schema (ctx, root);
+    }
   // (If not already present:)
-  else if (strcmp (cmd, "system.schema_list") == 0)
-    return cmd_system_schema_list (ctx, root);
-  else if (strcmp (cmd, "system.capabilities") == 0)
-    return cmd_system_capabilities (ctx, root);
+  else if (streq(cmd, "system.schema_list"))
+    {
+    cmd_system_schema_list (ctx, root);
+    }
+  else if (streq(cmd, "system.capabilities"))
+    {
+    cmd_system_capabilities (ctx, root);
+    }
 
 /* ---------- PLAYER ---------- */
-  else if (streq(cmd, "player.my_info"))         return cmd_player_my_info(ctx, root);
-  else if (streq(cmd, "player.list_online"))     return cmd_player_list_online(ctx, root);
+  else if (streq(cmd, "player.my_info"))
+    {
+      cmd_player_my_info(ctx, root);
+    }
+  else if (streq(cmd, "player.list_online"))
+    {
+      cmd_player_list_online(ctx, root);
+    }
+  else if (streq(cmd, "player.get_settings"))
+    {
+      cmd_player_get_settings(ctx, root);
+    }
+  else if (streq(cmd, "player.set_settings"))
+    {
+      cmd_player_set_settings(ctx, root);
+    }
 
-  else if (streq(cmd, "player.get_settings"))    return cmd_player_get_settings(ctx, root);
-  else if (streq(cmd, "player.set_settings"))    return cmd_player_set_settings(ctx, root);
-
-  else if (streq(cmd, "player.get_prefs"))       return cmd_player_get_prefs(ctx, root);
-  else if (streq(cmd, "player.set_prefs"))       return cmd_player_set_prefs(ctx, root);
+  else if (streq(cmd, "player.get_prefs"))
+    {
+      cmd_player_get_prefs(ctx, root);
+    }
+  else if (streq(cmd, "player.set_prefs"))
+    {
+      cmd_player_set_prefs(ctx, root);
+    }
 
   else if (streq(cmd, "player.get_topics") ||
-	   streq(cmd, "player.get_subscriptions"))  return cmd_player_get_topics(ctx, root);
+	   streq(cmd, "player.get_subscriptions"))
+    {
+      cmd_player_get_topics(ctx, root);
+    }
   else if (streq(cmd, "player.set_topics") ||
-	   streq(cmd, "player.set_subscriptions"))  return cmd_player_set_topics(ctx, root);
+	   streq(cmd, "player.set_subscriptions"))
+    {
+      cmd_player_set_topics(ctx, root);
+    }
 
   else if (streq(cmd, "player.get_bookmarks") ||
-	   streq(cmd, "nav.bookmark.list"))      return cmd_player_get_bookmarks(ctx, root);
+	   streq(cmd, "nav.bookmark.list"))
+    {
+      cmd_player_get_bookmarks(ctx, root);
+    }
   else if (streq(cmd, "player.set_bookmarks") ||
 	   streq(cmd, "nav.bookmark.set") ||
 	   streq(cmd, "nav.bookmark.add") ||
-	   streq(cmd, "nav.bookmark.remove"))    return cmd_player_set_bookmarks(ctx, root);
+	   streq(cmd, "nav.bookmark.remove"))
+    {
+      cmd_player_set_bookmarks(ctx, root);
+    }
 
   else if (streq(cmd, "player.get_avoids") ||
-	   streq(cmd, "nav.avoid.list"))         return cmd_player_get_avoids(ctx, root);
+	   streq(cmd, "nav.avoid.list"))
+    {
+      cmd_player_get_avoids(ctx, root);
+    }
   else if (streq(cmd, "player.set_avoids") ||
 	   streq(cmd, "nav.avoid.set") ||
 	   streq(cmd, "nav.avoid.add") ||
-	   streq(cmd, "nav.avoid.remove"))       return cmd_player_set_avoids(ctx, root);
+	   streq(cmd, "nav.avoid.remove"))
+    {
+      cmd_player_set_avoids(ctx, root);
+    }
 
   else if (streq(cmd, "player.get_notes") ||
-	   streq(cmd, "notes.list"))             return cmd_player_get_notes(ctx, root);
+	   streq(cmd, "notes.list"))
+    {
+      cmd_player_get_notes(ctx, root);
+    }
 
 /* ---------- SHIP ---------- */
   else if (!strcmp (c, "ship.inspect"))
@@ -543,7 +592,7 @@ process_message (client_ctx_t *ctx, json_t *root)
     }
   else if (!strcmp (c, "move.scan"))
     {
-      rc = cmd_move_scan (ctx, root);	/* NIY or real */
+      cmd_move_scan (ctx, root);	/* NIY or real */
     }
   else if (!strcmp (c, "move.warp"))
     {
@@ -689,7 +738,7 @@ process_message (client_ctx_t *ctx, json_t *root)
     }
   else if (strcmp (c, "subscribe.catalog") == 0)
     {
-      return cmd_subscribe_catalog (ctx, root);
+      cmd_subscribe_catalog (ctx, root);
     }
 
 /* ---------- BULK ---------- */
@@ -711,60 +760,60 @@ process_message (client_ctx_t *ctx, json_t *root)
 
   else if (streq (cmd, "player.get_settings"))
     {
-      return cmd_player_get_settings (ctx, root);
+      cmd_player_get_settings (ctx, root);
     }
   else if (streq (cmd, "player.set_settings"))
     {
-      return cmd_player_set_settings (ctx, root);
+      cmd_player_set_settings (ctx, root);
     }
 
   else if (streq (cmd, "player.get_prefs"))
     {
-      return cmd_player_get_prefs (ctx, root);
+      cmd_player_get_prefs (ctx, root);
     }
   else if (streq (cmd, "player.set_prefs"))
     {
-      return cmd_player_set_prefs (ctx, root);
+      cmd_player_set_prefs (ctx, root);
     }
 
   else if (streq (cmd, "player.get_topics")
 	   || streq (cmd, "player.get_subscriptions"))
     {
-      return cmd_player_get_topics (ctx, root);
+      cmd_player_get_topics (ctx, root);
     }
   else if (streq (cmd, "player.set_topics")
 	   || streq (cmd, "player.set_subscriptions"))
     {
-      return cmd_player_set_topics (ctx, root);
+      cmd_player_set_topics (ctx, root);
     }
 
   else if (streq (cmd, "player.get_bookmarks")
 	   || streq (cmd, "nav.bookmark.list"))
     {
-      return cmd_player_get_bookmarks (ctx, root);
+      cmd_player_get_bookmarks (ctx, root);
     }
   else if (streq (cmd, "player.set_bookmarks") ||
 	   streq (cmd, "nav.bookmark.set") ||
 	   streq (cmd, "nav.bookmark.add") ||
 	   streq (cmd, "nav.bookmark.remove"))
     {
-      return cmd_player_set_bookmarks (ctx, root);
+      cmd_player_set_bookmarks (ctx, root);
     }
 
   else if (streq (cmd, "player.get_avoids") || streq (cmd, "nav.avoid.list"))
     {
-      return cmd_player_get_avoids (ctx, root);
+      cmd_player_get_avoids (ctx, root);
     }
   else if (streq (cmd, "player.set_avoids") ||
 	   streq (cmd, "nav.avoid.set") ||
 	   streq (cmd, "nav.avoid.add") || streq (cmd, "nav.avoid.remove"))
     {
-      return cmd_player_set_avoids (ctx, root);
+      cmd_player_set_avoids (ctx, root);
     }
 
   else if (streq (cmd, "player.get_notes") || streq (cmd, "notes.list"))
     {
-      return cmd_player_get_notes (ctx, root);
+      cmd_player_get_notes (ctx, root);
     }
 
   /* ---------- S2S ---------- */

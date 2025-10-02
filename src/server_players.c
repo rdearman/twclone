@@ -66,7 +66,7 @@ cmd_player_list_online (client_ctx_t *ctx, json_t *root)
 int
 cmd_player_set_settings (client_ctx_t *ctx, json_t *root)
 {
-  STUB_NIY (ctx, root, "player.set_settings");
+  STUB_NIY (ctx, root,  "player.set_settings");
 }
 
 int
@@ -74,7 +74,7 @@ cmd_player_get_settings(client_ctx_t *ctx, json_t *root)
 {
   json_t *resp = players_build_settings(ctx, root);
   if (!resp)  send_enveloped_error(ctx->fd, root, 500, "settings_build_failed");
-  send_enveloped_ok(ctx, root, "player.settings", resp);
+  send_enveloped_ok(ctx->fd, root, "player.settings", resp);
   json_decref(resp);
   return 0;
 }
@@ -86,18 +86,17 @@ cmd_player_get_settings(client_ctx_t *ctx, json_t *root)
 int
 cmd_player_set_prefs (client_ctx_t *ctx, json_t *root)
 {
-  STUB_NIY (ctx, root, "player.set_prefs");
+  STUB_NIY (ctx, root,  "player.set_prefs");
 }
 
 int
 cmd_player_get_prefs(client_ctx_t *ctx, json_t *root)
 {
   json_t *prefs = players_get_prefs(ctx);
-  if (!prefs)  send_enveloped_error(ctx, root, 500, "prefs_load_failed");
-
+  if (!prefs)  send_enveloped_error(ctx->fd, root, 500, "prefs_load_failed");
   json_t *out = json_object();
   json_object_set_new(out, "prefs", prefs);
-  send_enveloped_ok(ctx, root, "player.prefs", out);
+  send_enveloped_ok(ctx->fd, root, "prefs",  out);
   json_decref(out);
   return 0;
 }
@@ -116,11 +115,11 @@ int
 cmd_player_get_topics(client_ctx_t *ctx, json_t *root)
 {
   json_t *topics = players_get_subscriptions(ctx);
-  if (!topics)  send_enveloped_error(ctx, root, 500, "subs_load_failed");
+  if (!topics)  send_enveloped_error(ctx->fd, root, 500, "subs_load_failed");
 
   json_t *out = json_object();
   json_object_set_new(out, "topics", topics);
-  send_enveloped_ok(ctx, root, "player.subscriptions", out);
+  send_enveloped_ok(ctx->fd, root, "player.subscriptions", out);
   json_decref(out);
   return 0;
 }
@@ -139,11 +138,10 @@ int
 cmd_player_get_bookmarks(client_ctx_t *ctx, json_t *root)
 {
   json_t *bookmarks = players_list_bookmarks(ctx);
-  if (!bookmarks)  send_enveloped_error(ctx, root, 500, "bookmarks_load_failed");
-
+  if (!bookmarks)  send_enveloped_error(ctx->fd, root, 500, "bookmarks_load_failed");
   json_t *out = json_object();
   json_object_set_new(out, "bookmarks", bookmarks);
-  send_enveloped_ok(ctx, root, "player.bookmarks", out);
+  send_enveloped_ok(ctx->fd, root, "player.bookmarks", out);
   json_decref(out);
   return 0;
 }
@@ -162,11 +160,11 @@ int
 cmd_player_get_avoids(client_ctx_t *ctx, json_t *root)
 {
   json_t *avoid = players_list_avoid(ctx);
-  if (!avoid)  send_enveloped_error(ctx, root, 500, "avoid_load_failed");
+  if (!avoid)  send_enveloped_error(ctx->fd, root, 500, "avoid_load_failed");
 
   json_t *out = json_object();
   json_object_set_new(out, "avoid", avoid);
-  send_enveloped_ok(ctx, root, "player.avoids", out);
+  send_enveloped_ok(ctx->fd, root,"avoids",  out);
   json_decref(out);
   return 0;
 }
@@ -179,11 +177,11 @@ int
 cmd_player_get_notes(client_ctx_t *ctx, json_t *root)
 {
   json_t *notes = players_list_notes(ctx, root); /* supports {"scope":...,"key":...} */
-  if (!notes)  send_enveloped_error(ctx, root, 500, "notes_load_failed");
+  if (!notes)  send_enveloped_error(ctx->fd, root, 500, "notes_load_failed");
 
   json_t *out = json_object();
   json_object_set_new(out, "notes", notes);
-  send_enveloped_ok(ctx, root, "player.notes", out);
+  send_enveloped_ok(ctx->fd, root,  "player.notes", out);
   json_decref(out);
   return 0;
 }

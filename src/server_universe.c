@@ -7,7 +7,12 @@
 #include "database.h"
 #include "server_cmds.h"
 #include "server_rules.h"
+#include "server_bigbang.h"
 #include "common.h"
+#include "server_envelope.h"
+#include "server_loop.h"
+#include "server_communication.h"
+
 
 #ifndef UNUSED
 #define UNUSED(x) (void)(x)
@@ -144,8 +149,7 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
   if (prc != 0)
     {
       free (q);
-      send_enveloped_error (ctx, 400, "bad_request",
-			    "Expected data { q:string?, type:'sector'|'port'|'any', limit?:int, cursor?:int|string }.");
+      send_enveloped_error (ctx->fd, root, 400,  "Expected data { q:string?, type:'sector'|'port'|'any', limit?:int, cursor?:int|string }.");
     }
 
   // If 'any', we’ll union both; otherwise pick a branch.
@@ -156,8 +160,7 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
   if (!db)
     {
       free (q);
-      send_enveloped_error (ctx, 500, "db_unavailable",
-			    "No database handle.");
+      send_enveloped_error (ctx->fd, root, 500,  "No database handle.");
     }
 
   // Build LIKE pattern for case-insensitive contains
@@ -224,7 +227,7 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
   if (rc != SQLITE_OK)
     {
       free (q);
-      send_enveloped_error (ctx, 500, "sql_error", sqlite3_errmsg (db));
+      send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
     }
 
   // Bind parameters:
@@ -377,68 +380,8 @@ cmd_move_describe_sector (client_ctx_t *ctx, json_t *root)
   if (sector_id <= 0)
     sector_id = 1;
 
-  cmd_sector_info (ctx->fd, root, sector_id, ctx->player_id);
+  (void) cmd_sector_info (ctx->fd, root, sector_id, ctx->player_id);
 }
-
-
-
-/* int */
-/* cmd_move_warp (client_ctx_t *ctx, json_t *root) */
-/* { */
-/*   json_t *jdata = json_object_get (root, "data"); */
-/*   int to = 0; */
-/*   if (json_is_object (jdata)) */
-/*     { */
-/*       json_t *jto = json_object_get (jdata, "to_sector_id"); */
-/*       if (json_is_integer (jto)) */
-/* 	to = (int) json_integer_value (jto); */
-/*     } */
-
-/*   // inside handle_move_warp(...) or similar */
-/*   decision_t d; */
-/*   d = validate_warp_rule (ctx->sector_id, to); */
-
-/*   // decision_t d = validate_warp_rule (ctx->sector_id, to); */
-/*   if (d.status == DEC_ERROR) */
-/*     { */
-/*       send_enveloped_error (ctx->fd, root, d.code, d.message); */
-/*     } */
-/*   else if (d.status == DEC_REFUSED) */
-/*     { */
-/*       send_enveloped_refused (ctx->fd, root, d.code, d.message, NULL); */
-/*     } */
-/*   else */
-/*     { */
-/*       int from = ctx->sector_id; */
-
-/*       /\* Persist new sector for this player *\/ */
-/*       int prc = db_player_set_sector (ctx->player_id, to); */
-/*       if (prc != SQLITE_OK) */
-/* 	{ */
-/* 	  send_enveloped_error (ctx->fd, root, 1502, */
-/* 				"Failed to persist player sector"); */
-/* 	  return 1; */
-/* 	} */
-
-/*       /\* Update session state *\/ */
-/*       ctx->sector_id = to; */
-
-/*       /\* Reply (include current_sector for clients) *\/ */
-/*       json_t *data = json_pack ("{s:i, s:i, s:i, s:i}", */
-/* 				"player_id", ctx->player_id, */
-/* 				"from_sector_id", from, */
-/* 				"to_sector_id", to, */
-/* 				"current_sector", to); */
-/*       if (!data) */
-/* 	{ */
-/* 	  send_enveloped_error (ctx->fd, root, 1500, "Out of memory"); */
-/* 	  return 1; */
-/* 	} */
-/*       send_enveloped_ok (ctx->fd, root, "move.result", data); */
-/*       json_decref (data); */
-/*     } */
-
-/* } */
 
 
 int
@@ -786,7 +729,7 @@ cmd_sector_info (int fd, json_t *root, int sector_id, int player_id)
     {
       send_enveloped_error (fd, root, 1500,
 			    "Out of memory building sector info");
-      return 1;
+      return ;
     }
 
   // Add beacon info
@@ -1005,7 +948,7 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
       json_decref (core);
       json_decref (adj);
       send_enveloped_error (ctx->fd, root, 1500, "OOM");
-      return 1;
+      return;
     }
   json_object_set_new (security, "fedspace", json_boolean (in_fed));
   json_object_set_new (security, "safe_zone",
@@ -1070,7 +1013,7 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
       if (beacon)
 	json_decref (beacon);
       send_enveloped_error (ctx->fd, root, 1500, "OOM");
-      return 1;
+      return ;
     }
   json_object_set_new (data, "sector_id", json_integer (sector_id));
   json_object_set_new (data, "name", json_string (name ? name : "Unknown"));
@@ -1229,7 +1172,7 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
     }
 
   /* ===== Send envelope with a nice meta.message ===== */
-  json_t *env = make_base_envelope (root);
+  json_t *env = make_base_envelope (root, "sector.info");
   json_object_set_new (env, "status", json_string ("ok"));
   json_object_set_new (env, "type", json_string ("sector.info"));
   json_object_set_new (env, "data", payload);	/* take ownership */

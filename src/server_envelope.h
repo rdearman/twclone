@@ -3,6 +3,8 @@
 #define SERVER_ENVELOPE_H
 #include <jansson.h>
 #include "s2s_transport.h"	// for s2s_conn_t
+#include "common.h"
+
 
 void iso8601_utc (char out[32]);	// if you use timestamps in envelopes
 const char *next_msg_id (void);	// if you auto-number messages
@@ -32,6 +34,12 @@ int s2s_env_validate_min (json_t * env, char **why);	/* 0 ok, else <0, *why mall
 /* Thin wrappers over transport */
 int s2s_send_env (s2s_conn_t * c, json_t * env, int timeout_ms);
 int s2s_recv_env (s2s_conn_t * c, json_t ** out_env, int timeout_ms);
+json_t * make_base_envelope (json_t *req, const char *type);
+int cmd_system_schema_list (client_ctx_t *ctx, json_t *root);
+int cmd_system_cmd_list (client_ctx_t *ctx, json_t *root);
+void send_error_json (int fd, int code, const char *msg);
+void send_all_json (int fd, json_t *obj);
+
 
 
 #endif

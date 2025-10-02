@@ -29,6 +29,9 @@
 #define DEF_PORT_CREDITS       500000
 
 /* forward decls */
+static int create_derelicts (void);
+
+
 static int ensure_fedspace_exit (sqlite3 * db, int outer_min, int outer_max,
 				 int add_return_edge);
 
@@ -2151,8 +2154,8 @@ create_derelicts (void)
       int st_id = sqlite3_column_int (sel, 0);
       const unsigned char *stype_name_uc = sqlite3_column_text (sel, 1);
       const char *stype_name =
-	(const char *) (stype_name_uc ? stype_name_uc : "");
-
+	(const char *) (stype_name_uc ? (const char *) stype_name_uc : "");
+      // (const char *) (stype_name_uc ? stype_name_uc : "");
       /* Build display name */
       char dname[128];
       char rnd[128];

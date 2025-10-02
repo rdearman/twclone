@@ -54,7 +54,7 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
 	  if (!data)
 	    {
 	      send_enveloped_error (ctx->fd, root, 1500, "Out of memory");
-	      return;
+	      return 1;
 	    }
 	  send_enveloped_ok (ctx->fd, root, "auth.session", data);
 	  json_decref (data);
