@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sqlite3.h>
-#include "database.h"
 #include <fcntl.h>
 #include <unistd.h>
 #include <time.h>
@@ -12,6 +11,8 @@
 #include <pthread.h>
 #include  "common.h"
 #include "server_config.h"
+#include "database.h"
+
 
 
 /* Define and initialize the mutex for the database handle */
@@ -28,11 +29,6 @@ static int db_ensure_idempotency_schema_unlocked (void);
 static int db_create_tables_unlocked (void);
 static int db_insert_defaults_unlocked (void);
 static int db_ensure_ship_perms_column_unlocked (void);
-
-
-
-#include "database.h"
-#include <sqlite3.h>
 
 int db_commands_accept(const char *cmd_type,
                        const char *idem_key,
@@ -5375,4 +5371,63 @@ db_notice_mark_seen (int notice_id, int player_id)
   int rc = sqlite3_step (stmt);
   sqlite3_finalize (stmt);
   return (rc == SQLITE_DONE) ? 0 : -1;
+}
+
+extern sqlite3 *g_db; /* already present elsewhere in your codebase */
+
+int db_player_name(int64_t player_id, char **out)
+{
+  if (!out) return -2;
+  *out = NULL;
+
+  /* Use the same handle + mutex model as the rest of database.c */
+  pthread_mutex_lock(&db_mutex);
+  sqlite3 *dbh = db_get_handle();
+  if (!dbh) {
+    pthread_mutex_unlock(&db_mutex);
+    return -3;
+  }
+
+  static const char *SQL =
+    "SELECT COALESCE(name, '') AS pname "
+    "FROM players "
+    "WHERE id = ?1 "
+    "LIMIT 1";
+
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2(dbh, SQL, -1, &st, NULL);
+  if (rc != SQLITE_OK) {
+    pthread_mutex_unlock(&db_mutex);
+    return -4;
+  }
+
+  rc = sqlite3_bind_int64(st, 1, (sqlite3_int64)player_id);
+  if (rc != SQLITE_OK) {
+    sqlite3_finalize(st);
+    pthread_mutex_unlock(&db_mutex);
+    return -5;
+  }
+
+  rc = sqlite3_step(st);
+  if (rc == SQLITE_ROW) {
+    const unsigned char *txt = sqlite3_column_text(st, 0);
+    if (txt && txt[0]) {
+      size_t n = strlen((const char*)txt);
+      char *dup = (char*)malloc(n + 1);
+      if (!dup) {
+        sqlite3_finalize(st);
+        pthread_mutex_unlock(&db_mutex);
+        return -6;
+      }
+      memcpy(dup, txt, n + 1);
+      *out = dup;              /* caller will free() */
+      sqlite3_finalize(st);
+      pthread_mutex_unlock(&db_mutex);
+      return 0;
+    }
+    /* had a row but empty name — treat as not found */
+  }
+  sqlite3_finalize(st);
+  pthread_mutex_unlock(&db_mutex);
+  return -1; /* not found */
 }

@@ -132,6 +132,6 @@ int db_notice_mark_seen (int notice_id, int player_id);
 // database.h (prototype)
 int db_commands_accept(const char *cmd_type, const char *idem_key, json_t *payload,
                        int *out_cmd_id, int *out_duplicate, int *out_due_at);
-
+int db_player_name(int64_t player_id, char **out);
 
 #endif /* DATABASE_H */

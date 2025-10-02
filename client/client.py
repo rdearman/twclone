@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -91,10 +90,44 @@ class Conn:
         self.send({"id": req_id, "command": command, "data": data})
         while True:
             resp = self.recv()
+            
             if resp.get("reply_to") == req_id or resp.get("status") in ("error", "refused"):
                 return resp
+            
+            # --- FIX START: Handle unsolicited events (e.g., player movement) ---
+            if resp.get("id") == "evt":
+                event_type = resp.get("event", "UNKNOWN_EVENT")
+                data = resp.get("data") or {}
+                
+                # Extract player name from the nested 'player' object
+                player_name = data.get('player', {}).get('name', '?') 
+                
+                msg = ""
+                if event_type == "sector.player_left":
+                    player_id = data.get('player_id', '?')
+                    sector_id = data.get('sector_id', '?')
+                    to_sec = data.get('to_sector_id', '?')
+                    # Use player_name in the output message
+                    msg = f"Player {player_name} (ID {player_id}) left sector {sector_id} for {to_sec}"
+                elif event_type == "sector.player_entered":
+                    player_id = data.get('player_id', '?')
+                    sector_id = data.get('sector_id', '?')
+                    from_sec = data.get('from_sector_id', '?')
+                    # Use player_name in the output message
+                    msg = f"Player {player_name} (ID {player_id}) arrived in sector {sector_id} from {from_sec}"
+                else:
+                    # Fallback for other events
+                    msg = f"Event: {event_type} (id: {resp.get('id')})"
+                    
+                print(f"[EVENT] {msg}")
+                
+                continue # Keep waiting for the RPC reply
+            # --- FIX END ---
+
             print(f"[WARN] Ignoring frame id={resp.get('id')} reply_to={resp.get('reply_to')}")
 
+
+    
 # ---------------------------
 # Context
 # ---------------------------
