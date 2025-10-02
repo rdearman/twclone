@@ -14,7 +14,7 @@
 #include "server_config.h"
 #include "server_envelope.h"
 #include "server_config.h"
-#include "s2s_transport.h" 
+#include "s2s_transport.h"
 
 
 // --- Weak fallback so linking succeeds even if server_loop.c doesn't define it ---
@@ -523,142 +523,170 @@ send_enveloped_refused (int fd, json_t *req, int code, const char *msg,
     }
   json_decref (resp);
 }
+
 ////////////////////////   S2S SECTION //////////////////////////////
 
 // server_envelope.c
 
 /* ---------- tiny helpers ---------- */
 
-static int urand_bytes(void *buf, size_t n) {
-  int fd = open("/dev/urandom", O_RDONLY);
-  if (fd < 0) return -1;
+static int
+urand_bytes (void *buf, size_t n)
+{
+  int fd = open ("/dev/urandom", O_RDONLY);
+  if (fd < 0)
+    return -1;
   size_t off = 0;
-  while (off < n) {
-    ssize_t r = read(fd, (char*)buf + off, n - off);
-    if (r <= 0) { close(fd); return -1; }
-    off += (size_t)r;
-  }
-  close(fd);
+  while (off < n)
+    {
+      ssize_t r = read (fd, (char *) buf + off, n - off);
+      if (r <= 0)
+	{
+	  close (fd);
+	  return -1;
+	}
+      off += (size_t) r;
+    }
+  close (fd);
   return 0;
 }
 
 /* UUID v4 (lowercase, canonical 36 chars). Caller must free(). */
-static char *gen_uuid_v4(void) {
+static char *
+gen_uuid_v4 (void)
+{
   unsigned char b[16];
-  if (urand_bytes(b, sizeof b) != 0) return NULL;
+  if (urand_bytes (b, sizeof b) != 0)
+    return NULL;
   /* Set version (4) and variant (10) bits */
-  b[6] = (unsigned char)((b[6] & 0x0F) | 0x40);
-  b[8] = (unsigned char)((b[8] & 0x3F) | 0x80);
+  b[6] = (unsigned char) ((b[6] & 0x0F) | 0x40);
+  b[8] = (unsigned char) ((b[8] & 0x3F) | 0x80);
 
   static const char *hex = "0123456789abcdef";
-  char *s = (char*)malloc(37);
-  if (!s) return NULL;
+  char *s = (char *) malloc (37);
+  if (!s)
+    return NULL;
   int p = 0;
-  for (int i = 0; i < 16; ++i) {
-    s[p++] = hex[(b[i] >> 4) & 0xF];
-    s[p++] = hex[b[i] & 0xF];
-    if (i==3 || i==5 || i==7 || i==9) s[p++] = '-';
-  }
+  for (int i = 0; i < 16; ++i)
+    {
+      s[p++] = hex[(b[i] >> 4) & 0xF];
+      s[p++] = hex[b[i] & 0xF];
+      if (i == 3 || i == 5 || i == 7 || i == 9)
+	s[p++] = '-';
+    }
   s[p] = '\0';
   return s;
 }
 
 /* Borrow-or-empty: returns a NEW ref you must decref (never NULL). */
-static json_t *borrow_or_empty_obj(json_t *maybe_obj) {
-  if (maybe_obj && json_is_object(maybe_obj)) { json_incref(maybe_obj); return maybe_obj; }
-  return json_object();
+static json_t *
+borrow_or_empty_obj (json_t *maybe_obj)
+{
+  if (maybe_obj && json_is_object (maybe_obj))
+    {
+      json_incref (maybe_obj);
+      return maybe_obj;
+    }
+  return json_object ();
 }
 
 /* ---------- envelope builders (public) ---------- */
 
-json_t *s2s_make_env(const char *type, const char *src, const char *dst, json_t *payload)
+json_t *
+s2s_make_env (const char *type, const char *src, const char *dst,
+	      json_t *payload)
 {
-  if (!type || !*type || !src || !*src || !dst || !*dst) return NULL;
+  if (!type || !*type || !src || !*src || !dst || !*dst)
+    return NULL;
 
-  char *id = gen_uuid_v4();
-  if (!id) return NULL;
+  char *id = gen_uuid_v4 ();
+  if (!id)
+    return NULL;
 
-  time_t now = time(NULL);
-  json_t *pl = borrow_or_empty_obj(payload);
+  time_t now = time (NULL);
+  json_t *pl = borrow_or_empty_obj (payload);
 
   /* NOTE: No "auth" here. Transport layer will add it before sending. */
-  json_t *env = json_pack(
-      "{s:i, s:s, s:s, s:I, s:s, s:s, s:o}",
-      "v", 1,
-      "type", type,
-      "id", id,
-      "ts", (json_int_t)now,
-      "src", src,
-      "dst", dst,
-      "payload", pl
-  );
+  json_t *env = json_pack ("{s:i, s:s, s:s, s:I, s:s, s:s, s:o}",
+			   "v", 1,
+			   "type", type,
+			   "id", id,
+			   "ts", (json_int_t) now,
+			   "src", src,
+			   "dst", dst,
+			   "payload", pl);
 
-  json_decref(pl);
-  free(id);
-  return env;  /* caller must json_decref */
+  json_decref (pl);
+  free (id);
+  return env;			/* caller must json_decref */
 }
 
-json_t *s2s_make_ack(const char *src, const char *dst, const char *ack_of, json_t *payload)
+json_t *
+s2s_make_ack (const char *src, const char *dst, const char *ack_of,
+	      json_t *payload)
 {
-  if (!src || !*src || !dst || !*dst || !ack_of || !*ack_of) return NULL;
+  if (!src || !*src || !dst || !*dst || !ack_of || !*ack_of)
+    return NULL;
 
-  char *id = gen_uuid_v4();
-  if (!id) return NULL;
+  char *id = gen_uuid_v4 ();
+  if (!id)
+    return NULL;
 
-  time_t now = time(NULL);
-  json_t *pl = borrow_or_empty_obj(payload);
+  time_t now = time (NULL);
+  json_t *pl = borrow_or_empty_obj (payload);
 
-  json_t *env = json_pack(
-      "{s:i, s:s, s:s, s:I, s:s, s:s, s:s, s:o}",
-      "v", 1,
-      "type", "s2s.ack",
-      "id", id,
-      "ts", (json_int_t)now,
-      "src", src,
-      "dst", dst,
-      "ack_of", ack_of,
-      "payload", pl
-  );
+  json_t *env = json_pack ("{s:i, s:s, s:s, s:I, s:s, s:s, s:s, s:o}",
+			   "v", 1,
+			   "type", "s2s.ack",
+			   "id", id,
+			   "ts", (json_int_t) now,
+			   "src", src,
+			   "dst", dst,
+			   "ack_of", ack_of,
+			   "payload", pl);
 
-  json_decref(pl);
-  free(id);
+  json_decref (pl);
+  free (id);
   return env;
 }
 
-json_t *s2s_make_error(const char *src, const char *dst,
-                       const char *ack_of, const char *code,
-                       const char *message, json_t *details /* NULL ok */)
+json_t *
+s2s_make_error (const char *src, const char *dst,
+		const char *ack_of, const char *code,
+		const char *message, json_t *details /* NULL ok */ )
 {
-  if (!src || !*src || !dst || !*dst || !ack_of || !*ack_of || !code || !*code) return NULL;
+  if (!src || !*src || !dst || !*dst || !ack_of || !*ack_of || !code
+      || !*code)
+    return NULL;
 
-  char *id = gen_uuid_v4();
-  if (!id) return NULL;
+  char *id = gen_uuid_v4 ();
+  if (!id)
+    return NULL;
 
-  time_t now = time(NULL);
-  json_t *det = details ? json_incref(details), details : json_object();
+  time_t now = time (NULL);
+  json_t *det = details ? json_incref (details), details : json_object ();
 
-  json_t *err = json_pack("{s:s, s:s, s:o}",
-                          "code", code,
-                          "message", message ? message : "",
-                          "details", det);
+  json_t *err = json_pack ("{s:s, s:s, s:o}",
+			   "code", code,
+			   "message", message ? message : "",
+			   "details", det);
 
-  json_decref(det);
+  json_decref (det);
 
-  json_t *env = json_pack(
-      "{s:i, s:s, s:s, s:I, s:s, s:s, s:s, s:o, s:o}",
-      "v", 1,
-      "type", "s2s.error",
-      "id", id,
-      "ts", (json_int_t)now,
-      "src", src,
-      "dst", dst,
-      "ack_of", ack_of,
-      "error", err,
-      "payload", json_object()   /* keep payload an object for uniformity */
-  );
+  json_t *env = json_pack ("{s:i, s:s, s:s, s:I, s:s, s:s, s:s, s:o, s:o}",
+			   "v", 1,
+			   "type", "s2s.error",
+			   "id", id,
+			   "ts", (json_int_t) now,
+			   "src", src,
+			   "dst", dst,
+			   "ack_of", ack_of,
+			   "error", err,
+			   "payload", json_object ()	/* keep payload an object for uniformity */
+    );
 
-  json_decref(err);
-  free(id);
+  json_decref (err);
+  free (id);
   return env;
 }
 
@@ -666,20 +694,26 @@ json_t *s2s_make_error(const char *src, const char *dst,
 
 /* --------- light parsing helpers --------- */
 
-const char *s2s_env_type(json_t *env) {
-  json_t *x = json_object_get(env, "type");
-  return json_is_string(x) ? json_string_value(x) : NULL;
+const char *
+s2s_env_type (json_t *env)
+{
+  json_t *x = json_object_get (env, "type");
+  return json_is_string (x) ? json_string_value (x) : NULL;
 }
 
-const char *s2s_env_id(json_t *env) {
-  json_t *x = json_object_get(env, "id");
-  return json_is_string(x) ? json_string_value(x) : NULL;
+const char *
+s2s_env_id (json_t *env)
+{
+  json_t *x = json_object_get (env, "id");
+  return json_is_string (x) ? json_string_value (x) : NULL;
 }
 
 /* Borrowed ref; do NOT decref the returned pointer. */
-json_t *s2s_env_payload(json_t *env) {
-  json_t *x = json_object_get(env, "payload");
-  return json_is_object(x) ? x : NULL;
+json_t *
+s2s_env_payload (json_t *env)
+{
+  json_t *x = json_object_get (env, "payload");
+  return json_is_object (x) ? x : NULL;
 }
 
 /* --------- minimal envelope validation ---------
@@ -687,56 +721,116 @@ json_t *s2s_env_payload(json_t *env) {
  * Returns 0 on OK; nonzero on error and sets *why to a malloc'd message.
  * Caller must free(*why) if non-NULL.
  */
-static char *dupmsg(const char *m) {
-  size_t n = strlen(m) + 1;
-  char *p = (char*)malloc(n);
-  if (p) memcpy(p, m, n);
+static char *
+dupmsg (const char *m)
+{
+  size_t n = strlen (m) + 1;
+  char *p = (char *) malloc (n);
+  if (p)
+    memcpy (p, m, n);
   return p;
 }
 
-int s2s_env_validate_min(json_t *env, char **why) {
-  if (why) *why = NULL;
-  if (!env || !json_is_object(env)) { if (why) *why = dupmsg("envelope not an object"); return -1; }
+int
+s2s_env_validate_min (json_t *env, char **why)
+{
+  if (why)
+    *why = NULL;
+  if (!env || !json_is_object (env))
+    {
+      if (why)
+	*why = dupmsg ("envelope not an object");
+      return -1;
+    }
 
-  json_t *v   = json_object_get(env, "v");
-  json_t *ty  = json_object_get(env, "type");
-  json_t *id  = json_object_get(env, "id");
-  json_t *ts  = json_object_get(env, "ts");
-  json_t *src = json_object_get(env, "src");
-  json_t *dst = json_object_get(env, "dst");
-  json_t *pl  = json_object_get(env, "payload");
+  json_t *v = json_object_get (env, "v");
+  json_t *ty = json_object_get (env, "type");
+  json_t *id = json_object_get (env, "id");
+  json_t *ts = json_object_get (env, "ts");
+  json_t *src = json_object_get (env, "src");
+  json_t *dst = json_object_get (env, "dst");
+  json_t *pl = json_object_get (env, "payload");
 
-  if (!json_is_integer(v) || json_integer_value(v) != 1) { if (why) *why = dupmsg("v!=1"); return -2; }
-  if (!json_is_string(ty) || json_string_length(ty) == 0) { if (why) *why = dupmsg("type missing"); return -3; }
-  if (!json_is_string(id) || json_string_length(id) == 0) { if (why) *why = dupmsg("id missing"); return -4; }
-  if (!json_is_integer(ts) || json_integer_value(ts) <= 0) { if (why) *why = dupmsg("ts invalid"); return -5; }
-  if (!json_is_string(src) || json_string_length(src)==0)  { if (why) *why = dupmsg("src missing"); return -6; }
-  if (!json_is_string(dst) || json_string_length(dst)==0)  { if (why) *why = dupmsg("dst missing"); return -7; }
-  if (!json_is_object(pl))                                  { if (why) *why = dupmsg("payload not object"); return -8; }
+  if (!json_is_integer (v) || json_integer_value (v) != 1)
+    {
+      if (why)
+	*why = dupmsg ("v!=1");
+      return -2;
+    }
+  if (!json_is_string (ty) || json_string_length (ty) == 0)
+    {
+      if (why)
+	*why = dupmsg ("type missing");
+      return -3;
+    }
+  if (!json_is_string (id) || json_string_length (id) == 0)
+    {
+      if (why)
+	*why = dupmsg ("id missing");
+      return -4;
+    }
+  if (!json_is_integer (ts) || json_integer_value (ts) <= 0)
+    {
+      if (why)
+	*why = dupmsg ("ts invalid");
+      return -5;
+    }
+  if (!json_is_string (src) || json_string_length (src) == 0)
+    {
+      if (why)
+	*why = dupmsg ("src missing");
+      return -6;
+    }
+  if (!json_is_string (dst) || json_string_length (dst) == 0)
+    {
+      if (why)
+	*why = dupmsg ("dst missing");
+      return -7;
+    }
+  if (!json_is_object (pl))
+    {
+      if (why)
+	*why = dupmsg ("payload not object");
+      return -8;
+    }
 
   return 0;
 }
 
 /* --------- thin wrappers over transport --------- */
 
-int s2s_send_env(s2s_conn_t *c, json_t *env, int timeout_ms) {
+int
+s2s_send_env (s2s_conn_t *c, json_t *env, int timeout_ms)
+{
   /* DO NOT add auth here; transport will inject + sign. */
-  return s2s_send_json(c, env, timeout_ms);
+  return s2s_send_json (c, env, timeout_ms);
 }
 
-int s2s_recv_env(s2s_conn_t *c, json_t **out_env, int timeout_ms) {
-  if (out_env) *out_env = NULL;
+int
+s2s_recv_env (s2s_conn_t *c, json_t **out_env, int timeout_ms)
+{
+  if (out_env)
+    *out_env = NULL;
   json_t *root = NULL;
-  int rc = s2s_recv_json(c, &root, timeout_ms);
-  if (rc != 0) return rc;
+  int rc = s2s_recv_json (c, &root, timeout_ms);
+  if (rc != 0)
+    return rc;
 
   char *why = NULL;
-  int vrc = s2s_env_validate_min(root, &why);
-  if (vrc != 0) {
-    if (why) { fprintf(stderr, "[s2s] envelope min-validate failed: %s\n", why); free(why); }
-    json_decref(root);
-    return -1;
-  }
-  if (out_env) *out_env = root; else json_decref(root);
+  int vrc = s2s_env_validate_min (root, &why);
+  if (vrc != 0)
+    {
+      if (why)
+	{
+	  fprintf (stderr, "[s2s] envelope min-validate failed: %s\n", why);
+	  free (why);
+	}
+      json_decref (root);
+      return -1;
+    }
+  if (out_env)
+    *out_env = root;
+  else
+    json_decref (root);
   return 0;
 }

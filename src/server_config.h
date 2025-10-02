@@ -59,35 +59,52 @@ extern "C"
     int planet_type_count;
   };
 
-  typedef struct {
-    struct { int tick_ms; int daily_align_sec; } engine;
-    struct { int event_batch; int command_batch; int broadcast_batch; } batching;
-    struct { int default_command_weight; int default_event_weight; } priorities;
-    struct {
-      char transport[8];      /* "uds" | "tcp" */
+  typedef struct
+  {
+    struct
+    {
+      int tick_ms;
+      int daily_align_sec;
+    } engine;
+    struct
+    {
+      int event_batch;
+      int command_batch;
+      int broadcast_batch;
+    } batching;
+    struct
+    {
+      int default_command_weight;
+      int default_event_weight;
+    } priorities;
+    struct
+    {
+      char transport[8];	/* "uds" | "tcp" */
       char uds_path[256];
       char tcp_host[128];
-      int  tcp_port;
-      int  frame_size_limit;  /* bytes */
+      int tcp_port;
+      int frame_size_limit;	/* bytes */
     } s2s;
-    struct {
+    struct
+    {
       int connect_ms, handshake_ms, rpc_ms;
       int backoff_initial_ms, backoff_max_ms;
       double backoff_factor;
     } safety;
-    struct {
-      char key_id[64];        /* shown as redacted in printout */
-      unsigned char key[64];  /* if you decode b64, optional */
+    struct
+    {
+      char key_id[64];		/* shown as redacted in printout */
+      unsigned char key[64];	/* if you decode b64, optional */
       int key_len;
     } secrets;
   } server_config_t;
 
   /* Single global instance (defined in server_config.c) */
   extern server_config_t g_cfg;
-  
+
   /* Loader name (you said load_config() conflicted elsewhere) */
-  int  load_eng_config(void);
-  void print_effective_config_redacted(void);
+  int load_eng_config (void);
+  void print_effective_config_redacted (void);
   int cmd_system_capabilities (client_ctx_t * ctx, json_t * root);
   int cmd_system_describe_schema (client_ctx_t * ctx, json_t * root);	// optional, if you expose it
   int cmd_session_ping (client_ctx_t * ctx, json_t * root);

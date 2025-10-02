@@ -28,162 +28,198 @@
 
 
 static eng_consumer_cfg_t G_CFG = {
-    .batch_size = 200,
-    .backlog_prio_threshold = 5000,
-    .priority_types_csv = "s2s.broadcast.sweep,player.login",
-    .consumer_key = "game_engine"
+  .batch_size = 200,
+  .backlog_prio_threshold = 5000,
+  .priority_types_csv = "s2s.broadcast.sweep,player.login",
+  .consumer_key = "game_engine"
 };
 
-void engine_tick(sqlite3 *db) {
-    eng_consumer_metrics_t m;
-    if (engine_consume_tick(db, &G_CFG, &m) == SQLITE_OK) {
-        fprintf(stderr, "[engine] events: processed=%d quarantined=%d last_id=%lld lag=%lld\n",
-                m.processed, m.quarantined, m.last_event_id, m.lag);
+void
+engine_tick (sqlite3 *db)
+{
+  eng_consumer_metrics_t m;
+  if (engine_consume_tick (db, &G_CFG, &m) == SQLITE_OK)
+    {
+      fprintf (stderr,
+	       "[engine] events: processed=%d quarantined=%d last_id=%lld lag=%lld\n",
+	       m.processed, m.quarantined, m.last_event_id, m.lag);
     }
 }
 
 
 /* Returns a new env (caller must json_decref(result)). */
-json_t *engine_build_command_push(const char *cmd_type,
-                                  const char *idem_key,
-                                  json_t *payload_obj,           /* owned by caller */
-                                  const char *correlation_id,   /* may be NULL */
-                                  int priority)                 /* <=0 -> default 100 */
+json_t *
+engine_build_command_push (const char *cmd_type, const char *idem_key, json_t *payload_obj,	/* owned by caller */
+			   const char *correlation_id,	/* may be NULL */
+			   int priority)	/* <=0 -> default 100 */
 {
-  if (!cmd_type || !idem_key || !payload_obj) return NULL;
-  if (priority <= 0) priority = 100;
+  if (!cmd_type || !idem_key || !payload_obj)
+    return NULL;
+  if (priority <= 0)
+    priority = 100;
 
-  json_t *pl = json_pack("{s:s,s:s,s:o,s:i}",
-                         "cmd_type", cmd_type,
-                         "idem_key", idem_key,
-                         "payload",  payload_obj,
-                         "priority", priority);
+  json_t *pl = json_pack ("{s:s,s:s,s:o,s:i}",
+			  "cmd_type", cmd_type,
+			  "idem_key", idem_key,
+			  "payload", payload_obj,
+			  "priority", priority);
   if (correlation_id)
-    json_object_set_new(pl, "correlation_id", json_string(correlation_id));
+    json_object_set_new (pl, "correlation_id", json_string (correlation_id));
 
-  json_t *env = s2s_make_env("s2s.command.push", "engine", "server", pl);
-  json_decref(pl);
+  json_t *env = s2s_make_env ("s2s.command.push", "engine", "server", pl);
+  json_decref (pl);
   return env;
 }
 
 
 
 
-static int engine_demo_push(s2s_conn_t *c) {
-  /* build the command payload */
-  json_t *cmdpl = json_pack("{s:s,s:s,s:s,s:i,s:o}",
-                            "cmd_type","notice.publish",
-                            "idem_key","player:42:hello:001",   // keep identical to test idempotency
-                            "correlation_id","demo-001",
-                            "priority",100,
-                            "payload", json_pack("{s:s,s:i,s:s,s:i}",
-                                                 "scope","player",
-                                                 "player_id",42,
-                                                 "message","Hello captain!",
-                                                 "ttl_seconds",3600));
-
-  json_t *env = s2s_make_env("s2s.command.push", "engine", "server", cmdpl);
-  json_decref(cmdpl);
-
-  int rc = s2s_send_env(c, env, 3000);
-  json_decref(env);
-  fprintf(stderr, "[engine] command.push send rc=%d\n", rc);
-  if (rc != 0) return rc;
-
-  json_t *resp = NULL;
-  rc = s2s_recv_env(c, &resp, 3000);
-  fprintf(stderr, "[engine] command.push recv rc=%d\n", rc);
-  if (rc == 0 && resp) {
-    const char *ty = s2s_env_type(resp);
-    if (ty && strcmp(ty,"s2s.ack")==0) {
-      json_t *ackpl = s2s_env_payload(resp);
-      json_t *dup = json_object_get(ackpl,"duplicate");
-      fprintf(stderr, "[engine] ack duplicate=%s\n",
-              (dup && json_is_true(dup)) ? "true" : "false");
-    } else {
-      fprintf(stderr, "[engine] got non-ack (%s)\n", ty?ty:"null");
-    }
-    json_decref(resp);
-  }
-  return rc;
-}
-
-
-
-/////////////////////////
-static int engine_send_notice_publish(s2s_conn_t *c, int player_id, const char *msg, int ttl_seconds)
+static int
+engine_demo_push (s2s_conn_t *c)
 {
-  json_t *pl = json_pack("{s:s,s:s,s:s,s:i,s:o}",
-                         "cmd_type", "notice.publish",
-                         "idem_key", "player:42:msg:abc",   /* TODO: make this unique per message */
-                         "correlation_id", "engine-demo-1",
-                         "priority", 100,
-                         "payload", json_pack("{s:s,s:i,s:s}",
-                                              "scope","player",
-                                              "player_id", player_id,
-                                              "message", msg));
-  json_t *env = s2s_make_env("s2s.command.push", "engine", "server", pl);
-  json_decref(pl);
+  /* build the command payload */
+  json_t *cmdpl = json_pack ("{s:s,s:s,s:s,s:i,s:o}",
+			     "cmd_type", "notice.publish",
+			     "idem_key", "player:42:hello:001",	// keep identical to test idempotency
+			     "correlation_id", "demo-001",
+			     "priority", 100,
+			     "payload", json_pack ("{s:s,s:i,s:s,s:i}",
+						   "scope", "player",
+						   "player_id", 42,
+						   "message",
+						   "Hello captain!",
+						   "ttl_seconds", 3600));
 
-  int rc = s2s_send_env(c, env, 3000);
-  json_decref(env);
-  if (rc != 0) return rc;
+  json_t *env = s2s_make_env ("s2s.command.push", "engine", "server", cmdpl);
+  json_decref (cmdpl);
+
+  int rc = s2s_send_env (c, env, 3000);
+  json_decref (env);
+  fprintf (stderr, "[engine] command.push send rc=%d\n", rc);
+  if (rc != 0)
+    return rc;
 
   json_t *resp = NULL;
-  rc = s2s_recv_env(c, &resp, 3000);
-  if (rc == 0 && resp) {
-    // log ack/error minimally
-    const char *ty = s2s_env_type(resp);
-    if (ty && strcmp(ty, "s2s.ack")==0) fprintf(stderr, "[engine] command.push ack\n");
-    else                                fprintf(stderr, "[engine] command.push err\n");
-    json_decref(resp);
-  }
+  rc = s2s_recv_env (c, &resp, 3000);
+  fprintf (stderr, "[engine] command.push recv rc=%d\n", rc);
+  if (rc == 0 && resp)
+    {
+      const char *ty = s2s_env_type (resp);
+      if (ty && strcmp (ty, "s2s.ack") == 0)
+	{
+	  json_t *ackpl = s2s_env_payload (resp);
+	  json_t *dup = json_object_get (ackpl, "duplicate");
+	  fprintf (stderr, "[engine] ack duplicate=%s\n",
+		   (dup && json_is_true (dup)) ? "true" : "false");
+	}
+      else
+	{
+	  fprintf (stderr, "[engine] got non-ack (%s)\n", ty ? ty : "null");
+	}
+      json_decref (resp);
+    }
+  return rc;
+}
+
+
+
+/////////////////////////
+static int
+engine_send_notice_publish (s2s_conn_t *c, int player_id, const char *msg,
+			    int ttl_seconds)
+{
+  json_t *pl = json_pack ("{s:s,s:s,s:s,s:i,s:o}",
+			  "cmd_type", "notice.publish",
+			  "idem_key", "player:42:msg:abc",	/* TODO: make this unique per message */
+			  "correlation_id", "engine-demo-1",
+			  "priority", 100,
+			  "payload", json_pack ("{s:s,s:i,s:s}",
+						"scope", "player",
+						"player_id", player_id,
+						"message", msg));
+  json_t *env = s2s_make_env ("s2s.command.push", "engine", "server", pl);
+  json_decref (pl);
+
+  int rc = s2s_send_env (c, env, 3000);
+  json_decref (env);
+  if (rc != 0)
+    return rc;
+
+  json_t *resp = NULL;
+  rc = s2s_recv_env (c, &resp, 3000);
+  if (rc == 0 && resp)
+    {
+      // log ack/error minimally
+      const char *ty = s2s_env_type (resp);
+      if (ty && strcmp (ty, "s2s.ack") == 0)
+	fprintf (stderr, "[engine] command.push ack\n");
+      else
+	fprintf (stderr, "[engine] command.push err\n");
+      json_decref (resp);
+    }
   return rc;
 }
 
 /////////////////////////
-static void log_s2s_metrics(const char *who) {
-  uint64_t sent=0, recv=0, auth_fail=0, too_big=0;
-  s2s_get_counters(&sent, &recv, &auth_fail, &too_big);
-  fprintf(stderr, "[%s] s2s metrics: sent=%" PRIu64 " recv=%" PRIu64
-                  " auth_fail=%" PRIu64 " too_big=%" PRIu64 "\n",
-          who, sent, recv, auth_fail, too_big);
+static void
+log_s2s_metrics (const char *who)
+{
+  uint64_t sent = 0, recv = 0, auth_fail = 0, too_big = 0;
+  s2s_get_counters (&sent, &recv, &auth_fail, &too_big);
+  fprintf (stderr, "[%s] s2s metrics: sent=%" PRIu64 " recv=%" PRIu64
+	   " auth_fail=%" PRIu64 " too_big=%" PRIu64 "\n",
+	   who, sent, recv, auth_fail, too_big);
 }
 
 
-static void engine_s2s_drain_once(s2s_conn_t *conn) {
+static void
+engine_s2s_drain_once (s2s_conn_t *conn)
+{
   json_t *msg = NULL;
-  int rc = s2s_recv_json(conn, &msg, 0);   // 0ms => non-blocking
-  if (rc != S2S_OK || !msg) return;
+  int rc = s2s_recv_json (conn, &msg, 0);	// 0ms => non-blocking
+  if (rc != S2S_OK || !msg)
+    return;
 
-  const char *type = json_string_value(json_object_get(msg, "type"));
-  if (type && strcmp(type, "s2s.engine.shutdown") == 0) {
-    // Begin graceful shutdown: set your running flag false, close down
-    fprintf(stderr, "[engine] received shutdown command\n");
-    // flip your engine running flag here…
-  } else if (type && strcmp(type, "s2s.health.check") == 0) {
-    // Optional: allow server to ping any time
-    time_t now = time(NULL);
-    static time_t start_ts; if (!start_ts) start_ts = now;
-    json_t *ack = json_pack("{s:i,s:s,s:s,s:I,s:o}",
-                            "v",1,"type","s2s.health.ack","id","rt-ack",
-                            "ts",(json_int_t)now,
-                            "payload", json_pack("{s:s,s:s,s:I}",
-                              "role","engine","version","0.1",
-                              "uptime_s",(json_int_t)(now-start_ts)));
-    s2s_send_json(conn, ack, 5000);
-    json_decref(ack);
-  } else {
-    // Unknown → send s2s.error
-    json_t *err = json_pack("{s:i,s:s,s:s,s:I,s:o}",
-                            "v",1,"type","s2s.error","id","unknown",
-                            "ts",(json_int_t)time(NULL),
-                            "payload", json_pack("{s:s}", "reason","unknown_type"));
-    s2s_send_json(conn, err, 5000);
-    json_decref(err);
-  }
+  const char *type = json_string_value (json_object_get (msg, "type"));
+  if (type && strcmp (type, "s2s.engine.shutdown") == 0)
+    {
+      // Begin graceful shutdown: set your running flag false, close down
+      fprintf (stderr, "[engine] received shutdown command\n");
+      // flip your engine running flag here…
+    }
+  else if (type && strcmp (type, "s2s.health.check") == 0)
+    {
+      // Optional: allow server to ping any time
+      time_t now = time (NULL);
+      static time_t start_ts;
+      if (!start_ts)
+	start_ts = now;
+      json_t *ack = json_pack ("{s:i,s:s,s:s,s:I,s:o}",
+			       "v", 1, "type", "s2s.health.ack", "id",
+			       "rt-ack",
+			       "ts", (json_int_t) now,
+			       "payload", json_pack ("{s:s,s:s,s:I}",
+						     "role", "engine",
+						     "version", "0.1",
+						     "uptime_s",
+						     (json_int_t) (now -
+								   start_ts)));
+      s2s_send_json (conn, ack, 5000);
+      json_decref (ack);
+    }
+  else
+    {
+      // Unknown → send s2s.error
+      json_t *err = json_pack ("{s:i,s:s,s:s,s:I,s:o}",
+			       "v", 1, "type", "s2s.error", "id", "unknown",
+			       "ts", (json_int_t) time (NULL),
+			       "payload", json_pack ("{s:s}", "reason",
+						     "unknown_type"));
+      s2s_send_json (conn, err, 5000);
+      json_decref (err);
+    }
 
-  json_decref(msg);
+  json_decref (msg);
 }
 
 /* Send the entire buffer (blocking). Returns 0 on success, -1 on error. */
@@ -299,11 +335,12 @@ static int
 engine_main_loop (int shutdown_fd)
 {
 
-  sqlite3 *db_handle = db_get_handle();
-  if (s2s_install_default_key(db_handle) != 0) {
-    fprintf(stderr, "[server] FATAL: S2S key missing/invalid.\n");
-    return 1; // or exit(1)
-  }
+  sqlite3 *db_handle = db_get_handle ();
+  if (s2s_install_default_key (db_handle) != 0)
+    {
+      fprintf (stderr, "[server] FATAL: S2S key missing/invalid.\n");
+      return 1;			// or exit(1)
+    }
 
   printf ("[engine] child up. pid=%d\n", getpid ());
 
@@ -311,58 +348,62 @@ engine_main_loop (int shutdown_fd)
   struct pollfd pfd = {.fd = shutdown_fd,.events = POLLIN };
 
   fprintf (stderr, "[engine] loading s2s key ...\n");
-  if (s2s_install_default_key(db_handle) != 0)
+  if (s2s_install_default_key (db_handle) != 0)
     {
-    fprintf(stderr, "[engine] FATAL: S2S key missing/invalid.\n");
-    return 1;
-  }
+      fprintf (stderr, "[engine] FATAL: S2S key missing/invalid.\n");
+      return 1;
+    }
 
-  fprintf(stderr, "[engine] connecting to 127.0.0.1:4321 ...\n");
-  s2s_conn_t *conn = s2s_tcp_client_connect("127.0.0.1", 4321, 5000);
-  if (!conn) {
-    fprintf(stderr, "[engine] connect failed\n");
-    return 1;
-  }
-  s2s_debug_dump_conn("engine", conn);  // optional debug
+  fprintf (stderr, "[engine] connecting to 127.0.0.1:4321 ...\n");
+  s2s_conn_t *conn = s2s_tcp_client_connect ("127.0.0.1", 4321, 5000);
+  if (!conn)
+    {
+      fprintf (stderr, "[engine] connect failed\n");
+      return 1;
+    }
+  s2s_debug_dump_conn ("engine", conn);	// optional debug
 
   /* Engine initiates: send hello, then expect ack */
-  time_t now = time(NULL);
-  json_t *hello = json_pack("{s:i,s:s,s:s,s:I,s:o}",
-			    "v",1,
-			    "type","s2s.health.hello",
-			    "id","boot-1",
-			    "ts",(json_int_t)now,
-			    "payload", json_pack("{s:s,s:s}",
-						 "role","engine","version","0.1"));
-  int rc = s2s_send_json(conn, hello, 5000);
-  json_decref(hello);
-  fprintf(stderr, "[engine] hello send rc=%d\n", rc);
+  time_t now = time (NULL);
+  json_t *hello = json_pack ("{s:i,s:s,s:s,s:I,s:o}",
+			     "v", 1,
+			     "type", "s2s.health.hello",
+			     "id", "boot-1",
+			     "ts", (json_int_t) now,
+			     "payload", json_pack ("{s:s,s:s}",
+						   "role", "engine",
+						   "version", "0.1"));
+  int rc = s2s_send_json (conn, hello, 5000);
+  json_decref (hello);
+  fprintf (stderr, "[engine] hello send rc=%d\n", rc);
 
   json_t *msg = NULL;
-  rc = s2s_recv_json(conn, &msg, 5000);
-  fprintf(stderr, "[engine] first frame rc=%d\n", rc);
-  if (rc == S2S_OK && msg) {
-    const char *type = json_string_value(json_object_get(msg, "type"));
-    if (type && strcmp(type, "s2s.health.ack") == 0) {
-      fprintf(stderr, "[engine] Ping test complete\n");
+  rc = s2s_recv_json (conn, &msg, 5000);
+  fprintf (stderr, "[engine] first frame rc=%d\n", rc);
+  if (rc == S2S_OK && msg)
+    {
+      const char *type = json_string_value (json_object_get (msg, "type"));
+      if (type && strcmp (type, "s2s.health.ack") == 0)
+	{
+	  fprintf (stderr, "[engine] Ping test complete\n");
+	}
+      json_decref (msg);
     }
-    json_decref(msg);
-  }
 
-   fprintf(stderr, "[engine] Running Smoke Test\n");
-   (void)engine_demo_push(conn);  
+  fprintf (stderr, "[engine] Running Smoke Test\n");
+  (void) engine_demo_push (conn);
 
-  static time_t last_metrics = 0;  
+  static time_t last_metrics = 0;
   for (;;)
     {
-      engine_s2s_drain_once(conn);
+      engine_s2s_drain_once (conn);
 
-      time_t now = time(NULL);
+      time_t now = time (NULL);
       if (now - last_metrics >= 3600)
 	{
-	log_s2s_metrics("engine");
-	last_metrics = now;
-	engine_tick(db_handle);
+	  log_s2s_metrics ("engine");
+	  last_metrics = now;
+	  engine_tick (db_handle);
 	}
 
       // Sleep until next tick or until shutdown pipe changes
@@ -441,10 +482,12 @@ engine_spawn (pid_t *out_pid, int *out_shutdown_fd)
   /* Parent keeps write end (shutdown signal), closes read end */
   close (pipefd[0]);
 
-  if (out_pid)          *out_pid = pid;
-  if (out_shutdown_fd)  *out_shutdown_fd = pipefd[1];
+  if (out_pid)
+    *out_pid = pid;
+  if (out_shutdown_fd)
+    *out_shutdown_fd = pipefd[1];
 
-  printf ("[engine] pid=%d\n", (int)pid);
+  printf ("[engine] pid=%d\n", (int) pid);
   return 0;
 }
 

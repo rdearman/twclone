@@ -7,7 +7,7 @@
 #include <sqlite3.h>
 
 
-sqlite3 *db_get_handle(void);
+sqlite3 *db_get_handle (void);
 
 /* External declaration for the mutex */
 extern pthread_mutex_t db_mutex;
@@ -130,8 +130,9 @@ json_t *db_notice_list_unseen_for_player (int player_id);
 int db_notice_mark_seen (int notice_id, int player_id);
 
 // database.h (prototype)
-int db_commands_accept(const char *cmd_type, const char *idem_key, json_t *payload,
-                       int *out_cmd_id, int *out_duplicate, int *out_due_at);
-int db_player_name(int64_t player_id, char **out);
+int db_commands_accept (const char *cmd_type, const char *idem_key,
+			json_t * payload, int *out_cmd_id, int *out_duplicate,
+			int *out_due_at);
+int db_player_name (int64_t player_id, char **out);
 
 #endif /* DATABASE_H */

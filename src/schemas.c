@@ -4,61 +4,126 @@
 #include <stdlib.h>
 
 
-static char *why_dup(const char *m) {
-  size_t n = strlen(m) + 1;
-  char *p = (char*)malloc(n);
-  if (p) memcpy(p, m, n);
+static char *
+why_dup (const char *m)
+{
+  size_t n = strlen (m) + 1;
+  char *p = (char *) malloc (n);
+  if (p)
+    memcpy (p, m, n);
   return p;
 }
 
-int schema_validate_payload(const char *type, json_t *payload, char **why) {
-  if (why) *why = NULL;
+int
+schema_validate_payload (const char *type, json_t *payload, char **why)
+{
+  if (why)
+    *why = NULL;
 
-  if (!type || !*type)                { if (why) *why = why_dup("type missing"); return -1; }
-  if (!payload || !json_is_object(payload)) {
-    if (why) *why = why_dup("payload not object"); return -1;
-  }
-
-  /* --- s2s.health.check --- */
-  if (strcmp(type, "s2s.health.check") == 0) {
-    /* empty or object is fine */
-    return 0;
-  }
-
-  /* --- s2s.broadcast.sweep --- */
-  if (strcmp(type, "s2s.broadcast.sweep") == 0) {
-    json_t *since = json_object_get(payload, "since_ts");
-    if (!since || !json_is_integer(since)) {
-      if (why) *why = why_dup("since_ts");
+  if (!type || !*type)
+    {
+      if (why)
+	*why = why_dup ("type missing");
       return -1;
     }
-    // Optional: filters or page_size ints later
-    return 0;
-  }
-  
+  if (!payload || !json_is_object (payload))
+    {
+      if (why)
+	*why = why_dup ("payload not object");
+      return -1;
+    }
+
+  /* --- s2s.health.check --- */
+  if (strcmp (type, "s2s.health.check") == 0)
+    {
+      /* empty or object is fine */
+      return 0;
+    }
+
+  /* --- s2s.broadcast.sweep --- */
+  if (strcmp (type, "s2s.broadcast.sweep") == 0)
+    {
+      json_t *since = json_object_get (payload, "since_ts");
+      if (!since || !json_is_integer (since))
+	{
+	  if (why)
+	    *why = why_dup ("since_ts");
+	  return -1;
+	}
+      // Optional: filters or page_size ints later
+      return 0;
+    }
+
   /* --- s2s.health.ack --- */
-  if (strcmp(type, "s2s.health.ack") == 0) {
-    if (!json_is_string(json_object_get(payload,"role")))     { if (why) *why = why_dup("role");     return -1; }
-    if (!json_is_string(json_object_get(payload,"version")))  { if (why) *why = why_dup("version");  return -1; }
-    if (!json_is_integer(json_object_get(payload,"uptime_s"))){ if (why) *why = why_dup("uptime_s"); return -1; }
-    return 0;
-  }
+  if (strcmp (type, "s2s.health.ack") == 0)
+    {
+      if (!json_is_string (json_object_get (payload, "role")))
+	{
+	  if (why)
+	    *why = why_dup ("role");
+	  return -1;
+	}
+      if (!json_is_string (json_object_get (payload, "version")))
+	{
+	  if (why)
+	    *why = why_dup ("version");
+	  return -1;
+	}
+      if (!json_is_integer (json_object_get (payload, "uptime_s")))
+	{
+	  if (why)
+	    *why = why_dup ("uptime_s");
+	  return -1;
+	}
+      return 0;
+    }
 
   /* --- s2s.command.push --- */
-  if (strcmp(type, "s2s.command.push") == 0) {
-    if (!json_is_string(json_object_get(payload,"cmd_type"))) { if (why) *why = why_dup("cmd_type"); return -1; }
-    if (!json_is_string(json_object_get(payload,"idem_key"))) { if (why) *why = why_dup("idem_key"); return -1; }
-    json_t *pl = json_object_get(payload,"payload");
-    if (!pl || !json_is_object(pl))                           { if (why) *why = why_dup("payload");  return -1; }
-    /* optional: correlation_id (string), priority (int), due_at (int) */
-    json_t *cid = json_object_get(payload, "correlation_id");
-    if (cid && !json_is_string(cid))                          { if (why) *why = why_dup("correlation_id"); return -1; }
-    json_t *prio = json_object_get(payload, "priority");
-    if (prio && !json_is_integer(prio))                       { if (why) *why = why_dup("priority"); return -1; }
-    json_t *due = json_object_get(payload, "due_at");
-    if (due && !json_is_integer(due))                         { if (why) *why = why_dup("due_at");   return -1; }
-    return 0;
-  }
+  if (strcmp (type, "s2s.command.push") == 0)
+    {
+      if (!json_is_string (json_object_get (payload, "cmd_type")))
+	{
+	  if (why)
+	    *why = why_dup ("cmd_type");
+	  return -1;
+	}
+      if (!json_is_string (json_object_get (payload, "idem_key")))
+	{
+	  if (why)
+	    *why = why_dup ("idem_key");
+	  return -1;
+	}
+      json_t *pl = json_object_get (payload, "payload");
+      if (!pl || !json_is_object (pl))
+	{
+	  if (why)
+	    *why = why_dup ("payload");
+	  return -1;
+	}
+      /* optional: correlation_id (string), priority (int), due_at (int) */
+      json_t *cid = json_object_get (payload, "correlation_id");
+      if (cid && !json_is_string (cid))
+	{
+	  if (why)
+	    *why = why_dup ("correlation_id");
+	  return -1;
+	}
+      json_t *prio = json_object_get (payload, "priority");
+      if (prio && !json_is_integer (prio))
+	{
+	  if (why)
+	    *why = why_dup ("priority");
+	  return -1;
+	}
+      json_t *due = json_object_get (payload, "due_at");
+      if (due && !json_is_integer (due))
+	{
+	  if (why)
+	    *why = why_dup ("due_at");
+	  return -1;
+	}
+      return 0;
+    }
 
   /* Unknown types: let dispatcher decide; treat as OK here. */
   return 0;

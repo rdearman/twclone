@@ -31,14 +31,17 @@ json_t *build_sector_info_json (int sector_id);
  * Build a nested player object { id, name? } for event payloads.
  * Name lookup is best-effort; if not found, we emit only {id}.
  */
-static json_t *make_player_object(int64_t player_id) {
-  json_t *player = json_object();
-  json_object_set_new(player, "id", json_integer(player_id));
+static json_t *
+make_player_object (int64_t player_id)
+{
+  json_t *player = json_object ();
+  json_object_set_new (player, "id", json_integer (player_id));
   char *pname = NULL;
-  if (db_player_name && db_player_name(player_id, &pname) == 0 && pname) {
-    json_object_set_new(player, "name", json_string(pname));
-    free(pname); /* allocated in db_player_name with malloc */
-  }
+  if (db_player_name && db_player_name (player_id, &pname) == 0 && pname)
+    {
+      json_object_set_new (player, "name", json_string (pname));
+      free (pname);		/* allocated in db_player_name with malloc */
+    }
   return player;
 }
 
@@ -490,24 +493,25 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
   /* json_object_set_new (left, "sector_id", json_integer (from)); */
   /* json_object_set_new (left, "to_sector_id", json_integer (to)); */
   /* legacy flat fields (kept for backward compatibility) */
-  json_object_set_new(left, "player_id", json_integer(ctx->player_id));
-  json_object_set_new(left, "sector_id", json_integer(from));
-  json_object_set_new(left, "to_sector_id", json_integer(to));
+  json_object_set_new (left, "player_id", json_integer (ctx->player_id));
+  json_object_set_new (left, "sector_id", json_integer (from));
+  json_object_set_new (left, "to_sector_id", json_integer (to));
   /* new nested object per protocol example */
-  json_object_set_new(left, "player", make_player_object(ctx->player_id));
+  json_object_set_new (left, "player", make_player_object (ctx->player_id));
   comm_publish_sector_event (from, "sector.player_left", left);
-  
+
   /* ENTERED event: sector = 'to' */
   json_t *entered = json_object ();
   /* json_object_set_new (entered, "player_id", json_integer (ctx->player_id)); */
   /* json_object_set_new (entered, "sector_id", json_integer (to)); */
   /* json_object_set_new (entered, "from_sector_id", json_integer (from)); */
   /* legacy flat fields (kept for backward compatibility) */
-  json_object_set_new(entered, "player_id", json_integer(ctx->player_id));
-  json_object_set_new(entered, "sector_id", json_integer(to));
-  json_object_set_new(entered, "from_sector_id", json_integer(from));
+  json_object_set_new (entered, "player_id", json_integer (ctx->player_id));
+  json_object_set_new (entered, "sector_id", json_integer (to));
+  json_object_set_new (entered, "from_sector_id", json_integer (from));
   /* new nested object per protocol example */
-  json_object_set_new(entered, "player", make_player_object(ctx->player_id));
+  json_object_set_new (entered, "player",
+		       make_player_object (ctx->player_id));
   comm_publish_sector_event (to, "sector.player_entered", entered);
 
   return 0;

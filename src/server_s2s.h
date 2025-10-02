@@ -9,11 +9,12 @@
 #include "schemas.h"
 
 /* Start/stop the control thread that reads envs from `conn` and dispatches. */
-int  server_s2s_start(s2s_conn_t *conn, pthread_t *out_thr, volatile sig_atomic_t *running_flag);
+int server_s2s_start (s2s_conn_t * conn, pthread_t * out_thr,
+		      volatile sig_atomic_t * running_flag);
 void server_s2s_stop (pthread_t thr);
 
 /* If you need to unit-test dispatch directly: */
-int  server_s2s_dispatch(s2s_conn_t *c, json_t *env);
+int server_s2s_dispatch (s2s_conn_t * c, json_t * env);
 
 #ifdef __cplusplus
 extern "C"
@@ -28,7 +29,7 @@ extern "C"
   int cmd_s2s_event_relay (client_ctx_t * ctx, json_t * root);	// "s2s.event.relay"
   int cmd_s2s_replication_heartbeat (client_ctx_t * ctx, json_t * root);	// "s2s.replication.heartbeat"
 
-  
+
 #ifdef __cplusplus
 }
 #endif

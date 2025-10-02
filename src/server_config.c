@@ -38,8 +38,10 @@ sqlite3 *g_db = NULL;
 
 /* --------- static helpers (not visible to linker) --------- */
 
-static void set_defaults(void) {
-  memset(&g_cfg, 0, sizeof g_cfg);
+static void
+set_defaults (void)
+{
+  memset (&g_cfg, 0, sizeof g_cfg);
 
   g_cfg.engine.tick_ms = 50;
   g_cfg.engine.daily_align_sec = 0;
@@ -49,19 +51,19 @@ static void set_defaults(void) {
   g_cfg.batching.broadcast_batch = 128;
 
   g_cfg.priorities.default_command_weight = 100;
-  g_cfg.priorities.default_event_weight   = 100;
+  g_cfg.priorities.default_event_weight = 100;
 
-  snprintf(g_cfg.s2s.transport, sizeof g_cfg.s2s.transport, "tcp");
-  snprintf(g_cfg.s2s.tcp_host,  sizeof g_cfg.s2s.tcp_host,  "127.0.0.1");
+  snprintf (g_cfg.s2s.transport, sizeof g_cfg.s2s.transport, "tcp");
+  snprintf (g_cfg.s2s.tcp_host, sizeof g_cfg.s2s.tcp_host, "127.0.0.1");
   g_cfg.s2s.tcp_port = 4321;
   g_cfg.s2s.frame_size_limit = 2 * 1024 * 1024;
 
-  g_cfg.safety.connect_ms         = 1500;
-  g_cfg.safety.handshake_ms       = 1500;
-  g_cfg.safety.rpc_ms             = 5000;
+  g_cfg.safety.connect_ms = 1500;
+  g_cfg.safety.handshake_ms = 1500;
+  g_cfg.safety.rpc_ms = 5000;
   g_cfg.safety.backoff_initial_ms = 100;
-  g_cfg.safety.backoff_max_ms     = 2000;
-  g_cfg.safety.backoff_factor     = 2.0;
+  g_cfg.safety.backoff_max_ms = 2000;
+  g_cfg.safety.backoff_factor = 2.0;
 
   g_cfg.secrets.key_id[0] = '\0';
   g_cfg.secrets.key_len = 0;
@@ -69,115 +71,171 @@ static void set_defaults(void) {
 
 
 
-static int validate_cfg(void) {
-  if (g_cfg.engine.tick_ms < 1) {
-    fprintf(stderr, "ERROR config: engine.tick_ms must be >= 1 (got %d)\n", g_cfg.engine.tick_ms);
-    return 0;
-  }
-  if (strcmp(g_cfg.s2s.transport,"uds")!=0 && strcmp(g_cfg.s2s.transport,"tcp")!=0) {
-    fprintf(stderr, "ERROR config: s2s.transport must be one of [uds|tcp] (got \"%s\")\n", g_cfg.s2s.transport);
-    return 0;
-  }
-  if (!strcmp(g_cfg.s2s.transport,"uds") && g_cfg.s2s.uds_path[0]=='\0') {
-    fprintf(stderr, "ERROR config: s2s.uds_path required when s2s.transport=uds\n");
-    return 0;
-  }
-  if (!strcmp(g_cfg.s2s.transport,"tcp") &&
-      (g_cfg.s2s.tcp_host[0]=='\0' || g_cfg.s2s.tcp_port<=0)) {
-    fprintf(stderr, "ERROR config: s2s.tcp_host/tcp_port required when s2s.transport=tcp\n");
-    return 0;
-  }
-  if (g_cfg.s2s.frame_size_limit > 8*1024*1024) {
-    fprintf(stderr, "ERROR config: s2s.frame_size_limit exceeds 8 MiB (%d)\n", g_cfg.s2s.frame_size_limit);
-    return 0;
-  }
+static int
+validate_cfg (void)
+{
+  if (g_cfg.engine.tick_ms < 1)
+    {
+      fprintf (stderr, "ERROR config: engine.tick_ms must be >= 1 (got %d)\n",
+	       g_cfg.engine.tick_ms);
+      return 0;
+    }
+  if (strcmp (g_cfg.s2s.transport, "uds") != 0
+      && strcmp (g_cfg.s2s.transport, "tcp") != 0)
+    {
+      fprintf (stderr,
+	       "ERROR config: s2s.transport must be one of [uds|tcp] (got \"%s\")\n",
+	       g_cfg.s2s.transport);
+      return 0;
+    }
+  if (!strcmp (g_cfg.s2s.transport, "uds") && g_cfg.s2s.uds_path[0] == '\0')
+    {
+      fprintf (stderr,
+	       "ERROR config: s2s.uds_path required when s2s.transport=uds\n");
+      return 0;
+    }
+  if (!strcmp (g_cfg.s2s.transport, "tcp") &&
+      (g_cfg.s2s.tcp_host[0] == '\0' || g_cfg.s2s.tcp_port <= 0))
+    {
+      fprintf (stderr,
+	       "ERROR config: s2s.tcp_host/tcp_port required when s2s.transport=tcp\n");
+      return 0;
+    }
+  if (g_cfg.s2s.frame_size_limit > 8 * 1024 * 1024)
+    {
+      fprintf (stderr,
+	       "ERROR config: s2s.frame_size_limit exceeds 8 MiB (%d)\n",
+	       g_cfg.s2s.frame_size_limit);
+      return 0;
+    }
   return 1;
 }
 
 /* --------- exported API --------- */
 
 
-void print_effective_config_redacted(void) {
-  printf("INFO config: effective (secrets redacted)\n");
-  printf("{\"engine\":{\"tick_ms\":%d,\"daily_align_sec\":%d},",
-         g_cfg.engine.tick_ms, g_cfg.engine.daily_align_sec);
+void
+print_effective_config_redacted (void)
+{
+  printf ("INFO config: effective (secrets redacted)\n");
+  printf ("{\"engine\":{\"tick_ms\":%d,\"daily_align_sec\":%d},",
+	  g_cfg.engine.tick_ms, g_cfg.engine.daily_align_sec);
 
-  printf("\"batching\":{\"event_batch\":%d,\"command_batch\":%d,\"broadcast_batch\":%d},",
-         g_cfg.batching.event_batch, g_cfg.batching.command_batch, g_cfg.batching.broadcast_batch);
+  printf
+    ("\"batching\":{\"event_batch\":%d,\"command_batch\":%d,\"broadcast_batch\":%d},",
+     g_cfg.batching.event_batch, g_cfg.batching.command_batch,
+     g_cfg.batching.broadcast_batch);
 
-  printf("\"priorities\":{\"default_command_weight\":%d,\"default_event_weight\":%d},",
-         g_cfg.priorities.default_command_weight, g_cfg.priorities.default_event_weight);
+  printf
+    ("\"priorities\":{\"default_command_weight\":%d,\"default_event_weight\":%d},",
+     g_cfg.priorities.default_command_weight,
+     g_cfg.priorities.default_event_weight);
 
-  printf("\"s2s\":{\"transport\":\"%s\",\"uds_path\":\"%s\",\"tcp_host\":\"%s\",\"tcp_port\":%d,\"frame_size_limit\":%d},",
-         g_cfg.s2s.transport, g_cfg.s2s.uds_path, g_cfg.s2s.tcp_host, g_cfg.s2s.tcp_port, g_cfg.s2s.frame_size_limit);
+  printf
+    ("\"s2s\":{\"transport\":\"%s\",\"uds_path\":\"%s\",\"tcp_host\":\"%s\",\"tcp_port\":%d,\"frame_size_limit\":%d},",
+     g_cfg.s2s.transport, g_cfg.s2s.uds_path, g_cfg.s2s.tcp_host,
+     g_cfg.s2s.tcp_port, g_cfg.s2s.frame_size_limit);
 
-  printf("\"safety\":{\"connect_ms\":%d,\"handshake_ms\":%d,\"rpc_ms\":%d,"
-         "\"backoff_initial_ms\":%d,\"backoff_max_ms\":%d,\"backoff_factor\":%.2f},",
-         g_cfg.safety.connect_ms, g_cfg.safety.handshake_ms, g_cfg.safety.rpc_ms,
-         g_cfg.safety.backoff_initial_ms, g_cfg.safety.backoff_max_ms, g_cfg.safety.backoff_factor);
+  printf ("\"safety\":{\"connect_ms\":%d,\"handshake_ms\":%d,\"rpc_ms\":%d,"
+	  "\"backoff_initial_ms\":%d,\"backoff_max_ms\":%d,\"backoff_factor\":%.2f},",
+	  g_cfg.safety.connect_ms, g_cfg.safety.handshake_ms,
+	  g_cfg.safety.rpc_ms, g_cfg.safety.backoff_initial_ms,
+	  g_cfg.safety.backoff_max_ms, g_cfg.safety.backoff_factor);
 
-  printf("\"secrets\":{\"key_id\":\"%s\",\"hmac\":\"********\"}}\n",
-         g_cfg.secrets.key_id[0] ? "********" : "");
+  printf ("\"secrets\":{\"key_id\":\"%s\",\"hmac\":\"********\"}}\n",
+	  g_cfg.secrets.key_id[0] ? "********" : "");
 }
 
 
 
-static void apply_db(sqlite3 *db) {
+static void
+apply_db (sqlite3 *db)
+{
   sqlite3_stmt *st = NULL;
-  if (sqlite3_prepare_v2(db, "SELECT key,value FROM app_config", -1, &st, NULL) != SQLITE_OK) return;
-  while (sqlite3_step(st) == SQLITE_ROW) {
-    const char *k = (const char*)sqlite3_column_text(st,0);
-    const char *v = (const char*)sqlite3_column_text(st,1);
-    // map k -> g_cfg fields; parse ints/doubles where needed
-    if (!strcmp(k,"engine.tick_ms"))                g_cfg.engine.tick_ms = atoi(v);
-    else if (!strcmp(k,"engine.daily_align_sec"))   g_cfg.engine.daily_align_sec = atoi(v);
+  if (sqlite3_prepare_v2
+      (db, "SELECT key,value FROM app_config", -1, &st, NULL) != SQLITE_OK)
+    return;
+  while (sqlite3_step (st) == SQLITE_ROW)
+    {
+      const char *k = (const char *) sqlite3_column_text (st, 0);
+      const char *v = (const char *) sqlite3_column_text (st, 1);
+      // map k -> g_cfg fields; parse ints/doubles where needed
+      if (!strcmp (k, "engine.tick_ms"))
+	g_cfg.engine.tick_ms = atoi (v);
+      else if (!strcmp (k, "engine.daily_align_sec"))
+	g_cfg.engine.daily_align_sec = atoi (v);
 
-    else if (!strcmp(k,"batch.event_batch"))        g_cfg.batching.event_batch = atoi(v);
-    else if (!strcmp(k,"batch.command_batch"))      g_cfg.batching.command_batch = atoi(v);
-    else if (!strcmp(k,"batch.broadcast_batch"))    g_cfg.batching.broadcast_batch = atoi(v);
+      else if (!strcmp (k, "batch.event_batch"))
+	g_cfg.batching.event_batch = atoi (v);
+      else if (!strcmp (k, "batch.command_batch"))
+	g_cfg.batching.command_batch = atoi (v);
+      else if (!strcmp (k, "batch.broadcast_batch"))
+	g_cfg.batching.broadcast_batch = atoi (v);
 
-    else if (!strcmp(k,"prio.default_command_weight")) g_cfg.priorities.default_command_weight = atoi(v);
-    else if (!strcmp(k,"prio.default_event_weight"))   g_cfg.priorities.default_event_weight = atoi(v);
+      else if (!strcmp (k, "prio.default_command_weight"))
+	g_cfg.priorities.default_command_weight = atoi (v);
+      else if (!strcmp (k, "prio.default_event_weight"))
+	g_cfg.priorities.default_event_weight = atoi (v);
 
-    else if (!strcmp(k,"s2s.transport"))            snprintf(g_cfg.s2s.transport,sizeof g_cfg.s2s.transport,"%s",v);
-    else if (!strcmp(k,"s2s.uds_path"))             snprintf(g_cfg.s2s.uds_path,sizeof g_cfg.s2s.uds_path,"%s",v);
-    else if (!strcmp(k,"s2s.tcp_host"))             snprintf(g_cfg.s2s.tcp_host,sizeof g_cfg.s2s.tcp_host,"%s",v);
-    else if (!strcmp(k,"s2s.tcp_port"))             g_cfg.s2s.tcp_port = atoi(v);
-    else if (!strcmp(k,"s2s.frame_size_limit"))     g_cfg.s2s.frame_size_limit = atoi(v);
+      else if (!strcmp (k, "s2s.transport"))
+	snprintf (g_cfg.s2s.transport, sizeof g_cfg.s2s.transport, "%s", v);
+      else if (!strcmp (k, "s2s.uds_path"))
+	snprintf (g_cfg.s2s.uds_path, sizeof g_cfg.s2s.uds_path, "%s", v);
+      else if (!strcmp (k, "s2s.tcp_host"))
+	snprintf (g_cfg.s2s.tcp_host, sizeof g_cfg.s2s.tcp_host, "%s", v);
+      else if (!strcmp (k, "s2s.tcp_port"))
+	g_cfg.s2s.tcp_port = atoi (v);
+      else if (!strcmp (k, "s2s.frame_size_limit"))
+	g_cfg.s2s.frame_size_limit = atoi (v);
 
-    else if (!strcmp(k,"safety.connect_ms"))        g_cfg.safety.connect_ms = atoi(v);
-    else if (!strcmp(k,"safety.handshake_ms"))      g_cfg.safety.handshake_ms = atoi(v);
-    else if (!strcmp(k,"safety.rpc_ms"))            g_cfg.safety.rpc_ms = atoi(v);
-    else if (!strcmp(k,"safety.backoff_initial_ms"))g_cfg.safety.backoff_initial_ms = atoi(v);
-    else if (!strcmp(k,"safety.backoff_max_ms"))    g_cfg.safety.backoff_max_ms = atoi(v);
-    else if (!strcmp(k,"safety.backoff_factor"))    g_cfg.safety.backoff_factor = atof(v);
-  }
-  sqlite3_finalize(st);
+      else if (!strcmp (k, "safety.connect_ms"))
+	g_cfg.safety.connect_ms = atoi (v);
+      else if (!strcmp (k, "safety.handshake_ms"))
+	g_cfg.safety.handshake_ms = atoi (v);
+      else if (!strcmp (k, "safety.rpc_ms"))
+	g_cfg.safety.rpc_ms = atoi (v);
+      else if (!strcmp (k, "safety.backoff_initial_ms"))
+	g_cfg.safety.backoff_initial_ms = atoi (v);
+      else if (!strcmp (k, "safety.backoff_max_ms"))
+	g_cfg.safety.backoff_max_ms = atoi (v);
+      else if (!strcmp (k, "safety.backoff_factor"))
+	g_cfg.safety.backoff_factor = atof (v);
+    }
+  sqlite3_finalize (st);
 
   // Secrets: pick active key (redacted in print)
   sqlite3_stmt *ks = NULL;
-  if (sqlite3_prepare_v2(db,
-      "SELECT key_id,key_b64 FROM s2s_keys WHERE active=1 AND is_default_tx=1 LIMIT 1", -1, &ks, NULL)==SQLITE_OK
-      && sqlite3_step(ks)==SQLITE_ROW) {
-    const char *kid = (const char*)sqlite3_column_text(ks,0);
-    const char *b64 = (const char*)sqlite3_column_text(ks,1);
-    snprintf(g_cfg.secrets.key_id, sizeof g_cfg.secrets.key_id, "%s", kid?kid:"");
-    // decode b64 → g_cfg.secrets.key / key_len (or keep it where your transport already expects it)
-  }
-  sqlite3_finalize(ks);
+  if (sqlite3_prepare_v2 (db,
+			  "SELECT key_id,key_b64 FROM s2s_keys WHERE active=1 AND is_default_tx=1 LIMIT 1",
+			  -1, &ks, NULL) == SQLITE_OK
+      && sqlite3_step (ks) == SQLITE_ROW)
+    {
+      const char *kid = (const char *) sqlite3_column_text (ks, 0);
+      const char *b64 = (const char *) sqlite3_column_text (ks, 1);
+      snprintf (g_cfg.secrets.key_id, sizeof g_cfg.secrets.key_id, "%s",
+		kid ? kid : "");
+      // decode b64 → g_cfg.secrets.key / key_len (or keep it where your transport already expects it)
+    }
+  sqlite3_finalize (ks);
 }
 
-static void apply_env(void) { /* same names as before: TW_ENGINE_TICK_MS, etc. */ }
+static void
+apply_env (void)
+{				/* same names as before: TW_ENGINE_TICK_MS, etc. */
+}
 
-int load_eng_config(void) {
-  set_defaults();
+int
+load_eng_config (void)
+{
+  set_defaults ();
 
   // ensure DB is open/initialised here (you already do schema creation)
   extern sqlite3 *g_db;
-  if (g_db) apply_db(g_db);
+  if (g_db)
+    apply_db (g_db);
 
-  apply_env();         // ENV overrides DB
-  return validate_cfg();
+  apply_env ();			// ENV overrides DB
+  return validate_cfg ();
 }
 
 void send_enveloped_ok (int fd, json_t * root, const char *type,

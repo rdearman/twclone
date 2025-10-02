@@ -30,20 +30,19 @@ static int db_create_tables_unlocked (void);
 static int db_insert_defaults_unlocked (void);
 static int db_ensure_ship_perms_column_unlocked (void);
 
-int db_commands_accept(const char *cmd_type,
-                       const char *idem_key,
-                       json_t *payload,
-                       int *out_cmd_id,
-                       int *out_duplicate,
-                       int *out_due_at)
+int
+db_commands_accept (const char *cmd_type,
+		    const char *idem_key,
+		    json_t *payload,
+		    int *out_cmd_id, int *out_duplicate, int *out_due_at)
 {
-  if (!cmd_type || !idem_key || !payload) return -1;
+  if (!cmd_type || !idem_key || !payload)
+    return -1;
 
   // Ensure idempotency index exists once (no-op if already there)
-  sqlite3_exec(db_handle,
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_engine_cmds_idem "
-    "ON engine_commands(idem_key);",
-    NULL,NULL,NULL);
+  sqlite3_exec (db_handle,
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_engine_cmds_idem "
+		"ON engine_commands(idem_key);", NULL, NULL, NULL);
 
   const char *SQL_INS =
     "INSERT INTO engine_commands("
@@ -53,60 +52,72 @@ int db_commands_accept(const char *cmd_type,
     ");";
 
   sqlite3_stmt *st = NULL;
-  int rc = sqlite3_prepare_v2(db_handle, SQL_INS, -1, &st, NULL);
-  if (rc != SQLITE_OK) return -2;
+  int rc = sqlite3_prepare_v2 (db_handle, SQL_INS, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    return -2;
 
-  char *payload_str = json_dumps(payload, JSON_COMPACT);
-  sqlite3_bind_text(st, 1, cmd_type,    -1, SQLITE_STATIC);
-  sqlite3_bind_text(st, 2, payload_str, -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text(st, 3, idem_key,    -1, SQLITE_STATIC);
+  char *payload_str = json_dumps (payload, JSON_COMPACT);
+  sqlite3_bind_text (st, 1, cmd_type, -1, SQLITE_STATIC);
+  sqlite3_bind_text (st, 2, payload_str, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text (st, 3, idem_key, -1, SQLITE_STATIC);
 
   int dup = 0, cmd_id = 0, due_at = 0;
 
-  rc = sqlite3_step(st);
-  if (rc == SQLITE_DONE) {
-    cmd_id = (int)sqlite3_last_insert_rowid(db_handle);
-    dup = 0;
-  } else if (rc == SQLITE_CONSTRAINT) {
-    // Duplicate: fetch existing id + due_at
-    const char *SQL_GET =
-      "SELECT id, COALESCE(due_at, strftime('%s','now')) "
-      "FROM engine_commands WHERE idem_key = ?;";
-    sqlite3_stmt *gt = NULL;
-    sqlite3_prepare_v2(db_handle, SQL_GET, -1, &gt, NULL);
-    sqlite3_bind_text(gt, 1, idem_key, -1, SQLITE_STATIC);
-    if (sqlite3_step(gt) == SQLITE_ROW) {
-      cmd_id = sqlite3_column_int(gt, 0);
-      due_at = sqlite3_column_int(gt, 1);
+  rc = sqlite3_step (st);
+  if (rc == SQLITE_DONE)
+    {
+      cmd_id = (int) sqlite3_last_insert_rowid (db_handle);
+      dup = 0;
     }
-    sqlite3_finalize(gt);
-    dup = 1;
-  } else {
-    sqlite3_finalize(st);
-    free(payload_str);
-    return -3;
-  }
+  else if (rc == SQLITE_CONSTRAINT)
+    {
+      // Duplicate: fetch existing id + due_at
+      const char *SQL_GET =
+	"SELECT id, COALESCE(due_at, strftime('%s','now')) "
+	"FROM engine_commands WHERE idem_key = ?;";
+      sqlite3_stmt *gt = NULL;
+      sqlite3_prepare_v2 (db_handle, SQL_GET, -1, &gt, NULL);
+      sqlite3_bind_text (gt, 1, idem_key, -1, SQLITE_STATIC);
+      if (sqlite3_step (gt) == SQLITE_ROW)
+	{
+	  cmd_id = sqlite3_column_int (gt, 0);
+	  due_at = sqlite3_column_int (gt, 1);
+	}
+      sqlite3_finalize (gt);
+      dup = 1;
+    }
+  else
+    {
+      sqlite3_finalize (st);
+      free (payload_str);
+      return -3;
+    }
 
-  sqlite3_finalize(st);
-  free(payload_str);
+  sqlite3_finalize (st);
+  free (payload_str);
 
   // For new rows, read due_at
-  if (!dup) {
-    const char *SQL_DUE =
-      "SELECT COALESCE(due_at, strftime('%s','now')) "
-      "FROM engine_commands WHERE id = ?;";
-    sqlite3_stmt *sd = NULL;
-    sqlite3_prepare_v2(db_handle, SQL_DUE, -1, &sd, NULL);
-    sqlite3_bind_int(sd, 1, cmd_id);
-    if (sqlite3_step(sd) == SQLITE_ROW) {
-      due_at = sqlite3_column_int(sd, 0);
+  if (!dup)
+    {
+      const char *SQL_DUE =
+	"SELECT COALESCE(due_at, strftime('%s','now')) "
+	"FROM engine_commands WHERE id = ?;";
+      sqlite3_stmt *sd = NULL;
+      sqlite3_prepare_v2 (db_handle, SQL_DUE, -1, &sd, NULL);
+      sqlite3_bind_int (sd, 1, cmd_id);
+      if (sqlite3_step (sd) == SQLITE_ROW)
+	{
+	  due_at = sqlite3_column_int (sd, 0);
+	}
+      sqlite3_finalize (sd);
     }
-    sqlite3_finalize(sd);
-  }
 
-  if (out_cmd_id)    *out_cmd_id    = cmd_id;
-  if (out_duplicate) *out_duplicate = dup;
-  if (out_due_at)    *out_due_at    = due_at;
+  if (out_cmd_id)
+    *out_cmd_id = cmd_id;
+  if (out_duplicate)
+    *out_duplicate = dup;
+  if (out_due_at)
+    *out_due_at = due_at;
   return 0;
 }
 
@@ -456,6 +467,7 @@ const char *create_table_sql[] = {
     "   event_type TEXT NOT NULL,  "
     "   delivery TEXT NOT NULL,  "
     "   filter_json TEXT,  "
+    "   locked INTEGER NOT NULL DEFAULT 0, "
     "   enabled INTEGER NOT NULL DEFAULT 1,  "
     "   UNIQUE(player_id, event_type),  "
     "   FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE "
@@ -483,6 +495,42 @@ const char *create_table_sql[] = {
     "  severity   TEXT NOT NULL CHECK(severity IN ('info','warn','error')),"
     "  expires_at INTEGER" ");",
 
+  "CREATE TABLE player_prefs   (  "
+    "  player_id  INTEGER NOT NULL  ,  "
+    "  key        TEXT    NOT NULL,       "
+    "  type       TEXT    NOT NULL CHECK (type IN ('bool','int','string','json'))  ,  "
+    "  value      TEXT    NOT NULL,       "
+    "  updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))  ,  "
+    "  PRIMARY KEY (player_id, key)  ,  "
+    "  FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE )  ;  ",
+
+  "CREATE TABLE player_bookmarks   (  "
+    "  id         INTEGER PRIMARY KEY AUTOINCREMENT  ,  "
+    "  player_id  INTEGER NOT NULL  ,  "
+    "  name       TEXT    NOT NULL,      "
+    "  sector_id  INTEGER NOT NULL  ,  "
+    "  updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))  ,  "
+    "  UNIQUE(player_id, name)  ,  "
+    "  FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE  ,  "
+    "  FOREIGN KEY (sector_id) REFERENCES sectors(id) ON DELETE CASCADE )  ;  ",
+
+  "CREATE TABLE player_avoid   (  "
+    "  player_id  INTEGER NOT NULL  ,  "
+    "  sector_id  INTEGER NOT NULL  ,  "
+    "  updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))  ,  "
+    "  PRIMARY KEY (player_id, sector_id)  ,  "
+    "  FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE  ,  "
+    "  FOREIGN KEY (sector_id) REFERENCES sectors(id) ON DELETE CASCADE )  ;  ",
+
+  "CREATE TABLE player_notes   (  "
+    "  id         INTEGER PRIMARY KEY AUTOINCREMENT  ,  "
+    "  player_id  INTEGER NOT NULL  ,  "
+    "  scope      TEXT    NOT NULL,    "
+    "  key        TEXT    NOT NULL,    "
+    "  note       TEXT    NOT NULL  ,  "
+    "  updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))  ,  "
+    "  UNIQUE(player_id, scope, key)  ,  "
+    "  FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE )  ;  ",
 
 
   //////////////////////////////////////////////////////////////////////
@@ -836,11 +884,12 @@ const char *create_table_sql[] = {
   " CREATE INDEX IF NOT EXISTS idx_subscriptions_player  "
     " ON subscriptions(player_id, enabled); ",
 
-
-  ///////////////// TRIGGERS /////////////////////
-
-
-  " CREATE TRIGGER IF NOT EXISTS corporations_touch_updated  "
+  "CREATE INDEX idx_player_prefs_player ON player_prefs(player_id)  ;  "
+    "CREATE INDEX idx_bookmarks_player ON player_bookmarks(player_id)  ;  "
+    "CREATE INDEX idx_avoid_player ON player_avoid(player_id)  ;  "
+    "CREATE INDEX idx_notes_player ON player_notes(player_id)  ;  "
+    ///////////////// TRIGGERS /////////////////////
+    " CREATE TRIGGER IF NOT EXISTS corporations_touch_updated  "
     " AFTER UPDATE ON corporations  "
     " FOR EACH ROW  "
     " BEGIN  "
@@ -1274,8 +1323,7 @@ const char *insert_default_sql[] = {
 
 ///////////// S2S /////////////////////////
 
-static const char *ENGINE_BOOTSTRAP_SQL =
-  "BEGIN IMMEDIATE;\n"
+static const char *ENGINE_BOOTSTRAP_SQL = "BEGIN IMMEDIATE;\n"
   /* --- S2S keyring (HMAC) --- */
   "CREATE TABLE IF NOT EXISTS s2s_keys(\n"
   "  key_id TEXT PRIMARY KEY,\n"
@@ -1337,10 +1385,7 @@ static const char *ENGINE_BOOTSTRAP_SQL =
   "  ts INTEGER NOT NULL,\n"
   "  type TEXT NOT NULL,\n"
   "  payload TEXT NOT NULL,\n"
-  "  error TEXT NOT NULL,\n"
-  "  moved_at INTEGER NOT NULL\n"
-  ");\n"
-  "\n"
+  "  error TEXT NOT NULL,\n" "  moved_at INTEGER NOT NULL\n" ");\n" "\n"
   /* --- Engine→Server command rail --- */
   "CREATE TABLE IF NOT EXISTS engine_commands(\n"
   "  id INTEGER PRIMARY KEY,\n"
@@ -1366,33 +1411,16 @@ static const char *ENGINE_BOOTSTRAP_SQL =
   "  ts INTEGER NOT NULL,\n"
   "  cmd_type TEXT NOT NULL,\n"
   "  correlation_id TEXT,\n"
-  "  actor_player_id INTEGER,\n"
-  "  details TEXT\n"
-  ");\n"
-  "\n"
-  "COMMIT;\n";
+  "  actor_player_id INTEGER,\n" "  details TEXT\n" ");\n" "\n" "COMMIT;\n";
 
-static const char *MIGRATE_A_SQL =
-  "BEGIN IMMEDIATE;"
-
+static const char *MIGRATE_A_SQL = "BEGIN IMMEDIATE;"
   /* engine_offset (consumer high-water mark) */
   "CREATE TABLE IF NOT EXISTS engine_offset ("
   "  key TEXT PRIMARY KEY,"
-  "  last_event_id INTEGER NOT NULL,"
-  "  last_event_ts INTEGER NOT NULL"
-  ");"
-
+  "  last_event_id INTEGER NOT NULL," "  last_event_ts INTEGER NOT NULL" ");"
   /* engine_events (durable rail) — keep your existing table; create if missing */
-  "CREATE TABLE IF NOT EXISTS engine_events ("
-  "  id              INTEGER PRIMARY KEY,"
-  "  ts              INTEGER NOT NULL,"
-  "  type            TEXT NOT NULL,"
-  "  actor_player_id INTEGER,"
-  "  sector_id       INTEGER,"
-  "  payload         JSON NOT NULL,"  /* JSON is stored as TEXT in SQLite */
-  "  idem_key        TEXT"
-  ");"
-
+  "CREATE TABLE IF NOT EXISTS engine_events (" "  id              INTEGER PRIMARY KEY," "  ts              INTEGER NOT NULL," "  type            TEXT NOT NULL," "  actor_player_id INTEGER," "  sector_id       INTEGER," "  payload         JSON NOT NULL,"	/* JSON is stored as TEXT in SQLite */
+  "  idem_key        TEXT" ");"
   /* Indices per acceptance criteria */
   "CREATE UNIQUE INDEX IF NOT EXISTS ux_engine_events_idem_key "
   "  ON engine_events(idem_key);"
@@ -1404,105 +1432,94 @@ static const char *MIGRATE_A_SQL =
   "  ON engine_events(actor_player_id, ts);"
   "CREATE INDEX IF NOT EXISTS ix_engine_events_sector_ts "
   "  ON engine_events(sector_id, ts);"
-
   /* Forward-compat view named exactly 'events' */
   "DROP VIEW IF EXISTS events;"
   "CREATE VIEW events AS "
   "  SELECT id, ts, type, actor_player_id, sector_id, payload, idem_key "
+  "  FROM engine_events;" "COMMIT;";
+
+static const char *MIGRATE_B_SQL = "BEGIN IMMEDIATE;"
+  /* High-water mark for the engine consumer */
+  "CREATE TABLE IF NOT EXISTS engine_offset("
+  "  key TEXT PRIMARY KEY,"
+  "  last_event_id INTEGER NOT NULL," "  last_event_ts INTEGER NOT NULL" ");"
+  /* Durable rail backing table */
+  "CREATE TABLE IF NOT EXISTS engine_events("
+  "  id              INTEGER PRIMARY KEY,"
+  "  ts              INTEGER NOT NULL,"
+  "  type            TEXT NOT NULL,"
+  "  actor_player_id INTEGER,"
+  "  sector_id       INTEGER,"
+  "  payload         JSON NOT NULL," "  idem_key        TEXT" ");"
+  /* Indices per AC */
+  "CREATE UNIQUE INDEX IF NOT EXISTS ux_engine_events_idem_key "
+  "  ON engine_events(idem_key);"
+  "CREATE INDEX IF NOT EXISTS ix_engine_events_ts "
+  "  ON engine_events(ts);"
+  "CREATE INDEX IF NOT EXISTS ix_engine_events_type "
+  "  ON engine_events(type);"
+  "CREATE INDEX IF NOT EXISTS ix_engine_events_actor_ts "
+  "  ON engine_events(actor_player_id, ts);"
+  "CREATE INDEX IF NOT EXISTS ix_engine_events_sector_ts "
+  "  ON engine_events(sector_id, ts);"
+  /* Forward-compat view named exactly `events` */
+  "DROP VIEW IF EXISTS events;"
+  "CREATE VIEW events AS "
+  "  SELECT id, ts, type, actor_player_id, sector_id, payload, idem_key "
   "  FROM engine_events;"
-
-  "COMMIT;";
-
-    static const char *MIGRATE_B_SQL =
-        "BEGIN IMMEDIATE;"
-
-        /* High-water mark for the engine consumer */
-        "CREATE TABLE IF NOT EXISTS engine_offset("
-        "  key TEXT PRIMARY KEY,"
-        "  last_event_id INTEGER NOT NULL,"
-        "  last_event_ts INTEGER NOT NULL"
-        ");"
-
-        /* Durable rail backing table */
-        "CREATE TABLE IF NOT EXISTS engine_events("
-        "  id              INTEGER PRIMARY KEY,"
-        "  ts              INTEGER NOT NULL,"
-        "  type            TEXT NOT NULL,"
-        "  actor_player_id INTEGER,"
-        "  sector_id       INTEGER,"
-        "  payload         JSON NOT NULL,"
-        "  idem_key        TEXT"
-        ");"
-
-        /* Indices per AC */
-        "CREATE UNIQUE INDEX IF NOT EXISTS ux_engine_events_idem_key "
-        "  ON engine_events(idem_key);"
-        "CREATE INDEX IF NOT EXISTS ix_engine_events_ts "
-        "  ON engine_events(ts);"
-        "CREATE INDEX IF NOT EXISTS ix_engine_events_type "
-        "  ON engine_events(type);"
-        "CREATE INDEX IF NOT EXISTS ix_engine_events_actor_ts "
-        "  ON engine_events(actor_player_id, ts);"
-        "CREATE INDEX IF NOT EXISTS ix_engine_events_sector_ts "
-        "  ON engine_events(sector_id, ts);"
-
-        /* Forward-compat view named exactly `events` */
-        "DROP VIEW IF EXISTS events;"
-        "CREATE VIEW events AS "
-        "  SELECT id, ts, type, actor_player_id, sector_id, payload, idem_key "
-        "  FROM engine_events;"
-
-        /* Make the view writable (append-only) */
-        "DROP TRIGGER IF EXISTS events_insert;"
-        "CREATE TRIGGER IF NOT EXISTS events_insert "
-        "INSTEAD OF INSERT ON events "
-        "BEGIN "
-        "  INSERT INTO engine_events(id, ts, type, actor_player_id, sector_id, payload, idem_key) "
-        "  VALUES (NEW.id, NEW.ts, NEW.type, NEW.actor_player_id, NEW.sector_id, NEW.payload, NEW.idem_key);"
-        "END;"
-
-        "DROP TRIGGER IF EXISTS events_update;"
-        "CREATE TRIGGER IF NOT EXISTS events_update "
-        "INSTEAD OF UPDATE ON events "
-        "BEGIN "
-        "  SELECT RAISE(ABORT, 'events is append-only');"
-        "END;"
-
-        "DROP TRIGGER IF EXISTS events_delete;"
-        "CREATE TRIGGER IF NOT EXISTS events_delete "
-        "INSTEAD OF DELETE ON events "
-        "BEGIN "
-        "  SELECT RAISE(ABORT, 'events is append-only');"
-        "END;"
-
-        "COMMIT;";
+  /* Make the view writable (append-only) */
+  "DROP TRIGGER IF EXISTS events_insert;"
+  "CREATE TRIGGER IF NOT EXISTS events_insert "
+  "INSTEAD OF INSERT ON events "
+  "BEGIN "
+  "  INSERT INTO engine_events(id, ts, type, actor_player_id, sector_id, payload, idem_key) "
+  "  VALUES (NEW.id, NEW.ts, NEW.type, NEW.actor_player_id, NEW.sector_id, NEW.payload, NEW.idem_key);"
+  "END;"
+  "DROP TRIGGER IF EXISTS events_update;"
+  "CREATE TRIGGER IF NOT EXISTS events_update "
+  "INSTEAD OF UPDATE ON events "
+  "BEGIN "
+  "  SELECT RAISE(ABORT, 'events is append-only');"
+  "END;"
+  "DROP TRIGGER IF EXISTS events_delete;"
+  "CREATE TRIGGER IF NOT EXISTS events_delete "
+  "INSTEAD OF DELETE ON events "
+  "BEGIN " "  SELECT RAISE(ABORT, 'events is append-only');" "END;" "COMMIT;";
 
 
-int db_engine_bootstrap(sqlite3 *db) {
+int
+db_engine_bootstrap (sqlite3 *db)
+{
   char *err = NULL;
-  int rc = sqlite3_exec(db, ENGINE_BOOTSTRAP_SQL, NULL, NULL, &err);
-  if (rc != SQLITE_OK) {
-    fprintf(stderr, "[db] engine bootstrap failed: %s\n", err ? err : "(unknown)");
-    sqlite3_free(err);
-    return -1;
-  }
+  int rc = sqlite3_exec (db, ENGINE_BOOTSTRAP_SQL, NULL, NULL, &err);
+  if (rc != SQLITE_OK)
+    {
+      fprintf (stderr, "[db] engine bootstrap failed: %s\n",
+	       err ? err : "(unknown)");
+      sqlite3_free (err);
+      return -1;
+    }
   // MIGRATE_A_SQL
-   rc = sqlite3_exec(db, MIGRATE_A_SQL , NULL, NULL, &err);
-  if (rc != SQLITE_OK) {
-    fprintf(stderr, "[db] Engine table update failed: %s\n", err ? err : "(unknown)");
-    sqlite3_free(err);
-    return -1;
-  }  
+  rc = sqlite3_exec (db, MIGRATE_A_SQL, NULL, NULL, &err);
+  if (rc != SQLITE_OK)
+    {
+      fprintf (stderr, "[db] Engine table update failed: %s\n",
+	       err ? err : "(unknown)");
+      sqlite3_free (err);
+      return -1;
+    }
 
   // MIGRATE_B_SQL
-   rc = sqlite3_exec(db, MIGRATE_B_SQL , NULL, NULL, &err);
-  if (rc != SQLITE_OK) {
-    fprintf(stderr, "[db] Engine table update failed: %s\n", err ? err : "(unknown)");
-    sqlite3_free(err);
-    return -1;
-  }  
-  
-  
+  rc = sqlite3_exec (db, MIGRATE_B_SQL, NULL, NULL, &err);
+  if (rc != SQLITE_OK)
+    {
+      fprintf (stderr, "[db] Engine table update failed: %s\n",
+	       err ? err : "(unknown)");
+      sqlite3_free (err);
+      return -1;
+    }
+
+
   return 0;
 }
 
@@ -1634,9 +1651,9 @@ db_init (void)
 	}
 
     }
-  db_engine_bootstrap(db_handle);
- 
-  
+  db_engine_bootstrap (db_handle);
+
+
   // If we've made it here, all steps were successful.
   ret_code = 0;
 
@@ -5373,61 +5390,67 @@ db_notice_mark_seen (int notice_id, int player_id)
   return (rc == SQLITE_DONE) ? 0 : -1;
 }
 
-extern sqlite3 *g_db; /* already present elsewhere in your codebase */
+extern sqlite3 *g_db;		/* already present elsewhere in your codebase */
 
-int db_player_name(int64_t player_id, char **out)
+int
+db_player_name (int64_t player_id, char **out)
 {
-  if (!out) return -2;
+  if (!out)
+    return -2;
   *out = NULL;
 
   /* Use the same handle + mutex model as the rest of database.c */
-  pthread_mutex_lock(&db_mutex);
-  sqlite3 *dbh = db_get_handle();
-  if (!dbh) {
-    pthread_mutex_unlock(&db_mutex);
-    return -3;
-  }
+  pthread_mutex_lock (&db_mutex);
+  sqlite3 *dbh = db_get_handle ();
+  if (!dbh)
+    {
+      pthread_mutex_unlock (&db_mutex);
+      return -3;
+    }
 
   static const char *SQL =
     "SELECT COALESCE(name, '') AS pname "
-    "FROM players "
-    "WHERE id = ?1 "
-    "LIMIT 1";
+    "FROM players " "WHERE id = ?1 " "LIMIT 1";
 
   sqlite3_stmt *st = NULL;
-  int rc = sqlite3_prepare_v2(dbh, SQL, -1, &st, NULL);
-  if (rc != SQLITE_OK) {
-    pthread_mutex_unlock(&db_mutex);
-    return -4;
-  }
-
-  rc = sqlite3_bind_int64(st, 1, (sqlite3_int64)player_id);
-  if (rc != SQLITE_OK) {
-    sqlite3_finalize(st);
-    pthread_mutex_unlock(&db_mutex);
-    return -5;
-  }
-
-  rc = sqlite3_step(st);
-  if (rc == SQLITE_ROW) {
-    const unsigned char *txt = sqlite3_column_text(st, 0);
-    if (txt && txt[0]) {
-      size_t n = strlen((const char*)txt);
-      char *dup = (char*)malloc(n + 1);
-      if (!dup) {
-        sqlite3_finalize(st);
-        pthread_mutex_unlock(&db_mutex);
-        return -6;
-      }
-      memcpy(dup, txt, n + 1);
-      *out = dup;              /* caller will free() */
-      sqlite3_finalize(st);
-      pthread_mutex_unlock(&db_mutex);
-      return 0;
+  int rc = sqlite3_prepare_v2 (dbh, SQL, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      pthread_mutex_unlock (&db_mutex);
+      return -4;
     }
-    /* had a row but empty name — treat as not found */
-  }
-  sqlite3_finalize(st);
-  pthread_mutex_unlock(&db_mutex);
-  return -1; /* not found */
+
+  rc = sqlite3_bind_int64 (st, 1, (sqlite3_int64) player_id);
+  if (rc != SQLITE_OK)
+    {
+      sqlite3_finalize (st);
+      pthread_mutex_unlock (&db_mutex);
+      return -5;
+    }
+
+  rc = sqlite3_step (st);
+  if (rc == SQLITE_ROW)
+    {
+      const unsigned char *txt = sqlite3_column_text (st, 0);
+      if (txt && txt[0])
+	{
+	  size_t n = strlen ((const char *) txt);
+	  char *dup = (char *) malloc (n + 1);
+	  if (!dup)
+	    {
+	      sqlite3_finalize (st);
+	      pthread_mutex_unlock (&db_mutex);
+	      return -6;
+	    }
+	  memcpy (dup, txt, n + 1);
+	  *out = dup;		/* caller will free() */
+	  sqlite3_finalize (st);
+	  pthread_mutex_unlock (&db_mutex);
+	  return 0;
+	}
+      /* had a row but empty name — treat as not found */
+    }
+  sqlite3_finalize (st);
+  pthread_mutex_unlock (&db_mutex);
+  return -1;			/* not found */
 }

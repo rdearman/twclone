@@ -11,115 +11,144 @@
 #include <fcntl.h>
 #include <time.h>
 #include <jansson.h>
-#include <inttypes.h>  
+#include <inttypes.h>
 /* local includes */
 #include "server_loop.h"
 #include "server_config.h"
-#include "s2s_keyring.h" 
+#include "s2s_keyring.h"
 #include "s2s_transport.h"
 #include "engine_main.h"
 #include "server_s2s.h"
-#include "config.h"	
-#include "database.h"	
+#include "config.h"
+#include "database.h"
 #include "server_bigbang.h"
 
 
 static pid_t g_engine_pid = -1;
-static int   g_engine_shutdown_fd = -1;
-static int   s2s_listen_fd = -1;
-static int   s2s_conn_fd   = -1;
+static int g_engine_shutdown_fd = -1;
+static int s2s_listen_fd = -1;
+static int s2s_conn_fd = -1;
 /// 
 static s2s_conn_t *g_s2s_conn = NULL;
-static pthread_t   g_s2s_thr;
+static pthread_t g_s2s_thr;
 static volatile int g_s2s_run = 0;
 
-volatile sig_atomic_t g_running = 1;        // global stop flag the loop can read
+volatile sig_atomic_t g_running = 1;	// global stop flag the loop can read
 static volatile sig_atomic_t g_saw_signal = 0;
 
-static void on_signal(int sig) {
-  (void)sig;
+static void
+on_signal (int sig)
+{
+  (void) sig;
   g_saw_signal = 1;
-  g_running = 0;                            // tell server_loop to exit
+  g_running = 0;		// tell server_loop to exit
 }
 
-static void install_signal_handlers(void) {
+static void
+install_signal_handlers (void)
+{
   struct sigaction sa;
-  memset(&sa, 0, sizeof(sa));
+  memset (&sa, 0, sizeof (sa));
   sa.sa_handler = on_signal;
-  sigemptyset(&sa.sa_mask);
-  sa.sa_flags = 0;                          // no SA_RESTART -> poll/select will EINTR
-  sigaction(SIGINT,  &sa, NULL);
-  sigaction(SIGTERM, &sa, NULL);
-  signal(SIGPIPE, SIG_IGN);
+  sigemptyset (&sa.sa_mask);
+  sa.sa_flags = 0;		// no SA_RESTART -> poll/select will EINTR
+  sigaction (SIGINT, &sa, NULL);
+  sigaction (SIGTERM, &sa, NULL);
+  signal (SIGPIPE, SIG_IGN);
 }
 
 /////////////////////////////////
-static void build_capabilities(void) {
-  if (g_capabilities) json_decref(g_capabilities);
-  g_capabilities = json_object();
+static void
+build_capabilities (void)
+{
+  if (g_capabilities)
+    json_decref (g_capabilities);
+  g_capabilities = json_object ();
 
-  json_t *limits = json_object();
-  json_object_set_new(limits, "max_bulk",       json_integer(100));
-  json_object_set_new(limits, "max_page_size",  json_integer(50));
-  json_object_set_new(limits, "max_beacon_len", json_integer(256));
-  json_object_set_new(g_capabilities, "limits", limits);
+  json_t *limits = json_object ();
+  json_object_set_new (limits, "max_bulk", json_integer (100));
+  json_object_set_new (limits, "max_page_size", json_integer (50));
+  json_object_set_new (limits, "max_beacon_len", json_integer (256));
+  json_object_set_new (g_capabilities, "limits", limits);
 
-  json_t *features = json_object();
-  json_object_set_new(features, "auth",              json_true());
-  json_object_set_new(features, "warp",              json_true());
-  json_object_set_new(features, "sector.describe",   json_true());
-  json_object_set_new(features, "trade.buy",         json_true());
-  json_object_set_new(features, "server_autopilot",  json_false());
-  json_object_set_new(g_capabilities, "features", features);
+  json_t *features = json_object ();
+  json_object_set_new (features, "auth", json_true ());
+  json_object_set_new (features, "warp", json_true ());
+  json_object_set_new (features, "sector.describe", json_true ());
+  json_object_set_new (features, "trade.buy", json_true ());
+  json_object_set_new (features, "server_autopilot", json_false ());
+  json_object_set_new (g_capabilities, "features", features);
 
-  json_object_set_new(g_capabilities, "version", json_string("1.0.0-alpha"));
+  json_object_set_new (g_capabilities, "version",
+		       json_string ("1.0.0-alpha"));
 }
 
 
-static void log_s2s_metrics(const char *who) {
-  uint64_t sent=0, recv=0, auth_fail=0, too_big=0;
-  s2s_get_counters(&sent, &recv, &auth_fail, &too_big);
-  fprintf(stderr, "[%s] s2s metrics: sent=%" PRIu64 " recv=%" PRIu64
-                  " auth_fail=%" PRIu64 " too_big=%" PRIu64 "\n",
-          who, sent, recv, auth_fail, too_big);
+static void
+log_s2s_metrics (const char *who)
+{
+  uint64_t sent = 0, recv = 0, auth_fail = 0, too_big = 0;
+  s2s_get_counters (&sent, &recv, &auth_fail, &too_big);
+  fprintf (stderr, "[%s] s2s metrics: sent=%" PRIu64 " recv=%" PRIu64
+	   " auth_fail=%" PRIu64 " too_big=%" PRIu64 "\n",
+	   who, sent, recv, auth_fail, too_big);
 }
 
-static void *s2s_control_thread(void *arg) {
-  (void)arg;
+static void *
+s2s_control_thread (void *arg)
+{
+  (void) arg;
   g_s2s_run = 1;
-  while (g_s2s_run) {
-    json_t *msg = NULL;
-    int rc = s2s_recv_json(g_s2s_conn, &msg, 1000); // 1s tick; lets us notice shutdowns
-    if (rc == S2S_OK && msg) {
-      const char *type = json_string_value(json_object_get(msg, "type"));
-      if (type && strcmp(type, "s2s.health.ack") == 0) {
-        // optional: read payload, surface metrics
-      } else if (type && strcmp(type, "s2s.error") == 0) {
-        json_t *pl = json_object_get(msg, "payload");
-        const char *reason = pl ? json_string_value(json_object_get(pl,"reason")) : NULL;
-        fprintf(stderr, "[server] s2s.error%s%s\n", reason?": ":"", reason?reason:"");
-      } else {
-        fprintf(stderr, "[server] s2s: unknown type '%s'\n", type?type:"(null)");
-      }
-      json_decref(msg);
-      continue;
+  while (g_s2s_run)
+    {
+      json_t *msg = NULL;
+      int rc = s2s_recv_json (g_s2s_conn, &msg, 1000);	// 1s tick; lets us notice shutdowns
+      if (rc == S2S_OK && msg)
+	{
+	  const char *type =
+	    json_string_value (json_object_get (msg, "type"));
+	  if (type && strcmp (type, "s2s.health.ack") == 0)
+	    {
+	      // optional: read payload, surface metrics
+	    }
+	  else if (type && strcmp (type, "s2s.error") == 0)
+	    {
+	      json_t *pl = json_object_get (msg, "payload");
+	      const char *reason =
+		pl ? json_string_value (json_object_get (pl, "reason")) :
+		NULL;
+	      fprintf (stderr, "[server] s2s.error%s%s\n", reason ? ": " : "",
+		       reason ? reason : "");
+	    }
+	  else
+	    {
+	      fprintf (stderr, "[server] s2s: unknown type '%s'\n",
+		       type ? type : "(null)");
+	    }
+	  json_decref (msg);
+	  continue;
+	}
+      // errors / idle
+      if (rc == S2S_E_TIMEOUT)
+	continue;		// benign idle
+      if (rc == S2S_E_CLOSED)
+	break;			// peer closed
+      if (rc == S2S_E_AUTH_BAD || rc == S2S_E_AUTH_REQUIRED)
+	{
+	  fprintf (stderr, "[server] s2s auth failure; closing\n");
+	  break;
+	}
+      if (rc == S2S_E_TOOLARGE)
+	{
+	  fprintf (stderr, "[server] s2s oversized frame; closing\n");
+	  break;
+	}
+      if (rc == S2S_E_IO)
+	{
+	  fprintf (stderr, "[server] s2s IO error; closing\n");
+	  break;
+	}
     }
-    // errors / idle
-    if (rc == S2S_E_TIMEOUT) continue;          // benign idle
-    if (rc == S2S_E_CLOSED)  break;             // peer closed
-    if (rc == S2S_E_AUTH_BAD || rc == S2S_E_AUTH_REQUIRED) {
-      fprintf(stderr, "[server] s2s auth failure; closing\n");
-      break;
-    }
-    if (rc == S2S_E_TOOLARGE) {
-      fprintf(stderr, "[server] s2s oversized frame; closing\n");
-      break;
-    }
-    if (rc == S2S_E_IO) {
-      fprintf(stderr, "[server] s2s IO error; closing\n");
-      break;
-    }
-  }
   return NULL;
 }
 
@@ -273,6 +302,7 @@ run_bigbang_if_needed (void)
     }
 
 }
+
 //////////////////////////////////////////////////
 int
 main (void)
@@ -290,7 +320,7 @@ main (void)
   /* Optional: keep a sanity check/log, but don't gate db_init() on it. */
   (void) load_config ();
 
-  
+
   if (universe_init () != 0)
     {
       fprintf (stderr, "Failed to init universe.\n");
@@ -310,13 +340,14 @@ main (void)
   /*   return 0; */
   /* } */
   // normal startup
-  if (!load_eng_config()) return 2;
+  if (!load_eng_config ())
+    return 2;
 
   /* 0.1) Capabilities (restored) */
-  build_capabilities();                 /* rebuilds g_capabilities */
+  build_capabilities ();	/* rebuilds g_capabilities */
 
   /* 0.2) Signals (restored) */
-  install_signal_handlers();            /* restores Ctrl-C / SIGTERM behavior */
+  install_signal_handlers ();	/* restores Ctrl-C / SIGTERM behavior */
 
   /* 1) S2S keyring (must be before we bring up TCP) */
   fprintf (stderr, "[server] loading s2s key ...\n");
@@ -353,8 +384,8 @@ main (void)
       goto shutdown_and_exit;
     }
   fprintf (stderr, "[server] accepted s2s\n");
-  s2s_debug_dump_conn("server", conn);
-  
+  s2s_debug_dump_conn ("server", conn);
+
   /* Receive engine hello first */
   json_t *msg = NULL;
   rc = s2s_recv_json (conn, &msg, 5000);
@@ -363,30 +394,33 @@ main (void)
     {
       const char *type = json_string_value (json_object_get (msg, "type"));
       if (type && strcmp (type, "s2s.health.hello") == 0)
-        {
-          fprintf (stderr, "[server] accepted hello\n");
+	{
+	  fprintf (stderr, "[server] accepted hello\n");
 
-          time_t now = time (NULL);
-          json_t *ack = json_pack ("{s:i,s:s,s:s,s:I,s:o}",
-                                   "v", 1,
-                                   "type", "s2s.health.ack",
-                                   "id", "boot-ack",
-                                   "ts", (json_int_t) now,
-                                   "payload", json_pack ("{s:s}", "status", "ok"));
-          int rc2 = s2s_send_json (conn, ack, 5000);
-          fprintf (stderr, "[server] ack send rc=%d\n", rc2);
-          json_decref (ack);
+	  time_t now = time (NULL);
+	  json_t *ack = json_pack ("{s:i,s:s,s:s,s:I,s:o}",
+				   "v", 1,
+				   "type", "s2s.health.ack",
+				   "id", "boot-ack",
+				   "ts", (json_int_t) now,
+				   "payload", json_pack ("{s:s}", "status",
+							 "ok"));
+	  int rc2 = s2s_send_json (conn, ack, 5000);
+	  fprintf (stderr, "[server] ack send rc=%d\n", rc2);
+	  json_decref (ack);
 
-          fprintf (stderr, "[server] Return Ping\n");
-	  if (server_s2s_start(conn, &g_s2s_thr, &g_running) != 0) {
-	    fprintf(stderr, "[server] failed to start s2s control thread\n");
-	  }
-        }
+	  fprintf (stderr, "[server] Return Ping\n");
+	  if (server_s2s_start (conn, &g_s2s_thr, &g_running) != 0)
+	    {
+	      fprintf (stderr,
+		       "[server] failed to start s2s control thread\n");
+	    }
+	}
       else
-        {
-          fprintf (stderr, "[server] unexpected type on first frame: %s\n",
-                   type ? type : "(null)");
-        }
+	{
+	  fprintf (stderr, "[server] unexpected type on first frame: %s\n",
+		   type ? type : "(null)");
+	}
       json_decref (msg);
     }
   else
@@ -400,7 +434,7 @@ main (void)
 
   /* 5) Park conn and start S2S control thread AFTER handshake */
   g_s2s_conn = conn;
-  g_s2s_run  = 1;
+  g_s2s_run = 1;
   pthread_create (&g_s2s_thr, NULL, s2s_control_thread, NULL);
 
   /* 6) Run the server loop (unchanged behavior/logs) */
@@ -409,13 +443,17 @@ main (void)
   fprintf (stderr, "Server loop exiting...\n");
 
   /* 7) Teardown in the right order:
-        - stop control thread (s2s_close unblocks recv)
-        - close listener
-        - request engine shutdown & reap
+     - stop control thread (s2s_close unblocks recv)
+     - close listener
+     - request engine shutdown & reap
    */
   g_s2s_run = 0;
-  if (g_s2s_conn) { s2s_close(g_s2s_conn); g_s2s_conn = NULL; }  // unblocks thread
-  pthread_join(g_s2s_thr, NULL);
+  if (g_s2s_conn)
+    {
+      s2s_close (g_s2s_conn);
+      g_s2s_conn = NULL;
+    }				// unblocks thread
+  pthread_join (g_s2s_thr, NULL);
 
   if (s2s_listen_fd >= 0)
     {
@@ -428,28 +466,37 @@ shutdown_and_exit:
   /* Ask engine to shut down and reap it (preserves your previous logic) */
   if (g_engine_shutdown_fd >= 0)
     {
-      engine_request_shutdown (g_engine_shutdown_fd);   /* close pipe -> child exits */
+      engine_request_shutdown (g_engine_shutdown_fd);	/* close pipe -> child exits */
       g_engine_shutdown_fd = -1;
     }
   if (g_engine_pid > 0)
     {
-      int waited = engine_wait (g_engine_pid, 3000);    /* wait up to 3s */
+      int waited = engine_wait (g_engine_pid, 3000);	/* wait up to 3s */
       if (waited == 1)
-        {
-          fprintf (stderr, "[server] engine still running; sending SIGTERM.\n");
-          kill (g_engine_pid, SIGTERM);
-          (void) engine_wait (g_engine_pid, 2000);
-        }
+	{
+	  fprintf (stderr,
+		   "[server] engine still running; sending SIGTERM.\n");
+	  kill (g_engine_pid, SIGTERM);
+	  (void) engine_wait (g_engine_pid, 2000);
+	}
       g_engine_pid = -1;
     }
 
   /* 8) Capabilities cleanup */
-  if (g_capabilities) { json_decref (g_capabilities); g_capabilities = NULL; }
+  if (g_capabilities)
+    {
+      json_decref (g_capabilities);
+      g_capabilities = NULL;
+    }
 
-  if (conn) { s2s_close(conn); conn = NULL; }
-  server_s2s_stop(g_s2s_thr);
+  if (conn)
+    {
+      s2s_close (conn);
+      conn = NULL;
+    }
+  server_s2s_stop (g_s2s_thr);
   g_s2s_thr = 0;
-  
+
   return (rc == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
@@ -504,21 +551,21 @@ shutdown_and_exit:
 
 /*   json_object_set_new (g_capabilities, "version", */
 /* 		       json_string ("1.0.0-alpha")); */
-  
+
 /*   fprintf(stderr, "[server] loading s2s key ...\n"); */
 /*   /\* get HMAC key *\/ */
 /*   if (s2s_install_default_key(db_handle) != 0) { */
 /*     fprintf(stderr, "[server] FATAL: S2S key missing/invalid.\n"); */
 /*     exit(1); */
 /*   } */
-  
+
 /*   /\* // start listening on the shared backend tunnel *\/ */
 /*   // 1) Open S2S listener (only once) */
 /*   if (s2s_listen_fd < 0) { */
 /*     s2s_listen_fd = s2s_listen_4321(); */
 /*     fprintf(stderr, "[server] s2s listen on 127.0.0.1:4321\n"); */
 /*   } */
-  
+
 /*   // 2) Spawn engine (only once) */
 /*   if (g_engine_pid <= 0) { */
 /*     fprintf(stderr, "[server] forking engine…\n"); */
@@ -569,7 +616,7 @@ shutdown_and_exit:
 
 /*   g_s2s_conn = conn;                 // keep the accepted conn */
 /*   pthread_create(&g_s2s_thr, NULL, s2s_control_thread, NULL); */
-  
+
 /*   // 2) Run the server loop (unchanged) */
 /*   rc = server_loop (&running); */
 
@@ -587,7 +634,7 @@ shutdown_and_exit:
 /*   g_s2s_run = 0; */
 /*   if (g_s2s_conn) { s2s_close(g_s2s_conn); g_s2s_conn = NULL; } // unblocks thread */
 /*   pthread_join(g_s2s_thr, NULL); */
- 
+
 /*   /\* 1) Ask engine to exit (pipe EOF) — your existing code *\/ */
 /*   if (g_engine_shutdown_fd >= 0) { */
 /*     engine_request_shutdown(g_engine_shutdown_fd);   // close pipe -> child exits */

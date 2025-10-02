@@ -11,6 +11,6 @@ json_t *schema_get (const char *key);
 /* Return an array of available schema keys (strings) */
 json_t *schema_keys (void);
 
-int schema_validate_payload(const char *type, json_t *payload, char **why);
+int schema_validate_payload (const char *type, json_t * payload, char **why);
 
 #endif

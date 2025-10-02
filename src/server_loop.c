@@ -33,7 +33,11 @@
 #include "server_config.h"
 #include "server_communication.h"
 #include "server_config.h"	// keep whatever includes you already had
+#include "server_players.h"
 
+#ifndef streq
+#define streq(a,b) (strcmp((a),(b))==0)
+#endif
 
 #define LISTEN_PORT 1234
 #define BUF_SIZE    8192
@@ -424,22 +428,36 @@ process_message (client_ctx_t *ctx, json_t *root)
     return cmd_system_capabilities (ctx, root);
 
 /* ---------- PLAYER ---------- */
-  else if (!strcmp (c, "player.my_info"))
-    {
-      rc = cmd_player_my_info (ctx, root);
-    }
-  else if (!strcmp (c, "player.list_online"))
-    {
-      rc = cmd_player_list_online (ctx, root);
-    }
-  else if (!strcmp (c, "player.rankings"))
-    {
-      rc = cmd_player_rankings (ctx, root);	/* NIY stub */
-    }
-  else if (!strcmp (c, "player.set_prefs"))
-    {
-      rc = cmd_player_set_prefs (ctx, root);	/* NIY stub */
-    }
+  else if (streq(cmd, "player.my_info"))         return cmd_player_my_info(ctx, root);
+  else if (streq(cmd, "player.list_online"))     return cmd_player_list_online(ctx, root);
+
+  else if (streq(cmd, "player.get_settings"))    return cmd_player_get_settings(ctx, root);
+  else if (streq(cmd, "player.set_settings"))    return cmd_player_set_settings(ctx, root);
+
+  else if (streq(cmd, "player.get_prefs"))       return cmd_player_get_prefs(ctx, root);
+  else if (streq(cmd, "player.set_prefs"))       return cmd_player_set_prefs(ctx, root);
+
+  else if (streq(cmd, "player.get_topics") ||
+	   streq(cmd, "player.get_subscriptions"))  return cmd_player_get_topics(ctx, root);
+  else if (streq(cmd, "player.set_topics") ||
+	   streq(cmd, "player.set_subscriptions"))  return cmd_player_set_topics(ctx, root);
+
+  else if (streq(cmd, "player.get_bookmarks") ||
+	   streq(cmd, "nav.bookmark.list"))      return cmd_player_get_bookmarks(ctx, root);
+  else if (streq(cmd, "player.set_bookmarks") ||
+	   streq(cmd, "nav.bookmark.set") ||
+	   streq(cmd, "nav.bookmark.add") ||
+	   streq(cmd, "nav.bookmark.remove"))    return cmd_player_set_bookmarks(ctx, root);
+
+  else if (streq(cmd, "player.get_avoids") ||
+	   streq(cmd, "nav.avoid.list"))         return cmd_player_get_avoids(ctx, root);
+  else if (streq(cmd, "player.set_avoids") ||
+	   streq(cmd, "nav.avoid.set") ||
+	   streq(cmd, "nav.avoid.add") ||
+	   streq(cmd, "nav.avoid.remove"))       return cmd_player_set_avoids(ctx, root);
+
+  else if (streq(cmd, "player.get_notes") ||
+	   streq(cmd, "notes.list"))             return cmd_player_get_notes(ctx, root);
 
 /* ---------- SHIP ---------- */
   else if (!strcmp (c, "ship.inspect"))
@@ -689,8 +707,67 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       rc = cmd_admin_shutdown_warning (ctx, root);	/* NIY stub */
     }
+/* ... PLAYER ... */
 
-/* ---------- S2S ---------- */
+  else if (streq (cmd, "player.get_settings"))
+    {
+      return cmd_player_get_settings (ctx, root);
+    }
+  else if (streq (cmd, "player.set_settings"))
+    {
+      return cmd_player_set_settings (ctx, root);
+    }
+
+  else if (streq (cmd, "player.get_prefs"))
+    {
+      return cmd_player_get_prefs (ctx, root);
+    }
+  else if (streq (cmd, "player.set_prefs"))
+    {
+      return cmd_player_set_prefs (ctx, root);
+    }
+
+  else if (streq (cmd, "player.get_topics")
+	   || streq (cmd, "player.get_subscriptions"))
+    {
+      return cmd_player_get_topics (ctx, root);
+    }
+  else if (streq (cmd, "player.set_topics")
+	   || streq (cmd, "player.set_subscriptions"))
+    {
+      return cmd_player_set_topics (ctx, root);
+    }
+
+  else if (streq (cmd, "player.get_bookmarks")
+	   || streq (cmd, "nav.bookmark.list"))
+    {
+      return cmd_player_get_bookmarks (ctx, root);
+    }
+  else if (streq (cmd, "player.set_bookmarks") ||
+	   streq (cmd, "nav.bookmark.set") ||
+	   streq (cmd, "nav.bookmark.add") ||
+	   streq (cmd, "nav.bookmark.remove"))
+    {
+      return cmd_player_set_bookmarks (ctx, root);
+    }
+
+  else if (streq (cmd, "player.get_avoids") || streq (cmd, "nav.avoid.list"))
+    {
+      return cmd_player_get_avoids (ctx, root);
+    }
+  else if (streq (cmd, "player.set_avoids") ||
+	   streq (cmd, "nav.avoid.set") ||
+	   streq (cmd, "nav.avoid.add") || streq (cmd, "nav.avoid.remove"))
+    {
+      return cmd_player_set_avoids (ctx, root);
+    }
+
+  else if (streq (cmd, "player.get_notes") || streq (cmd, "notes.list"))
+    {
+      return cmd_player_get_notes (ctx, root);
+    }
+
+  /* ---------- S2S ---------- */
   else if (!strcmp (c, "s2s.planet.genesis"))
     {
       rc = cmd_s2s_planet_genesis (ctx, root);	/* NIY stub */
