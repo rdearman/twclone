@@ -15,6 +15,54 @@
 #include "server_envelope.h"
 #include "server_config.h"
 #include "s2s_transport.h"
+#include "common.h"		/* now_iso8601, strip_ansi */
+
+
+/* Recursively strip ANSI from all JSON strings in 'node'. */
+static void
+sanitize_json_strings (json_t *node)
+{
+  if (!node)
+    return;
+
+  if (json_is_string (node))
+    {
+      const char *s = json_string_value (node);
+      if (!s)
+	return;
+      char buf[4096];
+      strip_ansi (buf, s, sizeof (buf));
+      if (strcmp (buf, s) != 0)
+	{
+	  (void) json_string_set (node, buf);	/* json_t* is fine here */
+	}
+      return;
+    }
+
+  if (json_is_array (node))
+    {
+      size_t i;
+      json_t *it;
+      json_array_foreach (node, i, it)
+      {
+	sanitize_json_strings (it);
+      }
+      return;
+    }
+
+  if (json_is_object (node))
+    {
+      void *iter = json_object_iter (node);
+      while (iter)
+	{
+	  json_t *v = json_object_iter_value (iter);	/* ← only iter */
+	  sanitize_json_strings (v);
+	  iter = json_object_iter_next (node, iter);	/* ← object + iter */
+	}
+      return;
+    }
+}
+
 
 
 // --- Weak fallback so linking succeeds even if server_loop.c doesn't define it ---
@@ -403,7 +451,7 @@ send_enveloped_ok (int fd, json_t *req, const char *type, json_t *data)
   if (req_id)
     json_object_set_new (resp, "reply_to", json_string (req_id));
 
-  // timestamp
+  // timestamp (ISO 8601, UTC)
   char tsbuf[32];
   iso8601_utc (tsbuf);
   json_object_set_new (resp, "ts", json_string (tsbuf));
@@ -421,6 +469,9 @@ send_enveloped_ok (int fd, json_t *req, const char *type, json_t *data)
 
   // meta: default rate-limit info
   json_object_set_new (resp, "meta", make_default_meta ());
+
+  // ✨ sanitize all strings (strip ANSI) before sending
+  sanitize_json_strings (resp);
 
   // write one line
   char *s = json_dumps (resp, JSON_COMPACT);
@@ -467,6 +518,10 @@ send_enveloped_error (int fd, json_t *req, int code, const char *message)
 
   json_object_set_new (resp, "data", json_null ());
   json_object_set_new (resp, "meta", make_default_meta ());
+
+  // ✨ sanitize all strings (strip ANSI) before sending
+  sanitize_json_strings (resp);
+
   int toss;
   char *s = json_dumps (resp, JSON_COMPACT);
   if (s)
@@ -479,6 +534,7 @@ send_enveloped_error (int fd, json_t *req, int code, const char *message)
     }
   json_decref (resp);
 }
+
 
 /* -------------------- REFUSED -------------------- */
 void
@@ -504,14 +560,19 @@ send_enveloped_refused (int fd, json_t *req, int code, const char *msg,
   json_object_set_new (resp, "status", json_string ("refused"));
   json_object_set_new (resp, "type", json_string ("error"));	// legacy shape
 
-  json_t *err =
-    json_pack ("{s:i, s:s}", "code", code, "message", msg ? msg : "");
+  json_t *err = json_pack ("{s:i, s:s}",
+			   "code", code,
+			   "message", msg ? msg : "");
   if (data_opt)
     json_object_set (err, "data", data_opt);	// borrow
   json_object_set_new (resp, "error", err);
 
   json_object_set_new (resp, "data", json_null ());
   json_object_set_new (resp, "meta", make_default_meta ());
+
+  // ✨ sanitize all strings (strip ANSI) before sending
+  sanitize_json_strings (resp);
+
   int toss;
   char *s = json_dumps (resp, JSON_COMPACT);
   if (s)
@@ -524,6 +585,7 @@ send_enveloped_refused (int fd, json_t *req, int code, const char *msg,
     }
   json_decref (resp);
 }
+
 
 ////////////////////////   S2S SECTION //////////////////////////////
 

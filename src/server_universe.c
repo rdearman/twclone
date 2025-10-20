@@ -149,7 +149,8 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
   if (prc != 0)
     {
       free (q);
-      send_enveloped_error (ctx->fd, root, 400,  "Expected data { q:string?, type:'sector'|'port'|'any', limit?:int, cursor?:int|string }.");
+      send_enveloped_error (ctx->fd, root, 400,
+			    "Expected data { q:string?, type:'sector'|'port'|'any', limit?:int, cursor?:int|string }.");
     }
 
   // If 'any', we’ll union both; otherwise pick a branch.
@@ -160,7 +161,7 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
   if (!db)
     {
       free (q);
-      send_enveloped_error (ctx->fd, root, 500,  "No database handle.");
+      send_enveloped_error (ctx->fd, root, 500, "No database handle.");
     }
 
   // Build LIKE pattern for case-insensitive contains
@@ -729,7 +730,7 @@ cmd_sector_info (int fd, json_t *root, int sector_id, int player_id)
     {
       send_enveloped_error (fd, root, 1500,
 			    "Out of memory building sector info");
-      return ;
+      return;
     }
 
   // Add beacon info
@@ -1013,7 +1014,7 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
       if (beacon)
 	json_decref (beacon);
       send_enveloped_error (ctx->fd, root, 1500, "OOM");
-      return ;
+      return;
     }
   json_object_set_new (data, "sector_id", json_integer (sector_id));
   json_object_set_new (data, "name", json_string (name ? name : "Unknown"));

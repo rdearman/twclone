@@ -148,6 +148,7 @@ am_server_OBJECTS = ../src/server_communication.$(OBJEXT) \
 	../src/database.$(OBJEXT) ../src/schemas.$(OBJEXT) \
 	../src/common.$(OBJEXT) ../src/engine_main.$(OBJEXT) \
 	../src/engine_consumer.$(OBJEXT) \
+	../src/db_player_settings.$(OBJEXT) \
 	../src/s2s_transport.$(OBJEXT) ../src/s2s_keyring.$(OBJEXT)
 server_OBJECTS = $(am_server_OBJECTS)
 server_DEPENDENCIES =
@@ -168,6 +169,7 @@ depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__maybe_remake_depfiles = depfiles
 am__depfiles_remade = ../src/$(DEPDIR)/common.Po \
 	../src/$(DEPDIR)/database.Po \
+	../src/$(DEPDIR)/db_player_settings.Po \
 	../src/$(DEPDIR)/engine_consumer.Po \
 	../src/$(DEPDIR)/engine_main.Po ../src/$(DEPDIR)/globals.Po \
 	../src/$(DEPDIR)/namegen.Po ../src/$(DEPDIR)/s2s_keyring.Po \
@@ -256,7 +258,7 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-ISODATE = 2025-10-02
+ISODATE = 2025-10-20
 LDFLAGS = 
 LIBOBJS = 
 LIBS = -lpthread -lm 
@@ -365,6 +367,7 @@ server_SOURCES = \
 	../src/common.c \
 	../src/engine_main.c \
 	../src/engine_consumer.c \
+	../src/db_player_settings.c \
 	../src/s2s_transport.c \
 	../src/s2s_keyring.c
 
@@ -523,6 +526,8 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/engine_consumer.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
+../src/db_player_settings.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
 
 server$(EXEEXT): $(server_OBJECTS) $(server_DEPENDENCIES) $(EXTRA_server_DEPENDENCIES) 
 	@rm -f server$(EXEEXT)
@@ -537,6 +542,7 @@ distclean-compile:
 
 include ../src/$(DEPDIR)/common.Po # am--include-marker
 include ../src/$(DEPDIR)/database.Po # am--include-marker
+include ../src/$(DEPDIR)/db_player_settings.Po # am--include-marker
 include ../src/$(DEPDIR)/engine_consumer.Po # am--include-marker
 include ../src/$(DEPDIR)/engine_main.Po # am--include-marker
 include ../src/$(DEPDIR)/globals.Po # am--include-marker
@@ -716,6 +722,7 @@ clean-am: clean-binPROGRAMS clean-generic mostlyclean-am
 distclean: distclean-am
 		-rm -f ../src/$(DEPDIR)/common.Po
 	-rm -f ../src/$(DEPDIR)/database.Po
+	-rm -f ../src/$(DEPDIR)/db_player_settings.Po
 	-rm -f ../src/$(DEPDIR)/engine_consumer.Po
 	-rm -f ../src/$(DEPDIR)/engine_main.Po
 	-rm -f ../src/$(DEPDIR)/globals.Po
@@ -789,6 +796,7 @@ installcheck-am:
 maintainer-clean: maintainer-clean-am
 		-rm -f ../src/$(DEPDIR)/common.Po
 	-rm -f ../src/$(DEPDIR)/database.Po
+	-rm -f ../src/$(DEPDIR)/db_player_settings.Po
 	-rm -f ../src/$(DEPDIR)/engine_consumer.Po
 	-rm -f ../src/$(DEPDIR)/engine_main.Po
 	-rm -f ../src/$(DEPDIR)/globals.Po

@@ -39,12 +39,13 @@ extern "C"
   void comm_publish_sector_event (int sector_id, const char *event_name,
 				  json_t * data);
 
-  void comm_publish_sector_event (int sector_id, const char *event_name,  json_t *data);
   void comm_publish_sector_event (int sector_id, const char *event_name,
-				json_t *data);
+				  json_t * data);
+  void comm_publish_sector_event (int sector_id, const char *event_name,
+				  json_t * data);
 
   void comm_publish_sector_event (int sector_id, const char *event_name,
-				  json_t *data);
+				  json_t * data);
 
   /* ---- Ephemeral gameplay/admin broadcast ---- */
   typedef enum
@@ -63,7 +64,7 @@ extern "C"
   void comm_broadcast_message (comm_scope_t scope, long long scope_id,
 			       const char *message, json_t * extra);
 
-  void push_unseen_notices_for_player (client_ctx_t *ctx, int player_id);
+  void push_unseen_notices_for_player (client_ctx_t * ctx, int player_id);
 
 
 #ifdef __cplusplus

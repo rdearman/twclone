@@ -176,6 +176,10 @@ typedef struct
 } client_ctx_t;
 
 
+void now_iso8601 (char out[25]);	/* "YYYY-MM-DDTHH:MM:SSZ" */
+/* Remove ANSI escape sequences from src into dst (cap bytes incl NUL). */
+void strip_ansi (char *dst, const char *src, size_t cap);
+
 
 
 #endif

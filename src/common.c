@@ -6,6 +6,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
+#include <ctype.h>
 #include "common.h"
 
 /*
@@ -183,4 +184,66 @@ void
 doprocess ()
 {
   // Placeholder for a function that handles processing.
+}
+
+
+#include <time.h>
+
+void
+now_iso8601 (char out[25])
+{
+  time_t t = time (NULL);
+  struct tm tm;
+  gmtime_r (&t, &tm);
+  /* YYYY-MM-DDTHH:MM:SSZ -> 20 chars + NUL */
+  strftime (out, 25, "%Y-%m-%dT%H:%M:%SZ", &tm);
+}
+
+
+
+void
+strip_ansi (char *dst, const char *src, size_t cap)
+{
+  if (!dst || !src || cap == 0)
+    return;
+  size_t w = 0;
+  for (size_t r = 0; src[r] != '\0' && w + 1 < cap;)
+    {
+      unsigned char c = (unsigned char) src[r];
+      if (c == 0x1B)
+	{			/* ESC */
+	  /* Skip CSI: ESC '[' ... letter */
+	  r++;
+	  if (src[r] == '[')
+	    {
+	      r++;
+	      while (src[r] && !(src[r] >= '@' && src[r] <= '~'))
+		r++;		/* params */
+	      if (src[r])
+		r++;		/* consume final byte */
+	      continue;
+	    }
+	  /* Skip OSC: ESC ']' ... BEL or ST (ESC '\') */
+	  if (src[r] == ']')
+	    {
+	      r++;
+	      while (src[r] && src[r] != 0x07)
+		{
+		  if (src[r] == 0x1B && src[r + 1] == '\\')
+		    {
+		      r += 2;
+		      break;
+		    }
+		  r++;
+		}
+	      if (src[r] == 0x07)
+		r++;		/* BEL */
+	      continue;
+	    }
+	  /* Fallback: drop single ESC */
+	  continue;
+	}
+      dst[w++] = src[r++];
+    }
+  dst[w] = '\0';
 }

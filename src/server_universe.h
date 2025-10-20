@@ -20,10 +20,10 @@ int cmd_move_autopilot_start (client_ctx_t * ctx, json_t * root);
 int cmd_move_autopilot_stop (client_ctx_t * ctx, json_t * root);
 int cmd_move_autopilot_status (client_ctx_t * ctx, json_t * root);
 int cmd_sector_search (client_ctx_t * ctx, json_t * root);
-int cmd_move_describe_sector (client_ctx_t *ctx, json_t *root);
-void cmd_move_scan (client_ctx_t *ctx, json_t *root);
-int cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root);
-void cmd_sector_info (int fd, json_t *root, int sector_id, int player_id);
+int cmd_move_describe_sector (client_ctx_t * ctx, json_t * root);
+void cmd_move_scan (client_ctx_t * ctx, json_t * root);
+int cmd_sector_set_beacon (client_ctx_t * ctx, json_t * root);
+void cmd_sector_info (int fd, json_t * root, int sector_id, int player_id);
 
 
 /**** Think this could be removed later. *******/

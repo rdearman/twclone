@@ -138,5 +138,3 @@ int db_chain_traps_and_bridge (int fedspace_max /* typically 10 */ );
 int db_rand_npc_shipname (char *out, size_t out_sz);
 
 #endif /* DATABASE_H */
-
-

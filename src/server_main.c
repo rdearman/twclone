@@ -22,6 +22,7 @@
 #include "config.h"
 #include "database.h"
 #include "server_bigbang.h"
+#include "db_player_settings.h"
 
 
 static pid_t g_engine_pid = -1;
@@ -320,7 +321,6 @@ main (void)
   /* Optional: keep a sanity check/log, but don't gate db_init() on it. */
   (void) load_config ();
 
-
   if (universe_init () != 0)
     {
       fprintf (stderr, "Failed to init universe.\n");
@@ -333,21 +333,21 @@ main (void)
       return EXIT_FAILURE;	// or your project’s error path
     }
 
-  /* // --print-config handling */
-  /* if (argc > 1 && strcmp(argv[1], "--print-config") == 0) { */
-  /*   if (!load_eng_config()) return 2; */
-  /*   print_effective_config_redacted(); */
-  /*   return 0; */
-  /* } */
+
   // normal startup
   if (!load_eng_config ())
     return 2;
+
+  // initalise the player settings if all the other DB stuff is done. 
+  db_player_settings_init (db_get_handle ());
+
 
   /* 0.1) Capabilities (restored) */
   build_capabilities ();	/* rebuilds g_capabilities */
 
   /* 0.2) Signals (restored) */
   install_signal_handlers ();	/* restores Ctrl-C / SIGTERM behavior */
+
 
   /* 1) S2S keyring (must be before we bring up TCP) */
   fprintf (stderr, "[server] loading s2s key ...\n");
@@ -499,175 +499,6 @@ shutdown_and_exit:
 
   return (rc == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
-
-
-///////////////////////////////////////////////////
-/* int */
-/* main (void) */
-/* { */
-/*   /\* Always open the global DB handle (creates schema/defaults if missing). *\/ */
-/*   if (db_init () != 0) */
-/*     { */
-/*       fprintf (stderr, "Failed to init DB.\n"); */
-/*       return EXIT_FAILURE; */
-/*     } */
-
-/*   /\* Optional: keep a sanity check/log, but don't gate db_init() on it. *\/ */
-/*   (void) load_config (); */
-
-/*   if (universe_init () != 0) */
-/*     { */
-/*       fprintf (stderr, "Failed to init universe.\n"); */
-/*       db_close (); */
-/*       return EXIT_FAILURE; */
-/*     } */
-
-/*   if (run_bigbang_if_needed () != 0) */
-/*     { */
-/*       return EXIT_FAILURE;	// or your project’s error path */
-/*     } */
-
-/*   sqlite3 *db_handle = db_get_handle(); */
-/*   if (s2s_install_default_key(db_handle) != 0) { */
-/*     fprintf(stderr, "[server] FATAL: S2S key missing/invalid.\n"); */
-/*     return 1; // or exit(1) */
-/*   } */
-
-/*   install_signal_handlers (); */
-/*   g_capabilities = json_object (); */
-/*   json_t *limits = json_object (); */
-/*   json_object_set_new (limits, "max_bulk", json_integer (100)); */
-/*   json_object_set_new (limits, "max_page_size", json_integer (50)); */
-/*   json_object_set_new (limits, "max_beacon_len", json_integer (256)); */
-/*   json_object_set_new (g_capabilities, "limits", limits); */
-
-/*   json_t *features = json_object (); */
-/*   json_object_set_new (features, "auth", json_true ()); */
-/*   json_object_set_new (features, "warp", json_true ()); */
-/*   json_object_set_new (features, "sector.describe", json_true ()); */
-/*   json_object_set_new (features, "trade.buy", json_true ()); */
-/*   json_object_set_new (features, "server_autopilot", json_false ()); */
-/*   json_object_set_new (g_capabilities, "features", features); */
-
-/*   json_object_set_new (g_capabilities, "version", */
-/* 		       json_string ("1.0.0-alpha")); */
-
-/*   fprintf(stderr, "[server] loading s2s key ...\n"); */
-/*   /\* get HMAC key *\/ */
-/*   if (s2s_install_default_key(db_handle) != 0) { */
-/*     fprintf(stderr, "[server] FATAL: S2S key missing/invalid.\n"); */
-/*     exit(1); */
-/*   } */
-
-/*   /\* // start listening on the shared backend tunnel *\/ */
-/*   // 1) Open S2S listener (only once) */
-/*   if (s2s_listen_fd < 0) { */
-/*     s2s_listen_fd = s2s_listen_4321(); */
-/*     fprintf(stderr, "[server] s2s listen on 127.0.0.1:4321\n"); */
-/*   } */
-
-/*   // 2) Spawn engine (only once) */
-/*   if (g_engine_pid <= 0) { */
-/*     fprintf(stderr, "[server] forking engine…\n"); */
-/*     if (engine_spawn(&g_engine_pid, &g_engine_shutdown_fd) != 0) { */
-/*       fprintf(stderr, "[server] engine spawn failed; continuing without engine\n"); */
-/*     } else { */
-/*       fprintf(stderr, "[server] engine forked. pid=%d\n", (int)g_engine_pid); */
-/*     } */
-/*   } */
-
-/*   fprintf(stderr, "[server] accepting engine…\n"); */
-/*   int lfd = s2s_listen_fd;  // your listener fd */
-/*   s2s_conn_t *conn = s2s_tcp_server_accept(lfd, 5000); */
-/*   if (!conn) { fprintf(stderr, "[server] accept failed\n"); return 1; } else {fprintf(stderr, "[server] accepted s2s\n");} */
-
-/*   time_t now = time(NULL); */
-
-/*   /\* Receive engine hello first *\/ */
-/*   json_t *msg = NULL; */
-/*   int rc = s2s_recv_json(conn, &msg, 5000); */
-/*   fprintf(stderr, "[server] first frame rc=%d\n", rc); */
-
-/*   if (rc == S2S_OK && msg) { */
-/*     const char *type = json_string_value(json_object_get(msg, "type")); */
-/*     if (type && strcmp(type, "s2s.health.hello") == 0) { */
-/*       fprintf(stderr, "[server] accepted hello\n"); */
-
-/*       /\* reply with ack *\/ */
-/*       time_t now = time(NULL); */
-/*       json_t *ack = json_pack("{s:i,s:s,s:s,s:I,s:o}", */
-/* 			      "v",1, */
-/* 			      "type","s2s.health.ack", */
-/* 			      "id","boot-ack", */
-/* 			      "ts",(json_int_t)now, */
-/* 			      "payload", json_pack("{s:s}", "status","ok")); */
-/*       int rc2 = s2s_send_json(conn, ack, 5000); */
-/*       fprintf(stderr, "[server] ack send rc=%d\n", rc2); */
-/*       json_decref(ack); */
-
-/*       fprintf(stderr, "[server] Return Ping\n");  /\* keep legacy log *\/ */
-/*     } else { */
-/*       fprintf(stderr, "[server] unexpected type on first frame: %s\n", type?type:"(null)"); */
-/*     } */
-/*     json_decref(msg); */
-/*   } else { */
-/*     fprintf(stderr, "[server] no hello from engine (rc=%d)\n", rc); */
-/*   } */
-
-/*   g_s2s_conn = conn;                 // keep the accepted conn */
-/*   pthread_create(&g_s2s_thr, NULL, s2s_control_thread, NULL); */
-
-/*   // 2) Run the server loop (unchanged) */
-/*   rc = server_loop (&running); */
-
-/*   /\* 0) S2S teardown first (unblocks any engine recv) *\/ */
-/*   if (s2s_conn_fd >= 0) { */
-/*     shutdown(s2s_conn_fd, SHUT_RDWR);  // be explicit; ok if it fails */
-/*     close(s2s_conn_fd); */
-/*     s2s_conn_fd = -1; */
-/*   } */
-/*   if (s2s_listen_fd >= 0) {            // likely already closed after accept */
-/*     close(s2s_listen_fd); */
-/*     s2s_listen_fd = -1; */
-/*   } */
-
-/*   g_s2s_run = 0; */
-/*   if (g_s2s_conn) { s2s_close(g_s2s_conn); g_s2s_conn = NULL; } // unblocks thread */
-/*   pthread_join(g_s2s_thr, NULL); */
-
-/*   /\* 1) Ask engine to exit (pipe EOF) — your existing code *\/ */
-/*   if (g_engine_shutdown_fd >= 0) { */
-/*     engine_request_shutdown(g_engine_shutdown_fd);   // close pipe -> child exits */
-/*     g_engine_shutdown_fd = -1; */
-/*   } */
-
-/*   /\* 2) Reap engine (and escalate if needed) — your existing code *\/ */
-/*   if (g_engine_pid > 0) { */
-/*     int waited = engine_wait(g_engine_pid, 3000); */
-/*     if (waited == 1) { */
-/*       fprintf(stderr, "[server] engine still running; sending SIGTERM.\n"); */
-/*       kill(g_engine_pid, SIGTERM); */
-/*       (void)engine_wait(g_engine_pid, 2000); */
-/*     } */
-/*     g_engine_pid = -1; */
-/*   } */
-
-
-/*   //  install_signal_handlers (); */
-
-/*   // rc = server_loop (&running); */
-
-/*   universe_shutdown (); */
-/*   db_close (); */
-
-/*   // Clean up the global capabilities object when the server exits */
-/*   if (g_capabilities) */
-/*     { */
-/*       json_decref (g_capabilities); */
-/*     } */
-
-/*   return (rc == 0) ? EXIT_SUCCESS : EXIT_FAILURE; */
-/* } */
 
 
 /* Returns 1 if we can open twconfig.db and read at least one row from config; else 0. */

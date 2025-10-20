@@ -124,9 +124,9 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 
   if (ctx->player_id <= 0)
     {
-      send_enveloped_error (ctx->fd, root ,1401,"not_authenticated");
+      send_enveloped_error (ctx->fd, root, 1401, "not_authenticated");
       //      send_enveloped_error (ctx, 1401, "not_authenticated",
-      //			    "Login required.");
+      //                            "Login required.");
     }
 
   json_t *data = json_object_get (root, "data");
@@ -159,13 +159,13 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
   const char *key = json_is_string (jkey) ? json_string_value (jkey) : NULL;
   if (!key || !*key)
     {
-      send_enveloped_error (ctx->fd, root, 400,  "idempotency_key required.");
+      send_enveloped_error (ctx->fd, root, 400, "idempotency_key required.");
     }
 
   sqlite3 *db = db_get_handle ();
   if (!db)
     {
-      send_enveloped_error (ctx->fd, root, 500,   "No database handle.");
+      send_enveloped_error (ctx->fd, root, 500, "No database handle.");
     }
 
   // 0) Fast path: check idempotency table
@@ -204,7 +204,8 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 		sqlite3_finalize (st);
 		if (!stored_resp)
 		  {
-		    send_enveloped_error (ctx->fd, root, 500,  "Stored response unreadable.");
+		    send_enveloped_error (ctx->fd, root, 500,
+					  "Stored response unreadable.");
 		  }
 		send_enveloped_ok (ctx->fd, root, "trade.sell_receipt_v1",
 				   stored_resp);
@@ -214,7 +215,8 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 	    else
 	      {
 		sqlite3_finalize (st);
-		send_enveloped_error (ctx->fd, root, 1105, "Same idempotency_key used with different request.");
+		send_enveloped_error (ctx->fd, root, 1105,
+				      "Same idempotency_key used with different request.");
 	      }
 	  }
 	sqlite3_finalize (st);
@@ -241,7 +243,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
     sqlite3_finalize (st);
     if (port_id <= 0)
       {
-	send_enveloped_error (ctx->fd, root, 1404,  "No port in this sector.");
+	send_enveloped_error (ctx->fd, root, 1404, "No port in this sector.");
       }
   }
 
@@ -509,32 +511,37 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 REFUSE_BAD_ITEMS:
   sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
   json_decref (receipt);
-  send_enveloped_error (ctx->fd, root, 400,"items[] must contain {commodity, amount>0}.");
+  send_enveloped_error (ctx->fd, root, 400,
+			"items[] must contain {commodity, amount>0}.");
 
 REFUSE_UNKNOWN_COMMODITY:
   sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
   json_decref (receipt);
-  send_enveloped_error (ctx->fd, root, 1404, "Commodity not recognised at this port.");
+  send_enveloped_error (ctx->fd, root, 1404,
+			"Commodity not recognised at this port.");
 
 REFUSE_INSUFFICIENT_CARGO:
   sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
   json_decref (receipt);
-  send_enveloped_error (ctx->fd,root, 1402,"You do not carry enough of that commodity.");
+  send_enveloped_error (ctx->fd, root, 1402,
+			"You do not carry enough of that commodity.");
 
 REFUSE_OVER_CAPACITY:
   sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
   json_decref (receipt);
-  send_enveloped_error (ctx->fd, root, 1403, "Port cannot accept that much cargo.");
+  send_enveloped_error (ctx->fd, root, 1403,
+			"Port cannot accept that much cargo.");
 
 REFUSE_NOT_BUYING:
   sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
   json_decref (receipt);
-  send_enveloped_error (ctx->fd, root, 1405, "Port is not buying this commodity right now.");
+  send_enveloped_error (ctx->fd, root, 1405,
+			"Port is not buying this commodity right now.");
 
 SQL_ERR:
   sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
   json_decref (receipt);
-  send_enveloped_error (ctx->fd, root, 500,  sqlite3_errmsg (db));
+  send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
 
 // Handle late-arriving duplicate idempotency insert
 IDEMPOTENCY_RACE:;
@@ -566,7 +573,8 @@ IDEMPOTENCY_RACE:;
 		sqlite3_finalize (st);
 		if (!stored_resp)
 		  {
-		    send_enveloped_error (ctx->fd,root, 500,  "Stored response unreadable.");
+		    send_enveloped_error (ctx->fd, root, 500,
+					  "Stored response unreadable.");
 		  }
 		// Safe to commit what we did; but we rolled back already. Just return stored response.
 		send_enveloped_ok (ctx->fd, root, "trade.sell_receipt_v1",
@@ -575,12 +583,13 @@ IDEMPOTENCY_RACE:;
 	    else
 	      {
 		sqlite3_finalize (st);
-		send_enveloped_error (ctx->fd,root, 1105,  "Same idempotency_key used with different request.");
+		send_enveloped_error (ctx->fd, root, 1105,
+				      "Same idempotency_key used with different request.");
 	      }
 	  }
 	sqlite3_finalize (st);
       }
-    send_enveloped_error (ctx->fd, root, 500,  "Could not resolve race.");
+    send_enveloped_error (ctx->fd, root, 500, "Could not resolve race.");
   }
 }
 
@@ -669,7 +678,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
 	  if (idem_key && *idem_key)
 	    {
 	      /* Try to begin idempotent op */
-	      //	      int rc = db_idemp_try_begin (idem_key, c, fp);
+	      //              int rc = db_idemp_try_begin (idem_key, c, fp);
 	      int rc = db_idemp_try_begin (idem_key, "trade.buy", fp);
 	      if (rc == SQLITE_CONSTRAINT)
 		{

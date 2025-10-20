@@ -671,6 +671,28 @@ cmd_subscribe_add (client_ctx_t *ctx, json_t *root)
   return 0;
 }
 
+/* Guard: refuse removing a locked subscription */
+static int
+is_locked_subscription (sqlite3 *db, int player_id, const char *topic)
+{
+  static const char *SQL =
+    "SELECT locked FROM subscriptions WHERE player_id=? AND event_type=? LIMIT 1";
+  sqlite3_stmt *st = NULL;
+  int locked = 0;
+  if (sqlite3_prepare_v2 (db, SQL, -1, &st, NULL) != SQLITE_OK)
+    return 0;
+  sqlite3_bind_int (st, 1, player_id);
+  sqlite3_bind_text (st, 2, topic, -1, SQLITE_STATIC);
+  if (sqlite3_step (st) == SQLITE_ROW)
+    {
+      locked = sqlite3_column_int (st, 0);
+    }
+  sqlite3_finalize (st);
+  return locked ? 1 : 0;
+}
+
+
+
 int
 cmd_subscribe_remove (client_ctx_t *ctx, json_t *root)
 {
@@ -684,6 +706,13 @@ cmd_subscribe_remove (client_ctx_t *ctx, json_t *root)
   if (!topic || !*topic)
     {
       send_enveloped_refused (ctx->fd, root, 1402, "Missing 'topic'", NULL);
+      return 0;
+    }
+
+  sqlite3 *db = db_get_handle ();
+  if (is_locked_subscription (db, ctx->player_id, topic))
+    {
+      send_enveloped_refused (ctx->fd, root, 1405, "Topic is locked", NULL);
       return 0;
     }
 

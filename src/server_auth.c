@@ -1,10 +1,119 @@
+#include <string.h>
+#include <jansson.h>
+#include <sqlite3.h>
+/* local includes */
 #include "server_auth.h"
 #include "errors.h"
 #include "config.h"
-#include <string.h>
-#include <jansson.h>
 #include "server_cmds.h"
 #include "server_envelope.h"
+#include "database.h"
+
+
+/* ---- hydration helpers (#194) ---------------------------------- */
+
+/* Required, locked subscriptions (cannot be unsubscribed) */
+static const char *k_required_locked_topics[] = {
+  "system.notice",
+  /* add more here if you need: "system.motd", ... */
+};
+
+/* Default prefs to seed if missing */
+typedef struct
+{
+  const char *key;
+  const char *type;		/* 'bool','int','string','json' */
+  const char *value;		/* stored as TEXT; server enforces type */
+} default_pref_t;
+
+static const default_pref_t k_default_prefs[] = {
+  {"ui.ansi", "bool", "true"},
+  {"ui.clock_24h", "bool", "true"},
+  {"ui.locale", "string", "en-GB"},
+  {"ui.page_length", "int", "20"},
+  {"privacy.dm_allowed", "bool", "true"},
+  /* add more defaults as needed */
+};
+
+/* Upsert a locked=1, enabled=1 subscription; preserve lock with MAX() */
+static int
+upsert_locked_subscription (sqlite3 *db, int player_id, const char *topic)
+{
+  static const char *SQL =
+    "INSERT INTO subscriptions(player_id,event_type,delivery,filter_json,locked,enabled) "
+    "VALUES(?, ?, 'internal', NULL, 1, 1) "
+    "ON CONFLICT(player_id, event_type) DO UPDATE SET "
+    "  enabled=1, " "  locked=MAX(subscriptions.locked, excluded.locked)";
+
+  sqlite3_stmt *st = NULL;
+  if (sqlite3_prepare_v2 (db, SQL, -1, &st, NULL) != SQLITE_OK)
+    return -1;
+  sqlite3_bind_int (st, 1, player_id);
+  sqlite3_bind_text (st, 2, topic, -1, SQLITE_STATIC);
+  int rc = sqlite3_step (st);
+  sqlite3_finalize (st);
+  return (rc == SQLITE_DONE) ? 0 : -1;
+}
+
+/* Insert a default pref if missing (do not overwrite user choice) */
+static int
+insert_default_pref_if_missing (sqlite3 *db, int player_id,
+				const char *key, const char *type,
+				const char *value)
+{
+  static const char *SQL =
+    "INSERT INTO player_prefs(player_id,key,type,value) "
+    "SELECT ?, ?, ?, ? "
+    "WHERE NOT EXISTS (SELECT 1 FROM player_prefs WHERE player_id=? AND key=?)";
+  sqlite3_stmt *st = NULL;
+  if (sqlite3_prepare_v2 (db, SQL, -1, &st, NULL) != SQLITE_OK)
+    return -1;
+  sqlite3_bind_int (st, 1, player_id);
+  sqlite3_bind_text (st, 2, key, -1, SQLITE_STATIC);
+  sqlite3_bind_text (st, 3, type, -1, SQLITE_STATIC);
+  sqlite3_bind_text (st, 4, value, -1, SQLITE_STATIC);
+  sqlite3_bind_int (st, 5, player_id);
+  sqlite3_bind_text (st, 6, key, -1, SQLITE_STATIC);
+  int rc = sqlite3_step (st);
+  sqlite3_finalize (st);
+  return (rc == SQLITE_DONE) ? 0 : -1;
+}
+
+/* Run full hydration transactionally; ignore individual insert errors */
+static void
+hydrate_player_defaults (int player_id)
+{
+  sqlite3 *db = db_get_handle ();
+  if (!db || player_id <= 0)
+    return;
+
+  char *errmsg = NULL;
+  (void) sqlite3_exec (db, "BEGIN", NULL, NULL, &errmsg);
+
+  /* locked subs */
+  for (size_t i = 0;
+       i <
+       sizeof (k_required_locked_topics) /
+       sizeof (k_required_locked_topics[0]); ++i)
+    {
+      (void) upsert_locked_subscription (db, player_id,
+					 k_required_locked_topics[i]);
+    }
+
+  /* default prefs (only if missing) */
+  for (size_t i = 0;
+       i < sizeof (k_default_prefs) / sizeof (k_default_prefs[0]); ++i)
+    {
+      (void) insert_default_pref_if_missing (db, player_id,
+					     k_default_prefs[i].key,
+					     k_default_prefs[i].type,
+					     k_default_prefs[i].value);
+    }
+
+  (void) sqlite3_exec (db, "COMMIT", NULL, NULL, &errmsg);
+}
+
+//// CMD Handlers ////////
 
 
 int
@@ -70,6 +179,8 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
 	}
     }
 
+  hydrate_player_defaults (ctx->player_id);
+
   return 0;
 }
 
@@ -126,6 +237,9 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
 	  send_enveloped_error (ctx->fd, root, AUTH_ERR_DB, "Database error");
 	}
     }
+
+  hydrate_player_defaults (ctx->player_id);
+
   return 0;
 }
 

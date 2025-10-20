@@ -24,11 +24,6 @@
 #include "schemas.h"
 #include "server_envelope.h"
 #include "server_config.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sqlite3.h>
-#include "server_config.h"
 
 /* Single definition of the global */
 server_config_t g_cfg;
@@ -297,6 +292,11 @@ make_session_hello_payload (int is_authed, int player_id, int sector_id)
       json_object_set_new (payload, "player_id", json_null ());
       json_object_set_new (payload, "current_sector", json_null ());
     }
+
+  /* NEW: ISO-8601 UTC timestamp for clients that prefer strings */
+  char iso[32];
+  iso8601_utc (iso);
+  json_object_set_new (payload, "server_time", json_string (iso));
   return payload;
 }
 

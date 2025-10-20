@@ -1,8 +1,13 @@
 #include <string.h>
 #include <sqlite3.h>
+#include <jansson.h>
 #include "database.h"
 #include "server_cmds.h"
+#include "server_auth.h"
+#include "server_envelope.h"
+#include "db_player_settings.h"
 #include "errors.h"
+
 
 /* Constant-time string compare to reduce timing leakage (simple variant). */
 static int

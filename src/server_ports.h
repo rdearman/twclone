@@ -18,10 +18,10 @@ extern "C"
 /* Trading */
   int cmd_trade_buy (client_ctx_t * ctx, json_t * root);
   int cmd_trade_sell (client_ctx_t * ctx, json_t * root);
-  int cmd_trade_offer (client_ctx_t *ctx, json_t *root);
-  int cmd_trade_accept (client_ctx_t *ctx, json_t *root);
-  int cmd_trade_cancel (client_ctx_t *ctx, json_t *root);
-  int cmd_trade_history (client_ctx_t *ctx, json_t *root);
+  int cmd_trade_offer (client_ctx_t * ctx, json_t * root);
+  int cmd_trade_accept (client_ctx_t * ctx, json_t * root);
+  int cmd_trade_cancel (client_ctx_t * ctx, json_t * root);
+  int cmd_trade_history (client_ctx_t * ctx, json_t * root);
 
 /* Optional if your loop implements them */
   int cmd_trade_quote (client_ctx_t * ctx, json_t * root);
