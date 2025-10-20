@@ -5,6 +5,10 @@
 #include <jansson.h>
 #include "server_cmds.h"
 #include <string.h>
+#include "database.h"
+#include "server_loop.h"
+#include "db_player_settings.h"
+#include "server_envelope.h"
 
 // forward-declared somewhere in this module already:
 static const char *ALLOWED_TOPICS[];
@@ -15,6 +19,12 @@ extern void send_all_json (int fd, json_t * obj);
 extern json_t *db_notice_list_unseen_for_player (int player_id);
 extern int db_notice_mark_seen (int notice_id, int player_id);
 
+static int
+send_to_player(int player_id, const char *event_type, json_t *data)
+{
+  // delegate to server_loop’s registry-based delivery
+  return server_deliver_to_player(player_id, event_type, data);
+}
 
 
 typedef struct sub_node
@@ -74,6 +84,38 @@ is_valid_topic (const char *topic)
       return 1;
   return 0;
 }
+
+
+struct bc_ctx {
+  const char *event_type;
+  json_t *data;
+  int deliveries;
+};
+
+static int
+bc_cb(int player_id, void *arg)
+{
+  struct bc_ctx *bc = (struct bc_ctx *)arg;
+  if (send_to_player(player_id, bc->event_type, bc->data) == 0) {
+    bc->deliveries++;
+  }
+  return 0; // continue
+}
+
+int
+server_broadcast_event(const char *event_type, json_t *data)
+{
+  if (!event_type || !data) return -1;
+
+  sqlite3 *db = db_get_handle();
+  if (!db) return -1;
+
+  struct bc_ctx bc = { .event_type = event_type, .data = data, .deliveries = 0 };
+  int rc = db_for_each_subscriber(db, event_type, bc_cb, &bc);
+  // You can log bc.deliveries if you want metrics later (#197)
+  return (rc == 0) ? bc.deliveries : rc;
+}
+
 
 
 /* ===================== broadcast ===================== */
@@ -874,3 +916,4 @@ cmd_subscribe_catalog (client_ctx_t *ctx, json_t *root)
   json_decref (data);
   return 0;
 }
+

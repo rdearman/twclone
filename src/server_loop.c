@@ -78,15 +78,73 @@ void send_enveloped_ok (int fd, json_t * root, const char *type,
 			json_t * data);
 json_t *build_sector_info_json (int sector_id);
 
-// Single source of truth for schema/introspection.
-// Keep in sync with your if/else chain in process_message().
 
-// --- Supported commands used for schema/introspection ---
 
-// ===== Introspection plumbing (local, with weak fallback) =====
 
-// Local list used by the weak fallback below.
-// Keep this in sync with your if/else chain.
+/* ===== Client registry for broadcasts (#195) ===== */
+#include <pthread.h>
+#include "server_envelope.h"  // send_enveloped_ok()
+
+typedef struct client_node_s {
+  client_ctx_t *ctx;
+  struct client_node_s *next;
+} client_node_t;
+
+static client_node_t *g_clients = NULL;
+static pthread_mutex_t g_clients_mu = PTHREAD_MUTEX_INITIALIZER;
+
+void
+server_register_client(client_ctx_t *ctx)
+{
+  pthread_mutex_lock(&g_clients_mu);
+  client_node_t *n = (client_node_t*)calloc(1, sizeof(*n));
+  if (n) {
+    n->ctx = ctx;
+    n->next = g_clients;
+    g_clients = n;
+  }
+  pthread_mutex_unlock(&g_clients_mu);
+}
+
+void
+server_unregister_client(client_ctx_t *ctx)
+{
+  pthread_mutex_lock(&g_clients_mu);
+  client_node_t **pp = &g_clients;
+  while (*pp) {
+    if ((*pp)->ctx == ctx) {
+      client_node_t *dead = *pp;
+      *pp = (*pp)->next;
+      free(dead);
+      break;
+    }
+    pp = &((*pp)->next);
+  }
+  pthread_mutex_unlock(&g_clients_mu);
+}
+
+/* Deliver an envelope (type+data) to any online socket for player_id. */
+int
+server_deliver_to_player(int player_id, const char *event_type, json_t *data)
+{
+  int delivered = 0;
+
+  pthread_mutex_lock(&g_clients_mu);
+  for (client_node_t *n = g_clients; n; n = n->next) {
+    client_ctx_t *c = n->ctx;
+    if (!c) continue;
+    if (c->player_id == player_id && c->fd >= 0) {
+      /* send_enveloped_ok does its own timestamp/meta/sanitize. */
+      send_enveloped_ok(c->fd, NULL, event_type, data);
+      delivered++;
+    }
+  }
+  pthread_mutex_unlock(&g_clients_mu);
+
+  return (delivered > 0) ? 0 : -1;
+}
+
+
 static const cmd_desc_t k_supported_cmds_fallback[] = {
   // --- session / system ---
   {"session.hello", "Handshake / hello"},
@@ -986,6 +1044,7 @@ server_loop (volatile sig_atomic_t *running)
 	      fprintf (stderr, "malloc failed\n");
 	      continue;
 	    }
+	  server_register_client(ctx);
 
 	  socklen_t sl = sizeof (ctx->peer);
 	  int cfd = accept (listen_fd, (struct sockaddr *) &ctx->peer, &sl);
@@ -1027,6 +1086,7 @@ server_loop (volatile sig_atomic_t *running)
 	}
     }
 
+  // server_unregister_client(ctx);
   pthread_attr_destroy (&attr);
   close (listen_fd);
   fprintf (stderr, "Server loop exiting...\n");

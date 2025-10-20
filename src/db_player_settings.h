@@ -35,3 +35,12 @@ int db_note_set (int64_t player_id, const char *scope, const char *key,
 		 const char *note);
 int db_note_delete (int64_t player_id, const char *scope, const char *key);
 int db_note_list (int64_t player_id, const char *scope_or_null, /*out */ sqlite3_stmt ** it);	/* cols: scope,key,note */
+// Iterate all players who should receive an event of the given type.
+// Matches exact topic and one-segment wildcard ("domain.*").
+// cb(player_id, arg) is called for each distinct player_id; return 0 to continue.
+typedef int (*player_id_cb)(int player_id, void *arg);
+
+int db_for_each_subscriber(sqlite3 *db,
+                           const char *event_type,   // e.g., "sector.42"
+                           player_id_cb cb,
+                           void *arg);

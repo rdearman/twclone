@@ -67,6 +67,12 @@ extern "C"
   void push_unseen_notices_for_player (client_ctx_t * ctx, int player_id);
 
 
+// Broadcast an event (type + payload) to all currently-connected players
+// who are subscribed (exact or domain.*). Data is borrowed (not stolen).
+int server_broadcast_event(const char *event_type, json_t *data);
+
+
+  
 #ifdef __cplusplus
 }
 #endif
