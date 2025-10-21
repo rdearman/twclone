@@ -364,8 +364,14 @@ main (void)
       fprintf (stderr, "[server] listen on 4321 failed\n");
       return EXIT_FAILURE;
     }
+  /* NEW: prevent child from inheriting this fd on exec */
+  int fl = fcntl(s2s_listen_fd, F_GETFD, 0);
+  if (fl != -1) {
+    fcntl(s2s_listen_fd, F_SETFD, fl | FD_CLOEXEC);
+  }
   fprintf (stderr, "[server] s2s listen on 127.0.0.1:4321\n");
 
+  
   /* 3) Fork the engine (child connects back to 4321) */
   fprintf (stderr, "[server] forking engine…\n");
   if (engine_spawn (&g_engine_pid, &g_engine_shutdown_fd) != 0)
@@ -489,13 +495,13 @@ shutdown_and_exit:
       g_capabilities = NULL;
     }
 
-  if (conn)
-    {
-      s2s_close (conn);
-      conn = NULL;
-    }
-  server_s2s_stop (g_s2s_thr);
-  g_s2s_thr = 0;
+  /* if (conn) */
+  /*   { */
+  /*     s2s_close (conn); */
+  /*     conn = NULL; */
+  /*   } */
+  /* server_s2s_stop (g_s2s_thr); */
+  /* g_s2s_thr = 0; */
 
   return (rc == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
