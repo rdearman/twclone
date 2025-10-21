@@ -467,6 +467,7 @@ const char *create_table_sql[] = {
     "   event_type TEXT NOT NULL,  "
     "   delivery TEXT NOT NULL,  "
     "   filter_json TEXT,  "
+    "   ephemeral INTEGER NOT NULL DEFAULT 0,  "
     "   locked INTEGER NOT NULL DEFAULT 0, "
     "   enabled INTEGER NOT NULL DEFAULT 1,  "
     "   UNIQUE(player_id, event_type),  "
@@ -884,6 +885,13 @@ const char *create_table_sql[] = {
   " CREATE INDEX IF NOT EXISTS idx_subscriptions_player  "
     " ON subscriptions(player_id, enabled); ",
 
+  " CREATE INDEX IF NOT EXISTS idx_subs_enabled  "
+    " ON subscriptions(enabled); ",
+
+  " CREATE INDEX IF NOT EXISTS idx_subs_event  "
+    " ON subscriptions(event_type); ",
+  
+  
   "CREATE INDEX idx_player_prefs_player ON player_prefs(player_id)  ;  "
     "CREATE INDEX idx_bookmarks_player ON player_bookmarks(player_id)  ;  "
     "CREATE INDEX idx_avoid_player ON player_avoid(player_id)  ;  "
