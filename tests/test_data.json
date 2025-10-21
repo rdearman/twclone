@@ -166,5 +166,61 @@
   }
 }
 
+,
+{
+  "name": "bookmark.add A=42",
+  "command": { "command": "nav.bookmark.add", "data": { "name": "A", "sector_id": 42 } },
+  "expect": { "status": "ok", "type": "nav.bookmark.ack_v1" }
+},
+{
+  "name": "bookmark.add A=42 idempotent",
+  "command": { "command": "nav.bookmark.add", "data": { "name": "A", "sector_id": 42 } },
+  "expect": { "status": "ok", "type": "nav.bookmark.ack_v1" }
+},
+{
+  "name": "bookmark.add A=77 (update)",
+  "command": { "command": "nav.bookmark.add", "data": { "name": "A", "sector_id": 77 } },
+  "expect": { "status": "ok", "type": "nav.bookmark.ack_v1" }
+},
+{
+  "name": "bookmark.list",
+  "command": { "command": "nav.bookmark.list" },
+  "expect": { "status": "ok", "type": "nav.bookmark.list_v1" }
+},
+{
+  "name": "bookmark.remove A",
+  "command": { "command": "nav.bookmark.remove", "data": { "name": "A" } },
+  "expect": { "status": "ok", "type": "nav.bookmark.ack_v1" }
+},
+{
+  "name": "bookmark.list (after remove)",
+  "command": { "command": "nav.bookmark.list" },
+  "expect": { "status": "ok", "type": "nav.bookmark.list_v1" }
+},
+{
+  "name": "avoid.add 99",
+  "command": { "command": "nav.avoid.add", "data": { "sector_id": 99 } },
+  "expect": { "status": "ok", "type": "nav.avoid.ack_v1" }
+},
+{
+  "name": "avoid.add 99 idempotent",
+  "command": { "command": "nav.avoid.add", "data": { "sector_id": 99 } },
+  "expect": { "status": "ok", "type": "nav.avoid.ack_v1" }
+},
+{
+  "name": "avoid.list (after add)",
+  "command": { "command": "nav.avoid.list" },
+  "expect": { "status": "ok", "type": "nav.avoid.list_v1" }
+},
+{
+  "name": "avoid.remove 99",
+  "command": { "command": "nav.avoid.remove", "data": { "sector_id": 99 } },
+  "expect": { "status": "ok", "type": "nav.avoid.ack_v1" }
+},
+{
+  "name": "avoid.list (after remove)",
+  "command": { "command": "nav.avoid.list" },
+  "expect": { "status": "ok", "type": "nav.avoid.list_v1" }
+}
     
 ]

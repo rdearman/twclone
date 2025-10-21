@@ -547,13 +547,17 @@ process_message (client_ctx_t *ctx, json_t *root)
       cmd_player_set_bookmarks (ctx, root);
     }
 
+  else if (streq(cmd, "nav.avoid.add")) {      cmd_nav_avoid_add(ctx, root);}
+  else if (streq(cmd, "nav.avoid.remove")) {   cmd_nav_avoid_remove(ctx, root);}
+  else if (streq(cmd, "nav.avoid.list")) {     cmd_nav_avoid_list(ctx, root);}
+
   else if (streq (cmd, "player.get_avoids") || streq (cmd, "nav.avoid.list"))
     {
       cmd_player_get_avoids (ctx, root);
     }
   else if (streq (cmd, "player.set_avoids") ||
 	   streq (cmd, "nav.avoid.set") ||
-	   streq (cmd, "nav.avoid.add") || streq (cmd, "nav.avoid.remove"))
+	   streq (cmd, "nav.avoid.add") )
     {
       cmd_player_set_avoids (ctx, root);
     }
