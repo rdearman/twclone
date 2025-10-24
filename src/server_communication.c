@@ -1,10 +1,11 @@
+#include <jansson.h>
+#include <string.h>
+// local includes
 #include "server_communication.h"
 #include "server_envelope.h"	// send_enveloped_ok/error/refused
 #include "errors.h"
 #include "config.h"
-#include <jansson.h>
 #include "server_cmds.h"
-#include <string.h>
 #include "database.h"
 #include "server_loop.h"
 #include "db_player_settings.h"
@@ -18,6 +19,24 @@ extern void rl_tick (client_ctx_t * ctx);
 extern void send_all_json (int fd, json_t * obj);
 extern json_t *db_notice_list_unseen_for_player (int player_id);
 extern int db_notice_mark_seen (int notice_id, int player_id);
+
+/* tiny local helpers (no new headers) */
+static int is_ascii_printable(const char *s){ if(!s)return 0; for (const unsigned char *p=(const unsigned char*)s; *p; ++p) if(*p<0x20||*p>0x7E) return 0; return 1; }
+static int len_leq(const char*s,size_t m){ return s && strlen(s)<=m; }
+static int is_allowed_topic(const char *t){
+    static const char *const allowed[] = {
+        "system.notice","sector.*","sector.player_entered","chat.sector","chat.global",
+        "combat.*","trade.*", NULL
+    };
+    if (!t) return 0;
+    for (int i=0; allowed[i]; ++i) if (strcmp(t, allowed[i])==0) return 1;
+    /* allow generic domain.* */
+    const char *dot = strchr(t, '.');
+    return dot && strcmp(dot+1, "*")==0;
+}
+enum { MAX_SUBSCRIPTIONS_PER_PLAYER = 64 };
+
+
 
 static int
 send_to_player(int player_id, const char *event_type, json_t *data)
@@ -667,51 +686,114 @@ comm_clear_subscriptions (client_ctx_t *ctx)
     }
 }
 
+/* ---- new command handlers ---- */
+
+int cmd_subscribe_add(client_ctx_t *ctx, json_t *root) {
+    if (ctx->player_id <= 0) { send_enveloped_error(ctx->fd, root, ERR_NOT_AUTHENTICATED, "auth required"); return -1; }
+
+    json_t *data = json_object_get(root, "data");
+    if (!json_is_object(data)) { send_enveloped_error(ctx->fd, root, ERR_INVALID_SCHEMA, "data must be object"); return -1; }
+
+    json_t *v = json_object_get(data, "event_type");
+    if (!json_is_string(v)) { send_enveloped_error(ctx->fd, root, ERR_MISSING_FIELD, "missing field: event_type"); return -1; }
+    const char *event_type = json_string_value(v);
+    if (!is_ascii_printable(event_type) || !len_leq(event_type, 64) || !is_allowed_topic(event_type)) {
+        send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "invalid event_type"); return -1;
+    }
+
+    const char *filter_json = NULL;
+    v = json_object_get(data, "filter_json");
+    if (v) {
+        if (!json_is_string(v)) { send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "filter_json must be string"); return -1; }
+        filter_json = json_string_value(v);
+        /* sanity-parse filter JSON so we don't store garbage */
+        json_error_t jerr; json_t *probe = json_loads(filter_json, 0, &jerr);
+        if (!probe) { send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "filter_json is not valid JSON"); return -1; }
+        json_decref(probe);
+    }
+
+    /* Cap check */
+    sqlite3 *db = db_get_handle();
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2(db, "SELECT COUNT(*) FROM subscriptions WHERE player_id=?1 AND enabled=1;", -1, &st, NULL) != SQLITE_OK) {
+        send_enveloped_error(ctx->fd, root, ERR_UNKNOWN, "db error"); return -1;
+    }
+    sqlite3_bind_int64(st, 1, ctx->player_id);
+    int have = 0; if (sqlite3_step(st) == SQLITE_ROW) have = sqlite3_column_int(st, 0);
+    sqlite3_finalize(st);
+    if (have >= MAX_SUBSCRIPTIONS_PER_PLAYER) {
+        json_t *meta = json_pack("{s:i,s:i}", "max", MAX_SUBSCRIPTIONS_PER_PLAYER, "have", have);
+        send_enveloped_refused(ctx->fd, root, ERR_LIMIT_EXCEEDED, "too many subscriptions", meta);
+        return -1;
+    }
+
+    /* Upsert subscription */
+    int rc = db_subscribe_upsert(ctx->player_id, event_type, filter_json, 0 /*locked*/);
+    if (rc != 0) { send_enveloped_error(ctx->fd, root, ERR_UNKNOWN, "db error"); return -1; }
+
+    json_t *resp = json_pack("{s:s}", "event_type", event_type);
+    send_enveloped_ok(ctx->fd, root, "subscribe.added", resp);
+    json_decref(resp);
+    return 0;
+}
+
+int cmd_subscribe_remove(client_ctx_t *ctx, json_t *root) {
+    if (ctx->player_id <= 0) { send_enveloped_error(ctx->fd, root, ERR_NOT_AUTHENTICATED, "auth required"); return -1; }
+
+    json_t *data = json_object_get(root, "data");
+    if (!json_is_object(data)) { send_enveloped_error(ctx->fd, root, ERR_INVALID_SCHEMA, "data must be object"); return -1; }
+
+    json_t *v = json_object_get(data, "event_type");
+    if (!json_is_string(v)) { send_enveloped_error(ctx->fd, root, ERR_MISSING_FIELD, "missing field: event_type"); return -1; }
+    const char *event_type = json_string_value(v);
+    if (!is_ascii_printable(event_type) || !len_leq(event_type, 64) || !is_allowed_topic(event_type)) {
+        send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "invalid event_type"); return -1;
+    }
+
+    int was_locked = 0;
+    int rc = db_subscribe_disable(ctx->player_id, event_type, &was_locked);
+    if (rc == +1 || was_locked) { send_enveloped_refused(ctx->fd, root, REF_SAFE_ZONE_ONLY /* or REF_LOCKED if you prefer */, "subscription locked by policy", NULL); return -1; }
+    if (rc != 0) { send_enveloped_error(ctx->fd, root, ERR_USER_NOT_FOUND, "subscription not found"); return -1; }
+
+    json_t *resp = json_pack("{s:s}", "event_type", event_type);
+    send_enveloped_ok(ctx->fd, root, "subscribe.removed", resp);
+    json_decref(resp);
+    return 0;
+}
+
+int cmd_subscribe_list(client_ctx_t *ctx, json_t *root) {
+    if (ctx->player_id <= 0) { send_enveloped_error(ctx->fd, root, ERR_NOT_AUTHENTICATED, "auth required"); return -1; }
+
+    sqlite3_stmt *it = NULL;
+    if (db_subscribe_list(ctx->player_id, &it) != 0) { send_enveloped_error(ctx->fd, root, ERR_UNKNOWN, "db error"); return -1; }
+
+    json_t *items = json_array();
+    while (sqlite3_step(it) == SQLITE_ROW) {
+        const char *type  = (const char*)sqlite3_column_text(it, 0);
+        int locked        = sqlite3_column_int(it, 1);
+        int enabled       = sqlite3_column_int(it, 2);
+        const char *deliv = (const char*)sqlite3_column_text(it, 3);
+        const char *flt   = (const char*)sqlite3_column_text(it, 4);
+        json_t *row = json_pack("{s:s,s:i,s:i,s:s,s:O?}",
+            "event_type", type ? type : "",
+            "locked", locked,
+            "enabled", enabled,
+            "delivery", deliv ? deliv : "push",
+            "filter", flt ? json_loads(flt, 0, NULL) : NULL);
+        json_array_append_new(items, row);
+    }
+    sqlite3_finalize(it);
+
+    json_t *resp = json_pack("{s:O}", "items", items);
+    send_enveloped_ok(ctx->fd, root, "subscribe.list", resp);
+    json_decref(resp);
+    return 0;
+}
+
+
+
 /* ---- command handlers ---- */
 
-int
-cmd_subscribe_add (client_ctx_t *ctx, json_t *root)
-{
-  if (!require_auth (ctx, root))
-    return 0;
-
-  json_t *data = json_object_get (root, "data");
-  const char *topic = data && json_is_object (data)
-    ? json_string_value (json_object_get (data, "topic")) : NULL;
-
-  if (!topic || !*topic)
-    {
-      send_enveloped_refused (ctx->fd, root, 1402, "Missing 'topic'", NULL);
-      return 0;
-    }
-  if (!is_valid_topic (topic))
-    {
-      /* catalogue code: invalid topic */
-      send_enveloped_refused (ctx->fd, root, 1403, "Invalid topic", NULL);
-      return 0;
-    }
-
-  sub_map_t *m = submap_get (ctx, 1);
-  if (!m)
-    {
-      send_enveloped_error (ctx->fd, root, 1102, "Out of memory");
-      return 0;
-    }
-
-  int rc = sub_add (m, topic);
-  if (rc < 0)
-    {
-      send_enveloped_error (ctx->fd, root, 1102, "Out of memory");
-      return 0;
-    }
-
-  json_t *resp = json_pack ("{s:s, s:b}", "topic", topic, "added",
-			    rc > 0 ? 1 : 0);
-  /* type token can be anything you standardise on; using subscribe.ack_v1 */
-  send_enveloped_ok (ctx->fd, root, "subscribe.ack_v1", resp);
-  json_decref (resp);
-  return 0;
-}
 
 /* Guard: refuse removing a locked subscription */
 static int
@@ -733,63 +815,6 @@ is_locked_subscription (sqlite3 *db, int player_id, const char *topic)
   return locked ? 1 : 0;
 }
 
-
-
-int
-cmd_subscribe_remove (client_ctx_t *ctx, json_t *root)
-{
-  if (!require_auth (ctx, root))
-    return 0;
-
-  json_t *data = json_object_get (root, "data");
-  const char *topic = data && json_is_object (data)
-    ? json_string_value (json_object_get (data, "topic")) : NULL;
-
-  if (!topic || !*topic)
-    {
-      send_enveloped_refused (ctx->fd, root, 1402, "Missing 'topic'", NULL);
-      return 0;
-    }
-
-  sqlite3 *db = db_get_handle ();
-  if (is_locked_subscription (db, ctx->player_id, topic))
-    {
-      send_enveloped_refused (ctx->fd, root, 1405, "Topic is locked", NULL);
-      return 0;
-    }
-
-  sub_map_t *m = submap_get (ctx, 0);
-  int removed = (m ? sub_remove (m, topic) : 0);
-
-  json_t *resp =
-    json_pack ("{s:s, s:b}", "topic", topic, "removed", removed ? 1 : 0);
-  send_enveloped_ok (ctx->fd, root, "subscribe.ack_v1", resp);
-  json_decref (resp);
-  return 0;
-}
-
-int
-cmd_subscribe_list (client_ctx_t *ctx, json_t *root)
-{
-  if (!require_auth (ctx, root))
-    return 0;
-
-  sub_map_t *m = submap_get (ctx, 0);
-
-  json_t *arr = json_array ();
-  if (m)
-    {
-      /* return in deterministic order (insertion order not guaranteed here);
-         it's fine for now; sort server-side later if needed */
-      for (sub_node_t * n = m->head; n; n = n->next)
-	json_array_append_new (arr, json_string (n->topic));
-    }
-
-  json_t *resp = json_pack ("{s:o}", "topics", arr);
-  send_enveloped_ok (ctx->fd, root, "subscribe.list_v1", resp);
-  json_decref (resp);
-  return 0;
-}
 
 
 /* ================== admin.* =================== */

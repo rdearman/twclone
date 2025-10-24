@@ -1,22 +1,22 @@
-#include "server_players.h"
-#include "server_envelope.h"
-#include "database.h"
-#include "jansson.h"
+#include <jansson.h>
 #include <string.h>
+#include <sqlite3.h>
+#include <stdlib.h>		/* for strtol */
+// local includes
 #include "server_players.h"
 #include "database.h"		// play_login, user_create, db_player_info_json, db_player_get_sector, db_session_*
 #include "errors.h"
 #include "config.h"
-#include <string.h>
 #include "server_cmds.h"
 #include "server_rules.h"
-#include <sqlite3.h>
-#include <stdlib.h>		/* for strtol */
 #include "db_player_settings.h"
 #include "server_envelope.h"
 #include "server_auth.h"
-#include "errors.h"
+#include "server_envelope.h"
 
+
+enum { MAX_BOOKMARKS = 64, MAX_BM_NAME = 64 };
+enum { MAX_AVOIDS = 64 };
 
 
 /* ---------- forward decls for settings section builders (stubs for now) ---------- */
@@ -26,10 +26,18 @@ static json_t *players_get_subscriptions (client_ctx_t * ctx);
 static json_t *players_list_bookmarks (client_ctx_t * ctx);
 static json_t *players_list_avoid (client_ctx_t * ctx);
 static json_t *players_list_notes (client_ctx_t * ctx, json_t * req);
+static int is_ascii_printable(const char *s){ if(!s)return 0; for(const unsigned char*p=(const unsigned char*)s;*p;++p) if(*p<0x20||*p>0x7E) return 0; return 1; }
+static int len_leq(const char*s,size_t m){ return s && strlen(s)<=m; }
 
-/* ==================================================================== */
-/*                  YOUR ORIGINAL INFO/ONLINE HANDLERS                   */
-/* ==================================================================== */
+
+
+static int is_valid_key(const char *s, size_t max){
+    if(!s) return 0; size_t n=strlen(s); if(n==0||n>max) return 0;
+    for(size_t i=0;i<n;++i){ char c=s[i];
+        if(!((c>='a'&&c<='z')||(c>='0'&&c<='9')||c=='.'||c=='_'||c=='-')) return 0;
+    } return 1;
+}
+
 
 int
 cmd_player_my_info (client_ctx_t *ctx, json_t *root)
@@ -375,220 +383,237 @@ validate_value (int pt, const char *v)
     }
 }
 
-int
-cmd_player_set_prefs (client_ctx_t *ctx, json_t *root)
-{
-  if (ctx->player_id <= 0)
-    {
-      send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
-      return 0;
+
+/* ------ Set Pref ------- */
+
+
+int cmd_player_set_prefs(client_ctx_t *ctx, json_t *root){
+    if (ctx->player_id <= 0){ send_enveloped_error(ctx->fd, root, ERR_NOT_AUTHENTICATED, "auth required"); return -1; }
+
+    json_t *data = json_object_get(root,"data");
+    if (!json_is_object(data)){ send_enveloped_error(ctx->fd, root, ERR_INVALID_SCHEMA, "data must be object"); return -1; }
+
+    /* Support both: {data:{patch:{...}}} OR {data:{...}} */
+    json_t *patch = json_object_get(data,"patch");
+    json_t *prefs = json_is_object(patch) ? patch : data;
+
+    void *it = json_object_iter(prefs);
+    while (it){
+        const char *key = json_object_iter_key(it);
+        json_t *val = json_object_iter_value(it);
+
+        if (!is_valid_key(key, 64)){ send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "invalid key"); return -1; }
+
+        pref_type t = PT_STRING;
+        char buf[512] = {0};
+
+        if (json_is_string(val)) {
+            const char *s = json_string_value(val);
+            if (!is_ascii_printable(s) || strlen(s) > 256){ send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "string too long/not printable"); return -1; }
+            t = PT_STRING; snprintf(buf, sizeof(buf), "%s", s);
+        } else if (json_is_integer(val)) {
+            t = PT_INT; snprintf(buf, sizeof(buf), "%lld", (long long)json_integer_value(val));
+        } else if (json_is_boolean(val)) {
+            t = PT_BOOL; snprintf(buf, sizeof(buf), "%s", json_is_true(val) ? "1" : "0");
+        } else {
+            send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "unsupported value type"); return -1;
+        }
+
+        if (db_prefs_set_one(ctx->player_id, key, t, buf) != 0){
+            send_enveloped_error(ctx->fd, root, ERR_UNKNOWN, "db error"); return -1;
+        }
+        it = json_object_iter_next(prefs, it);
     }
 
-  json_t *data = json_object_get (root, "data");
-  if (!json_is_object (data))
-    {
-      send_enveloped_refused (ctx->fd, root, 1402, "Bad arguments", NULL);
-      return 0;
+    json_t *resp = json_pack("{s:b}", "ok", 1);
+    send_enveloped_ok(ctx->fd, root, "player.prefs.updated", resp);
+    json_decref(resp);
+    return 0;
+}
+
+
+
+/* ---------- nav.bookmark.* ---------- */
+
+
+
+void cmd_nav_bookmark_add(client_ctx_t *ctx, json_t *root){
+    if (ctx->player_id <= 0){ send_enveloped_error(ctx->fd, root, ERR_NOT_AUTHENTICATED, "auth required"); return; }
+
+    json_t *data = json_object_get(root,"data");
+    if (!json_is_object(data)){ send_enveloped_error(ctx->fd, root, ERR_INVALID_SCHEMA, "data must be object"); return; }
+
+    json_t *v = json_object_get(data,"name");
+    if (!json_is_string(v)){ send_enveloped_error(ctx->fd, root, ERR_MISSING_FIELD, "missing field: name"); return; }
+    const char *name = json_string_value(v);
+    if (!is_ascii_printable(name) || !len_leq(name, MAX_BM_NAME)){ send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "invalid name"); return; }
+
+    v = json_object_get(data,"sector_id");
+    if (!json_is_integer(v) || json_integer_value(v) <= 0){ send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "invalid sector_id"); return; }
+    int64_t sector_id = json_integer_value(v);
+
+    /* Cap check */
+    sqlite3 *db = db_get_handle();
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2(db, "SELECT COUNT(*) FROM player_bookmarks WHERE player_id=?1;", -1, &st, NULL) != SQLITE_OK){
+        send_enveloped_error(ctx->fd, root, ERR_UNKNOWN, "db error"); return;
+    }
+    sqlite3_bind_int64(st, 1, ctx->player_id);
+    int have = 0; if (sqlite3_step(st) == SQLITE_ROW) have = sqlite3_column_int(st, 0);
+    sqlite3_finalize(st);
+    if (have >= MAX_BOOKMARKS){
+        json_t *meta = json_pack("{s:i,s:i}", "max", MAX_BOOKMARKS, "have", have);
+        send_enveloped_refused(ctx->fd, root, ERR_LIMIT_EXCEEDED, "too many bookmarks", meta);
+        return;
     }
 
-  /* Accept either single item or array in data.items */
-  json_t *items = json_object_get (data, "items");
-  if (!json_is_array (items))
-    {
-      json_t *one = json_object ();
-      json_object_set (one, "key", json_object_get (data, "key"));
-      json_object_set (one, "type", json_object_get (data, "type"));
-      json_object_set (one, "value", json_object_get (data, "value"));
-      items = json_array ();
-      json_array_append_new (items, one);
+    int rc = db_bookmark_upsert(ctx->player_id, name, sector_id);
+    if (rc != 0){ send_enveloped_error(ctx->fd, root, ERR_UNKNOWN, "db error"); return; }
+
+    json_t *resp = json_pack("{s:s,s:i}", "name", name, "sector_id", (int)sector_id);
+    send_enveloped_ok(ctx->fd, root, "nav.bookmark.added", resp);
+    json_decref(resp);
+}
+
+void cmd_nav_bookmark_remove(client_ctx_t *ctx, json_t *root){
+    if (ctx->player_id <= 0){ send_enveloped_error(ctx->fd, root, ERR_NOT_AUTHENTICATED, "auth required"); return; }
+
+    json_t *data = json_object_get(root,"data");
+    if (!json_is_object(data)){ send_enveloped_error(ctx->fd, root, ERR_INVALID_SCHEMA, "data must be object"); return; }
+
+    json_t *v = json_object_get(data,"name");
+    if (!json_is_string(v)){ send_enveloped_error(ctx->fd, root, ERR_MISSING_FIELD, "missing field: name"); return; }
+    const char *name = json_string_value(v);
+    if (!is_ascii_printable(name) || !len_leq(name, MAX_BM_NAME)){ send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "invalid name"); return; }
+
+    int rc = db_bookmark_remove(ctx->player_id, name);
+    if (rc != 0){ send_enveloped_error(ctx->fd, root, ERR_NOT_FOUND, "bookmark not found"); return; }
+
+    json_t *resp = json_pack("{s:s}", "name", name);
+    send_enveloped_ok(ctx->fd, root, "nav.bookmark.removed", resp);
+    json_decref(resp);
+}
+
+void cmd_nav_bookmark_list(client_ctx_t *ctx, json_t *root){
+    if (ctx->player_id <= 0){ send_enveloped_error(ctx->fd, root, ERR_NOT_AUTHENTICATED, "auth required"); return; }
+
+    sqlite3 *db = db_get_handle();
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2(db, "SELECT name, sector_id FROM player_bookmarks WHERE player_id=?1 ORDER BY updated_at DESC,name;", -1, &st, NULL) != SQLITE_OK){
+        send_enveloped_error(ctx->fd, root, ERR_UNKNOWN, "db error"); return;
+    }
+    sqlite3_bind_int64(st, 1, ctx->player_id);
+
+    json_t *items = json_array();
+    while (sqlite3_step(st) == SQLITE_ROW){
+        const char *name = (const char*)sqlite3_column_text(st, 0);
+        int sector_id = sqlite3_column_int(st, 1);
+        json_array_append_new(items, json_pack("{s:s,s:i}", "name", name?name:"", "sector_id", sector_id));
+    }
+    sqlite3_finalize(st);
+
+    json_t *resp = json_pack("{s:O}", "items", items);
+    send_enveloped_ok(ctx->fd, root, "nav.bookmark.list", resp);
+    json_decref(resp);
+}
+
+
+
+
+
+/* ---------- nav.avoid.* ---------- */
+
+
+void cmd_nav_avoid_add(client_ctx_t *ctx, json_t *root){
+    if (ctx->player_id <= 0){ send_enveloped_error(ctx->fd, root, ERR_NOT_AUTHENTICATED, "auth required"); return; }
+
+    json_t *data = json_object_get(root,"data");
+    if (!json_is_object(data)){ send_enveloped_error(ctx->fd, root, ERR_INVALID_SCHEMA, "data must be object"); return; }
+
+    json_t *v = json_object_get(data,"sector_id");
+    if (!json_is_integer(v) || json_integer_value(v) <= 0){ send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "invalid sector_id"); return; }
+    int sector_id = (int)json_integer_value(v);
+
+    /* Cap */
+    sqlite3 *db = db_get_handle();
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2(db, "SELECT COUNT(*) FROM player_avoid WHERE player_id=?1;", -1, &st, NULL) != SQLITE_OK){
+        send_enveloped_error(ctx->fd, root, ERR_UNKNOWN, "db error"); return;
+    }
+    sqlite3_bind_int64(st, 1, ctx->player_id);
+    int have = 0; if (sqlite3_step(st) == SQLITE_ROW) have = sqlite3_column_int(st, 0);
+    sqlite3_finalize(st);
+    if (have >= MAX_AVOIDS){
+        json_t *meta = json_pack("{s:i,s:i}", "max", MAX_AVOIDS, "have", have);
+        send_enveloped_refused(ctx->fd, root, ERR_LIMIT_EXCEEDED, "too many avoids", meta);
+        return;
     }
 
-  if (!json_is_array (items))
-    {
-      send_enveloped_refused (ctx->fd, root, 1402, "Bad arguments", NULL);
-      return 0;
+    if (sqlite3_prepare_v2(db, "INSERT INTO player_avoid(player_id,sector_id,updated_at) VALUES(?1,?2,strftime('%s','now'));", -1, &st, NULL) != SQLITE_OK){
+        send_enveloped_error(ctx->fd, root, ERR_UNKNOWN, "db error"); return;
+    }
+    sqlite3_bind_int64(st, 1, ctx->player_id);
+    sqlite3_bind_int(st, 2, sector_id);
+    int rc = sqlite3_step(st);
+    sqlite3_finalize(st);
+    if (rc != SQLITE_DONE) {
+        if (rc == SQLITE_CONSTRAINT) { send_enveloped_error(ctx->fd, root, ERR_DUPLICATE_REQUEST, "already in avoid list"); }
+        else { send_enveloped_error(ctx->fd, root, ERR_UNKNOWN, "db error"); }
+        return;
     }
 
-  size_t i, n_ok = 0;
-  json_t *it;
-  json_array_foreach (items, i, it)
-  {
-    if (!json_is_object (it))
-      continue;
-    const char *key = json_string_value (json_object_get (it, "key"));
-    const char *typ = json_string_value (json_object_get (it, "type"));
-    const char *val = json_string_value (json_object_get (it, "value"));
-    int pt = map_pt (typ);
-    if (!key || !val || !validate_value (pt, val))
-      continue;
-    if (db_prefs_set_one (ctx->player_id, key, pt, val) == 0)
-      n_ok++;
-  }
-
-  json_t *ack = json_object ();
-  json_object_set_new (ack, "updated", json_integer ((json_int_t) n_ok));
-  send_enveloped_ok (ctx->fd, root, "player.pref.ack_v1", ack);
-  return 0;
+    json_t *resp = json_pack("{s:i}", "sector_id", sector_id);
+    send_enveloped_ok(ctx->fd, root, "nav.avoid.added", resp);
+    json_decref(resp);
 }
 
+void cmd_nav_avoid_remove(client_ctx_t *ctx, json_t *root){
+    if (ctx->player_id <= 0){ send_enveloped_error(ctx->fd, root, ERR_NOT_AUTHENTICATED, "auth required"); return; }
 
-/* ---------- nav.bookmark.add ---------- */
-void
-cmd_nav_bookmark_add(client_ctx_t *ctx, json_t *root)
-{
-  if (ctx->player_id <= 0) { send_enveloped_refused(ctx->fd, root, 1401, "Not authenticated", NULL); return; }
+    json_t *data = json_object_get(root,"data");
+    if (!json_is_object(data)){ send_enveloped_error(ctx->fd, root, ERR_INVALID_SCHEMA, "data must be object"); return; }
 
-  json_t *data = json_object_get(root, "data");
-  const char *name = data ? json_string_value(json_object_get(data, "name")) : NULL;
-  int64_t sector_id = data ? (int64_t)json_integer_value(json_object_get(data, "sector_id")) : 0;
+    json_t *v = json_object_get(data,"sector_id");
+    if (!json_is_integer(v) || json_integer_value(v) <= 0){ send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "invalid sector_id"); return; }
+    int sector_id = (int)json_integer_value(v);
 
-  if (!name || !*name || sector_id <= 0) {
-    send_enveloped_refused(ctx->fd, root, 1402, "Bad arguments", NULL);
-    return;
-  }
-
-  int rc = db_bookmark_upsert((int64_t)ctx->player_id, name, sector_id);
-  if (rc != 0) { send_enveloped_error(ctx->fd, root, 1503, "Database error"); return; }
-
-  json_t *ack = json_pack("{s:s,s:I}", "name", name, "sector_id", (json_int_t)sector_id);
-  send_enveloped_ok(ctx->fd, root, "nav.bookmark.ack_v1", ack);
-  json_decref(ack);
-}
-
-/* ---------- nav.bookmark.remove ---------- */
-void
-cmd_nav_bookmark_remove(client_ctx_t *ctx, json_t *root)
-{
-  if (ctx->player_id <= 0) { send_enveloped_refused(ctx->fd, root, 1401, "Not authenticated", NULL); return; }
-
-  json_t *data = json_object_get(root, "data");
-  const char *name = data ? json_string_value(json_object_get(data, "name")) : NULL;
-
-  if (!name || !*name) {
-    send_enveloped_refused(ctx->fd, root, 1402, "Bad arguments", NULL);
-    return;
-  }
-
-  int rc = db_bookmark_remove((int64_t)ctx->player_id, name);
-  if (rc != 0) { send_enveloped_error(ctx->fd, root, 1503, "Database error"); return; }
-
-  json_t *ack = json_pack("{s:s}", "name", name);
-  send_enveloped_ok(ctx->fd, root, "nav.bookmark.ack_v1", ack);
-  json_decref(ack);
-}
-
-/* ---------- nav.bookmark.list ---------- */
-void
-cmd_nav_bookmark_list(client_ctx_t *ctx, json_t *root)
-{
-  if (ctx->player_id <= 0) { send_enveloped_refused(ctx->fd, root, 1401, "Not authenticated", NULL); return; }
-
-  sqlite3_stmt *it = NULL;
-  int rc = db_bookmark_list((int64_t)ctx->player_id, &it);
-  if (rc != 0 || !it) { send_enveloped_error(ctx->fd, root, 1503, "Database error"); return; }
-
-  json_t *arr = json_array();
-  /* cols: name (0), sector_id (1) */
-  for (;;) {
-    rc = sqlite3_step(it);
-    if (rc == SQLITE_ROW) {
-      const unsigned char *nm = sqlite3_column_text(it, 0);
-      int64_t sector_id       = (int64_t)sqlite3_column_int64(it, 1);
-      json_t *row = json_pack("{s:s,s:I}",
-                              "name", nm ? (const char*)nm : "",
-                              "sector_id", (json_int_t)sector_id);
-      json_array_append_new(arr, row);
-    } else if (rc == SQLITE_DONE) {
-      break;
-    } else {
-      sqlite3_finalize(it);
-      json_decref(arr);
-      send_enveloped_error(ctx->fd, root, 1503, "Database error");
-      return;
+    sqlite3 *db = db_get_handle();
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2(db, "DELETE FROM player_avoid WHERE player_id=?1 AND sector_id=?2;", -1, &st, NULL) != SQLITE_OK){
+        send_enveloped_error(ctx->fd, root, ERR_UNKNOWN, "db error"); return;
     }
-  }
-  sqlite3_finalize(it);
+    sqlite3_bind_int64(st, 1, ctx->player_id);
+    sqlite3_bind_int(st, 2, sector_id);
+    int rc = sqlite3_step(st);
+    int rows = sqlite3_changes(db);
+    sqlite3_finalize(st);
+    if (rc != SQLITE_DONE || rows == 0){ send_enveloped_error(ctx->fd, root, ERR_NOT_FOUND, "avoid not found"); return; }
 
-  json_t *payload = json_pack("{s:o}", "bookmarks", arr); /* takes ownership of arr */
-  send_enveloped_ok(ctx->fd, root, "nav.bookmark.list_v1", payload);
-  json_decref(payload);
+    json_t *resp = json_pack("{s:i}", "sector_id", sector_id);
+    send_enveloped_ok(ctx->fd, root, "nav.avoid.removed", resp);
+    json_decref(resp);
 }
 
-/* ---------- nav.avoid.add ---------- */
-void
-cmd_nav_avoid_add(client_ctx_t *ctx, json_t *root)
-{
-  if (ctx->player_id <= 0) { send_enveloped_refused(ctx->fd, root, 1401, "Not authenticated", NULL); return; }
+void cmd_nav_avoid_list(client_ctx_t *ctx, json_t *root){
+    if (ctx->player_id <= 0){ send_enveloped_error(ctx->fd, root, ERR_NOT_AUTHENTICATED, "auth required"); return; }
 
-  json_t *data = json_object_get(root, "data");
-  int64_t sector_id = data ? (int64_t)json_integer_value(json_object_get(data, "sector_id")) : 0;
-
-  if (sector_id <= 0) {
-    send_enveloped_refused(ctx->fd, root, 1402, "Bad arguments", NULL);
-    return;
-  }
-
-  int rc = db_avoid_add((int64_t)ctx->player_id, sector_id);
-  if (rc != 0) { send_enveloped_error(ctx->fd, root, 1503, "Database error"); return; }
-
-  json_t *ack = json_pack("{s:I}", "sector_id", (json_int_t)sector_id);
-  send_enveloped_ok(ctx->fd, root, "nav.avoid.ack_v1", ack);
-  json_decref(ack);
-}
-
-/* ---------- nav.avoid.remove ---------- */
-void
-cmd_nav_avoid_remove(client_ctx_t *ctx, json_t *root)
-{
-  if (ctx->player_id <= 0) { send_enveloped_refused(ctx->fd, root, 1401, "Not authenticated", NULL); return; }
-
-  json_t *data = json_object_get(root, "data");
-  int64_t sector_id = data ? (int64_t)json_integer_value(json_object_get(data, "sector_id")) : 0;
-
-  if (sector_id <= 0) {
-    send_enveloped_refused(ctx->fd, root, 1402, "Bad arguments", NULL);
-    return;
-  }
-
-  int rc = db_avoid_remove((int64_t)ctx->player_id, sector_id);
-  if (rc != 0) { send_enveloped_error(ctx->fd, root, 1503, "Database error"); return; }
-
-  json_t *ack = json_pack("{s:I}", "sector_id", (json_int_t)sector_id);
-  send_enveloped_ok(ctx->fd, root, "nav.avoid.ack_v1", ack);
-  json_decref(ack);
-}
-
-/* ---------- nav.avoid.list ---------- */
-void
-cmd_nav_avoid_list(client_ctx_t *ctx, json_t *root)
-{
-  if (ctx->player_id <= 0) { send_enveloped_refused(ctx->fd, root, 1401, "Not authenticated", NULL); return; }
-
-  sqlite3_stmt *it = NULL;
-  int rc = db_avoid_list((int64_t)ctx->player_id, &it);
-  if (rc != 0 || !it) { send_enveloped_error(ctx->fd, root, 1503, "Database error"); return; }
-
-  json_t *arr = json_array();
-  /* cols: sector_id (0) */
-  for (;;) {
-    rc = sqlite3_step(it);
-    if (rc == SQLITE_ROW) {
-      int64_t sector_id = (int64_t)sqlite3_column_int64(it, 0);
-      json_t *row = json_pack("{s:I}", "sector_id", (json_int_t)sector_id);
-      json_array_append_new(arr, row);
-    } else if (rc == SQLITE_DONE) {
-      break;
-    } else {
-      sqlite3_finalize(it);
-      json_decref(arr);
-      send_enveloped_error(ctx->fd, root, 1503, "Database error");
-      return;
+    sqlite3 *db = db_get_handle();
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2(db, "SELECT sector_id FROM player_avoid WHERE player_id=?1 ORDER BY updated_at DESC, sector_id;", -1, &st, NULL) != SQLITE_OK){
+        send_enveloped_error(ctx->fd, root, ERR_UNKNOWN, "db error"); return;
     }
-  }
-  sqlite3_finalize(it);
+    sqlite3_bind_int64(st, 1, ctx->player_id);
 
-  json_t *payload = json_pack("{s:o}", "sectors", arr); /* takes ownership */
-  send_enveloped_ok(ctx->fd, root, "nav.avoid.list_v1", payload);
-  json_decref(payload);
+    json_t *items = json_array();
+    while (sqlite3_step(st) == SQLITE_ROW){
+        int sid = sqlite3_column_int(st, 0);
+        json_array_append_new(items, json_integer(sid));
+    }
+    sqlite3_finalize(st);
+
+    json_t *resp = json_pack("{s:O}", "items", items);
+    send_enveloped_ok(ctx->fd, root, "nav.avoid.list", resp);
+    json_decref(resp);
 }
+
 

@@ -72,7 +72,7 @@ play_login (const char *player_name, const char *password, int *out_player_id)
     {
       if (dbpass)
 	free (dbpass);
-      return AUTH_ERR_IS_NPC;
+      return ERR_IS_NPC;
     }
 
   /* Compare password (constant-time helper) */

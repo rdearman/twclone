@@ -7,31 +7,29 @@
                       '0',
                       1,
                       [
-                        '/usr/share/autoconf'
+                        '/usr/local/share/autoconf'
                       ],
                       [
-                        '/usr/share/autoconf/autoconf/autoconf.m4f',
-                        '/usr/share/aclocal-1.17/internal/ac-config-macro-dirs.m4',
-                        '/usr/share/aclocal-1.17/amversion.m4',
-                        '/usr/share/aclocal-1.17/auxdir.m4',
-                        '/usr/share/aclocal-1.17/cond.m4',
-                        '/usr/share/aclocal-1.17/depend.m4',
-                        '/usr/share/aclocal-1.17/depout.m4',
-                        '/usr/share/aclocal-1.17/init.m4',
-                        '/usr/share/aclocal-1.17/install-sh.m4',
-                        '/usr/share/aclocal-1.17/lead-dot.m4',
-                        '/usr/share/aclocal-1.17/make.m4',
-                        '/usr/share/aclocal-1.17/missing.m4',
-                        '/usr/share/aclocal-1.17/options.m4',
-                        '/usr/share/aclocal-1.17/prog-cc-c-o.m4',
-                        '/usr/share/aclocal-1.17/rmf.m4',
-                        '/usr/share/aclocal-1.17/runlog.m4',
-                        '/usr/share/aclocal-1.17/sanity.m4',
-                        '/usr/share/aclocal-1.17/silent.m4',
-                        '/usr/share/aclocal-1.17/strip.m4',
-                        '/usr/share/aclocal-1.17/substnot.m4',
-                        '/usr/share/aclocal-1.17/tar.m4',
-                        '/usr/share/aclocal-1.17/xargsn.m4',
+                        '/usr/local/share/autoconf/autoconf/autoconf.m4f',
+                        '/usr/local/share/aclocal-1.16/internal/ac-config-macro-dirs.m4',
+                        '/usr/local/share/aclocal-1.16/amversion.m4',
+                        '/usr/local/share/aclocal-1.16/auxdir.m4',
+                        '/usr/local/share/aclocal-1.16/cond.m4',
+                        '/usr/local/share/aclocal-1.16/depend.m4',
+                        '/usr/local/share/aclocal-1.16/depout.m4',
+                        '/usr/local/share/aclocal-1.16/init.m4',
+                        '/usr/local/share/aclocal-1.16/install-sh.m4',
+                        '/usr/local/share/aclocal-1.16/lead-dot.m4',
+                        '/usr/local/share/aclocal-1.16/make.m4',
+                        '/usr/local/share/aclocal-1.16/missing.m4',
+                        '/usr/local/share/aclocal-1.16/options.m4',
+                        '/usr/local/share/aclocal-1.16/prog-cc-c-o.m4',
+                        '/usr/local/share/aclocal-1.16/runlog.m4',
+                        '/usr/local/share/aclocal-1.16/sanity.m4',
+                        '/usr/local/share/aclocal-1.16/silent.m4',
+                        '/usr/local/share/aclocal-1.16/strip.m4',
+                        '/usr/local/share/aclocal-1.16/substnot.m4',
+                        '/usr/local/share/aclocal-1.16/tar.m4',
                         'configure.ac'
                       ],
                       {
@@ -63,18 +61,13 @@
                         '_AM_AUTOCONF_VERSION' => 1,
                         '_AM_CONFIG_MACRO_DIRS' => 1,
                         '_AM_DEPENDENCIES' => 1,
-                        '_AM_FILESYSTEM_TIMESTAMP_RESOLUTION' => 1,
                         '_AM_IF_OPTION' => 1,
                         '_AM_MANGLE_OPTION' => 1,
                         '_AM_OUTPUT_DEPENDENCY_COMMANDS' => 1,
                         '_AM_PROG_CC_C_O' => 1,
-                        '_AM_PROG_RM_F' => 1,
                         '_AM_PROG_TAR' => 1,
-                        '_AM_PROG_XARGS_N' => 1,
                         '_AM_SET_OPTION' => 1,
                         '_AM_SET_OPTIONS' => 1,
-                        '_AM_SILENT_RULES' => 1,
-                        '_AM_SLEEP_FRACTIONAL_SECONDS' => 1,
                         '_AM_SUBST_NOTMAKE' => 1,
                         '_m4_warn' => 1,
                         'include' => 1,
@@ -87,12 +80,12 @@
                       '1',
                       1,
                       [
-                        '/usr/share/autoconf'
+                        '/usr/local/share/autoconf'
                       ],
                       [
-                        '/usr/share/autoconf/autoconf/autoconf.m4f',
+                        '/usr/local/share/autoconf/autoconf/autoconf.m4f',
                         'aclocal.m4',
-                        '/usr/share/autoconf/autoconf/trailer.m4',
+                        '/usr/local/share/autoconf/autoconf/trailer.m4',
                         'configure.ac'
                       ],
                       {
@@ -165,10 +158,10 @@
                       '2',
                       1,
                       [
-                        '/usr/share/autoconf'
+                        '/usr/local/share/autoconf'
                       ],
                       [
-                        '/usr/share/autoconf/autoconf/autoconf.m4f',
+                        '/usr/local/share/autoconf/autoconf/autoconf.m4f',
                         'aclocal.m4',
                         'configure.ac'
                       ],
