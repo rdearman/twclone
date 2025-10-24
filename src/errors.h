@@ -21,7 +21,8 @@
 #define ERR_RATE_LIMITED         1109
 #define ERR_INSUFFICIENT_TURNS   1110
 #define ERR_PERMISSION_DENIED    1111
-#define  ERR_NOT_FOUND	         1112
+#define ERR_NOT_FOUND	         1112
+#define ERR_DB			 1113
 
 /* 1200 — Auth / Player */
 #define ERR_NOT_AUTHENTICATED    1200   /* "auth required" */
@@ -59,6 +60,7 @@
 #define REF_SAFE_ZONE_ONLY       1406   /* REFUSED */
 #define REF_BLOCKED_BY_MINES     1407   /* REFUSED */
 #define REF_TRANSWARP_UNAVAILABLE 1408  /* REFUSED */
+#define ERR_BAD_STATE             1409 /* Current Sector Unknown */
 
 /* 1500 — Planet / Citadel */
 #define ERR_PLANET_NOT_FOUND     1500

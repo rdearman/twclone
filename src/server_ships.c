@@ -28,7 +28,6 @@
 #include "server_envelope.h"
 #include "server_rules.h"
 
-#define ERR_NOT_IMPLEMENTED 9999
 
 void handle_move_pathfind (client_ctx_t * ctx, json_t * root);
 

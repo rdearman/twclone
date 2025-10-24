@@ -115,6 +115,17 @@ class Conn:
                     from_sec = data.get('from_sector_id', '?')
                     # Use player_name in the output message
                     msg = f"Player {player_name} (ID {player_id}) arrived in sector {sector_id} from {from_sec}"
+                elif event_type == "sector.beacon_changed":
+                    sector_id = data.get("sector_id", "?")
+                    beacon = data.get("beacon") or "(cleared)"
+                    print(f"[EVENT] Sector {sector_id} beacon is now: {beacon}")
+                elif event_type == "system.notice":
+                    print(f"[NOTICE] {data.get('title') or ''} {data.get('body') or ''}".strip())
+                elif event_type == "chat.message":
+                    ch = data.get("channel") or "chat"
+                    frm = (data.get("from") or {}).get("name") or "?"
+                    msg = data.get("text") or ""
+                    print(f"[{ch}] {frm}: {msg}")
                 else:
                     # Fallback for other events
                     msg = f"Event: {event_type} (id: {resp.get('id')})"
@@ -158,6 +169,286 @@ class Context:
 # ---------------------------
 # Flags & helpers
 # ---------------------------
+
+@register("pathfind_flow")
+def pathfind_flow(ctx: Context):
+    """Ask for a target, call move.pathfind, print the route, and optionally follow it."""
+    # Where are we now?
+    cur_desc = ctx.last_sector_desc or {}
+    cur = cur_desc.get("sector_id") or cur_desc.get("id") or cur_desc.get("sector") or ctx.state.get("sector_id")
+    try:
+        target = int(input("Pathfind to sector id: ").strip())
+    except (ValueError, TypeError):
+        print("Invalid sector ID."); return
+
+    if not cur:
+        # Fallback: fetch current sector from server if we don't have it cached
+        try:
+            info = ctx.conn.rpc("move.describe_sector", {})
+            data = (info or {}).get("data") or {}
+            cur = data.get("sector_id") or data.get("id")
+        except Exception:
+            pass
+    if not cur:
+        print("Cannot determine current sector."); return
+
+    # Ask server for a path
+    req = {"from": cur, "to": target}
+    resp = ctx.conn.rpc("move.pathfind", req)
+    status = (resp or {}).get("status")
+    if status in ("error", "refused"):
+        err = (resp.get("error") or {})
+        print(f"Pathfind failed {err.get('code')}: {err.get('message') or 'error'}")
+        return
+    data = (resp or {}).get("data") or {}
+
+    # Try to normalize a path from a few likely shapes
+    path = data.get("path") or data.get("sectors") or data.get("steps") or []
+    # Some servers return an array of {from,to} edges; flatten if needed
+    if path and isinstance(path[0], dict):
+        # e.g., [{"from":1,"to":2},{"from":2,"to":5}] -> [1,2,5]
+        seq = [path[0].get("from")]
+        for e in path:
+            t = e.get("to")
+            if t is not None:
+                seq.append(t)
+        path = seq
+
+    hops = data.get("hops") or data.get("steps") or (len(path) - 1 if path else None)
+    cost = data.get("total_cost") or data.get("cost")
+
+    # Pretty print
+    if not path or len(path) < 1:
+        print("No route found.")
+        return
+
+    print("\n=== Route ===")
+    print(" → ".join(str(s) for s in path))
+    if hops is None:
+        hops = max(0, len(path) - 1)
+    extra = []
+    extra.append(f"hops: {hops}")
+    if cost is not None:
+        extra.append(f"cost: {cost}")
+    print("(" + ", ".join(extra) + ")\n")
+
+    # Offer to follow route
+    go = input("Follow this route now? [y/N] ").strip().lower()
+    if go != "y":
+        return
+
+    # Walk the path hop-by-hop
+    # We start from our *current* sector, so skip the first element if it matches.
+    start_idx = 0
+    if path and path[0] == cur:
+        start_idx = 1
+
+    for i in range(start_idx, len(path)):
+        hop = path[i]
+        print(f"→ warping to {hop} ...")
+        r = ctx.conn.rpc("move.warp", {"to_sector_id": hop})
+        st = (r or {}).get("status")
+        if st == "ok":
+            # Refresh sector view only if the hop succeeded
+            new = ctx.conn.rpc("move.describe_sector", {"sector_id": hop})
+            ctx.last_sector_desc = normalize_sector(get_data(new))
+            call_handler("redisplay_sector", ctx)
+        else:
+            err = (r.get("error") or {}).get("message")
+            reason = ((r.get("data") or {}).get("reason"))
+            msg = f"Hop to {hop} "
+            if st == "refused":
+                msg += "refused"
+            else:
+                msg += "failed"
+            if reason:
+                msg += f" ({reason})"
+            if err:
+                msg += f": {err}"
+            print(msg)
+            print("Stopping route.")
+            break
+
+
+@register("move_to_adjacent")
+def move_to_adjacent(ctx: Context):
+    d = ctx.last_sector_desc or {}
+    adj = d.get("adjacent") or []
+    raw = input("Move to sector: ").strip()
+    try:
+        target = int(raw)
+    except ValueError:
+        print("Invalid sector ID."); return
+
+    if target not in adj:
+        print(f"{target} is not adjacent. Valid: {', '.join(map(str, adj)) if adj else '(none)'}")
+        return
+
+    resp = ctx.conn.rpc("move.warp", {"to_sector_id": target})
+    status = (resp or {}).get("status")
+    if status == "ok":
+        # Only refresh if the server actually moved us
+        new = ctx.conn.rpc("move.describe_sector", {"sector_id": target})
+        ctx.last_sector_desc = normalize_sector(get_data(new))
+        call_handler("redisplay_sector", ctx)
+    else:
+        err = (resp.get("error") or {}).get("message") if resp else "Unknown error"
+        reason = (resp.get("data") or {}).get("reason") if resp else None
+        if reason:
+            print(f"Move refused: {reason} — {err or ''}".strip())
+        else:
+            print(f"Move failed: {err or 'no details'}")
+
+
+@register("warp_flow")
+def warp_flow(ctx: Context):
+    raw = input("Warp to sector id: ").strip()
+    try:
+        target = int(raw)
+    except ValueError:
+        print("Invalid sector ID."); return
+
+    resp = ctx.conn.rpc("move.warp", {"to_sector_id": target})
+    status = (resp or {}).get("status")
+
+    if status == "ok":
+        # server accepted and moved us
+        new = ctx.conn.rpc("move.describe_sector", {"sector_id": target})
+        ctx.last_sector_desc = normalize_sector(get_data(new))
+        call_handler("redisplay_sector", ctx)
+    elif status in ("refused", "error"):
+        # Show reason and stay where we are
+        data = (resp or {}).get("data") or {}
+        err = (resp.get("error") or {}).get("message") if resp else None
+        from_id = data.get("from")
+        to_id = data.get("to")
+        reason = data.get("reason")
+        msg = f"Warp {from_id}->{to_id} refused" if status == "refused" else "Warp failed"
+        if reason:
+            msg += f": {reason}"
+        if err:
+            msg += f" — {err}"
+        print(msg)
+    else:
+        print("Warp failed: unexpected response")
+
+
+
+# ---------- Settings pretty printers ----------
+def _pp(obj):
+    import json
+    print(json.dumps(obj, ensure_ascii=False, indent=2))
+
+def _pp_settings_blob(resp):
+    d = (resp or {}).get("data") or {}
+    print("\n=== SETTINGS ===")
+    prefs = d.get("prefs") or {}
+    subs  = d.get("subscriptions") or d.get("topics") or []
+    bms   = d.get("bookmarks") or []
+    avoid = d.get("avoid") or d.get("avoids") or []
+    notes = d.get("notes") or []
+    print("- prefs:")
+    for k, v in prefs.items():
+        print(f"  {k}: {v}")
+    print("- subscriptions:")
+    for s in subs:
+        if isinstance(s, dict):
+            print(f"  {s.get('topic')}  (locked={bool(s.get('locked'))})")
+        else:
+            print(f"  {s}")
+    print("- bookmarks:")
+    for b in bms:
+        print(f"  {b.get('name')} -> {b.get('sector_id')}")
+    print("- avoid:")
+    print("  " + (", ".join(map(str, avoid)) if avoid else "(none)"))
+    if notes:
+        print("- notes:")
+        for n in notes:
+            print(f"  [{n.get('scope')}:{n.get('key')}] {n.get('note')}")
+
+@register("settings_view")
+def settings_view(ctx: Context):
+    # Try aggregate; fall back to granular if server doesn’t have the union yet.
+    try:
+        resp = ctx.conn.rpc("player.get_settings", {"include": ["prefs","subscriptions","bookmarks","avoid","notes"]})
+        ctx.state["last_rpc"] = resp
+        _pp_settings_blob(resp)
+        return
+    except Exception:
+        pass
+
+    # Granular fallbacks (all defined in your server/API)
+    bundle = {"prefs":{}, "subscriptions":[], "bookmarks":[], "avoid":[], "notes":[]}
+    try:
+        r = ctx.conn.rpc("player.get_prefs", {});               bundle["prefs"] = (r.get("data") or {}).get("prefs") or {}
+    except Exception: pass
+    try:
+        r = ctx.conn.rpc("subscribe.list", {});                 bundle["subscriptions"] = (r.get("data") or {}).get("active") or (r.get("data") or {}).get("topics") or []
+    except Exception: pass
+    try:
+        r = ctx.conn.rpc("nav.bookmark.list", {});              bundle["bookmarks"] = (r.get("data") or {}).get("bookmarks") or []
+    except Exception: pass
+    try:
+        r = ctx.conn.rpc("nav.avoid.list", {});                 bundle["avoid"] = (r.get("data") or {}).get("sectors") or []
+    except Exception: pass
+    try:
+        r = ctx.conn.rpc("notes.list", {});                     bundle["notes"] = (r.get("data") or {}).get("notes") or []
+    except Exception: pass
+    ctx.state["last_rpc"] = {"status":"ok","type":"player.settings_v1","data":bundle}
+    _pp_settings_blob(ctx.state["last_rpc"])
+
+
+@register("prefs_toggle_24h")
+def prefs_toggle_24h(ctx: Context):
+    # Fetch current to compute toggle
+    cur = ctx.conn.rpc("player.get_prefs", {})
+    items = (cur.get("data") or {}).get("prefs") or []
+    now = {i["key"]: i.get("value") for i in items if isinstance(i, dict) and "key" in i}
+    new_val = not str(now.get("ui.clock_24h","true")).lower() in ("true","1","yes")
+    r = ctx.conn.rpc("player.set_prefs", {"items":[{"key":"ui.clock_24h","type":"bool","value": "true" if new_val else "false"}]})
+    _pp(r)
+
+@register("prefs_set_locale")
+def prefs_set_locale(ctx: Context):
+    loc = input("Locale (e.g., en-GB): ").strip() or "en-GB"
+    r = ctx.conn.rpc("player.set_prefs", {"items":[{"key":"ui.locale","type":"string","value": loc}]})
+    _pp(r)
+
+@register("bookmark_add_flow")
+def bookmark_add_flow(ctx: Context):
+    name = input("Bookmark name: ").strip()
+    try:
+        sid = int(input("Sector id: ").strip())
+    except ValueError:
+        print("Invalid sector id."); return
+    r = ctx.conn.rpc("nav.bookmark.add", {"name": name, "sector_id": sid})
+    _pp(r)
+
+@register("bookmark_remove_flow")
+def bookmark_remove_flow(ctx: Context):
+    name = input("Bookmark name to remove: ").strip()
+    r = ctx.conn.rpc("nav.bookmark.remove", {"name": name})
+    _pp(r)
+
+@register("avoid_add_flow")
+def avoid_add_flow(ctx: Context):
+    try:
+        sid = int(input("Sector id to avoid: ").strip())
+    except ValueError:
+        print("Invalid sector id."); return
+    r = ctx.conn.rpc("nav.avoid.add", {"sector_id": sid})
+    _pp(r)
+
+@register("avoid_remove_flow")
+def avoid_remove_flow(ctx: Context):
+    try:
+        sid = int(input("Sector id to remove from avoid: ").strip())
+    except ValueError:
+        print("Invalid sector id."); return
+    r = ctx.conn.rpc("nav.avoid.remove", {"sector_id": sid})
+    _pp(r)
+
+
 def get_data(resp: Dict[str, Any]) -> Dict[str, Any]:
     return (resp or {}).get("data") or {}
 
