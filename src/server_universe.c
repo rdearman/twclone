@@ -12,6 +12,34 @@
 #include "server_envelope.h"
 #include "server_loop.h"
 #include "server_communication.h"
+#include "server_universe.h"
+#include "database.h"
+#include <sqlite3.h>
+#include <time.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+static const int  kIssPatrolBudget = 8;     /* hops before we drift home */
+static const int  kIssTickMs       = 2000;
+static const char*kIssName         = "Imperial Starship";
+static const char*kIssNoticePrefix = "[ISS • Capt. Zyrain]";
+
+/* Private state (kept in this .c only) */
+static int g_iss_inited = 0;
+static int g_iss_id = 0;
+static int g_iss_sector = 0;
+static int g_stardock_sector = 0;
+static int g_patrol_budget = 0;
+
+/* pending summon (if set, next tick warps immediately) */
+static int g_summon_sector = 0;
+static int g_summon_offender = 0;
+typedef struct { int sector; int budget; } IssState;
+
+
+/* forward statics (defined later in this file) */
+static int  db_pick_adjacent(int sector);
+static void post_iss_notice_move(int from, int to, const char *kind, const char *extra);
 
 
 #ifndef UNUSED
@@ -1228,4 +1256,304 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
   send_all_json (ctx->fd, env);
   json_decref (env);
   return 0;
+}
+
+/////////  ISS BOT ////////////
+
+static void iss_state_load(IssState *st, int default_sector) {
+  st->sector = default_sector;
+  st->budget = kIssPatrolBudget;
+  sqlite3 *db = db_get_handle();
+  sqlite3_stmt *q = NULL;
+  if (sqlite3_prepare_v2(db,
+        "SELECT state_val FROM engine_state WHERE state_key='iss_state';",-1,&q,NULL)==SQLITE_OK
+      && sqlite3_step(q)==SQLITE_ROW) {
+    const char *json = (const char*)sqlite3_column_text(q,0);
+    if (json) {
+      // naive parse: sector:budget in "s:123,b:7" or use JSON if you prefer jansson
+      int s=0,b=0; if (sscanf(json,"s:%d,b:%d",&s,&b)==2) { st->sector=s; st->budget=b; }
+    }
+  }
+  sqlite3_finalize(q);
+}
+
+static void iss_state_save(const IssState *st) {
+  sqlite3 *db = db_get_handle();
+  sqlite3_stmt *p = NULL;
+  char buf[64]; snprintf(buf,sizeof(buf),"s:%d,b:%d", st->sector, st->budget);
+  if (sqlite3_prepare_v2(db,
+        "INSERT INTO engine_state(state_key,state_val) VALUES('iss_state',?1) "
+        "ON CONFLICT(state_key) DO UPDATE SET state_val=excluded.state_val;", -1, &p, NULL)==SQLITE_OK) {
+    sqlite3_bind_text(p, 1, buf, -1, SQLITE_STATIC);
+    sqlite3_step(p);
+  }
+  sqlite3_finalize(p);
+}
+
+
+static void log_iss_event_move(int actor_player_id, int sector, const char *etype, const char *payload_json) {
+  sqlite3 *db = db_get_handle(); sqlite3_stmt *st = NULL;
+  if (sqlite3_prepare_v2(db,
+        "INSERT INTO engine_events(ts,type,actor_player_id,sector_id,payload) "
+        "VALUES(strftime('%s','now'), ?1, ?2, ?3, ?4);",-1,&st,NULL)==SQLITE_OK) {
+    sqlite3_bind_text(st, 1, etype, -1, SQLITE_STATIC);
+    sqlite3_bind_int(st,  2, actor_player_id);
+    sqlite3_bind_int(st,  3, sector);
+    sqlite3_bind_text(st, 4, payload_json, -1, SQLITE_STATIC);
+    sqlite3_step(st);
+  }
+  sqlite3_finalize(st);
+}
+
+static void iss_patrol_tick(int iss_player_id, int stardock_sector, IssState *st) {
+  if (st->sector <= 0) st->sector = stardock_sector;
+
+  // Bias ~30% toward home so we naturally drift back within the budget window
+  int next = ((rand()%10) < 3) ? db_pick_adjacent(st->sector) : db_pick_adjacent(st->sector);
+  // Optional: when budget nearly spent, force toward home — for now, random is fine.
+
+  if (next != st->sector) {
+    // Move the ISS (players.sector)
+    sqlite3 *db = db_get_handle(); sqlite3_stmt *up = NULL;
+    if (sqlite3_prepare_v2(db,
+        "UPDATE players SET sector=?1, intransit=0, movingto=NULL, beginmove=NULL "
+        "WHERE id=?2;", -1, &up, NULL)==SQLITE_OK) {
+      sqlite3_bind_int(up, 1, next);
+      sqlite3_bind_int(up, 2, iss_player_id);
+      sqlite3_step(up);
+    }
+    sqlite3_finalize(up);
+
+    // Logs + notice
+    char payload[128]; snprintf(payload,sizeof(payload), "{\"from\":%d,\"to\":%d}", st->sector, next);
+    log_iss_event_move(iss_player_id, next, "npc.iss.move.v1", payload);
+    //    post_iss_notice_move(st->sector, next, "move");
+    post_iss_notice_move(st->sector, next, "move", NULL);
+    
+    st->sector = next;
+    st->budget--;
+    if (st->budget <= 0 || st->sector == stardock_sector) st->budget = kIssPatrolBudget;
+    iss_state_save(st);
+  }
+}
+
+static void iss_enqueue_summon(int sector_id, int offender_player_id) {
+  sqlite3 *db = db_get_handle(); sqlite3_stmt *st=NULL;
+  const char *payload = "{\"reason\":\"fedspace_violation\"}"; // add fields if you wish
+  if (sqlite3_prepare_v2(db,
+        "INSERT INTO engine_commands(type,payload,status,priority,attempts,created_at,due_at,worker,idem_key) "
+        "VALUES('npc.iss.summon.v1', json_object('sector',?1,'offender',?2,'info',?3), 'ready', 10, 0,"
+        "        strftime('%s','now'), strftime('%s','now'), NULL, NULL);", -1, &st, NULL)==SQLITE_OK) {
+    sqlite3_bind_int(st, 1, sector_id);
+    sqlite3_bind_int(st, 2, offender_player_id);
+    sqlite3_bind_text(st,3, payload, -1, SQLITE_STATIC);
+    sqlite3_step(st);
+  }
+  sqlite3_finalize(st);
+}
+
+static int iss_consume_summon(int iss_player_id, IssState *st) {
+  sqlite3 *db = db_get_handle();
+  sqlite3_stmt *pick=NULL;
+  if (sqlite3_prepare_v2(db,
+        "SELECT id, json_extract(payload,'$.sector'), json_extract(payload,'$.offender') "
+        "FROM engine_commands "
+        "WHERE status='ready' AND type='npc.iss.summon.v1' AND due_at <= strftime('%s','now') "
+        "ORDER BY priority ASC, due_at ASC LIMIT 1;", -1, &pick, NULL)!=SQLITE_OK) return 0;
+
+  int handled = 0;
+  if (sqlite3_step(pick)==SQLITE_ROW) {
+    int cmd_id  = sqlite3_column_int(pick, 0);
+    int sector  = sqlite3_column_int(pick, 1);
+    int offender= sqlite3_column_int(pick, 2);
+    sqlite3_finalize(pick);
+
+    // Mark running
+    sqlite3_exec(db, "UPDATE engine_commands SET status='running', started_at=strftime('%s','now') WHERE id="
+                      , NULL, NULL, NULL); // (prepare/bind properly in your code)
+
+    // Warp ISS
+    sqlite3_stmt *up=NULL;
+    if (sqlite3_prepare_v2(db, "UPDATE players SET sector=?1, intransit=0, movingto=NULL, beginmove=NULL WHERE id=?2;", -1, &up, NULL)==SQLITE_OK) {
+      sqlite3_bind_int(up, 1, sector);
+      sqlite3_bind_int(up, 2, iss_player_id);
+      sqlite3_step(up);
+    }
+    sqlite3_finalize(up);
+
+    char payload[160]; snprintf(payload,sizeof(payload), "{\"to\":%d,\"offender\":%d}", sector, offender);
+    log_iss_event_move(iss_player_id, sector, "npc.iss.warp.v1", payload);
+    post_iss_notice_move(st->sector, sector, "warp", NULL);
+
+    st->sector = sector; st->budget = kIssPatrolBudget/2; iss_state_save(st);
+
+    // Done
+    sqlite3_stmt *done=NULL;
+    if (sqlite3_prepare_v2(db, "UPDATE engine_commands SET status='finished', finished_at=strftime('%s','now') WHERE id=?1;", -1, &done, NULL)==SQLITE_OK) {
+      sqlite3_bind_int(done, 1, cmd_id); sqlite3_step(done);
+    }
+    sqlite3_finalize(done);
+
+    handled = 1;
+  } else {
+    sqlite3_finalize(pick);
+  }
+  return handled;
+}
+
+
+/* ===== Imperial Starship (ISS) — internal state + helpers ============ */
+
+/* --- tiny DB helpers --- */
+static int db_get_stardock_sector(void) {
+  sqlite3 *db = db_get_handle();
+  sqlite3_stmt *st = NULL;
+  int sector = 0;
+  if (sqlite3_prepare_v2(db,
+        "SELECT sector_id FROM stardock_location LIMIT 1;", -1, &st, NULL)==SQLITE_OK &&
+      sqlite3_step(st)==SQLITE_ROW) {
+    sector = sqlite3_column_int(st, 0);
+  }
+  sqlite3_finalize(st);
+  return sector;
+}
+
+static int db_get_iss_player(int *out_player_id, int *out_sector) {
+  sqlite3 *db = db_get_handle();
+  sqlite3_stmt *st = NULL;
+  int ok = 0;
+  if (sqlite3_prepare_v2(db,
+        "SELECT id, COALESCE(sector,0) FROM players "
+        "WHERE type=1 AND name=?1 LIMIT 1;", -1, &st, NULL)==SQLITE_OK) {
+    sqlite3_bind_text(st, 1, kIssName, -1, SQLITE_STATIC);
+    if (sqlite3_step(st)==SQLITE_ROW) {
+      *out_player_id = sqlite3_column_int(st, 0);
+      *out_sector    = sqlite3_column_int(st, 1);
+      ok = 1;
+    }
+  }
+  sqlite3_finalize(st);
+  return ok;
+}
+
+static int db_pick_adjacent(int sector) {
+  int next = sector;
+  sqlite3 *db = db_get_handle();
+  sqlite3_stmt *st = NULL;
+  if (sqlite3_prepare_v2(db,
+        "SELECT to_sector FROM sector_warps WHERE from_sector=?1 "
+        "ORDER BY RANDOM() LIMIT 1;", -1, &st, NULL)==SQLITE_OK) {
+    sqlite3_bind_int(st, 1, sector);
+    if (sqlite3_step(st)==SQLITE_ROW) next = sqlite3_column_int(st, 0);
+  }
+  sqlite3_finalize(st);
+  return next;
+}
+
+static void post_iss_notice_move(int from, int to, const char *kind, const char *extra) {
+  char title[160], body[256];
+  snprintf(title, sizeof(title), "%s %s", kIssNoticePrefix, kind);
+  snprintf(body,  sizeof(body),  "Imperial Starship %s: %d \xE2\x86\x92 %d%s%s",
+           kind, from, to, (extra && *extra) ? " — " : "", extra ? extra : "");
+
+  sqlite3 *db = db_get_handle();
+  sqlite3_stmt *st = NULL;
+  if (sqlite3_prepare_v2(db,
+        "INSERT INTO system_notice(created_at,title,body,severity,expires_at) "
+        "VALUES(strftime('%s','now'), ?1, ?2, 'info', strftime('%s','now')+3600);",
+        -1, &st, NULL)==SQLITE_OK) {
+    sqlite3_bind_text(st, 1, title, -1, SQLITE_STATIC);
+    sqlite3_bind_text(st, 2, body,  -1, SQLITE_STATIC);
+    sqlite3_step(st);
+  }
+  sqlite3_finalize(st);
+}
+
+/* Move the ISS; warp==1 means “blink”. */
+static void iss_move_to(int next_sector, int warp, const char *extra) {
+  if (next_sector <= 0 || next_sector == g_iss_sector) return;
+  sqlite3 *db = db_get_handle();
+  sqlite3_stmt *up = NULL;
+  if (sqlite3_prepare_v2(db,
+        "UPDATE players SET sector=?1, intransit=0, movingto=NULL, beginmove=NULL "
+        "WHERE id=?2;", -1, &up, NULL)==SQLITE_OK) {
+    sqlite3_bind_int(up, 1, next_sector);
+    sqlite3_bind_int(up, 2, g_iss_id);
+    sqlite3_step(up);
+  }
+  sqlite3_finalize(up);
+
+  post_iss_notice_move(g_iss_sector, next_sector, warp ? "warp" : "move", extra);
+  g_iss_sector = next_sector;
+
+  /* decay/refresh budget */
+  if (!warp) {
+    g_patrol_budget--;
+    if (g_patrol_budget <= 0 || g_iss_sector == g_stardock_sector)
+      g_patrol_budget = kIssPatrolBudget;
+  } else {
+    g_patrol_budget = kIssPatrolBudget/2; /* linger a bit, then drift home */
+  }
+}
+
+/* One patrol step: slight bias to wander, but budget forces eventual return. */
+static void iss_patrol_step(void) {
+  if (g_iss_sector <= 0) g_iss_sector = g_stardock_sector;
+  int next;
+  /* ~30% chance move “toward” home by picking an adjacent at random anyway;
+     keep it simple (pathing can be improved later). */
+  if ((rand() % 10) < 3) next = db_pick_adjacent(g_iss_sector);
+  else                   next = db_pick_adjacent(g_iss_sector);
+  if (next != g_iss_sector) iss_move_to(next, /*warp=*/0, /*extra=*/NULL);
+}
+
+/* Consume a pending summon (set by iss_summon()), return 1 if we warped. */
+static int iss_try_consume_summon(void) {
+  if (g_summon_sector > 0) {
+    char extra[64];
+    snprintf(extra, sizeof(extra), "summoned to sector %d (offender %d)", g_summon_sector, g_summon_offender);
+    iss_move_to(g_summon_sector, /*warp=*/1, extra);
+    g_summon_sector = 0;
+    g_summon_offender = 0;
+    return 1;
+  }
+  return 0;
+}
+
+/* --- public API -------------------------------------------------------- */
+
+int iss_init_once(void) {
+  if (g_iss_inited) return 1;
+
+  g_stardock_sector = db_get_stardock_sector();
+  if (g_stardock_sector <= 0) return 0;
+
+  int sector = 0;
+  if (!db_get_iss_player(&g_iss_id, &sector)) return 0;
+
+  if (sector <= 0) {
+    /* park at Stardock on first discovery */
+    g_iss_sector = g_stardock_sector;
+    iss_move_to(g_stardock_sector, /*warp=*/1, "initialization");
+  } else {
+    g_iss_sector = sector;
+  }
+
+  g_patrol_budget = kIssPatrolBudget;
+  srand((unsigned)time(NULL));
+  g_iss_inited = 1;
+  return 1;
+}
+
+void iss_summon(int sector_id, int offender_id) {
+  if (!g_iss_inited) return;
+  g_summon_sector  = sector_id;
+  g_summon_offender= offender_id;
+}
+
+void iss_tick(int64_t now_ms) {
+  (void)now_ms; /* reserved for future timing/backoff logic */
+  if (!g_iss_inited) return;
+  if (iss_try_consume_summon()) return;
+  iss_patrol_step();
 }

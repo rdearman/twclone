@@ -2,6 +2,12 @@
 #define SERVER_UNIVERSE_H
 
 #include "config.h"
+#include <stdint.h>
+
+/* Imperial Starship (ISS) patrol/summon API */
+int  iss_init_once(void);                          // returns 1 if ISS + Stardock found
+void iss_tick(int64_t now_ms);
+void iss_summon(int sector_id, int offender_id);   // call this from violation handlers
 
 /* Insert default config values into DB if missing */
 int initconfig (void);

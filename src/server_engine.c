@@ -30,12 +30,12 @@
 #include "server_engine.h"
 #include "database.h"
 #include "server_loop.h"	// Assuming this contains functions to communicate with clients
+#include "server_universe.h"
 
 
 
 // Define the interval for the main game loop ticks in seconds
 #define GAME_TICK_INTERVAL_SEC 60
-
 
 static inline uint64_t monotonic_millis(void) {
   struct timespec ts;
@@ -617,18 +617,28 @@ engine_main_loop (int shutdown_fd)
 
   static time_t last_metrics = 0;
   static time_t last_cmd_tick_ms = 0;
-
+  /* One-time ISS bootstrap */
+  int iss_ok = iss_init_once();       // 1 if ISS+Stardock found, else 0
+  int64_t next_iss_due = 0;           // run ASAP on first loop
+  const int64_t ISS_PERIOD_MS = 2000; // ~2s cadence
 
   for (;;)
     {
       engine_s2s_drain_once (conn);
 
+      
       uint64_t now_ms = monotonic_millis();
       if (now_ms - last_cmd_tick_ms >= 250) {
 	(void)server_commands_tick(db_get_handle(), 16);
 	last_cmd_tick_ms = now_ms;
       }      
 
+      int64_t iisnow = monotonic_millis();
+     // Drive ISS on schedule (inside the same engine loop)
+    if (iss_ok && iisnow >= next_iss_due) {
+      iss_tick(iisnow);                  // handles summon-if-any, else patrol
+      next_iss_due = iisnow + ISS_PERIOD_MS;
+    }
    
       time_t now = time (NULL);
       if (now - last_metrics >= 3600)

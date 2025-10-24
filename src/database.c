@@ -210,7 +210,23 @@ cleanup:
 
 
 const char *create_table_sql[] = {
-  " CREATE TABLE IF NOT EXISTS config ( "
+
+/* Advisory locks */
+"CREATE TABLE IF NOT EXISTS locks ("
+"  lock_name TEXT PRIMARY KEY,"
+"  owner TEXT,"
+"  until_ms INTEGER"
+");",
+"CREATE INDEX IF NOT EXISTS idx_locks_until ON locks(until_ms);",
+
+/* Engine KV */
+"CREATE TABLE IF NOT EXISTS engine_state ("
+"  state_key TEXT PRIMARY KEY,"
+"  state_val TEXT NOT NULL"
+");",
+
+/* ----------------------- original ------------------- */
+" CREATE TABLE IF NOT EXISTS config ( "
     "  id INTEGER PRIMARY KEY CHECK (id = 1), "
     "  turnsperday INTEGER, "
     "  maxwarps_per_sector INTEGER, "
