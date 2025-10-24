@@ -1,3 +1,6 @@
+
+
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -65,6 +68,10 @@ class Conn:
         self._seq = 0
         self._r = sock.makefile("r", encoding="utf-8", newline="\n")
         self.debug = debug
+        self._seen_notices = set()   # for de-duping system.notice
+
+        # optional: the Context can set this after it’s created (for prompt redraws)
+        self.ctx = None
 
     def _next_id(self) -> str:
         self._seq += 1
@@ -85,63 +92,81 @@ class Conn:
             raise ConnectionError("Server closed connection.")
         return json.loads(line)
 
-    def rpc(self, command: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    def rpc(self, command: str, data: dict) -> dict:
+        """
+        Send an RPC and wait for its reply. While waiting, handle unsolicited
+        event/broadcast frames (no reply_to) so they don't break menus.
+        Also de-duplicate system.notice by notice id.
+        """
         req_id = self._next_id()
         self.send({"id": req_id, "command": command, "data": data})
+
         while True:
             resp = self.recv()
-            
-            if resp.get("reply_to") == req_id or resp.get("status") in ("error", "refused"):
-                return resp
-            
-            # --- FIX START: Handle unsolicited events (e.g., player movement) ---
-            if resp.get("id") == "evt":
-                event_type = resp.get("event", "UNKNOWN_EVENT")
-                data = resp.get("data") or {}
-                
-                # Extract player name from the nested 'player' object
-                player_name = data.get('player', {}).get('name', '?') 
-                
-                msg = ""
-                if event_type == "sector.player_left":
-                    player_id = data.get('player_id', '?')
-                    sector_id = data.get('sector_id', '?')
-                    to_sec = data.get('to_sector_id', '?')
-                    # Use player_name in the output message
-                    msg = f"Player {player_name} (ID {player_id}) left sector {sector_id} for {to_sec}"
-                elif event_type == "sector.player_entered":
-                    player_id = data.get('player_id', '?')
-                    sector_id = data.get('sector_id', '?')
-                    from_sec = data.get('from_sector_id', '?')
-                    # Use player_name in the output message
-                    msg = f"Player {player_name} (ID {player_id}) arrived in sector {sector_id} from {from_sec}"
-                elif event_type == "sector.beacon_changed":
-                    sector_id = data.get("sector_id", "?")
-                    beacon = data.get("beacon") or "(cleared)"
-                    print(f"[EVENT] Sector {sector_id} beacon is now: {beacon}")
-                elif event_type == "system.notice":
-                    print(f"[NOTICE] {data.get('title') or ''} {data.get('body') or ''}".strip())
-                elif event_type == "chat.message":
-                    ch = data.get("channel") or "chat"
-                    frm = (data.get("from") or {}).get("name") or "?"
-                    msg = data.get("text") or ""
-                    print(f"[{ch}] {frm}: {msg}")
-                else:
-                    # Fallback for other events
-                    msg = f"Event: {event_type} (id: {resp.get('id')})"
-                    
-                print(f"[EVENT] {msg}")
-                
-                continue # Keep waiting for the RPC reply
-            # --- FIX END ---
 
+            # 1) Our RPC reply?
+            if resp.get("reply_to") == req_id:
+                return resp
+
+            # 2) Typed async event/broadcast (no reply_to): e.g., system.notice
+            t = resp.get("type")
+            if t and not resp.get("reply_to"):
+                d = resp.get("data") or {}
+
+                if t == "system.notice":
+                    # de-dup on notice id
+                    nid = d.get("id")
+                    if nid is not None:
+                        if nid in self._seen_notices:
+                            continue  # drop duplicate
+                        self._seen_notices.add(nid)
+                        # optional cap to avoid unbounded growth
+                        if len(self._seen_notices) > 256:
+                            self._seen_notices.clear()
+
+                    title = d.get("title", "System Notice")
+                    body  = d.get("body", "")
+                    print(f"\n*** {title} ***\n{body}\n")
+
+                    # optional: re-render current menu header/prompt
+                    try:
+                        if getattr(self, "ctx", None) and getattr(self.ctx, "active_menu_title", None):
+                            print(f"--- {self.ctx.active_menu_title} ---")
+                    except Exception:
+                        pass
+
+                else:
+                    # generic event hook/print
+                    if hasattr(self, "on_event") and callable(getattr(self, "on_event")):
+                        self.on_event(resp)
+                    else:
+                        print(f"[event] {t}: {d}")
+
+                continue  # keep waiting for our RPC reply
+
+            # 3) Legacy event envelope (id:'evt' or event field)
+            if resp.get("id") == "evt" or resp.get("event"):
+                ev_type = resp.get("event") or "event"
+                d = resp.get("data") or {}
+                print(f"[event] {ev_type}: {d}")
+                continue
+
+            # 4) Async errors without reply_to (rare broadcast errors)
+            if resp.get("status") in ("error", "refused") and resp.get("reply_to") is None:
+                err = (resp.get("error") or {}).get("message") or "error"
+                print(f"[async-{resp.get('status')}] {resp.get('type') or ''} {err}")
+                continue
+
+            # 5) Unknown frame: ignore but keep the RPC wait alive
             print(f"[WARN] Ignoring frame id={resp.get('id')} reply_to={resp.get('reply_to')}")
+            # loop continues
 
 
     
 # ---------------------------
 # Context
 # ---------------------------
+
 @dataclass
 class Context:
     conn: Conn

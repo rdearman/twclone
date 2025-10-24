@@ -282,6 +282,21 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
 	      send_enveloped_error (ctx->fd, root, 1500, "Out of memory");
 	      return 1;
 	    }
+	  /* Auto-subscribe this player to system.* on login (best-effort). */
+	  {
+	    sqlite3 *db = db_get_handle();
+	    sqlite3_stmt *st = NULL;
+	    if (sqlite3_prepare_v2(
+				   db,
+				   "INSERT OR IGNORE INTO subscriptions(player_id,event_type,delivery,enabled) "
+				   "VALUES(?1,'system.*','push',1);",
+				   -1, &st, NULL) == SQLITE_OK)
+	      {
+		sqlite3_bind_int64(st, 1, ctx->player_id);
+		(void)sqlite3_step(st);  /* ignore result; UNIQUE prevents dupes */
+	      }
+	    if (st) sqlite3_finalize(st);
+	  }	  
 	  send_enveloped_ok (ctx->fd, root, "auth.session", data);
 	  json_decref (data);
 	}
@@ -340,6 +355,24 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
 		ctx->sector_id = 1;
 	      json_t *data = json_pack ("{s:i, s:s}", "player_id", player_id,
 					"session_token", tok);
+
+	      /* Auto-subscribe this player to system.* on login (best-effort). */
+	      {
+		sqlite3 *db = db_get_handle();
+		sqlite3_stmt *st = NULL;
+		if (sqlite3_prepare_v2(
+				       db,
+				       "INSERT OR IGNORE INTO subscriptions(player_id,event_type,delivery,enabled) "
+				       "VALUES(?1,'system.*','push',1);",
+				       -1, &st, NULL) == SQLITE_OK)
+		  {
+		    sqlite3_bind_int64(st, 1, ctx->player_id);
+		    (void)sqlite3_step(st);  /* ignore result; UNIQUE prevents dupes */
+		  }
+		if (st) sqlite3_finalize(st);
+	      }
+
+	      
 	      send_enveloped_ok (ctx->fd, root, "auth.session", data);
 	      json_decref (data);
 	    }

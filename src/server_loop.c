@@ -39,6 +39,7 @@
 #include "server_bulk.h"
 
 
+
 #ifndef streq
 #define streq(a,b) (strcmp(json_string_value((a)), (b))==0)
 #endif
@@ -77,13 +78,96 @@ void handle_move_pathfind (client_ctx_t * ctx, json_t * root);
 void send_enveloped_ok (int fd, json_t * root, const char *type,
 			json_t * data);
 json_t *build_sector_info_json (int sector_id);
+static int64_t g_next_notice_ttl_sweep = 0;
+
+static inline uint64_t monotonic_millis(void) {
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return (uint64_t)ts.tv_sec * 1000ULL + (uint64_t)ts.tv_nsec / 1000000ULL;
+}
 
 
+/* ===== Client registry for broadcasts  ===== */
+
+
+/* Broadcast a system.notice to everyone (uses subscription infra).
+   Data is BORROWED here; we incref for the call. */
+static void
+server_broadcast_to_all_online (json_t *data)
+{
+    server_broadcast_event("system.notice", json_incref(data));
+    json_decref(data);
+}
+
+/* Sector-scoped, ephemeral event to subscribers of sector.* / sector.{id}.
+   NOTE: comm_publish_sector_event STEALS a ref to 'data'. */
+static void
+server_broadcast_to_sector (int sector_id, const char *event_type, json_t *data)
+{
+    comm_publish_sector_event(sector_id, event_type, data);  // steals 'data'
+}
+
+
+
+static int
+broadcast_sweep_once (sqlite3 *db, int max_rows)
+{
+    static const char *SQL_SEL =
+        "SELECT id, created_at, title, body, severity, expires_at "
+        "FROM system_notice "
+        "WHERE id NOT IN (SELECT DISTINCT notice_id FROM notice_seen WHERE player_id=0) "
+        "ORDER BY created_at ASC, id ASC LIMIT ?1;";
+
+    sqlite3_stmt *st = NULL;
+    int processed = 0;
+
+    if (max_rows <= 0 || max_rows > 1000) max_rows = 64;
+
+    if (sqlite3_prepare_v2(db, SQL_SEL, -1, &st, NULL) != SQLITE_OK) {
+        return 0;
+    }
+    sqlite3_bind_int(st, 1, max_rows);
+
+    while (sqlite3_step(st) == SQLITE_ROW) {
+        int id          = sqlite3_column_int(st, 0);
+        int created_at  = sqlite3_column_int(st, 1);
+        const char *title    = (const char*)sqlite3_column_text(st, 2);
+        const char *body     = (const char*)sqlite3_column_text(st, 3);
+        const char *severity = (const char*)sqlite3_column_text(st, 4);
+        int expires_at       = (sqlite3_column_type(st, 5) == SQLITE_NULL) ? 0 : sqlite3_column_int(st, 5);
+
+        json_t *data = json_pack("{s:i, s:i, s:s, s:s, s:s, s:O}",
+                                 "id", id,
+                                 "ts", created_at,
+                                 "title", title ? title : "",
+                                 "body",  body  ? body  : "",
+                                 "severity", severity ? severity : "info",
+                                 "expires_at", expires_at ? json_integer(expires_at) : json_null());
+
+        server_broadcast_to_all_online(json_incref(data));  /* fan-out live */
+        json_decref(data);
+
+        /* mark-as-published sentinel (player_id=0) to avoid re-sending */
+        sqlite3_stmt *st2 = NULL;
+        if (sqlite3_prepare_v2(db,
+              "INSERT OR IGNORE INTO notice_seen(notice_id, player_id, seen_at) "
+              "VALUES(?1, 0, strftime('%s','now'));",
+              -1, &st2, NULL) == SQLITE_OK)
+        {
+            sqlite3_bind_int(st2, 1, id);
+            (void)sqlite3_step(st2);
+        }
+        if (st2) sqlite3_finalize(st2);
+
+        processed++;
+    }
+
+    sqlite3_finalize(st);
+    return processed;
+}
 
 
 /* ===== Client registry for broadcasts (#195) ===== */
-#include <pthread.h>
-#include "server_envelope.h"	// send_enveloped_ok()
 
 typedef struct client_node_s
 {
@@ -506,7 +590,7 @@ process_message (client_ctx_t *ctx, json_t *root)
 /* ---------- PLAYER ---------- */
   else if (streq (cmd, "player.get_settings"))
     {
-      cmd_player_get_settings (ctx, root);
+      rc = cmd_player_get_settings (ctx, root);
     }
   else if (streq (cmd, "player.my_info"))
     {
@@ -1045,20 +1129,34 @@ server_loop (volatile sig_atomic_t *running)
   pthread_attr_t attr;
   pthread_attr_init (&attr);
   pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED);
-
+  
   while (*running)
     {
-      int rc = poll (&pfd, 1, 1000);	/* 1s tick re-checks *running */
-      if (rc < 0)
-	{
-	  if (errno == EINTR)
-	    continue;
-	  perror ("poll");
-	  break;
-	}
-      if (rc == 0)
-	continue;
+      int rc = poll(&pfd, 1, 100);   /* was 1000; 100ms gives us a ~10Hz tick */
+      // int rc = poll (&pfd, 1, 1000);	/* 1s tick re-checks *running */
 
+      /* === Broadcast pump tick (every ~500ms) === */
+      {
+	static uint64_t last_broadcast_ms = 0;
+	uint64_t now_ms = monotonic_millis();
+
+	if (now_ms - last_broadcast_ms >= 500) {
+	  (void)broadcast_sweep_once(db_get_handle(), 64);
+	  last_broadcast_ms = now_ms;
+	}
+      }
+
+      if (rc < 0) {
+	if (errno == EINTR) continue;
+	perror("poll");
+	break;
+      }
+
+      if (rc == 0) {
+	/* timeout only: we still ran the pump above; just loop again */
+	continue;
+      }
+      
       if (pfd.revents & POLLIN)
 	{
 	  client_ctx_t *ctx = calloc (1, sizeof (*ctx));

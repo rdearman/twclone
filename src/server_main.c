@@ -17,7 +17,7 @@
 #include "server_config.h"
 #include "s2s_keyring.h"
 #include "s2s_transport.h"
-#include "engine_main.h"
+#include "server_engine.h"
 #include "server_s2s.h"
 #include "config.h"
 #include "database.h"

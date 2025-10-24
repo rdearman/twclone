@@ -927,14 +927,14 @@ subscriptions_as_array (int64_t pid)
 }
 
 /* player.get_settings → player.settings_v1 */
-void
+int
 cmd_player_get_settings (client_ctx_t *ctx, json_t *root)
 {
   if (!ctx || ctx->player_id <= 0)
     {
       send_enveloped_error (ctx ? ctx->fd : -1, root, ERR_NOT_AUTHENTICATED,
 			    "Authentication required");
-      return;
+      return 0;
     }
 
   json_t *prefs = prefs_as_array (ctx->player_id);
@@ -949,4 +949,5 @@ cmd_player_get_settings (client_ctx_t *ctx, json_t *root)
 			    "subscriptions", subs);
 
   send_enveloped_ok (ctx->fd, root, "player.settings_v1", data);
+  return 0;
 }

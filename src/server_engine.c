@@ -1,4 +1,7 @@
-// server_engine.c
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -16,16 +19,128 @@
 #include <sys/types.h>
 #include <jansson.h>
 #include <inttypes.h>
+#include <sqlite3.h>
 /* local includes */
-#include "engine_main.h"
 #include "s2s_keyring.h"
 #include "s2s_transport.h"
 #include "database.h"
 #include "server_envelope.h"
 #include "s2s_transport.h"
 #include "engine_consumer.h"
+#include "server_engine.h"
+#include "database.h"
+#include "server_loop.h"	// Assuming this contains functions to communicate with clients
 
 
+
+// Define the interval for the main game loop ticks in seconds
+#define GAME_TICK_INTERVAL_SEC 60
+
+
+static inline uint64_t monotonic_millis(void) {
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return (uint64_t)ts.tv_sec * 1000ULL + (uint64_t)ts.tv_nsec / 1000000ULL;
+}
+
+
+
+/* Run TTL cleanup for system_notice + notice_seen.
+   now_ts: seconds since epoch (use time(NULL)). */
+static int
+engine_notice_ttl_sweep(sqlite3 *db, int64_t now_ts)
+{
+  int rc = SQLITE_OK;
+  char *errmsg = NULL;
+
+  /* v1 retention windows (seconds) */
+  const int64_t TTL_INFO  = 7  * 24 * 3600;
+  const int64_t TTL_WARN  = 14 * 24 * 3600;
+  const int64_t TTL_ERROR = 30 * 24 * 3600;
+
+  rc = sqlite3_exec(db, "BEGIN IMMEDIATE", NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK) { if (errmsg) sqlite3_free(errmsg); return rc; }
+
+  /* 1) Hard-expired rows: expires_at < now */
+  {
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2(db,
+          "DELETE FROM system_notice WHERE expires_at IS NOT NULL AND expires_at < ?1;",
+          -1, &st, NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_int64(st, 1, now_ts);
+      sqlite3_step(st);
+    }
+    if (st) sqlite3_finalize(st);
+  }
+
+  /* 2) Severity-based windows for rows without explicit expires_at */
+  {
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2(db,
+          "DELETE FROM system_notice "
+          "WHERE expires_at IS NULL AND severity='info'  AND created_at < (?1 - ?2);",
+          -1, &st, NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_int64(st, 1, now_ts);
+      sqlite3_bind_int64(st, 2, TTL_INFO);
+      sqlite3_step(st);
+    }
+    if (st) sqlite3_finalize(st);
+
+    if (sqlite3_prepare_v2(db,
+          "DELETE FROM system_notice "
+          "WHERE expires_at IS NULL AND severity='warn'  AND created_at < (?1 - ?2);",
+          -1, &st, NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_int64(st, 1, now_ts);
+      sqlite3_bind_int64(st, 2, TTL_WARN);
+      sqlite3_step(st);
+    }
+    if (st) sqlite3_finalize(st);
+
+    if (sqlite3_prepare_v2(db,
+          "DELETE FROM system_notice "
+          "WHERE expires_at IS NULL AND severity='error' AND created_at < (?1 - ?2);",
+          -1, &st, NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_int64(st, 1, now_ts);
+      sqlite3_bind_int64(st, 2, TTL_ERROR);
+      sqlite3_step(st);
+    }
+    if (st) sqlite3_finalize(st);
+  }
+
+  /* 3) Keep last 1,000 by id (optional, simple and safe) */
+  {
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2(db,
+          "WITH keep AS (SELECT id FROM system_notice ORDER BY id DESC LIMIT 1000) "
+          "DELETE FROM system_notice WHERE id NOT IN (SELECT id FROM keep);",
+          -1, &st, NULL) == SQLITE_OK)
+    {
+      sqlite3_step(st);
+    }
+    if (st) sqlite3_finalize(st);
+  }
+
+  /* 4) Remove orphaned notice_seen rows */
+  {
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2(db,
+          "DELETE FROM notice_seen WHERE notice_id NOT IN (SELECT id FROM system_notice);",
+          -1, &st, NULL) == SQLITE_OK)
+    {
+      sqlite3_step(st);
+    }
+    if (st) sqlite3_finalize(st);
+  }
+
+  rc = sqlite3_exec(db, "COMMIT", NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK) { if (errmsg) sqlite3_free(errmsg); return rc; }
+  return SQLITE_OK;
+}
+//////////////////////////
 
 static eng_consumer_cfg_t G_CFG = {
   .batch_size = 200,
@@ -43,7 +158,7 @@ engine_tick (sqlite3 *db)
       fprintf (stderr,
 	       "[engine] events: processed=%d quarantined=%d last_id=%lld lag=%lld\n",
 	       m.processed, m.quarantined, m.last_event_id, m.lag);
-    }
+    }  
 }
 
 
@@ -303,12 +418,6 @@ recv_line (int fd, char *buf, size_t cap)
 }
 
 
-
-
-
-// Keep the legacy thread entry (unused after forking, but preserved)
-#define GAME_TICK_INTERVAL_SEC 60
-
 /* ----- Forked engine process implementation ----- */
 
 
@@ -330,6 +439,119 @@ s2s_connect_4321 (void)
   close (fd);
   return -1;
 }
+
+
+/* --- executor: broadcast.create → INSERT INTO system_notice --- */
+static int exec_broadcast_create(sqlite3 *db, json_t *payload, const char *idem_key, int64_t *out_notice_id) {
+    (void)idem_key; /* idempotency handled at engine_commands layer */
+    const char *title = NULL, *body = NULL, *severity = "info";
+    int64_t expires_at = 0;
+
+    if (!json_is_object(payload)) return SQLITE_MISMATCH;
+    json_t *jt = json_object_get(payload, "title");
+    json_t *jb = json_object_get(payload, "body");
+    json_t *js = json_object_get(payload, "severity");
+    json_t *je = json_object_get(payload, "expires_at");
+    if (jt && json_is_string(jt)) title = json_string_value(jt);
+    if (jb && json_is_string(jb)) body  = json_string_value(jb);
+    if (js && json_is_string(js)) severity = json_string_value(js);
+    if (je && json_is_integer(je)) expires_at = (int64_t)json_integer_value(je);
+    if (!title || !body) return SQLITE_MISUSE;
+
+    sqlite3_stmt *st = NULL;
+    int rc = sqlite3_prepare_v2(db,
+        "INSERT INTO system_notice(id, created_at, title, body, severity, expires_at) "
+        "VALUES(NULL, strftime('%s','now'), ?1, ?2, ?3, ?4);", -1, &st, NULL);
+    if (rc != SQLITE_OK) return rc;
+
+    sqlite3_bind_text (st, 1, title, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text (st, 2, body,  -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text (st, 3, severity ? severity : "info", -1, SQLITE_TRANSIENT);
+    if (expires_at > 0) sqlite3_bind_int64(st, 4, expires_at); else sqlite3_bind_null(st, 4);
+
+    rc = sqlite3_step(st);
+    sqlite3_finalize(st);
+    if (rc != SQLITE_DONE) return SQLITE_ERROR;
+
+    if (out_notice_id) *out_notice_id = (int64_t)sqlite3_last_insert_rowid(db);
+    return SQLITE_OK;
+}
+
+/* --- tick: pull ready commands and execute --- */
+static int server_commands_tick(sqlite3 *db, int max_rows) {
+    if (max_rows <= 0 || max_rows > 100) max_rows = 16;
+    int processed = 0;
+
+    sqlite3_stmt *st = NULL;
+    int rc = sqlite3_prepare_v2(db,
+        "SELECT id, type, payload, idem_key "
+        "FROM engine_commands "
+        "WHERE status='ready' AND due_at <= strftime('%s','now') "
+        "ORDER BY priority ASC, due_at ASC, id ASC "
+        "LIMIT ?1;",
+        -1, &st, NULL);
+    if (rc != SQLITE_OK) return 0;
+    sqlite3_bind_int(st, 1, max_rows);
+
+    while (sqlite3_step(st) == SQLITE_ROW) {
+        int64_t cmd_id = sqlite3_column_int64(st, 0);
+        const char *type = (const char*)sqlite3_column_text(st, 1);
+        const char *payload_json = (const char*)sqlite3_column_text(st, 2);
+        const char *idem_key = (const char*)sqlite3_column_text(st, 3);
+
+        /* mark running */
+        sqlite3_stmt *upr = NULL;
+        if (sqlite3_prepare_v2(db,
+            "UPDATE engine_commands SET status='running', started_at=strftime('%s','now') WHERE id=?1;",
+            -1, &upr, NULL) == SQLITE_OK) {
+            sqlite3_bind_int64(upr, 1, cmd_id);
+            sqlite3_step(upr);
+        }
+        if (upr) sqlite3_finalize(upr);
+
+        int ok = -1;
+        json_error_t jerr;
+        json_t *pl = payload_json ? json_loads(payload_json, 0, &jerr) : NULL;
+
+        if (type && strcmp(type, "broadcast.create") == 0) {
+            int64_t notice_id = 0;
+            ok = (exec_broadcast_create(db, pl, idem_key, &notice_id) == SQLITE_OK) ? 0 : -1;
+        } else {
+            /* unknown command type → mark error */
+            ok = -1;
+        }
+
+        if (pl) json_decref(pl);
+
+        /* finalize status */
+        sqlite3_stmt *upf = NULL;
+        if (ok == 0) {
+            if (sqlite3_prepare_v2(db,
+                "UPDATE engine_commands SET status='done', finished_at=strftime('%s','now') WHERE id=?1;",
+                -1, &upf, NULL) == SQLITE_OK) {
+                sqlite3_bind_int64(upf, 1, cmd_id);
+                sqlite3_step(upf);
+            }
+        } else {
+            if (sqlite3_prepare_v2(db,
+                "UPDATE engine_commands SET status='error', attempts=attempts+1, finished_at=strftime('%s','now') WHERE id=?1;",
+                -1, &upf, NULL) == SQLITE_OK) {
+                sqlite3_bind_int64(upf, 1, cmd_id);
+                sqlite3_step(upf);
+            }
+        }
+        if (upf) sqlite3_finalize(upf);
+        processed++;
+    }
+    sqlite3_finalize(st);
+    return processed;
+}
+
+
+
+/////////////////////////////////////////////////////////////////////////////
+//////////////   MAIN ENGINE LOOP
+/////////////////////////////////////////////////////////////////////////////
 
 static int
 engine_main_loop (int shutdown_fd)
@@ -394,10 +616,20 @@ engine_main_loop (int shutdown_fd)
   (void) engine_demo_push (conn);
 
   static time_t last_metrics = 0;
+  static time_t last_cmd_tick_ms = 0;
+
+
   for (;;)
     {
       engine_s2s_drain_once (conn);
 
+      uint64_t now_ms = monotonic_millis();
+      if (now_ms - last_cmd_tick_ms >= 250) {
+	(void)server_commands_tick(db_get_handle(), 16);
+	last_cmd_tick_ms = now_ms;
+      }      
+
+   
       time_t now = time (NULL);
       if (now - last_metrics >= 3600)
 	{
@@ -406,6 +638,25 @@ engine_main_loop (int shutdown_fd)
 	  engine_tick (db_handle);
 	}
 
+      /* file-scope static, near other engine globals */
+      static int64_t g_next_notice_ttl_sweep = 0;
+
+      /* inside the engine’s main loop / tick */
+      {
+	int64_t now_ts = (int64_t)time(NULL);
+
+	if (g_next_notice_ttl_sweep == 0) {
+	  /* schedule first run ~5 minutes from start */
+	  g_next_notice_ttl_sweep = now_ts + 300;
+	}
+
+	if (now_ts >= g_next_notice_ttl_sweep) {
+	  (void)engine_notice_ttl_sweep(db_get_handle(), now_ts);
+	  g_next_notice_ttl_sweep = now_ts + 24*3600;  /* run daily */
+	}
+      }
+      
+      
       // Sleep until next tick or until shutdown pipe changes
       int rc = poll (&pfd, 1, tick_ms);
       if (rc > 0)

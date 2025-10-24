@@ -146,7 +146,7 @@ am_server_OBJECTS = ../src/server_communication.$(OBJEXT) \
 	../src/server_warp_post_processing.$(OBJEXT) \
 	../src/namegen.$(OBJEXT) ../src/globals.$(OBJEXT) \
 	../src/database.$(OBJEXT) ../src/schemas.$(OBJEXT) \
-	../src/common.$(OBJEXT) ../src/engine_main.$(OBJEXT) \
+	../src/common.$(OBJEXT) ../src/server_engine.$(OBJEXT) \
 	../src/engine_consumer.$(OBJEXT) \
 	../src/db_player_settings.$(OBJEXT) \
 	../src/s2s_transport.$(OBJEXT) ../src/s2s_keyring.$(OBJEXT)
@@ -171,8 +171,8 @@ am__depfiles_remade = ../src/$(DEPDIR)/common.Po \
 	../src/$(DEPDIR)/database.Po \
 	../src/$(DEPDIR)/db_player_settings.Po \
 	../src/$(DEPDIR)/engine_consumer.Po \
-	../src/$(DEPDIR)/engine_main.Po ../src/$(DEPDIR)/globals.Po \
-	../src/$(DEPDIR)/namegen.Po ../src/$(DEPDIR)/s2s_keyring.Po \
+	../src/$(DEPDIR)/globals.Po ../src/$(DEPDIR)/namegen.Po \
+	../src/$(DEPDIR)/s2s_keyring.Po \
 	../src/$(DEPDIR)/s2s_transport.Po ../src/$(DEPDIR)/schemas.Po \
 	../src/$(DEPDIR)/server_auth.Po \
 	../src/$(DEPDIR)/server_bigbang.Po \
@@ -182,6 +182,7 @@ am__depfiles_remade = ../src/$(DEPDIR)/common.Po \
 	../src/$(DEPDIR)/server_combat.Po \
 	../src/$(DEPDIR)/server_communication.Po \
 	../src/$(DEPDIR)/server_config.Po \
+	../src/$(DEPDIR)/server_engine.Po \
 	../src/$(DEPDIR)/server_envelope.Po \
 	../src/$(DEPDIR)/server_loop.Po \
 	../src/$(DEPDIR)/server_main.Po \
@@ -258,7 +259,7 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-ISODATE = 2025-10-21
+ISODATE = 2025-10-24
 LDFLAGS = 
 LIBOBJS = 
 LIBS = -lpthread -lm 
@@ -342,34 +343,34 @@ AUTOMAKE_OPTIONS = subdir-objects
 # 	../src/common.c \
 # 	../src/parse.c
 server_SOURCES = \
-	../src/server_communication.c \
+        ../src/server_communication.c \
         ../src/server_bulk.c \
-	../src/server_combat.c  \
-	../src/server_bigbang.c \
-	../src/server_cmds.c \
-	../src/server_citadel.c \
-	../src/server_envelope.c \
-	../src/server_auth.c \
-	../src/server_config.c \
-	../src/server_loop.c \
-	../src/server_main.c \
-	../src/server_planets.c \
-	../src/server_players.c \
-	../src/server_ports.c \
-	../src/server_ships.c \
-	../src/server_universe.c \
-	../src/server_s2s.c \
-	../src/server_warp_post_processing.c \
-	../src/namegen.c \
-	../src/globals.c \
-	../src/database.c \
-	../src/schemas.c \
-	../src/common.c \
-	../src/engine_main.c \
-	../src/engine_consumer.c \
-	../src/db_player_settings.c \
-	../src/s2s_transport.c \
-	../src/s2s_keyring.c
+        ../src/server_combat.c  \
+        ../src/server_bigbang.c \
+        ../src/server_cmds.c \
+        ../src/server_citadel.c \
+        ../src/server_envelope.c \
+        ../src/server_auth.c \
+        ../src/server_config.c \
+        ../src/server_loop.c \
+        ../src/server_main.c \
+        ../src/server_planets.c \
+        ../src/server_players.c \
+        ../src/server_ports.c \
+        ../src/server_ships.c \
+        ../src/server_universe.c \
+        ../src/server_s2s.c \
+        ../src/server_warp_post_processing.c \
+        ../src/namegen.c \
+        ../src/globals.c \
+        ../src/database.c \
+        ../src/schemas.c \
+        ../src/common.c \
+        ../src/server_engine.c \
+        ../src/engine_consumer.c \
+        ../src/db_player_settings.c \
+        ../src/s2s_transport.c \
+        ../src/s2s_keyring.c
 
 bigbang_SOURCES = \
 	../src/database.c \
@@ -522,7 +523,7 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_s2s.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/engine_main.$(OBJEXT): ../src/$(am__dirstamp) \
+../src/server_engine.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/engine_consumer.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
@@ -544,7 +545,6 @@ include ../src/$(DEPDIR)/common.Po # am--include-marker
 include ../src/$(DEPDIR)/database.Po # am--include-marker
 include ../src/$(DEPDIR)/db_player_settings.Po # am--include-marker
 include ../src/$(DEPDIR)/engine_consumer.Po # am--include-marker
-include ../src/$(DEPDIR)/engine_main.Po # am--include-marker
 include ../src/$(DEPDIR)/globals.Po # am--include-marker
 include ../src/$(DEPDIR)/namegen.Po # am--include-marker
 include ../src/$(DEPDIR)/s2s_keyring.Po # am--include-marker
@@ -558,6 +558,7 @@ include ../src/$(DEPDIR)/server_cmds.Po # am--include-marker
 include ../src/$(DEPDIR)/server_combat.Po # am--include-marker
 include ../src/$(DEPDIR)/server_communication.Po # am--include-marker
 include ../src/$(DEPDIR)/server_config.Po # am--include-marker
+include ../src/$(DEPDIR)/server_engine.Po # am--include-marker
 include ../src/$(DEPDIR)/server_envelope.Po # am--include-marker
 include ../src/$(DEPDIR)/server_loop.Po # am--include-marker
 include ../src/$(DEPDIR)/server_main.Po # am--include-marker
@@ -724,7 +725,6 @@ distclean: distclean-am
 	-rm -f ../src/$(DEPDIR)/database.Po
 	-rm -f ../src/$(DEPDIR)/db_player_settings.Po
 	-rm -f ../src/$(DEPDIR)/engine_consumer.Po
-	-rm -f ../src/$(DEPDIR)/engine_main.Po
 	-rm -f ../src/$(DEPDIR)/globals.Po
 	-rm -f ../src/$(DEPDIR)/namegen.Po
 	-rm -f ../src/$(DEPDIR)/s2s_keyring.Po
@@ -738,6 +738,7 @@ distclean: distclean-am
 	-rm -f ../src/$(DEPDIR)/server_combat.Po
 	-rm -f ../src/$(DEPDIR)/server_communication.Po
 	-rm -f ../src/$(DEPDIR)/server_config.Po
+	-rm -f ../src/$(DEPDIR)/server_engine.Po
 	-rm -f ../src/$(DEPDIR)/server_envelope.Po
 	-rm -f ../src/$(DEPDIR)/server_loop.Po
 	-rm -f ../src/$(DEPDIR)/server_main.Po
@@ -798,7 +799,6 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/$(DEPDIR)/database.Po
 	-rm -f ../src/$(DEPDIR)/db_player_settings.Po
 	-rm -f ../src/$(DEPDIR)/engine_consumer.Po
-	-rm -f ../src/$(DEPDIR)/engine_main.Po
 	-rm -f ../src/$(DEPDIR)/globals.Po
 	-rm -f ../src/$(DEPDIR)/namegen.Po
 	-rm -f ../src/$(DEPDIR)/s2s_keyring.Po
@@ -812,6 +812,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/$(DEPDIR)/server_combat.Po
 	-rm -f ../src/$(DEPDIR)/server_communication.Po
 	-rm -f ../src/$(DEPDIR)/server_config.Po
+	-rm -f ../src/$(DEPDIR)/server_engine.Po
 	-rm -f ../src/$(DEPDIR)/server_envelope.Po
 	-rm -f ../src/$(DEPDIR)/server_loop.Po
 	-rm -f ../src/$(DEPDIR)/server_main.Po

@@ -606,7 +606,39 @@ Server may publish capabilities (e.g., via `session.hello` or a dedicated endpoi
 
 ---
 
+## System Notices — TTL & Cleanup
+
+**Table:** `system_notice(id, created_at, title, body, severity, expires_at)`
+
+**Delivery:** The server’s broadcast pump periodically emits `type:"system.notice"` for *unpublished* rows and marks them once via `notice_seen(notice_id, player_id=0, seen_at)`.
+
+### TTL policy (v1)
+
+- If `expires_at` is set and `< now`, the notice is expired.
+- If `expires_at` is **NULL**, the engine applies a severity-based retention window:
+
+  | severity | retention (created_at-based) |
+  |---------|-------------------------------|
+  | info    | 7 days                        |
+  | warn    | 14 days                       |
+  | error   | 30 days                       |
+
+- A secondary guard caps history to the **most recent 1,000** rows by `id`.
+
+### Cleanup cadence
+
+- The engine runs a **daily** sweep that:
+  1) Deletes expired rows (`expires_at < now`)  
+  2) Deletes old rows by severity window (see table)  
+  3) Trims to last 1,000 rows (if applicable)  
+  4) Removes orphan `notice_seen` rows
+
+This keeps storage bounded while ensuring recent/global events remain available for late joiners.
+
+---
+
 ### Changelog
 
 * **v1 (2025-10-20):** Initial contract including envelopes, prefs RPCs, subscriptions, avoid/bookmark/notes RPCs, settings aggregator, localisation negotiation stubs, and core events (`engine.tick`, `nav.sector.enter`, `combat.hit`, `trade.deal.matched`, `system.notice`).
 
+* **v1.0.1 (2025-10-24):** TTL & Cleanup

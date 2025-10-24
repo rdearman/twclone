@@ -754,23 +754,305 @@ Same envelope; mutually-authenticated channel (mTLS or signed tokens; include `m
 * Servers MUST validate inbound payloads server-side.
 * Provide a conformance test suite with canned frames (golden files).
 
+Yep:
+
+# #175 — broadcast_sweep_once(db, max_rows)
+
+You can close it with what you’ve got. Quick acceptance checklist to drop in the issue before closing:
+
+* [x] **Sweeper** runs from `server_loop` every ~500 ms (bounded `LIMIT 64`).
+* [x] Selects **unpublished** rows from `system_notice`.
+* [x] Delivers via `server_broadcast_event("system.notice", …)`.
+* [x] Marks “published once” with `notice_seen(notice_id, player_id=0, seen_at)`.
+* [x] Manual test: insert row into `system_notice` → client shows banner.
+* [x] No duplicate sends (verified by sentinel in `notice_seen`).
+* [x] Works while idle (pump runs regardless of inbound traffic).
+
+If you want to be extra tidy, paste a short snippet of your client output and the `sqlite3` query showing the sentinel row.
+
 ---
 
-### Appendix A: Minimal Client Loop (pseudocode)
+## Broadcast Frames (broadcast.v1)
 
-```text
-open connection
-send system.hello
-recv capabilities
-send auth.login
-recv session
-send subscribe.add ["sector.events","chat.sector","combat.events"]
-loop:
-  read frame
-  if "reply_to": match pending future
-  else if "event": route to handlers
-  else: log unexpected frame
+### Purpose
+Server → Client **events** that are *not* replies to a specific request. These are pushed when the world changes (engine or player actions). Examples: `system.notice`, `sector.notice`, `chat.message`.
+
+### Envelope shape
+Broadcast frames share the same outer envelope as replies, **but have no `reply_to`**.
+
+```json
+{
+  "id": "srv-ok",            // string or number; server-assigned
+  "status": "ok",            // "ok" | "refused" | "error"
+  "type": "<event.name>",    // e.g., "system.notice"
+  "data": { /* event payload */ },
+  "ts": 1712345678,          // optional: event timestamp (seconds)
+  "meta": { /* optional transport metadata */ }
+}
+````
+
+* `reply_to`: **absent** (critical distinction from RPC replies).
+* `type`: REQUIRED. Event namespace; dot-separated.
+* `status`: SHOULD be `"ok"` for normal events. `"refused"`/`"error"` broadcasts are rare and only used for out-of-band alerts.
+* `data`: Event payload; schema depends on `type`.
+* `ts`/`expires_at`: Optional timing fields when the event is durable or time-limited.
+
+### Client handling rules
+
+1. If a frame has **`reply_to`** → route as an **RPC reply**.
+2. Else if it has **`type`** → route as an **async event**.
+3. Event frames **must not** break in-flight RPC waits; clients should keep waiting for their `reply_to`.
+4. Unknown event `type` → log and ignore (forward compatible).
+
+### Subscription routing
+
+* Delivery respects server subscriptions (e.g., `system.*`, `sector.*`), except for “locked” channels where the server auto-subscribes (e.g., `system.*` at login).
+* Topic matching uses prefix-wildcards: `"system.*"` matches `system.notice`, `system.warn`, etc.
+
+### Durability (server)
+
+* Durable broadcasts (e.g., global notices) are stored in `system_notice`.
+* The **broadcast pump** periodically:
+
+  1. Selects unpublished rows.
+  2. Emits `type:"system.notice"` frames to online clients.
+  3. Inserts sentinel `notice_seen(notice_id, player_id=0, seen_at)` to prevent re-send.
+* Sector-local shouts can be ephemeral (no DB), routed via `comm_publish_sector_event`.
+
+### Examples
+
+**Global notice (durable)**
+
+```json
+{
+  "id": "srv-ok",
+  "status": "ok",
+  "type": "system.notice",
+  "data": {
+    "id": 42,
+    "ts": 1761310445,
+    "title": "Stardock Destroyed",
+    "body": "Ferengi trader destroyed Stardock in sector 123",
+    "severity": "warn",
+    "expires_at": null
+  }
+}
 ```
+
+**Sector notice (ephemeral)**
+
+```json
+{
+  "id": "srv-ok",
+  "status": "ok",
+  "type": "sector.notice",
+  "data": {
+    "sector_id": 123,
+    "msg": "John docked at Muphrid",
+    "by": { "player_id": 7, "name": "John" }
+  }
+}
+```
+
+**Chat message (subspace)**
+
+```json
+{
+  "id": "srv-ok",
+  "status": "ok",
+  "type": "chat.message",
+  "data": {
+    "channel": "subspace",
+    "sender_id": 7,
+    "body": "Hello world",
+    "msg_id": 1337,
+    "sent_at": "2025-10-24T13:37:00Z"
+  }
+}
+```
+
+### Error vs Event
+
+* **RPC reply**: has `reply_to`, corresponds to a specific request id.
+* **Broadcast event**: has `type`, no `reply_to`, may arrive at any time.
+
+### Versioning
+
+* This is **broadcast.v1**. New fields can be added to `data` without bumping the version; removing or changing semantics requires `broadcast.v2` and a new capability bit.
+
+````
+
+## EVENT_CONTRACT.md – add a short cross-link
+
+```markdown
+### Broadcast Events (see PROTOCOL.md → Broadcast Frames)
+
+- `system.notice`
+  - `data`: `{ id, ts, title, body, severity('info'|'warn'|'error'), expires_at|null }`
+  - Source: engine or server inserts a row into `system_notice`.
+  - Delivery: server broadcast pump.
+
+- `sector.notice`
+  - `data`: `{ sector_id, msg, by:{player_id?, name?} }`
+  - Source: server emits on local actions (dock, enter/leave).
+  - Delivery: ephemeral via `comm_publish_sector_event`.
+
+- `chat.message`
+  - `data`: `{ channel, sender_id, body, msg_id, sent_at }`
+  - Delivery: to subscribers of `chat.*`.
+````
+---
+
+Perfect—here’s #177 as a **drop-in docs update**. Copy/paste these into your repo:
+
+---
+
+# PROTOCOL.md — add/replace this section
+
+````markdown
+## Broadcast Frames (broadcast.v1)
+
+### Purpose
+Server ➜ Client **events** that are *not* replies to a specific request. They may arrive at any time (e.g., `system.notice`, `sector.notice`, `chat.message`).
+
+### Envelope
+Broadcast frames share the same outer envelope as replies, **but have no `reply_to`**.
+
+```json
+{
+  "id": "srv-ok",             // server-assigned
+  "status": "ok",             // "ok" | "refused" | "error"
+  "type": "system.notice",    // REQUIRED for events
+  "data": { /* event payload */ },
+  "ts": 1761310445,           // optional event timestamp (unix seconds)
+  "meta": { /* optional transport metadata */ }
+}
+````
+
+* `reply_to`: **absent** for broadcasts (present only on RPC replies).
+* `type`: REQUIRED; dot-namespaced event name.
+* `status`: `"ok"` for normal events. `"refused"`/`"error"` broadcasts are rare (out-of-band alerts).
+* `data`: Event payload; schema depends on `type`.
+
+### Client handling rules
+
+1. If a frame has **`reply_to`** ➜ treat as **RPC reply**.
+2. Else, if it has **`type`** ➜ treat as **async event**.
+3. Do **not** stop waiting for your RPC reply when events arrive mid-RPC.
+4. Unknown `type` ➜ log and ignore (forward compatible).
+
+### Subscriptions & delivery
+
+* Delivery is controlled by server-side subscriptions (e.g., `system.*`, `sector.*`, `chat.*`).
+* Wildcards are prefix-match: `"system.*"` matches `system.notice`, `system.warn`, etc.
+* Some channels may be **locked/auto-subscribed** by the server (e.g., `system.*` at login).
+
+### Durability & pump
+
+* Durable broadcasts are stored in `system_notice(id, created_at, title, body, severity, expires_at)`.
+* The **broadcast pump** periodically:
+
+  1. selects unpublished notices;
+  2. emits `type:"system.notice"` to online clients;
+  3. marks a one-time sentinel in `notice_seen(notice_id, player_id=0, seen_at)` to prevent re-send.
+
+### Versioning
+
+This is **broadcast.v1**. Adding fields to `data` is non-breaking. Removals/semantic changes require `broadcast.v2` and a capability bit.
+
+### Examples
+
+**Global notice (durable)**
+
+```json
+{
+  "id": "srv-ok",
+  "status": "ok",
+  "type": "system.notice",
+  "data": {
+    "id": 42,
+    "ts": 1761310445,
+    "title": "Stardock Destroyed",
+    "body": "Ferengi trader destroyed Stardock in sector 123",
+    "severity": "warn",
+    "expires_at": null
+  }
+}
+```
+
+**Sector notice (ephemeral)**
+
+```json
+{
+  "id": "srv-ok",
+  "status": "ok",
+  "type": "sector.notice",
+  "data": {
+    "sector_id": 123,
+    "msg": "John docked at Muphrid",
+    "by": { "player_id": 7, "name": "John" }
+  }
+}
+```
+
+**Chat message**
+
+```json
+{
+  "id": "srv-ok",
+  "status": "ok",
+  "type": "chat.message",
+  "data": {
+    "channel": "subspace",
+    "sender_id": 7,
+    "body": "Hello world",
+    "msg_id": 1337,
+    "sent_at": "2025-10-24T13:37:00Z"
+  }
+}
+```
+
+````
+
+---
+
+# EVENT_CONTRACT.md — add this section (and link from the TOC if you have one)
+
+```markdown
+## Broadcast Events (see: PROTOCOL.md → Broadcast Frames)
+
+### `system.notice`
+- **Payload (`data`)**
+  - `id` (int): unique notice id
+  - `ts` (int): unix seconds
+  - `title` (string)
+  - `body` (string)
+  - `severity` (`"info"|"warn"|"error"`)
+  - `expires_at` (int|null): unix seconds, if set notice is expired after this time
+- **Source**: server or engine inserts into `system_notice`.
+- **Delivery**: broadcast pump; one-time sentinel `notice_seen(notice_id, player_id=0)` prevents duplicates.
+- **Client**: display banner; safe to de-dup by `id`.
+
+### `sector.notice`
+- **Payload (`data`)**
+  - `sector_id` (int)
+  - `msg` (string)
+  - `by` (object, optional): `{ player_id?, name? }`
+- **Source**: server emits on local actions (enter/leave/dock).
+- **Delivery**: ephemeral push to players in-sector (no DB row).
+- **Client**: transient message; no persistence expected.
+
+### `chat.message`
+- **Payload (`data`)**
+  - `channel` (string): e.g., `"subspace"`
+  - `sender_id` (int|null)
+  - `body` (string)
+  - `msg_id` (int)
+  - `sent_at` (ISO-8601 string)
+- **Source**: chat send path persists row; server pushes to subscribers of `chat.*`.
+- **Client**: append to chat view; paginate via `chat.history`.
+````
+
 
 ---
 
