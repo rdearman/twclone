@@ -1,6 +1,7 @@
 #include <string.h>
 #include <jansson.h>
 #include <sqlite3.h>
+#include <stdbool.h>
 /* local includes */
 #include "server_auth.h"
 #include "errors.h"
@@ -8,8 +9,7 @@
 #include "server_cmds.h"
 #include "server_envelope.h"
 #include "database.h"
-#include <stdbool.h>
-
+#include "db_player_settings.h"
 
 
 static bool
@@ -296,7 +296,17 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
 		(void)sqlite3_step(st);  /* ignore result; UNIQUE prevents dupes */
 	      }
 	    if (st) sqlite3_finalize(st);
-	  }	  
+	  }
+
+
+	  {
+	    char *cur = NULL;  // must be char*
+	    if (db_prefs_get_one(ctx->player_id, "ui.locale", &cur) != SQLITE_OK || !cur) {
+	      (void)db_prefs_set_one(ctx->player_id, "ui.locale", PT_STRING, "en-GB");
+	    }
+	    if (cur) free(cur);
+	  }
+	  
 	  send_enveloped_ok (ctx->fd, root, "auth.session", data);
 	  json_decref (data);
 	}

@@ -28,6 +28,8 @@ static json_t *players_get_subscriptions (client_ctx_t * ctx);
 static json_t *players_list_bookmarks (client_ctx_t * ctx);
 static json_t *players_list_avoid (client_ctx_t * ctx);
 static json_t *players_list_notes (client_ctx_t * ctx, json_t * req);
+
+
 static int
 is_ascii_printable (const char *s)
 {
@@ -404,6 +406,20 @@ validate_value (int pt, const char *v)
 
 /* ------ Set Pref ------- */
 
+/* --- allow ui.locale (simple BCP47-ish) --- */
+static int is_valid_locale(const char *s) {
+  if (!s) return 0;
+  size_t n = strlen(s);
+  if (n < 2 || n > 16) return 0;
+  for (size_t i=0;i<n;i++) {
+    char c = s[i];
+    if (!( (c>='A'&&c<='Z') || (c>='a'&&c<='z') || (c>='0'&&c<='9') || c=='-' )) return 0;
+  }
+  return 1;
+}
+
+
+
 
 int
 cmd_player_set_prefs (client_ctx_t *ctx, json_t *root)
@@ -473,11 +489,22 @@ cmd_player_set_prefs (client_ctx_t *ctx, json_t *root)
 	  return -1;
 	}
 
-      if (db_prefs_set_one (ctx->player_id, key, t, buf) != 0)
+      // if (db_prefs_set_one (ctx->player_id, key, t, buf) != 0)
+      if (db_prefs_set_one(ctx->player_id, "ui.locale", PT_STRING, json_string_value(val)) != 0)	
 	{
 	  send_enveloped_error (ctx->fd, root, ERR_UNKNOWN, "db error");
 	  return -1;
 	}
+
+      if (strcmp(key, "ui.locale") == 0) {
+	if (!json_is_string(val) || !is_valid_locale(json_string_value(val))) {
+	  send_enveloped_error(ctx->fd, root, ERR_BAD_REQUEST, "invalid ui.locale");
+	  return -1;
+	}
+	/* falls through to db_prefs_set_one with type='string' */
+      }
+      
+      
       it = json_object_iter_next (prefs, it);
     }
 
@@ -951,3 +978,4 @@ cmd_player_get_settings (client_ctx_t *ctx, json_t *root)
   send_enveloped_ok (ctx->fd, root, "player.settings_v1", data);
   return 0;
 }
+

@@ -1,16 +1,25 @@
-#pragma once
+// db_player_settings.h
+#ifndef DB_PLAYER_SETTINGS_H
+#define DB_PLAYER_SETTINGS_H
+#endif
+
 #include <stdint.h>
 #include <sqlite3.h>
 
-/* Call once after DB open */
-int db_player_settings_init (sqlite3 * db);
 
 /* ---- Prefs (typed KV) ---- */
-typedef enum
-{ PT_BOOL = 0, PT_INT = 1, PT_STRING = 2, PT_JSON = 3 } pref_type;
-int db_prefs_get_all (int64_t player_id, /*out */ sqlite3_stmt ** it);	/* step until SQLITE_DONE; cols: key,type,value */
-int db_prefs_set_one (int64_t player_id, const char *key, pref_type t,
-		      const char *value);
+#ifndef PREF_TYPE_DEFINED
+#define PREF_TYPE_DEFINED
+typedef enum {
+  PT_BOOL   = 1,
+  PT_INT    = 2,
+  PT_STRING = 3,
+  PT_JSON   = 4
+} pref_type;
+#endif
+
+/* Call once after DB open */
+int db_player_settings_init (sqlite3 * db);
 
 /* ---- Subscriptions ---- */
 int db_subscribe_upsert (int64_t player_id, const char *topic,
@@ -43,3 +52,8 @@ typedef int (*player_id_cb) (int player_id, void *arg);
 
 int db_for_each_subscriber (sqlite3 * db, const char *event_type,	// e.g., "sector.42"
 			    player_id_cb cb, void *arg);
+
+
+int db_prefs_get_all (int64_t player_id, /*out*/ sqlite3_stmt **it);
+int db_prefs_set_one (int64_t player_id, const char *key, pref_type t, const char *value);
+int db_prefs_get_one (int64_t player_id, const char *key, char **out_value);

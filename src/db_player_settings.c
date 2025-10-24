@@ -1,6 +1,10 @@
 #include "db_player_settings.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "database.h"            // db_get_handle()
+#include "db_player_settings.h"  // our prototypes
 
 
 static sqlite3 *g_db_ps = NULL;
@@ -19,7 +23,75 @@ db_player_settings_init (sqlite3 *db)
   return (g_db_ps ? 0 : -1);
 }
 
+
+
+
+
 /* ---------- Prefs ---------- */
+
+/* Upsert a single preference (typed) */
+int
+db_prefs_set_one (int64_t pid, const char *key, pref_type t, const char *value)
+{
+  if (!key || !value) return SQLITE_MISUSE;
+
+  /* map enum to on-disk textual type */
+  const char *type_str =
+    (t == PT_BOOL)   ? "bool"   :
+    (t == PT_INT)    ? "int"    :
+    (t == PT_STRING) ? "string" :
+    (t == PT_JSON)   ? "json"   : "string";
+
+  static const char *SQL =
+    "INSERT INTO player_prefs(player_id,key,type,value,updated_at) "
+    "VALUES(?1,?2,?3,?4,strftime('%s','now')) "
+    "ON CONFLICT(player_id,key) DO UPDATE SET "
+    "  type=excluded.type,"
+    "  value=excluded.value,"
+    "  updated_at=excluded.updated_at;";
+
+  sqlite3_stmt *st = NULL;
+  if (prep(g_db_ps, &st, SQL) != SQLITE_OK)
+    return -1;
+
+  sqlite3_bind_int64(st, 1, pid);
+  sqlite3_bind_text (st, 2, key,      -1, SQLITE_STATIC);
+  sqlite3_bind_text (st, 3, type_str, -1, SQLITE_STATIC);
+  sqlite3_bind_text (st, 4, value,    -1, SQLITE_TRANSIENT);
+
+  int rc = sqlite3_step(st);
+  sqlite3_finalize(st);
+  return (rc == SQLITE_DONE) ? 0 : -1;
+}
+
+
+
+int db_prefs_get_one (int64_t player_id, const char *key, char **out_value) {
+  if (out_value) *out_value = NULL;
+  if (!key || !out_value) return SQLITE_MISUSE;
+
+  sqlite3_stmt *st = NULL;
+  if (prep(g_db_ps, &st,
+      "SELECT value FROM player_prefs WHERE player_id=?1 AND key=?2 LIMIT 1;") != SQLITE_OK) {
+    return -1;
+  }
+
+  sqlite3_bind_int64(st, 1, player_id);
+  sqlite3_bind_text (st, 2, key, -1, SQLITE_STATIC);
+
+  int rc = sqlite3_step(st);
+  if (rc == SQLITE_ROW) {
+    const unsigned char *txt = sqlite3_column_text(st, 0);
+    if (txt) *out_value = strdup((const char*)txt);  // caller frees
+    rc = SQLITE_OK;
+  } else if (rc == SQLITE_DONE) {
+    rc = SQLITE_OK;  // not found → *out_value stays NULL
+  }
+  sqlite3_finalize(st);
+  return rc;
+}
+
+
 
 int
 db_prefs_get_all (int64_t pid, sqlite3_stmt **it)
@@ -47,26 +119,6 @@ type_to_s (pref_type t)
       return "json";
     }
   return "string";
-}
-
-int
-db_prefs_set_one (int64_t pid, const char *key, pref_type t,
-		  const char *value)
-{
-  static const char *SQL =
-    "INSERT INTO player_prefs(player_id,key,type,value,updated_at)"
-    "VALUES(?1,?2,?3,?4,strftime('%s','now')) "
-    "ON CONFLICT(player_id,key) DO UPDATE SET type=excluded.type,value=excluded.value,updated_at=excluded.updated_at;";
-  sqlite3_stmt *st = NULL;
-  if (prep (g_db_ps, &st, SQL) != SQLITE_OK)
-    return -1;
-  sqlite3_bind_int64 (st, 1, pid);
-  sqlite3_bind_text (st, 2, key, -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text (st, 3, type_to_s (t), -1, SQLITE_STATIC);
-  sqlite3_bind_text (st, 4, value, -1, SQLITE_TRANSIENT);
-  int rc = sqlite3_step (st);
-  sqlite3_finalize (st);
-  return (rc == SQLITE_DONE) ? 0 : -1;
 }
 
 /* ---------- Subscriptions ---------- */
@@ -340,3 +392,5 @@ db_for_each_subscriber (sqlite3 *db, const char *event_type, player_id_cb cb,
   sqlite3_finalize (st);
   return ok;
 }
+
+
