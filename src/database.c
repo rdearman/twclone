@@ -890,8 +890,8 @@ const char *create_table_sql[] = {
 
   " CREATE INDEX IF NOT EXISTS idx_subs_event  "
     " ON subscriptions(event_type); ",
-  
-  
+
+
   "CREATE INDEX idx_player_prefs_player ON player_prefs(player_id)  ;  "
     "CREATE INDEX idx_bookmarks_player ON player_bookmarks(player_id)  ;  "
     "CREATE INDEX idx_avoid_player ON player_avoid(player_id)  ;  "

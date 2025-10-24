@@ -288,48 +288,55 @@ db_note_list (int64_t pid, const char *scope, sqlite3_stmt **it)
 }
 
 int
-db_for_each_subscriber(sqlite3 *db, const char *event_type, player_id_cb cb, void *arg)
+db_for_each_subscriber (sqlite3 *db, const char *event_type, player_id_cb cb,
+			void *arg)
 {
-  if (!db || !event_type || !cb) return -1;
+  if (!db || !event_type || !cb)
+    return -1;
 
   // Compute domain and domain.* for the SQL fast-path
   // We support: exact match and single-level wildcard "domain.*"
-  const char *dot = strchr(event_type, '.');
-  char domain[64] = {0};
-  char domain_star[70] = {0};
-  if (dot && (size_t)(dot - event_type) < sizeof(domain)) {
-    size_t n = (size_t)(dot - event_type);
-    memcpy(domain, event_type, n);
-    domain[n] = '\0';
-    snprintf(domain_star, sizeof(domain_star), "%s.*", domain);
-  } else {
-    // No dot? Then only exact match makes sense; domain_star becomes "*"
-    strncpy(domain_star, "*", sizeof(domain_star)-1);
-  }
+  const char *dot = strchr (event_type, '.');
+  char domain[64] = { 0 };
+  char domain_star[70] = { 0 };
+  if (dot && (size_t) (dot - event_type) < sizeof (domain))
+    {
+      size_t n = (size_t) (dot - event_type);
+      memcpy (domain, event_type, n);
+      domain[n] = '\0';
+      snprintf (domain_star, sizeof (domain_star), "%s.*", domain);
+    }
+  else
+    {
+      // No dot? Then only exact match makes sense; domain_star becomes "*"
+      strncpy (domain_star, "*", sizeof (domain_star) - 1);
+    }
 
   // We purposely avoid LIKE/GLOB for predictable perf and semantics.
   // Unique(player_id, event_type) is already enforced; DISTINCT is for safety.
   const char *SQL =
     "SELECT DISTINCT player_id "
     "FROM subscriptions "
-    "WHERE enabled=1 "
-    "  AND (event_type = ?1 OR event_type = ?2)";
+    "WHERE enabled=1 " "  AND (event_type = ?1 OR event_type = ?2)";
 
   sqlite3_stmt *st = NULL;
-  int rc = sqlite3_prepare_v2(db, SQL, -1, &st, NULL);
-  if (rc != SQLITE_OK) return -1;
+  int rc = sqlite3_prepare_v2 (db, SQL, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    return -1;
 
-  sqlite3_bind_text(st, 1, event_type, -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text(st, 2, domain_star, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text (st, 1, event_type, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text (st, 2, domain_star, -1, SQLITE_TRANSIENT);
 
-  while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
-    int player_id = sqlite3_column_int(st, 0);
-    if (cb(player_id, arg) != 0) { // cb can stop early by returning non-zero
-      break;
+  while ((rc = sqlite3_step (st)) == SQLITE_ROW)
+    {
+      int player_id = sqlite3_column_int (st, 0);
+      if (cb (player_id, arg) != 0)
+	{			// cb can stop early by returning non-zero
+	  break;
+	}
     }
-  }
 
   int ok = (rc == SQLITE_ROW || rc == SQLITE_DONE) ? 0 : -1;
-  sqlite3_finalize(st);
+  sqlite3_finalize (st);
   return ok;
 }

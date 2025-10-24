@@ -14,11 +14,12 @@ void rl_tick (client_ctx_t * ctx);
 
 
 /* ---- client registry / delivery (used by broadcast path) ---- */
-void server_register_client(client_ctx_t *ctx);
-void server_unregister_client(client_ctx_t *ctx);
+void server_register_client (client_ctx_t * ctx);
+void server_unregister_client (client_ctx_t * ctx);
 
 /* Returns 0 if something was delivered; -1 if no online client for player_id.
    Does NOT steal 'data'. */
-int server_deliver_to_player(int player_id, const char *event_type, json_t *data);
+int server_deliver_to_player (int player_id, const char *event_type,
+			      json_t * data);
 
 #endif /* SERVER_LOOP_H */

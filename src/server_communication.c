@@ -21,28 +21,51 @@ extern json_t *db_notice_list_unseen_for_player (int player_id);
 extern int db_notice_mark_seen (int notice_id, int player_id);
 
 /* tiny local helpers (no new headers) */
-static int is_ascii_printable(const char *s){ if(!s)return 0; for (const unsigned char *p=(const unsigned char*)s; *p; ++p) if(*p<0x20||*p>0x7E) return 0; return 1; }
-static int len_leq(const char*s,size_t m){ return s && strlen(s)<=m; }
-static int is_allowed_topic(const char *t){
-    static const char *const allowed[] = {
-        "system.notice","sector.*","sector.player_entered","chat.sector","chat.global",
-        "combat.*","trade.*", NULL
-    };
-    if (!t) return 0;
-    for (int i=0; allowed[i]; ++i) if (strcmp(t, allowed[i])==0) return 1;
-    /* allow generic domain.* */
-    const char *dot = strchr(t, '.');
-    return dot && strcmp(dot+1, "*")==0;
+static int
+is_ascii_printable (const char *s)
+{
+  if (!s)
+    return 0;
+  for (const unsigned char *p = (const unsigned char *)s; *p; ++p)
+    if (*p < 0x20 || *p > 0x7E)
+      return 0;
+  return 1;
 }
-enum { MAX_SUBSCRIPTIONS_PER_PLAYER = 64 };
+
+static int
+len_leq (const char *s, size_t m)
+{
+  return s && strlen (s) <= m;
+}
+
+static int
+is_allowed_topic (const char *t)
+{
+  static const char *const allowed[] = {
+    "system.notice", "sector.*", "sector.player_entered", "chat.sector",
+      "chat.global",
+    "combat.*", "trade.*", NULL
+  };
+  if (!t)
+    return 0;
+  for (int i = 0; allowed[i]; ++i)
+    if (strcmp (t, allowed[i]) == 0)
+      return 1;
+  /* allow generic domain.* */
+  const char *dot = strchr (t, '.');
+  return dot && strcmp (dot + 1, "*") == 0;
+}
+
+enum
+{ MAX_SUBSCRIPTIONS_PER_PLAYER = 64 };
 
 
 
 static int
-send_to_player(int player_id, const char *event_type, json_t *data)
+send_to_player (int player_id, const char *event_type, json_t *data)
 {
   // delegate to server_loop’s registry-based delivery
-  return server_deliver_to_player(player_id, event_type, data);
+  return server_deliver_to_player (player_id, event_type, data);
 }
 
 
@@ -105,32 +128,36 @@ is_valid_topic (const char *topic)
 }
 
 
-struct bc_ctx {
+struct bc_ctx
+{
   const char *event_type;
   json_t *data;
   int deliveries;
 };
 
 static int
-bc_cb(int player_id, void *arg)
+bc_cb (int player_id, void *arg)
 {
-  struct bc_ctx *bc = (struct bc_ctx *)arg;
-  if (send_to_player(player_id, bc->event_type, bc->data) == 0) {
-    bc->deliveries++;
-  }
-  return 0; // continue
+  struct bc_ctx *bc = (struct bc_ctx *) arg;
+  if (send_to_player (player_id, bc->event_type, bc->data) == 0)
+    {
+      bc->deliveries++;
+    }
+  return 0;			// continue
 }
 
 int
-server_broadcast_event(const char *event_type, json_t *data)
+server_broadcast_event (const char *event_type, json_t *data)
 {
-  if (!event_type || !data) return -1;
+  if (!event_type || !data)
+    return -1;
 
-  sqlite3 *db = db_get_handle();
-  if (!db) return -1;
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return -1;
 
-  struct bc_ctx bc = { .event_type = event_type, .data = data, .deliveries = 0 };
-  int rc = db_for_each_subscriber(db, event_type, bc_cb, &bc);
+  struct bc_ctx bc = {.event_type = event_type,.data = data,.deliveries = 0 };
+  int rc = db_for_each_subscriber (db, event_type, bc_cb, &bc);
   // You can log bc.deliveries if you want metrics later (#197)
   return (rc == 0) ? bc.deliveries : rc;
 }
@@ -688,106 +715,202 @@ comm_clear_subscriptions (client_ctx_t *ctx)
 
 /* ---- new command handlers ---- */
 
-int cmd_subscribe_add(client_ctx_t *ctx, json_t *root) {
-    if (ctx->player_id <= 0) { send_enveloped_error(ctx->fd, root, ERR_NOT_AUTHENTICATED, "auth required"); return -1; }
-
-    json_t *data = json_object_get(root, "data");
-    if (!json_is_object(data)) { send_enveloped_error(ctx->fd, root, ERR_INVALID_SCHEMA, "data must be object"); return -1; }
-
-    json_t *v = json_object_get(data, "event_type");
-    if (!json_is_string(v)) { send_enveloped_error(ctx->fd, root, ERR_MISSING_FIELD, "missing field: event_type"); return -1; }
-    const char *event_type = json_string_value(v);
-    if (!is_ascii_printable(event_type) || !len_leq(event_type, 64) || !is_allowed_topic(event_type)) {
-        send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "invalid event_type"); return -1;
+int
+cmd_subscribe_add (client_ctx_t *ctx, json_t *root)
+{
+  if (ctx->player_id <= 0)
+    {
+      send_enveloped_error (ctx->fd, root, ERR_NOT_AUTHENTICATED,
+			    "auth required");
+      return -1;
     }
 
-    const char *filter_json = NULL;
-    v = json_object_get(data, "filter_json");
-    if (v) {
-        if (!json_is_string(v)) { send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "filter_json must be string"); return -1; }
-        filter_json = json_string_value(v);
-        /* sanity-parse filter JSON so we don't store garbage */
-        json_error_t jerr; json_t *probe = json_loads(filter_json, 0, &jerr);
-        if (!probe) { send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "filter_json is not valid JSON"); return -1; }
-        json_decref(probe);
+  json_t *data = json_object_get (root, "data");
+  if (!json_is_object (data))
+    {
+      send_enveloped_error (ctx->fd, root, ERR_INVALID_SCHEMA,
+			    "data must be object");
+      return -1;
     }
 
-    /* Cap check */
-    sqlite3 *db = db_get_handle();
-    sqlite3_stmt *st = NULL;
-    if (sqlite3_prepare_v2(db, "SELECT COUNT(*) FROM subscriptions WHERE player_id=?1 AND enabled=1;", -1, &st, NULL) != SQLITE_OK) {
-        send_enveloped_error(ctx->fd, root, ERR_UNKNOWN, "db error"); return -1;
+  json_t *v = json_object_get (data, "event_type");
+  if (!json_is_string (v))
+    {
+      send_enveloped_error (ctx->fd, root, ERR_MISSING_FIELD,
+			    "missing field: event_type");
+      return -1;
     }
-    sqlite3_bind_int64(st, 1, ctx->player_id);
-    int have = 0; if (sqlite3_step(st) == SQLITE_ROW) have = sqlite3_column_int(st, 0);
-    sqlite3_finalize(st);
-    if (have >= MAX_SUBSCRIPTIONS_PER_PLAYER) {
-        json_t *meta = json_pack("{s:i,s:i}", "max", MAX_SUBSCRIPTIONS_PER_PLAYER, "have", have);
-        send_enveloped_refused(ctx->fd, root, ERR_LIMIT_EXCEEDED, "too many subscriptions", meta);
-        return -1;
+  const char *event_type = json_string_value (v);
+  if (!is_ascii_printable (event_type) || !len_leq (event_type, 64)
+      || !is_allowed_topic (event_type))
+    {
+      send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG,
+			    "invalid event_type");
+      return -1;
     }
 
-    /* Upsert subscription */
-    int rc = db_subscribe_upsert(ctx->player_id, event_type, filter_json, 0 /*locked*/);
-    if (rc != 0) { send_enveloped_error(ctx->fd, root, ERR_UNKNOWN, "db error"); return -1; }
+  const char *filter_json = NULL;
+  v = json_object_get (data, "filter_json");
+  if (v)
+    {
+      if (!json_is_string (v))
+	{
+	  send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG,
+				"filter_json must be string");
+	  return -1;
+	}
+      filter_json = json_string_value (v);
+      /* sanity-parse filter JSON so we don't store garbage */
+      json_error_t jerr;
+      json_t *probe = json_loads (filter_json, 0, &jerr);
+      if (!probe)
+	{
+	  send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG,
+				"filter_json is not valid JSON");
+	  return -1;
+	}
+      json_decref (probe);
+    }
 
-    json_t *resp = json_pack("{s:s}", "event_type", event_type);
-    send_enveloped_ok(ctx->fd, root, "subscribe.added", resp);
-    json_decref(resp);
-    return 0;
+  /* Cap check */
+  sqlite3 *db = db_get_handle ();
+  sqlite3_stmt *st = NULL;
+  if (sqlite3_prepare_v2
+      (db,
+       "SELECT COUNT(*) FROM subscriptions WHERE player_id=?1 AND enabled=1;",
+       -1, &st, NULL) != SQLITE_OK)
+    {
+      send_enveloped_error (ctx->fd, root, ERR_UNKNOWN, "db error");
+      return -1;
+    }
+  sqlite3_bind_int64 (st, 1, ctx->player_id);
+  int have = 0;
+  if (sqlite3_step (st) == SQLITE_ROW)
+    have = sqlite3_column_int (st, 0);
+  sqlite3_finalize (st);
+  if (have >= MAX_SUBSCRIPTIONS_PER_PLAYER)
+    {
+      json_t *meta =
+	json_pack ("{s:i,s:i}", "max", MAX_SUBSCRIPTIONS_PER_PLAYER, "have",
+		   have);
+      send_enveloped_refused (ctx->fd, root, ERR_LIMIT_EXCEEDED,
+			      "too many subscriptions", meta);
+      return -1;
+    }
+
+  /* Upsert subscription */
+  int rc =
+    db_subscribe_upsert (ctx->player_id, event_type, filter_json,
+			 0 /*locked */ );
+  if (rc != 0)
+    {
+      send_enveloped_error (ctx->fd, root, ERR_UNKNOWN, "db error");
+      return -1;
+    }
+
+  json_t *resp = json_pack ("{s:s}", "event_type", event_type);
+  send_enveloped_ok (ctx->fd, root, "subscribe.added", resp);
+  json_decref (resp);
+  return 0;
 }
 
-int cmd_subscribe_remove(client_ctx_t *ctx, json_t *root) {
-    if (ctx->player_id <= 0) { send_enveloped_error(ctx->fd, root, ERR_NOT_AUTHENTICATED, "auth required"); return -1; }
-
-    json_t *data = json_object_get(root, "data");
-    if (!json_is_object(data)) { send_enveloped_error(ctx->fd, root, ERR_INVALID_SCHEMA, "data must be object"); return -1; }
-
-    json_t *v = json_object_get(data, "event_type");
-    if (!json_is_string(v)) { send_enveloped_error(ctx->fd, root, ERR_MISSING_FIELD, "missing field: event_type"); return -1; }
-    const char *event_type = json_string_value(v);
-    if (!is_ascii_printable(event_type) || !len_leq(event_type, 64) || !is_allowed_topic(event_type)) {
-        send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "invalid event_type"); return -1;
+int
+cmd_subscribe_remove (client_ctx_t *ctx, json_t *root)
+{
+  if (ctx->player_id <= 0)
+    {
+      send_enveloped_error (ctx->fd, root, ERR_NOT_AUTHENTICATED,
+			    "auth required");
+      return -1;
     }
 
-    int was_locked = 0;
-    int rc = db_subscribe_disable(ctx->player_id, event_type, &was_locked);
-    if (rc == +1 || was_locked) { send_enveloped_refused(ctx->fd, root, REF_SAFE_ZONE_ONLY /* or REF_LOCKED if you prefer */, "subscription locked by policy", NULL); return -1; }
-    if (rc != 0) { send_enveloped_error(ctx->fd, root, ERR_USER_NOT_FOUND, "subscription not found"); return -1; }
+  json_t *data = json_object_get (root, "data");
+  if (!json_is_object (data))
+    {
+      send_enveloped_error (ctx->fd, root, ERR_INVALID_SCHEMA,
+			    "data must be object");
+      return -1;
+    }
 
-    json_t *resp = json_pack("{s:s}", "event_type", event_type);
-    send_enveloped_ok(ctx->fd, root, "subscribe.removed", resp);
-    json_decref(resp);
-    return 0;
+  json_t *v = json_object_get (data, "event_type");
+  if (!json_is_string (v))
+    {
+      send_enveloped_error (ctx->fd, root, ERR_MISSING_FIELD,
+			    "missing field: event_type");
+      return -1;
+    }
+  const char *event_type = json_string_value (v);
+  if (!is_ascii_printable (event_type) || !len_leq (event_type, 64)
+      || !is_allowed_topic (event_type))
+    {
+      send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG,
+			    "invalid event_type");
+      return -1;
+    }
+
+  int was_locked = 0;
+  int rc = db_subscribe_disable (ctx->player_id, event_type, &was_locked);
+  if (rc == +1 || was_locked)
+    {
+      send_enveloped_refused (ctx->fd, root,
+			      REF_SAFE_ZONE_ONLY
+			      /* or REF_LOCKED if you prefer */ ,
+			      "subscription locked by policy", NULL);
+      return -1;
+    }
+  if (rc != 0)
+    {
+      send_enveloped_error (ctx->fd, root, ERR_USER_NOT_FOUND,
+			    "subscription not found");
+      return -1;
+    }
+
+  json_t *resp = json_pack ("{s:s}", "event_type", event_type);
+  send_enveloped_ok (ctx->fd, root, "subscribe.removed", resp);
+  json_decref (resp);
+  return 0;
 }
 
-int cmd_subscribe_list(client_ctx_t *ctx, json_t *root) {
-    if (ctx->player_id <= 0) { send_enveloped_error(ctx->fd, root, ERR_NOT_AUTHENTICATED, "auth required"); return -1; }
-
-    sqlite3_stmt *it = NULL;
-    if (db_subscribe_list(ctx->player_id, &it) != 0) { send_enveloped_error(ctx->fd, root, ERR_UNKNOWN, "db error"); return -1; }
-
-    json_t *items = json_array();
-    while (sqlite3_step(it) == SQLITE_ROW) {
-        const char *type  = (const char*)sqlite3_column_text(it, 0);
-        int locked        = sqlite3_column_int(it, 1);
-        int enabled       = sqlite3_column_int(it, 2);
-        const char *deliv = (const char*)sqlite3_column_text(it, 3);
-        const char *flt   = (const char*)sqlite3_column_text(it, 4);
-        json_t *row = json_pack("{s:s,s:i,s:i,s:s,s:O?}",
-            "event_type", type ? type : "",
-            "locked", locked,
-            "enabled", enabled,
-            "delivery", deliv ? deliv : "push",
-            "filter", flt ? json_loads(flt, 0, NULL) : NULL);
-        json_array_append_new(items, row);
+int
+cmd_subscribe_list (client_ctx_t *ctx, json_t *root)
+{
+  if (ctx->player_id <= 0)
+    {
+      send_enveloped_error (ctx->fd, root, ERR_NOT_AUTHENTICATED,
+			    "auth required");
+      return -1;
     }
-    sqlite3_finalize(it);
 
-    json_t *resp = json_pack("{s:O}", "items", items);
-    send_enveloped_ok(ctx->fd, root, "subscribe.list", resp);
-    json_decref(resp);
-    return 0;
+  sqlite3_stmt *it = NULL;
+  if (db_subscribe_list (ctx->player_id, &it) != 0)
+    {
+      send_enveloped_error (ctx->fd, root, ERR_UNKNOWN, "db error");
+      return -1;
+    }
+
+  json_t *items = json_array ();
+  while (sqlite3_step (it) == SQLITE_ROW)
+    {
+      const char *type = (const char *) sqlite3_column_text (it, 0);
+      int locked = sqlite3_column_int (it, 1);
+      int enabled = sqlite3_column_int (it, 2);
+      const char *deliv = (const char *) sqlite3_column_text (it, 3);
+      const char *flt = (const char *) sqlite3_column_text (it, 4);
+      json_t *row = json_pack ("{s:s,s:i,s:i,s:s,s:O?}",
+			       "event_type", type ? type : "",
+			       "locked", locked,
+			       "enabled", enabled,
+			       "delivery", deliv ? deliv : "push",
+			       "filter", flt ? json_loads (flt, 0,
+							   NULL) : NULL);
+      json_array_append_new (items, row);
+    }
+  sqlite3_finalize (it);
+
+  json_t *resp = json_pack ("{s:O}", "items", items);
+  send_enveloped_ok (ctx->fd, root, "subscribe.list", resp);
+  json_decref (resp);
+  return 0;
 }
 
 
@@ -941,4 +1064,3 @@ cmd_subscribe_catalog (client_ctx_t *ctx, json_t *root)
   json_decref (data);
   return 0;
 }
-

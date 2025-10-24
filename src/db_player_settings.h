@@ -15,19 +15,20 @@ int db_prefs_set_one (int64_t player_id, const char *key, pref_type t,
 /* ---- Subscriptions ---- */
 int db_subscribe_upsert (int64_t player_id, const char *topic,
 			 const char *filter_json, int locked /*0/1 */ );
-int db_subscribe_disable (int64_t player_id, const char *topic, /*out */
+int db_subscribe_disable (int64_t player_id, const char *topic,	/*out */
 			  int *was_locked);
 int db_subscribe_list (int64_t player_id, /*out */ sqlite3_stmt ** it);	/* cols: topic,locked,enabled,delivery,filter_json */
 
 /* ---- Bookmarks ---- */
-int db_bookmark_upsert (int64_t player_id, const char *name, int64_t sector_id);
-int db_bookmark_list   (int64_t player_id, /*out*/ sqlite3_stmt **it); // cols: name,sector_id
+int db_bookmark_upsert (int64_t player_id, const char *name,
+			int64_t sector_id);
+int db_bookmark_list (int64_t player_id, /*out */ sqlite3_stmt ** it);	// cols: name,sector_id
 int db_bookmark_remove (int64_t player_id, const char *name);
 
 /* ---- Avoid ---- */
 
-int db_avoid_add    (int64_t player_id, int64_t sector_id);
-int db_avoid_list   (int64_t player_id, /*out*/ sqlite3_stmt **it);    // cols: sector_id
+int db_avoid_add (int64_t player_id, int64_t sector_id);
+int db_avoid_list (int64_t player_id, /*out */ sqlite3_stmt ** it);	// cols: sector_id
 int db_avoid_remove (int64_t player_id, int64_t sector_id);
 
 /* ---- Notes ---- */
@@ -38,11 +39,7 @@ int db_note_list (int64_t player_id, const char *scope_or_null, /*out */ sqlite3
 // Iterate all players who should receive an event of the given type.
 // Matches exact topic and one-segment wildcard ("domain.*").
 // cb(player_id, arg) is called for each distinct player_id; return 0 to continue.
-typedef int (*player_id_cb)(int player_id, void *arg);
+typedef int (*player_id_cb) (int player_id, void *arg);
 
-int db_for_each_subscriber(sqlite3 *db,
-                           const char *event_type,   // e.g., "sector.42"
-                           player_id_cb cb,
-                           void *arg);
-
-
+int db_for_each_subscriber (sqlite3 * db, const char *event_type,	// e.g., "sector.42"
+			    player_id_cb cb, void *arg);

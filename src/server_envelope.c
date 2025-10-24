@@ -872,66 +872,68 @@ cmd_system_capabilities (client_ctx_t *ctx, json_t *root)
   get_cmd_table (&tbl, &n);
 
   // Base features you already expose
-  json_t *features = json_pack(
-    "{"
-      "s:b, s:b, s:b, s:b, s:b"
-    "}",
-    "move_warp",      have_cmd("move.warp"),
-    "move_scan",      have_cmd("move.scan"),
-    "trade_buy",      have_cmd("trade.buy"),
-    "trade_sell",     have_cmd("trade.sell"),
-    "sector_describe",have_cmd("sector.describe")
-  );
+  json_t *features = json_pack ("{" "s:b, s:b, s:b, s:b, s:b" "}",
+				"move_warp", have_cmd ("move.warp"),
+				"move_scan", have_cmd ("move.scan"),
+				"trade_buy", have_cmd ("trade.buy"),
+				"trade_sell", have_cmd ("trade.sell"),
+				"sector_describe",
+				have_cmd ("sector.describe"));
 
   // New feature flags (from #196 work)
   // Toggle off any you don't want to advertise yet.
-  json_object_set_new(features, "player_prefs_get",   json_boolean(have_cmd("player.get_prefs")));
-  json_object_set_new(features, "player_prefs_set",   json_boolean(have_cmd("player.set_prefs")));
-  json_object_set_new(features, "bookmark_add",       json_boolean(have_cmd("nav.bookmark.add")));
-  json_object_set_new(features, "bookmark_remove",    json_boolean(have_cmd("nav.bookmark.remove")));
-  json_object_set_new(features, "bookmark_list",      json_boolean(have_cmd("nav.bookmark.list")));
-  json_object_set_new(features, "avoid_add",          json_boolean(have_cmd("nav.avoid.add")));
-  json_object_set_new(features, "avoid_remove",       json_boolean(have_cmd("nav.avoid.remove")));
-  json_object_set_new(features, "avoid_list",         json_boolean(have_cmd("nav.avoid.list")));
-  json_object_set_new(features, "subscribe_add",      json_boolean(have_cmd("subscribe.add")));
-  json_object_set_new(features, "subscribe_remove",   json_boolean(have_cmd("subscribe.remove")));
-  json_object_set_new(features, "subscribe_list",     json_boolean(have_cmd("subscribe.list")));
+  json_object_set_new (features, "player_prefs_get",
+		       json_boolean (have_cmd ("player.get_prefs")));
+  json_object_set_new (features, "player_prefs_set",
+		       json_boolean (have_cmd ("player.set_prefs")));
+  json_object_set_new (features, "bookmark_add",
+		       json_boolean (have_cmd ("nav.bookmark.add")));
+  json_object_set_new (features, "bookmark_remove",
+		       json_boolean (have_cmd ("nav.bookmark.remove")));
+  json_object_set_new (features, "bookmark_list",
+		       json_boolean (have_cmd ("nav.bookmark.list")));
+  json_object_set_new (features, "avoid_add",
+		       json_boolean (have_cmd ("nav.avoid.add")));
+  json_object_set_new (features, "avoid_remove",
+		       json_boolean (have_cmd ("nav.avoid.remove")));
+  json_object_set_new (features, "avoid_list",
+		       json_boolean (have_cmd ("nav.avoid.list")));
+  json_object_set_new (features, "subscribe_add",
+		       json_boolean (have_cmd ("subscribe.add")));
+  json_object_set_new (features, "subscribe_remove",
+		       json_boolean (have_cmd ("subscribe.remove")));
+  json_object_set_new (features, "subscribe_list",
+		       json_boolean (have_cmd ("subscribe.list")));
 
   // If you have a single call that hydrates all settings (e.g., player.get_settings),
   // surface that too:
-  json_object_set_new(features, "player_settings_get", json_boolean(have_cmd("player.get_settings")));
-  json_object_set_new(features, "player_settings_set", json_boolean(have_cmd("player.set_settings")));
+  json_object_set_new (features, "player_settings_get",
+		       json_boolean (have_cmd ("player.get_settings")));
+  json_object_set_new (features, "player_settings_set",
+		       json_boolean (have_cmd ("player.set_settings")));
 
   // Schemas list (as before)
-  json_t *schemas = collect_schema_names();
+  json_t *schemas = collect_schema_names ();
 
   // Limits (match the caps enforced in the handlers)
   // If/when you add config-backed caps, replace these constants with getters.
   const int max_subscriptions = 64;
-  const int max_bookmarks     = 64;
-  const int max_avoids        = 64;
+  const int max_bookmarks = 64;
+  const int max_avoids = 64;
 
-  json_t *limits = json_pack(
-    "{"
-      "s:i, s:i, s:i"
-    "}",
-    "max_subscriptions", max_subscriptions,
-    "max_bookmarks",     max_bookmarks,
-    "max_avoids",        max_avoids
-  );
+  json_t *limits = json_pack ("{" "s:i, s:i, s:i" "}",
+			      "max_subscriptions", max_subscriptions,
+			      "max_bookmarks", max_bookmarks,
+			      "max_avoids", max_avoids);
 
   // Optional: include protocol sub-versions or error-catalog versioning later.
-  json_t *data = json_pack(
-    "{"
-      "s:s, s:o, s:o, s:i, s:o"
-    "}",
-    "protocol_version", "1.0",
-    "features",         features,
-    "schemas",          schemas,
-    "command_count",    (int)n,
-    "limits",           limits
-  );
+  json_t *data = json_pack ("{" "s:s, s:o, s:o, s:i, s:o" "}",
+			    "protocol_version", "1.0",
+			    "features", features,
+			    "schemas", schemas,
+			    "command_count", (int) n,
+			    "limits", limits);
 
-  send_enveloped_ok(ctx->fd, root, "system.capabilities", data);
+  send_enveloped_ok (ctx->fd, root, "system.capabilities", data);
   return 0;
 }

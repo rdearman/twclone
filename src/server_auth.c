@@ -18,17 +18,21 @@ player_is_sysop (sqlite3 *db, int player_id)
   bool is_sysop = false;
   sqlite3_stmt *st = NULL;
 
-  if (sqlite3_prepare_v2(db,
-        "SELECT COALESCE(type,2), COALESCE(flags,0) FROM players WHERE id=?1",
-        -1, &st, NULL) == SQLITE_OK) {
-    sqlite3_bind_int(st, 1, player_id);
-    if (sqlite3_step(st) == SQLITE_ROW) {
-      int type  = sqlite3_column_int(st, 0);
-      int flags = sqlite3_column_int(st, 1);
-      if (type == 1 || (flags & 0x1)) is_sysop = true;  /* adjust rule if needed */
+  if (sqlite3_prepare_v2 (db,
+			  "SELECT COALESCE(type,2), COALESCE(flags,0) FROM players WHERE id=?1",
+			  -1, &st, NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_int (st, 1, player_id);
+      if (sqlite3_step (st) == SQLITE_ROW)
+	{
+	  int type = sqlite3_column_int (st, 0);
+	  int flags = sqlite3_column_int (st, 1);
+	  if (type == 1 || (flags & 0x1))
+	    is_sysop = true;	/* adjust rule if needed */
+	}
     }
-  }
-  if (st) sqlite3_finalize(st);
+  if (st)
+    sqlite3_finalize (st);
   return is_sysop;
 }
 
@@ -42,48 +46,71 @@ subs_upsert_locked_defaults (sqlite3 *db, int player_id, bool is_sysop)
   sqlite3_stmt *st = NULL;
 
   /* 1) 'global' */
-  rc = sqlite3_prepare_v2(db,
-    "INSERT INTO subscriptions(player_id, event_type, delivery, locked, enabled) "
-    "VALUES(?1, 'global', 'push', 1, 1) "
-    "ON CONFLICT(player_id, event_type) DO UPDATE SET locked=1, enabled=1;",
-    -1, &st, NULL);
-  if (rc != SQLITE_OK) goto done;
-  sqlite3_bind_int(st, 1, player_id);
-  rc = sqlite3_step(st); sqlite3_finalize(st); st = NULL;
-  if (rc != SQLITE_DONE && rc != SQLITE_ROW) { rc = SQLITE_ERROR; goto done; }
+  rc = sqlite3_prepare_v2 (db,
+			   "INSERT INTO subscriptions(player_id, event_type, delivery, locked, enabled) "
+			   "VALUES(?1, 'global', 'push', 1, 1) "
+			   "ON CONFLICT(player_id, event_type) DO UPDATE SET locked=1, enabled=1;",
+			   -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    goto done;
+  sqlite3_bind_int (st, 1, player_id);
+  rc = sqlite3_step (st);
+  sqlite3_finalize (st);
+  st = NULL;
+  if (rc != SQLITE_DONE && rc != SQLITE_ROW)
+    {
+      rc = SQLITE_ERROR;
+      goto done;
+    }
   rc = SQLITE_OK;
 
   /* 2) 'player.<id>' */
   char chan[64];
-  snprintf(chan, sizeof(chan), "player.%d", player_id);
-  rc = sqlite3_prepare_v2(db,
-    "INSERT INTO subscriptions(player_id, event_type, delivery, locked, enabled) "
-    "VALUES(?1, ?2, 'push', 1, 1) "
-    "ON CONFLICT(player_id, event_type) DO UPDATE SET locked=1, enabled=1;",
-    -1, &st, NULL);
-  if (rc != SQLITE_OK) goto done;
+  snprintf (chan, sizeof (chan), "player.%d", player_id);
+  rc = sqlite3_prepare_v2 (db,
+			   "INSERT INTO subscriptions(player_id, event_type, delivery, locked, enabled) "
+			   "VALUES(?1, ?2, 'push', 1, 1) "
+			   "ON CONFLICT(player_id, event_type) DO UPDATE SET locked=1, enabled=1;",
+			   -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    goto done;
   sqlite3_bind_int (st, 1, player_id);
-  sqlite3_bind_text(st, 2, chan, -1, SQLITE_TRANSIENT);
-  rc = sqlite3_step(st); sqlite3_finalize(st); st = NULL;
-  if (rc != SQLITE_DONE && rc != SQLITE_ROW) { rc = SQLITE_ERROR; goto done; }
+  sqlite3_bind_text (st, 2, chan, -1, SQLITE_TRANSIENT);
+  rc = sqlite3_step (st);
+  sqlite3_finalize (st);
+  st = NULL;
+  if (rc != SQLITE_DONE && rc != SQLITE_ROW)
+    {
+      rc = SQLITE_ERROR;
+      goto done;
+    }
   rc = SQLITE_OK;
 
   /* 3) optional 'sysop' */
-  if (is_sysop) {
-    rc = sqlite3_prepare_v2(db,
-      "INSERT INTO subscriptions(player_id, event_type, delivery, locked, enabled) "
-      "VALUES(?1, 'sysop', 'push', 1, 1) "
-      "ON CONFLICT(player_id, event_type) DO UPDATE SET locked=1, enabled=1;",
-      -1, &st, NULL);
-    if (rc != SQLITE_OK) goto done;
-    sqlite3_bind_int(st, 1, player_id);
-    rc = sqlite3_step(st); sqlite3_finalize(st); st = NULL;
-    if (rc != SQLITE_DONE && rc != SQLITE_ROW) { rc = SQLITE_ERROR; goto done; }
-    rc = SQLITE_OK;
-  }
+  if (is_sysop)
+    {
+      rc = sqlite3_prepare_v2 (db,
+			       "INSERT INTO subscriptions(player_id, event_type, delivery, locked, enabled) "
+			       "VALUES(?1, 'sysop', 'push', 1, 1) "
+			       "ON CONFLICT(player_id, event_type) DO UPDATE SET locked=1, enabled=1;",
+			       -1, &st, NULL);
+      if (rc != SQLITE_OK)
+	goto done;
+      sqlite3_bind_int (st, 1, player_id);
+      rc = sqlite3_step (st);
+      sqlite3_finalize (st);
+      st = NULL;
+      if (rc != SQLITE_DONE && rc != SQLITE_ROW)
+	{
+	  rc = SQLITE_ERROR;
+	  goto done;
+	}
+      rc = SQLITE_OK;
+    }
 
 done:
-  if (st) sqlite3_finalize(st);
+  if (st)
+    sqlite3_finalize (st);
   return rc;
 }
 
@@ -234,15 +261,18 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
 	  ctx->player_id = player_id;
 	  ctx->sector_id = sector_id;	/* <-- set unconditionally on login */
 
-	  sqlite3 *dbh = db_get_handle();
-	  bool is_sysop = player_is_sysop(dbh, ctx->player_id);
-	  int rc = subs_upsert_locked_defaults(dbh, ctx->player_id, is_sysop);
-	  if (rc != SQLITE_OK) {
-	    send_enveloped_error(ctx->fd, root, 1503, "Database error (subs upsert)");
-	    return 0;
-	  }
+	  sqlite3 *dbh = db_get_handle ();
+	  bool is_sysop = player_is_sysop (dbh, ctx->player_id);
+	  int rc =
+	    subs_upsert_locked_defaults (dbh, ctx->player_id, is_sysop);
+	  if (rc != SQLITE_OK)
+	    {
+	      send_enveloped_error (ctx->fd, root, 1503,
+				    "Database error (subs upsert)");
+	      return 0;
+	    }
 
-	  
+
 	  /* Reply with session info, including current_sector */
 	  json_t *data = json_pack ("{s:i, s:i}",
 				    "player_id", player_id,
@@ -425,13 +455,15 @@ cmd_auth_refresh (client_ctx_t *ctx, json_t *root)
   if (!tok && ctx->player_id > 0)
     {
       int pid = 0;
-      sqlite3 *dbh = db_get_handle();
-      bool is_sysop = player_is_sysop(dbh, ctx->player_id);
-      int rc = subs_upsert_locked_defaults(dbh, ctx->player_id, is_sysop);
-      if (rc != SQLITE_OK) {
-	send_enveloped_error(ctx->fd, root, 1503, "Database error (subs upsert)");
-	return 0;
-      }
+      sqlite3 *dbh = db_get_handle ();
+      bool is_sysop = player_is_sysop (dbh, ctx->player_id);
+      int rc = subs_upsert_locked_defaults (dbh, ctx->player_id, is_sysop);
+      if (rc != SQLITE_OK)
+	{
+	  send_enveloped_error (ctx->fd, root, 1503,
+				"Database error (subs upsert)");
+	  return 0;
+	}
 
       char newtok[65];
       if (db_session_create (ctx->player_id, 86400, newtok) != SQLITE_OK)
@@ -449,12 +481,14 @@ cmd_auth_refresh (client_ctx_t *ctx, json_t *root)
   else if (tok)
     {
       int pid = 0;
-      sqlite3 *dbh = db_get_handle();
-      bool is_sysop = player_is_sysop(dbh, pid);
-      if (subs_upsert_locked_defaults(dbh, pid, is_sysop) != SQLITE_OK) {
-	send_enveloped_error(ctx->fd, root, 1503, "Database error (subs upsert)");
-	return 0;
-      }
+      sqlite3 *dbh = db_get_handle ();
+      bool is_sysop = player_is_sysop (dbh, pid);
+      if (subs_upsert_locked_defaults (dbh, pid, is_sysop) != SQLITE_OK)
+	{
+	  send_enveloped_error (ctx->fd, root, 1503,
+				"Database error (subs upsert)");
+	  return 0;
+	}
 
       /* Rotate provided token */
       char newtok[65];
@@ -498,5 +532,3 @@ cmd_auth_mfa_totp_verify (client_ctx_t *ctx, json_t *root)
 			"Not implemented: auth.mfa.totp.verify");
   return 0;
 }
-
-

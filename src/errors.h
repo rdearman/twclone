@@ -14,7 +14,7 @@
 #define ERR_SERVICE_UNAVAILABLE  1102
 #define ERR_MAINTENANCE_MODE     1103
 #define ERR_TIMEOUT              1104
-#define ERR_DUPLICATE_REQUEST    1105   /* idempotency / unique constraint */
+#define ERR_DUPLICATE_REQUEST    1105	/* idempotency / unique constraint */
 #define ERR_SERIALIZATION        1106
 #define ERR_VERSION_NOT_SUPPORTED 1107
 #define ERR_MESSAGE_TOO_LARGE    1108
@@ -25,7 +25,7 @@
 #define ERR_DB			 1113
 
 /* 1200 — Auth / Player */
-#define ERR_NOT_AUTHENTICATED    1200   /* "auth required" */
+#define ERR_NOT_AUTHENTICATED    1200	/* "auth required" */
 #define ERR_INVALID_TOKEN        1201
 #define ERR_TOKEN_EXPIRED        1202
 #define ERR_SESSION_REVOKED      1203
@@ -41,34 +41,34 @@
 #define ERR_IS_NPC		 1222
 
 /* 1300 — Validation / Quota */
-#define ERR_INVALID_SCHEMA       1300   /* bad top-level shape */
+#define ERR_INVALID_SCHEMA       1300	/* bad top-level shape */
 #define ERR_MISSING_FIELD        1301
-#define ERR_INVALID_ARG          1302   /* bad value/enum/type/range */
+#define ERR_INVALID_ARG          1302	/* bad value/enum/type/range */
 #define ERR_OUT_OF_RANGE         1303
-#define ERR_LIMIT_EXCEEDED       1304   /* quota/cap reached */
+#define ERR_LIMIT_EXCEEDED       1304	/* quota/cap reached */
 #define ERR_TOO_MANY_BULK_ITEMS  1305
 #define ERR_CURSOR_INVALID       1306
 #define ERR_BAD_REQUEST          1306
 
 /* 1400 — Movement / Rules */
-#define REF_NOT_IN_SECTOR        1400   /* REFUSED */
+#define REF_NOT_IN_SECTOR        1400	/* REFUSED */
 #define ERR_SECTOR_NOT_FOUND     1401
-#define REF_NO_WARP_LINK         1402   /* REFUSED */
-#define REF_TURN_COST_EXCEEDS    1403   /* REFUSED */
-#define REF_AUTOPILOT_RUNNING    1404   /* REFUSED */
+#define REF_NO_WARP_LINK         1402	/* REFUSED */
+#define REF_TURN_COST_EXCEEDS    1403	/* REFUSED */
+#define REF_AUTOPILOT_RUNNING    1404	/* REFUSED */
 #define ERR_AUTOPILOT_PATH_INVALID 1405
-#define REF_SAFE_ZONE_ONLY       1406   /* REFUSED */
-#define REF_BLOCKED_BY_MINES     1407   /* REFUSED */
-#define REF_TRANSWARP_UNAVAILABLE 1408  /* REFUSED */
-#define ERR_BAD_STATE             1409 /* Current Sector Unknown */
+#define REF_SAFE_ZONE_ONLY       1406	/* REFUSED */
+#define REF_BLOCKED_BY_MINES     1407	/* REFUSED */
+#define REF_TRANSWARP_UNAVAILABLE 1408	/* REFUSED */
+#define ERR_BAD_STATE             1409	/* Current Sector Unknown */
 
 /* 1500 — Planet / Citadel */
 #define ERR_PLANET_NOT_FOUND     1500
-#define REF_NOT_PLANET_OWNER     1501   /* REFUSED */
-#define REF_LANDING_REFUSED      1502   /* defences */
+#define REF_NOT_PLANET_OWNER     1501	/* REFUSED */
+#define REF_LANDING_REFUSED      1502	/* defences */
 #define ERR_CITADEL_REQUIRED     1503
 #define ERR_CITADEL_MAX_LEVEL    1504
-#define REF_INSUFFICIENT_RES     1505   /* ore/organics/equipment */
+#define REF_INSUFFICIENT_RES     1505	/* ore/organics/equipment */
 #define REF_TRANSFER_NOT_PERMITTED 1506
 #define REF_GENESIS_DISABLED     1507
 

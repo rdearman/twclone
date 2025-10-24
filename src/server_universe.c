@@ -363,9 +363,9 @@ validate_warp_rule (int from_sector, int to_sector)
     return err (ERR_BAD_STATE, "Unknown current sector");
 
   if (from_sector == to_sector)
-    return ok();  /* no-op warp is fine (cheap “success”) */
+    return ok ();		/* no-op warp is fine (cheap “success”) */
 
-  sqlite3 *db = db_get_handle();
+  sqlite3 *db = db_get_handle ();
   if (!db)
     return err (ERR_DB, "No database handle");
 
@@ -373,25 +373,25 @@ validate_warp_rule (int from_sector, int to_sector)
   sqlite3_stmt *st = NULL;
 
   /* Fast adjacency check */
-  pthread_mutex_lock(&db_mutex);
-  int rc = sqlite3_prepare_v2(
-      db,
-      "SELECT 1 FROM sector_warps WHERE from_sector = ?1 AND to_sector = ?2 LIMIT 1",
-      -1, &st, NULL
-  );
-  if (rc == SQLITE_OK) {
-    sqlite3_bind_int(st, 1, from_sector);
-    sqlite3_bind_int(st, 2, to_sector);
-    if (sqlite3_step(st) == SQLITE_ROW)
-      has = 1;
-  }
-  if (st) sqlite3_finalize(st);
-  pthread_mutex_unlock(&db_mutex);
+  pthread_mutex_lock (&db_mutex);
+  int rc = sqlite3_prepare_v2 (db,
+			       "SELECT 1 FROM sector_warps WHERE from_sector = ?1 AND to_sector = ?2 LIMIT 1",
+			       -1, &st, NULL);
+  if (rc == SQLITE_OK)
+    {
+      sqlite3_bind_int (st, 1, from_sector);
+      sqlite3_bind_int (st, 2, to_sector);
+      if (sqlite3_step (st) == SQLITE_ROW)
+	has = 1;
+    }
+  if (st)
+    sqlite3_finalize (st);
+  pthread_mutex_unlock (&db_mutex);
 
   if (!has)
     return refused (REF_NO_WARP_LINK, "No warp link");
 
-  return ok();
+  return ok ();
 }
 
 
@@ -434,12 +434,15 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
 
   if (d.status == DEC_REFUSED)
     {
-      json_t *meta = json_pack("{s:i,s:i,s:s}",
-			       "from", ctx->sector_id,
-			       "to",   to,
-			       "reason", (d.code == REF_NO_WARP_LINK ? "no_warp_link" : "refused"));
+      json_t *meta = json_pack ("{s:i,s:i,s:s}",
+				"from", ctx->sector_id,
+				"to", to,
+				"reason",
+				(d.code ==
+				 REF_NO_WARP_LINK ? "no_warp_link" :
+				 "refused"));
       send_enveloped_refused (ctx->fd, root, d.code, d.message, meta);
-      json_decref(meta);
+      json_decref (meta);
       return 0;
     }
 

@@ -84,4 +84,22 @@
     "command": { "command": "subscribe.list" },
     "expect": { "status": "ok", "type": "subscribe.list" }
   }
+    ,
+{
+  "name": "player.get_settings aggregates prefs/nav/subscriptions",
+  "login_as": "newguy",
+  "send": { "command": "player.get_settings" },
+  "expect": {
+    "status": "ok",
+    "type": "player.settings_v1",
+    "data": {
+      "prefs":  [{ "key": "ui.", "type": "*", "value": "*" }],
+      "bookmarks": "*array",
+      "avoid": "*array",
+      "subscriptions": "*array"
+    }
+  }
+}
+
+
 ]
