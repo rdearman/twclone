@@ -150,6 +150,7 @@ am_server_OBJECTS = ../src/server_communication.$(OBJEXT) \
 	../src/engine_consumer.$(OBJEXT) \
 	../src/db_player_settings.$(OBJEXT) \
 	../src/s2s_transport.$(OBJEXT) ../src/server_log.$(OBJEXT) \
+	../src/sysop_interaction.$(OBJEXT) \
 	../src/s2s_keyring.$(OBJEXT)
 server_OBJECTS = $(am_server_OBJECTS)
 server_DEPENDENCIES =
@@ -194,6 +195,7 @@ am__depfiles_remade = ../src/$(DEPDIR)/common.Po \
 	../src/$(DEPDIR)/server_ships.Po \
 	../src/$(DEPDIR)/server_universe.Po \
 	../src/$(DEPDIR)/server_warp_post_processing.Po \
+	../src/$(DEPDIR)/sysop_interaction.Po \
 	../src/$(DEPDIR)/test_bang.Po
 am__mv = mv -f
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
@@ -260,7 +262,7 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-ISODATE = 2025-10-24
+ISODATE = 2025-10-25
 LDFLAGS = 
 LIBOBJS = 
 LIBS = -lpthread -lm 
@@ -372,7 +374,8 @@ server_SOURCES = \
         ../src/db_player_settings.c \
         ../src/s2s_transport.c \
         ../src/server_log.c \
-        ../src/s2s_keyring.c
+	../src/sysop_interaction.c \
+	../src/s2s_keyring.c
 
 bigbang_SOURCES = \
 	../src/database.c \
@@ -534,6 +537,8 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/db_player_settings.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
+../src/sysop_interaction.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
 
 server$(EXEEXT): $(server_OBJECTS) $(server_DEPENDENCIES) $(EXTRA_server_DEPENDENCIES) 
 	@rm -f server$(EXEEXT)
@@ -575,6 +580,7 @@ include ../src/$(DEPDIR)/server_s2s.Po # am--include-marker
 include ../src/$(DEPDIR)/server_ships.Po # am--include-marker
 include ../src/$(DEPDIR)/server_universe.Po # am--include-marker
 include ../src/$(DEPDIR)/server_warp_post_processing.Po # am--include-marker
+include ../src/$(DEPDIR)/sysop_interaction.Po # am--include-marker
 include ../src/$(DEPDIR)/test_bang.Po # am--include-marker
 
 $(am__depfiles_remade):
@@ -756,6 +762,7 @@ distclean: distclean-am
 	-rm -f ../src/$(DEPDIR)/server_ships.Po
 	-rm -f ../src/$(DEPDIR)/server_universe.Po
 	-rm -f ../src/$(DEPDIR)/server_warp_post_processing.Po
+	-rm -f ../src/$(DEPDIR)/sysop_interaction.Po
 	-rm -f ../src/$(DEPDIR)/test_bang.Po
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
@@ -831,6 +838,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/$(DEPDIR)/server_ships.Po
 	-rm -f ../src/$(DEPDIR)/server_universe.Po
 	-rm -f ../src/$(DEPDIR)/server_warp_post_processing.Po
+	-rm -f ../src/$(DEPDIR)/sysop_interaction.Po
 	-rm -f ../src/$(DEPDIR)/test_bang.Po
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic

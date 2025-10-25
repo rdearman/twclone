@@ -24,6 +24,11 @@
 #include "server_bigbang.h"
 #include "db_player_settings.h"
 #include "server_log.h"
+#include "sysop_interaction.h"
+
+
+
+
 
 static pid_t g_engine_pid = -1;
 static int g_engine_shutdown_fd = -1;
@@ -326,11 +331,10 @@ main (void)
   int rc;
   g_running = 1;
 
-  //    server_log_init("twclone", "[server]", LOG_LOCAL0,
-  //                  /*echo_stderr=*/0, /*max_level=*/LOG_INFO);
-  server_log_init_file("/var/log/twclone.log", "[server]", 0, LOG_INFO);
-    LOGI("starting up");
+  server_log_init_file("./twclone.log", "[server]", 0, LOG_INFO);
+  LOGI("starting up");
     
+  sysop_start();
   
   /* 0) DB: open (create schema/defaults if missing) */
   if (db_init () != 0)
@@ -539,7 +543,7 @@ shutdown_and_exit:
       json_decref (g_capabilities);
       g_capabilities = NULL;
     }
-
+  sysop_stop();
   server_log_close();
   return (rc == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

@@ -12,6 +12,8 @@
 #include  "common.h"
 #include "server_config.h"
 #include "database.h"
+#include <sqlite3.h>
+#include <string.h>
 
 
 
@@ -29,6 +31,8 @@ static int db_ensure_idempotency_schema_unlocked (void);
 static int db_create_tables_unlocked (void);
 static int db_insert_defaults_unlocked (void);
 static int db_ensure_ship_perms_column_unlocked (void);
+int db_seed_cron_tasks(sqlite3 *db);
+
 
 int
 db_commands_accept (const char *cmd_type,
@@ -1591,6 +1595,55 @@ gen_session_token (char out64[65])
 
 
 int
+db_seed_cron_tasks(sqlite3 *db)
+{
+  if (!db) return SQLITE_MISUSE;
+
+  /* Wrap in a small transaction for atomicity */
+  char *err = NULL;
+  int rc = sqlite3_exec(db, "BEGIN IMMEDIATE;", NULL, NULL, &err);
+  if (rc != SQLITE_OK) {
+    if (err) sqlite3_free(err);
+    return rc;
+  }
+
+  /* Ensure table exists before seeding (no-op if already created) */
+  rc = sqlite3_exec(db,
+    "CREATE TABLE IF NOT EXISTS cron_tasks ("
+    "  id INTEGER PRIMARY KEY,"
+    "  name TEXT NOT NULL UNIQUE,"
+    "  schedule TEXT NOT NULL,"
+    "  enabled INTEGER NOT NULL DEFAULT 1,"
+    "  last_run_at INTEGER,"
+    "  next_due_at INTEGER,"
+    "  payload TEXT"
+    ");", NULL, NULL, &err);
+  if (rc != SQLITE_OK) goto done;
+
+  /* Seed: broadcast TTL cleanup runs every 5 minutes.
+     Idempotent: only inserts if the name doesn't exist. */
+  rc = sqlite3_exec(db,
+    "INSERT INTO cron_tasks(name, schedule, enabled, next_due_at) "
+    "SELECT 'broadcast_ttl_cleanup','every:5m',1,strftime('%s','now') "
+    "WHERE NOT EXISTS (SELECT 1 FROM cron_tasks WHERE name='broadcast_ttl_cleanup');",
+    NULL, NULL, &err);
+  if (rc != SQLITE_OK) goto done;
+
+done:
+  {
+    int rc2 = (rc == SQLITE_OK)
+      ? sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL)
+      : sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+    (void)rc2;
+  }
+  if (err) sqlite3_free(err);
+  return rc;
+}
+
+
+
+
+int
 db_init (void)
 {
   sqlite3_stmt *stmt = NULL;
@@ -1671,6 +1724,7 @@ db_init (void)
 
     }
   db_engine_bootstrap (db_handle);
+  (void) db_seed_cron_tasks(db_handle);
 
 
   // If we've made it here, all steps were successful.
@@ -5093,8 +5147,6 @@ db_apply_lock_policy_for_pilot (int ship_id, int new_pilot_player_id_or_0)
   return rc;
 }
 
-#include <sqlite3.h>
-#include <string.h>
 
 /* Thread-safe: picks a random name into `out`.
    Returns SQLITE_OK on success, SQLITE_NOTFOUND if table empty, or SQLite error code. */

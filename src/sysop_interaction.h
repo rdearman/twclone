@@ -1,9 +1,17 @@
+#pragma once
 
-#ifndef SYSOP_INTERACTION_H
-#define SYSOP_INTERACTION_H
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-void *getsysopcommands (void *msgidptr);
+/* Start/stop the SysOp REPL on stdin/stdout. */
+void sysop_start(void);
+void sysop_stop(void);
 
-void *makeplayersysop (void *threadinfo);
+/* (Optional) Directly dispatch a single line (for tests). */
+void sysop_dispatch_line(char *line);
+
+#ifdef __cplusplus
+}
 
 #endif

@@ -66,7 +66,8 @@ server_SOURCES = \
         ../src/db_player_settings.c \
         ../src/s2s_transport.c \
         ../src/server_log.c \
-        ../src/s2s_keyring.c
+	../src/sysop_interaction.c \
+	../src/s2s_keyring.c
 
 
 bigbang_SOURCES = \

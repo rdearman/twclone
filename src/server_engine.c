@@ -34,6 +34,11 @@
 #include "server_log.h"
 
 
+/* handlers (implemented below) */
+static int sweeper_system_notice_ttl(sqlite3 *db, int64_t now_ms);
+static int sweeper_engine_deadletter_retry(sqlite3 *db, int64_t now_ms);
+static int sweeper_engine_commands_timeout(sqlite3 *db, int64_t now_ms);
+
 // Define the interval for the main game loop ticks in seconds
 #define GAME_TICK_INTERVAL_SEC 60
 
@@ -45,6 +50,81 @@ monotonic_millis (void)
   return (uint64_t) ts.tv_sec * 1000ULL + (uint64_t) ts.tv_nsec / 1000000ULL;
 }
 
+/* ---- Cron: registry ---- */
+/* ---- Cron: registry ---- */
+typedef int (*cron_handler_fn)(sqlite3 *db, int64_t now_s);
+
+typedef struct {
+  const char *name;           /* matches cron_tasks.name */
+  cron_handler_fn fn;
+} CronHandler;
+
+/* handlers you declared */
+static int sweeper_broadcast_ttl_cleanup(sqlite3 *db, int64_t now_s);
+
+/* registry */
+static const CronHandler CRON_REGISTRY[] = {
+  { "broadcast_ttl_cleanup", sweeper_broadcast_ttl_cleanup },
+  { NULL, NULL }
+};
+
+/* lookup by name */
+static cron_handler_fn cron_find(const char *name) {
+  for (int i = 0; CRON_REGISTRY[i].name; ++i)
+    if (strcmp(CRON_REGISTRY[i].name, name) == 0) return CRON_REGISTRY[i].fn;
+  return NULL;
+}
+
+
+/* ---- Cron framework (schema: cron_tasks uses schedule + next_due_at) ---- */
+/* Schema: cron_tasks(id, name, schedule, last_run_at, next_due_at, enabled, payload) */
+
+/* Parse schedule -> next due (seconds since epoch)
+   Supports: every:Ns | every:Nm | daily@HH:MMZ (UTC) */
+static int64_t cron_next_due_from(int64_t now_s, const char *schedule) {
+  if (!schedule || !*schedule) return now_s + 60;
+
+  if (strncmp(schedule, "every:", 6) == 0) {
+    const char *p = schedule + 6;
+    char *end = NULL;
+    long n = strtol(p, &end, 10);
+    if (n <= 0) return now_s + 60;
+    if (end && (*end == 's' || *end == 'S')) return now_s + n;
+    if (end && (*end == 'm' || *end == 'M')) return now_s + n * 60L;
+    return now_s + n; /* default seconds */
+  }
+
+  if (strncmp(schedule, "daily@", 6) == 0) {
+    int HH = 0, MM = 0;
+    if (sscanf(schedule + 6, "%2d:%2dZ", &HH, &MM) == 2) {
+      /* compute next UTC wall-clock occurrence >= now */
+      time_t t = (time_t) now_s;
+      struct tm g; gmtime_r(&t, &g);
+      int64_t today = now_s - (g.tm_hour*3600 + g.tm_min*60 + g.tm_sec);
+      int64_t target = today + HH*3600 + MM*60;
+      return (now_s <= target) ? target : (target + 86400);
+    }
+  }
+
+  /* unknown → run in 60s to avoid lock-up */
+  return now_s + 60;
+}
+
+
+/* TTL for announcements visible to all players (older schema):
+   system_notice(id, created_at, title, body, severity, expires_at) */
+static int sweeper_broadcast_ttl_cleanup(sqlite3 *db, int64_t now_s) {
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2(db,
+    "DELETE FROM system_notice "
+    "WHERE expires_at IS NOT NULL AND expires_at < ?1 "
+    "LIMIT 500;", -1, &st, NULL);
+  if (rc != SQLITE_OK) return rc;
+  sqlite3_bind_int64(st, 1, now_s);
+  sqlite3_step(st);
+  sqlite3_finalize(st);
+  return 0;
+}
 
 
 /* Run TTL cleanup for system_notice + notice_seen.
@@ -623,7 +703,8 @@ server_commands_tick (sqlite3 *db, int max_rows)
 static int
 engine_main_loop (int shutdown_fd)
 {
-  server_log_init_file("/var/log/twclone.log", "[engine]", 0, LOG_INFO);
+  
+  server_log_init_file("./twclone.log", "[engine]", 0, LOG_INFO);
   LOGI("engine boot pid=%d", getpid());
 
   sqlite3 *db_handle = db_get_handle ();
@@ -704,6 +785,8 @@ engine_main_loop (int shutdown_fd)
   int64_t next_fer_due = 0;
   int fer_ok = fer_init_once();
   
+
+  
   for (;;)
     {
       engine_s2s_drain_once (conn);
@@ -729,7 +812,7 @@ engine_main_loop (int shutdown_fd)
 	fer_tick(iisnow);
 	next_fer_due = iisnow + FER_PERIOD_MS;
       }
-
+      
       time_t now = time (NULL);
       if (now - last_metrics >= 3600)
 	{
@@ -771,22 +854,54 @@ engine_main_loop (int shutdown_fd)
 	  //printf ("[engine] shutdown signal received.\n");
 	  break;
 	}
+
       if (rc == 0)
 	{
-	  // timeout -> do one bounded tick of work
-	  // (placeholders now; wire real sweepers per ENGINE.md)
-	  // - consume events in ASC batches
-	  // - run due cron_tasks
-	  // - NPC step, TTL sweepers, etc.
-	  // - update engine_offset watermark
-	  // Keep each unit short and idempotent.
-	  // …
-	  // For now, just a heartbeat:
-	  static time_t last = 0;
-	  time_t now = time (NULL);
-	  if (now != last)
-	    {;
-	    }			//printf("[engine] tick @ %ld\n", (long)now); last = now; }
+	  /* ---- bounded cron runner (inline) ---- */
+	  const int LIMIT = 8;
+	  int64_t now_s = (int64_t) time(NULL);
+
+	  sqlite3_stmt *pick = NULL;
+	  if (sqlite3_prepare_v2(db_handle,
+				 "SELECT id, name, schedule FROM cron_tasks "
+				 "WHERE enabled=1 AND next_due_at <= ?1 "
+				 "ORDER BY next_due_at ASC "
+				 "LIMIT ?2;", -1, &pick, NULL) == SQLITE_OK) {
+
+	    sqlite3_bind_int64(pick, 1, now_s);
+	    sqlite3_bind_int(pick,   2, LIMIT);
+
+	    while (sqlite3_step(pick) == SQLITE_ROW) {
+	      int64_t id = sqlite3_column_int64(pick, 0);
+	      const char *nm = (const char*) sqlite3_column_text(pick, 1);
+	      const char *sch= (const char*) sqlite3_column_text(pick, 2);
+
+	      /* run handler if registered */
+	      int task_rc = 0;
+	      cron_handler_fn fn = cron_find(nm);
+	      if (fn) task_rc = fn(db_handle, now_s);
+
+	      /* reschedule deterministically */
+	      int64_t next_due = cron_next_due_from(now_s, sch);
+
+	      sqlite3_stmt *upd = NULL;
+	      if (sqlite3_prepare_v2(db_handle,
+				     "UPDATE cron_tasks "
+				     "SET last_run_at=?2, next_due_at=?3 "
+				     "WHERE id=?1;", -1, &upd, NULL) == SQLITE_OK) {
+		sqlite3_bind_int64(upd, 1, id);
+		sqlite3_bind_int64(upd, 2, now_s);
+		sqlite3_bind_int64(upd, 3, next_due);
+		sqlite3_step(upd);
+		sqlite3_finalize(upd);
+	      }
+
+	      (void)task_rc; /* optional: log rc */
+	    }
+	    sqlite3_finalize(pick);
+	  }
+
+	  /* (keep anything else you want here; short, bounded work only) */
 	}
       else if (rc < 0 && errno != EINTR)
 	{
@@ -847,9 +962,6 @@ engine_spawn (pid_t *out_pid, int *out_shutdown_fd)
   return 0;
 }
 
-
-
-
 int
 engine_request_shutdown (int shutdown_fd)
 {
@@ -878,4 +990,137 @@ engine_wait (pid_t pid, int timeout_ms)
       usleep (step_ms * 1000);
       elapsed += step_ms;
     }
+}
+
+
+/* configurable knobs */
+static const int64_t CRON_PERIOD_MS = 500;     /* run every 0.5s */
+static const int      CRON_BATCH_LIMIT = 8;    /* max tasks per runner tick */
+static const int64_t  CRON_LOCK_STALE_MS = 120000; /* reclaim after 2 min */
+
+/* helpers to find handler */
+static cron_handler_fn cron_lookup(const char *name) {
+  for (int i=0; CRON_REGISTRY[i].name; ++i)
+    if (strcmp(CRON_REGISTRY[i].name, name)==0) return CRON_REGISTRY[i].fn;
+  return NULL;
+}
+
+/* one runner tick: claim due tasks, run, reschedule */
+static void run_cron_batch(sqlite3 *db, int64_t now_ms) {
+  sqlite3_stmt *st = NULL;
+
+  /* reclaim stale locks (best-effort) */
+  sqlite3_exec(db,
+    "UPDATE cron_tasks "
+    "SET locked=0, lock_owner=NULL "
+    "WHERE locked=1 AND (strftime('%s','now')*1000 - lock_ts_ms) > ?1;",
+    NULL,NULL,NULL); /* you can bind via prepared stmt if you like */
+
+  /* pick due & unlocked tasks (bounded) */
+  if (sqlite3_prepare_v2(db,
+      "SELECT id, task_name, interval_ms "
+      "FROM cron_tasks "
+      "WHERE enabled=1 AND locked=0 AND next_due_ms <= ?1 "
+      "ORDER BY priority DESC, next_due_ms ASC "
+      "LIMIT ?2;", -1, &st, NULL) != SQLITE_OK) return;
+
+  sqlite3_bind_int64(st, 1, now_ms);
+  sqlite3_bind_int(st,   2, CRON_BATCH_LIMIT);
+
+  while (sqlite3_step(st) == SQLITE_ROW) {
+    int64_t id      = sqlite3_column_int64(st, 0);
+    const char *nm  = (const char*)sqlite3_column_text(st, 1);
+    int64_t interval= sqlite3_column_int64(st, 2);
+
+    /* try to lock */
+    sqlite3_stmt *lk = NULL;
+    if (sqlite3_prepare_v2(db,
+        "UPDATE cron_tasks SET locked=1, lock_owner='engine', lock_ts_ms=?2 "
+        "WHERE id=?1 AND locked=0;", -1, &lk, NULL) == SQLITE_OK) {
+      sqlite3_bind_int64(lk, 1, id);
+      sqlite3_bind_int64(lk, 2, now_ms);
+      sqlite3_step(lk);
+      sqlite3_finalize(lk);
+    }
+
+    /* verify lock (race-safe) */
+    sqlite3_stmt *chk = NULL;
+    int have_lock = 0;
+    if (sqlite3_prepare_v2(db,
+        "SELECT locked FROM cron_tasks WHERE id=?1;", -1, &chk, NULL) == SQLITE_OK) {
+      sqlite3_bind_int64(chk, 1, id);
+      if (sqlite3_step(chk) == SQLITE_ROW) have_lock = sqlite3_column_int(chk, 0);
+      sqlite3_finalize(chk);
+    }
+    if (!have_lock) continue;
+
+    /* run the handler */
+    int rc = -1;
+    cron_handler_fn fn = cron_lookup(nm);
+    if (fn) {
+      rc = fn(db, now_ms);
+    }
+
+    /* reschedule (idempotent) */
+    sqlite3_stmt *upd = NULL;
+    if (sqlite3_prepare_v2(db,
+        "UPDATE cron_tasks SET "
+        "  locked=0, lock_owner=NULL, "
+        "  last_rc=?2, last_run_ms=?3, "
+        "  next_due_ms = CASE WHEN ?2=0 THEN (?3 + interval_ms) ELSE (?3 + interval_ms) END "
+        "WHERE id=?1;", -1, &upd, NULL) == SQLITE_OK) {
+      sqlite3_bind_int64(upd, 1, id);
+      sqlite3_bind_int(upd,    2, rc==0 ? 0 : rc); /* 0=ok, else error code */
+      sqlite3_bind_int64(upd,  3, now_ms);
+      sqlite3_step(upd);
+      sqlite3_finalize(upd);
+    }
+  }
+  sqlite3_finalize(st);
+}
+
+static int sweeper_system_notice_ttl(sqlite3 *db, int64_t now_ms) {
+  (void)now_ms;
+  /* delete ephemerals whose ttl expired; bounded batch */
+  sqlite3_stmt *st = NULL;
+  if (sqlite3_prepare_v2(db,
+      "DELETE FROM system_notice "
+      "WHERE ephemeral=1 AND (ts + ttl_seconds) < strftime('%s','now') "
+      "LIMIT 500;", -1, &st, NULL) != SQLITE_OK) return 1;
+  sqlite3_step(st);
+  sqlite3_finalize(st);
+  return 0;
+}
+static int sweeper_engine_commands_timeout(sqlite3 *db, int64_t now_ms) {
+  (void)now_ms;
+  /* deadletter stuck commands older than N seconds; bounded */
+  const int TIMEOUT_S = 60;  /* adjust */
+  sqlite3_stmt *st = NULL;
+
+  /* move timed-out commands to deadletter with cause=timeout */
+  if (sqlite3_prepare_v2(db,
+      "WITH stuck AS ( "
+      "  SELECT id, type, sector_id, payload "
+      "  FROM engine_commands "
+      "  WHERE status='pending' "
+      "    AND created_at < strftime('%s','now') - ?1 "
+      "  LIMIT 200 "
+      ") "
+      "INSERT INTO engine_events_deadletter(type, sector_id, payload, reason, retry_at, attempts, terminal) "
+      "SELECT type, sector_id, payload, 'timeout', strftime('%s','now') + 60, 0, 0 FROM stuck; ", -1, &st, NULL) != SQLITE_OK) return 4;
+  sqlite3_bind_int(st, 1, TIMEOUT_S);
+  sqlite3_step(st);
+  sqlite3_finalize(st);
+
+  /* mark them deadlettered */
+  if (sqlite3_prepare_v2(db,
+      "UPDATE engine_commands "
+      "SET status='deadlettered' "
+      "WHERE status='pending' "
+      "  AND created_at < strftime('%s','now') - ?1;", -1, &st, NULL) != SQLITE_OK) return 5;
+  sqlite3_bind_int(st, 1, TIMEOUT_S);
+  sqlite3_step(st);
+  sqlite3_finalize(st);
+
+  return 0;
 }
