@@ -11,8 +11,74 @@
 #include "db_player_settings.h"
 #include "server_envelope.h"
 
-// forward-declared somewhere in this module already:
-static const char *ALLOWED_TOPICS[];
+/* ---- topic validation ----
+   Accept either exact catalogue items or simple suffix wildcard "prefix.*".
+   Adjust ALLOWED list as you add more feeds. */
+/* Add alongside your existing ALLOWED_TOPICS */
+static const char *ALLOWED_TOPICS[] = {
+  "system.notice",
+  "system.events",
+  "broadcast.global",		/* NEW: global ephemeral broadcasts */
+  "sector.*",
+  "corp.*",			/* NEW: corporation-targeted */
+  "player.*",			/* NEW: player-targeted */
+  "chat.global",
+  "corp.mail",
+  "corp.log",
+  "iss.move",
+  "iss.warp",
+  "npc.*",			/* generic NPC surface: move/warp/spawn/attack/destroy */
+  "nav.*",			/* nav events per contract */
+  "chat.*",			/* show full chat namespace in catalog */
+  "engine.tick",		/* exact event in contract */
+  "sector.notice",		/* exact sector-scoped shout */
+  NULL
+};
+
+
+/* Accept only explicit public topics + selected wildcard domains (exclude npc.*) */
+static int
+is_allowed_topic (const char *t)
+{
+  static const char *const allowed[] = {
+    "system.notice",
+    "sector.*",
+    "sector.player_entered",
+    "chat.sector",
+    "chat.global",
+    "combat.*",
+    "trade.*",
+    "iss.move",
+    "iss.warp",
+    "engine.tick",
+    "sector.notice",
+    NULL
+  };
+  if (!t) return 0;
+  for (int i = 0; allowed[i]; ++i)
+    if (strcmp (t, allowed[i]) == 0)
+      return 1;
+
+  const char *dot = strchr (t, '.');
+  if (!dot || strcmp (dot + 1, "*") != 0) return 0;
+
+  static const char *const public_domains[] = {
+    "system","sector","chat","combat","trade","nav","iss","corp","player", NULL
+  };
+  size_t n = (size_t)(dot - t);
+  char dom[32];
+  if (n >= sizeof dom) return 0;
+  memcpy(dom, t, n); dom[n] = '\0';
+  for (int i=0; public_domains[i]; ++i)
+    if (strcmp(dom, public_domains[i]) == 0) return 1;
+
+  return 0;
+}
+
+
+
+enum
+{ MAX_SUBSCRIPTIONS_PER_PLAYER = 64 };
 
 extern void attach_rate_limit_meta (json_t * env, client_ctx_t * ctx);
 extern void rl_tick (client_ctx_t * ctx);
@@ -38,26 +104,6 @@ len_leq (const char *s, size_t m)
   return s && strlen (s) <= m;
 }
 
-static int
-is_allowed_topic (const char *t)
-{
-  static const char *const allowed[] = {
-    "system.notice", "sector.*", "sector.player_entered", "chat.sector",
-      "chat.global",
-    "combat.*", "trade.*", NULL
-  };
-  if (!t)
-    return 0;
-  for (int i = 0; allowed[i]; ++i)
-    if (strcmp (t, allowed[i]) == 0)
-      return 1;
-  /* allow generic domain.* */
-  const char *dot = strchr (t, '.');
-  return dot && strcmp (dot + 1, "*") == 0;
-}
-
-enum
-{ MAX_SUBSCRIPTIONS_PER_PLAYER = 64 };
 
 
 
@@ -669,23 +715,6 @@ sub_remove (sub_map_t *m, const char *topic)
   return 0;			/* not found */
 }
 
-/* ---- topic validation ----
-   Accept either exact catalogue items or simple suffix wildcard "prefix.*".
-   Adjust ALLOWED list as you add more feeds. */
-/* Add alongside your existing ALLOWED_TOPICS */
-static const char *ALLOWED_TOPICS[] = {
-  "system.notice",
-  "system.events",
-  "broadcast.global",		/* NEW: global ephemeral broadcasts */
-  "sector.*",
-  "corp.*",			/* NEW: corporation-targeted */
-  "player.*",			/* NEW: player-targeted */
-  "chat.global",
-  "corp.mail",
-  "corp.log",
-  NULL
-};
-
 
 
 /* ---- public cleanup hook ---- */
@@ -799,9 +828,8 @@ cmd_subscribe_add (client_ctx_t *ctx, json_t *root)
     }
 
   /* Upsert subscription */
-  int rc =
-    db_subscribe_upsert (ctx->player_id, event_type, filter_json,
-			 0 /*locked */ );
+  int rc = db_subscribe_upsert (ctx->player_id, event_type, filter_json,
+				0 /*locked */ );
   if (rc != 0)
     {
       send_enveloped_error (ctx->fd, root, ERR_UNKNOWN, "db error");
@@ -852,8 +880,7 @@ cmd_subscribe_remove (client_ctx_t *ctx, json_t *root)
   int rc = db_subscribe_disable (ctx->player_id, event_type, &was_locked);
   if (rc == +1 || was_locked)
     {
-      send_enveloped_refused (ctx->fd, root,
-			      REF_SAFE_ZONE_ONLY
+      send_enveloped_refused (ctx->fd, root, REF_SAFE_ZONE_ONLY
 			      /* or REF_LOCKED if you prefer */ ,
 			      "subscription locked by policy", NULL);
       return -1;

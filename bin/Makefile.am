@@ -65,6 +65,7 @@ server_SOURCES = \
         ../src/engine_consumer.c \
         ../src/db_player_settings.c \
         ../src/s2s_transport.c \
+        ../src/server_log.c \
         ../src/s2s_keyring.c
 
 
@@ -80,6 +81,7 @@ bigbang_SOURCES = \
 	../src/server_warp_post_processing.c \
 	../src/test_bang.c \
 	../src/globals.c \
+        ../src/server_log.c \
 	../src/common.c
 
 

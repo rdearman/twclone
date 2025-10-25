@@ -37,7 +37,7 @@
 #include "server_citadel.h"
 #include "server_combat.h"
 #include "server_bulk.h"
-
+#include "server_log.h"
 
 
 #ifndef streq
@@ -80,10 +80,12 @@ void send_enveloped_ok (int fd, json_t * root, const char *type,
 json_t *build_sector_info_json (int sector_id);
 static int64_t g_next_notice_ttl_sweep = 0;
 
-static inline uint64_t monotonic_millis(void) {
+static inline uint64_t
+monotonic_millis (void)
+{
   struct timespec ts;
-  clock_gettime(CLOCK_MONOTONIC, &ts);
-  return (uint64_t)ts.tv_sec * 1000ULL + (uint64_t)ts.tv_nsec / 1000000ULL;
+  clock_gettime (CLOCK_MONOTONIC, &ts);
+  return (uint64_t) ts.tv_sec * 1000ULL + (uint64_t) ts.tv_nsec / 1000000ULL;
 }
 
 
@@ -95,16 +97,17 @@ static inline uint64_t monotonic_millis(void) {
 static void
 server_broadcast_to_all_online (json_t *data)
 {
-    server_broadcast_event("system.notice", json_incref(data));
-    json_decref(data);
+  server_broadcast_event ("system.notice", json_incref (data));
+  json_decref (data);
 }
 
 /* Sector-scoped, ephemeral event to subscribers of sector.* / sector.{id}.
    NOTE: comm_publish_sector_event STEALS a ref to 'data'. */
 static void
-server_broadcast_to_sector (int sector_id, const char *event_type, json_t *data)
+server_broadcast_to_sector (int sector_id, const char *event_type,
+			    json_t *data)
 {
-    comm_publish_sector_event(sector_id, event_type, data);  // steals 'data'
+  comm_publish_sector_event (sector_id, event_type, data);	// steals 'data'
 }
 
 
@@ -112,58 +115,66 @@ server_broadcast_to_sector (int sector_id, const char *event_type, json_t *data)
 static int
 broadcast_sweep_once (sqlite3 *db, int max_rows)
 {
-    static const char *SQL_SEL =
-        "SELECT id, created_at, title, body, severity, expires_at "
-        "FROM system_notice "
-        "WHERE id NOT IN (SELECT DISTINCT notice_id FROM notice_seen WHERE player_id=0) "
-        "ORDER BY created_at ASC, id ASC LIMIT ?1;";
+  static const char *SQL_SEL =
+    "SELECT id, created_at, title, body, severity, expires_at "
+    "FROM system_notice "
+    "WHERE id NOT IN (SELECT DISTINCT notice_id FROM notice_seen WHERE player_id=0) "
+    "ORDER BY created_at ASC, id ASC LIMIT ?1;";
 
-    sqlite3_stmt *st = NULL;
-    int processed = 0;
+  sqlite3_stmt *st = NULL;
+  int processed = 0;
 
-    if (max_rows <= 0 || max_rows > 1000) max_rows = 64;
+  if (max_rows <= 0 || max_rows > 1000)
+    max_rows = 64;
 
-    if (sqlite3_prepare_v2(db, SQL_SEL, -1, &st, NULL) != SQLITE_OK) {
-        return 0;
+  if (sqlite3_prepare_v2 (db, SQL_SEL, -1, &st, NULL) != SQLITE_OK)
+    {
+      return 0;
     }
-    sqlite3_bind_int(st, 1, max_rows);
+  sqlite3_bind_int (st, 1, max_rows);
 
-    while (sqlite3_step(st) == SQLITE_ROW) {
-        int id          = sqlite3_column_int(st, 0);
-        int created_at  = sqlite3_column_int(st, 1);
-        const char *title    = (const char*)sqlite3_column_text(st, 2);
-        const char *body     = (const char*)sqlite3_column_text(st, 3);
-        const char *severity = (const char*)sqlite3_column_text(st, 4);
-        int expires_at       = (sqlite3_column_type(st, 5) == SQLITE_NULL) ? 0 : sqlite3_column_int(st, 5);
+  while (sqlite3_step (st) == SQLITE_ROW)
+    {
+      int id = sqlite3_column_int (st, 0);
+      int created_at = sqlite3_column_int (st, 1);
+      const char *title = (const char *) sqlite3_column_text (st, 2);
+      const char *body = (const char *) sqlite3_column_text (st, 3);
+      const char *severity = (const char *) sqlite3_column_text (st, 4);
+      int expires_at =
+	(sqlite3_column_type (st, 5) ==
+	 SQLITE_NULL) ? 0 : sqlite3_column_int (st, 5);
 
-        json_t *data = json_pack("{s:i, s:i, s:s, s:s, s:s, s:O}",
-                                 "id", id,
-                                 "ts", created_at,
-                                 "title", title ? title : "",
-                                 "body",  body  ? body  : "",
-                                 "severity", severity ? severity : "info",
-                                 "expires_at", expires_at ? json_integer(expires_at) : json_null());
+      json_t *data = json_pack ("{s:i, s:i, s:s, s:s, s:s, s:O}",
+				"id", id,
+				"ts", created_at,
+				"title", title ? title : "",
+				"body", body ? body : "",
+				"severity", severity ? severity : "info",
+				"expires_at",
+				expires_at ? json_integer (expires_at) :
+				json_null ());
 
-        server_broadcast_to_all_online(json_incref(data));  /* fan-out live */
-        json_decref(data);
+      server_broadcast_to_all_online (json_incref (data));	/* fan-out live */
+      json_decref (data);
 
-        /* mark-as-published sentinel (player_id=0) to avoid re-sending */
-        sqlite3_stmt *st2 = NULL;
-        if (sqlite3_prepare_v2(db,
-              "INSERT OR IGNORE INTO notice_seen(notice_id, player_id, seen_at) "
-              "VALUES(?1, 0, strftime('%s','now'));",
-              -1, &st2, NULL) == SQLITE_OK)
-        {
-            sqlite3_bind_int(st2, 1, id);
-            (void)sqlite3_step(st2);
-        }
-        if (st2) sqlite3_finalize(st2);
+      /* mark-as-published sentinel (player_id=0) to avoid re-sending */
+      sqlite3_stmt *st2 = NULL;
+      if (sqlite3_prepare_v2 (db,
+			      "INSERT OR IGNORE INTO notice_seen(notice_id, player_id, seen_at) "
+			      "VALUES(?1, 0, strftime('%s','now'));",
+			      -1, &st2, NULL) == SQLITE_OK)
+	{
+	  sqlite3_bind_int (st2, 1, id);
+	  (void) sqlite3_step (st2);
+	}
+      if (st2)
+	sqlite3_finalize (st2);
 
-        processed++;
+      processed++;
     }
 
-    sqlite3_finalize(st);
-    return processed;
+  sqlite3_finalize (st);
+  return processed;
 }
 
 
@@ -1110,7 +1121,8 @@ connection_thread (void *arg)
 int
 server_loop (volatile sig_atomic_t *running)
 {
-  fprintf (stderr, "Server loop starting...\n");
+  LOGI("Server loop starting...\n");
+  //  fprintf (stderr, "Server loop starting...\n");
 
 #ifdef SIGPIPE
   signal (SIGPIPE, SIG_IGN);	/* don’t die on write to closed socket */
@@ -1119,50 +1131,57 @@ server_loop (volatile sig_atomic_t *running)
   int listen_fd = make_listen_socket (LISTEN_PORT);
   if (listen_fd < 0)
     {
-      fprintf (stderr, "Server loop exiting due to listen socket error.\n");
+      LOGE("Server loop exiting due to listen socket error.\n");
+      //      fprintf (stderr, "Server loop exiting due to listen socket error.\n");
       return -1;
     }
-  fprintf (stderr, "Listening on 0.0.0.0:%d\n", LISTEN_PORT);
+  LOGI("Listening on 0.0.0.0:%d\n", LISTEN_PORT);
+  //  fprintf (stderr, "Listening on 0.0.0.0:%d\n", LISTEN_PORT);
 
   struct pollfd pfd = {.fd = listen_fd,.events = POLLIN,.revents = 0 };
 
   pthread_attr_t attr;
   pthread_attr_init (&attr);
   pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED);
-  
+
   while (*running)
     {
-      int rc = poll(&pfd, 1, 100);   /* was 1000; 100ms gives us a ~10Hz tick */
-      // int rc = poll (&pfd, 1, 1000);	/* 1s tick re-checks *running */
+      int rc = poll (&pfd, 1, 100);	/* was 1000; 100ms gives us a ~10Hz tick */
+      // int rc = poll (&pfd, 1, 1000); /* 1s tick re-checks *running */
 
       /* === Broadcast pump tick (every ~500ms) === */
       {
 	static uint64_t last_broadcast_ms = 0;
-	uint64_t now_ms = monotonic_millis();
+	uint64_t now_ms = monotonic_millis ();
 
-	if (now_ms - last_broadcast_ms >= 500) {
-	  (void)broadcast_sweep_once(db_get_handle(), 64);
-	  last_broadcast_ms = now_ms;
+	if (now_ms - last_broadcast_ms >= 500)
+	  {
+	    (void) broadcast_sweep_once (db_get_handle (), 64);
+	    last_broadcast_ms = now_ms;
+	  }
+      }
+
+      if (rc < 0)
+	{
+	  if (errno == EINTR)
+	    continue;
+	  perror ("poll");
+	  break;
 	}
-      }
 
-      if (rc < 0) {
-	if (errno == EINTR) continue;
-	perror("poll");
-	break;
-      }
+      if (rc == 0)
+	{
+	  /* timeout only: we still ran the pump above; just loop again */
+	  continue;
+	}
 
-      if (rc == 0) {
-	/* timeout only: we still ran the pump above; just loop again */
-	continue;
-      }
-      
       if (pfd.revents & POLLIN)
 	{
 	  client_ctx_t *ctx = calloc (1, sizeof (*ctx));
 	  if (!ctx)
 	    {
-	      fprintf (stderr, "malloc failed\n");
+	      LOGE( "malloc failed\n");
+	      //	      fprintf (stderr, "malloc failed\n");
 	      continue;
 	    }
 	  server_register_client (ctx);
@@ -1185,21 +1204,28 @@ server_loop (volatile sig_atomic_t *running)
 
 	  char ip[INET_ADDRSTRLEN];
 	  inet_ntop (AF_INET, &ctx->peer.sin_addr, ip, sizeof (ip));
-	  fprintf (stderr, "Client connected: %s:%u (fd=%d)\n",
+	  LOGI( "Client connected: %s:%u (fd=%d)\n",
 		   ip, (unsigned) ntohs (ctx->peer.sin_port), cfd);
+
+	  //	  fprintf (stderr, "Client connected: %s:%u (fd=%d)\n",
+	  //	   ip, (unsigned) ntohs (ctx->peer.sin_port), cfd);
 
 	  // after filling ctx->fd, ctx->running, ctx->peer, and assigning ctx->cid
 	  pthread_t th;
 	  int prc = pthread_create (&th, &attr, connection_thread, ctx);
 	  if (prc == 0)
 	    {
-	      fprintf (stderr,
-		       "[cid=%" PRIu64 "] thread created (pthread=%lu)\n",
+	      LOGI( "[cid=%" PRIu64 "] thread created (pthread=%lu)\n",
 		       ctx->cid, (unsigned long) th);
+
+	      //	      fprintf (stderr,
+	      //       "[cid=%" PRIu64 "] thread created (pthread=%lu)\n",
+	      //       ctx->cid, (unsigned long) th);
 	    }
 	  else
 	    {
-	      fprintf (stderr, "pthread_create: %s\n", strerror (prc));
+	      LOGE("pthread_create: %s\n", strerror (prc));
+	      //	      fprintf (stderr, "pthread_create: %s\n", strerror (prc));
 	      close (cfd);
 	      free (ctx);
 	    }
@@ -1210,6 +1236,7 @@ server_loop (volatile sig_atomic_t *running)
   // server_unregister_client(ctx);
   pthread_attr_destroy (&attr);
   close (listen_fd);
-  fprintf (stderr, "Server loop exiting...\n");
+  LOGI( "Server loop exiting...\n");
+  //  fprintf (stderr, "Server loop exiting...\n");
   return 0;
 }

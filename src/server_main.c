@@ -23,7 +23,7 @@
 #include "database.h"
 #include "server_bigbang.h"
 #include "db_player_settings.h"
-
+#include "server_log.h"
 
 static pid_t g_engine_pid = -1;
 static int g_engine_shutdown_fd = -1;
@@ -90,9 +90,13 @@ log_s2s_metrics (const char *who)
 {
   uint64_t sent = 0, recv = 0, auth_fail = 0, too_big = 0;
   s2s_get_counters (&sent, &recv, &auth_fail, &too_big);
-  fprintf (stderr, "[%s] s2s metrics: sent=%" PRIu64 " recv=%" PRIu64
+  LOGI("[%s] s2s metrics: sent=%" PRIu64 " recv=%" PRIu64
 	   " auth_fail=%" PRIu64 " too_big=%" PRIu64 "\n",
 	   who, sent, recv, auth_fail, too_big);
+
+  //  fprintf (stderr, "[%s] s2s metrics: sent=%" PRIu64 " recv=%" PRIu64
+  //	   " auth_fail=%" PRIu64 " too_big=%" PRIu64 "\n",
+  //	   who, sent, recv, auth_fail, too_big);
 }
 
 static void *
@@ -118,13 +122,18 @@ s2s_control_thread (void *arg)
 	      const char *reason =
 		pl ? json_string_value (json_object_get (pl, "reason")) :
 		NULL;
-	      fprintf (stderr, "[server] s2s.error%s%s\n", reason ? ": " : "",
+	      LOGE("s2s.error%s%s\n", reason ? ": " : "",
 		       reason ? reason : "");
+
+	      //	      fprintf (stderr, "[server] s2s.error%s%s\n", reason ? ": " : "",
+	      //       reason ? reason : "");
 	    }
 	  else
 	    {
-	      fprintf (stderr, "[server] s2s: unknown type '%s'\n",
+	      LOGE( " s2s: unknown type '%s'\n",
 		       type ? type : "(null)");
+	      //	      fprintf (stderr, "[server] s2s: unknown type '%s'\n",
+	      //       type ? type : "(null)");
 	    }
 	  json_decref (msg);
 	  continue;
@@ -136,17 +145,20 @@ s2s_control_thread (void *arg)
 	break;			// peer closed
       if (rc == S2S_E_AUTH_BAD || rc == S2S_E_AUTH_REQUIRED)
 	{
-	  fprintf (stderr, "[server] s2s auth failure; closing\n");
+	  LOGE( "s2s auth failure; closing\n");
+	  //	  fprintf (stderr, "[server] s2s auth failure; closing\n");
 	  break;
 	}
       if (rc == S2S_E_TOOLARGE)
 	{
-	  fprintf (stderr, "[server] s2s oversized frame; closing\n");
+	  LOGE("s2s oversized frame; closing\n");
+	  //	  fprintf (stderr, "[server] s2s oversized frame; closing\n");
 	  break;
 	}
       if (rc == S2S_E_IO)
 	{
-	  fprintf (stderr, "[server] s2s IO error; closing\n");
+	  LOGE("s2s IO error; closing\n");
+	  //	  fprintf (stderr, "[server] s2s IO error; closing\n");
 	  break;
 	}
     }
@@ -291,14 +303,17 @@ run_bigbang_if_needed (void)
   sqlite3 *dbh = db_get_handle ();
   if (!dbh)
     {
-      fprintf (stderr, "BIGBANG: DB handle unavailable.\n");
+      LOGE("BIGBANG: DB handle unavailable.\n");
+      //      fprintf (stderr, "BIGBANG: DB handle unavailable.\n");
       return -1;
     }
 
-  fprintf (stderr, "BIGBANG: Universe appears empty — seeding now...\n");
+  LOGW("BIGBANG: Universe appears empty — seeding now...\n");
+  //  fprintf (stderr, "BIGBANG: Universe appears empty — seeding now...\n");
   if (bigbang () != 0)
     {
-      fprintf (stderr, "BIGBANG: Failed.\n");
+      LOGE("BIGBANG: Failed.\n");
+      //      fprintf (stderr, "BIGBANG: Failed.\n");
       return -1;
     }
 
@@ -311,10 +326,17 @@ main (void)
   int rc;
   g_running = 1;
 
+  //    server_log_init("twclone", "[server]", LOG_LOCAL0,
+  //                  /*echo_stderr=*/0, /*max_level=*/LOG_INFO);
+  server_log_init_file("/var/log/twclone.log", "[server]", 0, LOG_INFO);
+    LOGI("starting up");
+    
+  
   /* 0) DB: open (create schema/defaults if missing) */
   if (db_init () != 0)
     {
-      fprintf (stderr, "Failed to init DB.\n");
+      LOGW("Failed to init DB.\n");
+      //      fprintf (stderr, "Failed to init DB.\n");
       return EXIT_FAILURE;
     }
 
@@ -323,7 +345,8 @@ main (void)
 
   if (universe_init () != 0)
     {
-      fprintf (stderr, "Failed to init universe.\n");
+      LOGW("Failed to init universe.\n");
+      //      fprintf (stderr, "Failed to init universe.\n");
       db_close ();
       return EXIT_FAILURE;
     }
@@ -350,10 +373,12 @@ main (void)
 
 
   /* 1) S2S keyring (must be before we bring up TCP) */
-  fprintf (stderr, "[server] loading s2s key ...\n");
+  LOGI("loading s2s key ...\n");
+  //  fprintf (stderr, " loading s2s key ...\n");
   if (s2s_install_default_key (db_get_handle ()) != 0)
     {
-      fprintf (stderr, "[server] FATAL: S2S key missing/invalid\n");
+      LOGW(" FATAL: S2S key missing/invalid\n");
+      //  fprintf (stderr, " FATAL: S2S key missing/invalid\n");
       return EXIT_FAILURE;
     }
 
@@ -361,7 +386,8 @@ main (void)
   s2s_listen_fd = s2s_listen_4321 ();
   if (s2s_listen_fd < 0)
     {
-      fprintf (stderr, "[server] listen on 4321 failed\n");
+      LOGW(" listen on 4321 failed\n");
+      //      fprintf (stderr, " listen on 4321 failed\n");
       return EXIT_FAILURE;
     }
   /* NEW: prevent child from inheriting this fd on exec */
@@ -370,39 +396,48 @@ main (void)
     {
       fcntl (s2s_listen_fd, F_SETFD, fl | FD_CLOEXEC);
     }
-  fprintf (stderr, "[server] s2s listen on 127.0.0.1:4321\n");
+  LOGW(" s2s listen on 127.0.0.1:4321\n");
+  //  fprintf (stderr, " s2s listen on 127.0.0.1:4321\n");
 
 
   /* 3) Fork the engine (child connects back to 4321) */
-  fprintf (stderr, "[server] forking engine…\n");
+    LOGW(" forking engine…\n");
+    //  fprintf (stderr, " forking engine…\n");
   if (engine_spawn (&g_engine_pid, &g_engine_shutdown_fd) != 0)
     {
-      fprintf (stderr, "[server] engine fork failed\n");
+      LOGW(" engine fork failed\n");
+      // fprintf (stderr, " engine fork failed\n");
       return EXIT_FAILURE;
     }
-  fprintf (stderr, "[server] engine forked. pid=%d\n", g_engine_pid);
+  LOGW(" engine forked. pid=%d\n", g_engine_pid);	
+  //  fprintf (stderr, " engine forked. pid=%d\n", g_engine_pid);
 
   /* 4) Accept one engine connection, complete JSON handshake: recv hello → send ack */
-  fprintf (stderr, "[server] accepting engine…\n");
+  LOGW(" accepting engine…\n");	  
+  //  fprintf (stderr, " accepting engine…\n");
   s2s_conn_t *conn = s2s_tcp_server_accept (s2s_listen_fd, 5000);
   if (!conn)
     {
-      fprintf (stderr, "[server] accept failed\n");
+        LOGW(" accept failed\n");
+	//  fprintf (stderr, " accept failed\n");
       goto shutdown_and_exit;
     }
-  fprintf (stderr, "[server] accepted s2s\n");
+  LOGW(" accepted s2s\n");
+  //  fprintf (stderr, " accepted s2s\n");
   s2s_debug_dump_conn ("server", conn);
 
   /* Receive engine hello first */
   json_t *msg = NULL;
   rc = s2s_recv_json (conn, &msg, 5000);
-  fprintf (stderr, "[server] first frame rc=%d\n", rc);
+    LOGW(" first frame rc=%d\n", rc);
+    //  fprintf (stderr, " first frame rc=%d\n", rc);
   if (rc == S2S_OK && msg)
     {
       const char *type = json_string_value (json_object_get (msg, "type"));
       if (type && strcmp (type, "s2s.health.hello") == 0)
 	{
-	  fprintf (stderr, "[server] accepted hello\n");
+	  LOGW(" accepted hello\n");
+	  //	  fprintf (stderr, " accepted hello\n");
 
 	  time_t now = time (NULL);
 	  json_t *ack = json_pack ("{s:i,s:s,s:s,s:I,s:o}",
@@ -413,26 +448,32 @@ main (void)
 				   "payload", json_pack ("{s:s}", "status",
 							 "ok"));
 	  int rc2 = s2s_send_json (conn, ack, 5000);
-	  fprintf (stderr, "[server] ack send rc=%d\n", rc2);
+	  LOGW(" ack send rc=%d\n", rc2);
+	  //	  fprintf (stderr, " ack send rc=%d\n", rc2);
 	  json_decref (ack);
 
-	  fprintf (stderr, "[server] Return Ping\n");
+	  LOGW(" Return Ping\n");
+	  //	  fprintf (stderr, " Return Ping\n");
 	  if (server_s2s_start (conn, &g_s2s_thr, &g_running) != 0)
 	    {
-	      fprintf (stderr,
-		       "[server] failed to start s2s control thread\n");
+	      LOGW(" failed to start s2s control thread\n");
+	      //fprintf (stderr,
+	      //	       " failed to start s2s control thread\n");
 	    }
 	}
       else
 	{
-	  fprintf (stderr, "[server] unexpected type on first frame: %s\n",
-		   type ? type : "(null)");
+	  LOGW(" unexpected type on first frame: %s\n",
+	       		   type ? type : "(null)");
+	  //	  fprintf (stderr, " unexpected type on first frame: %s\n",
+	  //	   type ? type : "(null)");
 	}
       json_decref (msg);
     }
   else
     {
-      fprintf (stderr, "[server] no hello from engine (rc=%d)\n", rc);
+      LOGW(" no hello from engine (rc=%d)\n", rc);
+      //      fprintf (stderr, " no hello from engine (rc=%d)\n", rc);
       /* continue anyway; control thread can handle retries later */
     }
 
@@ -445,9 +486,11 @@ main (void)
   pthread_create (&g_s2s_thr, NULL, s2s_control_thread, NULL);
 
   /* 6) Run the server loop (unchanged behavior/logs) */
-  fprintf (stderr, "Server loop starting...\n");
+  LOGW("Server loop starting...\n");
+  //  fprintf (stderr, "Server loop starting...\n");
   rc = server_loop (&g_running);
-  fprintf (stderr, "Server loop exiting...\n");
+    LOGW("Server loop exiting...\n");
+    //  fprintf (stderr, "Server loop exiting...\n");
 
   /* 7) Teardown in the right order:
      - stop control thread (s2s_close unblocks recv)
@@ -481,8 +524,9 @@ shutdown_and_exit:
       int waited = engine_wait (g_engine_pid, 3000);	/* wait up to 3s */
       if (waited == 1)
 	{
-	  fprintf (stderr,
-		   "[server] engine still running; sending SIGTERM.\n");
+	  LOGW(" engine still running; sending SIGTERM.\n");
+	  //	  fprintf (stderr,
+	  //	   " engine still running; sending SIGTERM.\n");
 	  kill (g_engine_pid, SIGTERM);
 	  (void) engine_wait (g_engine_pid, 2000);
 	}
@@ -496,14 +540,7 @@ shutdown_and_exit:
       g_capabilities = NULL;
     }
 
-  /* if (conn) */
-  /*   { */
-  /*     s2s_close (conn); */
-  /*     conn = NULL; */
-  /*   } */
-  /* server_s2s_stop (g_s2s_thr); */
-  /* g_s2s_thr = 0; */
-
+  server_log_close();
   return (rc == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 

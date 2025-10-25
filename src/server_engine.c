@@ -31,16 +31,18 @@
 #include "database.h"
 #include "server_loop.h"	// Assuming this contains functions to communicate with clients
 #include "server_universe.h"
-
+#include "server_log.h"
 
 
 // Define the interval for the main game loop ticks in seconds
 #define GAME_TICK_INTERVAL_SEC 60
 
-static inline uint64_t monotonic_millis(void) {
+static inline uint64_t
+monotonic_millis (void)
+{
   struct timespec ts;
-  clock_gettime(CLOCK_MONOTONIC, &ts);
-  return (uint64_t)ts.tv_sec * 1000ULL + (uint64_t)ts.tv_nsec / 1000000ULL;
+  clock_gettime (CLOCK_MONOTONIC, &ts);
+  return (uint64_t) ts.tv_sec * 1000ULL + (uint64_t) ts.tv_nsec / 1000000ULL;
 }
 
 
@@ -48,98 +50,115 @@ static inline uint64_t monotonic_millis(void) {
 /* Run TTL cleanup for system_notice + notice_seen.
    now_ts: seconds since epoch (use time(NULL)). */
 static int
-engine_notice_ttl_sweep(sqlite3 *db, int64_t now_ts)
+engine_notice_ttl_sweep (sqlite3 *db, int64_t now_ts)
 {
   int rc = SQLITE_OK;
   char *errmsg = NULL;
 
   /* v1 retention windows (seconds) */
-  const int64_t TTL_INFO  = 7  * 24 * 3600;
-  const int64_t TTL_WARN  = 14 * 24 * 3600;
+  const int64_t TTL_INFO = 7 * 24 * 3600;
+  const int64_t TTL_WARN = 14 * 24 * 3600;
   const int64_t TTL_ERROR = 30 * 24 * 3600;
 
-  rc = sqlite3_exec(db, "BEGIN IMMEDIATE", NULL, NULL, &errmsg);
-  if (rc != SQLITE_OK) { if (errmsg) sqlite3_free(errmsg); return rc; }
+  rc = sqlite3_exec (db, "BEGIN IMMEDIATE", NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK)
+    {
+      if (errmsg)
+	sqlite3_free (errmsg);
+      return rc;
+    }
 
   /* 1) Hard-expired rows: expires_at < now */
   {
     sqlite3_stmt *st = NULL;
-    if (sqlite3_prepare_v2(db,
-          "DELETE FROM system_notice WHERE expires_at IS NOT NULL AND expires_at < ?1;",
-          -1, &st, NULL) == SQLITE_OK)
-    {
-      sqlite3_bind_int64(st, 1, now_ts);
-      sqlite3_step(st);
-    }
-    if (st) sqlite3_finalize(st);
+    if (sqlite3_prepare_v2 (db,
+			    "DELETE FROM system_notice WHERE expires_at IS NOT NULL AND expires_at < ?1;",
+			    -1, &st, NULL) == SQLITE_OK)
+      {
+	sqlite3_bind_int64 (st, 1, now_ts);
+	sqlite3_step (st);
+      }
+    if (st)
+      sqlite3_finalize (st);
   }
 
   /* 2) Severity-based windows for rows without explicit expires_at */
   {
     sqlite3_stmt *st = NULL;
-    if (sqlite3_prepare_v2(db,
-          "DELETE FROM system_notice "
-          "WHERE expires_at IS NULL AND severity='info'  AND created_at < (?1 - ?2);",
-          -1, &st, NULL) == SQLITE_OK)
-    {
-      sqlite3_bind_int64(st, 1, now_ts);
-      sqlite3_bind_int64(st, 2, TTL_INFO);
-      sqlite3_step(st);
-    }
-    if (st) sqlite3_finalize(st);
+    if (sqlite3_prepare_v2 (db,
+			    "DELETE FROM system_notice "
+			    "WHERE expires_at IS NULL AND severity='info'  AND created_at < (?1 - ?2);",
+			    -1, &st, NULL) == SQLITE_OK)
+      {
+	sqlite3_bind_int64 (st, 1, now_ts);
+	sqlite3_bind_int64 (st, 2, TTL_INFO);
+	sqlite3_step (st);
+      }
+    if (st)
+      sqlite3_finalize (st);
 
-    if (sqlite3_prepare_v2(db,
-          "DELETE FROM system_notice "
-          "WHERE expires_at IS NULL AND severity='warn'  AND created_at < (?1 - ?2);",
-          -1, &st, NULL) == SQLITE_OK)
-    {
-      sqlite3_bind_int64(st, 1, now_ts);
-      sqlite3_bind_int64(st, 2, TTL_WARN);
-      sqlite3_step(st);
-    }
-    if (st) sqlite3_finalize(st);
+    if (sqlite3_prepare_v2 (db,
+			    "DELETE FROM system_notice "
+			    "WHERE expires_at IS NULL AND severity='warn'  AND created_at < (?1 - ?2);",
+			    -1, &st, NULL) == SQLITE_OK)
+      {
+	sqlite3_bind_int64 (st, 1, now_ts);
+	sqlite3_bind_int64 (st, 2, TTL_WARN);
+	sqlite3_step (st);
+      }
+    if (st)
+      sqlite3_finalize (st);
 
-    if (sqlite3_prepare_v2(db,
-          "DELETE FROM system_notice "
-          "WHERE expires_at IS NULL AND severity='error' AND created_at < (?1 - ?2);",
-          -1, &st, NULL) == SQLITE_OK)
-    {
-      sqlite3_bind_int64(st, 1, now_ts);
-      sqlite3_bind_int64(st, 2, TTL_ERROR);
-      sqlite3_step(st);
-    }
-    if (st) sqlite3_finalize(st);
+    if (sqlite3_prepare_v2 (db,
+			    "DELETE FROM system_notice "
+			    "WHERE expires_at IS NULL AND severity='error' AND created_at < (?1 - ?2);",
+			    -1, &st, NULL) == SQLITE_OK)
+      {
+	sqlite3_bind_int64 (st, 1, now_ts);
+	sqlite3_bind_int64 (st, 2, TTL_ERROR);
+	sqlite3_step (st);
+      }
+    if (st)
+      sqlite3_finalize (st);
   }
 
   /* 3) Keep last 1,000 by id (optional, simple and safe) */
   {
     sqlite3_stmt *st = NULL;
-    if (sqlite3_prepare_v2(db,
-          "WITH keep AS (SELECT id FROM system_notice ORDER BY id DESC LIMIT 1000) "
-          "DELETE FROM system_notice WHERE id NOT IN (SELECT id FROM keep);",
-          -1, &st, NULL) == SQLITE_OK)
-    {
-      sqlite3_step(st);
-    }
-    if (st) sqlite3_finalize(st);
+    if (sqlite3_prepare_v2 (db,
+			    "WITH keep AS (SELECT id FROM system_notice ORDER BY id DESC LIMIT 1000) "
+			    "DELETE FROM system_notice WHERE id NOT IN (SELECT id FROM keep);",
+			    -1, &st, NULL) == SQLITE_OK)
+      {
+	sqlite3_step (st);
+      }
+    if (st)
+      sqlite3_finalize (st);
   }
 
   /* 4) Remove orphaned notice_seen rows */
   {
     sqlite3_stmt *st = NULL;
-    if (sqlite3_prepare_v2(db,
-          "DELETE FROM notice_seen WHERE notice_id NOT IN (SELECT id FROM system_notice);",
-          -1, &st, NULL) == SQLITE_OK)
-    {
-      sqlite3_step(st);
-    }
-    if (st) sqlite3_finalize(st);
+    if (sqlite3_prepare_v2 (db,
+			    "DELETE FROM notice_seen WHERE notice_id NOT IN (SELECT id FROM system_notice);",
+			    -1, &st, NULL) == SQLITE_OK)
+      {
+	sqlite3_step (st);
+      }
+    if (st)
+      sqlite3_finalize (st);
   }
 
-  rc = sqlite3_exec(db, "COMMIT", NULL, NULL, &errmsg);
-  if (rc != SQLITE_OK) { if (errmsg) sqlite3_free(errmsg); return rc; }
+  rc = sqlite3_exec (db, "COMMIT", NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK)
+    {
+      if (errmsg)
+	sqlite3_free (errmsg);
+      return rc;
+    }
   return SQLITE_OK;
 }
+
 //////////////////////////
 
 static eng_consumer_cfg_t G_CFG = {
@@ -155,10 +174,11 @@ engine_tick (sqlite3 *db)
   eng_consumer_metrics_t m;
   if (engine_consume_tick (db, &G_CFG, &m) == SQLITE_OK)
     {
-      fprintf (stderr,
-	       "[engine] events: processed=%d quarantined=%d last_id=%lld lag=%lld\n",
-	       m.processed, m.quarantined, m.last_event_id, m.lag);
-    }  
+      LOGE("events: processed=%d quarantined=%d last_id=%lld lag=%lld\n",	       m.processed, m.quarantined, m.last_event_id, m.lag);
+      // fprintf (stderr,
+      //       "[engine] events: processed=%d quarantined=%d last_id=%lld lag=%lld\n",
+      //       m.processed, m.quarantined, m.last_event_id, m.lag);
+    }
 }
 
 
@@ -210,13 +230,15 @@ engine_demo_push (s2s_conn_t *c)
 
   int rc = s2s_send_env (c, env, 3000);
   json_decref (env);
-  fprintf (stderr, "[engine] command.push send rc=%d\n", rc);
+  LOGI("command.push send rc=%d\n", rc);
+  //  fprintf (stderr, "[engine] command.push send rc=%d\n", rc);
   if (rc != 0)
     return rc;
 
   json_t *resp = NULL;
   rc = s2s_recv_env (c, &resp, 3000);
-  fprintf (stderr, "[engine] command.push recv rc=%d\n", rc);
+  LOGI("command.push recv rc=%d\n", rc);
+  //  fprintf (stderr, "[engine] command.push recv rc=%d\n", rc);
   if (rc == 0 && resp)
     {
       const char *ty = s2s_env_type (resp);
@@ -224,12 +246,14 @@ engine_demo_push (s2s_conn_t *c)
 	{
 	  json_t *ackpl = s2s_env_payload (resp);
 	  json_t *dup = json_object_get (ackpl, "duplicate");
-	  fprintf (stderr, "[engine] ack duplicate=%s\n",
-		   (dup && json_is_true (dup)) ? "true" : "false");
+	  LOGW("ack duplicate=%s\n",(dup && json_is_true (dup)) ? "true" : "false");
+	  //	  fprintf (stderr, "[engine] ack duplicate=%s\n",
+	  //	   (dup && json_is_true (dup)) ? "true" : "false");
 	}
       else
 	{
-	  fprintf (stderr, "[engine] got non-ack (%s)\n", ty ? ty : "null");
+	  LOGE("got non-ack (%s)\n", ty ? ty : "null");
+	  //	  fprintf (stderr, "[engine] got non-ack (%s)\n", ty ? ty : "null");
 	}
       json_decref (resp);
     }
@@ -267,9 +291,11 @@ engine_send_notice_publish (s2s_conn_t *c, int player_id, const char *msg,
       // log ack/error minimally
       const char *ty = s2s_env_type (resp);
       if (ty && strcmp (ty, "s2s.ack") == 0)
-	fprintf (stderr, "[engine] command.push ack\n");
+	LOGI("command.push ack\n");
+      //	fprintf (stderr, "[engine] command.push ack\n");
       else
-	fprintf (stderr, "[engine] command.push err\n");
+	LOGE("command.push err\n");
+      //fprintf (stderr, "[engine] command.push err\n");
       json_decref (resp);
     }
   return rc;
@@ -281,9 +307,13 @@ log_s2s_metrics (const char *who)
 {
   uint64_t sent = 0, recv = 0, auth_fail = 0, too_big = 0;
   s2s_get_counters (&sent, &recv, &auth_fail, &too_big);
-  fprintf (stderr, "[%s] s2s metrics: sent=%" PRIu64 " recv=%" PRIu64
+  LOGI("[%s] s2s metrics: sent=%" PRIu64 " recv=%" PRIu64
 	   " auth_fail=%" PRIu64 " too_big=%" PRIu64 "\n",
 	   who, sent, recv, auth_fail, too_big);
+
+  //fprintf (stderr, "[%s] s2s metrics: sent=%" PRIu64 " recv=%" PRIu64
+  //	   " auth_fail=%" PRIu64 " too_big=%" PRIu64 "\n",
+  //	   who, sent, recv, auth_fail, too_big);
 }
 
 
@@ -299,7 +329,8 @@ engine_s2s_drain_once (s2s_conn_t *conn)
   if (type && strcmp (type, "s2s.engine.shutdown") == 0)
     {
       // Begin graceful shutdown: set your running flag false, close down
-      fprintf (stderr, "[engine] received shutdown command\n");
+      LOGI("received shutdown command\n");
+      // fprintf (stderr, "[engine] received shutdown command\n");
       // flip your engine running flag here…
     }
   else if (type && strcmp (type, "s2s.health.check") == 0)
@@ -442,109 +473,145 @@ s2s_connect_4321 (void)
 
 
 /* --- executor: broadcast.create → INSERT INTO system_notice --- */
-static int exec_broadcast_create(sqlite3 *db, json_t *payload, const char *idem_key, int64_t *out_notice_id) {
-    (void)idem_key; /* idempotency handled at engine_commands layer */
-    const char *title = NULL, *body = NULL, *severity = "info";
-    int64_t expires_at = 0;
+static int
+exec_broadcast_create (sqlite3 *db, json_t *payload, const char *idem_key,
+		       int64_t *out_notice_id)
+{
+  (void) idem_key;		/* idempotency handled at engine_commands layer */
+  const char *title = NULL, *body = NULL, *severity = "info";
+  int64_t expires_at = 0;
 
-    if (!json_is_object(payload)) return SQLITE_MISMATCH;
-    json_t *jt = json_object_get(payload, "title");
-    json_t *jb = json_object_get(payload, "body");
-    json_t *js = json_object_get(payload, "severity");
-    json_t *je = json_object_get(payload, "expires_at");
-    if (jt && json_is_string(jt)) title = json_string_value(jt);
-    if (jb && json_is_string(jb)) body  = json_string_value(jb);
-    if (js && json_is_string(js)) severity = json_string_value(js);
-    if (je && json_is_integer(je)) expires_at = (int64_t)json_integer_value(je);
-    if (!title || !body) return SQLITE_MISUSE;
+  if (!json_is_object (payload))
+    return SQLITE_MISMATCH;
+  json_t *jt = json_object_get (payload, "title");
+  json_t *jb = json_object_get (payload, "body");
+  json_t *js = json_object_get (payload, "severity");
+  json_t *je = json_object_get (payload, "expires_at");
+  if (jt && json_is_string (jt))
+    title = json_string_value (jt);
+  if (jb && json_is_string (jb))
+    body = json_string_value (jb);
+  if (js && json_is_string (js))
+    severity = json_string_value (js);
+  if (je && json_is_integer (je))
+    expires_at = (int64_t) json_integer_value (je);
+  if (!title || !body)
+    return SQLITE_MISUSE;
 
-    sqlite3_stmt *st = NULL;
-    int rc = sqlite3_prepare_v2(db,
-        "INSERT INTO system_notice(id, created_at, title, body, severity, expires_at) "
-        "VALUES(NULL, strftime('%s','now'), ?1, ?2, ?3, ?4);", -1, &st, NULL);
-    if (rc != SQLITE_OK) return rc;
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2 (db,
+			       "INSERT INTO system_notice(id, created_at, title, body, severity, expires_at) "
+			       "VALUES(NULL, strftime('%s','now'), ?1, ?2, ?3, ?4);",
+			       -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    return rc;
 
-    sqlite3_bind_text (st, 1, title, -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text (st, 2, body,  -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text (st, 3, severity ? severity : "info", -1, SQLITE_TRANSIENT);
-    if (expires_at > 0) sqlite3_bind_int64(st, 4, expires_at); else sqlite3_bind_null(st, 4);
+  sqlite3_bind_text (st, 1, title, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text (st, 2, body, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text (st, 3, severity ? severity : "info", -1,
+		     SQLITE_TRANSIENT);
+  if (expires_at > 0)
+    sqlite3_bind_int64 (st, 4, expires_at);
+  else
+    sqlite3_bind_null (st, 4);
 
-    rc = sqlite3_step(st);
-    sqlite3_finalize(st);
-    if (rc != SQLITE_DONE) return SQLITE_ERROR;
+  rc = sqlite3_step (st);
+  sqlite3_finalize (st);
+  if (rc != SQLITE_DONE)
+    return SQLITE_ERROR;
 
-    if (out_notice_id) *out_notice_id = (int64_t)sqlite3_last_insert_rowid(db);
-    return SQLITE_OK;
+  if (out_notice_id)
+    *out_notice_id = (int64_t) sqlite3_last_insert_rowid (db);
+  return SQLITE_OK;
 }
 
 /* --- tick: pull ready commands and execute --- */
-static int server_commands_tick(sqlite3 *db, int max_rows) {
-    if (max_rows <= 0 || max_rows > 100) max_rows = 16;
-    int processed = 0;
+static int
+server_commands_tick (sqlite3 *db, int max_rows)
+{
+  if (max_rows <= 0 || max_rows > 100)
+    max_rows = 16;
+  int processed = 0;
 
-    sqlite3_stmt *st = NULL;
-    int rc = sqlite3_prepare_v2(db,
-        "SELECT id, type, payload, idem_key "
-        "FROM engine_commands "
-        "WHERE status='ready' AND due_at <= strftime('%s','now') "
-        "ORDER BY priority ASC, due_at ASC, id ASC "
-        "LIMIT ?1;",
-        -1, &st, NULL);
-    if (rc != SQLITE_OK) return 0;
-    sqlite3_bind_int(st, 1, max_rows);
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2 (db,
+			       "SELECT id, type, payload, idem_key "
+			       "FROM engine_commands "
+			       "WHERE status='ready' AND due_at <= strftime('%s','now') "
+			       "ORDER BY priority ASC, due_at ASC, id ASC "
+			       "LIMIT ?1;",
+			       -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    return 0;
+  sqlite3_bind_int (st, 1, max_rows);
 
-    while (sqlite3_step(st) == SQLITE_ROW) {
-        int64_t cmd_id = sqlite3_column_int64(st, 0);
-        const char *type = (const char*)sqlite3_column_text(st, 1);
-        const char *payload_json = (const char*)sqlite3_column_text(st, 2);
-        const char *idem_key = (const char*)sqlite3_column_text(st, 3);
+  while (sqlite3_step (st) == SQLITE_ROW)
+    {
+      int64_t cmd_id = sqlite3_column_int64 (st, 0);
+      const char *type = (const char *) sqlite3_column_text (st, 1);
+      const char *payload_json = (const char *) sqlite3_column_text (st, 2);
+      const char *idem_key = (const char *) sqlite3_column_text (st, 3);
 
-        /* mark running */
-        sqlite3_stmt *upr = NULL;
-        if (sqlite3_prepare_v2(db,
-            "UPDATE engine_commands SET status='running', started_at=strftime('%s','now') WHERE id=?1;",
-            -1, &upr, NULL) == SQLITE_OK) {
-            sqlite3_bind_int64(upr, 1, cmd_id);
-            sqlite3_step(upr);
-        }
-        if (upr) sqlite3_finalize(upr);
+      /* mark running */
+      sqlite3_stmt *upr = NULL;
+      if (sqlite3_prepare_v2 (db,
+			      "UPDATE engine_commands SET status='running', started_at=strftime('%s','now') WHERE id=?1;",
+			      -1, &upr, NULL) == SQLITE_OK)
+	{
+	  sqlite3_bind_int64 (upr, 1, cmd_id);
+	  sqlite3_step (upr);
+	}
+      if (upr)
+	sqlite3_finalize (upr);
 
-        int ok = -1;
-        json_error_t jerr;
-        json_t *pl = payload_json ? json_loads(payload_json, 0, &jerr) : NULL;
+      int ok = -1;
+      json_error_t jerr;
+      json_t *pl = payload_json ? json_loads (payload_json, 0, &jerr) : NULL;
 
-        if (type && strcmp(type, "broadcast.create") == 0) {
-            int64_t notice_id = 0;
-            ok = (exec_broadcast_create(db, pl, idem_key, &notice_id) == SQLITE_OK) ? 0 : -1;
-        } else {
-            /* unknown command type → mark error */
-            ok = -1;
-        }
+      if (type && strcmp (type, "broadcast.create") == 0)
+	{
+	  int64_t notice_id = 0;
+	  ok =
+	    (exec_broadcast_create (db, pl, idem_key, &notice_id) ==
+	     SQLITE_OK) ? 0 : -1;
+	}
+      else
+	{
+	  /* unknown command type → mark error */
+	  ok = -1;
+	}
 
-        if (pl) json_decref(pl);
+      if (pl)
+	json_decref (pl);
 
-        /* finalize status */
-        sqlite3_stmt *upf = NULL;
-        if (ok == 0) {
-            if (sqlite3_prepare_v2(db,
-                "UPDATE engine_commands SET status='done', finished_at=strftime('%s','now') WHERE id=?1;",
-                -1, &upf, NULL) == SQLITE_OK) {
-                sqlite3_bind_int64(upf, 1, cmd_id);
-                sqlite3_step(upf);
-            }
-        } else {
-            if (sqlite3_prepare_v2(db,
-                "UPDATE engine_commands SET status='error', attempts=attempts+1, finished_at=strftime('%s','now') WHERE id=?1;",
-                -1, &upf, NULL) == SQLITE_OK) {
-                sqlite3_bind_int64(upf, 1, cmd_id);
-                sqlite3_step(upf);
-            }
-        }
-        if (upf) sqlite3_finalize(upf);
-        processed++;
+      /* finalize status */
+      sqlite3_stmt *upf = NULL;
+      if (ok == 0)
+	{
+	  if (sqlite3_prepare_v2 (db,
+				  "UPDATE engine_commands SET status='done', finished_at=strftime('%s','now') WHERE id=?1;",
+				  -1, &upf, NULL) == SQLITE_OK)
+	    {
+	      sqlite3_bind_int64 (upf, 1, cmd_id);
+	      sqlite3_step (upf);
+	    }
+	}
+      else
+	{
+	  if (sqlite3_prepare_v2 (db,
+				  "UPDATE engine_commands SET status='error', attempts=attempts+1, finished_at=strftime('%s','now') WHERE id=?1;",
+				  -1, &upf, NULL) == SQLITE_OK)
+	    {
+	      sqlite3_bind_int64 (upf, 1, cmd_id);
+	      sqlite3_step (upf);
+	    }
+	}
+      if (upf)
+	sqlite3_finalize (upf);
+      processed++;
     }
-    sqlite3_finalize(st);
-    return processed;
+  sqlite3_finalize (st);
+  return processed;
 }
 
 
@@ -556,31 +623,37 @@ static int server_commands_tick(sqlite3 *db, int max_rows) {
 static int
 engine_main_loop (int shutdown_fd)
 {
+  server_log_init_file("/var/log/twclone.log", "[engine]", 0, LOG_INFO);
+  LOGI("engine boot pid=%d", getpid());
 
   sqlite3 *db_handle = db_get_handle ();
   if (s2s_install_default_key (db_handle) != 0)
     {
-      fprintf (stderr, "[server] FATAL: S2S key missing/invalid.\n");
+      LOGW("[server] FATAL: S2S key missing/invalid.\n");
+      //fprintf (stderr, "[server] FATAL: S2S key missing/invalid.\n");
       return 1;			// or exit(1)
     }
-
-  printf ("[engine] child up. pid=%d\n", getpid ());
+  LOGI("[engine] child up. pid=%d\n", getpid ());
+  //printf ("[engine] child up. pid=%d\n", getpid ());
 
   const int tick_ms = 500;	// quick tick; we can fetch from DB config later
   struct pollfd pfd = {.fd = shutdown_fd,.events = POLLIN };
 
-  fprintf (stderr, "[engine] loading s2s key ...\n");
+  LOGI("[engine] loading s2s key ...\n");
+  //fprintf (stderr, "[engine] loading s2s key ...\n");
   if (s2s_install_default_key (db_handle) != 0)
     {
-      fprintf (stderr, "[engine] FATAL: S2S key missing/invalid.\n");
+      LOGE("[engine] FATAL: S2S key missing/invalid.\n");
+      //  fprintf (stderr, "[engine] FATAL: S2S key missing/invalid.\n");
       return 1;
     }
-
-  fprintf (stderr, "[engine] connecting to 127.0.0.1:4321 ...\n");
+  LOGI( "[engine] connecting to 127.0.0.1:4321 ...\n");
+  //fprintf (stderr, "[engine] connecting to 127.0.0.1:4321 ...\n");
   s2s_conn_t *conn = s2s_tcp_client_connect ("127.0.0.1", 4321, 5000);
   if (!conn)
     {
-      fprintf (stderr, "[engine] connect failed\n");
+      LOGE( "[engine] connect failed\n");
+      //  fprintf (stderr, "[engine] connect failed\n");
       return 1;
     }
   s2s_debug_dump_conn ("engine", conn);	// optional debug
@@ -597,49 +670,66 @@ engine_main_loop (int shutdown_fd)
 						   "version", "0.1"));
   int rc = s2s_send_json (conn, hello, 5000);
   json_decref (hello);
-  fprintf (stderr, "[engine] hello send rc=%d\n", rc);
+  LOGI( "[engine] hello send rc=%d\n", rc);
+  //fprintf (stderr, "[engine] hello send rc=%d\n", rc);
 
   json_t *msg = NULL;
   rc = s2s_recv_json (conn, &msg, 5000);
-  fprintf (stderr, "[engine] first frame rc=%d\n", rc);
+  LOGI( "[engine] first frame rc=%d\n", rc);
+  //fprintf (stderr, "[engine] first frame rc=%d\n", rc);
   if (rc == S2S_OK && msg)
     {
       const char *type = json_string_value (json_object_get (msg, "type"));
       if (type && strcmp (type, "s2s.health.ack") == 0)
 	{
-	  fprintf (stderr, "[engine] Ping test complete\n");
+	  LOGI("[engine] Ping test complete\n");
+	  //	  fprintf (stderr, "[engine] Ping test complete\n");
 	}
       json_decref (msg);
     }
 
-  fprintf (stderr, "[engine] Running Smoke Test\n");
+  LOGI("[engine] Running Smoke Test\n");
+  //  fprintf (stderr, "[engine] Running Smoke Test\n");
   (void) engine_demo_push (conn);
 
   static time_t last_metrics = 0;
   static time_t last_cmd_tick_ms = 0;
   /* One-time ISS bootstrap */
-  int iss_ok = iss_init_once();       // 1 if ISS+Stardock found, else 0
-  int64_t next_iss_due = 0;           // run ASAP on first loop
-  const int64_t ISS_PERIOD_MS = 2000; // ~2s cadence
-
+  int iss_ok = iss_init_once ();	// 1 if ISS+Stardock found, else 0
+  int64_t next_iss_due = 0;	// run ASAP on first loop
+  const int64_t ISS_PERIOD_MS = 2000;	// ~2s cadence
+  /* put this near your other period constants */
+  static const int64_t FER_PERIOD_MS = 1500; /* 1.5s; tweak as you like */
+  fer_attach_db(db_handle);
+  int64_t next_fer_due = 0;
+  int fer_ok = fer_init_once();
+  
   for (;;)
     {
       engine_s2s_drain_once (conn);
 
-      
-      uint64_t now_ms = monotonic_millis();
-      if (now_ms - last_cmd_tick_ms >= 250) {
-	(void)server_commands_tick(db_get_handle(), 16);
-	last_cmd_tick_ms = now_ms;
-      }      
 
-      int64_t iisnow = monotonic_millis();
-     // Drive ISS on schedule (inside the same engine loop)
-    if (iss_ok && iisnow >= next_iss_due) {
-      iss_tick(iisnow);                  // handles summon-if-any, else patrol
-      next_iss_due = iisnow + ISS_PERIOD_MS;
-    }
-   
+      uint64_t now_ms = monotonic_millis ();
+      if (now_ms - last_cmd_tick_ms >= 250)
+	{
+	  (void) server_commands_tick (db_get_handle (), 16);
+	  last_cmd_tick_ms = now_ms;
+	}
+
+      int64_t iisnow = monotonic_millis ();
+      // Drive ISS on schedule (inside the same engine loop)
+      if (iss_ok && iisnow >= next_iss_due)
+	{
+	  iss_tick (iisnow);	// handles summon-if-any, else patrol
+	  next_iss_due = iisnow + ISS_PERIOD_MS;
+	}
+
+      /* Drive Ferringhi traders */
+      if (fer_ok && iisnow >= next_fer_due) {
+	fer_tick(iisnow);
+	next_fer_due = iisnow + FER_PERIOD_MS;
+      }
+
       time_t now = time (NULL);
       if (now - last_metrics >= 3600)
 	{
@@ -653,20 +743,22 @@ engine_main_loop (int shutdown_fd)
 
       /* inside the engine’s main loop / tick */
       {
-	int64_t now_ts = (int64_t)time(NULL);
+	int64_t now_ts = (int64_t) time (NULL);
 
-	if (g_next_notice_ttl_sweep == 0) {
-	  /* schedule first run ~5 minutes from start */
-	  g_next_notice_ttl_sweep = now_ts + 300;
-	}
+	if (g_next_notice_ttl_sweep == 0)
+	  {
+	    /* schedule first run ~5 minutes from start */
+	    g_next_notice_ttl_sweep = now_ts + 300;
+	  }
 
-	if (now_ts >= g_next_notice_ttl_sweep) {
-	  (void)engine_notice_ttl_sweep(db_get_handle(), now_ts);
-	  g_next_notice_ttl_sweep = now_ts + 24*3600;  /* run daily */
-	}
+	if (now_ts >= g_next_notice_ttl_sweep)
+	  {
+	    (void) engine_notice_ttl_sweep (db_get_handle (), now_ts);
+	    g_next_notice_ttl_sweep = now_ts + 24 * 3600;	/* run daily */
+	  }
       }
-      
-      
+
+
       // Sleep until next tick or until shutdown pipe changes
       int rc = poll (&pfd, 1, tick_ms);
       if (rc > 0)
@@ -675,7 +767,8 @@ engine_main_loop (int shutdown_fd)
 	  char buf[8];
 	  ssize_t n = read (shutdown_fd, buf, sizeof (buf));
 	  (void) n;		// We don't care what's read; any activity/EOF = shutdown
-	  printf ("[engine] shutdown signal received.\n");
+	  LOGI("[engine] shutdown signal received.\n");
+	  //printf ("[engine] shutdown signal received.\n");
 	  break;
 	}
       if (rc == 0)
@@ -697,13 +790,15 @@ engine_main_loop (int shutdown_fd)
 	}
       else if (rc < 0 && errno != EINTR)
 	{
-	  fprintf (stderr, "[engine] poll error: %s\n", strerror (errno));
+	  LOGE( "[engine] poll error: %s\n", strerror (errno));
+	  //	  fprintf (stderr, "[engine] poll error: %s\n", strerror (errno));
 	  break;
 	}
     }
 
   db_close ();
-  printf ("[engine] child exiting cleanly.\n");
+  LOGI("[engine] child exiting cleanly.\n");
+  //  printf ("[engine] child exiting cleanly.\n");
   return 0;
 }
 
@@ -747,8 +842,8 @@ engine_spawn (pid_t *out_pid, int *out_shutdown_fd)
     *out_pid = pid;
   if (out_shutdown_fd)
     *out_shutdown_fd = pipefd[1];
-
-  printf ("[engine] pid=%d\n", (int) pid);
+  LOGI("[engine] pid=%d\n", (int) pid);
+  //  printf ("[engine] pid=%d\n", (int) pid);
   return 0;
 }
 

@@ -10,11 +10,12 @@
 /* ---- Prefs (typed KV) ---- */
 #ifndef PREF_TYPE_DEFINED
 #define PREF_TYPE_DEFINED
-typedef enum {
-  PT_BOOL   = 1,
-  PT_INT    = 2,
+typedef enum
+{
+  PT_BOOL = 1,
+  PT_INT = 2,
   PT_STRING = 3,
-  PT_JSON   = 4
+  PT_JSON = 4
 } pref_type;
 #endif
 
@@ -54,6 +55,7 @@ int db_for_each_subscriber (sqlite3 * db, const char *event_type,	// e.g., "sect
 			    player_id_cb cb, void *arg);
 
 
-int db_prefs_get_all (int64_t player_id, /*out*/ sqlite3_stmt **it);
-int db_prefs_set_one (int64_t player_id, const char *key, pref_type t, const char *value);
+int db_prefs_get_all (int64_t player_id, /*out */ sqlite3_stmt ** it);
+int db_prefs_set_one (int64_t player_id, const char *key, pref_type t,
+		      const char *value);
 int db_prefs_get_one (int64_t player_id, const char *key, char **out_value);

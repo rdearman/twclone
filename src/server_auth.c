@@ -284,29 +284,33 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
 	    }
 	  /* Auto-subscribe this player to system.* on login (best-effort). */
 	  {
-	    sqlite3 *db = db_get_handle();
+	    sqlite3 *db = db_get_handle ();
 	    sqlite3_stmt *st = NULL;
-	    if (sqlite3_prepare_v2(
-				   db,
-				   "INSERT OR IGNORE INTO subscriptions(player_id,event_type,delivery,enabled) "
-				   "VALUES(?1,'system.*','push',1);",
-				   -1, &st, NULL) == SQLITE_OK)
+	    if (sqlite3_prepare_v2 (db,
+				    "INSERT OR IGNORE INTO subscriptions(player_id,event_type,delivery,enabled) "
+				    "VALUES(?1,'system.*','push',1);",
+				    -1, &st, NULL) == SQLITE_OK)
 	      {
-		sqlite3_bind_int64(st, 1, ctx->player_id);
-		(void)sqlite3_step(st);  /* ignore result; UNIQUE prevents dupes */
+		sqlite3_bind_int64 (st, 1, ctx->player_id);
+		(void) sqlite3_step (st);	/* ignore result; UNIQUE prevents dupes */
 	      }
-	    if (st) sqlite3_finalize(st);
+	    if (st)
+	      sqlite3_finalize (st);
 	  }
 
 
 	  {
-	    char *cur = NULL;  // must be char*
-	    if (db_prefs_get_one(ctx->player_id, "ui.locale", &cur) != SQLITE_OK || !cur) {
-	      (void)db_prefs_set_one(ctx->player_id, "ui.locale", PT_STRING, "en-GB");
-	    }
-	    if (cur) free(cur);
+	    char *cur = NULL;	// must be char*
+	    if (db_prefs_get_one (ctx->player_id, "ui.locale", &cur) !=
+		SQLITE_OK || !cur)
+	      {
+		(void) db_prefs_set_one (ctx->player_id, "ui.locale",
+					 PT_STRING, "en-GB");
+	      }
+	    if (cur)
+	      free (cur);
 	  }
-	  
+
 	  send_enveloped_ok (ctx->fd, root, "auth.session", data);
 	  json_decref (data);
 	}
@@ -368,21 +372,21 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
 
 	      /* Auto-subscribe this player to system.* on login (best-effort). */
 	      {
-		sqlite3 *db = db_get_handle();
+		sqlite3 *db = db_get_handle ();
 		sqlite3_stmt *st = NULL;
-		if (sqlite3_prepare_v2(
-				       db,
-				       "INSERT OR IGNORE INTO subscriptions(player_id,event_type,delivery,enabled) "
-				       "VALUES(?1,'system.*','push',1);",
-				       -1, &st, NULL) == SQLITE_OK)
+		if (sqlite3_prepare_v2 (db,
+					"INSERT OR IGNORE INTO subscriptions(player_id,event_type,delivery,enabled) "
+					"VALUES(?1,'system.*','push',1);",
+					-1, &st, NULL) == SQLITE_OK)
 		  {
-		    sqlite3_bind_int64(st, 1, ctx->player_id);
-		    (void)sqlite3_step(st);  /* ignore result; UNIQUE prevents dupes */
+		    sqlite3_bind_int64 (st, 1, ctx->player_id);
+		    (void) sqlite3_step (st);	/* ignore result; UNIQUE prevents dupes */
 		  }
-		if (st) sqlite3_finalize(st);
+		if (st)
+		  sqlite3_finalize (st);
 	      }
 
-	      
+
 	      send_enveloped_ok (ctx->fd, root, "auth.session", data);
 	      json_decref (data);
 	    }

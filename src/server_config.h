@@ -112,6 +112,4 @@ extern "C"
   int cmd_system_hello (client_ctx_t * ctx, json_t * root);
   int cmd_session_disconnect (client_ctx_t * ctx, json_t * root);
 
-
-
-#endif				/* CONFIG_H */
+#endif

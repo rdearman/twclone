@@ -1,4 +1,3 @@
-#include "s2s_transport.h"
 #include <openssl/hmac.h>
 #include <openssl/evp.h>
 #include <arpa/inet.h>
@@ -17,7 +16,8 @@
 #include <openssl/hmac.h>
 #include <openssl/evp.h>
 #include <inttypes.h>
-
+#include "s2s_transport.h"
+#include "server_log.h"
 
 #ifdef TCP_NODELAY
 static int
@@ -73,7 +73,8 @@ s2s_debug_dump_conn (const char *who, s2s_conn_t *c)
 {
   if (!c || c->fd < 0)
     {
-      fprintf (stderr, "[%s] conn=NULL\n", who);
+      LOGI("[%s] conn=NULL\n", who);
+      //      fprintf (stderr, "[%s] conn=NULL\n", who);
       return;
     }
   struct sockaddr_in la, ra;
@@ -83,9 +84,12 @@ s2s_debug_dump_conn (const char *who, s2s_conn_t *c)
   char lip[32], rip[32];
   inet_ntop (AF_INET, &la.sin_addr, lip, sizeof (lip));
   inet_ntop (AF_INET, &ra.sin_addr, rip, sizeof (rip));
-  fprintf (stderr, "[%s] fd=%d local=%s:%u peer=%s:%u\n", who, c->fd,
+  LOGI("[%s] fd=%d local=%s:%u peer=%s:%u\n", who, c->fd,
 	   lip, (unsigned) ntohs (la.sin_port), rip,
 	   (unsigned) ntohs (ra.sin_port));
+  //  fprintf (stderr, "[%s] fd=%d local=%s:%u peer=%s:%u\n", who, c->fd,
+  //	   lip, (unsigned) ntohs (la.sin_port), rip,
+  //	   (unsigned) ntohs (ra.sin_port));
 }
 
 

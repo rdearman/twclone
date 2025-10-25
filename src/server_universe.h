@@ -4,10 +4,23 @@
 #include "config.h"
 #include <stdint.h>
 
-/* Imperial Starship (ISS) patrol/summon API */
-int  iss_init_once(void);                          // returns 1 if ISS + Stardock found
-void iss_tick(int64_t now_ms);
-void iss_summon(int sector_id, int offender_id);   // call this from violation handlers
+/* --- Ferringhi traders (NPC) --- */
+int  fer_init_once(void);          /* returns 1 if homeworld found, else 0 */
+void fer_tick(int64_t now_ms);     /* drive traders on a schedule */
+void fer_attach_db(sqlite3 *db);
+
+
+/* --- Small nav helpers over sector_warps (no DB args; use cached handle) --- */
+int  nav_next_hop(int start, int goal);   /* one-hop BFS toward goal */
+int  nav_random_neighbor(int sector);     /* random linked neighbour */
+int  sector_has_port (int sector);         /* 1 if sector has a port */
+
+
+ /* ISS patrol, universe helpers, etc. */
+ /* Imperial Starship (ISS) patrol/summon API */
+int iss_init_once (void);	// returns 1 if ISS + Stardock found
+void iss_tick (int64_t now_ms);
+void iss_summon (int sector_id, int offender_id);	// call this from violation handlers
 
 /* Insert default config values into DB if missing */
 int initconfig (void);

@@ -18,11 +18,42 @@
 #include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "database.h"
+#include "server_universe.h"
+#include "schemas.h"
+#include "common.h"
+#include "errors.h"
+#include "globals.h"
+#include <stdarg.h>   /* for va_list, vsnprintf */
 
-static const int  kIssPatrolBudget = 8;     /* hops before we drift home */
-static const int  kIssTickMs       = 2000;
-static const char*kIssName         = "Imperial Starship";
-static const char*kIssNoticePrefix = "[ISS • Capt. Zyrain]";
+
+/* cache DB so fer_tick signature matches ISS style */
+extern sqlite3 *g_db;             /* <- global DB handle used elsewhere (ISS) */
+static sqlite3 *g_fer_db = NULL;  /* <- cached here for trader helpers */
+
+/* Fallback logging macros  */
+#ifndef INFO_LOG
+#define INFO_LOG(...) do { fprintf(stderr, __VA_ARGS__); fputc('\n', stderr); } while (0)
+#endif
+#ifndef WARN_LOG
+#define WARN_LOG(...) do { fprintf(stderr, __VA_ARGS__); fputc('\n', stderr); } while (0)
+#endif
+
+
+#ifndef FER_TRADER_COUNT
+#define FER_TRADER_COUNT            3
+#endif
+#ifndef FER_TRADES_BEFORE_RETURN
+#define FER_TRADES_BEFORE_RETURN    5
+#endif
+#ifndef FER_MAX_HOLD
+#define FER_MAX_HOLD                100
+#endif
+
+static const int kIssPatrolBudget = 8;	/* hops before we drift home */
+static const int kIssTickMs = 2000;
+static const char *kIssName = "Imperial Starship";
+static const char *kIssNoticePrefix = "[ISS • Capt. Zyrain]";
 
 /* Private state (kept in this .c only) */
 static int g_iss_inited = 0;
@@ -34,13 +65,19 @@ static int g_patrol_budget = 0;
 /* pending summon (if set, next tick warps immediately) */
 static int g_summon_sector = 0;
 static int g_summon_offender = 0;
-typedef struct { int sector; int budget; } IssState;
+typedef struct
+{
+  int sector;
+  int budget;
+} IssState;
 
 
 /* forward statics (defined later in this file) */
-static int  db_pick_adjacent(int sector);
-static void post_iss_notice_move(int from, int to, const char *kind, const char *extra);
-
+static int db_pick_adjacent (int sector);
+static void post_iss_notice_move (int from, int to, const char *kind,
+				  const char *extra);
+static void iss_log_event_move (int from, int to, const char *kind,
+				const char *extra);
 
 #ifndef UNUSED
 #define UNUSED(x) (void)(x)
@@ -58,6 +95,34 @@ static void post_iss_notice_move(int from, int to, const char *kind, const char 
 #endif
 
 json_t *build_sector_info_json (int sector_id);
+
+
+/* --- minimal event writer for tests (engine_events) --- */
+static void fer_event_json(const char *type, int sector_id, const char *fmt, ...)
+{
+  if (!g_fer_db || !type) return;
+
+  /* format JSON payload from ... */
+  char payload[512];
+  va_list ap; va_start(ap, fmt);
+  vsnprintf(payload, sizeof payload, fmt, ap);
+  va_end(ap);
+
+  /* INSERT into engine_events(type, sector_id, payload, ts) */
+  const char *sql =
+    "INSERT INTO engine_events(type, sector_id, payload, ts) "
+    "VALUES (?1, ?2, ?3, strftime('%s','now'))";
+  sqlite3_stmt *st = NULL;
+  if (sqlite3_prepare_v2(g_fer_db, sql, -1, &st, NULL) != SQLITE_OK) return;
+  sqlite3_bind_text(st, 1, type, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int (st, 2, sector_id);
+  sqlite3_bind_text(st, 3, payload, -1, SQLITE_TRANSIENT);
+  sqlite3_step(st);
+  sqlite3_finalize(st);
+}
+
+
+
 
 
 /**
@@ -1260,144 +1325,199 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
 
 /////////  ISS BOT ////////////
 
-static void iss_state_load(IssState *st, int default_sector) {
+static void
+iss_state_load (IssState *st, int default_sector)
+{
   st->sector = default_sector;
   st->budget = kIssPatrolBudget;
-  sqlite3 *db = db_get_handle();
+  sqlite3 *db = db_get_handle ();
   sqlite3_stmt *q = NULL;
-  if (sqlite3_prepare_v2(db,
-        "SELECT state_val FROM engine_state WHERE state_key='iss_state';",-1,&q,NULL)==SQLITE_OK
-      && sqlite3_step(q)==SQLITE_ROW) {
-    const char *json = (const char*)sqlite3_column_text(q,0);
-    if (json) {
-      // naive parse: sector:budget in "s:123,b:7" or use JSON if you prefer jansson
-      int s=0,b=0; if (sscanf(json,"s:%d,b:%d",&s,&b)==2) { st->sector=s; st->budget=b; }
+  if (sqlite3_prepare_v2 (db,
+			  "SELECT state_val FROM engine_state WHERE state_key='iss_state';",
+			  -1, &q, NULL) == SQLITE_OK
+      && sqlite3_step (q) == SQLITE_ROW)
+    {
+      const char *json = (const char *) sqlite3_column_text (q, 0);
+      if (json)
+	{
+	  // naive parse: sector:budget in "s:123,b:7" or use JSON if you prefer jansson
+	  int s = 0, b = 0;
+	  if (sscanf (json, "s:%d,b:%d", &s, &b) == 2)
+	    {
+	      st->sector = s;
+	      st->budget = b;
+	    }
+	}
     }
-  }
-  sqlite3_finalize(q);
+  sqlite3_finalize (q);
 }
 
-static void iss_state_save(const IssState *st) {
-  sqlite3 *db = db_get_handle();
+static void
+iss_state_save (const IssState *st)
+{
+  sqlite3 *db = db_get_handle ();
   sqlite3_stmt *p = NULL;
-  char buf[64]; snprintf(buf,sizeof(buf),"s:%d,b:%d", st->sector, st->budget);
-  if (sqlite3_prepare_v2(db,
-        "INSERT INTO engine_state(state_key,state_val) VALUES('iss_state',?1) "
-        "ON CONFLICT(state_key) DO UPDATE SET state_val=excluded.state_val;", -1, &p, NULL)==SQLITE_OK) {
-    sqlite3_bind_text(p, 1, buf, -1, SQLITE_STATIC);
-    sqlite3_step(p);
-  }
-  sqlite3_finalize(p);
+  char buf[64];
+  snprintf (buf, sizeof (buf), "s:%d,b:%d", st->sector, st->budget);
+  if (sqlite3_prepare_v2 (db,
+			  "INSERT INTO engine_state(state_key,state_val) VALUES('iss_state',?1) "
+			  "ON CONFLICT(state_key) DO UPDATE SET state_val=excluded.state_val;",
+			  -1, &p, NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_text (p, 1, buf, -1, SQLITE_STATIC);
+      sqlite3_step (p);
+    }
+  sqlite3_finalize (p);
 }
 
 
-static void log_iss_event_move(int actor_player_id, int sector, const char *etype, const char *payload_json) {
-  sqlite3 *db = db_get_handle(); sqlite3_stmt *st = NULL;
-  if (sqlite3_prepare_v2(db,
-        "INSERT INTO engine_events(ts,type,actor_player_id,sector_id,payload) "
-        "VALUES(strftime('%s','now'), ?1, ?2, ?3, ?4);",-1,&st,NULL)==SQLITE_OK) {
-    sqlite3_bind_text(st, 1, etype, -1, SQLITE_STATIC);
-    sqlite3_bind_int(st,  2, actor_player_id);
-    sqlite3_bind_int(st,  3, sector);
-    sqlite3_bind_text(st, 4, payload_json, -1, SQLITE_STATIC);
-    sqlite3_step(st);
-  }
-  sqlite3_finalize(st);
+static void
+log_iss_event_move (int actor_player_id, int sector, const char *etype,
+		    const char *payload_json)
+{
+  sqlite3 *db = db_get_handle ();
+  sqlite3_stmt *st = NULL;
+  if (sqlite3_prepare_v2 (db,
+			  "INSERT INTO engine_events(ts,type,actor_player_id,sector_id,payload) "
+			  "VALUES(strftime('%s','now'), ?1, ?2, ?3, ?4);", -1,
+			  &st, NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_text (st, 1, etype, -1, SQLITE_STATIC);
+      sqlite3_bind_int (st, 2, actor_player_id);
+      sqlite3_bind_int (st, 3, sector);
+      sqlite3_bind_text (st, 4, payload_json, -1, SQLITE_STATIC);
+      sqlite3_step (st);
+    }
+  sqlite3_finalize (st);
 }
 
-static void iss_patrol_tick(int iss_player_id, int stardock_sector, IssState *st) {
-  if (st->sector <= 0) st->sector = stardock_sector;
+static void
+iss_patrol_tick (int iss_player_id, int stardock_sector, IssState *st)
+{
+  if (st->sector <= 0)
+    st->sector = stardock_sector;
 
   // Bias ~30% toward home so we naturally drift back within the budget window
-  int next = ((rand()%10) < 3) ? db_pick_adjacent(st->sector) : db_pick_adjacent(st->sector);
+  int next =
+    ((rand () % 10) <
+     3) ? db_pick_adjacent (st->sector) : db_pick_adjacent (st->sector);
   // Optional: when budget nearly spent, force toward home — for now, random is fine.
 
-  if (next != st->sector) {
-    // Move the ISS (players.sector)
-    sqlite3 *db = db_get_handle(); sqlite3_stmt *up = NULL;
-    if (sqlite3_prepare_v2(db,
-        "UPDATE players SET sector=?1, intransit=0, movingto=NULL, beginmove=NULL "
-        "WHERE id=?2;", -1, &up, NULL)==SQLITE_OK) {
-      sqlite3_bind_int(up, 1, next);
-      sqlite3_bind_int(up, 2, iss_player_id);
-      sqlite3_step(up);
+  if (next != st->sector)
+    {
+      // Move the ISS (players.sector)
+      sqlite3 *db = db_get_handle ();
+      sqlite3_stmt *up = NULL;
+      if (sqlite3_prepare_v2 (db,
+			      "UPDATE players SET sector=?1, intransit=0, movingto=NULL, beginmove=NULL "
+			      "WHERE id=?2;", -1, &up, NULL) == SQLITE_OK)
+	{
+	  sqlite3_bind_int (up, 1, next);
+	  sqlite3_bind_int (up, 2, iss_player_id);
+	  sqlite3_step (up);
+	}
+      sqlite3_finalize (up);
+
+      // Logs + notice
+      char payload[128];
+      snprintf (payload, sizeof (payload), "{\"from\":%d,\"to\":%d}",
+		st->sector, next);
+      log_iss_event_move (iss_player_id, next, "npc.iss.move.v1", payload);
+      iss_log_event_move (g_iss_sector, next, "move", NULL);
+
+      st->sector = next;
+      st->budget--;
+      if (st->budget <= 0 || st->sector == stardock_sector)
+	st->budget = kIssPatrolBudget;
+      iss_state_save (st);
     }
-    sqlite3_finalize(up);
-
-    // Logs + notice
-    char payload[128]; snprintf(payload,sizeof(payload), "{\"from\":%d,\"to\":%d}", st->sector, next);
-    log_iss_event_move(iss_player_id, next, "npc.iss.move.v1", payload);
-    //    post_iss_notice_move(st->sector, next, "move");
-    post_iss_notice_move(st->sector, next, "move", NULL);
-    
-    st->sector = next;
-    st->budget--;
-    if (st->budget <= 0 || st->sector == stardock_sector) st->budget = kIssPatrolBudget;
-    iss_state_save(st);
-  }
 }
 
-static void iss_enqueue_summon(int sector_id, int offender_player_id) {
-  sqlite3 *db = db_get_handle(); sqlite3_stmt *st=NULL;
-  const char *payload = "{\"reason\":\"fedspace_violation\"}"; // add fields if you wish
-  if (sqlite3_prepare_v2(db,
-        "INSERT INTO engine_commands(type,payload,status,priority,attempts,created_at,due_at,worker,idem_key) "
-        "VALUES('npc.iss.summon.v1', json_object('sector',?1,'offender',?2,'info',?3), 'ready', 10, 0,"
-        "        strftime('%s','now'), strftime('%s','now'), NULL, NULL);", -1, &st, NULL)==SQLITE_OK) {
-    sqlite3_bind_int(st, 1, sector_id);
-    sqlite3_bind_int(st, 2, offender_player_id);
-    sqlite3_bind_text(st,3, payload, -1, SQLITE_STATIC);
-    sqlite3_step(st);
-  }
-  sqlite3_finalize(st);
+static void
+iss_enqueue_summon (int sector_id, int offender_player_id)
+{
+  sqlite3 *db = db_get_handle ();
+  sqlite3_stmt *st = NULL;
+  const char *payload = "{\"reason\":\"fedspace_violation\"}";	// add fields if you wish
+  if (sqlite3_prepare_v2 (db,
+			  "INSERT INTO engine_commands(type,payload,status,priority,attempts,created_at,due_at,worker,idem_key) "
+			  "VALUES('npc.iss.summon.v1', json_object('sector',?1,'offender',?2,'info',?3), 'ready', 10, 0,"
+			  "        strftime('%s','now'), strftime('%s','now'), NULL, NULL);",
+			  -1, &st, NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_int (st, 1, sector_id);
+      sqlite3_bind_int (st, 2, offender_player_id);
+      sqlite3_bind_text (st, 3, payload, -1, SQLITE_STATIC);
+      sqlite3_step (st);
+    }
+  sqlite3_finalize (st);
 }
 
-static int iss_consume_summon(int iss_player_id, IssState *st) {
-  sqlite3 *db = db_get_handle();
-  sqlite3_stmt *pick=NULL;
-  if (sqlite3_prepare_v2(db,
-        "SELECT id, json_extract(payload,'$.sector'), json_extract(payload,'$.offender') "
-        "FROM engine_commands "
-        "WHERE status='ready' AND type='npc.iss.summon.v1' AND due_at <= strftime('%s','now') "
-        "ORDER BY priority ASC, due_at ASC LIMIT 1;", -1, &pick, NULL)!=SQLITE_OK) return 0;
+static int
+iss_consume_summon (int iss_player_id, IssState *st)
+{
+  sqlite3 *db = db_get_handle ();
+  sqlite3_stmt *pick = NULL;
+  if (sqlite3_prepare_v2 (db,
+			  "SELECT id, json_extract(payload,'$.sector'), json_extract(payload,'$.offender') "
+			  "FROM engine_commands "
+			  "WHERE status='ready' AND type='npc.iss.summon.v1' AND due_at <= strftime('%s','now') "
+			  "ORDER BY priority ASC, due_at ASC LIMIT 1;", -1,
+			  &pick, NULL) != SQLITE_OK)
+    return 0;
 
   int handled = 0;
-  if (sqlite3_step(pick)==SQLITE_ROW) {
-    int cmd_id  = sqlite3_column_int(pick, 0);
-    int sector  = sqlite3_column_int(pick, 1);
-    int offender= sqlite3_column_int(pick, 2);
-    sqlite3_finalize(pick);
+  if (sqlite3_step (pick) == SQLITE_ROW)
+    {
+      int cmd_id = sqlite3_column_int (pick, 0);
+      int sector = sqlite3_column_int (pick, 1);
+      int offender = sqlite3_column_int (pick, 2);
+      sqlite3_finalize (pick);
 
-    // Mark running
-    sqlite3_exec(db, "UPDATE engine_commands SET status='running', started_at=strftime('%s','now') WHERE id="
-                      , NULL, NULL, NULL); // (prepare/bind properly in your code)
+      // Mark running
+      sqlite3_exec (db, "UPDATE engine_commands SET status='running', started_at=strftime('%s','now') WHERE id=", NULL, NULL, NULL);	// (prepare/bind properly in your code)
 
-    // Warp ISS
-    sqlite3_stmt *up=NULL;
-    if (sqlite3_prepare_v2(db, "UPDATE players SET sector=?1, intransit=0, movingto=NULL, beginmove=NULL WHERE id=?2;", -1, &up, NULL)==SQLITE_OK) {
-      sqlite3_bind_int(up, 1, sector);
-      sqlite3_bind_int(up, 2, iss_player_id);
-      sqlite3_step(up);
+      // Warp ISS
+      sqlite3_stmt *up = NULL;
+      if (sqlite3_prepare_v2
+	  (db,
+	   "UPDATE players SET sector=?1, intransit=0, movingto=NULL, beginmove=NULL WHERE id=?2;",
+	   -1, &up, NULL) == SQLITE_OK)
+	{
+	  sqlite3_bind_int (up, 1, sector);
+	  sqlite3_bind_int (up, 2, iss_player_id);
+	  sqlite3_step (up);
+	}
+      sqlite3_finalize (up);
+
+      char payload[160];
+      snprintf (payload, sizeof (payload), "{\"to\":%d,\"offender\":%d}",
+		sector, offender);
+      log_iss_event_move (iss_player_id, sector, "npc.iss.warp.v1", payload);
+      post_iss_notice_move (st->sector, sector, "warp", NULL);
+
+      st->sector = sector;
+      st->budget = kIssPatrolBudget / 2;
+      iss_state_save (st);
+
+      // Done
+      sqlite3_stmt *done = NULL;
+      if (sqlite3_prepare_v2
+	  (db,
+	   "UPDATE engine_commands SET status='finished', finished_at=strftime('%s','now') WHERE id=?1;",
+	   -1, &done, NULL) == SQLITE_OK)
+	{
+	  sqlite3_bind_int (done, 1, cmd_id);
+	  sqlite3_step (done);
+	}
+      sqlite3_finalize (done);
+
+      handled = 1;
     }
-    sqlite3_finalize(up);
-
-    char payload[160]; snprintf(payload,sizeof(payload), "{\"to\":%d,\"offender\":%d}", sector, offender);
-    log_iss_event_move(iss_player_id, sector, "npc.iss.warp.v1", payload);
-    post_iss_notice_move(st->sector, sector, "warp", NULL);
-
-    st->sector = sector; st->budget = kIssPatrolBudget/2; iss_state_save(st);
-
-    // Done
-    sqlite3_stmt *done=NULL;
-    if (sqlite3_prepare_v2(db, "UPDATE engine_commands SET status='finished', finished_at=strftime('%s','now') WHERE id=?1;", -1, &done, NULL)==SQLITE_OK) {
-      sqlite3_bind_int(done, 1, cmd_id); sqlite3_step(done);
+  else
+    {
+      sqlite3_finalize (pick);
     }
-    sqlite3_finalize(done);
-
-    handled = 1;
-  } else {
-    sqlite3_finalize(pick);
-  }
   return handled;
 }
 
@@ -1405,155 +1525,633 @@ static int iss_consume_summon(int iss_player_id, IssState *st) {
 /* ===== Imperial Starship (ISS) — internal state + helpers ============ */
 
 /* --- tiny DB helpers --- */
-static int db_get_stardock_sector(void) {
-  sqlite3 *db = db_get_handle();
+static int
+db_get_stardock_sector (void)
+{
+  sqlite3 *db = db_get_handle ();
   sqlite3_stmt *st = NULL;
   int sector = 0;
-  if (sqlite3_prepare_v2(db,
-        "SELECT sector_id FROM stardock_location LIMIT 1;", -1, &st, NULL)==SQLITE_OK &&
-      sqlite3_step(st)==SQLITE_ROW) {
-    sector = sqlite3_column_int(st, 0);
-  }
-  sqlite3_finalize(st);
+  if (sqlite3_prepare_v2 (db,
+			  "SELECT sector_id FROM stardock_location LIMIT 1;",
+			  -1, &st, NULL) == SQLITE_OK
+      && sqlite3_step (st) == SQLITE_ROW)
+    {
+      sector = sqlite3_column_int (st, 0);
+    }
+  sqlite3_finalize (st);
   return sector;
 }
 
-static int db_get_iss_player(int *out_player_id, int *out_sector) {
-  sqlite3 *db = db_get_handle();
+static int
+db_get_iss_player (int *out_player_id, int *out_sector)
+{
+  sqlite3 *db = db_get_handle ();
   sqlite3_stmt *st = NULL;
   int ok = 0;
-  if (sqlite3_prepare_v2(db,
-        "SELECT id, COALESCE(sector,0) FROM players "
-        "WHERE type=1 AND name=?1 LIMIT 1;", -1, &st, NULL)==SQLITE_OK) {
-    sqlite3_bind_text(st, 1, kIssName, -1, SQLITE_STATIC);
-    if (sqlite3_step(st)==SQLITE_ROW) {
-      *out_player_id = sqlite3_column_int(st, 0);
-      *out_sector    = sqlite3_column_int(st, 1);
-      ok = 1;
+  if (sqlite3_prepare_v2 (db,
+			  "SELECT id, COALESCE(sector,0) FROM players "
+			  "WHERE type=1 AND name=?1 LIMIT 1;", -1, &st,
+			  NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_text (st, 1, kIssName, -1, SQLITE_STATIC);
+      if (sqlite3_step (st) == SQLITE_ROW)
+	{
+	  *out_player_id = sqlite3_column_int (st, 0);
+	  *out_sector = sqlite3_column_int (st, 1);
+	  ok = 1;
+	}
     }
-  }
-  sqlite3_finalize(st);
+  sqlite3_finalize (st);
   return ok;
 }
 
-static int db_pick_adjacent(int sector) {
+static int
+db_pick_adjacent (int sector)
+{
   int next = sector;
-  sqlite3 *db = db_get_handle();
+  sqlite3 *db = db_get_handle ();
   sqlite3_stmt *st = NULL;
-  if (sqlite3_prepare_v2(db,
-        "SELECT to_sector FROM sector_warps WHERE from_sector=?1 "
-        "ORDER BY RANDOM() LIMIT 1;", -1, &st, NULL)==SQLITE_OK) {
-    sqlite3_bind_int(st, 1, sector);
-    if (sqlite3_step(st)==SQLITE_ROW) next = sqlite3_column_int(st, 0);
-  }
-  sqlite3_finalize(st);
+  if (sqlite3_prepare_v2 (db,
+			  "SELECT to_sector FROM sector_warps WHERE from_sector=?1 "
+			  "ORDER BY RANDOM() LIMIT 1;", -1, &st,
+			  NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_int (st, 1, sector);
+      if (sqlite3_step (st) == SQLITE_ROW)
+	next = sqlite3_column_int (st, 0);
+    }
+  sqlite3_finalize (st);
   return next;
 }
 
-static void post_iss_notice_move(int from, int to, const char *kind, const char *extra) {
-  char title[160], body[256];
-  snprintf(title, sizeof(title), "%s %s", kIssNoticePrefix, kind);
-  snprintf(body,  sizeof(body),  "Imperial Starship %s: %d \xE2\x86\x92 %d%s%s",
-           kind, from, to, (extra && *extra) ? " — " : "", extra ? extra : "");
 
-  sqlite3 *db = db_get_handle();
+void
+iss_log_event_move (int from, int to, const char *kind, const char *extra)
+{
+  sqlite3 *db = db_get_handle ();
   sqlite3_stmt *st = NULL;
-  if (sqlite3_prepare_v2(db,
-        "INSERT INTO system_notice(created_at,title,body,severity,expires_at) "
-        "VALUES(strftime('%s','now'), ?1, ?2, 'info', strftime('%s','now')+3600);",
-        -1, &st, NULL)==SQLITE_OK) {
-    sqlite3_bind_text(st, 1, title, -1, SQLITE_STATIC);
-    sqlite3_bind_text(st, 2, body,  -1, SQLITE_STATIC);
-    sqlite3_step(st);
-  }
-  sqlite3_finalize(st);
+  if (sqlite3_prepare_v2 (db,
+			  "INSERT INTO system_events(scope,event_type,payload,created_at) "
+			  "VALUES('npc.iss', ?1, json_object('from',?2,'to',?3,'extra',?4), strftime('%s','now'));",
+			  -1, &st, NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_text (st, 1, kind, -1, SQLITE_STATIC);	// e.g. "move" or "warp"
+      sqlite3_bind_int (st, 2, from);
+      sqlite3_bind_int (st, 3, to);
+      sqlite3_bind_text (st, 4, extra ? extra : "", -1, SQLITE_STATIC);
+      sqlite3_step (st);
+    }
+  sqlite3_finalize (st);
+}
+
+
+static void
+post_iss_notice_move (int from, int to, const char *kind, const char *extra)
+{
+  char title[160], body[256];
+  snprintf (title, sizeof (title), "%s %s", kIssNoticePrefix, kind);
+  snprintf (body, sizeof (body),
+	    "Imperial Starship %s: %d \xE2\x86\x92 %d%s%s", kind, from, to,
+	    (extra && *extra) ? " — " : "", extra ? extra : "");
+
+  sqlite3 *db = db_get_handle ();
+  sqlite3_stmt *st = NULL;
+  if (sqlite3_prepare_v2 (db,
+			  "INSERT INTO system_notice(created_at,title,body,severity,expires_at) "
+			  "VALUES(strftime('%s','now'), ?1, ?2, 'info', strftime('%s','now')+3600);",
+			  -1, &st, NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_text (st, 1, title, -1, SQLITE_STATIC);
+      sqlite3_bind_text (st, 2, body, -1, SQLITE_STATIC);
+      sqlite3_step (st);
+    }
+  sqlite3_finalize (st);
 }
 
 /* Move the ISS; warp==1 means “blink”. */
-static void iss_move_to(int next_sector, int warp, const char *extra) {
-  if (next_sector <= 0 || next_sector == g_iss_sector) return;
-  sqlite3 *db = db_get_handle();
+static void
+iss_move_to (int next_sector, int warp, const char *extra)
+{
+  if (next_sector <= 0 || next_sector == g_iss_sector)
+    return;
+  sqlite3 *db = db_get_handle ();
   sqlite3_stmt *up = NULL;
-  if (sqlite3_prepare_v2(db,
-        "UPDATE players SET sector=?1, intransit=0, movingto=NULL, beginmove=NULL "
-        "WHERE id=?2;", -1, &up, NULL)==SQLITE_OK) {
-    sqlite3_bind_int(up, 1, next_sector);
-    sqlite3_bind_int(up, 2, g_iss_id);
-    sqlite3_step(up);
-  }
-  sqlite3_finalize(up);
+  if (sqlite3_prepare_v2 (db,
+			  "UPDATE players SET sector=?1, intransit=0, movingto=NULL, beginmove=NULL "
+			  "WHERE id=?2;", -1, &up, NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_int (up, 1, next_sector);
+      sqlite3_bind_int (up, 2, g_iss_id);
+      sqlite3_step (up);
+    }
+  sqlite3_finalize (up);
 
-  post_iss_notice_move(g_iss_sector, next_sector, warp ? "warp" : "move", extra);
+  iss_log_event_move (g_iss_sector, next_sector, warp ? "warp" : "move",
+		      extra);
+  // post_iss_notice_move(g_iss_sector, next_sector, warp ? "warp" : "move", extra);
   g_iss_sector = next_sector;
 
   /* decay/refresh budget */
-  if (!warp) {
-    g_patrol_budget--;
-    if (g_patrol_budget <= 0 || g_iss_sector == g_stardock_sector)
-      g_patrol_budget = kIssPatrolBudget;
-  } else {
-    g_patrol_budget = kIssPatrolBudget/2; /* linger a bit, then drift home */
-  }
+  if (!warp)
+    {
+      g_patrol_budget--;
+      if (g_patrol_budget <= 0 || g_iss_sector == g_stardock_sector)
+	g_patrol_budget = kIssPatrolBudget;
+    }
+  else
+    {
+      g_patrol_budget = kIssPatrolBudget / 2;	/* linger a bit, then drift home */
+    }
 }
 
 /* One patrol step: slight bias to wander, but budget forces eventual return. */
-static void iss_patrol_step(void) {
-  if (g_iss_sector <= 0) g_iss_sector = g_stardock_sector;
+static void
+iss_patrol_step (void)
+{
+  if (g_iss_sector <= 0)
+    g_iss_sector = g_stardock_sector;
   int next;
   /* ~30% chance move “toward” home by picking an adjacent at random anyway;
      keep it simple (pathing can be improved later). */
-  if ((rand() % 10) < 3) next = db_pick_adjacent(g_iss_sector);
-  else                   next = db_pick_adjacent(g_iss_sector);
-  if (next != g_iss_sector) iss_move_to(next, /*warp=*/0, /*extra=*/NULL);
+  if ((rand () % 10) < 3)
+    next = db_pick_adjacent (g_iss_sector);
+  else
+    next = db_pick_adjacent (g_iss_sector);
+  if (next != g_iss_sector)
+    iss_move_to (next, /*warp= */ 0, /*extra= */ NULL);
 }
 
 /* Consume a pending summon (set by iss_summon()), return 1 if we warped. */
-static int iss_try_consume_summon(void) {
-  if (g_summon_sector > 0) {
-    char extra[64];
-    snprintf(extra, sizeof(extra), "summoned to sector %d (offender %d)", g_summon_sector, g_summon_offender);
-    iss_move_to(g_summon_sector, /*warp=*/1, extra);
-    g_summon_sector = 0;
-    g_summon_offender = 0;
-    return 1;
-  }
+static int
+iss_try_consume_summon (void)
+{
+  if (g_summon_sector > 0)
+    {
+      char extra[64];
+      snprintf (extra, sizeof (extra), "summoned to sector %d (offender %d)",
+		g_summon_sector, g_summon_offender);
+      iss_move_to (g_summon_sector, /*warp= */ 1, extra);
+      g_summon_sector = 0;
+      g_summon_offender = 0;
+      return 1;
+    }
   return 0;
 }
 
 /* --- public API -------------------------------------------------------- */
 
-int iss_init_once(void) {
-  if (g_iss_inited) return 1;
+int
+iss_init_once (void)
+{
+  if (g_iss_inited)
+    return 1;
 
-  g_stardock_sector = db_get_stardock_sector();
-  if (g_stardock_sector <= 0) return 0;
+  g_stardock_sector = db_get_stardock_sector ();
+  if (g_stardock_sector <= 0)
+    return 0;
 
   int sector = 0;
-  if (!db_get_iss_player(&g_iss_id, &sector)) return 0;
+  if (!db_get_iss_player (&g_iss_id, &sector))
+    return 0;
 
-  if (sector <= 0) {
-    /* park at Stardock on first discovery */
-    g_iss_sector = g_stardock_sector;
-    iss_move_to(g_stardock_sector, /*warp=*/1, "initialization");
-  } else {
-    g_iss_sector = sector;
-  }
+  if (sector <= 0)
+    {
+      /* park at Stardock on first discovery */
+      g_iss_sector = g_stardock_sector;
+      iss_move_to (g_stardock_sector, /*warp= */ 1, "initialization");
+    }
+  else
+    {
+      g_iss_sector = sector;
+    }
 
   g_patrol_budget = kIssPatrolBudget;
-  srand((unsigned)time(NULL));
+  srand ((unsigned) time (NULL));
   g_iss_inited = 1;
   return 1;
 }
 
-void iss_summon(int sector_id, int offender_id) {
-  if (!g_iss_inited) return;
-  g_summon_sector  = sector_id;
-  g_summon_offender= offender_id;
+void
+iss_summon (int sector_id, int offender_id)
+{
+  if (!g_iss_inited)
+    return;
+  g_summon_sector = sector_id;
+  g_summon_offender = offender_id;
 }
 
-void iss_tick(int64_t now_ms) {
-  (void)now_ms; /* reserved for future timing/backoff logic */
-  if (!g_iss_inited) return;
-  if (iss_try_consume_summon()) return;
-  iss_patrol_step();
+void
+iss_tick (int64_t now_ms)
+{
+  (void) now_ms;		/* reserved for future timing/backoff logic */
+  if (!g_iss_inited)
+    return;
+  if (iss_try_consume_summon ())
+    return;
+  iss_patrol_step ();
+}
+
+
+static int
+iss_should_broadcast_now (int force)
+{
+  // read engine_state
+  sqlite3 *db = db_get_handle ();
+  sqlite3_stmt *q = NULL;
+  int do_broadcast = 0;
+  int64_t now = time (NULL), last = 0;
+  int broadcast_moves = 0;
+
+  if (sqlite3_prepare_v2 (db,
+			  "SELECT state_key, state_val FROM engine_state "
+			  "WHERE state_key IN ('iss.broadcast_moves','iss.last_notice_ts');",
+			  -1, &q, NULL) == SQLITE_OK)
+    {
+      while (sqlite3_step (q) == SQLITE_ROW)
+	{
+	  const char *k = (const char *) sqlite3_column_text (q, 0);
+	  const char *v = (const char *) sqlite3_column_text (q, 1);
+	  if (!k || !v)
+	    continue;
+	  if (!strcmp (k, "iss.broadcast_moves"))
+	    broadcast_moves = atoi (v);
+	  if (!strcmp (k, "iss.last_notice_ts"))
+	    last = atoll (v);
+	}
+    }
+  sqlite3_finalize (q);
+
+  if (force)
+    return 1;			// always for warps/summons
+
+  if (!broadcast_moves)
+    return 0;			// default off
+
+  // rate-limit to once per 60s
+  if (now - last < 60)
+    return 0;
+
+  // update last_notice_ts
+  sqlite3_stmt *u = NULL;
+  if (sqlite3_prepare_v2 (db,
+			  "INSERT INTO engine_state(state_key,state_val) VALUES('iss.last_notice_ts',?1) "
+			  "ON CONFLICT(state_key) DO UPDATE SET state_val=excluded.state_val;",
+			  -1, &u, NULL) == SQLITE_OK)
+    {
+      char buf[32];
+      snprintf (buf, sizeof (buf), "%lld", (long long) now);
+      sqlite3_bind_text (u, 1, buf, -1, SQLITE_STATIC);
+      sqlite3_step (u);
+    }
+  sqlite3_finalize (u);
+
+  return 1;
+}
+
+static void
+iss_post_notice_move (int from, int to, const char *kind, const char *extra)
+{
+  if (!iss_should_broadcast_now (strcmp (kind, "warp") == 0))
+    {
+      // even if not posting a notice, still log the event:
+      iss_log_event_move (from, to, kind, extra);
+      return;
+    }
+
+  // write a human-readable notice
+  char title[160], body[256];
+  snprintf (title, sizeof (title), "[ISS • Capt. Zyrain] %s", kind);
+  snprintf (body, sizeof (body), "Imperial Starship %s: %d → %d%s%s",
+	    kind, from, to, (extra
+			     && *extra) ? " — " : "", extra ? extra : "");
+
+  sqlite3 *db = db_get_handle ();
+  sqlite3_stmt *st = NULL;
+  if (sqlite3_prepare_v2 (db,
+			  "INSERT INTO system_notice(created_at,title,body,severity,expires_at) "
+			  "VALUES(strftime('%s','now'), ?1, ?2, 'info', strftime('%s','now')+3600);",
+			  -1, &st, NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_text (st, 1, title, -1, SQLITE_STATIC);
+      sqlite3_bind_text (st, 2, body, -1, SQLITE_STATIC);
+      sqlite3_step (st);
+    }
+  sqlite3_finalize (st);
+
+  // also log the event for subscribers
+  iss_log_event_move (from, to, kind, extra);
+}
+
+
+/* ================================
+ *  Ferringhi Trader NPCs (path-following)
+ *  - No warps; they move along sector links so players can tail them.
+ *  - They only trade at sectors that actually have ports (ports.location).
+ *  - Trades only adjust NPC-local holds (no port economy changes yet).
+ * ================================ */
+
+
+typedef enum {
+  FER_STATE_ROAM = 0,
+  FER_STATE_RETURNING = 1
+} fer_state_t;
+
+typedef struct {
+  int id;               /* 0..N-1 */
+  int sector;           /* current location */
+  int home_sector;      /* Ferringhi homeworld sector */
+  int trades_done;      /* trades since last refill */
+  fer_state_t state;    /* ROAM or RETURNING */
+  int hold_fuel, hold_ore, hold_organics, hold_equipment; /* local-only holds */
+} fer_trader_t;
+
+static fer_trader_t g_fer[FER_TRADER_COUNT];
+static int g_fer_inited = 0;
+
+/* ---------- DB helpers ---------- */
+
+static int
+fer_home_sector (sqlite3 *db)
+{
+  /* planets.name='Ferringhi' → sector */
+  const char *sql = "SELECT sector FROM planets WHERE name=?1 LIMIT 1;";
+  sqlite3_stmt *st = NULL; int sector = 0;
+  if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK) return 0;
+  sqlite3_bind_text(st, 1, "Ferringhi", -1, SQLITE_STATIC);
+  if (sqlite3_step(st) == SQLITE_ROW) sector = sqlite3_column_int(st, 0);
+  sqlite3_finalize(st);
+  return sector;
+}
+
+int
+sector_has_port (int sector)
+{
+  if (!g_fer_db || sector <= 0) return 0;
+  const char *sql = "SELECT 1 FROM ports WHERE location=?1 LIMIT 1;";
+  sqlite3_stmt *st = NULL; int ok = 0;
+  if (sqlite3_prepare_v2(g_fer_db, sql, -1, &st, NULL) != SQLITE_OK) return 0;
+  sqlite3_bind_int(st, 1, sector);
+  if (sqlite3_step(st) == SQLITE_ROW) ok = 1;
+  sqlite3_finalize(st);
+  return ok;
+}
+
+static int
+fer_random_port_sector (sqlite3 *db)
+{
+  /* any sector that has a port */
+  const char *sql = "SELECT location FROM ports ORDER BY RANDOM() LIMIT 1;";
+  sqlite3_stmt *st = NULL; int sector = 0;
+  if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK) return 0;
+  if (sqlite3_step(st) == SQLITE_ROW) sector = sqlite3_column_int(st, 0);
+  sqlite3_finalize(st);
+  return sector;
+}
+
+/* ---------- Graph helpers over sector_warps ---------- */
+
+int
+nav_random_neighbor (int sector)
+{
+  if (!g_fer_db || sector <= 0) return 0;
+  const char *sql =
+    "SELECT to_sector FROM sector_warps WHERE from_sector=?1 "
+    "ORDER BY RANDOM() LIMIT 1;";
+  sqlite3_stmt *st = NULL; int next = 0;
+  if (sqlite3_prepare_v2(g_fer_db, sql, -1, &st, NULL) != SQLITE_OK) return 0;
+  sqlite3_bind_int(st, 1, sector);
+  if (sqlite3_step(st) == SQLITE_ROW) next = sqlite3_column_int(st, 0);
+  sqlite3_finalize(st);
+  return next;
+}
+
+/* returns the first hop from start toward goal (BFS in a bounded ring) */
+int
+nav_next_hop (int start, int goal)
+{
+  if (!g_fer_db || start <= 0 || goal <= 0 || start == goal) return 0;
+
+  enum { MAX_Q = 4096, MAX_SEEN = 8192 };
+  int q[MAX_Q], head = 0, tail = 0;
+
+  typedef struct { int key, prev; } kv_t;
+  kv_t seen[MAX_SEEN]; int seen_n = 0;
+  auto int seen_get (int key) {
+    for (int i=0;i<seen_n;++i) if (seen[i].key==key) return i; return -1;
+  }
+  auto int seen_put (int key, int prev) {
+    if (seen_n >= MAX_SEEN) return -1;
+    seen[seen_n].key = key; seen[seen_n].prev = prev; return seen_n++;
+  }
+
+  q[tail = head = 0] = start; tail = 1; seen_put(start, -1);
+
+  const char *sql = "SELECT to_sector FROM sector_warps WHERE from_sector=?1;";
+  sqlite3_stmt *st = NULL; if (sqlite3_prepare_v2(g_fer_db, sql, -1, &st, NULL) != SQLITE_OK) return 0;
+
+  int found = -1;
+  while (head != tail && found == -1) {
+    int cur = q[head++ % MAX_Q];
+    sqlite3_reset(st); sqlite3_clear_bindings(st); sqlite3_bind_int(st, 1, cur);
+    while (sqlite3_step(st) == SQLITE_ROW) {
+      int nb = sqlite3_column_int(st, 0);
+      if (seen_get(nb) != -1) continue;
+      seen_put(nb, cur);
+      if (nb == goal) { found = nb; break; }
+      if ((tail - head) < (MAX_Q - 1)) q[tail++ % MAX_Q] = nb;
+    }
+  }
+  sqlite3_finalize(st);
+
+  if (found == -1) return 0;
+
+  /* reconstruct one hop toward goal */
+  int step = found, prev = -2;
+  for (;;) {
+    int i = seen_get(step); if (i < 0) break;
+    prev = seen[i].prev;
+    if (prev == -1) break;                /* step == start */
+    if (prev == start) return step;       /* first hop away from start */
+    step = prev;
+  }
+  return step; /* neighbour fallback */
+}
+
+/* ---------- (optional) internal event emitters ---------- */
+/* If you have a helper already for engine_events, call it here.
+   Otherwise keep these INFO_LOGs for visibility and add event writes later. */
+
+static void fer_emit_move (int id, int from_sec, int to_sec)
+{
+  fer_event_json("npc.move", to_sec,
+    "{ \"kind\":\"ferringhi\", \"id\":%d, \"from\":%d, \"to\":%d }",
+    id, from_sec, to_sec);
+}
+
+static void fer_emit_trade (int id, int sector,
+                            const char *sold, int sold_qty,
+                            const char *bought, int bought_qty)
+{
+  fer_event_json("npc.trade", sector,
+    "{ \"kind\":\"ferringhi\", \"id\":%d, \"sector\":%d, "
+    "\"sold\":\"%s\", \"sold_qty\":%d, \"bought\":\"%s\", \"bought_qty\":%d }",
+    id, sector, sold, sold_qty, bought, bought_qty);
+}
+
+
+
+/* ---------- Trader core ---------- */
+
+static void
+fer_reset_holds (fer_trader_t *t)
+{
+  t->hold_fuel      = FER_MAX_HOLD/2;
+  t->hold_ore       = FER_MAX_HOLD/2;
+  t->hold_organics  = FER_MAX_HOLD/2;
+  t->hold_equipment = FER_MAX_HOLD/2;
+}
+
+static void
+fer_trade_at_port (fer_trader_t *t, int sector)
+{
+  if (!t) return;
+  int r = (t->trades_done % 4);
+  const char *sold = NULL, *bought = NULL;
+  int *ps = NULL, *pb = NULL;
+
+  switch (r) {
+    case 0: sold="fuel";      ps=&t->hold_fuel;      bought="ore";       pb=&t->hold_ore; break;
+    case 1: sold="ore";       ps=&t->hold_ore;       bought="organics";  pb=&t->hold_organics; break;
+    case 2: sold="organics";  ps=&t->hold_organics;  bought="equipment"; pb=&t->hold_equipment; break;
+    default:sold="equipment"; ps=&t->hold_equipment; bought="fuel";      pb=&t->hold_fuel; break;
+  }
+
+  int sell_qty = (*ps > 10) ? 10 : *ps;
+  int buy_qty  = 10;
+  if ((*pb + buy_qty) > FER_MAX_HOLD) buy_qty = FER_MAX_HOLD - *pb;
+  if (buy_qty < 0) buy_qty = 0;
+
+  *ps -= sell_qty; *pb += buy_qty;
+  fer_emit_trade(t->id, sector, sold, sell_qty, bought, buy_qty);
+
+  t->trades_done++;
+  if (t->trades_done >= FER_TRADES_BEFORE_RETURN)
+    t->state = FER_STATE_RETURNING;
+}
+
+
+void fer_attach_db(sqlite3 *db) {
+  g_fer_db = db;
+}
+
+
+int fer_init_once(void)
+{
+  if (g_fer_inited) return 1;
+  if (!g_fer_db) {
+    WARN_LOG("[fer] no DB handle; traders disabled");
+    g_fer_inited = 1;
+    return 0;
+  }
+
+  /* find home sector */
+  int home = 0;
+  {
+    const char *sql = "SELECT sector FROM planets WHERE name=?1 LIMIT 1;";
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2(g_fer_db, sql, -1, &st, NULL) == SQLITE_OK) {
+      sqlite3_bind_text(st, 1, "Ferringhi", -1, SQLITE_STATIC);
+      if (sqlite3_step(st) == SQLITE_ROW) home = sqlite3_column_int(st, 0);
+      sqlite3_finalize(st);
+    }
+  }
+  if (home <= 0) {
+    WARN_LOG("[fer] no 'Ferringhi' planet found; disabling traders");
+    g_fer_inited = 1;
+    return 0;
+  }
+
+  for (int i=0;i<FER_TRADER_COUNT;++i) {
+    g_fer[i].id = i;
+    g_fer[i].home_sector = home;
+    g_fer[i].sector = home;
+    g_fer[i].trades_done = 0;
+    g_fer[i].state = FER_STATE_ROAM;
+    g_fer[i].hold_fuel = g_fer[i].hold_ore =
+    g_fer[i].hold_organics = g_fer[i].hold_equipment = FER_MAX_HOLD/2;
+  }
+
+  /* boot marker so you can query immediately */
+  fer_event_json("npc.online", 0, "{ \"kind\":\"ferringhi\", \"count\": %d }", FER_TRADER_COUNT);
+
+  g_fer_inited = 1;
+  return 1;
+}
+
+
+
+
+void
+fer_tick (int64_t now_ms)
+{
+  (void)now_ms; /* reserved for rate logic later */
+  if (!g_fer_inited) {
+    if (!fer_init_once()) return;
+  }
+
+  for (int i=0;i<FER_TRADER_COUNT;++i) {
+    fer_trader_t *t = &g_fer[i];
+    if (t->home_sector <= 0) continue;
+
+    /* choose goal: roam to random port, or return home */
+    int goal = (t->state == FER_STATE_RETURNING) ? t->home_sector : 0;
+    if (goal == 0) {
+      const char *sql = "SELECT location FROM ports ORDER BY RANDOM() LIMIT 1;";
+      sqlite3_stmt *st = NULL;
+      if (sqlite3_prepare_v2(g_fer_db, sql, -1, &st, NULL) == SQLITE_OK) {
+        if (sqlite3_step(st) == SQLITE_ROW) goal = sqlite3_column_int(st, 0);
+        sqlite3_finalize(st);
+      }
+    }
+    if (goal <= 0) continue;
+
+    /* one hop; drift if no path */
+    int next = nav_next_hop(t->sector, goal);
+    if (next == 0) next = nav_random_neighbor(t->sector);
+    if (next <= 0 || next == t->sector) continue;
+
+    int from = t->sector;
+    t->sector = next;
+    fer_emit_move(t->id, from, next);
+
+    /* trade only when actually on a port sector */
+    if (sector_has_port(t->sector)) {
+      /* simple rotating swap, unchanged from your previous function */
+      int r = (t->trades_done % 4);
+      const char *sold = NULL, *bought = NULL;
+      int *ps = NULL, *pb = NULL;
+      switch (r) {
+        case 0: sold="fuel";      ps=&t->hold_fuel;      bought="ore";       pb=&t->hold_ore; break;
+        case 1: sold="ore";       ps=&t->hold_ore;       bought="organics";  pb=&t->hold_organics; break;
+        case 2: sold="organics";  ps=&t->hold_organics;  bought="equipment"; pb=&t->hold_equipment; break;
+        default:sold="equipment"; ps=&t->hold_equipment; bought="fuel";      pb=&t->hold_fuel; break;
+      }
+      int sell_qty = (*ps > 10) ? 10 : *ps;
+      int buy_qty  = 10;
+      if ((*pb + buy_qty) > FER_MAX_HOLD) buy_qty = FER_MAX_HOLD - *pb;
+      if (buy_qty < 0) buy_qty = 0;
+      *ps -= sell_qty; *pb += buy_qty;
+      fer_emit_trade(t->id, t->sector, sold, sell_qty, bought, buy_qty);
+
+      t->trades_done++;
+      if (t->trades_done >= FER_TRADES_BEFORE_RETURN) t->state = FER_STATE_RETURNING;
+    }
+
+    /* reached home while returning → refill and go roam again */
+    if (t->state == FER_STATE_RETURNING && t->sector == t->home_sector) {
+      t->hold_fuel = t->hold_ore = t->hold_organics = t->hold_equipment = FER_MAX_HOLD/2;
+      t->trades_done = 0;
+      t->state = FER_STATE_ROAM;
+    }
+  }
 }
