@@ -31,6 +31,8 @@ static int db_create_tables_unlocked (void);
 static int db_insert_defaults_unlocked (void);
 static int db_ensure_ship_perms_column_unlocked (void);
 int db_seed_cron_tasks(sqlite3 *db);
+void db_handle_close_and_reset(void);
+
 
 // New function to add
 void db_handle_close_and_reset(void) {

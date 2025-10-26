@@ -1,4 +1,68 @@
 
+# === HOTFIX: ctx-based menu visibility + on-enter hook + Stardock context (placed at top) ===
+def _option_visible_with_ctx(ctx, opt: dict) -> bool:
+    if not isinstance(opt, dict):
+        return True
+    cond = opt.get("show_if_ctx")
+    if not cond:
+        return True
+    if isinstance(cond, str):
+        cond = [cond]
+    st = getattr(ctx, "state", {}) or {}
+    for flag in cond:
+        if not st.get(flag):
+            return False
+    return True
+
+def menu_on_enter(ctx, menu_def: dict):
+    if not isinstance(menu_def, dict):
+        return
+    on_enter = menu_def.get("on_enter")
+    if isinstance(on_enter, dict) and on_enter.get("pycall"):
+        fn = globals().get(on_enter["pycall"])
+        if callable(fn):
+            try:
+                fn(ctx)
+            except Exception:
+                pass
+
+def _infer_is_stardock(data: dict) -> bool:
+    if not isinstance(data, dict):
+        return False
+    port = data.get('port') if isinstance(data.get('port'), dict) else data
+    name = str((port or {}).get('name') or data.get('port_name') or "").lower()
+    pclass = str((port or {}).get('class') or (port or {}).get('type') or "").lower()
+    if "stardock" in name:
+        return True
+    if pclass in ("stardock", "star dock"):
+        return True
+    sid = (port or {}).get('sector_id') or data.get('sector_id')
+    if sid in (0, 1) and ("dock" in name or "dock" in pclass):
+        return True
+    return False
+
+def ctx_refresh_port_context(ctx):
+    ctx.state.setdefault('is_stardock', False)
+    conn = getattr(ctx, 'conn', None)
+    if conn is None:
+        return
+    def _try(cmd, payload=None):
+        try:
+            r = conn.rpc(cmd, payload or {})
+            if isinstance(r, dict) and r.get('status') in ('ok','srv-ok','success', None):
+                d = r.get('data') or {}
+                if isinstance(d, dict) and d:
+                    ctx.state['is_stardock'] = bool(_infer_is_stardock(d))
+                    return True
+        except Exception:
+            pass
+        return False
+    for cmd in ("port.status","dock.status","port.info","sector.port.status","sector.current","whereami"):
+        if _try(cmd):
+            break
+# === /HOTFIX ===
+
+
 
 
 #!/usr/bin/env python3

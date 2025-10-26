@@ -150,6 +150,7 @@ am_server_OBJECTS = ../src/server_communication.$(OBJEXT) \
 	../src/engine_consumer.$(OBJEXT) \
 	../src/db_player_settings.$(OBJEXT) \
 	../src/s2s_transport.$(OBJEXT) ../src/server_log.$(OBJEXT) \
+	../src/server_cron.$(OBJEXT) \
 	../src/sysop_interaction.$(OBJEXT) \
 	../src/s2s_keyring.$(OBJEXT)
 server_OBJECTS = $(am_server_OBJECTS)
@@ -184,6 +185,7 @@ am__depfiles_remade = ../src/$(DEPDIR)/common.Po \
 	../src/$(DEPDIR)/server_combat.Po \
 	../src/$(DEPDIR)/server_communication.Po \
 	../src/$(DEPDIR)/server_config.Po \
+	../src/$(DEPDIR)/server_cron.Po \
 	../src/$(DEPDIR)/server_engine.Po \
 	../src/$(DEPDIR)/server_envelope.Po \
 	../src/$(DEPDIR)/server_log.Po ../src/$(DEPDIR)/server_loop.Po \
@@ -374,6 +376,7 @@ server_SOURCES = \
         ../src/db_player_settings.c \
         ../src/s2s_transport.c \
         ../src/server_log.c \
+        ../src/server_cron.c \
 	../src/sysop_interaction.c \
 	../src/s2s_keyring.c
 
@@ -537,6 +540,8 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/db_player_settings.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_cron.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/sysop_interaction.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 
@@ -568,6 +573,7 @@ include ../src/$(DEPDIR)/server_cmds.Po # am--include-marker
 include ../src/$(DEPDIR)/server_combat.Po # am--include-marker
 include ../src/$(DEPDIR)/server_communication.Po # am--include-marker
 include ../src/$(DEPDIR)/server_config.Po # am--include-marker
+include ../src/$(DEPDIR)/server_cron.Po # am--include-marker
 include ../src/$(DEPDIR)/server_engine.Po # am--include-marker
 include ../src/$(DEPDIR)/server_envelope.Po # am--include-marker
 include ../src/$(DEPDIR)/server_log.Po # am--include-marker
@@ -750,6 +756,7 @@ distclean: distclean-am
 	-rm -f ../src/$(DEPDIR)/server_combat.Po
 	-rm -f ../src/$(DEPDIR)/server_communication.Po
 	-rm -f ../src/$(DEPDIR)/server_config.Po
+	-rm -f ../src/$(DEPDIR)/server_cron.Po
 	-rm -f ../src/$(DEPDIR)/server_engine.Po
 	-rm -f ../src/$(DEPDIR)/server_envelope.Po
 	-rm -f ../src/$(DEPDIR)/server_log.Po
@@ -826,6 +833,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/$(DEPDIR)/server_combat.Po
 	-rm -f ../src/$(DEPDIR)/server_communication.Po
 	-rm -f ../src/$(DEPDIR)/server_config.Po
+	-rm -f ../src/$(DEPDIR)/server_cron.Po
 	-rm -f ../src/$(DEPDIR)/server_engine.Po
 	-rm -f ../src/$(DEPDIR)/server_envelope.Po
 	-rm -f ../src/$(DEPDIR)/server_log.Po

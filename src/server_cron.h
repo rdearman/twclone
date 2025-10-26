@@ -9,3 +9,16 @@ cron_handler_fn cron_find(const char *name);
 
 /* Register all built-in cron handlers. Call once at startup. */
 void cron_register_builtins(void);
+// server_cron.h
+
+/* --- Public Declarations for Cron Handlers --- */
+int h_traps_process(sqlite3 *db, int64_t now_s);
+int h_npc_step(sqlite3 *db, int64_t now_s);
+int h_autouncloak_sweeper(sqlite3 *db, int64_t now_s);
+int h_fedspace_cleanup(sqlite3 *db, int64_t now_s);
+int h_broadcast_ttl_cleanup(sqlite3 *db, int64_t now_s);
+int h_planet_growth(sqlite3 *db, int64_t now_s);
+int h_daily_turn_reset(sqlite3 *db, int64_t now_s);
+int h_terra_replenish(sqlite3 *db, int64_t now_s);
+int h_port_reprice(sqlite3 *db, int64_t now_s);
+

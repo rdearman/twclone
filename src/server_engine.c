@@ -32,6 +32,7 @@
 #include "server_loop.h"	// Assuming this contains functions to communicate with clients
 #include "server_universe.h"
 #include "server_log.h"
+#include "server_cron.h"
 
 
 /* handlers (implemented below) */
@@ -63,18 +64,41 @@ typedef struct {
 static int sweeper_broadcast_ttl_cleanup(sqlite3 *db, int64_t now_s);
 
 /* registry */
+
 static const CronHandler CRON_REGISTRY[] = {
-  { "broadcast_ttl_cleanup", sweeper_broadcast_ttl_cleanup },
+  { "traps_process",          h_traps_process },
+  { "npc_step",               h_npc_step },
+  { "autouncloak_sweeper",    h_autouncloak_sweeper },
+  { "fedspace_cleanup",       h_fedspace_cleanup },
+  { "broadcast_ttl_cleanup",  h_broadcast_ttl_cleanup },
+  { "planet_growth",          h_planet_growth },
+  { "daily_turn_reset",       h_daily_turn_reset },
+  { "terra_replenish",        h_terra_replenish },
+  { "port_reprice",           h_port_reprice },
   { NULL, NULL }
 };
 
+/* static const CronHandler CRON_REGISTRY[] = { */
+/*   { "broadcast_ttl_cleanup", sweeper_broadcast_ttl_cleanup }, */
+/*   { NULL, NULL } */
+/* }; */
+
 /* lookup by name */
-static cron_handler_fn cron_find(const char *name) {
-  for (int i = 0; CRON_REGISTRY[i].name; ++i)
-    if (strcmp(CRON_REGISTRY[i].name, name) == 0) return CRON_REGISTRY[i].fn;
+//cron_handler_fn cron_find(const char *name) {
+//  for (int i = 0; CRON_REGISTRY[i].name; ++i)
+//    if (strcmp(CRON_REGISTRY[i].name, name) == 0) return CRON_REGISTRY[i].fn;
+//  return NULL;
+//}
+
+/* Lookup by task name (e.g., "fedspace_cleanup"). */
+cron_handler_fn cron_find(const char *name) {
+  for (size_t i = 0; CRON_REGISTRY[i].name; ++i) {
+    if (strcmp(CRON_REGISTRY[i].name, name) == 0) {
+      return CRON_REGISTRY[i].fn;
+    }
+  }
   return NULL;
 }
-
 
 /* ---- Cron framework (schema: cron_tasks uses schedule + next_due_at) ---- */
 /* Schema: cron_tasks(id, name, schedule, last_run_at, next_due_at, enabled, payload) */
@@ -901,6 +925,7 @@ engine_main_loop (int shutdown_fd)
 	      /* run handler if registered */
 	      int task_rc = 0;
 	      cron_handler_fn fn = cron_find(nm);
+	      LOGI("cron: starting handler '%s'", nm);
 	      if (fn) task_rc = fn(db_handle, now_s);
 
 	      /* reschedule deterministically */
