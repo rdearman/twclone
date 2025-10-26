@@ -9,12 +9,11 @@
 #include <jansson.h>
 #include <stdbool.h>
 #include <pthread.h>
+// local includes
 #include  "common.h"
 #include "server_config.h"
 #include "database.h"
-#include <sqlite3.h>
-#include <string.h>
-
+#include "server_log.h"
 
 
 /* Define and initialize the mutex for the database handle */
@@ -32,6 +31,59 @@ static int db_create_tables_unlocked (void);
 static int db_insert_defaults_unlocked (void);
 static int db_ensure_ship_perms_column_unlocked (void);
 int db_seed_cron_tasks(sqlite3 *db);
+
+// New function to add
+void db_handle_close_and_reset(void) {
+    // Only proceed if the handle is open
+    if (db_handle != NULL) {
+        sqlite3_close(db_handle);
+        db_handle = NULL;
+    }
+}
+
+/* sqlite3 * */
+/* db_get_handle (void) */
+/* { */
+/*   return db_handle; */
+/* } */
+
+sqlite3 * db_get_handle (void) {
+    // 1. Check if the handle is already open. If so, return it immediately.
+    if (db_handle != NULL) {
+        return db_handle;
+    }
+
+    // 2. The handle is NULL (due to a close_and_reset or initial load).
+    //    Open a new connection using the full, robust V2 flags.
+    int rc = sqlite3_open_v2(
+        DEFAULT_DB_NAME,
+        &db_handle,
+        SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_URI, 
+        NULL
+    );
+
+    if (rc != SQLITE_OK) {
+        // If the open fails, log the specific SQLite error and clean up.
+        LOGE("DB Re-Open Failed (%s): %s (rc=%d)", 
+             DEFAULT_DB_NAME, sqlite3_errstr(rc), rc);
+
+        if (db_handle) {
+            sqlite3_close(db_handle);
+            db_handle = NULL;
+        }
+        return NULL; // Return NULL on failure
+    }
+
+    // 3. Apply critical settings for concurrency (WAL and busy timeout)
+    //    These must be applied to every new connection.
+    if (sqlite3_exec(db_handle, "PRAGMA journal_mode=WAL;", NULL, NULL, NULL) != SQLITE_OK) {
+        LOGW("Failed to set WAL mode on fresh handle.");
+    }
+    sqlite3_busy_timeout(db_handle, 5000); // 5 seconds
+
+    // 4. Return the newly opened handle.
+    return db_handle;
+}
 
 
 int
@@ -1434,7 +1486,18 @@ static const char *ENGINE_BOOTSTRAP_SQL = "BEGIN IMMEDIATE;\n"
   "  ts INTEGER NOT NULL,\n"
   "  cmd_type TEXT NOT NULL,\n"
   "  correlation_id TEXT,\n"
-  "  actor_player_id INTEGER,\n" "  details TEXT\n" ");\n" "\n" "COMMIT;\n";
+  "  actor_player_id INTEGER,\n" "  details TEXT\n" ");\n" "\n" "COMMIT;\n"
+  /* --- Human Readable view --- */
+  "CREATE VIEW  IF NOT EXISTS cronjobs AS "
+  "SELECT "
+  "    id, "
+  "    name, "
+  "    datetime(next_due_at, 'unixepoch') AS next_due_utc, "
+  "    datetime(last_run_at, 'unixepoch') AS last_run_utc "
+  "FROM "
+  "    cron_tasks "
+  "ORDER BY "
+  "    next_due_at;\n "  ;
 
 static const char *MIGRATE_A_SQL = "BEGIN IMMEDIATE;"
   /* engine_offset (consumer high-water mark) */
@@ -1553,11 +1616,6 @@ static const size_t create_table_count =
 static const size_t insert_default_count =
   sizeof (insert_default_sql) / sizeof (insert_default_sql[0]);
 
-sqlite3 *
-db_get_handle (void)
-{
-  return db_handle;
-}
 
 
 static int
@@ -1663,12 +1721,12 @@ db_init (void)
   rc = sqlite3_open (DEFAULT_DB_NAME, &db_handle);
   if (rc != SQLITE_OK)
     {
-      // This message is critical!
-      fprintf (stderr,
-	       "FATAL ERROR: Could not open database! Code: %d, Message: %s\n",
-	       rc, sqlite3_errmsg (db_handle));
-      // Check where your code returns/exits here.
-      return -1;
+          LOGE("DB Open Failed (%s): %s (rc=%d)", DEFAULT_DB_NAME, sqlite3_errstr(rc), rc);
+	  sqlite3_close(db_handle);	
+	  fprintf (stderr,
+		   "FATAL ERROR: Could not open database! Code: %d, Message: %s\n",
+		   rc, sqlite3_errmsg (db_handle));
+	  return -1;
     }
 
 

@@ -707,7 +707,29 @@ engine_main_loop (int shutdown_fd)
   server_log_init_file("./twclone.log", "[engine]", 0, LOG_INFO);
   LOGI("engine boot pid=%d", getpid());
 
-  sqlite3 *db_handle = db_get_handle ();
+  // 1. *** CRITICAL NEW STEP: Shut down and re-initialize SQLite ***
+  //    This discards all inherited global VFS and memory state.
+  sqlite3_shutdown();
+  int rc = sqlite3_initialize();
+  if (rc != SQLITE_OK) {
+    LOGE("FATAL: SQLite re-initialization failed! rc=%d", rc);
+    return 1;
+  }
+
+  // 2. Close the stale handle inherited from the parent (which you already added)
+  db_handle_close_and_reset(); 
+
+  // 3. Get a fresh, new handle (which you already fixed to be idempotent)
+  sqlite3 *db_handle = db_get_handle(); 
+  if (db_handle == NULL) {
+    // This LOGE is no longer strictly necessary if db_get_handle() logs the error,
+    // but it confirms the fresh open failed.
+    LOGE("The fresh open failed.");
+    return 1; 
+  }
+
+
+  
   if (s2s_install_default_key (db_handle) != 0)
     {
       LOGW("[server] FATAL: S2S key missing/invalid.\n");
@@ -749,7 +771,7 @@ engine_main_loop (int shutdown_fd)
 			     "payload", json_pack ("{s:s,s:s}",
 						   "role", "engine",
 						   "version", "0.1"));
-  int rc = s2s_send_json (conn, hello, 5000);
+  rc = s2s_send_json (conn, hello, 5000);
   json_decref (hello);
   LOGI( "[engine] hello send rc=%d\n", rc);
   //fprintf (stderr, "[engine] hello send rc=%d\n", rc);
