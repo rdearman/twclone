@@ -92,6 +92,12 @@
 #ifndef COMMON_H
 #define COMMON_H
 
+typedef enum {
+    ASSET_MINE = 1,
+    ASSET_FIGHTER = 2,
+    ASSET_BEACON = 3
+} asset_type_t;
+
 
 int init_sockaddr (int, struct sockaddr_in *);
 int init_clientnetwork (char *hostname, int port);

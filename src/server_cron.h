@@ -21,4 +21,4 @@ int h_planet_growth(sqlite3 *db, int64_t now_s);
 int h_daily_turn_reset(sqlite3 *db, int64_t now_s);
 int h_terra_replenish(sqlite3 *db, int64_t now_s);
 int h_port_reprice(sqlite3 *db, int64_t now_s);
-
+int h_reset_turns_for_player(sqlite3 *db, int64_t now_s);

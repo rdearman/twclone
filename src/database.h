@@ -9,6 +9,7 @@
 
 sqlite3 *db_get_handle (void);
 
+
 /* External declaration for the mutex */
 extern pthread_mutex_t db_mutex;
 

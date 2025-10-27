@@ -46,7 +46,7 @@ static int insert_warp_unique (sqlite3 * db, int from, int to);
 static int create_random_warps (sqlite3 * db, int numSectors, int maxWarps);
 int create_imperial (void);	// Declared here for the compiler
 static int ensure_all_sectors_have_exits (sqlite3 * db);
-
+int create_ownership (void);
 static bool has_column (sqlite3 * db, const char *table, const char *column);
 
 struct twconfig *
@@ -817,6 +817,14 @@ bigbang (void)
       return -1;
     }
 
+  fprintf (stderr, "BIGBANG: Applying ownerships...\n");
+  if (create_ownership () != 0)
+    {
+      free (cfg);
+      return -1;
+    }
+
+  
   free (cfg);
   fprintf (stderr, "BIGBANG: Universe creation complete.\n");
   return 0;
@@ -1217,6 +1225,8 @@ create_ports (void)
       stardock_sector = 11;
     }
 
+
+  
   // Prepare statements for efficiency
   const char *port_sql =
     "INSERT INTO ports (number, name, location, size, techlevel, credits, type, invisible) VALUES (?, 'Port ' || ?, ?, ?, ?, ?, ?, 0);";
@@ -2420,4 +2430,87 @@ ensure_all_sectors_have_exits (sqlite3 *db)
 
   printf ("BIGBANG: Fixed %d one-way sectors.\n", sectors_fixed);
   return SQLITE_OK;
+}
+
+#include <sqlite3.h>
+#include <stdio.h>
+#include <time.h>
+#include <string.h>
+
+/**
+ * @brief Migrates existing beacons from the sectors table to the new 
+ * sector_assets table by inserting an ownership record (player 0).
+ * NOTE: The beacon text remains in the sectors table to support legacy functions.
+ * * This is intended to run once during the BIGBANG initialization phase.
+ * * @return 0 on success, -1 on database error.
+ */
+int create_ownership (void)
+{
+  sqlite3 *handle = db_get_handle (); // Assuming db_get_handle() is available
+  sqlite3_stmt *select_stmt = NULL;
+  sqlite3_stmt *insert_stmt = NULL;
+  int rc;
+
+  // --- 1. Prepare SELECT statement: Get sectors with existing beacon text.
+  // We only need the sector ID to create the ownership record.
+  const char *select_sql = "SELECT id FROM sectors WHERE beacon IS NOT NULL AND beacon != '';";
+  if (sqlite3_prepare_v2 (handle, select_sql, -1, &select_stmt, NULL) != SQLITE_OK)
+    {
+      fprintf (stderr, "BIGBANG ERROR: Failed to prepare SELECT beacon query: %s\n", sqlite3_errmsg (handle));
+      return -1;
+    }
+
+  // --- 2. Prepare INSERT statement: Insert into sector_assets (OWNERSHIP ONLY)
+  // Using your schema: no 'content' column. 
+  // player=0 (System), asset_type=1 (Beacon), quantity=1, ttl=NULL.
+  const char *insert_sql = "INSERT INTO sector_assets (sector, player, asset_type, quantity, ttl, deployed_at) VALUES (?, 0, 1, 1, NULL, strftime('%s', 'now'));";
+  if (sqlite3_prepare_v2 (handle, insert_sql, -1, &insert_stmt, NULL) != SQLITE_OK)
+    {
+      fprintf (stderr, "BIGBANG ERROR: Failed to prepare INSERT asset query: %s\n", sqlite3_errmsg (handle));
+      sqlite3_finalize (select_stmt);
+      return -1;
+    }
+
+  // --- 3. Loop through sectors and insert assets
+  int total_beacons = 0;
+  while ((rc = sqlite3_step (select_stmt)) == SQLITE_ROW)
+    {
+      int sector_id = sqlite3_column_int (select_stmt, 0);
+      
+      // Reset the INSERT statement for re-use and bind sector ID
+      sqlite3_reset (insert_stmt);
+      sqlite3_bind_int (insert_stmt, 1, sector_id);
+      // No need to bind beacon text since we are not storing it in sector_assets
+
+      // Execute the INSERT
+      if (sqlite3_step (insert_stmt) != SQLITE_DONE)
+	{
+	  fprintf (stderr, "BIGBANG ERROR: Failed to insert asset ownership for sector %d: %s\n", 
+		   sector_id, sqlite3_errmsg (handle));
+	  sqlite3_finalize (select_stmt);
+	  sqlite3_finalize (insert_stmt);
+	  return -1;
+	}
+      total_beacons++;
+    }
+
+  // Check for error in sqlite3_step (not an end of row condition)
+  if (rc != SQLITE_DONE)
+    {
+      fprintf (stderr, "BIGBANG ERROR: SELECT processing failed: %s\n", sqlite3_errmsg (handle));
+      sqlite3_finalize (select_stmt);
+      sqlite3_finalize (insert_stmt);
+      return -1;
+    }
+  
+  // --- 4. Finalize statements. 
+  sqlite3_finalize (select_stmt);
+  sqlite3_finalize (insert_stmt);
+
+  // NOTE: We DO NOT clear the 'sectors.beacon' column here, as existing functions 
+  // depend on the text remaining there. We only inserted the ownership metadata.
+  
+  fprintf (stderr, "BIGBANG: Migrated ownership for %d system beacons successfully.\n", total_beacons);
+
+  return 0;
 }

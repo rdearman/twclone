@@ -618,6 +618,20 @@ const char *create_table_sql[] = {
     "  UNIQUE(player_id, scope, key)  ,  "
     "  FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE )  ;  ",
 
+  "CREATE TABLE sector_assets ( "
+  "    id INTEGER PRIMARY KEY,  "
+  "    sector INTEGER NOT NULL REFERENCES sectors(id), "
+  "    player INTEGER REFERENCES players(id),  "
+  "    asset_type INTEGER NOT NULL,  "
+  "    quantity INTEGER, "
+  "    ttl INTEGER,  "
+  "    deployed_at INTEGER NOT NULL  "
+  "); ",
+
+  "CREATE TABLE IF NOT EXISTS msl_sectors ("
+  "  sector_id INTEGER PRIMARY KEY REFERENCES sectors(id)"
+  ");",
+  
 
   //////////////////////////////////////////////////////////////////////
   /// CREATE VIEWS 
@@ -1406,7 +1420,9 @@ const char *insert_default_sql[] = {
 
 
   "INSERT INTO ships (name, type, attack, holds_used, mines, fighters_used, genesis, photons, location, fighters, shields, holds, colonists,equipment, organics, ore, flags, ported, onplanet) VALUES ('Bit Banger',1, 110, 20, 25, 10, 0, 1,  87, 2300, 400, 20, 0,10,5, 5, 0, 1, 1);",
-  "INSERT INTO players (number, name, passwd, sector, ship, type) VALUES (7, 'newguy', 'pass123',1,1,2);",
+  "INSERT INTO players (number, name, passwd, sector, ship, type) VALUES (1, 'System', 'BOT',1,1,2);",
+  "INSERT INTO players (number, name, passwd, sector, ship, type) VALUES (1, 'Federation Administrator', 'BOT',1,1,2);",
+  "INSERT INTO players (number, name, passwd, sector, ship, type) VALUES (7, 'newguy', 'pass123',1,1,2);",  
 
   "INSERT INTO ship_ownership (player_id, ship_id, is_primary, role_id) VALUES (1,1,1,0);"
     "INSERT INTO player_types (description) VALUES ('NPC');"

@@ -27,7 +27,7 @@
 #include "common.h"
 #include "server_envelope.h"
 #include "server_rules.h"
-
+#include "server_players.h"
 
 void handle_move_pathfind (client_ctx_t * ctx, json_t * root);
 

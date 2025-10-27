@@ -4,6 +4,11 @@
 #include <jansson.h>
 #include <string.h>
 #include <stdlib.h>		/* for strtol */
+#include <sqlite3.h>
+#include <stdio.h>
+#include <time.h>
+#include <stdint.h>
+#include <string.h>
 // local includes
 #include "server_players.h"
 #include "database.h"		// play_login, user_create, db_player_info_json, db_player_get_sector, db_session_*
@@ -15,62 +20,75 @@
 #include "server_envelope.h"
 #include "server_auth.h"
 #include "server_envelope.h"
-#include <sqlite3.h>
-#include <stdio.h>
-#include <time.h>
-#include <stdint.h>
-#include <string.h>
+#include "server_log.h"
+
 
 // Assume this external function provides the database handle.
 extern sqlite3 *db_get_handle(void);
 
-/**
- * @param player_id The ID of the player to receive the message.
- * @param message The text content of the message.
- * @return 0 on success, or non-zero on error.
- */
-int h_send_message_to_player(int player_id, const char *message)
-{
-    sqlite3 *db = db_get_handle();
-    sqlite3_stmt *st = NULL;
-    int rc;
+#include <sqlite3.h>
+#include <time.h>
+#include <stdio.h>
 
-    // Use current Unix timestamp for the message time
-    int timestamp = (int)time(NULL);
+// Assuming these are defined elsewhere
+extern sqlite3 *db_get_handle(void);
+// Assuming SQLITE_TRANSIENT is defined (it is standard SQLite define)
 
-    // SQL statement to insert the message
-    const char *sql = 
-        "INSERT INTO messages (player_id, timestamp, message) "
-        "VALUES (?, ?, ?);";
+/** * Sends a complex mail message to a specific player, including a sender ID and subject.
+ * The 'mail' table is assumed to now include sender_id, subject, and a 'read' status.
+ *
+ * @param player_id The ID of the player to receive the message (the recipient). 
+ * @param sender_id The ID of the message sender (use 0 or a specific system ID for system messages).
+ * @param subject The subject line of the mail message.
+ * @param message The text content of the message body. 
+ * @return 0 on success, or non-zero on error. 
+ */ 
+int h_send_message_to_player(int player_id, int sender_id, const char *subject, const char *message) 
+{ 
+    sqlite3 *db = db_get_handle(); 
+    sqlite3_stmt *st = NULL; 
+    int rc; 
 
-    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    // Use current Unix timestamp for the message time 
+    int timestamp = (int)time(NULL); 
 
-    if (rc != SQLITE_OK) {
-        fprintf(stderr, "SQL error preparing message insert: %s\n", sqlite3_errmsg(db));
-        return 1;
-    }
+    // Updated SQL statement to insert recipient_id (player_id), sender_id, timestamp, 
+    // subject, message, and set 'read' status to 0 (unread).
+    const char *sql =
+        "INSERT INTO mail (sender_id, recipient_id, subject, body) "
+        "VALUES (?, ?, ?, ?);";
+    
+    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL); 
+
+    if (rc != SQLITE_OK) { 
+      LOGE( "SQL error preparing complex message insert: %s\n", sqlite3_errmsg(db)); 
+      return 1; 
+    } 
 
     // Bind parameters
-    sqlite3_bind_int(st, 1, player_id);
-    sqlite3_bind_int(st, 2, timestamp);
-    // Ensure the message fits the TEXT column and is safe (using bind is safer than snprintf into SQL string)
-    sqlite3_bind_text(st, 3, message, -1, SQLITE_STATIC);
+    // 1: recipient_id (player_id)
+    sqlite3_bind_int(st, 1, player_id);      
+    // 2: sender_id
+    sqlite3_bind_int(st, 2, sender_id);
+    // 3: timestamp
+    sqlite3_bind_text(st, 3, subject, -1, SQLITE_TRANSIENT);
+    // 5: message (using SQLITE_TRANSIENT)
+    sqlite3_bind_text(st, 4, message, -1, SQLITE_TRANSIENT);
+        
+    // Execute the statement 
+    if (sqlite3_step(st) != SQLITE_DONE) { 
+      LOGE( "SQL error executing complex message insert for player %d: %s\n", 
+            player_id, sqlite3_errmsg(db)); 
+        sqlite3_finalize(st); 
+        return 1; 
+    } 
 
-    // Execute the statement
-    if (sqlite3_step(st) != SQLITE_DONE) {
-        fprintf(stderr, "SQL error executing message insert for player %d: %s\n", 
-            player_id, sqlite3_errmsg(db));
-        sqlite3_finalize(st);
-        return 1;
-    }
+    sqlite3_finalize(st); 
 
-    sqlite3_finalize(st);
-    
-    // Optional: Log success (useful for debugging)
-    // fprintf(stdout, "Message sent to player %d: '%s'\n", player_id, message);
-
-    return 0;
-}
+    LOGD("Complex message sent to player %d from sender %d. Subject: '%s'\n", player_id, sender_id, subject); 
+        
+    return 0; 
+} 
 
 /**
  * @brief Retrieves the ID of the active ship for a given player.
@@ -175,7 +193,7 @@ int h_decloak_ship(sqlite3 *db, int ship_id)
         // 2. Send the notification to the player
         if (player_id > 0) {
             // Use the identified message function
-            h_send_message_to_player(player_id, "Your ship's cloaking device has been deactivated due to action.");
+	    h_send_message_to_player(player_id, 1, "Uncloaking", "Your ship's cloaking device has been deactivated due to action."); 
         }
 
         rows_affected = 1; // Ship was de-cloaked

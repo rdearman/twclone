@@ -34,8 +34,9 @@ extern "C"
   void cmd_nav_avoid_list (client_ctx_t * ctx, json_t * root);
   int h_decloak_ship(sqlite3 *db, int ship_id);
   int h_get_active_ship_id(sqlite3 *db, int player_id);
+  int h_send_message_to_player(int player_id, int sender_id, const char *subject, const char *message) ;
 
-
+  
 #ifdef __cplusplus
 }
 #endif
