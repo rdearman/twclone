@@ -1,8 +1,14 @@
+#include <sqlite3.h>
+#include <time.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdarg.h>
 #include <jansson.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <sqlite3.h>
+// local include
 #include "server_universe.h"
 #include "database.h"
 #include "server_cmds.h"
@@ -12,24 +18,17 @@
 #include "server_envelope.h"
 #include "server_loop.h"
 #include "server_communication.h"
-#include "server_universe.h"
-#include "database.h"
-#include <sqlite3.h>
-#include <time.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include "database.h"
-#include "server_universe.h"
 #include "schemas.h"
 #include "common.h"
 #include "errors.h"
 #include "globals.h"
-#include <stdarg.h>   /* for va_list, vsnprintf */
+#include "server_players.h"
+#include "server_log.h"
 
 
 /* cache DB so fer_tick signature matches ISS style */
-extern sqlite3 *g_db;             /* <- global DB handle used elsewhere (ISS) */
-static sqlite3 *g_fer_db = NULL;  /* <- cached here for trader helpers */
+extern sqlite3 *g_db;		/* <- global DB handle used elsewhere (ISS) */
+static sqlite3 *g_fer_db = NULL;	/* <- cached here for trader helpers */
 
 /* Fallback logging macros  */
 #ifndef INFO_LOG
@@ -98,27 +97,31 @@ json_t *build_sector_info_json (int sector_id);
 
 
 /* --- minimal event writer for tests (engine_events) --- */
-static void fer_event_json(const char *type, int sector_id, const char *fmt, ...)
+static void
+fer_event_json (const char *type, int sector_id, const char *fmt, ...)
 {
-  if (!g_fer_db || !type) return;
+  if (!g_fer_db || !type)
+    return;
 
   /* format JSON payload from ... */
   char payload[512];
-  va_list ap; va_start(ap, fmt);
-  vsnprintf(payload, sizeof payload, fmt, ap);
-  va_end(ap);
+  va_list ap;
+  va_start (ap, fmt);
+  vsnprintf (payload, sizeof payload, fmt, ap);
+  va_end (ap);
 
   /* INSERT into engine_events(type, sector_id, payload, ts) */
   const char *sql =
     "INSERT INTO engine_events(type, sector_id, payload, ts) "
     "VALUES (?1, ?2, ?3, strftime('%s','now'))";
   sqlite3_stmt *st = NULL;
-  if (sqlite3_prepare_v2(g_fer_db, sql, -1, &st, NULL) != SQLITE_OK) return;
-  sqlite3_bind_text(st, 1, type, -1, SQLITE_TRANSIENT);
+  if (sqlite3_prepare_v2 (g_fer_db, sql, -1, &st, NULL) != SQLITE_OK)
+    return;
+  sqlite3_bind_text (st, 1, type, -1, SQLITE_TRANSIENT);
   sqlite3_bind_int (st, 2, sector_id);
-  sqlite3_bind_text(st, 3, payload, -1, SQLITE_TRANSIENT);
-  sqlite3_step(st);
-  sqlite3_finalize(st);
+  sqlite3_bind_text (st, 3, payload, -1, SQLITE_TRANSIENT);
+  sqlite3_step (st);
+  sqlite3_finalize (st);
 }
 
 
@@ -509,6 +512,11 @@ cmd_move_describe_sector (client_ctx_t *ctx, json_t *root)
 int
 cmd_move_warp (client_ctx_t *ctx, json_t *root)
 {
+  
+  sqlite3 *db_handle = db_get_handle ();
+  h_decloak_ship(db_handle, h_get_active_ship_id(db_handle, ctx->player_id ));
+
+    
   json_t *jdata = json_object_get (root, "data");
   int to = 0;
   if (json_is_object (jdata))
@@ -1171,6 +1179,9 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
 {
   if (!ctx || !root)
     return 1;
+
+  sqlite3 *db_handle = db_get_handle ();
+  h_decloak_ship(db_handle, h_get_active_ship_id(db_handle, ctx->player_id ));  
 
   json_t *jdata = json_object_get (root, "data");
   json_t *jsector_id = json_object_get (jdata, "sector_id");
@@ -1851,18 +1862,20 @@ iss_post_notice_move (int from, int to, const char *kind, const char *extra)
  * ================================ */
 
 
-typedef enum {
+typedef enum
+{
   FER_STATE_ROAM = 0,
   FER_STATE_RETURNING = 1
 } fer_state_t;
 
-typedef struct {
-  int id;               /* 0..N-1 */
-  int sector;           /* current location */
-  int home_sector;      /* Ferringhi homeworld sector */
-  int trades_done;      /* trades since last refill */
-  fer_state_t state;    /* ROAM or RETURNING */
-  int hold_fuel, hold_ore, hold_organics, hold_equipment; /* local-only holds */
+typedef struct
+{
+  int id;			/* 0..N-1 */
+  int sector;			/* current location */
+  int home_sector;		/* Ferringhi homeworld sector */
+  int trades_done;		/* trades since last refill */
+  fer_state_t state;		/* ROAM or RETURNING */
+  int hold_fuel, hold_ore, hold_organics, hold_equipment;	/* local-only holds */
 } fer_trader_t;
 
 static fer_trader_t g_fer[FER_TRADER_COUNT];
@@ -1875,24 +1888,31 @@ fer_home_sector (sqlite3 *db)
 {
   /* planets.name='Ferringhi' → sector */
   const char *sql = "SELECT sector FROM planets WHERE name=?1 LIMIT 1;";
-  sqlite3_stmt *st = NULL; int sector = 0;
-  if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK) return 0;
-  sqlite3_bind_text(st, 1, "Ferringhi", -1, SQLITE_STATIC);
-  if (sqlite3_step(st) == SQLITE_ROW) sector = sqlite3_column_int(st, 0);
-  sqlite3_finalize(st);
+  sqlite3_stmt *st = NULL;
+  int sector = 0;
+  if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
+    return 0;
+  sqlite3_bind_text (st, 1, "Ferringhi", -1, SQLITE_STATIC);
+  if (sqlite3_step (st) == SQLITE_ROW)
+    sector = sqlite3_column_int (st, 0);
+  sqlite3_finalize (st);
   return sector;
 }
 
 int
 sector_has_port (int sector)
 {
-  if (!g_fer_db || sector <= 0) return 0;
+  if (!g_fer_db || sector <= 0)
+    return 0;
   const char *sql = "SELECT 1 FROM ports WHERE location=?1 LIMIT 1;";
-  sqlite3_stmt *st = NULL; int ok = 0;
-  if (sqlite3_prepare_v2(g_fer_db, sql, -1, &st, NULL) != SQLITE_OK) return 0;
-  sqlite3_bind_int(st, 1, sector);
-  if (sqlite3_step(st) == SQLITE_ROW) ok = 1;
-  sqlite3_finalize(st);
+  sqlite3_stmt *st = NULL;
+  int ok = 0;
+  if (sqlite3_prepare_v2 (g_fer_db, sql, -1, &st, NULL) != SQLITE_OK)
+    return 0;
+  sqlite3_bind_int (st, 1, sector);
+  if (sqlite3_step (st) == SQLITE_ROW)
+    ok = 1;
+  sqlite3_finalize (st);
   return ok;
 }
 
@@ -1901,10 +1921,13 @@ fer_random_port_sector (sqlite3 *db)
 {
   /* any sector that has a port */
   const char *sql = "SELECT location FROM ports ORDER BY RANDOM() LIMIT 1;";
-  sqlite3_stmt *st = NULL; int sector = 0;
-  if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK) return 0;
-  if (sqlite3_step(st) == SQLITE_ROW) sector = sqlite3_column_int(st, 0);
-  sqlite3_finalize(st);
+  sqlite3_stmt *st = NULL;
+  int sector = 0;
+  if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
+    return 0;
+  if (sqlite3_step (st) == SQLITE_ROW)
+    sector = sqlite3_column_int (st, 0);
+  sqlite3_finalize (st);
   return sector;
 }
 
@@ -1913,15 +1936,19 @@ fer_random_port_sector (sqlite3 *db)
 int
 nav_random_neighbor (int sector)
 {
-  if (!g_fer_db || sector <= 0) return 0;
+  if (!g_fer_db || sector <= 0)
+    return 0;
   const char *sql =
     "SELECT to_sector FROM sector_warps WHERE from_sector=?1 "
     "ORDER BY RANDOM() LIMIT 1;";
-  sqlite3_stmt *st = NULL; int next = 0;
-  if (sqlite3_prepare_v2(g_fer_db, sql, -1, &st, NULL) != SQLITE_OK) return 0;
-  sqlite3_bind_int(st, 1, sector);
-  if (sqlite3_step(st) == SQLITE_ROW) next = sqlite3_column_int(st, 0);
-  sqlite3_finalize(st);
+  sqlite3_stmt *st = NULL;
+  int next = 0;
+  if (sqlite3_prepare_v2 (g_fer_db, sql, -1, &st, NULL) != SQLITE_OK)
+    return 0;
+  sqlite3_bind_int (st, 1, sector);
+  if (sqlite3_step (st) == SQLITE_ROW)
+    next = sqlite3_column_int (st, 0);
+  sqlite3_finalize (st);
   return next;
 }
 
@@ -1929,73 +1956,110 @@ nav_random_neighbor (int sector)
 int
 nav_next_hop (int start, int goal)
 {
-  if (!g_fer_db || start <= 0 || goal <= 0 || start == goal) return 0;
+  if (!g_fer_db || start <= 0 || goal <= 0 || start == goal)
+    return 0;
 
-  enum { MAX_Q = 4096, MAX_SEEN = 8192 };
+  enum
+  { MAX_Q = 4096, MAX_SEEN = 8192 };
   int q[MAX_Q], head = 0, tail = 0;
 
-  typedef struct { int key, prev; } kv_t;
-  kv_t seen[MAX_SEEN]; int seen_n = 0;
-  auto int seen_get (int key) {
-    for (int i=0;i<seen_n;++i) if (seen[i].key==key) return i; return -1;
+  typedef struct
+  {
+    int key, prev;
+  } kv_t;
+  kv_t seen[MAX_SEEN];
+  int seen_n = 0;
+  auto int seen_get (int key)
+  {
+    for (int i = 0; i < seen_n; ++i)
+      if (seen[i].key == key)
+	return i;
+    return -1;
   }
-  auto int seen_put (int key, int prev) {
-    if (seen_n >= MAX_SEEN) return -1;
-    seen[seen_n].key = key; seen[seen_n].prev = prev; return seen_n++;
+  auto int seen_put (int key, int prev)
+  {
+    if (seen_n >= MAX_SEEN)
+      return -1;
+    seen[seen_n].key = key;
+    seen[seen_n].prev = prev;
+    return seen_n++;
   }
 
-  q[tail = head = 0] = start; tail = 1; seen_put(start, -1);
+  q[tail = head = 0] = start;
+  tail = 1;
+  seen_put (start, -1);
 
-  const char *sql = "SELECT to_sector FROM sector_warps WHERE from_sector=?1;";
-  sqlite3_stmt *st = NULL; if (sqlite3_prepare_v2(g_fer_db, sql, -1, &st, NULL) != SQLITE_OK) return 0;
+  const char *sql =
+    "SELECT to_sector FROM sector_warps WHERE from_sector=?1;";
+  sqlite3_stmt *st = NULL;
+  if (sqlite3_prepare_v2 (g_fer_db, sql, -1, &st, NULL) != SQLITE_OK)
+    return 0;
 
   int found = -1;
-  while (head != tail && found == -1) {
-    int cur = q[head++ % MAX_Q];
-    sqlite3_reset(st); sqlite3_clear_bindings(st); sqlite3_bind_int(st, 1, cur);
-    while (sqlite3_step(st) == SQLITE_ROW) {
-      int nb = sqlite3_column_int(st, 0);
-      if (seen_get(nb) != -1) continue;
-      seen_put(nb, cur);
-      if (nb == goal) { found = nb; break; }
-      if ((tail - head) < (MAX_Q - 1)) q[tail++ % MAX_Q] = nb;
+  while (head != tail && found == -1)
+    {
+      int cur = q[head++ % MAX_Q];
+      sqlite3_reset (st);
+      sqlite3_clear_bindings (st);
+      sqlite3_bind_int (st, 1, cur);
+      while (sqlite3_step (st) == SQLITE_ROW)
+	{
+	  int nb = sqlite3_column_int (st, 0);
+	  if (seen_get (nb) != -1)
+	    continue;
+	  seen_put (nb, cur);
+	  if (nb == goal)
+	    {
+	      found = nb;
+	      break;
+	    }
+	  if ((tail - head) < (MAX_Q - 1))
+	    q[tail++ % MAX_Q] = nb;
+	}
     }
-  }
-  sqlite3_finalize(st);
+  sqlite3_finalize (st);
 
-  if (found == -1) return 0;
+  if (found == -1)
+    return 0;
 
   /* reconstruct one hop toward goal */
   int step = found, prev = -2;
-  for (;;) {
-    int i = seen_get(step); if (i < 0) break;
-    prev = seen[i].prev;
-    if (prev == -1) break;                /* step == start */
-    if (prev == start) return step;       /* first hop away from start */
-    step = prev;
-  }
-  return step; /* neighbour fallback */
+  for (;;)
+    {
+      int i = seen_get (step);
+      if (i < 0)
+	break;
+      prev = seen[i].prev;
+      if (prev == -1)
+	break;			/* step == start */
+      if (prev == start)
+	return step;		/* first hop away from start */
+      step = prev;
+    }
+  return step;			/* neighbour fallback */
 }
 
 /* ---------- (optional) internal event emitters ---------- */
 /* If you have a helper already for engine_events, call it here.
    Otherwise keep these INFO_LOGs for visibility and add event writes later. */
 
-static void fer_emit_move (int id, int from_sec, int to_sec)
+static void
+fer_emit_move (int id, int from_sec, int to_sec)
 {
-  fer_event_json("npc.move", to_sec,
-    "{ \"kind\":\"ferringhi\", \"id\":%d, \"from\":%d, \"to\":%d }",
-    id, from_sec, to_sec);
+  fer_event_json ("npc.move", to_sec,
+		  "{ \"kind\":\"ferringhi\", \"id\":%d, \"from\":%d, \"to\":%d }",
+		  id, from_sec, to_sec);
 }
 
-static void fer_emit_trade (int id, int sector,
-                            const char *sold, int sold_qty,
-                            const char *bought, int bought_qty)
+static void
+fer_emit_trade (int id, int sector,
+		const char *sold, int sold_qty,
+		const char *bought, int bought_qty)
 {
-  fer_event_json("npc.trade", sector,
-    "{ \"kind\":\"ferringhi\", \"id\":%d, \"sector\":%d, "
-    "\"sold\":\"%s\", \"sold_qty\":%d, \"bought\":\"%s\", \"bought_qty\":%d }",
-    id, sector, sold, sold_qty, bought, bought_qty);
+  fer_event_json ("npc.trade", sector,
+		  "{ \"kind\":\"ferringhi\", \"id\":%d, \"sector\":%d, "
+		  "\"sold\":\"%s\", \"sold_qty\":%d, \"bought\":\"%s\", \"bought_qty\":%d }",
+		  id, sector, sold, sold_qty, bought, bought_qty);
 }
 
 
@@ -2005,34 +2069,59 @@ static void fer_emit_trade (int id, int sector,
 static void
 fer_reset_holds (fer_trader_t *t)
 {
-  t->hold_fuel      = FER_MAX_HOLD/2;
-  t->hold_ore       = FER_MAX_HOLD/2;
-  t->hold_organics  = FER_MAX_HOLD/2;
-  t->hold_equipment = FER_MAX_HOLD/2;
+  t->hold_fuel = FER_MAX_HOLD / 2;
+  t->hold_ore = FER_MAX_HOLD / 2;
+  t->hold_organics = FER_MAX_HOLD / 2;
+  t->hold_equipment = FER_MAX_HOLD / 2;
 }
 
 static void
 fer_trade_at_port (fer_trader_t *t, int sector)
 {
-  if (!t) return;
+  if (!t)
+    return;
   int r = (t->trades_done % 4);
   const char *sold = NULL, *bought = NULL;
   int *ps = NULL, *pb = NULL;
 
-  switch (r) {
-    case 0: sold="fuel";      ps=&t->hold_fuel;      bought="ore";       pb=&t->hold_ore; break;
-    case 1: sold="ore";       ps=&t->hold_ore;       bought="organics";  pb=&t->hold_organics; break;
-    case 2: sold="organics";  ps=&t->hold_organics;  bought="equipment"; pb=&t->hold_equipment; break;
-    default:sold="equipment"; ps=&t->hold_equipment; bought="fuel";      pb=&t->hold_fuel; break;
-  }
+  switch (r)
+    {
+    case 0:
+      sold = "fuel";
+      ps = &t->hold_fuel;
+      bought = "ore";
+      pb = &t->hold_ore;
+      break;
+    case 1:
+      sold = "ore";
+      ps = &t->hold_ore;
+      bought = "organics";
+      pb = &t->hold_organics;
+      break;
+    case 2:
+      sold = "organics";
+      ps = &t->hold_organics;
+      bought = "equipment";
+      pb = &t->hold_equipment;
+      break;
+    default:
+      sold = "equipment";
+      ps = &t->hold_equipment;
+      bought = "fuel";
+      pb = &t->hold_fuel;
+      break;
+    }
 
   int sell_qty = (*ps > 10) ? 10 : *ps;
-  int buy_qty  = 10;
-  if ((*pb + buy_qty) > FER_MAX_HOLD) buy_qty = FER_MAX_HOLD - *pb;
-  if (buy_qty < 0) buy_qty = 0;
+  int buy_qty = 10;
+  if ((*pb + buy_qty) > FER_MAX_HOLD)
+    buy_qty = FER_MAX_HOLD - *pb;
+  if (buy_qty < 0)
+    buy_qty = 0;
 
-  *ps -= sell_qty; *pb += buy_qty;
-  fer_emit_trade(t->id, sector, sold, sell_qty, bought, buy_qty);
+  *ps -= sell_qty;
+  *pb += buy_qty;
+  fer_emit_trade (t->id, sector, sold, sell_qty, bought, buy_qty);
 
   t->trades_done++;
   if (t->trades_done >= FER_TRADES_BEFORE_RETURN)
@@ -2040,49 +2129,60 @@ fer_trade_at_port (fer_trader_t *t, int sector)
 }
 
 
-void fer_attach_db(sqlite3 *db) {
+void
+fer_attach_db (sqlite3 *db)
+{
   g_fer_db = db;
 }
 
 
-int fer_init_once(void)
+int
+fer_init_once (void)
 {
-  if (g_fer_inited) return 1;
-  if (!g_fer_db) {
-    WARN_LOG("[fer] no DB handle; traders disabled");
-    g_fer_inited = 1;
-    return 0;
-  }
+  if (g_fer_inited)
+    return 1;
+  if (!g_fer_db)
+    {
+      WARN_LOG ("[fer] no DB handle; traders disabled");
+      g_fer_inited = 1;
+      return 0;
+    }
 
   /* find home sector */
   int home = 0;
   {
     const char *sql = "SELECT sector FROM planets WHERE name=?1 LIMIT 1;";
     sqlite3_stmt *st = NULL;
-    if (sqlite3_prepare_v2(g_fer_db, sql, -1, &st, NULL) == SQLITE_OK) {
-      sqlite3_bind_text(st, 1, "Ferringhi", -1, SQLITE_STATIC);
-      if (sqlite3_step(st) == SQLITE_ROW) home = sqlite3_column_int(st, 0);
-      sqlite3_finalize(st);
+    if (sqlite3_prepare_v2 (g_fer_db, sql, -1, &st, NULL) == SQLITE_OK)
+      {
+	sqlite3_bind_text (st, 1, "Ferringhi", -1, SQLITE_STATIC);
+	if (sqlite3_step (st) == SQLITE_ROW)
+	  home = sqlite3_column_int (st, 0);
+	sqlite3_finalize (st);
+      }
+  }
+  if (home <= 0)
+    {
+      WARN_LOG ("[fer] no 'Ferringhi' planet found; disabling traders");
+      g_fer_inited = 1;
+      return 0;
     }
-  }
-  if (home <= 0) {
-    WARN_LOG("[fer] no 'Ferringhi' planet found; disabling traders");
-    g_fer_inited = 1;
-    return 0;
-  }
 
-  for (int i=0;i<FER_TRADER_COUNT;++i) {
-    g_fer[i].id = i;
-    g_fer[i].home_sector = home;
-    g_fer[i].sector = home;
-    g_fer[i].trades_done = 0;
-    g_fer[i].state = FER_STATE_ROAM;
-    g_fer[i].hold_fuel = g_fer[i].hold_ore =
-    g_fer[i].hold_organics = g_fer[i].hold_equipment = FER_MAX_HOLD/2;
-  }
+  for (int i = 0; i < FER_TRADER_COUNT; ++i)
+    {
+      g_fer[i].id = i;
+      g_fer[i].home_sector = home;
+      g_fer[i].sector = home;
+      g_fer[i].trades_done = 0;
+      g_fer[i].state = FER_STATE_ROAM;
+      g_fer[i].hold_fuel = g_fer[i].hold_ore =
+	g_fer[i].hold_organics = g_fer[i].hold_equipment = FER_MAX_HOLD / 2;
+    }
 
   /* boot marker so you can query immediately */
-  fer_event_json("npc.online", 0, "{ \"kind\":\"ferringhi\", \"count\": %d }", FER_TRADER_COUNT);
+  fer_event_json ("npc.online", 0,
+		  "{ \"kind\":\"ferringhi\", \"count\": %d }",
+		  FER_TRADER_COUNT);
 
   g_fer_inited = 1;
   return 1;
@@ -2094,64 +2194,103 @@ int fer_init_once(void)
 void
 fer_tick (int64_t now_ms)
 {
-  (void)now_ms; /* reserved for rate logic later */
-  if (!g_fer_inited) {
-    if (!fer_init_once()) return;
-  }
-
-  for (int i=0;i<FER_TRADER_COUNT;++i) {
-    fer_trader_t *t = &g_fer[i];
-    if (t->home_sector <= 0) continue;
-
-    /* choose goal: roam to random port, or return home */
-    int goal = (t->state == FER_STATE_RETURNING) ? t->home_sector : 0;
-    if (goal == 0) {
-      const char *sql = "SELECT location FROM ports ORDER BY RANDOM() LIMIT 1;";
-      sqlite3_stmt *st = NULL;
-      if (sqlite3_prepare_v2(g_fer_db, sql, -1, &st, NULL) == SQLITE_OK) {
-        if (sqlite3_step(st) == SQLITE_ROW) goal = sqlite3_column_int(st, 0);
-        sqlite3_finalize(st);
-      }
-    }
-    if (goal <= 0) continue;
-
-    /* one hop; drift if no path */
-    int next = nav_next_hop(t->sector, goal);
-    if (next == 0) next = nav_random_neighbor(t->sector);
-    if (next <= 0 || next == t->sector) continue;
-
-    int from = t->sector;
-    t->sector = next;
-    fer_emit_move(t->id, from, next);
-
-    /* trade only when actually on a port sector */
-    if (sector_has_port(t->sector)) {
-      /* simple rotating swap, unchanged from your previous function */
-      int r = (t->trades_done % 4);
-      const char *sold = NULL, *bought = NULL;
-      int *ps = NULL, *pb = NULL;
-      switch (r) {
-        case 0: sold="fuel";      ps=&t->hold_fuel;      bought="ore";       pb=&t->hold_ore; break;
-        case 1: sold="ore";       ps=&t->hold_ore;       bought="organics";  pb=&t->hold_organics; break;
-        case 2: sold="organics";  ps=&t->hold_organics;  bought="equipment"; pb=&t->hold_equipment; break;
-        default:sold="equipment"; ps=&t->hold_equipment; bought="fuel";      pb=&t->hold_fuel; break;
-      }
-      int sell_qty = (*ps > 10) ? 10 : *ps;
-      int buy_qty  = 10;
-      if ((*pb + buy_qty) > FER_MAX_HOLD) buy_qty = FER_MAX_HOLD - *pb;
-      if (buy_qty < 0) buy_qty = 0;
-      *ps -= sell_qty; *pb += buy_qty;
-      fer_emit_trade(t->id, t->sector, sold, sell_qty, bought, buy_qty);
-
-      t->trades_done++;
-      if (t->trades_done >= FER_TRADES_BEFORE_RETURN) t->state = FER_STATE_RETURNING;
+  (void) now_ms;		/* reserved for rate logic later */
+  if (!g_fer_inited)
+    {
+      if (!fer_init_once ())
+	return;
     }
 
-    /* reached home while returning → refill and go roam again */
-    if (t->state == FER_STATE_RETURNING && t->sector == t->home_sector) {
-      t->hold_fuel = t->hold_ore = t->hold_organics = t->hold_equipment = FER_MAX_HOLD/2;
-      t->trades_done = 0;
-      t->state = FER_STATE_ROAM;
+  for (int i = 0; i < FER_TRADER_COUNT; ++i)
+    {
+      fer_trader_t *t = &g_fer[i];
+      if (t->home_sector <= 0)
+	continue;
+
+      /* choose goal: roam to random port, or return home */
+      int goal = (t->state == FER_STATE_RETURNING) ? t->home_sector : 0;
+      if (goal == 0)
+	{
+	  const char *sql =
+	    "SELECT location FROM ports ORDER BY RANDOM() LIMIT 1;";
+	  sqlite3_stmt *st = NULL;
+	  if (sqlite3_prepare_v2 (g_fer_db, sql, -1, &st, NULL) == SQLITE_OK)
+	    {
+	      if (sqlite3_step (st) == SQLITE_ROW)
+		goal = sqlite3_column_int (st, 0);
+	      sqlite3_finalize (st);
+	    }
+	}
+      if (goal <= 0)
+	continue;
+
+      /* one hop; drift if no path */
+      int next = nav_next_hop (t->sector, goal);
+      if (next == 0)
+	next = nav_random_neighbor (t->sector);
+      if (next <= 0 || next == t->sector)
+	continue;
+
+      int from = t->sector;
+      t->sector = next;
+      fer_emit_move (t->id, from, next);
+
+      /* trade only when actually on a port sector */
+      if (sector_has_port (t->sector))
+	{
+	  /* simple rotating swap, unchanged from your previous function */
+	  int r = (t->trades_done % 4);
+	  const char *sold = NULL, *bought = NULL;
+	  int *ps = NULL, *pb = NULL;
+	  switch (r)
+	    {
+	    case 0:
+	      sold = "fuel";
+	      ps = &t->hold_fuel;
+	      bought = "ore";
+	      pb = &t->hold_ore;
+	      break;
+	    case 1:
+	      sold = "ore";
+	      ps = &t->hold_ore;
+	      bought = "organics";
+	      pb = &t->hold_organics;
+	      break;
+	    case 2:
+	      sold = "organics";
+	      ps = &t->hold_organics;
+	      bought = "equipment";
+	      pb = &t->hold_equipment;
+	      break;
+	    default:
+	      sold = "equipment";
+	      ps = &t->hold_equipment;
+	      bought = "fuel";
+	      pb = &t->hold_fuel;
+	      break;
+	    }
+	  int sell_qty = (*ps > 10) ? 10 : *ps;
+	  int buy_qty = 10;
+	  if ((*pb + buy_qty) > FER_MAX_HOLD)
+	    buy_qty = FER_MAX_HOLD - *pb;
+	  if (buy_qty < 0)
+	    buy_qty = 0;
+	  *ps -= sell_qty;
+	  *pb += buy_qty;
+	  fer_emit_trade (t->id, t->sector, sold, sell_qty, bought, buy_qty);
+
+	  t->trades_done++;
+	  if (t->trades_done >= FER_TRADES_BEFORE_RETURN)
+	    t->state = FER_STATE_RETURNING;
+	}
+
+      /* reached home while returning → refill and go roam again */
+      if (t->state == FER_STATE_RETURNING && t->sector == t->home_sector)
+	{
+	  t->hold_fuel = t->hold_ore = t->hold_organics = t->hold_equipment =
+	    FER_MAX_HOLD / 2;
+	  t->trades_done = 0;
+	  t->state = FER_STATE_ROAM;
+	}
     }
-  }
 }

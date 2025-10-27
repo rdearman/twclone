@@ -54,23 +54,29 @@ is_allowed_topic (const char *t)
     "sector.notice",
     NULL
   };
-  if (!t) return 0;
+  if (!t)
+    return 0;
   for (int i = 0; allowed[i]; ++i)
     if (strcmp (t, allowed[i]) == 0)
       return 1;
 
   const char *dot = strchr (t, '.');
-  if (!dot || strcmp (dot + 1, "*") != 0) return 0;
+  if (!dot || strcmp (dot + 1, "*") != 0)
+    return 0;
 
   static const char *const public_domains[] = {
-    "system","sector","chat","combat","trade","nav","iss","corp","player", NULL
+    "system", "sector", "chat", "combat", "trade", "nav", "iss", "corp",
+    "player", NULL
   };
-  size_t n = (size_t)(dot - t);
+  size_t n = (size_t) (dot - t);
   char dom[32];
-  if (n >= sizeof dom) return 0;
-  memcpy(dom, t, n); dom[n] = '\0';
-  for (int i=0; public_domains[i]; ++i)
-    if (strcmp(dom, public_domains[i]) == 0) return 1;
+  if (n >= sizeof dom)
+    return 0;
+  memcpy (dom, t, n);
+  dom[n] = '\0';
+  for (int i = 0; public_domains[i]; ++i)
+    if (strcmp (dom, public_domains[i]) == 0)
+      return 1;
 
   return 0;
 }

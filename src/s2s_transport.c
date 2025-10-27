@@ -73,7 +73,7 @@ s2s_debug_dump_conn (const char *who, s2s_conn_t *c)
 {
   if (!c || c->fd < 0)
     {
-      LOGI("[%s] conn=NULL\n", who);
+      LOGI ("[%s] conn=NULL\n", who);
       //      fprintf (stderr, "[%s] conn=NULL\n", who);
       return;
     }
@@ -84,12 +84,12 @@ s2s_debug_dump_conn (const char *who, s2s_conn_t *c)
   char lip[32], rip[32];
   inet_ntop (AF_INET, &la.sin_addr, lip, sizeof (lip));
   inet_ntop (AF_INET, &ra.sin_addr, rip, sizeof (rip));
-  LOGI("[%s] fd=%d local=%s:%u peer=%s:%u\n", who, c->fd,
-	   lip, (unsigned) ntohs (la.sin_port), rip,
-	   (unsigned) ntohs (ra.sin_port));
+  LOGI ("[%s] fd=%d local=%s:%u peer=%s:%u\n", who, c->fd,
+	lip, (unsigned) ntohs (la.sin_port), rip,
+	(unsigned) ntohs (ra.sin_port));
   //  fprintf (stderr, "[%s] fd=%d local=%s:%u peer=%s:%u\n", who, c->fd,
-  //	   lip, (unsigned) ntohs (la.sin_port), rip,
-  //	   (unsigned) ntohs (ra.sin_port));
+  //       lip, (unsigned) ntohs (la.sin_port), rip,
+  //       (unsigned) ntohs (ra.sin_port));
 }
 
 

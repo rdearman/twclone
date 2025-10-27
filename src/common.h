@@ -16,6 +16,7 @@
 #include <jansson.h>		/* -ljansson */
 #include <stdbool.h>
 #include <sqlite3.h>
+#include <netinet/in.h>
 /* local includes */
 #include "database.h"
 #include "schemas.h"
@@ -91,8 +92,6 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-#include <netinet/in.h>
-#include <string.h>
 
 int init_sockaddr (int, struct sockaddr_in *);
 int init_clientnetwork (char *hostname, int port);

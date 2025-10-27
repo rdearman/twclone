@@ -13,6 +13,7 @@
 #include "server_envelope.h"
 #include "server_cmds.h"
 #include "common.h"
+#include "server_players.h"
 
 #ifndef UNUSED
 #define UNUSED(x) (void)(x)
@@ -43,6 +44,7 @@ static decision_t
 validate_trade_buy_rule (int player_id, int port_id, const char *commodity,
 			 int qty)
 {
+  
   if (!commodity || port_id <= 0 || qty <= 0)
     return err (ERR_BAD_REQUEST, "Missing required field");
 
@@ -68,6 +70,7 @@ validate_trade_buy_rule (int player_id, int port_id, const char *commodity,
 int
 cmd_trade_offer (client_ctx_t *ctx, json_t *root)
 {
+  
   STUB_NIY (ctx, root, "trade.offer");
 }
 
@@ -121,7 +124,9 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 {
   if (!ctx || !root)
     return -1;
-
+  sqlite3 *db_handle = db_get_handle ();
+  h_decloak_ship(db_handle, h_get_active_ship_id(db_handle, ctx->player_id ));
+  
   if (ctx->player_id <= 0)
     {
       send_enveloped_error (ctx->fd, root, 1401, "not_authenticated");
@@ -877,6 +882,9 @@ cmd_trade_quote (client_ctx_t *ctx, json_t *root)
 int
 cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
 {
+    sqlite3 *db_handle = db_get_handle ();
+  h_decloak_ship(db_handle, h_get_active_ship_id(db_handle, ctx->player_id ));
+  
   if (ctx->player_id <= 0)
     {
       send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);

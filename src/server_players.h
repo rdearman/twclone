@@ -32,7 +32,8 @@ extern "C"
   void cmd_nav_avoid_add (client_ctx_t * ctx, json_t * root);
   void cmd_nav_avoid_remove (client_ctx_t * ctx, json_t * root);
   void cmd_nav_avoid_list (client_ctx_t * ctx, json_t * root);
-
+  int h_decloak_ship(sqlite3 *db, int ship_id);
+  int h_get_active_ship_id(sqlite3 *db, int player_id);
 
 
 #ifdef __cplusplus

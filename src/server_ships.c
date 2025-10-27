@@ -41,12 +41,16 @@ void send_enveloped_refused (int fd, json_t * root, int code, const char *msg,
 int
 cmd_ship_transfer_cargo (client_ctx_t *ctx, json_t *root)
 {
+  sqlite3 *db_handle = db_get_handle ();
+  h_decloak_ship(db_handle, h_get_active_ship_id(db_handle, ctx->player_id ));
   STUB_NIY (ctx, root, "ship.transfer_cargo");
 }
 
 int
 cmd_ship_jettison (client_ctx_t *ctx, json_t *root)
 {
+    sqlite3 *db_handle = db_get_handle ();
+  h_decloak_ship(db_handle, h_get_active_ship_id(db_handle, ctx->player_id ));
   STUB_NIY (ctx, root, "ship.jettison");
 }
 
@@ -167,6 +171,9 @@ cmd_ship_rename (client_ctx_t *ctx, json_t *root)
 int
 cmd_ship_claim (client_ctx_t *ctx, json_t *root)
 {
+    sqlite3 *db_handle = db_get_handle ();
+  h_decloak_ship(db_handle, h_get_active_ship_id(db_handle, ctx->player_id ));
+  
   if (ctx->player_id <= 0)
     {
       send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);

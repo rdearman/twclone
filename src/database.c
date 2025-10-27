@@ -30,16 +30,19 @@ static int db_ensure_idempotency_schema_unlocked (void);
 static int db_create_tables_unlocked (void);
 static int db_insert_defaults_unlocked (void);
 static int db_ensure_ship_perms_column_unlocked (void);
-int db_seed_cron_tasks(sqlite3 *db);
-void db_handle_close_and_reset(void);
+int db_seed_cron_tasks (sqlite3 * db);
+void db_handle_close_and_reset (void);
 
 
 // New function to add
-void db_handle_close_and_reset(void) {
-    // Only proceed if the handle is open
-    if (db_handle != NULL) {
-        sqlite3_close(db_handle);
-        db_handle = NULL;
+void
+db_handle_close_and_reset (void)
+{
+  // Only proceed if the handle is open
+  if (db_handle != NULL)
+    {
+      sqlite3_close (db_handle);
+      db_handle = NULL;
     }
 }
 
@@ -49,42 +52,48 @@ void db_handle_close_and_reset(void) {
 /*   return db_handle; */
 /* } */
 
-sqlite3 * db_get_handle (void) {
-    // 1. Check if the handle is already open. If so, return it immediately.
-    if (db_handle != NULL) {
-        return db_handle;
+sqlite3 *
+db_get_handle (void)
+{
+  // 1. Check if the handle is already open. If so, return it immediately.
+  if (db_handle != NULL)
+    {
+      return db_handle;
     }
 
-    // 2. The handle is NULL (due to a close_and_reset or initial load).
-    //    Open a new connection using the full, robust V2 flags.
-    int rc = sqlite3_open_v2(
-        DEFAULT_DB_NAME,
-        &db_handle,
-        SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_URI, 
-        NULL
-    );
+  // 2. The handle is NULL (due to a close_and_reset or initial load).
+  //    Open a new connection using the full, robust V2 flags.
+  int rc = sqlite3_open_v2 (DEFAULT_DB_NAME,
+			    &db_handle,
+			    SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE |
+			    SQLITE_OPEN_URI,
+			    NULL);
 
-    if (rc != SQLITE_OK) {
-        // If the open fails, log the specific SQLite error and clean up.
-        LOGE("DB Re-Open Failed (%s): %s (rc=%d)", 
-             DEFAULT_DB_NAME, sqlite3_errstr(rc), rc);
+  if (rc != SQLITE_OK)
+    {
+      // If the open fails, log the specific SQLite error and clean up.
+      LOGE ("DB Re-Open Failed (%s): %s (rc=%d)",
+	    DEFAULT_DB_NAME, sqlite3_errstr (rc), rc);
 
-        if (db_handle) {
-            sqlite3_close(db_handle);
-            db_handle = NULL;
-        }
-        return NULL; // Return NULL on failure
+      if (db_handle)
+	{
+	  sqlite3_close (db_handle);
+	  db_handle = NULL;
+	}
+      return NULL;		// Return NULL on failure
     }
 
-    // 3. Apply critical settings for concurrency (WAL and busy timeout)
-    //    These must be applied to every new connection.
-    if (sqlite3_exec(db_handle, "PRAGMA journal_mode=WAL;", NULL, NULL, NULL) != SQLITE_OK) {
-        LOGW("Failed to set WAL mode on fresh handle.");
+  // 3. Apply critical settings for concurrency (WAL and busy timeout)
+  //    These must be applied to every new connection.
+  if (sqlite3_exec (db_handle, "PRAGMA journal_mode=WAL;", NULL, NULL, NULL)
+      != SQLITE_OK)
+    {
+      LOGW ("Failed to set WAL mode on fresh handle.");
     }
-    sqlite3_busy_timeout(db_handle, 5000); // 5 seconds
+  sqlite3_busy_timeout (db_handle, 5000);	// 5 seconds
 
-    // 4. Return the newly opened handle.
-    return db_handle;
+  // 4. Return the newly opened handle.
+  return db_handle;
 }
 
 
@@ -298,7 +307,9 @@ const char *create_table_sql[] = {
     "  hash_length INTEGER, "
     "  default_nodes INTEGER, "
     "  buff_size INTEGER, "
-    "  max_name_length INTEGER, " "  planet_type_count INTEGER " " ); ",
+    "  max_name_length INTEGER, "
+    "  max_cloak_duration INTEGER DEFAULT 24, "
+    "  planet_type_count INTEGER " " ); ",
 
   " CREATE TABLE IF NOT EXISTS trade_idempotency ( "
     " key          TEXT PRIMARY KEY, "
@@ -308,7 +319,6 @@ const char *create_table_sql[] = {
     " response_json TEXT NOT NULL, " " created_at   INTEGER NOT NULL ); ",
 
   " CREATE TABLE IF NOT EXISTS used_sectors (used INTEGER); ",
-
 
   " CREATE TABLE IF NOT EXISTS npc_shipnames (id INTEGER, name TEXT); ",
 
@@ -349,7 +359,6 @@ const char *create_table_sql[] = {
     " lastplanet INTEGER,  "	/* last planet created */
     " score INTEGER,  "
     " kills INTEGER,  "
-    " cloaked INTEGER,  "
     " remote INTEGER,  " " fighters INTEGER,  " " holds INTEGER " " ); ",
 
   " CREATE TABLE IF NOT EXISTS player_types (type INTEGER PRIMARY KEY AUTOINCREMENT, description TEXT); ",
@@ -359,11 +368,18 @@ const char *create_table_sql[] = {
   " CREATE TABLE IF NOT EXISTS sector_warps (from_sector INTEGER, to_sector INTEGER, PRIMARY KEY (from_sector, to_sector), FOREIGN KEY (from_sector) REFERENCES sectors(id) ON DELETE CASCADE, FOREIGN KEY (to_sector) REFERENCES sectors(id) ON DELETE CASCADE); ",
 
 
-  " CREATE TABLE IF NOT EXISTS ships ( " " id INTEGER PRIMARY KEY AUTOINCREMENT,  " " name TEXT NOT NULL,  " " type INTEGER,  " " attack INTEGER,  " " holds_used INTEGER,  " " mines INTEGER,  " " fighters_used INTEGER,  " " genesis INTEGER,  " " photons INTEGER,  " " location INTEGER,  "	/* FK to sectors.id */
-    " fighters INTEGER,  " " shields INTEGER,  " " holds INTEGER,  "
-    " beacons INTEGER,  " " colonists INTEGER,  " " equipment INTEGER,  "
-    " organics INTEGER,  " " ore INTEGER,  " " flags INTEGER,  "
-    " ported INTEGER,  " " onplanet INTEGER " " ); ",
+  " CREATE TABLE IF NOT EXISTS ships ( " " id INTEGER PRIMARY KEY AUTOINCREMENT,  " " name TEXT NOT NULL,  " " type INTEGER,  " " attack INTEGER,  " " holds_used INTEGER,  " " mines INTEGER,  " " fighters_used INTEGER,  " " genesis INTEGER,  " " photons INTEGER,  " "location INTEGER,  "	/* FK to sectors.id */
+    " fighters INTEGER,  "
+    " shields INTEGER,  "
+    " holds INTEGER,  "
+    " beacons INTEGER,  "
+    " colonists INTEGER,  "
+    " equipment INTEGER,  "
+    " organics INTEGER,  "
+    " ore INTEGER,  "
+    " flags INTEGER,  "
+    " cloaking_devices INTEGER,  "
+    " cloaked TIMESTAMP,  " " ported INTEGER,  " " onplanet INTEGER " " ); ",
 
 
   " CREATE TABLE IF NOT EXISTS shiptypes ( " " id INTEGER PRIMARY KEY AUTOINCREMENT,  " " name TEXT NOT NULL,  "	/* Coloured name string */
@@ -1496,10 +1512,7 @@ static const char *ENGINE_BOOTSTRAP_SQL = "BEGIN IMMEDIATE;\n"
   "    name, "
   "    datetime(next_due_at, 'unixepoch') AS next_due_utc, "
   "    datetime(last_run_at, 'unixepoch') AS last_run_utc "
-  "FROM "
-  "    cron_tasks "
-  "ORDER BY "
-  "    next_due_at;\n "  ;
+  "FROM " "    cron_tasks " "ORDER BY " "    next_due_at;\n ";
 
 static const char *MIGRATE_A_SQL = "BEGIN IMMEDIATE;"
   /* engine_offset (consumer high-water mark) */
@@ -1655,48 +1668,53 @@ gen_session_token (char out64[65])
 
 
 int
-db_seed_cron_tasks(sqlite3 *db)
+db_seed_cron_tasks (sqlite3 *db)
 {
-  if (!db) return SQLITE_MISUSE;
+  if (!db)
+    return SQLITE_MISUSE;
 
   /* Wrap in a small transaction for atomicity */
   char *err = NULL;
-  int rc = sqlite3_exec(db, "BEGIN IMMEDIATE;", NULL, NULL, &err);
-  if (rc != SQLITE_OK) {
-    if (err) sqlite3_free(err);
-    return rc;
-  }
+  int rc = sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, &err);
+  if (rc != SQLITE_OK)
+    {
+      if (err)
+	sqlite3_free (err);
+      return rc;
+    }
 
   /* Ensure table exists before seeding (no-op if already created) */
-  rc = sqlite3_exec(db,
-    "CREATE TABLE IF NOT EXISTS cron_tasks ("
-    "  id INTEGER PRIMARY KEY,"
-    "  name TEXT NOT NULL UNIQUE,"
-    "  schedule TEXT NOT NULL,"
-    "  enabled INTEGER NOT NULL DEFAULT 1,"
-    "  last_run_at INTEGER,"
-    "  next_due_at INTEGER,"
-    "  payload TEXT"
-    ");", NULL, NULL, &err);
-  if (rc != SQLITE_OK) goto done;
+  rc = sqlite3_exec (db,
+		     "CREATE TABLE IF NOT EXISTS cron_tasks ("
+		     "  id INTEGER PRIMARY KEY,"
+		     "  name TEXT NOT NULL UNIQUE,"
+		     "  schedule TEXT NOT NULL,"
+		     "  enabled INTEGER NOT NULL DEFAULT 1,"
+		     "  last_run_at INTEGER,"
+		     "  next_due_at INTEGER,"
+		     "  payload TEXT" ");", NULL, NULL, &err);
+  if (rc != SQLITE_OK)
+    goto done;
 
   /* Seed: broadcast TTL cleanup runs every 5 minutes.
      Idempotent: only inserts if the name doesn't exist. */
-  rc = sqlite3_exec(db,
-    "INSERT INTO cron_tasks(name, schedule, enabled, next_due_at) "
-    "SELECT 'broadcast_ttl_cleanup','every:5m',1,strftime('%s','now') "
-    "WHERE NOT EXISTS (SELECT 1 FROM cron_tasks WHERE name='broadcast_ttl_cleanup');",
-    NULL, NULL, &err);
-  if (rc != SQLITE_OK) goto done;
+  rc = sqlite3_exec (db,
+		     "INSERT INTO cron_tasks(name, schedule, enabled, next_due_at) "
+		     "SELECT 'broadcast_ttl_cleanup','every:5m',1,strftime('%s','now') "
+		     "WHERE NOT EXISTS (SELECT 1 FROM cron_tasks WHERE name='broadcast_ttl_cleanup');",
+		     NULL, NULL, &err);
+  if (rc != SQLITE_OK)
+    goto done;
 
 done:
   {
     int rc2 = (rc == SQLITE_OK)
-      ? sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL)
-      : sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
-    (void)rc2;
+      ? sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL)
+      : sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+    (void) rc2;
   }
-  if (err) sqlite3_free(err);
+  if (err)
+    sqlite3_free (err);
   return rc;
 }
 
@@ -1723,12 +1741,13 @@ db_init (void)
   rc = sqlite3_open (DEFAULT_DB_NAME, &db_handle);
   if (rc != SQLITE_OK)
     {
-          LOGE("DB Open Failed (%s): %s (rc=%d)", DEFAULT_DB_NAME, sqlite3_errstr(rc), rc);
-	  sqlite3_close(db_handle);	
-	  fprintf (stderr,
-		   "FATAL ERROR: Could not open database! Code: %d, Message: %s\n",
-		   rc, sqlite3_errmsg (db_handle));
-	  return -1;
+      LOGE ("DB Open Failed (%s): %s (rc=%d)", DEFAULT_DB_NAME,
+	    sqlite3_errstr (rc), rc);
+      sqlite3_close (db_handle);
+      fprintf (stderr,
+	       "FATAL ERROR: Could not open database! Code: %d, Message: %s\n",
+	       rc, sqlite3_errmsg (db_handle));
+      return -1;
     }
 
 
@@ -1784,7 +1803,7 @@ db_init (void)
 
     }
   db_engine_bootstrap (db_handle);
-  (void) db_seed_cron_tasks(db_handle);
+  (void) db_seed_cron_tasks (db_handle);
 
 
   // If we've made it here, all steps were successful.
