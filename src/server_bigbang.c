@@ -1719,11 +1719,11 @@ create_ferringhi (int ferringhi_sector)
     }
 
   // Handle default if no tunnel was found (or if prepare failed)
-  if (oso_tunnel == 0)
+  if (oso_tunnel == 0 || oso_tunnel == longest_tunnel_sector)
     {
       fprintf (stderr,
 	       "Orion Syndicate: No tunnels of length >= 2 found. Defaulting to sector 22.\n");
-      oso_tunnel = 22;
+      oso_tunnel = (rand() % (999 - 11 + 1)) + 11;;
     }
 
   // --- Ferringhi Homeworld (num=2) Update ---
