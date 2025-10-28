@@ -24,14 +24,14 @@
 
 
 // Assume this external function provides the database handle.
-extern sqlite3 *db_get_handle(void);
+extern sqlite3 *db_get_handle (void);
 
 #include <sqlite3.h>
 #include <time.h>
 #include <stdio.h>
 
 // Assuming these are defined elsewhere
-extern sqlite3 *db_get_handle(void);
+extern sqlite3 *db_get_handle (void);
 // Assuming SQLITE_TRANSIENT is defined (it is standard SQLite define)
 
 /** * Sends a complex mail message to a specific player, including a sender ID and subject.
@@ -42,53 +42,59 @@ extern sqlite3 *db_get_handle(void);
  * @param subject The subject line of the mail message.
  * @param message The text content of the message body. 
  * @return 0 on success, or non-zero on error. 
- */ 
-int h_send_message_to_player(int player_id, int sender_id, const char *subject, const char *message) 
-{ 
-    sqlite3 *db = db_get_handle(); 
-    sqlite3_stmt *st = NULL; 
-    int rc; 
+ */
+int
+h_send_message_to_player (int player_id, int sender_id, const char *subject,
+			  const char *message)
+{
+  sqlite3 *db = db_get_handle ();
+  sqlite3_stmt *st = NULL;
+  int rc;
 
-    // Use current Unix timestamp for the message time 
-    int timestamp = (int)time(NULL); 
+  // Use current Unix timestamp for the message time 
+  int timestamp = (int) time (NULL);
 
-    // Updated SQL statement to insert recipient_id (player_id), sender_id, timestamp, 
-    // subject, message, and set 'read' status to 0 (unread).
-    const char *sql =
-        "INSERT INTO mail (sender_id, recipient_id, subject, body) "
-        "VALUES (?, ?, ?, ?);";
-    
-    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL); 
+  // Updated SQL statement to insert recipient_id (player_id), sender_id, timestamp, 
+  // subject, message, and set 'read' status to 0 (unread).
+  const char *sql =
+    "INSERT INTO mail (sender_id, recipient_id, subject, body) "
+    "VALUES (?, ?, ?, ?);";
 
-    if (rc != SQLITE_OK) { 
-      LOGE( "SQL error preparing complex message insert: %s\n", sqlite3_errmsg(db)); 
-      return 1; 
-    } 
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
 
-    // Bind parameters
-    // 1: recipient_id (player_id)
-    sqlite3_bind_int(st, 1, player_id);      
-    // 2: sender_id
-    sqlite3_bind_int(st, 2, sender_id);
-    // 3: timestamp
-    sqlite3_bind_text(st, 3, subject, -1, SQLITE_TRANSIENT);
-    // 5: message (using SQLITE_TRANSIENT)
-    sqlite3_bind_text(st, 4, message, -1, SQLITE_TRANSIENT);
-        
-    // Execute the statement 
-    if (sqlite3_step(st) != SQLITE_DONE) { 
-      LOGE( "SQL error executing complex message insert for player %d: %s\n", 
-            player_id, sqlite3_errmsg(db)); 
-        sqlite3_finalize(st); 
-        return 1; 
-    } 
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("SQL error preparing complex message insert: %s\n",
+	    sqlite3_errmsg (db));
+      return 1;
+    }
 
-    sqlite3_finalize(st); 
+  // Bind parameters
+  // 1: recipient_id (player_id)
+  sqlite3_bind_int (st, 1, player_id);
+  // 2: sender_id
+  sqlite3_bind_int (st, 2, sender_id);
+  // 3: timestamp
+  sqlite3_bind_text (st, 3, subject, -1, SQLITE_TRANSIENT);
+  // 5: message (using SQLITE_TRANSIENT)
+  sqlite3_bind_text (st, 4, message, -1, SQLITE_TRANSIENT);
 
-    LOGD("Complex message sent to player %d from sender %d. Subject: '%s'\n", player_id, sender_id, subject); 
-        
-    return 0; 
-} 
+  // Execute the statement 
+  if (sqlite3_step (st) != SQLITE_DONE)
+    {
+      LOGE ("SQL error executing complex message insert for player %d: %s\n",
+	    player_id, sqlite3_errmsg (db));
+      sqlite3_finalize (st);
+      return 1;
+    }
+
+  sqlite3_finalize (st);
+
+  LOGD ("Complex message sent to player %d from sender %d. Subject: '%s'\n",
+	player_id, sender_id, subject);
+
+  return 0;
+}
 
 /**
  * @brief Retrieves the ID of the active ship for a given player.
@@ -99,41 +105,47 @@ int h_send_message_to_player(int player_id, int sender_id, const char *subject, 
  * @return The ship ID (int) on success, or 0 if player is not found 
  * or the ship column is NULL/0.
  */
-int h_get_active_ship_id(sqlite3 *db, int player_id)
+int
+h_get_active_ship_id (sqlite3 *db, int player_id)
 {
-    sqlite3_stmt *st = NULL;
-    int ship_id = 0;
-    int rc;
+  sqlite3_stmt *st = NULL;
+  int ship_id = 0;
+  int rc;
 
-    // SQL: Select the 'ship' column from 'players' where the 'id' matches the player_id.
-    // The player's active ship ID is stored in the 'ship' column.
-    const char *sql = "SELECT ship FROM players WHERE id = ?;";
+  // SQL: Select the 'ship' column from 'players' where the 'id' matches the player_id.
+  // The player's active ship ID is stored in the 'ship' column.
+  const char *sql = "SELECT ship FROM players WHERE id = ?;";
 
-    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
 
-    if (rc != SQLITE_OK) {
-        fprintf(stderr, "SQL error preparing ship lookup: %s\n", sqlite3_errmsg(db));
-        return 0; // Return 0 on error
+  if (rc != SQLITE_OK)
+    {
+      fprintf (stderr, "SQL error preparing ship lookup: %s\n",
+	       sqlite3_errmsg (db));
+      return 0;			// Return 0 on error
     }
 
-    sqlite3_bind_int(st, 1, player_id);
+  sqlite3_bind_int (st, 1, player_id);
 
-    // Execute the query
-    rc = sqlite3_step(st);
+  // Execute the query
+  rc = sqlite3_step (st);
 
-    if (rc == SQLITE_ROW) {
-        // The 'ship' column is at index 0. If it's NULL or 0, ship_id remains 0.
-        ship_id = sqlite3_column_int(st, 0);
-    } else if (rc != SQLITE_DONE) {
-        // Handle error if step was not successful and not just finished.
-        fprintf(stderr, "SQL error executing ship lookup for player %d: %s\n", 
-            player_id, sqlite3_errmsg(db));
+  if (rc == SQLITE_ROW)
+    {
+      // The 'ship' column is at index 0. If it's NULL or 0, ship_id remains 0.
+      ship_id = sqlite3_column_int (st, 0);
+    }
+  else if (rc != SQLITE_DONE)
+    {
+      // Handle error if step was not successful and not just finished.
+      fprintf (stderr, "SQL error executing ship lookup for player %d: %s\n",
+	       player_id, sqlite3_errmsg (db));
     }
 
-    sqlite3_finalize(st);
-    
-    // ship_id will be > 0 if a valid ship was found, otherwise 0.
-    return ship_id;
+  sqlite3_finalize (st);
+
+  // ship_id will be > 0 if a valid ship was found, otherwise 0.
+  return ship_id;
 }
 
 
@@ -157,61 +169,67 @@ int h_get_active_ship_id(sqlite3 *db, int player_id)
  * Trading/Ports,Buying/Selling at a Port,"port.buy, port.sell",Docking at a port (even if you stay in space) often removes cloak.
  *
  */
-int h_decloak_ship(sqlite3 *db, int ship_id)
+int
+h_decloak_ship (sqlite3 *db, int ship_id)
 {
-    sqlite3_stmt *st = NULL;
-    int rc;
-    int player_id = 0;
-    int rows_affected = 0;
+  sqlite3_stmt *st = NULL;
+  int rc;
+  int player_id = 0;
+  int rows_affected = 0;
 
-    // 1. Prepare the statement to UPDATE and check if the ship was cloaked (cloaked IS NOT NULL)
-    // We update the ship in a single query: set cloaked=NULL where cloaked is not NULL AND id = ?
-    // The RETURNING player_id clause assumes your 'ships' table has a player_id foreign key.
-    rc = sqlite3_prepare_v2(db,
-        "UPDATE ships "
-        "SET cloaked = NULL "
-        "WHERE id = ? AND cloaked IS NOT NULL "
-        "RETURNING player_id;", 
-        -1, &st, NULL);
+  // 1. Prepare the statement to UPDATE and check if the ship was cloaked (cloaked IS NOT NULL)
+  // We update the ship in a single query: set cloaked=NULL where cloaked is not NULL AND id = ?
+  // The RETURNING player_id clause assumes your 'ships' table has a player_id foreign key.
+  rc = sqlite3_prepare_v2 (db,
+			   "UPDATE ships "
+			   "SET cloaked = NULL "
+			   "WHERE id = ? AND cloaked IS NOT NULL "
+			   "RETURNING player_id;", -1, &st, NULL);
 
-    if (rc != SQLITE_OK) {
-        // Handle SQL preparation error
-        fprintf(stderr, "SQL error preparing de-cloak: %s\n", sqlite3_errmsg(db));
-        return 1;
+  if (rc != SQLITE_OK)
+    {
+      // Handle SQL preparation error
+      fprintf (stderr, "SQL error preparing de-cloak: %s\n",
+	       sqlite3_errmsg (db));
+      return 1;
     }
 
-    // Bind the ship ID
-    sqlite3_bind_int(st, 1, ship_id);
-    
-    // Execute and check the result
-    if (sqlite3_step(st) == SQLITE_ROW) {
-        // If a row was returned, the UPDATE was successful (the ship was cloaked)
-        
-        // Retrieve the player_id of the affected ship
-        player_id = sqlite3_column_int(st, 0); 
-        
-        // 2. Send the notification to the player
-        if (player_id > 0) {
-            // Use the identified message function
-	    h_send_message_to_player(player_id, 1, "Uncloaking", "Your ship's cloaking device has been deactivated due to action."); 
-        }
+  // Bind the ship ID
+  sqlite3_bind_int (st, 1, ship_id);
 
-        rows_affected = 1; // Ship was de-cloaked
+  // Execute and check the result
+  if (sqlite3_step (st) == SQLITE_ROW)
+    {
+      // If a row was returned, the UPDATE was successful (the ship was cloaked)
+
+      // Retrieve the player_id of the affected ship
+      player_id = sqlite3_column_int (st, 0);
+
+      // 2. Send the notification to the player
+      if (player_id > 0)
+	{
+	  // Use the identified message function
+	  h_send_message_to_player (player_id, 1, "Uncloaking",
+				    "Your ship's cloaking device has been deactivated due to action.");
+	}
+
+      rows_affected = 1;	// Ship was de-cloaked
     }
 
-    sqlite3_finalize(st);
+  sqlite3_finalize (st);
 
-    if (rows_affected > 0) {
-        // Commit the de-cloak immediately so subsequent actions see the new state
-        // NOTE: If you are already inside a transaction, remove this COMMIT call.
-        // Assuming h_decloak_ship is called as part of a larger, atomic command,
-        // it might be safer to let the calling function handle the final commit.
-        // I will remove the commit here for better transaction safety.
-        // return sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL); 
+  if (rows_affected > 0)
+    {
+      // Commit the de-cloak immediately so subsequent actions see the new state
+      // NOTE: If you are already inside a transaction, remove this COMMIT call.
+      // Assuming h_decloak_ship is called as part of a larger, atomic command,
+      // it might be safer to let the calling function handle the final commit.
+      // I will remove the commit here for better transaction safety.
+      // return sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL); 
     }
 
-    // Return 0 even if the ship wasn't cloaked, as that's a successful outcome for this function's goal.
-    return 0; 
+  // Return 0 even if the ship wasn't cloaked, as that's a successful outcome for this function's goal.
+  return 0;
 }
 
 

@@ -512,11 +512,12 @@ cmd_move_describe_sector (client_ctx_t *ctx, json_t *root)
 int
 cmd_move_warp (client_ctx_t *ctx, json_t *root)
 {
-  
-  sqlite3 *db_handle = db_get_handle ();
-  h_decloak_ship(db_handle, h_get_active_ship_id(db_handle, ctx->player_id ));
 
-    
+  sqlite3 *db_handle = db_get_handle ();
+  h_decloak_ship (db_handle,
+		  h_get_active_ship_id (db_handle, ctx->player_id));
+
+
   json_t *jdata = json_object_get (root, "data");
   int to = 0;
   if (json_is_object (jdata))
@@ -1181,7 +1182,8 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
     return 1;
 
   sqlite3 *db_handle = db_get_handle ();
-  h_decloak_ship(db_handle, h_get_active_ship_id(db_handle, ctx->player_id ));  
+  h_decloak_ship (db_handle,
+		  h_get_active_ship_id (db_handle, ctx->player_id));
 
   json_t *jdata = json_object_get (root, "data");
   json_t *jsector_id = json_object_get (jdata, "sector_id");
@@ -1236,7 +1238,7 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
   /* Perform the update:
      - if none existed → set text
      - if one existed  → clear (explode both) */
-  int rc = db_sector_set_beacon (req_sector_id, beacon_text);
+  int rc = db_sector_set_beacon (req_sector_id, beacon_text,ctx->player_id);
   if (rc != SQLITE_OK)
     {
       send_enveloped_error (ctx->fd, root, 1500,

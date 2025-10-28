@@ -1,7 +1,7 @@
 #include <sqlite3.h>
 #include <stdio.h>
 #include <string.h>
-#include <stdint.h> 
+#include <stdint.h>
 #include <time.h>
 #include <sqlite3.h>
 #include <stdlib.h>
@@ -17,6 +17,31 @@
 #define INITIAL_QUEUE_CAPACITY 64
 #define FEDSPACE_SECTOR_START 1
 #define FEDSPACE_SECTOR_END 10
+  // 60 minutes in seconds for the timeout
+#define LOGOUT_TIMEOUT_S (60 * 60)
+#define CONFISCATION_SECTOR 0
+// Define the range constants
+#define MIN_UNPROTECTED_SECTOR 11
+#define MAX_UNPROTECTED_SECTOR 999
+#define RANGE_SIZE (MAX_UNPROTECTED_SECTOR - MIN_UNPROTECTED_SECTOR + 1)
+
+
+// Pre-define reasons for logging purposes
+enum
+{
+  REASON_EVIL_ALIGN = 1,
+  REASON_EXCESS_FIGHTERS = 2,
+  REASON_HIGH_EXP = 3,
+  REASON_NO_OWNER = 4,
+  REASON_OVERCROWDING = 5
+};
+
+enum
+{ MAX_TOWS_PER_PASS = 50,
+  MAX_SHIPS_PER_FED_SECTOR = 5,
+  MAX_FED_FIGHTERS = 49
+};
+
 
 typedef struct
 {
@@ -26,7 +51,7 @@ typedef struct
 
 
 /* ---- forward decls for handlers ---- */
-/* static int h_reset_turns_for_player(sqlite3 *db, int64_t now_s); */ 
+/* static int h_reset_turns_for_player(sqlite3 *db, int64_t now_s); */
 /* static int h_fedspace_cleanup(sqlite3 *db, int64_t now_s); */
 /* static int h_autouncloak_sweeper(sqlite3 *db, int64_t now_s); */
 /* static int h_terra_replenish(sqlite3 *db, int64_t now_s); */
@@ -51,10 +76,175 @@ static entry_t REG[] = {
 
 static int g_reg_inited = 0;
 
-////////////////////////////////////
+
+///////////////////////////////////
 
 
-#define MSL_TABLE_NAME "msl_sectors" 
+/**
+ * @brief Returns a random sector ID between 11 and 999 (inclusive).
+ * * NOTE: The 'db' parameter is kept for compatibility with the function signature
+ * but is not used for the random number calculation.
+ */
+int
+get_random_sector (sqlite3 *db)
+{
+    // Generate a random number from 0 up to (RANGE_SIZE - 1)
+    // The modulus operator (%) is used to clamp the result.
+    int random_offset = rand() % RANGE_SIZE;
+    
+    // Shift the offset up to the minimum sector ID
+    int random_sector = MIN_UNPROTECTED_SECTOR + random_offset;
+    
+    return random_sector;
+}
+
+
+int
+tow_ship (sqlite3 *db, int ship_id, int new_sector_id, int admin_id,
+	  int reason_code)
+{
+  int rc;
+  int owner_id = 0;
+  int old_sector_id = 0;
+  sqlite3_stmt *stmt = NULL;
+
+
+  // --- 1. SELECT: Get current location and owner ---
+  // CORRECTION: Join 'ships' (T1) directly to 'players' (T2) using T1.id = T2.ship
+  const char *sql_select_ship_info =
+    "SELECT T1.location, T2.id " 
+    "FROM ships T1 "
+    "LEFT JOIN players T2 ON T1.id = T2.ship " // CORRECTED JOIN
+    "WHERE T1.id = ?;"; 
+
+  if (sqlite3_prepare_v2 (db, sql_select_ship_info, -1, &stmt, NULL) !=
+      SQLITE_OK)
+    {
+      LOGE ("tow_ship: Prepare SELECT failed for ship %d: %s", ship_id,
+	    sqlite3_errmsg (db));
+      return SQLITE_ERROR;
+    }
+  sqlite3_bind_int (stmt, 1, ship_id);
+
+  if (sqlite3_step (stmt) != SQLITE_ROW)
+    {
+      LOGE ("tow_ship: Ship ID %d not found or step failed. Error: %s",
+	    ship_id, sqlite3_errmsg (db));
+      sqlite3_finalize (stmt);
+      return SQLITE_NOTFOUND;
+    }
+
+  old_sector_id = sqlite3_column_int (stmt, 0);
+  // This will now correctly pull the player ID (4, 5, 6, etc.) instead of 0
+  owner_id = sqlite3_column_int (stmt, 1);
+  sqlite3_finalize (stmt);
+
+
+  // --- 2. Reason Code Mapping (Unchanged) ---
+  const char *reason_str;
+  const char *subject_str;
+  switch (reason_code)
+    {
+    case REASON_EVIL_ALIGN:
+      reason_str = "Evil Alignment";
+      subject_str = "Federation Tow Notice: Evil Alignment";
+      break;
+    case REASON_EXCESS_FIGHTERS:
+      reason_str = "Excess Fighters (>50)";
+      subject_str = "Federation Tow Notice: Illegal Fighters";
+      break;
+    case REASON_HIGH_EXP:
+      reason_str = "High Experience (>=1000 EP)";
+      subject_str = "Federation Tow Notice: Protection Expired";
+      break;
+    case REASON_NO_OWNER:
+      reason_str = "Unowned/Derelict Ship (Confiscated)";
+      subject_str = "Ship Confiscation Notice";
+      break;
+    case REASON_OVERCROWDING:
+      reason_str = "Overcrowding in FedSpace";
+      subject_str = "Federation Tow Notice: FedSpace Overcrowding";
+      break;
+    default:
+      reason_str = "Unknown Reason";
+      subject_str = "Federation Tow Notice: Ship Moved";
+      break;
+    }
+
+
+  // --- 3. UPDATE: Ship Location (Unchanged) ---
+  const char *sql_update_ship =
+    "UPDATE ships SET location = ? WHERE id = ?;"; 
+
+  if (sqlite3_prepare_v2 (db, sql_update_ship, -1, &stmt, NULL) != SQLITE_OK)
+    {
+      LOGE ("tow_ship: Prepare UPDATE ship failed: %s", sqlite3_errmsg (db));
+      return SQLITE_ERROR;
+    }
+  sqlite3_bind_int (stmt, 1, new_sector_id);
+  sqlite3_bind_int (stmt, 2, ship_id);
+  rc = sqlite3_step (stmt);
+  sqlite3_finalize (stmt);
+
+  if (rc != SQLITE_DONE)
+    {
+      LOGE ("tow_ship: Ship %d UPDATE failed: %d", ship_id, rc);
+      return rc;
+    }
+
+
+  // --- 4. UPDATE: Player Location and Notification ---
+  if (owner_id > 0) // This check should now pass for the bot players
+    {
+      const char *sql_update_player =
+	"UPDATE players SET sector = ? WHERE id = ?;"; // Corrected to use 'id'
+
+      if (sqlite3_prepare_v2 (db, sql_update_player, -1, &stmt, NULL) !=
+	  SQLITE_OK)
+	{
+	  LOGE ("tow_ship: Prepare UPDATE player failed: %s",
+		sqlite3_errmsg (db));
+	}
+      else
+	{
+          // Player ID is now correctly bound
+	  sqlite3_bind_int (stmt, 1, new_sector_id);
+	  sqlite3_bind_int (stmt, 2, owner_id);
+	  rc = sqlite3_step (stmt);
+	  sqlite3_finalize (stmt);
+
+	  if (rc != SQLITE_DONE)
+	    {
+	      LOGE ("tow_ship: Player %d UPDATE failed: %d", owner_id, rc);
+	    }
+	}
+
+      // Send Notification Message
+      char message_buffer[256];
+      snprintf (message_buffer, sizeof (message_buffer),
+		"Your ship was found parked in FedSpace (Sector %d) without protection. "
+		"It has been towed to Sector %d for violating FedLaw: %s. "
+		"The ship is now exposed to danger.",
+		old_sector_id, new_sector_id, reason_str);
+
+      // This function call should now execute
+      //      h_send_message_to_player (owner_id, admin_id, subject_str,
+      //			message_buffer);
+      h_send_message_to_player (admin_id, owner_id, subject_str,
+				message_buffer);
+
+    }
+
+  // --- 5. Log the Action (Unchanged) ---
+  LOGI
+    ("TOW: Ship %d (Owner %d) towed from sector %d to sector %d. Reason: %s (Code %d). Admin: %d.",
+     ship_id, owner_id, old_sector_id, new_sector_id, reason_str, reason_code,
+     admin_id);
+
+  return SQLITE_OK;
+}
+
+#define MSL_TABLE_NAME "msl_sectors"
 
 /**
  * @brief Finds the shortest path between two sectors using Breadth-First Search (BFS).
@@ -70,161 +260,189 @@ static int g_reg_inited = 0;
  * representing the path, or NULL if no path is found or on allocation error.
  * The caller is responsible for freeing the returned pointer.
  */
-static int *universe_pathfind_get_sectors(sqlite3 *db, int start_sector, int end_sector, const int *avoid_list)
+static int *
+universe_pathfind_get_sectors (sqlite3 *db, int start_sector, int end_sector,
+			       const int *avoid_list)
 {
-    // Check for trivial case
-    if (start_sector == end_sector) {
-        int *path = malloc(2 * sizeof(int));
-        if (path) {
-            path[0] = start_sector;
-            path[1] = 0; // Null terminator
-        }
-        return path;
+  // Check for trivial case
+  if (start_sector == end_sector)
+    {
+      int *path = malloc (2 * sizeof (int));
+      if (path)
+	{
+	  path[0] = start_sector;
+	  path[1] = 0;		// Null terminator
+	}
+      return path;
     }
 
-    // --- 1. Initialization and Sizing ---
+  // --- 1. Initialization and Sizing ---
 
-    // Find the actual maximum sector ID for correct array sizing
-    int max_sector_id = 0;
-    sqlite3_stmt *max_st = NULL;
-    if (sqlite3_prepare_v2(db, "SELECT MAX(sector_id) FROM sectors;", -1, &max_st, NULL) == SQLITE_OK) {
-        if (sqlite3_step(max_st) == SQLITE_ROW) {
-            max_sector_id = sqlite3_column_int(max_st, 0);
-        }
-        sqlite3_finalize(max_st);
-    }
-    
-    // Safety fallback for max size (should be larger than the largest possible sector ID)
-    if (max_sector_id < 100) { 
-        max_sector_id = 2000;
-    }
-
-    // Allocate parent array: stores the sector ID that led to the current sector.
-    // Index corresponds to sector ID. Value 0 means unvisited.
-    int *parent = calloc(max_sector_id + 1, sizeof(int));
-    if (!parent) {
-        // LOGE("Pathfind: Failed to allocate parent array."); // Assuming LOGE is available
-        return NULL;
+  // Find the actual maximum sector ID for correct array sizing
+  int max_sector_id = 0;
+  sqlite3_stmt *max_st = NULL;
+  if (sqlite3_prepare_v2
+      (db, "SELECT MAX(sector_id) FROM sectors;", -1, &max_st,
+       NULL) == SQLITE_OK)
+    {
+      if (sqlite3_step (max_st) == SQLITE_ROW)
+	{
+	  max_sector_id = sqlite3_column_int (max_st, 0);
+	}
+      sqlite3_finalize (max_st);
     }
 
-    // Initialize BFS Queue (dynamic resizing)
-    int *queue = malloc(INITIAL_QUEUE_CAPACITY * sizeof(int));
-    int queue_head = 0;
-    int queue_tail = 0;
-    int queue_capacity = INITIAL_QUEUE_CAPACITY;
-    if (!queue) {
-        // LOGE("Pathfind: Failed to allocate queue."); // Assuming LOGE is available
-        free(parent);
-        return NULL;
+  // Safety fallback for max size (should be larger than the largest possible sector ID)
+  if (max_sector_id < 100)
+    {
+      max_sector_id = 2000;
     }
 
-    // Handle avoid list: mark avoided sectors as blocked (-2)
-    if (avoid_list) {
-        for (const int *avoid = avoid_list; *avoid != 0; avoid++) {
-             if (*avoid > 0 && *avoid <= max_sector_id) {
-                parent[*avoid] = -2; // Sentinel for blocked/avoided sector
-             }
-        }
+  // Allocate parent array: stores the sector ID that led to the current sector.
+  // Index corresponds to sector ID. Value 0 means unvisited.
+  int *parent = calloc (max_sector_id + 1, sizeof (int));
+  if (!parent)
+    {
+      // LOGE("Pathfind: Failed to allocate parent array."); // Assuming LOGE is available
+      return NULL;
     }
 
-    // Mark start sector as visited and enqueue it. Parent of start is -1 (sentinel).
-    parent[start_sector] = -1;
-    queue[queue_tail++] = start_sector;
-    int path_found = 0;
-    
-    // --- 2. Breadth-First Search (BFS) ---
-    
-    sqlite3_stmt *warp_st = NULL;
-    const char *sql_warps = "SELECT to_sector FROM sector_warps WHERE from_sector = ?1;";
-    if (sqlite3_prepare_v2(db, sql_warps, -1, &warp_st, NULL) != SQLITE_OK) {
-        // LOGE("Pathfind: DB prepare error for warps: %s", sqlite3_errmsg(db)); // Assuming LOGE is available
-        free(parent);
-        free(queue);
-        return NULL;
+  // Initialize BFS Queue (dynamic resizing)
+  int *queue = malloc (INITIAL_QUEUE_CAPACITY * sizeof (int));
+  int queue_head = 0;
+  int queue_tail = 0;
+  int queue_capacity = INITIAL_QUEUE_CAPACITY;
+  if (!queue)
+    {
+      // LOGE("Pathfind: Failed to allocate queue."); // Assuming LOGE is available
+      free (parent);
+      return NULL;
     }
 
-    while (queue_head < queue_tail) {
-        int current_sector = queue[queue_head++];
-
-        // Check if we reached the target
-        if (current_sector == end_sector) {
-            path_found = 1;
-            break;
-        }
-
-        sqlite3_bind_int(warp_st, 1, current_sector);
-        
-        while (sqlite3_step(warp_st) == SQLITE_ROW) {
-            int neighbor = sqlite3_column_int(warp_st, 0);
-
-            // Bounds check and already visited/avoided check (parent[neighbor] == 0 means unvisited/unblocked)
-            if (neighbor <= 0 || neighbor > max_sector_id || parent[neighbor] != 0) {
-                continue; 
-            }
-            
-            // Mark as visited and record parent
-            parent[neighbor] = current_sector;
-
-            // Enqueue: Check for capacity and reallocate if necessary
-            if (queue_tail == queue_capacity) {
-                queue_capacity *= 2;
-                int *new_queue = realloc(queue, queue_capacity * sizeof(int));
-                if (!new_queue) {
-                    // LOGE("Pathfind: Realloc failed for queue expansion."); // Assuming LOGE is available
-                    path_found = 0; // Failure state
-                    queue_tail = 0; // Stop loop
-                    break;
-                }
-                queue = new_queue;
-            }
-            queue[queue_tail++] = neighbor;
-        }
-
-        sqlite3_reset(warp_st);
+  // Handle avoid list: mark avoided sectors as blocked (-2)
+  if (avoid_list)
+    {
+      for (const int *avoid = avoid_list; *avoid != 0; avoid++)
+	{
+	  if (*avoid > 0 && *avoid <= max_sector_id)
+	    {
+	      parent[*avoid] = -2;	// Sentinel for blocked/avoided sector
+	    }
+	}
     }
 
-    sqlite3_finalize(warp_st);
-    free(queue);
+  // Mark start sector as visited and enqueue it. Parent of start is -1 (sentinel).
+  parent[start_sector] = -1;
+  queue[queue_tail++] = start_sector;
+  int path_found = 0;
 
-    // --- 3. Path Reconstruction ---
-    
-    if (!path_found) {
-        free(parent);
-        return NULL;
+  // --- 2. Breadth-First Search (BFS) ---
+
+  sqlite3_stmt *warp_st = NULL;
+  const char *sql_warps =
+    "SELECT to_sector FROM sector_warps WHERE from_sector = ?1;";
+  if (sqlite3_prepare_v2 (db, sql_warps, -1, &warp_st, NULL) != SQLITE_OK)
+    {
+      // LOGE("Pathfind: DB prepare error for warps: %s", sqlite3_errmsg(db)); // Assuming LOGE is available
+      free (parent);
+      free (queue);
+      return NULL;
     }
 
-    // Count path length
-    int path_length = 0;
-    int temp_sector = end_sector;
-    while (temp_sector != -1) {
-        path_length++;
-        // Use a safety break in case of cycle/corrupt parent pointers
-        if (path_length > max_sector_id + 1) { 
-            // LOGE("Pathfind: Cycle detected during reconstruction. Aborting."); // Assuming LOGE is available
-            free(parent);
-            return NULL;
-        }
-        temp_sector = parent[temp_sector];
+  while (queue_head < queue_tail)
+    {
+      int current_sector = queue[queue_head++];
+
+      // Check if we reached the target
+      if (current_sector == end_sector)
+	{
+	  path_found = 1;
+	  break;
+	}
+
+      sqlite3_bind_int (warp_st, 1, current_sector);
+
+      while (sqlite3_step (warp_st) == SQLITE_ROW)
+	{
+	  int neighbor = sqlite3_column_int (warp_st, 0);
+
+	  // Bounds check and already visited/avoided check (parent[neighbor] == 0 means unvisited/unblocked)
+	  if (neighbor <= 0 || neighbor > max_sector_id
+	      || parent[neighbor] != 0)
+	    {
+	      continue;
+	    }
+
+	  // Mark as visited and record parent
+	  parent[neighbor] = current_sector;
+
+	  // Enqueue: Check for capacity and reallocate if necessary
+	  if (queue_tail == queue_capacity)
+	    {
+	      queue_capacity *= 2;
+	      int *new_queue = realloc (queue, queue_capacity * sizeof (int));
+	      if (!new_queue)
+		{
+		  // LOGE("Pathfind: Realloc failed for queue expansion."); // Assuming LOGE is available
+		  path_found = 0;	// Failure state
+		  queue_tail = 0;	// Stop loop
+		  break;
+		}
+	      queue = new_queue;
+	    }
+	  queue[queue_tail++] = neighbor;
+	}
+
+      sqlite3_reset (warp_st);
     }
 
-    // Allocate result and fill in reverse order
-    int *result_path = malloc((path_length + 1) * sizeof(int)); // +1 for terminator
-    if (!result_path) {
-        // LOGE("Pathfind: Failed to allocate result path."); // Assuming LOGE is available
-        free(parent);
-        return NULL;
+  sqlite3_finalize (warp_st);
+  free (queue);
+
+  // --- 3. Path Reconstruction ---
+
+  if (!path_found)
+    {
+      free (parent);
+      return NULL;
     }
 
-    int i = path_length - 1;
-    temp_sector = end_sector;
-    while (temp_sector != -1) {
-        result_path[i--] = temp_sector;
-        temp_sector = parent[temp_sector];
+  // Count path length
+  int path_length = 0;
+  int temp_sector = end_sector;
+  while (temp_sector != -1)
+    {
+      path_length++;
+      // Use a safety break in case of cycle/corrupt parent pointers
+      if (path_length > max_sector_id + 1)
+	{
+	  // LOGE("Pathfind: Cycle detected during reconstruction. Aborting."); // Assuming LOGE is available
+	  free (parent);
+	  return NULL;
+	}
+      temp_sector = parent[temp_sector];
     }
-    result_path[path_length] = 0; // Null terminator
 
-    free(parent);
-    return result_path;
+  // Allocate result and fill in reverse order
+  int *result_path = malloc ((path_length + 1) * sizeof (int));	// +1 for terminator
+  if (!result_path)
+    {
+      // LOGE("Pathfind: Failed to allocate result path."); // Assuming LOGE is available
+      free (parent);
+      return NULL;
+    }
+
+  int i = path_length - 1;
+  temp_sector = end_sector;
+  while (temp_sector != -1)
+    {
+      result_path[i--] = temp_sector;
+      temp_sector = parent[temp_sector];
+    }
+  result_path[path_length] = 0;	// Null terminator
+
+  free (parent);
+  return result_path;
 }
 
 /**
@@ -237,39 +455,48 @@ static int *universe_pathfind_get_sectors(sqlite3 *db, int start_sector, int end
  * @param avoid_list Sectors to avoid.
  * @param total_unique_sectors_added Pointer to counter for logging.
  */
-static void _insert_path_sectors(sqlite3 *db, sqlite3_stmt *insert_st, 
-                                 int start_sector, int end_sector, 
-                                 const int *avoid_list, int *total_unique_sectors_added)
+static void
+_insert_path_sectors (sqlite3 *db, sqlite3_stmt *insert_st,
+		      int start_sector, int end_sector,
+		      const int *avoid_list, int *total_unique_sectors_added)
 {
-    int rc;
-    int *s;
-    int *current_path = universe_pathfind_get_sectors(db, start_sector, end_sector, avoid_list);
-        
-    if (!current_path) {
-        LOGW("Could not find path from %d to %d. Check universe connections.", start_sector, end_sector);
-        return;
+  int rc;
+  int *s;
+  int *current_path =
+    universe_pathfind_get_sectors (db, start_sector, end_sector, avoid_list);
+
+  if (!current_path)
+    {
+      LOGW ("Could not find path from %d to %d. Check universe connections.",
+	    start_sector, end_sector);
+      return;
     }
 
-    // Insert Path Sectors into Table
-    for (s = current_path; *s != 0; s++) {
-        
-        sqlite3_reset(insert_st);
-        sqlite3_bind_int(insert_st, 1, *s);
-        
-        rc = sqlite3_step(insert_st);
-        
-        if (rc == SQLITE_DONE) {
-            // If the sector was newly inserted (not ignored)
-            if (sqlite3_changes(db) > 0) {
-                (*total_unique_sectors_added)++;
-            }
-        } else {
-            LOGW("SQL warning inserting sector %d for path %d->%d: %s", 
-                 *s, start_sector, end_sector, sqlite3_errmsg(db));
-        }
+  // Insert Path Sectors into Table
+  for (s = current_path; *s != 0; s++)
+    {
+
+      sqlite3_reset (insert_st);
+      sqlite3_bind_int (insert_st, 1, *s);
+
+      rc = sqlite3_step (insert_st);
+
+      if (rc == SQLITE_DONE)
+	{
+	  // If the sector was newly inserted (not ignored)
+	  if (sqlite3_changes (db) > 0)
+	    {
+	      (*total_unique_sectors_added)++;
+	    }
+	}
+      else
+	{
+	  LOGW ("SQL warning inserting sector %d for path %d->%d: %s",
+		*s, start_sector, end_sector, sqlite3_errmsg (db));
+	}
     }
-    
-    free(current_path);
+
+  free (current_path);
 }
 
 /**
@@ -279,152 +506,177 @@ static void _insert_path_sectors(sqlite3 *db, sqlite3_stmt *insert_st,
  * @param db The SQLite database handle.
  * @return 0 on success, -1 on database error.
  */
-int populate_msl_if_empty(sqlite3 *db)
+int
+populate_msl_if_empty (sqlite3 *db)
 {
-    const int *avoid_list = NULL; // No sectors to avoid for this "safe" path list
-    int rc;
-    int total_sectors_in_table = 0;
-    char sql_buffer[256];
-    
-    // --- 1. Check if the table is empty ---
-    snprintf(sql_buffer, sizeof(sql_buffer), 
-             "SELECT COUNT(sector_id) FROM %s;", MSL_TABLE_NAME);
-    
-    sqlite3_stmt *count_st = NULL;
-    
-    if (sqlite3_prepare_v2(db, sql_buffer, -1, &count_st, NULL) == SQLITE_OK &&
-        sqlite3_step(count_st) == SQLITE_ROW) {
-        total_sectors_in_table = sqlite3_column_int(count_st, 0);
-    }
-    sqlite3_finalize(count_st);
+  const int *avoid_list = NULL;	// No sectors to avoid for this "safe" path list
+  int rc;
+  int total_sectors_in_table = 0;
+  char sql_buffer[256];
 
-    if (total_sectors_in_table > 0) {
-        // Logging the correct table name now
-        LOGI("%s table already populated with %d entries. Skipping MSL calculation.", 
-             MSL_TABLE_NAME, total_sectors_in_table);
-        return 0;
+  // --- 1. Check if the table is empty ---
+  snprintf (sql_buffer, sizeof (sql_buffer),
+	    "SELECT COUNT(sector_id) FROM %s;", MSL_TABLE_NAME);
+
+  sqlite3_stmt *count_st = NULL;
+
+  if (sqlite3_prepare_v2 (db, sql_buffer, -1, &count_st, NULL) == SQLITE_OK &&
+      sqlite3_step (count_st) == SQLITE_ROW)
+    {
+      total_sectors_in_table = sqlite3_column_int (count_st, 0);
     }
-    
-    LOGI("%s table is empty. Starting comprehensive MSL path calculation (FedSpace 1-10 <-> Stardocks)...", 
-         MSL_TABLE_NAME);
-    
-    // --- 2. Create the table (if it doesn't exist) ---
-    snprintf(sql_buffer, sizeof(sql_buffer),
-        "CREATE TABLE IF NOT EXISTS %s ("
-        "  sector_id INTEGER PRIMARY KEY"
-        ");", MSL_TABLE_NAME);
-    
-    if (sqlite3_exec(db, sql_buffer, NULL, NULL, NULL) != SQLITE_OK) {
-        LOGE("SQL error creating %s table: %s", MSL_TABLE_NAME, sqlite3_errmsg(db));
-        return -1;
+  sqlite3_finalize (count_st);
+
+  if (total_sectors_in_table > 0)
+    {
+      // Logging the correct table name now
+      LOGI
+	("%s table already populated with %d entries. Skipping MSL calculation.",
+	 MSL_TABLE_NAME, total_sectors_in_table);
+      return 0;
     }
 
-    // --- 3. Prepare Select and Insert Statements and collect Stardocks ---
-    
-    // Select all Stardock sector IDs from the specified table.
-    sqlite3_stmt *select_st = NULL;
-    const char *sql_select_stardocks = "SELECT sector_id FROM stardock_location;";
-    rc = sqlite3_prepare_v2(db, sql_select_stardocks, -1, &select_st, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("SQL error preparing Stardock select: %s", sqlite3_errmsg(db));
-        return -1;
+  LOGI
+    ("%s table is empty. Starting comprehensive MSL path calculation (FedSpace 1-10 <-> Stardocks)...",
+     MSL_TABLE_NAME);
+
+  // --- 2. Create the table (if it doesn't exist) ---
+  snprintf (sql_buffer, sizeof (sql_buffer),
+	    "CREATE TABLE IF NOT EXISTS %s ("
+	    "  sector_id INTEGER PRIMARY KEY" ");", MSL_TABLE_NAME);
+
+  if (sqlite3_exec (db, sql_buffer, NULL, NULL, NULL) != SQLITE_OK)
+    {
+      LOGE ("SQL error creating %s table: %s", MSL_TABLE_NAME,
+	    sqlite3_errmsg (db));
+      return -1;
     }
 
-    // Collect stardock sectors into a dynamically sized array
-    int *stardock_sectors = NULL;
-    int stardock_count = 0;
-    int stardock_capacity = 8;
-    stardock_sectors = malloc(stardock_capacity * sizeof(int));
-    if (!stardock_sectors) {
-        LOGE("Failed to allocate stardock sector array.");
-        sqlite3_finalize(select_st);
-        return -1;
+  // --- 3. Prepare Select and Insert Statements and collect Stardocks ---
+
+  // Select all Stardock sector IDs from the specified table.
+  sqlite3_stmt *select_st = NULL;
+  const char *sql_select_stardocks =
+    "SELECT sector_id FROM stardock_location;";
+  rc = sqlite3_prepare_v2 (db, sql_select_stardocks, -1, &select_st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("SQL error preparing Stardock select: %s", sqlite3_errmsg (db));
+      return -1;
     }
 
-    // Fetch all stardock IDs
-    while (sqlite3_step(select_st) == SQLITE_ROW) {
-        int id = sqlite3_column_int(select_st, 0);
-        if (stardock_count == stardock_capacity) {
-            stardock_capacity *= 2;
-            int *new_arr = realloc(stardock_sectors, stardock_capacity * sizeof(int));
-            if (!new_arr) {
-                LOGE("Failed to reallocate stardock sector array.");
-                free(stardock_sectors);
-                sqlite3_finalize(select_st);
-                return -1;
-            }
-            stardock_sectors = new_arr;
-        }
-        stardock_sectors[stardock_count++] = id;
-    }
-    sqlite3_finalize(select_st);
-
-    if (stardock_count == 0) {
-        LOGW("No stardock locations found in stardock_location table. Skipping MSL calculation.");
-        free(stardock_sectors);
-        return 0;
+  // Collect stardock sectors into a dynamically sized array
+  int *stardock_sectors = NULL;
+  int stardock_count = 0;
+  int stardock_capacity = 8;
+  stardock_sectors = malloc (stardock_capacity * sizeof (int));
+  if (!stardock_sectors)
+    {
+      LOGE ("Failed to allocate stardock sector array.");
+      sqlite3_finalize (select_st);
+      return -1;
     }
 
-    // Prepare Insert statement
-    sqlite3_stmt *insert_st = NULL;
-    snprintf(sql_buffer, sizeof(sql_buffer),
-        "INSERT OR IGNORE INTO %s (sector_id) VALUES (?);", MSL_TABLE_NAME);
-    rc = sqlite3_prepare_v2(db, sql_buffer, -1, &insert_st, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("SQL error preparing insert statement for %s: %s", MSL_TABLE_NAME, sqlite3_errmsg(db));
-        free(stardock_sectors);
-        return -1;
+  // Fetch all stardock IDs
+  while (sqlite3_step (select_st) == SQLITE_ROW)
+    {
+      int id = sqlite3_column_int (select_st, 0);
+      if (stardock_count == stardock_capacity)
+	{
+	  stardock_capacity *= 2;
+	  int *new_arr =
+	    realloc (stardock_sectors, stardock_capacity * sizeof (int));
+	  if (!new_arr)
+	    {
+	      LOGE ("Failed to reallocate stardock sector array.");
+	      free (stardock_sectors);
+	      sqlite3_finalize (select_st);
+	      return -1;
+	    }
+	  stardock_sectors = new_arr;
+	}
+      stardock_sectors[stardock_count++] = id;
+    }
+  sqlite3_finalize (select_st);
+
+  if (stardock_count == 0)
+    {
+      LOGW
+	("No stardock locations found in stardock_location table. Skipping MSL calculation.");
+      free (stardock_sectors);
+      return 0;
     }
 
-    // --- 4. Iterate and Calculate Paths (Two-Way) ---
-    
-    // Start with a master transaction for the entire population process
-    if (sqlite3_exec(db, "BEGIN TRANSACTION;", NULL, NULL, NULL) != SQLITE_OK) {
-        LOGE("SQL error starting master transaction: %s", sqlite3_errmsg(db));
-        sqlite3_finalize(insert_st);
-        free(stardock_sectors);
-        return -1;
+  // Prepare Insert statement
+  sqlite3_stmt *insert_st = NULL;
+  snprintf (sql_buffer, sizeof (sql_buffer),
+	    "INSERT OR IGNORE INTO %s (sector_id) VALUES (?);",
+	    MSL_TABLE_NAME);
+  rc = sqlite3_prepare_v2 (db, sql_buffer, -1, &insert_st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("SQL error preparing insert statement for %s: %s", MSL_TABLE_NAME,
+	    sqlite3_errmsg (db));
+      free (stardock_sectors);
+      return -1;
     }
-    
-    int total_unique_sectors_added = 0;
-    
-    // Loop through FedSpace starting sectors (1 through 10)
-    for (int start_sector = FEDSPACE_SECTOR_START; start_sector <= FEDSPACE_SECTOR_END; start_sector++) {
-        // Loop through all collected Stardock sectors
-        for (int i = 0; i < stardock_count; i++) {
-            int stardock_id = stardock_sectors[i];
-            
-            // A. Path FedSpace -> Stardock (e.g., 1 -> 160)
-            LOGI("Calculating path %d -> %d", start_sector, stardock_id);
-            _insert_path_sectors(db, insert_st, start_sector, stardock_id, avoid_list, &total_unique_sectors_added);
-            
-            // B. Path Stardock -> FedSpace (e.g., 160 -> 1)
-            // Only calculate reverse if the start/end sectors are different
-            if (start_sector != stardock_id) { 
-                LOGI("Calculating path %d -> %d (Reverse)", stardock_id, start_sector);
-                _insert_path_sectors(db, insert_st, stardock_id, start_sector, avoid_list, &total_unique_sectors_added);
-            }
-        }
-    }
-    
-    // --- 5. Finalize and Commit ---
-    
-    sqlite3_finalize(insert_st);
-    free(stardock_sectors);
 
-    if (sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL) != SQLITE_OK) {
-        LOGE("SQL error committing master path transaction: %s", sqlite3_errmsg(db));
-        return -1;
-    }
-    
-    LOGI("Completed MSL setup. Populated %s with %d total unique sectors.", 
-         MSL_TABLE_NAME, total_unique_sectors_added);
+  // --- 4. Iterate and Calculate Paths (Two-Way) ---
 
-    return 0;
+  // Start with a master transaction for the entire population process
+  if (sqlite3_exec (db, "BEGIN TRANSACTION;", NULL, NULL, NULL) != SQLITE_OK)
+    {
+      LOGE ("SQL error starting master transaction: %s", sqlite3_errmsg (db));
+      sqlite3_finalize (insert_st);
+      free (stardock_sectors);
+      return -1;
+    }
+
+  int total_unique_sectors_added = 0;
+
+  // Loop through FedSpace starting sectors (1 through 10)
+  for (int start_sector = FEDSPACE_SECTOR_START;
+       start_sector <= FEDSPACE_SECTOR_END; start_sector++)
+    {
+      // Loop through all collected Stardock sectors
+      for (int i = 0; i < stardock_count; i++)
+	{
+	  int stardock_id = stardock_sectors[i];
+
+	  // A. Path FedSpace -> Stardock (e.g., 1 -> 160)
+	  LOGI ("Calculating path %d -> %d", start_sector, stardock_id);
+	  _insert_path_sectors (db, insert_st, start_sector, stardock_id,
+				avoid_list, &total_unique_sectors_added);
+
+	  // B. Path Stardock -> FedSpace (e.g., 160 -> 1)
+	  // Only calculate reverse if the start/end sectors are different
+	  if (start_sector != stardock_id)
+	    {
+	      LOGI ("Calculating path %d -> %d (Reverse)", stardock_id,
+		    start_sector);
+	      _insert_path_sectors (db, insert_st, stardock_id, start_sector,
+				    avoid_list, &total_unique_sectors_added);
+	    }
+	}
+    }
+
+  // --- 5. Finalize and Commit ---
+
+  sqlite3_finalize (insert_st);
+  free (stardock_sectors);
+
+  if (sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL) != SQLITE_OK)
+    {
+      LOGE ("SQL error committing master path transaction: %s",
+	    sqlite3_errmsg (db));
+      return -1;
+    }
+
+  LOGI ("Completed MSL setup. Populated %s with %d total unique sectors.",
+	MSL_TABLE_NAME, total_unique_sectors_added);
+
+  return 0;
 }
-
-////////////////////////////////////
-
 
 
 
@@ -437,94 +689,107 @@ int populate_msl_if_empty(sqlite3 *db)
  * @param now_s The current time in seconds (passed by the cron runner).
  * @return 0 on success, -1 on database error or if configuration is missing.
  */
-int h_reset_turns_for_player(sqlite3 *db, int64_t now_s)
+int
+h_reset_turns_for_player (sqlite3 *db, int64_t now_s)
 {
-    sqlite3_stmt *select_st = NULL;
-    sqlite3_stmt *update_st = NULL;
-    int max_turns = 0;
-    int rc;
-    int updated_count = 0;
-    
-    // --- 1. Get Maximum Turns Per Day from Config ---
-    const char *sql_config = "SELECT turnsperday FROM config WHERE id = 1;";
-    rc = sqlite3_prepare_v2(db, sql_config, -1, &select_st, NULL);
-    if (rc == SQLITE_OK && sqlite3_step(select_st) == SQLITE_ROW) {
-        max_turns = sqlite3_column_int(select_st, 0);
-    }
-    sqlite3_finalize(select_st);
-    select_st = NULL; // Reset to NULL for safety
+  sqlite3_stmt *select_st = NULL;
+  sqlite3_stmt *update_st = NULL;
+  int max_turns = 0;
+  int rc;
+  int updated_count = 0;
 
-    if (max_turns <= 0) {
-        // Use LOGE for a critical failure that prevents the job from running
-        LOGE("Turn reset failed: turnsperday is %d or missing in config.", max_turns);
-        return -1;
+  // --- 1. Get Maximum Turns Per Day from Config ---
+  const char *sql_config = "SELECT turnsperday FROM config WHERE id = 1;";
+  rc = sqlite3_prepare_v2 (db, sql_config, -1, &select_st, NULL);
+  if (rc == SQLITE_OK && sqlite3_step (select_st) == SQLITE_ROW)
+    {
+      max_turns = sqlite3_column_int (select_st, 0);
     }
+  sqlite3_finalize (select_st);
+  select_st = NULL;		// Reset to NULL for safety
 
-    // --- 2. Prepare Statements and Start Transaction ---
-    
-    // Select all player IDs that have turn records
-    const char *sql_select_players = "SELECT player FROM turns;";
-    rc = sqlite3_prepare_v2(db, sql_select_players, -1, &select_st, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("SQL error preparing player select: %s", sqlite3_errmsg(db));
-        return -1;
-    }
-    
-    // Update player's turns
-    const char *sql_update = 
-        "UPDATE turns SET turns_remaining = ?, last_update = ? WHERE player = ?;";
-    rc = sqlite3_prepare_v2(db, sql_update, -1, &update_st, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("SQL error preparing turns update: %s", sqlite3_errmsg(db));
-        sqlite3_finalize(select_st);
-        return -1;
-    }
-    
-    // Start Transaction for performance and atomicity
-    if (sqlite3_exec(db, "BEGIN TRANSACTION;", NULL, NULL, NULL) != SQLITE_OK) {
-        LOGE("SQL error starting transaction: %s", sqlite3_errmsg(db));
-        sqlite3_finalize(select_st);
-        sqlite3_finalize(update_st);
-        return -1;
+  if (max_turns <= 0)
+    {
+      // Use LOGE for a critical failure that prevents the job from running
+      LOGE ("Turn reset failed: turnsperday is %d or missing in config.",
+	    max_turns);
+      return -1;
     }
 
-    // --- 3. Iterate and Update ---
+  // --- 2. Prepare Statements and Start Transaction ---
 
-    while (sqlite3_step(select_st) == SQLITE_ROW) {
-        int player_id = sqlite3_column_int(select_st, 0);
-
-        // Bind parameters to the prepared UPDATE statement
-        sqlite3_reset(update_st);
-        sqlite3_bind_int(update_st, 1, max_turns);
-        sqlite3_bind_int64(update_st, 2, now_s); // Use cron-provided time
-        sqlite3_bind_int(update_st, 3, player_id);
-
-        rc = sqlite3_step(update_st);
-        
-        if (rc == SQLITE_DONE) {
-             updated_count++;
-        } else {
-            // Use LOGE for a failure within the transaction that needs attention
-            LOGE("SQL error executing turns update for player %d: %s",
-                     player_id, sqlite3_errmsg(db));
-            // Note: The transaction continues, but this failure is severe.
-        }
+  // Select all player IDs that have turn records
+  const char *sql_select_players = "SELECT player FROM turns;";
+  rc = sqlite3_prepare_v2 (db, sql_select_players, -1, &select_st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("SQL error preparing player select: %s", sqlite3_errmsg (db));
+      return -1;
     }
 
-    // --- 4. Finalize and Commit ---
-    
-    sqlite3_finalize(select_st);
-    sqlite3_finalize(update_st);
-
-    if (sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL) != SQLITE_OK) {
-        LOGE("SQL error committing transaction: %s", sqlite3_errmsg(db));
-        return -1;
+  // Update player's turns
+  const char *sql_update =
+    "UPDATE turns SET turns_remaining = ?, last_update = ? WHERE player = ?;";
+  rc = sqlite3_prepare_v2 (db, sql_update, -1, &update_st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("SQL error preparing turns update: %s", sqlite3_errmsg (db));
+      sqlite3_finalize (select_st);
+      return -1;
     }
-    
-    // Use LOGI for successful job completion
-    LOGI("Successfully reset turns for %d players to %d.", updated_count, max_turns);
-    
-    return 0;
+
+  // Start Transaction for performance and atomicity
+  if (sqlite3_exec (db, "BEGIN TRANSACTION;", NULL, NULL, NULL) != SQLITE_OK)
+    {
+      LOGE ("SQL error starting transaction: %s", sqlite3_errmsg (db));
+      sqlite3_finalize (select_st);
+      sqlite3_finalize (update_st);
+      return -1;
+    }
+
+  // --- 3. Iterate and Update ---
+
+  while (sqlite3_step (select_st) == SQLITE_ROW)
+    {
+      int player_id = sqlite3_column_int (select_st, 0);
+
+      // Bind parameters to the prepared UPDATE statement
+      sqlite3_reset (update_st);
+      sqlite3_bind_int (update_st, 1, max_turns);
+      sqlite3_bind_int64 (update_st, 2, now_s);	// Use cron-provided time
+      sqlite3_bind_int (update_st, 3, player_id);
+
+      rc = sqlite3_step (update_st);
+
+      if (rc == SQLITE_DONE)
+	{
+	  updated_count++;
+	}
+      else
+	{
+	  // Use LOGE for a failure within the transaction that needs attention
+	  LOGE ("SQL error executing turns update for player %d: %s",
+		player_id, sqlite3_errmsg (db));
+	  // Note: The transaction continues, but this failure is severe.
+	}
+    }
+
+  // --- 4. Finalize and Commit ---
+
+  sqlite3_finalize (select_st);
+  sqlite3_finalize (update_st);
+
+  if (sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL) != SQLITE_OK)
+    {
+      LOGE ("SQL error committing transaction: %s", sqlite3_errmsg (db));
+      return -1;
+    }
+
+  // Use LOGI for successful job completion
+  LOGI ("Successfully reset turns for %d players to %d.", updated_count,
+	max_turns);
+
+  return 0;
 }
 
 
@@ -661,48 +926,62 @@ rollback (sqlite3 *db)
 }
 
 // --- Helper function to get readable asset name ---
-const char* get_asset_name(int type) {
-    switch(type) {
-        case 3: return "Mine";
-        case 2: return "Fighter";
-        case 1: return "Beacon";
-        default: return "Unknown Asset";
+const char *
+get_asset_name (int type)
+{
+  switch (type)
+    {
+    case 3:
+      return "Mine";
+    case 2:
+      return "Fighter";
+    case 1:
+      return "Beacon";
+    default:
+      return "Unknown Asset";
     }
 }
 
+  //////////////////////
+  /////// COMPLETE THIS
+  /////////////////////
 
 
-/* FedSpace cleanup:
-   - Remove traps in FedSpace
-   - Clear wanted flags for ships in FedSpace
-   - Tow excess ships if > MAX_SHIPS_PER_FED_SECTOR in any Fed sector (keep the lowest IDs in place)
-   - Tow ships carrying >= MAX_FED_FIGHTERS in FedSpace
-   - At most 50 total tows per pass
-*/
+  // 1. Check anyone who has been in fedspace for more than an hour.
+  // 2. Check for Evil alignment who are in that list and tow them
+  // 3. Check for ships which have more than 50 fighters in that list and tow them
+  // 4. Check for players with more than 1000 EP in that list and tow them
+  // 5. Check for ships with no player inside (or no owner) and confiscate. (These can be offered for sale at Stardock later.) 
+  // 6. Overcrowding, more than 5 ships parked in fedspace, tow them to another fedspace sector if possible, otherwise tow to random.
+
+////////////////////////////////////////////////////////
+
 int
 h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
 {
-  // Use milliseconds for the lock check (now_s is seconds, convert to ms)
+
+  int fedadmin = 2; 
   int64_t now_ms = now_s * 1000;
   sqlite3_stmt *select_stmt = NULL;
-  
+  sqlite3_stmt *delete_stmt = NULL;
+  sqlite3_stmt *sector_stmt = NULL;
+  int cleared_assets = 0;
+  int tows = 0;
+  int rc;
+  char *err_msg = NULL;
+
   if (!try_lock (db, "fedspace_cleanup", now_ms))
     {
-      // try_lock failed. Check the status to see if the lock is stale.
       int64_t until_ms = db_lock_status (db, "fedspace_cleanup");
       int64_t time_left_s = (until_ms - now_ms) / 1000;
-
       if (until_ms > now_ms)
 	{
-	  // The lock exists and is NOT stale. This is an ACTIVE conflict.
 	  LOGW
 	    ("fedspace_cleanup: FAILED to acquire lock. Still held for %lld more seconds.",
 	     (long long) time_left_s);
 	}
       else
 	{
-	  // The lock exists but should have been cleaned up by try_lock (Stale/Expired).
-	  // This indicates a problem in the try_lock's cleanup step, but logs the state.
 	  LOGW
 	    ("fedspace_cleanup: FAILED to acquire lock. Lock is stale (Expires at %lld).",
 	     (long long) until_ms);
@@ -711,360 +990,328 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
     }
   else
     {
-      // try_lock succeeded.
       LOGI ("fedspace_cleanup: Lock acquired, starting cleanup operations.");
     }
 
-  /////////////////////
-      // --- STEP 1: Ensure MSL table is populated ---
-    // If the table is empty, this runs the one-time population logic.
-    if (populate_msl_if_empty(db) != 0) {
-        LOGE("fedspace_cleanup: MSL population failed. Aborting cleanup.");
+  // --- STEP 1: Ensure MSL table is populated ---
+  if (populate_msl_if_empty (db) != 0)
+    {
+      LOGE ("fedspace_cleanup: MSL population failed. Aborting cleanup.");
     }
 
-    // --- STEP 2: Identify assets and owners in MSL sectors for AUDIT/MESSAGING ---
-    
-    // Query: Select all assets in sectors marked as MSL (excluding System-owned assets, Player 0)
-    const char *select_assets_sql = 
-        "SELECT player, asset_type, sector, quantity "
-        "FROM sector_assets "
-        "WHERE sector IN (SELECT sector_id FROM msl_sectors) AND player != 0;";
-        
-    int rc = sqlite3_prepare_v2(db, select_assets_sql, -1, &select_stmt, NULL);
-    if (rc != SQLITE_OK) {
-        LOGW("fedspace_cleanup: Failed to prepare SELECT assets query: %s", sqlite3_errmsg(db));
-    }
-    
-    // --- STEP 3: Send messages to owners and delete assets ---
-    int cleared_assets = 0;
-    char message[256];
-
-    // Prepare DELETE statement outside the loop for efficiency
-    sqlite3_stmt *delete_stmt = NULL;
-    const char *delete_sql = 
-        "DELETE FROM sector_assets "
-        "WHERE player = ?1 AND asset_type = ?2 AND sector = ?3 AND quantity = ?4;";
-    
-    rc = sqlite3_prepare_v2(db, delete_sql, -1, &delete_stmt, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("fedspace_cleanup: Failed to prepare DELETE assets query: %s", sqlite3_errmsg(db));
-        // We can't proceed with deletion if the prepare failed, but let's continue to messages for now
-        // A full implementation might exit or handle this error more strictly.
-    }
-
-    while ((rc = sqlite3_step(select_stmt)) == SQLITE_ROW) {
-        int player_id = sqlite3_column_int(select_stmt, 0);
-        int asset_type = sqlite3_column_int(select_stmt, 1);
-        int sector_id = sqlite3_column_int(select_stmt, 2);
-        int quantity = sqlite3_column_int(select_stmt, 3);
-
-        if (player_id == 0) continue;
-
-
-        // Construct audit message
-        snprintf(message, sizeof(message),
-                 "%d %s(s) deployed in Sector %d (Major Space Lane) were destroyed by Federal Authorities. Deployments in MSL are strictly prohibited.",
-                 quantity, get_asset_name(asset_type), sector_id); // Completed snprintf line
-        
-        // --- 1. SEND MAIL ---
-        // h_send_message_to_player(int player_id, int sender_id, const char *subject, const char *message) ;
-        h_send_message_to_player(player_id, 1, "WARNING: MSL Violation", message);
-
-        LOGI("ASSET_RETURNED: %d", asset_type);
-        
-        // --- 2. DELETE ASSET ---
-        if (delete_stmt) {
-            // Re-bind parameters for the current row's data
-            sqlite3_reset(delete_stmt);
-            sqlite3_bind_int(delete_stmt, 1, player_id);
-            sqlite3_bind_int(delete_stmt, 2, asset_type);
-            sqlite3_bind_int(delete_stmt, 3, sector_id);
-            sqlite3_bind_int(delete_stmt, 4, quantity);
-            
-            int delete_rc = sqlite3_step(delete_stmt);
-            if (delete_rc != SQLITE_DONE) {
-                LOGE("fedspace_cleanup: Failed to execute DELETE for asset %d, player %d, sector %d: %s", 
-                    asset_type, player_id, sector_id, sqlite3_errmsg(db));
-            } else {
-                cleared_assets++;
-                LOGI("fedspace_cleanup: Cleared asset %d for player %d in sector %d. Quantity: %d", 
-                    asset_type, player_id, sector_id, quantity);
-            }
-        }
-        
+  // --- MSL Asset Clearing Logic (Using select_stmt, delete_stmt) ---
+  const char *select_assets_sql =
+    "SELECT player, asset_type, sector, quantity "
+    "FROM sector_assets "
+    "WHERE sector IN (SELECT sector_id FROM msl_sectors) AND player != 0;";
+  
+  rc = sqlite3_prepare_v2 (db, select_assets_sql, -1, &select_stmt, NULL);
+  if (rc == SQLITE_OK)
+  {
+      char message[256];
+      const char *delete_sql =
+        "DELETE FROM sector_assets WHERE player = ?1 AND asset_type = ?2 AND sector = ?3 AND quantity = ?4;";
+      
+      rc = sqlite3_prepare_v2 (db, delete_sql, -1, &delete_stmt, NULL);
+      
+      if (rc == SQLITE_OK)
+      {
+          while ((rc = sqlite3_step (select_stmt)) == SQLITE_ROW)
+          {
+              int player_id = sqlite3_column_int (select_stmt, 0);
+              int asset_type = sqlite3_column_int (select_stmt, 1);
+              int sector_id = sqlite3_column_int (select_stmt, 2);
+              int quantity = sqlite3_column_int (select_stmt, 3);
+  
+              snprintf (message, sizeof (message), "%d %s(s) deployed in Sector %d (Major Space Lane) were destroyed by Federal Authorities. Deployments in MSL are strictly prohibited.", quantity, get_asset_name (asset_type), sector_id);
+              h_send_message_to_player (player_id, fedadmin, "WARNING: MSL Violation", message);
+  
+              sqlite3_reset (delete_stmt);
+              sqlite3_bind_int (delete_stmt, 1, player_id);
+              sqlite3_bind_int (delete_stmt, 2, asset_type);
+              sqlite3_bind_int (delete_stmt, 3, sector_id);
+              sqlite3_bind_int (delete_stmt, 4, quantity);
+              if (sqlite3_step (delete_stmt) == SQLITE_DONE) cleared_assets++;
+          }
+          sqlite3_finalize (delete_stmt);
+          delete_stmt = NULL;
+      } else {
+           LOGE ("h_fedspace_cleanup: MSL DELETE prepare failed: %s", sqlite3_errmsg (db));
+      }
+      sqlite3_finalize (select_stmt);
+      select_stmt = NULL;
+  } else {
+       LOGE ("h_fedspace_cleanup: MSL SELECT prepare failed: %s", sqlite3_errmsg (db));
+  }
+  
+  if (cleared_assets > 0)
+    {
+      LOGI ("fedspace_cleanup: Completed asset clearing with %d assets cleared.", cleared_assets);
     }
     
-    sqlite3_finalize(select_stmt);
-    if (delete_stmt) {
-        sqlite3_finalize(delete_stmt);
+  // --- START TOWING TRANSACTION ---
+  rc = begin (db);
+  if (rc != 0) {
+      unlock (db, "fedspace_cleanup");
+      return rc;
+  }
+  
+  //////////////////////////////////////////////////////////////////
+  // I. Update LOGGED-IN Status (60-minute timeout)             //
+  //////////////////////////////////////////////////////////////////
+
+  // FIX: Using 'last_update' and 'loggedin'.
+  const char *sql_timeout_logout =
+    "UPDATE players SET loggedin = 0 " 
+    "WHERE loggedin = 1 AND ?1 - last_update > ?2;";
+
+  if (sqlite3_prepare_v2 (db, sql_timeout_logout, -1, &select_stmt, NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_int64 (select_stmt, 1, now_s);
+      sqlite3_bind_int (select_stmt, 2, LOGOUT_TIMEOUT_S);
+      rc = sqlite3_step (select_stmt);
+      sqlite3_finalize (select_stmt);
+      select_stmt = NULL;
+      
+      if (rc != SQLITE_DONE)
+	{
+	  LOGE ("h_fedspace_cleanup: LOGOUT failed: %d", rc);
+	}
     }
-    
-    if (cleared_assets > 0) {
-        rc = commit(db);
-        LOGI("fedspace_cleanup: Completed transaction with %d assets cleared.", cleared_assets);
+  else
+    {
+      LOGE ("h_fedspace_cleanup: LOGOUT prepare failed: %s", sqlite3_errmsg (db));
     }
 
+//////////////////////////////////////////////////////////////////
+  // II. Setup Permanent Eligible Ships Table                     //
+  //////////////////////////////////////////////////////////////////
+  
+  // 1. Ensure the permanent table exists (run once)
+  const char *sql_create_eligible_table =
+    "CREATE TABLE IF NOT EXISTS eligible_tows (ship_id INTEGER PRIMARY KEY, sector_id INTEGER, owner_id INTEGER, fighters INTEGER, alignment INTEGER, experience INTEGER);";
 
-  //////////////////////
+  rc = sqlite3_exec (db, sql_create_eligible_table, NULL, NULL, &err_msg);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_fedspace_cleanup: PERM TABLE creation failed: %s", err_msg);
+      sqlite3_free (err_msg);
+      rollback(db); 
+      unlock (db, "fedspace_cleanup");
+      return -1;
+    }
 
+  // 2. CRITICAL: Empty the table for the current run
+  // This replaces the old temporary table logic and should not be locked.
+  rc = sqlite3_exec (db, "DELETE FROM eligible_tows", NULL, NULL, &err_msg);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_fedspace_cleanup: DELETE TABLE failed: %s", err_msg);
+      sqlite3_free (err_msg);
+      rollback(db); 
+      unlock (db, "fedspace_cleanup");
+      return -1;
+    }
+
+  // 3. Populate the table (Now an INSERT INTO SELECT)
+  const char *sql_insert_eligible =
+    "INSERT INTO eligible_tows (ship_id, sector_id, owner_id, fighters, alignment, experience) "
+    "SELECT T1.id, T1.location, T2.id, T1.fighters, "
+    "       COALESCE(T2.alignment, 0), "   // Use 0 if alignment is NULL
+    "       COALESCE(T2.experience, 0) "   // Use 0 if experience is NULL
+    "FROM ships T1 "
+    "LEFT JOIN players T2 ON T1.id = T2.ship "
+    "WHERE T1.location BETWEEN ?1 AND ?2 "
+    "  AND (T2.loggedin = 0 OR T2.id IS NULL) " // Filter by loggedin status or no owner
+    "ORDER BY T1.id ASC;";
+  if (sqlite3_prepare_v2 (db, sql_insert_eligible, -1, &select_stmt, NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_int (select_stmt, 1, FEDSPACE_SECTOR_START);
+      sqlite3_bind_int (select_stmt, 2, FEDSPACE_SECTOR_END);
+      sqlite3_step (select_stmt);
+      sqlite3_finalize (select_stmt);
+      select_stmt = NULL;
+    }
 
   
-  enum
-  { MAX_TOWS_PER_PASS = 50, MAX_SHIPS_PER_FED_SECTOR = 5, MAX_FED_FIGHTERS =
-      98
-  };
-  rc = begin (db);
-  LOGI ("Starting Fedspace Cleanup");
-  if (rc)
+  //////////////////////////////////////////////////////////////////
+  // III. Towing Rules (2-5)                                      //
+  //////////////////////////////////////////////////////////////////
+
+  // Prepare DELETE statement once for all rules
+  const char *sql_delete_eligible = "DELETE FROM eligible_tows WHERE ship_id = ?;";
+  if (sqlite3_prepare_v2 (db, sql_delete_eligible, -1, &delete_stmt, NULL) != SQLITE_OK)
     {
-      LOGW ("fedspace_cleanup: begin rc=%d", rc);
-      return rc;
+      LOGE ("h_fedspace_cleanup: DELETE prepare failed: %s", sqlite3_errmsg (db));
+      delete_stmt = NULL;
     }
 
-  LOGI ("Looking for mines in fedspace");
-  /* 1) Remove sector traps/mines in FedSpace */
-  rc = sqlite3_exec (db,
-		     "DELETE FROM traps WHERE sector IN (SELECT id FROM sectors WHERE is_fed=1);",
-		     NULL, NULL, NULL);
-  if (rc)
+  // --- Rule 2: Evil alignment ---
+  const char *sql_evil_alignment = "SELECT ship_id FROM eligible_tows WHERE owner_id IS NOT NULL AND alignment < 0 LIMIT ?1;";
+  if (sqlite3_prepare_v2 (db, sql_evil_alignment, -1, &select_stmt, NULL) == SQLITE_OK)
     {
-      rollback (db);
-      LOGE ("fedspace_cleanup traps rc=%d", rc);
-      unlock (db, "fedspace_cleanup");
-      return rc;
-    }
-
-  /* 2) Clear wanted flags in FedSpace (engine policy) */
-  rc = sqlite3_exec (db,
-		     "UPDATE ships SET wanted=0 "
-		     "WHERE wanted=1 AND sector IN (SELECT id FROM sectors WHERE is_fed=1);",
-		     NULL, NULL, NULL);
-  if (rc)
-    {
-      rollback (db);
-      LOGE ("fedspace_cleanup ships rc=%d", rc);
-      unlock (db, "fedspace_cleanup");
-      return rc;
-    }
-
-  /* Helper: find a non-fed tow target for a given Fed sector (first non-fed neighbour; fallback = 1) */
-  sqlite3_stmt *q_tow = NULL;
-  rc = sqlite3_prepare_v2 (db,
-			   "WITH nf AS ( "
-			   "  SELECT w.to_sector AS cand "
-			   "  FROM warps w JOIN sectors s ON s.id=w.to_sector "
-			   "  WHERE w.from_sector=?1 AND s.is_fed=0 "
-			   "  ORDER BY cand "
-			   ") SELECT COALESCE((SELECT cand FROM nf LIMIT 1), 1);",
-			   -1, &q_tow, NULL);
-  if (rc != SQLITE_OK)
-    {
-      rollback (db);
-      LOGE ("fedspace_cleanup prep tow-target rc=%d", rc);
-      unlock (db, "fedspace_cleanup");
-      return rc;
-    }
-  else
-    LOGI ("Tow Target: %s", (char *) &q_tow);
-
-  // OK, need to figure out what to do with player who has multiple ships? If the ship is towed and they are in it, they move too. 
-  LOGI ("Set ships sectors for twoed ships");
-  /* Update ship sector */
-  sqlite3_stmt *u_ship = NULL;
-  rc = sqlite3_prepare_v2 (db,
-			   "UPDATE ships SET sector=?1 WHERE id=?2;", -1,
-			   &u_ship, NULL);
-  if (rc != SQLITE_OK)
-    {
-      sqlite3_finalize (q_tow);
-      rollback (db);
-      LOGE ("fedspace_cleanup prep upd-ship rc=%d", rc);
-      unlock (db, "fedspace_cleanup");
-      return rc;
-    }
-
-
-  /* Notice to owner (adjust to your notice table/columns) */
-  sqlite3_stmt *i_notice = NULL;
-  rc = sqlite3_prepare_v2 (db,
-			   "INSERT INTO system_notice(scope,scope_id,message,created_at,expires_at) "
-			   "VALUES('player',?1,?2,?3,NULL);",
-			   -1, &i_notice, NULL);
-  if (rc != SQLITE_OK)
-    {
-      sqlite3_finalize (u_ship);
-      sqlite3_finalize (q_tow);
-      rollback (db);
-      LOGE ("fedspace_cleanup prep notice rc=%d", rc);
-      unlock (db, "fedspace_cleanup");
-      return rc;
-    }
-  else
-    LOGI ("%s", (char *) &i_notice);
-
-  int tows = 0;
-
-  /* 3) Overcrowding: tow ships beyond MAX_SHIPS_PER_FED_SECTOR in each Fed sector (keep the lowest IDs) */
-  sqlite3_stmt *q_over = NULL;
-  rc = sqlite3_prepare_v2 (db,
-			   "WITH fed AS IN (1,2,3,4,5,6,7,8,9,10), "
-			   "crowded AS ( "
-			   "  SELECT s.id AS ship_id, s.sector, s.owner_player_id, "
-			   "         ROW_NUMBER() OVER (PARTITION BY s.sector ORDER BY s.id) AS rn "
-			   "  FROM ships s WHERE s.sector IN (SELECT id FROM fed) "
-			   "), offenders AS ( "
-			   "  SELECT ship_id, sector, owner_player_id "
-			   "  FROM crowded WHERE rn > ?1 "
-			   "  LIMIT ?2 "
-			   ") "
-			   "SELECT ship_id, sector, owner_player_id FROM offenders;",
-			   -1, &q_over, NULL);
-  if (rc != SQLITE_OK)
-    {
-      sqlite3_finalize (i_notice);
-      sqlite3_finalize (u_ship);
-      sqlite3_finalize (q_tow);
-      rollback (db);
-      LOGE ("fedspace_cleanup prep overcrowded rc=%d", rc);
-      unlock (db, "fedspace_cleanup");
-      return rc;
-    }
-  else
-    LOGI ("Cleared ship from fed from fedspace to %s", (char *) &q_over);
-
-  sqlite3_bind_int (q_over, 1, MAX_SHIPS_PER_FED_SECTOR);
-  sqlite3_bind_int (q_over, 2, MAX_TOWS_PER_PASS);
-
-  while (tows < MAX_TOWS_PER_PASS && sqlite3_step (q_over) == SQLITE_ROW)
-    {
-      int ship_id = sqlite3_column_int (q_over, 0);
-      int sec = sqlite3_column_int (q_over, 1);
-      int owner = sqlite3_column_int (q_over, 2);
-
-      /* compute tow target */
-      int tow_to = 1;		// this should probably just be a random number between 11-500
-      LOGI ("Q_TOW=%s", (char *) q_tow);
-      sqlite3_reset (q_tow);
-      sqlite3_clear_bindings (q_tow);
-      sqlite3_bind_int (q_tow, 1, sec);
-      if (sqlite3_step (q_tow) == SQLITE_ROW)
+      sqlite3_bind_int (select_stmt, 1, MAX_TOWS_PER_PASS - tows);
+      while (sqlite3_step (select_stmt) == SQLITE_ROW && tows < MAX_TOWS_PER_PASS)
 	{
-	  tow_to = sqlite3_column_int (q_tow, 0);
+	  int ship_id = sqlite3_column_int (select_stmt, 0);
+	  tow_ship (db, ship_id, get_random_sector (db), fedadmin, REASON_EVIL_ALIGN);
+	  if (delete_stmt) { sqlite3_bind_int (delete_stmt, 1, ship_id); sqlite3_step (delete_stmt); sqlite3_reset (delete_stmt); }
+	  tows++;
 	}
-      sqlite3_reset (q_tow);
-
-      /* move ship */
-      sqlite3_reset (u_ship);
-      sqlite3_clear_bindings (u_ship);
-      sqlite3_bind_int (u_ship, 1, tow_to);
-      sqlite3_bind_int (u_ship, 2, ship_id);
-      if (sqlite3_step (u_ship) != SQLITE_DONE)
-	{
-	  rc = SQLITE_ERROR;
-	  break;
-	}
-
-      /* owner notice */
-      sqlite3_reset (i_notice);
-      sqlite3_clear_bindings (i_notice);
-      sqlite3_bind_int (i_notice, 1, owner);
-      sqlite3_bind_text (i_notice, 2,
-			 "Federation tow: sector overcrowded; your ship was relocated to a nearby non-Fed sector.",
-			 -1, SQLITE_STATIC);
-      sqlite3_bind_int64 (i_notice, 3, now_s);
-      if (sqlite3_step (i_notice) != SQLITE_DONE)
-	{
-	  rc = SQLITE_ERROR;
-	  break;
-	}
-
-      tows++;
+      sqlite3_finalize (select_stmt);
+      select_stmt = NULL;
     }
 
-  sqlite3_finalize (q_over);
 
-  if (rc == SQLITE_OK && tows < MAX_TOWS_PER_PASS)
+  // --- Rule 3: Excess Fighters ---
+  const char *sql_excess_fighters = "SELECT ship_id FROM eligible_tows WHERE fighters > ?1 LIMIT ?2;";
+  if (sqlite3_prepare_v2 (db, sql_excess_fighters, -1, &select_stmt, NULL) == SQLITE_OK)
     {
-      /* 4) Fighter cap: tow ships carrying >= 99 fighters while in FedSpace (bounded by remaining budget) */
-      int remaining = MAX_TOWS_PER_PASS - tows;
-      sqlite3_stmt *q_fcap = NULL;
-      rc = sqlite3_prepare_v2 (db,
-			       "SELECT s.id AS ship_id, s.sector, s.owner_player_id "
-			       "FROM ships s "
-			       "WHERE s.sector IN (SELECT id FROM sectors WHERE in (1,2,3,4,5,6,7,8,9,10)) "
-			       "  AND s.fighters >= ?1 "
-			       "LIMIT ?2;", -1, &q_fcap, NULL);
-      if (rc == SQLITE_OK)
+      sqlite3_bind_int (select_stmt, 1, 49); 
+      sqlite3_bind_int (select_stmt, 2, MAX_TOWS_PER_PASS - tows);
+      while (sqlite3_step (select_stmt) == SQLITE_ROW && tows < MAX_TOWS_PER_PASS)
 	{
-	  sqlite3_bind_int (q_fcap, 1, MAX_FED_FIGHTERS + 1);	/* >= 99 */
-	  sqlite3_bind_int (q_fcap, 2, remaining);
-
-	  while (tows < MAX_TOWS_PER_PASS
-		 && sqlite3_step (q_fcap) == SQLITE_ROW)
-	    {
-	      int ship_id = sqlite3_column_int (q_fcap, 0);
-	      int sec = sqlite3_column_int (q_fcap, 1);
-	      int owner = sqlite3_column_int (q_fcap, 2);
-
-	      int tow_to = 1;
-	      sqlite3_reset (q_tow);
-	      sqlite3_clear_bindings (q_tow);
-	      sqlite3_bind_int (q_tow, 1, sec);
-	      if (sqlite3_step (q_tow) == SQLITE_ROW)
-		{
-		  tow_to = sqlite3_column_int (q_tow, 0);
-		}
-	      sqlite3_reset (q_tow);
-
-	      sqlite3_reset (u_ship);
-	      sqlite3_clear_bindings (u_ship);
-	      sqlite3_bind_int (u_ship, 1, tow_to);
-	      sqlite3_bind_int (u_ship, 2, ship_id);
-	      if (sqlite3_step (u_ship) != SQLITE_DONE)
-		{
-		  rc = SQLITE_ERROR;
-		  break;
-		}
-
-	      sqlite3_reset (i_notice);
-	      sqlite3_clear_bindings (i_notice);
-	      sqlite3_bind_int (i_notice, 1, owner);
-	      sqlite3_bind_text (i_notice, 2,
-				 "Federation tow: carrying too many fighters in FedSpace; your ship was relocated.",
-				 -1, SQLITE_STATIC);
-	      sqlite3_bind_int64 (i_notice, 3, now_s);
-	      if (sqlite3_step (i_notice) != SQLITE_DONE)
-		{
-		  rc = SQLITE_ERROR;
-		  break;
-		}
-
-	      tows++;
-	    }
-	  sqlite3_finalize (q_fcap);
+	  int ship_id = sqlite3_column_int (select_stmt, 0);
+	  tow_ship (db, ship_id, get_random_sector (db), fedadmin, REASON_EXCESS_FIGHTERS);
+	  if (delete_stmt) { sqlite3_bind_int (delete_stmt, 1, ship_id); sqlite3_step (delete_stmt); sqlite3_reset (delete_stmt); }
+	  tows++;
 	}
+      sqlite3_finalize (select_stmt);
+      select_stmt = NULL;
     }
 
-  sqlite3_finalize (i_notice);
-  sqlite3_finalize (u_ship);
-  sqlite3_finalize (q_tow);
+  // --- Rule 4: High Experience ---
+  const char *sql_high_exp = "SELECT ship_id FROM eligible_tows WHERE owner_id IS NOT NULL AND experience >= 1000 LIMIT ?1;";
+  if (sqlite3_prepare_v2 (db, sql_high_exp, -1, &select_stmt, NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_int (select_stmt, 1, MAX_TOWS_PER_PASS - tows);
+      while (sqlite3_step (select_stmt) == SQLITE_ROW && tows < MAX_TOWS_PER_PASS)
+	{
+	  int ship_id = sqlite3_column_int (select_stmt, 0);
+	  tow_ship (db, ship_id, get_random_sector (db), fedadmin, REASON_HIGH_EXP);
+	  if (delete_stmt) { sqlite3_bind_int (delete_stmt, 1, ship_id); sqlite3_step (delete_stmt); sqlite3_reset (delete_stmt); }
+	  tows++;
+	}
+      sqlite3_finalize (select_stmt);
+      select_stmt = NULL;
+    }
 
+  // --- Rule 5: No Owner (Confiscation) ---
+  // The query should only target truly unowned ships.
+  const char *sql_no_owner = "SELECT ship_id FROM eligible_tows WHERE owner_id IS NULL LIMIT ?1;";
+  // This looks correct and will only catch ships where the LEFT JOIN returned NULL for T2.id.
+  if (sqlite3_prepare_v2 (db, sql_no_owner, -1, &select_stmt, NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_int (select_stmt, 1, MAX_TOWS_PER_PASS - tows);
+      while (sqlite3_step (select_stmt) == SQLITE_ROW && tows < MAX_TOWS_PER_PASS)
+	{
+	  int ship_id = sqlite3_column_int (select_stmt, 0);
+	  tow_ship (db, ship_id, CONFISCATION_SECTOR, fedadmin, REASON_NO_OWNER);
+	  if (delete_stmt) { sqlite3_bind_int (delete_stmt, 1, ship_id); sqlite3_step (delete_stmt); sqlite3_reset (delete_stmt); }
+	  tows++;
+	}
+      sqlite3_finalize (select_stmt);
+      select_stmt = NULL;
+    }
+
+  //////////////////////////////////////////////////////////////////
+  // IV. Overcrowding Check (Rule 6)                              //
+  //////////////////////////////////////////////////////////////////
+  
+  // 1. Select Overcrowded Sectors (in FedSpace, 1-10)
+  const char *sql_overcrowded_sectors =
+    "SELECT T1.sector_id, COUNT(T1.ship_id) AS ship_count "
+    "FROM eligible_tows T1 "
+    "WHERE T1.sector_id BETWEEN ?1 AND ?2 "
+    "GROUP BY T1.sector_id "
+    "HAVING COUNT(T1.ship_id) > ?3 "
+    "ORDER BY T1.sector_id ASC;";
+
+  if (tows < MAX_TOWS_PER_PASS && sqlite3_prepare_v2 (db, sql_overcrowded_sectors, -1, &sector_stmt, NULL) == SQLITE_OK)
+  {
+      sqlite3_bind_int(sector_stmt, 1, FEDSPACE_SECTOR_START);
+      sqlite3_bind_int(sector_stmt, 2, FEDSPACE_SECTOR_END);
+      sqlite3_bind_int(sector_stmt, 3, MAX_SHIPS_PER_FED_SECTOR);
+
+      // Loop through overcrowded sectors
+      while (sqlite3_step(sector_stmt) == SQLITE_ROW && tows < MAX_TOWS_PER_PASS)
+      {
+          int sector_id = sqlite3_column_int(sector_stmt, 0);
+          int ship_count = sqlite3_column_int(sector_stmt, 1);
+          
+          int excess_ships = ship_count - MAX_SHIPS_PER_FED_SECTOR;
+          int to_tow = (MAX_TOWS_PER_PASS - tows < excess_ships) ? (MAX_TOWS_PER_PASS - tows) : excess_ships;
+
+          // 2. Select the excess ships (tow the newest ones first)
+          const char *sql_overcrowded_ships =
+              "SELECT ship_id FROM eligible_tows "
+              "WHERE sector_id = ?1 "
+              "ORDER BY ship_id DESC "
+              "LIMIT ?2;";
+              
+          if (sqlite3_prepare_v2 (db, sql_overcrowded_ships, -1, &select_stmt, NULL) == SQLITE_OK)
+          {
+              sqlite3_bind_int (select_stmt, 1, sector_id);
+              sqlite3_bind_int (select_stmt, 2, to_tow);
+
+              // Loop through the excess ships and tow them
+              while (sqlite3_step (select_stmt) == SQLITE_ROW)
+              {
+                  int ship_id = sqlite3_column_int (select_stmt, 0);
+                  int new_sector = get_random_sector (db);
+                  tow_ship (db, ship_id, new_sector, fedadmin, REASON_OVERCROWDING);
+
+                  if (delete_stmt) {
+                      sqlite3_bind_int (delete_stmt, 1, ship_id);
+                      sqlite3_step (delete_stmt);
+                      sqlite3_reset (delete_stmt);
+                  }
+                  tows++;
+              }
+              sqlite3_finalize (select_stmt);
+              select_stmt = NULL; // Crucial: Reset pointer after finalization
+          }
+      }
+      sqlite3_finalize (sector_stmt);
+      sector_stmt = NULL; // Crucial: Reset pointer after finalization
+  }
+
+// --- CRITICAL FINAL CLEANUP ---
+  // Finalize any lingering prepared statement pointers to release any possible lock
+  if (delete_stmt)
+    {
+      sqlite3_finalize (delete_stmt);
+      delete_stmt = NULL;
+    }
+  if (select_stmt)
+    {
+      sqlite3_finalize (select_stmt);
+      select_stmt = NULL;
+    }
+  if (sector_stmt) 
+    {
+      sqlite3_finalize (sector_stmt);
+      sector_stmt = NULL;
+    }
+
+
+  // The final cleanup is now a DELETE (already done in II.2, but harmless repetition)
+  // If the original TEMP table existed, this command is now harmlessly deleting rows 
+  // from the permanent table. NO DROP TABLE COMMAND HERE.
+  rc = sqlite3_exec (db, "DELETE FROM eligible_tows", NULL, NULL, &err_msg);
   if (rc != SQLITE_OK)
     {
-      rollback (db);
-      LOGE ("fedspace_cleanup tow rc=%d (towed=%d)", rc, tows);
-      unlock (db, "fedspace_cleanup");
-      return rc;
+      LOGE ("h_fedspace_cleanup: Final DELETE failed: %s", err_msg);
+      sqlite3_free (err_msg);
     }
-
+  // Commit the main transaction
   commit (db);
   LOGI ("fedspace_cleanup: ok (towed=%d)", tows);
   unlock (db, "fedspace_cleanup");
   return 0;
 }
 
-
-// In ../src/server_cron.c (or a dedicated cron job file)
+////////////////////////////////////////////////////////
 
 int
 h_daily_turn_reset (sqlite3 *db, int64_t now_s)

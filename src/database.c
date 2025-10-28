@@ -619,19 +619,16 @@ const char *create_table_sql[] = {
     "  FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE )  ;  ",
 
   "CREATE TABLE sector_assets ( "
-  "    id INTEGER PRIMARY KEY,  "
-  "    sector INTEGER NOT NULL REFERENCES sectors(id), "
-  "    player INTEGER REFERENCES players(id),  "
-  "    asset_type INTEGER NOT NULL,  "
-  "    quantity INTEGER, "
-  "    ttl INTEGER,  "
-  "    deployed_at INTEGER NOT NULL  "
-  "); ",
+    "    id INTEGER PRIMARY KEY,  "
+    "    sector INTEGER NOT NULL REFERENCES sectors(id), "
+    "    player INTEGER REFERENCES players(id),  "
+    "    asset_type INTEGER NOT NULL,  "
+    "    quantity INTEGER, "
+    "    ttl INTEGER,  " "    deployed_at INTEGER NOT NULL  " "); ",
 
   "CREATE TABLE IF NOT EXISTS msl_sectors ("
-  "  sector_id INTEGER PRIMARY KEY REFERENCES sectors(id)"
-  ");",
-  
+    "  sector_id INTEGER PRIMARY KEY REFERENCES sectors(id)" ");",
+
 
   //////////////////////////////////////////////////////////////////////
   /// CREATE VIEWS 
@@ -1422,7 +1419,7 @@ const char *insert_default_sql[] = {
   "INSERT INTO ships (name, type, attack, holds_used, mines, fighters_used, genesis, photons, location, fighters, shields, holds, colonists,equipment, organics, ore, flags, ported, onplanet) VALUES ('Bit Banger',1, 110, 20, 25, 10, 0, 1,  87, 2300, 400, 20, 0,10,5, 5, 0, 1, 1);",
   "INSERT INTO players (number, name, passwd, sector, ship, type) VALUES (1, 'System', 'BOT',1,1,2);",
   "INSERT INTO players (number, name, passwd, sector, ship, type) VALUES (1, 'Federation Administrator', 'BOT',1,1,2);",
-  "INSERT INTO players (number, name, passwd, sector, ship, type) VALUES (7, 'newguy', 'pass123',1,1,2);",  
+  "INSERT INTO players (number, name, passwd, sector, ship, type) VALUES (7, 'newguy', 'pass123',1,1,2);",
 
   "INSERT INTO ship_ownership (player_id, ship_id, is_primary, role_id) VALUES (1,1,1,0);"
     "INSERT INTO player_types (description) VALUES ('NPC');"
@@ -4311,14 +4308,16 @@ cleanup:
 
 
 int
-db_sector_set_beacon (int sector_id, const char *beacon_text)
+db_sector_set_beacon (int sector_id, const char *beacon_text, int player_id)
 {
   sqlite3 *dbh = db_get_handle ();
   sqlite3_stmt *st_sel = NULL, *st_upd = NULL;
+  sqlite3_stmt *st_asset = NULL;
   int rc = SQLITE_ERROR, had_beacon = 0;
 
   pthread_mutex_lock (&db_mutex);
 
+  // 1. SELECT: Check for existing beacon
   const char *sql_sel = "SELECT beacon FROM sectors WHERE id=?1;";
   rc = sqlite3_prepare_v2 (dbh, sql_sel, -1, &st_sel, NULL);
   if (rc != SQLITE_OK)
@@ -4338,14 +4337,15 @@ db_sector_set_beacon (int sector_id, const char *beacon_text)
   sqlite3_finalize (st_sel);
   st_sel = NULL;
 
+  // --- RESTORED: UPDATE sectors table ---
   const char *sql_upd = "UPDATE sectors SET beacon=?1 WHERE id=?2;";
   rc = sqlite3_prepare_v2 (dbh, sql_upd, -1, &st_upd, NULL);
   if (rc != SQLITE_OK)
     goto cleanup;
 
-  if (had_beacon)
+  if (had_beacon && (beacon_text == NULL || *beacon_text == '\0'))
     {
-      sqlite3_bind_null (st_upd, 1);	/* explode → leave none */
+      sqlite3_bind_null (st_upd, 1); /* explode → leave none */
     }
   else
     {
@@ -4359,16 +4359,63 @@ db_sector_set_beacon (int sector_id, const char *beacon_text)
   rc = sqlite3_step (st_upd);
   if (rc == SQLITE_DONE)
     rc = SQLITE_OK;
+  
+  // Finalize the update statement immediately after use
+  sqlite3_finalize (st_upd);
+  st_upd = NULL; 
+  
+  if (rc != SQLITE_OK) // Check if the UPDATE itself failed
+      goto cleanup;
+  // --- END RESTORED: UPDATE sectors table ---
+
+
+  // --- BEGIN NEW: Sector Asset (Beacon) Tracking ---
+
+  if (had_beacon && (beacon_text == NULL || *beacon_text == '\0'))
+    {
+      // Case A: Beacon removed (exploded or overwritten by null text)
+      const char *sql_del_asset = "DELETE FROM sector_assets WHERE sector_id=?1 AND asset_type='beacon';";
+      rc = sqlite3_exec(dbh, sql_del_asset, NULL, NULL, NULL);
+      if (rc != SQLITE_OK)
+	  LOGE("db_sector_set_beacon: DELETE asset failed for sector %d, rc=%d", sector_id, rc);
+    }
+  else if (beacon_text && *beacon_text)
+    {
+      // Case B: Beacon set or updated - INSERT OR REPLACE
+      const char *sql_ins_asset =
+	  "INSERT OR REPLACE INTO sector_assets (sector_id, asset_type, owner_id, text_content) "
+	  "VALUES (?1, 'beacon', ?2, ?3);";
+
+      rc = sqlite3_prepare_v2 (dbh, sql_ins_asset, -1, &st_asset, NULL);
+      if (rc != SQLITE_OK)
+	  goto cleanup;
+	  
+      sqlite3_bind_int (st_asset, 1, sector_id);
+      sqlite3_bind_int (st_asset, 2, player_id);	// BIND the new player_id
+      sqlite3_bind_text (st_asset, 3, beacon_text, -1, SQLITE_TRANSIENT);
+
+      rc = sqlite3_step (st_asset);
+      if (rc == SQLITE_DONE)
+	  rc = SQLITE_OK;
+
+      sqlite3_finalize (st_asset);
+      st_asset = NULL;
+    }
+  // --- END NEW: Sector Asset (Beacon) Tracking ---
+
 
 cleanup:
+  // Only finalize statements if they were not finalized earlier
   if (st_sel)
     sqlite3_finalize (st_sel);
   if (st_upd)
     sqlite3_finalize (st_upd);
+  if (st_asset)
+    sqlite3_finalize (st_asset);
+
   pthread_mutex_unlock (&db_mutex);
   return rc;
 }
-
 
 // In database.c
 int

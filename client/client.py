@@ -1,3 +1,5 @@
+from __future__ import annotations # <--- MUST be here
+
 
 # === HOTFIX: ctx-based menu visibility + on-enter hook + Stardock context (placed at top) ===
 def _option_visible_with_ctx(ctx, opt: dict) -> bool:
@@ -77,7 +79,7 @@ test_clientv3.py — Data-driven menu client for TWClone (server-connected, v2 p
   testing (full), adjacency-aware move, tow placeholder, help, shipyard, warp,
   autopilot route (add/clear/start), intercept, land, computer tools.
 """
-from __future__ import annotations
+### from __future__ import annotations
 import argparse
 import getpass
 import json

@@ -95,7 +95,7 @@ int db_players_at_sector_json (int sector_id, json_t ** out_array);
 int db_ports_at_sector_json (int sector_id, json_t ** out_array);
 int db_ships_at_sector_json (int player_id, int sector_id, json_t ** out);
 int db_sector_has_beacon (int sector_id);
-int db_sector_set_beacon (int sector_id, const char *beacon_text);
+int db_sector_set_beacon (int sector_id, const char *beacon_text, int player_id);
 int db_player_has_beacon_on_ship (int player_id);
 int db_player_decrement_beacon_count (int player_id);
 int db_player_has_beacon_on_ship (int player_id);
