@@ -149,88 +149,78 @@ h_get_active_ship_id (sqlite3 *db, int player_id)
 }
 
 
-
-/**
- * @brief Attempts to de-cloak a ship if it is currently cloaked.
- * * If the ship is successfully de-cloaked, it sends a notification to the owner.
- *
- * @param db The SQLite database connection handle.
- * @param ship_id The ID of the ship to check/de-cloak.
- * @return 0 on success (either already uncloaked or successfully de-cloaked),
- * or non-zero on a critical error (like SQL failure).
- *
- * This should be called whenever the ship does any of the following
- *
- * Movement,Com,"combat.attack, combat.fire_photon, deploy.genesis"
- * Deployment,"Deploying/Laying Traps (Mines, Beacons)","deploy.mine, deploy.beacon",Placing any object on the map.
- * Ship Maintenance,Jettisoning Cargo,jettison,Dumping goods is a physical action visible to scanners.
- * Planet Interaction,Landing on a Planet,planet.land,Docking or landing requires de-cloaking.
- * Planet Interaction,TransWarp drive (TW),move.transwarp,"While a jump (short hop) can keep cloak in some variants, transwarp usually forces  * a decloak and requires massive power."
- * Trading/Ports,Buying/Selling at a Port,"port.buy, port.sell",Docking at a port (even if you stay in space) often removes cloak.
- *
- */
 int
 h_decloak_ship (sqlite3 *db, int ship_id)
 {
   sqlite3_stmt *st = NULL;
-  int rc;
+  sqlite3_stmt *st_select = NULL; // Keep this distinct from 'st'
+  int rc = 0;
   int player_id = 0;
-  int rows_affected = 0;
 
-  // 1. Prepare the statement to UPDATE and check if the ship was cloaked (cloaked IS NOT NULL)
-  // We update the ship in a single query: set cloaked=NULL where cloaked is not NULL AND id = ?
-  // The RETURNING player_id clause assumes your 'ships' table has a player_id foreign key.
-  rc = sqlite3_prepare_v2 (db,
-			   "UPDATE ships "
-			   "SET cloaked = NULL "
-			   "WHERE id = ? AND cloaked IS NOT NULL "
-			   "RETURNING player_id;", -1, &st, NULL);
+  // --- Step 1: Get the Player ID for the Ship (Primary Owner) ---
+  const char *sql_select_owner =
+    "SELECT player_id FROM ship_ownership WHERE ship_id = ? AND is_primary = 1;";
 
+  rc = sqlite3_prepare_v2(db, sql_select_owner, -1, &st_select, NULL);
   if (rc != SQLITE_OK)
-    {
-      // Handle SQL preparation error
-      fprintf (stderr, "SQL error preparing de-cloak: %s\n",
-	       sqlite3_errmsg (db));
-      return 1;
-    }
+    goto cleanup;
 
-  // Bind the ship ID
+  sqlite3_bind_int(st_select, 1, ship_id); // Use the function argument 'ship_id'
+
+  if (sqlite3_step(st_select) == SQLITE_ROW)
+    {
+      player_id = sqlite3_column_int(st_select, 0);
+    }
+  // No need to check for SQLITE_DONE/ERROR explicitly here; we continue even if no owner is found.
+  sqlite3_finalize(st_select);
+  st_select = NULL;
+
+
+  // --- Step 2: Update the Ships table (De-cloak) ---
+  const char *sql_update_cloak = 
+      "UPDATE ships "
+      "SET cloaked = NULL "
+      "WHERE id = ? AND cloaked IS NOT NULL;"; 
+
+  rc = sqlite3_prepare_v2(db, sql_update_cloak, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    goto cleanup;
+  
   sqlite3_bind_int (st, 1, ship_id);
 
-  // Execute and check the result
-  if (sqlite3_step (st) == SQLITE_ROW)
+  // Execute the UPDATE statement. It returns SQLITE_DONE on success.
+  if (sqlite3_step (st) != SQLITE_DONE)
     {
-      // If a row was returned, the UPDATE was successful (the ship was cloaked)
-
-      // Retrieve the player_id of the affected ship
-      player_id = sqlite3_column_int (st, 0);
-
-      // 2. Send the notification to the player
+      // If the UPDATE failed (e.g., integrity constraint, I/O error), jump to cleanup
+      rc = sqlite3_step (st); // Store the error code
+      goto cleanup;
+    }
+  
+  // Check if any row was affected (i.e., the ship was successfully de-cloaked)
+  if (sqlite3_changes(db) > 0)
+    {
+      // 3. Send the notification to the player (if an owner was found)
       if (player_id > 0)
 	{
 	  // Use the identified message function
 	  h_send_message_to_player (player_id, 1, "Uncloaking",
 				    "Your ship's cloaking device has been deactivated due to action.");
 	}
-
-      rows_affected = 1;	// Ship was de-cloaked
     }
+  
+  rc = SQLITE_OK; // Set success status if we reached here
 
-  sqlite3_finalize (st);
-
-  if (rows_affected > 0)
-    {
-      // Commit the de-cloak immediately so subsequent actions see the new state
-      // NOTE: If you are already inside a transaction, remove this COMMIT call.
-      // Assuming h_decloak_ship is called as part of a larger, atomic command,
-      // it might be safer to let the calling function handle the final commit.
-      // I will remove the commit here for better transaction safety.
-      // return sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL); 
-    }
-
-  // Return 0 even if the ship wasn't cloaked, as that's a successful outcome for this function's goal.
-  return 0;
+cleanup:
+  if (st_select)
+    sqlite3_finalize(st_select);
+  if (st)
+    sqlite3_finalize(st);
+  
+  // Returning 0 on success is standard for C functions where an explicit error code is not necessary.
+  // We return 0 on success (SQLITE_OK) or the SQLite error code.
+  return (rc == SQLITE_OK) ? 0 : rc;
 }
+
 
 
 enum

@@ -26,6 +26,15 @@
 #define RANGE_SIZE (MAX_UNPROTECTED_SECTOR - MIN_UNPROTECTED_SECTOR + 1)
 
 
+static inline uint64_t
+monotonic_millis (void)
+{
+  struct timespec ts;
+  clock_gettime (CLOCK_MONOTONIC, &ts);
+  return (uint64_t) ts.tv_sec * 1000ULL + (uint64_t) ts.tv_nsec / 1000000ULL;
+}
+
+
 // Pre-define reasons for logging purposes
 enum
 {
@@ -75,9 +84,6 @@ static entry_t REG[] = {
 };
 
 static int g_reg_inited = 0;
-
-
-///////////////////////////////////
 
 
 /**
@@ -1441,21 +1447,42 @@ h_terra_replenish (sqlite3 *db, int64_t now_s)
   if (rc)
     return rc;
 
+  /* 1. Max out all storable goods on the Planet Terra (Earth) */
+  /* This assumes 'Terra' is the canonical name for Earth/FedSpace planet. */
   rc = sqlite3_exec (db,
-		     "UPDATE ports SET credits=MAX(credits, 500000000), fuel_stock=1000000, organics_stock=1000000 "
-		     "WHERE is_terra=1;", NULL, NULL, NULL);
+                     "UPDATE planet_goods SET quantity = max_capacity "
+                     "WHERE planet_id IN (SELECT id FROM planets WHERE name='Terra');",
+                     NULL, NULL, NULL);
 
   if (rc)
     {
       rollback (db);
-      LOGE ("terra_replenish rc=%d", rc);
+      LOGE ("terra_replenish (Terra resources max) rc=%d", rc);
       return rc;
     }
+  
+  /* 2. Reset Terraforming Turns for all player-owned planets */
+  /* This allows players to terraform one more time that day. */
+  /* Assuming 'terraform_turns_left' is a column on the planets table, and 1 is the daily limit. */
+  rc = sqlite3_exec (db,
+                     "UPDATE planets SET terraform_turns_left = 1 " // Reset to one turn per day
+                     "WHERE owner_id != 0;", // Targets only player-owned planets (owner_id > 0)
+                     NULL, NULL, NULL);
+
+  if (rc)
+    {
+      rollback (db);
+      LOGE ("terra_replenish (turns reset) rc=%d", rc);
+      return rc;
+    }
+
   commit (db);
   LOGI ("terra_replenish: ok");
   unlock (db, "terra_replenish");
   return 0;
 }
+
+
 
 int
 h_port_reprice (sqlite3 *db, int64_t now_s)
@@ -1575,12 +1602,38 @@ h_traps_process (sqlite3 *db, int64_t now_s)
   return 0;
 }
 
+
+/* Handler for the 'npc_step' cron task */
 int
-h_npc_step (sqlite3 *db, int64_t now_s)
+h_npc_step (sqlite3 * db, int64_t now_s)
 {
-  (void) db;
-  (void) now_s;
-  /* No-op for now; handled elsewhere. Consider disabling cron_tasks.enabled for npc_step. */
-  // LOGD("npc_step noop");
-  return 0;
+    int64_t now_ms = (int64_t)monotonic_millis();
+    // 1. Initialize and run ISS tick
+    if (iss_init_once() == 1) {
+        iss_tick(now_ms);
+    }
+    // 2. Initialize and run Ferringhi tick
+    if (fer_init_once() == 1) {
+        fer_attach_db(db); // Ensure DB handle is attached if needed
+        fer_tick(now_ms);
+    }
+    LOGI ("npc_step: ok");
+    return 0; // Return 0 (SQLITE_OK) for success
+}
+
+
+/* Implementation (in a .c file) */
+int
+h_port_price_drift (sqlite3 * db, int64_t now_s)
+{
+  (void) now_s; // now_s is seconds since epoch
+  
+  // 1. SELECT ports whose price needs to drift
+  // 2. Compute new prices based on supply/demand/random drift
+  // 3. UPDATE port_prices table
+  
+  // Placeholder: Example of running a simple update
+  // int rc = sqlite3_exec(db, "UPDATE port_prices SET price = price + 1 WHERE commodity_id = 1;", NULL, NULL, NULL);
+  
+  return 0; // Return 0 for success
 }

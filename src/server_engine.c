@@ -33,7 +33,7 @@
 #include "server_universe.h"
 #include "server_log.h"
 #include "server_cron.h"
-
+#include "common.h"
 
 /* handlers (implemented below) */
 static int sweeper_system_notice_ttl (sqlite3 * db, int64_t now_ms);
@@ -51,7 +51,6 @@ monotonic_millis (void)
   return (uint64_t) ts.tv_sec * 1000ULL + (uint64_t) ts.tv_nsec / 1000000ULL;
 }
 
-/* ---- Cron: registry ---- */
 /* ---- Cron: registry ---- */
 typedef int (*cron_handler_fn) (sqlite3 * db, int64_t now_s);
 
@@ -76,20 +75,9 @@ static const CronHandler CRON_REGISTRY[] = {
   {"daily_turn_reset", h_daily_turn_reset},
   {"terra_replenish", h_terra_replenish},
   {"port_reprice", h_port_reprice},
+  {"port_price_drift", h_port_price_drift},
   {NULL, NULL}
 };
-
-/* static const CronHandler CRON_REGISTRY[] = { */
-/*   { "broadcast_ttl_cleanup", sweeper_broadcast_ttl_cleanup }, */
-/*   { NULL, NULL } */
-/* }; */
-
-/* lookup by name */
-//cron_handler_fn cron_find(const char *name) {
-//  for (int i = 0; CRON_REGISTRY[i].name; ++i)
-//    if (strcmp(CRON_REGISTRY[i].name, name) == 0) return CRON_REGISTRY[i].fn;
-//  return NULL;
-//}
 
 /* Lookup by task name (e.g., "fedspace_cleanup"). */
 cron_handler_fn
@@ -104,6 +92,7 @@ cron_find (const char *name)
     }
   return NULL;
 }
+
 
 /* ---- Cron framework (schema: cron_tasks uses schedule + next_due_at) ---- */
 /* Schema: cron_tasks(id, name, schedule, last_run_at, next_due_at, enabled, payload) */
@@ -846,41 +835,20 @@ engine_main_loop (int shutdown_fd)
   static time_t last_cmd_tick_ms = 0;
   /* One-time ISS bootstrap */
   int iss_ok = iss_init_once ();	// 1 if ISS+Stardock found, else 0
-  int64_t next_iss_due = 0;	// run ASAP on first loop
-  const int64_t ISS_PERIOD_MS = 2000;	// ~2s cadence
-  /* put this near your other period constants */
-  static const int64_t FER_PERIOD_MS = 1500;	/* 1.5s; tweak as you like */
   fer_attach_db (db_handle);
-  int64_t next_fer_due = 0;
   int fer_ok = fer_init_once ();
-
 
 
   for (;;)
     {
       engine_s2s_drain_once (conn);
 
-
       uint64_t now_ms = monotonic_millis ();
+
       if (now_ms - last_cmd_tick_ms >= 250)
 	{
 	  (void) server_commands_tick (db_get_handle (), 16);
 	  last_cmd_tick_ms = now_ms;
-	}
-
-      int64_t iisnow = monotonic_millis ();
-      // Drive ISS on schedule (inside the same engine loop)
-      if (iss_ok && iisnow >= next_iss_due)
-	{
-	  iss_tick (iisnow);	// handles summon-if-any, else patrol
-	  next_iss_due = iisnow + ISS_PERIOD_MS;
-	}
-
-      /* Drive Ferringhi traders */
-      if (fer_ok && iisnow >= next_fer_due)
-	{
-	  fer_tick (iisnow);
-	  next_fer_due = iisnow + FER_PERIOD_MS;
 	}
 
       time_t now = time (NULL);
@@ -910,7 +878,6 @@ engine_main_loop (int shutdown_fd)
 	    g_next_notice_ttl_sweep = now_ts + 24 * 3600;	/* run daily */
 	  }
       }
-
 
       // Sleep until next tick or until shutdown pipe changes
       int rc = poll (&pfd, 1, tick_ms);

@@ -96,6 +96,9 @@ static void iss_log_event_move (int from, int to, const char *kind,
 json_t *build_sector_info_json (int sector_id);
 
 
+
+
+
 /* --- minimal event writer for tests (engine_events) --- */
 static void
 fer_event_json (const char *type, int sector_id, const char *fmt, ...)

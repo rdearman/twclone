@@ -629,7 +629,56 @@ const char *create_table_sql[] = {
   "CREATE TABLE IF NOT EXISTS msl_sectors ("
     "  sector_id INTEGER PRIMARY KEY REFERENCES sectors(id)" ");",
 
+  "CREATE TABLE IF NOT EXISTS trade_log ("
+  "    id            INTEGER PRIMARY KEY AUTOINCREMENT,"
+  "    player_id     INTEGER NOT NULL,"
+  "    port_id       INTEGER NOT NULL,"
+  "    sector_id     INTEGER NOT NULL,"
+  "    commodity     TEXT NOT NULL,"
+  "    units         INTEGER NOT NULL,"
+  "    price_per_unit REAL NOT NULL,"
+  "    action        TEXT CHECK(action IN ('buy', 'sell')) NOT NULL,"
+  "    timestamp     INTEGER NOT NULL,"
+  "    FOREIGN KEY (player_id) REFERENCES players(id),"
+  "    FOREIGN KEY (port_id) REFERENCES ports(id),"
+  "    FOREIGN KEY (sector_id) REFERENCES sectors(id)"
+  ");",
 
+  "CREATE INDEX IF NOT EXISTS ix_trade_log_ts ON trade_log(timestamp);",
+
+  "CREATE TABLE IF NOT EXISTS banks ("
+  "    player_id         INTEGER PRIMARY KEY,"
+  "    credits           INTEGER NOT NULL DEFAULT 0,"
+  "    last_deposit_at   INTEGER NOT NULL,"
+  "    last_interest_run INTEGER NOT NULL,"
+  "    FOREIGN KEY (player_id) REFERENCES players(id)"
+  ");",
+
+  "CREATE TABLE IF NOT EXISTS stardock_assets ("
+  "    sector_id      INTEGER PRIMARY KEY,"
+  "    owner_id       INTEGER NOT NULL,"
+  "    fighters       INTEGER NOT NULL DEFAULT 0,"
+  "    defenses       INTEGER NOT NULL DEFAULT 0,"
+  "    ship_capacity  INTEGER NOT NULL DEFAULT 1,"
+  "    created_at     INTEGER NOT NULL,"
+  "    FOREIGN KEY (sector_id) REFERENCES sectors(id),"
+  "    FOREIGN KEY (owner_id) REFERENCES players(id)"
+  ");",
+
+  "CREATE INDEX IF NOT EXISTS ix_stardock_owner ON stardock_assets(owner_id);",
+
+  "CREATE TABLE IF NOT EXISTS planet_goods ("
+  "    planet_id      INTEGER NOT NULL,"
+  "    commodity      TEXT NOT NULL CHECK(commodity IN ('ore', 'organics', 'equipment', 'food', 'fuel')),"
+  "    quantity       INTEGER NOT NULL DEFAULT 0,"
+  "    max_capacity   INTEGER NOT NULL,"
+  "    production_rate INTEGER NOT NULL,"
+  "    PRIMARY KEY (planet_id, commodity),"
+  "    FOREIGN KEY (planet_id) REFERENCES planets(id)"
+  ");",
+
+
+  
   //////////////////////////////////////////////////////////////////////
   /// CREATE VIEWS 
   //////////////////////////////////////////////////////////////////////
@@ -1456,10 +1505,10 @@ static const char *ENGINE_BOOTSTRAP_SQL = "BEGIN IMMEDIATE;\n"
   "('terra_replenish','daily@04:00Z',NULL,strftime('%s','now'),1,NULL),\n"
   "('port_reprice','daily@05:00Z',NULL,strftime('%s','now'),1,NULL),\n"
   "('planet_growth','every:10m',NULL,strftime('%s','now'),1,NULL),\n"
-  "('fedspace_cleanup','every:1m',NULL,strftime('%s','now'),1,NULL),\n"
-  "('autouncloak_sweeper','every:1m',NULL,strftime('%s','now'),1,NULL),\n"
-  "('traps_process','every:1s',NULL,strftime('%s','now'),1,NULL),\n"
-  "('npc_step','every:2s',NULL,strftime('%s','now'),1,NULL),\n"
+  "('fedspace_cleanup','every:2m',NULL,strftime('%s','now'),1,NULL),\n"
+  "('autouncloak_sweeper','every:15m',NULL,strftime('%s','now'),1,NULL),\n"
+  "('port_price_drift','every:10s',NULL,strftime('%s','now'),1,NULL),\n"
+  "('npc_step','every:30s',NULL,strftime('%s','now'),1,NULL),\n"
   "('broadcast_ttl_cleanup','every:5m',NULL,strftime('%s','now'),1,NULL);\n"
   "\n"
   /* --- Server→Engine event rail (separate from your existing system_events) --- */
@@ -4307,6 +4356,7 @@ cleanup:
 }
 
 
+
 int
 db_sector_set_beacon (int sector_id, const char *beacon_text, int player_id)
 {
@@ -4337,7 +4387,7 @@ db_sector_set_beacon (int sector_id, const char *beacon_text, int player_id)
   sqlite3_finalize (st_sel);
   st_sel = NULL;
 
-  // --- RESTORED: UPDATE sectors table ---
+  // 2. UPDATE: Update the sectors table (beacon text)
   const char *sql_upd = "UPDATE sectors SET beacon=?1 WHERE id=?2;";
   rc = sqlite3_prepare_v2 (dbh, sql_upd, -1, &st_upd, NULL);
   if (rc != SQLITE_OK)
@@ -4345,7 +4395,8 @@ db_sector_set_beacon (int sector_id, const char *beacon_text, int player_id)
 
   if (had_beacon && (beacon_text == NULL || *beacon_text == '\0'))
     {
-      sqlite3_bind_null (st_upd, 1); /* explode → leave none */
+      // Explode/Clear: Set sectors.beacon to NULL
+      sqlite3_bind_null (st_upd, 1);
     }
   else
     {
@@ -4360,52 +4411,54 @@ db_sector_set_beacon (int sector_id, const char *beacon_text, int player_id)
   if (rc == SQLITE_DONE)
     rc = SQLITE_OK;
   
-  // Finalize the update statement immediately after use
   sqlite3_finalize (st_upd);
   st_upd = NULL; 
   
-  if (rc != SQLITE_OK) // Check if the UPDATE itself failed
+  if (rc != SQLITE_OK)
       goto cleanup;
-  // --- END RESTORED: UPDATE sectors table ---
 
-
-  // --- BEGIN NEW: Sector Asset (Beacon) Tracking ---
+  // 3. Asset Tracking: Update the sector_assets table (ownership)
 
   if (had_beacon && (beacon_text == NULL || *beacon_text == '\0'))
     {
-      // Case A: Beacon removed (exploded or overwritten by null text)
-      const char *sql_del_asset = "DELETE FROM sector_assets WHERE sector_id=?1 AND asset_type='beacon';";
+      // Case A: Beacon removed (Exploded/Cancelled) - DELETE asset ownership
+      const char *sql_del_asset = "DELETE FROM sector_assets WHERE sector=?1 AND asset_type='3';";
       rc = sqlite3_exec(dbh, sql_del_asset, NULL, NULL, NULL);
       if (rc != SQLITE_OK)
 	  LOGE("db_sector_set_beacon: DELETE asset failed for sector %d, rc=%d", sector_id, rc);
     }
   else if (beacon_text && *beacon_text)
     {
-      // Case B: Beacon set or updated - INSERT OR REPLACE
+      // Case B: Beacon set or updated - INSERT OR REPLACE asset ownership
       const char *sql_ins_asset =
-	  "INSERT OR REPLACE INTO sector_assets (sector_id, asset_type, owner_id, text_content) "
-	  "VALUES (?1, 'beacon', ?2, ?3);";
+	"INSERT OR REPLACE INTO sector_assets (sector, asset_type, player, quantity, deployed_at) "
+	"VALUES (?1, ?2, ?3, 1, ?4);"; // *** ADDED: quantity and deployed_at ***
 
       rc = sqlite3_prepare_v2 (dbh, sql_ins_asset, -1, &st_asset, NULL);
       if (rc != SQLITE_OK)
+	{
+	  LOGE("db_sector_set_beacon: INSERT asset PREPARE failed for sector %d, rc=%d. Msg: %s",
+	       sector_id, rc, sqlite3_errmsg(dbh));
 	  goto cleanup;
-	  
+	}
+  
+      // Get current timestamp here if not available globally
+      int64_t now_s = (int64_t)time(NULL); 
+
       sqlite3_bind_int (st_asset, 1, sector_id);
-      sqlite3_bind_int (st_asset, 2, player_id);	// BIND the new player_id
-      sqlite3_bind_text (st_asset, 3, beacon_text, -1, SQLITE_TRANSIENT);
+      sqlite3_bind_text (st_asset, 2, "3", -1, SQLITE_STATIC); // Use "3" as you were using
+      sqlite3_bind_int (st_asset, 3, player_id);      // BIND the player_id
+      sqlite3_bind_int64 (st_asset, 4, now_s);        // *** NEW: BIND deployed_at ***
 
       rc = sqlite3_step (st_asset);
       if (rc == SQLITE_DONE)
-	  rc = SQLITE_OK;
+	rc = SQLITE_OK;
 
       sqlite3_finalize (st_asset);
       st_asset = NULL;
     }
-  // --- END NEW: Sector Asset (Beacon) Tracking ---
-
 
 cleanup:
-  // Only finalize statements if they were not finalized earlier
   if (st_sel)
     sqlite3_finalize (st_sel);
   if (st_upd)
@@ -4416,6 +4469,9 @@ cleanup:
   pthread_mutex_unlock (&db_mutex);
   return rc;
 }
+
+
+
 
 // In database.c
 int
