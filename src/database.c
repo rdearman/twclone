@@ -393,15 +393,34 @@ const char *create_table_sql[] = {
   " CREATE TABLE IF NOT EXISTS player_ships ( player_id INTEGER DEFAULT 0, ship_id INTEGER DEFAULT 0, role INTEGER DEFAULT 1, is_active INTEGER DEFAULT 1); ",
   " CREATE TABLE IF NOT EXISTS ship_roles ( role_id INTEGER PRIMARY KEY, role INTEGER DEFAULT 1, role_description TEXT DEFAULT 1); ",
 
+  " CREATE TABLE IF NOT EXISTS planets ( "
+  " id INTEGER PRIMARY KEY AUTOINCREMENT,  "
+  " num INTEGER,  " /* legacy planet ID */
+  " sector INTEGER NOT NULL,  "    /* FK to sectors.id */
+  " name TEXT NOT NULL,  "
+  " owner INTEGER,  "     /* FK to players.id */
+  " population INTEGER,  "
+  " type INTEGER,  "   /* FK to planettypes.id */
+  " creator TEXT,  "
+  " fuelColonist INTEGER,  " /* KEPT: Specialized Colonist */
+  " organicsColonist INTEGER,  " /* KEPT: Specialized Colonist */
+  " equipmentColonist INTEGER,  " /* KEPT: Specialized Colonist */
+  " fighters INTEGER,  "
+  " citadel_level INTEGER DEFAULT 0,  " /* replaces pointer to citadel struct */
+  " FOREIGN KEY (sector) REFERENCES sectors(id),  "
+  " FOREIGN KEY (owner) REFERENCES players(id),  "
+  " FOREIGN KEY (type) REFERENCES planettypes(id) "
+  " ); ",
 
-  " CREATE TABLE IF NOT EXISTS planets ( " " id INTEGER PRIMARY KEY AUTOINCREMENT,  " " num INTEGER,  "	/* legacy planet ID */
-    " sector INTEGER NOT NULL,  "	/* FK to sectors.id */
-    " name TEXT NOT NULL,  " " owner INTEGER,  "	/* FK to players.id */
-    " population INTEGER,  " " minerals INTEGER,  " " ore INTEGER,  " " energy INTEGER,  " " type INTEGER,  "	/* FK to planettypes.id */
-    " creator TEXT,  " " fuelColonist INTEGER,  " " organicsColonist INTEGER,  " " equipmentColonist INTEGER,  " " fuel INTEGER,  " " organics INTEGER,  " " equipment INTEGER,  " " fighters INTEGER,  " " citadel_level INTEGER DEFAULT 0,  "	/* replaces pointer to citadel struct */
-    " FOREIGN KEY (sector) REFERENCES sectors(id),  "
-    " FOREIGN KEY (owner) REFERENCES players(id),  "
-    " FOREIGN KEY (type) REFERENCES planettypes(id) " " ); ",
+  " CREATE TABLE IF NOT EXISTS planet_goods ( "
+  " planet_id INTEGER NOT NULL, "
+  " commodity TEXT NOT NULL CHECK(commodity IN ('ore', 'organics', 'equipment', 'food', 'fuel')), "
+  " quantity INTEGER NOT NULL DEFAULT 0, "
+  " max_capacity INTEGER NOT NULL, "
+  " production_rate INTEGER NOT NULL, "
+  " PRIMARY KEY (planet_id, commodity), "
+  " FOREIGN KEY (planet_id) REFERENCES planets(id) "
+  " ); "
 
   /* --- citadels table (fixed, closed properly) --- */
   " CREATE TABLE IF NOT EXISTS citadels ( " " id INTEGER PRIMARY KEY AUTOINCREMENT,  " " planet_id INTEGER UNIQUE NOT NULL,  "	/* 1:1 link to planets.id */
@@ -1349,9 +1368,46 @@ const char *insert_default_sql[] = {
     "20000,50000,20000, " "0,0,0,0,0, " "20000,50000,10000,1000000,-0.10);",
 
   /* Earth planet in sector 1 */
-  "INSERT OR IGNORE INTO planets (num, sector, name, owner, population, minerals, ore, energy, type, creator, fuelColonist, organicsColonist, equipmentColonist, fuel, organics, equipment, fighters)"
-    " VALUES (1,1,'Earth',0,8000000000,10000000,10000000,10000000,1,'System',6000000,6000000,6000000,100000,100000,100000,1000000);",
+  " INSERT OR IGNORE INTO planets (num, sector, name, owner, population, type, creator, fuelColonist, organicsColonist, equipmentColonist, fighters) "
+  " VALUES (1, 1, 'Earth', 0, 8000000000, 1, 'System', 6000000, 6000000, 6000000, 1000000); ",
 
+  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " ((SELECT id FROM planets WHERE name='Earth'), 'ore', 10000000, 10000000, 0); ",
+  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " ((SELECT id FROM planets WHERE name='Earth'), 'organics', 10000000, 10000000, 0); ",
+  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " ((SELECT id FROM planets WHERE name='Earth'), 'equipment', 10000000, 10000000, 0); ",
+  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " ((SELECT id FROM planets WHERE name='Earth'), 'fuel', 100000, 100000, 0); ",
+
+  /* Ferringhi planet in sector 0 (change in bigbang) */
+  " INSERT OR IGNORE INTO planets (num, sector, name, owner, population, type, creator, fuelColonist, organicsColonist, equipmentColonist, fighters) "
+  " VALUES (2, 0, 'Ferringhi Homeworld', 0, 8000000000, 1, 'System', 6000000, 6000000, 6000000, 1000000); ",
+
+  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " ((SELECT id FROM planets WHERE name='Earth'), 'ore', 10000000, 10000000, 0); ",
+  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " ((SELECT id FROM planets WHERE name='Earth'), 'organics', 10000000, 10000000, 0); ",
+  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " ((SELECT id FROM planets WHERE name='Earth'), 'equipment', 10000000, 10000000, 0); ",
+  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " ((SELECT id FROM planets WHERE name='Earth'), 'fuel', 100000, 100000, 0); ",
+
+  /* NPC Planet: Orion Hideout (Contraband Outpost) */
+  " INSERT OR IGNORE INTO planets (num, sector, name, owner, population, type, creator, fuelColonist, organicsColonist, equipmentColonist, fighters) "
+  " VALUES (3, 0, 'Orion Hideout', 13, 20000000, 1, 'Syndicate', 10000000, 10000, 10000000, 200000); ",
+
+  " /* Orion Hideout Commodity Stock and Capacity */ "
+  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " ((SELECT id FROM planets WHERE name='Orion Hideout'), 'ore', 50000000, 50000000, 10); ",
+  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " ((SELECT id FROM planets WHERE name='Orion Hideout'), 'organics', 100, 100, 0); ", /* Near Zero Capacity for Organics */
+  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " ((SELECT id FROM planets WHERE name='Orion Hideout'), 'equipment', 30000000, 30000000, 10); ",
+  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " ((SELECT id FROM planets WHERE name='Orion Hideout'), 'fuel', 1000000, 1000000, 5); ",
+
+  
   /* Fedspace sectors 1–10 */
   "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (1, 'Fedspace 1', 'The Federation -- Do Not Dump!', 'The Federation');",
   "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (2, 'Fedspace 2', 'The Federation -- Do Not Dump!', 'The Federation');",
@@ -1471,8 +1527,62 @@ const char *insert_default_sql[] = {
   "INSERT INTO players (number, name, passwd, sector, ship, type) VALUES (7, 'newguy', 'pass123',1,1,2);",
 
   "INSERT INTO ship_ownership (player_id, ship_id, is_primary, role_id) VALUES (1,1,1,0);"
-    "INSERT INTO player_types (description) VALUES ('NPC');"
-    "INSERT INTO player_types (description) VALUES ('Human Player');"
+  "INSERT INTO player_types (description) VALUES ('NPC');"
+  "INSERT INTO player_types (description) VALUES ('Human Player');"
+
+
+
+  /* ------------------------------------------------------------------------------------- */
+  /* 1. Insert Orion Syndicate Ship Types (Disabled for Purchase) - NO CHANGES REQUIRED */
+  /* ------------------------------------------------------------------------------------- */
+  "INSERT OR IGNORE INTO shiptypes "
+  " (name, basecost, maxattack, initialholds, maxholds, maxfighters, turns, mines, genesis, twarp, "
+  "  transportrange, maxshields, offense, defense, beacons, holo, planet, photons, can_purchase) "
+  "VALUES "
+  "('Orion Heavy Fighter Patrol', 150000, 5000, 20, 50, 20000, 5, 10, 5, 0, 10, 5000, 20, 10, 25, 1, 1, 1, 0), "
+  "('Orion Scout/Looter',         80000,  4000, 10, 150,  5000, 5, 10, 5, 0, 10, 3000,  8,  8, 25, 1, 1, 1, 0), "
+  "('Orion Contraband Runner',    120000, 3000, 10, 200,  3000, 5, 10, 5, 0, 10, 4000, 10,  5, 25, 1, 1, 1, 0), "
+  "('Orion Smuggler''s Kiss',     130000, 5000, 15, 100, 10000, 5, 10, 5, 0, 10, 5000, 15, 15, 25, 1, 1, 1, 0), "
+  "('Orion Black Market Guard',   180000, 6000, 20,  60,  8000, 5, 10, 5, 0, 10, 8000, 12, 25, 25, 1, 1, 1, 0);"
+  /* ------------------------------------------------------------------------------------- */
+
+
+  /* ------------------------------------------------------------------------------------- */
+  /* 2. Insert five maxed-out Orion Syndicate ships (FIXED: type, location, and column list) */
+  /* ------------------------------------------------------------------------------------- */
+  "INSERT INTO ships (name, type, location, holds, fighters, shields) "
+  "SELECT 'Orion Heavy Fighter Alpha', T.id, P.sector, T.maxholds, T.maxfighters, T.maxshields FROM shiptypes T, planets P WHERE P.num=3 AND T.name='Orion Heavy Fighter Patrol' UNION ALL "
+  "SELECT 'Orion Scout Gamma', T.id, P.sector, T.maxholds, T.maxfighters, T.maxshields FROM shiptypes T, planets P WHERE P.num=3 AND T.name='Orion Scout/Looter' UNION ALL "
+  "SELECT 'Orion Contraband Delta', T.id, P.sector, T.maxholds, T.maxfighters, T.maxshields FROM shiptypes T, planets P WHERE P.num=3 AND T.name='Orion Contraband Runner' UNION ALL "
+  "SELECT 'Orion Smuggler Beta', T.id, P.sector, T.maxholds, T.maxfighters, T.maxshields FROM shiptypes T, planets P WHERE P.num=3 AND T.name='Orion Smuggler''s Kiss' UNION ALL "
+  "SELECT 'Orion Guard Epsilon', T.id, P.sector, T.maxholds, T.maxfighters, T.maxshields FROM shiptypes T, planets P WHERE P.num=3 AND T.name='Orion Black Market Guard';"
+  /* ------------------------------------------------------------------------------------- */
+
+
+  /* ------------------------------------------------------------------------------------- */
+  /* 3. Insert 5 Orion Captains and assign ships (FIXED: players columns and ship ownership) */
+  /* ------------------------------------------------------------------------------------- */
+
+  /* Insert 5 Orion Captains (Players) - Removed non-schema columns (faction_id, empire, turns) */
+  "INSERT INTO players (type, name, passwd, sector, experience, alignment, credits) "
+  "SELECT 2, 'Zydras, Heavy Fighter Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
+  "SELECT 2, 'Krell, Scout Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
+  "SELECT 2, 'Vex, Contraband Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
+  "SELECT 2, 'Jaxx, Smuggler Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
+  "SELECT 2, 'Sira, Market Guard Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3;"
+
+  /* Link Players to Ships using the players.ship column (ships table has no owner_id) */
+  "UPDATE players SET ship = (SELECT id FROM ships WHERE name='Orion Heavy Fighter Alpha') WHERE name='Zydras, Heavy Fighter Captain';"
+  "UPDATE players SET ship = (SELECT id FROM ships WHERE name='Orion Scout Gamma') WHERE name='Krell, Scout Captain';"
+  "UPDATE players SET ship = (SELECT id FROM ships WHERE name='Orion Contraband Delta') WHERE name='Vex, Contraband Captain';"
+  "UPDATE players SET ship = (SELECT id FROM ships WHERE name='Orion Smuggler Beta') WHERE name='Jaxx, Smuggler Captain';"
+  "UPDATE players SET ship = (SELECT id FROM ships WHERE name='Orion Guard Epsilon') WHERE name='Sira, Market Guard Captain';"
+
+  /* ------------------------------------------------------------------------------------- */
+  
+
+
+
 };
 
 

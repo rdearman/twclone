@@ -1403,6 +1403,7 @@ create_ferringhi (int ferringhi_sector)
       return -1;
     }
 
+  
   int longest_tunnel_sector = 0;
   const char *q = "SELECT exit_sector FROM longest_tunnels LIMIT 1;";
   sqlite3_stmt *st = NULL;
@@ -1427,75 +1428,22 @@ create_ferringhi (int ferringhi_sector)
       longest_tunnel_sector = ferringhi_sector;
     }
 
-  char sql_sector[256];
-  snprintf (sql_sector, sizeof (sql_sector),
-	    "UPDATE sectors SET beacon='Ferringhi SPACE, Leave Now!', nebulae='Ferringhi' WHERE id=%d;",
+  // --- Ferringhi Homeworld (num=2) Update ---
+  char planet_sector[256];
+  snprintf (planet_sector, sizeof (planet_sector),
+	    "UPDATE planets SET sector=%d where id=2;",
 	    longest_tunnel_sector);
 
-  if (sqlite3_exec (db, sql_sector, NULL, NULL, NULL) != SQLITE_OK)
+  // Execute the variable that actually holds the SQL string: 'planet_sector'
+  if (sqlite3_exec (db, planet_sector, NULL, NULL, NULL) != SQLITE_OK) 
     {
       fprintf (stderr, "create_ferringhi failed: %s\n", sqlite3_errmsg (db));
       return -1;
     }
-
-  // Fetch planet type data to populate resource fields
-  sqlite3_stmt *type_stmt = NULL;
-  int fuel_prod = 0, organics_prod = 0, equipment_prod = 0;
-  const char *type_q =
-    "SELECT fuelProduction, organicsProduction, equipmentProduction FROM planettypes WHERE id = 1;";
-  if (sqlite3_prepare_v2 (db, type_q, -1, &type_stmt, NULL) == SQLITE_OK)
-    {
-      if (sqlite3_step (type_stmt) == SQLITE_ROW)
-	{
-	  fuel_prod = sqlite3_column_int (type_stmt, 0);
-	  organics_prod = sqlite3_column_int (type_stmt, 1);
-	  equipment_prod = sqlite3_column_int (type_stmt, 2);
-	}
-      sqlite3_finalize (type_stmt);
-    }
-
-  // Insert the Ferrengi homeworld into the planets table with all required values
-  char sql_planet[2048];
-  int planet_population = (rand () % 10) + 10000;
-  int planet_citadel_level = (rand () % 2) + 2;
-  int planet_type = 1;
-  int planet_ore = (rand () % 1000000) + 1;
-  int planet_organics = (rand () % 1000000) + 1;
-  int planet_energy = (rand () % 1000000) + 1;
-  int planet_fighters = (rand () % 2501) + 2500;
-
-  // Calculate realistic values for new fields
-  int planet_minerals = (rand () % 1000000) + 1;
-  int planet_fuel = (rand () % 50000) + fuel_prod * 100;
-  int planet_equipment = (rand () % 50000) + equipment_prod * 100;
-
-  // Colonists are a small fraction of the total population
-  int colonists_fuel = (rand () % (planet_population / 3)) + 1;
-  int colonists_organics = (rand () % (planet_population / 3)) + 1;
-  int colonists_equipment = (rand () % (planet_population / 3)) + 1;
-
-  snprintf (sql_planet, sizeof (sql_planet),
-	    "INSERT INTO planets (num, name, sector, owner, population, ore, organics, energy, fighters, citadel_level, type, minerals, fuel, equipment, fuelColonist, organicsColonist, equipmentColonist, creator) "
-	    "VALUES (2, 'Ferringhi', %d, 0, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, 'System');",
-	    longest_tunnel_sector, planet_population, planet_ore,
-	    planet_organics, planet_energy, planet_fighters,
-	    planet_citadel_level, planet_type, planet_minerals, planet_fuel,
-	    planet_equipment, colonists_fuel, colonists_organics,
-	    colonists_equipment);
-
-  if (sqlite3_exec (db, sql_planet, NULL, NULL, NULL) != SQLITE_OK)
-    {
-      fprintf (stderr, "create_ferringhi failed to create planet: %s\n",
-	       sqlite3_errmsg (db));
-      return -1;
-    }
-
-  // Get the ID of the new planet
-  sqlite3_int64 planet_id = sqlite3_last_insert_rowid (db);
-
+  
   // Insert the citadel details into the citadels table
   char sql_citadel[512];
-  snprintf (sql_citadel, sizeof (sql_citadel), "INSERT INTO citadels (planet_id, level, shields, treasury, military) " "VALUES (%lld, %d, %d, %d, 1);", planet_id, (rand () % 2) + 2,	// Citadel Level (2-3)
+  snprintf (sql_citadel, sizeof (sql_citadel), "INSERT INTO citadels (planet_id, level, shields, treasury, military) " "VALUES (%d, %d, %d, %d, 1);", 2, (rand () % 2) + 2,	// Citadel Level (2-3)
 	    (rand () % 1001) + 1000,	// Shields (1k-2k)
 	    (rand () % 5000001) + 1000000);	// Credits (1M-6M)
 
@@ -1505,7 +1453,6 @@ create_ferringhi (int ferringhi_sector)
 	       sqlite3_errmsg (db));
       return -1;
     }
-
   // Dynamically build the INSERT statement for the player
   char player_insert_sql[512];
   char player_cols[256] = "";
@@ -1741,9 +1688,73 @@ create_ferringhi (int ferringhi_sector)
   sqlite3_finalize (player_ins);
   sqlite3_finalize (player_update);
 
+
+  /* Insert Orion Syndicate Outpost */
+  int oso_tunnel = 0; // Initialize to 0, not 22, to properly check if the query found a result
+  const char *oso = "SELECT exit_sector FROM longest_tunnels LIMIT 1 OFFSET 2;";
+  sqlite3_stmt *stoso = NULL;
+  int rc = 0; // Variable to capture return code
+
+  if (sqlite3_prepare_v2 (db, oso, -1, &stoso, NULL) != SQLITE_OK) // <-- FIXED: Changed 'q' to 'oso'
+    {
+      fprintf (stderr, " Orion Syndicate prepare failed: %s\n",
+	       sqlite3_errmsg (db));
+      // Do not return -1 here; let it fall through and use the default sector 22.
+    }
+  else
+    {
+      rc = sqlite3_step (stoso); // Only call step once
+
+      if (rc == SQLITE_ROW)
+	{
+	  oso_tunnel = sqlite3_column_int (stoso, 0);
+	}
+      else if (rc != SQLITE_DONE)
+	{
+	  fprintf (stderr, " Orion Syndicate step failed: %s\n",
+		   sqlite3_errmsg (db));
+	}
+
+      sqlite3_finalize (stoso);
+    }
+
+  // Handle default if no tunnel was found (or if prepare failed)
+  if (oso_tunnel == 0)
+    {
+      fprintf (stderr,
+	       "Orion Syndicate: No tunnels of length >= 2 found. Defaulting to sector 22.\n");
+      oso_tunnel = 22;
+    }
+
+  // --- Ferringhi Homeworld (num=2) Update ---
+  planet_sector[256];
+  snprintf (planet_sector, sizeof (planet_sector),
+	    "UPDATE planets SET sector=%d where id=2;",
+	    longest_tunnel_sector);
+
+  // FIX: Execute the variable that actually holds the SQL string: 'planet_sector'
+  if (sqlite3_exec (db, planet_sector, NULL, NULL, NULL) != SQLITE_OK) 
+    {
+      fprintf (stderr, "create_ferringhi failed: %s\n", sqlite3_errmsg (db));
+      return -1;
+    }
+
+// --- Orion Syndicate Outpost (num=3) Update ---
+ char oso_planet_sector[256];
+ snprintf (oso_planet_sector, sizeof (oso_planet_sector),
+	   "UPDATE planets SET sector=%d where id=3;",
+	   oso_tunnel);
+
+ if (sqlite3_exec (db, oso_planet_sector, NULL, NULL, NULL) != SQLITE_OK)
+   {
+     fprintf (stderr, "create Orion Syndicate failed: %s\n", sqlite3_errmsg (db));
+     return -1;
+   }
+
+ 
   fprintf (stderr,
-	   "BIGBANG: Placed Ferringhi at sector %d (end of a long tunnel).\n",
-	   longest_tunnel_sector);
+	   "BIGBANG: Placed Ferringhi at sector %d (end of a long tunnel).\nBIGBANG: Placed Orion Syndicate at sector %d (end of a long tunnel).\n",
+	   longest_tunnel_sector, oso_tunnel);
 
   return 0;
 }

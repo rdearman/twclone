@@ -2154,18 +2154,29 @@ fer_init_once (void)
     }
 
   /* find home sector */
-  int home = 0;
+int home = 0;
   {
-    const char *sql = "SELECT sector FROM planets WHERE name=?1 LIMIT 1;";
+    const char *sql = "SELECT sector FROM planets WHERE id=2 LIMIT 1;"; // Simplified query
     sqlite3_stmt *st = NULL;
+    
+    // 1. Prepare the statement
     if (sqlite3_prepare_v2 (g_fer_db, sql, -1, &st, NULL) == SQLITE_OK)
       {
-	sqlite3_bind_text (st, 1, "Ferringhi", -1, SQLITE_STATIC);
-	if (sqlite3_step (st) == SQLITE_ROW)
-	  home = sqlite3_column_int (st, 0);
-	sqlite3_finalize (st);
+        // NOTE: Removed the unnecessary sqlite3_bind_text call.
+
+        // 2. Execute the query and check for a row
+        if (sqlite3_step (st) == SQLITE_ROW)
+          {
+            home = sqlite3_column_int (st, 0);
+          }
+        
+        // 3. Clean up
+        sqlite3_finalize (st);
       }
+    // Optional: Add an else block here to handle a prepare error if needed.
   }
+
+
   if (home <= 0)
     {
       WARN_LOG ("[fer] no 'Ferringhi' planet found; disabling traders");
