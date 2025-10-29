@@ -1192,6 +1192,9 @@ const char *insert_default_sql[] = {
   "INSERT OR IGNORE INTO ports (id, number, name, location, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
     "VALUES (9, 9, 'Port Type 9 (Stardock)', 9, 10, 5, 20000, 20000, 20000, 10000, 10000, 10000, 1000000, 0);",
 
+  "INSERT OR IGNORE INTO ports (id, number, name, location, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
+"VALUES (10, 10, 'Orion Black Market Dock', 10, 10, 5, 0, 0, 0, 0, 0, 0, 5000000, 0);",
+  
   /* ---------- TRADE RULES ---------- */
   /* Type 1: BBS (buys ore, buys organics, sells equipment) */
   "INSERT OR IGNORE INTO port_trade (port_id, commodity, mode) VALUES (1, 'ore', 'buy');",
@@ -1579,9 +1582,6 @@ const char *insert_default_sql[] = {
   "UPDATE players SET ship = (SELECT id FROM ships WHERE name='Orion Guard Epsilon') WHERE name='Sira, Market Guard Captain';"
 
   /* ------------------------------------------------------------------------------------- */
-  
-
-
 
 };
 

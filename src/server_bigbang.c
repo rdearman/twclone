@@ -1751,6 +1751,18 @@ create_ferringhi (int ferringhi_sector)
      return -1;
    }
 
+ /* Place the new Black Market Port in the Orion Hideout Sector (Planet num=3) */                                              char oso_port_sector[256];
+ snprintf (oso_port_sector, sizeof (oso_port_sector),
+	   "DELETE FROM ports where location=%d; INSERT INTO ports (location, type, name) values (%d, 10, 'Orion Black Market');",
+	   oso_tunnel,oso_tunnel);
+
+ if (sqlite3_exec (db, oso_port_sector, NULL, NULL, NULL) != SQLITE_OK)
+   {
+     fprintf (stderr, "create Orion Syndicate portfailed: %s\n", sqlite3_errmsg (db));
+     return -1;
+   }
+  
+ 
  
   fprintf (stderr,
 	   "BIGBANG: Placed Ferringhi at sector %d (end of a long tunnel).\nBIGBANG: Placed Orion Syndicate at sector %d (end of a long tunnel).\n",
