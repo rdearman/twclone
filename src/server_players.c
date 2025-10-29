@@ -23,16 +23,361 @@
 #include "server_log.h"
 
 
-// Assume this external function provides the database handle.
 extern sqlite3 *db_get_handle (void);
 
-#include <sqlite3.h>
-#include <time.h>
-#include <stdio.h>
+int h_get_player_credits(sqlite3 *db, int player_id, int *credits_out)
+{
+    if (!credits_out) return SQLITE_MISUSE;
 
-// Assuming these are defined elsewhere
-extern sqlite3 *db_get_handle (void);
-// Assuming SQLITE_TRANSIENT is defined (it is standard SQLite define)
+    static const char *SQL =
+        "SELECT COALESCE(credits,0) FROM players WHERE id=?1";
+
+    sqlite3_stmt *st = NULL;
+    int rc = sqlite3_prepare_v2(db, SQL, -1, &st, NULL);
+    if (rc != SQLITE_OK) return rc;
+
+    sqlite3_bind_int(st, 1, player_id);
+
+    rc = sqlite3_step(st);
+    if (rc == SQLITE_ROW) {
+        *credits_out = sqlite3_column_int(st, 0);
+        rc = SQLITE_OK;
+    } else {
+        rc = SQLITE_ERROR; /* no such player */
+    }
+
+    sqlite3_finalize(st);
+    return rc;
+}
+
+/* Low-level: compute free cargo = players.holds - SUM(ship_goods.quantity) */
+int h_get_cargo_space_free(sqlite3 *db, int player_id, int *free_out)
+{
+    if (!free_out) return SQLITE_MISUSE;
+
+    int rc;
+    sqlite3_stmt *st = NULL;
+
+    int holds = 0;
+    /* players.holds */
+    rc = sqlite3_prepare_v2(db, "SELECT COALESCE(holds,0) FROM players WHERE id=?1", -1, &st, NULL);
+    if (rc != SQLITE_OK) return rc;
+    sqlite3_bind_int(st, 1, player_id);
+    rc = sqlite3_step(st);
+    if (rc == SQLITE_ROW) holds = sqlite3_column_int(st, 0);
+    else { sqlite3_finalize(st); return SQLITE_ERROR; }
+    sqlite3_finalize(st);
+
+    /* total cargo on ship (assumes ship_goods exists as designed earlier) */
+    int total = 0;
+    rc = sqlite3_prepare_v2(db,
+            "SELECT COALESCE(SUM(quantity),0) "
+            "FROM ship_goods WHERE player_id=?1",
+            -1, &st, NULL);
+    if (rc != SQLITE_OK) return rc;
+    sqlite3_bind_int(st, 1, player_id);
+    rc = sqlite3_step(st);
+    if (rc == SQLITE_ROW) total = sqlite3_column_int(st, 0);
+    else { sqlite3_finalize(st); return SQLITE_ERROR; }
+    sqlite3_finalize(st);
+
+    int free_space = holds - total;
+    if (free_space < 0) free_space = 0; /* guard – shouldn’t happen if updates enforce caps */
+
+    *free_out = free_space;
+    return SQLITE_OK;
+}
+
+/* Convenience wrappers that match your usage style */
+int player_credits(client_ctx_t *ctx)
+{
+  sqlite3 *db = db_get_handle ();
+    int c = 0;
+    if (h_get_player_credits(db, ctx->player_id, &c) != SQLITE_OK) return 0;
+    return c;
+}
+
+int cargo_space_free(client_ctx_t *ctx)
+{
+    sqlite3 *db = db_get_handle ();
+    int f = 0;
+    if (h_get_cargo_space_free(db, ctx->player_id, &f) != SQLITE_OK) return 0;
+    return f;
+}
+
+
+/* Update a player's ship cargo for one commodity by delta (can be +/-). */
+int h_update_ship_cargo(sqlite3 *db, int player_id,
+                        const char *commodity, int delta, int *new_qty_out)
+{
+    if (!commodity || *commodity == '\0') return SQLITE_MISUSE;
+
+    int rc;
+    char *errmsg = NULL;
+    sqlite3_stmt *sel_row = NULL, *sel_sum = NULL, *upd = NULL, *ins = NULL;
+
+    rc = sqlite3_exec(db, "BEGIN IMMEDIATE", NULL, NULL, &errmsg);
+    if (rc != SQLITE_OK) { if (errmsg) sqlite3_free(errmsg); return rc; }
+
+    // Load current qty for this commodity (default 0 if not present)
+    const char *SQL_SEL_ROW =
+        "SELECT quantity FROM ship_goods WHERE player_id=?1 AND commodity=?2";
+    rc = sqlite3_prepare_v2(db, SQL_SEL_ROW, -1, &sel_row, NULL);
+    if (rc != SQLITE_OK) goto rollback;
+
+    sqlite3_bind_int(sel_row, 1, player_id);
+    sqlite3_bind_text(sel_row, 2, commodity, -1, SQLITE_STATIC);
+
+    int cur_qty = 0;
+    rc = sqlite3_step(sel_row);
+    if (rc == SQLITE_ROW) cur_qty = sqlite3_column_int(sel_row, 0);
+    else if (rc != SQLITE_DONE) goto rollback;
+    sqlite3_finalize(sel_row); sel_row = NULL;
+
+    // Compute proposed qty for this commodity
+    long long proposed_qty = (long long)cur_qty + (long long)delta;
+    if (proposed_qty < 0) { rc = SQLITE_CONSTRAINT; goto rollback; }
+
+    // Capacity check: total cargo across all commodities must fit in players.holds
+    int holds = 0, total_now = 0;
+    const char *SQL_HOLDS = "SELECT holds FROM players WHERE id=?1";
+    sqlite3_stmt *sel_holds = NULL;
+    rc = sqlite3_prepare_v2(db, SQL_HOLDS, -1, &sel_holds, NULL);
+    if (rc != SQLITE_OK) goto rollback;
+    sqlite3_bind_int(sel_holds, 1, player_id);
+    rc = sqlite3_step(sel_holds);
+    if (rc == SQLITE_ROW) holds = sqlite3_column_int(sel_holds, 0);
+    else { sqlite3_finalize(sel_holds); rc = SQLITE_CONSTRAINT; goto rollback; }
+    sqlite3_finalize(sel_holds);
+
+    const char *SQL_SEL_SUM =
+        "SELECT COALESCE(SUM(quantity),0) FROM ship_goods WHERE player_id=?1";
+    rc = sqlite3_prepare_v2(db, SQL_SEL_SUM, -1, &sel_sum, NULL);
+    if (rc != SQLITE_OK) goto rollback;
+    sqlite3_bind_int(sel_sum, 1, player_id);
+    rc = sqlite3_step(sel_sum);
+    if (rc == SQLITE_ROW) total_now = sqlite3_column_int(sel_sum, 0);
+    else { sqlite3_finalize(sel_sum); rc = SQLITE_ERROR; goto rollback; }
+    sqlite3_finalize(sel_sum); sel_sum = NULL;
+
+    long long total_proposed = (long long)total_now - (long long)cur_qty + proposed_qty;
+    if (total_proposed < 0 || total_proposed > holds) { rc = SQLITE_CONSTRAINT; goto rollback; }
+
+    // Upsert row
+    if (cur_qty == 0) {
+        const char *SQL_INS =
+            "INSERT INTO ship_goods(player_id, commodity, quantity) "
+            "VALUES (?1, ?2, ?3) "
+            "ON CONFLICT(player_id, commodity) DO UPDATE SET quantity=excluded.quantity";
+        rc = sqlite3_prepare_v2(db, SQL_INS, -1, &ins, NULL);
+        if (rc != SQLITE_OK) goto rollback;
+        sqlite3_bind_int(ins, 1, player_id);
+        sqlite3_bind_text(ins, 2, commodity, -1, SQLITE_STATIC);
+        sqlite3_bind_int(ins, 3, (int)proposed_qty);
+        rc = sqlite3_step(ins);
+        if (rc != SQLITE_DONE) { rc = SQLITE_ERROR; goto rollback; }
+        sqlite3_finalize(ins); ins = NULL;
+    } else {
+        const char *SQL_UPD =
+            "UPDATE ship_goods SET quantity=?3 WHERE player_id=?1 AND commodity=?2";
+        rc = sqlite3_prepare_v2(db, SQL_UPD, -1, &upd, NULL);
+        if (rc != SQLITE_OK) goto rollback;
+        sqlite3_bind_int(upd, 1, player_id);
+        sqlite3_bind_text(upd, 2, commodity, -1, SQLITE_STATIC);
+        sqlite3_bind_int(upd, 3, (int)proposed_qty);
+        rc = sqlite3_step(upd);
+        if (rc != SQLITE_DONE) { rc = SQLITE_ERROR; goto rollback; }
+        sqlite3_finalize(upd); upd = NULL;
+    }
+
+    if (new_qty_out) *new_qty_out = (int)proposed_qty;
+
+    rc = sqlite3_exec(db, "COMMIT", NULL, NULL, &errmsg);
+    if (errmsg) sqlite3_free(errmsg);
+    return rc;
+
+rollback:
+    if (sel_row) sqlite3_finalize(sel_row);
+    if (sel_sum) sqlite3_finalize(sel_sum);
+    if (upd) sqlite3_finalize(upd);
+    if (ins) sqlite3_finalize(ins);
+    sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
+    return rc;
+}
+
+
+/*
+ * Deduct 'amount' from a player's on-board ship credits (players.credits).
+ * - amount must be >= 0
+ * - Returns SQLITE_OK on success (and writes remaining balance to *new_balance)
+ * - Returns SQLITE_BUSY/SQLITE_ERROR/etc on DB error
+ * - Returns SQLITE_CONSTRAINT if insufficient funds (no update performed)
+ */
+int h_deduct_ship_credits(sqlite3 *db, int player_id, int amount, int *new_balance)
+{
+    if (amount < 0) return SQLITE_MISMATCH;
+
+    int rc;
+    char *errmsg = NULL;
+    sqlite3_stmt *upd = NULL, *sel = NULL;
+
+    rc = sqlite3_exec(db, "BEGIN IMMEDIATE", NULL, NULL, &errmsg);
+    if (rc != SQLITE_OK) {
+        if (errmsg) sqlite3_free(errmsg);
+        return rc;
+    }
+
+    // Atomic balance check + deduct; only succeeds if sufficient funds
+    const char *SQL_UPD =
+        "UPDATE players "
+        "   SET credits = credits - ?2 "
+        " WHERE id = ?1 AND credits >= ?2";
+
+    rc = sqlite3_prepare_v2(db, SQL_UPD, -1, &upd, NULL);
+    if (rc != SQLITE_OK) goto rollback;
+
+    sqlite3_bind_int(upd, 1, player_id);
+    sqlite3_bind_int(upd, 2, amount);
+
+    rc = sqlite3_step(upd);
+    if (rc != SQLITE_DONE) {
+        rc = SQLITE_ERROR;
+        goto rollback;
+    }
+
+    if (sqlite3_changes(db) == 0) {
+        // Not enough credits (or no such player)
+        rc = SQLITE_CONSTRAINT;
+        goto rollback;
+    }
+
+    sqlite3_finalize(upd);
+    upd = NULL;
+
+    if (new_balance) {
+        const char *SQL_SEL =
+            "SELECT credits FROM players WHERE id = ?1";
+        rc = sqlite3_prepare_v2(db, SQL_SEL, -1, &sel, NULL);
+        if (rc != SQLITE_OK) goto rollback;
+
+        sqlite3_bind_int(sel, 1, player_id);
+
+        rc = sqlite3_step(sel);
+        if (rc == SQLITE_ROW) {
+            *new_balance = sqlite3_column_int(sel, 0);
+            rc = SQLITE_OK;
+        } else {
+            rc = SQLITE_ERROR;
+            goto rollback;
+        }
+    }
+
+    sqlite3_finalize(sel);
+    rc = sqlite3_exec(db, "COMMIT", NULL, NULL, &errmsg);
+    if (errmsg) sqlite3_free(errmsg);
+    return rc;
+
+rollback:
+    if (upd) sqlite3_finalize(upd);
+    if (sel) sqlite3_finalize(sel);
+    sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
+    return rc;
+}
+
+int h_deduct_bank_balance(sqlite3 *db, int player_id, int amount, int *new_balance)
+{
+    if (amount < 0) return SQLITE_MISMATCH;
+
+    int rc;
+    char *errmsg = NULL;
+    sqlite3_stmt *upd = NULL, *sel = NULL;
+
+    rc = sqlite3_exec(db, "BEGIN IMMEDIATE", NULL, NULL, &errmsg);
+    if (rc != SQLITE_OK) { if (errmsg) sqlite3_free(errmsg); return rc; }
+
+    const char *SQL_UPD =
+        "UPDATE players SET bank_balance = bank_balance - ?2 "
+        " WHERE id = ?1 AND bank_balance >= ?2";
+
+    rc = sqlite3_prepare_v2(db, SQL_UPD, -1, &upd, NULL);
+    if (rc != SQLITE_OK) goto rollback;
+
+    sqlite3_bind_int(upd, 1, player_id);
+    sqlite3_bind_int(upd, 2, amount);
+
+    rc = sqlite3_step(upd);
+    if (rc != SQLITE_DONE || sqlite3_changes(db) == 0) { rc = SQLITE_CONSTRAINT; goto rollback; }
+    sqlite3_finalize(upd); upd = NULL;
+
+    if (new_balance) {
+        const char *SQL_SEL = "SELECT bank_balance FROM players WHERE id = ?1";
+        rc = sqlite3_prepare_v2(db, SQL_SEL, -1, &sel, NULL);
+        if (rc != SQLITE_OK) goto rollback;
+        sqlite3_bind_int(sel, 1, player_id);
+        rc = sqlite3_step(sel);
+        if (rc == SQLITE_ROW) { *new_balance = sqlite3_column_int(sel, 0); rc = SQLITE_OK; }
+        else { rc = SQLITE_ERROR; goto rollback; }
+        sqlite3_finalize(sel); sel = NULL;
+    }
+
+    rc = sqlite3_exec(db, "COMMIT", NULL, NULL, &errmsg);
+    if (errmsg) sqlite3_free(errmsg);
+    return rc;
+
+rollback:
+    if (upd) sqlite3_finalize(upd);
+    if (sel) sqlite3_finalize(sel);
+    sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
+    return rc;
+}
+
+
+/*
+ * Returns the current sector for the given player.
+ * - On success: sector id (>=1) or 0 if sector is NULL/0 (i.e., “in_ship”).
+ * - On not found or any error: 0.
+ *
+ * Schema fields used: players(id, sector)
+ * See also: player_locations view maps NULL/0 sector → "in_ship".
+ */
+int h_get_player_sector(int player_id)
+{
+  sqlite3 *db = db_get_handle ();
+  static const char *SQL =
+        "SELECT COALESCE(sector, 0) FROM players WHERE id = ?1";
+
+    sqlite3_stmt *stmt = NULL;
+    int rc = sqlite3_prepare_v2(db, SQL, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        /* optional: fprintf(stderr, "prepare failed: %s\n", sqlite3_errmsg(db)); */
+        return 0;
+    }
+
+    rc = sqlite3_bind_int(stmt, 1, player_id);
+    if (rc != SQLITE_OK) {
+        /* optional: fprintf(stderr, "bind failed: %s\n", sqlite3_errmsg(db)); */
+        sqlite3_finalize(stmt);
+        return 0;
+    }
+
+    rc = sqlite3_step(stmt);
+    int sector = 0;
+
+    if (rc == SQLITE_ROW) {
+        /* COALESCE guarantees non-NULL; still guard defensively */
+        sector = sqlite3_column_int(stmt, 0);
+        if (sector < 0) sector = 0;
+    } else {
+        /* optional: fprintf(stderr, "no row for player_id=%d\n", player_id); */
+        sector = 0;
+    }
+
+    sqlite3_finalize(stmt);
+    return sector;
+}
+
+
+
 
 /** * Sends a complex mail message to a specific player, including a sender ID and subject.
  * The 'mail' table is assumed to now include sender_id, subject, and a 'read' status.

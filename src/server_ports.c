@@ -16,10 +16,6 @@
 #include "common.h"
 #include "server_universe.h"
 
-
-
-
-
 #ifndef UNUSED
 #define UNUSED(x) (void)(x)
 #endif
@@ -52,6 +48,105 @@ rollback (sqlite3 *db)
 {
   return sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
 }
+
+
+/* Update a port's stock for one commodity by delta (can be +/-). */
+int h_update_port_stock(sqlite3 *db, int port_id,
+                        const char *commodity, int delta, int *new_qty_out)
+{
+    if (!commodity || *commodity == '\0') return SQLITE_MISUSE;
+
+    int rc;
+    char *errmsg = NULL;
+    sqlite3_stmt *sel = NULL, *upd = NULL, *ins = NULL;
+
+    rc = sqlite3_exec(db, "BEGIN IMMEDIATE", NULL, NULL, &errmsg);
+    if (rc != SQLITE_OK) { if (errmsg) sqlite3_free(errmsg); return rc; }
+
+    // Get current qty and max_capacity
+    const char *SQL_SEL =
+        "SELECT quantity, max_capacity "
+        "FROM port_goods WHERE port_id=?1 AND commodity=?2";
+    rc = sqlite3_prepare_v2(db, SQL_SEL, -1, &sel, NULL);
+    if (rc != SQLITE_OK) goto rollback;
+
+    sqlite3_bind_int(sel, 1, port_id);
+    sqlite3_bind_text(sel, 2, commodity, -1, SQLITE_STATIC);
+
+    int have_row = 0;
+    int cur_qty = 0, max_cap = 0;
+
+    rc = sqlite3_step(sel);
+    if (rc == SQLITE_ROW) {
+        have_row = 1;
+        cur_qty = sqlite3_column_int(sel, 0);
+        max_cap = sqlite3_column_int(sel, 1);
+    } else if (rc != SQLITE_DONE) {
+        goto rollback;
+    }
+    sqlite3_finalize(sel); sel = NULL;
+
+    // If no row exists yet, we still need max_capacity. For simplicity, treat
+    // missing row as quantity=0 and require delta>=0 (cannot sell what doesn't exist).
+    if (!have_row) {
+        if (delta < 0) { rc = SQLITE_CONSTRAINT; goto rollback; }
+
+        // Insert with quantity=delta, but we need a max_capacity.
+        // If you have a separate port types table, fetch it; here we assume
+        // max_capacity >= delta by setting it to delta (or a large default).
+        max_cap = (delta > 0 ? delta : 0);
+        const char *SQL_INS0 =
+            "INSERT INTO port_goods(port_id, commodity, quantity, max_capacity, production_rate) "
+            "VALUES (?1, ?2, ?3, ?4, 0)";
+        rc = sqlite3_prepare_v2(db, SQL_INS0, -1, &ins, NULL);
+        if (rc != SQLITE_OK) goto rollback;
+        sqlite3_bind_int(ins, 1, port_id);
+        sqlite3_bind_text(ins, 2, commodity, -1, SQLITE_STATIC);
+        sqlite3_bind_int(ins, 3, delta);
+        sqlite3_bind_int(ins, 4, max_cap);
+        rc = sqlite3_step(ins);
+        if (rc != SQLITE_DONE) { rc = SQLITE_ERROR; goto rollback; }
+        sqlite3_finalize(ins); ins = NULL;
+        if (new_qty_out) *new_qty_out = delta;
+        rc = sqlite3_exec(db, "COMMIT", NULL, NULL, &errmsg);
+        if (errmsg) sqlite3_free(errmsg);
+        return rc;
+    }
+
+    // Compute proposed quantity and enforce bounds: 0..max_capacity
+    long long proposed = (long long)cur_qty + (long long)delta;
+    if (proposed < 0 || (max_cap > 0 && proposed > max_cap)) {
+        rc = SQLITE_CONSTRAINT;
+        goto rollback;
+    }
+
+    // Update row
+    const char *SQL_UPD =
+        "UPDATE port_goods SET quantity=?3 WHERE port_id=?1 AND commodity=?2";
+    rc = sqlite3_prepare_v2(db, SQL_UPD, -1, &upd, NULL);
+    if (rc != SQLITE_OK) goto rollback;
+    sqlite3_bind_int(upd, 1, port_id);
+    sqlite3_bind_text(upd, 2, commodity, -1, SQLITE_STATIC);
+    sqlite3_bind_int(upd, 3, (int)proposed);
+    rc = sqlite3_step(upd);
+    if (rc != SQLITE_DONE) { rc = SQLITE_ERROR; goto rollback; }
+    sqlite3_finalize(upd); upd = NULL;
+
+    if (new_qty_out) *new_qty_out = (int)proposed;
+
+    rc = sqlite3_exec(db, "COMMIT", NULL, NULL, &errmsg);
+    if (errmsg) sqlite3_free(errmsg);
+    return rc;
+
+rollback:
+    if (sel) sqlite3_finalize(sel);
+    if (upd) sqlite3_finalize(upd);
+    if (ins) sqlite3_finalize(ins);
+    sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
+    return rc;
+}
+
+
 
 
 
@@ -436,8 +531,8 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 	sqlite3_bind_int(log_stmt, 2, port_id);
 	sqlite3_bind_int(log_stmt, 3, player_sector); // Sector where the trade occurred
 	sqlite3_bind_text(log_stmt, 4, commodity, -1, SQLITE_STATIC);
-	sqlite3_bind_int(log_stmt, 5, quantity);
-	sqlite3_bind_double(log_stmt, 6, price_per_unit); // Price received by player
+	sqlite3_bind_int(log_stmt, 5, amount); 
+	sqlite3_bind_double(log_stmt, 6, (double)buy_price); // Cast to double for the column
 	sqlite3_bind_text(log_stmt, 7, "sell", -1, SQLITE_STATIC);
 	sqlite3_bind_int64(log_stmt, 8, time(NULL)); // Current UNIX timestamp
 
@@ -703,234 +798,573 @@ build_trade_buy_fp_obj (const char *cmd, json_t *jdata)
 
 
 
+/* ========= Trading BUY ========= */
+
 /* ========= Trading ========= */
 
 int
 cmd_trade_buy (client_ctx_t *ctx, json_t *root)
 {
-  int player_sector;
-  int quantity; // Or 'units_to_buy'
-  double price_per_unit; // Or 'total_cost' / 'buy_price'
-  sqlite3 *db = db_get_handle();
-  
-  json_t *jdata = json_object_get (root, "data");
-  if (!json_is_object (jdata))
-    {
-      send_enveloped_error (ctx->fd, root, 1301, "Missing required field");
-    }
-  else
-    {      
-      /* Extract fields */
-      json_t *jport = json_object_get (jdata, "port_id");
-      json_t *jcomm = json_object_get (jdata, "commodity");
-      json_t *jqty = json_object_get (jdata, "quantity");
-      const char *commodity =
-	json_is_string (jcomm) ? json_string_value (jcomm) : NULL;
-      int port_id =
-	json_is_integer (jport) ? (int) json_integer_value (jport) : 0;
-      int qty = json_is_integer (jqty) ? (int) json_integer_value (jqty) : 0;
-
-      if (!commodity || port_id <= 0 || qty <= 0)
-	{
-	  RULE_ERROR (ERR_BAD_REQUEST, "Missing required field");
-	  //              send_enveloped_error (ctx->fd, root, 1301,
-	  //                            "Missing required field");
-	  /* no idempotency processing if invalid */
-	}
-      else
-	{
-	  /* Pull idempotency key if present */
-	  const char *idem_key = NULL;
-	  json_t *jmeta = json_object_get (root, "meta");
-	  if (json_is_object (jmeta))
-	    {
-	      json_t *jk = json_object_get (jmeta, "idempotency_key");
-	      if (json_is_string (jk))
-		idem_key = json_string_value (jk);
-	    }
-
-	  /* Build fingerprint */
-	  char fp[17];
-	  fp[0] = 0;
-	  int c;
-	  //json_t *fpobj = build_trade_buy_fp_obj (c, jdata);
-	  json_t *fpobj = build_trade_buy_fp_obj ("trade.buy", jdata);
-	  idemp_fingerprint_json (fpobj, fp);
-	  json_decref (fpobj);
-
-	  if (idem_key && *idem_key)
-	    {
-	      /* Try to begin idempotent op */
-	      //              int rc = db_idemp_try_begin (idem_key, c, fp);
-	      int rc = db_idemp_try_begin (idem_key, "trade.buy", fp);
-	      if (rc == SQLITE_CONSTRAINT)
-		{
-		  /* Existing key: fetch */
-		  char *ecmd = NULL, *efp = NULL, *erst = NULL;
-		  if (db_idemp_fetch (idem_key, &ecmd, &efp, &erst) ==
-		      SQLITE_OK)
-		    {
-		      int fp_match = (efp && strcmp (efp, fp) == 0);
-		      if (!fp_match)
-			{
-			  /* Key reused with different payload */
-			  send_enveloped_error (ctx->fd, root, 1105,
-						"Duplicate request (idempotency key reused)");
-			}
-		      else if (erst)
-			{
-			  /* Replay stored response exactly */
-			  json_error_t jerr;
-			  json_t *env = json_loads (erst, 0, &jerr);
-			  if (env)
-			    {
-			      send_all_json (ctx->fd, env);
-			      json_decref (env);
-			    }
-			  else
-			    {
-			      /* Corrupt stored response; treat as server error */
-			      send_enveloped_error (ctx->fd, root, 1500,
-						    "Idempotency replay error");
-			    }
-			}
-		      else
-			{
-			  /* Record exists but no stored response (in-flight/crash before store).
-			     For now, treat as duplicate; later you could block/wait or retry op safely. */
-			  send_enveloped_error (ctx->fd, root, 1105,
-						"Duplicate request (pending)");
-			}
-		      free (ecmd);
-		      free (efp);
-		      free (erst);
-		      /* Done */
-		      goto done_trade_buy;
-		    }
-		  else
-		    {
-		      /* Couldn’t fetch; treat as server error */
-		      send_enveloped_error (ctx->fd, root, 1500,
-					    "Database error");
-		      goto done_trade_buy;
-		    }
-		}
-	      else if (rc != SQLITE_OK)
-		{
-		  send_enveloped_error (ctx->fd, root, 1500,
-					"Database error");
-		  goto done_trade_buy;
-		}
-	      /* If SQLITE_OK, we “own” this key now and should execute then store. */
-	    }
-
-	  // Update the history
-
-	  {
-	    // Local definition for logging SQL (ensure this is available in your file)
-	    const char *log_sql =
-	      "INSERT INTO trade_log (player_id, port_id, sector_id, commodity, units, price_per_unit, action, timestamp) "
-	      "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8);";
-
-	    sqlite3_stmt *log_stmt = NULL;
+    sqlite3 *db = db_get_handle();
+    int rc = SQLITE_OK;
     
-	    // NOTE: Replace 'price_per_unit' with 'buy_price' or whatever variable holds the COST
-	    // to the player in your buy function.
+    // 1. Consolidated Declarations
+    int port_id = 0;
+    const char *commodity = NULL;
+    int qty = 0;
+    int player_sector = 0; // Needs to be set correctly, assumed via h_get_player_sector() or similar
+    
+    // Variables populated during lookup/check:
+    double port_sell_price = 0.0;
+    int port_stock = 0;
+    long long total_cost = 0;
+    long long current_player_credits = 0;
+    int current_cargo_free = 0;
+    sqlite3_stmt *stmt = NULL;
 
-	    int rc = sqlite3_prepare_v2(db, log_sql, -1, &log_stmt, NULL);
-	    if (rc != SQLITE_OK) {
-	      LOGE("trade_log prepare error in BUY: %s", sqlite3_errmsg(db));
-	      rollback(db);
-	      RULE_ERROR(1500, "Trade logging setup failed"); // Use your error macro
-	      goto trade_sell_done; // Use your cleanup label
-	    }
-
-	    // Bind parameters for logging the purchase
-	    sqlite3_bind_int(log_stmt, 1, ctx->player_id);
-	    sqlite3_bind_int(log_stmt, 2, port_id);
-	    sqlite3_bind_int(log_stmt, 3, player_sector); // Sector where the trade occurred
-	    sqlite3_bind_text(log_stmt, 4, commodity, -1, SQLITE_STATIC);
-	    sqlite3_bind_int(log_stmt, 5, quantity);
-	    sqlite3_bind_double(log_stmt, 6, price_per_unit); // Price paid by player
-	    sqlite3_bind_text(log_stmt, 7, "buy", -1, SQLITE_STATIC);
-	    sqlite3_bind_int64(log_stmt, 8, time(NULL)); // Current UNIX timestamp
-
-	    if ((rc = sqlite3_step(log_stmt)) != SQLITE_DONE) {
-	      LOGE("trade_log exec error in BUY: %s", sqlite3_errmsg(db));
-	      rollback(db);
-	      sqlite3_finalize(log_stmt);
-	      RULE_ERROR(1500, "Trade logging failed");
-	      goto trade_sell_done;
-	    }
-	    sqlite3_finalize(log_stmt);
-	  }
-
-
-	  
-	  /* === Perform the actual operation (your existing stub) === */
-	  json_t *data = json_pack ("{s:i, s:s, s:i}",
-				    "port_id", port_id,
-				    "commodity", commodity,
-				    "quantity", qty);
-
-	  /* Build the final envelope so we can persist exactly what we send */
-	  json_t *env = json_object ();
-	  json_object_set_new (env, "id", json_string ("srv-trade"));
-	  json_object_set (env, "reply_to", json_object_get (root, "id"));
-	  char ts[32];
-	  iso8601_utc (ts);
-	  json_object_set_new (env, "ts", json_string (ts));
-	  json_object_set_new (env, "status", json_string ("ok"));
-	trade_buy_done:
-	  ;
-	  json_object_set_new (env, "type", json_string ("trade.accepted"));
-	  json_object_set_new (env, "data", data);
-	  json_object_set_new (env, "error", json_null ());
-
-	  /* Optional meta: signal replay=false on first-run */
-	  json_t *meta = json_object ();
-	  if (idem_key && *idem_key)
-	    {
-	      json_object_set_new (meta, "idempotent_replay", json_false ());
-	      json_object_set_new (meta, "idempotency_key",
-				   json_string (idem_key));
-	    }
-	  if (json_object_size (meta) > 0)
-	    json_object_set_new (env, "meta", meta);
-	  else
-	    json_decref (meta);
-
-	  /* If we’re idempotent, store the envelope JSON BEFORE sending */
-	  if (idem_key && *idem_key)
-	    {
-	      char *env_json =
-		json_dumps (env, JSON_COMPACT | JSON_SORT_KEYS);
-	      if (!env_json
-		  || db_idemp_store_response (idem_key,
-					      env_json) != SQLITE_OK)
-		{
-		  if (env_json)
-		    free (env_json);
-		  json_decref (env);
-		  send_enveloped_error (ctx->fd, root, 1500,
-					"Database error");
-		  goto done_trade_buy;
-		}
-	      free (env_json);
-	    }
-
-	  /* Send */
-	  send_all_json (ctx->fd, env);
-	  json_decref (env);
-
-	done_trade_buy:
-	  (void) 0;
-	}
+    if (ctx->player_id <= 0) {
+        send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+        return 0;
     }
-  trade_sell_done:
-  return 0;
+
+    json_t *jdata = json_object_get (root, "data");
+    if (!json_is_object (jdata))
+    {
+        RULE_ERROR (ERR_BAD_REQUEST, "Missing required field");
+        goto trade_buy_done; // Use correct label here
+    }
+    
+    /* Extract fields */
+    json_t *jport = json_object_get (jdata, "port_id");
+    json_t *jcomm = json_object_get (jdata, "commodity");
+    json_t *jqty = json_object_get (jdata, "quantity");
+    
+    commodity = json_is_string (jcomm) ? json_string_value (jcomm) : NULL;
+    port_id = json_is_integer (jport) ? (int) json_integer_value (jport) : 0;
+    qty = json_is_integer (jqty) ? (int) json_integer_value (jqty) : 0;
+
+    if (!commodity || port_id <= 0 || qty <= 0)
+    {
+        RULE_ERROR (ERR_BAD_REQUEST, "Missing required field or invalid quantity");
+        goto trade_buy_done; // Use correct label here
+    }
+    
+    // =================================================================
+    // 2. Insert Price & Validation Logic (Replaces old stub/error-prone code)
+    // =================================================================
+
+    // Assume player_sector is retrieved here, e.g., player_sector = h_get_player_sector(ctx->player_id);
+    player_sector = h_get_player_sector(ctx->player_id); // Assuming this is defined and returns the player's current sector
+
+    // Look up Price and Stock
+    const char *sql_lookup =
+        "SELECT stock, sell_price FROM port_inventory WHERE port_id = ?1 AND commodity = ?2;";
+
+    rc = sqlite3_prepare_v2(db, sql_lookup, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("trade_buy price prepare error: %s", sqlite3_errmsg(db));
+        RULE_ERROR(1500, "Database error");
+        goto trade_buy_done; 
+    }
+
+    sqlite3_bind_int(stmt, 1, port_id);
+    sqlite3_bind_text(stmt, 2, commodity, -1, SQLITE_STATIC);
+
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        port_stock = sqlite3_column_int(stmt, 0);
+        port_sell_price = sqlite3_column_double(stmt, 1);
+    } else {
+        sqlite3_finalize(stmt);
+        RULE_REFUSE(1405, "Port does not trade that commodity", NULL);
+        return 0; // Return 0 outside of idempotency block
+    }
+
+    sqlite3_finalize(stmt);
+    
+    // Validation Checks
+    if (port_sell_price <= 0) {
+        RULE_REFUSE(1406, "Price is invalid or zero", NULL);
+        return 0;
+    }
+    
+    if (port_stock < qty) {
+        json_t *hint = json_pack ("{s:i}", "current_stock", port_stock);
+        RULE_REFUSE(1407, "Port ran out of stock", hint);
+        json_decref(hint);
+        return 0;
+    }
+
+    total_cost = (long long) (port_sell_price * qty); 
+    current_player_credits = player_credits(ctx->player_id); // Assuming h_get_player_credits() or similar
+    current_cargo_free = cargo_space_free(ctx->player_id); // Assuming h_get_cargo_space_free() or similar
+
+    if (current_player_credits < total_cost) {
+        json_t *hint = json_pack ("{s:i}", "cost", (int)total_cost);
+        RULE_REFUSE(1408, "Insufficient funds", hint);
+        json_decref(hint);
+        return 0;
+    }
+
+    if (current_cargo_free < qty) {
+        json_t *hint = json_pack ("{s:i}", "free_space", current_cargo_free);
+        RULE_REFUSE(1409, "Insufficient cargo space", hint);
+        json_decref(hint);
+        return 0;
+    }
+
+    // =================================================================
+    // 3. Preserve User's Idempotency Block (Wrapped for context)
+    // =================================================================
+    
+    /* Pull idempotency key if present */
+    const char *idem_key = NULL;
+    json_t *jmeta = json_object_get (root, "meta");
+    if (json_is_object (jmeta))
+    {
+        json_t *jk = json_object_get (jmeta, "idempotency_key");
+        if (json_is_string (jk))
+            idem_key = json_string_value (jk);
+    }
+
+    /* Build fingerprint */
+    char fp[17];
+    fp[0] = 0;
+    int c;
+    json_t *fpobj = build_trade_buy_fp_obj ("trade.buy", jdata);
+    idemp_fingerprint_json (fpobj, fp);
+    json_decref (fpobj);
+
+    if (idem_key && *idem_key)
+    {
+        /* Try to begin idempotent op */
+        int rc = db_idemp_try_begin (idem_key, "trade.buy", fp);
+        if (rc == SQLITE_CONSTRAINT)
+        {
+            /* Existing key: fetch */
+            char *ecmd = NULL, *efp = NULL, *erst = NULL;
+            if (db_idemp_fetch (idem_key, &ecmd, &efp, &erst) == SQLITE_OK)
+            {
+                int fp_match = (efp && strcmp (efp, fp) == 0);
+                if (!fp_match)
+                {
+                    send_enveloped_error (ctx->fd, root, 1105,
+                                            "Duplicate request (idempotency key reused)");
+                }
+                else if (erst)
+                {
+                    /* Replay stored response exactly */
+                    json_error_t jerr;
+                    json_t *env = json_loads (erst, 0, &jerr);
+                    if (env)
+                    {
+                        send_all_json (ctx->fd, env);
+                        json_decref (env);
+                    }
+                    else
+                    {
+                        /* Corrupt stored response; treat as server error */
+                        send_enveloped_error (ctx->fd, root, 1500,
+                                                "Idempotency replay error");
+                    }
+                }
+                else
+                {
+                    /* Record exists but no stored response (in-flight/crash before store). */
+                    send_enveloped_error (ctx->fd, root, 1105,
+                                            "Duplicate request (pending)");
+                }
+                free (ecmd);
+                free (efp);
+                free (erst);
+                goto done_trade_buy;
+            }
+            else
+            {
+                send_enveloped_error (ctx->fd, root, 1500,
+                                        "Database error");
+                goto done_trade_buy;
+            }
+        }
+        else if (rc != SQLITE_OK)
+        {
+            send_enveloped_error (ctx->fd, root, 1500,
+                                    "Database error");
+            goto done_trade_buy;
+        }
+        /* If SQLITE_OK, we “own” this key now and should execute then store. */
+    }
+
+
+    // =================================================================
+    // 4. Transaction and Updates (THE ACTUAL TRADE)
+    // =================================================================
+    
+    rc = begin(db);
+    if (rc != SQLITE_OK) {
+        LOGE("trade_buy begin error: %s", sqlite3_errmsg(db));
+        RULE_ERROR(1500, "Database error");
+        goto trade_buy_done;
+    }
+
+    int new_qty = 0;
+
+    // Apply effects (Transactional Updates)
+    rc = h_deduct_ship_credits(db, ctx->player_id, total_cost, NULL);
+    rc |= h_update_ship_cargo(db, ctx->player_id, commodity, qty, &new_qty);
+    rc |= h_update_port_stock(db, port_id, commodity, -qty, NULL);
+
+    if (rc != SQLITE_OK) {
+        LOGE("trade_buy update error: %s", sqlite3_errmsg(db));
+        rollback(db);
+        RULE_ERROR(1500, "Trade transaction failed");
+        goto trade_buy_done;
+    }
+    
+    // Logging (Correctly uses looked-up price and quantity)
+    {
+        const char *log_sql =
+            "INSERT INTO trade_log (player_id, port_id, sector_id, commodity, units, price_per_unit, action, timestamp) "
+            "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8);";
+
+        sqlite3_stmt *log_stmt = NULL;
+        
+        rc = sqlite3_prepare_v2(db, log_sql, -1, &log_stmt, NULL);
+        if (rc != SQLITE_OK) {
+            LOGE("trade_log prepare error in BUY: %s", sqlite3_errmsg(db));
+            rollback(db);
+            RULE_ERROR(1500, "Trade logging setup failed"); 
+            goto trade_buy_done; 
+        }
+
+        sqlite3_bind_int(log_stmt, 1, ctx->player_id);
+        sqlite3_bind_int(log_stmt, 2, port_id);
+        sqlite3_bind_int(log_stmt, 3, player_sector); 
+        sqlite3_bind_text(log_stmt, 4, commodity, -1, SQLITE_STATIC);
+        sqlite3_bind_int(log_stmt, 5, qty);                   
+        sqlite3_bind_double(log_stmt, 6, port_sell_price);    // CORRECT BINDING
+        sqlite3_bind_text(log_stmt, 7, "buy", -1, SQLITE_STATIC);
+        sqlite3_bind_int64(log_stmt, 8, time(NULL)); 
+
+        if ((rc = sqlite3_step(log_stmt)) != SQLITE_DONE) {
+            LOGE("trade_log exec error in BUY: %s", sqlite3_errmsg(db));
+            rollback(db);
+            sqlite3_finalize(log_stmt);
+            RULE_ERROR(1500, "Trade logging failed");
+            goto trade_buy_done;
+        }
+        sqlite3_finalize(log_stmt);
+    }
+    
+    // Commit Transaction
+    rc = commit(db);
+    if (rc != SQLITE_OK) {
+        LOGE("trade_buy commit error: %s", sqlite3_errmsg(db));
+        RULE_ERROR(1500, "Database commit failed");
+        goto trade_buy_done;
+    }
+
+
+    // =================================================================
+    // 5. Build Success Response (Uses final values)
+    // =================================================================
+    
+    json_t *data_rsp = json_pack ("{s:i, s:s, s:i, s:f, s:i}",
+                                 "port_id", port_id,
+                                 "commodity", commodity,
+                                 "quantity", qty,
+                                 "unit_price", port_sell_price, // Sends the correct unit price
+                                 "credits_remaining", (int)(current_player_credits - total_cost)); // Sends the new balance
+
+    /* Build the final envelope so we can persist exactly what we send */
+    json_t *env = json_object ();
+    json_object_set_new (env, "id", json_string ("srv-trade"));
+    json_object_set (env, "reply_to", json_object_get (root, "id"));
+    char ts[32];
+    iso8601_utc (ts);
+    json_object_set_new (env, "ts", json_string (ts));
+    json_object_set_new (env, "status", json_string ("ok"));
+    
+    json_object_set_new (env, "type", json_string ("trade.accepted"));
+    json_object_set_new (env, "data", data_rsp);
+    json_object_set_new (env, "error", json_null ());
+
+    /* Optional meta: signal replay=false on first-run */
+    json_t *meta = json_object ();
+    if (idem_key && *idem_key)
+    {
+        json_object_set_new (meta, "idempotent_replay", json_false ());
+        json_object_set_new (meta, "idempotency_key",
+                                json_string (idem_key));
+    }
+    if (json_object_size (meta) > 0)
+        json_object_set_new (env, "meta", meta);
+    else
+        json_decref (meta);
+
+    /* If we’re idempotent, store the envelope JSON BEFORE sending */
+    if (idem_key && *idem_key)
+    {
+        char *env_json =
+            json_dumps (env, JSON_COMPACT | JSON_SORT_KEYS);
+        if (!env_json
+            || db_idemp_store_response (idem_key, env_json) != SQLITE_OK)
+        {
+            if (env_json)
+                free (env_json);
+            json_decref (env);
+            send_enveloped_error (ctx->fd, root, 1500,
+                                    "Database error");
+            goto done_trade_buy;
+        }
+        free (env_json);
+    }
+
+    /* Send */
+    send_all_json (ctx->fd, env);
+    json_decref (env);
+    
+trade_buy_done:
+    return 1;
+ done_trade_buy:
+    /* Your final cleanup label */
+    return 0;
 }
 
+
+/* ========= Trading BUY ========= */
+
+
+/* int */
+/* cmd_trade_buy (client_ctx_t *ctx, json_t *root) */
+/* { */
+/*   double unit_price = 0.0; */
+/*   int player_sector; */
+/*   int quantity; // Or 'units_to_buy' */
+/*   double price_per_unit; // Or 'total_cost' / 'buy_price' */
+/*   sqlite3 *db = db_get_handle(); */
+  
+/*   json_t *jdata = json_object_get (root, "data"); */
+/*   if (!json_is_object (jdata)) */
+/*     { */
+/*       send_enveloped_error (ctx->fd, root, 1301, "Missing required field"); */
+/*     } */
+/*   else */
+/*     {       */
+/*       /\* Extract fields *\/ */
+/*       json_t *jport = json_object_get (jdata, "port_id"); */
+/*       json_t *jcomm = json_object_get (jdata, "commodity"); */
+/*       json_t *jqty = json_object_get (jdata, "quantity"); */
+/*       const char *commodity = */
+/* 	json_is_string (jcomm) ? json_string_value (jcomm) : NULL; */
+/*       int port_id = */
+/* 	json_is_integer (jport) ? (int) json_integer_value (jport) : 0; */
+/*       int qty = json_is_integer (jqty) ? (int) json_integer_value (jqty) : 0; */
+
+/*       if (!commodity || port_id <= 0 || qty <= 0) */
+/* 	{ */
+/* 	  RULE_ERROR (ERR_BAD_REQUEST, "Missing required field"); */
+/* 	  //              send_enveloped_error (ctx->fd, root, 1301, */
+/* 	  //                            "Missing required field"); */
+/* 	  /\* no idempotency processing if invalid *\/ */
+/* 	} */
+/*       else */
+/* 	{ */
+/* 	  /\* Pull idempotency key if present *\/ */
+/* 	  const char *idem_key = NULL; */
+/* 	  json_t *jmeta = json_object_get (root, "meta"); */
+/* 	  if (json_is_object (jmeta)) */
+/* 	    { */
+/* 	      json_t *jk = json_object_get (jmeta, "idempotency_key"); */
+/* 	      if (json_is_string (jk)) */
+/* 		idem_key = json_string_value (jk); */
+/* 	    } */
+
+/* 	  /\* Build fingerprint *\/ */
+/* 	  char fp[17]; */
+/* 	  fp[0] = 0; */
+/* 	  int c; */
+/* 	  //json_t *fpobj = build_trade_buy_fp_obj (c, jdata); */
+/* 	  json_t *fpobj = build_trade_buy_fp_obj ("trade.buy", jdata); */
+/* 	  idemp_fingerprint_json (fpobj, fp); */
+/* 	  json_decref (fpobj); */
+
+/* 	  if (idem_key && *idem_key) */
+/* 	    { */
+/* 	      /\* Try to begin idempotent op *\/ */
+/* 	      //              int rc = db_idemp_try_begin (idem_key, c, fp); */
+/* 	      int rc = db_idemp_try_begin (idem_key, "trade.buy", fp); */
+/* 	      if (rc == SQLITE_CONSTRAINT) */
+/* 		{ */
+/* 		  /\* Existing key: fetch *\/ */
+/* 		  char *ecmd = NULL, *efp = NULL, *erst = NULL; */
+/* 		  if (db_idemp_fetch (idem_key, &ecmd, &efp, &erst) == */
+/* 		      SQLITE_OK) */
+/* 		    { */
+/* 		      int fp_match = (efp && strcmp (efp, fp) == 0); */
+/* 		      if (!fp_match) */
+/* 			{ */
+/* 			  /\* Key reused with different payload *\/ */
+/* 			  send_enveloped_error (ctx->fd, root, 1105, */
+/* 						"Duplicate request (idempotency key reused)"); */
+/* 			} */
+/* 		      else if (erst) */
+/* 			{ */
+/* 			  /\* Replay stored response exactly *\/ */
+/* 			  json_error_t jerr; */
+/* 			  json_t *env = json_loads (erst, 0, &jerr); */
+/* 			  if (env) */
+/* 			    { */
+/* 			      send_all_json (ctx->fd, env); */
+/* 			      json_decref (env); */
+/* 			    } */
+/* 			  else */
+/* 			    { */
+/* 			      /\* Corrupt stored response; treat as server error *\/ */
+/* 			      send_enveloped_error (ctx->fd, root, 1500, */
+/* 						    "Idempotency replay error"); */
+/* 			    } */
+/* 			} */
+/* 		      else */
+/* 			{ */
+/* 			  /\* Record exists but no stored response (in-flight/crash before store). */
+/* 			     For now, treat as duplicate; later you could block/wait or retry op safely. *\/ */
+/* 			  send_enveloped_error (ctx->fd, root, 1105, */
+/* 						"Duplicate request (pending)"); */
+/* 			} */
+/* 		      free (ecmd); */
+/* 		      free (efp); */
+/* 		      free (erst); */
+/* 		      /\* Done *\/ */
+/* 		      goto done_trade_buy; */
+/* 		    } */
+/* 		  else */
+/* 		    { */
+/* 		      /\* Couldn’t fetch; treat as server error *\/ */
+/* 		      send_enveloped_error (ctx->fd, root, 1500, */
+/* 					    "Database error"); */
+/* 		      goto done_trade_buy; */
+/* 		    } */
+/* 		} */
+/* 	      else if (rc != SQLITE_OK) */
+/* 		{ */
+/* 		  send_enveloped_error (ctx->fd, root, 1500, */
+/* 					"Database error"); */
+/* 		  goto done_trade_buy; */
+/* 		} */
+/* 	      /\* If SQLITE_OK, we “own” this key now and should execute then store. *\/ */
+/* 	    } */
+
+/* 	  // Update the history */
+
+/* 	  { */
+/* 	    // Local definition for logging SQL (ensure this is available in your file) */
+/* 	    const char *log_sql = */
+/* 	      "INSERT INTO trade_log (player_id, port_id, sector_id, commodity, units, price_per_unit, action, timestamp) " */
+/* 	      "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8);"; */
+
+/* 	    sqlite3_stmt *log_stmt = NULL; */
+    
+/* 	    // NOTE: Replace 'price_per_unit' with 'buy_price' or whatever variable holds the COST */
+/* 	    // to the player in your buy function. */
+
+/* 	    int rc = sqlite3_prepare_v2(db, log_sql, -1, &log_stmt, NULL); */
+/* 	    if (rc != SQLITE_OK) { */
+/* 	      LOGE("trade_log prepare error in BUY: %s", sqlite3_errmsg(db)); */
+/* 	      rollback(db); */
+/* 	      RULE_ERROR(1500, "Trade logging setup failed"); // Use your error macro */
+/* 	      goto trade_sell_done; // Use your cleanup label */
+/* 	    } */
+
+/* 	    //unit_price = (double)item_sell_price; */
+	    
+/* 	    // Bind parameters for logging the purchase */
+/* 	    sqlite3_bind_int(log_stmt, 1, ctx->player_id); */
+/* 	    sqlite3_bind_int(log_stmt, 2, port_id); */
+/* 	    sqlite3_bind_int(log_stmt, 3, player_sector); // Sector where the trade occurred */
+/* 	    sqlite3_bind_text(log_stmt, 4, commodity, -1, SQLITE_STATIC); */
+/* 	    sqlite3_bind_int(log_stmt, 5, qty); */
+/* 	    sqlite3_bind_double(log_stmt, 6, unit_price); */
+/* 	    // sqlite3_bind_double(log_stmt, 6, (double)sell_price);  */
+/* 	    sqlite3_bind_text(log_stmt, 7, "buy", -1, SQLITE_STATIC); // Action should be 'buy' */
+/* 	    sqlite3_bind_int64(log_stmt, 8, time(NULL)); // Current UNIX timestamp */
+
+/* 	    if ((rc = sqlite3_step(log_stmt)) != SQLITE_DONE) { */
+/* 	      LOGE("trade_log exec error in BUY: %s", sqlite3_errmsg(db)); */
+/* 	      rollback(db); */
+/* 	      sqlite3_finalize(log_stmt); */
+/* 	      RULE_ERROR(1500, "Trade logging failed"); */
+/* 	      goto trade_sell_done; */
+/* 	    } */
+/* 	    sqlite3_finalize(log_stmt); */
+/* 	  } */
+
+/* 	  /\* === Perform the actual operation (your existing stub) === *\/ */
+/* 	  json_t *data = json_pack ("{s:i, s:s, s:i}", */
+/* 				    "port_id", port_id, */
+/* 				    "commodity", commodity, */
+/* 				    "quantity", qty); */
+
+/* 	  /\* Build the final envelope so we can persist exactly what we send *\/ */
+/* 	  json_t *env = json_object (); */
+/* 	  json_object_set_new (env, "id", json_string ("srv-trade")); */
+/* 	  json_object_set (env, "reply_to", json_object_get (root, "id")); */
+/* 	  char ts[32]; */
+/* 	  iso8601_utc (ts); */
+/* 	  json_object_set_new (env, "ts", json_string (ts)); */
+/* 	  json_object_set_new (env, "status", json_string ("ok")); */
+/* 	trade_buy_done: */
+/* 	  ; */
+/* 	  json_object_set_new (env, "type", json_string ("trade.accepted")); */
+/* 	  json_object_set_new (env, "data", data); */
+/* 	  json_object_set_new (env, "error", json_null ()); */
+
+/* 	  /\* Optional meta: signal replay=false on first-run *\/ */
+/* 	  json_t *meta = json_object (); */
+/* 	  if (idem_key && *idem_key) */
+/* 	    { */
+/* 	      json_object_set_new (meta, "idempotent_replay", json_false ()); */
+/* 	      json_object_set_new (meta, "idempotency_key", */
+/* 				   json_string (idem_key)); */
+/* 	    } */
+/* 	  if (json_object_size (meta) > 0) */
+/* 	    json_object_set_new (env, "meta", meta); */
+/* 	  else */
+/* 	    json_decref (meta); */
+
+/* 	  /\* If we’re idempotent, store the envelope JSON BEFORE sending *\/ */
+/* 	  if (idem_key && *idem_key) */
+/* 	    { */
+/* 	      char *env_json = */
+/* 		json_dumps (env, JSON_COMPACT | JSON_SORT_KEYS); */
+/* 	      if (!env_json */
+/* 		  || db_idemp_store_response (idem_key, */
+/* 					      env_json) != SQLITE_OK) */
+/* 		{ */
+/* 		  if (env_json) */
+/* 		    free (env_json); */
+/* 		  json_decref (env); */
+/* 		  send_enveloped_error (ctx->fd, root, 1500, */
+/* 					"Database error"); */
+/* 		  goto done_trade_buy; */
+/* 		} */
+/* 	      free (env_json); */
+/* 	    } */
+
+/* 	  /\* Send *\/ */
+/* 	  send_all_json (ctx->fd, env); */
+/* 	  json_decref (env); */
+
+/* 	done_trade_buy: */
+/* 	  (void) 0; */
+/* 	} */
+/*     } */
+/*   trade_sell_done: */
+/*   return 0; */
+/* } */
+
+
+
+/////////////////////////////////
 static int
 json_get_int_field (json_t *obj, const char *key, int *out)
 {
