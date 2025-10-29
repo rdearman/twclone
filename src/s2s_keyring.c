@@ -5,6 +5,42 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+
+/*
+ * Generates and inserts a new S2S key into the database if none exists.
+ * NOTE: Key ID and Key B64 should be securely generated in a production environment.
+ */
+int
+s2s_keyring_generate_key (sqlite3 *db, const char *key_id_in, const char *key_b64_in)
+{
+  const char *SQL_INSERT =
+    "INSERT INTO s2s_keys (key_id, key_b64, active, created_ts, is_default_tx) "
+    "VALUES (?, ?, 1, strftime('%s', 'now'), 1);";
+
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2(db, SQL_INSERT, -1, &st, NULL);
+  if (rc != SQLITE_OK) {
+    fprintf(stderr, "S2S_GEN: Failed to prepare insert: %s\n", sqlite3_errmsg(db));
+    return -1;
+  }
+
+  // Bind parameters for the new key
+  sqlite3_bind_text(st, 1, key_id_in, -1, SQLITE_STATIC);
+  sqlite3_bind_text(st, 2, key_b64_in, -1, SQLITE_STATIC);
+  
+  rc = sqlite3_step(st);
+  if (rc != SQLITE_DONE) {
+    fprintf(stderr, "S2S_GEN: Failed to execute insert: %s\n", sqlite3_errmsg(db));
+    sqlite3_finalize(st);
+    return -1;
+  }
+
+  sqlite3_finalize(st);
+  return 0; // Success
+}
+
+
+
 static void
 b64_compact (const char *in, char *out, size_t out_cap)
 {
@@ -77,13 +113,37 @@ s2s_load_default_key (sqlite3 *db, s2s_key_t *out_key)
       fprintf (stderr, "[s2s] key prepare failed: %s\n", sqlite3_errmsg (db));
       return -1;
     }
+
+
   rc = sqlite3_step (st);
   if (rc != SQLITE_ROW)
     {
-      fprintf (stderr, "[s2s] no active key in s2s_keys\n");
-      sqlite3_finalize (st);
-      return -1;
+      fprintf (stderr, "[s2s] no active key in s2s_keys. Attempting generation...\n");
+      sqlite3_finalize (st); // Finalize the failed statement
+
+      // --- ADDED KEY GENERATION/RECOVERY LOGIC ---
+      /* NOTE: Placeholder Key. Use crypto functions (like OpenSSL) to generate this in a real system. */
+      const char *new_key_id = "default_auto_gen_1";
+      const char *new_key_b64 = "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI="; // 32 bytes '123...' base64
+
+      // Try to generate and insert the new key
+      if (s2s_keyring_generate_key(db, new_key_id, new_key_b64) == 0)
+        {
+          fprintf (stderr, "[s2s] successfully generated and inserted new key. Retrying load.\n");
+          
+          // Retry the key lookup recursively using the correct function name
+          return s2s_load_default_key (db, out_key); 
+        }
+      else
+        {
+          fprintf (stderr, "[s2s] FATAL: S2S key generation failed. Cannot proceed.\n");
+          return -1;
+        }
     }
+
+
+  ///////////////
+  
   const unsigned char *kid = sqlite3_column_text (st, 0);
   const unsigned char *kb64 = sqlite3_column_text (st, 1);
   if (!kid || !kb64)

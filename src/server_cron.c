@@ -1450,9 +1450,9 @@ h_terra_replenish (sqlite3 *db, int64_t now_s)
   /* 1. Max out all storable goods on the Planet Terra (Earth) */
   /* This assumes 'Terra' is the canonical name for Earth/FedSpace planet. */
   rc = sqlite3_exec (db,
-                     "UPDATE planet_goods SET quantity = max_capacity "
-                     "WHERE planet_id IN (SELECT id FROM planets WHERE name='Terra');",
-                     NULL, NULL, NULL);
+                   "UPDATE planet_goods SET quantity = max_capacity "
+                   "WHERE planet_id = 1;",
+                   NULL, NULL, NULL);
 
   if (rc)
     {
@@ -1466,7 +1466,7 @@ h_terra_replenish (sqlite3 *db, int64_t now_s)
   /* Assuming 'terraform_turns_left' is a column on the planets table, and 1 is the daily limit. */
   rc = sqlite3_exec (db,
                      "UPDATE planets SET terraform_turns_left = 1 " // Reset to one turn per day
-                     "WHERE owner_id != 0;", // Targets only player-owned planets (owner_id > 0)
+                     "WHERE owner > 0;", // Targets only player-owned planets (owner_id > 0)
                      NULL, NULL, NULL);
 
   if (rc)
@@ -1484,40 +1484,10 @@ h_terra_replenish (sqlite3 *db, int64_t now_s)
 
 
 
-int
-h_port_reprice (sqlite3 *db, int64_t now_s)
-{
-  if (!try_lock (db, "port_reprice", now_s))
-    return 0;
-  (void) now_s;
-  int rc = begin (db);
-  if (rc)
-    return rc;
-
-  /* Placeholder: gentle mean reversion toward baseline prices. */
-  rc = sqlite3_exec (db,
-		     "UPDATE ports SET "
-		     " fuel_price = (fuel_price*9 + baseline_fuel_price)/10, "
-		     " org_price  = (org_price*9  + baseline_org_price)/10, "
-		     " equip_price= (equip_price*9+ baseline_equip_price)/10;",
-		     NULL, NULL, NULL);
-
-  if (rc)
-    {
-      rollback (db);
-      LOGE ("port_reprice rc=%d", rc);
-      return rc;
-    }
-  commit (db);
-  LOGI ("port_reprice: ok");
-  unlock (db, "port_reprice");
-  return 0;
-}
 
 int
 h_planet_growth (sqlite3 *db, int64_t now_s)
 {
-
   if (!try_lock (db, "planet_growth", now_s))
     return 0;
   (void) now_s;
@@ -1525,23 +1495,47 @@ h_planet_growth (sqlite3 *db, int64_t now_s)
   if (rc)
     return rc;
 
-  rc = sqlite3_exec (db, "UPDATE planets SET " " population = population + CAST(population*0.001 AS INT), "	/* +0.1% */
-		     " ore_stock  = MIN(ore_cap,  ore_stock  + 50), "
-		     " org_stock  = MIN(org_cap,  org_stock  + 50), "
-		     " equip_stock= MIN(equip_cap,equip_stock+ 50);",
-		     NULL, NULL, NULL);
+  /* 1. Population Growth (applies to the planets table) 
+     * RESTRICTED TO PLAYER-OWNED PLANETS (owner > 0) 
+     */
+  rc = sqlite3_exec (db, 
+                     "UPDATE planets SET "
+                     " population = population + CAST(population*0.001 AS INT) " /* +0.1% */
+                     "WHERE population > 0 AND owner > 0;", // ADDED: owner > 0
+                     NULL, NULL, NULL);
 
   if (rc)
     {
       rollback (db);
-      LOGE ("planet_growth rc=%d", rc);
+      LOGE ("planet_growth (pop) rc=%d", rc);
+      unlock (db, "planet_growth");
       return rc;
     }
+
+  /* 2. Resource Growth (applies to the planet_goods table) 
+     * Note: This applies to all goods with production, which includes ports/planets.
+     */
+  rc = sqlite3_exec (db, 
+                     "UPDATE planet_goods SET "
+                     " quantity = MIN(max_capacity, quantity + production_rate) "
+                     "WHERE production_rate > 0;", 
+                     NULL, NULL, NULL);
+
+  if (rc)
+    {
+      rollback (db);
+      LOGE ("planet_growth (res) rc=%d", rc);
+      unlock (db, "planet_growth");
+      return rc;
+    }
+
   commit (db);
   LOGI ("planet_growth: ok");
   unlock (db, "planet_growth");
   return 0;
 }
+
+
 
 int
 h_broadcast_ttl_cleanup (sqlite3 *db, int64_t now_s)
@@ -1617,23 +1611,116 @@ h_npc_step (sqlite3 * db, int64_t now_s)
         fer_attach_db(db); // Ensure DB handle is attached if needed
         fer_tick(now_ms);
     }
+
+    // 3. Initialize and run Orion tick <--- ADD THIS BLOCK
+    if (ori_init_once() == 1) {
+        ori_attach_db(db); // Ensure DB handle is attached if needed
+        ori_tick(now_ms);
+    }
+
     LOGI ("npc_step: ok");
     return 0; // Return 0 (SQLITE_OK) for success
 }
 
 
-/* Implementation (in a .c file) */
+/* Handler for the 'port_price_drift' cron task */
 int
-h_port_price_drift (sqlite3 * db, int64_t now_s)
+h_port_price_drift (sqlite3 *db, int64_t now_s)
 {
-  (void) now_s; // now_s is seconds since epoch
+  if (!try_lock (db, "port_price_drift", now_s))
+    return 0;
+  (void) now_s;
+  int rc = begin (db);
+  if (rc)
+    return rc;
+
+  /* Apply a small, random drift of -1, 0, or +1 to all product prices in the ports table. */
+  rc = sqlite3_exec (db, 
+                     "UPDATE ports SET "
+                     " product_ore = product_ore + (ABS(RANDOM()) % 3 - 1), "
+                     " product_organics = product_organics + (ABS(RANDOM()) % 3 - 1), "
+                     " product_equipment = product_equipment + (ABS(RANDOM()) % 3 - 1) "
+                     "WHERE id > 0;",
+                     NULL, NULL, NULL);
+
   
-  // 1. SELECT ports whose price needs to drift
-  // 2. Compute new prices based on supply/demand/random drift
-  // 3. UPDATE port_prices table
-  
-  // Placeholder: Example of running a simple update
-  // int rc = sqlite3_exec(db, "UPDATE port_prices SET price = price + 1 WHERE commodity_id = 1;", NULL, NULL, NULL);
-  
-  return 0; // Return 0 for success
+  if (rc)
+    {
+      rollback (db);
+      LOGE ("port_price_drift rc=%d", rc);
+      unlock (db, "port_price_drift");
+      return rc;
+    }
+
+  commit (db);
+  LOGI ("port_price_drift: ok");
+  unlock (db, "port_price_drift");
+  return 0;
+}
+
+
+
+
+/* Handler for the 'port_reprice' cron task (Robust Two-Query Solution) */
+int
+h_port_reprice (sqlite3 *db, int64_t now_s)
+{
+  if (!try_lock (db, "port_reprice", now_s))
+    return 0;
+  (void) now_s;
+  int rc = begin (db);
+  if (rc)
+    return rc;
+
+  /* STEP 1 (ESSENTIAL): Enforce a minimum price of 1 for all ports, unconditionally. */
+  rc = sqlite3_exec (db, 
+                     "UPDATE ports SET "
+                     " product_ore = MAX(1, product_ore), "
+                     " product_organics = MAX(1, product_organics), "
+                     " product_equipment = MAX(1, product_equipment) "
+                     "WHERE id > 0;",
+                     NULL, NULL, NULL);
+
+  if (rc != SQLITE_OK)
+    {
+      rollback (db);
+      LOGE ("port_reprice step 1 rc=%d", rc);
+      unlock (db, "port_reprice");
+      return rc;
+    }
+
+  /* STEP 2 (DYNAMIC): Adjust prices based on trade flow (only affects ports with history). */
+  rc = sqlite3_exec (db, 
+                     "UPDATE ports SET "
+                     " product_ore = product_ore + COALESCE(T.ore_net_flow / 50, 0),"
+                     " product_organics = product_organics + COALESCE(T.organics_net_flow / 50, 0),"
+                     " product_equipment = product_equipment + COALESCE(T.equipment_net_flow / 50, 0) "
+                     "FROM ( "
+                     "  SELECT "
+                     "    port_id, "
+                     "    SUM(CASE WHEN commodity = 'ore' AND action = 'sell' THEN units "
+                     "             WHEN commodity = 'ore' AND action = 'buy' THEN -units ELSE 0 END) AS ore_net_flow, "
+                     "    SUM(CASE WHEN commodity = 'organics' AND action = 'sell' THEN units "
+                     "             WHEN commodity = 'organics' AND action = 'buy' THEN -units ELSE 0 END) AS organics_net_flow, "
+                     "    SUM(CASE WHEN commodity = 'equipment' AND action = 'sell' THEN units "
+                     "             WHEN commodity = 'equipment' AND action = 'buy' THEN -units ELSE 0 END) AS equipment_net_flow "
+                     "  FROM trade_log "
+                     "  WHERE timestamp > (strftime('%s', 'now') - 86400) "
+                     "  GROUP BY port_id "
+                     ") AS T "
+                     "WHERE ports.id = T.port_id;",
+                     NULL, NULL, NULL);
+
+  if (rc)
+    {
+      rollback (db);
+      LOGE ("port_reprice step 2 rc=%d", rc);
+      unlock (db, "port_reprice");
+      return rc;
+    }
+
+  commit (db);
+  LOGI ("port_reprice: ok");
+  unlock (db, "port_reprice");
+  return 0;
 }

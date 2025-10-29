@@ -102,10 +102,17 @@ __attribute__((weak))
     {"move.pathfind", "Find path between sectors"},
     {"move.force_move", "Admin: force-move a ship"},
 
-    // --- trade ---
+    // --- INSERT THESE ENTRIES (Alphabetically) ---
+    {"trade.accept", "Accept player trade offer"},
+    {"trade.buy", "Buy commodity from port"},
+    {"trade.cancel", "Cancel player trade offer"},
+    {"trade.history", "View trade history (paginated)"},
+    {"trade.jettison", "Jettison cargo"},
+    {"trade.offer", "Create player trade offer"},
+    {"trade.port_info", "Port info (alias to sector.info/port)"},
+    {"trade.quote", "Get buy/sell quote"},
+    {"trade.sell", "Sell commodity to port"},
     {"trade.port_info", "Port prices/stock in sector"},
-    {"trade.buy", "Buy from port"},
-    {"trade.sell", "Sell to port"},
   };
 
   if (out_tbl)

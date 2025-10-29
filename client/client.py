@@ -81,6 +81,7 @@ test_clientv3.py — Data-driven menu client for TWClone (server-connected, v2 p
 """
 ### from __future__ import annotations
 import argparse
+import uuid
 import getpass
 import json
 import os
@@ -1547,19 +1548,71 @@ def cap_spam_handler(ctx: Context) -> None:
         print(f"[{i+1}] {r.get('status')} {r.get('type')}")
 
 @register("simple_buy_handler")
-def simple_buy_handler(ctx: Context) -> None:
-    try:
-        port_id = int(input("Port ID: ").strip())
-    except ValueError:
-        print("Invalid port id."); return
-    commodity = input("Commodity (ore/organics/equipment): ").strip()
-    try:
-        qty = int(input("Quantity: ").strip())
-    except ValueError:
-        print("Quantity must be an integer."); return
-    r = ctx.conn.rpc("trade.buy", {"port_id": port_id, "commodity": commodity, "quantity": qty})
-    print(json.dumps(r, ensure_ascii=False, indent=2))
+def simple_buy_handler(ctx: Context):
+    """
+    Automated buy flow: uses current sector ID as Port ID (as per user request), 
+    prompts for product and quantity, then calls the dock.buy RPC.
+    """
+    # 1. Automatically get the Port ID (current sector ID)
+    port_id = ctx.current_sector_id
+    if port_id is None:
+        print("Cannot determine current sector ID (Port ID). Ensure you have run 'D' to re-display the sector first.")
+        return
 
+    # 2. Prompt for product code
+    product_code = input("Product Code (E, O, or F): ").strip().upper()
+    if not product_code:
+        print("Buy cancelled.")
+        return
+
+    # --- FIX 2: Correct Commodity Mapping ---
+    code_map = {
+        "E": "equipment",
+        "O": "organics",
+        "F": "ore",  # TW "F"uel Ore maps to server's "ore"
+    }
+    commodity = code_map.get(product_code)
+    
+    if not commodity:
+        print("Invalid product code. Use E, O, or F.")
+        return
+
+    # 3. Prompt for quantity
+    try:
+        quantity = int(input(f"Quantity of {product_code}: ").strip())
+    except ValueError:
+        print("Invalid quantity."); return
+
+    if quantity <= 0:
+        print("Quantity must be positive."); return
+
+    print(f"Attempting to buy {quantity} units of {product_code} (Port ID: {port_id})...")
+
+    # 4. Execute the RPC
+    # --- FIX 1: Send the correct command "trade.buy" ---
+    frame = {
+        "command": "trade.buy",
+        "data": {
+            "port_id": port_id,
+            "commodity": commodity,  # Use the mapped name ("ore")
+            "quantity": quantity
+        },
+        "meta": {
+            # Use uuid or similar for idempotency key if you are testing the rail
+            "idempotency_key": str(uuid.uuid4()) 
+        }
+    }
+    resp = ctx.conn.rpc(frame['command'], frame['data'])
+    
+    # Display the server response (using the _pp helper function already in client.py)
+    ctx.state["last_rpc"] = resp
+    print("\n=== SERVER RESPONSE ===")
+    call_handler("print_last_rpc", ctx)
+    
+    # Optional: You can call redisplay_sector here to refresh inventory/status
+    call_handler("redisplay_sector", ctx)
+
+        
 @register("interactive_buy_handler")
 def interactive_buy_handler(ctx: Context) -> None:
     idem = input("Idempotency key (optional): ").strip() or None

@@ -14,7 +14,8 @@ typedef enum
 { BACKEND_NONE = 0, BACKEND_FILE, BACKEND_SYSLOG } backend_t;
 
 static backend_t g_backend = BACKEND_NONE;
-static int g_level_max = LOG_INFO;	/* LOG_DEBUG .. LOG_EMERG */
+// static int g_level_max = LOG_INFO;	/* LOG_DEBUG .. LOG_EMERG */
+static int g_level_max = LOG_ERR;	/* LOG_DEBUG .. LOG_EMERG */
 static char g_prefix[32] = "";
 static int g_echo_stderr = 0;	/* 0/1 */
 static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;

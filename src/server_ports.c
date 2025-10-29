@@ -70,7 +70,6 @@ validate_trade_buy_rule (int player_id, int port_id, const char *commodity,
 int
 cmd_trade_offer (client_ctx_t *ctx, json_t *root)
 {
-
   STUB_NIY (ctx, root, "trade.offer");
 }
 

@@ -1399,7 +1399,7 @@ const char *insert_default_sql[] = {
 
   /* NPC Planet: Orion Hideout (Contraband Outpost) */
   " INSERT OR IGNORE INTO planets (num, sector, name, owner, population, type, creator, fuelColonist, organicsColonist, equipmentColonist, fighters) "
-  " VALUES (3, 0, 'Orion Hideout', 13, 20000000, 1, 'Syndicate', 10000000, 10000, 10000000, 200000); ",
+  " VALUES (3, 0, 'Orion Hideout', 0, 20000000, 1, 'Syndicate', 10000000, 10000, 10000000, 200000); ",
 
   " /* Orion Hideout Commodity Stock and Capacity */ "
   " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
@@ -1524,7 +1524,10 @@ const char *insert_default_sql[] = {
     "(48, 'The Horizon Breaker'),\n"
     "(49, 'Stormchaser'),\n" "(50, 'Beyond the Veil');\n",
 
+  /* fix a problem with the terraforming cron */
+  "ALTER TABLE planets ADD COLUMN terraform_turns_left INTEGER NOT NULL DEFAULT 1;",
 
+  
   "INSERT INTO ships (name, type, attack, holds_used, mines, fighters_used, genesis, photons, location, fighters, shields, holds, colonists,equipment, organics, ore, flags, ported, onplanet) VALUES ('Bit Banger',1, 110, 20, 25, 10, 0, 1,  87, 2300, 400, 20, 0,10,5, 5, 0, 1, 1);",
   "INSERT INTO players (number, name, passwd, sector, ship, type) VALUES (1, 'System', 'BOT',1,1,2);",
   "INSERT INTO players (number, name, passwd, sector, ship, type) VALUES (1, 'Federation Administrator', 'BOT',1,1,2);",
@@ -1586,12 +1589,32 @@ const char *insert_default_sql[] = {
 
 
   /*  -- 1. Create the Orion Syndicate Corporation */
-"INSERT INTO corporations (name, owner_id, tag) VALUES "
-"('Orion Syndicate',4, 'ORION');",
+  "INSERT INTO corporations (name, owner_id, tag) VALUES "
+  "('Orion Syndicate',4, 'ORION');",
 
   /* -- 2. Create the Ferrengi Alliance Corporation */
-"INSERT INTO corporations (name, owner_id, tag) VALUES "
-"('Ferrengi Alliance', 9, 'FENG');"
+  "INSERT INTO corporations (name, owner_id, tag) VALUES "
+  "('Ferrengi Alliance', 9, 'FENG');"
+
+
+  
+  /* Ferringhi Homeworld (Planet ID 2) Commodities */
+
+  /* -- Ore (High Capacity) */
+  "INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " (2, 'ore', 10000000, 10000000, 0);",
+
+  /* -- Organics (Very High Capacity/Focus) */
+  "INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " (2, 'organics', 50000000, 50000000, 10);",
+
+  /* -- Equipment (High Capacity) */
+  "INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " (2, 'equipment', 10000000, 10000000, 0);",
+
+  /* - Fuel (High Capacity) */
+  "INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " (2, 'fuel', 1000000, 1000000, 5);",
 
 };
 
