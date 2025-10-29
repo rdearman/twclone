@@ -1,19 +1,24 @@
-#include <jansson.h>
 #include <string.h>
 #include <jansson.h>
 #include <sqlite3.h>
-#include <string.h>
 #include <stdlib.h>
 #include <time.h>
 /* local includes */
 #include "server_ports.h"
-#include "database.h"		// db_* for ports/trade
+#include "database.h"	
 #include "errors.h"
 #include "config.h"
 #include "server_envelope.h"
 #include "server_cmds.h"
-#include "common.h"
 #include "server_players.h"
+#include "server_cron.h"
+#include "server_log.h"
+#include "common.h"
+#include "server_universe.h"
+
+
+
+
 
 #ifndef UNUSED
 #define UNUSED(x) (void)(x)
@@ -28,6 +33,27 @@
 
 void idemp_fingerprint_json (json_t * obj, char out[17]);
 void iso8601_utc (char out[32]);
+
+/* Helpers */
+static int
+begin (sqlite3 *db)
+{
+  return sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, NULL);
+}
+
+static int
+commit (sqlite3 *db)
+{
+  return sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
+}
+
+static int
+rollback (sqlite3 *db)
+{
+  return sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+}
+
+
 
 //////////////////////////////////////////////////////////////////
 
@@ -85,11 +111,6 @@ cmd_trade_cancel (client_ctx_t *ctx, json_t *root)
   STUB_NIY (ctx, root, "trade.cancel");
 }
 
-int
-cmd_trade_history (client_ctx_t *ctx, json_t *root)
-{
-  STUB_NIY (ctx, root, "trade.history");
-}
 
 //////////////////////////////////////////////////
 
@@ -126,7 +147,11 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
   sqlite3 *db_handle = db_get_handle ();
   h_decloak_ship (db_handle,
 		  h_get_active_ship_id (db_handle, ctx->player_id));
+  int player_sector;
+  int quantity; // Or 'units_to_sell', whatever your variable is named
+  double price_per_unit;
 
+  
   if (ctx->player_id <= 0)
     {
       send_enveloped_error (ctx->fd, root, 1401, "not_authenticated");
@@ -384,6 +409,49 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       // - increment player credits by amount * buy_price
       // (Do not mutate prices here unless your economy model calls for it.)
 
+      // In cmd_trade_sell in server_ports.c, right after the UPDATE statements
+      // (and before the final commit/cleanup)
+
+      {
+	// Local definition for logging SQL
+	const char *log_sql =
+	  "INSERT INTO trade_log (player_id, port_id, sector_id, commodity, units, price_per_unit, action, timestamp) "
+	  "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8);";
+
+	sqlite3_stmt *log_stmt = NULL;
+    
+	// NOTE: Replace 'price_per_unit' with 'buy_price' if that's the variable name used
+	// in your cmd_trade_sell logic.
+
+	int rc = sqlite3_prepare_v2(db, log_sql, -1, &log_stmt, NULL);
+	if (rc != SQLITE_OK) {
+	  LOGE("trade_log prepare error in SELL: %s", sqlite3_errmsg(db));
+	  rollback(db);
+	  RULE_ERROR(1500, "Trade logging setup failed"); // Use your error macro
+	  goto trade_sell_done; // Use your cleanup label
+	}
+
+	// Bind parameters for logging the sale
+	sqlite3_bind_int(log_stmt, 1, ctx->player_id);
+	sqlite3_bind_int(log_stmt, 2, port_id);
+	sqlite3_bind_int(log_stmt, 3, player_sector); // Sector where the trade occurred
+	sqlite3_bind_text(log_stmt, 4, commodity, -1, SQLITE_STATIC);
+	sqlite3_bind_int(log_stmt, 5, quantity);
+	sqlite3_bind_double(log_stmt, 6, price_per_unit); // Price received by player
+	sqlite3_bind_text(log_stmt, 7, "sell", -1, SQLITE_STATIC);
+	sqlite3_bind_int64(log_stmt, 8, time(NULL)); // Current UNIX timestamp
+
+	if ((rc = sqlite3_step(log_stmt)) != SQLITE_DONE) {
+	  LOGE("trade_log exec error in SELL: %s", sqlite3_errmsg(db));
+	  rollback(db);
+	  sqlite3_finalize(log_stmt);
+	  RULE_ERROR(1500, "Trade logging failed");
+	  goto trade_sell_done;
+	}
+	sqlite3_finalize(log_stmt);
+      }
+
+      
       {
 	static const char *SQL_UPD_PC =
 	  "UPDATE player_cargo SET amount = amount - ?3 "
@@ -596,6 +664,11 @@ IDEMPOTENCY_RACE:;
       }
     send_enveloped_error (ctx->fd, root, 500, "Could not resolve race.");
   }
+
+ trade_buy_done:
+ trade_sell_done:
+  return 0;
+
 }
 
 
@@ -635,13 +708,18 @@ build_trade_buy_fp_obj (const char *cmd, json_t *jdata)
 int
 cmd_trade_buy (client_ctx_t *ctx, json_t *root)
 {
+  int player_sector;
+  int quantity; // Or 'units_to_buy'
+  double price_per_unit; // Or 'total_cost' / 'buy_price'
+  sqlite3 *db = db_get_handle();
+  
   json_t *jdata = json_object_get (root, "data");
   if (!json_is_object (jdata))
     {
       send_enveloped_error (ctx->fd, root, 1301, "Missing required field");
     }
   else
-    {
+    {      
       /* Extract fields */
       json_t *jport = json_object_get (jdata, "port_id");
       json_t *jcomm = json_object_get (jdata, "commodity");
@@ -746,6 +824,49 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
 	      /* If SQLITE_OK, we “own” this key now and should execute then store. */
 	    }
 
+	  // Update the history
+
+	  {
+	    // Local definition for logging SQL (ensure this is available in your file)
+	    const char *log_sql =
+	      "INSERT INTO trade_log (player_id, port_id, sector_id, commodity, units, price_per_unit, action, timestamp) "
+	      "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8);";
+
+	    sqlite3_stmt *log_stmt = NULL;
+    
+	    // NOTE: Replace 'price_per_unit' with 'buy_price' or whatever variable holds the COST
+	    // to the player in your buy function.
+
+	    int rc = sqlite3_prepare_v2(db, log_sql, -1, &log_stmt, NULL);
+	    if (rc != SQLITE_OK) {
+	      LOGE("trade_log prepare error in BUY: %s", sqlite3_errmsg(db));
+	      rollback(db);
+	      RULE_ERROR(1500, "Trade logging setup failed"); // Use your error macro
+	      goto trade_sell_done; // Use your cleanup label
+	    }
+
+	    // Bind parameters for logging the purchase
+	    sqlite3_bind_int(log_stmt, 1, ctx->player_id);
+	    sqlite3_bind_int(log_stmt, 2, port_id);
+	    sqlite3_bind_int(log_stmt, 3, player_sector); // Sector where the trade occurred
+	    sqlite3_bind_text(log_stmt, 4, commodity, -1, SQLITE_STATIC);
+	    sqlite3_bind_int(log_stmt, 5, quantity);
+	    sqlite3_bind_double(log_stmt, 6, price_per_unit); // Price paid by player
+	    sqlite3_bind_text(log_stmt, 7, "buy", -1, SQLITE_STATIC);
+	    sqlite3_bind_int64(log_stmt, 8, time(NULL)); // Current UNIX timestamp
+
+	    if ((rc = sqlite3_step(log_stmt)) != SQLITE_DONE) {
+	      LOGE("trade_log exec error in BUY: %s", sqlite3_errmsg(db));
+	      rollback(db);
+	      sqlite3_finalize(log_stmt);
+	      RULE_ERROR(1500, "Trade logging failed");
+	      goto trade_sell_done;
+	    }
+	    sqlite3_finalize(log_stmt);
+	  }
+
+
+	  
 	  /* === Perform the actual operation (your existing stub) === */
 	  json_t *data = json_pack ("{s:i, s:s, s:i}",
 				    "port_id", port_id,
@@ -806,6 +927,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
 	  (void) 0;
 	}
     }
+  trade_sell_done:
   return 0;
 }
 
@@ -893,5 +1015,137 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
     }
   send_enveloped_error (ctx->fd, root, 1101,
 			"Not implemented: trade.jettison");
+  return 0;
+}
+
+
+int
+cmd_trade_history (client_ctx_t *ctx, json_t *root)
+{
+  sqlite3 *db = db_get_handle ();
+  int rc = SQLITE_OK;
+  json_t *data = json_object_get (root, "data");
+
+  if (ctx->player_id <= 0)
+    {
+      send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+      return 0;
+    }
+
+  // 1. Get parameters
+  const char *cursor = json_string_value (json_object_get (data, "cursor"));
+  int limit = json_integer_value (json_object_get (data, "limit"));
+  if (limit <= 0 || limit > 50)
+    {
+      limit = 20; // Default or maximum
+    }
+
+  // 2. Prepare the query and cursor parameters
+  const char *sql_base =
+    "SELECT timestamp, id, port_id, commodity, units, price_per_unit, action "
+    "FROM trade_log WHERE player_id = ?1 ";
+  
+  const char *sql_cursor_cond =
+    "AND (timestamp < ?3 OR (timestamp = ?3 AND id < ?4)) ";
+  
+  const char *sql_suffix =
+    "ORDER BY timestamp DESC, id DESC LIMIT ?2;";
+
+  long long cursor_ts = 0;
+  long long cursor_id = 0;
+  char sql[512] = { 0 };
+  sqlite3_stmt *stmt = NULL;
+  
+  // Build the SQL query based on the cursor state
+  if (cursor && (strlen(cursor) > 0))
+    {
+      char *sep = strchr ((char *) cursor, '_');
+      if (sep)
+        {
+          *sep = '\0'; // Temporarily null-terminate the timestamp part
+          cursor_ts = atoll (cursor);
+          cursor_id = atoll (sep + 1);
+          *sep = '_'; // Restore original cursor string
+          
+          if (cursor_ts > 0 && cursor_id > 0)
+            {
+              // Query with cursor condition
+              snprintf(sql, sizeof(sql), "%s%s%s", sql_base, sql_cursor_cond, sql_suffix);
+            }
+        }
+    }
+    
+  if (sql[0] == 0) {
+    // Query without cursor condition (first page)
+    snprintf(sql, sizeof(sql), "%s%s", sql_base, sql_suffix);
+  }
+
+  // 3. Bind parameters
+  rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("trade.history prepare error: %s", sqlite3_errmsg (db));
+      send_enveloped_error (ctx->fd, root, 1500, "Database error");
+      return 0;
+    }
+
+  sqlite3_bind_int (stmt, 1, ctx->player_id);
+  sqlite3_bind_int (stmt, 2, limit + 1); // Fetch LIMIT + 1 to check for next page
+  
+  if (cursor_ts > 0 && cursor_id > 0)
+    {
+      sqlite3_bind_int64 (stmt, 3, cursor_ts);
+      sqlite3_bind_int64 (stmt, 4, cursor_id);
+    }
+
+  // 4. Fetch results
+  json_t *history_array = json_array ();
+  int count = 0;
+  long long last_ts = 0;
+  long long last_id = 0;
+
+  while (sqlite3_step (stmt) == SQLITE_ROW)
+    {
+      if (count < limit)
+        {
+          json_array_append_new (history_array,
+                                 json_pack ("{s:I, s:I, s:i, s:s, s:i, s:f, s:s}",
+                                            "timestamp", sqlite3_column_int64 (stmt, 0),
+                                            "id", sqlite3_column_int64 (stmt, 1),
+                                            "port_id", sqlite3_column_int (stmt, 2),
+                                            "commodity", sqlite3_column_text (stmt, 3),
+                                            "units", sqlite3_column_int (stmt, 4),
+                                            "price_per_unit", sqlite3_column_double (stmt, 5),
+                                            "action", sqlite3_column_text (stmt, 6)));
+          
+          last_ts = sqlite3_column_int64 (stmt, 0);
+          last_id = sqlite3_column_int64 (stmt, 1);
+          count++;
+        }
+      else
+        {
+          // We fetched the (limit + 1) row, which is the start of the next page
+          // This row is not added to the array.
+          break;
+        }
+    }
+    
+  sqlite3_finalize (stmt);
+
+  // 5. Build and send response
+  json_t *payload = json_object ();
+  json_object_set_new (payload, "history", history_array);
+  
+  // Check if a next page exists (i.e., we fetched limit + 1 rows)
+  if (count == limit && last_id > 0)
+    {
+      char next_cursor[64];
+      snprintf (next_cursor, sizeof(next_cursor), "%lld_%lld", last_ts, last_id);
+      json_object_set_new (payload, "next_cursor", json_string (next_cursor));
+    }
+
+
+  send_enveloped_ok (ctx->fd, root, "trade.history", payload);
+ 
   return 0;
 }
