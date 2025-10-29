@@ -8,6 +8,8 @@
 #include "server_config.h"
 #include "server_bigbang.h"
 #include "namegen.h"
+#include "server_log.h"
+
 
 /* ----------------------------------------------------
  * Tunables
@@ -1421,12 +1423,6 @@ create_ferringhi (int ferringhi_sector)
     }
   sqlite3_finalize (st);
 
-  if (longest_tunnel_sector == 0)
-    {
-      fprintf (stderr,
-	       "create_ferringhi: No tunnels of length >= 2 found. Defaulting to sector 20.\n");
-      longest_tunnel_sector = ferringhi_sector;
-    }
 
   // --- Ferringhi Homeworld (num=2) Update ---
   char planet_sector[256];
@@ -1690,7 +1686,7 @@ create_ferringhi (int ferringhi_sector)
 
 
   /* Insert Orion Syndicate Outpost */
-  int oso_tunnel = 0; // Initialize to 0, not 22, to properly check if the query found a result
+  int oso_tunnel = 0; 
   const char *oso = "SELECT exit_sector FROM longest_tunnels LIMIT 1 OFFSET 2;";
   sqlite3_stmt *stoso = NULL;
   int rc = 0; // Variable to capture return code
@@ -1718,39 +1714,48 @@ create_ferringhi (int ferringhi_sector)
       sqlite3_finalize (stoso);
     }
 
-  // Handle default if no tunnel was found (or if prepare failed)
-  if (oso_tunnel == 0 || oso_tunnel == longest_tunnel_sector)
-    {
-      fprintf (stderr,
-	       "Orion Syndicate: No tunnels of length >= 2 found. Defaulting to sector 22.\n");
-      oso_tunnel = (rand() % (999 - 11 + 1)) + 11;;
-    }
-
   // --- Ferringhi Homeworld (num=2) Update ---
-  planet_sector[256];
-  snprintf (planet_sector, sizeof (planet_sector),
-	    "UPDATE planets SET sector=%d where id=2;",
-	    longest_tunnel_sector);
 
-  // FIX: Execute the variable that actually holds the SQL string: 'planet_sector'
-  if (sqlite3_exec (db, planet_sector, NULL, NULL, NULL) != SQLITE_OK) 
+  if (longest_tunnel_sector == oso_tunnel || oso_tunnel < 20)
     {
-      fprintf (stderr, "create_ferringhi failed: %s\n", sqlite3_errmsg (db));
-      return -1;
+      oso_tunnel = (rand() % (999 - 11 + 1)) + 11;
     }
 
-// --- Orion Syndicate Outpost (num=3) Update ---
- char oso_planet_sector[256];
- snprintf (oso_planet_sector, sizeof (oso_planet_sector),
-	   "UPDATE planets SET sector=%d where id=3;",
-	   oso_tunnel);
 
- if (sqlite3_exec (db, oso_planet_sector, NULL, NULL, NULL) != SQLITE_OK)
-   {
-     fprintf (stderr, "create Orion Syndicate failed: %s\n", sqlite3_errmsg (db));
-     return -1;
-   }
+  // --- Ferrengi Homeworld (num=2) Update ---
+  char planet_sector_sql[1024];
+  snprintf(planet_sector_sql, sizeof(planet_sector_sql),
+	   "UPDATE planets SET sector=%d WHERE id=2; "
+	   "INSERT INTO sector_assets (sector, player, asset_type, corporation, quantity, deployed_at) "
+	   "VALUES (%d, 0, 2, 2, 50000, CAST(strftime('%%s','now') AS INTEGER)); "
+	   "INSERT INTO sector_assets (sector, player, asset_type, corporation, quantity, deployed_at) "
+	   "VALUES (%d, 0, 1, 2, 250,   CAST(strftime('%%s','now') AS INTEGER));",
+	   longest_tunnel_sector, longest_tunnel_sector, longest_tunnel_sector);
 
+  if (sqlite3_exec(db, planet_sector_sql, NULL, NULL, NULL) != SQLITE_OK) {
+    LOGE("Ferringhi DB Issue: %s", sqlite3_errmsg(db));
+    fprintf(stderr, "create_ferringhi failed: %s\n", sqlite3_errmsg(db));
+    return -1;
+  }
+
+  
+  // --- Orion Syndicate Outpost (num=3) Update ---
+  char oso_planet_sector[1024];
+  snprintf(oso_planet_sector, sizeof(oso_planet_sector),
+	   "UPDATE planets SET sector=%d WHERE id=3; "
+	   "INSERT INTO sector_assets (sector, player, asset_type, corporation, quantity, deployed_at) "
+	   "VALUES (%d, 4, 2, 1, 50000, CAST(strftime('%%s','now') AS INTEGER)); "
+	   "INSERT INTO sector_assets (sector, player, asset_type, corporation, quantity, deployed_at) "
+	   "VALUES (%d, 4, 1, 1, 250,   CAST(strftime('%%s','now') AS INTEGER));",
+	   oso_tunnel, oso_tunnel, oso_tunnel);
+
+  if (sqlite3_exec(db, oso_planet_sector, NULL, NULL, NULL) != SQLITE_OK) {
+    fprintf(stderr, "create Orion Syndicate failed: %s\n", sqlite3_errmsg(db));
+    return -1;
+  }
+
+  
+ 
  /* Place the new Black Market Port in the Orion Hideout Sector (Planet num=3) */                                              char oso_port_sector[256];
  snprintf (oso_port_sector, sizeof (oso_port_sector),
 	   "DELETE FROM ports where location=%d; INSERT INTO ports (location, type, name) values (%d, 10, 'Orion Black Market');",

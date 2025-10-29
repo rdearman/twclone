@@ -641,7 +641,8 @@ const char *create_table_sql[] = {
     "    id INTEGER PRIMARY KEY,  "
     "    sector INTEGER NOT NULL REFERENCES sectors(id), "
     "    player INTEGER REFERENCES players(id),  "
-    "    asset_type INTEGER NOT NULL,  "
+    "    corporation INTEGER NOT NULL DEFAULT 0,  "
+    "    asset_type INTEGER NOT NULL,  "  
     "    quantity INTEGER, "
     "    ttl INTEGER,  " "    deployed_at INTEGER NOT NULL  " "); ",
 
@@ -1582,6 +1583,15 @@ const char *insert_default_sql[] = {
   "UPDATE players SET ship = (SELECT id FROM ships WHERE name='Orion Guard Epsilon') WHERE name='Sira, Market Guard Captain';"
 
   /* ------------------------------------------------------------------------------------- */
+
+
+  /*  -- 1. Create the Orion Syndicate Corporation */
+"INSERT INTO corporations (name, owner_id, tag) VALUES "
+"('Orion Syndicate',4, 'ORION');",
+
+  /* -- 2. Create the Ferrengi Alliance Corporation */
+"INSERT INTO corporations (name, owner_id, tag) VALUES "
+"('Ferrengi Alliance', 9, 'FENG');"
 
 };
 

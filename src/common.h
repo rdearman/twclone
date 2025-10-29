@@ -31,6 +31,11 @@
 #define START_FIGHTERS 20
 #endif
 
+#ifndef MAX_FIGHTERS_PER_SECTOR
+#define MAX_FIGHTERS_PER_SECTOR 50000 
+#endif
+
+
 #ifndef START_HOLDS
 #define START_HOLDS 20
 #endif
