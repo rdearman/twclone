@@ -11,6 +11,7 @@
 
 #define DEFAULT_DB_NAME "twconfig.db"
 
+static json_t *g_capabilities = NULL;
 struct twconfig;
 struct twconfig *config_load (void);
 

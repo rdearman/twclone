@@ -3,7 +3,7 @@
 #pragma once
 
 #include "common.h"		// send_enveloped_*, json_t
-#include "types.h"		// client_ctx_t (same struct used in server_loop.c)
+#include "globals.h"
 #include <jansson.h>		/* -ljansson */
 #include <stdbool.h>
 #include <sqlite3.h>

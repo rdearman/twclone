@@ -1,7 +1,7 @@
 // server_planets.h
 #ifndef SERVER_PLANETS_H
 #define SERVER_PLANETS_H
-#include "types.h"
+#include "globals.h"
 #include <jansson.h>
 #include "common.h"
 

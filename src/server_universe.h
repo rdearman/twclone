@@ -3,6 +3,7 @@
 
 #include "config.h"
 #include <stdint.h>
+#include "server_communication.h"  /* brings in client_ctx_t and json_t */
 
 /* --- Ferringhi traders (NPC) --- */
 int  fer_init_once(void);          /* returns 1 if homeworld found, else 0 */
