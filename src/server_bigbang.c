@@ -1726,8 +1726,8 @@ create_ferringhi (int ferringhi_sector)
   char planet_sector_sql[1024];
   snprintf(planet_sector_sql, sizeof(planet_sector_sql),
 	   "UPDATE planets SET sector=%d WHERE id=2; "
-	   "INSERT INTO sector_assets (sector, player, asset_type, corporation, quantity, deployed_at) "
-	   "VALUES (%d, 0, 2, 2, 50000, CAST(strftime('%%s','now') AS INTEGER)); "
+	   "INSERT INTO sector_assets (sector, player, offensive_setting, asset_type, corporation, quantity, deployed_at) "
+	   "VALUES (%d, 0, 3, 2, 2, 50000, CAST(strftime('%%s','now') AS INTEGER)); "
 	   "INSERT INTO sector_assets (sector, player, asset_type, corporation, quantity, deployed_at) "
 	   "VALUES (%d, 0, 1, 2, 250,   CAST(strftime('%%s','now') AS INTEGER));",
 	   longest_tunnel_sector, longest_tunnel_sector, longest_tunnel_sector);
@@ -1743,8 +1743,8 @@ create_ferringhi (int ferringhi_sector)
   char oso_planet_sector[1024];
   snprintf(oso_planet_sector, sizeof(oso_planet_sector),
 	   "UPDATE planets SET sector=%d WHERE id=3; "
-	   "INSERT INTO sector_assets (sector, player, asset_type, corporation, quantity, deployed_at) "
-	   "VALUES (%d, 4, 2, 1, 50000, CAST(strftime('%%s','now') AS INTEGER)); "
+	   "INSERT INTO sector_assets (sector, player,offensive_setting, asset_type, corporation, quantity, deployed_at) "
+	   "VALUES (%d, 4, 2, 2, 1, 50000, CAST(strftime('%%s','now') AS INTEGER)); "
 	   "INSERT INTO sector_assets (sector, player, asset_type, corporation, quantity, deployed_at) "
 	   "VALUES (%d, 4, 1, 1, 250,   CAST(strftime('%%s','now') AS INTEGER));",
 	   oso_tunnel, oso_tunnel, oso_tunnel);

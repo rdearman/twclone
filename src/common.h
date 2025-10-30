@@ -104,6 +104,12 @@ typedef enum {
     ASSET_LIMPET_MINE = 4    
 } asset_type_t;
 
+typedef enum {
+    OFFENSE_TOLL = 1,
+    OFFENSE_DEFEND = 2,
+    OFFENSE_ATTACK = 3
+} offense_type_t;
+
 
 int init_sockaddr (int, struct sockaddr_in *);
 int init_clientnetwork (char *hostname, int port);

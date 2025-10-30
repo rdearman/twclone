@@ -643,7 +643,7 @@ const char *create_table_sql[] = {
     "    player INTEGER REFERENCES players(id),  "
     "    corporation INTEGER NOT NULL DEFAULT 0,  "
     "    asset_type INTEGER NOT NULL,  "
-    "    offensive_setting INTEGER NOT NULL,  "  
+    "    offensive_setting INTEGER DEFAULT 0,  "  
     "    quantity INTEGER, "
     "    ttl INTEGER,  " "    deployed_at INTEGER NOT NULL  " "); ",
 
