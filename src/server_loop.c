@@ -598,6 +598,7 @@ process_message (client_ctx_t *ctx, json_t *root)
       cmd_system_capabilities (ctx, root);
     }
 
+ 
 /* ---------- PLAYER ---------- */
   else if (streq (cmd, "player.get_settings"))
     {
@@ -878,7 +879,7 @@ process_message (client_ctx_t *ctx, json_t *root)
       rc = cmd_chat_history (ctx, root);	/* NIY stub */
     }
 
-/* ---------- MAIL ---------- */
+/* ---------- MAIL/Announcements ---------- */
   else if (!strcmp (c, "mail.send"))
     {
       rc = cmd_mail_send (ctx, root);	/* NIY stub */
@@ -895,7 +896,19 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       rc = cmd_mail_delete (ctx, root);	/* NIY stub */
     }
-
+  else if (strcmp(c, "sys.notice.create") == 0)
+    {
+    rc = cmd_sys_notice_create(ctx, root);
+    }
+  else if (strcmp(c, "notice.list") == 0)
+    {
+    rc = cmd_notice_list(ctx, root);
+    }
+  else if (strcmp(c, "notice.ack") == 0)
+    {
+    rc = cmd_notice_ack(ctx, root);
+    }
+  
 /* ---------- SUBSCRIBE ---------- */
   else if (!strcmp (c, "subscribe.add"))
     {

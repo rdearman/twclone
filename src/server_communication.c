@@ -1,5 +1,6 @@
 #include <jansson.h>
 #include <string.h>
+#include <time.h>
 // local includes
 #include "server_communication.h"
 #include "server_envelope.h"	// send_enveloped_ok/error/refused
@@ -10,6 +11,13 @@
 #include "server_loop.h"
 #include "db_player_settings.h"
 #include "server_envelope.h"
+#include "server_log.h"
+
+
+
+enum
+{ MAX_SUBSCRIPTIONS_PER_PLAYER = 64 };
+
 
 /* ---- topic validation ----
    Accept either exact catalogue items or simple suffix wildcard "prefix.*".
@@ -82,15 +90,200 @@ is_allowed_topic (const char *t)
 }
 
 
-
-enum
-{ MAX_SUBSCRIPTIONS_PER_PLAYER = 64 };
-
 extern void attach_rate_limit_meta (json_t * env, client_ctx_t * ctx);
 extern void rl_tick (client_ctx_t * ctx);
 extern void send_all_json (int fd, json_t * obj);
 extern json_t *db_notice_list_unseen_for_player (int player_id);
 extern int db_notice_mark_seen (int notice_id, int player_id);
+static void broadcast_system_notice (int notice_id,
+			 const char *title,
+			 const char *body,
+			 const char *severity,
+					    time_t created_at, time_t expires_at);
+/* ---------------- sys.notice.create ----------------
+ * Admin/SysOp-only. Create a persistent notice and push to online users.
+ * JSON:
+ *   { "title": str, "body": str, "severity": "info|warn|error",
+ *     "expires_at": int|null }   // unix seconds (UTC) or null for open-ended
+ */
+int
+cmd_sys_notice_create (client_ctx_t *ctx, json_t *root)
+{
+  /* TODO: gate with permissions (SysOp) if you have a helper like ensure_is_sysop(ctx) */
+  json_t *data = json_object_get (root, "data");
+  const char *title = json_string_value (json_object_get (data, "title"));
+  const char *body  = json_string_value (json_object_get (data, "body"));
+  const char *sev   = json_string_value (json_object_get (data, "severity"));
+  json_t *exp       = json_object_get (data, "expires_at");
+
+  if (!title || !body) {
+    send_enveloped_error (ctx->fd, root, 400, "title and body are required");
+    return 0;
+  }
+
+  if (!sev || (strcmp(sev,"info") && strcmp(sev,"warn") && strcmp(sev,"error"))) {
+    sev = "info";
+  }
+
+  sqlite3 *db = db_get_handle ();
+  sqlite3_stmt *st = NULL;
+  int rc, notice_id = 0;
+  time_t now = time (NULL);
+  // Calculate 24 hours from 'now' as the default
+  int active_until_time = now + (24 * 60 * 60);
+  
+  /* INSERT into system_notice (id autogen or explicit), per your schema */
+  /* system_notice(id, created_at, title, body, severity, expires_at) */
+  /* created_at/expires_at use unix seconds. */ /* :contentReference[oaicite:4]{index=4} */
+  rc = sqlite3_prepare_v2 (db,
+        "INSERT INTO system_notice (created_at, title, body, severity, expires_at) "
+        "VALUES (?1, ?2, ?3, ?4, ?5);", -1, &st, NULL);
+  if (rc != SQLITE_OK) goto sql_err;
+
+  sqlite3_bind_int64 (st, 1, (sqlite3_int64) now);
+  sqlite3_bind_text   (st, 2, title, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text   (st, 3, body,  -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text   (st, 4, sev,   -1, SQLITE_TRANSIENT);
+  if (exp && json_is_integer (exp))
+    sqlite3_bind_int64 (st, 5, (sqlite3_int64) json_integer_value (exp));
+  else
+    sqlite3_bind_null  (st, 5);
+
+  rc = sqlite3_step (st);
+  if (rc != SQLITE_DONE) goto sql_err;
+  sqlite3_finalize (st); st = NULL;
+
+  notice_id = (int) sqlite3_last_insert_rowid (db);
+
+  
+  /* Immediate push to online users (your helper composes the "system.notice") */
+  broadcast_system_notice (notice_id, title, body, sev, now, active_until_time);
+
+  
+  /* Build reply */
+  json_t *resp = json_pack ("{s:i, s:s, s:s, s:s}",
+                            "id", notice_id, "title", title, "body", body, "severity", sev);
+  /* echo expires_at if present */
+  if (exp && json_is_integer (exp))
+    json_object_set (resp, "expires_at", exp);
+
+  send_enveloped_ok (ctx->fd, root, "announce.created", resp);
+  return 0;
+
+sql_err:
+  if (st) sqlite3_finalize (st);
+  LOGE ("sys.notice.create SQL error: %s", sqlite3_errmsg (db));
+  send_enveloped_error (ctx->fd, root, 500, "db error");
+  return 1;
+}
+
+/* -------------- notice.list ----------------
+ * Return active notices and player seen state.
+ * Optional input: { "include_expired": bool, "limit": int }
+ */
+int
+cmd_notice_list (client_ctx_t *ctx, json_t *root)
+{
+  json_t *data = json_object_get (root, "data");
+  int include_expired = json_is_true (json_object_get (data, "include_expired"));
+  int limit = 100;
+  if (data) {
+    json_t *jlim = json_object_get (data, "limit");
+    if (jlim && json_is_integer (jlim)) limit = (int) json_integer_value (jlim);
+  }
+
+  sqlite3 *db = db_get_handle ();
+  sqlite3_stmt *st = NULL;
+
+  /* Active = expires_at IS NULL OR expires_at > now */
+  /* Join with notice_seen to surface seen_at for this player. */ /* :contentReference[oaicite:5]{index=5} */
+  const char *SQL =
+    "SELECT n.id, n.title, n.body, n.severity, n.created_at, n.expires_at, s.seen_at "
+    "FROM system_notice n "
+    "LEFT JOIN notice_seen s ON s.notice_id = n.id AND s.player_id = ?1 "
+    "WHERE (?2 OR n.expires_at IS NULL OR n.expires_at > strftime('%s','now')) "
+    "ORDER BY n.created_at DESC "
+    "LIMIT ?3;";
+
+  if (sqlite3_prepare_v2 (db, SQL, -1, &st, NULL) != SQLITE_OK) {
+    if (st) sqlite3_finalize (st);
+    send_enveloped_error (ctx->fd, root, 500, "db error");
+    return 0;
+  }
+  sqlite3_bind_int64 (st, 1, (sqlite3_int64) ctx->player_id);
+  sqlite3_bind_int   (st, 2, include_expired ? 1 : 0);
+  sqlite3_bind_int   (st, 3, limit);
+
+  json_t *items = json_array ();
+  while (sqlite3_step (st) == SQLITE_ROW) {
+    int id = sqlite3_column_int (st, 0);
+    const unsigned char *t = sqlite3_column_text (st, 1);
+    const unsigned char *b = sqlite3_column_text (st, 2);
+    const unsigned char *sv= sqlite3_column_text (st, 3);
+    sqlite3_int64 created  = sqlite3_column_int64 (st, 4);
+    sqlite3_int64 expires  = sqlite3_column_type (st, 5) == SQLITE_NULL ? 0 : sqlite3_column_int64 (st, 5);
+    sqlite3_int64 seen_at  = sqlite3_column_type (st, 6) == SQLITE_NULL ? 0 : sqlite3_column_int64 (st, 6);
+
+    json_t *row = json_pack ("{s:i, s:s, s:s, s:s, s:I}",
+                              "id", id,
+                              "title", t ? (const char*)t : "",
+                              "body",  b ? (const char*)b : "",
+                              "severity", sv ? (const char*)sv : "info",
+                              "created_at", (json_int_t) created);
+    if (expires > 0) json_object_set_new (row, "expires_at", json_integer (expires));
+    if (seen_at > 0) json_object_set_new (row, "seen_at",   json_integer (seen_at));
+    json_array_append_new (items, row);
+  }
+  sqlite3_finalize (st);
+
+  json_t *resp = json_pack ("{s:o}", "items", items);
+  send_enveloped_ok (ctx->fd, root, "notice.list_v1", resp);
+  return 0;
+}
+
+/* -------------- notice.ack ----------------
+ * Mark a notice as acknowledged (or simply 'seen') for this player.
+ * JSON: { "id": int }
+ */
+int
+cmd_notice_ack (client_ctx_t *ctx, json_t *root)
+{
+  json_t *data = json_object_get (root, "data");
+  int id = (int) json_integer_value (json_object_get (data, "id"));
+  if (id <= 0) {
+    send_enveloped_error (ctx->fd, root, 400, "id required");
+    return 1;
+  }
+
+  sqlite3 *db = db_get_handle ();
+  sqlite3_stmt *st = NULL;
+  time_t now = time (NULL);
+
+  /* INSERT OR REPLACE into notice_seen (notice_id, player_id, seen_at) */ /* :contentReference[oaicite:6]{index=6} */
+  if (sqlite3_prepare_v2 (db,
+      "INSERT OR REPLACE INTO notice_seen (notice_id, player_id, seen_at) "
+      "VALUES (?1, ?2, ?3);", -1, &st, NULL) != SQLITE_OK) {
+    if (st) sqlite3_finalize (st);
+    send_enveloped_error (ctx->fd, root, 500, "db error");
+    return 1;
+  }
+  sqlite3_bind_int (st, 1, id);
+  sqlite3_bind_int64 (st, 2, (sqlite3_int64) ctx->player_id);
+  sqlite3_bind_int64 (st, 3, (sqlite3_int64) now);
+
+  int rc = sqlite3_step (st);
+  sqlite3_finalize (st);
+  if (rc != SQLITE_DONE) {
+    send_enveloped_error (ctx->fd, root, 500, "db error");
+    return 1;
+  }
+
+  /* Optional: return the updated row */
+  json_t *resp = json_pack ("{s:i, s:I}", "id", id, "seen_at", (json_int_t) now);
+  send_enveloped_ok (ctx->fd, root, "notice.acknowledged", resp);
+  return 0;
+}
+
 
 /* tiny local helpers (no new headers) */
 static int
@@ -390,8 +583,7 @@ comm_publish_sector_event (int sector_id, const char *event_name,
 
 
 /* Mandatory broadcast (ignores subscriptions) */
-static void
-broadcast_system_notice (int notice_id,
+static void broadcast_system_notice (int notice_id,
 			 const char *title,
 			 const char *body,
 			 const char *severity,
@@ -632,47 +824,328 @@ cmd_chat_history (client_ctx_t *ctx, json_t *root)
   return niy (ctx, root, "chat.history");
 }
 
-/* ===================== mail.* ===================== */
+/* /\* ===================== mail.* ===================== *\/ */
 
 int
 cmd_mail_send (client_ctx_t *ctx, json_t *root)
 {
-  if (!require_auth (ctx, root))
+  if (!require_auth(ctx, root)) return 0;
+
+  sqlite3 *db = db_get_handle();
+  json_t *data = json_object_get(root, "data");
+  if (!data) { send_enveloped_error(ctx->fd, root, 1300, "Invalid request schema"); return 0; } /* 1300 */
+
+  /* Parse inputs */
+  const char *to_name = NULL, *subject = NULL, *body = NULL, *idem = NULL;
+  int to_id = 0;
+
+  json_t *j_to_id = json_object_get(data, "to_id");
+  if (j_to_id && json_is_integer(j_to_id)) to_id = (int)json_integer_value(j_to_id);
+
+  json_t *j_to = json_object_get(data, "to");
+  if (j_to && json_is_string(j_to)) to_name = json_string_value(j_to);
+
+  json_t *j_subject = json_object_get(data, "subject");
+  if (j_subject && json_is_string(j_subject)) subject = json_string_value(j_subject);
+
+  json_t *j_body = json_object_get(data, "body");
+  if (j_body && json_is_string(j_body)) body = json_string_value(j_body);
+
+  json_t *j_idem = json_object_get(data, "idempotency_key");
+  if (j_idem && json_is_string(j_idem)) idem = json_string_value(j_idem);
+
+  /* Basic validation */
+  if ((!to_name && to_id <= 0) || !body) {
+    send_enveloped_error(ctx->fd, root, 1301, "Missing required field: to/to_id and body"); /* 1301 */
     return 0;
-  // TODO: parse {to, subject?, body}, enqueue/persist
-  return niy (ctx, root, "mail.send");
+  }
+
+  /* Resolve recipient by name if needed (players.name exists) */
+  if (to_id <= 0 && to_name) {
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2(db, "SELECT id FROM players WHERE name = ?1 COLLATE NOCASE LIMIT 1;", -1, &st, NULL) != SQLITE_OK) {
+      if (st) sqlite3_finalize(st);
+      send_enveloped_error(ctx->fd, root, 500, "db error");
+      return 0;
+    }
+    sqlite3_bind_text(st, 1, to_name, -1, SQLITE_TRANSIENT);
+    if (sqlite3_step(st) == SQLITE_ROW) {
+      to_id = sqlite3_column_int(st, 0);
+    }
+    sqlite3_finalize(st);
+    if (to_id <= 0) { send_enveloped_error(ctx->fd, root, 1900, "Recipient not found"); return 0; } /* 1900 */
+  }
+
+  /* Check if recipient has blocked the sender (player_block) */
+  {
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2(db,
+          "SELECT 1 FROM player_block WHERE blocker_id=?1 AND blocked_id=?2 LIMIT 1;", -1, &st, NULL) != SQLITE_OK) {
+      if (st) sqlite3_finalize(st);
+      send_enveloped_error(ctx->fd, root, 500, "db error");
+      return 0;
+    }
+    sqlite3_bind_int(st, 1, to_id);
+    sqlite3_bind_int(st, 2, ctx->player_id);
+    int blocked = (sqlite3_step(st) == SQLITE_ROW);
+    sqlite3_finalize(st);
+    if (blocked) { send_enveloped_error(ctx->fd, root, 1901, "Muted or blocked"); return 0; } /* 1901 */
+  }
+
+  /* Idempotency: if idem_key+recipient exists, return existing id (mail has unique index) */
+  int mail_id = 0;
+  if (idem && *idem) {
+    sqlite3_stmt *chk = NULL;
+    if (sqlite3_prepare_v2(db,
+          "SELECT id FROM mail WHERE idempotency_key=?1 AND recipient_id=?2 LIMIT 1;", -1, &chk, NULL) == SQLITE_OK) {
+      sqlite3_bind_text(chk, 1, idem, -1, SQLITE_TRANSIENT);
+      sqlite3_bind_int(chk, 2, to_id);
+      if (sqlite3_step(chk) == SQLITE_ROW) {
+        mail_id = sqlite3_column_int(chk, 0);
+      }
+    }
+    if (chk) sqlite3_finalize(chk);
+  }
+
+  /* Insert if not already present */
+  if (mail_id == 0) {
+    sqlite3_stmt *ins = NULL;
+    if (sqlite3_prepare_v2(db,
+          "INSERT INTO mail(sender_id, recipient_id, subject, body, idempotency_key) "
+          "VALUES(?1,?2,?3,?4,?5);", -1, &ins, NULL) != SQLITE_OK) {
+      if (ins) sqlite3_finalize(ins);
+      send_enveloped_error(ctx->fd, root, 500, "db error");
+      return 0;
+    }
+    sqlite3_bind_int(ins, 1, ctx->player_id);
+    sqlite3_bind_int(ins, 2, to_id);
+    if (subject) sqlite3_bind_text(ins, 3, subject, -1, SQLITE_TRANSIENT); else sqlite3_bind_null(ins, 3);
+    sqlite3_bind_text(ins, 4, body, -1, SQLITE_TRANSIENT);
+    if (idem && *idem) sqlite3_bind_text(ins, 5, idem, -1, SQLITE_TRANSIENT); else sqlite3_bind_null(ins, 5);
+
+    if (sqlite3_step(ins) != SQLITE_DONE) {
+      /* Unique constraint on (idempotency_key, recipient_id) would hit here on replay */
+      sqlite3_finalize(ins);
+      /* Try to fetch id in case of constraint race */
+      if (idem && *idem) {
+        sqlite3_stmt *chk = NULL;
+        if (sqlite3_prepare_v2(db,
+              "SELECT id FROM mail WHERE idempotency_key=?1 AND recipient_id=?2 LIMIT 1;", -1, &chk, NULL) == SQLITE_OK) {
+          sqlite3_bind_text(chk, 1, idem, -1, SQLITE_TRANSIENT);
+          sqlite3_bind_int(chk, 2, to_id);
+          if (sqlite3_step(chk) == SQLITE_ROW) mail_id = sqlite3_column_int(chk, 0);
+        }
+        if (chk) sqlite3_finalize(chk);
+      }
+      if (mail_id == 0) { send_enveloped_error(ctx->fd, root, 500, "db error"); return 0; }
+    } else {
+      mail_id = (int)sqlite3_last_insert_rowid(db);
+      sqlite3_finalize(ins);
+    }
+  }
+
+  /* Respond */
+  json_t *resp = json_pack("{s:i}", "id", mail_id);
+  send_enveloped_ok(ctx->fd, root, "mail.sent", resp);
+  return 0;
 }
 
+
+/* ==================== mail.inbox ==================== */
+/* Input:  { "limit": 50?, "after_id": int? } (optional cursor)
+ * Output: type "mail.inbox_v1" { items:[{id,thread_id,sender_id,subject,sent_at,read_at}], next_after_id? }
+ */
 int
 cmd_mail_inbox (client_ctx_t *ctx, json_t *root)
 {
-  if (!require_auth (ctx, root))
+  sqlite3 *db = db_get_handle();
+  json_t *data = json_object_get(root, "data");
+  int limit = 50;
+  int after_id = 0;
+
+  if (data) {
+    json_t *jlim = json_object_get(data, "limit");
+    if (jlim && json_is_integer(jlim)) limit = (int)json_integer_value(jlim);
+    json_t *jaft = json_object_get(data, "after_id");
+    if (jaft && json_is_integer(jaft)) after_id = (int)json_integer_value(jaft);
+  }
+  if (limit <= 0 || limit > 200) limit = 50;
+
+  const char *SQL =
+    "SELECT id, thread_id, sender_id, subject, sent_at, read_at "
+    "FROM mail "
+    "WHERE recipient_id=?1 AND deleted=0 AND archived=0 "
+    "  AND (?2=0 OR id<?2) "               /* simple descending-id cursor */
+    "ORDER BY id DESC "
+    "LIMIT ?3;";                           /* uses idx_mail_inbox */
+
+  sqlite3_stmt *st = NULL;
+  if (sqlite3_prepare_v2(db, SQL, -1, &st, NULL) != SQLITE_OK) {
+    if (st) sqlite3_finalize(st);
+    send_enveloped_error(ctx->fd, root, 500, "db error");
     return 0;
-  // TODO: list inbox for ctx->player_id
-  return niy (ctx, root, "mail.inbox");
+  }
+  sqlite3_bind_int64(st, 1, (sqlite3_int64)ctx->player_id);
+  sqlite3_bind_int(st, 2, after_id);
+  sqlite3_bind_int(st, 3, limit);
+
+  json_t *items = json_array();
+  int last_id = 0;
+  while (sqlite3_step(st) == SQLITE_ROW) {
+    int id = sqlite3_column_int(st, 0);
+    int thread_id = sqlite3_column_type(st,1)==SQLITE_NULL ? 0 : sqlite3_column_int(st,1);
+    int sender_id = sqlite3_column_int(st, 2);
+    const char *subject = (const char*)sqlite3_column_text(st, 3);
+    const char *sent_at = (const char*)sqlite3_column_text(st, 4);
+    const char *read_at = (const char*)sqlite3_column_text(st, 5);
+
+    json_t *row = json_pack("{s:i, s:i, s:i, s:s, s:s}",
+      "id", id,
+      "thread_id", thread_id,
+      "sender_id", sender_id,
+      "subject", subject ? subject : "",
+      "sent_at", sent_at ? sent_at : "");
+    if (read_at) json_object_set_new(row, "read_at", json_string(read_at));
+    json_array_append_new(items, row);
+    last_id = id;
+  }
+  sqlite3_finalize(st);
+
+  json_t *resp = json_pack("{s:o}", "items", items);
+  if (json_array_size(items) == (size_t)limit) {
+    json_object_set_new(resp, "next_after_id", json_integer(last_id));
+  }
+  send_enveloped_ok(ctx->fd, root, "mail.inbox_v1", resp);
+  return 0;
 }
 
+/* ==================== mail.read ==================== */
+/* Input:  { "id": int }
+ * Output: type "mail.read_v1" { id, thread_id, sender_id, subject, body, sent_at, read_at }
+ * Side-effect: set read_at=now for the recipient (if not already set).
+ */
 int
 cmd_mail_read (client_ctx_t *ctx, json_t *root)
 {
-  if (!require_auth (ctx, root))
+  sqlite3 *db = db_get_handle();
+  json_t *data = json_object_get(root, "data");
+  if (!data) send_enveloped_error(ctx->fd, root, 1300, "Invalid request schema"); /* PROTOCOL 1300 */ /* :contentReference[oaicite:2]{index=2} */
+
+  int id = (int)json_integer_value(json_object_get(data, "id"));
+  if (id <= 0) send_enveloped_error(ctx->fd, root, 1301, "Missing required field: id"); /* 1301 */ /* :contentReference[oaicite:3]{index=3} */
+
+  /* Load and verify ownership */
+  const char *SEL =
+    "SELECT id, thread_id, sender_id, subject, body, sent_at, read_at "
+    "FROM mail WHERE id=?1 AND recipient_id=?2 AND deleted=0;";
+  sqlite3_stmt *st = NULL;
+  if (sqlite3_prepare_v2(db, SEL, -1, &st, NULL) != SQLITE_OK) {
+    if (st) sqlite3_finalize(st);
+    send_enveloped_error(ctx->fd, root, 500, "db error");
     return 0;
-  // TODO: parse {mail_id}, return message payload
-  return niy (ctx, root, "mail.read");
+  }
+  sqlite3_bind_int(st, 1, id);
+  sqlite3_bind_int64(st, 2, (sqlite3_int64)ctx->player_id);
+
+  if (sqlite3_step(st) != SQLITE_ROW) {
+    sqlite3_finalize(st);
+    send_enveloped_error(ctx->fd, root, 1900, "Recipient not found or message not yours"); /* Chat/Mail 1900 bucket */ /* :contentReference[oaicite:4]{index=4} */
+    return 0;
+  }
+
+  int thread_id = sqlite3_column_type(st,1)==SQLITE_NULL ? 0 : sqlite3_column_int(st,1);
+  int sender_id = sqlite3_column_int(st, 2);
+  const char *subject = (const char*)sqlite3_column_text(st, 3);
+  const char *body    = (const char*)sqlite3_column_text(st, 4);
+  const char *sent_at = (const char*)sqlite3_column_text(st, 5);
+  const char *read_at = (const char*)sqlite3_column_text(st, 6);
+  sqlite3_finalize(st);
+
+  /* Mark read if needed */
+  if (!read_at) {
+    sqlite3_stmt *up = NULL;
+    if (sqlite3_prepare_v2(db, "UPDATE mail SET read_at=strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id=?1;", -1, &up, NULL) == SQLITE_OK) {
+      sqlite3_bind_int(up, 1, id);
+      (void)sqlite3_step(up);
+    }
+    if (up) sqlite3_finalize(up);
+  }
+
+  json_t *resp = json_pack("{s:i,s:i,s:i,s:s,s:s,s:s}",
+                           "id", id,
+                           "thread_id", thread_id,
+                           "sender_id", sender_id,
+                           "subject", subject ? subject : "",
+                           "body", body ? body : "",
+                           "sent_at", sent_at ? sent_at : "");
+  if (read_at) {
+    json_object_set_new(resp, "read_at", json_string(read_at));
+  } else {
+    /* echo now-ish for UX; server truth is in DB */
+    time_t now = time(NULL);
+    char iso[32]; strftime(iso, sizeof iso, "%Y-%m-%dT%H:%M:%SZ", gmtime(&now));
+    json_object_set_new(resp, "read_at", json_string(iso));
+  }
+
+  send_enveloped_ok(ctx->fd, root, "mail.read_v1", resp);
+  return 0;
 }
 
+/* ==================== mail.delete ==================== */
+/* Input:  { "ids":[int,...] }  (soft delete; only own messages) */
+/* Output: type "mail.deleted" { count:int } */
 int
 cmd_mail_delete (client_ctx_t *ctx, json_t *root)
 {
-  if (!require_auth (ctx, root))
+  sqlite3 *db = db_get_handle();
+  json_t *data = json_object_get(root, "data");
+  json_t *ids  = data ? json_object_get(data, "ids") : NULL;
+  if (!ids || !json_is_array(ids)) {
+    send_enveloped_error(ctx->fd, root, 1300, "Invalid request schema: ids[] required"); /* :contentReference[oaicite:5]{index=5} */
     return 0;
-  // TODO: parse {mail_id}, delete/mark
-  return niy (ctx, root, "mail.delete");
+  }
+
+  /* Build a parameterised IN (...) safely (<= 200 ids) */
+  size_t n = json_array_size(ids);
+  if (n == 0) send_enveloped_ok(ctx->fd, root, "mail.deleted", json_pack("{s:i}","count",0));
+  if (n > 200) send_enveloped_error(ctx->fd, root, 1305, "Too many bulk items"); /* 1305 */ /* :contentReference[oaicite:6]{index=6} */
+
+  /* Create: UPDATE mail SET deleted=1 WHERE recipient_id=? AND id IN (?,?,...) */
+  char sql[1024];
+  char *p = sql;
+  p += snprintf(p, sizeof(sql), "UPDATE mail SET deleted=1 WHERE recipient_id=?1 AND id IN (");
+  for (size_t i=0;i<n;i++) {
+    p += snprintf(p, (size_t)(sql+sizeof(sql)-p), (i? ",?%zu" : "?%zu"), i+2);
+  }
+  p += snprintf(p, (size_t)(sql+sizeof(sql)-p), ");");
+
+  sqlite3_stmt *st = NULL;
+  if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK) {
+    if (st) sqlite3_finalize(st);
+    send_enveloped_error(ctx->fd, root, 500, "db error");
+    return 0;
+  }
+  sqlite3_bind_int64(st, 1, (sqlite3_int64)ctx->player_id);
+  for (size_t i=0;i<n;i++) {
+    sqlite3_bind_int(st, (int)i+2, (int)json_integer_value(json_array_get(ids, i)));
+  }
+
+  int rc = sqlite3_step(st);
+  int changes = sqlite3_changes(db);
+  sqlite3_finalize(st);
+  if (rc != SQLITE_DONE)
+    {
+    send_enveloped_error(ctx->fd, root, 500, "db error");
+    return 0;
+    }
+
+  json_t *resp = json_pack("{s:i}", "count", changes);
+  send_enveloped_ok(ctx->fd, root, "mail.deleted", resp);
+  return 0;
 }
 
-/* ================== subscribe.* =================== */
 
-
+/////////////////////////////////////////////////////////
 
 
 static int
