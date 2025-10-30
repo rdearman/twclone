@@ -80,6 +80,72 @@ void send_enveloped_ok (int fd, json_t * root, const char *type,
 json_t *build_sector_info_json (int sector_id);
 static int64_t g_next_notice_ttl_sweep = 0;
 
+
+
+static const cmd_desc_t k_supported_cmds_fallback[] = {
+  // --- Session / System ---
+  {"session.hello", "Handshake / hello"},
+  {"session.ping", "Ping"},
+  {"session.goodbye", "Client disconnect"},
+
+  {"system.schema_list", "List schema namespaces"},
+  {"system.describe_schema", "Describe commands in a schema"},
+  {"system.capabilities", "Feature flags, schemas, counts"},
+  {"system.cmd_list", "Flat list of all commands"},
+
+  // --- Auth ---
+  {"auth.login", "Authenticate"},
+  {"auth.logout", "Log out"},
+  {"auth.mfa", "Second-factor code"},
+  {"auth.register", "Create a new player"},
+
+  // --- Players / Ship ---
+  {"players.me", "Current player info"},
+  {"players.online", "List online players"},
+  {"players.refresh", "Refresh player state"},
+  {"ship.info", "Ship information"},
+
+  // --- Sector / Movement ---
+  {"sector.info", "Describe current sector"},
+  {"sector.set_beacon", "Set or clear sector beacon"},
+
+  {"move.warp", "Warp to sector"},
+  {"move.scan", "Scan adjacent sectors"},
+  {"move.pathfind", "Find path between sectors"},
+  {"move.force_move", "Admin: force-move a ship"},
+
+  // --- Trade / Commerce (Extended) ---
+  {"trade.port_info", "Port prices/stock in sector"},
+  {"trade.buy", "Buy commodity from port"},
+  {"trade.sell", "Sell commodity to port"},
+  {"trade.quote", "Get a quote for a trade action (Optional)"},
+  {"trade.offer", "Create a private player-to-player trade offer"},
+  {"trade.accept", "Accept a private trade offer"},
+  {"trade.cancel", "Cancel a pending trade offer"},
+  {"trade.history", "View recent trade transactions"},
+  {"trade.jettison", "Dump cargo into space (Optional)"},
+
+  // --- News ---
+  {"news.read", "Get the daily news feed"},
+};
+
+// Weak fallback: satisfies server_envelope.o at link time.
+// If server_loop.c defines a strong version, it will override this.
+__attribute__((weak))
+     void
+       loop_get_supported_commands (const cmd_desc_t **out_tbl, size_t *out_n)
+{
+  if (out_tbl)
+    *out_tbl = k_supported_cmds_fallback;
+  if (out_n)
+    *out_n =
+      sizeof (k_supported_cmds_fallback) /
+      sizeof (k_supported_cmds_fallback[0]);
+}
+
+
+
+
 static inline uint64_t
 monotonic_millis (void)
 {
@@ -244,59 +310,6 @@ server_deliver_to_player (int player_id, const char *event_type, json_t *data)
   pthread_mutex_unlock (&g_clients_mu);
 
   return (delivered > 0) ? 0 : -1;
-}
-
-
-static const cmd_desc_t k_supported_cmds_fallback[] = {
-  // --- session / system ---
-  {"session.hello", "Handshake / hello"},
-  {"session.ping", "Ping"},
-  {"session.goodbye", "Client disconnect"},
-
-  {"system.schema_list", "List schema namespaces"},
-  {"system.describe_schema", "Describe commands in a schema"},
-  {"system.capabilities", "Feature flags, schemas, counts"},
-  {"system.cmd_list", "Flat list of all commands"},
-
-  // --- auth ---
-  {"auth.login", "Authenticate"},
-  {"auth.logout", "Log out"},
-  {"auth.mfa", "Second-factor code"},
-  {"auth.register", "Create a new player"},
-
-  // --- players / ship ---
-  {"players.me", "Current player info"},
-  {"players.online", "List online players"},
-  {"players.refresh", "Refresh player state"},
-  {"ship.info", "Ship information"},
-
-  // --- sector / movement ---
-  {"sector.info", "Describe current sector"},
-  {"sector.set_beacon", "Set or clear sector beacon"},
-
-  {"move.warp", "Warp to sector"},
-  {"move.scan", "Scan adjacent sectors"},
-  {"move.pathfind", "Find path between sectors"},
-  {"move.force_move", "Admin: force-move a ship"},
-
-  // --- trade ---
-  {"trade.port_info", "Port prices/stock in sector"},
-  {"trade.buy", "Buy from port"},
-  {"trade.sell", "Sell to port"},
-};
-
-// Weak fallback: satisfies server_envelope.o at link time.
-// If server_loop.c defines a strong version, it will override this.
-__attribute__((weak))
-     void
-       loop_get_supported_commands (const cmd_desc_t **out_tbl, size_t *out_n)
-{
-  if (out_tbl)
-    *out_tbl = k_supported_cmds_fallback;
-  if (out_n)
-    *out_n =
-      sizeof (k_supported_cmds_fallback) /
-      sizeof (k_supported_cmds_fallback[0]);
 }
 
 
@@ -682,6 +695,64 @@ process_message (client_ctx_t *ctx, json_t *root)
       cmd_player_get_notes (ctx, root);
     }
 
+  else if (streq (cmd, "player.get_settings"))
+    {
+      cmd_player_get_settings (ctx, root);
+    }
+  else if (streq (cmd, "player.set_settings"))
+    {
+      cmd_player_set_settings (ctx, root);
+    }
+
+  else if (streq (cmd, "player.get_prefs"))
+    {
+      cmd_player_get_prefs (ctx, root);
+    }
+  else if (streq (cmd, "player.set_prefs"))
+    {
+      cmd_player_set_prefs (ctx, root);
+    }
+
+  else if (streq (cmd, "player.get_topics")
+	   || streq (cmd, "player.get_subscriptions"))
+    {
+      cmd_player_get_topics (ctx, root);
+    }
+  else if (streq (cmd, "player.set_topics")
+	   || streq (cmd, "player.set_subscriptions"))
+    {
+      cmd_player_set_topics (ctx, root);
+    }
+
+  else if (streq (cmd, "player.get_bookmarks")
+	   || streq (cmd, "nav.bookmark.list"))
+    {
+      cmd_player_get_bookmarks (ctx, root);
+    }
+  else if (streq (cmd, "player.set_bookmarks") ||
+	   streq (cmd, "nav.bookmark.set") ||
+	   streq (cmd, "nav.bookmark.add") ||
+	   streq (cmd, "nav.bookmark.remove"))
+    {
+      cmd_player_set_bookmarks (ctx, root);
+    }
+
+  else if (streq (cmd, "player.get_avoids") || streq (cmd, "nav.avoid.list"))
+    {
+      cmd_player_get_avoids (ctx, root);
+    }
+  else if (streq (cmd, "player.set_avoids") ||
+	   streq (cmd, "nav.avoid.set") ||
+	   streq (cmd, "nav.avoid.add") || streq (cmd, "nav.avoid.remove"))
+    {
+      cmd_player_set_avoids (ctx, root);
+    }
+
+  else if (streq (cmd, "player.get_notes") || streq (cmd, "notes.list"))
+    {
+      cmd_player_get_notes (ctx, root);
+    }
+
 /* ---------- SHIP ---------- */
   else if (!strcmp (c, "ship.inspect"))
     {
@@ -908,7 +979,13 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
     rc = cmd_notice_ack(ctx, root);
     }
-  
+/* ---------- NEWS ---------- */
+
+  else if (strcmp(c, "news.read") == 0)
+    {
+      rc = cmd_get_news(ctx, root);
+    }
+    
 /* ---------- SUBSCRIBE ---------- */
   else if (!strcmp (c, "subscribe.add"))
     {
@@ -941,65 +1018,6 @@ process_message (client_ctx_t *ctx, json_t *root)
   else if (!strcmp (c, "admin.shutdown_warning"))
     {
       rc = cmd_admin_shutdown_warning (ctx, root);	/* NIY stub */
-    }
-/* ... PLAYER ... */
-
-  else if (streq (cmd, "player.get_settings"))
-    {
-      cmd_player_get_settings (ctx, root);
-    }
-  else if (streq (cmd, "player.set_settings"))
-    {
-      cmd_player_set_settings (ctx, root);
-    }
-
-  else if (streq (cmd, "player.get_prefs"))
-    {
-      cmd_player_get_prefs (ctx, root);
-    }
-  else if (streq (cmd, "player.set_prefs"))
-    {
-      cmd_player_set_prefs (ctx, root);
-    }
-
-  else if (streq (cmd, "player.get_topics")
-	   || streq (cmd, "player.get_subscriptions"))
-    {
-      cmd_player_get_topics (ctx, root);
-    }
-  else if (streq (cmd, "player.set_topics")
-	   || streq (cmd, "player.set_subscriptions"))
-    {
-      cmd_player_set_topics (ctx, root);
-    }
-
-  else if (streq (cmd, "player.get_bookmarks")
-	   || streq (cmd, "nav.bookmark.list"))
-    {
-      cmd_player_get_bookmarks (ctx, root);
-    }
-  else if (streq (cmd, "player.set_bookmarks") ||
-	   streq (cmd, "nav.bookmark.set") ||
-	   streq (cmd, "nav.bookmark.add") ||
-	   streq (cmd, "nav.bookmark.remove"))
-    {
-      cmd_player_set_bookmarks (ctx, root);
-    }
-
-  else if (streq (cmd, "player.get_avoids") || streq (cmd, "nav.avoid.list"))
-    {
-      cmd_player_get_avoids (ctx, root);
-    }
-  else if (streq (cmd, "player.set_avoids") ||
-	   streq (cmd, "nav.avoid.set") ||
-	   streq (cmd, "nav.avoid.add") || streq (cmd, "nav.avoid.remove"))
-    {
-      cmd_player_set_avoids (ctx, root);
-    }
-
-  else if (streq (cmd, "player.get_notes") || streq (cmd, "notes.list"))
-    {
-      cmd_player_get_notes (ctx, root);
     }
 
   /* ---------- S2S ---------- */

@@ -23,3 +23,4 @@ int h_terra_replenish(sqlite3 *db, int64_t now_s);
 int h_port_reprice(sqlite3 *db, int64_t now_s);
 int h_reset_turns_for_player(sqlite3 *db, int64_t now_s);
 int h_port_price_drift(sqlite3 *db, int64_t now_s);
+int h_news_collator(void);

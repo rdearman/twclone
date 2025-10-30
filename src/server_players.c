@@ -1544,3 +1544,66 @@ cmd_player_get_settings (client_ctx_t *ctx, json_t *root)
   send_enveloped_ok (ctx->fd, root, "player.settings_v1", data);
   return 0;
 }
+
+
+#include <sqlite3.h>
+#include <jansson.h>
+#include <time.h>
+// ... include your other headers ...
+
+int cmd_get_news (client_ctx_t *ctx, json_t *root)
+{
+  sqlite3 *db = db_get_handle();
+  sqlite3_stmt *stmt = NULL;
+  int rc = SQLITE_ERROR;
+
+  // 1. Basic check
+  if (ctx->player_id <= 0) {
+      // send_enveloped_refused is assumed to be available
+      send_enveloped_refused(ctx->fd, root, 1401, "Not authenticated", NULL);
+      return 0;
+  }
+
+  // 2. Query to retrieve news (ordered newest first, non-expired)
+  const char *SQL = 
+    "SELECT published_ts, news_category, article_text "
+    "FROM news_feed "
+    "WHERE expiration_ts > ? " 
+    "ORDER BY published_ts DESC, news_id DESC "
+    "LIMIT 50;"; // Limit results to a reasonable number (e.g., 50)
+    
+  json_t *news_array = json_array();
+  long long current_time = (long long)time(NULL);
+
+  // 3. Prepare and Bind
+  rc = sqlite3_prepare_v2(db, SQL, -1, &stmt, NULL);
+  if (rc != SQLITE_OK) {
+      // Handle error...
+      json_decref(news_array);
+      send_enveloped_error(ctx->fd, root, 1500, "Database error");
+      return 0;
+  }
+  sqlite3_bind_int64(stmt, 1, current_time); // Bind current time for expiry check
+
+  // 4. Loop and Build JSON Array
+  while (sqlite3_step(stmt) == SQLITE_ROW) {
+      long long pub_ts = sqlite3_column_int64(stmt, 0);
+      const char *category = (const char *)sqlite3_column_text(stmt, 1);
+      const char *article = (const char *)sqlite3_column_text(stmt, 2);
+
+      json_array_append_new(news_array,
+                            json_pack("{s:i, s:s, s:s}",
+                                      "ts", pub_ts,
+                                      "category", category,
+                                      "article", article));
+  }
+  
+  sqlite3_finalize(stmt);
+
+  // 5. Build and Send Response
+  json_t *payload = json_pack("{s:O}", "news", news_array); 
+  send_enveloped_ok(ctx->fd, root, "news.list", payload);
+
+  json_decref(payload);
+  return 0;
+}

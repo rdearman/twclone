@@ -25,6 +25,11 @@
 #define MAX_UNPROTECTED_SECTOR 999
 #define RANGE_SIZE (MAX_UNPROTECTED_SECTOR - MIN_UNPROTECTED_SECTOR + 1)
 
+// --- Configuration ---
+// News articles will expire after 7 days (604800 seconds)
+#define NEWS_EXPIRATION_SECONDS 604800L 
+#define MAX_ARTICLE_LEN 512
+
 
 static inline uint64_t
 monotonic_millis (void)
@@ -81,6 +86,8 @@ static entry_t REG[] = {
   {"broadcast_ttl_cleanup", h_broadcast_ttl_cleanup},
   {"traps_process", h_traps_process},
   {"npc_step", h_npc_step},
+  {"port_price_drift", h_port_price_drift},
+  {"news_collator", h_news_collator},  
 };
 
 static int g_reg_inited = 0;
@@ -1723,4 +1730,240 @@ h_port_reprice (sqlite3 *db, int64_t now_s)
   LOGI ("port_reprice: ok");
   unlock (db, "port_reprice");
   return 0;
+}
+
+
+
+
+//////////////////////// NEWS BLOCK ////////////////////////
+
+// --- Helper Functions for Event Translation ---
+
+/**
+ * @brief Formats a combat.ship_destroyed event into a news article.
+ * @param payload The parsed JSON payload.
+ * @param sector_id The sector ID where the event occurred.
+ * @param out_category Output buffer for news category.
+ * @param out_article Output buffer for the final article text.
+ */
+static void format_ship_destroyed_news(json_t *payload, int sector_id, char *out_category, char *out_article)
+{
+    const char *ship_name = json_string_value(json_object_get(payload, "ship_name"));
+    const char *destroyed_by = json_string_value(json_object_get(payload, "destroyed_by"));
+    
+    // Default values if JSON is malformed
+    if (!ship_name) ship_name = "An Unknown Vessel";
+    if (!destroyed_by) destroyed_by = "Mysterious Forces";
+
+    // Set Category
+    snprintf(out_category, MAX_ARTICLE_LEN, "Combat");
+
+    // Format the news text
+    snprintf(out_article, MAX_ARTICLE_LEN,
+             "A major engagement was recorded in Sector %d: %s was destroyed by %s.",
+             sector_id, ship_name, destroyed_by);
+}
+
+/**
+ * @brief Formats a trade.large_sale event into a news article.
+ * @param payload The parsed JSON payload.
+ * @param actor_player_id The player ID initiating the event.
+ * @param out_category Output buffer for news category.
+ * @param out_article Output buffer for the final article text.
+ */
+static void format_large_sale_news(json_t *payload, int actor_player_id, char *out_category, char *out_article)
+{
+    const char *commodity = json_string_value(json_object_get(payload, "commodity"));
+    int units = (int)json_integer_value(json_object_get(payload, "units"));
+    
+    // In a full system, you would look up the player's name here:
+    // char *player_name = db_get_player_name(actor_player_id);
+    const char *player_name = "A Prominent Trader";
+    if (actor_player_id > 0) {
+        // Simple mock for a real player name
+        // player_name = db_get_player_name(actor_player_id); 
+    }
+
+    if (!commodity) commodity = "Unknown Goods";
+
+    snprintf(out_category, MAX_ARTICLE_LEN, "Trade");
+    
+    snprintf(out_article, MAX_ARTICLE_LEN,
+             "%s executed a massive sale of %d units of %s, causing major market turbulence.",
+             player_name, units, commodity);
+}
+
+
+/**
+ * @brief Dispatches event to the appropriate formatter function.
+ * @return 1 if successfully collated and published, 0 otherwise.
+ */
+static int collate_single_event(sqlite3_stmt *insert_stmt, sqlite3_int64 event_id, 
+                                sqlite3_int64 ts, const char *type, int actor_player_id, 
+                                int sector_id, const char *payload_str)
+{
+    json_t *payload = NULL;
+    char category[MAX_ARTICLE_LEN] = {0};
+    char article[MAX_ARTICLE_LEN] = {0};
+    sqlite3_int64 published_ts = (sqlite3_int64)time(NULL);
+    sqlite3_int64 expiration_ts = published_ts + NEWS_EXPIRATION_SECONDS;
+    
+    int processed = 0; // Flag if we generated an article
+
+    // 1. Parse JSON Payload
+    payload = json_loads(payload_str, 0, NULL);
+    if (!payload) {
+        // fprintf(stderr, "Error parsing JSON payload for event %lld.\n", event_id);
+        return 0; 
+    }
+
+    // 2. Dispatch to the Correct Formatter based on 'type'
+    if (strcmp(type, "combat.ship_destroyed") == 0) {
+        format_ship_destroyed_news(payload, sector_id, category, article);
+        processed = 1;
+    } else if (strcmp(type, "trade.large_sale") == 0) {
+        format_large_sale_news(payload, actor_player_id, category, article);
+        processed = 1;
+    } else if (strcmp(type, "lottery.winner") == 0) {
+        snprintf(category, MAX_ARTICLE_LEN, "System");
+        snprintf(article, MAX_ARTICLE_LEN, 
+                 "The Sector Lottery jackpot has been claimed by a lucky player! Check the system logs for details.");
+        processed = 1;
+    } 
+    // Add more types here: bounty.updated, ports.destroyed, etc.
+    
+    // 3. Insert into news_feed if an article was generated
+    if (processed) {
+        // Reset and bind parameters to the INSERT INTO news_feed statement
+        sqlite3_reset(insert_stmt);
+        sqlite3_bind_int64(insert_stmt, 1, published_ts);
+        sqlite3_bind_int64(insert_stmt, 2, expiration_ts);
+        sqlite3_bind_text(insert_stmt, 3, category, -1, SQLITE_STATIC);
+        sqlite3_bind_text(insert_stmt, 4, article, -1, SQLITE_STATIC);
+        
+        // The source_ids field is just the single event ID for now (JSON array "[ID]")
+        char source_id_json[64];
+        snprintf(source_id_json, sizeof(source_id_json), "[%lld]", event_id);
+        sqlite3_bind_text(insert_stmt, 5, source_id_json, -1, SQLITE_TRANSIENT);
+        
+        // Execute insert
+        if (sqlite3_step(insert_stmt) != SQLITE_DONE) {
+            // fprintf(stderr, "DB Error (news_feed insert): %s\n", sqlite3_errmsg(db_get_handle()));
+            processed = 0; // Insertion failed
+        }
+    }
+
+    json_decref(payload);
+    return processed;
+}
+
+
+// --- Main Cron Handler ---
+
+int h_news_collator(void)
+{
+    sqlite3 *db = db_get_handle();
+    sqlite3_stmt *select_stmt = NULL;
+    sqlite3_stmt *insert_stmt = NULL;
+    int rc = SQLITE_OK;
+    sqlite3_int64 current_time = (sqlite3_int64)time(NULL);
+    
+    // --- 0. SQL Definitions ---
+    // 1. SELECT: Get all unprocessed events
+    const char *SELECT_UNPROCESSED_SQL = 
+        "SELECT id, ts, type, actor_player_id, sector_id, payload "
+        "FROM engine_events WHERE processed_at IS NULL ORDER BY ts ASC, id ASC;";
+        
+    // 2. INSERT: Insert into the news_feed table (fields: published_ts, expiration_ts, news_category, article_text, source_ids)
+    const char *INSERT_NEWS_SQL = 
+        "INSERT INTO news_feed (published_ts, expiration_ts, news_category, article_text, source_ids) "
+        "VALUES (?, ?, ?, ?, ?);";
+        
+    // 3. DELETE: Clean up expired news
+    const char *DELETE_EXPIRED_SQL = 
+        "DELETE FROM news_feed WHERE expiration_ts < ?;";
+        
+    // 4. UPDATE: Mark processed events (Done in a batch after the loop)
+    char update_sql_buffer[4096] = {0}; // Large enough for a batch update
+
+    // --- 1. Start Transaction ---
+    if (begin(db) != SQLITE_OK) {
+        // fprintf(stderr, "Failed to start transaction.\n");
+        return SQLITE_ERROR;
+    }
+
+    // --- 2. Clean Up Expired News ---
+    rc = sqlite3_prepare_v2(db, DELETE_EXPIRED_SQL, -1, &select_stmt, NULL);
+    if (rc == SQLITE_OK) {
+        sqlite3_bind_int64(select_stmt, 1, current_time);
+        sqlite3_step(select_stmt);
+    }
+    sqlite3_finalize(select_stmt);
+    select_stmt = NULL; // Reset for next use
+    
+    // --- 3. Prepare SELECT and INSERT Statements ---
+    rc = sqlite3_prepare_v2(db, SELECT_UNPROCESSED_SQL, -1, &select_stmt, NULL);
+    if (rc != SQLITE_OK) goto error_cleanup;
+
+    rc = sqlite3_prepare_v2(db, INSERT_NEWS_SQL, -1, &insert_stmt, NULL);
+    if (rc != SQLITE_OK) goto error_cleanup;
+
+    // --- 4. Process Events and Build Batch Update List ---
+    
+    // Buffer to hold IDs of successfully processed events for batch update
+    char batch_ids[2048] = {0}; 
+    size_t batch_len = 0;
+    int event_count = 0;
+    
+    while (sqlite3_step(select_stmt) == SQLITE_ROW) {
+        sqlite3_int64 id = sqlite3_column_int64(select_stmt, 0);
+        sqlite3_int64 ts = sqlite3_column_int64(select_stmt, 1);
+        const char *type = (const char *)sqlite3_column_text(select_stmt, 2);
+        int actor_id = sqlite3_column_int(select_stmt, 3);
+        int sector_id = sqlite3_column_int(select_stmt, 4);
+        const char *payload_str = (const char *)sqlite3_column_text(select_stmt, 5);
+
+        // Try to process and publish the event
+        if (collate_single_event(insert_stmt, id, ts, type, actor_id, sector_id, payload_str)) {
+            // Article created successfully. Add ID to batch list.
+            if (batch_len > 0) {
+                batch_len += snprintf(batch_ids + batch_len, sizeof(batch_ids) - batch_len, ",%lld", id);
+            } else {
+                batch_len += snprintf(batch_ids + batch_len, sizeof(batch_ids) - batch_len, "%lld", id);
+            }
+            event_count++;
+        }
+    }
+    
+    // --- 5. Mark Events as Processed (Batch Update) ---
+    if (event_count > 0) {
+        snprintf(update_sql_buffer, sizeof(update_sql_buffer),
+                 "UPDATE engine_events SET processed_at = %lld WHERE id IN (%s);",
+                 current_time, batch_ids);
+
+        if (sqlite3_exec(db, update_sql_buffer, NULL, NULL, NULL) != SQLITE_OK) {
+            // fprintf(stderr, "DB Error (batch update): %s\n", sqlite3_errmsg(db));
+            rc = SQLITE_ERROR;
+            goto error_cleanup;
+        }
+    }
+
+    // --- 6. Finalize Statements and Commit ---
+    sqlite3_finalize(select_stmt);
+    sqlite3_finalize(insert_stmt);
+    
+    if (commit(db) != SQLITE_OK) {
+        // fprintf(stderr, "Failed to commit transaction.\n");
+        rc = SQLITE_ERROR;
+        return rc;
+    }
+    
+    return SQLITE_OK;
+
+error_cleanup:
+    // fprintf(stderr, "News collation failed, rolling back.\n");
+    sqlite3_finalize(select_stmt);
+    sqlite3_finalize(insert_stmt);
+    rollback(db);
+    return rc;
 }

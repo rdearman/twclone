@@ -268,3 +268,29 @@ cmd_ship_info_compat (client_ctx_t *ctx, json_t *root)
   // Otherwise leave as-is; the handler name + docs indicate deprecation.
   return rc;
 }
+
+
+void process_ship_destruction(int attacker_id, int victim_id, const char *victim_ship_name, int sector)
+{
+    // 1. Build the JSON payload using the helper json_pack()
+    json_t *payload = json_pack("{s:s, s:i, s:i}", 
+                                "ship_name", victim_ship_name, 
+                                "victim_player_id", victim_id, 
+                                "attacker_player_id", attacker_id);
+    
+    // 2. Log the event
+    int rc = db_log_engine_event(
+        (long long)time(NULL), 
+        "combat.ship_destroyed", 
+        attacker_id, 
+        sector, 
+        payload
+    );
+    
+    // 3. Cleanup the JSON object
+    json_decref(payload);
+    
+    if (rc != SQLITE_OK) {
+        // Log event logging failure
+    }
+}

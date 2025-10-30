@@ -642,7 +642,8 @@ const char *create_table_sql[] = {
     "    sector INTEGER NOT NULL REFERENCES sectors(id), "
     "    player INTEGER REFERENCES players(id),  "
     "    corporation INTEGER NOT NULL DEFAULT 0,  "
-    "    asset_type INTEGER NOT NULL,  "  
+    "    asset_type INTEGER NOT NULL,  "
+    "    offensive_setting INTEGER NOT NULL,  "  
     "    quantity INTEGER, "
     "    ttl INTEGER,  " "    deployed_at INTEGER NOT NULL  " "); ",
 
@@ -1652,7 +1653,8 @@ static const char *ENGINE_BOOTSTRAP_SQL = "BEGIN IMMEDIATE;\n"
   "('autouncloak_sweeper','every:15m',NULL,strftime('%s','now'),1,NULL),\n"
   "('port_price_drift','every:10s',NULL,strftime('%s','now'),1,NULL),\n"
   "('npc_step','every:30s',NULL,strftime('%s','now'),1,NULL),\n"
-  "('broadcast_ttl_cleanup','every:5m',NULL,strftime('%s','now'),1,NULL);\n"
+  "('broadcast_ttl_cleanup','every:5m',NULL,strftime('%s','now'),1,NULL),\n"
+  "('news_collator','daily@06:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','6 hours'),1,NULL);\n"
   "\n"
   /* --- Server→Engine event rail (separate from your existing system_events) --- */
   "CREATE TABLE IF NOT EXISTS engine_events(\n"
@@ -1662,7 +1664,8 @@ static const char *ENGINE_BOOTSTRAP_SQL = "BEGIN IMMEDIATE;\n"
   "  actor_player_id INTEGER,\n"
   "  sector_id INTEGER,\n"
   "  payload TEXT NOT NULL,\n"
-  "  idem_key TEXT\n"
+  "  idem_key TEXT, \n"
+  " processed_at INTEGER\n"
   ");\n"
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_engine_events_idem ON engine_events(idem_key) WHERE idem_key IS NOT NULL;\n"
   "CREATE INDEX IF NOT EXISTS idx_engine_events_ts ON engine_events(ts);\n"
@@ -1710,6 +1713,19 @@ static const char *ENGINE_BOOTSTRAP_SQL = "BEGIN IMMEDIATE;\n"
   "  cmd_type TEXT NOT NULL,\n"
   "  correlation_id TEXT,\n"
   "  actor_player_id INTEGER,\n" "  details TEXT\n" ");\n" "\n" "COMMIT;\n"
+
+  "CREATE TABLE IF NOT EXISTS news_feed(   "
+  "  news_id INTEGER PRIMARY KEY,   "
+  "  published_ts INTEGER NOT NULL,   "
+  "  expiration_ts INTEGER NOT NULL,   "
+  "  news_category TEXT NOT NULL,   "
+  "  article_text TEXT NOT NULL,   "
+  "  source_ids TEXT -- JSON array of engine_events.id's that contributed to this article   "
+  ");   "
+
+  "CREATE INDEX ix_news_feed_pub_ts ON news_feed(published_ts);   "
+  "CREATE INDEX ix_news_feed_exp_ts ON news_feed(expiration_ts);   "
+  
   /* --- Human Readable view --- */
   "CREATE VIEW  IF NOT EXISTS cronjobs AS "
   "SELECT "
@@ -1717,7 +1733,10 @@ static const char *ENGINE_BOOTSTRAP_SQL = "BEGIN IMMEDIATE;\n"
   "    name, "
   "    datetime(next_due_at, 'unixepoch') AS next_due_utc, "
   "    datetime(last_run_at, 'unixepoch') AS last_run_utc "
-  "FROM " "    cron_tasks " "ORDER BY " "    next_due_at;\n ";
+  "FROM " "    cron_tasks " "ORDER BY " "    next_due_at;\n "
+
+
+  ;
 
 static const char *MIGRATE_A_SQL = "BEGIN IMMEDIATE;"
   /* engine_offset (consumer high-water mark) */
@@ -5867,3 +5886,72 @@ db_player_name (int64_t player_id, char **out)
   pthread_mutex_unlock (&db_mutex);
   return -1;			/* not found */
 }
+
+// Note: This SQL omits the 'id' (autoincrement) and 'processed_at' (defaults to NULL)
+static const char *INSERT_ENGINE_EVENT_SQL = 
+  "INSERT INTO engine_events (ts, type, actor_player_id, sector_id, payload) "
+  "VALUES (?, ?, ?, ?, ?);";
+
+
+int db_log_engine_event(long long ts, 
+                        const char *type, 
+                        int actor_player_id, 
+                        int sector_id, 
+                        json_t *payload)
+{
+  sqlite3 *db = db_get_handle();
+  sqlite3_stmt *stmt = NULL;
+  int rc = SQLITE_ERROR;
+
+  // 1. Convert the JSON payload object into a serialised string
+  char *payload_str = json_dumps(payload, JSON_COMPACT);
+  if (!payload_str) {
+      // fprintf(stderr, "Error: Failed to serialize JSON payload.\n");
+      return SQLITE_NOMEM; // No memory or serialization error
+  }
+
+  // 2. Prepare the statement
+  rc = sqlite3_prepare_v2(db, INSERT_ENGINE_EVENT_SQL, -1, &stmt, NULL);
+  if (rc != SQLITE_OK) {
+      // fprintf(stderr, "DB Error (prepare): %s\n", sqlite3_errmsg(db));
+      goto cleanup;
+  }
+
+  // 3. Bind parameters
+  sqlite3_bind_int64(stmt, 1, ts);
+  sqlite3_bind_text(stmt, 2, type, -1, SQLITE_STATIC);
+  
+  // Bind player/sector IDs, allowing 0 to be treated as NULL/unspecified
+  if (actor_player_id > 0) {
+      sqlite3_bind_int(stmt, 3, actor_player_id);
+  } else {
+      sqlite3_bind_null(stmt, 3);
+  }
+  
+  if (sector_id > 0) {
+      sqlite3_bind_int(stmt, 4, sector_id);
+  } else {
+      sqlite3_bind_null(stmt, 4);
+  }
+  
+  // Bind the JSON string (SQLITE_TRANSIENT copies the string, safe for us to free)
+  sqlite3_bind_text(stmt, 5, payload_str, -1, SQLITE_TRANSIENT);
+
+  // 4. Execute the statement
+  rc = sqlite3_step(stmt);
+  if (rc != SQLITE_DONE) {
+      // fprintf(stderr, "DB Error (step): %s\n", sqlite3_errmsg(db));
+      rc = SQLITE_ERROR; // Set a general error code for return
+  } else {
+      rc = SQLITE_OK; // Success
+  }
+
+cleanup:
+  // 5. Cleanup
+  sqlite3_finalize(stmt);
+  // Free the string created by json_dumps
+  free(payload_str);
+  
+  return rc;
+}
+

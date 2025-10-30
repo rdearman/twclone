@@ -39,6 +39,9 @@ extern "C"
   int h_deduct_ship_credits(struct sqlite3 *db, int player_id, int amount, int *new_balance);
   int h_deduct_bank_balance(struct sqlite3 *db, int player_id, int amount, int *new_balance);
   int h_update_ship_cargo(sqlite3 *db, int player_id, const char *commodity, int delta, int *new_qty_out);
+  int cmd_get_news (client_ctx_t *ctx, json_t *root);
+
+
   
 #ifdef __cplusplus
 }

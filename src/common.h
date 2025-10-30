@@ -100,7 +100,8 @@
 typedef enum {
     ASSET_MINE = 1,
     ASSET_FIGHTER = 2,
-    ASSET_BEACON = 3
+    ASSET_BEACON = 3,
+    ASSET_LIMPET_MINE = 4    
 } asset_type_t;
 
 

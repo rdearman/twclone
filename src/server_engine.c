@@ -76,6 +76,7 @@ static const CronHandler CRON_REGISTRY[] = {
   {"terra_replenish", h_terra_replenish},
   {"port_reprice", h_port_reprice},
   {"port_price_drift", h_port_price_drift},
+  {"news_collator", h_news_collator},  
   {NULL, NULL}
 };
 

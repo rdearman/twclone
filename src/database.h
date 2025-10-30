@@ -138,6 +138,7 @@ int db_player_name (int64_t player_id, char **out);
 int db_chain_traps_and_bridge (int fedspace_max /* typically 10 */ );
 int db_rand_npc_shipname (char *out, size_t out_sz);
 void db_handle_close_and_reset (void);
+int db_log_engine_event(long long ts, const char *type, int actor_player_id, int sector_id, json_t *payload);
 
 
 #endif /* DATABASE_H */
