@@ -414,6 +414,7 @@ const char *create_table_sql[] = {
     "   cloaked TIMESTAMP,  "
     "   ported INTEGER,  "
     "   onplanet INTEGER,  "
+    "   CONSTRAINT check_current_cargo_limit CHECK ( (colonists + equipment + organics + ore) <= holds_used ), "
     "   FOREIGN KEY(type_id) REFERENCES shiptypes(id),  "
     "   FOREIGN KEY(location) REFERENCES sectors(id)  " " );  ",
 
@@ -1554,7 +1555,7 @@ const char *insert_default_sql[] = {
   "ALTER TABLE planets ADD COLUMN terraform_turns_left INTEGER NOT NULL DEFAULT 1;",
 
   "INSERT INTO ships (name, type_id, attack, holds_used, mines, limpets, fighters, genesis, photons, location, shields, beacons, colonists, equipment, organics, ore, flags, cloaking_devices, cloaked, ported, onplanet) "
-    "VALUES ('Bit Banger', 1, 110, 20, 25, 0, 2300, 0, 1, 87, 400, 0, 0, 10, 5, 5, 0, 0, NULL, 1, 1);",
+    "VALUES ('Bit Banger', 1, 110, 20, 25, 5, 2300, 5, 1, 1, 400, 10, 5, 5, 5, 5, 0, 5, NULL, 1, 1);",
 
   "INSERT INTO players (number, name, passwd, sector, ship, type) VALUES (1, 'System', 'BOT',1,1,1);",
   "INSERT INTO players (number, name, passwd, sector, ship, type) VALUES (1, 'Federation Administrator', 'BOT',1,1,1);",

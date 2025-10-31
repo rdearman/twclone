@@ -1664,9 +1664,9 @@ create_ferringhi (int ferringhi_sector)
       // Since Ferengi Trader will likely start with 0 cargo, we should bind 0 to holds_used.
       // Assuming 'holds_to_fill' is the number of cargo holds the ship starts with (0 in most cases).
       sqlite3_bind_int (ins, b++, holds_to_fill);	// This should be 0 for a new ship (holds_used)
-      sqlite3_bind_int (ins, b++, ore);	// Cargo begins here
-      sqlite3_bind_int (ins, b++, organics);
-      sqlite3_bind_int (ins, b++, equipment);	// Cargo ends here
+      sqlite3_bind_int (ins, b++, 0);	// Cargo begins here
+      sqlite3_bind_int (ins, b++, 0);
+      sqlite3_bind_int (ins, b++, 0);	// Cargo ends here
       sqlite3_bind_int (ins, b++, 0);	// limpets (New, default 0)
       sqlite3_bind_int (ins, b++, 0);	// genesis (New, default 0)
       sqlite3_bind_int (ins, b++, 0);	// colonists (New, default 0)
