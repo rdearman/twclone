@@ -106,149 +106,178 @@ static int ori_home_sector_id = -1;
 
 
 /* Private function to move all Orion ships */
-static void ori_move_all_ships(int64_t now_ms);
+static void ori_move_all_ships (int64_t now_ms);
 
 /* Helper to execute a single SELECT query and return an int value */
-static int get_int_value(sqlite3 *db, const char *sql) {
-    sqlite3_stmt *stmt = NULL;
-    int value = -1;
+static int
+get_int_value (sqlite3 *db, const char *sql)
+{
+  sqlite3_stmt *stmt = NULL;
+  int value = -1;
 
-    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) == SQLITE_OK) {
-        if (sqlite3_step(stmt) == SQLITE_ROW) {
-            value = sqlite3_column_int(stmt, 0);
-        }
-        sqlite3_finalize(stmt);
-    } else {
-        LOGE("ORI_DB_HELPER: Failed to prepare statement: %s", sqlite3_errmsg(db));
+  if (sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL) == SQLITE_OK)
+    {
+      if (sqlite3_step (stmt) == SQLITE_ROW)
+	{
+	  value = sqlite3_column_int (stmt, 0);
+	}
+      sqlite3_finalize (stmt);
     }
-    return value;
+  else
+    {
+      LOGE ("ORI_DB_HELPER: Failed to prepare statement: %s",
+	    sqlite3_errmsg (db));
+    }
+  return value;
 }
 
 
 /* Attaches the database handle (called by server_cron.c) */
-void ori_attach_db(sqlite3 *db) {
-    ori_db = db;
+void
+ori_attach_db (sqlite3 *db)
+{
+  ori_db = db;
 }
 
 
 /* Initializes Orion NPC state and finds the owner/home sector ID. */
-int ori_init_once(void) {
-    if (ori_initialized || ori_db == NULL) {
-        return (ori_owner_id != -1);
-    }
-    
-    // --- Step 1: Find the Orion Syndicate owner ID (from the corporation tag) ---
-    const char *sql_find_owner = 
-        "SELECT owner_id FROM corporations WHERE tag='ORION';";
-    ori_owner_id = get_int_value(ori_db, sql_find_owner);
-    
-    if (ori_owner_id == -1) {
-        LOGW("ORI_INIT: Failed to find Orion Syndicate owner. Skipping.");
-        ori_initialized = true;
-        return 0; 
-    }
-    
-    // --- Step 2: Find the Black Market home sector ID (from Port ID 10) ---
-    const char *sql_find_sector =
-        "SELECT location FROM ports WHERE id=10 AND name='Orion Black Market Dock';";
-    ori_home_sector_id = get_int_value(ori_db, sql_find_sector);
-
-    if (ori_home_sector_id == -1) {
-        LOGW("ORI_INIT: Failed to find Black Market home sector (Port ID 10). Movement will be random.");
+int
+ori_init_once (void)
+{
+  if (ori_initialized || ori_db == NULL)
+    {
+      return (ori_owner_id != -1);
     }
 
-    LOGI("ORI_INIT: Orion Syndicate owner ID is %d, Home Sector is %d", 
-         ori_owner_id, ori_home_sector_id);
-    
-    ori_initialized = true;
-    return 1;
+  // --- Step 1: Find the Orion Syndicate owner ID (from the corporation tag) ---
+  const char *sql_find_owner =
+    "SELECT owner_id FROM corporations WHERE tag='ORION';";
+  ori_owner_id = get_int_value (ori_db, sql_find_owner);
+
+  if (ori_owner_id == -1)
+    {
+      LOGW ("ORI_INIT: Failed to find Orion Syndicate owner. Skipping.");
+      ori_initialized = true;
+      return 0;
+    }
+
+  // --- Step 2: Find the Black Market home sector ID (from Port ID 10) ---
+  const char *sql_find_sector =
+    "SELECT location FROM ports WHERE id=10 AND name='Orion Black Market Dock';";
+  ori_home_sector_id = get_int_value (ori_db, sql_find_sector);
+
+  if (ori_home_sector_id == -1)
+    {
+      LOGW
+	("ORI_INIT: Failed to find Black Market home sector (Port ID 10). Movement will be random.");
+    }
+
+  LOGI ("ORI_INIT: Orion Syndicate owner ID is %d, Home Sector is %d",
+	ori_owner_id, ori_home_sector_id);
+
+  ori_initialized = true;
+  return 1;
 }
 
 
 /* Executes the core Orion movement logic on every cron tick. */
-void ori_tick(int64_t now_ms) {
-    if (!ori_initialized || ori_owner_id == -1 || ori_db == NULL) {
-        return;
+void
+ori_tick (int64_t now_ms)
+{
+  if (!ori_initialized || ori_owner_id == -1 || ori_db == NULL)
+    {
+      return;
     }
-    
-    LOGI("ORI_TICK: Running movement logic for Orion Syndicate...");
-    ori_move_all_ships(now_ms);
-    LOGI("ORI_TICK: Complete.");
+
+  LOGI ("ORI_TICK: Running movement logic for Orion Syndicate...");
+  ori_move_all_ships (now_ms);
+  LOGI ("ORI_TICK: Complete.");
 }
 
 
 /* Loops through all Orion ships and executes their movement logic. */
-static void ori_move_all_ships(int64_t now_ms) {
-    sqlite3_stmt *select_stmt = NULL;
-    int rc;
+static void
+ori_move_all_ships (int64_t now_ms)
+{
+  sqlite3_stmt *select_stmt = NULL;
+  int rc;
 
-    // Select all ships owned by the Orion Syndicate
-    const char *sql_select_orion_ships = 
-        "SELECT id, location, target_sector FROM ships WHERE owner_id = ?;";
-    
-    rc = sqlite3_prepare_v2(ori_db, sql_select_orion_ships, -1, &select_stmt, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("ORI_MOVE: Failed to prepare select statement: %s", sqlite3_errmsg(ori_db));
-        return;
+  // Select all ships owned by the Orion Syndicate
+  const char *sql_select_orion_ships =
+    "SELECT id, location, target_sector FROM ships WHERE owner_id = ?;";
+
+  rc =
+    sqlite3_prepare_v2 (ori_db, sql_select_orion_ships, -1, &select_stmt,
+			NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("ORI_MOVE: Failed to prepare select statement: %s",
+	    sqlite3_errmsg (ori_db));
+      return;
     }
 
-    sqlite3_bind_int(select_stmt, 1, ori_owner_id);
+  sqlite3_bind_int (select_stmt, 1, ori_owner_id);
 
-    while ((rc = sqlite3_step(select_stmt)) == SQLITE_ROW) {
-        int ship_id = sqlite3_column_int(select_stmt, 0);
-        int current_sector = sqlite3_column_int(select_stmt, 1);
-        int target_sector = sqlite3_column_int(select_stmt, 2);
+  while ((rc = sqlite3_step (select_stmt)) == SQLITE_ROW)
+    {
+      int ship_id = sqlite3_column_int (select_stmt, 0);
+      int current_sector = sqlite3_column_int (select_stmt, 1);
+      int target_sector = sqlite3_column_int (select_stmt, 2);
 
-        int new_target = target_sector;
-        
-        // --- Core Orion Movement Strategy ---
-        // If the ship has no current target (target_sector == 0) or has reached its target:
-        if (new_target == 0 || new_target == current_sector) {
-            
-            // 60% chance to target the Black Market home sector for resupply/patrol
-            if (rand() % 10 < 6 && ori_home_sector_id != -1) {
-                 new_target = ori_home_sector_id;
-            } else {
-                 // 40% chance to target a random, unprotected sector for piracy
-                 // MIN_UNPROTECTED_SECTOR=11, MAX_UNPROTECTED_SECTOR=999
-                 new_target = (rand() % (999 - 11 + 1)) + 11; 
-            }
-            
-            // Don't target the current sector
-            if (new_target == current_sector) {
-                new_target = (new_target % 999) + 1; 
-            }
-        }
-        
-        // --- Execute Movement ---
-        // NOTE: The 'move_ship' function should handle updating the ship's location 
-        // and checking for players/mines in the new sector.
-        
-        // Placeholder for the actual move_ship call
-        // if (move_ship(ship_id, new_target) == 0) {
-        //     LOGI("ORI_MOVE: Ship %d moved to sector %d.", ship_id, new_target);
-        // }
-        
-        // Since we don't have move_ship, we update the target directly for the next tick
-        const char *sql_update_target = 
-            "UPDATE ships SET target_sector = ? WHERE id = ?;";
-        sqlite3_exec(ori_db, sql_update_target, NULL, NULL, NULL);
+      int new_target = target_sector;
 
-        LOGI("ORI_MOVE: Ship %d targeting sector %d (from %d).", 
-             ship_id, new_target, current_sector);
+      // --- Core Orion Movement Strategy ---
+      // If the ship has no current target (target_sector == 0) or has reached its target:
+      if (new_target == 0 || new_target == current_sector)
+	{
+
+	  // 60% chance to target the Black Market home sector for resupply/patrol
+	  if (rand () % 10 < 6 && ori_home_sector_id != -1)
+	    {
+	      new_target = ori_home_sector_id;
+	    }
+	  else
+	    {
+	      // 40% chance to target a random, unprotected sector for piracy
+	      // MIN_UNPROTECTED_SECTOR=11, MAX_UNPROTECTED_SECTOR=999
+	      new_target = (rand () % (999 - 11 + 1)) + 11;
+	    }
+
+	  // Don't target the current sector
+	  if (new_target == current_sector)
+	    {
+	      new_target = (new_target % 999) + 1;
+	    }
+	}
+
+      // --- Execute Movement ---
+      // NOTE: The 'move_ship' function should handle updating the ship's location 
+      // and checking for players/mines in the new sector.
+
+      // Placeholder for the actual move_ship call
+      // if (move_ship(ship_id, new_target) == 0) {
+      //     LOGI("ORI_MOVE: Ship %d moved to sector %d.", ship_id, new_target);
+      // }
+
+      // Since we don't have move_ship, we update the target directly for the next tick
+      const char *sql_update_target =
+	"UPDATE ships SET target_sector = ? WHERE id = ?;";
+      sqlite3_exec (ori_db, sql_update_target, NULL, NULL, NULL);
+
+      LOGI ("ORI_MOVE: Ship %d targeting sector %d (from %d).",
+	    ship_id, new_target, current_sector);
     }
-    
-    if (rc != SQLITE_DONE) {
-         LOGE("ORI_MOVE: SELECT processing failed: %s", sqlite3_errmsg(ori_db));
+
+  if (rc != SQLITE_DONE)
+    {
+      LOGE ("ORI_MOVE: SELECT processing failed: %s",
+	    sqlite3_errmsg (ori_db));
     }
 
-    sqlite3_finalize(select_stmt);
+  sqlite3_finalize (select_stmt);
 }
 
 ////////////////////// ORION NPC ////////////////////////////////
-
-
-
 
 
 /* --- minimal event writer for tests (engine_events) --- */
@@ -278,8 +307,6 @@ fer_event_json (const char *type, int sector_id, const char *fmt, ...)
   sqlite3_step (st);
   sqlite3_finalize (st);
 }
-
-
 
 
 
@@ -672,12 +699,13 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
   h_decloak_ship (db_handle,
 		  h_get_active_ship_id (db_handle, ctx->player_id));
 
-  TurnConsumeResult tc = h_consume_player_turn(db_handle, ctx, "move.warp");
-  if (tc != TURN_CONSUME_SUCCESS) {
-      return handle_turn_consumption_error(ctx, tc, "move.warp", root, NULL);
-  }
- 
-  
+  TurnConsumeResult tc = h_consume_player_turn (db_handle, ctx, "move.warp");
+  if (tc != TURN_CONSUME_SUCCESS)
+    {
+      return handle_turn_consumption_error (ctx, tc, "move.warp", root, NULL);
+    }
+
+
   json_t *jdata = json_object_get (root, "data");
   int to = 0;
   if (json_is_object (jdata))
@@ -756,7 +784,7 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
   json_object_set_new (entered, "player",
 		       make_player_object (ctx->player_id));
   comm_publish_sector_event (to, "sector.player_entered", entered);
-  
+
   return 0;
 }
 
@@ -1223,14 +1251,15 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
   sqlite3 *db_handle = db_get_handle ();
   h_decloak_ship (db_handle,
 		  h_get_active_ship_id (db_handle, ctx->player_id));
-  TurnConsumeResult tc = h_consume_player_turn(db_handle, ctx, "move.scan");
-  if (tc != TURN_CONSUME_SUCCESS) {
-      return handle_turn_consumption_error(ctx, tc, "move.scan", root, NULL);
-  }
+  TurnConsumeResult tc = h_consume_player_turn (db_handle, ctx, "move.scan");
+  if (tc != TURN_CONSUME_SUCCESS)
+    {
+      return handle_turn_consumption_error (ctx, tc, "move.scan", root, NULL);
+    }
 
   /* Resolve sector id (default to 1 if session is unset) */
   int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 1;
-  LOGI("[move.scan] sector_id=%d\n", sector_id);
+  LOGI ("[move.scan] sector_id=%d\n", sector_id);
 
   /* 1) Core snapshot from DB (uses sectors.name/beacon; ports.location; ships.location; planets.sector) */
   json_t *core = NULL;
@@ -1332,8 +1361,8 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
   json_object_set_new (data, "beacon", beacon);	/* transfers ownership */
 
   /* Optional debug: confirm non-NULL before sending */
-  LOGD("[move.scan] built data=%p (sector_id=%d)\n",
-	   (void *) data, sector_id);
+  LOGD ("[move.scan] built data=%p (sector_id=%d)\n",
+	(void *) data, sector_id);
 
   /* 9) Send envelope (your send_enveloped_ok steals the 'data' ref via _set_new) */
   send_enveloped_ok (ctx->fd, root, "sector.scan_v1", data);
@@ -1408,7 +1437,7 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
   /* Perform the update:
      - if none existed → set text
      - if one existed  → clear (explode both) */
-  int rc = db_sector_set_beacon (req_sector_id, beacon_text,ctx->player_id);
+  int rc = db_sector_set_beacon (req_sector_id, beacon_text, ctx->player_id);
   if (rc != SQLITE_OK)
     {
       send_enveloped_error (ctx->fd, root, 1500,
@@ -2321,24 +2350,24 @@ fer_init_once (void)
     }
 
   /* find home sector */
-int home = 0;
+  int home = 0;
   {
-    const char *sql = "SELECT sector FROM planets WHERE id=2 LIMIT 1;"; // Simplified query
+    const char *sql = "SELECT sector FROM planets WHERE id=2 LIMIT 1;";	// Simplified query
     sqlite3_stmt *st = NULL;
-    
+
     // 1. Prepare the statement
     if (sqlite3_prepare_v2 (g_fer_db, sql, -1, &st, NULL) == SQLITE_OK)
       {
-        // NOTE: Removed the unnecessary sqlite3_bind_text call.
+	// NOTE: Removed the unnecessary sqlite3_bind_text call.
 
-        // 2. Execute the query and check for a row
-        if (sqlite3_step (st) == SQLITE_ROW)
-          {
-            home = sqlite3_column_int (st, 0);
-          }
-        
-        // 3. Clean up
-        sqlite3_finalize (st);
+	// 2. Execute the query and check for a row
+	if (sqlite3_step (st) == SQLITE_ROW)
+	  {
+	    home = sqlite3_column_int (st, 0);
+	  }
+
+	// 3. Clean up
+	sqlite3_finalize (st);
       }
     // Optional: Add an else block here to handle a prepare error if needed.
   }

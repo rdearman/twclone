@@ -10,9 +10,9 @@ extern "C"
 #endif
 
 /* ---- system notices (persistent) ---- */
-int cmd_sys_notice_create (client_ctx_t *ctx, json_t *root);   // "sys.notice.create"
-int cmd_notice_list       (client_ctx_t *ctx, json_t *root);   // "notice.list"
-int cmd_notice_ack        (client_ctx_t *ctx, json_t *root);   // "notice.ack"
+  int cmd_sys_notice_create (client_ctx_t * ctx, json_t * root);	// "sys.notice.create"
+  int cmd_notice_list (client_ctx_t * ctx, json_t * root);	// "notice.list"
+  int cmd_notice_ack (client_ctx_t * ctx, json_t * root);	// "notice.ack"
 
 /* ---- chat.* ---- */
   int cmd_chat_send (client_ctx_t * ctx, json_t * root);	// "chat.send"
@@ -26,7 +26,7 @@ int cmd_notice_ack        (client_ctx_t *ctx, json_t *root);   // "notice.ack"
   int cmd_mail_delete (client_ctx_t * ctx, json_t * root);	// "mail.delete"
 
 
-  
+
 /* ---- subscribe.* ---- */
   int cmd_subscribe_add (client_ctx_t * ctx, json_t * root);	// "subscribe.add"
   int cmd_subscribe_remove (client_ctx_t * ctx, json_t * root);	// "subscribe.remove"

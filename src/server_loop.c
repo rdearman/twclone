@@ -133,7 +133,7 @@ static const cmd_desc_t k_supported_cmds_fallback[] = {
 // If server_loop.c defines a strong version, it will override this.
 __attribute__((weak))
      void
-       loop_get_supported_commands (const cmd_desc_t **out_tbl, size_t *out_n)
+     loop_get_supported_commands (const cmd_desc_t **out_tbl, size_t *out_n)
 {
   if (out_tbl)
     *out_tbl = k_supported_cmds_fallback;
@@ -611,7 +611,7 @@ process_message (client_ctx_t *ctx, json_t *root)
       cmd_system_capabilities (ctx, root);
     }
 
- 
+
 /* ---------- PLAYER ---------- */
   else if (streq (cmd, "player.get_settings"))
     {
@@ -967,25 +967,25 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       rc = cmd_mail_delete (ctx, root);	/* NIY stub */
     }
-  else if (strcmp(c, "sys.notice.create") == 0)
+  else if (strcmp (c, "sys.notice.create") == 0)
     {
-    rc = cmd_sys_notice_create(ctx, root);
+      rc = cmd_sys_notice_create (ctx, root);
     }
-  else if (strcmp(c, "notice.list") == 0)
+  else if (strcmp (c, "notice.list") == 0)
     {
-    rc = cmd_notice_list(ctx, root);
+      rc = cmd_notice_list (ctx, root);
     }
-  else if (strcmp(c, "notice.ack") == 0)
+  else if (strcmp (c, "notice.ack") == 0)
     {
-    rc = cmd_notice_ack(ctx, root);
+      rc = cmd_notice_ack (ctx, root);
     }
 /* ---------- NEWS ---------- */
 
-  else if (strcmp(c, "news.read") == 0)
+  else if (strcmp (c, "news.read") == 0)
     {
-      rc = cmd_get_news(ctx, root);
+      rc = cmd_get_news (ctx, root);
     }
-    
+
 /* ---------- SUBSCRIBE ---------- */
   else if (!strcmp (c, "subscribe.add"))
     {

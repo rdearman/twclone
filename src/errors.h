@@ -115,6 +115,11 @@
 #define ERR_SHARD_UNAVAILABLE    2003
 #define ERR_CAPABILITY_DISABLED  2004
 
+/* 3000 - Sector */
+#define SECTOR_ERR		3000
+#define ERR_SECTOR_OVERCROWDED 	3001
+
+
 /* 9000+ — Vendor/private extensions available */
 
 #endif /* ERRORS_H */

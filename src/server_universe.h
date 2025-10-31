@@ -3,23 +3,23 @@
 
 #include "config.h"
 #include <stdint.h>
-#include "server_communication.h"  /* brings in client_ctx_t and json_t */
+#include "server_communication.h"	/* brings in client_ctx_t and json_t */
 
 /* --- Ferringhi traders (NPC) --- */
-int  fer_init_once(void);          /* returns 1 if homeworld found, else 0 */
-void fer_tick(int64_t now_ms);     /* drive traders on a schedule */
-void fer_attach_db(sqlite3 *db);
+int fer_init_once (void);	/* returns 1 if homeworld found, else 0 */
+void fer_tick (int64_t now_ms);	/* drive traders on a schedule */
+void fer_attach_db (sqlite3 * db);
 
 /* Orion Syndicate (ORI) patrol API */
-int ori_init_once(void);                           // returns 1 if Orion ships/sectors found
-void ori_attach_db(sqlite3 *db);                   // Attaches the main DB handle
-void ori_tick(int64_t now_ms);                     // Executes the Orion movement logic
+int ori_init_once (void);	// returns 1 if Orion ships/sectors found
+void ori_attach_db (sqlite3 * db);	// Attaches the main DB handle
+void ori_tick (int64_t now_ms);	// Executes the Orion movement logic
 
 
 /* --- Small nav helpers over sector_warps (no DB args; use cached handle) --- */
-int  nav_next_hop(int start, int goal);   /* one-hop BFS toward goal */
-int  nav_random_neighbor(int sector);     /* random linked neighbour */
-int  sector_has_port (int sector);         /* 1 if sector has a port */
+int nav_next_hop (int start, int goal);	/* one-hop BFS toward goal */
+int nav_random_neighbor (int sector);	/* random linked neighbour */
+int sector_has_port (int sector);	/* 1 if sector has a port */
 
 
  /* ISS patrol, universe helpers, etc. */

@@ -27,7 +27,7 @@
 
 // --- Configuration ---
 // News articles will expire after 7 days (604800 seconds)
-#define NEWS_EXPIRATION_SECONDS 604800L 
+#define NEWS_EXPIRATION_SECONDS 604800L
 #define MAX_ARTICLE_LEN 512
 
 
@@ -87,7 +87,7 @@ static entry_t REG[] = {
   {"traps_process", h_traps_process},
   {"npc_step", h_npc_step},
   {"port_price_drift", h_port_price_drift},
-  {"news_collator", h_news_collator},  
+  {"news_collator", h_news_collator},
 };
 
 static int g_reg_inited = 0;
@@ -101,14 +101,14 @@ static int g_reg_inited = 0;
 int
 get_random_sector (sqlite3 *db)
 {
-    // Generate a random number from 0 up to (RANGE_SIZE - 1)
-    // The modulus operator (%) is used to clamp the result.
-    int random_offset = rand() % RANGE_SIZE;
-    
-    // Shift the offset up to the minimum sector ID
-    int random_sector = MIN_UNPROTECTED_SECTOR + random_offset;
-    
-    return random_sector;
+  // Generate a random number from 0 up to (RANGE_SIZE - 1)
+  // The modulus operator (%) is used to clamp the result.
+  int random_offset = rand () % RANGE_SIZE;
+
+  // Shift the offset up to the minimum sector ID
+  int random_sector = MIN_UNPROTECTED_SECTOR + random_offset;
+
+  return random_sector;
 }
 
 
@@ -124,11 +124,8 @@ tow_ship (sqlite3 *db, int ship_id, int new_sector_id, int admin_id,
 
   // --- 1. SELECT: Get current location and owner ---
   // CORRECTION: Join 'ships' (T1) directly to 'players' (T2) using T1.id = T2.ship
-  const char *sql_select_ship_info =
-    "SELECT T1.location, T2.id " 
-    "FROM ships T1 "
-    "LEFT JOIN players T2 ON T1.id = T2.ship " // CORRECTED JOIN
-    "WHERE T1.id = ?;"; 
+  const char *sql_select_ship_info = "SELECT T1.location, T2.id " "FROM ships T1 " "LEFT JOIN players T2 ON T1.id = T2.ship "	// CORRECTED JOIN
+    "WHERE T1.id = ?;";
 
   if (sqlite3_prepare_v2 (db, sql_select_ship_info, -1, &stmt, NULL) !=
       SQLITE_OK)
@@ -186,8 +183,7 @@ tow_ship (sqlite3 *db, int ship_id, int new_sector_id, int admin_id,
 
 
   // --- 3. UPDATE: Ship Location (Unchanged) ---
-  const char *sql_update_ship =
-    "UPDATE ships SET location = ? WHERE id = ?;"; 
+  const char *sql_update_ship = "UPDATE ships SET location = ? WHERE id = ?;";
 
   if (sqlite3_prepare_v2 (db, sql_update_ship, -1, &stmt, NULL) != SQLITE_OK)
     {
@@ -207,10 +203,9 @@ tow_ship (sqlite3 *db, int ship_id, int new_sector_id, int admin_id,
 
 
   // --- 4. UPDATE: Player Location and Notification ---
-  if (owner_id > 0) // This check should now pass for the bot players
+  if (owner_id > 0)		// This check should now pass for the bot players
     {
-      const char *sql_update_player =
-	"UPDATE players SET sector = ? WHERE id = ?;"; // Corrected to use 'id'
+      const char *sql_update_player = "UPDATE players SET sector = ? WHERE id = ?;";	// Corrected to use 'id'
 
       if (sqlite3_prepare_v2 (db, sql_update_player, -1, &stmt, NULL) !=
 	  SQLITE_OK)
@@ -220,7 +215,7 @@ tow_ship (sqlite3 *db, int ship_id, int new_sector_id, int admin_id,
 	}
       else
 	{
-          // Player ID is now correctly bound
+	  // Player ID is now correctly bound
 	  sqlite3_bind_int (stmt, 1, new_sector_id);
 	  sqlite3_bind_int (stmt, 2, owner_id);
 	  rc = sqlite3_step (stmt);
@@ -242,7 +237,7 @@ tow_ship (sqlite3 *db, int ship_id, int new_sector_id, int admin_id,
 
       // This function call should now execute
       //      h_send_message_to_player (owner_id, admin_id, subject_str,
-      //			message_buffer);
+      //                        message_buffer);
       h_send_message_to_player (admin_id, owner_id, subject_str,
 				message_buffer);
 
@@ -955,11 +950,6 @@ get_asset_name (int type)
     }
 }
 
-  //////////////////////
-  /////// COMPLETE THIS
-  /////////////////////
-
-
   // 1. Check anyone who has been in fedspace for more than an hour.
   // 2. Check for Evil alignment who are in that list and tow them
   // 3. Check for ships which have more than 50 fighters in that list and tow them
@@ -973,7 +963,7 @@ int
 h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
 {
 
-  int fedadmin = 2; 
+  int fedadmin = 2;
   int64_t now_ms = now_s * 1000;
   sqlite3_stmt *select_stmt = NULL;
   sqlite3_stmt *delete_stmt = NULL;
@@ -1017,75 +1007,89 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
     "SELECT player, asset_type, sector, quantity "
     "FROM sector_assets "
     "WHERE sector IN (SELECT sector_id FROM msl_sectors) AND player != 0;";
-  
+
   rc = sqlite3_prepare_v2 (db, select_assets_sql, -1, &select_stmt, NULL);
   if (rc == SQLITE_OK)
-  {
+    {
       char message[256];
       const char *delete_sql =
-        "DELETE FROM sector_assets WHERE player = ?1 AND asset_type = ?2 AND sector = ?3 AND quantity = ?4;";
-      
+	"DELETE FROM sector_assets WHERE player = ?1 AND asset_type = ?2 AND sector = ?3 AND quantity = ?4;";
+
       rc = sqlite3_prepare_v2 (db, delete_sql, -1, &delete_stmt, NULL);
-      
+
       if (rc == SQLITE_OK)
-      {
-          while ((rc = sqlite3_step (select_stmt)) == SQLITE_ROW)
-          {
-              int player_id = sqlite3_column_int (select_stmt, 0);
-              int asset_type = sqlite3_column_int (select_stmt, 1);
-              int sector_id = sqlite3_column_int (select_stmt, 2);
-              int quantity = sqlite3_column_int (select_stmt, 3);
-  
-              snprintf (message, sizeof (message), "%d %s(s) deployed in Sector %d (Major Space Lane) were destroyed by Federal Authorities. Deployments in MSL are strictly prohibited.", quantity, get_asset_name (asset_type), sector_id);
-              h_send_message_to_player (player_id, fedadmin, "WARNING: MSL Violation", message);
-  
-              sqlite3_reset (delete_stmt);
-              sqlite3_bind_int (delete_stmt, 1, player_id);
-              sqlite3_bind_int (delete_stmt, 2, asset_type);
-              sqlite3_bind_int (delete_stmt, 3, sector_id);
-              sqlite3_bind_int (delete_stmt, 4, quantity);
-              if (sqlite3_step (delete_stmt) == SQLITE_DONE) cleared_assets++;
-          }
-          sqlite3_finalize (delete_stmt);
-          delete_stmt = NULL;
-      } else {
-           LOGE ("h_fedspace_cleanup: MSL DELETE prepare failed: %s", sqlite3_errmsg (db));
-      }
+	{
+	  while ((rc = sqlite3_step (select_stmt)) == SQLITE_ROW)
+	    {
+	      int player_id = sqlite3_column_int (select_stmt, 0);
+	      int asset_type = sqlite3_column_int (select_stmt, 1);
+	      int sector_id = sqlite3_column_int (select_stmt, 2);
+	      int quantity = sqlite3_column_int (select_stmt, 3);
+
+	      snprintf (message, sizeof (message),
+			"%d %s(s) deployed in Sector %d (Major Space Lane) were destroyed by Federal Authorities. Deployments in MSL are strictly prohibited.",
+			quantity, get_asset_name (asset_type), sector_id);
+	      h_send_message_to_player (player_id, fedadmin,
+					"WARNING: MSL Violation", message);
+
+	      sqlite3_reset (delete_stmt);
+	      sqlite3_bind_int (delete_stmt, 1, player_id);
+	      sqlite3_bind_int (delete_stmt, 2, asset_type);
+	      sqlite3_bind_int (delete_stmt, 3, sector_id);
+	      sqlite3_bind_int (delete_stmt, 4, quantity);
+	      if (sqlite3_step (delete_stmt) == SQLITE_DONE)
+		cleared_assets++;
+	    }
+	  sqlite3_finalize (delete_stmt);
+	  delete_stmt = NULL;
+	}
+      else
+	{
+	  LOGE ("h_fedspace_cleanup: MSL DELETE prepare failed: %s",
+		sqlite3_errmsg (db));
+	}
       sqlite3_finalize (select_stmt);
       select_stmt = NULL;
-  } else {
-       LOGE ("h_fedspace_cleanup: MSL SELECT prepare failed: %s", sqlite3_errmsg (db));
-  }
-  
+    }
+  else
+    {
+      LOGE ("h_fedspace_cleanup: MSL SELECT prepare failed: %s",
+	    sqlite3_errmsg (db));
+    }
+
   if (cleared_assets > 0)
     {
-      LOGI ("fedspace_cleanup: Completed asset clearing with %d assets cleared.", cleared_assets);
+      LOGI
+	("fedspace_cleanup: Completed asset clearing with %d assets cleared.",
+	 cleared_assets);
     }
-    
+
   // --- START TOWING TRANSACTION ---
   rc = begin (db);
-  if (rc != 0) {
+  if (rc != 0)
+    {
       unlock (db, "fedspace_cleanup");
       return rc;
-  }
-  
+    }
+
   //////////////////////////////////////////////////////////////////
   // I. Update LOGGED-IN Status (60-minute timeout)             //
   //////////////////////////////////////////////////////////////////
 
   // FIX: Using 'last_update' and 'loggedin'.
   const char *sql_timeout_logout =
-    "UPDATE players SET loggedin = 0 " 
+    "UPDATE players SET loggedin = 0 "
     "WHERE loggedin = 1 AND ?1 - last_update > ?2;";
 
-  if (sqlite3_prepare_v2 (db, sql_timeout_logout, -1, &select_stmt, NULL) == SQLITE_OK)
+  if (sqlite3_prepare_v2 (db, sql_timeout_logout, -1, &select_stmt, NULL) ==
+      SQLITE_OK)
     {
       sqlite3_bind_int64 (select_stmt, 1, now_s);
       sqlite3_bind_int (select_stmt, 2, LOGOUT_TIMEOUT_S);
       rc = sqlite3_step (select_stmt);
       sqlite3_finalize (select_stmt);
       select_stmt = NULL;
-      
+
       if (rc != SQLITE_DONE)
 	{
 	  LOGE ("h_fedspace_cleanup: LOGOUT failed: %d", rc);
@@ -1093,13 +1097,14 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
     }
   else
     {
-      LOGE ("h_fedspace_cleanup: LOGOUT prepare failed: %s", sqlite3_errmsg (db));
+      LOGE ("h_fedspace_cleanup: LOGOUT prepare failed: %s",
+	    sqlite3_errmsg (db));
     }
 
 //////////////////////////////////////////////////////////////////
   // II. Setup Permanent Eligible Ships Table                     //
   //////////////////////////////////////////////////////////////////
-  
+
   // 1. Ensure the permanent table exists (run once)
   const char *sql_create_eligible_table =
     "CREATE TABLE IF NOT EXISTS eligible_tows (ship_id INTEGER PRIMARY KEY, sector_id INTEGER, owner_id INTEGER, fighters INTEGER, alignment INTEGER, experience INTEGER);";
@@ -1109,7 +1114,7 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
     {
       LOGE ("h_fedspace_cleanup: PERM TABLE creation failed: %s", err_msg);
       sqlite3_free (err_msg);
-      rollback(db); 
+      rollback (db);
       unlock (db, "fedspace_cleanup");
       return -1;
     }
@@ -1121,23 +1126,18 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
     {
       LOGE ("h_fedspace_cleanup: DELETE TABLE failed: %s", err_msg);
       sqlite3_free (err_msg);
-      rollback(db); 
+      rollback (db);
       unlock (db, "fedspace_cleanup");
       return -1;
     }
 
   // 3. Populate the table (Now an INSERT INTO SELECT)
-  const char *sql_insert_eligible =
-    "INSERT INTO eligible_tows (ship_id, sector_id, owner_id, fighters, alignment, experience) "
-    "SELECT T1.id, T1.location, T2.id, T1.fighters, "
-    "       COALESCE(T2.alignment, 0), "   // Use 0 if alignment is NULL
-    "       COALESCE(T2.experience, 0) "   // Use 0 if experience is NULL
-    "FROM ships T1 "
-    "LEFT JOIN players T2 ON T1.id = T2.ship "
-    "WHERE T1.location BETWEEN ?1 AND ?2 "
-    "  AND (T2.loggedin = 0 OR T2.id IS NULL) " // Filter by loggedin status or no owner
+  const char *sql_insert_eligible = "INSERT INTO eligible_tows (ship_id, sector_id, owner_id, fighters, alignment, experience) " "SELECT T1.id, T1.location, T2.id, T1.fighters, " "       COALESCE(T2.alignment, 0), "	// Use 0 if alignment is NULL
+    "       COALESCE(T2.experience, 0) "	// Use 0 if experience is NULL
+    "FROM ships T1 " "LEFT JOIN players T2 ON T1.id = T2.ship " "WHERE T1.location BETWEEN ?1 AND ?2 " "  AND (T2.loggedin = 0 OR T2.id IS NULL) "	// Filter by loggedin status or no owner
     "ORDER BY T1.id ASC;";
-  if (sqlite3_prepare_v2 (db, sql_insert_eligible, -1, &select_stmt, NULL) == SQLITE_OK)
+  if (sqlite3_prepare_v2 (db, sql_insert_eligible, -1, &select_stmt, NULL) ==
+      SQLITE_OK)
     {
       sqlite3_bind_int (select_stmt, 1, FEDSPACE_SECTOR_START);
       sqlite3_bind_int (select_stmt, 2, FEDSPACE_SECTOR_END);
@@ -1146,29 +1146,41 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
       select_stmt = NULL;
     }
 
-  
+
   //////////////////////////////////////////////////////////////////
   // III. Towing Rules (2-5)                                      //
   //////////////////////////////////////////////////////////////////
 
   // Prepare DELETE statement once for all rules
-  const char *sql_delete_eligible = "DELETE FROM eligible_tows WHERE ship_id = ?;";
-  if (sqlite3_prepare_v2 (db, sql_delete_eligible, -1, &delete_stmt, NULL) != SQLITE_OK)
+  const char *sql_delete_eligible =
+    "DELETE FROM eligible_tows WHERE ship_id = ?;";
+  if (sqlite3_prepare_v2 (db, sql_delete_eligible, -1, &delete_stmt, NULL) !=
+      SQLITE_OK)
     {
-      LOGE ("h_fedspace_cleanup: DELETE prepare failed: %s", sqlite3_errmsg (db));
+      LOGE ("h_fedspace_cleanup: DELETE prepare failed: %s",
+	    sqlite3_errmsg (db));
       delete_stmt = NULL;
     }
 
   // --- Rule 2: Evil alignment ---
-  const char *sql_evil_alignment = "SELECT ship_id FROM eligible_tows WHERE owner_id IS NOT NULL AND alignment < 0 LIMIT ?1;";
-  if (sqlite3_prepare_v2 (db, sql_evil_alignment, -1, &select_stmt, NULL) == SQLITE_OK)
+  const char *sql_evil_alignment =
+    "SELECT ship_id FROM eligible_tows WHERE owner_id IS NOT NULL AND alignment < 0 LIMIT ?1;";
+  if (sqlite3_prepare_v2 (db, sql_evil_alignment, -1, &select_stmt, NULL) ==
+      SQLITE_OK)
     {
       sqlite3_bind_int (select_stmt, 1, MAX_TOWS_PER_PASS - tows);
-      while (sqlite3_step (select_stmt) == SQLITE_ROW && tows < MAX_TOWS_PER_PASS)
+      while (sqlite3_step (select_stmt) == SQLITE_ROW
+	     && tows < MAX_TOWS_PER_PASS)
 	{
 	  int ship_id = sqlite3_column_int (select_stmt, 0);
-	  tow_ship (db, ship_id, get_random_sector (db), fedadmin, REASON_EVIL_ALIGN);
-	  if (delete_stmt) { sqlite3_bind_int (delete_stmt, 1, ship_id); sqlite3_step (delete_stmt); sqlite3_reset (delete_stmt); }
+	  tow_ship (db, ship_id, get_random_sector (db), fedadmin,
+		    REASON_EVIL_ALIGN);
+	  if (delete_stmt)
+	    {
+	      sqlite3_bind_int (delete_stmt, 1, ship_id);
+	      sqlite3_step (delete_stmt);
+	      sqlite3_reset (delete_stmt);
+	    }
 	  tows++;
 	}
       sqlite3_finalize (select_stmt);
@@ -1177,16 +1189,25 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
 
 
   // --- Rule 3: Excess Fighters ---
-  const char *sql_excess_fighters = "SELECT ship_id FROM eligible_tows WHERE fighters > ?1 LIMIT ?2;";
-  if (sqlite3_prepare_v2 (db, sql_excess_fighters, -1, &select_stmt, NULL) == SQLITE_OK)
+  const char *sql_excess_fighters =
+    "SELECT ship_id FROM eligible_tows WHERE fighters > ?1 LIMIT ?2;";
+  if (sqlite3_prepare_v2 (db, sql_excess_fighters, -1, &select_stmt, NULL) ==
+      SQLITE_OK)
     {
-      sqlite3_bind_int (select_stmt, 1, 49); 
+      sqlite3_bind_int (select_stmt, 1, 49);
       sqlite3_bind_int (select_stmt, 2, MAX_TOWS_PER_PASS - tows);
-      while (sqlite3_step (select_stmt) == SQLITE_ROW && tows < MAX_TOWS_PER_PASS)
+      while (sqlite3_step (select_stmt) == SQLITE_ROW
+	     && tows < MAX_TOWS_PER_PASS)
 	{
 	  int ship_id = sqlite3_column_int (select_stmt, 0);
-	  tow_ship (db, ship_id, get_random_sector (db), fedadmin, REASON_EXCESS_FIGHTERS);
-	  if (delete_stmt) { sqlite3_bind_int (delete_stmt, 1, ship_id); sqlite3_step (delete_stmt); sqlite3_reset (delete_stmt); }
+	  tow_ship (db, ship_id, get_random_sector (db), fedadmin,
+		    REASON_EXCESS_FIGHTERS);
+	  if (delete_stmt)
+	    {
+	      sqlite3_bind_int (delete_stmt, 1, ship_id);
+	      sqlite3_step (delete_stmt);
+	      sqlite3_reset (delete_stmt);
+	    }
 	  tows++;
 	}
       sqlite3_finalize (select_stmt);
@@ -1194,15 +1215,24 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
     }
 
   // --- Rule 4: High Experience ---
-  const char *sql_high_exp = "SELECT ship_id FROM eligible_tows WHERE owner_id IS NOT NULL AND experience >= 1000 LIMIT ?1;";
-  if (sqlite3_prepare_v2 (db, sql_high_exp, -1, &select_stmt, NULL) == SQLITE_OK)
+  const char *sql_high_exp =
+    "SELECT ship_id FROM eligible_tows WHERE owner_id IS NOT NULL AND experience >= 1000 LIMIT ?1;";
+  if (sqlite3_prepare_v2 (db, sql_high_exp, -1, &select_stmt, NULL) ==
+      SQLITE_OK)
     {
       sqlite3_bind_int (select_stmt, 1, MAX_TOWS_PER_PASS - tows);
-      while (sqlite3_step (select_stmt) == SQLITE_ROW && tows < MAX_TOWS_PER_PASS)
+      while (sqlite3_step (select_stmt) == SQLITE_ROW
+	     && tows < MAX_TOWS_PER_PASS)
 	{
 	  int ship_id = sqlite3_column_int (select_stmt, 0);
-	  tow_ship (db, ship_id, get_random_sector (db), fedadmin, REASON_HIGH_EXP);
-	  if (delete_stmt) { sqlite3_bind_int (delete_stmt, 1, ship_id); sqlite3_step (delete_stmt); sqlite3_reset (delete_stmt); }
+	  tow_ship (db, ship_id, get_random_sector (db), fedadmin,
+		    REASON_HIGH_EXP);
+	  if (delete_stmt)
+	    {
+	      sqlite3_bind_int (delete_stmt, 1, ship_id);
+	      sqlite3_step (delete_stmt);
+	      sqlite3_reset (delete_stmt);
+	    }
 	  tows++;
 	}
       sqlite3_finalize (select_stmt);
@@ -1211,16 +1241,25 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
 
   // --- Rule 5: No Owner (Confiscation) ---
   // The query should only target truly unowned ships.
-  const char *sql_no_owner = "SELECT ship_id FROM eligible_tows WHERE owner_id IS NULL LIMIT ?1;";
+  const char *sql_no_owner =
+    "SELECT ship_id FROM eligible_tows WHERE owner_id IS NULL LIMIT ?1;";
   // This looks correct and will only catch ships where the LEFT JOIN returned NULL for T2.id.
-  if (sqlite3_prepare_v2 (db, sql_no_owner, -1, &select_stmt, NULL) == SQLITE_OK)
+  if (sqlite3_prepare_v2 (db, sql_no_owner, -1, &select_stmt, NULL) ==
+      SQLITE_OK)
     {
       sqlite3_bind_int (select_stmt, 1, MAX_TOWS_PER_PASS - tows);
-      while (sqlite3_step (select_stmt) == SQLITE_ROW && tows < MAX_TOWS_PER_PASS)
+      while (sqlite3_step (select_stmt) == SQLITE_ROW
+	     && tows < MAX_TOWS_PER_PASS)
 	{
 	  int ship_id = sqlite3_column_int (select_stmt, 0);
-	  tow_ship (db, ship_id, CONFISCATION_SECTOR, fedadmin, REASON_NO_OWNER);
-	  if (delete_stmt) { sqlite3_bind_int (delete_stmt, 1, ship_id); sqlite3_step (delete_stmt); sqlite3_reset (delete_stmt); }
+	  tow_ship (db, ship_id, CONFISCATION_SECTOR, fedadmin,
+		    REASON_NO_OWNER);
+	  if (delete_stmt)
+	    {
+	      sqlite3_bind_int (delete_stmt, 1, ship_id);
+	      sqlite3_step (delete_stmt);
+	      sqlite3_reset (delete_stmt);
+	    }
 	  tows++;
 	}
       sqlite3_finalize (select_stmt);
@@ -1230,64 +1269,70 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
   //////////////////////////////////////////////////////////////////
   // IV. Overcrowding Check (Rule 6)                              //
   //////////////////////////////////////////////////////////////////
-  
+
   // 1. Select Overcrowded Sectors (in FedSpace, 1-10)
   const char *sql_overcrowded_sectors =
     "SELECT T1.sector_id, COUNT(T1.ship_id) AS ship_count "
     "FROM eligible_tows T1 "
     "WHERE T1.sector_id BETWEEN ?1 AND ?2 "
     "GROUP BY T1.sector_id "
-    "HAVING COUNT(T1.ship_id) > ?3 "
-    "ORDER BY T1.sector_id ASC;";
+    "HAVING COUNT(T1.ship_id) > ?3 " "ORDER BY T1.sector_id ASC;";
 
-  if (tows < MAX_TOWS_PER_PASS && sqlite3_prepare_v2 (db, sql_overcrowded_sectors, -1, &sector_stmt, NULL) == SQLITE_OK)
-  {
-      sqlite3_bind_int(sector_stmt, 1, FEDSPACE_SECTOR_START);
-      sqlite3_bind_int(sector_stmt, 2, FEDSPACE_SECTOR_END);
-      sqlite3_bind_int(sector_stmt, 3, MAX_SHIPS_PER_FED_SECTOR);
+  if (tows < MAX_TOWS_PER_PASS
+      && sqlite3_prepare_v2 (db, sql_overcrowded_sectors, -1, &sector_stmt,
+			     NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_int (sector_stmt, 1, FEDSPACE_SECTOR_START);
+      sqlite3_bind_int (sector_stmt, 2, FEDSPACE_SECTOR_END);
+      sqlite3_bind_int (sector_stmt, 3, MAX_SHIPS_PER_FED_SECTOR);
 
       // Loop through overcrowded sectors
-      while (sqlite3_step(sector_stmt) == SQLITE_ROW && tows < MAX_TOWS_PER_PASS)
-      {
-          int sector_id = sqlite3_column_int(sector_stmt, 0);
-          int ship_count = sqlite3_column_int(sector_stmt, 1);
-          
-          int excess_ships = ship_count - MAX_SHIPS_PER_FED_SECTOR;
-          int to_tow = (MAX_TOWS_PER_PASS - tows < excess_ships) ? (MAX_TOWS_PER_PASS - tows) : excess_ships;
+      while (sqlite3_step (sector_stmt) == SQLITE_ROW
+	     && tows < MAX_TOWS_PER_PASS)
+	{
+	  int sector_id = sqlite3_column_int (sector_stmt, 0);
+	  int ship_count = sqlite3_column_int (sector_stmt, 1);
 
-          // 2. Select the excess ships (tow the newest ones first)
-          const char *sql_overcrowded_ships =
-              "SELECT ship_id FROM eligible_tows "
-              "WHERE sector_id = ?1 "
-              "ORDER BY ship_id DESC "
-              "LIMIT ?2;";
-              
-          if (sqlite3_prepare_v2 (db, sql_overcrowded_ships, -1, &select_stmt, NULL) == SQLITE_OK)
-          {
-              sqlite3_bind_int (select_stmt, 1, sector_id);
-              sqlite3_bind_int (select_stmt, 2, to_tow);
+	  int excess_ships = ship_count - MAX_SHIPS_PER_FED_SECTOR;
+	  int to_tow =
+	    (MAX_TOWS_PER_PASS - tows <
+	     excess_ships) ? (MAX_TOWS_PER_PASS - tows) : excess_ships;
 
-              // Loop through the excess ships and tow them
-              while (sqlite3_step (select_stmt) == SQLITE_ROW)
-              {
-                  int ship_id = sqlite3_column_int (select_stmt, 0);
-                  int new_sector = get_random_sector (db);
-                  tow_ship (db, ship_id, new_sector, fedadmin, REASON_OVERCROWDING);
+	  // 2. Select the excess ships (tow the newest ones first)
+	  const char *sql_overcrowded_ships =
+	    "SELECT ship_id FROM eligible_tows "
+	    "WHERE sector_id = ?1 " "ORDER BY ship_id DESC " "LIMIT ?2;";
 
-                  if (delete_stmt) {
-                      sqlite3_bind_int (delete_stmt, 1, ship_id);
-                      sqlite3_step (delete_stmt);
-                      sqlite3_reset (delete_stmt);
-                  }
-                  tows++;
-              }
-              sqlite3_finalize (select_stmt);
-              select_stmt = NULL; // Crucial: Reset pointer after finalization
-          }
-      }
+	  if (sqlite3_prepare_v2
+	      (db, sql_overcrowded_ships, -1, &select_stmt,
+	       NULL) == SQLITE_OK)
+	    {
+	      sqlite3_bind_int (select_stmt, 1, sector_id);
+	      sqlite3_bind_int (select_stmt, 2, to_tow);
+
+	      // Loop through the excess ships and tow them
+	      while (sqlite3_step (select_stmt) == SQLITE_ROW)
+		{
+		  int ship_id = sqlite3_column_int (select_stmt, 0);
+		  int new_sector = get_random_sector (db);
+		  tow_ship (db, ship_id, new_sector, fedadmin,
+			    REASON_OVERCROWDING);
+
+		  if (delete_stmt)
+		    {
+		      sqlite3_bind_int (delete_stmt, 1, ship_id);
+		      sqlite3_step (delete_stmt);
+		      sqlite3_reset (delete_stmt);
+		    }
+		  tows++;
+		}
+	      sqlite3_finalize (select_stmt);
+	      select_stmt = NULL;	// Crucial: Reset pointer after finalization
+	    }
+	}
       sqlite3_finalize (sector_stmt);
-      sector_stmt = NULL; // Crucial: Reset pointer after finalization
-  }
+      sector_stmt = NULL;	// Crucial: Reset pointer after finalization
+    }
 
 // --- CRITICAL FINAL CLEANUP ---
   // Finalize any lingering prepared statement pointers to release any possible lock
@@ -1301,7 +1346,7 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
       sqlite3_finalize (select_stmt);
       select_stmt = NULL;
     }
-  if (sector_stmt) 
+  if (sector_stmt)
     {
       sqlite3_finalize (sector_stmt);
       sector_stmt = NULL;
@@ -1457,9 +1502,8 @@ h_terra_replenish (sqlite3 *db, int64_t now_s)
   /* 1. Max out all storable goods on the Planet Terra (Earth) */
   /* This assumes 'Terra' is the canonical name for Earth/FedSpace planet. */
   rc = sqlite3_exec (db,
-                   "UPDATE planet_goods SET quantity = max_capacity "
-                   "WHERE planet_id = 1;",
-                   NULL, NULL, NULL);
+		     "UPDATE planet_goods SET quantity = max_capacity "
+		     "WHERE planet_id = 1;", NULL, NULL, NULL);
 
   if (rc)
     {
@@ -1467,14 +1511,13 @@ h_terra_replenish (sqlite3 *db, int64_t now_s)
       LOGE ("terra_replenish (Terra resources max) rc=%d", rc);
       return rc;
     }
-  
+
   /* 2. Reset Terraforming Turns for all player-owned planets */
   /* This allows players to terraform one more time that day. */
   /* Assuming 'terraform_turns_left' is a column on the planets table, and 1 is the daily limit. */
-  rc = sqlite3_exec (db,
-                     "UPDATE planets SET terraform_turns_left = 1 " // Reset to one turn per day
-                     "WHERE owner > 0;", // Targets only player-owned planets (owner_id > 0)
-                     NULL, NULL, NULL);
+  rc = sqlite3_exec (db, "UPDATE planets SET terraform_turns_left = 1 "	// Reset to one turn per day
+		     "WHERE owner > 0;",	// Targets only player-owned planets (owner_id > 0)
+		     NULL, NULL, NULL);
 
   if (rc)
     {
@@ -1503,13 +1546,11 @@ h_planet_growth (sqlite3 *db, int64_t now_s)
     return rc;
 
   /* 1. Population Growth (applies to the planets table) 
-     * RESTRICTED TO PLAYER-OWNED PLANETS (owner > 0) 
-     */
-  rc = sqlite3_exec (db, 
-                     "UPDATE planets SET "
-                     " population = population + CAST(population*0.001 AS INT) " /* +0.1% */
-                     "WHERE population > 0 AND owner > 0;", // ADDED: owner > 0
-                     NULL, NULL, NULL);
+   * RESTRICTED TO PLAYER-OWNED PLANETS (owner > 0) 
+   */
+  rc = sqlite3_exec (db, "UPDATE planets SET " " population = population + CAST(population*0.001 AS INT) "	/* +0.1% */
+		     "WHERE population > 0 AND owner > 0;",	// ADDED: owner > 0
+		     NULL, NULL, NULL);
 
   if (rc)
     {
@@ -1520,13 +1561,12 @@ h_planet_growth (sqlite3 *db, int64_t now_s)
     }
 
   /* 2. Resource Growth (applies to the planet_goods table) 
-     * Note: This applies to all goods with production, which includes ports/planets.
-     */
-  rc = sqlite3_exec (db, 
-                     "UPDATE planet_goods SET "
-                     " quantity = MIN(max_capacity, quantity + production_rate) "
-                     "WHERE production_rate > 0;", 
-                     NULL, NULL, NULL);
+   * Note: This applies to all goods with production, which includes ports/planets.
+   */
+  rc = sqlite3_exec (db,
+		     "UPDATE planet_goods SET "
+		     " quantity = MIN(max_capacity, quantity + production_rate) "
+		     "WHERE production_rate > 0;", NULL, NULL, NULL);
 
   if (rc)
     {
@@ -1606,27 +1646,30 @@ h_traps_process (sqlite3 *db, int64_t now_s)
 
 /* Handler for the 'npc_step' cron task */
 int
-h_npc_step (sqlite3 * db, int64_t now_s)
+h_npc_step (sqlite3 *db, int64_t now_s)
 {
-    int64_t now_ms = (int64_t)monotonic_millis();
-    // 1. Initialize and run ISS tick
-    if (iss_init_once() == 1) {
-        iss_tick(now_ms);
+  int64_t now_ms = (int64_t) monotonic_millis ();
+  // 1. Initialize and run ISS tick
+  if (iss_init_once () == 1)
+    {
+      iss_tick (now_ms);
     }
-    // 2. Initialize and run Ferringhi tick
-    if (fer_init_once() == 1) {
-        fer_attach_db(db); // Ensure DB handle is attached if needed
-        fer_tick(now_ms);
-    }
-
-    // 3. Initialize and run Orion tick <--- ADD THIS BLOCK
-    if (ori_init_once() == 1) {
-        ori_attach_db(db); // Ensure DB handle is attached if needed
-        ori_tick(now_ms);
+  // 2. Initialize and run Ferringhi tick
+  if (fer_init_once () == 1)
+    {
+      fer_attach_db (db);	// Ensure DB handle is attached if needed
+      fer_tick (now_ms);
     }
 
-    LOGI ("npc_step: ok");
-    return 0; // Return 0 (SQLITE_OK) for success
+  // 3. Initialize and run Orion tick <--- ADD THIS BLOCK
+  if (ori_init_once () == 1)
+    {
+      ori_attach_db (db);	// Ensure DB handle is attached if needed
+      ori_tick (now_ms);
+    }
+
+  LOGI ("npc_step: ok");
+  return 0;			// Return 0 (SQLITE_OK) for success
 }
 
 
@@ -1642,15 +1685,14 @@ h_port_price_drift (sqlite3 *db, int64_t now_s)
     return rc;
 
   /* Apply a small, random drift of -1, 0, or +1 to all product prices in the ports table. */
-  rc = sqlite3_exec (db, 
-                     "UPDATE ports SET "
-                     " product_ore = product_ore + (ABS(RANDOM()) % 3 - 1), "
-                     " product_organics = product_organics + (ABS(RANDOM()) % 3 - 1), "
-                     " product_equipment = product_equipment + (ABS(RANDOM()) % 3 - 1) "
-                     "WHERE id > 0;",
-                     NULL, NULL, NULL);
+  rc = sqlite3_exec (db,
+		     "UPDATE ports SET "
+		     " product_ore = product_ore + (ABS(RANDOM()) % 3 - 1), "
+		     " product_organics = product_organics + (ABS(RANDOM()) % 3 - 1), "
+		     " product_equipment = product_equipment + (ABS(RANDOM()) % 3 - 1) "
+		     "WHERE id > 0;", NULL, NULL, NULL);
 
-  
+
   if (rc)
     {
       rollback (db);
@@ -1680,13 +1722,12 @@ h_port_reprice (sqlite3 *db, int64_t now_s)
     return rc;
 
   /* STEP 1 (ESSENTIAL): Enforce a minimum price of 1 for all ports, unconditionally. */
-  rc = sqlite3_exec (db, 
-                     "UPDATE ports SET "
-                     " product_ore = MAX(1, product_ore), "
-                     " product_organics = MAX(1, product_organics), "
-                     " product_equipment = MAX(1, product_equipment) "
-                     "WHERE id > 0;",
-                     NULL, NULL, NULL);
+  rc = sqlite3_exec (db,
+		     "UPDATE ports SET "
+		     " product_ore = MAX(1, product_ore), "
+		     " product_organics = MAX(1, product_organics), "
+		     " product_equipment = MAX(1, product_equipment) "
+		     "WHERE id > 0;", NULL, NULL, NULL);
 
   if (rc != SQLITE_OK)
     {
@@ -1697,26 +1738,25 @@ h_port_reprice (sqlite3 *db, int64_t now_s)
     }
 
   /* STEP 2 (DYNAMIC): Adjust prices based on trade flow (only affects ports with history). */
-  rc = sqlite3_exec (db, 
-                     "UPDATE ports SET "
-                     " product_ore = product_ore + COALESCE(T.ore_net_flow / 50, 0),"
-                     " product_organics = product_organics + COALESCE(T.organics_net_flow / 50, 0),"
-                     " product_equipment = product_equipment + COALESCE(T.equipment_net_flow / 50, 0) "
-                     "FROM ( "
-                     "  SELECT "
-                     "    port_id, "
-                     "    SUM(CASE WHEN commodity = 'ore' AND action = 'sell' THEN units "
-                     "             WHEN commodity = 'ore' AND action = 'buy' THEN -units ELSE 0 END) AS ore_net_flow, "
-                     "    SUM(CASE WHEN commodity = 'organics' AND action = 'sell' THEN units "
-                     "             WHEN commodity = 'organics' AND action = 'buy' THEN -units ELSE 0 END) AS organics_net_flow, "
-                     "    SUM(CASE WHEN commodity = 'equipment' AND action = 'sell' THEN units "
-                     "             WHEN commodity = 'equipment' AND action = 'buy' THEN -units ELSE 0 END) AS equipment_net_flow "
-                     "  FROM trade_log "
-                     "  WHERE timestamp > (strftime('%s', 'now') - 86400) "
-                     "  GROUP BY port_id "
-                     ") AS T "
-                     "WHERE ports.id = T.port_id;",
-                     NULL, NULL, NULL);
+  rc = sqlite3_exec (db,
+		     "UPDATE ports SET "
+		     " product_ore = product_ore + COALESCE(T.ore_net_flow / 50, 0),"
+		     " product_organics = product_organics + COALESCE(T.organics_net_flow / 50, 0),"
+		     " product_equipment = product_equipment + COALESCE(T.equipment_net_flow / 50, 0) "
+		     "FROM ( "
+		     "  SELECT "
+		     "    port_id, "
+		     "    SUM(CASE WHEN commodity = 'ore' AND action = 'sell' THEN units "
+		     "             WHEN commodity = 'ore' AND action = 'buy' THEN -units ELSE 0 END) AS ore_net_flow, "
+		     "    SUM(CASE WHEN commodity = 'organics' AND action = 'sell' THEN units "
+		     "             WHEN commodity = 'organics' AND action = 'buy' THEN -units ELSE 0 END) AS organics_net_flow, "
+		     "    SUM(CASE WHEN commodity = 'equipment' AND action = 'sell' THEN units "
+		     "             WHEN commodity = 'equipment' AND action = 'buy' THEN -units ELSE 0 END) AS equipment_net_flow "
+		     "  FROM trade_log "
+		     "  WHERE timestamp > (strftime('%s', 'now') - 86400) "
+		     "  GROUP BY port_id "
+		     ") AS T "
+		     "WHERE ports.id = T.port_id;", NULL, NULL, NULL);
 
   if (rc)
     {
@@ -1732,9 +1772,6 @@ h_port_reprice (sqlite3 *db, int64_t now_s)
   return 0;
 }
 
-
-
-
 //////////////////////// NEWS BLOCK ////////////////////////
 
 // --- Helper Functions for Event Translation ---
@@ -1746,22 +1783,28 @@ h_port_reprice (sqlite3 *db, int64_t now_s)
  * @param out_category Output buffer for news category.
  * @param out_article Output buffer for the final article text.
  */
-static void format_ship_destroyed_news(json_t *payload, int sector_id, char *out_category, char *out_article)
+static void
+format_ship_destroyed_news (json_t *payload, int sector_id,
+			    char *out_category, char *out_article)
 {
-    const char *ship_name = json_string_value(json_object_get(payload, "ship_name"));
-    const char *destroyed_by = json_string_value(json_object_get(payload, "destroyed_by"));
-    
-    // Default values if JSON is malformed
-    if (!ship_name) ship_name = "An Unknown Vessel";
-    if (!destroyed_by) destroyed_by = "Mysterious Forces";
+  const char *ship_name =
+    json_string_value (json_object_get (payload, "ship_name"));
+  const char *destroyed_by =
+    json_string_value (json_object_get (payload, "destroyed_by"));
 
-    // Set Category
-    snprintf(out_category, MAX_ARTICLE_LEN, "Combat");
+  // Default values if JSON is malformed
+  if (!ship_name)
+    ship_name = "An Unknown Vessel";
+  if (!destroyed_by)
+    destroyed_by = "Mysterious Forces";
 
-    // Format the news text
-    snprintf(out_article, MAX_ARTICLE_LEN,
-             "A major engagement was recorded in Sector %d: %s was destroyed by %s.",
-             sector_id, ship_name, destroyed_by);
+  // Set Category
+  snprintf (out_category, MAX_ARTICLE_LEN, "Combat");
+
+  // Format the news text
+  snprintf (out_article, MAX_ARTICLE_LEN,
+	    "A major engagement was recorded in Sector %d: %s was destroyed by %s.",
+	    sector_id, ship_name, destroyed_by);
 }
 
 /**
@@ -1771,26 +1814,31 @@ static void format_ship_destroyed_news(json_t *payload, int sector_id, char *out
  * @param out_category Output buffer for news category.
  * @param out_article Output buffer for the final article text.
  */
-static void format_large_sale_news(json_t *payload, int actor_player_id, char *out_category, char *out_article)
+static void
+format_large_sale_news (json_t *payload, int actor_player_id,
+			char *out_category, char *out_article)
 {
-    const char *commodity = json_string_value(json_object_get(payload, "commodity"));
-    int units = (int)json_integer_value(json_object_get(payload, "units"));
-    
-    // In a full system, you would look up the player's name here:
-    // char *player_name = db_get_player_name(actor_player_id);
-    const char *player_name = "A Prominent Trader";
-    if (actor_player_id > 0) {
-        // Simple mock for a real player name
-        // player_name = db_get_player_name(actor_player_id); 
+  const char *commodity =
+    json_string_value (json_object_get (payload, "commodity"));
+  int units = (int) json_integer_value (json_object_get (payload, "units"));
+
+  // In a full system, you would look up the player's name here:
+  // char *player_name = db_get_player_name(actor_player_id);
+  const char *player_name = "A Prominent Trader";
+  if (actor_player_id > 0)
+    {
+      // Simple mock for a real player name
+      // player_name = db_get_player_name(actor_player_id); 
     }
 
-    if (!commodity) commodity = "Unknown Goods";
+  if (!commodity)
+    commodity = "Unknown Goods";
 
-    snprintf(out_category, MAX_ARTICLE_LEN, "Trade");
-    
-    snprintf(out_article, MAX_ARTICLE_LEN,
-             "%s executed a massive sale of %d units of %s, causing major market turbulence.",
-             player_name, units, commodity);
+  snprintf (out_category, MAX_ARTICLE_LEN, "Trade");
+
+  snprintf (out_article, MAX_ARTICLE_LEN,
+	    "%s executed a massive sale of %d units of %s, causing major market turbulence.",
+	    player_name, units, commodity);
 }
 
 
@@ -1798,172 +1846,278 @@ static void format_large_sale_news(json_t *payload, int actor_player_id, char *o
  * @brief Dispatches event to the appropriate formatter function.
  * @return 1 if successfully collated and published, 0 otherwise.
  */
-static int collate_single_event(sqlite3_stmt *insert_stmt, sqlite3_int64 event_id, 
-                                sqlite3_int64 ts, const char *type, int actor_player_id, 
-                                int sector_id, const char *payload_str)
+static int
+collate_single_event (sqlite3_stmt *insert_stmt, sqlite3_int64 event_id,
+		      sqlite3_int64 ts, const char *type, int actor_player_id,
+		      int sector_id, const char *payload_str)
 {
-    json_t *payload = NULL;
-    char category[MAX_ARTICLE_LEN] = {0};
-    char article[MAX_ARTICLE_LEN] = {0};
-    sqlite3_int64 published_ts = (sqlite3_int64)time(NULL);
-    sqlite3_int64 expiration_ts = published_ts + NEWS_EXPIRATION_SECONDS;
-    
-    int processed = 0; // Flag if we generated an article
+  json_t *payload = NULL;
+  char category[MAX_ARTICLE_LEN] = { 0 };
+  char article[MAX_ARTICLE_LEN] = { 0 };
+  sqlite3_int64 published_ts = (sqlite3_int64) time (NULL);
+  sqlite3_int64 expiration_ts = published_ts + NEWS_EXPIRATION_SECONDS;
 
-    // 1. Parse JSON Payload
-    payload = json_loads(payload_str, 0, NULL);
-    if (!payload) {
-        // fprintf(stderr, "Error parsing JSON payload for event %lld.\n", event_id);
-        return 0; 
+  int processed = 0;		// Flag if we generated an article
+
+  // 1. Parse JSON Payload
+  payload = json_loads (payload_str, 0, NULL);
+  if (!payload)
+    {
+      // fprintf(stderr, "Error parsing JSON payload for event %lld.\n", event_id);
+      return 0;
     }
 
-    // 2. Dispatch to the Correct Formatter based on 'type'
-    if (strcmp(type, "combat.ship_destroyed") == 0) {
-        format_ship_destroyed_news(payload, sector_id, category, article);
-        processed = 1;
-    } else if (strcmp(type, "trade.large_sale") == 0) {
-        format_large_sale_news(payload, actor_player_id, category, article);
-        processed = 1;
-    } else if (strcmp(type, "lottery.winner") == 0) {
-        snprintf(category, MAX_ARTICLE_LEN, "System");
-        snprintf(article, MAX_ARTICLE_LEN, 
-                 "The Sector Lottery jackpot has been claimed by a lucky player! Check the system logs for details.");
-        processed = 1;
-    } 
-    // Add more types here: bounty.updated, ports.destroyed, etc.
-    
-    // 3. Insert into news_feed if an article was generated
-    if (processed) {
-        // Reset and bind parameters to the INSERT INTO news_feed statement
-        sqlite3_reset(insert_stmt);
-        sqlite3_bind_int64(insert_stmt, 1, published_ts);
-        sqlite3_bind_int64(insert_stmt, 2, expiration_ts);
-        sqlite3_bind_text(insert_stmt, 3, category, -1, SQLITE_STATIC);
-        sqlite3_bind_text(insert_stmt, 4, article, -1, SQLITE_STATIC);
-        
-        // The source_ids field is just the single event ID for now (JSON array "[ID]")
-        char source_id_json[64];
-        snprintf(source_id_json, sizeof(source_id_json), "[%lld]", event_id);
-        sqlite3_bind_text(insert_stmt, 5, source_id_json, -1, SQLITE_TRANSIENT);
-        
-        // Execute insert
-        if (sqlite3_step(insert_stmt) != SQLITE_DONE) {
-            // fprintf(stderr, "DB Error (news_feed insert): %s\n", sqlite3_errmsg(db_get_handle()));
-            processed = 0; // Insertion failed
-        }
+  // 2. Dispatch to the Correct Formatter based on 'type'
+  if (strcmp (type, "combat.ship_destroyed") == 0)
+    {
+      format_ship_destroyed_news (payload, sector_id, category, article);
+      processed = 1;
+    }
+  else if (strcmp (type, "trade.large_sale") == 0)
+    {
+      format_large_sale_news (payload, actor_player_id, category, article);
+      processed = 1;
+    }
+  else if (strcmp (type, "lottery.winner") == 0)
+    {
+      snprintf (category, MAX_ARTICLE_LEN, "System");
+      snprintf (article, MAX_ARTICLE_LEN,
+		"The Sector Lottery jackpot has been claimed by a lucky player! Check the system logs for details.");
+      processed = 1;
+    }
+  // Add more types here: bounty.updated, ports.destroyed, etc.
+
+  // 3. Insert into news_feed if an article was generated
+  if (processed)
+    {
+      // Reset and bind parameters to the INSERT INTO news_feed statement
+      sqlite3_reset (insert_stmt);
+      sqlite3_bind_int64 (insert_stmt, 1, published_ts);
+      sqlite3_bind_int64 (insert_stmt, 2, expiration_ts);
+      sqlite3_bind_text (insert_stmt, 3, category, -1, SQLITE_STATIC);
+      sqlite3_bind_text (insert_stmt, 4, article, -1, SQLITE_STATIC);
+
+      // The source_ids field is just the single event ID for now (JSON array "[ID]")
+      char source_id_json[64];
+      snprintf (source_id_json, sizeof (source_id_json), "[%lld]", event_id);
+      sqlite3_bind_text (insert_stmt, 5, source_id_json, -1,
+			 SQLITE_TRANSIENT);
+
+      // Execute insert
+      if (sqlite3_step (insert_stmt) != SQLITE_DONE)
+	{
+	  // fprintf(stderr, "DB Error (news_feed insert): %s\n", sqlite3_errmsg(db_get_handle()));
+	  processed = 0;	// Insertion failed
+	}
     }
 
-    json_decref(payload);
-    return processed;
+  json_decref (payload);
+  return processed;
 }
 
 
 // --- Main Cron Handler ---
 
-int h_news_collator(void)
+int
+h_news_collator (void)
 {
-    sqlite3 *db = db_get_handle();
-    sqlite3_stmt *select_stmt = NULL;
-    sqlite3_stmt *insert_stmt = NULL;
-    int rc = SQLITE_OK;
-    sqlite3_int64 current_time = (sqlite3_int64)time(NULL);
-    
-    // --- 0. SQL Definitions ---
-    // 1. SELECT: Get all unprocessed events
-    const char *SELECT_UNPROCESSED_SQL = 
-        "SELECT id, ts, type, actor_player_id, sector_id, payload "
-        "FROM engine_events WHERE processed_at IS NULL ORDER BY ts ASC, id ASC;";
-        
-    // 2. INSERT: Insert into the news_feed table (fields: published_ts, expiration_ts, news_category, article_text, source_ids)
-    const char *INSERT_NEWS_SQL = 
-        "INSERT INTO news_feed (published_ts, expiration_ts, news_category, article_text, source_ids) "
-        "VALUES (?, ?, ?, ?, ?);";
-        
-    // 3. DELETE: Clean up expired news
-    const char *DELETE_EXPIRED_SQL = 
-        "DELETE FROM news_feed WHERE expiration_ts < ?;";
-        
-    // 4. UPDATE: Mark processed events (Done in a batch after the loop)
-    char update_sql_buffer[4096] = {0}; // Large enough for a batch update
+  sqlite3 *db = db_get_handle ();
+  sqlite3_stmt *select_stmt = NULL;
+  sqlite3_stmt *insert_stmt = NULL;
+  int rc = SQLITE_OK;
+  sqlite3_int64 current_time = (sqlite3_int64) time (NULL);
 
-    // --- 1. Start Transaction ---
-    if (begin(db) != SQLITE_OK) {
-        // fprintf(stderr, "Failed to start transaction.\n");
-        return SQLITE_ERROR;
+  // --- 0. SQL Definitions ---
+  // 1. SELECT: Get all unprocessed events
+  const char *SELECT_UNPROCESSED_SQL =
+    "SELECT id, ts, type, actor_player_id, sector_id, payload "
+    "FROM engine_events WHERE processed_at IS NULL ORDER BY ts ASC, id ASC;";
+
+  // 2. INSERT: Insert into the news_feed table (fields: published_ts, expiration_ts, news_category, article_text, source_ids)
+  const char *INSERT_NEWS_SQL =
+    "INSERT INTO news_feed (published_ts, expiration_ts, news_category, article_text, source_ids) "
+    "VALUES (?, ?, ?, ?, ?);";
+
+  // 3. DELETE: Clean up expired news
+  const char *DELETE_EXPIRED_SQL =
+    "DELETE FROM news_feed WHERE expiration_ts < ?;";
+
+  // 4. UPDATE: Mark processed events (Done in a batch after the loop)
+  char update_sql_buffer[4096] = { 0 };	// Large enough for a batch update
+
+  // --- 1. Start Transaction ---
+  if (begin (db) != SQLITE_OK)
+    {
+      // fprintf(stderr, "Failed to start transaction.\n");
+      return SQLITE_ERROR;
     }
 
-    // --- 2. Clean Up Expired News ---
-    rc = sqlite3_prepare_v2(db, DELETE_EXPIRED_SQL, -1, &select_stmt, NULL);
-    if (rc == SQLITE_OK) {
-        sqlite3_bind_int64(select_stmt, 1, current_time);
-        sqlite3_step(select_stmt);
+  // --- 2. Clean Up Expired News ---
+  rc = sqlite3_prepare_v2 (db, DELETE_EXPIRED_SQL, -1, &select_stmt, NULL);
+  if (rc == SQLITE_OK)
+    {
+      sqlite3_bind_int64 (select_stmt, 1, current_time);
+      sqlite3_step (select_stmt);
     }
-    sqlite3_finalize(select_stmt);
-    select_stmt = NULL; // Reset for next use
-    
-    // --- 3. Prepare SELECT and INSERT Statements ---
-    rc = sqlite3_prepare_v2(db, SELECT_UNPROCESSED_SQL, -1, &select_stmt, NULL);
-    if (rc != SQLITE_OK) goto error_cleanup;
+  sqlite3_finalize (select_stmt);
+  select_stmt = NULL;		// Reset for next use
 
-    rc = sqlite3_prepare_v2(db, INSERT_NEWS_SQL, -1, &insert_stmt, NULL);
-    if (rc != SQLITE_OK) goto error_cleanup;
+  // --- 3. Prepare SELECT and INSERT Statements ---
+  rc =
+    sqlite3_prepare_v2 (db, SELECT_UNPROCESSED_SQL, -1, &select_stmt, NULL);
+  if (rc != SQLITE_OK)
+    goto error_cleanup;
 
-    // --- 4. Process Events and Build Batch Update List ---
-    
-    // Buffer to hold IDs of successfully processed events for batch update
-    char batch_ids[2048] = {0}; 
-    size_t batch_len = 0;
-    int event_count = 0;
-    
-    while (sqlite3_step(select_stmt) == SQLITE_ROW) {
-        sqlite3_int64 id = sqlite3_column_int64(select_stmt, 0);
-        sqlite3_int64 ts = sqlite3_column_int64(select_stmt, 1);
-        const char *type = (const char *)sqlite3_column_text(select_stmt, 2);
-        int actor_id = sqlite3_column_int(select_stmt, 3);
-        int sector_id = sqlite3_column_int(select_stmt, 4);
-        const char *payload_str = (const char *)sqlite3_column_text(select_stmt, 5);
+  rc = sqlite3_prepare_v2 (db, INSERT_NEWS_SQL, -1, &insert_stmt, NULL);
+  if (rc != SQLITE_OK)
+    goto error_cleanup;
 
-        // Try to process and publish the event
-        if (collate_single_event(insert_stmt, id, ts, type, actor_id, sector_id, payload_str)) {
-            // Article created successfully. Add ID to batch list.
-            if (batch_len > 0) {
-                batch_len += snprintf(batch_ids + batch_len, sizeof(batch_ids) - batch_len, ",%lld", id);
-            } else {
-                batch_len += snprintf(batch_ids + batch_len, sizeof(batch_ids) - batch_len, "%lld", id);
-            }
-            event_count++;
-        }
+  // --- 4. Process Events and Build Batch Update List ---
+
+  // Buffer to hold IDs of successfully processed events for batch update
+  char batch_ids[2048] = { 0 };
+  size_t batch_len = 0;
+  int event_count = 0;
+
+  while (sqlite3_step (select_stmt) == SQLITE_ROW)
+    {
+      sqlite3_int64 id = sqlite3_column_int64 (select_stmt, 0);
+      sqlite3_int64 ts = sqlite3_column_int64 (select_stmt, 1);
+      const char *type = (const char *) sqlite3_column_text (select_stmt, 2);
+      int actor_id = sqlite3_column_int (select_stmt, 3);
+      int sector_id = sqlite3_column_int (select_stmt, 4);
+      const char *payload_str =
+	(const char *) sqlite3_column_text (select_stmt, 5);
+
+      // Try to process and publish the event
+      if (collate_single_event
+	  (insert_stmt, id, ts, type, actor_id, sector_id, payload_str))
+	{
+	  // Article created successfully. Add ID to batch list.
+	  if (batch_len > 0)
+	    {
+	      batch_len +=
+		snprintf (batch_ids + batch_len,
+			  sizeof (batch_ids) - batch_len, ",%lld", id);
+	    }
+	  else
+	    {
+	      batch_len +=
+		snprintf (batch_ids + batch_len,
+			  sizeof (batch_ids) - batch_len, "%lld", id);
+	    }
+	  event_count++;
+	}
     }
-    
-    // --- 5. Mark Events as Processed (Batch Update) ---
-    if (event_count > 0) {
-        snprintf(update_sql_buffer, sizeof(update_sql_buffer),
-                 "UPDATE engine_events SET processed_at = %lld WHERE id IN (%s);",
-                 current_time, batch_ids);
 
-        if (sqlite3_exec(db, update_sql_buffer, NULL, NULL, NULL) != SQLITE_OK) {
-            // fprintf(stderr, "DB Error (batch update): %s\n", sqlite3_errmsg(db));
-            rc = SQLITE_ERROR;
-            goto error_cleanup;
-        }
+  // --- 5. Mark Events as Processed (Batch Update) ---
+  if (event_count > 0)
+    {
+      snprintf (update_sql_buffer, sizeof (update_sql_buffer),
+		"UPDATE engine_events SET processed_at = %lld WHERE id IN (%s);",
+		current_time, batch_ids);
+
+      if (sqlite3_exec (db, update_sql_buffer, NULL, NULL, NULL) != SQLITE_OK)
+	{
+	  // fprintf(stderr, "DB Error (batch update): %s\n", sqlite3_errmsg(db));
+	  rc = SQLITE_ERROR;
+	  goto error_cleanup;
+	}
     }
 
-    // --- 6. Finalize Statements and Commit ---
-    sqlite3_finalize(select_stmt);
-    sqlite3_finalize(insert_stmt);
-    
-    if (commit(db) != SQLITE_OK) {
-        // fprintf(stderr, "Failed to commit transaction.\n");
-        rc = SQLITE_ERROR;
-        return rc;
+  // --- 6. Finalize Statements and Commit ---
+  sqlite3_finalize (select_stmt);
+  sqlite3_finalize (insert_stmt);
+
+  if (commit (db) != SQLITE_OK)
+    {
+      // fprintf(stderr, "Failed to commit transaction.\n");
+      rc = SQLITE_ERROR;
+      return rc;
     }
-    
-    return SQLITE_OK;
+
+  return SQLITE_OK;
 
 error_cleanup:
-    // fprintf(stderr, "News collation failed, rolling back.\n");
-    sqlite3_finalize(select_stmt);
-    sqlite3_finalize(insert_stmt);
-    rollback(db);
-    return rc;
+  // fprintf(stderr, "News collation failed, rolling back.\n");
+  sqlite3_finalize (select_stmt);
+  sqlite3_finalize (insert_stmt);
+  rollback (db);
+  return rc;
+}
+
+
+// --- Helper for logging (INSERT into engine_events) ---
+
+int
+h_log_engine_event (const char *type,
+		    int actor_player_id,
+		    int sector_id, json_t *payload, const char *idem_key)
+{
+  sqlite3 *db = db_get_handle ();
+  sqlite3_stmt *stmt = NULL;
+  int rc;
+  int current_ts = (int) time (NULL);
+  char *payload_str = NULL;
+
+  // 1. Serialize the JSON payload
+  // JSON_COMPACT is used to save space in the database TEXT field.
+  payload_str = json_dumps (payload, JSON_COMPACT | JSON_ENSURE_ASCII);
+  json_decref (payload);	// Consume the reference as per function contract
+
+  if (!payload_str)
+    {
+      fprintf (stderr,
+	       "ERROR: h_log_engine_event Failed to serialize JSON payload.\n");
+      return SQLITE_ERROR;
+    }
+
+  // 2. Prepare the SQL statement
+  const char *sql =
+    "INSERT INTO engine_events (ts, type, actor_player_id, sector_id, payload, idem_key) "
+    "VALUES (?, ?, ?, ?, ?, ?);";
+
+  rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      fprintf (stderr, "ERROR: h_log_engine_event prepare failed: %s\n",
+	       sqlite3_errmsg (db));
+      free (payload_str);
+      return rc;
+    }
+
+  // 3. Bind the parameters
+  sqlite3_bind_int (stmt, 1, current_ts);
+  sqlite3_bind_text (stmt, 2, type, -1, SQLITE_STATIC);
+  sqlite3_bind_int (stmt, 3, actor_player_id);
+  sqlite3_bind_int (stmt, 4, sector_id);
+  // Use SQLITE_TRANSIENT to make a copy of payload_str
+  sqlite3_bind_text (stmt, 5, payload_str, -1, SQLITE_TRANSIENT);
+
+  if (idem_key && idem_key[0] != '\0')
+    {
+      sqlite3_bind_text (stmt, 6, idem_key, -1, SQLITE_STATIC);
+    }
+  else
+    {
+      sqlite3_bind_null (stmt, 6);
+    }
+
+  // 4. Execute the statement
+  rc = sqlite3_step (stmt);
+  if (rc != SQLITE_DONE)
+    {
+      fprintf (stderr, "ERROR: h_log_engine_event execution failed: %s\n",
+	       sqlite3_errmsg (db));
+    }
+  else
+    {
+      rc = SQLITE_OK;		// Success
+    }
+
+  // 5. Cleanup
+  sqlite3_finalize (stmt);
+  free (payload_str);
+
+  return rc;
 }

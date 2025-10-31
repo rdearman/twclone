@@ -42,61 +42,6 @@ void send_enveloped_refused (int fd, json_t * root, int code, const char *msg,
 			     json_t * data_opt);
 
 
-/**
- * @brief Handles the 'combat.attack' command.
- * * @param ctx The player context (struct context *).
- * @param root The root JSON object containing the command payload.
- * @return int Returns 0 on successful processing (or error handling).
- */
-int handle_combat_attack(client_ctx_t *ctx, json_t *root) {
-    sqlite3 *db = db_get_handle();
-    
-    
-    // All combat actions reveal the ship
-    h_decloak_ship(db, h_get_active_ship_id (db, ctx->player_id));
-
-  TurnConsumeResult tc = h_consume_player_turn(db, ctx, "combat.attack");
-  if (tc != TURN_CONSUME_SUCCESS) {
-      return handle_turn_consumption_error(ctx, tc, "combat.attack", root, NULL);
-  }    
-    
-    // --- COMBAT ATTACK LOGIC GOES HERE ---
-    
-    // 2. Determine target (player ship, planet, port, etc.)
-    // 3. Perform attack calculations (fighters, cannons, torpedoes)
-    // 4. Update the DB with results (losses, sector change if target destroyed)
-    // 5. Send successful ACK/status to client
-    
-    return 0; // Success
-}
-
-/**
- * @brief Handles the 'combat.flee' command.
- * * @param ctx The player context (struct context *).
- * @param root The root JSON object containing the command payload.
- * @return int Returns 0 on successful processing (or error handling).
- */
-int handle_combat_flee(client_ctx_t *ctx, json_t *root) {
-    sqlite3 *db_handle = db_get_handle();
-    
-    // Attempting to flee reveals the ship
-    h_decloak_ship(db_handle, h_get_active_ship_id(db_handle, (ctx->player_id)));
-
-    TurnConsumeResult tc = h_consume_player_turn(db_handle, ctx, "combat.flee");
-    if (tc != TURN_CONSUME_SUCCESS) {
-      return handle_turn_consumption_error(ctx, tc, "combat.flee", root, NULL);
-    }    	
-    
-    // --- COMBAT FLEE LOGIC GOES HERE ---
-    
-    // 2. Determine success chance based on ship speed, opponent status, etc.
-    // 3. If successful, potentially move the ship one warp or clear the combat status flag.
-    // 4. If unsuccessful, opponent might get a free attack or the ship remains in combat.
-    // 5. Send successful ACK/status to client
-    
-    return 0; // Success
-}
-
 int
 cmd_ship_transfer_cargo (client_ctx_t *ctx, json_t *root)
 {
@@ -113,12 +58,16 @@ cmd_ship_jettison (client_ctx_t *ctx, json_t *root)
 {
   sqlite3 *db_handle = db_get_handle ();
   // Actions reveal the ship
-  h_decloak_ship(db_handle, h_get_active_ship_id(db_handle, ctx->player_id));
+  h_decloak_ship (db_handle,
+		  h_get_active_ship_id (db_handle, ctx->player_id));
 
-  TurnConsumeResult tc = h_consume_player_turn(db_handle, ctx, "trade.jettison");
-    if (tc != TURN_CONSUME_SUCCESS) {
-      return handle_turn_consumption_error(ctx, tc, "trade.jettison", root, NULL);
-    }    
+  TurnConsumeResult tc =
+    h_consume_player_turn (db_handle, ctx, "trade.jettison");
+  if (tc != TURN_CONSUME_SUCCESS)
+    {
+      return handle_turn_consumption_error (ctx, tc, "trade.jettison", root,
+					    NULL);
+    }
 
   STUB_NIY (ctx, root, "ship.jettison");
 }
@@ -337,27 +286,28 @@ cmd_ship_info_compat (client_ctx_t *ctx, json_t *root)
 }
 
 
-void process_ship_destruction(int attacker_id, int victim_id, const char *victim_ship_name, int sector)
+void
+process_ship_destruction (int attacker_id, int victim_id,
+			  const char *victim_ship_name, int sector)
 {
-    // 1. Build the JSON payload using the helper json_pack()
-    json_t *payload = json_pack("{s:s, s:i, s:i}", 
-                                "ship_name", victim_ship_name, 
-                                "victim_player_id", victim_id, 
-                                "attacker_player_id", attacker_id);
-    
-    // 2. Log the event
-    int rc = db_log_engine_event(
-        (long long)time(NULL), 
-        "combat.ship_destroyed", 
-        attacker_id, 
-        sector, 
-        payload
-    );
-    
-    // 3. Cleanup the JSON object
-    json_decref(payload);
-    
-    if (rc != SQLITE_OK) {
-        // Log event logging failure
+  // 1. Build the JSON payload using the helper json_pack()
+  json_t *payload = json_pack ("{s:s, s:i, s:i}",
+			       "ship_name", victim_ship_name,
+			       "victim_player_id", victim_id,
+			       "attacker_player_id", attacker_id);
+
+  // 2. Log the event
+  int rc = db_log_engine_event ((long long) time (NULL),
+				"combat.ship_destroyed",
+				attacker_id,
+				sector,
+				payload);
+
+  // 3. Cleanup the JSON object
+  json_decref (payload);
+
+  if (rc != SQLITE_OK)
+    {
+      // Log event logging failure
     }
 }

@@ -95,7 +95,8 @@ int db_players_at_sector_json (int sector_id, json_t ** out_array);
 int db_ports_at_sector_json (int sector_id, json_t ** out_array);
 int db_ships_at_sector_json (int player_id, int sector_id, json_t ** out);
 int db_sector_has_beacon (int sector_id);
-int db_sector_set_beacon (int sector_id, const char *beacon_text, int player_id);
+int db_sector_set_beacon (int sector_id, const char *beacon_text,
+			  int player_id);
 int db_player_has_beacon_on_ship (int player_id);
 int db_player_decrement_beacon_count (int player_id);
 int db_player_has_beacon_on_ship (int player_id);
@@ -138,7 +139,8 @@ int db_player_name (int64_t player_id, char **out);
 int db_chain_traps_and_bridge (int fedspace_max /* typically 10 */ );
 int db_rand_npc_shipname (char *out, size_t out_sz);
 void db_handle_close_and_reset (void);
-int db_log_engine_event(long long ts, const char *type, int actor_player_id, int sector_id, json_t *payload);
+int db_log_engine_event (long long ts, const char *type, int actor_player_id,
+			 int sector_id, json_t * payload);
 
 
 #endif /* DATABASE_H */
