@@ -1,7 +1,7 @@
 #pragma once
 #include <sqlite3.h>
 #include <stdint.h>
-#include <jansson.h> 
+#include <jansson.h>
 
 typedef int (*cron_handler_fn) (sqlite3 * db, int64_t now_s);
 
@@ -25,4 +25,5 @@ int h_port_reprice (sqlite3 * db, int64_t now_s);
 int h_reset_turns_for_player (sqlite3 * db, int64_t now_s);
 int h_port_price_drift (sqlite3 * db, int64_t now_s);
 int h_news_collator (void);
-int h_log_engine_event (const char *type, int actor_player_id, int sector_id, json_t * payload, const char *idem_key);
+int h_log_engine_event (const char *type, int actor_player_id, int sector_id,
+			json_t * payload, const char *idem_key);
