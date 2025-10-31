@@ -91,7 +91,7 @@
   {
     "name": "sector.set_beacon (set)",
     "tags": ["sector","write"],
-    "command": { "command": "sector.set_beacon", "data": { "text": "The Federation -- Do Not Dump!", "idempotency_key": "00000000-0000-0000-0000-00000000C001" } },
+    "command": { "command": "sector.set_beacon", "data": { "text": "The TEST WORLD -- Do Not Dump!", "idempotency_key": "00000000-0000-0000-0000-00000000C001" } },
     "expect": { "status": "*" }
   },
   {
@@ -206,5 +206,76 @@
     "tags": ["session"],
     "command": { "command": "session.goodbye" },
     "expect": { "status": "*" }
-  }
+  },
+  {
+    "name": "auth.login newguy (turn tests)",
+    "tags": ["auth","turns"],
+    "command": { "command": "auth.login", "data": { "user_name": "newguy", "password": "pass123" } },
+    "expect": { "status": "ok", "type": "*" }
+  },
+
+  { "name": "turns: baseline A (before scan)", "tags": ["turns","snapshot"],
+    "command": { "command": "player.my_info" }, "expect": { "status": "ok" } },
+
+  { "name": "turns: action scan (consumes 1)", "tags": ["turns","scan"],
+    "command": { "command": "move.scan" }, "expect": { "status": "*" } },
+
+  { "name": "turns: after scan A", "tags": ["turns","snapshot"],
+    "command": { "command": "player.my_info" }, "expect": { "status": "ok" } },
+
+  { "name": "turns: sector.info checkpoint", "tags": ["turns","info"],
+    "command": { "command": "sector.info" }, "expect": { "status": "*" } },
+
+  { "name": "turns: baseline B (before warp)", "tags": ["turns","snapshot"],
+    "command": { "command": "player.my_info" }, "expect": { "status": "ok" } },
+
+  { "name": "turns: action warp (consumes 1) — prompt target",
+    "tags": ["turns","warp","write"],
+    "command": { "command": "move.warp",
+      "data": { "to_sector_id": "<prompt:int:Sector ID>", "idempotency_key": "00000000-0000-0000-0000-0000TURNSWARP01" } },
+    "expect": { "status": "*" } },
+
+  { "name": "turns: after warp", "tags": ["turns","snapshot"],
+    "command": { "command": "player.my_info" }, "expect": { "status": "ok" } },
+
+  { "name": "turns: move to port sector? (optional info)",
+    "tags": ["turns","trade","info"], "command": { "command": "sector.info" }, "expect": { "status": "*" } },
+
+  { "name": "turns: baseline C (before trade.buy)", "tags": ["turns","snapshot","trade"],
+    "command": { "command": "player.my_info" }, "expect": { "status": "ok" } },
+
+  { "name": "turns: trade.port_info (prompt port)",
+    "tags": ["turns","trade","info"],
+    "command": { "command": "trade.port_info", "data": { "port_id": "<prompt:int:Port ID>" } },
+    "expect": { "status": "*" } },
+
+  { "name": "turns: action trade.buy (consumes 1 on success) — prompt values",
+    "tags": ["turns","trade","write"],
+    "command": { "command": "trade.buy",
+      "data": {
+        "port_id": "<prompt:int:Port ID>",
+        "commodity": "ore",
+        "quantity": 1,
+        "max_price": "9999.00",
+        "idempotency_key": "00000000-0000-0000-0000-0000TURNSBUY001"
+      } },
+    "expect": { "status": "*" } },
+
+  { "name": "turns: after trade.buy", "tags": ["turns","snapshot","trade"],
+    "command": { "command": "player.my_info" }, "expect": { "status": "ok" } },
+
+  { "name": "turns: action trade.sell (consumes 1 on success) — prompt values",
+    "tags": ["turns","trade","write"],
+    "command": { "command": "trade.sell",
+      "data": {
+        "port_id": "<prompt:int:Port ID>",
+        "commodity": "ore",
+        "quantity": 1,
+        "min_price": "0.01",
+        "idempotency_key": "00000000-0000-0000-0000-0000TURNSELL01"
+      } },
+    "expect": { "status": "*" } },
+
+  { "name": "turns: after trade.sell", "tags": ["turns","snapshot","trade"],
+    "command": { "command": "player.my_info" }, "expect": { "status": "ok" } }
 ]

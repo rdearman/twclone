@@ -255,13 +255,14 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
     if (!ctx || !root)
         return -1;
 
-    int consume = h_consume_player_turn(db_handle, ctx , "move.warp");
+    db = db_get_handle ();
+
+    int consume = h_consume_player_turn(db, ctx , "move.warp");
     if (!consume)
       {
         return handle_turn_consumption_error(ctx, consume, "move.warp", root, NULL);
       }
 
-    db = db_get_handle ();
 
     // --- 0. Initial Validation & Setup (Pre-Transaction) ---
 
@@ -1203,7 +1204,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
     sqlite3 *db = db_get_handle();
     int rc = SQLITE_OK;
 
-    int consume = h_consume_player_turn(db_handle, ctx , "move.warp");
+    int consume = h_consume_player_turn(db, ctx , "move.warp");
     if (!consume)
       {
         return handle_turn_consumption_error(ctx, consume, "move.warp", root, NULL);

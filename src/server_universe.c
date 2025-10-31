@@ -768,8 +768,13 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
 {
   if (!ctx)
     return 1;
+  /* Build avoid set (optional) */
+  /* We’ll size bitsets by max sector id */
+  sqlite3 *db = db_get_handle ();
+  int max_id = 0;
+  sqlite3_stmt *st = NULL;
 
-  int consume = h_consume_player_turn(db_handle, ctx , "move.warp");
+  int consume = h_consume_player_turn(db, ctx , "move.warp");
   if (!consume)
     {
         return handle_turn_consumption_error(ctx, consume, "move.warp", root, NULL);
@@ -803,11 +808,6 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
       return 1;
     }
 
-  /* Build avoid set (optional) */
-  /* We’ll size bitsets by max sector id */
-  sqlite3 *db = db_get_handle ();
-  int max_id = 0;
-  sqlite3_stmt *st = NULL;
 
   pthread_mutex_lock (&db_mutex);
   if (sqlite3_prepare_v2 (db, "SELECT MAX(id) FROM sectors", -1, &st, NULL) ==
@@ -1225,6 +1225,10 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
 {
   if (!ctx)
     return;
+
+  sqlite3 *db_handle = db_get_handle ();
+  h_decloak_ship (db_handle,
+		  h_get_active_ship_id (db_handle, ctx->player_id));
 
   int consume = h_consume_player_turn(db_handle, ctx , "move.warp");
   if (!consume)

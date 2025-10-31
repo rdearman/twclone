@@ -28,6 +28,10 @@
 #include "server_envelope.h"
 #include "server_rules.h"
 #include "server_players.h"
+#include "server_log.h"
+
+
+
 
 void handle_move_pathfind (client_ctx_t * ctx, json_t * root);
 
@@ -38,10 +42,75 @@ void send_enveloped_refused (int fd, json_t * root, int code, const char *msg,
 			     json_t * data_opt);
 
 
+/**
+ * @brief Handles the 'combat.attack' command.
+ * * @param ctx The player context (struct context *).
+ * @param root The root JSON object containing the command payload.
+ * @return int Returns 0 on successful processing (or error handling).
+ */
+int handle_combat_attack(client_ctx_t *ctx, json_t *root) {
+    sqlite3 *db = db_get_handle();
+    
+    
+    // All combat actions reveal the ship
+    h_decloak_ship(db, h_get_active_ship_id (db, ctx->player_id));
+                               
+    // 1. Consume a turn for attacking
+    TurnConsumeResult consume_result = h_consume_player_turn(db, ctx, "combat.attack");
+    
+    if (consume_result != TURN_CONSUME_SUCCESS) {
+        // Turn consumption failed (No turns, DB error, etc.)
+        return handle_turn_consumption_error(ctx, consume_result, "combat.attack", root, NULL);
+    }
+    
+    // --- COMBAT ATTACK LOGIC GOES HERE ---
+    
+    // 2. Determine target (player ship, planet, port, etc.)
+    // 3. Perform attack calculations (fighters, cannons, torpedoes)
+    // 4. Update the DB with results (losses, sector change if target destroyed)
+    // 5. Send successful ACK/status to client
+    
+    return 0; // Success
+}
+
+/**
+ * @brief Handles the 'combat.flee' command.
+ * * @param ctx The player context (struct context *).
+ * @param root The root JSON object containing the command payload.
+ * @return int Returns 0 on successful processing (or error handling).
+ */
+int handle_combat_flee(client_ctx_t *ctx, json_t *root) {
+    sqlite3 *db_handle = db_get_handle();
+    
+    // Attempting to flee reveals the ship
+    h_decloak_ship(db_handle, h_get_active_ship_id(db_handle, (ctx->player_id)));
+                               
+    // 1. Consume a turn for fleeing
+    TurnConsumeResult consume_result = h_consume_player_turn(db_handle,ctx, "combat.flee");
+    
+    if (consume_result != TURN_CONSUME_SUCCESS) {
+        // Turn consumption failed (No turns, DB error, etc.)
+        return handle_turn_consumption_error(ctx, consume_result, "combat.flee", root, NULL);
+    }
+    
+    // --- COMBAT FLEE LOGIC GOES HERE ---
+    
+    // 2. Determine success chance based on ship speed, opponent status, etc.
+    // 3. If successful, potentially move the ship one warp or clear the combat status flag.
+    // 4. If unsuccessful, opponent might get a free attack or the ship remains in combat.
+    // 5. Send successful ACK/status to client
+    
+    return 0; // Success
+}
+
+
+
 int
 cmd_ship_transfer_cargo (client_ctx_t *ctx, json_t *root)
 {
   sqlite3 *db_handle = db_get_handle ();
+
+
   h_decloak_ship (db_handle,
 		  h_get_active_ship_id (db_handle, ctx->player_id));
   STUB_NIY (ctx, root, "ship.transfer_cargo");
@@ -51,8 +120,17 @@ int
 cmd_ship_jettison (client_ctx_t *ctx, json_t *root)
 {
   sqlite3 *db_handle = db_get_handle ();
-  h_decloak_ship (db_handle,
-		  h_get_active_ship_id (db_handle, ctx->player_id));
+  // Actions reveal the ship
+  h_decloak_ship(db_handle, h_get_active_ship_id(db_handle, ctx->player_id));
+                               
+  // 1. Consume a turn for attacking
+  int consume_result = h_consume_player_turn(db_handle, ctx, "ship.jettison");
+  
+  if (consume_result != TURN_CONSUME_SUCCESS) {
+    // Turn consumption failed (No turns, DB error, etc.)
+    return handle_turn_consumption_error(ctx, consume_result, "ship.jettison", root, NULL);
+  }
+
   STUB_NIY (ctx, root, "ship.jettison");
 }
 
