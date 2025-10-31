@@ -49,6 +49,7 @@
 #define ERR_TOO_MANY_BULK_ITEMS  1305
 #define ERR_CURSOR_INVALID       1306
 #define ERR_BAD_REQUEST          1306
+#define ERR_REF_NO_TURNS         1307
 
 /* 1400 — Movement / Rules */
 #define REF_NOT_IN_SECTOR        1400	/* REFUSED */

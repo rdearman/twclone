@@ -1,3 +1,6 @@
+#ifndef COMMON_H
+#define COMMON_H
+
 #include <stdatomic.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -26,6 +29,26 @@
 #include <netinet/in.h>
 #include <string.h>
 
+// A simple structure to represent the result of the comsume player turn function
+typedef enum {
+    TURN_CONSUME_SUCCESS = 0,
+    TURN_CONSUME_ERROR_DB_FAIL,
+    TURN_CONSUME_ERROR_PLAYER_NOT_FOUND,
+    TURN_CONSUME_ERROR_NO_TURNS
+} TurnConsumeResult;
+
+typedef enum {
+    ASSET_MINE = 1,
+    ASSET_FIGHTER = 2,
+    ASSET_BEACON = 3,
+    ASSET_LIMPET_MINE = 4    
+} asset_type_t;
+
+typedef enum {
+    OFFENSE_TOLL = 1,
+    OFFENSE_DEFEND = 2,
+    OFFENSE_ATTACK = 3
+} offense_type_t;
 
 #ifndef START_FIGHTERS
 #define START_FIGHTERS 20
@@ -94,23 +117,6 @@
 #define MAX_NAME_LENGTH 25
 #endif
 
-#ifndef COMMON_H
-#define COMMON_H
-
-typedef enum {
-    ASSET_MINE = 1,
-    ASSET_FIGHTER = 2,
-    ASSET_BEACON = 3,
-    ASSET_LIMPET_MINE = 4    
-} asset_type_t;
-
-typedef enum {
-    OFFENSE_TOLL = 1,
-    OFFENSE_DEFEND = 2,
-    OFFENSE_ATTACK = 3
-} offense_type_t;
-
-
 int init_sockaddr (int, struct sockaddr_in *);
 int init_clientnetwork (char *hostname, int port);
 
@@ -147,8 +153,6 @@ enum porttype
 
 extern int *usedNames;
 extern time_t *timeptr;
-
-
 
 /* ships.flags bitmask */
 #define SHIPF_FOR_SALE   0x0001	/* Owner intends to sell at Stardock */
@@ -198,5 +202,4 @@ void now_iso8601 (char out[25]);	/* "YYYY-MM-DDTHH:MM:SSZ" */
 void strip_ansi (char *dst, const char *src, size_t cap);
 
 
-
-#endif
+#endif // COMMON.H

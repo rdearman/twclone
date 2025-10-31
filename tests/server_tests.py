@@ -3,124 +3,303 @@ import socket
 import json
 import uuid
 import os
-import re
+import argparse
+from typing import Any, Dict, List, Optional
 
-# Configuration from the test data file
+# ----------------------------
+# Defaults (override via CLI/env)
+# ----------------------------
 HOST = "localhost"
 PORT = 1234
 TIMEOUT = 5
-TEST_DATA_FILE = "test_data.json"
 
-# ---------- I/O helpers (unchanged) ----------
+# ----------------------------
+# CLI + file selection
+# ----------------------------
 
-def recv_line(sock, limit=65536):
+def parse_args():
+    p = argparse.ArgumentParser(description="TWClone Protocol Test Runner")
+    p.add_argument("file", nargs="?", default=None,
+                   help="Path to test JSON (default: test_data.json)")
+    p.add_argument("--suite", default=None,
+                   help="Suite name when using a suites file (e.g., 02_nav)")
+    p.add_argument("--host", default=None, help=f"Host (default: {HOST})")
+    p.add_argument("--port", type=int, default=None, help=f"Port (default: {PORT})")
+    p.add_argument("--timeout", type=int, default=None, help=f"Socket timeout seconds (default: {TIMEOUT})")
+    p.add_argument("--list-suites", action="store_true", help="List suites in the file and exit")
+    p.add_argument("--strict", action="store_true", help="Strict expect matching (no wildcards)")
+    # Auth bootstrap
+    p.add_argument("--user", default=os.getenv("TW_USER"), help="Username to auth/login")
+    p.add_argument("--passwd", default=os.getenv("TW_PASSWD"), help="Password to auth/login")
+    p.add_argument("--register-if-missing", action="store_true",
+                   help="Try auth.register first; ignore 'already exists' and proceed to login")
+    return p.parse_args()
+
+def resolve_test_file(args) -> str:
+    # Priority: CLI arg > env var > default
+    if args.file:
+        return args.file
+    if os.getenv("TW_TESTS"):
+        return os.getenv("TW_TESTS")
+    return "test_data.json"
+
+def resolve_suite(args) -> Optional[str]:
+    return args.suite or os.getenv("TW_SUITE")
+
+def load_json(path: str) -> Any:
+    with open(path, "r", encoding="utf-8") as fh:
+        return json.load(fh)
+
+def list_suites(doc: Any) -> List[str]:
+    if isinstance(doc, dict) and isinstance(doc.get("suites"), dict):
+        return list(doc["suites"].keys())
+    return []
+
+def normalise_tests(doc: Any, suite: Optional[str]) -> List[Dict[str, Any]]:
+    """
+    Accepted shapes:
+      - list of tests
+      - { "tests": [...] }
+      - { "suites": { "01_smoke": [...], ... } }
+      - legacy dict-of-lists (flatten)
+    """
+    if isinstance(doc, list):
+        return doc
+
+    if isinstance(doc, dict):
+        if suite and "suites" in doc and isinstance(doc["suites"], dict):
+            if suite not in doc["suites"]:
+                available = ", ".join(sorted(doc["suites"].keys()))
+                raise ValueError(f"Suite '{suite}' not found. Available: {available}")
+            if not isinstance(doc["suites"][suite], list):
+                raise ValueError(f"Suite '{suite}' is not a list.")
+            return doc["suites"][suite]
+
+        if "tests" in doc and isinstance(doc["tests"], list):
+            return doc["tests"]
+
+        # legacy: flatten arrays of tests at top-level
+        flattened: List[Dict[str, Any]] = []
+        for v in doc.values():
+            if isinstance(v, list) and v and isinstance(v[0], dict) and "command" in v[0]:
+                flattened.extend(v)
+        if flattened:
+            return flattened
+
+    raise ValueError("Unrecognised test file shape. Expected list, or {tests:[...]}, or {suites:{...}}.")
+
+# ----------------------------
+# Socket I/O
+# ----------------------------
+
+def recv_line(sock: socket.socket, limit: int = 65536) -> str:
     buf = bytearray()
     while True:
-        chunk = sock.recv(4096)
+        chunk = sock.recv(1)
         if not chunk:
             break
-        buf.extend(chunk)
-        if b"\n" in chunk or len(buf) >= limit:
+        if chunk == b"\n":
             break
-    s = bytes(buf)
-    if b"\n" in s:
-        s = s[:s.index(b"\n")]
-    return s.decode("utf-8")
+        buf.extend(chunk)
+        if len(buf) >= limit:
+            break
+    return buf.decode("utf-8", errors="replace")
 
-def send_and_receive(sock, message_dict):
-    # Add a unique ID and timestamp to each message for correlation
-    message_dict["id"] = str(uuid.uuid4())
-    message_dict["ts"] = "2025-09-17T19:45:12.345Z"  # placeholder timestamp
+def send_json_line(sock: socket.socket, obj: Dict[str, Any]) -> None:
+    data = json.dumps(obj, ensure_ascii=False)
+    sock.sendall(data.encode("utf-8") + b"\n")
+
+# ----------------------------
+# Expectation matching
+# ----------------------------
+
+def _is_wc(v: Any) -> bool:
+    return isinstance(v, str) and v == "*"
+
+def _is_arr_wc(v: Any) -> bool:
+    return isinstance(v, str) and v == "*array"
+
+def soft_match(actual: Any, expect: Any, strict: bool = False) -> bool:
+    if not strict:
+        if _is_wc(expect):
+            return True
+        if _is_arr_wc(expect):
+            return isinstance(actual, list)
+
+    if isinstance(expect, dict):
+        if not isinstance(actual, dict):
+            return False
+        for k, v in expect.items():
+            if k not in actual:
+                return False
+            if not soft_match(actual[k], v, strict=strict):
+                return False
+        return True
+
+    if isinstance(expect, list):
+        if not isinstance(actual, list):
+            return False
+        if len(expect) > len(actual):
+            return False
+        for i, ev in enumerate(expect):
+            if not soft_match(actual[i], ev, strict=strict):
+                return False
+        return True
+
+    return actual == expect
+
+# ----------------------------
+# Test shape coercion
+# ----------------------------
+
+def coerce_command_from_test(name: str, test: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Accept either:
+      - test["command"] is a dict -> use as-is
+      - test["command"] is a string -> wrap to {"command": "<string>"}
+      - legacy: test has "type" or "cmd" -> wrap accordingly
+    """
+    if "command" in test:
+        cmd = test["command"]
+        if isinstance(cmd, dict):
+            return cmd
+        if isinstance(cmd, str):
+            return {"command": cmd}
+        raise TypeError(f"Test '{name}': 'command' must be a string or object.")
+    # legacy fallback:
+    if "type" in test and isinstance(test["type"], str):
+        return {"command": test["type"]}
+    if "cmd" in test and isinstance(test["cmd"], str):
+        return {"command": test["cmd"]}
+    raise TypeError(f"Test '{name}': 'command' must be an object with 'command' field, a string, or legacy 'type'/'cmd'.")
+
+# ----------------------------
+# Auth bootstrap (optional)
+# ----------------------------
+
+def try_register(sock: socket.socket, user: str, passwd: str) -> None:
+    send_json_line(sock, {"command": "auth.register", "data": {"user_name": user, "password": passwd}})
+    resp = json.loads(recv_line(sock) or "{}")
+    # ok → proceed; error 1210 (exists) → proceed; any other error → print but continue to login
+    if resp.get("status") == "ok":
+        print(f"[auth.register] PASS  (user={user})")
+        return
+    err = (resp.get("error") or {}).get("code")
+    if err == 1210:
+        print(f"[auth.register] SKIP (already exists)")
+        return
+    print(f"[auth.register] NOTE: {resp}")
+
+def do_login(sock: socket.socket, user: str, passwd: str) -> bool:
+    send_json_line(sock, {"command": "auth.login", "data": {"user_name": user, "password": passwd}})
+    resp = json.loads(recv_line(sock) or "{}")
+    ok = (resp.get("status") == "ok")
+    print(f"[auth.login] {'PASS' if ok else 'FAIL'} (user={user})")
+    if not ok:
+        print("  response:", json.dumps(resp, ensure_ascii=False))
+    return ok
+
+# ----------------------------
+# Single test execution
+# ----------------------------
+
+def run_test(name: str, sock: socket.socket, test: Dict[str, Any], strict: bool = False) -> None:
+    command = coerce_command_from_test(name, test)
+    expect = test.get("expect", {"status": "ok"})
+
+    # Pass through idempotency_key if present
+    if isinstance(command.get("data"), dict) and "idempotency_key" in test:
+        command["data"].setdefault("idempotency_key", test["idempotency_key"])
+
+    # Send
+    send_json_line(sock, command)
+
+    # Receive
+    line = recv_line(sock)
+    if not line.strip():
+        print(f"[{name}] FAIL: empty response")
+        return
 
     try:
-        msg = json.dumps(message_dict) + "\n"
-        sock.sendall(msg.encode("utf-8"))
-        line = recv_line(sock).strip()
-        return json.loads(line) if line else {"status": "ERROR", "message": "empty reply"}
-    except socket.timeout:
-        return {"status": "TIMEOUT"}
-    except json.JSONDecodeError:
-        return {"status": "ERROR", "message": "Invalid JSON response from server"}
+        resp = json.loads(line)
     except Exception as e:
-        return {"status": "ERROR", "message": str(e)}
+        print(f"[{name}] FAIL: could not parse JSON response: {e}\n  raw: {line!r}")
+        return
 
-# ---------- Test runner function (consolidated) ----------
+    ok = soft_match(resp, expect, strict=strict)
+    status = resp.get("status")
+    rtype = resp.get("type")
 
-def run_test(name, sock, message, expect):
-    print(f"TRIED: {name}")
-    resp = send_and_receive(sock, message)
-    print(f"RETURNED: {resp}")
+    if ok:
+        print(f"[{name}] PASS  (status={status}, type={rtype})")
+    else:
+        print(f"[{name}] FAIL  (status={status}, type={rtype})")
+        print("  expect:", json.dumps(expect, ensure_ascii=False))
+        print("  actual:", json.dumps(resp, ensure_ascii=False))
 
-    ok = True
-
-    # Basic top-level expectations (status/type/code) — legacy behavior preserved
-    for k, v in expect.items():
-        if k in ("ts_regex", "assert_prefs"):  # handled below
-            continue
-        if k == "code":
-            if resp.get("error", {}).get("code") != v:
-                ok = False
-                break
-        else:
-            if resp.get(k) != v:
-                ok = False
-                break
-
-    # Optional: verify top-level ts matches ISO-8601 UTC
-    if ok and "ts_regex" in expect:
-        ts = resp.get("ts", "")
-        if not re.match(expect["ts_regex"], ts or ""):
-            ok = False
-
-    # Optional: verify specific prefs exist (for player.prefs_v1)
-    if ok and "assert_prefs" in expect:
-        if resp.get("type") != "player.prefs_v1":
-            ok = False
-        else:
-            prefs = (resp.get("data") or {}).get("prefs") or []
-            have = {p.get("key"): (p.get("type"), p.get("value"))
-                    for p in prefs if isinstance(p, dict) and "key" in p}
-            for want in expect["assert_prefs"]:
-                k = want.get("key"); t = want.get("type"); v = want.get("value")
-                if have.get(k) != (t, v):
-                    ok = False
-                    break
-
-    # Transport/parser failures that weren't expected
-    if resp.get("status") in ["TIMEOUT", "ERROR"] and not (expect and expect.get("status") in ["TIMEOUT", "ERROR"]):
-        ok = False
-
-    print(f"TEST: {'PASS' if ok else 'FAIL'}")
-    print("-" * 20)
-    return resp
+# ----------------------------
+# Suite execution
+# ----------------------------
 
 def run_test_suite():
-    if not os.path.exists(TEST_DATA_FILE):
-        print(f"ERROR: Test data file '{TEST_DATA_FILE}' not found.")
-        return
+    args = parse_args()
 
-    try:
-        with open(TEST_DATA_FILE, 'r') as f:
-            tests = json.load(f)
-    except json.JSONDecodeError:
-        print(f"ERROR: Invalid JSON in file '{TEST_DATA_FILE}'.")
-        return
+    test_file = resolve_test_file(args)
+    suite = resolve_suite(args)
+
+    # Optional host/port override
+    global HOST, PORT, TIMEOUT
+    if args.host:
+        HOST = args.host
+    if args.port:
+        PORT = args.port
+    if args.timeout:
+        TIMEOUT = args.timeout
 
     print("--- Running TWClone Protocol Tests ---")
+    print(f"Using file: {test_file}" + (f" (suite: {suite})" if suite else ""))
+
     try:
+        doc = load_json(test_file)
+
+        if args.list_suites:
+            suites = list_suites(doc)
+            if suites:
+                print("Suites available:")
+                for s in sorted(suites):
+                    print("  -", s)
+            else:
+                print("No suites found in this file.")
+            return
+
+        tests = normalise_tests(doc, suite=suite)
+
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(TIMEOUT)
             s.connect((HOST, PORT))
 
+            # Optional auth bootstrap
+            if args.user and args.passwd:
+                if args.register_if_missing:
+                    try_register(s, args.user, args.passwd)
+                if not do_login(s, args.user, args.passwd):
+                    print("Auth failed; continuing without auth…")
+
             for test in tests:
-                run_test(test["name"], s, test["command"], test["expect"])
+                if not isinstance(test, dict):
+                    raise TypeError(f"Test must be an object, got: {type(test)} -> {test!r}")
+
+                name = test.get("name", "<unnamed>")
+                run_test(name, s, test, strict=args.strict)
 
     except ConnectionRefusedError:
         print(f"\nERROR: Could not connect to {HOST}:{PORT}. Ensure the server is running.")
     except Exception as e:
         print(f"\nUnexpected error: {e}")
 
-# ---------- Main execution block ----------
+# ----------------------------
+# Main
+# ----------------------------
 
 if __name__ == "__main__":
     run_test_suite()

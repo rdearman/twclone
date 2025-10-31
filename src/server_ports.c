@@ -255,6 +255,12 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
     if (!ctx || !root)
         return -1;
 
+    int consume = h_consume_player_turn(db_handle, ctx , "move.warp");
+    if (!consume)
+      {
+        return handle_turn_consumption_error(ctx, consume, "move.warp", root, NULL);
+      }
+
     db = db_get_handle ();
 
     // --- 0. Initial Validation & Setup (Pre-Transaction) ---
@@ -1196,6 +1202,12 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
 {
     sqlite3 *db = db_get_handle();
     int rc = SQLITE_OK;
+
+    int consume = h_consume_player_turn(db_handle, ctx , "move.warp");
+    if (!consume)
+      {
+        return handle_turn_consumption_error(ctx, consume, "move.warp", root, NULL);
+      }
     
     // 1. Consolidated Declarations
     int port_id = 0;
@@ -1830,6 +1842,12 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
   sqlite3 *db_handle = db_get_handle ();
   h_decloak_ship (db_handle,
 		  h_get_active_ship_id (db_handle, ctx->player_id));
+
+  int consume = h_consume_player_turn(db_handle, ctx , "move.warp");
+  if (!consume)
+    {
+      return handle_turn_consumption_error(ctx, consume, "move.warp", root, NULL);
+    }
 
   if (ctx->player_id <= 0)
     {

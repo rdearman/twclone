@@ -1,0 +1,132 @@
+{
+  "meta": {
+    "generated_at": "2025-10-31T09:15:00Z",
+    "purpose": "Combat core scaffold tests. Safe now; tighten expects as endpoints stabilise."
+  },
+  "tests": [
+    {
+      "name": "seed_player_state",
+      "tags": ["combat", "smoke"],
+      "command": { "command": "player.my_info" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "describe_combat_sector",
+      "tags": ["combat", "sector"],
+      "command": { "command": "move.describe_sector" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "combat_status_snapshot",
+      "tags": ["combat", "log"],
+      "command": { "command": "combat.status" },
+      "expect": { "status": "*" }
+    },
+
+    {
+      "name": "attack_ship_prompted",
+      "tags": ["combat", "write"],
+      "command": {
+        "command": "combat.attack",
+        "data": {
+          "target_type": "ship",
+          "target_id": "<prompt:int:Target ship id>",
+          "stance": "aggressive",
+          "idempotency_key": "00000000-0000-0000-0000-000000000001"
+        }
+      },
+      "expect": { "status": "*" }
+    },
+    {
+      "name": "deploy_fighters_prompted",
+      "tags": ["fighters", "write"],
+      "command": {
+        "command": "combat.deploy_fighters",
+        "data": {
+          "sector_id": "<prompt:int:Sector id>",
+          "count": "<prompt:int:Count>",
+          "idempotency_key": "00000000-0000-0000-0000-000000000002"
+        }
+      },
+      "expect": { "status": "*" }
+    },
+    {
+      "name": "lay_armid_prompted",
+      "tags": ["mines", "write"],
+      "command": {
+        "command": "combat.lay_mines",
+        "data": {
+          "sector_id": "<prompt:int:Sector id>",
+          "type": "armid",
+          "count": "<prompt:int:Count>",
+          "idempotency_key": "00000000-0000-0000-0000-000000000003"
+        }
+      },
+      "expect": { "status": "*" }
+    },
+    {
+      "name": "lay_limpet_prompted",
+      "tags": ["mines", "write"],
+      "command": {
+        "command": "combat.lay_mines",
+        "data": {
+          "sector_id": "<prompt:int:Sector id>",
+          "type": "limpet",
+          "count": "<prompt:int:Count>",
+          "idempotency_key": "00000000-0000-0000-0000-000000000004"
+        }
+      },
+      "expect": { "status": "*" }
+    },
+    {
+      "name": "sweep_mines_prompted",
+      "tags": ["mines", "write"],
+      "command": {
+        "command": "combat.sweep_mines",
+        "data": {
+          "sector_id": "<prompt:int:Sector id>",
+          "max": "<prompt:int:Max sweep>",
+          "idempotency_key": "00000000-0000-0000-0000-000000000005"
+        }
+      },
+      "expect": { "status": "*" }
+    },
+    {
+      "name": "fighter_sweep_prompted",
+      "tags": ["fighters", "write"],
+      "command": {
+        "command": "combat.fighter_sweep",
+        "data": {
+          "sector_id": "<prompt:int:Sector id>",
+          "max": "<prompt:int:Max fighters>",
+          "idempotency_key": "00000000-0000-0000-0000-000000000006"
+        }
+      },
+      "expect": { "status": "*" }
+    },
+
+    {
+      "name": "planet_info_before_attack",
+      "tags": ["planet", "combat"],
+      "command": {
+        "command": "planet.info",
+        "data": { "planet_id": "<prompt:int:Planet id>" }
+      },
+      "expect": { "status": "*" }
+    },
+    {
+      "name": "attack_planet_prompted",
+      "tags": ["planet", "combat", "write"],
+      "command": {
+        "command": "combat.attack",
+        "data": {
+          "target_type": "planet",
+          "target_id": "<prompt:int:Planet id>",
+          "stance": "standard",
+          "idempotency_key": "00000000-0000-0000-0000-000000000007"
+        }
+      },
+      "expect": { "status": "*" }
+    }
+  ]
+}

@@ -672,7 +672,12 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
   h_decloak_ship (db_handle,
 		  h_get_active_ship_id (db_handle, ctx->player_id));
 
-
+  int consume = h_consume_player_turn(db_handle, ctx , "move.warp");
+  if (!consume)
+    {
+        return handle_turn_consumption_error(ctx, consume, "move.warp", root, NULL);
+    }
+  
   json_t *jdata = json_object_get (root, "data");
   int to = 0;
   if (json_is_object (jdata))
@@ -751,7 +756,7 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
   json_object_set_new (entered, "player",
 		       make_player_object (ctx->player_id));
   comm_publish_sector_event (to, "sector.player_entered", entered);
-
+  
   return 0;
 }
 
@@ -763,6 +768,12 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
 {
   if (!ctx)
     return 1;
+
+  int consume = h_consume_player_turn(db_handle, ctx , "move.warp");
+  if (!consume)
+    {
+        return handle_turn_consumption_error(ctx, consume, "move.warp", root, NULL);
+    }
 
   /* Parse request data */
   json_t *data = root ? json_object_get (root, "data") : NULL;
@@ -1215,9 +1226,15 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
   if (!ctx)
     return;
 
+  int consume = h_consume_player_turn(db_handle, ctx , "move.warp");
+  if (!consume)
+    {
+        return handle_turn_consumption_error(ctx, consume, "move.warp", root, NULL);
+    }
+  
   /* Resolve sector id (default to 1 if session is unset) */
   int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 1;
-  fprintf (stderr, "[move.scan] sector_id=%d\n", sector_id);
+  LOGI("[move.scan] sector_id=%d\n", sector_id);
 
   /* 1) Core snapshot from DB (uses sectors.name/beacon; ports.location; ships.location; planets.sector) */
   json_t *core = NULL;
@@ -1319,7 +1336,7 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
   json_object_set_new (data, "beacon", beacon);	/* transfers ownership */
 
   /* Optional debug: confirm non-NULL before sending */
-  fprintf (stderr, "[move.scan] built data=%p (sector_id=%d)\n",
+  LOGD("[move.scan] built data=%p (sector_id=%d)\n",
 	   (void *) data, sector_id);
 
   /* 9) Send envelope (your send_enveloped_ok steals the 'data' ref via _set_new) */

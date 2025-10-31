@@ -1819,7 +1819,7 @@ db_engine_bootstrap (sqlite3 *db)
   int rc = sqlite3_exec (db, ENGINE_BOOTSTRAP_SQL, NULL, NULL, &err);
   if (rc != SQLITE_OK)
     {
-      fprintf (stderr, "[db] engine bootstrap failed: %s\n",
+      fprintf (stderr, "[db] Non-Fatal Error- Engine bootstrap failed: %s\n",
 	       err ? err : "(unknown)");
       sqlite3_free (err);
       return -1;
@@ -1843,8 +1843,6 @@ db_engine_bootstrap (sqlite3 *db)
       sqlite3_free (err);
       return -1;
     }
-
-
   return 0;
 }
 

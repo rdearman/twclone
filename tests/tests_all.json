@@ -1,0 +1,210 @@
+[
+  {
+    "name": "session.hello",
+    "tags": ["session","smoke"],
+    "command": { "command": "session.hello", "data": { "client": "tw-testpack", "version": "1.0" } },
+    "expect": { "status": "ok", "type": "*" }
+  },
+  {
+    "name": "session.ping",
+    "tags": ["session","smoke"],
+    "command": { "command": "session.ping", "data": { "nonce": "abc123" } },
+    "expect": { "status": "ok", "type": "*" }
+  },
+
+  {
+    "name": "system.schema_list",
+    "tags": ["system","schema"],
+    "command": { "command": "system.schema_list" },
+    "expect": { "status": "ok", "type": "*" }
+  },
+  {
+    "name": "system.describe_schema (prompt namespace)",
+    "tags": ["system","schema"],
+    "command": { "command": "system.describe_schema", "data": { "namespace": "<prompt:string:namespace e.g. trade>" } },
+    "expect": { "status": "*" }
+  },
+  {
+    "name": "system.capabilities",
+    "tags": ["system","smoke"],
+    "command": { "command": "system.capabilities" },
+    "expect": { "status": "ok", "type": "*" }
+  },
+  {
+    "name": "system.cmd_list",
+    "tags": ["system","discover"],
+    "command": { "command": "system.cmd_list" },
+    "expect": { "status": "ok", "type": "*" }
+  },
+
+  {
+    "name": "auth.register newguy (ok or already exists)",
+    "tags": ["auth"],
+    "command": { "command": "auth.register", "data": { "user_name": "newguy", "password": "pass123" } },
+    "expect": { "status": "*" }
+  },
+  {
+    "name": "auth.login newguy",
+    "tags": ["auth"],
+    "command": { "command": "auth.login", "data": { "user_name": "newguy", "password": "pass123" } },
+    "expect": { "status": "ok", "type": "*" }
+  },
+
+  {
+    "name": "players.me",
+    "tags": ["players","smoke"],
+    "command": { "command": "players.me" },
+     "expect": { "status": "error", "type": "error", "error": { "code": 1400 } }
+  },
+    {
+	"name": "player.my_info (current impl alias)",
+	"tags": ["player","smoke","impl"],
+	"command": { "command": "player.my_info" },
+	"expect": { "status": "ok", "type": "*" }
+    },
+
+  {
+    "name": "players.online",
+    "tags": ["players","info"],
+      "command": { "command": "players.online" },
+     "expect": { "status": "error", "type": "error", "error": { "code": 1400 } }      
+  },
+  {
+    "name": "players.refresh",
+    "tags": ["players","state"],
+    "command": { "command": "players.refresh" },
+    "expect": { "status": "*" }
+  },
+  {
+    "name": "ship.info",
+    "tags": ["ship","info"],
+      "command": { "command": "ship.info" },
+      "expect": { "status": "*" }
+  },
+
+  {
+    "name": "sector.info (describe current sector)",
+    "tags": ["sector","smoke"],
+    "command": { "command": "sector.info" },
+    "expect": { "status": "ok", "type": "*" }
+  },
+  {
+    "name": "sector.set_beacon (set)",
+    "tags": ["sector","write"],
+    "command": { "command": "sector.set_beacon", "data": { "text": "The Federation -- Do Not Dump!", "idempotency_key": "00000000-0000-0000-0000-00000000C001" } },
+    "expect": { "status": "*" }
+  },
+  {
+    "name": "sector.set_beacon (clear)",
+    "tags": ["sector","write"],
+    "command": { "command": "sector.set_beacon", "data": { "text": "", "idempotency_key": "00000000-0000-0000-0000-00000000C002" } },
+    "expect": { "status": "*" }
+  },
+
+  {
+    "name": "move.warp (prompt)",
+    "tags": ["move","nav","write"],
+    "command": { "command": "move.warp", "data": { "to_sector_id": "<prompt:int:Sector ID>", "idempotency_key": "00000000-0000-0000-0000-00000000D001" } },
+    "expect": { "status": "*" }
+  },
+  {
+    "name": "move.scan",
+    "tags": ["move","nav"],
+    "command": { "command": "move.scan" },
+    "expect": { "status": "ok", "type": "*" }
+  },
+  {
+    "name": "move.pathfind (prompt)",
+    "tags": ["move","nav","path"],
+    "command": { "command": "move.pathfind", "data": { "from": "<ctx:state.sector_id?>", "to": "<prompt:int:Target sector>", "max_cost": 999 } },
+    "expect": { "status": "*" }
+  },
+  {
+    "name": "move.force_move (admin) (prompt)",
+    "tags": ["move","admin","write"],
+    "command": { "command": "move.force_move", "data": { "player_id": "<prompt:int:Player ID>", "sector_id": "<prompt:int:Sector ID>", "idempotency_key": "00000000-0000-0000-0000-00000000D002" } },
+    "expect": { "status": "*" }
+  },
+
+  {
+    "name": "trade.port_info (prompt)",
+    "tags": ["trade","info"],
+    "command": { "command": "trade.port_info", "data": { "port_id": "<prompt:int:Port ID>" } },
+    "expect": { "status": "*" }
+  },
+  {
+    "name": "trade.buy (prompt)",
+    "tags": ["trade","write"],
+    "command": { "command": "trade.buy", "data": { "port_id": "<prompt:int:Port ID>", "commodity": "ore", "quantity": 1, "max_price": "9999.00", "idempotency_key": "00000000-0000-0000-0000-00000000E001" } },
+    "expect": { "status": "*" }
+  },
+  {
+    "name": "trade.sell (prompt)",
+    "tags": ["trade","write"],
+    "command": { "command": "trade.sell", "data": { "port_id": "<prompt:int:Port ID>", "commodity": "ore", "quantity": 1, "min_price": "0.01", "idempotency_key": "00000000-0000-0000-0000-00000000E002" } },
+    "expect": { "status": "*" }
+  },
+  {
+    "name": "trade.quote (prompt) (optional)",
+    "tags": ["trade","info"],
+    "command": { "command": "trade.quote", "data": { "port_id": "<prompt:int:Port ID>", "action": "buy", "commodity": "ore", "quantity": 1 } },
+    "expect": { "status": "*" }
+  },
+  {
+    "name": "trade.offer (prompt)",
+    "tags": ["trade","offers","write"],
+    "command": { "command": "trade.offer", "data": { "to_player_id": "<prompt:int:Player ID>", "items": [ { "type": "credits", "amount": 100 } ], "expires_in": 600, "idempotency_key": "00000000-0000-0000-0000-00000000E003" } },
+    "expect": { "status": "*" }
+  },
+  {
+    "name": "trade.accept (prompt)",
+    "tags": ["trade","offers","write"],
+    "command": { "command": "trade.accept", "data": { "offer_id": "<prompt:int:Offer ID>", "idempotency_key": "00000000-0000-0000-0000-00000000E004" } },
+    "expect": { "status": "*" }
+  },
+  {
+    "name": "trade.cancel (prompt)",
+    "tags": ["trade","offers","write"],
+    "command": { "command": "trade.cancel", "data": { "offer_id": "<prompt:int:Offer ID>", "idempotency_key": "00000000-0000-0000-0000-00000000E005" } },
+    "expect": { "status": "*" }
+  },
+  {
+    "name": "trade.history",
+    "tags": ["trade","info"],
+    "command": { "command": "trade.history", "data": { "limit": 20 } },
+    "expect": { "status": "*" }
+  },
+  {
+    "name": "trade.jettison (prompt) (optional)",
+    "tags": ["trade","write"],
+    "command": { "command": "trade.jettison", "data": { "commodity": "ore", "quantity": 1, "idempotency_key": "00000000-0000-0000-0000-00000000E006" } },
+    "expect": { "status": "*" }
+  },
+
+  {
+    "name": "news.read",
+    "tags": ["news","info"],
+    "command": { "command": "news.read", "data": { "limit": 10 } },
+    "expect": { "status": "*" }
+  },
+
+  {
+    "name": "auth.mfa (prompt)",
+    "tags": ["auth","mfa"],
+    "command": { "command": "auth.mfa", "data": { "code": "<prompt:string:MFA code>" } },
+    "expect": { "status": "*" }
+  },
+  {
+    "name": "auth.logout",
+    "tags": ["auth"],
+    "command": { "command": "auth.logout" },
+    "expect": { "status": "*" }
+  },
+
+  {
+    "name": "session.goodbye",
+    "tags": ["session"],
+    "command": { "command": "session.goodbye" },
+    "expect": { "status": "*" }
+  }
+]

@@ -40,7 +40,9 @@ extern "C"
   int h_deduct_bank_balance(struct sqlite3 *db, int player_id, int amount, int *new_balance);
   int h_update_ship_cargo(sqlite3 *db, int player_id, const char *commodity, int delta, int *new_qty_out);
   int cmd_get_news (client_ctx_t *ctx, json_t *root);
-
+  TurnConsumeResult h_consume_player_turn(sqlite3 *db_conn, client_ctx_t *ctx, const char *reason_cmd);
+  int handle_turn_consumption_error(client_ctx_t *ctx, TurnConsumeResult consume_result, 
+				     const char *cmd, json_t *root, json_t *meta_data);
 
   
 #ifdef __cplusplus

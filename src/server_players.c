@@ -21,9 +21,185 @@
 #include "server_auth.h"
 #include "server_envelope.h"
 #include "server_log.h"
+#include "common.h"
 
 
 extern sqlite3 *db_get_handle (void);
+
+// extern void send_enveloped_refused(int fd, json_t *root_cmd, int code, const char *message, json_t *meta);
+
+
+/**
+ * @brief Maps a TurnConsumeResult enum to a client-facing string error message.
+ * * @param result The TurnConsumeResult enum value.
+ * @return const char* The corresponding error string.
+ */
+static const char *get_turn_error_message(TurnConsumeResult result) {
+    switch (result) {
+        case TURN_CONSUME_SUCCESS:
+            return "Turn consumed successfully."; // Should not be called on success
+        case TURN_CONSUME_ERROR_DB_FAIL:
+            return "Database failure prevented turn consumption. Please try again.";
+        case TURN_CONSUME_ERROR_PLAYER_NOT_FOUND:
+            return "Player entity not found in turn registry.";
+        case TURN_CONSUME_ERROR_NO_TURNS:
+            return "You have run out of turns and cannot perform this action.";
+        default:
+            return "An unknown error occurred during turn consumption.";
+    }
+}
+
+/**
+ * @brief Handles packaging and sending a TURN_CONSUME error back to the client.
+ * * @param ctx The player context structure (assuming it holds player_id, fd, and root).
+ * @param consume_result The TurnConsumeResult error code (must not be SUCCESS).
+ * @param cmd The command that failed (e.g., "move.warp").
+ * @param root The root JSON object of the command being processed.
+ * @param meta_data Optional existing JSON metadata to include in the response.
+ */
+int handle_turn_consumption_error(client_ctx_t *ctx, TurnConsumeResult consume_result, 
+                                   const char *cmd, json_t *root, json_t *meta_data)
+{
+    
+    // Convert the TurnConsumeResult enum into a string reason for the client
+    const char *reason_str = NULL;
+    switch (consume_result) {
+        // We only expect to handle errors here
+        case TURN_CONSUME_ERROR_DB_FAIL:
+            reason_str = "db_failure";
+            break;
+        case TURN_CONSUME_ERROR_PLAYER_NOT_FOUND:
+            reason_str = "player_not_found";
+            break;
+        case TURN_CONSUME_ERROR_NO_TURNS:
+            reason_str = "no_turns_remaining";
+            break;
+        default:
+            reason_str = "unknown_error";
+            break;
+    }
+
+    // Prepare the metadata package for the client
+    // We add the error code and the command that failed.
+    json_t *meta = NULL;
+    if (meta_data) {
+        // Start with existing metadata if provided
+        meta = json_copy(meta_data); 
+    } else {
+        meta = json_object();
+    }
+
+    // Add turn specific error details
+    if (meta) {
+        json_object_set_new(meta, "reason", json_string(reason_str));
+        json_object_set_new(meta, "command", json_string(cmd));
+
+        // Get the descriptive message for the user
+        const char *user_message = get_turn_error_message(consume_result);
+
+        // Send the refusal packet
+	//	send_enveloped_refused (int fd, json_t *req, int code, const char *msg,
+	//		json_t *data_opt)
+
+	send_enveloped_refused(ctx->fd, root, ERR_REF_NO_TURNS, user_message, NULL);
+
+        json_decref(meta);
+    }
+    return 0;
+}
+
+
+/**
+ * @brief Consumes one turn from a player's remaining turns count.
+ *
+ * This is the common function called by all turn-consuming actions (warp, attack, trade, etc.).
+ * It decrements the 'turns_remaining' field in the 'turns' table for the specified player.
+ *
+ * @param db_conn The initialized SQLite database connection.
+ * @param player_id The ID of the player whose turn should be consumed.
+ * @param reason_cmd A string describing the command that consumed the turn (e.g., "move.warp").
+ * @return TurnConsumeResult status code.
+ */
+TurnConsumeResult h_consume_player_turn(sqlite3 *db_conn, client_ctx_t *ctx, const char *reason_cmd)
+{
+    sqlite3_stmt *stmt = NULL;
+    int player_id = ctx->player_id;
+    const char *sql_update = 
+        "UPDATE turns "
+        "SET turns_remaining = turns_remaining - 1, "
+        "    last_update = strftime('%s', 'now') "
+        "WHERE player = ? AND turns_remaining > 0;";
+    
+    int rc;
+    int changes;
+
+    // 1. Prepare the SQL statement
+    rc = sqlite3_prepare_v2(db_conn, sql_update, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("DB Error (Prepare): %s\n", sqlite3_errmsg(db_conn));
+        return TURN_CONSUME_ERROR_DB_FAIL;
+    }
+
+    // 2. Bind the player ID
+    sqlite3_bind_int(stmt, 1, player_id);
+
+    // 3. Execute the statement
+    rc = sqlite3_step(stmt);
+    
+    if (rc != SQLITE_DONE) {
+        // If the statement executed but returned an error state
+      LOGE( "DB Error (Execute %s): %s\n", reason_cmd, sqlite3_errmsg(db_conn));
+        sqlite3_finalize(stmt);
+        return TURN_CONSUME_ERROR_DB_FAIL;
+    }
+
+    // 4. Check how many rows were affected
+    changes = sqlite3_changes(db_conn);
+
+    // 5. Finalize the statement (release resources)
+    sqlite3_finalize(stmt);
+
+    if (changes == 0) {
+        // We need a secondary check to see if the player has 0 turns, 
+        // or if the player simply doesn't exist in the 'turns' table.
+        
+        // Secondary query to find the player's turn count
+        const char *sql_select = 
+            "SELECT turns_remaining FROM turns WHERE player = ?;";
+        
+        rc = sqlite3_prepare_v2(db_conn, sql_select, -1, &stmt, NULL);
+        if (rc != SQLITE_OK) {
+	  LOGE("DB Error (Prepare Check): %s\n", sqlite3_errmsg(db_conn));
+            return TURN_CONSUME_ERROR_DB_FAIL;
+        }
+        
+        sqlite3_bind_int(stmt, 1, player_id);
+        
+        rc = sqlite3_step(stmt);
+
+        if (rc == SQLITE_ROW) {
+            // Player exists, but turns_remaining was 0 (or less, though that shouldn't happen)
+            sqlite3_finalize(stmt);
+            LOGE("Turn consumption failed for Player %d (%s): Turns remaining is 0.\n", player_id, reason_cmd);
+            return TURN_CONSUME_ERROR_NO_TURNS;
+        } else if (rc == SQLITE_DONE) {
+            // Player does not exist in the turns table
+            sqlite3_finalize(stmt);
+            LOGE("Turn consumption failed for Player %d (%s): Player not found in turns table.\n", player_id, reason_cmd);
+            return TURN_CONSUME_ERROR_PLAYER_NOT_FOUND;
+        } else {
+             // Some other select error
+	  LOGE( "DB Error (Execute Check %s): %s\n", reason_cmd, sqlite3_errmsg(db_conn));
+            sqlite3_finalize(stmt);
+            return TURN_CONSUME_ERROR_DB_FAIL;
+        }
+    }
+    
+    // 6. Success
+    LOGD("Player %d consumed 1 turn for command: %s. New turn count updated.\n", player_id, reason_cmd);
+    return TURN_CONSUME_SUCCESS;
+}
+
 
 int h_get_player_credits(sqlite3 *db, int player_id, int *credits_out)
 {
