@@ -813,7 +813,23 @@ cmd_player_my_info (client_ctx_t *ctx, json_t *root)
       send_enveloped_error (ctx->fd, root, 1503, "Database error");
       return 0;
     }
+  // Ensure data.player.turns_remaining is present for tests & clients
+  int tr = 0;
+  sqlite3 *db = db_get_handle();
+  sqlite3_stmt *st = NULL;
+  if (sqlite3_prepare_v2(db, "SELECT turns_remaining FROM turns WHERE player=?;", -1, &st, NULL) == SQLITE_OK) {
+      sqlite3_bind_int(st, 1, ctx->player_id);
+      if (sqlite3_step(st) == SQLITE_ROW) tr = sqlite3_column_int(st, 0);
+      sqlite3_finalize(st);
+  }
+  json_t *player = json_object_get(pinfo, "player");
+  if (!player || !json_is_object(player)) {
+      player = json_object(); // be defensive
+      json_object_set_new(pinfo, "player", player);
+  }
+  json_object_set_new(player, "turns_remaining", json_integer(tr));
 
+  
   send_enveloped_ok (ctx->fd, root, "player.info", pinfo);
   json_decref (pinfo);
   return 0;

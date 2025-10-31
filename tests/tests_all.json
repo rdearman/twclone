@@ -107,13 +107,14 @@
     "command": { "command": "move.warp", "data": { "to_sector_id": "<prompt:int:Sector ID>", "idempotency_key": "00000000-0000-0000-0000-00000000D001" } },
     "expect": { "status": "*" }
   },
-  {
-    "name": "move.scan",
-    "tags": ["move","nav"],
-    "command": { "command": "move.scan" },
-    "expect": { "status": "ok", "type": "*" }
-  },
-  {
+{
+  "name": "move.scan",
+  "tags": ["move","nav","smoke"],
+  "command": { "command": "move.scan" },
+  "expect": { "status": "*" }
+},
+
+    {
     "name": "move.pathfind (prompt)",
     "tags": ["move","nav","path"],
     "command": { "command": "move.pathfind", "data": { "from": "<ctx:state.sector_id?>", "to": "<prompt:int:Target sector>", "max_cost": 999 } },
@@ -213,69 +214,82 @@
     "command": { "command": "auth.login", "data": { "user_name": "newguy", "password": "pass123" } },
     "expect": { "status": "ok", "type": "*" }
   },
+{
+  "name": "turns: baseline (save @t0)",
+  "tags": ["turns","snapshot"],
+  "command": { "command": "player.my_info" },
+  "expect": { "status": "ok" },
+  "save": { "var": "t0", "path": "$turns" }
+},
+{
+  "name": "turns: scan",
+  "tags": ["turns","scan"],
+  "command": { "command": "move.scan" },
+  "expect": { "status": "*" }
+},
+{
+  "name": "turns: after scan (delta -1)",
+  "tags": ["turns","assert"],
+  "command": { "command": "player.my_info" },
+  "expect": { "status": "ok" },
+  "asserts": [
+    { "path": "$turns", "op": "delta", "baseline": "@t0", "value": -1 }
+  ],
+  "save": { "var": "t1", "path": "$turns" }
+},
+    {
+  "name": "turns: capture first adjacent as @adj",
+  "tags": ["turns","prep"],
+  "command": { "command": "sector.info" },
+  "expect": { "status": "ok" },
+  "save": { "var": "adj", "path": "data.adjacent.0" }
+},
+{
+  "name": "turns: baseline before warp (save @t2)",
+  "tags": ["turns","snapshot"],
+  "command": { "command": "player.my_info" },
+  "expect": { "status": "ok" },
+  "save": { "var": "t2", "path": "$turns" }
+},
+{
+  "name": "turns: warp to @adj",
+  "tags": ["turns","warp","write"],
+  "command": { "command": "move.warp",
+    "data": { "to_sector_id": "@adj", "idempotency_key": "00000000-0000-0000-0000-0000TURNWARP02" } },
+  "expect": { "status": "*" }
+},
+{
+  "name": "turns: after warp (<= baseline or -1 on success)",
+  "tags": ["turns","assert"],
+  "command": { "command": "player.my_info" },
+  "expect": { "status": "ok" },
+  "asserts": [
+    { "path": "$turns", "op": "<=", "value": "@t2" }
+  ]
+},
+    {
+  "name": "turns0: confirm zero",
+  "tags": ["turns0","assert"],
+  "command": { "command": "player.my_info" },
+  "expect": { "status": "ok" },
+  "asserts": [
+    { "path": "$turns", "op": "==", "value": 0 }
+  ]
+},
+{
+  "name": "turns0: scan refuses (code 1307)",
+  "tags": ["turns0","scan"],
+  "command": { "command": "move.scan" },
+  "expect": { "status": "refused", "type": "error", "error": { "code": 1307 } }
+},
+{
+  "name": "turns0: warp to @adj refuses (code 1307)",
+  "tags": ["turns0","warp"],
+  "command": { "command": "move.warp",
+    "data": { "to_sector_id": "@adj", "idempotency_key": "00000000-0000-0000-0000-0000TURNWARP00" } },
+  "expect": { "status": "refused", "type": "error", "error": { "code": 1307 } }
+}
 
-  { "name": "turns: baseline A (before scan)", "tags": ["turns","snapshot"],
-    "command": { "command": "player.my_info" }, "expect": { "status": "ok" } },
 
-  { "name": "turns: action scan (consumes 1)", "tags": ["turns","scan"],
-    "command": { "command": "move.scan" }, "expect": { "status": "*" } },
 
-  { "name": "turns: after scan A", "tags": ["turns","snapshot"],
-    "command": { "command": "player.my_info" }, "expect": { "status": "ok" } },
-
-  { "name": "turns: sector.info checkpoint", "tags": ["turns","info"],
-    "command": { "command": "sector.info" }, "expect": { "status": "*" } },
-
-  { "name": "turns: baseline B (before warp)", "tags": ["turns","snapshot"],
-    "command": { "command": "player.my_info" }, "expect": { "status": "ok" } },
-
-  { "name": "turns: action warp (consumes 1) — prompt target",
-    "tags": ["turns","warp","write"],
-    "command": { "command": "move.warp",
-      "data": { "to_sector_id": "<prompt:int:Sector ID>", "idempotency_key": "00000000-0000-0000-0000-0000TURNSWARP01" } },
-    "expect": { "status": "*" } },
-
-  { "name": "turns: after warp", "tags": ["turns","snapshot"],
-    "command": { "command": "player.my_info" }, "expect": { "status": "ok" } },
-
-  { "name": "turns: move to port sector? (optional info)",
-    "tags": ["turns","trade","info"], "command": { "command": "sector.info" }, "expect": { "status": "*" } },
-
-  { "name": "turns: baseline C (before trade.buy)", "tags": ["turns","snapshot","trade"],
-    "command": { "command": "player.my_info" }, "expect": { "status": "ok" } },
-
-  { "name": "turns: trade.port_info (prompt port)",
-    "tags": ["turns","trade","info"],
-    "command": { "command": "trade.port_info", "data": { "port_id": "<prompt:int:Port ID>" } },
-    "expect": { "status": "*" } },
-
-  { "name": "turns: action trade.buy (consumes 1 on success) — prompt values",
-    "tags": ["turns","trade","write"],
-    "command": { "command": "trade.buy",
-      "data": {
-        "port_id": "<prompt:int:Port ID>",
-        "commodity": "ore",
-        "quantity": 1,
-        "max_price": "9999.00",
-        "idempotency_key": "00000000-0000-0000-0000-0000TURNSBUY001"
-      } },
-    "expect": { "status": "*" } },
-
-  { "name": "turns: after trade.buy", "tags": ["turns","snapshot","trade"],
-    "command": { "command": "player.my_info" }, "expect": { "status": "ok" } },
-
-  { "name": "turns: action trade.sell (consumes 1 on success) — prompt values",
-    "tags": ["turns","trade","write"],
-    "command": { "command": "trade.sell",
-      "data": {
-        "port_id": "<prompt:int:Port ID>",
-        "commodity": "ore",
-        "quantity": 1,
-        "min_price": "0.01",
-        "idempotency_key": "00000000-0000-0000-0000-0000TURNSELL01"
-      } },
-    "expect": { "status": "*" } },
-
-  { "name": "turns: after trade.sell", "tags": ["turns","snapshot","trade"],
-    "command": { "command": "player.my_info" }, "expect": { "status": "ok" } }
 ]

@@ -1530,8 +1530,8 @@ const char *insert_default_sql[] = {
 
   
   "INSERT INTO ships (name, type, attack, holds_used, mines, fighters_used, genesis, photons, location, fighters, shields, holds, colonists,equipment, organics, ore, flags, ported, onplanet) VALUES ('Bit Banger',1, 110, 20, 25, 10, 0, 1,  87, 2300, 400, 20, 0,10,5, 5, 0, 1, 1);",
-  "INSERT INTO players (number, name, passwd, sector, ship, type) VALUES (1, 'System', 'BOT',1,1,2);",
-  "INSERT INTO players (number, name, passwd, sector, ship, type) VALUES (1, 'Federation Administrator', 'BOT',1,1,2);",
+  "INSERT INTO players (number, name, passwd, sector, ship, type) VALUES (1, 'System', 'BOT',1,1,1);",
+  "INSERT INTO players (number, name, passwd, sector, ship, type) VALUES (1, 'Federation Administrator', 'BOT',1,1,1);",
   "INSERT INTO players (number, name, passwd, sector, ship, type) VALUES (7, 'newguy', 'pass123',1,1,2);",
 
   "INSERT INTO ship_ownership (player_id, ship_id, is_primary, role_id) VALUES (1,1,1,0);"
@@ -1573,11 +1573,11 @@ const char *insert_default_sql[] = {
 
   /* Insert 5 Orion Captains (Players) - Removed non-schema columns (faction_id, empire, turns) */
   "INSERT INTO players (type, name, passwd, sector, experience, alignment, credits) "
-  "SELECT 2, 'Zydras, Heavy Fighter Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
-  "SELECT 2, 'Krell, Scout Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
-  "SELECT 2, 'Vex, Contraband Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
-  "SELECT 2, 'Jaxx, Smuggler Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
-  "SELECT 2, 'Sira, Market Guard Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3;"
+  "SELECT 1, 'Zydras, Heavy Fighter Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
+  "SELECT 1, 'Krell, Scout Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
+  "SELECT 1, 'Vex, Contraband Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
+  "SELECT 1, 'Jaxx, Smuggler Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
+  "SELECT 1, 'Sira, Market Guard Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3;"
 
   /* Link Players to Ships using the players.ship column (ships table has no owner_id) */
   "UPDATE players SET ship = (SELECT id FROM ships WHERE name='Orion Heavy Fighter Alpha') WHERE name='Zydras, Heavy Fighter Captain';"
@@ -1617,6 +1617,16 @@ const char *insert_default_sql[] = {
   "INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
   " (2, 'fuel', 1000000, 1000000, 5);",
 
+"INSERT INTO turns (player, turns_remaining, last_update)"
+"SELECT "
+"    id, "
+"    100, "
+"    strftime('%s', 'now') "
+"FROM "
+"    players "
+"WHERE "
+"    type = 2; "
+  
 };
 
 

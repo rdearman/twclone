@@ -54,14 +54,11 @@ int handle_combat_attack(client_ctx_t *ctx, json_t *root) {
     
     // All combat actions reveal the ship
     h_decloak_ship(db, h_get_active_ship_id (db, ctx->player_id));
-                               
-    // 1. Consume a turn for attacking
-    TurnConsumeResult consume_result = h_consume_player_turn(db, ctx, "combat.attack");
-    
-    if (consume_result != TURN_CONSUME_SUCCESS) {
-        // Turn consumption failed (No turns, DB error, etc.)
-        return handle_turn_consumption_error(ctx, consume_result, "combat.attack", root, NULL);
-    }
+
+  TurnConsumeResult tc = h_consume_player_turn(db, ctx, "combat.attack");
+  if (tc != TURN_CONSUME_SUCCESS) {
+      return handle_turn_consumption_error(ctx, tc, "combat.attack", root, NULL);
+  }    
     
     // --- COMBAT ATTACK LOGIC GOES HERE ---
     
@@ -84,14 +81,11 @@ int handle_combat_flee(client_ctx_t *ctx, json_t *root) {
     
     // Attempting to flee reveals the ship
     h_decloak_ship(db_handle, h_get_active_ship_id(db_handle, (ctx->player_id)));
-                               
-    // 1. Consume a turn for fleeing
-    TurnConsumeResult consume_result = h_consume_player_turn(db_handle,ctx, "combat.flee");
-    
-    if (consume_result != TURN_CONSUME_SUCCESS) {
-        // Turn consumption failed (No turns, DB error, etc.)
-        return handle_turn_consumption_error(ctx, consume_result, "combat.flee", root, NULL);
-    }
+
+    TurnConsumeResult tc = h_consume_player_turn(db_handle, ctx, "combat.flee");
+    if (tc != TURN_CONSUME_SUCCESS) {
+      return handle_turn_consumption_error(ctx, tc, "combat.flee", root, NULL);
+    }    	
     
     // --- COMBAT FLEE LOGIC GOES HERE ---
     
@@ -102,8 +96,6 @@ int handle_combat_flee(client_ctx_t *ctx, json_t *root) {
     
     return 0; // Success
 }
-
-
 
 int
 cmd_ship_transfer_cargo (client_ctx_t *ctx, json_t *root)
@@ -122,14 +114,11 @@ cmd_ship_jettison (client_ctx_t *ctx, json_t *root)
   sqlite3 *db_handle = db_get_handle ();
   // Actions reveal the ship
   h_decloak_ship(db_handle, h_get_active_ship_id(db_handle, ctx->player_id));
-                               
-  // 1. Consume a turn for attacking
-  int consume_result = h_consume_player_turn(db_handle, ctx, "ship.jettison");
-  
-  if (consume_result != TURN_CONSUME_SUCCESS) {
-    // Turn consumption failed (No turns, DB error, etc.)
-    return handle_turn_consumption_error(ctx, consume_result, "ship.jettison", root, NULL);
-  }
+
+  TurnConsumeResult tc = h_consume_player_turn(db_handle, ctx, "trade.jettison");
+    if (tc != TURN_CONSUME_SUCCESS) {
+      return handle_turn_consumption_error(ctx, tc, "trade.jettison", root, NULL);
+    }    
 
   STUB_NIY (ctx, root, "ship.jettison");
 }

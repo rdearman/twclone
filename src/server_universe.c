@@ -672,11 +672,11 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
   h_decloak_ship (db_handle,
 		  h_get_active_ship_id (db_handle, ctx->player_id));
 
-  int consume = h_consume_player_turn(db_handle, ctx , "move.warp");
-  if (!consume)
-    {
-        return handle_turn_consumption_error(ctx, consume, "move.warp", root, NULL);
-    }
+  TurnConsumeResult tc = h_consume_player_turn(db_handle, ctx, "move.warp");
+  if (tc != TURN_CONSUME_SUCCESS) {
+      return handle_turn_consumption_error(ctx, tc, "move.warp", root, NULL);
+  }
+ 
   
   json_t *jdata = json_object_get (root, "data");
   int to = 0;
@@ -773,12 +773,6 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
   sqlite3 *db = db_get_handle ();
   int max_id = 0;
   sqlite3_stmt *st = NULL;
-
-  int consume = h_consume_player_turn(db, ctx , "move.warp");
-  if (!consume)
-    {
-        return handle_turn_consumption_error(ctx, consume, "move.warp", root, NULL);
-    }
 
   /* Parse request data */
   json_t *data = root ? json_object_get (root, "data") : NULL;
@@ -1220,22 +1214,20 @@ build_sector_info_json (int sector_id)
 }
 
 /* -------- move.scan: fast, side-effect-free snapshot (defensive build) -------- */
-void
+int
 cmd_move_scan (client_ctx_t *ctx, json_t *root)
 {
   if (!ctx)
-    return;
+    return 1;
 
   sqlite3 *db_handle = db_get_handle ();
   h_decloak_ship (db_handle,
 		  h_get_active_ship_id (db_handle, ctx->player_id));
+  TurnConsumeResult tc = h_consume_player_turn(db_handle, ctx, "move.scan");
+  if (tc != TURN_CONSUME_SUCCESS) {
+      return handle_turn_consumption_error(ctx, tc, "move.scan", root, NULL);
+  }
 
-  int consume = h_consume_player_turn(db_handle, ctx , "move.warp");
-  if (!consume)
-    {
-        return handle_turn_consumption_error(ctx, consume, "move.warp", root, NULL);
-    }
-  
   /* Resolve sector id (default to 1 if session is unset) */
   int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 1;
   LOGI("[move.scan] sector_id=%d\n", sector_id);
@@ -1245,7 +1237,7 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
   if (db_sector_scan_core (sector_id, &core) != SQLITE_OK || !core)
     {
       send_enveloped_error (ctx->fd, root, 1401, "Sector not found");
-      return;
+      return 0;
     }
 
   /* 2) Adjacent IDs (array) */
@@ -1264,7 +1256,7 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
       json_decref (core);
       json_decref (adj);
       send_enveloped_error (ctx->fd, root, 1500, "OOM");
-      return;
+      return 0;
     }
   json_object_set_new (security, "fedspace", json_boolean (in_fed));
   json_object_set_new (security, "safe_zone",
@@ -1281,7 +1273,7 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
       json_decref (adj);
       json_decref (security);
       send_enveloped_error (ctx->fd, root, 1500, "OOM");
-      return;
+      return 0;
     }
   json_object_set_new (port, "present", json_boolean (port_cnt > 0));
   json_object_set_new (port, "class", json_null ());
@@ -1298,7 +1290,7 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
       json_decref (security);
       json_decref (port);
       send_enveloped_error (ctx->fd, root, 1500, "OOM");
-      return;
+      return 0;
     }
   json_object_set_new (counts, "ships", json_integer (ships));
   json_object_set_new (counts, "planets", json_integer (planets));
@@ -1329,7 +1321,7 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
       if (beacon)
 	json_decref (beacon);
       send_enveloped_error (ctx->fd, root, 1500, "OOM");
-      return;
+      return 0;
     }
   json_object_set_new (data, "sector_id", json_integer (sector_id));
   json_object_set_new (data, "name", json_string (name ? name : "Unknown"));
@@ -1349,7 +1341,9 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
   /* 10) Clean up */
   json_decref (core);
   /* 'data' members already owned by 'data' -> envelope stole 'data' */
+  return 0;
 }
+
 
 int
 cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)

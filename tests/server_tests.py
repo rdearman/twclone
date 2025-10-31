@@ -5,6 +5,9 @@ import uuid
 import os
 import argparse
 from typing import Any, Dict, List, Optional
+# --- add near top ---
+from typing import Tuple
+
 
 # ----------------------------
 # Defaults (override via CLI/env)
@@ -12,6 +15,7 @@ from typing import Any, Dict, List, Optional
 HOST = "localhost"
 PORT = 1234
 TIMEOUT = 5
+DUMP_ON_FAIL = False
 
 # ----------------------------
 # CLI + file selection
@@ -31,9 +35,12 @@ def parse_args():
     # Auth bootstrap
     p.add_argument("--user", default=os.getenv("TW_USER"), help="Username to auth/login")
     p.add_argument("--passwd", default=os.getenv("TW_PASSWD"), help="Password to auth/login")
+    p.add_argument("--dump-on-fail", action="store_true",
+                   help="Print full JSON response on expect/assert failures")
     p.add_argument("--register-if-missing", action="store_true",
                    help="Try auth.register first; ignore 'already exists' and proceed to login")
     return p.parse_args()
+
 
 def resolve_test_file(args) -> str:
     # Priority: CLI arg > env var > default
@@ -202,19 +209,155 @@ def do_login(sock: socket.socket, user: str, passwd: str) -> bool:
 # ----------------------------
 # Single test execution
 # ----------------------------
+# --- add with other helpers ---
 
-def run_test(name: str, sock: socket.socket, test: Dict[str, Any], strict: bool = False) -> None:
+def _walk_json(obj, path_prefix=""):
+    """Yield tuples (path, value) for all dict key paths to leaf values."""
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            newp = f"{path_prefix}.{k}" if path_prefix else k
+            yield from _walk_json(v, newp)
+    elif isinstance(obj, list):
+        for i, v in enumerate(obj):
+            newp = f"{path_prefix}.{i}" if path_prefix else str(i)
+            yield from _walk_json(v, newp)
+    else:
+        yield (path_prefix, obj)
+
+def _looks_like_turns(key: str, val: Any) -> bool:
+    if not isinstance(val, (int, float)):
+        return False
+    k = key.lower()
+    # prefer exact-ish names
+    strong = ("turns_remaining", "remaining_turns", "turns.left", "turns.remaining")
+    if any(s in k for s in strong):
+        return True
+    # fallback keywords check
+    return ("turn" in k and ("remain" in k or "left" in k or k.endswith(".turns")))
+
+def _find_turns_value(obj: Any) -> Optional[Any]:
+    """Search typical places first, then walk everything."""
+    # Fast-path guesses
+    fast_paths = [
+        "data.player.turns_remaining",
+        "data.turns_remaining",
+        "data.turns.remaining",
+        "data.turns",
+        "player.turns_remaining",
+        "player.turns",
+        "turns_remaining",
+        "turns",
+    ]
+    for p in fast_paths:
+        v = _get_by_path(obj, p)
+        if isinstance(v, (int, float)):
+            return v
+    # Heuristic search
+    best = None
+    best_path_len = 999
+    for path, val in _walk_json(obj):
+        if _looks_like_turns(path, val):
+            # choose the shortest path as "best"
+            pl = path.count(".")
+            if pl < best_path_len:
+                best = val
+                best_path_len = pl
+    return best
+
+
+def _get_by_path_one(obj: Any, path: str) -> Any:
+    if not path:
+        return obj
+    cur = obj
+    for part in path.split("."):
+        if isinstance(cur, dict):
+            cur = cur.get(part)
+        elif isinstance(cur, list) and part.isdigit():
+            idx = int(part)
+            if 0 <= idx < len(cur):
+                cur = cur[idx]
+            else:
+                return None
+        else:
+            return None
+    return cur
+
+def _get_by_path(obj: Any, path: str) -> Any:
+    if path == "$turns":
+        return _find_turns_value(obj)
+    # support fallback: "a.b|x.y|z"
+    for candidate in path.split("|"):
+        val = _get_by_path_one(obj, candidate.strip())
+        if val is not None:
+            return val
+    return None
+
+
+def _expand_vars_in_obj(o: Any, vars: Dict[str, Any]) -> Any:
+    if isinstance(o, str) and o.startswith("@"):
+        return vars.get(o[1:], o)  # leave as-is if missing
+    if isinstance(o, list):
+        return [_expand_vars_in_obj(x, vars) for x in o]
+    if isinstance(o, dict):
+        return {k: _expand_vars_in_obj(v, vars) for k, v in o.items()}
+    return o
+
+
+def _resolve_value(val: Any, vars: Dict[str, Any]) -> Any:
+    if isinstance(val, str) and val.startswith("@"):
+        return vars.get(val[1:])
+    return val
+
+def _run_asserts(resp: Dict[str, Any], assertions: List[Dict[str, Any]], vars: Dict[str, Any]) -> Tuple[bool, List[str]]:
+    errs = []
+    ok_all = True
+    for a in assertions:
+        path = a.get("path")
+        op = a.get("op", "==")
+        actual = _get_by_path(resp, path)
+        if op == "delta":
+            baseline = _resolve_value(a.get("baseline"), vars)
+            want_delta = _resolve_value(a.get("value"), vars)
+            try:
+                if actual - baseline != want_delta:
+                    ok_all = False
+                    errs.append(f"assert delta failed: ({actual}) - ({baseline}) != {want_delta} at {path}")
+            except Exception:
+                ok_all = False
+                errs.append(f"assert delta failed (non-numeric?) at {path} actual={actual!r} baseline={baseline!r}")
+            continue
+
+        expected = _resolve_value(a.get("value"), vars)
+        try:
+            if op == "==":  cond = (actual == expected)
+            elif op == "!=": cond = (actual != expected)
+            elif op == ">":  cond = (actual >  expected)
+            elif op == "<":  cond = (actual <  expected)
+            elif op == ">=": cond = (actual >= expected)
+            elif op == "<=": cond = (actual <= expected)
+            else:
+                cond = False
+                errs.append(f"unknown op '{op}'")
+        except Exception:
+            cond = False
+        if not cond:
+            ok_all = False
+            errs.append(f"assert {op} failed at {path}: actual={actual!r} expected={expected!r}")
+    return ok_all, errs
+
+# in run_test(...):
+def run_test(name: str, sock: socket.socket, test: Dict[str, Any], strict: bool = False, vars: Optional[Dict[str,Any]] = None) -> None:
+    if vars is None: vars = {}
+
     command = coerce_command_from_test(name, test)
     expect = test.get("expect", {"status": "ok"})
 
-    # Pass through idempotency_key if present
     if isinstance(command.get("data"), dict) and "idempotency_key" in test:
         command["data"].setdefault("idempotency_key", test["idempotency_key"])
 
-    # Send
+    command = _expand_vars_in_obj(command, vars)        
+        
     send_json_line(sock, command)
-
-    # Receive
     line = recv_line(sock)
     if not line.strip():
         print(f"[{name}] FAIL: empty response")
@@ -226,16 +369,37 @@ def run_test(name: str, sock: socket.socket, test: Dict[str, Any], strict: bool 
         print(f"[{name}] FAIL: could not parse JSON response: {e}\n  raw: {line!r}")
         return
 
+    # soft expect first
     ok = soft_match(resp, expect, strict=strict)
-    status = resp.get("status")
-    rtype = resp.get("type")
+    status = resp.get("status"); rtype = resp.get("type")
 
+    # handle save
+    save_spec = test.get("save")
+    if isinstance(save_spec, dict):
+        var = save_spec.get("var"); path = save_spec.get("path")
+        if var and path:
+            vars[var] = _get_by_path(resp, path)
+
+    # handle asserts
+    asserts = test.get("asserts")
+    if isinstance(asserts, list) and asserts:
+        ok2, errs = _run_asserts(resp, asserts, vars)
+        if not ok2:
+            ok = False
+            print(f"[{name}] ASSERT FAIL  (status={status}, type={rtype})")
+            for e in errs:
+                print("  -", e)
     if ok:
         print(f"[{name}] PASS  (status={status}, type={rtype})")
     else:
-        print(f"[{name}] FAIL  (status={status}, type={rtype})")
-        print("  expect:", json.dumps(expect, ensure_ascii=False))
-        print("  actual:", json.dumps(resp, ensure_ascii=False))
+        printed = False
+        if not isinstance(test.get("asserts"), list) or not test["asserts"]:
+            print(f"[{name}] FAIL  (status={status}, type={rtype})")
+            print("  expect:", json.dumps(expect, ensure_ascii=False))
+            print("  actual:", json.dumps(resp, ensure_ascii=False))
+            printed = True
+        if DUMP_ON_FAIL and not printed:
+            print(f"  full response: {json.dumps(resp, ensure_ascii=False)}")
 
 # ----------------------------
 # Suite execution
@@ -243,7 +407,9 @@ def run_test(name: str, sock: socket.socket, test: Dict[str, Any], strict: bool 
 
 def run_test_suite():
     args = parse_args()
-
+    global DUMP_ON_FAIL
+    DUMP_ON_FAIL = getattr(args, "dump_on_fail", False)
+    
     test_file = resolve_test_file(args)
     suite = resolve_suite(args)
 
@@ -285,12 +451,14 @@ def run_test_suite():
                 if not do_login(s, args.user, args.passwd):
                     print("Auth failed; continuing without auth…")
 
+            vars_store = {}
             for test in tests:
                 if not isinstance(test, dict):
                     raise TypeError(f"Test must be an object, got: {type(test)} -> {test!r}")
 
                 name = test.get("name", "<unnamed>")
-                run_test(name, s, test, strict=args.strict)
+                run_test(name, s, test, strict=args.strict, vars=vars_store)
+                # run_test(name, s, test, strict=args.strict)
 
     except ConnectionRefusedError:
         print(f"\nERROR: Could not connect to {HOST}:{PORT}. Ensure the server is running.")
