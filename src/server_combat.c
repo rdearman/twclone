@@ -21,6 +21,18 @@
 #include "errors.h"
 
 #define SECTOR_FIGHTER_CAP 50000
+#define MINE_SECTOR_CAP_PER_TYPE       100
+#define PLAYER_MINE_UNIVERSE_CAP_TOTAL 10000
+
+/* Forward decls from your codebase */
+json_t *db_get_stardock_sectors(void);
+
+/* typedef enum { */
+/*   ASSET_MINE         = 1,   /\* Armid *\/ */
+/*   ASSET_FIGHTER      = 2, */
+/*   ASSET_BEACON       = 3, */
+/*   ASSET_LIMPET_MINE  = 4 */
+/* } asset_type_t; */
 
 /* typedef enum { */
 /*   OFFENSE_TOLL   = 1, */
@@ -487,7 +499,7 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
     char *payload = json_dumps(evt, JSON_COMPACT);
     json_decref(evt);
     if (payload) {
-	(void) h_log_engine_event("fighters.deployed", ctx->player_id, sector_id,  payload, NULL);
+	(void) h_log_engine_event("fighters.deployed", ctx->player_id, sector_id, payload, NULL);
       free(payload);
     }
     /* If your h_log_engine_event signature takes json_t* instead:
@@ -553,14 +565,340 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
 
 
 /* ---------- combat.lay_mines ---------- */
-  int cmd_combat_lay_mines (client_ctx_t * ctx, json_t * root)
-  {
-    if (!require_auth (ctx, root))
-      return 0;
-    // TODO: parse amount, lay mines in sector grid
-    return niy (ctx, root, "combat.lay_mines");
+/* ---------- combat.lay_mines (fixed-SQL) ---------- */
+
+/* Count mines in ship cargo (Armid) */
+static const char *SQL_SHIP_GET_ARMID =
+  "SELECT armid_mines FROM ships WHERE id=?1;";
+
+/* Count mines in ship cargo (Limpet) */
+static const char *SQL_SHIP_GET_LIMPET =
+  "SELECT limpet_mines FROM ships WHERE id=?1;";
+
+/* Decrement ship cargo (Armid) */
+static const char *SQL_SHIP_DEC_ARMID =
+  "UPDATE ships SET armid_mines = armid_mines - ?1 WHERE id=?2;";
+
+/* Decrement ship cargo (Limpet) */
+static const char *SQL_SHIP_DEC_LIMPET =
+  "UPDATE ships SET limpet_mines = limpet_mines - ?1 WHERE id=?2;";
+
+/* ---- Sector assets (fixed column names from your fighter handler) ---- */
+static const char *SQL_SECTOR_MINES_SUM_BY_TYPE =
+  "SELECT COALESCE(SUM(quantity),0) "
+  "FROM sector_assets "
+  "WHERE sector=?1 AND asset_type=?2;";
+
+static const char *SQL_PLAYER_MINES_SUM_TOTAL =
+  "SELECT COALESCE(SUM(quantity),0) "
+  "FROM sector_assets "
+  "WHERE player=?1 AND asset_type IN (1,4);";  /* armid+limpet */
+
+static const char *SQL_ASSET_INSERT_MINES =
+  "INSERT INTO sector_assets(sector, player, corporation, "
+  "                          asset_type, quantity, offensive_setting, deployed_at) "
+  "VALUES (?1, ?2, ?3, ?4, ?5, NULL, strftime('%s','now'));";
+
+
+/* Helpers */
+static int sum_sector_mines_by_type(sqlite3 *db, int sector_id, int asset_type, int *total_out) {
+  *total_out = 0;
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2(db, SQL_SECTOR_MINES_SUM_BY_TYPE, -1, &st, NULL);
+  if (rc != SQLITE_OK) return rc;
+  sqlite3_bind_int(st, 1, sector_id);
+  sqlite3_bind_int(st, 2, asset_type);
+  if ((rc = sqlite3_step(st)) == SQLITE_ROW) {
+    *total_out = sqlite3_column_int(st, 0);
+    rc = SQLITE_OK;
+  } else if (rc == SQLITE_DONE) {
+    *total_out = 0;
+    rc = SQLITE_OK;
+  }
+  sqlite3_finalize(st);
+  return rc;
+}
+
+static int sum_player_mines_total(sqlite3 *db, int player_id, int *total_out) {
+  *total_out = 0;
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2(db, SQL_PLAYER_MINES_SUM_TOTAL, -1, &st, NULL);
+  if (rc != SQLITE_OK) return rc;
+  sqlite3_bind_int(st, 1, player_id);
+  if ((rc = sqlite3_step(st)) == SQLITE_ROW) {
+    *total_out = sqlite3_column_int(st, 0);
+    rc = SQLITE_OK;
+  } else if (rc == SQLITE_DONE) {
+    *total_out = 0;
+    rc = SQLITE_OK;
+  }
+  sqlite3_finalize(st);
+  return rc;
+}
+
+static int ship_get_mines(sqlite3 *db, int ship_id, int asset_type, int *have_out) {
+  *have_out = 0;
+  const char *sql = (asset_type == ASSET_MINE) ? SQL_SHIP_GET_ARMID : SQL_SHIP_GET_LIMPET;
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK) return rc;
+  sqlite3_bind_int(st, 1, ship_id);
+  if ((rc = sqlite3_step(st)) == SQLITE_ROW) {
+    *have_out = sqlite3_column_int(st, 0);
+    rc = SQLITE_OK;
+  } else {
+    rc = SQLITE_ERROR;
+  }
+  sqlite3_finalize(st);
+  return rc;
+}
+
+static int ship_consume_mines(sqlite3 *db, int ship_id, int asset_type, int amount) {
+  /* Check available */
+  int have = 0;
+  int rc = ship_get_mines(db, ship_id, asset_type, &have);
+  if (rc != SQLITE_OK) return rc;
+  if (have < amount) return SQLITE_TOOBIG;
+
+  const char *sql = (asset_type == ASSET_MINE) ? SQL_SHIP_DEC_ARMID : SQL_SHIP_DEC_LIMPET;
+  sqlite3_stmt *st = NULL;
+  rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK) return rc;
+  sqlite3_bind_int(st, 1, amount);
+  sqlite3_bind_int(st, 2, ship_id);
+  rc = sqlite3_step(st);
+  sqlite3_finalize(st);
+  return (rc == SQLITE_DONE) ? SQLITE_OK : SQLITE_ERROR;
+}
+
+static int insert_sector_mines(sqlite3 *db, int sector_id, int owner_player_id,
+                               json_t *corp_id_json, int asset_type, int amount)
+{
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2(db, SQL_ASSET_INSERT_MINES, -1, &st, NULL);
+  if (rc != SQLITE_OK) return rc;
+
+  sqlite3_bind_int(st, 1, sector_id);
+  sqlite3_bind_int(st, 2, owner_player_id);
+  if (corp_id_json && json_is_integer(corp_id_json)) {
+    sqlite3_bind_int(st, 3, (int)json_integer_value(corp_id_json));
+  } else {
+    sqlite3_bind_null(st, 3);
+  }
+  sqlite3_bind_int(st, 4, asset_type);
+  sqlite3_bind_int(st, 5, amount);
+
+  rc = sqlite3_step(st);
+  sqlite3_finalize(st);
+  return (rc == SQLITE_DONE) ? SQLITE_OK : SQLITE_ERROR;
+}
+
+/* ---- Main command -------------------------------------------------------- */
+/* JSON:
+   { "command":"combat.lay_mines",
+     "data": { "mine_type":"armid"|"limpet" | 1|4, "amount":N, "corporation_id":null|<id> }
+   }
+*/
+int
+cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
+{
+  if (!require_auth(ctx, root))
+    return 0;
+
+  sqlite3 *db = db_get_handle();
+  if (!db) {
+    send_enveloped_error(ctx->fd, root, ERR_SERVICE_UNAVAILABLE, "Database unavailable");
+    return 0;
   }
 
+  json_t *data = json_object_get(root, "data");
+  if (!data || !json_is_object(data)) {
+    send_enveloped_error(ctx->fd, root, ERR_MISSING_FIELD, "Missing required field: data");
+    return 0;
+  }
+
+  /* mine_type: accept string ("armid"/"limpet") or integer (1/4) */
+  json_t *j_type   = json_object_get(data, "mine_type");
+  json_t *j_amount = json_object_get(data, "amount");
+  json_t *j_corp   = json_object_get(data, "corporation_id"); /* optional */
+
+  if (!j_type || !j_amount || !json_is_integer(j_amount)) {
+    send_enveloped_error(ctx->fd, root, ERR_CURSOR_INVALID, "Missing or invalid fields: mine_type/amount");
+    return 0;
+  }
+
+  int asset_type = 0;
+  if (json_is_string(j_type)) {
+    const char *s = json_string_value(j_type);
+    if      (s && strcasecmp(s, "armid")  == 0) asset_type = ASSET_MINE;
+    else if (s && strcasecmp(s, "limpet") == 0) asset_type = ASSET_LIMPET_MINE;
+  } else if (json_is_integer(j_type)) {
+    int v = (int)json_integer_value(j_type);
+    if (v == ASSET_MINE || v == ASSET_LIMPET_MINE) asset_type = v;
+  }
+
+  if (!(asset_type == ASSET_MINE || asset_type == ASSET_LIMPET_MINE)) {
+    send_enveloped_error(ctx->fd, root, ERR_CURSOR_INVALID, "mine_type must be 'armid'|'limpet' or 1|4");
+    return 0;
+  }
+
+  int amount = (int)json_integer_value(j_amount);
+  if (amount <= 0) {
+    send_enveloped_error(ctx->fd, root, ERR_NOT_FOUND, "amount must be > 0");
+    return 0;
+  }
+
+  /* Resolve active ship + sector (do NOT decloak for mines) */
+  int ship_id = h_get_active_ship_id(db, ctx->player_id);
+  if (ship_id <= 0) {
+    send_enveloped_error(ctx->fd, root, ERR_SHIP_NOT_FOUND, "No active ship");
+    return 0;
+  }
+
+  int sector_id = -1;
+  {
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2(db, "SELECT sector_id FROM ships WHERE id=?1;", -1, &st, NULL) != SQLITE_OK) {
+      send_enveloped_error(ctx->fd, root, ERR_SECTOR_NOT_FOUND, "Unable to resolve current sector");
+      return 0;
+    }
+    sqlite3_bind_int(st, 1, ship_id);
+    if (sqlite3_step(st) == SQLITE_ROW) sector_id = sqlite3_column_int(st, 0);
+    sqlite3_finalize(st);
+    if (sector_id <= 0) {
+      send_enveloped_error(ctx->fd, root, ERR_SECTOR_NOT_FOUND, "Unable to resolve current sector");
+      return 0;
+    }
+  }
+
+  /* Caps: per-sector per-type + per-player universe total */
+  int sector_type_total = 0;
+  if (sum_sector_mines_by_type(db, sector_id, asset_type, &sector_type_total) != SQLITE_OK) {
+    send_enveloped_error(ctx->fd, root, REF_NOT_IN_SECTOR, "Failed to read sector mines");
+    return 0;
+  }
+  if (sector_type_total + amount > MINE_SECTOR_CAP_PER_TYPE) {
+    send_enveloped_error(ctx->fd, root, ERR_SECTOR_OVERCROWDED, "Sector mine limit exceeded (100 per type)");
+    return 0;
+  }
+
+  int player_total = 0;
+  if (sum_player_mines_total(db, ctx->player_id, &player_total) != SQLITE_OK) {
+    send_enveloped_error(ctx->fd, root, ERR_DB, "Failed to compute player mine total");
+    return 0;
+  }
+  if (player_total + amount > PLAYER_MINE_UNIVERSE_CAP_TOTAL) {
+    send_enveloped_error(ctx->fd, root, REF_AMMO_DEPLETED, "Universe mine limit exceeded (10,000 total)");
+    return 0;
+  }
+
+  /* TODO (optional): consume 1 turn here, if you have a helper:
+     // if (!h_consume_turn(ctx->player_id, 1)) {
+     //   send_enveloped_error(ctx->fd, root, ERR_NO_TURNS, "No turns remaining");
+     //   return 0;
+     // }
+  */
+
+  /* TX: debit ship cargo, credit sector_assets */
+  char *errmsg = NULL;
+  if (sqlite3_exec(db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg) != SQLITE_OK) {
+    if (errmsg) sqlite3_free(errmsg);
+    send_enveloped_error(ctx->fd, root, ERR_DB, "Could not start transaction");
+    return 0;
+  }
+
+  int rc = ship_consume_mines(db, ship_id, asset_type, amount);
+  if (rc == SQLITE_TOOBIG) {
+    sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+    send_enveloped_error(ctx->fd, root, REF_AMMO_DEPLETED, "Insufficient mines in cargo");
+    return 0;
+  }
+  if (rc != SQLITE_OK) {
+    sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+    send_enveloped_error(ctx->fd, root, ERR_DB, "Failed to update ship cargo");
+    return 0;
+  }
+
+  rc = insert_sector_mines(db, sector_id, ctx->player_id, j_corp, asset_type, amount);
+  if (rc != SQLITE_OK) {
+    sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+    send_enveloped_error(ctx->fd, root, SECTOR_ERR, "Failed to create sector assets record");
+    return 0;
+  }
+
+  if (sqlite3_exec(db, "COMMIT;", NULL, NULL, &errmsg) != SQLITE_OK) {
+    if (errmsg) sqlite3_free(errmsg);
+    send_enveloped_error(ctx->fd, root, ERR_DB, "Commit failed");
+    return 0;
+  }
+
+  /* Fedspace/Stardock → summon ISS + warn */
+  {
+    bool in_fed = (sector_id >= 1 && sector_id <= 10);
+    bool in_sdock = false;
+
+    json_t *sd = db_get_stardock_sectors();
+    if (sd && json_is_array(sd)) {
+      size_t i; json_t *v;
+      json_array_foreach(sd, i, v) {
+        if (json_is_integer(v) && json_integer_value(v) == sector_id) { in_sdock = true; break; }
+      }
+    }
+    if (sd) json_decref(sd);
+
+    if (in_fed || in_sdock) {
+      iss_summon(sector_id, ctx->player_id);
+      (void)h_send_message_to_player(ctx->player_id, 0,
+                                     "Federation Warning",
+                                     "Mine deployment in protected space has triggered ISS response.");
+    }
+  }
+
+  /* Engine event: mines.deployed */
+  {
+    json_t *evt = json_object();
+    json_object_set_new(evt, "sector_id",       json_integer(sector_id));
+    json_object_set_new(evt, "player_id",       json_integer(ctx->player_id));
+    if (j_corp && json_is_integer(j_corp))
+      json_object_set_new(evt, "corporation_id", json_integer(json_integer_value(j_corp)));
+    else
+      json_object_set_new(evt, "corporation_id", json_null());
+    json_object_set_new(evt, "amount",          json_integer(amount));
+    json_object_set_new(evt, "mine_type",       json_string(asset_type == ASSET_MINE ? "armid" : "limpet"));
+    json_object_set_new(evt, "asset_type",      json_integer(asset_type));
+    json_object_set_new(evt, "event_ts",        json_integer((json_int_t)time(NULL)));
+
+    char *payload = json_dumps(evt, JSON_COMPACT);
+    json_decref(evt);
+    if (payload) {
+      (void)h_log_engine_event("mines.deployed", ctx->player_id, sector_id, payload, "");
+      free(payload);
+    }
+  }
+
+  /* Recompute sector per-type for response convenience */
+  (void)sum_sector_mines_by_type(db, sector_id, asset_type, &sector_type_total);
+
+  /* Response */
+  json_t *out = json_object();
+  json_object_set_new(out, "sector_id",           json_integer(sector_id));
+  json_object_set_new(out, "owner_player_id",     json_integer(ctx->player_id));
+  if (j_corp && json_is_integer(j_corp))
+    json_object_set_new(out, "owner_corp_id",     json_integer(json_integer_value(j_corp)));
+  else
+    json_object_set_new(out, "owner_corp_id",     json_null());
+  json_object_set_new(out, "amount",              json_integer(amount));
+  json_object_set_new(out, "asset_type",          json_integer(asset_type));
+  json_object_set_new(out, "mine_type",           json_string(asset_type == ASSET_MINE ? "armid" : "limpet"));
+  json_object_set_new(out, "sector_total_after",  json_integer(sector_type_total));
+
+  send_enveloped_ok(ctx->fd, root, "combat.mines.deployed", out);
+  json_decref(out);
+  return 0;
+}
+
+
+/* ---------- STUBS ---------- */
 /* ---------- combat.sweep_mines ---------- */
   int cmd_combat_sweep_mines (client_ctx_t * ctx, json_t * root)
   {
@@ -578,3 +916,4 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
     // TODO: return sector combat snapshot (entities, mines, fighters, cooldowns)
     return niy (ctx, root, "combat.status");
   }
+

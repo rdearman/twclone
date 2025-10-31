@@ -1580,36 +1580,130 @@ create_ferringhi (int ferringhi_sector)
 	    }
 	}
 
+      
+      /// OLD CODE PRE tables changes
+  /*     // Dynamically build the INSERT statement for the ship */
+  /*     char insert_sql[1024]; */
+  /*     char cols[512] = ""; */
+  /*     char vals[512] = ""; */
+
+  /*     // Add the core columns that are always present */
+  /*     strncat (cols, */
+  /* 	       "name, type, location, fighters, shields, holds, holds_used, ore, organics, equipment", */
+  /* 	       sizeof (cols) - strlen (cols) - 1); */
+  /*     strncat (vals, "?, ?, ?, ?, ?, ?, ?, ?, ?, ?", */
+  /* 	       sizeof (vals) - strlen (vals) - 1); */
+
+  /*     if (has_column (db, "ships", "attack")) */
+  /* 	{ */
+  /* 	  strncat (cols, ", attack", sizeof (cols) - strlen (cols) - 1); */
+  /* 	  strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1); */
+  /* 	} */
+  /*     if (has_column (db, "ships", "mines")) */
+  /* 	{ */
+  /* 	  strncat (cols, ", mines", sizeof (cols) - strlen (cols) - 1); */
+  /* 	  strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1); */
+  /* 	} */
+  /*     if (has_column (db, "ships", "beacons")) */
+  /* 	{ */
+  /* 	  strncat (cols, ", beacons", sizeof (cols) - strlen (cols) - 1); */
+  /* 	  strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1); */
+  /* 	} */
+  /*     if (has_column (db, "ships", "photons")) */
+  /* 	{ */
+  /* 	  strncat (cols, ", photons", sizeof (cols) - strlen (cols) - 1); */
+  /* 	  strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1); */
+  /* 	} */
+
+  /*     snprintf (insert_sql, sizeof (insert_sql), */
+  /* 		"INSERT INTO ships (%s) VALUES (%s);", cols, vals); */
+
+  /*     sqlite3_stmt *ins = NULL; */
+  /*     int rc = sqlite3_prepare_v2 (db, insert_sql, -1, &ins, NULL); */
+  /*     if (rc != SQLITE_OK) */
+  /* 	{ */
+  /* 	  fprintf (stderr, "create_ferringhi prepare insert failed: %s\n", */
+  /* 		   sqlite3_errmsg (db)); */
+  /* 	  sqlite3_finalize (player_ins); */
+  /* 	  sqlite3_finalize (player_update); */
+  /* 	  return -1; */
+  /* 	} */
+
+  /*     int b = 1; */
+  /*     sqlite3_bind_text (ins, b++, "Ferrengi Trader", -1, SQLITE_STATIC); */
+  /*     sqlite3_bind_int (ins, b++, ship_type); */
+  /*     sqlite3_bind_int (ins, b++, longest_tunnel_sector); */
+  /*     sqlite3_bind_int (ins, b++, ship_fighters); */
+  /*     sqlite3_bind_int (ins, b++, ship_shields); */
+  /*     sqlite3_bind_int (ins, b++, ship_holds); */
+  /*     sqlite3_bind_int (ins, b++, holds_to_fill); */
+  /*     sqlite3_bind_int (ins, b++, ore); */
+  /*     sqlite3_bind_int (ins, b++, organics); */
+  /*     sqlite3_bind_int (ins, b++, equipment); */
+
+  /*     if (has_column (db, "ships", "attack")) */
+  /* 	sqlite3_bind_int (ins, b++, ship_fighters); */
+  /*     if (has_column (db, "ships", "mines")) */
+  /* 	sqlite3_bind_int (ins, b++, mines_to_add); */
+  /*     if (has_column (db, "ships", "beacons")) */
+  /* 	sqlite3_bind_int (ins, b++, beacons_to_add); */
+  /*     if (has_column (db, "ships", "photons")) */
+  /* 	sqlite3_bind_int (ins, b++, photons_to_add); */
+
       // Dynamically build the INSERT statement for the ship
       char insert_sql[1024];
       char cols[512] = "";
       char vals[512] = "";
+      int ship_attack = 100; 
 
-      // Add the core columns that are always present
+      // The 'ships' table schema requires all these columns for a complete insert.
+      // We are removing the redundant 'holds' column and renaming 'type' to 'type_id'.
+      // We are also adding 'limpets', 'genesis', 'colonists', 'flags', 'ported', 'onplanet',
+      // and the cloaking columns, providing default values where necessary.
       strncat (cols,
-	       "name, type, location, fighters, shields, holds, holds_used, ore, organics, equipment",
+	       "name, type_id, location, fighters, shields, holds_used, ore, organics, equipment, limpets, genesis, colonists, flags, ported, onplanet",
 	       sizeof (cols) - strlen (cols) - 1);
-      strncat (vals, "?, ?, ?, ?, ?, ?, ?, ?, ?, ?",
+      strncat (vals, "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?",
 	       sizeof (vals) - strlen (vals) - 1);
+
+
+      // NOTE: We now explicitly check and bind the `attack`, `mines`, `beacons`, and `photons`
+      // as they are optional / conditional.
 
       if (has_column (db, "ships", "attack"))
 	{
 	  strncat (cols, ", attack", sizeof (cols) - strlen (cols) - 1);
 	  strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
 	}
+
       if (has_column (db, "ships", "mines"))
 	{
 	  strncat (cols, ", mines", sizeof (cols) - strlen (cols) - 1);
 	  strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
 	}
+
       if (has_column (db, "ships", "beacons"))
 	{
 	  strncat (cols, ", beacons", sizeof (cols) - strlen (cols) - 1);
 	  strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
 	}
+
       if (has_column (db, "ships", "photons"))
 	{
 	  strncat (cols, ", photons", sizeof (cols) - strlen (cols) - 1);
+	  strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
+	}
+  
+      // Add the cloaking fields if they exist, to ensure proper schema upgrade compatibility.
+      // If you are certain these columns exist, you can add them to the core list above.
+      if (has_column (db, "ships", "cloaking_devices"))
+	{
+	  strncat (cols, ", cloaking_devices", sizeof (cols) - strlen (cols) - 1);
+	  strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
+	}
+      if (has_column (db, "ships", "cloaked"))
+	{
+	  strncat (cols, ", cloaked", sizeof (cols) - strlen (cols) - 1);
 	  strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
 	}
 
@@ -1628,25 +1722,42 @@ create_ferringhi (int ferringhi_sector)
 	}
 
       int b = 1;
+      // 1. Core Columns (15 parameters)
       sqlite3_bind_text (ins, b++, "Ferrengi Trader", -1, SQLITE_STATIC);
-      sqlite3_bind_int (ins, b++, ship_type);
+      sqlite3_bind_int (ins, b++, ship_type);                 // Renamed 'type' to 'type_id'
       sqlite3_bind_int (ins, b++, longest_tunnel_sector);
       sqlite3_bind_int (ins, b++, ship_fighters);
       sqlite3_bind_int (ins, b++, ship_shields);
-      sqlite3_bind_int (ins, b++, ship_holds);
-      sqlite3_bind_int (ins, b++, holds_to_fill);
-      sqlite3_bind_int (ins, b++, ore);
+      // We are binding the max holds to the current holds_used to start
+      // The ship should begin with 0 current cargo, but needs max holds for player to see capacity.
+      // Since Ferengi Trader will likely start with 0 cargo, we should bind 0 to holds_used.
+      // Assuming 'holds_to_fill' is the number of cargo holds the ship starts with (0 in most cases).
+      sqlite3_bind_int (ins, b++, holds_to_fill);             // This should be 0 for a new ship (holds_used)
+      sqlite3_bind_int (ins, b++, ore);                       // Cargo begins here
       sqlite3_bind_int (ins, b++, organics);
-      sqlite3_bind_int (ins, b++, equipment);
+      sqlite3_bind_int (ins, b++, equipment);                 // Cargo ends here
+      sqlite3_bind_int (ins, b++, 0);                         // limpets (New, default 0)
+      sqlite3_bind_int (ins, b++, 0);                         // genesis (New, default 0)
+      sqlite3_bind_int (ins, b++, 0);                         // colonists (New, default 0)
+      sqlite3_bind_int (ins, b++, 0);                         // flags (New, default 0)
+      sqlite3_bind_int (ins, b++, 0);                         // ported (New, default 0)
+      sqlite3_bind_int (ins, b++, 1);                         // onplanet (Always 1 for new ship on starting planet)
 
+      // 2. Conditional Columns
       if (has_column (db, "ships", "attack"))
-	sqlite3_bind_int (ins, b++, ship_fighters);
+	sqlite3_bind_int (ins, b++, ship_attack);             // Changed to bind ship_attack
       if (has_column (db, "ships", "mines"))
 	sqlite3_bind_int (ins, b++, mines_to_add);
       if (has_column (db, "ships", "beacons"))
 	sqlite3_bind_int (ins, b++, beacons_to_add);
       if (has_column (db, "ships", "photons"))
 	sqlite3_bind_int (ins, b++, photons_to_add);
+
+      // 3. Cloaking Columns
+      if (has_column (db, "ships", "cloaking_devices"))
+	sqlite3_bind_int (ins, b++, 0); // New, default 0
+      if (has_column (db, "ships", "cloaked"))
+	sqlite3_bind_null (ins, b++); // New, default NULL
 
 
       if (sqlite3_step (ins) != SQLITE_DONE)
@@ -1783,16 +1894,36 @@ create_ferringhi (int ferringhi_sector)
   return 0;
 }
 
+// In a fully relational design, these should ideally be fetched from the shiptypes table.
+// We are adding 'attack' here with a high default value.
+struct ImperialStats {
+    int fighters;
+    int shields;
+    int holds;
+    int photons;
+    int genesis;
+    int attack; // <- The new required column
+} imperial_stats = {
+    .fighters = 32000,
+    .shields = 65000,
+    .holds = 100,
+    .photons = 100,
+    .genesis = 10,
+    .attack = 5000 // High attack rating for Imperial ship
+};
 
 
 int
 create_imperial (void)
 {
+  int rc;
   pthread_mutex_lock (&db_mutex);
+
   sqlite3 *db = db_get_handle ();
   if (!db)
     {
       fprintf (stderr, "create_imperial: Failed to get DB handle\n");
+      pthread_mutex_unlock (&db_mutex);
       return -1;
     }
 
@@ -1800,6 +1931,7 @@ create_imperial (void)
   if (!cfg)
     {
       fprintf (stderr, "create_imperial: could not load config\n");
+      pthread_mutex_unlock (&db_mutex);
       return -1;
     }
 
@@ -1810,62 +1942,192 @@ create_imperial (void)
   if (imperial_starship_id == -1)
     {
       fprintf (stderr,
-	       "create_imperial: Failed to get required NPC shiptype ID.\n");
+               "create_imperial: Failed to get required NPC shiptype ID.\n");
+      free (cfg);
+      pthread_mutex_unlock (&db_mutex);
       return -1;
     }
+
   // Randomly place the Imperial Starship in a sector
   int imperial_sector = 11 + (rand () % (cfg->default_nodes - 10));
   free (cfg);
 
-  // Create the "Imperial" player (NPC) entry
+  // --- 1. Create the "Imperial" player (NPC) entry ---
   char sql_player[512];
-  snprintf (sql_player, sizeof (sql_player), "INSERT INTO players (name, passwd, credits, type) VALUES ('Imperial Starship', 'BOT', 10000000, 1);");	// Large credits and high alignment
+  snprintf (sql_player, sizeof (sql_player), "INSERT INTO players (name, passwd, credits, type) VALUES ('Imperial Starship', 'BOT', \
+10000000, 1);"); // Large credits and high alignment
   if (sqlite3_exec (db, sql_player, NULL, NULL, NULL) != SQLITE_OK)
     {
       fprintf (stderr, "create_imperial failed to create player: %s\n",
-	       sqlite3_errmsg (db));
+               sqlite3_errmsg (db));
+      pthread_mutex_unlock (&db_mutex);
       return -1;
     }
 
   sqlite3_int64 imperial_player_id = sqlite3_last_insert_rowid (db);
 
-  // Create the "Imperial Starship" ship entry linked to the player
-  char sql_ship[512];
-  snprintf (sql_ship, sizeof (sql_ship),
-	    "INSERT INTO ships (name, type, location, fighters, shields, holds, photons, genesis) "
-	    "VALUES ('Imperial Starship', %d, %d, 32000, 65000, 100, 100, 10);",
-	    imperial_starship_id, imperial_sector);
-  if (sqlite3_exec (db, sql_ship, NULL, NULL, NULL) != SQLITE_OK)
+  // --- 2. Create the "Imperial Starship" ship entry linked to the player ---
+
+  // Using a prepared statement for safety and to correctly bind all new and existing columns.
+  sqlite3_stmt *ins = NULL;
+  const char *sql_ship_insert =
+    "INSERT INTO ships ( name, type_id, location, fighters, shields, holds_used, photons, genesis, attack) "
+    "VALUES ('Imperial Starship', ?, ?, ?, ?, ?, ?, ?, ?);"; // 10 columns/bind points
+    
+  rc = sqlite3_prepare_v2 (db, sql_ship_insert, -1, &ins, NULL);
+  if (rc != SQLITE_OK)
     {
-      fprintf (stderr, "create_imperial failed to create ship: %s\n",
-	       sqlite3_errmsg (db));
+      fprintf (stderr, "create_imperial: Failed to prepare ship INSERT: %s\n",
+               sqlite3_errmsg (db));
+      pthread_mutex_unlock (&db_mutex);
       return -1;
     }
-  sqlite3_int64 imperial_ship_id = sqlite3_last_insert_rowid (db);
 
-  // Create the "Imperial Starship" ship entry linked to the player
+  // Bind the ship properties
+  int b = 1;
+  // (1) player_id (The ship must be linked to the NPC player)
+  sqlite3_bind_int64 (ins, b++, imperial_player_id);
+  // (2) type (FK to shiptypes, was previously the only identifier)
+  sqlite3_bind_int (ins, b++, imperial_starship_id);
+  // (3) location
+  sqlite3_bind_int (ins, b++, imperial_sector);
+  // (4) fighters (initial value from struct)
+  sqlite3_bind_int (ins, b++, imperial_stats.fighters);
+  // (5) shields (initial value from struct)
+  sqlite3_bind_int (ins, b++, imperial_stats.shields);
+  // (6) holds (initial value from struct)
+  sqlite3_bind_int (ins, b++, imperial_stats.holds);
+  // (7) photons (initial value from struct)
+  sqlite3_bind_int (ins, b++, imperial_stats.photons);
+  // (8) genesis (initial value from struct)
+  sqlite3_bind_int (ins, b++, imperial_stats.genesis);
+  // (9) attack (initial value from struct - FIXES THE BUG)
+  sqlite3_bind_int (ins, b++, imperial_stats.attack);
+
+  // Execute the ship insert
+  rc = sqlite3_step (ins);
+  if (rc != SQLITE_DONE)
+    {
+      fprintf (stderr, "create_imperial failed to create ship: %s\n",
+               sqlite3_errmsg (db));
+      sqlite3_finalize (ins);
+      pthread_mutex_unlock (&db_mutex);
+      return -1;
+    }
+  
+  sqlite3_int64 imperial_ship_id = sqlite3_last_insert_rowid (db);
+  sqlite3_finalize (ins); // Clean up the prepared statement
+
+  // --- 3. Link the ship ID back to the player entry ---
   char sql_update[512];
   // Build the UPDATE into the right buffer with the right size
   snprintf (sql_update, sizeof (sql_update),
-	    "UPDATE players SET ship=%lld WHERE id=%lld;",
-	    (long long) imperial_ship_id, (long long) imperial_player_id);
+            "UPDATE players SET ship=%lld WHERE id=%lld;",
+            (long long) imperial_ship_id, (long long) imperial_player_id);
 
-  // Execute the UPDATE, not the previous INSERT
+  // Execute the UPDATE
   if (sqlite3_exec (db, sql_update, NULL, NULL, NULL) != SQLITE_OK)
     {
       fprintf (stderr, "create_imperial failed to update player ship: %s\n",
-	       sqlite3_errmsg (db));
+               sqlite3_errmsg (db));
+      pthread_mutex_unlock (&db_mutex);
       return -1;
     }
 
-
   fprintf (stderr,
-	   "BIGBANG: Imperial Starship placed at sector %d.\n",
-	   imperial_sector);
+           "BIGBANG: Imperial Starship placed at sector %d.\n",
+           imperial_sector);
+
   pthread_mutex_unlock (&db_mutex);
 
   return 0;
 }
+
+
+
+/////////////// Pre schema change code
+
+/* int */
+/* create_imperial (void) */
+/* { */
+/*   pthread_mutex_lock (&db_mutex); */
+/*   sqlite3 *db = db_get_handle (); */
+/*   if (!db) */
+/*     { */
+/*       fprintf (stderr, "create_imperial: Failed to get DB handle\n"); */
+/*       return -1; */
+/*     } */
+
+/*   struct twconfig *cfg = config_load (); */
+/*   if (!cfg) */
+/*     { */
+/*       fprintf (stderr, "create_imperial: could not load config\n"); */
+/*       return -1; */
+/*     } */
+
+/*   // Dynamically retrieve the NPC shiptype ID, filtered by can_purchase = 0 */
+/*   int imperial_starship_id = */
+/*     get_npc_shiptype_id_by_name (db, "Imperial Starship (NPC)"); */
+
+/*   if (imperial_starship_id == -1) */
+/*     { */
+/*       fprintf (stderr, */
+/* 	       "create_imperial: Failed to get required NPC shiptype ID.\n"); */
+/*       return -1; */
+/*     } */
+/*   // Randomly place the Imperial Starship in a sector */
+/*   int imperial_sector = 11 + (rand () % (cfg->default_nodes - 10)); */
+/*   free (cfg); */
+
+/*   // Create the "Imperial" player (NPC) entry */
+/*   char sql_player[512]; */
+/*   snprintf (sql_player, sizeof (sql_player), "INSERT INTO players (name, passwd, credits, type) VALUES ('Imperial Starship', 'BOT', 10000000, 1);");	// Large credits and high alignment */
+/*   if (sqlite3_exec (db, sql_player, NULL, NULL, NULL) != SQLITE_OK) */
+/*     { */
+/*       fprintf (stderr, "create_imperial failed to create player: %s\n", */
+/* 	       sqlite3_errmsg (db)); */
+/*       return -1; */
+/*     } */
+
+/*   sqlite3_int64 imperial_player_id = sqlite3_last_insert_rowid (db); */
+
+/*   // Create the "Imperial Starship" ship entry linked to the player */
+/*   char sql_ship[512]; */
+/*   snprintf (sql_ship, sizeof (sql_ship), */
+/* 	    "INSERT INTO ships (name, type, location, fighters, shields, holds, photons, genesis) " */
+/* 	    "VALUES ('Imperial Starship', %d, %d, 32000, 65000, 100, 100, 10);", */
+/* 	    imperial_starship_id, imperial_sector); */
+/*   if (sqlite3_exec (db, sql_ship, NULL, NULL, NULL) != SQLITE_OK) */
+/*     { */
+/*       fprintf (stderr, "create_imperial failed to create ship: %s\n", */
+/* 	       sqlite3_errmsg (db)); */
+/*       return -1; */
+/*     } */
+/*   sqlite3_int64 imperial_ship_id = sqlite3_last_insert_rowid (db); */
+
+/*   // Create the "Imperial Starship" ship entry linked to the player */
+/*   char sql_update[512]; */
+/*   // Build the UPDATE into the right buffer with the right size */
+/*   snprintf (sql_update, sizeof (sql_update), */
+/* 	    "UPDATE players SET ship=%lld WHERE id=%lld;", */
+/* 	    (long long) imperial_ship_id, (long long) imperial_player_id); */
+
+/*   // Execute the UPDATE, not the previous INSERT */
+/*   if (sqlite3_exec (db, sql_update, NULL, NULL, NULL) != SQLITE_OK) */
+/*     { */
+/*       fprintf (stderr, "create_imperial failed to update player ship: %s\n", */
+/* 	       sqlite3_errmsg (db)); */
+/*       return -1; */
+/*     } */
+
+
+/*   fprintf (stderr, */
+/* 	   "BIGBANG: Imperial Starship placed at sector %d.\n", */
+/* 	   imperial_sector); */
+/*   pthread_mutex_unlock (&db_mutex); */
+
+/*   return 0; */
+/* } */
 
 /* /\* ---------- small helpers ---------- *\/ */
 
@@ -2050,6 +2312,325 @@ has_column (sqlite3 *db, const char *table, const char *column)
 //////////////////////////////////////////
 
 
+/* int */
+/* create_derelicts (void) */
+/* { */
+/*   sqlite3 *db = db_get_handle (); */
+/*   if (!db) */
+/*     { */
+/*       fprintf (stderr, "[create_derelicts] no DB handle\n"); */
+/*       return 1; */
+/*     } */
+
+/*   int rc = 0; */
+/*   char *errmsg = NULL; */
+
+/*   /\* Seed RNG once per process. *\/ */
+/*   static int seeded = 0; */
+/*   if (!seeded) */
+/*     { */
+/*       srand ((unsigned) time (NULL)); */
+/*       seeded = 1; */
+/*     } */
+
+/*   /\* Dynamically build the INSERT statement based on existing columns in your schema *\/ */
+/*   char insert_sql[1024]; */
+/*   char cols[512] = ""; */
+/*   char vals[512] = ""; */
+
+/*   // Add the core columns that are always present */
+/*   strncat (cols, "name, type", sizeof (cols) - strlen (cols) - 1); */
+/*   strncat (vals, "?, ?", sizeof (vals) - strlen (vals) - 1); */
+
+/*   // DYNAMIC FIX: Check for the 'attack' column and add it if present */
+/*   if (has_column (db, "ships", "attack")) */
+/*     { */
+/*       strncat (cols, ", attack", sizeof (cols) - strlen (cols) - 1); */
+/*       strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1); */
+/*     } */
+
+/*   // Add the remaining core columns */
+/*   strncat (cols, ", location, holds, fighters, shields", */
+/* 	   sizeof (cols) - strlen (cols) - 1); */
+/*   strncat (vals, ", ?, ?, ?, ?", sizeof (vals) - strlen (vals) - 1); */
+
+/*   // Dynamic cargo and equipment columns based on your schema */
+/*   if (has_column (db, "ships", "holds_used")) */
+/*     { */
+/*       strncat (cols, ", holds_used", sizeof (cols) - strlen (cols) - 1); */
+/*       strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1); */
+/*     } */
+/*   if (has_column (db, "ships", "fighters_used")) */
+/*     { */
+/*       strncat (cols, ", fighters_used", sizeof (cols) - strlen (cols) - 1); */
+/*       strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1); */
+/*     } */
+/*   if (has_column (db, "ships", "organics")) */
+/*     { */
+/*       strncat (cols, ", organics", sizeof (cols) - strlen (cols) - 1); */
+/*       strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1); */
+/*     } */
+/*   if (has_column (db, "ships", "equipment")) */
+/*     { */
+/*       strncat (cols, ", equipment", sizeof (cols) - strlen (cols) - 1); */
+/*       strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1); */
+/*     } */
+/*   if (has_column (db, "ships", "ore")) */
+/*     { */
+/*       strncat (cols, ", ore", sizeof (cols) - strlen (cols) - 1); */
+/*       strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1); */
+/*     } */
+/*   if (has_column (db, "ships", "colonists")) */
+/*     { */
+/*       strncat (cols, ", colonists", sizeof (cols) - strlen (cols) - 1); */
+/*       strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1); */
+/*     } */
+/*   if (has_column (db, "ships", "mines")) */
+/*     { */
+/*       strncat (cols, ", mines", sizeof (cols) - strlen (cols) - 1); */
+/*       strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1); */
+/*     } */
+/*   if (has_column (db, "ships", "genesis")) */
+/*     { */
+/*       strncat (cols, ", genesis", sizeof (cols) - strlen (cols) - 1); */
+/*       strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1); */
+/*     } */
+/*   if (has_column (db, "ships", "photons")) */
+/*     { */
+/*       strncat (cols, ", photons", sizeof (cols) - strlen (cols) - 1); */
+/*       strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1); */
+/*     } */
+/*   if (has_column (db, "ships", "beacons")) */
+/*     { */
+/*       strncat (cols, ", beacons", sizeof (cols) - strlen (cols) - 1); */
+/*       strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1); */
+/*     } */
+
+
+/*   // Add columns with a fixed default value */
+/*   strncat (cols, ", flags, ported, onplanet", */
+/* 	   sizeof (cols) - strlen (cols) - 1); */
+/*   strncat (vals, ", ?, ?, ?", sizeof (vals) - strlen (vals) - 1); */
+
+/*   snprintf (insert_sql, sizeof (insert_sql), */
+/* 	    "INSERT INTO ships (%s) VALUES (%s);", cols, vals); */
+
+/*   sqlite3_stmt *ins = NULL; */
+/*   rc = sqlite3_prepare_v2 (db, insert_sql, -1, &ins, NULL); */
+/*   if (rc != SQLITE_OK) */
+/*     { */
+/*       fprintf (stderr, "[create_derelicts] prepare insert failed: %s\n", */
+/* 	       sqlite3_errmsg (db)); */
+/*       return 1; */
+/*     } */
+
+/*   /\* Select statement based on your shiptypes schema *\/ */
+/*   sqlite3_stmt *sel = NULL; */
+/*   const char *select_candidates[] = { */
+/*     "SELECT id, name, maxholds, maxfighters, maxshields FROM shiptypes;", */
+/*     NULL */
+/*   }; */
+/*   rc = prepare_first_ok (db, &sel, select_candidates); */
+/*   if (rc != SQLITE_OK) */
+/*     { */
+/*       fprintf (stderr, */
+/* 	       "[create_derelicts] could not prepare shiptypes SELECT.\n"); */
+/*       sqlite3_finalize (ins); */
+/*       return 1; */
+/*     } */
+
+/*   /\* */
+/*    * BEGIN IMMEDIATE TRANSACTION: */
+/*    * This is a single transaction for atomicity and speed. */
+/*    * The duplicate BEGIN call was removed to fix the error. */
+/*    *\/ */
+/*   rc = sqlite3_exec (db, "BEGIN IMMEDIATE TRANSACTION;", NULL, NULL, &errmsg); */
+/*   if (rc != SQLITE_OK) */
+/*     { */
+/*       fprintf (stderr, "[create_derelicts] begin transaction failed: %s\n", */
+/* 	       errmsg ? errmsg : "(unknown)"); */
+/*       sqlite3_free (errmsg); */
+/*       sqlite3_finalize (ins); */
+/*       sqlite3_finalize (sel); */
+/*       return 1; */
+/*     } */
+
+/*   /\* Insert one derelict for each shiptype *\/ */
+/*   while ((rc = sqlite3_step (sel)) == SQLITE_ROW) */
+/*     { */
+/*       int st_id = sqlite3_column_int (sel, 0); */
+/*       const unsigned char *stype_name_uc = sqlite3_column_text (sel, 1); */
+/*       const char *stype_name = */
+/* 	(const char *) (stype_name_uc ? (const char *) stype_name_uc : ""); */
+/*       // (const char *) (stype_name_uc ? stype_name_uc : ""); */
+/*       /\* Build display name *\/ */
+/*       char dname[128]; */
+/*       char rnd[128]; */
+/*       if (db_rand_npc_shipname (rnd, sizeof rnd) == SQLITE_OK && rnd[0]) */
+/* 	{ */
+/* 	  snprintf (dname, sizeof dname, "%s", rnd); */
+/* 	} */
+/*       else if (stype_name && stype_name[0] != '\0') */
+/* 	{ */
+/* 	  snprintf (dname, sizeof dname, "Derelict %s", stype_name); */
+/* 	} */
+/*       else */
+/* 	{ */
+/* 	  snprintf (dname, sizeof dname, "Derelict Type %d", st_id); */
+/* 	} */
+
+/*       /\* Pick a random sector in the range 11..500 *\/ */
+/*       int sector = 11 + (rand () % 490); */
+
+/*       /\* Capacities from shiptypes *\/ */
+/*       int max_holds = sqlite3_column_int (sel, 2); */
+/*       int max_fighters = sqlite3_column_int (sel, 3); */
+/*       int max_shields = sqlite3_column_int (sel, 4); */
+
+/*       /\* Random fill percentage for “used” fields *\/ */
+/* #define MIN_FILL_PCT 25 */
+/* #define MAX_FILL_PCT 75 */
+/*       int fill_pct = */
+/* 	MIN_FILL_PCT + (rand () % (MAX_FILL_PCT - MIN_FILL_PCT + 1)); */
+/*       int holds_used = (int) (max_holds * (fill_pct / 100.0)); */
+/*       int fighters_used = (int) (max_fighters * (fill_pct / 100.0)); */
+/*       int mines_to_add = 1 + (rand () % 10); */
+/*       int photons_to_add = 1; */
+/*       int beacons_to_add = 4; */
+
+/*       /\* Bind in EXACTLY the same order as your INSERT column list *\/ */
+/*       int b = 1; */
+/*       sqlite3_bind_text (ins, b++, dname, -1, SQLITE_TRANSIENT);	/\* name *\/ */
+/*       sqlite3_bind_int (ins, b++, st_id);	/\* type *\/ */
+
+/*       // CHANGE: Now binds the attack value to the ship's maximum fighter capacity */
+/*       if (has_column (db, "ships", "attack")) */
+/* 	{ */
+/* 	  sqlite3_bind_int (ins, b++, max_fighters); */
+/* 	} */
+
+/*       sqlite3_bind_int (ins, b++, sector);	/\* location *\/ */
+/*       sqlite3_bind_int (ins, b++, max_holds);	/\* holds *\/ */
+/*       sqlite3_bind_int (ins, b++, max_fighters);	/\* fighters *\/ */
+/*       sqlite3_bind_int (ins, b++, max_shields);	/\* shields *\/ */
+
+/*       if (has_column (db, "ships", "holds_used")) */
+/* 	sqlite3_bind_int (ins, b++, holds_used); */
+/*       if (has_column (db, "ships", "fighters_used")) */
+/* 	sqlite3_bind_int (ins, b++, fighters_used); */
+/*       if (has_column (db, "ships", "organics")) */
+/* 	sqlite3_bind_int (ins, b++, 0); */
+/*       if (has_column (db, "ships", "equipment")) */
+/* 	sqlite3_bind_int (ins, b++, 0); */
+/*       if (has_column (db, "ships", "ore")) */
+/* 	sqlite3_bind_int (ins, b++, 0); */
+/*       if (has_column (db, "ships", "colonists")) */
+/* 	sqlite3_bind_int (ins, b++, 0); */
+/*       if (has_column (db, "ships", "mines")) */
+/* 	sqlite3_bind_int (ins, b++, mines_to_add); */
+/*       if (has_column (db, "ships", "genesis")) */
+/* 	sqlite3_bind_int (ins, b++, 0); */
+/*       if (has_column (db, "ships", "photons")) */
+/* 	sqlite3_bind_int (ins, b++, photons_to_add); */
+/*       if (has_column (db, "ships", "beacons")) */
+/* 	sqlite3_bind_int (ins, b++, beacons_to_add); */
+
+/*       sqlite3_bind_int (ins, b++, 0);	/\* flags *\/ */
+/*       sqlite3_bind_int (ins, b++, 0);	/\* ported *\/ */
+/*       sqlite3_bind_int (ins, b++, 0);	/\* onplanet *\/ */
+
+/*       int irc = sqlite3_step (ins); */
+/*       if (irc != SQLITE_DONE) */
+/* 	{ */
+/* 	  fprintf (stderr, */
+/* 		   "[create_derelicts] insert failed for shiptype %d (%s) into sector %d: %s\n", */
+/* 		   st_id, dname, sector, sqlite3_errmsg (db)); */
+/* 	  sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL); */
+/* 	  sqlite3_finalize (ins); */
+/* 	  sqlite3_finalize (sel); */
+/* 	  return 1; */
+/* 	} */
+/*       sqlite3_reset (ins); */
+/*     } */
+
+/*   /\* Normalise loop exit *\/ */
+/*   if (rc == SQLITE_DONE) */
+/*     rc = SQLITE_OK; */
+/*   if (rc != SQLITE_OK) */
+/*     { */
+/*       fprintf (stderr, "[create_derelicts] shiptypes SELECT failed: %s\n", */
+/* 	       sqlite3_errmsg (db)); */
+/*       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL); */
+/*       sqlite3_finalize (ins); */
+/*       sqlite3_finalize (sel); */
+/*       return 1; */
+/*     } */
+
+/*   /\* Rename all ships of type 18 to "Mary Celeste" *\/ */
+/*   { */
+/*     sqlite3_stmt *st = NULL; */
+/*     int urc = */
+/*       sqlite3_prepare_v2 (db, "UPDATE ships SET name=? WHERE type=?;", -1, */
+/* 			  &st, NULL); */
+/*     if (urc == SQLITE_OK) */
+/*       { */
+/* 	sqlite3_bind_text (st, 1, "Mary Celeste", -1, SQLITE_STATIC); */
+/* 	sqlite3_bind_int (st, 2, 18); */
+/* 	urc = sqlite3_step (st); */
+/*       } */
+/*     sqlite3_finalize (st); */
+/*     if (urc != SQLITE_DONE) */
+/*       { */
+/* 	fprintf (stderr, "[create_derelicts] rename type 18 failed: %s\n", */
+/* 		 sqlite3_errmsg (db)); */
+/* 	sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL); */
+/* 	sqlite3_finalize (ins); */
+/* 	sqlite3_finalize (sel); */
+/* 	return 1; */
+/*       } */
+/*   } */
+
+/*   /\* Delete all ships with class 17 (NPC Imperial Warship) *\/ */
+/*   rc = */
+/*     sqlite3_exec (db, "DELETE FROM ships WHERE type=17;", NULL, NULL, */
+/* 		  &errmsg); */
+/*   if (rc != SQLITE_OK) */
+/*     { */
+/*       fprintf (stderr, "[create_derelicts] DELETE type 17 failed: %s\n", */
+/* 	       errmsg ? errmsg : "(unknown)"); */
+/*       sqlite3_free (errmsg); */
+/*       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL); */
+/*       sqlite3_finalize (ins); */
+/*       sqlite3_finalize (sel); */
+/*       return 1; */
+/*     } */
+
+/*   /\* Commit the transaction *\/ */
+/*   rc = sqlite3_exec (db, "COMMIT;", NULL, NULL, &errmsg); */
+/*   if (rc != SQLITE_OK) */
+/*     { */
+/*       fprintf (stderr, "[create_derelicts] commit failed: %s\n", */
+/* 	       errmsg ? errmsg : "(unknown)"); */
+/*       sqlite3_free (errmsg); */
+/*       /\* fall through to cleanup as error *\/ */
+/*     } */
+
+/*   /\* unified cleanup & error handling *\/ */
+/*   if (rc != SQLITE_OK) */
+/*     { */
+/*       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL); */
+/*       sqlite3_finalize (ins); */
+/*       sqlite3_finalize (sel); */
+/*       return 1; */
+/*     } */
+
+/*   /\* success path *\/ */
+/*   sqlite3_finalize (ins); */
+/*   sqlite3_finalize (sel); */
+/*   return 0; */
+/* } */
+
+
 int
 create_derelicts (void)
 {
@@ -2059,7 +2640,6 @@ create_derelicts (void)
       fprintf (stderr, "[create_derelicts] no DB handle\n");
       return 1;
     }
-
   int rc = 0;
   char *errmsg = NULL;
 
@@ -2071,13 +2651,27 @@ create_derelicts (void)
       seeded = 1;
     }
 
+  /* Get all shiptypes (UPDATED to include maxattack, maxlimpets, maxgenesis) */
+  const char *sql_select =
+    "SELECT id, name, maxholds, maxfighters, maxshields, maxmines, maxphotons, maxbeacons, maxattack, maxlimpets, maxgenesis "
+    "FROM shiptypes WHERE can_purchase=1 AND id NOT IN (18);";
+  sqlite3_stmt *sel = NULL;
+  rc = sqlite3_prepare_v2 (db, sql_select, -1, &sel, NULL);
+  if (rc != SQLITE_OK)
+    {
+      fprintf (stderr, "[create_derelicts] shiptypes SELECT prepare failed: %s\n",
+	       sqlite3_errmsg (db));
+      return 1;
+    }
+
   /* Dynamically build the INSERT statement based on existing columns in your schema */
   char insert_sql[1024];
   char cols[512] = "";
   char vals[512] = "";
 
   // Add the core columns that are always present
-  strncat (cols, "name, type", sizeof (cols) - strlen (cols) - 1);
+  // FIX: 'type' is now 'type_id'
+  strncat (cols, "name, type_id", sizeof (cols) - strlen (cols) - 1);
   strncat (vals, "?, ?", sizeof (vals) - strlen (vals) - 1);
 
   // DYNAMIC FIX: Check for the 'attack' column and add it if present
@@ -2086,69 +2680,105 @@ create_derelicts (void)
       strncat (cols, ", attack", sizeof (cols) - strlen (cols) - 1);
       strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
     }
+  
+  // location, holds_used, shields are essential and should be added
+  if (has_column (db, "ships", "location"))
+    {
+      strncat (cols, ", location", sizeof (cols) - strlen (cols) - 1);
+      strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
+    }
 
-  // Add the remaining core columns
-  strncat (cols, ", location, holds, fighters, shields",
-	   sizeof (cols) - strlen (cols) - 1);
-  strncat (vals, ", ?, ?, ?, ?", sizeof (vals) - strlen (vals) - 1);
-
-  // Dynamic cargo and equipment columns based on your schema
   if (has_column (db, "ships", "holds_used"))
     {
       strncat (cols, ", holds_used", sizeof (cols) - strlen (cols) - 1);
       strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
     }
-  if (has_column (db, "ships", "fighters_used"))
+
+  if (has_column (db, "ships", "shields"))
     {
-      strncat (cols, ", fighters_used", sizeof (cols) - strlen (cols) - 1);
+      strncat (cols, ", shields", sizeof (cols) - strlen (cols) - 1);
       strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
     }
+    
+  // Equipment and Cargo
+  if (has_column (db, "ships", "fighters"))
+    {
+      strncat (cols, ", fighters", sizeof (cols) - strlen (cols) - 1);
+      strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
+    }
+  
   if (has_column (db, "ships", "organics"))
     {
       strncat (cols, ", organics", sizeof (cols) - strlen (cols) - 1);
       strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
     }
+
   if (has_column (db, "ships", "equipment"))
     {
       strncat (cols, ", equipment", sizeof (cols) - strlen (cols) - 1);
       strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
     }
+
   if (has_column (db, "ships", "ore"))
     {
       strncat (cols, ", ore", sizeof (cols) - strlen (cols) - 1);
       strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
     }
+
   if (has_column (db, "ships", "colonists"))
     {
       strncat (cols, ", colonists", sizeof (cols) - strlen (cols) - 1);
       strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
     }
+
+  // Weapons and Special Items
+  // NEW: limpets must be handled
+  if (has_column (db, "ships", "limpets"))
+    {
+      strncat (cols, ", limpets", sizeof (cols) - strlen (cols) - 1);
+      strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
+    }
+    
   if (has_column (db, "ships", "mines"))
     {
       strncat (cols, ", mines", sizeof (cols) - strlen (cols) - 1);
       strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
     }
+
   if (has_column (db, "ships", "genesis"))
     {
       strncat (cols, ", genesis", sizeof (cols) - strlen (cols) - 1);
       strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
     }
+
   if (has_column (db, "ships", "photons"))
     {
       strncat (cols, ", photons", sizeof (cols) - strlen (cols) - 1);
       strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
     }
+
   if (has_column (db, "ships", "beacons"))
     {
       strncat (cols, ", beacons", sizeof (cols) - strlen (cols) - 1);
       strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
     }
 
-
-  // Add columns with a fixed default value
-  strncat (cols, ", flags, ported, onplanet",
-	   sizeof (cols) - strlen (cols) - 1);
+  // Add columns with a fixed default value (flags, ported, onplanet are present in new schema)
+  strncat (cols, ", flags, ported, onplanet", sizeof (cols) - strlen (cols) - 1);
   strncat (vals, ", ?, ?, ?", sizeof (vals) - strlen (vals) - 1);
+  
+  // cloaking_devices and cloaked are also new in the schema
+  if (has_column (db, "ships", "cloaking_devices"))
+    {
+      strncat (cols, ", cloaking_devices", sizeof (cols) - strlen (cols) - 1);
+      strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
+    }
+  if (has_column (db, "ships", "cloaked"))
+    {
+      strncat (cols, ", cloaked", sizeof (cols) - strlen (cols) - 1);
+      strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
+    }
+
 
   snprintf (insert_sql, sizeof (insert_sql),
 	    "INSERT INTO ships (%s) VALUES (%s);", cols, vals);
@@ -2157,31 +2787,12 @@ create_derelicts (void)
   rc = sqlite3_prepare_v2 (db, insert_sql, -1, &ins, NULL);
   if (rc != SQLITE_OK)
     {
-      fprintf (stderr, "[create_derelicts] prepare insert failed: %s\n",
+      fprintf (stderr, "[create_derelicts] insert prepare failed: %s\n",
 	       sqlite3_errmsg (db));
+      sqlite3_finalize (sel);
       return 1;
     }
 
-  /* Select statement based on your shiptypes schema */
-  sqlite3_stmt *sel = NULL;
-  const char *select_candidates[] = {
-    "SELECT id, name, maxholds, maxfighters, maxshields FROM shiptypes;",
-    NULL
-  };
-  rc = prepare_first_ok (db, &sel, select_candidates);
-  if (rc != SQLITE_OK)
-    {
-      fprintf (stderr,
-	       "[create_derelicts] could not prepare shiptypes SELECT.\n");
-      sqlite3_finalize (ins);
-      return 1;
-    }
-
-  /*
-   * BEGIN IMMEDIATE TRANSACTION:
-   * This is a single transaction for atomicity and speed.
-   * The duplicate BEGIN call was removed to fix the error.
-   */
   rc = sqlite3_exec (db, "BEGIN IMMEDIATE TRANSACTION;", NULL, NULL, &errmsg);
   if (rc != SQLITE_OK)
     {
@@ -2200,7 +2811,7 @@ create_derelicts (void)
       const unsigned char *stype_name_uc = sqlite3_column_text (sel, 1);
       const char *stype_name =
 	(const char *) (stype_name_uc ? (const char *) stype_name_uc : "");
-      // (const char *) (stype_name_uc ? stype_name_uc : "");
+
       /* Build display name */
       char dname[128];
       char rnd[128];
@@ -2224,58 +2835,92 @@ create_derelicts (void)
       int max_holds = sqlite3_column_int (sel, 2);
       int max_fighters = sqlite3_column_int (sel, 3);
       int max_shields = sqlite3_column_int (sel, 4);
+      int max_mines = sqlite3_column_int (sel, 5);
+      int max_photons = sqlite3_column_int (sel, 6);
+      int max_beacons = sqlite3_column_int (sel, 7);
+      int max_attack = sqlite3_column_int (sel, 8); // NEW: maxattack
+      int max_limpets = sqlite3_column_int (sel, 9); // NEW: maxlimpets
+      int max_genesis = sqlite3_column_int (sel, 10); // NEW: maxgenesis
 
       /* Random fill percentage for “used” fields */
 #define MIN_FILL_PCT 25
 #define MAX_FILL_PCT 75
-      int fill_pct =
-	MIN_FILL_PCT + (rand () % (MAX_FILL_PCT - MIN_FILL_PCT + 1));
-      int holds_used = (int) (max_holds * (fill_pct / 100.0));
-      int fighters_used = (int) (max_fighters * (fill_pct / 100.0));
-      int mines_to_add = 1 + (rand () % 10);
-      int photons_to_add = 1;
-      int beacons_to_add = 4;
+      int fill_pct = MIN_FILL_PCT + (rand () % (MAX_FILL_PCT - MIN_FILL_PCT + 1));
+      
+      int holds_used = (int) (max_holds * ((float) fill_pct / 100.0));
+      int shields_to_add = (int) (max_shields * ((float) fill_pct / 100.0));
+      int fighters_to_add = (int) (max_fighters * ((float) fill_pct / 100.0));
+      int mines_to_add = (int) (max_mines * ((float) fill_pct / 100.0));
+      int photons_to_add = (int) (max_photons * ((float) fill_pct / 100.0));
+      int beacons_to_add = (int) (max_beacons * ((float) fill_pct / 100.0));
+      
+      // NEW: Calculations for new item types
+      int attack_to_add = (int) (max_attack * ((float) fill_pct / 100.0));
+      int limpets_to_add = (int) (max_limpets * ((float) fill_pct / 100.0));
+      int genesis_to_add = (int) (max_genesis * ((float) fill_pct / 100.0));
 
-      /* Bind in EXACTLY the same order as your INSERT column list */
+
+      /* Bind parameters in the correct order */
       int b = 1;
-      sqlite3_bind_text (ins, b++, dname, -1, SQLITE_TRANSIENT);	/* name */
-      sqlite3_bind_int (ins, b++, st_id);	/* type */
 
-      // CHANGE: Now binds the attack value to the ship's maximum fighter capacity
+      // 1. Core columns
+      sqlite3_bind_text (ins, b++, dname, -1, SQLITE_TRANSIENT);
+      sqlite3_bind_int (ins, b++, st_id); // FIX: Bind to type_id
+
+      // 2. Dynamic bindings that were added to cols/vals
       if (has_column (db, "ships", "attack"))
-	{
-	  sqlite3_bind_int (ins, b++, max_fighters);
-	}
-
-      sqlite3_bind_int (ins, b++, sector);	/* location */
-      sqlite3_bind_int (ins, b++, max_holds);	/* holds */
-      sqlite3_bind_int (ins, b++, max_fighters);	/* fighters */
-      sqlite3_bind_int (ins, b++, max_shields);	/* shields */
+	      sqlite3_bind_int (ins, b++, attack_to_add); // NEW: Use calculated attack
+      
+      if (has_column (db, "ships", "location"))
+	      sqlite3_bind_int (ins, b++, sector);
 
       if (has_column (db, "ships", "holds_used"))
-	sqlite3_bind_int (ins, b++, holds_used);
-      if (has_column (db, "ships", "fighters_used"))
-	sqlite3_bind_int (ins, b++, fighters_used);
-      if (has_column (db, "ships", "organics"))
-	sqlite3_bind_int (ins, b++, 0);
-      if (has_column (db, "ships", "equipment"))
-	sqlite3_bind_int (ins, b++, 0);
-      if (has_column (db, "ships", "ore"))
-	sqlite3_bind_int (ins, b++, 0);
-      if (has_column (db, "ships", "colonists"))
-	sqlite3_bind_int (ins, b++, 0);
-      if (has_column (db, "ships", "mines"))
-	sqlite3_bind_int (ins, b++, mines_to_add);
-      if (has_column (db, "ships", "genesis"))
-	sqlite3_bind_int (ins, b++, 0);
-      if (has_column (db, "ships", "photons"))
-	sqlite3_bind_int (ins, b++, photons_to_add);
-      if (has_column (db, "ships", "beacons"))
-	sqlite3_bind_int (ins, b++, beacons_to_add);
+	      sqlite3_bind_int (ins, b++, holds_used);
 
-      sqlite3_bind_int (ins, b++, 0);	/* flags */
-      sqlite3_bind_int (ins, b++, 0);	/* ported */
-      sqlite3_bind_int (ins, b++, 0);	/* onplanet */
+      if (has_column (db, "ships", "shields"))
+	      sqlite3_bind_int (ins, b++, shields_to_add);
+      
+      if (has_column (db, "ships", "fighters"))
+	      sqlite3_bind_int (ins, b++, fighters_to_add);
+      
+      if (has_column (db, "ships", "organics"))
+	      sqlite3_bind_int (ins, b++, 0); // No organics in derelict
+      
+      if (has_column (db, "ships", "equipment"))
+	      sqlite3_bind_int (ins, b++, 0); // No equipment in derelict
+
+      if (has_column (db, "ships", "ore"))
+	      sqlite3_bind_int (ins, b++, 0); // No ore in derelict
+
+      if (has_column (db, "ships", "colonists"))
+	      sqlite3_bind_int (ins, b++, 0); // No colonists in derelict
+
+      if (has_column (db, "ships", "limpets"))
+	      sqlite3_bind_int (ins, b++, limpets_to_add); // NEW: Bind limpets
+
+      if (has_column (db, "ships", "mines"))
+	      sqlite3_bind_int (ins, b++, mines_to_add);
+
+      if (has_column (db, "ships", "genesis"))
+	      sqlite3_bind_int (ins, b++, genesis_to_add); // FIX: Use calculated genesis
+
+      if (has_column (db, "ships", "photons"))
+	      sqlite3_bind_int (ins, b++, photons_to_add);
+
+      if (has_column (db, "ships", "beacons"))
+	      sqlite3_bind_int (ins, b++, beacons_to_add);
+
+
+      // 3. Fixed value columns
+      sqlite3_bind_int (ins, b++, 0); /* flags (NPC derelict) */
+      sqlite3_bind_int (ins, b++, 0); /* ported (not ported) */
+      sqlite3_bind_int (ins, b++, 0); /* onplanet (not on planet) */
+
+      // 4. Cloaking columns
+      if (has_column (db, "ships", "cloaking_devices"))
+	      sqlite3_bind_int (ins, b++, 0); // No cloaking devices on derelict
+      if (has_column (db, "ships", "cloaked"))
+	      sqlite3_bind_int (ins, b++, 0); // Not cloaked
 
       int irc = sqlite3_step (ins);
       if (irc != SQLITE_DONE)
@@ -2294,6 +2939,7 @@ create_derelicts (void)
   /* Normalise loop exit */
   if (rc == SQLITE_DONE)
     rc = SQLITE_OK;
+
   if (rc != SQLITE_OK)
     {
       fprintf (stderr, "[create_derelicts] shiptypes SELECT failed: %s\n",
@@ -2307,62 +2953,27 @@ create_derelicts (void)
   /* Rename all ships of type 18 to "Mary Celeste" */
   {
     sqlite3_stmt *st = NULL;
-    int urc =
-      sqlite3_prepare_v2 (db, "UPDATE ships SET name=? WHERE type=?;", -1,
-			  &st, NULL);
+    int urc = sqlite3_prepare_v2 (db, "UPDATE ships SET name=? WHERE type_id=?;", -1, &st, NULL); // FIX: Changed type to type_id
     if (urc == SQLITE_OK)
       {
-	sqlite3_bind_text (st, 1, "Mary Celeste", -1, SQLITE_STATIC);
-	sqlite3_bind_int (st, 2, 18);
-	urc = sqlite3_step (st);
+        sqlite3_bind_text (st, 1, "Mary Celeste", -1, SQLITE_STATIC);
+        sqlite3_bind_int (st, 2, 18);
+        (void) sqlite3_step (st);
       }
     sqlite3_finalize (st);
-    if (urc != SQLITE_DONE)
-      {
-	fprintf (stderr, "[create_derelicts] rename type 18 failed: %s\n",
-		 sqlite3_errmsg (db));
-	sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-	sqlite3_finalize (ins);
-	sqlite3_finalize (sel);
-	return 1;
-      }
   }
 
-  /* Delete all ships with class 17 (NPC Imperial Warship) */
-  rc =
-    sqlite3_exec (db, "DELETE FROM ships WHERE type=17;", NULL, NULL,
-		  &errmsg);
-  if (rc != SQLITE_OK)
-    {
-      fprintf (stderr, "[create_derelicts] DELETE type 17 failed: %s\n",
-	       errmsg ? errmsg : "(unknown)");
-      sqlite3_free (errmsg);
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      sqlite3_finalize (ins);
-      sqlite3_finalize (sel);
-      return 1;
-    }
-
-  /* Commit the transaction */
+  /* success path */
   rc = sqlite3_exec (db, "COMMIT;", NULL, NULL, &errmsg);
   if (rc != SQLITE_OK)
     {
-      fprintf (stderr, "[create_derelicts] commit failed: %s\n",
-	       errmsg ? errmsg : "(unknown)");
+      fprintf (stderr, "[create_derelicts] COMMIT failed: %s\n", errmsg ? errmsg : "(unknown)");
       sqlite3_free (errmsg);
-      /* fall through to cleanup as error */
-    }
-
-  /* unified cleanup & error handling */
-  if (rc != SQLITE_OK)
-    {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
       sqlite3_finalize (ins);
       sqlite3_finalize (sel);
       return 1;
     }
-
-  /* success path */
+  
   sqlite3_finalize (ins);
   sqlite3_finalize (sel);
   return 0;

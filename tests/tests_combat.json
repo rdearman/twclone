@@ -128,5 +128,59 @@
       },
       "expect": { "status": "*" }
     }
+      ,
+  {
+    "name": "auth.login",
+    "command": { "command": "auth.login", "data": { "user_name": "newguy", "password": "pass123" } },
+    "expect": { "status": "ok" }
+  },
+
+  {
+    "name": "deploy_fighters_ok (amount=1, offense=DEFEND, no corp)",
+    "command": {
+      "command": "combat.deploy_fighters",
+      "data": {
+        "amount": 1,
+        "offense": 2,
+        "corporation_id": null
+      }
+    },
+    "expect": { "status": "ok", "type": "combat.fighters.deployed" },
+    "asserts": [
+      { "path": "data.amount", "op": "==", "value": 1 },
+      { "path": "data.offense", "op": "==", "value": 2 },
+      { "path": "data.owner_player_id", "op": "==", "value": 3, "note": "Adjust if newguy's player_id differs" },
+      { "path": "data.owner_corp_id", "op": "==", "value": null }
+    ]
+  },
+
+  {
+    "name": "deploy_fighters_insufficient (refused 1503)",
+    "command": {
+      "command": "combat.deploy_fighters",
+      "data": {
+        "amount": 999999,
+        "offense": 2,
+        "corporation_id": null
+      }
+    },
+    "expect": { "status": "refused", "type": "error", "error": { "code": 1503 } }
+  },
+
+  {
+    "name": "deploy_fighters_sector_cap (refused 1504)",
+    "command": {
+      "command": "combat.deploy_fighters",
+      "data": {
+        "amount": 50001,
+        "offense": 2,
+        "corporation_id": null
+      }
+    },
+    "expect": { "status": "refused", "type": "error", "error": { "code": 1504 } }
+  }
+
   ]
+
+
 }
