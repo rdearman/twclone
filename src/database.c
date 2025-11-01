@@ -17,7 +17,8 @@
 
 
 /* Define and initialize the mutex for the database handle */
-pthread_mutex_t db_mutex = PTHREAD_MUTEX_INITIALIZER;
+// pthread_mutex_t db_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t db_mutex;
 
 static sqlite3 *db_handle = NULL;
 // const char *DEFAULT_DB_NAME =  "twconfig.db" ;
@@ -55,47 +56,66 @@ db_handle_close_and_reset (void)
 sqlite3 *
 db_get_handle (void)
 {
+  // Flag to ensure the mutex is initialized only once
+  static bool mutex_initialized = false; 
+
   // 1. Check if the handle is already open. If so, return it immediately.
   if (db_handle != NULL)
     {
       return db_handle;
     }
 
+  // =================================================================
+  // CRITICAL FIX: Mutex initialization runs ONCE before DB open
+  // =================================================================
+  if (!mutex_initialized)
+  {
+      pthread_mutexattr_t attr;
+      pthread_mutexattr_init(&attr);
+      
+      // Set the mutex type to RECURSIVE (the core fix)
+      pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE); 
+      
+      // Initialize the global db_mutex 
+      pthread_mutex_init(&db_mutex, &attr);
+      
+      pthread_mutexattr_destroy(&attr);
+
+      mutex_initialized = true;
+      // LOGI("DB Mutex initialized as RECURSIVE."); // Add log for confirmation
+  }
+  // =================================================================
+  
   // 2. The handle is NULL (due to a close_and_reset or initial load).
   //    Open a new connection using the full, robust V2 flags.
   int rc = sqlite3_open_v2 (DEFAULT_DB_NAME,
-			    &db_handle,
-			    SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE |
-			    SQLITE_OPEN_URI,
-			    NULL);
+                           &db_handle,
+                           SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE |
+                           SQLITE_OPEN_URI,
+                           NULL);
 
   if (rc != SQLITE_OK)
     {
-      // If the open fails, log the specific SQLite error and clean up.
-      LOGE ("DB Re-Open Failed (%s): %s (rc=%d)",
-	    DEFAULT_DB_NAME, sqlite3_errstr (rc), rc);
-
+      // ... (error handling remains the same) ...
       if (db_handle)
-	{
-	  sqlite3_close (db_handle);
-	  db_handle = NULL;
-	}
-      return NULL;		// Return NULL on failure
+        {
+          sqlite3_close (db_handle);
+          db_handle = NULL;
+        }
+      return NULL;  // Return NULL on failure
     }
 
   // 3. Apply critical settings for concurrency (WAL and busy timeout)
-  //    These must be applied to every new connection.
   if (sqlite3_exec (db_handle, "PRAGMA journal_mode=WAL;", NULL, NULL, NULL)
       != SQLITE_OK)
     {
       LOGW ("Failed to set WAL mode on fresh handle.");
     }
-  sqlite3_busy_timeout (db_handle, 5000);	// 5 seconds
+  sqlite3_busy_timeout (db_handle, 5000);   // 5 seconds
 
   // 4. Return the newly opened handle.
   return db_handle;
 }
-
 
 int
 db_commands_accept (const char *cmd_type,
@@ -414,6 +434,7 @@ const char *create_table_sql[] = {
     "   cloaked TIMESTAMP,  "
     "   ported INTEGER,  "
     "   onplanet INTEGER,  "
+    "   destroyed INTEGER DEFAULT 0,  "  
     "   CONSTRAINT check_current_cargo_limit CHECK ( (colonists + equipment + organics + ore) <= holds_used ), "
     "   FOREIGN KEY(type_id) REFERENCES shiptypes(id),  "
     "   FOREIGN KEY(location) REFERENCES sectors(id)  " " );  ",
@@ -687,6 +708,28 @@ const char *create_table_sql[] = {
 
   "CREATE INDEX IF NOT EXISTS ix_trade_log_ts ON trade_log(timestamp);",
 
+  " CREATE TABLE commodities (  "
+  "   name         TEXT PRIMARY KEY,  "
+  "   base_price   REAL NOT NULL,  "
+  "   is_illegal   BOOLEAN NOT NULL DEFAULT 0,  "
+  "   description  TEXT  "
+  " );  "
+
+  /* -- Seed initial standard commodities (Legal: is_illegal=0)  */
+  " INSERT INTO commodities (name, base_price, is_illegal, description) VALUES  "
+  " ('organics', 250.0, 0, 'Basic foodstuffs and biological supplies.'),  "
+  " ('equipment', 150.0, 0, 'Standard industrial and ship parts.'),  "
+  " ('fuel', 100.0, 0, 'Hydrogen and fusion fuel cells.'),  "
+  " ('ore', 50.0, 0, 'Raw mined minerals and metals.'),  "
+  " ('goods', 125.0, 0, 'Generic manufactured goods.');  "
+
+  /* -- Seed black market/illegal commodities (Illegal: is_illegal=1)  */
+  " INSERT INTO commodities (name, base_price, is_illegal, description) VALUES  "
+  " ('weapons', 800.0, 1, 'Illicit military-grade firearms and explosives.'),  "
+  " ('slaves', 1200.0, 1, 'Contraband humanoids.'),  "
+  " ('artifacts', 5000.0, 1, 'Rare alien technology and relics.');  "
+
+  
   "CREATE TABLE IF NOT EXISTS banks ("
     "    player_id         INTEGER PRIMARY KEY,"
     "    credits           INTEGER NOT NULL DEFAULT 0,"

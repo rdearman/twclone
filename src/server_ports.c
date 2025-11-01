@@ -3,6 +3,10 @@
 #include <sqlite3.h>
 #include <stdlib.h>
 #include <time.h>
+#include <sqlite3.h>
+#include <stdio.h>
+#include <string.h>
+#include <math.h> // For pow() function
 /* local includes */
 #include "server_ports.h"
 #include "database.h"
@@ -20,6 +24,8 @@
 #define UNUSED(x) (void)(x)
 #endif
 
+// Define a reasonable cap for commodity quantity at a port
+#define PORT_MAX_QUANTITY 10000.0
 
 #define RULE_REFUSE(_code,_msg,_hint_json) \
     do { send_enveloped_refused(ctx->fd, root, (_code), (_msg), (_hint_json)); goto trade_buy_done; } while (0)
@@ -2139,4 +2145,117 @@ cmd_trade_history (client_ctx_t *ctx, json_t *root)
   send_enveloped_ok (ctx->fd, root, "trade.history", payload);
 
   return 0;
+}
+
+
+/////////////////////////////////
+
+/* --- Public Helper Function Implementation --- */
+double
+h_calculate_trade_price(int port_id, const char *commodity, int quantity)
+{
+    sqlite3 *db_handle = db_get_handle();
+    sqlite3_stmt *stmt = NULL;
+    double price_index = 1.0;
+    double base_price = 0.0;
+    char port_type[2] = {'\0', '\0'}; 
+
+    // =========================================================
+    // 1. Acquire Mutex Lock (Must be RECURSIVE for nested calls)
+    // =========================================================
+    pthread_mutex_lock(&db_mutex); 
+    
+    // Safety check for impossible quantity
+    if (quantity < 0) {
+        // Unlock on error before return
+        pthread_mutex_unlock(&db_mutex);
+        return 1000.0;    
+    }
+
+    // --- 1. Fetch Base Price from 'commodities' table ---
+    const char *sql_base_price = "SELECT base_price FROM commodities WHERE name = ?;";
+    
+    if (sqlite3_prepare_v2(db_handle, sql_base_price, -1, &stmt, NULL) == SQLITE_OK) {
+        sqlite3_bind_text(stmt, 1, commodity, -1, SQLITE_STATIC);
+
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            base_price = sqlite3_column_double(stmt, 0);
+        }
+        sqlite3_finalize(stmt);
+        stmt = NULL;
+    } else {
+        // log_error("DB Error in h_calculate_trade_price (base price lookup): %s\n", sqlite3_errmsg(db_handle));
+        // Unlock on error before return
+        pthread_mutex_unlock(&db_mutex);
+        return 10.0; 
+    }
+    
+    if (base_price <= 0.0) {
+        // log_error("h_calculate_trade_price: Commodity %s not defined in the 'commodities' table.", commodity);
+        // Unlock on error before return
+        pthread_mutex_unlock(&db_mutex);
+        return 10.0; // Fallback to a nominal price
+    }
+    
+    // --- 2. Fetch Port Type and Price Index from DB ---
+    const char *sql_query = 
+        "SELECT T1.port_type, T2.price_index "
+        "FROM ports T1 "
+        "INNER JOIN port_commodities T2 ON T1.id = T2.port_id "
+        "WHERE T1.id = ? AND T2.commodity = ?;";
+
+    if (sqlite3_prepare_v2(db_handle, sql_query, -1, &stmt, NULL) == SQLITE_OK) {
+        sqlite3_bind_int(stmt, 1, port_id);
+        sqlite3_bind_text(stmt, 2, commodity, -1, SQLITE_STATIC);
+
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            // Read port_type (TEXT, column 0)
+            const char *type = (const char *)sqlite3_column_text(stmt, 0);
+            if (type && *type) {
+                port_type[0] = type[0];
+            }
+            // Read price_index (REAL, column 1)
+            price_index = sqlite3_column_double(stmt, 1);
+        }
+        sqlite3_finalize(stmt);
+    } else {
+        // log_error("DB Error in h_calculate_trade_price (port lookup): %s\n", sqlite3_errmsg(db_handle));
+        // Unlock on error before return
+        pthread_mutex_unlock(&db_mutex);
+        return base_price * 1.0; // Fallback
+    }
+    
+    // =========================================================
+    // 3. Calculation (No DB access required below this line)
+    // =========================================================
+    
+    // Clamp quantity
+    double clamped_quantity = (double)quantity;
+    // NOTE: You need to ensure PORT_MAX_QUANTITY is defined or replace it.
+    if (clamped_quantity > PORT_MAX_QUANTITY) {
+        clamped_quantity = PORT_MAX_QUANTITY;
+    }
+
+    // Normalized quantity: 0.0 (empty) to 1.0 (full)
+    double normalized_quantity = clamped_quantity / PORT_MAX_QUANTITY;
+
+    // Volatility Factor
+    double fluctuation_factor = pow((1.0 - normalized_quantity), 2.0);
+
+    // Apply the price index
+    double indexed_base_price = base_price * price_index;
+    
+    double price_modifier = 0.50; // The maximum percentage the price can fluctuate up
+
+    double final_price = indexed_base_price + (indexed_base_price * price_modifier * fluctuation_factor);
+
+    // Ensure price is never less than 1.0 credit
+    double final_result = fmax(1.0, final_price);
+
+    // =========================================================
+    // 4. Release Mutex Lock
+    // =========================================================
+    pthread_mutex_unlock(&db_mutex); 
+    
+    return final_result;
 }

@@ -31,7 +31,7 @@ extern "C"
   int player_credits (int player_id);
   int cargo_space_free (int player_id);
   int port_is_open (int port_id, const char *commodity);
-
+  extern double h_calculate_trade_price(int port_id, const char *commodity, int quantity);
 
 #ifdef __cplusplus
 }

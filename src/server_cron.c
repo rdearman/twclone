@@ -1408,7 +1408,7 @@ h_daily_turn_reset (sqlite3 *db, int64_t now_s)
       LOGE ("daily_turn_reset: commit failed: %s", sqlite3_errmsg (db));
     }
 
-  LOGI ("daily_turn_reset: ok");
+  //LOGI ("daily_turn_reset: ok");
   unlock (db, "daily_turn_reset");
   return rc;
 }
@@ -1482,7 +1482,7 @@ h_autouncloak_sweeper (sqlite3 *db, int64_t now_s)
 
   // 4. Finalize and Unlock
   rc = commit (db);
-  LOGI ("autouncloak_sweeper: ok");
+  //LOGI ("autouncloak_sweeper: ok");
   unlock (db, "autouncloak_sweeper");
 
   return 0;
@@ -1527,7 +1527,7 @@ h_terra_replenish (sqlite3 *db, int64_t now_s)
     }
 
   commit (db);
-  LOGI ("terra_replenish: ok");
+  //LOGI ("terra_replenish: ok");
   unlock (db, "terra_replenish");
   return 0;
 }
@@ -1577,7 +1577,7 @@ h_planet_growth (sqlite3 *db, int64_t now_s)
     }
 
   commit (db);
-  LOGI ("planet_growth: ok");
+  //LOGI ("planet_growth: ok");
   unlock (db, "planet_growth");
   return 0;
 }
@@ -1600,7 +1600,7 @@ h_broadcast_ttl_cleanup (sqlite3 *db, int64_t now_s)
     }
   sqlite3_finalize (st);
   rc = commit (db);
-  LOGI ("broadcast_ttl_cleanup: ok");
+  //LOGI ("broadcast_ttl_cleanup: ok");
   unlock (db, "broadcast_ttl_cleanup");
   return 0;
 }
@@ -1638,7 +1638,7 @@ h_traps_process (sqlite3 *db, int64_t now_s)
     }
 
   commit (db);
-  LOGI ("traps_process: ok");
+  //LOGI ("traps_process: ok");
   unlock (db, "traps_process");
   return 0;
 }
@@ -1660,15 +1660,13 @@ h_npc_step (sqlite3 *db, int64_t now_s)
       fer_attach_db (db);	// Ensure DB handle is attached if needed
       fer_tick (now_ms);
     }
-
   // 3. Initialize and run Orion tick <--- ADD THIS BLOCK
   if (ori_init_once () == 1)
     {
       ori_attach_db (db);	// Ensure DB handle is attached if needed
       ori_tick (now_ms);
     }
-
-  LOGI ("npc_step: ok");
+  // LOGI ("npc_step: ok");
   return 0;			// Return 0 (SQLITE_OK) for success
 }
 
@@ -1702,7 +1700,7 @@ h_port_price_drift (sqlite3 *db, int64_t now_s)
     }
 
   commit (db);
-  LOGI ("port_price_drift: ok");
+  //LOGI ("port_price_drift: ok");
   unlock (db, "port_price_drift");
   return 0;
 }
@@ -1767,7 +1765,7 @@ h_port_reprice (sqlite3 *db, int64_t now_s)
     }
 
   commit (db);
-  LOGI ("port_reprice: ok");
+  //LOGI ("port_reprice: ok");
   unlock (db, "port_reprice");
   return 0;
 }

@@ -30,6 +30,8 @@
 extern sqlite3 *g_db;		/* <- global DB handle used elsewhere (ISS) */
 static sqlite3 *g_fer_db = NULL;	/* <- cached here for trader helpers */
 
+#define NPC_TRADE_PLAYER_ID 0 
+
 /* Fallback logging macros  */
 #ifndef INFO_LOG
 #define INFO_LOG(...) do { fprintf(stderr, __VA_ARGS__); fputc('\n', stderr); } while (0)
@@ -53,6 +55,7 @@ static const int kIssPatrolBudget = 8;	/* hops before we drift home */
 static const int kIssTickMs = 2000;
 static const char *kIssName = "Imperial Starship";
 static const char *kIssNoticePrefix = "[ISS • Capt. Zyrain]";
+extern double h_calculate_trade_price(int port_id, const char *commodity, int quantity);
 
 /* Private state (kept in this .c only) */
 static int g_iss_inited = 0;
@@ -2293,18 +2296,141 @@ fer_emit_move (int id, int from_sec, int to_sec)
 		  id, from_sec, to_sec);
 }
 
-static void
-fer_emit_trade (int id, int sector,
-		const char *sold, int sold_qty,
-		const char *bought, int bought_qty)
+//////////////////////////////////////////////////////////////////////////////////
+/* --- Helper to read current quantity from port_commodities --- */
+static int
+h_get_port_commodity_quantity(int port_id, const char *commodity)
 {
-  fer_event_json ("npc.trade", sector,
-		  "{ \"kind\":\"ferringhi\", \"id\":%d, \"sector\":%d, "
-		  "\"sold\":\"%s\", \"sold_qty\":%d, \"bought\":\"%s\", \"bought_qty\":%d }",
-		  id, sector, sold, sold_qty, bought, bought_qty);
+    sqlite3 *db = db_get_handle();
+    sqlite3_stmt *stmt = NULL; // Explicitly initialized to NULL
+    int quantity = -1;
+
+    // 1. Acquire Mutex Lock (Recursive lock works here)
+    pthread_mutex_lock(&db_mutex); 
+    
+    const char *sql = "SELECT quantity FROM port_commodities WHERE port_id = ? AND commodity = ?;";
+
+    // If preparation fails, the lock MUST be released before returning
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        // log_error("SQL error in h_get_port_commodity_quantity: %s", sqlite3_errmsg(db));
+        
+        // CRITICAL: Unlock before returning on error
+        pthread_mutex_unlock(&db_mutex); 
+        return -1;
+    }
+
+    sqlite3_bind_int(stmt, 1, port_id);
+    sqlite3_bind_text(stmt, 2, commodity, -1, SQLITE_STATIC);
+
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        // Success: Found the quantity
+        quantity = sqlite3_column_int(stmt, 0);
+    } 
+    // Note: If sqlite3_step returns anything else (SQLITE_DONE, SQLITE_ERROR, etc.), 
+    // quantity remains -1, which is the desired error/not-found result.
+    // The previous version had an explicit else block, but it is not strictly necessary here.
+
+    sqlite3_finalize(stmt);
+    
+    // 2. Release Mutex Lock
+    pthread_mutex_unlock(&db_mutex); 
+    
+    return quantity;
 }
 
+/* --- Trade Log Emitter Implementation --- */
 
+static void
+fer_emit_trade_log(int port_id, int sector_id,
+                   const char *sold, int sold_qty,
+                   const char *bought, int bought_qty)
+{
+    sqlite3 *db = db_get_handle();
+    sqlite3_stmt *stmt = NULL;
+    int rc;
+    double price = 0.0;
+    char *action = "temp";
+    int qty = 0;
+    char *commodity = "holding string";
+    
+    // =========================================================
+    // 1. Acquire Mutex Lock (Must be RECURSIVE for nested calls)
+    // =========================================================
+    pthread_mutex_lock(&db_mutex); 
+
+    if (sold_qty != 0)
+      {
+    action = "sell";
+    commodity = sold;
+    /////////////////////////////////////////////////////////////////
+     int sold_port_qty = h_get_port_commodity_quantity(port_id, sold);
+
+    if (sold_port_qty >= 0) {
+      price = h_calculate_trade_price(port_id, sold, sold_port_qty);
+    }
+    qty = sold_port_qty;
+      }
+    if (bought_qty != 0)
+      {
+    action="buy";
+    commodity = bought;
+    int bought_port_qty = h_get_port_commodity_quantity(port_id, bought);
+    if (bought_port_qty >= 0) {
+      price = h_calculate_trade_price(port_id, bought, bought_port_qty);
+    } 
+    qty = bought_port_qty;
+      }
+    
+    // --- 3. Insert into trade_log ---
+    const char *sql_insert = 
+        "INSERT INTO trade_log (timestamp, sector_id, player_id, commodity, units, price_per_unit, action, port_id) "
+        "VALUES (strftime('%s','now'), ?, 0, ?, ?, ?, ?, ?);";
+    
+    if (sqlite3_prepare_v2(db, sql_insert, -1, &stmt, NULL) != SQLITE_OK) {
+      LOGE("SQL Prep Error (trade_log): %s", sqlite3_errmsg(db));
+      // CRITICAL: Unlock before returning on error
+      pthread_mutex_unlock(&db_mutex); 
+      return;
+    }
+
+    // Bind parameters
+    sqlite3_bind_int(stmt, 1, sector_id);
+    sqlite3_bind_text(stmt, 2, commodity, -1, SQLITE_STATIC); 
+    sqlite3_bind_int(stmt, 3, qty);                          
+    sqlite3_bind_double(stmt, 4, price);                      
+    sqlite3_bind_text(stmt, 5, action, -1, SQLITE_STATIC);    
+    sqlite3_bind_int(stmt, 6, port_id);                      
+    
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE)
+      {
+      LOGE("SQL Exec Error (trade_log): %s", sqlite3_errmsg(db));
+      LOGE("Commodity: %s", sold);
+      LOGE("Quantity: %d",qty);
+      LOGE("Price: %f",price); // Changed %d to %f for double price
+      LOGE("Action: %s", action);
+      LOGE("Port: %d", port_id);
+      LOGE("Sector: %d", sector_id);
+    }
+
+    sqlite3_finalize(stmt);
+    
+    // =========================================================
+    // 4. Release Mutex Lock
+    // =========================================================
+    pthread_mutex_unlock(&db_mutex); 
+
+    // This part does not access the DB, so it remains outside the lock.
+    fer_event_json ("npc.trade", sector_id, 
+        "{ \"kind\":\"ferringhi\", \"id\":%d, \"port_id\":%d, \"sector\":%d, "
+        "\"sold\":\"%s\", \"qty\":%d, \"price\":%.2f, "
+        "\"action\":\"%s\" }",
+        port_id, sector_id, sold, qty, price, action);
+
+    LOGI("Exit fer_emit_trade_log"); 
+}
+
+//////////////////////////////////////////////////////////////////////////////////
 
 /* ---------- Trader core ---------- */
 
@@ -2363,7 +2489,10 @@ fer_trade_at_port (fer_trader_t *t, int sector)
 
   *ps -= sell_qty;
   *pb += buy_qty;
-  fer_emit_trade (t->id, sector, sold, sell_qty, bought, buy_qty);
+  // Realistically I need to update the trade history table rather than the engine
+  // even for NPC trading in order to keep the float changing. 
+  fer_emit_trade_log (t->id, sector, sold, sell_qty, bought, buy_qty);
+
 
   t->trades_done++;
   if (t->trades_done >= FER_TRADES_BEFORE_RETURN)
@@ -2441,9 +2570,6 @@ fer_init_once (void)
   return 1;
 }
 
-
-
-
 void
 fer_tick (int64_t now_ms)
 {
@@ -2453,7 +2579,6 @@ fer_tick (int64_t now_ms)
       if (!fer_init_once ())
 	return;
     }
-
   for (int i = 0; i < FER_TRADER_COUNT; ++i)
     {
       fer_trader_t *t = &g_fer[i];
@@ -2467,13 +2592,21 @@ fer_tick (int64_t now_ms)
 	  const char *sql =
 	    "SELECT location FROM ports ORDER BY RANDOM() LIMIT 1;";
 	  sqlite3_stmt *st = NULL;
-	  if (sqlite3_prepare_v2 (g_fer_db, sql, -1, &st, NULL) == SQLITE_OK)
-	    {
-	      if (sqlite3_step (st) == SQLITE_ROW)
-		goal = sqlite3_column_int (st, 0);
-	      sqlite3_finalize (st);
-	    }
+	  int rc_prep = sqlite3_prepare_v2 (g_fer_db, sql, -1, &st, NULL);
+          if (rc_prep == SQLITE_OK)
+            {
+              int rc_step = sqlite3_step (st);
+              if (rc_step == SQLITE_ROW)
+                goal = sqlite3_column_int (st, 0);
+              else if (rc_step != SQLITE_DONE)
+                LOGE("fer_tick %d: DB Step Error: %s (%d)", i, sqlite3_errmsg(g_fer_db), rc_step); // Log 3 (Error Check)
+              sqlite3_finalize (st);
+            }
+          else
+            LOGE("fer_tick %d: DB Prep Error: %s (%d)", i, sqlite3_errmsg(g_fer_db), rc_prep); // Log 3 (Error Check)
+
 	}
+
       if (goal <= 0)
 	continue;
 
@@ -2486,7 +2619,8 @@ fer_tick (int64_t now_ms)
 
       int from = t->sector;
       t->sector = next;
-      fer_emit_move (t->id, from, next);
+      // Disable engine notification of move, it is filling up the table with crap
+      // fer_emit_move (t->id, from, next);
 
       /* trade only when actually on a port sector */
       if (sector_has_port (t->sector))
@@ -2530,13 +2664,13 @@ fer_tick (int64_t now_ms)
 	    buy_qty = 0;
 	  *ps -= sell_qty;
 	  *pb += buy_qty;
-	  fer_emit_trade (t->id, t->sector, sold, sell_qty, bought, buy_qty);
+
+	  fer_emit_trade_log (t->id, t->sector, sold, sell_qty, bought, buy_qty);
 
 	  t->trades_done++;
 	  if (t->trades_done >= FER_TRADES_BEFORE_RETURN)
 	    t->state = FER_STATE_RETURNING;
 	}
-
       /* reached home while returning → refill and go roam again */
       if (t->state == FER_STATE_RETURNING && t->sector == t->home_sector)
 	{
