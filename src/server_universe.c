@@ -1049,9 +1049,48 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
   free (queue);
 }
 
+
+static const char *SQL_SECTOR_ASSET_COUNTS =
+  "SELECT asset_type, COALESCE(SUM(quantity),0) AS qty "
+  "FROM sector_assets WHERE sector = ?1 "
+  "GROUP BY asset_type;";
+
+static void
+attach_sector_asset_counts(sqlite3 *db, int sector_id, json_t *data_out)
+{
+  int ftrs = 0, armid = 0, limpet = 0;
+
+  sqlite3_stmt *st = NULL;
+  if (sqlite3_prepare_v2(db, SQL_SECTOR_ASSET_COUNTS, -1, &st, NULL) == SQLITE_OK) {
+    sqlite3_bind_int(st, 1, sector_id);
+    while (sqlite3_step(st) == SQLITE_ROW) {
+      int type = sqlite3_column_int(st, 0);
+      int qty  = sqlite3_column_int(st, 1);
+      if (type == 2)            ftrs  += qty;   /* ASSET_FIGHTER */
+      else if (type == 1)       armid += qty;   /* ASSET_MINE (Armid) */
+      else if (type == 4)       limpet += qty;  /* ASSET_LIMPET_MINE */
+    }
+  }
+  if (st) sqlite3_finalize(st);
+
+  json_t *counts = json_object();
+  json_object_set_new(counts, "fighters",     json_integer(ftrs));
+  json_object_set_new(counts, "mines_armid",  json_integer(armid));
+  json_object_set_new(counts, "mines_limpet", json_integer(limpet));
+  json_object_set_new(counts, "mines",        json_integer(armid + limpet));
+
+  /* If you also track ships/planets elsewhere and already had a counts obj,
+     merge instead of overwrite. Otherwise, just set it: */
+  json_object_set_new(data_out, "counts", counts);
+}
+
+
+
 void
 cmd_sector_info (int fd, json_t *root, int sector_id, int player_id)
 {
+  sqlite3 *db = db_get_handle ();
+
   json_t *payload = build_sector_info_json (sector_id);
   if (!payload)
     {
@@ -1116,9 +1155,11 @@ cmd_sector_info (int fd, json_t *root, int sector_id, int player_id)
 			   json_integer (json_array_size (players)));
     }
 
+  attach_sector_asset_counts(db, sector_id, payload);
 
   send_enveloped_ok (fd, root, "sector.info", payload);
   json_decref (payload);
+
 }
 
 

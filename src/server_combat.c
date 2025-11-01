@@ -3,6 +3,12 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
+#include <stdbool.h>
+#include <jansson.h>
+#include <sqlite3.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdint.h>
 #include <time.h>
 #include <sqlite3.h>
 #include <stdlib.h>
@@ -60,37 +66,230 @@ niy (client_ctx_t *ctx, json_t *root, const char *which)
 }
 
 
-/**
- * @brief Handles the 'combat.attack' command.
- * * @param ctx The player context (struct context *).
- * @param root The root JSON object containing the command payload.
- * @return int Returns 0 on successful processing (or error handling).
- */
-int
-handle_combat_attack (client_ctx_t *ctx, json_t *root)
+static int
+cmd_deploy_assets_list_internal (client_ctx_t *ctx,
+				 json_t *root,				 
+				 const char *list_type,
+                                 const char *asset_key,
+                                 const char *sql_query)
 {
-  sqlite3 *db = db_get_handle ();
-
-
-  // All combat actions reveal the ship
-  h_decloak_ship (db, h_get_active_ship_id (db, ctx->player_id));
-
-  TurnConsumeResult tc = h_consume_player_turn (db, ctx, "combat.attack");
-  if (tc != TURN_CONSUME_SUCCESS)
+  sqlite3 *db = db_get_handle ();  
+  sqlite3_stmt *stmt = NULL;
+  sqlite3_stmt *corp_stmt = NULL;
+  int rc = 0;
+  json_t *player_assets_arr = json_array ();
+  json_t *corp_assets_arr = json_array ();
+  json_t *data_out = json_object ();
+  json_t *out = NULL;
+  int reply_rc = 0;
+  
+  // --- NEW LOCAL VARIABLE FOR CORP ID ---
+  int current_player_corp_id = 0;
+  
+  if (!player_assets_arr || !corp_assets_arr || !data_out)
     {
-      return handle_turn_consumption_error (ctx, tc, "combat.attack", root,
-					    NULL);
+      reply_rc = ERR_OOM;
+      goto cleanup;
+    }
+  
+  // ----------------------------------------------------
+  // 1.5. LOOK UP CURRENT PLAYER'S CORPORATION ID
+  // ----------------------------------------------------
+  const char *corp_sql =
+    "SELECT corp_id FROM corp_members WHERE player_id = ?;";
+  
+  if (sqlite3_prepare_v2 (db, corp_sql, -1, &corp_stmt, NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_int (corp_stmt, 1, ctx->player_id);
+      if (sqlite3_step (corp_stmt) == SQLITE_ROW)
+        {
+          current_player_corp_id = sqlite3_column_int (corp_stmt, 0);
+        }
+      sqlite3_finalize (corp_stmt);
+    }
+  // Note: If the player isn't in a corp, current_player_corp_id remains 0.
+  // ----------------------------------------------------
+
+  // Prepare the main SQL statement
+  if (sqlite3_prepare_v2 (db, sql_query, -1, &stmt, NULL) != SQLITE_OK)
+    {
+      LOGE( "DB Prepare Error: %s", sqlite3_errmsg (db));
+      reply_rc = ERR_DB_QUERY_FAILED;
+      goto cleanup;
     }
 
-  // --- COMBAT ATTACK LOGIC GOES HERE ---
+  // Bind the player_id to the first and second parameter in the SQL.
+  // The SQL is expected to have two '?' placeholders for player_id.
+  if (sqlite3_bind_int (stmt, 1, ctx->player_id) != SQLITE_OK ||
+      sqlite3_bind_int (stmt, 2, ctx->player_id) != SQLITE_OK)
+    {
+      LOGE( "DB Bind Error: %s", sqlite3_errmsg (db));
+      reply_rc = ERR_DB_QUERY_FAILED;
+      goto cleanup;
+    }
+  
+  // Execute and process results
+  while ((rc = sqlite3_step (stmt)) == SQLITE_ROW)
+    {
+      json_t *asset_obj = json_object ();
 
-  // 2. Determine target (player ship, planet, port, etc.)
-  // 3. Perform attack calculations (fighters, cannons, torpedoes)
-  // 4. Update the DB with results (losses, sector change if target destroyed)
-  // 5. Send successful ACK/status to client
+      // --- Common Fields ---
+      int sector_id = sqlite3_column_int (stmt, 0);
+      int count = sqlite3_column_int (stmt, 1);
+      int owner_player_id = sqlite3_column_int (stmt, 2);
+      const char *owner_email = (const char *) sqlite3_column_text (stmt, 3);
+      int owner_corp_id = sqlite3_column_int (stmt, 4);
+      const char *corp_email = (const char *) sqlite3_column_text (stmt, 5);
 
-  return 0;			// Success
+      /* ... all the json_object_set_new calls for asset_obj remain the same ... */
+
+      // --- Asset Specific Field (Mine Type or Fighter State) ---
+      // ... (no change here) ...
+
+      // -------------------------------------------------------------------
+      // --- Separate Player vs. Corp Assets ---
+      // -------------------------------------------------------------------
+      if (owner_player_id == ctx->player_id)
+        {
+          json_array_append_new (player_assets_arr, asset_obj);
+        }
+      // --- FIXED: Use local variable for comparison ---
+      else if (owner_corp_id > 0 && owner_corp_id == current_player_corp_id)
+        {
+          json_array_append_new (corp_assets_arr, asset_obj);
+        }
+      else
+        {
+          // Should only happen if the asset is deployed by a corp member
+          // but the current player is not a member (or the data is inconsistent).
+          // With the revised SQL, this branch should be rare for valid data.
+          json_decref (asset_obj);
+        }
+    }
+
+  if (rc != SQLITE_DONE)
+    {
+      LOGE( "DB Step Error: %s", sqlite3_errmsg (db));
+      reply_rc = ERR_DB_QUERY_FAILED;
+      goto cleanup;
+    }
+
+  // --- 4. Construct and Send Response ---
+  json_object_set_new (data_out, "player_assets", player_assets_arr);
+  json_object_set_new (data_out, "corp_assets", corp_assets_arr);
+  
+  // Create final response object (with reply_to/id/status handled by send_enveloped_ok)
+  out = json_pack ("{s:o}", "data", data_out);
+  
+  if (!out)
+    {
+      reply_rc = ERR_OOM;
+      goto cleanup;
+    }
+  
+  // This will send the response with the correct list_type
+  send_enveloped_ok (ctx->fd, root, list_type, out);
+cleanup:
+  if (stmt)
+    sqlite3_finalize (stmt);
+  if (out)
+    json_decref (out);
+  
+  if (reply_rc != 0)
+    {
+      send_enveloped_error (ctx->fd, root, reply_rc, NULL);
+      return reply_rc;
+    }
+
+  return 0;
 }
+
+
+/*
+ * RPC: deploy.fighters.list
+ * Fetches the list of the player's and their corporation's deployed fighters.
+ */
+int
+cmd_deploy_fighters_list (client_ctx_t *ctx, json_t *root)
+{
+  sqlite3 *db = db_get_handle ();
+  // NOTE: This SQL assumes a helper function/macro populates ctx->corp_id
+  // or that ctx->corp_id is loaded during session initialization.
+  // It joins player_fighters with players and corporations to get email details.
+  // 
+  // It selects fighters belonging to:
+  // 1. The current player (pf.player_id = ?)
+  // 2. The player's corporation (p.corp_id = c.id) where c.id is the player's corp.
+const char *sql_query_fighters =
+  "SELECT "
+    "pf.sector_id, "
+    "pf.count, "
+    "pf.player_id, "
+    "p.email, "
+    "c.id AS corp_id, "
+    "c.email AS corp_email "
+  "FROM player_fighters pf "
+  "JOIN players p ON pf.player_id = p.id "
+  "LEFT JOIN corporations c ON p.corp_id = c.id "
+  "WHERE "
+    "pf.player_id = ?1 "
+    "OR p.id IN ( "
+      "SELECT cm.player_id "
+      "FROM corp_members cm "
+      "WHERE cm.corp_id = (SELECT cm_self.corp_id FROM corp_members cm_self WHERE cm_self.player_id = ?2) "
+    ") "
+  "ORDER BY pf.sector_id ASC;";
+  
+  return cmd_deploy_assets_list_internal (ctx,
+					  root,
+                                          "Deploy.fighters.list_v1",
+                                          "fighters",
+                                          sql_query_fighters);
+}
+
+
+/*
+ * RPC: deploy.mines.list
+ * Fetches the list of the player's and their corporation's deployed mines.
+ */
+int
+cmd_deploy_mines_list (client_ctx_t *ctx, json_t *root)
+{
+    sqlite3 *db = db_get_handle ();
+  // NOTE: This SQL assumes a helper function/macro populates ctx->corp_id
+  // or that ctx->corp_id is loaded during session initialization.
+  // The mine query must include the 'type' column (armid/limpet).
+  //
+  // It selects mines belonging to:
+  // 1. The current player (pm.player_id = ?)
+  // 2. The player's corporation (p.corp_id = c.id) where c.id is the player's corp.
+const char *sql_query_mines =
+  "SELECT "
+    "pm.sector_id, "
+    "pm.count, "
+    "pm.player_id, "
+    "p.email, "
+    "c.id AS corp_id, "
+    "c.email AS corp_email, "
+    "pm.type "
+  "FROM player_mines pm "
+  "JOIN players p ON pm.player_id = p.id "
+  "LEFT JOIN corporations c ON p.corp_id = c.id "
+  "WHERE "
+    "pm.player_id = ?1 "
+    "OR p.id IN ( "
+      "SELECT cm.player_id "
+      "FROM corp_members cm "
+      "WHERE cm.corp_id = (SELECT cm_self.corp_id FROM corp_members cm_self WHERE cm_self.player_id = ?2) "
+    ") "
+  "ORDER BY pm.sector_id ASC, pm.type ASC;";
+  return cmd_deploy_assets_list_internal (ctx,
+					  root,
+                                          "deploy.mines.list_v1",
+                                          "mines",
+                                          sql_query_mines);
+}
+
 
 /**
  * @brief Handles the 'combat.flee' command.
@@ -130,22 +329,31 @@ handle_combat_flee (client_ctx_t *ctx, json_t *root)
 int
 cmd_combat_attack (client_ctx_t *ctx, json_t *root)
 {
-  if (!require_auth (ctx, root))
-    return 0;
-  // TODO: parse target, resolve sector, dmg calc, state updates, events
-  return niy (ctx, root, "combat.attack");
+  sqlite3 *db = db_get_handle ();
+
+
+  // All combat actions reveal the ship
+  h_decloak_ship (db, h_get_active_ship_id (db, ctx->player_id));
+
+  TurnConsumeResult tc = h_consume_player_turn (db, ctx, "combat.attack");
+  if (tc != TURN_CONSUME_SUCCESS)
+    {
+      return handle_turn_consumption_error (ctx, tc, "combat.attack", root,
+					    NULL);
+    }
+
+  // --- COMBAT ATTACK LOGIC GOES HERE ---
+
+  // 2. Determine target (player ship, planet, port, etc.)
+  // 3. Perform attack calculations (fighters, cannons, torpedoes)
+  // 4. Update the DB with results (losses, sector change if target destroyed)
+  // 5. Send successful ACK/status to client
+
+  return 0;			// Success
 }
 
 /* ---------- combat.deploy_fighters ---------- */
 /* ---------- combat.deploy_fighters (fixed-SQL) ---------- */
-
-/* typedef enum { */
-/*     ASSET_MINE = 1, */
-/*     ASSET_FIGHTER = 2, */
-/*     ASSET_BEACON = 3, */
-/*     ASSET_LIMPET_MINE = 4     */
-/* } asset_type_t; */
-
 
 static const char *SQL_SECTOR_FTR_SUM =
   "SELECT COALESCE(SUM(quantity),0) "
@@ -161,8 +369,6 @@ static const char *SQL_ASSET_INSERT =
   "INSERT INTO sector_assets(sector, player, corporation, "
   "                          asset_type, quantity, offensive_setting, deployed_at) "
   "VALUES (?1, ?2, ?3, 'fighters', ?4, ?5, strftime('%s','now'));";
-
-
 
 /* Sum fighters already in the sector. */
 static int
@@ -503,58 +709,55 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
       json_t *evt = json_object ();
       json_object_set_new (evt, "sector_id", json_integer (sector_id));
       json_object_set_new (evt, "player_id", json_integer (ctx->player_id));
+    
       if (j_corp_id && json_is_integer (j_corp_id))
-	json_object_set_new (evt, "corporation_id",
-			     json_integer (json_integer_value (j_corp_id)));
+        json_object_set_new (evt, "corporation_id",
+                             json_integer (json_integer_value (j_corp_id)));
       else
-	json_object_set_new (evt, "corporation_id", json_null ());
+        json_object_set_new (evt, "corporation_id", json_null ());
+        
       json_object_set_new (evt, "amount", json_integer (amount));
       json_object_set_new (evt, "offense", json_integer (offense));
       json_object_set_new (evt, "event_ts",
 			   json_integer ((json_int_t) time (NULL)));
 
-      char *payload = json_dumps (evt, JSON_COMPACT);
-      json_decref (evt);
-      if (payload)
-	{
-	  (void) h_log_engine_event ("fighters.deployed", ctx->player_id,
-				     sector_id, payload, NULL);
-	  free (payload);
-	}
-      /* If your h_log_engine_event signature takes json_t* instead:
-         // (void)h_log_engine_event(db, "fighters.deployed", evt);
-       */
+      (void) h_log_engine_event ("fighters.deployed", ctx->player_id,
+				 sector_id, evt, NULL);
     }
+                               
+    /* If your h_log_engine_event signature takes json_t* instead:
+       // (void)h_log_engine_event(db, "fighters.deployed", evt); 
+    */
+    // }
+    /* /\* Emit engine_event via h_log_engine_event *\/ */
+    /* { */
+    /*   json_t *evt = json_object (); */
+    /*   json_object_set_new (evt, "sector_id", json_integer (sector_id)); */
+    /*   json_object_set_new (evt, "player_id", json_integer (ctx->player_id)); */
+    /*   if (j_corp_id && json_is_integer (j_corp_id)) */
+    /* 	json_object_set_new (evt, "corporation_id", */
+    /* 			     json_integer (json_integer_value (j_corp_id))); */
+    /*   else */
+    /* 	json_object_set_new (evt, "corporation_id", json_null ()); */
+    /*   json_object_set_new (evt, "amount", json_integer (amount)); */
+    /*   json_object_set_new (evt, "offense", json_integer (offense)); */
+    /*   json_object_set_new (evt, "event_ts", */
+    /* 			   json_integer ((json_int_t) time (NULL))); */
 
-    /* Emit engine_event via h_log_engine_event */
-    {
-      json_t *evt = json_object ();
-      json_object_set_new (evt, "sector_id", json_integer (sector_id));
-      json_object_set_new (evt, "player_id", json_integer (ctx->player_id));
-      if (j_corp_id && json_is_integer (j_corp_id))
-	json_object_set_new (evt, "corporation_id",
-			     json_integer (json_integer_value (j_corp_id)));
-      else
-	json_object_set_new (evt, "corporation_id", json_null ());
-      json_object_set_new (evt, "amount", json_integer (amount));
-      json_object_set_new (evt, "offense", json_integer (offense));
-      json_object_set_new (evt, "event_ts",
-			   json_integer ((json_int_t) time (NULL)));
-
-      char *payload = json_dumps (evt, JSON_COMPACT);
-      json_decref (evt);
-      if (payload)
-	{
-	  // int h_log_engine_event (const char *type, int actor_player_id, int sector_id,
-	  //    json_t * payload, const char *idem_key);
-	  (void) h_log_engine_event ("fighters.deployed", ctx->player_id,
-				     sector_id, payload, "");
-	  free (payload);
-	}
-      /* If your h_log_engine_event signature takes json_t* instead:
-         // (void)h_log_engine_event(db, "fighters.deployed", evt);
-       */
-    }
+    /*   char *payload = json_dumps (evt, JSON_COMPACT); */
+    /*   json_decref (evt); */
+    /*   if (payload) */
+    /* 	{ */
+    /* 	  // int h_log_engine_event (const char *type, int actor_player_id, int sector_id, */
+    /* 	  //    json_t * payload, const char *idem_key); */
+    /* 	  (void) h_log_engine_event ("fighters.deployed", ctx->player_id, */
+    /* 				     sector_id, payload, ""); */
+    /* 	  free (payload); */
+    /* 	} */
+    /*   /\* If your h_log_engine_event signature takes json_t* instead: */
+    /*      // (void)h_log_engine_event(db, "fighters.deployed", evt); */
+    /*    *\/ */
+    /* } */
 
     /* Recompute total for response convenience */
     (void) sum_sector_fighters (db, sector_id, &sector_total);

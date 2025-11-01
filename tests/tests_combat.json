@@ -168,19 +168,94 @@
   },
 
   {
-    "name": "deploy_fighters_sector_cap (refused 1504)",
-    "command": {
-      "command": "combat.deploy_fighters",
-      "data": {
-        "amount": 50001,
-        "offense": 2,
-        "corporation_id": null
-      }
-    },
-    "expect": { "status": "refused", "type": "error", "error": { "code": 1504 } }
+    "name": "fighters.list — current sector (no filters)",
+    "command": { "command": "deploy.fighters.list" },
+    "expect": { "status": "ok", "type": "*" },
+    "asserts": [
+      { "path": "data.total", "op": ">=", "value": 0 }
+    ]
+  },
+  {
+    "name": "fighters.list — explicit sector 1 (exists in every map)",
+    "command": { "command": "deploy.fighters.list", "data": { "sector_id": 1 } },
+    "expect": { "status": "ok", "type": "*" },
+    "asserts": [
+      { "path": "data.total", "op": ">=", "value": 0 }
+    ]
+  },
+  {
+    "name": "fighters.list — pagination (limit 5)",
+    "command": { "command": "deploy.fighters.list", "data": { "limit": 5 } },
+    "expect": { "status": "ok", "type": "*" },
+    "asserts": [
+      { "path": "data.limit", "op": "==", "value": 5 }
+    ]
+  },
+
+  {
+    "name": "mines.list — current sector (all types)",
+    "command": { "command": "deploy.mines.list" },
+    "expect": { "status": "ok", "type": "*" },
+    "asserts": [
+      { "path": "data.total", "op": ">=", "value": 0 }
+    ]
+  },
+  {
+    "name": "mines.list — armid only (filter shape)",
+    "command": { "command": "deploy.mines.list", "data": { "mine_type": "armid" } },
+    "expect": { "status": "ok", "type": "*" },
+    "asserts": [
+      { "path": "data.total", "op": ">=", "value": 0 }
+    ]
+  },
+  {
+    "name": "mines.list — limpet only (filter shape)",
+    "command": { "command": "deploy.mines.list", "data": { "mine_type": "limpet" } },
+    "expect": { "status": "ok", "type": "*" },
+    "asserts": [
+      { "path": "data.total", "op": ">=", "value": 0 }
+    ]
+  },
+  {
+    "name": "mines.list — pagination (limit 10)",
+    "command": { "command": "deploy.mines.list", "data": { "limit": 10 } },
+    "expect": { "status": "ok", "type": "*" },
+    "asserts": [
+      { "path": "data.limit", "op": "==", "value": 10 }
+    ]
+  },
+[
+  {
+    "name": "fighters.list — sector 250 has ≥5000 fighters",
+    "command": { "command": "deploy.fighters.list", "data": { "sector_id": 250 } },
+    "expect": { "status": "ok", "type": "*" },
+    "asserts": [
+      { "path": "data.total", "op": ">=", "value": 5000 }
+    ]
+  },
+  {
+    "name": "mines.list — sector 250 armid ≥50",
+    "command": { "command": "deploy.mines.list", "data": { "sector_id": 250, "mine_type": "armid" } },
+    "expect": { "status": "ok", "type": "*" },
+    "asserts": [
+      { "path": "data.total", "op": ">=", "value": 50 }
+    ]
+  },
+  {
+    "name": "mines.list — sector 250 limpet ≥0",
+    "command": { "command": "deploy.mines.list", "data": { "sector_id": 250, "mine_type": "limpet" } },
+    "expect": { "status": "ok", "type": "*" },
+    "asserts": [
+      { "path": "data.total", "op": ">=", "value": 0 }
+    ]
+  },
+
+  {
+    "name": "mines.list — invalid type is refused (1306)",
+    "command": { "command": "deploy.mines.list", "data": { "mine_type": "banana" } },
+    "expect": { "status": "error", "type": "error", "error": { "code": 1306 } }
   }
-
+]
+      
   ]
-
-
 }

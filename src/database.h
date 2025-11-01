@@ -142,5 +142,6 @@ void db_handle_close_and_reset (void);
 int db_log_engine_event (long long ts, const char *type, int actor_player_id,
 			 int sector_id, json_t * payload);
 
+int db_is_sector_fedspace (int ck_sector);
 
 #endif /* DATABASE_H */

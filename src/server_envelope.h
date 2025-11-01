@@ -39,7 +39,7 @@ int cmd_system_schema_list (client_ctx_t * ctx, json_t * root);
 int cmd_system_cmd_list (client_ctx_t * ctx, json_t * root);
 void send_error_json (int fd, int code, const char *msg);
 void send_all_json (int fd, json_t * obj);
-
+int j_get_integer (json_t *root, const char *path, int *result);
 
 
 #endif

@@ -311,3 +311,57 @@ process_ship_destruction (int attacker_id, int victim_id,
       // Log event logging failure
     }
 }
+
+/*
+ * cmd_ship_self_destruct: Initiate player ship self-destruct sequence.
+ *
+ * This command requires a non-zero integer confirmation in the payload
+ * (e.g., { "data": { "confirmation": 42 } }).
+ * It is explicitly refused in protected sectors (FedSpace).
+ *
+ * Request: { "command": "ship.self_destruct", "data": { "confirmation": 42 } }
+ * Success: { "status": "ok", "type": "ship.self_destruct.confirmed" }
+ * Refused: { "status": "refused", "error": { "code": 1007|1506 } }
+ */
+int
+cmd_ship_self_destruct (client_ctx_t *ctx, json_t *root)
+{
+  int confirmation = 0;
+  json_t *evt = NULL;
+  sqlite3 *db = db_get_handle ();
+
+  /* 1. Get and validate confirmation payload for heavy confirmation */
+  if (j_get_integer (root, "data.confirmation", &confirmation) != 0
+      || confirmation == 0)
+    {
+      send_enveloped_refused (ctx->fd, root, ERR_CONFIRMATION_REQUIRED,
+                              "Self-destruct requires explicit non-zero integer confirmation.", NULL);
+      return -1;
+    }
+
+  /* 2. Refusal check: Cannot self-destruct in protected zones (FedSpace) */
+  if (db_is_sector_fedspace (ctx->sector_id))
+    {
+      send_enveloped_refused (ctx->fd, root, ERR_FORBIDDEN_IN_SECTOR,
+                              "Cannot self-destruct in protected FedSpace.", NULL);
+      return -1;
+    }
+
+  /* 3. Log the engine event, deferring destruction logic to the engine */
+  evt = json_object ();
+  if (!evt)
+    return -1; // Memory allocation failure
+
+  // Log the action with required context
+  json_object_set_new (evt, "sector_id", json_integer (ctx->sector_id));
+  json_object_set_new (evt, "confirmation_value", json_integer (confirmation));
+  
+  /* h_log_engine_event will consume the reference of 'evt' */
+  (void) h_log_engine_event ("ship.self_destruct.initiated",
+                             ctx->player_id, ctx->sector_id, evt, NULL);
+
+  /* 4. Response: command acknowledged and processed */
+  send_enveloped_ok (ctx->fd, root, "ship.self_destruct.confirmed", NULL);
+
+  return 0;
+}

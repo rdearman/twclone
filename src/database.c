@@ -5987,3 +5987,51 @@ cleanup:
 
   return rc;
 }
+
+
+int db_is_sector_fedspace (int ck_sector)
+{
+  sqlite3 *db = db_get_handle ();                                                                                            sqlite3_stmt *stmt = NULL;                                                                                                int rc = SQLITE_ERROR;
+
+  static const char *FEDSPACE_SQL =
+    "SELECT sector_id from stardock_location where sector_id=?1;";
+
+  sqlite3_stmt *st = NULL;
+
+  /* Full critical section: prepare → bind → step → finalize */
+  pthread_mutex_lock (&db_mutex);
+
+  rc = sqlite3_prepare_v2 (db, FEDSPACE_SQL, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE("db_is_sector_fedspace: %s", sqlite3_errmsg (db));
+      goto done;
+    }
+
+  sqlite3_bind_int (st, 1, ck_sector);
+
+  rc = sqlite3_step (st);
+  int sec_ret = 1;
+  if (rc == SQLITE_ROW)
+    {
+      sec_ret = sqlite3_column_int(st, 0);
+    }
+  
+  if (ck_sector == sec_ret || ck_sector >=1 && ck_sector <= 10)
+    {
+      rc = 1;
+    }
+  else
+    {
+      rc = 0;
+    }
+
+done:
+  if (st)
+    sqlite3_finalize (st);
+  pthread_mutex_unlock (&db_mutex);
+  return rc;
+}
+    
+
+  

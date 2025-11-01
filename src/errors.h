@@ -23,6 +23,8 @@
 #define ERR_PERMISSION_DENIED    1111
 #define ERR_NOT_FOUND	         1112
 #define ERR_DB			 1113
+#define ERR_OOM			 1114
+#define ERR_DB_QUERY_FAILED	 111
 
 /* 1200 — Auth / Player */
 #define ERR_NOT_AUTHENTICATED    1200	/* "auth required" */
@@ -50,6 +52,7 @@
 #define ERR_CURSOR_INVALID       1306
 #define ERR_BAD_REQUEST          1306
 #define ERR_REF_NO_TURNS         1307
+#define ERR_CONFIRMATION_REQUIRED 1308
 
 /* 1400 — Movement / Rules */
 #define REF_NOT_IN_SECTOR        1400	/* REFUSED */
@@ -118,6 +121,7 @@
 /* 3000 - Sector */
 #define SECTOR_ERR		3000
 #define ERR_SECTOR_OVERCROWDED 	3001
+#define ERR_FORBIDDEN_IN_SECTOR   3002
 
 
 /* 9000+ — Vendor/private extensions available */

@@ -790,6 +790,10 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       rc = cmd_ship_repair (ctx, root);	/* NIY stub */
     }
+  else if (!strcmp (c, "ship.self_destruct"))
+    {
+      rc = cmd_ship_self_destruct (ctx, root);	/* NIY stub */
+    }
 
 /* ---------- PORTS / TRADE ---------- */
   else if (!strcmp (c, "port.info") || !strcmp (c, "port.status")
@@ -935,6 +939,14 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       rc = cmd_combat_status (ctx, root);	/* NIY stub */
     }
+  else if (!strcmp (c, "deploy.fighters.list"))
+    {
+      rc = cmd_deploy_fighters_list (ctx, root);        /* list deployed fighters */
+    }
+  else if (!strcmp (c, "deploy.mines.list"))
+    {
+      rc = cmd_deploy_mines_list (ctx, root);           /* list deployed mines */
+    }  
 
 /* ---------- CHAT ---------- */
   else if (!strcmp (c, "chat.send"))

@@ -2060,17 +2060,28 @@ h_log_engine_event (const char *type,
   int current_ts = (int) time (NULL);
   char *payload_str = NULL;
 
+  if (payload == NULL)
+    {
+      payload = json_object (); // Create a new empty object: {}
+      if (payload == NULL)
+        {
+          fprintf (stderr,
+                   "ERROR: h_log_engine_event Failed to create empty JSON payload (OOM).\n");
+          return SQLITE_NOMEM; // Use a more appropriate OOM error code
+        }
+    }
+  
   // 1. Serialize the JSON payload
   // JSON_COMPACT is used to save space in the database TEXT field.
   payload_str = json_dumps (payload, JSON_COMPACT | JSON_ENSURE_ASCII);
   json_decref (payload);	// Consume the reference as per function contract
 
   if (!payload_str)
-    {
-      fprintf (stderr,
-	       "ERROR: h_log_engine_event Failed to serialize JSON payload.\n");
-      return SQLITE_ERROR;
-    }
+  {
+    fprintf (stderr,
+             "ERROR: h_log_engine_event Failed to serialize JSON payload for type: %s\n", type); // ADDED
+    return SQLITE_ERROR;
+  }
 
   // 2. Prepare the SQL statement
   const char *sql =

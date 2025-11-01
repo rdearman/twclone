@@ -944,3 +944,87 @@ cmd_system_capabilities (client_ctx_t *ctx, json_t *root)
   send_enveloped_ok (ctx->fd, root, "system.capabilities", data);
   return 0;
 }
+
+
+
+/**
+ * @brief Safely retrieves an integer from a JSON object/array using a dot-separated path.
+ *
+ * This function is robust against missing keys or incorrect types at any level of the path.
+ *
+ * @param root The root JSON object (command envelope).
+ * @param path The dot-separated path to the integer (e.g., "data.confirmation").
+ * @param result Pointer to store the extracted integer value.
+ * @return 0 on success, -1 on failure (path not found, wrong type, or invalid structure).
+ */
+int
+j_get_integer (json_t *root, const char *path, int *result)
+{
+  if (!root || !path || !result || *path == '\0')
+    {
+      fprintf (stderr, "j_get_integer: Invalid input parameters.\n");
+      return -1;
+    }
+
+  // Make a mutable copy of the path for strtok_r to work on.
+  char *path_copy = strdup (path);
+  if (!path_copy)
+    {
+      perror ("j_get_integer: strdup failed");
+      return -1; // Allocation failure
+    }
+
+  char *saveptr;
+  char *token;
+  json_t *current = root;
+
+  // Use strtok_r to safely tokenize the path by '.'
+  for (token = strtok_r (path_copy, ".", &saveptr);
+       token != NULL;
+       token = strtok_r (NULL, ".", &saveptr))
+    {
+      // 1. Ensure the current node is a JSON object before looking up a key
+      if (!current || !json_is_object (current))
+        {
+          fprintf (stderr, "j_get_integer: Path segment '%s' expected an object, but found something else or NULL.\n", token);
+          free (path_copy);
+          return -1;
+        }
+
+      // 2. Find the child node for the current token
+      json_t *next = json_object_get (current, token);
+
+      if (!next)
+        {
+          fprintf (stderr, "j_get_integer: Key '%s' not found at this level.\n", token);
+          free (path_copy);
+          return -1;
+        }
+
+      // 3. Check if this is the last token in the path
+      if (saveptr == NULL || *saveptr == '\0')
+        {
+          // We are on the final key: check type and extract value
+          if (json_is_integer (next))
+            {
+              *result = (int) json_integer_value (next);
+              free (path_copy);
+              return 0; // Success!
+            }
+          else
+            {
+              fprintf (stderr, "j_get_integer: Final key '%s' found, but value is not an integer.\n", token);
+              free (path_copy);
+              return -1; // Wrong type
+            }
+        }
+
+      // 4. Not the final token, move to the next level for traversal
+      current = next;
+    }
+
+  // Should only be reached if the path was malformed (e.g., ended in a dot)
+  free (path_copy);
+  fprintf (stderr, "j_get_integer: Path traversal completed without finding a final value.\n");
+  return -1;
+}
