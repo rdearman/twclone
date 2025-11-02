@@ -1030,6 +1030,55 @@ cleanup:
 }
 
 
+
+#include <stdio.h>
+#include <sqlite3.h>
+#include <string.h>
+
+// --- Callback function to process each row ---
+static int ship_callback(void *count_ptr, int argc, char **argv, char **azColName) {
+    int *count = (int *)count_ptr;
+    
+    // Check if the 'cloaked' value exists and print it
+    if (argv[0]) {
+        printf("Found cloaked ship (Timestamp: %s)\n", argv[0]);
+        (*count)++;
+    }
+    
+    return 0; // Return 0 to continue execution
+}
+
+
+// --- Function to execute the query ---
+int uncloak_ships_in_fedspace(sqlite3 *db) {
+    int rc;
+    char *err_msg = 0;
+    int cloaked_ship_count = 0;
+
+    // The corrected SQL query
+    const char *sql = 
+        "UPDATE ships SET cloaked=NULL "
+        "WHERE cloaked IS NOT NULL "
+        "  AND ( "
+        "    location IN (SELECT sector_id FROM stardock_location) "
+        "    OR location IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10) "
+        "  );";
+
+    printf("Executing SQL query...\n");
+
+    rc = sqlite3_exec(db, sql, ship_callback, &cloaked_ship_count, &err_msg);
+
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "SQL error: %s\n", err_msg);
+        sqlite3_free(err_msg);
+        return -1;
+    } 
+
+    printf("Query finished. Total cloaked ships found: %d\n", cloaked_ship_count);
+    return cloaked_ship_count;
+}
+
+
   // 1. Check anyone who has been in fedspace for more than an hour.
   // 2. Check for Evil alignment who are in that list and tow them
   // 3. Check for ships which have more than 50 fighters in that list and tow them
@@ -1076,6 +1125,8 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
       LOGI ("fedspace_cleanup: Lock acquired, starting cleanup operations.");
     }
 
+  int uncloak = uncloak_ships_in_fedspace(db);
+  
   // --- STEP 1: Ensure MSL table is populated ---
   if (populate_msl_if_empty (db) != 0)
     {
@@ -1229,6 +1280,7 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
       select_stmt = NULL;
     }
 
+  
 
   //////////////////////////////////////////////////////////////////
   // III. Towing Rules (2-5)                                      //
@@ -1421,6 +1473,9 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
       sector_stmt = NULL;	// Crucial: Reset pointer after finalization
     }
 
+  // select cloaked from ships where cloaked != NULL and location = fedspace;
+  
+  
 // --- CRITICAL FINAL CLEANUP ---
   // Finalize any lingering prepared statement pointers to release any possible lock
   if (delete_stmt)
@@ -1449,6 +1504,10 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
       LOGE ("h_fedspace_cleanup: Final DELETE failed: %s", err_msg);
       sqlite3_free (err_msg);
     }
+
+
+  
+
   // Commit the main transaction
   commit (db);
   LOGI ("fedspace_cleanup: ok (towed=%d)", tows);
