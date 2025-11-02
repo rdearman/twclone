@@ -112,6 +112,7 @@ get_random_sector (sqlite3 *db)
 }
 
 
+
 int
 tow_ship (sqlite3 *db, int ship_id, int new_sector_id, int admin_id,
 	  int reason_code)
@@ -1671,7 +1672,7 @@ h_npc_step (sqlite3 *db, int64_t now_s)
 }
 
 
-/* Handler for the 'port_price_drift' cron task */
+/* Handler for the 'port_price_drift' cron task (FIXED to update Price Indices) */
 int
 h_port_price_drift (sqlite3 *db, int64_t now_s)
 {
@@ -1682,14 +1683,19 @@ h_port_price_drift (sqlite3 *db, int64_t now_s)
   if (rc)
     return rc;
 
-  /* Apply a small, random drift of -1, 0, or +1 to all product prices in the ports table. */
+  /* Apply a small, random drift (-0.01, 0.0, or +0.01) to all price indices.
+     The price index is clamped between 0.5 and 1.5. */
   rc = sqlite3_exec (db,
-		     "UPDATE ports SET "
-		     " product_ore = product_ore + (ABS(RANDOM()) % 3 - 1), "
-		     " product_organics = product_organics + (ABS(RANDOM()) % 3 - 1), "
-		     " product_equipment = product_equipment + (ABS(RANDOM()) % 3 - 1) "
-		     "WHERE id > 0;", NULL, NULL, NULL);
-
+             "UPDATE ports SET "
+             // Ore: Target the price_index_ore column
+             " price_index_ore = MIN(1.5, MAX(0.5, price_index_ore + ((ABS(RANDOM()) % 3 - 1) * 0.01))), "
+             // Organics: Target the price_index_organics column
+             " price_index_organics = MIN(1.5, MAX(0.5, price_index_organics + ((ABS(RANDOM()) % 3 - 1) * 0.01))), "
+             // Equipment: Target the price_index_equipment column
+             " price_index_equipment = MIN(1.5, MAX(0.5, price_index_equipment + ((ABS(RANDOM()) % 3 - 1) * 0.01))), "
+             // Fuel: Target the price_index_fuel column
+             " price_index_fuel = MIN(1.5, MAX(0.5, price_index_fuel + ((ABS(RANDOM()) % 3 - 1) * 0.01))) "
+             "WHERE id > 0;", NULL, NULL, NULL);
 
   if (rc)
     {
@@ -1706,9 +1712,7 @@ h_port_price_drift (sqlite3 *db, int64_t now_s)
 }
 
 
-
-
-/* Handler for the 'port_reprice' cron task (Robust Two-Query Solution) */
+/* Handler for the 'port_reprice' cron task (FIXED to update Price Indices based on trade flow) */
 int
 h_port_reprice (sqlite3 *db, int64_t now_s)
 {
@@ -1719,47 +1723,40 @@ h_port_reprice (sqlite3 *db, int64_t now_s)
   if (rc)
     return rc;
 
-  /* STEP 1 (ESSENTIAL): Enforce a minimum price of 1 for all ports, unconditionally. */
+  /* Adjust price indices based on trade flow.
+     Net flow (T.X_net_flow) is POSITIVE when players SELL (increasing port supply).
+     Therefore, we SUBTRACT net_flow from the price index to make price FALL when supply is high. 
+     The price index is also clamped between 0.5 (cheap) and 1.5 (expensive). */
   rc = sqlite3_exec (db,
-		     "UPDATE ports SET "
-		     " product_ore = MAX(1, product_ore), "
-		     " product_organics = MAX(1, product_organics), "
-		     " product_equipment = MAX(1, product_equipment) "
-		     "WHERE id > 0;", NULL, NULL, NULL);
-
-  if (rc != SQLITE_OK)
-    {
-      rollback (db);
-      LOGE ("port_reprice step 1 rc=%d", rc);
-      unlock (db, "port_reprice");
-      return rc;
-    }
-
-  /* STEP 2 (DYNAMIC): Adjust prices based on trade flow (only affects ports with history). */
-  rc = sqlite3_exec (db,
-		     "UPDATE ports SET "
-		     " product_ore = product_ore + COALESCE(T.ore_net_flow / 50, 0),"
-		     " product_organics = product_organics + COALESCE(T.organics_net_flow / 50, 0),"
-		     " product_equipment = product_equipment + COALESCE(T.equipment_net_flow / 50, 0) "
-		     "FROM ( "
-		     "  SELECT "
-		     "    port_id, "
-		     "    SUM(CASE WHEN commodity = 'ore' AND action = 'sell' THEN units "
-		     "             WHEN commodity = 'ore' AND action = 'buy' THEN -units ELSE 0 END) AS ore_net_flow, "
-		     "    SUM(CASE WHEN commodity = 'organics' AND action = 'sell' THEN units "
-		     "             WHEN commodity = 'organics' AND action = 'buy' THEN -units ELSE 0 END) AS organics_net_flow, "
-		     "    SUM(CASE WHEN commodity = 'equipment' AND action = 'sell' THEN units "
-		     "             WHEN commodity = 'equipment' AND action = 'buy' THEN -units ELSE 0 END) AS equipment_net_flow "
-		     "  FROM trade_log "
-		     "  WHERE timestamp > (strftime('%s', 'now') - 86400) "
-		     "  GROUP BY port_id "
-		     ") AS T "
-		     "WHERE ports.id = T.port_id;", NULL, NULL, NULL);
+             "UPDATE ports SET "
+             // Use subtraction for price adjustment and clamp the index
+             " price_index_ore = MIN(1.5, MAX(0.5, price_index_ore - COALESCE(T.ore_net_flow / 50.0, 0))),"
+             " price_index_organics = MIN(1.5, MAX(0.5, price_index_organics - COALESCE(T.organics_net_flow / 50.0, 0))),"
+             " price_index_equipment = MIN(1.5, MAX(0.5, price_index_equipment - COALESCE(T.equipment_net_flow / 50.0, 0))),"
+             // Add Fuel price index update
+             " price_index_fuel = MIN(1.5, MAX(0.5, price_index_fuel - COALESCE(T.fuel_net_flow / 50.0, 0)))"
+             "FROM ( "
+             "  SELECT "
+             "    port_id, "
+             "    SUM(CASE WHEN commodity = 'ore' AND action = 'sell' THEN units "
+             "             WHEN commodity = 'ore' AND action = 'buy' THEN -units ELSE 0 END) AS ore_net_flow, "
+             "    SUM(CASE WHEN commodity = 'organics' AND action = 'sell' THEN units "
+             "             WHEN commodity = 'organics' AND action = 'buy' THEN -units ELSE 0 END) AS organics_net_flow, "
+             "    SUM(CASE WHEN commodity = 'equipment' AND action = 'sell' THEN units "
+             "             WHEN commodity = 'equipment' AND action = 'buy' THEN -units ELSE 0 END) AS equipment_net_flow, "
+             // Add Fuel to the net flow calculation
+             "    SUM(CASE WHEN commodity = 'fuel' AND action = 'sell' THEN units "
+             "             WHEN commodity = 'fuel' AND action = 'buy' THEN -units ELSE 0 END) AS fuel_net_flow "
+             "  FROM trade_log "
+             "  WHERE timestamp > (strftime('%s', 'now') - 86400) "
+             "  GROUP BY port_id "
+             ") AS T "
+             "WHERE ports.id = T.port_id;", NULL, NULL, NULL);
 
   if (rc)
     {
       rollback (db);
-      LOGE ("port_reprice step 2 rc=%d", rc);
+      LOGE ("port_reprice rc=%d", rc);
       unlock (db, "port_reprice");
       return rc;
     }
@@ -1769,6 +1766,8 @@ h_port_reprice (sqlite3 *db, int64_t now_s)
   unlock (db, "port_reprice");
   return 0;
 }
+
+
 
 //////////////////////// NEWS BLOCK ////////////////////////
 

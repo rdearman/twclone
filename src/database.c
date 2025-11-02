@@ -19,9 +19,10 @@
 /* Define and initialize the mutex for the database handle */
 // pthread_mutex_t db_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t db_mutex;
+// Helper flag to ensure initialization runs only once
+static bool db_mutex_initialized = false;
 
 static sqlite3 *db_handle = NULL;
-// const char *DEFAULT_DB_NAME =  "twconfig.db" ;
 
 /* Forward declaration so we can call it before the definition */
 static json_t *parse_neighbors_csv (const unsigned char *txt);
@@ -33,7 +34,6 @@ static int db_insert_defaults_unlocked (void);
 static int db_ensure_ship_perms_column_unlocked (void);
 int db_seed_cron_tasks (sqlite3 * db);
 void db_handle_close_and_reset (void);
-
 
 // New function to add
 void
@@ -47,20 +47,37 @@ db_handle_close_and_reset (void)
     }
 }
 
-/* sqlite3 * */
-/* db_get_handle (void) */
-/* { */
-/*   return db_handle; */
-/* } */
+static void
+db_init_recursive_mutex_once(void)
+{
+    if (db_mutex_initialized) {
+        return;
+    }
+
+    // Set up recursive attributes
+    pthread_mutexattr_t attr;
+    if (pthread_mutexattr_init(&attr) == 0) {
+        pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+        pthread_mutex_init(&db_mutex, &attr);
+        pthread_mutexattr_destroy(&attr);
+        db_mutex_initialized = true;
+    } else {
+        LOGE("FATAL: Failed to initialize mutex attributes for db_mutex.");
+    }
+}
+
+
+
+// database.c
 
 sqlite3 *
 db_get_handle (void)
 {
   // Flag to ensure the mutex is initialized only once
-  static bool mutex_initialized = false; 
+  static bool mutex_initialized = false; // Static ensures it's only checked once
 
   // 1. Check if the handle is already open. If so, return it immediately.
-  if (db_handle != NULL)
+  if (db_handle)
     {
       return db_handle;
     }
@@ -70,19 +87,32 @@ db_get_handle (void)
   // =================================================================
   if (!mutex_initialized)
   {
+      LOGI("DB Mutex initialization starting...");
       pthread_mutexattr_t attr;
-      pthread_mutexattr_init(&attr);
+      // 1a. Initialize attributes
+      if (pthread_mutexattr_init(&attr) != 0) {
+          LOGE("FATAL: Failed to initialize mutex attributes.");
+          return NULL;
+      }
       
-      // Set the mutex type to RECURSIVE (the core fix)
-      pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE); 
+      // 1b. Set the mutex type to RECURSIVE (the core fix)
+      if (pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE) != 0) {
+          LOGE("FATAL: Failed to set mutex type to recursive.");
+          pthread_mutexattr_destroy(&attr);
+          return NULL;
+      }
       
-      // Initialize the global db_mutex 
-      pthread_mutex_init(&db_mutex, &attr);
+      // 1c. Initialize the global db_mutex with recursive attributes
+      if (pthread_mutex_init(&db_mutex, &attr) != 0) {
+          LOGE("FATAL: Failed to initialize recursive db_mutex.");
+          pthread_mutexattr_destroy(&attr);
+          return NULL;
+      }
       
       pthread_mutexattr_destroy(&attr);
 
       mutex_initialized = true;
-      // LOGI("DB Mutex initialized as RECURSIVE."); // Add log for confirmation
+      LOGI("DB Mutex initialized as RECURSIVE.");
   }
   // =================================================================
   
@@ -96,6 +126,7 @@ db_get_handle (void)
 
   if (rc != SQLITE_OK)
     {
+      // LOGE("Can't open database: %s", sqlite3_errmsg(db_handle));
       // ... (error handling remains the same) ...
       if (db_handle)
         {
@@ -111,11 +142,13 @@ db_get_handle (void)
     {
       LOGW ("Failed to set WAL mode on fresh handle.");
     }
-  sqlite3_busy_timeout (db_handle, 5000);   // 5 seconds
+  sqlite3_busy_timeout (db_handle, 5000);    // 5 seconds
 
   // 4. Return the newly opened handle.
   return db_handle;
 }
+
+
 
 int
 db_commands_accept (const char *cmd_type,
@@ -344,19 +377,28 @@ const char *create_table_sql[] = {
 
   " CREATE TABLE IF NOT EXISTS planettypes (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE, typeDescription TEXT, typeName TEXT, citadelUpgradeTime_lvl1 INTEGER, citadelUpgradeTime_lvl2 INTEGER, citadelUpgradeTime_lvl3 INTEGER, citadelUpgradeTime_lvl4 INTEGER, citadelUpgradeTime_lvl5 INTEGER, citadelUpgradeTime_lvl6 INTEGER, citadelUpgradeOre_lvl1 INTEGER, citadelUpgradeOre_lvl2 INTEGER, citadelUpgradeOre_lvl3 INTEGER, citadelUpgradeOre_lvl4 INTEGER, citadelUpgradeOre_lvl5 INTEGER, citadelUpgradeOre_lvl6 INTEGER, citadelUpgradeOrganics_lvl1 INTEGER, citadelUpgradeOrganics_lvl2 INTEGER, citadelUpgradeOrganics_lvl3 INTEGER, citadelUpgradeOrganics_lvl4 INTEGER, citadelUpgradeOrganics_lvl5 INTEGER, citadelUpgradeOrganics_lvl6 INTEGER, citadelUpgradeEquipment_lvl1 INTEGER, citadelUpgradeEquipment_lvl2 INTEGER, citadelUpgradeEquipment_lvl3 INTEGER, citadelUpgradeEquipment_lvl4 INTEGER, citadelUpgradeEquipment_lvl5 INTEGER, citadelUpgradeEquipment_lvl6 INTEGER, citadelUpgradeColonist_lvl1 INTEGER, citadelUpgradeColonist_lvl2 INTEGER, citadelUpgradeColonist_lvl3 INTEGER, citadelUpgradeColonist_lvl4 INTEGER, citadelUpgradeColonist_lvl5 INTEGER, citadelUpgradeColonist_lvl6 INTEGER, maxColonist_ore INTEGER, maxColonist_organics INTEGER, maxColonist_equipment INTEGER, fighters INTEGER, fuelProduction INTEGER, organicsProduction INTEGER, equipmentProduction INTEGER, fighterProduction INTEGER, maxore INTEGER, maxorganics INTEGER, maxequipment INTEGER, maxfighters INTEGER, breeding REAL); ",
 
-  " CREATE TABLE IF NOT EXISTS ports ( " " id INTEGER PRIMARY KEY AUTOINCREMENT,  " " number INTEGER,  " " name TEXT NOT NULL,  " " location INTEGER NOT NULL,  "	/* FK to sectors.id */
-    " size INTEGER,  "
-    " techlevel INTEGER,  "
-    " max_ore INTEGER,  "
-    " max_organics INTEGER,  "
-    " max_equipment INTEGER,  "
-    " product_ore INTEGER,  "
-    " product_organics INTEGER,  "
-    " product_equipment INTEGER,  "
-    " credits INTEGER,  "
-    " invisible INTEGER DEFAULT 0,  "
-    " type INTEGER DEFAULT 1,  "
-    " FOREIGN KEY (location) REFERENCES sectors(id)); ",
+  " CREATE TABLE IF NOT EXISTS ports ( "
+  " id INTEGER PRIMARY KEY AUTOINCREMENT, "
+  " number INTEGER, "
+  " name TEXT NOT NULL, "
+  " location INTEGER NOT NULL, "    /* FK to sectors.id */
+  " size INTEGER, "
+  " techlevel INTEGER, "
+  " max_ore INTEGER, "
+  " max_organics INTEGER, "
+  " max_equipment INTEGER, "
+  " product_ore INTEGER, "          /* Stock Quantity */
+  " product_organics INTEGER, "     /* Stock Quantity */
+  " product_equipment INTEGER, "    /* Stock Quantity */
+  " price_index_ore REAL DEFAULT 1.0, "
+  " price_index_organics REAL DEFAULT 1.0, "
+  " price_index_equipment REAL DEFAULT 1.0, "
+  " price_index_fuel REAL DEFAULT 1.0, "
+  " credits INTEGER, "
+  " invisible INTEGER DEFAULT 0, "
+  " type INTEGER DEFAULT 1, "
+  " FOREIGN KEY (location) REFERENCES sectors(id)); "
+
 
   " CREATE TABLE IF NOT EXISTS port_trade ( "
     " id INTEGER PRIMARY KEY AUTOINCREMENT,  "
@@ -6078,3 +6120,31 @@ done:
     
 
   
+/* Returns the port_id (primary key) for a given sector, or -1 on error/not found */
+int
+db_get_port_id_by_sector(int sector_id)
+{
+    sqlite3 *db = db_get_handle(); // Get the handle
+    sqlite3_stmt *stmt = NULL;
+    int port_id = -1;
+
+    const char *sql = "SELECT id FROM ports WHERE location=?1;";
+
+    pthread_mutex_lock(&db_mutex); // Critical section starts
+
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        LOGE("db_get_port_id_by_sector: %s", sqlite3_errmsg(db));
+        goto done;
+    }
+
+    sqlite3_bind_int(stmt, 1, sector_id);
+
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        port_id = sqlite3_column_int(stmt, 0);
+    }
+
+done:
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&db_mutex); // Critical section ends
+    return port_id;
+}

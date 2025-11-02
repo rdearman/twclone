@@ -9,6 +9,8 @@
 
 sqlite3 *db_get_handle (void);
 
+// Define a reasonable cap for commodity quantity at a port
+#define PORT_MAX_QUANTITY 10000.0
 
 /* External declaration for the mutex */
 extern pthread_mutex_t db_mutex;
@@ -143,5 +145,6 @@ int db_log_engine_event (long long ts, const char *type, int actor_player_id,
 			 int sector_id, json_t * payload);
 
 int db_is_sector_fedspace (int ck_sector);
+int db_get_port_id_by_sector(int sector_id);
 
 #endif /* DATABASE_H */

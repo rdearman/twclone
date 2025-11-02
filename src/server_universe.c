@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <sqlite3.h>
+#include <stdarg.h>
 // local include
 #include "server_universe.h"
 #include "database.h"
@@ -26,6 +27,10 @@
 #include "server_log.h"
 
 
+
+// extern pthread_mutex_t db_mutex;
+
+
 /* cache DB so fer_tick signature matches ISS style */
 extern sqlite3 *g_db;		/* <- global DB handle used elsewhere (ISS) */
 static sqlite3 *g_fer_db = NULL;	/* <- cached here for trader helpers */
@@ -42,7 +47,7 @@ static sqlite3 *g_fer_db = NULL;	/* <- cached here for trader helpers */
 
 
 #ifndef FER_TRADER_COUNT
-#define FER_TRADER_COUNT            3
+#define FER_TRADER_COUNT            5
 #endif
 #ifndef FER_TRADES_BEFORE_RETURN
 #define FER_TRADES_BEFORE_RETURN    5
@@ -282,33 +287,89 @@ ori_move_all_ships (int64_t now_ms)
 
 ////////////////////// ORION NPC ////////////////////////////////
 
-
 /* --- minimal event writer for tests (engine_events) --- */
-static void
-fer_event_json (const char *type, int sector_id, const char *fmt, ...)
-{
-  if (!g_fer_db || !type)
-    return;
 
+static void
+fer_event_json (sqlite3 *db, const char *type, int sector_id, const char *fmt, ...)
+{
+  // Assumed extern definition: extern pthread_mutex_t db_mutex;
+
+  //LOGI("fer_event_json: Starting process for event type '%s' at sector %d.", type, sector_id);
+
+  if (!g_fer_db) {
+    // If the caller failed to provide the DB handle, we can't do anything
+    LOGE("fer_event_json: Received NULL DB handle. Cannot proceed.");
+    return;
+  }
+  
+  //LOGI("fer_event_json: past g_fer_db check");
+  
+  if (!type) {
+    LOGE("fer_event_json: Event type is NULL. Cannot proceed.");
+    return;
+  }
+
+  //LOGI("fer_event_json: past type check");
+  
   /* format JSON payload from ... */
   char payload[512];
   va_list ap;
   va_start (ap, fmt);
   vsnprintf (payload, sizeof payload, fmt, ap);
   va_end (ap);
+  
+  LOGI("fer_event_json: Payload formatted: %s", payload);
+
+  // 1. ACQUIRE LOCK (This should now correctly recurse)
+  //LOGI("fer_event_json: Attempting to acquire db_mutex.");
+  pthread_mutex_lock(&db_mutex);
+  //LOGI("fer_event_json: Mutex acquired.");
 
   /* INSERT into engine_events(type, sector_id, payload, ts) */
   const char *sql =
     "INSERT INTO engine_events(type, sector_id, payload, ts) "
     "VALUES (?1, ?2, ?3, strftime('%s','now'))";
   sqlite3_stmt *st = NULL;
-  if (sqlite3_prepare_v2 (g_fer_db, sql, -1, &st, NULL) != SQLITE_OK)
-    return;
+
+  // 2. Prepare Statement: Using the passed 'db' handle
+  int rc = sqlite3_prepare_v2 (g_fer_db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK) 
+    {
+      LOGE("fer_event_json: SQL Prepare FAILED (rc=%d).", rc);
+      LOGE("fer_event_json: Error message: %s", sqlite3_errmsg(g_fer_db));
+      
+      sqlite3_finalize(st); // Clean up even if prepare failed
+      pthread_mutex_unlock(&db_mutex); 
+      LOGI("fer_event_json: Mutex released on prepare failure.");
+      return; 
+    }
+
+  //LOGI("fer_event_json: SQL prepared successfully.");
+
+  // 3. Bind Parameters
   sqlite3_bind_text (st, 1, type, -1, SQLITE_TRANSIENT);
   sqlite3_bind_int (st, 2, sector_id);
   sqlite3_bind_text (st, 3, payload, -1, SQLITE_TRANSIENT);
-  sqlite3_step (st);
+
+  // 4. Step/Execute Statement
+  rc = sqlite3_step (st);
+  if (rc != SQLITE_DONE)
+    {
+      LOGE("fer_event_json: SQL Step FAILED (rc=%d). Expected SQLITE_DONE (%d).", rc, SQLITE_DONE);
+      LOGE("fer_event_json: Step error message: %s", sqlite3_errmsg(g_fer_db));
+    }
+  else
+    {
+      //LOGI("fer_event_json: SQL step successful (Event logged).");
+    }
+
+  // 5. Finalize Statement
   sqlite3_finalize (st);
+  //LOGI("fer_event_json: Statement finalized.");
+
+  // 6. RELEASE LOCK
+  pthread_mutex_unlock(&db_mutex);
+  //LOGI("fer_event_json: Mutex released. Function complete.");
 }
 
 
@@ -599,6 +660,7 @@ int
 universe_init (void)
 {
   sqlite3 *handle = db_get_handle ();	/* <-- accessor */
+
   sqlite3_stmt *stmt;
 
   const char *sql = "SELECT COUNT(*) FROM sectors;";
@@ -2289,9 +2351,9 @@ nav_next_hop (int start, int goal)
    Otherwise keep these INFO_LOGs for visibility and add event writes later. */
 
 static void
-fer_emit_move (int id, int from_sec, int to_sec)
+fer_emit_move ( int id, int from_sec, int to_sec)
 {
-  fer_event_json ("npc.move", to_sec,
+  fer_event_json (g_fer_db, "npc.move", to_sec,
 		  "{ \"kind\":\"ferringhi\", \"id\":%d, \"from\":%d, \"to\":%d }",
 		  id, from_sec, to_sec);
 }
@@ -2303,34 +2365,53 @@ h_get_port_commodity_quantity(int port_id, const char *commodity)
 {
     sqlite3 *db = db_get_handle();
     sqlite3_stmt *stmt = NULL; // Explicitly initialized to NULL
-    int quantity = -1;
+    int quantity = 0;
+    const char *column_name = NULL;
 
-    // 1. Acquire Mutex Lock (Recursive lock works here)
-    pthread_mutex_lock(&db_mutex); 
-    
-    const char *sql = "SELECT quantity FROM port_commodities WHERE port_id = ? AND commodity = ?;";
-
-    // If preparation fails, the lock MUST be released before returning
-    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
-        // log_error("SQL error in h_get_port_commodity_quantity: %s", sqlite3_errmsg(db));
-        
-        // CRITICAL: Unlock before returning on error
-        pthread_mutex_unlock(&db_mutex); 
-        return -1;
+    // 1. Determine the correct stock column name based on the commodity string
+    // NOTE: Commodities with no corresponding 'product_' column (like 'fuel' in your schema) 
+    // will correctly default to 0 stock.
+    if (strcmp(commodity, "ore") == 0) {
+        column_name = "product_ore";
+    } else if (strcmp(commodity, "organics") == 0) {
+        column_name = "product_organics";
+    } else if (strcmp(commodity, "equipment") == 0) {
+        column_name = "product_equipment";
     }
 
-    sqlite3_bind_int(stmt, 1, port_id);
-    sqlite3_bind_text(stmt, 2, commodity, -1, SQLITE_STATIC);
+    if (column_name == NULL) {
+        // This is not a true error, just an unimplemented stock type or a temporary commodity
+        LOGW("h_get_port_commodity_quantity: Commodity %s has no matching stock column in 'ports'. Returning 0.", commodity);
+        return 0; 
+    }
 
-    if (sqlite3_step(stmt) == SQLITE_ROW) {
-        // Success: Found the quantity
-        quantity = sqlite3_column_int(stmt, 0);
-    } 
-    // Note: If sqlite3_step returns anything else (SQLITE_DONE, SQLITE_ERROR, etc.), 
-    // quantity remains -1, which is the desired error/not-found result.
-    // The previous version had an explicit else block, but it is not strictly necessary here.
+// 2. Build the dynamic SQL query
+    char sql_query[256];
+    // We use snprintf to safely construct the query string with the correct column name
+    snprintf(sql_query, sizeof(sql_query), 
+             "SELECT %s FROM ports WHERE id = ?;", column_name);
 
-    sqlite3_finalize(stmt);
+    
+    // 1. Acquire Mutex Lock (Recursive lock works here)
+    pthread_mutex_lock(&db_mutex); 
+
+
+if (sqlite3_prepare_v2(db, sql_query, -1, &stmt, NULL) == SQLITE_OK) 
+    {
+        sqlite3_bind_int(stmt, 1, port_id);
+
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            // Success: Row found, read the quantity
+            quantity = sqlite3_column_int(stmt, 0);
+        }
+        // If sqlite3_step returns SQLITE_DONE (no port found), quantity remains 0.
+        
+        sqlite3_finalize(stmt);
+    } else {
+        // A true SQL error (e.g., failed to prepare, meaning bad SQL syntax or bad DB handle)
+        LOGE("DB Error in h_get_port_commodity_quantity: %s (SQL: %s)", sqlite3_errmsg(db), sql_query);
+        quantity = -1; // Return -1 only on a true DB error
+    }
     
     // 2. Release Mutex Lock
     pthread_mutex_unlock(&db_mutex); 
@@ -2340,164 +2421,141 @@ h_get_port_commodity_quantity(int port_id, const char *commodity)
 
 /* --- Trade Log Emitter Implementation --- */
 
+
+/* --- Trade Log Emitter Implementation --- */
 static void
 fer_emit_trade_log(int port_id, int sector_id,
                    const char *sold, int sold_qty,
                    const char *bought, int bought_qty)
 {
-    sqlite3 *db = db_get_handle();
+    // Local variables are reset for each potential transaction block
     sqlite3_stmt *stmt = NULL;
     int rc;
-    double price = 0.0;
-    char *action = "temp";
-    int qty = 0;
-    char *commodity = "holding string";
-    
+
     // =========================================================
     // 1. Acquire Mutex Lock (Must be RECURSIVE for nested calls)
     // =========================================================
-    pthread_mutex_lock(&db_mutex); 
+    pthread_mutex_lock(&db_mutex);
 
-    if (sold_qty != 0)
-      {
-    action = "sell";
-    commodity = sold;
-    /////////////////////////////////////////////////////////////////
-     int sold_port_qty = h_get_port_commodity_quantity(port_id, sold);
-
-    if (sold_port_qty >= 0) {
-      price = h_calculate_trade_price(port_id, sold, sold_port_qty);
-    }
-    qty = sold_port_qty;
-      }
-    if (bought_qty != 0)
-      {
-    action="buy";
-    commodity = bought;
-    int bought_port_qty = h_get_port_commodity_quantity(port_id, bought);
-    if (bought_port_qty >= 0) {
-      price = h_calculate_trade_price(port_id, bought, bought_port_qty);
-    } 
-    qty = bought_port_qty;
-      }
     
-    // --- 3. Insert into trade_log ---
-    const char *sql_insert = 
+    // --- Template SQL for reuse ---
+    const char *sql_insert =
         "INSERT INTO trade_log (timestamp, sector_id, player_id, commodity, units, price_per_unit, action, port_id) "
         "VALUES (strftime('%s','now'), ?, 0, ?, ?, ?, ?, ?);";
-    
-    if (sqlite3_prepare_v2(db, sql_insert, -1, &stmt, NULL) != SQLITE_OK) {
-      LOGE("SQL Prep Error (trade_log): %s", sqlite3_errmsg(db));
-      // CRITICAL: Unlock before returning on error
-      pthread_mutex_unlock(&db_mutex); 
-      return;
+
+
+    // =========================================================
+    // A. LOG THE SELL ACTION (If any quantity was sold)
+    // =========================================================
+    if (sold_qty != 0)
+    {
+      const char *action = "sell";
+      const char *commodity = sold;
+      double price = 0.0;
+        
+      // 1. Set QTY to the trade amount
+      int qty = (sold_qty != 0) ? sold_qty : 20; 
+
+      int sold_port_qty = h_get_port_commodity_quantity(port_id, sold);
+      LOGI("sold_port_qty = %d", sold_port_qty);
+      
+      // CRITICAL FIX: If lookup failed (returned -1), treat it as 0 stock.
+      if (sold_port_qty < 0) {
+        sold_port_qty = 0;
+      }
+
+      // 2. Price calculation is now guaranteed to run with a non-negative quantity
+      // Price calculation MUST use sold_port_qty (the stock), not the trade qty
+      price = h_calculate_trade_price(port_id, sold, sold_port_qty);
+      
+      // --- 3. Insert into trade_log for the SELL ---
+      if (sqlite3_prepare_v2(g_fer_db, sql_insert, -1, &stmt, NULL) == SQLITE_OK) 
+        {
+      sqlite3_bind_int(stmt, 1, sector_id);
+      sqlite3_bind_text(stmt, 2, commodity, -1, SQLITE_STATIC);
+      sqlite3_bind_int(stmt, 3, qty); 
+      sqlite3_bind_double(stmt, 4, price);
+      sqlite3_bind_text(stmt, 5, action, -1, SQLITE_STATIC);
+      sqlite3_bind_int(stmt, 6, port_id);
+
+      rc = sqlite3_step(stmt);
+      if (rc != SQLITE_DONE) {
+        LOGE("SQL Exec Error (trade_log, SELL): %s", sqlite3_errmsg(g_fer_db));
+      } else {
+        // Log the event only if the DB step was successful
+        fer_event_json (g_fer_db, "npc.trade", sector_id,
+                "{ \"kind\":\"ferringhi\", \"id\":%d, \"port_id\":%d, \"sector\":%d, "
+                "\"sold\":\"%s\", \"qty\":%d, \"price\":%.2f, \"action\":\"%s\" }",
+                NPC_TRADE_PLAYER_ID, port_id, sector_id, sold, qty, price, action);
+      }
+      sqlite3_finalize(stmt);
+      stmt = NULL; // Reset statement pointer
+        } else {
+      LOGE("SQL Prep Error (trade_log, SELL): %s", sqlite3_errmsg(g_fer_db));
+        }
     }
 
-    // Bind parameters
-    sqlite3_bind_int(stmt, 1, sector_id);
-    sqlite3_bind_text(stmt, 2, commodity, -1, SQLITE_STATIC); 
-    sqlite3_bind_int(stmt, 3, qty);                          
-    sqlite3_bind_double(stmt, 4, price);                      
-    sqlite3_bind_text(stmt, 5, action, -1, SQLITE_STATIC);    
-    sqlite3_bind_int(stmt, 6, port_id);                      
-    
-    rc = sqlite3_step(stmt);
-    if (rc != SQLITE_DONE)
-      {
-      LOGE("SQL Exec Error (trade_log): %s", sqlite3_errmsg(db));
-      LOGE("Commodity: %s", sold);
-      LOGE("Quantity: %d",qty);
-      LOGE("Price: %f",price); // Changed %d to %f for double price
-      LOGE("Action: %s", action);
-      LOGE("Port: %d", port_id);
-      LOGE("Sector: %d", sector_id);
+
+    // =========================================================
+    // B. LOG THE BUY ACTION (If any quantity was bought)
+    // =========================================================
+    if (bought_qty != 0)
+    {
+      const char *action = "buy";
+      const char *commodity = bought;
+      double price = 0.0;
+        
+      // 1. Set QTY to the trade amount
+      int qty = (bought_qty != 0) ? bought_qty : 20; 
+
+      int bought_port_qty = h_get_port_commodity_quantity(port_id, bought);
+      LOGI("bought_port_qty = %d", bought_port_qty);
+      
+      // CRITICAL FIX: If lookup failed (returned -1), treat it as 0 stock.
+      if (bought_port_qty < 0) {
+        bought_port_qty = 0;
+      }
+
+      // 2. Price calculation is now guaranteed to run with a non-negative quantity
+      // Price calculation MUST use bought_port_qty (the stock), not the trade qty
+      price = h_calculate_trade_price(port_id, bought, bought_port_qty);
+
+
+      // --- 3. Insert into trade_log for the BUY ---
+      if (sqlite3_prepare_v2(g_fer_db, sql_insert, -1, &stmt, NULL) == SQLITE_OK) 
+        {
+      sqlite3_bind_int(stmt, 1, sector_id);
+      sqlite3_bind_text(stmt, 2, commodity, -1, SQLITE_STATIC);
+      sqlite3_bind_int(stmt, 3, qty); // Use bought_qty here
+      sqlite3_bind_double(stmt, 4, price);
+      sqlite3_bind_text(stmt, 5, action, -1, SQLITE_STATIC);
+      sqlite3_bind_int(stmt, 6, port_id);
+
+      rc = sqlite3_step(stmt);
+      if (rc != SQLITE_DONE) {
+        LOGE("SQL Exec Error (trade_log, BUY): %s", sqlite3_errmsg(g_fer_db));
+      } else {
+        // Log the event only if the DB step was successful
+        fer_event_json (g_fer_db, "npc.trade", sector_id,
+                "{ \"kind\":\"ferringhi\", \"id\":%d, \"port_id\":%d, \"sector\":%d, "
+                "\"sold\":\"%s\", \"qty\":%d, \"price\":%.2f, \"action\":\"%s\" }",
+                NPC_TRADE_PLAYER_ID, port_id, sector_id, bought, qty, price, action);
+      }
+      sqlite3_finalize(stmt);
+        } else {
+      LOGE("SQL Prep Error (trade_log, BUY): %s", sqlite3_errmsg(g_fer_db));
+        }
     }
 
-    sqlite3_finalize(stmt);
-    
+
     // =========================================================
     // 4. Release Mutex Lock
     // =========================================================
-    pthread_mutex_unlock(&db_mutex); 
+    pthread_mutex_unlock(&db_mutex);
 
-    // This part does not access the DB, so it remains outside the lock.
-    fer_event_json ("npc.trade", sector_id, 
-        "{ \"kind\":\"ferringhi\", \"id\":%d, \"port_id\":%d, \"sector\":%d, "
-        "\"sold\":\"%s\", \"qty\":%d, \"price\":%.2f, "
-        "\"action\":\"%s\" }",
-        port_id, sector_id, sold, qty, price, action);
-
-    LOGI("Exit fer_emit_trade_log"); 
+    //LOGI("Exit fer_emit_trade_log");
 }
 
-//////////////////////////////////////////////////////////////////////////////////
-
-/* ---------- Trader core ---------- */
-
-static void
-fer_reset_holds (fer_trader_t *t)
-{
-  t->hold_fuel = FER_MAX_HOLD / 2;
-  t->hold_ore = FER_MAX_HOLD / 2;
-  t->hold_organics = FER_MAX_HOLD / 2;
-  t->hold_equipment = FER_MAX_HOLD / 2;
-}
-
-static void
-fer_trade_at_port (fer_trader_t *t, int sector)
-{
-  if (!t)
-    return;
-  int r = (t->trades_done % 4);
-  const char *sold = NULL, *bought = NULL;
-  int *ps = NULL, *pb = NULL;
-
-  switch (r)
-    {
-    case 0:
-      sold = "fuel";
-      ps = &t->hold_fuel;
-      bought = "ore";
-      pb = &t->hold_ore;
-      break;
-    case 1:
-      sold = "ore";
-      ps = &t->hold_ore;
-      bought = "organics";
-      pb = &t->hold_organics;
-      break;
-    case 2:
-      sold = "organics";
-      ps = &t->hold_organics;
-      bought = "equipment";
-      pb = &t->hold_equipment;
-      break;
-    default:
-      sold = "equipment";
-      ps = &t->hold_equipment;
-      bought = "fuel";
-      pb = &t->hold_fuel;
-      break;
-    }
-
-  int sell_qty = (*ps > 10) ? 10 : *ps;
-  int buy_qty = 10;
-  if ((*pb + buy_qty) > FER_MAX_HOLD)
-    buy_qty = FER_MAX_HOLD - *pb;
-  if (buy_qty < 0)
-    buy_qty = 0;
-
-  *ps -= sell_qty;
-  *pb += buy_qty;
-  // Realistically I need to update the trade history table rather than the engine
-  // even for NPC trading in order to keep the float changing. 
-  fer_emit_trade_log (t->id, sector, sold, sell_qty, bought, buy_qty);
-
-
-  t->trades_done++;
-  if (t->trades_done >= FER_TRADES_BEFORE_RETURN)
-    t->state = FER_STATE_RETURNING;
-}
 
 
 void
@@ -2510,6 +2568,7 @@ fer_attach_db (sqlite3 *db)
 int
 fer_init_once (void)
 {
+  
   if (g_fer_inited)
     return 1;
   if (!g_fer_db)
@@ -2560,9 +2619,10 @@ fer_init_once (void)
       g_fer[i].hold_fuel = g_fer[i].hold_ore =
 	g_fer[i].hold_organics = g_fer[i].hold_equipment = FER_MAX_HOLD / 2;
     }
+  
 
   /* boot marker so you can query immediately */
-  fer_event_json ("npc.online", 0,
+  fer_event_json (g_fer_db, "npc.online", 0,
 		  "{ \"kind\":\"ferringhi\", \"count\": %d }",
 		  FER_TRADER_COUNT);
 
@@ -2625,7 +2685,15 @@ fer_tick (int64_t now_ms)
       /* trade only when actually on a port sector */
       if (sector_has_port (t->sector))
 	{
-	  /* simple rotating swap, unchanged from your previous function */
+
+	  int current_sector = t->sector; // Sector the NPC is in
+	  int port_id = db_get_port_id_by_sector(current_sector);
+	  if (port_id < 0) {
+	    LOGW("NPC in sector %d has no valid port_id. Skipping trade log.", current_sector);
+	    return;
+	  }
+
+	  /* simple rotating swap, unchanged from  previous function */
 	  int r = (t->trades_done % 4);
 	  const char *sold = NULL, *bought = NULL;
 	  int *ps = NULL, *pb = NULL;
