@@ -1,3 +1,4 @@
+#include <jansson.h>
 #include <sqlite3.h>
 #include <stdio.h>
 #include <string.h>
@@ -30,6 +31,11 @@
 #define NEWS_EXPIRATION_SECONDS 604800L
 #define MAX_ARTICLE_LEN 512
 
+// New prototype for the event logging helper
+int h_log_fedspace_event (sqlite3 *db, int64_t ts, const char *type, 
+                          int actor_id, int target_id, int ship_id, 
+                          int sector_id, const char *reason);
+
 
 static inline uint64_t
 monotonic_millis (void)
@@ -40,15 +46,15 @@ monotonic_millis (void)
 }
 
 
-// Pre-define reasons for logging purposes
-enum
-{
-  REASON_EVIL_ALIGN = 1,
-  REASON_EXCESS_FIGHTERS = 2,
-  REASON_HIGH_EXP = 3,
-  REASON_NO_OWNER = 4,
-  REASON_OVERCROWDING = 5
-};
+/* // Pre-define reasons for logging purposes */
+/* enum */
+/* { */
+/*   REASON_EVIL_ALIGN = 1, */
+/*   REASON_EXCESS_FIGHTERS = 2, */
+/*   REASON_HIGH_EXP = 3, */
+/*   REASON_NO_OWNER = 4, */
+/*   REASON_OVERCROWDING = 5 */
+/* }; */
 
 enum
 { MAX_TOWS_PER_PASS = 50,
@@ -249,6 +255,9 @@ tow_ship (sqlite3 *db, int ship_id, int new_sector_id, int admin_id,
     ("TOW: Ship %d (Owner %d) towed from sector %d to sector %d. Reason: %s (Code %d). Admin: %d.",
      ship_id, owner_id, old_sector_id, new_sector_id, reason_str, reason_code,
      admin_id);
+  int64_t current_time_s = (int64_t)time(NULL);
+  h_log_fedspace_event(db, current_time_s, "fedspace:tow", admin_id, owner_id, 
+		       ship_id, old_sector_id, reason_str); 
 
   return SQLITE_OK;
 }
@@ -951,6 +960,76 @@ get_asset_name (int type)
     }
 }
 
+
+/*
+ * Helper to log a FedSpace action (tow or asset clear) to engine_events.
+ * * NOTE: Assumes db_mutex is already held by the caller (h_fedspace_cleanup).
+ */
+int
+h_log_fedspace_event (sqlite3 *db, int64_t ts, const char *type, 
+                      int actor_id, int target_id, int ship_id, 
+                      int sector_id, const char *reason)
+{
+    int rc = SQLITE_ERROR;
+    json_t *payload = NULL;
+    char *payload_str = NULL;
+    sqlite3_stmt *stmt = NULL;
+
+    // --- 1. Build JSON Payload ---
+    payload = json_object ();
+
+    if (!payload) {
+        LOGE ("h_log_fedspace_event: Failed to create JSON object.");
+        return rc;
+    }
+
+    // Add reason/context to the payload
+    json_object_set_new (payload, "reason", json_string(reason));
+    
+    // Dump the JSON to a string
+    payload_str = json_dumps (payload, JSON_COMPACT);
+    if (!payload_str) {
+        LOGE ("h_log_fedspace_event: Failed to dump JSON to string.");
+        goto cleanup;
+    }
+
+    // --- 2. Prepare SQL statement ---
+    const char *sql_insert = 
+        "INSERT INTO engine_events (ts, type, payload, actor_player_id, sector_id) "
+        "VALUES (?1, ?2, ?3, ?4, ?5);";
+
+    rc = sqlite3_prepare_v2 (db, sql_insert, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE ("h_log_fedspace_event SQL prepare failed: %s", sqlite3_errmsg(db));
+        goto cleanup;
+    }
+
+    // --- 3. Bind values ---
+    sqlite3_bind_int64 (stmt, 1, ts);
+    sqlite3_bind_text  (stmt, 2, type, -1, SQLITE_STATIC);
+    sqlite3_bind_text  (stmt, 3, payload_str, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int   (stmt, 4, actor_id);
+    sqlite3_bind_int   (stmt, 5, sector_id);
+
+
+    // --- 4. Execute and Finalize ---
+    if (sqlite3_step (stmt) != SQLITE_DONE) {
+        LOGE ("h_log_fedspace_event SQL execute failed: %s", sqlite3_errmsg(db));
+        rc = SQLITE_ERROR; // Ensure error is returned
+    } else {
+        rc = SQLITE_OK;
+    }
+
+cleanup:
+
+    sqlite3_finalize (stmt);
+    json_decref (payload);
+    free (payload_str); // Free the string created by json_dumps
+
+    return rc;
+}
+
+
   // 1. Check anyone who has been in fedspace for more than an hour.
   // 2. Check for Evil alignment who are in that list and tow them
   // 3. Check for ships which have more than 50 fighters in that list and tow them
@@ -1033,6 +1112,9 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
 	      h_send_message_to_player (player_id, fedadmin,
 					"WARNING: MSL Violation", message);
 
+	      h_log_fedspace_event(db, now_s, "fedspace:asset_cleared", fedadmin, player_id, 
+                     0, sector_id, "MSL_VIOLATION"); 
+	      
 	      sqlite3_reset (delete_stmt);
 	      sqlite3_bind_int (delete_stmt, 1, player_id);
 	      sqlite3_bind_int (delete_stmt, 2, asset_type);
@@ -1176,6 +1258,7 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
 	  int ship_id = sqlite3_column_int (select_stmt, 0);
 	  tow_ship (db, ship_id, get_random_sector (db), fedadmin,
 		    REASON_EVIL_ALIGN);
+	  
 	  if (delete_stmt)
 	    {
 	      sqlite3_bind_int (delete_stmt, 1, ship_id);
@@ -1203,6 +1286,7 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
 	  int ship_id = sqlite3_column_int (select_stmt, 0);
 	  tow_ship (db, ship_id, get_random_sector (db), fedadmin,
 		    REASON_EXCESS_FIGHTERS);
+
 	  if (delete_stmt)
 	    {
 	      sqlite3_bind_int (delete_stmt, 1, ship_id);
@@ -1228,6 +1312,7 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
 	  int ship_id = sqlite3_column_int (select_stmt, 0);
 	  tow_ship (db, ship_id, get_random_sector (db), fedadmin,
 		    REASON_HIGH_EXP);
+
 	  if (delete_stmt)
 	    {
 	      sqlite3_bind_int (delete_stmt, 1, ship_id);
@@ -1255,6 +1340,7 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
 	  int ship_id = sqlite3_column_int (select_stmt, 0);
 	  tow_ship (db, ship_id, CONFISCATION_SECTOR, fedadmin,
 		    REASON_NO_OWNER);
+
 	  if (delete_stmt)
 	    {
 	      sqlite3_bind_int (delete_stmt, 1, ship_id);
@@ -1389,7 +1475,7 @@ h_daily_turn_reset (sqlite3 *db, int64_t now_s)
 
   // 1. Reset all player's available turns to the daily maximum.
   rc = sqlite3_exec (db,
-		     "UPDATE players SET turns = (SELECT turnsperday FROM config WHERE id=1);",
+		     "UPDATE turns SET turns_remaining = (SELECT turnsperday FROM config WHERE id=1);",
 		     NULL, NULL, NULL);
 
   if (rc != SQLITE_OK)

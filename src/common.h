@@ -203,6 +203,7 @@ typedef struct
 void now_iso8601 (char out[25]);	/* "YYYY-MM-DDTHH:MM:SSZ" */
 /* Remove ANSI escape sequences from src into dst (cap bytes incl NUL). */
 void strip_ansi (char *dst, const char *src, size_t cap);
+const char * get_tow_reason_string (int reason_code);
 
 
 #endif // COMMON.H

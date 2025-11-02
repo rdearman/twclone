@@ -23,6 +23,7 @@ extern "C"
   int cmd_ship_jettison (client_ctx_t * ctx, json_t * root);
   int cmd_ship_upgrade (client_ctx_t * ctx, json_t * root);
   int cmd_ship_repair (client_ctx_t * ctx, json_t * root);
+  int cmd_ship_self_destruct (client_ctx_t *ctx, json_t *root);
 
 
 

@@ -1674,7 +1674,7 @@ h_calculate_trade_price(int port_id, const char *commodity, int quantity)
         }
         sqlite3_finalize(stmt);
         stmt = NULL;
-        LOGI("BASE PRICE: %f", base_price); // Changed %d to %f for double
+        //LOGI("BASE PRICE: %f", base_price); // Changed %d to %f for double
     } else {
         LOGE("DB Error in h_calculate_trade_price (base price lookup): %s", sqlite3_errmsg(db_handle));
         pthread_mutex_unlock(&db_mutex);

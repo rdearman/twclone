@@ -123,6 +123,13 @@
 #define ERR_SECTOR_OVERCROWDED 	3001
 #define ERR_FORBIDDEN_IN_SECTOR   3002
 
+/* 4000 - fedspace towing */
+#define REASON_EVIL_ALIGN	4000
+#define REASON_EXCESS_FIGHTERS	4001
+#define REASON_HIGH_EXP		4002
+#define REASON_NO_OWNER		4003
+#define REASON_OVERCROWDING	4004
+
 
 /* 9000+ — Vendor/private extensions available */
 

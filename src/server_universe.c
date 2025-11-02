@@ -318,7 +318,7 @@ fer_event_json (sqlite3 *db, const char *type, int sector_id, const char *fmt, .
   vsnprintf (payload, sizeof payload, fmt, ap);
   va_end (ap);
   
-  LOGI("fer_event_json: Payload formatted: %s", payload);
+  // LOGI("fer_event_json: Payload formatted: %s", payload);
 
   // 1. ACQUIRE LOCK (This should now correctly recurse)
   //LOGI("fer_event_json: Attempting to acquire db_mutex.");
@@ -2371,7 +2371,7 @@ h_get_port_commodity_quantity(int port_id, const char *commodity)
     // 1. Determine the correct stock column name based on the commodity string
     // NOTE: Commodities with no corresponding 'product_' column (like 'fuel' in your schema) 
     // will correctly default to 0 stock.
-    if (strcmp(commodity, "ore") == 0) {
+    if (strcmp(commodity, "ore") == 0 || strcmp(commodity, "fuel") == 0) {
         column_name = "product_ore";
     } else if (strcmp(commodity, "organics") == 0) {
         column_name = "product_organics";
@@ -2457,7 +2457,7 @@ fer_emit_trade_log(int port_id, int sector_id,
       int qty = (sold_qty != 0) ? sold_qty : 20; 
 
       int sold_port_qty = h_get_port_commodity_quantity(port_id, sold);
-      LOGI("sold_port_qty = %d", sold_port_qty);
+      //LOGI("sold_port_qty = %d", sold_port_qty);
       
       // CRITICAL FIX: If lookup failed (returned -1), treat it as 0 stock.
       if (sold_port_qty < 0) {
@@ -2509,7 +2509,7 @@ fer_emit_trade_log(int port_id, int sector_id,
       int qty = (bought_qty != 0) ? bought_qty : 20; 
 
       int bought_port_qty = h_get_port_commodity_quantity(port_id, bought);
-      LOGI("bought_port_qty = %d", bought_port_qty);
+      // LOGI("bought_port_qty = %d", bought_port_qty);
       
       // CRITICAL FIX: If lookup failed (returned -1), treat it as 0 stock.
       if (bought_port_qty < 0) {

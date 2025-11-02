@@ -357,7 +357,7 @@ cmd_ship_self_destruct (client_ctx_t *ctx, json_t *root)
   json_object_set_new (evt, "confirmation_value", json_integer (confirmation));
   
   /* h_log_engine_event will consume the reference of 'evt' */
-  (void) h_log_engine_event ("ship.self_destruct.initiated",
+  (void) db_log_engine_event ("ship.self_destruct.initiated",
                              ctx->player_id, ctx->sector_id, evt, NULL);
 
   /* 4. Response: command acknowledged and processed */
