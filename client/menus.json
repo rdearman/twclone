@@ -300,7 +300,12 @@
           "action": {
             "back": true
           }
-        }
+        },
+	  {
+	      "key": "n",
+	      "label": "(N) Density Scan (sector.scan.density)",
+	      "action": { "pycall": "sector_density_scan_flow" }
+	  }
       ]
     },
     "DOCK": {

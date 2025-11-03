@@ -262,6 +262,46 @@ class Context:
 # Flags & helpers
 # ---------------------------
 
+@register("sector_density_scan_flow")
+def sector_density_scan_flow(ctx: Context):
+    """
+    Density-only scan that is resilient:
+    - Sends sector_id (if known)
+    - Tries sector.scan.density; falls back to move.scan.density
+    - Prints table for [sid, density, ...] or single dict shape
+    """
+    sector_id = ctx.current_sector_id
+    payload = {"sector_id": sector_id} if sector_id is not None else {}
+    try:
+        resp = ctx.conn.rpc("sector.scan.density", payload)
+    except Exception:
+        resp = ctx.conn.rpc("move.scan.density", payload)
+    ctx.state["last_rpc"] = resp
+
+    print("\n=== Density Scan ===")
+    data = resp.get("data") if isinstance(resp, dict) else None
+
+    # Case A: {"sector_id": X, "density": Y}
+    if isinstance(data, dict) and "density" in data:
+        sid = data.get("sector_id", sector_id)
+        dens = data.get("density")
+        print(f"Sector: {sid}")
+        print(f"Density: {dens if dens is not None else '(unknown)'}")
+
+    # Case B: [sid, density, sid, density, ...]
+    elif isinstance(data, list) and all(isinstance(x, int) for x in data):
+        pairs = list(zip(data[0::2], data[1::2]))
+        print("Sector   Density")
+        print("----------------")
+        for sid, dens in pairs:
+            print(f"{sid:>6}   {dens:>7}")
+    else:
+        print("(unexpected response shape)")
+
+    print("\n--- Raw ---")
+    call_handler("print_last_rpc", ctx)
+
+
 @register("pathfind_flow")
 def pathfind_flow(ctx: Context):
     """Ask for a target, call move.pathfind, print the route, and optionally follow it."""
@@ -2068,3 +2108,40 @@ def filter_menu_options_with_ctx(ctx, options: list) -> list:
             out.append(opt)
     return out
 # --- END AUTO-ADDED MENU_SHIMS ---
+
+
+@register("sector_density_scan_flow")
+def sector_density_scan_flow(ctx: Context):
+    """
+    Density-only scan: calls sector.scan.density (fallback to move.scan.density).
+    Supports both dict payload and flat [sector_id, density, ...] arrays.
+    """
+    sector_id = ctx.current_sector_id
+    payload = {"sector_id": sector_id} if sector_id is not None else {}
+    try:
+        resp = ctx.conn.rpc("sector.scan.density", payload)
+    except Exception:
+        resp = ctx.conn.rpc("move.scan.density", payload)
+    ctx.state["last_rpc"] = resp
+
+    print("\n=== Density Scan ===")
+    data = resp.get("data") if isinstance(resp, dict) else None
+
+    # Case A
+    if isinstance(data, dict) and "density" in data:
+        sid = data.get("sector_id", sector_id)
+        dens = data.get("density")
+        print(f"Sector: {sid}")
+        print(f"Density: {dens if dens is not None else '(unknown)'}")
+    # Case B
+    elif isinstance(data, list) and all(isinstance(x, int) for x in data):
+        pairs = list(zip(data[0::2], data[1::2]))
+        print("Sector   Density")
+        print("----------------")
+        for sid, dens in pairs:
+            print(f"{sid:>6}   {dens:>7}")
+    else:
+        print("(unexpected response shape)")
+
+    print("\n--- Raw ---")
+    call_handler("print_last_rpc", ctx)

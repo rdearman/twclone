@@ -19,10 +19,13 @@
 /* Define and initialize the mutex for the database handle */
 // pthread_mutex_t db_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t db_mutex;
+
+
 // Helper flag to ensure initialization runs only once
 static bool db_mutex_initialized = false;
 
 static sqlite3 *db_handle = NULL;
+extern sqlite3 *g_db;
 
 /* Forward declaration so we can call it before the definition */
 static json_t *parse_neighbors_csv (const unsigned char *txt);
@@ -995,17 +998,43 @@ const char *create_table_sql[] = {
 /* ===================== OPS DASHBOARDS ===================== */
 
 /* 16) Sector ops (depends on sector_summary, sector_ports, sector_planets, ships_by_sector) */
-  "CREATE VIEW IF NOT EXISTS sector_ops AS\n"
-    "SELECT ss.sector_id,\n"
-    "       ss.outdeg, ss.indeg,\n"
-    "       sp.port_count,\n"
-    "       spp.planet_count,\n"
-    "       sbs.ship_count\n"
-    "FROM sector_summary ss\n"
-    "LEFT JOIN sector_ports    sp  ON sp.sector_id  = ss.sector_id\n"
-    "LEFT JOIN sector_planets  spp ON spp.sector_id = ss.sector_id\n"
-    "LEFT JOIN ships_by_sector sbs ON sbs.sector_id = ss.sector_id;",
+" CREATE VIEW IF NOT EXISTS sector_ops AS  "
+"  WITH weighted_assets AS (  "
+"     SELECT  "
+"         sector AS sector_id,  "
+"         COALESCE(SUM(  "
+"             quantity * CASE asset_type  "
+"                 WHEN 1 THEN 10  "
+"                 WHEN 2 THEN 5  "
+"                 WHEN 3 THEN 1  "
+"                 WHEN 4 THEN 10  "
+"                 ELSE 0  "
+"             END  "
+"         ), 0) AS asset_score  "
+"     FROM sector_assets  "
+"     GROUP BY sector  "
+"  )  "
+"  SELECT  "
+"     ss.sector_id,  "
+"     ss.outdeg,  "
+"     ss.indeg,  "
+"     sp.port_count,  "
+"     spp.planet_count,  "
+"     sbs.ship_count,  "
+"     (  "
+"         (COALESCE(spp.planet_count, 0) * 500)  "
+"       + (COALESCE(sp.port_count, 0) * 100)  "
+"       + (COALESCE(sbs.ship_count, 0) * 40)  "
+"       + (COALESCE(wa.asset_score, 0))  "
+"     ) AS total_density_score,  "
+"     wa.asset_score AS weighted_asset_score  "
+"  FROM sector_summary ss  "
+"  LEFT JOIN sector_ports    sp  ON sp.sector_id  = ss.sector_id  "
+"  LEFT JOIN sector_planets  spp ON spp.sector_id = ss.sector_id  "
+"  LEFT JOIN ships_by_sector sbs ON sbs.sector_id = ss.sector_id  "
+"  LEFT JOIN weighted_assets wa ON wa.sector_id = ss.sector_id;  ",
 
+  
 /* 17) World summary (one row) */
   "CREATE VIEW IF NOT EXISTS world_summary AS\n"
     "WITH a AS (SELECT COUNT(*) AS sectors FROM sectors),\n"
@@ -5930,7 +5959,6 @@ db_notice_mark_seen (int notice_id, int player_id)
   return (rc == SQLITE_DONE) ? 0 : -1;
 }
 
-extern sqlite3 *g_db;		/* already present elsewhere in your codebase */
 
 int
 db_player_name (int64_t player_id, char **out)
@@ -6147,4 +6175,126 @@ done:
     sqlite3_finalize(stmt);
     pthread_mutex_unlock(&db_mutex); // Critical section ends
     return port_id;
+}
+
+
+int
+db_get_ship_sector_id (sqlite3 *db, int ship_id)
+{
+    sqlite3_stmt *st = NULL;
+    int rc; // For SQLite's intermediate return codes.
+    int out_sector = 0;
+
+    // 1. Acquire the lock at the very beginning of the function.
+    pthread_mutex_lock (&db_mutex);
+
+    const char *sql = "SELECT location FROM ships WHERE id=?";
+
+    // 2. Prepare the statement. Use the passed 'db' handle.
+    rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK)
+    {
+        // Log error if preparation fails
+      LOGE( "Failed to prepare SQL statement for ship sector ID.");
+        goto cleanup;
+    }
+
+    sqlite3_bind_int (st, 1, ship_id);
+    
+    // 3. Step the statement.
+    rc = sqlite3_step (st);
+
+    if (rc == SQLITE_ROW)
+    {
+        // Data found: safely read the column, treating NULL as 0
+        out_sector = sqlite3_column_type (st, 0) == SQLITE_NULL ? 0 : sqlite3_column_int (st, 0);
+    }
+    else if (rc != SQLITE_DONE)
+    {
+        // Handle step errors (not SQLITE_ROW and not SQLITE_DONE)
+        LOGE("Error stepping SQL statement for ship sector ID.");
+        // out_sector remains 0
+    }
+    // If rc == SQLITE_DONE, the ship was not found, and out_sector remains 0, which is correct.
+
+cleanup:
+    // 4. Finalize the statement. This must be done whether the function succeeded or failed.
+    if (st)
+    {
+        sqlite3_finalize (st);
+    }
+
+    // 5. Release the lock. This is the final step before returning.
+    pthread_mutex_unlock (&db_mutex);
+
+    // 6. Return the result. 0 on error or not found, >0 on success.
+    return out_sector;
+}
+
+
+int
+db_fighters_at_sector_json (int sector_id, json_t **out_array)
+{
+  /*** for my reference */
+  /* typedef enum */
+  /* { */
+  /*   ASSET_MINE = 1, */
+  /*   ASSET_FIGHTER = 2, */
+  /*   ASSET_BEACON = 3, */
+  /*   ASSET_LIMPET_MINE = 4 */
+  /* } asset_type_t; */
+
+/*   sqlite> .schema sector_assets */
+/* CREATE TABLE sector_assets (
+   id INTEGER PRIMARY KEY,
+   sector INTEGER NOT NULL REFERENCES sectors(id),
+   player INTEGER REFERENCES players(id),
+   corporation INTEGER NOT NULL DEFAULT 0,
+   asset_type INTEGER NOT NULL,
+   offensive_setting INTEGER DEFAULT 0,
+   quantity INTEGER,
+   ttl INTEGER,
+   deployed_at INTEGER NOT NULL  ); */
+
+
+		 
+  // 1. SELECT quantity, player, corporation in sector_assets WHERE asset_type=ASSET_FIGHTER
+  // 2. if the corporation is not zero, then return the corporation as the owner not the player
+  // 3. if corporation=0 then return player as owner.
+  // 4. build the json with owner and quantity
+  
+}
+
+int
+db_mines_at_sector_json (int sector_id, json_t **out_array)
+{
+  /*** for my reference */
+  /* typedef enum */
+  /* { */
+  /*   ASSET_MINE = 1, */
+  /*   ASSET_FIGHTER = 2, */
+  /*   ASSET_BEACON = 3, */
+  /*   ASSET_LIMPET_MINE = 4 */
+  /* } asset_type_t; */
+
+/*   sqlite> .schema sector_assets */
+/* CREATE TABLE sector_assets (
+   id INTEGER PRIMARY KEY,
+   sector INTEGER NOT NULL REFERENCES sectors(id),
+   player INTEGER REFERENCES players(id),
+   corporation INTEGER NOT NULL DEFAULT 0,
+   asset_type INTEGER NOT NULL,
+   offensive_setting INTEGER DEFAULT 0,
+   quantity INTEGER,
+   ttl INTEGER,
+   deployed_at INTEGER NOT NULL  ); */
+
+  // 1. SELECT quantity, player, corporation in sector_assets WHERE asset_type in (ASSET_MINE, ASSET_LIMPET_MINE)
+  // 2. if the corporation is not zero, then return the corporation as the owner not the player
+  // 3. if corporation=0 then return player as owner.
+  // -- potential issue to be resolved later. The player may have a limpet mine attached to the ship. BUT
+  // -- because I haven't yet implemented limpet attachment, we'll just put a note in here for the moment
+  // -- and just return the number in the sector. 
+  // 4. build the json with owner and quantity and the two different types of mines. 
+  
 }

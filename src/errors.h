@@ -24,7 +24,9 @@
 #define ERR_NOT_FOUND	         1112
 #define ERR_DB			 1113
 #define ERR_OOM			 1114
-#define ERR_DB_QUERY_FAILED	 111
+#define ERR_DB_QUERY_FAILED	 1115
+#define ERROR_INTERNAL		 1116
+
 
 /* 1200 — Auth / Player */
 #define ERR_NOT_AUTHENTICATED    1200	/* "auth required" */

@@ -29,6 +29,21 @@
 #include <netinet/in.h>
 #include <string.h>
 
+
+typedef struct {
+  int fd;                                
+  volatile sig_atomic_t *running;        
+  struct sockaddr_in peer;               
+  uint64_t cid;                          
+  int player_id;                         
+  int sector_id;                         
+  /* --- rate limit hints --- */         
+  time_t rl_window_start;               
+  int rl_count;                          
+  int rl_limit;                          
+  int rl_window_sec;                     
+} client_ctx_t;
+
 // A simple structure to represent the result of the comsume player turn function
 typedef enum
 {
@@ -183,21 +198,6 @@ ship_clr_flag (int flags, int mask)
 }
 
 
-typedef struct
-{
-  int fd;
-  volatile sig_atomic_t *running;
-  struct sockaddr_in peer;
-  uint64_t cid;
-  int player_id;
-  int sector_id;
-
-  /* --- rate limit hints --- */
-  time_t rl_window_start;	/* epoch sec when current window began */
-  int rl_count;			/* responses sent in this window */
-  int rl_limit;			/* max responses per window */
-  int rl_window_sec;		/* window length in seconds */
-} client_ctx_t;
 
 
 void now_iso8601 (char out[25]);	/* "YYYY-MM-DDTHH:MM:SSZ" */

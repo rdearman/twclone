@@ -27,9 +27,7 @@
 #include "server_log.h"
 
 
-
-// extern pthread_mutex_t db_mutex;
-
+#define SECTOR_LIST_BUF_SIZE 256 
 
 /* cache DB so fer_tick signature matches ISS style */
 extern sqlite3 *g_db;		/* <- global DB handle used elsewhere (ISS) */
@@ -654,6 +652,396 @@ cmd_move_autopilot_status (client_ctx_t *ctx, json_t *root)
 {
   STUB_NIY (ctx, root, "move.autopilot.status");
 }
+
+////////////////////////////////////////////////////////////////
+// "sector.scan"
+/* void cmd_sector_scan (client_ctx_t *ctx, json_t *root) */
+/* { */
+/*   STUB_NIY (ctx, root, "scan.sector");   */
+/* } */
+
+
+json_t *
+build_sector_scan_json (int sector_id, int player_id, bool holo_scanner_active)
+{
+    sqlite3 *db = db_get_handle ();
+    json_t *root = json_object ();
+    if (!root)
+        return NULL;
+
+    /* Basic sector info (id/name) */
+    json_t *basic = NULL;
+    if (db_sector_basic_json (sector_id, &basic) == SQLITE_OK && basic)
+    {
+        json_object_set_new (root, "sector_id", json_integer (sector_id));
+        json_object_set_new (root, "name", json_object_get (basic, "name"));
+        json_decref (basic);
+    }
+    else
+    {
+        json_object_set_new (root, "sector_id", json_integer (sector_id));
+    }
+
+    /* Adjacent warps */
+    json_t *adj = NULL;
+    if (db_adjacent_sectors_json (sector_id, &adj) == SQLITE_OK && adj)
+    {
+        json_object_set_new (root, "adjacent", adj);
+        json_object_set_new (root, "adjacent_count",
+                            json_integer ((int) json_array_size (adj)));
+    }
+    else
+    {
+        json_object_set_new (root, "adjacent", json_array ());
+        json_object_set_new (root, "adjacent_count", json_integer (0));
+    }
+
+    /* Ships (Filtered by Holo-Scanner) */
+    json_t *ships = NULL;
+    int rc = db_ships_at_sector_json (player_id, sector_id, &ships);
+    if (rc == SQLITE_OK)
+    {
+        json_object_set_new (root, "ships", ships ? ships : json_array ());
+        json_object_set_new (root, "ships_count",
+                            json_integer ((int) json_array_size (ships)));
+    }
+    else
+    {
+        json_object_set_new (root, "ships", json_array ());
+        json_object_set_new (root, "ships_count", json_integer (0));
+    }
+    json_object_set_new(root, "holo_scanner_active", holo_scanner_active ? json_true() : json_false());
+
+
+    /* Ports */
+    json_t *ports = NULL;
+    if (db_ports_at_sector_json (sector_id, &ports) == SQLITE_OK && ports)
+    {
+        json_object_set_new (root, "ports", ports);
+        json_object_set_new (root, "has_port",
+                            json_array_size (ports) > 0 ? json_true () : json_false ());
+    }
+    else
+    {
+        json_object_set_new (root, "ports", json_array ());
+        json_object_set_new (root, "has_port", json_false ());
+    }
+
+    /* Planets */
+    json_t *planets = NULL;
+    if (db_planets_at_sector_json (sector_id, &planets) == SQLITE_OK && planets)
+    {
+        json_object_set_new (root, "planets", planets);
+        json_object_set_new (root, "has_planet",
+                            json_array_size (planets) > 0 ? json_true () : json_false ());
+        json_object_set_new (root, "planets_count",
+                            json_integer ((int) json_array_size (planets)));
+    }
+    else
+    {
+        json_object_set_new (root, "planets", json_array ());
+        json_object_set_new (root, "has_planet", json_false ());
+        json_object_set_new (root, "planets_count", json_integer (0));
+    }
+
+    /* Players (excluding those only visible by cloaked ships already filtered above) */
+    json_t *players = NULL;
+    if (db_players_at_sector_json (sector_id, &players) == SQLITE_OK && players)
+    {
+        json_object_set_new (root, "players", players);
+        json_object_set_new (root, "players_count",
+                            json_integer ((int) json_array_size (players)));
+    }
+    else
+    {
+        json_object_set_new (root, "players", json_array ());
+        json_object_set_new (root, "players_count", json_integer (0));
+    }
+    
+    /* Fighters */
+    json_t *fighters = NULL;
+    if (db_fighters_at_sector_json (sector_id, &fighters) == SQLITE_OK && fighters)
+    {
+        json_object_set_new (root, "fighters", fighters);
+        json_object_set_new (root, "fighters_count",
+                            json_integer ((int) json_array_size (fighters)));
+    }
+    else
+    {
+        json_object_set_new (root, "fighters", json_array ());
+        json_object_set_new (root, "fighters_count", json_integer (0));
+    }
+
+    /* Mines */
+    json_t *mines = NULL;
+    if (db_mines_at_sector_json (sector_id, &mines) == SQLITE_OK && mines)
+    {
+        json_object_set_new (root, "mines", mines);
+        json_object_set_new (root, "mines_count",
+                            json_integer ((int) json_array_size (mines)));
+    }
+    else
+    {
+        json_object_set_new (root, "mines", json_array ());
+        json_object_set_new (root, "mines_count", json_integer (0));
+    }
+
+    /* Beacons */
+    json_t *beacons = NULL;
+    if (db_beacons_at_sector_json (sector_id, &beacons) == SQLITE_OK && beacons)
+    {
+        json_object_set_new (root, "beacons", beacons);
+        json_object_set_new (root, "beacons_count",
+                            json_integer ((int) json_array_size (beacons)));
+    }
+    else
+    {
+        json_object_set_new (root, "beacons", json_array ());
+        json_object_set_new (root, "beacons_count", json_integer (0));
+    }
+    
+    // You can attach other asset counts here if needed, similar to attach_sector_asset_counts(db, sector_id, root);
+
+    return root;
+}
+
+
+// ====================================================================
+// --- PRIMARY COMMAND HANDLER: cmd_sector_scan (Replaces Mock) ---
+
+/**
+ * @brief Executes a detailed tactical scan of the current sector.
+ * * Implements the "sector.scan" command.
+ * * @param ctx The client context containing player, ship, and database info.
+ * @param root The root JSON request object.
+ */
+void 
+cmd_sector_scan (client_ctx_t *ctx, json_t *root)
+{
+    sqlite3 *db = db_get_handle ();
+    int player_id = ctx->player_id;
+    int ship_id = h_get_active_ship_id (db, player_id);
+    int sector_id;
+    bool holo_scanner_active = false;
+
+    // 1. Basic Checks
+    if (ship_id <= 0) {
+        send_enveloped_error (ctx->fd, root, 1501, 
+                              "You must be in a ship to perform a sector scan.");
+        return;
+    }
+    
+    // 2. Get Sector ID
+    sector_id = db_get_ship_sector_id(db, ship_id);
+    if (sector_id <= 0) {
+        send_enveloped_error (ctx->fd, root, 1502, 
+                              "Could not determine your current sector.");
+        return;
+    }
+    
+    // 3. Holo-Scanner Capability Check
+    // --- Holo-Scanner Check Placeholder ---
+    // The db_ship_has_holo_scanner() stub currently returns false.
+    // Uncomment the line below once the DB function is properly implemented
+    // to query the 'ships' table for the holo_scanner flag.
+    // holo_scanner_active = db_ship_has_holo_scanner(db, ship_id);
+    // --- End Placeholder ---
+    
+    // 4. Build JSON Payload
+    json_t *payload = build_sector_scan_json (sector_id, player_id, holo_scanner_active);
+    if (!payload)
+    {
+        send_enveloped_error (ctx->fd, root, 1503,
+                              "Out of memory building sector scan info");
+        return;
+    }
+
+    // 5. Send Response
+    send_enveloped_ok (ctx->fd, root, "sector.scan", payload);
+    json_decref (payload);
+}
+
+////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////
+
+// "sector.scan.density"
+
+
+// "sector.scan.density"
+void cmd_sector_scan_density (void *ctx_in, json_t *root)
+{
+    // FIX: Use the correct structure name provided by the user (client_ctx_t)
+    client_ctx_t *ctx = (client_ctx_t *)ctx_in; 
+    
+    // --- START: INITIALIZATION LOGIC ---
+    // Determine the target sector_id from context or request data
+    int msector = ctx->sector_id > 0 ? ctx->sector_id : 0;                              
+    json_t *jdata = json_object_get (root, "data");                                     
+    json_t *jsec =                                                                  
+        json_is_object (jdata) ? json_object_get (jdata, "sector_id") : NULL;           
+    if (json_is_integer (jsec))                                                         
+        msector = (int) json_integer_value (jsec);                                      
+    if (msector <= 0)                                                                   
+        msector = 1;
+    // --- END: INITIALIZATION LOGIC ---
+    
+    sqlite3 *db = db_get_handle();  
+
+    h_decloak_ship (db,
+             h_get_active_ship_id (db, ctx->player_id));
+
+    TurnConsumeResult tc = h_consume_player_turn (db, ctx, "move.warp");
+    if (tc != TURN_CONSUME_SUCCESS)
+    {
+        return handle_turn_consumption_error (ctx, tc, "sector.scan.density", root, NULL);
+    }
+
+    
+    const char *sql_adj = 
+        "SELECT to_sector FROM sector_warps WHERE from_sector = ?1 ORDER BY to_sector";
+    
+    const char *sql_density_template = 
+        "SELECT sector_id, total_density_score FROM sector_ops WHERE sector_id IN (%s) "
+        "ORDER BY (sector_id = %d) DESC, sector_id ASC;";
+
+    sqlite3_stmt *st = NULL;
+    sqlite3_stmt *st2 = NULL;
+    char *sql_formatted = NULL;
+    json_t *payload = NULL; 
+    int rc = SQLITE_ERROR;
+    
+    // Array to hold the current sector + adjacent sectors
+    // Assuming MAX_WARPS_PER_SECTOR and SECTOR_LIST_BUF_SIZE are defined
+    int adjacent[MAX_WARPS_PER_SECTOR + 1] = {0}; 
+    int count = 0;
+
+    pthread_mutex_lock (&db_mutex);
+    
+    // --- 1. Get Current and Adjacent Sectors ---
+    
+    adjacent[count++] = msector; // Add the current sector ID first
+
+    rc = sqlite3_prepare_v2 (db, sql_adj, -1, &st, NULL);
+    if (rc != SQLITE_OK)
+    {
+        // Preparation failed, rc is the error code
+        goto done;
+    }
+
+    sqlite3_bind_int (st, 1, msector);
+
+    while ((rc = sqlite3_step (st)) == SQLITE_ROW && count < (MAX_WARPS_PER_SECTOR + 1))
+    {
+        adjacent[count++] = sqlite3_column_int (st, 0);
+    }
+    
+    // CHECKPOINT: Check if the loop terminated due to an error other than SQLITE_DONE.
+    if (rc != SQLITE_DONE) 
+    {
+        // An error occurred during sqlite3_step (rc is the error code)
+        goto done; 
+    }
+    // Set rc back to OK since we successfully retrieved the list (even if the list was empty)
+    rc = SQLITE_OK;
+    
+    // st is now finalized in the 'done' block, we no longer need to finalize it here.
+    // sqlite3_finalize (st);
+    // st = NULL;
+
+    // --- 2. Build Comma-Separated Sector List (list) ---
+    char list[SECTOR_LIST_BUF_SIZE] = "";
+    int current_len = 0;
+    
+    for (int a = 0; a < count; a++)
+    {
+        int appended_len = snprintf(list + current_len, 
+                                    SECTOR_LIST_BUF_SIZE - current_len, 
+                                    "%d,", 
+                                    adjacent[a]); 
+
+        if (appended_len > 0 && current_len + appended_len < SECTOR_LIST_BUF_SIZE)
+        {
+            current_len += appended_len;
+        } else {
+            rc = ERROR_INTERNAL; // Buffer overflow
+            goto done;
+        }
+    }
+
+    // Remove the trailing comma
+    if (current_len > 0) {
+        list[current_len - 1] = '\0';
+    } else {
+        // This should only happen if the sector list is empty, which shouldn't be possible
+        // as msector is always added, but we handle it just in case.
+        if (count == 0) {
+             rc = SQLITE_OK; // No warps, no density to show, but no critical error
+        } else {
+             rc = ERROR_INTERNAL; 
+        }
+        goto done;
+    }
+
+    // --- 3. Prepare and Execute Density Query (FIXED) ---
+    
+    // Dynamically generate the SQL string using sqlite3_mprintf
+    sql_formatted = sqlite3_mprintf(sql_density_template, list, msector);
+    if (!sql_formatted) {
+        rc = SQLITE_NOMEM;
+        goto done;
+    }
+    
+    rc = sqlite3_prepare_v2 (db, sql_formatted, -1, &st2, NULL);
+    // Free the result of sqlite3_mprintf immediately after use
+    sqlite3_free(sql_formatted); 
+    
+    if (rc != SQLITE_OK)
+        goto done;
+
+    // --- 4. Process Results and Build JSON Payload ---
+    payload = json_array ();
+    while ((rc = sqlite3_step (st2)) == SQLITE_ROW)
+    {
+        int sector_id = sqlite3_column_int (st2, 0);
+        int density = sqlite3_column_int (st2, 1);
+        
+        // Append sector ID and density score pair
+        json_array_append_new (payload, json_integer (sector_id));
+        json_array_append_new (payload, json_integer (density));
+    }
+    
+    if (rc == SQLITE_DONE)
+    {
+        // --- FINAL USER-REQUESTED RESPONSE LOGIC ---
+        send_enveloped_ok (ctx->fd, root, "sector.density.scan", payload);
+        json_decref (payload);
+        // --- FINAL USER-REQUESTED RESPONSE LOGIC ---
+        rc = SQLITE_OK;
+    }
+    else
+    {
+        // An error occurred in the last sqlite3_step of st2
+        json_decref (payload);
+        // rc already holds the error code
+    }
+
+done:
+    // Finalize all statements and unlock mutex
+    // *MUST* finalize st and st2 if they were successfully prepared (st != NULL)
+    if (st)
+        sqlite3_finalize (st);
+    if (st2)
+        sqlite3_finalize (st2);
+        
+    pthread_mutex_unlock (&db_mutex);
+
+    // Handle errors if the final RC is not OK
+    if (rc != SQLITE_OK && rc != SQLITE_DONE) {
+        // Assuming ERR_DB and send_enveloped_error are defined
+        send_enveloped_error(ctx->fd, root, ERR_DB, sqlite3_errstr(rc));
+    }
+}
+
 
 
 int
@@ -2749,3 +3137,5 @@ fer_tick (int64_t now_ms)
 	}
     }
 }
+
+

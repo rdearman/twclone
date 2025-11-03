@@ -288,8 +288,18 @@
   "command": { "command": "move.warp",
     "data": { "to_sector_id": "@adj", "idempotency_key": "00000000-0000-0000-0000-0000TURNWARP00" } },
   "expect": { "status": "refused", "type": "error", "error": { "code": 1307 } }
+},
+{
+  "name": "sector.info shows fighters & mines",
+  "tags": ["sector","entities"],
+  "command": { "command": "sector.info" },
+  "expect": { "status": "ok", "type": "sector.info" },
+  "asserts": [
+    { "path": "data.entities.fighters", "op": ">=", "value": 0 },
+    { "path": "data.entities.mines.armid", "op": ">=", "value": 0 },
+    { "path": "data.entities.mines.limpet", "op": ">=", "value": 0 }
+  ]
 }
-
 
 
 ]

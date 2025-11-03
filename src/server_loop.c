@@ -871,6 +871,14 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       rc = cmd_sector_set_beacon (ctx, root);	/* NIY or real */
     }
+  else if (!strcmp (c, "sector.scan.density"))
+    {
+      rc = cmd_sector_scan_density (ctx, root);	/* NIY stub */
+    }
+  else if (!strcmp (c, "sector.scan"))
+    {
+      rc = cmd_sector_scan (ctx, root);	/* NIY stub */
+    }
 
 /* ---------- PLANETS / CITADEL ---------- */
   else if (!strcmp (c, "planet.genesis"))

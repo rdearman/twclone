@@ -1064,7 +1064,7 @@ int uncloak_ships_in_fedspace(sqlite3 *db) {
         "    OR location IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10) "
         "  );";
 
-    printf("Executing SQL query...\n");
+    //printf("Executing SQL query...\n");
 
     rc = sqlite3_exec(db, sql, ship_callback, &cloaked_ship_count, &err_msg);
 
@@ -1074,7 +1074,7 @@ int uncloak_ships_in_fedspace(sqlite3 *db) {
         return -1;
     } 
 
-    printf("Query finished. Total cloaked ships found: %d\n", cloaked_ship_count);
+    // printf("Query finished. Total cloaked ships found: %d\n", cloaked_ship_count);
     return cloaked_ship_count;
 }
 
@@ -1125,8 +1125,10 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
       LOGI ("fedspace_cleanup: Lock acquired, starting cleanup operations.");
     }
 
+  // Uncloak people in fedspace before towing. Also it will waste one cloaking device
+  // for anyone stupid enough to cloak in fedspace. lol
   int uncloak = uncloak_ships_in_fedspace(db);
-  
+
   // --- STEP 1: Ensure MSL table is populated ---
   if (populate_msl_if_empty (db) != 0)
     {
