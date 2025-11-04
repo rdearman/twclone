@@ -17,6 +17,7 @@
 #include "s2s_transport.h"
 #include "common.h"		/* now_iso8601, strip_ansi */
 
+int toss;
 
 /* Recursively strip ANSI from all JSON strings in 'node'. */
 static void
@@ -445,7 +446,7 @@ send_enveloped_ok (int fd, json_t *req, const char *type, json_t *data)
 
   // write one line
   char *s = json_dumps (resp, JSON_COMPACT);
-  int toss;
+  // int toss;
   if (s)
     {
       size_t len = strlen (s);
@@ -492,7 +493,7 @@ send_enveloped_error (int fd, json_t *req, int code, const char *message)
   // ✨ sanitize all strings (strip ANSI) before sending
   sanitize_json_strings (resp);
 
-  int toss;
+  //  int toss;
   char *s = json_dumps (resp, JSON_COMPACT);
   if (s)
     {
@@ -543,7 +544,7 @@ send_enveloped_refused (int fd, json_t *req, int code, const char *msg,
   // ✨ sanitize all strings (strip ANSI) before sending
   sanitize_json_strings (resp);
 
-  int toss;
+
   char *s = json_dumps (resp, JSON_COMPACT);
   if (s)
     {

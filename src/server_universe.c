@@ -610,7 +610,7 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
     }
 
   sqlite3_finalize (st);
-  free (q);
+  // free (q);
 
   // Pagination: if we fetched more than 'limit', expose a next cursor (offset+limit)
   json_t *jdata = json_object ();

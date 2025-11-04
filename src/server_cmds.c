@@ -137,7 +137,7 @@ user_create (const char *player_name, const char *password,
       return AUTH_ERR_DB;
     }
 
-  sqlite3_bind_text (st, 1, player_name, -1, SQLITE_TRANSIENT);
+ sqlite3_bind_text (st, 1, player_name, -1, SQLITE_TRANSIENT);
   sqlite3_bind_text (st, 2, password, -1, SQLITE_TRANSIENT);
 
   rc = sqlite3_step (st);
@@ -152,6 +152,43 @@ user_create (const char *player_name, const char *password,
 
   if (out_player_id)
     *out_player_id = (int) sqlite3_last_insert_rowid (db);
+
+  int player_id = (int) sqlite3_last_insert_rowid (db);
+
+  // Corrected code with INSERT...SELECT on turns
+  const char *ins_turns =
+    "INSERT INTO turns (player, turns_remaining, last_update) "
+    "SELECT ?1, turnsperday, strftime('%s', 'now') FROM config WHERE id = 1;";
+
+  rc = sqlite3_prepare_v2(db, ins_turns, -1, &st, NULL);
+
+  if (rc == SQLITE_OK) {
+    // ?1 is the player ID
+    sqlite3_bind_int(st, 1, player_id); 
+    sqlite3_step(st);
+    sqlite3_finalize(st);
+  }
+
+
+  // Create ship
+  const char *ins_ship = "INSERT INTO ships (name, type_id, location) VALUES ('new ship', 1, 1);";
+  rc = sqlite3_prepare_v2(db, ins_ship, -1, &st, NULL);
+  if (rc == SQLITE_OK) {
+    sqlite3_step(st);
+    sqlite3_finalize(st);
+  }
+
+  int ship_id = (int) sqlite3_last_insert_rowid(db);
+
+  // Update player's ship
+  const char *upd_player = "UPDATE players SET ship = ?1 WHERE id = ?2;";
+  rc = sqlite3_prepare_v2(db, upd_player, -1, &st, NULL);
+  if (rc == SQLITE_OK) {
+    sqlite3_bind_int(st, 1, ship_id);
+    sqlite3_bind_int(st, 2, player_id);
+    sqlite3_step(st);
+    sqlite3_finalize(st);
+  }
 
   pthread_mutex_unlock (&db_mutex);
 

@@ -43,7 +43,7 @@ static const char *SQL_INSERT_WARP =
 static const char *SQL_INSERT_USED_SECTOR =
   "INSERT INTO used_sectors(used) VALUES(?)";
 
-static int get_out_degree (sqlite3 * db, int sector);
+// static int get_out_degree (sqlite3 * db, int sector);
 static int insert_warp_unique (sqlite3 * db, int from, int to);
 static int create_random_warps (sqlite3 * db, int numSectors, int maxWarps);
 int create_imperial (void);	// Declared here for the compiler
@@ -555,6 +555,11 @@ create_sectors (void)
     return -1;
 
   int sector_count = get_sector_count ();
+  if (sector_count > 100)
+    {
+      fprintf(stderr, "Sectors already exist!");
+      return 1;
+    }
 
   struct twconfig *cfg = config_load ();
 
@@ -938,43 +943,43 @@ count_edges ()
   return count;
 }
 
-/* Reusable helper: insert A->B and B->A using the same prepared stmt. */
-static int
-insert_bidirectional (sqlite3 *db, sqlite3_stmt *ins, int a, int b)
-{
-  int rc;
+/* /\* Reusable helper: insert A->B and B->A using the same prepared stmt. *\/ */
+/* static int */
+/* insert_bidirectional (sqlite3 *db, sqlite3_stmt *ins, int a, int b) */
+/* { */
+/*   int rc; */
 
-  if (a == b)
-    return SQLITE_OK;		/* ignore self-edge safely */
+/*   if (a == b) */
+/*     return SQLITE_OK;		/\* ignore self-edge safely *\/ */
 
-  /* A -> B */
-  sqlite3_bind_int (ins, 1, a);
-  sqlite3_bind_int (ins, 2, b);
-  rc = sqlite3_step (ins);
-  if (rc != SQLITE_DONE)
-    {
-      fprintf (stderr, "BIGBANG: INSERT %d->%d failed: %s\n", a, b,
-	       sqlite3_errmsg (db));
-      return rc;
-    }
-  sqlite3_reset (ins);
-  sqlite3_clear_bindings (ins);
+/*   /\* A -> B *\/ */
+/*   sqlite3_bind_int (ins, 1, a); */
+/*   sqlite3_bind_int (ins, 2, b); */
+/*   rc = sqlite3_step (ins); */
+/*   if (rc != SQLITE_DONE) */
+/*     { */
+/*       fprintf (stderr, "BIGBANG: INSERT %d->%d failed: %s\n", a, b, */
+/* 	       sqlite3_errmsg (db)); */
+/*       return rc; */
+/*     } */
+/*   sqlite3_reset (ins); */
+/*   sqlite3_clear_bindings (ins); */
 
-  /* B -> A */
-  sqlite3_bind_int (ins, 1, b);
-  sqlite3_bind_int (ins, 2, a);
-  rc = sqlite3_step (ins);
-  if (rc != SQLITE_DONE)
-    {
-      fprintf (stderr, "BIGBANG: INSERT %d->%d failed: %s\n", b, a,
-	       sqlite3_errmsg (db));
-      return rc;
-    }
-  sqlite3_reset (ins);
-  sqlite3_clear_bindings (ins);
+/*   /\* B -> A *\/ */
+/*   sqlite3_bind_int (ins, 1, b); */
+/*   sqlite3_bind_int (ins, 2, a); */
+/*   rc = sqlite3_step (ins); */
+/*   if (rc != SQLITE_DONE) */
+/*     { */
+/*       fprintf (stderr, "BIGBANG: INSERT %d->%d failed: %s\n", b, a, */
+/* 	       sqlite3_errmsg (db)); */
+/*       return rc; */
+/*     } */
+/*   sqlite3_reset (ins); */
+/*   sqlite3_clear_bindings (ins); */
 
-  return SQLITE_OK;
-}
+/*   return SQLITE_OK; */
+/* } */
 
 
 // Helper function to count connections for a given sector
@@ -1156,28 +1161,28 @@ get_purchasable_shiptype_id_by_name (sqlite3 *db, const char *name)
   return id;
 }
 
-/* Returns the number of existing warps from a sector. Returns -1 on error. */
-static int
-get_out_degree (sqlite3 *db, int sector)
-{
-  const char *q = "SELECT COUNT(*) FROM sector_warps WHERE from_sector=?;";
-  sqlite3_stmt *st = NULL;
+/* /\* Returns the number of existing warps from a sector. Returns -1 on error. *\/ */
+/* static int */
+/* get_out_degree (sqlite3 *db, int sector) */
+/* { */
+/*   const char *q = "SELECT COUNT(*) FROM sector_warps WHERE from_sector=?;"; */
+/*   sqlite3_stmt *st = NULL; */
 
-  if (sqlite3_prepare_v2 (db, q, -1, &st, NULL) != SQLITE_OK)
-    {
-      fprintf (stderr, "get_out_degree prepare failed: %s\n",
-	       sqlite3_errmsg (db));
-      return -1;
-    }
-  sqlite3_bind_int (st, 1, sector);
-  int deg = -1;
-  if (sqlite3_step (st) == SQLITE_ROW)
-    {
-      deg = sqlite3_column_int (st, 0);
-    }
-  sqlite3_finalize (st);
-  return deg;
-}
+/*   if (sqlite3_prepare_v2 (db, q, -1, &st, NULL) != SQLITE_OK) */
+/*     { */
+/*       fprintf (stderr, "get_out_degree prepare failed: %s\n", */
+/* 	       sqlite3_errmsg (db)); */
+/*       return -1; */
+/*     } */
+/*   sqlite3_bind_int (st, 1, sector); */
+/*   int deg = -1; */
+/*   if (sqlite3_step (st) == SQLITE_ROW) */
+/*     { */
+/*       deg = sqlite3_column_int (st, 0); */
+/*     } */
+/*   sqlite3_finalize (st); */
+/*   return deg; */
+/* } */
 
 
 
@@ -1989,36 +1994,36 @@ prepare_first_ok (sqlite3 *db, sqlite3_stmt **stmt,
   return SQLITE_ERROR;
 }
 
-/* Check if a sector exists */
-static int
-sector_exists (sqlite3 *db, int sector_id)
-{
-  static sqlite3_stmt *st = NULL;
-  int rc;
+/* /\* Check if a sector exists *\/ */
+/* static int */
+/* sector_exists (sqlite3 *db, int sector_id) */
+/* { */
+/*   static sqlite3_stmt *st = NULL; */
+/*   int rc; */
 
-  if (!st)
-    {
-      rc =
-	sqlite3_prepare_v2 (db,
-			    "SELECT 1 FROM sectors WHERE id = ?1 LIMIT 1;",
-			    -1, &st, NULL);
-      if (rc != SQLITE_OK)
-	return 0;
-    }
-  sqlite3_reset (st);
-  sqlite3_clear_bindings (st);
-  sqlite3_bind_int (st, 1, sector_id);
+/*   if (!st) */
+/*     { */
+/*       rc = */
+/* 	sqlite3_prepare_v2 (db, */
+/* 			    "SELECT 1 FROM sectors WHERE id = ?1 LIMIT 1;", */
+/* 			    -1, &st, NULL); */
+/*       if (rc != SQLITE_OK) */
+/* 	return 0; */
+/*     } */
+/*   sqlite3_reset (st); */
+/*   sqlite3_clear_bindings (st); */
+/*   sqlite3_bind_int (st, 1, sector_id); */
 
-  rc = sqlite3_step (st);
-  return (rc == SQLITE_ROW);
-}
+/*   rc = sqlite3_step (st); */
+/*   return (rc == SQLITE_ROW); */
+/* } */
 
-/* random int in [lo, hi] inclusive */
-static int
-rand_incl (int lo, int hi)
-{
-  return lo + (int) (rand () % (hi - lo + 1));
-}
+/* /\* random int in [lo, hi] inclusive *\/ */
+/* static int */
+/* rand_incl (int lo, int hi) */
+/* { */
+/*   return lo + (int) (rand () % (hi - lo + 1)); */
+/* } */
 
 
 
@@ -2088,7 +2093,8 @@ ensure_fedspace_exit (sqlite3 *db, int outer_min, int outer_max,
       sqlite3_bind_int (st_ins, 2, to);
       int rc1 = sqlite3_step (st_ins);
       sqlite3_reset (st_ins);
-
+      if (rc1 ) {} //stop the compiler complaining
+      
       /* Optional return edge (keeps it safe from one-way pruning) */
       if (add_return_edge)
 	{

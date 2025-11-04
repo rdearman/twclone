@@ -1,305 +1,1091 @@
-[
-  {
-    "name": "session.hello",
-    "tags": ["session","smoke"],
-    "command": { "command": "session.hello", "data": { "client": "tw-testpack", "version": "1.0" } },
-    "expect": { "status": "ok", "type": "*" }
-  },
-  {
-    "name": "session.ping",
-    "tags": ["session","smoke"],
-    "command": { "command": "session.ping", "data": { "nonce": "abc123" } },
-    "expect": { "status": "ok", "type": "*" }
-  },
-
-  {
-    "name": "system.schema_list",
-    "tags": ["system","schema"],
-    "command": { "command": "system.schema_list" },
-    "expect": { "status": "ok", "type": "*" }
-  },
-  {
-    "name": "system.describe_schema (prompt namespace)",
-    "tags": ["system","schema"],
-    "command": { "command": "system.describe_schema", "data": { "namespace": "<prompt:string:namespace e.g. trade>" } },
-    "expect": { "status": "*" }
-  },
-  {
-    "name": "system.capabilities",
-    "tags": ["system","smoke"],
-    "command": { "command": "system.capabilities" },
-    "expect": { "status": "ok", "type": "*" }
-  },
-  {
-    "name": "system.cmd_list",
-    "tags": ["system","discover"],
-    "command": { "command": "system.cmd_list" },
-    "expect": { "status": "ok", "type": "*" }
-  },
-
-  {
-    "name": "auth.register newguy (ok or already exists)",
-    "tags": ["auth"],
-    "command": { "command": "auth.register", "data": { "user_name": "newguy", "password": "pass123" } },
-    "expect": { "status": "*" }
-  },
-  {
-    "name": "auth.login newguy",
-    "tags": ["auth"],
-    "command": { "command": "auth.login", "data": { "user_name": "newguy", "password": "pass123" } },
-    "expect": { "status": "ok", "type": "*" }
-  },
-
-  {
-    "name": "players.me",
-    "tags": ["players","smoke"],
-    "command": { "command": "players.me" },
-     "expect": { "status": "error", "type": "error", "error": { "code": 1400 } }
-  },
-    {
-	"name": "player.my_info (current impl alias)",
-	"tags": ["player","smoke","impl"],
-	"command": { "command": "player.my_info" },
-	"expect": { "status": "ok", "type": "*" }
-    },
-
-  {
-    "name": "players.online",
-    "tags": ["players","info"],
-      "command": { "command": "players.online" },
-     "expect": { "status": "error", "type": "error", "error": { "code": 1400 } }      
-  },
-  {
-    "name": "players.refresh",
-    "tags": ["players","state"],
-    "command": { "command": "players.refresh" },
-    "expect": { "status": "*" }
-  },
-  {
-    "name": "ship.info",
-    "tags": ["ship","info"],
-      "command": { "command": "ship.info" },
-      "expect": { "status": "*" }
-  },
-
-  {
-    "name": "sector.info (describe current sector)",
-    "tags": ["sector","smoke"],
-    "command": { "command": "sector.info" },
-    "expect": { "status": "ok", "type": "*" }
-  },
-  {
-    "name": "sector.set_beacon (set)",
-    "tags": ["sector","write"],
-    "command": { "command": "sector.set_beacon", "data": { "text": "The TEST WORLD -- Do Not Dump!", "idempotency_key": "00000000-0000-0000-0000-00000000C001" } },
-    "expect": { "status": "*" }
-  },
-  {
-    "name": "sector.set_beacon (clear)",
-    "tags": ["sector","write"],
-    "command": { "command": "sector.set_beacon", "data": { "text": "", "idempotency_key": "00000000-0000-0000-0000-00000000C002" } },
-    "expect": { "status": "*" }
-  },
-
-  {
-    "name": "move.warp (prompt)",
-    "tags": ["move","nav","write"],
-    "command": { "command": "move.warp", "data": { "to_sector_id": "<prompt:int:Sector ID>", "idempotency_key": "00000000-0000-0000-0000-00000000D001" } },
-    "expect": { "status": "*" }
-  },
 {
-  "name": "move.scan",
-  "tags": ["move","nav","smoke"],
-  "command": { "command": "move.scan" },
-  "expect": { "status": "*" }
-},
-
-    {
-    "name": "move.pathfind (prompt)",
-    "tags": ["move","nav","path"],
-    "command": { "command": "move.pathfind", "data": { "from": "<ctx:state.sector_id?>", "to": "<prompt:int:Target sector>", "max_cost": 999 } },
-    "expect": { "status": "*" }
-  },
-  {
-    "name": "move.force_move (admin) (prompt)",
-    "tags": ["move","admin","write"],
-    "command": { "command": "move.force_move", "data": { "player_id": "<prompt:int:Player ID>", "sector_id": "<prompt:int:Sector ID>", "idempotency_key": "00000000-0000-0000-0000-00000000D002" } },
-    "expect": { "status": "*" }
-  },
-
-  {
-    "name": "trade.port_info (prompt)",
-    "tags": ["trade","info"],
-    "command": { "command": "trade.port_info", "data": { "port_id": "<prompt:int:Port ID>" } },
-    "expect": { "status": "*" }
-  },
-  {
-    "name": "trade.buy (prompt)",
-    "tags": ["trade","write"],
-    "command": { "command": "trade.buy", "data": { "port_id": "<prompt:int:Port ID>", "commodity": "ore", "quantity": 1, "max_price": "9999.00", "idempotency_key": "00000000-0000-0000-0000-00000000E001" } },
-    "expect": { "status": "*" }
-  },
-  {
-    "name": "trade.sell (prompt)",
-    "tags": ["trade","write"],
-    "command": { "command": "trade.sell", "data": { "port_id": "<prompt:int:Port ID>", "commodity": "ore", "quantity": 1, "min_price": "0.01", "idempotency_key": "00000000-0000-0000-0000-00000000E002" } },
-    "expect": { "status": "*" }
-  },
-  {
-    "name": "trade.quote (prompt) (optional)",
-    "tags": ["trade","info"],
-    "command": { "command": "trade.quote", "data": { "port_id": "<prompt:int:Port ID>", "action": "buy", "commodity": "ore", "quantity": 1 } },
-    "expect": { "status": "*" }
-  },
-  {
-    "name": "trade.offer (prompt)",
-    "tags": ["trade","offers","write"],
-    "command": { "command": "trade.offer", "data": { "to_player_id": "<prompt:int:Player ID>", "items": [ { "type": "credits", "amount": 100 } ], "expires_in": 600, "idempotency_key": "00000000-0000-0000-0000-00000000E003" } },
-    "expect": { "status": "*" }
-  },
-  {
-    "name": "trade.accept (prompt)",
-    "tags": ["trade","offers","write"],
-    "command": { "command": "trade.accept", "data": { "offer_id": "<prompt:int:Offer ID>", "idempotency_key": "00000000-0000-0000-0000-00000000E004" } },
-    "expect": { "status": "*" }
-  },
-  {
-    "name": "trade.cancel (prompt)",
-    "tags": ["trade","offers","write"],
-    "command": { "command": "trade.cancel", "data": { "offer_id": "<prompt:int:Offer ID>", "idempotency_key": "00000000-0000-0000-0000-00000000E005" } },
-    "expect": { "status": "*" }
-  },
-  {
-    "name": "trade.history",
-    "tags": ["trade","info"],
-    "command": { "command": "trade.history", "data": { "limit": 20 } },
-    "expect": { "status": "*" }
-  },
-  {
-    "name": "trade.jettison (prompt) (optional)",
-    "tags": ["trade","write"],
-    "command": { "command": "trade.jettison", "data": { "commodity": "ore", "quantity": 1, "idempotency_key": "00000000-0000-0000-0000-00000000E006" } },
-    "expect": { "status": "*" }
-  },
-
-  {
-    "name": "news.read",
-    "tags": ["news","info"],
-    "command": { "command": "news.read", "data": { "limit": 10 } },
-    "expect": { "status": "*" }
-  },
-
-  {
-    "name": "auth.mfa (prompt)",
-    "tags": ["auth","mfa"],
-    "command": { "command": "auth.mfa", "data": { "code": "<prompt:string:MFA code>" } },
-    "expect": { "status": "*" }
-  },
-  {
-    "name": "auth.logout",
-    "tags": ["auth"],
-    "command": { "command": "auth.logout" },
-    "expect": { "status": "*" }
-  },
-
-  {
-    "name": "session.goodbye",
-    "tags": ["session"],
-    "command": { "command": "session.goodbye" },
-    "expect": { "status": "*" }
-  },
-  {
-    "name": "auth.login newguy (turn tests)",
-    "tags": ["auth","turns"],
-    "command": { "command": "auth.login", "data": { "user_name": "newguy", "password": "pass123" } },
-    "expect": { "status": "ok", "type": "*" }
-  },
-{
-  "name": "turns: baseline (save @t0)",
-  "tags": ["turns","snapshot"],
-  "command": { "command": "player.my_info" },
-  "expect": { "status": "ok" },
-  "save": { "var": "t0", "path": "$turns" }
-},
-{
-  "name": "turns: scan",
-  "tags": ["turns","scan"],
-  "command": { "command": "move.scan" },
-  "expect": { "status": "*" }
-},
-{
-  "name": "turns: after scan (delta -1)",
-  "tags": ["turns","assert"],
-  "command": { "command": "player.my_info" },
-  "expect": { "status": "ok" },
-  "asserts": [
-    { "path": "$turns", "op": "delta", "baseline": "@t0", "value": -1 }
-  ],
-  "save": { "var": "t1", "path": "$turns" }
-},
-    {
-  "name": "turns: capture first adjacent as @adj",
-  "tags": ["turns","prep"],
-  "command": { "command": "sector.info" },
-  "expect": { "status": "ok" },
-  "save": { "var": "adj", "path": "data.adjacent.0" }
-},
-{
-  "name": "turns: baseline before warp (save @t2)",
-  "tags": ["turns","snapshot"],
-  "command": { "command": "player.my_info" },
-  "expect": { "status": "ok" },
-  "save": { "var": "t2", "path": "$turns" }
-},
-{
-  "name": "turns: warp to @adj",
-  "tags": ["turns","warp","write"],
-  "command": { "command": "move.warp",
-    "data": { "to_sector_id": "@adj", "idempotency_key": "00000000-0000-0000-0000-0000TURNWARP02" } },
-  "expect": { "status": "*" }
-},
-{
-  "name": "turns: after warp (<= baseline or -1 on success)",
-  "tags": ["turns","assert"],
-  "command": { "command": "player.my_info" },
-  "expect": { "status": "ok" },
-  "asserts": [
-    { "path": "$turns", "op": "<=", "value": "@t2" }
-  ]
-},
-    {
-  "name": "turns0: confirm zero",
-  "tags": ["turns0","assert"],
-  "command": { "command": "player.my_info" },
-  "expect": { "status": "ok" },
-  "asserts": [
-    { "path": "$turns", "op": "==", "value": 0 }
-  ]
-},
-{
-  "name": "turns0: scan refuses (code 1307)",
-  "tags": ["turns0","scan"],
-  "command": { "command": "move.scan" },
-  "expect": { "status": "refused", "type": "error", "error": { "code": 1307 } }
-},
-{
-  "name": "turns0: warp to @adj refuses (code 1307)",
-  "tags": ["turns0","warp"],
-  "command": { "command": "move.warp",
-    "data": { "to_sector_id": "@adj", "idempotency_key": "00000000-0000-0000-0000-0000TURNWARP00" } },
-  "expect": { "status": "refused", "type": "error", "error": { "code": 1307 } }
-},
-{
-  "name": "sector.info shows fighters & mines",
-  "tags": ["sector","entities"],
-  "command": { "command": "sector.info" },
-  "expect": { "status": "ok", "type": "sector.info" },
-  "asserts": [
-    { "path": "data.entities.fighters", "op": ">=", "value": 0 },
-    { "path": "data.entities.mines.armid", "op": ">=", "value": 0 },
-    { "path": "data.entities.mines.limpet", "op": ">=", "value": 0 }
-  ]
+  "suites": {
+    "auth": [
+      {
+        "name": "register user",
+        "command": {
+          "command": "auth.register",
+          "data": {
+            "user_name": "gemini_user",
+            "password": "password"
+          }
+        },
+        "expect": {
+          "status": "ok",
+          "type": "auth.session"
+        }
+      },
+      {
+        "name": "register user again (should fail)",
+        "command": {
+          "command": "auth.register",
+          "data": {
+            "user_name": "gemini_user",
+            "password": "password"
+          }
+        },
+        "expect": {
+          "status": "error",
+          "error": {
+            "code": 1210
+          }
+        }
+      },
+      {
+        "name": "login user",
+        "command": {
+          "command": "auth.login",
+          "data": {
+            "user_name": "gemini_user",
+            "password": "password"
+          }
+        },
+        "expect": {
+          "status": "ok",
+          "type": "auth.session"
+        }
+      }
+    ],
+    "basic": [
+      {
+        "name": "hello",
+        "command": {
+          "command": "system.hello",
+          "data": {
+            "client": "tw-tests",
+            "version": "0.1"
+          }
+        },
+        "expect": {
+          "status": "ok",
+          "type": "session.hello"
+        }
+      },
+      {
+        "name": "capabilities",
+        "command": {
+          "command": "system.capabilities"
+        },
+        "expect": {
+          "status": "ok",
+          "type": "system.capabilities"
+        }
+      },
+      {
+        "name": "ping",
+        "command": {
+          "command": "session.ping"
+        },
+        "expect": {
+          "status": "ok",
+          "type": "session.pong"
+        }
+      },
+      {
+        "name": "player.my_info",
+        "command": {
+          "command": "player.my_info"
+        },
+        "expect": {
+          "status": "ok",
+          "type": "player.info"
+        },
+        "save": {
+          "var": "my_id",
+          "path": "data.player.id"
+        }
+      },
+      {
+        "name": "ship.info",
+        "command": {
+          "command": "ship.info"
+        },
+        "expect": {
+          "status": "ok",
+          "type": "ship.info"
+        }
+      },
+      {
+        "name": "sector.info (capture @curSector)",
+        "command": {
+          "command": "sector.info"
+        },
+        "expect": {
+          "status": "ok",
+          "type": "sector.info"
+        },
+        "save": {
+          "var": "curSector",
+          "path": "data.sector_id"
+        }
+      },
+      {
+        "name": "move.scan",
+        "command": {
+          "command": "move.scan"
+        },
+        "expect": {
+          "status": "ok",
+          "type": "sector.scan_v1"
+        }
+      },
+      {
+        "name": "player.list_online",
+        "command": {
+          "command": "player.list_online"
+        },
+        "expect": {
+          "status": "ok",
+          "type": "players.online",
+          "data": {
+            "players": "*array"
+          }
+        }
+      },
+      {
+        "name": "trade.port_info",
+        "command": {
+          "command": "trade.port_info",
+          "data": {
+            "sector_id": " @curSector"
+          }
+        },
+        "expect": {
+          "status": "ok",
+          "type": "trade.port_info",
+          "data": {
+            "ports": "*array"
+          }
+        }
+      }
+    ],
+    "trade": [
+      {
+        "name": "trade.buy 10 organics",
+        "command": {
+          "command": "trade.buy",
+          "data": {
+            "commodity": "organics",
+            "amount": 10
+          }
+        },
+        "expect": {
+          "status": "ok",
+          "type": "trade.receipt"
+        }
+      },
+      {
+        "name": "trade.sell 5 organics",
+        "command": {
+          "command": "trade.sell",
+          "data": {
+            "commodity": "organics",
+            "amount": 5
+          }
+        },
+        "expect": {
+          "status": "ok",
+          "type": "trade.receipt"
+        }
+      },
+      {
+        "name": "buy more than port has",
+        "command": {
+          "command": "trade.buy",
+          "data": {
+            "commodity": "organics",
+            "amount": 999999
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "sell more than ship has",
+        "command": {
+          "command": "trade.sell",
+          "data": {
+            "commodity": "organics",
+            "amount": 999999
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "buy commodity not sold at port",
+        "command": {
+          "command": "trade.buy",
+          "data": {
+            "commodity": "invalid_commodity",
+            "amount": 1
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "sell commodity not bought at port",
+        "command": {
+          "command": "trade.sell",
+          "data": {
+            "commodity": "invalid_commodity",
+            "amount": 1
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      }
+    ],
+    "combat": [
+      {
+        "name": "deploy fighters (amount=1, DEFEND)",
+        "command": {
+          "command": "combat.deploy_fighters",
+          "data": {
+            "amount": 1,
+            "offense": 2
+          }
+        },
+        "expect": {
+          "status": "ok",
+          "type": "combat.fighters.deployed"
+        },
+        "asserts": [
+          {
+            "path": "data.amount",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "path": "data.offense",
+            "op": "==",
+            "value": 2
+          },
+          {
+            "path": "data.sector_id",
+            "op": "==",
+            "value": " @curSector"
+          }
+        ]
+      },
+      {
+        "name": "fighters.list — current sector",
+        "command": {
+          "command": "deploy.fighters.list"
+        },
+        "expect": {
+          "status": "ok",
+          "type": "*",
+          "data": {
+            "total": ">=0"
+          }
+        }
+      },
+      {
+        "name": "mines.list — current sector (all types)",
+        "command": {
+          "command": "deploy.mines.list"
+        },
+        "expect": {
+          "status": "ok",
+          "type": "*",
+          "data": {
+            "total": ">=0"
+          }
+        }
+      },
+      {
+        "name": "deploy fighters with invalid offense",
+        "command": {
+          "command": "combat.deploy_fighters",
+          "data": {
+            "amount": 1,
+            "offense": 99
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "deploy more fighters than available",
+        "command": {
+          "command": "combat.deploy_fighters",
+          "data": {
+            "amount": 9999,
+            "offense": 1
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "fighters.list in other sector",
+        "command": {
+          "command": "deploy.fighters.list",
+          "data": {
+            "sector_id": 9999
+          }
+        },
+        "expect": {
+          "status": "ok",
+          "type": "*",
+          "data": {
+            "total": 0
+          }
+        }
+      }
+    ],
+    "navigation": [
+      {
+        "name": "move.warp to sector 2",
+        "command": {
+          "command": "move.warp",
+          "data": {
+            "sector_id": 2
+          }
+        },
+        "expect": {
+          "status": "ok",
+          "type": "move.warp"
+        },
+        "asserts": [
+          {
+            "path": "data.sector_id",
+            "op": "==",
+            "value": 2
+          }
+        ]
+      },
+      {
+        "name": "sector.set_beacon",
+        "command": {
+          "command": "sector.set_beacon",
+          "data": {
+            "message": "This is a test beacon"
+          }
+        },
+        "expect": {
+          "status": "ok",
+          "type": "sector.beacon"
+        }
+      },
+      {
+        "name": "warp to current sector",
+        "command": {
+          "command": "move.warp",
+          "data": {
+            "sector_id": " @curSector"
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "warp to non-existent sector",
+        "command": {
+          "command": "move.warp",
+          "data": {
+            "sector_id": 99999
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "pathfind with valid path",
+        "command": {
+          "command": "move.pathfind",
+          "data": {
+            "from_sector": 1,
+            "to_sector": 10
+          }
+        },
+        "expect": {
+          "status": "ok",
+          "type": "move.path"
+        }
+      },
+      {
+        "name": "pathfind with invalid path",
+        "command": {
+          "command": "move.pathfind",
+          "data": {
+            "from_sector": 1,
+            "to_sector": 99999
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      }
+    ],
+    "future": [
+      {
+        "name": "get player settings",
+        "command": {
+          "command": "player.get_settings"
+        },
+        "expect": {
+          "status": "ok"
+        }
+      },
+      {
+        "name": "set prefs",
+        "command": {
+          "command": "player.set_prefs",
+          "data": {
+            "patch": {
+              "ui.theme": "dark"
+            }
+          }
+        },
+        "expect": {
+          "status": "ok"
+        }
+      },
+      {
+        "name": "get prefs",
+        "command": {
+          "command": "player.get_prefs"
+        },
+        "expect": {
+          "status": "ok"
+        }
+      },
+      {
+        "name": "bulk execute",
+        "command": {
+          "command": "bulk.execute",
+          "data": {
+            "commands": [
+              {
+                "command": "system.ping"
+              }
+            ]
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "admin notice",
+        "command": {
+          "command": "admin.notice",
+          "data": {
+            "message": "test"
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "subscribe to topic",
+        "command": {
+          "command": "subscribe.add",
+          "data": {
+            "event_type": "sector.*"
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "s2s heartbeat",
+        "command": {
+          "command": "s2s.replication.heartbeat"
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "build citadel",
+        "command": {
+          "command": "citadel.build",
+          "data": {
+            "planet_id": 1
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "send mail",
+        "command": {
+          "command": "mail.send",
+          "data": {
+            "recipient_id": 1,
+            "subject": "test",
+            "body": "test"
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "get planet info",
+        "command": {
+          "command": "planet.info",
+          "data": {
+            "planet_id": 1
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "ship.transfer_cargo",
+        "command": {
+          "command": "ship.transfer_cargo",
+          "data": {
+            "from_ship_id": 1,
+            "to_ship_id": 2,
+            "commodity": "organics",
+            "amount": 1
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "ship.jettison",
+        "command": {
+          "command": "ship.jettison",
+          "data": {
+            "commodity": "organics",
+            "amount": 1
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "ship.upgrade",
+        "command": {
+          "command": "ship.upgrade",
+          "data": {
+            "upgrade_id": 1
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "ship.repair",
+        "command": {
+          "command": "ship.repair",
+          "data": {
+            "amount": 10
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "ship.self_destruct",
+        "command": {
+          "command": "ship.self_destruct"
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "trade.quote",
+        "command": {
+          "command": "trade.quote",
+          "data": {
+            "commodity": "organics",
+            "amount": 10
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "trade.offer",
+        "command": {
+          "command": "trade.offer",
+          "data": {
+            "recipient_id": 1,
+            "commodity": "organics",
+            "amount": 1,
+            "price": 10
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "trade.accept",
+        "command": {
+          "command": "trade.accept",
+          "data": {
+            "offer_id": 1
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "trade.cancel",
+        "command": {
+          "command": "trade.cancel",
+          "data": {
+            "offer_id": 1
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "trade.history",
+        "command": {
+          "command": "trade.history"
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "move.autopilot.start",
+        "command": {
+          "command": "move.autopilot.start",
+          "data": {
+            "destination_sector_id": 10
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "move.autopilot.stop",
+        "command": {
+          "command": "move.autopilot.stop"
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "move.autopilot.status",
+        "command": {
+          "command": "move.autopilot.status"
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "sector.search",
+        "command": {
+          "command": "sector.search",
+          "data": {
+            "query": "test"
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "sector.scan.density",
+        "command": {
+          "command": "sector.scan.density"
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "planet.genesis",
+        "command": {
+          "command": "planet.genesis",
+          "data": {
+            "sector_id": 1
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "planet.rename",
+        "command": {
+          "command": "planet.rename",
+          "data": {
+            "planet_id": 1,
+            "new_name": "new_planet_name"
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "planet.land",
+        "command": {
+          "command": "planet.land",
+          "data": {
+            "planet_id": 1
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "planet.launch",
+        "command": {
+          "command": "planet.launch"
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "planet.transfer_ownership",
+        "command": {
+          "command": "planet.transfer_ownership",
+          "data": {
+            "planet_id": 1,
+            "new_owner_id": 2
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "planet.harvest",
+        "command": {
+          "command": "planet.harvest",
+          "data": {
+            "planet_id": 1,
+            "commodity": "organics",
+            "amount": 1
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "planet.deposit",
+        "command": {
+          "command": "planet.deposit",
+          "data": {
+            "planet_id": 1,
+            "commodity": "organics",
+            "amount": 1
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "planet.withdraw",
+        "command": {
+          "command": "planet.withdraw",
+          "data": {
+            "planet_id": 1,
+            "commodity": "organics",
+            "amount": 1
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "citadel.upgrade",
+        "command": {
+          "command": "citadel.upgrade",
+          "data": {
+            "citadel_id": 1
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "combat.attack",
+        "command": {
+          "command": "combat.attack",
+          "data": {
+            "target_id": 1
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "combat.lay_mines",
+        "command": {
+          "command": "combat.lay_mines",
+          "data": {
+            "amount": 1
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "combat.sweep_mines",
+        "command": {
+          "command": "combat.sweep_mines",
+          "data": {
+            "sector_id": 1
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "combat.status",
+        "command": {
+          "command": "combat.status"
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "chat.send",
+        "command": {
+          "command": "chat.send",
+          "data": {
+            "message": "hello"
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "chat.broadcast",
+        "command": {
+          "command": "chat.broadcast",
+          "data": {
+            "message": "hello everyone"
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "chat.history",
+        "command": {
+          "command": "chat.history"
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "mail.inbox",
+        "command": {
+          "command": "mail.inbox"
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "mail.read",
+        "command": {
+          "command": "mail.read",
+          "data": {
+            "mail_id": 1
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "mail.delete",
+        "command": {
+          "command": "mail.delete",
+          "data": {
+            "mail_id": 1
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "sys.notice.create",
+        "command": {
+          "command": "sys.notice.create",
+          "data": {
+            "title": "test",
+            "body": "test",
+            "severity": "info"
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "notice.list",
+        "command": {
+          "command": "notice.list"
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "notice.ack",
+        "command": {
+          "command": "notice.ack",
+          "data": {
+            "notice_id": 1
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "subscribe.remove",
+        "command": {
+          "command": "subscribe.remove",
+          "data": {
+            "event_type": "sector.*"
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "subscribe.list",
+        "command": {
+          "command": "subscribe.list"
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "subscribe.catalog",
+        "command": {
+          "command": "subscribe.catalog"
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "admin.shutdown_warning",
+        "command": {
+          "command": "admin.shutdown_warning",
+          "data": {
+            "message": "server shutting down"
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "s2s.planet.genesis",
+        "command": {
+          "command": "s2s.planet.genesis",
+          "data": {
+            "planet_id": 1
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "s2s.planet.transfer",
+        "command": {
+          "command": "s2s.planet.transfer",
+          "data": {
+            "planet_id": 1,
+            "to_server_id": 2
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "s2s.player.migrate",
+        "command": {
+          "command": "s2s.player.migrate",
+          "data": {
+            "player_id": 1,
+            "to_server_id": 2
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "s2s.port.restock",
+        "command": {
+          "command": "s2s.port.restock",
+          "data": {
+            "port_id": 1
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      },
+      {
+        "name": "s2s.event.relay",
+        "command": {
+          "command": "s2s.event.relay",
+          "data": {
+            "event": {
+              "type": "test"
+            }
+          }
+        },
+        "expect": {
+          "status": "refused"
+        }
+      }
+    ]
+  }
 }
-
-
-]

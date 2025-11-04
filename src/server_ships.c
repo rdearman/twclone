@@ -331,7 +331,8 @@ cmd_ship_self_destruct (client_ctx_t *ctx, json_t *root)
   sqlite3 *db = db_get_handle ();
 
   /* 1. Get and validate confirmation payload for heavy confirmation */
-  if (j_get_integer (root, "data.confirmation", &confirmation) != 0
+  json_t *data = json_object_get (root, "data");
+  if (!data || json_unpack (data, "{s:i}", "confirmation", &confirmation) != 0
       || confirmation == 0)
     {
       send_enveloped_refused (ctx->fd, root, ERR_CONFIRMATION_REQUIRED,
@@ -357,8 +358,8 @@ cmd_ship_self_destruct (client_ctx_t *ctx, json_t *root)
   json_object_set_new (evt, "confirmation_value", json_integer (confirmation));
   
   /* h_log_engine_event will consume the reference of 'evt' */
-  (void) db_log_engine_event ("ship.self_destruct.initiated",
-                             ctx->player_id, ctx->sector_id, evt, NULL);
+  (void) db_log_engine_event ((long long) time (NULL), "ship.self_destruct.initiated",
+                             ctx->player_id, ctx->sector_id, evt);
 
   /* 4. Response: command acknowledged and processed */
   send_enveloped_ok (ctx->fd, root, "ship.self_destruct.confirmed", NULL);

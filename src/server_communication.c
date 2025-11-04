@@ -360,24 +360,24 @@ typedef struct sub_map
 static sub_map_t *g_submaps = NULL;
 
 
-/* find or create the per-ctx map node */
-static sub_map_t *
-submap_get (client_ctx_t *ctx, int create_if_missing)
-{
-  for (sub_map_t * m = g_submaps; m; m = m->next)
-    if (m->ctx == ctx)
-      return m;
-  if (!create_if_missing)
-    return NULL;
-  sub_map_t *m = (sub_map_t *) calloc (1, sizeof *m);
-  if (!m)
-    return NULL;
-  m->ctx = ctx;
-  m->head = NULL;
-  m->next = g_submaps;
-  g_submaps = m;
-  return m;
-}
+/* /\* find or create the per-ctx map node *\/ */
+/* static sub_map_t * */
+/* submap_get (client_ctx_t *ctx, int create_if_missing) */
+/* { */
+/*   for (sub_map_t * m = g_submaps; m; m = m->next) */
+/*     if (m->ctx == ctx) */
+/*       return m; */
+/*   if (!create_if_missing) */
+/*     return NULL; */
+/*   sub_map_t *m = (sub_map_t *) calloc (1, sizeof *m); */
+/*   if (!m) */
+/*     return NULL; */
+/*   m->ctx = ctx; */
+/*   m->head = NULL; */
+/*   m->next = g_submaps; */
+/*   g_submaps = m; */
+/*   return m; */
+/* } */
 
 static int
 matches_pattern (const char *topic, const char *pattern)
@@ -390,16 +390,16 @@ matches_pattern (const char *topic, const char *pattern)
   return strncmp (topic, pattern, plen) == 0;
 }
 
-static int
-is_valid_topic (const char *topic)
-{
-  if (!topic || !*topic)
-    return 0;
-  for (const char **p = ALLOWED_TOPICS; *p; ++p)
-    if (matches_pattern (topic, *p))
-      return 1;
-  return 0;
-}
+/* static int */
+/* is_valid_topic (const char *topic) */
+/* { */
+/*   if (!topic || !*topic) */
+/*     return 0; */
+/*   for (const char **p = ALLOWED_TOPICS; *p; ++p) */
+/*     if (matches_pattern (topic, *p)) */
+/*       return 1; */
+/*   return 0; */
+/* } */
 
 
 struct bc_ctx
@@ -1271,51 +1271,51 @@ cmd_mail_delete (client_ctx_t *ctx, json_t *root)
 /////////////////////////////////////////////////////////
 
 
-static int
-sub_contains (sub_node_t *head, const char *topic)
-{
-  for (sub_node_t * n = head; n; n = n->next)
-    if (strcmp (n->topic, topic) == 0)
-      return 1;
-  return 0;
-}
+/* static int */
+/* sub_contains (sub_node_t *head, const char *topic) */
+/* { */
+/*   for (sub_node_t * n = head; n; n = n->next) */
+/*     if (strcmp (n->topic, topic) == 0) */
+/*       return 1; */
+/*   return 0; */
+/* } */
 
-static int
-sub_add (sub_map_t *m, const char *topic)
-{
-  if (sub_contains (m->head, topic))
-    return 0;			/* already present -> idempotent add */
-  sub_node_t *n = (sub_node_t *) calloc (1, sizeof *n);
-  if (!n)
-    return -1;
-  n->topic = strdup (topic);
-  if (!n->topic)
-    {
-      free (n);
-      return -1;
-    }
-  n->next = m->head;
-  m->head = n;
-  return 1;			/* added */
-}
+/* static int */
+/* sub_add (sub_map_t *m, const char *topic) */
+/* { */
+/*   if (sub_contains (m->head, topic)) */
+/*     return 0;			/\* already present -> idempotent add *\/ */
+/*   sub_node_t *n = (sub_node_t *) calloc (1, sizeof *n); */
+/*   if (!n) */
+/*     return -1; */
+/*   n->topic = strdup (topic); */
+/*   if (!n->topic) */
+/*     { */
+/*       free (n); */
+/*       return -1; */
+/*     } */
+/*   n->next = m->head; */
+/*   m->head = n; */
+/*   return 1;			/\* added *\/ */
+/* } */
 
-static int
-sub_remove (sub_map_t *m, const char *topic)
-{
-  sub_node_t **pp = &m->head;
-  for (; *pp; pp = &(*pp)->next)
-    {
-      if (strcmp ((*pp)->topic, topic) == 0)
-	{
-	  sub_node_t *dead = *pp;
-	  *pp = dead->next;
-	  free (dead->topic);
-	  free (dead);
-	  return 1;		/* removed */
-	}
-    }
-  return 0;			/* not found */
-}
+/* static int */
+/* sub_remove (sub_map_t *m, const char *topic) */
+/* { */
+/*   sub_node_t **pp = &m->head; */
+/*   for (; *pp; pp = &(*pp)->next) */
+/*     { */
+/*       if (strcmp ((*pp)->topic, topic) == 0) */
+/* 	{ */
+/* 	  sub_node_t *dead = *pp; */
+/* 	  *pp = dead->next; */
+/* 	  free (dead->topic); */
+/* 	  free (dead); */
+/* 	  return 1;		/\* removed *\/ */
+/* 	} */
+/*     } */
+/*   return 0;			/\* not found *\/ */
+/* } */
 
 
 
@@ -1547,25 +1547,25 @@ cmd_subscribe_list (client_ctx_t *ctx, json_t *root)
 /* ---- command handlers ---- */
 
 
-/* Guard: refuse removing a locked subscription */
-static int
-is_locked_subscription (sqlite3 *db, int player_id, const char *topic)
-{
-  static const char *SQL =
-    "SELECT locked FROM subscriptions WHERE player_id=? AND event_type=? LIMIT 1";
-  sqlite3_stmt *st = NULL;
-  int locked = 0;
-  if (sqlite3_prepare_v2 (db, SQL, -1, &st, NULL) != SQLITE_OK)
-    return 0;
-  sqlite3_bind_int (st, 1, player_id);
-  sqlite3_bind_text (st, 2, topic, -1, SQLITE_STATIC);
-  if (sqlite3_step (st) == SQLITE_ROW)
-    {
-      locked = sqlite3_column_int (st, 0);
-    }
-  sqlite3_finalize (st);
-  return locked ? 1 : 0;
-}
+/* /\* Guard: refuse removing a locked subscription *\/ */
+/* static int */
+/* is_locked_subscription (sqlite3 *db, int player_id, const char *topic) */
+/* { */
+/*   static const char *SQL = */
+/*     "SELECT locked FROM subscriptions WHERE player_id=? AND event_type=? LIMIT 1"; */
+/*   sqlite3_stmt *st = NULL; */
+/*   int locked = 0; */
+/*   if (sqlite3_prepare_v2 (db, SQL, -1, &st, NULL) != SQLITE_OK) */
+/*     return 0; */
+/*   sqlite3_bind_int (st, 1, player_id); */
+/*   sqlite3_bind_text (st, 2, topic, -1, SQLITE_STATIC); */
+/*   if (sqlite3_step (st) == SQLITE_ROW) */
+/*     { */
+/*       locked = sqlite3_column_int (st, 0); */
+/*     } */
+/*   sqlite3_finalize (st); */
+/*   return locked ? 1 : 0; */
+/* } */
 
 
 

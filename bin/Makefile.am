@@ -19,6 +19,9 @@
 # Alternatively, the GPL can be found at
 # http://www.gnu.org/copyleft/gpl.html
 
+## AM_CFLAGS = -Wall -Wextra -Werror
+
+
 server_LDADD   	= -ljansson -lsqlite3 -lcrypto -lpthread -lm
 # bigbang_LDADD  = -ljansson -lsqlite3 -lpthread -lm
 # client_LDADD   = -ljansson -lsqlite3 -lpthread -lm

@@ -74,13 +74,22 @@ def normalise_tests(doc: Any, suite: Optional[str]) -> List[Dict[str, Any]]:
         return doc
 
     if isinstance(doc, dict):
-        if suite and "suites" in doc and isinstance(doc["suites"], dict):
-            if suite not in doc["suites"]:
-                available = ", ".join(sorted(doc["suites"].keys()))
-                raise ValueError(f"Suite '{suite}' not found. Available: {available}")
-            if not isinstance(doc["suites"][suite], list):
-                raise ValueError(f"Suite '{suite}' is not a list.")
-            return doc["suites"][suite]
+        if "suites" in doc and isinstance(doc.get("suites"), dict):
+            suites = doc["suites"]
+            if suite:
+                if suite not in suites:
+                    available = ", ".join(sorted(suites.keys()))
+                    raise ValueError(f"Suite '{suite}' not found. Available: {available}")
+                if not isinstance(suites[suite], list):
+                    raise ValueError(f"Suite '{suite}' is not a list.")
+                return suites[suite]
+            else:
+                # If no suite is specified, run all suites
+                all_tests: List[Dict[str, Any]] = []
+                for suite_name, tests in suites.items():
+                    if isinstance(tests, list):
+                        all_tests.extend(tests)
+                return all_tests
 
         if "tests" in doc and isinstance(doc["tests"], list):
             return doc["tests"]
