@@ -472,6 +472,7 @@ parse_sector_search_input (json_t *root,
   return 0;
 }
 
+
 int
 cmd_sector_search (client_ctx_t *ctx, json_t *root)
 {
@@ -485,12 +486,13 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
 
   int prc =
     parse_sector_search_input (root, &q, &type_any, &type_sector, &type_port,
-			       &limit, &offset);
+                               &limit, &offset);
   if (prc != 0)
     {
       free (q);
       send_enveloped_error (ctx->fd, root, 400,
-			    "Expected data { q:string?, type:'sector'|'port'|'any', limit?:int, cursor?:int|string }.");
+                            "Expected data { q:string?, type:'sector'|'port'|'any', limit?:int, cursor?:int|string }.");
+      return 0; // <-- FIX: Added return
     }
 
   // If 'any', we’ll union both; otherwise pick a branch.
@@ -502,26 +504,22 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
     {
       free (q);
       send_enveloped_error (ctx->fd, root, 500, "No database handle.");
+      return 0; // <-- FIX: Added return
     }
 
-  // Build LIKE pattern for case-insensitive contains
-  // Use COLLATE NOCASE in SQL so we don't need to lower() both sides
+  // Build LIKE pattern
   char likepat[512];
   snprintf (likepat, sizeof (likepat), "%%%s%%", q ? q : "");
 
-  // We fetch limit+1 rows to determine if there's a next page
   int fetch = limit + 1;
-
-  // We’ll assemble a UNION ALL statement dynamically based on what’s requested.
-  // Columns: kind, id, name, sector_id, sector_name
-  //  - For sectors: sector_id = id; sector_name = name
-  //  - For ports: sector_id = ports.sector_id; sector_name from join with sectors
   char sql[2048];
+
+// --- SQL FIX: Changed p.sector_id to p.location ---
 #if PORTS_HAVE_CLASS_TABLE
   const char *port_select =
-    "SELECT 'port' AS kind, p.id AS id, p.name AS name, p.sector_id AS sector_id, s.name AS sector_name "
+    "SELECT 'port' AS kind, p.id AS id, p.name AS name, p.location AS sector_id, s.name AS sector_name "
     "FROM ports p "
-    "JOIN sectors s ON s.id = p.sector_id "
+    "JOIN sectors s ON s.id = p.location "
     "LEFT JOIN port_classes pc ON pc.id = p.class_id "
     "WHERE ( (?1 = '') "
     "        OR (p.name LIKE ?2 COLLATE NOCASE) "
@@ -529,13 +527,13 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
 #else
   // ports.class is assumed to be a TEXT column
   const char *port_select =
-    "SELECT 'port' AS kind, p.id AS id, p.name AS name, p.sector_id AS sector_id, s.name AS sector_name "
+    "SELECT 'port' AS kind, p.id AS id, p.name AS name, p.location AS sector_id, s.name AS sector_name "
     "FROM ports p "
-    "JOIN sectors s ON s.id = p.sector_id "
+    "JOIN sectors s ON s.id = p.location "
     "WHERE ( (?1 = '') "
-    "        OR (p.name LIKE ?2 COLLATE NOCASE) "
-    "        OR (p.class LIKE ?2 COLLATE NOCASE) )";
+    "        OR (p.name LIKE ?2 COLLATE NOCASE) ";
 #endif
+// --- END SQL FIX ---
 
   const char *sector_select =
     "SELECT 'sector' AS kind, s.id AS id, s.name AS name, s.id AS sector_id, s.name AS sector_name "
@@ -546,20 +544,23 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
   if (do_sector && do_port)
     {
       snprintf (sql, sizeof (sql),
-		"%s UNION ALL %s "
-		"ORDER BY kind, name, id "
-		"LIMIT ?3 OFFSET ?4", sector_select, port_select);
+                "%s UNION ALL %s "
+                " ORDER BY kind, name, id "
+                " LIMIT ?3 OFFSET ?4", sector_select, port_select);
     }
   else if (do_sector)
     {
       snprintf (sql, sizeof (sql),
-		"%s "
-		"ORDER BY name, id " "LIMIT ?3 OFFSET ?4", sector_select);
+                "%s "
+                " ORDER BY name, id "
+		" LIMIT ?3 OFFSET ?4", sector_select);
     }
   else
-    {				// ports only
+    {                           // ports only
       snprintf (sql, sizeof (sql),
-		"%s " "ORDER BY name, id " "LIMIT ?3 OFFSET ?4", port_select);
+		"%s "
+		" ORDER BY name, id "
+		" LIMIT ?3 OFFSET ?4", port_select);
     }
 
   // Prepare and bind
@@ -569,13 +570,10 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
     {
       free (q);
       send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
+      return 0; // <-- FIX: Added return
     }
 
   // Bind parameters:
-  // ?1 = empty string check
-  // ?2 = like pattern
-  // ?3 = limit+1 (fetch)
-  // ?4 = offset
   sqlite3_bind_text (st, 1, q ? q : "", -1, SQLITE_TRANSIENT);
   sqlite3_bind_text (st, 2, likepat, -1, SQLITE_TRANSIENT);
   sqlite3_bind_int (st, 3, fetch);
@@ -593,46 +591,43 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
       const char *sector_name = (const char *) sqlite3_column_text (st, 4);
 
       if (row_count < limit)
-	{
-	  json_t *it = json_object ();
-	  json_object_set_new (it, "kind", json_string (kind ? kind : ""));
-	  json_object_set_new (it, "id", json_integer (id));
-	  json_object_set_new (it, "name", json_string (name ? name : ""));
-	  json_object_set_new (it, "sector_id", json_integer (sector_id));
-	  json_object_set_new (it, "sector_name",
-			       json_string (sector_name ? sector_name : ""));
-	  json_array_append_new (items, it);
-	}
+        {
+          json_t *it = json_object ();
+          json_object_set_new (it, "kind", json_string (kind ? kind : ""));
+          json_object_set_new (it, "id", json_integer (id));
+          json_object_set_new (it, "name", json_string (name ? name : ""));
+          json_object_set_new (it, "sector_id", json_integer (sector_id));
+          json_object_set_new (it, "sector_name",
+                               json_string (sector_name ? sector_name : ""));
+          json_array_append_new (items, it);
+        }
       row_count++;
 
       if (row_count >= fetch)
-	break;			// we only need to know if there’s one extra
+        break;
     }
 
   sqlite3_finalize (st);
-  // free (q);
+  free (q); // <-- FIX: Re-enabled free() for the success path to prevent memory leak
 
-  // Pagination: if we fetched more than 'limit', expose a next cursor (offset+limit)
+  // Pagination
   json_t *jdata = json_object ();
   json_object_set_new (jdata, "items", items);
 
   if (row_count > limit)
     {
       json_object_set_new (jdata, "next_cursor",
-			   json_integer (offset + limit));
+                           json_integer (offset + limit));
     }
   else
     {
       json_object_set_new (jdata, "next_cursor", json_null ());
     }
 
-  // Echo back what we actually applied (optional but handy)
-  // json_object_set_new(jdata, "applied_limit", json_integer(limit));
-  // json_object_set_new(jdata, "applied_offset", json_integer(offset));
-
-  //send_enveloped_ok (ctx->fd, root, "move.result", data);
   send_enveloped_ok (ctx->fd, root, "sector.search_results_v1", jdata);
+  return 0; // Added return for consistency
 }
+
 
 
 int
