@@ -163,12 +163,13 @@
       {
         "name": "trade.buy 10 organics",
         "command": {
-          "command": "trade.buy",
-          "data": {
-            "port_id": " @curSector",
-            "commodity": "organics",
-            "quantity": 10
-          }
+            "command": "trade.buy",
+"data": {
+  "port_id": " @curSector",
+  "items": [
+    { "commodity": "organics", "quantity": 10 }
+  ]
+}
         },
         "expect": {
           "status": "ok",
@@ -179,11 +180,12 @@
         "name": "trade.sell 5 organics",
         "command": {
           "command": "trade.sell",
-          "data": {
-            "port_id": " @curSector",
-            "commodity": "organics",
-            "quantity": 5
-          }
+"data": {
+  "port_id": " @curSector",
+  "items": [
+    { "commodity": "organics", "quantity": 10 }
+  ]
+}
         },
         "expect": {
           "status": "ok",
@@ -705,7 +707,7 @@
           "status": "refused"
         }
       },
-      {
+{
         "name": "sector.search",
         "command": {
           "command": "sector.search",
@@ -714,10 +716,11 @@
           }
         },
         "expect": {
-          "status": "refused"
+          "status": "ok",
+          "type": "sector.search_results_v1"
         }
       },
-      {
+	{
         "name": "sector.scan.density",
         "command": {
           "command": "sector.scan.density"

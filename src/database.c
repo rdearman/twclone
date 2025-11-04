@@ -1081,6 +1081,27 @@ const char *create_table_sql[] = {
   " LEFT JOIN shiptypes  st   ON st.id = sh.type_id   /* CORRECTED */   "
   " LEFT JOIN sectors    sctr ON sctr.id = p.sector;   "
 
+
+  " CREATE VIEW sector_search_index AS  "
+  " SELECT   "
+  "     'sector' AS kind,  "
+  "     s.id AS id,  "
+  "     s.name AS name,  "
+  "     s.id AS sector_id,  "
+  "     s.name AS sector_name,  "
+  "     s.name AS search_term_1  "
+  " FROM sectors s  "
+  " UNION ALL  "
+  " SELECT   "
+  "     'port' AS kind,  "
+  "     p.id AS id,  "
+  "     p.name AS name,  "
+  "     p.location AS sector_id,  "
+  "     s.name AS sector_name,  "
+  "     p.name AS search_term_1  "
+  " FROM ports p  "
+  " JOIN sectors s ON s.id = p.location;  "
+  
   
 //////////////////////////////////////////////////////////////////////
 /// CREATE INDEX

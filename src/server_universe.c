@@ -473,162 +473,130 @@ parse_sector_search_input (json_t *root,
 }
 
 
+//////////////////////////////
 int
 cmd_sector_search (client_ctx_t *ctx, json_t *root)
 {
   UNUSED (ctx);
-  if (!root)
-    return -1;
+  if (!root) return -1;
 
   char *q = NULL;
   int type_any = 0, type_sector = 0, type_port = 0;
   int limit = 0, offset = 0;
 
-  int prc =
-    parse_sector_search_input (root, &q, &type_any, &type_sector, &type_port,
-                               &limit, &offset);
+  int prc = parse_sector_search_input (root, &q, &type_any, &type_sector, &type_port, &limit, &offset);
   if (prc != 0)
-    {
-      free (q);
-      send_enveloped_error (ctx->fd, root, 400,
-                            "Expected data { q:string?, type:'sector'|'port'|'any', limit?:int, cursor?:int|string }.");
-      return 0; // <-- FIX: Added return
-    }
-
-  // If 'any', we’ll union both; otherwise pick a branch.
-  int do_sector = type_any || type_sector;
-  int do_port = type_any || type_port;
+  {
+    free (q);
+    send_enveloped_error (ctx->fd, root, 400, "Expected data { ... }");
+    return 0;
+  }
 
   sqlite3 *db = db_get_handle ();
   if (!db)
-    {
-      free (q);
-      send_enveloped_error (ctx->fd, root, 500, "No database handle.");
-      return 0; // <-- FIX: Added return
-    }
+  {
+    free (q);
+    send_enveloped_error (ctx->fd, root, 500, "No database handle.");
+    return 0;
+  }
 
-  // Build LIKE pattern
   char likepat[512];
   snprintf (likepat, sizeof (likepat), "%%%s%%", q ? q : "");
-
   int fetch = limit + 1;
-  char sql[2048];
 
-// --- SQL FIX: Changed p.sector_id to p.location ---
-#if PORTS_HAVE_CLASS_TABLE
-  const char *port_select =
-    "SELECT 'port' AS kind, p.id AS id, p.name AS name, p.location AS sector_id, s.name AS sector_name "
-    "FROM ports p "
-    "JOIN sectors s ON s.id = p.location "
-    "LEFT JOIN port_classes pc ON pc.id = p.class_id "
-    "WHERE ( (?1 = '') "
-    "        OR (p.name LIKE ?2 COLLATE NOCASE) "
-    "        OR (pc.name LIKE ?2 COLLATE NOCASE) )";
-#else
-  // ports.class is assumed to be a TEXT column
-  const char *port_select =
-    "SELECT 'port' AS kind, p.id AS id, p.name AS name, p.location AS sector_id, s.name AS sector_name "
-    "FROM ports p "
-    "JOIN sectors s ON s.id = p.location "
-    "WHERE ( (?1 = '') "
-    "        OR (p.name LIKE ?2 COLLATE NOCASE) ";
-#endif
-// --- END SQL FIX ---
+  // --- This SQL is now simple and robust ---
+  char sql[1024];
+  const char *base_sql = "SELECT kind, id, name, sector_id, sector_name FROM sector_search_index ";
+  const char *order_limit_sql = " ORDER BY kind, name, id LIMIT ?2 OFFSET ?3";
+  
+  // Build the WHERE clause
+  char where_sql[256];
+  if (type_any) {
+    // Match 'q' against the search term, and don't filter by kind
+    snprintf(where_sql, sizeof(where_sql), "WHERE ( (?1 = '') OR (search_term_1 LIKE ?1 COLLATE NOCASE) )");
+  } else if (type_sector) {
+    // Match 'q' AND kind = 'sector'
+    snprintf(where_sql, sizeof(where_sql), "WHERE kind = 'sector' AND ( (?1 = '') OR (search_term_1 LIKE ?1 COLLATE NOCASE) )");
+  } else { // type_port
+    // Match 'q' AND kind = 'port'
+    snprintf(where_sql, sizeof(where_sql), "WHERE kind = 'port' AND ( (?1 = '') OR (search_term_1 LIKE ?1 COLLATE NOCASE) )");
+  }
 
-  const char *sector_select =
-    "SELECT 'sector' AS kind, s.id AS id, s.name AS name, s.id AS sector_id, s.name AS sector_name "
-    "FROM sectors s "
-    "WHERE ( (?1 = '') OR (s.name LIKE ?2 COLLATE NOCASE) )";
+  // Combine the query
+  snprintf(sql, sizeof(sql), "%s %s %s", base_sql, where_sql, order_limit_sql);
 
-  // Compose SQL
-  if (do_sector && do_port)
-    {
-      snprintf (sql, sizeof (sql),
-                "%s UNION ALL %s "
-                " ORDER BY kind, name, id "
-                " LIMIT ?3 OFFSET ?4", sector_select, port_select);
-    }
-  else if (do_sector)
-    {
-      snprintf (sql, sizeof (sql),
-                "%s "
-                " ORDER BY name, id "
-		" LIMIT ?3 OFFSET ?4", sector_select);
-    }
-  else
-    {                           // ports only
-      snprintf (sql, sizeof (sql),
-		"%s "
-		" ORDER BY name, id "
-		" LIMIT ?3 OFFSET ?4", port_select);
-    }
+  // --- End of new SQL logic ---
 
-  // Prepare and bind
+  // This will print the *much simpler* SQL query for debugging
+  // fprintf(stderr, "\n[DEBUG] SQL (View): [%s]\n\n", sql);
+
   sqlite3_stmt *st = NULL;
   int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
-    {
-      free (q);
-      send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
-      return 0; // <-- FIX: Added return
-    }
+  {
+    free (q);
+    send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
+    return 0;
+  }
 
-  // Bind parameters:
-  sqlite3_bind_text (st, 1, q ? q : "", -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text (st, 2, likepat, -1, SQLITE_TRANSIENT);
-  sqlite3_bind_int (st, 3, fetch);
-  sqlite3_bind_int (st, 4, offset);
+  // Bind parameters
+  sqlite3_bind_text (st, 1, likepat, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int (st, 2, fetch);
+  sqlite3_bind_int (st, 3, offset);
+
+  // (The rest of your function: sqlite3_step loop, JSON packing, etc.)
+  // ... (This part of your code was already correct) ...
 
   json_t *items = json_array ();
   int row_count = 0;
 
   while ((rc = sqlite3_step (st)) == SQLITE_ROW)
+  {
+    const char *kind = (const char *) sqlite3_column_text (st, 0);
+    int id = sqlite3_column_int (st, 1);
+    const char *name = (const char *) sqlite3_column_text (st, 2);
+    int sector_id = sqlite3_column_int (st, 3);
+    const char *sector_name = (const char *) sqlite3_column_text (st, 4);
+
+    if (row_count < limit)
     {
-      const char *kind = (const char *) sqlite3_column_text (st, 0);
-      int id = sqlite3_column_int (st, 1);
-      const char *name = (const char *) sqlite3_column_text (st, 2);
-      int sector_id = sqlite3_column_int (st, 3);
-      const char *sector_name = (const char *) sqlite3_column_text (st, 4);
-
-      if (row_count < limit)
-        {
-          json_t *it = json_object ();
-          json_object_set_new (it, "kind", json_string (kind ? kind : ""));
-          json_object_set_new (it, "id", json_integer (id));
-          json_object_set_new (it, "name", json_string (name ? name : ""));
-          json_object_set_new (it, "sector_id", json_integer (sector_id));
-          json_object_set_new (it, "sector_name",
-                               json_string (sector_name ? sector_name : ""));
-          json_array_append_new (items, it);
-        }
-      row_count++;
-
-      if (row_count >= fetch)
-        break;
+      json_t *it = json_object ();
+      json_object_set_new (it, "kind", json_string (kind ? kind : ""));
+      json_object_set_new (it, "id", json_integer (id));
+      json_object_set_new (it, "name", json_string (name ? name : ""));
+      json_object_set_new (it, "sector_id", json_integer (sector_id));
+      json_object_set_new (it, "sector_name",
+                           json_string (sector_name ? sector_name : ""));
+      json_array_append_new (items, it);
     }
+    row_count++;
+
+    if (row_count >= fetch)
+      break;
+  }
 
   sqlite3_finalize (st);
-  free (q); // <-- FIX: Re-enabled free() for the success path to prevent memory leak
+  free (q); 
 
-  // Pagination
   json_t *jdata = json_object ();
   json_object_set_new (jdata, "items", items);
 
   if (row_count > limit)
-    {
-      json_object_set_new (jdata, "next_cursor",
-                           json_integer (offset + limit));
-    }
+  {
+    json_object_set_new (jdata, "next_cursor",
+                         json_integer (offset + limit));
+  }
   else
-    {
-      json_object_set_new (jdata, "next_cursor", json_null ());
-    }
+  {
+    json_object_set_new (jdata, "next_cursor", json_null ());
+  }
 
   send_enveloped_ok (ctx->fd, root, "sector.search_results_v1", jdata);
-  return 0; // Added return for consistency
+  return 0;
 }
 
 
+///////////////////////////////////
 
 int
 cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
