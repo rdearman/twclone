@@ -1057,29 +1057,31 @@ const char *create_table_sql[] = {
 
 
   /* --- player_info_v1 view and indexes --- */
-  "CREATE VIEW IF NOT EXISTS player_info_v1 AS\n"
-    "SELECT\n"
-    "  p.id         AS player_id,\n"
-    "  p.name       AS player_name,\n"
-    "  p.number     AS player_number,\n"
-    "  p.sector     AS sector_id,\n"
-    "  sctr.name    AS sector_name,\n"
-    "  p.credits    AS credits,\n"
-    "  p.alignment  AS alignment,\n"
-    "  p.experience AS experience,\n"
-    "  p.ship       AS ship_number,\n"
-    "  sh.id        AS ship_id,\n"
-    "  sh.name      AS ship_name,\n"
-    "  sh.type      AS ship_type_id,\n"
-    "  st.name      AS ship_type_name,\n"
-    "  sh.holds     AS ship_holds,\n"
-    "  sh.fighters  AS ship_fighters,\n"
-    "  (COALESCE(p.credits,0) + COALESCE(sh.fighters,0)*2) AS approx_worth\n"
-    "FROM players p\n"
-    "LEFT JOIN ships      sh   ON sh.id = p.ship\n"
-    "LEFT JOIN shiptypes  st   ON st.id     = sh.type\n"
-    "LEFT JOIN sectors    sctr ON sctr.id   = p.sector;",
 
+  " CREATE VIEW player_info_v1 AS   "
+  " SELECT   "
+  "   p.id         AS player_id,   "
+  "   p.name       AS player_name,   "
+  "   p.number     AS player_number,   "
+  "   p.sector     AS sector_id,   "
+  "   sctr.name    AS sector_name,   "
+  "   p.credits    AS credits,   "
+  "   p.alignment  AS alignment,   "
+  "   p.experience AS experience,   "
+  "   p.ship       AS ship_number,   "
+  "   sh.id        AS ship_id,   "
+  "   sh.name      AS ship_name,   "
+  "   sh.type_id   AS ship_type_id,         /* CORRECTED */   "
+  "   st.name      AS ship_type_name,   "
+  "   st.maxholds  AS ship_holds,           /* CORRECTED */   "
+  "   sh.fighters  AS ship_fighters,   "
+  "   (COALESCE(p.credits,0) + COALESCE(sh.fighters,0)*2) AS approx_worth   "
+  " FROM players p   "
+  " LEFT JOIN ships      sh   ON sh.id = p.ship   "
+  " LEFT JOIN shiptypes  st   ON st.id = sh.type_id   /* CORRECTED */   "
+  " LEFT JOIN sectors    sctr ON sctr.id = p.sector;   "
+
+  
 //////////////////////////////////////////////////////////////////////
 /// CREATE INDEX
 //////////////////////////////////////////////////////////////////////
@@ -4203,34 +4205,166 @@ cleanup:
   return ret_code;
 }
 
+
+/* int */
+/* db_player_info_json (int player_id, json_t **out) */
+/* { */
+/*   sqlite3_stmt *st = NULL; */
+/*   json_t *obj = NULL; */
+/*   int ret_code = SQLITE_ERROR; */
+
+/*   // 1. Acquire the lock at the beginning of the function. */
+/*   pthread_mutex_lock (&db_mutex); */
+
+/*   // Initialize the output pointer. */
+/*   if (out) */
+/*     *out = NULL; */
+
+/*   // Get the database handle. */
+/*   sqlite3 *dbh = db_get_handle (); */
+/*   if (!dbh) */
+/*     { */
+/*       goto cleanup; */
+/*     } */
+
+/*   // --- CORRECTED SQL QUERY --- */
+/*   const char *sql = "SELECT " */
+/*     " p.id, p.number, p.name, p.sector, " */
+/*     " s.id                      AS ship_id, " */
+/*     " COALESCE(s.id, 0)         AS ship_number, " */
+/*     " COALESCE(s.name, '')      AS ship_name, " */
+/*     " COALESCE(s.type_id, 0)    AS ship_type_id, " */
+/*     " COALESCE(st.name, '')     AS ship_type_name, " */
+/*     " COALESCE(s.holds_used, 0) AS ship_holds, " */
+/*     " COALESCE(s.fighters, 0)   AS ship_fighters, " */
+/*     " COALESCE(sectors.name, 'Unknown') AS sector_name " */
+/*     "FROM players p " */
+/*     "LEFT JOIN ships s      ON s.id = p.ship " */
+/*     "LEFT JOIN shiptypes st ON st.id = s.type_id " */
+/*     "LEFT JOIN sectors      ON sectors.id = p.sector " */
+/*     "WHERE p.id = ?"; */
+
+/*   // 2. Prepare the statement. Check for errors and jump to cleanup. */
+/*   int rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL); */
+/*   if (rc != SQLITE_OK) */
+/*     { */
+/*       ret_code = rc; */
+/*       goto cleanup; */
+/*     } */
+
+/*   // 3. Bind the parameter. */
+/*   sqlite3_bind_int (st, 1, player_id); */
+
+/*   // 4. Get results and create the JSON object. */
+/*   rc = sqlite3_step (st); */
+/*   if (rc == SQLITE_ROW) */
+/*     { */
+/*       int pid = sqlite3_column_int (st, 0); */
+/*       int pnum = sqlite3_column_int (st, 1); */
+/*       const char *pname = (const char *) sqlite3_column_text (st, 2); */
+/*       int psector = sqlite3_column_int (st, 3); */
+/*       int ship_id = sqlite3_column_int (st, 4); */
+/*       int ship_number = sqlite3_column_int (st, 5); */
+/*       const char *sname = (const char *) sqlite3_column_text (st, 6); */
+/*       int stype_id = sqlite3_column_int (st, 7); */
+/*       const char *stype = (const char *) sqlite3_column_text (st, 8); */
+/*       int sholds = sqlite3_column_int (st, 9); */
+/*       int sfighters = sqlite3_column_int (st, 10); */
+/*       const char *sector_name = (const char *) sqlite3_column_text (st, 11); */
+
+/*       obj = json_pack ("{s:i, s:s, s:i, s:i, s:s, s:i, s:i, s:s, s:i, s:i, s:i, s:s}", */
+/*                        "player_id", pid, */
+/*                        "player_name", pname ? pname : "", */
+/*                        "player_number", pnum, */
+/*                        "sector_id", psector, */
+/*                        "sector_name", sector_name ? sector_name : "Unknown", */
+/*                        "ship_id", ship_id, */
+/*                        "ship_number", ship_number, */
+/*                        "ship_name", sname ? sname : "", */
+/*                        "ship_type_id", stype_id, */
+/*                        "ship_holds", sholds, */
+/*                        "ship_fighters", sfighters, */
+/*                        "ship_type_name", stype ? stype : ""); */
+
+/*       ret_code = SQLITE_OK; */
+/*     } */
+/*   else if (rc == SQLITE_DONE) */
+/*     { */
+/*       ret_code = SQLITE_OK; */
+/*       obj = json_object (); */
+/*     } */
+/*   else */
+/*     { */
+/*       ret_code = rc; */
+/*     } */
+
+/* cleanup: */
+/*   // 5. Always finalize the SQLite statement if it was created. */
+/*   if (st) */
+/*     { */
+/*       sqlite3_finalize (st); */
+/*     } */
+
+/*   // 6. Set the output pointer and ensure proper JSON cleanup. */
+/*   if (ret_code == SQLITE_OK) */
+/*     { */
+/*       if (out) */
+/*         *out = obj; */
+/*       else */
+/*         json_decref (obj); */
+/*     } */
+/*   else */
+/*     { */
+/*       if (obj) */
+/*         json_decref (obj); */
+/*     } */
+
+/*   // 7. Always release the lock at the very end. */
+/*   pthread_mutex_unlock (&db_mutex); */
+
+/*   // 8. Single point of return. */
+/*   return ret_code; */
+/* } */
+
+
+
+
+
 int
 db_player_info_json (int player_id, json_t **out)
 {
   sqlite3_stmt *st = NULL;
-  json_t *obj = NULL;
+  json_t *root_obj = NULL; /* Renamed from obj */
   int ret_code = SQLITE_ERROR;
 
-  // 1. Acquire the lock at the beginning of the function.
   pthread_mutex_lock (&db_mutex);
 
-  // Initialize the output pointer.
   if (out)
     *out = NULL;
 
-  // Get the database handle.
   sqlite3 *dbh = db_get_handle ();
   if (!dbh)
     {
       goto cleanup;
     }
 
-  // --- REFACTORED SQL QUERY ---
-  // We now LEFT JOIN with the 'sectors' table to get the sector name directly from the database.
-  const char *sql = "SELECT " " p.id, p.number, p.name, p.sector, " " s.id         AS ship_id, " " COALESCE(s.id, 0) AS ship_number, " " COALESCE(s.name, '')  AS ship_name, " " COALESCE(s.type, 0)   AS ship_type_id, " " COALESCE(st.name, '') AS ship_type_name, " " COALESCE(s.holds, 0)  AS ship_holds, " " COALESCE(s.fighters, 0) AS ship_fighters, " " COALESCE(sectors.name, 'Unknown') AS sector_name "	// <--- NEW COLUMN
-    "FROM players p " "LEFT JOIN ships s       ON s.id = p.ship " "LEFT JOIN shiptypes st ON st.id = s.type " "LEFT JOIN sectors       ON sectors.id = p.sector "	// <--- NEW JOIN
+  // This SQL query is correct from our last fix
+  const char *sql = "SELECT "
+    " p.id, p.number, p.name, p.sector, "
+    " s.id                      AS ship_id, "
+    " COALESCE(s.id, 0)         AS ship_number, "
+    " COALESCE(s.name, '')      AS ship_name, "
+    " COALESCE(s.type_id, 0)    AS ship_type_id, "
+    " COALESCE(st.name, '')     AS ship_type_name, "
+    " COALESCE(s.holds_used, 0) AS ship_holds, "
+    " COALESCE(s.fighters, 0)   AS ship_fighters, "
+    " COALESCE(sectors.name, 'Unknown') AS sector_name "
+    "FROM players p "
+    "LEFT JOIN ships s      ON s.id = p.ship "
+    "LEFT JOIN shiptypes st ON st.id = s.type_id "
+    "LEFT JOIN sectors      ON sectors.id = p.sector "
     "WHERE p.id = ?";
 
-  // 2. Prepare the statement. Check for errors and jump to cleanup.
   int rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -4238,35 +4372,58 @@ db_player_info_json (int player_id, json_t **out)
       goto cleanup;
     }
 
-  // 3. Bind the parameter.
   sqlite3_bind_int (st, 1, player_id);
 
-  // 4. Get results and create the JSON object.
   rc = sqlite3_step (st);
   if (rc == SQLITE_ROW)
     {
-      int pid = sqlite3_column_int (st, 0);
-      int pnum = sqlite3_column_int (st, 1);
-      const char *pname = (const char *) sqlite3_column_text (st, 2);
-      int psector = sqlite3_column_int (st, 3);
-      int ship_id = sqlite3_column_int (st, 4);
-      int ship_number = sqlite3_column_int (st, 5);
-      const char *sname = (const char *) sqlite3_column_text (st, 6);
-      int stype_id = sqlite3_column_int (st, 7);
-      const char *stype = (const char *) sqlite3_column_text (st, 8);
-      int sholds = sqlite3_column_int (st, 9);
-      int sfighters = sqlite3_column_int (st, 10);
-      const char *sector_name = (const char *) sqlite3_column_text (st, 11);	// <--- NEW VARIABLE
+      // --- Create the nested objects ---
+      root_obj = json_object ();
+      json_t *player_obj = json_object ();
+      json_t *ship_obj = json_object ();
 
-      obj = json_pack ("{s:i, s:s, s:i, s:i, s:s, s:i, s:i, s:s, s:i, s:i, s:i, s:s}", "player_id", pid, "player_name", pname ? pname : "", "player_number", pnum, "sector_id", psector, "sector_name", sector_name ? sector_name : "Unknown",	// <--- USE THE NEW VARIABLE
-		       "ship_id", ship_id, "ship_number", ship_number, "ship_name", sname ? sname : "", "ship_type_id", stype_id, "ship_holds", sholds, "ship_fighters", sfighters, "ship_type_name", stype ? stype : "");	// Corrected placement.
+      if (!root_obj || !player_obj || !ship_obj) {
+          // Out of memory
+          json_decref(root_obj);
+          json_decref(player_obj);
+          json_decref(ship_obj);
+          ret_code = SQLITE_NOMEM;
+          goto cleanup;
+      }
+
+      json_object_set_new(root_obj, "player", player_obj);
+      json_object_set_new(root_obj, "ship", ship_obj);
+
+      // --- Populate "player" object ---
+      json_object_set_new(player_obj, "id", json_integer(sqlite3_column_int (st, 0)));
+      json_object_set_new(player_obj, "number", json_integer(sqlite3_column_int (st, 1)));
+      json_object_set_new(player_obj, "name", json_string((const char *)sqlite3_column_text (st, 2)));
+      
+      // --- Populate "ship" object (with location) ---
+      json_object_set_new(ship_obj, "id", json_integer(sqlite3_column_int (st, 4)));
+      json_object_set_new(ship_obj, "number", json_integer(sqlite3_column_int (st, 5)));
+      json_object_set_new(ship_obj, "name", json_string((const char *)sqlite3_column_text (st, 6)));
+      
+      json_t* ship_type_obj = json_object();
+      json_object_set_new(ship_type_obj, "id", json_integer(sqlite3_column_int (st, 7)));
+      json_object_set_new(ship_type_obj, "name", json_string((const char *)sqlite3_column_text (st, 8)));
+      json_object_set_new(ship_obj, "type", ship_type_obj);
+
+      json_object_set_new(ship_obj, "holds_used", json_integer(sqlite3_column_int (st, 9)));
+      json_object_set_new(ship_obj, "fighters", json_integer(sqlite3_column_int (st, 10)));
+      
+      json_t* location_obj = json_object();
+      json_object_set_new(location_obj, "sector_id", json_integer(sqlite3_column_int (st, 3)));
+      json_object_set_new(location_obj, "sector_name", json_string((const char *)sqlite3_column_text (st, 11)));
+      json_object_set_new(ship_obj, "location", location_obj);
 
       ret_code = SQLITE_OK;
     }
   else if (rc == SQLITE_DONE)
     {
+      // No player found, return empty object
       ret_code = SQLITE_OK;
-      obj = json_object ();
+      root_obj = json_object ();
     }
   else
     {
@@ -4274,32 +4431,29 @@ db_player_info_json (int player_id, json_t **out)
     }
 
 cleanup:
-  // 5. Always finalize the SQLite statement if it was created.
   if (st)
     {
       sqlite3_finalize (st);
     }
 
-  // 6. Set the output pointer and ensure proper JSON cleanup.
   if (ret_code == SQLITE_OK)
     {
       if (out)
-	*out = obj;
+        *out = root_obj;
       else
-	json_decref (obj);
+        json_decref (root_obj);
     }
   else
     {
-      if (obj)
-	json_decref (obj);
+      if (root_obj)
+        json_decref (root_obj);
     }
 
-  // 7. Always release the lock at the very end.
   pthread_mutex_unlock (&db_mutex);
 
-  // 8. Single point of return.
   return ret_code;
 }
+
 
 
 int
