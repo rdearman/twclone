@@ -554,10 +554,11 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       rc = cmd_auth_logout (ctx, root);
     }
-  else if (!strcmp (c, "user.create") || !strcmp (c, "new.user"))
-    {
-      rc = cmd_user_create (ctx, root);
-    }
+  // use auth.register
+  /* else if (!strcmp (c, "user.create") || !strcmp (c, "new.user")) */
+  /*   { */
+  /*     rc = cmd_user_create (ctx, root); */
+  /*   } */
   else if (!strcmp (c, "auth.refresh"))
     {
       rc = cmd_auth_refresh (ctx, root);	/* NIY stub */
@@ -576,17 +577,9 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       rc = cmd_system_describe_schema (ctx, root);
     }
-  else if (!strcmp (c, "session.ping"))
+  else if ((!strcmp (c, "session.ping")) || (!strcmp (c, "session.hello")) || (!strcmp (c, "system.hello")))
     {
-      rc = cmd_session_ping (ctx, root);
-    }
-  else if (!strcmp (c, "session.hello"))
-    {
-      rc = cmd_session_hello (ctx, root);
-    }
-  else if (!strcmp (c, "system.hello"))
-    {
-      rc = cmd_system_hello (ctx, root);	/* optional alias NIY */
+      rc = cmd_system_hello (ctx, root); 
     }
   else if (!strcmp (c, "session.disconnect")
 	   || !strcmp (c, "system.disconnect"))

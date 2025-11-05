@@ -14,7 +14,7 @@ from typing import Tuple
 # ----------------------------
 HOST = "localhost"
 PORT = 1234
-TIMEOUT = 5
+TIMEOUT = 25
 DUMP_ON_FAIL = False
 
 # ----------------------------

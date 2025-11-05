@@ -1054,6 +1054,265 @@ This is **broadcast.v1**. Adding fields to `data` is non-breaking. Removals/sema
 ````
 
 
+# 🥉 PROTOCOL ADDENDUM — UNDOCUMENTED OR EXTENDED COMMANDS
+
+This addendum documents additional RPC commands implemented in the current TWClone server that are **not yet covered** in the main `PROTOCOL.md`.
+
+Each entry follows the same structure as the core protocol:
+**Command → Expected Request / Response → Notes.**
+
+---
+
+## 8. Session Management
+
+### `session.ping`
+
+**Purpose:** Keep-alive or latency check between client and server.
+**Request:**
+
+```json
+{ "cmd": "session.ping" }
+```
+
+**Response:**
+
+```json
+{ "status": "ok", "type": "session.pong", "data": { "ts": "<ISO8601 timestamp>" } }
+```
+
+**Notes:**
+Used by test clients to verify an open connection without triggering gameplay logic.
+
+---
+
+### `session.hello`
+
+**Purpose:** Perform handshake and report current session context.
+**Request:**
+
+```json
+{ "cmd": "session.hello" }
+```
+
+**Response:**
+
+```json
+{
+  "status": "ok",
+  "type": "session.hello",
+  "data": { "current_sector": <int>, "player_id": <int> }
+}
+```
+
+---
+
+### `session.disconnect`
+
+**Purpose:** Gracefully close a player session.
+**Request:**
+
+```json
+{ "cmd": "session.disconnect" }
+```
+
+**Response:**
+
+```json
+{ "status": "ok", "type": "session.disconnected" }
+```
+
+---
+
+### `system.disconnect`
+
+**Purpose:** Administrative or engine-level disconnect.
+**Request:**
+
+```json
+{ "cmd": "system.disconnect", "data": { "reason": "maintenance" } }
+```
+
+**Response:**
+
+```json
+{ "status": "ok", "type": "system.disconnected", "data": { "reason": "maintenance" } }
+```
+
+---
+
+### `system.capabilities`
+
+**Purpose:** Enumerate server capabilities and enabled modules.
+**Request:**
+
+```json
+{ "cmd": "system.capabilities" }
+```
+
+**Response:**
+
+```json
+{
+  "status": "ok",
+  "type": "system.capabilities",
+  "data": {
+    "auth": ["login", "register", "mfa.totp.verify"],
+    "move": ["warp", "pathfind", "autopilot"],
+    "combat": ["attack", "deploy_fighters", "lay_mines"],
+    "limits": { "turns": 1000, "fighters_per_sector": 2500 }
+  }
+}
+```
+
+---
+
+## 9. Ship Extensions
+
+### `ship.inspect`
+
+**Purpose:** Retrieve detailed inspection data (hull, subsystems, damage, cargo).
+**Response Type:** `ship.inspect_result`
+
+### `ship.reregister`
+
+**Purpose:** Change registration or callsign of a ship after claim/rename cycle.
+
+### `ship.claim`
+
+**Purpose:** Claim an unowned or derelict ship in the same sector.
+
+### `ship.self_destruct`
+
+**Purpose:** Trigger a self-destruct sequence.
+**Notes:** May notify nearby sectors and remove the record from `ships` table.
+
+### `ship.info`
+
+**Purpose:** Return summary information (alias of `ship.status`).
+**Response:**
+
+```json
+{ "status": "ok", "type": "ship.info", "data": { "name": "...", "sector": 22, "owner": 1 } }
+```
+
+---
+
+## 10. Port Extensions
+
+### `port.info`
+
+Alias of `trade.port_info`, provided for internal API symmetry.
+
+### `port.status`
+
+**Purpose:** Query current trading status (open, closed, under attack, etc.).
+**Response:** `type: "port.status"`
+
+### `port.describe`
+
+**Purpose:** Return full description including commodities and traffic data.
+
+---
+
+## 11. Trade Extensions
+
+### `trade.quote`
+
+**Purpose:** Request a live quote for a commodity without committing to trade.
+**Request:**
+
+```json
+{ "cmd": "trade.quote", "data": { "commodity": "ore", "amount": 500 } }
+```
+
+**Response:**
+
+```json
+{ "status": "ok", "type": "trade.quote", "data": { "price": 45, "port_id": 2 } }
+```
+
+### `trade.jettison`
+
+**Purpose:** Dump cargo directly into space.
+(Handled identically to `ship.jettison` but routed through trade context.)
+
+---
+
+## 12. Sector Scans
+
+### `sector.info`
+
+**Purpose:** Direct lookup of sector metadata.
+Equivalent to the data payload from `move.describe_sector`.
+
+### `sector.scan`
+
+**Purpose:** Explicit sector scan returning ships, ports, and mines present.
+**Response Type:** `sector.scan`
+
+### `sector.scan.density`
+
+**Purpose:** Return calculated energy density (for warp/transport heuristics).
+**Response Type:** `sector.scan.density`
+
+---
+
+## 13. Deployment Lists
+
+### `deploy.fighters.list`
+
+**Purpose:** List all fighter deployments owned by the player in the current or specified sector.
+**Response:**
+
+```json
+{ "status": "ok", "type": "deploy.fighters.list", "data": { "total": 10, "entries": [...] } }
+```
+
+### `deploy.mines.list`
+
+**Purpose:** List all mines (Armid, Limpet) owned by the player in a sector.
+**Response:**
+
+```json
+{ "status": "ok", "type": "deploy.mines.list", "data": { "total": 5, "entries": [...] } }
+```
+
+---
+
+## 14. System Notices and News
+
+### `sys.notice.create`
+
+**Purpose:** SysOp or automated system announcement.
+Creates a record in `notices` and broadcasts if enabled.
+
+### `notice.list`
+
+**Purpose:** Retrieve pending or historical system notices for the user.
+
+### `notice.ack`
+
+**Purpose:** Mark a notice as read/acknowledged.
+
+### `news.read`
+
+**Purpose:** Fetch current in-game news entries (e.g., BBS feed).
+**Response:** `type: "news.read"`
+
+---
+
+## 15. Subscription Extensions
+
+### `subscribe.catalog`
+
+**Purpose:** Return a catalogue of all available subscription channels and topics.
+Complements `subscribe.list`.
+
+---
+
+# End of Addendum
+
+
 ---
 
 **This document is intentionally exhaustive and forward-compatible**. It retains all legacy semantics while leveraging JSON for clarity, validation, and evolvability (namespaces, schemas, idempotency, subscriptions, pagination, bulk, and robust error handling).
