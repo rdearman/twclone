@@ -1596,7 +1596,7 @@ create_ferringhi (int ferringhi_sector)
       // We are also adding 'limpets', 'genesis', 'colonists', 'flags', 'ported', 'onplanet',
       // and the cloaking columns, providing default values where necessary.
       strncat (cols,
-	       "name, type_id, location, fighters, shields, holds_used, ore, organics, equipment, limpets, genesis, colonists, flags, ported, onplanet",
+	       "name, type_id, location, fighters, shields, holds, ore, organics, equipment, limpets, genesis, colonists, flags, ported, onplanet",
 	       sizeof (cols) - strlen (cols) - 1);
       strncat (vals, "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?",
 	       sizeof (vals) - strlen (vals) - 1);
@@ -1664,11 +1664,11 @@ create_ferringhi (int ferringhi_sector)
       sqlite3_bind_int (ins, b++, longest_tunnel_sector);
       sqlite3_bind_int (ins, b++, ship_fighters);
       sqlite3_bind_int (ins, b++, ship_shields);
-      // We are binding the max holds to the current holds_used to start
+      // We are binding the max holds to the current holds to start
       // The ship should begin with 0 current cargo, but needs max holds for player to see capacity.
-      // Since Ferengi Trader will likely start with 0 cargo, we should bind 0 to holds_used.
+      // Since Ferengi Trader will likely start with 0 cargo, we should bind 0 to holds.
       // Assuming 'holds_to_fill' is the number of cargo holds the ship starts with (0 in most cases).
-      sqlite3_bind_int (ins, b++, holds_to_fill);	// This should be 0 for a new ship (holds_used)
+      sqlite3_bind_int (ins, b++, holds_to_fill);	// This should be 0 for a new ship (holds)
       sqlite3_bind_int (ins, b++, 0);	// Cargo begins here
       sqlite3_bind_int (ins, b++, 0);
       sqlite3_bind_int (ins, b++, 0);	// Cargo ends here
@@ -1907,7 +1907,7 @@ create_imperial (void)
 
   // Using a prepared statement for safety and to correctly bind all new and existing columns.
   sqlite3_stmt *ins = NULL;
-  const char *sql_ship_insert = "INSERT INTO ships ( name, type_id, location, fighters, shields, holds_used, photons, genesis, attack) " "VALUES ('Imperial Starship', ?, ?, ?, ?, ?, ?, ?, ?);";	// 10 columns/bind points
+  const char *sql_ship_insert = "INSERT INTO ships ( name, type_id, location, fighters, shields, holds, photons, genesis, attack) " "VALUES ('Imperial Starship', ?, ?, ?, ?, ?, ?, ?, ?);";	// 10 columns/bind points
 
   rc = sqlite3_prepare_v2 (db, sql_ship_insert, -1, &ins, NULL);
   if (rc != SQLITE_OK)
@@ -2214,16 +2214,16 @@ create_derelicts (void)
       strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
     }
 
-  // location, holds_used, shields are essential and should be added
+  // location, holds, shields are essential and should be added
   if (has_column (db, "ships", "location"))
     {
       strncat (cols, ", location", sizeof (cols) - strlen (cols) - 1);
       strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
     }
 
-  if (has_column (db, "ships", "holds_used"))
+  if (has_column (db, "ships", "holds"))
     {
-      strncat (cols, ", holds_used", sizeof (cols) - strlen (cols) - 1);
+      strncat (cols, ", holds", sizeof (cols) - strlen (cols) - 1);
       strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
     }
 
@@ -2382,7 +2382,7 @@ create_derelicts (void)
       int fill_pct =
 	MIN_FILL_PCT + (rand () % (MAX_FILL_PCT - MIN_FILL_PCT + 1));
 
-      int holds_used = (int) (max_holds * ((float) fill_pct / 100.0));
+      int holds = (int) (max_holds * ((float) fill_pct / 100.0));
       int shields_to_add = (int) (max_shields * ((float) fill_pct / 100.0));
       int fighters_to_add = (int) (max_fighters * ((float) fill_pct / 100.0));
       int mines_to_add = (int) (max_mines * ((float) fill_pct / 100.0));
@@ -2409,8 +2409,8 @@ create_derelicts (void)
       if (has_column (db, "ships", "location"))
 	sqlite3_bind_int (ins, b++, sector);
 
-      if (has_column (db, "ships", "holds_used"))
-	sqlite3_bind_int (ins, b++, holds_used);
+      if (has_column (db, "ships", "holds"))
+	sqlite3_bind_int (ins, b++, holds);
 
       if (has_column (db, "ships", "shields"))
 	sqlite3_bind_int (ins, b++, shields_to_add);

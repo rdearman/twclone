@@ -461,7 +461,7 @@ const char *create_table_sql[] = {
     "   name TEXT NOT NULL,  "
     "   type_id INTEGER, /* Foreign Key to shiptypes.id */  "
     "   attack INTEGER,  "
-    "   holds_used INTEGER,  "
+    "   holds INTEGER,  "
     "   mines INTEGER, /* Current quantity carried */  "
     "   limpets INTEGER, /* Current quantity carried */  "
     "   fighters INTEGER, /* Current quantity carried */  "
@@ -480,7 +480,7 @@ const char *create_table_sql[] = {
     "   ported INTEGER,  "
     "   onplanet INTEGER,  "
     "   destroyed INTEGER DEFAULT 0,  "  
-    "   CONSTRAINT check_current_cargo_limit CHECK ( (colonists + equipment + organics + ore) <= holds_used ), "
+    "   CONSTRAINT check_current_cargo_limit CHECK ( (colonists + equipment + organics + ore) <= holds ), "
     "   FOREIGN KEY(type_id) REFERENCES shiptypes(id),  "
     "   FOREIGN KEY(location) REFERENCES sectors(id)  " " );  ",
 
@@ -1691,7 +1691,7 @@ const char *insert_default_sql[] = {
   /* fix a problem with the terraforming cron */
   "ALTER TABLE planets ADD COLUMN terraform_turns_left INTEGER NOT NULL DEFAULT 1;",
 
-  "INSERT INTO ships (name, type_id, attack, holds_used, mines, limpets, fighters, genesis, photons, location, shields, beacons, colonists, equipment, organics, ore, flags, cloaking_devices, cloaked, ported, onplanet) "
+  "INSERT INTO ships (name, type_id, attack, holds, mines, limpets, fighters, genesis, photons, location, shields, beacons, colonists, equipment, organics, ore, flags, cloaking_devices, cloaked, ported, onplanet) "
     "VALUES ('Bit Banger', 1, 110, 20, 25, 5, 2300, 5, 1, 1, 400, 10, 5, 5, 5, 5, 0, 5, NULL, 1, 1);",
 
   "INSERT INTO players (number, name, passwd, sector, ship, type) VALUES (1, 'System', 'BOT',1,1,1);",
@@ -1710,7 +1710,7 @@ const char *insert_default_sql[] = {
 /* 2. Insert five maxed-out Orion Syndicate ships (FULL SCHEMA APPLIED) */
 /* ------------------------------------------------------------------------------------- */
     " INSERT INTO ships ( "
-    "  name, type_id, attack, holds_used, mines, limpets, fighters, genesis, photons, location, shields, beacons, colonists, equipment, organics, ore, flags, cloaking_devices, cloaked, ported, onplanet "
+    "  name, type_id, attack, holds, mines, limpets, fighters, genesis, photons, location, shields, beacons, colonists, equipment, organics, ore, flags, cloaking_devices, cloaked, ported, onplanet "
     " ) "
     " SELECT "
     "  'Orion Heavy Fighter Alpha', T.id, 0, T.maxholds, T.maxmines, 0, T.maxfighters, T.maxgenesis, T.maxphotons, P.sector, T.maxshields, T.maxbeacons, 0, 0, 0, 0, 0, 0, NULL, 0, 0 "
@@ -4256,7 +4256,7 @@ cleanup:
 /*     " COALESCE(s.name, '')      AS ship_name, " */
 /*     " COALESCE(s.type_id, 0)    AS ship_type_id, " */
 /*     " COALESCE(st.name, '')     AS ship_type_name, " */
-/*     " COALESCE(s.holds_used, 0) AS ship_holds, " */
+/*     " COALESCE(s.holds, 0) AS ship_holds, " */
 /*     " COALESCE(s.fighters, 0)   AS ship_fighters, " */
 /*     " COALESCE(sectors.name, 'Unknown') AS sector_name " */
 /*     "FROM players p " */
@@ -4377,7 +4377,7 @@ db_player_info_json (int player_id, json_t **out)
     " COALESCE(s.name, '')      AS ship_name, "
     " COALESCE(s.type_id, 0)    AS ship_type_id, "
     " COALESCE(st.name, '')     AS ship_type_name, "
-    " COALESCE(s.holds_used, 0) AS ship_holds, "
+    " COALESCE(s.holds, 0) AS ship_holds, "
     " COALESCE(s.fighters, 0)   AS ship_fighters, "
     " COALESCE(sectors.name, 'Unknown') AS sector_name "
     "FROM players p "
@@ -4430,7 +4430,7 @@ db_player_info_json (int player_id, json_t **out)
       json_object_set_new(ship_type_obj, "name", json_string((const char *)sqlite3_column_text (st, 8)));
       json_object_set_new(ship_obj, "type", ship_type_obj);
 
-      json_object_set_new(ship_obj, "holds_used", json_integer(sqlite3_column_int (st, 9)));
+      json_object_set_new(ship_obj, "holds", json_integer(sqlite3_column_int (st, 9)));
       json_object_set_new(ship_obj, "fighters", json_integer(sqlite3_column_int (st, 10)));
       
       json_t* location_obj = json_object();
@@ -5248,7 +5248,7 @@ db_ships_inspectable_at_sector_json (int player_id, int sector_id,
     "  own.player_id AS owner_id, "
     "  COALESCE( (SELECT name FROM players WHERE id = own.player_id), 'derelict') AS owner_name, "
     /* derelict/boardable == unpiloted, regardless of owner */
-    "  CASE WHEN pil.id IS NULL THEN 1 ELSE 0 END AS is_derelict, " "  s.fighters, s.shields, " "  s.holds AS holds_total, (s.holds - s.holds_used) AS holds_free, " "  s.ore, s.organics, s.equipment, s.colonists, " "  COALESCE(s.flags,0) AS flags, s.id AS registration, COALESCE(s.perms, 731) AS perms " "FROM ships s " "LEFT JOIN shiptypes      st  ON st.id = s.type " "LEFT JOIN ship_ownership own ON own.ship_id = s.id " "LEFT JOIN players pil ON pil.ship = s.id "	/* current pilot (if any) */
+    "  CASE WHEN pil.id IS NULL THEN 1 ELSE 0 END AS is_derelict, " "  s.fighters, s.shields, " "  s.holds AS holds_total, (s.holds - s.holds) AS holds_free, " "  s.ore, s.organics, s.equipment, s.colonists, " "  COALESCE(s.flags,0) AS flags, s.id AS registration, COALESCE(s.perms, 731) AS perms " "FROM ships s " "LEFT JOIN shiptypes      st  ON st.id = s.type " "LEFT JOIN ship_ownership own ON own.ship_id = s.id " "LEFT JOIN players pil ON pil.ship = s.id "	/* current pilot (if any) */
     "WHERE s.location = ? "
     "  AND (pil.id IS NULL OR pil.id != ?) "
     "ORDER BY is_derelict DESC, s.id ASC;";
@@ -5543,7 +5543,7 @@ db_ship_claim (int player_id, int sector_id, int ship_id, json_t **out_ship)
     "       COALESCE( (SELECT name FROM players WHERE id=own.player_id), 'derelict') AS owner_name, "
     "       0 AS is_derelict, "
     "       s.fighters, s.shields, "
-    "       s.holds AS holds_total, (s.holds - s.holds_used) AS holds_free, "
+    "       s.holds AS holds_total, (s.holds - s.holds) AS holds_free, "
     "       s.ore, s.organics, s.equipment, s.colonists, "
     "       COALESCE(s.flags,0) AS flags, s.id AS registration, COALESCE(s.perms, 731) AS perms "
     "FROM ships s "

@@ -51,8 +51,12 @@ extern "C"
 				     TurnConsumeResult consume_result,
 				     const char *cmd, json_t * root,
 				     json_t * meta_data);
+  /* Convenience wrappers used across the server */
+  int player_credits( client_ctx_t *ctx);
+  int cargo_space_free( client_ctx_t *ctx);
 
 
+  
 #ifdef __cplusplus
 }
 #endif

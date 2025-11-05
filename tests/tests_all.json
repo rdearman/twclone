@@ -37,58 +37,6 @@
 	  "capture": { "curSector": "data.current_sector" }
       },
       {
-	  "name": "system.capabilities",
-	  "cmd": "system.capabilities",
-	  "expect": {
-	      "id": "srv-ok",
-	      "ts": "*",
-	      "status": "ok",
-	      "type": "system.capabilities",
-	      "data": {
-		  "protocol_version": "*",
-		  "features": "*",
-		  "schemas": "*array",
-		  "command_count": "*",
-		  "limits": "*"
-	      },
-	      "error": null,
-	      "meta": "*"
-	  }
-      },
-      {
-	  "name": "player.my_info",
-	  "cmd": "player.my_info",
-	  "expect": {
-	      "id": "srv-ok",
-	      "ts": "*",
-	      "status": "ok",
-	      "type": "player.info",
-	      "data": { "player": "*", "ship": "*" },
-	      "error": null,
-	      "meta": "*"
-	  },
-	  "capture": {
-	      "my_id": "data.player.id",
-	      "curSector": "data.ship.location.sector_id"
-	  }
-      },
-      {
-	  "name": "ship.info",
-	  "cmd": "ship.info",
-	  "expect": {
-	      "id": "srv-ok",
-	      "ts": "*",
-	      "status": "ok",
-              "type": "ship.status",
-              "data": {
-		  "ship": "*"
-	      },
-	      "error": null,
-	      "meta": "*"
-
-	  }
-      },
-      {
 	  "name": "sector.info (current)",
 	  "cmd": "move.describe_sector",
 	  "data": { "sector_id": "@curSector" },
@@ -110,52 +58,22 @@
 	      "portId": "data.ports.0.id"
 	  }
       },
-      {
-      "name": "move.autopilot.status (NIY)",
-      "cmd": "move.autopilot.status",
-      "expect": {
-        "status": "error",
-        "type": "error",
-        "error": {
-          "code": 1101
-        }
-      }
-    },
 
-      {
-          "name": "move.autopilot.start (ok)",
-          "cmd": "move.autopilot.start",
-          "data": {
-              "to": 10 
-          },
-          "expect": {
-              "status": "ok",
-              "type": "move.path_v1"
-          },
-          "asserts": [
-              { "path": "data.total_cost", "op": "==", "value": 8 },
-              { "path": "data.steps.0", "op": "==", "value": 155 }
-          ]
+
+{
+      "name": "TRADE.BUY ( FORCE ID)",
+      "cmd": "trade.buy",
+      "idempotency_key": "test-buy-single-1762338651-2594",
+      "data": {
+        "port_id": 76,
+        "commodity": "ore",   
+        "quantity": 1         
       },
-      {
-      "name": "move.autopilot.stop (NIY)",
-      "cmd": "move.autopilot.stop",
       "expect": {
-        "status": "error",
-        "type": "error",
-        "error": {
-          "code": 1101
-        }
+        "status": "ok",
+        "type": "trade.accepted" 
       }
     },
-      {
-	  "name": "Set Test Beacon",
-	  "command": "sector.set_beacon",
-	  "data": {
-	      "sector_id": "@curSector",
-	      "text": "TESTING!"
-	  }
-      },
 
       
       {
@@ -243,6 +161,130 @@
         }
       }
     },
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      {
+	  "name": "system.capabilities",
+	  "cmd": "system.capabilities",
+	  "expect": {
+	      "id": "srv-ok",
+	      "ts": "*",
+	      "status": "ok",
+	      "type": "system.capabilities",
+	      "data": {
+		  "protocol_version": "*",
+		  "features": "*",
+		  "schemas": "*array",
+		  "command_count": "*",
+		  "limits": "*"
+	      },
+	      "error": null,
+	      "meta": "*"
+	  }
+      },
+      {
+	  "name": "player.my_info",
+	  "cmd": "player.my_info",
+	  "expect": {
+	      "id": "srv-ok",
+	      "ts": "*",
+	      "status": "ok",
+	      "type": "player.info",
+	      "data": { "player": "*", "ship": "*" },
+	      "error": null,
+	      "meta": "*"
+	  },
+	  "capture": {
+	      "my_id": "data.player.id",
+	      "curSector": "data.ship.location.sector_id"
+	  }
+      },
+      {
+	  "name": "ship.info",
+	  "cmd": "ship.info",
+	  "expect": {
+	      "id": "srv-ok",
+	      "ts": "*",
+	      "status": "ok",
+              "type": "ship.status",
+              "data": {
+		  "ship": "*"
+	      },
+	      "error": null,
+	      "meta": "*"
+
+	  }
+      },
+      {
+      "name": "move.autopilot.status (NIY)",
+      "cmd": "move.autopilot.status",
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+
+      {
+          "name": "move.autopilot.start (ok)",
+          "cmd": "move.autopilot.start",
+          "data": {
+              "to": 10 
+          },
+          "expect": {
+              "status": "ok",
+              "type": "move.path_v1"
+          },
+          "asserts": [
+              { "path": "data.total_cost", "op": "==", "value": 8 },
+              { "path": "data.steps.0", "op": "==", "value": 155 }
+          ]
+      },
+      {
+      "name": "move.autopilot.stop (NIY)",
+      "cmd": "move.autopilot.stop",
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+      {
+	  "name": "Set Test Beacon",
+	  "command": "sector.set_beacon",
+	  "data": {
+	      "sector_id": "@curSector",
+	      "text": "TESTING!"
+	  }
+      },
+
     {
       "name": "combat.deploy_fighters ok",
       "cmd": "combat.deploy_fighters",

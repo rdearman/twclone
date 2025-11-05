@@ -232,11 +232,17 @@ h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
 }
 
 
+/*
+ * In server_players.c
+ * This helper now *accepts* the db pointer.
+ */
 int
 h_get_player_credits (sqlite3 *db, int player_id, int *credits_out)
 {
   if (!credits_out)
     return SQLITE_MISUSE;
+  if (!db)
+    return SQLITE_ERROR; // Safety check
 
   static const char *SQL =
     "SELECT COALESCE(credits,0) FROM players WHERE id=?1";
@@ -248,6 +254,10 @@ h_get_player_credits (sqlite3 *db, int player_id, int *credits_out)
 
   sqlite3_bind_int (st, 1, player_id);
 
+  /*
+   * The copy-pasted cargo query has been removed.
+   */
+
   rc = sqlite3_step (st);
   if (rc == SQLITE_ROW)
     {
@@ -256,17 +266,20 @@ h_get_player_credits (sqlite3 *db, int player_id, int *credits_out)
     }
   else
     {
-      rc = SQLITE_ERROR;	/* no such player */
+      rc = SQLITE_ERROR;    /* no such player */
     }
 
   sqlite3_finalize (st);
   return rc;
 }
 
+
+
 /* Low-level: compute free cargo = players.holds - SUM(ship_goods.quantity) */
 int
 h_get_cargo_space_free (sqlite3 *db, int player_id, int *free_out)
 {
+
   if (!free_out)
     return SQLITE_MISUSE;
 
@@ -294,10 +307,15 @@ h_get_cargo_space_free (sqlite3 *db, int player_id, int *free_out)
 
   /* total cargo on ship (assumes ship_goods exists as designed earlier) */
   int total = 0;
+
   rc = sqlite3_prepare_v2 (db,
-			   "SELECT COALESCE(SUM(quantity),0) "
-			   "FROM ship_goods WHERE player_id=?1",
-			   -1, &st, NULL);
+                           "SELECT (COALESCE(s.holds, 0) - "
+                           "COALESCE(s.colonists + s.equipment + s.organics + s.ore, 0)) "
+                           "FROM players p "
+                           "JOIN ships s ON s.id = p.ship "
+                           "WHERE p.id = ?1",
+                           -1, &st, NULL);
+  
   if (rc != SQLITE_OK)
     return rc;
   sqlite3_bind_int (st, 1, player_id);
@@ -319,23 +337,25 @@ h_get_cargo_space_free (sqlite3 *db, int player_id, int *free_out)
   return SQLITE_OK;
 }
 
-/* Convenience wrappers that match your usage style */
+/* server_players.c */
 int
-player_credits (client_ctx_t *ctx)
+player_credits( client_ctx_t *ctx)
 {
-  sqlite3 *db = db_get_handle ();
+  if (!ctx || ctx->player_id <= 0) return 0;
+  sqlite3 *db = db_get_handle();
   int c = 0;
-  if (h_get_player_credits (db, ctx->player_id, &c) != SQLITE_OK)
+  if (h_get_player_credits(db, ctx->player_id, &c) != SQLITE_OK)
     return 0;
   return c;
 }
 
+
 int
 cargo_space_free (client_ctx_t *ctx)
 {
-  sqlite3 *db = db_get_handle ();
   int f = 0;
-  if (h_get_cargo_space_free (db, ctx->player_id, &f) != SQLITE_OK)
+  sqlite3 *db = db_get_handle();
+  if (h_get_cargo_space_free (db, ctx->player_id, &f) != SQLITE_OK) 
     return 0;
   return f;
 }
@@ -343,9 +363,10 @@ cargo_space_free (client_ctx_t *ctx)
 
 /* Update a player's ship cargo for one commodity by delta (can be +/-). */
 int
-h_update_ship_cargo (sqlite3 *db, int player_id,
+h_update_ship_cargo (  sqlite3 *db, int player_id,
 		     const char *commodity, int delta, int *new_qty_out)
 {
+
   if (!commodity || *commodity == '\0')
     return SQLITE_MISUSE;
 
