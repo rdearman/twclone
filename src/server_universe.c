@@ -1205,6 +1205,22 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
 }
 
 
+// Accept either an int or a string containing digits; return 1 on success.
+static int json_get_int_flexible(json_t *obj, const char *key, int *out) {
+  if (!obj || !key || !out) return 0;
+  json_t *v = json_object_get(obj, key);
+  if (!v) return 0;
+  if (json_is_integer(v)) { *out = (int)json_integer_value(v); return 1; }
+  if (json_is_string(v)) {
+    const char *s = json_string_value(v);
+    if (!s || !*s) return 0;
+    char *end = NULL;
+    long n = strtol(s, &end, 10);
+    if (end && *end == '\0') { *out = (int)n; return 1; }
+  }
+  return 0;
+}
+
 
 /* -------- move.pathfind: BFS path A->B with avoid list -------- */
 int
@@ -1212,41 +1228,37 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
 {
   if (!ctx)
     return 1;
-  /* Build avoid set (optional) */
-  /* We’ll size bitsets by max sector id */
-  sqlite3 *db = db_get_handle ();
+
+  sqlite3 *db = db_get_handle();
   int max_id = 0;
   sqlite3_stmt *st = NULL;
 
-  /* Parse request data */
-  json_t *data = root ? json_object_get (root, "data") : NULL;
+  json_t *data = root ? json_object_get(root, "data") : NULL;
 
-  /* from: null -> current sector */
+  // default from = current sector
   int from = (ctx->sector_id > 0) ? ctx->sector_id : 1;
-  if (data)
-    {
-      json_t *jfrom = json_object_get (data, "from");
-      if (jfrom && json_is_integer (jfrom))
-	from = (int) json_integer_value (jfrom);
-      /* if null or missing, keep default */
+  if (data) {
+    int tmp;
+    if (json_get_int_flexible(data, "from", &tmp) ||
+        json_get_int_flexible(data, "from_sector_id", &tmp)) {
+      from = tmp;
     }
+  }
 
-  /* to: required */
+  // to = required
   int to = -1;
-  if (data)
-    {
-      json_t *jto = json_object_get (data, "to");
-      if (jto && json_is_integer (jto))
-	to = (int) json_integer_value (jto);
+  if (data) {
+    int tmp;
+    if (json_get_int_flexible(data, "to", &tmp) ||
+        json_get_int_flexible(data, "to_sector_id", &tmp)) {
+      to = tmp;
     }
-  if (to <= 0)
-    {
-      send_enveloped_error (ctx->fd, root, 1401,
-			    "Target sector not specified");
-      return 1;
-    }
-
-
+  }
+  if (to <= 0) {
+    send_enveloped_error(ctx->fd, root, 1401, "Target sector not specified");
+    return 1;
+  }
+  
   pthread_mutex_lock (&db_mutex);
   if (sqlite3_prepare_v2 (db, "SELECT MAX(id) FROM sectors", -1, &st, NULL) ==
       SQLITE_OK && sqlite3_step (st) == SQLITE_ROW)
@@ -1837,6 +1849,7 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
   if (!ctx || !root)
     return 1;
 
+  
   sqlite3 *db_handle = db_get_handle ();
   h_decloak_ship (db_handle,
 		  h_get_active_ship_id (db_handle, ctx->player_id));

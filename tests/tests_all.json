@@ -36,7 +36,6 @@
 	  },
 	  "capture": { "curSector": "data.current_sector" }
       },
-
       {
 	  "name": "system.capabilities",
 	  "cmd": "system.capabilities",
@@ -55,12 +54,6 @@
 	      "error": null,
 	      "meta": "*"
 	  }
-      },
-      {
-	  "name": "system.describe_schema (system)",
-	  "cmd": "system.describe_schema",
-	  "data": { "name": "system" },
-	  "expect": { "status": "ok", "type": "system.schema", "data": "*" }
       },
       {
 	  "name": "player.my_info",
@@ -117,56 +110,7 @@
 	      "portId": "data.ports.0.id"
 	  }
       },
-      
-
-{
-  "name": "move.pathfind ok @curSector->10 (compat keys)",
-  "cmd": "move.pathfind",
-  "data": {
-    "from": "@curSector",
-    "from_sector_id": "@curSector",
-    "to": 10,
-    "to_sector_id": 10
-  },
-  "expect": {
-    "status": "ok",
-    "type": "move.path_v1",
-    "data": "*",
-    "meta": "*"
-  }
-}
-
-
-      
-    {
-      "name": "move.warp refused: to current sector",
-      "cmd": "move.warp",
-      "data": {
-        "from": "@curSector",
-        "to_sector_id": "@curSector"
-      },
-      "expect": {
-        "status": "refused",
-        "error": {
-          "code": "*any"
-        }
-      }
-    },
-    {
-      "name": "move.autopilot.start (NIY)",
-      "cmd": "move.autopilot.start",
-      "data": {
-        "to": 10
-      },
-      "expect": {
-        "status": "error",
-        "type": "error",
-        "error": {
-          "code": 1101
-        }
-      }
-    },
-    {
+      {
       "name": "move.autopilot.status (NIY)",
       "cmd": "move.autopilot.status",
       "expect": {
@@ -177,7 +121,23 @@
         }
       }
     },
-    {
+
+      {
+          "name": "move.autopilot.start (ok)",
+          "cmd": "move.autopilot.start",
+          "data": {
+              "to": 10 
+          },
+          "expect": {
+              "status": "ok",
+              "type": "move.path_v1"
+          },
+          "asserts": [
+              { "path": "data.total_cost", "op": "==", "value": 8 },
+              { "path": "data.steps.0", "op": "==", "value": 155 }
+          ]
+      },
+      {
       "name": "move.autopilot.stop (NIY)",
       "cmd": "move.autopilot.stop",
       "expect": {
@@ -188,20 +148,17 @@
         }
       }
     },
-    {
-      "name": "sector.set_beacon",
-      "cmd": "sector.set_beacon",
-      "idempotency_key": "test-beacon-1762338651-2364",
-      "data": {
-        "sector": "@curSector",
-        "title": "The Federation -- Do Not Dump!"
+      {
+	  "name": "Set Test Beacon",
+	  "command": "sector.set_beacon",
+	  "data": {
+	      "sector_id": "@curSector",
+	      "text": "TESTING!"
+	  }
       },
-      "expect": {
-        "status": "ok",
-        "type": "sector.info"
-      }
-    },
-    {
+
+      
+      {
       "name": "trade.port_info (by port_id)",
       "cmd": "trade.port_info",
       "data": {
@@ -213,7 +170,10 @@
         "data": "*object"
       }
     },
-    {
+
+
+
+      {
       "name": "trade.buy ok (items list)",
       "cmd": "trade.buy",
       "idempotency_key": "test-buy-single-1762338651-2594",
@@ -398,7 +358,78 @@
         "type": "mail.deleted"
       }
     },
+
+
+
+
+
+
+
+
+      
+      {
+	  "name": "system.describe_schema (system)",
+	  "cmd": "system.describe_schema",
+	  "data": {
+	      "name": "auth.login" 
+	  },
+	  "expect": {
+	      "status": "ok",
+	      "type": "system.schema",
+	      "data": "*"
+	  }
+      },
+
+      
+      {
+	  "name": "move.pathfind RRD CHECKS",
+	  "cmd": "move.pathfind",
+	  "data": {
+	      "from": 1,
+	      "to": 10
+	  },
+	  "expect": {
+	      "status": "ok",
+	      "type": "move.path_v1",
+	      "data": "*",
+	      "meta": "*"
+	  }
+      },
+
+
+      {
+	  "name": "move.warp (Sector 2)",
+	  "cmd": "move.warp",
+	  "data": {
+	      "from_sector_id": "@curSector",
+	      "to_sector_id": 2
+	  },
+	  "expect": {
+	      "status": "refused",
+	      "type": "error",
+	      "error": { "code": "*" },
+	      "meta": "*"
+	  }
+      },
+      
+
+      
     {
+      "name": "move.warp refused: to current sector",
+      "cmd": "move.warp",
+      "data": {
+        "from": "@curSector",
+        "to_sector_id": "@curSector"
+      },
+      "expect": {
+        "status": "refused",
+        "error": {
+          "code": "*any"
+        }
+      }
+    },
+
+      {
       "name": "sector.search (by text)",
       "cmd": "sector.search",
       "data": {

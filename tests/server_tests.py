@@ -172,22 +172,37 @@ def coerce_command_from_test(name: str, test: Dict[str, Any]) -> Dict[str, Any]:
     """
     Accept either:
       - test["command"] is a dict -> use as-is
-      - test["command"] is a string -> wrap to {"command": "<string>"}
+      - test["command"] is a string -> wrap to {"command": "<string>", "data": test.get("data")}
       - legacy: test has "type" or "cmd" -> wrap accordingly
     """
+    frame = {}
+
     if "command" in test:
         cmd = test["command"]
         if isinstance(cmd, dict):
-            return cmd
+            return cmd  # The "command" field is the whole frame
         if isinstance(cmd, str):
-            return {"command": cmd}
-        raise TypeError(f"Test '{name}': 'command' must be a string or object.")
+            frame["command"] = cmd
+            if "data" in test:
+                frame["data"] = test["data"] # <-- THE FIX
+            return frame
+
     # legacy fallback:
     if "type" in test and isinstance(test["type"], str):
-        return {"command": test["type"]}
+        frame["command"] = test["type"]
+        if "data" in test:
+            frame["data"] = test["data"] # <-- THE FIX
+        return frame
+        
     if "cmd" in test and isinstance(test["cmd"], str):
-        return {"command": test["cmd"]}
+        frame["command"] = test["cmd"]
+        if "data" in test:
+            frame["data"] = test["data"] # <-- THE FIX
+        return frame
+        
     raise TypeError(f"Test '{name}': 'command' must be an object with 'command' field, a string, or legacy 'type'/'cmd'.")
+
+
 
 # ----------------------------
 # Auth bootstrap (optional)
@@ -354,7 +369,7 @@ def _run_asserts(resp: Dict[str, Any], assertions: List[Dict[str, Any]], vars: D
             errs.append(f"assert {op} failed at {path}: actual={actual!r} expected={expected!r}")
     return ok_all, errs
 
-# in run_test(...):
+
 def run_test(name: str, sock: socket.socket, test: Dict[str, Any], strict: bool = False, vars: Optional[Dict[str,Any]] = None) -> None:
     if vars is None: vars = {}
 
@@ -382,12 +397,19 @@ def run_test(name: str, sock: socket.socket, test: Dict[str, Any], strict: bool 
     ok = soft_match(resp, expect, strict=strict)
     status = resp.get("status"); rtype = resp.get("type")
 
-    # handle save
-    save_spec = test.get("save")
+    # handle save (and capture)
+    save_spec = test.get("save") or test.get("capture") # <-- THE FIX
     if isinstance(save_spec, dict):
+        # Support both {"var": "name", "path": "..."}
         var = save_spec.get("var"); path = save_spec.get("path")
         if var and path:
             vars[var] = _get_by_path(resp, path)
+        
+        # Support {"name": "path", ...}
+        else:
+            for var_name, var_path in save_spec.items():
+                if isinstance(var_path, str):
+                    vars[var_name] = _get_by_path(resp, var_path)
 
     # handle asserts
     asserts = test.get("asserts")
@@ -409,6 +431,7 @@ def run_test(name: str, sock: socket.socket, test: Dict[str, Any], strict: bool 
             printed = True
         if DUMP_ON_FAIL and not printed:
             print(f"  full response: {json.dumps(resp, ensure_ascii=False)}")
+
 
 # ----------------------------
 # Suite execution
