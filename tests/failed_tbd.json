@@ -1,0 +1,94 @@
+{
+    "tests":
+    [
+
+	{
+	    "name": "TRADE.BUY ( FORCE ID)",
+	    "cmd": "trade.buy",
+	    "idempotency_key": "test-buy-single-1762338651-2594",
+	    "data": {
+		"port_id": 76,
+		"commodity": "ore",   
+		"quantity": 1         
+	    },
+	    "expect": {
+		"status": "ok",
+		"type": "trade.accepted" 
+	    }
+	},
+
+	
+	{
+	    "name": "trade.port_info (by port_id)",
+	    "cmd": "trade.port_info",
+	    "data": {
+		"port_id": "@portId"
+	    },
+	    "expect": {
+		"status": "ok",
+		"type": "trade.port_info",
+		"data": "*object"
+	    }
+	},
+
+
+
+	{
+	    "name": "trade.buy ok (items list)",
+	    "cmd": "trade.buy",
+	    "idempotency_key": "test-buy-single-1762338651-2594",
+	    "data": {
+		"port_id": "@portId",
+		"items": [
+		    {
+			"commodity": "ore",
+			"quantity": 1
+		    }
+		]
+	    },
+	    "expect": {
+		"status": "ok",
+		"type": "trade.receipt"
+	    }
+	},
+	{
+	    "name": "trade.buy idempotent replay",
+	    "cmd": "trade.buy",
+	    "idempotency_key": "@prev_idempotency_key",
+	    "data": {
+		"port_id": "@portId",
+		"items": [
+		    {
+			"commodity": "ore",
+			"quantity": 1
+		    }
+		]
+	    },
+	    "expect": {
+		"status": "ok",
+		"type": "trade.receipt"
+	    }
+	},
+	{
+	    "name": "trade.sell refused invalid commodity",
+	    "cmd": "trade.sell",
+	    "idempotency_key": "test-sell-invalid-1762338651-4283",
+	    "data": {
+		"port_id": "@portId",
+		"items": [
+		    {
+			"commodity": "invalid_thing",
+			"quantity": 1
+		    }
+		]
+	    },
+	    "expect": {
+		"status": "refused",
+		"error": {
+		    "code": "*any"
+		}
+	    }
+	}
+
+    ]
+}

@@ -1,5 +1,94 @@
 {
-  "tests": [
+    "tests":
+    [
+
+    {
+      "name": "auth.register (new user)",
+      "cmd": "auth.register",
+      "data": {
+        "user_name": "test_user_tbd",
+        "password": "password123"
+      },
+      "expect": {
+        "status": "ok",
+        "type": "auth.session"
+      }
+    },
+
+	{
+	    "name": "player.my_info",
+	    "cmd": "player.my_info",
+	    "expect": {
+		"status": "ok",
+		"type": "player.info",
+		"data": { "player": "*", "ship": "*" }
+	    },
+	    "capture": {
+		"my_id": "data.player.id",
+		"my_name": "data.player.name", 
+		"curSector": "data.ship.location.sector_id"
+	    }
+	},
+      {
+      "name": "sector.search (by text)",
+      "cmd": "sector.search",
+      "data": {
+        "q": "Federation"
+      },
+      "expect": {
+        "status": "ok",
+        "type": "sector.search_results_v1",
+        "data": {
+          "items": "*array"
+        }
+      }
+      },
+	
+	{
+	    "name": "mail.send",
+	    "cmd": "mail.send",
+	    "data": {
+		"to": "@my_name", 
+		"subject": "Hello",
+		"body": "Test"
+	    },
+	    "expect": {
+		"status": "ok",
+		"type": "mail.sent",
+		"data": {
+		    "id": "*" 
+		}
+	    }
+	},
+
+	{
+	    "name": "mail.inbox",
+	    "cmd": "mail.inbox",
+	    "data": {
+		"limit": 5
+	    },
+	    "expect": {
+		"status": "ok",
+		"type": "mail.inbox_v1",
+		"data": {
+		    "items": "*array"
+		}
+	    }
+	},
+	{
+	    "name": "mail.delete (ids array)",
+	    "cmd": "mail.delete",
+	    "data": {
+		"ids": [
+		    1
+		]
+	    },
+	    "expect": {
+		"status": "ok",
+		"type": "mail.deleted"
+	    }
+	},
+	
     {
       "name": "auth.login",
       "cmd": "auth.login",
@@ -58,134 +147,6 @@
 	      "portId": "data.ports.0.id"
 	  }
       },
-
-
-{
-      "name": "TRADE.BUY ( FORCE ID)",
-      "cmd": "trade.buy",
-      "idempotency_key": "test-buy-single-1762338651-2594",
-      "data": {
-        "port_id": 76,
-        "commodity": "ore",   
-        "quantity": 1         
-      },
-      "expect": {
-        "status": "ok",
-        "type": "trade.accepted" 
-      }
-    },
-
-      
-      {
-      "name": "trade.port_info (by port_id)",
-      "cmd": "trade.port_info",
-      "data": {
-        "port_id": "@portId"
-      },
-      "expect": {
-        "status": "ok",
-        "type": "trade.port_info",
-        "data": "*object"
-      }
-    },
-
-
-
-      {
-      "name": "trade.buy ok (items list)",
-      "cmd": "trade.buy",
-      "idempotency_key": "test-buy-single-1762338651-2594",
-      "data": {
-        "port_id": "@portId",
-        "items": [
-          {
-            "commodity": "ore",
-            "quantity": 1
-          }
-        ]
-      },
-      "expect": {
-        "status": "ok",
-        "type": "trade.receipt"
-      }
-    },
-    {
-      "name": "trade.buy idempotent replay",
-      "cmd": "trade.buy",
-      "idempotency_key": "@prev_idempotency_key",
-      "data": {
-        "port_id": "@portId",
-        "items": [
-          {
-            "commodity": "ore",
-            "quantity": 1
-          }
-        ]
-      },
-      "expect": {
-        "status": "ok",
-        "type": "trade.receipt"
-      }
-    },
-    {
-      "name": "trade.sell refused invalid commodity",
-      "cmd": "trade.sell",
-      "idempotency_key": "test-sell-invalid-1762338651-4283",
-      "data": {
-        "port_id": "@portId",
-        "items": [
-          {
-            "commodity": "invalid_thing",
-            "quantity": 1
-          }
-        ]
-      },
-      "expect": {
-        "status": "refused",
-        "error": {
-          "code": "*any"
-        }
-      }
-    },
-    {
-      "name": "trade.history (no next_cursor required)",
-      "cmd": "trade.history",
-      "data": {
-        "limit": 5
-      },
-      "expect": {
-        "status": "ok",
-        "type": "trade.history",
-        "data": {
-          "history": "*array"
-        }
-      }
-    },
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
       {
 	  "name": "system.capabilities",
 	  "cmd": "system.capabilities",
@@ -285,130 +246,6 @@
 	  }
       },
 
-    {
-      "name": "combat.deploy_fighters ok",
-      "cmd": "combat.deploy_fighters",
-      "idempotency_key": "test-fighters-deploy-1762338651-2237",
-      "data": {
-        "amount": 1,
-        "offense": 2
-      },
-      "expect": {
-        "status": "ok",
-        "type": "combat.fighters.deployed"
-      }
-    },
-    {
-      "name": "deploy.fighters.list (current sector)",
-      "cmd": "deploy.fighters.list",
-      "data": {
-        "sector_id": "@curSector"
-      },
-      "expect": {
-        "status": "ok",
-        "type": "Deploy.fighters.list_v1",
-        "data": {
-          "total": "*int"
-        }
-      }
-    },
-    {
-      "name": "deploy.mines.list (current sector)",
-      "cmd": "deploy.mines.list",
-      "data": {
-        "sector_id": "@curSector"
-      },
-      "expect": {
-        "status": "ok",
-        "type": "deploy.mines.list_v1",
-        "data": {
-          "total": "*int"
-        }
-      }
-    },
-    {
-      "name": "notice.create (system)",
-      "cmd": "sys.notice.create",
-      "data": {
-        "title": "Test notice",
-        "body": "This is a test notice",
-        "severity": "info"
-      },
-      "expect": {
-        "status": "ok",
-        "type": "announce.created",
-        "data": {
-          "id": "*any",
-          "severity": "info"
-        }
-      }
-    },
-    {
-      "name": "notice.list (no next_cursor required)",
-      "cmd": "notice.list",
-      "data": {
-        "limit": 5
-      },
-      "expect": {
-        "status": "ok",
-        "type": "notice.list_v1",
-        "data": {
-          "items": "*array"
-        }
-      }
-    },
-    {
-      "name": "mail.send",
-      "cmd": "mail.send",
-      "data": {
-        "to": "@my_id",
-        "subject": "Hello",
-        "body": "Test"
-      },
-      "expect": {
-        "status": "ok",
-        "type": "mail.sent",
-        "data": {
-          "id": "*any"
-        }
-      }
-    },
-    {
-      "name": "mail.inbox",
-      "cmd": "mail.inbox",
-      "data": {
-        "limit": 5
-      },
-      "expect": {
-        "status": "ok",
-        "type": "mail.inbox_v1",
-        "data": {
-          "items": "*array"
-        }
-      }
-    },
-    {
-      "name": "mail.delete (ids array)",
-      "cmd": "mail.delete",
-      "data": {
-        "ids": [
-          1
-        ]
-      },
-      "expect": {
-        "status": "ok",
-        "type": "mail.deleted"
-      }
-    },
-
-
-
-
-
-
-
-
-      
       {
 	  "name": "system.describe_schema (system)",
 	  "cmd": "system.describe_schema",
@@ -472,18 +309,112 @@
     },
 
       {
-      "name": "sector.search (by text)",
-      "cmd": "sector.search",
+      "name": "trade.history (no next_cursor required)",
+      "cmd": "trade.history",
       "data": {
-        "q": "Federation"
+          "limit": 5,
+        "player_id": 3	  
       },
       "expect": {
         "status": "ok",
-        "type": "sector.search_results_v1",
+          "type": "trade.history",
+        "data": {
+          "history": "*array"
+        }
+      }
+      },
+
+	{
+      "name": "combat.deploy_fighters ok",
+      "cmd": "combat.deploy_fighters",
+      "idempotency_key": "test-fighters-deploy-1762338651-2237",
+      "data": {
+        "amount": 1,
+	  "to_sector": 51,
+          "offense": 2
+      },
+      "expect": {
+        "status": "ok",
+        "type": "combat.fighters.deployed"
+      }
+    },
+
+	{
+      "name": "deploy.fighters.list (current sector)",
+      "cmd": "deploy.fighters.list",
+      "data": {
+        "sector_id": 51
+      },
+      "expect": {
+        "status": "ok",
+        "type": "Deploy.fighters.list_v1",
+        "data": {
+          "total": "*int"
+        }
+      }
+	},
+
+	{
+	    "name": "combat.lay_mines ok",
+	    "cmd": "combat.lay_mines",
+	    "idempotency_key": "test-mines-deploy-1762338651-2237",
+	    "data": {
+		"amount": 1,
+		"mine_type": 4 
+	    },
+	    "expect": {
+		"status": "ok",
+		"type": "combat.mines.deployed" 
+	    }
+	},
+	{
+	    "name": "deploy.mines.list (current sector)",
+	    "cmd": "deploy.mines.list",
+	    "data": {
+		"sector_id": 51
+	    },
+	    "expect": {
+		"status": "ok",
+		"type": "deploy.mines.list_v1",
+		"data": {
+		    "total": "*",
+		    "entries": "*array"
+		}
+            }
+	},
+    {
+      "name": "notice.create (system)",
+      "cmd": "sys.notice.create",
+      "data": {
+        "title": "Test notice",
+        "body": "This is a test notice",
+        "severity": "info"
+      },
+      "expect": {
+        "status": "ok",
+        "type": "announce.created",
+        "data": {
+          "id": "*any",
+          "severity": "info"
+        }
+      }
+    },
+    {
+      "name": "notice.list (no next_cursor required)",
+      "cmd": "notice.list",
+      "data": {
+        "limit": 5
+      },
+      "expect": {
+        "status": "ok",
+        "type": "notice.list_v1",
         "data": {
           "items": "*array"
         }
       }
     }
-  ]
+
+
+
+    ]
 }

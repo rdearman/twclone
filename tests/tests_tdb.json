@@ -1,0 +1,1118 @@
+{
+  "tests": [
+    {
+      "name": "Stardock: bank.deposit (TBD)",
+      "cmd": "bank.deposit",
+      "data": {
+        "amount": 100
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "Stardock: bank.withdraw (TBD)",
+      "cmd": "bank.withdraw",
+      "data": {
+        "amount": 100
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "Stardock: bank.transfer (TBD)",
+      "cmd": "bank.transfer",
+      "data": {
+        "to_player": "some_other_player",
+        "amount": 50
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "Stardock: hardware.list (TBD)",
+      "cmd": "hardware.list",
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "Stardock: hardware.buy (TBD)",
+      "cmd": "hardware.buy",
+      "data": {
+        "item": "holo_scanner",
+        "quantity": 1
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "Stardock: shipyard.list (TBD)",
+      "cmd": "shipyard.list",
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "Stardock: shipyard.buy (TBD)",
+      "cmd": "shipyard.buy",
+      "data": {
+        "type": "Merchant Freighter"
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "ship.upgrade (TBD)",
+      "cmd": "ship.upgrade",
+      "data": {
+        "holds": 10
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "ship.repair (TBD)",
+      "cmd": "ship.repair",
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "ship.tow.start (TBD)",
+      "cmd": "ship.tow.start",
+      "data": {
+        "ship_id": 999
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "ship.board (TBD)",
+      "cmd": "ship.board",
+      "data": {
+        "ship_id": 999
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "mail.read (TBD)",
+      "cmd": "mail.read",
+      "data": {
+        "id": 1
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "sector.search (TBD)",
+      "cmd": "sector.search",
+      "data": {
+        "q": "Stardock"
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "player.get_settings (TBD)",
+      "cmd": "player.get_settings",
+      "data": {
+        "include": [
+          "prefs"
+        ]
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "player.set_prefs (TBD)",
+      "cmd": "player.set_prefs",
+      "data": {
+        "prefs": {
+          "ui.ansi": true
+        }
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "corp.create (TBD)",
+      "cmd": "corp.create",
+      "data": {
+        "name": "My TBD Corp",
+        "tag": "TBD"
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "auth.logout",
+      "cmd": "auth.logout",
+      "expect": {
+        "status": "ok",
+        "type": "auth.logout"
+      }
+    },
+    {
+      "name": "auth.refresh (NIY)",
+      "cmd": "auth.refresh",
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "ship.rename (NIY)",
+      "cmd": "ship.rename",
+      "data": {
+        "new_name": "TBD Ship"
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "ship.jettison (NIY)",
+      "cmd": "ship.jettison",
+      "data": {
+        "commodity": "ore",
+        "quantity": 1
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "trade.quote (NIY)",
+      "cmd": "trade.quote",
+      "data": {
+        "port_id": "@portId",
+        "commodity": "ore",
+        "quantity": 100
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "move.scan (NIY)",
+      "cmd": "move.scan",
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "sector.scan.density (NIY)",
+      "cmd": "sector.scan.density",
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "planet.info (NIY)",
+      "cmd": "planet.info",
+      "data": {
+        "planet_id": 1
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "planet.land (NIY)",
+      "cmd": "planet.land",
+      "data": {
+        "planet_id": 1
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "combat.attack (NIY)",
+      "cmd": "combat.attack",
+      "data": {
+        "target_type": "ship",
+        "target_id": 999
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "chat.send (NIY)",
+      "cmd": "chat.send",
+      "data": {
+        "to_player_id": "@my_id",
+        "message": "This is a TBD test"
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "mail.read (NIY)",
+      "cmd": "mail.read",
+      "data": {
+        "id": 1
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "subscribe.add (NIY)",
+      "cmd": "subscribe.add",
+      "data": {
+        "topic": "sector.events"
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "subscribe.list (NIY)",
+      "cmd": "subscribe.list",
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "bulk.execute (NIY)",
+      "cmd": "bulk.execute",
+      "data": {
+        "items": [
+          {
+            "command": "session.ping"
+          }
+        ]
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "DOCK: port.status (for context)",
+      "cmd": "port.status",
+      "data": {},
+      "expect": {
+        "status": "ok",
+        "type": "port.status"
+      }
+    },
+    {
+      "name": "DOCK: port.info (for context)",
+      "cmd": "port.info",
+      "data": {},
+      "expect": {
+        "status": "ok",
+        "type": "port.info"
+      }
+    },
+    {
+      "name": "SHIPYARD: dock.ship.buy (TBD)",
+      "cmd": "dock.ship.buy",
+      "data": {
+        "type": "Merchant Freighter"
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "SHIPYARD: dock.ship.upgrades (TBD)",
+      "cmd": "dock.ship.upgrades",
+      "data": {
+        "holds": 10,
+        "fighters": 0,
+        "shields": 0
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "SHIPYARD: dock.ship.downgrades (TBD)",
+      "cmd": "dock.ship.downgrades",
+      "data": {
+        "holds": 5
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "SHIPYARD: dock.ship.sell (TBD)",
+      "cmd": "dock.ship.sell",
+      "data": {
+        "ship_id": "@my_ship_id"
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "BANK: dock.bank.deposit (TBD)",
+      "cmd": "dock.bank.deposit",
+      "data": {
+        "amount": 100
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "BANK: dock.bank.transfer (TBD)",
+      "cmd": "dock.bank.transfer",
+      "data": {
+        "to": "some_player",
+        "amount": 100
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "BANK: dock.bank.withdraw (TBD)",
+      "cmd": "dock.bank.withdraw",
+      "data": {
+        "amount": 100
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "GAME_STATUS: game.status (TBD)",
+      "cmd": "game.status",
+      "data": {},
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "COMPUTER: game.get_clock (TBD)",
+      "cmd": "game.get_clock",
+      "data": {},
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "COMPUTER: planet.info (TBD)",
+      "cmd": "planet.info",
+      "data": {
+        "planet_id": 1
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "COMPUTER: rename_ship_flow (TBD)",
+      "cmd": "ship.rename",
+      "data": {
+        "new_name": "Test Ship"
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "SETTINGS: nav.bookmark.list (TBD)",
+      "cmd": "nav.bookmark.list",
+      "data": {},
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "SETTINGS: nav.bookmark.add (TBD)",
+      "cmd": "nav.bookmark.add",
+      "data": {
+        "name": "Test",
+        "sector_id": 1
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "SETTINGS: nav.bookmark.remove (TBD)",
+      "cmd": "nav.bookmark.remove",
+      "data": {
+        "name": "Test"
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "SETTINGS: nav.avoid.list (TBD)",
+      "cmd": "nav.avoid.list",
+      "data": {},
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "SETTINGS: nav.avoid.add (TBD)",
+      "cmd": "nav.avoid.add",
+      "data": {
+        "sector_id": 999
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "SETTINGS: nav.avoid.remove (TBD)",
+      "cmd": "nav.avoid.remove",
+      "data": {
+        "sector_id": 999
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "SETTINGS: player.get_prefs (TBD)",
+      "cmd": "player.get_prefs",
+      "data": {},
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "SETTINGS: player.set_prefs (TBD)",
+      "cmd": "player.set_prefs",
+      "data": {
+        "items": [
+          {
+            "key": "ui.clock_24h",
+            "type": "bool",
+            "value": "true"
+          }
+        ]
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "SUBSCRIPTIONS: subscribe.add (TBD)",
+      "cmd": "subscribe.add",
+      "data": {
+        "event_type": "sector.*"
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "SUBSCRIPTIONS: subscribe.list (TBD)",
+      "cmd": "subscribe.list",
+      "data": {},
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+    {
+      "name": "BULK: bulk.execute (TBD)",
+      "cmd": "bulk.execute",
+      "data": {
+        "items": [
+          {
+            "command": "session.ping"
+          }
+        ]
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1101
+        }
+      }
+    },
+
+    {
+      "name": "auth.refresh (NIY)",
+      "cmd": "auth.refresh",
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "auth.logout",
+      "cmd": "auth.logout",
+      "expect": { "status": "ok", "type": "auth.logout" }
+    },
+    {
+      "name": "player.rankings (TBD)",
+      "cmd": "player.rankings",
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "ship.rename (TBD)",
+      "cmd": "ship.rename",
+      "data": { "new_name": "TBD Ship" },
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "ship.upgrade (TBD)",
+      "cmd": "ship.upgrade",
+      "data": { "holds": 10 },
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "ship.jettison (TBD)",
+      "cmd": "ship.jettison",
+      "data": { "commodity": "ore", "quantity": 1 },
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "ship.transfer_cargo (TBD)",
+      "cmd": "ship.transfer_cargo",
+      "data": { "to_ship_id": 999, "commodity": "ore", "quantity": 1 },
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "ship.repair (TBD)",
+      "cmd": "ship.repair",
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "ship.self_destruct (TBD)",
+      "cmd": "ship.self_destruct",
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "trade.sell (TBD)",
+      "cmd": "trade.sell",
+      "data": { "port_id": "@portId", "commodity": "ore", "quantity": 1 },
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "trade.quote (TBD)",
+      "cmd": "trade.quote",
+      "data": { "port_id": "@portId", "commodity": "ore", "quantity": 100 },
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "trade.offer (TBD)",
+      "cmd": "trade.offer",
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "trade.accept (TBD)",
+      "cmd": "trade.accept",
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "trade.cancel (TBD)",
+      "cmd": "trade.cancel",
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "move.scan (TBD)",
+      "cmd": "move.scan",
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "sector.scan.density (TBD)",
+      "cmd": "sector.scan.density",
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "sector.scan (TBD)",
+      "cmd": "sector.scan",
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "planet.genesis (TBD)",
+      "cmd": "planet.genesis",
+      "data": { "name": "New Planet" },
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "planet.info (TBD)",
+      "cmd": "planet.info",
+      "data": { "planet_id": 1 },
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "planet.land (TBD)",
+      "cmd": "planet.land",
+      "data": { "planet_id": 1 },
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "planet.launch (TBD)",
+      "cmd": "planet.launch",
+      "data": {},
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "planet.harvest (TBD)",
+      "cmd": "planet.harvest",
+      "data": { "commodity": "ore", "quantity": 100 },
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "planet.deposit (TBD)",
+      "cmd": "planet.deposit",
+      "data": { "commodity": "ore", "quantity": 100 },
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "planet.withdraw (TBD)",
+      "cmd": "planet.withdraw",
+      "data": { "commodity": "ore", "quantity": 100 },
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "planet.transfer_ownership (TBD)",
+      "cmd": "planet.transfer_ownership",
+      "data": { "planet_id": 1, "to_player_id": "@my_id" },
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "citadel.build (TBD)",
+      "cmd": "citadel.build",
+      "data": { "planet_id": 1 },
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "citadel.upgrade (TBD)",
+      "cmd": "citadel.upgrade",
+      "data": { "planet_id": 1 },
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "combat.attack (TBD)",
+      "cmd": "combat.attack",
+      "data": { "target_type": "ship", "target_id": 999 },
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "combat.sweep_mines (TBD)",
+      "cmd": "combat.sweep_mines",
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "combat.status (TBD)",
+      "cmd": "combat.status",
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "chat.broadcast (TBD)",
+      "cmd": "chat.broadcast",
+      "data": { "message": "Global TBD Test" },
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "chat.history (TBD)",
+      "cmd": "chat.history",
+      "data": { "limit": 10 },
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "mail.read (TBD)",
+      "cmd": "mail.read",
+      "data": { "id": 1 },
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "subscribe.add (TBD)",
+      "cmd": "subscribe.add",
+      "data": { "topic": "sector.events" },
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "subscribe.list (TBD)",
+      "cmd": "subscribe.list",
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "subscribe.remove (TBD)",
+      "cmd": "subscribe.remove",
+      "data": { "topic": "sector.events" },
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "subscribe.catalog (TBD)",
+      "cmd": "subscribe.catalog",
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "bulk.execute (TBD)",
+      "cmd": "bulk.execute",
+      "data": { "items": [ { "command": "session.ping" } ] },
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "admin.notice (TBD)",
+      "cmd": "admin.notice",
+      "data": { "message": "Test Admin Notice" },
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "DOCK: port.status (for context)",
+      "cmd": "port.status",
+      "data": {},
+      "expect": {
+        "status": "ok",
+        "type": "port.status"
+      }
+    },
+    {
+      "name": "DOCK: port.info (for context)",
+      "cmd": "port.info",
+      "data": {},
+      "expect": {
+        "status": "ok",
+        "type": "port.info"
+      }
+    },
+    {
+      "name": "BANK: dock.bank.deposit (TBD)",
+      "cmd": "dock.bank.deposit",
+      "data": { "amount": 100 },
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "BANK: dock.bank.transfer (TBD)",
+      "cmd": "dock.bank.transfer",
+      "data": { "to": "some_player", "amount": 100 },
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "BANK: dock.bank.withdraw (TBD)",
+      "cmd": "dock.bank.withdraw",
+      "data": { "amount": 100 },
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "SETTINGS: player.get_prefs (TBD)",
+      "cmd": "player.get_prefs",
+      "data": {},
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    },
+    {
+      "name": "SETTINGS: player.set_prefs (TBD)",
+      "cmd": "player.set_prefs",
+      "data": {
+        "items": [
+          { "key": "ui.clock_24h", "type": "bool", "value": "true" }
+        ]
+      },
+      "expect": {
+        "status": "error", "type": "error", "error": { "code": 1101 }
+      }
+    }
+  ]
+}      
+
+
+
