@@ -854,23 +854,23 @@ process_message (client_ctx_t *ctx, json_t *root)
     }
   else if (!strcmp (c, "move.autopilot.status"))
     {
-      rc = cmd_move_autopilot_status (ctx, root);	/* NIY stub */
+      rc = cmd_move_autopilot_status (ctx, root);
     }
   else if (!strcmp (c, "sector.search"))
     {
-      rc = cmd_sector_search (ctx, root);	/* NIY stub */
+      rc = cmd_sector_search (ctx, root);
     }
   else if (!strcmp (c, "sector.set_beacon"))
     {
-      rc = cmd_sector_set_beacon (ctx, root);	/* NIY or real */
+      rc = cmd_sector_set_beacon (ctx, root);
     }
   else if (!strcmp (c, "sector.scan.density"))
     {
-      rc = cmd_sector_scan_density (ctx, root);	/* NIY stub */
+      cmd_sector_scan_density (ctx, root); 
     }
   else if (!strcmp (c, "sector.scan"))
     {
-      rc = cmd_sector_scan (ctx, root);	/* NIY stub */
+      cmd_sector_scan (ctx, root);	
     }
 
 /* ---------- PLANETS / CITADEL ---------- */

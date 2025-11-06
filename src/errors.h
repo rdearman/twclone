@@ -26,7 +26,7 @@
 #define ERR_OOM			 1114
 #define ERR_DB_QUERY_FAILED	 1115
 #define ERROR_INTERNAL		 1116
-
+#define ERR_MEMORY		 1117
 
 /* 1200 — Auth / Player */
 #define ERR_NOT_AUTHENTICATED    1200	/* "auth required" */
@@ -95,6 +95,8 @@
 #define REF_OFFER_EXPIRED        1704
 #define REF_OFFER_NOT_YOURS      1705
 #define REF_TRADE_WINDOW_CLOSED  1706
+#define ERR_COMMODITY_NOT_SOLD   1707
+#define ERR_PRICE_INVALID	 1708
 
 /* 1800 — Ship / Combat */
 #define ERR_SHIP_NOT_FOUND       1800

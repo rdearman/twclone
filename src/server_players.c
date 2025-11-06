@@ -305,7 +305,7 @@ h_get_cargo_space_free (sqlite3 *db, int player_id, int *free_out)
     }
   sqlite3_finalize (st);
 
-  /* total cargo on ship (assumes ship_goods exists as designed earlier) */
+  /* total cargo qon ship (assumes ship_goods exists as designed earlier) */
   int total = 0;
 
   rc = sqlite3_prepare_v2 (db,
@@ -329,7 +329,7 @@ h_get_cargo_space_free (sqlite3 *db, int player_id, int *free_out)
     }
   sqlite3_finalize (st);
 
-  int free_space = holds - total;
+  int free_space = total;
   if (free_space < 0)
     free_space = 0;		/* guard – shouldn’t happen if updates enforce caps */
 
@@ -361,160 +361,139 @@ cargo_space_free (client_ctx_t *ctx)
 }
 
 
-/* Update a player's ship cargo for one commodity by delta (can be +/-). */
+/**
+ * @brief Updates a player's ship cargo for one commodity by a delta (+/-).
+ *
+ * This function is refactored to match the schema:
+ * 1. Finds the player's active ship ID (from players.ship).
+ * 2. Dynamically builds an UPDATE query for the correct column on the 'ships' table
+ * (e.g., "UPDATE ships SET ore = MAX(0, COALESCE(ore, 0) + ?1) ...").
+ * 3. Relies on the 'check_current_cargo_limit' CHECK constraint on the 'ships'
+ * table to automatically reject transactions that exceed total holds.
+ *
+ * @param db            Valid sqlite3 database handle.
+ * @param player_id     The ID of the player.
+ * @param commodity     The name of the commodity ("ore", "organics", "equipment", "colonists").
+ * @param delta         The amount to add (positive) or remove (negative).
+ * @param new_qty_out   (Optional) A pointer to an int to store the new total for this commodity.
+ * @return              SQLITE_OK on success, SQLITE_CONSTRAINT if holds are exceeded,
+ * or another SQLite error code on failure.
+ */
 int
-h_update_ship_cargo (  sqlite3 *db, int player_id,
-		     const char *commodity, int delta, int *new_qty_out)
+h_update_ship_cargo (sqlite3 *db, int player_id,
+                   const char *commodity, int delta, int *new_qty_out)
 {
-
-  if (!commodity || *commodity == '\0')
+  if (!db || !commodity || *commodity == '\0')
     return SQLITE_MISUSE;
 
   int rc;
   char *errmsg = NULL;
-  sqlite3_stmt *sel_row = NULL, *sel_sum = NULL, *upd = NULL, *ins = NULL;
+  sqlite3_stmt *stmt = NULL;
+  char *sql_query = NULL;
+  int ship_id = 0;
 
+  // 1. Identify the column name from the commodity string
+  const char *col_name = NULL;
+  if (strcmp(commodity, "ore") == 0) col_name = "ore";
+  else if (strcmp(commodity, "organics") == 0) col_name = "organics";
+  else if (strcmp(commodity, "equipment") == 0) col_name = "equipment";
+  else if (strcmp(commodity, "colonists") == 0) col_name = "colonists";
+  else {
+    return SQLITE_MISUSE; // Invalid commodity string
+  }
+
+  // 2. Get the player's active ship ID
+  // (Based on the schema, 'players.ship' holds the active ship ID)
+  const char *SQL_GET_SHIP = "SELECT ship FROM players WHERE id = ?1";
+  
+  rc = sqlite3_prepare_v2(db, SQL_GET_SHIP, -1, &stmt, NULL);
+  if (rc != SQLITE_OK) return rc;
+  
+  sqlite3_bind_int(stmt, 1, player_id);
+  
+  rc = sqlite3_step(stmt);
+  if (rc == SQLITE_ROW) {
+      ship_id = sqlite3_column_int(stmt, 0);
+  }
+  sqlite3_finalize(stmt);
+  stmt = NULL;
+  
+  if (rc != SQLITE_ROW || ship_id <= 0) {
+      return SQLITE_ERROR; // No such player or no ship associated
+  }
+
+  // 3. Start Transaction
   rc = sqlite3_exec (db, "BEGIN IMMEDIATE", NULL, NULL, &errmsg);
   if (rc != SQLITE_OK)
     {
-      if (errmsg)
-	sqlite3_free (errmsg);
+      if (errmsg) sqlite3_free (errmsg);
       return rc;
     }
 
-  // Load current qty for this commodity (default 0 if not present)
-  const char *SQL_SEL_ROW =
-    "SELECT quantity FROM ship_goods WHERE player_id=?1 AND commodity=?2";
-  rc = sqlite3_prepare_v2 (db, SQL_SEL_ROW, -1, &sel_row, NULL);
-  if (rc != SQLITE_OK)
-    goto rollback;
+  // 4. Build and execute the dynamic UPDATE
+  // This query updates the value and clamps it at 0.
+  // The CHECK constraint on the 'ships' table will catch (col + ... > holds)
+  sql_query = sqlite3_mprintf(
+      "UPDATE ships SET %q = MAX(0, COALESCE(%q, 0) + ?1) WHERE id = ?2",
+      col_name, col_name
+  );
+  if (!sql_query) {
+      sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
+      return SQLITE_NOMEM;
+  }
 
-  sqlite3_bind_int (sel_row, 1, player_id);
-  sqlite3_bind_text (sel_row, 2, commodity, -1, SQLITE_STATIC);
+  rc = sqlite3_prepare_v2(db, sql_query, -1, &stmt, NULL);
+  if (rc != SQLITE_OK) {
+      sqlite3_free(sql_query);
+      sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
+      return rc;
+  }
+  
+  sqlite3_bind_int(stmt, 1, delta);
+  sqlite3_bind_int(stmt, 2, ship_id);
+  
+  rc = sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+  stmt = NULL;
+  sqlite3_free(sql_query);
+  sql_query = NULL;
+  
+  if (rc != SQLITE_DONE) {
+      // This will be SQLITE_CONSTRAINT if the CHECK constraint fails (over capacity)
+      sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
+      return rc; 
+  }
 
-  int cur_qty = 0;
-  rc = sqlite3_step (sel_row);
-  if (rc == SQLITE_ROW)
-    cur_qty = sqlite3_column_int (sel_row, 0);
-  else if (rc != SQLITE_DONE)
-    goto rollback;
-  sqlite3_finalize (sel_row);
-  sel_row = NULL;
-
-  // Compute proposed qty for this commodity
-  long long proposed_qty = (long long) cur_qty + (long long) delta;
-  if (proposed_qty < 0)
-    {
-      rc = SQLITE_CONSTRAINT;
-      goto rollback;
-    }
-
-  // Capacity check: total cargo across all commodities must fit in players.holds
-  int holds = 0, total_now = 0;
-  const char *SQL_HOLDS = "SELECT holds FROM players WHERE id=?1";
-  sqlite3_stmt *sel_holds = NULL;
-  rc = sqlite3_prepare_v2 (db, SQL_HOLDS, -1, &sel_holds, NULL);
-  if (rc != SQLITE_OK)
-    goto rollback;
-  sqlite3_bind_int (sel_holds, 1, player_id);
-  rc = sqlite3_step (sel_holds);
-  if (rc == SQLITE_ROW)
-    holds = sqlite3_column_int (sel_holds, 0);
-  else
-    {
-      sqlite3_finalize (sel_holds);
-      rc = SQLITE_CONSTRAINT;
-      goto rollback;
-    }
-  sqlite3_finalize (sel_holds);
-
-  const char *SQL_SEL_SUM =
-    "SELECT COALESCE(SUM(quantity),0) FROM ship_goods WHERE player_id=?1";
-  rc = sqlite3_prepare_v2 (db, SQL_SEL_SUM, -1, &sel_sum, NULL);
-  if (rc != SQLITE_OK)
-    goto rollback;
-  sqlite3_bind_int (sel_sum, 1, player_id);
-  rc = sqlite3_step (sel_sum);
-  if (rc == SQLITE_ROW)
-    total_now = sqlite3_column_int (sel_sum, 0);
-  else
-    {
-      sqlite3_finalize (sel_sum);
-      rc = SQLITE_ERROR;
-      goto rollback;
-    }
-  sqlite3_finalize (sel_sum);
-  sel_sum = NULL;
-
-  long long total_proposed =
-    (long long) total_now - (long long) cur_qty + proposed_qty;
-  if (total_proposed < 0 || total_proposed > holds)
-    {
-      rc = SQLITE_CONSTRAINT;
-      goto rollback;
-    }
-
-  // Upsert row
-  if (cur_qty == 0)
-    {
-      const char *SQL_INS =
-	"INSERT INTO ship_goods(player_id, commodity, quantity) "
-	"VALUES (?1, ?2, ?3) "
-	"ON CONFLICT(player_id, commodity) DO UPDATE SET quantity=excluded.quantity";
-      rc = sqlite3_prepare_v2 (db, SQL_INS, -1, &ins, NULL);
-      if (rc != SQLITE_OK)
-	goto rollback;
-      sqlite3_bind_int (ins, 1, player_id);
-      sqlite3_bind_text (ins, 2, commodity, -1, SQLITE_STATIC);
-      sqlite3_bind_int (ins, 3, (int) proposed_qty);
-      rc = sqlite3_step (ins);
-      if (rc != SQLITE_DONE)
-	{
-	  rc = SQLITE_ERROR;
-	  goto rollback;
-	}
-      sqlite3_finalize (ins);
-      ins = NULL;
-    }
-  else
-    {
-      const char *SQL_UPD =
-	"UPDATE ship_goods SET quantity=?3 WHERE player_id=?1 AND commodity=?2";
-      rc = sqlite3_prepare_v2 (db, SQL_UPD, -1, &upd, NULL);
-      if (rc != SQLITE_OK)
-	goto rollback;
-      sqlite3_bind_int (upd, 1, player_id);
-      sqlite3_bind_text (upd, 2, commodity, -1, SQLITE_STATIC);
-      sqlite3_bind_int (upd, 3, (int) proposed_qty);
-      rc = sqlite3_step (upd);
-      if (rc != SQLITE_DONE)
-	{
-	  rc = SQLITE_ERROR;
-	  goto rollback;
-	}
-      sqlite3_finalize (upd);
-      upd = NULL;
-    }
-
+  // 5. (Optional) Get the new quantity if requested
   if (new_qty_out)
-    *new_qty_out = (int) proposed_qty;
+  {
+      sql_query = sqlite3_mprintf("SELECT COALESCE(%q, 0) FROM ships WHERE id = ?1", col_name);
+      if (!sql_query) {
+          sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
+          return SQLITE_NOMEM;
+      }
 
+      rc = sqlite3_prepare_v2(db, sql_query, -1, &stmt, NULL);
+      sqlite3_free(sql_query); // Free it now
+
+      if (rc != SQLITE_OK) {
+          sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
+          return rc;
+      }
+
+      sqlite3_bind_int(stmt, 1, ship_id);
+      if (sqlite3_step(stmt) == SQLITE_ROW) {
+          *new_qty_out = sqlite3_column_int(stmt, 0);
+      }
+      sqlite3_finalize(stmt);
+      stmt = NULL;
+  }
+
+  // 6. Commit
   rc = sqlite3_exec (db, "COMMIT", NULL, NULL, &errmsg);
-  if (errmsg)
-    sqlite3_free (errmsg);
-  return rc;
-
-rollback:
-  if (sel_row)
-    sqlite3_finalize (sel_row);
-  if (sel_sum)
-    sqlite3_finalize (sel_sum);
-  if (upd)
-    sqlite3_finalize (upd);
-  if (ins)
-    sqlite3_finalize (ins);
-  sqlite3_exec (db, "ROLLBACK", NULL, NULL, NULL);
-  return rc;
+  if (errmsg) sqlite3_free (errmsg);
+  
+  return rc; // Will be SQLITE_OK on success
 }
 
 

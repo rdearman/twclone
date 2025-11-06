@@ -876,7 +876,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       stock_col = "product_equipment";
       price_index_col = "price_index_equipment";
   } else {
-      RULE_REFUSE (1405, "Port does not trade that commodity", NULL);
+      RULE_REFUSE (ERR_COMMODITY_NOT_SOLD, "Port does not trade that commodity", NULL);
       goto trade_buy_done;
   }
   // ---
@@ -889,7 +889,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
   sql_lookup = sqlite3_mprintf("SELECT %q, %q FROM ports WHERE id = ?1",
                                stock_col, price_index_col);
   if (!sql_lookup) {
-      RULE_ERROR(1500, "Out of memory");
+      RULE_ERROR(ERR_MEMORY, "Out of memory");
       goto trade_buy_done;
   }
   // ---
@@ -915,7 +915,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
   else
     {
       sqlite3_finalize (stmt);
-      RULE_REFUSE (1404, "Port not found", NULL); // Port ID is invalid
+      RULE_REFUSE (ERR_PORT_NOT_FOUND, "Port not found", NULL); // Port ID is invalid
       return 0;
     }
   sqlite3_finalize (stmt);
@@ -932,7 +932,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       base_price = sqlite3_column_double(stmt, 0);
   } else {
       sqlite3_finalize(stmt);
-      RULE_REFUSE(1405, "Commodity base price not found", NULL);
+      RULE_REFUSE(ERR_COMMODITY_UNKNOWN, "Commodity base price not found", NULL);
       return 0;
   }
   sqlite3_finalize (stmt);
@@ -944,36 +944,34 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
   // Validation Checks
   if (port_sell_price <= 0)
     {
-      RULE_REFUSE (1406, "Price is invalid or zero", NULL);
+      RULE_REFUSE (ERR_PRICE_INVALID, "Price is invalid or zero", NULL);
       return 0;
     }
 
   if (port_stock < qty)
     {
       json_t *hint = json_pack ("{s:i}", "current_stock", port_stock);
-      RULE_REFUSE (1407, "Port ran out of stock", hint);
+      RULE_REFUSE (REF_PORT_OUT_OF_STOCK, "Port ran out of stock", hint);
       json_decref (hint);
       return 0;
     }
 
-
-
   current_player_credits = player_credits (ctx);
-
   current_cargo_free = cargo_space_free (ctx);
 
   if (current_player_credits < total_cost)
     {
       json_t *hint = json_pack ("{s:i}", "cost", (int) total_cost);
-      RULE_REFUSE (1408, "Insufficient funds", hint);
+      RULE_REFUSE (REF_NOT_ENOUGH_CREDITS, "Insufficient funds", hint);
       json_decref (hint);
       return 0;
     }
 
+  LOGI("cargo_free: %d Quantity: %d)", current_cargo_free, qty);
   if (current_cargo_free < qty)
     {
       json_t *hint = json_pack ("{s:i}", "free_space", current_cargo_free);
-      RULE_REFUSE (1409, "Insufficient cargo space", hint);
+      RULE_REFUSE (REF_NOT_ENOUGH_HOLDS, "Insufficient cargo space", hint);
       json_decref (hint);
       return 0;
     }
@@ -1063,7 +1061,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
   // 4. Transaction and Updates (THE ACTUAL TRADE)
   // =================================================================
 
-  rc = begin (db);
+  //rc = begin (db);
   if (rc != SQLITE_OK)
     {
       LOGE ("trade_buy begin error: %s", sqlite3_errmsg (db));
@@ -1126,7 +1124,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
   }
 
   // Commit Transaction
-  rc = commit (db);
+  //rc = commit (db);
   if (rc != SQLITE_OK)
     {
       LOGE ("trade_buy commit error: %s", sqlite3_errmsg (db));

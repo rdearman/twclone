@@ -66,31 +66,15 @@ niy (client_ctx_t *ctx, json_t *root, const char *which)
 }
 
 
-/**
- * @brief Generic handler to list a player's and their corp's deployed assets.
- *
- * This function is a generic implementation for listing deployed assets.
- * It runs the provided SQL query and returns a simple count of the assets.
- *
- * THIS VERSION IS CORRECTED TO MATCH THE TEST HARNESS EXPECTATIONS
- * (i.e., return a "total" count, not a detailed list).
- *
- * @param ctx           The client context.
- * @param root          The root JSON request object.
- * @param list_type     The 'type' string for the JSON response (e.g., "Deploy.fighters.list_v1").
- * @param asset_key     (Unused in this version, but kept for signature matching)
- * @param sql_query     The complete, corrected SQL query to execute.
- * @return 0 on success (response sent).
- */
-static int
+
+int
 cmd_deploy_assets_list_internal (client_ctx_t *ctx,
-                                 json_t *root,
-                                 const char *list_type,
-                                 const char *asset_key,
-                                 const char *sql_query)
+                                   json_t *root,
+                                   const char *list_type,
+                                   const char *asset_key,
+                                   const char *sql_query)
 {
-    // asset_key is unused in this version, but we'll silence the warning
-    (void)asset_key;
+    (void)asset_key; // asset_key is unused
 
     // --- 1. Initialization ---
     sqlite3 *db = db_get_handle ();
@@ -115,35 +99,61 @@ cmd_deploy_assets_list_internal (client_ctx_t *ctx,
     }
 
     // --- 3. Bind Parameters ---
-    // Both ?1 and ?2 in the corrected SQL refer to the calling player's ID.
     sqlite3_bind_int (st, 1, self_player_id);
     sqlite3_bind_int (st, 2, self_player_id);
 
-    // --- 4. Execute Query and Count Rows ---
+    // --- 4. Execute Query and Build Entries Array ---
     int total_count = 0;
+    json_t *entries = json_array(); // Create the array for the entries
+
     while ((rc = sqlite3_step (st)) == SQLITE_ROW)
     {
         total_count++;
+
+        // Extract all columns from the row
+        int sector_id    = sqlite3_column_int(st, 0);
+        int count        = sqlite3_column_int(st, 1);
+        int offense_mode = sqlite3_column_int(st, 2);
+        int player_id    = sqlite3_column_int(st, 3);
+        const char *player_name = (const char *)sqlite3_column_text(st, 4);
+        int corp_id      = sqlite3_column_int(st, 5);
+        const char *corp_tag = (const char *)sqlite3_column_text(st, 6);
+        int asset_type   = sqlite3_column_int(st, 7); // <-- ADDED
+
+        // Pack them into a JSON object
+        json_t *entry = json_pack(
+            "{s:i, s:i, s:i, s:i, s:s, s:i, s:s, s:i}", // <-- Added s:i
+            "sector_id", sector_id,
+            "count", count,
+            "offense_mode", offense_mode,
+            "player_id", player_id,
+            "player_name", player_name ? player_name : "Unknown",
+            "corp_id", corp_id,
+            "corp_tag", corp_tag ? corp_tag : "",
+            "type", asset_type // <-- ADDED
+        );
+
+        if (entry) {
+            json_array_append_new(entries, entry);
+        }
     }
 
     // --- 5. Finalize Statement and Unlock Mutex ---
     sqlite3_finalize (st);
     pthread_mutex_unlock (&db_mutex);
 
-    // Check for an error during the final step
     if (rc != SQLITE_DONE)
     {
-        send_enveloped_error (ctx->fd, root, 500, "Error processing asset count.");
+        json_decref(entries); // Clean up on error
+        send_enveloped_error (ctx->fd, root, 500, "Error processing asset list.");
         return 0;
     }
 
     // --- 6. Build Final Payload and Send Response ---
-    // This payload matches the test expectation: {"data": {"total": ...}}
     json_t *jdata_payload = json_object ();
     json_object_set_new (jdata_payload, "total", json_integer (total_count));
+    json_object_set_new (jdata_payload, "entries", entries); // Add the array
 
-    // send_enveloped_ok will take ownership of jdata_payload
-    // and wrap it, resulting in: { "status": "ok", "data": { "total": ... } }
     send_enveloped_ok (ctx->fd, root, list_type, jdata_payload);
 
     return 0;
@@ -152,28 +162,19 @@ cmd_deploy_assets_list_internal (client_ctx_t *ctx,
 
 
 
-/*
- * RPC: deploy.fighters.list
- * Fetches the list of the player's and their corporation's deployed fighters.
- */
 int
 cmd_deploy_fighters_list (client_ctx_t *ctx, json_t *root)
 {
-  // NOTE: This SQL assumes a helper function/macro populates ctx->corp_id
-  // or that ctx->corp_id is loaded during session initialization.
-  // It joins player_fighters with players and corporations to get email details.
-  // 
-  // It selects fighters belonging to:
-  // 1. The current player (pf.player_id = ?)
-  // 2. The player's corporation (p.corp_id = c.id) where c.id is the player's corp.
 const char *sql_query_fighters=
     "SELECT "
-    "  sa.sector AS sector_id, "
-    "  sa.quantity AS count, "
-    "  sa.player AS player_id, "
-    "  p.name AS player_name, " 
-    "  c.id AS corp_id, "
-    "  c.tag AS corp_tag "
+    "  sa.sector AS sector_id, "               /* Index 0 */
+    "  sa.quantity AS count, "                /* Index 1 */
+    "  sa.offensive_setting AS offense_mode, " /* Index 2 */
+    "  sa.player AS player_id, "              /* Index 3 */
+    "  p.name AS player_name, "               /* Index 4 */
+    "  c.id AS corp_id, "                     /* Index 5 */
+    "  c.tag AS corp_tag, "                   /* Index 6 */
+    "  sa.asset_type AS type "                /* Index 7 - ADDED */
     "FROM sector_assets sa "
     "JOIN players p ON sa.player = p.id "
     "LEFT JOIN corp_members cm_player ON cm_player.player_id = sa.player "
@@ -191,39 +192,28 @@ const char *sql_query_fighters=
     "    ) "
     "  ) "
     "ORDER BY sa.sector ASC;";
- 
+
   return cmd_deploy_assets_list_internal (ctx,
-					  root,
+                                          root,
                                           "Deploy.fighters.list_v1",
                                           "fighters",
                                           sql_query_fighters);
 }
 
 
-/*
- * RPC: deploy.mines.list
- * Fetches the list of the player's and their corporation's deployed mines.
- */
 int
 cmd_deploy_mines_list (client_ctx_t *ctx, json_t *root)
 {
-  // NOTE: This SQL assumes a helper function/macro populates ctx->corp_id
-  // or that ctx->corp_id is loaded during session initialization.
-  // The mine query must include the 'type' column (armid/limpet).
-  //
-  // It selects mines belonging to:
-  // 1. The current player (pm.player_id = ?)
-  // 2. The player's corporation (p.corp_id = c.id) where c.id is the player's corp.
-
 const char *sql_query_mines =
     "SELECT "
-    "  sa.sector AS sector_id, "
-    "  sa.quantity AS count, "
-    "  sa.player AS player_id, "
-    "  p.name AS player_name, "      /* Replaced p.email */
-    "  c.id AS corp_id, "
-    "  c.tag AS corp_tag, "          /* Replaced c.email */
-    "  sa.asset_type AS type "
+    "  sa.sector AS sector_id, "               /* Index 0 */
+    "  sa.quantity AS count, "                /* Index 1 */
+    "  sa.offensive_setting AS offense_mode, " /* Index 2 - ADDED */
+    "  sa.player AS player_id, "              /* Index 3 */
+    "  p.name AS player_name, "               /* Index 4 */
+    "  c.id AS corp_id, "                     /* Index 5 */
+    "  c.tag AS corp_tag, "                   /* Index 6 */
+    "  sa.asset_type AS type "                /* Index 7 */
     "FROM sector_assets sa "
     "JOIN players p ON sa.player = p.id "
     "LEFT JOIN corp_members cm_player ON cm_player.player_id = sa.player "
@@ -244,11 +234,13 @@ const char *sql_query_mines =
 
 
   return cmd_deploy_assets_list_internal (ctx,
-					  root,
+                                          root,
                                           "deploy.mines.list_v1",
                                           "mines",
                                           sql_query_mines);
 }
+
+
 
 
 /**
@@ -317,7 +309,7 @@ cmd_combat_attack (client_ctx_t *ctx, json_t *root)
 
 static const char *SQL_SECTOR_FTR_SUM =
   "SELECT COALESCE(SUM(quantity),0) "
-  "FROM sector_assets " "WHERE sector_id=?1 AND asset_type='2';";
+  "FROM sector_assets " "WHERE sector=?1 AND asset_type='2';";
 
 static const char *SQL_SHIP_GET_FTR =
   "SELECT fighters FROM ships WHERE id=?1;";
@@ -325,10 +317,10 @@ static const char *SQL_SHIP_GET_FTR =
 static const char *SQL_SHIP_DEC_FTR =
   "UPDATE ships SET fighters=fighters-?1 WHERE id=?2;";
 
-static const char *SQL_ASSET_INSERT =
+static const char *SQL_ASSET_INSERT_FIGHTERS =
   "INSERT INTO sector_assets(sector, player, corporation, "
   "                          asset_type, quantity, offensive_setting, deployed_at) "
-  "VALUES (?1, ?2, ?3, 'fighters', ?4, ?5, strftime('%s','now'));";
+  "VALUES (?1, ?2, ?3, 2, ?4, ?5, strftime('%s','now'));";
 
 /* Sum fighters already in the sector. */
 static int
@@ -355,13 +347,22 @@ sum_sector_fighters (sqlite3 *db, int sector_id, int *total_out)
 }
 
 /* Debit ship fighters safely (returns SQLITE_TOOBIG if insufficient). */
+
+/* Debit ship fighters safely (returns SQLITE_TOOBIG if insufficient). */
 static int
 ship_consume_fighters (sqlite3 *db, int ship_id, int amount)
 {
   sqlite3_stmt *st = NULL;
+
   int rc = sqlite3_prepare_v2 (db, SQL_SHIP_GET_FTR, -1, &st, NULL);
   if (rc != SQLITE_OK)
-    return rc;
+    {
+      LOGI("ship_consume_fighters - SQL_SHIP_GET_FTR");
+      return rc;
+    }
+
+  /* --- FIX: Bind the ship_id to the ?1 placeholder --- */
+  sqlite3_bind_int (st, 1, ship_id);
 
   int have = 0;
   if ((rc = sqlite3_step (st)) == SQLITE_ROW)
@@ -371,18 +372,28 @@ ship_consume_fighters (sqlite3 *db, int ship_id, int amount)
     }
   else
     {
+      /* This now correctly logs a failure if the ship_id was invalid */
+      LOGI("DEBUGGING:\nhave=%d ship_id=%d amount=%d \n%s", have, ship_id, amount,SQL_SHIP_GET_FTR);
       rc = SQLITE_ERROR;
     }
+
   sqlite3_finalize (st);
   if (rc != SQLITE_OK)
     return rc;
 
   if (have < amount)
-    return SQLITE_TOOBIG;
+    {
+      LOGI("DEBUGGING SQLITE_TOOBIG have < amount");
+      return SQLITE_TOOBIG;
+    }
 
   rc = sqlite3_prepare_v2 (db, SQL_SHIP_DEC_FTR, -1, &st, NULL);
   if (rc != SQLITE_OK)
-    return rc;
+    {
+      LOGI("%s",SQL_SHIP_DEC_FTR);
+      return rc;
+    }
+
   sqlite3_bind_int (st, 1, amount);
   sqlite3_bind_int (st, 2, ship_id);
   rc = sqlite3_step (st);
@@ -390,37 +401,62 @@ ship_consume_fighters (sqlite3 *db, int ship_id, int amount)
   return (rc == SQLITE_DONE) ? SQLITE_OK : SQLITE_ERROR;
 }
 
+
+/* Insert a sector_assets row for fighters. */
+
 /* Insert a sector_assets row for fighters. */
 static int
 insert_sector_fighters (sqlite3 *db,
-			int sector_id, int owner_player_id,
-			json_t *corp_id_json /* nullable */ ,
-			int offense_mode, int amount)
+                        int sector_id, int owner_player_id,
+                        json_t *corp_id_json /* nullable */ ,
+                        int offense_mode, int amount)
 {
   sqlite3_stmt *st = NULL;
-  int rc = sqlite3_prepare_v2 (db, SQL_ASSET_INSERT, -1, &st, NULL);
+  
+  /* * NOTE: Make sure SQL_ASSET_INSERT_FIGHTERS uses the integer 2 for asset_type, 
+   * not the string 'fighters'.
+   * e.g., "VALUES (?1, ?2, ?3, 2, ?4, ?5, strftime('%s','now'));"
+   */
+  int rc = sqlite3_prepare_v2 (db, SQL_ASSET_INSERT_FIGHTERS, -1, &st, NULL);
   if (rc != SQLITE_OK)
+  {
+    LOGE("insert_sector_fighters prepare failed: %s", sqlite3_errmsg(db));
     return rc;
+  }
 
   sqlite3_bind_int (st, 1, sector_id);
   sqlite3_bind_int (st, 2, owner_player_id);
 
+  /* --- THIS IS THE FIX --- */
   if (corp_id_json && json_is_integer (corp_id_json))
-    {
-      sqlite3_bind_int (st, 3, (int) json_integer_value (corp_id_json));
-    }
+  {
+    sqlite3_bind_int (st, 3, (int) json_integer_value (corp_id_json));
+  }
   else
-    {
-      sqlite3_bind_null (st, 3);
-    }
+  {
+    // Bind 0 (the default value) instead of NULL
+    sqlite3_bind_int (st, 3, 0); 
+  }
+  /* --- END FIX --- */
 
   sqlite3_bind_int (st, 4, amount);
   sqlite3_bind_int (st, 5, offense_mode);
 
   rc = sqlite3_step (st);
+  
+  if (rc != SQLITE_DONE)
+  {
+    // Add this log to see the specific error if it's still failing
+    LOGE("insert_sector_fighters step failed: %s (rc=%d)", sqlite3_errmsg(db), rc); 
+  }
+
   sqlite3_finalize (st);
   return (rc == SQLITE_DONE) ? SQLITE_OK : SQLITE_ERROR;
 }
+
+
+
+
 
 json_t *
 db_get_stardock_sectors (void)
@@ -463,7 +499,7 @@ db_get_stardock_sectors (void)
       // Append the new JSON object to the array (json_array_append_new consumes the reference)
       if (json_array_append_new (sector_list, j_sector) != 0)
 	{
-	  fprintf (stderr, "ERROR: Failed to append sector ID %d to list.\n",
+	  fprintf (stderr, "ERROR: Failed to append sector ID d to list.\n",
 		   sector_id);
 	  json_decref (j_sector);	// Clean up the orphaned reference
 	  // You may choose to stop here or continue
@@ -548,10 +584,16 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
   {
     sqlite3_stmt *st = NULL;
     if (sqlite3_prepare_v2
-	(db, "SELECT sector_id FROM ships WHERE id=?1;", -1, &st,
-	 NULL) != SQLITE_OK) {
-      send_enveloped_error (ctx->fd, root, ERR_SECTOR_NOT_FOUND,
-			    "Unable to resolve current sector");
+	(db, "SELECT location FROM ships WHERE id=?1;", -1, &st,
+	 NULL) != SQLITE_OK)
+      {
+	char error_buffer[256]; 
+	snprintf(error_buffer, sizeof(error_buffer), 
+		 "Unable to resolve current sector - SELECT location FROM ships WHERE id=%d;", 
+		 ship_id);
+	char *shperror = error_buffer;	
+	send_enveloped_error (ctx->fd, root, ERR_SECTOR_NOT_FOUND,
+			    shperror);
       return 0;
     }
     sqlite3_bind_int (st, 1, ship_id);
@@ -561,8 +603,13 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
       }
     sqlite3_finalize (st);
     if (sector_id <= 0) {
+	char error_buffer[256]; 
+	snprintf(error_buffer, sizeof(error_buffer), 
+		 "Unable to resolve current sector - SELECT sector_id FROM ships WHERE id=%d;", 
+		 ship_id);
+	char *scterror = error_buffer;	
       send_enveloped_error (ctx->fd, root, ERR_SECTOR_NOT_FOUND,
-			    "Unable to resolve current sector");
+			    scterror);
       return 0;
     }
   }
@@ -592,6 +639,7 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
     }
 
   int rc = ship_consume_fighters (db, ship_id, amount);
+  
   if (rc == SQLITE_TOOBIG)
     {
       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
@@ -707,40 +755,6 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
 				 sector_id, evt, NULL);
     }
                                
-    /* If your h_log_engine_event signature takes json_t* instead:
-       // (void)h_log_engine_event(db, "fighters.deployed", evt); 
-    */
-    // }
-    /* /\* Emit engine_event via h_log_engine_event *\/ */
-    /* { */
-    /*   json_t *evt = json_object (); */
-    /*   json_object_set_new (evt, "sector_id", json_integer (sector_id)); */
-    /*   json_object_set_new (evt, "player_id", json_integer (ctx->player_id)); */
-    /*   if (j_corp_id && json_is_integer (j_corp_id)) */
-    /* 	json_object_set_new (evt, "corporation_id", */
-    /* 			     json_integer (json_integer_value (j_corp_id))); */
-    /*   else */
-    /* 	json_object_set_new (evt, "corporation_id", json_null ()); */
-    /*   json_object_set_new (evt, "amount", json_integer (amount)); */
-    /*   json_object_set_new (evt, "offense", json_integer (offense)); */
-    /*   json_object_set_new (evt, "event_ts", */
-    /* 			   json_integer ((json_int_t) time (NULL))); */
-
-    /*   char *payload = json_dumps (evt, JSON_COMPACT); */
-    /*   json_decref (evt); */
-    /*   if (payload) */
-    /* 	{ */
-    /* 	  // int h_log_engine_event (const char *type, int actor_player_id, int sector_id, */
-    /* 	  //    json_t * payload, const char *idem_key); */
-    /* 	  (void) h_log_engine_event ("fighters.deployed", ctx->player_id, */
-    /* 				     sector_id, payload, ""); */
-    /* 	  free (payload); */
-    /* 	} */
-    /*   /\* If your h_log_engine_event signature takes json_t* instead: */
-    /*      // (void)h_log_engine_event(db, "fighters.deployed", evt); */
-    /*    *\/ */
-    /* } */
-
     /* Recompute total for response convenience */
     (void) sum_sector_fighters (db, sector_id, &sector_total);
 
@@ -773,35 +787,36 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
 
 
 /* ---------- combat.lay_mines ---------- */
-/* ---------- combat.lay_mines (fixed-SQL) ---------- */
 
 /* Count mines in ship cargo (Armid) */
 static const char *SQL_SHIP_GET_ARMID =
-  "SELECT armid_mines FROM ships WHERE id=?1;";
+  "SELECT mines FROM ships WHERE id=?1;"; /* FIX: was armid_mines */
 
 /* Count mines in ship cargo (Limpet) */
 static const char *SQL_SHIP_GET_LIMPET =
-  "SELECT limpet_mines FROM ships WHERE id=?1;";
+  "SELECT limpets FROM ships WHERE id=?1;"; /* FIX: was limpet_mines */
 
 /* Decrement ship cargo (Armid) */
 static const char *SQL_SHIP_DEC_ARMID =
-  "UPDATE ships SET armid_mines = armid_mines - ?1 WHERE id=?2;";
+  "UPDATE ships SET mines = mines - ?1 WHERE id=?2;"; /* FIX: was armid_mines */
 
 /* Decrement ship cargo (Limpet) */
 static const char *SQL_SHIP_DEC_LIMPET =
-  "UPDATE ships SET limpet_mines = limpet_mines - ?1 WHERE id=?2;";
+  "UPDATE ships SET limpets = limpets - ?1 WHERE id=?2;"; /* FIX: was limpet_mines */
 
 /* ---- Sector assets (fixed column names from your fighter handler) ---- */
 static const char *SQL_SECTOR_MINES_SUM_BY_TYPE =
   "SELECT COALESCE(SUM(quantity),0) "
   "FROM sector_assets " "WHERE sector=?1 AND asset_type=?2;";
 
-static const char *SQL_PLAYER_MINES_SUM_TOTAL = "SELECT COALESCE(SUM(quantity),0) " "FROM sector_assets " "WHERE player=?1 AND asset_type IN (1,4);";	/* armid+limpet */
+static const char *SQL_PLAYER_MINES_SUM_TOTAL = "SELECT COALESCE(SUM(quantity),0) " "FROM sector_assets " "WHERE player=?1 AND asset_type IN (1,4);";   /* armid+limpet */
+
 
 static const char *SQL_ASSET_INSERT_MINES =
   "INSERT INTO sector_assets(sector, player, corporation, "
-  "                          asset_type, quantity, offensive_setting, deployed_at) "
-  "VALUES (?1, ?2, ?3, ?4, ?5, NULL, strftime('%s','now'));";
+  "                      asset_type, quantity, offensive_setting, deployed_at) "
+  "VALUES (?1, ?2, ?3, ?4, ?5, ?6, strftime('%s','now'));";
+
 
 
 /* Helpers */
@@ -885,16 +900,25 @@ ship_consume_mines (sqlite3 *db, int ship_id, int asset_type, int amount)
   int have = 0;
   int rc = ship_get_mines (db, ship_id, asset_type, &have);
   if (rc != SQLITE_OK)
+    {
+
     return rc;
+    }
   if (have < amount)
-    return SQLITE_TOOBIG;
+    {
+      LOGI("DEBUGGING:\n\thave=%d ship_id=%d amount=%d \n\t%s", have, ship_id, amount, SQL_SHIP_GET_FTR);
+      return SQLITE_TOOBIG;
+    }
 
   const char *sql =
     (asset_type == ASSET_MINE) ? SQL_SHIP_DEC_ARMID : SQL_SHIP_DEC_LIMPET;
   sqlite3_stmt *st = NULL;
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
-    return rc;
+    {
+      LOGI("DEBUGGING:\n\thaveasset=%d  \n\t%s", asset_type,  (asset_type == ASSET_MINE) ? SQL_SHIP_DEC_ARMID : SQL_SHIP_DEC_LIMPET );
+      return rc;
+    }
   sqlite3_bind_int (st, 1, amount);
   sqlite3_bind_int (st, 2, ship_id);
   rc = sqlite3_step (st);
@@ -902,39 +926,56 @@ ship_consume_mines (sqlite3 *db, int ship_id, int asset_type, int amount)
   return (rc == SQLITE_DONE) ? SQLITE_OK : SQLITE_ERROR;
 }
 
+
+/* Insert a sector_assets row for MINES. */
 static int
-insert_sector_mines (sqlite3 *db, int sector_id, int owner_player_id,
-		     json_t *corp_id_json, int asset_type, int amount)
+insert_sector_mines (sqlite3 *db,
+                     int sector_id, int owner_player_id,
+                     json_t *corp_id_json /* nullable */ ,
+                     int asset_type, /* <-- The new parameter */
+                     int amount, int offense_mode)
 {
   sqlite3_stmt *st = NULL;
+  
+  /* Use the new SQL with 6 placeholders */
   int rc = sqlite3_prepare_v2 (db, SQL_ASSET_INSERT_MINES, -1, &st, NULL);
   if (rc != SQLITE_OK)
+  {
+    LOGE("insert_sector_mines prepare failed: %s", sqlite3_errmsg(db));
     return rc;
+  }
 
   sqlite3_bind_int (st, 1, sector_id);
   sqlite3_bind_int (st, 2, owner_player_id);
+
+  /* Bind corporation (handling NULL) */
   if (corp_id_json && json_is_integer (corp_id_json))
-    {
-      sqlite3_bind_int (st, 3, (int) json_integer_value (corp_id_json));
-    }
+  {
+    sqlite3_bind_int (st, 3, (int) json_integer_value (corp_id_json));
+  }
   else
-    {
-      sqlite3_bind_null (st, 3);
-    }
+  {
+    sqlite3_bind_int (st, 3, 0); // Use 0 for NULL as per your schema
+  }
+
+  /* --- Bind the new parameters in the correct order --- */
   sqlite3_bind_int (st, 4, asset_type);
   sqlite3_bind_int (st, 5, amount);
+  sqlite3_bind_int (st, 6, offense_mode);
+  /* --- End Fix --- */
 
   rc = sqlite3_step (st);
+  
+  if (rc != SQLITE_DONE)
+  {
+    LOGE("insert_sector_mines step failed: %s (rc=%d)", sqlite3_errmsg(db), rc); 
+  }
+
   sqlite3_finalize (st);
   return (rc == SQLITE_DONE) ? SQLITE_OK : SQLITE_ERROR;
 }
 
-/* ---- Main command -------------------------------------------------------- */
-/* JSON:
-   { "command":"combat.lay_mines",
-     "data": { "mine_type":"armid"|"limpet" | 1|4, "amount":N, "corporation_id":null|<id> }
-   }
-*/
+
 int
 cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
 {
@@ -1008,29 +1049,69 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
 			    "No active ship");
       return 0;
     }
-
   int sector_id = -1;
   {
     sqlite3_stmt *st = NULL;
     if (sqlite3_prepare_v2
-	(db, "SELECT sector_id FROM ships WHERE id=?1;", -1, &st,
+	(db, "SELECT location FROM ships WHERE id=?1;", -1, &st,
 	 NULL) != SQLITE_OK)
       {
+	char error_buffer[256]; 
+	snprintf(error_buffer, sizeof(error_buffer), 
+		 "Unable to resolve current sector - SELECT sector_id FROM ships WHERE id=%d;", 
+		 ship_id);
+	char *shperror = error_buffer;	
 	send_enveloped_error (ctx->fd, root, ERR_SECTOR_NOT_FOUND,
-			      "Unable to resolve current sector");
+			    shperror);
+
+
 	return 0;
-      }
+    }
     sqlite3_bind_int (st, 1, ship_id);
     if (sqlite3_step (st) == SQLITE_ROW)
-      sector_id = sqlite3_column_int (st, 0);
-    sqlite3_finalize (st);
-    if (sector_id <= 0)
       {
-	send_enveloped_error (ctx->fd, root, ERR_SECTOR_NOT_FOUND,
-			      "Unable to resolve current sector");
-	return 0;
+	sector_id = sqlite3_column_int (st, 0);
       }
+    sqlite3_finalize (st);
+    if (sector_id <= 0) {
+	char error_buffer[256]; 
+	snprintf(error_buffer, sizeof(error_buffer), 
+		 "Unable to resolve current sector - SELECT sector_id FROM ships WHERE id=%d;", 
+		 ship_id);
+	char *scterror = error_buffer;	
+      send_enveloped_error (ctx->fd, root, ERR_SECTOR_NOT_FOUND,
+			    scterror);
+      return 0;
+    }
   }
+
+  
+  /* int sector_id = -1; */
+  /* { */
+  /*   sqlite3_stmt *st = NULL; */
+  /*   if (sqlite3_prepare_v2 */
+  /* 	(db, "SELECT sector_id FROM ships WHERE id=?1;", -1, &st, */
+  /* 	 NULL) != SQLITE_OK) */
+  /*     { */
+  /* 	char * shperror = sprintf("Unable to resolve current sector - SELECT sector_id FROM ships WHERE id=%d;", ship_id); */
+  /* 	send_enveloped_error (ctx->fd, root, ERR_SECTOR_NOT_FOUND, */
+  /* 			    shperror); */
+  /* 	return 0; */
+  /*     } */
+  /*   sqlite3_bind_int (st, 1, ship_id); */
+  /*   if (sqlite3_step (st) == SQLITE_ROW) */
+  /*     sector_id = sqlite3_column_int (st, 0); */
+  /*   sqlite3_finalize (st); */
+  /*   if (sector_id <= 0) */
+  /*     { */
+      
+  /*     char * scterror = sprintf("Unable to resolve current sector - sector_id=%d;", sector_id); */
+  /*     send_enveloped_error (ctx->fd, root, ERR_SECTOR_NOT_FOUND, */
+  /* 			    scterror); */
+
+  /* 	return 0; */
+  /*     } */
+  /* } */
 
   /* Caps: per-sector per-type + per-player universe total */
   int sector_type_total = 0;
@@ -1096,9 +1177,13 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  rc =
-    insert_sector_mines (db, sector_id, ctx->player_id, j_corp, asset_type,
-			 amount);
+  /* rc = */
+  /*   insert_sector_mines (db, sector_id, ctx->player_id, j_corp, asset_type, */
+  /* 			 amount); */
+
+  rc = insert_sector_mines(db, sector_id, ctx->player_id, j_corp, 
+                           asset_type, amount, 0);
+
   if (rc != SQLITE_OK)
     {
       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
