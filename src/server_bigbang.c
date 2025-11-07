@@ -1069,20 +1069,6 @@ create_planets (void)
 }
 
 
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sqlite3.h>
-#include <time.h> // For rand()
-
-/* --- Assumed Forward Declarations --- */
-/* (These should be in a shared header) */
-extern sqlite3 *db_get_handle(void);
-/* --- End Declarations --- */
-
-
-
 /**
  * @brief Creates a fully-populated port, including its trade data,
  * based on the new schema in fullschema.sql.

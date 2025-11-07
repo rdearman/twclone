@@ -1122,9 +1122,6 @@ const char *create_table_sql[] = {
   // -- `ports.number` probably unique (if that’s your design):
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_ports_number ON ports(number);",
 
-  // -- Each (port_id, commodity) should be unique in port_trade:
-  "CREATE UNIQUE INDEX IF NOT EXISTS ux_port_trade ON port_trade(port_id, commodity);",
-
   //-- Ship ownership lookups by player or ship:
   "CREATE INDEX IF NOT EXISTS idx_ship_own_ship   ON ship_ownership(ship_id);",
 
@@ -1307,82 +1304,6 @@ const char *insert_default_sql[] = {
   "INSERT OR IGNORE INTO ship_roles (role_id, role, role_description) VALUES (7, 'manager', 'Delegated admin; can assign crew/pilot but not sell');",
 
 
-  /* ---------- PORTS ---------- */
-  "INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
-    "VALUES (1, 1, 'Port Type 1 (BBS)', 1, 5, 3, 10000, 10000, 10000, 5000, 5000, 5000, 500000, 0);",
-
-  "INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
-    "VALUES (2, 2, 'Port Type 2 (BSB)', 2, 5, 3, 10000, 10000, 10000, 5000, 5000, 5000, 500000, 0);",
-
-  "INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
-    "VALUES (3, 3, 'Port Type 3 (BSS)', 3, 5, 3, 10000, 10000, 10000, 5000, 5000, 5000, 500000, 0);",
-
-  "INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
-    "VALUES (4, 4, 'Port Type 4 (SBB)', 4, 5, 3, 10000, 10000, 10000, 5000, 5000, 5000, 500000, 0);",
-
-  "INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
-    "VALUES (5, 5, 'Port Type 5 (SBS)', 5, 5, 3, 10000, 10000, 10000, 5000, 5000, 5000, 500000, 0);",
-
-  "INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
-    "VALUES (6, 6, 'Port Type 6 (SSB)', 6, 5, 3, 10000, 10000, 10000, 5000, 5000, 5000, 500000, 0);",
-
-  "INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
-    "VALUES (7, 7, 'Port Type 7 (SSS)', 7, 5, 3, 10000, 10000, 10000, 5000, 5000, 5000, 500000, 0);",
-
-  "INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
-    "VALUES (8, 8, 'Port Type 8 (BBB)', 8, 5, 3, 10000, 10000, 10000, 5000, 5000, 5000, 500000, 0);",
-
-  "INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
-    "VALUES (9, 9, 'Port Type 9 (Stardock)', 9, 10, 5, 20000, 20000, 20000, 10000, 10000, 10000, 1000000, 0);",
-
-  "INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
-    "VALUES (10, 10, 'Orion Black Market Dock', 10, 10, 5, 0, 0, 0, 0, 0, 0, 5000000, 0);",
-
-  /* ---------- TRADE RULES ---------- */
-  /* Type 1: BBS (buys ore, buys organics, sells equipment) */
-  "INSERT OR IGNORE INTO port_trade (port_id, commodity, mode) VALUES (1, 'ore', 'buy');",
-  "INSERT OR IGNORE INTO port_trade (port_id, commodity, mode) VALUES (1, 'organics', 'buy');",
-  "INSERT OR IGNORE INTO port_trade (port_id, commodity, mode) VALUES (1, 'equipment', 'sell');",
-
-  /* Type 2: BSB (buys ore, sells organics, buys equipment) */
-  "INSERT OR IGNORE INTO port_trade (port_id, commodity, mode) VALUES (2, 'ore', 'buy');",
-  "INSERT OR IGNORE INTO port_trade (port_id, commodity, mode) VALUES (2, 'organics', 'sell');",
-  "INSERT OR IGNORE INTO port_trade (port_id, commodity, mode) VALUES (2, 'equipment', 'buy');",
-
-  /* Type 3: BSS (buys ore, sells organics, sells equipment) */
-  "INSERT OR IGNORE INTO port_trade (port_id, commodity, mode) VALUES (3, 'ore', 'buy');",
-  "INSERT OR IGNORE INTO port_trade (port_id, commodity, mode) VALUES (3, 'organics', 'sell');",
-  "INSERT OR IGNORE INTO port_trade (port_id, commodity, mode) VALUES (3, 'equipment', 'sell');",
-
-  /* Type 4: SBB (sells ore, buys organics, buys equipment) */
-  "INSERT OR IGNORE INTO port_trade (port_id, commodity, mode) VALUES (4, 'ore', 'sell');",
-  "INSERT OR IGNORE INTO port_trade (port_id, commodity, mode) VALUES (4, 'organics', 'buy');",
-  "INSERT OR IGNORE INTO port_trade (port_id, commodity, mode) VALUES (4, 'equipment', 'buy');",
-
-  /* Type 5: SBS (sells ore, buys organics, sells equipment) */
-  "INSERT OR IGNORE INTO port_trade (port_id, commodity, mode) VALUES (5, 'ore', 'sell');",
-  "INSERT OR IGNORE INTO port_trade (port_id, commodity, mode) VALUES (5, 'organics', 'buy');",
-  "INSERT OR IGNORE INTO port_trade (port_id, commodity, mode) VALUES (5, 'equipment', 'sell');",
-
-  /* Type 6: SSB (sells ore, sells organics, buys equipment) */
-  "INSERT OR IGNORE INTO port_trade (port_id, commodity, mode) VALUES (6, 'ore', 'sell');",
-  "INSERT OR IGNORE INTO port_trade (port_id, commodity, mode) VALUES (6, 'organics', 'sell');",
-  "INSERT OR IGNORE INTO port_trade (port_id, commodity, mode) VALUES (6, 'equipment', 'buy');",
-
-  /* Type 7: SSS (sells all) */
-  "INSERT OR IGNORE INTO port_trade (port_id, commodity, mode) VALUES (7, 'ore', 'sell');",
-  "INSERT OR IGNORE INTO port_trade (port_id, commodity, mode) VALUES (7, 'organics', 'sell');",
-  "INSERT OR IGNORE INTO port_trade (port_id, commodity, mode) VALUES (7, 'equipment', 'sell');",
-
-  /* Type 8: BBB (buys all) */
-  "INSERT OR IGNORE INTO port_trade (port_id, commodity, mode) VALUES (8, 'ore', 'buy');",
-  "INSERT OR IGNORE INTO port_trade (port_id, commodity, mode) VALUES (8, 'organics', 'buy');",
-  "INSERT OR IGNORE INTO port_trade (port_id, commodity, mode) VALUES (8, 'equipment', 'buy');",
-
-  /* Type 9: Stardock (BBB + upgrades/shipyard) */
-  "INSERT OR IGNORE INTO port_trade (port_id, commodity, mode) VALUES (9, 'ore', 'buy');",
-  "INSERT OR IGNORE INTO port_trade (port_id, commodity, mode) VALUES (9, 'organics', 'buy');",
-  "INSERT OR IGNORE INTO port_trade (port_id, commodity, mode) VALUES (9, 'equipment', 'buy');",
 
   "INSERT OR IGNORE INTO planettypes (code, typeDescription, typeName, "
     "citadelUpgradeTime_lvl1, citadelUpgradeTime_lvl2, citadelUpgradeTime_lvl3, citadelUpgradeTime_lvl4, citadelUpgradeTime_lvl5, citadelUpgradeTime_lvl6, "
@@ -1780,6 +1701,21 @@ const char *insert_default_sql[] = {
 "   base_price INTEGER NOT NULL DEFAULT 0 CHECK (base_price >= 0),  "
 "   volatility INTEGER NOT NULL DEFAULT 0 CHECK (volatility >= 0)  "
 " );  "
+
+
+" INSERT OR IGNORE INTO commodities (code, name, base_price, volatility)  "
+" VALUES  "
+"   ('ORE', 'Ore', 100, 20),  "
+"   ('ORG', 'Organics', 150, 30),  "
+"   ('EQU', 'Equipment', 200, 25);  "
+
+
+" INSERT OR IGNORE INTO commodities (code, name, base_price, volatility)  "
+" VALUES  "
+"   ('SLV', 'Slaves', 1000, 50),  "
+"   ('WPN', 'Weapons', 750, 40),  "
+"   ('DRG', 'Drugs', 500, 60);  "
+  
 
 " CREATE TABLE IF NOT EXISTS bank_accounts (  "
 "   player_id INTEGER PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE,  "
@@ -5415,54 +5351,6 @@ cleanup:
 
   return ret_code;
 }
-
-/* int */
-/* db_ports_at_sector_json (int sector_id, json_t **out_array) */
-/* { */
-/*   *out_array = NULL; */
-/*   json_t *ports = json_array (); */
-/*   if (!ports) */
-/*     { */
-/*       return SQLITE_NOMEM; */
-/*     } */
-
-/*   const char *sql = "SELECT id, name, type FROM ports WHERE location=?;"; */
-/*   sqlite3_stmt *st = NULL; */
-
-/*   int rc = sqlite3_prepare_v2 (db_get_handle (), sql, -1, &st, NULL); */
-/*   if (rc != SQLITE_OK) */
-/*     { */
-/*       json_decref (ports); */
-/*       return rc; */
-/*     } */
-
-/*   sqlite3_bind_int (st, 1, sector_id); */
-
-/*   while ((rc = sqlite3_step (st)) == SQLITE_ROW) */
-/*     { */
-/*       int port_id = sqlite3_column_int (st, 0); */
-/*       const char *port_name = (const char *) sqlite3_column_text (st, 1); */
-/*       const char *port_type = (const char *) sqlite3_column_text (st, 2); */
-
-/*       json_t *port = json_object (); */
-/*       if (!port) */
-/* 	{ */
-/* 	  json_decref (ports); */
-/* 	  sqlite3_finalize (st); */
-/* 	  return SQLITE_NOMEM; */
-/* 	} */
-
-/*       json_object_set_new (port, "id", json_integer (port_id)); */
-/*       json_object_set_new (port, "name", json_string (port_name)); */
-/*       json_object_set_new (port, "type", json_string (port_type)); */
-
-/*       json_array_append_new (ports, port); */
-/*     } */
-
-/*   sqlite3_finalize (st); */
-/*   *out_array = ports; */
-/*   return SQLITE_OK; */
-/* } */
 
 // In database.c
 int
