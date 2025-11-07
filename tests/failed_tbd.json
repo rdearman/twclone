@@ -7,13 +7,17 @@
 	    "cmd": "trade.buy",
 	    "idempotency_key": "test-buy-single-1762338651-2594",
 	    "data": {
-		"port_id": 76,
-		"commodity": "ore",   
-		"quantity": 1         
+		"port_id": 64,
+        "items": [
+            {
+                "commodity": "ore",
+                "quantity": 1
+            }
+        ]
 	    },
 	    "expect": {
 		"status": "ok",
-		"type": "trade.accepted" 
+		"type": "trade.buy_receipt_v1"
 	    }
 	},
 
@@ -22,7 +26,7 @@
 	    "name": "trade.port_info (by port_id)",
 	    "cmd": "trade.port_info",
 	    "data": {
-		"port_id": "@portId"
+		"port_id": 64
 	    },
 	    "expect": {
 		"status": "ok",
@@ -36,9 +40,9 @@
 	{
 	    "name": "trade.buy ok (items list)",
 	    "cmd": "trade.buy",
-	    "idempotency_key": "test-buy-single-1762338651-2594",
+	    "idempotency_key": "test-buy-single-1762338651-2594-2",
 	    "data": {
-		"port_id": "@portId",
+		"port_id": 64,
 		"items": [
 		    {
 			"commodity": "ore",
@@ -48,7 +52,7 @@
 	    },
 	    "expect": {
 		"status": "ok",
-		"type": "trade.receipt"
+		"type": "trade.buy_receipt_v1"
 	    }
 	},
 	{
@@ -56,7 +60,7 @@
 	    "cmd": "trade.buy",
 	    "idempotency_key": "@prev_idempotency_key",
 	    "data": {
-		"port_id": "@portId",
+		"port_id": 64,
 		"items": [
 		    {
 			"commodity": "ore",
@@ -66,7 +70,7 @@
 	    },
 	    "expect": {
 		"status": "ok",
-		"type": "trade.receipt"
+		"type": "trade.buy_receipt_v1"
 	    }
 	},
 	{
@@ -74,7 +78,7 @@
 	    "cmd": "trade.sell",
 	    "idempotency_key": "test-sell-invalid-1762338651-4283",
 	    "data": {
-		"port_id": "@portId",
+		"port_id": 64,
 		"items": [
 		    {
 			"commodity": "invalid_thing",

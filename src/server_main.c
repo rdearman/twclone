@@ -359,7 +359,6 @@ main (void)
       return EXIT_FAILURE;	// or your project’s error path
     }
 
-
   // normal startup
   if (!load_eng_config ())
     return 2;

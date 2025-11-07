@@ -171,7 +171,7 @@ user_create (const char *player_name, const char *password,
 
 
   // Create ship
-  const char *ins_ship = "INSERT INTO ships (name, type_id, location) VALUES ('new ship', 1, 1);";
+  const char *ins_ship = "INSERT INTO ships (name, type_id, sector) VALUES ('new ship', 1, 1);";
   rc = sqlite3_prepare_v2(db, ins_ship, -1, &st, NULL);
   if (rc == SQLITE_OK) {
     sqlite3_step(st);

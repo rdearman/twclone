@@ -38,7 +38,6 @@
 /* handlers (implemented below) */
 static int sweeper_system_notice_ttl (sqlite3 * db, int64_t now_ms);
 static int sweeper_engine_deadletter_retry (sqlite3 * db, int64_t now_ms);
-static int sweeper_engine_commands_timeout (sqlite3 * db, int64_t now_ms);
 
 // Define the interval for the main game loop ticks in seconds
 #define GAME_TICK_INTERVAL_SEC 60
@@ -1054,87 +1053,98 @@ cron_lookup (const char *name)
   return NULL;
 }
 
-/* one runner tick: claim due tasks, run, reschedule */
+
+/* one runner tick: claim due tasks, run, reschedule
+ *
+ * cron_tasks schema (current):
+ *   id          INTEGER PRIMARY KEY
+ *   name        TEXT UNIQUE NOT NULL       -- handler name
+ *   schedule    TEXT NOT NULL              -- interval seconds (for now)
+ *   last_run_at INTEGER                    -- unix time (s)
+ *   next_due_at INTEGER NOT NULL           -- unix time (s)
+ *   enabled     INTEGER NOT NULL DEFAULT 1
+ *   payload     TEXT
+ *
+ * Assumes:
+ *   - cron_lookup(name) -> cron_handler_fn or NULL
+ *   - now_ms is current time in milliseconds
+ *   - schedule is interpreted as an integer interval in seconds
+ */
 static void
 run_cron_batch (sqlite3 *db, int64_t now_ms)
 {
-  sqlite3_stmt *st = NULL;
-
-  /* reclaim stale locks (best-effort) */
-  sqlite3_exec (db, "UPDATE cron_tasks " "SET locked=0, lock_owner=NULL " "WHERE locked=1 AND (strftime('%s','now')*1000 - lock_ts_ms) > ?1;", NULL, NULL, NULL);	/* you can bind via prepared stmt if you like */
-
-  /* pick due & unlocked tasks (bounded) */
-  if (sqlite3_prepare_v2 (db,
-			  "SELECT id, task_name, interval_ms "
-			  "FROM cron_tasks "
-			  "WHERE enabled=1 AND locked=0 AND next_due_ms <= ?1 "
-			  "ORDER BY priority DESC, next_due_ms ASC "
-			  "LIMIT ?2;", -1, &st, NULL) != SQLITE_OK)
+  if (!db)
     return;
 
-  sqlite3_bind_int64 (st, 1, now_ms);
+  int64_t now_s = now_ms / 1000;   /* store timestamps in seconds */
+  sqlite3_stmt *st = NULL;
+
+  /* pick due tasks (bounded) */
+  if (sqlite3_prepare_v2 (
+	  db,
+	  "SELECT id, name, schedule, next_due_at "
+	  "FROM cron_tasks "
+	  "WHERE enabled = 1 AND next_due_at <= ?1 "
+	  "ORDER BY next_due_at ASC "
+	  "LIMIT ?2;",
+	  -1, &st, NULL) != SQLITE_OK)
+    {
+      return;
+    }
+
+  sqlite3_bind_int64 (st, 1, now_s);
   sqlite3_bind_int (st, 2, CRON_BATCH_LIMIT);
 
   while (sqlite3_step (st) == SQLITE_ROW)
     {
-      int64_t id = sqlite3_column_int64 (st, 0);
-      const char *nm = (const char *) sqlite3_column_text (st, 1);
-      int64_t interval = sqlite3_column_int64 (st, 2);
+      int c = 0;
+      sqlite3_int64 id         = sqlite3_column_int64 (st, c++);
+      const char   *name       = (const char *) sqlite3_column_text (st, c++);
+      const char   *schedule   = (const char *) sqlite3_column_text (st, c++);
+      /* sqlite3_int64 prev_due = sqlite3_column_int64 (st, c++); */ (void)sqlite3_column_int64(st, c++);
 
-      /* try to lock */
-      sqlite3_stmt *lk = NULL;
-      if (sqlite3_prepare_v2 (db,
-			      "UPDATE cron_tasks SET locked=1, lock_owner='engine', lock_ts_ms=?2 "
-			      "WHERE id=?1 AND locked=0;", -1, &lk,
-			      NULL) == SQLITE_OK)
-	{
-	  sqlite3_bind_int64 (lk, 1, id);
-	  sqlite3_bind_int64 (lk, 2, now_ms);
-	  sqlite3_step (lk);
-	  sqlite3_finalize (lk);
-	}
+      if (!name || !schedule)
+        continue;
 
-      /* verify lock (race-safe) */
-      sqlite3_stmt *chk = NULL;
-      int have_lock = 0;
-      if (sqlite3_prepare_v2 (db,
-			      "SELECT locked FROM cron_tasks WHERE id=?1;",
-			      -1, &chk, NULL) == SQLITE_OK)
-	{
-	  sqlite3_bind_int64 (chk, 1, id);
-	  if (sqlite3_step (chk) == SQLITE_ROW)
-	    have_lock = sqlite3_column_int (chk, 0);
-	  sqlite3_finalize (chk);
-	}
-      if (!have_lock)
-	continue;
-
-      /* run the handler */
+      /* look up handler */
+      cron_handler_fn fn = cron_lookup (name);
       int rc = -1;
-      cron_handler_fn fn = cron_lookup (nm);
       if (fn)
-	{
-	  rc = fn (db, now_ms);
-	}
+	rc = fn (db, now_ms);
 
-      /* reschedule (idempotent) */
+      /* compute next_due_at from schedule (treat as interval seconds) */
+      long long interval_s = atoll (schedule);
+      if (interval_s <= 0)
+	interval_s = 60;           /* safe fallback */
+
+      sqlite3_int64 next_due_at = now_s + interval_s;
+
+      /* reschedule */
       sqlite3_stmt *upd = NULL;
-      if (sqlite3_prepare_v2 (db,
-			      "UPDATE cron_tasks SET "
-			      "  locked=0, lock_owner=NULL, "
-			      "  last_rc=?2, last_run_ms=?3, "
-			      "  next_due_ms = CASE WHEN ?2=0 THEN (?3 + interval_ms) ELSE (?3 + interval_ms) END "
-			      "WHERE id=?1;", -1, &upd, NULL) == SQLITE_OK)
+      if (sqlite3_prepare_v2 (
+	      db,
+	      "UPDATE cron_tasks "
+	      "SET last_run_at = ?2, next_due_at = ?3 "
+	      "WHERE id = ?1;",
+	      -1, &upd, NULL) == SQLITE_OK)
 	{
 	  sqlite3_bind_int64 (upd, 1, id);
-	  sqlite3_bind_int (upd, 2, rc == 0 ? 0 : rc);	/* 0=ok, else error code */
-	  sqlite3_bind_int64 (upd, 3, now_ms);
-	  sqlite3_step (upd);
+	  sqlite3_bind_int64 (upd, 2, now_s);
+	  sqlite3_bind_int64 (upd, 3, next_due_at);
+	  (void) sqlite3_step (upd);
 	  sqlite3_finalize (upd);
 	}
+      else
+	{
+	  if (upd)
+	    sqlite3_finalize (upd);
+	}
     }
+
   sqlite3_finalize (st);
 }
+
+
 
 static int
 sweeper_system_notice_ttl (sqlite3 *db, int64_t now_ms)
@@ -1144,7 +1154,7 @@ sweeper_system_notice_ttl (sqlite3 *db, int64_t now_ms)
   sqlite3_stmt *st = NULL;
   if (sqlite3_prepare_v2 (db,
 			  "DELETE FROM system_notice "
-			  "WHERE ephemeral=1 AND (ts + ttl_seconds) < strftime('%s','now') "
+			  "WHERE expires_at IS NOT NULL AND expires_at <= now "
 			  "LIMIT 500;", -1, &st, NULL) != SQLITE_OK)
     return 1;
   sqlite3_step (st);
@@ -1152,42 +1162,3 @@ sweeper_system_notice_ttl (sqlite3 *db, int64_t now_ms)
   return 0;
 }
 
-static int
-sweeper_engine_commands_timeout (sqlite3 *db, int64_t now_ms)
-{
-  (void) now_ms;
-  /* deadletter stuck commands older than N seconds; bounded */
-  const int TIMEOUT_S = 60;	/* adjust */
-  sqlite3_stmt *st = NULL;
-
-  /* move timed-out commands to deadletter with cause=timeout */
-  if (sqlite3_prepare_v2 (db,
-			  "WITH stuck AS ( "
-			  "  SELECT id, type, sector_id, payload "
-			  "  FROM engine_commands "
-			  "  WHERE status='pending' "
-			  "    AND created_at < strftime('%s','now') - ?1 "
-			  "  LIMIT 200 "
-			  ") "
-			  "INSERT INTO engine_events_deadletter(type, sector_id, payload, reason, retry_at, attempts, terminal) "
-			  "SELECT type, sector_id, payload, 'timeout', strftime('%s','now') + 60, 0, 0 FROM stuck; ",
-			  -1, &st, NULL) != SQLITE_OK)
-    return 4;
-  sqlite3_bind_int (st, 1, TIMEOUT_S);
-  sqlite3_step (st);
-  sqlite3_finalize (st);
-
-  /* mark them deadlettered */
-  if (sqlite3_prepare_v2 (db,
-			  "UPDATE engine_commands "
-			  "SET status='deadlettered' "
-			  "WHERE status='pending' "
-			  "  AND created_at < strftime('%s','now') - ?1;", -1,
-			  &st, NULL) != SQLITE_OK)
-    return 5;
-  sqlite3_bind_int (st, 1, TIMEOUT_S);
-  sqlite3_step (st);
-  sqlite3_finalize (st);
-
-  return 0;
-}

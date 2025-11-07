@@ -384,7 +384,7 @@ const char *create_table_sql[] = {
   " id INTEGER PRIMARY KEY AUTOINCREMENT, "
   " number INTEGER, "
   " name TEXT NOT NULL, "
-  " location INTEGER NOT NULL, "    /* FK to sectors.id */
+  " sector INTEGER NOT NULL, "    /* FK to sectors.id */
   " size INTEGER, "
   " techlevel INTEGER, "
   " max_ore INTEGER, "
@@ -400,7 +400,7 @@ const char *create_table_sql[] = {
   " credits INTEGER, "
   " invisible INTEGER DEFAULT 0, "
   " type INTEGER DEFAULT 1, "
-  " FOREIGN KEY (location) REFERENCES sectors(id)); "
+  " FOREIGN KEY (sector) REFERENCES sectors(id)); "
 
 
   " CREATE TABLE IF NOT EXISTS port_trade ( "
@@ -467,7 +467,7 @@ const char *create_table_sql[] = {
     "   fighters INTEGER, /* Current quantity carried */  "
     "   genesis INTEGER, /* Current quantity carried */  "
     "   photons INTEGER, /* Current quantity carried */  "
-    "   location INTEGER, /* Foreign Key to sectors.id */  "
+    "   sector INTEGER, /* Foreign Key to sectors.id */  "
     "   shields INTEGER,  "
     "   beacons INTEGER, /* Current quantity carried */  "
     "   colonists INTEGER,  "
@@ -482,7 +482,7 @@ const char *create_table_sql[] = {
     "   destroyed INTEGER DEFAULT 0,  "  
     "   CONSTRAINT check_current_cargo_limit CHECK ( (colonists + equipment + organics + ore) <= holds ), "
     "   FOREIGN KEY(type_id) REFERENCES shiptypes(id),  "
-    "   FOREIGN KEY(location) REFERENCES sectors(id)  " " );  ",
+    "   FOREIGN KEY(sector) REFERENCES sectors(id)  " " );  ",
 
 
 
@@ -888,8 +888,8 @@ const char *create_table_sql[] = {
     "  SELECT sector AS sector_id, COUNT(*) AS planet_count\n"
     "  FROM planets GROUP BY sector\n"
     "), prt AS (\n"
-    "  SELECT location AS sector_id, COUNT(*) AS port_count\n"
-    "  FROM ports GROUP BY location\n"
+    "  SELECT sector AS sector_id, COUNT(*) AS port_count\n"
+    "  FROM ports GROUP BY sector\n"
     ")\n"
     "SELECT s.id AS sector_id,\n"
     "       COALESCE(d.outdeg,0) AS outdeg,\n"
@@ -914,7 +914,7 @@ const char *create_table_sql[] = {
     "  LEFT JOIN port_trade t ON t.port_id = p.id\n"
     "  GROUP BY p.id\n"
     ")\n"
-    "SELECT p.id, p.number, p.name, p.location AS sector_id, p.size, p.techlevel, p.credits,\n"
+    "SELECT p.id, p.number, p.name, p.sector AS sector_id, p.size, p.techlevel, p.credits,\n"
     "       COALESCE(m.ore,'-') || COALESCE(m.org,'-') || COALESCE(m.eqp,'-') AS trade_code\n"
     "FROM ports p\n" "LEFT JOIN m ON m.port_id = p.id;",
 
@@ -929,7 +929,7 @@ const char *create_table_sql[] = {
 
 /* 11) Stardock location (by type=9 or name) */
   "CREATE VIEW IF NOT EXISTS stardock_location AS\n"
-    "SELECT id AS port_id, number, name, location AS sector_id\n"
+    "SELECT id AS port_id, number, name, sector AS sector_id\n"
     "FROM ports\n" "WHERE type = 9 OR name LIKE '%Stardock%';",
 
 /* ===================== PLANETS / CITADELS ===================== */
@@ -971,7 +971,7 @@ const char *create_table_sql[] = {
     "COALESCE(GROUP_CONCAT(sh.name || '#' || sh.id, ', '), '') AS ships,\n"
     "       COUNT(sh.id) AS ship_count\n"
     "FROM sectors s\n"
-    "LEFT JOIN ships sh ON sh.location = s.id\n" "GROUP BY s.id;",
+    "LEFT JOIN ships sh ON sh.sector = s.id\n" "GROUP BY s.id;",
 
 /* ===================== OPS DASHBOARDS ===================== */
 
@@ -1074,11 +1074,11 @@ const char *create_table_sql[] = {
   "     'port' AS kind,  "
   "     p.id AS id,  "
   "     p.name AS name,  "
-  "     p.location AS sector_id,  "
+  "     p.sector AS sector_id,  "
   "     s.name AS sector_name,  "
   "     p.name AS search_term_1  "
   " FROM ports p  "
-  " JOIN sectors s ON s.id = p.location;  "
+  " JOIN sectors s ON s.id = p.sector;  "
   
   
 //////////////////////////////////////////////////////////////////////
@@ -1100,7 +1100,7 @@ const char *create_table_sql[] = {
 
   "CREATE INDEX IF NOT EXISTS idx_warps_from ON sector_warps(from_sector);",
   "CREATE INDEX IF NOT EXISTS idx_warps_to   ON sector_warps(to_sector);",
-  "CREATE INDEX IF NOT EXISTS idx_ports_loc  ON ports(location);",
+  "CREATE INDEX IF NOT EXISTS idx_ports_loc  ON ports(sector);",
   "CREATE INDEX IF NOT EXISTS idx_planets_sector ON planets(sector);",
   "CREATE INDEX IF NOT EXISTS idx_citadels_planet ON citadels(planet_id);",
   "CREATE INDEX IF NOT EXISTS ix_warps_from_to ON sector_warps(from_sector, to_sector);",
@@ -1129,7 +1129,7 @@ const char *create_table_sql[] = {
   "CREATE INDEX IF NOT EXISTS idx_ship_own_ship   ON ship_ownership(ship_id);",
 
   "DROP INDEX IF EXISTS idx_ports_number;",
-  "CREATE UNIQUE INDEX IF NOT EXISTS idx_ports_loc_number ON ports(location, number);",
+  "CREATE UNIQUE INDEX IF NOT EXISTS idx_ports_loc_number ON ports(sector, number);",
 
 
   " CREATE UNIQUE INDEX IF NOT EXISTS idx_mail_idem_recipient  "
@@ -1308,34 +1308,34 @@ const char *insert_default_sql[] = {
 
 
   /* ---------- PORTS ---------- */
-  "INSERT OR IGNORE INTO ports (id, number, name, location, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
+  "INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
     "VALUES (1, 1, 'Port Type 1 (BBS)', 1, 5, 3, 10000, 10000, 10000, 5000, 5000, 5000, 500000, 0);",
 
-  "INSERT OR IGNORE INTO ports (id, number, name, location, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
+  "INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
     "VALUES (2, 2, 'Port Type 2 (BSB)', 2, 5, 3, 10000, 10000, 10000, 5000, 5000, 5000, 500000, 0);",
 
-  "INSERT OR IGNORE INTO ports (id, number, name, location, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
+  "INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
     "VALUES (3, 3, 'Port Type 3 (BSS)', 3, 5, 3, 10000, 10000, 10000, 5000, 5000, 5000, 500000, 0);",
 
-  "INSERT OR IGNORE INTO ports (id, number, name, location, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
+  "INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
     "VALUES (4, 4, 'Port Type 4 (SBB)', 4, 5, 3, 10000, 10000, 10000, 5000, 5000, 5000, 500000, 0);",
 
-  "INSERT OR IGNORE INTO ports (id, number, name, location, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
+  "INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
     "VALUES (5, 5, 'Port Type 5 (SBS)', 5, 5, 3, 10000, 10000, 10000, 5000, 5000, 5000, 500000, 0);",
 
-  "INSERT OR IGNORE INTO ports (id, number, name, location, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
+  "INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
     "VALUES (6, 6, 'Port Type 6 (SSB)', 6, 5, 3, 10000, 10000, 10000, 5000, 5000, 5000, 500000, 0);",
 
-  "INSERT OR IGNORE INTO ports (id, number, name, location, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
+  "INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
     "VALUES (7, 7, 'Port Type 7 (SSS)', 7, 5, 3, 10000, 10000, 10000, 5000, 5000, 5000, 500000, 0);",
 
-  "INSERT OR IGNORE INTO ports (id, number, name, location, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
+  "INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
     "VALUES (8, 8, 'Port Type 8 (BBB)', 8, 5, 3, 10000, 10000, 10000, 5000, 5000, 5000, 500000, 0);",
 
-  "INSERT OR IGNORE INTO ports (id, number, name, location, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
+  "INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
     "VALUES (9, 9, 'Port Type 9 (Stardock)', 9, 10, 5, 20000, 20000, 20000, 10000, 10000, 10000, 1000000, 0);",
 
-  "INSERT OR IGNORE INTO ports (id, number, name, location, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
+  "INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, invisible) "
     "VALUES (10, 10, 'Orion Black Market Dock', 10, 10, 5, 0, 0, 0, 0, 0, 0, 5000000, 0);",
 
   /* ---------- TRADE RULES ---------- */
@@ -1669,7 +1669,7 @@ const char *insert_default_sql[] = {
   /* fix a problem with the terraforming cron */
   "ALTER TABLE planets ADD COLUMN terraform_turns_left INTEGER NOT NULL DEFAULT 1;",
 
-  "INSERT INTO ships (name, type_id, attack, holds, mines, limpets, fighters, genesis, photons, location, shields, beacons, colonists, equipment, organics, ore, flags, cloaking_devices, cloaked, ported, onplanet) "
+  "INSERT INTO ships (name, type_id, attack, holds, mines, limpets, fighters, genesis, photons, sector, shields, beacons, colonists, equipment, organics, ore, flags, cloaking_devices, cloaked, ported, onplanet) "
     "VALUES ('Bit Banger', 1, 110, 20, 25, 5, 2300, 5, 1, 1, 400, 10, 5, 5, 5, 5, 0, 5, NULL, 1, 1);",
 
   "INSERT INTO players (number, name, passwd, sector, ship, type) VALUES (1, 'System', 'BOT',1,1,1);",
@@ -1688,7 +1688,7 @@ const char *insert_default_sql[] = {
 /* 2. Insert five maxed-out Orion Syndicate ships (FULL SCHEMA APPLIED) */
 /* ------------------------------------------------------------------------------------- */
     " INSERT INTO ships ( "
-    "  name, type_id, attack, holds, mines, limpets, fighters, genesis, photons, location, shields, beacons, colonists, equipment, organics, ore, flags, cloaking_devices, cloaked, ported, onplanet "
+    "  name, type_id, attack, holds, mines, limpets, fighters, genesis, photons, sector, shields, beacons, colonists, equipment, organics, ore, flags, cloaking_devices, cloaked, ported, onplanet "
     " ) "
     " SELECT "
     "  'Orion Heavy Fighter Alpha', T.id, 0, T.maxholds, T.maxmines, 0, T.maxfighters, T.maxgenesis, T.maxphotons, P.sector, T.maxshields, T.maxbeacons, 0, 0, 0, 0, 0, 0, NULL, 0, 0 "
@@ -4447,9 +4447,9 @@ db_players_at_sector_json (int sector_id, json_t **out_array)
   rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
-      /* Fallback if some builds use 'location' instead of 'sector' */
+      /* Fallback if some builds use 'sector' instead of 'sector' */
       const char *sql2 =
-	"SELECT id, COALESCE(name, player_name) AS pname FROM players WHERE location = ? ORDER BY id";
+	"SELECT id, COALESCE(name, player_name) AS pname FROM players WHERE sector = ? ORDER BY id";
       rc = sqlite3_prepare_v2 (dbh, sql2, -1, &st, NULL);
       if (rc != SQLITE_OK)
 	goto cleanup;
@@ -4791,7 +4791,7 @@ db_player_set_sector (int player_id, int sector_id)
     }
 
   // Update the ship's location using the retrieved ship ID
-  const char *sql_update_ship = "UPDATE ships SET location=? WHERE id=?;";
+  const char *sql_update_ship = "UPDATE ships SET sector=? WHERE id=?;";
   rc = sqlite3_prepare_v2 (dbh, sql_update_ship, -1, &st_update_ship, NULL);
   if (rc != SQLITE_OK)
     {
@@ -5260,7 +5260,7 @@ db_ships_at_sector_json (int player_id, int sector_id, json_t **out)
     }
 
   /* 3) Query: ship name, type name, owner name, ship id (by sector) */
-  const char *sql = "SELECT T1.name, T2.name, T3.name, T1.id " "FROM ships T1 " "LEFT JOIN shiptypes T2 ON T1.type = T2.id " "LEFT JOIN players  T3 ON T1.id = T3.ship " "WHERE T1.location=?;";	/* sector_id */
+  const char *sql = "SELECT T1.name, T2.name, T3.name, T1.id " "FROM ships T1 " "LEFT JOIN shiptypes T2 ON T1.type = T2.id " "LEFT JOIN players  T3 ON T1.id = T3.ship " "WHERE T1.sector=?;";	/* sector_id */
 
   int rc = sqlite3_prepare_v2 (db_get_handle (), sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
@@ -5358,7 +5358,7 @@ db_ports_at_sector_json (int sector_id, json_t **out_array)
       goto cleanup;
     }
 
-  const char *sql = "SELECT id, name, type FROM ports WHERE location=?;";
+  const char *sql = "SELECT id, name, type FROM ports WHERE sector=?;";
 
   // 2. Prepare the statement. Check for errors and jump to cleanup if needed.
   rc = sqlite3_prepare_v2 (db_get_handle (), sql, -1, &st, NULL);
@@ -5927,13 +5927,13 @@ db_ships_inspectable_at_sector_json (int player_id, int sector_id,
     "  s.id AS ship_id, "
     "  COALESCE(NULLIF(s.name,''), st.name || ' #' || s.id) AS ship_name, "
     "  st.id AS type_id, "
-    "  st.name AS type_name, " "  s.location AS sector_id, "
+    "  st.name AS type_name, " "  s.sector AS sector_id, "
     /* owner from ship_ownership (NOT pilot) */
     "  own.player_id AS owner_id, "
     "  COALESCE( (SELECT name FROM players WHERE id = own.player_id), 'derelict') AS owner_name, "
     /* derelict/boardable == unpiloted, regardless of owner */
     "  CASE WHEN pil.id IS NULL THEN 1 ELSE 0 END AS is_derelict, " "  s.fighters, s.shields, " "  s.holds AS holds_total, (s.holds - s.holds) AS holds_free, " "  s.ore, s.organics, s.equipment, s.colonists, " "  COALESCE(s.flags,0) AS flags, s.id AS registration, COALESCE(s.perms, 731) AS perms " "FROM ships s " "LEFT JOIN shiptypes      st  ON st.id = s.type " "LEFT JOIN ship_ownership own ON own.ship_id = s.id " "LEFT JOIN players pil ON pil.ship = s.id "	/* current pilot (if any) */
-    "WHERE s.location = ? "
+    "WHERE s.sector = ? "
     "  AND (pil.id IS NULL OR pil.id != ?) "
     "ORDER BY is_derelict DESC, s.id ASC;";
 
@@ -6138,7 +6138,7 @@ db_ship_claim (int player_id, int sector_id, int ship_id, json_t **out_ship)
     goto out_unlock;
 
   static const char *SQL_CHECK = "SELECT s.id FROM ships s " "LEFT JOIN players pil ON pil.ship = s.id "	// Changed from s.number to s.id
-    "WHERE s.id=? AND s.location=? "
+    "WHERE s.id=? AND s.sector=? "
     "  AND pil.id IS NULL AND (s.perms % 10) >= 1;";
 
   rc = sqlite3_prepare_v2 (db_handle, SQL_CHECK, -1, &stmt, NULL);
@@ -6222,7 +6222,7 @@ db_ship_claim (int player_id, int sector_id, int ship_id, json_t **out_ship)
     "SELECT s.id AS ship_id, "
     "       COALESCE(NULLIF(s.name,''), st.name || ' #' || s.id) AS ship_name, "
     "       st.id AS type_id, st.name AS type_name, "
-    "       s.location AS sector_id, "
+    "       s.sector AS sector_id, "
     "       own.player_id AS owner_id, "
     "       COALESCE( (SELECT name FROM players WHERE id=own.player_id), 'derelict') AS owner_name, "
     "       0 AS is_derelict, "
@@ -6650,8 +6650,8 @@ db_sector_scan_core (int sector_id, json_t **out_obj)
   const char *sql =
     "SELECT s.name, "
     "       0 AS safe_zone, "
-    "       (SELECT COUNT(1) FROM ports   p  WHERE p.location  = s.id) AS port_count, "
-    "       (SELECT COUNT(1) FROM ships   sh WHERE sh.location = s.id) AS ship_count, "
+    "       (SELECT COUNT(1) FROM ports   p  WHERE p.sector  = s.id) AS port_count, "
+    "       (SELECT COUNT(1) FROM ships   sh WHERE sh.sector = s.id) AS ship_count, "
     "       (SELECT COUNT(1) FROM planets pl WHERE pl.sector  = s.id) AS planet_count, "
     "       s.beacon AS beacon_text " "FROM sectors s WHERE s.id = ?1";
 
@@ -7015,7 +7015,7 @@ db_get_port_id_by_sector(int sector_id)
     sqlite3_stmt *stmt = NULL;
     int port_id = -1;
 
-    const char *sql = "SELECT id FROM ports WHERE location=?1;";
+    const char *sql = "SELECT id FROM ports WHERE sector=?1;";
 
     pthread_mutex_lock(&db_mutex); // Critical section starts
 
@@ -7047,7 +7047,7 @@ db_get_ship_sector_id (sqlite3 *db, int ship_id)
     // 1. Acquire the lock at the very beginning of the function.
     pthread_mutex_lock (&db_mutex);
 
-    const char *sql = "SELECT location FROM ships WHERE id=?";
+    const char *sql = "SELECT sector FROM ships WHERE id=?";
 
     // 2. Prepare the statement. Use the passed 'db' handle.
     rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);

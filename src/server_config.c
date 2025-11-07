@@ -24,6 +24,7 @@
 #include "schemas.h"
 #include "server_envelope.h"
 #include "server_config.h"
+#include "server_log.h"
 
 /* Single definition of the global */
 server_config_t g_cfg;
@@ -149,7 +150,10 @@ apply_db (sqlite3 *db)
   sqlite3_stmt *st = NULL;
   if (sqlite3_prepare_v2
       (db, "SELECT key,value FROM app_config", -1, &st, NULL) != SQLITE_OK)
-    return;
+    {
+      LOGI("[config] no app_config table found, using defaults (%s)\n", sqlite3_errmsg(db));
+      return;
+    }
   while (sqlite3_step (st) == SQLITE_ROW)
     {
       const char *k = (const char *) sqlite3_column_text (st, 0);

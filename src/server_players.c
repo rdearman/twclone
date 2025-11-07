@@ -254,10 +254,6 @@ h_get_player_credits (sqlite3 *db, int player_id, int *credits_out)
 
   sqlite3_bind_int (st, 1, player_id);
 
-  /*
-   * The copy-pasted cargo query has been removed.
-   */
-
   rc = sqlite3_step (st);
   if (rc == SQLITE_ROW)
     {

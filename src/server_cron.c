@@ -131,7 +131,7 @@ tow_ship (sqlite3 *db, int ship_id, int new_sector_id, int admin_id,
 
   // --- 1. SELECT: Get current location and owner ---
   // CORRECTION: Join 'ships' (T1) directly to 'players' (T2) using T1.id = T2.ship
-  const char *sql_select_ship_info = "SELECT T1.location, T2.id " "FROM ships T1 " "LEFT JOIN players T2 ON T1.id = T2.ship "	// CORRECTED JOIN
+  const char *sql_select_ship_info = "SELECT T1.sector, T2.id " "FROM ships T1 " "LEFT JOIN players T2 ON T1.id = T2.ship "	// CORRECTED JOIN
     "WHERE T1.id = ?;";
 
   if (sqlite3_prepare_v2 (db, sql_select_ship_info, -1, &stmt, NULL) !=
@@ -190,7 +190,7 @@ tow_ship (sqlite3 *db, int ship_id, int new_sector_id, int admin_id,
 
 
   // --- 3. UPDATE: Ship Location (Unchanged) ---
-  const char *sql_update_ship = "UPDATE ships SET location = ? WHERE id = ?;";
+  const char *sql_update_ship = "UPDATE ships SET sector = ? WHERE id = ?;";
 
   if (sqlite3_prepare_v2 (db, sql_update_ship, -1, &stmt, NULL) != SQLITE_OK)
     {
@@ -1060,8 +1060,8 @@ int uncloak_ships_in_fedspace(sqlite3 *db) {
         "UPDATE ships SET cloaked=NULL "
         "WHERE cloaked IS NOT NULL "
         "  AND ( "
-        "    location IN (SELECT sector_id FROM stardock_location) "
-        "    OR location IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10) "
+        "    sector IN (SELECT sector_id FROM stardock_location) "
+        "    OR sector IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10) "
         "  );";
 
     //printf("Executing SQL query...\n");
@@ -1268,9 +1268,9 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
     }
 
   // 3. Populate the table (Now an INSERT INTO SELECT)
-  const char *sql_insert_eligible = "INSERT INTO eligible_tows (ship_id, sector_id, owner_id, fighters, alignment, experience) " "SELECT T1.id, T1.location, T2.id, T1.fighters, " "       COALESCE(T2.alignment, 0), "	// Use 0 if alignment is NULL
+  const char *sql_insert_eligible = "INSERT INTO eligible_tows (ship_id, sector_id, owner_id, fighters, alignment, experience) " "SELECT T1.id, T1.sector, T2.id, T1.fighters, " "       COALESCE(T2.alignment, 0), "	// Use 0 if alignment is NULL
     "       COALESCE(T2.experience, 0) "	// Use 0 if experience is NULL
-    "FROM ships T1 " "LEFT JOIN players T2 ON T1.id = T2.ship " "WHERE T1.location BETWEEN ?1 AND ?2 " "  AND (T2.loggedin = 0 OR T2.id IS NULL) "	// Filter by loggedin status or no owner
+    "FROM ships T1 " "LEFT JOIN players T2 ON T1.id = T2.ship " "WHERE T1.sector BETWEEN ?1 AND ?2 " "  AND (T2.loggedin = 0 OR T2.id IS NULL) "	// Filter by loggedin status or no owner
     "ORDER BY T1.id ASC;";
   if (sqlite3_prepare_v2 (db, sql_insert_eligible, -1, &select_stmt, NULL) ==
       SQLITE_OK)

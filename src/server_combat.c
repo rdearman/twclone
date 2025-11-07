@@ -584,12 +584,12 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
   {
     sqlite3_stmt *st = NULL;
     if (sqlite3_prepare_v2
-	(db, "SELECT location FROM ships WHERE id=?1;", -1, &st,
+	(db, "SELECT sector FROM ships WHERE id=?1;", -1, &st,
 	 NULL) != SQLITE_OK)
       {
 	char error_buffer[256]; 
 	snprintf(error_buffer, sizeof(error_buffer), 
-		 "Unable to resolve current sector - SELECT location FROM ships WHERE id=%d;", 
+		 "Unable to resolve current sector - SELECT sector FROM ships WHERE id=%d;", 
 		 ship_id);
 	char *shperror = error_buffer;	
 	send_enveloped_error (ctx->fd, root, ERR_SECTOR_NOT_FOUND,
@@ -1053,7 +1053,7 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
   {
     sqlite3_stmt *st = NULL;
     if (sqlite3_prepare_v2
-	(db, "SELECT location FROM ships WHERE id=?1;", -1, &st,
+	(db, "SELECT sector FROM ships WHERE id=?1;", -1, &st,
 	 NULL) != SQLITE_OK)
       {
 	char error_buffer[256]; 

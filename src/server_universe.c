@@ -169,7 +169,7 @@ ori_init_once (void)
 
   // --- Step 2: Find the Black Market home sector ID (from Port ID 10) ---
   const char *sql_find_sector =
-    "SELECT location FROM ports WHERE id=10 AND name='Orion Black Market Dock';";
+    "SELECT sector FROM ports WHERE id=10 AND name='Orion Black Market Dock';";
   ori_home_sector_id = get_int_value (ori_db, sql_find_sector);
 
   if (ori_home_sector_id == -1)
@@ -210,7 +210,7 @@ ori_move_all_ships (int64_t now_ms)
 
   // Select all ships owned by the Orion Syndicate
   const char *sql_select_orion_ships =
-    "SELECT id, location, target_sector FROM ships WHERE owner_id = ?;";
+    "SELECT id, sector, target_sector FROM ships WHERE owner_id = ?;";
 
   rc =
     sqlite3_prepare_v2 (ori_db, sql_select_orion_ships, -1, &select_stmt,
@@ -2575,7 +2575,7 @@ sector_has_port (int sector)
 {
   if (!g_fer_db || sector <= 0)
     return 0;
-  const char *sql = "SELECT 1 FROM ports WHERE location=?1 LIMIT 1;";
+  const char *sql = "SELECT 1 FROM ports WHERE sector=?1 LIMIT 1;";
   sqlite3_stmt *st = NULL;
   int ok = 0;
   if (sqlite3_prepare_v2 (g_fer_db, sql, -1, &st, NULL) != SQLITE_OK)
@@ -2591,7 +2591,7 @@ static int
 fer_random_port_sector (sqlite3 *db)
 {
   /* any sector that has a port */
-  const char *sql = "SELECT location FROM ports ORDER BY RANDOM() LIMIT 1;";
+  const char *sql = "SELECT sector FROM ports ORDER BY RANDOM() LIMIT 1;";
   sqlite3_stmt *st = NULL;
   int sector = 0;
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
@@ -3014,7 +3014,7 @@ fer_tick (int64_t now_ms)
       if (goal == 0)
 	{
 	  const char *sql =
-	    "SELECT location FROM ports ORDER BY RANDOM() LIMIT 1;";
+	    "SELECT sector FROM ports ORDER BY RANDOM() LIMIT 1;";
 	  sqlite3_stmt *st = NULL;
 	  int rc_prep = sqlite3_prepare_v2 (g_fer_db, sql, -1, &st, NULL);
           if (rc_prep == SQLITE_OK)
