@@ -10,8 +10,12 @@
         "password": "password123"
       },
       "expect": {
-        "status": "ok",
-        "type": "auth.session"
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1210,
+          "message": "Username already exists"
+        }
       }
     },
 
@@ -97,10 +101,11 @@
         "password": "@passwd"
       },
       "expect": {
-        "status": "ok",
-        "type": "auth.session",
-        "data": {
-          "player": "*object"
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1220,
+          "message": "Invalid credentials"
         }
       }
     },
@@ -156,11 +161,19 @@
 	      "status": "ok",
 	      "type": "system.capabilities",
 	      "data": {
-		  "protocol_version": "*",
-		  "features": "*",
-		  "schemas": "*array",
-		  "command_count": "*",
-		  "limits": "*"
+		  "limits": {
+		      "max_bulk": "*",
+		      "max_page_size": "*",
+		      "max_beacon_len": "*"
+		  },
+		  "features": {
+		      "auth": "*",
+		      "warp": "*",
+		      "sector.describe": "*",
+		      "trade.buy": "*",
+		      "server_autopilot": "*"
+		  },
+		  "version": "*"
 	      },
 	      "error": null,
 	      "meta": "*"
@@ -254,8 +267,11 @@
 	  },
 	  "expect": {
 	      "status": "ok",
-	      "type": "system.schema",
-	      "data": "*"
+	      "type": "system.describe_schema",
+	      "data": {
+	          "name": "auth.login",
+	          "messages": "*array"
+	      }
 	  }
       },
 
@@ -349,7 +365,19 @@
         "status": "ok",
         "type": "Deploy.fighters.list_v1",
         "data": {
-          "total": "*int"
+          "total": "*",
+          "entries": [
+            {
+              "sector_id": "*",
+              "count": "*",
+              "offense_mode": "*",
+              "player_id": "*",
+              "player_name": "*",
+              "corp_id": "*",
+              "corp_tag": "*",
+              "type": "*"
+            }
+          ]
         }
       }
 	},
@@ -394,7 +422,9 @@
         "status": "ok",
         "type": "announce.created",
         "data": {
-          "id": "*any",
+          "id": "*",
+          "title": "*",
+          "body": "*",
           "severity": "info"
         }
       }
@@ -501,9 +531,231 @@
 		"type": "trade.port_info",
 		"data": "*"
 	    }
-	}
-
-
-
+	},
+        {
+            "name": "trade.quote (ore)",
+            "cmd": "trade.quote",
+            "data": {
+                "port_id": 64,
+                "commodity": "ore",
+                "quantity": 10
+            },
+            "expect": {
+                "status": "ok",
+                "type": "trade.quote",
+                "data": {
+                    "port_id": 64,
+                    "commodity": "ore",
+                    "quantity": 10,
+                    "buy_price": "*float",
+                    "sell_price": "*float",
+                    "total_buy_price": "*int",
+                    "total_sell_price": "*int"
+                }
+            },
+            "asserts": [
+                { "path": "data.buy_price", "op": ">", "value": 0 },
+                { "path": "data.sell_price", "op": ">", "value": 0 },
+                { "path": "data.total_buy_price", "op": ">", "value": 0 },
+                { "path": "data.total_sell_price", "op": ">", "value": 0 }
+            ]
+        },
+        {
+            "name": "trade.quote (organics)",
+            "cmd": "trade.quote",
+            "data": {
+                "port_id": 64,
+                "commodity": "organics",
+                "quantity": 5
+            },
+            "expect": {
+                "status": "ok",
+                "type": "trade.quote",
+                "data": {
+                    "port_id": 64,
+                    "commodity": "organics",
+                    "quantity": 5,
+                    "buy_price": "*float",
+                    "sell_price": "*float",
+                    "total_buy_price": "*int",
+                    "total_sell_price": "*int"
+                }
+            },
+            "asserts": [
+                { "path": "data.buy_price", "op": ">", "value": 0 },
+                { "path": "data.sell_price", "op": ">", "value": 0 },
+                { "path": "data.total_buy_price", "op": ">", "value": 0 },
+                { "path": "data.total_sell_price", "op": ">", "value": 0 }
+            ]
+        },
+        {
+            "name": "trade.quote (invalid commodity)",
+            "cmd": "trade.quote",
+            "data": {
+                "port_id": 64,
+                "commodity": "invalid_item",
+                "quantity": 1
+            },
+            "expect": {
+                "status": "error",
+                "error": {
+                    "code": 400
+                }
+            }
+        },
+        {
+            "name": "trade.quote (zero quantity)",
+            "cmd": "trade.quote",
+            "data": {
+                "port_id": 64,
+                "commodity": "ore",
+                "quantity": 0
+            },
+            "expect": {
+                "status": "error",
+                "error": {
+                    "code": 400
+                }
+            }
+        },
+        {
+            "name": "bank.deposit (initial credits for testing)",
+            "cmd": "bank.deposit",
+            "data": {
+                "amount": 1000000
+            },
+            "expect": {
+                "status": "ok",
+                "type": "bank.deposited",
+                "data": {
+                    "new_balance": "*int"
+                }
+            },
+            "asserts": [
+                { "path": "data.new_balance", "op": ">=", "value": 1000000 }
+            ]
+        },
+        {
+            "name": "ship.jettison (ore - acquire cargo first)",
+            "cmd": "trade.buy",
+            "idempotency_key": "test-jettison-acquire-ore-1",
+            "data": {
+                "port_id": 64,
+                "items": [
+                    {
+                        "commodity": "ore",
+                        "quantity": 5
+                    }
+                ]
+            },
+            "expect": {
+                "status": "ok",
+                "type": "bank.deposited"
+            }
+        },
+        {
+            "name": "ship.jettison (ore - successful jettison)",
+            "cmd": "ship.jettison",
+            "data": {
+                "commodity": "ore",
+                "quantity": 2
+            },
+            "expect": {
+                "status": "ok",
+                "type": "ship.jettisoned",
+                "data": {
+                    "remaining_cargo": [
+                        { "commodity": "ore", "quantity": 3 }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "ship.jettison (insufficient cargo)",
+            "cmd": "ship.jettison",
+            "data": {
+                "commodity": "ore",
+                "quantity": 99999
+            },
+            "expect": {
+                "status": "refused",
+                "error": {
+                    "code": 1402
+                }
+            }
+        },
+        {
+            "name": "ship.jettison (invalid commodity)",
+            "cmd": "ship.jettison",
+            "data": {
+                "commodity": "invalid_item",
+                "quantity": 1
+            },
+            "expect": {
+                "status": "refused",
+                "error": {
+                    "code": 1402
+                }
+            }
+        },
+        {
+            "name": "combat.deploy_fighters (deploy 10 fighters)",
+            "cmd": "combat.deploy_fighters",
+            "idempotency_key": "test-deploy-fighters-1",
+            "data": {
+                "amount": 10,
+                "offense": 2
+            },
+            "expect": {
+                "status": "ok",
+                "type": "combat.fighters.deployed",
+                "data": {
+                    "sector_id": "*int",
+                    "owner_player_id": "*int",
+                    "owner_corp_id": "*null_or_int",
+                    "amount": 10,
+                    "offense": 2,
+                    "sector_total_after": "*int"
+                }
+            },
+            "asserts": [
+                { "path": "data.sector_id", "op": ">", "value": 0 },
+                { "path": "data.owner_player_id", "op": ">", "value": 0 },
+                { "path": "data.sector_total_after", "op": ">=", "value": 10 }
+            ]
+        },
+        {
+            "name": "deploy.fighters.list (verify deployed fighters)",
+            "cmd": "deploy.fighters.list",
+            "data": {},
+            "expect": {
+                "status": "ok",
+                "type": "Deploy.fighters.list_v1",
+                "data": {
+                    "total": "*int",
+                    "entries": [
+                        {
+                            "sector_id": "*int",
+                            "count": "*int",
+                            "offense_mode": "*int",
+                            "player_id": "*int",
+                            "player_name": "*string",
+                            "corp_id": "*int",
+                            "corp_tag": "*string",
+                            "type": 2
+                        }
+                    ]
+                }
+            },
+            "asserts": [
+                { "path": "data.total", "op": ">=", "value": 1 },
+                { "path": "data.entries.0.sector_id", "op": ">", "value": 0 },
+                { "path": "data.entries.0.count", "op": ">=", "value": 10 },
+                { "path": "data.entries.0.offense_mode", "op": "==", "value": 2 },
+                { "path": "data.entries.0.player_id", "op": ">", "value": 0 },
+                { "path": "data.entries.0.type", "op": "==", "value": 2 }
+            ]
+        }
+	
     ]
 }
