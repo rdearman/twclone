@@ -833,37 +833,45 @@ h_calculate_trade_price(int port_id, const char *commodity, int quantity)
     // =========================================================
     pthread_mutex_lock(&db_mutex); 
 
-    // Safety check for impossible quantity (keep as is)
-    if (quantity < 0) {
-        pthread_mutex_unlock(&db_mutex);
-        return 1000.0;
-    }
-
-    // --- 1a. Map commodity to dynamic columns ---
-    if (strcmp(commodity, "ore") == 0) {
-        index_column = "price_index_ore";
-        max_stock_column = "max_ore";
-    } else if (strcmp(commodity, "organics") == 0) {
-        index_column = "price_index_organics";
-        max_stock_column = "max_organics";
-    } else if (strcmp(commodity, "equipment") == 0) {
-        index_column = "price_index_equipment";
-        max_stock_column = "max_equipment";
-    } else if (strcmp(commodity, "fuel") == 0) {
-        index_column = "price_index_fuel";
-        max_stock_column = "max_ore"; // NOTE: Adjust if 'max_fuel' exists later
-    } else {
-        LOGE("h_calculate_trade_price: Unknown commodity %s. Cannot calculate price.", commodity);
-        pthread_mutex_unlock(&db_mutex);
-        return 10.0; 
-    }
-
+        // Safety check for impossible quantity (keep as is)
+        if (quantity < 0) {
+            pthread_mutex_unlock(&db_mutex);
+            return 1000.0;
+        }
+    
+        // If commodity is "fuel", treat it as "ore" as per user's instruction.
+        if (strcmp(commodity, "fuel") == 0) {
+            commodity = "ore";
+        }
+    
+        // --- 1a. Map commodity to dynamic columns ---
+        if (strcmp(commodity, "ore") == 0) {
+            index_column = "price_index_ore";
+            max_stock_column = "max_ore";
+        } else if (strcmp(commodity, "organics") == 0) {
+            index_column = "price_index_organics";
+            max_stock_column = "max_organics";
+        } else if (strcmp(commodity, "equipment") == 0) {
+            index_column = "price_index_equipment";
+            max_stock_column = "max_equipment";
+        } else {
+            LOGE("h_calculate_trade_price: Unknown commodity %s. Cannot calculate price.", commodity);
+            pthread_mutex_unlock(&db_mutex);
+            return 10.0;
+        }
     // --- 1b. Fetch Base Price from 'commodities' table (kept as is) ---
-    const char *sql_base_price = "SELECT base_price FROM commodities WHERE name = ?;";
+    const char *sql_base_price = "SELECT base_price FROM commodities WHERE code = ?;";
+    const char *commodity_code = commodity_to_code(commodity);
+
+    if (!commodity_code) {
+        LOGE("h_calculate_trade_price: Invalid commodity code for %s.", commodity);
+        pthread_mutex_unlock(&db_mutex);
+        return 10.0;
+    }
     
     if (sqlite3_prepare_v2(db_handle, sql_base_price, -1, &stmt, NULL) == SQLITE_OK)
     {
-        sqlite3_bind_text(stmt, 1, commodity, -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 1, commodity_code, -1, SQLITE_STATIC);
 
         if (sqlite3_step(stmt) == SQLITE_ROW) {
             base_price = sqlite3_column_double(stmt, 0);

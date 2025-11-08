@@ -1699,6 +1699,7 @@ const char *insert_default_sql[] = {
 "   id INTEGER PRIMARY KEY,  "
 "   code TEXT UNIQUE NOT NULL,  "
 "   name TEXT NOT NULL,  "
+"   illegal INTEGER NOT NULL DEFAULT 1,  "  
 "   base_price INTEGER NOT NULL DEFAULT 0 CHECK (base_price >= 0),  "
 "   volatility INTEGER NOT NULL DEFAULT 0 CHECK (volatility >= 0)  "
 " );  "
@@ -1711,11 +1712,11 @@ const char *insert_default_sql[] = {
 "   ('EQU', 'Equipment', 200, 25);  "
 
 
-" INSERT OR IGNORE INTO commodities (code, name, base_price, volatility)  "
+" INSERT OR IGNORE INTO commodities (code, name, base_price, volatility, illegal)  "
 " VALUES  "
-"   ('SLV', 'Slaves', 1000, 50),  "
-"   ('WPN', 'Weapons', 750, 40),  "
-"   ('DRG', 'Drugs', 500, 60);  "
+"   ('SLV', 'Slaves', 1000, 50, 0),  "
+"   ('WPN', 'Weapons', 750, 40, 0),  "
+"   ('DRG', 'Drugs', 500, 60, 0);  "
   
 
 " CREATE TABLE IF NOT EXISTS bank_accounts (  "
