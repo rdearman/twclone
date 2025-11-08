@@ -1,0 +1,154 @@
+{
+    "tests":
+    [
+        {
+            "name": "trade.quote (ore)",
+            "cmd": "trade.quote",
+            "data": {
+                "port_id": 64,
+                "commodity": "ore",
+                "quantity": 10
+            },
+            "expect": {
+                "status": "ok",
+                "type": "trade.quote",
+                "data": {
+                    "port_id": 64,
+                    "commodity": "ore",
+                    "quantity": 10,
+                    "buy_price": "*float",
+                    "sell_price": "*float",
+                    "total_buy_price": "*int",
+                    "total_sell_price": "*int"
+                }
+            },
+            "asserts": [
+                { "path": "data.buy_price", "op": ">", "value": 0 },
+                { "path": "data.sell_price", "op": ">", "value": 0 },
+                { "path": "data.total_buy_price", "op": ">", "value": 0 },
+                { "path": "data.total_sell_price", "op": ">", "value": 0 }
+            ]
+        },
+        {
+            "name": "trade.quote (organics)",
+            "cmd": "trade.quote",
+            "data": {
+                "port_id": 64,
+                "commodity": "organics",
+                "quantity": 5
+            },
+            "expect": {
+                "status": "ok",
+                "type": "trade.quote",
+                "data": {
+                    "port_id": 64,
+                    "commodity": "organics",
+                    "quantity": 5,
+                    "buy_price": "*float",
+                    "sell_price": "*float",
+                    "total_buy_price": "*int",
+                    "total_sell_price": "*int"
+                }
+            },
+            "asserts": [
+                { "path": "data.buy_price", "op": ">", "value": 0 },
+                { "path": "data.sell_price", "op": ">", "value": 0 },
+                { "path": "data.total_buy_price", "op": ">", "value": 0 },
+                { "path": "data.total_sell_price", "op": ">", "value": 0 }
+            ]
+        },
+        {
+            "name": "trade.quote (invalid commodity)",
+            "cmd": "trade.quote",
+            "data": {
+                "port_id": 64,
+                "commodity": "invalid_item",
+                "quantity": 1
+            },
+            "expect": {
+                "status": "error",
+                "error": {
+                    "code": 400
+                }
+            }
+        },
+        {
+            "name": "trade.quote (zero quantity)",
+            "cmd": "trade.quote",
+            "data": {
+                "port_id": 64,
+                "commodity": "ore",
+                "quantity": 0
+            },
+            "expect": {
+                "status": "error",
+                "error": {
+                    "code": 400
+                }
+            }
+        },
+        {
+            "name": "ship.jettison (ore - acquire cargo first)",
+            "cmd": "trade.buy",
+            "idempotency_key": "test-jettison-acquire-ore-1",
+            "data": {
+                "port_id": 64,
+                "items": [
+                    {
+                        "commodity": "ore",
+                        "quantity": 5
+                    }
+                ]
+            },
+            "expect": {
+                "status": "ok",
+                "type": "trade.buy_receipt_v1"
+            }
+        },
+        {
+            "name": "ship.jettison (ore - successful jettison)",
+            "cmd": "ship.jettison",
+            "data": {
+                "commodity": "ore",
+                "quantity": 2
+            },
+            "expect": {
+                "status": "ok",
+                "type": "ship.jettisoned",
+                "data": {
+                    "remaining_cargo": [
+                        { "commodity": "ore", "quantity": 3 }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "ship.jettison (insufficient cargo)",
+            "cmd": "ship.jettison",
+            "data": {
+                "commodity": "ore",
+                "quantity": 99999
+            },
+            "expect": {
+                "status": "refused",
+                "error": {
+                    "code": 1402
+                }
+            }
+        },
+        {
+            "name": "ship.jettison (invalid commodity)",
+            "cmd": "ship.jettison",
+            "data": {
+                "commodity": "invalid_item",
+                "quantity": 1
+            },
+            "expect": {
+                "status": "refused",
+                "error": {
+                    "code": 1405
+                }
+            }
+        }
+    ]
+}
