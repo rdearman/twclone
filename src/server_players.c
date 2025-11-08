@@ -357,141 +357,126 @@ cargo_space_free (client_ctx_t *ctx)
 }
 
 
+
+#include <sqlite3.h>
+#include <string.h>
+#include <stdio.h> // For fprintf, stderr
+
 /**
  * @brief Updates a player's ship cargo for one commodity by a delta (+/-).
  *
+ * (Refactored to operate safely within an existing transaction)
+ *
  * This function is refactored to match the schema:
  * 1. Finds the player's active ship ID (from players.ship).
- * 2. Dynamically builds an UPDATE query for the correct column on the 'ships' table
- * (e.g., "UPDATE ships SET ore = MAX(0, COALESCE(ore, 0) + ?1) ...").
+ * 2. Dynamically builds an UPDATE ... RETURNING query for the correct column
+ * (e.g., "UPDATE ships SET ore = MAX(0, COALESCE(ore, 0) + ?1) ... RETURNING ore").
  * 3. Relies on the 'check_current_cargo_limit' CHECK constraint on the 'ships'
  * table to automatically reject transactions that exceed total holds.
  *
- * @param db            Valid sqlite3 database handle.
- * @param player_id     The ID of the player.
- * @param commodity     The name of the commodity ("ore", "organics", "equipment", "colonists").
- * @param delta         The amount to add (positive) or remove (negative).
- * @param new_qty_out   (Optional) A pointer to an int to store the new total for this commodity.
- * @return              SQLITE_OK on success, SQLITE_CONSTRAINT if holds are exceeded,
+ * @param db             Valid sqlite3 database handle (must be in a transaction).
+ * @param player_id      The ID of the player.
+ * @param commodity      The name of the commodity ("ore", "organics", "equipment", "colonists").
+ * @param delta          The amount to add (positive) or remove (negative).
+ * @param new_qty_out    (Optional) A pointer to an int to store the new total for this commodity.
+ * @return               SQLITE_OK on success, SQLITE_CONSTRAINT if holds are exceeded,
  * or another SQLite error code on failure.
  */
 int
 h_update_ship_cargo (sqlite3 *db, int player_id,
-                   const char *commodity, int delta, int *new_qty_out)
+                       const char *commodity, int delta, int *new_qty_out)
 {
-  if (!db || !commodity || *commodity == '\0')
-    return SQLITE_MISUSE;
+    if (!db || !commodity || *commodity == '\0')
+        return SQLITE_MISUSE;
 
-  int rc;
-  char *errmsg = NULL;
-  sqlite3_stmt *stmt = NULL;
-  char *sql_query = NULL;
-  int ship_id = 0;
+    int rc;
+    sqlite3_stmt *stmt = NULL;
+    char *sql_query = NULL;
+    int ship_id = 0;
 
-  // 1. Identify the column name from the commodity string
-  const char *col_name = NULL;
-  if (strcmp(commodity, "ore") == 0) col_name = "ore";
-  else if (strcmp(commodity, "organics") == 0) col_name = "organics";
-  else if (strcmp(commodity, "equipment") == 0) col_name = "equipment";
-  else if (strcmp(commodity, "colonists") == 0) col_name = "colonists";
-  else {
-    return SQLITE_MISUSE; // Invalid commodity string
-  }
-
-  // 2. Get the player's active ship ID
-  // (Based on the schema, 'players.ship' holds the active ship ID)
-  const char *SQL_GET_SHIP = "SELECT ship FROM players WHERE id = ?1";
-  
-  rc = sqlite3_prepare_v2(db, SQL_GET_SHIP, -1, &stmt, NULL);
-  if (rc != SQLITE_OK) return rc;
-  
-  sqlite3_bind_int(stmt, 1, player_id);
-  
-  rc = sqlite3_step(stmt);
-  if (rc == SQLITE_ROW) {
-      ship_id = sqlite3_column_int(stmt, 0);
-  }
-  sqlite3_finalize(stmt);
-  stmt = NULL;
-  
-  if (rc != SQLITE_ROW || ship_id <= 0) {
-      return SQLITE_ERROR; // No such player or no ship associated
-  }
-
-  // 3. Start Transaction
-  rc = sqlite3_exec (db, "BEGIN IMMEDIATE", NULL, NULL, &errmsg);
-  if (rc != SQLITE_OK)
-    {
-      if (errmsg) sqlite3_free (errmsg);
-      return rc;
+    // 1. Identify the column name from the commodity string
+    const char *col_name = NULL;
+    if (strcmp(commodity, "ore") == 0) col_name = "ore";
+    else if (strcmp(commodity, "organics") == 0) col_name = "organics";
+    else if (strcmp(commodity, "equipment") == 0) col_name = "equipment";
+    else if (strcmp(commodity, "colonists") == 0) col_name = "colonists";
+    else {
+        fprintf(stderr, "h_update_ship_cargo: Invalid commodity name '%s'\n", commodity);
+        return SQLITE_MISUSE; // Invalid commodity string
     }
 
-  // 4. Build and execute the dynamic UPDATE
-  // This query updates the value and clamps it at 0.
-  // The CHECK constraint on the 'ships' table will catch (col + ... > holds)
-  sql_query = sqlite3_mprintf(
-      "UPDATE ships SET %q = MAX(0, COALESCE(%q, 0) + ?1) WHERE id = ?2",
-      col_name, col_name
-  );
-  if (!sql_query) {
-      sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
-      return SQLITE_NOMEM;
-  }
+    // 2. Get the player's active ship ID
+    const char *SQL_GET_SHIP = "SELECT ship FROM players WHERE id = ?1";
+    
+    rc = sqlite3_prepare_v2(db, SQL_GET_SHIP, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "h_update_ship_cargo: Failed to prepare get_ship: %s\n", sqlite3_errmsg(db));
+        return rc;
+    }
+    
+    sqlite3_bind_int(stmt, 1, player_id);
+    
+    rc = sqlite3_step(stmt);
+    if (rc == SQLITE_ROW) {
+        ship_id = sqlite3_column_int(stmt, 0);
+    }
+    sqlite3_finalize(stmt);
+    stmt = NULL;
+    
+    if (rc != SQLITE_ROW || ship_id <= 0) {
+        // This means no player was found, or the player has no ship (ship_id is 0 or NULL)
+        fprintf(stderr, "h_update_ship_cargo: Player %d has no active ship (id: %d).\n", player_id, ship_id);
+        return SQLITE_ERROR; // No such player or no ship associated
+    }
 
-  rc = sqlite3_prepare_v2(db, sql_query, -1, &stmt, NULL);
-  if (rc != SQLITE_OK) {
-      sqlite3_free(sql_query);
-      sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
-      return rc;
-  }
-  
-  sqlite3_bind_int(stmt, 1, delta);
-  sqlite3_bind_int(stmt, 2, ship_id);
-  
-  rc = sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
-  stmt = NULL;
-  sqlite3_free(sql_query);
-  sql_query = NULL;
-  
-  if (rc != SQLITE_DONE) {
-      // This will be SQLITE_CONSTRAINT if the CHECK constraint fails (over capacity)
-      sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
-      return rc; 
-  }
+    // 3. Build and execute the dynamic UPDATE ... RETURNING
+    // This query updates the value, clamps it at 0, and returns the new value.
+    // The CHECK constraint on the 'ships' table will catch (col + ... > holds)
+    sql_query = sqlite3_mprintf(
+        "UPDATE ships SET %q = MAX(0, COALESCE(%q, 0) + ?1) WHERE id = ?2 "
+        "RETURNING %q",
+        col_name, col_name, col_name
+    );
 
-  // 5. (Optional) Get the new quantity if requested
-  if (new_qty_out)
-  {
-      sql_query = sqlite3_mprintf("SELECT COALESCE(%q, 0) FROM ships WHERE id = ?1", col_name);
-      if (!sql_query) {
-          sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
-          return SQLITE_NOMEM;
-      }
+    if (!sql_query) {
+        return SQLITE_NOMEM;
+    }
 
-      rc = sqlite3_prepare_v2(db, sql_query, -1, &stmt, NULL);
-      sqlite3_free(sql_query); // Free it now
+    rc = sqlite3_prepare_v2(db, sql_query, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "h_update_ship_cargo: Failed to prepare update: %s\n", sqlite3_errmsg(db));
+        sqlite3_free(sql_query);
+        return rc;
+    }
+    
+    sqlite3_bind_int(stmt, 1, delta);
+    sqlite3_bind_int(stmt, 2, ship_id);
+    
+    rc = sqlite3_step(stmt);
+    
+    // If the update was successful, rc will be SQLITE_ROW (due to RETURNING)
+    if (rc == SQLITE_ROW) {
+        // (Optional) Get the new quantity if requested
+        if (new_qty_out) {
+            *new_qty_out = sqlite3_column_int(stmt, 0);
+        }
+        rc = SQLITE_OK; // Set the final return code to success
+    } 
+    else if (rc == SQLITE_DONE) {
+        // This would mean the UPDATE affected 0 rows, e.g., ship_id was not found
+        // (which shouldn't happen if our SELECT above worked, but good to check)
+        fprintf(stderr, "h_update_ship_cargo: Failed to find ship %d for update.\n", ship_id);
+        rc = SQLITE_ERROR;
+    }
+    // If rc is any other value (like SQLITE_CONSTRAINT), we will just return that
+    // error code, which is what we want.
 
-      if (rc != SQLITE_OK) {
-          sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
-          return rc;
-      }
-
-      sqlite3_bind_int(stmt, 1, ship_id);
-      if (sqlite3_step(stmt) == SQLITE_ROW) {
-          *new_qty_out = sqlite3_column_int(stmt, 0);
-      }
-      sqlite3_finalize(stmt);
-      stmt = NULL;
-  }
-
-  // 6. Commit
-  rc = sqlite3_exec (db, "COMMIT", NULL, NULL, &errmsg);
-  if (errmsg) sqlite3_free (errmsg);
-  
-  return rc; // Will be SQLITE_OK on success
+    // 4. Clean up
+    sqlite3_finalize(stmt);
+    sqlite3_free(sql_query);
+    
+    return rc; // Will be SQLITE_OK or an error code (e.g., SQLITE_CONSTRAINT)
 }
-
 
 /*
  * Deduct 'amount' from a player's on-board ship credits (players.credits).

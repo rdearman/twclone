@@ -738,7 +738,7 @@ static int
 engine_main_loop (int shutdown_fd)
 {
 
-  server_log_init_file ("./twclone.log", "[engine]", 0, LOG_INFO);
+  server_log_init_file ("./twclone.log", "[engine]", 0, LOG_DEBUG);
   LOGI ("engine boot pid=%d", getpid ());
 
   // 1. *** CRITICAL NEW STEP: Shut down and re-initialize SQLite ***

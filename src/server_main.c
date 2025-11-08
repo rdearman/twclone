@@ -330,7 +330,7 @@ main (void)
   int rc;
   g_running = 1;
 
-  server_log_init_file ("./twclone.log", "[server]", 0, LOG_INFO);
+  server_log_init_file ("./twclone.log", "[server]", 0, LOG_DEBUG);
   LOGI ("starting up");
 
   sysop_start ();
