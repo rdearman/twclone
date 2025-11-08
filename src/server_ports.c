@@ -76,20 +76,25 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  json_t *data = json_object_get (root, "data");
+  int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 0;
   int port_id = 0;
-  int sector_id = 0;
 
-  if (json_is_object (data))
-    {
-      json_t *jport = json_object_get (data, "port_id");
-      if (json_is_integer (jport))
-        port_id = (int) json_integer_value (jport);
+  json_t *data = json_object_get (root, "data");
+  LOGD("cmd_port_info: Extracted data object (simplified): is_object: %d", json_is_object(data));
 
-      json_t *jsec = json_object_get (data, "sector_id");
-      if (json_is_integer (jsec))
-        sector_id = (int) json_integer_value (jsec);
-    }
+  LOGD("cmd_port_info: About to get jport from data object.");
+  json_t *jport = json_object_get (data, "port_id");
+  LOGD("cmd_port_info: After jport extraction: jport (raw): %p", (void*)jport);
+  if (json_is_integer (jport))
+    port_id = (int) json_integer_value (jport);
+
+  LOGD("cmd_port_info: About to get jsec from data object.");
+  json_t *jsec = json_object_get (data, "sector_id");
+  LOGD("cmd_port_info: After jsec extraction: jsec (raw): %p", (void*)jsec);
+  if (json_is_integer (jsec))
+    sector_id = (int) json_integer_value (jsec);
+
+  LOGD("cmd_port_info: Received port_id=%d, sector_id=%d", port_id, sector_id);
 
   /* Resolve by port_id if supplied */
   const char *sql = NULL;
@@ -120,6 +125,8 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
+  LOGD("cmd_port_info: Preparing SQL: %s", sql);
+
   sqlite3_stmt *st = NULL;
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
@@ -129,11 +136,18 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
     }
 
   if (port_id > 0)
-    sqlite3_bind_int (st, 1, port_id);
+    {
+      sqlite3_bind_int (st, 1, port_id);
+      LOGD("cmd_port_info: Bound port_id: %d", port_id);
+    }
   else
-    sqlite3_bind_int (st, 1, sector_id);
+    {
+      sqlite3_bind_int (st, 1, sector_id);
+      LOGD("cmd_port_info: Bound sector_id: %d", sector_id);
+    }
 
   int rc = sqlite3_step (st);
+  LOGD("cmd_port_info: sqlite3_step returned: %d", rc);
   if (rc != SQLITE_ROW)
     {
       sqlite3_finalize (st);
@@ -1992,93 +2006,130 @@ cmd_port_info (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 0;
+  int sector_id = 0;
   int port_id = 0;
 
   json_t *data = json_object_get (root, "data");
   if (json_is_object (data))
     {
-      int s = 0, p = 0;
-
-      /* Prefer explicit port_id if provided */
-      if (json_get_int_field (data, "port_id", &p) && p > 0)
+      json_get_int_field (data, "port_id", &port_id);
+      if (port_id > 0)
         {
-          /* Resolve sector from ports for this port_id */
-          static const char *SQL =
-            "SELECT sector FROM ports WHERE id = ?1 LIMIT 1;";
-          sqlite3_stmt *st = NULL;
-
-          if (sqlite3_prepare_v2 (db, SQL, -1, &st, NULL) != SQLITE_OK)
+          // If port_id is provided, resolve sector_id from the database
+          static const char *SQL_RESOLVE_SECTOR = "SELECT sector FROM ports WHERE id = ?1 LIMIT 1;";
+          sqlite3_stmt *st_resolve = NULL;
+          if (sqlite3_prepare_v2 (db, SQL_RESOLVE_SECTOR, -1, &st_resolve, NULL) != SQLITE_OK)
             {
-              send_enveloped_error (ctx->fd, root, 500,
-                                    sqlite3_errmsg (db));
+              send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
               return 0;
             }
-
-          sqlite3_bind_int (st, 1, p);
-
-          if (sqlite3_step (st) == SQLITE_ROW)
+          sqlite3_bind_int (st_resolve, 1, port_id);
+          if (sqlite3_step (st_resolve) == SQLITE_ROW)
             {
-              sector_id = sqlite3_column_int (st, 0);
-              port_id = p;
+              sector_id = sqlite3_column_int (st_resolve, 0);
             }
+          sqlite3_finalize (st_resolve);
 
-          sqlite3_finalize (st);
-
-          if (port_id <= 0 || sector_id <= 0)
-            {
-              send_enveloped_refused (ctx->fd, root, 1404,
-                                      "Port not found", NULL);
+          if (sector_id <= 0) {
+              send_enveloped_refused (ctx->fd, root, 1404, "Port not found", NULL);
               return 0;
-            }
+          }
         }
-      else if (json_get_int_field (data, "sector_id", &s) && s > 0)
+      else
         {
-          sector_id = s;
+          // If port_id is not provided, try to get sector_id from data
+          json_get_int_field (data, "sector_id", &sector_id);
         }
     }
 
-  if (sector_id <= 0)
+  // Fallback to ctx->sector_id if neither port_id nor sector_id were found in data
+  if (port_id <= 0 && sector_id <= 0) {
+      sector_id = ctx->sector_id;
+  }
+
+  // If still no valid port_id or sector_id, return error
+  if (port_id <= 0 && sector_id <= 0)
     {
       send_enveloped_error (ctx->fd, root, 400,
-                            "Missing sector_id or port_id");
+                            "Missing port_id or sector_id");
       return 0;
     }
 
-  json_t *sector = NULL;
-  if (db_sector_info_json (sector_id, &sector) != SQLITE_OK || !sector)
+  const char *sql = NULL;
+  if (port_id > 0)
     {
-      send_enveloped_error (ctx->fd, root, 1500,
-                            "Database error");
+      sql =
+        "SELECT id, number, name, sector, size, techlevel, "
+        "max_ore, max_organics, max_equipment, "
+        "product_ore, product_organics, product_equipment, "
+        "price_index_ore, price_index_organics, price_index_equipment, "
+        "credits, type "
+        "FROM ports WHERE id = ?1 LIMIT 1;";
+    }
+  else // Use sector_id if port_id is not set
+    {
+      sql =
+        "SELECT id, number, name, sector, size, techlevel, "
+        "max_ore, max_organics, max_equipment, "
+        "product_ore, product_organics, product_equipment, "
+        "price_index_ore, price_index_organics, price_index_equipment, "
+        "credits, type "
+        "FROM ports WHERE sector = ?1 LIMIT 1;";
+    }
+
+  sqlite3_stmt *st = NULL;
+  if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
+    {
+      send_enveloped_error (ctx->fd, root, 500,
+                            sqlite3_errmsg (db));
       return 0;
     }
 
-  json_t *port = json_object_get (sector, "port");
-  if (!json_is_object (port))
+  if (port_id > 0)
     {
-      json_decref (sector);
+      sqlite3_bind_int (st, 1, port_id);
+    }
+  else
+    {
+      sqlite3_bind_int (st, 1, sector_id);
+    }
+
+  int rc = sqlite3_step (st);
+  if (rc != SQLITE_ROW)
+    {
+      sqlite3_finalize (st);
       send_enveloped_refused (ctx->fd, root, 1404,
                               "No port in this sector", NULL);
       return 0;
     }
 
-  if (!port_id)
-    {
-      json_t *jid = json_object_get (port, "id");
-      if (json_is_integer (jid))
-        port_id = (int) json_integer_value (jid);
-    }
+  json_t *port = json_object ();
+  json_object_set_new (port, "id",          json_integer (sqlite3_column_int (st, 0)));
+  json_object_set_new (port, "number",      json_integer (sqlite3_column_int (st, 1)));
+  json_object_set_new (port, "name",        json_string  ((const char *) sqlite3_column_text (st, 2)));
+  json_object_set_new (port, "sector",      json_integer (sqlite3_column_int (st, 3)));
+  json_object_set_new (port, "size",        json_integer (sqlite3_column_int (st, 4)));
+  json_object_set_new (port, "techlevel",   json_integer (sqlite3_column_int (st, 5)));
+  json_object_set_new (port, "max_ore",     json_integer (sqlite3_column_int (st, 6)));
+  json_object_set_new (port, "max_organics",json_integer (sqlite3_column_int (st, 7)));
+  json_object_set_new (port, "max_equipment",json_integer(sqlite3_column_int (st, 8)));
+  json_object_set_new (port, "product_ore", json_integer (sqlite3_column_int (st, 9)));
+  json_object_set_new (port, "product_organics", json_integer (sqlite3_column_int (st,10)));
+  json_object_set_new (port, "product_equipment", json_integer (sqlite3_column_int (st,11)));
+  json_object_set_new (port, "price_index_ore", json_real (sqlite3_column_double (st,12)));
+  json_object_set_new (port, "price_index_organics", json_real (sqlite3_column_double (st,13)));
+  json_object_set_new (port, "price_index_equipment", json_real (sqlite3_column_double (st,14)));
+  json_object_set_new (port, "credits",    json_integer (sqlite3_column_int (st,15)));
+  json_object_set_new (port, "type",       json_integer (sqlite3_column_int (st,16)));
 
-  json_t *payload =
-    json_pack ("{s:i,s:i,s:O}",
-               "sector_id", sector_id,
-               "port_id", port_id,
-               "port", port);
+  sqlite3_finalize (st);
+
+  json_t *payload = json_object ();
+  json_object_set_new (payload, "port", port);
 
   send_enveloped_ok (ctx->fd, root, "trade.port_info", payload);
 
   json_decref (payload);
-  json_decref (sector);
   return 0;
 }
 

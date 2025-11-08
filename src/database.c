@@ -506,9 +506,7 @@ const char *create_table_sql[] = {
     " sector INTEGER NOT NULL,  "	/* FK to sectors.id */
     " name TEXT NOT NULL,  " " owner INTEGER,  "	/* FK to players.id */
     " population INTEGER,  " " type INTEGER,  "	/* FK to planettypes.id */
-    " creator TEXT,  " " fuelColonist INTEGER,  "	/* KEPT: Specialized Colonist */
-    " organicsColonist INTEGER,  "	/* KEPT: Specialized Colonist */
-    " equipmentColonist INTEGER,  "	/* KEPT: Specialized Colonist */
+    " creator TEXT,  " " colonist INTEGER,  "
     " fighters INTEGER,  " " citadel_level INTEGER DEFAULT 0,  "	/* replaces pointer to citadel struct */
     " FOREIGN KEY (sector) REFERENCES sectors(id),  "
     " FOREIGN KEY (owner) REFERENCES players(id),  "
@@ -1435,8 +1433,8 @@ const char *insert_default_sql[] = {
     "20000,50000,20000, " "0,0,0,0,0, " "20000,50000,10000,1000000,-0.10);",
 
   /* Earth planet in sector 1 */
-  " INSERT OR IGNORE INTO planets (num, sector, name, owner, population, type, creator, fuelColonist, organicsColonist, equipmentColonist, fighters) "
-    " VALUES (1, 1, 'Earth', 0, 8000000000, 1, 'System', 6000000, 6000000, 6000000, 1000000); ",
+  " INSERT OR IGNORE INTO planets (num, sector, name, owner, population, type, creator, colonist, fighters) "
+    " VALUES (1, 1, 'Earth', 0, 8000000000, 1, 'System', 18000000, 1000000); ",
 
   " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
     " ((SELECT id FROM planets WHERE name='Earth'), 'ore', 10000000, 10000000, 0); ",
@@ -1448,8 +1446,8 @@ const char *insert_default_sql[] = {
     " ((SELECT id FROM planets WHERE name='Earth'), 'fuel', 100000, 100000, 0); ",
 
   /* Ferringhi planet in sector 0 (change in bigbang) */
-  " INSERT OR IGNORE INTO planets (num, sector, name, owner, population, type, creator, fuelColonist, organicsColonist, equipmentColonist, fighters) "
-    " VALUES (2, 0, 'Ferringhi Homeworld', 0, 8000000000, 1, 'System', 6000000, 6000000, 6000000, 1000000); ",
+  " INSERT OR IGNORE INTO planets (num, sector, name, owner, population, type, creator, colonist, fighters) "
+    " VALUES (2, 0, 'Ferringhi Homeworld', 0, 8000000000, 1, 'System', 18000000, 1000000); ",
 
   " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
     " ((SELECT id FROM planets WHERE name='Earth'), 'ore', 10000000, 10000000, 0); ",
@@ -1461,8 +1459,8 @@ const char *insert_default_sql[] = {
     " ((SELECT id FROM planets WHERE name='Earth'), 'fuel', 100000, 100000, 0); ",
 
   /* NPC Planet: Orion Hideout (Contraband Outpost) */
-  " INSERT OR IGNORE INTO planets (num, sector, name, owner, population, type, creator, fuelColonist, organicsColonist, equipmentColonist, fighters) "
-    " VALUES (3, 0, 'Orion Hideout', 0, 20000000, 1, 'Syndicate', 10000000, 10000, 10000000, 200000); ",
+  " INSERT OR IGNORE INTO planets (num, sector, name, owner, population, type, creator, colonist, fighters) "
+    " VALUES (3, 0, 'Orion Hideout', 0, 20000000, 1, 'Syndicate', 20010000, 200000); ",
 
   " /* Orion Hideout Commodity Stock and Capacity */ "
     " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
@@ -1485,6 +1483,9 @@ const char *insert_default_sql[] = {
   "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (8, 'Fedspace 8', 'The Federation -- Do Not Dump!', 'The Federation');",
   "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (9, 'Fedspace 9', 'The Federation -- Do Not Dump!', 'The Federation');",
   "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (10, 'Fedspace 10','The Federation -- Do Not Dump!', 'The Federation');",
+
+  " INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, type) "
+  " VALUES (1, 1, 'Earth Port', 1, 10, 10, 10000, 10000, 10000, 5000, 5000, 5000, 1000000, 1); ",
 
   /* Fedspace warps (hard-coded) */
   "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (1,2);",
@@ -4537,7 +4538,7 @@ db_planets_at_sector_json (int sector_id, json_t **out_array)
     goto cleanup;
 
   const char *sql =
-    "SELECT id, name, owner, fighters, fuelColonist, organicsColonist, equipmentColonist, "
+    "SELECT id, name, owner, fighters, colonist, "
     "fuel, organics, equipment, citadel_level FROM planets WHERE sector = ? ORDER BY id;";
 
   rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);

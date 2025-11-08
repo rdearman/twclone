@@ -1172,27 +1172,25 @@ create_full_port (sqlite3 *db, int sector, int port_number,
       return rc;
     }
 
-  /*
-   * ===================================================================
-   * 3. INSERT INTO 'ports' TABLE
-   * ===================================================================
-   */
-  const char *port_sql =
-    "INSERT INTO ports ("
-    "  number, name, sector, size, techlevel, credits, type, invisible, "
-    "  max_ore, product_ore, price_index_ore, "
-    "  max_organics, product_organics, price_index_organics, "
-    "  max_equipment, product_equipment, price_index_equipment, "
-    "  price_index_fuel "
-    ") VALUES ("
-    "  ?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, "  /* Params 1-7 */
-    "  ?8, ?9, ?10, "                     /* Ore params 8-10 */
-    "  ?11, ?12, ?13, "                   /* Organics params 11-13 */
-    "  ?14, ?15, ?16, "                   /* Equipment params 14-16 */
-    "  1.0 "                              /* price_index_fuel */
-    ");";
-
-  if (sqlite3_prepare_v2 (db, port_sql, -1, &port_stmt, NULL) != SQLITE_OK)
+    /*
+     * ===================================================================
+     * 3. INSERT INTO 'ports' TABLE
+     * ===================================================================
+     */
+    const char *port_sql =
+      "INSERT INTO ports (" 
+          "  number, name, sector, size, techlevel, credits, type, invisible, "
+          "  max_ore, product_ore, price_index_ore, "
+          "  max_organics, product_organics, price_index_organics, "
+          "  max_equipment, product_equipment, price_index_equipment, "
+          "  price_index_fuel "
+          ") VALUES ("
+          "  ?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, "  /* Params 1-7 */
+          "  ?8, ?9, ?10, "                     /* Ore params 8-10 */
+          "  ?11, ?12, ?13, "                   /* Organics params 11-13 */
+          "  ?14, ?15, ?16, "                   /* Equipment params 14-16 */
+          "  1.0 "                              /* price_index_fuel */
+          ");";  if (sqlite3_prepare_v2 (db, port_sql, -1, &port_stmt, NULL) != SQLITE_OK)
     {
       fprintf (stderr, "create_full_port: ports prepare failed: %s\n",
                sqlite3_errmsg (db));
