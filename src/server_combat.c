@@ -499,7 +499,7 @@ db_get_stardock_sectors (void)
       // Append the new JSON object to the array (json_array_append_new consumes the reference)
       if (json_array_append_new (sector_list, j_sector) != 0)
 	{
-	  fprintf (stderr, "ERROR: Failed to append sector ID d to list.\n",
+	  fprintf (stderr, "ERROR: Failed to append sector ID %d to list.\n",
 		   sector_id);
 	  json_decref (j_sector);	// Clean up the orphaned reference
 	  // You may choose to stop here or continue
@@ -523,217 +523,215 @@ db_get_stardock_sectors (void)
 }
 
 
-int
-cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
-{
-  if (!require_auth (ctx, root))
-    return 0;
-
-  sqlite3 *db = db_get_handle ();
-  if (!db)
-    {
-      send_enveloped_error (ctx->fd, root, ERR_SERVICE_UNAVAILABLE,
-			    "Database unavailable");
-      return 0;
-    }
-
-  /* Parse input */
-  json_t *data = json_object_get (root, "data");
-  if (!data || !json_is_object (data))
-    {
-      send_enveloped_error (ctx->fd, root, ERR_MISSING_FIELD,
-			    "Missing required field: data");
-      return 0;
-    }
-
-  json_t *j_amount = json_object_get (data, "amount");
-  json_t *j_offense = json_object_get (data, "offense");	/* required: 1..3 */
-  json_t *j_corp_id = json_object_get (data, "corporation_id");	/* optional, nullable */
-
-  if (!j_amount || !json_is_integer (j_amount) ||
-      !j_offense || !json_is_integer (j_offense))
-    {
-      send_enveloped_error (ctx->fd, root, ERR_CURSOR_INVALID,
-			    "Missing required field or invalid type: amount/offense");
-      return 0;
-    }
-
-  int amount = (int) json_integer_value (j_amount);
-  int offense = (int) json_integer_value (j_offense);
-  if (amount <= 0) {
-    send_enveloped_error (ctx->fd, root, ERR_NOT_FOUND, "amount must be > 0");
-    return 0;
-  }
-  if (offense < OFFENSE_TOLL || offense > OFFENSE_ATTACK) {
-    send_enveloped_error (ctx->fd, root, ERR_CURSOR_INVALID,
-			  "offense must be one of {1=TOLL,2=DEFEND,3=ATTACK}");
-    return 0;
-  }
-  /* Resolve active ship + sector */
-  int ship_id = h_get_active_ship_id (db, ctx->player_id);
-  if (ship_id <= 0) {
-    send_enveloped_error (ctx->fd, root, ERR_SHIP_NOT_FOUND,
-			  "No active ship");
-    return 0;
-  }
-
-  /* Decloak: visible hostile/defensive action */
-  (void) h_decloak_ship (db, ship_id);
-
-  int sector_id = -1;
+  int
+  cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
   {
-    sqlite3_stmt *st = NULL;
-    if (sqlite3_prepare_v2
-	(db, "SELECT sector FROM ships WHERE id=?1;", -1, &st,
-	 NULL) != SQLITE_OK)
-      {
-	char error_buffer[256]; 
-	snprintf(error_buffer, sizeof(error_buffer), 
-		 "Unable to resolve current sector - SELECT sector FROM ships WHERE id=%d;", 
-		 ship_id);
-	char *shperror = error_buffer;	
-	send_enveloped_error (ctx->fd, root, ERR_SECTOR_NOT_FOUND,
-			    shperror);
+    if (!require_auth (ctx, root))
       return 0;
-    }
-    sqlite3_bind_int (st, 1, ship_id);
-    if (sqlite3_step (st) == SQLITE_ROW)
-      {
-	sector_id = sqlite3_column_int (st, 0);
-      }
-    sqlite3_finalize (st);
-    if (sector_id <= 0) {
-	char error_buffer[256]; 
-	snprintf(error_buffer, sizeof(error_buffer), 
-		 "Unable to resolve current sector - SELECT sector_id FROM ships WHERE id=%d;", 
-		 ship_id);
-	char *scterror = error_buffer;	
-      send_enveloped_error (ctx->fd, root, ERR_SECTOR_NOT_FOUND,
-			    scterror);
-      return 0;
-    }
-  }
-
-  /* Sector cap */
-  int sector_total = 0;
-  if (sum_sector_fighters (db, sector_id, &sector_total) != SQLITE_OK) {
-    send_enveloped_error (ctx->fd, root, REF_NOT_IN_SECTOR,
-			  "Failed to read sector fighters");
-    return 0;
-  }
-  if (sector_total + amount > SECTOR_FIGHTER_CAP) {
-    send_enveloped_error (ctx->fd, root, ERR_SECTOR_OVERCROWDED,
-			  "Sector fighter limit exceeded (50,000)");
-    return 0;
-  }
-
-  /* Transaction: debit ship, credit sector */
-  char *errmsg = NULL;
-  if (sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg) != SQLITE_OK)
-    {
-      if (errmsg)
-	sqlite3_free (errmsg);
-      send_enveloped_error (ctx->fd, root, ERR_DB,
-			    "Could not start transaction");
-      return 0;
-    }
-
-  int rc = ship_consume_fighters (db, ship_id, amount);
   
-  if (rc == SQLITE_TOOBIG)
-    {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      send_enveloped_error (ctx->fd, root, REF_AMMO_DEPLETED,
-			    "Insufficient fighters on ship");
-      return 0;
-    }
-  if (rc != SQLITE_OK)
-    {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      send_enveloped_error (ctx->fd, root, REF_AMMO_DEPLETED,
-			    "Failed to update ship fighters");
-      return 0;
-    }
-
-  rc =
-    insert_sector_fighters (db, sector_id, ctx->player_id, j_corp_id, offense,
-			    amount);
-  if (rc != SQLITE_OK)
-    {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      send_enveloped_error (ctx->fd, root, SECTOR_ERR,
-			    "Failed to create sector assets record");
-      return 0;
-    }
-
-  if (sqlite3_exec (db, "COMMIT;", NULL, NULL, &errmsg) != SQLITE_OK)
-    {
-      if (errmsg)
-	sqlite3_free (errmsg);
-      send_enveloped_error (ctx->fd, root, ERR_DB, "Commit failed");
-      return 0;
-    }
-
-  /* Fedspace/Stardock → summon ISS + warn player */
-  json_t *stardock_sectors = db_get_stardock_sectors ();
-  if (stardock_sectors == NULL) {}
-  {
+    sqlite3 *db = db_get_handle ();
+    if (!db)
+      {
+        send_enveloped_error (ctx->fd, root, ERR_SERVICE_UNAVAILABLE,
+  			    "Database unavailable");
+        return 0;
+      }
+  
     bool in_fed = false;
     bool in_sdock = false;
+  
+    /* Parse input */
+    json_t *data = json_object_get (root, "data");
+    if (!data || !json_is_object (data))
+      {
+        send_enveloped_error (ctx->fd, root, ERR_MISSING_FIELD,
+  			    "Missing required field: data");
+        return 0;
+      }
+  
+    json_t *j_amount = json_object_get (data, "amount");
+    json_t *j_offense = json_object_get (data, "offense");	/* required: 1..3 */
+    json_t *j_corp_id = json_object_get (data, "corporation_id");	/* optional, nullable */
+  
+    if (!j_amount || !json_is_integer (j_amount) ||
+        !j_offense || !json_is_integer (j_offense))
+      {
+        send_enveloped_error (ctx->fd, root, ERR_CURSOR_INVALID,
+  			    "Missing required field or invalid type: amount/offense");
+        return 0;
+      }
+  
+    int amount = (int) json_integer_value (j_amount);
+    int offense = (int) json_integer_value (j_offense);
+    if (amount <= 0) {
+      send_enveloped_error (ctx->fd, root, ERR_NOT_FOUND, "amount must be > 0");
+      return 0;
+    }
+    if (offense < OFFENSE_TOLL || offense > OFFENSE_ATTACK) {
+      send_enveloped_error (ctx->fd, root, ERR_CURSOR_INVALID,
+  			  "offense must be one of {1=TOLL,2=DEFEND,3=ATTACK}");
+      return 0;
+    }
+    /* Resolve active ship + sector */
+    int ship_id = h_get_active_ship_id (db, ctx->player_id);
+    if (ship_id <= 0) {
+      send_enveloped_error (ctx->fd, root, ERR_SHIP_NOT_FOUND,
+  			  "No active ship");
+      return 0;
+    }
+  
+    /* Decloak: visible hostile/defensive action */
+    (void) h_decloak_ship (db, ship_id);
+  
+    int sector_id = -1;
+    {
+      sqlite3_stmt *st = NULL;
+      if (sqlite3_prepare_v2
+  	(db, "SELECT sector FROM ships WHERE id=?1;", -1, &st,
+  	 NULL) != SQLITE_OK)
+        {
+  	char error_buffer[256]; 
+  	snprintf(error_buffer, sizeof(error_buffer), 
+  		 "Unable to resolve current sector - SELECT sector FROM ships WHERE id=%d;", 
+  		 ship_id);
+  	char *shperror = error_buffer;	
+  	send_enveloped_error (ctx->fd, root, ERR_SECTOR_NOT_FOUND,
+  			    shperror);
+        return 0;
+      }
+      sqlite3_bind_int (st, 1, ship_id);
+      if (sqlite3_step (st) == SQLITE_ROW)
+        {
+  	sector_id = sqlite3_column_int (st, 0);
+        }
+      sqlite3_finalize (st);
+      if (sector_id <= 0) {
+  	char error_buffer[256]; 
+  	snprintf(error_buffer, sizeof(error_buffer), 
+  		 "Unable to resolve current sector - SELECT sector_id FROM ships WHERE id=%d;", 
+  		 ship_id);
+  	char *scterror = error_buffer;	
+        send_enveloped_error (ctx->fd, root, ERR_SECTOR_NOT_FOUND,
+  			    scterror);
+        return 0;
+      }
+    }
+  
+    /* Sector cap */
+    int sector_total = 0;
+    if (sum_sector_fighters (db, sector_id, &sector_total) != SQLITE_OK) {
+      send_enveloped_error (ctx->fd, root, REF_NOT_IN_SECTOR,
+  			  "Failed to read sector fighters");
+      return 0;
+    }
+    if (sector_total + amount > SECTOR_FIGHTER_CAP) {
+      send_enveloped_error (ctx->fd, root, ERR_SECTOR_OVERCROWDED,
+  			  "Sector fighter limit exceeded (50,000)");
+      return 0;
+    }
+  
+    /* Transaction: debit ship, credit sector */
+    char *errmsg = NULL;
+    if (sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg) != SQLITE_OK)
+      {
+        if (errmsg)
+  	sqlite3_free (errmsg);
+        send_enveloped_error (ctx->fd, root, ERR_DB,
+  			    "Could not start transaction");
+        return 0;
+      }
+  
+    int rc = ship_consume_fighters (db, ship_id, amount);
+    
+    if (rc == SQLITE_TOOBIG)
+      {
+        sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+        send_enveloped_error (ctx->fd, root, REF_AMMO_DEPLETED,
+  			    "Insufficient fighters on ship");
+        return 0;
+      }
+    if (rc != SQLITE_OK)
+      {
+        sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+        send_enveloped_error (ctx->fd, root, REF_AMMO_DEPLETED,
+  			    "Failed to update ship fighters");
+        return 0;
+      }
+  
+    rc =
+      insert_sector_fighters (db, sector_id, ctx->player_id, j_corp_id, offense,
+  			    amount);
+    if (rc != SQLITE_OK)
+      {
+        sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+        send_enveloped_error (ctx->fd, root, SECTOR_ERR,
+  			    "Failed to create sector assets record");
+        return 0;
+      }
+  
+    if (sqlite3_exec (db, "COMMIT;", NULL, NULL, &errmsg) != SQLITE_OK)
+      {
+        if (errmsg)
+  	sqlite3_free (errmsg);
+        send_enveloped_error (ctx->fd, root, ERR_DB, "Commit failed");
+        return 0;
+      }
+  
+    /* Fedspace/Stardock → summon ISS + warn player */
     // Check for Federation sectors (1-10)
     if (sector_id >= 1 && sector_id <= 10)
       {
-	in_fed = true;
+        in_fed = true;
       }
     // Get the list of stardock sectors from the database
     // The function returns a new reference which MUST be freed.
     json_t *stardock_sectors = db_get_stardock_sectors ();
-
+  
     // --------------------------------------------------------
     // Logic to check if sector_id is a Stardock location
     // --------------------------------------------------------
     if (stardock_sectors && json_is_array (stardock_sectors))
       {
-	size_t index;
-	json_t *sector_value;
-
-	// Loop through the array of stardock sector IDs
-	json_array_foreach (stardock_sectors, index, sector_value)
-	{
-
-	  // 1. Ensure the element is a valid integer
-	  if (json_is_integer (sector_value))
-	    {
-
-	      int stardock_sector_id = json_integer_value (sector_value);
-
-	      // 2. Check for a match
-	      if (sector_id == stardock_sector_id)
-		{
-		  in_sdock = true;
-		  // Found a match, no need to check the rest of the array
-		  break;
-		}
-	    }
-	}
+        size_t index;
+        json_t *sector_value;
+  
+        // Loop through the array of stardock sector IDs
+        json_array_foreach (stardock_sectors, index, sector_value)
+        {
+  
+  	// 1. Ensure the element is a valid integer
+  	if (json_is_integer (sector_value))
+  	  {
+  
+  	    int stardock_sector_id = json_integer_value (sector_value);
+  
+  	    // 2. Check for a match
+  	    if (sector_id == stardock_sector_id)
+  	      {
+  		in_sdock = true;
+  		// Found a match, no need to check the rest of the array
+  		break;
+  	      }
+  	  }
+        }
       }
-
+  
     if (stardock_sectors)
       {
-	json_decref (stardock_sectors);
+        json_decref (stardock_sectors);
       }
-
-    if (in_fed)
+  
+    if (in_fed || in_sdock)
       {
-	iss_summon (sector_id, ctx->player_id);
-	// h_send_message_to_player (int player_id, int sender_id, const char *subject,
-	// const char *message)
-
-	(void) h_send_message_to_player (ctx->player_id, 0,
-					 "Federation Warning",
-					 "Fighter deployment in protected space has triggered ISS response.");
+        iss_summon (sector_id, ctx->player_id);
+        // h_send_message_to_player (int player_id, int sender_id, const char *subject,
+        // const char *message)
+  
+        (void) h_send_message_to_player (ctx->player_id, 0,
+  				       "Federation Warning",
+  				       "Fighter deployment in protected space has triggered ISS response.");
       }
-
+  
     /* Emit engine_event via h_log_engine_event */
     {
       json_t *evt = json_object ();
@@ -742,48 +740,42 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
     
       if (j_corp_id && json_is_integer (j_corp_id))
         json_object_set_new (evt, "corporation_id",
-                             json_integer (json_integer_value (j_corp_id)));
+  			   json_integer (json_integer_value (j_corp_id)));
       else
         json_object_set_new (evt, "corporation_id", json_null ());
         
       json_object_set_new (evt, "amount", json_integer (amount));
       json_object_set_new (evt, "offense", json_integer (offense));
       json_object_set_new (evt, "event_ts",
-			   json_integer ((json_int_t) time (NULL)));
-
+  			 json_integer ((json_int_t) time (NULL)));
+  
       (void) h_log_engine_event ("fighters.deployed", ctx->player_id,
-				 sector_id, evt, NULL);
+  			       sector_id, evt, NULL);
     }
-                               
+                                 
     /* Recompute total for response convenience */
     (void) sum_sector_fighters (db, sector_id, &sector_total);
-
+  
     /* ---- Build data payload (no outer wrapper here) ---- */
     json_t *out = json_object ();
     json_object_set_new (out, "sector_id", json_integer (sector_id));
     json_object_set_new (out, "owner_player_id",
-			 json_integer (ctx->player_id));
+  		       json_integer (ctx->player_id));
     if (j_corp_id && json_is_integer (j_corp_id))
       json_object_set_new (out, "owner_corp_id",
-			   json_integer (json_integer_value (j_corp_id)));
+  			 json_integer (json_integer_value (j_corp_id)));
     else
       json_object_set_new (out, "owner_corp_id", json_null ());
     json_object_set_new (out, "amount", json_integer (amount));
     json_object_set_new (out, "offense", json_integer (offense));
     json_object_set_new (out, "sector_total_after",
-			 json_integer (sector_total));
-
+  		       json_integer (sector_total));
+  
     /* Envelope: echo id/meta from `root`, set type string for this result */
     send_enveloped_ok (ctx->fd, root, "combat.fighters.deployed", out);
     json_decref (out);
     return 0;
-
-/* Planet integration (future):
-  // If sector has a player-owned planet, you may redirect/attach fighters to planet storage.
-*/
   }
-}
-
 
 
 /* ---------- combat.lay_mines ---------- */
@@ -1249,14 +1241,8 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
     json_object_set_new (evt, "event_ts",
 			 json_integer ((json_int_t) time (NULL)));
 
-    char *payload = json_dumps (evt, JSON_COMPACT);
-    json_decref (evt);
-    if (payload)
-      {
-	(void) h_log_engine_event ("mines.deployed", ctx->player_id,
-				   sector_id, payload, "");
-	free (payload);
-      }
+    (void) h_log_engine_event ("mines.deployed", ctx->player_id,
+				   sector_id, evt, NULL);
   }
 
   /* Recompute sector per-type for response convenience */
@@ -1305,4 +1291,293 @@ cmd_combat_status (client_ctx_t *ctx, json_t *root)
     return 0;
   // TODO: return sector combat snapshot (entities, mines, fighters, cooldowns)
   return niy (ctx, root, "combat.status");
+}
+
+int
+cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
+{
+  if (!require_auth (ctx, root))
+    return 0;
+
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    {
+      send_enveloped_error (ctx->fd, root, ERR_SERVICE_UNAVAILABLE,
+			    "Database unavailable");
+      return 0;
+    }
+
+  /* 1. Parse input */
+  json_t *data = json_object_get (root, "data");
+  if (!data || !json_is_object (data))
+    {
+      send_enveloped_error (ctx->fd, root, ERR_MISSING_FIELD,
+			    "Missing required field: data");
+      return 0;
+    }
+
+  json_t *j_sector_id = json_object_get (data, "sector_id");
+  json_t *j_asset_id = json_object_get (data, "asset_id");
+
+  if (!j_sector_id || !json_is_integer (j_sector_id) ||
+      !j_asset_id || !json_is_integer (j_asset_id))
+    {
+      send_enveloped_error (ctx->fd, root, ERR_CURSOR_INVALID,
+			    "Missing required field or invalid type: sector_id/asset_id");
+      return 0;
+    }
+
+  int requested_sector_id = (int) json_integer_value (j_sector_id);
+  int asset_id = (int) json_integer_value (j_asset_id);
+
+  /* 2. Load player, ship, current_sector_id */
+  int player_ship_id = h_get_active_ship_id (db, ctx->player_id);
+  if (player_ship_id <= 0)
+    {
+      send_enveloped_error (ctx->fd, root, ERR_SHIP_NOT_FOUND,
+			    "No active ship found for player.");
+      return 0;
+    }
+
+  int player_current_sector_id = -1;
+  int ship_fighters_current = 0;
+  int ship_fighters_max = 0;
+  int player_corp_id = 0;
+
+  sqlite3_stmt *stmt_player_ship = NULL;
+  const char *sql_player_ship =
+    "SELECT s.sector, s.fighters, st.maxfighters, cm.corp_id "
+    "FROM ships s "
+    "JOIN shiptypes st ON s.type = st.id "
+    "LEFT JOIN corp_members cm ON cm.player_id = ?1 "
+    "WHERE s.id = ?2;";
+
+  if (sqlite3_prepare_v2 (db, sql_player_ship, -1, &stmt_player_ship, NULL) != SQLITE_OK)
+    {
+      send_enveloped_error (ctx->fd, root, ERR_DB,
+			    "Failed to prepare player ship query.");
+      return 0;
+    }
+  sqlite3_bind_int (stmt_player_ship, 1, ctx->player_id);
+  sqlite3_bind_int (stmt_player_ship, 2, player_ship_id);
+
+  if (sqlite3_step (stmt_player_ship) == SQLITE_ROW)
+    {
+      player_current_sector_id = sqlite3_column_int (stmt_player_ship, 0);
+      ship_fighters_current = sqlite3_column_int (stmt_player_ship, 1);
+      ship_fighters_max = sqlite3_column_int (stmt_player_ship, 2);
+      player_corp_id = sqlite3_column_int (stmt_player_ship, 3); // 0 if NULL
+    }
+  sqlite3_finalize (stmt_player_ship);
+
+  if (player_current_sector_id <= 0)
+    {
+      send_enveloped_error (ctx->fd, root, ERR_SECTOR_NOT_FOUND,
+			    "Could not determine player's current sector.");
+      return 0;
+    }
+
+  /* 3. Validate sector match */
+  if (player_current_sector_id != requested_sector_id)
+    {
+      send_enveloped_refused (ctx->fd, root, REF_NOT_IN_SECTOR, "Not in sector",
+			      json_pack ("{s:s}", "reason", "not_in_sector"));
+      return 0;
+    }
+
+  /* 4. Fetch asset and validate existence */
+  sqlite3_stmt *stmt_asset = NULL;
+  const char *sql_asset =
+    "SELECT quantity, player, corporation, offensive_setting "
+    "FROM sector_assets "
+    "WHERE id = ?1 AND sector = ?2 AND asset_type = 2;"; // asset_type = 2 for fighters
+
+  if (sqlite3_prepare_v2 (db, sql_asset, -1, &stmt_asset, NULL) != SQLITE_OK)
+    {
+      send_enveloped_error (ctx->fd, root, ERR_DB,
+			    "Failed to prepare asset query.");
+      return 0;
+    }
+  sqlite3_bind_int (stmt_asset, 1, asset_id);
+  sqlite3_bind_int (stmt_asset, 2, requested_sector_id);
+
+  int asset_qty = 0;
+  int asset_owner_player_id = 0;
+  int asset_owner_corp_id = 0;
+  int asset_offensive_setting = 0;
+
+  if (sqlite3_step (stmt_asset) == SQLITE_ROW)
+    {
+      asset_qty = sqlite3_column_int (stmt_asset, 0);
+      asset_owner_player_id = sqlite3_column_int (stmt_asset, 1);
+      asset_owner_corp_id = sqlite3_column_int (stmt_asset, 2); // 0 if NULL
+      asset_offensive_setting = sqlite3_column_int (stmt_asset, 3);
+    }
+  sqlite3_finalize (stmt_asset);
+
+  if (asset_qty <= 0)
+    {
+      send_enveloped_error (ctx->fd, root, ERR_SHIP_NOT_FOUND, "Asset not found");
+      return 0;
+    }
+
+  /* 5. Validate ownership */
+  bool is_owner = false;
+  if (asset_owner_player_id == ctx->player_id)
+    {
+      is_owner = true; // Personal fighters
+    }
+  else if (asset_owner_corp_id != 0 && player_corp_id != 0 &&
+           asset_owner_corp_id == player_corp_id)
+    {
+      // Corporate fighters, player is member of owning corp
+      // (Assuming player_corp_id is 0 if not in a corp, and non-zero if in one)
+      is_owner = true;
+    }
+
+  if (!is_owner)
+    {
+      send_enveloped_refused (ctx->fd, root, ERR_TARGET_INVALID, "Not owner",
+			      json_pack ("{s:s}", "reason", "not_owner"));
+      return 0;
+    }
+
+  /* 6. Compute pickup quantity */
+  int available_to_recall = asset_qty;
+  int capacity_left = ship_fighters_max - ship_fighters_current;
+  int take = 0;
+
+  if (take <= 0)
+    {
+      send_enveloped_refused (ctx->fd, root, ERR_OUT_OF_RANGE, "No capacity",
+			      json_pack ("{s:s}", "reason", "no_capacity"));
+      return 0;
+    }
+
+  take = (available_to_recall < capacity_left) ? available_to_recall : capacity_left;
+
+  if (capacity_left <= 0)
+    {
+      send_enveloped_refused (ctx->fd, root, ERR_OUT_OF_RANGE, "No capacity",
+			      json_pack ("{s:s}", "reason", "no_capacity"));
+      return 0;
+    }
+
+  /* 7. Apply changes (transaction) */
+  char *errmsg = NULL;
+  if (sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg) != SQLITE_OK)
+    {
+      if (errmsg)
+	sqlite3_free (errmsg);
+      send_enveloped_error (ctx->fd, root, ERR_DB,
+			    "Could not start transaction");
+      return 0;
+    }
+
+  /* Increment ship fighters */
+  sqlite3_stmt *stmt_update_ship = NULL;
+  const char *sql_update_ship =
+    "UPDATE ships SET fighters = fighters + ?1 WHERE id = ?2;";
+  if (sqlite3_prepare_v2 (db, sql_update_ship, -1, &stmt_update_ship, NULL) != SQLITE_OK)
+    {
+      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      send_enveloped_error (ctx->fd, root, ERR_DB,
+			    "Failed to prepare ship update.");
+      return 0;
+    }
+  sqlite3_bind_int (stmt_update_ship, 1, take);
+  sqlite3_bind_int (stmt_update_ship, 2, player_ship_id);
+  if (sqlite3_step (stmt_update_ship) != SQLITE_DONE)
+    {
+      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      send_enveloped_error (ctx->fd, root, ERR_DB,
+			    "Failed to update ship fighters.");
+      return 0;
+    }
+  sqlite3_finalize (stmt_update_ship);
+
+  /* Update or delete sector_assets record */
+  if (take == asset_qty)
+    {
+      sqlite3_stmt *stmt_delete_asset = NULL;
+      const char *sql_delete_asset = "DELETE FROM sector_assets WHERE id = ?1;";
+      if (sqlite3_prepare_v2 (db, sql_delete_asset, -1, &stmt_delete_asset, NULL) != SQLITE_OK)
+	{
+	  sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+	  send_enveloped_error (ctx->fd, root, ERR_DB,
+				"Failed to prepare asset delete.");
+	  return 0;
+	}
+      sqlite3_bind_int (stmt_delete_asset, 1, asset_id);
+      if (sqlite3_step (stmt_delete_asset) != SQLITE_DONE)
+	{
+	  sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+	  send_enveloped_error (ctx->fd, root, ERR_DB,
+				"Failed to delete asset record.");
+	  return 0;
+	}
+      sqlite3_finalize (stmt_delete_asset);
+    }
+  else
+    {
+      sqlite3_stmt *stmt_update_asset = NULL;
+      const char *sql_update_asset =
+	"UPDATE sector_assets SET quantity = quantity - ?1 WHERE id = ?2;";
+      if (sqlite3_prepare_v2 (db, sql_update_asset, -1, &stmt_update_asset, NULL) != SQLITE_OK)
+	{
+	  sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+	  send_enveloped_error (ctx->fd, root, ERR_DB,
+				"Failed to prepare asset update.");
+	  return 0;
+	}
+      sqlite3_bind_int (stmt_update_asset, 1, take);
+      sqlite3_bind_int (stmt_update_asset, 2, asset_id);
+      if (sqlite3_step (stmt_update_asset) != SQLITE_DONE)
+	{
+	  sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+	  send_enveloped_error (ctx->fd, root, ERR_DB,
+				"Failed to update asset quantity.");
+	  return 0;
+	}
+      sqlite3_finalize (stmt_update_asset);
+    }
+
+  if (sqlite3_exec (db, "COMMIT;", NULL, NULL, &errmsg) != SQLITE_OK)
+    {
+      if (errmsg)
+	sqlite3_free (errmsg);
+      send_enveloped_error (ctx->fd, root, ERR_DB, "Commit failed");
+      return 0;
+    }
+
+  /* 8. Emit engine event */
+  json_t *evt = json_object ();
+  json_object_set_new (evt, "player_id", json_integer (ctx->player_id));
+  json_object_set_new (evt, "ship_id", json_integer (player_ship_id));
+  json_object_set_new (evt, "sector_id", json_integer (requested_sector_id));
+  json_object_set_new (evt, "asset_id", json_integer (asset_id));
+  json_object_set_new (evt, "recalled", json_integer (take));
+  json_object_set_new (evt, "remaining_in_sector", json_integer (asset_qty - take));
+
+  const char *mode_str = "unknown";
+  if (asset_offensive_setting == 1) mode_str = "offensive";
+  else if (asset_offensive_setting == 2) mode_str = "defensive";
+  else if (asset_offensive_setting == 3) mode_str = "toll";
+  json_object_set_new (evt, "mode", json_string (mode_str));
+
+  (void) h_log_engine_event ("fighters.recalled", ctx->player_id,
+			     requested_sector_id, evt, NULL);
+
+  /* 9. Send enveloped_ok response */
+  json_t *out = json_object ();
+  json_object_set_new (out, "sector_id", json_integer (requested_sector_id));
+  json_object_set_new (out, "asset_id", json_integer (asset_id));
+  json_object_set_new (out, "recalled", json_integer (take));
+  json_object_set_new (out, "remaining_in_sector", json_integer (asset_qty - take));
+  json_object_set_new (out, "mode", json_string (mode_str));
+
+  send_enveloped_ok (ctx->fd, root, "fighters.recalled", out);
+  json_decref (out);
+
+  return 0;
 }

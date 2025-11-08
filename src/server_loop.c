@@ -51,9 +51,9 @@
 #define RULE_ERROR(_code,_msg) \
     do { send_enveloped_error(ctx->fd, root, (_code), (_msg)); goto trade_buy_done; } while (0)
 
-static _Atomic uint64_t g_conn_seq = 0;
+// static _Atomic uint64_t g_conn_seq = 0;
 /* global (file-scope) counter for server message ids */
-static _Atomic uint64_t g_msg_seq = 0;
+// static _Atomic uint64_t g_msg_seq = 0;
 static __thread client_ctx_t *g_ctx_for_send = NULL;
 /* forward declaration to avoid implicit extern */
 void send_all_json (int fd, json_t * obj);
@@ -78,7 +78,7 @@ void handle_move_pathfind (client_ctx_t * ctx, json_t * root);
 void send_enveloped_ok (int fd, json_t * root, const char *type,
 			json_t * data);
 json_t *build_sector_info_json (int sector_id);
-static int64_t g_next_notice_ttl_sweep = 0;
+// static int64_t g_next_notice_ttl_sweep = 0;
 
 
 
@@ -127,6 +127,9 @@ static const cmd_desc_t k_supported_cmds_fallback[] = {
 
   // --- News ---
   {"news.read", "Get the daily news feed"},
+
+  // --- Combat ---
+  {"fighters.recall", "Recall deployed fighters"},
 };
 
 // Weak fallback: satisfies server_envelope.o at link time.
@@ -169,12 +172,14 @@ server_broadcast_to_all_online (json_t *data)
 
 /* Sector-scoped, ephemeral event to subscribers of sector.* / sector.{id}.
    NOTE: comm_publish_sector_event STEALS a ref to 'data'. */
+/*
 static void
 server_broadcast_to_sector (int sector_id, const char *event_type,
 			    json_t *data)
 {
   comm_publish_sector_event (sector_id, event_type, data);	// steals 'data'
 }
+*/
 
 
 
@@ -403,6 +408,7 @@ make_listen_socket (uint16_t port)
   return fd;
 }
 
+/*
 static int
 send_all (int fd, const void *buf, size_t n)
 {
@@ -421,6 +427,7 @@ send_all (int fd, const void *buf, size_t n)
     }
   return 0;
 }
+*/
 
 
 /* Roll the window and increment count for this response */
@@ -609,6 +616,10 @@ process_message (client_ctx_t *ctx, json_t *root)
   else if (streq (cmd, "player.get_settings"))
     {
       rc = cmd_player_get_settings (ctx, root);
+    }
+  else if (streq (cmd, "bank.deposit"))
+    {
+      rc = cmd_bank_deposit (ctx, root);
     }
   else if (streq (cmd, "player.my_info"))
     {
@@ -808,7 +819,7 @@ process_message (client_ctx_t *ctx, json_t *root)
     }
   else if (!strcmp (c, "trade.jettison"))
     {
-      rc = cmd_trade_jettison (ctx, root);	/* NIY stub */
+      rc = cmd_ship_jettison (ctx, root);	/* NIY stub */
     }
   else if (!strcmp (c, "trade.offer"))
     {
@@ -948,6 +959,10 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       rc = cmd_deploy_mines_list (ctx, root);           /* list deployed mines */
     }  
+  else if (!strcmp (c, "fighters.recall"))
+    {
+      rc = cmd_fighters_recall (ctx, root);             /* recall deployed fighters */
+    }
 
 /* ---------- CHAT ---------- */
   else if (!strcmp (c, "chat.send"))

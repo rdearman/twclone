@@ -99,6 +99,7 @@ static json_t *schema_combat_deploy_fighters (void);
 static json_t *schema_combat_lay_mines (void);
 static json_t *schema_combat_sweep_mines (void);
 static json_t *schema_combat_status (void);
+static json_t *schema_fighters_recall (void);
 
 /* --- Deploy --- */
 static json_t *schema_deploy_fighters_list (void);
@@ -330,6 +331,8 @@ schema_get (const char *key)
     return schema_combat_sweep_mines ();
   else if (strcmp (key, "combat.status") == 0)
     return schema_combat_status ();
+  else if (strcmp (key, "fighters.recall") == 0)
+    return schema_fighters_recall ();
 
   /* Deploy */
   else if (strcmp (key, "deploy.fighters.list") == 0)
@@ -477,6 +480,7 @@ schema_keys (void)
   json_array_append_new (keys, json_string ("combat.lay_mines"));
   json_array_append_new (keys, json_string ("combat.sweep_mines"));
   json_array_append_new (keys, json_string ("combat.status"));
+  json_array_append_new (keys, json_string ("fighters.recall"));
 
   /* Deploy */
   json_array_append_new (keys, json_string ("deploy.fighters.list"));
@@ -1382,6 +1386,27 @@ schema_combat_status (void)
   return json_pack ("{s:s, s:s}",
                     "$id", "ge://schema/combat.status.json",
                     "$comment", "Schema not yet implemented");
+}
+
+static json_t *
+schema_fighters_recall (void)
+{
+  json_t *data_props = json_pack(
+      "{s:{s:s}, s:{s:s}}",
+      "sector_id", "type", "integer",
+      "asset_id",  "type", "integer");
+
+  json_t *data_schema = json_pack(
+      "{s:s, s:s, s:s, s:o, s:[s,s], s:b}",
+      "$id",      "ge://schema/fighters.recall.json",
+      "$schema",  "https://json-schema.org/draft/2020-12/schema",
+      "type",     "object",
+      "properties", data_props,
+      "required", "sector_id", "asset_id",
+      "additionalProperties", 0);
+
+  json_decref(data_props);
+  return data_schema;
 }
 
 /* --- Deploy --- */

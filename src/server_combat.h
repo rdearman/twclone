@@ -16,6 +16,7 @@ extern "C"
   int cmd_combat_status (client_ctx_t * ctx, json_t * root);	// "combat.status"
   int cmd_deploy_fighters_list (client_ctx_t *ctx, json_t *root);
   int cmd_deploy_mines_list (client_ctx_t *ctx, json_t *root);
+  int cmd_fighters_recall (client_ctx_t *ctx, json_t *root);
 
 
 
