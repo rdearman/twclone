@@ -668,7 +668,9 @@ db_get_stardock_sectors (void)
   			    "Failed to create sector assets record");
         return 0;
       }
-  
+    
+    int asset_id = (int) sqlite3_last_insert_rowid(db); // Capture the newly created asset_id
+
     if (sqlite3_exec (db, "COMMIT;", NULL, NULL, &errmsg) != SQLITE_OK)
       {
         if (errmsg)
@@ -748,6 +750,7 @@ db_get_stardock_sectors (void)
       json_object_set_new (evt, "offense", json_integer (offense));
       json_object_set_new (evt, "event_ts",
   			 json_integer ((json_int_t) time (NULL)));
+      json_object_set_new (evt, "asset_id", json_integer (asset_id)); // Add asset_id to event
   
       (void) h_log_engine_event ("fighters.deployed", ctx->player_id,
   			       sector_id, evt, NULL);
@@ -756,6 +759,9 @@ db_get_stardock_sectors (void)
     /* Recompute total for response convenience */
     (void) sum_sector_fighters (db, sector_id, &sector_total);
   
+    LOGI("DEBUG: cmd_combat_deploy_fighters - sector_id: %d, player_id: %d, amount: %d, offense: %d, sector_total: %d, asset_id: %d",
+         sector_id, ctx->player_id, amount, offense, sector_total, asset_id);
+
     /* ---- Build data payload (no outer wrapper here) ---- */
     json_t *out = json_object ();
     json_object_set_new (out, "sector_id", json_integer (sector_id));
@@ -770,6 +776,7 @@ db_get_stardock_sectors (void)
     json_object_set_new (out, "offense", json_integer (offense));
     json_object_set_new (out, "sector_total_after",
   		       json_integer (sector_total));
+    json_object_set_new (out, "asset_id", json_integer (asset_id)); // Add asset_id to response
   
     /* Envelope: echo id/meta from `root`, set type string for this result */
     send_enveloped_ok (ctx->fd, root, "combat.fighters.deployed", out);

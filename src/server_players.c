@@ -136,6 +136,8 @@ TurnConsumeResult
 h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
 		       const char *reason_cmd)
 {
+  pthread_mutex_lock (&db_mutex); // Acquire lock
+
   sqlite3_stmt *stmt = NULL;
   int player_id = ctx->player_id;
   const char *sql_update =
@@ -152,6 +154,7 @@ h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
   if (rc != SQLITE_OK)
     {
       LOGE ("DB Error (Prepare): %s\n", sqlite3_errmsg (db_conn));
+      pthread_mutex_unlock (&db_mutex); // Release lock
       return TURN_CONSUME_ERROR_DB_FAIL;
     }
 
@@ -167,6 +170,7 @@ h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
       LOGE ("DB Error (Execute %s): %s\n", reason_cmd,
 	    sqlite3_errmsg (db_conn));
       sqlite3_finalize (stmt);
+      pthread_mutex_unlock (&db_mutex); // Release lock
       return TURN_CONSUME_ERROR_DB_FAIL;
     }
 
@@ -189,6 +193,7 @@ h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
       if (rc != SQLITE_OK)
 	{
 	  LOGE ("DB Error (Prepare Check): %s\n", sqlite3_errmsg (db_conn));
+          pthread_mutex_unlock (&db_mutex); // Release lock
 	  return TURN_CONSUME_ERROR_DB_FAIL;
 	}
 
@@ -203,6 +208,7 @@ h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
 	  LOGE
 	    ("Turn consumption failed for Player %d (%s): Turns remaining is 0.\n",
 	     player_id, reason_cmd);
+          pthread_mutex_unlock (&db_mutex); // Release lock
 	  return TURN_CONSUME_ERROR_NO_TURNS;
 	}
       else if (rc == SQLITE_DONE)
@@ -212,6 +218,7 @@ h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
 	  LOGE
 	    ("Turn consumption failed for Player %d (%s): Player not found in turns table.\n",
 	     player_id, reason_cmd);
+          pthread_mutex_unlock (&db_mutex); // Release lock
 	  return TURN_CONSUME_ERROR_PLAYER_NOT_FOUND;
 	}
       else
@@ -220,6 +227,7 @@ h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
 	  LOGE ("DB Error (Execute Check %s): %s\n", reason_cmd,
 		sqlite3_errmsg (db_conn));
 	  sqlite3_finalize (stmt);
+          pthread_mutex_unlock (&db_mutex); // Release lock
 	  return TURN_CONSUME_ERROR_DB_FAIL;
 	}
     }
@@ -228,6 +236,7 @@ h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
   LOGD
     ("Player %d consumed 1 turn for command: %s. New turn count updated.\n",
      player_id, reason_cmd);
+  pthread_mutex_unlock (&db_mutex); // Release lock
   return TURN_CONSUME_SUCCESS;
 }
 
@@ -244,13 +253,30 @@ h_get_player_credits (sqlite3 *db, int player_id, int *credits_out)
   if (!db)
     return SQLITE_ERROR; // Safety check
 
-  static const char *SQL =
-    "SELECT COALESCE(credits,0) FROM players WHERE id=?1";
-
   sqlite3_stmt *st = NULL;
-  int rc = sqlite3_prepare_v2 (db, SQL, -1, &st, NULL);
-  if (rc != SQLITE_OK)
+  int rc = SQLITE_ERROR;
+
+  // Ensure a bank account exists for the player (INSERT OR IGNORE)
+  const char *SQL_ENSURE_ACCOUNT =
+    "INSERT OR IGNORE INTO bank_accounts (player_id, currency, balance) VALUES (?1, 'CRD', 0);";
+  rc = sqlite3_prepare_v2(db, SQL_ENSURE_ACCOUNT, -1, &st, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("h_get_player_credits: ENSURE_ACCOUNT prepare error: %s", sqlite3_errmsg(db));
+      return rc;
+  }
+  sqlite3_bind_int(st, 1, player_id);
+  sqlite3_step(st); // Execute the insert or ignore
+  sqlite3_finalize(st);
+  st = NULL; // Reset statement pointer
+
+  static const char *SQL =
+    "SELECT COALESCE(balance,0) FROM bank_accounts WHERE player_id=?1";
+
+  rc = sqlite3_prepare_v2 (db, SQL, -1, &st, NULL);
+  if (rc != SQLITE_OK) {
+    LOGE("h_get_player_credits: SELECT prepare error: %s", sqlite3_errmsg(db));
     return rc;
+  }
 
   sqlite3_bind_int (st, 1, player_id);
 
@@ -262,6 +288,7 @@ h_get_player_credits (sqlite3 *db, int player_id, int *credits_out)
     }
   else
     {
+      LOGE("h_get_player_credits: Player %d not found in bank_accounts.", player_id);
       rc = SQLITE_ERROR;    /* no such player */
     }
 
@@ -296,8 +323,9 @@ h_get_cargo_space_free (sqlite3 *db, int player_id, int *free_out)
     holds = sqlite3_column_int (st, 0);
   else
     {
+      holds = holds; // Explicitly use holds to satisfy the compiler
       sqlite3_finalize (st);
-      return SQLITE_ERROR;
+      return SQLITE_NOTFOUND;
     }
   sqlite3_finalize (st);
 
@@ -718,7 +746,7 @@ h_send_message_to_player (int player_id, int sender_id, const char *subject,
   int rc;
 
   // Use current Unix timestamp for the message time 
-  int timestamp = (int) time (NULL);
+//   int timestamp = (int) time (NULL);
 
   // Updated SQL statement to insert recipient_id (player_id), sender_id, timestamp, 
   // subject, message, and set 'read' status to 0 (unread).
@@ -895,8 +923,8 @@ enum
 
 
 /* ---------- forward decls for settings section builders (stubs for now) ---------- */
-static json_t *players_build_settings (client_ctx_t * ctx, json_t * req);
-static json_t *players_get_prefs (client_ctx_t * ctx);
+// static json_t *players_build_settings (client_ctx_t * ctx, json_t * req);
+// static json_t *players_get_prefs (client_ctx_t * ctx);
 static json_t *players_get_subscriptions (client_ctx_t * ctx);
 static json_t *players_list_bookmarks (client_ctx_t * ctx);
 static json_t *players_list_avoid (client_ctx_t * ctx);
@@ -1149,12 +1177,13 @@ cmd_player_get_notes (client_ctx_t *ctx, json_t *root)
 /*                       SECTION BUILDERS (STUBS)                        */
 /* ==================================================================== */
 
+/*
 static int
 _include_wanted (json_t *data, const char *key)
 {
   json_t *inc = data ? json_object_get (data, "include") : NULL;
   if (!inc || !json_is_array (inc))
-    return 1;			/* no filter → include all */
+    return 1;			// no filter → include all
   size_t i, n = json_array_size (inc);
   for (i = 0; i < n; i++)
     {
@@ -1164,7 +1193,9 @@ _include_wanted (json_t *data, const char *key)
     }
   return 0;
 }
+*/
 
+/*
 static json_t *
 players_build_settings (client_ctx_t *ctx, json_t *req)
 {
@@ -1207,8 +1238,10 @@ players_build_settings (client_ctx_t *ctx, json_t *req)
     }
   return out;
 }
+*/
 
 /* Replace these stubs with DB-backed implementations as you land #189+ */
+/*
 static json_t *
 players_get_prefs (client_ctx_t *ctx)
 {
@@ -1221,6 +1254,7 @@ players_get_prefs (client_ctx_t *ctx)
   json_object_set_new (prefs, "privacy.dm_allowed", json_true ());
   return prefs;
 }
+*/
 
 static json_t *
 players_get_subscriptions (client_ctx_t *ctx)
@@ -1261,6 +1295,7 @@ players_list_notes (client_ctx_t *ctx, json_t *req)
 }
 
 /* --- local helpers for type mapping/validation --- */
+/*
 static int
 map_pt (const char *s)
 {
@@ -1274,7 +1309,9 @@ map_pt (const char *s)
     return PT_JSON;
   return PT_STRING;
 }
+*/
 
+/*
 static int
 validate_value (int pt, const char *v)
 {
@@ -1290,12 +1327,13 @@ validate_value (int pt, const char *v)
       strtol (v, &end, 10);
       return (end && *end == '\0');
     case PT_JSON:
-      return v[0] == '{' || v[0] == '[';	/* lightweight check */
+      return v[0] == '{' || v[0] == '[';	// lightweight check
     case PT_STRING:
     default:
       return 1;
     }
 }
+*/
 
 
 /* ------ Set Pref ------- */
@@ -1358,7 +1396,7 @@ cmd_player_set_prefs (client_ctx_t *ctx, json_t *root)
 	  return -1;
 	}
 
-      pref_type t = PT_STRING;
+      // pref_type t; // Declare without initialization
       char buf[512] = { 0 };
 
       if (json_is_string (val))
@@ -1370,18 +1408,18 @@ cmd_player_set_prefs (client_ctx_t *ctx, json_t *root)
 				    "string too long/not printable");
 	      return -1;
 	    }
-	  t = PT_STRING;
+	  // t = PT_STRING; // Assign here
 	  snprintf (buf, sizeof (buf), "%s", s);
 	}
       else if (json_is_integer (val))
 	{
-	  t = PT_INT;
+	  // t = PT_INT; // Assign here
 	  snprintf (buf, sizeof (buf), "%lld",
 		    (long long) json_integer_value (val));
 	}
       else if (json_is_boolean (val))
 	{
-	  t = PT_BOOL;
+	  // t = PT_BOOL; // Assign here
 	  snprintf (buf, sizeof (buf), "%s", json_is_true (val) ? "1" : "0");
 	}
       else
@@ -1947,3 +1985,115 @@ cmd_get_news (client_ctx_t *ctx, json_t *root)
   json_decref (payload);
   return 0;
 }
+
+int
+cmd_bank_deposit (client_ctx_t *ctx, json_t *root)
+{
+  if (!ctx || ctx->player_id <= 0)
+    {
+      send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+      return 0;
+    }
+
+  json_t *data = json_object_get (root, "data");
+  if (!json_is_object (data))
+    {
+      send_enveloped_error (ctx->fd, root, 400, "Missing data object.");
+      return 0;
+    }
+
+  json_t *j_amount = json_object_get (data, "amount");
+  if (!json_is_integer (j_amount) || json_integer_value (j_amount) <= 0)
+    {
+      send_enveloped_error (ctx->fd, root, 400,
+                            "Deposit amount must be a positive integer.");
+      return 0;
+    }
+
+  long long amount = json_integer_value (j_amount);
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    {
+      send_enveloped_error (ctx->fd, root, 500, "No database handle.");
+      return 0;
+    }
+
+  int rc;
+  char *errmsg = NULL;
+  sqlite3_stmt *st = NULL;
+  long long new_balance = 0;
+
+  // Start transaction
+  if (sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg) != SQLITE_OK)
+    {
+      if (errmsg)
+        sqlite3_free (errmsg);
+      send_enveloped_error (ctx->fd, root, 500, "Failed to start transaction.");
+      return 0;
+    }
+
+  // Ensure a bank account exists for the player (INSERT OR IGNORE)
+  const char *SQL_ENSURE_ACCOUNT =
+    "INSERT OR IGNORE INTO bank_accounts (player_id, currency, balance) VALUES (?1, 'CRD', 0);";
+  rc = sqlite3_prepare_v2(db, SQL_ENSURE_ACCOUNT, -1, &st, NULL);
+  if (rc != SQLITE_OK) {
+      sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+      send_enveloped_error(ctx->fd, root, 500, sqlite3_errmsg(db));
+      return 0;
+  }
+  sqlite3_bind_int(st, 1, ctx->player_id);
+  sqlite3_step(st); // Execute the insert or ignore
+  sqlite3_finalize(st);
+  st = NULL; // Reset statement pointer
+
+  // Update bank_accounts.balance
+  const char *SQL_UPDATE_BANK =
+    "UPDATE bank_accounts SET balance = balance + ?2 WHERE player_id = ?1 RETURNING balance;";
+
+  rc = sqlite3_prepare_v2 (db, SQL_UPDATE_BANK, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
+      return 0;
+    }
+
+  sqlite3_bind_int (st, 1, ctx->player_id);
+  sqlite3_bind_int64 (st, 2, amount);
+
+  if (sqlite3_step (st) == SQLITE_ROW)
+    {
+      new_balance = sqlite3_column_int64 (st, 0);
+      rc = SQLITE_OK;
+    }
+  else
+    {
+      rc = SQLITE_ERROR; // Player not found or update failed
+    }
+
+  sqlite3_finalize (st);
+
+  if (rc != SQLITE_OK)
+    {
+      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      send_enveloped_error (ctx->fd, root, 500, "Failed to update bank balance.");
+      return 0;
+    }
+
+  // Commit transaction
+  if (sqlite3_exec (db, "COMMIT;", NULL, NULL, &errmsg) != SQLITE_OK)
+    {
+      if (errmsg)
+        sqlite3_free (errmsg);
+      send_enveloped_error (ctx->fd, root, 500, "Failed to commit transaction.");
+      return 0;
+    }
+
+  json_t *payload = json_object ();
+  json_object_set_new (payload, "new_balance", json_integer (new_balance));
+  send_enveloped_ok (ctx->fd, root, "bank.deposited", payload);
+  json_decref (payload);
+
+  return 0;
+}
+

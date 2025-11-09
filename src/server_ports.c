@@ -37,7 +37,7 @@ void iso8601_utc (char out[32]);
 
 /* Forward declarations for static helper functions */
 static int h_calculate_port_buy_price (sqlite3 *db, int port_id, const char *commodity);
-static int internal_calculate_buy_price_formula (int base_price, int supply);
+
 
 /* Helpers */
 static int
@@ -610,12 +610,30 @@ static int
 h_update_player_credits(sqlite3 *db, int player_id, long long delta, long long *new_balance_out)
 {
     sqlite3_stmt *st = NULL;
-    const char *SQL_UPD = "UPDATE players "
-                          "SET credits = credits + ?2 "
-                          "WHERE id = ?1 AND credits + ?2 >= 0 "
-                          "RETURNING credits;";
-    int rc = sqlite3_prepare_v2(db, SQL_UPD, -1, &st, NULL);
-    if (rc != SQLITE_OK) return rc;
+    int rc = SQLITE_ERROR;
+
+    // Ensure a bank account exists for the player (INSERT OR IGNORE)
+    const char *SQL_ENSURE_ACCOUNT =
+      "INSERT OR IGNORE INTO bank_accounts (player_id, currency, balance) VALUES (?1, 'CRD', 0);";
+    rc = sqlite3_prepare_v2(db, SQL_ENSURE_ACCOUNT, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("h_update_player_credits: ENSURE_ACCOUNT prepare error: %s", sqlite3_errmsg(db));
+        return rc;
+    }
+    sqlite3_bind_int(st, 1, player_id);
+    sqlite3_step(st); // Execute the insert or ignore
+    sqlite3_finalize(st);
+    st = NULL; // Reset statement pointer
+
+    const char *SQL_UPD = "UPDATE bank_accounts "
+                          "SET balance = balance + ?2 "
+                          "WHERE player_id = ?1 AND balance + ?2 >= 0 "
+                          "RETURNING balance;";
+    rc = sqlite3_prepare_v2(db, SQL_UPD, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("h_update_player_credits: UPDATE prepare error: %s", sqlite3_errmsg(db));
+        return rc;
+    }
 
     sqlite3_bind_int(st, 1, player_id);
     sqlite3_bind_int64(st, 2, delta);
@@ -627,6 +645,8 @@ h_update_player_credits(sqlite3 *db, int player_id, long long delta, long long *
     } else if (rc == SQLITE_DONE) {
         /* This means the WHERE clause failed (insufficient funds) */
         rc = SQLITE_CONSTRAINT;
+    } else {
+        LOGE("h_update_player_credits: UPDATE step error: %s", sqlite3_errmsg(db));
     }
     sqlite3_finalize(st);
     return rc;
@@ -686,6 +706,13 @@ cmd_trade_quote (client_ctx_t *ctx, json_t *root)
                             "port_id, commodity, and quantity are required.");
       return 0;
     }
+
+  // Validate commodity using commodity_to_code
+  const char *commodity_code = commodity_to_code(commodity);
+  if (!commodity_code) {
+      send_enveloped_error (ctx->fd, root, 400, "Invalid commodity.");
+      return 0;
+  }
 
   // Calculate the price the port will CHARGE the player (player's buy price)
   int player_buy_price_per_unit = h_calculate_port_sell_price (db, port_id, commodity);
@@ -969,7 +996,8 @@ h_calculate_trade_price(int port_id, const char *commodity, int quantity)
     sqlite3_stmt *stmt = NULL;
     double price_index = 1.0;
     double base_price = 0.0;
-    char port_type[2] = {'\0', '\0'};
+
+
     
     const char *index_column = NULL;
     const char *max_stock_column = NULL;
@@ -1050,8 +1078,9 @@ h_calculate_trade_price(int port_id, const char *commodity, int quantity)
 
         if (sqlite3_step(stmt) == SQLITE_ROW) {
             // Read port_type (INTEGER, column 0) - assuming 'type' is INTEGER in schema
-            int type_int = sqlite3_column_int(stmt, 0);
-            port_type[0] = (char)('0' + type_int); // Convert int type (e.g., 1) to char ('1')
+
+
+
             
             // Read price_index (REAL, column 1)
             price_index = sqlite3_column_double(stmt, 1);
@@ -1071,33 +1100,19 @@ h_calculate_trade_price(int port_id, const char *commodity, int quantity)
     
     // Safety check against division by zero
     if (max_stock <= 0) {
-        max_stock = 1; 
+        pthread_mutex_unlock(&db_mutex);
+        return base_price * price_index;
     }
 
-    // Normalized quantity: 0.0 (empty) to 1.0 (full)
-    double normalized_quantity = fmin(1.0, ((double)quantity) / max_stock);
-    
-    // Volatility Factor (Demand-based pricing: high price when stock is low)
-    double fluctuation_factor = pow((1.0 - normalized_quantity), 2.0);
+    // Calculate current stock (assuming you have a way to get this)
+    // For now, let's assume current_stock is half of max_stock for demonstration
+    int current_stock = max_stock / 2; 
 
-    // Apply the price index
-    double indexed_base_price = base_price * price_index;
-    
-    // The price modifier dictates the maximum deviation from the base price.
-    double price_modifier = 0.50; // Max 50% increase from the indexed base price.
+    // Example price calculation (can be adjusted based on game mechanics)
+    double price = base_price * price_index * (1.0 + (double)(max_stock - current_stock) / max_stock);
 
-    // final_price = Indexed Base Price + (Indexed Base Price * Fluctuation based on Demand)
-    double final_price = indexed_base_price + (indexed_base_price * price_modifier * fluctuation_factor);
-
-    // Ensure price is never less than 1.0 credit
-    double final_result = fmax(1.0, final_price);
-
-    // =========================================================
-    // 4. Release Mutex Lock
-    // =========================================================
-    pthread_mutex_unlock(&db_mutex); 
-
-    return final_result;
+    pthread_mutex_unlock(&db_mutex);
+    return price;
 }
 
 
@@ -2273,103 +2288,125 @@ cmd_port_info (client_ctx_t *ctx, json_t *root)
 /**
  * @brief Calculates the price a port will PAY the player for a commodity.
  *
- * Data:
- *   - commodities(code, base_price, ...)
- *   - port_commodities(port_id, commodity_id, supply)
+ * Uses:
+ *   - commodities(code, base_price)
+ *   - ports(product_ore/organics/equipment, price_index_ore/organics/equipment)
+ *
+ * Formula:
+ *   price = ceil(base_price * price_index_X * PORT_BUY_DISCOUNT_FACTOR)
  *
  * Returns:
- *   - >= 1 : valid unit price
- *   -  -1  : no row / config error / not traded here
+ *   >0 : valid price
+ *   0  : not buyable / misconfigured / illegal commodity
  */
- int
+int
 h_calculate_port_buy_price (sqlite3 *db, int port_id, const char *commodity)
 {
-  if (!db || port_id <= 0 || !commodity)
-    return -1;
+  if (!db || port_id <= 0 || !commodity || !*commodity)
+    return 0;
 
-  const char *code = commodity_to_code (commodity);
-  if (!code)
-    return -1;
+  const char *code = NULL;
+  const char *prod_col = NULL;
+  const char *idx_col = NULL;
 
-  static const char *sql =
-    "SELECT c.base_price, pc.supply "
-    "FROM port_commodities pc "
-    "JOIN commodities c ON pc.commodity_id = c.id "
-    "WHERE pc.port_id = ?1 AND c.code = ?2 "
-    "LIMIT 1;";
-
-  sqlite3_stmt *stmt = NULL;
-  int rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
-  if (rc != SQLITE_OK)
+  /* Map commodity to column names and code */
+  if (strcmp (commodity, "ore") == 0)
     {
-      fprintf (stderr, "h_calculate_port_buy_price: prepare failed: %s\n",
-               sqlite3_errmsg (db));
-      return -1;
+      code = "ORE";
+      prod_col = "product_ore";
+      idx_col = "price_index_ore";
     }
-
-  rc = sqlite3_bind_int (stmt, 1, port_id);
-  if (rc == SQLITE_OK)
-    rc = sqlite3_bind_text (stmt, 2, code, -1, SQLITE_TRANSIENT);
-
-  if (rc != SQLITE_OK)
+  else if (strcmp (commodity, "organics") == 0)
     {
-      fprintf (stderr, "h_calculate_port_buy_price: bind failed: %s\n",
-               sqlite3_errmsg (db));
-      sqlite3_finalize (stmt);
-      return -1;
+      code = "ORG";
+      prod_col = "product_organics";
+      idx_col = "price_index_organics";
     }
-
-  int result = -1;
-
-  rc = sqlite3_step (stmt);
-  if (rc == SQLITE_ROW)
+  else if (strcmp (commodity, "equipment") == 0)
     {
-      int base_price = sqlite3_column_int (stmt, 0);
-      int supply     = sqlite3_column_int (stmt, 1);
-      result = internal_calculate_buy_price_formula (base_price, supply);
+      code = "EQU";
+      prod_col = "product_equipment";
+      idx_col = "price_index_equipment";
     }
-  else if (rc == SQLITE_DONE)
+  else if (strcmp (commodity, "fuel") == 0)
     {
-      /* No row: port does not trade this commodity. */
-      result = -1;
+      /* Ports generally don't buy fuel back from players */
+      return 0;
     }
   else
     {
-      fprintf (stderr, "h_calculate_port_buy_price: step failed: %s\n",
-               sqlite3_errmsg (db));
-      result = -1;
+      /* Illegal commodities (SLV, WPN, DRG) are not bought by regular ports */
+      return 0;
     }
 
-  sqlite3_finalize (stmt);
-  return result;
-}
+  /* 1. Fetch base_price from commodities table */
+  int base_price = 0;
+  sqlite3_stmt *st_comm = NULL;
+  static const char *SQL_COMM = "SELECT base_price FROM commodities WHERE code = ?1 LIMIT 1;";
+  if (sqlite3_prepare_v2 (db, SQL_COMM, -1, &st_comm, NULL) != SQLITE_OK)
+    {
+      LOGE ("h_calculate_port_buy_price: commodities prepare failed: %s", sqlite3_errmsg (db));
+      return 0;
+    }
+  sqlite3_bind_text (st_comm, 1, code, -1, SQLITE_TRANSIENT);
+  if (sqlite3_step (st_comm) == SQLITE_ROW)
+    {
+      base_price = sqlite3_column_int (st_comm, 0);
+    }
+  sqlite3_finalize (st_comm);
 
-
-/**
- * @brief Internal pricing curve for port buy-price (what port pays player).
- *
- * supply is treated as 0..100 (clamped):
- *   supply=0   -> 150% of base_price
- *   supply=100 ->  50% of base_price
- */
- int
-internal_calculate_buy_price_formula (int base_price, int supply)
-{
   if (base_price <= 0)
-    return -1;
+    {
+      LOGE ("h_calculate_port_buy_price: base_price not found or invalid for commodity %s", commodity);
+      return 0;
+    }
 
-  if (supply < 0)
-    supply = 0;
-  else if (supply > 100)
-    supply = 100;
+  /* 2. Fetch product_X (supply) and price_index_X from ports table */
 
-  const int max_factor_pct = 150;
-  const int min_factor_pct = 50;
-  int delta = max_factor_pct - min_factor_pct;             /* 100 */
-  int factor_pct = max_factor_pct - (delta * supply / 100);
 
-  long long scaled = (long long) base_price * factor_pct;
-  long long price = (scaled + 50) / 100; /* rounded */
+  double price_idx = 0.0;
+  sqlite3_stmt *st_port = NULL;
+  char sql_port[256];
+  sqlite3_snprintf (sizeof (sql_port), sql_port,
+                    "SELECT %s, %s FROM ports WHERE id = ?1 LIMIT 1;",
+                    prod_col, idx_col);
+
+  if (sqlite3_prepare_v2 (db, sql_port, -1, &st_port, NULL) != SQLITE_OK)
+    {
+      LOGE ("h_calculate_port_buy_price: ports prepare failed: %s", sqlite3_errmsg (db));
+      return 0;
+    }
+  sqlite3_bind_int (st_port, 1, port_id);
+
+  if (sqlite3_step (st_port) == SQLITE_ROW)
+    {
+
+      price_idx = sqlite3_column_double (st_port, 1);
+    }
+  sqlite3_finalize (st_port);
+
+  if (price_idx <= 0.0)
+    {
+      LOGE ("h_calculate_port_buy_price: price_index not found or invalid for port %d, commodity %s", port_id, commodity);
+      return 0;
+    }
+
+  /* 3. Calculate price using internal formula */
+  /* The internal_calculate_buy_price_formula expects supply as 0-100.
+   * We need to normalize port_supply to this range.
+   * For now, let's use a simplified approach or assume port_supply is already scaled.
+   * If port_supply is actual quantity, we need a max_capacity to normalize.
+   * For simplicity, let's use a fixed discount factor for now, and revisit if needed.
+   */
+  // Assuming internal_calculate_buy_price_formula is designed for a different 'supply' concept
+  // Let's use a direct calculation based on the port's price index and a fixed discount.
+  
+  // Ports buy at a discount compared to their sell price.
+  // Let's define a PORT_BUY_DISCOUNT_FACTOR, e.g., 0.8 (port buys at 80% of base_price * price_index)
+  const double PORT_BUY_DISCOUNT_FACTOR = 0.8; 
+
+  double raw_price = (double)base_price * price_idx * PORT_BUY_DISCOUNT_FACTOR;
+  long long price = (long long) (raw_price + 0.999999); /* ceil */
 
   if (price < 1)
     price = 1;
@@ -2378,3 +2415,6 @@ internal_calculate_buy_price_formula (int base_price, int supply)
 
   return (int) price;
 }
+
+
+

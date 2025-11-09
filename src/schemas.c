@@ -1355,10 +1355,24 @@ schema_combat_attack (void)
 static json_t *
 schema_combat_deploy_fighters (void)
 {
-  /* TODO: Implement this schema */
-  return json_pack ("{s:s, s:s}",
-                    "$id", "ge://schema/combat.deploy_fighters.json",
-                    "$comment", "Schema not yet implemented");
+  json_t *data_props = json_pack(
+      "{s:o, s:o, s:o}",
+      "amount", json_pack("{s:s}", "type", "integer"),
+      "offense", json_pack("{s:s}", "type", "integer"),
+      "corporation_id", json_pack("{s:s}", "type", "integer")
+  );
+
+  json_t *data_schema = json_pack(
+      "{s:s, s:s, s:s, s:o, s:[s,s], s:b}",
+      "$id",      "ge://schema/combat.deploy_fighters.json",
+      "$schema",  "https://json-schema.org/draft/2020-12/schema",
+      "type",     "object",
+      "properties", data_props,
+      "required", "amount", "offense",
+      "additionalProperties", json_false());
+
+  json_decref(data_props);
+  return data_schema;
 }
 
 static json_t *

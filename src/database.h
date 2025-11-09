@@ -146,5 +146,7 @@ int db_log_engine_event (long long ts, const char *type, int actor_player_id,
 
 int db_is_sector_fedspace (int ck_sector);
 int db_get_port_id_by_sector(int sector_id);
+int db_get_ship_sector_id (sqlite3 *db, int ship_id);
+int db_recall_fighter_asset (int asset_id, int player_id);
 
 #endif /* DATABASE_H */

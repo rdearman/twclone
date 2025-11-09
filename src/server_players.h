@@ -45,6 +45,7 @@ extern "C"
 			   int delta, int *new_qty_out);
   int h_get_player_credits (sqlite3 *db, int player_id, int *credits_out);
   int cmd_get_news (client_ctx_t * ctx, json_t * root);
+  int cmd_bank_deposit (client_ctx_t * ctx, json_t * root);
   TurnConsumeResult h_consume_player_turn (sqlite3 * db_conn,
 					   client_ctx_t * ctx,
 					   const char *reason_cmd);

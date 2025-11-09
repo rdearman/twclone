@@ -26,8 +26,8 @@
 #include "server_config.h"
 #include "server_log.h"
 
-/* Single definition of the global */
 server_config_t g_cfg;
+json_t *g_capabilities = NULL;
 
 /* Provided by your DB module; MUST be defined there (no 'static') */
 sqlite3 *g_db = NULL;
@@ -210,7 +210,7 @@ apply_db (sqlite3 *db)
       && sqlite3_step (ks) == SQLITE_ROW)
     {
       const char *kid = (const char *) sqlite3_column_text (ks, 0);
-      const char *b64 = (const char *) sqlite3_column_text (ks, 1);
+//       const char *b64 = (const char *) sqlite3_column_text (ks, 1);
       snprintf (g_cfg.secrets.key_id, sizeof g_cfg.secrets.key_id, "%s",
 		kid ? kid : "");
       // decode b64 → g_cfg.secrets.key / key_len (or keep it where your transport already expects it)
@@ -244,18 +244,19 @@ void send_enveloped_ok (int fd, json_t * root, const char *type,
 void loop_get_supported_commands (const cmd_desc_t ** out_tbl, size_t *out_n);
 
 
+/*
 static int
 resolve_current_sector_from_info (json_t *info_obj, int fallback)
 {
   if (!json_is_object (info_obj))
     return fallback;
 
-  /* Preferred flat field */
+  // Preferred flat field
   json_t *j = json_object_get (info_obj, "current_sector");
   if (json_is_integer (j))
     return (int) json_integer_value (j);
 
-  /* Common alternates */
+  // Common alternates
   json_t *ship = json_object_get (info_obj, "ship");
   if (json_is_object (ship))
     {
@@ -272,6 +273,7 @@ resolve_current_sector_from_info (json_t *info_obj, int fallback)
     }
   return fallback;
 }
+*/
 
 /////////////////////////// NEW 
 
@@ -316,11 +318,12 @@ cmd_system_hello (client_ctx_t *ctx, json_t *root)
 //////////////////
 
 // Define the handler function
-static void
-handle_system_capabilities (int fd, json_t *root)
+int
+cmd_system_capabilities (client_ctx_t *ctx, json_t *root)
 {
-  send_enveloped_ok (fd, root, "system.capabilities",
+  send_enveloped_ok (ctx->fd, root, "system.capabilities",
 		     json_incref (g_capabilities));
+  return 0;
 }
 
 
@@ -381,7 +384,7 @@ cmd_session_ping (client_ctx_t *ctx, json_t *root)
 int
 cmd_session_hello (client_ctx_t *ctx, json_t *root)
 {
-  const char *req_id = json_string_value (json_object_get (root, "id"));
+//   const char *req_id = json_string_value (json_object_get (root, "id"));
 
   json_t *payload = make_session_hello_payload ((ctx->player_id > 0),
 						ctx->player_id,

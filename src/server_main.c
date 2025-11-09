@@ -33,7 +33,7 @@
 static pid_t g_engine_pid = -1;
 static int g_engine_shutdown_fd = -1;
 static int s2s_listen_fd = -1;
-static int s2s_conn_fd = -1;
+// static int s2s_conn_fd = -1;
 /// 
 static s2s_conn_t *g_s2s_conn = NULL;
 static pthread_t g_s2s_thr;
@@ -90,6 +90,7 @@ build_capabilities (void)
 }
 
 
+/*
 static void
 log_s2s_metrics (const char *who)
 {
@@ -103,6 +104,7 @@ log_s2s_metrics (const char *who)
   //       " auth_fail=%" PRIu64 " too_big=%" PRIu64 "\n",
   //       who, sent, recv, auth_fail, too_big);
 }
+*/
 
 static void *
 s2s_control_thread (void *arg)
@@ -171,6 +173,7 @@ s2s_control_thread (void *arg)
 
 
 //////////////////////
+/*
 static int
 s2s_accept_once (int lfd)
 {
@@ -178,7 +181,9 @@ s2s_accept_once (int lfd)
   socklen_t slen = sizeof (peer);
   return accept (lfd, (struct sockaddr *) &peer, &slen);
 }
+*/
 
+/*
 static int
 send_all (int fd, const char *s)
 {
@@ -192,7 +197,9 @@ send_all (int fd, const char *s)
     }
   return 0;
 }
+*/
 
+/*
 static int
 recv_line (int fd, char *buf, size_t cap)
 {
@@ -210,16 +217,19 @@ recv_line (int fd, char *buf, size_t cap)
   buf[off] = '\0';
   return (int) off;
 }
+*/
 
 /////////////////////////////
 
 
 /* Convenience: send a NUL-terminated C string. Returns 0 on success, -1 on error. */
+/*
 static int
 send_cstr (int fd, const char *s)
 {
   return send_all (fd, s);
 }
+*/
 
 ////////
 
@@ -318,16 +328,16 @@ run_bigbang_if_needed (void)
     {
       LOGE ("BIGBANG: Failed.\n");
       //      fprintf (stderr, "BIGBANG: Failed.\n");
-      return -1;
-    }
-
-}
+            return -1;
+          }
+        return 0;
+      }
 
 //////////////////////////////////////////////////
 int
 main (void)
 {
-  int rc;
+  int rc = 1; // Initialize rc to 1 (failure)
   g_running = 1;
 
   server_log_init_file ("./twclone.log", "[server]", 0, LOG_DEBUG);

@@ -476,6 +476,7 @@ cmd_user_create (client_ctx_t *ctx, json_t *root)
 int
 cmd_auth_refresh (client_ctx_t *ctx, json_t *root)
 {
+  int pid = 0; /* Declare pid at function scope */
   /* Try data.session_token */
   json_t *jdata = json_object_get (root, "data");
   const char *tok = NULL;
@@ -501,7 +502,6 @@ cmd_auth_refresh (client_ctx_t *ctx, json_t *root)
   /* If still no token, fall back to the connection’s logged-in player */
   if (!tok && ctx->player_id > 0)
     {
-      int pid = 0;
       sqlite3 *dbh = db_get_handle ();
       bool is_sysop = player_is_sysop (dbh, ctx->player_id);
       int rc = subs_upsert_locked_defaults (dbh, ctx->player_id, is_sysop);
@@ -527,7 +527,6 @@ cmd_auth_refresh (client_ctx_t *ctx, json_t *root)
     }
   else if (tok)
     {
-      int pid = 0;
       sqlite3 *dbh = db_get_handle ();
       bool is_sysop = player_is_sysop (dbh, pid);
       if (subs_upsert_locked_defaults (dbh, pid, is_sysop) != SQLITE_OK)
@@ -539,7 +538,6 @@ cmd_auth_refresh (client_ctx_t *ctx, json_t *root)
 
       /* Rotate provided token */
       char newtok[65];
-      pid = 0;
       int rc = db_session_refresh (tok, 86400, newtok, &pid);
       if (rc == SQLITE_OK)
 	{

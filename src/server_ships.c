@@ -29,6 +29,7 @@
 #include "server_rules.h"
 #include "server_players.h"
 #include "server_log.h"
+#include "server_ports.h"
 
 
 
@@ -56,20 +57,115 @@ cmd_ship_transfer_cargo (client_ctx_t *ctx, json_t *root)
 int
 cmd_ship_jettison (client_ctx_t *ctx, json_t *root)
 {
-  sqlite3 *db_handle = db_get_handle ();
-  // Actions reveal the ship
-  h_decloak_ship (db_handle,
-		  h_get_active_ship_id (db_handle, ctx->player_id));
+  sqlite3 *db = db_get_handle ();
+  json_t *data = json_object_get (root, "data");
+  json_t *payload = NULL;
+  const char *commodity = NULL;
+  int quantity = 0;
+  int player_ship_id = 0;
+  int rc = 0;
+
+  if (ctx->player_id <= 0)
+    {
+      send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+      return 0;
+    }
+
+  player_ship_id = h_get_active_ship_id (db, ctx->player_id);
+  if (player_ship_id <= 0)
+    {
+      send_enveloped_refused (ctx->fd, root, 1404, "No active ship found.", NULL);
+      return 0;
+    }
+
+  h_decloak_ship (db, player_ship_id);
 
   TurnConsumeResult tc =
-    h_consume_player_turn (db_handle, ctx, "trade.jettison");
+    h_consume_player_turn (db, ctx, "ship.jettison");
   if (tc != TURN_CONSUME_SUCCESS)
     {
-      return handle_turn_consumption_error (ctx, tc, "trade.jettison", root,
+      return handle_turn_consumption_error (ctx, tc, "ship.jettison", root,
 					    NULL);
     }
 
-  STUB_NIY (ctx, root, "ship.jettison");
+  if (!json_is_object (data))
+    {
+      send_enveloped_error (ctx->fd, root, 400, "Missing data object.");
+      return 0;
+    }
+
+  json_t *jcommodity = json_object_get (data, "commodity");
+  if (json_is_string (jcommodity))
+    commodity = json_string_value (jcommodity);
+
+  json_t *jquantity = json_object_get (data, "quantity");
+  if (json_is_integer (jquantity))
+    quantity = (int) json_integer_value (jquantity);
+
+  if (!commodity || quantity <= 0)
+    {
+      send_enveloped_error (ctx->fd, root, 400,
+                            "commodity and quantity are required, and quantity must be positive.");
+      return 0;
+    }
+
+  // Check current cargo
+  int cur_ore, cur_org, cur_eq, cur_holds;
+  if (h_get_ship_cargo_and_holds (db, player_ship_id,
+                                  &cur_ore, &cur_org, &cur_eq, &cur_holds) != SQLITE_OK)
+    {
+      send_enveloped_error (ctx->fd, root, 500, "Could not read ship cargo.");
+      return 0;
+    }
+
+  int have = 0;
+  if (strcmp (commodity, "ore") == 0)
+    have = cur_ore;
+  else if (strcmp (commodity, "organics") == 0)
+    have = cur_org;
+  else if (strcmp (commodity, "equipment") == 0)
+    have = cur_eq;
+  else
+    {
+      send_enveloped_refused (ctx->fd, root, 1405, "Unknown commodity.", NULL);
+      return 0;
+    }
+
+  if (have < quantity)
+    {
+      send_enveloped_refused (ctx->fd, root, 1402,
+                              "You do not carry enough of that commodity to jettison.",
+                              NULL);
+      return 0;
+    }
+
+  // Update ship cargo (jettisoning means negative delta)
+  int new_qty = 0;
+  rc = h_update_ship_cargo (db, player_ship_id, commodity, -quantity, &new_qty);
+  if (rc != SQLITE_OK)
+    {
+      send_enveloped_error (ctx->fd, root, 500, "Failed to update ship cargo.");
+      return 0;
+    }
+
+  // Construct response with remaining cargo
+  payload = json_object ();
+  json_t *remaining_cargo_array = json_array();
+  
+  // Re-fetch current cargo to ensure accurate remaining_cargo
+  if (h_get_ship_cargo_and_holds (db, player_ship_id,
+                                  &cur_ore, &cur_org, &cur_eq, &cur_holds) == SQLITE_OK)
+  {
+      if (cur_ore > 0) json_array_append_new(remaining_cargo_array, json_pack("{s:s, s:i}", "commodity", "ore", "quantity", cur_ore));
+      if (cur_org > 0) json_array_append_new(remaining_cargo_array, json_pack("{s:s, s:i}", "commodity", "organics", "quantity", cur_org));
+      if (cur_eq > 0) json_array_append_new(remaining_cargo_array, json_pack("{s:s, s:i}", "commodity", "equipment", "quantity", cur_eq));
+  }
+  json_object_set_new (payload, "remaining_cargo", remaining_cargo_array);
+
+  send_enveloped_ok (ctx->fd, root, "ship.jettisoned", payload);
+  json_decref (payload);
+
+  return 0;
 }
 
 int
@@ -85,17 +181,7 @@ cmd_ship_repair (client_ctx_t *ctx, json_t *root)
 }
 
 
-static void
-mark_deprecated (json_t *res)
-{
-  json_t *meta = json_object_get (res, "meta");
-  if (!meta)
-    {
-      meta = json_object ();
-      json_object_set_new (res, "meta", meta);
-    }
-  json_object_set_new (meta, "deprecated", json_true ());
-}
+
 
 
 /* ship.inspect */
@@ -328,9 +414,7 @@ cmd_ship_self_destruct (client_ctx_t *ctx, json_t *root)
 {
   int confirmation = 0;
   json_t *evt = NULL;
-  sqlite3 *db = db_get_handle ();
 
-  /* 1. Get and validate confirmation payload for heavy confirmation */
   json_t *data = json_object_get (root, "data");
   if (!data || json_unpack (data, "{s:i}", "confirmation", &confirmation) != 0
       || confirmation == 0)

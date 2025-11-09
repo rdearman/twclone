@@ -37,11 +37,15 @@ static int create_derelicts (void);
 static int ensure_fedspace_exit (sqlite3 * db, int outer_min, int outer_max,
 				 int add_return_edge);
 
+/*
 static const char *SQL_INSERT_WARP =
   "INSERT OR IGNORE INTO sector_warps(from_sector, to_sector) VALUES(?,?)";
+*/
 
+/*
 static const char *SQL_INSERT_USED_SECTOR =
   "INSERT INTO used_sectors(used) VALUES(?)";
+*/
 
 // static int get_out_degree (sqlite3 * db, int sector);
 static int insert_warp_unique (sqlite3 * db, int from, int to);
@@ -656,6 +660,7 @@ create_sectors (void)
 /* ----------------------------------------------------
  * Port creation (placeholder — keep your original behaviour)
  * ---------------------------------------------------- */
+/*
 static const char *
 trade_code_for_type (int t)
 {
@@ -681,6 +686,7 @@ trade_code_for_type (int t)
       return "???";
     }
 }
+*/
 
 static int
 random_port_type_1_to_8 (void)
@@ -688,6 +694,7 @@ random_port_type_1_to_8 (void)
   return 1 + (rand () % 8);
 }
 
+/*
 static int
 seed_port_trade_rows (sqlite3 *db, int port_id, int type)
 {
@@ -696,6 +703,7 @@ seed_port_trade_rows (sqlite3 *db, int port_id, int type)
   (void) type;
   return 0;
 }
+*/
 
 /* ----------------------------------------------------
  * Orchestration
@@ -871,6 +879,7 @@ sector_degree_in_memory (const Warp *warps, int warp_count, int sector_id)
 /* ------- tunnel helpers ------- */
 
 
+/*
 static int
 sw_add_edge (sqlite3 *db, int a, int b)
 {
@@ -888,9 +897,11 @@ sw_add_edge (sqlite3 *db, int a, int b)
   int rc = sqlite3_step (ins);
   return (rc == SQLITE_DONE || rc == SQLITE_OK) ? SQLITE_OK : rc;
 }
+*/
 
 
 /* Pick a random sector in [lo,hi] that isn't equal to 'avoid' and exists in sectors */
+/*
 static int
 pick_sector_in_range (sqlite3 *db, int lo, int hi, int avoid,
 		      int max_attempts)
@@ -915,6 +926,7 @@ pick_sector_in_range (sqlite3 *db, int lo, int hi, int avoid,
     }
   return 0;
 }
+*/
 
 /************* Tunneling *******************/
 
@@ -1933,6 +1945,7 @@ create_imperial (void)
 
 /* /\* ---------- small helpers ---------- *\/ */
 
+/*
 static int
 prepare_first_ok (sqlite3 *db, sqlite3_stmt **stmt,
 		  const char *const *candidates)
@@ -1944,6 +1957,7 @@ prepare_first_ok (sqlite3 *db, sqlite3_stmt **stmt,
     }
   return SQLITE_ERROR;
 }
+*/
 
 /* /\* Check if a sector exists *\/ */
 /* static int */

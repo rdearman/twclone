@@ -710,6 +710,7 @@
                 "status": "ok",
                 "type": "combat.fighters.deployed",
                 "data": {
+                    "asset_id": "*int",
                     "sector_id": "*int",
                     "owner_player_id": "*int",
                     "owner_corp_id": "*null_or_int",
@@ -718,7 +719,11 @@
                     "sector_total_after": "*int"
                 }
             },
+            "capture": {
+                "deployedFighterAssetId": "data.asset_id"
+            },
             "asserts": [
+                { "path": "data.asset_id", "op": ">", "value": 0 },
                 { "path": "data.sector_id", "op": ">", "value": 0 },
                 { "path": "data.owner_player_id", "op": ">", "value": 0 },
                 { "path": "data.sector_total_after", "op": ">=", "value": 10 }
@@ -754,6 +759,45 @@
                 { "path": "data.entries.0.offense_mode", "op": "==", "value": 2 },
                 { "path": "data.entries.0.player_id", "op": ">", "value": 0 },
                 { "path": "data.entries.0.type", "op": "==", "value": 2 }
+            ]
+        },
+        {
+            "name": "fighters.recall (recall 5 fighters)",
+            "cmd": "fighters.recall",
+            "data": {
+                "sector_id": "@curSector",
+                "asset_id": "@deployedFighterAssetId"
+            },
+            "expect": {
+                "status": "ok",
+                "type": "fighters.recalled",
+                "data": {
+                    "sector_id": "@curSector",
+                    "asset_id": "@deployedFighterAssetId",
+                    "recalled": 10,
+                    "remaining_in_sector": 0,
+                    "mode": "*string"
+                }
+            },
+            "asserts": [
+                { "path": "data.recalled", "op": "==", "value": 10 },
+                { "path": "data.remaining_in_sector", "op": "==", "value": 0 }
+            ]
+        },
+        {
+            "name": "deploy.fighters.list (verify no deployed fighters after recall)",
+            "cmd": "deploy.fighters.list",
+            "data": {},
+            "expect": {
+                "status": "ok",
+                "type": "Deploy.fighters.list_v1",
+                "data": {
+                    "total": 0,
+                    "entries": []
+                }
+            },
+            "asserts": [
+                { "path": "data.total", "op": "==", "value": 0 }
             ]
         }
 	

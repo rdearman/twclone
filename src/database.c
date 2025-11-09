@@ -416,7 +416,7 @@ const char *create_table_sql[] = {
     " name TEXT NOT NULL,  " " passwd TEXT NOT NULL,  "	/* hashed password */
     " sector INTEGER,  "	/* 0 if in a ship */
     " ship INTEGER,  "		/* ship number */
-    " experience INTEGER,  " " alignment INTEGER,  " " credits INTEGER,  " " bank_balance INTEGER,  " " flags INTEGER,  "	/* bitfield: P_LOGGEDIN, P_STARDOCK, etc. */
+    " experience INTEGER,  " " alignment INTEGER,  " " credits INTEGER,  " " flags INTEGER,  "	/* bitfield: P_LOGGEDIN, P_STARDOCK, etc. */
     " lastprice INTEGER,  " " firstprice INTEGER,  " " integrity INTEGER,  " " login_time INTEGER,  " " last_update INTEGER,  " " intransit INTEGER,  "	/* 0/1 boolean */
     " beginmove INTEGER,  "	/* timestamp */
     " movingto INTEGER,  "	/* sector destination */
@@ -2917,7 +2917,8 @@ db_insert_defaults_unlocked (void)
       if (sqlite3_exec (db, insert_default_sql[i], NULL, NULL, &errmsg) !=
 	  SQLITE_OK)
 	{
-	  fprintf (stderr, "DB insert_defaults error (%zu): %s\n", i, errmsg);
+	  LOGE ("DB insert_defaults error (%zu): %s", i, errmsg);
+	  LOGE ("Failing SQL: %s", insert_default_sql[i]);
 	  goto cleanup;
 	}
     }
