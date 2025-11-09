@@ -1,4 +1,5 @@
-#pragma once
+#ifndef SERVER_CRON_H
+#define SERVER_CRON_H
 #include <sqlite3.h>
 #include <stdint.h>
 #include <jansson.h>
@@ -23,7 +24,10 @@ int h_daily_turn_reset (sqlite3 * db, int64_t now_s);
 int h_terra_replenish (sqlite3 * db, int64_t now_s);
 int h_port_reprice (sqlite3 * db, int64_t now_s);
 int h_reset_turns_for_player (sqlite3 * db, int64_t now_s);
-int h_port_price_drift (sqlite3 * db, int64_t now_s);
-int h_news_collator (void);
+int h_port_price_drift (sqlite3 *db, int64_t now_s);
+int h_news_collator (sqlite3 *db, int64_t now_s);
+int h_daily_market_settlement (sqlite3 *db, int64_t now_s);
 int h_log_engine_event (const char *type, int actor_player_id, int sector_id,
 			json_t * payload, const char *idem_key);
+
+#endif /* SERVER_CRON_H */

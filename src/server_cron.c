@@ -14,6 +14,8 @@
 #include "common.h"
 #include "server_players.h"
 #include "server_universe.h"
+#include "server_ports.h" // Added for port commodity functions
+#include "server_planets.h" // Added for planet commodity functions
 
 #define INITIAL_QUEUE_CAPACITY 64
 #define FEDSPACE_SECTOR_START 1
@@ -94,6 +96,7 @@ static entry_t REG[] = {
   {"npc_step", h_npc_step},
   {"port_price_drift", h_port_price_drift},
   {"news_collator", h_news_collator},
+  {"daily_market_settlement", h_daily_market_settlement},
 };
 
 static int g_reg_inited = 0;
@@ -1986,6 +1989,567 @@ format_large_sale_news (json_t *payload, int actor_player_id,
 }
 
 
+int
+h_daily_market_settlement (sqlite3 *db, int64_t now_s)
+{
+  if (!try_lock (db, "daily_market_settlement", now_s))
+    return 0;
+
+  LOGI ("daily_market_settlement: Starting daily market settlement.");
+
+  int rc = begin (db);
+  if (rc)
+    {
+      unlock (db, "daily_market_settlement");
+      return rc;
+    }
+
+  // 1. Planet Production
+  // Call h_planet_growth to update planet resources.
+  LOGI ("daily_market_settlement: Running planet growth.");
+  rc = h_planet_growth(db, now_s);
+  if (rc != SQLITE_OK) {
+      LOGE ("daily_market_settlement: h_planet_growth failed: %s", sqlite3_errmsg (db));
+      rollback (db);
+      unlock (db, "daily_market_settlement");
+      return rc;
+  }
+
+  // 2. AI Order Placement (NPC Planets)
+  LOGI ("daily_market_settlement: Processing AI Order Placement for NPC Planets.");
+
+  sqlite3_stmt *npc_planet_stmt = NULL;
+  const char *sql_select_npc_planets =
+      "SELECT id, sector, owner_player_id, population, type, "
+      "ore_on_hand, organics_on_hand, equipment_on_hand, fuel_on_hand "
+      "FROM planets WHERE owner_player_id = 0;";
+
+  rc = sqlite3_prepare_v2(db, sql_select_npc_planets, -1, &npc_planet_stmt, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("daily_market_settlement: Failed to prepare NPC planet select statement: %s", sqlite3_errmsg(db));
+      rollback(db);
+      unlock(db, "daily_market_settlement");
+      return rc;
+  }
+
+  while (sqlite3_step(npc_planet_stmt) == SQLITE_ROW) {
+      int planet_id = sqlite3_column_int(npc_planet_stmt, 0);
+      // int sector_id = sqlite3_column_int(npc_planet_stmt, 1);
+      // int owner_player_id = sqlite3_column_int(npc_planet_stmt, 2); // Should be 0
+      // ... other planet data if needed later
+
+      LOGI("daily_market_settlement: Processing NPC Planet ID: %d", planet_id);
+
+      sqlite3_stmt *planet_goods_stmt = NULL;
+      const char *sql_select_planet_goods =
+          "SELECT commodity, quantity, max_capacity, production_rate FROM planet_goods WHERE planet_id = ?;";
+      rc = sqlite3_prepare_v2(db, sql_select_planet_goods, -1, &planet_goods_stmt, NULL);
+      if (rc != SQLITE_OK) {
+          LOGE("daily_market_settlement: Failed to prepare planet_goods select statement for planet %d: %s", planet_id, sqlite3_errmsg(db));
+          sqlite3_finalize(npc_planet_stmt);
+          rollback(db);
+          unlock(db, "daily_market_settlement");
+          return rc;
+      }
+      sqlite3_bind_int(planet_goods_stmt, 1, planet_id);
+
+      sqlite3_stmt *commodity_info_stmt = NULL;
+      const char *sql_select_commodity_info =
+          "SELECT id, code, base_price, volatility FROM commodities WHERE code = ?;";
+      rc = sqlite3_prepare_v2(db, sql_select_commodity_info, -1, &commodity_info_stmt, NULL);
+      if (rc != SQLITE_OK) {
+          LOGE("daily_market_settlement: Failed to prepare commodity_info select statement for planet %d: %s", planet_id, sqlite3_errmsg(db));
+          sqlite3_finalize(planet_goods_stmt);
+          sqlite3_finalize(npc_planet_stmt);
+          rollback(db);
+          unlock(db, "daily_market_settlement");
+          return rc;
+      }
+
+      sqlite3_stmt *insert_order_stmt = NULL;
+      const char *sql_insert_order =
+          "INSERT INTO commodity_orders (actor_type, actor_id, location_type, location_id, commodity_id, side, quantity, price, status, ts) "
+          "VALUES ('npc_planet', ?, 'planet', ?, ?, ?, ?, ?, 'open', ?);";
+      rc = sqlite3_prepare_v2(db, sql_insert_order, -1, &insert_order_stmt, NULL);
+      if (rc != SQLITE_OK) {
+          LOGE("daily_market_settlement: Failed to prepare insert_order statement for planet %d: %s", planet_id, sqlite3_errmsg(db));
+          sqlite3_finalize(commodity_info_stmt);
+          sqlite3_finalize(planet_goods_stmt);
+          sqlite3_finalize(npc_planet_stmt);
+          rollback(db);
+          unlock(db, "daily_market_settlement");
+          return rc;
+      }
+
+      while (sqlite3_step(planet_goods_stmt) == SQLITE_ROW) {
+          const char *commodity_code = (const char *)sqlite3_column_text(planet_goods_stmt, 0);
+          int current_quantity = sqlite3_column_int(planet_goods_stmt, 1);
+          int max_capacity = sqlite3_column_int(planet_goods_stmt, 2);
+          int production_rate = sqlite3_column_int(planet_goods_stmt, 3);
+
+          sqlite3_reset(commodity_info_stmt);
+          sqlite3_bind_text(commodity_info_stmt, 1, commodity_code, -1, SQLITE_STATIC);
+          if (sqlite3_step(commodity_info_stmt) != SQLITE_ROW) {
+              LOGW("daily_market_settlement: Commodity info not found for code %s on planet %d", commodity_code, planet_id);
+              continue;
+          }
+          int commodity_id = sqlite3_column_int(commodity_info_stmt, 0);
+          double base_price = sqlite3_column_double(commodity_info_stmt, 2);
+          // double volatility = sqlite3_column_double(commodity_info_stmt, 3); // Not used for now
+
+          int order_quantity = 0;
+          double order_price = 0.0;
+          const char *order_side = NULL;
+
+          // Sell condition: production_rate > 0 and quantity > 80% of max_capacity
+          if (production_rate > 0 && current_quantity > (0.8 * max_capacity)) {
+              order_side = "sell";
+              order_quantity = current_quantity - (0.5 * max_capacity); // Sell excess above half capacity
+              order_price = base_price * 0.9; // Sell slightly below base price
+          }
+          // Buy condition: production_rate < 0 and quantity < 20% of max_capacity
+          else if (production_rate < 0 && current_quantity < (0.2 * max_capacity)) {
+              order_side = "buy";
+              order_quantity = (0.5 * max_capacity) - current_quantity; // Buy up to half capacity
+              order_price = base_price * 1.1; // Buy slightly above base price
+          }
+
+          if (order_quantity > 0 && order_side != NULL) {
+              LOGI("daily_market_settlement: Planet %d placing %s order for %d units of %s at %.2f credits.",
+                   planet_id, order_side, order_quantity, commodity_code, order_price);
+
+              sqlite3_reset(insert_order_stmt);
+              sqlite3_bind_int(insert_order_stmt, 1, planet_id);
+              sqlite3_bind_int(insert_order_stmt, 2, planet_id);
+              sqlite3_bind_int(insert_order_stmt, 3, commodity_id);
+              sqlite3_bind_text(insert_order_stmt, 4, order_side, -1, SQLITE_STATIC);
+              sqlite3_bind_int(insert_order_stmt, 5, order_quantity);
+              sqlite3_bind_double(insert_order_stmt, 6, order_price);
+              sqlite3_bind_int64(insert_order_stmt, 7, now_s);
+
+              if (sqlite3_step(insert_order_stmt) != SQLITE_DONE) {
+                  LOGE("daily_market_settlement: Failed to insert order for planet %d, commodity %s: %s", planet_id, commodity_code, sqlite3_errmsg(db));
+              }
+          }
+      }
+      sqlite3_finalize(insert_order_stmt);
+      insert_order_stmt = NULL;
+      sqlite3_finalize(commodity_info_stmt);
+      commodity_info_stmt = NULL;
+      sqlite3_finalize(planet_goods_stmt);
+      planet_goods_stmt = NULL;
+  }
+  sqlite3_finalize(npc_planet_stmt);
+  npc_planet_stmt = NULL;
+
+  // 3. AI Order Placement (Ports)
+  LOGI ("daily_market_settlement: Processing AI Order Placement for Ports.");
+
+  sqlite3_stmt *port_stmt = NULL;
+  const char *sql_select_ports =
+      "SELECT id, sector, techlevel, "
+      "ore_on_hand, organics_on_hand, equipment_on_hand, fuel_on_hand, "
+      "max_ore, max_organics, max_equipment, max_fuel "
+      "FROM ports;";
+
+  rc = sqlite3_prepare_v2(db, sql_select_ports, -1, &port_stmt, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("daily_market_settlement: Failed to prepare port select statement: %s", sqlite3_errmsg(db));
+      rollback(db);
+      unlock(db, "daily_market_settlement");
+      return rc;
+  }
+
+  while (sqlite3_step(port_stmt) == SQLITE_ROW) {
+      int port_id = sqlite3_column_int(port_stmt, 0);
+      // int sector_id = sqlite3_column_int(port_stmt, 1);
+      // int techlevel = sqlite3_column_int(port_stmt, 2);
+      // ... other port data if needed later
+
+      LOGI("daily_market_settlement: Processing Port ID: %d", port_id);
+
+      // Get commodity info statement (re-use from planet logic)
+      sqlite3_stmt *commodity_info_stmt = NULL;
+      const char *sql_select_commodity_info =
+          "SELECT id, code, base_price, volatility FROM commodities WHERE code = ?;";
+      rc = sqlite3_prepare_v2(db, sql_select_commodity_info, -1, &commodity_info_stmt, NULL);
+      if (rc != SQLITE_OK) {
+          LOGE("daily_market_settlement: Failed to prepare commodity_info select statement for port %d: %s", port_id, sqlite3_errmsg(db));
+          sqlite3_finalize(port_stmt);
+          rollback(db);
+          unlock(db, "daily_market_settlement");
+          return rc;
+      }
+
+      // Insert order statement (re-use from planet logic, but with actor_type='port')
+      sqlite3_stmt *insert_order_stmt = NULL;
+      const char *sql_insert_order =
+          "INSERT INTO commodity_orders (actor_type, actor_id, location_type, location_id, commodity_id, side, quantity, price, status, ts) "
+          "VALUES ('port', ?, 'port', ?, ?, ?, ?, ?, 'open', ?);";
+      rc = sqlite3_prepare_v2(db, sql_insert_order, -1, &insert_order_stmt, NULL);
+      if (rc != SQLITE_OK) {
+          LOGE("daily_market_settlement: Failed to prepare insert_order statement for port %d: %s", port_id, sqlite3_errmsg(db));
+          sqlite3_finalize(commodity_info_stmt);
+          sqlite3_finalize(port_stmt);
+          rollback(db);
+          unlock(db, "daily_market_settlement");
+          return rc;
+      }
+
+      // Iterate through commodities for the current port
+      const char *commodities[] = {"ore", "organics", "equipment", "fuel"};
+      int on_hand_cols[] = {3, 4, 5, 6}; // Indices for ore_on_hand, organics_on_hand, etc.
+      int max_capacity_cols[] = {7, 8, 9, 10}; // Indices for max_ore, max_organics, etc.
+
+      for (int i = 0; i < sizeof(commodities) / sizeof(commodities[0]); ++i) {
+          const char *commodity_code = commodities[i];
+          int current_on_hand = sqlite3_column_int(port_stmt, on_hand_cols[i]);
+          int max_capacity = sqlite3_column_int(port_stmt, max_capacity_cols[i]);
+
+          sqlite3_reset(commodity_info_stmt);
+          sqlite3_bind_text(commodity_info_stmt, 1, commodity_code, -1, SQLITE_STATIC);
+          if (sqlite3_step(commodity_info_stmt) != SQLITE_ROW) {
+              LOGW("daily_market_settlement: Commodity info not found for code %s on port %d", commodity_code, port_id);
+              continue;
+          }
+          int commodity_id = sqlite3_column_int(commodity_info_stmt, 0);
+          double base_price = sqlite3_column_double(commodity_info_stmt, 2);
+
+          int order_quantity = 0;
+          double order_price = 0.0;
+          const char *order_side = NULL;
+
+          // Sell condition: on_hand > 80% of max_capacity
+          if (current_on_hand > (0.8 * max_capacity)) {
+              order_side = "sell";
+              order_quantity = current_on_hand - (0.5 * max_capacity); // Sell excess above half capacity
+              order_price = base_price * 0.9; // Sell slightly below base price
+          }
+          // Buy condition: on_hand < 20% of max_capacity
+          else if (current_on_hand < (0.2 * max_capacity)) {
+              order_side = "buy";
+              order_quantity = (0.5 * max_capacity) - current_on_hand; // Buy up to half capacity
+              order_price = base_price * 1.1; // Buy slightly above base price
+          }
+
+          if (order_quantity > 0 && order_side != NULL) {
+              LOGI("daily_market_settlement: Port %d placing %s order for %d units of %s at %.2f credits.",
+                   port_id, order_side, order_quantity, commodity_code, order_price);
+
+              sqlite3_reset(insert_order_stmt);
+              sqlite3_bind_int(insert_order_stmt, 1, port_id);
+              sqlite3_bind_int(insert_order_stmt, 2, port_id);
+              sqlite3_bind_int(insert_order_stmt, 3, commodity_id);
+              sqlite3_bind_text(insert_order_stmt, 4, order_side, -1, SQLITE_STATIC);
+              sqlite3_bind_int(insert_order_stmt, 5, order_quantity);
+              sqlite3_bind_double(insert_order_stmt, 6, order_price);
+              sqlite3_bind_int64(insert_order_stmt, 7, now_s);
+
+              if (sqlite3_step(insert_order_stmt) != SQLITE_DONE) {
+                  LOGE("daily_market_settlement: Failed to insert order for port %d, commodity %s: %s", port_id, commodity_code, sqlite3_errmsg(db));
+              }
+          }
+      }
+      sqlite3_finalize(insert_order_stmt);
+      insert_order_stmt = NULL;
+      sqlite3_finalize(commodity_info_stmt);
+      commodity_info_stmt = NULL;
+  }
+  sqlite3_finalize(port_stmt);
+  port_stmt = NULL;
+
+  // 4. Order Matching Engine and Trade Execution
+  LOGI ("daily_market_settlement: Starting Order Matching Engine and Trade Execution.");
+
+  sqlite3_stmt *buy_orders_stmt = NULL;
+  const char *sql_select_buy_orders =
+      "SELECT id, actor_type, actor_id, location_type, location_id, commodity_id, quantity, price "
+      "FROM commodity_orders WHERE side = 'buy' AND status = 'open' ORDER BY price DESC, ts ASC;"; // Highest price first, then oldest
+
+  rc = sqlite3_prepare_v2(db, sql_select_buy_orders, -1, &buy_orders_stmt, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("daily_market_settlement: Failed to prepare buy orders select statement: %s", sqlite3_errmsg(db));
+      rollback(db);
+      unlock(db, "daily_market_settlement");
+      return rc;
+  }
+
+  sqlite3_stmt *sell_orders_stmt = NULL;
+  const char *sql_select_sell_orders =
+      "SELECT id, actor_type, actor_id, location_type, location_id, commodity_id, quantity, price "
+      "FROM commodity_orders WHERE side = 'sell' AND status = 'open' ORDER BY price ASC, ts ASC;"; // Lowest price first, then oldest
+
+  rc = sqlite3_prepare_v2(db, sql_select_sell_orders, -1, &sell_orders_stmt, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("daily_market_settlement: Failed to prepare sell orders select statement: %s", sqlite3_errmsg(db));
+      sqlite3_finalize(buy_orders_stmt);
+      rollback(db);
+      unlock(db, "daily_market_settlement");
+      return rc;
+  }
+
+  // TODO: Implement the matching and execution logic here.
+
+  sqlite3_finalize(sell_orders_stmt);
+  sell_orders_stmt = NULL;
+
+  // Store buy orders in memory to iterate against sell orders
+  // This is a simplified approach; for very large numbers of orders,
+  // a more sophisticated in-memory data structure or a different matching algorithm would be needed.
+  // For now, we'll re-fetch sell orders for each buy order, which is inefficient but simpler to implement.
+
+  // Fetch all buy orders into a temporary structure or re-iterate the statement
+  // For simplicity, we'll just iterate the buy_orders_stmt directly and reset sell_orders_stmt for each.
+  // This is not optimal for performance but is clear for initial implementation.
+
+  sqlite3_stmt *update_order_stmt = NULL;
+  const char *sql_update_order =
+      "UPDATE commodity_orders SET quantity = ?, status = ? WHERE id = ?;";
+  rc = sqlite3_prepare_v2(db, sql_update_order, -1, &update_order_stmt, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("daily_market_settlement: Failed to prepare update order statement: %s", sqlite3_errmsg(db));
+      sqlite3_finalize(buy_orders_stmt);
+      sqlite3_finalize(sell_orders_stmt);
+      rollback(db);
+      unlock(db, "daily_market_settlement");
+      return rc;
+  }
+
+  while (sqlite3_step(buy_orders_stmt) == SQLITE_ROW) {
+      // Extract buy order details
+      int buy_order_id = sqlite3_column_int(buy_orders_stmt, 0);
+      const char *buyer_actor_type = (const char *)sqlite3_column_text(buy_orders_stmt, 1);
+      int buyer_actor_id = sqlite3_column_int(buy_orders_stmt, 2);
+      // const char *buyer_location_type = (const char *)sqlite3_column_text(buy_orders_stmt, 3);
+      // int buyer_location_id = sqlite3_column_int(buy_orders_stmt, 4);
+      int buy_commodity_id = sqlite3_column_int(buy_orders_stmt, 5);
+      int buy_quantity = sqlite3_column_int(buy_orders_stmt, 6);
+      double buy_price = sqlite3_column_double(buy_orders_stmt, 7);
+
+      // Reset sell orders statement for each buy order
+      sqlite3_reset(sell_orders_stmt);
+
+      while (sqlite3_step(sell_orders_stmt) == SQLITE_ROW) {
+          // Extract sell order details
+          int sell_order_id = sqlite3_column_int(sell_orders_stmt, 0);
+          const char *seller_actor_type = (const char *)sqlite3_column_text(sell_orders_stmt, 1);
+          int seller_actor_id = sqlite3_column_int(sell_orders_stmt, 2);
+          // const char *seller_location_type = (const char *)sqlite3_column_text(sell_orders_stmt, 3);
+          // int seller_location_id = sqlite3_column_int(sell_orders_stmt, 4);
+          int sell_commodity_id = sqlite3_column_int(sell_orders_stmt, 5);
+          int sell_quantity = sqlite3_column_int(sell_orders_stmt, 6);
+          double sell_price = sqlite3_column_double(sell_orders_stmt, 7);
+
+          // Check for match conditions
+          if (buy_commodity_id == sell_commodity_id && buy_price >= sell_price) {
+              // Match found!
+              int trade_quantity = (buy_quantity < sell_quantity) ? buy_quantity : sell_quantity;
+              double trade_price = sell_price; // Buyer pays seller's price
+
+              LOGI("daily_market_settlement: Trade found! Buy Order %d (qty %d @ %.2f) matched Sell Order %d (qty %d @ %.2f). Trading %d units at %.2f.",
+                   buy_order_id, buy_quantity, buy_price, sell_order_id, sell_quantity, trade_quantity, trade_price);
+
+              // --- Execute Trade ---
+
+              // 1. Transfer Credits
+              long long new_balance; // Declare a variable to hold the new balance
+
+              // Deduct from buyer
+              h_deduct_credits(db, buyer_actor_type, buyer_actor_id, (int64_t)(trade_quantity * trade_price), &new_balance);
+              // Add to seller
+              h_add_credits(db, seller_actor_type, seller_actor_id, (int64_t)(trade_quantity * trade_price), &new_balance);
+
+              // 2. Transfer Commodities (This is the complex part, needs helper functions)
+              // I'll need helper functions like h_deduct_commodity and h_add_commodity
+              // For now, I'll just log that this needs to be done.
+              // 2. Transfer Commodities
+              // Get commodity code from commodity_id
+              sqlite3_stmt *get_commodity_code_stmt = NULL;
+              const char *sql_get_commodity_code = "SELECT code FROM commodities WHERE id = ?;";
+              rc = sqlite3_prepare_v2(db, sql_get_commodity_code, -1, &get_commodity_code_stmt, NULL);
+              if (rc != SQLITE_OK) {
+                  LOGE("daily_market_settlement: Failed to prepare get_commodity_code_stmt: %s", sqlite3_errmsg(db));
+                  // Handle error, potentially rollback and unlock
+                  sqlite3_finalize(get_commodity_code_stmt);
+                  sqlite3_finalize(update_order_stmt);
+                  sqlite3_finalize(buy_orders_stmt);
+                  sqlite3_finalize(sell_orders_stmt);
+                  rollback(db);
+                  unlock(db, "daily_market_settlement");
+                  return rc;
+              }
+              sqlite3_bind_int(get_commodity_code_stmt, 1, buy_commodity_id);
+              if (sqlite3_step(get_commodity_code_stmt) != SQLITE_ROW) {
+                  LOGE("daily_market_settlement: Commodity code not found for ID %d", buy_commodity_id);
+                  // Handle error
+                  sqlite3_finalize(get_commodity_code_stmt);
+                  sqlite3_finalize(update_order_stmt);
+                  sqlite3_finalize(buy_orders_stmt);
+                  sqlite3_finalize(sell_orders_stmt);
+                  rollback(db);
+                  unlock(db, "daily_market_settlement");
+                  return rc;
+              }
+              const char *commodity_code = (const char *)sqlite3_column_text(get_commodity_code_stmt, 0);
+              sqlite3_finalize(get_commodity_code_stmt);
+
+              int dummy_qty; // For new_qty_out parameter
+
+              // Deduct from seller
+              if (strcmp(seller_actor_type, "player") == 0) {
+                  h_update_ship_cargo(db, seller_actor_id, commodity_code, -trade_quantity, &dummy_qty);
+              } else if (strcmp(seller_actor_type, "port") == 0) {
+                  h_update_port_stock(db, seller_actor_id, commodity_code, -trade_quantity, &dummy_qty);
+              } else if (strcmp(seller_actor_type, "npc_planet") == 0) {
+                  h_update_planet_stock(db, seller_actor_id, commodity_code, -trade_quantity, &dummy_qty);
+              } else {
+                  LOGE("daily_market_settlement: Unknown seller_actor_type: %s", seller_actor_type);
+              }
+
+              // Add to buyer
+              if (strcmp(buyer_actor_type, "player") == 0) {
+                  h_update_ship_cargo(db, buyer_actor_id, commodity_code, trade_quantity, &dummy_qty);
+              } else if (strcmp(buyer_actor_type, "port") == 0) {
+                  h_update_port_stock(db, buyer_actor_id, commodity_code, trade_quantity, &dummy_qty);
+              } else if (strcmp(buyer_actor_type, "npc_planet") == 0) {
+                  h_update_planet_stock(db, buyer_actor_id, commodity_code, trade_quantity, &dummy_qty);
+              } else {
+                  LOGE("daily_market_settlement: Unknown buyer_actor_type: %s", buyer_actor_type);
+              }
+
+
+              // 3. Update Order Status and Quantities
+              // Update buy order
+              buy_quantity -= trade_quantity;
+              sqlite3_reset(update_order_stmt);
+              sqlite3_bind_int(update_order_stmt, 1, buy_quantity);
+              sqlite3_bind_text(update_order_stmt, 2, (buy_quantity == 0) ? "filled" : "open", -1, SQLITE_STATIC);
+              sqlite3_bind_int(update_order_stmt, 3, buy_order_id);
+              if (sqlite3_step(update_order_stmt) != SQLITE_DONE) {
+                  LOGE("daily_market_settlement: Failed to update buy order %d: %s", buy_order_id, sqlite3_errmsg(db));
+              }
+
+              // Update sell order
+              sell_quantity -= trade_quantity;
+              sqlite3_reset(update_order_stmt);
+              sqlite3_bind_int(update_order_stmt, 1, sell_quantity);
+              sqlite3_bind_text(update_order_stmt, 2, (sell_quantity == 0) ? "filled" : "open", -1, SQLITE_STATIC);
+              sqlite3_bind_int(update_order_stmt, 3, sell_order_id);
+              if (sqlite3_step(update_order_stmt) != SQLITE_DONE) {
+                  LOGE("daily_market_settlement: Failed to update sell order %d: %s", sell_order_id, sqlite3_errmsg(db));
+              }
+
+              // If buy order is filled, break from inner loop to get next buy order
+              if (buy_quantity == 0) {
+                  break;
+              }
+          }
+      }
+  }
+
+  sqlite3_finalize(update_order_stmt);
+  update_order_stmt = NULL;
+
+  sqlite3_finalize(buy_orders_stmt);
+  buy_orders_stmt = NULL;
+  sqlite3_finalize(sell_orders_stmt);
+  sell_orders_stmt = NULL;
+
+  // 5. Unmatched Order Adjustment/Cancellation
+  LOGI ("daily_market_settlement: Cancelling unmatched orders.");
+
+  sqlite3_stmt *cancel_orders_stmt = NULL;
+  const char *sql_cancel_orders =
+      "UPDATE commodity_orders SET status = 'cancelled' WHERE status = 'open';";
+
+  rc = sqlite3_prepare_v2(db, sql_cancel_orders, -1, &cancel_orders_stmt, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("daily_market_settlement: Failed to prepare cancel orders statement: %s", sqlite3_errmsg(db));
+      rollback(db);
+      unlock(db, "daily_market_settlement");
+      return rc;
+  }
+
+  if (sqlite3_step(cancel_orders_stmt) != SQLITE_DONE) {
+      LOGE("daily_market_settlement: Failed to cancel unmatched orders: %s", sqlite3_errmsg(db));
+  }
+  sqlite3_finalize(cancel_orders_stmt);
+  cancel_orders_stmt = NULL;
+
+  // 6. Citadel Construction Progress
+  LOGI ("daily_market_settlement: Checking Citadel Construction Progress.");
+
+  sqlite3_stmt *citadel_stmt = NULL;
+  const char *sql_select_completed_citadels =
+      "SELECT id, planet_id, target_level, owner FROM citadels "
+      "WHERE (construction_status = 'building' OR construction_status = 'upgrading') "
+      "AND construction_end_time <= ?;";
+
+  rc = sqlite3_prepare_v2(db, sql_select_completed_citadels, -1, &citadel_stmt, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("daily_market_settlement: Failed to prepare citadel select statement: %s", sqlite3_errmsg(db));
+      rollback(db);
+      unlock(db, "daily_market_settlement");
+      return rc;
+  }
+  sqlite3_bind_int64(citadel_stmt, 1, now_s);
+
+  sqlite3_stmt *update_citadel_stmt = NULL;
+  const char *sql_update_citadel =
+      "UPDATE citadels SET level = ?, construction_start_time = 0, "
+      "construction_end_time = 0, target_level = 0, construction_status = 'idle' "
+      "WHERE id = ?;";
+  rc = sqlite3_prepare_v2(db, sql_update_citadel, -1, &update_citadel_stmt, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("daily_market_settlement: Failed to prepare citadel update statement: %s", sqlite3_errmsg(db));
+      sqlite3_finalize(citadel_stmt);
+      rollback(db);
+      unlock(db, "daily_market_settlement");
+      return rc;
+  }
+
+  while (sqlite3_step(citadel_stmt) == SQLITE_ROW) {
+      int citadel_id = sqlite3_column_int(citadel_stmt, 0);
+      int planet_id = sqlite3_column_int(citadel_stmt, 1);
+      int target_level = sqlite3_column_int(citadel_stmt, 2);
+      int owner_id = sqlite3_column_int(citadel_stmt, 3);
+
+      LOGI("daily_market_settlement: Completing Citadel ID %d (Planet %d) to Level %d for Player %d.",
+           citadel_id, planet_id, target_level, owner_id);
+
+      sqlite3_reset(update_citadel_stmt);
+      sqlite3_bind_int(update_citadel_stmt, 1, target_level);
+      sqlite3_bind_int(update_citadel_stmt, 2, citadel_id);
+
+      if (sqlite3_step(update_citadel_stmt) != SQLITE_DONE) {
+          LOGE("daily_market_settlement: Failed to update citadel %d: %s", citadel_id, sqlite3_errmsg(db));
+      } else {
+          // Optional: Send notification to player
+          char message_buffer[256];
+          snprintf(message_buffer, sizeof(message_buffer),
+                   "Your Citadel on Planet %d has completed construction and is now Level %d!",
+                   planet_id, target_level);
+          h_send_message_to_player(owner_id, 0, "Citadel Construction Complete", message_buffer);
+      }
+  }
+  sqlite3_finalize(citadel_stmt);
+  citadel_stmt = NULL;
+  sqlite3_finalize(update_citadel_stmt);
+  update_citadel_stmt = NULL;
+
+  rc = commit (db);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("daily_market_settlement: commit failed: %s", sqlite3_errmsg (db));
+    }
+
+  LOGI ("daily_market_settlement: ok");
+  unlock (db, "daily_market_settlement");
+  return rc;
+}
+
+
+
 /**
  * @brief Dispatches event to the appropriate formatter function.
  * @return 1 if successfully collated and published, 0 otherwise.
@@ -2063,9 +2627,8 @@ collate_single_event (sqlite3_stmt *insert_stmt, sqlite3_int64 event_id,
 // --- Main Cron Handler ---
 
 int
-h_news_collator (void)
+h_news_collator (sqlite3 *db, int64_t now_s)
 {
-  sqlite3 *db = db_get_handle ();
   sqlite3_stmt *select_stmt = NULL;
   sqlite3_stmt *insert_stmt = NULL;
   int rc = SQLITE_OK;

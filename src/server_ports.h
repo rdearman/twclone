@@ -33,6 +33,7 @@ extern "C"
   int port_is_open (int port_id, const char *commodity);
   extern double h_calculate_trade_price(int port_id, const char *commodity, int quantity);
   int h_get_ship_cargo_and_holds (sqlite3 *db, int ship_id, int *ore, int *organics, int *equipment, int *holds);
+  int h_update_port_stock (sqlite3 *db, int port_id, const char *commodity, int delta, int *new_qty_out);
 
 #ifdef __cplusplus
 }

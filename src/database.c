@@ -387,21 +387,14 @@ const char *create_table_sql[] = {
   " sector INTEGER NOT NULL, "    /* FK to sectors.id */
   " size INTEGER, "
   " techlevel INTEGER, "
-  " max_ore INTEGER, "
-  " max_organics INTEGER, "
-  " max_equipment INTEGER, "
-  " product_ore INTEGER, "          /* Stock Quantity */
-  " product_organics INTEGER, "     /* Stock Quantity */
-  " product_equipment INTEGER, "    /* Stock Quantity */
-  " price_index_ore REAL DEFAULT 1.0, "
-  " price_index_organics REAL DEFAULT 1.0, "
-  " price_index_equipment REAL DEFAULT 1.0, "
-  " price_index_fuel REAL DEFAULT 1.0, "
+  " ore_on_hand INTEGER NOT NULL DEFAULT 0, "
+  " organics_on_hand INTEGER NOT NULL DEFAULT 0, "
+  " equipment_on_hand INTEGER NOT NULL DEFAULT 0, "
+  " petty_cash INTEGER NOT NULL DEFAULT 0, "
   " credits INTEGER, "
   " invisible INTEGER DEFAULT 0, "
   " type INTEGER DEFAULT 1, "
   " FOREIGN KEY (sector) REFERENCES sectors(id)); "
-
 
   " CREATE TABLE IF NOT EXISTS port_trade ( "
     " id INTEGER PRIMARY KEY AUTOINCREMENT,  "
@@ -502,24 +495,99 @@ const char *create_table_sql[] = {
 
 
 
-  " CREATE TABLE IF NOT EXISTS planets ( " " id INTEGER PRIMARY KEY AUTOINCREMENT,  " " num INTEGER,  "	/* legacy planet ID */
-    " sector INTEGER NOT NULL,  "	/* FK to sectors.id */
-    " name TEXT NOT NULL,  " " owner INTEGER,  "	/* FK to players.id */
-    " population INTEGER,  " " type INTEGER,  "	/* FK to planettypes.id */
-    " creator TEXT,  " " colonist INTEGER,  "
-    " fighters INTEGER,  " " citadel_level INTEGER DEFAULT 0,  "	/* replaces pointer to citadel struct */
-    " FOREIGN KEY (sector) REFERENCES sectors(id),  "
-    " FOREIGN KEY (owner) REFERENCES players(id),  "
-    " FOREIGN KEY (type) REFERENCES planettypes(id) " " ); ",
+  " CREATE TABLE IF NOT EXISTS planets ( "
+
+
+
+  " id INTEGER PRIMARY KEY AUTOINCREMENT,  "
+
+
+
+  " num INTEGER,  "	/* legacy planet ID */
+
+
+
+  " sector INTEGER NOT NULL,  "	/* FK to sectors.id */
+
+
+
+  " name TEXT NOT NULL,  "
+
+
+
+  " owner INTEGER,  "	/* FK to players.id (legacy, will be replaced by owner_player_id for player-owned) */
+
+
+
+  " owner_player_id INTEGER REFERENCES players(id) ON DELETE SET NULL, " /* Explicit owner for player-owned planets */
+
+
+
+  " population INTEGER,  "
+
+
+
+  " type INTEGER,  "	/* FK to planettypes.id */
+
+
+
+  " creator TEXT,  "
+
+
+
+  " colonist INTEGER,  "
+
+
+
+  " fighters INTEGER,  "
+
+
+
+  " citadel_level INTEGER DEFAULT 0,  "	/* replaces pointer to citadel struct */
+
+
+
+  " ore_on_hand INTEGER NOT NULL DEFAULT 0, "
+
+
+
+  " organics_on_hand INTEGER NOT NULL DEFAULT 0, "
+
+
+
+  " equipment_on_hand INTEGER NOT NULL DEFAULT 0, "
+
+
+
+  " FOREIGN KEY (sector) REFERENCES sectors(id),  "
+
+
+
+  " FOREIGN KEY (owner) REFERENCES players(id),  "
+
+
+
+  " FOREIGN KEY (type) REFERENCES planettypes(id) "
+
+
+
+  " ); ",
 
   " CREATE TABLE IF NOT EXISTS planet_goods ( "
-    " planet_id INTEGER NOT NULL, "
-    " commodity TEXT NOT NULL CHECK(commodity IN ('ore', 'organics', 'equipment', 'food', 'fuel')), "
-    " quantity INTEGER NOT NULL DEFAULT 0, "
-    " max_capacity INTEGER NOT NULL, "
-    " production_rate INTEGER NOT NULL, "
-    " PRIMARY KEY (planet_id, commodity), "
-    " FOREIGN KEY (planet_id) REFERENCES planets(id) " " ); "
+
+  "    planet_id INTEGER NOT NULL, "
+
+  "    commodity TEXT NOT NULL CHECK(commodity IN ('ore', 'organics', 'equipment')), "
+
+  "    quantity INTEGER NOT NULL DEFAULT 0, "
+
+  "    max_capacity INTEGER NOT NULL, "
+
+  "    production_rate INTEGER NOT NULL, "
+
+  "    PRIMARY KEY (planet_id, commodity), "
+
+  "    FOREIGN KEY (planet_id) REFERENCES planets(id) " " ); "
     /* --- citadels table (fixed, closed properly) --- */
     " CREATE TABLE IF NOT EXISTS citadels ( " " id INTEGER PRIMARY KEY AUTOINCREMENT,  " " planet_id INTEGER UNIQUE NOT NULL,  "	/* 1:1 link to planets.id */
     " level INTEGER,  " " treasury INTEGER,  " " militaryReactionLevel INTEGER,  " " qCannonAtmosphere INTEGER,  " " qCannonSector INTEGER,  " " planetaryShields INTEGER,  " " transporterlvl INTEGER,  " " interdictor INTEGER,  " " upgradePercent REAL,  " " upgradestart INTEGER,  " " owner INTEGER,  "	/* FK to players.id */
@@ -531,6 +599,10 @@ const char *create_table_sql[] = {
     " qcannontype INTEGER,  "
     " qtorpstype INTEGER,  "
     " military INTEGER,  "
+    " construction_start_time INTEGER DEFAULT 0,  "
+    " construction_end_time INTEGER DEFAULT 0,  "
+    " target_level INTEGER DEFAULT 0,  "
+    " construction_status TEXT DEFAULT 'idle',  "
     " FOREIGN KEY (planet_id) REFERENCES planets(id) ON DELETE CASCADE,  "
     " FOREIGN KEY (owner) REFERENCES players(id) " " ); ",
 
@@ -1441,9 +1513,7 @@ const char *insert_default_sql[] = {
   " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
     " ((SELECT id FROM planets WHERE name='Earth'), 'organics', 10000000, 10000000, 0); ",
   " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
-    " ((SELECT id FROM planets WHERE name='Earth'), 'equipment', 10000000, 10000000, 0); ",
-  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
-    " ((SELECT id FROM planets WHERE name='Earth'), 'fuel', 100000, 100000, 0); ",
+  " ((SELECT id FROM planets WHERE name='Earth'), 'equipment', 10000000, 10000000, 0); ",
 
   /* Ferringhi planet in sector 0 (change in bigbang) */
   " INSERT OR IGNORE INTO planets (num, sector, name, owner, population, type, creator, colonist, fighters) "
@@ -1467,9 +1537,7 @@ const char *insert_default_sql[] = {
     " ((SELECT id FROM planets WHERE name='Orion Hideout'), 'ore', 50000000, 50000000, 10); ",
   " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES " " ((SELECT id FROM planets WHERE name='Orion Hideout'), 'organics', 100, 100, 0); ",	/* Near Zero Capacity for Organics */
   " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
-    " ((SELECT id FROM planets WHERE name='Orion Hideout'), 'equipment', 30000000, 30000000, 10); ",
-  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
-    " ((SELECT id FROM planets WHERE name='Orion Hideout'), 'fuel', 1000000, 1000000, 5); ",
+  " ((SELECT id FROM planets WHERE name='Orion Hideout'), 'equipment', 30000000, 30000000, 10); ",
 
 
   /* Fedspace sectors 1–10 */
@@ -1484,8 +1552,9 @@ const char *insert_default_sql[] = {
   "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (9, 'Fedspace 9', 'The Federation -- Do Not Dump!', 'The Federation');",
   "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (10, 'Fedspace 10','The Federation -- Do Not Dump!', 'The Federation');",
 
-  " INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, max_ore, max_organics, max_equipment, product_ore, product_organics, product_equipment, credits, type) "
-  " VALUES (1, 1, 'Earth Port', 1, 10, 10, 10000, 10000, 10000, 5000, 5000, 5000, 1000000, 1); ",
+  " INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, ore_on_hand, organics_on_hand, equipment_on_hand, petty_cash, credits, type) "
+
+  " VALUES (1, 1, 'Earth Port', 1, 10, 10, 10000, 10000, 10000, 0, 1000000, 1); ",
 
   /* Fedspace warps (hard-coded) */
   "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (1,2);",
@@ -1670,12 +1739,8 @@ const char *insert_default_sql[] = {
     " (2, 'organics', 50000000, 50000000, 10);",
 
   /* -- Equipment (High Capacity) */
-  "INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
-    " (2, 'equipment', 10000000, 10000000, 0);",
-
-  /* - Fuel (High Capacity) */
-  "INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
-    " (2, 'fuel', 1000000, 1000000, 5);",
+  " INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " (2, 'equipment', 10000000, 10000000, 0);",
 
   "INSERT INTO turns (player, turns_remaining, last_update)"
     "SELECT "
@@ -1719,16 +1784,52 @@ const char *insert_default_sql[] = {
 "   ('DRG', 'Drugs', 500, 60, 0);  "
   
 
+" CREATE TABLE IF NOT EXISTS commodity_orders (  "
+"   id INTEGER PRIMARY KEY,  "
+"   actor_type TEXT NOT NULL CHECK (actor_type IN ('player','corp','npc_planet','port')),  "
+"   actor_id INTEGER NOT NULL,  "
+"   location_type TEXT NOT NULL CHECK (location_type IN ('planet','port')),  "
+"   location_id INTEGER NOT NULL,  "
+"   commodity_id INTEGER NOT NULL REFERENCES commodities(id) ON DELETE CASCADE,  "
+"   side TEXT NOT NULL CHECK (side IN ('buy','sell')),  "
+"   quantity INTEGER NOT NULL CHECK (quantity > 0),  "
+"   price INTEGER NOT NULL CHECK (price >= 0),  "
+"   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','filled','cancelled','expired')),  "
+"   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))  "
+" );  "
+" CREATE INDEX IF NOT EXISTS idx_commodity_orders_comm ON commodity_orders(commodity_id, status);  "
+
+" CREATE TABLE IF NOT EXISTS commodity_trades (  "
+"   id INTEGER PRIMARY KEY,  "
+"   commodity_id INTEGER NOT NULL REFERENCES commodities(id) ON DELETE CASCADE,  "
+"   buyer_actor_type TEXT NOT NULL CHECK (buyer_actor_type IN ('player','corp','npc_planet','port')),  "
+"   buyer_actor_id INTEGER NOT NULL,  "
+"   buyer_location_type TEXT NOT NULL CHECK (buyer_location_type IN ('planet','port')),  "
+"   buyer_location_id INTEGER NOT NULL,  "
+"   seller_actor_type TEXT NOT NULL CHECK (seller_actor_type IN ('player','corp','npc_planet','port')),  "
+"   seller_actor_id INTEGER NOT NULL,  "
+"   seller_location_type TEXT NOT NULL CHECK (seller_location_type IN ('planet','port')),  "
+"   seller_location_id INTEGER NOT NULL,  "
+"   quantity INTEGER NOT NULL CHECK (quantity > 0),  "
+"   price INTEGER NOT NULL CHECK (price >= 0),  "
+"   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
+"   settlement_tx_buy INTEGER,  "
+"   settlement_tx_sell INTEGER  "
+" );  "
+
 " CREATE TABLE IF NOT EXISTS bank_accounts (  "
-"   player_id INTEGER PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE,  "
+"   owner_type TEXT NOT NULL,  "
+"   owner_id INTEGER NOT NULL,  "
 "   currency TEXT NOT NULL DEFAULT 'CRD' REFERENCES currencies(code),  "
 "   balance INTEGER NOT NULL DEFAULT 0 CHECK (balance >= 0),  "
-"   last_interest_at TEXT  "
+"   last_interest_at TEXT,  "
+"   PRIMARY KEY (owner_type, owner_id)  "
 " );  "
 
 " CREATE TABLE IF NOT EXISTS bank_tx (  "
 "   id INTEGER PRIMARY KEY,  "
-"   player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,  "
+"   owner_type TEXT NOT NULL,  "
+"   owner_id INTEGER NOT NULL,  "
 "   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
 "   kind TEXT NOT NULL CHECK (kind IN (  "
 "     'deposit',  "
@@ -1742,9 +1843,10 @@ const char *insert_default_sql[] = {
 "   balance_after INTEGER,  "
 "   currency TEXT NOT NULL DEFAULT 'CRD' REFERENCES currencies(code),  "
 "   memo TEXT,  "
-"   idempotency_key TEXT UNIQUE  "
+"   idempotency_key TEXT UNIQUE,  "
+"   FOREIGN KEY (owner_type, owner_id) REFERENCES bank_accounts(owner_type, owner_id) ON DELETE CASCADE  "
 " );  "
-" CREATE INDEX IF NOT EXISTS idx_bank_tx_player_ts ON bank_tx(player_id, ts);  "
+" CREATE INDEX IF NOT EXISTS idx_bank_tx_owner_ts ON bank_tx(owner_type, owner_id, ts);  "
 " CREATE INDEX IF NOT EXISTS idx_bank_tx_kind_ts   ON bank_tx(kind, ts);  "
 
 " CREATE TABLE IF NOT EXISTS bank_interest_policy (  "
@@ -1783,12 +1885,12 @@ const char *insert_default_sql[] = {
 " BEFORE INSERT ON bank_tx  "
 " FOR EACH ROW  "
 " BEGIN  "
-"   INSERT OR IGNORE INTO bank_accounts(player_id, currency, balance, last_interest_at)  "
-"   VALUES (NEW.player_id, COALESCE(NEW.currency,'CRD'), 0, NULL);  "
+"   INSERT OR IGNORE INTO bank_accounts(owner_type, owner_id, currency, balance, last_interest_at)  "
+"   VALUES (NEW.owner_type, NEW.owner_id, COALESCE(NEW.currency,'CRD'), 0, NULL);  "
 
 "   SELECT CASE  "
 "     WHEN NEW.kind IN ('withdraw','transfer_out')  "
-"       AND (SELECT balance FROM bank_accounts WHERE player_id = NEW.player_id) - NEW.amount < 0  "
+"       AND (SELECT balance FROM bank_accounts WHERE owner_type = NEW.owner_type AND owner_id = NEW.owner_id) - NEW.amount < 0  "
 "     THEN RAISE(ABORT, 'BANK_INSUFFICIENT_FUNDS')  "
 "     ELSE 1  "
 "   END;  "
@@ -1804,10 +1906,10 @@ const char *insert_default_sql[] = {
 "                   WHEN 'transfer_out' THEN balance - NEW.amount  "
 "                   ELSE balance + NEW.amount  "
 "                 END  "
-"   WHERE player_id = NEW.player_id;  "
+"   WHERE owner_type = NEW.owner_type AND owner_id = NEW.owner_id;  "
 
 "   UPDATE bank_tx  "
-"   SET balance_after = (SELECT balance FROM bank_accounts WHERE player_id = NEW.player_id)  "
+"   SET balance_after = (SELECT balance FROM bank_accounts WHERE owner_type = NEW.owner_type AND owner_id = NEW.owner_id)  "
 "   WHERE id = NEW.id;  "
 " END;  "
 
@@ -6856,14 +6958,12 @@ db_player_name (int64_t player_id, char **out)
 
 // Note: This SQL omits the 'id' (autoincrement) and 'processed_at' (defaults to NULL)
 static const char *INSERT_ENGINE_EVENT_SQL =
-  "INSERT INTO engine_events (ts, type, actor_player_id, sector_id, payload) "
-  "VALUES (?, ?, ?, ?, ?);";
+  "INSERT INTO engine_events (ts, type, actor_owner_type, actor_owner_id, sector_id, payload) "
+  "VALUES (?, ?, ?, ?, ?, ?);";
 
-
-int
-db_log_engine_event (long long ts,
+int db_log_engine_event (long long ts,
 		     const char *type,
-		     int actor_player_id, int sector_id, json_t *payload)
+		     const char *actor_owner_type, int actor_owner_id, int sector_id, json_t *payload)
 {
   sqlite3 *db = db_get_handle ();
   sqlite3_stmt *stmt = NULL;
@@ -6889,27 +6989,33 @@ db_log_engine_event (long long ts,
   sqlite3_bind_int64 (stmt, 1, ts);
   sqlite3_bind_text (stmt, 2, type, -1, SQLITE_STATIC);
 
-  // Bind player/sector IDs, allowing 0 to be treated as NULL/unspecified
-  if (actor_player_id > 0)
-    {
-      sqlite3_bind_int (stmt, 3, actor_player_id);
-    }
-  else
-    {
-      sqlite3_bind_null (stmt, 3);
-    }
+  // Bind owner type and ID
+  if (actor_owner_type && strlen(actor_owner_type) > 0) {
+      sqlite3_bind_text(stmt, 3, actor_owner_type, -1, SQLITE_STATIC);
+  } else {
+      sqlite3_bind_null(stmt, 3);
+  }
 
-  if (sector_id > 0)
+  if (actor_owner_id > 0)
     {
-      sqlite3_bind_int (stmt, 4, sector_id);
+      sqlite3_bind_int (stmt, 4, actor_owner_id);
     }
   else
     {
       sqlite3_bind_null (stmt, 4);
     }
 
+  if (sector_id > 0)
+    {
+      sqlite3_bind_int (stmt, 5, sector_id);
+    }
+  else
+    {
+      sqlite3_bind_null (stmt, 5);
+    }
+
   // Bind the JSON string (SQLITE_TRANSIENT copies the string, safe for us to free)
-  sqlite3_bind_text (stmt, 5, payload_str, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text (stmt, 6, payload_str, -1, SQLITE_TRANSIENT);
 
   // 4. Execute the statement
   rc = sqlite3_step (stmt);

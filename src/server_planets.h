@@ -14,6 +14,7 @@ int cmd_planet_transfer_ownership (client_ctx_t * ctx, json_t * root);
 int cmd_planet_harvest (client_ctx_t * ctx, json_t * root);
 int cmd_planet_deposit (client_ctx_t * ctx, json_t * root);
 int cmd_planet_withdraw (client_ctx_t * ctx, json_t * root);
+int h_update_planet_stock (sqlite3 *db, int planet_id, const char *commodity, int delta, int *new_qty_out);
 
 
 #endif
