@@ -2301,7 +2301,14 @@ const char *insert_default_sql[] = {
 "   project_id INTEGER NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,  "
 "   blueprint_code TEXT NOT NULL,  "
 "   unlocked_ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))  "
-" );  "
+" );  ",
+
+  "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, balance) "
+  "VALUES ('npc_planet', (SELECT id FROM planets WHERE name='Earth'), 1000000);",
+  "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, balance) "
+  "VALUES ('npc_planet', (SELECT id FROM planets WHERE name='Ferringhi Homeworld'), 1000000);",
+  "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, balance) "
+  "VALUES ('npc_planet', (SELECT id FROM planets WHERE name='Orion Hideout'), 1000000);"
 
 " CREATE TABLE IF NOT EXISTS black_accounts (  "
 "   id INTEGER PRIMARY KEY,  "

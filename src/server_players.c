@@ -22,7 +22,7 @@
 #include "server_envelope.h"
 #include "server_log.h"
 #include "common.h"
-
+#include "db_player_settings.h"
 
 extern sqlite3 *db_get_handle (void);
 
@@ -246,54 +246,44 @@ h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
  * This helper now *accepts* the db pointer.
  */
 int
-h_get_player_credits (sqlite3 *db, int player_id, int *credits_out)
+h_get_credits (sqlite3 *db, const char *owner_type, int owner_id, int *credits_out)
 {
-  if (!credits_out)
-    return SQLITE_MISUSE;
-  if (!db)
-    return SQLITE_ERROR; // Safety check
+    sqlite3_stmt *st = NULL;
+    int rc = SQLITE_ERROR;
 
-  sqlite3_stmt *st = NULL;
-  int rc = SQLITE_ERROR;
+    // Ensure a bank account exists for the owner (INSERT OR IGNORE)
+    const char *SQL_ENSURE_ACCOUNT =
+      "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) VALUES (?1, ?2, 'CRD', 0);";
+    rc = sqlite3_prepare_v2(db, SQL_ENSURE_ACCOUNT, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("h_get_credits: ENSURE_ACCOUNT prepare error: %s", sqlite3_errmsg(db));
+        return rc;
+    }
+    sqlite3_bind_text(st, 1, owner_type, -1, SQLITE_STATIC);
+    sqlite3_bind_int(st, 2, owner_id);
+    sqlite3_step(st); // Execute the insert or ignore
+    sqlite3_finalize(st);
+    st = NULL; // Reset statement pointer
 
-  // Ensure a bank account exists for the player (INSERT OR IGNORE)
-  const char *SQL_ENSURE_ACCOUNT =
-    "INSERT OR IGNORE INTO bank_accounts (player_id, currency, balance) VALUES (?1, 'CRD', 0);";
-  rc = sqlite3_prepare_v2(db, SQL_ENSURE_ACCOUNT, -1, &st, NULL);
-  if (rc != SQLITE_OK) {
-      LOGE("h_get_player_credits: ENSURE_ACCOUNT prepare error: %s", sqlite3_errmsg(db));
-      return rc;
-  }
-  sqlite3_bind_int(st, 1, player_id);
-  sqlite3_step(st); // Execute the insert or ignore
-  sqlite3_finalize(st);
-  st = NULL; // Reset statement pointer
+    const char *SQL_SEL = "SELECT COALESCE(balance,0) FROM bank_accounts WHERE owner_type=?1 AND owner_id=?2";
+    rc = sqlite3_prepare_v2(db, SQL_SEL, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("h_get_credits: SELECT prepare error: %s", sqlite3_errmsg(db));
+        return rc;
+    }
 
-  static const char *SQL =
-    "SELECT COALESCE(balance,0) FROM bank_accounts WHERE player_id=?1";
+    sqlite3_bind_text(st, 1, owner_type, -1, SQLITE_STATIC);
+    sqlite3_bind_int (st, 2, owner_id);
 
-  rc = sqlite3_prepare_v2 (db, SQL, -1, &st, NULL);
-  if (rc != SQLITE_OK) {
-    LOGE("h_get_player_credits: SELECT prepare error: %s", sqlite3_errmsg(db));
+    if (sqlite3_step(st) == SQLITE_ROW) {
+        *credits_out = sqlite3_column_int(st, 0);
+        rc = SQLITE_OK;
+    } else {
+        LOGE("h_get_credits: Owner type '%s', ID %d not found in bank_accounts.", owner_type, owner_id);
+        rc = SQLITE_NOTFOUND;
+    }
+    sqlite3_finalize(st);
     return rc;
-  }
-
-  sqlite3_bind_int (st, 1, player_id);
-
-  rc = sqlite3_step (st);
-  if (rc == SQLITE_ROW)
-    {
-      *credits_out = sqlite3_column_int (st, 0);
-      rc = SQLITE_OK;
-    }
-  else
-    {
-      LOGE("h_get_player_credits: Player %d not found in bank_accounts.", player_id);
-      rc = SQLITE_ERROR;    /* no such player */
-    }
-
-  sqlite3_finalize (st);
-  return rc;
 }
 
 
@@ -368,7 +358,7 @@ player_credits( client_ctx_t *ctx)
   if (!ctx || ctx->player_id <= 0) return 0;
   sqlite3 *db = db_get_handle();
   int c = 0;
-  if (h_get_player_credits(db, ctx->player_id, &c) != SQLITE_OK)
+  if (h_get_credits(db, "player", ctx->player_id, &c) != SQLITE_OK)
     return 0;
   return c;
 }
@@ -506,170 +496,329 @@ h_update_ship_cargo (sqlite3 *db, int player_id,
     return rc; // Will be SQLITE_OK or an error code (e.g., SQLITE_CONSTRAINT)
 }
 
-/*
- * Deduct 'amount' from a player's on-board ship credits (players.credits).
- * - amount must be >= 0
- * - Returns SQLITE_OK on success (and writes remaining balance to *new_balance)
- * - Returns SQLITE_BUSY/SQLITE_ERROR/etc on DB error
- * - Returns SQLITE_CONSTRAINT if insufficient funds (no update performed)
- */
 int
 h_deduct_ship_credits (sqlite3 *db, int player_id, int amount,
-		       int *new_balance)
+		     int *new_balance)
 {
-  if (amount < 0)
-    return SQLITE_MISMATCH;
-
-  int rc;
-  char *errmsg = NULL;
-  sqlite3_stmt *upd = NULL, *sel = NULL;
-
-  rc = sqlite3_exec (db, "BEGIN IMMEDIATE", NULL, NULL, &errmsg);
-  if (rc != SQLITE_OK)
-    {
-      if (errmsg)
-	sqlite3_free (errmsg);
-      return rc;
-    }
-
-  // Atomic balance check + deduct; only succeeds if sufficient funds
-  const char *SQL_UPD =
-    "UPDATE players "
-    "   SET credits = credits - ?2 " " WHERE id = ?1 AND credits >= ?2";
-
-  rc = sqlite3_prepare_v2 (db, SQL_UPD, -1, &upd, NULL);
-  if (rc != SQLITE_OK)
-    goto rollback;
-
-  sqlite3_bind_int (upd, 1, player_id);
-  sqlite3_bind_int (upd, 2, amount);
-
-  rc = sqlite3_step (upd);
-  if (rc != SQLITE_DONE)
-    {
-      rc = SQLITE_ERROR;
-      goto rollback;
-    }
-
-  if (sqlite3_changes (db) == 0)
-    {
-      // Not enough credits (or no such player)
-      rc = SQLITE_CONSTRAINT;
-      goto rollback;
-    }
-
-  sqlite3_finalize (upd);
-  upd = NULL;
-
-  if (new_balance)
-    {
-      const char *SQL_SEL = "SELECT credits FROM players WHERE id = ?1";
-      rc = sqlite3_prepare_v2 (db, SQL_SEL, -1, &sel, NULL);
-      if (rc != SQLITE_OK)
-	goto rollback;
-
-      sqlite3_bind_int (sel, 1, player_id);
-
-      rc = sqlite3_step (sel);
-      if (rc == SQLITE_ROW)
-	{
-	  *new_balance = sqlite3_column_int (sel, 0);
-	  rc = SQLITE_OK;
-	}
-      else
-	{
-	  rc = SQLITE_ERROR;
-	  goto rollback;
-	}
-    }
-
-  sqlite3_finalize (sel);
-  rc = sqlite3_exec (db, "COMMIT", NULL, NULL, &errmsg);
-  if (errmsg)
-    sqlite3_free (errmsg);
-  return rc;
-
-rollback:
-  if (upd)
-    sqlite3_finalize (upd);
-  if (sel)
-    sqlite3_finalize (sel);
-  sqlite3_exec (db, "ROLLBACK", NULL, NULL, NULL);
+  long long new_balance_ll = 0;
+  int rc = h_deduct_credits (db, "player", player_id, amount, &new_balance_ll);
+  if (rc == SQLITE_OK && new_balance) {
+    *new_balance = (int)new_balance_ll;
+  }
   return rc;
 }
 
 int
-h_deduct_bank_balance (sqlite3 *db, int player_id, int amount,
-		       int *new_balance)
+h_deduct_credits (sqlite3 *db, const char *owner_type, int owner_id, int amount,
+		  long long *new_balance_out)
 {
-  if (amount < 0)
-    return SQLITE_MISMATCH;
-
-  int rc;
   char *errmsg = NULL;
-  sqlite3_stmt *upd = NULL, *sel = NULL;
+  int rc = SQLITE_ERROR;
+  long long current_balance = 0;
 
-  rc = sqlite3_exec (db, "BEGIN IMMEDIATE", NULL, NULL, &errmsg);
+  // Create mutable copies of owner_type and owner_id for potential redirection
+  const char *actual_owner_type = owner_type;
+  int actual_owner_id = owner_id;
+
+  if (!db || !owner_type || !*owner_type || owner_id <= 0 || amount <= 0)
+    {
+      LOGE ("h_deduct_credits: Invalid arguments. db=%p, owner_type=%s, owner_id=%d, amount=%d", db, owner_type, owner_id, amount);
+      return SQLITE_MISUSE;
+    }
+
+  // --- Redirection Logic for Orion/Ferringhi Traders ---
+  if (strcmp(owner_type, "player") == 0) {
+      sqlite3_stmt *player_info_stmt = NULL;
+      const char *sql_get_player_info = "SELECT type, name FROM players WHERE id = ?;";
+      if (sqlite3_prepare_v2(db, sql_get_player_info, -1, &player_info_stmt, NULL) == SQLITE_OK) {
+          sqlite3_bind_int(player_info_stmt, 1, owner_id);
+          if (sqlite3_step(player_info_stmt) == SQLITE_ROW) {
+              int player_type = sqlite3_column_int(player_info_stmt, 0);
+              const char *player_name = (const char *)sqlite3_column_text(player_info_stmt, 1);
+
+              // Check if it's an NPC player (type 1) and if name contains "Orion" or "Ferrengi"
+              if (player_type == 1) { // Assuming type 1 is for NPC players
+                  if (strstr(player_name, "Orion") != NULL) {
+                      actual_owner_type = "npc_planet";
+                      sqlite3_stmt *planet_id_stmt = NULL;
+                      const char *sql_get_planet_id = "SELECT id FROM planets WHERE name='Orion Hideout';";
+                      if (sqlite3_prepare_v2(db, sql_get_planet_id, -1, &planet_id_stmt, NULL) == SQLITE_OK) {
+                          if (sqlite3_step(planet_id_stmt) == SQLITE_ROW) {
+                              actual_owner_id = sqlite3_column_int(planet_id_stmt, 0);
+                          }
+                          sqlite3_finalize(planet_id_stmt);
+                      }
+                      LOGD("h_deduct_credits: Redirecting Orion player %d (%s) to npc_planet %d.", owner_id, player_name, actual_owner_id);
+                  } else if (strstr(player_name, "Ferrengi") != NULL) {
+                      actual_owner_type = "npc_planet";
+                      sqlite3_stmt *planet_id_stmt = NULL;
+                      const char *sql_get_planet_id = "SELECT id FROM planets WHERE name='Ferringhi Homeworld';";
+                      if (sqlite3_prepare_v2(db, sql_get_planet_id, -1, &planet_id_stmt, NULL) == SQLITE_OK) {
+                          if (sqlite3_step(planet_id_stmt) == SQLITE_ROW) {
+                              actual_owner_id = sqlite3_column_int(planet_id_stmt, 0);
+                          }
+                          sqlite3_finalize(planet_id_stmt);
+                      }
+                      LOGD("h_deduct_credits: Redirecting Ferringhi player %d (%s) to npc_planet %d.", owner_id, player_name, actual_owner_id);
+                  }
+              }
+          }
+          sqlite3_finalize(player_info_stmt);
+      }
+  }
+  // --- End Redirection Logic ---
+
+  // Start transaction
+  rc = sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg);
   if (rc != SQLITE_OK)
     {
-      if (errmsg)
-	sqlite3_free (errmsg);
+      LOGE ("h_deduct_credits: Failed to start transaction: %s", errmsg ? errmsg : "unknown error");
+      sqlite3_free (errmsg);
       return rc;
     }
 
-  const char *SQL_UPD =
-    "UPDATE players SET bank_balance = bank_balance - ?2 "
-    " WHERE id = ?1 AND bank_balance >= ?2";
-
-  rc = sqlite3_prepare_v2 (db, SQL_UPD, -1, &upd, NULL);
+  // 1. Get current balance
+  sqlite3_stmt *select_stmt = NULL;
+  const char *sql_select_balance =
+    "SELECT balance FROM bank_accounts WHERE owner_type = ?1 AND owner_id = ?2;";
+  rc = sqlite3_prepare_v2 (db, sql_select_balance, -1, &select_stmt, NULL);
   if (rc != SQLITE_OK)
-    goto rollback;
-
-  sqlite3_bind_int (upd, 1, player_id);
-  sqlite3_bind_int (upd, 2, amount);
-
-  rc = sqlite3_step (upd);
-  if (rc != SQLITE_DONE || sqlite3_changes (db) == 0)
     {
-      rc = SQLITE_CONSTRAINT;
-      goto rollback;
+      LOGE ("h_deduct_credits: SELECT prepare error: %s", sqlite3_errmsg (db));
+      goto rollback_and_cleanup;
     }
-  sqlite3_finalize (upd);
-  upd = NULL;
+  sqlite3_bind_text (select_stmt, 1, actual_owner_type, -1, SQLITE_STATIC);
+  sqlite3_bind_int (select_stmt, 2, actual_owner_id);
 
-  if (new_balance)
+  if (sqlite3_step (select_stmt) == SQLITE_ROW)
     {
-      const char *SQL_SEL = "SELECT bank_balance FROM players WHERE id = ?1";
-      rc = sqlite3_prepare_v2 (db, SQL_SEL, -1, &sel, NULL);
-      if (rc != SQLITE_OK)
-	goto rollback;
-      sqlite3_bind_int (sel, 1, player_id);
-      rc = sqlite3_step (sel);
-      if (rc == SQLITE_ROW)
-	{
-	  *new_balance = sqlite3_column_int (sel, 0);
-	  rc = SQLITE_OK;
-	}
-      else
-	{
-	  rc = SQLITE_ERROR;
-	  goto rollback;
-	}
-      sqlite3_finalize (sel);
-      sel = NULL;
+      current_balance = sqlite3_column_int64 (select_stmt, 0);
+    }
+  else
+    {
+      LOGE ("h_deduct_credits: Owner type '%s', ID %d not found in bank_accounts.", actual_owner_type, actual_owner_id);
+      rc = SQLITE_NOTFOUND;
+      goto rollback_and_cleanup;
+    }
+  sqlite3_finalize (select_stmt);
+  select_stmt = NULL;
+
+  // 2. Check for sufficient funds
+  if (current_balance < amount)
+    {
+      LOGW ("h_deduct_credits: Insufficient funds for owner type '%s', ID %d. Current: %lld, Attempted deduct: %d", actual_owner_type, actual_owner_id, current_balance, amount);
+      rc = SQLITE_CONSTRAINT;	// Or a custom error code for insufficient funds
+      goto rollback_and_cleanup;
     }
 
-  rc = sqlite3_exec (db, "COMMIT", NULL, NULL, &errmsg);
+  // 3. Update balance
+  long long new_balance = current_balance - amount;
+  sqlite3_stmt *update_stmt = NULL;
+  const char *sql_update_balance =
+    "UPDATE bank_accounts SET balance = ?1 WHERE owner_type = ?2 AND owner_id = ?3;";
+  rc = sqlite3_prepare_v2 (db, sql_update_balance, -1, &update_stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_deduct_credits: UPDATE prepare error: %s", sqlite3_errmsg (db));
+      goto rollback_and_cleanup;
+    }
+  sqlite3_bind_int64 (update_stmt, 1, new_balance);
+  sqlite3_bind_text (update_stmt, 2, actual_owner_type, -1, SQLITE_STATIC);
+  sqlite3_bind_int (update_stmt, 3, actual_owner_id);
+
+  if (sqlite3_step (update_stmt) != SQLITE_DONE)
+    {
+      LOGE ("h_deduct_credits: UPDATE step error: %s", sqlite3_errmsg (db));
+      goto rollback_and_cleanup;
+    }
+  sqlite3_finalize (update_stmt);
+  update_stmt = NULL;
+
+  // 4. Record transaction
+  sqlite3_stmt *insert_tx_stmt = NULL;
+  const char *sql_insert_tx =
+    "INSERT INTO bank_tx (owner_type, owner_id, kind, amount, balance_after, currency, memo) "
+    "VALUES (?1, ?2, 'withdraw', ?3, ?4, 'CRD', 'Withdrawal via h_deduct_credits');";
+  rc = sqlite3_prepare_v2(db, sql_insert_tx, -1, &insert_tx_stmt, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("h_deduct_credits: INSERT_TX prepare error: %s", sqlite3_errmsg(db));
+      goto rollback_and_cleanup;
+  }
+  sqlite3_bind_text(insert_tx_stmt, 1, actual_owner_type, -1, SQLITE_STATIC);
+  sqlite3_bind_int(insert_tx_stmt, 2, actual_owner_id);
+  sqlite3_bind_int(insert_tx_stmt, 3, amount);
+  sqlite3_bind_int64(insert_tx_stmt, 4, new_balance);
+
+  if (sqlite3_step(insert_tx_stmt) != SQLITE_DONE) {
+      LOGE("h_deduct_credits: INSERT_TX step error: %s", sqlite3_errmsg(db));
+      goto rollback_and_cleanup;
+  }
+  sqlite3_finalize(insert_tx_stmt);
+  insert_tx_stmt = NULL;
+
+  // Commit transaction
+  rc = sqlite3_exec (db, "COMMIT;", NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_deduct_credits: Failed to commit transaction: %s", errmsg ? errmsg : "unknown error");
+      sqlite3_free (errmsg);
+      return rc;
+    }
+
+  if (new_balance_out)
+    *new_balance_out = new_balance;
+
+  return SQLITE_OK;
+
+rollback_and_cleanup:
+  sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+  if (select_stmt)
+    sqlite3_finalize (select_stmt);
+  if (update_stmt)
+    sqlite3_finalize (update_stmt);
+  if (insert_tx_stmt)
+    sqlite3_finalize (insert_tx_stmt);
   if (errmsg)
     sqlite3_free (errmsg);
   return rc;
+}
 
-rollback:
-  if (upd)
-    sqlite3_finalize (upd);
-  if (sel)
-    sqlite3_finalize (sel);
-  sqlite3_exec (db, "ROLLBACK", NULL, NULL, NULL);
+
+int
+h_add_credits (sqlite3 *db, const char *owner_type, int owner_id, int amount, long long *new_balance_out)
+{
+  sqlite3_stmt *st = NULL;
+  int rc = SQLITE_ERROR;
+  char *errmsg = NULL;
+  long long current_balance = 0;
+
+  // Create mutable copies of owner_type and owner_id for potential redirection
+  const char *actual_owner_type = owner_type;
+  int actual_owner_id = owner_id;
+
+  if (!db || !owner_type || owner_id <= 0 || amount <= 0) {
+    LOGE("h_add_credits: Invalid arguments. db=%p, owner_type=%s, owner_id=%d, amount=%d", db, owner_type, owner_id, amount);
+    return SQLITE_MISUSE;
+  }
+
+  // --- Redirection Logic for Orion/Ferringhi Traders --- 
+  if (strcmp(owner_type, "player") == 0) {
+      sqlite3_stmt *player_info_stmt = NULL;
+      const char *sql_get_player_info = "SELECT type, name FROM players WHERE id = ?;";
+      if (sqlite3_prepare_v2(db, sql_get_player_info, -1, &player_info_stmt, NULL) == SQLITE_OK) {
+          sqlite3_bind_int(player_info_stmt, 1, owner_id);
+          if (sqlite3_step(player_info_stmt) == SQLITE_ROW) {
+              int player_type = sqlite3_column_int(player_info_stmt, 0);
+              const char *player_name = (const char *)sqlite3_column_text(player_info_stmt, 1);
+
+              // Check if it's an NPC player (type 1) and if name contains "Orion" or "Ferrengi"
+              if (player_type == 1) { // Assuming type 1 is for NPC players
+                  if (strstr(player_name, "Orion") != NULL) {
+                      actual_owner_type = "npc_planet";
+                      sqlite3_stmt *planet_id_stmt = NULL;
+                      const char *sql_get_planet_id = "SELECT id FROM planets WHERE name='Orion Hideout';";
+                      if (sqlite3_prepare_v2(db, sql_get_planet_id, -1, &planet_id_stmt, NULL) == SQLITE_OK) {
+                          if (sqlite3_step(planet_id_stmt) == SQLITE_ROW) {
+                              actual_owner_id = sqlite3_column_int(planet_id_stmt, 0);
+                          }
+                          sqlite3_finalize(planet_id_stmt);
+                      }
+                      LOGD("h_add_credits: Redirecting Orion player %d (%s) to npc_planet %d.", owner_id, player_name, actual_owner_id);
+                  } else if (strstr(player_name, "Ferrengi") != NULL) {
+                      actual_owner_type = "npc_planet";
+                      sqlite3_stmt *planet_id_stmt = NULL;
+                      const char *sql_get_planet_id = "SELECT id FROM planets WHERE name='Ferringhi Homeworld';";
+                      if (sqlite3_prepare_v2(db, sql_get_planet_id, -1, &planet_id_stmt, NULL) == SQLITE_OK) {
+                          if (sqlite3_step(planet_id_stmt) == SQLITE_ROW) {
+                              actual_owner_id = sqlite3_column_int(planet_id_stmt, 0);
+                          }
+                          sqlite3_finalize(planet_id_stmt);
+                      }
+                      LOGD("h_add_credits: Redirecting Ferringhi player %d (%s) to npc_planet %d.", owner_id, player_name, actual_owner_id);
+                  }
+              }
+          }
+          sqlite3_finalize(player_info_stmt);
+      }
+  }
+  // --- End Redirection Logic ---
+
+  // Start transaction
+  if (sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg) != SQLITE_OK) {
+    LOGE("h_add_credits: Failed to start transaction: %s", errmsg ? errmsg : "unknown error");
+    if (errmsg) sqlite3_free (errmsg);
+    return SQLITE_ERROR;
+  }
+
+  // Ensure a bank account exists for the owner (INSERT OR IGNORE)
+  const char *SQL_ENSURE_ACCOUNT =
+    "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) VALUES (?1, ?2, 'CRD', 0);";
+  rc = sqlite3_prepare_v2(db, SQL_ENSURE_ACCOUNT, -1, &st, NULL);
+  if (rc != SQLITE_OK) {
+    LOGE("h_add_credits: ENSURE_ACCOUNT prepare error: %s", sqlite3_errmsg(db));
+    goto rollback_and_exit;
+  }
+  sqlite3_bind_text(st, 1, actual_owner_type, -1, SQLITE_STATIC);
+  sqlite3_bind_int(st, 2, actual_owner_id);
+  sqlite3_step(st); // Execute the insert or ignore
+  sqlite3_finalize(st);
+  st = NULL;
+
+  // Update bank_accounts.balance and get new balance
+  const char *SQL_UPDATE_BANK =
+    "UPDATE bank_accounts SET balance = balance + ?3 WHERE owner_type = ?1 AND owner_id = ?2 RETURNING balance;";
+  rc = sqlite3_prepare_v2 (db, SQL_UPDATE_BANK, -1, &st, NULL);
+  if (rc != SQLITE_OK) {
+    LOGE("h_add_credits: UPDATE_BANK prepare error: %s", sqlite3_errmsg(db));
+    goto rollback_and_exit;
+  }
+  sqlite3_bind_text (st, 1, actual_owner_type, -1, SQLITE_STATIC);
+  sqlite3_bind_int (st, 2, actual_owner_id);
+  sqlite3_bind_int64 (st, 3, amount);
+
+  if (sqlite3_step (st) == SQLITE_ROW) {
+    current_balance = sqlite3_column_int64 (st, 0);
+    rc = SQLITE_OK;
+  } else {
+    LOGE("h_add_credits: UPDATE_BANK step error: %s", sqlite3_errmsg(db));
+    rc = SQLITE_ERROR; // Owner not found or update failed
+    goto rollback_and_exit;
+  }
+  sqlite3_finalize (st);
+  st = NULL;
+
+  // Log bank_tx entry
+  const char *SQL_INSERT_TX =
+    "INSERT INTO bank_tx (owner_type, owner_id, kind, amount, balance_after, currency, memo) "
+    "VALUES (?1, ?2, 'deposit', ?3, ?4, 'CRD', 'Deposit via h_add_credits');";
+  rc = sqlite3_prepare_v2(db, SQL_INSERT_TX, -1, &st, NULL);
+  if (rc != SQLITE_OK) {
+    LOGE("h_add_credits: INSERT_TX prepare error: %s", sqlite3_errmsg(db));
+    goto rollback_and_exit;
+  }
+  sqlite3_bind_text(st, 1, actual_owner_type, -1, SQLITE_STATIC);
+  sqlite3_bind_int(st, 2, actual_owner_id);
+  sqlite3_bind_int64(st, 3, amount);
+  sqlite3_bind_int64(st, 4, current_balance);
+  sqlite3_step(st);
+  sqlite3_finalize(st);
+  st = NULL;
+
+  // Commit transaction
+  if (sqlite3_exec (db, "COMMIT;", NULL, NULL, &errmsg) != SQLITE_OK) {
+    LOGE("h_add_credits: Failed to commit transaction: %s", errmsg ? errmsg : "unknown error");
+    if (errmsg) sqlite3_free (errmsg);
+    return SQLITE_ERROR;
+  }
+
+  if (new_balance_out) {
+    *new_balance_out = current_balance;
+  }
+  return SQLITE_OK;
+
+rollback_and_exit:
+  sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+  if (st) sqlite3_finalize(st);
   return rc;
 }
 
@@ -2018,82 +2167,20 @@ cmd_bank_deposit (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  int rc;
-  char *errmsg = NULL;
-  sqlite3_stmt *st = NULL;
   long long new_balance = 0;
-
-  // Start transaction
-  if (sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg) != SQLITE_OK)
-    {
-      if (errmsg)
-        sqlite3_free (errmsg);
-      send_enveloped_error (ctx->fd, root, 500, "Failed to start transaction.");
-      return 0;
-    }
-
-  // Ensure a bank account exists for the player (INSERT OR IGNORE)
-  const char *SQL_ENSURE_ACCOUNT =
-    "INSERT OR IGNORE INTO bank_accounts (player_id, currency, balance) VALUES (?1, 'CRD', 0);";
-  rc = sqlite3_prepare_v2(db, SQL_ENSURE_ACCOUNT, -1, &st, NULL);
-  if (rc != SQLITE_OK) {
-      sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
-      send_enveloped_error(ctx->fd, root, 500, sqlite3_errmsg(db));
-      return 0;
-  }
-  sqlite3_bind_int(st, 1, ctx->player_id);
-  sqlite3_step(st); // Execute the insert or ignore
-  sqlite3_finalize(st);
-  st = NULL; // Reset statement pointer
-
-  // Update bank_accounts.balance
-  const char *SQL_UPDATE_BANK =
-    "UPDATE bank_accounts SET balance = balance + ?2 WHERE player_id = ?1 RETURNING balance;";
-
-  rc = sqlite3_prepare_v2 (db, SQL_UPDATE_BANK, -1, &st, NULL);
-  if (rc != SQLITE_OK)
-    {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
-      return 0;
-    }
-
-  sqlite3_bind_int (st, 1, ctx->player_id);
-  sqlite3_bind_int64 (st, 2, amount);
-
-  if (sqlite3_step (st) == SQLITE_ROW)
-    {
-      new_balance = sqlite3_column_int64 (st, 0);
-      rc = SQLITE_OK;
-    }
-  else
-    {
-      rc = SQLITE_ERROR; // Player not found or update failed
-    }
-
-  sqlite3_finalize (st);
+  int rc = h_add_credits (db, "player", ctx->player_id, amount, &new_balance);
 
   if (rc != SQLITE_OK)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      send_enveloped_error (ctx->fd, root, 500, "Failed to update bank balance.");
+      send_enveloped_error (ctx->fd, root, 500, "Failed to deposit credits.");
       return 0;
     }
 
-  // Commit transaction
-  if (sqlite3_exec (db, "COMMIT;", NULL, NULL, &errmsg) != SQLITE_OK)
-    {
-      if (errmsg)
-        sqlite3_free (errmsg);
-      send_enveloped_error (ctx->fd, root, 500, "Failed to commit transaction.");
-      return 0;
-    }
-
-  json_t *payload = json_object ();
-  json_object_set_new (payload, "new_balance", json_integer (new_balance));
-  send_enveloped_ok (ctx->fd, root, "bank.deposited", payload);
+  json_t *payload = json_pack ("{s:i, s:I}", "player_id", ctx->player_id, "new_balance", new_balance);
+  send_enveloped_ok (ctx->fd, root, "bank.deposit.confirmed", payload);
   json_decref (payload);
 
   return 0;
 }
+
 
