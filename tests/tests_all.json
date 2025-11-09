@@ -329,7 +329,7 @@
       "cmd": "trade.history",
       "data": {
           "limit": 5,
-        "player_id": 3	  
+        "player_id": "@my_id"	  
       },
       "expect": {
         "status": "ok",
@@ -346,7 +346,7 @@
       "idempotency_key": "test-fighters-deploy-1762338651-2237",
       "data": {
         "amount": 1,
-	  "to_sector": 51,
+	  "to_sector": "@curSector",
           "offense": 2
       },
       "expect": {
@@ -448,7 +448,8 @@
 	    "cmd": "trade.buy",
 	    "idempotency_key": "test-buy-single-1762338651-2594",
 	    "data": {
-		"port_id": 64,
+		"port_id": "@portId",
+        "account": 0,
         "items": [
             {
                 "commodity": "ore",
@@ -465,9 +466,9 @@
 	{
 	    "name": "trade.buy ok (items list)",
 	    "cmd": "trade.buy",
-	    "idempotency_key": "test-buy-single-1762338651-2594-2",
 	    "data": {
-		"port_id": 64,
+		"port_id": "@portId",
+        "account": 0,
 		"items": [
 		    {
 			"commodity": "ore",
@@ -485,7 +486,8 @@
 	    "cmd": "trade.buy",
 	    "idempotency_key": "@prev_idempotency_key",
 	    "data": {
-		"port_id": 64,
+		"port_id": "@portId",
+        "account": 0,
 		"items": [
 		    {
 			"commodity": "ore",
@@ -503,8 +505,9 @@
 	    "cmd": "trade.sell",
 	    "idempotency_key": "test-sell-invalid-1762338651-4283",
 	    "data": {
-		"port_id": 64,
-		"sector_id": 64,
+		"port_id": "@portId",
+		"sector_id": "@curSector",
+        "account": 0,
 		"items": [
 		    {
 			"commodity": "invalid_thing",
@@ -523,8 +526,8 @@
 	    "name": "trade.port_info (by port_id)",
 	    "cmd": "trade.port_info",
 	    "data": {
-		"sector_id": 64,
-		"port_id": 64
+		"sector_id": "@curSector",
+		"port_id": "@portId"
 	    },
 	    "expect": {
 		"status": "ok",
@@ -536,7 +539,7 @@
             "name": "trade.quote (ore)",
             "cmd": "trade.quote",
             "data": {
-                "port_id": 64,
+                "port_id": "@portId",
                 "commodity": "ore",
                 "quantity": 10
             },
@@ -564,7 +567,7 @@
             "name": "trade.quote (organics)",
             "cmd": "trade.quote",
             "data": {
-                "port_id": 64,
+                "port_id": "@portId",
                 "commodity": "organics",
                 "quantity": 5
             },
@@ -592,7 +595,7 @@
             "name": "trade.quote (invalid commodity)",
             "cmd": "trade.quote",
             "data": {
-                "port_id": 64,
+                "port_id": "@portId",
                 "commodity": "invalid_item",
                 "quantity": 1
             },
@@ -607,7 +610,7 @@
             "name": "trade.quote (zero quantity)",
             "cmd": "trade.quote",
             "data": {
-                "port_id": 64,
+                "port_id": "@portId",
                 "commodity": "ore",
                 "quantity": 0
             },
@@ -640,7 +643,7 @@
             "cmd": "trade.buy",
             "idempotency_key": "test-jettison-acquire-ore-1",
             "data": {
-                "port_id": 64,
+                "port_id": "@portId",
                 "items": [
                     {
                         "commodity": "ore",
