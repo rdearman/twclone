@@ -115,6 +115,7 @@ int db_ships_inspectable_at_sector_json (int player_id, int sector_id,
 /* Rename if caller owns the ship (via ship_ownership) */
 int db_ship_rename_if_owner (int player_id, int ship_id,
 			     const char *new_name);
+int db_destroy_ship (sqlite3 *db, int player_id, int ship_id);
 /* Claim an unpiloted ship (ownership unchanged); returns JSON of claimed ship */
 int db_ship_claim (int player_id, int sector_id, int ship_id,
 		   json_t ** out_ship);

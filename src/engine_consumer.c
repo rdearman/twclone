@@ -144,6 +144,82 @@ static const char *BASE_SELECT =
   "ORDER BY id ASC " "LIMIT ?4;";
 
 
+static int
+handle_ship_self_destruct_initiated (sqlite3 *db, sqlite3_stmt *ev_row)
+{
+  int rc = SQLITE_ERROR;
+  int player_id = sqlite3_column_int (ev_row, 3); // actor_player_id
+  int sector_id = sqlite3_column_int (ev_row, 4); // sector_id
+  const char *payload_str = (const char *) sqlite3_column_text (ev_row, 5); // payload
+
+  json_error_t jerr;
+  json_t *payload = json_loads (payload_str, 0, &jerr);
+  if (!payload)
+    {
+      fprintf (stderr, "Error parsing JSON payload for self-destruct: %s\n", jerr.text);
+      return 1; // Quarantine
+    }
+
+  // Get ship_id from player_id
+  int ship_id = 0;
+  {
+    sqlite3_stmt *st_ship = NULL;
+    const char *sql_get_ship_id = "SELECT ship FROM players WHERE id = ?;";
+    if (sqlite3_prepare_v2(db, sql_get_ship_id, -1, &st_ship, NULL) == SQLITE_OK) {
+      sqlite3_bind_int(st_ship, 1, player_id);
+      if (sqlite3_step(st_ship) == SQLITE_ROW) {
+        ship_id = sqlite3_column_int(st_ship, 0);
+      }
+      sqlite3_finalize(st_ship);
+    }
+  }
+
+  if (ship_id == 0) {
+    fprintf(stderr, "Error: Player %d has no active ship to self-destruct.\n", player_id);
+    json_decref(payload);
+    return 1; // Quarantine
+  }
+
+  // Get ship name for the destroyed event
+  char ship_name[256] = {0};
+  {
+    sqlite3_stmt *st_name = NULL;
+    const char *sql_get_ship_name = "SELECT name FROM ships WHERE id = ?;";
+    if (sqlite3_prepare_v2(db, sql_get_ship_name, -1, &st_name, NULL) == SQLITE_OK) {
+      sqlite3_bind_int(st_name, 1, ship_id);
+      if (sqlite3_step(st_name) == SQLITE_ROW) {
+        strncpy(ship_name, (const char*)sqlite3_column_text(st_name, 0), sizeof(ship_name) - 1);
+      }
+      sqlite3_finalize(st_name);
+    }
+  }
+
+  // Perform ship destruction
+  rc = db_destroy_ship(db, player_id, ship_id);
+  if (rc != SQLITE_OK) {
+    fprintf(stderr, "Error destroying ship %d for player %d: %s\n", ship_id, player_id, sqlite3_errmsg(db));
+    json_decref(payload);
+    return 1; // Quarantine
+  }
+
+  // Log ship.destroyed event
+  json_t *destroyed_payload = json_pack("{s:i, s:i, s:s}",
+                                        "player_id", player_id,
+                                        "ship_id", ship_id,
+                                        "ship_name", ship_name);
+  if (!destroyed_payload) {
+    fprintf(stderr, "Error creating ship.destroyed payload.\n");
+    json_decref(payload);
+    return 1; // Quarantine
+  }
+
+  db_log_engine_event(get_now_epoch(), "ship.destroyed", player_id, sector_id, destroyed_payload);
+  json_decref(destroyed_payload);
+  json_decref(payload);
+
+  return 0; // Success
+}
+
 int
 handle_event (const char *type, sqlite3 *db, sqlite3_stmt *ev_row)
 {
@@ -153,6 +229,10 @@ handle_event (const char *type, sqlite3 *db, sqlite3_stmt *ev_row)
     {
       /* no-op placeholder; side effects should be idempotent */
       return 0;
+    }
+  else if (strcmp (type, "ship.self_destruct.initiated") == 0)
+    {
+      return handle_ship_self_destruct_initiated (db, ev_row);
     }
   /* Unknown type -> signal quarantine */
   return 1;

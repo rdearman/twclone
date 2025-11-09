@@ -6313,6 +6313,87 @@ out_unlock:
 }
 
 
+int
+db_destroy_ship (sqlite3 *db, int player_id, int ship_id)
+{
+  int rc = SQLITE_ERROR;
+  sqlite3_stmt *stmt = NULL;
+
+  pthread_mutex_lock (&db_mutex);
+
+  rc = sqlite3_exec (db, "BEGIN IMMEDIATE", NULL, NULL, NULL);
+  if (rc != SQLITE_OK)
+    goto out_unlock;
+
+  // 1. Get ship details before deletion for logging/event creation
+  char ship_name[256] = { 0 };
+  int ship_sector = 0;
+  {
+    const char *sql_get_ship_info = "SELECT name, sector FROM ships WHERE id = ?;";
+    rc = sqlite3_prepare_v2(db, sql_get_ship_info, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) goto rollback;
+    sqlite3_bind_int(stmt, 1, ship_id);
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+      strncpy(ship_name, (const char*)sqlite3_column_text(stmt, 0), sizeof(ship_name) - 1);
+      ship_sector = sqlite3_column_int(stmt, 1);
+    }
+    sqlite3_finalize(stmt);
+    stmt = NULL;
+  }
+
+  // 2. Delete from ships table
+  const char *sql_delete_ship = "DELETE FROM ships WHERE id = ?;";
+  rc = sqlite3_prepare_v2 (db, sql_delete_ship, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    goto rollback;
+  sqlite3_bind_int (stmt, 1, ship_id);
+  rc = sqlite3_step (stmt);
+  sqlite3_finalize (stmt);
+  stmt = NULL;
+  if (rc != SQLITE_DONE)
+    goto rollback;
+
+  // 3. Delete from ship_ownership table
+  const char *sql_delete_ownership = "DELETE FROM ship_ownership WHERE ship_id = ?;";
+  rc = sqlite3_prepare_v2 (db, sql_delete_ownership, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    goto rollback;
+  sqlite3_bind_int (stmt, 1, ship_id);
+  rc = sqlite3_step (stmt);
+  sqlite3_finalize (stmt);
+  stmt = NULL;
+  if (rc != SQLITE_DONE)
+    goto rollback;
+
+  // 4. Update player's active ship to 0 if it was the destroyed ship
+  const char *sql_update_player = "UPDATE players SET ship = 0 WHERE id = ? AND ship = ?;";
+  rc = sqlite3_prepare_v2 (db, sql_update_player, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    goto rollback;
+  sqlite3_bind_int (stmt, 1, player_id);
+  sqlite3_bind_int (stmt, 2, ship_id);
+  rc = sqlite3_step (stmt);
+  sqlite3_finalize (stmt);
+  stmt = NULL;
+  if (rc != SQLITE_DONE)
+    goto rollback;
+
+  rc = sqlite3_exec (db, "COMMIT", NULL, NULL, NULL);
+  if (rc != SQLITE_OK)
+    goto out_unlock;
+
+  pthread_mutex_unlock (&db_mutex);
+  return SQLITE_OK;
+
+rollback:
+  sqlite3_exec (db, "ROLLBACK", NULL, NULL, NULL);
+out_unlock:
+  if (stmt)
+    sqlite3_finalize (stmt);
+  pthread_mutex_unlock (&db_mutex);
+  return rc;
+}
+
 
 /* Decide if a player_id is an NPC (engine policy). 
    Adjust the predicate as you formalize NPC flags. */
