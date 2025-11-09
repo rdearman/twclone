@@ -9,6 +9,7 @@
 #include "server_bigbang.h"
 #include "namegen.h"
 #include "server_log.h"
+#include "server_players.h"
 
 
 /* ----------------------------------------------------
@@ -1189,59 +1190,48 @@ create_full_port (sqlite3 *db, int sector, int port_number,
      * 3. INSERT INTO 'ports' TABLE
      * ===================================================================
      */
-    const char *port_sql =
-      "INSERT INTO ports (" 
-          "  number, name, sector, size, techlevel, credits, type, invisible, "
-          "  max_ore, product_ore, price_index_ore, "
-          "  max_organics, product_organics, price_index_organics, "
-          "  max_equipment, product_equipment, price_index_equipment, "
-          "  price_index_fuel "
-          ") VALUES ("
-          "  ?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, "  /* Params 1-7 */
-          "  ?8, ?9, ?10, "                     /* Ore params 8-10 */
-          "  ?11, ?12, ?13, "                   /* Organics params 11-13 */
-          "  ?14, ?15, ?16, "                   /* Equipment params 14-16 */
-          "  1.0 "                              /* price_index_fuel */
-          ");";  if (sqlite3_prepare_v2 (db, port_sql, -1, &port_stmt, NULL) != SQLITE_OK)
-    {
-      fprintf (stderr, "create_full_port: ports prepare failed: %s\n",
-               sqlite3_errmsg (db));
-      rc = sqlite3_errcode (db);
-      goto rollback;
-    }
-
-  /* Bind all 16 parameters */
-  sqlite3_bind_int (port_stmt, 1, port_number);
-  sqlite3_bind_text (port_stmt, 2, base_name, -1, SQLITE_STATIC);
-  sqlite3_bind_int (port_stmt, 3, sector);
-  sqlite3_bind_int (port_stmt, 4, port_size);
-  sqlite3_bind_int (port_stmt, 5, port_tech);
-  sqlite3_bind_int (port_stmt, 6, port_credits);
-  sqlite3_bind_int (port_stmt, 7, type_id);
-  /* Ore */
-  sqlite3_bind_int (port_stmt, 8, ore_max);
-  sqlite3_bind_int (port_stmt, 9, ore_stock);
-  sqlite3_bind_double (port_stmt, 10, ore_price_idx);
-  /* Organics */
-  sqlite3_bind_int (port_stmt, 11, org_max);
-  sqlite3_bind_int (port_stmt, 12, org_stock);
-  sqlite3_bind_double (port_stmt, 13, org_price_idx);
-  /* Equipment */
-  sqlite3_bind_int (port_stmt, 14, equ_max);
-  sqlite3_bind_int (port_stmt, 15, equ_stock);
-  sqlite3_bind_double (port_stmt, 16, equ_price_idx);
-
-  if (sqlite3_step (port_stmt) != SQLITE_DONE)
-    {
-      fprintf (stderr, "create_full_port: ports insert failed: %s\n",
-               sqlite3_errmsg (db));
-      rc = sqlite3_errcode (db);
-      goto rollback;
-    }
-  port_id = sqlite3_last_insert_rowid (db);
-  sqlite3_finalize (port_stmt);
-  port_stmt = NULL;
-
+        const char *port_sql =
+          "INSERT INTO ports ("
+              "  number, name, sector, size, techlevel, credits, type, invisible, "
+              "  ore_on_hand, organics_on_hand, equipment_on_hand, petty_cash "
+              ") VALUES ("
+              "  ?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, "  /* Params 1-7 */
+              "  ?8, ?9, ?10, ?11 "                /* New goods_on_hand and petty_cash params */
+              ");";  if (sqlite3_prepare_v2 (db, port_sql, -1, &port_stmt, NULL) != SQLITE_OK)
+        {
+          fprintf (stderr, "create_full_port: ports prepare failed: %s\n",
+                   sqlite3_errmsg (db));
+          rc = sqlite3_errcode (db);
+          goto rollback;
+        }
+    
+      /* Bind all 11 parameters */
+      sqlite3_bind_int (port_stmt, 1, port_number);
+      sqlite3_bind_text (port_stmt, 2, base_name, -1, SQLITE_STATIC);
+      sqlite3_bind_int (port_stmt, 3, sector);
+      sqlite3_bind_int (port_stmt, 4, port_size);
+      sqlite3_bind_int (port_stmt, 5, port_tech);
+      sqlite3_bind_int (port_stmt, 6, port_credits);
+      sqlite3_bind_int (port_stmt, 7, type_id);
+      /* Goods on Hand and Petty Cash */
+      sqlite3_bind_int (port_stmt, 8, 0); // ore_on_hand
+      sqlite3_bind_int (port_stmt, 9, 0); // organics_on_hand
+      sqlite3_bind_int (port_stmt, 10, 0); // equipment_on_hand
+      sqlite3_bind_int (port_stmt, 11, 0); // petty_cash
+    
+      if (sqlite3_step (port_stmt) != SQLITE_DONE)
+        {
+          fprintf (stderr, "create_full_port: ports insert failed: %s\n",
+                   sqlite3_errmsg (db));
+          rc = sqlite3_errcode (db);
+          goto rollback;
+        }
+      port_id = sqlite3_last_insert_rowid (db);
+      sqlite3_finalize (port_stmt);
+      port_stmt = NULL;
+    
+      // Create a bank account for the new port
+      h_add_credits(db, "port", (int)port_id, 0, NULL);
 
   /*
    * ===================================================================
@@ -1395,7 +1385,7 @@ create_ferringhi (int ferringhi_sector)
   // --- Ferringhi Homeworld (num=2) Update ---
   char planet_sector[256];
   snprintf (planet_sector, sizeof (planet_sector),
-	    "UPDATE planets SET sector=%d where id=2;",
+	    "UPDATE planets SET sector=%d, ore_on_hand=0, organics_on_hand=0, equipment_on_hand=0 where id=2;",
 	    longest_tunnel_sector);
 
   // Execute the variable that actually holds the SQL string: 'planet_sector'
@@ -1404,6 +1394,7 @@ create_ferringhi (int ferringhi_sector)
       fprintf (stderr, "create_ferringhi failed: %s\n", sqlite3_errmsg (db));
       return -1;
     }
+  h_add_credits(db, "npc_planet", 2, 0, NULL);
 
   // Insert the citadel details into the citadels table
   char sql_citadel[512];
@@ -1755,7 +1746,7 @@ create_ferringhi (int ferringhi_sector)
   // --- Orion Syndicate Outpost (num=3) Update ---
   char oso_planet_sector[1024];
   snprintf (oso_planet_sector, sizeof (oso_planet_sector),
-	    "UPDATE planets SET sector=%d WHERE id=3; "
+	    "UPDATE planets SET sector=%d, ore_on_hand=0, organics_on_hand=0, equipment_on_hand=0 WHERE id=3; "
 	    "INSERT INTO sector_assets (sector, player,offensive_setting, asset_type, corporation, quantity, deployed_at) "
 	    "VALUES (%d, 4, 2, 2, 1, 50000, CAST(strftime('%%s','now') AS INTEGER)); "
 	    "INSERT INTO sector_assets (sector, player, asset_type, corporation, quantity, deployed_at) "
@@ -1768,6 +1759,7 @@ create_ferringhi (int ferringhi_sector)
 	       sqlite3_errmsg (db));
       return -1;
     }
+  h_add_credits(db, "npc_planet", 3, 0, NULL);
 
 
 

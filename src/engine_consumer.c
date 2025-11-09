@@ -213,7 +213,7 @@ handle_ship_self_destruct_initiated (sqlite3 *db, sqlite3_stmt *ev_row)
     return 1; // Quarantine
   }
 
-  db_log_engine_event(get_now_epoch(), "ship.destroyed", player_id, sector_id, destroyed_payload);
+  db_log_engine_event(get_now_epoch(), "ship.destroyed", "player", player_id, sector_id, destroyed_payload);
   json_decref(destroyed_payload);
   json_decref(payload);
 

@@ -217,7 +217,7 @@ server_log_vprintf (int priority, const char *fmt, va_list ap)
   const int echo = g_echo_stderr;
   const backend_t be = g_backend;
   const int fd = g_fd;
-  char prefix[32];
+  char prefix[64];
   prefix[0] = 0;
   if (g_prefix[0])
     snprintf (prefix, sizeof prefix, "%s ", g_prefix);

@@ -2346,7 +2346,7 @@ h_daily_market_settlement (sqlite3 *db, int64_t now_s)
               int trade_quantity = (buy_quantity < sell_quantity) ? buy_quantity : sell_quantity;
               double trade_price = sell_price; // Buyer pays seller's price
 
-              LOGI("daily_market_settlement: Trade found! Buy Order %d (qty %d @ %.2f) matched Sell Order %d (qty %d @ %.2f). Trading %d units at %.2f.",
+              LOGI("daily_market_settlement: Trade found! Buy Order %d (qty %d @ %.2f) matched Sell Order %d (qty %d). Trading %d units at %.2f.",
                    buy_order_id, buy_quantity, buy_price, sell_order_id, sell_quantity, trade_quantity, trade_price);
 
               // --- Execute Trade ---

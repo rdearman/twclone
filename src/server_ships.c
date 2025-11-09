@@ -385,7 +385,7 @@ process_ship_destruction (int attacker_id, int victim_id,
   // 2. Log the event
   int rc = db_log_engine_event ((long long) time (NULL),
 				"combat.ship_destroyed",
-				attacker_id,
+				"player", attacker_id,
 				sector,
 				payload);
 
@@ -443,7 +443,7 @@ cmd_ship_self_destruct (client_ctx_t *ctx, json_t *root)
   
   /* h_log_engine_event will consume the reference of 'evt' */
   (void) db_log_engine_event ((long long) time (NULL), "ship.self_destruct.initiated",
-                             ctx->player_id, ctx->sector_id, evt);
+                             "player", ctx->player_id, ctx->sector_id, evt);
 
   /* 4. Response: command acknowledged and processed */
   send_enveloped_ok (ctx->fd, root, "ship.self_destruct.confirmed", NULL);

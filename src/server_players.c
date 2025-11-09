@@ -1998,6 +1998,204 @@ bookmarks_as_array (int64_t pid)
   return arr;
 }
 
+int
+h_deduct_player_petty_cash (sqlite3 *db, int player_id, long long amount, long long *new_balance_out)
+{
+  char *errmsg = NULL;
+  int rc = SQLITE_ERROR;
+  long long current_balance = 0;
+
+  if (!db || player_id <= 0 || amount <= 0) {
+      LOGE("h_deduct_player_petty_cash: Invalid arguments. db=%p, player_id=%d, amount=%lld", db, player_id, amount);
+      return SQLITE_MISUSE;
+  }
+
+  // Start transaction
+  rc = sqlite3_exec(db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK) {
+      LOGE("h_deduct_player_petty_cash: Failed to start transaction: %s", errmsg ? errmsg : "unknown error");
+      sqlite3_free(errmsg);
+      return rc;
+  }
+
+  // 1. Get current petty cash balance
+  sqlite3_stmt *select_stmt = NULL;
+  const char *sql_select_balance = "SELECT credits FROM players WHERE id = ?;";
+  rc = sqlite3_prepare_v2(db, sql_select_balance, -1, &select_stmt, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("h_deduct_player_petty_cash: SELECT prepare error: %s", sqlite3_errmsg(db));
+      goto rollback_and_cleanup;
+  }
+  sqlite3_bind_int(select_stmt, 1, player_id);
+
+  if (sqlite3_step(select_stmt) == SQLITE_ROW) {
+      current_balance = sqlite3_column_int64(select_stmt, 0);
+  } else {
+      LOGE("h_deduct_player_petty_cash: Player ID %d not found in players table.", player_id);
+      rc = SQLITE_NOTFOUND;
+      goto rollback_and_cleanup;
+  }
+  sqlite3_finalize(select_stmt);
+  select_stmt = NULL;
+
+  // 2. Check for sufficient funds
+  if (current_balance < amount) {
+      LOGW("h_deduct_player_petty_cash: Insufficient petty cash for player %d. Current: %lld, Attempted deduct: %lld", player_id, current_balance, amount);
+      rc = SQLITE_CONSTRAINT; // Or a custom error code for insufficient funds
+      goto rollback_and_cleanup;
+  }
+
+  // 3. Update petty cash balance
+  long long new_balance = current_balance - amount;
+  sqlite3_stmt *update_stmt = NULL;
+  const char *sql_update_balance = "UPDATE players SET credits = ? WHERE id = ?;";
+  rc = sqlite3_prepare_v2(db, sql_update_balance, -1, &update_stmt, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("h_deduct_player_petty_cash: UPDATE prepare error: %s", sqlite3_errmsg(db));
+      goto rollback_and_cleanup;
+  }
+  sqlite3_bind_int64(update_stmt, 1, new_balance);
+  sqlite3_bind_int(update_stmt, 2, player_id);
+
+  if (sqlite3_step(update_stmt) != SQLITE_DONE) {
+      LOGE("h_deduct_player_petty_cash: UPDATE step error: %s", sqlite3_errmsg(db));
+      goto rollback_and_cleanup;
+  }
+  sqlite3_finalize(update_stmt);
+  update_stmt = NULL;
+
+  // Commit transaction
+  rc = sqlite3_exec(db, "COMMIT;", NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK) {
+      LOGE("h_deduct_player_petty_cash: Failed to commit transaction: %s", errmsg ? errmsg : "unknown error");
+      sqlite3_free(errmsg);
+      return rc;
+  }
+
+  if (new_balance_out)
+    *new_balance_out = new_balance;
+
+  return SQLITE_OK;
+
+rollback_and_cleanup:
+  sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+  if (select_stmt) sqlite3_finalize(select_stmt);
+  if (update_stmt) sqlite3_finalize(update_stmt);
+  if (errmsg) sqlite3_free(errmsg);
+  return rc;
+}
+
+int
+h_add_player_petty_cash (sqlite3 *db, int player_id, long long amount, long long *new_balance_out)
+{
+  char *errmsg = NULL;
+  int rc = SQLITE_ERROR;
+  long long current_balance = 0;
+
+  if (!db || player_id <= 0 || amount <= 0) {
+      LOGE("h_add_player_petty_cash: Invalid arguments. db=%p, player_id=%d, amount=%lld", db, player_id, amount);
+      return SQLITE_MISUSE;
+  }
+
+  // Start transaction
+  rc = sqlite3_exec(db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK) {
+      LOGE("h_add_player_petty_cash: Failed to start transaction: %s", errmsg ? errmsg : "unknown error");
+      sqlite3_free(errmsg);
+      return rc;
+  }
+
+  // 1. Get current petty cash balance
+  sqlite3_stmt *select_stmt = NULL;
+  const char *sql_select_balance = "SELECT credits FROM players WHERE id = ?;";
+  rc = sqlite3_prepare_v2(db, sql_select_balance, -1, &select_stmt, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("h_add_player_petty_cash: SELECT prepare error: %s", sqlite3_errmsg(db));
+      goto rollback_and_cleanup;
+  }
+  sqlite3_bind_int(select_stmt, 1, player_id);
+
+  if (sqlite3_step(select_stmt) == SQLITE_ROW) {
+      current_balance = sqlite3_column_int64(select_stmt, 0);
+  } else {
+      LOGE("h_add_player_petty_cash: Player ID %d not found in players table.", player_id);
+      rc = SQLITE_NOTFOUND;
+      goto rollback_and_cleanup;
+  }
+  sqlite3_finalize(select_stmt);
+  select_stmt = NULL;
+
+  // 2. Update petty cash balance
+  long long new_balance = current_balance + amount;
+  sqlite3_stmt *update_stmt = NULL;
+  const char *sql_update_balance = "UPDATE players SET credits = ? WHERE id = ?;";
+  rc = sqlite3_prepare_v2(db, sql_update_balance, -1, &update_stmt, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("h_add_player_petty_cash: UPDATE prepare error: %s", sqlite3_errmsg(db));
+      goto rollback_and_cleanup;
+  }
+  sqlite3_bind_int64(update_stmt, 1, new_balance);
+  sqlite3_bind_int(update_stmt, 2, player_id);
+
+  if (sqlite3_step(update_stmt) != SQLITE_DONE) {
+      LOGE("h_add_player_petty_cash: UPDATE step error: %s", sqlite3_errmsg(db));
+      goto rollback_and_cleanup;
+  }
+  sqlite3_finalize(update_stmt);
+  update_stmt = NULL;
+
+  // Commit transaction
+  rc = sqlite3_exec(db, "COMMIT;", NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK) {
+      LOGE("h_add_player_petty_cash: Failed to commit transaction: %s", errmsg ? errmsg : "unknown error");
+      sqlite3_free(errmsg);
+      return rc;
+  }
+
+  if (new_balance_out)
+    *new_balance_out = new_balance;
+
+  return SQLITE_OK;
+
+rollback_and_cleanup:
+  sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+  if (select_stmt) sqlite3_finalize(select_stmt);
+  if (update_stmt) sqlite3_finalize(update_stmt);
+  if (errmsg) sqlite3_free(errmsg);
+  return rc;
+}
+
+int
+h_get_player_petty_cash (sqlite3 *db, int player_id, long long *credits_out)
+{
+    sqlite3_stmt *select_stmt = NULL;
+    const char *sql_select_balance = "SELECT credits FROM players WHERE id = ?;";
+    int rc = SQLITE_ERROR;
+
+    if (!db || player_id <= 0 || !credits_out) {
+        LOGE("h_get_player_petty_cash: Invalid arguments. db=%p, player_id=%d, credits_out=%p", db, player_id, credits_out);
+        return SQLITE_MISUSE;
+    }
+
+    rc = sqlite3_prepare_v2(db, sql_select_balance, -1, &select_stmt, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("h_get_player_petty_cash: SELECT prepare error: %s", sqlite3_errmsg(db));
+        return rc;
+    }
+    sqlite3_bind_int(select_stmt, 1, player_id);
+
+    if (sqlite3_step(select_stmt) == SQLITE_ROW) {
+        *credits_out = sqlite3_column_int64(select_stmt, 0);
+        rc = SQLITE_OK;
+    } else {
+        LOGE("h_get_player_petty_cash: Player ID %d not found in players table.", player_id);
+        rc = SQLITE_NOTFOUND;
+    }
+    sqlite3_finalize(select_stmt);
+    return rc;
+}
+
+
 static json_t *
 avoid_as_array (int64_t pid)
 {
