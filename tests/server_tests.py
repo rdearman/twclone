@@ -370,13 +370,19 @@ def _run_asserts(resp: Dict[str, Any], assertions: List[Dict[str, Any]], vars: D
     return ok_all, errs
 
 
+def _generate_idempotency_key() -> str:
+    return str(uuid.uuid4())
+
 def run_test(name: str, sock: socket.socket, test: Dict[str, Any], strict: bool = False, vars: Optional[Dict[str,Any]] = None) -> None:
     if vars is None: vars = {}
 
     command = coerce_command_from_test(name, test)
     expect = test.get("expect", {"status": "ok"})
 
-    if isinstance(command.get("data"), dict) and "idempotency_key" in test:
+    # Handle dynamic idempotency_key generation
+    if test.get("idempotency_key") == "*generate*":
+        command["data"]["idempotency_key"] = _generate_idempotency_key()
+    elif isinstance(command.get("data"), dict) and "idempotency_key" in test:
         command["data"].setdefault("idempotency_key", test["idempotency_key"])
 
     command = _expand_vars_in_obj(command, vars)        
