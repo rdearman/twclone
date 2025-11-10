@@ -1,6 +1,7 @@
 // db_player_settings.h
 #ifndef DB_PLAYER_SETTINGS_H
 #define DB_PLAYER_SETTINGS_H
+#include <stddef.h>
 #endif
 
 #include <stdint.h>
@@ -59,3 +60,6 @@ int db_prefs_get_all (int64_t player_id, /*out */ sqlite3_stmt ** it);
 int db_prefs_set_one (int64_t player_id, const char *key, pref_type t,
 		      const char *value);
 int db_prefs_get_one (int64_t player_id, const char *key, char **out_value);
+int db_get_player_pref_int(int player_id, const char *key, int default_value);
+int db_get_player_pref_string(int player_id, const char *key, const char *default_value, char *out_buffer, size_t buffer_size);
+

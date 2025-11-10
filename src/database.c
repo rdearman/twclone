@@ -14,6 +14,8 @@
 #include "server_config.h"
 #include "database.h"
 #include "server_log.h"
+#include "server_cron.h"
+#include "server_cron.h"
 
 
 /* Define and initialize the mutex for the database handle */
@@ -391,10 +393,10 @@ const char *create_table_sql[] = {
   " organics_on_hand INTEGER NOT NULL DEFAULT 0, "
   " equipment_on_hand INTEGER NOT NULL DEFAULT 0, "
   " petty_cash INTEGER NOT NULL DEFAULT 0, "
-  " credits INTEGER, "
   " invisible INTEGER DEFAULT 0, "
   " type INTEGER DEFAULT 1, "
-  " FOREIGN KEY (sector) REFERENCES sectors(id)); "
+  " FOREIGN KEY (sector) REFERENCES sectors(id)); ",
+
 
   " CREATE TABLE IF NOT EXISTS port_trade ( "
     " id INTEGER PRIMARY KEY AUTOINCREMENT,  "
@@ -403,6 +405,10 @@ const char *create_table_sql[] = {
     " commodity TEXT CHECK(commodity IN ('ore','organics','equipment')),  "
     " mode TEXT CHECK(mode IN ('buy','sell')),  "
     " FOREIGN KEY (port_id) REFERENCES ports(id)); ",
+
+
+
+
 
 
   " CREATE TABLE IF NOT EXISTS players ( " " id INTEGER PRIMARY KEY AUTOINCREMENT,  " " type INTEGER DEFAULT 2,  " " number INTEGER,  "	/* legacy player ID */
@@ -417,7 +423,8 @@ const char *create_table_sql[] = {
     " lastplanet INTEGER,  "	/* last planet created */
     " score INTEGER,  "
     " kills INTEGER,  "
-    " remote INTEGER,  " " fighters INTEGER,  " " holds INTEGER " " ); ",
+    " remote INTEGER,  " " fighters INTEGER,  " " holds INTEGER, "
+    " last_news_read_timestamp INTEGER DEFAULT 0 " " ); ",
 
   " CREATE TABLE IF NOT EXISTS player_types (type INTEGER PRIMARY KEY AUTOINCREMENT, description TEXT); ",
 
@@ -573,6 +580,16 @@ const char *create_table_sql[] = {
 
   " ); ",
 
+  " CREATE TABLE IF NOT EXISTS citadel_requirements ( "
+  "   planet_type_id INTEGER NOT NULL REFERENCES planettypes(id) ON DELETE CASCADE, "
+  "   citadel_level INTEGER NOT NULL, "
+  "   ore_cost INTEGER NOT NULL DEFAULT 0, "
+  "   organics_cost INTEGER NOT NULL DEFAULT 0, "
+  "   equipment_cost INTEGER NOT NULL DEFAULT 0, "
+  "   colonist_cost INTEGER NOT NULL DEFAULT 0, "
+  "   time_cost_days INTEGER NOT NULL DEFAULT 0, "
+  "   PRIMARY KEY (planet_type_id, citadel_level) "
+  " ); ",
   " CREATE TABLE IF NOT EXISTS planet_goods ( "
 
   "    planet_id INTEGER NOT NULL, "
@@ -823,12 +840,21 @@ const char *create_table_sql[] = {
 
   "CREATE INDEX IF NOT EXISTS ix_trade_log_ts ON trade_log(timestamp);",
   
-  "CREATE TABLE IF NOT EXISTS banks ("
-    "    player_id         INTEGER PRIMARY KEY,"
-    "    credits           INTEGER NOT NULL DEFAULT 0,"
-    "    last_deposit_at   INTEGER NOT NULL,"
-    "    last_interest_run INTEGER NOT NULL,"
-    "    FOREIGN KEY (player_id) REFERENCES players(id)" ");",
+    "CREATE TABLE IF NOT EXISTS banks ("
+  
+      "    owner_type        TEXT NOT NULL,"
+  
+      "    owner_id          INTEGER NOT NULL,"
+  
+      "    credits           INTEGER NOT NULL DEFAULT 0,"
+  
+      "    last_deposit_at   INTEGER NOT NULL,"
+  
+      "    last_interest_run INTEGER NOT NULL,"
+  
+      "    PRIMARY KEY (owner_type, owner_id)"
+  
+      ");",
 
   "CREATE TABLE IF NOT EXISTS stardock_assets ("
     "    sector_id      INTEGER PRIMARY KEY,"
@@ -1552,9 +1578,9 @@ const char *insert_default_sql[] = {
   "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (9, 'Fedspace 9', 'The Federation -- Do Not Dump!', 'The Federation');",
   "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (10, 'Fedspace 10','The Federation -- Do Not Dump!', 'The Federation');",
 
-  " INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, ore_on_hand, organics_on_hand, equipment_on_hand, petty_cash, credits, type) "
+            " INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, ore_on_hand, organics_on_hand, equipment_on_hand, petty_cash, type) "
 
-  " VALUES (1, 1, 'Earth Port', 1, 10, 10, 10000, 10000, 10000, 0, 1000000, 1); ",
+            " VALUES (1, 1, 'Earth Port', 1, 10, 10, 10000, 10000, 10000, 0, 1); ",
 
   /* Fedspace warps (hard-coded) */
   "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (1,2);",
@@ -1779,9 +1805,9 @@ const char *insert_default_sql[] = {
 
 " INSERT OR IGNORE INTO commodities (code, name, base_price, volatility, illegal)  "
 " VALUES  "
-"   ('SLV', 'Slaves', 1000, 50, 0),  "
-"   ('WPN', 'Weapons', 750, 40, 0),  "
-"   ('DRG', 'Drugs', 500, 60, 0);  "
+"   ('SLV', 'Slaves', 1000, 50, 1),  "
+"   ('WPN', 'Weapons', 750, 40, 1),  "
+"   ('DRG', 'Drugs', 500, 60, 1);  "
   
 
 " CREATE TABLE IF NOT EXISTS commodity_orders (  "
@@ -2450,7 +2476,7 @@ const char *insert_default_sql[] = {
 "   p.name AS player_name,  "
 "   COALESCE(ba.balance,0) AS bank_balance  "
 " FROM players p  "
-" LEFT JOIN bank_accounts ba ON ba.player_id = p.id;  "
+" LEFT JOIN bank_accounts ba ON ba.owner_type = 'player' AND ba.owner_id = p.id;  "
 
 " CREATE VIEW IF NOT EXISTS v_corp_treasury AS  "
 " SELECT  "
@@ -2484,12 +2510,12 @@ const char *insert_default_sql[] = {
 
 " CREATE VIEW IF NOT EXISTS v_bank_leaderboard AS  "
 " SELECT  "
-"   ba.player_id,  "
+"   ba.owner_id AS player_id,  "
 "   p.name,  "
 "   ba.balance  "
 " FROM bank_accounts ba  "
-" JOIN players p ON ba.player_id = p.id  "
-" LEFT JOIN player_prefs pp ON ba.player_id = pp.player_id AND pp.key = 'privacy.show_leaderboard'  "
+" JOIN players p ON ba.owner_type = 'player' AND ba.owner_id = p.id  "
+" LEFT JOIN player_prefs pp ON ba.owner_id = pp.player_id AND pp.key = 'privacy.show_leaderboard'  "
 " WHERE COALESCE(pp.value, 'true') = 'true'  "
 " ORDER BY ba.balance DESC;  "
   
@@ -2524,11 +2550,9 @@ static const char *ENGINE_BOOTSTRAP_SQL = "BEGIN IMMEDIATE;\n"
   "INSERT OR IGNORE INTO cron_tasks(name,schedule,last_run_at,next_due_at,enabled,payload) VALUES\n"
   "('daily_turn_reset','daily@03:00Z',NULL,strftime('%s','now'),1,NULL),\n"
   "('terra_replenish','daily@04:00Z',NULL,strftime('%s','now'),1,NULL),\n"
-  "('port_reprice','daily@05:00Z',NULL,strftime('%s','now'),1,NULL),\n"
   "('planet_growth','every:10m',NULL,strftime('%s','now'),1,NULL),\n"
   "('fedspace_cleanup','every:2m',NULL,strftime('%s','now'),1,NULL),\n"
   "('autouncloak_sweeper','every:15m',NULL,strftime('%s','now'),1,NULL),\n"
-  "('port_price_drift','every:10s',NULL,strftime('%s','now'),1,NULL),\n"
   "('npc_step','every:30s',NULL,strftime('%s','now'),1,NULL),\n"
   "('broadcast_ttl_cleanup','every:5m',NULL,strftime('%s','now'),1,NULL),\n"
   "('news_collator','daily@06:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','6 hours'),1,NULL);\n"
@@ -4361,7 +4385,7 @@ db_port_info_json (int port_id, json_t **out_obj)
 {
   sqlite3_stmt *st = NULL;
   json_t *port = NULL;
-  json_t *commodities = NULL;
+  json_t *commodities_array = NULL;
   int rc = SQLITE_ERROR;	// Default to error
   sqlite3 *dbh = NULL;
 
@@ -4383,9 +4407,11 @@ db_port_info_json (int port_id, json_t **out_obj)
       goto cleanup;
     }
 
-  // First, get the basic port info
+  // First, get the basic port info and commodity on-hand/max values
   const char *port_sql =
-    "SELECT id, name, type, tech_level, credits, sector FROM ports WHERE id=?;";
+    "SELECT id, name, type, techlevel, credits, sector, "
+    "ore_on_hand, organics_on_hand, equipment_on_hand, petty_cash "
+    "FROM ports WHERE id=?;";
   rc = sqlite3_prepare_v2 (dbh, port_sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     goto cleanup;
@@ -4410,39 +4436,34 @@ db_port_info_json (int port_id, json_t **out_obj)
 		       json_integer (sqlite3_column_int (st, 4)));
   json_object_set_new (port, "sector_id",
 		       json_integer (sqlite3_column_int (st, 5)));
+  json_object_set_new (port, "petty_cash",
+		       json_integer (sqlite3_column_int (st, 9))); // petty_cash
 
-  sqlite3_finalize (st);
-  st = NULL;
-
-  // Now, get the commodities info
-  const char *stock_sql =
-    "SELECT commodity, quantity, buy_price, sell_price FROM port_stock WHERE port_id=?;";
-  rc = sqlite3_prepare_v2 (dbh, stock_sql, -1, &st, NULL);
-  if (rc != SQLITE_OK)
-    goto cleanup;
-
-  sqlite3_bind_int (st, 1, port_id);
-  commodities = json_array ();
-  if (!commodities)
+  commodities_array = json_array ();
+  if (!commodities_array)
     {
       rc = SQLITE_NOMEM;
       goto cleanup;
     }
 
-  while ((rc = sqlite3_step (st)) == SQLITE_ROW)
-    {
-      json_t *commodity = json_object ();
-      json_object_set_new (commodity, "commodity",
-			   json_string ((const char *)
-					sqlite3_column_text (st, 0)));
-      json_object_set_new (commodity, "quantity",
-			   json_integer (sqlite3_column_int (st, 1)));
-      json_object_set_new (commodity, "buy_price",
-			   json_integer (sqlite3_column_int (st, 2)));
-      json_object_set_new (commodity, "sell_price",
-			   json_integer (sqlite3_column_int (st, 3)));
-      json_array_append_new (commodities, commodity);
-    }
+  // Add Ore info
+  json_array_append_new (commodities_array,
+			 json_pack ("{s:s, s:i}",
+				    "commodity", "ore",
+				    "quantity", sqlite3_column_int (st, 6))); // ore_on_hand
+  // Add Organics info
+  json_array_append_new (commodities_array,
+			 json_pack ("{s:s, s:i}",
+				    "commodity", "organics",
+				    "quantity", sqlite3_column_int (st, 7))); // organics_on_hand
+  // Add Equipment info
+  json_array_append_new (commodities_array,
+			 json_pack ("{s:s, s:i}",
+				    "commodity", "equipment",
+				    "quantity", sqlite3_column_int (st, 8))); // equipment_on_hand
+
+  sqlite3_finalize (st);
+  st = NULL;
 
   rc = SQLITE_OK;
 
@@ -4452,22 +4473,21 @@ cleanup:
 
   if (rc == SQLITE_OK)
     {
-      json_object_set_new (port, "commodities", commodities);
+      json_object_set_new (port, "commodities", commodities_array);
       *out_obj = port;
     }
   else
     {
       if (port)
 	json_decref (port);
-      if (commodities)
-	json_decref (commodities);
+      if (commodities_array)
+	json_decref (commodities_array);
     }
 
   pthread_mutex_unlock (&db_mutex);
 
   return rc;
 }
-
 /* ---------- PLAYERS AT SECTOR (lightweight: id + name) ---------- */
 
 int
@@ -6487,6 +6507,14 @@ db_destroy_ship (sqlite3 *db, int player_id, int ship_id)
   if (rc != SQLITE_DONE)
     goto rollback;
 
+  // Log ship destroyed event
+  json_t *payload = json_object();
+  json_object_set_new(payload, "ship_id", json_integer(ship_id));
+  json_object_set_new(payload, "ship_name", json_string(ship_name));
+  json_object_set_new(payload, "player_id", json_integer(player_id));
+  //  h_log_engine_event((long long)time(NULL), "ship.destroyed", "player", player_id, ship_sector, payload, NULL);
+
+  
   rc = sqlite3_exec (db, "COMMIT", NULL, NULL, NULL);
   if (rc != SQLITE_OK)
     goto out_unlock;
@@ -6970,7 +6998,7 @@ static const char *INSERT_ENGINE_EVENT_SQL =
 
 int db_log_engine_event (long long ts,
 		     const char *type,
-		     const char *actor_owner_type, int actor_owner_id, int sector_id, json_t *payload)
+		     const char *actor_owner_type, int actor_player_id, int sector_id, json_t *payload, const char *idem_key)
 {
   sqlite3 *db = db_get_handle ();
   sqlite3_stmt *stmt = NULL;
@@ -7003,9 +7031,9 @@ int db_log_engine_event (long long ts,
       sqlite3_bind_null(stmt, 3);
   }
 
-  if (actor_owner_id > 0)
+  if (actor_player_id > 0)
     {
-      sqlite3_bind_int (stmt, 4, actor_owner_id);
+      sqlite3_bind_int (stmt, 4, actor_player_id);
     }
   else
     {
@@ -7045,6 +7073,87 @@ cleanup:
   return rc;
 }
 
+
+int db_news_insert_feed_item(int ts, const char *category, const char *scope,
+                             const char *headline, const char *body, json_t *context_data)
+{
+  sqlite3 *db = db_get_handle ();
+  sqlite3_stmt *stmt = NULL;
+  int rc = SQLITE_ERROR;
+  char *article_text = NULL;
+  char *context_str = NULL;
+  int expiration_ts = ts + NEWS_EXPIRATION_SECONDS; // NEWS_EXPIRATION_SECONDS is defined in server_cron.h
+
+  // Combine headline and body into article_text
+  // Add scope to context_data if it's not null
+  if (scope && strlen(scope) > 0) {
+      if (!context_data) {
+          context_data = json_object();
+      }
+      json_object_set_new(context_data, "scope", json_string(scope));
+  }
+
+  if (context_data) {
+      context_str = json_dumps(context_data, JSON_COMPACT);
+      if (!context_str) {
+          fprintf(stderr, "ERROR: db_news_insert_feed_item Failed to serialize context_data.\n");
+          goto cleanup;
+      }
+      if (asprintf(&article_text, "HEADLINE: %s\nBODY: %s\nCONTEXT: %s", headline, body, context_str) == -1) {
+          fprintf(stderr, "ERROR: db_news_insert_feed_item Failed to allocate article_text with context.\n");
+          goto cleanup;
+      }
+  } else {
+      if (asprintf(&article_text, "HEADLINE: %s\nBODY: %s", headline, body) == -1) {
+          fprintf(stderr, "ERROR: db_news_insert_feed_item Failed to allocate article_text without context.\n");
+          goto cleanup;
+      }
+  }
+
+  if (!article_text) {
+      fprintf(stderr, "ERROR: db_news_insert_feed_item Failed to allocate article_text.\n");
+      goto cleanup;
+  }
+
+  const char *sql =
+    "INSERT INTO news_feed (published_ts, expiration_ts, news_category, article_text) "
+    "VALUES (?, ?, ?, ?);";
+
+  rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      fprintf (stderr, "ERROR: db_news_insert_feed_item prepare failed: %s\n", sqlite3_errmsg (db));
+      goto cleanup;
+    }
+
+  sqlite3_bind_int (stmt, 1, ts);
+  sqlite3_bind_int (stmt, 2, expiration_ts);
+  sqlite3_bind_text (stmt, 3, category, -1, SQLITE_STATIC);
+  sqlite3_bind_text (stmt, 4, article_text, -1, SQLITE_TRANSIENT);
+
+  rc = sqlite3_step (stmt);
+  if (rc != SQLITE_DONE)
+    {
+      fprintf (stderr, "ERROR: db_news_insert_feed_item execution failed: %s\n", sqlite3_errmsg (db));
+      rc = SQLITE_ERROR;
+    }
+  else
+    {
+      rc = SQLITE_OK;
+    }
+
+cleanup:
+  if (stmt)
+    sqlite3_finalize (stmt);
+  if (article_text)
+    free(article_text);
+  if (context_str)
+    free(context_str);
+  if (context_data)
+    json_decref(context_data); // Decref if created locally or passed in
+
+  return rc;
+}
 
 int db_is_sector_fedspace (int ck_sector)
 {
@@ -7175,6 +7284,263 @@ cleanup:
     return out_sector;
 }
 
+
+/*
+ * Helper function to add credits to an account.
+ * Returns SQLITE_OK on success, or an SQLite error code.
+ * If new_balance is not NULL, it will be set to the account's new balance.
+ */
+int h_add_credits(sqlite3 *db, const char *owner_type, int owner_id, long long amount, long long *new_balance) {
+    sqlite3_stmt *stmt = NULL;
+    int rc = SQLITE_ERROR;
+
+    if (!db || !owner_type || amount <= 0) {
+        return SQLITE_MISUSE;
+    }
+
+    pthread_mutex_lock(&db_mutex);
+
+    const char *sql =
+        "INSERT INTO bank_tx (owner_type, owner_id, kind, amount) "
+        "VALUES (?, ?, 'deposit', ?);";
+
+    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("h_add_credits: Failed to prepare statement: %s", sqlite3_errmsg(db));
+        goto cleanup;
+    }
+
+    sqlite3_bind_text(stmt, 1, owner_type, -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 2, owner_id);
+    sqlite3_bind_int64(stmt, 3, amount);
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        LOGE("h_add_credits: Failed to execute statement: %s", sqlite3_errmsg(db));
+        goto cleanup;
+    }
+
+    if (new_balance) {
+        sqlite3_stmt *balance_stmt = NULL;
+        const char *balance_sql = "SELECT balance FROM bank_accounts WHERE owner_type = ? AND owner_id = ?;";
+        rc = sqlite3_prepare_v2(db, balance_sql, -1, &balance_stmt, NULL);
+        if (rc == SQLITE_OK) {
+            sqlite3_bind_text(balance_stmt, 1, owner_type, -1, SQLITE_STATIC);
+            sqlite3_bind_int(balance_stmt, 2, owner_id);
+            if (sqlite3_step(balance_stmt) == SQLITE_ROW) {
+                *new_balance = sqlite3_column_int64(balance_stmt, 0);
+            }
+            sqlite3_finalize(balance_stmt);
+        } else {
+            LOGE("h_add_credits: Failed to prepare balance statement: %s", sqlite3_errmsg(db));
+        }
+    }
+
+    rc = SQLITE_OK;
+
+cleanup:
+    if (stmt) {
+        sqlite3_finalize(stmt);
+    }
+    pthread_mutex_unlock(&db_mutex);
+    return rc;
+}
+
+/*
+ * Helper function to deduct credits from an account.
+ * Returns SQLITE_OK on success, SQLITE_CONSTRAINT if insufficient funds, or an SQLite error code.
+ * If new_balance is not NULL, it will be set to the account's new balance.
+ */
+int h_deduct_credits(sqlite3 *db, const char *owner_type, int owner_id, long long amount, long long *new_balance) {
+    sqlite3_stmt *stmt = NULL;
+    int rc = SQLITE_ERROR;
+
+    if (!db || !owner_type || amount <= 0) {
+        return SQLITE_MISUSE;
+    }
+
+    pthread_mutex_lock(&db_mutex);
+
+    const char *sql =
+        "INSERT INTO bank_tx (owner_type, owner_id, kind, amount) "
+        "VALUES (?, ?, 'withdraw', ?);";
+
+    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("h_deduct_credits: Failed to prepare statement: %s", sqlite3_errmsg(db));
+        goto cleanup;
+    }
+
+    sqlite3_bind_text(stmt, 1, owner_type, -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 2, owner_id);
+    sqlite3_bind_int64(stmt, 3, amount);
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        if (rc == SQLITE_CONSTRAINT) {
+            LOGW("h_deduct_credits: Insufficient funds for %s:%d to deduct %lld credits.", owner_type, owner_id, amount);
+        } else {
+            LOGE("h_deduct_credits: Failed to execute statement: %s", sqlite3_errmsg(db));
+        }
+        goto cleanup;
+    }
+
+    if (new_balance) {
+        sqlite3_stmt *balance_stmt = NULL;
+        const char *balance_sql = "SELECT balance FROM bank_accounts WHERE owner_type = ? AND owner_id = ?;";
+        rc = sqlite3_prepare_v2(db, balance_sql, -1, &balance_stmt, NULL);
+        if (rc == SQLITE_OK) {
+            sqlite3_bind_text(balance_stmt, 1, owner_type, -1, SQLITE_STATIC);
+            sqlite3_bind_int(balance_stmt, 2, owner_id);
+            if (sqlite3_step(balance_stmt) == SQLITE_ROW) {
+                *new_balance = sqlite3_column_int64(balance_stmt, 0);
+            }
+            sqlite3_finalize(balance_stmt);
+        } else {
+            LOGE("h_deduct_credits: Failed to prepare balance statement: %s", sqlite3_errmsg(db));
+        }
+    }
+
+    rc = SQLITE_OK;
+
+cleanup:
+    if (stmt) {
+        sqlite3_finalize(stmt);
+    }
+    pthread_mutex_unlock(&db_mutex);
+    return rc;
+}
+
+/*
+ * Helper function to update commodity stock on a planet.
+ * Returns SQLITE_OK on success, or an SQLite error code.
+ * If new_quantity is not NULL, it will be set to the commodity's new quantity.
+ */
+int h_update_planet_stock(sqlite3 *db, int planet_id, const char *commodity_code, int quantity_change, int *new_quantity) {
+    sqlite3_stmt *stmt = NULL;
+    int rc = SQLITE_ERROR;
+
+    if (!db || !commodity_code || planet_id <= 0) {
+        return SQLITE_MISUSE;
+    }
+
+    pthread_mutex_lock(&db_mutex);
+
+    const char *sql =
+        "UPDATE planet_goods SET quantity = quantity + ? "
+        "WHERE planet_id = ? AND commodity = ?;";
+
+    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("h_update_planet_stock: Failed to prepare statement: %s", sqlite3_errmsg(db));
+        goto cleanup;
+    }
+
+    sqlite3_bind_int(stmt, 1, quantity_change);
+    sqlite3_bind_int(stmt, 2, planet_id);
+    sqlite3_bind_text(stmt, 3, commodity_code, -1, SQLITE_STATIC);
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        LOGE("h_update_planet_stock: Failed to execute statement: %s", sqlite3_errmsg(db));
+        goto cleanup;
+    }
+
+    if (new_quantity) {
+        sqlite3_stmt *qty_stmt = NULL;
+        const char *qty_sql = "SELECT quantity FROM planet_goods WHERE planet_id = ? AND commodity = ?;";
+        rc = sqlite3_prepare_v2(db, qty_sql, -1, &qty_stmt, NULL);
+        if (rc == SQLITE_OK) {
+            sqlite3_bind_int(qty_stmt, 1, planet_id);
+            sqlite3_bind_text(qty_stmt, 2, commodity_code, -1, SQLITE_STATIC);
+            if (sqlite3_step(qty_stmt) == SQLITE_ROW) {
+                *new_quantity = sqlite3_column_int(qty_stmt, 0);
+            }
+            sqlite3_finalize(qty_stmt);
+        } else {
+            LOGE("h_update_planet_stock: Failed to prepare quantity statement: %s", sqlite3_errmsg(db));
+        }
+    }
+
+    rc = SQLITE_OK;
+
+cleanup:
+    if (stmt) {
+        sqlite3_finalize(stmt);
+    }
+    pthread_mutex_unlock(&db_mutex);
+    return rc;
+}
+
+/*
+ * Helper function to update commodity stock on a port.
+ * Returns SQLITE_OK on success, or an SQLite error code.
+ * If new_quantity is not NULL, it will be set to the commodity's new quantity.
+ */
+int h_update_port_stock(sqlite3 *db, int port_id, const char *commodity_code, int quantity_change, int *new_quantity) {
+    sqlite3_stmt *stmt = NULL;
+    int rc = SQLITE_ERROR;
+
+    if (!db || !commodity_code || port_id <= 0) {
+        return SQLITE_MISUSE;
+    }
+
+    pthread_mutex_lock(&db_mutex);
+
+    const char *sql =
+        "UPDATE ports SET "
+        "ore_on_hand = CASE WHEN ?3 = 'ore' THEN ore_on_hand + ?1 ELSE ore_on_hand END, "
+        "organics_on_hand = CASE WHEN ?3 = 'organics' THEN organics_on_hand + ?1 ELSE organics_on_hand END, "
+        "equipment_on_hand = CASE WHEN ?3 = 'equipment' THEN equipment_on_hand + ?1 ELSE equipment_on_hand END "
+        "WHERE id = ?2;";
+
+    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("h_update_port_stock: Failed to prepare statement: %s", sqlite3_errmsg(db));
+        goto cleanup;
+    }
+
+    sqlite3_bind_int(stmt, 1, quantity_change);
+    sqlite3_bind_int(stmt, 2, port_id);
+    sqlite3_bind_text(stmt, 3, commodity_code, -1, SQLITE_STATIC);
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        LOGE("h_update_port_stock: Failed to execute statement: %s", sqlite3_errmsg(db));
+        goto cleanup;
+    }
+
+    if (new_quantity) {
+        sqlite3_stmt *qty_stmt = NULL;
+        const char *qty_sql =
+            "SELECT CASE "
+            "WHEN ?2 = 'ore' THEN ore_on_hand "
+            "WHEN ?2 = 'organics' THEN organics_on_hand "
+            "WHEN ?2 = 'equipment' THEN equipment_on_hand "
+            "ELSE 0 END "
+            "FROM ports WHERE id = ?1;";
+        rc = sqlite3_prepare_v2(db, qty_sql, -1, &qty_stmt, NULL);
+        if (rc == SQLITE_OK) {
+            sqlite3_bind_int(qty_stmt, 1, port_id);
+            sqlite3_bind_text(qty_stmt, 2, commodity_code, -1, SQLITE_STATIC);
+            if (sqlite3_step(qty_stmt) == SQLITE_ROW) {
+                *new_quantity = sqlite3_column_int(qty_stmt, 0);
+            }
+            sqlite3_finalize(qty_stmt);
+        } else {
+            LOGE("h_update_port_stock: Failed to prepare quantity statement: %s", sqlite3_errmsg(db));
+        }
+    }
+
+    rc = SQLITE_OK;
+
+cleanup:
+    if (stmt) {
+        sqlite3_finalize(stmt);
+    }
+    pthread_mutex_unlock(&db_mutex);
+    return rc;
+}
 
 int
 db_fighters_at_sector_json (int sector_id, json_t **out_array)

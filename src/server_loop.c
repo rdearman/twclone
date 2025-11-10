@@ -37,6 +37,7 @@
 #include "server_citadel.h"
 #include "server_combat.h"
 #include "server_bulk.h"
+#include "server_news.h"
 #include "server_log.h"
 
 
@@ -610,6 +611,14 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       cmd_system_capabilities (ctx, root);
     }
+  else if (streq (cmd, "sys.test_news_cron"))
+    {
+      rc = cmd_sys_test_news_cron (ctx, root);
+    }
+  else if (streq (cmd, "sys.raw_sql_exec"))
+    {
+      rc = cmd_sys_raw_sql_exec (ctx, root);
+    }
 
 
 /* ---------- PLAYER ---------- */
@@ -621,6 +630,15 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       rc = cmd_bank_deposit (ctx, root);
     }
+  else if (streq (cmd, "bank.transfer"))
+    {
+      rc = cmd_bank_transfer (ctx, root);
+    }
+  else if (streq (cmd, "bank.withdraw"))
+    {
+      rc = cmd_bank_withdraw (ctx, root);
+    }
+
   else if (streq (cmd, "player.my_info"))
     {
       cmd_player_my_info (ctx, root);
@@ -803,7 +821,7 @@ process_message (client_ctx_t *ctx, json_t *root)
   else if (!strcmp (c, "port.info") || !strcmp (c, "port.status")
 	   || !strcmp (c, "trade.port_info") || !strcmp (c, "port.describe"))
     {
-      rc = cmd_port_info (ctx, root);
+      rc = cmd_trade_port_info (ctx, root);
     }
   else if (!strcmp (c, "trade.buy"))
     {
@@ -1008,10 +1026,13 @@ process_message (client_ctx_t *ctx, json_t *root)
       rc = cmd_notice_ack (ctx, root);
     }
 /* ---------- NEWS ---------- */
-
-  else if (strcmp (c, "news.read") == 0)
+  else if (strcmp (c, "news.get_feed") == 0)
     {
-      rc = cmd_get_news (ctx, root);
+      rc = cmd_news_get_feed (ctx, root);
+    }
+  else if (strcmp (c, "news.mark_feed_read") == 0)
+    {
+      rc = cmd_news_mark_feed_read (ctx, root);
     }
 
 /* ---------- SUBSCRIBE ---------- */

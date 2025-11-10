@@ -1,6 +1,12 @@
 #ifndef SERVER_CMDS_H
 #define SERVER_CMDS_H
 
+#include <jansson.h>		/* for json_t */
+#include <sqlite3.h>		/* for sqlite3 */
+#include <pthread.h>		/* for pthread_mutex_t */
+#include <sqlite3.h>
+#include "server_loop.h"
+
 /* No JSON here on purpose: this layer does pure logic/DB.
    server_loop.c still builds/sends the envelopes. */
 
@@ -67,5 +73,7 @@ extern "C"
 // Add this line with the other database function declarations
 int db_port_info_json (int port_id, json_t ** out_obj);
 
+int cmd_sys_test_news_cron(client_ctx_t *ctx, json_t *root);
+int cmd_sys_raw_sql_exec(client_ctx_t *ctx, json_t *root);
 
 #endif /* SERVER_CMDS_H */

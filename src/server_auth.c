@@ -274,9 +274,21 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
 
 
 	  /* Reply with session info, including current_sector */
-	  json_t *data = json_pack ("{s:i, s:i}",
+          int unread_news_count = 0;
+          sqlite3_stmt *stmt = NULL;
+          const char *sql = "SELECT COUNT(*) FROM news_feed WHERE timestamp > (SELECT last_news_read_timestamp FROM players WHERE id = ?);";
+          if (sqlite3_prepare_v2(dbh, sql, -1, &stmt, NULL) == SQLITE_OK) {
+              sqlite3_bind_int(stmt, 1, player_id);
+              if (sqlite3_step(stmt) == SQLITE_ROW) {
+                  unread_news_count = sqlite3_column_int(stmt, 0);
+              }
+              sqlite3_finalize(stmt);
+          }
+
+	  json_t *data = json_pack ("{s:i, s:i, s:i}",
 				    "player_id", player_id,
-				    "current_sector", sector_id);
+				    "current_sector", sector_id,
+                    "unread_news_count", unread_news_count);
 	  if (!data)
 	    {
 	      send_enveloped_error (ctx->fd, root, 1500, "Out of memory");

@@ -36,7 +36,7 @@ void idemp_fingerprint_json (json_t * obj, char out[17]);
 void iso8601_utc (char out[32]);
 
 /* Forward declarations for static helper functions */
-static int h_calculate_port_buy_price (sqlite3 *db, int port_id, const char *commodity);
+int h_calculate_port_buy_price (sqlite3 *db, int port_id, const char *commodity);
 
 
 /* Helpers */
@@ -80,21 +80,21 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
   int port_id = 0;
 
   json_t *data = json_object_get (root, "data");
-  LOGD("cmd_port_info: Extracted data object (simplified): is_object: %d", json_is_object(data));
+  LOGD("cmd_trade_port_info: Extracted data object (simplified): is_object: %d", json_is_object(data));
 
-  LOGD("cmd_port_info: About to get jport from data object.");
+  LOGD("cmd_trade_port_info: About to get jport from data object.");
   json_t *jport = json_object_get (data, "port_id");
-  LOGD("cmd_port_info: After jport extraction: jport (raw): %p", (void*)jport);
+  LOGD("cmd_trade_port_info: After jport extraction: jport (raw): %p", (void*)jport);
   if (json_is_integer (jport))
     port_id = (int) json_integer_value (jport);
 
-  LOGD("cmd_port_info: About to get jsec from data object.");
+  LOGD("cmd_trade_port_info: About to get jsec from data object.");
   json_t *jsec = json_object_get (data, "sector_id");
-  LOGD("cmd_port_info: After jsec extraction: jsec (raw): %p", (void*)jsec);
+  LOGD("cmd_trade_port_info: After jsec extraction: jsec (raw): %p", (void*)jsec);
   if (json_is_integer (jsec))
     sector_id = (int) json_integer_value (jsec);
 
-  LOGD("cmd_port_info: Received port_id=%d, sector_id=%d", port_id, sector_id);
+  LOGD("cmd_trade_port_info: Received port_id=%d, sector_id=%d", port_id, sector_id);
 
   /* Resolve by port_id if supplied */
   const char *sql = NULL;
@@ -121,7 +121,7 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  LOGD("cmd_port_info: Preparing SQL: %s", sql);
+  LOGD("cmd_trade_port_info: Preparing SQL: %s", sql);
 
   sqlite3_stmt *st = NULL;
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
@@ -134,16 +134,16 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
   if (port_id > 0)
     {
       sqlite3_bind_int (st, 1, port_id);
-      LOGD("cmd_port_info: Bound port_id: %d", port_id);
+      LOGD("cmd_trade_port_info: Bound port_id: %d", port_id);
     }
   else
     {
       sqlite3_bind_int (st, 1, sector_id);
-      LOGD("cmd_port_info: Bound sector_id: %d", sector_id);
+      LOGD("cmd_trade_port_info: Bound sector_id: %d", sector_id);
     }
 
   int rc = sqlite3_step (st);
-  LOGD("cmd_port_info: sqlite3_step returned: %d", rc);
+  LOGD("cmd_trade_port_info: sqlite3_step returned: %d", rc);
   if (rc != SQLITE_ROW)
     {
       sqlite3_finalize (st);
@@ -278,44 +278,46 @@ bind_text_or_null (sqlite3_stmt *st, int idx, const char *s)
 
 
 
-/**
- * @brief Checks if a port is buying a specific commodity.
- *
- * Returns:
- *  - 1 if there is a matching port_trade row with mode='buy'
- *  - 0 otherwise (including errors or bad input)
- */
 static int
 h_port_buys_commodity (sqlite3 *db, int port_id, const char *commodity)
 {
   if (!db || port_id <= 0 || !commodity || !*commodity)
     return 0;
 
-  static const char *SQL_SEL =
-    "SELECT 1 FROM port_trade "
-    "WHERE port_id = ?1 AND commodity = ?2 AND mode = 'buy' "
-    "LIMIT 1;";
-
   sqlite3_stmt *st = NULL;
-  int rc = sqlite3_prepare_v2 (db, SQL_SEL, -1, &st, NULL);
-  if (rc != SQLITE_OK)
+  const char *sql =
+    "SELECT "
+    "CASE ?2 "
+    "WHEN 'ore' THEN p.ore_on_hand "
+    "WHEN 'organics' THEN p.organics_on_hand "
+    "WHEN 'equipment' THEN p.equipment_on_hand "
+    "ELSE 0 END AS quantity, "
+    "p.size AS max_capacity " /* Using port size as a proxy for max_capacity for now */
+    "FROM ports p WHERE p.id = ?1 LIMIT 1;";
+
+  if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
-      /* Optional: fprintf(stderr, "h_port_buys_commodity: prepare failed: %s\n", sqlite3_errmsg(db)); */
+      LOGE("h_port_buys_commodity: prepare failed: %s", sqlite3_errmsg(db));
       return 0;
     }
 
-  rc = sqlite3_bind_int (st, 1, port_id);
-  if (rc == SQLITE_OK)
-    rc = sqlite3_bind_text (st, 2, commodity, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int (st, 1, port_id);
+  sqlite3_bind_text (st, 2, commodity, -1, SQLITE_STATIC);
 
-  if (rc != SQLITE_OK)
+  int buys = 0;
+  if (sqlite3_step (st) == SQLITE_ROW)
     {
-      /* Optional: fprintf(stderr, "h_port_buys_commodity: bind failed: %s\n", sqlite3_errmsg(db)); */
-      sqlite3_finalize (st);
-      return 0;
+      int current_quantity = sqlite3_column_int (st, 0);
+      int max_capacity = sqlite3_column_int (st, 1);
+      
+      if (current_quantity < max_capacity)
+        buys = 1;
     }
-
-  int buys = (sqlite3_step (st) == SQLITE_ROW) ? 1 : 0;
+  else
+    {
+      // If no entry in port_stock, assume port doesn't trade this commodity or is full
+      LOGD("h_port_buys_commodity: No port_stock entry for port %d, commodity %s", port_id, commodity);
+    }
 
   sqlite3_finalize (st);
   return buys;
@@ -323,105 +325,7 @@ h_port_buys_commodity (sqlite3 *db, int port_id, const char *commodity)
 
 
 
-int
-h_update_port_stock (sqlite3 *db, int port_id,
-                     const char *commodity, int delta, int *new_qty_out)
-{
-  if (!commodity || *commodity == '\0')
-    return SQLITE_MISUSE;
 
-  char sql_buf[512];
-  const char *col_on_hand = NULL;
-  const char *col_max = NULL;
-
-  /* 1. Select the correct column names based on the commodity string */
-  if (strcmp(commodity, "ore") == 0) {
-    col_on_hand = "ore_on_hand";
-    col_max = "max_ore"; // Assuming max_ore still exists for capacity
-  } else if (strcmp(commodity, "organics") == 0) {
-    col_on_hand = "organics_on_hand";
-    col_max = "max_organics"; // Assuming max_organics still exists for capacity
-  } else if (strcmp(commodity, "equipment") == 0) {
-    col_on_hand = "equipment_on_hand";
-    col_max = "max_equipment"; // Assuming max_equipment still exists for capacity
-  } else {
-    /* Unknown or unsupported commodity */
-    return SQLITE_MISUSE;
-  }
-
-  // --- Fetch current stock and max capacity ---
-  int current_qty = 0;
-  int max_capacity = 0;
-  sqlite3_stmt *select_stmt = NULL;
-  snprintf(sql_buf, sizeof(sql_buf),
-           "SELECT %s, %s FROM ports WHERE id = ?1;",
-           col_on_hand, col_max);
-  
-  int rc = sqlite3_prepare_v2(db, sql_buf, -1, &select_stmt, NULL);
-  if (rc != SQLITE_OK) {
-    LOGE("h_update_port_stock: SELECT prepare error: %s", sqlite3_errmsg(db));
-    return rc;
-  }
-  sqlite3_bind_int(select_stmt, 1, port_id);
-  
-  if (sqlite3_step(select_stmt) == SQLITE_ROW) {
-    current_qty = sqlite3_column_int(select_stmt, 0);
-    max_capacity = sqlite3_column_int(select_stmt, 1);
-  } else {
-    sqlite3_finalize(select_stmt);
-    return SQLITE_NOTFOUND; // Port not found
-  }
-  sqlite3_finalize(select_stmt);
-
-  // --- Perform C-side checks for underflow/overflow ---
-  int potential_new_qty = current_qty + delta;
-  
-  if (potential_new_qty < 0) {
-    LOGD("h_update_port_stock: Underflow detected for port_id=%d, commodity=%s, current_qty=%d, delta=%d", port_id, commodity, current_qty, delta);
-    return SQLITE_CONSTRAINT; // Underflow
-  }
-  
-  // Only check for overflow if max_capacity is positive (i.e., not unlimited)
-  if (max_capacity > 0 && potential_new_qty > max_capacity) {
-    LOGD("h_update_port_stock: Overflow detected for port_id=%d, commodity=%s, current_qty=%d, delta=%d, max_capacity=%d", port_id, commodity, current_qty, delta, max_capacity);
-    return SQLITE_CONSTRAINT; // Overflow
-  }
-
-  // --- Build and execute the simplified UPDATE query ---
-  snprintf(sql_buf, sizeof(sql_buf),
-    "UPDATE ports "
-    "SET %s = ?2 "
-    "WHERE id = ?1 "
-    "RETURNING %s;",
-    col_on_hand,
-    col_on_hand
-  );
-  LOGD("h_update_port_stock: UPDATE SQL: %s", sql_buf);
-
-  sqlite3_stmt *update_stmt = NULL;
-  rc = sqlite3_prepare_v2(db, sql_buf, -1, &update_stmt, NULL);
-  if (rc != SQLITE_OK) {
-    LOGE("h_update_port_stock: UPDATE prepare error: %s", sqlite3_errmsg(db));
-    return rc;
-  }
-
-  sqlite3_bind_int(update_stmt, 1, port_id);
-  sqlite3_bind_int(update_stmt, 2, potential_new_qty);
-
-  rc = sqlite3_step(update_stmt);
-
-  if (rc == SQLITE_ROW) {
-    if (new_qty_out) {
-      *new_qty_out = sqlite3_column_int(update_stmt, 0);
-    }
-    rc = SQLITE_OK;
-  } else if (rc == SQLITE_DONE) {
-    rc = SQLITE_NOTFOUND; // Should not happen if SELECT found the port
-  }
-  
-  sqlite3_finalize(update_stmt);
-  return rc;
-}
 
 
 
@@ -459,73 +363,45 @@ h_get_ship_cargo_and_holds (sqlite3 *db, int ship_id, int *ore, int *organics,
  *
  * Uses:
  *   - commodities(code, base_price)
- *   - ports(price_index_ore/organics/equipment)
+ *   - ports(ore_on_hand, organics_on_hand, equipment_on_hand, techlevel)
  *
  * Formula:
- *   price = ceil(base_price * price_index_X)
+ *   price = ceil(base_price * price_multiplier)
  *
  * Returns:
  *   >0 : valid price
  *   0  : not sellable / misconfigured
  */
-static int
+int
 h_calculate_port_sell_price (sqlite3 *db, int port_id, const char *commodity)
 {
   if (!db || port_id <= 0 || !commodity || !*commodity)
     return 0;
 
-  const char *commodity_code = NULL;
-  const char *on_hand_col = NULL;
-  const char *max_col = NULL;
-
-  if (strcmp (commodity, "ore") == 0)
-    {
-      commodity_code = "ORE";
-      on_hand_col = "ore_on_hand";
-      max_col = "max_ore";
-    }
-  else if (strcmp (commodity, "organics") == 0)
-    {
-      commodity_code = "ORG";
-      on_hand_col = "organics_on_hand";
-      max_col = "max_organics";
-    }
-  else if (strcmp (commodity, "equipment") == 0)
-    {
-      commodity_code = "EQU";
-      on_hand_col = "equipment_on_hand";
-      max_col = "max_equipment";
-    }
-  else
-    {
-      return 0; /* unsupported commodity */
-    }
-
-  char sql[512];
-  sqlite3_snprintf (sizeof (sql), sql,
-                    "SELECT c.base_price, p.%s, p.%s, p.techlevel "
-                    "FROM commodities c, ports p "
-                    "WHERE c.code = ?1 AND p.id = ?2 "
-                    "LIMIT 1;",
-                    on_hand_col, max_col);
-
   sqlite3_stmt *st = NULL;
+  const char *sql =
+    "SELECT c.base_price, c.volatility, "
+    "CASE ?2 "
+    "WHEN 'ore' THEN p.ore_on_hand "
+    "WHEN 'organics' THEN p.organics_on_hand "
+    "WHEN 'equipment' THEN p.equipment_on_hand "
+    "ELSE 0 END AS quantity, "
+    "p.size AS max_capacity, p.techlevel " /* Using port size as a proxy for max_capacity for now */
+    "FROM commodities c JOIN ports p ON p.id = ?1 "
+    "WHERE c.code = ?2 LIMIT 1;";
+
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
       LOGE("h_calculate_port_sell_price: prepare failed: %s", sqlite3_errmsg(db));
       return 0;
     }
 
-  if (sqlite3_bind_text (st, 1, commodity_code, -1, SQLITE_TRANSIENT) != SQLITE_OK ||
-      sqlite3_bind_int (st, 2, port_id) != SQLITE_OK)
-    {
-      LOGE("h_calculate_port_sell_price: bind failed: %s", sqlite3_errmsg(db));
-      sqlite3_finalize (st);
-      return 0;
-    }
+  sqlite3_bind_int (st, 1, port_id);
+  sqlite3_bind_text (st, 2, commodity, -1, SQLITE_STATIC);
 
   int base_price = 0;
-  int on_hand = 0;
+  int volatility = 0;
+  int quantity = 0;
   int max_capacity = 0;
   int techlevel = 0;
   int rc = sqlite3_step (st);
@@ -533,13 +409,16 @@ h_calculate_port_sell_price (sqlite3 *db, int port_id, const char *commodity)
   if (rc == SQLITE_ROW)
     {
       base_price = sqlite3_column_int (st, 0);
-      on_hand = sqlite3_column_int (st, 1);
-      max_capacity = sqlite3_column_int (st, 2);
-      techlevel = sqlite3_column_int (st, 3);
+      volatility = sqlite3_column_int (st, 1);
+      quantity = sqlite3_column_int (st, 2);
+      max_capacity = sqlite3_column_int (st, 3);
+      techlevel = sqlite3_column_int (st, 4);
     }
   else
     {
       LOGW("h_calculate_port_sell_price: No data found for commodity %s at port %d", commodity, port_id);
+      sqlite3_finalize (st);
+      return 0; // Port not selling this commodity or no stock info
     }
 
   sqlite3_finalize (st);
@@ -547,18 +426,23 @@ h_calculate_port_sell_price (sqlite3 *db, int port_id, const char *commodity)
   if (base_price <= 0)
     return 0;
 
-  // Implement a simple supply/demand pricing model
   double price_multiplier = 1.0;
+
   if (max_capacity > 0) {
-      // If supply is low, price goes up. If supply is high, price goes down (closer to base).
-      // Example: on_hand = 0 -> multiplier = 2.0 (double price)
-      //          on_hand = max_capacity -> multiplier = 1.0 (base price)
-      // This formula makes the price higher when supply is low.
-      price_multiplier = 1.0 + (double)(max_capacity - on_hand) / max_capacity;
+      double fill_ratio = (double)quantity / max_capacity;
+      // Port sells (player buys): price is higher when supply is low
+      // If quantity is low (e.g., < 50% of max_capacity), price increases.
+      // If quantity is high (e.g., > 50% of max_capacity), price decreases towards base.
+      if (fill_ratio < 0.5) {
+          // Price increases as supply decreases
+          price_multiplier = 1.0 + (1.0 - fill_ratio) * (volatility / 100.0);
+      } else {
+          // Price decreases towards base as supply increases
+          price_multiplier = 1.0 - (fill_ratio - 0.5) * (volatility / 100.0);
+      }
   }
 
   // Adjust for techlevel (higher techlevel means better prices for the port, so higher sell price)
-  // A simple linear adjustment: +5% per tech level above 1
   price_multiplier *= (1.0 + (techlevel - 1) * 0.05);
 
   long long price = (long long) (base_price * price_multiplier + 0.999999); /* ceil */
@@ -591,11 +475,11 @@ h_port_sells_commodity (sqlite3 *db, int port_id, const char *commodity)
   const char *col = NULL;
 
   if (strcmp (commodity, "ore") == 0)
-    col = "product_ore";
+    col = "ore_on_hand";
   else if (strcmp (commodity, "organics") == 0)
-    col = "product_organics";
+    col = "organics_on_hand";
   else if (strcmp (commodity, "equipment") == 0)
-    col = "product_equipment";
+    col = "equipment_on_hand";
   else
     return 0; /* unsupported commodity */
 
@@ -1012,131 +896,7 @@ cmd_trade_history (client_ctx_t *ctx, json_t *root)
 
 
 
-double
-h_calculate_trade_price(int port_id, const char *commodity, int quantity)
-{
-    sqlite3 *db_handle = db_get_handle();
-    sqlite3_stmt *stmt = NULL;
-    double price_index = 1.0;
-    double base_price = 0.0;
 
-
-    
-    const char *index_column = NULL;
-    const char *max_stock_column = NULL;
-    int max_stock = 10000; // Default max stock
-
-    // =========================================================
-    // 1. Acquire Mutex Lock 
-    // =========================================================
-    pthread_mutex_lock(&db_mutex); 
-
-        // Safety check for impossible quantity (keep as is)
-        if (quantity < 0) {
-            pthread_mutex_unlock(&db_mutex);
-            return 1000.0;
-        }
-    
-        // If commodity is "fuel", treat it as "ore" as per user's instruction.
-        if (strcmp(commodity, "fuel") == 0) {
-            commodity = "ore";
-        }
-    
-        // --- 1a. Map commodity to dynamic columns ---
-        if (strcmp(commodity, "ore") == 0) {
-            index_column = "price_index_ore";
-            max_stock_column = "max_ore";
-        } else if (strcmp(commodity, "organics") == 0) {
-            index_column = "price_index_organics";
-            max_stock_column = "max_organics";
-        } else if (strcmp(commodity, "equipment") == 0) {
-            index_column = "price_index_equipment";
-            max_stock_column = "max_equipment";
-        } else {
-            LOGE("h_calculate_trade_price: Unknown commodity %s. Cannot calculate price.", commodity);
-            pthread_mutex_unlock(&db_mutex);
-            return 10.0;
-        }
-    // --- 1b. Fetch Base Price from 'commodities' table (kept as is) ---
-    const char *sql_base_price = "SELECT base_price FROM commodities WHERE code = ?;";
-    const char *commodity_code = commodity_to_code(commodity);
-
-    if (!commodity_code) {
-        LOGE("h_calculate_trade_price: Invalid commodity code for %s.", commodity);
-        pthread_mutex_unlock(&db_mutex);
-        return 10.0;
-    }
-    
-    if (sqlite3_prepare_v2(db_handle, sql_base_price, -1, &stmt, NULL) == SQLITE_OK)
-    {
-        sqlite3_bind_text(stmt, 1, commodity_code, -1, SQLITE_STATIC);
-
-        if (sqlite3_step(stmt) == SQLITE_ROW) {
-            base_price = sqlite3_column_double(stmt, 0);
-        }
-        sqlite3_finalize(stmt);
-        stmt = NULL;
-        //LOGI("BASE PRICE: %f", base_price); // Changed %d to %f for double
-    } else {
-        LOGE("DB Error in h_calculate_trade_price (base price lookup): %s", sqlite3_errmsg(db_handle));
-        pthread_mutex_unlock(&db_mutex);
-        return 10.0; 
-    }
-    
-    if (base_price <= 0.0) {
-        LOGE("h_calculate_trade_price: Commodity %s not defined or base price is zero.", commodity);
-        pthread_mutex_unlock(&db_mutex);
-        return 10.0; 
-    }
-
-    // --- 2. Fetch Port Data (FIXED: Uses dynamic columns from 'ports') ---
-    char sql_port_query[256];
-    // Select the generic 'type' (which you called port_type) and the specific price index/max stock.
-    snprintf(sql_port_query, sizeof(sql_port_query),
-             "SELECT type, %s, %s FROM ports WHERE id = ?;", 
-             index_column, max_stock_column);
-
-    if (sqlite3_prepare_v2(db_handle, sql_port_query, -1, &stmt, NULL) == SQLITE_OK) {
-        sqlite3_bind_int(stmt, 1, port_id);
-
-        if (sqlite3_step(stmt) == SQLITE_ROW) {
-            // Read port_type (INTEGER, column 0) - assuming 'type' is INTEGER in schema
-
-
-
-            
-            // Read price_index (REAL, column 1)
-            price_index = sqlite3_column_double(stmt, 1);
-            
-            // Read max_stock (INTEGER, column 2)
-            max_stock = sqlite3_column_int(stmt, 2);
-            
-        }
-        sqlite3_finalize(stmt);
-    } else {
-        LOGE("DB Error in h_calculate_trade_price (port lookup): %s", sqlite3_errmsg(db_handle));
-        pthread_mutex_unlock(&db_mutex);
-        return base_price * 1.0; 
-    }
-    
-    // --- 3. Calculation ---
-    
-    // Safety check against division by zero
-    if (max_stock <= 0) {
-        pthread_mutex_unlock(&db_mutex);
-        return base_price * price_index;
-    }
-
-    // Calculate current stock (assuming you have a way to get this)
-    // For now, let's assume current_stock is half of max_stock for demonstration
-    int current_stock = max_stock / 2; 
-
-    // Example price calculation (can be adjusted based on game mechanics)
-    double price = base_price * price_index * (1.0 + (double)(max_stock - current_stock) / max_stock);
-
-    pthread_mutex_unlock(&db_mutex);
-    return price;
-}
 
 
 int
@@ -1385,7 +1145,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
           return -1;
       }
   } else { // Bank account
-      int credits_i = 0;
+      long long credits_i = 0;
       if (h_get_credits(db, "player", ctx->player_id, &credits_i) != SQLITE_OK) {
           send_enveloped_error(ctx->fd, root, 500, "Could not read player bank credits.");
           return -1;
@@ -2217,212 +1977,41 @@ cleanup:
 }
 
 
+
+
+
+
+
 int
-cmd_port_info (client_ctx_t *ctx, json_t *root)
-{
-  if (ctx->player_id <= 0)
-    {
-      send_enveloped_refused (ctx->fd, root, 1401,
-                              "Not authenticated", NULL);
-      return 0;
-    }
-
-  sqlite3 *db = db_get_handle ();
-  if (!db)
-    {
-      send_enveloped_error (ctx->fd, root, 500,
-                            "No database handle");
-      return 0;
-    }
-
-  int sector_id = 0;
-  int port_id = 0;
-
-  json_t *data = json_object_get (root, "data");
-  if (json_is_object (data))
-    {
-      json_get_int_field (data, "port_id", &port_id);
-      if (port_id > 0)
-        {
-          // If port_id is provided, resolve sector_id from the database
-          static const char *SQL_RESOLVE_SECTOR = "SELECT sector FROM ports WHERE id = ?1 LIMIT 1;";
-          sqlite3_stmt *st_resolve = NULL;
-          if (sqlite3_prepare_v2 (db, SQL_RESOLVE_SECTOR, -1, &st_resolve, NULL) != SQLITE_OK)
-            {
-              send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
-              return 0;
-            }
-          sqlite3_bind_int (st_resolve, 1, port_id);
-          if (sqlite3_step (st_resolve) == SQLITE_ROW)
-            {
-              sector_id = sqlite3_column_int (st_resolve, 0);
-            }
-          sqlite3_finalize (st_resolve);
-
-          if (sector_id <= 0) {
-              send_enveloped_refused (ctx->fd, root, 1404, "Port not found", NULL);
-              return 0;
-          }
-        }
-      else
-        {
-          // If port_id is not provided, try to get sector_id from data
-          json_get_int_field (data, "sector_id", &sector_id);
-        }
-    }
-
-  // Fallback to ctx->sector_id if neither port_id nor sector_id were found in data
-  if (port_id <= 0 && sector_id <= 0) {
-      sector_id = ctx->sector_id;
-  }
-
-  // If still no valid port_id or sector_id, return error
-  if (port_id <= 0 && sector_id <= 0)
-    {
-      send_enveloped_error (ctx->fd, root, 400,
-                            "Missing port_id or sector_id");
-      return 0;
-    }
-
-  const char *sql = NULL;
-  if (port_id > 0)
-    {
-      sql =
-        "SELECT id, number, name, sector, size, techlevel, "
-        "max_ore, max_organics, max_equipment, "
-        "product_ore, product_organics, product_equipment, "
-        "price_index_ore, price_index_organics, price_index_equipment, "
-        "credits, type "
-        "FROM ports WHERE id = ?1 LIMIT 1;";
-    }
-  else // Use sector_id if port_id is not set
-    {
-      sql =
-        "SELECT id, number, name, sector, size, techlevel, "
-        "max_ore, max_organics, max_equipment, "
-        "product_ore, product_organics, product_equipment, "
-        "price_index_ore, price_index_organics, price_index_equipment, "
-        "credits, type "
-        "FROM ports WHERE sector = ?1 LIMIT 1;";
-    }
-
-  sqlite3_stmt *st = NULL;
-  if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
-    {
-      send_enveloped_error (ctx->fd, root, 500,
-                            sqlite3_errmsg (db));
-      return 0;
-    }
-
-  if (port_id > 0)
-    {
-      sqlite3_bind_int (st, 1, port_id);
-    }
-  else
-    {
-      sqlite3_bind_int (st, 1, sector_id);
-    }
-
-  int rc = sqlite3_step (st);
-  if (rc != SQLITE_ROW)
-    {
-      sqlite3_finalize (st);
-      send_enveloped_refused (ctx->fd, root, 1404,
-                              "No port in this sector", NULL);
-      return 0;
-    }
-
-  json_t *port = json_object ();
-  json_object_set_new (port, "id",          json_integer (sqlite3_column_int (st, 0)));
-  json_object_set_new (port, "number",      json_integer (sqlite3_column_int (st, 1)));
-  json_object_set_new (port, "name",        json_string  ((const char *) sqlite3_column_text (st, 2)));
-  json_object_set_new (port, "sector",      json_integer (sqlite3_column_int (st, 3)));
-  json_object_set_new (port, "size",        json_integer (sqlite3_column_int (st, 4)));
-  json_object_set_new (port, "techlevel",   json_integer (sqlite3_column_int (st, 5)));
-  json_object_set_new (port, "max_ore",     json_integer (sqlite3_column_int (st, 6)));
-  json_object_set_new (port, "max_organics",json_integer (sqlite3_column_int (st, 7)));
-  json_object_set_new (port, "max_equipment",json_integer(sqlite3_column_int (st, 8)));
-  json_object_set_new (port, "product_ore", json_integer (sqlite3_column_int (st, 9)));
-  json_object_set_new (port, "product_organics", json_integer (sqlite3_column_int (st,10)));
-  json_object_set_new (port, "product_equipment", json_integer (sqlite3_column_int (st,11)));
-  json_object_set_new (port, "price_index_ore", json_real (sqlite3_column_double (st,12)));
-  json_object_set_new (port, "price_index_organics", json_real (sqlite3_column_double (st,13)));
-  json_object_set_new (port, "price_index_equipment", json_real (sqlite3_column_double (st,14)));
-  json_object_set_new (port, "credits",    json_integer (sqlite3_column_int (st,15)));
-  json_object_set_new (port, "type",       json_integer (sqlite3_column_int (st,16)));
-
-  sqlite3_finalize (st);
-
-  json_t *payload = json_object ();
-  json_object_set_new (payload, "port", port);
-
-  send_enveloped_ok (ctx->fd, root, "trade.port_info", payload);
-
-  json_decref (payload);
-  return 0;
-}
-
-
-
-
-static int
 h_calculate_port_buy_price (sqlite3 *db, int port_id, const char *commodity)
 {
   if (!db || port_id <= 0 || !commodity || !*commodity)
     return 0;
 
-  const char *commodity_code = NULL;
-  const char *on_hand_col = NULL;
-  const char *max_col = NULL;
-
-  if (strcmp (commodity, "ore") == 0)
-    {
-      commodity_code = "ORE";
-      on_hand_col = "ore_on_hand";
-      max_col = "max_ore";
-    }
-  else if (strcmp (commodity, "organics") == 0)
-    {
-      commodity_code = "ORG";
-      on_hand_col = "organics_on_hand";
-      max_col = "max_organics";
-    }
-  else if (strcmp (commodity, "equipment") == 0)
-    {
-      commodity_code = "EQU";
-      on_hand_col = "equipment_on_hand";
-      max_col = "max_equipment";
-    }
-  else
-    {
-      return 0; /* unsupported commodity */
-    }
-
-  char sql[512];
-  sqlite3_snprintf (sizeof (sql), sql,
-                    "SELECT c.base_price, p.%s, p.%s, p.techlevel "
-                    "FROM commodities c, ports p "
-                    "WHERE c.code = ?1 AND p.id = ?2 "
-                    "LIMIT 1;",
-                    on_hand_col, max_col);
-
   sqlite3_stmt *st = NULL;
+  const char *sql =
+    "SELECT c.base_price, c.volatility, "
+    "CASE ?2 "
+    "WHEN 'ore' THEN p.ore_on_hand "
+    "WHEN 'organics' THEN p.organics_on_hand "
+    "WHEN 'equipment' THEN p.equipment_on_hand "
+    "ELSE 0 END AS quantity, "
+    "p.size AS max_capacity, p.techlevel " /* Using port size as a proxy for max_capacity for now */
+    "FROM commodities c JOIN ports p ON p.id = ?1 "
+    "WHERE c.code = ?2 LIMIT 1;";
+
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
       LOGE("h_calculate_port_buy_price: prepare failed: %s", sqlite3_errmsg(db));
       return 0;
     }
 
-  if (sqlite3_bind_text (st, 1, commodity_code, -1, SQLITE_TRANSIENT) != SQLITE_OK ||
-      sqlite3_bind_int (st, 2, port_id) != SQLITE_OK)
-    {
-      LOGE("h_calculate_port_buy_price: bind failed: %s", sqlite3_errmsg(db));
-      sqlite3_finalize (st);
-      return 0;
-    }
+  sqlite3_bind_int (st, 1, port_id);
+  sqlite3_bind_text (st, 2, commodity, -1, SQLITE_STATIC);
 
   int base_price = 0;
-  int on_hand = 0;
+  int volatility = 0;
+  int quantity = 0;
   int max_capacity = 0;
   int techlevel = 0;
   int rc = sqlite3_step (st);
@@ -2430,13 +2019,16 @@ h_calculate_port_buy_price (sqlite3 *db, int port_id, const char *commodity)
   if (rc == SQLITE_ROW)
     {
       base_price = sqlite3_column_int (st, 0);
-      on_hand = sqlite3_column_int (st, 1);
-      max_capacity = sqlite3_column_int (st, 2);
-      techlevel = sqlite3_column_int (st, 3);
+      volatility = sqlite3_column_int (st, 1);
+      quantity = sqlite3_column_int (st, 2);
+      max_capacity = sqlite3_column_int (st, 3);
+      techlevel = sqlite3_column_int (st, 4);
     }
   else
     {
       LOGW("h_calculate_port_buy_price: No data found for commodity %s at port %d", commodity, port_id);
+      sqlite3_finalize (st);
+      return 0; // Port not buying this commodity or no stock info
     }
 
   sqlite3_finalize (st);
@@ -2444,21 +2036,24 @@ h_calculate_port_buy_price (sqlite3 *db, int port_id, const char *commodity)
   if (base_price <= 0)
     return 0;
 
-  // Implement a simple supply/demand pricing model
   double price_multiplier = 1.0;
+
   if (max_capacity > 0) {
-      // If supply is high, price goes down. If supply is low, price goes up (closer to base).
-      // Example: on_hand = 0 -> multiplier = 1.0 (base price)
-      //          on_hand = max_capacity -> multiplier = 0.5 (half price)
-      // This formula makes the price lower when supply is high.
-      price_multiplier = 1.0 - (double)on_hand / (2.0 * max_capacity); // Adjust divisor for desired range
-      if (price_multiplier < 0.1) price_multiplier = 0.1; // Minimum price floor
+      double fill_ratio = (double)quantity / max_capacity;
+      // Port buys (player sells): price is lower when supply is high
+      // If quantity is high (e.g., > 50% of max_capacity), price decreases.
+      // If quantity is low (e.g., < 50% of max_capacity), price increases towards base.
+      if (fill_ratio > 0.5) {
+          // Price decreases as supply increases
+          price_multiplier = 1.0 - (fill_ratio - 0.5) * (volatility / 100.0);
+      } else {
+          // Price increases towards base as supply decreases
+          price_multiplier = 1.0 + (0.5 - fill_ratio) * (volatility / 100.0);
+      }
   }
 
   // Adjust for techlevel (higher techlevel means better prices for the port, so lower buy price)
-  // A simple linear adjustment: -2% per tech level above 1
-  price_multiplier *= (1.0 - (techlevel - 1) * 0.02);
-  if (price_multiplier < 0.1) price_multiplier = 0.1; // Ensure price doesn't go too low
+  price_multiplier *= (1.0 - (techlevel - 1) * 0.02); // Port wants to buy low
 
   long long price = (long long) (base_price * price_multiplier + 0.999999); /* ceil */
 

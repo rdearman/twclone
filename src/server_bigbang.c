@@ -1094,7 +1094,6 @@ create_full_port (sqlite3 *db, int sector, int port_number,
                   const char *base_name, int type_id, int *port_id_out)
 {
   sqlite3_stmt *port_stmt = NULL;
-  sqlite3_stmt *trade_stmt = NULL;
   int rc = SQLITE_OK;
   sqlite3_int64 port_id = 0;
 
@@ -1104,20 +1103,15 @@ create_full_port (sqlite3 *db, int sector, int port_number,
    */
 
   /* Commodity stock levels */
-  int ore_stock = 0, org_stock = 0, equ_stock = 0;
-  int ore_max = 0, org_max = 0, equ_max = 0;
-  double ore_price_idx = 1.0, org_price_idx = 1.0, equ_price_idx = 1.0;
-
-  /* Commodity trade modes */
-  const char *ore_mode_1 = "buy";  /* All ports buy ore */
-  const char *ore_mode_2 = "sell"; /* All ports sell ore */
-  const char *org_mode = "none";
-  const char *equ_mode = "none";
+  int ore_on_hand_val = 0;
+  int organics_on_hand_val = 0;
+  int equipment_on_hand_val = 0;
 
   /* Default port stats */
   int port_size = 5 + (rand () % 5); /* Random size 5-9 */
   int port_tech = 1 + (rand () % 5); /* Random tech 1-5 */
   int port_credits = 50000 + (rand () % 50000);
+  int petty_cash_val = 0; // Default petty cash
 
   /*
    * ===================================================================
@@ -1127,43 +1121,53 @@ create_full_port (sqlite3 *db, int sector, int port_number,
    * This is based on standard TradeWars port classifications.
    */
 
-  /* All ports (1-8) trade Ore */
-  ore_stock = 10000 + (rand () % 10000);
-  ore_max = 20000 + (rand () % 10000);
-  ore_price_idx = 0.8 + ((rand () % 40) / 100.0); /* 0.8 to 1.2 */
-
   switch (type_id)
     {
     case 1: /* Sells Equipment */
     case 2: /* Sells Equipment */
-      equ_mode = "sell";
-      equ_stock = 5000 + (rand () % 5000);
-      equ_max = 10000 + (rand () % 5000);
-      equ_price_idx = 1.0 + ((rand () % 50) / 100.0); /* 1.0 to 1.5 */
+      ore_on_hand_val = DEF_PORT_PROD_ORE;
+      organics_on_hand_val = DEF_PORT_MAX_ORG / 2;
+      equipment_on_hand_val = DEF_PORT_PROD_EQU;
       break;
 
     case 3: /* Buys Equipment */
     case 4: /* Buys Equipment */
-      equ_mode = "buy";
-      equ_stock = 1000 + (rand () % 2000);
-      equ_max = 10000 + (rand () % 5000);
-      equ_price_idx = 0.5 + ((rand () % 50) / 100.0); /* 0.5 to 1.0 */
+      ore_on_hand_val = DEF_PORT_PROD_ORE;
+      organics_on_hand_val = DEF_PORT_MAX_ORG / 2;
+      equipment_on_hand_val = DEF_PORT_MAX_EQU / 4;
       break;
 
     case 5: /* Sells Organics */
     case 6: /* Sells Organics */
-      org_mode = "sell";
-      org_stock = 5000 + (rand () % 5000);
-      org_max = 10000 + (rand () % 5000);
-      org_price_idx = 1.0 + ((rand () % 50) / 100.0); /* 1.0 to 1.5 */
+      ore_on_hand_val = DEF_PORT_PROD_ORE;
+      organics_on_hand_val = DEF_PORT_PROD_ORG;
+      equipment_on_hand_val = DEF_PORT_MAX_EQU / 2;
       break;
 
     case 7: /* Buys Organics */
     case 8: /* Buys Organics */
-      org_mode = "buy";
-      org_stock = 1000 + (rand () % 2000);
-      org_max = 10000 + (rand () % 5000);
-      org_price_idx = 0.5 + ((rand () % 50) / 100.0); /* 0.5 to 1.0 */
+      ore_on_hand_val = DEF_PORT_PROD_ORE;
+      organics_on_hand_val = DEF_PORT_MAX_ORG / 4;
+      equipment_on_hand_val = DEF_PORT_MAX_EQU / 2;
+      break;
+
+    case 9: /* Stardock - Buys/Sells all, high stock */
+      ore_on_hand_val = DEF_PORT_MAX_ORE;
+      organics_on_hand_val = DEF_PORT_MAX_ORG;
+      equipment_on_hand_val = DEF_PORT_MAX_EQU;
+      port_credits = 1000000; // Stardock has more credits
+      port_size = 10;
+      port_tech = 10;
+      break;
+
+    case 10: /* Orion Black Market - Special case, high ore, low organics, high equipment */
+      ore_on_hand_val = DEF_PORT_MAX_ORE * 2;
+      organics_on_hand_val = DEF_PORT_MAX_ORG / 10;
+      equipment_on_hand_val = DEF_PORT_MAX_EQU * 2;
+      port_credits = 2000000; // More credits for black market
+      petty_cash_val = 100000; // Significant petty cash
+      port_size = 8;
+      port_tech = 8;
       break;
 
     default:
@@ -1192,11 +1196,11 @@ create_full_port (sqlite3 *db, int sector, int port_number,
      */
         const char *port_sql =
           "INSERT INTO ports ("
-              "  number, name, sector, size, techlevel, credits, type, invisible, "
+              "  number, name, sector, size, techlevel, type, invisible, "
               "  ore_on_hand, organics_on_hand, equipment_on_hand, petty_cash "
               ") VALUES ("
-              "  ?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, "  /* Params 1-7 */
-              "  ?8, ?9, ?10, ?11 "                /* New goods_on_hand and petty_cash params */
+              "  ?1, ?2, ?3, ?4, ?5, ?6, 0, "  /* Params 1-6 */
+              "  ?7, ?8, ?9, ?10 "                /* New goods_on_hand and petty_cash params */
               ");";  if (sqlite3_prepare_v2 (db, port_sql, -1, &port_stmt, NULL) != SQLITE_OK)
         {
           fprintf (stderr, "create_full_port: ports prepare failed: %s\n",
@@ -1205,19 +1209,18 @@ create_full_port (sqlite3 *db, int sector, int port_number,
           goto rollback;
         }
     
-      /* Bind all 11 parameters */
+      /* Bind all 10 parameters */
       sqlite3_bind_int (port_stmt, 1, port_number);
       sqlite3_bind_text (port_stmt, 2, base_name, -1, SQLITE_STATIC);
       sqlite3_bind_int (port_stmt, 3, sector);
       sqlite3_bind_int (port_stmt, 4, port_size);
       sqlite3_bind_int (port_stmt, 5, port_tech);
-      sqlite3_bind_int (port_stmt, 6, port_credits);
-      sqlite3_bind_int (port_stmt, 7, type_id);
+      sqlite3_bind_int (port_stmt, 6, type_id);
       /* Goods on Hand and Petty Cash */
-      sqlite3_bind_int (port_stmt, 8, 0); // ore_on_hand
-      sqlite3_bind_int (port_stmt, 9, 0); // organics_on_hand
-      sqlite3_bind_int (port_stmt, 10, 0); // equipment_on_hand
-      sqlite3_bind_int (port_stmt, 11, 0); // petty_cash
+      sqlite3_bind_int (port_stmt, 7, ore_on_hand_val);
+      sqlite3_bind_int (port_stmt, 8, organics_on_hand_val);
+      sqlite3_bind_int (port_stmt, 9, equipment_on_hand_val);
+      sqlite3_bind_int (port_stmt, 10, petty_cash_val);
     
       if (sqlite3_step (port_stmt) != SQLITE_DONE)
         {
@@ -1231,70 +1234,11 @@ create_full_port (sqlite3 *db, int sector, int port_number,
       port_stmt = NULL;
     
       // Create a bank account for the new port
-      h_add_credits(db, "port", (int)port_id, 0, NULL);
+      h_add_credits(db, "port", (int)port_id, port_credits, NULL);
 
   /*
    * ===================================================================
-   * 4. INSERT INTO 'port_trade' TABLE
-   * ===================================================================
-   */
-  const char *trade_sql =
-    "INSERT INTO port_trade (port_id, commodity, mode, maxproduct) VALUES (?, ?, ?, ?);";
-
-  if (sqlite3_prepare_v2 (db, trade_sql, -1, &trade_stmt, NULL) != SQLITE_OK)
-    {
-      fprintf (stderr, "create_full_port: port_trade prepare failed: %s\n",
-               sqlite3_errmsg (db));
-      rc = sqlite3_errcode (db);
-      goto rollback;
-    }
-
-  int max_trade_product =
-    ore_max + org_max + equ_max; /* Simple max, can be tuned */
-
-  /* --- Ore (All ports Buy/Sell) --- */
-  sqlite3_bind_int (trade_stmt, 1, port_id);
-  sqlite3_bind_text (trade_stmt, 2, "ore", -1, SQLITE_STATIC);
-  sqlite3_bind_text (trade_stmt, 3, ore_mode_1, -1, SQLITE_STATIC);
-  sqlite3_bind_int (trade_stmt, 4, max_trade_product);
-  sqlite3_step (trade_stmt);
-  sqlite3_reset (trade_stmt);
-
-  sqlite3_bind_int (trade_stmt, 1, port_id);
-  sqlite3_bind_text (trade_stmt, 2, "ore", -1, SQLITE_STATIC);
-  sqlite3_bind_text (trade_stmt, 3, ore_mode_2, -1, SQLITE_STATIC);
-  sqlite3_bind_int (trade_stmt, 4, max_trade_product);
-  sqlite3_step (trade_stmt);
-  sqlite3_reset (trade_stmt);
-
-  /* --- Organics (If applicable) --- */
-  if (strcmp (org_mode, "none") != 0)
-    {
-      sqlite3_bind_int (trade_stmt, 1, port_id);
-      sqlite3_bind_text (trade_stmt, 2, "organics", -1, SQLITE_STATIC);
-      sqlite3_bind_text (trade_stmt, 3, org_mode, -1, SQLITE_STATIC);
-      sqlite3_bind_int (trade_stmt, 4, max_trade_product);
-      sqlite3_step (trade_stmt);
-      sqlite3_reset (trade_stmt);
-    }
-
-  /* --- Equipment (If applicable) --- */
-  if (strcmp (equ_mode, "none") != 0)
-    {
-      sqlite3_bind_int (trade_stmt, 1, port_id);
-      sqlite3_bind_text (trade_stmt, 2, "equipment", -1, SQLITE_STATIC);
-      sqlite3_bind_text (trade_stmt, 3, equ_mode, -1, SQLITE_STATIC);
-      sqlite3_bind_int (trade_stmt, 4, max_trade_product);
-      sqlite3_step (trade_stmt);
-      sqlite3_reset (trade_stmt);
-    }
-
-  sqlite3_finalize (trade_stmt);
-  trade_stmt = NULL;
-
-  /*
-   * ===================================================================
-   * 5. COMMIT TRANSACTION
+   * 4. COMMIT TRANSACTION
    * ===================================================================
    */
   rc = sqlite3_exec (db, "COMMIT", NULL, NULL, NULL);
@@ -1315,8 +1259,6 @@ create_full_port (sqlite3 *db, int sector, int port_number,
 rollback:
   if (port_stmt)
     sqlite3_finalize (port_stmt);
-  if (trade_stmt)
-    sqlite3_finalize (trade_stmt);
 
   sqlite3_exec (db, "ROLLBACK", NULL, NULL, NULL);
   return rc;
@@ -2709,17 +2651,11 @@ create_ports (void)
    */
   const char *port_sql =
     "INSERT INTO ports ("
-    "  number, name, sector, size, techlevel, credits, type, invisible, "
-    "  max_ore, product_ore, price_index_ore, "
-    "  max_organics, product_organics, price_index_organics, "
-    "  max_equipment, product_equipment, price_index_equipment, "
-    "  price_index_fuel "
+    "  number, name, sector, size, techlevel, type, invisible, "
+    "  ore_on_hand, organics_on_hand, equipment_on_hand, petty_cash "
     ") VALUES ("
-    "  ?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, "  /* Params 1-7 */
-    "  ?8, ?9, ?10, "                     /* Ore params 8-10 */
-    "  ?11, ?12, ?13, "                   /* Organics params 11-13 */
-    "  ?14, ?15, ?16, "                   /* Equipment params 14-16 */
-    "  1.0 "                              /* price_index_fuel */
+    "  ?1, ?2, ?3, ?4, ?5, ?6, 0, "  /* Params 1-6 */
+    "  ?7, ?8, ?9, ?10 "                /* New goods_on_hand and petty_cash params */
     ");";
 
   sqlite3_stmt *port_stmt;
@@ -2752,25 +2688,16 @@ create_ports (void)
   sqlite3_bind_int (port_stmt, 3, stardock_sector);
   sqlite3_bind_int (port_stmt, 4, 10);
   sqlite3_bind_int (port_stmt, 5, 5);
-  sqlite3_bind_int (port_stmt, 6, 1000000);
-  sqlite3_bind_int (port_stmt, 7, 9);    /* Type ID for Stardock */
+  sqlite3_bind_int (port_stmt, 6, 9);    /* Type ID for Stardock */
 
   /* Bind new commodity values (Type 9: Buy/Sell all) */
-  int max_stock = 50000;
-  int start_stock = 25000;
-  double price_index = 1.0;
+  int start_stock = 25000; // Use start_stock for initial on_hand values
+  int petty_cash_val = 0; // Assuming petty_cash starts at 0 for Stardock
 
-  sqlite3_bind_int (port_stmt, 8, max_stock);    /* max_ore */
-  sqlite3_bind_int (port_stmt, 9, start_stock);  /* product_ore */
-  sqlite3_bind_double (port_stmt, 10, price_index); /* price_index_ore */
-
-  sqlite3_bind_int (port_stmt, 11, max_stock);   /* max_organics */
-  sqlite3_bind_int (port_stmt, 12, start_stock); /* product_organics */
-  sqlite3_bind_double (port_stmt, 13, price_index);/* price_index_organics */
-
-  sqlite3_bind_int (port_stmt, 14, max_stock);   /* max_equipment */
-  sqlite3_bind_int (port_stmt, 15, start_stock); /* product_equipment */
-  sqlite3_bind_double (port_stmt, 16, price_index);/* price_index_equipment */
+  sqlite3_bind_int (port_stmt, 7, start_stock);    // ore_on_hand
+  sqlite3_bind_int (port_stmt, 8, start_stock);    // organics_on_hand
+  sqlite3_bind_int (port_stmt, 9, start_stock);    // equipment_on_hand
+  sqlite3_bind_int (port_stmt, 10, petty_cash_val); // petty_cash
 
   if (sqlite3_step (port_stmt) != SQLITE_DONE)
     {

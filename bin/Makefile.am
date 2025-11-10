@@ -52,6 +52,7 @@ server_SOURCES = \
         ../src/server_config.c \
         ../src/server_loop.c \
         ../src/server_main.c \
+        ../src/server_news.c \
         ../src/server_planets.c \
         ../src/server_players.c \
         ../src/server_ports.c \
@@ -77,6 +78,8 @@ server_SOURCES = \
 bigbang_SOURCES = \
 	../src/database.c \
 	../src/schemas.c \
+        ../src/db_player_settings.c \
+        ../src/server_players.c \
 	../src/server_envelope.c \
 	../src/s2s_transport.c \
 	../src/s2s_keyring.c \

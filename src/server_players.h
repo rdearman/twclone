@@ -39,16 +39,16 @@ extern "C"
   int h_get_player_sector (int player_id);
   int h_deduct_ship_credits (struct sqlite3 *db, int player_id, int amount,
 			     int *new_balance);
-  int h_deduct_credits (struct sqlite3 *db, const char *owner_type, int owner_id, int amount, long long *new_balance_out);
-  int h_add_credits (sqlite3 *db, const char *owner_type, int owner_id, int amount, long long *new_balance_out);
   int h_update_ship_cargo (sqlite3 * db, int player_id, const char *commodity,
 			   int delta, int *new_qty_out);
-  int h_get_credits (sqlite3 *db, const char *owner_type, int owner_id, int *credits_out);
+  int h_get_credits (sqlite3 *db, const char *owner_type, int owner_id, long long *credits_out);
   int h_deduct_player_petty_cash (sqlite3 *db, int player_id, long long amount, long long *new_balance_out);
   int h_add_player_petty_cash (sqlite3 *db, int player_id, long long amount, long long *new_balance_out);
   int h_get_player_petty_cash (sqlite3 *db, int player_id, long long *credits_out);
   int cmd_get_news (client_ctx_t * ctx, json_t * root);
   int cmd_bank_deposit (client_ctx_t * ctx, json_t * root);
+  int cmd_bank_transfer (client_ctx_t * ctx, json_t * root);
+  int cmd_bank_withdraw (client_ctx_t * ctx, json_t * root);
   TurnConsumeResult h_consume_player_turn (sqlite3 * db_conn,
 					   client_ctx_t * ctx,
 					   const char *reason_cmd);

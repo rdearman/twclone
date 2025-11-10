@@ -142,12 +142,20 @@ int db_player_name (int64_t player_id, char **out);
 int db_chain_traps_and_bridge (int fedspace_max /* typically 10 */ );
 int db_rand_npc_shipname (char *out, size_t out_sz);
 void db_handle_close_and_reset (void);
-int db_log_engine_event (long long ts, const char *type, const char *actor_owner_type, int actor_owner_id, int sector_id, json_t *payload);
+int db_log_engine_event (long long ts, const char *type, const char *actor_owner_type, int actor_player_id, int sector_id, json_t *payload, const char *idem_key);
+int db_news_insert_feed_item(int ts, const char *category, const char *scope,
+                             const char *headline, const char *body, json_t *context_data);
 
 
 int db_is_sector_fedspace (int ck_sector);
 int db_get_port_id_by_sector(int sector_id);
 int db_get_ship_sector_id (sqlite3 *db, int ship_id);
 int db_recall_fighter_asset (int asset_id, int player_id);
+
+// Banking and Stock Management for Market Settlement
+int h_add_credits(sqlite3 *db, const char *owner_type, int owner_id, long long amount, long long *new_balance);
+int h_deduct_credits(sqlite3 *db, const char *owner_type, int owner_id, long long amount, long long *new_balance);
+int h_update_planet_stock(sqlite3 *db, int planet_id, const char *commodity_code, int quantity_change, int *new_quantity);
+int h_update_port_stock(sqlite3 *db, int port_id, const char *commodity_code, int quantity_change, int *new_quantity);
 
 #endif /* DATABASE_H */

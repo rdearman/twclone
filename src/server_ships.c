@@ -376,21 +376,17 @@ void
 process_ship_destruction (int attacker_id, int victim_id,
 			  const char *victim_ship_name, int sector)
 {
-  // 1. Build the JSON payload using the helper json_pack()
-  json_t *payload = json_pack ("{s:s, s:i, s:i}",
-			       "ship_name", victim_ship_name,
-			       "victim_player_id", victim_id,
-			       "attacker_player_id", attacker_id);
-
-  // 2. Log the event
-  int rc = db_log_engine_event ((long long) time (NULL),
-				"combat.ship_destroyed",
-				"player", attacker_id,
-				sector,
-				payload);
-
-  // 3. Cleanup the JSON object
-  json_decref (payload);
+  sqlite3 *db = db_get_handle(); // Get db handle
+  // Retrieve ship_sector here
+  int ship_sector = db_get_ship_sector_id(db, victim_id); // Assuming victim_id is the ship_id
+  if (ship_sector == 0) { // If ship_sector is 0, it means the ship was not in a sector (e.g., in transit or error)
+      ship_sector = -1; // Use -1 or another indicator for unknown/invalid sector
+  }
+  json_t *payload = json_object();
+  json_object_set_new(payload, "ship_id", json_integer(victim_id));
+  json_object_set_new(payload, "ship_name", json_string(victim_ship_name));
+  json_object_set_new(payload, "player_id", json_integer(victim_id)); // Assuming victim_id is also player_id for logging
+  int rc = db_log_engine_event ((long long) time (NULL), "ship.destroyed", "system", 0, ship_sector, payload, NULL);
 
   if (rc != SQLITE_OK)
     {
@@ -442,8 +438,16 @@ cmd_ship_self_destruct (client_ctx_t *ctx, json_t *root)
   json_object_set_new (evt, "confirmation_value", json_integer (confirmation));
   
   /* h_log_engine_event will consume the reference of 'evt' */
-  (void) db_log_engine_event ((long long) time (NULL), "ship.self_destruct.initiated",
-                             "player", ctx->player_id, ctx->sector_id, evt);
+  sqlite3 *db = db_get_handle();
+  int ship_id = h_get_active_ship_id(db, ctx->player_id);
+  // Retrieve ship_sector here
+  int ship_sector = db_get_ship_sector_id(db, ship_id);
+  if (ship_sector == 0) { // If ship_sector is 0, it means the ship was not in a sector (e.g., in transit or error)
+      ship_sector = -1; // Use -1 or another indicator for unknown/invalid sector
+  }
+  json_object_set_new(evt, "ship_id", json_integer(ship_id));
+  json_object_set_new(evt, "player_id", json_integer(ctx->player_id));
+  (void) db_log_engine_event ((long long) time (NULL), "ship.self_destruct.initiated", "player", ctx->player_id, ship_sector, evt, NULL);
 
   /* 4. Response: command acknowledged and processed */
   send_enveloped_ok (ctx->fd, root, "ship.self_destruct.confirmed", NULL);

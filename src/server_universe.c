@@ -11,6 +11,7 @@
 #include <stdarg.h>
 // local include
 #include "server_universe.h"
+#include "server_ports.h"
 #include "database.h"
 #include "server_cmds.h"
 #include "server_rules.h"
@@ -58,7 +59,7 @@ static const int kIssPatrolBudget = 8;	/* hops before we drift home */
 
 static const char *kIssName = "Imperial Starship";
 static const char *kIssNoticePrefix = "[ISS • Capt. Zyrain]";
-extern double h_calculate_trade_price(int port_id, const char *commodity, int quantity);
+
 
 /* Private state (kept in this .c only) */
 static int g_iss_inited = 0;
@@ -2499,11 +2500,11 @@ h_get_port_commodity_quantity(int port_id, const char *commodity)
     // NOTE: Commodities with no corresponding 'product_' column (like 'fuel' in your schema) 
     // will correctly default to 0 stock.
     if (strcmp(commodity, "ore") == 0 || strcmp(commodity, "fuel") == 0) {
-        column_name = "product_ore";
+        column_name = "ore_on_hand";
     } else if (strcmp(commodity, "organics") == 0) {
-        column_name = "product_organics";
+        column_name = "organics_on_hand";
     } else if (strcmp(commodity, "equipment") == 0) {
-        column_name = "product_equipment";
+        column_name = "equipment_on_hand";
     }
 
     if (column_name == NULL) {
@@ -2593,7 +2594,7 @@ fer_emit_trade_log(int port_id, int sector_id,
 
       // 2. Price calculation is now guaranteed to run with a non-negative quantity
       // Price calculation MUST use sold_port_qty (the stock), not the trade qty
-      price = h_calculate_trade_price(port_id, sold, sold_port_qty);
+      price = h_calculate_port_sell_price(g_fer_db, port_id, sold);
       
       // --- 3. Insert into trade_log for the SELL ---
       if (sqlite3_prepare_v2(g_fer_db, sql_insert, -1, &stmt, NULL) == SQLITE_OK) 
@@ -2645,7 +2646,7 @@ fer_emit_trade_log(int port_id, int sector_id,
 
       // 2. Price calculation is now guaranteed to run with a non-negative quantity
       // Price calculation MUST use bought_port_qty (the stock), not the trade qty
-      price = h_calculate_trade_price(port_id, bought, bought_port_qty);
+      price = h_calculate_port_buy_price(g_fer_db, port_id, bought);
 
 
       // --- 3. Insert into trade_log for the BUY ---
@@ -2820,35 +2821,29 @@ fer_tick (int64_t now_ms)
 	    return;
 	  }
 
-	  /* simple rotating swap, unchanged from  previous function */
-	  int r = (t->trades_done % 4);
+	  /* simple rotating swap for legal commodities */
+	  int r = (t->trades_done % 3); // Change from %4 to %3
 	  const char *sold = NULL, *bought = NULL;
 	  int *ps = NULL, *pb = NULL;
 	  switch (r)
 	    {
 	    case 0:
-	      sold = "fuel";
-	      ps = &t->hold_fuel;
-	      bought = "ore";
-	      pb = &t->hold_ore;
-	      break;
-	    case 1:
 	      sold = "ore";
 	      ps = &t->hold_ore;
 	      bought = "organics";
 	      pb = &t->hold_organics;
 	      break;
-	    case 2:
+	    case 1:
 	      sold = "organics";
 	      ps = &t->hold_organics;
 	      bought = "equipment";
 	      pb = &t->hold_equipment;
 	      break;
-	    default:
+	    case 2: // This will be the new 'default' case
 	      sold = "equipment";
 	      ps = &t->hold_equipment;
-	      bought = "fuel";
-	      pb = &t->hold_fuel;
+	      bought = "ore"; // Cycle back to ore
+	      pb = &t->hold_ore;
 	      break;
 	    }
 	  int sell_qty = (*ps > 10) ? 10 : *ps;

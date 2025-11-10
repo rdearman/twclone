@@ -89,6 +89,8 @@ static json_t *schema_planet_harvest (void);
 static json_t *schema_planet_deposit (void);
 static json_t *schema_planet_withdraw (void);
 
+
+
 /* --- Citadel --- */
 static json_t *schema_citadel_build (void);
 static json_t *schema_citadel_upgrade (void);
@@ -314,6 +316,8 @@ schema_get (const char *key)
   else if (strcmp (key, "planet.withdraw") == 0)
     return schema_planet_withdraw ();
 
+
+
   /* Citadel */
   else if (strcmp (key, "citadel.build") == 0)
     return schema_citadel_build ();
@@ -469,6 +473,8 @@ schema_keys (void)
   json_array_append_new (keys, json_string ("planet.harvest"));
   json_array_append_new (keys, json_string ("planet.deposit"));
   json_array_append_new (keys, json_string ("planet.withdraw"));
+
+
 
   /* Citadel */
   json_array_append_new (keys, json_string ("citadel.build"));
@@ -1320,6 +1326,8 @@ schema_planet_withdraw (void)
                     "$id", "ge://schema/planet.withdraw.json",
                     "$comment", "Schema not yet implemented");
 }
+
+
 
 /* --- Citadel --- */
 

@@ -124,7 +124,9 @@ am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
 am__dirstamp = $(am__leading_dot)dirstamp
 am_bigbang_OBJECTS = ../src/database.$(OBJEXT) \
-	../src/schemas.$(OBJEXT) ../src/server_envelope.$(OBJEXT) \
+	../src/schemas.$(OBJEXT) ../src/db_player_settings.$(OBJEXT) \
+	../src/server_players.$(OBJEXT) \
+	../src/server_envelope.$(OBJEXT) \
 	../src/s2s_transport.$(OBJEXT) ../src/s2s_keyring.$(OBJEXT) \
 	../src/namegen.$(OBJEXT) ../src/server_bigbang.$(OBJEXT) \
 	../src/server_config.$(OBJEXT) \
@@ -139,7 +141,8 @@ am_server_OBJECTS = ../src/server_communication.$(OBJEXT) \
 	../src/server_citadel.$(OBJEXT) \
 	../src/server_envelope.$(OBJEXT) ../src/server_auth.$(OBJEXT) \
 	../src/server_config.$(OBJEXT) ../src/server_loop.$(OBJEXT) \
-	../src/server_main.$(OBJEXT) ../src/server_planets.$(OBJEXT) \
+	../src/server_main.$(OBJEXT) ../src/server_news.$(OBJEXT) \
+	../src/server_planets.$(OBJEXT) \
 	../src/server_players.$(OBJEXT) ../src/server_ports.$(OBJEXT) \
 	../src/server_ships.$(OBJEXT) ../src/server_universe.$(OBJEXT) \
 	../src/server_s2s.$(OBJEXT) \
@@ -190,6 +193,7 @@ am__depfiles_remade = ../src/$(DEPDIR)/common.Po \
 	../src/$(DEPDIR)/server_envelope.Po \
 	../src/$(DEPDIR)/server_log.Po ../src/$(DEPDIR)/server_loop.Po \
 	../src/$(DEPDIR)/server_main.Po \
+	../src/$(DEPDIR)/server_news.Po \
 	../src/$(DEPDIR)/server_planets.Po \
 	../src/$(DEPDIR)/server_players.Po \
 	../src/$(DEPDIR)/server_ports.Po \
@@ -359,6 +363,7 @@ server_SOURCES = \
         ../src/server_config.c \
         ../src/server_loop.c \
         ../src/server_main.c \
+        ../src/server_news.c \
         ../src/server_planets.c \
         ../src/server_players.c \
         ../src/server_ports.c \
@@ -383,6 +388,8 @@ server_SOURCES = \
 bigbang_SOURCES = \
 	../src/database.c \
 	../src/schemas.c \
+        ../src/db_player_settings.c \
+        ../src/server_players.c \
 	../src/server_envelope.c \
 	../src/s2s_transport.c \
 	../src/s2s_keyring.c \
@@ -480,6 +487,10 @@ clean-binPROGRAMS:
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/schemas.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
+../src/db_player_settings.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_players.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_envelope.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/s2s_transport.$(OBJEXT): ../src/$(am__dirstamp) \
@@ -522,9 +533,9 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_main.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/server_planets.$(OBJEXT): ../src/$(am__dirstamp) \
+../src/server_news.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/server_players.$(OBJEXT): ../src/$(am__dirstamp) \
+../src/server_planets.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_ports.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
@@ -537,8 +548,6 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 ../src/server_engine.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/engine_consumer.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/db_player_settings.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_cron.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
@@ -579,6 +588,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_log.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_loop.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_main.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_news.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_planets.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_players.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_ports.Po@am__quote@ # am--include-marker
@@ -762,6 +772,7 @@ distclean: distclean-am
 	-rm -f ../src/$(DEPDIR)/server_log.Po
 	-rm -f ../src/$(DEPDIR)/server_loop.Po
 	-rm -f ../src/$(DEPDIR)/server_main.Po
+	-rm -f ../src/$(DEPDIR)/server_news.Po
 	-rm -f ../src/$(DEPDIR)/server_planets.Po
 	-rm -f ../src/$(DEPDIR)/server_players.Po
 	-rm -f ../src/$(DEPDIR)/server_ports.Po
@@ -839,6 +850,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/$(DEPDIR)/server_log.Po
 	-rm -f ../src/$(DEPDIR)/server_loop.Po
 	-rm -f ../src/$(DEPDIR)/server_main.Po
+	-rm -f ../src/$(DEPDIR)/server_news.Po
 	-rm -f ../src/$(DEPDIR)/server_planets.Po
 	-rm -f ../src/$(DEPDIR)/server_players.Po
 	-rm -f ../src/$(DEPDIR)/server_ports.Po

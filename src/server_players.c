@@ -246,7 +246,7 @@ h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
  * This helper now *accepts* the db pointer.
  */
 int
-h_get_credits (sqlite3 *db, const char *owner_type, int owner_id, int *credits_out)
+h_get_credits (sqlite3 *db, const char *owner_type, int owner_id, long long *credits_out)
 {
     sqlite3_stmt *st = NULL;
     int rc = SQLITE_ERROR;
@@ -276,7 +276,7 @@ h_get_credits (sqlite3 *db, const char *owner_type, int owner_id, int *credits_o
     sqlite3_bind_int (st, 2, owner_id);
 
     if (sqlite3_step(st) == SQLITE_ROW) {
-        *credits_out = sqlite3_column_int(st, 0);
+        *credits_out = sqlite3_column_int64(st, 0);
         rc = SQLITE_OK;
     } else {
         LOGE("h_get_credits: Owner type '%s', ID %d not found in bank_accounts.", owner_type, owner_id);
@@ -357,7 +357,7 @@ player_credits( client_ctx_t *ctx)
 {
   if (!ctx || ctx->player_id <= 0) return 0;
   sqlite3 *db = db_get_handle();
-  int c = 0;
+  long long c = 0;
   if (h_get_credits(db, "player", ctx->player_id, &c) != SQLITE_OK)
     return 0;
   return c;
@@ -508,319 +508,11 @@ h_deduct_ship_credits (sqlite3 *db, int player_id, int amount,
   return rc;
 }
 
-int
-h_deduct_credits (sqlite3 *db, const char *owner_type, int owner_id, int amount,
-		  long long *new_balance_out)
-{
-  char *errmsg = NULL;
-  int rc = SQLITE_ERROR;
-  long long current_balance = 0;
-
-  // Create mutable copies of owner_type and owner_id for potential redirection
-  const char *actual_owner_type = owner_type;
-  int actual_owner_id = owner_id;
-
-  if (!db || !owner_type || !*owner_type || owner_id <= 0 || amount <= 0)
-    {
-      LOGE ("h_deduct_credits: Invalid arguments. db=%p, owner_type=%s, owner_id=%d, amount=%d", db, owner_type, owner_id, amount);
-      return SQLITE_MISUSE;
-    }
-
-  // --- Redirection Logic for Orion/Ferringhi Traders ---
-  if (strcmp(owner_type, "player") == 0) {
-      sqlite3_stmt *player_info_stmt = NULL;
-      const char *sql_get_player_info = "SELECT type, name FROM players WHERE id = ?;";
-      if (sqlite3_prepare_v2(db, sql_get_player_info, -1, &player_info_stmt, NULL) == SQLITE_OK) {
-          sqlite3_bind_int(player_info_stmt, 1, owner_id);
-          if (sqlite3_step(player_info_stmt) == SQLITE_ROW) {
-              int player_type = sqlite3_column_int(player_info_stmt, 0);
-              const char *player_name = (const char *)sqlite3_column_text(player_info_stmt, 1);
-
-              // Check if it's an NPC player (type 1) and if name contains "Orion" or "Ferrengi"
-              if (player_type == 1) { // Assuming type 1 is for NPC players
-                  if (strstr(player_name, "Orion") != NULL) {
-                      actual_owner_type = "npc_planet";
-                      sqlite3_stmt *planet_id_stmt = NULL;
-                      const char *sql_get_planet_id = "SELECT id FROM planets WHERE name='Orion Hideout';";
-                      if (sqlite3_prepare_v2(db, sql_get_planet_id, -1, &planet_id_stmt, NULL) == SQLITE_OK) {
-                          if (sqlite3_step(planet_id_stmt) == SQLITE_ROW) {
-                              actual_owner_id = sqlite3_column_int(planet_id_stmt, 0);
-                          }
-                          sqlite3_finalize(planet_id_stmt);
-                      }
-                      LOGD("h_deduct_credits: Redirecting Orion player %d (%s) to npc_planet %d.", owner_id, player_name, actual_owner_id);
-                  } else if (strstr(player_name, "Ferrengi") != NULL) {
-                      actual_owner_type = "npc_planet";
-                      sqlite3_stmt *planet_id_stmt = NULL;
-                      const char *sql_get_planet_id = "SELECT id FROM planets WHERE name='Ferringhi Homeworld';";
-                      if (sqlite3_prepare_v2(db, sql_get_planet_id, -1, &planet_id_stmt, NULL) == SQLITE_OK) {
-                          if (sqlite3_step(planet_id_stmt) == SQLITE_ROW) {
-                              actual_owner_id = sqlite3_column_int(planet_id_stmt, 0);
-                          }
-                          sqlite3_finalize(planet_id_stmt);
-                      }
-                      LOGD("h_deduct_credits: Redirecting Ferringhi player %d (%s) to npc_planet %d.", owner_id, player_name, actual_owner_id);
-                  }
-              }
-          }
-          sqlite3_finalize(player_info_stmt);
-      }
-  }
-  // --- End Redirection Logic ---
-
-  // Start transaction
-  rc = sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg);
-  if (rc != SQLITE_OK)
-    {
-      LOGE ("h_deduct_credits: Failed to start transaction: %s", errmsg ? errmsg : "unknown error");
-      sqlite3_free (errmsg);
-      return rc;
-    }
-
-  // 1. Get current balance
-  sqlite3_stmt *select_stmt = NULL;
-  const char *sql_select_balance =
-    "SELECT balance FROM bank_accounts WHERE owner_type = ?1 AND owner_id = ?2;";
-  rc = sqlite3_prepare_v2 (db, sql_select_balance, -1, &select_stmt, NULL);
-  if (rc != SQLITE_OK)
-    {
-      LOGE ("h_deduct_credits: SELECT prepare error: %s", sqlite3_errmsg (db));
-      goto rollback_and_cleanup;
-    }
-  sqlite3_bind_text (select_stmt, 1, actual_owner_type, -1, SQLITE_STATIC);
-  sqlite3_bind_int (select_stmt, 2, actual_owner_id);
-
-  if (sqlite3_step (select_stmt) == SQLITE_ROW)
-    {
-      current_balance = sqlite3_column_int64 (select_stmt, 0);
-    }
-  else
-    {
-      LOGE ("h_deduct_credits: Owner type '%s', ID %d not found in bank_accounts.", actual_owner_type, actual_owner_id);
-      rc = SQLITE_NOTFOUND;
-      goto rollback_and_cleanup;
-    }
-  sqlite3_finalize (select_stmt);
-  select_stmt = NULL;
-
-  // 2. Check for sufficient funds
-  if (current_balance < amount)
-    {
-      LOGW ("h_deduct_credits: Insufficient funds for owner type '%s', ID %d. Current: %lld, Attempted deduct: %d", actual_owner_type, actual_owner_id, current_balance, amount);
-      rc = SQLITE_CONSTRAINT;	// Or a custom error code for insufficient funds
-      goto rollback_and_cleanup;
-    }
-
-  // 3. Update balance
-  long long new_balance = current_balance - amount;
-  sqlite3_stmt *update_stmt = NULL;
-  const char *sql_update_balance =
-    "UPDATE bank_accounts SET balance = ?1 WHERE owner_type = ?2 AND owner_id = ?3;";
-  rc = sqlite3_prepare_v2 (db, sql_update_balance, -1, &update_stmt, NULL);
-  if (rc != SQLITE_OK)
-    {
-      LOGE ("h_deduct_credits: UPDATE prepare error: %s", sqlite3_errmsg (db));
-      goto rollback_and_cleanup;
-    }
-  sqlite3_bind_int64 (update_stmt, 1, new_balance);
-  sqlite3_bind_text (update_stmt, 2, actual_owner_type, -1, SQLITE_STATIC);
-  sqlite3_bind_int (update_stmt, 3, actual_owner_id);
-
-  if (sqlite3_step (update_stmt) != SQLITE_DONE)
-    {
-      LOGE ("h_deduct_credits: UPDATE step error: %s", sqlite3_errmsg (db));
-      goto rollback_and_cleanup;
-    }
-  sqlite3_finalize (update_stmt);
-  update_stmt = NULL;
-
-  // 4. Record transaction
-  sqlite3_stmt *insert_tx_stmt = NULL;
-  const char *sql_insert_tx =
-    "INSERT INTO bank_tx (owner_type, owner_id, kind, amount, balance_after, currency, memo) "
-    "VALUES (?1, ?2, 'withdraw', ?3, ?4, 'CRD', 'Withdrawal via h_deduct_credits');";
-  rc = sqlite3_prepare_v2(db, sql_insert_tx, -1, &insert_tx_stmt, NULL);
-  if (rc != SQLITE_OK) {
-      LOGE("h_deduct_credits: INSERT_TX prepare error: %s", sqlite3_errmsg(db));
-      goto rollback_and_cleanup;
-  }
-  sqlite3_bind_text(insert_tx_stmt, 1, actual_owner_type, -1, SQLITE_STATIC);
-  sqlite3_bind_int(insert_tx_stmt, 2, actual_owner_id);
-  sqlite3_bind_int(insert_tx_stmt, 3, amount);
-  sqlite3_bind_int64(insert_tx_stmt, 4, new_balance);
-
-  if (sqlite3_step(insert_tx_stmt) != SQLITE_DONE) {
-      LOGE("h_deduct_credits: INSERT_TX step error: %s", sqlite3_errmsg(db));
-      goto rollback_and_cleanup;
-  }
-  sqlite3_finalize(insert_tx_stmt);
-  insert_tx_stmt = NULL;
-
-  // Commit transaction
-  rc = sqlite3_exec (db, "COMMIT;", NULL, NULL, &errmsg);
-  if (rc != SQLITE_OK)
-    {
-      LOGE ("h_deduct_credits: Failed to commit transaction: %s", errmsg ? errmsg : "unknown error");
-      sqlite3_free (errmsg);
-      return rc;
-    }
-
-  if (new_balance_out)
-    *new_balance_out = new_balance;
-
-  return SQLITE_OK;
-
-rollback_and_cleanup:
-  sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-  if (select_stmt)
-    sqlite3_finalize (select_stmt);
-  if (update_stmt)
-    sqlite3_finalize (update_stmt);
-  if (insert_tx_stmt)
-    sqlite3_finalize (insert_tx_stmt);
-  if (errmsg)
-    sqlite3_free (errmsg);
-  return rc;
-}
 
 
-int
-h_add_credits (sqlite3 *db, const char *owner_type, int owner_id, int amount, long long *new_balance_out)
-{
-  sqlite3_stmt *st = NULL;
-  int rc = SQLITE_ERROR;
-  char *errmsg = NULL;
-  long long current_balance = 0;
 
-  // Create mutable copies of owner_type and owner_id for potential redirection
-  const char *actual_owner_type = owner_type;
-  int actual_owner_id = owner_id;
 
-  if (!db || !owner_type || owner_id <= 0 || amount <= 0) {
-    LOGE("h_add_credits: Invalid arguments. db=%p, owner_type=%s, owner_id=%d, amount=%d", db, owner_type, owner_id, amount);
-    return SQLITE_MISUSE;
-  }
 
-  // --- Redirection Logic for Orion/Ferringhi Traders --- 
-  if (strcmp(owner_type, "player") == 0) {
-      sqlite3_stmt *player_info_stmt = NULL;
-      const char *sql_get_player_info = "SELECT type, name FROM players WHERE id = ?;";
-      if (sqlite3_prepare_v2(db, sql_get_player_info, -1, &player_info_stmt, NULL) == SQLITE_OK) {
-          sqlite3_bind_int(player_info_stmt, 1, owner_id);
-          if (sqlite3_step(player_info_stmt) == SQLITE_ROW) {
-              int player_type = sqlite3_column_int(player_info_stmt, 0);
-              const char *player_name = (const char *)sqlite3_column_text(player_info_stmt, 1);
-
-              // Check if it's an NPC player (type 1) and if name contains "Orion" or "Ferrengi"
-              if (player_type == 1) { // Assuming type 1 is for NPC players
-                  if (strstr(player_name, "Orion") != NULL) {
-                      actual_owner_type = "npc_planet";
-                      sqlite3_stmt *planet_id_stmt = NULL;
-                      const char *sql_get_planet_id = "SELECT id FROM planets WHERE name='Orion Hideout';";
-                      if (sqlite3_prepare_v2(db, sql_get_planet_id, -1, &planet_id_stmt, NULL) == SQLITE_OK) {
-                          if (sqlite3_step(planet_id_stmt) == SQLITE_ROW) {
-                              actual_owner_id = sqlite3_column_int(planet_id_stmt, 0);
-                          }
-                          sqlite3_finalize(planet_id_stmt);
-                      }
-                      LOGD("h_add_credits: Redirecting Orion player %d (%s) to npc_planet %d.", owner_id, player_name, actual_owner_id);
-                  } else if (strstr(player_name, "Ferrengi") != NULL) {
-                      actual_owner_type = "npc_planet";
-                      sqlite3_stmt *planet_id_stmt = NULL;
-                      const char *sql_get_planet_id = "SELECT id FROM planets WHERE name='Ferringhi Homeworld';";
-                      if (sqlite3_prepare_v2(db, sql_get_planet_id, -1, &planet_id_stmt, NULL) == SQLITE_OK) {
-                          if (sqlite3_step(planet_id_stmt) == SQLITE_ROW) {
-                              actual_owner_id = sqlite3_column_int(planet_id_stmt, 0);
-                          }
-                          sqlite3_finalize(planet_id_stmt);
-                      }
-                      LOGD("h_add_credits: Redirecting Ferringhi player %d (%s) to npc_planet %d.", owner_id, player_name, actual_owner_id);
-                  }
-              }
-          }
-          sqlite3_finalize(player_info_stmt);
-      }
-  }
-  // --- End Redirection Logic ---
-
-  // Start transaction
-  if (sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg) != SQLITE_OK) {
-    LOGE("h_add_credits: Failed to start transaction: %s", errmsg ? errmsg : "unknown error");
-    if (errmsg) sqlite3_free (errmsg);
-    return SQLITE_ERROR;
-  }
-
-  // Ensure a bank account exists for the owner (INSERT OR IGNORE)
-  const char *SQL_ENSURE_ACCOUNT =
-    "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) VALUES (?1, ?2, 'CRD', 0);";
-  rc = sqlite3_prepare_v2(db, SQL_ENSURE_ACCOUNT, -1, &st, NULL);
-  if (rc != SQLITE_OK) {
-    LOGE("h_add_credits: ENSURE_ACCOUNT prepare error: %s", sqlite3_errmsg(db));
-    goto rollback_and_exit;
-  }
-  sqlite3_bind_text(st, 1, actual_owner_type, -1, SQLITE_STATIC);
-  sqlite3_bind_int(st, 2, actual_owner_id);
-  sqlite3_step(st); // Execute the insert or ignore
-  sqlite3_finalize(st);
-  st = NULL;
-
-  // Update bank_accounts.balance and get new balance
-  const char *SQL_UPDATE_BANK =
-    "UPDATE bank_accounts SET balance = balance + ?3 WHERE owner_type = ?1 AND owner_id = ?2 RETURNING balance;";
-  rc = sqlite3_prepare_v2 (db, SQL_UPDATE_BANK, -1, &st, NULL);
-  if (rc != SQLITE_OK) {
-    LOGE("h_add_credits: UPDATE_BANK prepare error: %s", sqlite3_errmsg(db));
-    goto rollback_and_exit;
-  }
-  sqlite3_bind_text (st, 1, actual_owner_type, -1, SQLITE_STATIC);
-  sqlite3_bind_int (st, 2, actual_owner_id);
-  sqlite3_bind_int64 (st, 3, amount);
-
-  if (sqlite3_step (st) == SQLITE_ROW) {
-    current_balance = sqlite3_column_int64 (st, 0);
-    rc = SQLITE_OK;
-  } else {
-    LOGE("h_add_credits: UPDATE_BANK step error: %s", sqlite3_errmsg(db));
-    rc = SQLITE_ERROR; // Owner not found or update failed
-    goto rollback_and_exit;
-  }
-  sqlite3_finalize (st);
-  st = NULL;
-
-  // Log bank_tx entry
-  const char *SQL_INSERT_TX =
-    "INSERT INTO bank_tx (owner_type, owner_id, kind, amount, balance_after, currency, memo) "
-    "VALUES (?1, ?2, 'deposit', ?3, ?4, 'CRD', 'Deposit via h_add_credits');";
-  rc = sqlite3_prepare_v2(db, SQL_INSERT_TX, -1, &st, NULL);
-  if (rc != SQLITE_OK) {
-    LOGE("h_add_credits: INSERT_TX prepare error: %s", sqlite3_errmsg(db));
-    goto rollback_and_exit;
-  }
-  sqlite3_bind_text(st, 1, actual_owner_type, -1, SQLITE_STATIC);
-  sqlite3_bind_int(st, 2, actual_owner_id);
-  sqlite3_bind_int64(st, 3, amount);
-  sqlite3_bind_int64(st, 4, current_balance);
-  sqlite3_step(st);
-  sqlite3_finalize(st);
-  st = NULL;
-
-  // Commit transaction
-  if (sqlite3_exec (db, "COMMIT;", NULL, NULL, &errmsg) != SQLITE_OK) {
-    LOGE("h_add_credits: Failed to commit transaction: %s", errmsg ? errmsg : "unknown error");
-    if (errmsg) sqlite3_free (errmsg);
-    return SQLITE_ERROR;
-  }
-
-  if (new_balance_out) {
-    *new_balance_out = current_balance;
-  }
-  return SQLITE_OK;
-
-rollback_and_exit:
-  sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
-  if (st) sqlite3_finalize(st);
-  return rc;
-}
 
 
 /*
@@ -1598,6 +1290,30 @@ cmd_player_set_prefs (client_ctx_t *ctx, json_t *root)
 	    }
 	  /* falls through to db_prefs_set_one with type='string' */
 	}
+      else if (strcmp(key, "news.fetch_mode") == 0)
+      {
+          if (!json_is_integer(val)) {
+              send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "news.fetch_mode must be an integer");
+              return -1;
+          }
+          int mode = json_integer_value(val);
+          if (mode < 0 || mode > 7) {
+              send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "news.fetch_mode must be between 0 and 7");
+              return -1;
+          }
+      }
+      else if (strcmp(key, "news.category_filter") == 0)
+      {
+          if (!json_is_string(val)) {
+              send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "news.category_filter must be a string");
+              return -1;
+          }
+          const char* filter = json_string_value(val);
+          if (strlen(filter) > 128) {
+              send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "news.category_filter is too long");
+              return -1;
+          }
+      }
 
 
       it = json_object_iter_next (prefs, it);
@@ -2287,19 +2003,72 @@ cmd_get_news (client_ctx_t *ctx, json_t *root)
   // 1. Basic check
   if (ctx->player_id <= 0)
     {
-      // send_enveloped_refused is assumed to be available
       send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
       return 0;
     }
 
-  // 2. Query to retrieve news (ordered newest first, non-expired)
-  const char *SQL = "SELECT published_ts, news_category, article_text " "FROM news_feed " "WHERE expiration_ts > ? " "ORDER BY published_ts DESC, news_id DESC " "LIMIT 50;";	// Limit results to a reasonable number (e.g., 50)
+  // 2. Retrieve player preferences
+  int fetch_mode = 0; // Default to 0 (all unread)
+  char category_filter[128] = {0}; // Default to no filter (all categories)
+
+  // Get news.fetch_mode
+  sqlite3_stmt *pref_stmt = NULL;
+  char *fetch_mode_str = NULL;
+  if (db_prefs_get_one(ctx->player_id, "news.fetch_mode", &fetch_mode_str) == SQLITE_OK && fetch_mode_str) {
+      fetch_mode = atoi(fetch_mode_str);
+      free(fetch_mode_str);
+  }
+
+  // Get news.category_filter
+  char *category_filter_str = NULL;
+  if (db_prefs_get_one(ctx->player_id, "news.category_filter", &category_filter_str) == SQLITE_OK && category_filter_str) {
+      strncpy(category_filter, category_filter_str, sizeof(category_filter) - 1);
+      free(category_filter_str);
+  }
+
+  // 3. Dynamically construct the SQL query
+  char sql_query[1024];
+  char where_clause[512] = "WHERE expiration_ts > ?1 "; // ?1 for current_time
+
+  // Apply fetch_mode filter
+  if (fetch_mode > 0) { // 1=today, 2=2days, ..., 7=7days
+      long long start_timestamp = (long long)time(NULL) - (fetch_mode * 86400LL); // 86400 seconds in a day
+      snprintf(where_clause + strlen(where_clause), sizeof(where_clause) - strlen(where_clause),
+               "AND published_ts >= %lld ", start_timestamp);
+  } else { // fetch_mode = 0 (any unread message)
+      // Retrieve player's last_news_read_timestamp
+      long long last_read_ts = 0;
+      sqlite3_stmt *player_ts_stmt = NULL;
+      if (sqlite3_prepare_v2(db, "SELECT last_news_read_timestamp FROM players WHERE id = ?;", -1, &player_ts_stmt, NULL) == SQLITE_OK) {
+          sqlite3_bind_int(player_ts_stmt, 1, ctx->player_id);
+          if (sqlite3_step(player_ts_stmt) == SQLITE_ROW) {
+              last_read_ts = sqlite3_column_int64(player_ts_stmt, 0);
+          }
+          sqlite3_finalize(player_ts_stmt);
+      }
+      if (last_read_ts > 0) {
+          snprintf(where_clause + strlen(where_clause), sizeof(where_clause) - strlen(where_clause),
+                   "AND published_ts > %lld ", last_read_ts);
+      }
+  }
+
+  // Apply category filter
+  if (strlen(category_filter) > 0 && strcmp(category_filter, "all") != 0) {
+      snprintf(where_clause + strlen(where_clause), sizeof(where_clause) - strlen(where_clause),
+               "AND news_category = '%s' ", category_filter);
+  }
+
+  snprintf(sql_query, sizeof(sql_query),
+           "SELECT published_ts, news_category, article_text "
+           "FROM news_feed %s"
+           "ORDER BY published_ts DESC, news_id DESC "
+           "LIMIT 50;", where_clause);
 
   json_t *news_array = json_array ();
   long long current_time = (long long) time (NULL);
 
-  // 3. Prepare and Bind
-  rc = sqlite3_prepare_v2 (db, SQL, -1, &stmt, NULL);
+  // 4. Prepare and Bind
+  rc = sqlite3_prepare_v2 (db, sql_query, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
       // Handle error...
@@ -2309,7 +2078,7 @@ cmd_get_news (client_ctx_t *ctx, json_t *root)
     }
   sqlite3_bind_int64 (stmt, 1, current_time);	// Bind current time for expiry check
 
-  // 4. Loop and Build JSON Array
+  // 5. Loop and Build JSON Array
   while (sqlite3_step (stmt) == SQLITE_ROW)
     {
       long long pub_ts = sqlite3_column_int64 (stmt, 0);
@@ -2325,7 +2094,16 @@ cmd_get_news (client_ctx_t *ctx, json_t *root)
 
   sqlite3_finalize (stmt);
 
-  // 5. Build and Send Response
+  // 6. Update player's last_news_read_timestamp
+  sqlite3_stmt *update_ts_stmt = NULL;
+  if (sqlite3_prepare_v2(db, "UPDATE players SET last_news_read_timestamp = ? WHERE id = ?;", -1, &update_ts_stmt, NULL) == SQLITE_OK) {
+      sqlite3_bind_int64(update_ts_stmt, 1, current_time);
+      sqlite3_bind_int(update_ts_stmt, 2, ctx->player_id);
+      sqlite3_step(update_ts_stmt);
+      sqlite3_finalize(update_ts_stmt);
+  }
+
+  // 7. Build and Send Response
   json_t *payload = json_pack ("{s:O}", "news", news_array);
   send_enveloped_ok (ctx->fd, root, "news.list", payload);
 
@@ -2380,5 +2158,169 @@ cmd_bank_deposit (client_ctx_t *ctx, json_t *root)
 
   return 0;
 }
+
+int cmd_bank_transfer (client_ctx_t * ctx, json_t * root)
+{
+  if (ctx->player_id <= 0)
+    {
+      send_enveloped_refused (ctx->fd, root, ERR_NOT_AUTHENTICATED,
+                              "Not authenticated", NULL);
+      return 0;
+    }
+
+  json_t *data = json_object_get (root, "data");
+  if (!json_is_object (data))
+    {
+      send_enveloped_error (ctx->fd, root, ERR_INVALID_SCHEMA,
+                            "data must be object");
+      return 0;
+    }
+
+  json_t *j_to_player_id = json_object_get (data, "to_player_id");
+  json_t *j_amount = json_object_get (data, "amount");
+
+  if (!json_is_integer (j_to_player_id) || json_integer_value (j_to_player_id) <= 0)
+    {
+      send_enveloped_refused (ctx->fd, root, ERR_INVALID_ARG,
+                              "Invalid recipient player ID", NULL);
+      return 0;
+    }
+
+  if (!json_is_integer (j_amount) || json_integer_value (j_amount) <= 0)
+    {
+      send_enveloped_refused (ctx->fd, root, ERR_INVALID_ARG,
+                              "Invalid transfer amount", NULL);
+      return 0;
+    }
+
+  int to_player_id = json_integer_value (j_to_player_id);
+  long long amount = json_integer_value (j_amount);
+
+  if (ctx->player_id == to_player_id)
+    {
+      send_enveloped_refused (ctx->fd, root, ERR_INVALID_ARG,
+                              "Cannot transfer to self", NULL);
+      return 0;
+    }
+
+  sqlite3 *db = db_get_handle ();
+  long long from_balance = 0;
+  long long to_balance = 0;
+  int rc;
+
+  // Start transaction
+  sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, NULL);
+
+  // Check sender's balance
+        rc = h_get_credits (db, "player", ctx->player_id, &from_balance);
+        if (rc != SQLITE_OK)
+          {
+            sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+            send_enveloped_error (ctx->fd, root, ERR_UNKNOWN, "Failed to get sender balance");
+            return 0;
+          }
+  if (from_balance < amount)
+    {
+      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      send_enveloped_refused (ctx->fd, root, ERR_INSUFFICIENT_FUNDS,
+                              "Insufficient funds", NULL);
+      return 0;
+    }
+
+  // Deduct from sender
+        rc = h_deduct_credits (db, "player", ctx->player_id, amount, &from_balance);
+        if (rc != SQLITE_OK)
+          {
+            sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+            send_enveloped_error (ctx->fd, root, ERR_UNKNOWN, "Failed to deduct funds");
+            return 0;
+          }
+  // Add to recipient
+        rc = h_add_credits (db, "player", to_player_id, amount, &to_balance);
+        if (rc != SQLITE_OK)
+          {
+            sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+            send_enveloped_error (ctx->fd, root, ERR_UNKNOWN, "Failed to add funds to recipient");
+            return 0;
+          }
+  // Commit transaction
+  sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
+
+  json_t *payload = json_pack ("{s:i, s:i, s:I, s:I}",
+                               "from_player_id", ctx->player_id,
+                               "to_player_id", to_player_id,
+                               "from_balance", from_balance,
+                               "to_balance", to_balance);
+  send_enveloped_ok (ctx->fd, root, "bank.transfer.confirmed", payload);
+  json_decref (payload);
+  return 0;
+}
+
+int cmd_bank_withdraw (client_ctx_t * ctx, json_t * root)
+{
+  if (ctx->player_id <= 0)
+    {
+      send_enveloped_refused (ctx->fd, root, ERR_NOT_AUTHENTICATED,
+                              "Not authenticated", NULL);
+      return 0;
+    }
+
+        json_t *data = json_object_get (root, "data");
+        if (!json_is_object (data))
+          {
+            send_enveloped_error (ctx->fd, root, ERR_INVALID_SCHEMA,
+                                  "data must be object");
+            return 0;
+          }
+  json_t *j_amount = json_object_get (data, "amount");
+
+  if (!json_is_integer (j_amount) || json_integer_value (j_amount) <= 0)
+    {
+      send_enveloped_refused (ctx->fd, root, ERR_INVALID_ARG,
+                              "Invalid withdrawal amount", NULL);
+      return 0;
+    }
+
+  long long amount = json_integer_value (j_amount);
+  sqlite3 *db = db_get_handle ();
+  long long new_balance = 0;
+  int rc;
+
+  // Start transaction
+  sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, NULL);
+
+  // Deduct from player's bank account
+  rc = h_deduct_credits (db, "player", ctx->player_id, amount, &new_balance);
+  if (rc != SQLITE_OK)
+    {
+      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      if (rc == SQLITE_CONSTRAINT) { // Assuming h_deduct_credits returns SQLITE_CONSTRAINT for insufficient funds
+          send_enveloped_refused (ctx->fd, root, ERR_INSUFFICIENT_FUNDS,
+                                  "Insufficient funds", NULL);
+                } else {
+                    send_enveloped_error (ctx->fd, root, ERR_UNKNOWN, "Failed to withdraw funds");
+                }
+                return 0;
+              }
+  // Add to player's petty cash (players.credits)
+        rc = h_add_player_petty_cash (db, ctx->player_id, amount, NULL); // new_balance_out can be NULL if not needed
+        if (rc != SQLITE_OK)
+          {
+            sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+            send_enveloped_error (ctx->fd, root, ERR_UNKNOWN, "Failed to add to petty cash");
+            return 0;
+          }
+  // Commit transaction
+  sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
+
+  json_t *payload = json_pack ("{s:I}", "new_balance", new_balance);
+  send_enveloped_ok (ctx->fd, root, "bank.withdraw.confirmed", payload);
+  json_decref (payload);
+  return 0;
+}
+
+
+
+
 
 

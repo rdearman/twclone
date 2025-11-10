@@ -33,6 +33,88 @@
 		"curSector": "data.ship.location.sector_id"
 	    }
 	},
+    {
+      "name": "auth.register (second user)",
+      "cmd": "auth.register",
+      "data": {
+        "user_name": "test_user_2",
+        "password": "password123"
+      },
+      "expect": {
+        "status": "error",
+        "type": "error",
+        "error": {
+          "code": 1210,
+          "message": "Username already exists"
+        }
+      }
+    },
+    {
+      "name": "player.my_info (second user)",
+      "cmd": "player.my_info",
+      "expect": {
+        "status": "ok",
+        "type": "player.info",
+        "data": { "player": "*", "ship": "*" }
+      },
+      "capture": {
+        "second_player_id": "data.player.id",
+        "second_player_name": "data.player.name"
+      }
+    },
+    {
+        "name": "bank.transfer (successful to another player)",
+        "cmd": "bank.transfer",
+        "idempotency_key": "test-bank-transfer-success",
+        "data": {
+            "to_player_id": "@second_player_id",
+            "amount": 10000
+        },
+        "expect": {
+            "status": "ok",
+            "type": "bank.transfer.confirmed",
+            "data": {
+                "from_balance": "*int",
+                "to_balance": "*int"
+            }
+        },
+        "asserts": [
+            { "path": "data.from_balance", "op": ">=", "value": 940000 },
+            { "path": "data.to_balance", "op": ">=", "value": 10000 }
+        ]
+    },
+    {
+        "name": "bank.transfer (insufficient funds)",
+        "cmd": "bank.transfer",
+        "idempotency_key": "test-bank-transfer-insufficient-funds",
+        "data": {
+            "to_player_id": "@second_player_id",
+            "amount": 999999999
+        },
+        "expect": {
+            "status": "refused",
+            "error": {
+                "code": 1302,
+                "message": "Cannot transfer to self"
+            }
+        }
+    },
+    {
+        "name": "bank.transfer (invalid recipient)",
+        "cmd": "bank.transfer",
+        "idempotency_key": "test-bank-transfer-invalid-recipient",
+        "data": {
+            "to_player_id": 999999,
+            "amount": 100
+        },
+        "expect": {
+            "status": "refused",
+            "error": {
+                "code": 1702,
+                "message": "Insufficient funds"
+            }
+        }
+    },
       {
       "name": "sector.search (by text)",
       "cmd": "sector.search",
@@ -629,7 +711,7 @@
             },
             "expect": {
                 "status": "ok",
-                "type": "bank.deposited",
+                "type": "bank.deposit.confirmed",
                 "data": {
                     "new_balance": "*int"
                 }
@@ -802,7 +884,334 @@
             "asserts": [
                 { "path": "data.total", "op": "==", "value": 0 }
             ]
+        },
+        {
+            "name": "bank.deposit (initial credits for testing)",
+            "cmd": "bank.deposit",
+            "data": {
+                "amount": 1000000
+            },
+            "expect": {
+                "status": "ok",
+                "type": "bank.deposit.confirmed",
+                "data": {
+                    "new_balance": "*int"
+                }
+            },
+            "asserts": [
+                { "path": "data.new_balance", "op": ">=", "value": 1000000 }
+            ]
+        },
+        {
+            "name": "bank.withdraw (successful withdrawal)",
+            "cmd": "bank.withdraw",
+            "data": {
+                "amount": 50000
+            },
+            "expect": {
+                "status": "ok",
+                "type": "bank.withdraw.confirmed",
+                "data": {
+                    "new_balance": "*int"
+                }
+            },
+            "asserts": [
+                { "path": "data.new_balance", "op": ">=", "value": 950000 }
+            ]
+        },
+        {
+            "name": "bank.withdraw (insufficient funds)",
+            "cmd": "bank.withdraw",
+            "data": {
+                "amount": 999999999
+            },
+            "expect": {
+                "status": "refused",
+                "error": {
+                    "code": 1702,
+                    "message": "Insufficient funds"
+                }
+            }
+        },
+        {
+            "name": "bank.balance (check current balance)",
+            "cmd": "bank.balance",
+            "expect": {
+                "status": "ok",
+                "type": "bank.balance",
+                "data": {
+                    "balance": "*int"
+                }
+            },
+            "asserts": [
+                { "path": "data.balance", "op": ">=", "value": 950000 }
+            ]
+        },
+        {
+            "name": "trade.buy (insufficient funds)",
+            "cmd": "trade.buy",
+            "idempotency_key": "test-buy-insufficient-funds",
+            "data": {
+                "port_id": "@portId",
+                "account": 1,
+                "items": [
+                    {
+                        "commodity": "ore",
+                        "quantity": 999999999
+                    }
+                ]
+            },
+            "expect": {
+                "status": "refused",
+                "error": {
+                    "code": 1402
+                }
+            }
+        },
+        {
+            "name": "trade.buy (insufficient cargo space - acquire max cargo first)",
+            "cmd": "trade.buy",
+            "idempotency_key": "test-buy-fill-cargo",
+            "data": {
+                "port_id": "@portId",
+                "account": 1,
+                "items": [
+                    {
+                        "commodity": "ore",
+                        "quantity": 1000
+                    }
+                ]
+            },
+            "expect": {
+                "status": "ok"
+            }
+        },
+        {
+            "name": "trade.buy (insufficient cargo space - attempt to buy more)",
+            "cmd": "trade.buy",
+            "idempotency_key": "test-buy-insufficient-cargo",
+            "data": {
+                "port_id": "@portId",
+                "account": 1,
+                "items": [
+                    {
+                        "commodity": "ore",
+                        "quantity": 1
+                    }
+                ]
+            },
+            "expect": {
+                "status": "refused",
+                "error": {
+                    "code": 1403
+                }
+            }
+        },
+        {
+            "name": "trade.sell (insufficient cargo)",
+            "cmd": "trade.sell",
+            "idempotency_key": "test-sell-insufficient-cargo",
+            "data": {
+                "port_id": "@portId",
+                "sector_id": "@curSector",
+                "account": 1,
+                "items": [
+                    {
+                        "commodity": "organics",
+                        "quantity": 999999999
+                    }
+                ]
+            },
+            "expect": {
+                "status": "refused",
+                "error": {
+                    "code": 1402
+                }
+            }
+        },
+        {
+            "name": "trade.sell (port not buying)",
+            "cmd": "trade.sell",
+            "idempotency_key": "test-sell-port-not-buying",
+            "data": {
+                "port_id": "@portId",
+                "sector_id": "@curSector",
+                "account": 1,
+                "items": [
+                    {
+                        "commodity": "equipment",
+                        "quantity": 1
+                    }
+                ]
+            },
+            "expect": {
+                "status": "refused",
+                "error": {
+                    "code": 1405
+                }
+            }
+        },
+        {
+            "name": "sys.test_news_cron (generate economic boom event)",
+            "cmd": "sys.test_news_cron",
+            "data": {
+                "subcommand": "generate_event",
+                "event_type": "commodity.boom",
+                "actor_player_id": "@my_id",
+                "sector_id": "@curSector",
+                "payload": {
+                    "commodity": "ORE",
+                    "location": "Test Port",
+                    "price": 150.50
+                }
+            },
+            "expect": {
+                "status": "ok",
+                "type": "sys.test_news_cron.event_generated"
+            }
+        },
+        {
+            "name": "sys.test_news_cron (run news compiler)",
+            "cmd": "sys.test_news_cron",
+            "data": {
+                "subcommand": "run_compiler"
+            },
+            "expect": {
+                "status": "ok",
+                "type": "sys.test_news_cron.compiler_ran"
+            }
+        },
+        {
+            "name": "news.get_feed (check for new economic news)",
+            "cmd": "news.get_feed",
+            "expect": {
+                "status": "ok",
+                "type": "news.list",
+                "data": {
+                    "news": "*array"
+                }
+            },
+            "asserts": [
+                { "path": "data.news.0.category", "op": "==", "value": "economic" },
+                { "path": "data.news.0.article", "op": "contains", "value": "Economic Boom! ORE Prices Soar in Test Port!" }
+            ]
+        },
+        {
+            "name": "news.mark_feed_read (mark one news item as read)",
+            "cmd": "news.mark_feed_read",
+            "data": {
+                "news_id": "@data.news.0.id"
+            },
+            "expect": {
+                "status": "ok",
+                "type": "news.marked_read"
+            }
+        },
+        {
+            "name": "news.get_feed (verify one less unread news item)",
+            "cmd": "news.get_feed",
+            "expect": {
+                "status": "ok",
+                "type": "news.list",
+                "data": {
+                    "news": "*array"
+                }
+            },
+            "asserts": [
+                { "path": "data.news.length", "op": "==", "value": 0 }
+            ]
+        },
+        {
+            "name": "sys.test_news_cron (generate warning event)",
+            "cmd": "sys.test_news_cron",
+            "data": {
+                "subcommand": "generate_event",
+                "event_type": "system.warning",
+                "actor_player_id": "@my_id",
+                "sector_id": "@curSector",
+                "payload": {
+                    "message": "Warning: Asteroid field detected!"
+                }
+            },
+            "expect": {
+                "status": "ok",
+                "type": "sys.test_news_cron.event_generated"
+            }
+        },
+        {
+            "name": "sys.test_news_cron (generate error event)",
+            "cmd": "sys.test_news_cron",
+            "data": {
+                "subcommand": "generate_event",
+                "event_type": "system.error",
+                "actor_player_id": "@my_id",
+                "sector_id": "@curSector",
+                "payload": {
+                    "message": "Error: Warp core breach imminent!"
+                }
+            },
+            "expect": {
+                "status": "ok",
+                "type": "sys.test_news_cron.event_generated"
+            }
+        },
+        {
+            "name": "sys.test_news_cron (run news compiler again)",
+            "cmd": "sys.test_news_cron",
+            "data": {
+                "subcommand": "run_compiler"
+            },
+            "expect": {
+                "status": "ok",
+                "type": "sys.test_news_cron.compiler_ran"
+            }
+        },
+        {
+            "name": "news.get_feed (check for new warning and error news)",
+            "cmd": "news.get_feed",
+            "expect": {
+                "status": "ok",
+                "type": "news.list",
+                "data": {
+                    "news": "*array"
+                }
+            },
+            "asserts": [
+                { "path": "data.news.length", "op": "==", "value": 2 },
+                { "path": "data.news.0.category", "op": "==", "value": "system" },
+                { "path": "data.news.0.severity", "op": "==", "value": "error" },
+                { "path": "data.news.1.category", "op": "==", "value": "system" },
+                { "path": "data.news.1.severity", "op": "==", "value": "warn" }
+            ],
+            "capture": {
+                "news_id_1": "data.news.0.id",
+                "news_id_2": "data.news.1.id"
+            }
+        },
+        {
+            "name": "news.mark_feed_read (mark multiple news items as read)",
+            "cmd": "news.mark_feed_read",
+            "data": {
+                "news_ids": ["@news_id_1", "@news_id_2"]
+            },
+            "expect": {
+                "status": "ok",
+                "type": "news.marked_read"
+            }
+        },
+        {
+            "name": "news.get_feed (verify all news items read)",
+            "cmd": "news.get_feed",
+            "expect": {
+                "status": "ok",
+                "type": "news.list",
+                "data": {
+                    "news": "*array"
+                }
+            },
+            "asserts": [
+                { "path": "data.news.length", "op": "==", "value": 0 }
+            ]
         }
-	
     ]
 }

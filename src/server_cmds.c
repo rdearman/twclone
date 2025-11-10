@@ -7,7 +7,8 @@
 #include "server_envelope.h"
 #include "db_player_settings.h"
 #include "errors.h"
-
+#include "server_players.h" // Include for banking functions
+#include "server_cron.h" // Include for cron job functions
 
 /* Constant-time string compare to reduce timing leakage (simple variant). */
 static int
@@ -193,4 +194,115 @@ user_create (const char *player_name, const char *password,
   pthread_mutex_unlock (&db_mutex);
 
   return AUTH_OK;
+}
+
+int
+cmd_sys_test_news_cron(client_ctx_t *ctx, json_t *root)
+{
+    sqlite3 *db = db_get_handle();
+    json_t *data = json_object_get(root, "data");
+    const char *subcommand = NULL;
+    int rc = 0;
+
+    if (!json_is_object(data)) {
+        send_enveloped_error(ctx->fd, root, 400, "Missing data object.");
+        return 0;
+    }
+
+    json_t *j_subcommand = json_object_get(data, "subcommand");
+    if (json_is_string(j_subcommand)) {
+        subcommand = json_string_value(j_subcommand);
+    } else {
+        send_enveloped_error(ctx->fd, root, 400, "Missing or invalid 'subcommand'.");
+        return 0;
+    }
+
+    if (strcmp(subcommand, "generate_event") == 0) {
+        const char *event_type = NULL;
+        int actor_player_id = 0;
+        int sector_id = 0;
+        json_t *payload = NULL;
+
+        json_t *j_event_type = json_object_get(data, "event_type");
+        if (json_is_string(j_event_type)) {
+            event_type = json_string_value(j_event_type);
+        } else {
+            send_enveloped_error(ctx->fd, root, 400, "Missing or invalid 'event_type'.");
+            return 0;
+        }
+
+        json_t *j_actor_player_id = json_object_get(data, "actor_player_id");
+        if (json_is_integer(j_actor_player_id)) {
+            actor_player_id = json_integer_value(j_actor_player_id);
+        }
+
+        json_t *j_sector_id = json_object_get(data, "sector_id");
+        if (json_is_integer(j_sector_id)) {
+            sector_id = json_integer_value(j_sector_id);
+        }
+
+        json_t *j_payload = json_object_get(data, "payload");
+        if (j_payload) {
+            payload = json_deep_copy(j_payload); // Make a copy as db_log_engine_event consumes reference
+        } else {
+            payload = json_object(); // Empty payload if not provided
+        }
+
+        rc = db_log_engine_event((long long)time(NULL), event_type, "player", actor_player_id, sector_id, payload, NULL);
+        if (rc == SQLITE_OK) {
+            send_enveloped_ok(ctx->fd, root, "sys.test_news_cron.event_generated", NULL);
+        } else {
+            send_enveloped_error(ctx->fd, root, 500, "Failed to generate engine event.");
+        }
+    } else if (strcmp(subcommand, "run_compiler") == 0) {
+        rc = h_daily_news_compiler(db, (long long)time(NULL));
+        if (rc == SQLITE_OK) {
+            send_enveloped_ok(ctx->fd, root, "sys.test_news_cron.compiler_ran", NULL);
+        } else {
+            send_enveloped_error(ctx->fd, root, 500, "Failed to run news compiler.");
+        }
+    } else if (strcmp(subcommand, "run_cleanup") == 0) {
+        rc = h_cleanup_old_news(db, (long long)time(NULL));
+        if (rc == SQLITE_OK) {
+            send_enveloped_ok(ctx->fd, root, "sys.test_news_cron.cleanup_ran", NULL);
+        } else {
+            send_enveloped_error(ctx->fd, root, 500, "Failed to run news cleanup.");
+        }
+    } else {
+        send_enveloped_error(ctx->fd, root, 400, "Unknown subcommand.");
+    }
+
+    return 0;
+}
+
+int
+cmd_sys_raw_sql_exec(client_ctx_t *ctx, json_t *root)
+{
+    sqlite3 *db = db_get_handle();
+    json_t *data = json_object_get(root, "data");
+    const char *sql_str = NULL;
+    char *err_msg = NULL;
+    int rc = 0;
+
+    if (!json_is_object(data)) {
+        send_enveloped_error(ctx->fd, root, 400, "Missing data object.");
+        return 0;
+    }
+
+    json_t *j_sql = json_object_get(data, "sql");
+    if (json_is_string(j_sql)) {
+        sql_str = json_string_value(j_sql);
+    } else {
+        send_enveloped_error(ctx->fd, root, 400, "Missing or invalid 'sql' string.");
+        return 0;
+    }
+
+    rc = sqlite3_exec(db, sql_str, NULL, NULL, &err_msg);
+    if (rc != SQLITE_OK) {
+        send_enveloped_error(ctx->fd, root, 500, err_msg ? err_msg : "Failed to execute SQL.");
+        sqlite3_free(err_msg);
+    } else {
+        send_enveloped_ok(ctx->fd, root, "sys.raw_sql_exec.success", NULL);
+    }
+    return 0;
 }

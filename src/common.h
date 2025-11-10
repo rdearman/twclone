@@ -99,6 +99,7 @@ typedef enum
 
 #ifndef DEFAULT_NODES
 #define DEFAULT_NODES 0
+#define MIN(a,b) (((a)<(b))?(a):(b))
 #endif
 
 

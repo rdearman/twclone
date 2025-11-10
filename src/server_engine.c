@@ -73,10 +73,7 @@ static const CronHandler CRON_REGISTRY[] = {
   {"planet_growth", h_planet_growth},
   {"daily_turn_reset", h_daily_turn_reset},
   {"terra_replenish", h_terra_replenish},
-  {"port_reprice", h_port_reprice},
-  {"port_price_drift", h_port_price_drift},
-  {"news_collator", h_news_collator},
-  {NULL, NULL}
+  {"daily_market_settlement", h_daily_market_settlement},
 };
 
 /* Lookup by task name (e.g., "fedspace_cleanup"). */

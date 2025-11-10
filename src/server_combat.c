@@ -752,9 +752,8 @@ db_get_stardock_sectors (void)
   			 json_integer ((json_int_t) time (NULL)));
       json_object_set_new (evt, "asset_id", json_integer (asset_id)); // Add asset_id to event
   
-      (void) h_log_engine_event ("fighters.deployed", ctx->player_id,
-  			       sector_id, evt, NULL);
-    }
+            (void) db_log_engine_event ((long long)time(NULL), "fighters.deployed", NULL, ctx->player_id,
+                                      sector_id, evt, NULL);    }
                                  
     /* Recompute total for response convenience */
     (void) sum_sector_fighters (db, sector_id, &sector_total);
@@ -1248,9 +1247,8 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
     json_object_set_new (evt, "event_ts",
 			 json_integer ((json_int_t) time (NULL)));
 
-    (void) h_log_engine_event ("mines.deployed", ctx->player_id,
-				   sector_id, evt, NULL);
-  }
+        (void) db_log_engine_event ((long long)time(NULL), "mines.deployed", NULL, ctx->player_id,
+                                        sector_id, evt, NULL);  }
 
   /* Recompute sector per-type for response convenience */
   (void) sum_sector_mines_by_type (db, sector_id, asset_type,
@@ -1572,9 +1570,8 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
   else if (asset_offensive_setting == 3) mode_str = "toll";
   json_object_set_new (evt, "mode", json_string (mode_str));
 
-  (void) h_log_engine_event ("fighters.recalled", ctx->player_id,
-			     requested_sector_id, evt, NULL);
-
+    (void) db_log_engine_event ((long long)time(NULL), "fighters.recalled", NULL, ctx->player_id,
+                                requested_sector_id, evt, NULL);
   /* 9. Send enveloped_ok response */
   json_t *out = json_object ();
   json_object_set_new (out, "sector_id", json_integer (requested_sector_id));

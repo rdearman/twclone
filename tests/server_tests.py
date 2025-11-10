@@ -318,8 +318,14 @@ def _get_by_path(obj: Any, path: str) -> Any:
 
 
 def _expand_vars_in_obj(o: Any, vars: Dict[str, Any]) -> Any:
-    if isinstance(o, str) and o.startswith("@"):
-        return vars.get(o[1:], o)  # leave as-is if missing
+    if isinstance(o, str):
+        val = o
+        if "*uuid*" in val:
+            import uuid
+            val = val.replace("*uuid*", str(uuid.uuid4()))
+        if val.startswith("@"):
+            return vars.get(val[1:], val)
+        return val
     if isinstance(o, list):
         return [_expand_vars_in_obj(x, vars) for x in o]
     if isinstance(o, dict):
