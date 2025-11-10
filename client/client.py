@@ -428,6 +428,10 @@ def ctx_refresh_port_context(ctx):
                 d = r.get('data') or {}
                 if isinstance(d, dict) and d:
                     ctx.state['is_stardock'] = bool(_infer_is_stardock(d))
+                    # Update ctx.last_sector_desc with the port information
+                    # This assumes 'd' contains relevant sector/port data
+                    # We need to normalize it first
+                    ctx.last_sector_desc = normalize_sector(d)
                     return True
         except Exception:
             pass
@@ -2013,10 +2017,14 @@ def simple_buy_handler(ctx: Context):
     Automated buy flow: uses current sector ID as Port ID (as per user request), 
     prompts for product and quantity, then calls the dock.buy RPC.
     """
-    # 1. Automatically get the Port ID (current sector ID)
-    port_id = ctx.current_sector_id
-    if port_id is None:
-        print("Cannot determine current sector ID (Port ID). Ensure you have run 'D' to re-display the sector first.")
+    # 1. Automatically get the Port ID
+    port_info = ctx.last_sector_desc.get("port")
+    port_id = None
+    if isinstance(port_info, dict):
+        port_id = port_info.get("id")
+
+    if not isinstance(port_id, int):
+        print("Cannot determine Port ID. Ensure you are docked at a port and have re-displayed the sector (D).")
         return
 
     # 2. Prompt for product code

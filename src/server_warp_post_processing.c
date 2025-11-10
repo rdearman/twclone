@@ -142,6 +142,16 @@ create_complex_warps (sqlite3 *db, int numSectors)
 	    {
 	      fprintf (stderr, "SQL error: %s\n", errmsg);
 	      sqlite3_free (errmsg);
+	      // Re-insert the original warp to restore state
+	      char sql_reinsert_original[128];
+	      snprintf (sql_reinsert_original, sizeof (sql_reinsert_original),
+			"INSERT INTO sector_warps (from_sector, to_sector) VALUES (%d, %d);",
+			end_sector1, start_sector1);
+	      sqlite3_exec (db, sql_reinsert_original, NULL, NULL, &errmsg); // errmsg is reused, but should be handled if this also fails
+	      if (errmsg) {
+		  fprintf (stderr, "CRITICAL SQL error during rollback: %s\n", errmsg);
+		  sqlite3_free (errmsg);
+	      }
 	      return -1;
 	    }
 	}

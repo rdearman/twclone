@@ -348,12 +348,13 @@
           }
         },
         {
-          "key": "q",
-          "label": "(Q) Get Quote",
+          "key": "g",
+          "label": "(G) Get Quote",
           "action": {
             "rpc": {
               "command": "trade.quote",
               "data": {
+                "port_id": "<ctx:last_sector_desc.port.id>",
                 "commodity": "<prompt:str:Commodity (ore, organics, equipment)>",
                 "quantity": "<prompt:int:Quantity>",
                 "action": "<prompt:str:Action (buy or sell)>"

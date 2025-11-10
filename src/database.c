@@ -407,24 +407,27 @@ const char *create_table_sql[] = {
     " FOREIGN KEY (port_id) REFERENCES ports(id)); ",
 
 
+  " CREATE TABLE IF NOT EXISTS players ( "
+  " id INTEGER PRIMARY KEY AUTOINCREMENT,  "
+  " type INTEGER DEFAULT 2,  "
+  " number INTEGER,  "
+  " name TEXT NOT NULL,  "
+  " passwd TEXT NOT NULL,  "
+  " sector INTEGER,  "
+  " ship INTEGER,  "	
+  " experience INTEGER,  "
+  " alignment INTEGER,  "
+  " credits INTEGER,  "
+  " flags INTEGER,  "
+  " login_time INTEGER,  "
+  " last_update INTEGER,  "
+  " intransit INTEGER,  "
+  " beginmove INTEGER,  "
+  " movingto INTEGER,  "
+  " loggedin INTEGER,  "
+  " lastplanet INTEGER,  "
+  " score INTEGER);  ",
 
-
-
-
-  " CREATE TABLE IF NOT EXISTS players ( " " id INTEGER PRIMARY KEY AUTOINCREMENT,  " " type INTEGER DEFAULT 2,  " " number INTEGER,  "	/* legacy player ID */
-    " name TEXT NOT NULL,  " " passwd TEXT NOT NULL,  "	/* hashed password */
-    " sector INTEGER,  "	/* 0 if in a ship */
-    " ship INTEGER,  "		/* ship number */
-    " experience INTEGER,  " " alignment INTEGER,  " " credits INTEGER,  " " flags INTEGER,  "	/* bitfield: P_LOGGEDIN, P_STARDOCK, etc. */
-    " lastprice INTEGER,  " " firstprice INTEGER,  " " integrity INTEGER,  " " login_time INTEGER,  " " last_update INTEGER,  " " intransit INTEGER,  "	/* 0/1 boolean */
-    " beginmove INTEGER,  "	/* timestamp */
-    " movingto INTEGER,  "	/* sector destination */
-    " loggedin INTEGER,  "	/* runtime only, but persisted if desired */
-    " lastplanet INTEGER,  "	/* last planet created */
-    " score INTEGER,  "
-    " kills INTEGER,  "
-    " remote INTEGER,  " " fighters INTEGER,  " " holds INTEGER, "
-    " last_news_read_timestamp INTEGER DEFAULT 0 " " ); ",
 
   " CREATE TABLE IF NOT EXISTS player_types (type INTEGER PRIMARY KEY AUTOINCREMENT, description TEXT); ",
 
@@ -1009,7 +1012,7 @@ const char *create_table_sql[] = {
     "  LEFT JOIN port_trade t ON t.port_id = p.id\n"
     "  GROUP BY p.id\n"
     ")\n"
-    "SELECT p.id, p.number, p.name, p.sector AS sector_id, p.size, p.techlevel, p.credits,\n"
+    "SELECT p.id, p.number, p.name, p.sector AS sector_id, p.size, p.techlevel, p.petty_cash,\n"
     "       COALESCE(m.ore,'-') || COALESCE(m.org,'-') || COALESCE(m.eqp,'-') AS trade_code\n"
     "FROM ports p\n" "LEFT JOIN m ON m.port_id = p.id;",
 
@@ -1068,12 +1071,11 @@ const char *create_table_sql[] = {
     "  sh.ported AS is_ported,\n"
     "  sh.onplanet AS is_onplanet\n"
     "FROM players p\n"
-    "LEFT JOIN ships sh ON sh.id = p.ship;",,
+    "LEFT JOIN ships sh ON sh.id = p.ship;",
 
 /* 15) Ships by sector */
   "CREATE VIEW IF NOT EXISTS ships_by_sector AS\n"
     "SELECT s.id AS sector_id,\n"
-    "COALESCE(GROUP_CONCAT(sh.name || '#' || sh.id, ', '), '') AS ships,\n"
     "       COUNT(sh.id) AS ship_count\n"
     "FROM sectors s\n"
     "LEFT JOIN ships sh ON sh.sector = s.id\n" "GROUP BY s.id;",
@@ -1146,9 +1148,9 @@ const char *create_table_sql[] = {
   "   p.id         AS player_id,   "
   "   p.name       AS player_name,   "
   "   p.number     AS player_number,   "
-  "   sh.sector    AS sector_id, -- Use ship's sector as canonical   "
+  "   sh.sector    AS sector_id,    "
   "   sctr.name    AS sector_name,   "
-  "   p.credits    AS credits,   "
+  "   p.credits    AS petty_cash,   "
   "   p.alignment  AS alignment,   "
   "   p.experience AS experience,   "
   "   p.ship       AS ship_number,   "
@@ -1156,25 +1158,25 @@ const char *create_table_sql[] = {
   "   sh.name      AS ship_name,   "
   "   sh.type_id   AS ship_type_id,   "
   "   st.name      AS ship_type_name,   "
-  "   st.maxholds  AS ship_holds_capacity, -- Renamed for clarity   "
-  "   sh.holds     AS ship_holds_current,  -- Added current holds from ship   "
+  "   st.maxholds  AS ship_holds_capacity,    "
+  "   sh.holds     AS ship_holds_current,    "
   "   sh.fighters  AS ship_fighters,   "
-  "   sh.mines     AS ship_mines,          -- Added mines from ship   "
-  "   sh.limpets   AS ship_limpets,        -- Added limpets from ship   "
-  "   sh.genesis   AS ship_genesis,        -- Added genesis from ship   "
-  "   sh.photons   AS ship_photons,        -- Added photons from ship   "
-  "   sh.beacons   AS ship_beacons,        -- Added beacons from ship   "
-  "   sh.colonists AS ship_colonists,      -- Added colonists from ship   "
-  "   sh.equipment AS ship_equipment,      -- Added equipment from ship   "
-  "   sh.organics  AS ship_organics,       -- Added organics from ship   "
-  "   sh.ore       AS ship_ore,            -- Added ore from ship   "
-  "   sh.ported    AS ship_ported,         -- Added ported flag   "
-  "   sh.onplanet  AS ship_onplanet,       -- Added onplanet flag   "
+  "   sh.mines     AS ship_mines,            "
+  "   sh.limpets   AS ship_limpets,          "
+  "   sh.genesis   AS ship_genesis,          "
+  "   sh.photons   AS ship_photons,          "
+  "   sh.beacons   AS ship_beacons,          "
+  "   sh.colonists AS ship_colonists,        "
+  "   sh.equipment AS ship_equipment,        "
+  "   sh.organics  AS ship_organics,         "
+  "   sh.ore       AS ship_ore,              "
+  "   sh.ported    AS ship_ported,           "
+  "   sh.onplanet  AS ship_onplanet,         "
   "   (COALESCE(p.credits,0) + COALESCE(sh.fighters,0)*2) AS approx_worth   "
   " FROM players p   "
   " LEFT JOIN ships      sh   ON sh.id = p.ship   "
   " LEFT JOIN shiptypes  st   ON st.id = sh.type_id   "
-  " LEFT JOIN sectors    sctr ON sctr.id = sh.sector; -- Join on ship's sector
+  " LEFT JOIN sectors    sctr ON sctr.id = sh.sector; ",
 
 
   " CREATE VIEW sector_search_index AS  "
@@ -1967,12 +1969,6 @@ const char *insert_default_sql[] = {
 "   SELECT RAISE(ABORT, 'BANK_LEDGER_APPEND_ONLY');  "
 " END;  "
 
-" CREATE TRIGGER IF NOT EXISTS trg_bank_tx_before_update  "
-" BEFORE UPDATE ON bank_tx  "
-" FOR EACH ROW  "
-" BEGIN  "
-"   SELECT RAISE(ABORT, 'BANK_LEDGER_IMMUTABLE');  "
-" END;  "
 
 " CREATE TABLE IF NOT EXISTS corp_accounts (  "
 "   corp_id INTEGER PRIMARY KEY REFERENCES corps(id) ON DELETE CASCADE,  "
