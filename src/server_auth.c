@@ -8,9 +8,15 @@
 #include "config.h"
 #include "server_cmds.h"
 #include "server_envelope.h"
+#include <stdlib.h> // For rand() and srand()
+#include <time.h>   // For time()
+#include "server_players.h" // For h_send_message_to_player
+#include "server_config.h"
 #include "database.h"
 #include "db_player_settings.h"
 
+
+extern struct twconfig *config_load (void);
 
 static bool
 player_is_sysop (sqlite3 *db, int player_id)
@@ -348,75 +354,156 @@ int
 cmd_auth_register (client_ctx_t *ctx, json_t *root)
 {
   json_t *jdata = json_object_get (root, "data");
-  const char *name = NULL, *pass = NULL;
+  const char *name = NULL, *pass = NULL, *ship_name = NULL;
+  const char *ui_locale = NULL, *ui_timezone = NULL;
+  int player_id = 0;
+  int rc = 0;
+  struct twconfig *cfg = NULL;
+  int spawn_sector_id = 0;
+  int new_ship_id = -1;
+  sqlite3 *db = db_get_handle();
+
   if (json_is_object (jdata))
     {
       json_t *jn = json_object_get (jdata, "user_name");
       json_t *jp = json_object_get (jdata, "password");
+      json_t *jsn = json_object_get (jdata, "ship_name");
+      json_t *jloc = json_object_get (jdata, "ui_locale");
+      json_t *jtz = json_object_get (jdata, "ui_timezone");
+
       if (!json_is_string (jn))
-	jn = json_object_get (jdata, "player_name");
+	jn = json_object_get (jdata, "player_name"); // Legacy support
       name = json_is_string (jn) ? json_string_value (jn) : NULL;
       pass = json_is_string (jp) ? json_string_value (jp) : NULL;
+      ship_name = json_is_string (jsn) ? json_string_value (jsn) : NULL;
+      ui_locale = json_is_string (jloc) ? json_string_value (jloc) : NULL;
+      ui_timezone = json_is_string (jtz) ? json_string_value (jtz) : NULL;
     }
+
   if (!name || !pass)
     {
       send_enveloped_error (ctx->fd, root, 1301, "Missing required field");
+      return 0;
     }
-  else
+
+  // --- Start Transaction for player creation and initial setup ---
+  rc = sqlite3_exec(db, "BEGIN IMMEDIATE", NULL, NULL, NULL);
+  if (rc != SQLITE_OK) {
+      send_enveloped_error(ctx->fd, root, 1500, "Database error (BEGIN)");
+      return 0;
+  }
+
+  rc = user_create (name, pass, &player_id);
+  if (rc == AUTH_OK)
     {
-      int player_id = 0;
-      int rc = user_create (name, pass, &player_id);
-      if (rc == AUTH_OK)
-	{
-	  /* issue a session token (24h = 86400s) */
-	  char tok[65];
-	  if (db_session_create (player_id, 86400, tok) != SQLITE_OK)
+      // --- Configuration Loading ---
+      cfg = config_load();
+      if (!cfg) {
+          send_enveloped_error(ctx->fd, root, 1500, "Database error (config_load)");
+          goto rollback_and_error;
+      }
+
+      // --- Spawn Location ---
+      srand(time(NULL)); // Seed random number generator
+      spawn_sector_id = (rand() % 10) + 1; // Random sector between 1 and 10
+
+      // --- Ship Creation & Naming ---
+      if (!ship_name || !*ship_name) {
+          ship_name = "Used Scout Marauder"; // Default ship name
+      }
+      new_ship_id = db_create_initial_ship(player_id, ship_name, spawn_sector_id);
+      if (new_ship_id == -1) {
+          send_enveloped_error(ctx->fd, root, 1500, "Database error (ship creation)");
+          goto rollback_and_error;
+      }
+
+      // --- Update Player's Sector and Ship ---
+      if (db_player_set_sector(player_id, spawn_sector_id) != SQLITE_OK) {
+          send_enveloped_error(ctx->fd, root, 1500, "Database error (set player sector)");
+          goto rollback_and_error;
+      }
+      // db_ship_claim already updates players.ship, but ensure ctx is updated
+      ctx->sector_id = spawn_sector_id;
+
+      // --- Starting Credits ---
+      if (h_add_credits(db, "player", player_id, cfg->startingcredits, NULL) != SQLITE_OK) {
+          send_enveloped_error(ctx->fd, root, 1500, "Database error (add credits)");
+          goto rollback_and_error;
+      }
+
+      // --- Starting Alignment ---
+      if (db_player_set_alignment(player_id, 1) != SQLITE_OK) {
+          send_enveloped_error(ctx->fd, root, 1500, "Database error (set alignment)");
+          goto rollback_and_error;
+      }
+
+      // --- Automatic Subscriptions ---
+      // Already subscribed to system.*
+      // Add news.* subscription
+      sqlite3_stmt *st = NULL;
+      if (sqlite3_prepare_v2 (db,
+                              "INSERT OR IGNORE INTO subscriptions(player_id,event_type,delivery,enabled) "
+                              "VALUES(?1,'news.*','push',1);",
+                              -1, &st, NULL) == SQLITE_OK)
+        {
+          sqlite3_bind_int64 (st, 1, player_id);
+          (void) sqlite3_step (st);
+        }
+      if (st) sqlite3_finalize (st);
+
+      // --- Player Preferences (Override Defaults) ---
+      if (ui_locale) {
+          db_prefs_set_one(player_id, "ui.locale", PT_STRING, ui_locale);
+      }
+      if (ui_timezone) {
+          db_prefs_set_one(player_id, "ui.timezone", PT_STRING, ui_timezone);
+      }
+
+      // --- Welcome Message ---
+      h_send_message_to_player(player_id, 0, "Welcome to TWClone!", get_welcome_message(player_id));
+
+      // --- Issue Session Token ---
+      char tok[65];
+      if (db_session_create (player_id, 86400, tok) != SQLITE_OK)
 	    {
-	      send_enveloped_error (ctx->fd, root, 1500, "Database error");
+	      send_enveloped_error (ctx->fd, root, 1500, "Database error (session token)");
+	      goto rollback_and_error;
 	    }
 	  else
 	    {
 	      ctx->player_id = player_id;
-	      if (ctx->sector_id <= 0)
-		ctx->sector_id = 1;
 	      json_t *data = json_pack ("{s:i, s:s}", "player_id", player_id,
 					"session_token", tok);
-
-	      /* Auto-subscribe this player to system.* on login (best-effort). */
-	      {
-		sqlite3 *db = db_get_handle ();
-		sqlite3_stmt *st = NULL;
-		if (sqlite3_prepare_v2 (db,
-					"INSERT OR IGNORE INTO subscriptions(player_id,event_type,delivery,enabled) "
-					"VALUES(?1,'system.*','push',1);",
-					-1, &st, NULL) == SQLITE_OK)
-		  {
-		    sqlite3_bind_int64 (st, 1, ctx->player_id);
-		    (void) sqlite3_step (st);	/* ignore result; UNIQUE prevents dupes */
-		  }
-		if (st)
-		  sqlite3_finalize (st);
-	      }
-
-
 	      send_enveloped_ok (ctx->fd, root, "auth.session", data);
 	      json_decref (data);
 	    }
-	}
-      else if (rc == AUTH_ERR_NAME_TAKEN)
-	{
-	  send_enveloped_error (ctx->fd, root, AUTH_ERR_NAME_TAKEN,
+    }
+  else if (rc == AUTH_ERR_NAME_TAKEN)
+    {
+      send_enveloped_error (ctx->fd, root, AUTH_ERR_NAME_TAKEN,
 				"Username already exists");
-	}
-      else
-	{
-	  send_enveloped_error (ctx->fd, root, AUTH_ERR_DB, "Database error");
-	}
+      goto rollback_and_error;
+    }
+  else
+    {
+      send_enveloped_error (ctx->fd, root, AUTH_ERR_DB, "Database error");
+      goto rollback_and_error;
     }
 
-  hydrate_player_defaults (ctx->player_id);
-
+  // --- Commit Transaction ---
+  sqlite3_exec(db, "COMMIT", NULL, NULL, NULL);
+  if (cfg) free(cfg);
   return 0;
+
+rollback_and_error:
+  sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
+  if (cfg) free(cfg);
+  return 0;
+}
+
+const char *get_welcome_message(int player_id) {
+    (void)player_id; // Suppress unused parameter warning
+    return "Hello Player";
 }
 
 /* ---------- auth.logout ---------- */

@@ -1571,7 +1571,7 @@ create_ferringhi (int ferringhi_sector)
       sqlite3_bind_int (ins, b++, 0);	// limpets (New, default 0)
       sqlite3_bind_int (ins, b++, 0);	// genesis (New, default 0)
       sqlite3_bind_int (ins, b++, 0);	// colonists (New, default 0)
-      sqlite3_bind_int (ins, b++, 0);	// flags (New, default 0)
+      sqlite3_bind_int (ins, b++, 777);	// flags (New, default 777 for claimable derelicts)
       sqlite3_bind_int (ins, b++, 0);	// ported (New, default 0)
       sqlite3_bind_int (ins, b++, 1);	// onplanet (Always 1 for new ship on starting planet)
 

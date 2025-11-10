@@ -223,7 +223,8 @@
             "rpc": {
               "command": "ship.info",
               "data": {}
-            }
+            },
+            "post": "print_inspect_response_pretty"
           }
         },
         {
@@ -262,9 +263,10 @@
             "rpc": {
               "command": "move.describe_sector",
               "data": {
-                "sector_id": "<prompt:int:Sector ID>"
+                "sector_id": "<ctx:current_sector_id>"
               }
-            }
+            },
+            "post": "print_last_rpc"
           }
         },
         {
@@ -274,28 +276,7 @@
             "pycall": "scan_sector"
           }
         },
-        {
-          "key": "m",
-          "label": "(M) Map",
-          "action": {
-            "pycall": "map_flow"
-          }
-        },
-        {
-          "key": "t",
-          "label": "(T) Target Info",
-          "action": {
-            "pycall": "target_info_flow"
-          }
-        },
-        {
-          "key": "w",
-          "label": "(W) Warp to sector",
-          "action": {
-            "pycall": "warp_flow"
-          }
-        },
-        {
+	  {
           "key": "r",
           "label": "(R) Rename Ship",
           "action": {
@@ -628,7 +609,10 @@
               "command": "auth.register",
               "data": {
                 "user_name": "<prompt:str:Username>",
-                "password": "<prompt:str:Password>"
+                "password": "<prompt:str:Password>",
+                "ship_name": "<prompt:str:Ship Name (optional)>",
+                "ui_locale": "<prompt:str:UI Locale (e.g., en-US, optional)>",
+                "ui_timezone": "<prompt:str:UI Timezone (e.g., America/New_York, optional)>"
               }
             }
           }

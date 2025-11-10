@@ -1556,15 +1556,27 @@ def render_ship_card(ship: dict) -> str:
     sid   = ship.get("id") or ship.get("ship_id") or "?"
     name  = ship.get("name") or ship.get("ship_name") or "Unnamed"
     stype = (ship.get("type") or {}).get("name") or ship.get("ship_type") or "?"
-    sector_id = ship.get("sector_id") or ship.get("sector") or "?"
+    sector_id = (ship.get("location") or {}).get("sector_id") or "?"
     owner = (ship.get("owner") or {}).get("name") if isinstance(ship.get("owner"), dict) else ship.get("owner")
     owner = owner or "unknown"
     flags = _bool_flags(ship.get("flags") or {})
     shields = _fmt_int((ship.get("defence") or {}).get("shields") or 0)
     fighters = _fmt_int((ship.get("defence") or {}).get("fighters") or 0)
-    holds_total = (ship.get("holds") or {}).get("total") or 0
-    holds_free  = (ship.get("holds") or {}).get("free") or 0
-    holds_used  = max(0, int(holds_total) - int(holds_free)) if isinstance(holds_total, int) and isinstance(holds_free, int) else "?"
+    holds_val = ship.get("holds")
+    cargo_items = ship.get("cargo") or {}
+    
+    holds_used = sum(cargo_items.values()) # Sum of all cargo items
+    
+    if isinstance(holds_val, dict):
+        holds_total = holds_val.get("total") or 0
+        holds_free  = max(0, int(holds_total) - int(holds_used))
+    elif isinstance(holds_val, int):
+        holds_total = holds_val # This is max_holds
+        holds_free  = max(0, int(holds_total) - int(holds_used))
+    else:
+        holds_total = 0
+        holds_free = 0
+    
     holds_line  = f"{_fmt_int(holds_used)} used / {_fmt_int(holds_total)} total"
     cargo = _render_cargo(ship.get("cargo"))
 
@@ -1579,24 +1591,27 @@ def render_ship_card(ship: dict) -> str:
     lines.append("└────────────────────────────────────────────")
     return "\n".join(lines)
 
-def print_inspect_response_pretty(resp: dict):
-    """Pretty-print ship.inspect response; fall back to JSON if shape unexpected."""
-    try:
-        data = (resp or {}).get("data") or {}
-        ships = data.get("ships") or []
-        if not isinstance(ships, list) or not ships:
-            # Some servers return a single 'ship' object
-            ship = data.get("ship")
-            if isinstance(ship, dict):
-                print(render_ship_card(ship))
-                return
-            raise ValueError("No ships found in response.")
-        for ship in ships:
-            print(render_ship_card(ship))
+@register("print_inspect_response_pretty")
+def print_inspect_response_pretty(ctx):
+    resp = ctx.state.get("last_rpc")
+    if resp is None:
+        print("[no response captured]")
         return
-    except Exception:
-        # Fall back to raw JSON dump if structure differs
-        print(json.dumps(resp, ensure_ascii=False, indent=2))
+    
+    # Directly access data to see where it fails
+    data = resp.get("data")
+
+    ships = data.get("ships") or []
+    if not isinstance(ships, list) or not ships:
+        # Some servers return a single 'ship' object
+        ship = data.get("ship")
+        if isinstance(ship, dict):
+            print(render_ship_card(ship))
+            return
+        raise ValueError("No ships found in response.")
+    for ship in ships:
+        print(render_ship_card(ship))
+    return
 
 
 

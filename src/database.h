@@ -90,6 +90,7 @@ int db_players_at_sector_json (int sector_id, json_t ** out_array);
 int db_beacons_at_sector_json (int sector_id, json_t ** out_array);
 int db_planets_at_sector_json (int sector_id, json_t ** out_array);
 int db_player_set_sector (int player_id, int sector_id);
+int db_player_set_alignment(int player_id, int alignment);
 int db_player_get_sector (int player_id, int *out_sector);
 int db_player_info_json (int player_id, json_t ** out);
 int db_sector_beacon_text (int sector_id, char **out_text);	// caller frees *out_text
@@ -117,6 +118,7 @@ int db_ships_inspectable_at_sector_json (int player_id, int sector_id,
 int db_ship_rename_if_owner (int player_id, int ship_id,
 			     const char *new_name);
 int db_destroy_ship (sqlite3 *db, int player_id, int ship_id);
+int db_create_initial_ship(int player_id, const char *ship_name, int sector_id);
 /* Claim an unpiloted ship (ownership unchanged); returns JSON of claimed ship */
 int db_ship_claim (int player_id, int sector_id, int ship_id,
 		   json_t ** out_ship);
