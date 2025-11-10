@@ -2,7 +2,8 @@
 #define DATABASE_H
 
 #include <jansson.h>		/* for json_t */
-#include <sqlite3.h>		/* for sqlite3 */
+#include <stdbool.h>
+#include <sqlite3.h>
 #include <pthread.h>		/* for pthread_mutex_t */
 #include <sqlite3.h>
 
@@ -21,7 +22,7 @@ typedef struct json_t json_t;
 int db_init ();
 
 /* Create required tables */
-int db_create_tables (void);
+int db_create_tables (bool schema_exists);
 
 /* Insert default data (config rows, etc.) */
 int db_insert_defaults (void);

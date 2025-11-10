@@ -299,27 +299,6 @@ h_get_cargo_space_free (sqlite3 *db, int player_id, int *free_out)
   int rc;
   sqlite3_stmt *st = NULL;
 
-  int holds = 0;
-  /* players.holds */
-  rc =
-    sqlite3_prepare_v2 (db,
-			"SELECT COALESCE(holds,0) FROM players WHERE id=?1",
-			-1, &st, NULL);
-  if (rc != SQLITE_OK)
-    return rc;
-  sqlite3_bind_int (st, 1, player_id);
-  rc = sqlite3_step (st);
-  if (rc == SQLITE_ROW)
-    holds = sqlite3_column_int (st, 0);
-  else
-    {
-      holds = holds; // Explicitly use holds to satisfy the compiler
-      sqlite3_finalize (st);
-      return SQLITE_NOTFOUND;
-    }
-  sqlite3_finalize (st);
-
-  /* total cargo qon ship (assumes ship_goods exists as designed earlier) */
   int total = 0;
 
   rc = sqlite3_prepare_v2 (db,

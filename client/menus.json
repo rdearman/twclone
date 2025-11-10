@@ -122,6 +122,20 @@
           "action": {
             "submenu": "BULK"
           }
+        },
+        {
+          "key": "n",
+          "label": "(N) News",
+          "action": {
+            "submenu": "NEWS"
+          }
+        },
+        {
+          "key": "f",
+          "label": "(F) Deployment",
+          "action": {
+            "submenu": "DEPLOYMENT"
+          }
         }
       ]
     },
@@ -149,13 +163,7 @@
             "pycall": "pathfind_flow"
           }
         },
-        {
-          "key": "i",
-          "label": "(I) Intercept Ship",
-          "action": {
-            "pycall": "intercept_flow"
-          }
-        },
+        
         {
           "key": "a",
           "label": "(A) Autopilot",
@@ -327,13 +335,32 @@
         },
         {
           "key": "s",
-          "label": "(S) Shipyard",
+          "label": "(S) Sell",
           "action": {
-            "submenu": "SHIPYARD"
-          },
-          "show_if_ctx": [
-            "is_stardock"
-          ]
+            "rpc": {
+              "command": "trade.sell",
+              "data": {
+                "commodity": "<prompt:str:Commodity (ore, organics, equipment)>",
+                "quantity": "<prompt:int:Quantity>"
+              }
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
+          "key": "q",
+          "label": "(Q) Get Quote",
+          "action": {
+            "rpc": {
+              "command": "trade.quote",
+              "data": {
+                "commodity": "<prompt:str:Commodity (ore, organics, equipment)>",
+                "quantity": "<prompt:int:Quantity>",
+                "action": "<prompt:str:Action (buy or sell)>"
+              }
+            },
+            "post": "print_last_rpc"
+          }
         },
         {
           "key": "k",
@@ -921,6 +948,99 @@
           "label": "(X) Execute batch",
           "action": {
             "pycall": "cli_bulk_execute_flow"
+          }
+        },
+        {
+          "key": "q",
+          "label": "(Q) Back",
+          "action": {
+            "back": true
+          }
+        }
+      ]
+    },
+    "NEWS": {
+      "title": "--- News ---",
+      "options": [
+        {
+          "key": "g",
+          "label": "(G) Get News Feed",
+          "action": {
+            "rpc": {
+              "command": "news.get_feed",
+              "data": {}
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
+          "key": "m",
+          "label": "(M) Mark All Read",
+          "action": {
+            "rpc": {
+              "command": "news.mark_feed_read",
+              "data": {}
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
+          "key": "q",
+          "label": "(Q) Back",
+          "action": {
+            "back": true
+          }
+        }
+      ]
+    },
+    "DEPLOYMENT": {
+      "title": "--- Deployment Menu ---",
+      "options": [
+        {
+          "key": "d",
+          "label": "(D) Deploy Fighters",
+          "action": {
+            "rpc": {
+              "command": "combat.deploy_fighters",
+              "data": {
+                "amount": "<prompt:int:Amount to deploy>",
+                "offensive_setting": "<prompt:int:Offensive setting (0-3)>"
+              }
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
+          "key": "r",
+          "label": "(R) Recall Fighters",
+          "action": {
+            "rpc": {
+              "command": "fighters.recall",
+              "data": {}
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
+          "key": "l",
+          "label": "(L) List Deployed Fighters",
+          "action": {
+            "rpc": {
+              "command": "deploy.fighters.list",
+              "data": {}
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
+          "key": "m",
+          "label": "(M) List Deployed Mines",
+          "action": {
+            "rpc": {
+              "command": "deploy.mines.list",
+              "data": {}
+            },
+            "post": "print_last_rpc"
           }
         },
         {

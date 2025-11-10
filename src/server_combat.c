@@ -1452,7 +1452,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
   int capacity_left = ship_fighters_max - ship_fighters_current;
   int take = 0;
 
-  if (take <= 0)
+  if (capacity_left <= 0)
     {
       send_enveloped_refused (ctx->fd, root, ERR_OUT_OF_RANGE, "No capacity",
 			      json_pack ("{s:s}", "reason", "no_capacity"));
@@ -1461,10 +1461,10 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
 
   take = (available_to_recall < capacity_left) ? available_to_recall : capacity_left;
 
-  if (capacity_left <= 0)
+  if (take <= 0) // Now this check makes sense
     {
-      send_enveloped_refused (ctx->fd, root, ERR_OUT_OF_RANGE, "No capacity",
-			      json_pack ("{s:s}", "reason", "no_capacity"));
+      send_enveloped_refused (ctx->fd, root, ERR_OUT_OF_RANGE, "No fighters to recall or no capacity",
+			      json_pack ("{s:s}", "reason", "no_fighters_or_capacity"));
       return 0;
     }
 

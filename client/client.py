@@ -126,6 +126,365 @@ def call_handler(name: str, ctx: "Context", *args, **kwargs):
         return None
     return fn(ctx, *args, **kwargs)
 
+# --- BEGIN AUTO-ADDED CAPS_HELPERS ---
+def _ctx_capabilities_get(ctx, path, default=None):
+    """Resolve dotted path from ctx.capabilities (dict)."""
+    cur = getattr(ctx, 'capabilities', None) or {}
+    for part in path.split("."):
+        if not isinstance(cur, dict):
+            return default
+        cur = cur.get(part)
+    return default if cur is None else cur
+# --- END AUTO-ADDED CAPS_HELPERS ---
+
+
+# --- BEGIN AUTO-ADDED RPC_RATE_LIMIT_WRAP ---
+# Attempt to wrap Conn.rpc to capture meta.rate_limit into ctx.state.
+try:
+    _OldConn = Conn
+    if not hasattr(_OldConn, "_twc_rl_wrapped"):
+        _old_rpc = _OldConn.rpc
+        def _rpc_wrapped(self, cmd, data=None, *args, **kwargs):
+            resp = _old_rpc(self, cmd, data, *args, **kwargs)
+            try:
+                rl = ((resp or {}).get("meta") or {}).get("rate_limit")
+                if rl and hasattr(self, "ctx") and isinstance(getattr(self, "ctx"), object):
+                    st = getattr(self.ctx, "state", None)
+                    if isinstance(st, dict):
+                        st["rate_limit"] = rl
+            except Exception:
+                pass
+            return resp
+        _OldConn.rpc = _rpc_wrapped
+        _OldConn._twc_rl_wrapped = True
+except NameError:
+    # Conn not defined in this script; ignore.
+    pass
+# --- END AUTO-ADDED RPC_RATE_LIMIT_WRAP ---
+
+
+# --- BEGIN AUTO-ADDED RATE_LIMIT_HUD ---
+def _print_rate_limit_hud(ctx):
+    rl = (getattr(ctx, "state", {}) or {}).get("rate_limit")
+    if not isinstance(rl, dict):
+        return
+    lim = rl.get("limit"); rem = rl.get("remaining"); rst = rl.get("reset")
+    tail = ""
+    try:
+        import time
+        if isinstance(rst, (int, float)):
+            eta = int(rst - time.time())
+            if eta >= 0:
+                tail = f"  T-{eta}s"
+    except Exception:
+        pass
+    print(f"[rate] {rem}/{lim}{tail}")
+# --- END AUTO-ADDED RATE_LIMIT_HUD ---
+
+
+# --- BEGIN AUTO-ADDED EVENT_HANDLERS ---
+def _handle_known_broadcast(envelope: dict):
+    t = envelope.get("type")
+    if t in ("sector.player_entered", "sector.player_left"):
+        d = envelope.get("data") or {}
+        who = d.get("player_name") or d.get("player_id") or "Someone"
+        sid = d.get("sector_id")
+        verb = "entered" if t.endswith("entered") else "left"
+        print(f"\n» {who} {verb} sector {sid}\n")
+        return True
+    if t == "broadcast.v1":
+        d = envelope.get("data") or {}
+        msg = d.get("message") or ""
+        scope = d.get("scope") or "global"
+        print(f"\n[notice:{scope}] {msg}\n")
+        return True
+    return False
+# --- END AUTO-ADDED EVENT_HANDLERS ---
+
+
+# --- BEGIN AUTO-ADDED AUTOPILOT ---
+@register("cli_autopilot_status")
+def cli_autopilot_status(ctx):
+    """Query and display autopilot status."""
+    r = ctx.conn.rpc("move.autopilot.status", {})
+    data = (r or {}).get("data") or {}
+    state = data.get("state")
+    nxt = data.get("next")
+    print(f"Autopilot: {state or 'unknown'}; next: {nxt if nxt is not None else '-'}")
+    ctx.state["last_rpc"] = r
+
+@register("cli_autopilot_control")
+def cli_autopilot_control(ctx):
+    """Send Y/N/E-style controls to autopilot."""
+    print("Controls: [Y] stop at next  |  [N] continue  |  [E] express  |  [Q] back")
+    while True:
+        k = input("> ").strip().lower()
+        if k == "y":
+            _ = ctx.conn.rpc("move.autopilot.control", {"action":"stop_at_next"})
+        elif k == "n":
+            _ = ctx.conn.rpc("move.autopilot.control", {"action":"continue"})
+        elif k == "e":
+            _ = ctx.conn.rpc("move.autopilot.control", {"action":"express"})
+        elif k == "q" or k == "":
+            return
+        else:
+            print("Y/N/E or Q")
+# --- END AUTO-ADDED AUTOPILOT ---
+
+
+# --- BEGIN AUTO-ADDED BULK_EXEC ---
+@register("cli_bulk_execute_flow")
+def cli_bulk_execute_flow(ctx):
+    max_bulk = _ctx_capabilities_get(ctx, "limits.max_bulk", 0)
+    if not max_bulk:
+        print("Bulk not available on this server.")
+        return
+    print(f"Enter up to {max_bulk} commands as JSON lines like: {{\"command\":\"...\",\"data\":{{}}}}")
+    print("Blank line to end.")
+    import json as _json
+    items = []
+    while len(items) < int(max_bulk):
+        line = input()
+        if not line.strip():
+            break
+        try:
+            obj = _json.loads(line)
+            if not isinstance(obj, dict) or "command" not in obj:
+                print("Expecting {'command':'...', 'data':{}}"); continue
+            items.append(obj)
+        except Exception:
+            print("Invalid JSON.")
+    if not items:
+        print("No commands.")
+        return
+    r = ctx.conn.rpc("bulk.execute", {"items": items})
+    try:
+        print(_json.dumps(r, ensure_ascii=False, indent=2))
+    except Exception:
+        print(r)
+# --- END AUTO-ADDED BULK_EXEC ---
+
+
+# --- BEGIN AUTO-ADDED SUBSCRIPTIONS ---
+@register("cli_subscriptions_list")
+def cli_subscriptions_list(ctx):
+    r = ctx.conn.rpc("subscribe.list", {})
+    data = (r or {}).get("data") or {}
+    items = data.get("items") or data.get("topics") or []
+    if not items:
+        print("(no subscriptions)")
+    for it in items:
+        t = it.get("topic") or it.get("event_type")
+        locked = it.get("locked")
+        print(f"- {t}{' [locked]' if locked else ''}")
+    ctx.state["last_rpc"] = r
+
+@register("cli_subscriptions_remove")
+def cli_subscriptions_remove(ctx):
+    topic = input("Topic to remove: ").strip()
+    r = ctx.conn.rpc("subscribe.remove", {"topic": topic})
+    if r.get("status") in ("refused","error"):
+        err = (r.get("error") or {})
+        if err.get("code") == 1407:
+            print("Cannot remove: topic is locked.")
+    import json as _json
+    try:
+        print(_json.dumps(r, ensure_ascii=False, indent=2))
+    except Exception:
+        print(r)
+# --- END AUTO-ADDED SUBSCRIPTIONS ---
+
+
+# --- BEGIN AUTO-ADDED CHAT_MAIL ---
+@register("cli_chat_history")
+def cli_chat_history(ctx):
+    r = ctx.conn.rpc("chat.history", {"limit": 20})
+    import json as _json
+    try:
+        print(_json.dumps(r, ensure_ascii=False, indent=2))
+    except Exception:
+        print(r)
+
+@register("cli_chat_send")
+def cli_chat_send(ctx):
+    msg = input("Message: ").strip()
+    if not msg:
+        print("Empty message.")
+        return
+    scope = (input("Scope (global|corp|player) [global]: ").strip() or "global").lower()
+    to = None
+    if scope == "player":
+        to = input("Player name/id: ").strip()
+    r = ctx.conn.rpc("chat.send", {"scope": scope, "to": to, "message": msg})
+    import json as _json
+    try:
+        print(_json.dumps(r, ensure_ascii=False, indent=2))
+    except Exception:
+        print(r)
+
+@register("cli_mail_inbox")
+def cli_mail_inbox(ctx):
+    r = ctx.conn.rpc("mail.inbox", {"limit": 20})
+    import json as _json
+    try:
+        print(_json.dumps(r, ensure_ascii=False, indent=2))
+    except Exception:
+        print(r)
+
+@register("cli_mail_read")
+def cli_mail_read(ctx):
+    mid = input("Mail id: ").strip()
+    try:
+        mid = int(mid)
+    except Exception:
+        print("Bad id.")
+        return
+    r = ctx.conn.rpc("mail.read", {"id": mid})
+    import json as _json
+    try:
+        print(_json.dumps(r, ensure_ascii=False, indent=2))
+    except Exception:
+        print(r)
+
+@register("cli_mail_send")
+def cli_mail_send(ctx):
+    to = input("To (player): ").strip()
+    subj = input("Subject: ").strip()
+    body = input("Body: ").strip()
+    r = ctx.conn.rpc("mail.send", {"to": to, "subject": subj, "body": body})
+    import json as _json
+    try:
+        print(_json.dumps(r, ensure_ascii=False, indent=2))
+    except Exception:
+        print(r)
+
+@register("cli_mail_delete")
+def cli_mail_delete(ctx):
+    mid = input("Mail id: ").strip()
+    try:
+        mid = int(mid)
+    except Exception:
+        print("Bad id.")
+        return
+    r = ctx.conn.rpc("mail.delete", {"id": mid})
+    import json as _json
+    try:
+        print(_json.dumps(r, ensure_ascii=False, indent=2))
+    except Exception:
+        print(r)
+    try:
+        mid = int(mid)
+    except Exception:
+        print("Bad id.")
+        return
+    r = ctx.conn.rpc("mail.delete", {"id": mid})
+    import json as _json
+    try:
+        print(_json.dumps(r, ensure_ascii=False, indent=2))
+    except Exception:
+        print(r)
+# --- END AUTO-ADDED CHAT_MAIL ---
+
+
+# --- BEGIN AUTO-ADDED HUD_HOOK ---
+def _hud_after_action(ctx):
+    try:
+        _print_rate_limit_hud(ctx)
+    except Exception:
+        pass
+# --- END AUTO-ADDED HUD_HOOK ---
+
+
+# --- BEGIN AUTO-ADDED DOCK_CONTEXT_REFRESH ---
+def _infer_is_stardock(data: dict) -> bool:
+    """Try to infer if the current dock/port is 'Stardock' from various payload shapes."""
+    if not isinstance(data, dict):
+        return False
+    # data may look like: { 'port': { 'name': 'Stardock', 'class': 'stardock', ... } }
+    port = data.get('port') if isinstance(data.get('port'), dict) else data
+    name = str((port or {}).get('name') or data.get('port_name') or "").lower()
+    pclass = str((port or {}).get('class') or (port or {}).get('type') or "").lower()
+    # Heuristics
+    if "stardock" in name:
+        return True
+    if pclass in ("stardock", "star dock"):
+        return True
+    sid = (port or {}).get('sector_id') or data.get('sector_id')
+    if sid in (0, 1):
+        if "dock" in name or "dock" in pclass:
+            return True
+    return False
+
+def ctx_refresh_port_context(ctx):
+    """Best-effort fetch to set ctx.state['is_stardock'] before showing the Dock menu."""
+    ctx.state.setdefault('is_stardock', False)
+    conn = getattr(ctx, 'conn', None)
+    if conn is None:
+        return
+    def _try(cmd, payload=None):
+        try:
+            r = conn.rpc(cmd, payload or {})
+            if isinstance(r, dict) and r.get('status') in ('ok','srv-ok','success', None):
+                d = r.get('data') or {}
+                if isinstance(d, dict) and d:
+                    ctx.state['is_stardock'] = bool(_infer_is_stardock(d))
+                    return True
+        except Exception:
+            pass
+        return False
+    for cmd in ("port.status","dock.status","port.info","sector.port.status","sector.current","whereami"):
+        if _try(cmd):
+            break
+# --- END AUTO-ADDED DOCK_CONTEXT_REFRESH ---
+
+
+# --- BEGIN AUTO-ADDED SHOW_IF_CTX_SUPPORT ---
+def _option_visible_with_ctx(ctx, opt: dict) -> bool:
+    """Return True if 'show_if_ctx' conditions (if any) are satisfied based on ctx.state flags."""
+    if not isinstance(opt, dict):
+        return True
+    cond = opt.get("show_if_ctx")
+    if not cond:
+        return True
+    if isinstance(cond, str):
+        cond = [cond]
+    st = getattr(ctx, "state", {}) or {}
+    for flag in cond:
+        if not st.get(flag):
+            return False
+    return True
+# --- END AUTO-ADDED SHOW_IF_CTX_SUPPORT ---
+
+
+# --- BEGIN AUTO-ADDED MENU_SHIMS ---
+def menu_on_enter(ctx, menu_def: dict):
+    """Call optional prefetch hooks.
+    
+    Supports menu JSON like: {"on_enter": {"pycall": "ctx_refresh_port_context"}}.
+    """
+    if not isinstance(menu_def, dict):
+        return
+    on_enter = menu_def.get("on_enter")
+    if isinstance(on_enter, dict) and on_enter.get("pycall"):
+        fn = globals().get(on_enter["pycall"])
+        if callable(fn):
+            try:
+                fn(ctx)
+            except Exception:
+                pass
+
+def filter_menu_options_with_ctx(ctx, options: list) -> list:
+    """Filter an options list using ctx flags via _option_visible_with_ctx."""
+    out = []
+    for opt in options or []:
+        try:
+            if _option_visible_with_ctx(ctx, opt):
+                out.append(opt)
+        except Exception:
+            out.append(opt)
+    return out
+# --- END AUTO-ADDED MENU_SHIMS ---
+
 # ---------------------------
 # Conn (ported from v2)
 # ---------------------------
@@ -326,7 +685,9 @@ def pathfind_flow(ctx: Context):
 
     # Ask server for a path
     req = {"from": cur, "to": target}
+    print(f"[DEBUG] Pathfind request: {req}") # ADDED DEBUG PRINT
     resp = ctx.conn.rpc("move.pathfind", req)
+    print(f"[DEBUG] Pathfind response: {resp}") # ADDED DEBUG PRINT
     status = (resp or {}).get("status")
     if status in ("error", "refused"):
         err = (resp.get("error") or {})
@@ -756,6 +1117,17 @@ def disconnect_and_quit(ctx):
     except Exception as e:
         print(f"disconnect error: {e}")
     sys.exit(0)
+
+# --- BEGIN AUTO-ADDED CAPS_HELPERS ---
+def _ctx_capabilities_get(ctx, path, default=None):
+    """Resolve dotted path from ctx.capabilities (dict)."""
+    cur = getattr(ctx, 'capabilities', None) or {}
+    for part in path.split("."):
+        if not isinstance(cur, dict):
+            return default
+        cur = cur.get(part)
+    return default if cur is None else cur
+# --- END AUTO-ADDED CAPS_HELPERS ---
 
 # add near the top of the file (or just before dispatch_action)
 def _run_post(ctx, post):
@@ -1419,13 +1791,61 @@ def autopilot_flow(ctx: Context):
 
 @register("add_route_flow")
 def add_route_flow(ctx: Context):
-    raw = input("Add sector to route: ").strip()
+    """Ask for a target, call move.pathfind, and add the route to autopilot."""
+    # Where are we now?
+    cur_desc = ctx.last_sector_desc or {}
+    cur = cur_desc.get("sector_id") or cur_desc.get("id") or cur_desc.get("sector") or ctx.state.get("sector_id")
     try:
-        sector = int(raw)
-    except ValueError:
-        print("Invalid sector."); return
+        target = int(input("Add sector to route (target sector ID): ").strip())
+    except (ValueError, TypeError):
+        print("Invalid sector ID."); return
+
+    if not cur:
+        # Fallback: fetch current sector from server if we don't have it cached
+        try:
+            info = ctx.conn.rpc("move.describe_sector", {})
+            data = (info or {}).get("data") or {}
+            cur = data.get("sector_id") or data.get("id")
+        except Exception:
+            pass
+    if not cur:
+        print("Cannot determine current sector. Please re-display sector (D) first."); return
+
+    # Ask server for a path
+    req = {"from": cur, "to": target}
+    resp = ctx.conn.rpc("move.pathfind", req)
+    status = (resp or {}).get("status")
+    if status in ("error", "refused"):
+        err = (resp.get("error") or {})
+        print(f"Pathfind failed {err.get('code')}: {err.get('message') or 'error'}")
+        return
+    data = (resp or {}).get("data") or {}
+
+    # Try to normalize a path from a few likely shapes
+    path = data.get("path") or data.get("sectors") or data.get("steps") or []
+    # Some servers return an array of {from,to} edges; flatten if needed
+    if path and isinstance(path[0], dict):
+        # e.g., [{"from":1,"to":2},{"from":2,"to":5}] -> [1,2,5]
+        seq = [path[0].get("from")]
+        for e in path:
+            t = e.get("to")
+            if t is not None:
+                seq.append(t)
+        path = seq
+
+    if not path or len(path) < 1:
+        print("No route found to target sector.")
+        return
+
+    # Append path to current autopilot route, skipping the current sector if it's the first element
     route = ctx.state.setdefault("ap_route", [])
-    route.append(sector)
+    start_idx = 0
+    if path and path[0] == cur:
+        start_idx = 1
+
+    for sector_id in path[start_idx:]:
+        route.append(sector_id)
+
     ctx.state["ap_route_plotted"] = bool(route)
     print("Route:", " -> ".join(map(str, route)))
 
@@ -1784,330 +2204,25 @@ def _ctx_capabilities_get(ctx, path, default=None):
 # --- END AUTO-ADDED CAPS_HELPERS ---
 
 
-# --- BEGIN AUTO-ADDED RPC_RATE_LIMIT_WRAP ---
-# Attempt to wrap Conn.rpc to capture meta.rate_limit into ctx.state.
-try:
-    _OldConn = Conn
-    if not hasattr(_OldConn, "_twc_rl_wrapped"):
-        _old_rpc = _OldConn.rpc
-        def _rpc_wrapped(self, cmd, data=None, *args, **kwargs):
-            resp = _old_rpc(self, cmd, data, *args, **kwargs)
-            try:
-                rl = ((resp or {}).get("meta") or {}).get("rate_limit")
-                if rl and hasattr(self, "ctx") and isinstance(getattr(self, "ctx"), object):
-                    st = getattr(self.ctx, "state", None)
-                    if isinstance(st, dict):
-                        st["rate_limit"] = rl
-            except Exception:
-                pass
-            return resp
-        _OldConn.rpc = _rpc_wrapped
-        _OldConn._twc_rl_wrapped = True
-except NameError:
-    # Conn not defined in this script; ignore.
-    pass
-# --- END AUTO-ADDED RPC_RATE_LIMIT_WRAP ---
 
 
-# --- BEGIN AUTO-ADDED RATE_LIMIT_HUD ---
-def _print_rate_limit_hud(ctx):
-    rl = (getattr(ctx, "state", {}) or {}).get("rate_limit")
-    if not isinstance(rl, dict):
-        return
-    lim = rl.get("limit"); rem = rl.get("remaining"); rst = rl.get("reset")
-    tail = ""
-    try:
-        import time
-        if isinstance(rst, (int, float)):
-            eta = int(rst - time.time())
-            if eta >= 0:
-                tail = f"  T-{eta}s"
-    except Exception:
-        pass
-    print(f"[rate] {rem}/{lim}{tail}")
-# --- END AUTO-ADDED RATE_LIMIT_HUD ---
 
 
-# --- BEGIN AUTO-ADDED EVENT_HANDLERS ---
-def _handle_known_broadcast(envelope: dict):
-    t = envelope.get("type")
-    if t in ("sector.player_entered", "sector.player_left"):
-        d = envelope.get("data") or {}
-        who = d.get("player_name") or d.get("player_id") or "Someone"
-        sid = d.get("sector_id")
-        verb = "entered" if t.endswith("entered") else "left"
-        print(f"\n» {who} {verb} sector {sid}\n")
-        return True
-    if t == "broadcast.v1":
-        d = envelope.get("data") or {}
-        msg = d.get("message") or ""
-        scope = d.get("scope") or "global"
-        print(f"\n[notice:{scope}] {msg}\n")
-        return True
-    return False
-# --- END AUTO-ADDED EVENT_HANDLERS ---
 
 
-# --- BEGIN AUTO-ADDED AUTOPILOT ---
-def cli_autopilot_status(ctx):
-    """Query and display autopilot status."""
-    r = ctx.conn.rpc("move.autopilot.status", {})
-    data = (r or {}).get("data") or {}
-    state = data.get("state")
-    nxt = data.get("next")
-    print(f"Autopilot: {state or 'unknown'}; next: {nxt if nxt is not None else '-'}")
-    ctx.state["last_rpc"] = r
-
-def cli_autopilot_control(ctx):
-    """Send Y/N/E-style controls to autopilot."""
-    print("Controls: [Y] stop at next  |  [N] continue  |  [E] express  |  [Q] back")
-    while True:
-        k = input("> ").strip().lower()
-        if k == "y":
-            _ = ctx.conn.rpc("move.autopilot.control", {"action":"stop_at_next"})
-        elif k == "n":
-            _ = ctx.conn.rpc("move.autopilot.control", {"action":"continue"})
-        elif k == "e":
-            _ = ctx.conn.rpc("move.autopilot.control", {"action":"express"})
-        elif k == "q" or k == "":
-            return
-        else:
-            print("Y/N/E or Q")
-# --- END AUTO-ADDED AUTOPILOT ---
 
 
-# --- BEGIN AUTO-ADDED BULK_EXEC ---
-def cli_bulk_execute_flow(ctx):
-    max_bulk = _ctx_capabilities_get(ctx, "limits.max_bulk", 0)
-    if not max_bulk:
-        print("Bulk not available on this server.")
-        return
-    print(f"Enter up to {max_bulk} commands as JSON lines like: {{\"command\":\"...\",\"data\":{{}}}}")
-    print("Blank line to end.")
-    import json as _json
-    items = []
-    while len(items) < int(max_bulk):
-        line = input()
-        if not line.strip():
-            break
-        try:
-            obj = _json.loads(line)
-            if not isinstance(obj, dict) or "command" not in obj:
-                print("Expecting {'command':'...', 'data':{}}"); continue
-            items.append(obj)
-        except Exception:
-            print("Invalid JSON.")
-    if not items:
-        print("No commands.")
-        return
-    r = ctx.conn.rpc("bulk.execute", {"items": items})
-    try:
-        print(_json.dumps(r, ensure_ascii=False, indent=2))
-    except Exception:
-        print(r)
-# --- END AUTO-ADDED BULK_EXEC ---
 
 
-# --- BEGIN AUTO-ADDED SUBSCRIPTIONS ---
-def cli_subscriptions_list(ctx):
-    r = ctx.conn.rpc("subscribe.list", {})
-    data = (r or {}).get("data") or {}
-    items = data.get("items") or data.get("topics") or []
-    if not items:
-        print("(no subscriptions)")
-    for it in items:
-        t = it.get("topic") or it.get("event_type")
-        locked = it.get("locked")
-        print(f"- {t}{' [locked]' if locked else ''}")
-    ctx.state["last_rpc"] = r
-
-def cli_subscriptions_remove(ctx):
-    topic = input("Topic to remove: ").strip()
-    r = ctx.conn.rpc("subscribe.remove", {"topic": topic})
-    if r.get("status") in ("refused","error"):
-        err = (r.get("error") or {})
-        if err.get("code") == 1407:
-            print("Cannot remove: topic is locked.")
-    import json as _json
-    try:
-        print(_json.dumps(r, ensure_ascii=False, indent=2))
-    except Exception:
-        print(r)
-# --- END AUTO-ADDED SUBSCRIPTIONS ---
 
 
-# --- BEGIN AUTO-ADDED CHAT_MAIL ---
-def cli_chat_history(ctx):
-    r = ctx.conn.rpc("chat.history", {"limit": 20})
-    import json as _json
-    try:
-        print(_json.dumps(r, ensure_ascii=False, indent=2))
-    except Exception:
-        print(r)
-
-def cli_chat_send(ctx):
-    msg = input("Message: ").strip()
-    if not msg:
-        print("Empty message.")
-        return
-    scope = (input("Scope (global|corp|player) [global]: ").strip() or "global").lower()
-    to = None
-    if scope == "player":
-        to = input("Player name/id: ").strip()
-    r = ctx.conn.rpc("chat.send", {"scope": scope, "to": to, "message": msg})
-    import json as _json
-    try:
-        print(_json.dumps(r, ensure_ascii=False, indent=2))
-    except Exception:
-        print(r)
-
-def cli_mail_inbox(ctx):
-    r = ctx.conn.rpc("mail.inbox", {"limit": 20})
-    import json as _json
-    try:
-        print(_json.dumps(r, ensure_ascii=False, indent=2))
-    except Exception:
-        print(r)
-
-def cli_mail_read(ctx):
-    mid = input("Mail id: ").strip()
-    try:
-        mid = int(mid)
-    except Exception:
-        print("Bad id.")
-        return
-    r = ctx.conn.rpc("mail.read", {"id": mid})
-    import json as _json
-    try:
-        print(_json.dumps(r, ensure_ascii=False, indent=2))
-    except Exception:
-        print(r)
-
-def cli_mail_send(ctx):
-    to = input("To (player): ").strip()
-    subj = input("Subject: ").strip()
-    body = input("Body: ").strip()
-    r = ctx.conn.rpc("mail.send", {"to": to, "subject": subj, "body": body})
-    import json as _json
-    try:
-        print(_json.dumps(r, ensure_ascii=False, indent=2))
-    except Exception:
-        print(r)
-
-def cli_mail_delete(ctx):
-    mid = input("Mail id: ").strip()
-    try:
-        mid = int(mid)
-    except Exception:
-        print("Bad id.")
-        return
-    r = ctx.conn.rpc("mail.delete", {"id": mid})
-    import json as _json
-    try:
-        print(_json.dumps(r, ensure_ascii=False, indent=2))
-    except Exception:
-        print(r)
-# --- END AUTO-ADDED CHAT_MAIL ---
 
 
-# --- BEGIN AUTO-ADDED HUD_HOOK ---
-def _hud_after_action(ctx):
-    try:
-        _print_rate_limit_hud(ctx)
-    except Exception:
-        pass
-# --- END AUTO-ADDED HUD_HOOK ---
 
 
-# --- BEGIN AUTO-ADDED DOCK_CONTEXT_REFRESH ---
-def _infer_is_stardock(data: dict) -> bool:
-    """Try to infer if the current dock/port is 'Stardock' from various payload shapes."""
-    if not isinstance(data, dict):
-        return False
-    # data may look like: { 'port': { 'name': 'Stardock', 'class': 'stardock', ... } }
-    port = data.get('port') if isinstance(data.get('port'), dict) else data
-    name = str((port or {}).get('name') or data.get('port_name') or "").lower()
-    pclass = str((port or {}).get('class') or (port or {}).get('type') or "").lower()
-    # Heuristics
-    if "stardock" in name:
-        return True
-    if pclass in ("stardock", "star dock"):
-        return True
-    sid = (port or {}).get('sector_id') or data.get('sector_id')
-    if sid in (0, 1):
-        if "dock" in name or "dock" in pclass:
-            return True
-    return False
-
-def ctx_refresh_port_context(ctx):
-    """Best-effort fetch to set ctx.state['is_stardock'] before showing the Dock menu."""
-    ctx.state.setdefault('is_stardock', False)
-    conn = getattr(ctx, 'conn', None)
-    if conn is None:
-        return
-    def _try(cmd, payload=None):
-        try:
-            r = conn.rpc(cmd, payload or {})
-            if isinstance(r, dict) and r.get('status') in ('ok','srv-ok','success', None):
-                d = r.get('data') or {}
-                if isinstance(d, dict) and d:
-                    ctx.state['is_stardock'] = bool(_infer_is_stardock(d))
-                    return True
-        except Exception:
-            pass
-        return False
-    for cmd in ("port.status","dock.status","port.info","sector.port.status","sector.current","whereami"):
-        if _try(cmd):
-            break
-# --- END AUTO-ADDED DOCK_CONTEXT_REFRESH ---
 
 
-# --- BEGIN AUTO-ADDED SHOW_IF_CTX_SUPPORT ---
-def _option_visible_with_ctx(ctx, opt: dict) -> bool:
-    """Return True if 'show_if_ctx' conditions (if any) are satisfied based on ctx.state flags."""
-    if not isinstance(opt, dict):
-        return True
-    cond = opt.get("show_if_ctx")
-    if not cond:
-        return True
-    if isinstance(cond, str):
-        cond = [cond]
-    st = getattr(ctx, "state", {}) or {}
-    for flag in cond:
-        if not st.get(flag):
-            return False
-    return True
-# --- END AUTO-ADDED SHOW_IF_CTX_SUPPORT ---
 
-
-# --- BEGIN AUTO-ADDED MENU_SHIMS ---
-def menu_on_enter(ctx, menu_def: dict):
-    """Call optional prefetch hooks.
-    
-    Supports menu JSON like: {"on_enter": {"pycall": "ctx_refresh_port_context"}}.
-    """
-    if not isinstance(menu_def, dict):
-        return
-    on_enter = menu_def.get("on_enter")
-    if isinstance(on_enter, dict) and on_enter.get("pycall"):
-        fn = globals().get(on_enter["pycall"])
-        if callable(fn):
-            try:
-                fn(ctx)
-            except Exception:
-                pass
-
-def filter_menu_options_with_ctx(ctx, options: list) -> list:
-    """Filter an options list using ctx flags via _option_visible_with_ctx."""
-    out = []
-    for opt in options or []:
-        try:
-            if _option_visible_with_ctx(ctx, opt):
-                out.append(opt)
-        except Exception:
-            out.append(opt)
-    return out
-# --- END AUTO-ADDED MENU_SHIMS ---
 
 
 @register("sector_density_scan_flow")

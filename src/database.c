@@ -34,7 +34,7 @@ static json_t *parse_neighbors_csv (const unsigned char *txt);
 /* Unlocked helpers (call only when db_mutex is already held) */
 static int db_ensure_auth_schema_unlocked (void);
 static int db_ensure_idempotency_schema_unlocked (void);
-static int db_create_tables_unlocked (void);
+static int db_create_tables_unlocked (bool schema_exists);
 static int db_insert_defaults_unlocked (void);
 static int db_ensure_ship_perms_column_unlocked (void);
 int db_seed_cron_tasks (sqlite3 * db);
@@ -490,7 +490,7 @@ const char *create_table_sql[] = {
   " CREATE TABLE IF NOT EXISTS ship_roles ( role_id INTEGER PRIMARY KEY, role INTEGER DEFAULT 1, role_description TEXT DEFAULT 1); ",
 
 
-  " CREATE TABLE ship_ownership ( "
+  " CREATE TABLE IF NOT EXISTS ship_ownership ( "
     " ship_id     INTEGER NOT NULL, "
     " player_id   INTEGER NOT NULL, "
     " role_id     INTEGER NOT NULL, "
@@ -630,8 +630,7 @@ const char *create_table_sql[] = {
     " CREATE INDEX IF NOT EXISTS idx_sessions_player ON sessions(player_id); "
     " CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires); ",
 
-  " DROP TABLE IF EXISTS turns; "
-    " CREATE TABLE turns( "
+  " CREATE TABLE IF NOT EXISTS turns( "
     "   player INTEGER NOT NULL, "
     "   turns_remaining INTEGER NOT NULL, "
     "   last_update TIMESTAMP NOT NULL, "
@@ -1055,11 +1054,21 @@ const char *create_table_sql[] = {
 
 /* 14) Player locations */
   "CREATE VIEW IF NOT EXISTS player_locations AS\n"
-    "SELECT id AS player_id, name AS player_name,\n"
-    "       sector AS sector_id,\n"
-    "       ship   AS ship_number,\n"
-    "       CASE WHEN sector IS NULL OR sector=0 THEN 'in_ship' ELSE 'in_sector' END AS location_kind\n"
-    "FROM players;",
+    "SELECT\n"
+    "  p.id AS player_id,\n"
+    "  p.name AS player_name,\n"
+    "  sh.sector AS sector_id,\n"
+    "  sh.id AS ship_id,\n"
+    "  CASE\n"
+    "    WHEN sh.ported = 1 THEN 'docked_at_port'\n"
+    "    WHEN sh.onplanet = 1 THEN 'landed_on_planet'\n"
+    "    WHEN sh.sector IS NOT NULL THEN 'in_space'\n"
+    "    ELSE 'unknown'\n"
+    "  END AS location_kind,\n"
+    "  sh.ported AS is_ported,\n"
+    "  sh.onplanet AS is_onplanet\n"
+    "FROM players p\n"
+    "LEFT JOIN ships sh ON sh.id = p.ship;",,
 
 /* 15) Ships by sector */
   "CREATE VIEW IF NOT EXISTS ships_by_sector AS\n"
@@ -1137,7 +1146,7 @@ const char *create_table_sql[] = {
   "   p.id         AS player_id,   "
   "   p.name       AS player_name,   "
   "   p.number     AS player_number,   "
-  "   p.sector     AS sector_id,   "
+  "   sh.sector    AS sector_id, -- Use ship's sector as canonical   "
   "   sctr.name    AS sector_name,   "
   "   p.credits    AS credits,   "
   "   p.alignment  AS alignment,   "
@@ -1145,15 +1154,27 @@ const char *create_table_sql[] = {
   "   p.ship       AS ship_number,   "
   "   sh.id        AS ship_id,   "
   "   sh.name      AS ship_name,   "
-  "   sh.type_id   AS ship_type_id,         /* CORRECTED */   "
+  "   sh.type_id   AS ship_type_id,   "
   "   st.name      AS ship_type_name,   "
-  "   st.maxholds  AS ship_holds,           /* CORRECTED */   "
+  "   st.maxholds  AS ship_holds_capacity, -- Renamed for clarity   "
+  "   sh.holds     AS ship_holds_current,  -- Added current holds from ship   "
   "   sh.fighters  AS ship_fighters,   "
+  "   sh.mines     AS ship_mines,          -- Added mines from ship   "
+  "   sh.limpets   AS ship_limpets,        -- Added limpets from ship   "
+  "   sh.genesis   AS ship_genesis,        -- Added genesis from ship   "
+  "   sh.photons   AS ship_photons,        -- Added photons from ship   "
+  "   sh.beacons   AS ship_beacons,        -- Added beacons from ship   "
+  "   sh.colonists AS ship_colonists,      -- Added colonists from ship   "
+  "   sh.equipment AS ship_equipment,      -- Added equipment from ship   "
+  "   sh.organics  AS ship_organics,       -- Added organics from ship   "
+  "   sh.ore       AS ship_ore,            -- Added ore from ship   "
+  "   sh.ported    AS ship_ported,         -- Added ported flag   "
+  "   sh.onplanet  AS ship_onplanet,       -- Added onplanet flag   "
   "   (COALESCE(p.credits,0) + COALESCE(sh.fighters,0)*2) AS approx_worth   "
   " FROM players p   "
   " LEFT JOIN ships      sh   ON sh.id = p.ship   "
-  " LEFT JOIN shiptypes  st   ON st.id = sh.type_id   /* CORRECTED */   "
-  " LEFT JOIN sectors    sctr ON sctr.id = p.sector;   "
+  " LEFT JOIN shiptypes  st   ON st.id = sh.type_id   "
+  " LEFT JOIN sectors    sctr ON sctr.id = sh.sector; -- Join on ship's sector
 
 
   " CREATE VIEW sector_search_index AS  "
@@ -2918,10 +2939,7 @@ db_init (void)
   /* Step 3: if no config table, create schema + defaults */
   if (!table_exists)
     {
-      fprintf (stderr,
-	       "No schema detected -- creating tables and inserting defaults...\n");
-
-      if (db_create_tables_unlocked () != 0)
+      if (db_create_tables_unlocked (false) != 0)
 	{
 	  fprintf (stderr, "Failed to create tables\n");
 	  ret_code = -1;
@@ -2934,6 +2952,18 @@ db_init (void)
 	  goto cleanup;
 	}
 
+    }
+  else
+    {
+      /* // Even if config table exists, ensure all other tables/views are up-to-date */
+      /* // This handles cases where new tables/views are added after initial setup */
+      /* fprintf (stderr, "Schema detected -- ensuring all tables and views are up-to-date...\n"); */
+      /* if (db_create_tables_unlocked (true) != 0) */
+      /* 	{ */
+      /* 	  fprintf (stderr, "Failed to update tables/views\n"); */
+      /* 	  ret_code = -1; */
+      /* 	  goto cleanup; */
+      /* 	} */
     }
   if( !db_engine_bootstrap (db_handle))
     {
@@ -2973,18 +3003,18 @@ cleanup:
 
 /* Public, thread-safe wrapper */
 int
-db_create_tables (void)
+db_create_tables (bool schema_exists)
 {
   int rc;
   pthread_mutex_lock (&db_mutex);
-  rc = db_create_tables_unlocked ();
+  rc = db_create_tables_unlocked (schema_exists);
   pthread_mutex_unlock (&db_mutex);
   return rc;
 }
 
 /* Actual work; assumes db_mutex is already held */
 static int
-db_create_tables_unlocked (void)
+db_create_tables_unlocked (bool schema_exists)
 {
   char *errmsg = NULL;
   int ret_code = -1;
@@ -2996,11 +3026,18 @@ db_create_tables_unlocked (void)
 
   for (size_t i = 0; i < create_table_count; i++)
     {
-      rc = sqlite3_exec (db_handle, create_table_sql[i], 0, 0, &errmsg);
+      const char *sql_statement = create_table_sql[i];
+
+      // If schema_exists is true, skip CREATE TABLE IF NOT EXISTS statements
+      if (schema_exists && strstr(sql_statement, "CREATE TABLE IF NOT EXISTS") == sql_statement) {
+          continue; // Skip this statement
+      }
+
+      rc = sqlite3_exec (db_handle, sql_statement, 0, 0, &errmsg);
       if (rc != SQLITE_OK)
 	{
 	  fprintf (stderr, "SQL error at step %zu: %s\n", i, errmsg);
-	  fprintf (stderr, "Failing SQL: %s\n", create_table_sql[i]);
+	  fprintf (stderr, "Failing SQL: %s\n", sql_statement);
 	  sqlite3_free (errmsg);
 	  return -1;
 	}
@@ -3008,19 +3045,6 @@ db_create_tables_unlocked (void)
 
   ret_code = 0;
 cleanup:
-  if (errmsg)
-    sqlite3_free (errmsg);
-  if (ret_code == 0)
-    {
-      if (ret_code == 0)
-	{
-	  int rc2 = db_ensure_ship_perms_column_unlocked ();
-	  if (rc2 != SQLITE_OK)
-	    return -1;
-	}
-    }
-  sqlite3_exec (db, "COMMIT;", 0, 0, 0);
-
   return ret_code;
 }
 
@@ -4840,23 +4864,7 @@ db_player_set_sector (int player_id, int sector_id)
     }
 
 
-  // Update the player's location
-  const char *sql_update_player = "UPDATE players SET sector=? WHERE id=?;";
-  rc =
-    sqlite3_prepare_v2 (dbh, sql_update_player, -1, &st_update_player, NULL);
-  if (rc != SQLITE_OK)
-    {
-      ret_code = rc;
-      goto cleanup;
-    }
-  sqlite3_bind_int (st_update_player, 1, sector_id);
-  sqlite3_bind_int (st_update_player, 2, player_id);
-  rc = sqlite3_step (st_update_player);
-  if (rc != SQLITE_DONE)
-    {
-      ret_code = rc;
-      goto cleanup;
-    }
+
 
   // Update the ship's location using the retrieved ship ID
   const char *sql_update_ship = "UPDATE ships SET sector=? WHERE id=?;";
@@ -4882,8 +4890,6 @@ cleanup:
   // 3. Finalize all prepared statements.
   if (st_find_ship)
     sqlite3_finalize (st_find_ship);
-  if (st_update_player)
-    sqlite3_finalize (st_update_player);
   if (st_update_ship)
     sqlite3_finalize (st_update_ship);
 
@@ -4927,7 +4933,7 @@ db_player_get_sector (int player_id, int *out_sector)
       goto cleanup;
     }
 
-  const char *sql = "SELECT sector FROM players WHERE id=?";
+  const char *sql = "SELECT T2.sector FROM players AS T1 JOIN ships AS T2 ON T1.ship = T2.id WHERE T1.id = ?;";
 
   // 2. Prepare the statement. This is the first point of failure.
   rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
