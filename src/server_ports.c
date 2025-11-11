@@ -964,7 +964,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       LOGD("cmd_trade_buy: Missing data object for player_id=%d", ctx->player_id); // ADDED
       return -1;
     }
-  int account_type = db_get_player_pref_int(ctx->player_id, "trade.default_account", 1); // Default to bank account (1)
+  int account_type = db_get_player_pref_int(ctx->player_id, "trade.default_account", 0); // Default to petty cash (0)
   json_t *jaccount = json_object_get(data, "account");
   if (json_is_integer(jaccount)) {
       int requested_account_type = (int)json_integer_value(jaccount);
@@ -1575,7 +1575,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       return -1;
     }
 
-  int account_type = db_get_player_pref_int(ctx->player_id, "trade.default_account", 1); // Default to bank account (1)
+  int account_type = db_get_player_pref_int(ctx->player_id, "trade.default_account", 0); // Default to petty cash (0)
   json_t *jaccount = json_object_get(data, "account");
   if (json_is_integer(jaccount)) {
       int requested_account_type = (int)json_integer_value(jaccount);
