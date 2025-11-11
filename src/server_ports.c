@@ -19,6 +19,7 @@
 #include "server_log.h"
 #include "common.h"
 #include "server_universe.h"
+#include "db_player_settings.h"
 
 
 #ifndef UNUSED
@@ -963,16 +964,15 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       LOGD("cmd_trade_buy: Missing data object for player_id=%d", ctx->player_id); // ADDED
       return -1;
     }
-  LOGD("cmd_trade_buy: Data object present for player_id=%d", ctx->player_id); // ADDED
-
-  int account_type = 1; // Default to bank account
+  int account_type = db_get_player_pref_int(ctx->player_id, "trade.default_account", 1); // Default to bank account (1)
   json_t *jaccount = json_object_get(data, "account");
   if (json_is_integer(jaccount)) {
-      account_type = (int)json_integer_value(jaccount);
-      if (account_type != 0 && account_type != 1) {
+      int requested_account_type = (int)json_integer_value(jaccount);
+      if (requested_account_type != 0 && requested_account_type != 1) {
           send_enveloped_error(ctx->fd, root, 400, "Invalid account type. Must be 0 (petty cash) or 1 (bank).");
           return -1;
       }
+      account_type = requested_account_type; // Override with explicit request
   }
   LOGD("cmd_trade_buy: Account type for player_id=%d is %d", ctx->player_id, account_type);
 
@@ -1575,14 +1575,15 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       return -1;
     }
 
-  int account_type = 1; // Default to bank account
+  int account_type = db_get_player_pref_int(ctx->player_id, "trade.default_account", 1); // Default to bank account (1)
   json_t *jaccount = json_object_get(data, "account");
   if (json_is_integer(jaccount)) {
-      account_type = (int)json_integer_value(jaccount);
-      if (account_type != 0 && account_type != 1) {
+      int requested_account_type = (int)json_integer_value(jaccount);
+      if (requested_account_type != 0 && requested_account_type != 1) {
           send_enveloped_error(ctx->fd, root, 400, "Invalid account type. Must be 0 (petty cash) or 1 (bank).");
           return -1;
       }
+      account_type = requested_account_type; // Override with explicit request
   }
   LOGD("cmd_trade_sell: Account type for player_id=%d is %d", ctx->player_id, account_type);
 

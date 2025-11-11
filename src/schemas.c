@@ -90,6 +90,9 @@ static json_t *schema_planet_harvest (void);
 static json_t *schema_planet_deposit (void);
 static json_t *schema_planet_withdraw (void);
 
+/* --- Player --- */
+static json_t *schema_player_set_trade_account_preference (void);
+
 
 
 /* --- Citadel --- */
@@ -319,6 +322,10 @@ schema_get (const char *key)
   else if (strcasecmp (key, "planet.withdraw") == 0)
     return schema_planet_withdraw ();
 
+  /* Player */
+  else if (strcasecmp (key, "player.set_trade_account_preference") == 0)
+    return schema_player_set_trade_account_preference ();
+
 
 
   /* Citadel */
@@ -480,6 +487,9 @@ schema_keys (void)
   json_array_append_new (keys, json_string ("planet.harvest"));
   json_array_append_new (keys, json_string ("planet.deposit"));
   json_array_append_new (keys, json_string ("planet.withdraw"));
+
+  /* Player */
+  json_array_append_new (keys, json_string ("player.set_trade_account_preference"));
 
 
 
@@ -1659,4 +1669,26 @@ schema_bulk_execute (void)
   return json_pack ("{s:s, s:s}",
                     "$id", "ge://schema/bulk.execute.json",
                     "$comment", "Schema not yet implemented");
+}
+
+/* --- Player --- */
+static json_t *
+schema_player_set_trade_account_preference (void)
+{
+  json_t *data_props = json_pack(
+      "{s:o}",
+      "preference", json_pack("{s:s, s:[i,i]}", "type", "integer", "enum", 0, 1)
+  );
+
+  json_t *data_schema = json_pack(
+      "{s:s, s:s, s:s, s:o, s:[s], s:b}",
+      "$id",      "ge://schema/player.set_trade_account_preference.json",
+      "$schema",  "https://json-schema.org/draft/2020-12/schema",
+      "type",     "object",
+      "properties", data_props,
+      "required", "preference",
+      "additionalProperties", json_false());
+
+  json_decref(data_props);
+  return data_schema;
 }

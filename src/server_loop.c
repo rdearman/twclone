@@ -737,45 +737,9 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       cmd_player_set_prefs (ctx, root);
     }
-
-  else if (streq (cmd, "player.get_topics")
-	   || streq (cmd, "player.get_subscriptions"))
+  else if (streq (cmd, "player.set_trade_account_preference"))
     {
-      cmd_player_get_topics (ctx, root);
-    }
-  else if (streq (cmd, "player.set_topics")
-	   || streq (cmd, "player.set_subscriptions"))
-    {
-      cmd_player_set_topics (ctx, root);
-    }
-
-  else if (streq (cmd, "player.get_bookmarks")
-	   || streq (cmd, "nav.bookmark.list"))
-    {
-      cmd_player_get_bookmarks (ctx, root);
-    }
-  else if (streq (cmd, "player.set_bookmarks") ||
-	   streq (cmd, "nav.bookmark.set") ||
-	   streq (cmd, "nav.bookmark.add") ||
-	   streq (cmd, "nav.bookmark.remove"))
-    {
-      cmd_player_set_bookmarks (ctx, root);
-    }
-
-  else if (streq (cmd, "player.get_avoids") || streq (cmd, "nav.avoid.list"))
-    {
-      cmd_player_get_avoids (ctx, root);
-    }
-  else if (streq (cmd, "player.set_avoids") ||
-	   streq (cmd, "nav.avoid.set") ||
-	   streq (cmd, "nav.avoid.add") || streq (cmd, "nav.avoid.remove"))
-    {
-      cmd_player_set_avoids (ctx, root);
-    }
-
-  else if (streq (cmd, "player.get_notes") || streq (cmd, "notes.list"))
-    {
-      cmd_player_get_notes (ctx, root);
+      rc = cmd_player_set_trade_account_preference (ctx, root);
     }
 
 /* ---------- SHIP ---------- */
