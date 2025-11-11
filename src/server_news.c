@@ -16,10 +16,10 @@ static int is_category_in_filter(const char *filter, const char *category) {
     }
 
     // For safety, wrap with commas to ensure we match whole words
-    char padded_filter[256];
+    char padded_filter[512];
     snprintf(padded_filter, sizeof(padded_filter), ",%s,", filter);
 
-    char padded_category[128];
+    char padded_category[512];
     snprintf(padded_category, sizeof(padded_category), ",%s,", category);
 
     return strstr(padded_filter, padded_category) != NULL;
@@ -50,13 +50,13 @@ int cmd_news_get_feed(client_ctx_t *ctx, json_t *root) {
     int rc;
 
     if (fetch_mode == 0) { // Unread
-        snprintf(sql, sizeof(sql), "SELECT id, timestamp, category, scope, headline, body, context_data FROM news_feed WHERE timestamp > (SELECT last_news_read_timestamp FROM players WHERE id = ?) ORDER BY timestamp DESC LIMIT 100;");
+        snprintf(sql, sizeof(sql), "SELECT news_id, published_ts, news_category, article_text, source_ids FROM news_feed WHERE published_ts > (SELECT last_news_read_timestamp FROM players WHERE id = ?) ORDER BY published_ts DESC LIMIT 100;");
         rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
         if (rc == SQLITE_OK) {
             sqlite3_bind_int(stmt, 1, ctx->player_id);
         }
     } else { // Last N days
-        snprintf(sql, sizeof(sql), "SELECT id, timestamp, category, scope, headline, body, context_data FROM news_feed WHERE timestamp > (strftime('%%s','now') - ?) ORDER BY timestamp DESC LIMIT 100;");
+        snprintf(sql, sizeof(sql), "SELECT news_id, published_ts, news_category, article_text, source_ids FROM news_feed WHERE published_ts > (strftime('%%s','now') - ?) ORDER BY published_ts DESC LIMIT 100;");
         rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
         if (rc == SQLITE_OK) {
             sqlite3_bind_int(stmt, 1, fetch_mode * 86400); // N days in seconds
@@ -76,14 +76,40 @@ int cmd_news_get_feed(client_ctx_t *ctx, json_t *root) {
 
         if (is_category_in_filter(category_filter, category)) {
             json_t *article = json_object();
+            const char *full_article_text = (const char *)sqlite3_column_text(stmt, 3);
+            const char *headline_start = strstr(full_article_text, "HEADLINE: ");
+            const char *body_start = strstr(full_article_text, "\nBODY: ");
+            
+            char *extracted_headline = NULL;
+            char *extracted_body = NULL;
+
+            if (headline_start && body_start && body_start > headline_start) {
+                headline_start += strlen("HEADLINE: ");
+                // Extract headline
+                size_t headline_len = body_start - headline_start;
+                extracted_headline = (char *)malloc(headline_len + 1);
+                if (extracted_headline) {
+                    strncpy(extracted_headline, headline_start, headline_len);
+                    extracted_headline[headline_len] = '\0';
+                }
+
+                // Extract body
+                body_start += strlen("\nBODY: ");
+                extracted_body = strdup(body_start);
+            } else {
+                // Fallback if format is not as expected
+                extracted_headline = strdup("Untitled News");
+                extracted_body = strdup(full_article_text ? full_article_text : "");
+            }
+
             json_object_set_new(article, "id", json_integer(sqlite3_column_int(stmt, 0)));
             json_object_set_new(article, "timestamp", json_integer(sqlite3_column_int64(stmt, 1)));
             json_object_set_new(article, "category", json_string(category));
-            json_object_set_new(article, "scope", json_string((const char *)sqlite3_column_text(stmt, 3)));
-            json_object_set_new(article, "headline", json_string((const char *)sqlite3_column_text(stmt, 4)));
-            json_object_set_new(article, "body", json_string((const char *)sqlite3_column_text(stmt, 5)));
+            json_object_set_new(article, "scope", json_string("")); // Hardcoded empty string
+            json_object_set_new(article, "headline", json_string(extracted_headline ? extracted_headline : ""));
+            json_object_set_new(article, "body", json_string(extracted_body ? extracted_body : ""));
             
-            const char *context_data_str = (const char *)sqlite3_column_text(stmt, 6);
+            const char *context_data_str = (const char *)sqlite3_column_text(stmt, 4);
             if (context_data_str) {
                 json_error_t error;
                 json_t *context_data = json_loads(context_data_str, 0, &error);
@@ -92,6 +118,10 @@ int cmd_news_get_feed(client_ctx_t *ctx, json_t *root) {
                 }
             }
             json_array_append_new(articles, article);
+
+            // Free allocated strings
+            free(extracted_headline);
+            free(extracted_body);
         }
     }
     sqlite3_finalize(stmt);
