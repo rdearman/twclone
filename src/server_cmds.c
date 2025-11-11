@@ -1,4 +1,5 @@
 #include <string.h>
+#include <strings.h>
 #include <sqlite3.h>
 #include <jansson.h>
 #include "database.h"
@@ -217,7 +218,7 @@ cmd_sys_test_news_cron(client_ctx_t *ctx, json_t *root)
         return 0;
     }
 
-    if (strcmp(subcommand, "generate_event") == 0) {
+    if (strcasecmp(subcommand, "generate_event") == 0) {
         const char *event_type = NULL;
         int actor_player_id = 0;
         int sector_id = 0;
@@ -254,14 +255,14 @@ cmd_sys_test_news_cron(client_ctx_t *ctx, json_t *root)
         } else {
             send_enveloped_error(ctx->fd, root, 500, "Failed to generate engine event.");
         }
-    } else if (strcmp(subcommand, "run_compiler") == 0) {
+    } else if (strcasecmp(subcommand, "run_compiler") == 0) {
         rc = h_daily_news_compiler(db, (long long)time(NULL));
         if (rc == SQLITE_OK) {
             send_enveloped_ok(ctx->fd, root, "sys.test_news_cron.compiler_ran", NULL);
         } else {
             send_enveloped_error(ctx->fd, root, 500, "Failed to run news compiler.");
         }
-    } else if (strcmp(subcommand, "run_cleanup") == 0) {
+    } else if (strcasecmp(subcommand, "run_cleanup") == 0) {
         rc = h_cleanup_old_news(db, (long long)time(NULL));
         if (rc == SQLITE_OK) {
             send_enveloped_ok(ctx->fd, root, "sys.test_news_cron.cleanup_ran", NULL);

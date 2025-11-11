@@ -127,7 +127,7 @@
           "key": "f",
           "label": "(F) Deployment",
           "action": {
-            "submenu": "DEPLOYMENT"
+            "submenu": "DEPLOYMENT_MAIN"
           }
         }
       ]
@@ -279,21 +279,16 @@
           "key": "b",
           "label": "(B) Buy (buy)",
           "action": {
-            "pycall": "simple_buy_handler"
+            "pycall": "simple_buy_handler",
+            "post": "pretty_print_trade_receipt"
           }
         },
         {
           "key": "s",
           "label": "(S) Sell",
           "action": {
-            "rpc": {
-              "command": "trade.sell",
-              "data": {
-                "commodity": "<prompt:str:Commodity (ore, organics, equipment)>",
-                "quantity": "<prompt:int:Quantity>"
-              }
-            },
-            "post": "print_last_rpc"
+            "pycall": "simple_sell_handler",
+            "post": "pretty_print_sell_receipt"
           }
         },
         {
@@ -305,11 +300,10 @@
               "data": {
                 "port_id": "<ctx:last_sector_desc.port.id>",
                 "commodity": "<prompt:str:Commodity (ore, organics, equipment)>",
-                "quantity": "<prompt:int:Quantity>",
-                "action": "<prompt:str:Action (buy or sell)>"
+                "quantity": "<prompt:int:Quantity>"
               }
             },
-            "post": "print_last_rpc"
+            "post": "pretty_print_trade_quote"
           }
         },
         {
@@ -904,8 +898,34 @@
         }
       ]
     },
-    "DEPLOYMENT": {
+    "DEPLOYMENT_MAIN": {
       "title": "--- Deployment Menu ---",
+      "options": [
+        {
+          "key": "f",
+          "label": "(F) Fighters",
+          "action": {
+            "submenu": "DEPLOYMENT_FIGHTERS"
+          }
+        },
+        {
+          "key": "m",
+          "label": "(M) Mines",
+          "action": {
+            "submenu": "DEPLOYMENT_MINES"
+          }
+        },
+        {
+          "key": "q",
+          "label": "(Q) Back",
+          "action": {
+            "back": true
+          }
+        }
+      ]
+    },
+    "DEPLOYMENT_FIGHTERS": {
+      "title": "--- Fighter Deployment ---",
       "options": [
         {
           "key": "d",
@@ -915,43 +935,70 @@
               "command": "combat.deploy_fighters",
               "data": {
                 "amount": "<prompt:int:Amount to deploy>",
-                "offensive_setting": "<prompt:int:Offensive setting (0-3)>"
+                "offense": "<prompt:int:Offensive setting (1=TOLL, 2=DEFEND, 3=ATTACK)>"
               }
             },
-            "post": "print_last_rpc"
+            "post": [
+              "print_last_rpc",
+              {"pycall": "refresh_sector_and_display"}
+            ]
           }
         },
         {
           "key": "r",
           "label": "(R) Recall Fighters",
           "action": {
-            "rpc": {
-              "command": "fighters.recall",
-              "data": {}
-            },
-            "post": "print_last_rpc"
+            "pycall": "recall_fighters_flow"
           }
         },
         {
           "key": "l",
           "label": "(L) List Deployed Fighters",
           "action": {
-            "rpc": {
-              "command": "deploy.fighters.list",
-              "data": {}
-            },
-            "post": "print_last_rpc"
+            "pycall": "list_deployed_fighters_flow"
           }
         },
         {
-          "key": "m",
-          "label": "(M) List Deployed Mines",
+          "key": "q",
+          "label": "(Q) Back",
+          "action": {
+            "back": true
+          }
+        }
+      ]
+    },
+    "DEPLOYMENT_MINES": {
+      "title": "--- Mine Deployment ---",
+      "options": [
+        {
+          "key": "d",
+          "label": "(D) Deploy Mines",
           "action": {
             "rpc": {
-              "command": "deploy.mines.list",
-              "data": {}
+              "command": "combat.deploy_mines",
+              "data": {
+                "amount": "<prompt:int:Amount to deploy>",
+                "offense": "<prompt:int:Offensive setting (1=TOLL, 2=DEFEND, 3=ATTACK)>"
+              }
             },
-            "post": "print_last_rpc"
+            "post": [
+              "print_last_rpc",
+              {"pycall": "refresh_sector_and_display"}
+            ]
+          }
+        },
+        {
+          "key": "r",
+          "label": "(R) Recall Mines",
+          "action": {
+            "pycall": "recall_mines_flow"
+          }
+        },
+        {
+          "key": "l",
+          "label": "(L) List Deployed Mines",
+          "action": {
+            "pycall": "list_deployed_mines_flow"
           }
         },
         {

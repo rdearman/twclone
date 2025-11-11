@@ -30,6 +30,7 @@
 #include "server_players.h"
 #include "server_log.h"
 #include "server_ports.h"
+#include <strings.h>
 
 
 
@@ -119,12 +120,10 @@ cmd_ship_jettison (client_ctx_t *ctx, json_t *root)
     }
 
   int have = 0;
-  if (strcmp (commodity, "ore") == 0)
+  if (strcasecmp (commodity, "ore") == 0)
     have = cur_ore;
-  else if (strcmp (commodity, "organics") == 0)
-    have = cur_org;
-  else if (strcmp (commodity, "equipment") == 0)
-    have = cur_eq;
+      else if (strcasecmp (commodity, "organics") == 0)    have = cur_org;
+      else if (strcasecmp (commodity, "equipment") == 0)    have = cur_eq;
   else
     {
       send_enveloped_refused (ctx->fd, root, 1405, "Unknown commodity.", NULL);

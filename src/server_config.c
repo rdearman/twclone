@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -76,21 +77,21 @@ validate_cfg (void)
 	       g_cfg.engine.tick_ms);
       return 0;
     }
-  if (strcmp (g_cfg.s2s.transport, "uds") != 0
-      && strcmp (g_cfg.s2s.transport, "tcp") != 0)
+  if (strcasecmp (g_cfg.s2s.transport, "uds") != 0
+      && strcasecmp (g_cfg.s2s.transport, "tcp") != 0)
     {
       fprintf (stderr,
 	       "ERROR config: s2s.transport must be one of [uds|tcp] (got \"%s\")\n",
 	       g_cfg.s2s.transport);
       return 0;
     }
-  if (!strcmp (g_cfg.s2s.transport, "uds") && g_cfg.s2s.uds_path[0] == '\0')
+  if (!strcasecmp (g_cfg.s2s.transport, "uds") && g_cfg.s2s.uds_path[0] == '\0')
     {
       fprintf (stderr,
 	       "ERROR config: s2s.uds_path required when s2s.transport=uds\n");
       return 0;
     }
-  if (!strcmp (g_cfg.s2s.transport, "tcp") &&
+  if (!strcasecmp (g_cfg.s2s.transport, "tcp") &&
       (g_cfg.s2s.tcp_host[0] == '\0' || g_cfg.s2s.tcp_port <= 0))
     {
       fprintf (stderr,
@@ -159,45 +160,45 @@ apply_db (sqlite3 *db)
       const char *k = (const char *) sqlite3_column_text (st, 0);
       const char *v = (const char *) sqlite3_column_text (st, 1);
       // map k -> g_cfg fields; parse ints/doubles where needed
-      if (!strcmp (k, "engine.tick_ms"))
+      if (!strcasecmp (k, "engine.tick_ms"))
 	g_cfg.engine.tick_ms = atoi (v);
-      else if (!strcmp (k, "engine.daily_align_sec"))
+      else if (!strcasecmp (k, "engine.daily_align_sec"))
 	g_cfg.engine.daily_align_sec = atoi (v);
 
-      else if (!strcmp (k, "batch.event_batch"))
+      else if (!strcasecmp (k, "batch.event_batch"))
 	g_cfg.batching.event_batch = atoi (v);
-      else if (!strcmp (k, "batch.command_batch"))
+      else if (!strcasecmp (k, "batch.command_batch"))
 	g_cfg.batching.command_batch = atoi (v);
-      else if (!strcmp (k, "batch.broadcast_batch"))
+      else if (!strcasecmp (k, "batch.broadcast_batch"))
 	g_cfg.batching.broadcast_batch = atoi (v);
 
-      else if (!strcmp (k, "prio.default_command_weight"))
+      else if (!strcasecmp (k, "prio.default_command_weight"))
 	g_cfg.priorities.default_command_weight = atoi (v);
-      else if (!strcmp (k, "prio.default_event_weight"))
+      else if (!strcasecmp (k, "prio.default_event_weight"))
 	g_cfg.priorities.default_event_weight = atoi (v);
 
-      else if (!strcmp (k, "s2s.transport"))
+      else if (!strcasecmp (k, "s2s.transport"))
 	snprintf (g_cfg.s2s.transport, sizeof g_cfg.s2s.transport, "%s", v);
-      else if (!strcmp (k, "s2s.uds_path"))
+      else if (!strcasecmp (k, "s2s.uds_path"))
 	snprintf (g_cfg.s2s.uds_path, sizeof g_cfg.s2s.uds_path, "%s", v);
-      else if (!strcmp (k, "s2s.tcp_host"))
+      else if (!strcasecmp (k, "s2s.tcp_host"))
 	snprintf (g_cfg.s2s.tcp_host, sizeof g_cfg.s2s.tcp_host, "%s", v);
-      else if (!strcmp (k, "s2s.tcp_port"))
+      else if (!strcasecmp (k, "s2s.tcp_port"))
 	g_cfg.s2s.tcp_port = atoi (v);
-      else if (!strcmp (k, "s2s.frame_size_limit"))
+      else if (!strcasecmp (k, "s2s.frame_size_limit"))
 	g_cfg.s2s.frame_size_limit = atoi (v);
 
-      else if (!strcmp (k, "safety.connect_ms"))
+      else if (!strcasecmp (k, "safety.connect_ms"))
 	g_cfg.safety.connect_ms = atoi (v);
-      else if (!strcmp (k, "safety.handshake_ms"))
+      else if (!strcasecmp (k, "safety.handshake_ms"))
 	g_cfg.safety.handshake_ms = atoi (v);
-      else if (!strcmp (k, "safety.rpc_ms"))
+      else if (!strcasecmp (k, "safety.rpc_ms"))
 	g_cfg.safety.rpc_ms = atoi (v);
-      else if (!strcmp (k, "safety.backoff_initial_ms"))
+      else if (!strcasecmp (k, "safety.backoff_initial_ms"))
 	g_cfg.safety.backoff_initial_ms = atoi (v);
-      else if (!strcmp (k, "safety.backoff_max_ms"))
+      else if (!strcasecmp (k, "safety.backoff_max_ms"))
 	g_cfg.safety.backoff_max_ms = atoi (v);
-      else if (!strcmp (k, "safety.backoff_factor"))
+      else if (!strcasecmp (k, "safety.backoff_factor"))
 	g_cfg.safety.backoff_factor = atof (v);
     }
   sqlite3_finalize (st);

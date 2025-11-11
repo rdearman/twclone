@@ -1,5 +1,6 @@
 #include <jansson.h>
 #include <string.h>
+#include <strings.h>
 #include <time.h>
 // local includes
 #include "server_communication.h"
@@ -65,11 +66,11 @@ is_allowed_topic (const char *t)
   if (!t)
     return 0;
   for (int i = 0; allowed[i]; ++i)
-    if (strcmp (t, allowed[i]) == 0)
+    if (strcasecmp (t, allowed[i]) == 0)
       return 1;
 
   const char *dot = strchr (t, '.');
-  if (!dot || strcmp (dot + 1, "*") != 0)
+  if (!dot || strcasecmp (dot + 1, "*") != 0)
     return 0;
 
   static const char *const public_domains[] = {
@@ -83,7 +84,7 @@ is_allowed_topic (const char *t)
   memcpy (dom, t, n);
   dom[n] = '\0';
   for (int i = 0; public_domains[i]; ++i)
-    if (strcmp (dom, public_domains[i]) == 0)
+    if (strcasecmp (dom, public_domains[i]) == 0)
       return 1;
 
   return 0;
@@ -124,9 +125,8 @@ cmd_sys_notice_create (client_ctx_t *ctx, json_t *root)
     }
 
   if (!sev
-      || (strcmp (sev, "info") && strcmp (sev, "warn")
-	  && strcmp (sev, "error")))
-    {
+            || (strcasecmp (sev, "info") && strcasecmp (sev, "warn")
+                && strcasecmp (sev, "error")))    {
       sev = "info";
     }
 
@@ -384,7 +384,7 @@ matches_pattern (const char *topic, const char *pattern)
 {
   const char *star = strchr (pattern, '*');
   if (!star)
-    return strcmp (topic, pattern) == 0;	/* exact */
+    return strcasecmp (topic, pattern) == 0;	/* exact */
   /* suffix wildcard: "prefix.*" */
   size_t plen = (size_t) (star - pattern);
   return strncmp (topic, pattern, plen) == 0;
@@ -1631,18 +1631,18 @@ cmd_admin_shutdown_warning (client_ctx_t *ctx, json_t *root)
 static const char *
 topic_desc (const char *pattern)
 {
-  if (strcmp (pattern, "sector.*") == 0)
+  if (strcasecmp (pattern, "sector.*") == 0)
     return
       "All sector-scoped events; use sector.{id} pattern, e.g., sector.42";
-  if (strcmp (pattern, "system.notice") == 0)
+  if (strcasecmp (pattern, "system.notice") == 0)
     return "Server notices & maintenance";
-  if (strcmp (pattern, "system.events") == 0)
+  if (strcasecmp (pattern, "system.events") == 0)
     return "Raw system events stream (structured)";
-  if (strcmp (pattern, "corp.mail") == 0)
+  if (strcasecmp (pattern, "corp.mail") == 0)
     return "Corporation mail (membership required)";
-  if (strcmp (pattern, "corp.log") == 0)
+  if (strcasecmp (pattern, "corp.log") == 0)
     return "Corporation activity log (membership required)";
-  if (strcmp (pattern, "chat.global") == 0)
+  if (strcasecmp (pattern, "chat.global") == 0)
     return "Global chat/subspace mirror";
   return "";
 }

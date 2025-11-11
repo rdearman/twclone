@@ -5,6 +5,7 @@
 #include <stdarg.h>
 #include <jansson.h>
 #include <string.h>
+#include <strings.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <sqlite3.h>
@@ -426,12 +427,10 @@ parse_sector_search_input (json_t *root,
   if (json_is_string (jtype))
     type = json_string_value (jtype);
 
-  if (!type || strcmp (type, "any") == 0)
+  if (!type || strcasecmp (type, "any") == 0)
     *type_any = 1;
-  else if (strcmp (type, "sector") == 0)
-    *type_sector = 1;
-  else if (strcmp (type, "port") == 0)
-    *type_port = 1;
+      else if (strcasecmp (type, "sector") == 0)    *type_sector = 1;
+      else if (strcasecmp (type, "port") == 0)    *type_port = 1;
   else
     {
       free (*q_out);
@@ -2500,11 +2499,11 @@ h_get_port_commodity_quantity(int port_id, const char *commodity)
     // 1. Determine the correct stock column name based on the commodity string
     // NOTE: Commodities with no corresponding 'product_' column (like 'fuel' in your schema) 
     // will correctly default to 0 stock.
-    if (strcmp(commodity, "ore") == 0 || strcmp(commodity, "fuel") == 0) {
+    if (strcasecmp(commodity, "ore") == 0 || strcasecmp(commodity, "fuel") == 0) {
         column_name = "ore_on_hand";
-    } else if (strcmp(commodity, "organics") == 0) {
+    } else if (strcasecmp(commodity, "organics") == 0) {
         column_name = "organics_on_hand";
-    } else if (strcmp(commodity, "equipment") == 0) {
+    } else if (strcasecmp(commodity, "equipment") == 0) {
         column_name = "equipment_on_hand";
     }
 

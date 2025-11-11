@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <errno.h>
 #include <signal.h>
 #include <unistd.h>
@@ -42,7 +43,7 @@
 
 
 #ifndef streq
-#define streq(a,b) (strcmp(json_string_value((a)), (b))==0)
+#define streq(a,b) (strcasecmp(json_string_value((a)), (b))==0)
 #endif
 #define LISTEN_PORT 1234
 #define BUF_SIZE    8192
@@ -131,6 +132,8 @@ static const cmd_desc_t k_supported_cmds_fallback[] = {
 
   // --- Combat ---
   {"fighters.recall", "Recall deployed fighters"},
+  {"combat.deploy_mines", "Deploy mines"},
+  {"mines.recall", "Recall deployed mines"},
 };
 
 // Weak fallback: satisfies server_envelope.o at link time.
@@ -546,7 +549,7 @@ process_message (client_ctx_t *ctx, json_t *root)
   int rc = 0;
 
 /* ---------- AUTH / USER ---------- */
-  if (!strcmp (c, "login") || !strcmp (c, "auth.login"))
+  if (!strcasecmp (c, "login") || !strcasecmp (c, "auth.login"))
     {
       rc = cmd_auth_login (ctx, root);
       if (rc)
@@ -554,11 +557,11 @@ process_message (client_ctx_t *ctx, json_t *root)
 	  push_unseen_notices_for_player (ctx, ctx->player_id);
 	}
     }
-  else if (!strcmp (c, "auth.register"))
+  else if (!strcasecmp (c, "auth.register"))
     {
       rc = cmd_auth_register (ctx, root);
     }
-  else if (!strcmp (c, "auth.logout"))
+  else if (!strcasecmp (c, "auth.logout"))
     {
       rc = cmd_auth_logout (ctx, root);
     }
@@ -567,30 +570,30 @@ process_message (client_ctx_t *ctx, json_t *root)
   /*   { */
   /*     rc = cmd_user_create (ctx, root); */
   /*   } */
-  else if (!strcmp (c, "auth.refresh"))
+  else if (!strcasecmp (c, "auth.refresh"))
     {
       rc = cmd_auth_refresh (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "auth.mfa.totp.verify"))
+  else if (!strcasecmp (c, "auth.mfa.totp.verify"))
     {
       rc = cmd_auth_mfa_totp_verify (ctx, root);	/* NIY stub */
     }
 
 /* ---------- SYSTEM / SESSION ---------- */
-  else if (!strcmp (c, "system.capabilities"))
+  else if (!strcasecmp (c, "system.capabilities"))
     {
       rc = cmd_system_capabilities (ctx, root);
     }
-  else if (!strcmp (c, "system.describe_schema"))
+  else if (!strcasecmp (c, "system.describe_schema"))
     {
       rc = cmd_system_describe_schema (ctx, root);
     }
-  else if ((!strcmp (c, "session.ping")) || (!strcmp (c, "session.hello")) || (!strcmp (c, "system.hello")))
+  else if ((!strcasecmp (c, "session.ping")) || (!strcasecmp (c, "session.hello")) || (!strcasecmp (c, "system.hello")))
     {
       rc = cmd_system_hello (ctx, root); 
     }
-  else if (!strcmp (c, "session.disconnect")
-	   || !strcmp (c, "system.disconnect"))
+  else if (!strcasecmp (c, "session.disconnect")
+	   || !strcasecmp (c, "system.disconnect"))
     {
       rc = cmd_session_disconnect (ctx, root);	/* NIY stub */
     }
@@ -776,321 +779,329 @@ process_message (client_ctx_t *ctx, json_t *root)
     }
 
 /* ---------- SHIP ---------- */
-  else if (!strcmp (c, "ship.inspect"))
+  else if (!strcasecmp (c, "ship.inspect"))
     {
       rc = cmd_ship_inspect (ctx, root);
     }
-  else if (!strcmp (c, "ship.rename") || !strcmp (c, "ship.reregister"))
+  else if (!strcasecmp (c, "ship.rename") || !strcasecmp (c, "ship.reregister"))
     {
       rc = cmd_ship_rename (ctx, root);
     }
-  else if (!strcmp (c, "ship.claim"))
+  else if (!strcasecmp (c, "ship.claim"))
     {
       rc = cmd_ship_claim (ctx, root);
     }
-  else if (!strcmp (c, "ship.status"))
+  else if (!strcasecmp (c, "ship.status"))
     {
       rc = cmd_ship_status (ctx, root);
     }
-  else if (!strcmp (c, "ship.info"))
+  else if (!strcasecmp (c, "ship.info"))
     {
       rc = cmd_ship_info_compat (ctx, root);	/* legacy alias */
     }
-  else if (!strcmp (c, "ship.transfer_cargo"))
+  else if (!strcasecmp (c, "ship.transfer_cargo"))
     {
       rc = cmd_ship_transfer_cargo (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "ship.jettison"))
+  else if (!strcasecmp (c, "ship.jettison"))
     {
       rc = cmd_ship_jettison (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "ship.upgrade"))
+  else if (!strcasecmp (c, "ship.upgrade"))
     {
       rc = cmd_ship_upgrade (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "ship.repair"))
+  else if (!strcasecmp (c, "ship.repair"))
     {
       rc = cmd_ship_repair (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "ship.self_destruct"))
+  else if (!strcasecmp (c, "ship.self_destruct"))
     {
       rc = cmd_ship_self_destruct (ctx, root);	/* NIY stub */
     }
 
 /* ---------- PORTS / TRADE ---------- */
-  else if (!strcmp (c, "port.info") || !strcmp (c, "port.status")
-	   || !strcmp (c, "trade.port_info") || !strcmp (c, "port.describe"))
+  else if (!strcasecmp (c, "port.info") || !strcasecmp (c, "port.status")
+	   || !strcasecmp (c, "trade.port_info") || !strcasecmp (c, "port.describe"))
     {
       rc = cmd_trade_port_info (ctx, root);
     }
-  else if (!strcmp (c, "trade.buy"))
+  else if (!strcasecmp (c, "trade.buy"))
     {
       rc = cmd_trade_buy (ctx, root);
     }
-  else if (!strcmp (c, "trade.sell"))
+  else if (!strcasecmp (c, "trade.sell"))
     {
       rc = cmd_trade_sell (ctx, root);	/* NIY stub (or real) */
     }
-  else if (!strcmp (c, "trade.quote"))
+  else if (!strcasecmp (c, "trade.quote"))
     {
       rc = cmd_trade_quote (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "trade.jettison"))
+  else if (!strcasecmp (c, "trade.jettison"))
     {
       rc = cmd_ship_jettison (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "trade.offer"))
+  else if (!strcasecmp (c, "trade.offer"))
     {
       rc = cmd_trade_offer (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "trade.accept"))
+  else if (!strcasecmp (c, "trade.accept"))
     {
       rc = cmd_trade_accept (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "trade.cancel"))
+  else if (!strcasecmp (c, "trade.cancel"))
     {
       rc = cmd_trade_cancel (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "trade.history"))
+  else if (!strcasecmp (c, "trade.history"))
     {
       rc = cmd_trade_history (ctx, root);	/* NIY stub */
     }
 
 /* ---------- UNIVERSE / SECTOR / MOVE ---------- */
-  else if (!strcmp (c, "move.describe_sector") || !strcmp (c, "sector.info"))
+  else if (!strcasecmp (c, "move.describe_sector") || !strcasecmp (c, "sector.info"))
     {
       rc = cmd_move_describe_sector (ctx, root);	/* NIY or real */
     }
-  else if (!strcmp (c, "move.scan"))
+  else if (!strcasecmp (c, "move.scan"))
     {
       cmd_move_scan (ctx, root);	/* NIY or real */
     }
-  else if (!strcmp (c, "move.warp"))
+  else if (!strcasecmp (c, "move.warp"))
     {
       rc = cmd_move_warp (ctx, root);	/* NIY or real */
     }
-  else if (!strcmp (c, "move.pathfind"))
+  else if (!strcasecmp (c, "move.pathfind"))
     {
       rc = cmd_move_pathfind (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "move.autopilot.start"))
+  else if (!strcasecmp (c, "move.autopilot.start"))
     {
       rc = cmd_move_autopilot_start (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "move.autopilot.stop"))
+  else if (!strcasecmp (c, "move.autopilot.stop"))
     {
       rc = cmd_move_autopilot_stop (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "move.autopilot.status"))
+  else if (!strcasecmp (c, "move.autopilot.status"))
     {
       rc = cmd_move_autopilot_status (ctx, root);
     }
-  else if (!strcmp (c, "sector.search"))
+  else if (!strcasecmp (c, "sector.search"))
     {
       rc = cmd_sector_search (ctx, root);
     }
-  else if (!strcmp (c, "sector.set_beacon"))
+  else if (!strcasecmp (c, "sector.set_beacon"))
     {
       rc = cmd_sector_set_beacon (ctx, root);
     }
-  else if (!strcmp (c, "sector.scan.density"))
+  else if (!strcasecmp (c, "sector.scan.density"))
     {
       cmd_sector_scan_density (ctx, root); 
     }
-  else if (!strcmp (c, "sector.scan"))
+  else if (!strcasecmp (c, "sector.scan"))
     {
       cmd_sector_scan (ctx, root);	
     }
 
 /* ---------- PLANETS / CITADEL ---------- */
-  else if (!strcmp (c, "planet.genesis"))
+  else if (!strcasecmp (c, "planet.genesis"))
     {
       rc = cmd_planet_genesis (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "planet.info"))
+  else if (!strcasecmp (c, "planet.info"))
     {
       rc = cmd_planet_info (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "planet.rename"))
+  else if (!strcasecmp (c, "planet.rename"))
     {
       rc = cmd_planet_rename (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "planet.land"))
+  else if (!strcasecmp (c, "planet.land"))
     {
       rc = cmd_planet_land (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "planet.launch"))
+  else if (!strcasecmp (c, "planet.launch"))
     {
       rc = cmd_planet_launch (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "planet.transfer_ownership"))
+  else if (!strcasecmp (c, "planet.transfer_ownership"))
     {
       rc = cmd_planet_transfer_ownership (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "planet.harvest"))
+  else if (!strcasecmp (c, "planet.harvest"))
     {
       rc = cmd_planet_harvest (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "planet.deposit"))
+  else if (!strcasecmp (c, "planet.deposit"))
     {
       rc = cmd_planet_deposit (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "planet.withdraw"))
+  else if (!strcasecmp (c, "planet.withdraw"))
     {
       rc = cmd_planet_withdraw (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "citadel.build"))
+  else if (!strcasecmp (c, "citadel.build"))
     {
       rc = cmd_citadel_build (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "citadel.upgrade"))
+  else if (!strcasecmp (c, "citadel.upgrade"))
     {
       rc = cmd_citadel_upgrade (ctx, root);	/* NIY stub */
     }
 
 /* ---------- COMBAT ---------- */
-  else if (!strcmp (c, "combat.attack"))
+  else if (!strcasecmp (c, "combat.attack"))
     {
       rc = cmd_combat_attack (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "combat.deploy_fighters"))
+  else if (!strcasecmp (c, "combat.deploy_fighters"))
     {
       rc = cmd_combat_deploy_fighters (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "combat.lay_mines"))
+  else if (!strcasecmp (c, "combat.lay_mines"))
     {
       rc = cmd_combat_lay_mines (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "combat.sweep_mines"))
+  else if (!strcasecmp (c, "combat.sweep_mines"))
     {
       rc = cmd_combat_sweep_mines (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "combat.status"))
+  else if (!strcasecmp (c, "combat.status"))
     {
       rc = cmd_combat_status (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "deploy.fighters.list"))
+  else if (!strcasecmp (c, "deploy.fighters.list"))
     {
       rc = cmd_deploy_fighters_list (ctx, root);        /* list deployed fighters */
     }
-  else if (!strcmp (c, "deploy.mines.list"))
+  else if (!strcasecmp (c, "deploy.mines.list"))
     {
       rc = cmd_deploy_mines_list (ctx, root);           /* list deployed mines */
     }  
-  else if (!strcmp (c, "fighters.recall"))
+  else if (!strcasecmp (c, "fighters.recall"))
     {
       rc = cmd_fighters_recall (ctx, root);             /* recall deployed fighters */
     }
+  else if (!strcasecmp (c, "combat.deploy_mines"))
+    {
+      rc = cmd_combat_deploy_mines (ctx, root);
+    }
+  else if (!strcasecmp (c, "mines.recall"))
+    {
+      rc = cmd_mines_recall (ctx, root);
+    }
 
 /* ---------- CHAT ---------- */
-  else if (!strcmp (c, "chat.send"))
+  else if (!strcasecmp (c, "chat.send"))
     {
       rc = cmd_chat_send (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "chat.broadcast"))
+  else if (!strcasecmp (c, "chat.broadcast"))
     {
       rc = cmd_chat_broadcast (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "chat.history"))
+  else if (!strcasecmp (c, "chat.history"))
     {
       rc = cmd_chat_history (ctx, root);	/* NIY stub */
     }
 
 /* ---------- MAIL/Announcements ---------- */
-  else if (!strcmp (c, "mail.send"))
+  else if (!strcasecmp (c, "mail.send"))
     {
       rc = cmd_mail_send (ctx, root);
     }
-  else if (!strcmp (c, "mail.inbox"))
+  else if (!strcasecmp (c, "mail.inbox"))
     {
       rc = cmd_mail_inbox (ctx, root);
     }
-  else if (!strcmp (c, "mail.read"))
+  else if (!strcasecmp (c, "mail.read"))
     {
       rc = cmd_mail_read (ctx, root);
     }
-  else if (!strcmp (c, "mail.delete"))
+  else if (!strcasecmp (c, "mail.delete"))
     {
       rc = cmd_mail_delete (ctx, root);
     }
-  else if (strcmp (c, "sys.notice.create") == 0)
+  else if (strcasecmp (c, "sys.notice.create") == 0)
     {
       rc = cmd_sys_notice_create (ctx, root);
     }
-  else if (strcmp (c, "notice.list") == 0)
+  else if (strcasecmp (c, "notice.list") == 0)
     {
       rc = cmd_notice_list (ctx, root);
     }
-  else if (strcmp (c, "notice.ack") == 0)
+  else if (strcasecmp (c, "notice.ack") == 0)
     {
       rc = cmd_notice_ack (ctx, root);
     }
 /* ---------- NEWS ---------- */
-  else if (strcmp (c, "news.get_feed") == 0)
+  else if (strcasecmp (c, "news.get_feed") == 0)
     {
       rc = cmd_news_get_feed (ctx, root);
     }
-  else if (strcmp (c, "news.mark_feed_read") == 0)
+  else if (strcasecmp (c, "news.mark_feed_read") == 0)
     {
       rc = cmd_news_mark_feed_read (ctx, root);
     }
 
 /* ---------- SUBSCRIBE ---------- */
-  else if (!strcmp (c, "subscribe.add"))
+  else if (!strcasecmp (c, "subscribe.add"))
     {
       rc = cmd_subscribe_add (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "subscribe.remove"))
+  else if (!strcasecmp (c, "subscribe.remove"))
     {
       rc = cmd_subscribe_remove (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "subscribe.list"))
+  else if (!strcasecmp (c, "subscribe.list"))
     {
       rc = cmd_subscribe_list (ctx, root);	/* NIY stub */
     }
-  else if (strcmp (c, "subscribe.catalog") == 0)
+  else if (strcasecmp (c, "subscribe.catalog") == 0)
     {
       cmd_subscribe_catalog (ctx, root);
     }
 
 /* ---------- BULK ---------- */
-  else if (!strcmp (c, "bulk.execute"))
+  else if (!strcasecmp (c, "bulk.execute"))
     {
       rc = cmd_bulk_execute (ctx, root);	/* NIY stub */
     }
 
 /* ---------- ADMIN ---------- */
-  else if (!strcmp (c, "admin.notice"))
+  else if (!strcasecmp (c, "admin.notice"))
     {
       rc = cmd_admin_notice (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "admin.shutdown_warning"))
+  else if (!strcasecmp (c, "admin.shutdown_warning"))
     {
       rc = cmd_admin_shutdown_warning (ctx, root);	/* NIY stub */
     }
 
   /* ---------- S2S ---------- */
-  else if (!strcmp (c, "s2s.planet.genesis"))
+  else if (!strcasecmp (c, "s2s.planet.genesis"))
     {
       rc = cmd_s2s_planet_genesis (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "s2s.planet.transfer"))
+  else if (!strcasecmp (c, "s2s.planet.transfer"))
     {
       rc = cmd_s2s_planet_transfer (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "s2s.player.migrate"))
+  else if (!strcasecmp (c, "s2s.player.migrate"))
     {
       rc = cmd_s2s_player_migrate (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "s2s.port.restock"))
+  else if (!strcasecmp (c, "s2s.port.restock"))
     {
       rc = cmd_s2s_port_restock (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "s2s.event.relay"))
+  else if (!strcasecmp (c, "s2s.event.relay"))
     {
       rc = cmd_s2s_event_relay (ctx, root);	/* NIY stub */
     }
-  else if (!strcmp (c, "s2s.replication.heartbeat"))
+  else if (!strcasecmp (c, "s2s.replication.heartbeat"))
     {
       rc = cmd_s2s_replication_heartbeat (ctx, root);	/* NIY stub */
     }

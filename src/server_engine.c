@@ -9,6 +9,7 @@
 #include <poll.h>
 #include <errno.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <sys/socket.h>
@@ -82,7 +83,7 @@ cron_find (const char *name)
 {
   for (size_t i = 0; CRON_REGISTRY[i].name; ++i)
     {
-      if (strcmp (CRON_REGISTRY[i].name, name) == 0)
+      if (strcasecmp (CRON_REGISTRY[i].name, name) == 0)
 	{
 	  return CRON_REGISTRY[i].fn;
 	}
@@ -352,7 +353,7 @@ engine_demo_push (s2s_conn_t *c)
   if (rc == 0 && resp)
     {
       const char *ty = s2s_env_type (resp);
-      if (ty && strcmp (ty, "s2s.ack") == 0)
+      if (ty && strcasecmp (ty, "s2s.ack") == 0)
 	{
 	  json_t *ackpl = s2s_env_payload (resp);
 	  json_t *dup = json_object_get (ackpl, "duplicate");
@@ -401,7 +402,7 @@ engine_send_notice_publish (s2s_conn_t *c, int player_id, const char *msg,
     {
       // log ack/error minimally
       const char *ty = s2s_env_type (resp);
-      if (ty && strcmp (ty, "s2s.ack") == 0)
+      if (ty && strcasecmp (ty, "s2s.ack") == 0)
 	LOGI ("command.push ack\n");
       //        fprintf (stderr, "[engine] command.push ack\n");
       else
@@ -437,15 +438,14 @@ engine_s2s_drain_once (s2s_conn_t *conn)
     return;
 
   const char *type = json_string_value (json_object_get (msg, "type"));
-  if (type && strcmp (type, "s2s.engine.shutdown") == 0)
+  if (type && strcasecmp (type, "s2s.engine.shutdown") == 0)
     {
       // Begin graceful shutdown: set your running flag false, close down
       LOGI ("received shutdown command\n");
       // fprintf (stderr, "[engine] received shutdown command\n");
       // flip your engine running flag here…
     }
-  else if (type && strcmp (type, "s2s.health.check") == 0)
-    {
+      else if (type && strcasecmp (type, "s2s.health.check") == 0)    {
       // Optional: allow server to ping any time
       time_t now = time (NULL);
       static time_t start_ts;
@@ -679,7 +679,7 @@ server_commands_tick (sqlite3 *db, int max_rows)
       json_error_t jerr;
       json_t *pl = payload_json ? json_loads (payload_json, 0, &jerr) : NULL;
 
-      if (type && strcmp (type, "broadcast.create") == 0)
+      if (type && strcasecmp (type, "broadcast.create") == 0)
 	{
 	  int64_t notice_id = 0;
 	  ok =
@@ -1045,7 +1045,7 @@ static cron_handler_fn
 cron_lookup (const char *name)
 {
   for (int i = 0; CRON_REGISTRY[i].name; ++i)
-    if (strcmp (CRON_REGISTRY[i].name, name) == 0)
+    if (strcasecmp (CRON_REGISTRY[i].name, name) == 0)
       return CRON_REGISTRY[i].fn;
   return NULL;
 }

@@ -12,6 +12,7 @@
 #include <time.h>
 #include <jansson.h>
 #include <inttypes.h>
+#include <strings.h>
 /* local includes */
 #include "server_loop.h"
 #include "server_config.h"
@@ -119,11 +120,11 @@ s2s_control_thread (void *arg)
 	{
 	  const char *type =
 	    json_string_value (json_object_get (msg, "type"));
-	  if (type && strcmp (type, "s2s.health.ack") == 0)
+	  if (type && strcasecmp (type, "s2s.health.ack") == 0)
 	    {
 	      // optional: read payload, surface metrics
 	    }
-	  else if (type && strcmp (type, "s2s.error") == 0)
+	  else if (type && strcasecmp (type, "s2s.error") == 0)
 	    {
 	      json_t *pl = json_object_get (msg, "payload");
 	      const char *reason =
@@ -446,7 +447,7 @@ main (void)
   if (rc == S2S_OK && msg)
     {
       const char *type = json_string_value (json_object_get (msg, "type"));
-      if (type && strcmp (type, "s2s.health.hello") == 0)
+      if (type && strcasecmp (type, "s2s.health.hello") == 0)
 	{
 	  LOGW (" accepted hello\n");
 	  //      fprintf (stderr, " accepted hello\n");

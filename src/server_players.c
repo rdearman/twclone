@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <jansson.h>
 #include <string.h>
+#include <strings.h>
 #include <stdlib.h>		/* for strtol */
 #include <sqlite3.h>
 #include <stdio.h>
@@ -393,10 +394,10 @@ h_update_ship_cargo (sqlite3 *db, int player_id,
 
     // 1. Identify the column name from the commodity string
     const char *col_name = NULL;
-    if (strcmp(commodity, "ore") == 0) col_name = "ore";
-    else if (strcmp(commodity, "organics") == 0) col_name = "organics";
-    else if (strcmp(commodity, "equipment") == 0) col_name = "equipment";
-    else if (strcmp(commodity, "colonists") == 0) col_name = "colonists";
+    if (strcasecmp(commodity, "ore") == 0) col_name = "ore";
+    else if (strcasecmp(commodity, "organics") == 0) col_name = "organics";
+    else if (strcasecmp(commodity, "equipment") == 0) col_name = "equipment";
+    else if (strcasecmp(commodity, "colonists") == 0) col_name = "colonists";
     else {
         fprintf(stderr, "h_update_ship_cargo: Invalid commodity name '%s'\n", commodity);
         return SQLITE_MISUSE; // Invalid commodity string
@@ -1269,7 +1270,7 @@ cmd_player_set_prefs (client_ctx_t *ctx, json_t *root)
 	    }
 	  /* falls through to db_prefs_set_one with type='string' */
 	}
-      else if (strcmp(key, "news.fetch_mode") == 0)
+      else if (strcasecmp(key, "news.fetch_mode") == 0)
       {
           if (!json_is_integer(val)) {
               send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "news.fetch_mode must be an integer");
@@ -1281,7 +1282,7 @@ cmd_player_set_prefs (client_ctx_t *ctx, json_t *root)
               return -1;
           }
       }
-      else if (strcmp(key, "news.category_filter") == 0)
+      else if (strcasecmp(key, "news.category_filter") == 0)
       {
           if (!json_is_string(val)) {
               send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "news.category_filter must be a string");
@@ -2032,7 +2033,7 @@ cmd_get_news (client_ctx_t *ctx, json_t *root)
   }
 
   // Apply category filter
-  if (strlen(category_filter) > 0 && strcmp(category_filter, "all") != 0) {
+  if (strlen(category_filter) > 0 && strcasecmp(category_filter, "all") != 0) {
       snprintf(where_clause + strlen(where_clause), sizeof(where_clause) - strlen(where_clause),
                "AND news_category = '%s' ", category_filter);
   }

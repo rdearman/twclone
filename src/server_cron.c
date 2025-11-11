@@ -2,6 +2,7 @@
 #include <sqlite3.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <stdint.h>
 #include <time.h>
 #include <sqlite3.h>
@@ -1379,14 +1380,14 @@ int h_daily_news_compiler(sqlite3 *db, int64_t now_s) {
                         scope = scope_str; // Dynamic scope
                     }
         
-                    if (strcmp(event_type, "commodity.boom") == 0 || strcmp(event_type, "commodity.bust") == 0) {
+                    if (strcasecmp(event_type, "commodity.boom") == 0 || strcasecmp(event_type, "commodity.bust") == 0) {
                         const char *commodity = json_string_value(json_object_get(payload_obj, "commodity"));
                         const char *location = json_string_value(json_object_get(payload_obj, "location"));
                         double price = json_real_value(json_object_get(payload_obj, "price"));
         
                         if (commodity && location) {
                             category = "economic";
-                            if (strcmp(event_type, "commodity.boom") == 0) {
+                            if (strcasecmp(event_type, "commodity.boom") == 0) {
                                 if (asprintf(&headline_str, "Economic Boom! %s Prices Soar in %s!", commodity, location) == -1) {
                                     LOGE("h_daily_news_compiler: Failed to allocate headline_str for commodity.boom.");
                                     goto next_event_cleanup;
@@ -1413,7 +1414,7 @@ int h_daily_news_compiler(sqlite3 *db, int64_t now_s) {
                             json_object_set_new(context_data, "location", json_string(location));
                             json_object_set_new(context_data, "price", json_real(price));
                         }
-                    } else if (strcmp(event_type, "ship.destroyed") == 0) {
+                    } else if (strcasecmp(event_type, "ship.destroyed") == 0) {
                         int destroyed_player_id = json_integer_value(json_object_get(payload_obj, "player_id"));
                         int destroyed_ship_id = json_integer_value(json_object_get(payload_obj, "ship_id"));
                         const char *ship_name = json_string_value(json_object_get(payload_obj, "ship_name"));
@@ -1434,7 +1435,7 @@ int h_daily_news_compiler(sqlite3 *db, int64_t now_s) {
                             json_object_set_new(context_data, "destroyed_ship_id", json_integer(destroyed_ship_id));
                             json_object_set_new(context_data, "ship_name", json_string(ship_name));
                         }
-                    } else if (strcmp(event_type, "fedspace:tow") == 0) {
+                    } else if (strcasecmp(event_type, "fedspace:tow") == 0) {
                         const char *reason = json_string_value(json_object_get(payload_obj, "reason"));
                         if (reason) {
                             category = "military";
@@ -1449,7 +1450,7 @@ int h_daily_news_compiler(sqlite3 *db, int64_t now_s) {
                             }
                             body = body_str;
                         }
-                    } else if (strcmp(event_type, "combat.ship_destroyed") == 0) {
+                    } else if (strcasecmp(event_type, "combat.ship_destroyed") == 0) {
                         const char *ship_name = json_string_value(json_object_get(payload_obj, "ship_name"));
                         int victim_player_id = json_integer_value(json_object_get(payload_obj, "victim_player_id"));
                         int attacker_player_id = json_integer_value(json_object_get(payload_obj, "attacker_player_id"));
@@ -1907,7 +1908,7 @@ h_daily_market_settlement (sqlite3 *db, int64_t now_s)
                   int dummy_qty; // For new_qty_out
 
                   // Deduct from seller's stock
-                  if (strcmp(sell_orders[j].location_type, "planet") == 0) {
+                  if (strcasecmp(sell_orders[j].location_type, "planet") == 0) {
                       commodity_transfer_rc = h_update_planet_stock(db, sell_orders[j].location_id, commodity_code, -trade_quantity, &dummy_qty);
                   } else { // port
                       commodity_transfer_rc = h_update_port_stock(db, sell_orders[j].location_id, commodity_code, -trade_quantity, &dummy_qty);
@@ -1922,7 +1923,7 @@ h_daily_market_settlement (sqlite3 *db, int64_t now_s)
                   }
 
                   // Add to buyer's stock
-                  if (strcmp(buy_orders[i].location_type, "planet") == 0) {
+                  if (strcasecmp(buy_orders[i].location_type, "planet") == 0) {
                       commodity_transfer_rc = h_update_planet_stock(db, buy_orders[i].location_id, commodity_code, trade_quantity, &dummy_qty);
                   } else { // port
                       commodity_transfer_rc = h_update_port_stock(db, buy_orders[i].location_id, commodity_code, trade_quantity, &dummy_qty);
@@ -1934,7 +1935,7 @@ h_daily_market_settlement (sqlite3 *db, int64_t now_s)
                       h_deduct_credits(db, sell_orders[j].actor_type, sell_orders[j].actor_id, trade_quantity * trade_price, NULL);
                       h_add_credits(db, buy_orders[i].actor_type, buy_orders[i].actor_id, trade_quantity * trade_price, NULL);
                       // Re-add commodity to seller (if it was deducted)
-                      if (strcmp(sell_orders[j].location_type, "planet") == 0) {
+                      if (strcasecmp(sell_orders[j].location_type, "planet") == 0) {
                           h_update_planet_stock(db, sell_orders[j].location_id, commodity_code, trade_quantity, NULL);
                       } else {
                           h_update_port_stock(db, sell_orders[j].location_id, commodity_code, trade_quantity, NULL);
@@ -1955,12 +1956,12 @@ h_daily_market_settlement (sqlite3 *db, int64_t now_s)
                       // This is a critical error, attempt to rollback everything for this trade
                       h_deduct_credits(db, sell_orders[j].actor_type, sell_orders[j].actor_id, trade_quantity * trade_price, NULL);
                       h_add_credits(db, buy_orders[i].actor_type, buy_orders[i].actor_id, trade_quantity * trade_price, NULL);
-                      if (strcmp(sell_orders[j].location_type, "planet") == 0) {
+                      if (strcasecmp(sell_orders[j].location_type, "planet") == 0) {
                           h_update_planet_stock(db, sell_orders[j].location_id, commodity_code, trade_quantity, NULL);
                       } else {
                           h_update_port_stock(db, sell_orders[j].location_id, commodity_code, trade_quantity, NULL);
                       }
-                      if (strcmp(buy_orders[i].location_type, "planet") == 0) {
+                      if (strcasecmp(buy_orders[i].location_type, "planet") == 0) {
                           h_update_planet_stock(db, buy_orders[i].location_id, commodity_code, -trade_quantity, NULL);
                       } else {
                           h_update_port_stock(db, buy_orders[i].location_id, commodity_code, -trade_quantity, NULL);
@@ -2067,7 +2068,7 @@ matching_cleanup:
               json_object_set_new(payload, "price", json_real(price));
               
               int sector_id = 0; // Default sector
-              if(strcmp(location_type, "port") == 0) {
+              if(strcasecmp(location_type, "port") == 0) {
                   // Get sector from port
                   sqlite3_stmt *sector_lookup_stmt = NULL;
                   const char *sql_sector_lookup = "SELECT sector FROM ports WHERE id = ?;";
@@ -2078,7 +2079,7 @@ matching_cleanup:
                       }
                       sqlite3_finalize(sector_lookup_stmt);
                   }
-              } else if (strcmp(location_type, "planet") == 0) {
+              } else if (strcasecmp(location_type, "planet") == 0) {
                   // Get sector from planet
                   sqlite3_stmt *sector_lookup_stmt = NULL;
                   const char *sql_sector_lookup = "SELECT sector FROM planets WHERE id = ?;";

@@ -288,9 +288,9 @@ h_port_buys_commodity (sqlite3 *db, int port_id, const char *commodity)
   const char *sql =
     "SELECT "
     "CASE ?2 "
-    "WHEN 'ore' THEN p.ore_on_hand "
-    "WHEN 'organics' THEN p.organics_on_hand "
-    "WHEN 'equipment' THEN p.equipment_on_hand "
+    "WHEN 'ORE' THEN p.ore_on_hand "
+    "WHEN 'ORG' THEN p.organics_on_hand "
+    "WHEN 'EQU' THEN p.equipment_on_hand "
     "ELSE 0 END AS quantity, "
     "p.size AS max_capacity " /* Using port size as a proxy for max_capacity for now */
     "FROM ports p WHERE p.id = ?1 LIMIT 1;";
@@ -382,13 +382,13 @@ h_calculate_port_sell_price (sqlite3 *db, int port_id, const char *commodity)
   const char *sql =
     "SELECT c.base_price, c.volatility, "
     "CASE ?2 "
-    "WHEN 'ore' THEN p.ore_on_hand "
-    "WHEN 'organics' THEN p.organics_on_hand "
-    "WHEN 'equipment' THEN p.equipment_on_hand "
+    "WHEN 'ORE' THEN p.ore_on_hand "
+    "WHEN 'ORG' THEN p.organics_on_hand "
+    "WHEN 'EQU' THEN p.equipment_on_hand "
     "ELSE 0 END AS quantity, "
-    "p.size AS max_capacity, p.techlevel " /* Using port size as a proxy for max_capacity for now */
+    "p.size * 1000 AS max_capacity, p.techlevel " /* Using port size as a proxy for max_capacity for now */
     "FROM commodities c JOIN ports p ON p.id = ?1 "
-    "WHERE c.code = ?2 LIMIT 1;";
+    "WHERE UPPER(c.code) = UPPER(?2) LIMIT 1;";
 
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
@@ -474,11 +474,11 @@ h_port_sells_commodity (sqlite3 *db, int port_id, const char *commodity)
 
   const char *col = NULL;
 
-  if (strcmp (commodity, "ore") == 0)
+  if (strcasecmp (commodity, "ore") == 0)
     col = "ore_on_hand";
-  else if (strcmp (commodity, "organics") == 0)
+  else if (strcasecmp (commodity, "organics") == 0)
     col = "organics_on_hand";
-  else if (strcmp (commodity, "equipment") == 0)
+  else if (strcasecmp (commodity, "equipment") == 0)
     col = "equipment_on_hand";
   else
     return 0; /* unsupported commodity */
@@ -622,11 +622,11 @@ cmd_trade_quote (client_ctx_t *ctx, json_t *root)
   }
 
   // Calculate the price the port will CHARGE the player (player's buy price)
-  int player_buy_price_per_unit = h_calculate_port_sell_price (db, port_id, commodity);
+  int player_buy_price_per_unit = h_calculate_port_sell_price (db, port_id, commodity_code);
   long long total_player_buy_price = (long long)player_buy_price_per_unit * quantity;
 
   // Calculate the price the port will PAY the player (player's sell price)
-  int player_sell_price_per_unit = h_calculate_port_buy_price (db, port_id, commodity);
+  int player_sell_price_per_unit = h_calculate_port_buy_price (db, port_id, commodity_code);
   long long total_player_sell_price = (long long)player_sell_price_per_unit * quantity;
 
   payload = json_object ();
@@ -709,11 +709,11 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
     }
 
   int have = 0;
-  if (strcmp (commodity, "ore") == 0)
+  if (strcasecmp (commodity, "ore") == 0)
     have = cur_ore;
-  else if (strcmp (commodity, "organics") == 0)
+  else if (strcasecmp (commodity, "organics") == 0)
     have = cur_org;
-  else if (strcmp (commodity, "equipment") == 0)
+  else if (strcasecmp (commodity, "equipment") == 0)
     have = cur_eq;
   else
     {
@@ -1183,9 +1183,9 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       LOGD("cmd_trade_buy: Validating item %zu: commodity='%s', amount=%d", i, commodity, amount); // ADDED
 
       if (!commodity || amount <= 0
-          || (strcmp (commodity, "ore") != 0
-              && strcmp (commodity, "organics") != 0
-              && strcmp (commodity, "equipment") != 0))
+          || (strcasecmp (commodity, "ore") != 0
+              && strcasecmp (commodity, "organics") != 0
+              && strcasecmp (commodity, "equipment") != 0))
         {
           free (trade_lines);
           send_enveloped_error (ctx->fd, root, 400,
@@ -1717,9 +1717,9 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
         (int) json_integer_value (json_object_get (it, "quantity"));
 
       if (!commodity || amount <= 0
-          || (strcmp (commodity, "ore") != 0
-              && strcmp (commodity, "organics") != 0
-              && strcmp (commodity, "equipment") != 0))
+          || (strcasecmp (commodity, "ore") != 0
+              && strcasecmp (commodity, "organics") != 0
+              && strcasecmp (commodity, "equipment") != 0))
         {
           /* BUGFIX: invalid commodity → refused 1405, not 400/error */
           send_enveloped_refused (ctx->fd, root, 1405,
@@ -1755,11 +1755,11 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
         }
 
       int have = 0;
-      if (strcmp (commodity, "ore") == 0)
+      if (strcasecmp (commodity, "ore") == 0)
         have = ore;
-      else if (strcmp (commodity, "organics") == 0)
+      else if (strcasecmp (commodity, "organics") == 0)
         have = org;
-      else if (strcmp (commodity, "equipment") == 0)
+      else if (strcasecmp (commodity, "equipment") == 0)
         have = eq;
 
       if (have < amount)
@@ -1992,13 +1992,13 @@ h_calculate_port_buy_price (sqlite3 *db, int port_id, const char *commodity)
   const char *sql =
     "SELECT c.base_price, c.volatility, "
     "CASE ?2 "
-    "WHEN 'ore' THEN p.ore_on_hand "
-    "WHEN 'organics' THEN p.organics_on_hand "
-    "WHEN 'equipment' THEN p.equipment_on_hand "
+    "WHEN 'ORE' THEN p.ore_on_hand "
+    "WHEN 'ORG' THEN p.organics_on_hand "
+    "WHEN 'EQU' THEN p.equipment_on_hand "
     "ELSE 0 END AS quantity, "
-    "p.size AS max_capacity, p.techlevel " /* Using port size as a proxy for max_capacity for now */
+    "p.size * 1000 AS max_capacity, p.techlevel " /* Using port size as a proxy for max_capacity for now */
     "FROM commodities c JOIN ports p ON p.id = ?1 "
-    "WHERE c.code = ?2 LIMIT 1;";
+    "WHERE UPPER(c.code) = UPPER(?2) LIMIT 1;";
 
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {

@@ -55,6 +55,7 @@
 #define ERR_BAD_REQUEST          1306
 #define ERR_REF_NO_TURNS         1307
 #define ERR_CONFIRMATION_REQUIRED 1308
+#define REF_INSUFFICIENT_CAPACITY 1309
 
 /* 1400 — Movement / Rules */
 #define REF_NOT_IN_SECTOR        1400	/* REFUSED */

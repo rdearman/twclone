@@ -1,6 +1,7 @@
 #include <sqlite3.h>
 #include <jansson.h>
 #include <string.h>
+#include <strings.h>
 #include "server_news.h"
 #include "server_envelope.h"
 #include "db_player_settings.h"
@@ -11,7 +12,7 @@
 
 // Helper to check if a category is in the filter string
 static int is_category_in_filter(const char *filter, const char *category) {
-    if (!filter || strcmp(filter, "all") == 0 || strlen(filter) == 0) {
+    if (!filter || strcasecmp(filter, "all") == 0 || strlen(filter) == 0) {
         return 1; // No filter means all categories are included
     }
 

@@ -104,8 +104,11 @@ def parse_args():
     p.add_argument("--user", help="Player name for login.")
     p.add_argument("--passwd", help="Password for login.")
     p.add_argument("--debug", action="store_true", help="Enable debug output")
-    p.add_argument("--menus", default="./menus.json",
-                   help="Path to menus.json (default: ./menus.json)")
+    # Resolve menus.json path relative to script location
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    default_menus_path = os.path.join(script_dir, "menus.json")
+    p.add_argument("--menus", default=default_menus_path,
+                   help=f"Path to menus.json (default: {default_menus_path})")
     return p.parse_args()
 
 # ---------------------------
@@ -590,6 +593,11 @@ def ctx_refresh_port_context(ctx):
                     # This assumes 'd' contains relevant sector/port data
                     # We need to normalize it first
                     ctx.last_sector_desc = normalize_sector(d)
+                    # Explicitly ensure port.id is set if available in the raw data
+                    if 'port' in d and isinstance(d['port'], dict) and 'id' in d['port']:
+                        if 'port' not in ctx.last_sector_desc:
+                            ctx.last_sector_desc['port'] = {}
+                        ctx.last_sector_desc['port']['id'] = d['port']['id']
                     return True
         except Exception:
             pass
@@ -1156,13 +1164,19 @@ def normalize_sector(d: Dict[str, Any]) -> Dict[str, Any]:
     ports = d.get("ports") or []
     if ports and isinstance(ports, list):
         p0 = ports[0]
+        # Extract 'id' if present
+        if p0.get("id"):
+            port_obj["id"] = p0["id"]
         pcls = p0.get("class") or p0.get("type")
         if isinstance(pcls, int) or (isinstance(pcls, str) and pcls.isdigit()):
-            port_obj = {"class": int(pcls)}
+            port_obj["class"] = int(pcls)
         if p0.get("name"):
             port_obj["name"] = p0["name"]
     elif isinstance(d.get("port"), dict):
         port_obj = dict(d.get("port"))
+        # Ensure 'id' is copied if it exists in the raw port data
+        if "id" not in port_obj and d["port"].get("id"):
+            port_obj["id"] = d["port"]["id"]
         if "class" not in port_obj and isinstance(port_obj.get("type"), int):
             port_obj["class"] = port_obj["type"]
     # ships/planets/beacon
@@ -1175,7 +1189,8 @@ def normalize_sector(d: Dict[str, Any]) -> Dict[str, Any]:
         "port": port_obj,
         "planets": planets,
         "ships": ships,
-        "beacon": beacon
+        "beacon": beacon,
+        "counts": d.get("counts") # Add this line
     }
 
 def get_my_player_name(conn: Conn) -> Optional[str]:
@@ -1292,6 +1307,118 @@ def print_last_rpc(ctx):
         print("[no response captured]")
         return
     print(json.dumps(resp, ensure_ascii=False, indent=2))
+
+@register("pretty_print_trade_quote")
+def pretty_print_trade_quote(ctx):
+    resp = ctx.state.get("last_rpc")
+    if resp is None:
+        print("[no response captured]")
+        return
+
+    data = resp.get("data")
+    if not isinstance(data, dict):
+        print("[Error] Invalid trade.quote response data.")
+        _pp(resp) # Fallback to raw print if data is malformed
+        return
+
+    port_id = data.get("port_id")
+    commodity = data.get("commodity")
+    quantity = data.get("quantity")
+    buy_price = data.get("buy_price")
+    sell_price = data.get("sell_price")
+    total_buy_price = data.get("total_buy_price")
+    total_sell_price = data.get("total_sell_price")
+
+    print(f"\n--- Trade Quote for Port {port_id} ---")
+    print(f"  Commodity: {commodity.capitalize()}")
+    print(f"  Quantity:  {quantity}")
+    print(f"  Buy Price (per unit):  {buy_price:.2f} credits")
+    print(f"  Sell Price (per unit): {sell_price:.2f} credits")
+    print(f"  Total Buy Price:   {total_buy_price} credits")
+    print(f"  Total Sell Price:  {total_sell_price} credits")
+@register("pretty_print_trade_receipt")
+def pretty_print_trade_receipt(ctx):
+    resp = ctx.state.get("last_rpc")
+    if resp is None:
+        print("[no response captured]")
+        return
+
+    if resp.get("status") != "ok":
+        print(f"[Error] Trade failed: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp) # Fallback to raw print on error
+        return
+
+    data = resp.get("data")
+    if not isinstance(data, dict):
+        print("[Error] Invalid trade receipt data.")
+        _pp(resp) # Fallback to raw print if data is malformed
+        return
+
+    sector_id = data.get("sector_id")
+    port_id = data.get("port_id")
+    player_id = data.get("player_id")
+    total_cost = data.get("total_cost")
+    credits_remaining = data.get("credits_remaining")
+    lines = data.get("lines", [])
+
+    print(f"\n--- Trade Receipt (Buy) ---")
+    print(f"  Sector ID: {sector_id}")
+    print(f"  Port ID:   {port_id}")
+    print(f"  Player ID: {player_id}")
+    print(f"  Total Cost: {total_cost} credits")
+    print(f"  Credits Remaining: {credits_remaining} credits")
+    print(f"\n  Items Purchased:")
+    if lines:
+        for item in lines:
+            commodity = item.get("commodity")
+            quantity = item.get("quantity")
+            unit_price = item.get("unit_price")
+            value = item.get("value")
+            print(f"    - {quantity} x {commodity.capitalize()} @ {unit_price} cr/unit = {value} credits")
+    else:
+        print("    (No items listed)")
+
+@register("pretty_print_sell_receipt")
+def pretty_print_sell_receipt(ctx):
+    resp = ctx.state.get("last_rpc")
+    if resp is None:
+        print("[no response captured]")
+        return
+
+    if resp.get("status") != "ok":
+        print(f"[Error] Sell failed: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp) # Fallback to raw print on error
+        return
+
+    data = resp.get("data")
+    if not isinstance(data, dict):
+        print("[Error] Invalid sell receipt data.")
+        _pp(resp) # Fallback to raw print if data is malformed
+        return
+
+    sector_id = data.get("sector_id")
+    port_id = data.get("port_id")
+    player_id = data.get("player_id")
+    total_credits = data.get("total_credits")
+    credits_remaining = data.get("credits_remaining")
+    lines = data.get("lines", [])
+
+    print(f"\n--- Trade Receipt (Sell) ---")
+    print(f"  Sector ID: {sector_id}")
+    print(f"  Port ID:   {port_id}")
+    print(f"  Player ID: {player_id}")
+    print(f"  Total Credits Gained: {total_credits} credits")
+    print(f"  Credits Remaining: {credits_remaining} credits")
+    print(f"\n  Items Sold:")
+    if lines:
+        for item in lines:
+            commodity = item.get("commodity")
+            quantity = item.get("quantity")
+            unit_price = item.get("unit_price")
+            value = item.get("value")
+            print(f"    - {quantity} x {commodity.capitalize()} @ {unit_price} cr/unit = {value} credits")
+    else:
+        print("    (No items listed)")
 @register("disconnect_and_quit")
 
 def disconnect_and_quit(ctx):
@@ -1316,6 +1443,7 @@ def _ctx_capabilities_get(ctx, path, default=None):
 
 # add near the top of the file (or just before dispatch_action)
 def _run_post(ctx, post):
+
     if not post:
         return
     if isinstance(post, str):
@@ -1454,7 +1582,7 @@ def dispatch_action(ctx: Context, action: Dict[str, Any]):
     #     return
     if "pycall" in action:
         call_handler(action["pycall"], ctx)
-        _run_post(ctx, action.get("post"))   # <-- was call_handler(post, ctx)
+        _run_post(ctx, action.get("post"))
         return
     if "flow" in action:
         call_handler(action["flow"], ctx)
@@ -1506,12 +1634,219 @@ def redisplay_sector(ctx: Context):
     else:
         print("Ships here: none")
 
+    # Display deployed fighters if available
+    counts = d.get("counts")
+    if isinstance(counts, dict):
+        fighters = counts.get("fighters")
+        if isinstance(fighters, int) and fighters > 0:
+            print(f"Deployed Fighters: {fighters}")
+
+    # Display deployed mines if available
+    if isinstance(counts, dict):
+        mines = counts.get("mines")
+        if isinstance(mines, int) and mines > 0:
+            print(f"Deployed Mines: {mines}")
+
     if planets:
         print("Planets: " + ", ".join(pl.get("name") or "Unnamed" for pl in planets))
     else:
         print("Planets: none")
 
     print("Beacon: " + (beacon if beacon else "none"))
+
+@register("refresh_sector_and_display")
+def refresh_sector_and_display(ctx: Context):
+    """Fetches the latest sector data, updates context, and then redisplays the sector."""
+    if ctx.current_sector_id is None:
+        print("Cannot refresh sector: current sector ID is unknown.")
+        return
+
+    resp = ctx.conn.rpc("move.describe_sector", {"sector_id": ctx.current_sector_id})
+    if resp.get("status") == "ok":
+        ctx.last_sector_desc = normalize_sector(get_data(resp))
+        redisplay_sector(ctx)
+    else:
+        print(f"[Error] Failed to refresh sector: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp) # Fallback to pretty print full response on error
+
+@register("recall_fighters_flow")
+def recall_fighters_flow(ctx: Context):
+    if ctx.current_sector_id is None:
+        print("Cannot recall fighters: current sector ID is unknown.")
+        return
+
+    # 1. List deployed fighters
+    list_resp = ctx.conn.rpc("deploy.fighters.list", {"sector_id": ctx.current_sector_id})
+    if list_resp.get("status") != "ok":
+        print(f"[Error] Failed to list deployed fighters: {list_resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(list_resp)
+        return
+
+    fighters_data = get_data(list_resp)
+    
+    fighters_list = fighters_data.get("entries", [])
+    
+    if not fighters_list:
+        print("No fighters deployed in this sector to recall.")
+        return
+
+    print("\n--- Deployed Fighters ---")
+    for f in fighters_list:
+        print(f"  Asset ID: {f.get('asset_id')}, Quantity: {f.get('count')}, Offensive Setting: {f.get('offense_mode')}")
+    print("-------------------------")
+
+    # 2. Prompt user for asset_id
+    asset_id_str = input("Enter Asset ID to recall (or 'q' to cancel): ").strip()
+    if asset_id_str.lower() == 'q':
+        print("Recall cancelled.")
+        return
+
+    try:
+        asset_id = int(asset_id_str)
+    except ValueError:
+        print("Invalid Asset ID. Please enter a number.")
+        return
+
+    # 3. Execute recall RPC
+    recall_resp = ctx.conn.rpc("fighters.recall", {
+        "sector_id": ctx.current_sector_id,
+        "asset_id": asset_id
+    })
+
+    if recall_resp.get("status") == "ok":
+        print("Fighters recalled successfully.")
+        refresh_sector_and_display(ctx)
+    else:
+        print(f"[Error] Failed to recall fighters: {recall_resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(recall_resp)
+
+@register("deploy_mines_flow")
+def deploy_mines_flow(ctx: Context):
+    if ctx.current_sector_id is None:
+        print("Cannot deploy mines: current sector ID is unknown.")
+        return
+
+    # Prompt user for amount and offensive setting
+    amount_str = input("Amount to deploy: ").strip()
+    if not amount_str.isdigit():
+        print("Invalid amount. Please enter a number.")
+        return
+    amount = int(amount_str)
+
+    offense_str = input("Offensive setting (1=TOLL, 2=DEFEND, 3=ATTACK): ").strip()
+    if not offense_str.isdigit() or int(offense_str) not in [1, 2, 3]:
+        print("Invalid offensive setting. Please choose 1, 2, or 3.")
+        return
+    offense = int(offense_str)
+
+    deploy_resp = ctx.conn.rpc("combat.deploy_mines", {
+        "amount": amount,
+        "offense": offense
+    })
+
+    if deploy_resp.get("status") == "ok":
+        print("Mines deployed successfully.")
+        refresh_sector_and_display(ctx)
+    else:
+        print(f"[Error] Failed to deploy mines: {deploy_resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(deploy_resp)
+
+@register("recall_mines_flow")
+def recall_mines_flow(ctx: Context):
+    if ctx.current_sector_id is None:
+        print("Cannot recall mines: current sector ID is unknown.")
+        return
+
+    # 1. List deployed mines
+    list_resp = ctx.conn.rpc("deploy.mines.list", {"sector_id": ctx.current_sector_id})
+    if list_resp.get("status") != "ok":
+        print(f"[Error] Failed to list deployed mines: {list_resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(list_resp)
+        return
+
+    mines_data = get_data(list_resp)
+    mines_list = mines_data.get("entries", [])
+    if not mines_list:
+        print("No mines deployed in this sector to recall.")
+        return
+
+    print("\n--- Deployed Mines ---")
+    for m in mines_list:
+        print(f"  Asset ID: {m.get('asset_id')}, Quantity: {m.get('count')}, Offensive Setting: {m.get('offense_mode')}")
+    print("----------------------")
+
+    # 2. Prompt user for asset_id
+    asset_id_str = input("Enter Asset ID to recall (or 'q' to cancel): ").strip()
+    if asset_id_str.lower() == 'q':
+        print("Recall cancelled.")
+        return
+
+    try:
+        asset_id = int(asset_id_str)
+    except ValueError:
+        print("Invalid Asset ID. Please enter a number.")
+        return
+
+    # 3. Execute recall RPC
+    recall_resp = ctx.conn.rpc("mines.recall", {
+        "sector_id": ctx.current_sector_id,
+        "asset_id": asset_id
+    })
+
+    if recall_resp.get("status") == "ok":
+        print("Mines recalled successfully.")
+        refresh_sector_and_display(ctx)
+    else:
+        print(f"[Error] Failed to recall mines: {recall_resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(recall_resp)
+
+@register("list_deployed_fighters_flow")
+def list_deployed_fighters_flow(ctx: Context):
+    if ctx.current_sector_id is None:
+        print("Cannot list fighters: current sector ID is unknown.")
+        return
+
+    list_resp = ctx.conn.rpc("deploy.fighters.list", {"sector_id": ctx.current_sector_id})
+    if list_resp.get("status") != "ok":
+        print(f"[Error] Failed to list deployed fighters: {list_resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(list_resp)
+        return
+
+    fighters_data = get_data(list_resp)
+    fighters_list = fighters_data.get("entries", [])
+
+    if not fighters_list:
+        print("No fighters deployed in this sector.")
+        return
+
+    print("\n--- Deployed Fighters ---")
+    for f in fighters_list:
+        print(f"  Asset ID: {f.get('asset_id')}, Quantity: {f.get('count')}, Offensive Setting: {f.get('offense_mode')}")
+    print("-------------------------")
+
+@register("list_deployed_mines_flow")
+def list_deployed_mines_flow(ctx: Context):
+    if ctx.current_sector_id is None:
+        print("Cannot list mines: current sector ID is unknown.")
+        return
+
+    list_resp = ctx.conn.rpc("deploy.mines.list", {"sector_id": ctx.current_sector_id})
+    if list_resp.get("status") != "ok":
+        print(f"[Error] Failed to list deployed mines: {list_resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(list_resp)
+        return
+
+    mines_data = get_data(list_resp)
+    mines_list = mines_data.get("entries", [])
+
+    if not mines_list:
+        print("No mines deployed in this sector.")
+        return
+
+    print("\n--- Deployed Mines ---")
+    for m in mines_list:
+        print(f"  Asset ID: {m.get('asset_id')}, Quantity: {m.get('count')}, Offensive Setting: {m.get('offense_mode')}")
+    print("----------------------")
 
 def _render_scan_card(scan: dict) -> str:
     """
@@ -1958,6 +2293,114 @@ def warp_flow(ctx: Context):
     ctx.last_sector_desc = normalize_sector(get_data(new))
     call_handler("redisplay_sector", ctx)
 
+@register("simple_buy_handler")
+def simple_buy_handler(ctx: Context):
+
+    port_id = (ctx.last_sector_desc.get("port") or {}).get("id")
+    if port_id is None:
+        print("Cannot determine current port ID. Please ensure you are docked.")
+        return
+
+    commodity_input = input("Product Code (ORE, ORGANICS, EQUIPMENT): ").strip().upper()
+    
+    code_map = {
+        "ORE": "ore",
+        "ORGANICS": "organics",
+        "EQUIPMENT": "equipment"
+    }
+    commodity = code_map.get(commodity_input)
+
+    if not commodity:
+        print("Invalid commodity. Please use ORE, ORGANICS, or EQUIPMENT.")
+        return
+
+    try:
+        quantity = int(input(f"Quantity of {commodity_input.capitalize()}: ").strip())
+        if quantity <= 0:
+            print("Quantity must be positive.")
+            return
+    except ValueError:
+        print("Invalid quantity.")
+        return
+
+    # Generate a unique idempotency key
+    idempotency_key = str(uuid.uuid4())
+
+    print(f"Attempting to buy {quantity} units of {commodity.capitalize()} (Port ID: {port_id})...")
+
+    payload = {
+        "port_id": port_id,
+        "items": [
+            {
+                "commodity": commodity,
+                "quantity": quantity
+            }
+        ],
+        "idempotency_key": idempotency_key
+    }
+
+    try:
+        resp = ctx.conn.rpc("trade.buy", payload)
+        ctx.state["last_rpc"] = resp
+        _run_post(ctx, "pretty_print_trade_receipt")
+    except Exception as e:
+        print(f"[ERROR] An unexpected error occurred during RPC call: {e}")
+        ctx.state["last_rpc"] = {"status": "error", "error": {"message": str(e)}}
+        _run_post(ctx, "pretty_print_trade_receipt")
+
+@register("simple_sell_handler")
+def simple_sell_handler(ctx: Context):
+    port_id = (ctx.last_sector_desc.get("port") or {}).get("id")
+    if port_id is None:
+        print("Cannot determine current port ID. Please ensure you are docked.")
+        return
+
+    commodity_input = input("Product Code (ORE, ORGANICS, EQUIPMENT): ").strip().upper()
+    
+    code_map = {
+        "ORE": "ore",
+        "ORGANICS": "organics",
+        "EQUIPMENT": "equipment"
+    }
+    commodity = code_map.get(commodity_input)
+
+    if not commodity:
+        print("Invalid commodity. Please use ORE, ORGANICS, or EQUIPMENT.")
+        return
+
+    try:
+        quantity = int(input(f"Quantity of {commodity_input.capitalize()}: ").strip())
+        if quantity <= 0:
+            print("Quantity must be positive.")
+            return
+    except ValueError:
+        print("Invalid quantity.")
+        return
+
+    idempotency_key = str(uuid.uuid4())
+
+    print(f"Attempting to sell {quantity} units of {commodity.capitalize()} (Port ID: {port_id})...")
+
+    payload = {
+        "port_id": port_id,
+        "items": [
+            {
+                "commodity": commodity,
+                "quantity": quantity
+            }
+        ],
+        "idempotency_key": idempotency_key
+    }
+
+    try:
+        resp = ctx.conn.rpc("trade.sell", payload)
+        ctx.state["last_rpc"] = resp
+        _run_post(ctx, "pretty_print_sell_receipt")
+    except Exception as e:
+        print(f"[ERROR] An unexpected error occurred during RPC call: {e}")
+        ctx.state["last_rpc"] = {"status": "error", "error": {"message": str(e)}}
+        _run_post(ctx, "pretty_print_sell_receipt")
+
 @register("intercept_flow")
 def intercept_flow(ctx: Context):
     try:
@@ -2249,74 +2692,7 @@ def cap_spam_handler(ctx: Context) -> None:
         r = ctx.conn.rpc("system.capabilities", {})  # was system.hello
         print(f"[{i+1}] {r.get('status')} {r.get('type')}")
 
-@register("simple_buy_handler")
-def simple_buy_handler(ctx: Context):
-    """
-    Automated buy flow: uses current sector ID as Port ID (as per user request), 
-    prompts for product and quantity, then calls the dock.buy RPC.
-    """
-    # 1. Automatically get the Port ID
-    port_info = ctx.last_sector_desc.get("port")
-    port_id = None
-    if isinstance(port_info, dict):
-        port_id = port_info.get("id")
 
-    if not isinstance(port_id, int):
-        print("Cannot determine Port ID. Ensure you are docked at a port and have re-displayed the sector (D).")
-        return
-
-    # 2. Prompt for product code
-    product_code = input("Product Code (E, O, or F): ").strip().upper()
-    if not product_code:
-        print("Buy cancelled.")
-        return
-
-    # --- FIX 2: Correct Commodity Mapping ---
-    code_map = {
-        "E": "equipment",
-        "O": "organics",
-        "F": "ore",  # TW "F"uel Ore maps to server's "ore"
-    }
-    commodity = code_map.get(product_code)
-    
-    if not commodity:
-        print("Invalid product code. Use E, O, or F.")
-        return
-
-    # 3. Prompt for quantity
-    try:
-        quantity = int(input(f"Quantity of {product_code}: ").strip())
-    except ValueError:
-        print("Invalid quantity."); return
-
-    if quantity <= 0:
-        print("Quantity must be positive."); return
-
-    print(f"Attempting to buy {quantity} units of {product_code} (Port ID: {port_id})...")
-
-    # 4. Execute the RPC
-    # --- FIX 1: Send the correct command "trade.buy" ---
-    frame = {
-        "command": "trade.buy",
-        "data": {
-            "port_id": port_id,
-            "commodity": commodity,  # Use the mapped name ("ore")
-            "quantity": quantity
-        },
-        "meta": {
-            # Use uuid or similar for idempotency key if you are testing the rail
-            "idempotency_key": str(uuid.uuid4()) 
-        }
-    }
-    resp = ctx.conn.rpc(frame['command'], frame['data'])
-    
-    # Display the server response (using the _pp helper function already in client.py)
-    ctx.state["last_rpc"] = resp
-    print("\n=== SERVER RESPONSE ===")
-    call_handler("print_last_rpc", ctx)
-    
-    # Optional: You can call redisplay_sector here to refresh inventory/status
-    call_handler("redisplay_sector", ctx)
 
         
 @register("interactive_buy_handler")
@@ -2408,7 +2784,8 @@ def main():
                 login = fb
 
             if login.get("status") in ("error","refused"):
-                print("Login failed."); return 2
+                print("Login failed.");
+                return 2
 
             current = extract_current_sector(login)
             if not isinstance(current, int):

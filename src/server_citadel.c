@@ -7,6 +7,8 @@
 #include <jansson.h>
 #include <sqlite3.h>
 #include <time.h>
+#include <string.h>
+#include <strings.h>
 
 // Helper to get the player's current planet_id from their active ship.
 // Returns planet_id > 0 on success, 0 if not on a planet or error.
@@ -104,7 +106,7 @@ int cmd_citadel_upgrade(client_ctx_t *ctx, json_t *root) {
         sqlite3_finalize(citadel_st);
     }
 
-    if (strcmp(construction_status, "idle") != 0) {
+    if (strcasecmp(construction_status, "idle") != 0) {
         send_enveloped_refused(ctx->fd, root, 1106, "An upgrade is already in progress.", NULL);
         return 0;
     }

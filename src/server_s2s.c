@@ -1,5 +1,6 @@
 #include <jansson.h>
 #include <string.h>
+#include <strings.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -117,11 +118,11 @@ server_s2s_dispatch (s2s_conn_t *c, json_t *env)
       return 0;
     }
 
-  if (strcmp (type, "s2s.broadcast.sweep") == 0)
+  if (strcasecmp (type, "s2s.broadcast.sweep") == 0)
     return handle_broadcast_sweep (c, env);
-  if (strcmp (type, "s2s.health.check") == 0)
+  if (strcasecmp (type, "s2s.health.check") == 0)
     return handle_health_check (c, env);
-  if (strcmp (type, "s2s.command.push") == 0)
+  if (strcasecmp (type, "s2s.command.push") == 0)
     return handle_command_push (c, env);
 
   json_t *err = s2s_make_error ("server", "engine", s2s_env_id (env),

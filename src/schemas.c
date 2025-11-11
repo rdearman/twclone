@@ -1,4 +1,5 @@
 #include <string.h>
+#include <strings.h>
 #include <jansson.h>
 #include "schemas.h"
 #include <stdlib.h>
@@ -102,6 +103,8 @@ static json_t *schema_combat_lay_mines (void);
 static json_t *schema_combat_sweep_mines (void);
 static json_t *schema_combat_status (void);
 static json_t *schema_fighters_recall (void);
+static json_t *schema_combat_deploy_mines (void);
+static json_t *schema_mines_recall (void);
 
 /* --- Deploy --- */
 static json_t *schema_deploy_fighters_list (void);
@@ -183,209 +186,213 @@ schema_get (const char *key)
     return NULL;
 
   /* Core */
-  if (strcmp (key, "envelope") == 0)
+  if (strcasecmp (key, "envelope") == 0)
     return schema_envelope ();
 
   /* Auth */
-  else if (strcmp (key, "auth.login") == 0)
+  else if (strcasecmp (key, "auth.login") == 0)
     return schema_auth_login ();
-  else if (strcmp (key, "auth.register") == 0)
+  else if (strcasecmp (key, "auth.register") == 0)
     return schema_auth_register ();
-  else if (strcmp (key, "auth.logout") == 0)
+  else if (strcasecmp (key, "auth.logout") == 0)
     return schema_auth_logout ();
-  else if (strcmp (key, "auth.refresh") == 0)
+  else if (strcasecmp (key, "auth.refresh") == 0)
     return schema_auth_refresh ();
-  else if (strcmp (key, "auth.mfa.totp.verify") == 0)
+  else if (strcasecmp (key, "auth.mfa.totp.verify") == 0)
     return schema_auth_mfa_totp_verify ();
 
   /* System */
-  else if (strcmp (key, "system.capabilities") == 0)
+  else if (strcasecmp (key, "system.capabilities") == 0)
     return schema_system_capabilities ();
-  else if (strcmp (key, "system.describe_schema") == 0)
+  else if (strcasecmp (key, "system.describe_schema") == 0)
     return schema_system_describe_schema ();
-  else if (strcmp (key, "system.hello") == 0)
+  else if (strcasecmp (key, "system.hello") == 0)
     return schema_system_hello ();
-  else if (strcmp (key, "system.disconnect") == 0)
+  else if (strcasecmp (key, "system.disconnect") == 0)
     return schema_system_disconnect ();
 
   /* Session */
-  else if (strcmp (key, "session.ping") == 0)
+  else if (strcasecmp (key, "session.ping") == 0)
     return schema_session_ping ();
-  else if (strcmp (key, "session.hello") == 0)
+  else if (strcasecmp (key, "session.hello") == 0)
     return schema_session_hello ();
-  else if (strcmp (key, "session.disconnect") == 0)
+  else if (strcasecmp (key, "session.disconnect") == 0)
     return schema_session_disconnect ();
 
   /* Ship */
-  else if (strcmp (key, "ship.inspect") == 0)
+  else if (strcasecmp (key, "ship.inspect") == 0)
     return schema_ship_inspect ();
-  else if (strcmp (key, "ship.rename") == 0)
+  else if (strcasecmp (key, "ship.rename") == 0)
     return schema_ship_rename ();
-  else if (strcmp (key, "ship.reregister") == 0)
+  else if (strcasecmp (key, "ship.reregister") == 0)
     return schema_ship_reregister ();
-  else if (strcmp (key, "ship.claim") == 0)
+  else if (strcasecmp (key, "ship.claim") == 0)
     return schema_ship_claim ();
-  else if (strcmp (key, "ship.status") == 0)
+  else if (strcasecmp (key, "ship.status") == 0)
     return schema_ship_status ();
-  else if (strcmp (key, "ship.info") == 0)
+  else if (strcasecmp (key, "ship.info") == 0)
     return schema_ship_info ();
-  else if (strcmp (key, "ship.transfer_cargo") == 0)
+  else if (strcasecmp (key, "ship.transfer_cargo") == 0)
     return schema_ship_transfer_cargo ();
-  else if (strcmp (key, "ship.jettison") == 0)
+  else if (strcasecmp (key, "ship.jettison") == 0)
     return schema_ship_jettison ();
-  else if (strcmp (key, "ship.upgrade") == 0)
+  else if (strcasecmp (key, "ship.upgrade") == 0)
     return schema_ship_upgrade ();
-  else if (strcmp (key, "ship.repair") == 0)
+  else if (strcasecmp (key, "ship.repair") == 0)
     return schema_ship_repair ();
-  else if (strcmp (key, "ship.self_destruct") == 0)
+  else if (strcasecmp (key, "ship.self_destruct") == 0)
     return schema_ship_self_destruct ();
 
   /* Port */
-  else if (strcmp (key, "port.info") == 0)
+  else if (strcasecmp (key, "port.info") == 0)
     return schema_port_info ();
-  else if (strcmp (key, "port.status") == 0)
+  else if (strcasecmp (key, "port.status") == 0)
     return schema_port_status ();
-  else if (strcmp (key, "port.describe") == 0)
+  else if (strcasecmp (key, "port.describe") == 0)
     return schema_port_describe ();
 
   /* Trade */
-  else if (strcmp (key, "trade.port_info") == 0)
+  else if (strcasecmp (key, "trade.port_info") == 0)
     return schema_trade_port_info ();
-  else if (strcmp (key, "trade.buy") == 0)
+  else if (strcasecmp (key, "trade.buy") == 0)
     return schema_trade_buy ();
-  else if (strcmp (key, "trade.sell") == 0)
+  else if (strcasecmp (key, "trade.sell") == 0)
     return schema_trade_sell ();
-  else if (strcmp (key, "trade.quote") == 0)
+  else if (strcasecmp (key, "trade.quote") == 0)
     return schema_trade_quote ();
-  else if (strcmp (key, "trade.jettison") == 0)
+  else if (strcasecmp (key, "trade.jettison") == 0)
     return schema_trade_jettison ();
-  else if (strcmp (key, "trade.offer") == 0)
+  else if (strcasecmp (key, "trade.offer") == 0)
     return schema_trade_offer ();
-  else if (strcmp (key, "trade.accept") == 0)
+  else if (strcasecmp (key, "trade.accept") == 0)
     return schema_trade_accept ();
-  else if (strcmp (key, "trade.cancel") == 0)
+  else if (strcasecmp (key, "trade.cancel") == 0)
     return schema_trade_cancel ();
-  else if (strcmp (key, "trade.history") == 0)
+  else if (strcasecmp (key, "trade.history") == 0)
     return schema_trade_history ();
 
   /* Move */
-  else if (strcmp (key, "move.describe_sector") == 0)
+  else if (strcasecmp (key, "move.describe_sector") == 0)
     return schema_move_describe_sector ();
-  else if (strcmp (key, "move.scan") == 0)
+  else if (strcasecmp (key, "move.scan") == 0)
     return schema_move_scan ();
-  else if (strcmp (key, "move.warp") == 0)
+  else if (strcasecmp (key, "move.warp") == 0)
     return schema_move_warp ();
-  else if (strcmp (key, "move.pathfind") == 0)
+  else if (strcasecmp (key, "move.pathfind") == 0)
     return schema_move_pathfind ();
-  else if (strcmp (key, "move.autopilot.start") == 0)
+  else if (strcasecmp (key, "move.autopilot.start") == 0)
     return schema_move_autopilot_start ();
-  else if (strcmp (key, "move.autopilot.stop") == 0)
+  else if (strcasecmp (key, "move.autopilot.stop") == 0)
     return schema_move_autopilot_stop ();
-  else if (strcmp (key, "move.autopilot.status") == 0)
+  else if (strcasecmp (key, "move.autopilot.status") == 0)
     return schema_move_autopilot_status ();
 
   /* Sector */
-  else if (strcmp (key, "sector.info") == 0)
+  else if (strcasecmp (key, "sector.info") == 0)
     return schema_sector_info ();
-  else if (strcmp (key, "sector.search") == 0)
+  else if (strcasecmp (key, "sector.search") == 0)
     return schema_sector_search ();
-  else if (strcmp (key, "sector.set_beacon") == 0)
+  else if (strcasecmp (key, "sector.set_beacon") == 0)
     return schema_sector_set_beacon ();
-  else if (strcmp (key, "sector.scan.density") == 0)
+  else if (strcasecmp (key, "sector.scan.density") == 0)
     return schema_sector_scan_density ();
-  else if (strcmp (key, "sector.scan") == 0)
+  else if (strcasecmp (key, "sector.scan") == 0)
     return schema_sector_scan ();
 
   /* Planet */
-  else if (strcmp (key, "planet.genesis") == 0)
+  else if (strcasecmp (key, "planet.genesis") == 0)
     return schema_planet_genesis ();
-  else if (strcmp (key, "planet.info") == 0)
+  else if (strcasecmp (key, "planet.info") == 0)
     return schema_planet_info ();
-  else if (strcmp (key, "planet.rename") == 0)
+  else if (strcasecmp (key, "planet.rename") == 0)
     return schema_planet_rename ();
-  else if (strcmp (key, "planet.land") == 0)
+  else if (strcasecmp (key, "planet.land") == 0)
     return schema_planet_land ();
-  else if (strcmp (key, "planet.launch") == 0)
+  else if (strcasecmp (key, "planet.launch") == 0)
     return schema_planet_launch ();
-  else if (strcmp (key, "planet.transfer_ownership") == 0)
+  else if (strcasecmp (key, "planet.transfer_ownership") == 0)
     return schema_planet_transfer_ownership ();
-  else if (strcmp (key, "planet.harvest") == 0)
+  else if (strcasecmp (key, "planet.harvest") == 0)
     return schema_planet_harvest ();
-  else if (strcmp (key, "planet.deposit") == 0)
+  else if (strcasecmp (key, "planet.deposit") == 0)
     return schema_planet_deposit ();
-  else if (strcmp (key, "planet.withdraw") == 0)
+  else if (strcasecmp (key, "planet.withdraw") == 0)
     return schema_planet_withdraw ();
 
 
 
   /* Citadel */
-  else if (strcmp (key, "citadel.build") == 0)
+  else if (strcasecmp (key, "citadel.build") == 0)
     return schema_citadel_build ();
-  else if (strcmp (key, "citadel.upgrade") == 0)
+  else if (strcasecmp (key, "citadel.upgrade") == 0)
     return schema_citadel_upgrade ();
 
   /* Combat */
-  else if (strcmp (key, "combat.attack") == 0)
+  else if (strcasecmp (key, "combat.attack") == 0)
     return schema_combat_attack ();
-  else if (strcmp (key, "combat.deploy_fighters") == 0)
+  else if (strcasecmp (key, "combat.deploy_fighters") == 0)
     return schema_combat_deploy_fighters ();
-  else if (strcmp (key, "combat.lay_mines") == 0)
+  else if (strcasecmp (key, "combat.lay_mines") == 0)
     return schema_combat_lay_mines ();
-  else if (strcmp (key, "combat.sweep_mines") == 0)
+  else if (strcasecmp (key, "combat.sweep_mines") == 0)
     return schema_combat_sweep_mines ();
-  else if (strcmp (key, "combat.status") == 0)
+  else if (strcasecmp (key, "combat.status") == 0)
     return schema_combat_status ();
-  else if (strcmp (key, "fighters.recall") == 0)
+  else if (strcasecmp (key, "fighters.recall") == 0)
     return schema_fighters_recall ();
+  else if (strcasecmp (key, "combat.deploy_mines") == 0)
+    return schema_combat_deploy_mines ();
+  else if (strcasecmp (key, "mines.recall") == 0)
+    return schema_mines_recall ();
 
   /* Deploy */
-  else if (strcmp (key, "deploy.fighters.list") == 0)
+  else if (strcasecmp (key, "deploy.fighters.list") == 0)
     return schema_deploy_fighters_list ();
-  else if (strcmp (key, "deploy.mines.list") == 0)
+  else if (strcasecmp (key, "deploy.mines.list") == 0)
     return schema_deploy_mines_list ();
 
   /* Chat */
-  else if (strcmp (key, "chat.send") == 0)
+  else if (strcasecmp (key, "chat.send") == 0)
     return schema_chat_send ();
-  else if (strcmp (key, "chat.broadcast") == 0)
+  else if (strcasecmp (key, "chat.broadcast") == 0)
     return schema_chat_broadcast ();
-  else if (strcmp (key, "chat.history") == 0)
+  else if (strcasecmp (key, "chat.history") == 0)
     return schema_chat_history ();
 
   /* Mail */
-  else if (strcmp (key, "mail.send") == 0)
+  else if (strcasecmp (key, "mail.send") == 0)
     return schema_mail_send ();
-  else if (strcmp (key, "mail.inbox") == 0)
+  else if (strcasecmp (key, "mail.inbox") == 0)
     return schema_mail_inbox ();
-  else if (strcmp (key, "mail.read") == 0)
+  else if (strcasecmp (key, "mail.read") == 0)
     return schema_mail_read ();
-  else if (strcmp (key, "mail.delete") == 0)
+  else if (strcasecmp (key, "mail.delete") == 0)
     return schema_mail_delete ();
 
   /* Notice */
-  else if (strcmp (key, "sys.notice.create") == 0)
+  else if (strcasecmp (key, "sys.notice.create") == 0)
     return schema_sys_notice_create ();
-  else if (strcmp (key, "notice.list") == 0)
+  else if (strcasecmp (key, "notice.list") == 0)
     return schema_notice_list ();
-  else if (strcmp (key, "notice.ack") == 0)
+  else if (strcasecmp (key, "notice.ack") == 0)
     return schema_notice_ack ();
 
   /* News */
-  else if (strcmp (key, "news.read") == 0)
+  else if (strcasecmp (key, "news.read") == 0)
     return schema_news_read ();
 
   /* Subscribe */
-  else if (strcmp (key, "subscribe.add") == 0)
+  else if (strcasecmp (key, "subscribe.add") == 0)
     return schema_subscribe_add ();
-  else if (strcmp (key, "subscribe.remove") == 0)
+  else if (strcasecmp (key, "subscribe.remove") == 0)
     return schema_subscribe_remove ();
-  else if (strcmp (key, "subscribe.list") == 0)
+  else if (strcasecmp (key, "subscribe.list") == 0)
     return schema_subscribe_list ();
-  else if (strcmp (key, "subscribe.catalog") == 0)
+  else if (strcasecmp (key, "subscribe.catalog") == 0)
     return schema_subscribe_catalog ();
 
   /* Bulk */
-  else if (strcmp (key, "bulk.execute") == 0)
+  else if (strcasecmp (key, "bulk.execute") == 0)
     return schema_bulk_execute ();
 
   /* No match found */
@@ -487,6 +494,8 @@ schema_keys (void)
   json_array_append_new (keys, json_string ("combat.sweep_mines"));
   json_array_append_new (keys, json_string ("combat.status"));
   json_array_append_new (keys, json_string ("fighters.recall"));
+  json_array_append_new (keys, json_string ("combat.deploy_mines"));
+  json_array_append_new (keys, json_string ("mines.recall"));
 
   /* Deploy */
   json_array_append_new (keys, json_string ("deploy.fighters.list"));
@@ -630,14 +639,14 @@ s2s_validate_payload (const char *type, json_t *payload, char **why)
     }
 
   /* --- s2s.health.check --- */
-  if (strcmp (type, "s2s.health.check") == 0)
+  if (strcasecmp (type, "s2s.health.check") == 0)
     {
       /* empty or object is fine */
       return 0;
     }
 
   /* --- s2s.broadcast.sweep --- */
-  if (strcmp (type, "s2s.broadcast.sweep") == 0)
+  if (strcasecmp (type, "s2s.broadcast.sweep") == 0)
     {
       json_t *since = json_object_get (payload, "since_ts");
       if (!since || !json_is_integer (since))
@@ -651,7 +660,7 @@ s2s_validate_payload (const char *type, json_t *payload, char **why)
     }
 
   /* --- s2s.health.ack --- */
-  if (strcmp (type, "s2s.health.ack") == 0)
+  if (strcasecmp (type, "s2s.health.ack") == 0)
     {
       if (!json_is_string (json_object_get (payload, "role")))
 	{
@@ -675,7 +684,7 @@ s2s_validate_payload (const char *type, json_t *payload, char **why)
     }
 
   /* --- s2s.command.push --- */
-  if (strcmp (type, "s2s.command.push") == 0)
+  if (strcasecmp (type, "s2s.command.push") == 0)
     {
       if (!json_is_string (json_object_get (payload, "cmd_type")))
 	{
@@ -1421,6 +1430,51 @@ schema_fighters_recall (void)
   json_t *data_schema = json_pack(
       "{s:s, s:s, s:s, s:o, s:[s,s], s:b}",
       "$id",      "ge://schema/fighters.recall.json",
+      "$schema",  "https://json-schema.org/draft/2020-12/schema",
+      "type",     "object",
+      "properties", data_props,
+      "required", "sector_id", "asset_id",
+      "additionalProperties", 0);
+
+  json_decref(data_props);
+  return data_schema;
+}
+
+static json_t *
+schema_combat_deploy_mines (void)
+{
+  json_t *data_props = json_pack(
+      "{s:o, s:o, s:o, s:o}",
+      "amount", json_pack("{s:s}", "type", "integer"),
+      "offense", json_pack("{s:s}", "type", "integer"),
+      "corporation_id", json_pack("{s:s}", "type", "integer"),
+      "mine_type", json_pack("{s:s}", "type", "integer")
+  );
+
+  json_t *data_schema = json_pack(
+      "{s:s, s:s, s:s, s:o, s:[s,s], s:b}",
+      "$id",      "ge://schema/combat.deploy_mines.json",
+      "$schema",  "https://json-schema.org/draft/2020-12/schema",
+      "type",     "object",
+      "properties", data_props,
+      "required", "amount", "offense",
+      "additionalProperties", json_false());
+
+  json_decref(data_props);
+  return data_schema;
+}
+
+static json_t *
+schema_mines_recall (void)
+{
+  json_t *data_props = json_pack(
+      "{s:{s:s}, s:{s:s}}",
+      "sector_id", "type", "integer",
+      "asset_id",  "type", "integer");
+
+  json_t *data_schema = json_pack(
+      "{s:s, s:s, s:s, s:o, s:[s,s], s:b}",
+      "$id",      "ge://schema/mines.recall.json",
       "$schema",  "https://json-schema.org/draft/2020-12/schema",
       "type",     "object",
       "properties", data_props,

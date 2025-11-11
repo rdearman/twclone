@@ -1,4 +1,5 @@
 #include <string.h>
+#include <strings.h>
 #include <stdio.h>
 #include <time.h>
 #include <jansson.h>
@@ -225,12 +226,12 @@ handle_event (const char *type, sqlite3 *db, sqlite3_stmt *ev_row)
 {
   /* Example: switch on type and run idempotent effects.
      Use UPSERTs / UNIQUE constraints in your domain tables to keep re-runnable. */
-  if (strcmp (type, "s2s.broadcast.sweep") == 0)
+  if (strcasecmp (type, "s2s.broadcast.sweep") == 0)
     {
       /* no-op placeholder; side effects should be idempotent */
       return 0;
     }
-  else if (strcmp (type, "ship.self_destruct.initiated") == 0)
+  else if (strcasecmp (type, "ship.self_destruct.initiated") == 0)
     {
       return handle_ship_self_destruct_initiated (db, ev_row);
     }
