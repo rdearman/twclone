@@ -1981,6 +1981,7 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
   rl_tick (ctx);
   send_all_json (ctx->fd, env);
   json_decref (env);
+  send_enveloped_ok (ctx->fd, root, "sector.set_beacon", NULL);
   return 0;
 }
 
