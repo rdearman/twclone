@@ -92,9 +92,7 @@ db_get_handle (void)
   // =================================================================
   if (!mutex_initialized)
   {
-      LOGI("DB Mutex initialization starting...");
       pthread_mutexattr_t attr;
-      // 1a. Initialize attributes
       if (pthread_mutexattr_init(&attr) != 0) {
           LOGE("FATAL: Failed to initialize mutex attributes.");
           return NULL;
@@ -117,7 +115,6 @@ db_get_handle (void)
       pthread_mutexattr_destroy(&attr);
 
       mutex_initialized = true;
-      LOGI("DB Mutex initialized as RECURSIVE.");
   }
   // =================================================================
   
@@ -2542,7 +2539,7 @@ const char *insert_default_sql[] = {
 
 ///////////// S2S /////////////////////////
 
-static const char *ENGINE_BOOTSTRAP_SQL = "BEGIN IMMEDIATE;\n"
+static const char *ENGINE_BOOTSTRAP_SQL = ""
   /* --- S2S keyring (HMAC) --- */
   "CREATE TABLE IF NOT EXISTS s2s_keys(\n"
   "  key_id TEXT PRIMARY KEY,\n"
@@ -2630,7 +2627,7 @@ static const char *ENGINE_BOOTSTRAP_SQL = "BEGIN IMMEDIATE;\n"
   "  ts INTEGER NOT NULL,\n"
   "  cmd_type TEXT NOT NULL,\n"
   "  correlation_id TEXT,\n"
-  "  actor_player_id INTEGER,\n" "  details TEXT\n" ");\n" "\n" "COMMIT;\n"
+  "  actor_player_id INTEGER,\n" "  details TEXT\n" ");\n" "\n"
   "CREATE TABLE IF NOT EXISTS news_feed(   "
   "  news_id INTEGER PRIMARY KEY,   "
   "  published_ts INTEGER NOT NULL,   "
@@ -2640,7 +2637,9 @@ static const char *ENGINE_BOOTSTRAP_SQL = "BEGIN IMMEDIATE;\n"
   "  source_ids TEXT -- JSON array of engine_events.id's that contributed to this article   "
   ");   "
   "CREATE INDEX ix_news_feed_pub_ts ON news_feed(published_ts);   "
-  "CREATE INDEX ix_news_feed_exp_ts ON news_feed(expiration_ts);   "
+  "CREATE INDEX ix_news_feed_exp_ts ON news_feed(expiration_ts);";
+
+static const char *CREATE_VIEWS_SQL =
   /* --- Human Readable view --- */
   "CREATE VIEW  IF NOT EXISTS cronjobs AS "
   "SELECT "
@@ -2728,50 +2727,33 @@ static const char *MIGRATE_C_SQL =
   
 
 int
-db_engine_bootstrap (sqlite3 *db)
+db_engine_bootstrap (void)
 {
-  char *err = NULL;
-  int rc = sqlite3_exec (db, ENGINE_BOOTSTRAP_SQL, NULL, NULL, &err);
-  if (rc != SQLITE_OK)
+  sqlite3 *db = db_get_handle ();
+  if (!db)
     {
-      fprintf (stderr, "[db] Non-Fatal Error- Engine bootstrap failed: %s\n",
-	       err ? err : "(unknown)");
-      sqlite3_free (err);
-      return -1;
-    }
-  // MIGRATE_A_SQL
-  rc = sqlite3_exec (db, MIGRATE_A_SQL, NULL, NULL, &err);
-  if (rc != SQLITE_OK)
-    {
-      fprintf (stderr, "[db] Engine table update failed: %s\n",
-	       err ? err : "(unknown)");
-      sqlite3_free (err);
-      return -1;
+      LOGE ("Failed to get DB handle in db_engine_bootstrap");
+      return 0;
     }
 
-  // MIGRATE_B_SQL
-  rc = sqlite3_exec (db, MIGRATE_B_SQL, NULL, NULL, &err);
+  char *err_msg = 0;
+  int rc = sqlite3_exec (db, ENGINE_BOOTSTRAP_SQL, 0, 0, &err_msg);
+
   if (rc != SQLITE_OK)
     {
-      fprintf (stderr, "[db] Engine table update failed: %s\n",
-	       err ? err : "(unknown)");
-      sqlite3_free (err);
-      return -1;
+      LOGE ("Engine bootstrap failed: %s", err_msg);
+      sqlite3_free (err_msg);
+      return 0;
     }
 
-  // MIGRATE_C_SQL
-  rc = sqlite3_exec (db, MIGRATE_C_SQL, NULL, NULL, &err);
+  rc = sqlite3_exec (db, CREATE_VIEWS_SQL, 0, 0, &err_msg);
   if (rc != SQLITE_OK)
     {
-      fprintf (stderr, "[db] Engine table update failed: %s\n",
-	       err ? err : "(unknown)");
-      sqlite3_free (err);
-      return -1;
+      LOGE ("Engine create views failed: %s", err_msg);
+      sqlite3_free (err_msg);
+      return 0;
     }
-  else
-    fprintf(stderr, "[db] Ran Economy Creation\n");
-
-  return 0;
+  return 1;
 }
 
 /* Number of tables */
@@ -2961,7 +2943,7 @@ db_init (void)
       /* 	  goto cleanup; */
       /* 	} */
     }
-  if( !db_engine_bootstrap (db_handle))
+  if( !db_engine_bootstrap ())
     {
       fprintf(stderr, "PROBLEM WITH ENGINE CREATION");
     }
@@ -2971,6 +2953,7 @@ db_init (void)
 
   // If we've made it here, all steps were successful.
   ret_code = 0;
+  LOGI("db_init completed successfully");
 
 cleanup:
   /* Step 4: Finalize the statement if it was successfully prepared. */

@@ -534,7 +534,7 @@ def mail_delete_flow(ctx: Context):
     except ValueError:
         print("Invalid Mail ID."); return
 
-    r = ctx.conn.rpc("mail.delete", {"id": mid})
+    r = ctx.conn.rpc("mail.delete", {"ids": [mid]})
     ctx.state["last_rpc"] = r
     if r.get("status") == "ok":
         print(f"Mail ID {mid} deleted.")

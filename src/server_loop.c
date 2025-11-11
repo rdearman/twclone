@@ -999,19 +999,19 @@ process_message (client_ctx_t *ctx, json_t *root)
 /* ---------- MAIL/Announcements ---------- */
   else if (!strcmp (c, "mail.send"))
     {
-      rc = cmd_mail_send (ctx, root);	/* NIY stub */
+      rc = cmd_mail_send (ctx, root);
     }
   else if (!strcmp (c, "mail.inbox"))
     {
-      rc = cmd_mail_inbox (ctx, root);	/* NIY stub */
+      rc = cmd_mail_inbox (ctx, root);
     }
   else if (!strcmp (c, "mail.read"))
     {
-      rc = cmd_mail_read (ctx, root);	/* NIY stub */
+      rc = cmd_mail_read (ctx, root);
     }
   else if (!strcmp (c, "mail.delete"))
     {
-      rc = cmd_mail_delete (ctx, root);	/* NIY stub */
+      rc = cmd_mail_delete (ctx, root);
     }
   else if (strcmp (c, "sys.notice.create") == 0)
     {
