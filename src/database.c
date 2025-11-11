@@ -23,6 +23,8 @@
 pthread_mutex_t db_mutex;
 
 
+
+
 // Helper flag to ensure initialization runs only once
 static bool db_mutex_initialized = false;
 
@@ -423,7 +425,8 @@ const char *create_table_sql[] = {
   " movingto INTEGER,  "
   " loggedin INTEGER,  "
   " lastplanet INTEGER,  "
-  " score INTEGER);  ",
+  " score INTEGER,  "
+  " last_news_read_timestamp INTEGER DEFAULT 0);  ",
 
 
   " CREATE TABLE IF NOT EXISTS player_types (type INTEGER PRIMARY KEY AUTOINCREMENT, description TEXT); ",
@@ -2539,105 +2542,108 @@ const char *insert_default_sql[] = {
 
 ///////////// S2S /////////////////////////
 
-static const char *ENGINE_BOOTSTRAP_SQL = ""
+static const char *engine_bootstrap_sql_statements[] = {
   /* --- S2S keyring (HMAC) --- */
-  "CREATE TABLE IF NOT EXISTS s2s_keys(\n"
-  "  key_id TEXT PRIMARY KEY,\n"
-  "  key_b64 TEXT NOT NULL,\n"
-  "  is_default_tx INTEGER NOT NULL DEFAULT 0,\n"
-  "  active INTEGER NOT NULL DEFAULT 1,\n"
-  "  created_ts INTEGER NOT NULL\n"
-  ");\n"
-  "INSERT OR IGNORE INTO s2s_keys(key_id,key_b64,is_default_tx,active,created_ts)\n"
-  "VALUES('k0','c3VwZXJzZWNyZXRrZXlzZWNyZXRrZXlzZWNyZXQxMjM0NTY3OA==',1,1,strftime('%s','now'));\n"
-  "\n"
+  "CREATE TABLE IF NOT EXISTS s2s_keys("
+  "  key_id TEXT PRIMARY KEY,"
+  "  key_b64 TEXT NOT NULL,"
+  "  is_default_tx INTEGER NOT NULL DEFAULT 0,"
+  "  active INTEGER NOT NULL DEFAULT 1,"
+  "  created_ts INTEGER NOT NULL"
+  ");",
+  "INSERT OR IGNORE INTO s2s_keys(key_id,key_b64,is_default_tx,active,created_ts)"
+  "VALUES('k0','c3VwZXJzZWNyZXRrZXlzZWNyZXRrZXlzZWNyZXQxMjM0NTY3OA==',1,1,strftime('%s','now'));",
   /* --- Engine cron/scheduling --- */
-  "CREATE TABLE IF NOT EXISTS cron_tasks(\n"
-  "  id INTEGER PRIMARY KEY,\n"
-  "  name TEXT UNIQUE NOT NULL,\n"
-  "  schedule TEXT NOT NULL,\n"
-  "  last_run_at INTEGER,\n"
-  "  next_due_at INTEGER NOT NULL,\n"
-  "  enabled INTEGER NOT NULL DEFAULT 1,\n"
-  "  payload TEXT\n"
-  ");\n"
-  "INSERT OR IGNORE INTO cron_tasks(name,schedule,last_run_at,next_due_at,enabled,payload) VALUES\n"
-  "('daily_turn_reset','daily@03:00Z',NULL,strftime('%s','now'),1,NULL),\n"
-  "('terra_replenish','daily@04:00Z',NULL,strftime('%s','now'),1,NULL),\n"
-  "('planet_growth','every:10m',NULL,strftime('%s','now'),1,NULL),\n"
-  "('fedspace_cleanup','every:2m',NULL,strftime('%s','now'),1,NULL),\n"
-  "('autouncloak_sweeper','every:15m',NULL,strftime('%s','now'),1,NULL),\n"
-  "('npc_step','every:30s',NULL,strftime('%s','now'),1,NULL),\n"
-  "('broadcast_ttl_cleanup','every:5m',NULL,strftime('%s','now'),1,NULL),\n"
-  "('news_collator','daily@06:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','6 hours'),1,NULL);\n"
-  "\n"
+  "CREATE TABLE IF NOT EXISTS cron_tasks("
+  "  id INTEGER PRIMARY KEY,"
+  "  name TEXT UNIQUE NOT NULL,"
+  "  schedule TEXT NOT NULL,"
+  "  last_run_at INTEGER,"
+  "  next_due_at INTEGER NOT NULL,"
+  "  enabled INTEGER NOT NULL DEFAULT 1,"
+  "  payload TEXT"
+  ");",
+  "INSERT OR IGNORE INTO cron_tasks(name,schedule,last_run_at,next_due_at,enabled,payload) VALUES"
+  "('daily_turn_reset','daily@03:00Z',NULL,strftime('%s','now'),1,NULL),"
+  "('terra_replenish','daily@04:00Z',NULL,strftime('%s','now'),1,NULL),"
+  "('planet_growth','every:10m',NULL,strftime('%s','now'),1,NULL),"
+  "('fedspace_cleanup','every:2m',NULL,strftime('%s','now'),1,NULL),"
+  "('autouncloak_sweeper','every:15m',NULL,strftime('%s','now'),1,NULL),"
+  "('npc_step','every:30s',NULL,strftime('%s','now'),1,NULL),"
+  "('broadcast_ttl_cleanup','every:5m',NULL,strftime('%s','now'),1,NULL),"
+  "('news_collator','daily@06:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','6 hours'),1,NULL);",
   /* --- Server→Engine event rail (separate from your existing system_events) --- */
-  "CREATE TABLE IF NOT EXISTS engine_events(\n"
-  "  id INTEGER PRIMARY KEY,\n"
-  "  ts INTEGER NOT NULL,\n"
-  "  type TEXT NOT NULL,\n"
-  "  actor_player_id INTEGER,\n"
-  "  sector_id INTEGER,\n"
-  "  payload TEXT NOT NULL,\n"
-  "  idem_key TEXT, \n"
-  " processed_at INTEGER\n"
-  ");\n"
-  "CREATE UNIQUE INDEX IF NOT EXISTS idx_engine_events_idem ON engine_events(idem_key) WHERE idem_key IS NOT NULL;\n"
-  "CREATE INDEX IF NOT EXISTS idx_engine_events_ts ON engine_events(ts);\n"
-  "CREATE INDEX IF NOT EXISTS idx_engine_events_actor_ts ON engine_events(actor_player_id, ts);\n"
-  "CREATE INDEX IF NOT EXISTS idx_engine_events_sector_ts ON engine_events(sector_id, ts);\n"
-  "\n"
+  "CREATE TABLE IF NOT EXISTS engine_events("
+  "  id INTEGER PRIMARY KEY,"
+  "  ts INTEGER NOT NULL,"
+  "  type TEXT NOT NULL,"
+  "  actor_player_id INTEGER,"
+  "  sector_id INTEGER,"
+  "  payload TEXT NOT NULL,"
+  "  idem_key TEXT, "
+  " processed_at INTEGER"
+  ");",
+  "CREATE UNIQUE INDEX IF NOT EXISTS idx_engine_events_idem ON engine_events(idem_key) WHERE idem_key IS NOT NULL;",
+  "CREATE INDEX IF NOT EXISTS idx_engine_events_ts ON engine_events(ts);",
+  "CREATE INDEX IF NOT EXISTS idx_engine_events_actor_ts ON engine_events(actor_player_id, ts);",
+  "CREATE INDEX IF NOT EXISTS idx_engine_events_sector_ts ON engine_events(sector_id, ts);",
   /* --- Engine watermark --- */
-  "CREATE TABLE IF NOT EXISTS engine_offset(\n"
-  "  key TEXT PRIMARY KEY,\n"
-  "  last_event_id INTEGER NOT NULL,\n"
-  "  last_event_ts INTEGER NOT NULL\n"
-  ");\n"
-  "INSERT OR IGNORE INTO engine_offset(key,last_event_id,last_event_ts) VALUES('events',0,0);\n"
-  "\n"
+  "CREATE TABLE IF NOT EXISTS engine_offset("
+  "  key TEXT PRIMARY KEY,"
+  "  last_event_id INTEGER NOT NULL,"
+  "  last_event_ts INTEGER NOT NULL"
+  ");",
+  "INSERT OR IGNORE INTO engine_offset(key,last_event_id,last_event_ts) VALUES('events',0,0);",
   /* --- Deadletter for bad events --- */
-  "CREATE TABLE IF NOT EXISTS engine_events_deadletter(\n"
-  "  id INTEGER PRIMARY KEY,\n"
-  "  ts INTEGER NOT NULL,\n"
-  "  type TEXT NOT NULL,\n"
-  "  payload TEXT NOT NULL,\n"
-  "  error TEXT NOT NULL,\n" "  moved_at INTEGER NOT NULL\n" ");\n" "\n"
+  "CREATE TABLE IF NOT EXISTS engine_events_deadletter("
+  "  id INTEGER PRIMARY KEY,"
+  "  ts INTEGER NOT NULL,"
+  "  type TEXT NOT NULL,"
+  "  payload TEXT NOT NULL,"
+  "  error TEXT NOT NULL,"
+  "  moved_at INTEGER NOT NULL"
+  ");",
   /* --- Engine→Server command rail --- */
-  "CREATE TABLE IF NOT EXISTS engine_commands(\n"
-  "  id INTEGER PRIMARY KEY,\n"
-  "  type TEXT NOT NULL,\n"
-  "  payload TEXT NOT NULL,\n"
-  "  status TEXT NOT NULL DEFAULT 'ready',\n"
-  "  priority INTEGER NOT NULL DEFAULT 100,\n"
-  "  attempts INTEGER NOT NULL DEFAULT 0,\n"
-  "  created_at INTEGER NOT NULL,\n"
-  "  due_at INTEGER NOT NULL,\n"
-  "  started_at INTEGER,\n"
-  "  finished_at INTEGER,\n"
-  "  worker TEXT,\n"
-  "  idem_key TEXT\n"
-  ");\n"
-  "CREATE UNIQUE INDEX IF NOT EXISTS idx_engine_cmds_idem ON engine_commands(idem_key) WHERE idem_key IS NOT NULL;\n"
-  "CREATE INDEX IF NOT EXISTS idx_engine_cmds_status_due ON engine_commands(status, due_at);\n"
-  "CREATE INDEX IF NOT EXISTS idx_engine_cmds_prio_due ON engine_commands(priority, due_at);\n"
-  "\n"
+  "CREATE TABLE IF NOT EXISTS engine_commands("
+  "  id INTEGER PRIMARY KEY,"
+  "  type TEXT NOT NULL,"
+  "  payload TEXT NOT NULL,"
+  "  status TEXT NOT NULL DEFAULT 'ready',"
+  "  priority INTEGER NOT NULL DEFAULT 100,"
+  "  attempts INTEGER NOT NULL DEFAULT 0,"
+  "  created_at INTEGER NOT NULL,"
+  "  due_at INTEGER NOT NULL,"
+  "  started_at INTEGER,"
+  "  finished_at INTEGER,"
+  "  worker TEXT,"
+  "  idem_key TEXT"
+  ");",
+  "CREATE UNIQUE INDEX IF NOT EXISTS idx_engine_cmds_idem ON engine_commands(idem_key) WHERE idem_key IS NOT NULL;",
+  "CREATE INDEX IF NOT EXISTS idx_engine_cmds_status_due ON engine_commands(status, due_at);",
+  "CREATE INDEX IF NOT EXISTS idx_engine_cmds_prio_due ON engine_commands(priority, due_at);",
   /* --- Engine audit trail --- */
-  "CREATE TABLE IF NOT EXISTS engine_audit(\n"
-  "  id INTEGER PRIMARY KEY,\n"
-  "  ts INTEGER NOT NULL,\n"
-  "  cmd_type TEXT NOT NULL,\n"
-  "  correlation_id TEXT,\n"
-  "  actor_player_id INTEGER,\n" "  details TEXT\n" ");\n" "\n"
+  "CREATE TABLE IF NOT EXISTS engine_audit("
+  "  id INTEGER PRIMARY KEY,"
+  "  ts INTEGER NOT NULL,"
+  "  cmd_type TEXT NOT NULL,"
+  "  correlation_id TEXT,"
+  "  actor_player_id INTEGER,"
+  "  details TEXT"
+  ");",
   "CREATE TABLE IF NOT EXISTS news_feed(   "
   "  news_id INTEGER PRIMARY KEY,   "
   "  published_ts INTEGER NOT NULL,   "
   "  expiration_ts INTEGER NOT NULL,   "
   "  news_category TEXT NOT NULL,   "
   "  article_text TEXT NOT NULL,   "
-  "  source_ids TEXT -- JSON array of engine_events.id's that contributed to this article   "
-  ");   "
-  "CREATE INDEX ix_news_feed_pub_ts ON news_feed(published_ts);   "
-  "CREATE INDEX ix_news_feed_exp_ts ON news_feed(expiration_ts);";
+  "  source_ids TEXT"
+  ");",
+  "CREATE INDEX ix_news_feed_pub_ts ON news_feed(published_ts);",
+  "CREATE INDEX ix_news_feed_exp_ts ON news_feed(expiration_ts);"
+};
+
+static const size_t engine_bootstrap_sql_count =
+  sizeof (engine_bootstrap_sql_statements) / sizeof (engine_bootstrap_sql_statements[0]);
 
 static const char *CREATE_VIEWS_SQL =
   /* --- Human Readable view --- */
@@ -2725,6 +2731,13 @@ static const char *MIGRATE_C_SQL =
   "BEGIN IMMEDIATE;"
   "COMMIT;";
   
+/* Number of tables */
+static const size_t create_table_count =
+  sizeof (create_table_sql) / sizeof (create_table_sql[0]);
+/* Number of default inserts */
+static const size_t insert_default_count =
+  sizeof (insert_default_sql) / sizeof (insert_default_sql[0]);
+
 
 int
 db_engine_bootstrap (void)
@@ -2737,13 +2750,19 @@ db_engine_bootstrap (void)
     }
 
   char *err_msg = 0;
-  int rc = sqlite3_exec (db, ENGINE_BOOTSTRAP_SQL, 0, 0, &err_msg);
-
-  if (rc != SQLITE_OK)
+  int rc = 0; // Declare rc here
+  for (size_t i = 0; i < engine_bootstrap_sql_count; ++i)
     {
-      LOGE ("Engine bootstrap failed: %s", err_msg);
-      sqlite3_free (err_msg);
-      return 0;
+      const char *sql_stmt = engine_bootstrap_sql_statements[i];
+      int rc = sqlite3_exec (db, sql_stmt, 0, 0, &err_msg);
+
+      if (rc != SQLITE_OK)
+        {
+          LOGE ("Engine bootstrap SQL statement failed: %s", sql_stmt);
+          LOGE ("Engine bootstrap failed: %s", err_msg);
+          sqlite3_free (err_msg);
+          return 0;
+        }
     }
 
   rc = sqlite3_exec (db, CREATE_VIEWS_SQL, 0, 0, &err_msg);
@@ -2755,15 +2774,6 @@ db_engine_bootstrap (void)
     }
   return 1;
 }
-
-/* Number of tables */
-static const size_t create_table_count =
-  sizeof (create_table_sql) / sizeof (create_table_sql[0]);
-/* Number of default inserts */
-static const size_t insert_default_count =
-  sizeof (insert_default_sql) / sizeof (insert_default_sql[0]);
-
-
 
 static int
 urandom_bytes (void *buf, size_t n)
@@ -2945,7 +2955,7 @@ db_init (void)
     }
   if( !db_engine_bootstrap ())
     {
-      fprintf(stderr, "PROBLEM WITH ENGINE CREATION");
+      LOGE("PROBLEM WITH ENGINE CREATION");
     }
   
   (void) db_seed_cron_tasks (db_handle);
