@@ -292,6 +292,75 @@ def cli_subscriptions_remove(ctx):
         print(_json.dumps(r, ensure_ascii=False, indent=2))
     except Exception:
         print(r)
+
+@register("subscriptions_list_flow")
+def subscriptions_list_flow(ctx: Context):
+    r = ctx.conn.rpc("subscribe.list", {})
+    ctx.state["last_rpc"] = r
+    if r.get("status") == "ok":
+        data = r.get("data") or {}
+        items = data.get("items") or []
+        if items:
+            print("Current subscriptions:")
+            for item in items:
+                locked_str = " (locked)" if item.get("locked") else ""
+                print(f"  - {item.get('event_type')}{locked_str}")
+        else:
+            print("No active subscriptions.")
+    else:
+        _pp(r)
+
+@register("subscriptions_add_flow")
+def subscriptions_add_flow(ctx: Context):
+    # Get available topics from the server
+    catalog_resp = ctx.conn.rpc("subscribe.catalog", {})
+    if catalog_resp.get("status") != "ok":
+        print("Could not retrieve subscription catalog from server.")
+        _pp(catalog_resp)
+        return
+
+    catalog_data = catalog_resp.get("data") or {}
+    available_topics = catalog_data.get("items") or []
+
+    if not available_topics:
+        print("No available subscription topics found on the server.")
+        return
+
+    print("Available subscription topics:")
+    for i, topic in enumerate(available_topics):
+        print(f"  {i+1}: {topic.get('event_type')} - {topic.get('description')}")
+
+    try:
+        choice = int(input("Choose a topic to subscribe to: "))
+        if 1 <= choice <= len(available_topics):
+            selected_topic = available_topics[choice - 1].get("event_type")
+        else:
+            print("Invalid choice.")
+            return
+    except ValueError:
+        print("Invalid input.")
+        return
+
+    if selected_topic:
+        add_resp = ctx.conn.rpc("subscribe.add", {"event_type": selected_topic})
+        if add_resp.get("status") == "ok":
+            print(f"Successfully subscribed to {selected_topic}.")
+        else:
+            print(f"Failed to subscribe to {selected_topic}.")
+            _pp(add_resp)
+
+@register("subscriptions_remove_flow")
+def subscriptions_remove_flow(ctx: Context):
+    topic = input("Topic to remove: ").strip()
+    if not topic:
+        print("Cancelled.")
+        return
+    r = ctx.conn.rpc("subscribe.remove", {"event_type": topic})
+    if r.get("status") == "ok":
+        print(f"Successfully unsubscribed from {topic}.")
+    else:
+        print(f"Failed to unsubscribe from {topic}.")
+        _pp(r)
 # --- END AUTO-ADDED SUBSCRIPTIONS ---
 
 
@@ -383,6 +452,95 @@ def cli_mail_delete(ctx):
         print(_json.dumps(r, ensure_ascii=False, indent=2))
     except Exception:
         print(r)
+
+@register("mail_inbox_flow")
+def mail_inbox_flow(ctx: Context):
+    r = ctx.conn.rpc("mail.inbox", {"limit": 20})
+    ctx.state["last_rpc"] = r
+    if r.get("status") == "ok":
+        data = r.get("data") or {}
+        items = data.get("items") or []
+        if items:
+            print("\n--- Inbox ---")
+            for item in items:
+                mail_id = item.get("id")
+                sender = item.get("sender_name") or f"ID: {item.get('sender_id')}"
+                subject = item.get("subject") or "(no subject)"
+                sent_at = item.get("sent_at") or "unknown time"
+                print(f"  ID: {mail_id:<4} From: {sender:<15} Subject: {subject:<30} Sent: {sent_at}")
+        else:
+            print("Inbox is empty.")
+    else:
+        _pp(r)
+
+@register("mail_read_flow")
+def mail_read_flow(ctx: Context):
+    try:
+        mid = int(input("Mail ID to read: ").strip())
+    except ValueError:
+        print("Invalid Mail ID."); return
+
+    r = ctx.conn.rpc("mail.read", {"id": mid})
+    ctx.state["last_rpc"] = r
+    if r.get("status") == "ok":
+        data = r.get("data") or {}
+        if data:
+            sender = data.get("sender_name") or f"ID: {data.get('sender_id')}"
+            subject = data.get("subject") or "(no subject)"
+            sent_at = data.get("sent_at") or "unknown time"
+            body = data.get("body") or "(empty message)"
+            print(f"\n--- Mail ID: {mid} ---")
+            print(f"From: {sender}")
+            print(f"Subject: {subject}")
+            print(f"Sent: {sent_at}")
+            print("-" * 30)
+            print(body)
+            print("-" * 30)
+        else:
+            print(f"Mail ID {mid} not found or no content.")
+    else:
+        _pp(r)
+
+@register("mail_send_flow")
+def mail_send_flow(ctx: Context):
+    to = input("To (player name or ID): ").strip()
+    if not to:
+        print("Recipient cannot be empty. Cancelled."); return
+    subj = input("Subject: ").strip()
+    body = input("Body (enter on a new line, then Ctrl+D to finish): ")
+    
+    # Read multi-line input for body
+    lines = []
+    while True:
+        try:
+            line = input()
+            lines.append(line)
+        except EOFError:
+            break
+    body = "\n".join(lines)
+
+    r = ctx.conn.rpc("mail.send", {"to": to, "subject": subj, "body": body})
+    ctx.state["last_rpc"] = r
+    if r.get("status") == "ok":
+        print(f"Mail sent to {to}.")
+    else:
+        print(f"Failed to send mail to {to}.")
+        _pp(r)
+
+@register("mail_delete_flow")
+def mail_delete_flow(ctx: Context):
+    try:
+        mid = int(input("Mail ID to delete: ").strip())
+    except ValueError:
+        print("Invalid Mail ID."); return
+
+    r = ctx.conn.rpc("mail.delete", {"id": mid})
+    ctx.state["last_rpc"] = r
+    if r.get("status") == "ok":
+        print(f"Mail ID {mid} deleted.")
+    else:
+        print(f"Failed to delete Mail ID {mid}.")
+        _pp(r)
 # --- END AUTO-ADDED CHAT_MAIL ---
 
 
@@ -661,9 +819,6 @@ def sector_density_scan_flow(ctx: Context):
     else:
         print("(unexpected response shape)")
 
-    print("\n--- Raw ---")
-    call_handler("print_last_rpc", ctx)
-
 
 @register("pathfind_flow")
 def pathfind_flow(ctx: Context):
@@ -845,8 +1000,13 @@ def _pp_settings_blob(resp):
     avoid = d.get("avoid") or d.get("avoids") or []
     notes = d.get("notes") or []
     print("- prefs:")
-    for k, v in prefs.items():
-        print(f"  {k}: {v}")
+    if isinstance(prefs, list):
+        for p in prefs:
+            if isinstance(p, dict):
+                print(f"  {p.get('key')}: {p.get('value')}")
+    elif isinstance(prefs, dict):
+        for k, v in prefs.items():
+            print(f"  {k}: {v}")
     print("- subscriptions:")
     for s in subs:
         if isinstance(s, dict):
@@ -902,7 +1062,7 @@ def prefs_toggle_24h(ctx: Context):
     items = (cur.get("data") or {}).get("prefs") or []
     now = {i["key"]: i.get("value") for i in items if isinstance(i, dict) and "key" in i}
     new_val = not str(now.get("ui.clock_24h","true")).lower() in ("true","1","yes")
-    r = ctx.conn.rpc("player.set_prefs", {"items":[{"key":"ui.clock_24h","type":"bool","value": "true" if new_val else "false"}]})
+    r = ctx.conn.rpc("player.set_prefs", {"items":[{"key":"ui.clock_24h","type":"bool","value": new_val}]})
     _pp(r)
 
 @register("prefs_set_locale")
@@ -934,7 +1094,10 @@ def avoid_add_flow(ctx: Context):
     except ValueError:
         print("Invalid sector id."); return
     r = ctx.conn.rpc("nav.avoid.add", {"sector_id": sid})
-    _pp(r)
+    if r.get("status") == "ok":
+        print(f"Sector {sid} added to avoid list.")
+    else:
+        _pp(r) # Fallback to pretty print full response on error
 
 @register("avoid_remove_flow")
 def avoid_remove_flow(ctx: Context):
@@ -943,7 +1106,25 @@ def avoid_remove_flow(ctx: Context):
     except ValueError:
         print("Invalid sector id."); return
     r = ctx.conn.rpc("nav.avoid.remove", {"sector_id": sid})
-    _pp(r)
+    if r.get("status") == "ok":
+        print(f"Sector {sid} removed from avoid list.")
+    else:
+        _pp(r) # Fallback to pretty print full response on error
+
+
+@register("avoid_list_flow")
+def avoid_list_flow(ctx: Context):
+    r = ctx.conn.rpc("nav.avoid.list", {})
+    ctx.state["last_rpc"] = r
+    if r.get("status") == "ok":
+        data = r.get("data") or {}
+        items = data.get("items") or []
+        if items:
+            print("Sectors to avoid: " + ", ".join(map(str, items)))
+        else:
+            print("No sectors in avoid list.")
+    else:
+        _pp(r) # Fallback to pretty print full response on error
 
 
 def get_data(resp: Dict[str, Any]) -> Dict[str, Any]:
@@ -1900,6 +2081,48 @@ def land_flow(ctx: Context):
     r = ctx.conn.rpc("planet.land", {"planet_id": pid})
     print(json.dumps(r, ensure_ascii=False, indent=2))
 
+@register("planet_info_flow")
+def planet_info_flow(ctx: Context):
+    """
+    Get info for a planet in the current sector.
+    - If no planets, print a message.
+    - If planets, prompt the user to select one.
+    - Call planet.info with the selected planet's ID.
+    """
+    planets = ctx.last_sector_desc.get("planets") or []
+
+    if not planets:
+        print("No planet in sector")
+        return
+
+    if len(planets) == 1:
+        selected_planet = planets[0]
+    else:
+        print("Planets in this sector:")
+        for i, planet in enumerate(planets):
+            print(f"  {i+1}: {planet.get('name', 'Unnamed Planet')} (ID: {planet.get('id')})")
+
+        try:
+            choice = int(input("Which planet? "))
+            if 1 <= choice <= len(planets):
+                selected_planet = planets[choice - 1]
+            else:
+                print("Invalid choice.")
+                return
+        except ValueError:
+            print("Invalid input.")
+            return
+
+    planet_id = selected_planet.get("id")
+    if planet_id is None:
+        print("Could not determine planet ID.")
+        return
+
+    resp = ctx.conn.rpc("planet.info", {"planet_id": planet_id})
+    ctx.state["last_rpc"] = resp
+    # Pretty print the response
+    print(json.dumps(resp, indent=2))
+
 @register("map_flow")
 def map_flow(ctx: Context):
     # Fallback generic call; adjust to your server's map endpoint
@@ -2280,6 +2503,3 @@ def sector_density_scan_flow(ctx: Context):
             print(f"{sid:>6}   {dens:>7}")
     else:
         print("(unexpected response shape)")
-
-    print("\n--- Raw ---")
-    call_handler("print_last_rpc", ctx)

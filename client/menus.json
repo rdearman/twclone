@@ -45,13 +45,6 @@
           }
         },
         {
-          "key": "v",
-          "label": "(V) View Game Status",
-          "action": {
-            "submenu": "GAME_STATUS"
-          }
-        },
-        {
           "key": "r",
           "label": "(R) Release Beacon",
           "action": {
@@ -228,13 +221,6 @@
           }
         },
         {
-          "key": "a",
-          "label": "(A) Autopilot",
-          "action": {
-            "submenu": "MOVE"
-          }
-        },
-        {
           "key": "g",
           "label": "(G) Get game clock",
           "action": {
@@ -248,25 +234,7 @@
           "key": "p",
           "label": "(P) Planet Info",
           "action": {
-            "rpc": {
-              "command": "planet.info",
-              "data": {
-                "planet_id": "<prompt:int:Planet ID>"
-              }
-            }
-          }
-        },
-        {
-          "key": "d",
-          "label": "(D) Describe Sector",
-          "action": {
-            "rpc": {
-              "command": "move.describe_sector",
-              "data": {
-                "sector_id": "<ctx:current_sector_id>"
-              }
-            },
-            "post": "print_last_rpc"
+            "pycall": "planet_info_flow"
           }
         },
         {
@@ -283,18 +251,18 @@
             "pycall": "rename_ship_flow"
           }
         },
+	  {
+	      "key": "d",
+	      "label": "(D) Density Scan (sector.scan.density)",
+	      "action": { "pycall": "sector_density_scan_flow" }
+	  },
         {
           "key": "q",
           "label": "(Q) Back to Main Menu",
           "action": {
             "back": true
           }
-        },
-	  {
-	      "key": "n",
-	      "label": "(N) Density Scan (sector.scan.density)",
-	      "action": { "pycall": "sector_density_scan_flow" }
-	  }
+        }
       ]
     },
     "DOCK": {
@@ -443,28 +411,6 @@
               "data": {
                 "amount": "<prompt:int:Amount>"
               }
-            }
-          }
-        },
-        {
-          "key": "q",
-          "label": "(Q) Back to Main Menu",
-          "action": {
-            "back": true
-          }
-        }
-      ]
-    },
-    "GAME_STATUS": {
-      "title": "--- Game Status ---",
-      "options": [
-        {
-          "key": "d",
-          "label": "(D) Display status",
-          "action": {
-            "rpc": {
-              "command": "game.status",
-              "data": {}
             }
           }
         },
@@ -780,11 +726,7 @@
           "key": "l",
           "label": "(L) List",
           "action": {
-            "rpc": {
-              "command": "nav.avoid.list",
-              "data": {}
-            },
-            "post": "print_last_rpc"
+            "pycall": "avoid_list_flow"
           }
         },
         {
@@ -817,37 +759,21 @@
           "key": "l",
           "label": "(L) List",
           "action": {
-            "rpc": {
-              "command": "subscribe.list",
-              "data": {}
-            },
-            "post": "print_last_rpc"
+            "pycall": "subscriptions_list_flow"
           }
         },
         {
           "key": "a",
           "label": "(A) Add",
           "action": {
-            "rpc": {
-              "command": "subscribe.add",
-              "data": {
-                "event_type": "<prompt:str:Topic (e.g., system.notice or sector.*)>"
-              }
-            },
-            "post": "print_last_rpc"
+            "pycall": "subscriptions_add_flow"
           }
         },
         {
           "key": "r",
           "label": "(R) Remove",
           "action": {
-            "rpc": {
-              "command": "subscribe.remove",
-              "data": {
-                "event_type": "<prompt:str:Topic>"
-              }
-            },
-            "post": "print_last_rpc"
+            "pycall": "subscriptions_remove_flow"
           }
         },
         {
@@ -892,28 +818,28 @@
           "key": "i",
           "label": "(I) Inbox",
           "action": {
-            "pycall": "cli_mail_inbox"
+            "pycall": "mail_inbox_flow"
           }
         },
         {
           "key": "r",
           "label": "(R) Read",
           "action": {
-            "pycall": "cli_mail_read"
+            "pycall": "mail_read_flow"
           }
         },
         {
           "key": "s",
           "label": "(S) Send",
           "action": {
-            "pycall": "cli_mail_send"
+            "pycall": "mail_send_flow"
           }
         },
         {
           "key": "d",
           "label": "(D) Delete",
           "action": {
-            "pycall": "cli_mail_delete"
+            "pycall": "mail_delete_flow"
           }
         },
         {
