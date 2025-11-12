@@ -9,6 +9,10 @@ import os
 import signal
 import sys
 import argparse
+from planner import FiniteStatePlanner
+
+MAX_PORT_INFO_FAILURES = 3 # Define a threshold for port info failures
+COOLDOWN_SECONDS = 5 # Cooldown for repeated info requests
 
 # --- Global Shutdown Flag ---
 shutdown_flag = False
@@ -54,7 +58,11 @@ class StateManager:
             "received_responses": [], # New: Responses received in current tick
             "ship_info": None, # New: Stores the latest ship.status data
             "port_info": None, # New: Stores the latest trade.port_info data
-            "sector_info_fetched_for": {} # New: Tracks when sector info was last fetched for a sector
+            "sector_info_fetched_for": {}, # New: Tracks when sector info was last fetched for a sector
+            "port_info_failures_per_sector": {}, # New: Tracks persistent failures for port info per sector
+            "last_ship_info_request_time": 0, # New: Timestamp of last ship.info request
+            "last_sector_info_request_time": 0, # New: Timestamp of last sector.info request
+            "cached_schemas": {} # New: Stores fetched command schemas
         }
         self.load()
 
@@ -79,6 +87,10 @@ class StateManager:
                     self.state["ship_info"] = loaded_state.get("ship_info", None)
                     self.state["port_info"] = loaded_state.get("port_info", None)
                     self.state["sector_info_fetched_for"] = loaded_state.get("sector_info_fetched_for", {})
+                    self.state["port_info_failures_per_sector"] = loaded_state.get("port_info_failures_per_sector", {})
+                    self.state["last_ship_info_request_time"] = loaded_state.get("last_ship_info_request_time", 0)
+                    self.state["last_sector_info_request_time"] = loaded_state.get("last_sector_info_request_time", 0)
+                    self.state["cached_schemas"] = loaded_state.get("cached_schemas", {})
                 logger.info(f"Successfully loaded state from {self.path}")
             except json.JSONDecodeError:
                 logger.error(f"Could not decode state file {self.path}. Starting with fresh state.")
@@ -142,6 +154,12 @@ class GameConnection:
             logger.error("No active connection to send command.")
             if not self.connect():
                 return None
+
+        # Add idempotency key to meta if not already present
+        if "meta" not in command_json:
+            command_json["meta"] = {}
+        if "idempotency_key" not in command_json["meta"]:
+            command_json["meta"]["idempotency_key"] = str(uuid.uuid4())
 
         full_command = json.dumps(command_json) + "\n"
         try:
@@ -263,7 +281,14 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection):
                         state_manager.set("player_location_sector", new_sector_id)
                         logger.info(f"Player warped to sector: {new_sector_id}")
 
-                # Update ship_info
+                # Update cached_schemas
+                if response.get("type") == "system.describe_schema" and response.get("status") == "ok":
+                    schema_name = sent_command.get("data", {}).get("name")
+                    if schema_name:
+                        cached_schemas = state_manager.get("cached_schemas", {})
+                        cached_schemas[schema_name] = response.get("data", {})
+                        state_manager.set("cached_schemas", cached_schemas)
+                        logger.info(f"Schema for '{schema_name}' cached.")
                 if response.get("type") == "ship.status":
                     ship_data = response.get("data", {}).get("ship")
                     if ship_data:
@@ -282,8 +307,53 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection):
         else:
             logger.debug(f"Received unsolicited server message: {json.dumps(response)}")
 
+def format_game_state_for_llm(game_state_json: dict) -> str:
+    """
+    Formats the game state into a human-readable string for the LLM.
+    """
+    formatted_state = []
+
+    # Current Credits
+    formatted_state.append(f"Credits: {game_state_json.get('current_credits', '0.00')}")
+
+    # Player Location
+    current_sector_id = game_state_json.get("player_location_sector", 1)
+    last_server_response = game_state_json.get("last_server_response", {})
+    sector_name = last_server_response.get("data", {}).get("name", f"Sector {current_sector_id}")
+    formatted_state.append(f"Location: {sector_name} (Sector {current_sector_id})")
+
+    # Ship Info
+    ship_info = game_state_json.get("ship_info")
+    if ship_info:
+        cargo = ship_info.get("cargo", {})
+        formatted_cargo = ", ".join([f"{k}: {v}" for k, v in cargo.items()])
+        formatted_state.append(f"Cargo: {{{formatted_cargo}}}")
+    else:
+        formatted_state.append("Cargo: Unknown (ship.info not available)")
+
+    # Port Info
+    port_info = game_state_json.get("port_info")
+    if port_info:
+        port_id = port_info.get("id")
+        port_name = port_info.get("name")
+        stock = port_info.get("stock", {})
+        formatted_stock = ", ".join([f"{k}: {v}" for k, v in stock.items()])
+        formatted_state.append(f"Port {port_id} ({port_name}) Stock: {{{formatted_stock}}}")
+    else:
+        formatted_state.append("Port Info: Not available or outdated")
+
+    # Broken Commands
+    broken_commands = game_state_json.get("broken_commands", [])
+    if broken_commands:
+        formatted_broken = ", ".join([f"'{item['command']}' (Error: {item['error']})" for item in broken_commands])
+        formatted_state.append(f"Broken Commands: [{formatted_broken}]")
+    else:
+        formatted_state.append("Broken Commands: None")
+
+    return "\\n".join(formatted_state)
+
 def get_ollama_response(game_state_json: dict, model: str, current_stage: str):
-    state_history_str = json.dumps(game_state_json)
+    formatted_game_state = format_game_state_for_llm(game_state_json)
     
     # --- Dynamic Command List Generation ---
     command_list_str = """
@@ -296,12 +366,12 @@ def get_ollama_response(game_state_json: dict, model: str, current_stage: str):
     if last_response and last_response.get("type") == "system.cmd_list":
         commands = last_response.get("data", {}).get("commands", [])
         if commands:
-            command_list_str = "\n".join([f"- `{c.get('cmd')}`: {c.get('summary', '')}" for c in commands])
+            command_list_str = "\\n".join([f"- `{c.get('cmd')}`: {c.get('summary', '')}" for c in commands])
 
     last_commands_history = game_state_json.get("last_commands_history", [])
     last_commands_str = ""
     if last_commands_history:
-        last_commands_str = "\n\nRecently executed commands:\n" + "\n".join([f"- {cmd}" for cmd in last_commands_history])
+        last_commands_str = "\\n\\nRecently executed commands:\\n" + "\\n".join([f"- {cmd}" for cmd in last_commands_history])
 
     system_prompt = ""
     if current_stage == "discovery":
@@ -311,32 +381,37 @@ Here is the list of available commands:
 {command_list_str}
 {last_commands_str}
 
-You must choose a command from this list. Your response MUST be a JSON object with a "command" field containing the command name. If a command requires parameters, include them in a "data" field. For example: {{'command': 'system.describe_schema', 'data': {{'name': 'players'}}}} 
+You must choose a command from this list. Your response MUST be a JSON object with a "command" field containing the command name. If a command requires parameters, include them in a "data" field. For example: {{'command': 'system.describe_schema', 'data': {{'name': 'players'}}}}
 
 CRITICAL: If the last server response contains an "Unknown command" error, you MUST choose a different command from the list. Do not repeat a command that has just resulted in an error.
 
 Your primary goal in this stage is to systematically try every command in the `commands_to_try` list. Once a command is tried, it will be removed from `commands_to_try`. If a command requires parameters, try to guess reasonable default parameters (e.g., for `system.describe_schema`, try `{{ 'name': 'system' }}`). If a command consistently fails or requires complex parameters you cannot guess, categorize it as broken.
 """
-    elif current_stage == "economic_optimization":
-        working_commands_str = "\n".join([f"- `{c}`" for c in game_state_json.get("working_commands", [])])
+    elif current_stage == "economic_optimization" or current_stage == "exploit": # Use for exploit stage as well
+        working_commands_str = "\\n".join([f"- `{c}`" for c in game_state_json.get("working_commands", [])])
         system_prompt = f"""You are 'AI_QA_Bot'. Your SOLE task is to output a single, valid JSON object for the next game command. DO NOT include any prose or extra text. Your objective is to quadruple your current credits. Use the provided game state to formulate the next logical action.
 
 Here is the list of commands that have been confirmed to be WORKING:
 {working_commands_str}
 {last_commands_str}
 
-You must choose a command from this list of WORKING commands. Your response MUST be a JSON object with a "command" field containing the command name. If a command requires parameters, include them in a "data" field. For example: {{'command': 'trade.buy', 'data': {{'port_id': 1, 'commodity': 'ore', 'quantity': 10}}}} 
+You must choose a command from this list of WORKING commands. Your response MUST be a JSON object with a "command" field containing the command name. If a command requires parameters, include them in a "data" field. For example: {{'command': 'trade.buy', 'data': {{'port_id': 1, 'commodity': 'ore', 'quantity': 10}}}}
 
 Your current credits are: {game_state_json.get("current_credits", "0.00")}
 
+To achieve your objective of quadrupling your credits, you **must calculate a price differential** before issuing a `trade.buy` or `trade.sell` command. **You cannot buy and sell at the same port.**
+
+**THOUGHT REQUIREMENT:** Your `thought` field **MUST** include a comparison: `Profit Margin Check: Buy Price at Port X vs. Expected Sell Price at Port Y = [Value]`.
+
 To achieve your objective of quadrupling your credits, follow these steps:
 1.  **Gather Information:** Use `sector.info` and `trade.port_info` to understand the current sector and available trade opportunities.
-2.  **Identify Profitable Trades:** Look for commodities that can be bought cheaply and sold for a higher price. **Crucially, profitable trading involves buying at one port and selling at a different port. Do NOT buy and sell at the same port, as this will result in a loss.**
-3.  **Execute Trades:** Use `trade.buy` and `trade.sell` with appropriate parameters (port_id, commodity, quantity) to make a profit.
-4.  **Manage Funds:** Use `bank.deposit` and `bank.withdraw` to manage your credits.
-5.  **Move to New Sectors:** If no profitable trades are available in the current sector, use `move.warp` to move to an adjacent sector (you can get adjacent sectors from `sector.info`).
+2.  **Handle Missing Port Info:** If `port_info` is not available or `trade.port_info` commands are consistently failing, use `move.warp` to move to an adjacent sector to find new trade opportunities.
+3.  **Identify Profitable Trades:** Look for commodities that can be bought cheaply and sold for a higher price. **Crucially, profitable trading involves buying at one port and selling at a different port. Do NOT buy and sell at the same port, as this will result in a loss.**
+4.  **Execute Trades:** Use `trade.buy` and `trade.sell` with appropriate parameters (port_id, commodity, quantity) to make a profit.
+5.  **Manage Funds:** Use `bank.deposit` and `bank.withdraw` to manage your credits.
+6.  **Move to New Sectors:** If no profitable trades are available in the current sector, use `move.warp` to move to an adjacent sector (you can get adjacent sectors from `sector.info`).
 
-You must choose a command from the list of WORKING economic commands. Your response MUST be a JSON object with a "command" field containing the command name. If a command requires parameters, include them in a "data" field. For example: {{'command': 'trade.buy', 'data': {{'port_id': 1, 'commodity': 'ore', 'quantity': 10}}}} 
+You must choose a command from the list of WORKING economic commands. Your response MUST be a JSON object with a "command" field containing the command name. If a command requires parameters, include them in a "data" field. For example: {{'command': 'trade.buy', 'data': {{'port_id': 1, 'commodity': 'ore', 'quantity': 10}}}}
 
 Prioritize actions that directly increase your credits. Avoid repeating commands that don't yield new information or contribute to your economic goal.
 """
@@ -348,14 +423,14 @@ Here is the list of available commands:
 {command_list_str}
 {last_commands_str}
 
-You must choose a command from this list. Your response MUST be a JSON object with a "command" field containing the command name. If a command requires parameters, include them in a "data" field. For example: {{'command': 'system.describe_schema', 'data': {{'name': 'players'}}}} 
+You must choose a command from this list. Your response MUST be a JSON object with a "command" field containing the command name. If a command requires parameters, include them in a "data" field. For example: {{'command': 'system.describe_schema', 'data': {{'name': 'players'}}}}
 
 CRITICAL: If the last server response contains an "Unknown command" error, you MUST choose a different command from the list. Do not repeat a command that has just resulted in an error.
 """
 
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"Analyze the last server response and current state below, then output the next command JSON. State:\n{state_history_str}"}
+        {"role": "user", "content": f"Analyze the last server response and current state below, then output the next command JSON. State:\\n{formatted_game_state}"}
     ]
     try:
         response = ollama.chat(
@@ -373,7 +448,6 @@ CRITICAL: If the last server response contains an "Unknown command" error, you M
     except Exception as e:
         logger.error(f"Ollama API Error: {e}")
     return None
-
 def main():
     """Main execution function."""
     global config, logger, shutdown_flag
@@ -400,29 +474,7 @@ def main():
     
     state_manager = StateManager(config.get('state_file', 'state.json'))
     game_conn = GameConnection(config.get('game_host'), config.get('game_port'), state_manager)
-
-    # --- Login Sequence ---
-    if not state_manager.get("session_token"):
-        logger.info("No session token found. Attempting login.")
-        login_command_id = str(uuid.uuid4())
-        login_command = {
-            "id": login_command_id,
-            "ts": datetime.datetime.now().isoformat() + "Z",
-            "command": "auth.login",
-            "data": {
-                "username": config.get("player_username"),
-                "password": config.get("player_password")
-            },
-            "meta": {"client_version": config.get("client_version")}
-        }
-        game_conn.send_command(login_command)
-        state_manager.set("last_command_sent_id", login_command_id) # Track the login command
-
-        # The main loop will now handle processing this response.
-        # We'll check for login success in the main loop's response processing.
-        # For now, we'll assume login will be handled by the main loop's response processing.
-        # If login fails, the main loop will eventually detect it and trigger shutdown.
-
+    planner = FiniteStatePlanner(state_manager, game_conn, config)
 
     # --- Main Loop ---
     while not shutdown_flag:
@@ -437,184 +489,46 @@ def main():
             # --- Process all incoming responses ---
             process_responses(state_manager, game_conn)
 
-            # --- Decision Making and Command Sending ---
-            current_session_token = state_manager.get("session_token")
-            if not current_session_token:
-                # If no session token, try to log in
-                logger.info("No session token found. Attempting login.")
-                login_command_id = str(uuid.uuid4())
-                login_command = {
-                    "id": login_command_id,
+            # --- Decision Making and Command Sending via Planner ---
+            # If there are pending commands, don't send new ones yet
+            if state_manager.get("pending_commands"):
+                time.sleep(0.5) # Increased sleep
+                continue
+
+            # Get LLM suggestion (if applicable for the current stage)
+            llm_command = None
+            # Only consult LLM for exploit stage for now, as per the planner's design
+            if planner.current_stage == "exploit":
+                game_state = state_manager.get_all()
+                llm_command = get_ollama_response(game_state, config.get("ollama_model"), state_manager.get("stage"))
+                if llm_command:
+                    logger.info(f"LLM suggested command: {llm_command.get('command')} with data: {llm_command.get('data')}")
+                else:
+                    logger.warning("LLM failed to generate a valid command.")
+
+            next_command_dict = planner.get_next_command(llm_command)
+
+            if next_command_dict:
+                next_command_id = str(uuid.uuid4())
+                game_command = {
+                    "id": next_command_id,
                     "ts": datetime.datetime.now().isoformat() + "Z",
-                    "command": "auth.login",
-                    "auth": {"session": None}, # No session yet
-                    "data": {
-                        "username": config.get("player_username"),
-                        "password": config.get("player_password")
-                    },
+                    "command": next_command_dict["command"],
+                    "auth": {"session": state_manager.get("session_token")},
+                    "data": next_command_dict.get("data", {}),
                     "meta": {"client_version": config.get("client_version")}
                 }
-                game_conn.send_command(login_command)
-                state_manager.set("last_command_sent_id", login_command_id)
-                time.sleep(0.1) # Small delay to prevent busy loop if login fails immediately
-                continue # Restart loop to process potential login response
 
-            # --- Stage 1: Command Discovery ---
-            if state_manager.get("stage") == "discovery":
-                # Ensure we have a command list to try
-                if not state_manager.get("commands_to_try") and not state_manager.get("pending_commands"):
-                    logger.info("Discovery stage: Populating commands to try.")
-                    cmd_list_command_id = str(uuid.uuid4())
-                    cmd_list_command = {
-                        "id": cmd_list_command_id,
-                        "ts": datetime.datetime.now().isoformat() + "Z",
-                        "command": "system.cmd_list",
-                        "auth": {"session": current_session_token},
-                        "data": {},
-                        "meta": {"client_version": config.get("client_version")}
-                    }
-                    game_conn.send_command(cmd_list_command)
-                    state_manager.set("last_command_sent_id", cmd_list_command_id)
-                    time.sleep(0.1) 
-                    continue
-                
-                # Check if system.cmd_list response has been processed
-                # This logic is mostly handled by the central response processor now.
-                # However, we need to ensure commands_to_try is populated from it.
-                if not state_manager.get("commands_to_try") and \
-                   state_manager.get("last_server_response", {}).get("type") == "system.cmd_list" and \
-                   state_manager.get("last_server_response", {}).get("status") == "ok":
-                    commands_from_list = [c.get("cmd") for c in state_manager.get("last_server_response", {}).get("data", {}).get("commands", [])]
-                    if commands_from_list:
-                        # Filter out commands that are already in working_commands or broken_commands
-                        existing_cmds_set = set(state_manager.get("working_commands", []) + [item["command"] for item in state_manager.get("broken_commands", [])])
-                        new_cmds_to_try = [cmd for cmd in commands_from_list if cmd not in existing_cmds_set]
-                        state_manager.set("commands_to_try", new_cmds_to_try)
-                        logger.info(f"Populated {len(new_cmds_to_try)} commands to try from system.cmd_list response.")
-                    # Clear last_server_response since it was processed for command list
-                    state_manager.set("last_server_response", {})
+                game_conn.send_command(game_command)
+                state_manager.set("last_command_sent_id", next_command_id)
 
-                # If there are pending commands, don't send new ones yet
-                if state_manager.get("pending_commands"):
-                    time.sleep(0.1)
-                    continue
-
-                # Select a command to try
-                command_name = None
-                commands_to_try = state_manager.get("commands_to_try")
-                if commands_to_try:
-                    command_name = commands_to_try.pop(0) # Get and remove the first command
-                    state_manager.set("commands_to_try", commands_to_try) # Update state after pop
-
-                if command_name:
-                    logger.info(f"Discovery stage: Attempting command: {command_name}")
-                    command_data = {}
-                    if command_name == "system.describe_schema":
-                        command_data = {"name": "system"} # Example: describe 'system' schema
-                    elif command_name == "trade.port_info":
-                        command_data = {"port_id": 1} # Assume port 1 for discovery
-                    elif command_name == "move.warp":
-                        command_data = {"sector_id": 2} # Assume sector 2 for discovery
-                    # Add more default data for other commands as needed for discovery
-
-                    next_command_id = str(uuid.uuid4())
-                    game_command = {
-                        "id": next_command_id,
-                        "ts": datetime.datetime.now().isoformat() + "Z",
-                        "command": command_name,
-                        "auth": {"session": current_session_token},
-                        "data": command_data,
-                        "meta": {"client_version": config.get("client_version")}
-                    }
-
-                    game_conn.send_command(game_command)
-                    state_manager.set("last_command_sent_id", next_command_id)
-
-                    # Store the command in history
-                    history = state_manager.get("last_commands_history")
-                    history.append(command_name)
-                    state_manager.set("last_commands_history", history[-5:]) # Keep only the last 5 commands
-                
-                # If all commands tried and no pending ones, transition
-                if not state_manager.get("commands_to_try") and not state_manager.get("pending_commands"):
-                    logger.info("Discovery stage complete. All commands attempted. Transitioning to economic optimization.")
-                    state_manager.set("stage", "economic_optimization")
-                    state_manager.set("last_server_response", {})
-                time.sleep(0.1) # Small delay to prevent busy loop initially
-                continue # Always continue to allow response processing
-
-            # --- End Stage 1 Logic ---
-
-            # --- Stage 2: Economic Optimization (or other stages) ---
-            elif state_manager.get("stage") == "economic_optimization":
-                game_state = state_manager.get_all()
-                current_sector_id = game_state.get("player_location_sector", 1)
-                ship_info = state_manager.get("ship_info")
-                port_info = state_manager.get("port_info")
-                
-                next_command = None
-                next_command_data = {}
-
-                # If there are pending commands, don't send new ones yet
-                if state_manager.get("pending_commands"):
-                    time.sleep(0.1)
-                    continue
-
-                if not ship_info:
-                    next_command = "ship.info"
-                    logger.info("Economic Optimization: Requesting ship.info to get cargo and holds data.")
-elif not state_manager.get("sector_info_fetched_for", {}).get(current_sector_id) or \
-                     (time.time() - state_manager.get("sector_info_fetched_for", {}).get(current_sector_id, 0)) > 60: # Refresh every 60s
-                    next_command = "sector.info"
-                    logger.info(f"Economic Optimization: Requesting sector.info for sector {current_sector_id}.")
-elif not port_info or \
-                     port_info.get("sector") != current_sector_id or \
-                     (time.time() - state_manager.get("port_info_fetched_at", 0)) > 60: # Refresh every 60s
-                    sector_data = state_manager.get("last_server_response", {}).get("data", {})
-                    ports_in_sector = sector_data.get("ports", [])
-                    if ports_in_sector:
-                        port_id = ports_in_sector[0].get("id")
-                        next_command = "trade.port_info"
-                        next_command_data = {"port_id": port_id}
-                        # port_info_fetched_at is set in response processing
-                        logger.info(f"Economic Optimization: Requesting trade.port_info for port {port_id}.")
-                    else:
-                        logger.warning("Economic Optimization: No ports in sector. Cannot get port info.")
-                        # If no ports, try moving to another sector (simple toggle between 1 and 2)
-                        target_sector = 2 if current_sector_id == 1 else 1
-                        next_command = "move.warp"
-                        next_command_data = {"sector_id": target_sector}
-                        logger.info(f"Economic Optimization: No ports, warping to sector {target_sector}.")
-                else: # We have all essential info, consult LLM for trade decisions
-                    logger.info("Economic Optimization: Consulting LLM for next action.")
-                    llm_command = get_ollama_response(game_state, config.get("ollama_model"), state_manager.get("stage"))
-                    if llm_command:
-                        next_command = llm_command.get("command")
-                        next_command_data = llm_command.get("data", {})
-                        logger.info(f"LLM suggested command: {next_command} with data: {next_command_data}")
-                    else:
-                        logger.error("LLM failed to generate a valid command. Defaulting to ship.info.")
-                        next_command = "ship.info" # Fallback
-
-                if next_command:
-                    next_command_id = str(uuid.uuid4())
-                    game_command = {
-                        "id": next_command_id,
-                        "ts": datetime.datetime.now().isoformat() + "Z",
-                        "command": next_command,
-                        "auth": {"session": current_session_token},
-                        "data": next_command_data,
-                        "meta": {"client_version": config.get("client_version")}
-                    }
-
-                    game_conn.send_command(game_command)
-                    state_manager.set("last_command_sent_id", next_command_id)
-
-                    history = state_manager.get("last_commands_history")
-                    history.append(next_command)
-                    state_manager.set("last_commands_history", history[-5:]) # Keep only the last 5 commands
-                
-                time.sleep(0.1) # Small delay to prevent busy loop
+                history = state_manager.get("last_commands_history")
+                history.append(next_command_dict["command"])
+                state_manager.set("last_commands_history", history[-5:]) # Keep only the last 5 commands
+            else:
+                logger.warning("Planner returned no command. Waiting...")
+            
+            time.sleep(0.5) # Small delay to prevent busy loop
 
         except Exception as e:
             logger.critical(f"An unhandled exception occurred in the main loop: {e}", exc_info=True)
