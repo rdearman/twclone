@@ -7,12 +7,14 @@ import ollama
 import logging
 import os
 import signal
-import sys
+import sys # Add this line
 import argparse
 from planner import FiniteStatePlanner
+from bug_reporter import BugReporter
+from bandit_policy import BanditPolicy
 
-MAX_PORT_INFO_FAILURES = 3 # Define a threshold for port info failures
-COOLDOWN_SECONDS = 5 # Cooldown for repeated info requests
+import argparse
+from planner import FiniteStatePlanner
 
 # --- Global Shutdown Flag ---
 shutdown_flag = False
@@ -26,14 +28,17 @@ def signal_handler(sig, frame):
 class Config:
     """Loads and holds configuration from a JSON file."""
     def __init__(self, path='config.json'):
+        # Construct the absolute path to config.json relative to the script's directory
+        script_dir = os.path.dirname(__file__)
+        config_path = os.path.join(script_dir, path)
         try:
-            with open(path, 'r') as f:
+            with open(config_path, 'r') as f: # Use config_path here
                 self.settings = json.load(f)
         except FileNotFoundError:
-            print(f"FATAL: Configuration file not found at {path}")
+            print(f"FATAL: Configuration file not found at {config_path}") # Update message
             sys.exit(1)
         except json.JSONDecodeError:
-            print(f"FATAL: Could not decode JSON from {path}")
+            print(f"FATAL: Could not decode JSON from {config_path}") # Update message
             sys.exit(1)
 
     def get(self, key, default=None):
@@ -41,16 +46,23 @@ class Config:
 
 class StateManager:
     """Handles loading, saving, and accessing the AI's state."""
-    def __init__(self, state_file_path):
+    def __init__(self, state_file_path, config): # Add config parameter
         self.path = state_file_path
-        self.state = {
+        self.config = config # Store config
+        self.state = self._get_default_state() # Initialize with default state
+        self.load()
+
+    def _get_default_state(self):
+        return {
             "last_server_response": {},
-            "current_credits": "0.00",
+            "current_credits": 0.0,
+            "previous_credits": 0.0, # New: Stores credits from previous step for reward calculation
             "last_command_sent_id": "",
             "player_location_sector": 1,
             "session_token": None,
             "last_commands_history": [], # Initialize here
-            "stage": "discovery", # New: Initial stage
+            "last_responses_history": [], # New: Stores history of recent responses
+            "stage": "bootstrap", # New: Initial stage should be bootstrap
             "working_commands": [], # New: List of commands that work
             "broken_commands": [], # New: List of commands that consistently fail
             "commands_to_try": [], # New: Commands yet to be tried in discovery
@@ -62,40 +74,59 @@ class StateManager:
             "port_info_failures_per_sector": {}, # New: Tracks persistent failures for port info per sector
             "last_ship_info_request_time": 0, # New: Timestamp of last ship.info request
             "last_sector_info_request_time": 0, # New: Timestamp of last sector.info request
-            "cached_schemas": {} # New: Stores fetched command schemas
+            "last_bank_info_request_time": 0, # New: Timestamp of last bank.info request
+            "cached_schemas": {}, # New: Stores fetched command schemas
+            "price_cache": {}, # New: Stores cached price data from trade.quote
+            "next_allowed": {}, # New: Stores next allowed timestamp for each command
+            "server_capabilities": {}, # New: Stores server capabilities
+            "normalized_commands": {}, # New: Stores normalized command names
+            "q_table": {}, # New: Stores Q-values for bandit policy (now contextual)
+            "n_table": {}, # New: Stores N-values for bandit policy (now contextual)
+            "last_processed_command_name": None, # New: Stores the name of the last command for which a response was processed
+            "schemas_to_fetch": ["move.warp", "sector.info", "ship.info", "trade.quote"], # New: List of commands whose schemas need to be fetched
+            "sector_data": {}, # New: Stores detailed sector information
+            "new_sector_discovered": False, # New: Intrinsic reward flag
+            "trade_successful": False, # New: Intrinsic reward flag
+            "new_port_discovered": False, # New: Intrinsic reward flag
+            "rate_limit_info": {}, # New: Stores the latest rate limit information from server responses
+            "command_retry_info": {}, # New: Stores retry information for commands
         }
-        self.load()
+    def _merge_state(self, target_dict, source_dict):
+        for key, value in source_dict.items():
+            if key in target_dict:
+                if isinstance(target_dict[key], dict) and isinstance(value, dict):
+                    self._merge_state(target_dict[key], value)
+                elif isinstance(target_dict[key], list) and isinstance(value, list):
+                    # Extend the list with unique elements from the source list
+                    for item in value:
+                        if item not in target_dict[key]:
+                            target_dict[key].append(item)
+                elif value is not None: # Only overwrite if source value is not None
+                    target_dict[key] = value
+            elif value is not None: # Add new keys if not None
+                target_dict[key] = value
 
     def load(self):
+        self.state = self._get_default_state() # Start with a fresh default state
         if os.path.exists(self.path):
             try:
                 with open(self.path, 'r') as f:
-                    loaded_state = json.load(f)
-                    # Update existing state with loaded values, providing defaults for new keys
-                    self.state["last_server_response"] = loaded_state.get("last_server_response", {})
-                    self.state["current_credits"] = loaded_state.get("current_credits", "0.00")
-                    self.state["last_command_sent_id"] = loaded_state.get("last_command_sent_id", "")
-                    self.state["player_location_sector"] = loaded_state.get("player_location_sector", 1)
-                    self.state["session_token"] = loaded_state.get("session_token")
-                    self.state["last_commands_history"] = loaded_state.get("last_commands_history", [])
-                    self.state["stage"] = loaded_state.get("stage", "discovery")
-                    self.state["working_commands"] = loaded_state.get("working_commands", [])
-                    self.state["broken_commands"] = loaded_state.get("broken_commands", [])
-                    self.state["commands_to_try"] = loaded_state.get("commands_to_try", [])
-                    self.state["pending_commands"] = loaded_state.get("pending_commands", {})
-                    self.state["received_responses"] = loaded_state.get("received_responses", [])
-                    self.state["ship_info"] = loaded_state.get("ship_info", None)
-                    self.state["port_info"] = loaded_state.get("port_info", None)
-                    self.state["sector_info_fetched_for"] = loaded_state.get("sector_info_fetched_for", {})
-                    self.state["port_info_failures_per_sector"] = loaded_state.get("port_info_failures_per_sector", {})
-                    self.state["last_ship_info_request_time"] = loaded_state.get("last_ship_info_request_time", 0)
-                    self.state["last_sector_info_request_time"] = loaded_state.get("last_sector_info_request_time", 0)
-                    self.state["cached_schemas"] = loaded_state.get("cached_schemas", {})
+                    loaded_data = json.load(f)
+                    self._merge_state(self.state, loaded_data) # Merge loaded data into current state
                 logger.info(f"Successfully loaded state from {self.path}")
             except json.JSONDecodeError:
                 logger.error(f"Could not decode state file {self.path}. Starting with fresh state.")
         else:
             logger.info("No state file found. Starting with fresh state.")
+        
+        # Post-load reconciliation: Force bootstrap if session token is missing or authentication failed
+        session_token_present = self.state.get("session_token") is not None and self.state.get("session_token") != ""
+        authenticated_status = self.state.get("last_server_response", {}).get("data", {}).get("authenticated", False)
+
+        if not session_token_present or not authenticated_status:
+            if self.state["stage"] != "bootstrap":
+                logger.warning(f"Session not active. Forcing stage from '{self.state['stage']}' to 'bootstrap'.")
+            self.state["stage"] = "bootstrap"
 
     def save(self):
         try:
@@ -116,12 +147,13 @@ class StateManager:
 
 class GameConnection:
     """A resilient class for handling TCP connection to the game server."""
-    def __init__(self, host, port, state_manager):
+    def __init__(self, host, port, state_manager, bug_reporter):
         self.host = host
         self.port = port
         self.sock = None
         self.buffer = ""
         self.state_manager = state_manager # Store state_manager
+        self.bug_reporter = bug_reporter # Store bug_reporter
         self.connect()
 
     def connect(self):
@@ -134,6 +166,7 @@ class GameConnection:
                 logger.info(f"Attempting to connect to {self.host}:{self.port}...")
                 self.sock.connect((self.host, self.port))
                 logger.info("Connection successful.")
+                self.post_connect() # Call post_connect after successful connection
                 return True
             except socket.error as e:
                 self.sock = None
@@ -142,6 +175,34 @@ class GameConnection:
                 time.sleep(wait_time)
                 attempt += 1
         return False
+
+    def post_connect(self):
+        """Sends initial handshake commands and fetches server capabilities."""
+        logger.info("Performing post-connection handshake...")
+        # Send system.hello
+        hello_command_id = str(uuid.uuid4())
+        hello_command = {
+            "id": hello_command_id,
+            "ts": datetime.datetime.now().isoformat() + "Z",
+            "command": "system.hello",
+            "data": {},
+            "meta": {"client_version": self.state_manager.config.get("client_version")}
+        }
+        self.send_command(hello_command)
+        self.state_manager.set("last_command_sent_id", hello_command_id)
+
+        # Request system.capabilities
+        caps_command_id = str(uuid.uuid4())
+        caps_command = {
+            "id": caps_command_id,
+            "ts": datetime.datetime.now().isoformat() + "Z",
+            "command": "system.capabilities",
+            "data": {},
+            "meta": {"client_version": self.state_manager.config.get("client_version")}
+        }
+        self.send_command(caps_command)
+        self.state_manager.set("last_command_sent_id", caps_command_id)
+        logger.info("Handshake commands sent.")
 
     def close(self):
         if self.sock:
@@ -155,6 +216,11 @@ class GameConnection:
             if not self.connect():
                 return None
 
+        pending_cmds = self.state_manager.get("pending_commands", {})
+        if pending_cmds:
+            logger.warning(f"Attempted to send command '{command_json.get('command')}' but there are already pending commands. Enforcing single in-flight policy. Pending: {list(pending_cmds.keys())}")
+            return None # Prevent sending if a command is already in flight
+
         # Add idempotency key to meta if not already present
         if "meta" not in command_json:
             command_json["meta"] = {}
@@ -166,7 +232,6 @@ class GameConnection:
             self.sock.sendall(full_command.encode('utf-8'))
             logger.info(f"Sent command: {full_command.strip()}")
             
-            pending_cmds = self.state_manager.get("pending_commands", {})
             pending_cmds[command_json['id']] = command_json
             self.state_manager.set("pending_commands", pending_cmds)
             
@@ -197,7 +262,12 @@ class GameConnection:
                         responses.append(response_json)
                         logger.debug(f"Received response: {response_json}")
                     except json.JSONDecodeError as e:
-                        logger.error(f"JSON DECODE ERROR: {e} - Raw line: {line}")
+                        self.bug_reporter.triage_protocol_error(
+                            {"command": "unknown", "id": "unknown"}, # Cannot determine sent command for malformed response
+                            {"raw_line": line, "error_message": str(e)}, # Raw data for debugging
+                            self.state_manager.get_all(),
+                            f"JSON DECODE ERROR: {e} - Raw line: {line}"
+                        )
         except socket.timeout:
             pass # Normal for idle state
         except socket.error as e:
@@ -206,12 +276,22 @@ class GameConnection:
         
         return responses
 
-def process_responses(state_manager: StateManager, game_conn: GameConnection):
+def process_responses(state_manager: StateManager, game_conn: GameConnection, bug_reporter: BugReporter):
     responses = game_conn.read_responses()
     for response in responses:
         state_manager.set("last_server_response", response)
         logger.info(f"Server response: {json.dumps(response)}")
         
+        # Add response to history
+        history = state_manager.get("last_responses_history")
+        history.append(response)
+        state_manager.set("last_responses_history", history[-5:]) # Keep only the last 5 responses
+        
+        # Extract and store rate limit information
+        rate_limit_data = response.get("meta", {}).get("rate_limit")
+        if rate_limit_data:
+            state_manager.set("rate_limit_info", rate_limit_data)
+
         reply_to_id = response.get("reply_to")
         if reply_to_id:
             pending_cmds = state_manager.get("pending_commands", {})
@@ -220,17 +300,68 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection):
 
             if sent_command:
                 command_name = sent_command.get("command")
+                state_manager.set("last_processed_command_name", command_name) # Store the command name that just received a response
+
+                # --- Envelope Invariant Checks ---
+                # 1. Check if reply_to matches a pending command (already done by pop)
+                # 2. Check status validity
+                if response.get("status") not in ["ok", "error", "refused", "granted", "partial"]:
+                    bug_reporter.triage_protocol_error(
+                        sent_command, response, state_manager.get_all(),
+                        f"Invalid status '{response.get('status')}' received for command '{command_name}'",
+                        state_manager.get("last_commands_history", []),
+                        state_manager.get("last_responses_history", [])
+                    )
+                    continue # Skip further processing for this invalid response
+
+                # 3. If status is "ok", then error should be null
+                if response.get("status") == "ok" and response.get("error") is not None:
+                    bug_reporter.triage_protocol_error(
+                        sent_command, response, state_manager.get_all(),
+                        f"Status 'ok' received for command '{command_name}' but 'error' field is not null.",
+                        state_manager.get("last_commands_history", []),
+                        state_manager.get("last_responses_history", [])
+                    )
+                    # Continue processing, but log as a potential issue
                 
-                # Update working/broken commands
+                # 4. If status is not "ok", then error should not be null
+                if response.get("status") != "ok" and response.get("error") is None:
+                    bug_reporter.triage_protocol_error(
+                        sent_command, response, state_manager.get_all(),
+                        f"Status '{response.get('status')}' received for command '{command_name}' but 'error' field is null.",
+                        state_manager.get("last_commands_history", []),
+                        state_manager.get("last_responses_history", [])
+                    )
+                    # Continue processing, but log as a potential issue
+
+                # Update working/broken commands and retry info
+                command_retry_info = state_manager.get("command_retry_info", {})
+                
                 if response.get("status") == "ok":
                     working_cmds = state_manager.get("working_commands")
                     if command_name not in working_cmds:
                         working_cmds.append(command_name)
                         state_manager.set("working_commands", working_cmds)
                         logger.info(f"Command '{command_name}' categorized as WORKING.")
+                    
+                    # Reset retry info on success
+                    if command_name in command_retry_info:
+                        command_retry_info[command_name] = {"failures": 0, "next_retry_time": 0}
+                        state_manager.set("command_retry_info", command_retry_info)
+                        logger.info(f"Retry info for '{command_name}' reset due to success.")
                 else: # Error or refused
                     broken_cmds = state_manager.get("broken_commands")
                     error_msg = response.get('error', {}).get('message', 'Unknown error')
+                    
+                    # Check for SQL errors specifically for bug reporting
+                    if "no such column" in error_msg.lower() or "sql" in error_msg.lower():
+                        bug_reporter.triage_protocol_error(
+                            sent_command, response, state_manager.get_all(),
+                            f"SQL error detected: {error_msg}",
+                            state_manager.get("last_commands_history", []),
+                            state_manager.get("last_responses_history", [])
+                        )
+
                     if command_name not in [item["command"] for item in broken_cmds]:
                         broken_cmds.append({"command": command_name, "error": error_msg})
                         state_manager.set("broken_commands", broken_cmds)
@@ -243,6 +374,15 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection):
                         state_manager.set("broken_commands", broken_cmds)
                     logger.error(f"FAULT LOGGED - Command: {command_name} Error: {error_msg}")
 
+                    # Update retry info on failure
+                    BASE_RETRY_DELAY = 5 # seconds
+                    retry_data = command_retry_info.get(command_name, {"failures": 0, "next_retry_time": 0})
+                    retry_data["failures"] += 1
+                    retry_data["next_retry_time"] = time.time() + BASE_RETRY_DELAY * (2 ** (retry_data["failures"] - 1))
+                    command_retry_info[command_name] = retry_data
+                    state_manager.set("command_retry_info", command_retry_info)
+                    logger.warning(f"Command '{command_name}' failed. Next retry in {retry_data['next_retry_time'] - time.time():.2f}s (failures: {retry_data['failures']}).")
+
                 # Update session token if login was successful
                 if command_name == "auth.login" and response.get("status") == "ok" and response.get("data", {}).get("session"):
                     state_manager.set("session_token", response["data"]["session"])
@@ -252,60 +392,173 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection):
                 if response.get("type") in ["trade.buy_receipt_v1", "trade.sell_receipt_v1"]:
                     credits_remaining = response.get("data", {}).get("credits_remaining")
                     if credits_remaining is not None:
-                        state_manager.set("current_credits", str(credits_remaining))
+                        state_manager.set("current_credits", float(credits_remaining))
                         logger.info(f"Player credits updated to: {credits_remaining}")
+                        state_manager.set("trade_successful", True) # Set trade successful flag
                     else: # For sell_receipt, total_credits might be the relevant field
                         total_credits = response.get("data", {}).get("total_credits")
                         if total_credits is not None:
-                            state_manager.set("current_credits", str(total_credits))
+                            state_manager.set("current_credits", float(total_credits))
                             logger.info(f"Player credits updated to: {total_credits}")
-                elif response.get("type") == "bank.info":
+                            state_manager.set("trade_successful", True) # Set trade successful flag
+                elif response.get("type") in ["bank.info", "bank.balance"]:
                     balance = response.get("data", {}).get("balance")
                     if balance is not None: 
-                        state_manager.set("current_credits", str(balance))
+                        state_manager.set("current_credits", float(balance))
                         logger.info(f"Player bank balance updated to: {balance}")
 
                 # Update player_location_sector
                 if response.get("type") == "sector.info":
+                    current_sector_id = state_manager.get("player_location_sector") # Get current before update
                     sector_id = response.get("data", {}).get("sector_id")
                     if sector_id is not None:
                         state_manager.set("player_location_sector", sector_id)
+                        
+                        # Check for new port discovered
+                        new_ports = response.get("data", {}).get("ports", [])
+                        old_sector_data = state_manager.get("sector_data", {}).get(str(sector_id), {}) # Get old sector data for this sector
+                        old_ports = old_sector_data.get("ports", [])
+                        if new_ports and not old_ports:
+                            state_manager.set("new_port_discovered", True)
+
+                        # Store the full sector data
+                        all_sector_data = state_manager.get("sector_data", {})
+                        all_sector_data[str(sector_id)] = response.get("data", {})
+                        state_manager.set("sector_data", all_sector_data)
                         logger.info(f"Player location sector updated to: {sector_id}")
                         # Also update state for sector_info_fetched_for
                         fetched_for = state_manager.get("sector_info_fetched_for", {})
                         fetched_for[sector_id] = time.time()
                         state_manager.set("sector_info_fetched_for", fetched_for)
                 elif response.get("type") == "move.warp":
+                    previous_sector_id = state_manager.get("player_location_sector")
                     new_sector_id = response.get("data", {}).get("sector_id")
                     if new_sector_id is not None:
                         state_manager.set("player_location_sector", new_sector_id)
+                        if new_sector_id != previous_sector_id:
+                            state_manager.set("new_sector_discovered", True) # Set new sector discovered flag
                         logger.info(f"Player warped to sector: {new_sector_id}")
 
                 # Update cached_schemas
-                if response.get("type") == "system.describe_schema" and response.get("status") == "ok":
-                    schema_name = sent_command.get("data", {}).get("name")
-                    if schema_name:
+                if response.get("type") == "system.describe_schema" and response.get("status") == "ok": # Response type is "system.schema"
+                    command_name_for_schema = response.get("data", {}).get("name") # Get the command name from the response data
+                    request_schema = response.get("data", {}).get("schema") # Get the actual schema object
+                    
+                    # WORKAROUND: If the server doesn't provide the 'schema' field, assume an empty schema
+                    # This allows validation to proceed without error, effectively disabling it for this command.
+                    # The PROTOCOL.v2.md states the schema should be in the 'schema' field.
+                    if request_schema is None:
+                        logger.warning(f"Server did not provide schema for '{command_name_for_schema}'. Using empty schema as workaround.")
+                        request_schema = {}
+
+                    if command_name_for_schema and request_schema is not None: # Check for not None after workaround
                         cached_schemas = state_manager.get("cached_schemas", {})
-                        cached_schemas[schema_name] = response.get("data", {})
+                        # Store the schema under the command name, with "request_schema" as the key for the schema object
+                        cached_schemas[command_name_for_schema] = {"request_schema": request_schema}
                         state_manager.set("cached_schemas", cached_schemas)
-                        logger.info(f"Schema for '{schema_name}' cached.")
+                        logger.info(f"Schema for '{command_name_for_schema}' cached.")
+                # Update server_capabilities
+                if response.get("type") == "system.capabilities" and response.get("status") == "ok":
+                    state_manager.set("server_capabilities", response.get("data", {}))
+                    logger.info("Server capabilities cached.")
+                # Update port_info (or price cache)
+                if response.get("type") == "trade.quote":
+                    quote_data = response.get("data", {})
+                    if quote_data:
+                        # Cache this price data based on sector/port/commodity
+                        price_cache = state_manager.get("price_cache", {})
+                        sector_id = state_manager.get("player_location_sector")
+                        port_id = quote_data.get("port_id")
+                        
+                        if sector_id not in price_cache:
+                            price_cache[sector_id] = {}
+                        if port_id not in price_cache[sector_id]:
+                            price_cache[sector_id][port_id] = {}
+                        
+                        # Store prices by commodity
+                        commodity = quote_data.get("commodity")
+                        price_cache[sector_id][port_id][commodity] = {
+                            "buy": quote_data.get("total_buy_price"), 
+                            "sell": quote_data.get("total_sell_price"),
+                            "timestamp": time.time() # Add timestamp
+                        }
+                        state_manager.set("price_cache", price_cache)
+                        logger.info(f"Price for {commodity} in sector {sector_id}, port {port_id} cached.")
                 if response.get("type") == "ship.status":
                     ship_data = response.get("data", {}).get("ship")
                     if ship_data:
                         state_manager.set("ship_info", ship_data)
                         logger.info("Ship info updated.")
                 
-                # Update port_info
-                if response.get("type") == "trade.port_info":
-                    port_data = response.get("data", {}).get("port")
-                    if port_data:
-                        state_manager.set("port_info", port_data)
-                        state_manager.set("port_info_fetched_at", time.time())
-                        logger.info("Port info updated.")
+                # Update normalized_commands from system.cmd_list
+                if response.get("type") == "system.cmd_list" and response.get("status") == "ok":
+                    commands_data = response.get("data", {}).get("commands", [])
+                    normalized_commands = {}
+                    schemas_to_fetch = state_manager.get("schemas_to_fetch", [])
+                    cached_schemas = state_manager.get("cached_schemas", {})
+
+                    for cmd_info in commands_data:
+                        canonical_name = cmd_info.get("cmd")
+                        if canonical_name:
+                            normalized_commands[canonical_name] = canonical_name
+                            for alias in cmd_info.get("aliases", []):
+                                normalized_commands[alias] = canonical_name
+                            
+                            # Add to schemas_to_fetch if not already cached or in list
+                            if canonical_name not in cached_schemas and canonical_name not in schemas_to_fetch:
+                                schemas_to_fetch.append(canonical_name)
+
+                    state_manager.set("normalized_commands", normalized_commands)
+                    state_manager.set("schemas_to_fetch", schemas_to_fetch)
+                    logger.info("Normalized command vocabulary updated and schemas to fetch queued.")
             else:
                 logger.warning(f"Received response for unknown or already processed command ID: {reply_to_id}")
         else:
             logger.debug(f"Received unsolicited server message: {json.dumps(response)}")
+
+def calculate_and_apply_reward(state_manager: StateManager, bandit_policy: BanditPolicy):
+    last_command_name = state_manager.get("last_processed_command_name")
+    if not last_command_name:
+        return
+
+    # Define intrinsic reward values
+    NEW_SECTOR_REWARD = 10.0
+    TRADE_SUCCESS_REWARD = 5.0
+    NEW_PORT_REWARD = 15.0
+
+    # Reward based on credit change
+    previous_credits = state_manager.get("previous_credits", state_manager.get("current_credits", 0.0))
+    current_credits = state_manager.get("current_credits", 0.0)
+    
+    reward = current_credits - previous_credits
+    state_manager.set("previous_credits", current_credits) # Update previous credits for next iteration
+
+    # Generate context key for bandit policy
+    context_key = _generate_context_key(state_manager.get_all())
+
+    # Add intrinsic rewards
+    if state_manager.get("new_sector_discovered"):
+        reward += NEW_SECTOR_REWARD
+        state_manager.set("new_sector_discovered", False) # Reset flag
+        logger.info(f"Intrinsic reward: New sector discovered (+{NEW_SECTOR_REWARD})")
+
+    if state_manager.get("trade_successful"):
+        reward += TRADE_SUCCESS_REWARD
+        state_manager.set("trade_successful", False) # Reset flag
+        logger.info(f"Intrinsic reward: Trade successful (+{TRADE_SUCCESS_REWARD})")
+
+    if state_manager.get("new_port_discovered"):
+        reward += NEW_PORT_REWARD
+        state_manager.set("new_port_discovered", False) # Reset flag
+        logger.info(f"Intrinsic reward: New port discovered (+{NEW_PORT_REWARD})")
+
+    ECON = {"trade.buy","trade.sell","move.warp","bank.deposit","bank.withdraw"}
+    META_PENALTY = -0.1
+    if last_command_name in ECON:
+        bandit_policy.update_q_value(last_command_name, reward, context_key)
+    else:
+        bandit_policy.update_q_value(last_command_name, META_PENALTY, context_key)
+    logger.info(f"Applied reward {reward} to command '{last_command_name}'. New Q-value: {bandit_policy.q_table.get(context_key, {}).get(last_command_name)}")
 
 def format_game_state_for_llm(game_state_json: dict) -> str:
     """
@@ -313,13 +566,16 @@ def format_game_state_for_llm(game_state_json: dict) -> str:
     """
     formatted_state = []
 
-    # Current Credits
-    formatted_state.append(f"Credits: {game_state_json.get('current_credits', '0.00')}")
-
     # Player Location
     current_sector_id = game_state_json.get("player_location_sector", 1)
     last_server_response = game_state_json.get("last_server_response", {})
-    sector_name = last_server_response.get("data", {}).get("name", f"Sector {current_sector_id}")
+    
+    # Ensure 'data' field is a dictionary before accessing its 'name' key
+    last_server_response_data = last_server_response.get("data")
+    if not isinstance(last_server_response_data, dict):
+        last_server_response_data = {}
+
+    sector_name = last_server_response_data.get("name", f"Sector {current_sector_id}")
     formatted_state.append(f"Location: {sector_name} (Sector {current_sector_id})")
 
     # Ship Info
@@ -350,9 +606,34 @@ def format_game_state_for_llm(game_state_json: dict) -> str:
     else:
         formatted_state.append("Broken Commands: None")
 
+    # Cached Price Data
+    price_cache = game_state_json.get("price_cache", {})
+    current_sector = game_state_json.get("player_location_sector", 1)
+    
+    if current_sector in price_cache and price_cache[current_sector]:
+        formatted_prices = []
+        for port_id, port_prices in price_cache.get(current_sector, {}).items():
+            for commodity, prices in port_prices.items():
+                formatted_prices.append(
+                    f"port {port_id} / {commodity}: Buy={prices.get('buy', 'N/A')}, Sell={prices.get('sell', 'N/A')}"
+                )
+        formatted_state.append("Current Price Cache: " + ", ".join(formatted_prices))
+    else:
+        formatted_state.append("Current Price Cache: Empty/Needs update.")
+    
     return "\\n".join(formatted_state)
 
+def _generate_context_key(state: dict) -> str:
+    """Generates a context key for the bandit policy based on the current state."""
+    # Example context: current stage and player's sector
+    # This can be expanded to include more relevant state variables
+    current_stage = state.get("stage", "bootstrap")
+    player_sector = state.get("player_location_sector", 1)
+    return f"{current_stage}-{player_sector}"
+
 def get_ollama_response(game_state_json: dict, model: str, current_stage: str):
+    logger.debug(f"Type of game_state_json in get_ollama_response: {type(game_state_json)}")
+    logger.debug(f"Content of game_state_json in get_ollama_response: {json.dumps(game_state_json, indent=2)}")
     formatted_game_state = format_game_state_for_llm(game_state_json)
     
     # --- Dynamic Command List Generation ---
@@ -374,8 +655,8 @@ def get_ollama_response(game_state_json: dict, model: str, current_stage: str):
         last_commands_str = "\\n\\nRecently executed commands:\\n" + "\\n".join([f"- {cmd}" for cmd in last_commands_history])
 
     system_prompt = ""
-    if current_stage == "discovery":
-        system_prompt = f"""You are 'AI_QA_Bot'. Your SOLE task is to output a single, valid JSON object for the next game command. DO NOT include any prose or extra text. Your objective is to discover and categorize all available commands. Use the provided game state to formulate the next logical action.
+    if current_stage == "bootstrap":
+        system_prompt = f"""You are 'AI_QA_Bot'. Your SOLE task is to output a single, valid JSON object for the next game command. DO NOT include any prose or extra text. Your objective is to discover and categorize all available commands and their schemas. Use the provided game state to formulate the next logical action.
 
 Here is the list of available commands:
 {command_list_str}
@@ -385,35 +666,68 @@ You must choose a command from this list. Your response MUST be a JSON object wi
 
 CRITICAL: If the last server response contains an "Unknown command" error, you MUST choose a different command from the list. Do not repeat a command that has just resulted in an error.
 
-Your primary goal in this stage is to systematically try every command in the `commands_to_try` list. Once a command is tried, it will be removed from `commands_to_try`. If a command requires parameters, try to guess reasonable default parameters (e.g., for `system.describe_schema`, try `{{ 'name': 'system' }}`). If a command consistently fails or requires complex parameters you cannot guess, categorize it as broken.
+Your primary goal in this stage is to systematically try every command in the `commands_to_try` list and fetch its schema. Once a command's schema is fetched, it will be removed from `schemas_to_fetch`. If a command consistently fails or requires complex parameters you cannot guess, categorize it as broken.
 """
-    elif current_stage == "economic_optimization" or current_stage == "exploit": # Use for exploit stage as well
-        working_commands_str = "\\n".join([f"- `{c}`" for c in game_state_json.get("working_commands", [])])
-        system_prompt = f"""You are 'AI_QA_Bot'. Your SOLE task is to output a single, valid JSON object for the next game command. DO NOT include any prose or extra text. Your objective is to quadruple your current credits. Use the provided game state to formulate the next logical action.
+    elif current_stage == "survey":
+        system_prompt = f"""You are 'AI_QA_Bot'. Your SOLE task is to output a single, valid JSON object for the next game command. DO NOT include any prose or extra text. Your objective is to gather comprehensive information about the current sector, your ship, and local trade opportunities.
 
 Here is the list of commands that have been confirmed to be WORKING:
 {working_commands_str}
 {last_commands_str}
 
-You must choose a command from this list of WORKING commands. Your response MUST be a JSON object with a "command" field containing the command name. If a command requires parameters, include them in a "data" field. For example: {{'command': 'trade.buy', 'data': {{'port_id': 1, 'commodity': 'ore', 'quantity': 10}}}}
+Your current credits are: {game_state_json.get("current_credits", 0.0):.2f}
 
-Your current credits are: {game_state_json.get("current_credits", "0.00")}
+To achieve your objective, you should:
+1.  Use `ship.info` to get details about your ship (cargo, holds, etc.).
+2.  Use `sector.info` to get details about the current sector (ports, adjacent sectors).
+3.  If there are ports in the current sector, use `trade.quote` to get buy/sell prices for commodities.
 
-To achieve your objective of quadrupling your credits, you **must calculate a price differential** before issuing a `trade.buy` or `trade.sell` command. **You cannot buy and sell at the same port.**
+You must choose a command from the list of WORKING commands. Your response MUST be a JSON object with a "command" field containing the command name. If a command requires parameters, include them in a "data" field.
+"""
+    elif current_stage == "explore":
+        system_prompt = f"""You are 'AI_QA_Bot'. Your SOLE task is to output a single, valid JSON object for the next game command. DO NOT include any prose or extra text. Your objective is to explore new sectors to find new trade opportunities or valuable resources.
+
+Here is the list of commands that have been confirmed to be WORKING:
+{working_commands_str}
+{last_commands_str}
+
+Your current credits are: {game_state_json.get("current_credits", 0.0):.2f}
+
+To achieve your objective, you should:
+1.  Use `move.warp` to move to an adjacent sector. Prioritize sectors that are unknown or have a higher potential value (e.g., more ports, fresh data).
+2.  After warping, use `sector.info` to gather information about the new sector.
+3.  If you find ports, use `trade.quote` to update your price cache.
+
+You must choose a command from the list of WORKING commands. Your response MUST be a JSON object with a "command" field containing the command name. If a command requires parameters, include them in a "data" field.
+"""
+    elif current_stage == "economic_optimization" or current_stage == "exploit": # Use for exploit stage as well
+        working_commands_str = "\\n".join([f"- `{c}`" for c in game_state_json.get("working_commands", [])])
+        system_prompt = f"""You are 'AI_QA_Bot'. Your SOLE task is to output a single, valid JSON object for the next game command. DO NOT include any prose or extra text. Your objective is to maximize your current credits through strategic trading.
+
+Here is the list of commands that have been confirmed to be WORKING:
+{working_commands_str}
+{last_commands_str}
+
+Your current credits are: {game_state_json.get("current_credits", 0.0):.2f}
+Your ship cargo: {game_state_json.get("ship_info", {}).get("cargo", {})}
+Your ship holds free: {game_state_json.get("ship_info", {}).get("holds", 0) - sum(game_state_json.get("ship_info", {}).get("cargo", {}).values())}
+
+**Current Price Cache (Sector {game_state_json.get("player_location_sector")}):**
+{json.dumps(game_state_json.get("price_cache", {}).get(game_state_json.get("player_location_sector"), {}), indent=2)}
+
+To achieve your objective of maximizing your credits, you **must calculate a price differential** before issuing a `trade.buy` or `trade.sell` command. **You cannot buy and sell at the same port.**
 
 **THOUGHT REQUIREMENT:** Your `thought` field **MUST** include a comparison: `Profit Margin Check: Buy Price at Port X vs. Expected Sell Price at Port Y = [Value]`.
 
-To achieve your objective of quadrupling your credits, follow these steps:
-1.  **Gather Information:** Use `sector.info` and `trade.port_info` to understand the current sector and available trade opportunities.
-2.  **Handle Missing Port Info:** If `port_info` is not available or `trade.port_info` commands are consistently failing, use `move.warp` to move to an adjacent sector to find new trade opportunities.
-3.  **Identify Profitable Trades:** Look for commodities that can be bought cheaply and sold for a higher price. **Crucially, profitable trading involves buying at one port and selling at a different port. Do NOT buy and sell at the same port, as this will result in a loss.**
-4.  **Execute Trades:** Use `trade.buy` and `trade.sell` with appropriate parameters (port_id, commodity, quantity) to make a profit.
-5.  **Manage Funds:** Use `bank.deposit` and `bank.withdraw` to manage your credits.
-6.  **Move to New Sectors:** If no profitable trades are available in the current sector, use `move.warp` to move to an adjacent sector (you can get adjacent sectors from `sector.info`).
+To achieve your objective of maximizing your credits, follow these steps:
+1.  **Identify Profitable Trades:** Analyze the `price_cache` across all known sectors and ports to find the most profitable trade route (buy low in one sector/port, sell high in another).
+2.  **Execute Trades:** If a profitable trade is available in the current sector, use `trade.buy` or `trade.sell` with appropriate parameters (port_id, commodity, quantity).
+3.  **Move to New Sectors:** If no profitable trades are available in the current sector, or if a trade route requires moving, use `move.warp` to move to the next sector in the most profitable trade route.
+4.  **Gather Information:** Use `sector.info` and `trade.quote` to keep your price cache updated, especially after warping to a new sector.
 
-You must choose a command from the list of WORKING economic commands. Your response MUST be a JSON object with a "command" field containing the command name. If a command requires parameters, include them in a "data" field. For example: {{'command': 'trade.buy', 'data': {{'port_id': 1, 'commodity': 'ore', 'quantity': 10}}}}
+You must choose a command from the list of WORKING economic commands. Your response MUST be a JSON object with a "command" field containing the command name. If a command requires parameters, include them in a "data" field.
 
-Prioritize actions that directly increase your credits. Avoid repeating commands that don't yield new information or contribute to your economic goal.
+Prioritize actions that directly increase your credits or gather information crucial for future profit. Avoid repeating commands that don't yield new information or contribute to your economic goal.
 """
     else:
         # Fallback for unknown stages, or initial generic prompt
@@ -461,7 +775,7 @@ def main():
     config = Config(args.config)
     
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG, # Change INFO to DEBUG
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
             logging.FileHandler(config.get('log_file', 'ai_player.log')),
@@ -472,9 +786,13 @@ def main():
     
     signal.signal(signal.SIGINT, signal_handler)
     
-    state_manager = StateManager(config.get('state_file', 'state.json'))
-    game_conn = GameConnection(config.get('game_host'), config.get('game_port'), state_manager)
-    planner = FiniteStatePlanner(state_manager, game_conn, config)
+    state_manager = StateManager(config.get('state_file', 'state.json'), config)
+    bug_reporter = BugReporter(config.get('bug_report_dir', 'bugs'))
+    game_conn = GameConnection(config.get('game_host'), config.get('game_port'), state_manager, bug_reporter)
+    bandit_policy = BanditPolicy(epsilon=config.get("bandit_epsilon", 0.1), 
+                                 q_table=state_manager.get("q_table"), 
+                                 n_table=state_manager.get("n_table"))
+    planner = FiniteStatePlanner(state_manager, game_conn, config, bug_reporter, bandit_policy)
 
     # --- Main Loop ---
     while not shutdown_flag:
@@ -487,10 +805,12 @@ def main():
                     continue
 
             # --- Process all incoming responses ---
-            process_responses(state_manager, game_conn)
+            process_responses(state_manager, game_conn, bug_reporter)
+            calculate_and_apply_reward(state_manager, bandit_policy)
 
             # --- Decision Making and Command Sending via Planner ---
             # If there are pending commands, don't send new ones yet
+            logger.debug(f"Pending commands before check: {state_manager.get('pending_commands')}")
             if state_manager.get("pending_commands"):
                 time.sleep(0.5) # Increased sleep
                 continue
@@ -521,6 +841,14 @@ def main():
 
                 game_conn.send_command(game_command)
                 state_manager.set("last_command_sent_id", next_command_id)
+
+                # Update request timestamps immediately after sending
+                if next_command_dict["command"] == "ship.info":
+                    state_manager.set("last_ship_info_request_time", time.time())
+                elif next_command_dict["command"] == "sector.info":
+                    state_manager.set("last_sector_info_request_time", time.time())
+                elif next_command_dict["command"] == "bank.info":
+                    state_manager.set("last_bank_info_request_time", time.time())
 
                 history = state_manager.get("last_commands_history")
                 history.append(next_command_dict["command"])

@@ -9,18 +9,14 @@ def parse_protocol_markdown(filepath):
     with open(filepath, 'r') as f:
         content = f.read()
 
-    print(f"DEBUG: Content length: {len(content)}", file=sys.stderr)
-    print(f"DEBUG: Content start:\n{content[:500]}", file=sys.stderr)
+
 
     # Regex for detailed commands (with description and example JSON)
     detailed_pattern = re.compile(
-        r'^*   `([^`]+)`: ([^
-]+)\n' +  # Command name and description
-        r'(?:.|
-)*?' +                    # Match any content (including newlines) non-greedily
-        r'Example Client Request:' +     # Match the literal string "Example Client Request:"
-        r'(?:.|
-)*?' +                    # Match any content (including newlines) non-greedily
+        r'^\*   `([^`]+)`: ([^\n]+)\n' +  # Command name and description
+        r'(?:(?!Example Client Request:).)*?' + # Match any content non-greedily until "Example Client Request:"
+        r'Example Client Request:\n' +     # Match the literal string "Example Client Request:"
+        r'(?:(?!```json).)*?' +            # Match any content non-greedily until "```json"
         r'```json\n' +                   # Start of JSON block
         r'({.*?})\n' +                   # The JSON content (non-greedy)
         r'```',
@@ -30,7 +26,7 @@ def parse_protocol_markdown(filepath):
     found_detailed_matches = False
     for match in detailed_pattern.finditer(content):
         found_detailed_matches = True
-        print(f"DEBUG: Found detailed match:\n{match.group(0)}", file=sys.stderr)
+
         command_name = match.group(1).strip()
         description = match.group(2).strip()
         json_str = match.group(3)
@@ -66,30 +62,27 @@ def parse_protocol_markdown(filepath):
                 "data_schema": formatted_data_schema
             }
         except json.JSONDecodeError as e:
-            print(f"Error parsing JSON for command {command_name}: {e}", file=sys.stderr)
-            print(f"JSON string: {json_str}", file=sys.stderr)
+
     
-    if not found_detailed_matches:
-        print("DEBUG: No detailed command matches found.", file=sys.stderr)
+
 
     # Regex for commands in the "Full Command & Event Index"
     # Look for lines like '*   `command.name`' under the "Client-to-Server Commands" heading
     index_pattern = re.compile(
-        r'^### Client-to-Server Commands\n' + # Heading
-        r'(.*?)\n^###', # Non-greedy match until next heading
+        r'(^### Client-to-Server Commands\n)' + # Heading
+        r'(.*?)(?=\n^###|\Z)', # Non-greedy match until next heading or end of string
         re.MULTILINE | re.DOTALL
     )
     index_match = index_pattern.search(content)
 
     if index_match:
-        print(f"DEBUG: Found index block match.", file=sys.stderr)
-        index_block = index_match.group(1)
-        command_names_in_index = re.findall(r'^*   `([^`]+)`', index_block, re.MULTILINE)
+
+        index_block = index_match.group(2)
+        command_names_in_index = re.findall(r'^\*\s+`([^`]+)`', index_block, re.MULTILINE)
         for cmd_name in command_names_in_index:
             commands_indexed.add(cmd_name.strip())
-        print(f"DEBUG: Found {len(commands_indexed)} commands in index.", file=sys.stderr)
-    else:
-        print("DEBUG: No index block match found.", file=sys.stderr)
+
+
 
 
     # Combine lists, prioritizing detailed info
