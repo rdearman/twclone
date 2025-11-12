@@ -1,0 +1,645 @@
+### Available Game Commands:
+
+**1. `auth.login`**
+   - Description: Authenticates a user and returns a session token.
+   - Data Schema: ```json
+{
+  "username": "<string>",
+  "password": "<string>"
+}
+```
+
+**2. `auth.logout`**
+   - Description: Invalidates the current session.
+   - Data Schema: ```json
+{}
+```
+
+**3. `auth.refresh`**
+   - Description: Requests a new session token (if the current one is close to expiry).
+   - Data Schema: ```json
+{}
+```
+
+**4. `auth.register`**
+   - Description: Creates a new player account.
+   - Data Schema: ```json
+{
+  "username": "<string>",
+  "password": "<string>",
+  "email": "<string>"
+}
+```
+
+**5. `bank.balance`**
+   - Description: Get current player bank balance.
+   - Data Schema: ```json
+{}
+```
+
+**6. `bank.deposit`**
+   - Description: Deposit credits from hand to bank account.
+   - Data Schema: ```json
+{
+  "amount": "<string>"
+}
+```
+
+**7. `bank.orders.cancel`**
+   - Description: Cancel a recurring payment.
+   - Data Schema: ```json
+{
+  "order_id": "<string>"
+}
+```
+
+**8. `bank.orders.create`**
+   - Description: Create a new recurring payment.
+   - Data Schema: ```json
+{
+  "to_player_name": "<string>",
+  "amount": "<string>",
+  "frequency": "<string>",
+  "memo": "<string>"
+}
+```
+
+**9. `bank.orders.list`**
+   - Description: List recurring/standing payment orders.
+   - Data Schema: ```json
+{}
+```
+
+**10. `bank.statement`**
+    - Description: Get a paginated history of transactions.
+    - Data Schema: ```json
+{
+  "page": "<integer>",
+  "limit": "<integer>"
+}
+```
+
+**11. `bank.transfer`**
+    - Description: Transfer credits to another player.
+    - Data Schema: ```json
+{
+  "to_player_name": "<string>",
+  "amount": "<string>",
+  "memo": "<string>"
+}
+```
+
+**12. `bank.withdraw`**
+    - Description: Withdraw credits from bank to hand.
+    - Data Schema: ```json
+{
+  "amount": "<string>"
+}
+```
+
+**13. `bounty.list`**
+    - Description: List active bounties on players.
+    - Data Schema: ```json
+{
+  "page": "<integer>",
+  "limit": "<integer>"
+}
+```
+
+**14. `bounty.post`**
+    - Description: Post a new bounty on a player. Funds are held in escrow.
+    - Data Schema: ```json
+{
+  "target_player_name": "<string>",
+  "reward": "<string>"
+}
+```
+
+**15. `combat.attack`**
+    - Description: Attack a target (ship, planet, fighters).
+    - Data Schema: ```json
+{
+  "target_id": "<integer>"
+}
+```
+
+**16. `combat.deploy_fighters`**
+    - Description: Deploy fighters in the current sector.
+    - Data Schema: ```json
+{
+  "quantity": "<integer>"
+}
+```
+
+**17. `combat.lay_mines`**
+    - Description: Lay mines in the current sector.
+    - Data Schema: ```json
+{
+  "quantity": "<integer>"
+}
+```
+
+**18. `corp.balance`**
+    - Description: Get the balance of the player's corporation.
+    - Data Schema: ```json
+{}
+```
+
+**19. `corp.deposit`**
+    - Description: Deposit credits into the corporate treasury.
+    - Data Schema: ```json
+{
+  "amount": "<string>"
+}
+```
+
+**20. `corp.issue_dividend`**
+    - Description: Issue a dividend to all corp members from the treasury.
+    - Data Schema: ```json
+{
+  "total_amount": "<string>"
+}
+```
+
+**21. `corp.set_tax`**
+    - Description: Set the automated tax rate for corp members.
+    - Data Schema: ```json
+{
+  "rate": "<float>"
+}
+```
+
+**22. `corp.statement`**
+    - Description: Get the corporation's transaction history.
+    - Data Schema: ```json
+{
+  "page": "<integer>",
+  "limit": "<integer>"
+}
+```
+
+**23. `corp.stock.issue`**
+    - Description: Issue new shares for a corporation to raise capital (requires leadership).
+    - Data Schema: ```json
+{
+  "quantity": "<integer>",
+  "price": "<string>"
+}
+```
+
+**24. `corp.withdraw`**
+    - Description: Withdraw credits (requires permissions).
+    - Data Schema: ```json
+{
+  "amount": "<string>"
+}
+```
+
+**25. `fine.list`**
+    - Description: List outstanding fines for the current player.
+    - Data Schema: ```json
+{}
+```
+
+**26. `fine.pay`**
+    - Description: Pay an outstanding fine.
+    - Data Schema: ```json
+{
+  "fine_id": "<string>"
+}
+```
+
+**27. `insurance.claim.file`**
+    - Description: File a claim against an active policy.
+    - Data Schema: ```json
+{
+  "active_policy_id": "<string>",
+  "details": "<string>"
+}
+```
+
+**28. `insurance.policies.buy`**
+    - Description: Purchase an insurance policy for a ship or cargo.
+    - Data Schema: ```json
+{
+  "policy_id": "<string>"
+}
+```
+
+**29. `insurance.policies.list`**
+    - Description: List available insurance policies.
+    - Data Schema: ```json
+{
+  "type": "<string>"
+}
+```
+
+**30. `loan.accept`**
+    - Description: Accept a loan offer.
+    - Data Schema: ```json
+{
+  "application_id": "<string>"
+}
+```
+
+**31. `loan.apply`**
+    - Description: Apply for a loan.
+    - Data Schema: ```json
+{
+  "offer_id": "<string>"
+}
+```
+
+**32. `loan.list_active`**
+    - Description: List player's active loans.
+    - Data Schema: ```json
+{}
+```
+
+**33. `loan.offers.list`**
+    - Description: List available loan offers from banks.
+    - Data Schema: ```json
+{}
+```
+
+**34. `loan.repay`**
+    - Description: Make a payment on an active loan.
+    - Data Schema: ```json
+{
+  "loan_id": "<string>",
+  "amount": "<string>"
+}
+```
+
+**35. `market.contracts.buy`**
+    - Description: Trade commodity futures contracts.
+    - Data Schema: ```json
+{
+  "commodity": "<string>",
+  "quantity": "<integer>",
+  "expiry_ts": "<string>"
+}
+```
+
+**36. `market.contracts.list`**
+    - Description: List futures contracts held by the player.
+    - Data Schema: ```json
+{}
+```
+
+**37. `market.contracts.sell`**
+    - Description: Trade commodity futures contracts.
+    - Data Schema: ```json
+{
+  "contract_id": "<string>"
+}
+```
+
+**38. `market.orders.cancel`**
+    - Description: Cancel an open order.
+    - Data Schema: ```json
+{
+  "order_id": "<string>"
+}
+```
+
+**39. `market.orders.create`**
+    - Description: Place a new buy or sell order on the exchange.
+    - Data Schema: ```json
+{
+  "commodity": "<string>",
+  "side": "<string>",
+  "quantity": "<integer>",
+  "price": "<string>"
+}
+```
+
+**40. `market.orders.list`**
+    - Description: List open buy/sell orders on the galactic commodity exchange.
+    - Data Schema: ```json
+{
+  "commodity": "<string>",
+  "side": "<string>"
+}
+```
+
+**41. `move.autopilot.start`**
+    - Description: Manage server-side autopilot.
+    - Data Schema: ```json
+{
+  "path": ["<integer>"]
+}
+```
+
+**42. `move.autopilot.status`**
+    - Description: Manage server-side autopilot.
+    - Data Schema: ```json
+{}
+```
+
+**43. `move.autopilot.stop`**
+    - Description: Manage server-side autopilot.
+    - Data Schema: ```json
+{}
+```
+
+**44. `move.describe_sector`**
+    - Description: Get detailed information about a sector.
+    - Data Schema: ```json
+{}
+```
+
+**45. `move.pathfind`**
+    - Description: Find the shortest path between two sectors.
+    - Data Schema: ```json
+{
+  "from_sector_id": "<integer>",
+  "to_sector_id": "<integer>"
+}
+```
+
+**46. `move.transwarp`**
+    - Description: Execute a long-range jump (requires special drive).
+    - Data Schema: ```json
+{
+  "sector_id": "<integer>"
+}
+```
+
+**47. `move.warp`**
+    - Description: Warp to an adjacent sector.
+    - Data Schema: ```json
+{
+  "sector_id": "<integer>"
+}
+```
+
+**48. `nav.avoid.add`**
+    - Description: Manage sectors to avoid during pathfinding.
+    - Data Schema: ```json
+{
+  "sector_id": "<integer>"
+}
+```
+
+**49. `nav.avoid.list`**
+    - Description: Manage sectors to avoid during pathfinding.
+    - Data Schema: ```json
+{}
+```
+
+**50. `nav.avoid.remove`**
+    - Description: Manage sectors to avoid during pathfinding.
+    - Data Schema: ```json
+{
+  "sector_id": "<integer>"
+}
+```
+
+**51. `nav.bookmark.add`**
+    - Description: Manage bookmarked locations.
+    - Data Schema: ```json
+{
+  "sector_id": "<integer>",
+  "name": "<string>"
+}
+```
+
+**52. `nav.bookmark.list`**
+    - Description: Manage bookmarked locations.
+    - Data Schema: ```json
+{}
+```
+
+**53. `nav.bookmark.remove`**
+    - Description: Manage bookmarked locations.
+    - Data Schema: ```json
+{
+  "name": "<string>"
+}
+```
+
+**54. `planet.create`**
+    - Description: Create a new planet.
+    - Data Schema: ```json
+{
+  "name": "<string>",
+  "type": "<string>"
+}
+```
+
+**55. `planet.deposit`**
+    - Description: Transfer goods between ship and planet.
+    - Data Schema: ```json
+{
+  "planet_id": "<integer>",
+  "commodity": "<string>",
+  "quantity": "<integer>"
+}
+```
+
+**56. `planet.list_mine`**
+    - Description: List planets owned by the player.
+    - Data Schema: ```json
+{}
+```
+
+**57. `planet.withdraw`**
+    - Description: Transfer goods between ship and planet.
+    - Data Schema: ```json
+{
+  "planet_id": "<integer>",
+  "commodity": "<string>",
+  "quantity": "<integer>"
+}
+```
+
+**58. `player.get_settings`**
+    - Description: Retrieve a bundle of player preferences, bookmarks, avoid lists, etc.
+    - Data Schema: ```json
+{}
+```
+
+**59. `player.list_online`**
+    - Description: List online players (paginated).
+    - Data Schema: ```json
+{
+  "page": "<integer>",
+  "limit": "<integer>"
+}
+```
+
+**60. `player.my_info`**
+    - Description: Get current player, ship, and location data.
+    - Data Schema: ```json
+{}
+```
+
+**61. `player.rankings`**
+    - Description: Get player rankings (e.g., net worth, experience).
+    - Data Schema: ```json
+{
+  "by": "<string>",
+  "limit": "<integer>"
+}
+```
+
+**62. `player.set_prefs`**
+    - Description: Update player preferences (e.g., UI, notifications).
+    - Data Schema: ```json
+{
+  "preferences": {
+    "ui_theme": "<string>"
+  }
+}
+```
+
+**63. `research.projects.fund`**
+    - Description: Contribute credits to a large-scale R&D project.
+    - Data Schema: ```json
+{
+  "project_id": "<string>",
+  "amount": "<string>"
+}
+```
+
+**64. `research.projects.list`**
+    - Description: List active R&D projects available for funding.
+    - Data Schema: ```json
+{}
+```
+
+**65. `ship.info`**
+    - Description: Get status of the player's ship.
+    - Data Schema: ```json
+{}
+```
+
+**66. `ship.jettison`**
+    - Description: Jettison cargo into space.
+    - Data Schema: ```json
+{
+  "commodity": "<string>",
+  "quantity": "<integer>"
+}
+```
+
+**67. `ship.status`**
+    - Description: Get status of the player's ship.
+    - Data Schema: ```json
+{}
+```
+
+**68. `ship.upgrade`**
+    - Description: Upgrade ship components at a shipyard.
+    - Data Schema: ```json
+{
+  "component": "<string>",
+  "level": "<integer>"
+}
+```
+
+**69. `stock.exchange.list_stocks`**
+    - Description: List all publicly traded corporations.
+    - Data Schema: ```json
+{}
+```
+
+**70. `stock.exchange.orders.cancel`**
+    - Description: Cancel a stock order.
+    - Data Schema: ```json
+{
+  "order_id": "<string>"
+}
+```
+
+**71. `stock.exchange.orders.create`**
+    - Description: Place a buy/sell order for shares of a corporation.
+    - Data Schema: ```json
+{
+  "ticker": "<string>",
+  "side": "<string>",
+  "quantity": "<integer>",
+  "price": "<string>"
+}
+```
+
+**72. `stock.portfolio.list`**
+    - Description: View the player's current stock portfolio.
+    - Data Schema: ```json
+{}
+```
+
+**73. `system.capabilities`**
+    - Description: Provides a list of supported server namespaces, features, and limits.
+    - Data Schema: ```json
+{}
+```
+
+**74. `system.describe_schema`**
+    - Description: Returns a JSON Schema for a given command or event, useful for client-side validation and code generation.
+    - Data Schema: ```json
+{
+  "type": "<string>",
+  "name": "<string>"
+}
+```
+
+**75. `system.hello`**
+    - Description: Sent by the client upon connection to announce its version and receive server capabilities.
+    - Data Schema: ```json
+{
+  "client_version": "<string>",
+  "capabilities": ["<string>"],
+  "auth": {
+    "last_session": "<string>"
+  }
+}
+```
+
+**76. `trade.buy`**
+    - Description: Basic commodity trading with a port.
+    - Data Schema: ```json
+{
+  "port_id": "<integer>",
+  "commodity": "<string>",
+  "quantity": "<integer>"
+}
+```
+
+**77. `trade.history`**
+    - Description: Get player's trade history.
+    - Data Schema: ```json
+{
+  "page": "<integer>",
+  "limit": "<integer>"
+}
+```
+
+**78. `trade.port_info`**
+    - Description: Get info on a port's statically sold goods.
+    - Data Schema: ```json
+{
+  "port_id": "<integer>"
+}
+```
+
+**79. `trade.quote`**
+    - Description: Get a price quote for a commodity without trading.
+    - Data Schema: ```json
+{
+  "port_id": "<integer>",
+  "commodity": "<string>",
+  "quantity": "<integer>"
+}
+```
+
+**80. `trade.sell`**
+    - Description: Basic commodity trading with a port.
+    - Data Schema: ```json
+{
+  "port_id": "<integer>",
+  "commodity": "<string>",
+  "quantity": "<integer>"
+}
+```

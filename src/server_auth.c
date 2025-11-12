@@ -14,6 +14,7 @@
 #include "server_config.h"
 #include "database.h"
 #include "db_player_settings.h"
+#include "server_log.h"
 
 
 extern struct twconfig *config_load (void);
@@ -230,16 +231,19 @@ hydrate_player_defaults (int player_id)
 int
 cmd_auth_login (client_ctx_t *ctx, json_t *root)
 {
+  LOGI("cmd_auth_login called");
   /* NEW: pull fields from the "data" object, not the root */
   json_t *jdata = json_object_get (root, "data");
   const char *name = NULL, *pass = NULL;
 
   if (json_is_object (jdata))
     {
-      /* Accept both "user_name" (new) and "player_name" (legacy) */
+      /* Accept "user_name" (new), "player_name" (legacy), and "username" */
       json_t *jname = json_object_get (jdata, "user_name");
       if (!json_is_string (jname))
 	jname = json_object_get (jdata, "player_name");
+      if (!json_is_string (jname))
+    jname = json_object_get (jdata, "username");
       json_t *jpass = json_object_get (jdata, "password");
 
       name = json_is_string (jname) ? json_string_value (jname) : NULL;
@@ -255,6 +259,7 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
     {
       int player_id = 0;
       int rc = play_login (name, pass, &player_id);
+      LOGI("play_login returned %d for player %s", rc, name);
       if (rc == AUTH_OK)
 	{
 	  /* Read canonical sector from DB; fall back to 1 if missing/NULL */
@@ -291,10 +296,17 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
               sqlite3_finalize(stmt);
           }
 
-	  json_t *data = json_pack ("{s:i, s:i, s:i}",
+      char session_token[65];
+      if (db_session_create(player_id, 86400, session_token) != SQLITE_OK) {
+          send_enveloped_error(ctx->fd, root, 1500, "Database error (session creation)");
+          return 1;
+      }
+
+	  json_t *data = json_pack ("{s:i, s:i, s:i, s:s}",
 				    "player_id", player_id,
 				    "current_sector", sector_id,
-                    "unread_news_count", unread_news_count);
+                    "unread_news_count", unread_news_count,
+                    "session", session_token);
 	  if (!data)
 	    {
 	      send_enveloped_error (ctx->fd, root, 1500, "Out of memory");

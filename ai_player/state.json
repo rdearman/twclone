@@ -1,0 +1,393 @@
+{
+    "last_server_response": {
+        "id": "srv-ok",
+        "reply_to": "0f95c1ef-f0e6-4279-84c8-10c6db2881ee",
+        "ts": "2025-11-12T16:55:21Z",
+        "status": "ok",
+        "type": "sector.info",
+        "data": {
+            "sector_id": 1,
+            "name": "Fedspace 1",
+            "adjacent": [
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+            ],
+            "adjacent_count": 6,
+            "ports": [
+                {
+                    "id": 1,
+                    "name": "Earth Port",
+                    "type": "1"
+                }
+            ],
+            "has_port": true,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": "The Federation -- Do Not Dump!",
+            "has_beacon": true,
+            "ships": [
+                {
+                    "id": 1,
+                    "name": "Bit Banger",
+                    "type": "Merchant Cruiser",
+                    "ship_name": "Bit Banger",
+                    "ship_type": "Merchant Cruiser",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 2,
+                    "name": "QA Bot 1",
+                    "type": "Scout Marauder",
+                    "ship_name": "QA Bot 1",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot"
+                }
+            ],
+            "ships_count": 2,
+            "ports_count": 1,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 1,
+                "mines_limpet": 0,
+                "mines": 1
+            }
+        },
+        "error": null,
+        "meta": {
+            "rate_limit": {
+                "limit": 60,
+                "remaining": 60,
+                "reset": 60
+            }
+        }
+    },
+    "current_credits": "0.00",
+    "last_command_sent_id": "86f38cb3-1d2b-43ab-a75c-9c245943f2dc",
+    "player_location_sector": 1,
+    "session_token": "0d94581df89385b045fe988a96623134782362925fb72e9fdd55bc2e13d11b0d",
+    "last_commands_history": [
+        "ship.info",
+        "sector.info",
+        "ship.info",
+        "sector.info",
+        "ship.info"
+    ],
+    "stage": "economic_optimization",
+    "working_commands": [
+        "session.hello",
+        "session.ping",
+        "system.schema_list",
+        "system.describe_schema",
+        "system.capabilities",
+        "system.cmd_list",
+        "auth.logout",
+        "ship.info",
+        "sector.info",
+        "move.scan",
+        "trade.history"
+    ],
+    "broken_commands": [
+        {
+            "command": "session.goodbye",
+            "error": "Unknown command"
+        },
+        {
+            "command": "auth.login",
+            "error": "Missing required field"
+        },
+        {
+            "command": "auth.mfa",
+            "error": "Unknown command"
+        },
+        {
+            "command": "auth.register",
+            "error": "Missing required field"
+        },
+        {
+            "command": "players.me",
+            "error": "Unknown command"
+        },
+        {
+            "command": "players.online",
+            "error": "Unknown command"
+        },
+        {
+            "command": "players.refresh",
+            "error": "Unknown command"
+        },
+        {
+            "command": "sector.set_beacon",
+            "error": "Invalid request schema"
+        },
+        {
+            "command": "move.warp",
+            "error": "Missing required field"
+        },
+        {
+            "command": "move.pathfind",
+            "error": "Target sector not specified"
+        },
+        {
+            "command": "move.force_move",
+            "error": "Unknown command"
+        },
+        {
+            "command": "trade.accept",
+            "error": "Not implemented: \"trade.accept\""
+        },
+        {
+            "command": "trade.buy",
+            "error": "items[] required."
+        },
+        {
+            "command": "trade.cancel",
+            "error": "Not implemented: \"trade.cancel\""
+        },
+        {
+            "command": "trade.jettison",
+            "error": "commodity and quantity are required, and quantity must be positive."
+        },
+        {
+            "command": "trade.offer",
+            "error": "Not implemented: \"trade.offer\""
+        },
+        {
+            "command": "trade.port_info",
+            "error": "no such column: credits"
+        },
+        {
+            "command": "trade.quote",
+            "error": "port_id, commodity, and quantity are required."
+        },
+        {
+            "command": "trade.sell",
+            "error": "items[] required."
+        },
+        {
+            "command": "trade.port_info",
+            "error": "no such column: credits"
+        }
+    ],
+    "commands_to_try": [],
+    "pending_commands": {
+        "d4748dab-a57b-4f12-a8ee-cd99fed47d5a": {
+            "id": "d4748dab-a57b-4f12-a8ee-cd99fed47d5a",
+            "ts": "2025-11-12T16:55:19.575585Z",
+            "command": "trade.port_info",
+            "auth": {
+                "session": "0d94581df89385b045fe988a96623134782362925fb72e9fdd55bc2e13d11b0d"
+            },
+            "data": {
+                "port_id": 1
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1"
+            }
+        },
+        "bce2f3ef-8f65-4e82-bfb7-43679722efe5": {
+            "id": "bce2f3ef-8f65-4e82-bfb7-43679722efe5",
+            "ts": "2025-11-12T16:55:19.676323Z",
+            "command": "sector.info",
+            "auth": {
+                "session": "0d94581df89385b045fe988a96623134782362925fb72e9fdd55bc2e13d11b0d"
+            },
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1"
+            }
+        },
+        "98155583-fa8a-45ad-a7c8-28243e2e061c": {
+            "id": "98155583-fa8a-45ad-a7c8-28243e2e061c",
+            "ts": "2025-11-12T16:55:19.777441Z",
+            "command": "ship.info",
+            "auth": {
+                "session": "0d94581df89385b045fe988a96623134782362925fb72e9fdd55bc2e13d11b0d"
+            },
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1"
+            }
+        },
+        "b114db22-8a71-4a04-9359-9b1cc999d2fd": {
+            "id": "b114db22-8a71-4a04-9359-9b1cc999d2fd",
+            "ts": "2025-11-12T16:55:19.878207Z",
+            "command": "sector.info",
+            "auth": {
+                "session": "0d94581df89385b045fe988a96623134782362925fb72e9fdd55bc2e13d11b0d"
+            },
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1"
+            }
+        },
+        "419382bd-1fed-4041-a34e-e18c5c62e6d6": {
+            "id": "419382bd-1fed-4041-a34e-e18c5c62e6d6",
+            "ts": "2025-11-12T16:55:19.979219Z",
+            "command": "ship.info",
+            "auth": {
+                "session": "0d94581df89385b045fe988a96623134782362925fb72e9fdd55bc2e13d11b0d"
+            },
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1"
+            }
+        },
+        "0e56eaad-648f-4577-ae1b-aac06fff3c40": {
+            "id": "0e56eaad-648f-4577-ae1b-aac06fff3c40",
+            "ts": "2025-11-12T16:55:20.080140Z",
+            "command": "sector.info",
+            "auth": {
+                "session": "0d94581df89385b045fe988a96623134782362925fb72e9fdd55bc2e13d11b0d"
+            },
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1"
+            }
+        },
+        "d96a4da9-215b-450b-9213-a44c4096b91f": {
+            "id": "d96a4da9-215b-450b-9213-a44c4096b91f",
+            "ts": "2025-11-12T16:55:20.181337Z",
+            "command": "ship.info",
+            "auth": {
+                "session": "0d94581df89385b045fe988a96623134782362925fb72e9fdd55bc2e13d11b0d"
+            },
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1"
+            }
+        },
+        "764acf31-43d9-42c5-8e13-4f3d71fd7399": {
+            "id": "764acf31-43d9-42c5-8e13-4f3d71fd7399",
+            "ts": "2025-11-12T16:55:20.282453Z",
+            "command": "sector.info",
+            "auth": {
+                "session": "0d94581df89385b045fe988a96623134782362925fb72e9fdd55bc2e13d11b0d"
+            },
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1"
+            }
+        },
+        "0e0317dc-d916-4760-a26d-908ef0c54566": {
+            "id": "0e0317dc-d916-4760-a26d-908ef0c54566",
+            "ts": "2025-11-12T16:55:20.383875Z",
+            "command": "ship.info",
+            "auth": {
+                "session": "0d94581df89385b045fe988a96623134782362925fb72e9fdd55bc2e13d11b0d"
+            },
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1"
+            }
+        },
+        "99444e39-baf8-4a4e-86f7-d72edaf76e78": {
+            "id": "99444e39-baf8-4a4e-86f7-d72edaf76e78",
+            "ts": "2025-11-12T16:55:20.485032Z",
+            "command": "sector.info",
+            "auth": {
+                "session": "0d94581df89385b045fe988a96623134782362925fb72e9fdd55bc2e13d11b0d"
+            },
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1"
+            }
+        },
+        "d16971b8-cf6e-42eb-9c6f-218c9842c24e": {
+            "id": "d16971b8-cf6e-42eb-9c6f-218c9842c24e",
+            "ts": "2025-11-12T16:55:20.586920Z",
+            "command": "ship.info",
+            "auth": {
+                "session": "0d94581df89385b045fe988a96623134782362925fb72e9fdd55bc2e13d11b0d"
+            },
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1"
+            }
+        },
+        "7fa3469c-e264-49f9-ab65-9b262e55653c": {
+            "id": "7fa3469c-e264-49f9-ab65-9b262e55653c",
+            "ts": "2025-11-12T16:55:20.688074Z",
+            "command": "sector.info",
+            "auth": {
+                "session": "0d94581df89385b045fe988a96623134782362925fb72e9fdd55bc2e13d11b0d"
+            },
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1"
+            }
+        },
+        "0002b629-e590-41ce-891b-a7ec6dde53f9": {
+            "id": "0002b629-e590-41ce-891b-a7ec6dde53f9",
+            "ts": "2025-11-12T16:55:20.789460Z",
+            "command": "ship.info",
+            "auth": {
+                "session": "0d94581df89385b045fe988a96623134782362925fb72e9fdd55bc2e13d11b0d"
+            },
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1"
+            }
+        },
+        "b91433e7-0e75-433d-8dd8-6aff6205659b": {
+            "id": "b91433e7-0e75-433d-8dd8-6aff6205659b",
+            "ts": "2025-11-12T16:55:20.890596Z",
+            "command": "sector.info",
+            "auth": {
+                "session": "0d94581df89385b045fe988a96623134782362925fb72e9fdd55bc2e13d11b0d"
+            },
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1"
+            }
+        },
+        "9e996add-790c-48f4-854b-ecfaab6badd3": {
+            "id": "9e996add-790c-48f4-854b-ecfaab6badd3",
+            "ts": "2025-11-12T16:55:20.991744Z",
+            "command": "ship.info",
+            "auth": {
+                "session": "0d94581df89385b045fe988a96623134782362925fb72e9fdd55bc2e13d11b0d"
+            },
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1"
+            }
+        },
+        "0f95c1ef-f0e6-4279-84c8-10c6db2881ee": {
+            "id": "0f95c1ef-f0e6-4279-84c8-10c6db2881ee",
+            "ts": "2025-11-12T16:55:21.092603Z",
+            "command": "sector.info",
+            "auth": {
+                "session": "0d94581df89385b045fe988a96623134782362925fb72e9fdd55bc2e13d11b0d"
+            },
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1"
+            }
+        },
+        "86f38cb3-1d2b-43ab-a75c-9c245943f2dc": {
+            "id": "86f38cb3-1d2b-43ab-a75c-9c245943f2dc",
+            "ts": "2025-11-12T16:55:21.193873Z",
+            "command": "ship.info",
+            "auth": {
+                "session": "0d94581df89385b045fe988a96623134782362925fb72e9fdd55bc2e13d11b0d"
+            },
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1"
+            }
+        }
+    },
+    "received_responses": [],
+    "ship_info": null,
+    "port_info": null,
+    "last_port_info_request": 1762966519.5755262
+}

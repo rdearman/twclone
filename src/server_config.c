@@ -40,6 +40,7 @@ set_defaults (void)
 {
   memset (&g_cfg, 0, sizeof g_cfg);
 
+  g_cfg.server_port = 1234;
   g_cfg.engine.tick_ms = 50;
   g_cfg.engine.daily_align_sec = 0;
 

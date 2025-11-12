@@ -45,7 +45,6 @@
 #ifndef streq
 #define streq(a,b) (strcasecmp(json_string_value((a)), (b))==0)
 #endif
-#define LISTEN_PORT 1234
 #define BUF_SIZE    8192
 #define RULE_REFUSE(_code,_msg,_hint_json) \
     do { send_enveloped_refused(ctx->fd, root, (_code), (_msg), (_hint_json)); goto trade_buy_done; } while (0)
@@ -88,7 +87,7 @@ static const cmd_desc_t k_supported_cmds_fallback[] = {
   // --- Session / System ---
   {"session.hello", "Handshake / hello"},
   {"session.ping", "Ping"},
-  {"session.goodbye", "Client disconnect"},
+  {"auth.logout", "Log out"},
 
   {"system.schema_list", "List schema namespaces"},
   {"system.describe_schema", "Describe commands in a schema"},
@@ -101,10 +100,15 @@ static const cmd_desc_t k_supported_cmds_fallback[] = {
   {"auth.mfa", "Second-factor code"},
   {"auth.register", "Create a new player"},
 
+  // --- Banking ---
+  {"bank.deposit", "Deposit credits to bank"},
+  {"bank.transfer", "Transfer credits between players"},
+  {"bank.withdraw", "Withdraw credits from bank"},
+
   // --- Players / Ship ---
-  {"players.me", "Current player info"},
-  {"players.online", "List online players"},
-  {"players.refresh", "Refresh player state"},
+  {"player.my_info", "Current player info"},
+  {"player.list_online", "List online players"},
+
   {"ship.info", "Ship information"},
 
   // --- Sector / Movement ---
@@ -114,7 +118,7 @@ static const cmd_desc_t k_supported_cmds_fallback[] = {
   {"move.warp", "Warp to sector"},
   {"move.scan", "Scan adjacent sectors"},
   {"move.pathfind", "Find path between sectors"},
-  {"move.force_move", "Admin: force-move a ship"},
+
 
   // --- Trade / Commerce (Extended) ---
   {"trade.port_info", "Port prices/stock in sector"},
@@ -131,8 +135,13 @@ static const cmd_desc_t k_supported_cmds_fallback[] = {
   {"news.read", "Get the daily news feed"},
 
   // --- Combat ---
+  {"combat.deploy_fighters", "Deploy fighters"},
+  {"deploy.fighters.list", "List deployed fighters"},
   {"fighters.recall", "Recall deployed fighters"},
   {"combat.deploy_mines", "Deploy mines"},
+  {"combat.lay_mines", "Lay mines"},
+  {"combat.sweep_mines", "Sweep for mines"},
+  {"deploy.mines.list", "List deployed mines"},
   {"mines.recall", "Recall deployed mines"},
 };
 
@@ -501,10 +510,17 @@ process_message (client_ctx_t *ctx, json_t *root)
 
   /* Auto-auth from meta.session_token (transport-agnostic clients) */
   json_t *jmeta = json_object_get (root, "meta");
+  json_t *jauth = json_object_get (root, "auth");
   const char *session_token = NULL;
   if (json_is_object (jmeta))
     {
       json_t *jtok = json_object_get (jmeta, "session_token");
+      if (json_is_string (jtok))
+	session_token = json_string_value (jtok);
+    }
+  if (session_token == NULL && json_is_object (jauth))
+    {
+      json_t *jtok = json_object_get (jauth, "session");
       if (json_is_string (jtok))
 	session_token = json_string_value (jtok);
     }
@@ -1183,14 +1199,14 @@ server_loop (volatile sig_atomic_t *running)
   signal (SIGPIPE, SIG_IGN);	/* don’t die on write to closed socket */
 #endif
 
-  int listen_fd = make_listen_socket (LISTEN_PORT);
+  int listen_fd = make_listen_socket (g_cfg.server_port);
   if (listen_fd < 0)
     {
       LOGE ("Server loop exiting due to listen socket error.\n");
       //      fprintf (stderr, "Server loop exiting due to listen socket error.\n");
       return -1;
     }
-  LOGI ("Listening on 0.0.0.0:%d\n", LISTEN_PORT);
+  LOGI ("Listening on 0.0.0.0:%d\n", g_cfg.server_port);
   //  fprintf (stderr, "Listening on 0.0.0.0:%d\n", LISTEN_PORT);
 
   struct pollfd pfd = {.fd = listen_fd,.events = POLLIN,.revents = 0 };

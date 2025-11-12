@@ -104,7 +104,7 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
       sql =
         "SELECT id, number, name, sector, size, techlevel, "
         "ore_on_hand, organics_on_hand, equipment_on_hand, petty_cash, "
-        "credits, type "
+        "type "
         "FROM ports WHERE id = ?1 LIMIT 1;";
     }
   else if (sector_id > 0)
@@ -112,7 +112,7 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
       sql =
         "SELECT id, number, name, sector, size, techlevel, "
         "ore_on_hand, organics_on_hand, equipment_on_hand, petty_cash, "
-        "credits, type "
+        "type "
         "FROM ports WHERE sector = ?1 LIMIT 1;";
     }
   else
@@ -164,8 +164,8 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
   json_object_set_new (port, "organics_on_hand",json_integer (sqlite3_column_int (st, 7)));
   json_object_set_new (port, "equipment_on_hand",json_integer(sqlite3_column_int (st, 8)));
   json_object_set_new (port, "petty_cash", json_integer (sqlite3_column_int (st, 9)));
-  json_object_set_new (port, "credits",    json_integer (sqlite3_column_int (st,10)));
-  json_object_set_new (port, "type",       json_integer (sqlite3_column_int (st,11)));
+  json_object_set_new (port, "credits",    json_integer (sqlite3_column_int (st, 9)));
+  json_object_set_new (port, "type",       json_integer (sqlite3_column_int (st,10)));
 
   sqlite3_finalize (st);
 

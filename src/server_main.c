@@ -237,14 +237,14 @@ send_cstr (int fd, const char *s)
 //static int s2s_listen_fd = -1, s2s_conn_fd = -1;
 
 static int
-s2s_listen_4321 (void)
+s2s_listen (void)
 {
   int fd = socket (AF_INET, SOCK_STREAM, 0);
   int yes = 1;
   setsockopt (fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof (yes));
   struct sockaddr_in addr = { 0 };
   addr.sin_family = AF_INET;
-  addr.sin_port = htons (4321);
+  addr.sin_port = htons (g_cfg.s2s.tcp_port);
   inet_pton (AF_INET, "127.0.0.1", &addr.sin_addr);
   if (bind (fd, (struct sockaddr *) &addr, sizeof (addr)) < 0)
     return -1;
@@ -374,6 +374,17 @@ main (void)
   if (!load_eng_config ())
     return 2;
 
+  // Load ports from DB, with fallback to defaults
+  int server_port = 0;
+  int s2s_port = 0;
+  if (db_load_ports(&server_port, &s2s_port) == 0) {
+      g_cfg.server_port = server_port;
+      g_cfg.s2s.tcp_port = s2s_port;
+      LOGI("Loaded ports from database: server=%d, s2s=%d", g_cfg.server_port, g_cfg.s2s.tcp_port);
+  } else {
+      LOGW("Could not load ports from database, using defaults.");
+  }
+
   // initalise the player settings if all the other DB stuff is done. 
   db_player_settings_init (db_get_handle ());
 
@@ -395,12 +406,11 @@ main (void)
       return EXIT_FAILURE;
     }
 
-  /* 2) S2S listener on 127.0.0.1:4321 for engine control link */
-  s2s_listen_fd = s2s_listen_4321 ();
+  /* 2) S2S listener for engine control link */
+  s2s_listen_fd = s2s_listen ();
   if (s2s_listen_fd < 0)
     {
-      LOGW (" listen on 4321 failed\n");
-      //      fprintf (stderr, " listen on 4321 failed\n");
+      LOGW ("listen on s2s port %d failed\n", g_cfg.s2s.tcp_port);
       return EXIT_FAILURE;
     }
   /* NEW: prevent child from inheriting this fd on exec */
@@ -409,11 +419,10 @@ main (void)
     {
       fcntl (s2s_listen_fd, F_SETFD, fl | FD_CLOEXEC);
     }
-  LOGW (" s2s listen on 127.0.0.1:4321\n");
-  //  fprintf (stderr, " s2s listen on 127.0.0.1:4321\n");
+  LOGW ("s2s listen on 127.0.0.1:%d\n", g_cfg.s2s.tcp_port);
 
 
-  /* 3) Fork the engine (child connects back to 4321) */
+  /* 3) Fork the engine (child connects back to the s2s port) */
   LOGW (" forking engine…\n");
   //  fprintf (stderr, " forking engine…\n");
   if (engine_spawn (&g_engine_pid, &g_engine_shutdown_fd) != 0)

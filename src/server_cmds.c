@@ -10,6 +10,7 @@
 #include "errors.h"
 #include "server_players.h" // Include for banking functions
 #include "server_cron.h" // Include for cron job functions
+#include "server_log.h"
 
 /* Constant-time string compare to reduce timing leakage (simple variant). */
 static int
@@ -38,7 +39,9 @@ play_login (const char *player_name, const char *password, int *out_player_id)
   if (!db)
     return AUTH_ERR_DB;
 
+  LOGI("play_login: attempting to lock db_mutex for player %s", player_name);
   pthread_mutex_lock (&db_mutex);
+  LOGI("play_login: db_mutex locked for player %s", player_name);
 
   const char *sql = "SELECT id, passwd, type FROM players WHERE name=?1;";
   sqlite3_stmt *st = NULL;

@@ -1,0 +1,10 @@
+{
+    "game_host": "127.0.0.1",
+    "game_port": 2345,
+    "ollama_model": "llama3.1",
+    "log_file": "ai_player.log",
+    "state_file": "state.json",
+    "player_username": "ai_qa_bot",
+    "player_password": "quality",
+    "client_version": "AI_QA_Bot/1.1"
+}

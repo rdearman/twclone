@@ -35,6 +35,7 @@
 #include "server_log.h"
 #include "server_cron.h"
 #include "common.h"
+#include "server_config.h"
 
 /* handlers (implemented below) */
 static int sweeper_system_notice_ttl (sqlite3 * db, int64_t now_ms);
@@ -783,9 +784,8 @@ engine_main_loop (int shutdown_fd)
       //  fprintf (stderr, "[engine] FATAL: S2S key missing/invalid.\n");
       return 1;
     }
-  LOGI ("[engine] connecting to 127.0.0.1:4321 ...\n");
-  //fprintf (stderr, "[engine] connecting to 127.0.0.1:4321 ...\n");
-  s2s_conn_t *conn = s2s_tcp_client_connect ("127.0.0.1", 4321, 5000);
+  LOGI ("[engine] connecting to 127.0.0.1:%d ...\n", g_cfg.s2s.tcp_port);
+  s2s_conn_t *conn = s2s_tcp_client_connect ("127.0.0.1", g_cfg.s2s.tcp_port, 5000);
   if (!conn)
     {
       LOGE ("[engine] connect failed\n");

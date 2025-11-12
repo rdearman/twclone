@@ -38,6 +38,7 @@ static int db_ensure_auth_schema_unlocked (void);
 static int db_ensure_idempotency_schema_unlocked (void);
 static int db_create_tables_unlocked (bool schema_exists);
 static int db_insert_defaults_unlocked (void);
+static int db_seed_ai_qa_bot_bank_account_unlocked(void);
 static int db_ensure_ship_perms_column_unlocked (void);
 int db_seed_cron_tasks (sqlite3 * db);
 void db_handle_close_and_reset (void);
@@ -366,7 +367,10 @@ const char *create_table_sql[] = {
     "  buff_size INTEGER, "
     "  max_name_length INTEGER, "
     "  max_cloak_duration INTEGER DEFAULT 24, "
-    "  planet_type_count INTEGER " " ); ",
+    "  planet_type_count INTEGER, "
+    "  server_port INTEGER, "
+    "  s2s_port INTEGER "
+  " ); ",
 
   " CREATE TABLE IF NOT EXISTS trade_idempotency ( "
     " key          TEXT PRIMARY KEY, "
@@ -1352,8 +1356,8 @@ const char *create_table_sql[] = {
 
 const char *insert_default_sql[] = {
   /* Config defaults */
-  "INSERT OR IGNORE INTO config (id, turnsperday, maxwarps_per_sector, startingcredits, startingfighters, startingholds, processinterval, autosave, max_ports, max_planets_per_sector, max_total_planets, max_citadel_level, number_of_planet_types, max_ship_name_length, ship_type_count, hash_length, default_nodes, buff_size, max_name_length, planet_type_count) "
-    "VALUES (1, 120, 6, 1000, 10, 20, 1, 5, 200, 6, 300, 6, 8, 50, 8, 128, 500, 1024, 50, 8);",
+  "INSERT OR IGNORE INTO config (id, turnsperday, maxwarps_per_sector, startingcredits, startingfighters, startingholds, processinterval, autosave, max_ports, max_planets_per_sector, max_total_planets, max_citadel_level, number_of_planet_types, max_ship_name_length, ship_type_count, hash_length, default_nodes, buff_size, max_name_length, planet_type_count, server_port, s2s_port) "
+    "VALUES (1, 120, 6, 1000, 10, 20, 1, 5, 200, 6, 300, 6, 8, 50, 8, 128, 500, 1024, 50, 8, 1234, 4321);",
 
 
 /* Shiptypes: name, basecost, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, twarp, transportrange, maxshields, offense, defense, maxbeacons, holo, planet, maxphotons, can_purchase */
@@ -1716,7 +1720,14 @@ const char *insert_default_sql[] = {
   "INSERT INTO players (number, name, passwd, sector, ship, type) VALUES (1, 'Federation Administrator', 'BOT',1,1,1);",
   "INSERT INTO players (number, name, passwd, sector, ship, type) VALUES (7, 'newguy', 'pass123',1,1,2);",
 
-  "INSERT INTO ship_ownership (player_id, ship_id, is_primary, role_id) VALUES (1,1,1,0);"
+  /* ---- AI QA Bot Test Player ---- */
+  "INSERT INTO ships (name, type_id, attack, holds, fighters, shields, sector, onplanet, ported) SELECT 'QA Bot 1', T.id, T.maxattack, T.maxholds, T.maxfighters, T.maxshields, 1, 0, 0 FROM shiptypes T WHERE T.name = 'Scout Marauder';",
+  "INSERT INTO players (number, name, passwd, sector, credits, type) VALUES (8, 'ai_qa_bot', 'quality', 1, 10000, 2);",
+  "UPDATE players SET ship = (SELECT id FROM ships WHERE name = 'QA Bot 1') WHERE name = 'ai_qa_bot';",
+  "INSERT INTO ship_ownership (player_id, ship_id, is_primary, role_id) VALUES ((SELECT id FROM players WHERE name = 'ai_qa_bot'), (SELECT id FROM ships WHERE name = 'QA Bot 1'), 1, 1);",
+  /* ----------------------------- */
+
+  "INSERT INTO ship_ownership (player_id, ship_id, is_primary, role_id) VALUES (1,1,1,0);",
     "INSERT INTO player_types (description) VALUES ('NPC');"
     "INSERT INTO player_types (description) VALUES ('Human Player');"
     /* ------------------------------------------------------------------------------------- */
@@ -2939,6 +2950,12 @@ db_init (void)
 	  ret_code = -1;
 	  goto cleanup;
 	}
+      if (db_seed_ai_qa_bot_bank_account_unlocked() != 0)
+	{
+	  fprintf (stderr, "Failed to seed AI QA bot bank account\n");
+	  ret_code = -1;
+	  goto cleanup;
+	}
 
     }
   else
@@ -2987,6 +3004,71 @@ cleanup:
   pthread_mutex_unlock (&db_mutex);
 
   return ret_code;
+}
+
+
+int
+db_load_ports(int *server_port, int *s2s_port)
+{
+    sqlite3_stmt *stmt = NULL;
+    int rc;
+    int ret_code = -1;
+
+    if (!server_port || !s2s_port) {
+        return -1;
+    }
+
+    pthread_mutex_lock(&db_mutex);
+
+    if (!db_handle) {
+        goto cleanup;
+    }
+
+    const char *sql = "SELECT server_port, s2s_port FROM config WHERE id = 1;";
+
+    rc = sqlite3_prepare_v2(db_handle, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("DB prepare for port loading error: %s", sqlite3_errmsg(db_handle));
+        goto cleanup;
+    }
+
+    rc = sqlite3_step(stmt);
+    if (rc == SQLITE_ROW) {
+        *server_port = sqlite3_column_int(stmt, 0);
+        *s2s_port = sqlite3_column_int(stmt, 1);
+        ret_code = 0; // Success
+    } else {
+        LOGE("DB step for port loading error: %s", sqlite3_errmsg(db_handle));
+    }
+
+cleanup:
+    if (stmt) {
+        sqlite3_finalize(stmt);
+    }
+    pthread_mutex_unlock(&db_mutex);
+    return ret_code;
+}
+
+
+static int
+db_seed_ai_qa_bot_bank_account_unlocked(void)
+{
+  char *err_msg = 0;
+  int rc;
+
+  const char *sql = "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, balance, last_interest_at) VALUES ('player', (SELECT id FROM players WHERE name = 'ai_qa_bot'), 10000, strftime('%Y-%m-%dT%H:%M:%fZ','now'));";
+
+  rc = sqlite3_exec(db_handle, sql, 0, 0, &err_msg);
+
+  if (rc != SQLITE_OK)
+  {
+    LOGE("DB seed ai_qa_bot bank account error: %s", err_msg);
+    LOGE("Failing SQL: %s", sql);
+    sqlite3_free(err_msg);
+    return -1;
+  }
+
+  return 0;
 }
 
 

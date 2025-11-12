@@ -27,6 +27,9 @@ int db_create_tables (bool schema_exists);
 /* Insert default data (config rows, etc.) */
 int db_insert_defaults (void);
 
+/* Load ports from config table */
+int db_load_ports(int *server_port, int *s2s_port);
+
 /* CRUD operations */
 int db_create (const char *table, json_t * row);
 json_t *db_read (const char *table, int id);

@@ -62,6 +62,7 @@ extern "C"
 
   typedef struct
   {
+    int server_port;
     struct
     {
       int tick_ms;
