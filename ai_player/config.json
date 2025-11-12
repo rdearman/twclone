@@ -6,5 +6,7 @@
     "state_file": "state.json",
     "player_username": "ai_qa_bot",
     "player_password": "quality",
-    "client_version": "AI_QA_Bot/1.1"
+    "client_version": "AI_QA_Bot/1.1",
+    "cooldown_seconds": 15,
+    "max_port_info_failures": 3
 }

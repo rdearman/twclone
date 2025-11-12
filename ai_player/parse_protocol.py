@@ -62,6 +62,8 @@ def parse_protocol_markdown(filepath):
                 "data_schema": formatted_data_schema
             }
         except json.JSONDecodeError as e:
+            print(f"[parser] JSON decode failed for command '{command_name}': {e}", file=sys.stderr)
+            continue
 
     
 

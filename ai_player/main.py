@@ -9,9 +9,11 @@ import os
 import signal
 import sys # Add this line
 import argparse
+import random # Add this line
 from planner import FiniteStatePlanner
 from bug_reporter import BugReporter
 from bandit_policy import BanditPolicy
+from parse_protocol import parse_protocol_markdown
 
 import argparse
 from planner import FiniteStatePlanner
@@ -54,6 +56,8 @@ class StateManager:
 
     def _get_default_state(self):
         return {
+            "player_username": self.config.get("player_username"), # Add player_username
+            "client_version": self.config.get("client_version"), # Add client_version
             "last_server_response": {},
             "current_credits": 0.0,
             "previous_credits": 0.0, # New: Stores credits from previous step for reward calculation
@@ -177,32 +181,19 @@ class GameConnection:
         return False
 
     def post_connect(self):
-        """Sends initial handshake commands and fetches server capabilities."""
         logger.info("Performing post-connection handshake...")
-        # Send system.hello
         hello_command_id = str(uuid.uuid4())
         hello_command = {
             "id": hello_command_id,
             "ts": datetime.datetime.now().isoformat() + "Z",
             "command": "system.hello",
-            "data": {},
-            "meta": {"client_version": self.state_manager.config.get("client_version")}
+            "data": {"client_version": self.state_manager.config.get("client_version")}, # Move client_version to data
+            "meta": {} # Clear meta as client_version is now in data
         }
         self.send_command(hello_command)
         self.state_manager.set("last_command_sent_id", hello_command_id)
-
-        # Request system.capabilities
-        caps_command_id = str(uuid.uuid4())
-        caps_command = {
-            "id": caps_command_id,
-            "ts": datetime.datetime.now().isoformat() + "Z",
-            "command": "system.capabilities",
-            "data": {},
-            "meta": {"client_version": self.state_manager.config.get("client_version")}
-        }
-        self.send_command(caps_command)
-        self.state_manager.set("last_command_sent_id", caps_command_id)
-        logger.info("Handshake commands sent.")
+        logger.info("Handshake command sent.")
+        # Remove the immediate system.capabilities send; let planner issue it next.
 
     def close(self):
         if self.sock:
@@ -266,7 +257,11 @@ class GameConnection:
                             {"command": "unknown", "id": "unknown"}, # Cannot determine sent command for malformed response
                             {"raw_line": line, "error_message": str(e)}, # Raw data for debugging
                             self.state_manager.get_all(),
-                            f"JSON DECODE ERROR: {e} - Raw line: {line}"
+                            f"JSON DECODE ERROR: {e} - Raw line: {line}",
+                            self.state_manager.get("last_commands_history", []),
+                            self.state_manager.get("last_responses_history", []),
+                            sent_schema=None, # No schema for malformed response
+                            validated=False # Not applicable
                         )
         except socket.timeout:
             pass # Normal for idle state
@@ -290,6 +285,12 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
         # Extract and store rate limit information
         rate_limit_data = response.get("meta", {}).get("rate_limit")
         if rate_limit_data:
+            # Assuming 'reset' is a window length in seconds
+            reset_window_length = rate_limit_data.get("reset", 0)
+            if reset_window_length > 0:
+                rate_limit_data["reset_at"] = time.time() + reset_window_length
+            else:
+                rate_limit_data["reset_at"] = 0 # No reset time if window length is 0
             state_manager.set("rate_limit_info", rate_limit_data)
 
         reply_to_id = response.get("reply_to")
@@ -310,7 +311,9 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
                         sent_command, response, state_manager.get_all(),
                         f"Invalid status '{response.get('status')}' received for command '{command_name}'",
                         state_manager.get("last_commands_history", []),
-                        state_manager.get("last_responses_history", [])
+                        state_manager.get("last_responses_history", []),
+                        sent_schema=state_manager.get("cached_schemas", {}).get(command_name, {}).get("request_schema"),
+                        validated=True # Assuming the sent command was validated before sending
                     )
                     continue # Skip further processing for this invalid response
 
@@ -320,7 +323,9 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
                         sent_command, response, state_manager.get_all(),
                         f"Status 'ok' received for command '{command_name}' but 'error' field is not null.",
                         state_manager.get("last_commands_history", []),
-                        state_manager.get("last_responses_history", [])
+                        state_manager.get("last_responses_history", []),
+                        sent_schema=state_manager.get("cached_schemas", {}).get(command_name, {}).get("request_schema"),
+                        validated=True # Assuming the sent command was validated before sending
                     )
                     # Continue processing, but log as a potential issue
                 
@@ -330,7 +335,9 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
                         sent_command, response, state_manager.get_all(),
                         f"Status '{response.get('status')}' received for command '{command_name}' but 'error' field is null.",
                         state_manager.get("last_commands_history", []),
-                        state_manager.get("last_responses_history", [])
+                        state_manager.get("last_responses_history", []),
+                        sent_schema=state_manager.get("cached_schemas", {}).get(command_name, {}).get("request_schema"),
+                        validated=True # Assuming the sent command was validated before sending
                     )
                     # Continue processing, but log as a potential issue
 
@@ -359,7 +366,9 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
                             sent_command, response, state_manager.get_all(),
                             f"SQL error detected: {error_msg}",
                             state_manager.get("last_commands_history", []),
-                            state_manager.get("last_responses_history", [])
+                            state_manager.get("last_responses_history", []),
+                            sent_schema=state_manager.get("cached_schemas", {}).get(command_name, {}).get("request_schema"),
+                            validated=True # Assuming the sent command was validated before sending
                         )
 
                     if command_name not in [item["command"] for item in broken_cmds]:
@@ -440,7 +449,7 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
                         logger.info(f"Player warped to sector: {new_sector_id}")
 
                 # Update cached_schemas
-                if response.get("type") == "system.describe_schema" and response.get("status") == "ok": # Response type is "system.schema"
+                if response.get("status") == "ok" and response.get("type") in ["system.describe_schema","system.schema"]:
                     command_name_for_schema = response.get("data", {}).get("name") # Get the command name from the response data
                     request_schema = response.get("data", {}).get("schema") # Get the actual schema object
                     
@@ -515,6 +524,34 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
                 logger.warning(f"Received response for unknown or already processed command ID: {reply_to_id}")
         else:
             logger.debug(f"Received unsolicited server message: {json.dumps(response)}")
+
+def load_schemas_from_docs(state_manager: StateManager):
+    logger.info("Loading schemas from protocol markdown file...")
+    try:
+        # Use the parser you wrote
+        extracted_commands = parse_protocol_markdown('/home/rick/twclone/docs/PROTOCOL.v2.md')
+        
+        cached_schemas = {}
+        for cmd in extracted_commands:
+            try:
+                # Convert the string schema back into a dict for the validator
+                schema_dict = json.loads(cmd['data_schema'])
+                cached_schemas[cmd['name']] = {"request_schema": schema_dict}
+            except json.JSONDecodeError:
+                # Handle cases like "{}" which are valid
+                if cmd['data_schema'] == "{}":
+                    cached_schemas[cmd['name']] = {"request_schema": {}}
+                else:
+                    logger.warning(f"Could not parse schema for {cmd['name']}: {cmd['data_schema']}")
+
+        state_manager.set("cached_schemas", cached_schemas)
+        # We no longer need to fetch schemas, so clear the list
+        state_manager.set("schemas_to_fetch", []) 
+        logger.info(f"Successfully loaded and cached {len(cached_schemas)} schemas from docs.")
+    
+    except Exception as e:
+        logger.critical(f"Failed to load schemas from protocol file: {e}", exc_info=True)
+        # You might want to sys.exit(1) here if schemas are critical
 
 def calculate_and_apply_reward(state_manager: StateManager, bandit_policy: BanditPolicy):
     last_command_name = state_manager.get("last_processed_command_name")
@@ -621,7 +658,7 @@ def format_game_state_for_llm(game_state_json: dict) -> str:
     else:
         formatted_state.append("Current Price Cache: Empty/Needs update.")
     
-    return "\\n".join(formatted_state)
+    return "\n".join(formatted_state)
 
 def _generate_context_key(state: dict) -> str:
     """Generates a context key for the bandit policy based on the current state."""
@@ -669,6 +706,7 @@ CRITICAL: If the last server response contains an "Unknown command" error, you M
 Your primary goal in this stage is to systematically try every command in the `commands_to_try` list and fetch its schema. Once a command's schema is fetched, it will be removed from `schemas_to_fetch`. If a command consistently fails or requires complex parameters you cannot guess, categorize it as broken.
 """
     elif current_stage == "survey":
+        working_commands_str = "\\n".join([f"- `{c}`" for c in game_state_json.get("working_commands", [])])
         system_prompt = f"""You are 'AI_QA_Bot'. Your SOLE task is to output a single, valid JSON object for the next game command. DO NOT include any prose or extra text. Your objective is to gather comprehensive information about the current sector, your ship, and local trade opportunities.
 
 Here is the list of commands that have been confirmed to be WORKING:
@@ -685,6 +723,7 @@ To achieve your objective, you should:
 You must choose a command from the list of WORKING commands. Your response MUST be a JSON object with a "command" field containing the command name. If a command requires parameters, include them in a "data" field.
 """
     elif current_stage == "explore":
+        working_commands_str = "\\n".join([f"- `{c}`" for c in game_state_json.get("working_commands", [])])
         system_prompt = f"""You are 'AI_QA_Bot'. Your SOLE task is to output a single, valid JSON object for the next game command. DO NOT include any prose or extra text. Your objective is to explore new sectors to find new trade opportunities or valuable resources.
 
 Here is the list of commands that have been confirmed to be WORKING:
@@ -774,6 +813,9 @@ def main():
     # --- Initialization ---
     config = Config(args.config)
     
+    # Set random seed for reproducibility
+    random.seed(config.get("random_seed", time.time()))
+
     logging.basicConfig(
         level=logging.DEBUG, # Change INFO to DEBUG
         format='%(asctime)s - %(levelname)s - %(message)s',

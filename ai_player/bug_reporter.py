@@ -10,7 +10,7 @@ class BugReporter:
         self.bug_report_dir = bug_report_dir
         os.makedirs(self.bug_report_dir, exist_ok=True)
 
-    def report_bug(self, bug_type: str, description: str, reproducer: dict, frames: list, server_caps: dict, agent_state: dict, last_commands_history: list, last_responses_history: list):
+    def report_bug(self, bug_type: str, description: str, reproducer: dict, frames: list, server_caps: dict, agent_state: dict, last_commands_history: list, last_responses_history: list, sent_schema: dict = None, validated: bool = False):
         timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         bug_filename = os.path.join(self.bug_report_dir, f"BUG-{timestamp}-{bug_type}.md")
 
@@ -58,6 +58,9 @@ class BugReporter:
 ```json
 {json.dumps(agent_state, indent=2)}
 ```
+
+## Client Version
+{agent_state.get('client_version', 'N/A')}
 """
         try:
             with open(bug_filename, "w") as f:
@@ -66,7 +69,7 @@ class BugReporter:
         except IOError as e:
             logger.critical(f"Failed to write bug report to {bug_filename}: {e}")
 
-    def triage_protocol_error(self, sent_command: dict, response: dict, agent_state: dict, error_message: str, last_commands_history: list, last_responses_history: list):
+    def triage_protocol_error(self, sent_command: dict, response: dict, agent_state: dict, error_message: str, last_commands_history: list, last_responses_history: list, sent_schema: dict = None, validated: bool = False):
         bug_type = "Protocol Error"
         description = f"Server returned a protocol error: {error_message}"
         reproducer = {
@@ -88,7 +91,7 @@ class BugReporter:
         frames.append({"type": "command", "data": sent_command})
         frames.append({"type": "response", "data": response})
 
-        self.report_bug(bug_type, description, reproducer, frames, agent_state.get("server_capabilities", {}), agent_state, last_commands_history, last_responses_history)
+        self.report_bug(bug_type, description, reproducer, frames, agent_state.get("server_capabilities", {}), agent_state, last_commands_history, last_responses_history, sent_schema, validated)
 
     def triage_invariant_failure(self, invariant_name: str, description: str, agent_state: dict):
         bug_type = f"Invariant Failure: {invariant_name}"
@@ -97,5 +100,10 @@ class BugReporter:
             "expected": f"Invariant '{invariant_name}' to hold true",
             "actual": description
         }
-        frames = [] # No specific frames for invariant failure unless tied to a response
-        self.report_bug(bug_type, description, reproducer, frames, agent_state.get("server_capabilities", {}), agent_state)
+        frames = []
+        last_cmds = agent_state.get("last_commands_history", [])
+        last_resps = agent_state.get("last_responses_history", [])
+        self.report_bug(
+            bug_type, description, reproducer, frames,
+            agent_state.get("server_capabilities", {}), agent_state, last_cmds, last_resps
+        )

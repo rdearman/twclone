@@ -3,6 +3,7 @@ import time
 import random
 import json
 from jsonschema import validate, ValidationError
+from main import load_schemas_from_docs # Import the function
 
 logger = logging.getLogger(__name__)
 
@@ -102,11 +103,17 @@ class FiniteStatePlanner:
                 {"command": command_name, "data": payload}, # Sent command info
                 {"error": {"message": e.message, "details": str(e)}}, # Response-like error info
                 self.state_manager.get_all(),
-                f"Payload validation failed for command '{command_name}': {e.message}"
+                f"Payload validation failed for command '{command_name}': {e.message}",
+                self.state_manager.get("last_commands_history", []),
+                self.state_manager.get("last_responses_history", []),
+                sent_schema=request_schema, # Pass the schema used for validation
+                validated=False # Validation failed
             )
             return False
 
-    def _can_warp(self, state):
+    def _can_warp(self, state, dynamic_cooldown):
+        if not state.get("ship_info", {}).get("id"):
+            return False
         # Check if there are adjacent sectors and enough fuel/turns (placeholder for now)
         sector_data = state.get("sector_data", {})
         sector_data_for_current_sector = sector_data.get(str(state.get("player_location_sector")), {})
@@ -157,7 +164,11 @@ class FiniteStatePlanner:
                 target_sector = best_route["buy_sector_id"]
             
             if target_sector and target_sector in adjacent_sectors:
-                logger.info(f"Strategic warp: Moving towards {target_sector} for trade route.")
+                ship_id = state.get("ship_info", {}).get("id")
+                if not ship_id:
+                    logger.error("Cannot warp: ship_id is missing from state.")
+                    return None
+                logger.info(f"Strategic warp: Moving towards sector {target_sector}.")
                 return {"sector_id": target_sector}
 
         if adjacent_sectors:
@@ -180,10 +191,12 @@ class FiniteStatePlanner:
                 logger.info(f"Adaptive exploration: Warping to sector {best_adjacent_sector} with value {highest_value}.")
                 return {"sector_id": best_adjacent_sector}
             elif adjacent_sectors: # Fallback to any adjacent if no "best" found (e.g., all have same low value)
-                return {"sector_id": random.choice(adjacent_sectors)}
+                chosen_sector = random.choice(adjacent_sectors)
+                logger.info(f"Adaptive exploration: Warping to sector {chosen_sector} (random fallback).")
+                return {"sector_id": chosen_sector}
         return None # Cannot warp
 
-    def _can_get_trade_quote(self, state):
+    def _can_get_trade_quote(self, state, dynamic_cooldown):
         # Only try if we have the port ID and the command isn't permanently broken.
         broken_trade_quote = "trade.quote" in [item["command"] for item in state.get("broken_commands", [])]
         ports = state.get("sector_data", {}).get(str(state.get("player_location_sector")), {}).get("ports", [])
@@ -205,7 +218,7 @@ class FiniteStatePlanner:
             return {"port_id": port_id, "commodity": commodity, "quantity": 1}
         return None
 
-    def _can_buy(self, state):
+    def _can_buy(self, state, dynamic_cooldown):
         # Preconditions for buying:
         # 1. Have a valid price_cache for the current sector and port
         # 2. Have enough credits
@@ -262,7 +275,7 @@ class FiniteStatePlanner:
                 return {"port_id": port_id, "commodity": commodity, "quantity": 1}
         return None
 
-    def _can_sell(self, state):
+    def _can_sell(self, state, dynamic_cooldown):
         # Preconditions for selling:
         # 1. Have a valid price_cache for the current sector and port
         # 2. Have cargo to sell
@@ -310,7 +323,7 @@ class FiniteStatePlanner:
                 return {"port_id": port_id, "commodity": commodity, "quantity": 1}
         return None
 
-    def _can_deposit(self, state):
+    def _can_deposit(self, state, dynamic_cooldown):
         # Preconditions for depositing:
         # 1. Have credits
         return state.get("current_credits", 0.0) > 0
@@ -319,7 +332,7 @@ class FiniteStatePlanner:
         # Deposit all current credits
         return {"amount": state.get("current_credits", 0.0)}
 
-    def _can_withdraw(self, state):
+    def _can_withdraw(self, state, dynamic_cooldown):
         # Preconditions for withdrawing:
         # 1. Have credits in bank (placeholder - requires bank.info)
         # 2. Need credits for a purchase (placeholder - requires knowing future purchase)
@@ -442,9 +455,10 @@ class FiniteStatePlanner:
 
     def _generate_context_key(self, state: dict) -> str:
         """Generates a context key for the bandit policy based on the current state."""
-        current_stage = state.get("stage", "bootstrap")
-        player_sector = state.get("player_location_sector", 1)
-        return f"{current_stage}-{player_sector}"
+        stage = state.get("stage","bootstrap")
+        sector = state.get("player_location_sector",1)
+        have_ship = 1 if state.get("ship_info",{}).get("id") else 0
+        return f"{stage}-{sector}-ship{have_ship}"
 
     def transition_stage(self, new_stage):
         logger.info(f"Planner: Transitioning from stage '{self.current_stage}' to '{new_stage}'.")
@@ -461,11 +475,11 @@ class FiniteStatePlanner:
 
         if rate_limit_info:
             remaining = rate_limit_info.get("remaining", 1)
-            reset_time = rate_limit_info.get("reset", 0) # Unix timestamp
+            reset_at = rate_limit_info.get("reset_at", 0) # Use reset_at
             
-            if remaining <= 1 and reset_time > time.time():
-                # If we're near the limit, wait until reset time plus a small buffer
-                dynamic_cooldown = max(dynamic_cooldown, reset_time - time.time() + 1)
+            if remaining <= 1 and reset_at > time.time(): # Compare with reset_at
+                # If we're near the limit, wait until reset_at plus a small buffer
+                dynamic_cooldown = max(dynamic_cooldown, reset_at - time.time() + 1)
                 logger.warning(f"Dynamic cooldown adjusted to {dynamic_cooldown:.2f}s due to rate limit (remaining: {remaining}).")
 
 
@@ -483,6 +497,17 @@ class FiniteStatePlanner:
                         if payload is not None:
                             logger.debug(f"Planner: Bootstrap candidate: {action_def['command']}")
                             return {"command": action_def["command"], "data": payload}
+                
+                # Fallback: If schemas are still to be fetched and no bootstrap action could be taken,
+                # load schemas from docs as a last resort.
+                if current_state.get("schemas_to_fetch"):
+                    logger.warning("Bootstrap: Could not fetch all schemas via system.describe_schema. Falling back to loading from docs.")
+                    load_schemas_from_docs(self.state_manager)
+                    # After loading from docs, re-evaluate if we can transition or need more actions
+                    if not self.state_manager.get("schemas_to_fetch"): # If docs loaded all needed schemas
+                        self.transition_stage("survey")
+                        return self.get_next_command(llm_suggestion) # Try to get a command for the new stage
+                
                 logger.error("Bootstrap: Stuck. Cannot login or cache schemas.")
                 return None # Cannot proceed
 
@@ -530,7 +555,7 @@ class FiniteStatePlanner:
                 if command_name in ["ship.info", "sector.info"] and self.current_stage == "survey":
                     if action_def["precondition"](current_state, dynamic_cooldown):
                         candidates.append(action_def)
-                elif action_def["precondition"](current_state):
+                elif action_def["precondition"](current_state, dynamic_cooldown):
                     candidates.append(action_def)
         
         logger.info(f"Planner: Candidate actions for stage '{self.current_stage}': {[c['command'] for c in candidates]}")
@@ -559,13 +584,19 @@ class FiniteStatePlanner:
             # Use bandit policy to choose an action
             candidate_commands = [action_def["command"] for action_def in candidates]
             context_key = self._generate_context_key(current_state) # Generate context key
-            chosen_command_name = self.bandit_policy.choose_action(candidate_commands, context_key)
             
-            chosen_action_def = next( (action_def for action_def in candidates if action_def["command"] == chosen_command_name), None)
+            # Loop through candidates, trying to find one with a valid payload
+            for _ in range(len(candidates)): # Try each candidate once
+                chosen_command_name = self.bandit_policy.choose_action(candidate_commands, context_key)
+                chosen_action_def = next( (action_def for action_def in candidates if action_def["command"] == chosen_command_name), None)
 
-            if chosen_action_def:
-                payload = chosen_action_def["payload_builder"](current_state, dynamic_cooldown)
-                if payload is not None:
+                if chosen_action_def:
+                    payload = chosen_action_def["payload_builder"](current_state, dynamic_cooldown)
+                    if payload is None:
+                        logger.warning(f"Payload builder for command '{chosen_action_def['command']}' returned None. Trying another candidate.")
+                        candidate_commands.remove(chosen_command_name) # Remove from consideration
+                        continue
+                    
                     # Validate payload before returning
                     if self._validate_payload(chosen_action_def["command"], payload):
                         # Apply cooldown to this command
@@ -575,8 +606,12 @@ class FiniteStatePlanner:
                         return {"command": chosen_action_def["command"], "data": payload}
                     else:
                         logger.warning(f"Generated payload for command '{chosen_action_def['command']}' is invalid. Trying another candidate.")
-            
-        logger.warning(f"No valid actions found for stage '{self.current_stage}'. Stalling.")
+                        candidate_commands.remove(chosen_command_name) # Remove from consideration
+                        continue
+                candidate_commands.remove(chosen_command_name) # If chosen_action_def is None, remove it
+
+        logger.warning(f"No valid payloads for candidates in stage '{self.current_stage}'.")
+        return None
         
         # If exploit stage has no actions, transition to explore
         if self.current_stage == "exploit" and not candidates:

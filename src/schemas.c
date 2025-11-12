@@ -884,10 +884,23 @@ schema_system_capabilities (void)
 static json_t *
 schema_move_warp (void)
 {
-  /* TODO: Implement this schema */
-  return json_pack ("{s:s, s:s}",
-                    "$id", "ge://schema/move_warp.json",
-                    "$comment", "Schema not yet implemented");
+  json_t *data_props = json_pack(
+      "{s:o, s:o}",
+      "sector_id", json_pack("{s:s}", "type", "integer"),
+      "ship_id",   json_pack("{s:s}", "type", "integer")
+  );
+
+  json_t *data_schema = json_pack(
+      "{s:s, s:s, s:s, s:o, s:[s,s], s:b}",
+      "$id",      "ge://schema/move_warp.json",
+      "$schema",  "https://json-schema.org/draft/2020-12/schema",
+      "type",     "object",
+      "properties", data_props,
+      "required", "sector_id", "ship_id",
+      "additionalProperties", json_false());
+
+  json_decref(data_props);
+  return data_schema;
 }
 
 

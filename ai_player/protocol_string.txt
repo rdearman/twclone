@@ -370,7 +370,8 @@
     - Description: Warp to an adjacent sector.
     - Data Schema: ```json
 {
-  "sector_id": "<integer>"
+  "sector_id": "<integer>",
+  "ship_id": "<integer>"
 }
 ```
 
