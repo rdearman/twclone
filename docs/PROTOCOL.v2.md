@@ -89,7 +89,9 @@ For asynchronous events pushed to the client (not in response to a specific comm
       "data": {
         "username": "new_player",
         "password": "a_strong_password",
-        "email": "new_player@example.com"
+        "ship_name": "My First Ship", // Optional
+        "ui_locale": "en_US",         // Optional
+        "ui_timezone": "America/New_York" // Optional
       }
     }
     ```
@@ -101,16 +103,15 @@ For asynchronous events pushed to the client (not in response to a specific comm
       "ts": "2025-11-07T10:15:00.100Z",
       "reply_to": "c1d2e3f4-a5b6-c7d8-e9f0-a1b2c3d4e5f6",
       "status": "ok",
-      "type": "auth.registration_complete",
+      "type": "auth.session",
       "data": {
         "player_id": 12345,
-        "username": "new_player",
-        "session": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        "session_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
       }
     }
     ```
 
-*   `auth.login`: Authenticates a user and returns a session token.
+*   `auth.login` (aliases: `login`): Authenticates a user and returns a session token.
 
     *Example Client Request:*
     ```json
@@ -133,10 +134,12 @@ For asynchronous events pushed to the client (not in response to a specific comm
       "ts": "2025-11-07T10:20:00.100Z",
       "reply_to": "d1e2f3a4-b5c6-d7e8-f9a0-b1c2d3e4f5a6",
       "status": "ok",
-      "type": "auth.session_granted",
+      "type": "auth.session",
       "data": {
-        "session": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-        "expires_at": "2025-11-08T10:20:00.100Z"
+        "player_id": 12345,
+        "current_sector": 1,
+        "unread_news_count": 0,
+        "session_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
       }
     }
     ```
@@ -149,7 +152,7 @@ For asynchronous events pushed to the client (not in response to a specific comm
       "id": "e1f2a3b4-c5d6-e7f8-a9b0-c1d2e3f4a5b6",
       "ts": "2025-11-07T10:25:00.000Z",
       "command": "auth.logout",
-      "auth": { "session": "eyJhbGciOi..." },
+      "auth": { "session": "eyJhbGciOi..." }, // Optional
       "data": {}
     }
     ```
@@ -161,8 +164,7 @@ For asynchronous events pushed to the client (not in response to a specific comm
       "ts": "2025-11-07T10:25:00.100Z",
       "reply_to": "e1f2a3b4-c5d6-e7f8-a9b0-c1d2e3f4a5b6",
       "status": "ok",
-      "type": "auth.session_terminated",
-      "data": {}
+      "type": "auth.logged_out"
     }
     ```
 
@@ -173,9 +175,10 @@ For asynchronous events pushed to the client (not in response to a specific comm
     {
       "id": "f1a2b3c4-d5e6-f7a8-b9c0-d1e2f3a4b5c6",
       "ts": "2025-11-08T10:00:00.000Z",
-      "command": "auth.refresh",
       "auth": { "session": "eyJhbGciOi..." },
-      "data": {}
+      "data": {
+        "session_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." // Optional, can also be in meta
+      }
     }
     ```
 
@@ -186,10 +189,100 @@ For asynchronous events pushed to the client (not in response to a specific comm
       "ts": "2025-11-08T10:00:00.100Z",
       "reply_to": "f1a2b3c4-d5e6-f7a8-b9c0-d1e2f3a4b5c6",
       "status": "ok",
-      "type": "auth.session_granted",
+      "type": "auth.session",
       "data": {
-        "session": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... (a new token)",
-        "expires_at": "2025-11-09T10:00:00.100Z"
+        "player_id": 12345,
+        "session_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... (a new token)"
+      }
+    }
+    ```
+
+*   `auth.mfa.totp.verify`: Verify a TOTP code for Multi-Factor Authentication. (NIY - Not Yet Implemented)
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "g1h2i3j4-k5l6-m7n8-o9p0-q1r2s3t4u5v6",
+      "ts": "2025-11-07T10:30:00.000Z",
+      "command": "auth.mfa.totp.verify",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {
+        "totp_code": "123456"
+      }
+    }
+    ```
+
+    *Example Server Response (Error):*
+    ```json
+    {
+      "id": "sg1h2i3j4-k5l6-m7n8-o9p0-q1r2s3t4u5v6",
+      "ts": "2025-11-07T10:30:00.100Z",
+      "reply_to": "g1h2i3j4-k5l6-m7n8-o9p0-q1r2s3t4u5v6",
+      "status": "error",
+      "type": "auth.mfa.totp.verify",
+      "error": {
+        "code": 1101,
+    }
+    ```
+
+*   `user.create`: Creates a new player account. (DEPRECATED: Use `auth.register` instead)
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "h1i2j3k4-l5m6-n7o8-p9q0-r1s2t3u4v5w6",
+      "ts": "2025-11-07T10:35:00.000Z",
+      "command": "user.create",
+      "auth": null,
+      "data": {
+        "username": "new_player_deprecated",
+        "password": "a_strong_password"
+      }
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sh1i2j3k4-l5m6-n7o8-p9q0-r1s2t3u4v5w6",
+      "ts": "2025-11-07T10:35:00.100Z",
+      "reply_to": "h1i2j3k4-l5m6-n7o8-p9q0-r1s2t3u4v5w6",
+      "status": "ok",
+      "type": "auth.session",
+      "data": {
+        "player_id": 12346,
+        "session_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+      }
+    }
+    ```
+
+*   `user.create`: Creates a new player account. (DEPRECATED: Use `auth.register` instead)
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "h1i2j3k4-l5m6-n7o8-p9q0-r1s2t3u4v5w6",
+      "ts": "2025-11-07T10:35:00.000Z",
+      "command": "user.create",
+      "auth": null,
+      "data": {
+        "username": "new_player_deprecated",
+        "password": "a_strong_password"
+      }
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sh1i2j3k4-l5m6-n7o8-p9q0-r1s2t3u4v5w6",
+      "ts": "2025-11-07T10:35:00.100Z",
+      "reply_to": "h1i2j3k4-l5m6-n7o8-p9q0-r1s2t3u4v5w6",
+      "status": "ok",
+      "type": "auth.session",
+      "data": {
+        "player_id": 12346,
+        "session_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
       }
     }
     ```
@@ -1087,16 +1180,20 @@ Commands for interacting with the ledger-based economy. Most are only available 
     ```
 
 ### 4.4. Movement & Navigation
-*   `move.describe_sector`: Get detailed information about a sector.
+*   `move.describe_sector`: (ALIAS for `sector.info`) Get detailed information about a sector. See `sector.info` for details.
+
+*   `sector.info`: Get current sector information.
 
     *Example Client Request:*
     ```json
     {
       "id": "a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
       "ts": "2025-11-07T15:00:00.000Z",
-      "command": "move.describe_sector",
+      "command": "sector.info",
       "auth": { "session": "eyJhbGciOi..." },
-      "data": {}
+      "data": {
+        "sector_id": 1 // Optional: If omitted, current sector info is returned
+      }
     }
     ```
 
@@ -1107,17 +1204,31 @@ Commands for interacting with the ledger-based economy. Most are only available 
       "ts": "2025-11-07T15:00:00.100Z",
       "reply_to": "a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
       "status": "ok",
-      "type": "sector.description",
+      "type": "sector.info",
       "data": {
         "sector_id": 1,
         "name": "Sol",
-        "players": ["player1", "player2"],
-        "ships": [
-          { "id": 101, "owner": "player1", "type": "Freighter" },
-          { "id": 102, "owner": "player2", "type": "Fighter" }
+        "description": "The home system of humanity.",
+        "coordinates": { "x": 0, "y": 0, "z": 0 },
+        "adjacent_sectors": [
+          { "id": 2, "name": "Alpha Centauri" },
+          { "id": 3, "name": "Barnard's Star" }
         ],
-        "objects": [
-          { "id": 201, "type": "Stardock" }
+        "celestial_objects": [
+          { "type": "planet", "id": 101, "name": "Earth" },
+          { "type": "star", "id": 102, "name": "Sol" }
+        ],
+        "ports": [
+          { "id": 1, "name": "Earth Port", "type": "Stardock", "faction": "Federation" }
+        ],
+        "ships_present": [
+          { "id": 54321, "owner_id": 12345, "owner_name": "player1", "type": "Freighter" }
+        ],
+        "players_present": [
+          { "id": 12345, "username": "player1" }
+        ],
+        "beacons": [
+          { "id": 201, "text": "Welcome to Sol!" }
         ]
       }
     }
@@ -1133,7 +1244,7 @@ Commands for interacting with the ledger-based economy. Most are only available 
       "command": "move.warp",
       "auth": { "session": "eyJhbGciOi..." },
       "data": {
-        "sector_id": 2
+        "to_sector_id": 2
       }
     }
     ```
@@ -1145,13 +1256,185 @@ Commands for interacting with the ledger-based economy. Most are only available 
       "ts": "2025-11-07T15:05:00.100Z",
       "reply_to": "b1c2d3e4-f5a6-b7c8-d9e0-f1a2b3c4d5e6",
       "status": "ok",
-      "type": "move.warp_complete",
+      "type": "move.result",
       "data": {
-        "new_sector_id": 2,
-        "new_sector_name": "Alpha Centauri"
+        "player_id": 12345,
+        "from_sector_id": 1,
+        "to_sector_id": 2,
+        "current_sector": 2
       }
     }
     ```
+    *Note: This command also broadcasts `sector.player_left` to the `from_sector` and `sector.player_entered` to the `to_sector`.*
+
+*   `move.scan`: Get a summary scan of the current sector.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "h1i2j3k4-l5m6-n7o8-p9q0-r1s2t3u4v5w6",
+      "ts": "2025-11-07T15:06:00.000Z",
+      "command": "move.scan",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {}
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sh1i2j3k4-l5m6-n7o8-p9q0-r1s2t3u4v5w6",
+      "ts": "2025-11-07T15:06:00.100Z",
+      "reply_to": "h1i2j3k4-l5m6-n7o8-p9q0-r1s2t3u4v5w6",
+      "status": "ok",
+      "type": "sector.scan_v1",
+      "data": {
+        "sector_id": 1,
+        "name": "Sol",
+        "ships_count": 5,
+        "players_count": 2,
+        "ports_count": 1,
+        "planets_count": 3
+      }
+    }
+    ```
+
+*   `sector.scan`: Get a detailed scan of the current sector.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "i1j2k3l4-m5n6-o7p8-q9r0-s1t2u3v4w5x6",
+      "ts": "2025-11-07T15:07:00.000Z",
+      "command": "sector.scan",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {}
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "si1j2k3l4-m5n6-o7p8-q9r0-s1t2u3v4w5x6",
+      "ts": "2025-11-07T15:07:00.100Z",
+      "reply_to": "i1j2k3l4-m5n6-o7p8-q9r0-s1t2u3v4w5x6",
+      "status": "ok",
+      "type": "sector.scan",
+      "data": {
+        "sector_id": 1,
+        "name": "Sol",
+        "celestial_objects": [
+          { "type": "planet", "id": 101, "name": "Earth", "resources": ["water", "minerals"] }
+        ],
+        "ships_present": [
+          { "id": 54321, "owner_name": "player1", "type": "Freighter", "cargo": [{"commodity": "ore", "quantity": 50}] }
+        ],
+        "anomalies": [
+          { "type": "wormhole", "destination_sector": 10 }
+        ]
+      }
+    }
+    ```
+
+*   `sector.scan.density`: Get density scan data for surrounding sectors.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "j1k2l3m4-n5o6-p7q8-r9s0-t1u2v3w4x5y6",
+      "ts": "2025-11-07T15:08:00.000Z",
+      "command": "sector.scan.density",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {
+        "sector_id": 1 // Optional: If omitted, current sector's density is returned
+      }
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sj1k2l3m4-n5o6-p7q8-r9s0-t1u2v3w4x5y6",
+      "ts": "2025-11-07T15:08:00.100Z",
+      "reply_to": "j1k2l3m4-n5o6-p7q8-r9s0-t1u2v3w4x5y6",
+      "status": "ok",
+      "type": "sector.density.scan",
+      "data": [
+        { "sector_id": 1, "density": 0.85 },
+        { "sector_id": 2, "density": 0.60 },
+        { "sector_id": 3, "density": 0.92 }
+    }
+    ```
+
+*   `sector.search`: Search for objects or players within sectors.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "k1l2m3n4-o5p6-q7r8-s9t0-u1v2w3x4y5z6",
+      "ts": "2025-11-07T15:09:00.000Z",
+      "command": "sector.search",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {
+        "q": "player1",
+        "type": "player", // Optional: "player", "ship", "planet", "port", "beacon"
+        "limit": 10,      // Optional: Default 20
+        "cursor": 0       // Optional: For pagination
+      }
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sk1l2m3n4-o5p6-q7r8-s9t0-u1v2w3x4y5z6",
+      "ts": "2025-11-07T15:09:00.100Z",
+      "reply_to": "k1l2m3n4-o5p6-q7r8-s9t0-u1v2w3x4y5z6",
+      "status": "ok",
+      "type": "sector.search_results_v1",
+      "data": {
+        "items": [
+          { "type": "player", "id": 12345, "name": "player1", "sector_id": 1 },
+          { "type": "ship", "id": 54321, "name": "Stardust Cruiser", "sector_id": 1 }
+        ],
+        "next_cursor": 10 // Or null if no more results
+      }
+    }
+    ```
+
+*   `sector.set_beacon`: Set a custom beacon message in a sector.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "l1m2n3o4-p5q6-r7s8-t9u0-v1w2x3y4z5a6",
+      "ts": "2025-11-07T15:10:00.000Z",
+      "command": "sector.set_beacon",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {
+        "sector_id": 1,
+        "text": "Beware of pirates!"
+      }
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sl1m2n3o4-p5q6-r7s8-t9u0-v1w2x3y4z5a6",
+      "ts": "2025-11-07T15:10:00.100Z",
+      "reply_to": "l1m2n3o4-p5q6-r7s8-t9u0-v1w2x3y4z5a6",
+      "status": "ok",
+      "type": "sector.set_beacon",
+      "data": null,
+      "meta": {
+        "message": "Beacon set successfully."
+      }
+    }
+    ```
+    *Note: Setting a beacon will typically be followed by a `sector.info` event broadcast to all clients in the sector.*
+
+
 
 *   `move.pathfind`: Find the shortest path between two sectors.
 
@@ -1163,8 +1446,9 @@ Commands for interacting with the ledger-based economy. Most are only available 
       "command": "move.pathfind",
       "auth": { "session": "eyJhbGciOi..." },
       "data": {
-        "from_sector_id": 1,
-        "to_sector_id": 10
+        "from": 1, // Optional: If omitted, current sector is used as start
+        "to": 10,
+        "avoid": [666, 777] // Optional: Sectors to avoid
       }
     }
     ```
@@ -1176,10 +1460,10 @@ Commands for interacting with the ledger-based economy. Most are only available 
       "ts": "2025-11-07T15:10:00.100Z",
       "reply_to": "c1d2e3f4-a5b6-c7d8-e9f0-a1b2c3d4e5f6",
       "status": "ok",
-      "type": "move.path",
+      "type": "move.path_v1",
       "data": {
-        "path": [1, 2, 5, 8, 10],
-        "jumps": 4
+        "steps": [1, 2, 5, 8, 10],
+        "total_cost": 4
       }
     }
     ```
@@ -1214,9 +1498,9 @@ Commands for interacting with the ledger-based economy. Most are only available 
     }
     ```
 
-*   `move.autopilot.start/stop/status`: Manage server-side autopilot.
+*   `move.autopilot.start`: (ALIAS for `move.pathfind`) Start server-side autopilot.
 
-    *Example Client Request (start):*
+    *Example Client Request:*
     ```json
     {
       "id": "e1f2a3b4-c5d6-e7f8-a9b0-c1d2e3f4a5b6",
@@ -1224,29 +1508,87 @@ Commands for interacting with the ledger-based economy. Most are only available 
       "command": "move.autopilot.start",
       "auth": { "session": "eyJhbGciOi..." },
       "data": {
-        "path": [1, 2, 5, 8, 10]
+        "from": 1, // Optional: If omitted, current sector is used as start
+        "to": 10,
+        "avoid": [666, 777] // Optional: Sectors to avoid
       }
     }
     ```
 
-    *Example Server Response (start):*
+    *Example Server Response:*
     ```json
     {
       "id": "se1f2a3b4-c5d6-e7f8-a9b0-c1d2e3f4a5b6",
       "ts": "2025-11-07T15:20:00.100Z",
       "reply_to": "e1f2a3b4-c5d6-e7f8-a9b0-c1d2e3f4a5b6",
       "status": "ok",
-      "type": "move.autopilot.started",
+      "type": "move.path_v1",
       "data": {
-        "destination_sector_id": 10,
-        "eta": "2025-11-07T15:22:00.000Z"
+        "steps": [1, 2, 5, 8, 10],
+        "total_cost": 4
       }
     }
     ```
 
-*   `nav.avoid.list/add/remove`: Manage sectors to avoid during pathfinding.
+*   `move.autopilot.stop`: Stop server-side autopilot. (NIY - Not Yet Implemented)
 
-    *Example Client Request (add):*
+    *Example Client Request:*
+    ```json
+    {
+      "id": "f1a2b3c4-d5e6-f7a8-b9c0-d1e2f3a4b5c6",
+      "ts": "2025-11-07T15:21:00.000Z",
+      "command": "move.autopilot.stop",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {}
+    }
+    ```
+
+    *Example Server Response (Error):*
+    ```json
+    {
+      "id": "sf1a2b3c4-d5e6-f7a8-b9c0-d1e2f3a4b5c6",
+      "ts": "2025-11-07T15:21:00.100Z",
+      "reply_to": "f1a2b3c4-d5e6-f7a8-b9c0-d1e2f3a4b5c6",
+      "status": "error",
+      "type": "move.autopilot.stop",
+      "error": {
+        "code": 1101,
+        "message": "Not Implemented"
+      }
+    }
+    ```
+
+*   `move.autopilot.status`: Get current server-side autopilot status. (NIY - Not Yet Implemented)
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "g1h2i3j4-k5l6-m7n8-o9p0-q1r2s3t4u5v6",
+      "ts": "2025-11-07T15:22:00.000Z",
+      "command": "move.autopilot.status",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {}
+    }
+    ```
+
+    *Example Server Response (Error):*
+    ```json
+    {
+      "id": "sg1h2i3j4-k5l6-m7n8-o9p0-q1r2s3t4u5v6",
+      "ts": "2025-11-07T15:22:00.100Z",
+      "reply_to": "g1h2i3j4-k5l6-m7n8-o9p0-q1r2s3t4u5v6",
+      "status": "error",
+      "type": "move.autopilot.status",
+      "error": {
+        "code": 1101,
+        "message": "Not Implemented"
+      }
+    }
+    ```
+
+*   `nav.avoid.add`: Add a sector to the player's avoid list.
+
+    *Example Client Request:*
     ```json
     {
       "id": "f1a2b3c4-d5e6-f7a8-b9c0-d1e2f3a4b5c6",
@@ -1259,7 +1601,7 @@ Commands for interacting with the ledger-based economy. Most are only available 
     }
     ```
 
-    *Example Server Response (add):*
+    *Example Server Response:*
     ```json
     {
       "id": "sf1a2b3c4-d5e6-f7a8-b9c0-d1e2f3a4b5c6",
@@ -1273,9 +1615,65 @@ Commands for interacting with the ledger-based economy. Most are only available 
     }
     ```
 
-*   `nav.bookmark.list/add/remove`: Manage bookmarked locations.
+*   `nav.avoid.remove`: Remove a sector from the player's avoid list.
 
-    *Example Client Request (add):*
+    *Example Client Request:*
+    ```json
+    {
+      "id": "f1a2b3c4-d5e6-f7a8-b9c0-d1e2f3a4b5c6",
+      "ts": "2025-11-07T15:26:00.000Z",
+      "command": "nav.avoid.remove",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {
+        "sector_id": 666
+      }
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sf1a2b3c4-d5e6-f7a8-b9c0-d1e2f3a4b5c6",
+      "ts": "2025-11-07T15:26:00.100Z",
+      "reply_to": "f1a2b3c4-d5e6-f7a8-b9c0-d1e2f3a4b5c6",
+      "status": "ok",
+      "type": "nav.avoid.removed",
+      "data": {
+        "avoid_list": []
+      }
+    }
+    ```
+
+*   `nav.avoid.list`: Get the player's current avoid list.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "f1a2b3c4-d5e6-f7a8-b9c0-d1e2f3a4b5c6",
+      "ts": "2025-11-07T15:27:00.000Z",
+      "command": "nav.avoid.list",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {}
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sf1a2b3c4-d5e6-f7a8-b9c0-d1e2f3a4b5c6",
+      "ts": "2025-11-07T15:27:00.100Z",
+      "reply_to": "f1a2b3c4-d5e6-f7a8-b9c0-d1e2f3a4b5c6",
+      "status": "ok",
+      "type": "nav.avoid.list",
+      "data": {
+        "avoid_list": [666, 777]
+      }
+    }
+    ```
+
+*   `nav.bookmark.add`: Add a location to the player's bookmarks.
+
+    *Example Client Request:*
     ```json
     {
       "id": "g1b2c3d4-e5f6-g7b8-c9d0-e1f2a3b4c5d6",
@@ -1289,7 +1687,7 @@ Commands for interacting with the ledger-based economy. Most are only available 
     }
     ```
 
-    *Example Server Response (add):*
+    *Example Server Response:*
     ```json
     {
       "id": "sg1b2c3d4-e5f6-g7b8-c9d0-e1f2a3b4c5d6",
@@ -1305,7 +1703,97 @@ Commands for interacting with the ledger-based economy. Most are only available 
     }
     ```
 
+*   `nav.bookmark.remove`: Remove a location from the player's bookmarks.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "g1b2c3d4-e5f6-g7b8-c9d0-e1f2a3b4c5d6",
+      "ts": "2025-11-07T15:31:00.000Z",
+      "command": "nav.bookmark.remove",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {
+        "sector_id": 101
+      }
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sg1b2c3d4-e5f6-g7b8-c9d0-e1f2a3b4c5d6",
+      "ts": "2025-11-07T15:31:00.100Z",
+      "reply_to": "g1b2c3d4-e5f6-g7b8-c9d0-e1f2a3b4c5d6",
+      "status": "ok",
+      "type": "nav.bookmark.removed",
+      "data": {
+        "bookmarks": []
+      }
+    }
+    ```
+
+*   `nav.bookmark.list`: Get the player's current bookmarks.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "g1b2c3d4-e5f6-g7b8-c9d0-e1f2a3b4c5d6",
+      "ts": "2025-11-07T15:32:00.000Z",
+      "command": "nav.bookmark.list",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {}
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sg1b2c3d4-e5f6-g7b8-c9d0-e1f2a3b4c5d6",
+      "ts": "2025-11-07T15:32:00.100Z",
+      "reply_to": "g1b2c3d4-e5f6-g7b8-c9d0-e1f2a3b4c5d6",
+      "status": "ok",
+      "type": "nav.bookmark.list",
+      "data": {
+        "bookmarks": [
+          { "sector_id": 101, "name": "My Home Base" },
+          { "sector_id": 202, "name": "Mining Colony" }
+        ]
+      }
+    }
+    ```
+
 ### 4.5. Ports & Trade (Commodity Exchange)
+### 4.5.1. Player Trade Preferences
+
+*   `player.set_trade_account_preference`: Set the player's preferred account for trade transactions.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+      "ts": "2025-11-07T16:00:00.000Z",
+      "command": "player.set_trade_account_preference",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {
+        "preference": 1 // 0 = Petty Cash (ship holds), 1 = Bank Account
+      }
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sa1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+      "ts": "2025-11-07T16:00:00.100Z",
+      "reply_to": "a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+      "status": "ok",
+      "type": "player.set_trade_account_preference",
+      "data": {
+        "message": "Preference updated successfully."
+      }
+    }
+    ```
+
 *   `trade.port_info`: Get info on a port's statically sold goods.
 
     *Example Client Request:*
@@ -1316,7 +1804,8 @@ Commands for interacting with the ledger-based economy. Most are only available 
       "command": "trade.port_info",
       "auth": { "session": "eyJhbGciOi..." },
       "data": {
-        "port_id": 1
+        "port_id": 1,    // Optional: Either port_id or sector_id must be provided
+        "sector_id": 1   // Optional: Either port_id or sector_id must be provided
       }
     }
     ```
@@ -1330,19 +1819,28 @@ Commands for interacting with the ledger-based economy. Most are only available 
       "status": "ok",
       "type": "trade.port_info",
       "data": {
-        "port_id": 1,
-        "name": "Earth Trading Post",
-        "commodities": [
-          { "commodity": "food", "quantity": 10000, "buy_price": "10.00", "sell_price": "9.00" },
-          { "commodity": "water", "quantity": 20000, "buy_price": "5.00", "sell_price": "4.50" }
-        ]
+        "port": {
+          "id": 1,
+          "number": 1,
+          "name": "Earth Trading Post",
+          "sector": 1,
+          "size": 5,
+          "techlevel": 8,
+          "ore_on_hand": 10000,
+          "organics_on_hand": 20000,
+          "equipment_on_hand": 5000,
+          "petty_cash": 123456, // Note: This is from the same DB column as 'credits'
+          "credits": 123456,    // Note: This is from the same DB column as 'petty_cash'
+          "type": 1 // e.g., 1 for Stardock
+        }
       }
     }
     ```
 
-*   `trade.buy`/`trade.sell`: Basic commodity trading with a port.
 
-    *Example Client Request (buy):*
+*   `trade.buy`: Buy commodities from a port.
+
+    *Example Client Request:*
     ```json
     {
       "id": "b1c2d3e4-f5a6-b7c8-d9e0-f1a2b3c4d5e6",
@@ -1350,28 +1848,113 @@ Commands for interacting with the ledger-based economy. Most are only available 
       "command": "trade.buy",
       "auth": { "session": "eyJhbGciOi..." },
       "data": {
-        "port_id": 1,
-        "commodity": "food",
-        "quantity": 100
+        "account": 1, // Optional: 0 = Petty Cash (ship holds), 1 = Bank Account. Default is Petty Cash.
+        "sector_id": 1,
+        "port_id": 1, // Optional: If omitted, port in current sector is used.
+        "items": [
+          { "commodity": "ore", "quantity": 100 },
+          { "commodity": "equipment", "quantity": 50 }
+        ],
+        "idempotency_key": "buy_txn_12345" // Unique key for idempotent requests
       }
     }
     ```
 
-    *Example Server Response (buy):*
+    *Example Server Response:*
     ```json
     {
       "id": "sb1c2d3e4-f5a6-b7c8-d9e0-f1a2b3c4d5e6",
       "ts": "2025-11-07T16:05:00.100Z",
       "reply_to": "b1c2d3e4-f5a6-b7c8-d9e0-f1a2b3c4d5e6",
       "status": "ok",
-      "type": "trade.receipt",
+      "type": "trade.buy_receipt_v1",
       "data": {
-        "trade_id": "trade_1",
-        "type": "buy",
-        "commodity": "food",
-        "quantity": 100,
-        "price_per_unit": "10.00",
-        "total_cost": "1000.00"
+        "sector_id": 1,
+        "port_id": 1,
+        "player_id": 12345,
+        "lines": [
+          { "commodity": "ore", "quantity": 100, "unit_price": 55, "value": 5500 },
+          { "commodity": "equipment", "quantity": 50, "unit_price": 120, "value": 6000 }
+        ],
+        "credits_remaining": 988500,
+        "total_cost": 11500
+      }
+    }
+    ```
+
+
+*   `trade.sell`: Sell commodities to a port.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "c1d2e3f4-a5b6-c7d8-e9f0-a1b2c3d4e5f6",
+      "ts": "2025-11-07T16:06:00.000Z",
+      "command": "trade.sell",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {
+        "account": 1, // Optional: 0 = Petty Cash (ship holds), 1 = Bank Account. Default is Petty Cash.
+        "sector_id": 1,
+        "items": [
+          { "commodity": "ore", "quantity": 50 },
+          { "commodity": "organics", "quantity": 20 }
+        ],
+        "idempotency_key": "sell_txn_12345" // Unique key for idempotent requests
+      }
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sc1d2e3f4-a5b6-c7d8-e9f0-a1b2c3d4e5f6",
+      "ts": "2025-11-07T16:06:00.100Z",
+      "reply_to": "c1d2e3f4-a5b6-c7d8-e9f0-a1b2c3d4e5f6",
+      "status": "ok",
+      "type": "trade.sell_receipt_v1",
+      "data": {
+        "sector_id": 1,
+        "port_id": 1,
+        "player_id": 12345,
+        "lines": [
+          { "commodity": "ore", "quantity": 50, "unit_price": 50, "value": 2500 },
+          { "commodity": "organics", "quantity": 20, "unit_price": 10, "value": 200 }
+        ],
+        "credits_remaining": 990000,
+        "total_credits": 2700
+      }
+    }
+    ```
+
+*   `trade.jettison`: Jettison cargo from the player's ship.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "d1e2f3a4-b5c6-d7e8-f9a0-b1c2d3e4f5a6",
+      "ts": "2025-11-07T16:07:00.000Z",
+      "command": "trade.jettison",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {
+        "commodity": "ore",
+        "quantity": 10
+      }
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sd1e2f3a4-b5c6-d7e8-f9a0-b1c2d3e4f5a6",
+      "ts": "2025-11-07T16:07:00.100Z",
+      "reply_to": "d1e2f3a4-b5c6-d7e8-f9a0-b1c2d3e4f5a6",
+      "status": "ok",
+      "type": "ship.jettisoned",
+      "data": {
+        "remaining_cargo": [
+          { "commodity": "ore", "quantity": 90 },
+          { "commodity": "organics", "quantity": 20 }
+        ]
       }
     }
     ```
@@ -1386,8 +1969,8 @@ Commands for interacting with the ledger-based economy. Most are only available 
       "command": "trade.history",
       "auth": { "session": "eyJhbGciOi..." },
       "data": {
-        "page": 1,
-        "limit": 10
+        "cursor": "2025-11-07T16:05:00.000Z_trade_1", // Optional: For pagination, format "timestamp_id"
+        "limit": 10 // Optional: Default 20, max 50
       }
     }
     ```
@@ -1401,17 +1984,15 @@ Commands for interacting with the ledger-based economy. Most are only available 
       "status": "ok",
       "type": "trade.history",
       "data": {
-        "trades": [
-          { "trade_id": "trade_1", "ts": "2025-11-07T16:05:00.000Z", "type": "buy", "commodity": "food", "quantity": 100, "total_cost": "1000.00" }
+        "history": [
+          { "timestamp": 1678886700000, "id": 1, "port_id": 1, "commodity": "ore", "units": 100, "price_per_unit": 55.00, "action": "buy" },
+          { "timestamp": 1678886600000, "id": 2, "port_id": 1, "commodity": "equipment", "units": 50, "price_per_unit": 120.00, "action": "sell" }
         ],
-        "pagination": {
-          "total_trades": 1,
-          "total_pages": 1,
-          "current_page": 1
-        }
+        "next_cursor": "2025-11-07T16:05:00.000Z_trade_2" // Or null if no more results
       }
     }
     ```
+
 
 *   `trade.quote`: Get a price quote for a commodity without trading.
 
@@ -1424,7 +2005,7 @@ Commands for interacting with the ledger-based economy. Most are only available 
       "auth": { "session": "eyJhbGciOi..." },
       "data": {
         "port_id": 1,
-        "commodity": "food",
+        "commodity": "ore", // Supported: "ore", "organics", "equipment", "SLV", "WPN", "DRG"
         "quantity": 100
       }
     }
@@ -1435,23 +2016,120 @@ Commands for interacting with the ledger-based economy. Most are only available 
     {
       "id": "sd1e2f3a4-b5c6-d7e8-f9a0-b1c2d3e4f5a6",
       "ts": "2025-11-07T16:15:00.100Z",
-      "reply_to": "d1e2f3a4-b5c6-d7e8-f9a0-b1c2d3e4f5a6",
+      "reply_to": "d1e2f3d4-b5c6-d7e8-f9a0-b1c2d3e4f5a6",
       "status": "ok",
       "type": "trade.quote",
       "data": {
         "port_id": 1,
-        "commodity": "food",
+        "commodity": "ore",
         "quantity": 100,
-        "buy_price": "10.00",
-        "sell_price": "9.00",
-        "total_buy_price": "1000.00",
-        "total_sell_price": "900.00"
+        "buy_price": 55.00, // float
+        "sell_price": 50.00, // float
+        "total_buy_price": 5500, // integer
+        "total_sell_price": 5000 // integer
+      }
+    }
+    ```
+
+
+*   `trade.offer`: Create a trade offer to another player. (NIY - Not Yet Implemented)
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "e1f2a3b4-c5d6-e7f8-a9b0-c1d2e3f4a5b6",
+      "ts": "2025-11-07T16:16:00.000Z",
+      "command": "trade.offer",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {
+        "to_player_id": 123,
+        "offered_items": [
+          { "commodity": "ore", "quantity": 100 }
+        ],
+        "requested_items": [
+          { "commodity": "organics", "quantity": 50 }
+        ]
+      }
+    }
+    ```
+
+    *Example Server Response (Error):*
+    ```json
+    {
+      "id": "se1f2a3b4-c5d6-e7f8-a9b0-c1d2e3f4a5b6",
+      "ts": "2025-11-07T16:16:00.100Z",
+      "reply_to": "e1f2a3b4-c5d6-e7f8-a9b0-c1d2e3f4a5b6",
+      "status": "error",
+      "type": "trade.offer",
+      "error": {
+        "code": 1101,
+        "message": "Not Implemented"
+      }
+    }
+    ```
+
+*   `trade.accept`: Accept a trade offer. (NIY - Not Yet Implemented)
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "f1a2b3c4-d5e6-f7a8-b9c0-d1e2f3a4b5c6",
+      "ts": "2025-11-07T16:17:00.000Z",
+      "command": "trade.accept",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {
+        "offer_id": "offer_123"
+      }
+    }
+    ```
+
+    *Example Server Response (Error):*
+    ```json
+    {
+      "id": "sf1a2b3c4-d5e6-f7a8-b9c0-d1e2f3a4b5c6",
+      "ts": "2025-11-07T16:17:00.100Z",
+      "reply_to": "f1a2b3c4-d5e6-f7a8-b9c0-d1e2f3a4b5c6",
+      "status": "error",
+      "type": "trade.accept",
+      "error": {
+        "code": 1101,
+        "message": "Not Implemented"
+      }
+    }
+    ```
+
+*   `trade.cancel`: Cancel a trade offer. (NIY - Not Yet Implemented)
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "g1h2i3j4-k5l6-m7n8-o9p0-q1r2s3t4u5v6",
+      "ts": "2025-11-07T16:18:00.000Z",
+      "command": "trade.cancel",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {
+        "offer_id": "offer_123"
+      }
+    }
+    ```
+
+    *Example Server Response (Error):*
+    ```json
+    {
+      "id": "sg1h2i3j4-k5l6-m7n8-o9p0-q1r2s3t4u5v6",
+      "ts": "2025-11-07T16:18:00.100Z",
+      "reply_to": "g1h2i3j4-k5l6-m7n8-o9p0-q1r2s3t4u5v6",
+      "status": "error",
+      "type": "trade.cancel",
+      "error": {
+        "code": 1101,
+        "message": "Not Implemented"
       }
     }
     ```
 
 **Dynamic Market Commands:**
-*   `market.orders.list`: List open buy/sell orders on the galactic commodity exchange.
+*   `market.orders.list`: List open buy/sell orders on the galactic commodity exchange. (NIY - Not Yet Implemented)
 
     *Example Client Request:*
     ```json
@@ -1467,23 +2145,22 @@ Commands for interacting with the ledger-based economy. Most are only available 
     }
     ```
 
-    *Example Server Response:*
+    *Example Server Response (Error):*
     ```json
     {
       "id": "se1f2a3b4-c5d6-e7f8-a9b0-c1d2e3f4a5b6",
       "ts": "2025-11-07T16:20:00.100Z",
       "reply_to": "e1f2a3b4-c5d6-e7f8-a9b0-c1d2e3f4a5b6",
-      "status": "ok",
-      "type": "market.orders_list",
-      "data": {
-        "orders": [
-          { "order_id": "ord_buy_1", "player_name": "buyer1", "quantity": 1000, "price": "55.00" }
-        ]
+      "status": "error",
+      "type": "market.orders.list",
+      "error": {
+        "code": 1101,
+        "message": "Not Implemented"
       }
     }
     ```
 
-*   `market.orders.create`: Place a new buy or sell order on the exchange.
+*   `market.orders.create`: Place a new buy or sell order on the exchange. (NIY - Not Yet Implemented)
 
     *Example Client Request:*
     ```json
@@ -1501,21 +2178,22 @@ Commands for interacting with the ledger-based economy. Most are only available 
     }
     ```
 
-    *Example Server Response:*
+    *Example Server Response (Error):*
     ```json
     {
       "id": "sf1a2b3c4-d5e6-f7a8-b9c0-d1e2f3a4b5c6",
       "ts": "2025-11-07T16:25:00.100Z",
       "reply_to": "f1a2b3c4-d5e6-f7a8-b9c0-d1e2f3a4b5c6",
-      "status": "ok",
-      "type": "market.order_created",
-      "data": {
-        "order_id": "ord_sell_1"
+      "status": "error",
+      "type": "market.orders.create",
+      "error": {
+        "code": 1101,
+        "message": "Not Implemented"
       }
     }
     ```
 
-*   `market.orders.cancel`: Cancel an open order.
+*   `market.orders.cancel`: Cancel an open order. (NIY - Not Yet Implemented)
 
     *Example Client Request:*
     ```json
@@ -1530,21 +2208,22 @@ Commands for interacting with the ledger-based economy. Most are only available 
     }
     ```
 
-    *Example Server Response:*
+    *Example Server Response (Error):*
     ```json
     {
       "id": "sg1b2c3d4-e5f6-g7b8-c9d0-e1f2a3b4c5d6",
       "ts": "2025-11-07T16:30:00.100Z",
       "reply_to": "g1b2c3d4-e5f6-g7b8-c9d0-e1f2a3b4c5d6",
-      "status": "ok",
-      "type": "market.order_cancelled",
-      "data": {
-        "order_id": "ord_sell_1"
+      "status": "error",
+      "type": "market.orders.cancel",
+      "error": {
+        "code": 1101,
+        "message": "Not Implemented"
       }
     }
     ```
 
-*   `market.contracts.list`: List futures contracts held by the player.
+*   `market.contracts.list`: List futures contracts held by the player on the stock exchange. (NIY - Not Yet Implemented)
 
     *Example Client Request:*
     ```json
@@ -1557,23 +2236,22 @@ Commands for interacting with the ledger-based economy. Most are only available 
     }
     ```
 
-    *Example Server Response:*
+    *Example Server Response (Error):*
     ```json
     {
       "id": "sh1b2c3d4-e5f6-h7b8-c9d0-e1f2a3b4c5d6",
       "ts": "2025-11-07T16:35:00.100Z",
       "reply_to": "h1b2c3d4-e5f6-h7b8-c9d0-e1f2a3b4c5d6",
-      "status": "ok",
-      "type": "market.contracts_list",
-      "data": {
-        "contracts": [
-          { "contract_id": "fut_ore_1", "commodity": "ore", "quantity": 100, "purchase_price": "50.00", "expiry_ts": "2025-12-01T00:00:00.000Z" }
-        ]
+      "status": "error",
+      "type": "market.contracts.list",
+      "error": {
+        "code": 1101,
+        "message": "Not Implemented"
       }
     }
     ```
 
-*   `market.contracts.buy`/`market.contracts.sell`: Trade commodity futures contracts.
+*   `market.contracts.buy`/`market.contracts.sell`: Trade commodity futures contracts on the stock exchange. (NIY - Not Yet Implemented)
 
     *Example Client Request (buy):*
     ```json
@@ -1590,26 +2268,24 @@ Commands for interacting with the ledger-based economy. Most are only available 
     }
     ```
 
-    *Example Server Response (buy):*
+    *Example Server Response (Error):*
     ```json
     {
       "id": "si1b2c3d4-e5f6-i7b8-c9d0-e1f2a3b4c5d6",
       "ts": "2025-11-07T16:40:00.100Z",
       "reply_to": "i1b2c3d4-e5f6-i7b8-c9d0-e1f2a3b4c5d6",
-      "status": "ok",
-      "type": "market.contract_purchased",
-      "data": {
-        "contract_id": "fut_ore_2",
-        "commodity": "ore",
-        "quantity": 50,
-        "purchase_price": "58.00",
-        "expiry_ts": "2026-01-01T00:00:00.000Z"
+      "status": "error",
+      "type": "market.contracts.buy",
+      "error": {
+        "code": 1101,
+        "message": "Not Implemented"
       }
     }
     ```
 
+
 ### 4.6. Financial Instruments (Loans & Insurance)
-*   `loan.offers.list`: List available loan offers from banks.
+*   `loan.offers.list`: List available loan offers from banks. (NIY - Not Yet Implemented)
 
     *Example Client Request:*
     ```json
@@ -1622,23 +2298,22 @@ Commands for interacting with the ledger-based economy. Most are only available 
     }
     ```
 
-    *Example Server Response:*
+    *Example Server Response (Error):*
     ```json
     {
       "id": "sa1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
       "ts": "2025-11-07T17:00:00.100Z",
       "reply_to": "a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
-      "status": "ok",
+      "status": "error",
       "type": "loan.offers_list",
-      "data": {
-        "offers": [
-          { "offer_id": "loan_offer_1", "amount": "100000.00", "interest_rate": 5.0, "duration_days": 30 }
-        ]
+      "error": {
+        "code": 1101,
+        "message": "Not Implemented"
       }
     }
     ```
 
-*   `loan.apply`: Apply for a loan.
+*   `loan.apply`: Apply for a loan. (NIY - Not Yet Implemented)
 
     *Example Client Request:*
     ```json
@@ -1653,21 +2328,22 @@ Commands for interacting with the ledger-based economy. Most are only available 
     }
     ```
 
-    *Example Server Response:*
+    *Example Server Response (Error):*
     ```json
     {
       "id": "sb1c2d3e4-f5a6-b7c8-d9e0-f1a2b3c4d5e6",
       "ts": "2025-11-07T17:05:00.100Z",
       "reply_to": "b1c2d3e4-f5a6-b7c8-d9e0-f1a2b3c4d5e6",
-      "status": "ok",
-      "type": "loan.application_received",
-      "data": {
-        "application_id": "loan_app_1"
+      "status": "error",
+      "type": "loan.apply",
+      "error": {
+        "code": 1101,
+        "message": "Not Implemented"
       }
     }
     ```
 
-*   `loan.accept`: Accept a loan offer.
+*   `loan.accept`: Accept a loan offer. (NIY - Not Yet Implemented)
 
     *Example Client Request:*
     ```json
@@ -1682,24 +2358,22 @@ Commands for interacting with the ledger-based economy. Most are only available 
     }
     ```
 
-    *Example Server Response:*
+    *Example Server Response (Error):*
     ```json
     {
       "id": "sc1d2e3f4-a5b6-c7d8-e9f0-a1b2c3d4e5f6",
       "ts": "2025-11-07T17:10:00.100Z",
       "reply_to": "c1d2e3f4-a5b6-c7d8-e9f0-a1b2c3d4e5f6",
-      "status": "ok",
-      "type": "loan.accepted",
-      "data": {
-        "loan_id": "loan_1",
-        "amount": "100000.00",
-        "interest_rate": 5.0,
-        "total_repayment": "105000.00"
+      "status": "error",
+      "type": "loan.accept",
+      "error": {
+        "code": 1101,
+        "message": "Not Implemented"
       }
     }
     ```
 
-*   `loan.repay`: Make a payment on an active loan.
+*   `loan.repay`: Make a payment on an active loan. (NIY - Not Yet Implemented)
 
     *Example Client Request:*
     ```json
@@ -1715,23 +2389,22 @@ Commands for interacting with the ledger-based economy. Most are only available 
     }
     ```
 
-    *Example Server Response:*
+    *Example Server Response (Error):*
     ```json
     {
       "id": "sd1e2f3a4-b5c6-d7e8-f9a0-b1c2d3e4f5a6",
       "ts": "2025-11-07T17:15:00.100Z",
       "reply_to": "d1e2f3a4-b5c6-d7e8-f9a0-b1c2d3e4f5a6",
-      "status": "ok",
+      "status": "error",
       "type": "loan.repayment_receipt",
-      "data": {
-        "loan_id": "loan_1",
-        "amount_paid": "1000.00",
-        "remaining_balance": "104000.00"
+      "error": {
+        "code": 1101,
+        "message": "Not Implemented"
       }
     }
     ```
 
-*   `loan.list_active`: List player's active loans.
+*   `loan.list_active`: List player's active loans. (NIY - Not Yet Implemented)
 
     *Example Client Request:*
     ```json
@@ -1744,23 +2417,22 @@ Commands for interacting with the ledger-based economy. Most are only available 
     }
     ```
 
-    *Example Server Response:*
+    *Example Server Response (Error):*
     ```json
     {
       "id": "se1f2a3b4-c5d6-e7f8-a9b0-c1d2e3f4a5b6",
       "ts": "2025-11-07T17:20:00.100Z",
       "reply_to": "e1f2a3b4-c5d6-e7f8-a9b0-c1d2e3f4a5b6",
-      "status": "ok",
-      "type": "loan.active_loans",
-      "data": {
-        "loans": [
-          { "loan_id": "loan_1", "remaining_balance": "104000.00", "next_payment_due_ts": "2025-11-14T17:10:00.100Z" }
-        ]
+      "status": "error",
+      "type": "loan.list_active",
+      "error": {
+        "code": 1101,
+        "message": "Not Implemented"
       }
     }
     ```
 
-*   `insurance.policies.list`: List available insurance policies.
+*   `insurance.policies.list`: List available insurance policies. (NIY - Not Yet Implemented)
 
     *Example Client Request:*
     ```json
@@ -1775,23 +2447,22 @@ Commands for interacting with the ledger-based economy. Most are only available 
     }
     ```
 
-    *Example Server Response:*
+    *Example Server Response (Error):*
     ```json
     {
       "id": "sf1a2b3c4-d5e6-f7a8-b9c0-d1e2f3a4b5c6",
       "ts": "2025-11-07T17:25:00.100Z",
       "reply_to": "f1a2b3c4-d5e6-f7a8-b9c0-d1e2f3a4b5c6",
-      "status": "ok",
-      "type": "insurance.policies_list",
-      "data": {
-        "policies": [
-          { "policy_id": "ins_ship_1", "name": "Basic Hull Insurance", "premium": "5000.00", "coverage": "100000.00" }
-        ]
+      "status": "error",
+      "type": "insurance.policies.list",
+      "error": {
+        "code": 1101,
+        "message": "Not Implemented"
       }
     }
     ```
 
-*   `insurance.policies.buy`: Purchase an insurance policy for a ship or cargo.
+*   `insurance.policies.buy`: Purchase an insurance policy for a ship or cargo. (NIY - Not Yet Implemented)
 
     *Example Client Request:*
     ```json
@@ -1806,21 +2477,22 @@ Commands for interacting with the ledger-based economy. Most are only available 
     }
     ```
 
-    *Example Server Response:*
+    *Example Server Response (Error):*
     ```json
     {
       "id": "sg1b2c3d4-e5f6-g7b8-c9d0-e1f2a3b4c5d6",
       "ts": "2025-11-07T17:30:00.100Z",
       "reply_to": "g1b2c3d4-e5f6-g7b8-c9d0-e1f2a3b4c5d6",
-      "status": "ok",
-      "type": "insurance.policy_purchased",
-      "data": {
-        "active_policy_id": "active_ins_1"
+      "status": "error",
+      "type": "insurance.policies.buy",
+      "error": {
+        "code": 1101,
+        "message": "Not Implemented"
       }
     }
     ```
 
-*   `insurance.claim.file`: File a claim against an active policy.
+*   `insurance.claim.file`: File a claim against an active policy. (NIY - Not Yet Implemented)
 
     *Example Client Request:*
     ```json
@@ -1836,22 +2508,23 @@ Commands for interacting with the ledger-based economy. Most are only available 
     }
     ```
 
-    *Example Server Response:*
+    *Example Server Response (Error):*
     ```json
     {
       "id": "sh1b2c3d4-e5f6-h7b8-c9d0-e1f2a3b4c5d6",
       "ts": "2025-11-07T17:35:00.100Z",
       "reply_to": "h1b2c3d4-e5f6-h7b8-c9d0-e1f2a3b4c5d6",
-      "status": "ok",
-      "type": "insurance.claim_filed",
-      "data": {
-        "claim_id": "claim_1"
+      "status": "error",
+      "type": "insurance.claim.file",
+      "error": {
+        "code": 1101,
+        "message": "Not Implemented"
       }
     }
     ```
 
 ### 4.7. Strategic Investment (Stocks & R&D)
-*   `corp.stock.issue`: Issue new shares for a corporation to raise capital (requires leadership).
+*   `corp.stock.issue`: Issue new shares for a corporation to raise capital (requires leadership). (NIY - Not Yet Implemented)
 
     *Example Client Request:*
     ```json
@@ -1867,22 +2540,22 @@ Commands for interacting with the ledger-based economy. Most are only available 
     }
     ```
 
-    *Example Server Response:*
+    *Example Server Response (Error):*
     ```json
     {
-      "id": "sa1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+      "id": "sa1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b3c4d5e6",
       "ts": "2025-11-07T18:00:00.100Z",
       "reply_to": "a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
-      "status": "ok",
-      "type": "corp.stock.issued",
-      "data": {
-        "shares_issued": 10000,
-        "price_per_share": "100.00"
+      "status": "error",
+      "type": "corp.stock.issue",
+      "error": {
+        "code": 1101,
+        "message": "Not Implemented"
       }
     }
     ```
 
-*   `stock.exchange.list_stocks`: List all publicly traded corporations.
+*   `stock.exchange.list_stocks`: List all publicly traded corporations. (NIY - Not Yet Implemented)
 
     *Example Client Request:*
     ```json
@@ -1895,23 +2568,22 @@ Commands for interacting with the ledger-based economy. Most are only available 
     }
     ```
 
-    *Example Server Response:*
+    *Example Server Response (Error):*
     ```json
     {
       "id": "sb1c2d3e4-f5a6-b7c8-d9e0-f1a2b3c4d5e6",
       "ts": "2025-11-07T18:05:00.100Z",
       "reply_to": "b1c2d3e4-f5a6-b7c8-d9e0-f1a2b3c4d5e6",
-      "status": "ok",
-      "type": "stock.exchange.stocks_list",
-      "data": {
-        "stocks": [
-          { "ticker": "MYCORP", "corp_name": "My Corporation", "price": "150.00", "volume": 100000 }
-        ]
+      "status": "error",
+      "type": "stock.exchange.list_stocks",
+      "error": {
+        "code": 1101,
+        "message": "Not Implemented"
       }
     }
     ```
 
-*   `stock.exchange.orders.create`: Place a buy/sell order for shares of a corporation.
+*   `stock.exchange.orders.create`: Place a buy/sell order for shares of a corporation. (NIY - Not Yet Implemented)
 
     *Example Client Request:*
     ```json
@@ -1929,48 +2601,49 @@ Commands for interacting with the ledger-based economy. Most are only available 
     }
     ```
 
-    *Example Server Response:*
+    *Example Server Response (Error):*
     ```json
     {
       "id": "sc1d2e3f4-a5b6-c7d8-e9f0-a1b2c3d4e5f6",
       "ts": "2025-11-07T18:10:00.100Z",
       "reply_to": "c1d2e3f4-a5b6-c7d8-e9f0-a1b2c3d4e5f6",
-      "status": "ok",
-      "type": "stock.exchange.order_created",
-      "data": {
-        "order_id": "stock_ord_1"
+      "status": "error",
+      "type": "stock.exchange.orders.create",
+      "error": {
+        "code": 1101,
+        "message": "Not Implemented"
       }
     }
     ```
 
-*   `stock.exchange.orders.cancel`: Cancel a stock order.
+*   `stock.exchange.orders.list`: List open stock orders for the player. (NIY - Not Yet Implemented)
 
     *Example Client Request:*
     ```json
     {
-      "id": "d1e2f3a4-b5c6-d7e8-f9a0-b1c2d3e4f5a6",
-      "ts": "2025-11-07T18:15:00.000Z",
-      "command": "stock.exchange.orders.cancel",
+      "id": "e1f2a3b4-c5d6-e7f8-a9b0-c1d2e3f4a5b6",
+      "ts": "2025-11-07T18:20:00.000Z",
+      "command": "stock.exchange.orders.list",
       "auth": { "session": "eyJhbGciOi..." },
-      "data": {
-        "order_id": "stock_ord_1"
+      "data": {}
+    }
+    ```
+
+    *Example Server Response (Error):*
+    ```json
+    {
+      "id": "se1f2a3b4-c5d6-e7f8-a9b0-c1d2e3f4a5b6",
+      "ts": "2025-11-07T18:20:00.100Z",
+      "reply_to": "e1f2a3b4-c5d6-e7f8-a9b0-c1d2e3f4a5b6",
+      "status": "error",
+      "type": "stock.exchange.orders.list",
+      "error": {
+        "code": 1101,
+        "message": "Not Implemented"
       }
     }
     ```
 
-    *Example Server Response:*
-    ```json
-    {
-      "id": "sd1e2f3a4-b5c6-d7e8-f9a0-b1c2d3e4f5a6",
-      "ts": "2025-11-07T18:15:00.100Z",
-      "reply_to": "d1e2f3a4-b5c6-d7e8-f9a0-b1c2d3e4f5a6",
-      "status": "ok",
-      "type": "stock.exchange.order_cancelled",
-      "data": {
-        "order_id": "stock_ord_1"
-      }
-    }
-    ```
 
 *   `stock.portfolio.list`: View the player's current stock portfolio.
 
@@ -2092,6 +2765,44 @@ Commands for interacting with the ledger-based economy. Most are only available 
         "cargo": [
           { "commodity": "ore", "quantity": 50 }
         ]
+      }
+    }
+    ```
+
+*   `ship.info`: Get detailed information about the player's ship.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+      "ts": "2025-11-07T19:00:00.000Z",
+      "command": "ship.info",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {}
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sa1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+      "ts": "2025-11-07T19:00:00.100Z",
+      "reply_to": "a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+      "status": "ok",
+      "type": "ship.info",
+      "data": {
+        "ship_id": 123,
+        "name": "My Ship",
+        "type": "Freighter",
+        "holds_capacity": 100,
+        "holds_current": 50,
+        "cargo": [
+          { "commodity": "ore", "quantity": 50 }
+        ],
+        "location": {
+          "sector_id": 1,
+          "sector_name": "Sol"
+        }
       }
     }
     ```
