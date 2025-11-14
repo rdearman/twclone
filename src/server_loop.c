@@ -101,6 +101,7 @@ static const cmd_desc_t k_supported_cmds_fallback[] = {
   {"auth.register", "Create a new player"},
 
   // --- Banking ---
+  {"bank.balance", "Get player bank balance"},
   {"bank.deposit", "Deposit credits to bank"},
   {"bank.transfer", "Transfer credits between players"},
   {"bank.withdraw", "Withdraw credits from bank"},
@@ -644,6 +645,10 @@ process_message (client_ctx_t *ctx, json_t *root)
   else if (streq (cmd, "player.get_settings"))
     {
       rc = cmd_player_get_settings (ctx, root);
+    }
+  else if (streq (cmd, "bank.balance"))
+    {
+      rc = cmd_bank_balance (ctx, root);
     }
   else if (streq (cmd, "bank.deposit"))
     {

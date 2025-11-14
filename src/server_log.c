@@ -131,7 +131,6 @@ server_log_init_file (const char *filepath,
   int fd = open (g_path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
   if (fd < 0)
     {
-      LOGE("server_log_init_file: Failed to open log file '%s': %s (errno=%d)\n", g_path, strerror(errno), errno);
       /* fall back to stderr-only if the path is not writable */
       g_fd = -1;
       g_backend = BACKEND_NONE;	/* so we don't pretend we have a file */

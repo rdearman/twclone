@@ -131,6 +131,11 @@ class FiniteStatePlanner:
                 {"command": "trade.sell", "precondition": self._can_sell, "payload_builder": self._sell_payload},
                 {"command": "move.warp", "precondition": self._can_warp, "payload_builder": self._warp_payload},
                 {"command": "bank.balance", "precondition": self._can_bank_balance, "payload_builder": self._bank_balance_payload},
+                {
+                    "command": "bank.deposit",
+                    "precondition": lambda s, cd: s.get("current_credits", 0.0) > 5000,
+                    "payload_builder": self._deposit_payload,
+                },
             ],
             "expand": [] # Future stage
         }
@@ -143,14 +148,21 @@ class FiniteStatePlanner:
         return {"sector_id": state.get("player_location_sector")}
 
     def _can_get_port_info(self, state, dynamic_cooldown):
-        sector_data = state.get("sector_data", {}).get(str(state.get("player_location_sector")), {})
-        return sector_data.get("ports") and not state.get("port_info")
+        sector_id = str(state.get("player_location_sector"))
+        sector_data = state.get("sector_data", {}).get(sector_id, {})
+        ports = sector_data.get("ports") or []
+        if not ports:
+            return False
+
+        fetched = state.get("port_info_by_sector", {})
+        return sector_id not in fetched
 
     def _port_info_payload(self, state, dynamic_cooldown):
-        ports = state.get("sector_data", {}).get(str(state.get("player_location_sector")), {}).get("ports", [])
-        if ports:
-            return {"port_id": ports[0].get("id")}
-        return None
+        sector_id = str(state.get("player_location_sector"))
+        ports = state.get("sector_data", {}).get(sector_id, {}).get("ports", [])
+        if not ports:
+            return None
+        return {"port_id": ports[0].get("id")}
 
     def _can_get_player_info(self, state, dynamic_cooldown):
         # Simple cooldown to avoid spamming
@@ -220,57 +232,40 @@ class FiniteStatePlanner:
             return False
 
     def _can_warp(self, state, dynamic_cooldown):
-        current_sector = state.get("player_location_sector")
-        sectors_with_info = state.get("sectors_with_info", set())
-
-        # Do not warp away from a sector we haven’t scanned yet
-        if current_sector not in sectors_with_info:
-            return False
-
-        if not (state.get("ship_info") or {}).get("id"):
-            return False
-        # Check if there are adjacent sectors and enough fuel/turns (placeholder for now)
-        sector_data = state.get("sector_data", {})
-        sector_data_for_current_sector = sector_data.get(str(state.get("player_location_sector")), {})
-        adjacent_sectors = sector_data_for_current_sector.get("adjacent", [])
-        logger.debug(f"_can_warp: Current sector: {state.get('player_location_sector')}, Adjacent sectors from state: {adjacent_sectors}")
-        
-        # Check for strategic trade route
-        best_route = self._find_best_trade_route(state)
-        current_sector = state.get("player_location_sector")
-
-        if best_route:
-            if current_sector != best_route["buy_sector_id"] and current_sector != best_route["sell_sector_id"]:
-                # If we are not at the buy or sell sector, we need to warp towards one of them
-                # For simplicity, let's assume we always warp to the buy_sector first if not there
-                if current_sector != best_route["buy_sector_id"]:
-                    # We need to warp to buy_sector_id
-                    # For now, just check if it's reachable (adjacent)
-                    if best_route["buy_sector_id"] in adjacent_sectors:
-                        return True
-                elif current_sector != best_route["sell_sector_id"]:
-                    # We need to warp to sell_sector_id
-                    # For now, just check if it's reachable (adjacent)
-                    if best_route["sell_sector_id"] in adjacent_sectors:
-                        return True
-            elif current_sector == best_route["buy_sector_id"] and state.get("ship_info", {}).get("cargo", {}).get(best_route["commodity"], 0) < best_route["quantity"]:
-                # We are at the buy sector but haven't bought enough, so don't warp yet
-                return False
-            elif current_sector == best_route["sell_sector_id"] and state.get("ship_info", {}).get("cargo", {}).get(best_route["commodity"], 0) > 0:
-                # We are at the sell sector and still have cargo to sell, so don't warp yet
-                return False
-
-        return bool(adjacent_sectors) or self._can_use_server_pathfinding(state)
+        # This is a simplified precondition. The main logic is in the payload builder.
+        # We can consider warping if we have a ship.
+        return bool((state.get("ship_info") or {}).get("id"))
 
     def _warp_payload(self, state, dynamic_cooldown):
-        """
-        Calculates the payload for a move.warp command, prioritizing unvisited sectors
-        and falling back to a random (but not backwards) choice.
-        """
         logger.debug("Calculating warp payload...")
         
+        route = state.get("current_trade_route")
         current_sector = state.get("player_location_sector")
-        logger.debug(f"_warp_payload: Current sector: {current_sector}")
+        ship_id = state.get("ship_info", {}).get("id")
+        if not ship_id:
+            logger.error("Cannot warp: ship_id is missing from state.")
+            return None
+
+        # --- 1. Trade Route Navigation ---
+        if route:
+            target_sector = None
+            # At buy sector with cargo -> go to sell sector
+            if str(current_sector) == str(route["buy_sector_id"]) and (state.get("ship_info", {}).get("cargo", {}).get(route["commodity"], 0) or 0) > 0:
+                target_sector = route["sell_sector_id"]
+                logger.info(f"Trade Route: Cargo loaded. Warping to sell sector {target_sector}.")
+            # Not at buy sector -> go to buy sector
+            elif str(current_sector) != str(route["buy_sector_id"]):
+                # We should also not be at the sell sector with cargo
+                if not (str(current_sector) == str(route["sell_sector_id"]) and (state.get("ship_info", {}).get("cargo", {}).get(route["commodity"], 0) or 0) > 0):
+                    target_sector = route["buy_sector_id"]
+                    logger.info(f"Trade Route: Heading to buy sector {target_sector}.")
+
+            if target_sector:
+                return {"to_sector_id": target_sector, "ship_id": ship_id}
+
+        # --- 2. Exploration Navigation (Fallback) ---
+        logger.debug("No trade route, or route is completed for now. Falling back to exploration logic.")
+        
         if not current_sector:
             logger.error("Cannot warp: current_sector is unknown in state.")
             return None
@@ -283,10 +278,18 @@ class FiniteStatePlanner:
             
         adjacent_sectors = current_sector_data.get("adjacent", [])
         if not adjacent_sectors:
-            logger.warning(f"Cannot warp: Sector {current_sector} has no adjacent sectors.")
-            return None
+            logger.warning(f"Cannot warp: Sector {current_sector} has no adjacent sectors. Attempting to jump to a random known sector.")
+            all_known_sectors = list(state.get("sector_data", {}).keys())
+            # Remove current sector from list of possible targets
+            all_known_sectors = [s for s in all_known_sectors if int(s) != current_sector]
+            if all_known_sectors:
+                target_sector = random.choice(all_known_sectors)
+                logger.info(f"Jumping to random known sector: {target_sector}")
+                return {"to_sector_id": int(target_sector), "ship_id": ship_id}
+            else:
+                logger.error("In a dead end and no other sectors are known. Truly stuck.")
+                return None
             
-        # Filter out the current sector (e.g., if a sector links to itself)
         possible_targets = [s for s in adjacent_sectors if s != current_sector]
         if not possible_targets:
             logger.warning(f"No valid warp targets from sector {current_sector}.")
@@ -297,58 +300,67 @@ class FiniteStatePlanner:
         
         target_sector = None
 
-        # 1. ALWAYS prefer the highest-numbered UNVISITED sector
         if unvisited_targets:
-            unvisited_targets.sort(reverse=True) # Sort high-to-low
-            target_sector = unvisited_targets[0] # Pick the highest
+            unvisited_targets.sort(reverse=True)
+            target_sector = unvisited_targets[0]
             logger.info(f"Exploring: Preferring highest *unvisited* sector: {target_sector}")
-        
-        # 2. If all are visited, fall back to a random choice,
-        #    BUT NOT the sector we just came from.
         else:
             previous_sector = state.get("previous_sector_id")
-            
-            # Filter out the sector we just left
             fallback_targets = [s for s in possible_targets if s != previous_sector]
-            
-            # If filtering leaves no options (like in the 427 -> 180 trap)
-            # then just use the original list (which will include the previous sector)
             if not fallback_targets:
                 fallback_targets = possible_targets
-
-            # Pick a RANDOM one from the fallback list to break the loop
             target_sector = random.choice(fallback_targets)
             logger.info(f"Exploring: All adjacent sectors visited. Picking random valid target: {target_sector}")
 
-        # Build the payload
-        ship_id = state.get("ship_info", {}).get("id")
-        if not ship_id:
-            logger.error("Cannot warp: ship_id is missing from state.")
-            return None
-            
         logger.info(f"Warp payload created: Warping to sector {target_sector} with ship {ship_id}.")
         return {"to_sector_id": target_sector, "ship_id": ship_id}
 
     def _can_get_trade_quote(self, state, dynamic_cooldown):
-        # Only try if we have the port ID and the command isn't permanently broken.
         broken_trade_quote = "trade.quote" in [item["command"] for item in state.get("broken_commands", [])]
-        ports = state.get("sector_data", {}).get(str(state.get("player_location_sector")), {}).get("ports", [])
-        
-        logger.debug(f"_can_get_trade_quote: broken_trade_quote={broken_trade_quote}, ports_present={bool(ports)}")
-
         if broken_trade_quote:
             return False
+
+        ports = state.get("sector_data", {}).get(str(state.get("player_location_sector")), {}).get("ports", [])
+        if not ports:
+            return False
+
+        # Don't quote if survey is already complete for this sector/port
+        if self._survey_complete(state):
+            logger.debug("Can't get trade quote: survey is complete.")
+            return False
         
-        return bool(ports)
+        return True
 
     def _trade_quote_payload(self, state, dynamic_cooldown):
-        # Assuming the current port is always the first one listed in the sector.
-        ports = state.get("sector_data", {}).get(str(state.get("player_location_sector")), {}).get("ports", [])
-        if ports:
-            port_id = ports[0].get("id")
-            # Ask about a few common commodities dynamically, or hardcode known goods for now
-            commodity = random.choice(['ore', 'organics', 'equipment']) 
+        current_sector = str(state.get("player_location_sector"))
+        ports = state.get("sector_data", {}).get(current_sector, {}).get("ports", [])
+        if not ports:
+            return None
+        
+        port_id = ports[0].get("id")
+        if not port_id:
+            return None
+
+        # Get the list of commodities for this port from the cached port_info
+        port_info = state.get("port_info_by_sector", {}).get(current_sector, {}).get(str(port_id))
+        if not port_info:
+            commodity = random.choice(['ore', 'organics', 'equipment'])
             return {"port_id": port_id, "commodity": commodity, "quantity": 1}
+
+        available_commodities = (port_info.get("port", {}) or port_info).get("commodities", [])
+        if not available_commodities:
+            commodity = random.choice(['ore', 'organics', 'equipment'])
+            return {"port_id": port_id, "commodity": commodity, "quantity": 1}
+
+        # Find the next commodity to survey
+        price_cache_for_port = state.get("price_cache", {}).get(current_sector, {}).get(str(port_id), {})
+        
+        for commodity in available_commodities:
+            if commodity not in price_cache_for_port:
+                logger.info(f"Systematic survey: Quoting for unsurveyed commodity '{commodity}' at port {port_id}.")
+                return {"port_id": port_id, "commodity": commodity, "quantity": 1}
+                
+        logger.info(f"All commodities at port {port_id} seem to be surveyed.")
         return None
 
     def _can_buy(self, state, dynamic_cooldown):
@@ -391,13 +403,44 @@ class FiniteStatePlanner:
         return True
 
     def _buy_payload(self, state, dynamic_cooldown):
+        route = state.get("current_trade_route")
+        current_sector = state.get("player_location_sector")
+
+        # Prioritize buying based on the current trade route
+        if route and str(current_sector) == str(route["buy_sector_id"]):
+            ship_info = state.get("ship_info", {})
+            holds = ship_info.get("holds", 0)
+            cargo = ship_info.get("cargo", {})
+            current_cargo = sum(cargo.values())
+            free_holds = max(0, holds - current_cargo)
+            
+            current_credits = state.get("current_credits", 0.0)
+            buy_price = route.get("buy_price")
+
+            if free_holds > 0 and buy_price and current_credits >= buy_price:
+                # Buy as much as the route suggests, constrained by holds and credits
+                max_qty_by_credits = int(current_credits / buy_price) if buy_price > 0 else 0
+                quantity_to_buy = min(route["quantity"], free_holds, max_qty_by_credits)
+                
+                if quantity_to_buy > 0:
+                    logger.info(f"Following trade route: buying {quantity_to_buy} of {route['commodity']} at sector {current_sector}.")
+                    return {
+                        "port_id": route["buy_port_id"],
+                        "items": [
+                            {
+                                "commodity": route["commodity"],
+                                "quantity": quantity_to_buy
+                            }
+                        ]
+                    }
+
+        # Fallback to original logic: find the single cheapest commodity in the current sector
         sector_id = state.get("player_location_sector")
         price_cache = state.get("price_cache", {})
         sector_prices = price_cache.get(str(sector_id), {})
         if not sector_prices:
             return None
 
-        # Find the port with the cheapest commodity to buy
         cheapest_commodity = None
         cheapest_price = float('inf')
         target_port_id = None
@@ -413,17 +456,23 @@ class FiniteStatePlanner:
         if not cheapest_commodity or not target_port_id:
             return None
 
-        # Determine quantity to buy (e.g., 1 unit, or up to free holds)
         ship = state.get("ship_info", {})
         holds = ship.get("holds", 0)
         cargo = ship.get("cargo", {})
         current_cargo = sum(cargo.values())
         free_holds = max(0, holds - current_cargo)
         
-        quantity = min(1, free_holds) # Buy 1 unit, or whatever fits if less than 1
+        current_credits = state.get("current_credits", 0.0)
+        if cheapest_price > current_credits:
+            return None # Cannot afford even the cheapest item
+
+        # Buy up to 10 units, or whatever fits and is affordable
+        max_qty_by_credits = int(current_credits / cheapest_price) if cheapest_price > 0 else 0
+        quantity = min(10, free_holds, max_qty_by_credits)
         if quantity <= 0:
             return None
 
+        logger.info(f"Opportunistic buy: buying {quantity} of cheapest commodity {cheapest_commodity}.")
         return {
             "port_id": target_port_id,
             "items": [
@@ -469,34 +518,55 @@ class FiniteStatePlanner:
         sector = state.get("player_location_sector")
         price_cache = state.get("price_cache", {})
         sector_cache = price_cache.get(str(sector), {})
-
         if not sector_cache:
             return None
 
-        port_id, port_prices = next(iter(sector_cache.items()))
-        
         ship_info = state.get("ship_info", {})
         cargo = ship_info.get("cargo", {})
-        
-        for commodity, amount in cargo.items():
-            if amount > 0:
-                return {
-                    "port_id": int(port_id),
-                    "items": [
-                        {
-                            "commodity": commodity,
-                            "quantity": amount
-                        }
-                    ]
+        if not cargo:
+            return None
+
+        best = None  # (profit_per_unit, port_id, commodity, quantity)
+
+        for port_id_str, port_prices in sector_cache.items():
+            port_id = int(port_id_str)
+            for commodity, amount in cargo.items():
+                if amount <= 0:
+                    continue
+                prices = port_prices.get(commodity)
+                if not prices:
+                    continue
+                sell_price = prices.get("sell")
+                if not sell_price or sell_price <= 0:
+                    continue
+
+                # For now profit_per_unit == sell_price; if you later track buy_price, use that.
+                profit_per_unit = sell_price
+                if not best or profit_per_unit > best[0]:
+                    best = (profit_per_unit, port_id, commodity, amount)
+
+        if not best:
+            return None
+
+        _, port_id, commodity, quantity = best
+
+        # Align the payload shape with the server schema here
+        return {
+            "port_id": port_id,
+            "items": [
+                {
+                    "commodity": commodity,
+                    "quantity": quantity
                 }
-        return None
+            ]
+        }
 
     def _can_deposit(self, state, dynamic_cooldown):
         # Preconditions for depositing:
         # 1. Have credits
         return state.get("current_credits", 0.0) > 0
 
-    def _deposit_payload(self, state):
+    def _deposit_payload(self, state, dynamic_cooldown):
         # Deposit all current credits
         return {"amount": state.get("current_credits", 0.0)}
 
@@ -591,7 +661,9 @@ class FiniteStatePlanner:
                                             "sell_port_id": sell_port_id,
                                             "commodity": commodity,
                                             "quantity": max_buy_quantity,
-                                            "profit": total_profit
+                                            "profit": total_profit,
+                                            "buy_price": buy_price_per_unit,
+                                            "sell_price": sell_price_per_unit
                                         }
         return best_route
 
@@ -630,30 +702,44 @@ class FiniteStatePlanner:
         return value
 
     def _survey_complete(self, state):
-        sector_id = state.get("player_location_sector")
-        if sector_id is None:
+        sector_id = str(state.get("player_location_sector"))
+        if not sector_id:
             return False
 
-        sector_data = state.get("sector_data", {})
-        sd = sector_data.get(str(sector_id))
-        if not sd or not sd.get("has_port"):
-            return True  # nothing to survey here
+        sector_data = state.get("sector_data", {}).get(sector_id)
+        if not sector_data or not sector_data.get("ports"):
+            return True  # Nothing to survey here.
 
-        ports = sd.get("ports") or []
+        ports = sector_data.get("ports", [])
         if not ports:
             return True
 
-        # For now, just use the first port in the sector
         port_id = ports[0].get("id")
-        if port_id is None:
+        if not port_id:
             return True
 
-        price_cache = state.get("price_cache", {})
-        sector_cache = price_cache.get(str(sector_id), {})
-        port_cache = sector_cache.get(str(port_id), {})
+        # Check if we have the port info needed to know what to survey
+        port_info = state.get("port_info_by_sector", {}).get(sector_id, {}).get(str(port_id))
+        if not port_info:
+            return False # Not complete, we don't even have the list of commodities yet.
 
-        # Treat survey as "complete" if we have at least 3 commodities priced.
-        return len(port_cache.keys()) >= 3
+        available_commodities = (port_info.get("port", {}) or port_info).get("commodities", [])
+        if not available_commodities:
+            return True # Nothing to survey.
+
+        # Check if all available commodities are in the price cache for this port
+        price_cache_for_port = state.get("price_cache", {}).get(sector_id, {}).get(str(port_id), {})
+        
+        surveyed_count = 0
+        for commodity in available_commodities:
+            if commodity in price_cache_for_port:
+                surveyed_count += 1
+                
+        is_complete = surveyed_count >= len(available_commodities)
+        if is_complete and len(available_commodities) > 0:
+            logger.info(f"Survey of port {port_id} is complete. All {len(available_commodities)} commodities have been priced.")
+        
+        return is_complete
 
     def transition_stage(self, new_stage):
         logger.info(f"Planner: Transitioning from stage '{self.current_stage}' to '{new_stage}'.")
@@ -667,14 +753,12 @@ class FiniteStatePlanner:
         current_sector = current_state.get("player_location_sector")
         sector_data = current_state.get("sector_data", {})
         has_port = sector_data.get(str(current_sector), {}).get("ports")
-        price_cache = current_state.get("price_cache", {})
 
         if has_port:
-            sector_cache = price_cache.get(str(current_sector), {})
-            if not sector_cache:
+            if not self._survey_complete(current_state):
                 return "survey"
             else:
-                # We have prices. Can we actually do anything?
+                # Survey is complete. Decide if we can trade.
                 can_buy = self._can_buy(current_state, 0) # Pass 0 for cooldown
                 can_sell = self._can_sell(current_state, 0)
                 if can_buy or can_sell:
@@ -689,7 +773,7 @@ class FiniteStatePlanner:
                     else:
                         return "exploit"
                 else:
-                    # We have prices, but can't act on them. Explore.
+                    # Survey is complete, but we can't act on the prices. Explore.
                     return "explore"
 
         return "explore"
@@ -721,12 +805,21 @@ class FiniteStatePlanner:
         self.state_manager.set("stage", self.current_stage)
         logger.info(f"Planner: Current stage is '{self.current_stage}'.")
 
+        if self.current_stage == "exploit":
+            best_route = self._find_best_trade_route(current_state)
+            self.state_manager.set("current_trade_route", best_route)
+            if best_route:
+                logger.info(f"Found best trade route with profit {best_route['profit']}.")
+        else:
+            # Clear the route if not in exploit stage
+            self.state_manager.set("current_trade_route", None)
+
         # After bootstrap logic, before candidate selection
         if self.current_stage in ("exploit", "explore"):
-            current_sector = current_state.get("player_location_sector")
-            has_port = bool(current_state.get("sector_data", {}).get(str(current_sector), {}).get("ports"))
-            if has_port and not current_state.get("port_info"):
-                logger.info("At a port with no port_info; switching to survey stage.")
+            current_sector = str(current_state.get("player_location_sector"))
+            has_port = bool(current_state.get("sector_data", {}).get(current_sector, {}).get("ports"))
+            if has_port and current_sector not in current_state.get("port_info_by_sector", {}):
+                logger.info("At a port with no port_info for this sector; switching to survey stage.")
                 self.transition_stage("survey")
 
         if self.current_stage == "survey":

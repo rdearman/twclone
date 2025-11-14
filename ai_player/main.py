@@ -107,7 +107,7 @@ class StateManager:
             "last_responses_history": [],
             "commands_to_try": [],
             "ship_info": None,
-            "port_info": None,
+            "port_info_by_sector": {},
             "last_bank_info_request_time": 0,
             "price_cache": {},
             "next_allowed": {},
@@ -119,7 +119,6 @@ class StateManager:
             "new_port_discovered": False,
             "rate_limit_info": {},
             "command_retry_info": {},
-            "ports_by_sector": {},
         }
 
     def _merge_state(self, target_dict, source_dict):
@@ -486,28 +485,40 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
 
                     # 4) Port info
                     if response_type == "trade.port_info" and response.get("status") == "ok":
-                        state_manager.set("port_info", response_data)
                         port = response_data.get("port", {})
                         port_id = port.get("id") or response_data.get("port_id") # More robust
-                        if port_id is not None:
+                        current_sector = str(state_manager.get("player_location_sector"))
+
+                        if port_id is not None and current_sector:
                             visited_ports = state_manager.get("visited_ports", set())
                             if port_id not in visited_ports:
                                 visited_ports.add(port_id)
                                 state_manager.set("visited_ports", visited_ports)
                                 state_manager.set("new_port_discovered", True)
-                                logger.info(f"Updated port info for new port_id={port_id}")
+                                logger.info(f"Discovered new port_id={port_id}")
                             else:
                                 logger.info(f"Refreshed port info for port_id={port_id}")
                             
-                            # Update ports_by_sector map
-                            ports_by_sector = state_manager.get("ports_by_sector", {})
-                            current_sector = state_manager.get("player_location_sector")
-                            if current_sector is not None:
-                                ports_by_sector.setdefault(str(current_sector), {})[str(port_id)] = response_data
-                                state_manager.set("ports_by_sector", ports_by_sector)
-                                logger.info(f"Cached port {port_id} in sector {current_sector} in ports_by_sector.")
+                            # Extract commodities from on_hand data
+                            commodities_at_port = []
+                            if port.get("ore_on_hand") is not None:
+                                commodities_at_port.append("ore")
+                            if port.get("organics_on_hand") is not None:
+                                commodities_at_port.append("organics")
+                            if port.get("equipment_on_hand") is not None:
+                                commodities_at_port.append("equipment")
+                            
+                            # Add the extracted commodities list to the response_data for easier access
+                            response_data["commodities"] = commodities_at_port
+
+                            # Update port_info_by_sector map
+                            pi_by_sector = state_manager.get("port_info_by_sector", {})
+                            sector_ports = pi_by_sector.setdefault(current_sector, {})
+                            sector_ports[str(port_id)] = response_data # Store the modified response_data
+                            state_manager.set("port_info_by_sector", pi_by_sector)
+                            logger.info(f"Cached port {port_id} info for sector {current_sector}. Commodities: {commodities_at_port}")
                         else:
-                            logger.warning("trade.port_info ok but no port_id in data")
+                            logger.warning(f"trade.port_info 'ok' but missing port_id ({port_id}) or current_sector ({current_sector})")
 
                     # 5) Trade quote → price cache
                     if response_type == "trade.quote" and response.get("status") == "ok":
@@ -547,7 +558,6 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
                             visited.add(new_sector)
                             state_manager.set("visited_sectors", visited)
                             state_manager.set("new_sector_visited_this_tick", True)
-                            state_manager.set("port_info", None) # Clear port_info on sector change
                             logger.info(f"Moved to sector {new_sector}")
                 else: # Error or refused
                     if state_manager.config.get("qa_mode"):
@@ -867,7 +877,7 @@ def main():
     random.seed(config.get("random_seed", time.time()))
 
     logging.basicConfig(
-        level=logging.DEBUG, # Change INFO to DEBUG
+        level=logging.INFO, # Change INFO to DEBUG
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
             logging.FileHandler(config.get('log_file', 'ai_player.log')),
@@ -881,6 +891,8 @@ def main():
     state_manager = StateManager(config.get('state_file', 'state.json'), config)
     # Clear broken_commands at startup to allow re-attempting them after fixes
     state_manager.set("broken_commands", [])
+    # Clear command_retry_info at startup to allow re-attempting them after fixes
+    state_manager.set("command_retry_info", {})
     
     # Load JSON Schemas from PROTOCOL docs once at startup
     try:

@@ -46,6 +46,7 @@ extern "C"
   int h_add_player_petty_cash (sqlite3 *db, int player_id, long long amount, long long *new_balance_out);
   int h_get_player_petty_cash (sqlite3 *db, int player_id, long long *credits_out);
   int cmd_get_news (client_ctx_t * ctx, json_t * root);
+  int cmd_bank_balance (client_ctx_t * ctx, json_t * root);
   int cmd_bank_deposit (client_ctx_t * ctx, json_t * root);
   int cmd_bank_transfer (client_ctx_t * ctx, json_t * root);
   int cmd_bank_withdraw (client_ctx_t * ctx, json_t * root);

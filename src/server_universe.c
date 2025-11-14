@@ -2337,7 +2337,7 @@ typedef struct
   int home_sector;		/* Ferringhi homeworld sector */
   int trades_done;		/* trades since last refill */
   fer_state_t state;		/* ROAM or RETURNING */
-  int hold_fuel, hold_ore, hold_organics, hold_equipment;	/* local-only holds */
+  int hold_ore, hold_organics, hold_equipment;	/* local-only holds */
 } fer_trader_t;
 
 static fer_trader_t g_fer[FER_TRADER_COUNT];
@@ -2491,13 +2491,12 @@ h_get_port_commodity_quantity(int port_id, const char *commodity)
     const char *column_name = NULL;
 
     // 1. Determine the correct stock column name based on the commodity string
-    // NOTE: Commodities with no corresponding 'product_' column (like 'fuel' in your schema) 
-    // will correctly default to 0 stock.
-    if (strcasecmp(commodity, "ore") == 0 || strcasecmp(commodity, "fuel") == 0) {
+    if (strcasecmp(commodity, "ORE") == 0 )
+      {
         column_name = "ore_on_hand";
-    } else if (strcasecmp(commodity, "organics") == 0) {
+    } else if (strcasecmp(commodity, "ORG") == 0) {
         column_name = "organics_on_hand";
-    } else if (strcasecmp(commodity, "equipment") == 0) {
+    } else if (strcasecmp(commodity, "EQU") == 0) {
         column_name = "equipment_on_hand";
     }
 
@@ -2738,7 +2737,7 @@ fer_init_once (void)
       g_fer[i].sector = home;
       g_fer[i].trades_done = 0;
       g_fer[i].state = FER_STATE_ROAM;
-      g_fer[i].hold_fuel = g_fer[i].hold_ore =
+      g_fer[i].hold_ore =
 	g_fer[i].hold_organics = g_fer[i].hold_equipment = FER_MAX_HOLD / 2;
     }
   
@@ -2822,21 +2821,21 @@ fer_tick (int64_t now_ms)
 	  switch (r)
 	    {
 	    case 0:
-	      sold = "ore";
+	      sold = "ORE";
 	      ps = &t->hold_ore;
-	      bought = "organics";
+	      bought = "ORG";
 	      pb = &t->hold_organics;
 	      break;
 	    case 1:
-	      sold = "organics";
+	      sold = "ORG";
 	      ps = &t->hold_organics;
-	      bought = "equipment";
+	      bought = "EQU";
 	      pb = &t->hold_equipment;
 	      break;
 	    case 2: // This will be the new 'default' case
-	      sold = "equipment";
+	      sold = "EQU";
 	      ps = &t->hold_equipment;
-	      bought = "ore"; // Cycle back to ore
+	      bought = "ORE"; // Cycle back to ore
 	      pb = &t->hold_ore;
 	      break;
 	    }
@@ -2858,7 +2857,7 @@ fer_tick (int64_t now_ms)
       /* reached home while returning → refill and go roam again */
       if (t->state == FER_STATE_RETURNING && t->sector == t->home_sector)
 	{
-	  t->hold_fuel = t->hold_ore = t->hold_organics = t->hold_equipment =
+	  t->hold_ore = t->hold_organics = t->hold_equipment =
 	    FER_MAX_HOLD / 2;
 	  t->trades_done = 0;
 	  t->state = FER_STATE_ROAM;

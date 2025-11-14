@@ -7811,3 +7811,290 @@ db_mines_at_sector_json (int sector_id, json_t **out_array)
   // 4. build the json with owner and quantity and the two different types of mines. 
   
 }
+
+/*
+* =================================================================================
+* GENERIC BANK BALANCE FUNCTIONS
+* =================================================================================
+*
+* This section provides a generic way to retrieve bank balances for different
+* entity types (player, corp, npc, port, planet).
+*
+* It uses a single static helper function `h_get_bank_balance` to perform
+* the database query, and then exposes public wrapper functions for each
+* entity type.
+*
+*/
+
+/**
+ * @brief Generic helper to get a bank balance for any owner type.
+ * @param owner_type The type of the owner (e.g., "player", "corp").
+ * @param owner_id The ID of the owner.
+ * @param out_balance Pointer to store the resulting balance.
+ * @return SQLITE_OK on success, or an error code.
+ */
+static int h_get_bank_balance(const char *owner_type, int owner_id, long long *out_balance) {
+    if (out_balance == NULL) {
+        return SQLITE_MISUSE;
+    }
+
+    *out_balance = 0; // Default to 0
+
+    sqlite3 *db = db_get_handle();
+    if (!db) {
+        return SQLITE_ERROR;
+    }
+
+    const char *sql = "SELECT balance FROM bank_accounts WHERE owner_type = ?1 AND owner_id = ?2;";
+    sqlite3_stmt *st = NULL;
+    int rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        return rc;
+    }
+
+    sqlite3_bind_text(st, 1, owner_type, -1, SQLITE_STATIC);
+    sqlite3_bind_int(st, 2, owner_id);
+
+    rc = sqlite3_step(st);
+    if (rc == SQLITE_ROW) {
+        *out_balance = sqlite3_column_int64(st, 0);
+        rc = SQLITE_OK;
+    } else if (rc == SQLITE_DONE) {
+        // No account found, balance is already 0, which is a success case.
+        rc = SQLITE_OK;
+    } else {
+        // An actual error occurred during the step.
+        rc = SQLITE_ERROR;
+    }
+
+    sqlite3_finalize(st);
+    return rc;
+}
+
+/**
+ * @brief Gets the bank balance for a player.
+ */
+int db_get_player_bank_balance(int player_id, long long *out_balance) {
+    return h_get_bank_balance("player", player_id, out_balance);
+}
+
+/**
+ * @brief Gets the bank balance for a corporation.
+ */
+int db_get_corp_bank_balance(int corp_id, long long *out_balance) {
+    return h_get_bank_balance("corp", corp_id, out_balance);
+}
+
+/**
+ * @brief Gets the bank balance for an NPC.
+ */
+int db_get_npc_bank_balance(int npc_id, long long *out_balance) {
+    return h_get_bank_balance("npc", npc_id, out_balance);
+}
+
+/**
+ * @brief Gets the bank balance for a port.
+ */
+int db_get_port_bank_balance(int port_id, long long *out_balance) {
+    return h_get_bank_balance("port", port_id, out_balance);
+}
+
+/**
+ * @brief Gets the bank balance for a planet.
+ */
+int db_get_planet_bank_balance(int planet_id, long long *out_balance) {
+    return h_get_bank_balance("planet", planet_id, out_balance);
+}
+
+int db_bank_account_exists(const char *owner_type, int owner_id) {
+    sqlite3 *db = db_get_handle();
+    if (!db) {
+        return -1; // Error
+    }
+
+    const char *sql = "SELECT 1 FROM bank_accounts WHERE owner_type = ?1 AND owner_id = ?2;";
+    sqlite3_stmt *st = NULL;
+    int rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        return -1; // Error
+    }
+
+    sqlite3_bind_text(st, 1, owner_type, -1, SQLITE_STATIC);
+    sqlite3_bind_int(st, 2, owner_id);
+
+    rc = sqlite3_step(st);
+    int exists = 0;
+    if (rc == SQLITE_ROW) {
+        exists = 1;
+    } else if (rc != SQLITE_DONE) {
+        exists = -1; // Error
+    }
+
+    sqlite3_finalize(st);
+    return exists;
+}
+
+/*
+* =================================================================================
+* BATCH DATABASE FUNCTIONS (Corrected - No Internal Transactions)
+* =================================================================================
+*
+* These functions perform single database operations. For atomicity across
+* multiple operations (like a transfer), the calling code is responsible for
+* wrapping the calls in a transaction.
+*
+* Example:
+*   sqlite3_exec(db, "BEGIN TRANSACTION;", NULL, NULL, NULL);
+*   int rc = db_bank_transfer(...);
+*   if (rc == SQLITE_OK) {
+*       sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL);
+*   } else {
+*       sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+*   }
+*/
+
+/**
+ * @brief Creates a new bank account for a given owner.
+ * @return SQLITE_OK on success, or an SQLite error code.
+ */
+int db_bank_create_account(const char *owner_type, int owner_id, long long initial_balance) {
+    sqlite3 *db = db_get_handle();
+    if (!db) {
+        return SQLITE_ERROR;
+    }
+
+    const char *sql = "INSERT INTO bank_accounts (owner_type, owner_id, balance, last_interest_at) VALUES (?1, ?2, ?3, strftime('%Y-%m-%dT%H:%M:%fZ','now'));";
+    sqlite3_stmt *st = NULL;
+    int rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        return rc;
+    }
+
+    sqlite3_bind_text(st, 1, owner_type, -1, SQLITE_STATIC);
+    sqlite3_bind_int(st, 2, owner_id);
+    sqlite3_bind_int64(st, 3, initial_balance);
+
+    rc = sqlite3_step(st);
+    sqlite3_finalize(st);
+
+    return (rc == SQLITE_DONE) ? SQLITE_OK : rc;
+}
+
+/**
+ * @brief Deposits a given amount into an owner's bank account.
+ * @return SQLITE_OK on success, SQLITE_NOTFOUND if the account doesn't exist.
+ */
+int db_bank_deposit(const char *owner_type, int owner_id, long long amount) {
+    if (amount <= 0) {
+        return SQLITE_MISUSE;
+    }
+
+    sqlite3 *db = db_get_handle();
+    if (!db) {
+        return SQLITE_ERROR;
+    }
+
+    if (db_bank_account_exists(owner_type, owner_id) != 1) {
+        // For simplicity, we can create the account on first deposit.
+        int create_rc = db_bank_create_account(owner_type, owner_id, amount);
+        return create_rc;
+    }
+
+    const char *sql = "UPDATE bank_accounts SET balance = balance + ?1 WHERE owner_type = ?2 AND owner_id = ?3;";
+    sqlite3_stmt *st = NULL;
+    int rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        return rc;
+    }
+
+    sqlite3_bind_int64(st, 1, amount);
+    sqlite3_bind_text(st, 2, owner_type, -1, SQLITE_STATIC);
+    sqlite3_bind_int(st, 3, owner_id);
+
+    rc = sqlite3_step(st);
+    sqlite3_finalize(st);
+
+    return (rc == SQLITE_DONE) ? SQLITE_OK : rc;
+}
+
+/**
+ * @brief Withdraws a given amount from an owner's bank account.
+ * @return SQLITE_OK on success, SQLITE_CONSTRAINT for insufficient funds.
+ */
+int db_bank_withdraw(const char *owner_type, int owner_id, long long amount) {
+    if (amount <= 0) {
+        return SQLITE_MISUSE;
+    }
+
+    sqlite3 *db = db_get_handle();
+    if (!db) {
+        return SQLITE_ERROR;
+    }
+
+    long long current_balance = 0;
+    if (h_get_bank_balance(owner_type, owner_id, &current_balance) != SQLITE_OK) {
+        return SQLITE_ERROR;
+    }
+
+    if (current_balance < amount) {
+        return SQLITE_CONSTRAINT; // Insufficient funds
+    }
+
+    const char *sql = "UPDATE bank_accounts SET balance = balance - ?1 WHERE owner_type = ?2 AND owner_id = ?3;";
+    sqlite3_stmt *st = NULL;
+    int rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        return rc;
+    }
+
+    sqlite3_bind_int64(st, 1, amount);
+    sqlite3_bind_text(st, 2, owner_type, -1, SQLITE_STATIC);
+    sqlite3_bind_int(st, 3, owner_id);
+
+    rc = sqlite3_step(st);
+    sqlite3_finalize(st);
+
+    return (rc == SQLITE_DONE) ? SQLITE_OK : rc;
+}
+
+/**
+ * @brief Transfers an amount between two bank accounts.
+ * @note For atomicity, the caller should wrap this function in a transaction.
+ * @return SQLITE_OK on success, or an error code from withdraw/deposit.
+ */
+int db_bank_transfer(const char *from_owner_type, int from_owner_id, const char *to_owner_type, int to_owner_id, long long amount) {
+    if (amount <= 0) {
+        return SQLITE_MISUSE;
+    }
+
+    int rc = db_bank_withdraw(from_owner_type, from_owner_id, amount);
+    if (rc != SQLITE_OK) {
+        return rc; // Let the caller handle the rollback
+    }
+
+    rc = db_bank_deposit(to_owner_type, to_owner_id, amount);
+    if (rc != SQLITE_OK) {
+        // The withdrawal succeeded, but the deposit failed.
+        // The caller MUST roll back the transaction to prevent money from disappearing.
+        return rc;
+    }
+
+    return SQLITE_OK;
+}
+
+// NOTE: The remaining functions are placeholders and will need to be implemented.
+int db_bank_get_transactions(const char *owner_type, int owner_id, int limit, json_t **out_array) { return SQLITE_OK; }
+int db_bank_apply_interest() { return SQLITE_OK; }
+int db_bank_process_orders() { return SQLITE_OK; }
+int db_bank_set_flags(const char *owner_type, int owner_id, int flags) { return SQLITE_OK; }
+int db_bank_get_flags(const char *owner_type, int owner_id, int *out_flags) { return SQLITE_OK; }
+int db_commodity_get_price(const char *commodity_code, int *out_price) { return SQLITE_OK; }
+int db_commodity_update_price(const char *commodity_code, int new_price) { return SQLITE_OK; }
+int db_commodity_create_order(const char *actor_type, int actor_id, const char *commodity_code, const char *side, int quantity, int price) { return SQLITE_OK; }
+int db_commodity_fill_order(int order_id, int quantity) { return SQLITE_OK; }
+int db_commodity_get_orders(const char *commodity_code, const char *status, json_t **out_array) { return SQLITE_OK; }
+int db_commodity_get_trades(const char *commodity_code, int limit, json_t **out_array) { return SQLITE_OK; }
+int db_port_get_goods_on_hand(int port_id, const char *commodity_code, int *out_quantity) { return SQLITE_OK; }
+int db_port_update_goods_on_hand(int port_id, const char *commodity_code, int quantity_change) { return SQLITE_OK; }
+int db_planet_get_goods_on_hand(int planet_id, const char *commodity_code, int *out_quantity) { return SQLITE_OK; }
+int db_planet_update_goods_on_hand(int planet_id, const char *commodity_code, int quantity_change) { return SQLITE_OK; }

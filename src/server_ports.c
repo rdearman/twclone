@@ -399,12 +399,8 @@ h_calculate_port_sell_price (sqlite3 *db, int port_id, const char *commodity)
     return 0;
   }
 
-  // Convert commodity to canonical code
-  const char *canonical_commodity = commodity_to_code(commodity);
-  if (!canonical_commodity) {
-      LOGW("h_calculate_port_sell_price: Invalid or unknown commodity code: %s", commodity);
-      return 0;
-  }
+  // Assume commodity is already canonical code
+  const char *canonical_commodity = commodity;
   // LOGD("h_calculate_port_sell_price: Canonical commodity for %s is %s", commodity, canonical_commodity);
 
   sqlite3_stmt *st = NULL;
@@ -518,21 +514,15 @@ h_port_sells_commodity (sqlite3 *db, int port_id, const char *commodity)
   if (!db || port_id <= 0 || !commodity || !*commodity)
     return 0;
 
-  char *canonical_commodity_code = (char *)commodity_to_code(commodity);
-  if (!canonical_commodity_code) {
-      return 0; // Invalid or unsupported commodity
-  }
-
   const char *col = NULL;
 
-  if (strcasecmp (canonical_commodity_code, "ORE") == 0)
+  if (strcasecmp (commodity, "ORE") == 0)
     col = "ore_on_hand";
-  else if (strcasecmp (canonical_commodity_code, "ORG") == 0)
+  else if (strcasecmp (commodity, "ORG") == 0)
     col = "organics_on_hand";
-  else if (strcasecmp (canonical_commodity_code, "EQU") == 0)
+  else if (strcasecmp (commodity, "EQU") == 0)
     col = "equipment_on_hand";
   else {
-    free(canonical_commodity_code);
     return 0; /* unsupported commodity */
   }
 
@@ -542,14 +532,12 @@ h_port_sells_commodity (sqlite3 *db, int port_id, const char *commodity)
 
   sqlite3_stmt *st = NULL;
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK) {
-    free(canonical_commodity_code);
     return 0;
   }
 
   if (sqlite3_bind_int (st, 1, port_id) != SQLITE_OK)
     {
       sqlite3_finalize (st);
-      free(canonical_commodity_code);
       return 0;
     }
 
@@ -563,7 +551,6 @@ h_port_sells_commodity (sqlite3 *db, int port_id, const char *commodity)
     }
 
   sqlite3_finalize (st);
-  free(canonical_commodity_code);
   return sells;
 }
 
@@ -698,6 +685,9 @@ cmd_trade_quote (client_ctx_t *ctx, json_t *root)
   send_enveloped_ok (ctx->fd, root, "trade.quote", payload);
   json_decref (payload);
 
+  // Free the commodity_code
+  free((char *)commodity_code); // Cast to char* because strdup returns char*
+
   return 0;
 }
 
@@ -788,7 +778,7 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
 
   // Update ship cargo (jettisoning means negative delta)
   int new_qty = 0;
-  rc = h_update_ship_cargo (db, player_ship_id, commodity, -quantity, &new_qty);
+  rc = h_update_ship_cargo (db, ctx->player_id, commodity, -quantity, &new_qty);
   if (rc != SQLITE_OK)
     {
       send_enveloped_error (ctx->fd, root, 500, "Failed to update ship cargo.");
@@ -1251,23 +1241,21 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       char *canonical_commodity = (char *)commodity_to_code(raw_commodity);
       if (!canonical_commodity)
         {
-          free (trade_lines);
           send_enveloped_refused (ctx->fd, root, 1405,
                                   "Invalid or unsupported commodity.",
                                   NULL);
           LOGD("cmd_trade_buy: Invalid or unsupported commodity '%s'", raw_commodity);
-          return -1;
+          goto cleanup;
         }
       trade_lines[i].commodity = canonical_commodity; // Store the strdup'ed canonical code
 
       if (!h_port_sells_commodity (db, port_id, trade_lines[i].commodity))
         {
-          free (trade_lines);
           send_enveloped_refused (ctx->fd, root, 1405,
                                   "Port is not selling this commodity right now.",
                                   NULL);
           LOGD("cmd_trade_buy: Port %d not selling commodity '%s'", port_id, trade_lines[i].commodity);
-          return 0;
+          goto cleanup;
         }
       LOGD("cmd_trade_buy: Port %d sells commodity '%s'", port_id, trade_lines[i].commodity);
 
@@ -1383,7 +1371,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       /* ship cargo + */
       LOGD("cmd_trade_buy: Updating ship cargo for item %zu", i); // ADDED
       int dummy_qty = 0;
-      rc = h_update_ship_cargo (db, player_ship_id, trade_lines[i].commodity, amount, &dummy_qty);
+      rc = h_update_ship_cargo (db, ctx->player_id, trade_lines[i].commodity, amount, &dummy_qty);
       if (rc != SQLITE_OK)
         {
           if (rc == SQLITE_CONSTRAINT)
@@ -1873,7 +1861,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       /* update ship cargo (−amount) */
       {
         int new_ship_qty = 0;
-        rc = h_update_ship_cargo (db, player_ship_id, canonical_commodity_code, -amount,
+        rc = h_update_ship_cargo (db, ctx->player_id, canonical_commodity_code, -amount,
                                   &new_ship_qty);
         if (rc != SQLITE_OK)
           {
@@ -2062,13 +2050,9 @@ h_calculate_port_buy_price (sqlite3 *db, int port_id, const char *commodity)
     return 0;
   }
 
-  // Convert commodity to canonical code
-  const char *canonical_commodity = commodity_to_code(commodity);
-  if (!canonical_commodity) {
-      LOGW("h_calculate_port_buy_price: Invalid or unknown commodity code: %s", commodity);
-      return 0;
-  }
-  // LOGD("h_calculate_port_buy_price: Canonical commodity for %s is %s", commodity, canonical_commodity);
+  // Assume commodity is already canonical code
+  const char *canonical_commodity = commodity;
+  // LOGI("h_calculate_port_buy_price: Canonical commodity for %s is %s", commodity, canonical_commodity);
 
   sqlite3_stmt *st = NULL;
   const char *sql =

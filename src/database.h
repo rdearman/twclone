@@ -108,6 +108,7 @@ int db_player_has_beacon_on_ship (int player_id);
 int db_player_decrement_beacon_count (int player_id);
 int db_player_has_beacon_on_ship (int player_id);
 int db_player_decrement_beacon_count (int player_id);
+int db_get_player_bank_balance(int player_id, long long *out_balance);
 int db_ships_inspectable_at_sector_json (int player_id, int sector_id,
 					 json_t ** out_array);
 int db_ship_claim (int player_id, int sector_id, int ship_id,
@@ -137,10 +138,7 @@ int db_notice_create (const char *title, const char *body,
 /* Return unseen notices for a player as a JSON array (caller owns ref) */
 json_t *db_notice_list_unseen_for_player (int player_id);
 
-/* Mark a notice as seen by a player; returns 0 ok, -1 error */
 int db_notice_mark_seen (int notice_id, int player_id);
-
-// database.h (prototype)
 int db_commands_accept (const char *cmd_type, const char *idem_key,
 			json_t * payload, int *out_cmd_id, int *out_duplicate,
 			int *out_due_at);
@@ -151,8 +149,6 @@ void db_handle_close_and_reset (void);
 int db_log_engine_event (long long ts, const char *type, const char *actor_owner_type, int actor_player_id, int sector_id, json_t *payload, const char *idem_key);
 int db_news_insert_feed_item(int ts, const char *category, const char *scope,
                              const char *headline, const char *body, json_t *context_data);
-
-
 int db_is_sector_fedspace (int ck_sector);
 int db_get_port_id_by_sector(int sector_id);
 int db_get_ship_sector_id (sqlite3 *db, int ship_id);
@@ -163,5 +159,34 @@ int h_add_credits(sqlite3 *db, const char *owner_type, int owner_id, long long a
 int h_deduct_credits(sqlite3 *db, const char *owner_type, int owner_id, long long amount, long long *new_balance);
 int h_update_planet_stock(sqlite3 *db, int planet_id, const char *commodity_code, int quantity_change, int *new_quantity);
 int h_update_port_stock(sqlite3 *db, int port_id, const char *commodity_code, int quantity_change, int *new_quantity);
+int db_get_player_bank_balance(int player_id, long long *out_balance);
+int db_get_corp_bank_balance(int corp_id, long long *out_balance);
+int db_get_npc_bank_balance(int npc_id, long long *out_balance);
+int db_get_port_bank_balance(int port_id, long long *out_balance);
+int db_get_planet_bank_balance(int planet_id, long long *out_balance);
+int db_bank_account_exists(const char *owner_type, int owner_id);
+int db_bank_create_account(const char *owner_type, int owner_id, long long initial_balance);
+int db_bank_deposit(const char *owner_type, int owner_id, long long amount);
+int db_bank_withdraw(const char *owner_type, int owner_id, long long amount);
+int db_bank_transfer(const char *from_owner_type, int from_owner_id, const char *to_owner_type, int to_owner_id, long long amount);
+int db_bank_get_transactions(const char *owner_type, int owner_id, int limit, json_t **out_array);
+int db_bank_apply_interest();
+int db_bank_process_orders();
+int db_bank_set_flags(const char *owner_type, int owner_id, int flags);
+int db_bank_get_flags(const char *owner_type, int owner_id, int *out_flags);
+int db_commodity_get_price(const char *commodity_code, int *out_price);
+int db_commodity_update_price(const char *commodity_code, int new_price);
+int db_commodity_create_order(const char *actor_type, int actor_id, const char *commodity_code, const char *side, int quantity, int price);
+int db_commodity_fill_order(int order_id, int quantity);
+int db_commodity_get_orders(const char *commodity_code, const char *status, json_t **out_array);
+int db_commodity_get_trades(const char *commodity_code, int limit, json_t **out_array);
+int db_port_get_goods_on_hand(int port_id, const char *commodity_code, int *out_quantity);
+int db_port_update_goods_on_hand(int port_id, const char *commodity_code, int quantity_change);
+int db_planet_get_goods_on_hand(int planet_id, const char *commodity_code, int *out_quantity);
+int db_planet_update_goods_on_hand(int planet_id, const char *commodity_code, int quantity_change);
+
+
+
+
 
 #endif /* DATABASE_H */

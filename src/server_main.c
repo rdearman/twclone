@@ -341,7 +341,7 @@ main (void)
   int rc = 1; // Initialize rc to 1 (failure)
   g_running = 1;
 
-  server_log_init_file ("/tmp/twclone.log", "[server]", 0, LOG_DEBUG);
+  server_log_init_file ("./twclone.log", "[server]", 0, LOG_DEBUG);
   LOGI ("starting up");
 
   sysop_start ();

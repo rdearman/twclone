@@ -19,6 +19,35 @@
 #include "server_planets.h"
 #include "database.h"
 
+/*
+ * Helper function to add credits to an account.
+ * Returns SQLITE_OK on success, or an SQLite error code.
+ * If new_balance is not NULL, it will be set to the account's new balance.
+ */
+
+
+/*
+ * Helper function to deduct credits from an account.
+ * Returns SQLITE_OK on success, SQLITE_CONSTRAINT if insufficient funds, or an SQLite error code.
+ * If new_balance is not NULL, it will be set to the account's new balance.
+ */
+
+
+/*
+ * Helper function to update commodity stock on a planet.
+ * Returns SQLITE_OK on success, or an SQLite error code.
+ * If new_quantity is not NULL, it will be set to the commodity's new quantity.
+ */
+
+
+/*
+ * Helper function to update commodity stock on a port.
+ * Returns SQLITE_OK on success, or an SQLite error code.
+ * If new_quantity is not NULL, it will be set to the commodity's new quantity.
+ */
+
+
+
 #define INITIAL_QUEUE_CAPACITY 64
 #define FEDSPACE_SECTOR_START 1
 #define FEDSPACE_SECTOR_END 10

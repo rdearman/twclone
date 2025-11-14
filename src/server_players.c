@@ -394,9 +394,9 @@ h_update_ship_cargo (sqlite3 *db, int player_id,
 
     // 1. Identify the column name from the commodity string
     const char *col_name = NULL;
-    if (strcasecmp(commodity, "ore") == 0) col_name = "ore";
-    else if (strcasecmp(commodity, "organics") == 0) col_name = "organics";
-    else if (strcasecmp(commodity, "equipment") == 0) col_name = "equipment";
+    if (strcasecmp(commodity, "ORE") == 0) col_name = "ore";
+    else if (strcasecmp(commodity, "ORG") == 0) col_name = "organics";
+    else if (strcasecmp(commodity, "EQU") == 0) col_name = "equipment";
     else if (strcasecmp(commodity, "colonists") == 0) col_name = "colonists";
     else {
         LOGE("h_update_ship_cargo: Invalid commodity name '%s'\n", commodity);
@@ -2262,10 +2262,42 @@ int cmd_bank_withdraw (client_ctx_t * ctx, json_t * root)
   sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
 
   json_t *payload = json_pack ("{s:I}", "new_balance", new_balance);
-  send_enveloped_ok (ctx->fd, root, "bank.withdraw.confirmed", payload);
   json_decref (payload);
   return 0;
 }
+
+int
+cmd_bank_balance (client_ctx_t *ctx, json_t *root)
+{
+  if (!ctx || ctx->player_id <= 0)
+    {
+      send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+      return 0;
+    }
+
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    {
+      send_enveloped_error (ctx->fd, root, 500, "No database handle");
+      return 0;
+    }
+
+  long long balance = 0;
+  if (db_get_player_bank_balance(ctx->player_id, &balance) != SQLITE_OK)
+    {
+      send_enveloped_error (ctx->fd, root, 500, "Could not retrieve bank balance.");
+      return 0;
+    }
+
+  json_t *payload = json_object ();
+  json_object_set_new (payload, "balance", json_integer (balance));
+
+  send_enveloped_ok (ctx->fd, root, "bank.balance", payload);
+  json_decref (payload);
+
+  return 0;
+}
+
 
 
 
