@@ -1,6 +1,6 @@
 {
     "game_host": "127.0.0.1",
-    "game_port": 2345,
+    "game_port": 1234,
     "ollama_model": "llama3.1",
     "log_file": "ai_player.log",
     "state_file": "state.json",
@@ -8,5 +8,12 @@
     "player_password": "quality",
     "client_version": "AI_QA_Bot/1.1",
     "cooldown_seconds": 15,
-    "max_port_info_failures": 3
+    "max_port_info_failures": 3,
+    "qa_mode": true,
+    "max_retries_per_command": 3,
+    "initial_credits": 10000,
+    "qa_focus_commands": [
+      "ship.info", "sector.info", "trade.quote", "trade.port_info",
+      "trade.buy", "trade.sell", "bank.deposit", "bank.withdraw"
+    ]
 }

@@ -14,8 +14,8 @@ def parse_protocol_markdown(filepath):
     # Regex for detailed commands (with description and example JSON)
     detailed_pattern = re.compile(
         r'^\*   `([^`]+)`: ([^\n]+)\n' +  # Command name and description
-        r'(?:(?!Example Client Request:).)*?' + # Match any content non-greedily until "Example Client Request:"
-        r'Example Client Request:\n' +     # Match the literal string "Example Client Request:"
+        r'(?:(?!\*?Example Client Request:\*?).)*?' + # Match any content non-greedily until "Example Client Request:"
+        r'\*?Example Client Request:\*?\n' +     # Match the literal string "Example Client Request:" with optional asterisks
         r'(?:(?!```json).)*?' +            # Match any content non-greedily until "```json"
         r'```json\n' +                   # Start of JSON block
         r'({.*?})\n' +                   # The JSON content (non-greedy)
@@ -27,7 +27,8 @@ def parse_protocol_markdown(filepath):
     for match in detailed_pattern.finditer(content):
         found_detailed_matches = True
 
-        command_name = match.group(1).strip()
+        command_name_raw = match.group(1).strip()
+        command_names = [c.strip() for c in command_name_raw.split('/')]
         description = match.group(2).strip()
         json_str = match.group(3)
 
@@ -56,13 +57,14 @@ def parse_protocol_markdown(filepath):
                         schema_for_llm[key] = "<any>"
                 formatted_data_schema = json.dumps(schema_for_llm, indent=2)
 
-            commands_detailed[command_name] = {
-                "name": command_name,
-                "description": description,
-                "data_schema": formatted_data_schema
-            }
+            for command_name in command_names:
+                commands_detailed[command_name] = {
+                    "name": command_name,
+                    "description": description,
+                    "data_schema": formatted_data_schema
+                }
         except json.JSONDecodeError as e:
-            print(f"[parser] JSON decode failed for command '{command_name}': {e}", file=sys.stderr)
+            print(f"[parser] JSON decode failed for command '{command_name_raw}': {e}", file=sys.stderr)
             continue
 
     

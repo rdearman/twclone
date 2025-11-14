@@ -822,7 +822,7 @@ schema_sector_set_beacon(void)
       "additionalProperties", 0); // 0 = json_false()
 
   // 3. Clean up and return the schema for the 'data' block
-  json_decref(data_props);
+  // json_decref(data_props); // REMOVED: json_pack already takes ownership
   return data_schema;
 }
 
@@ -885,21 +885,20 @@ static json_t *
 schema_move_warp (void)
 {
   json_t *data_props = json_pack(
-      "{s:o, s:o}",
-      "sector_id", json_pack("{s:s}", "type", "integer"),
-      "ship_id",   json_pack("{s:s}", "type", "integer")
+      "{s:o}", // Only one property: to_sector_id
+      "to_sector_id", json_pack("{s:s}", "type", "integer")
   );
 
   json_t *data_schema = json_pack(
-      "{s:s, s:s, s:s, s:o, s:[s,s], s:b}",
+      "{s:s, s:s, s:s, s:o, s:[s], s:b}", // 'required' array now only has one item
       "$id",      "ge://schema/move_warp.json",
       "$schema",  "https://json-schema.org/draft/2020-12/schema",
       "type",     "object",
       "properties", data_props,
-      "required", "sector_id", "ship_id",
+      "required", "to_sector_id", // Only to_sector_id is required
       "additionalProperties", json_false());
 
-  json_decref(data_props);
+  // json_decref(data_props); // REMOVED: json_pack already takes ownership
   return data_schema;
 }
 
@@ -907,25 +906,47 @@ schema_move_warp (void)
 static json_t *
 schema_system_describe_schema (void)
 {
-  return json_pack (
-      "{s:s, s:s, s:s, s:{s:o, s:o}, s:o}",
-      "$id", "ge://schema/system.describe_schema.json", 
-      "$schema", "https://json-schema.org/draft/2020-12/schema",
-      "type", "object", 
-      "properties", "data",
-      json_pack ("{s:{s:{s:s}}, s:[s]}",
-                 "properties", "name", "{s:s}", "type", "string", 
-                 "required", "name"),
-      "required", json_pack ("[s,s]", "command", "data"));
+  json_t *name_prop = json_pack("{s:s}", "type", "string");
+  json_t *type_prop = json_pack("{s:s, s:[s,s]}", "type", "string", "enum", "command", "event");
+
+  json_t *data_properties = json_pack(
+      "{s:o, s:o}",
+      "name", name_prop,
+      "type", type_prop
+  );
+
+  json_t *data_schema = json_pack(
+      "{s:s, s:s, s:s, s:o, s:[s,s], s:b}",
+      "$id",      "ge://schema/system.describe_schema.json",
+      "$schema",  "https://json-schema.org/draft/2020-12/schema",
+      "type",     "object",
+      "properties", data_properties,
+      "required", "name", "type",
+      "additionalProperties", json_false());
+
+  // json_pack takes ownership of name_prop, type_prop, and data_properties
+  return data_schema;
 }
 
 static json_t *
 schema_system_hello (void)
 {
-  /* TODO: Implement this schema */
-  return json_pack ("{s:s, s:s}",
-                    "$id", "ge://schema/system.hello.json",
-                    "$comment", "Schema not yet implemented");
+  json_t *data_props = json_pack(
+      "{s:o}",
+      "client_version", json_pack("{s:s}", "type", "string")
+  );
+
+  json_t *data_schema = json_pack(
+      "{s:s, s:s, s:s, s:o, s:[s], s:b}",
+      "$id",      "ge://schema/system.hello.json",
+      "$schema",  "https://json-schema.org/draft/2020-12/schema",
+      "type",     "object",
+      "properties", data_props,
+      "required", "client_version",
+      "additionalProperties", json_false());
+
+  // json_decref(data_props); // REMOVED: json_pack already takes ownership
+  return data_schema;
 }
 
 static json_t *
@@ -1016,10 +1037,15 @@ schema_ship_status (void)
 static json_t *
 schema_ship_info (void)
 {
-  /* TODO: Implement this schema */
-  return json_pack ("{s:s, s:s}",
-                    "$id", "ge://schema/ship.info.json",
-                    "$comment", "Schema not yet implemented");
+  json_t *data_schema = json_pack(
+      "{s:s, s:s, s:s, s:o, s:b}",
+      "$id",      "ge://schema/ship.info.json",
+      "$schema",  "https://json-schema.org/draft/2020-12/schema",
+      "type",     "object",
+      "properties", json_object(), // Empty properties object
+      "additionalProperties", json_false());
+
+  return data_schema;
 }
 
 static json_t *
@@ -1119,10 +1145,24 @@ schema_trade_sell (void)
 static json_t *
 schema_trade_quote (void)
 {
-  /* TODO: Implement this schema */
-  return json_pack ("{s:s, s:s}",
-                    "$id", "ge://schema/trade.quote.json",
-                    "$comment", "Schema not yet implemented");
+  json_t *data_props = json_pack(
+      "{s:o, s:o, s:o}",
+      "port_id",   json_pack("{s:s}", "type", "integer"),
+      "commodity", json_pack("{s:s}", "type", "string"),
+      "quantity",  json_pack("{s:s}", "type", "integer")
+  );
+
+  json_t *data_schema = json_pack(
+      "{s:s, s:s, s:s, s:o, s:[s,s,s], s:b}",
+      "$id",      "ge://schema/trade.quote.json",
+      "$schema",  "https://json-schema.org/draft/2020-12/schema",
+      "type",     "object",
+      "properties", data_props,
+      "required", "port_id", "commodity", "quantity",
+      "additionalProperties", json_false());
+
+  // json_decref(data_props); // REMOVED: json_pack already takes ownership
+  return data_schema;
 }
 
 static json_t *
@@ -1231,10 +1271,15 @@ schema_move_autopilot_status (void)
 static json_t *
 schema_sector_info (void)
 {
-  /* TODO: Implement this schema */
-  return json_pack ("{s:s, s:s}",
-                    "$id", "ge://schema/sector.info.json",
-                    "$comment", "Schema not yet implemented");
+  json_t *data_schema = json_pack(
+      "{s:s, s:s, s:s, s:o, s:b}",
+      "$id",      "ge://schema/sector.info.json",
+      "$schema",  "https://json-schema.org/draft/2020-12/schema",
+      "type",     "object",
+      "properties", json_object(), // Empty properties object
+      "additionalProperties", json_false());
+
+  return data_schema;
 }
 
 static json_t *

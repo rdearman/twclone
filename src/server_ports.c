@@ -376,8 +376,19 @@ h_get_ship_cargo_and_holds (sqlite3 *db, int ship_id, int *ore, int *organics,
 int
 h_calculate_port_sell_price (sqlite3 *db, int port_id, const char *commodity)
 {
-  if (!db || port_id <= 0 || !commodity || !*commodity)
+  // LOGD("h_calculate_port_sell_price: Entering with port_id=%d, commodity=%s", port_id, commodity);
+  if (!db || port_id <= 0 || !commodity || !*commodity) {
+    LOGW("h_calculate_port_sell_price: Invalid input: db=%p, port_id=%d, commodity=%s", db, port_id, commodity);
     return 0;
+  }
+
+  // Convert commodity to canonical code
+  const char *canonical_commodity = commodity_to_code(commodity);
+  if (!canonical_commodity) {
+      LOGW("h_calculate_port_sell_price: Invalid or unknown commodity code: %s", commodity);
+      return 0;
+  }
+  // LOGD("h_calculate_port_sell_price: Canonical commodity for %s is %s", commodity, canonical_commodity);
 
   sqlite3_stmt *st = NULL;
   const char *sql =
@@ -391,41 +402,58 @@ h_calculate_port_sell_price (sqlite3 *db, int port_id, const char *commodity)
     "FROM commodities c JOIN ports p ON p.id = ?1 "
     "WHERE UPPER(c.code) = UPPER(?2) LIMIT 1;";
 
-  if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
+  int rc_prepare = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc_prepare != SQLITE_OK)
     {
-      LOGE("h_calculate_port_sell_price: prepare failed: %s", sqlite3_errmsg(db));
+      LOGE("h_calculate_port_sell_price: prepare failed: %s (rc=%d)", sqlite3_errmsg(db), rc_prepare);
       return 0;
     }
+  // LOGD("h_calculate_port_sell_price: SQL prepared successfully for port_id=%d, canonical_commodity=%s", port_id, canonical_commodity);
 
-  sqlite3_bind_int (st, 1, port_id);
-  sqlite3_bind_text (st, 2, commodity, -1, SQLITE_STATIC);
+  int rc_bind_int = sqlite3_bind_int (st, 1, port_id);
+  if (rc_bind_int != SQLITE_OK) {
+      LOGE("h_calculate_port_sell_price: bind_int failed for port_id %d: %s (rc=%d)", port_id, sqlite3_errmsg(db), rc_bind_int);
+      sqlite3_finalize (st);
+      return 0;
+  }
+  // Bind the canonical commodity code
+  int rc_bind_text = sqlite3_bind_text (st, 2, canonical_commodity, -1, SQLITE_STATIC);
+  if (rc_bind_text != SQLITE_OK) {
+      LOGE("h_calculate_port_sell_price: bind_text failed for canonical_commodity %s: %s (rc=%d)", canonical_commodity, sqlite3_errmsg(db), rc_bind_text);
+      sqlite3_finalize (st);
+      return 0;
+  }
+  //LOGD("h_calculate_port_sell_price: Parameters bound for port_id=%d, canonical_commodity=%s", port_id, canonical_commodity);
 
   int base_price = 0;
   int volatility = 0;
   int quantity = 0;
   int max_capacity = 0;
   int techlevel = 0;
-  int rc = sqlite3_step (st);
+  int rc_step = sqlite3_step (st);
 
-  if (rc == SQLITE_ROW)
+  if (rc_step == SQLITE_ROW)
     {
       base_price = sqlite3_column_int (st, 0);
       volatility = sqlite3_column_int (st, 1);
       quantity = sqlite3_column_int (st, 2);
       max_capacity = sqlite3_column_int (st, 3);
       techlevel = sqlite3_column_int (st, 4);
+      // LOGD("h_calculate_port_sell_price: Data found for port_id=%d, canonical_commodity=%s: base_price=%d, quantity=%d, max_capacity=%d", port_id, canonical_commodity, base_price, quantity, max_capacity);
     }
   else
     {
-      LOGW("h_calculate_port_sell_price: No data found for commodity %s at port %d", commodity, port_id);
+      LOGW("h_calculate_port_sell_price: No data found for canonical_commodity %s at port %d (rc_step=%d, errmsg=%s)", canonical_commodity, port_id, rc_step, sqlite3_errmsg(db));
       sqlite3_finalize (st);
       return 0; // Port not selling this commodity or no stock info
     }
 
   sqlite3_finalize (st);
 
-  if (base_price <= 0)
+  if (base_price <= 0) {
+    LOGW("h_calculate_port_sell_price: Base price is zero or less for canonical_commodity %s at port %d", canonical_commodity, port_id);
     return 0;
+  }
 
   double price_multiplier = 1.0;
 
@@ -1212,10 +1240,10 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
           send_enveloped_refused (ctx->fd, root, 1405,
                                   "Port is not selling this commodity right now.",
                                   NULL);
-          LOGD("cmd_trade_buy: Port %d sell price <= 0 for commodity '%s'", port_id, commodity); // ADDED
+          // LOGD("cmd_trade_buy: Port %d sell price <= 0 for commodity '%s'", port_id, commodity); // ADDED
           return 0;
         }
-      LOGD("cmd_trade_buy: Unit price for '%s' at port %d is %d", commodity, port_id, unit_price); // ADDED
+      // LOGD("cmd_trade_buy: Unit price for '%s' at port %d is %d", commodity, port_id, unit_price); // ADDED
 
       long long line_cost = (long long) amount * (long long) unit_price;
       trade_lines[i].commodity = commodity;
@@ -1226,7 +1254,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       total_cost += line_cost;
       total_cargo_space_needed += amount;
     }
-  LOGD("cmd_trade_buy: Finished trade line validation. Total cost=%lld, total cargo needed=%d", total_cost, total_cargo_space_needed); // ADDED
+  //LOGD("cmd_trade_buy: Finished trade line validation. Total cost=%lld, total cargo needed=%d", total_cost, total_cargo_space_needed); // ADDED
 
   if (total_cost > current_credits)
     {
@@ -1977,17 +2005,22 @@ cleanup:
   return 0;
 }
 
-
-
-
-
-
-
 int
 h_calculate_port_buy_price (sqlite3 *db, int port_id, const char *commodity)
 {
-  if (!db || port_id <= 0 || !commodity || !*commodity)
+  // LOGD("h_calculate_port_buy_price: Entering with port_id=%d, commodity=%s", port_id, commodity);
+  if (!db || port_id <= 0 || !commodity || !*commodity) {
+    LOGW("h_calculate_port_buy_price: Invalid input: db=%p, port_id=%d, commodity=%s", db, port_id, commodity);
     return 0;
+  }
+
+  // Convert commodity to canonical code
+  const char *canonical_commodity = commodity_to_code(commodity);
+  if (!canonical_commodity) {
+      LOGW("h_calculate_port_buy_price: Invalid or unknown commodity code: %s", commodity);
+      return 0;
+  }
+  // LOGD("h_calculate_port_buy_price: Canonical commodity for %s is %s", commodity, canonical_commodity);
 
   sqlite3_stmt *st = NULL;
   const char *sql =
@@ -2001,41 +2034,58 @@ h_calculate_port_buy_price (sqlite3 *db, int port_id, const char *commodity)
     "FROM commodities c JOIN ports p ON p.id = ?1 "
     "WHERE UPPER(c.code) = UPPER(?2) LIMIT 1;";
 
-  if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
+  int rc_prepare = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc_prepare != SQLITE_OK)
     {
-      LOGE("h_calculate_port_buy_price: prepare failed: %s", sqlite3_errmsg(db));
+      LOGE("h_calculate_port_buy_price: prepare failed: %s (rc=%d)", sqlite3_errmsg(db), rc_prepare);
       return 0;
     }
+  // LOGD("h_calculate_port_buy_price: SQL prepared successfully for port_id=%d, canonical_commodity=%s", port_id, canonical_commodity);
 
-  sqlite3_bind_int (st, 1, port_id);
-  sqlite3_bind_text (st, 2, commodity, -1, SQLITE_STATIC);
+  int rc_bind_int = sqlite3_bind_int (st, 1, port_id);
+  if (rc_bind_int != SQLITE_OK) {
+      LOGE("h_calculate_port_buy_price: bind_int failed for port_id %d: %s (rc=%d)", port_id, sqlite3_errmsg(db), rc_bind_int);
+      sqlite3_finalize (st);
+      return 0;
+  }
+  // Bind the canonical commodity code
+  int rc_bind_text = sqlite3_bind_text (st, 2, canonical_commodity, -1, SQLITE_STATIC);
+  if (rc_bind_text != SQLITE_OK) {
+      LOGE("h_calculate_port_buy_price: bind_text failed for canonical_commodity %s: %s (rc=%d)", canonical_commodity, sqlite3_errmsg(db), rc_bind_text);
+      sqlite3_finalize (st);
+      return 0;
+  }
+  // LOGD("h_calculate_port_buy_price: Parameters bound for port_id=%d, canonical_commodity=%s", port_id, canonical_commodity);
 
   int base_price = 0;
   int volatility = 0;
   int quantity = 0;
   int max_capacity = 0;
   int techlevel = 0;
-  int rc = sqlite3_step (st);
+  int rc_step = sqlite3_step (st);
 
-  if (rc == SQLITE_ROW)
+  if (rc_step == SQLITE_ROW)
     {
       base_price = sqlite3_column_int (st, 0);
       volatility = sqlite3_column_int (st, 1);
       quantity = sqlite3_column_int (st, 2);
       max_capacity = sqlite3_column_int (st, 3);
       techlevel = sqlite3_column_int (st, 4);
+      // LOGD("h_calculate_port_buy_price: Data found for port_id=%d, canonical_commodity=%s: base_price=%d, quantity=%d, max_capacity=%d", port_id, canonical_commodity, base_price, quantity, max_capacity);
     }
   else
     {
-      LOGW("h_calculate_port_buy_price: No data found for commodity %s at port %d", commodity, port_id);
+      LOGW("h_calculate_port_buy_price: No data found for canonical_commodity %s at port %d (rc_step=%d, errmsg=%s)", canonical_commodity, port_id, rc_step, sqlite3_errmsg(db));
       sqlite3_finalize (st);
       return 0; // Port not buying this commodity or no stock info
     }
 
   sqlite3_finalize (st);
 
-  if (base_price <= 0)
+  if (base_price <= 0) {
+    LOGW("h_calculate_port_buy_price: Base price is zero or less for canonical_commodity %s at port %d", canonical_commodity, port_id);
     return 0;
+  }
 
   double price_multiplier = 1.0;
 

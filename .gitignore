@@ -65,4 +65,4 @@ TAGS
 twclone.log
 *.db-shm
 *db-wal
-*.log
+###*.log

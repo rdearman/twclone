@@ -93,6 +93,21 @@ class BanditPolicy:
         self.q_table = q_table
         self.n_table = n_table
 
+def make_context_key(state: dict) -> str:
+    """Generates a context key for the bandit policy based on the current state."""
+    stage = state.get("stage", "bootstrap")
+    sector_id = state.get("player_location_sector", 1)
+    
+    sector_data = state.get("sector_data", {}).get(str(sector_id), {})
+    sector_class = sector_data.get("class", "unknown_class")
+
+    port_type = "no_port"
+    if sector_data.get("ports"):
+        # A more detailed port type could be used if available
+        port_type = "port_present"
+
+    return f"stage:{stage}-sector_class:{sector_class}-port_type:{port_type}"
+
     # --- UCB1 (Upper Confidence Bound 1) - Future Enhancement ---
     def choose_action_ucb1(self, actions: list[str], context_key: str, total_plays: int) -> str:
         """

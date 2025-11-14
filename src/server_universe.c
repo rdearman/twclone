@@ -1131,14 +1131,18 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
 
   int from = ctx->sector_id;
 
+  LOGI("cmd_move_warp: Player %d (fd %d) attempting to warp from sector %d to %d", ctx->player_id, ctx->fd, from, to);
+
   /* Persist & update session */
   int prc = db_player_set_sector (ctx->player_id, to);
   if (prc != SQLITE_OK)
     {
+      LOGE("cmd_move_warp: db_player_set_sector failed for player %d, ship_id %d, to sector %d. Error code: %d", ctx->player_id, h_get_active_ship_id(db_handle, ctx->player_id), to, prc);
       send_enveloped_error (ctx->fd, root, 1502,
 			    "Failed to persist player sector");
       return 0;
     }
+  LOGI("cmd_move_warp: Player %d (fd %d) successfully warped from sector %d to %d. db_player_set_sector returned %d", ctx->player_id, ctx->fd, from, to, prc);
   ctx->sector_id = to;
 
   /* 1) Send the direct reply for the actor */
@@ -1153,27 +1157,17 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
 
   /* LEFT event: sector = 'from' */
   json_t *left = json_object ();
-  /* json_object_set_new (left, "player_id", json_integer (ctx->player_id)); */
-  /* json_object_set_new (left, "sector_id", json_integer (from)); */
-  /* json_object_set_new (left, "to_sector_id", json_integer (to)); */
-  /* legacy flat fields (kept for backward compatibility) */
   json_object_set_new (left, "player_id", json_integer (ctx->player_id));
   json_object_set_new (left, "sector_id", json_integer (from));
   json_object_set_new (left, "to_sector_id", json_integer (to));
-  /* new nested object per protocol example */
   json_object_set_new (left, "player", make_player_object (ctx->player_id));
   comm_publish_sector_event (from, "sector.player_left", left);
 
   /* ENTERED event: sector = 'to' */
   json_t *entered = json_object ();
-  /* json_object_set_new (entered, "player_id", json_integer (ctx->player_id)); */
-  /* json_object_set_new (entered, "sector_id", json_integer (to)); */
-  /* json_object_set_new (entered, "from_sector_id", json_integer (from)); */
-  /* legacy flat fields (kept for backward compatibility) */
   json_object_set_new (entered, "player_id", json_integer (ctx->player_id));
   json_object_set_new (entered, "sector_id", json_integer (to));
   json_object_set_new (entered, "from_sector_id", json_integer (from));
-  /* new nested object per protocol example */
   json_object_set_new (entered, "player",
 		       make_player_object (ctx->player_id));
   comm_publish_sector_event (to, "sector.player_entered", entered);
@@ -2815,8 +2809,8 @@ fer_tick (int64_t now_ms)
 	{
 
 	  int current_sector = t->sector; // Sector the NPC is in
-	  int port_id = db_get_port_id_by_sector(current_sector);
-	  if (port_id < 0) {
+	  int actual_port_id = db_get_port_id_by_sector(current_sector);
+	  if (actual_port_id < 0) {
 	    LOGW("NPC in sector %d has no valid port_id. Skipping trade log.", current_sector);
 	    return;
 	  }
@@ -2855,7 +2849,7 @@ fer_tick (int64_t now_ms)
 	  *ps -= sell_qty;
 	  *pb += buy_qty;
 
-	  fer_emit_trade_log (t->id, t->sector, sold, sell_qty, bought, buy_qty);
+	  fer_emit_trade_log (actual_port_id, t->sector, sold, sell_qty, bought, buy_qty);
 
 	  t->trades_done++;
 	  if (t->trades_done >= FER_TRADES_BEFORE_RETURN)

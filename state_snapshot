@@ -1,0 +1,110 @@
+<overall_goal>
+        Implement strategic trading in the AI player by fixing critical bugs, improving learning mechanisms, and adding advanced trading and exploration strategies.
+    </overall_goal>
+
+    <key_knowledge>
+        - The AI player (`ai_player/main.py`) interacts with a game server via a JSON protocol.
+        - State is managed by `StateManager`, actions by `FiniteStatePlanner`, and decisions by `BanditPolicy`.
+        - Logging occurs in `ai_player/ai_player.log`.
+        - Configuration is handled by `config.json`.
+        - Protocol details are found in `docs/PROTOCOL.md` and `docs/PROTOCOL.v2.md`.
+        - The server's `system.describe_schema` command returns detailed JSON schema for a specific command (type `system.schema`) when called with `{"type": "command", "name": "command.name"}`.
+        - The `planner.py`'s schema lookup now expects schemas to be keyed by command name with `request_schema` inside.
+        - The server **does NOT support any direct "bank.info" or "bank.balance" command**. `system.cmd_list` does not list such commands.
+        - `current_credits` in `StateManager` tracks 'on-hand' credits (updated by trade receipts), not a bank balance.
+        - `ship_info.get('holds', 0)` refers to total cargo capacity. Free holds must be calculated as `ship_info.get('holds', 0) - sum(ship_info.get('cargo', {}).values())`.
+        - Contextual bandits are implemented: `BanditPolicy` now uses `q_table` and `n_table` nested by `context_key = "{stage}-{player_sector}"`.
+        - Intrinsic rewards are implemented for `new_sector_discovered` (10.0), `trade_successful` (5.0), and `new_port_discovered` (15.0).
+        - `price_cache` now includes `timestamp` for each commodity's buy/sell price, and is structured as `{sector_id: {port_id: {commodity: {buy: price, sell: price, timestamp: time}}}}`.
+    </key_knowledge>
+
+    <file_system_state>
+        - MODIFIED: `ai_player/main.py`
+            - `StateManager.__init__`:
+                - Initialized `self.state["sector_data"] = {}` and `self.state["last_bank_info_request_time"] = 0`.
+                - Added `self.state["new_sector_discovered"] = False`, `self.state["trade_successful"] = False`, `self.state["new_port_discovered"] = False`.
+                - Added `self.state["last_responses_history"] = []`.
+                - Added `self.state["rate_limit_info"] = {}`.
+                - Added `self.state["command_retry_info"] = {}`.
+                - Changed default `stage` to "bootstrap".
+            - `StateManager.load`: Ensured `new_sector_discovered`, `trade_successful`, `new_port_discovered`, `last_responses_history`, `rate_limit_info`, and `command_retry_info` are correctly loaded with defaults. Removed redundant stage migration logic.
+            - `process_responses`:
+                - Stores `sector.info` response data into `state_manager.state["sector_data"]` (keyed by sector ID).
+                - Updates `last_bank_info_request_time` when `bank.info` is sent.
+                - Stores full sector data in `sector_data` upon `sector.info` response.
+                - Sets `trade_successful` flag on `trade.buy_receipt_v1` or `trade.sell_receipt_v1`.
+                - Sets `new_sector_discovered` flag on `move.warp` to a different sector.
+                - Sets `new_port_discovered` flag on `sector.info` if new ports are found in a previously port-less sector.
+                - Added each received response to `last_responses_history` (keeping last 5).
+                - Extracts and stores `rate_limit_info` from response `meta`.
+                - Modified calls to `bug_reporter.triage_protocol_error` to pass `last_commands_history` and `last_responses_history`.
+                - Enhanced `price_cache` structure to `{sector_id: {port_id: {commodity: {buy: price, sell: price, timestamp: time}}}}` when processing `trade.quote` responses.
+                - Updates `command_retry_info` on command failure (increment failures, calculate `next_retry_time` with exponential backoff) and resets on success.
+                - Added workaround for missing `schema` field in `system.describe_schema` responses by setting `request_schema` to an empty dictionary.
+            - `calculate_and_apply_reward`:
+                - Calculates and applies intrinsic rewards based on `new_sector_discovered`, `trade_successful`, `new_port_discovered` flags.
+                - Resets intrinsic reward flags after applying.
+                - Retrieves `context_key` and passes it to `bandit_policy.update_q_value`.
+            - `GameConnection.send_command`: Added explicit check to prevent sending a command if `pending_commands` is not empty, enforcing a single in-flight policy.
+            - Added `_generate_context_key(state: dict)` function for contextual bandits.
+            - `get_ollama_response`: Refined `system_prompt` for `bootstrap`, `survey`, `explore`, and `exploit` stages for better command generation.
+        - MODIFIED: `ai_player/planner.py`
+            - `__init__`: Removed `self.cooldown_seconds`.
+            - `_build_action_catalogue` (`survey` stage): `bank.info` action removed. Preconditions for `ship.info` and `sector.info` now accept a `cooldown` argument instead of using `self.cooldown_seconds`.
+            - `_build_action_catalogue` (`exploit` stage): `bank.deposit` and `bank.withdraw` actions removed.
+            - `get_next_command` (`bootstrap` stage): Stricter exit condition: `session_token`, `normalized_commands` populated, AND `schemas_to_fetch` is empty.
+            - `_can_get_trade_quote`: Uses `state.get("sector_data", {}).get(str(state.get("player_location_sector")), {}).get("ports", [])`.
+            - `_trade_quote_payload`: Uses `state.get("sector_data", {}).get(str(state.get("player_location_sector")), {}).get("ports", [])`.
+            - `_buy_payload`, `_can_buy`, `_sell_payload`, `_can_sell`: Updated to correctly access `price_cache` with the new nested structure (`price_cache[sector_id][port_id][commodity]`).
+            - `_generate_context_key`: New method to generate context for contextual bandits (`"{stage}-{player_sector}"`).
+            - `_find_best_trade_route`: New method to analyze `price_cache` across sectors and ports to find the most profitable trade route.
+            - `_evaluate_sector_value`: New method to calculate a score for a sector based on ports, price freshness/profitability, and adjacent sectors.
+            - `get_next_command`:
+                - Pass `context_key` to `self.bandit_policy.choose_action`.
+                - Dynamic cooldown calculation based on `rate_limit_info`.
+                - If `exploit` stage has no valid actions, transitions to `explore` stage.
+                - Respects `command_retry_info["next_retry_time"]` when filtering candidates and handles commands exceeding `MAX_RETRIES`.
+                - Passes `dynamic_cooldown` to `ship.info` and `sector.info` preconditions.
+                - Corrected `ship_info_fresh` and `sector_info_fresh` to be boolean values.
+                - Removed the `else` block that set `dynamic_cooldown` to `self.config.get("default_dynamic_cooldown", 1)`.
+        - MODIFIED: `ai_player/bandit_policy.py`
+            - `__init__`: `q_table` and `n_table` are now nested dictionaries (context_key -> action -> value).
+            - `choose_action`: Accepts `context_key` and operates on context-specific tables.
+            - `update_q_value`: Accepts `context_key` and operates on context-specific tables.
+            - `get_tables`, `set_tables`: Adapted to handle nested structure.
+            - `choose_action_ucb1`: Modified to accept `context_key` and operates on context-specific tables.
+        - MODIFIED: `ai_player/bug_reporter.py`
+            - `triage_protocol_error`: Now accepts `last_commands_history` and `last_responses_history` and uses them to build comprehensive `frames`.
+            - `report_bug`: Now accepts `last_commands_history` and `last_responses_history` and includes them in the generated markdown report for enhanced context.
+    </file_system_state>
+
+    <recent_actions>
+        - Fixed `_can_warp` and `_warp_payload` to use `sector_data` instead of `last_server_response`, enabling `move.warp` fallback in exploit stage.
+        - Implemented intrinsic rewards in `main.py` for new sector discovery, successful trades, and new port discovery.
+        - Implemented contextual bandit keys by modifying `bandit_policy.py` to use nested Q/N tables and `planner.py` to generate and pass a `context_key`.
+        - Confirmed persistent storage of nested Q/N tables via `StateManager`.
+        - Enhanced `price_cache` in `main.py` to include `port_id` and `timestamp`.
+        - Updated `_can_buy`, `_buy_payload`, `_can_sell`, `_sell_payload` in `planner.py` to reflect new `price_cache` structure.
+        - Implemented `_find_best_trade_route` and `_evaluate_sector_value` methods in `planner.py`.
+        - Integrated strategic trade route planning into `_can_warp` and `_warp_payload`.
+        - Added fallback from `exploit` to `explore` stage if no actions available in `exploit`.
+        - Modified `send_command` in `main.py` to strictly enforce a single in-flight command.
+        - Implemented three-frame repro in bug reports by tracking `last_responses_history` in `StateManager` and passing histories to `BugReporter`.
+        - Implemented dynamic cooldowns by storing `rate_limit_info` in `StateManager` and using it in `planner.py`'s `get_next_command`.
+        - Implemented Error Handling and Retries with Backoff by adding `command_retry_info` to `StateManager`, updating it in `process_responses`, and respecting it in `planner.py`'s `get_next_command`.
+        - Ensured More Granular State Management for Preconditions by reviewing and confirming that preconditions rely on specific state variables and freshness checks.
+        - Implemented LLM Prompt Engineering for Better Command Generation by refining `system_prompt` for each stage in `main.py`.
+        - Ensured Normalised Command Names Early and Everywhere by reviewing `main.py` and `planner.py` for consistent use of canonical command names.
+        - Fixed `AttributeError: 'FiniteStatePlanner' object has no attribute 'cooldown_seconds'` by modifying `planner.py` to pass `dynamic_cooldown` to relevant preconditions.
+        - Fixed `ship_info_fresh` and `sector_info_fresh` not being boolean values in `planner.py`.
+        - Fixed AI getting stuck in `discovery` stage by setting default `stage` to "bootstrap" in `StateManager.__init__` and removing redundant stage migration.
+        - Implemented workaround for missing `schema` field in `system.describe_schema` responses by setting `request_schema` to an empty dictionary in `main.py`.
+        - Corrected the way `ports` are accessed in `_can_get_trade_quote` and `_trade_quote_payload` in `planner.py`.
+        - Removed the `else` block that set `dynamic_cooldown` to `self.config.get("default_dynamic_cooldown", 1)` in `planner.py`.
+    </recent_actions>
+
+    <current_plan>
+        - All tasks for Phase 4: Robustness & Debugging are complete.
+        - The AI is now successfully transitioning through stages.
+        - The next step is to verify the AI's behavior in the `explore` and `exploit` stages.
+    </current_plan>

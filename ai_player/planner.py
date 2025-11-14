@@ -3,7 +3,7 @@ import time
 import random
 import json
 from jsonschema import validate, ValidationError
-from main import load_schemas_from_docs # Import the function
+from bandit_policy import make_context_key # Import the unified context key function
 
 logger = logging.getLogger(__name__)
 
@@ -23,33 +23,133 @@ class FiniteStatePlanner:
         # Build the action catalogue with dynamic preconditions and payload builders
         self.action_catalogue = self._build_action_catalogue()
 
+#    def _build_action_catalogue(self):
+#        return {
+#            "bootstrap": [
+#                {"command": "auth.login", "precondition": lambda s: not s.get("session_token"), "payload_builder": self._login_payload},
+#                {"command": "ship.info", "precondition": lambda s: s.get("session_token") and not s.get("ship_info"), "payload_builder": lambda s: {}}, # Get ship info early
+#                {"command": "system.cmd_list", "precondition": lambda s: s.get("session_token") and not s.get("normalized_commands"), "payload_builder": self._cmd_list_payload},
+#                {"command": "system.describe_schema", "precondition": lambda s: s.get("session_token") and s.get("normalized_commands") and s.get("schemas_to_fetch"), "payload_builder": self._describe_next_schema_payload},
+#            ],
+#            "survey": [
+#                # Only request if ship_info is MISSING or older than COOLDOWN
+#                {"command": "ship.info", "precondition": lambda s, dynamic_cooldown: not s.get("ship_info") or (time.time() - s.get("last_ship_info_request_time", 0)) > dynamic_cooldown, "payload_builder": lambda s, dynamic_cooldown: {}},
+#                {"command": "sector.info", "precondition": lambda s, dynamic_cooldown: not s.get("sector_info_fetched_for", {}).get(s.get("player_location_sector")) or (time.time() - s.get("last_sector_info_request_time", 0)) > dynamic_cooldown, "payload_builder": lambda s, dynamic_cooldown: {"sector_id": s.get("player_location_sector")}},
+#                {"command": "trade.quote", "precondition": self._can_get_trade_quote, "payload_builder": lambda s, dynamic_cooldown: self._trade_quote_payload(s)},
+#            ],
+#            "explore": [
+#                {"command": "move.warp", "precondition": self._can_warp, "payload_builder": lambda s, cooldown: self._warp_payload(s, cooldown)},
+#                # Fallback actions if warp is on cooldown:
+#                {"command": "ship.info", "precondition": lambda s, dynamic_cooldown: not s.get("ship_info") or (time.time() - s.get("last_ship_info_request_time", 0)) > dynamic_cooldown, "payload_builder": lambda s, dynamic_cooldown: {}},
+#                {"command": "sector.info", "precondition": lambda s, dynamic_cooldown: not s.get("sector_info_fetched_for", {}).get(s.get("player_location_sector")) or (time.time() - s.get("last_sector_info_request_time", 0)) > dynamic_cooldown, "payload_builder": lambda s, dynamic_cooldown: {}},
+#            ],
+#            "exploit": [
+#                {"command": "trade.buy", "precondition": self._can_buy, "payload_builder": lambda s, dynamic_cooldown: self._buy_payload(s)},
+#                {"command": "trade.sell", "precondition": self._can_sell, "payload_builder": lambda s, dynamic_cooldown: self._sell_payload(s)},
+#                {"command": "move.warp", "precondition": self._can_warp, "payload_builder": lambda s, dynamic_cooldown: self._warp_payload(s, dynamic_cooldown)},
+#            ],
+#            "expand": [] # Future stage
+#        }
+#
+
+
     def _build_action_catalogue(self):
         return {
             "bootstrap": [
-                {"command": "auth.login", "precondition": lambda s: not s.get("session_token"), "payload_builder": self._login_payload},
-                {"command": "system.cmd_list", "precondition": lambda s: s.get("session_token") and not s.get("normalized_commands"), "payload_builder": self._cmd_list_payload},
-                {"command": "system.describe_schema", "precondition": lambda s: s.get("session_token") and s.get("normalized_commands") and s.get("schemas_to_fetch"), "payload_builder": self._describe_next_schema_payload},
+                {
+                    "command": "auth.login",
+                    "precondition": lambda s: (
+                        not s.get("session_token")
+                        and not any(
+                            cmd.get("command") == "auth.login"
+                            for cmd in s.get("pending_commands", {}).values()
+                        )
+                    ),
+                    "payload_builder": self._login_payload,
+                },
+                {
+                    "command": "system.cmd_list",
+                    "precondition": lambda s: (
+                        s.get("session_token")
+                        and not s.get("normalized_commands")  # empty dict/list -> False
+                        and not any(
+                            cmd.get("command") == "system.cmd_list"
+                            for cmd in s.get("pending_commands", {}).values()
+                        )
+                    ),
+                    "payload_builder": self._cmd_list_payload,
+                },
+                {
+                    "command": "system.describe_schema",
+                    "precondition": lambda s: (
+                        s.get("session_token")
+                        and not s.get("cached_schemas")  # empty dict means nothing cached yet
+                        and len(s.get("schemas_to_fetch", [])) > 0
+                        and not any(
+                            cmd.get("command") == "system.describe_schema"
+                            for cmd in s.get("pending_commands", {}).values()
+                        )
+                    ),
+                    "payload_builder": self._describe_schema_payload
+                },
+                {
+                    "command": "ship.info", # Get ship info early
+                    "precondition": lambda s: (
+                        s.get("session_token")
+                        and not s.get("ship_info")
+                        and not any(
+                            cmd.get("command") == "ship.info"
+                            for cmd in s.get("pending_commands", {}).values()
+                        )
+                    ), 
+                    "payload_builder": lambda s: {}
+                },
+                {
+                    "command": "player.my_info",
+                    "precondition": lambda s: s.get("session_token") and s.get("last_player_info_request_time") == 0,
+                    "payload_builder": lambda s: {}
+                },
             ],
             "survey": [
-                # Only request if ship_info is MISSING or older than COOLDOWN
-                {"command": "ship.info", "precondition": lambda s, dynamic_cooldown: not s.get("ship_info") or (time.time() - s.get("last_ship_info_request_time", 0)) > dynamic_cooldown, "payload_builder": lambda s, dynamic_cooldown: {}},
-                # Only request if sector_info is MISSING or older than COOLDOWN
-                {"command": "sector.info", "precondition": lambda s, dynamic_cooldown: not s.get("sector_info_fetched_for", {}).get(s.get("player_location_sector")) or (time.time() - s.get("last_sector_info_request_time", 0)) > dynamic_cooldown, "payload_builder": lambda s, dynamic_cooldown: {}},
-                {"command": "trade.quote", "precondition": self._can_get_trade_quote, "payload_builder": lambda s, dynamic_cooldown: self._trade_quote_payload(s)},
+                {"command": "player.my_info", "precondition": self._can_get_player_info, "payload_builder": self._player_info_payload},
+                {"command": "trade.port_info", "precondition": self._can_get_port_info, "payload_builder": self._port_info_payload},
+                {"command": "trade.quote", "precondition": self._can_get_trade_quote, "payload_builder": self._trade_quote_payload},
             ],
             "explore": [
-                {"command": "move.warp", "precondition": self._can_warp, "payload_builder": lambda s, cooldown: self._warp_payload(s, cooldown)},
-                # Fallback actions if warp is on cooldown:
-                {"command": "ship.info", "precondition": lambda s, dynamic_cooldown: not s.get("ship_info") or (time.time() - s.get("last_ship_info_request_time", 0)) > dynamic_cooldown, "payload_builder": lambda s, dynamic_cooldown: {}},
-                {"command": "sector.info", "precondition": lambda s, dynamic_cooldown: not s.get("sector_info_fetched_for", {}).get(s.get("player_location_sector")) or (time.time() - s.get("last_sector_info_request_time", 0)) > dynamic_cooldown, "payload_builder": lambda s, dynamic_cooldown: {}},
+                {"command": "sector.info", "precondition": self._can_get_sector_info, "payload_builder": self._sector_info_payload},
+                {"command": "move.warp", "precondition": self._can_warp, "payload_builder": self._warp_payload},
             ],
             "exploit": [
-                {"command": "trade.buy", "precondition": self._can_buy, "payload_builder": lambda s, dynamic_cooldown: self._buy_payload(s)},
-                {"command": "trade.sell", "precondition": self._can_sell, "payload_builder": lambda s, dynamic_cooldown: self._sell_payload(s)},
-                {"command": "move.warp", "precondition": self._can_warp, "payload_builder": lambda s, dynamic_cooldown: self._warp_payload(s, dynamic_cooldown)},
+                {"command": "trade.buy", "precondition": self._can_buy, "payload_builder": self._buy_payload},
+                {"command": "trade.sell", "precondition": self._can_sell, "payload_builder": self._sell_payload},
+                {"command": "move.warp", "precondition": self._can_warp, "payload_builder": self._warp_payload},
             ],
             "expand": [] # Future stage
         }
+
+    def _can_get_sector_info(self, state, dynamic_cooldown):
+        return not state.get("sector_info_fetched_for", {}).get(str(state.get("player_location_sector"))) or \
+               (time.time() - state.get("last_sector_info_request_time", 0)) > dynamic_cooldown
+
+    def _sector_info_payload(self, state, dynamic_cooldown):
+        return {"sector_id": state.get("player_location_sector")}
+
+    def _can_get_port_info(self, state, dynamic_cooldown):
+        sector_data = state.get("sector_data", {}).get(str(state.get("player_location_sector")), {})
+        return sector_data.get("ports") and not state.get("port_info")
+
+    def _port_info_payload(self, state, dynamic_cooldown):
+        ports = state.get("sector_data", {}).get(str(state.get("player_location_sector")), {}).get("ports", [])
+        if ports:
+            return {"port_id": ports[0].get("id")}
+        return None
+
+    def _can_get_player_info(self, state, dynamic_cooldown):
+        # Simple cooldown to avoid spamming
+        return (time.time() - state.get("last_player_info_request_time", 0)) > dynamic_cooldown
+
+    def _player_info_payload(self, state, dynamic_cooldown):
+        return {}
 
     def _login_payload(self, state):
         return {
@@ -112,12 +212,20 @@ class FiniteStatePlanner:
             return False
 
     def _can_warp(self, state, dynamic_cooldown):
-        if not state.get("ship_info", {}).get("id"):
+        current_sector = state.get("player_location_sector")
+        sectors_with_info = state.get("sectors_with_info", set())
+
+        # Do not warp away from a sector we haven’t scanned yet
+        if current_sector not in sectors_with_info:
+            return False
+
+        if not (state.get("ship_info") or {}).get("id"):
             return False
         # Check if there are adjacent sectors and enough fuel/turns (placeholder for now)
         sector_data = state.get("sector_data", {})
         sector_data_for_current_sector = sector_data.get(str(state.get("player_location_sector")), {})
         adjacent_sectors = sector_data_for_current_sector.get("adjacent", [])
+        logger.debug(f"_can_warp: Current sector: {state.get('player_location_sector')}, Adjacent sectors from state: {adjacent_sectors}")
         
         # Check for strategic trade route
         best_route = self._find_best_trade_route(state)
@@ -144,57 +252,74 @@ class FiniteStatePlanner:
                 # We are at the sell sector and still have cargo to sell, so don't warp yet
                 return False
 
-        return bool(adjacent_sectors) # Fallback to random warp if no strategic route or not yet ready to warp for it
+        return bool(adjacent_sectors) or self._can_use_server_pathfinding(state)
 
     def _warp_payload(self, state, dynamic_cooldown):
-        current_sector = state.get("player_location_sector", 1)
-        sector_data = state.get("sector_data", {})
-        sector_data_for_current_sector = sector_data.get(str(state.get("player_location_sector")), {})
-        adjacent_sectors = sector_data_for_current_sector.get("adjacent", [])
+        """
+        Calculates the payload for a move.warp command, prioritizing unvisited sectors
+        and falling back to a random (but not backwards) choice.
+        """
+        logger.debug("Calculating warp payload...")
         
-        best_route = self._find_best_trade_route(state)
-
-        if best_route:
-            target_sector = None
-            # If we are at the buy sector and have bought enough, warp to sell sector
-            if current_sector == best_route["buy_sector_id"] and state.get("ship_info", {}).get("cargo", {}).get(best_route["commodity"], 0) >= best_route["quantity"]:
-                target_sector = best_route["sell_sector_id"]
-            # If we are not at the buy sector, warp to buy sector
-            elif current_sector != best_route["buy_sector_id"]:
-                target_sector = best_route["buy_sector_id"]
+        current_sector = state.get("player_location_sector")
+        logger.debug(f"_warp_payload: Current sector: {current_sector}")
+        if not current_sector:
+            logger.error("Cannot warp: current_sector is unknown in state.")
+            return None
+        
+        sector_data_map = state.get("sector_data", {})
+        current_sector_data = sector_data_map.get(str(current_sector))
+        if not current_sector_data:
+            logger.error(f"Cannot warp: No sector_data for current sector {current_sector}.")
+            return None
             
-            if target_sector and target_sector in adjacent_sectors:
-                ship_id = state.get("ship_info", {}).get("id")
-                if not ship_id:
-                    logger.error("Cannot warp: ship_id is missing from state.")
-                    return None
-                logger.info(f"Strategic warp: Moving towards sector {target_sector}.")
-                return {"sector_id": target_sector}
-
-        if adjacent_sectors:
-            # Fallback to intelligent warp if no strategic route or not ready for strategic warp
-            # Pick the adjacent sector with the highest value
-            best_adjacent_sector = None
-            highest_value = -float('inf')
-
-            for sector_id in adjacent_sectors:
-                # Avoid warping back to the current sector unless it's the only option
-                if sector_id == current_sector and len(adjacent_sectors) > 1:
-                    continue
-                
-                value = self._evaluate_sector_value(state, sector_id, dynamic_cooldown)
-                if value > highest_value:
-                    highest_value = value
-                    best_adjacent_sector = sector_id
+        adjacent_sectors = current_sector_data.get("adjacent", [])
+        if not adjacent_sectors:
+            logger.warning(f"Cannot warp: Sector {current_sector} has no adjacent sectors.")
+            return None
             
-            if best_adjacent_sector:
-                logger.info(f"Adaptive exploration: Warping to sector {best_adjacent_sector} with value {highest_value}.")
-                return {"sector_id": best_adjacent_sector}
-            elif adjacent_sectors: # Fallback to any adjacent if no "best" found (e.g., all have same low value)
-                chosen_sector = random.choice(adjacent_sectors)
-                logger.info(f"Adaptive exploration: Warping to sector {chosen_sector} (random fallback).")
-                return {"sector_id": chosen_sector}
-        return None # Cannot warp
+        # Filter out the current sector (e.g., if a sector links to itself)
+        possible_targets = [s for s in adjacent_sectors if s != current_sector]
+        if not possible_targets:
+            logger.warning(f"No valid warp targets from sector {current_sector}.")
+            return None
+            
+        visited_sectors = set(state.get("visited_sectors", []))
+        unvisited_targets = [s for s in possible_targets if s not in visited_sectors]
+        
+        target_sector = None
+
+        # 1. ALWAYS prefer the highest-numbered UNVISITED sector
+        if unvisited_targets:
+            unvisited_targets.sort(reverse=True) # Sort high-to-low
+            target_sector = unvisited_targets[0] # Pick the highest
+            logger.info(f"Exploring: Preferring highest *unvisited* sector: {target_sector}")
+        
+        # 2. If all are visited, fall back to a random choice,
+        #    BUT NOT the sector we just came from.
+        else:
+            previous_sector = state.get("previous_sector_id")
+            
+            # Filter out the sector we just left
+            fallback_targets = [s for s in possible_targets if s != previous_sector]
+            
+            # If filtering leaves no options (like in the 427 -> 180 trap)
+            # then just use the original list (which will include the previous sector)
+            if not fallback_targets:
+                fallback_targets = possible_targets
+
+            # Pick a RANDOM one from the fallback list to break the loop
+            target_sector = random.choice(fallback_targets)
+            logger.info(f"Exploring: All adjacent sectors visited. Picking random valid target: {target_sector}")
+
+        # Build the payload
+        ship_id = state.get("ship_info", {}).get("id")
+        if not ship_id:
+            logger.error("Cannot warp: ship_id is missing from state.")
+            return None
+            
+        logger.info(f"Warp payload created: Warping to sector {target_sector} with ship {ship_id}.")
+        return {"to_sector_id": target_sector, "ship_id": ship_id}
 
     def _can_get_trade_quote(self, state, dynamic_cooldown):
         # Only try if we have the port ID and the command isn't permanently broken.
@@ -208,7 +333,7 @@ class FiniteStatePlanner:
         
         return bool(ports)
 
-    def _trade_quote_payload(self, state):
+    def _trade_quote_payload(self, state, dynamic_cooldown):
         # Assuming the current port is always the first one listed in the sector.
         ports = state.get("sector_data", {}).get(str(state.get("player_location_sector")), {}).get("ports", [])
         if ports:
@@ -219,108 +344,95 @@ class FiniteStatePlanner:
         return None
 
     def _can_buy(self, state, dynamic_cooldown):
-        # Preconditions for buying:
-        # 1. Have a valid price_cache for the current sector and port
-        # 2. Have enough credits
-        # 3. Have cargo space
-        # 4. Port has stock of the commodity (implied by price_cache having a buy price)
-        current_sector = state.get("player_location_sector")
-        ports_in_sector = state.get("sector_data", {}).get(str(current_sector), {}).get("ports", [])
-        
-        if not ports_in_sector:
-            return False
-        
-        current_port_id = ports_in_sector[0].get("id") # Assuming current port is the first one
-        
-        price_cache_for_port = state.get("price_cache", {}).get(current_sector, {}).get(current_port_id, {})
-        ship_info = state.get("ship_info", {})
-        current_credits = state.get("current_credits", 0.0)
-        
-        if not price_cache_for_port or not ship_info:
+        ship = state.get("ship_info")
+        if not ship:
             return False
 
-        # Find a commodity that can be bought
-        for commodity, prices in price_cache_for_port.items():
-            buy_price = prices.get("buy")
-            current_cargo_count = sum(ship_info.get('cargo', {}).values())
-            holds_free = ship_info.get('holds', 0) - current_cargo_count
-            if buy_price is not None and current_credits >= buy_price and holds_free > 0:
-                return True
-        return False
+        holds = ship.get("holds", 0)
+        cargo = ship.get("cargo", {})
+        current_cargo = sum(cargo.values())
+        if current_cargo >= holds:
+            return False
 
-    def _buy_payload(self, state):
-        current_sector = state.get("player_location_sector")
-        ports_in_sector = state.get("sector_data", {}).get(str(current_sector), {}).get("ports", [])
-        
-        if not ports_in_sector:
-            return None
-        
-        port_id = ports_in_sector[0].get("id") # Assuming current port is the first one
-        
-        price_cache_for_port = state.get("price_cache", {}).get(current_sector, {}).get(port_id, {})
-        ship_info = state.get("ship_info", {})
-        current_credits = state.get("current_credits", 0.0)
-        
-        if not ports_in_sector or not price_cache_for_port or not ship_info:
+        # For QA: ignore credits, let the server reject if insufficient
+        return True
+
+    def _buy_payload(self, state, dynamic_cooldown):
+        ship = state.get("ship_info", {})
+        holds = ship.get("holds", 0)
+        cargo = ship.get("cargo", {})
+        current_cargo = sum(cargo.values())
+        free_holds = max(0, holds - current_cargo)
+
+        if free_holds <= 0:
             return None
 
-        current_cargo_count = sum(ship_info.get('cargo', {}).values())
-        holds_free = ship_info.get('holds', 0) - current_cargo_count
+        sector = state.get("player_location_sector")
+        price_cache = state.get("price_cache", {})
+        sector_cache = price_cache.get(str(sector), {})
 
-        # Find a profitable commodity to buy
-        for commodity, prices in price_cache_for_port.items():
-            buy_price = prices.get("buy")
-            if buy_price is not None and current_credits >= buy_price and holds_free > 0:
-                # For now, buy 1 unit. Later, this will be more sophisticated.
-                return {"port_id": port_id, "commodity": commodity, "quantity": 1}
-        return None
+        if not sector_cache:
+            return None
+
+        port_id, port_prices = next(iter(sector_cache.items()))
+        
+        # Find a commodity to buy
+        best_commodity_to_buy = None
+        for commodity, prices in port_prices.items():
+            if prices.get("buy") is not None:
+                best_commodity_to_buy = commodity
+                break
+        
+        if not best_commodity_to_buy:
+            return None
+
+        # For now keep it simple: small fixed quantity bounded by free holds
+        quantity = min(10, free_holds)
+        if quantity <= 0:
+            return None
+
+        return {
+            "port_id": int(port_id),
+            "items": [
+                {
+                    "commodity": best_commodity_to_buy,
+                    "quantity": quantity
+                }
+            ]
+        }
 
     def _can_sell(self, state, dynamic_cooldown):
-        # Preconditions for selling:
-        # 1. Have a valid price_cache for the current sector and port
-        # 2. Have cargo to sell
-        current_sector = state.get("player_location_sector")
-        ports_in_sector = state.get("sector_data", {}).get(str(current_sector), {}).get("ports", [])
-        
-        if not ports_in_sector:
+        ship_info = state.get("ship_info")
+        if not ship_info:
             return False
         
-        current_port_id = ports_in_sector[0].get("id") # Assuming current port is the first one
-        
-        price_cache_for_port = state.get("price_cache", {}).get(current_sector, {}).get(current_port_id, {})
-        ship_info = state.get("ship_info", {})
-        
-        if not price_cache_for_port or not ship_info:
-            return False
+        cargo = ship_info.get("cargo", {})
+        return any(v > 0 for v in cargo.values())
 
-        # Find a commodity that can be sold
-        for commodity, prices in price_cache_for_port.items():
-            sell_price = prices.get("sell")
-            if sell_price is not None and ship_info.get("cargo", {}).get(commodity, 0) > 0:
-                return True
-        return False
+    def _sell_payload(self, state, dynamic_cooldown):
+        sector = state.get("player_location_sector")
+        price_cache = state.get("price_cache", {})
+        sector_cache = price_cache.get(str(sector), {})
 
-    def _sell_payload(self, state):
-        current_sector = state.get("player_location_sector")
-        ports_in_sector = state.get("sector_data", {}).get(str(current_sector), {}).get("ports", [])
-        
-        if not ports_in_sector:
-            return None
-        
-        port_id = ports_in_sector[0].get("id") # Assuming current port is the first one
-
-        price_cache_for_port = state.get("price_cache", {}).get(current_sector, {}).get(port_id, {})
-        ship_info = state.get("ship_info", {})
-        
-        if not ports_in_sector or not price_cache_for_port or not ship_info:
+        if not sector_cache:
             return None
 
-        # Find a profitable commodity to sell
-        for commodity, prices in price_cache_for_port.items():
-            sell_price = prices.get("sell")
-            if sell_price is not None and ship_info.get("cargo", {}).get(commodity, 0) > 0:
-                # For now, sell 1 unit. Later, this will be more sophisticated.
-                return {"port_id": port_id, "commodity": commodity, "quantity": 1}
+        port_id, port_prices = next(iter(sector_cache.items()))
+        
+        ship_info = state.get("ship_info", {})
+        cargo = ship_info.get("cargo", {})
+        
+        for commodity, amount in cargo.items():
+            if amount > 0:
+                return {
+                    "port_id": int(port_id),
+                    "items": [
+                        {
+                            "commodity": commodity,
+                            "quantity": amount
+                        }
+                    ]
+                }
         return None
 
     def _can_deposit(self, state, dynamic_cooldown):
@@ -347,6 +459,14 @@ class FiniteStatePlanner:
 
     def _bank_info_payload(self, state):
         return {}
+    
+    def _can_use_server_pathfinding(self, state) -> bool:
+        """Checks if the server-side pathfinding command is available."""
+        normalized_commands = state.get("normalized_commands", {})
+        cached_schemas = state.get("cached_schemas", {})
+        is_available = "move.path_to_sector" in normalized_commands and "move.path_to_sector" in cached_schemas
+        logger.debug(f"Server pathfinding (move.path_to_sector) available: {is_available}")
+        return is_available
 
     def _find_best_trade_route(self, state):
         """
@@ -453,171 +573,231 @@ class FiniteStatePlanner:
 
         return value
 
-    def _generate_context_key(self, state: dict) -> str:
-        """Generates a context key for the bandit policy based on the current state."""
-        stage = state.get("stage","bootstrap")
-        sector = state.get("player_location_sector",1)
-        have_ship = 1 if state.get("ship_info",{}).get("id") else 0
-        return f"{stage}-{sector}-ship{have_ship}"
+    def _survey_complete(self, state):
+        sector_id = state.get("player_location_sector")
+        if sector_id is None:
+            return False
+
+        sector_data = state.get("sector_data", {})
+        sd = sector_data.get(str(sector_id))
+        if not sd or not sd.get("has_port"):
+            return True  # nothing to survey here
+
+        ports = sd.get("ports") or []
+        if not ports:
+            return True
+
+        # For now, just use the first port in the sector
+        port_id = ports[0].get("id")
+        if port_id is None:
+            return True
+
+        price_cache = state.get("price_cache", {})
+        sector_cache = price_cache.get(str(sector_id), {})
+        port_cache = sector_cache.get(str(port_id), {})
+
+        # Treat survey as "complete" if we have at least 3 commodities priced.
+        return len(port_cache.keys()) >= 3
 
     def transition_stage(self, new_stage):
         logger.info(f"Planner: Transitioning from stage '{self.current_stage}' to '{new_stage}'.")
         self.current_stage = new_stage
         self.state_manager.set("stage", new_stage)
 
+    def _select_stage(self, current_state):
+        if not current_state.get("session_token") or not current_state.get("ship_info"):
+            return "bootstrap"
+
+        current_sector = current_state.get("player_location_sector")
+        sector_data = current_state.get("sector_data", {})
+        has_port = sector_data.get(str(current_sector), {}).get("ports")
+        price_cache = current_state.get("price_cache", {})
+
+        if has_port:
+            sector_cache = price_cache.get(str(current_sector), {})
+            if not sector_cache:
+                return "survey"
+            else:
+                # We have prices. Can we actually do anything?
+                can_buy = self._can_buy(current_state, 0) # Pass 0 for cooldown
+                can_sell = self._can_sell(current_state, 0)
+                if can_buy or can_sell:
+                    # Check if trade.buy or trade.sell are broken
+                    broken_commands = [c["command"] for c in current_state.get("broken_commands", [])]
+                    if "trade.buy" in broken_commands and "trade.sell" in broken_commands:
+                        return "explore" # Both trade commands are broken, so can't exploit
+                    elif "trade.buy" in broken_commands and not can_sell:
+                        return "explore" # Buy is broken and can't sell
+                    elif "trade.sell" in broken_commands and not can_buy:
+                        return "explore" # Sell is broken and can't buy
+                    else:
+                        return "exploit"
+                else:
+                    # We have prices, but can't act on them. Explore.
+                    return "explore"
+
+        return "explore"
+
     def get_next_command(self, llm_suggestion=None):
         current_state = self.state_manager.get_all()
-        logger.info(f"Planner: Current stage is '{self.current_stage}'.")
+
+        # --- Hard invariants first ---
+
+        # 1. If we lost the session, we must go back to bootstrap.
+        if not current_state.get("session_token"):
+            if self.current_stage != "bootstrap":
+                logger.warning("No session_token; forcing stage=bootstrap.")
+                self.transition_stage("bootstrap")
+            # Let the existing bootstrap block handle the rest
+        else:
+            # 2. If we have a session but no ship_info, *force* ship.info
+            if not current_state.get("ship_info"):
+                last = current_state.get("last_ship_info_request_time", 0)
+                cooldown = self.config.get("cooldown_seconds", 15)
+                if time.time() - last >= cooldown:
+                    logger.info("No ship_info in state; forcing ship.info before anything else.")
+                    return {"command": "ship.info", "data": {}}
+                else:
+                    logger.debug("Waiting for ship.info response (still within cooldown).")
+                    # continue to maybe send sector.info etc., but do NOT warp
         
+        self.current_stage = self._select_stage(current_state)
+        self.state_manager.set("stage", self.current_stage)
+        logger.info(f"Planner: Current stage is '{self.current_stage}'.")
+
+        # After bootstrap logic, before candidate selection
+        if self.current_stage in ("exploit", "explore"):
+            current_sector = current_state.get("player_location_sector")
+            has_port = bool(current_state.get("sector_data", {}).get(str(current_sector), {}).get("ports"))
+            if has_port and not current_state.get("port_info"):
+                logger.info("At a port with no port_info; switching to survey stage.")
+                self.transition_stage("survey")
+
+        if self.current_stage == "survey":
+            if self._survey_complete(current_state):
+                logger.info("Survey complete for sector %s; ready for next stage.",
+                            current_state.get("player_location_sector"))
+                # Let the next tick's _select_stage decide what to do now that prices are known.
+
         # Determine dynamic cooldown based on server rate limits
         rate_limit_info = current_state.get("rate_limit_info", {})
-        dynamic_cooldown = self.config.get("cooldown_seconds", 15) # Default cooldown from config
+        dynamic_cooldown = self.config.get("cooldown_seconds", 15)
 
         if rate_limit_info:
             remaining = rate_limit_info.get("remaining", 1)
-            reset_at = rate_limit_info.get("reset_at", 0) # Use reset_at
-            
-            if remaining <= 1 and reset_at > time.time(): # Compare with reset_at
-                # If we're near the limit, wait until reset_at plus a small buffer
+            reset_at = rate_limit_info.get("reset_at", 0)
+            if remaining <= 1 and reset_at > time.time():
                 dynamic_cooldown = max(dynamic_cooldown, reset_at - time.time() + 1)
-                logger.warning(f"Dynamic cooldown adjusted to {dynamic_cooldown:.2f}s due to rate limit (remaining: {remaining}).")
+                logger.warning(f"Dynamic cooldown adjusted to {dynamic_cooldown:.2f}s due to rate limit.")
 
-
-        # Stage Transition Logic
+        # --- Action Selection ---
+        action_defs = self.action_catalogue.get(self.current_stage, [])
+        
         if self.current_stage == "bootstrap":
-            logger.debug(f"Bootstrap check: session_token={bool(current_state.get('session_token'))}, cached_schemas={bool(current_state.get('cached_schemas'))}, normalized_commands={bool(current_state.get('normalized_commands'))}, schemas_to_fetch={len(current_state.get('schemas_to_fetch', []))}")
-            # Relaxed bootstrap exit criteria: session token present AND (any schemas OR cmd_list loaded)
-            if current_state.get("session_token") and current_state.get("normalized_commands") and not current_state.get("schemas_to_fetch"):
-                self.transition_stage("survey")
-            else:
-                # If not logged in or schemas not cached, try bootstrap actions
-                for action_def in self.action_catalogue["bootstrap"]:
-                    if action_def["precondition"](current_state):
-                        payload = action_def["payload_builder"](current_state)
-                        if payload is not None:
-                            logger.debug(f"Planner: Bootstrap candidate: {action_def['command']}")
-                            return {"command": action_def["command"], "data": payload}
-                
-                # Fallback: If schemas are still to be fetched and no bootstrap action could be taken,
-                # load schemas from docs as a last resort.
-                if current_state.get("schemas_to_fetch"):
-                    logger.warning("Bootstrap: Could not fetch all schemas via system.describe_schema. Falling back to loading from docs.")
-                    load_schemas_from_docs(self.state_manager)
-                    # After loading from docs, re-evaluate if we can transition or need more actions
-                    if not self.state_manager.get("schemas_to_fetch"): # If docs loaded all needed schemas
-                        self.transition_stage("survey")
-                        return self.get_next_command(llm_suggestion) # Try to get a command for the new stage
-                
-                logger.error("Bootstrap: Stuck. Cannot login or cache schemas.")
-                return None # Cannot proceed
+            for action_def in action_defs:
+                if action_def["precondition"](current_state):
+                    payload = action_def["payload_builder"](current_state)
+                    if payload is not None:
+                        return {"command": action_def["command"], "data": payload}
+            logger.error("Bootstrap: Stuck. No valid actions found.")
+            return None
 
-        if self.current_stage == "survey":
-            # Check if basic info is gathered and fresh
-            ship_info_fresh = (time.time() - current_state.get("last_ship_info_request_time", 0)) <= dynamic_cooldown and bool(current_state.get("ship_info"))
-            sector_info_fresh = (time.time() - current_state.get("last_sector_info_request_time", 0)) <= dynamic_cooldown and bool(current_state.get("sector_info_fetched_for", {}).get(current_state.get("player_location_sector")))
-            
-            # If trade.quote is broken, we can't rely on it for survey completion
-            trade_quote_broken = "trade.quote" in [item["command"] for item in current_state.get("broken_commands", [])]
-            price_cache_available = current_state.get("price_cache") and current_state.get("player_location_sector") in current_state.get("price_cache", {})
-
-            logger.debug(f"Survey stage checks: ship_info_fresh={ship_info_fresh}, sector_info_fresh={sector_info_fresh}, price_cache_available={price_cache_available}, trade_quote_broken={trade_quote_broken}")
-
-            if ship_info_fresh and sector_info_fresh and (price_cache_available or trade_quote_broken):
-                self.transition_stage("exploit") # Move to exploit if survey is complete
-            
-        # Filter candidate actions based on preconditions, cooldowns, and retry info
+        # --- For all other stages ---
         candidates = []
         command_retry_info = current_state.get("command_retry_info", {})
-        MAX_RETRIES = self.config.get("max_command_retries", 5) # Max retries before considering permanently broken
+        max_retries = self.config.get("max_retries_per_command", 3)
 
-        for action_def in self.action_catalogue.get(self.current_stage, []):
+        for action_def in action_defs:
             command_name = action_def["command"]
-            next_allowed_time = current_state.get("next_allowed", {}).get(command_name, 0)
-            
             retry_data = command_retry_info.get(command_name, {"failures": 0, "next_retry_time": 0})
 
-            # Check if command is in backoff
             if time.time() < retry_data["next_retry_time"]:
-                logger.debug(f"Command '{command_name}' is in backoff. Next retry at {retry_data['next_retry_time']:.2f}.")
-                continue # Skip this command if it's still in backoff
+                continue
+            
+            if retry_data["failures"] >= max_retries:
+                broken_cmds = [c["command"] for c in current_state.get("broken_commands", [])]
+                if command_name not in broken_cmds:
+                    logger.warning(f"Command '{command_name}' exceeded max retries ({max_retries}). Reporting as broken.")
+                    self.bug_reporter.triage_invariant_failure(
+                        "Command Exceeded Max Retries",
+                        f"Command '{command_name}' failed {retry_data['failures']} times.",
+                        current_state
+                    )
+                    all_broken = current_state.get("broken_commands", [])
+                    all_broken.append({"command": command_name, "error": "Exceeded max retries"})
+                    self.state_manager.set("broken_commands", all_broken)
+                continue
 
-            # Check if command has exceeded max retries and should be considered permanently broken
-            if retry_data["failures"] >= MAX_RETRIES:
-                logger.warning(f"Command '{command_name}' exceeded max retries ({MAX_RETRIES}). Considering it permanently broken.")
-                # Add to broken_commands if not already there
-                broken_cmds = current_state.get("broken_commands", [])
-                if command_name not in [item["command"] for item in broken_cmds]:
-                    broken_cmds.append({"command": command_name, "error": "Exceeded max retries"})
-                    self.state_manager.set("broken_commands", broken_cmds)
-                continue # Skip this command
-
-            if time.time() >= next_allowed_time:
-                if command_name in ["ship.info", "sector.info"] and self.current_stage == "survey":
-                    if action_def["precondition"](current_state, dynamic_cooldown):
-                        candidates.append(action_def)
-                elif action_def["precondition"](current_state, dynamic_cooldown):
-                    candidates.append(action_def)
+            if action_def["precondition"](current_state, dynamic_cooldown):
+                candidates.append(action_def)
         
         logger.info(f"Planner: Candidate actions for stage '{self.current_stage}': {[c['command'] for c in candidates]}")
 
-        if llm_suggestion:
-            # Normalize LLM suggestion command
-            normalized_llm_command = current_state.get("normalized_commands", {}).get(llm_suggestion.get("command"), llm_suggestion.get("command"))
-            llm_suggestion["command"] = normalized_llm_command # Update command name in suggestion
+        # QA Mode: Prioritize focus commands
+        if self.config.get("qa_mode"):
+            qa_focus_commands = self.config.get("qa_focus_commands", [])
+            qa_candidates = [c for c in candidates if c["command"] in qa_focus_commands]
+            if qa_candidates:
+                logger.info(f"QA Mode: Prioritizing focus commands: {[c['command'] for c in qa_candidates]}")
+                candidates = qa_candidates
 
-            # Check if LLM suggestion is a valid and allowed action for the current stage and not on cooldown
+        if not candidates:
+            if self.current_stage == "exploit":
+                self.transition_stage("explore")
+                return None # Allow the main loop to call get_next_command again in the next tick
+            logger.warning(f"No valid actions found for stage '{self.current_stage}'.")
+            return None
+
+        # LLM Suggestion or Bandit Policy
+        if llm_suggestion:
+            normalized_llm_command = current_state.get("normalized_commands", {}).get(llm_suggestion.get("command"), llm_suggestion.get("command"))
+            llm_suggestion["command"] = normalized_llm_command
+            
             for action_def in candidates:
                 if action_def["command"] == normalized_llm_command:
-                    # Validate LLM's suggested payload against schema
                     if self._validate_payload(normalized_llm_command, llm_suggestion.get("data", {})):
-                        # Apply cooldown to this command
-                        next_allowed = current_state.get("next_allowed", {})
-                        next_allowed[action_def["command"]] = time.time() + dynamic_cooldown
-                        self.state_manager.set("next_allowed", next_allowed)
-                        return llm_suggestion # Return LLM's suggestion directly
+                        return llm_suggestion
                     else:
-                        logger.warning(f"LLM suggested command '{normalized_llm_command}' with invalid payload. Discarding suggestion.")
-                        break # Discard this LLM suggestion and proceed to fallback
-
-        # Fallback to deterministic/bandit selection if no valid LLM suggestion or no LLM suggestion
-        if candidates:
-            # Use bandit policy to choose an action
-            candidate_commands = [action_def["command"] for action_def in candidates]
-            context_key = self._generate_context_key(current_state) # Generate context key
-            
-            # Loop through candidates, trying to find one with a valid payload
-            for _ in range(len(candidates)): # Try each candidate once
-                chosen_command_name = self.bandit_policy.choose_action(candidate_commands, context_key)
-                chosen_action_def = next( (action_def for action_def in candidates if action_def["command"] == chosen_command_name), None)
-
-                if chosen_action_def:
-                    payload = chosen_action_def["payload_builder"](current_state, dynamic_cooldown)
-                    if payload is None:
-                        logger.warning(f"Payload builder for command '{chosen_action_def['command']}' returned None. Trying another candidate.")
-                        candidate_commands.remove(chosen_command_name) # Remove from consideration
-                        continue
-                    
-                    # Validate payload before returning
-                    if self._validate_payload(chosen_action_def["command"], payload):
-                        # Apply cooldown to this command
-                        next_allowed = current_state.get("next_allowed", {})
-                        next_allowed[chosen_action_def["command"]] = time.time() + dynamic_cooldown
-                        self.state_manager.set("next_allowed", next_allowed)
-                        return {"command": chosen_action_def["command"], "data": payload}
-                    else:
-                        logger.warning(f"Generated payload for command '{chosen_action_def['command']}' is invalid. Trying another candidate.")
-                        candidate_commands.remove(chosen_command_name) # Remove from consideration
-                        continue
-                candidate_commands.remove(chosen_command_name) # If chosen_action_def is None, remove it
-
-        logger.warning(f"No valid payloads for candidates in stage '{self.current_stage}'.")
-        return None
+                        logger.warning(f"LLM suggested invalid payload for {normalized_llm_command}. Falling back to bandit.")
+                        break
         
-        # If exploit stage has no actions, transition to explore
-        if self.current_stage == "exploit" and not candidates:
-            logger.info("Exploit stage has no valid actions. Transitioning to explore stage.")
-            self.transition_stage("explore")
-            # After transitioning, immediately try to get a command for the new stage
-            return self.get_next_command(llm_suggestion)
+        # Fallback to bandit policy
+        candidate_commands = [action_def["command"] for action_def in candidates]
+        context_key = make_context_key(current_state)
+        
+        # Stuck detection
+        if self.config.get("qa_mode"):
+            history = current_state.get("last_commands_history", [])
+            if len(history) >= 20:
+                last_20_commands = history[-20:]
+                if len(set(last_20_commands)) == 1:
+                    command = last_20_commands[0]
+                    self.bug_reporter.report_bug(
+                        bug_type="Agent Stuck",
+                        description=f"Agent repeated {command} 20 times in a row.",
+                        reproducer={"history": last_20_commands},
+                        frames=[], # no frames available
+                        server_caps=current_state.get("server_capabilities", {}),
+                        agent_state=current_state,
+                        last_commands_history=history,
+                        last_responses_history=self.state_manager.get("last_responses_history", []),
+                        replay_commands=last_20_commands,
+                    )
 
+        for _ in range(len(candidates)):
+            chosen_command_name = self.bandit_policy.choose_action(candidate_commands, context_key)
+            chosen_action_def = next((c for c in candidates if c["command"] == chosen_command_name), None)
+
+            if chosen_action_def:
+                payload = chosen_action_def["payload_builder"](current_state, dynamic_cooldown)
+                if payload is not None and self._validate_payload(chosen_command_name, payload):
+                    self.state_manager.set("last_stage", self.current_stage)
+                    self.state_manager.set("last_action", chosen_command_name)
+                    self.state_manager.set("last_context_key", context_key)
+                    return {"command": chosen_command_name, "data": payload}
+                
+                if chosen_command_name in candidate_commands:
+                    candidate_commands.remove(chosen_command_name)
+        
+        logger.error(f"All candidate actions for stage '{self.current_stage}' failed payload generation or validation.")
         return None

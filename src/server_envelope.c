@@ -219,43 +219,49 @@ cmd_system_cmd_list (client_ctx_t *ctx, json_t *root)
   return 0;
 }
 
-// system.describe_schema {name} → { type:"system.describe_schema", data:{ name, messages:[...] } }
+// system.describe_schema {name, type} → { type:"system.schema", data:{ name, type, schema } }
 int
 cmd_system_describe_schema (client_ctx_t *ctx, json_t *root)
 {
   const char *name = NULL;
+  const char *schema_type = NULL; // "command" or "event"
   json_t *d = json_object_get (root, "data");
   if (d)
-    name = json_string_value (json_object_get (d, "name"));
+    {
+      name = json_string_value (json_object_get (d, "name"));
+      schema_type = json_string_value (json_object_get (d, "type")); // Assuming client sends "type"
+    }
+
   if (!name || !*name)
     {
-      send_enveloped_error (ctx->fd, root, 1103, "Missing 'name'");
+      send_enveloped_error (ctx->fd, root, 1103, "Missing 'name' in data payload");
+      return 0;
+    }
+  // Default to "command" if type is not provided or recognized
+  if (!schema_type || (strcasecmp(schema_type, "command") != 0 && strcasecmp(schema_type, "event") != 0)) {
+      schema_type = "command";
+  }
+
+  // 1. Retrieve the actual schema for the requested command/event
+  json_t *schema_obj = schema_get (name);
+  if (!schema_obj)
+    {
+      // If schema_get returns NULL, it means the schema is not found/implemented
+      send_enveloped_error (ctx->fd, root, 1104, "Schema not found or not implemented");
       return 0;
     }
 
-  size_t plen = strlen (name);
-  const cmd_desc_t *tbl = NULL;
-  size_t n = 0;
-  get_cmd_table (&tbl, &n);
+  // 2. Construct the correct 'data' payload for the response
+  json_t *response_data = json_object ();
+  json_object_set_new (response_data, "name", json_string (name));
+  json_object_set_new (response_data, "type", json_string (schema_type));
+  json_object_set_new (response_data, "schema", schema_obj); // schema_obj is a new reference from schema_get()
 
-  json_t *msgs = json_array ();
-  for (size_t i = 0; i < n; i++)
-    {
-      const char *cmd = tbl[i].name;
-      if (!cmd)
-	continue;
-      if (strncmp (cmd, name, plen) == 0 && cmd[plen] == '.')
-	{
-	  json_t *o = json_object ();
-	  json_object_set_new (o, "cmd", json_string (cmd));
-	  if (tbl[i].summary && tbl[i].summary[0])
-	    json_object_set_new (o, "summary", json_string (tbl[i].summary));
-	  json_array_append_new (msgs, o);
-	}
-    }
+  // 3. Send with correct type "system.schema"
+  send_enveloped_ok (ctx->fd, root, "system.schema", response_data);
 
-  json_t *out = json_pack ("{s:s, s:o}", "name", name, "messages", msgs);
-  send_enveloped_ok (ctx->fd, root, "system.describe_schema", out);
+  // response_data now owns schema_obj, so no separate decref for schema_obj here.
+  // send_enveloped_ok will decref response_data (and thus schema_obj)
   return 0;
 }
 
@@ -442,7 +448,9 @@ send_enveloped_ok (int fd, json_t *req, const char *type, json_t *data)
   json_object_set_new (resp, "meta", make_default_meta ());
 
   // ✨ sanitize all strings (strip ANSI) before sending
-  sanitize_json_strings (resp);
+  if (type && strcmp(type, "system.schema") != 0) {
+      sanitize_json_strings (resp);
+  }
 
   // write one line
   char *s = json_dumps (resp, JSON_COMPACT);

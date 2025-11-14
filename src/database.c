@@ -123,6 +123,7 @@ db_get_handle (void)
   
   // 2. The handle is NULL (due to a close_and_reset or initial load).
   //    Open a new connection using the full, robust V2 flags.
+  // LOGI("db_get_handle: Attempting to open new database connection to '%s'", DEFAULT_DB_NAME);
   int rc = sqlite3_open_v2 (DEFAULT_DB_NAME,
                            &db_handle,
                            SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE |
@@ -131,8 +132,7 @@ db_get_handle (void)
 
   if (rc != SQLITE_OK)
     {
-      // LOGE("Can't open database: %s", sqlite3_errmsg(db_handle));
-      // ... (error handling remains the same) ...
+      LOGE("db_get_handle: Can't open database '%s': %s (rc=%d)", DEFAULT_DB_NAME, sqlite3_errmsg(db_handle), rc);
       if (db_handle)
         {
           sqlite3_close (db_handle);
@@ -140,6 +140,7 @@ db_get_handle (void)
         }
       return NULL;  // Return NULL on failure
     }
+  // LOGI("db_get_handle: Successfully opened database connection to '%s'", DEFAULT_DB_NAME);
 
   // 3. Apply critical settings for concurrency (WAL and busy timeout)
   if (sqlite3_exec (db_handle, "PRAGMA journal_mode=WAL;", NULL, NULL, NULL)
@@ -510,81 +511,24 @@ const char *create_table_sql[] = {
 
 
   " CREATE TABLE IF NOT EXISTS planets ( "
-
-
-
   " id INTEGER PRIMARY KEY AUTOINCREMENT,  "
-
-
-
   " num INTEGER,  "	/* legacy planet ID */
-
-
-
   " sector INTEGER NOT NULL,  "	/* FK to sectors.id */
-
-
-
   " name TEXT NOT NULL,  "
-
-
-
   " owner INTEGER,  "	/* FK to players.id (legacy, will be replaced by owner_player_id for player-owned) */
-
-
-
   " owner_player_id INTEGER REFERENCES players(id) ON DELETE SET NULL, " /* Explicit owner for player-owned planets */
-
-
-
   " population INTEGER,  "
-
-
-
   " type INTEGER,  "	/* FK to planettypes.id */
-
-
-
   " creator TEXT,  "
-
-
-
   " colonist INTEGER,  "
-
-
-
   " fighters INTEGER,  "
-
-
-
   " citadel_level INTEGER DEFAULT 0,  "	/* replaces pointer to citadel struct */
-
-
-
   " ore_on_hand INTEGER NOT NULL DEFAULT 0, "
-
-
-
   " organics_on_hand INTEGER NOT NULL DEFAULT 0, "
-
-
-
   " equipment_on_hand INTEGER NOT NULL DEFAULT 0, "
-
-
-
   " FOREIGN KEY (sector) REFERENCES sectors(id),  "
-
-
-
   " FOREIGN KEY (owner) REFERENCES players(id),  "
-
-
-
   " FOREIGN KEY (type) REFERENCES planettypes(id) "
-
-
-
   " ); ",
 
   " CREATE TABLE IF NOT EXISTS citadel_requirements ( "
@@ -780,7 +724,7 @@ const char *create_table_sql[] = {
     "  severity   TEXT NOT NULL CHECK(severity IN ('info','warn','error')),"
     "  expires_at INTEGER" ");",
 
-  "CREATE TABLE player_prefs   (  "
+  "CREATE TABLE  IF NOT EXISTS player_prefs   (  "
     "  player_id  INTEGER NOT NULL  ,  "
     "  key        TEXT    NOT NULL,       "
     "  type       TEXT    NOT NULL CHECK (type IN ('bool','int','string','json'))  ,  "
@@ -789,7 +733,7 @@ const char *create_table_sql[] = {
     "  PRIMARY KEY (player_id, key)  ,  "
     "  FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE )  ;  ",
 
-  "CREATE TABLE player_bookmarks   (  "
+  "CREATE TABLE IF NOT EXISTS player_bookmarks   (  "
     "  id         INTEGER PRIMARY KEY AUTOINCREMENT  ,  "
     "  player_id  INTEGER NOT NULL  ,  "
     "  name       TEXT    NOT NULL,      "
@@ -799,7 +743,7 @@ const char *create_table_sql[] = {
     "  FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE  ,  "
     "  FOREIGN KEY (sector_id) REFERENCES sectors(id) ON DELETE CASCADE )  ;  ",
 
-  "CREATE TABLE player_avoid   (  "
+  "CREATE TABLE  IF NOT EXISTS player_avoid  (  "
     "  player_id  INTEGER NOT NULL  ,  "
     "  sector_id  INTEGER NOT NULL  ,  "
     "  updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))  ,  "
@@ -807,7 +751,7 @@ const char *create_table_sql[] = {
     "  FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE  ,  "
     "  FOREIGN KEY (sector_id) REFERENCES sectors(id) ON DELETE CASCADE )  ;  ",
 
-  "CREATE TABLE player_notes   (  "
+  "CREATE TABLE IF NOT EXISTS player_notes   (  "
     "  id         INTEGER PRIMARY KEY AUTOINCREMENT  ,  "
     "  player_id  INTEGER NOT NULL  ,  "
     "  scope      TEXT    NOT NULL,    "
@@ -817,7 +761,7 @@ const char *create_table_sql[] = {
     "  UNIQUE(player_id, scope, key)  ,  "
     "  FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE )  ;  ",
 
-  "CREATE TABLE sector_assets ( "
+  "CREATE TABLE IF NOT EXISTS sector_assets  ( "
     "    id INTEGER PRIMARY KEY,  "
     "    sector INTEGER NOT NULL REFERENCES sectors(id), "
     "    player INTEGER REFERENCES players(id),  "
@@ -1147,7 +1091,7 @@ const char *create_table_sql[] = {
 
   /* --- player_info_v1 view and indexes --- */
 
-  " CREATE VIEW player_info_v1 AS   "
+  " CREATE VIEW IF NOT EXISTS player_info_v1  AS   "
   " SELECT   "
   "   p.id         AS player_id,   "
   "   p.name       AS player_name,   "
@@ -1183,7 +1127,7 @@ const char *create_table_sql[] = {
   " LEFT JOIN sectors    sctr ON sctr.id = sh.sector; ",
 
 
-  " CREATE VIEW sector_search_index AS  "
+  " CREATE VIEW IF NOT EXISTS sector_search_index  AS  "
   " SELECT   "
   "     'sector' AS kind,  "
   "     s.id AS id,  "
@@ -1310,10 +1254,10 @@ const char *create_table_sql[] = {
     " ON subscriptions(event_type); ",
 
 
-  "CREATE INDEX idx_player_prefs_player ON player_prefs(player_id)  ;  "
-    "CREATE INDEX idx_bookmarks_player ON player_bookmarks(player_id)  ;  "
-    "CREATE INDEX idx_avoid_player ON player_avoid(player_id)  ;  "
-    "CREATE INDEX idx_notes_player ON player_notes(player_id)  ;  "
+  "CREATE INDEX IF NOT EXISTS idx_player_prefs_player ON player_prefs(player_id)  ;  "
+    "CREATE INDEX IF NOT EXISTS idx_bookmarks_player ON player_bookmarks(player_id)  ;  "
+    "CREATE INDEX IF NOT EXISTS idx_avoid_player ON player_avoid(player_id)  ;  "
+    "CREATE INDEX IF NOT EXISTS idx_notes_player ON player_notes(player_id)  ;  "
     ///////////////// TRIGGERS /////////////////////
     " CREATE TRIGGER IF NOT EXISTS corporations_touch_updated  "
     " AFTER UPDATE ON corporations  "
@@ -1824,7 +1768,7 @@ const char *insert_default_sql[] = {
 "   id INTEGER PRIMARY KEY,  "
 "   code TEXT UNIQUE NOT NULL,  "
 "   name TEXT NOT NULL,  "
-"   illegal INTEGER NOT NULL DEFAULT 1,  "  
+"   illegal INTEGER NOT NULL DEFAULT 0,  "  
 "   base_price INTEGER NOT NULL DEFAULT 0 CHECK (base_price >= 0),  "
 "   volatility INTEGER NOT NULL DEFAULT 0 CHECK (volatility >= 0)  "
 " );  "
@@ -2649,8 +2593,8 @@ static const char *engine_bootstrap_sql_statements[] = {
   "  article_text TEXT NOT NULL,   "
   "  source_ids TEXT"
   ");",
-  "CREATE INDEX ix_news_feed_pub_ts ON news_feed(published_ts);",
-  "CREATE INDEX ix_news_feed_exp_ts ON news_feed(expiration_ts);"
+  "CREATE INDEX IF NOT EXISTS ix_news_feed_pub_ts ON news_feed(published_ts);",
+  "CREATE INDEX IF NOT EXISTS ix_news_feed_exp_ts ON news_feed(expiration_ts);"
 };
 
 static const size_t engine_bootstrap_sql_count =
@@ -2687,7 +2631,7 @@ static const char *MIGRATE_A_SQL = "BEGIN IMMEDIATE;"
   "  ON engine_events(sector_id, ts);"
   /* Forward-compat view named exactly 'events' */
   "DROP VIEW IF EXISTS events;"
-  "CREATE VIEW events AS "
+  "CREATE VIEW IF NOT EXISTS  events AS "
   "  SELECT id, ts, type, actor_player_id, sector_id, payload, idem_key "
   "  FROM engine_events;" "COMMIT;";
 
@@ -2716,7 +2660,7 @@ static const char *MIGRATE_B_SQL = "BEGIN IMMEDIATE;"
   "  ON engine_events(sector_id, ts);"
   /* Forward-compat view named exactly `events` */
   "DROP VIEW IF EXISTS events;"
-  "CREATE VIEW events AS "
+  "CREATE VIEW IF NOT EXISTS events AS "
   "  SELECT id, ts, type, actor_player_id, sector_id, payload, idem_key "
   "  FROM engine_events;"
   /* Make the view writable (append-only) */
@@ -4922,20 +4866,26 @@ db_player_set_sector (int player_id, int sector_id)
 
   if (rc != SQLITE_DONE)
     {
-      // Player not found or other error. rc holds the step result.
-      if (rc == SQLITE_DONE)
-	{
-	  ret_code = SQLITE_NOTFOUND;	// You might define this custom error code.
-	}
-      else
-	{
-	  ret_code = rc;
-	}
+      ret_code = rc;
       goto cleanup;
     }
 
-
-
+  // Update the player's sector in the players table
+  const char *sql_update_player = "UPDATE players SET sector=? WHERE id=?;";
+  rc = sqlite3_prepare_v2 (dbh, sql_update_player, -1, &st_update_player, NULL);
+  if (rc != SQLITE_OK)
+    {
+      ret_code = rc;
+      goto cleanup;
+    }
+  sqlite3_bind_int (st_update_player, 1, sector_id);
+  sqlite3_bind_int (st_update_player, 2, player_id);
+  rc = sqlite3_step (st_update_player);
+  if (rc != SQLITE_DONE)
+    {
+      ret_code = rc;
+      goto cleanup;
+    }
 
   // Update the ship's location using the retrieved ship ID
   const char *sql_update_ship = "UPDATE ships SET sector=? WHERE id=?;";
@@ -4961,6 +4911,8 @@ cleanup:
   // 3. Finalize all prepared statements.
   if (st_find_ship)
     sqlite3_finalize (st_find_ship);
+  if (st_update_player)
+    sqlite3_finalize (st_update_player);
   if (st_update_ship)
     sqlite3_finalize (st_update_ship);
 
