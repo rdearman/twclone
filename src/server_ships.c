@@ -111,9 +111,9 @@ cmd_ship_jettison (client_ctx_t *ctx, json_t *root)
     }
 
   // Check current cargo
-  int cur_ore, cur_org, cur_eq, cur_holds;
+  int cur_ore, cur_org, cur_eq, cur_holds, cur_colonists;
   if (h_get_ship_cargo_and_holds (db, player_ship_id,
-                                  &cur_ore, &cur_org, &cur_eq, &cur_holds) != SQLITE_OK)
+                                  &cur_ore, &cur_org, &cur_eq, &cur_holds, &cur_colonists) != SQLITE_OK)
     {
       send_enveloped_error (ctx->fd, root, 500, "Could not read ship cargo.");
       return 0;
@@ -153,11 +153,12 @@ cmd_ship_jettison (client_ctx_t *ctx, json_t *root)
   
   // Re-fetch current cargo to ensure accurate remaining_cargo
   if (h_get_ship_cargo_and_holds (db, player_ship_id,
-                                  &cur_ore, &cur_org, &cur_eq, &cur_holds) == SQLITE_OK)
+                                  &cur_ore, &cur_org, &cur_eq, &cur_holds, &cur_colonists) == SQLITE_OK)
   {
       if (cur_ore > 0) json_array_append_new(remaining_cargo_array, json_pack("{s:s, s:i}", "commodity", "ore", "quantity", cur_ore));
       if (cur_org > 0) json_array_append_new(remaining_cargo_array, json_pack("{s:s, s:i}", "commodity", "organics", "quantity", cur_org));
       if (cur_eq > 0) json_array_append_new(remaining_cargo_array, json_pack("{s:s, s:i}", "commodity", "equipment", "quantity", cur_eq));
+      if (cur_colonists > 0) json_array_append_new(remaining_cargo_array, json_pack("{s:s, s:i}", "commodity", "colonists", "quantity", cur_colonists));
   }
   json_object_set_new (payload, "remaining_cargo", remaining_cargo_array);
 

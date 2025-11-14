@@ -65,4 +65,11 @@ TAGS
 twclone.log
 *.db-shm
 *db-wal
-###*.log
+*.log
+tmp/
+
+# python stuff
+__pycache__
+ai_player/bugs
+temp_parser_test.err
+temp_parser_test.py
