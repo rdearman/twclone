@@ -2,6 +2,7 @@ import socket
 import json
 import time
 import uuid
+import uuid
 import datetime
 import ollama
 import logging
@@ -118,6 +119,7 @@ class StateManager:
             "new_port_discovered": False,
             "rate_limit_info": {},
             "command_retry_info": {},
+            "ports_by_sector": {},
         }
 
     def _merge_state(self, target_dict, source_dict):
@@ -434,6 +436,12 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
                             credits = data["player"]["credits"]
                         elif "ship" in data and "credits" in data["ship"]:
                             credits = data["ship"]["credits"]
+                    elif response_type == "bank.balance" and response.get("status") == "ok":
+                        data = response.get("data", {}) or {}
+                        if "balance" in data:
+                            credits = data["balance"]
+                        elif "bank_account" in data and "balance" in data["bank_account"]:
+                            credits = data["bank_account"]["balance"]
 
                     if credits is not None:
                         try:
@@ -490,6 +498,14 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
                                 logger.info(f"Updated port info for new port_id={port_id}")
                             else:
                                 logger.info(f"Refreshed port info for port_id={port_id}")
+                            
+                            # Update ports_by_sector map
+                            ports_by_sector = state_manager.get("ports_by_sector", {})
+                            current_sector = state_manager.get("player_location_sector")
+                            if current_sector is not None:
+                                ports_by_sector.setdefault(str(current_sector), {})[str(port_id)] = response_data
+                                state_manager.set("ports_by_sector", ports_by_sector)
+                                logger.info(f"Cached port {port_id} in sector {current_sector} in ports_by_sector.")
                         else:
                             logger.warning("trade.port_info ok but no port_id in data")
 
@@ -863,6 +879,8 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     
     state_manager = StateManager(config.get('state_file', 'state.json'), config)
+    # Clear broken_commands at startup to allow re-attempting them after fixes
+    state_manager.set("broken_commands", [])
     
     # Load JSON Schemas from PROTOCOL docs once at startup
     try:
@@ -923,9 +941,9 @@ def main():
                     "ts": datetime.datetime.now().isoformat() + "Z",
                     "command": next_command_dict["command"],
                     "auth": {"session": state_manager.get("session_token")},
-                    "data": next_command_dict.get("data", {}),
-                    "meta": {"client_version": config.get("client_version"), "idempotency_key": idempotency_key},
-                    "idempotency_key": idempotency_key
+                    "data": {**next_command_dict.get("data", {}), "idempotency_key": idempotency_key}, # Add idempotency_key to data
+                    "meta": {"client_version": config.get("client_version")}, # Remove idempotency_key from meta as it's in data
+                    "idempotency_key": idempotency_key # Keep at top level for consistency, though server doesn't use it here
                 }
 
                 game_conn.send_command(game_command)

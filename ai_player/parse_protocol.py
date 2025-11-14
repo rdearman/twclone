@@ -18,7 +18,7 @@ def parse_protocol_markdown(filepath):
         r'\*?Example Client Request:\*?\n' +     # Match the literal string "Example Client Request:" with optional asterisks
         r'(?:(?!```json).)*?' +            # Match any content non-greedily until "```json"
         r'```json\n' +                   # Start of JSON block
-        r'({.*?})\n' +                   # The JSON content (non-greedy)
+        r'(\{[\s\S]*?\})\n' +                   # The JSON content (non-greedy, including newlines)
         r'```',
         re.MULTILINE | re.DOTALL
     )
@@ -31,9 +31,11 @@ def parse_protocol_markdown(filepath):
         command_names = [c.strip() for c in command_name_raw.split('/')]
         description = match.group(2).strip()
         json_str = match.group(3)
+        print(f"[DEBUG PARSER] Captured JSON string for {command_name_raw}:\n{json_str}", file=sys.stderr)
 
         try:
             example_json = json.loads(json_str)
+            print(f"[DEBUG PARSER] Parsed example JSON for {command_name_raw}:\n{json.dumps(example_json, indent=2)}", file=sys.stderr)
             data_schema = example_json.get("data", {})
             
             if not data_schema:

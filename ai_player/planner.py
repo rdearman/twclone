@@ -109,20 +109,28 @@ class FiniteStatePlanner:
                     "precondition": lambda s: s.get("session_token") and s.get("last_player_info_request_time") == 0,
                     "payload_builder": lambda s: {}
                 },
+                {
+                    "command": "bank.balance",
+                    "precondition": lambda s: s.get("session_token") and s.get("last_bank_info_request_time") == 0,
+                    "payload_builder": self._bank_balance_payload
+                },
             ],
             "survey": [
                 {"command": "player.my_info", "precondition": self._can_get_player_info, "payload_builder": self._player_info_payload},
                 {"command": "trade.port_info", "precondition": self._can_get_port_info, "payload_builder": self._port_info_payload},
                 {"command": "trade.quote", "precondition": self._can_get_trade_quote, "payload_builder": self._trade_quote_payload},
+                {"command": "bank.balance", "precondition": self._can_bank_balance, "payload_builder": self._bank_balance_payload},
             ],
             "explore": [
                 {"command": "sector.info", "precondition": self._can_get_sector_info, "payload_builder": self._sector_info_payload},
                 {"command": "move.warp", "precondition": self._can_warp, "payload_builder": self._warp_payload},
+                {"command": "bank.balance", "precondition": self._can_bank_balance, "payload_builder": self._bank_balance_payload},
             ],
             "exploit": [
                 {"command": "trade.buy", "precondition": self._can_buy, "payload_builder": self._buy_payload},
                 {"command": "trade.sell", "precondition": self._can_sell, "payload_builder": self._sell_payload},
                 {"command": "move.warp", "precondition": self._can_warp, "payload_builder": self._warp_payload},
+                {"command": "bank.balance", "precondition": self._can_bank_balance, "payload_builder": self._bank_balance_payload},
             ],
             "expand": [] # Future stage
         }
@@ -346,57 +354,82 @@ class FiniteStatePlanner:
     def _can_buy(self, state, dynamic_cooldown):
         ship = state.get("ship_info")
         if not ship:
+            logger.info("Cannot buy: Ship info not available.")
             return False
 
         holds = ship.get("holds", 0)
         cargo = ship.get("cargo", {})
         current_cargo = sum(cargo.values())
-        if current_cargo >= holds:
-            return False
-
-        # For QA: ignore credits, let the server reject if insufficient
-        return True
-
-    def _buy_payload(self, state, dynamic_cooldown):
-        ship = state.get("ship_info", {})
-        holds = ship.get("holds", 0)
-        cargo = ship.get("cargo", {})
-        current_cargo = sum(cargo.values())
-        free_holds = max(0, holds - current_cargo)
-
+        free_holds = holds - current_cargo
         if free_holds <= 0:
-            return None
+            logger.info("Cannot buy: No free cargo holds.")
+            return False
+
+        current_credits = state.get("current_credits", 0.0)
+        if current_credits <= 0: # Must have some credits to buy
+            logger.info("Cannot buy: Insufficient credits.")
+            return False
 
         sector = state.get("player_location_sector")
         price_cache = state.get("price_cache", {})
         sector_cache = price_cache.get(str(sector), {})
 
-        if not sector_cache:
-            return None
-
-        port_id, port_prices = next(iter(sector_cache.items()))
-        
-        # Find a commodity to buy
-        best_commodity_to_buy = None
-        for commodity, prices in port_prices.items():
-            if prices.get("buy") is not None:
-                best_commodity_to_buy = commodity
+        # Check if there are any commodities with a buy price in the current sector
+        has_buyable_commodities = False
+        for port_id, port_prices in sector_cache.items():
+            for commodity, prices in port_prices.items():
+                if prices.get("buy") is not None and prices.get("buy") > 0:
+                    has_buyable_commodities = True
+                    break
+            if has_buyable_commodities:
                 break
         
-        if not best_commodity_to_buy:
+        if not has_buyable_commodities:
+            logger.info(f"Cannot buy: No buyable commodities found in sector {sector}.")
+            return False
+
+        return True
+
+    def _buy_payload(self, state, dynamic_cooldown):
+        sector_id = state.get("player_location_sector")
+        price_cache = state.get("price_cache", {})
+        sector_prices = price_cache.get(str(sector_id), {})
+        if not sector_prices:
             return None
 
-        # For now keep it simple: small fixed quantity bounded by free holds
-        quantity = min(10, free_holds)
+        # Find the port with the cheapest commodity to buy
+        cheapest_commodity = None
+        cheapest_price = float('inf')
+        target_port_id = None
+
+        for port_id_str, port_data in sector_prices.items():
+            for commodity, prices in port_data.items():
+                buy_price = prices.get("buy")
+                if buy_price is not None and buy_price > 0 and buy_price < cheapest_price:
+                    cheapest_price = buy_price
+                    cheapest_commodity = commodity
+                    target_port_id = int(port_id_str)
+
+        if not cheapest_commodity or not target_port_id:
+            return None
+
+        # Determine quantity to buy (e.g., 1 unit, or up to free holds)
+        ship = state.get("ship_info", {})
+        holds = ship.get("holds", 0)
+        cargo = ship.get("cargo", {})
+        current_cargo = sum(cargo.values())
+        free_holds = max(0, holds - current_cargo)
+        
+        quantity = min(1, free_holds) # Buy 1 unit, or whatever fits if less than 1
         if quantity <= 0:
             return None
 
         return {
-            "port_id": int(port_id),
+            "port_id": target_port_id,
             "items": [
                 {
-                    "commodity": best_commodity_to_buy,
-                    "quantity": quantity
+                    "commodity": cheapest_commodity,
+                    "quantity": quantity,
                 }
             ]
         }
@@ -404,10 +437,33 @@ class FiniteStatePlanner:
     def _can_sell(self, state, dynamic_cooldown):
         ship_info = state.get("ship_info")
         if not ship_info:
+            logger.info("Cannot sell: Ship info not available.")
             return False
         
         cargo = ship_info.get("cargo", {})
-        return any(v > 0 for v in cargo.values())
+        if not any(v > 0 for v in cargo.values()):
+            logger.info("Cannot sell: No cargo to sell.")
+            return False
+
+        sector = state.get("player_location_sector")
+        price_cache = state.get("price_cache", {})
+        sector_cache = price_cache.get(str(sector), {})
+
+        # Check if there are any commodities with a sell price in the current sector
+        has_sellable_commodities = False
+        for port_id, port_prices in sector_cache.items():
+            for commodity, prices in port_prices.items():
+                if cargo.get(commodity, 0) > 0 and prices.get("sell") is not None and prices.get("sell") > 0:
+                    has_sellable_commodities = True
+                    break
+            if has_sellable_commodities:
+                break
+        
+        if not has_sellable_commodities:
+            logger.info(f"Cannot sell: No sellable commodities found in sector {sector} for current cargo.")
+            return False
+
+        return True
 
     def _sell_payload(self, state, dynamic_cooldown):
         sector = state.get("player_location_sector")
@@ -450,14 +506,14 @@ class FiniteStatePlanner:
         # 2. Need credits for a purchase (placeholder - requires knowing future purchase)
         return False # For now, don't withdraw automatically
 
-    def _withdraw_payload(self, state):
+    def _withdraw_payload(self, state, dynamic_cooldown):
         return {}
 
-    def _can_bank_info(self, state):
-        # Only request if bank.info is MISSING or older than COOLDOWN
-        return (time.time() - state.get("last_bank_info_request_time", 0)) > self.dynamic_cooldown
+    def _can_bank_balance(self, state, dynamic_cooldown):
+        # Only request if bank.balance is MISSING or older than COOLDOWN
+        return (time.time() - state.get("last_bank_info_request_time", 0)) > dynamic_cooldown
 
-    def _bank_info_payload(self, state):
+    def _bank_balance_payload(self, state, dynamic_cooldown):
         return {}
     
     def _can_use_server_pathfinding(self, state) -> bool:

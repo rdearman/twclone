@@ -399,7 +399,7 @@ h_update_ship_cargo (sqlite3 *db, int player_id,
     else if (strcasecmp(commodity, "equipment") == 0) col_name = "equipment";
     else if (strcasecmp(commodity, "colonists") == 0) col_name = "colonists";
     else {
-        fprintf(stderr, "h_update_ship_cargo: Invalid commodity name '%s'\n", commodity);
+        LOGE("h_update_ship_cargo: Invalid commodity name '%s'\n", commodity);
         return SQLITE_MISUSE; // Invalid commodity string
     }
 
@@ -408,7 +408,7 @@ h_update_ship_cargo (sqlite3 *db, int player_id,
     
     rc = sqlite3_prepare_v2(db, SQL_GET_SHIP, -1, &stmt, NULL);
     if (rc != SQLITE_OK) {
-        fprintf(stderr, "h_update_ship_cargo: Failed to prepare get_ship: %s\n", sqlite3_errmsg(db));
+        LOGE("h_update_ship_cargo: Failed to prepare get_ship: %s\n", sqlite3_errmsg(db));
         return rc;
     }
     
@@ -423,18 +423,20 @@ h_update_ship_cargo (sqlite3 *db, int player_id,
     
     if (rc != SQLITE_ROW || ship_id <= 0) {
         // This means no player was found, or the player has no ship (ship_id is 0 or NULL)
-        fprintf(stderr, "h_update_ship_cargo: Player %d has no active ship (id: %d).\n", player_id, ship_id);
+        LOGE("h_update_ship_cargo: Player %d has no active ship (id: %d).\n", player_id, ship_id);
         return SQLITE_ERROR; // No such player or no ship associated
     }
 
     // 3. Build and execute the dynamic UPDATE ... RETURNING
     // This query updates the value, clamps it at 0, and returns the new value.
     // The CHECK constraint on the 'ships' table will catch (col + ... > holds)
+    LOGD("h_update_ship_cargo: col_name='%s', delta=%d, ship_id=%d\n", col_name, delta, ship_id);
     sql_query = sqlite3_mprintf(
         "UPDATE ships SET %q = MAX(0, COALESCE(%q, 0) + ?1) WHERE id = ?2 "
         "RETURNING %q",
         col_name, col_name, col_name
     );
+    LOGD("h_update_ship_cargo: Generated SQL: %s\n", sql_query);
 
     if (!sql_query) {
         return SQLITE_NOMEM;
@@ -442,7 +444,7 @@ h_update_ship_cargo (sqlite3 *db, int player_id,
 
     rc = sqlite3_prepare_v2(db, sql_query, -1, &stmt, NULL);
     if (rc != SQLITE_OK) {
-        fprintf(stderr, "h_update_ship_cargo: Failed to prepare update: %s\n", sqlite3_errmsg(db));
+        LOGE("h_update_ship_cargo: Failed to prepare update: %s\n", sqlite3_errmsg(db));
         sqlite3_free(sql_query);
         return rc;
     }
@@ -463,7 +465,7 @@ h_update_ship_cargo (sqlite3 *db, int player_id,
     else if (rc == SQLITE_DONE) {
         // This would mean the UPDATE affected 0 rows, e.g., ship_id was not found
         // (which shouldn't happen if our SELECT above worked, but good to check)
-        fprintf(stderr, "h_update_ship_cargo: Failed to find ship %d for update.\n", ship_id);
+        LOGE("h_update_ship_cargo: Failed to find ship %d for update.\n", ship_id);
         rc = SQLITE_ERROR;
     }
     // If rc is any other value (like SQLITE_CONSTRAINT), we will just return that
@@ -635,7 +637,7 @@ h_get_active_ship_id (sqlite3 *db, int player_id)
 
   if (rc != SQLITE_OK)
     {
-      fprintf (stderr, "SQL error preparing ship lookup: %s\n",
+      LOGE ("SQL error preparing ship lookup: %s\n",
 	       sqlite3_errmsg (db));
       return 0;			// Return 0 on error
     }
@@ -653,7 +655,7 @@ h_get_active_ship_id (sqlite3 *db, int player_id)
   else if (rc != SQLITE_DONE)
     {
       // Handle error if step was not successful and not just finished.
-      fprintf (stderr, "SQL error executing ship lookup for player %d: %s\n",
+      LOGE ("SQL error executing ship lookup for player %d: %s\n",
 	       player_id, sqlite3_errmsg (db));
     }
 
@@ -1706,21 +1708,13 @@ h_deduct_player_petty_cash (sqlite3 *db, int player_id, long long amount, long l
       return SQLITE_MISUSE;
   }
 
-  // Start transaction
-  rc = sqlite3_exec(db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg);
-  if (rc != SQLITE_OK) {
-      LOGE("h_deduct_player_petty_cash: Failed to start transaction: %s", errmsg ? errmsg : "unknown error");
-      sqlite3_free(errmsg);
-      return rc;
-  }
-
   // 1. Get current petty cash balance
   sqlite3_stmt *select_stmt = NULL;
   const char *sql_select_balance = "SELECT credits FROM players WHERE id = ?;";
   rc = sqlite3_prepare_v2(db, sql_select_balance, -1, &select_stmt, NULL);
   if (rc != SQLITE_OK) {
       LOGE("h_deduct_player_petty_cash: SELECT prepare error: %s", sqlite3_errmsg(db));
-      goto rollback_and_cleanup;
+      goto cleanup;
   }
   sqlite3_bind_int(select_stmt, 1, player_id);
 
@@ -1729,7 +1723,7 @@ h_deduct_player_petty_cash (sqlite3 *db, int player_id, long long amount, long l
   } else {
       LOGE("h_deduct_player_petty_cash: Player ID %d not found in players table.", player_id);
       rc = SQLITE_NOTFOUND;
-      goto rollback_and_cleanup;
+      goto cleanup;
   }
   sqlite3_finalize(select_stmt);
   select_stmt = NULL;
@@ -1738,7 +1732,7 @@ h_deduct_player_petty_cash (sqlite3 *db, int player_id, long long amount, long l
   if (current_balance < amount) {
       LOGW("h_deduct_player_petty_cash: Insufficient petty cash for player %d. Current: %lld, Attempted deduct: %lld", player_id, current_balance, amount);
       rc = SQLITE_CONSTRAINT; // Or a custom error code for insufficient funds
-      goto rollback_and_cleanup;
+      goto cleanup;
   }
 
   // 3. Update petty cash balance
@@ -1748,33 +1742,24 @@ h_deduct_player_petty_cash (sqlite3 *db, int player_id, long long amount, long l
   rc = sqlite3_prepare_v2(db, sql_update_balance, -1, &update_stmt, NULL);
   if (rc != SQLITE_OK) {
       LOGE("h_deduct_player_petty_cash: UPDATE prepare error: %s", sqlite3_errmsg(db));
-      goto rollback_and_cleanup;
+      goto cleanup;
   }
   sqlite3_bind_int64(update_stmt, 1, new_balance);
   sqlite3_bind_int(update_stmt, 2, player_id);
 
   if (sqlite3_step(update_stmt) != SQLITE_DONE) {
       LOGE("h_deduct_player_petty_cash: UPDATE step error: %s", sqlite3_errmsg(db));
-      goto rollback_and_cleanup;
+      goto cleanup;
   }
   sqlite3_finalize(update_stmt);
   update_stmt = NULL;
-
-  // Commit transaction
-  rc = sqlite3_exec(db, "COMMIT;", NULL, NULL, &errmsg);
-  if (rc != SQLITE_OK) {
-      LOGE("h_deduct_player_petty_cash: Failed to commit transaction: %s", errmsg ? errmsg : "unknown error");
-      sqlite3_free(errmsg);
-      return rc;
-  }
 
   if (new_balance_out)
     *new_balance_out = new_balance;
 
   return SQLITE_OK;
 
-rollback_and_cleanup:
-  sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+cleanup:
   if (select_stmt) sqlite3_finalize(select_stmt);
   if (update_stmt) sqlite3_finalize(update_stmt);
   if (errmsg) sqlite3_free(errmsg);
@@ -1793,21 +1778,13 @@ h_add_player_petty_cash (sqlite3 *db, int player_id, long long amount, long long
       return SQLITE_MISUSE;
   }
 
-  // Start transaction
-  rc = sqlite3_exec(db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg);
-  if (rc != SQLITE_OK) {
-      LOGE("h_add_player_petty_cash: Failed to start transaction: %s", errmsg ? errmsg : "unknown error");
-      sqlite3_free(errmsg);
-      return rc;
-  }
-
   // 1. Get current petty cash balance
   sqlite3_stmt *select_stmt = NULL;
   const char *sql_select_balance = "SELECT credits FROM players WHERE id = ?;";
   rc = sqlite3_prepare_v2(db, sql_select_balance, -1, &select_stmt, NULL);
   if (rc != SQLITE_OK) {
       LOGE("h_add_player_petty_cash: SELECT prepare error: %s", sqlite3_errmsg(db));
-      goto rollback_and_cleanup;
+      goto cleanup;
   }
   sqlite3_bind_int(select_stmt, 1, player_id);
 
@@ -1816,7 +1793,7 @@ h_add_player_petty_cash (sqlite3 *db, int player_id, long long amount, long long
   } else {
       LOGE("h_add_player_petty_cash: Player ID %d not found in players table.", player_id);
       rc = SQLITE_NOTFOUND;
-      goto rollback_and_cleanup;
+      goto cleanup;
   }
   sqlite3_finalize(select_stmt);
   select_stmt = NULL;
@@ -1828,33 +1805,24 @@ h_add_player_petty_cash (sqlite3 *db, int player_id, long long amount, long long
   rc = sqlite3_prepare_v2(db, sql_update_balance, -1, &update_stmt, NULL);
   if (rc != SQLITE_OK) {
       LOGE("h_add_player_petty_cash: UPDATE prepare error: %s", sqlite3_errmsg(db));
-      goto rollback_and_cleanup;
+      goto cleanup;
   }
   sqlite3_bind_int64(update_stmt, 1, new_balance);
   sqlite3_bind_int(update_stmt, 2, player_id);
 
   if (sqlite3_step(update_stmt) != SQLITE_DONE) {
       LOGE("h_add_player_petty_cash: UPDATE step error: %s", sqlite3_errmsg(db));
-      goto rollback_and_cleanup;
+      goto cleanup;
   }
   sqlite3_finalize(update_stmt);
   update_stmt = NULL;
-
-  // Commit transaction
-  rc = sqlite3_exec(db, "COMMIT;", NULL, NULL, &errmsg);
-  if (rc != SQLITE_OK) {
-      LOGE("h_add_player_petty_cash: Failed to commit transaction: %s", errmsg ? errmsg : "unknown error");
-      sqlite3_free(errmsg);
-      return rc;
-  }
 
   if (new_balance_out)
     *new_balance_out = new_balance;
 
   return SQLITE_OK;
 
-rollback_and_cleanup:
-  sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+cleanup:
   if (select_stmt) sqlite3_finalize(select_stmt);
   if (update_stmt) sqlite3_finalize(update_stmt);
   if (errmsg) sqlite3_free(errmsg);

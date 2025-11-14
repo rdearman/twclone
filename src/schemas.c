@@ -784,16 +784,45 @@ schema_auth_login (void)
 static json_t *
 schema_trade_buy (void)
 {
-  return json_pack ("{s:s, s:s, s:s, s:{s:o}, s:o}",
+  json_t *item_properties = json_pack(
+      "{s:o, s:o}",
+      "commodity", json_pack("{s:s}", "type", "string"),
+      "quantity",  json_pack("{s:s}", "type", "integer")
+  );
+
+  json_t *item_schema = json_pack(
+      "{s:s, s:o, s:[s,s], s:b}",
+      "type", "object",
+      "properties", item_properties,
+      "required", json_pack("[s,s]", "commodity", "quantity"),
+      "additionalProperties", json_false()
+  );
+
+  json_t *data_properties = json_pack(
+      "{s:o, s:o, s:o, s:o}",
+      "port_id",         json_pack("{s:s}", "type", "integer"),
+      "items",           json_pack("{s:s, s:o}", "type", "array", "items", item_schema),
+      "idempotency_key", json_pack("{s:s}", "type", "string"),
+      "account",         json_pack("{s:s, s:[i,i]}", "type", "integer", "enum", 0, 1)
+  );
+
+  json_t *data_required = json_pack("[s,s,s]", "port_id", "items", "idempotency_key");
+
+  json_t *data_schema = json_pack(
+      "{s:s, s:o, s:o, s:b}",
+      "type", "object",
+      "properties", data_properties,
+      "required", data_required,
+      "additionalProperties", json_false()
+  );
+
+  return json_pack ("{s:s, s:s, s:s, s:o, s:o, s:b}",
 		    "$id", "ge://schema/trade.buy.json",
 		    "$schema", "https://json-schema.org/draft/2020-12/schema",
 		    "type", "object",
-		    "properties", "data", json_pack ("{s:{s:s, s:s, s:s}}",
-						     "properties",
-						     "port_id", "integer",
-						     "commodity", "string",
-						     "quantity", "integer"),
-		    "required", json_pack ("[s,s]", "command", "data"));
+		    "properties", json_pack("{s:o}", "data", data_schema),
+		    "required", json_pack("[s,s]", "command", "data"),
+		    "additionalProperties", json_false());
 }
 
 static json_t *
@@ -1136,10 +1165,45 @@ schema_trade_port_info (void)
 static json_t *
 schema_trade_sell (void)
 {
-  /* TODO: Implement this schema */
-  return json_pack ("{s:s, s:s}",
-                    "$id", "ge://schema/trade.sell.json",
-                    "$comment", "Schema not yet implemented");
+  json_t *item_properties = json_pack(
+      "{s:o, s:o}",
+      "commodity", json_pack("{s:s}", "type", "string"),
+      "quantity",  json_pack("{s:s}", "type", "integer")
+  );
+
+  json_t *item_schema = json_pack(
+      "{s:s, s:o, s:[s,s], s:b}",
+      "type", "object",
+      "properties", item_properties,
+      "required", json_pack("[s,s]", "commodity", "quantity"),
+      "additionalProperties", json_false()
+  );
+
+  json_t *data_properties = json_pack(
+      "{s:o, s:o, s:o, s:o}",
+      "sector_id",       json_pack("{s:s}", "type", "integer"),
+      "items",           json_pack("{s:s, s:o}", "type", "array", "items", item_schema),
+      "idempotency_key", json_pack("{s:s}", "type", "string"),
+      "account",         json_pack("{s:s, s:[i,i]}", "type", "integer", "enum", 0, 1)
+  );
+
+  json_t *data_required = json_pack("[s,s,s]", "sector_id", "items", "idempotency_key");
+
+  json_t *data_schema = json_pack(
+      "{s:s, s:o, s:o, s:b}",
+      "type", "object",
+      "properties", data_properties,
+      "required", data_required,
+      "additionalProperties", json_false()
+  );
+
+  return json_pack ("{s:s, s:s, s:s, s:o, s:o, s:b}",
+		    "$id", "ge://schema/trade.sell.json",
+		    "$schema", "https://json-schema.org/draft/2020-12/schema",
+		    "type", "object",
+		    "properties", json_pack("{s:o}", "data", data_schema),
+		    "required", json_pack("[s,s]", "command", "data"),
+		    "additionalProperties", json_false());
 }
 
 static json_t *
