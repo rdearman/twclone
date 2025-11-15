@@ -109,6 +109,7 @@ class StateManager:
             "ship_info": None,
             "port_info_by_sector": {},
             "last_bank_info_request_time": 0,
+            "bank_balance": 0.0, # New field to store the bank balance
             "price_cache": {},
             "next_allowed": {},
             "server_capabilities": {},
@@ -117,8 +118,13 @@ class StateManager:
             "new_sector_discovered": False,
             "trade_successful": False,
             "new_port_discovered": False,
+            "last_trade_revenue": 0.0, # New field to store revenue from the last trade.sell
+            "last_trade_cost": 0.0,    # New field to store cost from the last trade.buy
             "rate_limit_info": {},
             "command_retry_info": {},
+            "waiting_for_turns": False, # New flag to indicate if the bot is waiting for turns
+            "next_allowed_action_time": 0, # Timestamp when the bot can act again after running out of turns
+            "llm_recovery_command": None, # New field to store LLM suggested recovery command
         }
         logger.debug(f"StateManager._get_default_state: Initial player_location_sector: {default_state['player_location_sector']}")
         return default_state
@@ -429,9 +435,12 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
                         ship_info = state_manager.get("ship_info", {})
                         current_cargo = ship_info.get("cargo", {})
                         
+                        total_revenue = 0
                         for item in sold_items:
                             commodity = item.get("commodity", "").lower()
                             quantity_sold = item.get("quantity", 0)
+                            item_value = item.get("value", 0)
+                            total_revenue += item_value
                             if commodity in current_cargo:
                                 current_cargo[commodity] = max(0, current_cargo[commodity] - quantity_sold)
                                 logger.info(f"Updated cargo: Sold {quantity_sold} of {commodity}. Remaining: {current_cargo[commodity]}")
@@ -439,6 +448,7 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
                         ship_info["cargo"] = current_cargo
                         state_manager.set("ship_info", ship_info)
                         state_manager.set("trade_successful", True) # For reward calculation
+                        state_manager.set("last_trade_revenue", total_revenue) # Store revenue
                         logger.info("Ship cargo updated after successful trade.sell.")
 
                     # NEW: Update cargo after successful trade.buy
@@ -447,10 +457,13 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
                         ship_info = state_manager.get("ship_info", {})
                         current_cargo = ship_info.get("cargo", {})
 
+                        total_cost = 0
                         for item in bought_items:
                             # Server response might use uppercase 'ORE'
                             commodity = item.get("commodity", "").lower() 
                             quantity_bought = item.get("quantity", 0)
+                            item_value = item.get("value", 0)
+                            total_cost += item_value
                             if commodity:
                                 current_cargo[commodity] = current_cargo.get(commodity, 0) + quantity_bought
                                 logger.info(f"Updated cargo: Bought {quantity_bought} of {commodity}. New total: {current_cargo[commodity]}")
@@ -458,6 +471,7 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
                         ship_info["cargo"] = current_cargo
                         state_manager.set("ship_info", ship_info)
                         state_manager.set("trade_successful", True) # For reward calculation
+                        state_manager.set("last_trade_cost", total_cost) # Store cost
                         logger.info("Ship cargo updated after successful trade.buy.")
 
                     # NEW: Robust credit handling
@@ -474,8 +488,10 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
                         data = response.get("data", {}) or {}
                         if "balance" in data:
                             credits = data["balance"]
+                            state_manager.set("bank_balance", credits) # Store bank balance
                         elif "bank_account" in data and "balance" in data["bank_account"]:
                             credits = data["bank_account"]["balance"]
+                            state_manager.set("bank_balance", credits) # Store bank balance
 
                     if credits is not None:
                         try:
@@ -606,6 +622,12 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
                         # will force a 'ship.info' command on the next tick.
                         state_manager.set("ship_info", None) 
                         state_manager.set("last_ship_info_request_time", 0) # Bypass cooldown
+                    elif error_code == 1307: # "You have run out of turns"
+                        logger.warning("Received 'Out of turns' error. Pausing all actions for 1 hour.")
+                        # Set a global cooldown for all commands for 1 hour
+                        state_manager.set("next_allowed_action_time", time.time() + 3600) # 1 hour cooldown
+                        state_manager.set("waiting_for_turns", True)
+                        # Do NOT increment command_retry_info for this error, as it's a global game state, not a command-specific failure.
                     elif error_code == 1405 and command_name == "trade.sell": # "Port is not buying this commodity right now."
                         logger.warning(f"Received 'Port not buying commodity' error for {sent_command.get('data', {}).get('items', [{}])[0].get('commodity')} at port {sent_command.get('data', {}).get('port_id')}. Marking as unsellable in price_cache.")
                         port_id = sent_command.get('data', {}).get('port_id')
@@ -624,33 +646,44 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
                                 state_manager.set("price_cache", price_cache)
                                 logger.info(f"Updated price_cache for {commodity} at port {port_id} in sector {current_sector}: marked as unsellable.")
                         # Do NOT increment command_retry_info for trade.sell for this error, as the command itself isn't broken.
-                    # --- END NEW FIX ---
-
-                    if state_manager.config.get("qa_mode"):
-                        bug_reporter.triage_protocol_error(
-                            sent_command=sent_command,
-                            response=response,
-                            agent_state=state_manager.get_all(),
-                            error_message=response.get("error", "unknown"),
-                            last_commands_history=state_manager.get("last_commands_history", []),
-                            last_responses_history=state_manager.get("last_responses_history", []),
-                            sent_schema=None, # schema is not available here
-                            validated=False # validation is not available here
+                    else: # Generic error handling
+                        logger.warning(f"Unhandled error code {error_code} for command '{command_name}': {error_msg}. Consulting LLM for recovery.")
+                        # Call LLM for recovery
+                        recovery_llm_command = get_ollama_response(
+                            state_manager.get_all(),
+                            state_manager.config.get("ollama_model"),
+                            "UNHANDLED_ERROR_RECOVERY" # New stage for LLM prompt
                         )
+                        if recovery_llm_command:
+                            logger.info(f"LLM suggested recovery: {recovery_llm_command}")
+                            # Store this command to be picked up by the planner in the next tick
+                            state_manager.set("llm_recovery_command", recovery_llm_command)
+                        else:
+                            logger.error("LLM recovery failed for unhandled error. Falling back to default error handling.")
+                            # Fallback to existing bug reporting and retry logic
+                            if state_manager.config.get("qa_mode"):
+                                bug_reporter.triage_protocol_error(
+                                    sent_command=sent_command,
+                                    response=response,
+                                    agent_state=state_manager.get_all(),
+                                    error_message=response.get("error", "unknown"),
+                                    last_commands_history=state_manager.get("last_commands_history", []),
+                                    last_responses_history=state_manager.get("last_responses_history", []),
+                                    sent_schema=None, # schema is not available here
+                                    validated=False # validation is not available here
+                                )
 
-                    broken_cmds = state_manager.get("broken_commands")
-                    error_msg = response.get('error', {}).get('message', 'Unknown error')
+                            # NEW: track repeated failures for QA & avoidance
+                            # Only increment failures if it's not a 1405 error for trade.sell
+                            if not (error_code == 1405 and command_name == "trade.sell"):
+                                fail_counts = state_manager.get("command_retry_info", {})
+                                info = fail_counts.get(command_name, {"failures": 0, "next_retry_time": 0})
+                                info["failures"] += 1
+                                fail_counts[command_name] = info
+                                state_manager.set("command_retry_info", fail_counts)
 
-                    # NEW: track repeated failures for QA & avoidance
-                    # Only increment failures if it's not a 1405 error for trade.sell
-                    if not (error_code == 1405 and command_name == "trade.sell"):
-                        fail_counts = state_manager.get("command_retry_info", {})
-                        info = fail_counts.get(command_name, {"failures": 0, "next_retry_time": 0})
-                        info["failures"] += 1
-                        fail_counts[command_name] = info
-                        state_manager.set("command_retry_info", fail_counts)
-
-                    logger.warning(f"Command '{command_name}' failed with: {error_msg}")
+                            logger.warning(f"Command '{command_name}' failed with: {error_msg}")
+                    # --- END NEW FIX ---
             else:
                 logger.warning(f"Received response for unknown or already processed command ID: {reply_to_id}")
         else:
@@ -694,6 +727,8 @@ def calculate_and_apply_reward(state_manager: StateManager, bandit_policy: Bandi
     # 1. Calculate reward based on state deltas
     previous_credits = state_manager.get("previous_credits", state_manager.get("current_credits", 0.0))
     current_credits = state_manager.get("current_credits", 0.0)
+    
+    # Base reward from credit change
     reward = (current_credits - previous_credits) / 1000.0 # Scale to a small number
     state_manager.set("previous_credits", current_credits)
 
@@ -701,12 +736,23 @@ def calculate_and_apply_reward(state_manager: StateManager, bandit_policy: Bandi
     if state_manager.get("new_sector_discovered"):
         reward += 10.0
         state_manager.set("new_sector_discovered", False)
-    if state_manager.get("trade_successful"):
-        reward += 5.0
-        state_manager.set("trade_successful", False)
+    
     if state_manager.get("new_port_discovered"):
         reward += 15.0
         state_manager.set("new_port_discovered", False)
+
+    # Incorporate trade profit/loss directly
+    if state_manager.get("trade_successful"):
+        last_trade_revenue = state_manager.get("last_trade_revenue", 0.0)
+        last_trade_cost = state_manager.get("last_trade_cost", 0.0)
+        trade_profit_loss = last_trade_revenue - last_trade_cost
+        
+        reward += trade_profit_loss / 100.0 # Scale trade profit/loss
+        logger.info(f"Trade resulted in profit/loss: {trade_profit_loss}. Adjusted reward by {trade_profit_loss / 100.0}.")
+        
+        state_manager.set("trade_successful", False)
+        state_manager.set("last_trade_revenue", 0.0)
+        state_manager.set("last_trade_cost", 0.0)
 
     # 2. Update the bandit policy
     bandit_policy.update_q_value(last_action, reward, last_context_key)
@@ -921,6 +967,33 @@ Based on the state, suggest a command to un-stick the bot. Good options might be
 
 Your response MUST be a JSON object with a "command" field and an optional "data" field.
 """
+    elif current_stage == "UNHANDLED_ERROR_RECOVERY": # New stage for unhandled errors
+        working_commands_str = "\\n".join([f"- `{c}`" for c in game_state_json.get("working_commands", [])])
+        last_server_response = game_state_json.get("last_server_response", {})
+        error_message = last_server_response.get("error", {}).get("message", "Unknown error")
+        error_code = last_server_response.get("error", {}).get("code", "Unknown code")
+
+        system_prompt = f"""You are 'AI_QA_Bot' and have encountered an unhandled server error. Your SOLE task is to output a single, valid JSON object for the next game command to attempt to recover from this error. DO NOT include any prose or extra text.
+
+The last server response was an error:
+Error Code: {error_code}
+Error Message: {error_message}
+
+Here is the list of commands that have been confirmed to be WORKING:
+{working_commands_str}
+{last_commands_str}
+
+Current State Summary:
+{formatted_game_state}
+
+Your goal is to suggest a command that might help resolve or bypass this unhandled error. Consider:
+- Requesting `ship.info` or `sector.info` to refresh local state.
+- Attempting a `bank.balance` to check financial status.
+- If the error seems related to a specific action, try a different action.
+- If unsure, a `system.hello` might re-initialize the session.
+
+Your response MUST be a JSON object with a "command" field and an optional "data" field.
+"""
     else:
         # Fallback for unknown stages, or initial generic prompt
         system_prompt = f"""You are 'AI_QA_Bot'. Your SOLE task is to output a single, valid JSON object for the next game command. DO NOT include any prose or extra text. Your objective is profit and anomaly logging. Use the provided game state to formulate the next logical action.
@@ -1019,39 +1092,58 @@ def main():
             process_responses(state_manager, game_conn, bug_reporter)
             calculate_and_apply_reward(state_manager, bandit_policy)
 
+            # --- Check if waiting for turns cooldown ---
+            if state_manager.get("waiting_for_turns"):
+                next_allowed_time = state_manager.get("next_allowed_action_time", 0)
+                if time.time() < next_allowed_time:
+                    sleep_duration = max(1, int(next_allowed_time - time.time()))
+                    logger.info(f"Waiting for turns cooldown. Sleeping for {sleep_duration} seconds...")
+                    time.sleep(sleep_duration)
+                    continue # Skip command generation until cooldown is over
+                else:
+                    logger.info("Turns cooldown over. Resuming operations.")
+                    state_manager.set("waiting_for_turns", False) # Cooldown is over, reset flag
+
             # --- Decision Making and Command Sending via Planner ---
-            # If there are pending commands, don't send new ones yet
-            logger.debug(f"Pending commands before check: {state_manager.get('pending_commands')}")
-            if state_manager.get("pending_commands"):
-                time.sleep(0.5) # Increased sleep
-                continue
+            # Prioritize LLM recovery command if available
+            llm_recovery_command = state_manager.get("llm_recovery_command")
+            if llm_recovery_command:
+                logger.info(f"Prioritizing LLM recovery command: {llm_recovery_command}")
+                next_command_dict = llm_recovery_command
+                state_manager.set("llm_recovery_command", None) # Clear after use
+            else:
+                # If there are pending commands, don't send new ones yet
+                logger.debug(f"Pending commands before check: {state_manager.get('pending_commands')}")
+                if state_manager.get("pending_commands"):
+                    time.sleep(0.5) # Increased sleep
+                    continue
 
-            # Get LLM suggestion (if applicable for the current stage)
-            llm_command = None
-            # Only consult LLM for exploit stage for now, as per the planner's design
-            if planner.current_stage == "exploit":
-                game_state = state_manager.get_all()
-                llm_command = get_ollama_response(game_state, config.get("ollama_model"), state_manager.get("stage"))
-                if llm_command:
-                    logger.info(f"LLM suggested command for exploit stage: {llm_command.get('command')} with data: {llm_command.get('data')}")
-                else:
-                    logger.warning("LLM failed to generate a valid command for exploit stage.")
+                # Get LLM suggestion (if applicable for the current stage)
+                llm_command = None
+                # Only consult LLM for exploit stage for now, as per the planner's design
+                if planner.current_stage == "exploit":
+                    game_state = state_manager.get_all()
+                    llm_command = get_ollama_response(game_state, config.get("ollama_model"), state_manager.get("stage"))
+                    if llm_command:
+                        logger.info(f"LLM suggested command for exploit stage: {llm_command.get('command')} with data: {llm_command.get('data')}")
+                    else:
+                        logger.warning("LLM failed to generate a valid command for exploit stage.")
 
-            next_command_dict = planner.get_next_command(llm_command)
+                next_command_dict = planner.get_next_command(llm_command)
 
-            if not next_command_dict:
-                logger.warning("Planner returned no command. Attempting LLM recovery...")
-                game_state = state_manager.get_all()
-                recovery_llm_command = get_ollama_response(
-                    game_state, 
-                    config.get("ollama_model"), 
-                    "RECOVERY_STUCK"
-                )
-                if recovery_llm_command:
-                    logger.info(f"LLM recovery suggested: {recovery_llm_command}")
-                    next_command_dict = recovery_llm_command
-                else:
-                    logger.error("LLM recovery failed. The bot is truly stuck.")
+                if not next_command_dict:
+                    logger.warning("Planner returned no command. Attempting LLM recovery...")
+                    game_state = state_manager.get_all()
+                    recovery_llm_command = get_ollama_response(
+                        game_state, 
+                        config.get("ollama_model"), 
+                        "RECOVERY_STUCK"
+                    )
+                    if recovery_llm_command:
+                        logger.info(f"LLM recovery suggested: {recovery_llm_command}")
+                        next_command_dict = recovery_llm_command
+                    else:
+                        logger.error("LLM recovery failed. The bot is truly stuck.")
 
             if next_command_dict:
                 next_command_id = str(uuid.uuid4())

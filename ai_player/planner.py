@@ -146,8 +146,13 @@ class FiniteStatePlanner:
                 {"command": "bank.balance", "precondition": self._can_bank_balance, "payload_builder": self._bank_balance_payload},
                 {
                     "command": "bank.deposit",
-                    "precondition": lambda s, cd: s.get("current_credits", 0.0) > 5000,
+                    "precondition": self._can_deposit,
                     "payload_builder": self._deposit_payload,
+                },
+                {
+                    "command": "bank.withdraw",
+                    "precondition": self._can_withdraw,
+                    "payload_builder": self._withdraw_payload,
                 },
             ],
             "expand": [] # Future stage
@@ -606,22 +611,34 @@ class FiniteStatePlanner:
         }
 
     def _can_deposit(self, state, dynamic_cooldown):
-        # Preconditions for depositing:
-        # 1. Have credits
-        return state.get("current_credits", 0.0) > 0
+        # Deposit if petty cash > 5250 + 20% (6300)
+        current_credits = state.get("current_credits", 0.0)
+        return current_credits > 6300
 
     def _deposit_payload(self, state, dynamic_cooldown):
-        # Deposit all current credits
-        return {"amount": int(state.get("current_credits", 0.0))}
+        # Deposit all current credits above the threshold
+        amount_to_deposit = int(state.get("current_credits", 0.0) - 5250) # Keep 5250 petty cash
+        if amount_to_deposit > 0:
+            return {"amount": amount_to_deposit}
+        return None
 
     def _can_withdraw(self, state, dynamic_cooldown):
-        # Preconditions for withdrawing:
-        # 1. Have credits in bank (placeholder - requires bank.info)
-        # 2. Need credits for a purchase (placeholder - requires knowing future purchase)
-        return False # For now, don't withdraw automatically
+        # Withdraw if petty cash < 2500
+        current_credits = state.get("current_credits", 0.0)
+        bank_balance = state.get("bank_balance", 0.0) # Assuming bank_balance is stored in state
+        return current_credits < 2500 and bank_balance > 0
 
     def _withdraw_payload(self, state, dynamic_cooldown):
-        return {}
+        # Withdraw enough to bring petty cash up to 2500, or all available bank balance
+        current_credits = state.get("current_credits", 0.0)
+        bank_balance = state.get("bank_balance", 0.0)
+        amount_needed = 2500 - current_credits
+        
+        if amount_needed > 0 and bank_balance > 0:
+            amount_to_withdraw = min(int(amount_needed), int(bank_balance))
+            if amount_to_withdraw > 0:
+                return {"amount": amount_to_withdraw}
+        return None
 
     def _can_bank_balance(self, state, dynamic_cooldown):
         # Only request if bank.balance is MISSING or older than COOLDOWN
@@ -858,6 +875,11 @@ class FiniteStatePlanner:
     def get_next_command(self, llm_suggestion=None):
         current_state = self.state_manager.get_all()
         logger.debug(f"get_next_command: player_location_sector from current_state: {current_state.get('player_location_sector')}")
+
+        # If the bot is waiting for turns, do not generate any commands
+        if current_state.get("waiting_for_turns"):
+            logger.info("Bot is waiting for turns cooldown. No commands will be generated.")
+            return None
 
         # --- Hard invariants first ---
 
