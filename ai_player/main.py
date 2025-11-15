@@ -1,22 +1,24 @@
+import copy
 import socket
 import json
 import time
-import uuid
-import uuid
 import datetime
 import ollama
 import logging
 import os
 import signal
-import sys # Add this line
+import sys
 import argparse
-import random # Add this line
+import random
+import uuid
+from collections import deque
+from typing import Any, Dict, List, Optional, Tuple, Union
+
 from planner import FiniteStatePlanner
 from bug_reporter import BugReporter
 from bandit_policy import BanditPolicy, make_context_key
 from parse_protocol import parse_protocol_markdown
-
-import argparse
+from jsonschema import validate, ValidationError
 from planner import FiniteStatePlanner
 
 # --- Global Shutdown Flag ---
@@ -121,10 +123,36 @@ class StateManager:
             "last_trade_revenue": 0.0, # New field to store revenue from the last trade.sell
             "last_trade_cost": 0.0,    # New field to store cost from the last trade.buy
             "rate_limit_info": {},
-            "command_retry_info": {},
             "waiting_for_turns": False, # New flag to indicate if the bot is waiting for turns
             "next_allowed_action_time": 0, # Timestamp when the bot can act again after running out of turns
             "llm_recovery_command": None, # New field to store LLM suggested recovery command
+            "commands_seen_ok": set(),
+            "commands_seen_error": set(),
+            "error_codes_seen": set(),
+            "ports_visited_by_class": {}, # e.g., {"port_class_type": set(port_ids)}
+            "special_ports_seen": set(),
+            "zones_covered": set(),
+            "total_steps": 0,
+            "commands_never_tried": set(), # Will be populated from normalized_commands
+            "deduplicated_bugs": {}, # Stores {"bug_hash": {"count": N, "latest_timestamp": "..."}},
+
+            # Command Cooldowns (new)
+            "command_cooldowns": {}, # Stores {"command_name": {"cooldown_until": timestamp}}
+
+            # QA Metrics (new)
+            "qa_metrics": {
+                "commands": {}, # Stores metrics per command, e.g., {"command_name": {"total_calls": N, "successful_calls": N, "failed_calls": N, "last_called_timestamp": T, "error_codes_seen": set()}}
+                "scenarios": { # Stores flags for specific scenario coverage
+                    "seen_1402_error": False, # "Not enough cargo"
+                    "seen_1403_error": False, # "Insufficient cargo"
+                    "seen_1307_error": False, # "Out of turns"
+                    "seen_1405_sell_rejection": False, # "Port is not buying this commodity right now."
+                    "tested_zero_holds": False,
+                    "tested_full_holds": False,
+                    "tested_empty_credits": False,
+                    "tested_high_credits": False,
+                }
+            }
         }
         logger.debug(f"StateManager._get_default_state: Initial player_location_sector: {default_state['player_location_sector']}")
         return default_state
@@ -139,6 +167,18 @@ class StateManager:
                     for item in value:
                         if item not in target_dict[key]:
                             target_dict[key].append(item)
+                elif isinstance(target_dict[key], set):
+                    # If target is a set, ensure source value is also treated as a set for merging
+                    if key == "error_codes_seen":
+                        logger.debug(f"Merging error_codes_seen: target_type={type(target_dict[key])}, source_type={type(value)}, target_value={target_dict[key]}, source_value={value}")
+                    if isinstance(value, list):
+                        target_dict[key].update(set(value))
+                    elif isinstance(value, set):
+                        target_dict[key].update(value)
+                    elif value is not None:
+                        # If target is a set, but source value is not iterable (e.g., a string, int),
+                        # this indicates a type mismatch. Overwrite if not None.
+                        target_dict[key] = value
                 elif value is not None: # Only overwrite if source value is not None
                     target_dict[key] = value
             elif value is not None: # Add new keys if not None
@@ -156,6 +196,30 @@ class StateManager:
                         loaded_data['visited_ports'] = set(loaded_data['visited_ports'])
                     if 'sectors_with_info' in loaded_data and isinstance(loaded_data['sectors_with_info'], list):
                         loaded_data['sectors_with_info'] = set(loaded_data['sectors_with_info'])
+                    if 'commands_seen_ok' in loaded_data and isinstance(loaded_data['commands_seen_ok'], list):
+                        loaded_data['commands_seen_ok'] = set(loaded_data['commands_seen_ok'])
+                    if 'commands_seen_error' in loaded_data and isinstance(loaded_data['commands_seen_error'], list):
+                        loaded_data['commands_seen_error'] = set(loaded_data['commands_seen_error'])
+                    if 'error_codes_seen' in loaded_data and isinstance(loaded_data['error_codes_seen'], list):
+                        loaded_data['error_codes_seen'] = set(loaded_data['error_codes_seen'])
+                    if 'special_ports_seen' in loaded_data and isinstance(loaded_data['special_ports_seen'], list):
+                        loaded_data['special_ports_seen'] = set(loaded_data['special_ports_seen'])
+                    if 'zones_covered' in loaded_data and isinstance(loaded_data['zones_covered'], list):
+                        loaded_data['zones_covered'] = set(loaded_data['zones_covered'])
+                    if 'commands_never_tried' in loaded_data and isinstance(loaded_data['commands_never_tried'], list):
+                        loaded_data['commands_never_tried'] = set(loaded_data['commands_never_tried'])
+                    if 'deduplicated_bugs' in loaded_data and isinstance(loaded_data['deduplicated_bugs'], dict):
+                        # Ensure inner dicts are loaded correctly, no set conversion needed
+                        pass 
+                    
+                    # NEW: Handle qa_metrics deserialization
+                    if 'qa_metrics' in loaded_data and isinstance(loaded_data['qa_metrics'], dict):
+                        if 'commands' in loaded_data['qa_metrics'] and isinstance(loaded_data['qa_metrics']['commands'], dict):
+                            for cmd_name, cmd_metrics in loaded_data['qa_metrics']['commands'].items():
+                                if 'error_codes_seen' in cmd_metrics and isinstance(cmd_metrics['error_codes_seen'], list):
+                                    cmd_metrics['error_codes_seen'] = set(cmd_metrics['error_codes_seen'])
+                        # Scenarios are booleans, no special handling needed
+
                     self._merge_state(self.state, loaded_data) # Merge loaded data into current state
                     logger.debug(f"StateManager.load: player_location_sector after merge: {self.state['player_location_sector']}")
                 logger.info(f"Successfully loaded state from {self.path}")
@@ -184,14 +248,35 @@ class StateManager:
             self.state["stage"] = "bootstrap"
 
     def save(self):
-        # Create a serializable copy of the state
-        state_to_save = self.state.copy()
+        # Create a serializable deep copy of the state
+        state_to_save = copy.deepcopy(self.state)
         if 'visited_sectors' in state_to_save:
             state_to_save['visited_sectors'] = list(state_to_save['visited_sectors'])
         if 'visited_ports' in state_to_save:
             state_to_save['visited_ports'] = list(state_to_save['visited_ports'])
         if 'sectors_with_info' in state_to_save:
             state_to_save['sectors_with_info'] = list(state_to_save['sectors_with_info'])
+        if 'commands_seen_ok' in state_to_save:
+            state_to_save['commands_seen_ok'] = list(state_to_save['commands_seen_ok'])
+        if 'commands_seen_error' in state_to_save:
+            state_to_save['commands_seen_error'] = list(state_to_save['commands_seen_error'])
+        if 'error_codes_seen' in state_to_save:
+            state_to_save['error_codes_seen'] = list(state_to_save['error_codes_seen'])
+        if 'special_ports_seen' in state_to_save:
+            state_to_save['special_ports_seen'] = list(state_to_save['special_ports_seen'])
+        if 'zones_covered' in state_to_save:
+            state_to_save['zones_covered'] = list(state_to_save['zones_covered'])
+        if 'commands_never_tried' in state_to_save:
+            state_to_save['commands_never_tried'] = list(state_to_save['commands_never_tried'])
+        # No special handling for deduplicated_bugs, as it's already a dict of dicts
+
+        # NEW: Handle qa_metrics serialization
+        if 'qa_metrics' in state_to_save and isinstance(state_to_save['qa_metrics'], dict):
+            if 'commands' in state_to_save['qa_metrics'] and isinstance(state_to_save['qa_metrics']['commands'], dict):
+                for cmd_name, cmd_metrics in state_to_save['qa_metrics']['commands'].items():
+                    if 'error_codes_seen' in cmd_metrics and isinstance(cmd_metrics['error_codes_seen'], set):
+                        cmd_metrics['error_codes_seen'] = list(cmd_metrics['error_codes_seen'])
+
 
         try:
             with open(self.path, 'w') as f:
@@ -200,10 +285,23 @@ class StateManager:
         except (IOError, TypeError) as e:
             logger.error(f"Could not write state to {self.path}: {e}")
 
-    def get(self, key, default=None):
-        return self.state.get(key, default)
+    def get(self, key: str, default: Any = None) -> Any:
+        value = self.state.get(key, default)
+        logger.debug(f"StateManager.get: Key='{key}', Type={type(value)}, Value={value}")
+        if key == "qa_metrics" and isinstance(value, dict):
+            if "commands" in value and isinstance(value["commands"], dict):
+                for cmd_name, cmd_metrics in value["commands"].items():
+                    if "error_codes_seen" in cmd_metrics:
+                        logger.debug(f"StateManager.get:   - Command='{cmd_name}', error_codes_seen Type={type(cmd_metrics['error_codes_seen'])}, Value={cmd_metrics['error_codes_seen']}")
+        return value
 
     def set(self, key, value):
+        logger.debug(f"StateManager.set: Key='{key}', Type={type(value)}")
+        if key == "qa_metrics" and isinstance(value, dict):
+            if "commands" in value and isinstance(value["commands"], dict):
+                for cmd_name, cmd_metrics in value["commands"].items():
+                    if "error_codes_seen" in cmd_metrics:
+                        logger.debug(f"StateManager.set:   - Command='{cmd_name}', error_codes_seen Type={type(cmd_metrics['error_codes_seen'])}, Value={cmd_metrics['error_codes_seen']}")
         self.state[key] = value
 
     def get_all(self):
@@ -289,6 +387,21 @@ class GameConnection:
             self.state_manager.set("last_player_info_request_time", time.time())
         elif cmd_name.startswith("bank."):
             self.state_manager.set("last_bank_info_request_time", time.time())
+            if cmd_name == "bank.deposit":
+                # Store pre-deposit state for invariant check
+                self.state_manager.set("pre_deposit_hand_credits", self.state_manager.get("current_credits", 0.0))
+                self.state_manager.set("pre_deposit_bank_balance", self.state_manager.get("bank_balance", 0.0))
+                logger.debug(f"Stored pre-deposit state: hand={self.state_manager.get('pre_deposit_hand_credits')}, bank={self.state_manager.get('pre_deposit_bank_balance')}")
+            elif cmd_name == "trade.buy":
+                # Store pre-buy cargo state for invariant check
+                current_cargo = self.state_manager.get("ship_info", {}).get("cargo", {})
+                commodities_to_buy = command_json.get("data", {}).get("items", [])
+                pre_buy_cargo_snapshot = {}
+                for item in commodities_to_buy:
+                    commodity = item.get("commodity", "").lower()
+                    pre_buy_cargo_snapshot[commodity] = current_cargo.get(commodity, 0)
+                self.state_manager.set("pre_buy_cargo_snapshot", pre_buy_cargo_snapshot)
+                logger.debug(f"Stored pre-buy cargo snapshot: {pre_buy_cargo_snapshot}")
 
         full_command = json.dumps(command_json) + "\n"
         try:
@@ -371,6 +484,54 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
                 state_manager.set("last_processed_command_name", command_name)
                 
                 if response.get("status") == "ok":
+                    commands_seen_ok = state_manager.get("commands_seen_ok", set())
+                    if command_name not in commands_seen_ok:
+                        commands_seen_ok.add(command_name)
+                        state_manager.set("commands_seen_ok", commands_seen_ok)
+                        state_manager.set("new_command_discovered", True) # Flag for reward
+                    
+                    # --- QA Metrics Update: Successful Call ---
+                    qa_metrics = state_manager.get_all()["qa_metrics"]
+                    # Ensure 'commands' key exists
+                    if "commands" not in qa_metrics:
+                        qa_metrics["commands"] = {}
+                    cmd_metrics = qa_metrics["commands"].setdefault(command_name, {
+                        "total_calls": 0, "successful_calls": 0, "failed_calls": 0,
+                        "last_called_timestamp": 0, "error_codes_seen": set()
+                    })
+                    cmd_metrics["total_calls"] += 1
+                    cmd_metrics["successful_calls"] += 1
+                    cmd_metrics["last_called_timestamp"] = time.time()
+                    # --- END QA Metrics Update ---
+
+                    # Remove from commands_never_tried if successful
+                    commands_never_tried = state_manager.get("commands_never_tried", set())
+                    if command_name in commands_never_tried:
+                        commands_never_tried.remove(command_name)
+                        state_manager.set("commands_never_tried", commands_never_tried)
+
+                    # Validate response against schema
+                    cached_schemas = state_manager.get("cached_schemas", {})
+                    command_schemas = cached_schemas.get(command_name)
+                    if command_schemas and command_schemas.get("response_schema"):
+                        try:
+                            validate(instance=response.get("data", {}), schema=command_schemas["response_schema"])
+                            logger.debug(f"Response for {command_name} validated successfully against schema.")
+                        except ValidationError as e:
+                            logger.error(f"Response validation error for {command_name}: {e.message}")
+                            bug_reporter.triage_protocol_error(
+                                sent_command=sent_command,
+                                response=response,
+                                agent_state=state_manager.get_all(),
+                                error_message=f"Response schema validation failed: {e.message}",
+                                last_commands_history=state_manager.get("last_commands_history", []),
+                                last_responses_history=state_manager.get("last_responses_history", []),
+                                sent_schema=command_schemas.get("request_schema"),
+                                validated=False
+                            )
+                        except Exception as e:
+                            logger.error(f"Unexpected error during response schema validation for {command_name}: {e}")
+                    
                     # --- Domain-specific state updates based on response type ---
                     response_type = response.get("type")
                     response_data = response.get("data", {}) or {}
@@ -474,6 +635,39 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
                         state_manager.set("last_trade_cost", total_cost) # Store cost
                         logger.info("Ship cargo updated after successful trade.buy.")
 
+                        # --- Invariant Check: Trade Buy Cargo Increase ---
+                        pre_buy_cargo_snapshot = state_manager.get("pre_buy_cargo_snapshot", {})
+                        invariant_violated = False
+                        for item in bought_items:
+                            commodity = item.get("commodity", "").lower()
+                            quantity_bought = item.get("quantity", 0)
+                            
+                            pre_buy_qty = pre_buy_cargo_snapshot.get(commodity, 0)
+                            post_buy_qty = current_cargo.get(commodity, 0)
+
+                            if (post_buy_qty - pre_buy_qty) != quantity_bought:
+                                invariant_violated = True
+                                bug_reporter.triage_invariant_failure(
+                                    invariant_name="trade_buy_cargo_increase",
+                                    current_value={
+                                        "commodity": commodity,
+                                        "pre_buy_quantity": pre_buy_qty,
+                                        "post_buy_quantity": post_buy_qty,
+                                        "quantity_bought_expected": quantity_bought
+                                    },
+                                    expected_condition=f"Cargo of {commodity} increased by {quantity_bought}",
+                                    agent_state=state_manager.get_all(),
+                                    error_message=f"Trade buy invariant violated for {commodity}: Expected increase of {quantity_bought}, but got {post_buy_qty - pre_buy_qty}"
+                                )
+                                logger.error(f"Trade buy invariant violated for {commodity}: Expected increase of {quantity_bought}, but got {post_buy_qty - pre_buy_qty}")
+                        
+                        if not invariant_violated:
+                            logger.info("Trade buy cargo increase invariant check passed.")
+                        
+                        # Clear pre-buy state
+                        state_manager.set("pre_buy_cargo_snapshot", {})
+                        # --- END Invariant Check: Trade Buy Cargo Increase ---
+
                     # NEW: Robust credit handling
                     credits = None
                     if response_type in ("ship.status", "player.info") and response.get("status") == "ok":
@@ -492,6 +686,41 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
                         elif "bank_account" in data and "balance" in data["bank_account"]:
                             credits = data["bank_account"]["balance"]
                             state_manager.set("bank_balance", credits) # Store bank balance
+                    
+                    # --- Invariant Check: Bank Deposit ---
+                    if command_name == "bank.deposit" and response.get("status") == "ok":
+                        pre_deposit_hand_credits = state_manager.get("pre_deposit_hand_credits")
+                        pre_deposit_bank_balance = state_manager.get("pre_deposit_bank_balance")
+                        
+                        post_deposit_hand_credits = state_manager.get("current_credits")
+                        post_deposit_bank_balance = state_manager.get("bank_balance")
+
+                        if pre_deposit_hand_credits is not None and pre_deposit_bank_balance is not None:
+                            total_credits_before = pre_deposit_hand_credits + pre_deposit_bank_balance
+                            total_credits_after = post_deposit_hand_credits + post_deposit_bank_balance
+
+                            # Use a small tolerance for floating point comparisons
+                            if abs(total_credits_before - total_credits_after) > 0.001:
+                                bug_reporter.triage_invariant_failure(
+                                    invariant_name="bank_deposit_conservation",
+                                    current_value={
+                                        "before_hand": pre_deposit_hand_credits,
+                                        "before_bank": pre_deposit_bank_balance,
+                                        "after_hand": post_deposit_hand_credits,
+                                        "after_bank": post_deposit_bank_balance
+                                    },
+                                    expected_condition="total credits before deposit == total credits after deposit",
+                                    agent_state=state_manager.get_all(),
+                                    error_message=f"Bank deposit invariant violated: Total credits changed from {total_credits_before} to {total_credits_after}"
+                                )
+                                logger.error(f"Bank deposit invariant violated: Total credits changed from {total_credits_before} to {total_credits_after}")
+                            else:
+                                logger.info("Bank deposit invariant check passed.")
+                        
+                        # Clear pre-deposit state
+                        state_manager.set("pre_deposit_hand_credits", None)
+                        state_manager.set("pre_deposit_bank_balance", None)
+                    # --- END Invariant Check: Bank Deposit ---
 
                     if credits is not None:
                         try:
@@ -532,6 +761,13 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
                             sectors_with_info.add(sector_id)
                             state_manager.set("sectors_with_info", sectors_with_info)
 
+                            # Update zones_covered
+                            zone = response_data.get("zone")
+                            if zone:
+                                zones_covered = state_manager.get("zones_covered", set())
+                                zones_covered.add(zone)
+                                state_manager.set("zones_covered", zones_covered)
+
                             logger.info(f"Updated sector.info cache for sector {sector_id}")
 
                     # 4) Port info
@@ -568,6 +804,18 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
                             sector_ports[str(port_id)] = response_data # Store the modified response_data
                             state_manager.set("port_info_by_sector", pi_by_sector)
                             logger.info(f"Cached port {port_id} info for sector {current_sector}. Commodities: {commodities_at_port}")
+
+                            # Update ports_visited_by_class and special_ports_seen
+                            port_class = port.get("class")
+                            if port_class:
+                                ports_by_class = state_manager.get("ports_visited_by_class", {})
+                                ports_by_class.setdefault(port_class, set()).add(port_id)
+                                state_manager.set("ports_visited_by_class", ports_by_class)
+                            
+                            special_ports = state_manager.get("special_ports_seen", set())
+                            special_ports.add(port_id) # For now, all ports are "special" for tracking
+                            state_manager.set("special_ports_seen", special_ports)
+
                         else:
                             logger.warning(f"trade.port_info 'ok' but missing port_id ({port_id}) or current_sector ({current_sector})")
 
@@ -611,9 +859,60 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
                             state_manager.set("new_sector_visited_this_tick", True)
                             logger.info(f"Moved to sector {new_sector}")
                 else: # Error or refused
+                    # --- QA Metrics Update: Failed Call ---
+                    qa_metrics = state_manager.get_all()["qa_metrics"]
+                    if "commands" not in qa_metrics:
+                        qa_metrics["commands"] = {}
+                    cmd_metrics = qa_metrics["commands"].setdefault(command_name, {
+                        "total_calls": 0, "successful_calls": 0, "failed_calls": 0,
+                        "last_called_timestamp": 0, "error_codes_seen": set()
+                    })
+                    cmd_metrics["total_calls"] += 1
+                    cmd_metrics["failed_calls"] += 1
+                    cmd_metrics["last_called_timestamp"] = time.time()
+                    # --- END QA Metrics Update ---
+
+                    commands_seen_error = state_manager.get("commands_seen_error", set())
+                    if command_name not in commands_seen_error:
+                        commands_seen_error.add(command_name)
+                        state_manager.set("commands_seen_error", commands_seen_error)
+                        state_manager.set("new_command_discovered", True) # Flag for reward
+
+                    # Remove from commands_never_tried if it resulted in an error
+                    commands_never_tried = state_manager.get("commands_never_tried", set())
+                    if command_name in commands_never_tried:
+                        commands_never_tried.remove(command_name)
+                        state_manager.set("commands_never_tried", commands_never_tried)
+
                     error_data = response.get('error', {})
                     error_msg = error_data.get('message', 'Unknown error')
                     error_code = error_data.get('code')
+
+                    # Add error code to qa_metrics
+                    if error_code:
+                        logger.debug(f"Type of cmd_metrics['error_codes_seen'] before add: {type(cmd_metrics['error_codes_seen'])}")
+                        cmd_metrics["error_codes_seen"].add(error_code)
+                    error_codes_seen = state_manager.get("error_codes_seen", set())
+                    if error_code not in error_codes_seen:
+                        error_codes_seen.add(error_code)
+                        state_manager.set("error_codes_seen", error_codes_seen)
+                        state_manager.set("new_error_code_discovered", True) # Flag for reward
+
+                    # --- QA Metrics Update: Scenario Flags ---
+                    # Ensure 'scenarios' key exists
+                    if "scenarios" not in qa_metrics:
+                        qa_metrics["scenarios"] = {}
+                    qa_scenarios = qa_metrics["scenarios"]
+                    if error_code == 1402: # "Not enough cargo"
+                        qa_scenarios["seen_1402_error"] = True
+                    elif error_code == 1403: # "Insufficient cargo"
+                        qa_scenarios["seen_1403_error"] = True
+                    elif error_code == 1307: # "You have run out of turns"
+                        qa_scenarios["seen_1307_error"] = True
+                    elif error_code == 1405 and command_name == "trade.sell": # "Port is not buying this commodity right now."
+                        qa_scenarios["seen_1405_sell_rejection"] = True
+                    # --- END QA Metrics Update: Scenario Flags ---
+
 
                     # --- START NEW FIX ---
                     if error_code == 1403: # "Insufficient cargo space"
@@ -673,40 +972,47 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
                                     validated=False # validation is not available here
                                 )
 
-                            # NEW: track repeated failures for QA & avoidance
-                            # Only increment failures if it's not a 1405 error for trade.sell
-                            if not (error_code == 1405 and command_name == "trade.sell"):
-                                fail_counts = state_manager.get("command_retry_info", {})
-                                info = fail_counts.get(command_name, {"failures": 0, "next_retry_time": 0})
-                                info["failures"] += 1
-                                fail_counts[command_name] = info
-                                state_manager.set("command_retry_info", fail_counts)
-
-                            logger.warning(f"Command '{command_name}' failed with: {error_msg}")
+                            # NEW: Apply cooldown for failed command
+                            command_cooldown_duration = state_manager.config.get("command_cooldown_duration", 300)
+                            command_cooldowns = state_manager.get("command_cooldowns", {})
+                            command_cooldowns[command_name] = {"cooldown_until": time.time() + command_cooldown_duration}
+                            state_manager.set("command_cooldowns", command_cooldowns)
+                            logger.warning(f"Command '{command_name}' failed with: {error_msg}. Placed on cooldown until {time.time() + command_cooldown_duration}.")
                     # --- END NEW FIX ---
-            else:
-                logger.warning(f"Received response for unknown or already processed command ID: {reply_to_id}")
-        else:
-            logger.debug(f"Received unsolicited server message: {json.dumps(response)}")
+        state_manager.set("qa_metrics", qa_metrics) # Update state_manager with modified qa_metrics
 
 def load_schemas_from_docs(state_manager: StateManager):
     logger.info("Loading schemas from protocol markdown file...")
+    protocol_path = state_manager.config.get("protocol_doc_path")
+    if not protocol_path:
+        logger.error("FATAL: 'protocol_doc_path' not found in config. Cannot load schemas.")
+        sys.exit(1)
+
+    # Construct the absolute path to protocol_path relative to the script's directory
+    script_dir = os.path.dirname(__file__)
+    absolute_protocol_path = os.path.join(script_dir, "..", protocol_path) # Assuming protocol_path is relative to project root
+
     try:
         # Use the parser you wrote
-        extracted_commands = parse_protocol_markdown('/home/rick/twclone/docs/PROTOCOL.v2.md')
+        extracted_commands = parse_protocol_markdown(absolute_protocol_path)
         
         cached_schemas = {}
         for cmd in extracted_commands:
             try:
-                # Convert the string schema back into a dict for the validator
-                schema_dict = json.loads(cmd['data_schema'])
-                cached_schemas[cmd['name']] = {"request_schema": schema_dict}
+                request_schema_dict = json.loads(cmd['request_schema'])
+                response_schema_dict = json.loads(cmd['response_schema'])
+                cached_schemas[cmd['name']] = {
+                    "request_schema": request_schema_dict,
+                    "response_schema": response_schema_dict,
+                    "response_type": cmd['response_type']
+                }
             except json.JSONDecodeError:
-                # Handle cases like "{}" which are valid
-                if cmd['data_schema'] == "{}":
-                    cached_schemas[cmd['name']] = {"request_schema": {}}
-                else:
-                    logger.warning(f"Could not parse schema for {cmd['name']}: {cmd['data_schema']}")
+                logger.warning(f"Could not parse schema for {cmd['name']}. Request: {cmd['request_schema']}, Response: {cmd['response_schema']}")
+                cached_schemas[cmd['name']] = {
+                    "request_schema": {},
+                    "response_schema": {},
+                    "response_type": cmd['response_type']
+                }
 
         state_manager.set("cached_schemas", cached_schemas)
         # We no longer need to fetch schemas, so clear the list
@@ -724,22 +1030,56 @@ def calculate_and_apply_reward(state_manager: StateManager, bandit_policy: Bandi
     if not last_action or not last_context_key:
         return # Nothing to apply reward to
 
+    reward_weights = state_manager.config.get("reward_weights", {})
+
     # 1. Calculate reward based on state deltas
     previous_credits = state_manager.get("previous_credits", state_manager.get("current_credits", 0.0))
     current_credits = state_manager.get("current_credits", 0.0)
     
     # Base reward from credit change
-    reward = (current_credits - previous_credits) / 1000.0 # Scale to a small number
+    reward = (current_credits - previous_credits) * reward_weights.get("credits_change", 0.0)
     state_manager.set("previous_credits", current_credits)
+
+    # --- QA-Oriented Rewards ---
+    qa_metrics = state_manager.get("qa_metrics", {})
+    qa_scenarios = qa_metrics.get("scenarios", {})
+
+    # Reward for first time an action is taken in a specific context
+    # This check needs to be done against the n_table directly, as it's the source of truth for action counts
+    q_table, n_table = bandit_policy.get_tables()
+    context_n_table = n_table.get(last_context_key, {})
+    if context_n_table.get(last_action, 0) == 1: # If this is the first time this action was taken in this context
+        reward += reward_weights.get("first_action_in_context", 0.0)
+        logger.info(f"QA Reward: +{reward_weights.get('first_action_in_context', 0.0)} for first action '{last_action}' in context '{last_context_key}'.")
+
+    # Reward for new scenario flags being set (only reward once per flag)
+    for scenario_key, is_set in qa_scenarios.items():
+        # Check if the flag was just set in this tick and hasn't been rewarded before
+        # This requires a mechanism to track if a scenario has been "discovered" and rewarded
+        # For simplicity, we'll assume setting it to True is a "new discovery" for now.
+        # A more robust solution would involve a separate set of "rewarded_scenarios".
+        if is_set and state_manager.get(f"rewarded_scenario_{scenario_key}", False) == False:
+            reward += reward_weights.get(f"new_scenario_{scenario_key}", 0.0)
+            logger.info(f"QA Reward: +{reward_weights.get(f'new_scenario_{scenario_key}', 0.0)} for new scenario '{scenario_key}'.")
+            state_manager.set(f"rewarded_scenario_{scenario_key}", True) # Mark as rewarded
+    # --- END QA-Oriented Rewards ---
 
     # Add intrinsic rewards for exploration, etc.
     if state_manager.get("new_sector_discovered"):
-        reward += 10.0
+        reward += reward_weights.get("new_sector_discovered", 0.0)
         state_manager.set("new_sector_discovered", False)
     
     if state_manager.get("new_port_discovered"):
-        reward += 15.0
+        reward += reward_weights.get("new_port_discovered", 0.0)
         state_manager.set("new_port_discovered", False)
+
+    if state_manager.get("new_command_discovered"):
+        reward += reward_weights.get("new_command_discovered", 0.0)
+        state_manager.set("new_command_discovered", False)
+
+    if state_manager.get("new_error_code_discovered"):
+        reward += reward_weights.get("new_error_code_discovered", 0.0)
+        state_manager.set("new_error_code_discovered", False)
 
     # Incorporate trade profit/loss directly
     if state_manager.get("trade_successful"):
@@ -747,8 +1087,8 @@ def calculate_and_apply_reward(state_manager: StateManager, bandit_policy: Bandi
         last_trade_cost = state_manager.get("last_trade_cost", 0.0)
         trade_profit_loss = last_trade_revenue - last_trade_cost
         
-        reward += trade_profit_loss / 100.0 # Scale trade profit/loss
-        logger.info(f"Trade resulted in profit/loss: {trade_profit_loss}. Adjusted reward by {trade_profit_loss / 100.0}.")
+        reward += trade_profit_loss * reward_weights.get("trade_profit_loss", 0.0)
+        logger.info(f"Trade resulted in profit/loss: {trade_profit_loss}. Adjusted reward by {trade_profit_loss * reward_weights.get('trade_profit_loss', 0.0)}.")
         
         state_manager.set("trade_successful", False)
         state_manager.set("last_trade_revenue", 0.0)
@@ -767,6 +1107,211 @@ def calculate_and_apply_reward(state_manager: StateManager, bandit_policy: Bandi
     state_manager.set("last_action", None)
     state_manager.set("last_context_key", None)
     state_manager.set("last_stage", None)
+
+def compare_commands_with_docs(state_manager: StateManager, bug_reporter: BugReporter):
+    """
+    Compares commands discovered live with documented commands and logs discrepancies.
+    """
+    cached_schemas = state_manager.get("cached_schemas", {})
+    commands_seen_ok = state_manager.get("commands_seen_ok", set())
+    commands_seen_error = state_manager.get("commands_seen_error", set())
+
+    documented_commands = set(cached_schemas.keys())
+    live_commands = commands_seen_ok.union(commands_seen_error)
+
+    # Commands in docs but not seen live
+    undiscovered_commands = documented_commands - live_commands
+    if undiscovered_commands:
+        logger.warning(f"Undiscovered commands (in docs but not seen live): {undiscovered_commands}")
+        # Optionally, report as a bug if this is unexpected
+        # bug_reporter.triage_protocol_error(
+        #     sent_command={"command": "system.cmd_list", "id": "n/a"},
+        #     response={"status": "warning", "error": {"message": f"Undiscovered commands: {undiscovered_commands}"}},
+        #     agent_state=state_manager.get_all(),
+        #     error_message=f"Commands in documentation not yet seen live: {undiscovered_commands}",
+        #     last_commands_history=[],
+        #     last_responses_history=[],
+        #     sent_schema=None,
+        #     validated=True
+        # )
+
+    # Commands seen live but not in docs
+    undocumented_commands = live_commands - documented_commands
+    if undocumented_commands:
+        logger.error(f"Undocumented commands (seen live but not in docs): {undocumented_commands}")
+        bug_reporter.triage_protocol_error(
+            sent_command={"command": "system.cmd_list", "id": "n/a"},
+            response={"status": "error", "error": {"message": f"Undocumented commands: {undocumented_commands}"}},
+            agent_state=state_manager.get_all(),
+            error_message=f"Commands seen live but not found in documentation: {undocumented_commands}",
+            last_commands_history=[],
+            last_responses_history=[],
+            sent_schema=None,
+            validated=True
+        )
+
+def check_invariants(state_manager: StateManager, bug_reporter: BugReporter):
+    """
+    Verifies critical invariants of the game state and reports violations.
+    """
+    # Invariant 1: Player location must always be a positive integer
+    player_location_sector = state_manager.get("player_location_sector")
+    if not isinstance(player_location_sector, int) or player_location_sector <= 0:
+        bug_reporter.triage_invariant_failure(
+            invariant_name="player_location_sector_positive",
+            current_value=player_location_sector,
+            expected_condition="player_location_sector > 0",
+            agent_state=state_manager.get_all(),
+            error_message=f"Player location sector is invalid: {player_location_sector}"
+        )
+
+    # Invariant 2: Current credits should not be negative
+    current_credits = state_manager.get("current_credits")
+    if current_credits < 0:
+        bug_reporter.triage_invariant_failure(
+            invariant_name="current_credits_non_negative",
+            current_value=current_credits,
+            expected_condition="current_credits >= 0",
+            agent_state=state_manager.get_all(),
+            error_message=f"Current credits are negative: {current_credits}"
+        )
+
+    # Invariant 3: Session token must be present after authentication stage
+    if state_manager.get("stage") != "bootstrap" and not state_manager.get("session_token"):
+        bug_reporter.triage_invariant_failure(
+            invariant_name="session_token_present_after_bootstrap",
+            current_value=state_manager.get("session_token"),
+            expected_condition="session_token is not None and not empty",
+            agent_state=state_manager.get_all(),
+            error_message="Session token is missing after bootstrap stage"
+        )
+
+    # Invariant 4: commands_never_tried should only contain commands not yet attempted
+    commands_never_tried = state_manager.get("commands_never_tried", set())
+    commands_seen_ok = state_manager.get("commands_seen_ok", set())
+    commands_seen_error = state_manager.get("commands_seen_error", set())
+
+    intersection_ok = commands_never_tried.intersection(commands_seen_ok)
+    if intersection_ok:
+        bug_reporter.triage_invariant_failure(
+            invariant_name="commands_never_tried_no_overlap_ok",
+            current_value=list(intersection_ok),
+            expected_condition="commands_never_tried and commands_seen_ok should be disjoint",
+            agent_state=state_manager.get_all(),
+            error_message=f"Commands in commands_never_tried also in commands_seen_ok: {intersection_ok}"
+        )
+    
+    intersection_error = commands_never_tried.intersection(commands_seen_error)
+    if intersection_error:
+        bug_reporter.triage_invariant_failure(
+            invariant_name="commands_never_tried_no_overlap_error",
+            current_value=list(intersection_error),
+            expected_condition="commands_never_tried and commands_seen_error should be disjoint",
+            agent_state=state_manager.get_all(),
+            error_message=f"Commands in commands_never_tried also in commands_seen_error: {intersection_error}"
+        )
+
+    # Invariant 5: If waiting_for_turns is True, next_allowed_action_time must be in the future
+    if state_manager.get("waiting_for_turns"):
+        next_allowed_action_time = state_manager.get("next_allowed_action_time", 0)
+        if time.time() >= next_allowed_action_time:
+            bug_reporter.triage_invariant_failure(
+                invariant_name="waiting_for_turns_time_consistency",
+                current_value={"waiting_for_turns": True, "next_allowed_action_time": next_allowed_action_time, "current_time": time.time()},
+                expected_condition="current_time < next_allowed_action_time when waiting_for_turns is True",
+                agent_state=state_manager.get_all(),
+                error_message="waiting_for_turns is True but next_allowed_action_time is not in the future"
+            )
+
+def write_coverage_report(state_manager: StateManager):
+    report_dir = state_manager.config.get("coverage_report_dir", "coverage_reports")
+    os.makedirs(report_dir, exist_ok=True)
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    report_filename = os.path.join(report_dir, f"coverage_report_{timestamp}.json")
+
+    coverage_data = {
+        "timestamp": timestamp,
+        "total_steps": state_manager.get("total_steps", 0),
+        "commands_seen_ok": list(state_manager.get("commands_seen_ok", set())),
+        "commands_seen_error": list(state_manager.get("commands_seen_error", set())),
+        "commands_never_tried": list(state_manager.get("commands_never_tried", set())),
+        "error_codes_seen": list(state_manager.get("error_codes_seen", set())),
+        "ports_visited_by_class": {k: list(v) for k, v in state_manager.get("ports_visited_by_class", {}).items()},
+        "special_ports_seen": list(state_manager.get("special_ports_seen", set())),
+        "zones_covered": list(state_manager.get("zones_covered", set())),
+        "q_table_size": len(state_manager.get("q_table", {})),
+        "n_table_size": len(state_manager.get("n_table", {})),
+        "qa_metrics": {
+            "commands": {
+                cmd_name: {
+                    "total_calls": metrics["total_calls"],
+                    "successful_calls": metrics["successful_calls"],
+                    "failed_calls": metrics["failed_calls"],
+                    "last_called_timestamp": metrics["last_called_timestamp"],
+                    "error_codes_seen": list(metrics["error_codes_seen"]) # Convert set to list
+                }
+                for cmd_name, metrics in state_manager.get("qa_metrics", {}).get("commands", {}).items()
+            },
+            "scenarios": state_manager.get("qa_metrics", {}).get("scenarios", {})
+        }
+    }
+
+    try:
+        with open(report_filename, "w") as f:
+            json.dump(coverage_data, f, indent=4)
+        logger.info(f"Coverage report written to {report_filename}")
+    except IOError as e:
+        logger.error(f"Failed to write coverage report to {report_filename}: {e}")
+
+def get_oracle_llm_response(game_state_json: dict, model: str, bug_report_context: str):
+    """
+    Consults the LLM for bug analysis and potential recovery suggestions.
+    This is a separate "oracle" LLM call, not part of the main planning loop.
+    """
+    serializable_state = game_state_json.copy()
+    if 'visited_sectors' in serializable_state:
+        serializable_state['visited_sectors'] = list(serializable_state['visited_sectors'])
+    if 'visited_ports' in serializable_state:
+        serializable_state['visited_ports'] = list(serializable_state['visited_ports'])
+    if 'sectors_with_info' in serializable_state:
+        serializable_state['sectors_with_info'] = list(serializable_state['sectors_with_info'])
+
+    formatted_game_state = format_game_state_for_llm(game_state_json)
+
+    system_prompt = f"""You are an 'AI_QA_Oracle'. Your task is to analyze a bug report and the current game state, then provide a concise analysis of the root cause and, if possible, suggest a single, valid JSON command to recover or further diagnose the issue.
+
+Bug Report Context:
+{bug_report_context}
+
+Current Game State Summary:
+{formatted_game_state}
+
+Your response MUST be a JSON object with two fields:
+1. "analysis": A string explaining the likely root cause of the bug.
+2. "suggested_command": (Optional) A JSON object representing a single game command (e.g., {{"command": "ship.info", "data": {{}}}}). If you cannot suggest a command, omit this field.
+
+DO NOT include any prose or extra text outside the JSON object.
+"""
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": "Analyze the bug and state, then provide your analysis and a suggested command (if any)."}
+    ]
+    try:
+        response = ollama.chat(
+            model=model,
+            messages=messages,
+            format='json',
+            options={'temperature': 0.1, 'seed': 42}
+        )
+        oracle_response_str = response['message']['content']
+        oracle_response_dict = json.loads(oracle_response_str)
+        logger.info(f"Ollama Oracle responded with: {oracle_response_str}")
+        return oracle_response_dict
+    except json.JSONDecodeError as e:
+        logger.error(f"Ollama Oracle response JSON DECODE ERROR: {e} - Raw data: {oracle_response_str}")
+    except Exception as e:
+        logger.error(f"Ollama Oracle API Error: {e}")
+    return None
 
 def format_game_state_for_llm(game_state_json: dict) -> str:
     """
@@ -842,6 +1387,25 @@ def get_ollama_response(game_state_json: dict, model: str, current_stage: str):
         serializable_state['visited_ports'] = list(serializable_state['visited_ports'])
     if 'sectors_with_info' in serializable_state:
         serializable_state['sectors_with_info'] = list(serializable_state['sectors_with_info'])
+    if 'commands_seen_ok' in serializable_state:
+        serializable_state['commands_seen_ok'] = list(serializable_state['commands_seen_ok'])
+    if 'commands_seen_error' in serializable_state:
+        serializable_state['commands_seen_error'] = list(serializable_state['commands_seen_error'])
+    if 'error_codes_seen' in serializable_state:
+        serializable_state['error_codes_seen'] = list(serializable_state['error_codes_seen'])
+    if 'special_ports_seen' in serializable_state:
+        serializable_state['special_ports_seen'] = list(serializable_state['special_ports_seen'])
+    if 'zones_covered' in serializable_state:
+        serializable_state['zones_covered'] = list(serializable_state['zones_covered'])
+    if 'commands_never_tried' in serializable_state:
+        serializable_state['commands_never_tried'] = list(serializable_state['commands_never_tried'])
+    
+    # Handle nested sets in qa_metrics
+    if 'qa_metrics' in serializable_state and isinstance(serializable_state['qa_metrics'], dict):
+        if 'commands' in serializable_state['qa_metrics'] and isinstance(serializable_state['qa_metrics']['commands'], dict):
+            for cmd_name, cmd_metrics in serializable_state['qa_metrics']['commands'].items():
+                if 'error_codes_seen' in cmd_metrics and isinstance(cmd_metrics['error_codes_seen'], set):
+                    cmd_metrics['error_codes_seen'] = list(cmd_metrics['error_codes_seen'])
         
     logger.debug(f"Content of game_state_json in get_ollama_response: {json.dumps(serializable_state, indent=2)}")
     
@@ -866,6 +1430,8 @@ def get_ollama_response(game_state_json: dict, model: str, current_stage: str):
         last_commands_str = "\\n\\nRecently executed commands:\\n" + "\\n".join([f"- {cmd}" for cmd in last_commands_history])
 
     system_prompt = ""
+    qa_mode_enabled = game_state_json.get("config", {}).get("qa_mode", False)
+
     if current_stage == "bootstrap":
         system_prompt = f"""You are 'AI_QA_Bot'. Your SOLE task is to output a single, valid JSON object for the next game command. DO NOT include any prose or extra text. Your objective is to discover and categorize all available commands and their schemas. Use the provided game state to formulate the next logical action.
 
@@ -1057,8 +1623,8 @@ def main():
     state_manager = StateManager(config.get('state_file', 'state.json'), config)
     # Clear broken_commands at startup to allow re-attempting them after fixes
     state_manager.set("broken_commands", [])
-    # Clear command_retry_info at startup to allow re-attempting them after fixes
-    state_manager.set("command_retry_info", {})
+    # Clear command_cooldowns at startup to allow re-attempting them after fixes
+    state_manager.set("command_cooldowns", {})
     
     # Load JSON Schemas from PROTOCOL docs once at startup
     try:
@@ -1066,10 +1632,17 @@ def main():
     except Exception as e:
         logger.error("Schema loading failed; continuing without validation: %s", e)
 
+    # Initialize commands_never_tried after schemas are loaded
+    # This will be further refined once system.cmd_list is processed
+    if not state_manager.get("commands_never_tried"):
+        all_known_commands = set(state_manager.get("cached_schemas", {}).keys())
+        state_manager.set("commands_never_tried", all_known_commands)
+
     bug_reporter = BugReporter(
         config.get('bug_report_dir', 'bugs'),
         state_manager=state_manager,
         config=config,
+        get_oracle_llm_response_func=get_oracle_llm_response,
     )
     game_conn = GameConnection(config.get('game_host'), config.get('game_port'), state_manager, bug_reporter)
     bandit_policy = BanditPolicy(epsilon=config.get("bandit_epsilon", 0.1), 
@@ -1092,6 +1665,20 @@ def main():
             process_responses(state_manager, game_conn, bug_reporter)
             calculate_and_apply_reward(state_manager, bandit_policy)
 
+            # Check invariants after state updates
+            check_invariants(state_manager, bug_reporter)
+
+            # Increment total steps
+            state_manager.set("total_steps", state_manager.get("total_steps", 0) + 1)
+
+            # Periodically write coverage report
+            if state_manager.get("total_steps") % state_manager.config.get("coverage_report_interval", 100) == 0:
+                write_coverage_report(state_manager)
+            
+            # Periodically compare commands with docs
+            if state_manager.get("total_steps") % state_manager.config.get("command_comparison_interval", 500) == 0:
+                compare_commands_with_docs(state_manager, bug_reporter)
+
             # --- Check if waiting for turns cooldown ---
             if state_manager.get("waiting_for_turns"):
                 next_allowed_time = state_manager.get("next_allowed_action_time", 0)
@@ -1105,6 +1692,19 @@ def main():
                     state_manager.set("waiting_for_turns", False) # Cooldown is over, reset flag
 
             # --- Decision Making and Command Sending via Planner ---
+            # Adjust epsilon based on stage
+            current_stage = state_manager.get("stage")
+            if current_stage == "bootstrap":
+                bandit_policy.epsilon = state_manager.config.get("epsilon_bootstrap", 0.5)
+            elif current_stage == "survey":
+                bandit_policy.epsilon = state_manager.config.get("epsilon_survey", 0.3)
+            elif current_stage == "explore":
+                bandit_policy.epsilon = state_manager.config.get("epsilon_explore", 0.2)
+            elif current_stage == "exploit":
+                bandit_policy.epsilon = state_manager.config.get("epsilon_exploit", 0.1)
+            else:
+                bandit_policy.epsilon = state_manager.config.get("bandit_epsilon", 0.1) # Default
+
             # Prioritize LLM recovery command if available
             llm_recovery_command = state_manager.get("llm_recovery_command")
             if llm_recovery_command:
@@ -1166,7 +1766,7 @@ def main():
                 state_manager.set("last_command_sent_id", next_command_id)
 
                 history = state_manager.get("last_commands_history")
-                history.append(next_command_dict["command"])
+                history.append(game_command) # Store the full command dictionary
                 state_manager.set("last_commands_history", history[-5:]) # Keep only the last 5 commands
             else:
                 logger.warning("Planner and LLM recovery failed to produce a command. Waiting...")

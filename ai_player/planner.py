@@ -967,7 +967,7 @@ class FiniteStatePlanner:
                 if payload is not None and self._validate_payload("trade.sell", payload):
                     self.state_manager.set("last_stage", self.current_stage)
                     self.state_manager.set("last_action", "trade.sell")
-                    self.state_manager.set("last_context_key", make_context_key(current_state))
+                    self.state_manager.set("last_context_key", make_context_key(current_state, self.config))
                     return {"command": "trade.sell", "data": payload}
                 else:
                     logger.warning("Prioritized 'trade.sell' payload generation or validation failed despite holds being full.")
@@ -982,11 +982,17 @@ class FiniteStatePlanner:
 
         for action_def in action_defs:
             command_name = action_def["command"]
+            
+            # Check if command is on cooldown
+            command_cooldowns = current_state.get("command_cooldowns", {})
+            if command_name in command_cooldowns:
+                cooldown_until = command_cooldowns[command_name].get("cooldown_until", 0)
+                if time.time() < cooldown_until:
+                    logger.debug(f"Command '{command_name}' is on cooldown until {cooldown_until}. Skipping.")
+                    continue
+
             retry_data = command_retry_info.get(command_name, {"failures": 0, "next_retry_time": 0})
 
-            if time.time() < retry_data["next_retry_time"]:
-                continue
-            
             if retry_data["failures"] >= max_retries:
                 if command_name not in GAMEPLAY_COMMANDS:
                     broken_cmds = [c["command"] for c in current_state.get("broken_commands", [])]
@@ -1031,17 +1037,22 @@ class FiniteStatePlanner:
             normalized_llm_command = current_state.get("normalized_commands", {}).get(llm_suggestion.get("command"), llm_suggestion.get("command"))
             llm_suggestion["command"] = normalized_llm_command
             
-            for action_def in candidates:
-                if action_def["command"] == normalized_llm_command:
-                    if self._validate_payload(normalized_llm_command, llm_suggestion.get("data", {})):
-                        return llm_suggestion
-                    else:
-                        logger.warning(f"LLM suggested invalid payload for {normalized_llm_command}. Falling back to bandit.")
-                        break
+            # Check if LLM suggested command is in candidate_commands
+            candidate_command_names = [ad["command"] for ad in candidates]
+            if normalized_llm_command not in candidate_command_names:
+                logger.warning(f"LLM suggested command '{normalized_llm_command}' is not in the list of candidate commands. Falling back to bandit.")
+            else:
+                for action_def in candidates:
+                    if action_def["command"] == normalized_llm_command:
+                        if self._validate_payload(normalized_llm_command, llm_suggestion.get("data", {})):
+                            return llm_suggestion
+                        else:
+                            logger.warning(f"LLM suggested invalid payload for {normalized_llm_command}. Falling back to bandit.")
+                            break
         
         # Fallback to bandit policy
         candidate_commands = [action_def["command"] for action_def in candidates]
-        context_key = make_context_key(current_state)
+        context_key = make_context_key(current_state, self.config)
         
         # Stuck detection
         if self.config.get("qa_mode"):

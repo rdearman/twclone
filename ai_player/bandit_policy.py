@@ -93,8 +93,8 @@ class BanditPolicy:
         self.q_table = q_table
         self.n_table = n_table
 
-def make_context_key(state: dict) -> str:
-    """Generates a context key for the bandit policy based on the current state."""
+def make_context_key(state: dict, config: dict) -> str:
+    """Generates a context key for the bandit policy based on the current state and config."""
     stage = state.get("stage", "bootstrap")
     sector_id = state.get("player_location_sector", 1)
     
@@ -103,10 +103,73 @@ def make_context_key(state: dict) -> str:
 
     port_type = "no_port"
     if sector_data.get("ports"):
-        # A more detailed port type could be used if available
         port_type = "port_present"
 
-    return f"stage:{stage}-sector_class:{sector_class}-port_type:{port_type}"
+    ship_info = state.get("ship_info", {})
+    holds = ship_info.get("holds", 0)
+    cargo_total = sum(ship_info.get("cargo", {}).values()) if ship_info.get("cargo") else 0
+    holds_full = "full" if cargo_total >= holds and holds > 0 else "not_full"
+
+    credits = state.get("current_credits", 0)
+    credits_bucket = "low"
+    if credits > 10000:
+        credits_bucket = "medium"
+    if credits > 100000:
+        credits_bucket = "high"
+
+    qa_mode = config.get("qa_mode", False) # Use the passed config
+
+    # New context elements
+    can_sell_any = "can_sell" if _can_sell_any(state, config) else "cannot_sell"
+    can_buy_any = "can_buy" if _can_buy_any(state, config) else "cannot_buy"
+    has_bank_balance = "has_bank_balance" if state.get("bank_balance", 0) > 0 else "no_bank_balance"
+    has_pending_commands = "pending_cmds" if len(state.get("pending_commands", {})) > 0 else "no_pending_cmds"
+
+    return (
+        f"stage:{stage}-sector_class:{sector_class}-port_type:{port_type}-"
+        f"holds:{holds_full}-credits:{credits_bucket}-qa_mode:{qa_mode}-"
+        f"sell:{can_sell_any}-buy:{can_buy_any}-bank:{has_bank_balance}-"
+        f"pending:{has_pending_commands}"
+    )
+
+# Helper functions for _can_sell_any and _can_buy_any, mirroring planner logic
+def _can_sell_any(state: dict, config: dict) -> bool:
+    ship_info = state.get("ship_info")
+    if not ship_info:
+        return False
+    cargo = ship_info.get("cargo", {})
+    if not any(v > 0 for v in cargo.values()):
+        return False
+    sector = state.get("player_location_sector")
+    price_cache = state.get("price_cache", {})
+    sector_cache = price_cache.get(str(sector), {})
+    for port_id, port_prices in sector_cache.items():
+        for commodity, prices in port_prices.items():
+            if cargo.get(commodity, 0) > 0 and prices.get("sell") is not None and prices.get("sell") > 0:
+                return True
+    return False
+
+def _can_buy_any(state: dict, config: dict) -> bool:
+    ship = state.get("ship_info")
+    if not ship:
+        return False
+    holds = ship.get("holds", 0)
+    cargo = ship.get("cargo", {})
+    current_cargo = sum(cargo.values())
+    free_holds = holds - current_cargo
+    if free_holds <= 0:
+        return False
+    current_credits = state.get("current_credits", 0.0)
+    if current_credits <= 0:
+        return False
+    sector = state.get("player_location_sector")
+    price_cache = state.get("price_cache", {})
+    sector_cache = price_cache.get(str(sector), {})
+    for port_id, port_prices in sector_cache.items():
+        for commodity, prices in port_prices.items():
+            if prices.get("buy") is not None and prices.get("buy") > 0:
+                return True
+    return False
 
     # --- UCB1 (Upper Confidence Bound 1) - Future Enhancement ---
     def choose_action_ucb1(self, actions: list[str], context_key: str, total_plays: int) -> str:

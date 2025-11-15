@@ -19,7 +19,13 @@ def parse_protocol_markdown(filepath):
         r'(?:(?!```json).)*?' +            # Match any content non-greedily until "```json"
         r'```json\n' +                   # Start of JSON block
         r'(\{[\s\S]*?\})\n' +                   # The JSON content (non-greedy, including newlines)
-        r'```',
+        r'```\n' +
+        r'(?:(?!\*?Example Server Response:\*?).)*?' + # Match any content non-greedily until "Example Server Response:"
+        r'(?:\*?Example Server Response:\*?\n' + # Optional: Match the literal string "Example Server Response:"
+        r'(?:(?!```json).)*?' +            # Match any content non-greedily until "```json"
+        r'```json\n' +                   # Start of JSON block
+        r'(\{[\s\S]*?\})\n' +                   # The JSON content (non-greedy, including newlines)
+        r'```)?',                         # Make the entire server response block optional
         re.MULTILINE | re.DOTALL
     )
 
@@ -30,40 +36,67 @@ def parse_protocol_markdown(filepath):
         command_name_raw = match.group(1).strip()
         command_names = [c.strip() for c in command_name_raw.split('/')]
         description = match.group(2).strip()
-        json_str = match.group(3)
-        print(f"[DEBUG PARSER] Captured JSON string for {command_name_raw}:\n{json_str}", file=sys.stderr)
+        request_json_str = match.group(3)
+        response_json_str = match.group(4) # This will be None if no response example
+
+        print(f"[DEBUG PARSER] Captured Request JSON string for {command_name_raw}:\n{request_json_str}", file=sys.stderr)
+        if response_json_str:
+            print(f"[DEBUG PARSER] Captured Response JSON string for {command_name_raw}:\n{response_json_str}", file=sys.stderr)
 
         try:
-            example_json = json.loads(json_str)
-            print(f"[DEBUG PARSER] Parsed example JSON for {command_name_raw}:\n{json.dumps(example_json, indent=2)}", file=sys.stderr)
-            data_schema = example_json.get("data", {})
+            request_example_json = json.loads(request_json_str)
+            print(f"[DEBUG PARSER] Parsed request example JSON for {command_name_raw}:\n{json.dumps(request_example_json, indent=2)}", file=sys.stderr)
+            request_data_schema = request_example_json.get("data", {})
             
-            if not data_schema:
-                formatted_data_schema = "{}"
-            else:
-                schema_for_llm = {}
-                for key, value in data_schema.items():
+            formatted_request_data_schema = {}
+            if request_data_schema:
+                for key, value in request_data_schema.items():
                     if isinstance(value, str):
-                        schema_for_llm[key] = "<string>"
+                        formatted_request_data_schema[key] = "<string>"
                     elif isinstance(value, int):
-                        schema_for_llm[key] = "<integer>"
+                        formatted_request_data_schema[key] = "<integer>"
                     elif isinstance(value, float):
-                        schema_for_llm[key] = "<float>"
+                        formatted_request_data_schema[key] = "<float>"
                     elif isinstance(value, bool):
-                        schema_for_llm[key] = "<boolean>"
+                        formatted_request_data_schema[key] = "<boolean>"
                     elif isinstance(value, list):
-                        schema_for_llm[key] = "<array>"
+                        formatted_request_data_schema[key] = "<array>"
                     elif isinstance(value, dict):
-                        schema_for_llm[key] = "<object>"
+                        formatted_request_data_schema[key] = "<object>"
                     else:
-                        schema_for_llm[key] = "<any>"
-                formatted_data_schema = json.dumps(schema_for_llm, indent=2)
+                        formatted_request_data_schema[key] = "<any>"
+            
+            formatted_response_data_schema = {}
+            if response_json_str:
+                response_example_json = json.loads(response_json_str)
+                print(f"[DEBUG PARSER] Parsed response example JSON for {command_name_raw}:\n{json.dumps(response_example_json, indent=2)}", file=sys.stderr)
+                response_data_schema = response_example_json.get("data", {})
+                response_type = response_example_json.get("type")
+
+                if response_data_schema:
+                    for key, value in response_data_schema.items():
+                        if isinstance(value, str):
+                            formatted_response_data_schema[key] = "<string>"
+                        elif isinstance(value, int):
+                            formatted_response_data_schema[key] = "<integer>"
+                        elif isinstance(value, float):
+                            formatted_response_data_schema[key] = "<float>"
+                        elif isinstance(value, bool):
+                            formatted_response_data_schema[key] = "<boolean>"
+                        elif isinstance(value, list):
+                            formatted_response_data_schema[key] = "<array>"
+                        elif isinstance(value, dict):
+                            formatted_response_data_schema[key] = "<object>"
+                        else:
+                            formatted_response_data_schema[key] = "<any>"
 
             for command_name in command_names:
                 commands_detailed[command_name] = {
                     "name": command_name,
                     "description": description,
-                    "data_schema": formatted_data_schema
+                    "request_schema": json.dumps(formatted_request_data_schema, indent=2),
+                    "response_schema": json.dumps(formatted_response_data_schema, indent=2),
+                    "response_type": response_type # Store the response type
                 }
         except json.JSONDecodeError as e:
             print(f"[parser] JSON decode failed for command '{command_name_raw}': {e}", file=sys.stderr)
@@ -101,7 +134,9 @@ def parse_protocol_markdown(filepath):
             final_commands.append({
                 "name": cmd_name,
                 "description": "No detailed description available. Refer to context for usage.",
-                "data_schema": "{}"
+                "request_schema": "{}", # Initialize as empty JSON string
+                "response_schema": "{}", # Initialize as empty JSON string
+                "response_type": None # No response type available
             })
             
     return final_commands

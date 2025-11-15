@@ -26,6 +26,7 @@
 #include "db_player_settings.h"
 #include "server_log.h"
 #include "sysop_interaction.h"
+#include "server_cron.h"
 
 
 
@@ -387,6 +388,8 @@ main (void)
 
   // initalise the player settings if all the other DB stuff is done. 
   db_player_settings_init (db_get_handle ());
+
+  cron_register_builtins ();
 
 
   /* 0.1) Capabilities (restored) */
