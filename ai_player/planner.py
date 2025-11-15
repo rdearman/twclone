@@ -7,6 +7,18 @@ from bandit_policy import make_context_key # Import the unified context key func
 
 logger = logging.getLogger(__name__)
 
+GAMEPLAY_COMMANDS = {
+    "move.warp",
+    "sector.info",
+    "ship.info",
+    "player.my_info",
+    "trade.port_info",
+    "trade.quote",
+    "trade.buy",
+    "trade.sell",
+    "bank.balance",
+}
+
 class FiniteStatePlanner:
     def __init__(self, state_manager, game_connection, config, bug_reporter, bandit_policy):
         self.state_manager = state_manager
@@ -122,6 +134,7 @@ class FiniteStatePlanner:
                 {"command": "bank.balance", "precondition": self._can_bank_balance, "payload_builder": self._bank_balance_payload},
             ],
             "explore": [
+                {"command": "ship.info", "precondition": self._can_get_ship_info, "payload_builder": lambda s, c: {}},
                 {"command": "sector.info", "precondition": self._can_get_sector_info, "payload_builder": self._sector_info_payload},
                 {"command": "move.warp", "precondition": self._can_warp, "payload_builder": self._warp_payload},
                 {"command": "bank.balance", "precondition": self._can_bank_balance, "payload_builder": self._bank_balance_payload},
@@ -163,6 +176,10 @@ class FiniteStatePlanner:
         if not ports:
             return None
         return {"port_id": ports[0].get("id")}
+
+    def _can_get_ship_info(self, state, dynamic_cooldown):
+        # Simple cooldown to avoid spamming
+        return (time.time() - state.get("last_ship_info_request_time", 0)) > dynamic_cooldown
 
     def _can_get_player_info(self, state, dynamic_cooldown):
         # Simple cooldown to avoid spamming
@@ -261,7 +278,7 @@ class FiniteStatePlanner:
                     logger.info(f"Trade Route: Heading to buy sector {target_sector}.")
 
             if target_sector:
-                return {"to_sector_id": target_sector, "ship_id": ship_id}
+                return {"sector_id": target_sector, "ship_id": ship_id}
 
         # --- 2. Exploration Navigation (Fallback) ---
         logger.debug("No trade route, or route is completed for now. Falling back to exploration logic.")
@@ -285,7 +302,7 @@ class FiniteStatePlanner:
             if all_known_sectors:
                 target_sector = random.choice(all_known_sectors)
                 logger.info(f"Jumping to random known sector: {target_sector}")
-                return {"to_sector_id": int(target_sector), "ship_id": ship_id}
+                return {"sector_id": int(target_sector), "ship_id": ship_id}
             else:
                 logger.error("In a dead end and no other sectors are known. Truly stuck.")
                 return None
@@ -313,7 +330,7 @@ class FiniteStatePlanner:
             logger.info(f"Exploring: All adjacent sectors visited. Picking random valid target: {target_sector}")
 
         logger.info(f"Warp payload created: Warping to sector {target_sector} with ship {ship_id}.")
-        return {"to_sector_id": target_sector, "ship_id": ship_id}
+        return {"sector_id": target_sector, "ship_id": ship_id}
 
     def _can_get_trade_quote(self, state, dynamic_cooldown):
         broken_trade_quote = "trade.quote" in [item["command"] for item in state.get("broken_commands", [])]
@@ -373,6 +390,7 @@ class FiniteStatePlanner:
         cargo = ship.get("cargo", {})
         current_cargo = sum(cargo.values())
         free_holds = holds - current_cargo
+        logger.debug(f"_can_buy debug: ship={ship}, holds={holds}, cargo={cargo}, current_cargo={current_cargo}, free_holds={free_holds}")
         if free_holds <= 0:
             logger.info("Cannot buy: No free cargo holds.")
             return False
@@ -396,6 +414,7 @@ class FiniteStatePlanner:
             if has_buyable_commodities:
                 break
         
+        logger.debug(f"_can_buy debug: free_holds={free_holds}, current_credits={current_credits}, sector_cache={sector_cache}, has_buyable_commodities={has_buyable_commodities}")
         if not has_buyable_commodities:
             logger.info(f"Cannot buy: No buyable commodities found in sector {sector}.")
             return False
@@ -508,6 +527,7 @@ class FiniteStatePlanner:
             if has_sellable_commodities:
                 break
         
+        logger.debug(f"_can_sell debug: cargo={cargo}, sector_cache={sector_cache}, has_sellable_commodities={has_sellable_commodities}")
         if not has_sellable_commodities:
             logger.info(f"Cannot sell: No sellable commodities found in sector {sector} for current cargo.")
             return False
@@ -526,6 +546,10 @@ class FiniteStatePlanner:
         if not cargo:
             return None
 
+        holds = ship_info.get("holds", 0)
+        current_cargo_total = sum(cargo.values())
+        holds_full = current_cargo_total >= holds
+
         best = None  # (profit_per_unit, port_id, commodity, quantity)
 
         for port_id_str, port_prices in sector_cache.items():
@@ -536,12 +560,32 @@ class FiniteStatePlanner:
                 prices = port_prices.get(commodity)
                 if not prices:
                     continue
+                
                 sell_price = prices.get("sell")
-                if not sell_price or sell_price <= 0:
+                not_sellable_until = prices.get("not_sellable_until", 0)
+
+                if sell_price is None or sell_price <= 0 or time.time() < not_sellable_until:
+                    logger.debug(f"Skipping {commodity} at port {port_id}: sell_price={sell_price}, not_sellable_until={not_sellable_until}")
                     continue
 
                 # For now profit_per_unit == sell_price; if you later track buy_price, use that.
                 profit_per_unit = sell_price
+                
+                # Prioritize selling if holds are full, even if profit isn't optimal
+                if holds_full:
+                    # If holds are full, any sell is good to free up space
+                    # We'll just take the first valid sell opportunity
+                    logger.info(f"Holds full, prioritizing sell of {commodity} at port {port_id} for {sell_price} credits/unit.")
+                    return {
+                        "port_id": port_id,
+                        "items": [
+                            {
+                                "commodity": commodity,
+                                "quantity": amount # Sell all of this commodity
+                            }
+                        ]
+                    }
+
                 if not best or profit_per_unit > best[0]:
                     best = (profit_per_unit, port_id, commodity, amount)
 
@@ -568,7 +612,7 @@ class FiniteStatePlanner:
 
     def _deposit_payload(self, state, dynamic_cooldown):
         # Deposit all current credits
-        return {"amount": state.get("current_credits", 0.0)}
+        return {"amount": int(state.get("current_credits", 0.0))}
 
     def _can_withdraw(self, state, dynamic_cooldown):
         # Preconditions for withdrawing:
@@ -665,6 +709,7 @@ class FiniteStatePlanner:
                                             "buy_price": buy_price_per_unit,
                                             "sell_price": sell_price_per_unit
                                         }
+        logger.debug(f"_find_best_trade_route: Best route found: {best_route}")
         return best_route
 
     def _evaluate_sector_value(self, state, sector_id: int, dynamic_cooldown: float) -> float:
@@ -703,32 +748,45 @@ class FiniteStatePlanner:
 
     def _survey_complete(self, state):
         sector_id = str(state.get("player_location_sector"))
+        logger.debug(f"_survey_complete debug: checking sector_id={sector_id}")
         if not sector_id:
+            logger.debug("_survey_complete debug: No sector_id, returning False.")
             return False
 
         sector_data = state.get("sector_data", {}).get(sector_id)
+        logger.debug(f"_survey_complete debug: sector_data={sector_data}")
         if not sector_data or not sector_data.get("ports"):
+            logger.debug("_survey_complete debug: No sector_data or no ports, returning True.")
             return True  # Nothing to survey here.
 
         ports = sector_data.get("ports", [])
+        logger.debug(f"_survey_complete debug: ports={ports}")
         if not ports:
+            logger.debug("_survey_complete debug: Empty ports list, returning True.")
             return True
 
         port_id = ports[0].get("id")
+        logger.debug(f"_survey_complete debug: port_id={port_id}")
         if not port_id:
+            logger.debug("_survey_complete debug: No port_id, returning True.")
             return True
 
         # Check if we have the port info needed to know what to survey
         port_info = state.get("port_info_by_sector", {}).get(sector_id, {}).get(str(port_id))
+        logger.debug(f"_survey_complete debug: port_info={port_info}")
         if not port_info:
-            return False # Not complete, we don't even have the list of commodities yet.
+            logger.debug("_survey_complete debug: No port_info, returning False.")
+            return False # We don't have port info, so survey is not complete
 
-        available_commodities = (port_info.get("port", {}) or port_info).get("commodities", [])
+        available_commodities = port_info.get("commodities", [])
+        logger.debug(f"_survey_complete debug: available_commodities={available_commodities}")
         if not available_commodities:
+            logger.debug("_survey_complete debug: No available_commodities, returning True.")
             return True # Nothing to survey.
 
         # Check if all available commodities are in the price cache for this port
         price_cache_for_port = state.get("price_cache", {}).get(sector_id, {}).get(str(port_id), {})
+        logger.debug(f"_survey_complete debug: price_cache_for_port={price_cache_for_port}")
         
         surveyed_count = 0
         for commodity in available_commodities:
@@ -736,6 +794,7 @@ class FiniteStatePlanner:
                 surveyed_count += 1
                 
         is_complete = surveyed_count >= len(available_commodities)
+        logger.debug(f"_survey_complete debug: surveyed_count={surveyed_count}, len(available_commodities)={len(available_commodities)}, is_complete={is_complete}")
         if is_complete and len(available_commodities) > 0:
             logger.info(f"Survey of port {port_id} is complete. All {len(available_commodities)} commodities have been priced.")
         
@@ -747,20 +806,38 @@ class FiniteStatePlanner:
         self.state_manager.set("stage", new_stage)
 
     def _select_stage(self, current_state):
+        logger.debug(f"_select_stage: player_location_sector from current_state: {current_state.get('player_location_sector')}")
         if not current_state.get("session_token") or not current_state.get("ship_info"):
             return "bootstrap"
+
+        ship_info = current_state.get("ship_info", {})
+        holds = ship_info.get("holds", 0)
+        cargo_total = sum(ship_info.get("cargo", {}).values())
+        holds_full = cargo_total >= holds
+
+        logger.debug(f"_select_stage debug: holds_full={holds_full}, cargo_total={cargo_total}, holds={holds}")
+
+        # If holds are full and we can sell, force exploit stage to prioritize selling
+        if holds_full and self._can_sell(current_state, 0):
+            logger.info("Holds are full and can sell; forcing 'exploit' stage to prioritize selling.")
+            return "exploit"
 
         current_sector = current_state.get("player_location_sector")
         sector_data = current_state.get("sector_data", {})
         has_port = sector_data.get(str(current_sector), {}).get("ports")
 
+        logger.debug(f"_select_stage debug: current_sector={current_sector}, has_port={has_port}")
+
         if has_port:
-            if not self._survey_complete(current_state):
+            survey_is_complete = self._survey_complete(current_state)
+            logger.debug(f"_select_stage debug: survey_is_complete={survey_is_complete}")
+            if not survey_is_complete:
                 return "survey"
             else:
                 # Survey is complete. Decide if we can trade.
                 can_buy = self._can_buy(current_state, 0) # Pass 0 for cooldown
                 can_sell = self._can_sell(current_state, 0)
+                logger.debug(f"_select_stage debug: can_buy={can_buy}, can_sell={can_sell}")
                 if can_buy or can_sell:
                     # Check if trade.buy or trade.sell are broken
                     broken_commands = [c["command"] for c in current_state.get("broken_commands", [])]
@@ -780,6 +857,7 @@ class FiniteStatePlanner:
 
     def get_next_command(self, llm_suggestion=None):
         current_state = self.state_manager.get_all()
+        logger.debug(f"get_next_command: player_location_sector from current_state: {current_state.get('player_location_sector')}")
 
         # --- Hard invariants first ---
 
@@ -851,7 +929,31 @@ class FiniteStatePlanner:
             logger.error("Bootstrap: Stuck. No valid actions found.")
             return None
 
-        # --- For all other stages ---
+        # Determine if holds are full
+        ship_info = current_state.get("ship_info", {})
+        holds = ship_info.get("holds", 0)
+        cargo_total = sum(ship_info.get("cargo", {}).values())
+        holds_full = cargo_total >= holds
+
+        # --- Prioritize selling if holds are full ---
+        if holds_full and self._can_sell(current_state, 0):
+            logger.info("Holds are full and can sell. Prioritizing 'trade.sell' command.")
+            # Create a temporary action_def for trade.sell
+            sell_action_def = next((ad for ad in action_defs if ad["command"] == "trade.sell"), None)
+            if sell_action_def:
+                payload = sell_action_def["payload_builder"](current_state, dynamic_cooldown)
+                if payload is not None and self._validate_payload("trade.sell", payload):
+                    self.state_manager.set("last_stage", self.current_stage)
+                    self.state_manager.set("last_action", "trade.sell")
+                    self.state_manager.set("last_context_key", make_context_key(current_state))
+                    return {"command": "trade.sell", "data": payload}
+                else:
+                    logger.warning("Prioritized 'trade.sell' payload generation or validation failed despite holds being full.")
+            else:
+                logger.error("Could not find 'trade.sell' action definition even though holds are full and can sell.")
+            # If for some reason sell fails, proceed to normal action selection, but this should ideally not happen.
+
+        # --- For all other stages and if holds are not full or sell failed ---
         candidates = []
         command_retry_info = current_state.get("command_retry_info", {})
         max_retries = self.config.get("max_retries_per_command", 3)
@@ -864,17 +966,22 @@ class FiniteStatePlanner:
                 continue
             
             if retry_data["failures"] >= max_retries:
-                broken_cmds = [c["command"] for c in current_state.get("broken_commands", [])]
-                if command_name not in broken_cmds:
-                    logger.warning(f"Command '{command_name}' exceeded max retries ({max_retries}). Reporting as broken.")
-                    self.bug_reporter.triage_invariant_failure(
-                        "Command Exceeded Max Retries",
-                        f"Command '{command_name}' failed {retry_data['failures']} times.",
-                        current_state
-                    )
-                    all_broken = current_state.get("broken_commands", [])
-                    all_broken.append({"command": command_name, "error": "Exceeded max retries"})
-                    self.state_manager.set("broken_commands", all_broken)
+                if command_name not in GAMEPLAY_COMMANDS:
+                    broken_cmds = [c["command"] for c in current_state.get("broken_commands", [])]
+                    if command_name not in broken_cmds:
+                        logger.warning(
+                            f"Command '{command_name}' exceeded max retries ({max_retries}). "
+                            f"Reporting as broken."
+                        )
+                        self.bug_reporter.triage_invariant_failure(
+                            "Command Exceeded Max Retries",
+                            f"Command '{command_name}' failed {retry_data['failures']} times.",
+                            current_state
+                        )
+                        all_broken = current_state.get("broken_commands", [])
+                        all_broken.append({"command": command_name, "error": "Exceeded max retries"})
+                        self.state_manager.set("broken_commands", all_broken)
+                # Always skip this tick, but *don’t* mark core gameplay commands as permanently broken
                 continue
 
             if action_def["precondition"](current_state, dynamic_cooldown):

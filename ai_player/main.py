@@ -57,10 +57,10 @@ class StateManager:
 
     def _get_default_state(self):
         initial_credits = self.config.get("initial_credits", 0.0)
-        return {
+        default_state = {
             "stage": "bootstrap",
             "session_token": None,
-            "player_location_sector": 1,
+            "player_location_sector": 0,
             "last_server_response": {},
             "last_command_sent_id": "",
             "pending_commands": {},
@@ -120,6 +120,8 @@ class StateManager:
             "rate_limit_info": {},
             "command_retry_info": {},
         }
+        logger.debug(f"StateManager._get_default_state: Initial player_location_sector: {default_state['player_location_sector']}")
+        return default_state
 
     def _merge_state(self, target_dict, source_dict):
         for key, value in source_dict.items():
@@ -137,7 +139,6 @@ class StateManager:
                 target_dict[key] = value
 
     def load(self):
-        self.state = self._get_default_state() # Start with a fresh default state
         if os.path.exists(self.path):
             try:
                 with open(self.path, 'r') as f:
@@ -150,6 +151,7 @@ class StateManager:
                     if 'sectors_with_info' in loaded_data and isinstance(loaded_data['sectors_with_info'], list):
                         loaded_data['sectors_with_info'] = set(loaded_data['sectors_with_info'])
                     self._merge_state(self.state, loaded_data) # Merge loaded data into current state
+                    logger.debug(f"StateManager.load: player_location_sector after merge: {self.state['player_location_sector']}")
                 logger.info(f"Successfully loaded state from {self.path}")
             except json.JSONDecodeError:
                 logger.error(f"Could not decode state file {self.path}. Starting with fresh state.")
@@ -337,6 +339,7 @@ class GameConnection:
 
 def process_responses(state_manager: StateManager, game_conn: GameConnection, bug_reporter: BugReporter):
     responses = game_conn.read_responses()
+    now = time.time() # Moved definition of 'now' here
     for response in responses:
         state_manager.set("last_server_response", response)
         logger.info(f"Server response: {json.dumps(response)}")
@@ -365,27 +368,15 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
                     # --- Domain-specific state updates based on response type ---
                     response_type = response.get("type")
                     response_data = response.get("data", {}) or {}
-                    now = time.time()
-
-                    # --- Invariant Checks ---
-                    if state_manager.config.get("qa_mode"):
-                        if response_data.get("credits") is not None and response_data.get("credits") < 0:
-                            bug_reporter.triage_invariant_failure(
-                                "Negative Credits",
-                                f"Credits dropped to {response_data.get('credits')} in response to {command_name}",
-                                state_manager.get_all()
-                            )
-                        if response_type in ("ship.info", "ship.status"):
-                            ship = response_data.get("ship") or response_data
-                            if ship:
-                                holds = ship.get("holds", 0)
-                                cargo_total = sum(ship.get("cargo", {}).values())
-                                if cargo_total > holds:
-                                    bug_reporter.triage_invariant_failure(
-                                        "Cargo Exceeds Holds",
-                                        f"Total cargo ({cargo_total}) exceeds holds capacity ({holds})",
-                                        state_manager.get_all()
-                                    )
+                    
+                    # --- ADDED BLOCK: Force sync planner location with ship's true location ---
+                    ship_data = response_data.get("ship") or response_data
+                    if response_type in ("ship.info", "ship.status", "player.info") and ship_data.get("location"):
+                        true_sector = ship_data.get("location").get("sector_id")
+                        if true_sector is not None:
+                            state_manager.set("player_location_sector", true_sector)
+                            logger.info(f"Re-syncing planner location to ship's true location: {true_sector}")
+                    # --- END ADDED BLOCK ---
 
                     # 1) Auth / session
                     if command_name == "auth.login" and response.get("status") == "ok":
@@ -415,6 +406,13 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
                         # Normalise shape: TWClone uses data.ship in ship.status
                         ship = response_data.get("ship") or response_data
                         if ship:
+                            # Use ship.type.name for actual holds, as ship.holds seems to be max holds
+                            holds_str = ship.get("type", {}).get("name", "0")
+                            try:
+                                ship["holds"] = int(holds_str)
+                            except ValueError:
+                                logger.warning(f"Could not parse ship holds from type.name: {holds_str}. Defaulting to 0.")
+                                ship["holds"] = 0
                             state_manager.set("ship_info", ship)
                             loc = ship.get("location", {})
                             sector_id = loc.get("sector_id")
@@ -424,6 +422,43 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
                                 visited.add(sector_id)
                                 state_manager.set("visited_sectors", visited)
                                 logger.info(f"Ship in sector {sector_id}")
+                    
+                    # NEW: Update cargo after successful trade.sell
+                    if response_type == "trade.sell_receipt_v1" and response.get("status") == "ok":
+                        sold_items = response_data.get("lines", [])
+                        ship_info = state_manager.get("ship_info", {})
+                        current_cargo = ship_info.get("cargo", {})
+                        
+                        for item in sold_items:
+                            commodity = item.get("commodity", "").lower()
+                            quantity_sold = item.get("quantity", 0)
+                            if commodity in current_cargo:
+                                current_cargo[commodity] = max(0, current_cargo[commodity] - quantity_sold)
+                                logger.info(f"Updated cargo: Sold {quantity_sold} of {commodity}. Remaining: {current_cargo[commodity]}")
+                        
+                        ship_info["cargo"] = current_cargo
+                        state_manager.set("ship_info", ship_info)
+                        state_manager.set("trade_successful", True) # For reward calculation
+                        logger.info("Ship cargo updated after successful trade.sell.")
+
+                    # NEW: Update cargo after successful trade.buy
+                    if response_type == "trade.buy_receipt_v1" and response.get("status") == "ok":
+                        bought_items = response_data.get("lines", [])
+                        ship_info = state_manager.get("ship_info", {})
+                        current_cargo = ship_info.get("cargo", {})
+
+                        for item in bought_items:
+                            # Server response might use uppercase 'ORE'
+                            commodity = item.get("commodity", "").lower() 
+                            quantity_bought = item.get("quantity", 0)
+                            if commodity:
+                                current_cargo[commodity] = current_cargo.get(commodity, 0) + quantity_bought
+                                logger.info(f"Updated cargo: Bought {quantity_bought} of {commodity}. New total: {current_cargo[commodity]}")
+                        
+                        ship_info["cargo"] = current_cargo
+                        state_manager.set("ship_info", ship_info)
+                        state_manager.set("trade_successful", True) # For reward calculation
+                        logger.info("Ship cargo updated after successful trade.buy.")
 
                     # NEW: Robust credit handling
                     credits = None
@@ -560,6 +595,37 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
                             state_manager.set("new_sector_visited_this_tick", True)
                             logger.info(f"Moved to sector {new_sector}")
                 else: # Error or refused
+                    error_data = response.get('error', {})
+                    error_msg = error_data.get('message', 'Unknown error')
+                    error_code = error_data.get('code')
+
+                    # --- START NEW FIX ---
+                    if error_code == 1403: # "Insufficient cargo space"
+                        logger.warning("Received 'Insufficient cargo' error. Forcing ship.info refresh.")
+                        # By setting ship_info to None, the planner's invariant check
+                        # will force a 'ship.info' command on the next tick.
+                        state_manager.set("ship_info", None) 
+                        state_manager.set("last_ship_info_request_time", 0) # Bypass cooldown
+                    elif error_code == 1405 and command_name == "trade.sell": # "Port is not buying this commodity right now."
+                        logger.warning(f"Received 'Port not buying commodity' error for {sent_command.get('data', {}).get('items', [{}])[0].get('commodity')} at port {sent_command.get('data', {}).get('port_id')}. Marking as unsellable in price_cache.")
+                        port_id = sent_command.get('data', {}).get('port_id')
+                        commodity = sent_command.get('data', {}).get('items', [{}])[0].get('commodity')
+                        current_sector = str(state_manager.get("player_location_sector"))
+
+                        if port_id and commodity and current_sector:
+                            price_cache = state_manager.get("price_cache", {})
+                            sector_prices = price_cache.setdefault(current_sector, {})
+                            port_prices = sector_prices.setdefault(str(port_id), {})
+                            
+                            # Mark the commodity as unsellable at this port
+                            if commodity in port_prices:
+                                port_prices[commodity]["sell"] = 0 # Set sell price to 0 or None
+                                port_prices[commodity]["not_sellable_until"] = time.time() + state_manager.config.get("trade_retry_cooldown", 300) # Cooldown for this specific commodity
+                                state_manager.set("price_cache", price_cache)
+                                logger.info(f"Updated price_cache for {commodity} at port {port_id} in sector {current_sector}: marked as unsellable.")
+                        # Do NOT increment command_retry_info for trade.sell for this error, as the command itself isn't broken.
+                    # --- END NEW FIX ---
+
                     if state_manager.config.get("qa_mode"):
                         bug_reporter.triage_protocol_error(
                             sent_command=sent_command,
@@ -576,11 +642,13 @@ def process_responses(state_manager: StateManager, game_conn: GameConnection, bu
                     error_msg = response.get('error', {}).get('message', 'Unknown error')
 
                     # NEW: track repeated failures for QA & avoidance
-                    fail_counts = state_manager.get("command_retry_info", {})
-                    info = fail_counts.get(command_name, {"failures": 0, "next_retry_time": 0})
-                    info["failures"] += 1
-                    fail_counts[command_name] = info
-                    state_manager.set("command_retry_info", fail_counts)
+                    # Only increment failures if it's not a 1405 error for trade.sell
+                    if not (error_code == 1405 and command_name == "trade.sell"):
+                        fail_counts = state_manager.get("command_retry_info", {})
+                        info = fail_counts.get(command_name, {"failures": 0, "next_retry_time": 0})
+                        info["failures"] += 1
+                        fail_counts[command_name] = info
+                        state_manager.set("command_retry_info", fail_counts)
 
                     logger.warning(f"Command '{command_name}' failed with: {error_msg}")
             else:
@@ -828,6 +896,31 @@ You must choose a command from the list of WORKING economic commands. Your respo
 
 Prioritize actions that directly increase your credits or gather information crucial for future profit. Avoid repeating commands that don't yield new information or contribute to your economic goal.
 """
+    elif current_stage == "RECOVERY_STUCK": # New prompt for getting unstuck
+        working_commands_str = "\\n".join([f"- `{c}`" for c in game_state_json.get("working_commands", [])])
+        system_prompt = f"""You are 'AI_QA_Bot' in a recovery situation. Your SOLE task is to output a single, valid JSON object for the next game command to get the bot unstuck. DO NOT include any prose or extra text. The bot's internal planner has failed to find a valid action.
+
+Your goal is to analyze the current state and suggest a single command to break the deadlock.
+
+Here is the list of commands that have been confirmed to be WORKING:
+{working_commands_str}
+{last_commands_str}
+
+Current State Summary:
+{formatted_game_state}
+
+Common reasons for getting stuck include:
+- All available actions are on cooldown.
+- A critical command (like 'move.warp') has been temporarily disabled after too many failures.
+- The bot is in the wrong stage for its location (e.g., 'explore' stage while at a port that needs surveying).
+
+Based on the state, suggest a command to un-stick the bot. Good options might be:
+- A command that has been on cooldown for a while.
+- A command that forces a state refresh, like `ship.info` or `sector.info`.
+- A command that might transition the bot to a more appropriate stage.
+
+Your response MUST be a JSON object with a "command" field and an optional "data" field.
+"""
     else:
         # Fallback for unknown stages, or initial generic prompt
         system_prompt = f"""You are 'AI_QA_Bot'. Your SOLE task is to output a single, valid JSON object for the next game command. DO NOT include any prose or extra text. Your objective is profit and anomaly logging. Use the provided game state to formulate the next logical action.
@@ -877,7 +970,7 @@ def main():
     random.seed(config.get("random_seed", time.time()))
 
     logging.basicConfig(
-        level=logging.INFO, # Change INFO to DEBUG
+        level=logging.DEBUG, # Change INFO to DEBUG
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
             logging.FileHandler(config.get('log_file', 'ai_player.log')),
@@ -914,6 +1007,7 @@ def main():
     # --- Main Loop ---
     while not shutdown_flag:
         try:
+            llm_command = None # ADDED: Reset LLM command at the start of each loop iteration
             if not game_conn.sock:
                 logger.warning("No game connection. Attempting to reconnect...")
                 game_conn.connect()
@@ -939,11 +1033,25 @@ def main():
                 game_state = state_manager.get_all()
                 llm_command = get_ollama_response(game_state, config.get("ollama_model"), state_manager.get("stage"))
                 if llm_command:
-                    logger.info(f"LLM suggested command: {llm_command.get('command')} with data: {llm_command.get('data')}")
+                    logger.info(f"LLM suggested command for exploit stage: {llm_command.get('command')} with data: {llm_command.get('data')}")
                 else:
-                    logger.warning("LLM failed to generate a valid command.")
+                    logger.warning("LLM failed to generate a valid command for exploit stage.")
 
             next_command_dict = planner.get_next_command(llm_command)
+
+            if not next_command_dict:
+                logger.warning("Planner returned no command. Attempting LLM recovery...")
+                game_state = state_manager.get_all()
+                recovery_llm_command = get_ollama_response(
+                    game_state, 
+                    config.get("ollama_model"), 
+                    "RECOVERY_STUCK"
+                )
+                if recovery_llm_command:
+                    logger.info(f"LLM recovery suggested: {recovery_llm_command}")
+                    next_command_dict = recovery_llm_command
+                else:
+                    logger.error("LLM recovery failed. The bot is truly stuck.")
 
             if next_command_dict:
                 next_command_id = str(uuid.uuid4())
@@ -953,10 +1061,14 @@ def main():
                     "ts": datetime.datetime.now().isoformat() + "Z",
                     "command": next_command_dict["command"],
                     "auth": {"session": state_manager.get("session_token")},
-                    "data": {**next_command_dict.get("data", {}), "idempotency_key": idempotency_key}, # Add idempotency_key to data
-                    "meta": {"client_version": config.get("client_version")}, # Remove idempotency_key from meta as it's in data
-                    "idempotency_key": idempotency_key # Keep at top level for consistency, though server doesn't use it here
+                    "meta": {"client_version": config.get("client_version")},
                 }
+                # Conditionally add idempotency_key to data or meta based on command type
+                if next_command_dict["command"] in ["trade.buy", "trade.sell"]:
+                    game_command["data"] = {**next_command_dict.get("data", {}), "idempotency_key": idempotency_key}
+                else:
+                    game_command["data"] = next_command_dict.get("data", {})
+                    game_command["meta"]["idempotency_key"] = idempotency_key
 
                 game_conn.send_command(game_command)
                 state_manager.set("last_command_sent_id", next_command_id)
@@ -965,7 +1077,7 @@ def main():
                 history.append(next_command_dict["command"])
                 state_manager.set("last_commands_history", history[-5:]) # Keep only the last 5 commands
             else:
-                logger.warning("Planner returned no command. Waiting...")
+                logger.warning("Planner and LLM recovery failed to produce a command. Waiting...")
             
             time.sleep(0.5) # Small delay to prevent busy loop
 

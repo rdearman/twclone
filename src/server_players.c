@@ -2091,16 +2091,48 @@ cmd_bank_deposit (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  long long new_balance = 0;
-  int rc = h_add_credits (db, "player", ctx->player_id, amount, &new_balance);
+  long long player_petty_cash = 0;
+  int rc = h_get_player_petty_cash(db, ctx->player_id, &player_petty_cash);
+  if (rc != SQLITE_OK) {
+      send_enveloped_error(ctx->fd, root, 500, "Failed to retrieve petty cash balance.");
+      return 0;
+  }
+
+  if (player_petty_cash < amount) {
+      send_enveloped_refused(ctx->fd, root, ERR_INSUFFICIENT_FUNDS, "Insufficient petty cash to deposit.", NULL);
+      return 0;
+  }
+
+  // Start transaction
+  sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, NULL);
+
+  // Deduct from player's petty cash
+  rc = h_deduct_player_petty_cash(db, ctx->player_id, amount, NULL); // new_balance_out can be NULL
+  if (rc != SQLITE_OK) {
+      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      if (rc == SQLITE_CONSTRAINT) {
+          send_enveloped_refused(ctx->fd, root, ERR_INSUFFICIENT_FUNDS, "Insufficient petty cash to deposit.", NULL);
+      } else {
+          send_enveloped_error(ctx->fd, root, 500, "Failed to deduct from petty cash.");
+      }
+      return 0;
+  }
+
+  // Add to player's bank account
+  long long new_bank_balance = 0;
+  rc = h_add_credits (db, "player", ctx->player_id, amount, &new_bank_balance);
 
   if (rc != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, 500, "Failed to deposit credits.");
+      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      send_enveloped_error (ctx->fd, root, 500, "Failed to deposit credits to bank.");
       return 0;
     }
 
-  json_t *payload = json_pack ("{s:i, s:I}", "player_id", ctx->player_id, "new_balance", new_balance);
+  // Commit transaction
+  sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
+
+  json_t *payload = json_pack ("{s:i, s:I}", "player_id", ctx->player_id, "new_balance", new_bank_balance);
   send_enveloped_ok (ctx->fd, root, "bank.deposit.confirmed", payload);
   json_decref (payload);
 
