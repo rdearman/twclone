@@ -134,48 +134,187 @@ class GameConnection:
 
 # --- Strategy & Goal Functions ---
 
+def _get_filtered_game_state_for_llm(full_game_state):
+    """
+    Creates a filtered version of the game state for the LLM,
+    including only essential information to reduce token count and provide explicit guidance.
+    """
+    filtered_state = {}
+
+    # Essential top-level info
+    filtered_state["session_id"] = full_game_state.get("session_id")
+    current_sector_id = full_game_state.get("player_location_sector")
+    filtered_state["player_location_sector"] = current_sector_id
+    filtered_state["bank_balance"] = full_game_state.get("bank_balance")
+
+    # Player Info (trimmed)
+    player_info = full_game_state.get("player_info", {})
+    if player_info:
+        filtered_state["player_info"] = {
+            "username": player_info.get("username"),
+            "credits": player_info.get("credits"),
+            "faction": player_info.get("faction"),
+            "is_online": player_info.get("is_online"),
+        }
+
+    # Ship Info (trimmed)
+    ship_info = full_game_state.get("ship_info", {})
+    if ship_info:
+        filtered_state["ship_info"] = {
+            "type": ship_info.get("type"),
+            "max_cargo": ship_info.get("max_cargo"),
+            "current_cargo_volume": ship_info.get("current_cargo_volume"),
+            "cargo": ship_info.get("cargo", {}), # Keep full cargo details
+            "location": ship_info.get("location"), # Keep location details
+            "modules": {
+                "warp_drive": ship_info.get("modules", {}).get("warp_drive")
+            }
+        }
+        filtered_state["ship_cargo_capacity"] = ship_info.get("max_cargo", 0)
+        filtered_state["ship_current_cargo_volume"] = ship_info.get("current_cargo_volume", 0)
+        
+    # Sector Data (current and adjacent only)
+    all_sector_data = full_game_state.get("sector_data", {})
+    all_port_info = full_game_state.get("port_info_by_sector", {})
+
+    relevant_sector_ids = set()
+    current_sector_details = None
+    if current_sector_id is not None and str(current_sector_id) in all_sector_data:
+        relevant_sector_ids.add(str(current_sector_id))
+        current_sector_details = all_sector_data[str(current_sector_id)]
+        if "adjacent" in current_sector_details:
+            for adj_sector_id in current_sector_details["adjacent"]:
+                relevant_sector_ids.add(str(adj_sector_id))
+    
+    filtered_state["current_sector_info"] = {}
+    filtered_state["adjacent_sectors_info"] = []
+    filtered_state["has_port_in_current_sector"] = False
+    filtered_state["current_port_commodities"] = []
+    filtered_state["valid_goto_sectors"] = []
+    filtered_state["valid_commodity_names"] = ["ORE", "ORGANICS", "EQUIPMENT", "COLONISTS"] # Explicitly list valid commodities
+
+    if current_sector_details:
+        filtered_state["current_sector_info"] = {
+            "sector_id": current_sector_details.get("sector_id"),
+            "name": current_sector_details.get("name"),
+            "has_port": current_sector_details.get("has_port", False)
+        }
+        if current_sector_details.get("has_port"):
+            filtered_state["has_port_in_current_sector"] = True
+            current_port_data = all_port_info.get(str(current_sector_id))
+            if current_port_data:
+                filtered_state["current_port_commodities"] = [
+                    {"commodity": c["commodity"], "buy_price": c["buy_price"], "sell_price": c["sell_price"]}
+                    for c in current_port_data.get("commodities", [])
+                ]
+    
+    if current_sector_details and "adjacent" in current_sector_details:
+        for adj_sector_id in current_sector_details["adjacent"]:
+            filtered_state["valid_goto_sectors"].append(adj_sector_id)
+            if str(adj_sector_id) in all_sector_data:
+                sector_details = all_sector_data[str(adj_sector_id)]
+                filtered_state["adjacent_sectors_info"].append({
+                    "sector_id": sector_details.get("sector_id"),
+                    "name": sector_details.get("name"),
+                    "has_port": sector_details.get("has_port", False)
+                })
+
+    return filtered_state
+
 def get_strategy_from_llm(game_state, model):
     """
     Asks the LLM for a high-level strategic plan.
     """
     PROMPT_STRATEGY = """
     You are a master space trader. Your goal is to make profit.
-    Based on the current game state, provide a high-level strategic plan.
-    Return your plan as a JSON list of simple goal strings.
-    The goals should be: "goto: <sector_id>", "sell: <commodity_code>", "buy: <commodity_code>".
+    Based on this filtered summary of the current game state, provide a high-level strategic plan.
+    Return your plan as a sequence of simple goal strings, one goal per line.
+    The goals MUST be in the format: "goto: <sector_id>", "sell: <commodity_code>", "buy: <commodity_code>".
     
-    Example response:
-    ["goto: 127", "sell: ORGANICS", "buy: ORE", "goto: 271", "sell: ORE"]
-
+    IMPORTANT RULES FOR GENERATING GOALS:
+    1.  For "goto" goals:
+        -   The <sector_id> MUST be one of the sector IDs listed in `valid_goto_sectors`.
+        -   Do NOT attempt to 'goto' a sector that is not directly adjacent.
+    
+    2.  For "buy" or "sell" goals:
+        -   You MUST be in a sector with a port. Check `has_port_in_current_sector` (must be `true`).
+        -   The <commodity_code> MUST be one of the valid commodity names listed in `valid_commodity_names`.
+        -   When buying, consider `ship_cargo_capacity` and `ship_current_cargo_volume` to ensure you have space.
+        -   When selling, ensure you actually possess the commodity in your `ship_info.cargo`.
+        -   Refer to `current_port_commodities` for available items and their prices at the current port.
+            -   Example: `current_port_commodities: [{"commodity": "ORE", "buy_price": 100, "sell_price": 80}]` means you can buy ORE for 100 and sell for 80.
+    
+    Do not include any other text, commentary, or explanation.
+    
     Current state:
     {game_state}
+    
+    Example of a valid plan:
+    goto: 123
+    buy: ORE
+    goto: 456
+    sell: ORE
     
     What is your plan?
     """
     
+    # Filter the game state to reduce token count for the LLM
+    filtered_game_state = _get_filtered_game_state_for_llm(game_state)
+
     try:
-        # Re-use your existing get_ollama_response function, but with the new prompt
-        response_json = get_ollama_response(
-            game_state, 
+        response_text = get_ollama_response(
+            filtered_game_state, 
             model, 
-            "PROMPT_STRATEGY", # This is a placeholder key
-            override_prompt=PROMPT_STRATEGY # Pass the full prompt
+            "PROMPT_STRATEGY",
+            override_prompt=PROMPT_STRATEGY
         )
         
-        if response_json:
+        if response_text:
             import re
             import json
             
-            # --- FIX: Added re.DOTALL to find JSON that spans multiple lines ---
-            match = re.search(r'\[.*\]', response_json, re.DOTALL)
-            if match:
-                plan_str = match.group(0)
-                plan = json.loads(plan_str)
-                if isinstance(plan, list):
-                    logger.info(f"LLM provided new strategy: {plan}")
-                    return plan
+            # --- FIX: More robust regex to find the JSON list ---
+            
+            # --- Robust Parsing Logic ---
+            plan = []
+            
+            # Regex to find goal strings like "goto: X", "sell: Y", "buy: Z"
+            goal_pattern = re.compile(r'(goto:\s*\d+|sell:\s*\w+|buy:\s*\w+)', re.IGNORECASE)
+            
+            # Find all matches in the response text
+            raw_goals = goal_pattern.findall(response_text)
+            
+            # Clean up and add to plan
+            for goal in raw_goals:
+                plan.append(goal.strip())
+
+            if plan:
+                validated_plan = []
+                for goal in plan:
+                    if not isinstance(goal, str): continue
+                    
+                    parts = goal.split(':')
+                    if len(parts) != 2: continue
+
+                    goal_type = parts[0].strip()
+                    goal_target = parts[1].strip()
+
+                    if goal_type not in ["goto", "sell", "buy"] or not goal_target:
+                        continue
+                    
+                    if goal_type == "goto":
+                        try:
+                            int(goal_target)
+                        except ValueError:
+                            continue
+                    
+                    validated_plan.append(f"{goal_type}: {goal_target}")
+
+                if validated_plan:
+                    logger.info(f"LLM provided new strategy: {validated_plan}")
+                    return validated_plan
         
-        logger.warning("LLM failed to provide a valid strategy plan from response.")
+        logger.warning(f"LLM failed to provide a valid strategy plan from response: {response_text}")
         return None
 
     except Exception as e:
@@ -193,14 +332,13 @@ def is_goal_complete(goal_str, game_state, response_data, response_type):
         if goal_type == "goto":
             target_sector_id = int(goal_target)
             
-            # --- FIX: Check current state first! ---
             # This handles the case where the goal is "goto" a sector we are already in.
             if game_state.get("player_location_sector") == target_sector_id:
                 return True
 
-            # Check if we just arrived from a warp
-            if response_type == "ship.info" or response_type == "ship.status":
-                new_sector = response_data.get("ship", {}).get("location", {}).get("sector_id")
+            # Check if we just arrived from a warp (move.result)
+            if response_type == "move.result":
+                new_sector = response_data.get("to_sector_id")
                 if new_sector == target_sector_id:
                     return True
 
@@ -220,6 +358,63 @@ def is_goal_complete(goal_str, game_state, response_data, response_type):
     return False
 
 # --- Main Game Loop ---
+
+def bootstrap_schemas(game_conn, state_manager, config):
+    """
+    Fetches all command schemas from the server on startup.
+    """
+    logger.info("Bootstrapping command schemas...")
+    
+    try:
+        with open('protocol_string.txt', 'r') as f:
+            content = f.read()
+        logger.debug(f"Content of protocol_string.txt:\n{content[:500]}...") # Log first 500 chars
+    except FileNotFoundError:
+        logger.error("protocol_string.txt not found. Cannot bootstrap schemas.")
+        return
+
+    # Regex to find all command names like `1. auth.login`
+    command_pattern = re.compile(r'\*\*(\d+)\.\s*`([a-zA-Z0-9._-]+)`\*\*')
+    matches = command_pattern.findall(content)
+    commands_to_fetch = [match[1] for match in matches] # Extract just the command name
+    logger.debug(f"Commands found in protocol_string.txt: {commands_to_fetch}")
+    
+    # We don't need to describe these commands
+    commands_to_ignore = [
+        "system.hello", 
+        "system.capabilities", 
+        "system.describe_schema"
+    ]
+
+    for command_name in commands_to_fetch:
+        if command_name in commands_to_ignore:
+            continue
+        # Check if command is in schema_blacklist
+        if command_name in state_manager.get("schema_blacklist", []):
+            logger.debug(f"Skipping schema request for blacklisted command: {command_name}")
+            continue
+
+        idempotency_key = str(uuid.uuid4())
+        request_id = f"c-{idempotency_key[:8]}"
+        schema_request = {
+            "id": request_id,
+            "command": "system.describe_schema",
+            "data": {
+                "type": "command",
+                "name": command_name
+            },
+            "meta": {
+                "client_version": config.get("client_version"),
+                "idempotency_key": idempotency_key
+            }
+        }
+        logger.debug(f"Requesting schema for command: {command_name}")
+        game_conn.send_command(schema_request)
+        state_manager.state["pending_schema_requests"][command_name] = request_id # Store the mapping
+        time.sleep(0.1) # Avoid overwhelming the server
+
+    logger.info(f"Requested schemas for {len(commands_to_fetch) - len(commands_to_ignore)} commands.")
+
 
 def main():
     global shutdown_flag
@@ -266,6 +461,7 @@ def main():
     state_manager.set("session_id", None) 
 
     last_heartbeat = time.time()
+    schemas_bootstrapped = False
     
     # --- Main Loop ---
     while not shutdown_flag:
@@ -306,7 +502,7 @@ def main():
             responses = game_conn.receive_responses()
             if responses:
                 # --- FIX: Pass config object to fix NameError ---
-                process_responses(responses, state_manager, bug_reporter, config)
+                process_responses(responses, state_manager, bug_reporter, bandit_policy, config)
                 last_heartbeat = time.time()
             
             # 3. Handle Heartbeat (Ping)
@@ -324,6 +520,15 @@ def main():
             
             # --- If we are here, we are authenticated ---
 
+            # --- Bootstrap Schemas after login ---
+            if not schemas_bootstrapped:
+                bootstrap_schemas(game_conn, state_manager, config)
+                schemas_bootstrapped = True
+                # Give server time to respond to schema requests
+                logger.info("Waiting for schema responses...")
+                time.sleep(2) 
+                continue
+
             # 4. Get Current State & Strategy
             strategy_plan = game_state.get("strategy_plan", [])
             current_goal = None
@@ -333,9 +538,13 @@ def main():
                 if game_state.get("player_info") and game_state.get("ship_info"): # Only ask if we are 'in-game'
                     logger.info("Strategy plan is empty. Requesting a new one from LLM.")
                     new_plan = get_strategy_from_llm(game_state, config.get("ollama_model")) 
-                    if new_plan:
+                    if new_plan and isinstance(new_plan, list) and all(isinstance(g, str) and ":" in g for g in new_plan):
                         state_manager.set("strategy_plan", new_plan)
                         strategy_plan = new_plan
+                    else:
+                        logger.warning(f"LLM provided an invalid plan: {new_plan}. Retrying.")
+                        time.sleep(2) # Wait a moment before retrying
+                        continue
             
             # 6. Get the current goal
             if strategy_plan:
@@ -355,20 +564,12 @@ def main():
                     "command": command_name,
                     "data": next_command_dict.get("data", {}),
                     "meta": {
-                        "client_version": config.get("client_version")
+                        "client_version": config.get("client_version"),
+                        # --- THIS IS THE FIX for 1306 ERROR ---
+                        # Always include the idempotency_key in meta
+                        "idempotency_key": idempotency_key 
                     }
                 }
-                
-                # --- THIS IS THE FIX for 1306 ERROR ---
-                # Only add idempotency_key where it is allowed
-                if command_name in ["trade.buy", "trade.sell"]:
-                    # Add to data payload
-                    full_command["data"]["idempotency_key"] = idempotency_key
-                elif command_name not in ["move.warp"]: 
-                    # Add to meta payload for most other commands
-                    full_command["meta"]["idempotency_key"] = idempotency_key
-                # For move.warp, we add NO key.
-                # --- END FIX ---
 
                 logger.info("Sending command: %s", full_command)
                 
@@ -397,7 +598,7 @@ def main():
             logger.info("Shutdown signal received. Exiting.")
             shutdown_flag = True
         except Exception as e:
-            logger.critical("Unhandled exception in main loop: %s", e, exc_info=True)
+            logger.critical(f"Unhandled exception in main loop: {e}", exc_info=True)
             time.sleep(5) # Avoid rapid crash-loop
             
     # --- Cleanup ---
@@ -408,12 +609,12 @@ def main():
 
 # --- Response Processing Function ---
 
-def process_responses(responses, state_manager, bug_reporter, config):
+def process_responses(responses, state_manager, bug_reporter, bandit_policy, config):
     """
     Processes a list of responses from the server, updates state,
     and checks for goal completion.
     
-    --- FIX: Added 'config' parameter ---
+    --- FIX: Added 'config' and 'bandit_policy' parameters ---
     """
     game_state_before = state_manager.get_all() # Get state before processing
 
@@ -435,6 +636,14 @@ def process_responses(responses, state_manager, bug_reporter, config):
         try:
             if response.get("status") == "ok":
                 
+                # --- Handle Schema Responses ---
+                if response_type == "system.schema":
+                    schema_name = response_data.get("name")
+                    if schema_name and 'schema' in response_data:
+                        state_manager.add_schema(schema_name, response_data['schema'])
+                        logger.debug(f"Cached schema for command: {schema_name}")
+                    continue # Don't process schema responses further
+
                 # --- FIX: Detect successful login ---
                 if response_type == "auth.session":
                     session_id = response_data.get("session")
@@ -461,6 +670,11 @@ def process_responses(responses, state_manager, bug_reporter, config):
                         state_manager.set("player_location_sector", ship_data["location"]["sector_id"])
 
                 # 4) Location Info
+                if response_type == "move.result":
+                    # --- Update player location immediately ---
+                    if response_data.get("current_sector"):
+                        state_manager.set("player_location_sector", response_data["current_sector"])
+
                 if response_type == "sector.info":
                     # --- THIS IS THE FIX for the 'sector.info' loop ---
                     sector_id = response_data.get("sector_id") # <-- WAS .get("id")
@@ -528,25 +742,24 @@ def process_responses(responses, state_manager, bug_reporter, config):
                 error_code = error_data.get("code")
                 
                 log_command_name = "unknown"
-                
+                # Try to get the command name from the reply_to ID
+                if response.get("reply_to"):
+                    # This is a hacky way to get the command name from the ID
+                    # A better way would be to store a map of ID to command name
+                    # when sending the command.
+                    for cmd_name, cmd_id in state_manager.get("pending_schema_requests", {}).items():
+                        if cmd_id == response["reply_to"]:
+                            log_command_name = cmd_name
+                            break
+
                 logger.warning("Server refused command '%s': %s (Code: %s)", log_command_name, error_msg, error_code)
                 
                 state_manager.record_command_failure(log_command_name)
                 
-                # --- GOAL INVALIDATION ---
-                strategy_plan = state_manager.get("strategy_plan", [])
-                if strategy_plan:
-                    # Clear the plan on ANY error for now. This is safer.
-                    logger.error(f"Goal-related error: {error_msg}. Clearing plan.")
-                    state_manager.set("strategy_plan", []) # Clear the plan
-                        
-                # --- Auto-Recovery Logic ---
-                if error_code == 1403: # "Insufficient cargo space"
-                    logger.warning("Forcing ship.info refresh due to 'Insufficient cargo' error.")
-                    state_manager.set("ship_info", None)
-                if error_code == 1402: # "You do not carry enough..."
-                    logger.warning("Forcing ship.info refresh due to 'Not enough commodity' error.")
-                    state_manager.set("ship_info", None)
+                # If schema request failed with 1104, add to blacklist
+                if response_type == "error" and error_code == 1104 and log_command_name != "unknown":
+                    state_manager.add_to_schema_blacklist(log_command_name)
+
 
                 # --- QA Mode: Triage Error ---
                 if config.get("qa_mode"):
@@ -560,6 +773,7 @@ def process_responses(responses, state_manager, bug_reporter, config):
 
         except Exception as e:
             logger.error("Critical error in process_responses: %s", e, exc_info=True)
+
 
 
 if __name__ == "__main__":

@@ -86,6 +86,10 @@ class BanditPolicy:
         context_q_table[action] += alpha * (reward - context_q_table[action])
         logger.debug(f"Bandit: Updated Q for {action} in context '{context_key}' to {context_q_table[action]} (N={context_n_table[action]}) with reward {reward}")
 
+    def give_feedback(self, action: str, context_key: str, reward: float):
+        """Public method to provide feedback, which updates the Q-value."""
+        self.update_q_value(action, reward, context_key)
+
     def get_tables(self):
         return self.q_table, self.n_table
 

@@ -23,7 +23,10 @@ class StateManager:
             "strategy_plan": [],        # NEW: For multi-stage plans
             "trade_successful": False,  # For bandit reward,
             "q_table": {},              # Persist learning
-            "n_table": {}               # Persist learning
+            "n_table": {},              # Persist learning
+            "command_schemas": {},      # NEW: Cache for command schemas
+            "schema_blacklist": [],     # NEW: List of commands that failed schema fetching
+            "pending_schema_requests": {} # NEW: Map of schema request ID to command name
         }
         self.load_state()
 
@@ -42,6 +45,9 @@ class StateManager:
                     self.state["strategy_plan"] = []
                     self.state["command_retry_info"] = {} 
                     self.state["session_id"] = None # Always force re-login
+                    self.state["command_schemas"] = {} # Always force schema refetch
+                    self.state["schema_blacklist"] = [] # NEW: Clear schema blacklist on load
+                    self.state["pending_schema_requests"] = {} # NEW: Clear pending schema requests on load
                     
                     # --- ADD THESE LINES TO CLEAR CACHES ---
                     logger.warning("Clearing cached world data to force re-exploration.")
@@ -154,3 +160,39 @@ class StateManager:
         self.state["price_cache"][port_id]["sell"][commodity] = quote_data.get("sell_price")
             
         self.save_state()
+
+    # --- Schema Management ---
+
+    def add_schema(self, command_name, schema):
+        # --- FIX: Clean up malformed schemas from the server ---
+        if command_name in ["trade.buy", "trade.sell"]:
+            try:
+                item_schema = schema["properties"]["data"]["properties"]["items"]["items"]
+                
+                # Correct the 'required' array
+                if "required" in item_schema and "\u0001" in item_schema["required"]:
+                    logger.warning(f"Cleaning malformed 'required' array in schema for {command_name}")
+                    item_schema["required"] = ["commodity", "quantity"]
+
+                # Remove the invalid key
+                if "\u0006" in item_schema:
+                    logger.warning(f"Removing invalid key '\\u0006' from schema for {command_name}")
+                    del item_schema["\u0006"]
+
+            except KeyError as e:
+                logger.error(f"Could not clean schema for {command_name}. Structure was not as expected. Error: {e}")
+
+        self.state["command_schemas"][command_name] = schema
+        logger.debug(f"Added schema for {command_name}: {json.dumps(schema)}")
+        self.save_state()
+
+    def get_schema(self, command_name):
+        """Retrieves a command schema from the cache."""
+        return self.state.get('command_schemas', {}).get(command_name)
+
+    def add_to_schema_blacklist(self, command_name):
+        """Adds a command to the schema blacklist."""
+        if command_name not in self.state["schema_blacklist"]:
+            self.state["schema_blacklist"].append(command_name)
+            logger.info(f"Added '{command_name}' to schema blacklist.")
+            self.save_state()

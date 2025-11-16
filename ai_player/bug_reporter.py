@@ -99,3 +99,32 @@ class BugReporter:
                 json.dump(data, f, indent=4)
         except Exception as e:
             logger.error(f"Failed to write bug file {filename}: {e}")
+
+    def triage_schema_validation_error(self, command_name, payload, schema, error, game_state):
+        """
+        Saves a detailed report for a payload that failed schema validation.
+        """
+        bug_id = f"err_schema_{command_name}"
+        bug_dir = os.path.join(self.report_path, bug_id)
+        
+        if not os.path.exists(bug_dir):
+            try:
+                os.makedirs(bug_dir)
+                logger.warning(f"Schema validation failed for '{command_name}'. Saving new report: {bug_id}")
+                
+                self._save_bug_report(bug_dir, "payload.json", payload)
+                self._save_bug_report(bug_dir, "schema.json", schema)
+                self._save_bug_report(bug_dir, "game_state.json", game_state)
+                
+                summary = {
+                    "bug_id": bug_id,
+                    "first_seen": self._get_timestamp(),
+                    "command": command_name,
+                    "error_message": error.message,
+                    "error_path": list(error.path),
+                    "error_validator": error.validator,
+                }
+                self._save_bug_report(bug_dir, "summary.json", summary)
+                
+            except OSError as e:
+                logger.error(f"Failed to save schema validation bug report: {e}")
