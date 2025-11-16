@@ -102,8 +102,13 @@ def make_context_key(state: dict, config: dict) -> str:
     sector_class = sector_data.get("class", "unknown_class")
 
     port_type = "no_port"
+    port_id_str = ""
     if sector_data.get("ports"):
         port_type = "port_present"
+        # If there are ports, try to get the ID of the first one
+        first_port = sector_data["ports"][0]
+        if first_port and first_port.get("id"):
+            port_id_str = f"-port:{first_port['id']}"
 
     ship_info = state.get("ship_info", {})
     holds = ship_info.get("holds", 0)
@@ -126,10 +131,10 @@ def make_context_key(state: dict, config: dict) -> str:
     has_pending_commands = "pending_cmds" if len(state.get("pending_commands", {})) > 0 else "no_pending_cmds"
 
     return (
-        f"stage:{stage}-sector_class:{sector_class}-port_type:{port_type}-"
-        f"holds:{holds_full}-credits:{credits_bucket}-qa_mode:{qa_mode}-"
-        f"sell:{can_sell_any}-buy:{can_buy_any}-bank:{has_bank_balance}-"
-        f"pending:{has_pending_commands}"
+        f"stage:{stage}-sector_class:{sector_class}-port_type:{port_type}{port_id_str}-"
+        f"holds_full:{holds_full}-credits:{credits_bucket}-qa_mode:{qa_mode}-"
+        f"can_sell_any:{can_sell_any}-can_buy_any:{can_buy_any}-has_bank_balance:{has_bank_balance}-"
+        f"has_pending_commands:{has_pending_commands}"
     )
 
 # Helper functions for _can_sell_any and _can_buy_any, mirroring planner logic

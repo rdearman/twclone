@@ -1,0 +1,161 @@
+{
+    "session_id": "5e4d551429c68a8be0af4892d93cab365ba55c77aab2040b6116ed1211b7cfd6",
+    "player_info": {
+        "player": {
+            "id": 4,
+            "number": 8,
+            "name": "ai_qa_bot",
+            "turns_remaining": 120
+        },
+        "ship": {
+            "id": 2,
+            "number": 2,
+            "name": "QA Bot 1",
+            "type": {
+                "id": 0,
+                "name": "25"
+            },
+            "holds": 250,
+            "fighters": 1,
+            "location": {
+                "sector_id": 1,
+                "sector_name": "Fedspace 1"
+            },
+            "owner": {
+                "id": 4,
+                "name": "ai_qa_bot"
+            },
+            "cargo": {
+                "ore": 0,
+                "organics": 0,
+                "equipment": 0,
+                "colonists": 0
+            }
+        }
+    },
+    "ship_info": {
+        "id": 2,
+        "number": 2,
+        "name": "QA Bot 1",
+        "type": {
+            "id": 0,
+            "name": "25"
+        },
+        "holds": 250,
+        "fighters": 1,
+        "location": {
+            "sector_id": 1,
+            "sector_name": "Fedspace 1"
+        },
+        "owner": {
+            "id": 4,
+            "name": "ai_qa_bot"
+        },
+        "cargo": {
+            "ore": 0,
+            "organics": 0,
+            "equipment": 0,
+            "colonists": 0
+        }
+    },
+    "player_location_sector": 1,
+    "sector_data": {
+        "1": {
+            "sector_id": 1,
+            "name": "Fedspace 1",
+            "adjacent": [
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+            ],
+            "adjacent_count": 6,
+            "ports": [
+                {
+                    "id": 1,
+                    "name": "Earth Port",
+                    "type": "1"
+                }
+            ],
+            "has_port": true,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": "The Federation -- Do Not Dump!",
+            "has_beacon": true,
+            "ships": [
+                {
+                    "id": 1,
+                    "name": "Bit Banger",
+                    "type": "Merchant Cruiser",
+                    "ship_name": "Bit Banger",
+                    "ship_type": "Merchant Cruiser",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 2,
+                    "name": "QA Bot 1",
+                    "type": "Scout Marauder",
+                    "ship_name": "QA Bot 1",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot"
+                }
+            ],
+            "ships_count": 2,
+            "ports_count": 1,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 1,
+                "mines_limpet": 0,
+                "mines": 1
+            }
+        }
+    },
+    "port_info_by_sector": {},
+    "price_cache": {
+        "1": {
+            "buy": {},
+            "sell": {}
+        }
+    },
+    "bank_balance": 0,
+    "command_retry_info": {
+        "player.my_info": {
+            "next_retry_time": 1763292283.009053
+        },
+        "ship.info": {
+            "next_retry_time": 1763292283.5148942
+        },
+        "sector.info": {
+            "next_retry_time": 1763292310.2979174
+        },
+        "trade.quote": {
+            "next_retry_time": 1763292326.1471655
+        },
+        "move.warp": {
+            "next_retry_time": 1763292335.487425
+        },
+        "unknown": {
+            "failures": 1,
+            "next_retry_time": 1763292340.9882312
+        }
+    },
+    "strategy_plan": [
+        "goto: 2",
+        "sell: ORGANICS",
+        "buy: ORE",
+        "goto: 3",
+        "sell: ORE"
+    ],
+    "trade_successful": false,
+    "player_id": 4,
+    "last_action": "trade.quote",
+    "last_context_key": "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds",
+    "last_stage": "survey"
+}

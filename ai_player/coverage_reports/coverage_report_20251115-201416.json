@@ -1,0 +1,200 @@
+{
+    "timestamp": "20251115-201416",
+    "total_steps": 200,
+    "commands_seen_ok": [
+        "auth.login",
+        "ship.info",
+        "sector.info",
+        "player.my_info",
+        "bank.balance",
+        "trade.port_info",
+        "system.hello",
+        "trade.quote"
+    ],
+    "commands_seen_error": [
+        "move.warp",
+        "bank.deposit",
+        "trade.buy"
+    ],
+    "commands_never_tried": [
+        "player.get_settings",
+        "bank.statement",
+        "bank.withdraw",
+        "corp.deposit",
+        "planet.deposit",
+        "insurance.policies.buy",
+        "move.pathfind",
+        "corp.balance",
+        "nav.avoid.add",
+        "insurance.claim.file",
+        "ship.jettison",
+        "bank.orders.list",
+        "market.orders.create",
+        "ship.upgrade",
+        "player.list_online",
+        "loan.repay",
+        "trade.sell",
+        "system.capabilities",
+        "system.describe_schema",
+        "combat.deploy_fighters",
+        "stock.portfolio.list",
+        "corp.withdraw",
+        "nav.bookmark.add",
+        "nav.avoid.list",
+        "market.orders.cancel",
+        "loan.accept",
+        "move.transwarp",
+        "combat.lay_mines",
+        "corp.statement",
+        "corp.stock.issue",
+        "market.contracts.sell",
+        "market.contracts.list",
+        "player.rankings",
+        "nav.bookmark.remove",
+        "bounty.post",
+        "corp.set_tax",
+        "research.projects.fund",
+        "auth.register",
+        "move.autopilot.status",
+        "bank.orders.create",
+        "trade.history",
+        "bounty.list",
+        "move.describe_sector",
+        "auth.logout",
+        "market.contracts.buy",
+        "bank.orders.cancel",
+        "loan.apply",
+        "nav.bookmark.list",
+        "stock.exchange.list_stocks",
+        "planet.list_mine",
+        "move.autopilot.start",
+        "fine.pay",
+        "insurance.policies.list",
+        "move.autopilot.stop",
+        "planet.withdraw",
+        "ship.status",
+        "nav.avoid.remove",
+        "bank.transfer",
+        "player.set_prefs",
+        "loan.list_active",
+        "loan.offers.list",
+        "fine.list",
+        "planet.create",
+        "auth.refresh",
+        "research.projects.list",
+        "combat.attack",
+        "stock.exchange.orders.cancel",
+        "market.orders.list",
+        "corp.issue_dividend",
+        "stock.exchange.orders.create"
+    ],
+    "error_codes_seen": [
+        1402,
+        1306,
+        1702
+    ],
+    "ports_visited_by_class": {},
+    "special_ports_seen": [
+        1
+    ],
+    "zones_covered": [],
+    "q_table_size": 5,
+    "n_table_size": 5,
+    "qa_metrics": {
+        "commands": {
+            "system.hello": {
+                "total_calls": 2,
+                "successful_calls": 2,
+                "failed_calls": 0,
+                "last_called_timestamp": 1763236759.0743783,
+                "error_codes_seen": []
+            },
+            "auth.login": {
+                "total_calls": 1,
+                "successful_calls": 1,
+                "failed_calls": 0,
+                "last_called_timestamp": 1763236557.7520638,
+                "error_codes_seen": []
+            },
+            "ship.info": {
+                "total_calls": 4,
+                "successful_calls": 4,
+                "failed_calls": 0,
+                "last_called_timestamp": 1763236718.3287082,
+                "error_codes_seen": []
+            },
+            "sector.info": {
+                "total_calls": 14,
+                "successful_calls": 14,
+                "failed_calls": 0,
+                "last_called_timestamp": 1763236983.30976,
+                "error_codes_seen": []
+            },
+            "player.my_info": {
+                "total_calls": 1,
+                "successful_calls": 1,
+                "failed_calls": 0,
+                "last_called_timestamp": 1763236565.68355,
+                "error_codes_seen": []
+            },
+            "trade.port_info": {
+                "total_calls": 1,
+                "successful_calls": 1,
+                "failed_calls": 0,
+                "last_called_timestamp": 1763236566.1932554,
+                "error_codes_seen": []
+            },
+            "trade.quote": {
+                "total_calls": 3,
+                "successful_calls": 3,
+                "failed_calls": 0,
+                "last_called_timestamp": 1763236568.2369506,
+                "error_codes_seen": []
+            },
+            "bank.balance": {
+                "total_calls": 16,
+                "successful_calls": 16,
+                "failed_calls": 0,
+                "last_called_timestamp": 1763236964.057695,
+                "error_codes_seen": []
+            },
+            "trade.buy": {
+                "total_calls": 3,
+                "successful_calls": 0,
+                "failed_calls": 3,
+                "last_called_timestamp": 1763236697.6142244,
+                "error_codes_seen": [
+                    1402
+                ]
+            },
+            "move.warp": {
+                "total_calls": 3,
+                "successful_calls": 0,
+                "failed_calls": 3,
+                "last_called_timestamp": 1763236749.8007505,
+                "error_codes_seen": [
+                    1306
+                ]
+            },
+            "bank.deposit": {
+                "total_calls": 3,
+                "successful_calls": 0,
+                "failed_calls": 3,
+                "last_called_timestamp": 1763236678.2497072,
+                "error_codes_seen": [
+                    1702
+                ]
+            }
+        },
+        "scenarios": {
+            "seen_1402_error": true,
+            "seen_1403_error": false,
+            "seen_1307_error": false,
+            "seen_1405_sell_rejection": false,
+            "tested_zero_holds": false,
+            "tested_full_holds": false,
+            "tested_empty_credits": false,
+            "tested_high_credits": false
+        }
+    }
+}

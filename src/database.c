@@ -2526,7 +2526,7 @@ static const char *engine_bootstrap_sql_statements[] = {
   "('autouncloak_sweeper','every:15m',NULL,strftime('%s','now'),1,NULL),"
   "('npc_step','every:30s',NULL,strftime('%s','now'),1,NULL),"
   "('broadcast_ttl_cleanup','every:5m',NULL,strftime('%s','now'),1,NULL),"
-  "('news_collator','daily@06:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','6 hours'),1,NULL);",
+  "('daily_news_compiler','daily@06:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','6 hours'),1,NULL);",
   /* --- Server→Engine event rail (separate from your existing system_events) --- */
   "CREATE TABLE IF NOT EXISTS engine_events("
   "  id INTEGER PRIMARY KEY,"
@@ -2841,9 +2841,7 @@ db_init (void)
       LOGE ("DB Open Failed (%s): %s (rc=%d)", DEFAULT_DB_NAME,
 	    sqlite3_errstr (rc), rc);
       sqlite3_close (db_handle);
-      fprintf (stderr,
-	       "FATAL ERROR: Could not open database! Code: %d, Message: %s\n",
-	       rc, sqlite3_errmsg (db_handle));
+      LOGE("FATAL ERROR: Could not open database! Code: %d, Message: %s", rc, sqlite3_errmsg (db_handle));
       return -1;
     }
 
@@ -2860,8 +2858,7 @@ db_init (void)
   rc = sqlite3_prepare_v2 (db_handle, sql, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
-      fprintf (stderr, "DB prepare check error: %s\n",
-	       sqlite3_errmsg (db_handle));
+      LOGE("DB prepare check error: %s", sqlite3_errmsg (db_handle));
       ret_code = -1;
       goto cleanup;
     }
@@ -2873,8 +2870,7 @@ db_init (void)
   // We should treat this as an error.
   if (rc != SQLITE_ROW && rc != SQLITE_DONE)
     {
-      fprintf (stderr, "DB step check error: %s\n",
-	       sqlite3_errmsg (db_handle));
+      LOGE("DB step check error: %s", sqlite3_errmsg (db_handle));
       ret_code = -1;
       goto cleanup;
     }
@@ -2884,19 +2880,19 @@ db_init (void)
     {
       if (db_create_tables_unlocked (false) != 0)
 	{
-	  fprintf (stderr, "Failed to create tables\n");
+	  LOGE("Failed to create tables");
 	  ret_code = -1;
 	  goto cleanup;
 	}
       if (db_insert_defaults_unlocked () != 0)
 	{
-	  fprintf (stderr, "Failed to insert default data\n");
+	  LOGE("Failed to insert default data");
 	  ret_code = -1;
 	  goto cleanup;
 	}
       if (db_seed_ai_qa_bot_bank_account_unlocked() != 0)
 	{
-	  fprintf (stderr, "Failed to seed AI QA bot bank account\n");
+	  LOGE("Failed to seed AI QA bot bank account");
 	  ret_code = -1;
 	  goto cleanup;
 	}
@@ -3051,8 +3047,8 @@ db_create_tables_unlocked (bool schema_exists)
       rc = sqlite3_exec (db_handle, sql_statement, 0, 0, &errmsg);
       if (rc != SQLITE_OK)
 	{
-	  fprintf (stderr, "SQL error at step %zu: %s\n", i, errmsg);
-	  fprintf (stderr, "Failing SQL: %s\n", sql_statement);
+	  LOGE("SQL error at step %zu: %s", i, errmsg);
+	  LOGE("Failing SQL: %s", sql_statement);
 	  sqlite3_free (errmsg);
 	  return -1;
 	}
@@ -3133,7 +3129,7 @@ db_create (const char *table, json_t *row)
     }
 
   /* TODO: Build INSERT SQL dynamically based on JSON keys/values */
-  fprintf (stderr, "db_create(%s, row) called (not implemented)\n", table);
+  LOGE("db_create(%s, row) called (not implemented)", table);
 
   ret_code = 0;			// Assuming success for the placeholder
 
@@ -3158,7 +3154,7 @@ db_read (const char *table, int id)
     }
 
   /* TODO: Prepare SELECT ... WHERE id=? and return json_t * */
-  fprintf (stderr, "db_read(%s, %d) called (not implemented)\n", table, id);
+  LOGE("db_read(%s, %d) called (not implemented)", table, id);
 
   // result should be set here on success
 
@@ -3183,8 +3179,7 @@ db_update (const char *table, int id, json_t *row)
     }
 
   /* TODO: Build UPDATE SQL dynamically */
-  fprintf (stderr, "db_update(%s, %d, row) called (not implemented)\n", table,
-	   id);
+  LOGE("db_update(%s, %d, row) called (not implemented)", table, id);
 
   ret_code = 0;			// Assuming success for the placeholder
 
@@ -3209,7 +3204,7 @@ db_delete (const char *table, int id)
     }
 
   /* TODO: Prepare DELETE ... WHERE id=? */
-  fprintf (stderr, "db_delete(%s, %d) called (not implemented)\n", table, id);
+  LOGE("db_delete(%s, %d) called (not implemented)", table, id);
 
   ret_code = 0;			// Assuming success for the placeholder
 
@@ -3292,7 +3287,7 @@ rollback:
 fail:
   if (errmsg)
     {
-      fprintf (stderr, "[DB] auth schema: %s\n", errmsg);
+      LOGE("[DB] auth schema: %s", errmsg);
       sqlite3_free (errmsg);
     }
   return rc;
@@ -3776,7 +3771,7 @@ rollback:
 fail:
   if (errmsg)
     {
-      fprintf (stderr, "[DB] idempotency schema: %s\n", errmsg);
+      LOGE("[DB] idempotency schema: %s", errmsg);
       sqlite3_free (errmsg);
     }
   return rc;
@@ -4949,7 +4944,7 @@ int db_player_set_alignment(int player_id, int alignment) {
     static const char *SQL_UPDATE_ALIGNMENT = "UPDATE players SET alignment = ? WHERE id = ?;";
     rc = sqlite3_prepare_v2(db, SQL_UPDATE_ALIGNMENT, -1, &stmt, NULL);
     if (rc != SQLITE_OK) {
-        fprintf(stderr, "ERROR: db_player_set_alignment prepare failed: %s\n", sqlite3_errmsg(db));
+        LOGE("ERROR: db_player_set_alignment prepare failed: %s", sqlite3_errmsg(db));
         goto cleanup;
     }
 
@@ -4958,7 +4953,7 @@ int db_player_set_alignment(int player_id, int alignment) {
 
     rc = sqlite3_step(stmt);
     if (rc != SQLITE_DONE) {
-        fprintf(stderr, "ERROR: db_player_set_alignment execution failed: %s\n", sqlite3_errmsg(db));
+        LOGE("ERROR: db_player_set_alignment execution failed: %s", sqlite3_errmsg(db));
         goto cleanup;
     }
 
@@ -6475,7 +6470,7 @@ db_ship_claim (int player_id, int sector_id, int ship_id, json_t **out_ship)
 rollback:
   /* We only come here after BEGIN succeeded */
   const char *err = sqlite3_errmsg (db_handle);
-  fprintf (stderr, "%s\n", err);
+  LOGE("%s", err);
   sqlite3_exec (db_handle, "ROLLBACK", NULL, NULL, NULL);
   if (stmt)
     {
@@ -6929,8 +6924,7 @@ db_ensure_ship_perms_column_unlocked (void)
 			 NULL, NULL, &errmsg);
       if (rc != SQLITE_OK)
 	{
-	  fprintf (stderr, "ALTER TABLE ships ADD COLUMN perms failed: %s\n",
-		   errmsg ? errmsg : "(unknown)");
+	  LOGE("ALTER TABLE ships ADD COLUMN perms failed: %s", errmsg ? errmsg : "(unknown)");
 	  sqlite3_free (errmsg);
 	  return rc;
 	}
@@ -6976,7 +6970,7 @@ db_sector_scan_core (int sector_id, json_t **out_obj)
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
-      fprintf (stderr, "[scan_core] prepare failed (sector=%d): %s\n",
+      LOGE("[scan_core] prepare failed (sector=%d): %s",
 	       sector_id, sqlite3_errmsg (db));
       goto done;
     }
@@ -7299,22 +7293,22 @@ int db_news_insert_feed_item(int ts, const char *category, const char *scope,
   if (context_data) {
       context_str = json_dumps(context_data, JSON_COMPACT);
       if (!context_str) {
-          fprintf(stderr, "ERROR: db_news_insert_feed_item Failed to serialize context_data.\n");
+          LOGE("ERROR: db_news_insert_feed_item Failed to serialize context_data.");
           goto cleanup;
       }
       if (asprintf(&article_text, "HEADLINE: %s\nBODY: %s\nCONTEXT: %s", headline, body, context_str) == -1) {
-          fprintf(stderr, "ERROR: db_news_insert_feed_item Failed to allocate article_text with context.\n");
+          LOGE("ERROR: db_news_insert_feed_item Failed to allocate article_text with context.");
           goto cleanup;
       }
   } else {
       if (asprintf(&article_text, "HEADLINE: %s\nBODY: %s", headline, body) == -1) {
-          fprintf(stderr, "ERROR: db_news_insert_feed_item Failed to allocate article_text without context.\n");
+          LOGE("ERROR: db_news_insert_feed_item Failed to allocate article_text without context.");
           goto cleanup;
       }
   }
 
   if (!article_text) {
-      fprintf(stderr, "ERROR: db_news_insert_feed_item Failed to allocate article_text.\n");
+      LOGE("ERROR: db_news_insert_feed_item Failed to allocate article_text.");
       goto cleanup;
   }
 
@@ -7325,7 +7319,7 @@ int db_news_insert_feed_item(int ts, const char *category, const char *scope,
   rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
-      fprintf (stderr, "ERROR: db_news_insert_feed_item prepare failed: %s\n", sqlite3_errmsg (db));
+      LOGE("ERROR: db_news_insert_feed_item prepare failed: %s", sqlite3_errmsg (db));
       goto cleanup;
     }
 
@@ -7337,7 +7331,7 @@ int db_news_insert_feed_item(int ts, const char *category, const char *scope,
   rc = sqlite3_step (stmt);
   if (rc != SQLITE_DONE)
     {
-      fprintf (stderr, "ERROR: db_news_insert_feed_item execution failed: %s\n", sqlite3_errmsg (db));
+      LOGE("ERROR: db_news_insert_feed_item execution failed: %s", sqlite3_errmsg (db));
       rc = SQLITE_ERROR;
     }
   else

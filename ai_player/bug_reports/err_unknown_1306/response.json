@@ -1,0 +1,19 @@
+{
+    "id": "srv-err",
+    "reply_to": "c-009e2e92",
+    "ts": "2025-11-16T11:25:30Z",
+    "status": "error",
+    "type": "error",
+    "error": {
+        "code": 1306,
+        "message": "Missing required field"
+    },
+    "data": null,
+    "meta": {
+        "rate_limit": {
+            "limit": 60,
+            "remaining": 60,
+            "reset": 60
+        }
+    }
+}

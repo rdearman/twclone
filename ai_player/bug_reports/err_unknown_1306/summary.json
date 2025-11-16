@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_unknown_1306",
+    "first_seen": "20251116_112531_001",
+    "command": "unknown",
+    "error_code": 1306,
+    "error_message": "Missing required field"
+}

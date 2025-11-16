@@ -7,6 +7,7 @@
 #include "database.h"
 #include "server_communication.h"	// (optional if you want to also emit immediately)
 #include "engine_consumer.h"
+#include "server_log.h"
 
 
 
@@ -157,7 +158,7 @@ handle_ship_self_destruct_initiated (sqlite3 *db, sqlite3_stmt *ev_row)
   json_t *payload = json_loads (payload_str, 0, &jerr);
   if (!payload)
     {
-      fprintf (stderr, "Error parsing JSON payload for self-destruct: %s\n", jerr.text);
+      LOGE("Error parsing JSON payload for self-destruct: %s", jerr.text);
       return 1; // Quarantine
     }
 
@@ -176,7 +177,7 @@ handle_ship_self_destruct_initiated (sqlite3 *db, sqlite3_stmt *ev_row)
   }
 
   if (ship_id == 0) {
-    fprintf(stderr, "Error: Player %d has no active ship to self-destruct.\n", player_id);
+    LOGE("Error: Player %d has no active ship to self-destruct.", player_id);
     json_decref(payload);
     return 1; // Quarantine
   }
@@ -198,7 +199,7 @@ handle_ship_self_destruct_initiated (sqlite3 *db, sqlite3_stmt *ev_row)
   // Perform ship destruction
   rc = db_destroy_ship(db, player_id, ship_id);
   if (rc != SQLITE_OK) {
-    fprintf(stderr, "Error destroying ship %d for player %d: %s\n", ship_id, player_id, sqlite3_errmsg(db));
+    LOGE("Error destroying ship %d for player %d: %s", ship_id, player_id, sqlite3_errmsg(db));
     json_decref(payload);
     return 1; // Quarantine
   }
@@ -209,7 +210,7 @@ handle_ship_self_destruct_initiated (sqlite3 *db, sqlite3_stmt *ev_row)
                                         "ship_id", ship_id,
                                         "ship_name", ship_name);
   if (!destroyed_payload) {
-    fprintf(stderr, "Error creating ship.destroyed payload.\n");
+    LOGE("Error creating ship.destroyed payload.");
     json_decref(payload);
     return 1; // Quarantine
   }

@@ -4,6 +4,7 @@
 #include "schemas.h"
 #include <stdlib.h>
 #include <string.h>
+#include "server_log.h"
 
 /*
  * =============================================================================
@@ -605,7 +606,7 @@ schema_validate_payload (const char *type, json_t *payload, char **why)
    */
     /* Use the 'payload' variable, which exists in this function */
     char *dump = json_dumps(payload, 0);
-    fprintf(stderr, "[VALIDATOR] Checking 'sector.set_beacon' with payload: %s\n", dump ? dump : "(null)");
+    LOGD("[VALIDATOR] Checking 'sector.set_beacon' with payload: %s", dump ? dump : "(null)");
     free(dump);
 
   /* ===================================================================

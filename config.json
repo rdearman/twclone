@@ -1,0 +1,32 @@
+{
+  "game_host": "127.0.0.1",
+  "game_port": 1234,
+  "ollama_model": "llama3",
+  "log_file": "ai_player.log",
+  "state_file": "state.json",
+  "bug_report_dir": "bugs",
+  "player_username": "ai_qa_bot",
+  "player_password": "quality",
+  "client_version": "AI_QA_Bot/1.1",
+  "initial_credits": 10000.0,
+  "cooldown_seconds": 15,
+  "max_retries_per_command": 3,
+  "trade_retry_cooldown": 300,
+  "qa_mode": true,
+  "qa_focus_commands": ["trade.buy", "trade.sell", "bank.deposit", "move.warp", "sector.info", "trade.port_info", "trade.quote"],
+  "random_seed": 42,
+  "reward_weights": {
+    "errors": -10.0,
+    "new_working_command": 5.0,
+    "new_error_code": 5.0,
+    "new_sector": 10.0,
+    "new_port": 15.0,
+    "new_port_class": 7.5,
+    "new_special_port": 10.0,
+    "new_zone": 10.0,
+    "trade_profit_loss": 0.01,
+    "credits_change": 0.001
+  },
+  "petty_cash_threshold_deposit": 6300,
+  "petty_cash_threshold_withdraw": 2500
+}

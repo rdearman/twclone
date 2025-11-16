@@ -1,6 +1,46 @@
 import json
 import re
 import sys # Import sys for stderr
+from typing import Any
+
+def _generate_schema_from_example(example_data: dict) -> dict:
+    """
+    Generates a basic JSON schema from an example dictionary.
+    Infers types and marks all top-level fields as required.
+    """
+    if not example_data:
+        return {"type": "object", "properties": {}}
+
+    properties = {}
+    required = []
+    for key, value in example_data.items():
+        properties[key] = {"type": _get_json_schema_type(value)}
+        required.append(key)
+    
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": required
+    }
+
+def _get_json_schema_type(value: Any) -> str:
+    """Infers JSON schema type from a Python value."""
+    if isinstance(value, str):
+        return "string"
+    elif isinstance(value, int):
+        return "integer"
+    elif isinstance(value, float):
+        return "number"
+    elif isinstance(value, bool):
+        return "boolean"
+    elif isinstance(value, list):
+        # For simplicity, assume array of any type for now
+        return "array"
+    elif isinstance(value, dict):
+        # Recursively generate schema for nested objects
+        return _generate_schema_from_example(value)
+    else:
+        return "string" # Default to string for unknown types
 
 def parse_protocol_markdown(filepath):
     commands_detailed = {} # Use a dict to easily handle duplicates and prioritize detailed info
@@ -46,56 +86,28 @@ def parse_protocol_markdown(filepath):
         try:
             request_example_json = json.loads(request_json_str)
             print(f"[DEBUG PARSER] Parsed request example JSON for {command_name_raw}:\n{json.dumps(request_example_json, indent=2)}", file=sys.stderr)
-            request_data_schema = request_example_json.get("data", {})
             
-            formatted_request_data_schema = {}
-            if request_data_schema:
-                for key, value in request_data_schema.items():
-                    if isinstance(value, str):
-                        formatted_request_data_schema[key] = "<string>"
-                    elif isinstance(value, int):
-                        formatted_request_data_schema[key] = "<integer>"
-                    elif isinstance(value, float):
-                        formatted_request_data_schema[key] = "<float>"
-                    elif isinstance(value, bool):
-                        formatted_request_data_schema[key] = "<boolean>"
-                    elif isinstance(value, list):
-                        formatted_request_data_schema[key] = "<array>"
-                    elif isinstance(value, dict):
-                        formatted_request_data_schema[key] = "<object>"
-                    else:
-                        formatted_request_data_schema[key] = "<any>"
+            # Store the 'data' part of the request example as the request_schema
+            request_data_example = request_example_json.get("data", {})
+            request_schema_obj = _generate_schema_from_example(request_data_example)
             
-            formatted_response_data_schema = {}
+            response_schema_obj = {}
+            response_type = None
             if response_json_str:
                 response_example_json = json.loads(response_json_str)
                 print(f"[DEBUG PARSER] Parsed response example JSON for {command_name_raw}:\n{json.dumps(response_example_json, indent=2)}", file=sys.stderr)
-                response_data_schema = response_example_json.get("data", {})
+                
+                # Store the 'data' part of the response example as the response_schema
+                response_data_example = response_example_json.get("data", {})
+                response_schema_obj = _generate_schema_from_example(response_data_example)
                 response_type = response_example_json.get("type")
-
-                if response_data_schema:
-                    for key, value in response_data_schema.items():
-                        if isinstance(value, str):
-                            formatted_response_data_schema[key] = "<string>"
-                        elif isinstance(value, int):
-                            formatted_response_data_schema[key] = "<integer>"
-                        elif isinstance(value, float):
-                            formatted_response_data_schema[key] = "<float>"
-                        elif isinstance(value, bool):
-                            formatted_response_data_schema[key] = "<boolean>"
-                        elif isinstance(value, list):
-                            formatted_response_data_schema[key] = "<array>"
-                        elif isinstance(value, dict):
-                            formatted_response_data_schema[key] = "<object>"
-                        else:
-                            formatted_response_data_schema[key] = "<any>"
 
             for command_name in command_names:
                 commands_detailed[command_name] = {
                     "name": command_name,
                     "description": description,
-                    "request_schema": json.dumps(formatted_request_data_schema, indent=2),
-                    "response_schema": json.dumps(formatted_response_data_schema, indent=2),
+                    "request_schema": json.dumps(request_schema_obj, indent=2), # Store as JSON string
+                    "response_schema": json.dumps(response_schema_obj, indent=2), # Store as JSON string
                     "response_type": response_type # Store the response type
                 }
         except json.JSONDecodeError as e:
@@ -141,16 +153,8 @@ def parse_protocol_markdown(filepath):
             
     return final_commands
 
-def format_commands_for_llm(commands):
-    formatted_string = "### Available Game Commands:\n\n"
-    for i, cmd in enumerate(commands):
-        formatted_string += f"**{i+1}. `{cmd['name']}`**\n"
-        formatted_string += f"   - Description: {cmd['description']}\n"
-        formatted_string += f"   - Data Schema: ```json\n{cmd['data_schema']}\n```\n\n"
-    return formatted_string
-
 if __name__ == "__main__":
     protocol_filepath = '/home/rick/twclone/docs/PROTOCOL.v2.md'
     extracted_commands = parse_protocol_markdown(protocol_filepath)
-    llm_protocol_string = format_commands_for_llm(extracted_commands)
-    print(llm_protocol_string)
+    # Optionally, print the extracted commands for verification
+    # print(json.dumps(extracted_commands, indent=2))

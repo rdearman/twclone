@@ -776,7 +776,7 @@ int uncloak_ships_in_fedspace(sqlite3 *db) {
     rc = sqlite3_exec(db, sql, ship_callback, &cloaked_ship_count, &err_msg);
 
     if (rc != SQLITE_OK) {
-        fprintf(stderr, "SQL error: %s\n", err_msg);
+        LOGE("SQL error: %s", err_msg);
         sqlite3_free(err_msg);
         return -1;
     } 

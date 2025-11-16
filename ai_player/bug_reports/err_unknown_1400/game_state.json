@@ -1,0 +1,86 @@
+{
+    "session_id": "a480f53661d38b9762ea5a893c0f5452c9d055a45b506178d9a7f11a7d4b5703",
+    "player_info": {
+        "player": {
+            "id": 4,
+            "number": 8,
+            "name": "ai_qa_bot",
+            "turns_remaining": 120
+        },
+        "ship": {
+            "id": 2,
+            "number": 2,
+            "name": "QA Bot 1",
+            "type": {
+                "id": 0,
+                "name": "25"
+            },
+            "holds": 250,
+            "fighters": 176,
+            "location": {
+                "sector_id": 176,
+                "sector_name": "Alpha Cap"
+            },
+            "owner": {
+                "id": 4,
+                "name": "ai_qa_bot"
+            },
+            "cargo": {
+                "ore": 0,
+                "organics": 0,
+                "equipment": 0,
+                "colonists": 0
+            }
+        }
+    },
+    "ship_info": {
+        "id": 2,
+        "number": 2,
+        "name": "QA Bot 1",
+        "type": {
+            "id": 0,
+            "name": "25"
+        },
+        "holds": 250,
+        "fighters": 176,
+        "location": {
+            "sector_id": 176,
+            "sector_name": "Alpha Cap"
+        },
+        "owner": {
+            "id": 4,
+            "name": "ai_qa_bot"
+        },
+        "cargo": {
+            "ore": 0,
+            "organics": 0,
+            "equipment": 0,
+            "colonists": 0
+        }
+    },
+    "player_location_sector": 176,
+    "sector_data": {},
+    "port_info_by_sector": {},
+    "price_cache": {},
+    "bank_balance": 0,
+    "command_retry_info": {
+        "player.my_info": {
+            "next_retry_time": 1763284831.294132
+        },
+        "ship.info": {
+            "next_retry_time": 1763284831.799781
+        },
+        "unknown": {
+            "failures": 1,
+            "next_retry_time": 1763284858.021954
+        }
+    },
+    "strategy_plan": [
+        "goto: 175",
+        "sell: ORGANICS",
+        "buy: ORE",
+        "sell: ORGANICS",
+        "goto: 270"
+    ],
+    "trade_successful": false
+}

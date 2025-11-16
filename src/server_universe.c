@@ -39,10 +39,10 @@ static sqlite3 *g_fer_db = NULL;	/* <- cached here for trader helpers */
 
 /* Fallback logging macros  */
 #ifndef INFO_LOG
-#define INFO_LOG(...) do { fprintf(stderr, __VA_ARGS__); fputc('\n', stderr); } while (0)
+#define INFO_LOG(...) server_log_printf(LOG_INFO, __VA_ARGS__)
 #endif
 #ifndef WARN_LOG
-#define WARN_LOG(...) do { fprintf(stderr, __VA_ARGS__); fputc('\n', stderr); } while (0)
+#define WARN_LOG(...) server_log_printf(LOG_WARNING, __VA_ARGS__)
 #endif
 
 
