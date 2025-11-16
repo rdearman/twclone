@@ -42,6 +42,8 @@ Makefile.in
 /bin/
 */.deps/
 */.libs/
+ai_player/coverage_reports/
+
 
 # Test outputs
 *.trs

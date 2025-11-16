@@ -44,3 +44,6 @@
 2025-11-16 12:45:17,960 - state_manager - WARNING - Command unknown failed 2 time(s). Backing off for 20 sec.
 2025-11-16 12:45:17,961 - root - ERROR - Goal-related error: Missing required field. Clearing plan.
 2025-11-16 12:45:17,968 - root - INFO - Strategy plan is empty. Requesting a new one from LLM.
+2025-11-16 12:46:20,686 - root - INFO - Shutdown signal received. Exiting.
+2025-11-16 12:46:20,688 - root - INFO - Disconnected from game server.
+2025-11-16 12:46:20,689 - root - INFO - Bot has shut down.

@@ -1,7 +1,0 @@
-{
-    "bug_id": "err_unknown_1400",
-    "first_seen": "20251116_092048_027",
-    "command": "unknown",
-    "error_code": 1400,
-    "error_message": "Unknown command"
-}
