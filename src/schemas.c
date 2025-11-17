@@ -1857,17 +1857,33 @@ static json_t *
 schema_player_info (void)
 {
   json_t *player_props = json_pack(
-      "{s:o, s:o, s:o, s:o}",
+      "{s:o, s:o, s:o, s:o, s:o}", // Added one more 'o' for bank_balance
       "id", json_pack("{s:s}", "type", "integer"),
       "username", json_pack("{s:s}", "type", "string"),
-      "credits", json_pack("{s:s}", "type", "string"), // String for decimal
-      "experience", json_pack("{s:s}", "type", "integer")
+      "credits", json_pack("{s:s}", "type", "string"), // Petty cash (on hand)
+      "experience", json_pack("{s:s}", "type", "integer"),
+      "bank_balance", json_pack("{s:s}", "type", "string") // Bank account balance
+  );
+
+  json_t *cargo_item_props = json_pack(
+      "{s:o, s:o}",
+      "commodity", json_pack("{s:s}", "type", "string"),
+      "quantity",  json_pack("{s:s}", "type", "integer")
+  );
+
+  json_t *cargo_item_schema = json_pack(
+      "{s:s, s:o, s:[s,s], s:b}",
+      "type", "object",
+      "properties", cargo_item_props,
+      "required", json_pack("[s,s]", "commodity", "quantity"),
+      "additionalProperties", json_false()
   );
 
   json_t *holds_props = json_pack(
-      "{s:o, s:o}",
+      "{s:o, s:o, s:o}", // Added one more 'o' for cargo array
       "capacity", json_pack("{s:s}", "type", "integer"),
-      "current", json_pack("{s:s}", "type", "integer")
+      "current", json_pack("{s:s}", "type", "integer"),
+      "cargo", json_pack("{s:s, s:o}", "type", "array", "items", cargo_item_schema)
   );
 
   json_t *ship_props = json_pack(
@@ -1876,6 +1892,16 @@ schema_player_info (void)
       "name", json_pack("{s:s}", "type", "string"),
       "class", json_pack("{s:s}", "type", "string"),
       "holds", json_pack("{s:s, s:o}", "type", "object", "properties", holds_props)
+  );
+
+  json_t *ship_array_schema = json_pack(
+      "{s:s, s:o}",
+      "type", "array",
+      "items", json_pack("{s:s, s:o, s:[s,s,s,s], s:b}",
+                         "type", "object",
+                         "properties", ship_props,
+                         "required", json_pack("[s,s,s,s]", "id", "name", "class", "holds"),
+                         "additionalProperties", json_false())
   );
 
   json_t *location_props = json_pack(
@@ -1887,11 +1913,11 @@ schema_player_info (void)
   json_t *data_properties = json_pack(
       "{s:o, s:o, s:o}",
       "player", json_pack("{s:s, s:o}", "type", "object", "properties", player_props),
-      "ship", json_pack("{s:s, s:o}", "type", "object", "properties", ship_props),
+      "ships", json_pack("{s:s, s:o}", "type", "array", "items", ship_array_schema), // Changed from "ship" to "ships" (array)
       "location", json_pack("{s:s, s:o}", "type", "object", "properties", location_props)
   );
 
-  json_t *data_required = json_pack("[s,s,s]", "player", "ship", "location");
+  json_t *data_required = json_pack("[s,s,s]", "player", "ships", "location"); // Changed from "ship" to "ships"
 
   json_t *data_schema = json_pack(
       "{s:s, s:s, s:s, s:o, s:o, s:b}",

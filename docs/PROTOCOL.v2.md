@@ -438,23 +438,38 @@ For asynchronous events pushed to the client (not in response to a specific comm
           "username": "player1",
           "credits": "10000.00",
           "experience": 5000,
+          "bank_balance": "50000.00",
           "corporation": {
             "id": 101,
             "name": "StarTraders Inc."
           }
         },
-        "ship": {
-          "id": 54321,
-          "name": "Stardust Cruiser",
-          "class": "Freighter",
-          "holds": {
-            "capacity": 100,
-            "current": 50,
-            "cargo": [
-              { "commodity": "ore", "quantity": 50 }
-            ]
+        "ships": [
+          {
+            "id": 54321,
+            "name": "Stardust Cruiser",
+            "class": "Freighter",
+            "holds": {
+              "capacity": 100,
+              "current": 50,
+              "cargo": [
+                { "commodity": "ore", "quantity": 50 }
+              ]
+            }
+          },
+          {
+            "id": 54322,
+            "name": "Explorer I",
+            "class": "Scout",
+            "holds": {
+              "capacity": 20,
+              "current": 5,
+              "cargo": [
+                { "commodity": "equipment", "quantity": 5 }
+              ]
+            }
           }
-        },
+        ],
         "location": {
           "sector": 1,
           "name": "Sol"
