@@ -1856,13 +1856,23 @@ schema_player_my_info (void)
 static json_t *
 schema_player_info (void)
 {
+  json_t *corporation_props = json_pack(
+      "{s:o, s:o}",
+      "id", json_pack("{s:s}", "type", "integer"),
+      "name", json_pack("{s:s}", "type", "string")
+  );
+
   json_t *player_props = json_pack(
-      "{s:o, s:o, s:o, s:o, s:o}", // Added one more 'o' for bank_balance
+      "{s:o, s:o, s:o, s:o, s:o, s:o, s:o, s:o, s:o}", // Added alignment, score, last_news_read_timestamp, corporation
       "id", json_pack("{s:s}", "type", "integer"),
       "username", json_pack("{s:s}", "type", "string"),
       "credits", json_pack("{s:s}", "type", "string"), // Petty cash (on hand)
       "experience", json_pack("{s:s}", "type", "integer"),
-      "bank_balance", json_pack("{s:s}", "type", "string") // Bank account balance
+      "alignment", json_pack("{s:s}", "type", "integer"),
+      "score", json_pack("{s:s}", "type", "integer"),
+      "last_news_read_timestamp", json_pack("{s:s}", "type", "integer"),
+      "bank_balance", json_pack("{s:s}", "type", "string"), // Bank account balance
+      "corporation", json_pack("{s:s, s:o}", "type", "object", "properties", corporation_props)
   );
 
   json_t *cargo_item_props = json_pack(
@@ -1880,34 +1890,60 @@ schema_player_info (void)
   );
 
   json_t *holds_props = json_pack(
-      "{s:o, s:o, s:o}", // Added one more 'o' for cargo array
+      "{s:o, s:o, s:o}",
       "capacity", json_pack("{s:s}", "type", "integer"),
       "current", json_pack("{s:s}", "type", "integer"),
       "cargo", json_pack("{s:s, s:o}", "type", "array", "items", cargo_item_schema)
   );
 
   json_t *ship_props = json_pack(
-      "{s:o, s:o, s:o, s:o}",
+      "{s:o, s:o, s:o, s:o, s:o, s:o, s:o, s:o, s:o, s:o, s:o, s:o, s:o, s:o, s:o, s:o, s:o, s:o, s:o, s:o, s:o, s:o, s:o, s:o, s:o, s:o}", // Updated count for new fields
       "id", json_pack("{s:s}", "type", "integer"),
       "name", json_pack("{s:s}", "type", "string"),
-      "class", json_pack("{s:s}", "type", "string"),
-      "holds", json_pack("{s:s, s:o}", "type", "object", "properties", holds_props)
+      "type_id", json_pack("{s:s}", "type", "integer"),
+      "type_name", json_pack("{s:s}", "type", "string"), // From shiptypes
+      "attack", json_pack("{s:s}", "type", "integer"),
+      "holds", json_pack("{s:s, s:o}", "type", "object", "properties", holds_props),
+      "mines", json_pack("{s:s}", "type", "integer"),
+      "limpets", json_pack("{s:s}", "type", "integer"),
+      "fighters", json_pack("{s:s}", "type", "integer"),
+      "genesis", json_pack("{s:s}", "type", "integer"),
+      "photons", json_pack("{s:s}", "type", "integer"),
+      "sector", json_pack("{s:s}", "type", "integer"),
+      "shields", json_pack("{s:s}", "type", "integer"),
+      "beacons", json_pack("{s:s}", "type", "integer"),
+      "colonists", json_pack("{s:s}", "type", "integer"),
+      "equipment", json_pack("{s:s}", "type", "integer"),
+      "organics", json_pack("{s:s}", "type", "integer"),
+      "ore", json_pack("{s:s}", "type", "integer"),
+      "flags", json_pack("{s:s}", "type", "integer"),
+      "cloaking_devices", json_pack("{s:s}", "type", "integer"),
+      "cloaked", json_pack("{s:s}", "type", "string"), // TIMESTAMP
+      "ported", json_pack("{s:s}", "type", "integer"),
+      "onplanet", json_pack("{s:s}", "type", "integer"),
+      "destroyed", json_pack("{s:s}", "type", "integer"),
+      "is_primary", json_pack("{s:s}", "type", "integer"), // From ship_ownership
+      "acquired_at", json_pack("{s:s}", "type", "integer")  // From ship_ownership
   );
 
   json_t *ship_array_schema = json_pack(
       "{s:s, s:o}",
       "type", "array",
-      "items", json_pack("{s:s, s:o, s:[s,s,s,s], s:b}",
+      "items", json_pack("{s:s, s:o, s:[s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s], s:b}", // Updated required fields count
                          "type", "object",
                          "properties", ship_props,
-                         "required", json_pack("[s,s,s,s]", "id", "name", "class", "holds"),
+                         "required", json_pack("[s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s]",
+                                               "id", "name", "type_id", "type_name", "attack", "holds", "mines", "limpets",
+                                               "fighters", "genesis", "photons", "sector", "shields", "beacons", "colonists",
+                                               "equipment", "organics", "ore", "flags", "cloaking_devices", "cloaked",
+                                               "ported", "onplanet", "destroyed", "is_primary", "acquired_at"),
                          "additionalProperties", json_false())
   );
 
   json_t *location_props = json_pack(
       "{s:o, s:o}",
-      "sector", json_pack("{s:s}", "type", "integer"),
-      "name", json_pack("{s:s}", "type", "string")
+      "sector_id", json_pack("{s:s}", "type", "integer"), // Renamed to sector_id for clarity
+      "sector_name", json_pack("{s:s}", "type", "string") // Added sector_name
   );
 
   json_t *data_properties = json_pack(

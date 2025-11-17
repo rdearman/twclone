@@ -438,6 +438,9 @@ For asynchronous events pushed to the client (not in response to a specific comm
           "username": "player1",
           "credits": "10000.00",
           "experience": 5000,
+          "alignment": 0,
+          "score": 123456,
+          "last_news_read_timestamp": 1678886400,
           "bank_balance": "50000.00",
           "corporation": {
             "id": 101,
@@ -448,31 +451,75 @@ For asynchronous events pushed to the client (not in response to a specific comm
           {
             "id": 54321,
             "name": "Stardust Cruiser",
-            "class": "Freighter",
+            "type_id": 1,
+            "type_name": "Freighter",
+            "attack": 10,
             "holds": {
               "capacity": 100,
               "current": 50,
               "cargo": [
                 { "commodity": "ore", "quantity": 50 }
               ]
-            }
+            },
+            "mines": 0,
+            "limpets": 0,
+            "fighters": 0,
+            "genesis": 0,
+            "photons": 0,
+            "sector": 1,
+            "shields": 50,
+            "beacons": 0,
+            "colonists": 0,
+            "equipment": 0,
+            "organics": 0,
+            "ore": 50,
+            "flags": 0,
+            "cloaking_devices": 0,
+            "cloaked": null,
+            "ported": 1,
+            "onplanet": 0,
+            "destroyed": 0,
+            "is_primary": 1,
+            "acquired_at": 1678886400
           },
           {
             "id": 54322,
             "name": "Explorer I",
-            "class": "Scout",
+            "type_id": 2,
+            "type_name": "Scout",
+            "attack": 5,
             "holds": {
               "capacity": 20,
               "current": 5,
               "cargo": [
                 { "commodity": "equipment", "quantity": 5 }
               ]
-            }
+            },
+            "mines": 0,
+            "limpets": 0,
+            "fighters": 0,
+            "genesis": 0,
+            "photons": 0,
+            "sector": 1,
+            "shields": 20,
+            "beacons": 0,
+            "colonists": 0,
+            "equipment": 5,
+            "organics": 0,
+            "ore": 0,
+            "flags": 0,
+            "cloaking_devices": 0,
+            "cloaked": null,
+            "ported": 1,
+            "onplanet": 0,
+            "destroyed": 0,
+            "is_primary": 0,
+            "acquired_at": 1678886400
           }
         ],
         "location": {
-          "sector": 1,
-          "name": "Sol"
+          "sector_id": 1,
+          "sector_name": "Sol"
         }
       }
     }
