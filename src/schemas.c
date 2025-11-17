@@ -95,6 +95,7 @@ static json_t *schema_planet_withdraw (void);
 static json_t *schema_player_set_trade_account_preference (void);
 static json_t *schema_player_my_info (void);
 static json_t *schema_player_info (void);
+static json_t *schema_bank_balance (void);
 
 
 
@@ -332,6 +333,8 @@ schema_get (const char *key)
     return schema_player_my_info ();
   else if (strcasecmp (key, "player.info") == 0) // This is the response type for player.my_info
     return schema_player_info ();
+  else if (strcasecmp (key, "bank.balance") == 0)
+    return schema_bank_balance ();
 
 
 
@@ -499,6 +502,7 @@ schema_keys (void)
   json_array_append_new (keys, json_string ("player.set_trade_account_preference"));
   json_array_append_new (keys, json_string ("player.my_info"));
   json_array_append_new (keys, json_string ("player.info"));
+  json_array_append_new (keys, json_string ("bank.balance"));
 
 
 
@@ -1305,10 +1309,11 @@ schema_move_describe_sector (void)
 static json_t *
 schema_move_scan (void)
 {
-  /* TODO: Implement this schema */
-  return json_pack ("{s:s, s:s}",
+  return json_pack ("{s:s, s:s, s:s, s:o}",
                     "$id", "ge://schema/move.scan.json",
-                    "$comment", "Schema not yet implemented");
+                    "$schema", "https://json-schema.org/draft/2020-12/schema",
+                    "type", "object",
+                    "properties", json_object());
 }
 
 static json_t *
@@ -1971,3 +1976,19 @@ schema_player_info (void)
 
   return data_schema;
 }
+
+static json_t *
+schema_bank_balance (void)
+{
+    json_t *data_schema = json_pack(
+        "{s:s, s:s, s:s, s:o, s:o, s:b}",
+        "$id",      "ge://schema/bank.balance.json",
+        "$schema",  "https://json-schema.org/draft/2020-12/schema",
+        "type",     "object",
+        "properties", json_object(),
+        "required", json_array(),
+        "additionalProperties", json_false());
+
+    return data_schema;
+}
+

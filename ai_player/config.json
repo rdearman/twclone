@@ -7,7 +7,7 @@
     "player_username": "ai_qa_bot",
     "player_password": "quality",
     "client_version": "AI_QA_Bot/1.1",
-    "protocol_doc_path": "docs/PROTOCOL.v2.md",
+    "protocol_doc_path": "../docs/PROTOCOL.v2.md",
     "cooldown_seconds": 15,
     "max_port_info_failures": 3,
     "qa_mode": true,

@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 # --- Configuration ---
 # You might want to move these to your config.json eventually
 OLLAMA_API_URL = "http://localhost:11434/api/generate"
-DEFAULT_MODEL = "llama3:latest"
+DEFAULT_MODEL = "llama3.1"
 REQUEST_TIMEOUT = 120  # 2 minutes
 
 def get_ollama_response(game_state, model=None, prompt_key=None, override_prompt=None):
@@ -30,7 +30,7 @@ def get_ollama_response(game_state, model=None, prompt_key=None, override_prompt
         # We must serialize the game_state to a compact JSON string
         try:
             state_str = json.dumps(game_state, separators=(',', ':'))
-            full_prompt = override_prompt.format(game_state=state_str)
+            full_prompt = override_prompt.replace("{game_state}", state_str)
         except Exception as e:
             logger.error(f"Failed to serialize game state for LLM: {e}")
             return None

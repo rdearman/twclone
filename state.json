@@ -1,0 +1,75 @@
+{
+    "session_id": "b1df6681b43e99ca266c3238d44a43237521421910202672224defcaba7f4f64",
+    "player_info": {
+        "player": {
+            "id": 4,
+            "number": 8,
+            "name": "ai_qa_bot",
+            "turns_remaining": 9999646
+        },
+        "ship": {
+            "id": 2,
+            "number": 2,
+            "name": "QA Bot 1",
+            "type": {
+                "id": 0,
+                "name": "25"
+            },
+            "holds": 25,
+            "fighters": 250,
+            "location": {
+                "sector_id": 115,
+                "sector_name": "Uncharted Space"
+            },
+            "owner": {
+                "id": 4,
+                "name": "ai_qa_bot"
+            },
+            "cargo": {
+                "ore": 0,
+                "organics": 0,
+                "equipment": 0,
+                "colonists": 0
+            }
+        }
+    },
+    "ship_info": {
+        "id": 2,
+        "number": 2,
+        "name": "QA Bot 1",
+        "type": {
+            "id": 0,
+            "name": "25"
+        },
+        "holds": 25,
+        "fighters": 250,
+        "location": {
+            "sector_id": 115,
+            "sector_name": "Uncharted Space"
+        },
+        "owner": {
+            "id": 4,
+            "name": "ai_qa_bot"
+        },
+        "cargo": {
+            "ore": 0,
+            "organics": 0,
+            "equipment": 0,
+            "colonists": 0
+        }
+    },
+    "player_location_sector": 115,
+    "sector_data": {},
+    "port_info_by_sector": {},
+    "price_cache": {},
+    "bank_balance": 0,
+    "command_retry_info": {},
+    "strategy_plan": [],
+    "trade_successful": false,
+    "q_table": {},
+    "n_table": {},
+    "command_schemas": {},
+    "schema_blacklist": [],
+    "pending_schema_requests": {},
+    "player_id": 4
+}

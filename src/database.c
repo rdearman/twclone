@@ -5254,8 +5254,8 @@ int db_player_info_json (int player_id, json_t **out)
       json_object_set_new(ship_type_obj, "name", json_string(st_name));
       json_object_set_new(ship_obj, "type", ship_type_obj);
 
-      int s_holds = sqlite3_column_int (st, 9);
-      int s_fighters = sqlite3_column_int (st, 10);
+      int s_holds = sqlite3_column_int (st, 8);
+      int s_fighters = sqlite3_column_int (st, 9);
       json_object_set_new(ship_obj, "holds", json_integer(s_holds));
       json_object_set_new(ship_obj, "fighters", json_integer(s_fighters));
       

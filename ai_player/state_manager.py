@@ -2,7 +2,7 @@ import json
 import os
 import time
 import logging
-from collections import deque
+
 
 logger = logging.getLogger(__name__)
 
@@ -164,23 +164,7 @@ class StateManager:
     # --- Schema Management ---
 
     def add_schema(self, command_name, schema):
-        # --- FIX: Clean up malformed schemas from the server ---
-        if command_name in ["trade.buy", "trade.sell"]:
-            try:
-                item_schema = schema["properties"]["data"]["properties"]["items"]["items"]
-                
-                # Correct the 'required' array
-                if "required" in item_schema and "\u0001" in item_schema["required"]:
-                    logger.warning(f"Cleaning malformed 'required' array in schema for {command_name}")
-                    item_schema["required"] = ["commodity", "quantity"]
 
-                # Remove the invalid key
-                if "\u0006" in item_schema:
-                    logger.warning(f"Removing invalid key '\\u0006' from schema for {command_name}")
-                    del item_schema["\u0006"]
-
-            except KeyError as e:
-                logger.error(f"Could not clean schema for {command_name}. Structure was not as expected. Error: {e}")
 
         self.state["command_schemas"][command_name] = schema
         logger.debug(f"Added schema for {command_name}: {json.dumps(schema)}")

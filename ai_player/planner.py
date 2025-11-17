@@ -105,8 +105,7 @@ class Planner:
 
                 return {"command": "trade.sell", "data": {
                     "port_id": port_id,
-                    "commodity": commodity_to_sell,
-                    "quantity": int(quantity) 
+                    "items": [{"commodity": commodity_to_sell, "quantity": int(quantity)}]
                 }}
 
             elif goal_type == "buy":
@@ -126,9 +125,11 @@ class Planner:
 
                 return {"command": "trade.buy", "data": {
                     "port_id": port_id,
-                    "commodity": commodity_to_buy,
-                    "quantity": quantity
+                    "items": [{"commodity": commodity_to_buy, "quantity": quantity}]
                 }}
+            
+            elif goal_type == "scan" and goal_target == "density":
+                return {"command": "sector.scan.density", "data": {}}
 
         except Exception as e:
             logger.error(f"Error in _achieve_goal for '{goal_str}': {e}", exc_info=True)
@@ -212,10 +213,28 @@ class Planner:
         if not current_state.get("ship_info"):
             return {"command": "ship.info", "data": {}}
         
-        current_sector = str(current_state.get("player_location_sector"))
-        if current_sector != "None" and not current_state.get("sector_data", {}).get(current_sector):
-            logger.info(f"Invariant check: Missing sector_data for current sector {current_sector}. Fetching.")
-            return {"command": "sector.info", "data": {"sector_id": int(current_sector)}}
+        current_sector_id = current_state.get("player_location_sector")
+        if current_sector_id is not None and str(current_sector_id) != "None":
+            current_sector_data = current_state.get("sector_data", {}).get(str(current_sector_id))
+            
+            # Check for missing current sector data
+            if not current_sector_data:
+                logger.info(f"Invariant check: Missing sector_data for current sector {current_sector_id}. Fetching.")
+                return {"command": "sector.info", "data": {"sector_id": int(current_sector_id)}}
+            
+            # Check for density scan if we have the module and adjacent sectors are not fully known
+            if current_state.get("has_density_scanner"):
+                adjacent_sectors_info = current_state.get("adjacent_sectors_info", [])
+                # Check if any adjacent sector is missing density info or has_port info
+                needs_scan = False
+                for adj_info in adjacent_sectors_info:
+                    if "density" not in adj_info or "has_port" not in adj_info:
+                        needs_scan = True
+                        break
+                
+                if needs_scan:
+                    logger.info("Invariant check: Density scanner available and adjacent sectors need more info. Performing scan.")
+                    return {"command": "sector.scan.density", "data": {}}
             
         return None
         
@@ -225,6 +244,9 @@ class Planner:
         
         current_sector_id = str(current_state.get("player_location_sector"))
         if not current_state.get("sector_data", {}).get(current_sector_id):
+            return "explore"
+
+        if self._is_in_dead_end(current_state):
             return "explore"
         
         if self._at_port(current_state) and not self._survey_complete(current_state):
@@ -287,6 +309,18 @@ class Planner:
         return [cmd for cmd in actions if self._is_command_ready(cmd, retry_info)]
 
     # --- State Helper Functions ---
+
+    def _is_in_dead_end(self, current_state):
+        """Checks if the bot is in a sector with no port and no known adjacent ports."""
+        if self._at_port(current_state):
+            return False
+        
+        adjacent_sectors_info = current_state.get("adjacent_sectors_info", [])
+        for adj_info in adjacent_sectors_info:
+            if adj_info.get("has_port"):
+                return False
+        
+        return True
 
     def _get_free_holds(self, current_state):
         """Calculates remaining free cargo space."""
@@ -351,10 +385,16 @@ class Planner:
         return bool(port_buy_prices)
 
     def _build_payload(self, command_name: str, context: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        logger.debug(f"[_build_payload] command_name: {command_name}, context: {context}")
         """
         Dynamically builds and validates a payload for a given command using its JSON schema.
         'context' is current_state for fallback logic, or goal data for goal logic.
         """
+        if command_name == "bank.balance":
+            return {}
+        if command_name == "sector.scan.density":
+            return {}
+
         schema = self.state_manager.get_schema(command_name)
         if not schema:
             logger.debug(f"No schema found for command '{command_name}'. Assuming empty payload.")
@@ -364,6 +404,8 @@ class Planner:
 
         properties = schema.get("properties", {})
         required_fields = schema.get("required", [])
+        logger.debug(f"[_build_payload] properties: {properties}")
+        logger.debug(f"[_build_payload] required_fields: {required_fields}")
         payload = {}
 
         # --- FIX: Use a consistent 'current_state' context ---
@@ -379,39 +421,43 @@ class Planner:
                 nested_payload = {}
                 
                 for field in nested_properties.keys():
+                    logger.debug(f"[_build_payload] processing nested field: {field}")
                     if field in context:
                         nested_payload[field] = context[field]
+                        logger.debug(f"[_build_payload] got nested field {field} from context")
                         continue
                     
                     if field in nested_required:
                         value = self._generate_required_field(field, command_name, current_state)
                         if value is not None:
                             nested_payload[field] = value
+                            logger.debug(f"[_build_payload] generated nested field {field}")
                         else:
                             logger.error(f"Could not generate required field '{field}' for command '{command_name}'.")
                             return None
                 payload['data'] = nested_payload
             else: # Flat payload
                 for field in properties.keys():
+                    logger.debug(f"[_build_payload] processing flat field: {field}")
                     if field in context:
                         payload[field] = context[field]
+                        logger.debug(f"[_build_payload] got flat field {field} from context")
                         continue
 
                     if field in required_fields:
                         value = self._generate_required_field(field, command_name, current_state)
                         if value is not None:
                             payload[field] = value
+                            logger.debug(f"[_build_payload] generated flat field {field}")
                         else:
                             logger.error(f"Could not generate required field '{field}' for command '{command_name}'.")
                             return None
             
+            logger.debug(f"[_build_payload] final payload before validation: {payload}")
             full_command_for_validation = {"command": command_name, **payload}
 
             logger.debug(f"Validating command: {command_name}")
             logger.debug(f"Payload for validation: {json.dumps(full_command_for_validation)}")
-            logger.debug(f"Schema for validation: {json.dumps(schema)}")
-            logger.debug(f"Raw payload before validation: {json.dumps(payload)}") # ADDED THIS LINE
-            logger.debug(f"Full command for validation: {json.dumps(full_command_for_validation)}") # ADDED THIS LINE
 
             # Validate the final payload against the full schema
             validate(instance=full_command_for_validation, schema=schema)
@@ -453,24 +499,20 @@ class Planner:
             return str(uuid.uuid4())
                 
         if field_name == "commodity":
-            if command_name == "trade.sell": return self._get_best_commodity_to_sell(current_state)
-            if command_name == "trade.buy": return self._get_cheapest_commodity_to_buy(current_state)
             if command_name == "trade.quote": return "ORE"
         
         if field_name == "quantity":
-            if command_name == "trade.sell":
-                commodity = self._get_best_commodity_to_sell(current_state)
-                if commodity: return current_state.get("ship_info", {}).get("cargo", {}).get(commodity.lower(), 0)
-            elif command_name == "trade.buy":
-                free_holds = self._get_free_holds(current_state)
-                if free_holds > 0: return min(10, free_holds)
-            elif command_name == "trade.quote":
+            if command_name == "trade.quote":
                 return 1
+        
+        if field_name == "account":
+            # For now, always use account 0 (player's personal account)
+            return 0
 
         if field_name == "amount":
-             if command_name == "bank.deposit":
-                 credits = current_state.get("player_info", {}).get("credits", 0)
-                 if credits > 1000: return str(credits - 1000)
+            if command_name == "bank.deposit":
+                credits = current_state.get("player_info", {}).get("credits", 0)
+                if credits > 1000: return str(credits - 1000)
 
         if field_name == "items":
             if command_name == "trade.buy":
@@ -479,11 +521,13 @@ class Planner:
                 free_holds = self._get_free_holds(current_state)
                 quantity = min(10, free_holds) if free_holds > 0 else 0
                 if quantity > 0: return [{"commodity": commodity, "quantity": quantity}]
+                else: return None # Cannot buy if no free holds
             if command_name == "trade.sell":
                 commodity = self._get_best_commodity_to_sell(current_state)
                 if not commodity: return None
                 quantity = current_state.get("ship_info", {}).get("cargo", {}).get(commodity.lower(), 0)
                 if quantity > 0: return [{"commodity": commodity, "quantity": int(quantity)}]
+                else: return None # Cannot sell if no cargo
 
         logger.warning(f"No generation logic for required field '{field_name}' in command '{command_name}'.")
         return None
@@ -503,9 +547,20 @@ class Planner:
         possible_targets = [s for s in adjacent_sectors if s != current_sector]
         if not possible_targets: return None
             
+        # Prioritize sectors with ports identified by density scan
+        sectors_with_ports = []
+        unexplored_sectors = []
         for sector_id in possible_targets:
-            if str(sector_id) not in sector_data_map:
-                return sector_id # Unexplored
+            adj_sector_info = next((s for s in current_state.get("adjacent_sectors_info", []) if s.get("sector_id") == sector_id), None)
+            if adj_sector_info and adj_sector_info.get("has_port"):
+                sectors_with_ports.append(sector_id)
+            elif str(sector_id) not in sector_data_map:
+                unexplored_sectors.append(sector_id)
+        
+        if sectors_with_ports:
+            return random.choice(sectors_with_ports) # Go to a sector with a known port
+        if unexplored_sectors:
+            return random.choice(unexplored_sectors) # Go to an unexplored sector
         
         return random.choice(possible_targets) # All explored, pick random
 
