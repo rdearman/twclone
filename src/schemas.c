@@ -93,6 +93,8 @@ static json_t *schema_planet_withdraw (void);
 
 /* --- Player --- */
 static json_t *schema_player_set_trade_account_preference (void);
+static json_t *schema_player_my_info (void);
+static json_t *schema_player_info (void);
 
 
 
@@ -326,6 +328,10 @@ schema_get (const char *key)
   /* Player */
   else if (strcasecmp (key, "player.set_trade_account_preference") == 0)
     return schema_player_set_trade_account_preference ();
+  else if (strcasecmp (key, "player.my_info") == 0)
+    return schema_player_my_info ();
+  else if (strcasecmp (key, "player.info") == 0) // This is the response type for player.my_info
+    return schema_player_info ();
 
 
 
@@ -491,6 +497,8 @@ schema_keys (void)
 
   /* Player */
   json_array_append_new (keys, json_string ("player.set_trade_account_preference"));
+  json_array_append_new (keys, json_string ("player.my_info"));
+  json_array_append_new (keys, json_string ("player.info"));
 
 
 
@@ -768,15 +776,25 @@ schema_envelope (void)
 static json_t *
 schema_auth_login (void)
 {
-  return json_pack ("{s:s, s:s, s:s, s:{s:o}, s:o}",
-		    "$id", "ge://schema/auth.login.json",
-		    "$schema", "https://json-schema.org/draft/2020-12/schema",
-		    "type", "object",
-		    "properties", "data", json_pack ("{s:{s:s, s:s}}",
-						     "properties",
-						     "user_name", "string",
-						     "password", "string"),
-		    "required", json_pack ("[s,s]", "command", "data"));
+  json_t *data_properties = json_pack(
+      "{s:o, s:o}",
+      "username", json_pack("{s:s}", "type", "string"),
+      "password", json_pack("{s:s}", "type", "string")
+  );
+
+  json_t *data_required = json_pack("[s,s]", "username", "password");
+
+  json_t *data_schema = json_pack(
+      "{s:s, s:s, s:s, s:o, s:o, s:b}",
+      "$id",      "ge://schema/auth.login.json",
+      "$schema",  "https://json-schema.org/draft/2020-12/schema",
+      "type",     "object",
+      "properties", data_properties,
+      "required", data_required,
+      "additionalProperties", json_false()
+  );
+
+  return data_schema;
 }
 
 
@@ -800,30 +818,27 @@ schema_trade_buy (void)
   );
 
   json_t *data_properties = json_pack(
-      "{s:o, s:o, s:o, s:o}",
+      "{s:o, s:o, s:o, s:o, s:o}",
       "port_id",         json_pack("{s:s}", "type", "integer"),
       "items",           json_pack("{s:s, s:o}", "type", "array", "items", item_schema),
       "idempotency_key", json_pack("{s:s}", "type", "string"),
-      "account",         json_pack("{s:s, s:[i,i]}", "type", "integer", "enum", 0, 1)
+      "account",         json_pack("{s:s, s:[i,i]}", "type", "integer", "enum", 0, 1),
+      "sector_id",       json_pack("{s:s}", "type", "integer")
   );
 
-  json_t *data_required = json_pack("[s,s,s]", "port_id", "items", "idempotency_key");
+  json_t *data_required = json_pack("[s,s,s,s,s]", "port_id", "items", "idempotency_key", "account", "sector_id");
 
   json_t *data_schema = json_pack(
-      "{s:s, s:o, s:o, s:b}",
-      "type", "object",
+      "{s:s, s:s, s:s, s:o, s:o, s:b}",
+      "$id",      "ge://schema/trade.buy.json",
+      "$schema",  "https://json-schema.org/draft/2020-12/schema",
+      "type",     "object",
       "properties", data_properties,
       "required", data_required,
       "additionalProperties", json_false()
   );
 
-  return json_pack ("{s:s, s:s, s:s, s:o, s:o, s:b}",
-		    "$id", "ge://schema/trade.buy.json",
-		    "$schema", "https://json-schema.org/draft/2020-12/schema",
-		    "type", "object",
-		    "properties", json_pack("{s:o}", "data", data_schema),
-		    "required", json_pack("[s,s]", "command", "data"),
-		    "additionalProperties", json_false());
+  return data_schema;
 }
 
 static json_t *
@@ -1181,30 +1196,27 @@ schema_trade_sell (void)
   );
 
   json_t *data_properties = json_pack(
-      "{s:o, s:o, s:o, s:o}",
+      "{s:o, s:o, s:o, s:o, s:o}",
       "sector_id",       json_pack("{s:s}", "type", "integer"),
+      "port_id",         json_pack("{s:s}", "type", "integer"),
       "items",           json_pack("{s:s, s:o}", "type", "array", "items", item_schema),
       "idempotency_key", json_pack("{s:s}", "type", "string"),
       "account",         json_pack("{s:s, s:[i,i]}", "type", "integer", "enum", 0, 1)
   );
 
-  json_t *data_required = json_pack("[s,s,s]", "sector_id", "items", "idempotency_key");
+  json_t *data_required = json_pack("[s,s,s,s,s]", "sector_id", "port_id", "items", "idempotency_key", "account");
 
   json_t *data_schema = json_pack(
-      "{s:s, s:o, s:o, s:b}",
-      "type", "object",
+      "{s:s, s:s, s:s, s:o, s:o, s:b}",
+      "$id",      "ge://schema/trade.sell.json",
+      "$schema",  "https://json-schema.org/draft/2020-12/schema",
+      "type",     "object",
       "properties", data_properties,
       "required", data_required,
       "additionalProperties", json_false()
   );
 
-  return json_pack ("{s:s, s:s, s:s, s:o, s:o, s:b}",
-		    "$id", "ge://schema/trade.sell.json",
-		    "$schema", "https://json-schema.org/draft/2020-12/schema",
-		    "type", "object",
-		    "properties", json_pack("{s:o}", "data", data_schema),
-		    "required", json_pack("[s,s]", "command", "data"),
-		    "additionalProperties", json_false());
+  return data_schema;
 }
 
 static json_t *
@@ -1336,13 +1348,20 @@ schema_move_autopilot_status (void)
 static json_t *
 schema_sector_info (void)
 {
+  json_t *data_properties = json_pack(
+      "{s:o}",
+      "sector_id", json_pack("{s:s}", "type", "integer")
+  );
+
   json_t *data_schema = json_pack(
-      "{s:s, s:s, s:s, s:o, s:b}",
+      "{s:s, s:s, s:s, s:o, s:o, s:b}",
       "$id",      "ge://schema/sector.info.json",
       "$schema",  "https://json-schema.org/draft/2020-12/schema",
       "type",     "object",
-      "properties", json_object(), // Empty properties object
-      "additionalProperties", json_false());
+      "properties", data_properties,
+      "required", json_array(),    // No required properties
+      "additionalProperties", json_false()
+  );
 
   return data_schema;
 }
@@ -1813,5 +1832,76 @@ schema_player_set_trade_account_preference (void)
       "additionalProperties", json_false());
 
   json_decref(data_props);
+  return data_schema;
+}
+
+/* --- Player --- */
+static json_t *
+schema_player_my_info (void)
+{
+  json_t *data_schema = json_pack(
+      "{s:s, s:s, s:s, s:o, s:o, s:b}",
+      "$id",      "ge://schema/player.my_info.json",
+      "$schema",  "https://json-schema.org/draft/2020-12/schema",
+      "type",     "object",
+      "properties", json_object(), // Empty properties object
+      "required", json_array(),    // No required properties
+      "additionalProperties", json_false()
+  );
+
+  return data_schema;
+}
+
+/* --- Player --- */
+static json_t *
+schema_player_info (void)
+{
+  json_t *player_props = json_pack(
+      "{s:o, s:o, s:o, s:o}",
+      "id", json_pack("{s:s}", "type", "integer"),
+      "username", json_pack("{s:s}", "type", "string"),
+      "credits", json_pack("{s:s}", "type", "string"), // String for decimal
+      "experience", json_pack("{s:s}", "type", "integer")
+  );
+
+  json_t *holds_props = json_pack(
+      "{s:o, s:o}",
+      "capacity", json_pack("{s:s}", "type", "integer"),
+      "current", json_pack("{s:s}", "type", "integer")
+  );
+
+  json_t *ship_props = json_pack(
+      "{s:o, s:o, s:o, s:o}",
+      "id", json_pack("{s:s}", "type", "integer"),
+      "name", json_pack("{s:s}", "type", "string"),
+      "class", json_pack("{s:s}", "type", "string"),
+      "holds", json_pack("{s:s, s:o}", "type", "object", "properties", holds_props)
+  );
+
+  json_t *location_props = json_pack(
+      "{s:o, s:o}",
+      "sector", json_pack("{s:s}", "type", "integer"),
+      "name", json_pack("{s:s}", "type", "string")
+  );
+
+  json_t *data_properties = json_pack(
+      "{s:o, s:o, s:o}",
+      "player", json_pack("{s:s, s:o}", "type", "object", "properties", player_props),
+      "ship", json_pack("{s:s, s:o}", "type", "object", "properties", ship_props),
+      "location", json_pack("{s:s, s:o}", "type", "object", "properties", location_props)
+  );
+
+  json_t *data_required = json_pack("[s,s,s]", "player", "ship", "location");
+
+  json_t *data_schema = json_pack(
+      "{s:s, s:s, s:s, s:o, s:o, s:b}",
+      "$id",      "ge://schema/player.info.json",
+      "$schema",  "https://json-schema.org/draft/2020-12/schema",
+      "type",     "object",
+      "properties", data_properties,
+      "required", data_required,
+      "additionalProperties", json_false()
+  );
+
   return data_schema;
 }

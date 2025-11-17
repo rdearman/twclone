@@ -1848,14 +1848,14 @@ Commands for interacting with the ledger-based economy. Most are only available 
       "command": "trade.buy",
       "auth": { "session": "eyJhbGciOi..." },
       "data": {
-        "account": 1, // Optional: 0 = Petty Cash (ship holds), 1 = Bank Account. Default is Petty Cash.
+        "account": 1, // 0 = Petty Cash (ship holds), 1 = Bank Account.
         "sector_id": 1,
-        "port_id": 1, // Optional: If omitted, port in current sector is used.
+        "port_id": 1,
         "items": [
           { "commodity": "ore", "quantity": 100 },
           { "commodity": "equipment", "quantity": 50 }
         ],
-        "idempotency_key": "buy_txn_12345" // Unique key for idempotent requests
+        "idempotency_key": "buy_txn_12345"
       }
     }
     ```
@@ -1893,13 +1893,14 @@ Commands for interacting with the ledger-based economy. Most are only available 
       "command": "trade.sell",
       "auth": { "session": "eyJhbGciOi..." },
       "data": {
-        "account": 1, // Optional: 0 = Petty Cash (ship holds), 1 = Bank Account. Default is Petty Cash.
+        "account": 1, // 0 = Petty Cash (ship holds), 1 = Bank Account.
         "sector_id": 1,
+        "port_id": 1,
         "items": [
           { "commodity": "ore", "quantity": 50 },
           { "commodity": "organics", "quantity": 20 }
         ],
-        "idempotency_key": "sell_txn_12345" // Unique key for idempotent requests
+        "idempotency_key": "sell_txn_12345"
       }
     }
     ```
