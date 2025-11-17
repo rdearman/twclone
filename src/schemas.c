@@ -809,13 +809,15 @@ schema_trade_buy (void)
       "quantity",  json_pack("{s:s}", "type", "integer")
   );
 
-  json_t *item_schema = json_pack(
-      "{s:s, s:o, s:[s,s], s:b}",
-      "type", "object",
-      "properties", item_properties,
-      "required", json_pack("[s,s]", "commodity", "quantity"),
-      "additionalProperties", json_false()
-  );
+  json_t *item_required_array = json_array();
+  json_array_append_new(item_required_array, json_string("commodity"));
+  json_array_append_new(item_required_array, json_string("quantity"));
+
+  json_t *item_schema = json_object();
+  json_object_set_new(item_schema, "type", json_string("object"));
+  json_object_set_new(item_schema, "properties", item_properties);
+  json_object_set_new(item_schema, "required", item_required_array);
+  json_object_set_new(item_schema, "additionalProperties", json_false());
 
   json_t *data_properties = json_pack(
       "{s:o, s:o, s:o, s:o, s:o}",
@@ -1187,13 +1189,15 @@ schema_trade_sell (void)
       "quantity",  json_pack("{s:s}", "type", "integer")
   );
 
-  json_t *item_schema = json_pack(
-      "{s:s, s:o, s:[s,s], s:b}",
-      "type", "object",
-      "properties", item_properties,
-      "required", json_pack("[s,s]", "commodity", "quantity"),
-      "additionalProperties", json_false()
-  );
+  json_t *item_required_array = json_array();
+  json_array_append_new(item_required_array, json_string("commodity"));
+  json_array_append_new(item_required_array, json_string("quantity"));
+
+  json_t *item_schema = json_object();
+  json_object_set_new(item_schema, "type", json_string("object"));
+  json_object_set_new(item_schema, "properties", item_properties);
+  json_object_set_new(item_schema, "required", item_required_array);
+  json_object_set_new(item_schema, "additionalProperties", json_false());
 
   json_t *data_properties = json_pack(
       "{s:o, s:o, s:o, s:o, s:o}",
