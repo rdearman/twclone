@@ -6,7 +6,7 @@
 #include "common.h"		// client_ctx_t
 #include "server_envelope.h"	// send_enveloped_* prototypes
 #include "database.h"		// if your moved bodies call db_*
-// #include "schemas.h"      // uncomment if you wire system.describe_schema to schemas.c
+#include "schemas.h"      // uncomment if you wire system.describe_schema to schemas.c
 #include <stdint.h>
 
 #define DEFAULT_DB_NAME "twconfig.db"

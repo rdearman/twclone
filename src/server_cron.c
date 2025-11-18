@@ -642,15 +642,16 @@ try_lock (sqlite3 *db, const char *name, int64_t now_s)
 {
   sqlite3_stmt *st = NULL;
   int rc;
+  int64_t now_ms = now_s * 1000;
 
   const int LOCK_DURATION_S = 60;
-  int64_t until_s = now_s + LOCK_DURATION_S;
+  int64_t until_ms = now_ms + (LOCK_DURATION_S * 1000);
 
   rc = sqlite3_prepare_v2 (db, "DELETE FROM locks WHERE lock_name=?1 AND until_ms < ?2;", -1, &st, NULL);
   if (rc == SQLITE_OK)
     {
       sqlite3_bind_text (st, 1, name, -1, SQLITE_STATIC);
-      sqlite3_bind_int64 (st, 2, now_s);
+      sqlite3_bind_int64 (st, 2, now_ms);
       sqlite3_step (st);
     }
   sqlite3_finalize (st);
@@ -662,7 +663,7 @@ try_lock (sqlite3 *db, const char *name, int64_t now_s)
     return 0;
 
   sqlite3_bind_text (st, 1, name, -1, SQLITE_STATIC);
-  sqlite3_bind_int64 (st, 2, until_s);
+  sqlite3_bind_int64 (st, 2, until_ms);
 
   sqlite3_step (st);
   sqlite3_finalize (st);
@@ -797,7 +798,7 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
   int rc;
   char *err_msg = NULL;
 
-  if (!try_lock (db, "fedspace_cleanup", now_ms))
+  if (!try_lock (db, "fedspace_cleanup", now_s))
     {
       int64_t until_ms = db_lock_status (db, "fedspace_cleanup");
       int64_t time_left_s = (until_ms - now_ms) / 1000;

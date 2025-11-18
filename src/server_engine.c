@@ -1042,109 +1042,6 @@ static const int64_t CRON_PERIOD_MS = 500;	/* run every 0.5s */
 static const int CRON_BATCH_LIMIT = 8;	/* max tasks per runner tick */
 static const int64_t CRON_LOCK_STALE_MS = 120000;	/* reclaim after 2 min */
 
-/* helpers to find handler */
-static cron_handler_fn
-cron_lookup (const char *name)
-{
-  for (int i = 0; CRON_REGISTRY[i].name; ++i)
-    if (strcasecmp (CRON_REGISTRY[i].name, name) == 0)
-      return CRON_REGISTRY[i].fn;
-  return NULL;
-}
-
-
-/* one runner tick: claim due tasks, run, reschedule
- *
- * cron_tasks schema (current):
- *   id          INTEGER PRIMARY KEY
- *   name        TEXT UNIQUE NOT NULL       -- handler name
- *   schedule    TEXT NOT NULL              -- interval seconds (for now)
- *   last_run_at INTEGER                    -- unix time (s)
- *   next_due_at INTEGER NOT NULL           -- unix time (s)
- *   enabled     INTEGER NOT NULL DEFAULT 1
- *   payload     TEXT
- *
- * Assumes:
- *   - cron_lookup(name) -> cron_handler_fn or NULL
- *   - now_ms is current time in milliseconds
- *   - schedule is interpreted as an integer interval in seconds
- */
-static void
-run_cron_batch (sqlite3 *db, int64_t now_ms)
-{
-  if (!db)
-    return;
-
-  int64_t now_s = now_ms / 1000;   /* store timestamps in seconds */
-  sqlite3_stmt *st = NULL;
-
-  /* pick due tasks (bounded) */
-  if (sqlite3_prepare_v2 (
-	  db,
-	  "SELECT id, name, schedule, next_due_at "
-	  "FROM cron_tasks "
-	  "WHERE enabled = 1 AND next_due_at <= ?1 "
-	  "ORDER BY next_due_at ASC "
-	  "LIMIT ?2;",
-	  -1, &st, NULL) != SQLITE_OK)
-    {
-      return;
-    }
-
-  sqlite3_bind_int64 (st, 1, now_s);
-  sqlite3_bind_int (st, 2, CRON_BATCH_LIMIT);
-
-  while (sqlite3_step (st) == SQLITE_ROW)
-    {
-      int c = 0;
-      sqlite3_int64 id         = sqlite3_column_int64 (st, c++);
-      const char   *name       = (const char *) sqlite3_column_text (st, c++);
-      const char   *schedule   = (const char *) sqlite3_column_text (st, c++);
-      /* sqlite3_int64 prev_due = sqlite3_column_int64 (st, c++); */ (void)sqlite3_column_int64(st, c++);
-
-      if (!name || !schedule)
-        continue;
-
-      /* look up handler */
-      cron_handler_fn fn = cron_lookup (name);
-      int rc = -1;
-      if (fn)
-	rc = fn (db, now_ms);
-
-      /* compute next_due_at from schedule (treat as interval seconds) */
-      long long interval_s = atoll (schedule);
-      if (interval_s <= 0)
-	interval_s = 60;           /* safe fallback */
-
-      sqlite3_int64 next_due_at = now_s + interval_s;
-
-      /* reschedule */
-      sqlite3_stmt *upd = NULL;
-      if (sqlite3_prepare_v2 (
-	      db,
-	      "UPDATE cron_tasks "
-	      "SET last_run_at = ?2, next_due_at = ?3 "
-	      "WHERE id = ?1;",
-	      -1, &upd, NULL) == SQLITE_OK)
-	{
-	  sqlite3_bind_int64 (upd, 1, id);
-	  sqlite3_bind_int64 (upd, 2, now_s);
-	  sqlite3_bind_int64 (upd, 3, next_due_at);
-	  (void) sqlite3_step (upd);
-	  sqlite3_finalize (upd);
-	}
-      else
-	{
-	  if (upd)
-	    sqlite3_finalize (upd);
-	}
-    }
-
-  sqlite3_finalize (st);
-}
-
-
-
 static int
 sweeper_system_notice_ttl (sqlite3 *db, int64_t now_ms)
 {
@@ -1160,4 +1057,5 @@ sweeper_system_notice_ttl (sqlite3 *db, int64_t now_ms)
   sqlite3_finalize (st);
   return 0;
 }
+
 

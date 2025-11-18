@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_unknown_1402",
+    "first_seen": "20251118_071244_573",
+    "command": "unknown",
+    "error_code": 1402,
+    "error_message": "Insufficient credits for this purchase."
+}

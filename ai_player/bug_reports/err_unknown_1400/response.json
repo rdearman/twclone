@@ -1,12 +1,11 @@
 {
     "id": "srv-err",
-    "reply_to": "c-96ab2288",
-    "ts": "2025-11-18T06:56:09Z",
+    "ts": "2025-11-18T07:38:38Z",
     "status": "error",
     "type": "error",
     "error": {
-        "code": 1104,
-        "message": "Schema not found or not implemented"
+        "code": 1400,
+        "message": "Unknown command"
     },
     "data": null,
     "meta": {

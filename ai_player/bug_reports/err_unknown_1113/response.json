@@ -1,12 +1,12 @@
 {
     "id": "srv-err",
-    "reply_to": "c-96ab2288",
-    "ts": "2025-11-18T06:56:09Z",
+    "reply_to": "c-52a9c0df",
+    "ts": "2025-11-18T07:02:08Z",
     "status": "error",
     "type": "error",
     "error": {
-        "code": 1104,
-        "message": "Schema not found or not implemented"
+        "code": 1113,
+        "message": "another row available"
     },
     "data": null,
     "meta": {

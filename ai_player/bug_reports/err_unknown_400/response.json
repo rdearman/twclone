@@ -1,11 +1,12 @@
 {
     "id": "srv-err",
-    "ts": "2025-11-17T17:49:40Z",
+    "reply_to": "c-830e8b83",
+    "ts": "2025-11-18T06:59:59Z",
     "status": "error",
     "type": "error",
     "error": {
-        "code": 1400,
-        "message": "Unknown command"
+        "code": 400,
+        "message": "Deposit amount must be a positive integer."
     },
     "data": null,
     "meta": {

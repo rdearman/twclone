@@ -144,6 +144,7 @@ int db_commands_accept (const char *cmd_type, const char *idem_key,
 			int *out_due_at);
 int db_player_name (int64_t player_id, char **out);
 int db_chain_traps_and_bridge (int fedspace_max /* typically 10 */ );
+int db_path_exists (sqlite3 *db, int from, int to);
 int db_rand_npc_shipname (char *out, size_t out_sz);
 void db_handle_close_and_reset (void);
 int db_log_engine_event (long long ts, const char *type, const char *actor_owner_type, int actor_player_id, int sector_id, json_t *payload, const char *idem_key);

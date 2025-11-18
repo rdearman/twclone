@@ -129,8 +129,35 @@ class Planner:
                 }}
 
             elif goal_type == "survey" and goal_target == "port":
-                logger.info("Achieving 'survey: port' by calling trade.port_info")
-                return {"command": "trade.port_info", "data": {}}
+                if not self._at_port(current_state):
+                    logger.warning("Goal 'survey: port' failed: not at a port. Falling back.")
+                    return None
+                
+                if self._survey_complete(current_state):
+                    logger.debug("Goal 'survey: port' already complete.")
+                    return None
+
+                logger.info("Achieving 'survey: port'.")
+                port_id = self._find_port_in_sector(current_state, current_sector)
+                if not port_id:
+                    logger.warning("Goal 'survey: port' failed: could not find port ID.")
+                    return None
+                
+                port_info = current_state.get("port_info_by_sector", {}).get(str(current_sector), {})
+                port_commodities = [c.get("symbol") for c in port_info.get("commodities", [])]
+                
+                price_cache = current_state.get("price_cache", {}).get(str(port_id), {"buy": {}, "sell": {}})
+
+                for commodity_symbol in port_commodities:
+                    if not (price_cache["buy"].get(commodity_symbol) is not None and
+                            price_cache["sell"].get(commodity_symbol) is not None):
+                        logger.info(f"Calling trade.quote for unquoted commodity: {commodity_symbol}")
+                        return {"command": "trade.quote", "data": {"port_id": port_id, "commodity": commodity_symbol, "quantity": 1}}
+                
+                # If we reach here, all commodities are quoted, but _survey_complete returned False
+                # This should ideally not happen if _survey_complete is correct.
+                logger.warning("Survey: port logic reached end without quoting all commodities, but none found unquoted.")
+                return {"command": "trade.port_info", "data": {}} # Fallback to ensure port info is fresh
             
             elif goal_type == "scan" and goal_target == "density":
                 return {"command": "sector.scan.density", "data": {}}
@@ -155,6 +182,23 @@ class Planner:
 
         # --- 2. Try to Achieve Strategic Goal (NEW) ---
         if current_goal:
+            goal_type, _, goal_target = current_goal.partition(":")
+            goal_type = goal_type.strip()
+
+            # Pre-check for credits if the goal is to buy
+            if goal_type == "buy":
+                port_id = self._find_port_in_sector(current_state, current_state.get("player_location_sector"))
+                commodity_to_buy = goal_target.upper()
+                buy_price = current_state.get("price_cache", {}).get(str(port_id), {}).get("buy", {}).get(commodity_to_buy)
+                
+                if buy_price is not None:
+                    # Assume we want to buy at least 1 unit to trigger the check
+                    required_credits = buy_price 
+                    withdraw_command = self._ensure_sufficient_credits(current_state, required_credits)
+                    if withdraw_command:
+                        logger.info(f"Prioritizing bank withdrawal for buy goal: {current_goal}")
+                        return withdraw_command
+
             goal_command_dict = self._achieve_goal(current_state, current_goal)
             
             if goal_command_dict:
@@ -226,6 +270,11 @@ class Planner:
                 logger.info(f"Invariant check: Missing sector_data for current sector {current_sector_id}. Fetching.")
                 return {"command": "sector.info", "data": {"sector_id": int(current_sector_id)}}
             
+            # Check for missing schema for sector.scan.density if we have the scanner
+            if current_state.get("has_density_scanner") and not self.state_manager.get_schema("sector.scan.density"):
+                logger.info("Invariant check: Missing schema for sector.scan.density. Fetching.")
+                return {"command": "system.describe_schema", "data": {"name": "sector.scan.density"}}
+            
             # Check for density scan if we have the module and adjacent sectors are not fully known
             if current_state.get("has_density_scanner"):
                 adjacent_sectors_info = current_state.get("adjacent_sectors_info", [])
@@ -242,6 +291,32 @@ class Planner:
             
         return None
         
+    def _ensure_sufficient_credits(self, current_state, required_amount):
+        """
+        Checks if player has enough credits. If not, and bank balance is sufficient,
+        returns a bank.withdraw command.
+        """
+        player_credits_str = current_state.get("player_info", {}).get("player", {}).get("credits", "0")
+        try:
+            player_credits = float(player_credits_str)
+        except (ValueError, TypeError):
+            player_credits = 0.0
+
+        if player_credits >= required_amount:
+            return None # Already have enough credits
+
+        bank_balance = current_state.get("bank_balance", 0)
+        needed_from_bank = required_amount - player_credits
+        
+        if bank_balance >= needed_from_bank:
+            logger.info(f"Player needs {needed_from_bank} credits. Withdrawing from bank.")
+            # Withdraw a bit more than needed, up to a max, to avoid frequent small withdrawals
+            withdraw_amount = min(bank_balance, needed_from_bank + 500, 5000) # Withdraw at least needed, up to 5000
+            return {"command": "bank.withdraw", "data": {"amount": int(withdraw_amount)}}
+        else:
+            logger.warning(f"Player needs {needed_from_bank} credits but only has {bank_balance} in bank. Cannot withdraw.")
+            return None
+
     # --- Stage Selection (Priority 1) ---
     def _select_stage(self, current_state):
         """Determines the bot's current high-level 'stage'."""
@@ -290,6 +365,18 @@ class Planner:
             except (ValueError, TypeError):
                 pass # Ignore if credits is not a valid number
             actions.append("bank.balance")
+            # Allow withdrawing if player credits are low and bank balance is available
+            player_credits_str = current_state.get("player_info", {}).get("player", {}).get("credits", "0")
+            try:
+                player_credits = float(player_credits_str)
+            except (ValueError, TypeError):
+                player_credits = 0.0
+            
+            bank_balance = current_state.get("bank_balance", 0)
+
+            if player_credits < 500 and bank_balance > 0: # If player credits are low, consider withdrawing
+                actions.append("bank.withdraw")
+            
             return actions
         
         return ["bank.balance"] # Default
@@ -350,16 +437,29 @@ class Planner:
         return sector_data.get("has_port", False)
 
     def _survey_complete(self, current_state):
-        """Checks if we have price data for the current port."""
+        """Checks if we have price data for all commodities at the current port."""
         sector_id = str(current_state.get("player_location_sector"))
         port_id = self._find_port_in_sector(current_state, sector_id)
         if not port_id:
             return False  # No port here; nothing to survey
 
-        port_id = str(port_id)
-        price_cache = current_state.get("price_cache", {}).get(port_id, {})
+        port_id_str = str(port_id)
+        port_info = current_state.get("port_info_by_sector", {}).get(sector_id, {})
+        port_commodities = [c.get("symbol") for c in port_info.get("commodities", [])]
         
-        return bool(price_cache.get("buy", {})) and bool(price_cache.get("sell", {}))
+        if not port_commodities:
+            # If port_info doesn't list commodities, we can't know if survey is complete.
+            # Assume complete if we have any price data.
+            price_cache = current_state.get("price_cache", {}).get(port_id_str, {})
+            return bool(price_cache.get("buy", {})) and bool(price_cache.get("sell", {}))
+
+        price_cache = current_state.get("price_cache", {}).get(port_id_str, {})
+        for commodity_symbol in port_commodities:
+            if not (price_cache.get("buy", {}).get(commodity_symbol) is not None and
+                    price_cache.get("sell", {}).get(commodity_symbol) is not None):
+                return False # Missing price data for at least one commodity
+        
+        return True
 
     def _can_sell(self, current_state):
         """Checks if we have cargo and are at a port that will buy it."""
@@ -523,7 +623,7 @@ class Planner:
                 try:
                     credits = float(player_credits_str)
                     if credits > 1000:
-                        return str(credits - 1000)
+                        return int(credits - 1000)
                 except (ValueError, TypeError):
                     return None
 
@@ -531,10 +631,33 @@ class Planner:
             if command_name == "trade.buy":
                 commodity = self._get_cheapest_commodity_to_buy(current_state)
                 if not commodity: return None
+                
                 free_holds = self._get_free_holds(current_state)
-                quantity = min(10, free_holds) if free_holds > 0 else 0
+                if free_holds <= 0:
+                    logger.warning("No free holds to buy. Cannot generate buy command.")
+                    return None
+
+                port_id = str(self._find_port_in_sector(current_state, current_sector))
+                buy_price = current_state.get("price_cache", {}).get(port_id, {}).get("buy", {}).get(commodity)
+                
+                if buy_price is None:
+                    logger.warning(f"No buy price found for {commodity}. Cannot generate buy command.")
+                    return None
+
+                player_credits_str = current_state.get("player_info", {}).get("player", {}).get("credits", "0")
+                try:
+                    player_credits = float(player_credits_str)
+                except (ValueError, TypeError):
+                    player_credits = 0.0
+                
+                max_affordable_quantity = int(player_credits / buy_price) if buy_price > 0 else 0
+                
+                quantity = min(10, free_holds, max_affordable_quantity)
+                
                 if quantity > 0: return [{"commodity": commodity, "quantity": quantity}]
-                else: return None # Cannot buy if no free holds
+                else: 
+                    logger.warning(f"Not enough credits ({player_credits}) or free holds ({free_holds}) to buy {commodity} at {buy_price}. Cannot generate buy command.")
+                    return None # Cannot buy if no free holds or not enough credits
             if command_name == "trade.sell":
                 commodity = self._get_best_commodity_to_sell(current_state)
                 if not commodity: return None

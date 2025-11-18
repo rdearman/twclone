@@ -807,21 +807,17 @@ schema_auth_login (void)
 static json_t *
 schema_trade_buy (void)
 {
-  json_t *item_properties = json_pack(
-      "{s:o, s:o}",
-      "commodity", json_pack("{s:s}", "type", "string"),
-      "quantity",  json_pack("{s:s}", "type", "integer")
+  json_t *item_schema = json_pack(
+      "{s:s, s:o, s:o, s:b}",
+      "type", "object",
+      "properties", json_pack(
+          "{s:o, s:o}",
+          "commodity", json_pack("{s:s}", "type", "string"),
+          "quantity",  json_pack("{s:s}", "type", "integer")
+      ),
+      "required", json_pack("[s,s]", "commodity", "quantity"),
+      "additionalProperties", json_false()
   );
-
-  json_t *item_required_array = json_array();
-  json_array_append_new(item_required_array, json_string("commodity"));
-  json_array_append_new(item_required_array, json_string("quantity"));
-
-  json_t *item_schema = json_object();
-  json_object_set_new(item_schema, "type", json_string("object"));
-  json_object_set_new(item_schema, "properties", item_properties);
-  json_object_set_new(item_schema, "required", item_required_array);
-  json_object_set_new(item_schema, "additionalProperties", json_false());
 
   json_t *data_properties = json_pack(
       "{s:o, s:o, s:o, s:o, s:o}",
@@ -1014,19 +1010,25 @@ schema_system_disconnect (void)
 static json_t *
 schema_session_ping (void)
 {
-  /* TODO: Implement this schema */
-  return json_pack ("{s:s, s:s}",
+  return json_pack ("{s:s, s:s, s:s, s:o, s:o, s:b}",
                     "$id", "ge://schema/session.ping.json",
-                    "$comment", "Schema not yet implemented");
+                    "$schema", "https://json-schema.org/draft/2020-12/schema",
+                    "type", "object",
+                    "properties", json_object(), // Empty properties object
+                    "required", json_array(),    // No required properties
+                    "additionalProperties", json_false());
 }
 
 static json_t *
 schema_session_hello (void)
 {
-  /* TODO: Implement this schema */
-  return json_pack ("{s:s, s:s}",
+  return json_pack ("{s:s, s:s, s:s, s:o, s:o, s:b}",
                     "$id", "ge://schema/session.hello.json",
-                    "$comment", "Schema not yet implemented");
+                    "$schema", "https://json-schema.org/draft/2020-12/schema",
+                    "type", "object",
+                    "properties", json_object(), // Empty properties object
+                    "required", json_array(),    // No required properties
+                    "additionalProperties", json_false());
 }
 
 static json_t *
@@ -1158,19 +1160,47 @@ schema_port_info (void)
 static json_t *
 schema_port_status (void)
 {
-  /* TODO: Implement this schema */
-  return json_pack ("{s:s, s:s}",
-                    "$id", "ge://schema/port.status.json",
-                    "$comment", "Schema not yet implemented");
+  json_t *data_properties = json_pack(
+      "{s:o, s:o}",
+      "port_id", json_pack("{s:s}", "type", "integer"),
+      "sector_id", json_pack("{s:s}", "type", "integer")
+  );
+
+  json_t *data_schema = json_pack(
+      "{s:s, s:s, s:s, s:o, s:o, s:b}",
+      "$id",      "ge://schema/port.status.json",
+      "$schema",  "https://json-schema.org/draft/2020-12/schema",
+      "type",     "object",
+      "properties", data_properties,
+      "anyOf", json_pack("[o,o]",
+                         json_pack("{s:[s]}", "required", "port_id"),
+                         json_pack("{s:[s]}", "required", "sector_id")),
+      "additionalProperties", json_false()
+  );
+  return data_schema;
 }
 
 static json_t *
 schema_port_describe (void)
 {
-  /* TODO: Implement this schema */
-  return json_pack ("{s:s, s:s}",
-                    "$id", "ge://schema/port.describe.json",
-                    "$comment", "Schema not yet implemented");
+  json_t *data_properties = json_pack(
+      "{s:o, s:o}",
+      "port_id", json_pack("{s:s}", "type", "integer"),
+      "sector_id", json_pack("{s:s}", "type", "integer")
+  );
+
+  json_t *data_schema = json_pack(
+      "{s:s, s:s, s:s, s:o, s:o, s:b}",
+      "$id",      "ge://schema/port.describe.json",
+      "$schema",  "https://json-schema.org/draft/2020-12/schema",
+      "type",     "object",
+      "properties", data_properties,
+      "anyOf", json_pack("[o,o]",
+                         json_pack("{s:[s]}", "required", "port_id"),
+                         json_pack("{s:[s]}", "required", "sector_id")),
+      "additionalProperties", json_false()
+  );
+  return data_schema;
 }
 
 /* --- Trade --- */
@@ -1187,21 +1217,17 @@ schema_trade_port_info (void)
 static json_t *
 schema_trade_sell (void)
 {
-  json_t *item_properties = json_pack(
-      "{s:o, s:o}",
-      "commodity", json_pack("{s:s}", "type", "string"),
-      "quantity",  json_pack("{s:s}", "type", "integer")
+  json_t *item_schema = json_pack(
+      "{s:s, s:o, s:o, s:b}",
+      "type", "object",
+      "properties", json_pack(
+          "{s:o, s:o}",
+          "commodity", json_pack("{s:s}", "type", "string"),
+          "quantity",  json_pack("{s:s}", "type", "integer")
+      ),
+      "required", json_pack("[s,s]", "commodity", "quantity"),
+      "additionalProperties", json_false()
   );
-
-  json_t *item_required_array = json_array();
-  json_array_append_new(item_required_array, json_string("commodity"));
-  json_array_append_new(item_required_array, json_string("quantity"));
-
-  json_t *item_schema = json_object();
-  json_object_set_new(item_schema, "type", json_string("object"));
-  json_object_set_new(item_schema, "properties", item_properties);
-  json_object_set_new(item_schema, "required", item_required_array);
-  json_object_set_new(item_schema, "additionalProperties", json_false());
 
   json_t *data_properties = json_pack(
       "{s:o, s:o, s:o, s:o, s:o}",
@@ -1346,10 +1372,13 @@ schema_move_autopilot_stop (void)
 static json_t *
 schema_move_autopilot_status (void)
 {
-  /* TODO: Implement this schema */
-  return json_pack ("{s:s, s:s}",
+  return json_pack ("{s:s, s:s, s:s, s:o, s:o, s:b}",
                     "$id", "ge://schema/move.autopilot.status.json",
-                    "$comment", "Schema not yet implemented");
+                    "$schema", "https://json-schema.org/draft/2020-12/schema",
+                    "type", "object",
+                    "properties", json_object(), // Empty properties object
+                    "required", json_array(),    // No required properties
+                    "additionalProperties", json_false());
 }
 
 /* --- Sector --- */
@@ -1651,19 +1680,25 @@ schema_mines_recall (void)
 static json_t *
 schema_deploy_fighters_list (void)
 {
-  /* TODO: Implement this schema */
-  return json_pack ("{s:s, s:s}",
+  return json_pack ("{s:s, s:s, s:s, s:o, s:o, s:b}",
                     "$id", "ge://schema/deploy.fighters.list.json",
-                    "$comment", "Schema not yet implemented");
+                    "$schema", "https://json-schema.org/draft/2020-12/schema",
+                    "type", "object",
+                    "properties", json_object(), // Empty properties object
+                    "required", json_array(),    // No required properties
+                    "additionalProperties", json_false());
 }
 
 static json_t *
 schema_deploy_mines_list (void)
 {
-  /* TODO: Implement this schema */
-  return json_pack ("{s:s, s:s}",
+  return json_pack ("{s:s, s:s, s:s, s:o, s:o, s:b}",
                     "$id", "ge://schema/deploy.mines.list.json",
-                    "$comment", "Schema not yet implemented");
+                    "$schema", "https://json-schema.org/draft/2020-12/schema",
+                    "type", "object",
+                    "properties", json_object(), // Empty properties object
+                    "required", json_array(),    // No required properties
+                    "additionalProperties", json_false());
 }
 
 /* --- Chat --- */
@@ -1700,28 +1735,55 @@ schema_chat_history (void)
 static json_t *
 schema_mail_send (void)
 {
-  /* TODO: Implement this schema */
-  return json_pack ("{s:s, s:s}",
-                    "$id", "ge://schema/mail.send.json",
-                    "$comment", "Schema not yet implemented");
+  json_t *data_properties = json_pack(
+      "{s:o, s:o, s:o}",
+      "to_player_name", json_pack("{s:s}", "type", "string"),
+      "subject",        json_pack("{s:s}", "type", "string"),
+      "body",           json_pack("{s:s}", "type", "string")
+  );
+
+  json_t *data_schema = json_pack(
+      "{s:s, s:s, s:s, s:o, s:[s,s,s], s:b}",
+      "$id",      "ge://schema/mail.send.json",
+      "$schema",  "https://json-schema.org/draft/2020-12/schema",
+      "type",     "object",
+      "properties", data_properties,
+      "required", "to_player_name", "subject", "body",
+      "additionalProperties", json_false());
+
+  return data_schema;
 }
 
 static json_t *
 schema_mail_inbox (void)
 {
-  /* TODO: Implement this schema */
-  return json_pack ("{s:s, s:s}",
+  return json_pack ("{s:s, s:s, s:s, s:o, s:o, s:b}",
                     "$id", "ge://schema/mail.inbox.json",
-                    "$comment", "Schema not yet implemented");
+                    "$schema", "https://json-schema.org/draft/2020-12/schema",
+                    "type", "object",
+                    "properties", json_object(), // Empty properties object
+                    "required", json_array(),    // No required properties
+                    "additionalProperties", json_false());
 }
 
 static json_t *
 schema_mail_read (void)
 {
-  /* TODO: Implement this schema */
-  return json_pack ("{s:s, s:s}",
-                    "$id", "ge://schema/mail.read.json",
-                    "$comment", "Schema not yet implemented");
+  json_t *data_properties = json_pack(
+      "{s:o}",
+      "mail_id", json_pack("{s:s}", "type", "integer")
+  );
+
+  json_t *data_schema = json_pack(
+      "{s:s, s:s, s:s, s:o, s:[s], s:b}",
+      "$id",      "ge://schema/mail.read.json",
+      "$schema",  "https://json-schema.org/draft/2020-12/schema",
+      "type",     "object",
+      "properties", data_properties,
+      "required", "mail_id",
+      "additionalProperties", json_false());
+
+  return data_schema;
 }
 
 static json_t *
@@ -1738,28 +1800,56 @@ schema_mail_delete (void)
 static json_t *
 schema_sys_notice_create (void)
 {
-  /* TODO: Implement this schema */
-  return json_pack ("{s:s, s:s}",
-                    "$id", "ge://schema/sys.notice.create.json",
-                    "$comment", "Schema not yet implemented");
+  json_t *data_properties = json_pack(
+      "{s:o, s:o, s:o, s:o}",
+      "title",      json_pack("{s:s}", "type", "string"),
+      "body",       json_pack("{s:s}", "type", "string"),
+      "severity",   json_pack("{s:s}", "type", "string"),
+      "expires_at", json_pack("{s:s}", "type", "integer")
+  );
+
+  json_t *data_schema = json_pack(
+      "{s:s, s:s, s:s, s:o, s:[s,s], s:b}",
+      "$id",      "ge://schema/sys.notice.create.json",
+      "$schema",  "https://json-schema.org/draft/2020-12/schema",
+      "type",     "object",
+      "properties", data_properties,
+      "required", "title", "body",
+      "additionalProperties", json_false());
+
+  return data_schema;
 }
 
 static json_t *
 schema_notice_list (void)
 {
-  /* TODO: Implement this schema */
-  return json_pack ("{s:s, s:s}",
+  return json_pack ("{s:s, s:s, s:s, s:o, s:o, s:b}",
                     "$id", "ge://schema/notice.list.json",
-                    "$comment", "Schema not yet implemented");
+                    "$schema", "https://json-schema.org/draft/2020-12/schema",
+                    "type", "object",
+                    "properties", json_object(), // Empty properties object
+                    "required", json_array(),    // No required properties
+                    "additionalProperties", json_false());
 }
 
 static json_t *
 schema_notice_ack (void)
 {
-  /* TODO: Implement this schema */
-  return json_pack ("{s:s, s:s}",
-                    "$id", "ge://schema/notice.ack.json",
-                    "$comment", "Schema not yet implemented");
+  json_t *data_properties = json_pack(
+      "{s:o}",
+      "notice_id", json_pack("{s:s}", "type", "integer")
+  );
+
+  json_t *data_schema = json_pack(
+      "{s:s, s:s, s:s, s:o, s:[s], s:b}",
+      "$id",      "ge://schema/notice.ack.json",
+      "$schema",  "https://json-schema.org/draft/2020-12/schema",
+      "type",     "object",
+      "properties", data_properties,
+      "required", "notice_id",
+      "additionalProperties", json_false());
+
+  return data_schema;
 }
 
 /* --- News --- */
@@ -1767,10 +1857,13 @@ schema_notice_ack (void)
 static json_t *
 schema_news_read (void)
 {
-  /* TODO: Implement this schema */
-  return json_pack ("{s:s, s:s}",
+  return json_pack ("{s:s, s:s, s:s, s:o, s:o, s:b}",
                     "$id", "ge://schema/news.read.json",
-                    "$comment", "Schema not yet implemented");
+                    "$schema", "https://json-schema.org/draft/2020-12/schema",
+                    "type", "object",
+                    "properties", json_object(), // Empty properties object
+                    "required", json_array(),    // No required properties
+                    "additionalProperties", json_false());
 }
 
 /* --- Subscribe --- */
@@ -1805,10 +1898,13 @@ schema_subscribe_list (void)
 static json_t *
 schema_subscribe_catalog (void)
 {
-  /* TODO: Implement this schema */
-  return json_pack ("{s:s, s:s}",
+  return json_pack ("{s:s, s:s, s:s, s:o, s:o, s:b}",
                     "$id", "ge://schema/subscribe.catalog.json",
-                    "$comment", "Schema not yet implemented");
+                    "$schema", "https://json-schema.org/draft/2020-12/schema",
+                    "type", "object",
+                    "properties", json_object(), // Empty properties object
+                    "required", json_array(),    // No required properties
+                    "additionalProperties", json_false());
 }
 
 /* --- Bulk --- */

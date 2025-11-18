@@ -33,7 +33,7 @@
 
 /* forward decls */
 static int create_derelicts (void);
-
+static int fix_traps_with_pathcheck (sqlite3 *db, int fedspace_max);
 
 static int ensure_fedspace_exit (sqlite3 * db, int outer_min, int outer_max,
 				 int add_return_edge);
@@ -791,6 +791,12 @@ bigbang (void)
     }
 
   printf ("BIGBANG: Chaining isolated sectors and bridges...\n");
+
+  printf ("BIGBANG: Fixing trap components with path checks...\n");
+  rc = fix_traps_with_pathcheck (db, 10);
+  if (rc != SQLITE_OK)
+    fprintf (stderr, "fix_traps_with_pathcheck failed: %s\n", sqlite3_errmsg (db));
+
   // After all sectors/warps are generated:
   int ferringhi = db_chain_traps_and_bridge (10);	// 1..10 are FedSpace by convention
   // It returns the first isolated sector it found. So we pass that to the
@@ -2842,4 +2848,51 @@ create_ports (void)
            "BIGBANG: Stardock at sector %d, plus %d normal ports\n",
            stardock_sector, maxPorts - 1);
   return 0;
+}
+
+
+static int fix_traps_with_pathcheck (sqlite3 *db, int fedspace_max)
+{
+  int rc;
+  int max_id = 0;
+  sqlite3_stmt *st = NULL;
+
+  rc = sqlite3_prepare_v2 (db, "SELECT MAX(id) FROM sectors", -1, &st, NULL);
+  if (rc != SQLITE_OK) return rc;
+  if (sqlite3_step (st) == SQLITE_ROW)
+    max_id = sqlite3_column_int (st, 0);
+  sqlite3_finalize (st);
+
+  if (max_id <= fedspace_max)
+    return SQLITE_OK;
+
+  /* Pre-prepare insert for escape warps */
+  rc = sqlite3_prepare_v2 (db,
+      "INSERT OR IGNORE INTO sector_warps(from_sector,to_sector) VALUES(?1,?2)",
+      -1, &st, NULL);
+  if (rc != SQLITE_OK) return rc;
+
+  for (int s = fedspace_max + 1; s <= max_id; ++s)
+    {
+      /* Is there a path from s back to sector 1? */
+      int has_path = db_path_exists (db, s, 1);
+      if (has_path < 0)
+        {
+          sqlite3_finalize (st);
+          return SQLITE_ERROR;
+        }
+      if (!has_path)
+        {
+          /* No path home: add an escape warp back into FedSpace */
+          int escape = 1 + (rand () % fedspace_max);
+          sqlite3_reset (st);
+          sqlite3_clear_bindings (st);
+          sqlite3_bind_int (st, 1, s);
+          sqlite3_bind_int (st, 2, escape);
+          sqlite3_step (st);
+        }
+    }
+
+  sqlite3_finalize (st);
+  return SQLITE_OK;
 }

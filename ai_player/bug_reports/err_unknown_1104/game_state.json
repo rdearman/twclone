@@ -1,5 +1,5 @@
 {
-    "session_id": "856466150a20ddbbec204386015c3886f25b1e28c312f0042404c9aa6607ad12",
+    "session_id": "46229d4940bf2436398086d82a7ab80f57e373f4a93303898ec8d21c8274f243",
     "player_info": null,
     "ship_info": null,
     "player_location_sector": null,
@@ -9,11 +9,11 @@
     "bank_balance": 0,
     "command_retry_info": {
         "player.my_info": {
-            "next_retry_time": 1763404497.1198428
+            "next_retry_time": 1763448976.8797736
         },
         "session.goodbye": {
             "failures": 1,
-            "next_retry_time": 1763404502.6261272
+            "next_retry_time": 1763448982.3908503
         }
     },
     "strategy_plan": [],
@@ -34,33 +34,34 @@
         "session.goodbye"
     ],
     "pending_schema_requests": {
-        "system.cmd_list": "c-1323fce8",
-        "session.hello": "c-85451848",
-        "session.ping": "c-8478c186",
-        "session.goodbye": "c-531facf2",
-        "system.schema_list": "c-1be46b9c",
-        "auth.login": "c-78b2b609",
-        "auth.logout": "c-ff1edaa5",
-        "auth.mfa": "c-6f1922a6",
-        "auth.register": "c-c0580fda",
-        "players.me": "c-979d782d",
-        "players.online": "c-73192bf9",
-        "players.refresh": "c-89f26fa4",
-        "ship.info": "c-dcc59b80",
-        "sector.info": "c-b6b0e308",
-        "sector.set_beacon": "c-920afd01",
-        "move.warp": "c-f43cdd71",
-        "move.scan": "c-732636a0",
-        "move.pathfind": "c-e2ae224a",
-        "move.force_move": "c-85b53633",
-        "trade.accept": "c-32829f7f",
-        "trade.buy": "c-e5d904c7",
-        "trade.cancel": "c-fe89a81f",
-        "trade.history": "c-034dede9",
-        "trade.jettison": "c-e4abf307",
-        "trade.offer": "c-5eeff3f6",
-        "trade.port_info": "c-df745b1a",
-        "trade.quote": "c-5dd590b1",
-        "trade.sell": "c-4b8f9f3c"
-    }
+        "system.cmd_list": "c-0e2e4636",
+        "session.hello": "c-92cd0ffc",
+        "session.ping": "c-6ace64c7",
+        "session.goodbye": "c-96ab2288",
+        "system.schema_list": "c-3940b2c3",
+        "auth.login": "c-4b3b524a",
+        "auth.logout": "c-e7151824",
+        "auth.mfa": "c-c653ad55",
+        "auth.register": "c-f01bd348",
+        "players.me": "c-bc01ffe2",
+        "players.online": "c-42ba5a24",
+        "players.refresh": "c-84ec3df4",
+        "ship.info": "c-8977463d",
+        "sector.info": "c-28237ee2",
+        "sector.set_beacon": "c-ed646518",
+        "move.warp": "c-52c091e7",
+        "move.scan": "c-2c7f4f0b",
+        "move.pathfind": "c-0f049e99",
+        "move.force_move": "c-7b8b8301",
+        "trade.accept": "c-83b3cca4",
+        "trade.buy": "c-c78f7a18",
+        "trade.cancel": "c-139413d0",
+        "trade.history": "c-b8d824ea",
+        "trade.jettison": "c-dafa2c9e",
+        "trade.offer": "c-c007c28b",
+        "trade.port_info": "c-82d7d3f9",
+        "trade.quote": "c-4f088973",
+        "trade.sell": "c-3b750768"
+    },
+    "recent_sectors": []
 }

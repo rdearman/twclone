@@ -8092,3 +8092,80 @@ int db_port_get_goods_on_hand(int port_id, const char *commodity_code, int *out_
 int db_port_update_goods_on_hand(int port_id, const char *commodity_code, int quantity_change) { return SQLITE_OK; }
 int db_planet_get_goods_on_hand(int planet_id, const char *commodity_code, int *out_quantity) { return SQLITE_OK; }
 int db_planet_update_goods_on_hand(int planet_id, const char *commodity_code, int quantity_change) { return SQLITE_OK; }
+
+
+
+/* Return 1 if path exists from `from` to `to`, 0 if no path, <0 on error. */
+db_path_exists (sqlite3 *db, int from, int to)
+{
+  int max_id = 0;
+  sqlite3_stmt *st = NULL;
+  int rc;
+
+  /* Get max id once; in practice you can cache this in caller. */
+  rc = sqlite3_prepare_v2 (db, "SELECT MAX(id) FROM sectors", -1, &st, NULL);
+  if (rc != SQLITE_OK) return -1;
+  if (sqlite3_step (st) == SQLITE_ROW)
+    max_id = sqlite3_column_int (st, 0);
+  sqlite3_finalize (st);
+
+  if (max_id <= 0 || from <= 0 || from > max_id || to <= 0 || to > max_id)
+    return 0; /* treat as “no path” */
+
+  size_t N = (size_t) max_id + 1;
+  unsigned char *seen = calloc (N, 1);
+  int *queue = malloc (N * sizeof (int));
+  if (!seen || !queue)
+    {
+      free (seen);
+      free (queue);
+      return -1;
+    }
+
+  /* Prepare neighbour query */
+  rc = sqlite3_prepare_v2 (db,
+      "SELECT to_sector FROM sector_warps WHERE from_sector = ?1",
+      -1, &st, NULL);
+  if (rc != SQLITE_OK || !st)
+    {
+      free (seen);
+      free (queue);
+      return -1;
+    }
+
+  int qh = 0, qt = 0;
+  queue[qt++] = from;
+  seen[from] = 1;
+  int found = 0;
+
+  while (qh < qt && !found)
+    {
+      int u = queue[qh++];
+
+      sqlite3_reset (st);
+      sqlite3_clear_bindings (st);
+      sqlite3_bind_int (st, 1, u);
+
+      while ((rc = sqlite3_step (st)) == SQLITE_ROW)
+        {
+          int v = sqlite3_column_int (st, 0);
+          if (v <= 0 || v > max_id)
+            continue;
+          if (seen[v])
+            continue;
+          seen[v] = 1;
+          if (v == to)
+            {
+              found = 1;
+              break;
+            }
+          queue[qt++] = v;
+        }
+    }
+
+  sqlite3_finalize (st);
+  free (seen);
+  free (queue);
+
+  return found;
+}

@@ -29,7 +29,11 @@ def get_ollama_response(game_state, model=None, prompt_key=None, override_prompt
         # Format the prompt with the game state
         # We must serialize the game_state to a compact JSON string
         try:
-            state_str = json.dumps(game_state, separators=(',', ':'))
+            state_str = json.dumps(
+                game_state,
+                separators=(',', ':'),
+                default=lambda o: f"<<nonserializable:{type(o).__name__}>>"
+            )
             full_prompt = override_prompt.replace("{game_state}", state_str)
         except Exception as e:
             logger.error(f"Failed to serialize game state for LLM: {e}")

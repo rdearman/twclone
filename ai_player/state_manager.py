@@ -26,7 +26,8 @@ class StateManager:
             "n_table": {},              # Persist learning
             "command_schemas": {},      # NEW: Cache for command schemas
             "schema_blacklist": [],     # NEW: List of commands that failed schema fetching
-            "pending_schema_requests": {} # NEW: Map of schema request ID to command name
+            "pending_schema_requests": {}, # NEW: Map of schema request ID to command name
+            "recent_sectors": [],       # NEW: To avoid ping-ponging
         }
         self.load_state()
 
@@ -48,6 +49,7 @@ class StateManager:
                     self.state["command_schemas"] = {} # Always force schema refetch
                     self.state["schema_blacklist"] = [] # NEW: Clear schema blacklist on load
                     self.state["pending_schema_requests"] = {} # NEW: Clear pending schema requests on load
+                    self.state["recent_sectors"] = [] # NEW: Clear recent sectors on load
                     
                     # --- ADD THESE LINES TO CLEAR CACHES ---
                     logger.warning("Clearing cached world data to force re-exploration.")
@@ -161,10 +163,22 @@ class StateManager:
             
         self.save_state()
 
+    def update_player_info(self, player_data):
+        """Updates the player_info in the state."""
+        if 'player' in player_data:
+            if self.state['player_info'] is None:
+                self.state['player_info'] = {}
+            self.state['player_info']['player'] = player_data['player']
+            logger.info(f"Player info updated. Turns remaining: {player_data['player'].get('turns_remaining')}")
+        if 'ship' in player_data:
+            if self.state['ship_info'] is None:
+                self.state['ship_info'] = {}
+            self.state['ship_info'] = player_data['ship']
+        self.save_state()
+
     # --- Schema Management ---
 
     def add_schema(self, command_name, schema):
-
 
         self.state["command_schemas"][command_name] = schema
         logger.debug(f"Added schema for {command_name}: {json.dumps(schema)}")
