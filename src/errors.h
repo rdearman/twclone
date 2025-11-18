@@ -43,6 +43,7 @@
 #define ERR_INVALID_CREDENTIAL   1220
 #define ERR_REGISTRATION_DISABLED 1221
 #define ERR_IS_NPC		 1222
+#define ERR_NOT_IN_CORP          1223
 
 /* 1300 — Validation / Quota */
 #define ERR_INVALID_SCHEMA       1300	/* bad top-level shape */
@@ -68,6 +69,8 @@
 #define REF_BLOCKED_BY_MINES     1407	/* REFUSED */
 #define REF_TRANSWARP_UNAVAILABLE 1408	/* REFUSED */
 #define ERR_BAD_STATE             1409	/* Current Sector Unknown */
+#define TERRITORY_UNSAFE         1410
+#define ERR_FOREIGN_LIMPETS_PRESENT 1411
 
 /* 1500 — Planet / Citadel */
 #define ERR_PLANET_NOT_FOUND     1500
@@ -123,6 +126,9 @@
 #define REF_ADMIN_ONLY           2002
 #define ERR_SHARD_UNAVAILABLE    2003
 #define ERR_CAPABILITY_DISABLED  2004
+#define ERR_LIMPETS_DISABLED     2005
+#define ERR_LIMPET_SWEEP_DISABLED 2006
+#define ERR_LIMPET_ATTACK_DISABLED 2007
 
 /* 3000 - Sector */
 #define SECTOR_ERR		3000

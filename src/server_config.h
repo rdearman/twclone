@@ -105,6 +105,15 @@ extern "C"
         bool enabled;
         bool fedspace_allowed;
         bool msl_allowed;
+        bool sweep_enabled;
+        bool attack_enabled;
+        int sweep_rate_mines_per_fighter;
+        int sweep_rate_limpets_per_fighter_loss;
+        int attack_rate_limpets_per_fighter;
+        int attack_rate_limpets_per_fighter_loss;
+        int entry_trigger_rate_limpets_per_fighter;
+        int entry_damage_per_limpet;
+        int limpet_ttl_days;
         int per_sector_cap;
         int max_per_ship;
         bool allow_multi_owner;

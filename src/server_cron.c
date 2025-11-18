@@ -18,6 +18,7 @@
 #include "server_ports.h"
 #include "server_planets.h"
 #include "database.h"
+#include "server_config.h"
 
 /*
  * Helper function to add credits to an account.
@@ -85,6 +86,8 @@ typedef struct
   cron_handler_fn fn;
 } entry_t;
 
+int cron_limpet_ttl_cleanup(sqlite3 *db, int64_t now_s); // Forward declaration
+
 static entry_t REG[] = {
   {"daily_turn_reset", h_reset_turns_for_player},
   {"fedspace_cleanup", h_fedspace_cleanup},
@@ -97,6 +100,7 @@ static entry_t REG[] = {
   {"daily_market_settlement", h_daily_market_settlement},
   {"daily_news_compiler", h_daily_news_compiler},
   {"cleanup_old_news", h_cleanup_old_news},
+  {"limpet_ttl_cleanup", cron_limpet_ttl_cleanup},
 };
 
 static int g_reg_inited = 0;
@@ -783,6 +787,81 @@ int uncloak_ships_in_fedspace(sqlite3 *db) {
     } 
 
     return cloaked_ship_count;
+}
+
+// Cron handler to clean up expired Limpet mines
+int
+cron_limpet_ttl_cleanup (sqlite3 *db, int64_t now_s)
+{
+  if (!g_cfg.mines.limpet.enabled) {
+      return 0; // Limpet mines disabled, no cleanup needed
+  }
+  if (g_cfg.mines.limpet.limpet_ttl_days <= 0) {
+      LOGW("limpet_ttl_days is not set or zero. Skipping Limpet TTL cleanup.");
+      return 0; // No TTL is set, so no cleanup needed
+  }
+
+  if (!try_lock (db, "limpet_ttl_cleanup", now_s))
+    return 0;
+
+  LOGI ("limpet_ttl_cleanup: Starting Limpet mine TTL cleanup.");
+
+  int rc = begin (db);
+  if (rc)
+    {
+      unlock (db, "limpet_ttl_cleanup");
+      return rc;
+    }
+
+  sqlite3_stmt *st = NULL;
+  int removed_count = 0;
+
+  // Calculate the expiry timestamp: deployed_at + (limpet_ttl_days * seconds_in_day)
+  // Assuming deployed_at is UNIX epoch.
+  long long expiry_threshold_s = now_s - ((long long)g_cfg.mines.limpet.limpet_ttl_days * 24 * 3600);
+
+  const char *sql_delete_expired =
+      "DELETE FROM sector_assets "
+      "WHERE asset_type = ?1 AND deployed_at <= ?2;";
+
+  rc = sqlite3_prepare_v2(db, sql_delete_expired, -1, &st, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("limpet_ttl_cleanup: Failed to prepare delete statement: %s", sqlite3_errmsg(db));
+      rollback(db);
+      unlock(db, "limpet_ttl_cleanup");
+      return rc;
+  }
+
+  sqlite3_bind_int(st, 1, ASSET_LIMPET_MINE);
+  sqlite3_bind_int64(st, 2, expiry_threshold_s);
+
+  rc = sqlite3_step(st);
+  if (rc != SQLITE_DONE) {
+      LOGE("limpet_ttl_cleanup: Failed to execute delete statement: %s", sqlite3_errmsg(db));
+      rollback(db);
+      unlock(db, "limpet_ttl_cleanup");
+      sqlite3_finalize(st);
+      return rc;
+  }
+  removed_count = sqlite3_changes(db);
+  sqlite3_finalize(st);
+
+  rc = commit(db);
+  if (rc != SQLITE_OK) {
+      LOGE("limpet_ttl_cleanup: Commit failed: %s", sqlite3_errmsg(db));
+      rollback(db); // Attempt to rollback if commit fails
+      unlock(db, "limpet_ttl_cleanup");
+      return rc;
+  }
+
+  if (removed_count > 0) {
+      LOGI("limpet_ttl_cleanup: Removed %d expired Limpet mines.", removed_count);
+  } else {
+      LOGD("limpet_ttl_cleanup: No expired Limpet mines found.");
+  }
+
+  unlock(db, "limpet_ttl_cleanup");
+  return SQLITE_OK;
 }
 
 int

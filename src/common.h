@@ -221,6 +221,8 @@ typedef struct {
     int sector_id;
     int armid_triggered;   /* total exploded */
     int armid_remaining;   /* sum of remaining hostile mines after updates */
+    int limpet_triggered;  /* total limpets triggered */
+    int limpet_remaining;  /* sum of remaining limpets after updates */
     int shields_lost;
     int fighters_lost;
     int hull_lost;
