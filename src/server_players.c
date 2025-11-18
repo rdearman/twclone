@@ -829,6 +829,14 @@ cmd_player_my_info (client_ctx_t *ctx, json_t *root)
     }
   json_object_set_new (player, "turns_remaining", json_integer (tr));
 
+  // Add player credits
+  long long credits_val = 0;
+  if (h_get_player_petty_cash(db, ctx->player_id, &credits_val) == SQLITE_OK) {
+      char credits_str[32];
+      snprintf(credits_str, sizeof(credits_str), "%lld.00", credits_val); // Format as string with decimals
+      json_object_set_new(player, "credits", json_string(credits_str));
+  }
+
 
   send_enveloped_ok (ctx->fd, root, "player.info", pinfo);
   json_decref (pinfo);
