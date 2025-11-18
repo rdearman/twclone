@@ -37,6 +37,7 @@ typedef struct {
   uint64_t cid;                          
   int player_id;                         
   int sector_id;                         
+  int corp_id; // Added for corporation ID
   /* --- rate limit hints --- */         
   time_t rl_window_start;               
   int rl_count;                          
@@ -97,23 +98,8 @@ typedef enum
 #define SHIP_TYPES 10
 #endif
 
-#ifndef DEFAULT_NODES
-#define DEFAULT_NODES 0
-#define MIN(a,b) (((a)<(b))?(a):(b))
-#endif
-
-
-//  END New
-#ifndef MAX_PLAYERS
-#define MAX_PLAYERS 200
-#endif
-
-#ifndef MAX_SHIPS
-#define MAX_SHIPS 1024
-#endif
-
-#ifndef MAX_PORTS
-#define MAX_PORTS 500
+#ifndef BUFF_SIZE
+#define BUFF_SIZE 5000
 #endif
 
 #ifndef MAX_TOTAL_PLANETS
@@ -124,30 +110,16 @@ typedef enum
 #define MAX_WARPS_PER_SECTOR 6
 #endif
 
-#ifndef DEFAULT_PORT
-#define DEFAULT_PORT 1234
-#endif
-
-#ifndef BUFF_SIZE
-#define BUFF_SIZE 5000
-#endif
-
-#ifndef MAX_NAME_LENGTH
-#define MAX_NAME_LENGTH 25
-#endif
+#define MIN(a,b) (((a)<(b))?(a):(b))
+#define MAX(a,b) (((a)>(b))?(a):(b))
 
 int init_sockaddr (int, struct sockaddr_in *);
-int init_clientnetwork (char *hostname, int port);
-
-int init_sockaddr (int, struct sockaddr_in *);
-int init_clientnetwork (char *hostname, int port);
+int init_clientnetwork (char *hostname, int new_port);
 
 //int sendinfo (int sockid, char *buffer);
 //int recvinfo (int sockid, char *buffer);
 int acceptnewconnection (int sockid);
 int randomnum (int min, int max);
-int min (int a, int b);
-int max (int a, int b);
 enum porttype
 {
   p_trade,
@@ -198,13 +170,56 @@ ship_clr_flag (int flags, int mask)
   return flags & ~mask;
 }
 
+// Armid Mine Configuration
+typedef struct {
+    struct {
+        bool enabled;
+        double base_trigger_chance;
+        double max_trigger_chance;
+        int damage_per_mine;
+        double min_fraction_exploded;
+        double max_fraction_exploded;
+    } armid;
+    struct {
+        bool enabled;
+        double mines_per_fighter_avg;
+        double mines_per_fighter_var;
+        double fighter_loss_per_mine;
+        double max_fraction_per_sweep;
+    } sweep;
+} armid_mine_config_t;
 
+// Structure to mirror the sector_assets table for in-memory use
+typedef struct {
+    int id;
+    int sector;
+    int player;
+    int corporation;
+    int asset_type;
+    int offensive_setting;
+    int quantity;
+    time_t ttl; // Using time_t for UNIX epoch expiry
+    time_t deployed_at;
+} sector_asset_t;
 
+// Structure to represent a ship's combat-relevant stats for damage application
+typedef struct {
+    int id;
+    int shields;
+    int fighters;
+    int hull;
+    // Add other relevant ship fields if needed for future combat logic
+} ship_t;
 
 void now_iso8601 (char out[25]);	/* "YYYY-MM-DDTHH:MM:SSZ" */
 /* Remove ANSI escape sequences from src into dst (cap bytes incl NUL). */
 void strip_ansi (char *dst, const char *src, size_t cap);
 const char * get_tow_reason_string (int reason_code);
+
+// Utility functions for random numbers and clamping
+double rand01();
+double rand_range(double min, double max);
+double clamp(double value, double min, double max);
 
 
 #endif // COMMON.H

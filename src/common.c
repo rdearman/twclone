@@ -152,29 +152,22 @@ randomnum (int min, int max)
 
 }
 
-int
-min (int a, int b)
-{
-  if (a > b)
-    return (b);
-  else if (a < b)
-    return (a);
-  else
-    return (0);
+
+
+// Utility functions for random numbers and clamping
+double rand01() {
+    return (double)rand() / (double)RAND_MAX;
 }
 
-int
-max (int a, int b)
-{
-  if (a > b)
-    return (a);
-  else if (b > a)
-    return (b);
-  else
-    return (0);
+double rand_range(double min_val, double max_val) {
+    return min_val + (rand01() * (max_val - min_val));
 }
 
-
+double clamp(double value, double min_val, double max_val) {
+    if (value < min_val) return min_val;
+    if (value > max_val) return max_val;
+    return value;
+}
 
 // Placeholder functions to satisfy the linker
 void

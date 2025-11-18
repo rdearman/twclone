@@ -2332,10 +2332,99 @@ cmd_bank_balance (client_ctx_t *ctx, json_t *root)
   json_t *payload = json_object ();
   json_object_set_new (payload, "balance", json_integer (balance));
 
-  send_enveloped_ok (ctx->fd, root, "bank.balance", payload);
   json_decref (payload);
 
   return 0;
+}
+
+// Function to destroy a ship and handle its side effects
+int destroy_ship_and_handle_side_effects(client_ctx_t *ctx, int sector_id, int player_id) {
+    sqlite3 *db = db_get_handle();
+    if (!db) {
+        LOGE("destroy_ship_and_handle_side_effects: Database handle not available.");
+        return -1;
+    }
+
+    // Get the ship_id for the player
+    int ship_id = h_get_active_ship_id(db, player_id);
+    if (ship_id <= 0) {
+        LOGW("destroy_ship_and_handle_side_effects: No active ship found for player %d to destroy.", player_id);
+        return 0; // Nothing to destroy
+    }
+
+    char *errmsg = NULL;
+    int rc;
+
+    // Start a transaction
+    if (sqlite3_exec(db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg) != SQLITE_OK) {
+        LOGE("destroy_ship_and_handle_side_effects: Failed to start transaction: %s", errmsg);
+        if (errmsg) sqlite3_free(errmsg);
+        return -1;
+    }
+
+    // 1. Delete the ship from the 'ships' table
+    sqlite3_stmt *delete_ship_stmt = NULL;
+    const char *sql_delete_ship = "DELETE FROM ships WHERE id = ?;";
+    rc = sqlite3_prepare_v2(db, sql_delete_ship, -1, &delete_ship_stmt, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("destroy_ship_and_handle_side_effects: Failed to prepare delete ship statement: %s", sqlite3_errmsg(db));
+        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+        return -1;
+    }
+    sqlite3_bind_int(delete_ship_stmt, 1, ship_id);
+    rc = sqlite3_step(delete_ship_stmt);
+    sqlite3_finalize(delete_ship_stmt);
+    if (rc != SQLITE_DONE) {
+        LOGE("destroy_ship_and_handle_side_effects: Failed to delete ship %d: %s", ship_id, sqlite3_errmsg(db));
+        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+        return -1;
+    }
+
+    // 2. Update the player's active_ship to NULL or 0
+    sqlite3_stmt *update_player_stmt = NULL;
+    const char *sql_update_player_ship = "UPDATE players SET ship = NULL WHERE id = ?;";
+    rc = sqlite3_prepare_v2(db, sql_update_player_ship, -1, &update_player_stmt, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("destroy_ship_and_handle_side_effects: Failed to prepare update player ship statement: %s", sqlite3_errmsg(db));
+        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+        return -1;
+    }
+    sqlite3_bind_int(update_player_stmt, 1, player_id);
+    rc = sqlite3_step(update_player_stmt);
+    sqlite3_finalize(update_player_stmt);
+    if (rc != SQLITE_DONE) {
+        LOGE("destroy_ship_and_handle_side_effects: Failed to update player %d active ship: %s", player_id, sqlite3_errmsg(db));
+        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+        return -1;
+    }
+
+    // Commit the transaction
+    if (sqlite3_exec(db, "COMMIT;", NULL, NULL, &errmsg) != SQLITE_OK) {
+        LOGE("destroy_ship_and_handle_side_effects: Failed to commit transaction: %s", errmsg);
+        if (errmsg) sqlite3_free(errmsg);
+        return -1;
+    }
+
+    // 3. Log an engine event for ship destruction
+    json_t *evt = json_object();
+    if (evt) {
+        json_object_set_new(evt, "player_id", json_integer(player_id));
+        json_object_set_new(evt, "ship_id", json_integer(ship_id));
+        json_object_set_new(evt, "sector_id", json_integer(sector_id));
+        (void) db_log_engine_event((long long)time(NULL), "ship.destroyed", NULL, player_id, sector_id, evt, NULL);
+    } else {
+        LOGE("destroy_ship_and_handle_side_effects: Failed to create JSON event for ship.destroyed.");
+    }
+
+    // 4. Send a message to the player about their ship being destroyed
+    // Assuming ctx->player_id is the player whose ship was destroyed.
+    // The brief implies row.player is the mine owner, so the message should go to ctx->player_id.
+    (void) h_send_message_to_player(player_id, 0, "Ship Destroyed!",
+                                   "Your ship has been destroyed! You will need to acquire a new one.");
+
+    LOGI("Ship %d belonging to player %d destroyed in sector %d.", ship_id, player_id, sector_id);
+
+    return 0;
 }
 
 

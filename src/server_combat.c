@@ -16,6 +16,7 @@
 #include <strings.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <math.h> // Added for pow() and ceil()
 // local includes
 #include "server_cron.h"
 #include "server_log.h"
@@ -73,6 +74,167 @@ niy (client_ctx_t *ctx, json_t *root, const char *which)
 }
 
 
+
+
+void
+apply_armid_mines_on_entry (sqlite3 *db, int ship_id, int sector_id)
+{
+  sqlite3_stmt *st = NULL;
+  const char *sql_select_mines =
+    "SELECT id, quantity, offensive_setting, player, corporation "
+    "FROM sector_assets "
+    "WHERE sector = ?1 AND asset_type = 1;"; // asset_type 1 for Armid Mines
+
+  if (sqlite3_prepare_v2 (db, sql_select_mines, -1, &st, NULL) != SQLITE_OK)
+    {
+      LOGE ("Failed to prepare mine selection statement: %s",
+	    sqlite3_errmsg (db));
+      return;
+    }
+  sqlite3_bind_int (st, 1, sector_id);
+
+  while (sqlite3_step (st) == SQLITE_ROW)
+    {
+      int mine_id = sqlite3_column_int (st, 0);
+      int mine_quantity = sqlite3_column_int (st, 1);
+      int offensive_setting = sqlite3_column_int (st, 2);
+      int mine_owner_player_id = sqlite3_column_int (st, 3);
+      int mine_owner_corp_id = sqlite3_column_int (st, 4);	// 0 if NULL
+
+      // Get ship's current shield and hull
+      int ship_hull = 0;
+      int ship_shield = 0;
+      int ship_player_id = 0;
+      int ship_corp_id = 0;
+
+      sqlite3_stmt *ship_st = NULL;
+      const char *sql_select_ship =
+	"SELECT hull, shield, player, corporation FROM ships WHERE id = ?1;";
+      if (sqlite3_prepare_v2 (db, sql_select_ship, -1, &ship_st, NULL) !=
+	  SQLITE_OK)
+	{
+	  LOGE ("Failed to prepare ship selection statement: %s",
+		sqlite3_errmsg (db));
+	  sqlite3_finalize (st);
+	  return;
+	}
+      sqlite3_bind_int (ship_st, 1, ship_id);
+      if (sqlite3_step (ship_st) == SQLITE_ROW)
+	{
+	  ship_hull = sqlite3_column_int (ship_st, 0);
+	  ship_shield = sqlite3_column_int (ship_st, 1);
+	  ship_player_id = sqlite3_column_int (ship_st, 2);
+	  ship_corp_id = sqlite3_column_int (ship_st, 3);
+	}
+      sqlite3_finalize (ship_st);
+
+      // Skip if mine owner is the same as ship owner (player or corp)
+      if (mine_owner_player_id == ship_player_id)
+	{
+	  continue;
+	}
+      if (mine_owner_corp_id != 0 && ship_corp_id != 0
+	  && mine_owner_corp_id == ship_corp_id)
+	{
+	  continue;
+	}
+
+      // Calculate damage based on offensive setting
+      double damage_multiplier = 0.0;
+      switch (offensive_setting)
+	{
+	case OFFENSE_TOLL:
+	  damage_multiplier = 0.1;
+	  break;
+	case OFFENSE_DEFEND:
+	  damage_multiplier = 0.5;
+	  break;
+	case OFFENSE_ATTACK:
+	  damage_multiplier = 1.0;
+	  break;
+	default:
+	  LOGW ("Unknown offensive setting for mine %d: %d", mine_id,
+		offensive_setting);
+	  continue;
+	}
+
+      // Damage calculation: 1 mine = 10 damage (base)
+      double base_damage_per_mine = 10.0;
+      double total_potential_damage =
+	mine_quantity * base_damage_per_mine * damage_multiplier;
+
+      // Apply damage to shield first
+      int damage_to_shield = (int) ceil (total_potential_damage / 2.0);	// Half damage to shield
+      int damage_to_hull = (int) ceil (total_potential_damage / 2.0);	// Half damage to hull
+
+      if (ship_shield > 0)
+	{
+	  int shield_after_damage = ship_shield - damage_to_shield;
+	  if (shield_after_damage < 0)
+	    {
+	      damage_to_hull -= abs (shield_after_damage);	// Excess damage to hull
+	      ship_shield = 0;
+	    }
+	  else
+	    {
+	      ship_shield = shield_after_damage;
+	    }
+	}
+
+      ship_hull -= damage_to_hull;
+
+      // Update ship's hull and shield
+      sqlite3_stmt *update_st = NULL;
+      const char *sql_update_ship_hp =
+	"UPDATE ships SET hull = ?1, shield = ?2 WHERE id = ?3;";
+      if (sqlite3_prepare_v2 (db, sql_update_ship_hp, -1, &update_st, NULL) !=
+	  SQLITE_OK)
+	{
+	  LOGE ("Failed to prepare ship HP update statement: %s",
+		sqlite3_errmsg (db));
+	  sqlite3_finalize (st);
+	  return;
+	}
+      sqlite3_bind_int (update_st, 1, ship_hull);
+      sqlite3_bind_int (update_st, 2, ship_shield);
+      sqlite3_bind_int (update_st, 3, ship_id);
+      if (sqlite3_step (update_st) != SQLITE_DONE)
+	{
+	  LOGE ("Failed to update ship HP: %s", sqlite3_errmsg (db));
+	}
+      sqlite3_finalize (update_st);
+
+      // Log the event
+      json_t *evt = json_object ();
+      json_object_set_new (evt, "ship_id", json_integer (ship_id));
+      json_object_set_new (evt, "sector_id", json_integer (sector_id));
+      json_object_set_new (evt, "mine_id", json_integer (mine_id));
+      json_object_set_new (evt, "mine_owner_player_id",
+			   json_integer (mine_owner_player_id));
+      json_object_set_new (evt, "mine_owner_corp_id",
+			   json_integer (mine_owner_corp_id));
+      json_object_set_new (evt, "damage_dealt",
+			   json_integer ((int) total_potential_damage));
+      json_object_set_new (evt, "ship_hull_after", json_integer (ship_hull));
+      json_object_set_new (evt, "ship_shield_after",
+			   json_integer (ship_shield));
+      json_object_set_new (evt, "event_ts",
+			   json_integer ((json_int_t) time (NULL)));
+
+      (void) db_log_engine_event ((long long) time (NULL),
+				  "combat.armid_mine.triggered", NULL,
+				  mine_owner_player_id, sector_id, evt, NULL);
+
+      // If ship is destroyed, handle it
+      if (ship_hull <= 0)
+	{
+	  // This will be handled by a separate function, e.g., check_for_ship_destruction
+	  LOGI ("Ship %d destroyed by Armid mine %d in sector %d", ship_id,
+		mine_id, sector_id);
+	}
+    }
+  sqlite3_finalize (st);
+}
 
 int
 cmd_deploy_assets_list_internal (client_ctx_t *ctx,
@@ -1998,14 +2160,13 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
     (void) db_log_engine_event ((long long)time(NULL), "mines.recalled", NULL, ctx->player_id,
                                 requested_sector_id, evt, NULL);
   }
-
-  /* 7. Send response */
-  json_t *out = json_pack ("{\"s\":i, \"s\":i, \"s\":i, \"s\":i, \"s\":i}",
-			   "sector_id", requested_sector_id,
-			   "player_id", ctx->player_id,
-			   "asset_id", asset_id,
-			   "amount", asset_quantity,
-			   "asset_type", asset_type);
+  /* 7. Send enveloped_ok response */
+  json_t *out = json_object ();
+  json_object_set_new (out, "sector_id", json_integer (requested_sector_id));
+  json_object_set_new (out, "asset_id", json_integer (asset_id));
+  json_object_set_new (out, "recalled", json_integer (asset_quantity));
+  json_object_set_new (out, "remaining_in_sector", json_integer (0)); // All recalled
+  json_object_set_new (out, "asset_type", json_integer (asset_type));
 
   send_enveloped_ok (ctx->fd, root, "combat.mines.recalled", out);
   json_decref (out);

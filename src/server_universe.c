@@ -1145,6 +1145,9 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
   LOGI("cmd_move_warp: Player %d (fd %d) successfully warped from sector %d to %d. db_player_set_sector returned %d", ctx->player_id, ctx->fd, from, to, prc);
   ctx->sector_id = to;
 
+  // Apply Armid mines on entry
+  apply_armid_mines_on_entry(db_handle, h_get_active_ship_id(db_handle, ctx->player_id), to);
+
   /* 1) Send the direct reply for the actor */
   json_t *resp = json_object ();
   json_object_set_new (resp, "player_id", json_integer (ctx->player_id));

@@ -20,6 +20,8 @@ extern "C"
   int cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root);
   int cmd_mines_recall (client_ctx_t *ctx, json_t *root);
 
+  void apply_armid_mines_on_entry (sqlite3 *db, int ship_id, int sector_id);
+
 
 
 

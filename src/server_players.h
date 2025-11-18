@@ -61,6 +61,9 @@ extern "C"
   int player_credits(client_ctx_t *ctx);
   int cargo_space_free(client_ctx_t *ctx);
 
+  // Function to destroy a ship and handle its side effects
+  int destroy_ship_and_handle_side_effects(client_ctx_t *ctx, int sector_id, int player_id);
+
 
   
 #ifdef __cplusplus
