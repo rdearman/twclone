@@ -225,6 +225,58 @@ For asynchronous events pushed to the client (not in response to a specific comm
     }
     ```
 
+*   `session.ping`: Keep-alive message to maintain session.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "ping-123",
+      "ts": "2025-11-07T10:31:00.000Z",
+      "command": "session.ping",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {}
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sping-123",
+      "ts": "2025-11-07T10:31:00.100Z",
+      "reply_to": "ping-123",
+      "status": "ok",
+      "type": "session.pong",
+      "data": {}
+    }
+    ```
+
+*   `session.hello`: Initial handshake for session establishment.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "hello-456",
+      "ts": "2025-11-07T10:32:00.000Z",
+      "command": "session.hello",
+      "auth": null,
+      "data": {}
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "shello-456",
+      "ts": "2025-11-07T10:32:00.100Z",
+      "reply_to": "hello-456",
+      "status": "ok",
+      "type": "session.welcome",
+      "data": {
+        "server_version": "tw-server/2.0.0"
+      }
+    }
+    ```
+
 *   `user.create`: Creates a new player account. (DEPRECATED: Use `auth.register` instead)
 
     *Example Client Request:*
@@ -1560,7 +1612,7 @@ Commands for interacting with the ledger-based economy. Most are only available 
     }
     ```
 
-*   `move.autopilot.start`: (ALIAS for `move.pathfind`) Start server-side autopilot.
+*   `move.autopilot.start`: (ALIAS for `move.pathfind`) Start server-side autopilot. (NIY - Not Yet Implemented)
 
     *Example Client Request:*
     ```json
@@ -1569,11 +1621,7 @@ Commands for interacting with the ledger-based economy. Most are only available 
       "ts": "2025-11-07T15:20:00.000Z",
       "command": "move.autopilot.start",
       "auth": { "session": "eyJhbGciOi..." },
-      "data": {
-        "from": 1, // Optional: If omitted, current sector is used as start
-        "to": 10,
-        "avoid": [666, 777] // Optional: Sectors to avoid
-      }
+      "data": {}
     }
     ```
 
@@ -1852,6 +1900,71 @@ Commands for interacting with the ledger-based economy. Most are only available 
       "type": "player.set_trade_account_preference",
       "data": {
         "message": "Preference updated successfully."
+      }
+    }
+    ```
+
+*   `port.status`: Get status information about a port.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "port-status-1",
+      "ts": "2025-11-07T16:01:00.000Z",
+      "command": "port.status",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {
+        "port_id": 1    // Optional: Either port_id or sector_id must be provided
+      }
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sport-status-1",
+      "ts": "2025-11-07T16:01:00.100Z",
+      "reply_to": "port-status-1",
+      "status": "ok",
+      "type": "port.info",
+      "data": {
+        "port": {
+          "id": 1,
+          "name": "Earth Trading Post"
+        }
+      }
+    }
+    ```
+
+*   `port.describe`: Get detailed description of a port.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "port-describe-1",
+      "ts": "2025-11-07T16:02:00.000Z",
+      "command": "port.describe",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {
+        "sector_id": 1   // Optional: Either port_id or sector_id must be provided
+      }
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sport-describe-1",
+      "ts": "2025-11-07T16:02:00.100Z",
+      "reply_to": "port-describe-1",
+      "status": "ok",
+      "type": "port.info",
+      "data": {
+        "port": {
+          "id": 1,
+          "name": "Earth Trading Post",
+          "description": "A bustling hub of commerce."
+        }
       }
     }
     ```
@@ -3115,6 +3228,378 @@ Commands for interacting with the ledger-based economy. Most are only available 
     }
     ```
 
+*   `deploy.fighters.list`: List deployed fighters in the current sector.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "j1k2l3m4-n5o6-p7q8-r9s0-t1u2v3w4x5y6",
+      "ts": "2025-11-07T19:45:00.000Z",
+      "command": "deploy.fighters.list",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {}
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sj1k2l3m4-n5o6-p7q8-r9s0-t1u2v3w4x5y6",
+      "ts": "2025-11-07T19:45:00.100Z",
+      "reply_to": "j1k2l3m4-n5o6-p7q8-r9s0-t1u2v3w4x5y6",
+      "status": "ok",
+      "type": "deploy.fighters.list_v1",
+      "data": {
+        "fighters": [
+          { "id": 1, "owner_id": 123, "sector_id": 1, "quantity": 5 },
+          { "id": 2, "owner_id": 456, "sector_id": 1, "quantity": 3 }
+        ]
+      }
+    }
+    ```
+
+*   `deploy.mines.list`: List deployed mines in the current sector.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "k1l2m3n4-o5p6-q7r8-s9t0-u1v2w3x4y5z6",
+      "ts": "2025-11-07T19:50:00.000Z",
+      "command": "deploy.mines.list",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {}
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sk1l2m3n4-o5p6-q7r8-s9t0-u1v2w3x4y5z6",
+      "ts": "2025-11-07T19:50:00.100Z",
+      "reply_to": "k1l2m3n4-o5p6-q7r8-s9t0-u1v2w3x4y5z6",
+      "status": "ok",
+      "type": "deploy.mines.list_v1",
+      "data": {
+        "mines": [
+          { "id": 1, "owner_id": 123, "sector_id": 1, "quantity": 2 },
+          { "id": 2, "owner_id": 456, "sector_id": 1, "quantity": 1 }
+        ]
+      }
+    }
+    ```
+
+### 4.9. Communication (Mail & Chat)
+*   `mail.send`: Send a new mail message to another player.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+      "ts": "2025-11-07T20:00:00.000Z",
+      "command": "mail.send",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {
+        "to_player_name": "RecipientPlayer",
+        "subject": "Meeting Request",
+        "body": "Can we meet at Earth Port tomorrow?"
+      }
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sa1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+      "ts": "2025-11-07T20:00:00.100Z",
+      "reply_to": "a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+      "status": "ok",
+      "type": "mail.sent",
+      "data": {
+        "mail_id": 123
+      }
+    }
+    ```
+
+*   `mail.inbox`: List mail messages in the player's inbox.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "b1c2d3e4-f5a6-b7c8-d9e0-f1a2b3c4d5e6",
+      "ts": "2025-11-07T20:05:00.000Z",
+      "command": "mail.inbox",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {}
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sb1c2d3e4-f5a6-b7c8-d9e0-f1a2b3c4d5e6",
+      "ts": "2025-11-07T20:05:00.100Z",
+      "reply_to": "b1c2d3e4-f5a6-b7c8-d9e0-f1a2b3c4d5e6",
+      "status": "ok",
+      "type": "mail.inbox_v1",
+      "data": {
+        "items": [
+          { "id": 123, "thread_id": 1, "sender_id": 456, "subject": "Meeting Request", "sent_at": "2025-11-07T20:00:00.000Z", "read_at": null },
+          { "id": 124, "thread_id": 2, "sender_id": 789, "subject": "Trade Offer", "sent_at": "2025-11-07T19:30:00.000Z", "read_at": "2025-11-07T20:01:00.000Z" }
+        ]
+      }
+    }
+    ```
+
+*   `mail.read`: Read a specific mail message.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "c1d2e3f4-a5b6-c7d8-e9f0-a1b2c3d4e5f6",
+      "ts": "2025-11-07T20:10:00.000Z",
+      "command": "mail.read",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {
+        "mail_id": 123
+      }
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sc1d2e3f4-a5b6-c7d8-e9f0-a1b2c3d4e5f6",
+      "ts": "2025-11-07T20:10:00.100Z",
+      "reply_to": "c1d2e3f4-a5b6-c7d8-e9f0-a1b2c3d4e5f6",
+      "status": "ok",
+      "type": "mail.read_v1",
+      "data": {
+        "id": 123,
+        "thread_id": 1,
+        "sender_id": 456,
+        "subject": "Meeting Request",
+        "body": "Can we meet at Earth Port tomorrow?",
+        "sent_at": "2025-11-07T20:00:00.000Z",
+        "read_at": "2025-11-07T20:10:00.100Z"
+      }
+    }
+    ```
+
+### 4.10. System Notices
+*   `sys.notice.create`: (Sysop Command) Create a new system-wide notice.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+      "ts": "2025-11-07T20:15:00.000Z",
+      "command": "sys.notice.create",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {
+        "message": "Server maintenance scheduled for 03:00 UTC.",
+        "severity": 2, // 1=info, 2=warning, 3=critical
+        "expires_at": "2025-11-08T03:00:00.000Z" // Optional
+      }
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sa1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+      "ts": "2025-11-07T20:15:00.100Z",
+      "reply_to": "a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+      "status": "ok",
+      "type": "sys.notice.created",
+      "data": {
+        "notice_id": 1
+      }
+    }
+    ```
+
+*   `notice.list`: List active system notices for the current player.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "b1c2d3e4-f5a6-b7c8-d9e0-f1a2b3c4d5e6",
+      "ts": "2025-11-07T20:20:00.000Z",
+      "command": "notice.list",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {}
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sb1c2d3e4-f5a6-b7c8-d9e0-f1a2b3c4d5e6",
+      "ts": "2025-11-07T20:20:00.100Z",
+      "reply_to": "b1c2d3e4-f5a6-b7c8-d9e0-f1a2b3c4d5e6",
+      "status": "ok",
+      "type": "notice.list_v1",
+      "data": {
+        "notices": [
+          { "id": 1, "message": "Server maintenance scheduled for 03:00 UTC.", "severity": 2, "created_at": "2025-11-07T20:15:00.000Z", "expires_at": "2025-11-08T03:00:00.000Z", "acknowledged": false }
+        ]
+      }
+    }
+    ```
+
+*   `notice.ack`: Acknowledge a system notice, marking it as read for the player.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "c1d2e3f4-a5b6-c7d8-e9f0-a1b2c3d4e5f6",
+      "ts": "2025-11-07T20:25:00.000Z",
+      "command": "notice.ack",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {
+        "notice_id": 1
+      }
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sc1d2e3f4-a5b6-c7d8-e9f0-a1b2c3d4e5f6",
+      "ts": "2025-11-07T20:25:00.100Z",
+      "reply_to": "c1d2e3f4-a5b6-c7d8-e9f0-a1b2c3d4e5f6",
+      "status": "ok",
+      "type": "notice.acknowledged",
+      "data": {
+        "notice_id": 1
+      }
+    }
+    ```
+
+### 4.11. News & Events
+*   `news.read`: Read a specific news article.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+      "ts": "2025-11-07T20:30:00.000Z",
+      "command": "news.read",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {
+        "news_id": 1
+      }
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sa1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+      "ts": "2025-11-07T20:30:00.100Z",
+      "reply_to": "a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+      "status": "ok",
+      "type": "news.article",
+      "data": {
+        "news_id": 1,
+        "published_ts": "2025-11-07T10:00:00.000Z",
+        "news_category": "Galactic Politics",
+        "article_text": "Breaking news: Federation expands its borders...",
+        "source_ids": [101, 102]
+      }
+    }
+    ```
+
+### 4.12. Subscriptions
+*   `subscribe.catalog`: Subscribe to a catalog of events or data streams.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+      "ts": "2025-11-07T20:35:00.000Z",
+      "command": "subscribe.catalog",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {
+        "catalog_name": "market_data" // e.g., "market_data", "sector_updates"
+      }
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sa1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+      "ts": "2025-11-07T20:35:00.100Z",
+      "reply_to": "a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+      "status": "ok",
+      "type": "subscribe.catalog_v1",
+      "data": {
+        "catalog_name": "market_data",
+        "status": "subscribed"
+      }
+    }
+    ```
+
+*   `deploy.fighters.list`: List deployed fighters in the current sector.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "j1k2l3m4-n5o6-p7q8-r9s0-t1u2v3w4x5y6",
+      "ts": "2025-11-07T19:45:00.000Z",
+      "command": "deploy.fighters.list",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {}
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sj1k2l3m4-n5o6-p7q8-r9s0-t1u2v3w4x5y6",
+      "ts": "2025-11-07T19:45:00.100Z",
+      "reply_to": "j1k2l3m4-n5o6-p7q8-r9s0-t1u2v3w4x5y6",
+      "status": "ok",
+      "type": "deploy.fighters.list_v1",
+      "data": {
+        "fighters": [
+          { "id": 1, "owner_id": 123, "sector_id": 1, "quantity": 5 },
+          { "id": 2, "owner_id": 456, "sector_id": 1, "quantity": 3 }
+        ]
+      }
+    }
+    ```
+
+*   `deploy.mines.list`: List deployed mines in the current sector.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "k1l2m3n4-o5p6-q7r8-s9t0-u1v2w3x4y5z6",
+      "ts": "2025-11-07T19:50:00.000Z",
+      "command": "deploy.mines.list",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {}
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sk1l2m3n4-o5p6-q7r8-s9t0-u1v2w3x4y5z6",
+      "ts": "2025-11-07T19:50:00.100Z",
+      "reply_to": "k1l2m3n4-o5p6-q7r8-s9t0-u1v2w3x4y5z6",
+      "status": "ok",
+      "type": "deploy.mines.list_v1",
+      "data": {
+        "mines": [
+          { "id": 1, "owner_id": 123, "sector_id": 1, "quantity": 2 },
+          { "id": 2, "owner_id": 456, "sector_id": 1, "quantity": 1 }
+        ]
+      }
+    }
+    ```
+
 ---
 
 ## 5. Server-to-Client Events
@@ -3424,10 +3909,13 @@ The error model uses HTTP-like status codes within the JSON response. `status: "
 
 ### Client-to-Server Commands
 
+*   `admin.notice`
+*   `admin.shutdown_warning`
 *   `auth.login`
 *   `auth.logout`
-*   `auth.refresh`
+*   `auth.mfa.totp.verify`
 *   `auth.register`
+*   `auth.refresh`
 *   `bank.balance`
 *   `bank.deposit`
 *   `bank.orders.cancel`
@@ -3438,9 +3926,18 @@ The error model uses HTTP-like status codes within the JSON response. `status: "
 *   `bank.withdraw`
 *   `bounty.list`
 *   `bounty.post`
+*   `bulk.execute`
+*   `chat.broadcast`
+*   `chat.history`
+*   `chat.send`
+*   `citadel.build`
+*   `citadel.upgrade`
 *   `combat.attack`
 *   `combat.deploy_fighters`
+*   `combat.deploy_mines`
 *   `combat.lay_mines`
+*   `combat.status`
+*   `combat.sweep_mines`
 *   `corp.balance`
 *   `corp.deposit`
 *   `corp.issue_dividend`
@@ -3448,6 +3945,9 @@ The error model uses HTTP-like status codes within the JSON response. `status: "
 *   `corp.statement`
 *   `corp.stock.issue`
 *   `corp.withdraw`
+*   `deploy.fighters.list`
+*   `deploy.mines.list`
+*   `fighters.recall`
 *   `fine.list`
 *   `fine.pay`
 *   `insurance.claim.file`
@@ -3458,17 +3958,23 @@ The error model uses HTTP-like status codes within the JSON response. `status: "
 *   `loan.list_active`
 *   `loan.offers.list`
 *   `loan.repay`
+*   `mail.delete`
+*   `mail.inbox`
+*   `mail.read`
+*   `mail.send`
 *   `market.contracts.buy`
 *   `market.contracts.list`
 *   `market.contracts.sell`
 *   `market.orders.cancel`
 *   `market.orders.create`
 *   `market.orders.list`
+*   `mines.recall`
 *   `move.autopilot.start`
 *   `move.autopilot.status`
 *   `move.autopilot.stop`
 *   `move.describe_sector`
 *   `move.pathfind`
+*   `move.scan`
 *   `move.transwarp`
 *   `move.warp`
 *   `nav.avoid.add`
@@ -3477,30 +3983,92 @@ The error model uses HTTP-like status codes within the JSON response. `status: "
 *   `nav.bookmark.add`
 *   `nav.bookmark.list`
 *   `nav.bookmark.remove`
+*   `nav.bookmark.set`
+*   `news.get_feed`
+*   `news.mark_feed_read`
+*   `news.read`
+*   `notice.ack`
+*   `notice.list`
+*   `notes.list`
 *   `planet.create`
 *   `planet.deposit`
+*   `planet.genesis`
+*   `planet.harvest`
+*   `planet.info`
+*   `planet.land`
+*   `planet.launch`
 *   `planet.list_mine`
+*   `planet.rename`
+*   `planet.transfer_ownership`
 *   `planet.withdraw`
+*   `player.get_avoids`
+*   `player.get_bookmarks`
+*   `player.get_notes`
+*   `player.get_prefs`
 *   `player.get_settings`
+*   `player.get_subscriptions`
+*   `player.get_topics`
 *   `player.list_online`
 *   `player.my_info`
 *   `player.rankings`
+*   `player.set_avoids`
+*   `player.set_bookmarks`
 *   `player.set_prefs`
+*   `player.set_settings`
+*   `player.set_subscriptions`
+*   `player.set_topics`
+*   `player.set_trade_account_preference`
+*   `port.describe`
+*   `port.info`
+*   `port.status`
 *   `research.projects.fund`
 *   `research.projects.list`
+*   `s2s.event.relay`
+*   `s2s.planet.genesis`
+*   `s2s.planet.transfer`
+*   `s2s.player.migrate`
+*   `s2s.port.restock`
+*   `s2s.replication.heartbeat`
+*   `sector.info`
+*   `sector.scan`
+*   `sector.scan.density`
+*   `sector.search`
+*   `sector.set_beacon`
+*   `session.disconnect`
+*   `session.hello`
+*   `session.ping`
+*   `ship.claim`
 *   `ship.info`
+*   `ship.inspect`
 *   `ship.jettison`
+*   `ship.repair`
+*   `ship.rename`
+*   `ship.reregister`
+*   `ship.self_destruct`
 *   `ship.status`
+*   `ship.transfer_cargo`
 *   `ship.upgrade`
 *   `stock.exchange.list_stocks`
 *   `stock.exchange.orders.cancel`
 *   `stock.exchange.orders.create`
 *   `stock.portfolio.list`
+*   `subscribe.add`
+*   `subscribe.catalog`
+*   `subscribe.list`
+*   `subscribe.remove`
+*   `sys.notice.create`
+*   `sys.raw_sql_exec`
 *   `system.capabilities`
+*   `system.cmd_list`
 *   `system.describe_schema`
+*   `system.disconnect`
 *   `system.hello`
+*   `trade.accept`
 *   `trade.buy`
+*   `trade.cancel`
 *   `trade.history`
+*   `trade.jettison`
+*   `trade.offer`
 *   `trade.port_info`
 *   `trade.quote`
 *   `trade.sell`
