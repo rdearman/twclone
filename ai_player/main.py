@@ -149,13 +149,14 @@ def _get_filtered_game_state_for_llm(full_game_state):
     filtered_state["bank_balance"] = full_game_state.get("bank_balance")
 
     # Player Info (trimmed)
-    player_info = full_game_state.get("player_info", {})
-    if player_info:
+    player_info_data = full_game_state.get("player_info", {})
+    if player_info_data and "player" in player_info_data:
+        player_obj = player_info_data.get("player", {})
         filtered_state["player_info"] = {
-            "username": player_info.get("username"),
-            "credits": player_info.get("credits"),
-            "faction": player_info.get("faction"),
-            "is_online": player_info.get("is_online"),
+            "username": player_obj.get("username"),
+            "credits": player_obj.get("credits"),
+            "faction": player_obj.get("faction"),
+            "is_online": player_obj.get("is_online"),
         }
 
     # Ship Info (trimmed)
@@ -295,13 +296,18 @@ def get_strategy_from_llm(game_state, model, stage):
     """
     Asks the LLM for a high-level strategic plan.
     """
+    # Filter the game state to reduce token count for the LLM
+    filtered_game_state = _get_filtered_game_state_for_llm(game_state)
+
+    # --- FIX 3.1 & 3.2 ---
+    # If we are not at a port, we must be exploring.
+    if not filtered_game_state.get("can_trade_at_current_location", False):
+        stage = "explore"
+    
     if stage == "explore":
         prompt = PROMPT_EXPLORE
     else:
         prompt = PROMPT_STRATEGY
-    
-    # Filter the game state to reduce token count for the LLM
-    filtered_game_state = _get_filtered_game_state_for_llm(game_state)
 
     try:
         response_text = get_ollama_response(
@@ -385,6 +391,7 @@ def get_strategy_from_llm(game_state, model, stage):
                 validated = []
                 valid_gotos = set(filtered_game_state.get("valid_goto_sectors", []))
                 valid_comms = set(c.upper() for c in filtered_game_state.get("valid_commodity_names", []))
+                can_trade_here = filtered_game_state.get("can_trade_at_current_location", False)
 
                 for goal in plan:
                     if not isinstance(goal, str) or ":" not in goal:
@@ -402,6 +409,9 @@ def get_strategy_from_llm(game_state, model, stage):
                             continue
                         validated.append(f"goto: {sid}")
                     elif verb in ("buy", "sell"):
+                        if not can_trade_here:
+                            logger.warning(f"LLM proposed '{goal}' but not at a port. Ignoring.")
+                            continue
                         comm = arg.upper()
                         if comm not in valid_comms:
                             continue
@@ -456,7 +466,20 @@ def is_goal_complete(goal_str, game_state, response_data, response_type):
             if response_type != "trade.buy_receipt_v1": return False
             # Check if what we just bought matches the goal
             return any(l.get("commodity", "").lower() == goal_target for l in response_data.get("lines", []))
-    
+
+        elif goal_type == "survey" and goal_target == "port":
+            if response_type == "port.info":
+                # Goal is complete if we have received port info with commodities.
+                return bool(response_data.get("port", {}).get("commodities"))
+            # Fallback check on the state, in case the response was processed before the goal check.
+            current_sector_id = str(game_state.get("player_location_sector"))
+            port_info = game_state.get("port_info_by_sector", {}).get(current_sector_id)
+            if port_info and port_info.get("commodities"):
+                return True
+            return False
+
+        elif goal_type == "scan" and goal_target == "density":
+            return response_type == "sector.density.scan"
     except Exception as e:
         logger.warning(f"Error checking goal completion for '{goal_str}': {e}")
     
@@ -601,22 +624,42 @@ def main():
                 continue
 
             # 4. Get Current State & Strategy
+            game_state = state_manager.get_all()
+            
+            # --- FIX: Cooldown if out of turns ---
+            if (game_state.get("player_info") or {}).get("player", {}).get("turns_remaining", 1) <= 0:
+                logger.info("Out of turns. Cooling down for 1 hour.")
+                time.sleep(3600)
+                continue
+
             strategy_plan = game_state.get("strategy_plan", [])
             current_goal = None
 
             # 5. Check if we need a new strategy
             if not strategy_plan:
-                if game_state.get("player_info") and game_state.get("ship_info"): # Only ask if we are 'in-game'
-                    logger.info("Strategy plan is empty. Requesting a new one from LLM.")
-                    logger.debug(f"Calling LLM with model: {config.get('ollama_model')}")
-                    new_plan = get_strategy_from_llm(game_state, config.get("ollama_model"), planner.current_stage) 
-                    if new_plan and isinstance(new_plan, list) and all(isinstance(g, str) and ":" in g for g in new_plan):
-                        state_manager.set("strategy_plan", new_plan)
-                        strategy_plan = new_plan
-                    else:
-                        logger.warning(f"LLM provided an invalid plan: {new_plan}. Retrying.")
-                        time.sleep(2) # Wait a moment before retrying
-                        continue
+                game_state = state_manager.get_all() # get fresh state
+                current_sector_id = str(game_state.get("player_location_sector"))
+                current_sector_data = game_state.get("sector_data", {}).get(current_sector_id, {})
+                at_port = current_sector_data.get("has_port", False)
+                
+                port_info = game_state.get("port_info_by_sector", {}).get(current_sector_id)
+                survey_needed = at_port and (not port_info or not port_info.get("commodities"))
+
+                if survey_needed:
+                    logger.info("At a port, but survey is incomplete. Setting goal to survey.")
+                    state_manager.set("strategy_plan", ["survey: port"])
+                else:
+                    if game_state.get("player_info") and game_state.get("ship_info"): # Only ask if we are 'in-game'
+                        logger.info("Strategy plan is empty. Requesting a new one from LLM.")
+                        logger.debug(f"Calling LLM with model: {config.get('ollama_model')}")
+                        new_plan = get_strategy_from_llm(game_state, config.get("ollama_model"), planner.current_stage) 
+                        if new_plan and isinstance(new_plan, list) and all(isinstance(g, str) and ":" in g for g in new_plan):
+                            state_manager.set("strategy_plan", new_plan)
+                            strategy_plan = new_plan
+                        else:
+                            logger.warning(f"LLM provided an invalid plan: {new_plan}. Retrying.")
+                            time.sleep(2) # Wait a moment before retrying
+                            continue
             
             # 6. Get the current goal
             if strategy_plan:
@@ -763,10 +806,11 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                 if response_type == "auth.session":
                     session_id = response_data.get("session")
                     state_manager.set("session_id", session_id)
+                    state_manager.update_player_info(response_data)
                 
                 # 2) Player Info
                 if response_type == "player.info" or response_type == "player.my_info":
-                    state_manager.set("player_info", response_data)
+                    state_manager.update_player_info(response_data)
                     if response_data.get("ship", {}).get("location"):
                         state_manager.set("player_location_sector", response_data["ship"]["location"]["sector_id"])
                 
@@ -791,7 +835,25 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                 if response_type == "move.result":
                     # --- Update player location immediately ---
                     if response_data.get("current_sector"):
-                        state_manager.set("player_location_sector", response_data["current_sector"])
+                        new_sector = response_data.get("current_sector")
+                        state_manager.set("player_location_sector", new_sector)
+                        # --- FIX: Track recent sectors ---
+                        visits = state_manager.get("recent_sectors", [])
+                        visits.append(new_sector)
+                        state_manager.set("recent_sectors", visits[-10:])
+
+                        # --- FIX: Refresh player info after move ---
+                        idempotency_key = str(uuid.uuid4())
+                        refresh_cmd = {
+                            "id": f"c-{idempotency_key[:8]}",
+                            "command": "player.my_info",
+                            "data": {},
+                            "meta": {
+                                "client_version": config.get("client_version"),
+                                "idempotency_key": idempotency_key
+                            }
+                        }
+                        game_conn.send_command(refresh_cmd)
 
                 if response_type == "sector.info":
                     # --- THIS IS THE FIX for the 'sector.info' loop ---

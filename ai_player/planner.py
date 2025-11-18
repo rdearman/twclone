@@ -127,6 +127,10 @@ class Planner:
                     "port_id": port_id,
                     "items": [{"commodity": commodity_to_buy, "quantity": quantity}]
                 }}
+
+            elif goal_type == "survey" and goal_target == "port":
+                logger.info("Achieving 'survey: port' by calling trade.port_info")
+                return {"command": "trade.port_info", "data": {}}
             
             elif goal_type == "scan" and goal_target == "density":
                 return {"command": "sector.scan.density", "data": {}}
@@ -279,8 +283,12 @@ class Planner:
                 if self._can_buy(current_state):
                     actions.append("trade.buy")
             actions.append("move.warp")
-            if current_state.get("player_info", {}).get("credits", 0) > 1000:
-                actions.append("bank.deposit")
+            player_credits_str = current_state.get("player_info", {}).get("player", {}).get("credits", "0")
+            try:
+                if float(player_credits_str) > 1000:
+                    actions.append("bank.deposit")
+            except (ValueError, TypeError):
+                pass # Ignore if credits is not a valid number
             actions.append("bank.balance")
             return actions
         
@@ -346,8 +354,8 @@ class Planner:
         sector_id = str(current_state.get("player_location_sector"))
         port_id = self._find_port_in_sector(current_state, sector_id)
         if not port_id:
-            return True # No port to survey
-        
+            return False  # No port here; nothing to survey
+
         port_id = str(port_id)
         price_cache = current_state.get("price_cache", {}).get(port_id, {})
         
@@ -511,8 +519,13 @@ class Planner:
 
         if field_name == "amount":
             if command_name == "bank.deposit":
-                credits = current_state.get("player_info", {}).get("credits", 0)
-                if credits > 1000: return str(credits - 1000)
+                player_credits_str = current_state.get("player_info", {}).get("player", {}).get("credits", "0")
+                try:
+                    credits = float(player_credits_str)
+                    if credits > 1000:
+                        return str(credits - 1000)
+                except (ValueError, TypeError):
+                    return None
 
         if field_name == "items":
             if command_name == "trade.buy":
@@ -546,6 +559,14 @@ class Planner:
         # --- FIX: Don't warp to the same sector ---
         possible_targets = [s for s in adjacent_sectors if s != current_sector]
         if not possible_targets: return None
+
+        # --- FIX 3.3: Avoid recent sectors to prevent ping-pong ---
+        recent = set(current_state.get("recent_sectors", [])[-5:])
+        non_recent_targets = [s for s in possible_targets if s not in recent]
+        
+        if non_recent_targets:
+            possible_targets = non_recent_targets
+        # If all possible targets are recent, we'll just have to pick one
             
         # Prioritize sectors with ports identified by density scan
         sectors_with_ports = []
