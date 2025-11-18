@@ -1,7 +1,0 @@
-{
-    "bug_id": "err_unknown_1307",
-    "first_seen": "20251118_084616_836",
-    "command": "unknown",
-    "error_code": 1307,
-    "error_message": "Database failure prevented turn consumption. Please try again."
-}

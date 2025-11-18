@@ -1,7 +1,0 @@
-{
-    "bug_id": "err_unknown_1104",
-    "first_seen": "20251118_065612_392",
-    "command": "unknown",
-    "error_code": 1104,
-    "error_message": "Schema not found or not implemented"
-}
