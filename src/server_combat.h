@@ -25,6 +25,15 @@ extern "C"
   void apply_armid_damage_to_ship(ship_t *ship, int total_damage, armid_damage_breakdown_t *b);
   
   int apply_armid_mines_on_entry(client_ctx_t *ctx, int new_sector_id, armid_encounter_t *out_enc);
+
+  typedef struct {
+      int total_mines;          // all mine types
+      int armid_mines;
+      int limpet_mines;
+  } sector_mine_counts_t;
+
+  int get_sector_mine_counts(int sector_id, sector_mine_counts_t *out);
+
 #ifdef __cplusplus
 }
 #endif

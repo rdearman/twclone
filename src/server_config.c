@@ -65,6 +65,15 @@ set_defaults (void)
 
   g_cfg.secrets.key_id[0] = '\0';
   g_cfg.secrets.key_len = 0;
+
+  // Limpet Mine Configuration Defaults
+  g_cfg.mines.limpet.enabled = true;
+  g_cfg.mines.limpet.fedspace_allowed = false;
+  g_cfg.mines.limpet.msl_allowed = false;
+  g_cfg.mines.limpet.per_sector_cap = 250;
+  g_cfg.mines.limpet.max_per_ship = 1;
+  g_cfg.mines.limpet.allow_multi_owner = false;
+  g_cfg.mines.limpet.scrub_cost = 5000;
 }
 
 
@@ -140,8 +149,25 @@ print_effective_config_redacted (void)
 	  g_cfg.safety.rpc_ms, g_cfg.safety.backoff_initial_ms,
 	  g_cfg.safety.backoff_max_ms, g_cfg.safety.backoff_factor);
 
-  printf ("\"secrets\":{\"key_id\":\"%s\",\"hmac\":\"********\"}}\n",
+  printf ("\"secrets\":{\"key_id\":\"%s\",\"hmac\":\"********\"}}",
 	  g_cfg.secrets.key_id[0] ? "********" : "");
+
+  printf (",\"mines\":{\"limpet\":{"
+          "\"enabled\":%s,"
+          "\"fedspace_allowed\":%s,"
+          "\"msl_allowed\":%s,"
+          "\"per_sector_cap\":%d,"
+          "\"max_per_ship\":%d,"
+          "\"allow_multi_owner\":%s,"
+          "\"scrub_cost\":%d}}}",
+          g_cfg.mines.limpet.enabled ? "true" : "false",
+          g_cfg.mines.limpet.fedspace_allowed ? "true" : "false",
+          g_cfg.mines.limpet.msl_allowed ? "true" : "false",
+          g_cfg.mines.limpet.per_sector_cap,
+          g_cfg.mines.limpet.max_per_ship,
+          g_cfg.mines.limpet.allow_multi_owner ? "true" : "false",
+          g_cfg.mines.limpet.scrub_cost);
+  printf ("\n");
 }
 
 
@@ -201,6 +227,22 @@ apply_db (sqlite3 *db)
 	g_cfg.safety.backoff_max_ms = atoi (v);
       else if (!strcasecmp (k, "safety.backoff_factor"))
 	g_cfg.safety.backoff_factor = atof (v);
+
+      // Limpet Mine Configuration
+      else if (!strcasecmp (k, "mines.limpet.enabled"))
+        g_cfg.mines.limpet.enabled = (bool)atoi(v);
+      else if (!strcasecmp (k, "mines.limpet.fedspace_allowed"))
+        g_cfg.mines.limpet.fedspace_allowed = (bool)atoi(v);
+      else if (!strcasecmp (k, "mines.limpet.msl_allowed"))
+        g_cfg.mines.limpet.msl_allowed = (bool)atoi(v);
+      else if (!strcasecmp (k, "mines.limpet.per_sector_cap"))
+        g_cfg.mines.limpet.per_sector_cap = atoi(v);
+      else if (!strcasecmp (k, "mines.limpet.max_per_ship"))
+        g_cfg.mines.limpet.max_per_ship = atoi(v);
+      else if (!strcasecmp (k, "mines.limpet.allow_multi_owner"))
+        g_cfg.mines.limpet.allow_multi_owner = (bool)atoi(v);
+      else if (!strcasecmp (k, "mines.limpet.scrub_cost"))
+        g_cfg.mines.limpet.scrub_cost = atoi(v);
     }
   sqlite3_finalize (st);
 

@@ -27,6 +27,7 @@
 #include "server_envelope.h"
 #include "server_log.h"
 #include "errors.h"
+#include "server_config.h"
 
 #define SECTOR_FIGHTER_CAP 50000
 #define SECTOR_MINE_CAP 50000
@@ -71,6 +72,26 @@ niy (client_ctx_t *ctx, json_t *root, const char *which)
   (void) which;
   send_enveloped_error (ctx->fd, root, 1101, "Not implemented");
   return 0;
+}
+
+// Helper to check if a sector is a FedSpace sector (sectors 1-10)
+static bool is_fedspace_sector(int sector_id) {
+    return (sector_id >= 1 && sector_id <= 10);
+}
+
+// Helper to check if a sector is a Major Space Lane (MSL)
+static bool is_msl_sector(sqlite3 *db, int sector_id) {
+    sqlite3_stmt *st = NULL;
+    const char *sql = "SELECT 1 FROM msl_sectors WHERE sector_id = ?1 LIMIT 1;";
+    int rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("Failed to prepare MSL check statement: %s", sqlite3_errmsg(db));
+        return false;
+    }
+    sqlite3_bind_int(st, 1, sector_id);
+    bool is_msl = (sqlite3_step(st) == SQLITE_ROW);
+    sqlite3_finalize(st);
+    return is_msl;
 }
 
 
@@ -1139,16 +1160,107 @@ insert_sector_fighters (sqlite3 *db,
     LOGE("insert_sector_fighters step failed: %s (rc=%d)", sqlite3_errmsg(db), rc); 
   }
 
-  sqlite3_finalize (st);
-  return (rc == SQLITE_DONE) ? SQLITE_OK : SQLITE_ERROR;
-}
+  
 
+    sqlite3_finalize (st);
 
+    return (rc == SQLITE_DONE) ? SQLITE_OK : SQLITE_ERROR;
 
+  }
 
+  
 
-json_t *
-db_get_stardock_sectors (void)
+  /*
+
+   * Populates sector_mine_counts_t with counts of different mine types in a sector.
+
+   */
+
+  int
+
+  get_sector_mine_counts(int sector_id, sector_mine_counts_t *out)
+
+  {
+
+    if (!out) return SQLITE_MISUSE;
+
+  
+
+    sqlite3 *db = db_get_handle();
+
+    if (!db) return SQLITE_ERROR;
+
+  
+
+    memset(out, 0, sizeof(sector_mine_counts_t)); // Initialize counts to zero
+
+  
+
+    sqlite3_stmt *st = NULL;
+
+    const char *sql =
+
+      "SELECT "
+
+      "  SUM(CASE WHEN asset_type IN (1, 4) THEN quantity ELSE 0 END) AS total_mines, "
+
+      "  SUM(CASE WHEN asset_type = 1 THEN quantity ELSE 0 END) AS armid_mines, "
+
+      "  SUM(CASE WHEN asset_type = 4 THEN quantity ELSE 0 END) AS limpet_mines "
+
+      "FROM sector_assets "
+
+      "WHERE sector = ?1;";
+
+  
+
+    int rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+
+    if (rc != SQLITE_OK) {
+
+      LOGE("Failed to prepare get_sector_mine_counts statement: %s", sqlite3_errmsg(db));
+
+      return rc;
+
+    }
+
+  
+
+    sqlite3_bind_int(st, 1, sector_id);
+
+  
+
+    if (sqlite3_step(st) == SQLITE_ROW) {
+
+      out->total_mines = sqlite3_column_int(st, 0);
+
+      out->armid_mines = sqlite3_column_int(st, 1);
+
+      out->limpet_mines = sqlite3_column_int(st, 2);
+
+      rc = SQLITE_OK;
+
+    } else {
+
+      // No mines found, counts are already zero due to memset
+
+      rc = SQLITE_OK;
+
+    }
+
+  
+
+    sqlite3_finalize(st);
+
+    return rc;
+
+  }
+
+  
+
+  json_t *
+
+  db_get_stardock_sectors (void)
 {
   sqlite3 *db = db_get_handle ();
   sqlite3_stmt *stmt = NULL;

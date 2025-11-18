@@ -99,6 +99,18 @@ extern "C"
       unsigned char key[64];	/* if you decode b64, optional */
       int key_len;
     } secrets;
+    struct
+    {
+      struct {
+        bool enabled;
+        bool fedspace_allowed;
+        bool msl_allowed;
+        int per_sector_cap;
+        int max_per_ship;
+        bool allow_multi_owner;
+        int scrub_cost;
+      } limpet;
+    } mines;
   } server_config_t;
 
   /* Single global instance (defined in server_config.c) */

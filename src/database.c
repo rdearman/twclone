@@ -464,37 +464,79 @@ const char *create_table_sql[] = {
     "   maxphotons INTEGER, /* Photon torpedo count */  "
     "   can_purchase INTEGER /* Can be bought at a port (0/1) */  " " );  ",
 
-  " CREATE TABLE IF NOT EXISTS ships (  "
-    "   id INTEGER PRIMARY KEY AUTOINCREMENT,  "
-    "   name TEXT NOT NULL,  "
-    "   type_id INTEGER, /* Foreign Key to shiptypes.id */  "
-    "   attack INTEGER,  "
-    "   holds INTEGER,  "
-    "   mines INTEGER, /* Current quantity carried */  "
-    "   limpets INTEGER, /* Current quantity carried */  "
-    "   fighters INTEGER, /* Current quantity carried */  "
-    "   genesis INTEGER, /* Current quantity carried */  "
-    "   photons INTEGER, /* Current quantity carried */  "
-    "   sector INTEGER, /* Foreign Key to sectors.id */  "
-    "   shields INTEGER,  "
-    "   beacons INTEGER, /* Current quantity carried */  "
-    "   colonists INTEGER,  "
-    "   equipment INTEGER,  "
-    "   organics INTEGER,  "
-    "   ore INTEGER,  "
-    "   flags INTEGER,  "
-    "   cloaking_devices INTEGER,  "
-    "   cloaked TIMESTAMP,  "
-    "   ported INTEGER,  "
-    "   onplanet INTEGER,  "
-    "   destroyed INTEGER DEFAULT 0,  "  
-    "   CONSTRAINT check_current_cargo_limit CHECK ( (colonists + equipment + organics + ore) <= holds ), "
-    "   FOREIGN KEY(type_id) REFERENCES shiptypes(id),  "
-    "   FOREIGN KEY(sector) REFERENCES sectors(id)  " " );  ",
+    " CREATE TABLE IF NOT EXISTS ships (  "
 
+      "   id INTEGER PRIMARY KEY AUTOINCREMENT,  "
 
+      "   name TEXT NOT NULL,  "
 
-  " CREATE TABLE IF NOT EXISTS player_ships ( player_id INTEGER DEFAULT 0, ship_id INTEGER DEFAULT 0, role INTEGER DEFAULT 1, is_active INTEGER DEFAULT 1); ",
+      "   type_id INTEGER, /* Foreign Key to shiptypes.id */  "
+
+      "   attack INTEGER,  "
+
+      "   holds INTEGER,  "
+
+      "   mines INTEGER, /* Current quantity carried */  "
+
+      "   limpets INTEGER, /* Current quantity carried */  "
+
+      "   fighters INTEGER, /* Current quantity carried */  "
+
+      "   genesis INTEGER, /* Current quantity carried */  "
+
+      "   photons INTEGER, /* Current quantity carried */  "
+
+      "   sector INTEGER, /* Foreign Key to sectors.id */  "
+
+      "   shields INTEGER,  "
+
+      "   beacons INTEGER, /* Current quantity carried */  "
+
+      "   colonists INTEGER,  "
+
+      "   equipment INTEGER,  "
+
+      "   organics INTEGER,  "
+
+      "   ore INTEGER,  "
+
+      "   flags INTEGER,  "
+
+      "   cloaking_devices INTEGER,  "
+
+      "   cloaked TIMESTAMP,  "
+
+      "   ported INTEGER,  "
+
+      "   onplanet INTEGER,  "
+
+      "   destroyed INTEGER DEFAULT 0,  "  
+
+      "   CONSTRAINT check_current_cargo_limit CHECK ( (colonists + equipment + organics + ore) <= holds ), "
+
+      "   FOREIGN KEY(type_id) REFERENCES shiptypes(id),  "
+
+      "   FOREIGN KEY(sector) REFERENCES sectors(id)  " " );  ",
+
+  
+
+    " CREATE TABLE IF NOT EXISTS ship_markers ( "
+
+      " ship_id        INTEGER NOT NULL REFERENCES ships(id), "
+
+      " owner_player   INTEGER NOT NULL, "
+
+      " owner_corp     INTEGER NOT NULL DEFAULT 0, "
+
+      " marker_type    TEXT NOT NULL, "
+
+      " PRIMARY KEY (ship_id, owner_player, marker_type) "
+
+    " ); ",
+
+  
+
+    " CREATE TABLE IF NOT EXISTS player_ships ( player_id INTEGER DEFAULT 0, ship_id INTEGER DEFAULT 0, role INTEGER DEFAULT 1, is_active INTEGER DEFAULT 1); ",
   " CREATE TABLE IF NOT EXISTS ship_roles ( role_id INTEGER PRIMARY KEY, role INTEGER DEFAULT 1, role_description TEXT DEFAULT 1); ",
 
 
