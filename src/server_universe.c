@@ -27,6 +27,7 @@
 #include "globals.h"
 #include "server_players.h"
 #include "server_log.h"
+#include "server_combat.h"
 
 
 #define SECTOR_LIST_BUF_SIZE 256 
@@ -983,6 +984,34 @@ done:
 
 
 
+/*
+ * Checks if a warp link exists between two sectors.
+ * Returns 1 if a warp exists, 0 otherwise.
+ */
+int
+h_warp_exists(sqlite3 *db, int from_sector_id, int to_sector_id)
+{
+  sqlite3_stmt *st = NULL;
+  int has_warp = 0;
+
+  const char *sql = "SELECT 1 FROM sector_warps WHERE from_sector = ?1 AND to_sector = ?2 LIMIT 1;";
+
+  if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK) {
+    LOGE("Failed to prepare h_warp_exists statement: %s", sqlite3_errmsg(db));
+    return 0;
+  }
+
+  sqlite3_bind_int(st, 1, from_sector_id);
+  sqlite3_bind_int(st, 2, to_sector_id);
+
+  if (sqlite3_step(st) == SQLITE_ROW) {
+    has_warp = 1;
+  }
+
+  sqlite3_finalize(st);
+  return has_warp;
+}
+
 int
 universe_init (void)
 {
@@ -1130,6 +1159,7 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
     }
 
   int from = ctx->sector_id;
+  int turns_spent = 1; // Assuming 1 turn for a single warp, as per typical game mechanics.
 
   LOGI("cmd_move_warp: Player %d (fd %d) attempting to warp from sector %d to %d", ctx->player_id, ctx->fd, from, to);
 
@@ -1146,14 +1176,32 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
   ctx->sector_id = to;
 
   // Apply Armid mines on entry
-  apply_armid_mines_on_entry(db_handle, h_get_active_ship_id(db_handle, ctx->player_id), to);
+    armid_encounter_t armid_enc = {0};
+  apply_armid_mines_on_entry(ctx, to, &armid_enc);
 
   /* 1) Send the direct reply for the actor */
   json_t *resp = json_object ();
   json_object_set_new (resp, "player_id", json_integer (ctx->player_id));
   json_object_set_new (resp, "from_sector_id", json_integer (from));
   json_object_set_new (resp, "to_sector_id", json_integer (to));
-  json_object_set_new (resp, "current_sector", json_integer (ctx->sector_id));
+  json_object_set_new (resp, "turns_spent", json_integer (turns_spent));
+
+  if (armid_enc.armid_triggered > 0) {
+      json_t *damage_obj = json_object();
+      json_object_set_new(damage_obj, "shields_lost", json_integer(armid_enc.shields_lost));
+      json_object_set_new(damage_obj, "fighters_lost", json_integer(armid_enc.fighters_lost));
+      json_object_set_new(damage_obj, "hull_lost", json_integer(armid_enc.hull_lost));
+      json_object_set_new(damage_obj, "destroyed", json_boolean(armid_enc.destroyed));
+
+      json_t *encounter_obj = json_object();
+      json_object_set_new(encounter_obj, "kind", json_string("mines"));
+      json_object_set_new(encounter_obj, "armid_triggered", json_integer(armid_enc.armid_triggered));
+      json_object_set_new(encounter_obj, "armid_remaining", json_integer(armid_enc.armid_remaining));
+      json_object_set_new(encounter_obj, "damage", damage_obj);
+
+      json_object_set_new(resp, "encounter", encounter_obj);
+  }
+
   send_enveloped_ok (ctx->fd, root, "move.result", resp);
 
   /* 2) Broadcast LEFT (from) then ENTERED (to) to subscribers */

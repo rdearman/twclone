@@ -211,6 +211,22 @@ typedef struct {
     // Add other relevant ship fields if needed for future combat logic
 } ship_t;
 
+typedef struct {
+    int shields_lost;
+    int fighters_lost;
+    int hull_lost;
+} armid_damage_breakdown_t;
+
+typedef struct {
+    int sector_id;
+    int armid_triggered;   /* total exploded */
+    int armid_remaining;   /* sum of remaining hostile mines after updates */
+    int shields_lost;
+    int fighters_lost;
+    int hull_lost;
+    bool destroyed;
+} armid_encounter_t;
+
 void now_iso8601 (char out[25]);	/* "YYYY-MM-DDTHH:MM:SSZ" */
 /* Remove ANSI escape sequences from src into dst (cap bytes incl NUL). */
 void strip_ansi (char *dst, const char *src, size_t cap);

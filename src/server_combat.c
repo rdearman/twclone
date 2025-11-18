@@ -76,12 +76,100 @@ niy (client_ctx_t *ctx, json_t *root, const char *which)
 
 
 
-void
-apply_armid_mines_on_entry (sqlite3 *db, int ship_id, int sector_id)
+/*
+ * Returns true if the mine stack is hostile to the given ship context,
+ * false otherwise (friendly or neutral).
+ */
+bool
+armid_stack_is_hostile (const sector_asset_t *mine_asset,
+                        int ship_player_id, int ship_corp_id)
 {
+  /* Friendly if same player */
+  if (mine_asset->player == ship_player_id)
+    return false;
+
+  /* Friendly if same non-zero corporation */
+  if (mine_asset->corporation != 0 &&
+      mine_asset->corporation == ship_corp_id)
+    return false;
+
+  /* Otherwise hostile */
+  return true;
+}
+
+/*
+ * Returns true if the mine stack is active (quantity > 0 and not expired),
+ * false otherwise.
+ */
+bool
+armid_stack_is_active(const sector_asset_t *row, time_t now)
+{
+    if (row->quantity <= 0) return false;
+    if (row->ttl == 0 || row->ttl == (time_t)0 || row->ttl == -1) return true;
+    return row->ttl > now;
+}
+
+/*
+ * Applies Armid mine damage to a ship, prioritizing shields, then fighters, then hull.
+ */
+void
+apply_armid_damage_to_ship(ship_t *ship,
+                           int total_damage,
+                           armid_damage_breakdown_t *b)
+{
+    int dmg = total_damage;
+
+    if (ship->shields > 0 && dmg > 0) {
+        int d = MIN(dmg, ship->shields);
+        ship->shields -= d;
+        dmg -= d;
+        if (b) b->shields_lost += d;
+    }
+
+    if (ship->fighters > 0 && dmg > 0) {
+        int d = MIN(dmg, ship->fighters);
+        ship->fighters -= d;
+        dmg -= d;
+        if (b) b->fighters_lost += d;
+    }
+
+    if (ship->hull > 0 && dmg > 0) {
+        int d = MIN(dmg, ship->hull);
+        ship->hull -= d;
+        dmg -= d;
+        if (b) b->hull_lost += d;
+    }
+}
+
+int
+apply_armid_mines_on_entry (client_ctx_t *ctx, int new_sector_id, armid_encounter_t *out_enc)
+{
+  sqlite3 *db = db_get_handle(); // Get DB handle from context
+  if (!db) {
+      LOGE("Database handle not available in apply_armid_mines_on_entry");
+      return -1; // Indicate error
+  }
+
+  int ship_id = h_get_active_ship_id(db, ctx->player_id);
+  if (ship_id <= 0) {
+      // No active ship, no mines can be triggered
+      return 0;
+  }
+
+  // If mines.armid.enabled is false or ship missing -> no-op.
+  if (!g_armid_config.armid.enabled) {
+      return 0;
+  }
+
+  // Initialize out_enc
+  if (out_enc) {
+      memset(out_enc, 0, sizeof(armid_encounter_t));
+      out_enc->sector_id = new_sector_id;
+  }
+
   sqlite3_stmt *st = NULL;
   const char *sql_select_mines =
-    "SELECT id, quantity, offensive_setting, player, corporation "
+    "SELECT id, quantity, offensive_setting, player, corporation, ttl "
     "FROM sector_assets "
     "WHERE sector = ?1 AND asset_type = 1;"; // asset_type 1 for Armid Mines
 
@@ -89,151 +177,173 @@ apply_armid_mines_on_entry (sqlite3 *db, int ship_id, int sector_id)
     {
       LOGE ("Failed to prepare mine selection statement: %s",
 	    sqlite3_errmsg (db));
-      return;
+      return -1; // Indicate error
     }
-  sqlite3_bind_int (st, 1, sector_id);
+  sqlite3_bind_int (st, 1, new_sector_id);
+
+  // Get ship's current shield, fighters, and hull
+  ship_t ship_stats = {0};
+  int ship_player_id = ctx->player_id;
+  int ship_corp_id = ctx->corp_id; // Assuming ctx->corp_id is available
+
+  sqlite3_stmt *ship_st = NULL;
+  const char *sql_select_ship =
+    "SELECT id, hull, fighters, shields FROM ships WHERE id = ?1;";
+  if (sqlite3_prepare_v2 (db, sql_select_ship, -1, &ship_st, NULL) !=
+      SQLITE_OK)
+    {
+      LOGE ("Failed to prepare ship selection statement: %s",
+	    sqlite3_errmsg (db));
+      sqlite3_finalize (st);
+      return -1; // Indicate error
+    }
+  sqlite3_bind_int (ship_st, 1, ship_id);
+  if (sqlite3_step (ship_st) == SQLITE_ROW)
+    {
+      ship_stats.id = sqlite3_column_int (ship_st, 0);
+      ship_stats.hull = sqlite3_column_int (ship_st, 1);
+      ship_stats.fighters = sqlite3_column_int (ship_st, 2);
+      ship_stats.shields = sqlite3_column_int (ship_st, 3);
+    } else {
+        LOGW("Ship %d not found for armid mine encounter.", ship_id);
+        sqlite3_finalize(ship_st);
+        sqlite3_finalize(st);
+        return 0; // No ship, no encounter
+    }
+  sqlite3_finalize (ship_st);
 
   while (sqlite3_step (st) == SQLITE_ROW)
     {
       int mine_id = sqlite3_column_int (st, 0);
       int mine_quantity = sqlite3_column_int (st, 1);
-      int offensive_setting = sqlite3_column_int (st, 2);
-      int mine_owner_player_id = sqlite3_column_int (st, 3);
-      int mine_owner_corp_id = sqlite3_column_int (st, 4);	// 0 if NULL
+      int offensive_setting = sqlite3_column_int (st, 2); // Keep for logging if needed
 
-      // Get ship's current shield and hull
-      int ship_hull = 0;
-      int ship_shield = 0;
-      int ship_player_id = 0;
-      int ship_corp_id = 0;
+      sector_asset_t mine_asset_row = {
+        .id = mine_id,
+        .quantity = mine_quantity,
+        .player = sqlite3_column_int (st, 3),
+        .corporation = sqlite3_column_int (st, 4),
+        .ttl = sqlite3_column_int (st, 5)
+      };
 
-      sqlite3_stmt *ship_st = NULL;
-      const char *sql_select_ship =
-	"SELECT hull, shield, player, corporation FROM ships WHERE id = ?1;";
-      if (sqlite3_prepare_v2 (db, sql_select_ship, -1, &ship_st, NULL) !=
-	  SQLITE_OK)
-	{
-	  LOGE ("Failed to prepare ship selection statement: %s",
-		sqlite3_errmsg (db));
-	  sqlite3_finalize (st);
-	  return;
-	}
-      sqlite3_bind_int (ship_st, 1, ship_id);
-      if (sqlite3_step (ship_st) == SQLITE_ROW)
-	{
-	  ship_hull = sqlite3_column_int (ship_st, 0);
-	  ship_shield = sqlite3_column_int (ship_st, 1);
-	  ship_player_id = sqlite3_column_int (ship_st, 2);
-	  ship_corp_id = sqlite3_column_int (ship_st, 3);
-	}
-      sqlite3_finalize (ship_st);
+      // Get current time for TTL check
+      time_t current_time = time(NULL);
 
-      // Skip if mine owner is the same as ship owner (player or corp)
-      if (mine_owner_player_id == ship_player_id)
-	{
-	  continue;
-	}
-      if (mine_owner_corp_id != 0 && ship_corp_id != 0
-	  && mine_owner_corp_id == ship_corp_id)
-	{
-	  continue;
-	}
+      // Skip if mine is not active
+      if (!armid_stack_is_active(&mine_asset_row, current_time)) {
+          continue;
+      }
 
-      // Calculate damage based on offensive setting
-      double damage_multiplier = 0.0;
-      switch (offensive_setting)
-	{
-	case OFFENSE_TOLL:
-	  damage_multiplier = 0.1;
-	  break;
-	case OFFENSE_DEFEND:
-	  damage_multiplier = 0.5;
-	  break;
-	case OFFENSE_ATTACK:
-	  damage_multiplier = 1.0;
-	  break;
-	default:
-	  LOGW ("Unknown offensive setting for mine %d: %d", mine_id,
-		offensive_setting);
-	  continue;
-	}
+      // Skip if mine is not hostile
+      if (!armid_stack_is_hostile(&mine_asset_row, ship_player_id, ship_corp_id)) {
+          continue;
+      }
 
-      // Damage calculation: 1 mine = 10 damage (base)
-      double base_damage_per_mine = 10.0;
-      double total_potential_damage =
-	mine_quantity * base_damage_per_mine * damage_multiplier;
+      // If ship->hull <= 0, stop processing further stacks.
+      if (ship_stats.hull <= 0) {
+          if (out_enc) out_enc->destroyed = true;
+          break;
+      }
 
-      // Apply damage to shield first
-      int damage_to_shield = (int) ceil (total_potential_damage / 2.0);	// Half damage to shield
-      int damage_to_hull = (int) ceil (total_potential_damage / 2.0);	// Half damage to hull
+      // Compute trigger probability
+      double p_base = g_armid_config.armid.base_trigger_chance;
+      double p_max  = g_armid_config.armid.max_trigger_chance;
 
-      if (ship_shield > 0)
-	{
-	  int shield_after_damage = ship_shield - damage_to_shield;
-	  if (shield_after_damage < 0)
-	    {
-	      damage_to_hull -= abs (shield_after_damage);	// Excess damage to hull
-	      ship_shield = 0;
-	    }
-	  else
-	    {
-	      ship_shield = shield_after_damage;
-	    }
-	}
+      double p_trigger = 1.0 - pow(1.0 - p_base, mine_asset_row.quantity);
+      if (p_trigger > p_max) p_trigger = p_max;
 
-      ship_hull -= damage_to_hull;
+      // Roll for trigger
+      if (rand01() > p_trigger) {
+          continue; // This stack doesn’t fire
+      }
 
-      // Update ship's hull and shield
-      sqlite3_stmt *update_st = NULL;
-      const char *sql_update_ship_hp =
-	"UPDATE ships SET hull = ?1, shield = ?2 WHERE id = ?3;";
-      if (sqlite3_prepare_v2 (db, sql_update_ship_hp, -1, &update_st, NULL) !=
-	  SQLITE_OK)
-	{
-	  LOGE ("Failed to prepare ship HP update statement: %s",
-		sqlite3_errmsg (db));
-	  sqlite3_finalize (st);
-	  return;
-	}
-      sqlite3_bind_int (update_st, 1, ship_hull);
-      sqlite3_bind_int (update_st, 2, ship_shield);
-      sqlite3_bind_int (update_st, 3, ship_id);
-      if (sqlite3_step (update_st) != SQLITE_DONE)
-	{
-	  LOGE ("Failed to update ship HP: %s", sqlite3_errmsg (db));
-	}
-      sqlite3_finalize (update_st);
+      // If it fires:
+      double f_min = g_armid_config.armid.min_fraction_exploded;
+      double f_max = g_armid_config.armid.max_fraction_exploded;
+      double f = rand_range(f_min, f_max);
+      f = clamp(f, 0.0, 1.0);
 
-      // Log the event
-      json_t *evt = json_object ();
-      json_object_set_new (evt, "ship_id", json_integer (ship_id));
-      json_object_set_new (evt, "sector_id", json_integer (sector_id));
-      json_object_set_new (evt, "mine_id", json_integer (mine_id));
-      json_object_set_new (evt, "mine_owner_player_id",
-			   json_integer (mine_owner_player_id));
-      json_object_set_new (evt, "mine_owner_corp_id",
-			   json_integer (mine_owner_corp_id));
-      json_object_set_new (evt, "damage_dealt",
-			   json_integer ((int) total_potential_damage));
-      json_object_set_new (evt, "ship_hull_after", json_integer (ship_hull));
-      json_object_set_new (evt, "ship_shield_after",
-			   json_integer (ship_shield));
-      json_object_set_new (evt, "event_ts",
-			   json_integer ((json_int_t) time (NULL)));
+      int exploded = (int)ceil(mine_asset_row.quantity * f);
+      exploded = clamp(exploded, 1, mine_asset_row.quantity);
+
+      int damage = exploded * g_armid_config.armid.damage_per_mine;
+      armid_damage_breakdown_t d = {0};
+      apply_armid_damage_to_ship(&ship_stats, damage, &d);
+
+      // Update DB:
+      int remaining = mine_asset_row.quantity - exploded;
+      if (remaining > 0) {
+          sqlite3_stmt *update_st = NULL;
+          const char *sql_update_mine_qty = "UPDATE sector_assets SET quantity = ?1 WHERE id = ?2;";
+          if (sqlite3_prepare_v2(db, sql_update_mine_qty, -1, &update_st, NULL) != SQLITE_OK) {
+              LOGE("Failed to prepare mine quantity update statement: %s", sqlite3_errmsg(db));
+              sqlite3_finalize(st);
+              return -1;
+          }
+          sqlite3_bind_int(update_st, 1, remaining);
+          sqlite3_bind_int(update_st, 2, mine_id);
+          if (sqlite3_step(update_st) != SQLITE_DONE) {
+              LOGE("Failed to update mine quantity: %s", sqlite3_errmsg(db));
+          }
+          sqlite3_finalize(update_st);
+      } else {
+          sqlite3_stmt *delete_st = NULL;
+          const char *sql_delete_mine = "DELETE FROM sector_assets WHERE id = ?1;";
+          if (sqlite3_prepare_v2(db, sql_delete_mine, -1, &delete_st, NULL) != SQLITE_OK) {
+              LOGE("Failed to prepare mine delete statement: %s", sqlite3_errmsg(db));
+              sqlite3_finalize(st);
+              return -1;
+          }
+          sqlite3_bind_int(delete_st, 1, mine_id);
+          if (sqlite3_step(delete_st) != SQLITE_DONE) {
+              LOGE("Failed to delete mine: %s", sqlite3_errmsg(db));
+          }
+          sqlite3_finalize(delete_st);
+      }
+
+      // Accumulate into armid_encounter_t:
+      if (out_enc) {
+          out_enc->armid_triggered += exploded;
+          out_enc->armid_remaining += MAX(remaining, 0);
+          out_enc->shields_lost    += d.shields_lost;
+          out_enc->fighters_lost   += d.fighters_lost;
+          out_enc->hull_lost       += d.hull_lost;
+      }
+
+      // Emit combat.hit async event
+      json_t *hit_data = json_object();
+      json_object_set_new(hit_data, "v", json_integer(1));
+      json_object_set_new(hit_data, "attacker_id", json_integer(mine_asset_row.player)); // Mine owner
+      json_object_set_new(hit_data, "defender_id", json_integer(ctx->player_id)); // Ship owner
+      json_object_set_new(hit_data, "weapon", json_string("armid_mines"));
+      json_object_set_new(hit_data, "sector_id", json_integer(new_sector_id));
+      json_object_set_new(hit_data, "damage_total", json_integer(damage));
+
+      json_t *breakdown_obj = json_object();
+      json_object_set_new(breakdown_obj, "shields_lost", json_integer(d.shields_lost));
+      json_object_set_new(breakdown_obj, "fighters_lost", json_integer(d.fighters_lost));
+      json_object_set_new(breakdown_obj, "hull_lost", json_integer(d.hull_lost));
+      json_object_set_new(hit_data, "breakdown", breakdown_obj);
+      json_object_set_new(hit_data, "destroyed", json_boolean(ship_stats.hull <= 0));
 
       (void) db_log_engine_event ((long long) time (NULL),
-				  "combat.armid_mine.triggered", NULL,
-				  mine_owner_player_id, sector_id, evt, NULL);
+                                  "combat.hit", NULL,
+                                  mine_asset_row.player, new_sector_id, hit_data, NULL);
 
       // If ship is destroyed, handle it
-      if (ship_hull <= 0)
+      if (ship_stats.hull <= 0)
 	{
-	  // This will be handled by a separate function, e.g., check_for_ship_destruction
+	  // Call existing ship destruction flow:
+          destroy_ship_and_handle_side_effects(ctx, new_sector_id, ctx->player_id);
+          if (out_enc) out_enc->destroyed = true;
 	  LOGI ("Ship %d destroyed by Armid mine %d in sector %d", ship_id,
-		mine_id, sector_id);
+		mine_id, new_sector_id);
+          break; // Stop processing further stacks
 	}
     }
   sqlite3_finalize (st);
+
+  return 0; // Success
 }
 
 int
@@ -1104,15 +1214,349 @@ db_get_stardock_sectors (void)
 
 
 
-/* ---------- STUBS ---------- */
 /* ---------- combat.sweep_mines ---------- */
 int
 cmd_combat_sweep_mines (client_ctx_t *ctx, json_t *root)
 {
   if (!require_auth (ctx, root))
     return 0;
-  // TODO: parse sweep strength, clear mines, apply risk to ship
-  return niy (ctx, root, "combat.sweep_mines");
+
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    {
+      send_enveloped_error (ctx->fd, root, ERR_SERVICE_UNAVAILABLE,
+			    "Database unavailable");
+      return 0;
+    }
+
+  // 1. Validation
+  json_t *data = json_object_get (root, "data");
+  if (!data || !json_is_object (data))
+    {
+      send_enveloped_error (ctx->fd, root, ERR_MISSING_FIELD,
+			    "Missing required field: data");
+      return 0;
+    }
+
+  json_t *j_from_sector_id = json_object_get (data, "from_sector_id");
+  json_t *j_target_sector_id = json_object_get (data, "target_sector_id");
+  json_t *j_fighters_committed = json_object_get (data, "fighters_committed");
+
+  if (!j_from_sector_id || !json_is_integer (j_from_sector_id) ||
+      !j_target_sector_id || !json_is_integer (j_target_sector_id) ||
+      !j_fighters_committed || !json_is_integer (j_fighters_committed))
+    {
+      send_enveloped_error (ctx->fd, root, ERR_CURSOR_INVALID,
+			    "Missing required field or invalid type: from_sector_id/target_sector_id/fighters_committed");
+      return 0;
+    }
+
+  int from_sector_id = (int) json_integer_value (j_from_sector_id);
+  int target_sector_id = (int) json_integer_value (j_target_sector_id);
+  int fighters_committed = (int) json_integer_value (j_fighters_committed);
+
+  if (fighters_committed <= 0)
+    {
+      send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG,
+			    "Fighters committed must be greater than 0.");
+      return 0;
+    }
+
+  // Check if player's ship is in from_sector_id
+  int ship_id = h_get_active_ship_id (db, ctx->player_id);
+  if (ship_id <= 0)
+    {
+      send_enveloped_error (ctx->fd, root, ERR_SHIP_NOT_FOUND,
+			    "No active ship found for player.");
+      return 0;
+    }
+
+  int player_current_sector_id = -1;
+  int ship_fighters_current = 0;
+  int ship_corp_id = 0;
+
+  sqlite3_stmt *stmt_player_ship = NULL;
+  const char *sql_player_ship =
+    "SELECT sector, fighters, corporation FROM ships WHERE id = ?1;";
+  if (sqlite3_prepare_v2 (db, sql_player_ship, -1, &stmt_player_ship, NULL) != SQLITE_OK)
+    {
+      send_enveloped_error (ctx->fd, root, ERR_DB,
+			    "Failed to prepare player ship query.");
+      return 0;
+    }
+  sqlite3_bind_int (stmt_player_ship, 1, ship_id);
+
+  if (sqlite3_step (stmt_player_ship) == SQLITE_ROW)
+    {
+      player_current_sector_id = sqlite3_column_int (stmt_player_ship, 0);
+      ship_fighters_current = sqlite3_column_int (stmt_player_ship, 1);
+      ship_corp_id = sqlite3_column_int (stmt_player_ship, 2);
+    }
+  sqlite3_finalize (stmt_player_ship);
+
+  if (player_current_sector_id != from_sector_id)
+    {
+      send_enveloped_refused (ctx->fd, root, REF_NOT_IN_SECTOR,
+			      "Ship is not in the specified 'from_sector_id'.",
+			      json_pack ("{s:s}", "reason", "not_in_from_sector"));
+      return 0;
+    }
+
+  if (fighters_committed > ship_fighters_current)
+    {
+      send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG,
+			    "Not enough fighters on ship to commit.");
+      return 0;
+    }
+
+  // Check for warp existence (from_sector_id to target_sector_id)
+  if (!h_warp_exists (db, from_sector_id, target_sector_id))
+    {
+      send_enveloped_error (ctx->fd, root, ERR_TARGET_INVALID,
+			    "No warp exists between specified sectors.");
+      return 0;
+    }
+
+  if (!g_armid_config.sweep.enabled)
+    {
+      send_enveloped_error (ctx->fd, root, ERR_CAPABILITY_DISABLED,
+			    "Mine sweeping is currently disabled.");
+      return 0;
+    }
+
+  // 2. Load hostile Armid stacks in target_sector_id
+  sqlite3_stmt *st = NULL;
+  const char *sql_select_mines =
+    "SELECT id, quantity, player, corporation, ttl "
+    "FROM sector_assets "
+    "WHERE sector = ?1 AND asset_type = 1 AND quantity > 0;"; // asset_type 1 for Armid Mines
+
+  if (sqlite3_prepare_v2 (db, sql_select_mines, -1, &st, NULL) != SQLITE_OK)
+    {
+      LOGE ("Failed to prepare mine selection statement for sweeping: %s",
+	    sqlite3_errmsg (db));
+      return -1;
+    }
+  sqlite3_bind_int (st, 1, target_sector_id);
+
+  // Store hostile mines to process
+  typedef struct {
+      int id;
+      int quantity;
+      int player;
+      int corporation;
+      time_t ttl;
+  } mine_stack_info_t;
+
+  json_t *hostile_stacks_json = json_array(); // To hold all hostile stacks
+  int total_hostile = 0;
+  time_t current_time = time(NULL);
+
+  while (sqlite3_step (st) == SQLITE_ROW)
+    {
+      mine_stack_info_t current_mine_stack = {
+          .id = sqlite3_column_int(st, 0),
+          .quantity = sqlite3_column_int(st, 1),
+          .player = sqlite3_column_int(st, 2),
+          .corporation = sqlite3_column_int(st, 3),
+          .ttl = sqlite3_column_int(st, 4)
+      };
+
+      sector_asset_t mine_asset_for_check = {
+          .quantity = current_mine_stack.quantity,
+          .player = current_mine_stack.player,
+          .corporation = current_mine_stack.corporation,
+          .ttl = current_mine_stack.ttl
+      };
+
+      if (armid_stack_is_active(&mine_asset_for_check, current_time) &&
+          armid_stack_is_hostile(&mine_asset_for_check, ctx->player_id, ship_corp_id))
+      {
+          json_t *stack_obj = json_object();
+          json_object_set_new(stack_obj, "id", json_integer(current_mine_stack.id));
+          json_object_set_new(stack_obj, "quantity", json_integer(current_mine_stack.quantity));
+          json_array_append_new(hostile_stacks_json, stack_obj);
+          total_hostile += current_mine_stack.quantity;
+      }
+    }
+  sqlite3_finalize (st);
+
+  // 3. If total_hostile <= 0: No change; return reply with removed=0, fighters_lost=0, success=false.
+  if (total_hostile <= 0)
+    {
+      json_t *out = json_object ();
+      json_object_set_new (out, "from_sector_id", json_integer (from_sector_id));
+      json_object_set_new (out, "target_sector_id", json_integer (target_sector_id));
+      json_object_set_new (out, "fighters_sent", json_integer (fighters_committed));
+      json_object_set_new (out, "fighters_lost", json_integer (0));
+      json_object_set_new (out, "armid_removed", json_integer (0));
+      json_object_set_new (out, "armid_remaining", json_integer (0));
+      json_object_set_new (out, "success", json_boolean (false));
+      send_enveloped_ok (ctx->fd, root, "combat.mines_swept_v1", out);
+      json_decref(hostile_stacks_json);
+      return 0;
+    }
+
+  // 4. Let F = fighters_committed.
+  int F = fighters_committed;
+
+  // 5. Efficiency:
+  double mean = g_armid_config.sweep.mines_per_fighter_avg;
+  double var  = g_armid_config.sweep.mines_per_fighter_var;
+
+  double eff = mean + rand_range(-var, var);
+  if (eff < 0) eff = 0;
+
+  int raw_capacity = (int)floor(F * eff);
+
+  // 6. Cap by max fraction:
+  double max_frac = g_armid_config.sweep.max_fraction_per_sweep;
+  int max_allowed = (int)floor(total_hostile * max_frac);
+
+  int mines_to_clear = raw_capacity;
+  if (mines_to_clear > max_allowed) mines_to_clear = max_allowed;
+  if (mines_to_clear < 0) mines_to_clear = 0;
+
+  // 7. Fighters lost:
+  int fighters_lost =
+      (int)ceil(mines_to_clear * g_armid_config.sweep.fighter_loss_per_mine);
+  if (fighters_lost > F) fighters_lost = F;
+
+  // Transaction for updates
+  char *errmsg = NULL;
+  if (sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg) != SQLITE_OK)
+    {
+      if (errmsg) sqlite3_free (errmsg);
+      send_enveloped_error (ctx->fd, root, ERR_DB, "Could not start transaction");
+      json_decref(hostile_stacks_json);
+      return 0;
+    }
+
+  // 8. Apply to stacks (sorted id ASC):
+  int remaining_to_clear = mines_to_clear;
+  int armid_removed = 0;
+
+  size_t index;
+  json_t *stack_obj;
+  json_array_foreach(hostile_stacks_json, index, stack_obj) {
+      if (remaining_to_clear <= 0) break;
+
+      int mine_stack_id = json_integer_value(json_object_get(stack_obj, "id"));
+      int mine_stack_qty = json_integer_value(json_object_get(stack_obj, "quantity"));
+
+      if (mine_stack_qty <= 0) continue;
+
+      int remove = MIN(remaining_to_clear, mine_stack_qty);
+      int new_qty = mine_stack_qty - remove;
+
+      armid_removed += remove;
+      remaining_to_clear -= remove;
+
+      if (new_qty > 0) {
+          sqlite3_stmt *update_st = NULL;
+          const char *sql_update_mine_qty = "UPDATE sector_assets SET quantity = ?1 WHERE id = ?2;";
+          if (sqlite3_prepare_v2(db, sql_update_mine_qty, -1, &update_st, NULL) != SQLITE_OK) {
+              LOGE("Failed to prepare mine quantity update statement during sweep: %s", sqlite3_errmsg(db));
+              sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+              json_decref(hostile_stacks_json);
+              return -1;
+          }
+          sqlite3_bind_int(update_st, 1, new_qty);
+          sqlite3_bind_int(update_st, 2, mine_stack_id);
+          if (sqlite3_step(update_st) != SQLITE_DONE) {
+              LOGE("Failed to update mine quantity during sweep: %s", sqlite3_errmsg(db));
+              sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+              json_decref(hostile_stacks_json);
+              return -1;
+          }
+          sqlite3_finalize(update_st);
+      } else {
+          sqlite3_stmt *delete_st = NULL;
+          const char *sql_delete_mine = "DELETE FROM sector_assets WHERE id = ?1;";
+          if (sqlite3_prepare_v2(db, sql_delete_mine, -1, &delete_st, NULL) != SQLITE_OK) {
+              LOGE("Failed to prepare mine delete statement during sweep: %s", sqlite3_errmsg(db));
+              sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+              json_decref(hostile_stacks_json);
+              return -1;
+          }
+          sqlite3_bind_int(delete_st, 1, mine_stack_id);
+          if (sqlite3_step(delete_st) != SQLITE_DONE) {
+              LOGE("Failed to delete mine during sweep: %s", sqlite3_errmsg(db));
+              sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+              json_decref(hostile_stacks_json);
+              return -1;
+          }
+          sqlite3_finalize(delete_st);
+      }
+  }
+
+  // 9. Update ship fighters:
+  sqlite3_stmt *update_ship_st = NULL;
+  const char *sql_update_ship_fighters = "UPDATE ships SET fighters = fighters - ?1 WHERE id = ?2;";
+  if (sqlite3_prepare_v2(db, sql_update_ship_fighters, -1, &update_ship_st, NULL) != SQLITE_OK) {
+      LOGE("Failed to prepare ship fighters update statement during sweep: %s", sqlite3_errmsg(db));
+      sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+      json_decref(hostile_stacks_json);
+      return -1;
+  }
+  sqlite3_bind_int(update_ship_st, 1, fighters_lost);
+  sqlite3_bind_int(update_ship_st, 2, ship_id);
+  if (sqlite3_step(update_ship_st) != SQLITE_DONE) {
+      LOGE("Failed to update ship fighters during sweep: %s", sqlite3_errmsg(db));
+      sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+      json_decref(hostile_stacks_json);
+      return -1;
+  }
+  sqlite3_finalize(update_ship_st);
+
+  if (sqlite3_exec (db, "COMMIT;", NULL, NULL, &errmsg) != SQLITE_OK)
+    {
+      if (errmsg) sqlite3_free (errmsg);
+      send_enveloped_error (ctx->fd, root, ERR_DB, "Commit failed");
+      json_decref(hostile_stacks_json);
+      return 0;
+    }
+
+  // Re-calculate remaining hostile mines for response
+  int armid_remaining_after_sweep = 0;
+  sqlite3_stmt *recalc_st = NULL;
+  const char *sql_recalc_mines =
+    "SELECT COALESCE(SUM(quantity),0) FROM sector_assets WHERE sector = ?1 AND asset_type = 1 AND quantity > 0;";
+  if (sqlite3_prepare_v2(db, sql_recalc_mines, -1, &recalc_st, NULL) == SQLITE_OK) {
+      sqlite3_bind_int(recalc_st, 1, target_sector_id);
+      if (sqlite3_step(recalc_st) == SQLITE_ROW) {
+          armid_remaining_after_sweep = sqlite3_column_int(recalc_st, 0);
+      }
+      sqlite3_finalize(recalc_st);
+  } else {
+      LOGE("Failed to re-calculate remaining mines after sweep: %s", sqlite3_errmsg(db));
+  }
+
+  // 10. Reply:
+  json_t *out = json_object ();
+  json_object_set_new (out, "from_sector_id", json_integer (from_sector_id));
+  json_object_set_new (out, "target_sector_id", json_integer (target_sector_id));
+  json_object_set_new (out, "fighters_sent", json_integer (fighters_committed));
+  json_object_set_new (out, "fighters_lost", json_integer (fighters_lost));
+  json_object_set_new (out, "armid_removed", json_integer (armid_removed));
+  json_object_set_new (out, "armid_remaining", json_integer (armid_remaining_after_sweep));
+  json_object_set_new (out, "success", json_boolean (armid_removed > 0));
+  send_enveloped_ok (ctx->fd, root, "combat.mines_swept_v1", out);
+
+  // Optional broadcast:
+  if (armid_removed > 0) {
+      json_t *broadcast_data = json_object();
+      json_object_set_new(broadcast_data, "v", json_integer(1));
+      json_object_set_new(broadcast_data, "sweeper_id", json_integer(ctx->player_id));
+      json_object_set_new(broadcast_data, "sector_id", json_integer(target_sector_id));
+      json_object_set_new(broadcast_data, "armid_removed", json_integer(armid_removed));
+      json_object_set_new(broadcast_data, "fighters_lost", json_integer(fighters_lost));
+      (void) db_log_engine_event ((long long)time(NULL), "combat.mines_swept", NULL, ctx->player_id,
+                                  target_sector_id, broadcast_data, NULL);
+  }
+
+  json_decref(hostile_stacks_json);
+  return 0;
 }
 
 /* ---------- combat.status ---------- */

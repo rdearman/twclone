@@ -1,0 +1,40 @@
+{
+  "tests": [
+    {
+      "name": "Auth and get player info",
+      "cmd": "auth.login",
+      "data": {
+        "user_name": "test_armid_player",
+        "password": "password123"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "capture": {
+        "my_id": "data.player.id",
+        "curSector": "data.ship.location.sector_id"
+      }
+    },
+    {
+      "name": "Enter sector with no Armids",
+      "cmd": "move.warp",
+      "data": {
+        "from_sector_id": "@curSector",
+        "to_sector_id": 100
+      },
+      "expect": {
+        "status": "ok",
+        "type": "move.result",
+        "data": {
+          "from": "@curSector",
+          "to": 100,
+          "turns_spent": "*",
+          "encounter": null
+        }
+      },
+      "capture": {
+        "curSector": "data.to"
+      }
+    }
+  ]
+}
