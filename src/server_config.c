@@ -74,6 +74,16 @@ set_defaults (void)
   g_cfg.mines.limpet.max_per_ship = 1;
   g_cfg.mines.limpet.allow_multi_owner = false;
   g_cfg.mines.limpet.scrub_cost = 5000;
+
+  // Death Configuration Defaults (from design brief)
+  g_cfg.death.max_per_day = 2;
+  g_cfg.death.xp_loss_flat = 100;
+  g_cfg.death.xp_loss_percent = 0;
+  snprintf(g_cfg.death.drop_cargo, sizeof(g_cfg.death.drop_cargo), "all");
+  snprintf(g_cfg.death.drop_credits_mode, sizeof(g_cfg.death.drop_credits_mode), "all_ship");
+  g_cfg.death.big_sleep_duration_seconds = 86400;
+  g_cfg.death.big_sleep_clear_xp_below = 0;
+  snprintf(g_cfg.death.escape_pod_spawn_mode, sizeof(g_cfg.death.escape_pod_spawn_mode), "safe_path"); // Default to safe_path for general kills
 }
 
 
@@ -167,6 +177,25 @@ print_effective_config_redacted (void)
           g_cfg.mines.limpet.max_per_ship,
           g_cfg.mines.limpet.allow_multi_owner ? "true" : "false",
           g_cfg.mines.limpet.scrub_cost);
+
+  // New death config printing
+  printf (",\"death\":{"
+          "\"max_per_day\":%d,"
+          "\"xp_loss_flat\":%d,"
+          "\"xp_loss_percent\":%d,"
+          "\"drop_cargo\":\"%s\","
+          "\"drop_credits_mode\":\"%s\","
+          "\"big_sleep_duration_seconds\":%d,"
+          "\"big_sleep_clear_xp_below\":%d,"
+          "\"escape_pod_spawn_mode\":\"%s\"}}",
+          g_cfg.death.max_per_day,
+          g_cfg.death.xp_loss_flat,
+          g_cfg.death.xp_loss_percent,
+          g_cfg.death.drop_cargo,
+          g_cfg.death.drop_credits_mode,
+          g_cfg.death.big_sleep_duration_seconds,
+          g_cfg.death.big_sleep_clear_xp_below,
+          g_cfg.death.escape_pod_spawn_mode);
   printf ("\n");
 }
 

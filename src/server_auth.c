@@ -262,6 +262,52 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
       LOGI("play_login returned %d for player %s", rc, name);
       if (rc == AUTH_OK)
 	{
+        sqlite3 *dbh = db_get_handle();
+        long long current_timestamp = time(NULL);
+        char podded_status_str[32] = {0};
+        long long big_sleep_until = 0;
+
+        // Check player's podded status
+        sqlite3_stmt *ps_st = NULL;
+        const char *sql_get_podded_status = "SELECT status, big_sleep_until FROM podded_status WHERE player_id = ?;";
+        int ps_rc = sqlite3_prepare_v2(dbh, sql_get_podded_status, -1, &ps_st, NULL);
+        if (ps_rc == SQLITE_OK) {
+            sqlite3_bind_int(ps_st, 1, player_id);
+            if (sqlite3_step(ps_st) == SQLITE_ROW) {
+                strncpy(podded_status_str, (const char*)sqlite3_column_text(ps_st, 0), sizeof(podded_status_str) - 1);
+                big_sleep_until = sqlite3_column_int64(ps_st, 1);
+            }
+            sqlite3_finalize(ps_st);
+        } else {
+            LOGE("cmd_auth_login: Failed to query podded_status for player %d: %s", player_id, sqlite3_errmsg(dbh));
+            // Proceed as if not in big sleep to avoid blocking login due to DB error
+        }
+
+        if (strcmp(podded_status_str, "big_sleep") == 0) {
+            if (current_timestamp < big_sleep_until) {
+                // Still in Big Sleep
+                json_t *err_data = json_pack("{s:i, s:i}", "player_id", player_id, "big_sleep_until", big_sleep_until);
+                send_enveloped_refused(ctx->fd, root, ERR_REF_BIG_SLEEP, "You are currently in Big Sleep.", err_data);
+                json_decref(err_data);
+                return 0; // Disallow login
+            } else {
+                // Big Sleep has ended, respawn player
+                LOGI("cmd_auth_login: Player %d's Big Sleep ended. Spawning new starter ship.", player_id);
+                // Assume default safe sector is 1
+                int respawn_sector_id = 1;
+                int spawn_rc = spawn_starter_ship(dbh, player_id, respawn_sector_id);
+                if (spawn_rc != SQLITE_OK) {
+                    LOGE("cmd_auth_login: Failed to spawn starter ship for player %d after Big Sleep: %s", player_id, sqlite3_errmsg(dbh));
+                    send_enveloped_error(ctx->fd, root, 1500, "Database error during respawn.");
+                    return 0;
+                }
+                // Emit event player.big_sleep_ended
+                json_t *event_payload = json_object();
+                json_object_set_new(event_payload, "player_id", json_integer(player_id));
+                db_log_engine_event(current_timestamp, "player.big_sleep_ended", "system", player_id, respawn_sector_id, event_payload, NULL);
+            }
+        }
+        
 	  /* Read canonical sector from DB; fall back to 1 if missing/NULL */
 	  int sector_id = 0;
 	  if (db_player_get_sector (player_id, &sector_id) != SQLITE_OK
@@ -272,11 +318,11 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
 	  ctx->player_id = player_id;
 	  ctx->sector_id = sector_id;	/* <-- set unconditionally on login */
 
-	  sqlite3 *dbh = db_get_handle ();
+	  // sqlite3 *dbh = db_get_handle (); // Already obtained above
 	  bool is_sysop = player_is_sysop (dbh, ctx->player_id);
-	  int rc =
+	  int subs_rc =
 	    subs_upsert_locked_defaults (dbh, ctx->player_id, is_sysop);
-	  if (rc != SQLITE_OK)
+	  if (subs_rc != SQLITE_OK)
 	    {
 	      send_enveloped_error (ctx->fd, root, 1503,
 				    "Database error (subs upsert)");
@@ -314,9 +360,8 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
 	    }
 	  /* Auto-subscribe this player to system.* on login (best-effort). */
 	  {
-	    sqlite3 *db = db_get_handle ();
 	    sqlite3_stmt *st = NULL;
-	    if (sqlite3_prepare_v2 (db,
+	    if (sqlite3_prepare_v2 (dbh, // Use dbh which is already defined
 				    "INSERT OR IGNORE INTO subscriptions(player_id,event_type,delivery,enabled) "
 				    "VALUES(?1,'system.*','push',1);",
 				    -1, &st, NULL) == SQLITE_OK)

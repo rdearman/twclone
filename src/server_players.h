@@ -64,8 +64,9 @@ extern "C"
   // Function to destroy a ship and handle its side effects
   int destroy_ship_and_handle_side_effects(client_ctx_t *ctx, int sector_id, int player_id);
 
+  // New function for Big Sleep respawn
+  int spawn_starter_ship(sqlite3 *db, int player_id, int sector_id);
 
-  
 #ifdef __cplusplus
 }
 #endif

@@ -2337,6 +2337,126 @@ cmd_bank_balance (client_ctx_t *ctx, json_t *root)
   return 0;
 }
 
+int spawn_starter_ship(sqlite3 *db, int player_id, int sector_id) {
+    int rc = SQLITE_ERROR;
+    sqlite3_stmt *st = NULL;
+    int ship_type_id = 0;
+    int new_ship_id = 0;
+    const char *starter_ship_type_name = "Scout Marauder";
+
+    LOGI("spawn_starter_ship: Player %d respawning in starter ship at sector %d.", player_id, sector_id);
+
+    // 1. Get the shiptype ID for the starter ship (Scout Marauder)
+    const char *sql_get_shiptype = "SELECT id, initialholds, maxfighters, maxshields FROM shiptypes WHERE name = ?;";
+    rc = sqlite3_prepare_v2(db, sql_get_shiptype, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("spawn_starter_ship: Failed to prepare shiptype select: %s", sqlite3_errmsg(db));
+        return rc;
+    }
+    sqlite3_bind_text(st, 1, starter_ship_type_name, -1, SQLITE_STATIC);
+    
+    int initial_holds = 0;
+    int initial_fighters = 0;
+    int initial_shields = 0;
+
+    if (sqlite3_step(st) == SQLITE_ROW) {
+        ship_type_id = sqlite3_column_int(st, 0);
+        initial_holds = sqlite3_column_int(st, 1);
+        initial_fighters = sqlite3_column_int(st, 2);
+        initial_shields = sqlite3_column_int(st, 3);
+    }
+    sqlite3_finalize(st);
+    st = NULL;
+
+    if (ship_type_id == 0) {
+        LOGE("spawn_starter_ship: Starter ship type '%s' not found.", starter_ship_type_name);
+        return SQLITE_NOTFOUND;
+    }
+
+    // 2. Insert a new ship for the player
+    // We are no longer using owner_player_id in ships directly, rely on ship_ownership
+    const char *sql_insert_ship =
+        "INSERT INTO ships (name, type_id, holds, fighters, shields, sector, ported, onplanet) "
+        "VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, 0);"; // Assume not ported or on planet initially
+    rc = sqlite3_prepare_v2(db, sql_insert_ship, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("spawn_starter_ship: Failed to prepare ship insert: %s", sqlite3_errmsg(db));
+        return rc;
+    }
+    sqlite3_bind_text(st, 1, "Starter Ship", -1, SQLITE_STATIC);
+    sqlite3_bind_int(st, 2, ship_type_id);
+    sqlite3_bind_int(st, 3, initial_holds);
+    sqlite3_bind_int(st, 4, initial_fighters);
+    sqlite3_bind_int(st, 5, initial_shields);
+    sqlite3_bind_int(st, 6, sector_id);
+
+    if (sqlite3_step(st) != SQLITE_DONE) {
+        LOGE("spawn_starter_ship: Failed to insert new starter ship: %s", sqlite3_errmsg(db));
+        sqlite3_finalize(st);
+        return rc;
+    }
+    new_ship_id = sqlite3_last_insert_rowid(db);
+    sqlite3_finalize(st);
+    st = NULL;
+
+    // 3. Assign ship ownership via ship_ownership table
+    const char *sql_insert_ship_ownership =
+        "INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary) VALUES (?1, ?2, 1, 1);"; // role_id 1 = owner, is_primary 1
+    rc = sqlite3_prepare_v2(db, sql_insert_ship_ownership, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("spawn_starter_ship: Failed to prepare ship_ownership insert: %s", sqlite3_errmsg(db));
+        return rc;
+    }
+    sqlite3_bind_int(st, 1, new_ship_id);
+    sqlite3_bind_int(st, 2, player_id);
+    if (sqlite3_step(st) != SQLITE_DONE) {
+        LOGE("spawn_starter_ship: Failed to insert ship_ownership: %s", sqlite3_errmsg(db));
+        sqlite3_finalize(st);
+        return rc;
+    }
+    sqlite3_finalize(st);
+    st = NULL;
+
+    // 4. Update player's active ship and sector in the players table
+    const char *sql_update_player =
+        "UPDATE players SET ship = ?, sector = ? WHERE id = ?;";
+    rc = sqlite3_prepare_v2(db, sql_update_player, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("spawn_starter_ship: Failed to prepare player update: %s", sqlite3_errmsg(db));
+        return rc;
+    }
+    sqlite3_bind_int(st, 1, new_ship_id);
+    sqlite3_bind_int(st, 2, sector_id);
+    sqlite3_bind_int(st, 3, player_id);
+    if (sqlite3_step(st) != SQLITE_DONE) {
+        LOGE("spawn_starter_ship: Failed to update player's ship/sector: %s", sqlite3_errmsg(db));
+        sqlite3_finalize(st);
+        return rc;
+    }
+    sqlite3_finalize(st);
+    st = NULL;
+    
+    // 5. Update podded_status table
+    const char *sql_update_podded_status =
+        "UPDATE podded_status SET status = 'alive', podded_count_today = 0, big_sleep_until = 0 WHERE player_id = ?;";
+    rc = sqlite3_prepare_v2(db, sql_update_podded_status, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("spawn_starter_ship: Failed to prepare podded_status update: %s", sqlite3_errmsg(db));
+        return rc;
+    }
+    sqlite3_bind_int(st, 1, player_id);
+    if (sqlite3_step(st) != SQLITE_DONE) {
+        LOGE("spawn_starter_ship: Failed to update podded_status for player %d: %s", player_id, sqlite3_errmsg(db));
+        sqlite3_finalize(st);
+        return rc;
+    }
+    sqlite3_finalize(st);
+    st = NULL;
+
+    LOGI("spawn_starter_ship: Player %d successfully respawned in ship %d ('%s') at sector %d.", player_id, new_ship_id, starter_ship_type_name, sector_id);
+    return SQLITE_OK;
+}
+
 // Function to destroy a ship and handle its side effects
 int destroy_ship_and_handle_side_effects(client_ctx_t *ctx, int sector_id, int player_id) {
     sqlite3 *db = db_get_handle();

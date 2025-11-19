@@ -8136,6 +8136,302 @@ int db_planet_get_goods_on_hand(int planet_id, const char *commodity_code, int *
 int db_planet_update_goods_on_hand(int planet_id, const char *commodity_code, int quantity_change) { return SQLITE_OK; }
 
 
+// New helper functions for ship destruction and player status
+
+// db_mark_ship_destroyed: Marks a ship as destroyed.
+int db_mark_ship_destroyed(sqlite3 *db, int ship_id) {
+    sqlite3_stmt *st = NULL;
+    int rc;
+    const char *sql = "UPDATE ships SET destroyed = 1 WHERE id = ?;";
+    
+    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("db_mark_ship_destroyed: prepare error: %s", sqlite3_errmsg(db));
+        return rc;
+    }
+    sqlite3_bind_int(st, 1, ship_id);
+    rc = sqlite3_step(st);
+    sqlite3_finalize(st);
+    
+    if (rc != SQLITE_DONE) {
+        LOGE("db_mark_ship_destroyed: execute error: %s", sqlite3_errmsg(db));
+        return rc;
+    }
+    return SQLITE_OK;
+}
+
+// db_clear_player_active_ship: Clears the active ship for a player.
+int db_clear_player_active_ship(sqlite3 *db, int player_id) {
+    sqlite3_stmt *st = NULL;
+    int rc;
+    const char *sql = "UPDATE players SET ship = 0 WHERE id = ?;"; // Set ship to 0 (NULL)
+    
+    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("db_clear_player_active_ship: prepare error: %s", sqlite3_errmsg(db));
+        return rc;
+    }
+    sqlite3_bind_int(st, 1, player_id);
+    rc = sqlite3_step(st);
+    sqlite3_finalize(st);
+    
+    if (rc != SQLITE_DONE) {
+        LOGE("db_clear_player_active_ship: execute error: %s", sqlite3_errmsg(db));
+        return rc;
+    }
+    return SQLITE_OK;
+}
+
+// db_increment_player_stat: Increments a specified player statistic.
+int db_increment_player_stat(sqlite3 *db, int player_id, const char *stat_name) {
+    sqlite3_stmt *st = NULL;
+    int rc;
+    char *sql_query = NULL;
+    
+    // Using sqlite3_mprintf to safely construct the query with a dynamic column name
+    sql_query = sqlite3_mprintf("UPDATE players SET %q = %q + 1 WHERE id = ?;", stat_name, stat_name);
+    if (!sql_query) {
+        return SQLITE_NOMEM;
+    }
+
+    rc = sqlite3_prepare_v2(db, sql_query, -1, &st, NULL);
+    sqlite3_free(sql_query); // Free the allocated string immediately after preparing
+    if (rc != SQLITE_OK) {
+        LOGE("db_increment_player_stat: prepare error for %s: %s", stat_name, sqlite3_errmsg(db));
+        return rc;
+    }
+    sqlite3_bind_int(st, 1, player_id);
+    rc = sqlite3_step(st);
+    sqlite3_finalize(st);
+    
+    if (rc != SQLITE_DONE) {
+        LOGE("db_increment_player_stat: execute error for %s: %s", stat_name, sqlite3_errmsg(db));
+        return rc;
+    }
+    return SQLITE_OK;
+}
+
+// db_get_player_xp: Retrieves a player's experience points.
+int db_get_player_xp(sqlite3 *db, int player_id) {
+    sqlite3_stmt *st = NULL;
+    int rc;
+    int xp = 0;
+    const char *sql = "SELECT experience FROM players WHERE id = ?;";
+    
+    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("db_get_player_xp: prepare error: %s", sqlite3_errmsg(db));
+        return 0; // Return 0 on error
+    }
+    sqlite3_bind_int(st, 1, player_id);
+    rc = sqlite3_step(st);
+    if (rc == SQLITE_ROW) {
+        xp = sqlite3_column_int(st, 0);
+    } else if (rc != SQLITE_DONE) {
+        LOGE("db_get_player_xp: execute error: %s", sqlite3_errmsg(db));
+    }
+    sqlite3_finalize(st);
+    return xp;
+}
+
+// db_update_player_xp: Updates a player's experience points.
+int db_update_player_xp(sqlite3 *db, int player_id, int new_xp) {
+    sqlite3_stmt *st = NULL;
+    int rc;
+    const char *sql = "UPDATE players SET experience = ? WHERE id = ?;";
+    
+    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("db_update_player_xp: prepare error: %s", sqlite3_errmsg(db));
+        return rc;
+    }
+    sqlite3_bind_int(st, 1, new_xp);
+    sqlite3_bind_int(st, 2, player_id);
+    rc = sqlite3_step(st);
+    sqlite3_finalize(st);
+    
+    if (rc != SQLITE_DONE) {
+        LOGE("db_update_player_xp: execute error: %s", sqlite3_errmsg(db));
+        return rc;
+    }
+    return SQLITE_OK;
+}
+
+// db_shiptype_has_escape_pod: Checks if a ship type has an escape pod.
+bool db_shiptype_has_escape_pod(sqlite3 *db, int ship_id) {
+    sqlite3_stmt *st = NULL;
+    int rc;
+    bool has_pod = false;
+    const char *sql = "SELECT T.has_escape_pod FROM ships S JOIN shiptypes T ON S.type_id = T.id WHERE S.id = ?;";
+    
+    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("db_shiptype_has_escape_pod: prepare error: %s", sqlite3_errmsg(db));
+        return false;
+    }
+    sqlite3_bind_int(st, 1, ship_id);
+    rc = sqlite3_step(st);
+    if (rc == SQLITE_ROW) {
+        has_pod = sqlite3_column_int(st, 0) == 1;
+    } else if (rc != SQLITE_DONE) {
+        LOGE("db_shiptype_has_escape_pod: execute error: %s", sqlite3_errmsg(db));
+    }
+    sqlite3_finalize(st);
+    return has_pod;
+}
+
+// db_get_player_podded_count_today: Retrieves player's podded count for today.
+int db_get_player_podded_count_today(sqlite3 *db, int player_id) {
+    sqlite3_stmt *st = NULL;
+    int rc;
+    int count = 0;
+    const char *sql = "SELECT podded_count_today FROM podded_status WHERE player_id = ?;";
+    
+    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("db_get_player_podded_count_today: prepare error: %s", sqlite3_errmsg(db));
+        return 0;
+    }
+    sqlite3_bind_int(st, 1, player_id);
+    rc = sqlite3_step(st);
+    if (rc == SQLITE_ROW) {
+        count = sqlite3_column_int(st, 0);
+    } else if (rc == SQLITE_DONE) {
+        // No entry, create one
+        db_create_podded_status_entry(db, player_id); // This will insert a default row
+        // After creation, count is 0
+    } else {
+        LOGE("db_get_player_podded_count_today: execute error: %s", sqlite3_errmsg(db));
+    }
+    sqlite3_finalize(st);
+    return count;
+}
+
+// db_get_player_podded_last_reset: Retrieves player's last podded reset timestamp.
+long long db_get_player_podded_last_reset(sqlite3 *db, int player_id) {
+    sqlite3_stmt *st = NULL;
+    int rc;
+    long long timestamp = 0;
+    const char *sql = "SELECT podded_last_reset FROM podded_status WHERE player_id = ?;";
+    
+    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("db_get_player_podded_last_reset: prepare error: %s", sqlite3_errmsg(db));
+        return 0;
+    }
+    sqlite3_bind_int(st, 1, player_id);
+    rc = sqlite3_step(st);
+    if (rc == SQLITE_ROW) {
+        timestamp = sqlite3_column_int64(st, 0);
+    } else if (rc == SQLITE_DONE) {
+        // No entry, create one
+        db_create_podded_status_entry(db, player_id); // This will insert a default row
+        // After creation, current timestamp should be returned as default
+        timestamp = time(NULL);
+    } else {
+        LOGE("db_get_player_podded_last_reset: execute error: %s", sqlite3_errmsg(db));
+    }
+    sqlite3_finalize(st);
+    return timestamp;
+}
+
+// db_reset_player_podded_count: Resets player's podded count and updates last reset timestamp.
+int db_reset_player_podded_count(sqlite3 *db, int player_id, long long timestamp) {
+    sqlite3_stmt *st = NULL;
+    int rc;
+    const char *sql = "UPDATE podded_status SET podded_count_today = 0, podded_last_reset = ? WHERE player_id = ?;";
+    
+    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("db_reset_player_podded_count: prepare error: %s", sqlite3_errmsg(db));
+        return rc;
+    }
+    sqlite3_bind_int64(st, 1, timestamp);
+    sqlite3_bind_int(st, 2, player_id);
+    rc = sqlite3_step(st);
+    sqlite3_finalize(st);
+    
+    if (rc != SQLITE_DONE) {
+        LOGE("db_reset_player_podded_count: execute error: %s", sqlite3_errmsg(db));
+        return rc;
+    }
+    return SQLITE_OK;
+}
+
+// db_update_player_podded_status: Updates a player's podded status.
+int db_update_player_podded_status(sqlite3 *db, int player_id, const char *status, long long big_sleep_until) {
+    sqlite3_stmt *st = NULL;
+    int rc;
+    const char *sql = "UPDATE podded_status SET status = ?, big_sleep_until = ? WHERE player_id = ?;";
+    
+    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("db_update_player_podded_status: prepare error: %s", sqlite3_errmsg(db));
+        return rc;
+    }
+    sqlite3_bind_text(st, 1, status, -1, SQLITE_STATIC);
+    sqlite3_bind_int64(st, 2, big_sleep_until);
+    sqlite3_bind_int(st, 3, player_id);
+    rc = sqlite3_step(st);
+    sqlite3_finalize(st);
+    
+    if (rc != SQLITE_DONE) {
+        LOGE("db_update_player_podded_status: execute error: %s", sqlite3_errmsg(db));
+        return rc;
+    }
+    return SQLITE_OK;
+}
+
+// db_create_podded_status_entry: Creates a default entry in podded_status for a player.
+int db_create_podded_status_entry(sqlite3 *db, int player_id) {
+    sqlite3_stmt *st = NULL;
+    int rc;
+    const char *sql = "INSERT OR IGNORE INTO podded_status (player_id, podded_count_today, podded_last_reset, status, big_sleep_until) VALUES (?, 0, ?, 'alive', 0);";
+    
+    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("db_create_podded_status_entry: prepare error: %s", sqlite3_errmsg(db));
+        return rc;
+    }
+    sqlite3_bind_int(st, 1, player_id);
+    sqlite3_bind_int64(st, 2, time(NULL));
+    rc = sqlite3_step(st);
+    sqlite3_finalize(st);
+    
+    if (rc != SQLITE_DONE) {
+        LOGE("db_create_podded_status_entry: execute error: %s", sqlite3_errmsg(db));
+        return rc;
+    }
+    return SQLITE_OK;
+}
+
+// db_get_shiptype_info: Retrieves holds, fighters, and shields for a shiptype.
+int db_get_shiptype_info(sqlite3 *db, int shiptype_id, int *holds, int *fighters, int *shields) {
+    sqlite3_stmt *st = NULL;
+    int rc;
+    const char *sql = "SELECT initialholds, maxfighters, maxshields FROM shiptypes WHERE id = ?;";
+    
+    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("db_get_shiptype_info: prepare error: %s", sqlite3_errmsg(db));
+        return rc;
+    }
+    sqlite3_bind_int(st, 1, shiptype_id);
+    rc = sqlite3_step(st);
+    if (rc == SQLITE_ROW) {
+        *holds = sqlite3_column_int(st, 0);
+        *fighters = sqlite3_column_int(st, 1);
+        *shields = sqlite3_column_int(st, 2);
+        rc = SQLITE_OK;
+    } else if (rc == SQLITE_DONE) {
+        LOGW("db_get_shiptype_info: No shiptype found for ID %d.", shiptype_id);
+        rc = SQLITE_NOTFOUND;
+    } else {
+        LOGE("db_get_shiptype_info: execute error: %s", sqlite3_errmsg(db));
+    }
+    sqlite3_finalize(st);
+    return rc;
+}
 
 /* Return 1 if path exists from `from` to `to`, 0 if no path, <0 on error. */
 db_path_exists (sqlite3 *db, int from, int to)

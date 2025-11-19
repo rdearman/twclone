@@ -186,6 +186,20 @@ int db_port_update_goods_on_hand(int port_id, const char *commodity_code, int qu
 int db_planet_get_goods_on_hand(int planet_id, const char *commodity_code, int *out_quantity);
 int db_planet_update_goods_on_hand(int planet_id, const char *commodity_code, int quantity_change);
 
+// New helper functions for ship destruction and player status
+int db_mark_ship_destroyed(sqlite3 *db, int ship_id);
+int db_clear_player_active_ship(sqlite3 *db, int player_id);
+int db_increment_player_stat(sqlite3 *db, int player_id, const char *stat_name);
+int db_get_player_xp(sqlite3 *db, int player_id);
+int db_update_player_xp(sqlite3 *db, int player_id, int new_xp);
+bool db_shiptype_has_escape_pod(sqlite3 *db, int ship_id);
+int db_get_player_podded_count_today(sqlite3 *db, int player_id);
+long long db_get_player_podded_last_reset(sqlite3 *db, int player_id);
+int db_reset_player_podded_count(sqlite3 *db, int player_id, long long timestamp);
+int db_update_player_podded_status(sqlite3 *db, int player_id, const char *status, long long big_sleep_until);
+int db_create_podded_status_entry(sqlite3 *db, int player_id);
+int db_get_shiptype_info(sqlite3 *db, int shiptype_id, int *holds, int *fighters, int *shields);
+
 
 
 

@@ -120,6 +120,16 @@ extern "C"
         int scrub_cost;
       } limpet;
     } mines;
+    struct { // New death config
+        int max_per_day;
+        int xp_loss_flat;
+        int xp_loss_percent;
+        char drop_cargo[16]; // "all", "none", "percent"
+        char drop_credits_mode[16]; // "all_ship", "none", "percent"
+        int big_sleep_duration_seconds;
+        int big_sleep_clear_xp_below;
+        char escape_pod_spawn_mode[32]; // "previous_sector", "safe_path"
+    } death;
   } server_config_t;
 
   /* Single global instance (defined in server_config.c) */
