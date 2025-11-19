@@ -1,7 +1,0 @@
-{
-    "bug_id": "err_unknown_1405",
-    "first_seen": "20251119_033951_138",
-    "command": "unknown",
-    "error_code": 1405,
-    "error_message": "Port is not buying this commodity right now."
-}

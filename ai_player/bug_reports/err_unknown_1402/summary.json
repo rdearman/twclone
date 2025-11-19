@@ -1,7 +1,0 @@
-{
-    "bug_id": "err_unknown_1402",
-    "first_seen": "20251119_034005_330",
-    "command": "unknown",
-    "error_code": 1402,
-    "error_message": "No warp link"
-}
