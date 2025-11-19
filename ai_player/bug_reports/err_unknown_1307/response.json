@@ -1,0 +1,19 @@
+{
+    "id": "srv-refuse",
+    "reply_to": "c-eeb91aef",
+    "ts": "2025-11-19T04:35:51Z",
+    "status": "refused",
+    "type": "error",
+    "error": {
+        "code": 1307,
+        "message": "Database failure prevented turn consumption. Please try again."
+    },
+    "data": null,
+    "meta": {
+        "rate_limit": {
+            "limit": 60,
+            "remaining": 60,
+            "reset": 60
+        }
+    }
+}

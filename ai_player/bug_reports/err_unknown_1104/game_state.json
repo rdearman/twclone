@@ -1,0 +1,75 @@
+{
+    "session_id": "c6374404f034f72638e7554fe6b3302ee57d5481bf5e684d71fb7be81df3a54d",
+    "player_info": null,
+    "ship_info": null,
+    "player_location_sector": null,
+    "sector_data": {},
+    "port_info_by_sector": {},
+    "price_cache": {},
+    "bank_balance": 0,
+    "command_retry_info": {
+        "player.my_info": {
+            "next_retry_time": 1763523583.7735884
+        },
+        "session.goodbye": {
+            "failures": 1,
+            "next_retry_time": 1763523589.2812536
+        }
+    },
+    "strategy_plan": [],
+    "trade_successful": false,
+    "q_table": {},
+    "n_table": {},
+    "command_schemas": {
+        "session.hello": {
+            "$id": "ge://schema/session.hello.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+        },
+        "session.ping": {
+            "$id": "ge://schema/session.ping.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+        }
+    },
+    "schema_blacklist": [
+        "session.goodbye"
+    ],
+    "pending_schema_requests": {
+        "system.cmd_list": "c-1e2e00f1",
+        "session.hello": "c-3494a819",
+        "session.ping": "c-4c5ccc62",
+        "session.goodbye": "c-290caa94",
+        "system.schema_list": "c-7dcfdcf0",
+        "auth.login": "c-ce6e001c",
+        "auth.logout": "c-d4eff3b9",
+        "auth.mfa": "c-6bfb76bf",
+        "auth.register": "c-0fec9719",
+        "players.me": "c-7d3ea0c7",
+        "players.online": "c-f89c8563",
+        "players.refresh": "c-b3e8fb29",
+        "ship.info": "c-f8ea9ff9",
+        "sector.info": "c-8a6c5bf7",
+        "sector.set_beacon": "c-856ceb17",
+        "move.warp": "c-99f02d33",
+        "move.scan": "c-3878a8bf",
+        "move.pathfind": "c-b500563c",
+        "move.force_move": "c-e06ea656",
+        "trade.accept": "c-9917b305",
+        "trade.buy": "c-35b6ee00",
+        "trade.cancel": "c-25d92202",
+        "trade.history": "c-c942a7e3",
+        "trade.jettison": "c-802b58ea",
+        "trade.offer": "c-92095902",
+        "trade.port_info": "c-0e4e4f0b",
+        "trade.quote": "c-ba7c7d9a",
+        "trade.sell": "c-fbcb6f27"
+    },
+    "recent_sectors": []
+}

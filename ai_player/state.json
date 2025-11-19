@@ -1,12 +1,12 @@
 {
-    "session_id": "61cee690e296418171a1907e7f790716277c10bb3986a6dc2f3c2ded71e73b72",
+    "session_id": "9aacb4cd188d404604b992206b26793ee8a6298328b76ae198536ecb18dfe4b1",
     "player_info": {
         "player": {
             "id": 4,
             "number": 8,
             "name": "ai_qa_bot",
-            "turns_remaining": 997270,
-            "credits": "865.00"
+            "turns_remaining": 120,
+            "credits": "10000.00"
         }
     },
     "ship_info": {
@@ -20,76 +20,39 @@
         "holds": 25,
         "fighters": 250,
         "location": {
-            "sector_id": 87,
-            "sector_name": "Uncharted Space"
+            "sector_id": 1,
+            "sector_name": "Fedspace 1"
         },
         "owner": {
             "id": 4,
             "name": "ai_qa_bot"
         },
         "cargo": {
-            "ore": 0,
+            "ore": 25,
             "organics": 0,
             "equipment": 0,
             "colonists": 0
         }
     },
-    "player_location_sector": 174,
+    "player_location_sector": 1,
     "sector_data": {
-        "204": {
-            "sector_id": 204,
-            "name": "Uncharted Space",
+        "1": {
+            "sector_id": 1,
+            "name": "Fedspace 1",
             "adjacent": [
-                17,
-                308,
-                351,
-                398
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
             ],
-            "adjacent_count": 4,
-            "ports": [],
-            "has_port": false,
-            "players": [],
-            "players_count": 0,
-            "beacons": [],
-            "beacons_count": 0,
-            "planets": [],
-            "has_planet": false,
-            "planets_count": 0,
-            "beacon": null,
-            "has_beacon": false,
-            "ships": [
-                {
-                    "id": 2,
-                    "name": "QA Bot 1",
-                    "type": "Scout Marauder",
-                    "ship_name": "QA Bot 1",
-                    "ship_type": "Scout Marauder",
-                    "owner": "ai_qa_bot"
-                }
-            ],
-            "ships_count": 1,
-            "ports_count": 0,
-            "counts": {
-                "fighters": 0,
-                "mines_armid": 0,
-                "mines_limpet": 0,
-                "mines": 0
-            }
-        },
-        "17": {
-            "sector_id": 17,
-            "name": "Uncharted Space",
-            "adjacent": [
-                61,
-                204,
-                313
-            ],
-            "adjacent_count": 3,
+            "adjacent_count": 6,
             "ports": [
                 {
-                    "id": 163,
-                    "name": "Dwaseld",
-                    "type": "7"
+                    "id": 1,
+                    "name": "Earth Port",
+                    "type": "1"
                 }
             ],
             "has_port": true,
@@ -100,9 +63,17 @@
             "planets": [],
             "has_planet": false,
             "planets_count": 0,
-            "beacon": null,
-            "has_beacon": false,
+            "beacon": "The Federation -- Do Not Dump!",
+            "has_beacon": true,
             "ships": [
+                {
+                    "id": 1,
+                    "name": "Bit Banger",
+                    "type": "Merchant Cruiser",
+                    "ship_name": "Bit Banger",
+                    "ship_type": "Merchant Cruiser",
+                    "owner": "derelict"
+                },
                 {
                     "id": 2,
                     "name": "QA Bot 1",
@@ -110,1734 +81,144 @@
                     "ship_name": "QA Bot 1",
                     "ship_type": "Scout Marauder",
                     "owner": "ai_qa_bot"
-                },
-                {
-                    "id": 13,
-                    "name": "Imperial Starship",
-                    "type": "Interdictor Cruiser",
-                    "ship_name": "Imperial Starship",
-                    "ship_type": "Interdictor Cruiser",
-                    "owner": "derelict"
                 }
             ],
             "ships_count": 2,
             "ports_count": 1,
             "counts": {
                 "fighters": 0,
-                "mines_armid": 0,
+                "mines_armid": 1,
                 "mines_limpet": 0,
-                "mines": 0
-            }
-        },
-        "61": {
-            "sector_id": 61,
-            "name": "Camelopardalis",
-            "adjacent": [
-                17,
-                292
-            ],
-            "adjacent_count": 2,
-            "ports": [],
-            "has_port": false,
-            "players": [],
-            "players_count": 0,
-            "beacons": [],
-            "beacons_count": 0,
-            "planets": [],
-            "has_planet": false,
-            "planets_count": 0,
-            "beacon": null,
-            "has_beacon": false,
-            "ships": [
-                {
-                    "id": 2,
-                    "name": "QA Bot 1",
-                    "type": "Scout Marauder",
-                    "ship_name": "QA Bot 1",
-                    "ship_type": "Scout Marauder",
-                    "owner": "ai_qa_bot"
-                }
-            ],
-            "ships_count": 1,
-            "ports_count": 0,
-            "counts": {
-                "fighters": 0,
-                "mines_armid": 0,
-                "mines_limpet": 0,
-                "mines": 0
-            }
-        },
-        "313": {
-            "sector_id": 313,
-            "name": "Epsilon Del",
-            "adjacent": [
-                210,
-                256,
-                399,
-                482
-            ],
-            "adjacent_count": 4,
-            "ports": [],
-            "has_port": false,
-            "players": [],
-            "players_count": 0,
-            "beacons": [],
-            "beacons_count": 0,
-            "planets": [],
-            "has_planet": false,
-            "planets_count": 0,
-            "beacon": null,
-            "has_beacon": false,
-            "ships": [
-                {
-                    "id": 2,
-                    "name": "QA Bot 1",
-                    "type": "Scout Marauder",
-                    "ship_name": "QA Bot 1",
-                    "ship_type": "Scout Marauder",
-                    "owner": "ai_qa_bot"
-                }
-            ],
-            "ships_count": 1,
-            "ports_count": 0,
-            "counts": {
-                "fighters": 0,
-                "mines_armid": 0,
-                "mines_limpet": 0,
-                "mines": 0
-            }
-        },
-        "210": {
-            "sector_id": 210,
-            "name": "Uncharted Space",
-            "adjacent": [
-                420
-            ],
-            "adjacent_count": 1,
-            "ports": [],
-            "has_port": false,
-            "players": [],
-            "players_count": 0,
-            "beacons": [],
-            "beacons_count": 0,
-            "planets": [],
-            "has_planet": false,
-            "planets_count": 0,
-            "beacon": null,
-            "has_beacon": false,
-            "ships": [
-                {
-                    "id": 2,
-                    "name": "QA Bot 1",
-                    "type": "Scout Marauder",
-                    "ship_name": "QA Bot 1",
-                    "ship_type": "Scout Marauder",
-                    "owner": "ai_qa_bot"
-                }
-            ],
-            "ships_count": 1,
-            "ports_count": 0,
-            "counts": {
-                "fighters": 0,
-                "mines_armid": 0,
-                "mines_limpet": 0,
-                "mines": 0
-            }
-        },
-        "420": {
-            "sector_id": 420,
-            "name": "Uncharted Space",
-            "adjacent": [
-                174,
-                210,
-                427
-            ],
-            "adjacent_count": 3,
-            "ports": [],
-            "has_port": false,
-            "players": [],
-            "players_count": 0,
-            "beacons": [],
-            "beacons_count": 0,
-            "planets": [],
-            "has_planet": false,
-            "planets_count": 0,
-            "beacon": null,
-            "has_beacon": false,
-            "ships": [
-                {
-                    "id": 2,
-                    "name": "QA Bot 1",
-                    "type": "Scout Marauder",
-                    "ship_name": "QA Bot 1",
-                    "ship_type": "Scout Marauder",
-                    "owner": "ai_qa_bot"
-                }
-            ],
-            "ships_count": 1,
-            "ports_count": 0,
-            "counts": {
-                "fighters": 0,
-                "mines_armid": 0,
-                "mines_limpet": 0,
-                "mines": 0
-            }
-        },
-        "174": {
-            "sector_id": 174,
-            "name": "Pisces",
-            "adjacent": [
-                87,
-                127,
-                182
-            ],
-            "adjacent_count": 3,
-            "ports": [],
-            "has_port": false,
-            "players": [],
-            "players_count": 0,
-            "beacons": [],
-            "beacons_count": 0,
-            "planets": [],
-            "has_planet": false,
-            "planets_count": 0,
-            "beacon": null,
-            "has_beacon": false,
-            "ships": [
-                {
-                    "id": 2,
-                    "name": "QA Bot 1",
-                    "type": "Scout Marauder",
-                    "ship_name": "QA Bot 1",
-                    "ship_type": "Scout Marauder",
-                    "owner": "ai_qa_bot"
-                }
-            ],
-            "ships_count": 1,
-            "ports_count": 0,
-            "counts": {
-                "fighters": 0,
-                "mines_armid": 0,
-                "mines_limpet": 0,
-                "mines": 0
-            }
-        },
-        "87": {
-            "sector_id": 87,
-            "name": "Uncharted Space",
-            "adjacent": [
-                174,
-                245,
-                386
-            ],
-            "adjacent_count": 3,
-            "ports": [],
-            "has_port": false,
-            "players": [],
-            "players_count": 0,
-            "beacons": [],
-            "beacons_count": 0,
-            "planets": [],
-            "has_planet": false,
-            "planets_count": 0,
-            "beacon": null,
-            "has_beacon": false,
-            "ships": [
-                {
-                    "id": 2,
-                    "name": "QA Bot 1",
-                    "type": "Scout Marauder",
-                    "ship_name": "QA Bot 1",
-                    "ship_type": "Scout Marauder",
-                    "owner": "ai_qa_bot"
-                }
-            ],
-            "ships_count": 1,
-            "ports_count": 0,
-            "counts": {
-                "fighters": 0,
-                "mines_armid": 0,
-                "mines_limpet": 0,
-                "mines": 0
+                "mines": 1
             }
         }
     },
     "port_info_by_sector": {},
     "price_cache": {
-        "163": {
+        "1": {
             "buy": {
-                "ORE": 108.0
+                "ORE": 131.0
             },
             "sell": {
-                "ORE": 88.0
+                "ORE": 74.0
             }
         }
     },
-    "bank_balance": 10000,
+    "bank_balance": 0,
     "command_retry_info": {
         "sector.info": {
-            "next_retry_time": 1763460495.6480622
+            "next_retry_time": 1763523745.1451776
         },
         "session.goodbye": {
             "failures": 1,
-            "next_retry_time": 1763460436.662641
+            "next_retry_time": 1763523750.6513853
         },
         "system.schema_list": {
             "failures": 1,
-            "next_retry_time": 1763460436.6714716
+            "next_retry_time": 1763523750.6529584
         },
         "auth.mfa": {
             "failures": 1,
-            "next_retry_time": 1763460436.685745
+            "next_retry_time": 1763523750.6543698
         },
         "players.me": {
             "failures": 1,
-            "next_retry_time": 1763460436.6964526
+            "next_retry_time": 1763523750.6555095
         },
         "players.online": {
             "failures": 1,
-            "next_retry_time": 1763460436.703763
+            "next_retry_time": 1763523750.6562538
         },
         "players.refresh": {
             "failures": 1,
-            "next_retry_time": 1763460436.7093928
+            "next_retry_time": 1763523750.6570127
         },
         "move.force_move": {
             "failures": 1,
-            "next_retry_time": 1763460436.725202
+            "next_retry_time": 1763523750.660375
         },
         "sector.scan.density": {
-            "next_retry_time": 1763460496.1729112
+            "next_retry_time": 1763523745.6680908
         },
-        "move.warp": {
-            "next_retry_time": 1763460501.3799877
+        "trade.port_info": {
+            "next_retry_time": 1763523746.1815777
         },
         "trade.quote": {
-            "next_retry_time": 1763460436.5241103
+            "next_retry_time": 1763523746.6938434
         },
-        "trade.buy": {
-            "next_retry_time": 1763460446.7768712
+        "trade.sell": {
+            "next_retry_time": 1763534282.627614
         },
         "unknown": {
-            "failures": 3,
-            "next_retry_time": 1763460482.2777305
+            "failures": 5245,
+            "next_retry_time": 1763534579.1484492
+        },
+        "move.warp": {
+            "next_retry_time": 1763534283.1377776
+        },
+        "bank.deposit": {
+            "next_retry_time": 1763534283.647679
         },
         "bank.balance": {
-            "next_retry_time": 1763460496.6976879
+            "next_retry_time": 1763534284.1583676
         }
     },
     "strategy_plan": [],
     "trade_successful": true,
     "q_table": {
-        "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
-            "bank.balance": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "sector.info": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:67-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.sell": 0.0,
-            "trade.buy": 0.0,
-            "bank.deposit": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:145-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
             "trade.port_info": 0.0,
             "trade.quote": 0.0,
             "trade.buy": 0.0,
-            "bank.deposit": 0.0,
             "move.warp": 0.0,
-            "bank.balance": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:145-holds_full:full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
+            "bank.deposit": 0.0,
             "bank.balance": 0.0,
             "trade.sell": 0.0
         },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:22-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
             "trade.sell": 0.0,
             "bank.deposit": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:45-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "bank.deposit": 0.0,
-            "bank.balance": 0.0,
-            "trade.buy": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:58-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "bank.deposit": 0.0,
-            "bank.balance": 0.0,
-            "trade.buy": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:19-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "bank.deposit": 0.0,
-            "bank.balance": 0.0,
-            "trade.buy": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:69-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "bank.deposit": 0.0,
-            "bank.balance": 0.0,
-            "trade.buy": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.deposit": 0.0,
-            "bank.balance": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "bank.balance": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:155-holds_full:full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.sell": 0.0,
-            "bank.deposit": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:41-holds_full:full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "bank.deposit": 0.0,
-            "trade.sell": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:41-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.buy": 0.0,
             "bank.balance": 0.0,
             "move.warp": 0.0,
-            "trade.sell": 0.0,
-            "bank.deposit": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:111-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.deposit": 0.0,
-            "trade.sell": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:15-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.deposit": 0.0,
-            "trade.sell": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:24-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.deposit": 0.0,
-            "trade.sell": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:165-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
             "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.deposit": 0.0,
-            "bank.balance": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:101-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "bank.deposit": 0.0,
-            "trade.buy": 0.0,
-            "trade.sell": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:97-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.deposit": 0.0,
-            "bank.balance": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:9-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.deposit": 0.0,
-            "bank.balance": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:112-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.sell": 0.0,
-            "trade.buy": 0.0,
-            "bank.deposit": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:164-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.deposit": 0.0,
-            "bank.balance": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:120-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "bank.deposit": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:57-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "bank.balance": 0.0,
-            "trade.buy": 0.0,
-            "bank.deposit": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:151-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "bank.balance": 0.0,
-            "trade.buy": 0.0,
-            "bank.deposit": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:43-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.deposit": 0.0,
-            "bank.balance": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:30-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.sell": 0.0,
-            "trade.buy": 0.0,
-            "bank.deposit": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:50-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.sell": 0.0,
-            "trade.buy": 0.0,
-            "bank.deposit": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:76-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "bank.balance": 0.0,
-            "bank.deposit": 0.0,
-            "trade.buy": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:76-holds_full:full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.sell": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:166-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.deposit": 0.0,
-            "bank.balance": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:53-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.deposit": 0.0,
-            "bank.balance": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:186-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "bank.deposit": 0.0,
-            "bank.balance": 0.0,
-            "trade.buy": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:83-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.deposit": 0.0,
-            "bank.balance": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:70-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "bank.deposit": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:196-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.deposit": 0.0,
-            "bank.balance": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:149-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "trade.sell": 0.0,
-            "bank.deposit": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:185-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.sell": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:195-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:168-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "bank.balance": 0.0,
-            "trade.buy": 0.0,
-            "move.warp": 0.0,
-            "trade.sell": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:126-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "bank.balance": 0.0,
-            "trade.buy": 0.0,
-            "move.warp": 0.0,
-            "bank.deposit": 0.0,
-            "trade.sell": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:98-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:144-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:104-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:187-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0,
-            "trade.sell": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:68-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:33-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "bank.balance": 0.0,
-            "trade.buy": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:202-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "move.warp": 0.0,
-            "bank.balance": 0.0,
-            "trade.sell": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:90-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:134-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:49-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "bank.balance": 0.0,
-            "trade.buy": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:18-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:6-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:55-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.sell": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:128-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.sell": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:75-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:65-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "trade.sell": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:11-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0,
-            "trade.sell": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:105-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "bank.balance": 0.0,
-            "trade.buy": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:150-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:162-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "bank.balance": 0.0,
-            "trade.buy": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:72-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:92-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:192-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:79-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:178-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:39-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "bank.balance": 0.0,
-            "trade.buy": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:21-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:159-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0,
-            "bank.deposit": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:16-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "bank.balance": 0.0,
-            "trade.buy": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0,
-            "bank.deposit": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:17-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "move.warp": 0.0,
-            "bank.balance": 0.0,
-            "trade.sell": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:38-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.sell": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:82-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:136-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:62-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0,
-            "trade.sell": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:169-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "trade.sell": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:94-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:116-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.deposit": 0.0,
-            "bank.balance": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:52-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:31-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:108-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:175-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:160-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:99-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:114-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:86-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:179-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:153-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:167-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "trade.sell": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:91-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "trade.sell": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:85-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:93-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:163-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.0,
-            "trade.quote": 0.0,
-            "trade.buy": 0.0,
-            "bank.balance": 0.0,
-            "move.warp": 0.0
+            "trade.quote": 0.0
         }
     },
     "n_table": {
-        "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
-            "bank.balance": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "sector.info": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:67-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.sell": 0,
-            "trade.buy": 0,
-            "bank.deposit": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:145-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
             "trade.port_info": 0,
             "trade.quote": 0,
             "trade.buy": 0,
-            "bank.deposit": 0,
             "move.warp": 0,
-            "bank.balance": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:145-holds_full:full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
+            "bank.deposit": 0,
             "bank.balance": 0,
             "trade.sell": 0
         },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:22-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
             "trade.sell": 0,
             "bank.deposit": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:45-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "bank.deposit": 0,
-            "bank.balance": 0,
-            "trade.buy": 0,
-            "trade.sell": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:58-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "bank.deposit": 0,
-            "bank.balance": 0,
-            "trade.buy": 0,
-            "trade.sell": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:19-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "bank.deposit": 0,
-            "bank.balance": 0,
-            "trade.buy": 0,
-            "trade.sell": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:69-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "bank.deposit": 0,
-            "bank.balance": 0,
-            "trade.buy": 0,
-            "trade.sell": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.deposit": 0,
-            "bank.balance": 0,
-            "trade.sell": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "bank.balance": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:155-holds_full:full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.sell": 0,
-            "bank.deposit": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:41-holds_full:full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "bank.deposit": 0,
-            "trade.sell": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:41-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.buy": 0,
             "bank.balance": 0,
             "move.warp": 0,
-            "trade.sell": 0,
-            "bank.deposit": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:111-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.deposit": 0,
-            "trade.sell": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:15-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.deposit": 0,
-            "trade.sell": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:24-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.deposit": 0,
-            "trade.sell": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:165-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
             "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.deposit": 0,
-            "bank.balance": 0,
-            "trade.sell": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:101-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "bank.deposit": 0,
-            "trade.buy": 0,
-            "trade.sell": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:97-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.deposit": 0,
-            "bank.balance": 0,
-            "trade.sell": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:9-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.deposit": 0,
-            "bank.balance": 0,
-            "trade.sell": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:112-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.sell": 0,
-            "trade.buy": 0,
-            "bank.deposit": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:164-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.deposit": 0,
-            "bank.balance": 0,
-            "trade.sell": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:120-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "bank.deposit": 0,
-            "trade.sell": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:57-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "bank.balance": 0,
-            "trade.buy": 0,
-            "bank.deposit": 0,
-            "trade.sell": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:151-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "bank.balance": 0,
-            "trade.buy": 0,
-            "bank.deposit": 0,
-            "trade.sell": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:43-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.deposit": 0,
-            "bank.balance": 0,
-            "trade.sell": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:30-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.sell": 0,
-            "trade.buy": 0,
-            "bank.deposit": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:50-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.sell": 0,
-            "trade.buy": 0,
-            "bank.deposit": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:76-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "bank.balance": 0,
-            "bank.deposit": 0,
-            "trade.buy": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:76-holds_full:full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.sell": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:166-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.deposit": 0,
-            "bank.balance": 0,
-            "trade.sell": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:53-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.deposit": 0,
-            "bank.balance": 0,
-            "trade.sell": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:186-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "bank.deposit": 0,
-            "bank.balance": 0,
-            "trade.buy": 0,
-            "trade.sell": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:83-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.deposit": 0,
-            "bank.balance": 0,
-            "trade.sell": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:70-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "bank.deposit": 0,
-            "trade.sell": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:196-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.deposit": 0,
-            "bank.balance": 0,
-            "trade.sell": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:149-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "trade.sell": 0,
-            "bank.deposit": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:185-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.sell": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:195-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:168-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "bank.balance": 0,
-            "trade.buy": 0,
-            "move.warp": 0,
-            "trade.sell": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:126-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "bank.balance": 0,
-            "trade.buy": 0,
-            "move.warp": 0,
-            "bank.deposit": 0,
-            "trade.sell": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:98-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:144-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "trade.sell": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:104-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:187-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0,
-            "trade.sell": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:68-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "trade.sell": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:33-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "bank.balance": 0,
-            "trade.buy": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:202-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "move.warp": 0,
-            "bank.balance": 0,
-            "trade.sell": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:90-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:134-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:49-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "bank.balance": 0,
-            "trade.buy": 0,
-            "trade.sell": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:18-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:6-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "trade.sell": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:55-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.sell": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:128-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.sell": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:75-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:65-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "trade.sell": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:11-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0,
-            "trade.sell": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:105-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "bank.balance": 0,
-            "trade.buy": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:150-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:162-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "bank.balance": 0,
-            "trade.buy": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:72-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:92-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:192-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "trade.sell": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:79-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:178-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:39-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "bank.balance": 0,
-            "trade.buy": 0,
-            "trade.sell": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:21-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:159-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "trade.sell": 0,
-            "move.warp": 0,
-            "bank.deposit": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:16-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "bank.balance": 0,
-            "trade.buy": 0,
-            "trade.sell": 0,
-            "move.warp": 0,
-            "bank.deposit": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:17-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "move.warp": 0,
-            "bank.balance": 0,
-            "trade.sell": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:38-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.sell": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:82-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:136-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:62-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0,
-            "trade.sell": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:169-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "trade.sell": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:94-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:116-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.deposit": 0,
-            "bank.balance": 0,
-            "trade.sell": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:52-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:31-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:108-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:175-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:160-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:99-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:114-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:86-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:179-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "trade.sell": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:153-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:167-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "trade.sell": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:91-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "trade.sell": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:85-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:93-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
-        },
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:163-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0,
-            "trade.quote": 0,
-            "trade.buy": 0,
-            "bank.balance": 0,
-            "move.warp": 0
+            "trade.quote": 0
         }
     },
     "command_schemas": {
         "session.hello": {
             "$id": "ge://schema/session.hello.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
         },
         "session.ping": {
             "$id": "ge://schema/session.ping.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
         },
         "auth.login": {
             "$id": "ge://schema/auth.login.json",
@@ -1954,7 +335,7 @@
                             "commodity",
                             "quantity"
                         ],
-                        "additionalProperties": false
+                        "additionalProperties": true
                     }
                 },
                 "idempotency_key": {
@@ -2049,7 +430,7 @@
                             "commodity",
                             "quantity"
                         ],
-                        "additionalProperties": false
+                        "additionalProperties": true
                     }
                 },
                 "idempotency_key": {
@@ -2083,48 +464,37 @@
         "move.force_move"
     ],
     "pending_schema_requests": {
-        "system.cmd_list": "c-49da908c",
-        "session.hello": "c-a0ecbcfe",
-        "session.ping": "c-b4521fad",
-        "session.goodbye": "c-ba8864b0",
-        "system.schema_list": "c-8447c262",
-        "auth.login": "c-4e4bf6b5",
-        "auth.logout": "c-bdd4bd78",
-        "auth.mfa": "c-cb5ea8a9",
-        "auth.register": "c-2613dfbd",
-        "players.me": "c-332f9cea",
-        "players.online": "c-d0607174",
-        "players.refresh": "c-835a13ba",
-        "ship.info": "c-5f115fbe",
-        "sector.info": "c-3f5a5b95",
-        "sector.set_beacon": "c-02aded60",
-        "move.warp": "c-1471c7b8",
-        "move.scan": "c-b4ad4f00",
-        "move.pathfind": "c-f56368c0",
-        "move.force_move": "c-289e02e1",
-        "trade.accept": "c-eb9c42a6",
-        "trade.buy": "c-ff441ba3",
-        "trade.cancel": "c-e169ecdf",
-        "trade.history": "c-3ad0c580",
-        "trade.jettison": "c-67e8738c",
-        "trade.offer": "c-0f3a494f",
-        "trade.port_info": "c-bc2ddcfa",
-        "trade.quote": "c-b4b8fc4e",
-        "trade.sell": "c-9be25ce1"
+        "system.cmd_list": "c-2fa38984",
+        "session.hello": "c-37553398",
+        "session.ping": "c-8812f709",
+        "session.goodbye": "c-05f83147",
+        "system.schema_list": "c-8c331c11",
+        "auth.login": "c-a2859c73",
+        "auth.logout": "c-c6c00748",
+        "auth.mfa": "c-e8159653",
+        "auth.register": "c-807ab52c",
+        "players.me": "c-a0826238",
+        "players.online": "c-dec3b8e5",
+        "players.refresh": "c-9fc2cca7",
+        "ship.info": "c-4cf48756",
+        "sector.info": "c-5e5e40d6",
+        "sector.set_beacon": "c-0009ded2",
+        "move.warp": "c-f04e187a",
+        "move.scan": "c-1b78905d",
+        "move.pathfind": "c-a56662e1",
+        "move.force_move": "c-df4b558b",
+        "trade.accept": "c-5c16caf1",
+        "trade.buy": "c-4e85db85",
+        "trade.cancel": "c-19b7c796",
+        "trade.history": "c-3b732e18",
+        "trade.jettison": "c-2c8a37f4",
+        "trade.offer": "c-ac2fdbf1",
+        "trade.port_info": "c-5be451c7",
+        "trade.quote": "c-27fbdf6f",
+        "trade.sell": "c-276eaef6"
     },
-    "recent_sectors": [
-        61,
-        17,
-        313,
-        210,
-        420,
-        210,
-        420,
-        174,
-        87,
-        174
-    ],
+    "recent_sectors": [],
     "last_action": "bank.balance",
-    "last_context_key": "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:has_bank_balance-has_pending_commands:no_pending_cmds",
-    "last_stage": "explore"
+    "last_context_key": "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds",
+    "last_stage": "exploit"
 }

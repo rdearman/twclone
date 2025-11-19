@@ -1,0 +1,502 @@
+{
+    "session_id": "9aacb4cd188d404604b992206b26793ee8a6298328b76ae198536ecb18dfe4b1",
+    "player_info": {
+        "player": {
+            "id": 4,
+            "number": 8,
+            "name": "ai_qa_bot",
+            "turns_remaining": 120,
+            "credits": "10000.00"
+        }
+    },
+    "ship_info": {
+        "id": 2,
+        "number": 2,
+        "name": "QA Bot 1",
+        "type": {
+            "id": 0,
+            "name": "25"
+        },
+        "holds": 25,
+        "fighters": 250,
+        "location": {
+            "sector_id": 1,
+            "sector_name": "Fedspace 1"
+        },
+        "owner": {
+            "id": 4,
+            "name": "ai_qa_bot"
+        },
+        "cargo": {
+            "ore": 25,
+            "organics": 0,
+            "equipment": 0,
+            "colonists": 0
+        }
+    },
+    "player_location_sector": 1,
+    "sector_data": {
+        "1": {
+            "sector_id": 1,
+            "name": "Fedspace 1",
+            "adjacent": [
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+            ],
+            "adjacent_count": 6,
+            "ports": [
+                {
+                    "id": 1,
+                    "name": "Earth Port",
+                    "type": "1"
+                }
+            ],
+            "has_port": true,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": "The Federation -- Do Not Dump!",
+            "has_beacon": true,
+            "ships": [
+                {
+                    "id": 1,
+                    "name": "Bit Banger",
+                    "type": "Merchant Cruiser",
+                    "ship_name": "Bit Banger",
+                    "ship_type": "Merchant Cruiser",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 2,
+                    "name": "QA Bot 1",
+                    "type": "Scout Marauder",
+                    "ship_name": "QA Bot 1",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot"
+                }
+            ],
+            "ships_count": 2,
+            "ports_count": 1,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 1,
+                "mines_limpet": 0,
+                "mines": 1
+            }
+        }
+    },
+    "port_info_by_sector": {},
+    "price_cache": {
+        "1": {
+            "buy": {
+                "ORE": 131.0
+            },
+            "sell": {
+                "ORE": 74.0
+            }
+        }
+    },
+    "bank_balance": 0,
+    "command_retry_info": {
+        "sector.info": {
+            "next_retry_time": 1763523745.1451776
+        },
+        "session.goodbye": {
+            "failures": 1,
+            "next_retry_time": 1763523750.6513853
+        },
+        "system.schema_list": {
+            "failures": 1,
+            "next_retry_time": 1763523750.6529584
+        },
+        "auth.mfa": {
+            "failures": 1,
+            "next_retry_time": 1763523750.6543698
+        },
+        "players.me": {
+            "failures": 1,
+            "next_retry_time": 1763523750.6555095
+        },
+        "players.online": {
+            "failures": 1,
+            "next_retry_time": 1763523750.6562538
+        },
+        "players.refresh": {
+            "failures": 1,
+            "next_retry_time": 1763523750.6570127
+        },
+        "move.force_move": {
+            "failures": 1,
+            "next_retry_time": 1763523750.660375
+        },
+        "sector.scan.density": {
+            "next_retry_time": 1763523745.6680908
+        },
+        "trade.port_info": {
+            "next_retry_time": 1763523746.1815777
+        },
+        "trade.quote": {
+            "next_retry_time": 1763523746.6938434
+        },
+        "trade.sell": {
+            "next_retry_time": 1763526956.0829406
+        },
+        "unknown": {
+            "failures": 1596,
+            "next_retry_time": 1763527252.0963538
+        },
+        "move.warp": {
+            "next_retry_time": 1763526956.5951445
+        },
+        "bank.deposit": {
+            "next_retry_time": 1763526952.0548756
+        },
+        "bank.balance": {
+            "next_retry_time": 1763526952.56312
+        }
+    },
+    "strategy_plan": [
+        "survey: port"
+    ],
+    "trade_successful": true,
+    "q_table": {
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.port_info": 0.0,
+            "trade.quote": 0.0,
+            "trade.buy": 0.0,
+            "move.warp": 0.0,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.0,
+            "trade.sell": 0.0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.sell": 0.0,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.0,
+            "move.warp": 0.0,
+            "trade.port_info": 0.0,
+            "trade.quote": 0.0
+        }
+    },
+    "n_table": {
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:not_full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.port_info": 0,
+            "trade.quote": 0,
+            "trade.buy": 0,
+            "move.warp": 0,
+            "bank.deposit": 0,
+            "bank.balance": 0,
+            "trade.sell": 0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.sell": 0,
+            "bank.deposit": 0,
+            "bank.balance": 0,
+            "move.warp": 0,
+            "trade.port_info": 0,
+            "trade.quote": 0
+        }
+    },
+    "command_schemas": {
+        "session.hello": {
+            "$id": "ge://schema/session.hello.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+        },
+        "session.ping": {
+            "$id": "ge://schema/session.ping.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+        },
+        "auth.login": {
+            "$id": "ge://schema/auth.login.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "username": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "username",
+                "password"
+            ],
+            "additionalProperties": true
+        },
+        "auth.logout": {
+            "$id": "ge://schema/auth.logout.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "auth.register": {
+            "$id": "ge://schema/auth.register.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "ship.info": {
+            "$id": "ge://schema/ship.info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+        },
+        "sector.info": {
+            "$id": "ge://schema/sector.info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [],
+            "additionalProperties": true
+        },
+        "sector.set_beacon": {
+            "$id": "ge://schema/sector.set_beacon.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "text": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "sector_id",
+                "text"
+            ],
+            "additionalProperties": false
+        },
+        "move.warp": {
+            "$id": "ge://schema/move_warp.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "to_sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "to_sector_id"
+            ],
+            "additionalProperties": true
+        },
+        "move.scan": {
+            "$id": "ge://schema/move.scan.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {}
+        },
+        "move.pathfind": {
+            "$id": "ge://schema/move.pathfind.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.accept": {
+            "$id": "ge://schema/trade.accept.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.buy": {
+            "$id": "ge://schema/trade.buy.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "port_id": {
+                    "type": "integer"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "commodity": {
+                                "type": "string"
+                            },
+                            "quantity": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "commodity",
+                            "quantity"
+                        ],
+                        "additionalProperties": true
+                    }
+                },
+                "idempotency_key": {
+                    "type": "string"
+                },
+                "account": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ]
+                },
+                "sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "port_id",
+                "items",
+                "idempotency_key",
+                "account",
+                "sector_id"
+            ],
+            "additionalProperties": true
+        },
+        "trade.cancel": {
+            "$id": "ge://schema/trade.cancel.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.history": {
+            "$id": "ge://schema/trade.history.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.jettison": {
+            "$id": "ge://schema/trade.jettison.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.offer": {
+            "$id": "ge://schema/trade.offer.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.port_info": {
+            "$id": "ge://schema/trade.port_info.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.quote": {
+            "$id": "ge://schema/trade.quote.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "port_id": {
+                    "type": "integer"
+                },
+                "commodity": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "port_id",
+                "commodity",
+                "quantity"
+            ],
+            "additionalProperties": true
+        },
+        "trade.sell": {
+            "$id": "ge://schema/trade.sell.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "port_id": {
+                    "type": "integer"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "commodity": {
+                                "type": "string"
+                            },
+                            "quantity": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "commodity",
+                            "quantity"
+                        ],
+                        "additionalProperties": true
+                    }
+                },
+                "idempotency_key": {
+                    "type": "string"
+                },
+                "account": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ]
+                }
+            },
+            "required": [
+                "sector_id",
+                "port_id",
+                "items",
+                "idempotency_key",
+                "account"
+            ],
+            "additionalProperties": true
+        }
+    },
+    "schema_blacklist": [
+        "session.goodbye",
+        "system.schema_list",
+        "auth.mfa",
+        "players.me",
+        "players.online",
+        "players.refresh",
+        "move.force_move"
+    ],
+    "pending_schema_requests": {
+        "system.cmd_list": "c-2fa38984",
+        "session.hello": "c-37553398",
+        "session.ping": "c-8812f709",
+        "session.goodbye": "c-05f83147",
+        "system.schema_list": "c-8c331c11",
+        "auth.login": "c-a2859c73",
+        "auth.logout": "c-c6c00748",
+        "auth.mfa": "c-e8159653",
+        "auth.register": "c-807ab52c",
+        "players.me": "c-a0826238",
+        "players.online": "c-dec3b8e5",
+        "players.refresh": "c-9fc2cca7",
+        "ship.info": "c-4cf48756",
+        "sector.info": "c-5e5e40d6",
+        "sector.set_beacon": "c-0009ded2",
+        "move.warp": "c-f04e187a",
+        "move.scan": "c-1b78905d",
+        "move.pathfind": "c-a56662e1",
+        "move.force_move": "c-df4b558b",
+        "trade.accept": "c-5c16caf1",
+        "trade.buy": "c-4e85db85",
+        "trade.cancel": "c-19b7c796",
+        "trade.history": "c-3b732e18",
+        "trade.jettison": "c-2c8a37f4",
+        "trade.offer": "c-ac2fdbf1",
+        "trade.port_info": "c-5be451c7",
+        "trade.quote": "c-27fbdf6f",
+        "trade.sell": "c-276eaef6"
+    },
+    "recent_sectors": [],
+    "last_action": "move.warp",
+    "last_context_key": "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds",
+    "last_stage": "exploit"
+}

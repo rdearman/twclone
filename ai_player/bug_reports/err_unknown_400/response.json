@@ -1,0 +1,19 @@
+{
+    "id": "srv-err",
+    "reply_to": "c-c87d0eb8",
+    "ts": "2025-11-19T03:39:48Z",
+    "status": "error",
+    "type": "error",
+    "error": {
+        "code": 400,
+        "message": "Deposit amount must be a positive integer."
+    },
+    "data": null,
+    "meta": {
+        "rate_limit": {
+            "limit": 60,
+            "remaining": 60,
+            "reset": 60
+        }
+    }
+}
