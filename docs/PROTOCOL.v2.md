@@ -3140,18 +3140,20 @@ Commands for interacting with the ledger-based economy. Most are only available 
     }
     ```
 
-*   `planet.create`: Create a new planet.
+*   `planet.genesis_create`: Create a new planet using a Genesis Torpedo.
 
     *Example Client Request:*
     ```json
     {
       "id": "d1e2f3a4-b5c6-d7e8-f9a0-b1c2d3e4f5a6",
       "ts": "2025-11-07T19:15:00.000Z",
-      "command": "planet.create",
+      "command": "planet.genesis_create",
       "auth": { "session": "eyJhbGciOi..." },
       "data": {
-        "name": "My Planet",
-        "type": "terran"
+        "sector_id": 1,                     // The sector to create the planet in
+        "name": "My New Homeworld",         // The desired name for the planet
+        "owner_entity_type": "player",      // "player" or "corporation"
+        "idempotency_key": "unique-uuid"    // Optional: for safe retries
       }
     }
     ```
@@ -3163,9 +3165,16 @@ Commands for interacting with the ledger-based economy. Most are only available 
       "ts": "2025-11-07T19:15:00.100Z",
       "reply_to": "d1e2f3a4-b5c6-d7e8-f9a0-b1c2d3e4f5a6",
       "status": "ok",
-      "type": "planet.created",
+      "type": "planet.genesis_created_v1",
       "data": {
-        "planet_id": 101
+        "sector_id": 1,
+        "planet_id": 101,
+        "class": "M",                          // The generated planet class
+        "name": "My New Homeworld",
+        "owner_type": "player",
+        "owner_id": 12345,
+        "over_cap": false,                     // True if sector is over soft cap
+        "navhaz_delta": 0                      // Change in navhaz for the sector
       }
     }
     ```
@@ -3975,6 +3984,14 @@ The error model uses HTTP-like status codes within the JSON response. `status: "
 *   `2101`: Target bank account not found
 *   `2102`: Transfer to self not allowed
 *   `2103`: Standing order creation failed
+*   `2104`: Genesis feature is disabled
+*   `2105`: Planet creation prohibited in MSL sector
+*   `2106`: Sector has reached maximum planets
+*   `2107`: No Genesis torpedoes on ship
+*   `2108`: Invalid planet name length
+*   `2109`: Invalid owner type for planet
+*   `2110`: Player not in a corporation to create corporate planet
+*   `2111`: The universe has reached its maximum planet capacity
 *   `2201`: Insufficient shares to sell
 *   `2202`: Stock not publicly traded
 *   `2301`: Credit rating too low for loan
