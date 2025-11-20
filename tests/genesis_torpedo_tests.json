@@ -1,0 +1,191 @@
+{
+  "description": "Tests for planet.genesis_create command and validation.",
+  "suites": {
+    "setup_genesis_test_env": [
+      {
+        "name": "Register Player for Genesis Tests",
+        "command": "auth.register",
+        "data": { "username": "genesis_player", "password": "password" },
+        "expect": { "status": "ok" },
+        "user": "genesis_player",
+        "passwd": "password",
+        "save": { "player_id": "data.player_id" }
+      },
+      {
+        "name": "Register Corp Player for Genesis Tests",
+        "command": "auth.register",
+        "data": { "username": "genesis_corp_player", "password": "password" },
+        "expect": { "status": "ok" },
+        "user": "genesis_corp_player",
+        "passwd": "password",
+        "save": { "corp_player_id": "data.player_id" }
+      },
+      {
+        "name": "Create Corporation for Genesis Player",
+        "command": "corp.create",
+        "user": "genesis_corp_player",
+        "passwd": "password",
+        "data": { "name": "GenesisCorp", "tag": "GEN1" },
+        "expect": { "status": "ok" },
+        "save": { "corp_id": "data.corp_id" }
+      },
+      {
+        "name": "Login Player for Genesis Tests",
+        "command": "auth.login",
+        "user": "genesis_player",
+        "passwd": "password",
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Login Corp Player for Genesis Tests",
+        "command": "auth.login",
+        "user": "genesis_corp_player",
+        "passwd": "password",
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Grant Genesis Torpedoes to Genesis Player",
+        "command": "sysop.give_item",
+        "data": { "item": "genesis_torpedo", "quantity": 10, "target_player_id": "@player_id" },
+        "user": "sysop_user",
+        "passwd": "sysop_password",
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Grant Genesis Torpedoes to Corp Player",
+        "command": "sysop.give_item",
+        "data": { "item": "genesis_torpedo", "quantity": 10, "target_player_id": "@corp_player_id" },
+        "user": "sysop_user",
+        "passwd": "sysop_password",
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Add test sectors to msl_sectors (prohibited for genesis)",
+        "command": "sysop.raw_sql_exec",
+        "data": { "sql": "INSERT OR IGNORE INTO msl_sectors (sector_id) VALUES (1), (2), (3);" },
+        "user": "sysop_user",
+        "passwd": "sysop_password",
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Ensure planettypes have genesis_weight",
+        "command": "sysop.raw_sql_exec",
+        "data": { "sql": "UPDATE planettypes SET genesis_weight = 10 WHERE code IN ('M','K','O','L','C','H','U');" },
+        "user": "sysop_user",
+        "passwd": "sysop_password",
+        "expect": { "status": "ok" }
+      }
+    ],
+    "genesis_basic_creation": [
+      {
+        "name": "Basic Creation - Player Owned Planet",
+        "command": "planet.genesis_create",
+        "data": { "sector_id": 1000, "name": "PlayerHome", "owner_entity_type": "player" },
+        "user": "genesis_player",
+        "expect": { "status": "ok", "type": "planet.genesis_created_v1" },
+        "asserts": [
+          { "path": "data.planet_id", "op": ">", "value": 0 },
+          { "path": "data.class", "op": "!=", "value": null },
+          { "path": "data.name", "op": "==", "value": "PlayerHome" },
+          { "path": "data.owner_type", "op": "==", "value": "player" },
+          { "path": "data.owner_id", "op": "==", "value": "@player_id" },
+          { "path": "data.over_cap", "op": "==", "value": false }
+        ]
+      },
+      {
+        "name": "Basic Creation - Corporation Owned Planet",
+        "command": "planet.genesis_create",
+        "data": { "sector_id": 1001, "name": "CorpOutpost", "owner_entity_type": "corporation" },
+        "user": "genesis_corp_player",
+        "expect": { "status": "ok", "type": "planet.genesis_created_v1" },
+        "asserts": [
+          { "path": "data.planet_id", "op": ">", "value": 0 },
+          { "path": "data.class", "op": "!=", "value": null },
+          { "path": "data.name", "op": "==", "value": "CorpOutpost" },
+          { "path": "data.owner_type", "op": "==", "value": "corporation" },
+          { "path": "data.owner_id", "op": "==", "value": "@corp_id" },
+          { "path": "data.over_cap", "op": "==", "value": false }
+        ]
+      }
+    ],
+    "genesis_validation_tests": [
+      {
+        "name": "Validation - MSL Prohibited Sector",
+        "command": "planet.genesis_create",
+        "data": { "sector_id": 1, "name": "MSLPlanet", "owner_entity_type": "player" },
+        "user": "genesis_player",
+        "expect": { "status": "error", "error.code": "ERR_GENESIS_MSL_PROHIBITED" }
+      },
+      {
+        "name": "Validation - Insufficient Torpedoes",
+        "command": "planet.genesis_create",
+        "data": { "sector_id": 1002, "name": "NoTorp", "owner_entity_type": "player" },
+        "user": "genesis_player",
+        "expect": { "status": "error", "error.code": "ERR_NO_GENESIS_TORPEDO" },
+        "pre_command_sql": "UPDATE ships SET genesis = 0 WHERE id = (SELECT ship FROM players WHERE name = 'genesis_player');",
+        "post_command_sql": "UPDATE ships SET genesis = 10 WHERE id = (SELECT ship FROM players WHERE name = 'genesis_player');"
+      },
+      {
+        "name": "Validation - Planet Name Too Long",
+        "command": "planet.genesis_create",
+        "data": { "sector_id": 1003, "name": "ThisIsAVeryVeryVeryLongPlanetNameThatExceedsTheMaximumAllowedLengthForAPlanet", "owner_entity_type": "player" },
+        "user": "genesis_player",
+        "expect": { "status": "error", "error.code": "ERR_INVALID_PLANET_NAME_LENGTH" }
+      },
+      {
+        "name": "Validation - Invalid Owner Type",
+        "command": "planet.genesis_create",
+        "data": { "sector_id": 1004, "name": "InvalidOwner", "owner_entity_type": "alien" },
+        "user": "genesis_player",
+        "expect": { "status": "error", "error.code": "ERR_INVALID_OWNER_TYPE" }
+      },
+      {
+        "name": "Validation - Corp Planet No Corp",
+        "command": "planet.genesis_create",
+        "data": { "sector_id": 1005, "name": "NoCorp", "owner_entity_type": "corporation" },
+        "user": "genesis_player",
+        "expect": { "status": "error", "error.code": "ERR_NO_CORPORATION" }
+      },
+      {
+        "name": "Validation - Universe Full (via DB Trigger)",
+        "command": "planet.genesis_create",
+        "data": { "sector_id": 1006, "name": "FullUniverse", "owner_entity_type": "player" },
+        "user": "genesis_player",
+        "expect": { "status": "error", "error.code": "ERR_UNIVERSE_FULL" },
+        "pre_command_sql": "UPDATE config SET max_total_planets = (SELECT COUNT(*) FROM planets);",
+        "post_command_sql": "UPDATE config SET max_total_planets = 300;"
+      }
+    ],
+    "genesis_idempotency_tests": [
+      {
+        "name": "Idempotency - First Request",
+        "command": "planet.genesis_create",
+        "data": { "sector_id": 2000, "name": "IdempotentP1", "owner_entity_type": "player", "idempotency_key": "test-idem-key-1" },
+        "user": "genesis_player",
+        "expect": { "status": "ok", "type": "planet.genesis_created_v1" },
+        "save": { "first_planet_id": "data.planet_id", "first_response": "*" }
+      },
+      {
+        "name": "Idempotency - Second Request (same key, same input)",
+        "command": "planet.genesis_create",
+        "data": { "sector_id": 2000, "name": "IdempotentP1", "owner_entity_type": "player", "idempotency_key": "test-idem-key-1" },
+        "user": "genesis_player",
+        "expect": { "status": "ok", "type": "planet.genesis_created_v1" },
+        "asserts": [
+          { "path": "data.planet_id", "op": "==", "value": "@first_planet_id" }
+        ]
+      },
+      {
+        "name": "Idempotency - Different Input (same key) should return original response",
+        "command": "planet.genesis_create",
+        "data": { "sector_id": 2001, "name": "IdempotentP2_Different", "owner_entity_type": "player", "idempotency_key": "test-idem-key-1" },
+        "user": "genesis_player",
+        "expect": { "status": "ok", "type": "planet.genesis_created_v1" },
+        "asserts": [
+          { "path": "data.planet_id", "op": "==", "value": "@first_planet_id" }
+        ]
+      }
+    ]
+
+  }
+}

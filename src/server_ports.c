@@ -943,10 +943,6 @@ cmd_trade_history (client_ctx_t *ctx, json_t *root)
 }
 
 
-
-
-
-
 int
 cmd_trade_buy (client_ctx_t *ctx, json_t *root)
 {
@@ -964,7 +960,13 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
   const char *key = NULL;
   int port_id = 0;
   int requested_port_id = 0;
-  long long total_cost = 0;
+  long long total_item_cost = 0;
+  long long total_cost_with_fees = 0;
+  fee_result_t charges = {0};
+  long long new_balance = 0;
+  long long total_credits = 0;
+  char tx_group_id[UUID_STR_LEN];
+  h_generate_hex_uuid(tx_group_id, sizeof(tx_group_id));
 
   struct TradeLine {
     char *commodity;
@@ -1276,17 +1278,19 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       trade_lines[i].unit_price = unit_price;
       trade_lines[i].line_cost = line_cost;
 
-      total_cost += line_cost;
+      total_item_cost += line_cost;
       total_cargo_space_needed += amount;
     }
-  //LOGD("cmd_trade_buy: Finished trade line validation. Total cost=%lld, total cargo needed=%d", total_cost, total_cargo_space_needed); // ADDED
+  LOGD("cmd_trade_buy: Finished trade line validation. Total item cost=%lld, total cargo needed=%d", total_item_cost, total_cargo_space_needed); // MODIFIED
+  rc = calculate_fees(db, TX_TYPE_TRADE_BUY, total_item_cost, "player", &charges);
+  total_cost_with_fees = total_item_cost + charges.fee_total;
 
-  if (total_cost > current_credits)
+  if (total_cost_with_fees > current_credits)
     {
       free (trade_lines);
       send_enveloped_refused (ctx->fd, root, 1402,
                               "Insufficient credits for this purchase.", NULL);
-      LOGD("cmd_trade_buy: Insufficient credits: %lld vs %lld", current_credits, total_cost); // ADDED
+      LOGD("cmd_trade_buy: Insufficient credits: %lld vs %lld", current_credits, total_cost_with_fees); // ADDED
       return 0;
     }
   LOGD("cmd_trade_buy: Sufficient credits."); // ADDED
@@ -1414,13 +1418,19 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
   LOGD("cmd_trade_buy: Finished trade application loop"); // ADDED
 
   /* debit credits (atomic helper) */
-  LOGD("cmd_trade_buy: Debiting player credits. Total cost=%lld", total_cost); // ADDED
+  LOGD("cmd_trade_buy: Debiting player credits. Total cost with fees=%lld", total_cost_with_fees); // MODIFIED
   {
-    long long new_balance = 0;
     if (account_type == 0) { // Petty cash
-        rc = h_deduct_player_petty_cash(db, ctx->player_id, total_cost, &new_balance);
+        rc = h_deduct_player_petty_cash(db, ctx->player_id, total_cost_with_fees, &new_balance);
     } else { // Bank account
-        rc = h_deduct_credits(db, "player", ctx->player_id, total_cost, &new_balance);
+        int player_bank_account_id = -1;
+        int get_account_rc = h_get_account_id_unlocked(db, "player", ctx->player_id, &player_bank_account_id);
+        if (get_account_rc != SQLITE_OK) {
+             LOGE("cmd_trade_buy: Failed to get player bank account ID for player %d (rc=%d)", ctx->player_id, get_account_rc);
+             rc = get_account_rc; // Propagate the error
+        } else {
+            rc = h_deduct_credits_unlocked(db, player_bank_account_id, total_cost_with_fees, "TRADE_BUY", tx_group_id, &new_balance);
+        }
     }
     
     if (rc != SQLITE_OK)
@@ -1440,19 +1450,48 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
   }
   LOGD("cmd_trade_buy: Player credits debited. New balance=%lld", json_integer_value(json_object_get(receipt, "credits_remaining"))); // ADDED
 
-  // Add total_cost to port's petty_cash
+  // Add total_item_cost to port's bank account
   {
     long long new_port_balance = 0;
-    rc = h_add_credits(db, "port", port_id, total_cost, &new_port_balance);
+    int port_bank_account_id = -1;
+    int get_account_rc = h_get_account_id_unlocked(db, "port", port_id, &port_bank_account_id);
+    if (get_account_rc != SQLITE_OK) {
+        LOGE("cmd_trade_buy: Failed to get port bank account ID for port %d (rc=%d)", port_id, get_account_rc);
+        rc = get_account_rc;
+        goto fail_tx;
+    }
+    rc = h_add_credits_unlocked(db, port_bank_account_id, total_item_cost, "TRADE_BUY", tx_group_id, &new_port_balance);
     if (rc != SQLITE_OK) {
-      LOGE("cmd_trade_buy: Failed to add credits to port %d petty_cash: %s", port_id, sqlite3_errmsg(db));
+      LOGE("cmd_trade_buy: Failed to add credits to port %d: %s", port_id, sqlite3_errmsg(db));
       goto fail_tx;
     }
-    LOGD("cmd_trade_buy: Added %lld credits to port %d petty_cash. New balance=%lld", total_cost, port_id, new_port_balance);
+    LOGD("cmd_trade_buy: Added %lld credits to port %d. New balance=%lld", total_item_cost, port_id, new_port_balance);
   }
 
-  json_object_set_new (receipt, "total_cost",
-                       json_integer (total_cost));
+  // Add fees to system bank account
+  if (charges.fee_to_bank > 0) {
+    long long new_system_balance = 0;
+    int system_bank_account_id = -1;
+    int get_account_rc = h_get_system_account_id_unlocked(db, "SYSTEM", 0, &system_bank_account_id);
+    if (get_account_rc != SQLITE_OK) {
+        LOGE("cmd_trade_buy: Failed to get system bank account ID (rc=%d)", get_account_rc);
+        rc = get_account_rc;
+        goto fail_tx;
+    }
+    rc = h_add_credits_unlocked(db, system_bank_account_id, charges.fee_to_bank, "TRADE_BUY_FEE", tx_group_id, &new_system_balance);
+    if (rc != SQLITE_OK) {
+      LOGE("cmd_trade_buy: Failed to add fees to system bank: %s", sqlite3_errmsg(db));
+      goto fail_tx;
+    }
+    LOGD("cmd_trade_buy: Added %lld fees to system bank. New balance=%lld", charges.fee_to_bank, new_system_balance);
+  }
+
+  json_object_set_new (receipt, "total_item_cost",
+                       json_integer (total_item_cost));
+  json_object_set_new (receipt, "total_cost_with_fees",
+                       json_integer (total_cost_with_fees));
+  json_object_set_new (receipt, "fees",
+                       json_integer (charges.fee_total));
 
   /* idempotency insert */
   LOGD("cmd_trade_buy: Attempting idempotency insert for key='%s'", key); // ADDED
@@ -1594,7 +1633,12 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
   const char *key = NULL;
   int sector_id = 0;
   int port_id = 0;
+  long long total_credits_after_fees = 0;
+  fee_result_t charges = {0};
+  long long new_balance = 0;
   long long total_credits = 0;
+  char tx_group_id[UUID_STR_LEN];
+  h_generate_hex_uuid(tx_group_id, sizeof(tx_group_id));
   int rc = 0;
   char *req_s = NULL;
   char *resp_s = NULL;
@@ -1896,16 +1940,8 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       long long line_credits = (long long)amount * buy_price;
       total_credits += line_credits;
 
-      // Deduct credits from port's petty_cash
-      {
-        long long new_port_balance = 0;
-        rc = h_deduct_credits(db, "port", port_id, line_credits, &new_port_balance);
-        if (rc != SQLITE_OK) {
-          LOGE("cmd_trade_sell: Failed to deduct credits from port %d petty_cash: %s", port_id, sqlite3_errmsg(db));
-          goto fail_tx;
-        }
-        LOGD("cmd_trade_sell: Deducted %lld credits from port %d petty_cash. New balance=%lld", line_credits, port_id, new_port_balance);
-      }
+      // No longer deducting port credits inside the loop.
+      // This will be handled as a single transaction outside the loop with total_credits.
 
       json_t *jline = json_object ();
       json_object_set_new (jline, "commodity", json_string (canonical_commodity_code));
@@ -1916,13 +1952,28 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       free(canonical_commodity_code); // Free the dynamically allocated commodity code
     }
 
+  rc = calculate_fees(db, TX_TYPE_TRADE_SELL, total_credits, "player", &charges);
+  total_credits_after_fees = total_credits - charges.fee_total;
+
+  if (total_credits_after_fees < 0) {
+      send_enveloped_refused(ctx->fd, root, 1402,
+                             "Selling this would result in negative credits after fees.", NULL);
+      goto fail_tx;
+  }
+
   /* credit player (atomic helper) */
   {
-    long long new_balance = 0;
     if (account_type == 0) { // Petty cash
-        rc = h_add_player_petty_cash(db, ctx->player_id, total_credits, &new_balance);
+        rc = h_add_player_petty_cash(db, ctx->player_id, total_credits_after_fees, &new_balance);
     } else { // Bank account
-        rc = h_add_credits(db, "player", ctx->player_id, total_credits, &new_balance);
+        int player_bank_account_id = -1;
+        int get_account_rc = h_get_account_id_unlocked(db, "player", ctx->player_id, &player_bank_account_id);
+        if (get_account_rc != SQLITE_OK) {
+             LOGE("cmd_trade_sell: Failed to get player bank account ID for player %d (rc=%d)", ctx->player_id, get_account_rc);
+             rc = get_account_rc;
+        } else {
+            rc = h_add_credits_unlocked(db, player_bank_account_id, total_credits_after_fees, "TRADE_SELL", tx_group_id, &new_balance);
+        }
     }
     
     if (rc != SQLITE_OK)
@@ -1933,9 +1984,52 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
     json_object_set_new (receipt, "credits_remaining",
                          json_integer (new_balance));
   }
+  LOGD("cmd_trade_sell: Player credits credited. New balance=%lld", json_integer_value(json_object_get(receipt, "credits_remaining")));
 
-  json_object_set_new (receipt, "total_credits",
+  // Deduct total_credits from port's bank account
+  {
+    long long new_port_balance = 0;
+    int port_bank_account_id = -1;
+    int get_account_rc = h_get_account_id_unlocked(db, "port", port_id, &port_bank_account_id);
+    if (get_account_rc != SQLITE_OK) {
+        LOGE("cmd_trade_sell: Failed to get port bank account ID for port %d (rc=%d)", port_id, get_account_rc);
+        rc = get_account_rc;
+        goto fail_tx;
+    } else {
+        rc = h_deduct_credits_unlocked(db, port_bank_account_id, total_credits, "TRADE_SELL", tx_group_id, &new_port_balance);
+    }
+    if (rc != SQLITE_OK) {
+      LOGE("cmd_trade_sell: Failed to deduct credits from port %d: %s", port_id, sqlite3_errmsg(db));
+      goto fail_tx;
+    }
+    LOGD("cmd_trade_sell: Deducted %lld credits from port %d. New balance=%lld", total_credits, port_id, new_port_balance);
+  }
+
+  // Add fees to system bank account
+  if (charges.fee_to_bank > 0) {
+    long long new_system_balance = 0;
+    int system_bank_account_id = -1;
+    int get_account_rc = h_get_system_account_id_unlocked(db, "SYSTEM", 0, &system_bank_account_id);
+    if (get_account_rc != SQLITE_OK) {
+        LOGE("cmd_trade_sell: Failed to get system bank account ID (rc=%d)", get_account_rc);
+        rc = get_account_rc;
+        goto fail_tx;
+    } else {
+        rc = h_add_credits_unlocked(db, system_bank_account_id, charges.fee_to_bank, "TRADE_SELL_FEE", tx_group_id, &new_system_balance);
+    }
+    if (rc != SQLITE_OK) {
+      LOGE("cmd_trade_sell: Failed to add fees to system bank: %s", sqlite3_errmsg(db));
+      goto fail_tx;
+    }
+    LOGD("cmd_trade_sell: Added %lld fees to system bank. New balance=%lld", charges.fee_to_bank, new_system_balance);
+  }
+
+  json_object_set_new (receipt, "total_item_credits",
                        json_integer (total_credits));
+  json_object_set_new (receipt, "total_credits_after_fees",
+                       json_integer (total_credits_after_fees));
+  json_object_set_new (receipt, "fees",
+                       json_integer (charges.fee_total));
 
   /* idempotency insert */
   {

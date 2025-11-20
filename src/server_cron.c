@@ -65,6 +65,7 @@
 
 int h_daily_news_compiler(sqlite3 *db, int64_t now_s);
 int h_cleanup_old_news(sqlite3 *db, int64_t now_s);
+int h_daily_bank_interest_tick(sqlite3 *db, int64_t now_s);
 
 static inline uint64_t
 monotonic_millis (void)
@@ -101,6 +102,7 @@ static entry_t REG[] = {
   {"daily_news_compiler", h_daily_news_compiler},
   {"cleanup_old_news", h_cleanup_old_news},
   {"limpet_ttl_cleanup", cron_limpet_ttl_cleanup},
+  {"daily_bank_interest_tick", h_daily_bank_interest_tick},
 };
 
 static int g_reg_inited = 0;
@@ -1190,6 +1192,143 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
   LOGI ("fedspace_cleanup: ok (towed=%d)", tows);
   unlock (db, "fedspace_cleanup");
   return 0;
+}
+
+// Helper function to convert Unix epoch seconds to UTC epoch day (YYYYMMDD)
+static int get_utc_epoch_day(int64_t unix_timestamp) {
+    time_t rawtime = unix_timestamp;
+    struct tm *info;
+    // Use gmtime for UTC
+    info = gmtime(&rawtime);
+    if (info == NULL) {
+        return 0; // Error
+    }
+    // Return YYYYMMDD
+    return (info->tm_year + 1900) * 10000 + (info->tm_mon + 1) * 100 + info->tm_mday;
+}
+
+#define MAX_BACKLOG_DAYS 30 // Cap for how many days of interest can be applied retroactively
+
+int
+h_daily_bank_interest_tick (sqlite3 *db, int64_t now_s)
+{
+  if (!try_lock (db, "daily_bank_interest_tick", now_s))
+    return 0;
+
+  LOGI ("daily_bank_interest_tick: Starting daily bank interest accrual.");
+
+  int rc = begin (db);
+  if (rc)
+    {
+      unlock (db, "daily_bank_interest_tick");
+      return rc;
+    }
+
+  sqlite3_stmt *st = NULL;
+  const char *sql_select_accounts =
+      "SELECT id, owner_type, owner_id, balance, interest_rate_bp, last_interest_tick "
+      "FROM bank_accounts WHERE is_active = 1 AND interest_rate_bp > 0;";
+
+  rc = sqlite3_prepare_v2(db, sql_select_accounts, -1, &st, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("daily_bank_interest_tick: Failed to prepare select accounts statement: %s", sqlite3_errmsg(db));
+      goto rollback_and_unlock;
+  }
+
+  int current_epoch_day = get_utc_epoch_day(now_s);
+  int processed_accounts = 0;
+
+  long long min_balance_for_interest = h_get_config_int_unlocked(db, "bank_min_balance_for_interest", 0);
+  long long max_daily_per_account = h_get_config_int_unlocked(db, "bank_max_daily_interest_per_account", 9223372036854775807LL);
+
+  while (sqlite3_step(st) == SQLITE_ROW) {
+      int account_id = sqlite3_column_int(st, 0);
+      const char *owner_type = (const char *)sqlite3_column_text(st, 1);
+      int owner_id = sqlite3_column_int(st, 2);
+      long long balance = sqlite3_column_int64(st, 3);
+      int interest_rate_bp = sqlite3_column_int(st, 4);
+      int last_interest_tick = sqlite3_column_int(st, 5);
+
+      if (balance < min_balance_for_interest) {
+          continue; // Skip accounts below minimum balance
+      }
+
+      int days_to_accrue = current_epoch_day - last_interest_tick;
+      if (days_to_accrue <= 0) {
+          continue; // Already processed for today or future tick
+      }
+      if (days_to_accrue > MAX_BACKLOG_DAYS) {
+          days_to_accrue = MAX_BACKLOG_DAYS; // Cap the backlog
+      }
+      
+      char tx_group_id[33];
+      h_generate_hex_uuid(tx_group_id, sizeof(tx_group_id));
+
+      for (int i = 0; i < days_to_accrue; ++i) {
+          if (balance <= 0) break; // No interest on zero or negative balance
+
+          // interest = floor( balance * interest_rate_bp / (10000 * 365) )
+          long long daily_interest = (balance * interest_rate_bp) / (10000 * 365);
+
+          if (daily_interest > max_daily_per_account) {
+              daily_interest = max_daily_per_account;
+          }
+
+          if (daily_interest > 0) {
+              // Use h_add_credits_unlocked to record interest and update balance
+              int add_rc = h_add_credits_unlocked(db, account_id, daily_interest, "INTEREST", tx_group_id, &balance);
+              if (add_rc != SQLITE_OK) {
+                  LOGE("daily_bank_interest_tick: Failed to add interest to account %d (owner %s:%d): %s",
+                       account_id, owner_type, owner_id, sqlite3_errmsg(db));
+                  // Continue to next account or abort? Aborting for now.
+                  goto rollback_and_unlock;
+              }
+          }
+      }
+
+      // Update last_interest_tick in bank_accounts
+      sqlite3_stmt *update_tick_st = NULL;
+      const char *sql_update_tick = "UPDATE bank_accounts SET last_interest_tick = ? WHERE id = ?;";
+      int update_rc = sqlite3_prepare_v2(db, sql_update_tick, -1, &update_tick_st, NULL);
+      if (update_rc != SQLITE_OK) {
+          LOGE("daily_bank_interest_tick: Failed to prepare update last_interest_tick statement: %s", sqlite3_errmsg(db));
+          goto rollback_and_unlock;
+      }
+      sqlite3_bind_int(update_tick_st, 1, current_epoch_day);
+      sqlite3_bind_int(update_tick_st, 2, account_id);
+      update_rc = sqlite3_step(update_tick_st);
+      sqlite3_finalize(update_tick_st);
+      if (update_rc != SQLITE_DONE) {
+          LOGE("daily_bank_interest_tick: Failed to update last_interest_tick for account %d: %s", account_id, sqlite3_errmsg(db));
+          goto rollback_and_unlock;
+      }
+      processed_accounts++;
+  }
+
+  if (rc != SQLITE_DONE) {
+      LOGE("daily_bank_interest_tick: Error stepping through bank_accounts: %s", sqlite3_errmsg(db));
+      goto rollback_and_unlock;
+  }
+
+  sqlite3_finalize(st);
+  st = NULL;
+
+  rc = commit (db);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("daily_bank_interest_tick: commit failed: %s", sqlite3_errmsg (db));
+      goto rollback_and_unlock;
+    }
+
+  LOGI ("daily_bank_interest_tick: Successfully processed interest for %d accounts.", processed_accounts);
+  unlock (db, "daily_bank_interest_tick");
+  return SQLITE_OK;
+
+rollback_and_unlock:
+  if (st) sqlite3_finalize(st);
+  rollback (db);
+  unlock (db, "daily_bank_interest_tick");
+  return rc;
 }
 
 int

@@ -24,6 +24,7 @@
 #include "server_log.h"
 #include "common.h"
 #include "db_player_settings.h"
+#include "server_ships.h"
 
 extern sqlite3 *db_get_handle (void);
 
@@ -613,57 +614,6 @@ h_send_message_to_player (int player_id, int sender_id, const char *subject,
   return 0;
 }
 
-/**
- * @brief Retrieves the ID of the active ship for a given player.
- * * Queries the 'players' table using the player_id to get the value
- * from the 'ship' column.
- * * @param db The SQLite database handle.
- * @param player_id The ID of the player whose ship is being sought.
- * @return The ship ID (int) on success, or 0 if player is not found 
- * or the ship column is NULL/0.
- */
-int
-h_get_active_ship_id (sqlite3 *db, int player_id)
-{
-  sqlite3_stmt *st = NULL;
-  int ship_id = 0;
-  int rc;
-
-  // SQL: Select the 'ship' column from 'players' where the 'id' matches the player_id.
-  // The player's active ship ID is stored in the 'ship' column.
-  const char *sql = "SELECT ship FROM players WHERE id = ?;";
-
-  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
-
-  if (rc != SQLITE_OK)
-    {
-      LOGE ("SQL error preparing ship lookup: %s\n",
-	       sqlite3_errmsg (db));
-      return 0;			// Return 0 on error
-    }
-
-  sqlite3_bind_int (st, 1, player_id);
-
-  // Execute the query
-  rc = sqlite3_step (st);
-
-  if (rc == SQLITE_ROW)
-    {
-      // The 'ship' column is at index 0. If it's NULL or 0, ship_id remains 0.
-      ship_id = sqlite3_column_int (st, 0);
-    }
-  else if (rc != SQLITE_DONE)
-    {
-      // Handle error if step was not successful and not just finished.
-      LOGE ("SQL error executing ship lookup for player %d: %s\n",
-	       player_id, sqlite3_errmsg (db));
-    }
-
-  sqlite3_finalize (st);
-
-  // ship_id will be > 0 if a valid ship was found, otherwise 0.
-  return ship_id;
-}
 
 
 int
@@ -1944,129 +1894,263 @@ cmd_player_get_settings (client_ctx_t *ctx, json_t *root)
 }
 
 
-#include <sqlite3.h>
-#include <jansson.h>
-#include <time.h>
-// ... include your other headers ...
-
-int
-cmd_get_news (client_ctx_t *ctx, json_t *root)
+int cmd_bank_history (client_ctx_t *ctx, json_t *root)
 {
   sqlite3 *db = db_get_handle ();
   sqlite3_stmt *stmt = NULL;
   int rc = SQLITE_ERROR;
 
-  // 1. Basic check
   if (ctx->player_id <= 0)
     {
-      send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+      send_enveloped_refused (ctx->fd, root, ERR_NOT_AUTHENTICATED, "Not authenticated", NULL);
       return 0;
     }
 
-  // 2. Retrieve player preferences
-  int fetch_mode = 0; // Default to 0 (all unread)
-  char category_filter[128] = {0}; // Default to no filter (all categories)
+  json_t *data = json_object_get (root, "data");
+  if (!json_is_object (data))
+    {
+      send_enveloped_error (ctx->fd, root, ERR_INVALID_SCHEMA, "data must be object");
+      return 0;
+    }
 
-  // Get news.fetch_mode
-  sqlite3_stmt *pref_stmt = NULL;
-  char *fetch_mode_str = NULL;
-  if (db_prefs_get_one(ctx->player_id, "news.fetch_mode", &fetch_mode_str) == SQLITE_OK && fetch_mode_str) {
-      fetch_mode = atoi(fetch_mode_str);
-      free(fetch_mode_str);
+  // --- Input Parameters ---
+  int limit = 20; // Default limit
+  json_t *j_limit = json_object_get(data, "limit");
+  if (json_is_integer(j_limit)) {
+      limit = (int)json_integer_value(j_limit);
+      if (limit <= 0 || limit > 50) limit = 20; // Clamp limit
   }
 
-  // Get news.category_filter
-  char *category_filter_str = NULL;
-  if (db_prefs_get_one(ctx->player_id, "news.category_filter", &category_filter_str) == SQLITE_OK && category_filter_str) {
-      strncpy(category_filter, category_filter_str, sizeof(category_filter) - 1);
-      free(category_filter_str);
+  const char *cursor = NULL;
+  json_t *j_cursor = json_object_get(data, "cursor");
+  if (json_is_string(j_cursor)) {
+      cursor = json_string_value(j_cursor);
   }
 
-  // 3. Dynamically construct the SQL query
+  const char *tx_type_filter = NULL;
+  json_t *j_tx_type = json_object_get(data, "tx_type");
+  if (json_is_string(j_tx_type)) {
+      tx_type_filter = json_string_value(j_tx_type);
+  }
+
+  long long start_date = 0;
+  json_t *j_start_date = json_object_get(data, "start_date");
+  if (json_is_integer(j_start_date)) {
+      start_date = json_integer_value(j_start_date);
+  }
+
+  long long end_date = 0;
+  json_t *j_end_date = json_object_get(data, "end_date");
+  if (json_is_integer(j_end_date)) {
+      end_date = json_integer_value(j_end_date);
+  }
+
+  long long min_amount = 0;
+  json_t *j_min_amount = json_object_get(data, "min_amount");
+  if (json_is_integer(j_min_amount)) {
+      min_amount = json_integer_value(j_min_amount);
+  }
+
+  long long max_amount = 0;
+  json_t *j_max_amount = json_object_get(data, "max_amount");
+  if (json_is_integer(j_max_amount)) {
+      max_amount = json_integer_value(j_max_amount);
+  }
+
+  // --- Build SQL Query ---
   char sql_query[1024];
-  char where_clause[512] = "WHERE expiration_ts > ?1 "; // ?1 for current_time
+  char where_clause[512];
+  where_clause[0] = '\0'; // Initialize empty
 
-  // Apply fetch_mode filter
-  if (fetch_mode > 0) { // 1=today, 2=2days, ..., 7=7days
-      long long start_timestamp = (long long)time(NULL) - (fetch_mode * 86400LL); // 86400 seconds in a day
-      snprintf(where_clause + strlen(where_clause), sizeof(where_clause) - strlen(where_clause),
-               "AND published_ts >= %lld ", start_timestamp);
-  } else { // fetch_mode = 0 (any unread message)
-      // Retrieve player's last_news_read_timestamp
-      long long last_read_ts = 0;
-      sqlite3_stmt *player_ts_stmt = NULL;
-      if (sqlite3_prepare_v2(db, "SELECT last_news_read_timestamp FROM players WHERE id = ?;", -1, &player_ts_stmt, NULL) == SQLITE_OK) {
-          sqlite3_bind_int(player_ts_stmt, 1, ctx->player_id);
-          if (sqlite3_step(player_ts_stmt) == SQLITE_ROW) {
-              last_read_ts = sqlite3_column_int64(player_ts_stmt, 0);
-          }
-          sqlite3_finalize(player_ts_stmt);
-      }
-      if (last_read_ts > 0) {
-          snprintf(where_clause + strlen(where_clause), sizeof(where_clause) - strlen(where_clause),
-                   "AND published_ts > %lld ", last_read_ts);
-      }
-  }
-
-  // Apply category filter
-  if (strlen(category_filter) > 0 && strcasecmp(category_filter, "all") != 0) {
-      snprintf(where_clause + strlen(where_clause), sizeof(where_clause) - strlen(where_clause),
-               "AND news_category = '%s' ", category_filter);
-  }
-
-  snprintf(sql_query, sizeof(sql_query),
-           "SELECT published_ts, news_category, article_text "
-           "FROM news_feed %s"
-           "ORDER BY published_ts DESC, news_id DESC "
-           "LIMIT 50;", where_clause);
-
-  json_t *news_array = json_array ();
-  long long current_time = (long long) time (NULL);
-
-  // 4. Prepare and Bind
-  rc = sqlite3_prepare_v2 (db, sql_query, -1, &stmt, NULL);
-  if (rc != SQLITE_OK)
-    {
-      // Handle error...
-      json_decref (news_array);
-      send_enveloped_error (ctx->fd, root, 1500, "Database error");
+  // Base query to get transactions for the player's account
+  // First, get the player's account ID
+  int player_bank_account_id = -1;
+  rc = h_get_account_id_unlocked(db, "player", ctx->player_id, &player_bank_account_id);
+  if (rc != SQLITE_OK) {
+      // If no account, then no history. Return empty.
+      json_t *payload = json_pack ("{s:o, s:b}", "history", json_array(), "has_next_page", json_false());
+      send_enveloped_ok (ctx->fd, root, "bank.history.response", payload);
+      json_decref(payload);
       return 0;
-    }
-  sqlite3_bind_int64 (stmt, 1, current_time);	// Bind current time for expiry check
+  }
+  snprintf(where_clause, sizeof(where_clause), "WHERE account_id = %d ", player_bank_account_id);
 
-  // 5. Loop and Build JSON Array
-  while (sqlite3_step (stmt) == SQLITE_ROW)
-    {
-      long long pub_ts = sqlite3_column_int64 (stmt, 0);
-      const char *category = (const char *) sqlite3_column_text (stmt, 1);
-      const char *article = (const char *) sqlite3_column_text (stmt, 2);
 
-      json_array_append_new (news_array,
-			     json_pack ("{s:i, s:s, s:s}",
-					"ts", pub_ts,
-					"category", category,
-					"article", article));
-    }
-
-  sqlite3_finalize (stmt);
-
-  // 6. Update player's last_news_read_timestamp
-  sqlite3_stmt *update_ts_stmt = NULL;
-  if (sqlite3_prepare_v2(db, "UPDATE players SET last_news_read_timestamp = ? WHERE id = ?;", -1, &update_ts_stmt, NULL) == SQLITE_OK) {
-      sqlite3_bind_int64(update_ts_stmt, 1, current_time);
-      sqlite3_bind_int(update_ts_stmt, 2, ctx->player_id);
-      sqlite3_step(update_ts_stmt);
-      sqlite3_finalize(update_ts_stmt);
+  // Apply filters
+  if (tx_type_filter) {
+      char temp_clause[64];
+      snprintf(temp_clause, sizeof(temp_clause), "AND tx_type = '%s' ", tx_type_filter);
+      strcat(where_clause, temp_clause);
+  }
+  if (start_date > 0) {
+      char temp_clause[64];
+      snprintf(temp_clause, sizeof(temp_clause), "AND ts >= %lld ", start_date);
+      strcat(where_clause, temp_clause);
+  }
+  if (end_date > 0) {
+      char temp_clause[64];
+      snprintf(temp_clause, sizeof(temp_clause), "AND ts <= %lld ", end_date);
+      strcat(where_clause, temp_clause);
+  }
+  if (min_amount > 0) {
+      char temp_clause[64];
+      snprintf(temp_clause, sizeof(temp_clause), "AND amount >= %lld ", min_amount);
+      strcat(where_clause, temp_clause);
+  }
+  if (max_amount > 0) {
+      char temp_clause[64];
+      snprintf(temp_clause, sizeof(temp_clause), "AND amount <= %lld ", max_amount);
+      strcat(where_clause, temp_clause);
   }
 
-  // 7. Build and Send Response
-  json_t *payload = json_pack ("{s:O}", "news", news_array);
-  send_enveloped_ok (ctx->fd, root, "news.list", payload);
+  // Cursor-based pagination
+  long long cursor_ts = 0;
+  long long cursor_id = 0;
+  if (cursor) {
+      char *sep = strchr ((char *) cursor, '_');
+      if (sep) {
+          *sep = '\0'; // Temporarily null-terminate the timestamp part
+          cursor_ts = atoll (cursor);
+          cursor_id = atoll (sep + 1);
+          *sep = '_'; // Restore original cursor string
+      }
+      if (cursor_ts > 0 || cursor_id > 0) { // If a valid cursor was parsed
+          char temp_clause[128];
+          snprintf(temp_clause, sizeof(temp_clause), "AND (ts < %lld OR (ts = %lld AND id < %lld)) ", cursor_ts, cursor_ts, cursor_id);
+          strcat(where_clause, temp_clause);
+      }
+  }
+  
+  // Final SQL construction
+  snprintf(sql_query, sizeof(sql_query),
+           "SELECT id, tx_type, direction, amount, currency, ts, balance_after, description "
+           "FROM bank_transactions %s"
+           "ORDER BY ts DESC, id DESC "
+           "LIMIT %d;", where_clause, limit + 1); // Fetch limit + 1 to check for next page
 
-  json_decref (payload);
+  // --- Execute Query and Build Response ---
+  rc = sqlite3_prepare_v2(db, sql_query, -1, &stmt, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("cmd_bank_history: Failed to prepare statement: %s", sqlite3_errmsg(db));
+      send_enveloped_error(ctx->fd, root, 500, "Database error.");
+      return 0;
+  }
+
+  json_t *history_array = json_array();
+  int count = 0;
+  long long last_ts = 0;
+  long long last_id = 0;
+  bool has_next_page = false;
+
+  while (sqlite3_step(stmt) == SQLITE_ROW) {
+      if (count < limit) {
+          json_t *tx = json_object();
+          json_object_set_new(tx, "id", json_integer(sqlite3_column_int64(stmt, 0)));
+          json_object_set_new(tx, "type", json_string((const char*)sqlite3_column_text(stmt, 1)));
+          json_object_set_new(tx, "direction", json_string((const char*)sqlite3_column_text(stmt, 2)));
+          json_object_set_new(tx, "amount", json_integer(sqlite3_column_int64(stmt, 3)));
+          json_object_set_new(tx, "currency", json_string((const char*)sqlite3_column_text(stmt, 4)));
+          json_object_set_new(tx, "timestamp", json_integer(sqlite3_column_int64(stmt, 5)));
+          json_object_set_new(tx, "balance_after", json_integer(sqlite3_column_int64(stmt, 6)));
+          
+          const char *description = (const char*)sqlite3_column_text(stmt, 7);
+          if (description) {
+              json_object_set_new(tx, "description", json_string(description));
+          } else {
+              json_object_set_new(tx, "description", json_string(""));
+          }
+          json_array_append_new(history_array, tx);
+          
+          last_id = sqlite3_column_int64(stmt, 0);
+          last_ts = sqlite3_column_int64(stmt, 5);
+          count++;
+      } else {
+          has_next_page = true;
+          break; // Stop if we've read one more than the limit
+      }
+  }
+  sqlite3_finalize(stmt);
+
+  // --- Send Response ---
+  json_t *payload = json_object();
+  json_object_set_new(payload, "history", history_array);
+  json_object_set_new(payload, "has_next_page", json_boolean(has_next_page));
+
+  if (has_next_page) {
+      char next_cursor[64];
+      snprintf(next_cursor, sizeof(next_cursor), "%lld_%lld", last_ts, last_id);
+      json_object_set_new(payload, "next_cursor", json_string(next_cursor));
+  }
+
+  send_enveloped_ok (ctx->fd, root, "bank.history.response", payload);
+  json_decref(payload);
+
   return 0;
 }
 
+int cmd_bank_leaderboard (client_ctx_t *ctx, json_t *root)
+{
+  sqlite3 *db = db_get_handle ();
+  sqlite3_stmt *stmt = NULL;
+  int rc = SQLITE_ERROR;
+
+  if (ctx->player_id <= 0)
+    {
+      send_enveloped_refused (ctx->fd, root, ERR_NOT_AUTHENTICATED, "Not authenticated", NULL);
+      return 0;
+    }
+
+  json_t *data = json_object_get (root, "data");
+  if (!json_is_object (data))
+    {
+      send_enveloped_error (ctx->fd, root, ERR_INVALID_SCHEMA, "data must be object");
+      return 0;
+    }
+
+  // --- Input Parameters ---
+  int limit = 20; // Default limit
+  json_t *j_limit = json_object_get(data, "limit");
+  if (json_is_integer(j_limit)) {
+      limit = (int)json_integer_value(j_limit);
+      if (limit <= 0 || limit > 100) limit = 20; // Clamp limit between 1 and 100
+  }
+
+  // --- Build SQL Query ---
+  // We need player name from 'players' table and balance from 'bank_accounts' table
+  const char *sql_query =
+      "SELECT P.name, BA.balance "
+      "FROM bank_accounts BA "
+      "JOIN players P ON P.id = BA.owner_id "
+      "WHERE BA.owner_type = 'player' "
+      "ORDER BY BA.balance DESC "
+      "LIMIT ?1;";
+
+  rc = sqlite3_prepare_v2(db, sql_query, -1, &stmt, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("cmd_bank_leaderboard: Failed to prepare statement: %s", sqlite3_errmsg(db));
+      send_enveloped_error(ctx->fd, root, 500, "Database error.");
+      return 0;
+  }
+  sqlite3_bind_int(stmt, 1, limit);
+
+  // --- Execute Query and Build Response ---
+  json_t *leaderboard_array = json_array();
+
+  while (sqlite3_step(stmt) == SQLITE_ROW) {
+      json_t *entry = json_object();
+      json_object_set_new(entry, "player_name", json_string((const char*)sqlite3_column_text(stmt, 0)));
+      json_object_set_new(entry, "balance", json_integer(sqlite3_column_int64(stmt, 1)));
+      json_array_append_new(leaderboard_array, entry);
+  }
+  sqlite3_finalize(stmt);
+
+  // --- Send Response ---
+  json_t *payload = json_pack ("{s:o}", "leaderboard", leaderboard_array);
+  send_enveloped_ok (ctx->fd, root, "bank.leaderboard.response", payload);
+  json_decref(payload);
+
+  return 0;
+}
 int
 cmd_bank_deposit (client_ctx_t *ctx, json_t *root)
 {

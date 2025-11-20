@@ -90,12 +90,71 @@ static json_t *schema_planet_transfer_ownership (void);
 static json_t *schema_planet_harvest (void);
 static json_t *schema_planet_deposit (void);
 static json_t *schema_planet_withdraw (void);
+static json_t *schema_planet_genesis_create(void);
+
 
 /* --- Player --- */
 static json_t *schema_player_set_trade_account_preference (void);
 static json_t *schema_player_my_info (void);
 static json_t *schema_player_info (void);
 static json_t *schema_bank_balance (void);
+static json_t *schema_bank_history (void);
+static json_t *schema_bank_leaderboard (void);
+
+static json_t *
+schema_bank_history (void)
+{
+  json_t *tx_type_enum = json_pack("[s,s,s,s,s,s,s,s,s,s,s]",
+          "DEPOSIT", "WITHDRAWAL", "TRANSFER", "INTEREST", "FEE", "WIRE", "TAX",
+          "TRADE_BUY_FEE", "TRADE_SELL_FEE", "WITHDRAWAL_FEE", "ADJUSTMENT");
+
+  json_t *data_properties = json_pack(
+      "{s:o, s:o, s:o, s:o, s:o, s:o, s:o}",
+      "limit", json_pack("{s:s, s:i, s:i}", "type", "integer", "minimum", 1, "maximum", 50),
+      "cursor", json_pack("{s:s}", "type", "string"),
+      "tx_type", json_pack("{s:s, s:o}", "type", "string", "enum", tx_type_enum),
+      "start_date", json_pack("{s:s}", "type", "integer"), // Unix timestamp
+      "end_date", json_pack("{s:s}", "type", "integer"),   // Unix timestamp
+      "min_amount", json_pack("{s:s, s:i}", "type", "integer", "minimum", 0),
+      "max_amount", json_pack("{s:s, s:i}", "type", "integer", "minimum", 0)
+  );
+
+  json_t *data_schema = json_pack(
+      "{s:s, s:s, s:s, s:o, s:o, s:b}",
+      "$id",      "ge://schema/bank.history.json",
+      "$schema",  "https://json-schema.org/draft/2020-12/schema",
+      "type",     "object",
+      "properties", data_properties,
+      "required", json_array(), // No required fields for flexibility
+      "additionalProperties", json_false()
+  );
+
+  // json_decref(tx_type_enum); // json_pack takes ownership
+  // json_decref(data_properties); // json_pack takes ownership
+  return data_schema;
+}
+
+static json_t *
+schema_bank_leaderboard (void)
+{
+  json_t *data_properties = json_pack(
+      "{s:o}",
+      "limit", json_pack("{s:s, s:i, s:i}", "type", "integer", "minimum", 1, "maximum", 100)
+  );
+
+  json_t *data_schema = json_pack(
+      "{s:s, s:s, s:s, s:o, s:o, s:b}",
+      "$id",      "ge://schema/bank.leaderboard.json",
+      "$schema",  "https://json-schema.org/draft/2020-12/schema",
+      "type",     "object",
+      "properties", data_properties,
+      "required", json_array(), // No required fields, limit defaults to 20
+      "additionalProperties", json_false()
+  );
+
+  return data_schema;
+}
+
 
 
 
@@ -170,7 +229,7 @@ why_dup (const char *m)
 static int
 my_json_schema_validate_placeholder (json_t *schema, json_t *payload, char **why)
 {
-  /* TODO: Implement this using a real validator library. */
+  /* TODO(GH-391): Implement this using a real validator library. */
   (void)schema;  /* Suppress unused parameter warning */
   (void)payload; /* Suppress unused parameter warning */
 
@@ -325,6 +384,8 @@ schema_get (const char *key)
     return schema_planet_deposit ();
   else if (strcasecmp (key, "planet.withdraw") == 0)
     return schema_planet_withdraw ();
+  else if (strcasecmp (key, "planet.genesis_create") == 0)
+    return schema_planet_genesis_create ();
 
   /* Player */
   else if (strcasecmp (key, "player.set_trade_account_preference") == 0)
@@ -335,6 +396,10 @@ schema_get (const char *key)
     return schema_player_info ();
   else if (strcasecmp (key, "bank.balance") == 0)
     return schema_bank_balance ();
+  else if (strcasecmp (key, "bank.history") == 0)
+    return schema_bank_history ();
+  else if (strcasecmp (key, "bank.leaderboard") == 0)
+    return schema_bank_leaderboard ();
 
 
 
@@ -503,6 +568,8 @@ schema_keys (void)
   json_array_append_new (keys, json_string ("player.my_info"));
   json_array_append_new (keys, json_string ("player.info"));
   json_array_append_new (keys, json_string ("bank.balance"));
+  json_array_append_new (keys, json_string ("bank.history"));
+  json_array_append_new (keys, json_string ("bank.leaderboard"));
 
 
 
@@ -1315,10 +1382,23 @@ schema_trade_cancel (void)
 static json_t *
 schema_trade_history (void)
 {
-  /* TODO: Implement this schema */
-  return json_pack ("{s:s, s:s}",
-                    "$id", "ge://schema/trade.history.json",
-                    "$comment", "Schema not yet implemented");
+  json_t *data_properties = json_pack(
+      "{s:o, s:o}",
+      "limit", json_pack("{s:s, s:i, s:i}", "type", "integer", "minimum", 1, "maximum", 50),
+      "cursor", json_pack("{s:s}", "type", "string")
+  );
+
+  json_t *data_schema = json_pack(
+      "{s:s, s:s, s:s, s:o, s:o, s:b}",
+      "$id",      "ge://schema/trade.history.json",
+      "$schema",  "https://json-schema.org/draft/2020-12/schema",
+      "type",     "object",
+      "properties", data_properties,
+      "required", json_array(), // No required fields for flexibility
+      "additionalProperties", json_false()
+  );
+
+  return data_schema;
 }
 
 /* --- Move --- */
@@ -1524,6 +1604,30 @@ schema_planet_withdraw (void)
   return json_pack ("{s:s, s:s}",
                     "$id", "ge://schema/planet.withdraw.json",
                     "$comment", "Schema not yet implemented");
+}
+
+static json_t *
+schema_planet_genesis_create(void)
+{
+  json_t *data_properties = json_pack(
+      "{s:o, s:o, s:o, s:o}",
+      "sector_id", json_pack("{s:s}", "type", "integer"),
+      "name", json_pack("{s:s}", "type", "string"),
+      "owner_entity_type", json_pack("{s:s, s:[s,s]}", "type", "string", "enum", "player", "corporation"),
+      "idempotency_key", json_pack("{s:s}", "type", "string")
+  );
+  json_t *data_required = json_pack("[s,s,s]", "sector_id", "name", "owner_entity_type");
+
+  json_t *data_schema = json_pack(
+      "{s:s, s:s, s:s, s:o, s:o, s:b}",
+      "$id",      "ge://schema/planet.genesis_create.json",
+      "$schema",  "https://json-schema.org/draft/2020-12/schema",
+      "type",     "object",
+      "properties", data_properties,
+      "required", data_required,
+      "additionalProperties", json_false()
+  );
+  return data_schema;
 }
 
 

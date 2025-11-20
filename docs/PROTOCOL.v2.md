@@ -790,7 +790,8 @@ Commands for interacting with the ledger-based economy. Most are only available 
     }
     ```
 
-*   `bank.deposit`: Deposit credits from hand to bank account.
+*   `bank.deposit`: Deposit credits from petty cash (on hand) to bank account.
+    Fees may apply and are deducted from the deposit amount.
 
     *Example Client Request:*
     ```json
@@ -799,7 +800,7 @@ Commands for interacting with the ledger-based economy. Most are only available 
       "ts": "2025-11-07T12:10:00.000Z",
       "command": "bank.deposit",
       "auth": { "session": "eyJhbGciOi..." },
-      "data": { "amount": "1000.00" }
+      "data": { "amount": 1000000 } // Amount in minor units (e.g., 1000000 for 10000.00 credits)
     }
     ```
 
@@ -810,17 +811,17 @@ Commands for interacting with the ledger-based economy. Most are only available 
       "ts": "2025-11-07T12:10:00.100Z",
       "reply_to": "c1d2e3f4-a5b6-c7d8-e9f0-a1b2c3d4e5f6",
       "status": "ok",
-      "type": "bank.transaction_receipt",
+      "type": "bank.deposit.confirmed",
       "data": {
-        "transaction_id": "txn_3",
-        "type": "deposit",
-        "amount": "1000.00",
-        "new_balance": "124456.78"
+        "new_bank_balance": 12445678,  // New balance in minor units
+        "amount_deposited": 990000,    // Actual amount deposited after fees
+        "fees": 10000                  // Total fees deducted
       }
     }
     ```
 
-*   `bank.withdraw`: Withdraw credits from bank to hand.
+*   `bank.withdraw`: Withdraw credits from bank to petty cash (on hand).
+    Fees may apply and are added to the withdrawal amount, deducted from your bank account.
 
     *Example Client Request:*
     ```json
@@ -829,7 +830,7 @@ Commands for interacting with the ledger-based economy. Most are only available 
       "ts": "2025-11-07T12:15:00.000Z",
       "command": "bank.withdraw",
       "auth": { "session": "eyJhbGciOi..." },
-      "data": { "amount": "500.00" }
+      "data": { "amount": 50000 } // Amount in minor units (e.g., 50000 for 500.00 credits)
     }
     ```
 
@@ -840,17 +841,17 @@ Commands for interacting with the ledger-based economy. Most are only available 
       "ts": "2025-11-07T12:15:00.100Z",
       "reply_to": "d1e2f3a4-b5c6-d7e8-f9a0-b1c2d3e4f5a6",
       "status": "ok",
-      "type": "bank.transaction_receipt",
+      "type": "bank.withdraw.confirmed",
       "data": {
-        "transaction_id": "txn_4",
-        "type": "withdraw",
-        "amount": "500.00",
-        "new_balance": "123956.78"
+        "new_bank_balance": 12395678, // New bank balance in minor units
+        "amount_withdrawn": 50000,     // Actual amount withdrawn to petty cash
+        "fees": 500                    // Total fees deducted from bank account
       }
     }
     ```
 
-*   `bank.transfer`: Transfer credits to another player.
+*   `bank.transfer`: Transfer credits from your bank account to another player's bank account.
+    Fees may apply and are deducted from the sender's total transfer amount.
 
     *Example Client Request:*
     ```json
@@ -860,9 +861,9 @@ Commands for interacting with the ledger-based economy. Most are only available 
       "command": "bank.transfer",
       "auth": { "session": "eyJhbGciOi..." },
       "data": {
-        "to_player_name": "Jane",
-        "amount": "500.00",
-        "memo": "For the ore"
+        "to_player_id": 12345, // Target player's ID
+        "amount": 50000,       // Amount in minor units (e.g., 50000 for 500.00 credits)
+        "memo": "For the ore"  // Optional memo
       }
     }
     ```
@@ -874,13 +875,104 @@ Commands for interacting with the ledger-based economy. Most are only available 
       "ts": "2025-11-07T12:20:00.100Z",
       "reply_to": "e1f2a3b4-c5d6-e7f8-a9b0-c1d2e3f4a5b6",
       "status": "ok",
-      "type": "bank.transaction_receipt",
+      "type": "bank.transfer.confirmed",
       "data": {
-        "transaction_id": "txn_5",
-        "type": "transfer_out",
-        "amount": "500.00",
-        "new_balance": "123456.78",
-        "recipient": "Jane"
+        "from_player_id": 54321,      // Sender's player ID
+        "to_player_id": 12345,        // Recipient's player ID
+        "from_balance": 12345678,     // Sender's new balance in minor units
+        "to_balance": 98765432,       // Recipient's new balance in minor units
+        "fees": 500                   // Total fees deducted from sender
+      }
+    }
+    ```
+
+*   `bank.history`: Get a paginated history of your bank transactions, with optional filtering.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "f1a2b3c4-d5e6-f7a8-b9c0-d1e2f3a4b5c6",
+      "ts": "2025-11-07T12:25:00.000Z",
+      "command": "bank.history",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {
+        "limit": 10,       // Optional: Number of transactions per page (default 20, max 50)
+        "cursor": "1234567890_1", // Optional: Cursor for pagination (ts_id of last item from previous page)
+        "tx_type": "DEPOSIT", // Optional: Filter by transaction type (e.g., "DEPOSIT", "WITHDRAWAL", "TRANSFER", "INTEREST", "FEE")
+        "start_date": 1678886400, // Optional: Filter by start Unix timestamp
+        "end_date": 1678972800,   // Optional: Filter by end Unix timestamp
+        "min_amount": 10000,      // Optional: Filter by minimum amount in minor units
+        "max_amount": 100000      // Optional: Filter by maximum amount in minor units
+      }
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sf1a2b3c4-d5e6-f7a8-b9c0-d1e2f3a4b5c6",
+      "ts": "2025-11-07T12:25:00.100Z",
+      "reply_to": "f1a2b3c4-d5e6-f7a8-b9c0-d1e2f3a4b5c6",
+      "status": "ok",
+      "type": "bank.history.response",
+      "data": {
+        "history": [
+          {
+            "id": 5,
+            "type": "DEPOSIT",
+            "direction": "CREDIT",
+            "amount": 100000,
+            "currency": "CRD",
+            "timestamp": 1678972700,
+            "balance_after": 12345678,
+            "description": ""
+          },
+          {
+            "id": 4,
+            "type": "TRANSFER",
+            "direction": "DEBIT",
+            "amount": 50000,
+            "currency": "CRD",
+            "timestamp": 1678972600,
+            "balance_after": 12245678,
+            "description": "For the ore"
+          }
+        ],
+        "has_next_page": true,
+        "next_cursor": "1678972600_4"
+      }
+    }
+    ```
+
+*   `bank.leaderboard`: Get a list of the wealthiest players by their bank balance ("rich list").
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "g1h2i3j4-k5l6-m7n8-o9p0-q1r2s3t4u5v6",
+      "ts": "2025-11-07T12:30:00.000Z",
+      "command": "bank.leaderboard",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {
+        "limit": 5 // Optional: Number of players to return (default 20, max 100)
+      }
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sg1h2i3j4-k5l6-m7n8-o9p0-q1r2s3t4u5v6",
+      "ts": "2025-11-07T12:30:00.100Z",
+      "reply_to": "g1h2i3j4-k5l6-m7n8-o9p0-q1r2s3t4u5v6",
+      "status": "ok",
+      "type": "bank.leaderboard.response",
+      "data": {
+        "leaderboard": [
+          { "player_name": "RichestPlayer", "balance": 999999999999 },
+          { "player_name": "WealthyTrader", "balance": 500000000000 },
+          { "player_name": "MidTierInvestor", "balance": 100000000000 }
+        ]
       }
     }
     ```
@@ -2013,24 +2105,70 @@ Commands for interacting with the ledger-based economy. Most are only available 
     ```
 
 
-*   `trade.buy`: Buy commodities from a port.
+*   `trade.buy`: Buy commodity from port.
+    Funds can be deducted from petty cash or bank account based on `account` preference. Fees may apply.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+      "ts": "2025-11-07T16:05:00.000Z",
+      "command": "trade.buy",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {
+        "port_id": 1,
+        "items": [
+          { "commodity": "ore", "quantity": 100 }
+        ],
+        "idempotency_key": "buy-ore-txn-123", // Unique key for idempotent requests
+        "account": 1, // Optional: 0 for petty cash (default), 1 for bank account
+        "sector_id": 1 // Optional: current sector is used if not provided
+      }
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sa1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+      "ts": "2025-11-07T16:05:00.100Z",
+      "reply_to": "a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+      "status": "ok",
+      "type": "trade.buy_receipt_v1",
+      "data": {
+        "sector_id": 1,
+        "port_id": 1,
+        "player_id": 12345,
+        "lines": [
+          { "commodity": "ORE", "quantity": 100, "unit_price": 100, "value": 10000 }
+        ],
+        "credits_remaining": 900000, // Remaining credits in the chosen account
+        "total_item_cost": 10000,    // Total cost of items before fees
+        "total_cost_with_fees": 10100, // Total cost including fees
+        "fees": 100                  // Total fees applied
+      }
+    }
+    ```
+
+
+*   `trade.sell`: Sell commodity to port.
+    Credits can be deposited to petty cash or bank account based on `account` preference. Fees may apply.
 
     *Example Client Request:*
     ```json
     {
       "id": "b1c2d3e4-f5a6-b7c8-d9e0-f1a2b3c4d5e6",
-      "ts": "2025-11-07T16:05:00.000Z",
-      "command": "trade.buy",
+      "ts": "2025-11-07T16:10:00.000Z",
+      "command": "trade.sell",
       "auth": { "session": "eyJhbGciOi..." },
       "data": {
-        "account": 1, // 0 = Petty Cash (ship holds), 1 = Bank Account.
-        "sector_id": 1,
         "port_id": 1,
         "items": [
-          { "commodity": "ore", "quantity": 100 },
-          { "commodity": "equipment", "quantity": 50 }
+          { "commodity": "ore", "quantity": 50 }
         ],
-        "idempotency_key": "buy_txn_12345"
+        "idempotency_key": "sell-ore-txn-456", // Unique key for idempotent requests
+        "account": 1, // Optional: 0 for petty cash (default), 1 for bank account
+        "sector_id": 1 // Optional: current sector is used if not provided
       }
     }
     ```
@@ -2039,53 +2177,8 @@ Commands for interacting with the ledger-based economy. Most are only available 
     ```json
     {
       "id": "sb1c2d3e4-f5a6-b7c8-d9e0-f1a2b3c4d5e6",
-      "ts": "2025-11-07T16:05:00.100Z",
+      "ts": "2025-11-07T16:10:00.100Z",
       "reply_to": "b1c2d3e4-f5a6-b7c8-d9e0-f1a2b3c4d5e6",
-      "status": "ok",
-      "type": "trade.buy_receipt_v1",
-      "data": {
-        "sector_id": 1,
-        "port_id": 1,
-        "player_id": 12345,
-        "lines": [
-          { "commodity": "ore", "quantity": 100, "unit_price": 55, "value": 5500 },
-          { "commodity": "equipment", "quantity": 50, "unit_price": 120, "value": 6000 }
-        ],
-        "credits_remaining": 988500,
-        "total_cost": 11500
-      }
-    }
-    ```
-
-
-*   `trade.sell`: Sell commodities to a port.
-
-    *Example Client Request:*
-    ```json
-    {
-      "id": "c1d2e3f4-a5b6-c7d8-e9f0-a1b2c3d4e5f6",
-      "ts": "2025-11-07T16:06:00.000Z",
-      "command": "trade.sell",
-      "auth": { "session": "eyJhbGciOi..." },
-      "data": {
-        "account": 1, // 0 = Petty Cash (ship holds), 1 = Bank Account.
-        "sector_id": 1,
-        "port_id": 1,
-        "items": [
-          { "commodity": "ore", "quantity": 50 },
-          { "commodity": "organics", "quantity": 20 }
-        ],
-        "idempotency_key": "sell_txn_12345"
-      }
-    }
-    ```
-
-    *Example Server Response:*
-    ```json
-    {
-      "id": "sc1d2e3f4-a5b6-c7d8-e9f0-a1b2c3d4e5f6",
-      "ts": "2025-11-07T16:06:00.100Z",
-      "reply_to": "c1d2e3f4-a5b6-c7d8-e9f0-a1b2c3d4e5f6",
       "status": "ok",
       "type": "trade.sell_receipt_v1",
       "data": {
@@ -2093,11 +2186,12 @@ Commands for interacting with the ledger-based economy. Most are only available 
         "port_id": 1,
         "player_id": 12345,
         "lines": [
-          { "commodity": "ore", "quantity": 50, "unit_price": 50, "value": 2500 },
-          { "commodity": "organics", "quantity": 20, "unit_price": 10, "value": 200 }
+          { "commodity": "ORE", "quantity": 50, "unit_price": 100, "value": 5000 }
         ],
-        "credits_remaining": 990000,
-        "total_credits": 2700
+        "credits_gained": 500000,   // Credits gained before fees
+        "total_credits_with_fees": 495000, // Total credits after fees
+        "fees": 5000,               // Total fees applied
+        "new_player_credits": 950000 // Remaining credits in the chosen account
       }
     }
     ```

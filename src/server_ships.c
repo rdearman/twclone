@@ -697,3 +697,23 @@ cmd_ship_self_destruct (client_ctx_t *ctx, json_t *root)
 
   return 0;
 }
+
+// Helper to get active ship ID for a player
+int h_get_active_ship_id(sqlite3 *db, int player_id) {
+    sqlite3_stmt *stmt;
+    int ship_id = 0;
+    const char *sql = "SELECT ship FROM players WHERE id = ?;";
+
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) == SQLITE_OK) {
+        sqlite3_bind_int(stmt, 1, player_id);
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            ship_id = sqlite3_column_int(stmt, 0);
+        }
+    } else {
+        // Log an error if prepare fails
+        LOGE("Failed to prepare statement for h_get_active_ship_id: %s", sqlite3_errmsg(db));
+    }
+    sqlite3_finalize(stmt);
+    return ship_id;
+}
+

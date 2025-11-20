@@ -90,7 +90,9 @@ bigbang_SOURCES = \
 	../src/test_bang.c \
 	../src/globals.c \
         ../src/server_log.c \
-	../src/common.c
+	../src/common.c \
+        ../src/server_ships.c \
+        ../src/server_ports.c
 
 
 

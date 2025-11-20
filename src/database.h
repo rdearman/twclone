@@ -12,6 +12,9 @@ sqlite3 *db_get_handle (void);
 
 // Define a reasonable cap for commodity quantity at a port
 #define PORT_MAX_QUANTITY 10000.0
+#define UUID_STR_LEN 33
+#define TX_TYPE_TRADE_BUY "TRADE_BUY"
+#define TX_TYPE_TRADE_SELL "TRADE_SELL"
 
 /* External declaration for the mutex */
 extern pthread_mutex_t db_mutex;
@@ -156,8 +159,30 @@ int db_get_ship_sector_id (sqlite3 *db, int ship_id);
 int db_recall_fighter_asset (int asset_id, int player_id);
 
 // Banking and Stock Management for Market Settlement
+// Configuration helpers (thread-safe wrappers)
+int db_get_config_int(sqlite3 *db, const char *key_col_name, int default_value);
+bool db_get_config_bool(sqlite3 *db, const char *key_col_name, bool default_value);
+
 int h_add_credits(sqlite3 *db, const char *owner_type, int owner_id, long long amount, long long *new_balance);
 int h_deduct_credits(sqlite3 *db, const char *owner_type, int owner_id, long long amount, long long *new_balance);
+
+typedef struct {
+    long long fee_total;        // total fee in minor units
+    long long fee_to_bank;          // amount credited to bank revenue account
+    long long tax_to_system;        // amount credited to system tax account
+} fee_result_t;
+
+// Unlocked helper functions (assume db_mutex is already held)
+int h_get_account_id_unlocked(sqlite3 *db, const char *owner_type, int owner_id, int *account_id_out);
+int h_create_bank_account_unlocked(sqlite3 *db, const char *owner_type, int owner_id, long long initial_balance, int *account_id_out);
+int h_get_system_account_id_unlocked(sqlite3 *db, const char *system_owner_type, int system_owner_id, int *account_id_out);
+int h_add_credits_unlocked(sqlite3 *db, int account_id, long long amount, const char *tx_type, const char *tx_group_id, long long *new_balance);
+int h_deduct_credits_unlocked(sqlite3 *db, int account_id, long long amount, const char *tx_type, const char *tx_group_id, long long *new_balance);
+long long h_get_config_int_unlocked(sqlite3 *db, const char *key, long long default_value);
+void h_generate_hex_uuid(char *buffer, size_t buffer_size);
+
+// Function to calculate fees for a given transaction type and amount
+int calculate_fees(sqlite3 *db, const char *tx_type, long long base_amount, const char *owner_type, fee_result_t *out);
 int h_update_planet_stock(sqlite3 *db, int planet_id, const char *commodity_code, int quantity_change, int *new_quantity);
 int h_update_port_stock(sqlite3 *db, int port_id, const char *commodity_code, int quantity_change, int *new_quantity);
 int db_get_player_bank_balance(int player_id, long long *out_balance);
@@ -166,7 +191,7 @@ int db_get_npc_bank_balance(int npc_id, long long *out_balance);
 int db_get_port_bank_balance(int port_id, long long *out_balance);
 int db_get_planet_bank_balance(int planet_id, long long *out_balance);
 int db_bank_account_exists(const char *owner_type, int owner_id);
-int db_bank_create_account(const char *owner_type, int owner_id, long long initial_balance);
+int db_bank_create_account(const char *owner_type, int owner_id, long long initial_balance, int *account_id_out);
 int db_bank_deposit(const char *owner_type, int owner_id, long long amount);
 int db_bank_withdraw(const char *owner_type, int owner_id, long long amount);
 int db_bank_transfer(const char *from_owner_type, int from_owner_id, const char *to_owner_type, int to_owner_id, long long amount);

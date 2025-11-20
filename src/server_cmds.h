@@ -76,6 +76,10 @@ int db_port_info_json (int port_id, json_t ** out_obj);
 int cmd_sys_test_news_cron(client_ctx_t *ctx, json_t *root);
 int cmd_sys_raw_sql_exec(client_ctx_t *ctx, json_t *root);
 
+// General JSON response helpers
+int send_error_response(client_ctx_t *ctx, json_t *root, int err_code, const char *msg);
+int send_json_response(client_ctx_t *ctx, json_t *response_json);
+
 /* --- Player Commands --- */
 int cmd_player_set_trade_account_preference(client_ctx_t *ctx, json_t *root);
 

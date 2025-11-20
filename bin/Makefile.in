@@ -132,7 +132,8 @@ am_bigbang_OBJECTS = ../src/database.$(OBJEXT) \
 	../src/server_config.$(OBJEXT) \
 	../src/server_warp_post_processing.$(OBJEXT) \
 	../src/test_bang.$(OBJEXT) ../src/globals.$(OBJEXT) \
-	../src/server_log.$(OBJEXT) ../src/common.$(OBJEXT)
+	../src/server_log.$(OBJEXT) ../src/common.$(OBJEXT) \
+	../src/server_ships.$(OBJEXT) ../src/server_ports.$(OBJEXT)
 bigbang_OBJECTS = $(am_bigbang_OBJECTS)
 bigbang_DEPENDENCIES =
 am_server_OBJECTS = ../src/server_communication.$(OBJEXT) \
@@ -400,7 +401,9 @@ bigbang_SOURCES = \
 	../src/test_bang.c \
 	../src/globals.c \
         ../src/server_log.c \
-	../src/common.c
+	../src/common.c \
+        ../src/server_ships.c \
+        ../src/server_ports.c
 
 all: all-am
 
@@ -513,6 +516,10 @@ clean-binPROGRAMS:
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/common.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_ships.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_ports.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
 
 bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEPENDENCIES) 
 	@rm -f bigbang$(EXEEXT)
@@ -536,10 +543,6 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 ../src/server_news.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_planets.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/server_ports.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/server_ships.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_universe.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)

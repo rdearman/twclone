@@ -36,6 +36,7 @@ typedef struct {
   struct sockaddr_in peer;               
   uint64_t cid;                          
   int player_id;                         
+  int ship_id;
   int sector_id;                         
   int corp_id; // Added for corporation ID
   /* --- rate limit hints --- */         
@@ -239,5 +240,9 @@ double rand01();
 double rand_range(double min, double max);
 double clamp(double value, double min, double max);
 
+// JSON helper functions (prototypes)
+bool json_get_int_flexible(json_t *data_obj, const char *key, int *out_val);
+const char *json_get_string_or_null(json_t *data_obj, const char *key);
 
-#endif // COMMON.H
+
+#endif // COMMON_H

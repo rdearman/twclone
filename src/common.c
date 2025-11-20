@@ -215,7 +215,7 @@ strip_ansi (char *dst, const char *src, size_t cap)
     {
       unsigned char c = (unsigned char) src[r];
       if (c == 0x1B)
-	{			/* ESC */
+	{		/* ESC */
 	  /* Skip CSI: ESC '[' ... letter */
 	  r++;
 	  if (src[r] == '[')
@@ -250,4 +250,40 @@ strip_ansi (char *dst, const char *src, size_t cap)
       dst[w++] = src[r++];
     }
   dst[w] = '\0';
+}
+
+
+// Implementation of json_get_int_flexible
+bool json_get_int_flexible(json_t *data_obj, const char *key, int *out_val) {
+    if (!json_is_object(data_obj)) {
+        return false;
+    }
+    json_t *val = json_object_get(data_obj, key);
+    if (json_is_integer(val)) {
+        *out_val = (int)json_integer_value(val);
+        return true;
+    }
+    if (json_is_string(val)) {
+        const char *s = json_string_value(val);
+        if (!s || !*s) return false;
+        char *endptr;
+        long lval = strtol(s, &endptr, 10);
+        if (*endptr == '\0' && endptr != s) { // Check that conversion actually happened
+            *out_val = (int)lval;
+            return true;
+        }
+    }
+    return false;
+}
+
+// Implementation of json_get_string_or_null
+const char *json_get_string_or_null(json_t *data_obj, const char *key) {
+    if (!json_is_object(data_obj)) {
+        return NULL;
+    }
+    json_t *val = json_object_get(data_obj, key);
+    if (json_is_string(val)) {
+        return json_string_value(val);
+    }
+    return NULL;
 }

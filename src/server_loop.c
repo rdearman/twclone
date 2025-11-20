@@ -765,6 +765,14 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       rc = cmd_bank_withdraw (ctx, root);
     }
+  else if (streq (cmd, "bank.history"))
+    {
+      rc = cmd_bank_history (ctx, root);
+    }
+  else if (streq (cmd, "bank.leaderboard"))
+    {
+      rc = cmd_bank_leaderboard (ctx, root);
+    }
 
   else if (streq (cmd, "player.my_info"))
     {
@@ -1029,6 +1037,10 @@ process_message (client_ctx_t *ctx, json_t *root)
   else if (!strcasecmp (c, "planet.withdraw"))
     {
       rc = cmd_planet_withdraw (ctx, root);	/* NIY stub */
+    }
+  else if (!strcasecmp (c, "planet.genesis_create"))
+    {
+      rc = cmd_planet_genesis_create (ctx, root);
     }
   else if (!strcasecmp (c, "citadel.build"))
     {

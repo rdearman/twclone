@@ -73,6 +73,16 @@
 #define TERRITORY_UNSAFE         1410
 #define ERR_FOREIGN_LIMPETS_PRESENT 1411
 
+/* 2100 - Genesis Torpedo / Planet Creation */
+#define ERR_GENESIS_DISABLED          2100
+#define ERR_GENESIS_MSL_PROHIBITED    2101
+#define ERR_GENESIS_SECTOR_FULL       2102
+#define ERR_NO_GENESIS_TORPEDO        2103
+#define ERR_INVALID_PLANET_NAME_LENGTH 2104
+#define ERR_INVALID_OWNER_TYPE        2105
+#define ERR_NO_CORPORATION            2106
+#define ERR_UNIVERSE_FULL             2107
+
 /* 1500 — Planet / Citadel */
 #define ERR_PLANET_NOT_FOUND     1500
 #define REF_NOT_PLANET_OWNER     1501	/* REFUSED */

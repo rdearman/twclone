@@ -50,7 +50,8 @@ extern "C"
   int cmd_bank_deposit (client_ctx_t * ctx, json_t * root);
   int cmd_bank_transfer (client_ctx_t * ctx, json_t * root);
   int cmd_bank_withdraw (client_ctx_t * ctx, json_t * root);
-  TurnConsumeResult h_consume_player_turn (sqlite3 * db_conn,
+  int cmd_bank_history (client_ctx_t * ctx, json_t * root);
+int cmd_bank_leaderboard (client_ctx_t * ctx, json_t * root);  TurnConsumeResult h_consume_player_turn (sqlite3 * db_conn,
 					   client_ctx_t * ctx,
 					   const char *reason_cmd);
   int handle_turn_consumption_error (client_ctx_t * ctx,

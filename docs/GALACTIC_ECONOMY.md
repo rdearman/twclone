@@ -30,6 +30,7 @@ This layer provides the foundational banking features for individual players and
 
 * **Corporate Treasury:** A parallel set of tables (corp\_accounts, corp\_tx) provides a shared bank account for corporations.  
 * **Automated Finances:** The system supports:  
+* Similar to player banking, corporate transactions may also incur fees.
   * **Automated Taxes:** A corp leader can set a "5% interest tax" or a flat weekly fee, which is automatically collected from members via bank.transfer.  
   * **Dividends & Salaries:** The leader can issue mass payouts to members, which are processed as corp\_tx entries with kind='dividend'.
 

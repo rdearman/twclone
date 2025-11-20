@@ -1227,21 +1227,7 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
 }
 
 
-// Accept either an int or a string containing digits; return 1 on success.
-static int json_get_int_flexible(json_t *obj, const char *key, int *out) {
-  if (!obj || !key || !out) return 0;
-  json_t *v = json_object_get(obj, key);
-  if (!v) return 0;
-  if (json_is_integer(v)) { *out = (int)json_integer_value(v); return 1; }
-  if (json_is_string(v)) {
-    const char *s = json_string_value(v);
-    if (!s || !*s) return 0;
-    char *end = NULL;
-    long n = strtol(s, &end, 10);
-    if (end && *end == '\0') { *out = (int)n; return 1; }
-  }
-  return 0;
-}
+
 
 
 /* -------- move.pathfind: BFS path A->B with avoid list -------- */

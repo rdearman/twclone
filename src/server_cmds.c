@@ -348,3 +348,35 @@ cmd_player_set_trade_account_preference(client_ctx_t *ctx, json_t *root)
   send_enveloped_ok(ctx->fd, root, "player.set_trade_account_preference", NULL);
   return 0;
 }
+
+// General JSON response helpers
+int send_error_response(client_ctx_t *ctx, json_t *root, int err_code, const char *msg) {
+    // server_envelope.h's send_enveloped_error expects the original root message for id/cmd matching.
+    // The err_code and msg are passed directly.
+    send_enveloped_error(ctx->fd, root, err_code, msg);
+    return 0; // Or -1 depending on desired return behavior
+}
+
+int send_json_response(client_ctx_t *ctx, json_t *response_json) {
+    // server_envelope.h's send_enveloped_ok expects the original root and a data object.
+    // Here, response_json *is* the data object we want to send.
+    // We create a temporary object to hold the response_json under a "data" key,
+    // or you might adjust send_enveloped_ok to directly accept the data.
+    // For now, let's assume response_json contains the actual data to be sent.
+    // If response_json needs to be wrapped in a "data" field, we'd do:
+    // json_t *wrapper = json_object();
+    // json_object_set_new(wrapper, "data", response_json);
+    // send_enveloped_ok(ctx->fd, root, "ok", wrapper);
+    // json_decref(wrapper); // assuming send_enveloped_ok takes ownership or copies.
+
+    // A more direct approach if send_enveloped_ok just sends "ok" and an arbitrary json_t
+    // For now, mimicking existing pattern where "data" is often implicitly handled,
+    // or the `response_json` is the actual payload.
+    // Looking at `send_enveloped_ok` in `server_envelope.h`... it takes `json_t *data`.
+    // So, we just pass the `response_json` directly as data.
+    // If `response_json` should be nested under a specific key, that logic would be here.
+    // Given the prototype: `send_enveloped_ok(int fd, json_t *original_request_root, const char *command_name, json_t *data)`
+    // `response_json` should likely be the `data` parameter.
+    send_enveloped_ok(ctx->fd, NULL, "ok", response_json); // original_request_root is not needed here
+    return 0;
+}
