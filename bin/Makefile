@@ -124,16 +124,11 @@ am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
 am__dirstamp = $(am__leading_dot)dirstamp
 am_bigbang_OBJECTS = ../src/database.$(OBJEXT) \
-	../src/schemas.$(OBJEXT) ../src/db_player_settings.$(OBJEXT) \
-	../src/server_players.$(OBJEXT) \
-	../src/server_envelope.$(OBJEXT) \
-	../src/s2s_transport.$(OBJEXT) ../src/s2s_keyring.$(OBJEXT) \
-	../src/namegen.$(OBJEXT) ../src/server_bigbang.$(OBJEXT) \
-	../src/server_config.$(OBJEXT) \
+	../src/schemas.$(OBJEXT) ../src/namegen.$(OBJEXT) \
+	../src/server_bigbang.$(OBJEXT) \
 	../src/server_warp_post_processing.$(OBJEXT) \
-	../src/test_bang.$(OBJEXT) ../src/globals.$(OBJEXT) \
-	../src/server_log.$(OBJEXT) ../src/common.$(OBJEXT) \
-	../src/server_ships.$(OBJEXT) ../src/server_ports.$(OBJEXT)
+	../src/globals.$(OBJEXT) ../src/common.$(OBJEXT) \
+	../src/test_bang.$(OBJEXT) ../src/server_log.$(OBJEXT)
 bigbang_OBJECTS = $(am_bigbang_OBJECTS)
 bigbang_DEPENDENCIES =
 am_server_OBJECTS = ../src/server_communication.$(OBJEXT) \
@@ -148,15 +143,15 @@ am_server_OBJECTS = ../src/server_communication.$(OBJEXT) \
 	../src/server_ships.$(OBJEXT) ../src/server_universe.$(OBJEXT) \
 	../src/server_s2s.$(OBJEXT) \
 	../src/server_warp_post_processing.$(OBJEXT) \
+	../src/server_log.$(OBJEXT) ../src/server_cron.$(OBJEXT) \
 	../src/namegen.$(OBJEXT) ../src/globals.$(OBJEXT) \
 	../src/database.$(OBJEXT) ../src/schemas.$(OBJEXT) \
 	../src/common.$(OBJEXT) ../src/server_engine.$(OBJEXT) \
 	../src/engine_consumer.$(OBJEXT) \
 	../src/db_player_settings.$(OBJEXT) \
-	../src/s2s_transport.$(OBJEXT) ../src/server_log.$(OBJEXT) \
-	../src/server_cron.$(OBJEXT) \
+	../src/s2s_transport.$(OBJEXT) \
 	../src/sysop_interaction.$(OBJEXT) \
-	../src/s2s_keyring.$(OBJEXT)
+	../src/s2s_keyring.$(OBJEXT) ../src/server_stardock.$(OBJEXT)
 server_OBJECTS = $(am_server_OBJECTS)
 server_DEPENDENCIES =
 AM_V_P = $(am__v_P_$(V))
@@ -200,6 +195,7 @@ am__depfiles_remade = ../src/$(DEPDIR)/common.Po \
 	../src/$(DEPDIR)/server_ports.Po \
 	../src/$(DEPDIR)/server_s2s.Po \
 	../src/$(DEPDIR)/server_ships.Po \
+	../src/$(DEPDIR)/server_stardock.Po \
 	../src/$(DEPDIR)/server_universe.Po \
 	../src/$(DEPDIR)/server_warp_post_processing.Po \
 	../src/$(DEPDIR)/sysop_interaction.Po \
@@ -269,7 +265,7 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-ISODATE = 2025-11-17
+ISODATE = 2025-11-20
 LDFLAGS = 
 LIBOBJS = 
 LIBS = -lpthread -lm 
@@ -345,13 +341,6 @@ server_LDADD = -ljansson -lsqlite3 -lcrypto -lpthread -lm
 # client_LDADD   = -ljansson -lsqlite3 -lpthread -lm
 bigbang_LDADD = -ljansson -lsqlite3 -lcrypto -lpthread -lm
 AUTOMAKE_OPTIONS = subdir-objects
-
-# client_SOURCES = \
-# 	../src/globals.c \
-# 	../src/database.c \
-# 	../src/client.c \
-# 	../src/common.c \
-# 	../src/parse.c
 server_SOURCES = \
         ../src/server_communication.c \
         ../src/server_bulk.c \
@@ -372,6 +361,8 @@ server_SOURCES = \
         ../src/server_universe.c \
         ../src/server_s2s.c \
         ../src/server_warp_post_processing.c \
+        ../src/server_log.c \
+        ../src/server_cron.c \
         ../src/namegen.c \
         ../src/globals.c \
         ../src/database.c \
@@ -381,29 +372,20 @@ server_SOURCES = \
         ../src/engine_consumer.c \
         ../src/db_player_settings.c \
         ../src/s2s_transport.c \
-        ../src/server_log.c \
-        ../src/server_cron.c \
 	../src/sysop_interaction.c \
-	../src/s2s_keyring.c
+	../src/s2s_keyring.c \
+        ../src/server_stardock.c
 
 bigbang_SOURCES = \
 	../src/database.c \
 	../src/schemas.c \
-        ../src/db_player_settings.c \
-        ../src/server_players.c \
-	../src/server_envelope.c \
-	../src/s2s_transport.c \
-	../src/s2s_keyring.c \
 	../src/namegen.c \
 	../src/server_bigbang.c \
-	../src/server_config.c \
 	../src/server_warp_post_processing.c \
-	../src/test_bang.c \
 	../src/globals.c \
-        ../src/server_log.c \
 	../src/common.c \
-        ../src/server_ships.c \
-        ../src/server_ports.c
+	../src/test_bang.c \
+	../src/server_log.c
 
 all: all-am
 
@@ -490,35 +472,19 @@ clean-binPROGRAMS:
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/schemas.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/db_player_settings.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/server_players.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/server_envelope.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/s2s_transport.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/s2s_keyring.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/namegen.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_bigbang.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/server_config.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_warp_post_processing.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/test_bang.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/globals.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/server_log.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/common.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/server_ships.$(OBJEXT): ../src/$(am__dirstamp) \
+../src/test_bang.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/server_ports.$(OBJEXT): ../src/$(am__dirstamp) \
+../src/server_log.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 
 bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEPENDENCIES) 
@@ -534,7 +500,11 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_citadel.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_envelope.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_auth.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_config.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_loop.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
@@ -544,17 +514,31 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_planets.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_players.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_ports.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_ships.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_universe.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_s2s.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_cron.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_engine.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/engine_consumer.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/server_cron.$(OBJEXT): ../src/$(am__dirstamp) \
+../src/db_player_settings.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
+../src/s2s_transport.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/sysop_interaction.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
+../src/s2s_keyring.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_stardock.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 
 server$(EXEEXT): $(server_OBJECTS) $(server_DEPENDENCIES) $(EXTRA_server_DEPENDENCIES) 
@@ -597,6 +581,7 @@ include ../src/$(DEPDIR)/server_players.Po # am--include-marker
 include ../src/$(DEPDIR)/server_ports.Po # am--include-marker
 include ../src/$(DEPDIR)/server_s2s.Po # am--include-marker
 include ../src/$(DEPDIR)/server_ships.Po # am--include-marker
+include ../src/$(DEPDIR)/server_stardock.Po # am--include-marker
 include ../src/$(DEPDIR)/server_universe.Po # am--include-marker
 include ../src/$(DEPDIR)/server_warp_post_processing.Po # am--include-marker
 include ../src/$(DEPDIR)/sysop_interaction.Po # am--include-marker
@@ -781,6 +766,7 @@ distclean: distclean-am
 	-rm -f ../src/$(DEPDIR)/server_ports.Po
 	-rm -f ../src/$(DEPDIR)/server_s2s.Po
 	-rm -f ../src/$(DEPDIR)/server_ships.Po
+	-rm -f ../src/$(DEPDIR)/server_stardock.Po
 	-rm -f ../src/$(DEPDIR)/server_universe.Po
 	-rm -f ../src/$(DEPDIR)/server_warp_post_processing.Po
 	-rm -f ../src/$(DEPDIR)/sysop_interaction.Po
@@ -859,6 +845,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/$(DEPDIR)/server_ports.Po
 	-rm -f ../src/$(DEPDIR)/server_s2s.Po
 	-rm -f ../src/$(DEPDIR)/server_ships.Po
+	-rm -f ../src/$(DEPDIR)/server_stardock.Po
 	-rm -f ../src/$(DEPDIR)/server_universe.Po
 	-rm -f ../src/$(DEPDIR)/server_warp_post_processing.Po
 	-rm -f ../src/$(DEPDIR)/sysop_interaction.Po
