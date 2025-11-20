@@ -339,6 +339,8 @@ run_bigbang_if_needed (void)
 int
 main (void)
 {
+  srand((unsigned) time(NULL)); // Seed random number generator once at program start
+
   int rc = 1; // Initialize rc to 1 (failure)
   g_running = 1;
 

@@ -461,7 +461,6 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
       }
 
       // --- Spawn Location ---
-      srand(time(NULL)); // Seed random number generator
       spawn_sector_id = (rand() % 10) + 1; // Random sector between 1 and 10
 
       // --- Ship Creation & Naming ---

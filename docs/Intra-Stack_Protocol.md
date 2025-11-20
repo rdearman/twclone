@@ -149,7 +149,7 @@ These are **client RPCs** (outside S2S) that often **emit events** which the Eng
 * `ship.status` (and alias `ship.info`) → fast read; no event.
 * `bank.balance.get` (Stardock-gated) → fast read; no event.
 * `hardware.list` (Stardock & special ports) → fast read; no event.
-* `hardware.buy` (later) → **emits** `player.trade.v1` with `type=buy` (equipment).
+*   `hardware.buy` → purchase hardware; no event.
 * `corp.join|leave` → **emits** `player.corp_join.v1`.
 * `planet.deposit|withdraw` → **emits** `player.planet_transfer.v1`.
 * `combat.attack.port|planet|ship` → **emits** `player.port_strike.v1` or `combat.ship_damage.v1`.

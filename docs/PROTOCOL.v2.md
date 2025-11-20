@@ -3108,6 +3108,69 @@ Commands for interacting with the ledger-based economy. Most are only available 
     }
     ```
 
+*   `hardware.list`: List available hardware at the player's current location.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+      "ts": "2025-11-07T19:00:00.000Z",
+      "command": "hardware.list",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {}
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sa1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+      "ts": "2025-11-07T19:00:00.100Z",
+      "reply_to": "a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+      "status": "ok",
+      "type": "hardware.list_v1",
+      "data": {
+        "hardware": [
+          { "item_code": "ARMD", "name": "Armid Mine", "price": 5000, "description": "A standard anti-ship mine." },
+          { "item_code": "LMPT", "name": "Limpet Mine", "price": 10000, "description": "A mine that attaches to a ship's hull." }
+        ]
+      }
+    }
+    ```
+
+*   `hardware.buy`: Purchase hardware for the player's ship.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "b1c2d3e4-f5a6-b7c8-d9e0-f1a2b3c4d5e6",
+      "ts": "2025-11-07T19:05:00.000Z",
+      "command": "hardware.buy",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {
+        "item_code": "ARMD",
+        "quantity": 10
+      }
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sb1c2d3e4-f5a6-b7c8-d9e0-f1a2b3c4d5e6",
+      "ts": "2025-11-07T19:05:00.100Z",
+      "reply_to": "b1c2d3e4-f5a6-b7c8-d9e0-f1a2b3c4d5e6",
+      "status": "ok",
+      "type": "hardware.buy_receipt_v1",
+      "data": {
+        "item_code": "ARMD",
+        "quantity": 10,
+        "total_cost": 50000,
+        "credits_remaining": 950000
+      }
+    }
+    ```
+
 *   `ship.jettison`: Jettison cargo into space.
 
     *Example Client Request:*
@@ -3975,11 +4038,18 @@ The error model uses HTTP-like status codes within the JSON response. `status: "
 *   **1100s**: System/General
 *   **1200s**: Auth/Player
 *   **1700s**: Trade & Market
+*   **1800s**: Hardware & Upgrades
 *   **2100s**: Banking & Finance (New)
 *   **2200s**: Stocks & R&D (New)
 *   **2300s**: Loans & Insurance (New)
 
 **New Error Codes for v2.0:**
+*   `1811`: Hardware item not available at this location
+*   `1812`: Invalid hardware item code
+*   `1813`: Insufficient credits for purchase
+*   `1814`: Ship capacity for this item would be exceeded
+*   `1815`: Ship type does not support this hardware
+*   `1816`: Invalid purchase quantity (must be > 0)
 *   `2100`: Insufficient funds in bank
 *   `2101`: Target bank account not found
 *   `2102`: Transfer to self not allowed
@@ -4061,6 +4131,8 @@ The error model uses HTTP-like status codes within the JSON response. `status: "
 *   `fighters.recall`
 *   `fine.list`
 *   `fine.pay`
+*   `hardware.buy`
+*   `hardware.list`
 *   `insurance.claim.file`
 *   `insurance.policies.buy`
 *   `insurance.policies.list`

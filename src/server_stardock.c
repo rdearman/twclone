@@ -17,6 +17,8 @@ int cmd_hardware_list(client_ctx_t *ctx, json_t *root) {
     int player_id = ctx->player_id;
     int ship_id = 0;
     int sector_id = 0;
+    sqlite3_stmt *stmt = NULL; // Declare stmt here
+    int port_type = 0; // Declare port_type here
 
     // 1. Authenticate player and get ship/sector context
     if (player_id <= 0) {
@@ -34,19 +36,16 @@ int cmd_hardware_list(client_ctx_t *ctx, json_t *root) {
     char location_type[16] = "OTHER";
     int port_id = 0;
 
-    sqlite3_stmt *stmt = NULL;
-    const char *sql_loc_check = "SELECT id, type FROM ports WHERE sector = ? AND (type = 9 OR type = 0);"; // type 9 for Stardock, 0 for Class-0
+    const char *sql_loc_check = "SELECT id, type FROM ports WHERE sector = ? AND (type = " QUOTE(PORT_TYPE_STARDOCK) " OR type = " QUOTE(PORT_TYPE_CLASS0) ");"; // type 9 for Stardock, 0 for Class-0
     int rc = sqlite3_prepare_v2(db, sql_loc_check, -1, &stmt, NULL);
 
     if (rc == SQLITE_OK) {
         sqlite3_bind_int(stmt, 1, sector_id);
         if (sqlite3_step(stmt) == SQLITE_ROW) {
-            port_id = sqlite3_column_int(stmt, 0);
-            int port_type = sqlite3_column_int(stmt, 1);
-            if (port_type == 9) { // Stardock
-                strncpy(location_type, "STARDOCK", sizeof(location_type) - 1);
-            } else if (port_type == 0) { // Class-0
-                strncpy(location_type, "CLASS0", sizeof(location_type) - 1);
+            if (port_type == PORT_TYPE_STARDOCK) { // Stardock
+                strncpy(location_type, LOCATION_STARDOCK, sizeof(location_type) - 1);
+            } else if (port_type == PORT_TYPE_CLASS0) { // Class-0
+                strncpy(location_type, LOCATION_CLASS0, sizeof(location_type) - 1);
             }
         }
         sqlite3_finalize(stmt);
@@ -104,7 +103,7 @@ int cmd_hardware_list(client_ctx_t *ctx, json_t *root) {
 
 
     json_t *items_array = json_array();
-    const char *sql_hardware = "SELECT code, name, price, max_per_ship, category FROM hardware_items WHERE enabled = 1 AND (? = 'STARDOCK' OR (? = 'CLASS0' AND sold_in_class0 = 1))";
+    const char *sql_hardware = "SELECT code, name, price, max_per_ship, category FROM hardware_items WHERE enabled = 1 AND (? = '" LOCATION_STARDOCK "' OR (? = '" LOCATION_CLASS0 "' AND sold_in_class0 = 1))";
     rc = sqlite3_prepare_v2(db, sql_hardware, -1, &stmt, NULL);
     if (rc != SQLITE_OK) {
         send_enveloped_error(ctx->fd, root, ERR_DB_QUERY_FAILED, "Failed to get hardware items.");
@@ -125,37 +124,37 @@ int cmd_hardware_list(client_ctx_t *ctx, json_t *root) {
         bool ship_has_capacity = true;
         bool item_supported = true;
 
-        if (strcasecmp(category, "FIGHTER") == 0) {
+        if (strcasecmp(category, HW_CATEGORY_FIGHTER) == 0) {
             max_purchase = MAX(0, max_fighters - current_fighters);
-        } else if (strcasecmp(category, "SHIELD") == 0) {
+        } else if (strcasecmp(category, HW_CATEGORY_SHIELD) == 0) {
             max_purchase = MAX(0, max_shields - current_shields);
-        } else if (strcasecmp(category, "HOLD") == 0) {
+        } else if (strcasecmp(category, HW_CATEGORY_HOLD) == 0) {
             max_purchase = MAX(0, max_holds - current_holds);
-        } else if (strcasecmp(category, "SPECIAL") == 0) {
-            if (strcasecmp(code, "GENESIS") == 0) {
-                int limit = (max_per_ship_hw != -1 && max_per_ship_hw < max_genesis) ? max_per_ship_hw : max_genesis;
+        } else if (strcasecmp(category, HW_CATEGORY_SPECIAL) == 0) {
+            if (strcasecmp(code, HW_ITEM_GENESIS) == 0) {
+                int limit = (max_per_ship_hw != HW_MAX_PER_SHIP_DEFAULT && max_per_ship_hw < max_genesis) ? max_per_ship_hw : max_genesis;
                 max_purchase = MAX(0, limit - current_genesis);
-            } else if (strcasecmp(code, "DETONATOR") == 0) {
-                int limit = (max_per_ship_hw != -1 && max_per_ship_hw < max_detonators_st) ? max_per_ship_hw : max_detonators_st;
+            } else if (strcasecmp(code, HW_ITEM_DETONATOR) == 0) {
+                int limit = (max_per_ship_hw != HW_MAX_PER_SHIP_DEFAULT && max_per_ship_hw < max_detonators_st) ? max_per_ship_hw : max_detonators_st;
                 max_purchase = MAX(0, limit - current_detonators);
-            } else if (strcasecmp(code, "PROBE") == 0) {
-                int limit = (max_per_ship_hw != -1 && max_per_ship_hw < max_probes_st) ? max_per_ship_hw : max_probes_st;
+            } else if (strcasecmp(code, HW_ITEM_PROBE) == 0) {
+                int limit = (max_per_ship_hw != HW_MAX_PER_SHIP_DEFAULT && max_per_ship_hw < max_probes_st) ? max_per_ship_hw : max_probes_st;
                 max_purchase = MAX(0, limit - current_probes);
             } else {
                 item_supported = false; // Unknown special item
             }
-        } else if (strcasecmp(category, "MODULE") == 0) {
+        } else if (strcasecmp(category, HW_CATEGORY_MODULE) == 0) {
             // Modules are generally 0 or 1. Check if ship can support and if already installed.
-            if (strcasecmp(code, "CLOAK") == 0) {
+            if (strcasecmp(code, HW_ITEM_CLOAK) == 0) {
                 if (!can_cloak) item_supported = false;
                 max_purchase = (can_cloak && current_cloaks == 0) ? 1 : 0;
-            } else if (strcasecmp(code, "TWARP") == 0) { // TransWarp Drive
+            } else if (strcasecmp(code, HW_ITEM_TWARP) == 0) { // TransWarp Drive
                 if (!can_transwarp) item_supported = false;
                 max_purchase = (can_transwarp && has_transwarp == 0) ? 1 : 0;
-            } else if (strcasecmp(code, "PSCANNER") == 0) { // Planet Scanner
+            } else if (strcasecmp(code, HW_ITEM_PSCANNER) == 0) { // Planet Scanner
                 if (!can_planet_scan) item_supported = false;
                 max_purchase = (can_planet_scan && has_planet_scanner == 0) ? 1 : 0;
-            } else if (strcasecmp(code, "LSCANNER") == 0) { // Long-Range Scanner
+            } else if (strcasecmp(code, HW_ITEM_LSCANNER) == 0) { // Long-Range Scanner
                 if (!can_long_range_scan) item_supported = false;
                 max_purchase = (can_long_range_scan && has_long_range_scanner == 0) ? 1 : 0;
             } else {
@@ -164,10 +163,11 @@ int cmd_hardware_list(client_ctx_t *ctx, json_t *root) {
         } else {
             item_supported = false; // Unknown category
         }
+
         
         if (max_purchase <= 0) ship_has_capacity = false;
 
-        if (item_supported && (max_purchase > 0 || strcmp(category, "MODULE") == 0) ) { // Always show modules if supported, even if max_purchase is 0 for "already installed" status
+        if (item_supported && (max_purchase > HW_MIN_QUANTITY || strcmp(category, HW_CATEGORY_MODULE) == 0) ) { // Always show modules if supported, even if max_purchase is 0 for "already installed" status
             json_t *item_obj = json_object();
             json_object_set_new(item_obj, "code", json_string(code));
             json_object_set_new(item_obj, "name", json_string(name));
@@ -224,7 +224,7 @@ int cmd_hardware_buy(client_ctx_t *ctx, json_t *root) {
         send_enveloped_error(ctx->fd, root, ERR_MISSING_FIELD, "Missing 'code' for hardware item.");
         return 0;
     }
-    if (quantity <= 0) {
+    if (quantity <= HW_MIN_QUANTITY - 1) {
         send_enveloped_error(ctx->fd, root, ERR_HARDWARE_QUANTITY_INVALID, "Quantity must be greater than zero.");
         return 0;
     }
@@ -331,15 +331,15 @@ int cmd_hardware_buy(client_ctx_t *ctx, json_t *root) {
         return 0;
     }
 
-    if (port_found_id == 0 || (strcmp(location_type, "STARDOCK") != 0 && strcmp(location_type, "CLASS0") != 0)) {
+    if (port_found_id == 0 || (strcmp(location_type, LOCATION_STARDOCK) != 0 && strcmp(location_type, LOCATION_CLASS0) != 0)) {
         send_enveloped_refused(ctx->fd, root, ERR_HARDWARE_NOT_AVAILABLE, "Hardware can only be purchased at Stardock or Class-0 ports.", NULL);
         return 0;
     }
-    if (strcmp(location_type, "CLASS0") == 0 && hw_sold_in_class0 == 0) {
+    if (strcmp(location_type, LOCATION_CLASS0) == 0 && hw_sold_in_class0 == 0) {
         send_enveloped_refused(ctx->fd, root, ERR_HARDWARE_NOT_AVAILABLE, "This hardware item is not sold at Class-0 ports.", NULL);
         return 0;
     }
-    if (strcmp(location_type, "OTHER") == 0) { // Should not happen if port_found_id != 0, but defensive
+    if (strcmp(location_type, LOCATION_OTHER) == 0) { // Should not happen if port_found_id != 0, but defensive
         send_enveloped_refused(ctx->fd, root, ERR_HARDWARE_NOT_AVAILABLE, "Hardware can only be purchased at Stardock or Class-0 ports.", NULL);
         return 0;
     }
@@ -502,44 +502,43 @@ int cmd_hardware_buy(client_ctx_t *ctx, json_t *root) {
             return 0;
         }
         
-        // For modules, if max_per_ship is -1 (meaning use shiptype default of 1) and already installed, capacity is exceeded
-        if (hw_max_per_ship == 1 && *current_ship_val >= 1) { // If max_per_ship is 1, and we already have it
+        // For modules, if max_per_ship is HW_MAX_PER_SHIP_DEFAULT (meaning use shiptype default of 1) and already installed, capacity is exceeded
+        if (hw_max_per_ship == HW_MAX_PER_SHIP_DEFAULT && *current_ship_val >= 1) { // If max_per_ship is 1, and we already have it
              send_enveloped_refused(ctx->fd, root, ERR_HARDWARE_CAPACITY_EXCEEDED, "Module already installed and cannot be stacked.", NULL);
              return 0;
         }
-        // If max_per_ship is NULL (-1) and shiptype max is 1, assume 1 is max, so if current is 1, capacity exceeded
-        if (hw_max_per_ship == -1 && max_shiptype_val == 1 && *current_ship_val >= 1) {
+        // If hw_max_per_ship is HW_MAX_PER_SHIP_DEFAULT (meaning use shiptype default of 1) and shiptype max is 1, assume 1 is max, so if current is 1, capacity exceeded
+        if (hw_max_per_ship == HW_MAX_PER_SHIP_DEFAULT && max_shiptype_val == 1 && *current_ship_val >= 1) {
             send_enveloped_refused(ctx->fd, root, ERR_HARDWARE_CAPACITY_EXCEEDED, "Module already installed and cannot be stacked.", NULL);
             return 0;
         }
         
-        new_value = *current_ship_val + quantity;
-        if (hw_max_per_ship != -1) { // If hardware_items specifies a max
-            if (new_value > hw_max_per_ship) {
-                send_enveloped_refused(ctx->fd, root, ERR_HARDWARE_CAPACITY_EXCEEDED, "Purchase would exceed item-specific limit.", NULL);
+                new_value = *current_ship_val + quantity;
+                if (hw_max_per_ship != HW_MAX_PER_SHIP_DEFAULT) { // If hardware_items specifies a max
+                    if (new_value > hw_max_per_ship) {
+                        send_enveloped_refused(ctx->fd, root, ERR_HARDWARE_CAPACITY_EXCEEDED, "Purchase would exceed item-specific limit.", NULL);
+                        return 0;
+                    }
+                } else { // Use shiptype max
+                    if (new_value > max_shiptype_val) {
+                        send_enveloped_refused(ctx->fd, root, ERR_HARDWARE_CAPACITY_EXCEEDED, "Purchase would exceed ship type's maximum capacity.", NULL);
+                        return 0;
+                    }
+                }
+                                                                                                                 
+            } else {
+                send_enveloped_refused(ctx->fd, root, ERR_HARDWARE_INVALID_ITEM, "Unsupported hardware category.", NULL);
                 return 0;
             }
-        } else { // Use shiptype max
-            if (new_value > max_shiptype_val) {
-                send_enveloped_refused(ctx->fd, root, ERR_HARDWARE_CAPACITY_EXCEEDED, "Purchase would exceed ship type's maximum capacity.", NULL);
-                return 0;
-            }
-        }
-
-    } else {
-        send_enveloped_refused(ctx->fd, root, ERR_HARDWARE_INVALID_ITEM, "Unsupported hardware category.", NULL);
-        return 0;
-    }
-
-    // Capacity check for non-modules
-    if (strcmp(hw_category, "MODULE") != 0 && current_ship_val && max_shiptype_val > 0) {
-        new_value = *current_ship_val + quantity;
+                                                                                                                 
+            // Capacity check for non-modules
+            if (strcmp(hw_category, HW_CATEGORY_MODULE) != 0 && current_ship_val && max_shiptype_val > 0) {        new_value = *current_ship_val + quantity;
         if (new_value > max_shiptype_val) {
             send_enveloped_refused(ctx->fd, root, ERR_HARDWARE_CAPACITY_EXCEEDED, "Purchase would exceed ship type's maximum capacity.", NULL);
             return 0;
         }
         // If hw_max_per_ship is set, it might override shiptype_val
-        if (hw_max_per_ship != -1 && new_value > hw_max_per_ship) {
+        if (hw_max_per_ship != HW_MAX_PER_SHIP_DEFAULT && new_value > hw_max_per_ship) {
             send_enveloped_refused(ctx->fd, root, ERR_HARDWARE_CAPACITY_EXCEEDED, "Purchase would exceed item-specific limit.", NULL);
             return 0;
         }

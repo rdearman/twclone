@@ -719,8 +719,6 @@ bigbang (void)
       return -1;
     }
 
-  srand ((unsigned) time (NULL));
-
   struct twconfig *cfg = config_load ();
   if (!cfg)
     {
