@@ -33,13 +33,6 @@ bin_PROGRAMS = \
 	server \
 	bigbang
 
-# client_SOURCES = \
-# 	../src/globals.c \
-# 	../src/database.c \
-# 	../src/client.c \
-# 	../src/common.c \
-# 	../src/parse.c
-
 server_SOURCES = \
         ../src/server_communication.c \
         ../src/server_bulk.c \
@@ -60,6 +53,8 @@ server_SOURCES = \
         ../src/server_universe.c \
         ../src/server_s2s.c \
         ../src/server_warp_post_processing.c \
+        ../src/server_log.c \
+        ../src/server_cron.c \
         ../src/namegen.c \
         ../src/globals.c \
         ../src/database.c \
@@ -69,30 +64,21 @@ server_SOURCES = \
         ../src/engine_consumer.c \
         ../src/db_player_settings.c \
         ../src/s2s_transport.c \
-        ../src/server_log.c \
-        ../src/server_cron.c \
 	../src/sysop_interaction.c \
-	../src/s2s_keyring.c
+	../src/s2s_keyring.c \
+        ../src/server_stardock.c
 
 
 bigbang_SOURCES = \
 	../src/database.c \
 	../src/schemas.c \
-        ../src/db_player_settings.c \
-        ../src/server_players.c \
-	../src/server_envelope.c \
-	../src/s2s_transport.c \
-	../src/s2s_keyring.c \
 	../src/namegen.c \
 	../src/server_bigbang.c \
-	../src/server_config.c \
 	../src/server_warp_post_processing.c \
-	../src/test_bang.c \
 	../src/globals.c \
-        ../src/server_log.c \
 	../src/common.c \
-        ../src/server_ships.c \
-        ../src/server_ports.c
+	../src/test_bang.c \
+	../src/server_log.c
 
 
 

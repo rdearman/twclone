@@ -15,7 +15,6 @@
 #include "database.h"
 #include "server_log.h"
 #include "server_cron.h"
-#include "server_cron.h"
 
 
 /* Define and initialize the mutex for the database handle */
@@ -146,7 +145,7 @@ db_get_handle (void)
   if (sqlite3_exec (db_handle, "PRAGMA journal_mode=WAL;", NULL, NULL, NULL)
       != SQLITE_OK)
     {
-      LOGW ("Failed to set WAL mode on fresh handle.");
+   LOGW ("Failed to set WAL mode on fresh handle.");
     }
   sqlite3_busy_timeout (db_handle, 5000);    // 5 seconds
 
@@ -465,15 +464,18 @@ const char *create_table_sql[] = {
     "   maxmines INTEGER,  "
     "   maxlimpets INTEGER,  "
     "   maxgenesis INTEGER,  "
-    "   twarp INTEGER, /* Transwarp capability (0/1) */  "
+    "   max_detonators INTEGER NOT NULL DEFAULT 0, "
+    "   max_probes INTEGER NOT NULL DEFAULT 0, "
+    "   can_transwarp INTEGER NOT NULL DEFAULT 0,  "
     "   transportrange INTEGER,  "
     "   maxshields INTEGER,  "
     "   offense INTEGER,  "
     "   defense INTEGER,  "
     "   maxbeacons INTEGER,  "
-    "   holo INTEGER, /* Holo scanner (0/1) */  "
-    "   planet INTEGER, /* Can land on planets (0/1) */  "
+    "   can_long_range_scan INTEGER NOT NULL DEFAULT 0,  "
+    "   can_planet_scan INTEGER NOT NULL DEFAULT 0,  "
     "   maxphotons INTEGER, /* Photon torpedo count */  "
+    "   can_cloak INTEGER NOT NULL DEFAULT 0, "
     "   can_purchase INTEGER /* Can be bought at a port (0/1) */  " " );  ",
 
     " CREATE TABLE IF NOT EXISTS ships (  "
@@ -495,6 +497,8 @@ const char *create_table_sql[] = {
       "   fighters INTEGER, /* Current quantity carried */  "
 
       "   genesis INTEGER, /* Current quantity carried */  "
+      "   detonators INTEGER NOT NULL DEFAULT 0, "
+      "   probes INTEGER NOT NULL DEFAULT 0, "
 
       "   photons INTEGER, /* Current quantity carried */  "
 
@@ -515,6 +519,9 @@ const char *create_table_sql[] = {
       "   flags INTEGER,  "
 
       "   cloaking_devices INTEGER,  "
+      "   has_transwarp INTEGER NOT NULL DEFAULT 0, "
+      "   has_planet_scanner INTEGER NOT NULL DEFAULT 0, "
+      "   has_long_range_scanner INTEGER NOT NULL DEFAULT 0, "
 
       "   cloaked TIMESTAMP,  "
 
@@ -610,20 +617,26 @@ const char *create_table_sql[] = {
   "   PRIMARY KEY (planet_type_id, citadel_level) "
   " ); ",
   " CREATE TABLE IF NOT EXISTS planet_goods ( "
-
   "    planet_id INTEGER NOT NULL, "
-
   "    commodity TEXT NOT NULL CHECK(commodity IN ('ore', 'organics', 'equipment')), "
-
   "    quantity INTEGER NOT NULL DEFAULT 0, "
-
   "    max_capacity INTEGER NOT NULL, "
-
   "    production_rate INTEGER NOT NULL, "
-
   "    PRIMARY KEY (planet_id, commodity), "
+  "    FOREIGN KEY (planet_id) REFERENCES planets(id) " " ); ",
 
-  "    FOREIGN KEY (planet_id) REFERENCES planets(id) " " ); "
+  " CREATE TABLE IF NOT EXISTS hardware_items ( "
+    " id INTEGER PRIMARY KEY, "
+    " code TEXT UNIQUE NOT NULL, "
+    " name TEXT NOT NULL, "
+    " price INTEGER NOT NULL, "
+    " requires_stardock INTEGER NOT NULL DEFAULT 1, "
+    " sold_in_class0 INTEGER NOT NULL DEFAULT 0, "
+    " max_per_ship INTEGER, "
+    " category TEXT NOT NULL, "
+    " enabled INTEGER NOT NULL DEFAULT 1 "
+  " ); ",
+
     /* --- citadels table (fixed, closed properly) --- */
     " CREATE TABLE IF NOT EXISTS citadels ( " " id INTEGER PRIMARY KEY AUTOINCREMENT,  " " planet_id INTEGER UNIQUE NOT NULL,  "	/* 1:1 link to planets.id */
     " level INTEGER,  " " treasury INTEGER,  " " militaryReactionLevel INTEGER,  " " qCannonAtmosphere INTEGER,  " " qCannonSector INTEGER,  " " planetaryShields INTEGER,  " " transporterlvl INTEGER,  " " interdictor INTEGER,  " " upgradePercent REAL,  " " upgradestart INTEGER,  " " owner INTEGER,  "	/* FK to players.id */
@@ -1706,7 +1719,18 @@ const char *insert_default_sql[] = {
     "(46, 'The Old Dog'),\n"
     "(47, 'The Wayfinder'),\n"
     "(48, 'The Horizon Breaker'),\n"
-    "(49, 'Stormchaser'),\n" "(50, 'Beyond the Veil');\n",
+    "(49, 'Stormchaser'),\n"
+    "(50, 'Beyond the Veil');\n",
+
+  "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('FIGHTERS', 'Fighters', 100, 0, 1, NULL, 'FIGHTER', 1);",
+  "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('SHIELDS', 'Shields', 200, 0, 1, NULL, 'SHIELD', 1);",
+  "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('HOLDS', 'Holds', 50, 0, 1, NULL, 'HOLD', 1);",
+  "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('GENESIS', 'Genesis Torpedo', 25000, 1, 0, NULL, 'SPECIAL', 1);",
+  "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('DETONATOR', 'Atomic Detonator', 10000, 1, 0, NULL, 'SPECIAL', 1);",
+  "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('CLOAK', 'Cloaking Device', 50000, 1, 0, 1, 'MODULE', 1);",
+  "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('LSCANNER', 'Long-Range Scanner', 30000, 1, 0, 1, 'MODULE', 1);",
+  "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('PSCANNER', 'Planet Scanner', 15000, 1, 0, 1, 'MODULE', 1);",
+  "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('TWARP', 'TransWarp Drive', 100000, 1, 0, 1, 'MODULE', 1);",
 
   /* fix a problem with the terraforming cron */
   "ALTER TABLE planets ADD COLUMN terraform_turns_left INTEGER NOT NULL DEFAULT 1;",

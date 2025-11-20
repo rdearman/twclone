@@ -47,6 +47,8 @@ static json_t *schema_ship_jettison (void);
 static json_t *schema_ship_upgrade (void);
 static json_t *schema_ship_repair (void);
 static json_t *schema_ship_self_destruct (void);
+static json_t *schema_hardware_list (void);
+static json_t *schema_hardware_buy (void);
 
 /* --- Port --- */
 static json_t *schema_port_info (void);
@@ -154,6 +156,47 @@ schema_bank_leaderboard (void)
 
   return data_schema;
 }
+
+static json_t *
+schema_hardware_list (void)
+{
+  return json_pack ("{s:s, s:s, s:s, s:o, s:o, s:b}",
+                    "$id", "ge://schema/hardware.list.json",
+                    "$schema", "https://json-schema.org/draft/2020-12/schema",
+                    "type", "object",
+                    "properties", json_object(), // Empty properties object
+                    "required", json_array(),    // No required properties
+                    "additionalProperties", json_false());
+}
+
+static json_t *
+schema_hardware_buy (void)
+{
+  json_t *data_properties = json_pack(
+      "{s:o, s:o, s:o}",
+      "code", json_pack("{s:s}", "type", "string"),
+      "quantity", json_pack("{s:s, s:i}", "type", "integer", "minimum", 1),
+      "idempotency_key", json_pack("{s:s}", "type", "string")
+  );
+
+  json_t *data_required = json_pack("[s,s]", "code", "quantity");
+
+  json_t *data_schema = json_pack(
+      "{s:s, s:s, s:s, s:o, s:o, s:b}",
+      "$id",      "ge://schema/hardware.buy.json",
+      "$schema",  "https://json-schema.org/draft/2020-12/schema",
+      "type",     "object",
+      "properties", data_properties,
+      "required", data_required,
+      "additionalProperties", json_false()
+  );
+
+  return data_schema;
+}
+
+
+
+/* --- Citadel --- */
 
 
 
@@ -308,6 +351,10 @@ schema_get (const char *key)
     return schema_ship_repair ();
   else if (strcasecmp (key, "ship.self_destruct") == 0)
     return schema_ship_self_destruct ();
+  else if (strcasecmp (key, "hardware.list") == 0)
+    return schema_hardware_list ();
+  else if (strcasecmp (key, "hardware.buy") == 0)
+    return schema_hardware_buy ();
 
   /* Port */
   else if (strcasecmp (key, "port.info") == 0)

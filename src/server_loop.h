@@ -21,5 +21,7 @@ void server_unregister_client (client_ctx_t * ctx);
    Does NOT steal 'data'. */
 int server_deliver_to_player (int player_id, const char *event_type,
 			      json_t * data);
+void idemp_fingerprint_json (json_t *obj, char out[17]);
+
 
 #endif /* SERVER_LOOP_H */

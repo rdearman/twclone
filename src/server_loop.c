@@ -40,6 +40,7 @@
 #include "server_bulk.h"
 #include "server_news.h"
 #include "server_log.h"
+#include "server_stardock.h" // Include for hardware commands
 
 
 #ifndef streq
@@ -125,6 +126,8 @@ static const cmd_desc_t k_supported_cmds_fallback[] = {
     {"fighters.recall", "Recall deployed fighters"},
     {"fine.list", "List fines"},
     {"fine.pay", "Pay a fine"},
+    {"hardware.buy", "Buy ship hardware"},
+    {"hardware.list", "List available ship hardware"},
     {"insurance.claim.file", "File an insurance claim"},
     {"insurance.policies.buy", "Buy an insurance policy"},
     {"insurance.policies.list", "List insurance policies"},
@@ -869,13 +872,21 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       cmd_player_set_prefs (ctx, root);
     }
-  else if (streq (cmd, "player.set_trade_account_preference"))
-    {
-      rc = cmd_player_set_trade_account_preference (ctx, root);
-    }
-
-/* ---------- SHIP ---------- */
-  else if (!strcasecmp (c, "ship.inspect"))
+    else if (streq (cmd, "player.set_trade_account_preference"))
+      {
+        rc = cmd_player_set_trade_account_preference (ctx, root);
+      }
+  /* ---------- HARDWARE ---------- */
+    else if (!strcasecmp (c, "hardware.list"))
+      {
+        rc = cmd_hardware_list (ctx, root);
+      }
+    else if (!strcasecmp (c, "hardware.buy"))
+      {
+        rc = cmd_hardware_buy (ctx, root);
+      }
+  /* ---------- SHIP ---------- */
+    else if (!strcasecmp (c, "ship.inspect"))
     {
       rc = cmd_ship_inspect (ctx, root);
     }

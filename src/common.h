@@ -245,4 +245,5 @@ bool json_get_int_flexible(json_t *data_obj, const char *key, int *out_val);
 const char *json_get_string_or_null(json_t *data_obj, const char *key);
 
 
+
 #endif // COMMON_H

@@ -39,12 +39,6 @@ static sqlite3 *g_fer_db = NULL;	/* <- cached here for trader helpers */
 #define NPC_TRADE_PLAYER_ID 0 
 
 /* Fallback logging macros  */
-#ifndef INFO_LOG
-#define INFO_LOG(...) server_log_printf(LOG_INFO, __VA_ARGS__)
-#endif
-#ifndef WARN_LOG
-#define WARN_LOG(...) server_log_printf(LOG_WARNING, __VA_ARGS__)
-#endif
 
 
 #ifndef FER_TRADER_COUNT
@@ -2731,7 +2725,7 @@ fer_init_once (void)
     return 1;
   if (!g_fer_db)
     {
-      WARN_LOG ("[fer] no DB handle; traders disabled");
+      LOGW ("[fer] no DB handle; traders disabled");
       g_fer_inited = 1;
       return 0;
     }
@@ -2762,7 +2756,7 @@ fer_init_once (void)
 
   if (home <= 0)
     {
-      WARN_LOG ("[fer] no 'Ferringhi' planet found; disabling traders");
+      LOGW ("[fer] no 'Ferringhi' planet found; disabling traders");
       g_fer_inited = 1;
       return 0;
     }
