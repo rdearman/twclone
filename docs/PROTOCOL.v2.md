@@ -1998,6 +1998,108 @@ Commands for interacting with the ledger-based economy. Most are only available 
 
 *   `port.status`: Get status information about a port.
 
+### 4.6. Shipyard Services
+Commands for interacting with shipyards to trade in and upgrade ship hulls.
+
+*   `shipyard.list`: Lists ship types available for purchase at the current shipyard.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+      "ts": "2025-11-07T18:00:00.000Z",
+      "command": "shipyard.list",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {}
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sa1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+      "ts": "2025-11-07T18:00:00.100Z",
+      "reply_to": "a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+      "status": "ok",
+      "type": "shipyard.list_v1",
+      "data": {
+        "sector_id": 1,
+        "is_shipyard": true,
+        "current_ship": {
+          "type": "Scout Marauder",
+          "base_price": 15950,
+          "trade_in_value": 7975
+        },
+        "available": [
+          {
+            "type": "Merchant Cruiser",
+            "name": "Merchant Cruiser",
+            "base_price": 41300,
+            "shipyard_price": 41300,
+            "trade_in_value": 7975,
+            "net_cost": 33325,
+            "eligible": true,
+            "reasons": []
+          },
+          {
+            "type": "Imperial Starship",
+            "name": "Imperial Starship",
+            "base_price": 329000,
+            "shipyard_price": 329000,
+            "trade_in_value": 7975,
+            "net_cost": 321025,
+            "eligible": false,
+            "reasons": [
+              "alignment_too_low",
+              "commission_too_low"
+            ]
+          }
+        ]
+      }
+    }
+    ```
+
+*   `shipyard.upgrade`: Atomically trades in the current ship for a new hull.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "b1c2d3e4-f5a6-b7c8-d9e0-f1a2b3c4d5e6",
+      "ts": "2025-11-07T18:05:00.000Z",
+      "command": "shipyard.upgrade",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {
+        "new_type_id": 1,
+        "new_ship_name": "My Mighty Cruiser"
+      }
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sb1c2d3e4-f5a6-b7c8-d9e0-f1a2b3c4d5e6",
+      "ts": "2025-11-07T18:05:00.100Z",
+      "reply_to": "b1c2d3e4-f5a6-b7c8-d9e0-f1a2b3c4d5e6",
+      "status": "ok",
+      "type": "shipyard.upgrade_v1",
+      "data": {
+        "sector_id": 1,
+        "new_type_id": 1,
+        "new_ship_name": "My Mighty Cruiser",
+        "cost_summary": {
+            "shipyard_price": 41300,
+            "trade_in_value": 7975,
+            "net_cost_before_tax": 33325,
+            "tax": 4130,
+            "final_cost": 37455
+        },
+        "credits_after": 62545
+      }
+    }
+    ```
+
+
     *Example Client Request:*
     ```json
     {
@@ -4039,6 +4141,18 @@ The error model uses HTTP-like status codes within the JSON response. `status: "
 *   **1200s**: Auth/Player
 *   **1700s**: Trade & Market
 *   **1800s**: Hardware & Upgrades
+    *   `1811 ERR_HARDWARE_NOT_AVAILABLE`: Hardware not sold at this location.
+    *   `1812 ERR_HARDWARE_INVALID_ITEM`: Invalid or disabled hardware item code.
+    *   `1813 ERR_HARDWARE_INSUFFICIENT_FUNDS`: Not enough credits for purchase.
+    *   `1814 ERR_HARDWARE_CAPACITY_EXCEEDED`: Ship cannot hold any more of this item.
+    *   `1815 ERR_HARDWARE_NOT_SUPPORTED_BY_SHIP`: Ship type cannot equip this module.
+    *   `1816 ERR_HARDWARE_QUANTITY_INVALID`: Quantity must be greater than zero.
+    *   `1820 ERR_NOT_AT_SHIPYARD`: Player is not docked at a valid shipyard port.
+    *   `1821 ERR_SHIPYARD_REQUIREMENTS_NOT_MET`: Player does not meet alignment, commission, or other requirements.
+    *   `1822 ERR_SHIPYARD_INSUFFICIENT_FUNDS`: Player does not have enough credits for the upgrade.
+    *   `1823 ERR_SHIPYARD_INVALID_SHIP_TYPE`: The requested ship type ID is invalid.
+    *   `1824 ERR_SHIPYARD_SHIP_TYPE_NOT_AVAILABLE_HERE`: The requested ship is not for sale at this shipyard.
+    *   `1825 ERR_SHIPYARD_CAPACITY_MISMATCH`: Current cargo or hardware would not fit on the new hull.
 *   **2100s**: Banking & Finance (New)
 *   **2200s**: Stocks & R&D (New)
 *   **2300s**: Loans & Insurance (New)
