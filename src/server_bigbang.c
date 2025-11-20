@@ -78,7 +78,15 @@ config_load (void)
     "       default_nodes, "
     "       buff_size, "
     "       max_name_length, "
-    "       planet_type_count " "FROM config WHERE id=1;";
+    "       planet_type_count, "
+    "       shipyard_enabled, "
+    "       shipyard_trade_in_factor_bp, "
+    "       shipyard_require_cargo_fit, "
+    "       shipyard_require_fighters_fit, "
+    "       shipyard_require_shields_fit, "
+    "       shipyard_require_hardware_compat, "
+    "       shipyard_tax_bp "
+    "FROM config WHERE id=1;";
 
 
 
@@ -120,6 +128,13 @@ config_load (void)
       cfg->buff_size = sqlite3_column_int (stmt, 16);
       cfg->max_name_length = sqlite3_column_int (stmt, 17);
       cfg->planet_type_count = sqlite3_column_int (stmt, 18);
+      cfg->shipyard_enabled = sqlite3_column_int (stmt, 19);
+      cfg->shipyard_trade_in_factor_bp = sqlite3_column_int (stmt, 20);
+      cfg->shipyard_require_cargo_fit = sqlite3_column_int (stmt, 21);
+      cfg->shipyard_require_fighters_fit = sqlite3_column_int (stmt, 22);
+      cfg->shipyard_require_shields_fit = sqlite3_column_int (stmt, 23);
+      cfg->shipyard_require_hardware_compat = sqlite3_column_int (stmt, 24);
+      cfg->shipyard_tax_bp = sqlite3_column_int (stmt, 25);
 
       // fprintf(stderr, "DEBUG:
       //        cfg->maxwarps_per_sector);

@@ -36,6 +36,14 @@
 // Helper for stringification of macros
 #define QUOTE(name) #name
 
+// Function prototypes for shipyard commands
+int cmd_shipyard_list(client_ctx_t *ctx, json_t *root);
+int cmd_shipyard_upgrade(client_ctx_t *ctx, json_t *root);
+
+// Function prototypes for shipyard commands
+int cmd_shipyard_list(client_ctx_t *ctx, json_t *root);
+int cmd_shipyard_upgrade(client_ctx_t *ctx, json_t *root);
+
 // Function prototypes for hardware-related commands
 int cmd_hardware_list(client_ctx_t *ctx, json_t *root);
 int cmd_hardware_buy(client_ctx_t *ctx, json_t *root);

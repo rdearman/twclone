@@ -58,6 +58,15 @@ extern "C"
     int buff_size;
     int max_name_length;
     int planet_type_count;
+
+    /* Shipyard Configuration */
+    int shipyard_enabled;
+    int shipyard_trade_in_factor_bp;
+    int shipyard_require_cargo_fit;
+    int shipyard_require_fighters_fit;
+    int shipyard_require_shields_fit;
+    int shipyard_require_hardware_compat;
+    int shipyard_tax_bp;
   };
 
   typedef struct

@@ -226,6 +226,8 @@ static const cmd_desc_t k_supported_cmds_fallback[] = {
     {"ship.status", "Ship status"},
     {"ship.transfer_cargo", "Transfer cargo"},
     {"ship.upgrade", "Upgrade a ship"},
+    {"shipyard.list", "List available ship hulls"},
+    {"shipyard.upgrade", "Upgrade to a new ship hull"},
     {"stock.exchange.list_stocks", "List stocks on the exchange"},
     {"stock.exchange.orders.cancel", "Cancel a stock order"},
     {"stock.exchange.orders.create", "Create a stock order"},
@@ -884,6 +886,15 @@ process_message (client_ctx_t *ctx, json_t *root)
     else if (!strcasecmp (c, "hardware.buy"))
       {
         rc = cmd_hardware_buy (ctx, root);
+      }
+  /* ---------- SHIPYARD ---------- */
+    else if (!strcasecmp (c, "shipyard.list"))
+      {
+        rc = cmd_shipyard_list (ctx, root);
+      }
+    else if (!strcasecmp (c, "shipyard.upgrade"))
+      {
+        rc = cmd_shipyard_upgrade (ctx, root);
       }
   /* ---------- SHIP ---------- */
     else if (!strcasecmp (c, "ship.inspect"))

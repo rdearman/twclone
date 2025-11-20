@@ -1,0 +1,93 @@
+[
+  {
+    "name": "Setup: Populate Shipyard",
+    "description": "Add some ships to the Stardock shipyard inventory for testing.",
+    "steps": [
+      "Ensure player is at Stardock (sector 1, port 1).",
+      "Run SQL: INSERT OR IGNORE INTO shipyard_inventory (port_id, ship_type_id, enabled) VALUES (1, 2, 1); -- Scout Marauder",
+      "Run SQL: INSERT OR IGNORE INTO shipyard_inventory (port_id, ship_type_id, enabled) VALUES (1, 9, 1); -- Imperial Starship (requires high stats)",
+      "Run SQL: INSERT OR IGNORE INTO shipyard_inventory (port_id, ship_type_id, enabled) VALUES (1, 16, 1); -- Ferrengi Warship (normally not purchasable)"
+    ]
+  },
+  {
+    "name": "Test: shipyard.list at Stardock",
+    "description": "Verify that the list command works correctly at a valid shipyard.",
+    "command": {
+      "command": "shipyard.list"
+    },
+    "expected_outcome": "A successful response containing a list of available ships, including the Scout Marauder, Imperial Starship, and Ferrengi Warship. Check that the prices and trade-in values are calculated correctly."
+  },
+  {
+    "name": "Test: shipyard.list outside Shipyard",
+    "description": "Verify that the command fails when not at a shipyard.",
+    "steps": [
+      "Move to a sector without a shipyard port (e.g., sector 2)."
+    ],
+    "command": {
+      "command": "shipyard.list"
+    },
+    "expected_outcome": "An error response with the code `ERR_NOT_AT_SHIPYARD`."
+  },
+  {
+    "name": "Test: Eligibility - Requirements not met",
+    "description": "Verify that a ship for which the player does not meet requirements is listed as ineligible.",
+    "command": {
+      "command": "shipyard.list"
+    },
+    "expected_outcome": "In the 'available' array, the 'Imperial Starship' should have `eligible: false` and the `reasons` array should contain items like `alignment_too_low`, `commission_too_low`, etc. (assuming default player stats)."
+  },
+    {
+    "name": "Test: Eligibility - Cargo does not fit",
+    "description": "Verify that a ship is listed as ineligible if current cargo exceeds the new hull's capacity.",
+    "steps": [
+        "Load current ship with more cargo than a Scout Marauder can hold (max holds: 25)."
+    ],
+    "command": {
+      "command": "shipyard.list"
+    },
+    "expected_outcome": "The 'Scout Marauder' should have `eligible: false` and the `reasons` array should contain `cargo_would_not_fit`."
+  },
+  {
+    "name": "Test: Successful Upgrade",
+    "description": "Perform a valid ship upgrade and verify the results.",
+    "steps": [
+        "Ensure current ship's cargo, fighters, etc., will fit in the new ship.",
+        "Ensure player has enough credits."
+    ],
+    "command": {
+      "command": "shipyard.upgrade",
+      "data": {
+        "new_type_id": 2,
+        "new_ship_name": "My New Scout"
+      }
+    },
+    "expected_outcome": "A successful response. Verify that the player's ship type is now 'Scout Marauder', the name is 'My New Scout', and credits have been deducted correctly (including tax). Check with a `player.my_info` command."
+  },
+  {
+    "name": "Test: Failed Upgrade - Insufficient Funds",
+    "description": "Attempt an upgrade without enough credits.",
+    "steps": [
+      "Set player's ship credits to a low value (e.g., 100)."
+    ],
+    "command": {
+      "command": "shipyard.upgrade",
+      "data": {
+        "new_type_id": 2,
+        "new_ship_name": "Broke Mobile"
+      }
+    },
+    "expected_outcome": "An error response with the code `ERR_SHIPYARD_INSUFFICIENT_FUNDS`."
+  },
+    {
+    "name": "Test: Failed Upgrade - Ineligible",
+    "description": "Attempt to upgrade to a ship for which requirements are not met.",
+    "command": {
+      "command": "shipyard.upgrade",
+      "data": {
+        "new_type_id": 9,
+        "new_ship_name": "Wishful Thinking"
+      }
+    },
+    "expected_outcome": "An error response with the code `ERR_SHIPYARD_REQUIREMENTS_NOT_MET`."
+  }
+]

@@ -381,7 +381,14 @@ const char *create_table_sql[] = {
     "  genesis_class_weight_L INTEGER NOT NULL DEFAULT 10, "
     "  genesis_class_weight_C INTEGER NOT NULL DEFAULT 10, "
     "  genesis_class_weight_H INTEGER NOT NULL DEFAULT 10, "
-    "  genesis_class_weight_U INTEGER NOT NULL DEFAULT 5 "
+    "  genesis_class_weight_U INTEGER NOT NULL DEFAULT 5, "
+    "  shipyard_enabled INTEGER NOT NULL DEFAULT 1, "
+    "  shipyard_trade_in_factor_bp INTEGER NOT NULL DEFAULT 5000, "
+    "  shipyard_require_cargo_fit INTEGER NOT NULL DEFAULT 1, "
+    "  shipyard_require_fighters_fit INTEGER NOT NULL DEFAULT 1, "
+    "  shipyard_require_shields_fit INTEGER NOT NULL DEFAULT 1, "
+    "  shipyard_require_hardware_compat INTEGER NOT NULL DEFAULT 1, "
+    "  shipyard_tax_bp INTEGER NOT NULL DEFAULT 1000 "
   " ); ",
 
   " CREATE TABLE IF NOT EXISTS trade_idempotency ( "
@@ -432,6 +439,7 @@ const char *create_table_sql[] = {
   " ship INTEGER,  "	
   " experience INTEGER,  "
   " alignment INTEGER,  "
+  " commission INTEGER DEFAULT 0,  "
   " credits INTEGER,  "
   " flags INTEGER,  "
   " login_time INTEGER,  "
@@ -456,6 +464,9 @@ const char *create_table_sql[] = {
     "   id INTEGER PRIMARY KEY AUTOINCREMENT,  "
     "   name TEXT NOT NULL UNIQUE,  "
     "   basecost INTEGER,  "
+    "   required_alignment INTEGER,  "
+    "   required_commission INTEGER,  "
+    "   required_experience INTEGER,  "
     "   maxattack INTEGER,  "
     "   initialholds INTEGER,  "
     "   maxholds INTEGER,  "
@@ -475,8 +486,10 @@ const char *create_table_sql[] = {
     "   can_long_range_scan INTEGER NOT NULL DEFAULT 0,  "
     "   can_planet_scan INTEGER NOT NULL DEFAULT 0,  "
     "   maxphotons INTEGER, /* Photon torpedo count */  "
-    "   can_cloak INTEGER NOT NULL DEFAULT 0, "
-    "   can_purchase INTEGER /* Can be bought at a port (0/1) */  " " );  ",
+    "   max_cloaks INTEGER NOT NULL DEFAULT 0, "
+    "   can_purchase INTEGER, /* Can be bought at a port (0/1) */  "
+    "   enabled INTEGER NOT NULL DEFAULT 1 "
+" );  ",
 
     " CREATE TABLE IF NOT EXISTS ships (  "
 
@@ -884,6 +897,20 @@ const char *create_table_sql[] = {
     "    FOREIGN KEY (owner_id) REFERENCES players(id)" ");",
 
   "CREATE INDEX IF NOT EXISTS ix_stardock_owner ON stardock_assets(owner_id);",
+
+  "CREATE TABLE IF NOT EXISTS shipyard_inventory ("
+    "    port_id         INTEGER NOT NULL REFERENCES ports(id),"
+    "    ship_type_id    INTEGER NOT NULL REFERENCES shiptypes(id),"
+    "    enabled         INTEGER NOT NULL DEFAULT 1,"
+    "    PRIMARY KEY (port_id, ship_type_id)"
+  ");",
+
+  "CREATE TABLE IF NOT EXISTS shipyard_inventory ("
+    "    port_id         INTEGER NOT NULL REFERENCES ports(id),"
+    "    ship_type_id    INTEGER NOT NULL REFERENCES shiptypes(id),"
+    "    enabled         INTEGER NOT NULL DEFAULT 1,"
+    "    PRIMARY KEY (port_id, ship_type_id)"
+  ");",
 
   "CREATE TABLE IF NOT EXISTS planet_goods ("
     "    planet_id      INTEGER NOT NULL,"
@@ -1367,68 +1394,36 @@ const char *create_table_sql[] = {
 
 const char *insert_default_sql[] = {
   /* Config defaults */
-  "INSERT OR IGNORE INTO config (id, turnsperday, maxwarps_per_sector, startingcredits, startingfighters, startingholds, processinterval, autosave, max_ports, max_planets_per_sector, max_total_planets, max_citadel_level, number_of_planet_types, max_ship_name_length, ship_type_count, hash_length, default_nodes, buff_size, max_name_length, planet_type_count, server_port, s2s_port, bank_alert_threshold_player, bank_alert_threshold_corp) "
-    "VALUES (1, 120, 6, 1000, 10, 20, 1, 5, 200, 6, 300, 6, 8, 50, 8, 128, 500, 1024, 50, 8, 1234, 4321, 1000000, 5000000);",
+  "INSERT OR IGNORE INTO config (id, turnsperday, maxwarps_per_sector, startingcredits, startingfighters, startingholds, processinterval, autosave, max_ports, max_planets_per_sector, max_total_planets, max_citadel_level, number_of_planet_types, max_ship_name_length, ship_type_count, hash_length, default_nodes, buff_size, max_name_length, planet_type_count, server_port, s2s_port, bank_alert_threshold_player, bank_alert_threshold_corp, genesis_enabled, genesis_block_at_cap, genesis_navhaz_delta, genesis_class_weight_M, genesis_class_weight_K, genesis_class_weight_O, genesis_class_weight_L, genesis_class_weight_C, genesis_class_weight_H, genesis_class_weight_U, shipyard_enabled, shipyard_trade_in_factor_bp, shipyard_require_cargo_fit, shipyard_require_fighters_fit, shipyard_require_shields_fit, shipyard_require_hardware_compat, shipyard_tax_bp) "
+    "VALUES (1, 120, 6, 1000, 10, 20, 1, 5, 200, 6, 300, 6, 8, 50, 8, 128, 500, 1024, 50, 8, 1234, 4321, 1000000, 5000000, 1, 0, 0, 10, 10, 10, 10, 10, 10, 5, 1, 5000, 1, 1, 1, 1, 1000);",
 
 
-/* Shiptypes: name, basecost, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, twarp, transportrange, maxshields, offense, defense, maxbeacons, holo, planet, maxphotons, can_purchase */
+/* Shiptypes: name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled */
 
 /* Initial Ship Types (First Block) */
-  " INSERT OR IGNORE INTO shiptypes VALUES (NULL, 'Merchant Cruiser', 41300, 750, 20, 75, 2500, 3, 50, 0, 5, 0, 5, 400,\
- 10, 10, 0, 1, 1, 0, 1); ",
-  " INSERT OR IGNORE INTO shiptypes VALUES (NULL, 'Scout Marauder', 15950, 250, 10, 25, 250, 2, 0, 0, 0, 0, 0, 100, 20,\
- 20, 0, 1, 1, 0, 1); ",
-  " INSERT OR IGNORE INTO shiptypes VALUES (NULL, 'Missile Frigate', 100000, 2000, 12, 60, 5000, 3, 5, 0, 0, 0, 2, 400,\
- 13, 13, 5, 0, 0, 1, 1); ",
-  " INSERT OR IGNORE INTO shiptypes VALUES (NULL, 'Battleship', 88500, 3000, 16, 80, 10000, 4, 25, 0, 1, 0, 8, 750, 16,\
- 16, 50, 1, 1, 0, 1); ",
-  " INSERT OR IGNORE INTO shiptypes VALUES (NULL, 'Corporate Flagship', 163500, 6000, 20, 85, 20000, 3, 100, 0, 10, 1,\
- 10, 1500, 12, 12, 100, 1, 1, 1, 1); ",
-  " INSERT OR IGNORE INTO shiptypes VALUES (NULL, 'Colonial Transport', 63600, 100, 50, 250, 200, 6, 0, 0, 5, 0, 7, 500,\
- 6, 6, 10, 0, 1, 0, 1); ",
-  " INSERT OR IGNORE INTO shiptypes VALUES (NULL, 'Cargo Transport', 51950, 125, 50, 125, 400, 4, 1, 0, 2, 0, 5, 1000, 8,\
- 8, 20, 1, 1, 0, 1); ",
-  " INSERT OR IGNORE INTO shiptypes VALUES (NULL, 'Merchant Freighter', 33400, 100, 30, 65, 300, 2, 2, 0, 2, 0, 5, 500,\
- 8, 8, 20, 1, 1, 0, 1); ",
-  " INSERT OR IGNORE INTO shiptypes VALUES (NULL, 'Imperial Starship', 329000, 10000, 40, 150, 50000, 4, 125, 0, 10, 1,\
- 15, 2000, 15, 15, 150, 1, 1, 1, 1); ",
-  " INSERT OR IGNORE INTO shiptypes VALUES (NULL, 'Havoc Gunstar', 79000, 1000, 12, 50, 10000, 3, 5, 0, 1, 1, 6, 3000,\
- 13, 13, 5, 1, 0, 0, 1); ",
-  " INSERT OR IGNORE INTO shiptypes VALUES (NULL, 'Constellation', 72500, 2000, 20, 80, 5000, 3, 25, 0, 2, 0, 6, 750, 14,\
- 14, 50, 1, 1, 0, 1); ",
-  " INSERT OR IGNORE INTO shiptypes VALUES (NULL, 'T''khasi Orion', 42500, 250, 30, 60, 750, 2, 5, 0, 1, 0, 3, 750, 11, 11,\
- 20, 1, 1, 0, 1); ",
-  " INSERT OR IGNORE INTO shiptypes VALUES (NULL, 'Tholian Sentinel', 47500, 800, 10, 50, 2500, 4, 50, 0, 1, 0, 3, 4000,\
- 1, 1, 10, 1, 0, 0, 1); ",
-  " INSERT OR IGNORE INTO shiptypes VALUES (NULL, 'Taurean Mule', 63600, 150, 50, 150, 300, 4, 0, 0, 1, 0, 5, 600, 5, 5,\
- 20, 1, 1, 0, 1); ",
-  " INSERT OR IGNORE INTO shiptypes VALUES (NULL, 'Interdictor Cruiser', 539000, 15000, 10, 40, 100000, 15, 200, 0, 20,\
- 0, 20, 4000, 12, 12, 100, 1, 1, 0, 1); ",
-  " INSERT OR IGNORE INTO shiptypes VALUES (NULL, 'Ferrengi Warship', 150000, 5000, 20, 100, 15000, 5, 20, 0, 5, 0, 10,\
- 5000, 15, 15, 50, 1, 1, 1, 0); ",
-  " INSERT OR IGNORE INTO shiptypes VALUES (NULL, 'Imperial Starship (NPC)', 329000, 10000, 40, 150, 50000, 4, 125, 0,\
- 10, 1, 15, 2000, 15, 15, 150, 1, 1, 1, 0); "
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Merchant Cruiser', 41300, NULL, NULL, NULL, 750, 20, 75, 2500, 3, 50, 0, 5, 0, 0, 0, 5, 400, 10, 10, 0, 1, 1, 0, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Scout Marauder', 15950, NULL, NULL, NULL, 250, 10, 25, 250, 2, 0, 0, 0, 0, 0, 0, 0, 100, 20, 20, 0, 1, 1, 0, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Missile Frigate', 100000, NULL, NULL, NULL, 2000, 12, 60, 5000, 3, 5, 0, 0, 0, 0, 0, 2, 400, 13, 13, 5, 0, 0, 1, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Battleship', 88500, NULL, NULL, NULL, 3000, 16, 80, 10000, 4, 25, 0, 1, 0, 0, 0, 8, 750, 16, 16, 50, 1, 1, 0, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Corporate Flagship', 163500, NULL, NULL, NULL, 6000, 20, 85, 20000, 3, 100, 0, 10, 0, 0, 1, 10, 1500, 12, 12, 100, 1, 1, 1, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Colonial Transport', 63600, NULL, NULL, NULL, 100, 50, 250, 200, 6, 0, 0, 5, 0, 0, 0, 7, 500, 6, 6, 10, 0, 1, 0, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Cargo Transport', 51950, NULL, NULL, NULL, 125, 50, 125, 400, 4, 1, 0, 2, 0, 0, 0, 5, 1000, 8, 8, 20, 1, 1, 0, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Merchant Freighter', 33400, NULL, NULL, NULL, 100, 30, 65, 300, 2, 2, 0, 2, 0, 0, 0, 5, 500, 8, 8, 20, 1, 1, 0, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Imperial Starship', 329000, NULL, NULL, NULL, 10000, 40, 150, 50000, 4, 125, 0, 10, 0, 0, 1, 15, 2000, 15, 15, 150, 1, 1, 1, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Havoc Gunstar', 79000, NULL, NULL, NULL, 1000, 12, 50, 10000, 3, 5, 0, 1, 0, 0, 1, 6, 3000, 13, 13, 5, 1, 0, 0, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Constellation', 72500, NULL, NULL, NULL, 2000, 20, 80, 5000, 3, 25, 0, 2, 0, 0, 0, 6, 750, 14, 14, 50, 1, 1, 0, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('T''khasi Orion', 42500, NULL, NULL, NULL, 250, 30, 60, 750, 2, 5, 0, 1, 0, 0, 0, 3, 750, 11, 11, 20, 1, 1, 0, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Tholian Sentinel', 47500, NULL, NULL, NULL, 800, 10, 50, 2500, 4, 50, 0, 1, 0, 0, 0, 3, 4000, 1, 1, 10, 1, 0, 0, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Taurean Mule', 63600, NULL, NULL, NULL, 150, 50, 150, 300, 4, 0, 0, 1, 0, 0, 0, 5, 600, 5, 5, 20, 1, 1, 0, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Interdictor Cruiser', 539000, NULL, NULL, NULL, 15000, 10, 40, 100000, 15, 200, 0, 20, 0, 0, 0, 20, 4000, 12, 12, 100, 1, 1, 0, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Ferrengi Warship', 150000, NULL, NULL, NULL, 5000, 20, 100, 15000, 5, 20, 0, 5, 0, 0, 0, 10, 5000, 15, 15, 50, 1, 1, 1, 0, 0, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Imperial Starship (NPC)', 329000, NULL, NULL, NULL, 10000, 40, 150, 50000, 4, 125, 0, 10, 0, 0, 1, 15, 2000, 15, 15, 150, 1, 1, 1, 0, 0, 1); ",
 /* Orion Syndicate Ship Types (Second Block) */
-    " INSERT OR IGNORE INTO shiptypes (name, basecost, maxattack, initialholds, maxholds, maxfighters, turns, maxmines,\
- maxlimpets, maxgenesis, twarp, transportrange, maxshields, offense, defense, maxbeacons, holo, planet, maxphotons,\
- can_purchase) VALUES ('Orion Heavy Fighter Patrol', 150000, 5000, 20, 50, 20000, 5, 10, 0, 5, 0, 10, 5000, 20, 10,\
- 25, 1, 1, 1, 0); ",
-  " INSERT OR IGNORE INTO shiptypes (name, basecost, maxattack, initialholds, maxholds, maxfighters, turns, maxmines,\
- maxlimpets, maxgenesis, twarp, transportrange, maxshields, offense, defense, maxbeacons, holo, planet, maxphotons,\
- can_purchase) VALUES ('Orion Scout/Looter', 80000, 4000, 10, 150, 5000, 5, 10, 0, 5, 0, 10, 3000, 8, 8, 25, 1, 1,\
- 1, 0); ",
-  " INSERT OR IGNORE INTO shiptypes (name, basecost, maxattack, initialholds, maxholds, maxfighters, turns, maxmines,\
- maxlimpets, maxgenesis, twarp, transportrange, maxshields, offense, defense, maxbeacons, holo, planet, maxphotons,\
- can_purchase) VALUES ('Orion Contraband Runner', 120000, 3000, 10, 200, 3000, 5, 10, 0, 5, 0, 10, 4000, 10, 5, 25,\
- 1, 1, 1, 0); ",
-  " INSERT OR IGNORE INTO shiptypes (name, basecost, maxattack, initialholds, maxholds, maxfighters, turns, maxmines,\
- maxlimpets, maxgenesis, twarp, transportrange, maxshields, offense, defense, maxbeacons, holo, planet, maxphotons,\
- can_purchase) VALUES ('Orion Smuggler''s Kiss', 130000, 5000, 15, 100, 10000, 5, 10, 0, 5, 0, 10, 5000, 15, 15, 25,\
- 1, 1, 1, 0); ",
-  " INSERT OR IGNORE INTO shiptypes (name, basecost, maxattack, initialholds, maxholds, maxfighters, turns, maxmines,\
- maxlimpets, maxgenesis, twarp, transportrange, maxshields, offense, defense, maxbeacons, holo, planet, maxphotons,\
- can_purchase) VALUES ('Orion Black Market Guard', 180000, 6000, 20, 60, 8000, 5, 10, 0, 5, 0, 10, 8000, 12, 25, 25,\
- 1, 1, 1, 0); "
+    " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Orion Heavy Fighter Patrol', 150000, NULL, NULL, NULL, 5000, 20, 50, 20000, 5, 10, 0, 5, 0, 0, 0, 10, 5000, 20, 10, 25, 1, 1, 1, 0, 0, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Orion Scout/Looter', 80000, NULL, NULL, NULL, 4000, 10, 150, 5000, 5, 10, 0, 5, 0, 0, 0, 10, 3000, 8, 8, 25, 1, 1, 1, 0, 0, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Orion Contraband Runner', 120000, NULL, NULL, NULL, 3000, 10, 200, 3000, 5, 10, 0, 5, 0, 0, 0, 10, 4000, 10, 5, 25, 1, 1, 1, 0, 0, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Orion Smuggler''s Kiss', 130000, NULL, NULL, NULL, 5000, 15, 100, 10000, 5, 10, 0, 5, 0, 0, 0, 10, 5000, 15, 15, 25, 1, 1, 1, 0, 0, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Orion Black Market Guard', 180000, NULL, NULL, NULL, 6000, 20, 60, 8000, 5, 10, 0, 5, 0, 0, 0, 10, 8000, 12, 25, 25, 1, 1, 1, 0, 0, 1); "
     "INSERT OR IGNORE INTO ship_roles (role_id, role, role_description) VALUES (1, 'owner',   'Legal owner; can sell/rename, set availability, assign others');",
   "INSERT OR IGNORE INTO ship_roles (role_id, role, role_description) VALUES (2, 'pilot',   'Currently flying the ship; usually the active ship for the player');",
   "INSERT OR IGNORE INTO ship_roles (role_id, role, role_description) VALUES (3, 'crew',    'Can board and use limited functions (e.g., scan, fire fighters)');",
