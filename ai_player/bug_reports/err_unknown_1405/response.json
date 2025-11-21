@@ -1,7 +1,7 @@
 {
     "id": "srv-refuse",
-    "reply_to": "c-93ffed69",
-    "ts": "2025-11-21T07:12:38Z",
+    "reply_to": "c-c958b22d",
+    "ts": "2025-11-21T13:40:33Z",
     "status": "refused",
     "type": "error",
     "error": {

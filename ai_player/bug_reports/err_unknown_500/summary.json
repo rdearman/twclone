@@ -1,7 +1,0 @@
-{
-    "bug_id": "err_unknown_500",
-    "first_seen": "20251121_071240_832",
-    "command": "unknown",
-    "error_code": 500,
-    "error_message": "Could not retrieve bank balance."
-}

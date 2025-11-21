@@ -1,5 +1,5 @@
 {
-    "session_id": "8552a22c7838d310f130bab227b1cb6c5a9c0d99b41ef3ba1e54fa3e99f26e62",
+    "session_id": "dc9bf1d584dfafc39cb5b38dc8aff39e84a4f22c94c10c6a1cec70d6242a410d",
     "player_info": {
         "player": {
             "id": 4,
@@ -73,9 +73,17 @@
                     "ship_name": "Bit Banger",
                     "ship_type": "Merchant Cruiser",
                     "owner": "derelict"
+                },
+                {
+                    "id": 2,
+                    "name": "QA Bot 1",
+                    "type": "Scout Marauder",
+                    "ship_name": "QA Bot 1",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot"
                 }
             ],
-            "ships_count": 1,
+            "ships_count": 2,
             "ports_count": 1,
             "counts": {
                 "fighters": 0,
@@ -99,51 +107,57 @@
     "bank_balance": 0,
     "command_retry_info": {
         "sector.info": {
-            "next_retry_time": 1763709161.7355747
+            "next_retry_time": 1763732435.3394992
         },
         "session.goodbye": {
             "failures": 1,
-            "next_retry_time": 1763709167.241563
+            "next_retry_time": 1763732440.8462
         },
         "system.schema_list": {
             "failures": 1,
-            "next_retry_time": 1763709167.2437112
+            "next_retry_time": 1763732440.848561
         },
         "auth.mfa": {
             "failures": 1,
-            "next_retry_time": 1763709167.2452633
+            "next_retry_time": 1763732440.8501854
         },
         "players.me": {
             "failures": 1,
-            "next_retry_time": 1763709167.2464015
+            "next_retry_time": 1763732440.851393
         },
         "players.online": {
             "failures": 1,
-            "next_retry_time": 1763709167.2471704
+            "next_retry_time": 1763732440.8522081
         },
         "players.refresh": {
             "failures": 1,
-            "next_retry_time": 1763709167.2479608
+            "next_retry_time": 1763732440.853069
         },
         "move.force_move": {
             "failures": 1,
-            "next_retry_time": 1763709167.2515397
+            "next_retry_time": 1763732440.8566856
         },
         "sector.scan.density": {
-            "next_retry_time": 1763709162.2602737
+            "next_retry_time": 1763732435.864917
         },
         "trade.port_info": {
-            "next_retry_time": 1763709162.7754858
+            "next_retry_time": 1763732436.3787208
+        },
+        "trade.quote": {
+            "next_retry_time": 1763732436.8932972
+        },
+        "move.warp": {
+            "next_retry_time": 1763732437.4035585
+        },
+        "bank.deposit": {
+            "next_retry_time": 1763732437.9111743
         },
         "unknown": {
             "failures": 2,
-            "next_retry_time": 1763709179.2986412
-        },
-        "trade.quote": {
-            "next_retry_time": 1763709163.287472
+            "next_retry_time": 1763732453.9251451
         },
         "trade.sell": {
-            "next_retry_time": 1763709163.7977972
+            "next_retry_time": 1763732438.4243212
         }
     },
     "strategy_plan": [
@@ -462,34 +476,34 @@
         "move.force_move"
     ],
     "pending_schema_requests": {
-        "system.cmd_list": "c-d7962bfc",
-        "session.hello": "c-08f9a371",
-        "session.ping": "c-e339c58d",
-        "session.goodbye": "c-fc4c7dff",
-        "system.schema_list": "c-6e7c63ca",
-        "auth.login": "c-6f3fb107",
-        "auth.logout": "c-c94ece4f",
-        "auth.mfa": "c-1956526f",
-        "auth.register": "c-2582ce54",
-        "players.me": "c-bcdcb6fe",
-        "players.online": "c-de9ade0c",
-        "players.refresh": "c-2d26d2cb",
-        "ship.info": "c-1af63dce",
-        "sector.info": "c-c412c024",
-        "sector.set_beacon": "c-b9666b85",
-        "move.warp": "c-b592cc78",
-        "move.scan": "c-7a82f887",
-        "move.pathfind": "c-6a0b793f",
-        "move.force_move": "c-6fdcc316",
-        "trade.accept": "c-0670fb8c",
-        "trade.buy": "c-9c64c50e",
-        "trade.cancel": "c-21b7f778",
-        "trade.history": "c-921656e1",
-        "trade.jettison": "c-73139a99",
-        "trade.offer": "c-59be28ce",
-        "trade.port_info": "c-fa8390fd",
-        "trade.quote": "c-8c735db4",
-        "trade.sell": "c-321b7e99"
+        "system.cmd_list": "c-71693bfb",
+        "session.hello": "c-e89f399f",
+        "session.ping": "c-09be67b0",
+        "session.goodbye": "c-cf53a319",
+        "system.schema_list": "c-72ed4e77",
+        "auth.login": "c-25ec6445",
+        "auth.logout": "c-49ae2981",
+        "auth.mfa": "c-81e846e4",
+        "auth.register": "c-6b59e508",
+        "players.me": "c-ba97e3a9",
+        "players.online": "c-e820e298",
+        "players.refresh": "c-15736341",
+        "ship.info": "c-fc5d3005",
+        "sector.info": "c-c6124793",
+        "sector.set_beacon": "c-2ab2c1ce",
+        "move.warp": "c-5a6d1826",
+        "move.scan": "c-524488e2",
+        "move.pathfind": "c-ebbbc3fe",
+        "move.force_move": "c-91d92611",
+        "trade.accept": "c-ea6ce2bc",
+        "trade.buy": "c-a5f8dbec",
+        "trade.cancel": "c-9a4ca478",
+        "trade.history": "c-c9ee5d41",
+        "trade.jettison": "c-396b86a2",
+        "trade.offer": "c-196ca141",
+        "trade.port_info": "c-c2f58aa8",
+        "trade.quote": "c-96b764cd",
+        "trade.sell": "c-ca0764ac"
     },
     "recent_sectors": [],
     "last_action": "trade.sell",

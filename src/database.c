@@ -491,7 +491,7 @@ const char *create_table_sql[] = {
   " CREATE TABLE IF NOT EXISTS tavern_loans ( "
   "   player_id      INTEGER PRIMARY KEY REFERENCES players(id), "
   "   principal      INTEGER NOT NULL, "
-  "   interest_rate  INTEGER NOT NULL,     -- basis points "
+  "   interest_rate  INTEGER NOT NULL, "
   "   due_date       INTEGER NOT NULL, "
   "   is_defaulted   INTEGER NOT NULL DEFAULT 0 "
   " ); ",
@@ -639,6 +639,7 @@ const char *create_table_sql[] = {
       "   onplanet INTEGER,  "
 
       "   destroyed INTEGER DEFAULT 0,  "  
+      "   hull INTEGER NOT NULL DEFAULT 100, "  
 
       "   CONSTRAINT check_current_cargo_limit CHECK ( (colonists + equipment + organics + ore) <= holds ), "
 
@@ -1001,21 +1002,35 @@ const char *create_table_sql[] = {
     "    PRIMARY KEY (port_id, ship_type_id)"
   ");",
 
-  "CREATE TABLE IF NOT EXISTS shipyard_inventory ("
-    "    port_id         INTEGER NOT NULL REFERENCES ports(id),"
-    "    ship_type_id    INTEGER NOT NULL REFERENCES shiptypes(id),"
-    "    enabled         INTEGER NOT NULL DEFAULT 1,"
-    "    PRIMARY KEY (port_id, ship_type_id)"
-  ");",
+    "CREATE TABLE IF NOT EXISTS shipyard_inventory ("    "    port_id         INTEGER NOT NULL REFERENCES ports(id),"    "    ship_type_id    INTEGER NOT NULL REFERENCES shiptypes(id),"    "    enabled         INTEGER NOT NULL DEFAULT 1,"    "    PRIMARY KEY (port_id, ship_type_id)"  ");",
 
-  "CREATE TABLE IF NOT EXISTS planet_goods ("
-    "    planet_id      INTEGER NOT NULL,"
-    "    commodity      TEXT NOT NULL CHECK(commodity IN ('ore', 'organics', 'equipment', 'food', 'fuel')),"
-    "    quantity       INTEGER NOT NULL DEFAULT 0,"
-    "    max_capacity   INTEGER NOT NULL,"
-    "    production_rate INTEGER NOT NULL,"
-    "    PRIMARY KEY (planet_id, commodity),"
-    "    FOREIGN KEY (planet_id) REFERENCES planets(id)" ");",
+  
+
+      " CREATE TABLE IF NOT EXISTS podded_status ( "
+
+  
+
+      "   player_id INTEGER PRIMARY KEY REFERENCES players(id), "
+
+  
+
+      "   status TEXT NOT NULL DEFAULT 'active', "
+
+  
+
+      "   big_sleep_until INTEGER, "
+
+  
+
+      "   reason TEXT "
+
+  
+
+      " ); ",
+
+  
+
+    "CREATE TABLE IF NOT EXISTS planet_goods ("    "    planet_id      INTEGER NOT NULL,"    "    commodity      TEXT NOT NULL CHECK(commodity IN ('ore', 'organics', 'equipment', 'food', 'fuel')),"    "    quantity       INTEGER NOT NULL DEFAULT 0,"    "    max_capacity   INTEGER NOT NULL,"    "    production_rate INTEGER NOT NULL,"    "    PRIMARY KEY (planet_id, commodity),"    "    FOREIGN KEY (planet_id) REFERENCES planets(id)" ");",
 
 
 
@@ -1660,8 +1675,8 @@ const char *insert_default_sql[] = {
     "20000,50000,20000, " "0,0,0,0,0, " "20000,50000,10000,1000000,-0.10);",
 
   /* Earth planet in sector 1 */
-  " INSERT OR IGNORE INTO planets (num, sector, name, owner, population, type, creator, colonist, fighters) "
-    " VALUES (1, 1, 'Earth', 0, 8000000000, 1, 'System', 18000000, 1000000); ",
+  " INSERT OR IGNORE INTO planets (num, sector, name, owner_id, owner_type, population, type, creator, colonist, fighters) "
+    " VALUES (1, 1, 'Earth', 0, 'player', 8000000000, 1, 'System', 18000000, 1000000); ",
 
   " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
     " ((SELECT id FROM planets WHERE name='Earth'), 'ore', 10000000, 10000000, 0); ",
@@ -1671,8 +1686,8 @@ const char *insert_default_sql[] = {
   " ((SELECT id FROM planets WHERE name='Earth'), 'equipment', 10000000, 10000000, 0); ",
 
   /* Ferringhi planet in sector 0 (change in bigbang) */
-  " INSERT OR IGNORE INTO planets (num, sector, name, owner, population, type, creator, colonist, fighters) "
-    " VALUES (2, 0, 'Ferringhi Homeworld', 0, 8000000000, 1, 'System', 18000000, 1000000); ",
+  " INSERT OR IGNORE INTO planets (num, sector, name, owner_id, owner_type, population, type, creator, colonist, fighters) "
+    " VALUES (2, 0, 'Ferringhi Homeworld', 0, 'npc_faction', 8000000000, 1, 'System', 18000000, 1000000); ",
 
   " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
     " ((SELECT id FROM planets WHERE name='Earth'), 'ore', 10000000, 10000000, 0); ",
@@ -1684,8 +1699,8 @@ const char *insert_default_sql[] = {
     " ((SELECT id FROM planets WHERE name='Earth'), 'fuel', 100000, 100000, 0); ",
 
   /* NPC Planet: Orion Hideout (Contraband Outpost) */
-  " INSERT OR IGNORE INTO planets (num, sector, name, owner, population, type, creator, colonist, fighters) "
-    " VALUES (3, 0, 'Orion Hideout', 0, 20000000, 1, 'Syndicate', 20010000, 200000); ",
+  " INSERT OR IGNORE INTO planets (num, sector, name, owner_id, owner_type, population, type, creator, colonist, fighters) "
+    " VALUES (3, 0, 'Orion Hideout', 0, 'npc_faction', 20000000, 1, 'Syndicate', 20010000, 200000); ",
 
   " /* Orion Hideout Commodity Stock and Capacity */ "
     " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
@@ -1750,12 +1765,12 @@ const char *insert_default_sql[] = {
 
   "INSERT INTO shiptypes\n"
     "(name, basecost, maxattack, initialholds, maxholds, maxfighters, "
-    " turns, maxmines, maxlimpets, maxgenesis, twarp, transportrange, maxshields, "
-    " offense, defense, maxbeacons, holo, planet, maxphotons, can_purchase)\n"
+    " turns, maxmines, maxlimpets, maxgenesis, can_transwarp, transportrange, maxshields, "
+    " offense, defense, maxbeacons, maxphotons, can_purchase)\n"
     " SELECT"
     " 'Mary Celeste Class', basecost, maxattack, initialholds, maxholds, maxfighters, "
-    " turns, maxmines, maxlimpets, maxgenesis, twarp, transportrange, maxshields, "
-    " offense, defense, maxbeacons, holo, planet, maxphotons, 0\n"
+    " turns, maxmines, maxlimpets, maxgenesis, can_transwarp, transportrange, maxshields, "
+    " offense, defense, maxbeacons, maxphotons, 0\n"
     " FROM shiptypes "
     "WHERE name='Corporate Flagship'"
     " AND NOT EXISTS (SELECT 1 FROM shiptypes WHERE name='Mary Celeste Class');",
@@ -2034,13 +2049,22 @@ const char *insert_default_sql[] = {
 "   related_account_id INTEGER,  "
 "   description TEXT,  "
 "   ts INTEGER NOT NULL,  "
-"   balance_after INTEGER NOT NULL,  "
+"   balance_after INTEGER DEFAULT 0,  "
 "   idempotency_key TEXT,  "
 "   engine_event_id INTEGER  "
 " );  "
 " CREATE INDEX IF NOT EXISTS idx_bank_transactions_account_ts ON bank_transactions(account_id, ts DESC);  "
 " CREATE INDEX IF NOT EXISTS idx_bank_transactions_tx_group ON bank_transactions(tx_group_id);  "
 " CREATE UNIQUE INDEX IF NOT EXISTS idx_bank_transactions_idem ON bank_transactions(account_id, idempotency_key) WHERE idempotency_key IS NOT NULL;  "
+
+  " CREATE TRIGGER IF NOT EXISTS trg_bank_transactions_balance_after  "
+  " AFTER INSERT ON bank_transactions  "
+  " FOR EACH ROW  "
+  " BEGIN  "
+  "   UPDATE bank_transactions  "
+  "   SET balance_after = (SELECT balance FROM bank_accounts WHERE id = NEW.account_id)  "
+  "   WHERE id = NEW.id;  "
+  " END; ",
 
 " CREATE TABLE IF NOT EXISTS bank_fee_schedules (  "
 "   id INTEGER PRIMARY KEY,  "
