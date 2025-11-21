@@ -1,6 +1,6 @@
 # twclone — JSON Protocol (v2.0)
 
-**Version:** 2.0  
+**Version:** 2.0
 **Status:** DRAFT
 
 This document describes the version 2.0 JSON protocol for twclone. It consolidates and extends the v1.0 protocol, incorporating the features outlined in the Galactic Economy blueprint and discoveries from test suites. This version introduces comprehensive support for advanced economic and social systems.
@@ -410,8 +410,7 @@ For asynchronous events pushed to the client (not in response to a specific comm
         "namespaces": ["auth", "bank", "market", "combat", "ship", "player"],
         "limits": {
           "max_frame_size": 131072,
-          "max_req_per_min": 200,
-          "max_open_orders": 100
+          "max_req_per_min": 200
         },
         "auth_methods": ["session", "token"],
         "features": ["websockets", "compression.deflate", "idempotency_key"]
@@ -2246,7 +2245,6 @@ Commands for interacting with shipyards to trade in and upgrade ship hulls.
         ],
         "credits_remaining": 900000, // Remaining credits in the chosen account
         "total_item_cost": 10000,    // Total cost of items before fees
-        "total_cost_with_fees": 10100, // Total cost including fees
         "fees": 100                  // Total fees applied
       }
     }
@@ -3804,6 +3802,97 @@ Commands for interacting with shipyards to trade in and upgrade ship hulls.
       "data": {
         "catalog_name": "market_data",
         "status": "subscribed"
+      }
+    }
+    ```
+
+### 4.13. System Administration Commands
+*   `corp.create`: Create a new corporation.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "a1b2c3d4-e5f6-g7b8-c9d0-e1f2a3b4c5d6",
+      "ts": "2025-11-07T20:40:00.000Z",
+      "command": "corp.create",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {
+        "name": "My New Corp",
+        "tag": "MNC"
+      }
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sa1b2c3d4-e5f6-g7b8-c9d0-e1f2a3b4c5d6",
+      "ts": "2025-11-07T20:40:00.100Z",
+      "reply_to": "a1b2c3d4-e5f6-g7b8-c9d0-e1f2a3b4c5d6",
+      "status": "ok",
+      "type": "corp.created",
+      "data": {
+        "corp_id": 101
+      }
+    }
+    ```
+
+*   `sysop.give_item`: (Sysop) Give an item to a player.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "b1c2d3e4-f5a6-h7c8-d9e0-f1a2b3c4d5e6",
+      "ts": "2025-11-07T20:45:00.000Z",
+      "command": "sysop.give_item",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {
+        "item": "genesis_torpedo",
+        "quantity": 10,
+        "target_player_id": 12345
+      }
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sb1c2d3e4-f5a6-h7c8-d9e0-f1a2b3c4d5e6",
+      "ts": "2025-11-07T20:45:00.100Z",
+      "reply_to": "b1c2d3e4-f5a6-h7c8-d9e0-f1a2b3c4d5e6",
+      "status": "ok",
+      "type": "sysop.item_given",
+      "data": {
+        "message": "10 genesis_torpedo(s) given to player 12345."
+      }
+    }
+    ```
+
+*   `sysop.raw_sql_exec`: (Sysop) Execute a raw SQL query.
+
+    *Example Client Request:*
+    ```json
+    {
+      "id": "c1d2e3f4-a5b6-i7d8-e9f0-a1b2c3d4e5f6",
+      "ts": "2025-11-07T20:50:00.000Z",
+      "command": "sysop.raw_sql_exec",
+      "auth": { "session": "eyJhbGciOi..." },
+      "data": {
+        "sql": "UPDATE players SET credits = 1000000 WHERE id = 12345;"
+      }
+    }
+    ```
+
+    *Example Server Response:*
+    ```json
+    {
+      "id": "sc1d2e3f4-a5b6-i7d8-e9f0-a1b2c3d4e5f6",
+      "ts": "2025-11-07T20:50:00.100Z",
+      "reply_to": "c1d2e3f4-a5b6-i7d8-e9f0-a1b2c3d4e5f6",
+      "status": "ok",
+      "type": "sysop.sql_executed",
+      "data": {
+        "message": "SQL executed successfully."
       }
     }
     ```

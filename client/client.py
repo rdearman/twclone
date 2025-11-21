@@ -577,11 +577,18 @@ def _infer_is_stardock(data: dict) -> bool:
     return False
 
 def ctx_refresh_port_context(ctx):
-    """Best-effort fetch to set ctx.state['is_stardock'] before showing the Dock menu."""
+    """Best-effort fetch to set ctx.state['is_stardock'] and other access flags before showing the Dock menu."""
     ctx.state.setdefault('is_stardock', False)
+    ctx.state.setdefault('is_shipyard_port', False)
+    ctx.state.setdefault('has_exchange_access', False)
+    ctx.state.setdefault('has_insurance_access', False)
+    ctx.state.setdefault('has_tavern_access', False)
+    ctx.state.setdefault('has_hardware_access', False)
+
     conn = getattr(ctx, 'conn', None)
     if conn is None:
         return
+
     def _try(cmd, payload=None):
         try:
             r = conn.rpc(cmd, payload or {})
@@ -589,11 +596,19 @@ def ctx_refresh_port_context(ctx):
                 d = r.get('data') or {}
                 if isinstance(d, dict) and d:
                     ctx.state['is_stardock'] = bool(_infer_is_stardock(d))
-                    # Update ctx.last_sector_desc with the port information
-                    # This assumes 'd' contains relevant sector/port data
-                    # We need to normalize it first
+                    
+                    port_data = d.get('port') if isinstance(d.get('port'), dict) else d
+                    port_class = port_data.get('class') or port_data.get('type')
+                    if port_class == 9: # Stardock
+                        ctx.state['is_shipyard_port'] = True
+                        ctx.state['has_hardware_access'] = True
+                        ctx.state['has_exchange_access'] = True # Example: Exchange at Stardock
+                        ctx.state['has_insurance_access'] = True # Example: Insurance at Stardock
+                    elif port_class == 7: # Tavern (arbitrary, adjust as per game rules)
+                        ctx.state['has_tavern_access'] = True
+                    # Add other port types and their associated access flags as needed
+
                     ctx.last_sector_desc = normalize_sector(d)
-                    # Explicitly ensure port.id is set if available in the raw data
                     if 'port' in d and isinstance(d['port'], dict) and 'id' in d['port']:
                         if 'port' not in ctx.last_sector_desc:
                             ctx.last_sector_desc['port'] = {}
@@ -1287,7 +1302,8 @@ def compute_flags(ctx: Context) -> Dict[str, bool]:
 
     flags = {
         "has_port": bool(d.get("port")),
-        "is_stardock": bool(isinstance(d.get("port"), dict) and d.get("port", {}).get("class") == 9),
+        "is_stardock": ctx.state.get("is_stardock", False),
+        "is_shipyard_port": ctx.state.get("is_shipyard_port", False),
         "has_planet": bool(d.get("planets")),
         "can_set_beacon": (d.get("beacon") in (None, "")),
         "has_boardable": has_boardable_ship(ships, my_ship_id=my_ship_id, my_name=my_name),
@@ -1296,6 +1312,10 @@ def compute_flags(ctx: Context) -> Dict[str, bool]:
         "planet_has_products": bool(ctx.state.get("planet_products_available")),
         "is_corp_member": bool(ctx.player_info.get("corp_id")),
         "can_autopilot": bool(ctx.state.get("ap_route_plotted")),
+        "has_exchange_access": ctx.state.get("has_exchange_access", False),
+        "has_insurance_access": ctx.state.get("has_insurance_access", False),
+        "has_tavern_access": ctx.state.get("has_tavern_access", False),
+        "has_hardware_access": ctx.state.get("has_hardware_access", False),
     }
     return flags
 
@@ -1419,6 +1439,254 @@ def pretty_print_sell_receipt(ctx):
             print(f"    - {quantity} x {commodity.capitalize()} @ {unit_price} cr/unit = {value} credits")
     else:
         print("    (No items listed)")
+@register("pretty_print_shipyard_list")
+def pretty_print_shipyard_list(ctx):
+    resp = ctx.state.get("last_rpc")
+    if resp is None:
+        print("[no response captured]")
+        return
+
+    if resp.get("status") != "ok":
+        print(f"[Error] Failed to get shipyard list: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+        return
+
+    data = resp.get("data")
+    if not isinstance(data, dict):
+        print("[Error] Invalid shipyard list data.")
+        _pp(resp)
+        return
+
+    current_ship = data.get("current_ship")
+    available_ships = data.get("available", [])
+
+    print("\n--- Shipyard List ---")
+    if current_ship:
+        print(f"Your current ship: {current_ship.get('type')} (Trade-in Value: {current_ship.get('trade_in_value')} cr)")
+    else:
+        print("You don't have a ship or it could not be identified.")
+
+    print("\nAvailable for Purchase/Upgrade:")
+    if available_ships:
+        for ship in available_ships:
+            eligible_status = "Eligible" if ship.get("eligible") else "Ineligible"
+            reasons = f" ({', '.join(ship.get('reasons'))})" if ship.get("reasons") else ""
+            print(f"  - {ship.get('name')} (Price: {ship.get('shipyard_price')} cr, Net Cost: {ship.get('net_cost')} cr) - {eligible_status}{reasons}")
+    else:
+        print("No ships available at this shipyard.")
+
+@register("pretty_print_hardware_list")
+def pretty_print_hardware_list(ctx):
+    resp = ctx.state.get("last_rpc")
+    if resp is None:
+        print("[no response captured]")
+        return
+
+    if resp.get("status") != "ok":
+        print(f"[Error] Failed to get hardware list: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+        return
+
+    data = resp.get("data")
+    if not isinstance(data, dict) or "hardware" not in data:
+        print("[Error] Invalid hardware list data.")
+        _pp(resp)
+        return
+
+    hardware_items = data.get("hardware", [])
+    if hardware_items:
+        print("\n--- Available Hardware ---")
+        for item in hardware_items:
+            print(f"  - {item.get('name')} ({item.get('item_code')}) - Price: {item.get('price')} cr - {item.get('description')}")
+    else:
+        print("No hardware available at this location.")
+
+@register("hardware_buy_flow")
+def hardware_buy_flow(ctx: Context):
+    item_code = input("Enter item code to buy: ").strip().upper()
+    if not item_code:
+        print("Cancelled.")
+        return
+
+    try:
+        quantity = int(input("Enter quantity: ").strip())
+        if quantity <= 0:
+            print("Quantity must be positive.")
+            return
+    except ValueError:
+        print("Invalid quantity.")
+        return
+
+    payload = {
+        "item_code": item_code,
+        "quantity": quantity
+    }
+
+    resp = ctx.conn.rpc("hardware.buy", payload)
+    ctx.state["last_rpc"] = resp
+
+    if resp.get("status") == "ok":
+        print(f"Successfully purchased {quantity} units of {item_code}.")
+        _pp(resp)
+        # Refresh player info to update cargo/equipment display
+        my_info_resp = ctx.conn.rpc("player.my_info", {})
+        if my_info_resp.get("status") == "ok":
+            ctx.player_info = get_data(my_info_resp)
+        else:
+            print("[Warning] Could not refresh player info after hardware purchase.")
+    else:
+        print(f"[Error] Hardware purchase failed: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+
+@register("pretty_print_bank_history")
+def pretty_print_bank_history(ctx):
+    resp = ctx.state.get("last_rpc")
+    if resp is None:
+        print("[no response captured]")
+        return
+
+    if resp.get("status") != "ok":
+        print(f"[Error] Failed to get bank history: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+        return
+
+    data = resp.get("data")
+    if not isinstance(data, dict) or "history" not in data:
+        print("[Error] Invalid bank history data.")
+        _pp(resp)
+        return
+
+    history_items = data.get("history", [])
+    if history_items:
+        print("\n--- Bank Transaction History ---")
+        for item in history_items:
+            ts = item.get("timestamp")
+            if isinstance(ts, (int, float)):
+                try:
+                    import datetime
+                    dt_object = datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc)
+                    formatted_ts = dt_object.isoformat(timespec='seconds')
+                except Exception:
+                    formatted_ts = str(ts)
+            else:
+                formatted_ts = str(ts)
+
+            print(f"  ID: {item.get('id')} | Type: {item.get('type')} | Direction: {item.get('direction')}")
+            print(f"    Amount: {item.get('amount') / 100.0:.2f} {item.get('currency')} | Balance After: {item.get('balance_after') / 100.0:.2f}")
+            print(f"    Timestamp: {formatted_ts} | Desc: {item.get('description') or 'N/A'}")
+            print("-" * 30)
+        if data.get("has_next_page"):
+            print(f"More history available. Next cursor: {data.get('next_cursor')}")
+    else:
+        print("No bank transaction history available.")
+
+@register("pretty_print_bank_leaderboard")
+def pretty_print_bank_leaderboard(ctx):
+    resp = ctx.state.get("last_rpc")
+    if resp is None:
+        print("[no response captured]")
+        return
+
+    if resp.get("status") != "ok":
+        print(f"[Error] Failed to get bank leaderboard: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+        return
+
+    data = resp.get("data")
+    if not isinstance(data, dict) or "leaderboard" not in data:
+        print("[Error] Invalid bank leaderboard data.")
+        _pp(resp)
+        return
+
+    leaderboard_items = data.get("leaderboard", [])
+    if leaderboard_items:
+        print("\n--- Bank Wealth Leaderboard ---")
+        print(" Rank | Player Name       | Balance")
+        print("------|-------------------|------------")
+        for i, item in enumerate(leaderboard_items):
+            # Assuming balance is in minor units and needs conversion
+            balance_display = f"{item.get('balance') / 100.0:.2f}" if isinstance(item.get('balance'), (int, float)) else str(item.get('balance'))
+            print(f" {i+1:<4} | {item.get('player_name', 'Unknown'):<17} | {balance_display}")
+    else:
+        print("No bank leaderboard data available.")
+
+@register("insurance_buy_flow")
+def insurance_buy_flow(ctx: Context):
+    policy_id = input("Enter policy ID to buy: ").strip()
+    if not policy_id:
+        print("Cancelled.")
+        return
+
+    resp = ctx.conn.rpc("insurance.policies.buy", {"policy_id": policy_id})
+    ctx.state["last_rpc"] = resp
+
+    if resp.get("status") == "ok":
+        print(f"Successfully purchased insurance policy {policy_id}.")
+        _pp(resp)
+    else:
+        print(f"[Error] Failed to buy insurance policy: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+
+@register("insurance_claim_flow")
+def insurance_claim_flow(ctx: Context):
+    active_policy_id = input("Enter active policy ID to file a claim against: ").strip()
+    if not active_policy_id:
+        print("Cancelled.")
+        return
+
+    details = input("Enter claim details: ").strip()
+    if not details:
+        print("Claim details cannot be empty. Cancelled.")
+        return
+
+    resp = ctx.conn.rpc("insurance.claim.file", {"active_policy_id": active_policy_id, "details": details})
+    ctx.state["last_rpc"] = resp
+
+    if resp.get("status") == "ok":
+        print(f"Successfully filed claim for policy {active_policy_id}.")
+        _pp(resp)
+    else:
+        print(f"[Error] Failed to file insurance claim: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+
+@register("tavern_graffiti_post_flow")
+def tavern_graffiti_post_flow(ctx: Context):
+    message = input("Enter your graffiti message (max 255 chars): ").strip()
+    if not message:
+        print("Cancelled.")
+        return
+    if len(message) > 255:
+        print("Message too long (max 255 chars). Cancelled.")
+        return
+
+    resp = ctx.conn.rpc("tavern.graffiti.post", {"message": message})
+    ctx.state["last_rpc"] = resp
+
+    if resp.get("status") == "ok":
+        print("Graffiti posted successfully.")
+        _pp(resp)
+    else:
+        print(f"[Error] Failed to post graffiti: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+
+@register("tavern_rumour_get_hint_flow")
+def tavern_rumour_get_hint_flow(ctx: Context):
+    resp = ctx.conn.rpc("tavern.rumour.get_hint", {})
+    ctx.state["last_rpc"] = resp
+
+    if resp.get("status") == "ok":
+        hint = resp.get("data", {}).get("hint")
+        if hint:
+            print("\n--- Rumour Mill Hint ---")
+            print(hint)
+            print("------------------------")
+        else:
+            print("No hint received from the rumour mill.")
+        _pp(resp)
+    else:
+        print(f"[Error] Failed to get rumour hint: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+
 @register("disconnect_and_quit")
 
 def disconnect_and_quit(ctx):
@@ -2586,48 +2854,156 @@ def target_info_flow(ctx: Context):
 # ---------------------------
 # Shipyard flows
 # ---------------------------
+@register("shipyard_upgrade_flow")
+def shipyard_upgrade_flow(ctx: Context):
+    """
+    Flow for upgrading/purchasing a new ship at the shipyard.
+    - Lists available ships.
+    - Prompts for new ship type ID and name.
+    - Calls shipyard.upgrade.
+    """
+    list_resp = ctx.conn.rpc("shipyard.list", {})
+    ctx.state["last_rpc"] = list_resp
+    if list_resp.get("status") != "ok":
+        print(f"[Error] Could not retrieve shipyard list: {list_resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(list_resp)
+        return
+
+    data = list_resp.get("data")
+    if not isinstance(data, dict):
+        print("[Error] Invalid shipyard list data.")
+        _pp(list_resp)
+        return
+
+    available_ships = data.get("available", [])
+    if not available_ships:
+        print("No ships available for upgrade at this shipyard.")
+        return
+
+    print("\n--- Available Ships for Upgrade ---")
+    for i, ship in enumerate(available_ships):
+        eligible_status = "Eligible" if ship.get("eligible") else "Ineligible"
+        reasons = f" ({', '.join(ship.get('reasons'))})" if ship.get("reasons") else ""
+        print(f"  {i+1}: {ship.get('name')} (Type ID: {ship.get('type_id')}) - Net Cost: {ship.get('net_cost')} cr - {eligible_status}{reasons}")
+
+    try:
+        choice = int(input("Enter number of ship to upgrade to: ").strip())
+        if not (1 <= choice <= len(available_ships)):
+            print("Invalid choice.")
+            return
+        selected_ship = available_ships[choice - 1]
+    except ValueError:
+        print("Invalid input. Please enter a number.")
+        return
+
+    if not selected_ship.get("eligible"):
+        print(f"Cannot upgrade to {selected_ship.get('name')}: {', '.join(selected_ship.get('reasons'))}")
+        return
+
+    new_ship_type_id = selected_ship.get("type_id")
+    new_ship_name = input(f"Enter new name for your {selected_ship.get('name')} (current ship name suggested): ").strip()
+    if not new_ship_name:
+        print("New ship name cannot be empty. Cancelled.")
+        return
+
+    payload = {
+        "new_type_id": new_ship_type_id,
+        "new_ship_name": new_ship_name
+    }
+
+    upgrade_resp = ctx.conn.rpc("shipyard.upgrade", payload)
+    ctx.state["last_rpc"] = upgrade_resp
+
+    if upgrade_resp.get("status") == "ok":
+        print(f"Successfully upgraded to {new_ship_name}!")
+        _pp(upgrade_resp)
+        # Refresh player info and sector description after a successful upgrade
+        my_info_resp = ctx.conn.rpc("player.my_info", {})
+        if my_info_resp.get("status") == "ok":
+            ctx.player_info = get_data(my_info_resp)
+            ctx.last_sector_desc = normalize_sector(get_data(ctx.conn.rpc("move.describe_sector", {"sector_id": ctx.current_sector_id})))
+        else:
+            print("[Warning] Could not refresh player info after ship upgrade.")
+    else:
+        print(f"[Error] Ship upgrade failed: {upgrade_resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(upgrade_resp)
+
 @register("buy_ship_flow")
 def buy_ship_flow(ctx: Context):
-    st = input("Ship type: ").strip()
-    r = ctx.conn.rpc("dock.ship.buy", {"type": st})
-    print(json.dumps(r, ensure_ascii=False, indent=2))
+    """
+    Lists available ships and prompts user to buy a new one.
+    This assumes a server command like 'shipyard.buy' or similar if distinct from upgrade.
+    For now, it redirects to the upgrade flow for simplicity, assuming 'upgrade' handles initial purchase.
+    """
+    print("Please use the 'Upgrade Ship' option to purchase a new ship at the shipyard, or implement a dedicated buy command.")
+    shipyard_upgrade_flow(ctx)
 
 @register("upgrade_ship_flow")
 def upgrade_ship_flow(ctx: Context):
-    try:
-        holds = int(input("Holds to buy: ").strip())
-        fighters = int(input("Fighters to buy: ").strip())
-        shields = int(input("Shields to buy: ").strip())
-    except ValueError:
-        print("Invalid numbers."); return
-    r = ctx.conn.rpc("dock.ship.upgrades", {"holds": holds, "fighters": fighters, "shields": shields})
-    print(json.dumps(r, ensure_ascii=False, indent=2))
+    """ Placeholder for ship component upgrades. """
+    print("Ship component upgrades are not yet implemented. Use the Shipyard 'Upgrade Ship' option for hull upgrades.")
 
 @register("downgrade_ship_flow")
 def downgrade_ship_flow(ctx: Context):
-    try:
-        holds = int(input("Sell back holds: ").strip())
-        fighters = int(input("Sell back fighters: ").strip())
-        shields = int(input("Sell back shields: ").strip())
-    except ValueError:
-        print("Invalid numbers."); return
-    r = ctx.conn.rpc("dock.ship.downgrades", {"holds": holds, "fighters": fighters, "shields": shields})
-    print(json.dumps(r, ensure_ascii=False, indent=2))
+    """ Placeholder for ship component downgrades. """
+    print("Ship component downgrades are not yet implemented.")
 
 @register("sell_ship_flow")
 def sell_ship_flow(ctx: Context):
+    """ Placeholder for selling ships. """
+    print("Selling ships is not yet implemented.")
+
+
+
+
+
+@register("jettison_cargo_flow")
+def jettison_cargo_flow(ctx: Context):
+    commodities = (ctx.player_info.get("ship") or {}).get("cargo") or []
+    if not commodities:
+        print("Your ship has no cargo to jettison.")
+        return
+
+    print("\n--- Current Cargo ---")
+    for item in commodities:
+        print(f"  {item.get('commodity').capitalize()}: {item.get('quantity')}")
+    print("---------------------")
+
+    commodity_to_jettison = input("Enter commodity to jettison: ").strip().lower()
+    if not commodity_to_jettison:
+        print("Cancelled.")
+        return
+
     try:
-        ship_id = int(input("Ship ID to sell: ").strip())
+        quantity_to_jettison = int(input(f"Quantity of {commodity_to_jettison.capitalize()} to jettison: ").strip())
+        if quantity_to_jettison <= 0:
+            print("Quantity must be positive.")
+            return
     except ValueError:
-        print("Invalid ship id."); return
-    r = ctx.conn.rpc("dock.ship.sell", {"ship_id": ship_id})
-    print(json.dumps(r, ensure_ascii=False, indent=2))
+        print("Invalid quantity.")
+        return
 
+    payload = {
+        "commodity": commodity_to_jettison,
+        "quantity": quantity_to_jettison
+    }
 
+    resp = ctx.conn.rpc("ship.jettison", payload)
+    ctx.state["last_rpc"] = resp
+    if resp.get("status") == "ok":
+        print(f"Successfully jettisoned {quantity_to_jettison} units of {commodity_to_jettison}.")
+        # Refresh player info to update cargo display
+        my_info_resp = ctx.conn.rpc("player.my_info", {})
+        if my_info_resp.get("status") == "ok":
+            ctx.player_info = get_data(my_info_resp)
+        else:
+            print("[Warning] Could not refresh player info after jettison.")
+    else:
+        print(f"[Error] Failed to jettison cargo: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
 
 
 @register("rename_ship_flow")
-def rename_ship_flow(ctx: Context):
     """
     Rename/re-register *your current ship* without asking for a ship id.
     - Resolves current ship_id from player.my_info

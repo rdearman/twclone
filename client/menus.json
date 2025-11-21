@@ -129,6 +129,38 @@
           "action": {
             "submenu": "DEPLOYMENT_MAIN"
           }
+        },
+        {
+          "key": "x",
+          "label": "E(X)change",
+          "action": {
+            "submenu": "EXCHANGE_MAIN"
+          },
+          "show_if_ctx": ["has_exchange_access"]
+        },
+        {
+          "key": "i",
+          "label": "(I) Insurance",
+          "action": {
+            "submenu": "INSURANCE_MAIN"
+          },
+          "show_if_ctx": ["has_insurance_access"]
+        },
+        {
+          "key": "t",
+          "label": "(T) Tavern",
+          "action": {
+            "submenu": "TAVERN_MAIN"
+          },
+          "show_if_ctx": ["has_tavern_access"]
+        },
+        {
+          "key": "s",
+          "label": "(S) Shipyard",
+          "action": {
+            "submenu": "SHIPYARD_MAIN"
+          },
+          "show_if_ctx": ["has_shipyard_access"]
         }
       ]
     },
@@ -257,6 +289,20 @@
 	      "action": { "pycall": "sector_density_scan_flow" }
 	  },
         {
+          "key": "h",
+          "label": "(H) Hardware",
+          "action": {
+            "submenu": "HARDWARE_MAIN"
+          }
+        },
+        {
+          "key": "j",
+          "label": "(J) Jettison Cargo",
+          "action": {
+            "pycall": "jettison_cargo_flow"
+          }
+        },
+        {
           "key": "q",
           "label": "(Q) Back to Main Menu",
           "action": {
@@ -317,6 +363,14 @@
           ]
         },
         {
+          "key": "y",
+          "label": "(Y) Shipyard",
+          "action": {
+            "submenu": "SHIPYARD_MAIN"
+          },
+          "show_if_ctx": ["is_shipyard_port"]
+        },
+        {
           "key": "q",
           "label": "(Q) Back to Main Menu",
           "action": {
@@ -328,40 +382,60 @@
         "pycall": "ctx_refresh_port_context"
       }
     },
-    "SHIPYARD": {
+    "SHIPYARD_MAIN": {
       "title": "--- Shipyard Menu ---",
       "options": [
         {
-          "key": "b",
-          "label": "(B) Buy Ship",
+          "key": "l",
+          "label": "(L) List Ships",
           "action": {
-            "pycall": "buy_ship_flow"
+            "rpc": {
+              "command": "shipyard.list",
+              "data": {}
+            },
+            "post": "pretty_print_shipyard_list"
           }
         },
         {
           "key": "u",
           "label": "(U) Upgrade Ship",
           "action": {
-            "pycall": "upgrade_ship_flow"
-          }
-        },
-        {
-          "key": "d",
-          "label": "(D) Downgrade Ship",
-          "action": {
-            "pycall": "downgrade_ship_flow"
-          }
-        },
-        {
-          "key": "s",
-          "label": "(S) Sell Ship",
-          "action": {
-            "pycall": "sell_ship_flow"
+            "pycall": "shipyard_upgrade_flow"
           }
         },
         {
           "key": "q",
-          "label": "(Q) Back to Main Menu",
+          "label": "(Q) Back to Dock Menu",
+          "action": {
+            "back": true
+          }
+        }
+      ]
+    },
+    "HARDWARE_MAIN": {
+      "title": "--- Hardware Store ---",
+      "options": [
+        {
+          "key": "l",
+          "label": "(L) List Hardware",
+          "action": {
+            "rpc": {
+              "command": "hardware.list",
+              "data": {}
+            },
+            "post": "pretty_print_hardware_list"
+          }
+        },
+        {
+          "key": "b",
+          "label": "(B) Buy Hardware",
+          "action": {
+            "pycall": "hardware_buy_flow"
+          }
+        },
+        {
+          "key": "q",
+          "label": "(Q) Back to Ship's Computer",
           "action": {
             "back": true
           }
@@ -376,24 +450,12 @@
           "label": "(D) Deposit",
           "action": {
             "rpc": {
-              "command": "dock.bank.deposit",
+              "command": "bank.deposit",
               "data": {
                 "amount": "<prompt:int:Amount>"
               }
-            }
-          }
-        },
-        {
-          "key": "t",
-          "label": "(T) Transfer funds",
-          "action": {
-            "rpc": {
-              "command": "dock.bank.transfer",
-              "data": {
-                "to": "<prompt:str:To whom?>",
-                "amount": "<prompt:int:Amount>"
-              }
-            }
+            },
+            "post": "print_last_rpc"
           }
         },
         {
@@ -401,16 +463,419 @@
           "label": "(W) Withdraw",
           "action": {
             "rpc": {
-              "command": "dock.bank.withdraw",
+              "command": "bank.withdraw",
               "data": {
                 "amount": "<prompt:int:Amount>"
               }
-            }
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
+          "key": "t",
+          "label": "(T) Transfer funds",
+          "action": {
+            "rpc": {
+              "command": "bank.transfer",
+              "data": {
+                "to_player_name": "<prompt:str:To whom (player name)>",
+                "amount": "<prompt:int:Amount>",
+                "memo": "<prompt:str:Memo (optional)>"
+              }
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
+          "key": "h",
+          "label": "(H) View History",
+          "action": {
+            "rpc": {
+              "command": "bank.history",
+              "data": {}
+            },
+            "post": "pretty_print_bank_history"
+          }
+        },
+        {
+          "key": "l",
+          "label": "(L) Leaderboard",
+          "action": {
+            "rpc": {
+              "command": "bank.leaderboard",
+              "data": {}
+            },
+            "post": "pretty_print_bank_leaderboard"
+          }
+        },
+        {
+          "key": "q",
+          "label": "(Q) Back to Dock Menu",
+          "action": {
+            "back": true
+          }
+        }
+      ]
+    },
+    "EXCHANGE_MAIN": {
+      "title": "--- Exchange Menu ---",
+      "options": [
+        {
+          "key": "l",
+          "label": "(L) List Stocks",
+          "action": {
+            "rpc": {
+              "command": "stock.exchange.list_stocks",
+              "data": {}
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
+          "key": "p",
+          "label": "(P) View Portfolio",
+          "action": {
+            "rpc": {
+              "command": "stock.portfolio.list",
+              "data": {}
+            },
+            "post": "print_last_rpc"
           }
         },
         {
           "key": "q",
           "label": "(Q) Back to Main Menu",
+          "action": {
+            "back": true
+          }
+        }
+      ]
+    },
+    "INSURANCE_MAIN": {
+      "title": "--- Insurance Menu ---",
+      "options": [
+        {
+          "key": "l",
+          "label": "(L) List Policies",
+          "action": {
+            "rpc": {
+              "command": "insurance.policies.list",
+              "data": {}
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
+          "key": "b",
+          "label": "(B) Buy Policy",
+          "action": {
+            "pycall": "insurance_buy_flow"
+          }
+        },
+        {
+          "key": "c",
+          "label": "(C) File Claim",
+          "action": {
+            "pycall": "insurance_claim_flow"
+          }
+        },
+        {
+          "key": "q",
+          "label": "(Q) Back to Main Menu",
+          "action": {
+            "back": true
+          }
+        }
+      ]
+    },
+    "TAVERN_MAIN": {
+      "title": "--- Tavern Menu ---",
+      "options": [
+        {
+          "key": "l",
+          "label": "(L) Lottery",
+          "action": {
+            "submenu": "TAVERN_LOTTERY"
+          }
+        },
+        {
+          "key": "d",
+          "label": "(D) Dead Pool",
+          "action": {
+            "submenu": "TAVERN_DEADPOOL"
+          }
+        },
+        {
+          "key": "c",
+          "label": "(C) Dice",
+          "action": {
+            "submenu": "TAVERN_DICE"
+          }
+        },
+        {
+          "key": "h",
+          "label": "(H) High Stakes",
+          "action": {
+            "submenu": "TAVERN_HIGHSTAKES"
+          }
+        },
+        {
+          "key": "r",
+          "label": "(R) Raffle",
+          "action": {
+            "submenu": "TAVERN_RAFFLE"
+          }
+        },
+        {
+          "key": "t",
+          "label": "(T) Trader",
+          "action": {
+            "submenu": "TAVERN_TRADER"
+          }
+        },
+        {
+          "key": "g",
+          "label": "(G) Graffiti",
+          "action": {
+            "pycall": "tavern_graffiti_post_flow"
+          }
+        },
+        {
+          "key": "u",
+          "label": "(U) Buy Round",
+          "action": {
+            "rpc": {
+              "command": "tavern.round.buy",
+              "data": {}
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
+          "key": "o",
+          "label": "(O) Loans (Loan Shark)",
+          "action": {
+            "submenu": "TAVERN_LOANS"
+          }
+        },
+        {
+          "key": "s",
+          "label": "(S) Rumour Mill",
+          "action": {
+            "pycall": "tavern_rumour_get_hint_flow"
+          }
+        },
+        {
+          "key": "b",
+          "label": "(B) Barcharts (Prices Summary)",
+          "action": {
+            "rpc": {
+              "command": "tavern.barcharts.get_prices_summary",
+              "data": {}
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
+          "key": "q",
+          "label": "(Q) Back to Main Menu",
+          "action": {
+            "back": true
+          }
+        }
+      ]
+    },
+    "TAVERN_LOTTERY": {
+      "title": "--- Tavern Lottery ---",
+      "options": [
+        {
+          "key": "b",
+          "label": "(B) Buy Ticket",
+          "action": {
+            "rpc": {
+              "command": "tavern.lottery.buy_ticket",
+              "data": {
+                "number": "<prompt:int:Your lucky number>"
+              }
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
+          "key": "s",
+          "label": "(S) Check Status",
+          "action": {
+            "rpc": {
+              "command": "tavern.lottery.status",
+              "data": {}
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
+          "key": "q",
+          "label": "(Q) Back to Tavern Menu",
+          "action": {
+            "back": true
+          }
+        }
+      ]
+    },
+    "TAVERN_DEADPOOL": {
+      "title": "--- Tavern Dead Pool ---",
+      "options": [
+        {
+          "key": "p",
+          "label": "(P) Place Bet",
+          "action": {
+            "rpc": {
+              "command": "tavern.deadpool.place_bet",
+              "data": {
+                "target_player_name": "<prompt:str:Target Player Name>",
+                "amount": "<prompt:int:Bet Amount>"
+              }
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
+          "key": "q",
+          "label": "(Q) Back to Tavern Menu",
+          "action": {
+            "back": true
+          }
+        }
+      ]
+    },
+    "TAVERN_DICE": {
+      "title": "--- Tavern Dice ---",
+      "options": [
+        {
+          "key": "p",
+          "label": "(P) Play Dice",
+          "action": {
+            "rpc": {
+              "command": "tavern.dice.play",
+              "data": {
+                "amount": "<prompt:int:Bet Amount>"
+              }
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
+          "key": "q",
+          "label": "(Q) Back to Tavern Menu",
+          "action": {
+            "back": true
+          }
+        }
+      ]
+    },
+    "TAVERN_HIGHSTAKES": {
+      "title": "--- Tavern High Stakes ---",
+      "options": [
+        {
+          "key": "p",
+          "label": "(P) Play High Stakes",
+          "action": {
+            "rpc": {
+              "command": "tavern.highstakes.play",
+              "data": {
+                "amount": "<prompt:int:Bet Amount>",
+                "rounds": "<prompt:int:Number of Rounds>"
+              }
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
+          "key": "q",
+          "label": "(Q) Back to Tavern Menu",
+          "action": {
+            "back": true
+          }
+        }
+      ]
+    },
+    "TAVERN_RAFFLE": {
+      "title": "--- Tavern Raffle ---",
+      "options": [
+        {
+          "key": "b",
+          "label": "(B) Buy Ticket",
+          "action": {
+            "rpc": {
+              "command": "tavern.raffle.buy_ticket",
+              "data": {}
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
+          "key": "q",
+          "label": "(Q) Back to Tavern Menu",
+          "action": {
+            "back": true
+          }
+        }
+      ]
+    },
+    "TAVERN_TRADER": {
+      "title": "--- Tavern Trader ---",
+      "options": [
+        {
+          "key": "b",
+          "label": "(B) Buy Password",
+          "action": {
+            "rpc": {
+              "command": "tavern.trader.buy_password",
+              "data": {}
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
+          "key": "q",
+          "label": "(Q) Back to Tavern Menu",
+          "action": {
+            "back": true
+          }
+        }
+      ]
+    },
+    "TAVERN_LOANS": {
+      "title": "--- Tavern Loans (Loan Shark) ---",
+      "options": [
+        {
+          "key": "t",
+          "label": "(T) Take Loan",
+          "action": {
+            "rpc": {
+              "command": "tavern.loan.take",
+              "data": {
+                "amount": "<prompt:int:Loan Amount>"
+              }
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
+          "key": "p",
+          "label": "(P) Pay Loan",
+          "action": {
+            "rpc": {
+              "command": "tavern.loan.pay",
+              "data": {
+                "amount": "<prompt:int:Payment Amount>"
+              }
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
+          "key": "q",
+          "label": "(Q) Back to Tavern Menu",
           "action": {
             "back": true
           }
