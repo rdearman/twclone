@@ -239,11 +239,14 @@ const char * get_tow_reason_string (int reason_code);
 double rand01();
 double rand_range(double min, double max);
 double clamp(double value, double min, double max);
+int get_random_int(int min, int max);
+
+
+
+
 
 // JSON helper functions (prototypes)
 bool json_get_int_flexible(json_t *data_obj, const char *key, int *out_val);
 const char *json_get_string_or_null(json_t *data_obj, const char *key);
-
-
 
 #endif // COMMON_H

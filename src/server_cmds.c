@@ -29,6 +29,8 @@ ct_str_eq (const char *a, const char *b)
   return diff == 0;
 }
 
+
+
 int
 play_login (const char *player_name, const char *password, int *out_player_id)
 {

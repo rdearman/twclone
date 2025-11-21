@@ -1,0 +1,19 @@
+{
+    "id": "srv-err",
+    "reply_to": "c-a563e7b3",
+    "ts": "2025-11-21T07:12:40Z",
+    "status": "error",
+    "type": "error",
+    "error": {
+        "code": 500,
+        "message": "Could not retrieve bank balance."
+    },
+    "data": null,
+    "meta": {
+        "rate_limit": {
+            "limit": 60,
+            "remaining": 60,
+            "reset": 60
+        }
+    }
+}

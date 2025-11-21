@@ -19,6 +19,7 @@
 #include "server_planets.h"
 #include "database.h"
 #include "server_config.h"
+#include "server_stardock.h" // For Tavern-related declarations
 
 /*
  * Helper function to add credits to an account.
@@ -103,6 +104,10 @@ static entry_t REG[] = {
   {"cleanup_old_news", h_cleanup_old_news},
   {"limpet_ttl_cleanup", cron_limpet_ttl_cleanup},
   {"daily_bank_interest_tick", h_daily_bank_interest_tick},
+  {"daily_lottery_draw", h_daily_lottery_draw},
+  {"deadpool_resolution_cron", h_deadpool_resolution_cron},
+  {"tavern_notice_expiry_cron", h_tavern_notice_expiry_cron},
+  {"loan_shark_interest_cron", h_loan_shark_interest_cron},
 };
 
 static int g_reg_inited = 0;
@@ -1782,6 +1787,480 @@ int h_cleanup_old_news(sqlite3 *db, int64_t now_s) {
     unlock(db, "cleanup_old_news");
 
     return rc == SQLITE_DONE ? SQLITE_OK : rc;
+}
+
+int
+h_daily_lottery_draw (sqlite3 *db, int64_t now_s)
+{
+  if (!try_lock (db, "daily_lottery_draw", now_s))
+    return 0;
+
+  LOGI ("daily_lottery_draw: Starting daily lottery draw.");
+
+  int rc = begin (db);
+  if (rc)
+    {
+      unlock (db, "daily_lottery_draw");
+      return rc;
+    }
+
+  char draw_date_str[32];
+  struct tm *tm_info = localtime(&now_s);
+  strftime(draw_date_str, sizeof(draw_date_str), "%Y-%m-%d", tm_info);
+
+  // Check if today's draw is already processed
+  sqlite3_stmt *st_check = NULL;
+  const char *sql_check = "SELECT winning_number, jackpot, carried_over FROM tavern_lottery_state WHERE draw_date = ?;";
+  rc = sqlite3_prepare_v2(db, sql_check, -1, &st_check, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("daily_lottery_draw: Failed to prepare check statement: %s", sqlite3_errmsg(db));
+      goto rollback_and_unlock;
+  }
+  sqlite3_bind_text(st_check, 1, draw_date_str, -1, SQLITE_STATIC);
+  if (sqlite3_step(st_check) == SQLITE_ROW && sqlite3_column_type(st_check, 0) != SQLITE_NULL) {
+      LOGI("daily_lottery_draw: Lottery for %s already processed. Skipping.", draw_date_str);
+      sqlite3_finalize(st_check);
+      goto commit_and_unlock;
+  }
+  sqlite3_finalize(st_check);
+  st_check = NULL;
+
+  // Get yesterday's jackpot and carried over amount
+  long long yesterday_jackpot = 0;
+  long long yesterday_carried_over = 0;
+  char yesterday_date_str[32];
+  time_t yesterday_s = now_s - (24 * 60 * 60);
+  tm_info = localtime(&yesterday_s);
+  strftime(yesterday_date_str, sizeof(yesterday_date_str), "%Y-%m-%d", tm_info);
+
+  const char *sql_yesterday_state = "SELECT jackpot, carried_over FROM tavern_lottery_state WHERE draw_date = ?;";
+  rc = sqlite3_prepare_v2(db, sql_yesterday_state, -1, &st_check, NULL);
+  if (rc == SQLITE_OK) {
+      sqlite3_bind_text(st_check, 1, yesterday_date_str, -1, SQLITE_STATIC);
+      if (sqlite3_step(st_check) == SQLITE_ROW) {
+          yesterday_jackpot = sqlite3_column_int64(st_check, 0);
+          yesterday_carried_over = sqlite3_column_int64(st_check, 1);
+      }
+      sqlite3_finalize(st_check);
+      st_check = NULL;
+  }
+
+  // Calculate total tickets sold today
+  sqlite3_stmt *st_tickets = NULL;
+  long long total_tickets_sold = 0;
+  long long total_pot_from_tickets = 0;
+  const char *sql_sum_tickets = "SELECT COUNT(*), SUM(cost) FROM tavern_lottery_tickets WHERE draw_date = ?;";
+  rc = sqlite3_prepare_v2(db, sql_sum_tickets, -1, &st_tickets, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("daily_lottery_draw: Failed to prepare sum tickets statement: %s", sqlite3_errmsg(db));
+      goto rollback_and_unlock;
+  }
+  sqlite3_bind_text(st_tickets, 1, draw_date_str, -1, SQLITE_STATIC);
+  if (sqlite3_step(st_tickets) == SQLITE_ROW) {
+      total_tickets_sold = sqlite3_column_int64(st_tickets, 0);
+      total_pot_from_tickets = sqlite3_column_int64(st_tickets, 1);
+  }
+  sqlite3_finalize(st_tickets);
+  st_tickets = NULL;
+
+  // Calculate current jackpot: carried over from yesterday + 50% of today's ticket sales
+  long long current_jackpot = yesterday_carried_over + (total_pot_from_tickets / 2);
+
+  int winning_number = get_random_int(1, 999);
+  long long total_winnings = 0;
+  bool winner_found = false;
+
+  // Find winning tickets and distribute winnings
+  sqlite3_stmt *st_winners = NULL;
+  const char *sql_winners = "SELECT player_id, number, cost FROM tavern_lottery_tickets WHERE draw_date = ? AND number = ?;";
+  rc = sqlite3_prepare_v2(db, sql_winners, -1, &st_winners, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("daily_lottery_draw: Failed to prepare winners statement: %s", sqlite3_errmsg(db));
+      goto rollback_and_unlock;
+  }
+  sqlite3_bind_text(st_winners, 1, draw_date_str, -1, SQLITE_STATIC);
+  sqlite3_bind_int(st_winners, 2, winning_number);
+
+  json_t *winners_array = json_array(); // To store winners for logging
+  while (sqlite3_step(st_winners) == SQLITE_ROW) {
+      winner_found = true;
+      int player_id = sqlite3_column_int(st_winners, 0);
+      
+      // For simplicity, total jackpot split evenly among winners
+      // In a real game, might want to consider partial matches, etc.
+      json_t *winner_obj = json_object();
+      json_object_set_new(winner_obj, "player_id", json_integer(player_id));
+      json_array_append_new(winners_array, winner_obj);
+  }
+  sqlite3_finalize(st_winners);
+  st_winners = NULL;
+
+  if (winner_found) {
+      long long payout_per_winner = current_jackpot / json_array_size(winners_array);
+      total_winnings = current_jackpot;
+
+      for (size_t i = 0; i < json_array_size(winners_array); i++) {
+          json_t *winner_obj = json_array_get(winners_array, i);
+          int player_id = json_integer_value(json_object_get(winner_obj, "player_id"));
+          
+          // Add credits to winner
+          int add_rc = h_add_credits(db, "player", player_id, payout_per_winner, NULL);
+          if (add_rc != SQLITE_OK) {
+              LOGE("daily_lottery_draw: Failed to add winnings to player %d: %s", player_id, sqlite3_errmsg(db));
+              // Error here is critical, consider specific handling or abort
+          } else {
+              json_object_set_new(winner_obj, "winnings", json_integer(payout_per_winner));
+          }
+      }
+      current_jackpot = 0; // Jackpot cleared
+      yesterday_carried_over = 0; // No rollover
+  } else {
+      // No winner, 50% of today's sales carried over to next jackpot
+      yesterday_carried_over = total_pot_from_tickets / 2; // Rollover 50% of tickets sales
+      current_jackpot = 0; // Jackpot cleared
+      LOGI("daily_lottery_draw: No winner found for %s. Jackpot rolls over.", draw_date_str);
+  }
+
+  // Update or insert tavern_lottery_state for today
+  sqlite3_stmt *st_update_state = NULL;
+  const char *sql_update_state =
+      "INSERT INTO tavern_lottery_state (draw_date, winning_number, jackpot, carried_over) VALUES (?, ?, ?, ?) "
+      "ON CONFLICT(draw_date) DO UPDATE SET winning_number = excluded.winning_number, jackpot = excluded.jackpot, carried_over = excluded.carried_over;";
+  rc = sqlite3_prepare_v2(db, sql_update_state, -1, &st_update_state, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("daily_lottery_draw: Failed to prepare update state statement: %s", sqlite3_errmsg(db));
+      json_decref(winners_array);
+      goto rollback_and_unlock;
+  }
+  sqlite3_bind_text(st_update_state, 1, draw_date_str, -1, SQLITE_STATIC);
+  if (winner_found) {
+      sqlite3_bind_int(st_update_state, 2, winning_number);
+  } else {
+      sqlite3_bind_null(st_update_state, 2); // No winning number if no winner
+  }
+  sqlite3_bind_int64(st_update_state, 3, current_jackpot);
+  sqlite3_bind_int64(st_update_state, 4, yesterday_carried_over);
+
+  if (sqlite3_step(st_update_state) != SQLITE_DONE) {
+      LOGE("daily_lottery_draw: Failed to update lottery state: %s", sqlite3_errmsg(db));
+      json_decref(winners_array);
+      goto rollback_and_unlock;
+  }
+  sqlite3_finalize(st_update_state);
+  st_update_state = NULL;
+  
+  LOGI("daily_lottery_draw: Draw for %s completed. Winning number: %d. Jackpot: %lld. Winners: %s",
+       draw_date_str, winning_number, current_jackpot, winner_found ? json_dumps(winners_array, 0) : "None");
+  
+  json_decref(winners_array);
+
+commit_and_unlock:
+  rc = commit (db);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("daily_lottery_draw: commit failed: %s", sqlite3_errmsg (db));
+      goto rollback_and_unlock;
+    }
+
+  unlock (db, "daily_lottery_draw");
+  return SQLITE_OK;
+
+rollback_and_unlock:
+  if (st_check) sqlite3_finalize(st_check);
+  if (st_tickets) sqlite3_finalize(st_tickets);
+  if (st_winners) sqlite3_finalize(st_winners);
+  if (st_update_state) sqlite3_finalize(st_update_state);
+  rollback (db);
+  unlock (db, "daily_lottery_draw");
+  return rc;
+}
+
+int
+h_deadpool_resolution_cron (sqlite3 *db, int64_t now_s)
+{
+  if (!try_lock (db, "deadpool_resolution_cron", now_s))
+    return 0;
+
+  LOGI ("deadpool_resolution_cron: Starting Dead Pool bet resolution.");
+
+  int rc = begin (db);
+  if (rc)
+    {
+      unlock (db, "deadpool_resolution_cron");
+      return rc;
+    }
+
+  sqlite3_stmt *st_bets = NULL, *st_update_bet = NULL, *st_lost_bets = NULL;
+  // 1. Mark expired bets as resolved
+  sqlite3_stmt *st_expire = NULL;
+  const char *sql_expire = "UPDATE tavern_deadpool_bets SET resolved = 1, result = 'expired', resolved_at = ? WHERE resolved = 0 AND expires_at <= ?;";
+  rc = sqlite3_prepare_v2(db, sql_expire, -1, &st_expire, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("deadpool_resolution_cron: Failed to prepare expire statement: %s", sqlite3_errmsg(db));
+      goto rollback_and_unlock;
+  }
+  sqlite3_bind_int(st_expire, 1, (int)now_s);
+  sqlite3_bind_int(st_expire, 2, (int)now_s);
+  if (sqlite3_step(st_expire) != SQLITE_DONE) {
+      LOGE("deadpool_resolution_cron: Failed to expire old bets: %s", sqlite3_errmsg(db));
+      goto rollback_and_unlock;
+  }
+  sqlite3_finalize(st_expire);
+  st_expire = NULL;
+
+  // 2. Process ship.destroyed events
+  sqlite3_stmt *st_events = NULL;
+  const char *sql_events =
+      "SELECT payload FROM engine_events WHERE type = 'ship.destroyed' AND ts > (SELECT COALESCE(MAX(resolved_at), 0) FROM tavern_deadpool_bets WHERE result IS NOT NULL AND result != 'expired');";
+  rc = sqlite3_prepare_v2(db, sql_events, -1, &st_events, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("deadpool_resolution_cron: Failed to prepare events statement: %s", sqlite3_errmsg(db));
+      goto rollback_and_unlock;
+  }
+
+  while (sqlite3_step(st_events) == SQLITE_ROW) {
+      const char *payload_str = (const char *)sqlite3_column_text(st_events, 0);
+      json_error_t jerr;
+      json_t *payload_obj = json_loads(payload_str, 0, &jerr);
+      if (!payload_obj) {
+          LOGW("deadpool_resolution_cron: Failed to parse event payload: %s", jerr.text);
+          continue;
+      }
+      int destroyed_player_id = json_integer_value(json_object_get(payload_obj, "player_id"));
+      json_decref(payload_obj);
+
+      if (destroyed_player_id <= 0) continue;
+
+      // Find matching unresolved bets for the destroyed player
+      sqlite3_stmt *st_bets = NULL;
+      const char *sql_bets = "SELECT id, bettor_id, amount, odds_bp FROM tavern_deadpool_bets WHERE target_id = ? AND resolved = 0;";
+      rc = sqlite3_prepare_v2(db, sql_bets, -1, &st_bets, NULL);
+      if (rc != SQLITE_OK) {
+          LOGE("deadpool_resolution_cron: Failed to prepare bets statement: %s", sqlite3_errmsg(db));
+          continue;
+      }
+      sqlite3_bind_int(st_bets, 1, destroyed_player_id);
+
+      while (sqlite3_step(st_bets) == SQLITE_ROW) {
+          int bet_id = sqlite3_column_int(st_bets, 0);
+          int bettor_id = sqlite3_column_int(st_bets, 1);
+          long long amount = sqlite3_column_int64(st_bets, 2);
+          int odds_bp = sqlite3_column_int(st_bets, 3);
+
+          long long payout = (amount * odds_bp) / 10000; // Calculate payout
+          if (payout < 0) payout = 0; // Ensure payout is not negative
+
+          // Payout to winner
+          int add_rc = h_add_credits(db, "player", bettor_id, payout, NULL);
+          if (add_rc != SQLITE_OK) {
+              LOGE("deadpool_resolution_cron: Failed to payout winnings to player %d for bet %d: %s", bettor_id, bet_id, sqlite3_errmsg(db));
+              // Log and continue, or abort transaction if critical
+          }
+
+          // Mark bet as won
+          sqlite3_stmt *st_update_bet = NULL;
+          const char *sql_update_bet = "UPDATE tavern_deadpool_bets SET resolved = 1, result = 'won', resolved_at = ? WHERE id = ?;";
+          rc = sqlite3_prepare_v2(db, sql_update_bet, -1, &st_update_bet, NULL);
+          if (rc != SQLITE_OK) {
+              LOGE("deadpool_resolution_cron: Failed to prepare update bet statement: %s", sqlite3_errmsg(db));
+              goto rollback_and_unlock;
+          }
+          sqlite3_bind_int(st_update_bet, 1, (int)now_s);
+          sqlite3_bind_int(st_update_bet, 2, bet_id);
+          if (sqlite3_step(st_update_bet) != SQLITE_DONE) {
+              LOGE("deadpool_resolution_cron: Failed to mark bet %d as won: %s", bet_id, sqlite3_errmsg(db));
+              goto rollback_and_unlock;
+          }
+          sqlite3_finalize(st_update_bet);
+          st_update_bet = NULL;
+      }
+      sqlite3_finalize(st_bets);
+      st_bets = NULL;
+
+      // Mark all other unresolved bets on this target as lost
+      sqlite3_stmt *st_lost_bets = NULL;
+      const char *sql_lost_bets = "UPDATE tavern_deadpool_bets SET resolved = 1, result = 'lost', resolved_at = ? WHERE target_id = ? AND resolved = 0;";
+      rc = sqlite3_prepare_v2(db, sql_lost_bets, -1, &st_lost_bets, NULL);
+      if (rc != SQLITE_OK) {
+          LOGE("deadpool_resolution_cron: Failed to prepare lost bets statement: %s", sqlite3_errmsg(db));
+          goto rollback_and_unlock;
+      }
+      sqlite3_bind_int(st_lost_bets, 1, (int)now_s);
+      sqlite3_bind_int(st_lost_bets, 2, destroyed_player_id);
+      if (sqlite3_step(st_lost_bets) != SQLITE_DONE) {
+          LOGE("deadpool_resolution_cron: Failed to mark lost bets for target %d: %s", destroyed_player_id, sqlite3_errmsg(db));
+          goto rollback_and_unlock;
+      }
+      sqlite3_finalize(st_lost_bets);
+      st_lost_bets = NULL;
+  }
+  sqlite3_finalize(st_events);
+  st_events = NULL;
+
+  rc = commit (db);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("deadpool_resolution_cron: commit failed: %s", sqlite3_errmsg (db));
+      goto rollback_and_unlock;
+    }
+
+  LOGI ("deadpool_resolution_cron: Dead Pool bet resolution completed.");
+  unlock (db, "deadpool_resolution_cron");
+  return SQLITE_OK;
+
+rollback_and_unlock:
+  if (st_expire) sqlite3_finalize(st_expire);
+  if (st_events) sqlite3_finalize(st_events);
+  if (st_bets) sqlite3_finalize(st_bets);
+  if (st_update_bet) sqlite3_finalize(st_update_bet);
+  if (st_lost_bets) sqlite3_finalize(st_lost_bets);
+  rollback (db);
+  unlock (db, "deadpool_resolution_cron");
+  return rc;
+}
+
+int
+h_tavern_notice_expiry_cron (sqlite3 *db, int64_t now_s)
+{
+  if (!try_lock (db, "tavern_notice_expiry_cron", now_s))
+    return 0;
+
+  LOGI ("tavern_notice_expiry_cron: Starting Tavern notice and corp recruiting expiry cleanup.");
+
+  int rc = begin (db);
+  if (rc)
+    {
+      unlock (db, "tavern_notice_expiry_cron");
+      return rc;
+    }
+
+  sqlite3_stmt *st = NULL;
+  int deleted_count = 0;
+
+  // Delete expired tavern_notices
+  const char *sql_delete_notices = "DELETE FROM tavern_notices WHERE expires_at <= ?;";
+  rc = sqlite3_prepare_v2(db, sql_delete_notices, -1, &st, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("tavern_notice_expiry_cron: Failed to prepare notices delete statement: %s", sqlite3_errmsg(db));
+      goto rollback_and_unlock;
+  }
+  sqlite3_bind_int(st, 1, (int)now_s);
+  if (sqlite3_step(st) != SQLITE_DONE) {
+      LOGE("tavern_notice_expiry_cron: Failed to delete expired notices: %s", sqlite3_errmsg(db));
+      goto rollback_and_unlock;
+  }
+  deleted_count += sqlite3_changes(db);
+  sqlite3_finalize(st);
+  st = NULL;
+
+  // Delete expired corp_recruiting entries
+  const char *sql_delete_corp_recruiting = "DELETE FROM corp_recruiting WHERE expires_at <= ?;";
+  rc = sqlite3_prepare_v2(db, sql_delete_corp_recruiting, -1, &st, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("tavern_notice_expiry_cron: Failed to prepare corp recruiting delete statement: %s", sqlite3_errmsg(db));
+      goto rollback_and_unlock;
+  }
+  sqlite3_bind_int(st, 1, (int)now_s);
+  if (sqlite3_step(st) != SQLITE_DONE) {
+      LOGE("tavern_notice_expiry_cron: Failed to delete expired corp recruiting entries: %s", sqlite3_errmsg(db));
+      goto rollback_and_unlock;
+  }
+  deleted_count += sqlite3_changes(db);
+  sqlite3_finalize(st);
+  st = NULL;
+
+  rc = commit (db);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("tavern_notice_expiry_cron: commit failed: %s", sqlite3_errmsg (db));
+      goto rollback_and_unlock;
+    }
+
+  LOGI ("tavern_notice_expiry_cron: Removed %d expired Tavern notices and corp recruiting entries.", deleted_count);
+  unlock (db, "tavern_notice_expiry_cron");
+  return SQLITE_OK;
+
+rollback_and_unlock:
+  if (st) sqlite3_finalize(st);
+  rollback (db);
+  unlock (db, "tavern_notice_expiry_cron");
+  return rc;
+}
+
+int
+h_loan_shark_interest_cron (sqlite3 *db, int64_t now_s)
+{
+  if (!try_lock (db, "loan_shark_interest_cron", now_s))
+    return 0;
+
+  if (!g_tavern_cfg.loan_shark_enabled) {
+      LOGI("loan_shark_interest_cron: Loan Shark is disabled in config. Skipping.");
+      unlock(db, "loan_shark_interest_cron");
+      return 0;
+  }
+
+  LOGI ("loan_shark_interest_cron: Starting Loan Shark interest and default processing.");
+
+  int rc = begin (db);
+  if (rc)
+    {
+      unlock (db, "loan_shark_interest_cron");
+      return rc;
+    }
+
+  sqlite3_stmt *st = NULL;
+  const char *sql_select_loans = "SELECT player_id, principal, interest_rate, due_date, is_defaulted FROM tavern_loans WHERE principal > 0;";
+  rc = sqlite3_prepare_v2(db, sql_select_loans, -1, &st, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("loan_shark_interest_cron: Failed to prepare select loans statement: %s", sqlite3_errmsg(db));
+      goto rollback_and_unlock;
+  }
+
+  int processed_loans = 0;
+  while (sqlite3_step(st) == SQLITE_ROW) {
+      int player_id = sqlite3_column_int(st, 0);
+      long long principal = sqlite3_column_int64(st, 1);
+      int interest_rate = sqlite3_column_int(st, 2);
+      // int due_date = sqlite3_column_int(st, 3); // Not directly used in this loop for application
+      // int is_defaulted = sqlite3_column_int(st, 4); // Handled by check_loan_default implicitly
+
+      // Apply interest
+      int apply_rc = apply_loan_interest(db, player_id, principal, interest_rate);
+      if (apply_rc != SQLITE_OK) {
+          LOGE("loan_shark_interest_cron: Failed to apply interest for player %d: %s", player_id, sqlite3_errmsg(db));
+          // Decide whether to continue or abort for this player's loan
+      }
+
+      // Check for default status
+      // Note: check_loan_default will update the DB itself if a loan becomes defaulted
+      check_loan_default(db, player_id, (int)now_s);
+      
+      processed_loans++;
+  }
+
+  if (rc != SQLITE_DONE) {
+      LOGE("loan_shark_interest_cron: Error stepping through loans: %s", sqlite3_errmsg(db));
+      goto rollback_and_unlock;
+  }
+  sqlite3_finalize(st);
+  st = NULL;
+
+  rc = commit (db);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("loan_shark_interest_cron: commit failed: %s", sqlite3_errmsg (db));
+      goto rollback_and_unlock;
+    }
+
+  LOGI ("loan_shark_interest_cron: Processed interest and defaults for %d loans.", processed_loans);
+  unlock (db, "loan_shark_interest_cron");
+  return SQLITE_OK;
+
+rollback_and_unlock:
+  if (st) sqlite3_finalize(st);
+  rollback (db);
+  unlock (db, "loan_shark_interest_cron");
+  return rc;
 }
 
 int

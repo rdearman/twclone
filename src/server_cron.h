@@ -3,6 +3,7 @@
 #include <sqlite3.h>
 #include <stdint.h>
 #include <jansson.h>
+#include <stdbool.h>
 
 typedef int (*cron_handler_fn) (sqlite3 * db, int64_t now_s);
 
@@ -38,5 +39,11 @@ int h_daily_market_settlement(sqlite3 *db, int64_t now_s);
 int db_log_engine_event (long long ts, const char *type, const char *actor_owner_type, int actor_id, int sector_id, json_t *payload, const char *idem_key);
 int h_daily_news_compiler(sqlite3 *db, int64_t now_s);
 int h_cleanup_old_news(sqlite3 *db, int64_t now_s);
+int h_daily_lottery_draw(sqlite3 *db, int64_t now_s);
+int h_deadpool_resolution_cron(sqlite3 *db, int64_t now_s);
+int h_tavern_notice_expiry_cron(sqlite3 *db, int64_t now_s);
+int h_loan_shark_interest_cron(sqlite3 *db, int64_t now_s);
+
+
 
 #endif /* SERVER_CRON_H */

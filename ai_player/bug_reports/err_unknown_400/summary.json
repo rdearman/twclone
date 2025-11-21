@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_unknown_400",
+    "first_seen": "20251121_071239_810",
+    "command": "unknown",
+    "error_code": 400,
+    "error_message": "Deposit amount must be a positive integer."
+}

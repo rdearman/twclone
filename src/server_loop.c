@@ -228,6 +228,19 @@ static const cmd_desc_t k_supported_cmds_fallback[] = {
     {"ship.upgrade", "Upgrade a ship"},
     {"shipyard.list", "List available ship hulls"},
     {"shipyard.upgrade", "Upgrade to a new ship hull"},
+    {"tavern.deadpool.place_bet", "Place a bet on a player's destruction"},
+    {"tavern.dice.play", "Play bar dice"},
+    {"tavern.graffiti.post", "Post a message on the graffiti wall"},
+    {"tavern.highstakes.play", "Play at the high-stakes table"},
+    {"tavern.loan.pay", "Repay a loan from the loan shark"},
+    {"tavern.loan.take", "Take a loan from the loan shark"},
+    {"tavern.lottery.buy_ticket", "Buy a lottery ticket"},
+    {"tavern.lottery.status", "Check lottery status"},
+    {"tavern.raffle.buy_ticket", "Buy a raffle ticket"},
+    {"tavern.round.buy", "Buy a round for the tavern"},
+    {"tavern.rumour.get_hint", "Get a hint from the rumour mill"},
+    {"tavern.trader.buy_password", "Buy an underground password from the grimy trader"},
+    {"tavern.barcharts.get_prices_summary", "Get a summary of commodity prices"},
     {"stock.exchange.list_stocks", "List stocks on the exchange"},
     {"stock.exchange.orders.cancel", "Cancel a stock order"},
     {"stock.exchange.orders.create", "Create a stock order"},
@@ -896,6 +909,60 @@ process_message (client_ctx_t *ctx, json_t *root)
       {
         rc = cmd_shipyard_upgrade (ctx, root);
       }
+  /* ---------- TAVERN ---------- */
+    else if (!strcasecmp (c, "tavern.lottery.buy_ticket"))
+      {
+        rc = cmd_tavern_lottery_buy_ticket (ctx, root);
+      }
+    else if (!strcasecmp (c, "tavern.lottery.status"))
+      {
+        rc = cmd_tavern_lottery_status (ctx, root);
+      }
+    else if (!strcasecmp (c, "tavern.deadpool.place_bet"))
+      {
+        rc = cmd_tavern_deadpool_place_bet (ctx, root);
+      }
+    else if (!strcasecmp (c, "tavern.dice.play"))
+      {
+        rc = cmd_tavern_dice_play (ctx, root);
+      }
+    else if (!strcasecmp (c, "tavern.highstakes.play"))
+      {
+        rc = cmd_tavern_highstakes_play (ctx, root);
+      }
+    else if (!strcasecmp (c, "tavern.raffle.buy_ticket"))
+      {
+        rc = cmd_tavern_raffle_buy_ticket (ctx, root);
+      }
+    else if (!strcasecmp (c, "tavern.trader.buy_password"))
+      {
+        rc = cmd_tavern_trader_buy_password (ctx, root);
+      }
+    else if (!strcasecmp (c, "tavern.graffiti.post"))
+      {
+        rc = cmd_tavern_graffiti_post (ctx, root);
+      }
+    else if (!strcasecmp (c, "tavern.round.buy"))
+      {
+        rc = cmd_tavern_round_buy (ctx, root);
+      }
+    else if (!strcasecmp (c, "tavern.loan.take"))
+      {
+        rc = cmd_tavern_loan_take (ctx, root);
+      }
+    else if (!strcasecmp (c, "tavern.loan.pay"))
+      {
+        rc = cmd_tavern_loan_pay (ctx, root);
+      }
+    else if (!strcasecmp (c, "tavern.rumour.get_hint"))
+      {
+        rc = cmd_tavern_rumour_get_hint (ctx, root);
+      }
+    else if (!strcasecmp (c, "tavern.barcharts.get_prices_summary"))
+      {
+        rc = cmd_tavern_barcharts_get_prices_summary (ctx, root);
+      }
+
   /* ---------- SHIP ---------- */
     else if (!strcasecmp (c, "ship.inspect"))
     {

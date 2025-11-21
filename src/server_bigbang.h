@@ -26,6 +26,8 @@ int create_ports (void);
 int create_ferringhi (int sector);
 int create_planets (void);
 extern int create_complex_warps (sqlite3 * db, int numSectors);
+int create_imperial (void);
+int create_taverns (void);
 // static int create_ports (sqlite3 * db, const char *path_to_db, int num_ports);
 
 #endif /* SERVER_BIGBANG_H */

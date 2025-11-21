@@ -436,7 +436,25 @@ server_broadcast_event (const char *event_type, json_t *data)
   return (rc == 0) ? bc.deliveries : rc;
 }
 
+// Broadcast an event (type + payload) to all currently-connected players
+// in a specific sector. Payload is borrowed (not stolen).
+int server_broadcast_to_sector(int sector_id, const char *event_name, json_t *payload) {
+    if (!event_name || !payload || sector_id <= 0) {
+        return -1;
+    }
 
+    // Create a copy of the payload for each recipient as comm_publish_sector_event consumes the reference
+    json_t *payload_copy = json_deep_copy(payload);
+    if (!payload_copy) {
+        LOGE("server_broadcast_to_sector: Failed to deep copy payload for sector %d.", sector_id);
+        return -1;
+    }
+
+    // This function acts as a wrapper to comm_publish_sector_event, ensuring sector-specific filtering
+    comm_publish_sector_event(sector_id, event_name, payload_copy);
+
+    return 0; // Success
+}
 
 /* ===================== broadcast ===================== */
 

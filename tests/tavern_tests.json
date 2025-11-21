@@ -1,0 +1,308 @@
+{
+  "description": "Functional tests for Tavern features.",
+  "suites": {
+    "setup_tavern_player": [
+      {
+        "name": "Register Tavern Player",
+        "command": "auth.register",
+        "data": { "user_name": "taverntest", "password": "password" },
+        "expect": { "status": "ok" },
+        "user": "taverntest",
+        "passwd": "password"
+      },
+      {
+        "name": "Login Tavern Player",
+        "command": "auth.login",
+        "data": { "user_name": "taverntest", "password": "password" },
+        "expect": { "status": "ok" },
+        "user": "taverntest",
+        "passwd": "password",
+        "save": { "tavern_player_id": "data.player_id", "tavern_player_sector": "data.current_sector" }
+      },
+      {
+        "name": "Deposit initial funds to Tavern Player bank (100k)",
+        "command": "bank.deposit",
+        "data": { "amount": 10000000 },
+        "user": "taverntest",
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Travel to a Tavern Sector (sector 1 for now)",
+        "command": "move.warp",
+        "data": { "to_sector_id": 1 },
+        "user": "taverntest",
+        "expect": { "status": "ok", "type": "move.result" },
+        "asserts": [
+          { "path": "to_sector_id", "op": "==", "value": 1 }
+        ]
+      }
+    ],
+    "tavern_lottery_tests": [
+      {
+        "name": "Lottery - Buy Ticket Success",
+        "command": "tavern.lottery.buy_ticket",
+        "data": { "number": 123 },
+        "user": "taverntest",
+        "expect": { "status": "ok", "type": "tavern.lottery.buy_ticket_v1" },
+        "asserts": [
+          { "path": "status", "op": "==", "value": "Ticket purchased" },
+          { "path": "ticket_number", "op": "==", "value": 123 }
+        ]
+      },
+      {
+        "name": "Lottery - Buy Ticket - Insufficient Funds",
+        "command": "tavern.lottery.buy_ticket",
+        "data": { "number": 456 },
+        "user": "taverntest",
+        "expect": { "status": "refused", "error.code": 1702 }
+      },
+      {
+        "name": "Lottery - Get Status",
+        "command": "tavern.lottery.status",
+        "data": {},
+        "user": "taverntest",
+        "expect": { "status": "ok", "type": "tavern.lottery.status_v1" },
+        "asserts": [
+          { "path": "jackpot", "op": ">", "value": 0 },
+          { "path": "player_tickets", "op": "*array" },
+          { "path": "player_tickets.0.number", "op": "==", "value": 123 }
+        ]
+      }
+    ],
+    "tavern_deadpool_tests": [
+      {
+        "name": "Dead Pool - Place Bet Success",
+        "command": "tavern.deadpool.place_bet",
+        "data": { "target_id": "@player_id", "amount": 500 },
+        "user": "taverntest",
+        "save": { "player_id": "tavern_player_id" },
+        "expect": { "status": "ok", "type": "tavern.deadpool.place_bet_v1" },
+        "asserts": [
+          { "path": "status", "op": "==", "value": "Dead Pool bet placed." },
+          { "path": "target_id", "op": "==", "value": "@player_id" },
+          { "path": "amount", "op": "==", "value": 500 }
+        ]
+      },
+      {
+        "name": "Dead Pool - Place Bet - Bet on Self",
+        "command": "tavern.deadpool.place_bet",
+        "data": { "target_id": "@tavern_player_id", "amount": 100 },
+        "user": "taverntest",
+        "expect": { "status": "refused", "error.code": 1834 }
+      },
+      {
+        "name": "Dead Pool - Place Bet - Insufficient Funds",
+        "command": "tavern.deadpool.place_bet",
+        "data": { "target_id": "@player_id", "amount": 99999999 },
+        "user": "taverntest",
+        "expect": { "status": "refused", "error.code": 1702 }
+      }
+    ],
+    "tavern_dice_tests": [
+      {
+        "name": "Dice Play - Success (any outcome)",
+        "command": "tavern.dice.play",
+        "data": { "amount": 200 },
+        "user": "taverntest",
+        "expect": { "status": "ok", "type": "tavern.dice.play_v1" },
+        "asserts": [
+          { "path": "status", "op": "==", "value": "Dice game played." },
+          { "path": "die1", "op": ">", "value": 0 },
+          { "path": "die2", "op": ">", "value": 0 },
+          { "path": "total", "op": ">", "value": 1 }
+        ]
+      },
+      {
+        "name": "Dice Play - Insufficient Funds",
+        "command": "tavern.dice.play",
+        "data": { "amount": 999999999 },
+        "user": "taverntest",
+        "expect": { "status": "refused", "error.code": 1702 }
+      }
+    ],
+    "tavern_highstakes_tests": [
+      {
+        "name": "High Stakes Play - Success (any outcome)",
+        "command": "tavern.highstakes.play",
+        "data": { "amount": 1000, "rounds": 1 },
+        "user": "taverntest",
+        "expect": { "status": "ok", "type": "tavern.highstakes.play_v1" },
+        "asserts": [
+          { "path": "status", "op": "==", "value": "High-stakes game played." },
+          { "path": "initial_bet", "op": "==", "value": 1000 },
+          { "path": "rounds_played", "op": ">", "value": 0 }
+        ]
+      },
+      {
+        "name": "High Stakes Play - Insufficient Funds",
+        "command": "tavern.highstakes.play",
+        "data": { "amount": 999999999, "rounds": 1 },
+        "user": "taverntest",
+        "expect": { "status": "refused", "error.code": 1702 }
+      }
+    ],
+    "tavern_raffle_tests": [
+      {
+        "name": "Raffle - Buy Ticket Success (any outcome)",
+        "command": "tavern.raffle.buy_ticket",
+        "data": {},
+        "user": "taverntest",
+        "expect": { "status": "ok", "type": "tavern.raffle.buy_ticket_v1" },
+        "asserts": [
+          { "path": "status", "op": "glob", "value": "You *" },
+          { "path": "current_pot", "op": ">=", "value": 0 }
+        ]
+      },
+      {
+        "name": "Raffle - Buy Ticket - Insufficient Funds",
+        "command": "tavern.raffle.buy_ticket",
+        "data": {},
+        "user": "taverntest",
+        "expect": { "status": "refused", "error.code": 1702 }
+      }
+    ],
+    "tavern_trader_tests": [
+      {
+        "name": "Trader - Buy Password - Fail (Too Honorable)",
+        "command": "tavern.trader.buy_password",
+        "data": {},
+        "user": "taverntest",
+        "expect": { "status": "refused", "error.code": 1836 }
+      }
+      // Cannot test success case directly without changing player alignment.
+    ],
+    "tavern_graffiti_tests": [
+      {
+        "name": "Graffiti - Post Success",
+        "command": "tavern.graffiti.post",
+        "data": { "text": "Hello World from TavernTest!" },
+        "user": "taverntest",
+        "expect": { "status": "ok", "type": "tavern.graffiti.post_v1" },
+        "asserts": [
+          { "path": "status", "op": "==", "value": "Graffiti posted successfully." },
+          { "path": "text", "op": "==", "value": "Hello World from TavernTest!" }
+        ]
+      },
+      {
+        "name": "Graffiti - Post Empty Text",
+        "command": "tavern.graffiti.post",
+        "data": { "text": "" },
+        "user": "taverntest",
+        "expect": { "status": "refused", "error.code": 1302 }
+      }
+    ],
+    "tavern_round_tests": [
+      {
+        "name": "Buy Round - Success",
+        "command": "tavern.round.buy",
+        "data": {},
+        "user": "taverntest",
+        "expect": { "status": "ok", "type": "tavern.round.buy_v1" },
+        "asserts": [
+          { "path": "status", "op": "==", "value": "Round bought successfully!" },
+          { "path": "cost", "op": ">", "value": 0 },
+          { "path": "alignment_gain", "op": ">", "value": 0 }
+        ]
+      },
+      {
+        "name": "Buy Round - Insufficient Funds",
+        "command": "tavern.round.buy",
+        "data": {},
+        "user": "taverntest",
+        "expect": { "status": "refused", "error.code": 1702 }
+      }
+    ],
+    "tavern_loan_tests": [
+      {
+        "name": "Loan - Take Loan Success",
+        "command": "tavern.loan.take",
+        "data": { "amount": 10000 },
+        "user": "taverntest",
+        "expect": { "status": "ok", "type": "tavern.loan.take_v1" },
+        "asserts": [
+          { "path": "status", "op": "==", "value": "Loan taken successfully!" },
+          { "path": "amount", "op": "==", "value": 10000 },
+          { "path": "interest_rate_bp", "op": ">", "value": 0 }
+        ]
+      },
+      {
+        "name": "Loan - Take Loan - Already Has Loan",
+        "command": "tavern.loan.take",
+        "data": { "amount": 5000 },
+        "user": "taverntest",
+        "expect": { "status": "refused", "error.code": 1839 }
+      },
+      {
+        "name": "Loan - Pay Loan Success",
+        "command": "tavern.loan.pay",
+        "data": { "amount": 5000 },
+        "user": "taverntest",
+        "expect": { "status": "ok", "type": "tavern.loan.pay_v1" },
+        "asserts": [
+          { "path": "status", "op": "==", "value": "Loan payment successful." },
+          { "path": "paid_amount", "op": "==", "value": 5000 },
+          { "path": "remaining_principal", "op": ">", "value": 0 }
+        ]
+      },
+      {
+        "name": "Loan - Pay Loan - Full Repayment",
+        "command": "tavern.loan.pay",
+        "data": { "amount": 5000 },
+        "user": "taverntest",
+        "expect": { "status": "ok", "type": "tavern.loan.pay_v1" },
+        "asserts": [
+          { "path": "status", "op": "==", "value": "Loan fully paid!" },
+          { "path": "remaining_principal", "op": "==", "value": 0 }
+        ]
+      },
+      {
+        "name": "Loan - Pay Loan - No Outstanding Loan",
+        "command": "tavern.loan.pay",
+        "data": { "amount": 100 },
+        "user": "taverntest",
+        "expect": { "status": "refused", "error.code": 1838 }
+      }
+    ],
+    "tavern_rumour_tests": [
+      {
+        "name": "Rumour - Get Hint Success",
+        "command": "tavern.rumour.get_hint",
+        "data": {},
+        "user": "taverntest",
+        "expect": { "status": "ok", "type": "tavern.rumour.get_hint_v1" },
+        "asserts": [
+          { "path": "status", "op": "==", "value": "Rumour acquired." },
+          { "path": "hint", "op": "glob", "value": "I heard *" }
+        ]
+      },
+      {
+        "name": "Rumour - Get Hint - Insufficient Funds",
+        "command": "tavern.rumour.get_hint",
+        "data": {},
+        "user": "taverntest",
+        "expect": { "status": "refused", "error.code": 1702 }
+      }
+    ],
+    "tavern_barcharts_tests": [
+      {
+        "name": "Barcharts - Get Prices Summary Success",
+        "command": "tavern.barcharts.get_prices_summary",
+        "data": {},
+        "user": "taverntest",
+        "expect": { "status": "ok", "type": "tavern.barcharts.get_prices_summary_v1" },
+        "asserts": [
+          { "path": "status", "op": "==", "value": "Market summary acquired." },
+          { "path": "prices", "op": "*array" },
+          { "path": "prices.0.sector_id", "op": ">", "value": 0 }
+        ]
+      },
+      {
+        "name": "Barcharts - Get Prices Summary - Insufficient Funds",
+        "command": "tavern.barcharts.get_prices_summary",
+        "data": {},
+        "user": "taverntest",
+        "expect": { "status": "refused", "error.code": 1702 }
+      }
+    ]
+  }
+}

@@ -152,6 +152,11 @@ randomnum (int min, int max)
 
 }
 
+// Helper function for random number generation (inclusive)
+int get_random_int(int min, int max) {
+    return min + rand() % (max - min + 1);
+}
+
 
 
 // Utility functions for random numbers and clamping
@@ -416,6 +421,27 @@ bool json_get_int_flexible(json_t *data_obj, const char *key, int *out_val) {
         long lval = strtol(s, &endptr, 10);
         if (*endptr == '\0' && endptr != s) { // Check that conversion actually happened
             *out_val = (int)lval;
+            return true;
+        }
+    }
+    return false;
+}
+
+// Implementation of json_get_int64_flexible
+bool json_get_int64_flexible(json_t *json, const char *key, long long *out) {
+    if (!json || !key || !out) return false;
+
+    json_t *value = json_object_get(json, key);
+    if (!value) return false;
+
+    if (json_is_integer(value)) {
+        *out = json_integer_value(value);
+        return true;
+    } else if (json_is_string(value)) {
+        // Attempt to parse string as long long
+        long long ll_val;
+        if (sscanf(json_string_value(value), "%lld", &ll_val) == 1) {
+            *out = ll_val;
             return true;
         }
     }

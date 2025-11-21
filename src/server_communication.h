@@ -48,11 +48,6 @@ extern "C"
 
   void comm_publish_sector_event (int sector_id, const char *event_name,
 				  json_t * data);
-  void comm_publish_sector_event (int sector_id, const char *event_name,
-				  json_t * data);
-
-  void comm_publish_sector_event (int sector_id, const char *event_name,
-				  json_t * data);
 
   /* ---- Ephemeral gameplay/admin broadcast ---- */
   typedef enum
@@ -77,6 +72,10 @@ extern "C"
 // Broadcast an event (type + payload) to all currently-connected players
 // who are subscribed (exact or domain.*). Data is borrowed (not stolen).
   int server_broadcast_event (const char *event_type, json_t * data);
+
+// Broadcast an event (type + payload) to all currently-connected players
+// in a specific sector. Payload is borrowed (not stolen).
+  int server_broadcast_to_sector(int sector_id, const char *event_name, json_t *payload);
 
 
 

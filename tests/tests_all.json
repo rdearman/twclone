@@ -1,850 +1,441 @@
 {
     "tests":
     [
-
-    {
-      "name": "auth.register (new user)",
-      "cmd": "auth.register",
-      "data": {
-        "user_name": "test_user_tbd",
-        "password": "password123"
-      },
-      "expect": {
-        "status": "error",
-        "type": "error",
-        "error": {
-          "code": 1210,
-          "message": "Username already exists"
-        }
-      }
-    },
-
-	{
-	    "name": "player.my_info",
-	    "cmd": "player.my_info",
-	    "expect": {
-		"status": "ok",
-		"type": "player.info",
-		"data": { "player": "*", "ship": "*" }
-	    },
-	    "capture": {
-		"my_id": "data.player.id",
-		"my_name": "data.player.name", 
-		"curSector": "data.ship.location.sector_id"
-	    }
-	},
-    {
-      "name": "auth.register (second user)",
-      "cmd": "auth.register",
-      "data": {
-        "user_name": "test_user_2",
-        "password": "password123"
-      },
-      "expect": {
-        "status": "error",
-        "type": "error",
-        "error": {
-          "code": 1210,
-          "message": "Username already exists"
-        }
-      }
-    },
-    {
-      "name": "player.my_info (second user)",
-      "cmd": "player.my_info",
-      "expect": {
-        "status": "ok",
-        "type": "player.info",
-        "data": { "player": "*", "ship": "*" }
-      },
-      "capture": {
-        "second_player_id": "data.player.id",
-        "second_player_name": "data.player.name"
-      }
-    },
-    {
-        "name": "bank.transfer (successful to another player)",
-        "cmd": "bank.transfer",
-        "idempotency_key": "test-bank-transfer-success",
-        "data": {
-            "to_player_id": "@second_player_id",
-            "amount": 10000
-        },
-        "expect": {
-            "status": "ok",
-            "type": "bank.transfer.confirmed",
-            "data": {
-                "from_balance": "*int",
-                "to_balance": "*int"
-            }
-        },
-        "asserts": [
-            { "path": "data.from_balance", "op": ">=", "value": 940000 },
-            { "path": "data.to_balance", "op": ">=", "value": 10000 }
-        ]
-    },
-    {
-        "name": "bank.transfer (insufficient funds)",
-        "cmd": "bank.transfer",
-        "idempotency_key": "test-bank-transfer-insufficient-funds",
-        "data": {
-            "to_player_id": "@second_player_id",
-            "amount": 999999999
-        },
-        "expect": {
-            "status": "refused",
-            "error": {
-                "code": 1302,
-                "message": "Cannot transfer to self"
-            }
-        }
-    },
-    {
-        "name": "bank.transfer (invalid recipient)",
-        "cmd": "bank.transfer",
-        "idempotency_key": "test-bank-transfer-invalid-recipient",
-        "data": {
-            "to_player_id": 999999,
-            "amount": 100
-        },
-        "expect": {
-            "status": "refused",
-            "error": {
-                "code": 1702,
-                "message": "Insufficient funds"
-            }
-        }
-    },
-      {
-      "name": "sector.search (by text)",
-      "cmd": "sector.search",
-      "data": {
-        "q": "Federation"
-      },
-      "expect": {
-        "status": "ok",
-        "type": "sector.search_results_v1",
-        "data": {
-          "items": "*array"
-        }
-      }
-      },
-	
-	{
-	    "name": "mail.send",
-	    "cmd": "mail.send",
-	    "data": {
-		"to": "@my_name", 
-		"subject": "Hello",
-		"body": "Test"
-	    },
-	    "expect": {
-		"status": "ok",
-		"type": "mail.sent",
-		"data": {
-		    "id": "*" 
-		}
-	    }
-	},
-
-	{
-	    "name": "mail.inbox",
-	    "cmd": "mail.inbox",
-	    "data": {
-		"limit": 5
-	    },
-	    "expect": {
-		"status": "ok",
-		"type": "mail.inbox_v1",
-		"data": {
-		    "items": "*array"
-		}
-	    }
-	},
-	{
-	    "name": "mail.delete (ids array)",
-	    "cmd": "mail.delete",
-	    "data": {
-		"ids": [
-		    1
-		]
-	    },
-	    "expect": {
-		"status": "ok",
-		"type": "mail.deleted"
-	    }
-	},
-	
-    {
-      "name": "auth.login",
-      "cmd": "auth.login",
-      "data": {
-        "user_name": "@user",
-        "password": "@passwd"
-      },
-      "expect": {
-        "status": "error",
-        "type": "error",
-        "error": {
-          "code": 1220,
-          "message": "Invalid credentials"
-        }
-      }
-    },
-      {
-	  "name": "system.hello",
-	  "cmd": "system.hello",
-	  "expect": {
-	      "id": "srv-ok",
-	      "ts": "*",
-	      "status": "ok",
-	      "type": "session.hello",
-	      "data": {
-		  "protocol_version": "*",
-		  "server_time_unix": "*",
-		  "authenticated": true,
-		  "player_id": "*",
-		  "current_sector": "*",
-		  "server_time": "*"
-	      },
-	      "error": null,
-	      "meta": "*"
-	  },
-	  "capture": { "curSector": "data.current_sector" }
-      },
-      {
-	  "name": "sector.info (current)",
-	  "cmd": "move.describe_sector",
-	  "data": { "sector_id": "@curSector" },
-	  "expect": {
-	      "id": "srv-ok",
-	      "ts": "*",
-	      "status": "ok",
-	      "type": "sector.info",
-	      "data": {
-		  "sector_id": "*",
-		  "ports": "*array"
-	      },
-	      "meta": "*"
-	  },
-	  "asserts": [
-	      { "path": "data.sector_id", "op": ">", "value": 0 }
-	  ],
-	  "capture": {
-	      "portId": "data.ports.0.id"
-	  }
-      },
-      {
-	  "name": "system.capabilities",
-	  "cmd": "system.capabilities",
-	  "expect": {
-	      "id": "srv-ok",
-	      "ts": "*",
-	      "status": "ok",
-	      "type": "system.capabilities",
-	      "data": {
-		  "limits": {
-		      "max_bulk": "*",
-		      "max_page_size": "*",
-		      "max_beacon_len": "*"
-		  },
-		  "features": {
-		      "auth": "*",
-		      "warp": "*",
-		      "sector.describe": "*",
-		      "trade.buy": "*",
-		      "server_autopilot": "*"
-		  },
-		  "version": "*"
-	      },
-	      "error": null,
-	      "meta": "*"
-	  }
-      },
-      {
-	  "name": "player.my_info",
-	  "cmd": "player.my_info",
-	  "expect": {
-	      "id": "srv-ok",
-	      "ts": "*",
-	      "status": "ok",
-	      "type": "player.info",
-	      "data": { "player": "*", "ship": "*" },
-	      "error": null,
-	      "meta": "*"
-	  },
-	  "capture": {
-	      "my_id": "data.player.id",
-	      "curSector": "data.ship.location.sector_id"
-	  }
-      },
-      {
-	  "name": "ship.info",
-	  "cmd": "ship.info",
-	  "expect": {
-	      "id": "srv-ok",
-	      "ts": "*",
-	      "status": "ok",
-              "type": "ship.status",
-              "data": {
-		  "ship": "*"
-	      },
-	      "error": null,
-	      "meta": "*"
-
-	  }
-      },
-      {
-      "name": "move.autopilot.status (NIY)",
-      "cmd": "move.autopilot.status",
-      "expect": {
-        "status": "error",
-        "type": "error",
-        "error": {
-          "code": 1101
-        }
-      }
-    },
-
-      {
-          "name": "move.autopilot.start (ok)",
-          "cmd": "move.autopilot.start",
-          "data": {
-              "to": 10 
-          },
-          "expect": {
-              "status": "ok",
-              "type": "move.path_v1"
-          },
-          "asserts": [
-              { "path": "data.total_cost", "op": "==", "value": 8 },
-              { "path": "data.steps.0", "op": "==", "value": 155 }
-          ]
-      },
-      {
-      "name": "move.autopilot.stop (NIY)",
-      "cmd": "move.autopilot.stop",
-      "expect": {
-        "status": "error",
-        "type": "error",
-        "error": {
-          "code": 1101
-        }
-      }
-    },
-      {
-	  "name": "Set Test Beacon",
-	  "command": "sector.set_beacon",
-	  "data": {
-	      "sector_id": "@curSector",
-	      "text": "TESTING!"
-	  }
-      },
-
-      {
-	  "name": "system.describe_schema (system)",
-	  "cmd": "system.describe_schema",
-	  "data": {
-	      "name": "auth.login" 
-	  },
-	  "expect": {
-	      "status": "ok",
-	      "type": "system.describe_schema",
-	      "data": {
-	          "name": "auth.login",
-	          "messages": "*array"
-	      }
-	  }
-      },
-
-      
-      {
-	  "name": "move.pathfind RRD CHECKS",
-	  "cmd": "move.pathfind",
-	  "data": {
-	      "from": 1,
-	      "to": 10
-	  },
-	  "expect": {
-	      "status": "ok",
-	      "type": "move.path_v1",
-	      "data": "*",
-	      "meta": "*"
-	  }
-      },
-
-
-      {
-	  "name": "move.warp (Sector 2)",
-	  "cmd": "move.warp",
-	  "data": {
-	      "from_sector_id": "@curSector",
-	      "to_sector_id": 2
-	  },
-	  "expect": {
-	      "status": "refused",
-	      "type": "error",
-	      "error": { "code": "*" },
-	      "meta": "*"
-	  }
-      },
-      
-
-      
-    {
-      "name": "move.warp refused: to current sector",
-      "cmd": "move.warp",
-      "data": {
-        "from": "@curSector",
-        "to_sector_id": "@curSector"
-      },
-      "expect": {
-        "status": "refused",
-        "error": {
-          "code": "*any"
-        }
-      }
-    },
-
-      {
-      "name": "trade.history (no next_cursor required)",
-      "cmd": "trade.history",
-      "data": {
-          "limit": 5,
-        "player_id": "@my_id"	  
-      },
-      "expect": {
-        "status": "ok",
-          "type": "trade.history",
-        "data": {
-          "history": "*array"
-        }
-      }
-      },
-
-	{
-      "name": "combat.deploy_fighters ok",
-      "cmd": "combat.deploy_fighters",
-      "idempotency_key": "test-fighters-deploy-1762338651-2237",
-      "data": {
-        "amount": 1,
-	  "to_sector": "@curSector",
-          "offense": 2
-      },
-      "expect": {
-        "status": "ok",
-        "type": "combat.fighters.deployed"
-      }
-    },
-
-	{
-      "name": "deploy.fighters.list (current sector)",
-      "cmd": "deploy.fighters.list",
-      "data": {
-        "sector_id": 51
-      },
-      "expect": {
-        "status": "ok",
-        "type": "Deploy.fighters.list_v1",
-        "data": {
-          "total": "*",
-          "entries": [
-            {
-              "sector_id": "*",
-              "count": "*",
-              "offense_mode": "*",
-              "player_id": "*",
-              "player_name": "*",
-              "corp_id": "*",
-              "corp_tag": "*",
-              "type": "*"
-            }
-          ]
-        }
-      }
-	},
-
-	{
-	    "name": "combat.lay_mines ok",
-	    "cmd": "combat.lay_mines",
-	    "idempotency_key": "test-mines-deploy-1762338651-2237",
-	    "data": {
-		"amount": 1,
-		"mine_type": 4 
-	    },
-	    "expect": {
-		"status": "ok",
-		"type": "combat.mines.deployed" 
-	    }
-	},
-	{
-	    "name": "deploy.mines.list (current sector)",
-	    "cmd": "deploy.mines.list",
-	    "data": {
-		"sector_id": 51
-	    },
-	    "expect": {
-		"status": "ok",
-		"type": "deploy.mines.list_v1",
-		"data": {
-		    "total": "*",
-		    "entries": "*array"
-		}
-            }
-	},
-    {
-      "name": "notice.create (system)",
-      "cmd": "sys.notice.create",
-      "data": {
-        "title": "Test notice",
-        "body": "This is a test notice",
-        "severity": "info"
-      },
-      "expect": {
-        "status": "ok",
-        "type": "announce.created",
-        "data": {
-          "id": "*",
-          "title": "*",
-          "body": "*",
-          "severity": "info"
-        }
-      }
-    },
-    {
-      "name": "notice.list (no next_cursor required)",
-      "cmd": "notice.list",
-      "data": {
-        "limit": 5
-      },
-      "expect": {
-        "status": "ok",
-        "type": "notice.list_v1",
-        "data": {
-          "items": "*array"
-        }
-      }
-    },
-	{
-	    "name": "TRADE.BUY ( FORCE ID)",
-	    "cmd": "trade.buy",
-	    "idempotency_key": "test-buy-single-1762338651-2594",
-	    "data": {
-		"port_id": "@portId",
-        "account": 0,
-        "items": [
-            {
-                "commodity": "ore",
-                "quantity": 1
-            }
-        ]
-	    },
-	    "expect": {
-		"status": "ok",
-		"type": "trade.buy_receipt_v1"
-	    }
-	},
-
-	{
-	    "name": "trade.buy ok (items list)",
-	    "cmd": "trade.buy",
-	    "data": {
-		"port_id": "@portId",
-        "account": 0,
-		"items": [
-		    {
-			"commodity": "ore",
-			"quantity": 1
-		    }
-		]
-	    },
-	    "expect": {
-		"status": "ok",
-		"type": "trade.buy_receipt_v1"
-	    }
-	},
-	{
-	    "name": "trade.buy idempotent replay",
-	    "cmd": "trade.buy",
-	    "idempotency_key": "@prev_idempotency_key",
-	    "data": {
-		"port_id": "@portId",
-        "account": 0,
-		"items": [
-		    {
-			"commodity": "ore",
-			"quantity": 1
-		    }
-		]
-	    },
-	    "expect": {
-		"status": "ok",
-		"type": "trade.buy_receipt_v1"
-	    }
-	},
-	{
-	    "name": "trade.sell refused invalid commodity",
-	    "cmd": "trade.sell",
-	    "idempotency_key": "test-sell-invalid-1762338651-4283",
-	    "data": {
-		"port_id": "@portId",
-		"sector_id": "@curSector",
-        "account": 0,
-		"items": [
-		    {
-			"commodity": "invalid_thing",
-			"quantity": 1
-		    }
-		]
-	    },
-	    "expect": {
-		"status": "refused",
-		"error": {
-		    "code": "*"
-		}
-	    }
-	},
-	{
-	    "name": "trade.port_info (by port_id)",
-	    "cmd": "trade.port_info",
-	    "data": {
-		"sector_id": "@curSector",
-		"port_id": "@portId"
-	    },
-	    "expect": {
-		"status": "ok",
-		"type": "trade.port_info",
-		"data": "*"
-	    }
-	},
         {
-            "name": "trade.quote (ore)",
-            "cmd": "trade.quote",
+            "name": "auth.register (new user)",
+            "cmd": "auth.register",
             "data": {
-                "port_id": "@portId",
-                "commodity": "ore",
-                "quantity": 10
-            },
-            "expect": {
-                "status": "ok",
-                "type": "trade.quote",
-                "data": {
-                    "port_id": 64,
-                    "commodity": "ore",
-                    "quantity": 10,
-                    "buy_price": "*float",
-                    "sell_price": "*float",
-                    "total_buy_price": "*int",
-                    "total_sell_price": "*int"
-                }
-            },
-            "asserts": [
-                { "path": "data.buy_price", "op": ">", "value": 0 },
-                { "path": "data.sell_price", "op": ">", "value": 0 },
-                { "path": "data.total_buy_price", "op": ">", "value": 0 },
-                { "path": "data.total_sell_price", "op": ">", "value": 0 }
-            ]
-        },
-        {
-            "name": "trade.quote (organics)",
-            "cmd": "trade.quote",
-            "data": {
-                "port_id": "@portId",
-                "commodity": "organics",
-                "quantity": 5
-            },
-            "expect": {
-                "status": "ok",
-                "type": "trade.quote",
-                "data": {
-                    "port_id": 64,
-                    "commodity": "organics",
-                    "quantity": 5,
-                    "buy_price": "*float",
-                    "sell_price": "*float",
-                    "total_buy_price": "*int",
-                    "total_sell_price": "*int"
-                }
-            },
-            "asserts": [
-                { "path": "data.buy_price", "op": ">", "value": 0 },
-                { "path": "data.sell_price", "op": ">", "value": 0 },
-                { "path": "data.total_buy_price", "op": ">", "value": 0 },
-                { "path": "data.total_sell_price", "op": ">", "value": 0 }
-            ]
-        },
-        {
-            "name": "trade.quote (invalid commodity)",
-            "cmd": "trade.quote",
-            "data": {
-                "port_id": "@portId",
-                "commodity": "invalid_item",
-                "quantity": 1
+                "user_name": "test_user_tbd",
+                "password": "password123"
             },
             "expect": {
                 "status": "error",
+                "type": "error",
                 "error": {
-                    "code": 400
+                    "code": 1210,
+                    "message": "Username already exists"
                 }
             }
         },
         {
-            "name": "trade.quote (zero quantity)",
-            "cmd": "trade.quote",
+            "name": "player.my_info",
+            "cmd": "player.my_info",
+            "expect": {
+                "status": "ok",
+                "type": "player.info",
+                "data": { "player": "*", "ship": "*" }
+            },
+            "capture": {
+                "my_id": "data.player.id",
+                "my_name": "data.player.name", 
+                "curSector": "data.ship.location.sector_id"
+            }
+        },
+        {
+            "name": "auth.register (second user)",
+            "cmd": "auth.register",
             "data": {
-                "port_id": "@portId",
-                "commodity": "ore",
-                "quantity": 0
+                "user_name": "test_user_2",
+                "password": "password123"
             },
             "expect": {
                 "status": "error",
+                "type": "error",
                 "error": {
-                    "code": 400
+                    "code": 1210,
+                    "message": "Username already exists"
                 }
             }
         },
         {
-            "name": "bank.deposit (initial credits for testing)",
-            "cmd": "bank.deposit",
+            "name": "Login Player 2 (for bank transfer tests)",
+            "command": "auth.login",
+            "data": { "user_name": "test_user_2", "password": "password123" },
+            "expect": { "status": "ok" },
+            "user": "test_user_2",
+            "passwd": "password123",
+            "save": {"player2_id": "data.player_id"}
+        },
+        {
+            "name": "bank.transfer (successful to another player)",
+            "cmd": "bank.transfer",
+            "idempotency_key": "test-bank-transfer-success",
             "data": {
-                "amount": 1000000
+                "to_player_id": "@player2_id",
+                "amount": 10000
             },
             "expect": {
                 "status": "ok",
-                "type": "bank.deposit.confirmed",
+                "type": "bank.transfer.confirmed",
                 "data": {
-                    "new_balance": "*int"
+                    "from_balance": "*int",
+                    "to_balance": "*int"
                 }
             },
             "asserts": [
-                { "path": "data.new_balance", "op": ">=", "value": 1000000 }
+                { "path": "data.from_balance", "op": ">=", "value": 940000 },
+                { "path": "data.to_balance", "op": ">=", "value": 10000 }
             ]
         },
         {
-            "name": "ship.jettison (ore - acquire cargo first)",
-            "cmd": "trade.buy",
-            "idempotency_key": "test-jettison-acquire-ore-1",
+            "name": "bank.transfer (insufficient funds)",
+            "cmd": "bank.transfer",
+            "idempotency_key": "test-bank-transfer-insufficient-funds",
             "data": {
-                "port_id": "@portId",
-                "items": [
-                    {
-                        "commodity": "ore",
-                        "quantity": 5
-                    }
+                "to_player_id": "@player2_id",
+                "amount": 999999999
+            },
+            "expect": {
+                "status": "refused",
+                "error": {
+                    "code": 1702,
+                    "message": "Insufficient funds"
+                }
+            }
+        },
+        {
+            "name": "bank.transfer (invalid recipient)",
+            "cmd": "bank.transfer",
+            "idempotency_key": "test-bank-transfer-invalid-recipient",
+            "data": {
+                "to_player_id": 999999,
+                "amount": 100
+            },
+            "expect": {
+                "status": "refused",
+                "error": {
+                    "code": 1204
+                }
+            }
+        },
+        {
+            "name": "sector.search (by text)",
+            "cmd": "sector.search",
+            "data": {
+                "q": "Federation"
+            },
+            "expect": {
+                "status": "ok",
+                "type": "sector.search_results_v1",
+                "data": {
+                    "items": "*array"
+                }
+            }
+        },
+        {
+            "name": "mail.send",
+            "cmd": "mail.send",
+            "data": {
+                "to": "@my_name",
+                "subject": "Hello",
+                "body": "Test"
+            },
+            "expect": {
+                "status": "ok",
+                "type": "mail.sent",
+                "data": {
+                    "id": "*"
+                }
+            }
+        },
+        {
+            "name": "mail.inbox",
+            "cmd": "mail.inbox",
+            "data": {
+                "limit": 5
+            },
+            "expect": {
+                "status": "ok",
+                "type": "mail.inbox_v1",
+                "data": {
+                    "items": "*array"
+                }
+            }
+        },
+        {
+            "name": "mail.delete (ids array)",
+            "cmd": "mail.delete",
+            "data": {
+                "ids": [
+                    1
                 ]
             },
             "expect": {
                 "status": "ok",
-                "type": "bank.deposited"
+                "type": "mail.deleted"
             }
         },
         {
-            "name": "ship.jettison (ore - successful jettison)",
-            "cmd": "ship.jettison",
+            "name": "auth.login",
+            "cmd": "auth.login",
             "data": {
-                "commodity": "ore",
-                "quantity": 2
+                "user_name": "@user",
+                "password": "@passwd"
             },
             "expect": {
                 "status": "ok",
-                "type": "ship.jettisoned",
+                "type": "auth.session"
+            }
+        },
+        {
+            "name": "system.hello",
+            "cmd": "system.hello",
+            "expect": {
+                "id": "srv-ok",
+                "ts": "*",
+                "status": "ok",
+                "type": "session.hello",
                 "data": {
-                    "remaining_cargo": [
-                        { "commodity": "ore", "quantity": 3 }
-                    ]
+                    "protocol_version": "*",
+                    "server_time_unix": "*",
+                    "authenticated": true,
+                    "player_id": "*",
+                    "current_sector": "*",
+                    "server_time": "*"
+                },
+                "error": null,
+                "meta": "*"
+            },
+            "capture": { "curSector": "data.current_sector" }
+        },
+        {
+            "name": "sector.info (current)",
+            "cmd": "move.describe_sector",
+            "data": { "sector_id": "@curSector" },
+            "expect": {
+                "id": "srv-ok",
+                "ts": "*",
+                "status": "ok",
+                "type": "sector.info",
+                "data": {
+                    "sector_id": "*",
+                    "ports": "*array"
+                },
+                "meta": "*"
+            },
+            "asserts": [
+                { "path": "data.sector_id", "op": ">", "value": 0 }
+            ],
+            "capture": {
+                "portId": "data.ports.0.id"
+            }
+        },
+        {
+            "name": "system.capabilities",
+            "cmd": "system.capabilities",
+            "expect": {
+                "id": "srv-ok",
+                "ts": "*",
+                "status": "ok",
+                "type": "system.capabilities",
+                "data": {
+                    "limits": {
+                        "max_bulk": "*",
+                        "max_page_size": "*",
+                        "max_beacon_len": "*"
+                    },
+                    "features": {
+                        "auth": "*",
+                        "warp": "*",
+                        "sector.describe": "*",
+                        "trade.buy": "*",
+                        "server_autopilot": "*"
+                    },
+                    "version": "*"
+                },
+                "error": null,
+                "meta": "*"
+            }
+        },
+        {
+            "name": "player.my_info",
+            "cmd": "player.my_info",
+            "expect": {
+                "id": "srv-ok",
+                "ts": "*",
+                "status": "ok",
+                "type": "player.info",
+                "data": { "player": "*", "ship": "*" },
+                "error": null,
+                "meta": "*"
+            },
+            "capture": {
+                "my_id": "data.player.id",
+                "curSector": "data.ship.location.sector_id"
+            }
+        },
+        {
+            "name": "ship.info",
+            "cmd": "ship.info",
+            "expect": {
+                "id": "srv-ok",
+                "ts": "*",
+                "status": "ok",
+                "type": "ship.status",
+                "data": {
+                    "ship": "*"
+                },
+                "error": null,
+                "meta": "*"
+
+            }
+        },
+        {
+            "name": "move.autopilot.status (NIY)",
+            "cmd": "move.autopilot.status",
+            "expect": {
+                "status": "error",
+                "type": "error",
+                "error": {
+                    "code": 1101
                 }
             }
         },
         {
-            "name": "ship.jettison (insufficient cargo)",
-            "cmd": "ship.jettison",
+            "name": "move.autopilot.start (ok)",
+            "cmd": "move.autopilot.start",
             "data": {
-                "commodity": "ore",
-                "quantity": 99999
+                "to": 10
+            },
+            "expect": {
+                "status": "ok",
+                "type": "move.path_v1"
+            },
+            "asserts": [
+                { "path": "data.total_cost", "op": "==", "value": 8 },
+                { "path": "data.steps.0", "op": "==", "value": 155 }
+            ]
+        },
+        {
+            "name": "move.autopilot.stop (NIY)",
+            "cmd": "move.autopilot.stop",
+            "expect": {
+                "status": "error",
+                "type": "error",
+                "error": {
+                    "code": 1101
+                }
+            }
+        },
+        {
+            "name": "Set Test Beacon",
+            "command": "sector.set_beacon",
+            "data": {
+                "sector_id": "@curSector",
+                "text": "TESTING!"
+            }
+        },
+        {
+            "name": "system.describe_schema (system)",
+            "cmd": "system.describe_schema",
+            "data": {
+                "name": "auth.login"
+            },
+            "expect": {
+                "status": "ok",
+                "type": "system.describe_schema",
+                "data": {
+                    "name": "auth.login",
+                    "messages": "*array"
+                }
+            }
+        },
+        {
+            "name": "move.pathfind RRD CHECKS",
+            "cmd": "move.pathfind",
+            "data": {
+                "from": 1,
+                "to": 10
+            },
+            "expect": {
+                "status": "ok",
+                "type": "move.path_v1",
+                "data": "*",
+                "meta": "*"
+            }
+        },
+        {
+            "name": "move.warp (Sector 2)",
+            "cmd": "move.warp",
+            "data": {
+                "from_sector_id": "@curSector",
+                "to_sector_id": 2
+            },
+            "expect": {
+                "status": "refused",
+                "type": "error",
+                "error": { "code": "*" },
+                "meta": "*"
+            }
+        },
+        {
+            "name": "move.warp refused: to current sector",
+            "cmd": "move.warp",
+            "data": {
+                "from": "@curSector",
+                "to_sector_id": "@curSector"
             },
             "expect": {
                 "status": "refused",
                 "error": {
-                    "code": 1402
+                    "code": "*any"
                 }
             }
         },
         {
-            "name": "ship.jettison (invalid commodity)",
-            "cmd": "ship.jettison",
+            "name": "trade.history (no next_cursor required)",
+            "cmd": "trade.history",
             "data": {
-                "commodity": "invalid_item",
-                "quantity": 1
+                "limit": 5,
+                "player_id": "@my_id"
             },
             "expect": {
-                "status": "refused",
-                "error": {
-                    "code": 1402
+                "status": "ok",
+                "type": "trade.history",
+                "data": {
+                    "history": "*array"
                 }
             }
         },
         {
-            "name": "combat.deploy_fighters (deploy 10 fighters)",
+            "name": "combat.deploy_fighters ok",
             "cmd": "combat.deploy_fighters",
-            "idempotency_key": "test-deploy-fighters-1",
+            "idempotency_key": "test-fighters-deploy-1762338651-2237",
             "data": {
-                "amount": 10,
+                "amount": 1,
+                "to_sector": "@curSector",
                 "offense": 2
             },
             "expect": {
                 "status": "ok",
-                "type": "combat.fighters.deployed",
-                "data": {
-                    "asset_id": "*int",
-                    "sector_id": "*int",
-                    "owner_player_id": "*int",
-                    "owner_corp_id": "*null_or_int",
-                    "amount": 10,
-                    "offense": 2,
-                    "sector_total_after": "*int"
-                }
-            },
-            "capture": {
-                "deployedFighterAssetId": "data.asset_id"
-            },
-            "asserts": [
-                { "path": "data.asset_id", "op": ">", "value": 0 },
-                { "path": "data.sector_id", "op": ">", "value": 0 },
-                { "path": "data.owner_player_id", "op": ">", "value": 0 },
-                { "path": "data.sector_total_after", "op": ">=", "value": 10 }
-            ]
+                "type": "combat.fighters.deployed"
+            }
         },
         {
-            "name": "deploy.fighters.list (verify deployed fighters)",
+            "name": "deploy.fighters.list (current sector)",
             "cmd": "deploy.fighters.list",
-            "data": {},
+            "data": {
+                "sector_id": 51
+            },
             "expect": {
                 "status": "ok",
                 "type": "Deploy.fighters.list_v1",
                 "data": {
-                    "total": "*int",
+                    "total": "*",
                     "entries": [
                         {
-                            "sector_id": "*int",
-                            "count": "*int",
-                            "offense_mode": "*int",
-                            "player_id": "*int",
-                            "player_name": "*string",
-                            "corp_id": "*int",
-                            "corp_tag": "*string",
-                            "type": 2
+                            "sector_id": "*",
+                            "count": "*",
+                            "offense_mode": "*",
+                            "player_id": "*",
+                            "player_name": "*",
+                            "corp_id": "*",
+                            "corp_tag": "*",
+                            "type": "*"
                         }
                     ]
                 }
-            },
-            "asserts": [
-                { "path": "data.total", "op": ">=", "value": 1 },
-                { "path": "data.entries.0.sector_id", "op": ">", "value": 0 },
-                { "path": "data.entries.0.count", "op": ">=", "value": 10 },
-                { "path": "data.entries.0.offense_mode", "op": "==", "value": 2 },
-                { "path": "data.entries.0.player_id", "op": ">", "value": 0 },
-                { "path": "data.entries.0.type", "op": "==", "value": 2 }
-            ]
+            }
         },
         {
             "name": "fighters.recall (recall 5 fighters)",
@@ -957,14 +548,14 @@
                 "items": [
                     {
                         "commodity": "ore",
-                        "quantity": 999999999
+                        "quantity": 1000
                     }
                 ]
             },
             "expect": {
                 "status": "refused",
                 "error": {
-                    "code": 1402
+                    "code": 1702
                 }
             }
         },
@@ -974,11 +565,10 @@
             "idempotency_key": "test-buy-fill-cargo",
             "data": {
                 "port_id": "@portId",
-                "account": 1,
                 "items": [
                     {
                         "commodity": "ore",
-                        "quantity": 1000
+                        "quantity": 1
                     }
                 ]
             },
@@ -992,7 +582,6 @@
             "idempotency_key": "test-buy-insufficient-cargo",
             "data": {
                 "port_id": "@portId",
-                "account": 1,
                 "items": [
                     {
                         "commodity": "ore",
@@ -1003,7 +592,7 @@
             "expect": {
                 "status": "refused",
                 "error": {
-                    "code": 1403
+                    "code": 1701
                 }
             }
         },
@@ -1014,10 +603,9 @@
             "data": {
                 "port_id": "@portId",
                 "sector_id": "@curSector",
-                "account": 1,
                 "items": [
                     {
-                        "commodity": "organics",
+                        "commodity": "ore",
                         "quantity": 999999999
                     }
                 ]
@@ -1025,7 +613,7 @@
             "expect": {
                 "status": "refused",
                 "error": {
-                    "code": 1402
+                    "code": 1702
                 }
             }
         },
@@ -1036,7 +624,6 @@
             "data": {
                 "port_id": "@portId",
                 "sector_id": "@curSector",
-                "account": 1,
                 "items": [
                     {
                         "commodity": "equipment",
@@ -1047,7 +634,7 @@
             "expect": {
                 "status": "refused",
                 "error": {
-                    "code": 1405
+                    "code": 1601
                 }
             }
         },
@@ -1212,6 +799,284 @@
             "asserts": [
                 { "path": "data.news.length", "op": "==", "value": 0 }
             ]
+        },
+        {
+            "name": "Register Tavern Player",
+            "command": "auth.register",
+            "data": { "user_name": "taverntest", "password": "password" },
+            "expect": { "status": "ok" },
+            "user": "taverntest",
+            "passwd": "password"
+        },
+        {
+            "name": "Login Tavern Player",
+            "command": "auth.login",
+            "data": { "user_name": "taverntest", "password": "password" },
+            "expect": { "status": "ok" },
+            "user": "taverntest",
+            "passwd": "password",
+            "save": { "tavern_player_id": "data.player_id", "tavern_player_sector": "data.current_sector" }
+        },
+        {
+            "name": "Deposit initial funds to Tavern Player bank (100k)",
+            "command": "bank.deposit",
+            "data": { "amount": 10000000 },
+            "user": "taverntest",
+            "expect": { "status": "ok" }
+        },
+        {
+            "name": "Travel to a Tavern Sector (sector 1 for now)",
+            "command": "move.warp",
+            "data": { "to_sector_id": 1 },
+            "user": "taverntest",
+            "expect": { "status": "ok", "type": "move.result" },
+            "asserts": [
+                { "path": "to_sector_id", "op": "==", "value": 1 }
+            ]
+        },
+        {
+            "name": "Lottery - Buy Ticket Success",
+            "command": "tavern.lottery.buy_ticket",
+            "data": { "number": 123 },
+            "user": "taverntest",
+            "expect": { "status": "ok", "type": "tavern.lottery.buy_ticket_v1" },
+            "asserts": [
+                { "path": "status", "op": "==", "value": "Ticket purchased" },
+                { "path": "ticket_number", "op": "==", "value": 123 }
+            ]
+        },
+        {
+            "name": "Lottery - Buy Ticket - Insufficient Funds",
+            "command": "tavern.lottery.buy_ticket",
+            "data": { "number": 456 },
+            "user": "taverntest",
+            "expect": { "status": "refused", "error.code": 1702 }
+        },
+        {
+            "name": "Lottery - Get Status",
+            "command": "tavern.lottery.status",
+            "data": {},
+            "user": "taverntest",
+            "expect": { "status": "ok", "type": "tavern.lottery.status_v1" },
+            "asserts": [
+                { "path": "jackpot", "op": ">", "value": 0 },
+                { "path": "player_tickets", "op": "*array" },
+                { "path": "player_tickets.0.number", "op": "==", "value": 123 }
+            ]
+        },
+        {
+            "name": "Dead Pool - Place Bet Success",
+            "command": "tavern.deadpool.place_bet",
+            "data": { "target_id": "@player_id", "amount": 500 },
+            "user": "taverntest",
+            "save": { "player_id": "tavern_player_id" },
+            "expect": { "status": "ok", "type": "tavern.deadpool.place_bet_v1" },
+            "asserts": [
+                { "path": "status", "op": "==", "value": "Dead Pool bet placed." },
+                { "path": "target_id", "op": "==", "value": "@player_id" },
+                { "path": "amount", "op": "==", "value": 500 }
+            ]
+        },
+        {
+            "name": "Dead Pool - Place Bet - Bet on Self",
+            "command": "tavern.deadpool.place_bet",
+            "data": { "target_id": "@tavern_player_id", "amount": 100 },
+            "user": "taverntest",
+            "expect": { "status": "refused", "error.code": 1834 }
+        },
+        {
+            "name": "Dead Pool - Place Bet - Insufficient Funds",
+            "command": "tavern.deadpool.place_bet",
+            "data": { "target_id": "@player_id", "amount": 99999999 },
+            "user": "taverntest",
+            "expect": { "status": "refused", "error.code": 1702 }
+        },
+        {
+            "name": "Dice Play - Success (any outcome)",
+            "command": "tavern.dice.play",
+            "data": { "amount": 200 },
+            "user": "taverntest",
+            "expect": { "status": "ok", "type": "tavern.dice.play_v1" },
+            "asserts": [
+                { "path": "status", "op": "==", "value": "Dice game played." },
+                { "path": "die1", "op": ">", "value": 0 },
+                { "path": "die2", "op": ">", "value": 0 },
+                { "path": "total", "op": ">", "value": 1 }
+            ]
+        },
+        {
+            "name": "Dice Play - Insufficient Funds",
+            "command": "tavern.dice.play",
+            "data": { "amount": 999999999 },
+            "user": "taverntest",
+            "expect": { "status": "refused", "error.code": 1702 }
+        },
+        {
+            "name": "High Stakes Play - Success (any outcome)",
+            "command": "tavern.highstakes.play",
+            "data": { "amount": 1000, "rounds": 1 },
+            "user": "taverntest",
+            "expect": { "status": "ok", "type": "tavern.highstakes.play_v1" },
+            "asserts": [
+                { "path": "status", "op": "==", "value": "High-stakes game played." },
+                { "path": "initial_bet", "op": "==", "value": 1000 },
+                { "path": "rounds_played", "op": ">", "value": 0 }
+            ]
+        },
+        {
+            "name": "High Stakes Play - Insufficient Funds",
+            "command": "tavern.highstakes.play",
+            "data": { "amount": 999999999, "rounds": 1 },
+            "user": "taverntest",
+            "expect": { "status": "refused", "error.code": 1702 }
+        },
+        {
+            "name": "Raffle - Buy Ticket Success (any outcome)",
+            "command": "tavern.raffle.buy_ticket",
+            "data": {},
+            "user": "taverntest",
+            "expect": { "status": "ok", "type": "tavern.raffle.buy_ticket_v1" },
+            "asserts": [
+                { "path": "status", "op": "glob", "value": "You *" },
+                { "path": "current_pot", "op": ">=", "value": 0 }
+            ]
+        },
+        {
+            "name": "Raffle - Buy Ticket - Insufficient Funds",
+            "command": "tavern.raffle.buy_ticket",
+            "data": {},
+            "user": "taverntest",
+            "expect": { "status": "refused", "error.code": 1702 }
+        },
+        {
+            "name": "Trader - Buy Password - Fail (Too Honorable)",
+            "command": "tavern.trader.buy_password",
+            "data": {},
+            "user": "taverntest",
+            "expect": { "status": "refused", "error.code": 1836 }
+        },
+        {
+            "name": "Graffiti - Post Success",
+            "command": "tavern.graffiti.post",
+            "data": { "text": "Hello World from TavernTest!" },
+            "user": "taverntest",
+            "expect": { "status": "ok", "type": "tavern.graffiti.post_v1" },
+            "asserts": [
+                { "path": "status", "op": "==", "value": "Graffiti posted successfully." },
+                { "path": "text", "op": "==", "value": "Hello World from TavernTest!" }
+            ]
+        },
+        {
+            "name": "Graffiti - Post Empty Text",
+            "command": "tavern.graffiti.post",
+            "data": { "text": "" },
+            "user": "taverntest",
+            "expect": { "status": "refused", "error.code": 1302 }
+        },
+        {
+            "name": "Buy Round - Success",
+            "command": "tavern.round.buy",
+            "data": {},
+            "user": "taverntest",
+            "expect": { "status": "ok", "type": "tavern.round.buy_v1" },
+            "asserts": [
+                { "path": "status", "op": "==", "value": "Round bought successfully!" },
+                { "path": "cost", "op": ">", "value": 0 },
+                { "path": "alignment_gain", "op": ">", "value": 0 }
+            ]
+        },
+        {
+            "name": "Buy Round - Insufficient Funds",
+            "command": "tavern.round.buy",
+            "data": {},
+            "user": "taverntest",
+            "expect": { "status": "refused", "error.code": 1702 }
+        },
+        {
+            "name": "Loan - Take Loan Success",
+            "command": "tavern.loan.take",
+            "data": { "amount": 10000 },
+            "user": "taverntest",
+            "expect": { "status": "ok", "type": "tavern.loan.take_v1" },
+            "asserts": [
+                { "path": "status", "op": "==", "value": "Loan taken successfully!" },
+                { "path": "amount", "op": "==", "value": 10000 },
+                { "path": "interest_rate_bp", "op": ">", "value": 0 }
+            ]
+        },
+        {
+            "name": "Loan - Take Loan - Already Has Loan",
+            "command": "tavern.loan.take",
+            "data": { "amount": 5000 },
+            "user": "taverntest",
+            "expect": { "status": "refused", "error.code": 1839 }
+        },
+        {
+            "name": "Loan - Pay Loan Success",
+            "command": "tavern.loan.pay",
+            "data": { "amount": 5000 },
+            "user": "taverntest",
+            "expect": { "status": "ok", "type": "tavern.loan.pay_v1" },
+            "asserts": [
+                { "path": "status", "op": "==", "value": "Loan payment successful." },
+                { "path": "paid_amount", "op": "==", "value": 5000 },
+                { "path": "remaining_principal", "op": ">", "value": 0 }
+            ]
+        },
+        {
+            "name": "Loan - Pay Loan - Full Repayment",
+            "command": "tavern.loan.pay",
+            "data": { "amount": 5000 },
+            "user": "taverntest",
+            "expect": { "status": "ok", "type": "tavern.loan.pay_v1" },
+            "asserts": [
+                { "path": "status", "op": "==", "value": "Loan fully paid!" },
+                { "path": "remaining_principal", "op": "==", "value": 0 }
+            ]
+        },
+        {
+            "name": "Loan - Pay Loan - No Outstanding Loan",
+            "command": "tavern.loan.pay",
+            "data": { "amount": 100 },
+            "user": "taverntest",
+            "expect": { "status": "refused", "error.code": 1838 }
+        },
+        {
+            "name": "Rumour - Get Hint Success",
+            "command": "tavern.rumour.get_hint",
+            "data": {},
+            "user": "taverntest",
+            "expect": { "status": "ok", "type": "tavern.rumour.get_hint_v1" },
+            "asserts": [
+                { "path": "status", "op": "==", "value": "Rumour acquired." },
+                { "path": "hint", "op": "glob", "value": "I heard *" }
+            ]
+        },
+        {
+            "name": "Rumour - Get Hint - Insufficient Funds",
+            "command": "tavern.rumour.get_hint",
+            "data": {},
+            "user": "taverntest",
+            "expect": { "status": "refused", "error.code": 1702 }
+        },
+        {
+            "name": "Barcharts - Get Prices Summary Success",
+            "command": "tavern.barcharts.get_prices_summary",
+            "data": {},
+            "user": "taverntest",
+            "expect": { "status": "ok", "type": "tavern.barcharts.get_prices_summary_v1" },
+            "asserts": [
+                { "path": "status", "op": "==", "value": "Market summary acquired." },
+                { "path": "prices", "op": "*array" },
+                { "path": "prices.0.sector_id", "op": ">", "value": 0 }
+            ]
+        },
+        {
+            "name": "Barcharts - Get Prices Summary - Insufficient Funds",
+            "command": "tavern.barcharts.get_prices_summary",
+            "data": {},
+            "user": "taverntest",
+            "expect": { "status": "refused", "error.code": 1702 }
         }
     ]
 }

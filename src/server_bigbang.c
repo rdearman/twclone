@@ -1766,6 +1766,7 @@ struct ImperialStats
 };
 
 
+
 int
 create_imperial (void)
 {
@@ -1891,6 +1892,101 @@ create_imperial (void)
 
   pthread_mutex_unlock (&db_mutex);
 
+  return 0;
+}
+
+int
+create_taverns (void)
+{
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return -1;
+
+  // 1. Get a random tavern name ID
+  int tavern_name_id = 0;
+  sqlite3_stmt *st_name = NULL;
+  const char *sql_get_name = "SELECT id FROM tavern_names ORDER BY RANDOM() LIMIT 1;";
+  if (sqlite3_prepare_v2(db, sql_get_name, -1, &st_name, NULL) != SQLITE_OK) {
+      fprintf (stderr, "create_taverns: Failed to prepare name statement: %s\n", sqlite3_errmsg(db));
+      return -1;
+  }
+  if (sqlite3_step(st_name) == SQLITE_ROW) {
+      tavern_name_id = sqlite3_column_int(st_name, 0);
+  } else {
+      fprintf (stderr, "create_taverns: No tavern names found in database.\n");
+      sqlite3_finalize(st_name);
+      return -1;
+  }
+  sqlite3_finalize(st_name);
+  if (tavern_name_id == 0) return -1; // Should not happen if data is seeded
+
+  // 2. Find Stardock sector_id
+  int stardock_sector_id = 0;
+  sqlite3_stmt *st_stardock = NULL;
+  const char *sql_get_stardock = "SELECT sector FROM ports WHERE type = 9 LIMIT 1;";
+  if (sqlite3_prepare_v2(db, sql_get_stardock, -1, &st_stardock, NULL) != SQLITE_OK) {
+      fprintf (stderr, "create_taverns: Failed to prepare stardock statement: %s\n", sqlite3_errmsg(db));
+      return -1;
+  }
+  if (sqlite3_step(st_stardock) == SQLITE_ROW) {
+      stardock_sector_id = sqlite3_column_int(st_stardock, 0);
+  }
+  sqlite3_finalize(st_stardock);
+  if (stardock_sector_id == 0) {
+      fprintf (stderr, "create_taverns: Stardock not found.\n");
+      return -1;
+  }
+
+  // 3. Find Orion Black Market sector_id (port type 10)
+  int orion_sector_id = 0;
+  sqlite3_stmt *st_orion = NULL;
+  const char *sql_get_orion = "SELECT sector FROM ports WHERE type = 10 LIMIT 1;";
+  if (sqlite3_prepare_v2(db, sql_get_orion, -1, &st_orion, NULL) != SQLITE_OK) {
+      fprintf (stderr, "create_taverns: Failed to prepare orion statement: %s\n", sqlite3_errmsg(db));
+      return -1;
+  }
+  if (sqlite3_step(st_orion) == SQLITE_ROW) {
+      orion_sector_id = sqlite3_column_int(st_orion, 0);
+  }
+  sqlite3_finalize(st_orion);
+  if (orion_sector_id == 0) {
+      fprintf (stderr, "create_taverns: Orion Black Market port not found.\n");
+  }
+
+  // 4. Insert taverns into the taverns table
+  const char *sql_insert_tavern = "INSERT OR IGNORE INTO taverns (sector_id, name_id, enabled) VALUES (?, ?, 1);";
+  sqlite3_stmt *st_insert = NULL;
+  int rc = 0;
+
+  // Insert Stardock tavern
+  if (sqlite3_prepare_v2(db, sql_insert_tavern, -1, &st_insert, NULL) != SQLITE_OK) {
+      fprintf (stderr, "create_taverns: Failed to prepare insert statement: %s\n", sqlite3_errmsg(db));
+      return -1;
+  }
+  sqlite3_bind_int(st_insert, 1, stardock_sector_id);
+  sqlite3_bind_int(st_insert, 2, tavern_name_id);
+  rc = sqlite3_step(st_insert);
+  if (rc != SQLITE_DONE) {
+      fprintf (stderr, "create_taverns: Failed to insert Stardock tavern: %s\n", sqlite3_errmsg(db));
+      sqlite3_finalize(st_insert);
+      return -1;
+  }
+  sqlite3_reset(st_insert);
+
+  // Insert Orion Black Market tavern (if found)
+  if (orion_sector_id != 0) {
+      sqlite3_bind_int(st_insert, 1, orion_sector_id);
+      sqlite3_bind_int(st_insert, 2, tavern_name_id); // Use the same name for simplicity
+      rc = sqlite3_step(st_insert);
+      if (rc != SQLITE_DONE) {
+          fprintf (stderr, "create_taverns: Failed to insert Orion tavern: %s\n", sqlite3_errmsg(db));
+          sqlite3_finalize(st_insert);
+          return -1;
+      }
+  }
+  sqlite3_finalize(st_insert);
+
+  fprintf (stderr, "BIGBANG: Created taverns in sectors %d and %d.\n", stardock_sector_id, orion_sector_id);
   return 0;
 }
 

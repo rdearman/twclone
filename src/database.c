@@ -402,6 +402,102 @@ const char *create_table_sql[] = {
 
   " CREATE TABLE IF NOT EXISTS npc_shipnames (id INTEGER, name TEXT); ",
 
+  " CREATE TABLE IF NOT EXISTS tavern_names ( "
+  "   id        INTEGER PRIMARY KEY AUTOINCREMENT, "
+  "   name      TEXT NOT NULL UNIQUE, "
+  "   enabled   INTEGER NOT NULL DEFAULT 1, "
+  "   weight    INTEGER NOT NULL DEFAULT 1 "
+  " ); ",
+
+  " CREATE TABLE IF NOT EXISTS taverns ( "
+  "   sector_id   INTEGER PRIMARY KEY REFERENCES sectors(id), "
+  "   name_id     INTEGER NOT NULL REFERENCES tavern_names(id), "
+  "   enabled     INTEGER NOT NULL DEFAULT 1 "
+  " ); ",
+
+  " CREATE TABLE IF NOT EXISTS tavern_settings ( "
+  "   id                          INTEGER PRIMARY KEY CHECK (id = 1), "
+  "   max_bet_per_transaction     INTEGER NOT NULL DEFAULT 5000, "
+  "   daily_max_wager             INTEGER NOT NULL DEFAULT 50000, "
+  "   enable_dynamic_wager_limit  INTEGER NOT NULL DEFAULT 0, "
+  "   graffiti_max_posts          INTEGER NOT NULL DEFAULT 100, "
+  "   notice_expires_days         INTEGER NOT NULL DEFAULT 7, "
+  "   buy_round_cost              INTEGER NOT NULL DEFAULT 1000, "
+  "   buy_round_alignment_gain    INTEGER NOT NULL DEFAULT 5, "
+  "   loan_shark_enabled          INTEGER NOT NULL DEFAULT 1 "
+  " ); ",
+
+  " CREATE TABLE IF NOT EXISTS tavern_lottery_state ( "
+  "   draw_date      TEXT PRIMARY KEY, "
+  "   winning_number INTEGER, "
+  "   jackpot        INTEGER NOT NULL, "
+  "   carried_over   INTEGER NOT NULL DEFAULT 0 "
+  " ); ",
+  " CREATE TABLE IF NOT EXISTS tavern_lottery_tickets ( "
+  "   id             INTEGER PRIMARY KEY, "
+  "   draw_date      TEXT NOT NULL, "
+  "   player_id      INTEGER NOT NULL REFERENCES players(id), "
+  "   number         INTEGER NOT NULL, "
+  "   cost           INTEGER NOT NULL, "
+  "   purchased_at   INTEGER NOT NULL "
+  " ); ",
+
+  " CREATE TABLE IF NOT EXISTS tavern_deadpool_bets ( "
+  "   id             INTEGER PRIMARY KEY, "
+  "   bettor_id      INTEGER NOT NULL REFERENCES players(id), "
+  "   target_id      INTEGER NOT NULL REFERENCES players(id), "
+  "   amount         INTEGER NOT NULL, "
+  "   odds_bp        INTEGER NOT NULL, "
+  "   placed_at      INTEGER NOT NULL, "
+  "   expires_at     INTEGER NOT NULL, "
+  "   resolved       INTEGER NOT NULL DEFAULT 0, "
+  "   resolved_at    INTEGER, "
+  "   result         TEXT "
+  " ); ",
+
+  " CREATE TABLE IF NOT EXISTS tavern_raffle_state ( "
+  "   id             INTEGER PRIMARY KEY CHECK (id = 1), "
+  "   pot            INTEGER NOT NULL, "
+  "   last_winner_id INTEGER, "
+  "   last_payout    INTEGER, "
+  "   last_win_ts    INTEGER "
+  " ); ",
+
+  " CREATE TABLE IF NOT EXISTS tavern_graffiti ( "
+  "   id          INTEGER PRIMARY KEY, "
+  "   player_id   INTEGER NOT NULL REFERENCES players(id), "
+  "   text        TEXT NOT NULL, "
+  "   created_at  INTEGER NOT NULL "
+  " ); ",
+
+  " CREATE TABLE IF NOT EXISTS tavern_notices ( "
+  "   id          INTEGER PRIMARY KEY, "
+  "   author_id   INTEGER NOT NULL REFERENCES players(id), "
+  "   corp_id     INTEGER, "
+  "   text        TEXT NOT NULL, "
+  "   created_at  INTEGER NOT NULL, "
+  "   expires_at  INTEGER NOT NULL "
+  " ); ",
+
+  " CREATE TABLE IF NOT EXISTS corp_recruiting ( "
+  "   corp_id       INTEGER PRIMARY KEY REFERENCES corporations(id), "
+  "   tagline       TEXT NOT NULL, "
+  "   min_alignment INTEGER, "
+  "   play_style    TEXT, "
+  "   created_at    INTEGER NOT NULL, "
+  "   expires_at    INTEGER NOT NULL "
+  " ); ",
+
+  " CREATE TABLE IF NOT EXISTS tavern_loans ( "
+  "   player_id      INTEGER PRIMARY KEY REFERENCES players(id), "
+  "   principal      INTEGER NOT NULL, "
+  "   interest_rate  INTEGER NOT NULL,     -- basis points "
+  "   due_date       INTEGER NOT NULL, "
+  "   is_defaulted   INTEGER NOT NULL DEFAULT 0 "
+  " ); ",
+
+
+
   " CREATE TABLE IF NOT EXISTS planettypes (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE, typeDescription TEXT, typeName TEXT, citadelUpgradeTime_lvl1 INTEGER, citadelUpgradeTime_lvl2 INTEGER, citadelUpgradeTime_lvl3 INTEGER, citadelUpgradeTime_lvl4 INTEGER, citadelUpgradeTime_lvl5 INTEGER, citadelUpgradeTime_lvl6 INTEGER, citadelUpgradeOre_lvl1 INTEGER, citadelUpgradeOre_lvl2 INTEGER, citadelUpgradeOre_lvl3 INTEGER, citadelUpgradeOre_lvl4 INTEGER, citadelUpgradeOre_lvl5 INTEGER, citadelUpgradeOre_lvl6 INTEGER, citadelUpgradeOrganics_lvl1 INTEGER, citadelUpgradeOrganics_lvl2 INTEGER, citadelUpgradeOrganics_lvl3 INTEGER, citadelUpgradeOrganics_lvl4 INTEGER, citadelUpgradeOrganics_lvl5 INTEGER, citadelUpgradeOrganics_lvl6 INTEGER, citadelUpgradeEquipment_lvl1 INTEGER, citadelUpgradeEquipment_lvl2 INTEGER, citadelUpgradeEquipment_lvl3 INTEGER, citadelUpgradeEquipment_lvl4 INTEGER, citadelUpgradeEquipment_lvl5 INTEGER, citadelUpgradeEquipment_lvl6 INTEGER, citadelUpgradeColonist_lvl1 INTEGER, citadelUpgradeColonist_lvl2 INTEGER, citadelUpgradeColonist_lvl3 INTEGER, citadelUpgradeColonist_lvl4 INTEGER, citadelUpgradeColonist_lvl5 INTEGER, citadelUpgradeColonist_lvl6 INTEGER, maxColonist_ore INTEGER, maxColonist_organics INTEGER, maxColonist_equipment INTEGER, fighters INTEGER, fuelProduction INTEGER, organicsProduction INTEGER, equipmentProduction INTEGER, fighterProduction INTEGER, maxore INTEGER, maxorganics INTEGER, maxequipment INTEGER, maxfighters INTEGER, breeding REAL, genesis_weight INTEGER NOT NULL DEFAULT 10); ",
 
   " CREATE TABLE IF NOT EXISTS ports ( "
@@ -1716,6 +1812,14 @@ const char *insert_default_sql[] = {
     "(48, 'The Horizon Breaker'),\n"
     "(49, 'Stormchaser'),\n"
     "(50, 'Beyond the Veil');\n",
+
+  "INSERT OR IGNORE INTO tavern_names (name, enabled, weight) VALUES ('The Rusty Flange', 1, 10);",
+  "INSERT OR IGNORE INTO tavern_names (name, enabled, weight) VALUES ('The Starfall Inn', 1, 10);",
+  "INSERT OR IGNORE INTO tavern_names (name, enabled, weight) VALUES ('Orions Den', 1, 5);",
+  "INSERT OR IGNORE INTO tavern_names (name, enabled, weight) VALUES ('FedSpace Cantina', 1, 8);",
+
+  "INSERT OR IGNORE INTO tavern_settings (id, max_bet_per_transaction, daily_max_wager, enable_dynamic_wager_limit, graffiti_max_posts, notice_expires_days, buy_round_cost, buy_round_alignment_gain, loan_shark_enabled)\n"
+    "VALUES (1, 5000, 50000, 0, 100, 7, 1000, 5, 1);",
 
   "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('FIGHTERS', 'Fighters', 100, 0, 1, NULL, 'FIGHTER', 1);",
   "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('SHIELDS', 'Shields', 200, 0, 1, NULL, 'SHIELD', 1);",
@@ -8905,6 +9009,7 @@ int db_get_shiptype_info(sqlite3 *db, int shiptype_id, int *holds, int *fighters
 }
 
 /* Return 1 if path exists from `from` to `to`, 0 if no path, <0 on error. */
+int
 db_path_exists (sqlite3 *db, int from, int to)
 {
   int max_id = 0;

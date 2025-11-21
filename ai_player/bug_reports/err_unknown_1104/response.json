@@ -1,0 +1,19 @@
+{
+    "id": "srv-err",
+    "reply_to": "c-fc4c7dff",
+    "ts": "2025-11-21T07:12:20Z",
+    "status": "error",
+    "type": "error",
+    "error": {
+        "code": 1104,
+        "message": "Schema not found or not implemented"
+    },
+    "data": null,
+    "meta": {
+        "rate_limit": {
+            "limit": 60,
+            "remaining": 60,
+            "reset": 60
+        }
+    }
+}
