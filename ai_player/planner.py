@@ -174,7 +174,15 @@ class Planner:
         Selects the next command, prioritizing the strategic goal.
         """
         
+        
+        # --- Check for turns remaining ---
+        player_turns_remaining = current_state.get("player_info", {}).get("player", {}).get("turns_remaining")
+        if player_turns_remaining is not None and player_turns_remaining <= 0:
+            logger.warning("No turns remaining. Skipping command execution.")
+            return None
+
         # --- 1. Check Invariants (Must-Do Actions) ---
+
         invariant_command = self._check_invariants(current_state)
         if invariant_command:
             # Invariant commands are simple and don't need the full payload builder
@@ -265,13 +273,15 @@ class Planner:
         if current_sector_id is not None and str(current_sector_id) != "None":
             current_sector_data = current_state.get("sector_data", {}).get(str(current_sector_id))
             
-            # Check for missing current sector data
-            if not current_sector_data:
-                logger.info(f"Invariant check: Missing sector_data for current sector {current_sector_id}. Fetching.")
+            # Check for missing or incomplete current sector data (e.g., missing adjacent sectors)
+            if not current_sector_data or not current_sector_data.get("adjacent"):
+                logger.info(f"Invariant check: Missing or incomplete sector_data for current sector {current_sector_id}. Fetching.")
                 return {"command": "sector.info", "data": {"sector_id": int(current_sector_id)}}
             
             # Check for missing schema for sector.scan.density if we have the scanner
-            if current_state.get("has_density_scanner") and not self.state_manager.get_schema("sector.scan.density"):
+            if (current_state.get("has_density_scanner") and 
+                "sector.scan.density" not in self.state_manager.get("schema_blacklist", []) and # Check blacklist
+                not self.state_manager.get_schema("sector.scan.density")):
                 logger.info("Invariant check: Missing schema for sector.scan.density. Fetching.")
                 return {"command": "system.describe_schema", "data": {"name": "sector.scan.density"}}
             
@@ -475,7 +485,8 @@ class Planner:
         logger.debug(f"Can sell check: cargo={cargo}, port_id={port_id}, port_sell_prices={port_sell_prices}") # ADDED THIS LINE
 
         for commodity, quantity in cargo.items():
-            if quantity > 0 and commodity.upper() in port_sell_prices:
+            sell_price = port_sell_prices.get(commodity.upper())
+            if quantity > 0 and sell_price is not None and sell_price > 0:
                 return True
         return False
 
@@ -505,8 +516,14 @@ class Planner:
 
         schema = self.state_manager.get_schema(command_name)
         if not schema:
-            logger.debug(f"No schema found for command '{command_name}'. Assuming empty payload.")
-            return {}
+            # For commands that are known to work with empty payloads without a schema
+            if command_name in ["bank.balance", "sector.scan.density"]:
+                logger.debug(f"No schema found for command '{command_name}'. Assuming empty payload.")
+                return {}
+            
+            logger.warning(f"No schema found for command '{command_name}'. Adding to schema blacklist and returning None.")
+            self.state_manager.add_to_schema_blacklist(command_name)
+            return None
 
         logger.debug(f"Using schema for {command_name}: {json.dumps(schema)}")
 
@@ -622,10 +639,14 @@ class Planner:
                 player_credits_str = current_state.get("player_info", {}).get("player", {}).get("credits", "0")
                 try:
                     credits = float(player_credits_str)
+                    # Only attempt to deposit if credits are strictly greater than 1000
                     if credits > 1000:
                         return int(credits - 1000)
+                    else:
+                        return None # Not enough credits to make a meaningful deposit
                 except (ValueError, TypeError):
                     return None
+
 
         if field_name == "items":
             if command_name == "trade.buy":

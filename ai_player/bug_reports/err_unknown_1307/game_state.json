@@ -1,5 +1,5 @@
 {
-    "session_id": "8a9f86bda21247e5e53dfe1422600fb61d2a848407ea69b52801d43e5289bb65",
+    "session_id": "192648aebf146d73df7bbe6a76c882ca35592250e7a0c0e658cccf30ff8abfdc",
     "player_info": {
         "player": {
             "id": 4,
@@ -99,57 +99,57 @@
     "bank_balance": 0,
     "command_retry_info": {
         "sector.info": {
-            "next_retry_time": 1763749291.9093153
+            "next_retry_time": 1763747849.3720126
         },
         "session.goodbye": {
             "failures": 1,
-            "next_retry_time": 1763749297.4155064
+            "next_retry_time": 1763747854.8790205
         },
         "system.schema_list": {
             "failures": 1,
-            "next_retry_time": 1763749297.4178557
+            "next_retry_time": 1763747854.883097
         },
         "auth.mfa": {
             "failures": 1,
-            "next_retry_time": 1763749297.4193237
+            "next_retry_time": 1763747854.8859668
         },
         "players.me": {
             "failures": 1,
-            "next_retry_time": 1763749297.4204574
+            "next_retry_time": 1763747854.8881738
         },
         "players.online": {
             "failures": 1,
-            "next_retry_time": 1763749297.4212189
+            "next_retry_time": 1763747854.8896358
         },
         "players.refresh": {
             "failures": 1,
-            "next_retry_time": 1763749297.4219873
+            "next_retry_time": 1763747854.8911626
         },
         "move.force_move": {
             "failures": 1,
-            "next_retry_time": 1763749297.4254127
+            "next_retry_time": 1763747854.8979206
         },
         "sector.scan.density": {
-            "next_retry_time": 1763749292.4332807
+            "next_retry_time": 1763747849.913346
         },
         "trade.quote": {
-            "next_retry_time": 1763749292.949333
+            "next_retry_time": 1763747850.4305127
         },
         "bank.balance": {
-            "next_retry_time": 1763749571.6276717
-        },
-        "trade.sell": {
-            "next_retry_time": 1763749572.1418102
-        },
-        "unknown": {
-            "failures": 143,
-            "next_retry_time": 1763749868.6632526
-        },
-        "bank.deposit": {
-            "next_retry_time": 1763749572.6522706
+            "next_retry_time": 1763748078.6279135
         },
         "move.warp": {
-            "next_retry_time": 1763749573.1625342
+            "next_retry_time": 1763748079.1391714
+        },
+        "trade.sell": {
+            "next_retry_time": 1763748074.5936513
+        },
+        "unknown": {
+            "failures": 119,
+            "next_retry_time": 1763748374.6401799
+        },
+        "bank.deposit": {
+            "next_retry_time": 1763748075.101385
         }
     },
     "strategy_plan": [
@@ -468,34 +468,34 @@
         "move.force_move"
     ],
     "pending_schema_requests": {
-        "system.cmd_list": "c-14ae0796",
-        "session.hello": "c-831d2bc6",
-        "session.ping": "c-3f402cc5",
-        "session.goodbye": "c-e05ed76b",
-        "system.schema_list": "c-4b3e6de0",
-        "auth.login": "c-7380d1ef",
-        "auth.logout": "c-38daab26",
-        "auth.mfa": "c-2565d03e",
-        "auth.register": "c-d268f1fe",
-        "players.me": "c-391f7540",
-        "players.online": "c-d6b4a2c9",
-        "players.refresh": "c-3d18fc0e",
-        "ship.info": "c-de5ad492",
-        "sector.info": "c-c9f60c7a",
-        "sector.set_beacon": "c-6e294ed8",
-        "move.warp": "c-e26b55a7",
-        "move.scan": "c-70c907bc",
-        "move.pathfind": "c-a3eb1e60",
-        "move.force_move": "c-14a3bf39",
-        "trade.accept": "c-a584f8c1",
-        "trade.buy": "c-d15f02f9",
-        "trade.cancel": "c-8c20025a",
-        "trade.history": "c-60fd190f",
-        "trade.jettison": "c-aad12e53",
-        "trade.offer": "c-292721c9",
-        "trade.port_info": "c-29c70243",
-        "trade.quote": "c-ae8b7bf7",
-        "trade.sell": "c-ba0eecf9"
+        "system.cmd_list": "c-01c9a988",
+        "session.hello": "c-8e6020c8",
+        "session.ping": "c-ca8e37ce",
+        "session.goodbye": "c-e97d546f",
+        "system.schema_list": "c-c56072ce",
+        "auth.login": "c-e35e6a33",
+        "auth.logout": "c-ca64febe",
+        "auth.mfa": "c-77688d42",
+        "auth.register": "c-8728b4b7",
+        "players.me": "c-7a607f1f",
+        "players.online": "c-e162673e",
+        "players.refresh": "c-c68a47ea",
+        "ship.info": "c-9ffe0c80",
+        "sector.info": "c-c67c5b97",
+        "sector.set_beacon": "c-591dd6e4",
+        "move.warp": "c-27b4ab06",
+        "move.scan": "c-7a6931e1",
+        "move.pathfind": "c-d2602317",
+        "move.force_move": "c-6823f5b8",
+        "trade.accept": "c-6bac8def",
+        "trade.buy": "c-1fc7b7a8",
+        "trade.cancel": "c-255e20cb",
+        "trade.history": "c-201f7f42",
+        "trade.jettison": "c-0f771833",
+        "trade.offer": "c-3d63735f",
+        "trade.port_info": "c-a1fe157c",
+        "trade.quote": "c-9a5f4597",
+        "trade.sell": "c-973e2c5a"
     },
     "recent_sectors": [],
     "last_action": "move.warp",
