@@ -3004,6 +3004,7 @@ def jettison_cargo_flow(ctx: Context):
 
 
 @register("rename_ship_flow")
+def rename_ship_flow(ctx: Context):
     """
     Rename/re-register *your current ship* without asking for a ship id.
     - Resolves current ship_id from player.my_info

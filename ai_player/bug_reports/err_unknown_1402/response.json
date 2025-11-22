@@ -1,0 +1,24 @@
+{
+    "id": "srv-refuse",
+    "reply_to": "c-ab9f7ecb",
+    "ts": "2025-11-21T23:25:21Z",
+    "status": "refused",
+    "type": "error",
+    "error": {
+        "code": 1402,
+        "message": "No warp link",
+        "data": {
+            "from": 2,
+            "to": 5,
+            "reason": "no_warp_link"
+        }
+    },
+    "data": null,
+    "meta": {
+        "rate_limit": {
+            "limit": 60,
+            "remaining": 60,
+            "reset": 60
+        }
+    }
+}

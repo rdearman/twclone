@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_unknown_1404",
+    "first_seen": "20251121_232521_342",
+    "command": "unknown",
+    "error_code": 1404,
+    "error_message": "No port in this sector"
+}

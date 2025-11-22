@@ -136,20 +136,14 @@
             "next_retry_time": 1763767525.8392704
         },
         "unknown": {
-            "failures": 102,
-            "next_retry_time": 1763768209.30629
+            "failures": 2,
+            "next_retry_time": 1763767542.3627412
         },
         "trade.quote": {
             "next_retry_time": 1763767526.3513246
         },
         "move.warp": {
-            "next_retry_time": 1763767915.8274903
-        },
-        "bank.balance": {
-            "next_retry_time": 1763767911.2837076
-        },
-        "trade.sell": {
-            "next_retry_time": 1763767913.805692
+            "next_retry_time": 1763767526.861991
         }
     },
     "strategy_plan": [
@@ -465,8 +459,7 @@
         "players.me",
         "players.online",
         "players.refresh",
-        "move.force_move",
-        "bank.deposit"
+        "move.force_move"
     ],
     "pending_schema_requests": {
         "system.cmd_list": "c-81414180",

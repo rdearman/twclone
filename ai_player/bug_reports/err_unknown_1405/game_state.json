@@ -136,20 +136,20 @@
             "next_retry_time": 1763767525.8392704
         },
         "unknown": {
-            "failures": 102,
-            "next_retry_time": 1763768209.30629
+            "failures": 3,
+            "next_retry_time": 1763767563.383539
         },
         "trade.quote": {
             "next_retry_time": 1763767526.3513246
         },
         "move.warp": {
-            "next_retry_time": 1763767915.8274903
+            "next_retry_time": 1763767526.861991
         },
         "bank.balance": {
-            "next_retry_time": 1763767911.2837076
+            "next_retry_time": 1763767527.3724244
         },
         "trade.sell": {
-            "next_retry_time": 1763767913.805692
+            "next_retry_time": 1763767527.8827457
         }
     },
     "strategy_plan": [
@@ -465,8 +465,7 @@
         "players.me",
         "players.online",
         "players.refresh",
-        "move.force_move",
-        "bank.deposit"
+        "move.force_move"
     ],
     "pending_schema_requests": {
         "system.cmd_list": "c-81414180",
@@ -499,7 +498,7 @@
         "trade.sell": "c-660c2a8b"
     },
     "recent_sectors": [],
-    "last_action": "move.warp",
+    "last_action": "trade.sell",
     "last_context_key": "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:full-credits:low-qa_mode:True-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds",
     "last_stage": "exploit"
 }
