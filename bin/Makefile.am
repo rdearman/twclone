@@ -19,8 +19,9 @@
 # Alternatively, the GPL can be found at
 # http://www.gnu.org/copyleft/gpl.html
 
-## AM_CFLAGS = -Wall -Wextra -Werror
+# AM_CFLAGS = -Wall -Wextra -Werror -I../src
 
+AM_CFLAGS = -Wall -Wextra 
 
 server_LDADD   	= -ljansson -lsqlite3 -lcrypto -lpthread -lm
 # bigbang_LDADD  = -ljansson -lsqlite3 -lpthread -lm
@@ -66,6 +67,7 @@ server_SOURCES = \
         ../src/s2s_transport.c \
 	../src/sysop_interaction.c \
 	../src/s2s_keyring.c \
+	../src/server_corporation.c  \
         ../src/server_stardock.c
 
 

@@ -1,0 +1,11 @@
+
+
+Need to make the thing do:
+- [X] Run gh to find all corp related tickets and close or update
+- [ ] Run git commit on the code after it compiles
+- [ ] Make the tests for all the new code
+- [ ] Make the AI bot aware of new cmds so need to have it published by the server
+- [ ] Update the PROTOCOL.v2.md documentation to include the new JSON
+- [ ] Might need to look at breaking this document up into files for easier editing. 
+- [ ] Make the client have a corp menu
+

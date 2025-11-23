@@ -163,8 +163,8 @@ int db_recall_fighter_asset (int asset_id, int player_id);
 int db_get_config_int(sqlite3 *db, const char *key_col_name, int default_value);
 bool db_get_config_bool(sqlite3 *db, const char *key_col_name, bool default_value);
 
-int h_add_credits(sqlite3 *db, const char *owner_type, int owner_id, long long amount, long long *new_balance);
-int h_deduct_credits(sqlite3 *db, const char *owner_type, int owner_id, long long amount, long long *new_balance);
+int h_add_credits(sqlite3 *db, const char *owner_type, int owner_id, long long amount, const char *tx_type, const char *tx_group_id, long long *new_balance_out);
+int h_deduct_credits(sqlite3 *db, const char *owner_type, int owner_id, long long amount, const char *tx_type, const char *tx_group_id, long long *new_balance_out);
 
 typedef struct {
     long long fee_total;        // total fee in minor units
@@ -224,6 +224,8 @@ int db_reset_player_podded_count(sqlite3 *db, int player_id, long long timestamp
 int db_update_player_podded_status(sqlite3 *db, int player_id, const char *status, long long big_sleep_until);
 int db_create_podded_status_entry(sqlite3 *db, int player_id);
 int db_get_shiptype_info(sqlite3 *db, int shiptype_id, int *holds, int *fighters, int *shields);
+int db_player_land_on_planet(int player_id, int planet_id);
+int db_player_launch_from_planet(int player_id, int *out_sector_id);
 
 
 

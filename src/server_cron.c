@@ -108,6 +108,7 @@ static entry_t REG[] = {
   {"deadpool_resolution_cron", h_deadpool_resolution_cron},
   {"tavern_notice_expiry_cron", h_tavern_notice_expiry_cron},
   {"loan_shark_interest_cron", h_loan_shark_interest_cron},
+  {"daily_corp_tax", h_daily_corp_tax},
 };
 
 static int g_reg_inited = 0;
@@ -1904,7 +1905,7 @@ h_daily_lottery_draw (sqlite3 *db, int64_t now_s)
           int player_id = json_integer_value(json_object_get(winner_obj, "player_id"));
           
           // Add credits to winner
-          int add_rc = h_add_credits(db, "player", player_id, payout_per_winner, NULL);
+          int add_rc = h_add_credits(db, "player", player_id, payout_per_winner, "LOTTERY_WIN", NULL, NULL);
           if (add_rc != SQLITE_OK) {
               LOGE("daily_lottery_draw: Failed to add winnings to player %d: %s", player_id, sqlite3_errmsg(db));
               // Error here is critical, consider specific handling or abort
@@ -2051,7 +2052,7 @@ h_deadpool_resolution_cron (sqlite3 *db, int64_t now_s)
           if (payout < 0) payout = 0; // Ensure payout is not negative
 
           // Payout to winner
-          int add_rc = h_add_credits(db, "player", bettor_id, payout, NULL);
+          int add_rc = h_add_credits(db, "player", bettor_id, payout, "DEADPOOL_WIN", NULL, NULL);
           if (add_rc != SQLITE_OK) {
               LOGE("deadpool_resolution_cron: Failed to payout winnings to player %d for bet %d: %s", bettor_id, bet_id, sqlite3_errmsg(db));
               // Log and continue, or abort transaction if critical
@@ -2614,7 +2615,7 @@ h_daily_market_settlement (sqlite3 *db, int64_t now_s)
                   int credit_transfer_rc;
 
                   // Deduct credits from buyer
-                  credit_transfer_rc = h_deduct_credits(db, buy_orders[i].actor_type, buy_orders[i].actor_id, trade_quantity * trade_price, &buyer_new_balance);
+                  credit_transfer_rc = h_deduct_credits(db, buy_orders[i].actor_type, buy_orders[i].actor_id, trade_quantity * trade_price, "TRADE_BUY", NULL, &buyer_new_balance);
                   if (credit_transfer_rc != SQLITE_OK) {
                       LOGW("daily_market_settlement: Buyer %s:%d insufficient funds for trade. Skipping trade.", buy_orders[i].actor_type, buy_orders[i].actor_id);
                       // Mark buy order as failed or cancel it? For now, just skip this match.
@@ -2622,11 +2623,11 @@ h_daily_market_settlement (sqlite3 *db, int64_t now_s)
                   }
 
                   // Add credits to seller
-                  credit_transfer_rc = h_add_credits(db, sell_orders[j].actor_type, sell_orders[j].actor_id, trade_quantity * trade_price, &seller_new_balance);
+                  credit_transfer_rc = h_add_credits(db, sell_orders[j].actor_type, sell_orders[j].actor_id, trade_quantity * trade_price, "TRADE_SELL", NULL, &seller_new_balance);
                   if (credit_transfer_rc != SQLITE_OK) {
                       LOGW("daily_market_settlement: Seller %s:%d failed to receive funds for trade. Rolling back buyer deduction.", sell_orders[j].actor_type, sell_orders[j].actor_id);
                       // Attempt to reverse buyer deduction (this is tricky, might need a separate transaction or more robust error handling)
-                      h_add_credits(db, buy_orders[i].actor_type, buy_orders[i].actor_id, trade_quantity * trade_price, NULL); // Refund buyer
+                      h_add_credits(db, buy_orders[i].actor_type, buy_orders[i].actor_id, trade_quantity * trade_price, "TRADE_REFUND", NULL, NULL); // Refund buyer
                       continue;
                   }
 
@@ -2643,9 +2644,8 @@ h_daily_market_settlement (sqlite3 *db, int64_t now_s)
                   if (commodity_transfer_rc != SQLITE_OK) {
                       LOGW("daily_market_settlement: Seller %s:%d (%s:%d) insufficient stock for trade. Rolling back credit transfers.",
                            sell_orders[j].actor_type, sell_orders[j].actor_id, sell_orders[j].location_type, sell_orders[j].location_id);
-                      // Rollback credit transfers
-                      h_deduct_credits(db, sell_orders[j].actor_type, sell_orders[j].actor_id, trade_quantity * trade_price, NULL);
-                      h_add_credits(db, buy_orders[i].actor_type, buy_orders[i].actor_id, trade_quantity * trade_price, NULL);
+                                             // Rollback credit transfers
+                                             h_add_credits(db, buy_orders[i].actor_type, buy_orders[i].actor_id, trade_quantity * trade_price, "TRADE_REFUND", NULL, NULL);
                       continue;
                   }
 
@@ -2659,8 +2659,8 @@ h_daily_market_settlement (sqlite3 *db, int64_t now_s)
                       LOGW("daily_market_settlement: Buyer %s:%d (%s:%d) max capacity exceeded for trade. Rolling back all previous steps.",
                            buy_orders[i].actor_type, buy_orders[i].actor_id, buy_orders[i].location_type, buy_orders[i].location_id);
                       // Rollback all previous steps
-                      h_deduct_credits(db, sell_orders[j].actor_type, sell_orders[j].actor_id, trade_quantity * trade_price, NULL);
-                      h_add_credits(db, buy_orders[i].actor_type, buy_orders[i].actor_id, trade_quantity * trade_price, NULL);
+                      h_deduct_credits(db, sell_orders[j].actor_type, sell_orders[j].actor_id, trade_quantity * trade_price, "TRADE_SELL", NULL, NULL);
+                      h_add_credits(db, buy_orders[i].actor_type, buy_orders[i].actor_id, trade_quantity * trade_price, "TRADE_REFUND", NULL, NULL);
                       // Re-add commodity to seller (if it was deducted)
                       if (strcasecmp(sell_orders[j].location_type, "planet") == 0) {
                           h_update_planet_stock(db, sell_orders[j].location_id, commodity_code, trade_quantity, NULL);
@@ -2681,8 +2681,8 @@ h_daily_market_settlement (sqlite3 *db, int64_t now_s)
                       LOGE("daily_market_settlement: Failed to prepare insert trade statement: %s", sqlite3_errmsg(db));
                       sqlite3_finalize(insert_trade_stmt);
                       // This is a critical error, attempt to rollback everything for this trade
-                      h_deduct_credits(db, sell_orders[j].actor_type, sell_orders[j].actor_id, trade_quantity * trade_price, NULL);
-                      h_add_credits(db, buy_orders[i].actor_type, buy_orders[i].actor_id, trade_quantity * trade_price, NULL);
+                      h_deduct_credits(db, sell_orders[j].actor_type, sell_orders[j].actor_id, trade_quantity * trade_price, "TRADE_SELL", NULL, NULL);
+                      h_add_credits(db, buy_orders[i].actor_type, buy_orders[i].actor_id, trade_quantity * trade_price, "TRADE_REFUND", NULL, NULL);
                       if (strcasecmp(sell_orders[j].location_type, "planet") == 0) {
                           h_update_planet_stock(db, sell_orders[j].location_id, commodity_code, trade_quantity, NULL);
                       } else {
@@ -2881,6 +2881,84 @@ rollback_and_unlock:
   unlock (db, "daily_market_settlement");
   return rc;
 }
+
+int h_daily_corp_tax(sqlite3 *db, int64_t now_s) {
+    if (!try_lock(db, "daily_corp_tax", now_s)) {
+        return 0;
+    }
+
+    LOGI("h_daily_corp_tax: Starting daily corporation tax collection.");
+
+    int rc = begin(db);
+    if (rc) {
+        unlock(db, "daily_corp_tax");
+        return rc;
+    }
+
+    sqlite3_stmt *st_corps = NULL;
+    const char *sql_select_corps = "SELECT id FROM corporations WHERE id > 0;";
+    
+    rc = sqlite3_prepare_v2(db, sql_select_corps, -1, &st_corps, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("h_daily_corp_tax: Failed to prepare select corporations statement: %s", sqlite3_errmsg(db));
+        goto rollback_and_unlock_tax;
+    }
+
+    while (sqlite3_step(st_corps) == SQLITE_ROW) {
+        int corp_id = sqlite3_column_int(st_corps, 0);
+        long long total_assets = 0;
+        long long bank_balance = 0;
+        
+        // Get corp bank balance
+        db_get_corp_bank_balance(corp_id, &bank_balance);
+        total_assets += bank_balance;
+
+        // Get planet assets
+        sqlite3_stmt *st_planets = NULL;
+        const char *sql_select_planets = "SELECT ore_on_hand, organics_on_hand, equipment_on_hand FROM planets WHERE owner_id = ? AND owner_type = 'corp';";
+        if (sqlite3_prepare_v2(db, sql_select_planets, -1, &st_planets, NULL) == SQLITE_OK) {
+            sqlite3_bind_int(st_planets, 1, corp_id);
+            while (sqlite3_step(st_planets) == SQLITE_ROW) {
+                total_assets += sqlite3_column_int64(st_planets, 0) * 100; // price of ore
+                total_assets += sqlite3_column_int64(st_planets, 1) * 150; // price of organics
+                total_assets += sqlite3_column_int64(st_planets, 2) * 200; // price of equipment
+            }
+            sqlite3_finalize(st_planets);
+        }
+
+        long long tax_amount = (total_assets * CORP_TAX_RATE_BP) / 10000;
+        if (tax_amount <= 0) continue;
+
+        if (db_bank_withdraw("corp", corp_id, tax_amount) != SQLITE_OK) {
+            // Failed to pay tax
+            sqlite3_stmt *st_update_corp = NULL;
+            const char *sql_update_corp = "UPDATE corporations SET tax_arrears = tax_arrears + ?, credit_rating = credit_rating - 1 WHERE id = ?;";
+            if (sqlite3_prepare_v2(db, sql_update_corp, -1, &st_update_corp, NULL) == SQLITE_OK) {
+                sqlite3_bind_int64(st_update_corp, 1, tax_amount);
+                sqlite3_bind_int(st_update_corp, 2, corp_id);
+                sqlite3_step(st_update_corp);
+                sqlite3_finalize(st_update_corp);
+            }
+        }
+    }
+    sqlite3_finalize(st_corps);
+
+    rc = commit(db);
+    if (rc != SQLITE_OK) {
+        LOGE("h_daily_corp_tax: commit failed: %s", sqlite3_errmsg(db));
+        goto rollback_and_unlock_tax;
+    }
+    
+    unlock(db, "daily_corp_tax");
+    return SQLITE_OK;
+
+rollback_and_unlock_tax:
+    if(st_corps) sqlite3_finalize(st_corps);
+    rollback(db);
+    unlock(db, "daily_corp_tax");
+    return rc;
+}
+
 
 
 

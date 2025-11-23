@@ -42,6 +42,8 @@ extern "C"
   int h_update_ship_cargo (sqlite3 * db, int player_id, const char *commodity,
 			   int delta, int *new_qty_out);
   int h_get_credits (sqlite3 *db, const char *owner_type, int owner_id, long long *credits_out);
+  int h_add_credits(sqlite3 *db, const char *owner_type, int owner_id, long long amount, const char *tx_type, const char *tx_group_id, long long *new_balance_out);
+  int h_deduct_credits(sqlite3 *db, const char *owner_type, int owner_id, long long amount, const char *tx_type, const char *tx_group_id, long long *new_balance_out);
   int h_deduct_player_petty_cash (sqlite3 *db, int player_id, long long amount, long long *new_balance_out);
   int h_add_player_petty_cash (sqlite3 *db, int player_id, long long amount, long long *new_balance_out);
   int h_get_player_petty_cash (sqlite3 *db, int player_id, long long *credits_out);
@@ -51,7 +53,9 @@ extern "C"
   int cmd_bank_transfer (client_ctx_t * ctx, json_t * root);
   int cmd_bank_withdraw (client_ctx_t * ctx, json_t * root);
   int cmd_bank_history (client_ctx_t * ctx, json_t * root);
-int cmd_bank_leaderboard (client_ctx_t * ctx, json_t * root);  TurnConsumeResult h_consume_player_turn (sqlite3 * db_conn,
+int cmd_bank_leaderboard (client_ctx_t * ctx, json_t * root);
+int h_get_player_bank_account_id(sqlite3 *db, int player_id);
+TurnConsumeResult h_consume_player_turn (sqlite3 * db_conn,
 					   client_ctx_t * ctx,
 					   const char *reason_cmd);
   int handle_turn_consumption_error (client_ctx_t * ctx,

@@ -11,6 +11,7 @@
 #include "server_ports.h" // For port types, etc.
 #include "server_ships.h" // For h_get_active_ship_id
 #include "server_cmds.h" // For send_error_response, send_json_response and send_error_and_return
+#include "server_corporation.h" // For h_is_player_corp_ceo
 #include "server_loop.h" // For idemp_fingerprint_json
 #include "server_config.h"
 #include "server_log.h" // For LOGE
@@ -323,6 +324,15 @@ int cmd_shipyard_list(client_ctx_t *ctx, json_t *root) {
         const char *type_name = (const char*)sqlite3_column_text(stmt, 1);
         long long new_ship_basecost = sqlite3_column_int64(stmt, 2);
         long long net_cost = new_ship_basecost - trade_in_value;
+        /* Corporate Flagship: CEO-only */
+        if (type_name && !strcasecmp(type_name, "Corporate Flagship")) {
+            int dummy_corp_id = 0;
+            if (!h_is_player_corp_ceo(db, player_id, &dummy_corp_id)) {
+                eligible = false;
+                json_array_append_new(reasons_array, json_string("must_be_corp_ceo"));
+            }
+        }
+
         
         json_object_set_new(ship_obj, "type", json_string(type_name));
         json_object_set_new(ship_obj, "name", json_string(type_name)); // Using type_name as name for now
@@ -524,6 +534,18 @@ int cmd_shipyard_upgrade(client_ctx_t *ctx, json_t *root) {
     }
     
     long long new_shiptype_basecost = sqlite3_column_int64(stmt, 0);
+    const char *target_ship_name = (const char*)sqlite3_column_text(stmt, 16);
+
+    if (target_ship_name && strcasecmp(target_ship_name, "Corporate Flagship") == 0) {
+        int dummy_corp_id = 0;
+        if (!h_is_player_corp_ceo(db, ctx->player_id, &dummy_corp_id)) {
+            sqlite3_finalize(stmt);
+            free(cfg);
+            sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+            return send_error_response(ctx, root, ERR_SHIPYARD_REQUIREMENTS_NOT_MET, "Only a corporation CEO can purchase a Corporate Flagship.");
+        }
+    }
+    
     sqlite3_finalize(stmt);
     stmt = NULL;
 

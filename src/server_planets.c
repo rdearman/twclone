@@ -1,4 +1,3 @@
-// server_planets.c
 #include "server_planets.h"
 #include "server_rules.h"
 #include "common.h"
@@ -10,6 +9,10 @@
 #include <string.h>         // For strncpy, strlen
 #include <stdlib.h>         // For strdup, free
 #include "server_cmds.h"    // For send_error_response, send_json_response
+#include "server_corporation.h"
+
+// Forward declaration
+void send_enveloped_error(int fd, json_t *root, int code, const char *msg);
 
 int
 cmd_planet_genesis (client_ctx_t *ctx, json_t *root)
@@ -29,16 +32,117 @@ cmd_planet_rename (client_ctx_t *ctx, json_t *root)
   STUB_NIY (ctx, root, "planet.rename");
 }
 
-int
-cmd_planet_land (client_ctx_t *ctx, json_t *root)
-{
-  STUB_NIY (ctx, root, "planet.land");
+int cmd_planet_land(client_ctx_t *ctx, json_t *root) {
+    if (ctx->player_id == 0) {
+        send_enveloped_error(ctx->fd, root, ERR_NOT_AUTHENTICATED, "Authentication required.");
+        return -1;
+    }
+
+    json_t *data = json_object_get(root, "data");
+    if (!data) {
+        send_enveloped_error(ctx->fd, root, ERR_BAD_REQUEST, "Missing data payload.");
+        return 0;
+    }
+
+    int planet_id = 0;
+    json_unpack(data, "{s:i}", "planet_id", &planet_id);
+    if (planet_id <= 0) {
+        send_enveloped_error(ctx->fd, root, ERR_MISSING_FIELD, "Missing or invalid 'planet_id'.");
+        return 0;
+    }
+
+    sqlite3 *db = db_get_handle();
+
+    // Check if player is in the same sector as the planet
+    int player_sector = 0;
+    db_player_get_sector(ctx->player_id, &player_sector);
+
+    sqlite3_stmt *st = NULL;
+    const char *sql_planet_info = "SELECT sector, owner_id, owner_type FROM planets WHERE id = ?;";
+    if (sqlite3_prepare_v2(db, sql_planet_info, -1, &st, NULL) != SQLITE_OK) {
+        send_enveloped_error(ctx->fd, root, ERR_DB_QUERY_FAILED, "Failed to get planet info.");
+        return 0;
+    }
+    sqlite3_bind_int(st, 1, planet_id);
+    
+    int planet_sector = 0;
+    int owner_id = 0;
+    const char *owner_type = NULL;
+    if (sqlite3_step(st) == SQLITE_ROW) {
+        planet_sector = sqlite3_column_int(st, 0);
+        owner_id = sqlite3_column_int(st, 1);
+        owner_type = (const char *)sqlite3_column_text(st, 2);
+    } else {
+        sqlite3_finalize(st);
+        send_enveloped_error(ctx->fd, root, ERR_NOT_FOUND, "Planet not found.");
+        return 0;
+    }
+    sqlite3_finalize(st);
+
+    if (player_sector != planet_sector) {
+        send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "You are not in the same sector as the planet.");
+        return 0;
+    }
+
+    bool can_land = false;
+    if (owner_id == 0) { // unowned
+        can_land = true;
+    } else if (strcmp(owner_type, "player") == 0) {
+        if (owner_id == ctx->player_id) {
+            can_land = true;
+        }
+    } else if (strcmp(owner_type, "corp") == 0) {
+        int player_corp_id = h_get_player_corp_id(db, ctx->player_id);
+        if (player_corp_id > 0 && player_corp_id == owner_id) {
+            can_land = true;
+        }
+    }
+
+    if (!can_land) {
+        send_enveloped_error(ctx->fd, root, ERR_PERMISSION_DENIED, "You do not have permission to land on this planet.");
+        return 0;
+    }
+
+    if (db_player_land_on_planet(ctx->player_id, planet_id) != SQLITE_OK) {
+        send_enveloped_error(ctx->fd, root, ERR_SERVER_ERROR, "Failed to land on planet.");
+        return 0;
+    }
+    
+    // Update context
+    ctx->sector_id = 0; // Not in a sector anymore
+
+    json_t *response_data = json_object();
+    json_object_set_new(response_data, "message", json_string("Landed successfully."));
+    json_object_set_new(response_data, "planet_id", json_integer(planet_id));
+    send_enveloped_ok(ctx->fd, root, "planet.land.success", response_data);
+    
+    return 0;
 }
+
 
 int
 cmd_planet_launch (client_ctx_t *ctx, json_t *root)
 {
-  STUB_NIY (ctx, root, "planet.launch");
+    if (ctx->player_id == 0) {
+        send_enveloped_error(ctx->fd, root, ERR_NOT_AUTHENTICATED, "Authentication required.");
+        return -1;
+    }
+
+    int sector_id = 0;
+    if (db_player_launch_from_planet(ctx->player_id, &sector_id) != SQLITE_OK) {
+        send_enveloped_error(ctx->fd, root, ERR_SERVER_ERROR, "Failed to launch from planet. Are you on a planet?");
+        return 0;
+    }
+    
+    // Update context
+    ctx->sector_id = sector_id;
+
+    json_t *response_data = json_object();
+    json_object_set_new(response_data, "message", json_string("Launched successfully."));
+    json_object_set_new(response_data, "sector_id", json_integer(sector_id));
+    send_enveloped_ok(ctx->fd, root, "planet.launch.success", response_data);
+    
+    return 0;
 }
 
 int

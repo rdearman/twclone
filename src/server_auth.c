@@ -482,7 +482,7 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
       ctx->sector_id = spawn_sector_id;
 
       // --- Starting Credits ---
-      if (h_add_credits(db, "player", player_id, cfg->startingcredits, NULL) != SQLITE_OK) {
+      if (h_add_credits(db, "player", player_id, cfg->startingcredits, "REGISTER_CREDITS", NULL, NULL) != SQLITE_OK) {
           send_enveloped_error(ctx->fd, root, 1500, "Database error (add credits)");
           goto rollback_and_error;
       }

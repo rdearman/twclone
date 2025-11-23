@@ -1253,7 +1253,7 @@ create_full_port (sqlite3 *db, int sector, int port_number,
       port_stmt = NULL;
     
       // Create a bank account for the new port
-      h_add_credits(db, "port", (int)port_id, port_credits, NULL);
+      h_add_credits(db, "port", (int)port_id, port_credits, "BIGBANG_SEED", NULL, NULL);
 
   /*
    * ===================================================================
@@ -1355,7 +1355,7 @@ create_ferringhi (int ferringhi_sector)
       fprintf (stderr, "create_ferringhi failed: %s\n", sqlite3_errmsg (db));
       return -1;
     }
-  h_add_credits(db, "npc_planet", 2, 0, NULL);
+  h_add_credits(db, "npc_planet", 2, 0, "BIGBANG_SEED", NULL, NULL);
 
   // Insert the citadel details into the citadels table
   char sql_citadel[512];
@@ -1720,7 +1720,7 @@ create_ferringhi (int ferringhi_sector)
 	       sqlite3_errmsg (db));
       return -1;
     }
-  h_add_credits(db, "npc_planet", 3, 0, NULL);
+  h_add_credits(db, "npc_planet", 3, 0, "BIGBANG_SEED", NULL, NULL);
 
 
 

@@ -41,6 +41,7 @@
 #include "server_news.h"
 #include "server_log.h"
 #include "server_stardock.h" // Include for hardware commands
+#include "server_corporation.h"
 
 
 #ifndef streq
@@ -660,6 +661,7 @@ process_message (client_ctx_t *ctx, json_t *root)
       if (rc == SQLITE_OK && pid > 0)
 	{
 	  ctx->player_id = pid;
+    ctx->corp_id = h_get_player_corp_id(db_get_handle(), pid);
 	  if (ctx->sector_id <= 0)
 	    ctx->sector_id = 1;	/* or load from DB */
 	}
@@ -897,6 +899,28 @@ process_message (client_ctx_t *ctx, json_t *root)
       {
         rc = cmd_player_set_trade_account_preference (ctx, root);
       }
+
+/* ---------- CORPORATION & STOCK ---------- */
+  else if (!strcasecmp(c, "corp.create")) { rc = cmd_corp_create(ctx, root); }
+  else if (!strcasecmp(c, "corp.dissolve")) { rc = cmd_corp_dissolve(ctx, root); }
+  else if (!strcasecmp(c, "corp.invite")) { rc = cmd_corp_invite(ctx, root); }
+  else if (!strcasecmp(c, "corp.kick")) { rc = cmd_corp_kick(ctx, root); }
+  else if (!strcasecmp(c, "corp.join")) { rc = cmd_corp_join(ctx, root); }
+  else if (!strcasecmp(c, "corp.leave")) { rc = cmd_corp_leave(ctx, root); }
+  else if (!strcasecmp(c, "corp.list")) { rc = cmd_corp_list(ctx, root); }
+  else if (!strcasecmp(c, "corp.roster")) { rc = cmd_corp_roster(ctx, root); }
+  else if (!strcasecmp(c, "corp.balance")) { rc = cmd_corp_balance(ctx, root); }
+  else if (!strcasecmp(c, "corp.deposit")) { rc = cmd_corp_deposit(ctx, root); }
+  else if (!strcasecmp(c, "corp.withdraw")) { rc = cmd_corp_withdraw(ctx, root); }
+  else if (!strcasecmp(c, "corp.statement")) { rc = cmd_corp_statement(ctx, root); }
+  else if (!strcasecmp(c, "corp.status")) { rc = cmd_corp_status(ctx, root); }
+  else if (strncasecmp(c, "stock.", 6) == 0) { rc = cmd_stock(ctx, root); }
+    else if (!strcasecmp (c, "corp.transfer_ceo"))
+    {
+      rc = cmd_corp_transfer_ceo (ctx, root);
+    }
+
+  
   /* ---------- HARDWARE ---------- */
     else if (!strcasecmp (c, "hardware.list"))
       {

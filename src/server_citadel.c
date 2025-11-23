@@ -9,6 +9,7 @@
 #include <time.h>
 #include <string.h>
 #include <strings.h>
+#include "server_corporation.h"
 
 // Helper to get the player's current planet_id from their active ship.
 // Returns planet_id > 0 on success, 0 if not on a planet or error.
@@ -67,28 +68,42 @@ int cmd_citadel_upgrade(client_ctx_t *ctx, json_t *root) {
     }
 
     sqlite3_stmt *planet_st = NULL;
-    const char *sql_planet = "SELECT type, owner_player_id, colonist, ore_on_hand, organics_on_hand, equipment_on_hand FROM planets WHERE id = ?1;";
+    const char *sql_planet = "SELECT type, owner_id, owner_type, colonist, ore_on_hand, organics_on_hand, equipment_on_hand FROM planets WHERE id = ?1;";
     if (sqlite3_prepare_v2(db, sql_planet, -1, &planet_st, NULL) != SQLITE_OK) {
         send_enveloped_error(ctx->fd, root, 500, "Failed to query planet data.");
         return 0;
     }
     sqlite3_bind_int(planet_st, 1, planet_id);
 
-    int planet_type = 0, owner_player_id = 0;
+    int planet_type = 0, owner_id = 0;
+    const char *owner_type = NULL;
     long long p_colonists = 0, p_ore = 0, p_org = 0, p_equip = 0;
 
     if (sqlite3_step(planet_st) == SQLITE_ROW) {
         planet_type = sqlite3_column_int(planet_st, 0);
-        owner_player_id = sqlite3_column_int(planet_st, 1);
-        p_colonists = sqlite3_column_int64(planet_st, 2);
-        p_ore = sqlite3_column_int64(planet_st, 3);
-        p_org = sqlite3_column_int64(planet_st, 4);
-        p_equip = sqlite3_column_int64(planet_st, 5);
+        owner_id = sqlite3_column_int(planet_st, 1);
+        owner_type = (const char *)sqlite3_column_text(planet_st, 2);
+        p_colonists = sqlite3_column_int64(planet_st, 3);
+        p_ore = sqlite3_column_int64(planet_st, 4);
+        p_org = sqlite3_column_int64(planet_st, 5);
+        p_equip = sqlite3_column_int64(planet_st, 6);
     }
     sqlite3_finalize(planet_st);
 
-    if (owner_player_id != ctx->player_id) {
-        send_enveloped_refused(ctx->fd, root, 1403, "You do not own this planet.", NULL);
+    bool can_build = false;
+    if (strcmp(owner_type, "player") == 0) {
+        if (owner_id == ctx->player_id) {
+            can_build = true;
+        }
+    } else if (strcmp(owner_type, "corp") == 0) {
+        int player_corp_id = h_get_player_corp_id(db, ctx->player_id);
+        if (player_corp_id > 0 && player_corp_id == owner_id) {
+            can_build = true;
+        }
+    }
+
+    if (!can_build) {
+        send_enveloped_refused(ctx->fd, root, 1403, "You do not have permission to build on this planet.", NULL);
         return 0;
     }
 

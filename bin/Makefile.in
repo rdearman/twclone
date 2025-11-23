@@ -35,6 +35,8 @@
 # Alternatively, the GPL can be found at
 # http://www.gnu.org/copyleft/gpl.html
 
+# AM_CFLAGS = -Wall -Wextra -Werror -I../src
+
 VPATH = @srcdir@
 am__is_gnu_make = { \
   if test -z '$(MAKELEVEL)'; then \
@@ -151,7 +153,9 @@ am_server_OBJECTS = ../src/server_communication.$(OBJEXT) \
 	../src/db_player_settings.$(OBJEXT) \
 	../src/s2s_transport.$(OBJEXT) \
 	../src/sysop_interaction.$(OBJEXT) \
-	../src/s2s_keyring.$(OBJEXT) ../src/server_stardock.$(OBJEXT)
+	../src/s2s_keyring.$(OBJEXT) \
+	../src/server_corporation.$(OBJEXT) \
+	../src/server_stardock.$(OBJEXT)
 server_OBJECTS = $(am_server_OBJECTS)
 server_DEPENDENCIES =
 AM_V_P = $(am__v_P_@AM_V@)
@@ -184,6 +188,7 @@ am__depfiles_remade = ../src/$(DEPDIR)/common.Po \
 	../src/$(DEPDIR)/server_combat.Po \
 	../src/$(DEPDIR)/server_communication.Po \
 	../src/$(DEPDIR)/server_config.Po \
+	../src/$(DEPDIR)/server_corporation.Po \
 	../src/$(DEPDIR)/server_cron.Po \
 	../src/$(DEPDIR)/server_engine.Po \
 	../src/$(DEPDIR)/server_envelope.Po \
@@ -336,6 +341,7 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
+AM_CFLAGS = -Wall -Wextra 
 server_LDADD = -ljansson -lsqlite3 -lcrypto -lpthread -lm
 # bigbang_LDADD  = -ljansson -lsqlite3 -lpthread -lm
 # client_LDADD   = -ljansson -lsqlite3 -lpthread -lm
@@ -374,6 +380,7 @@ server_SOURCES = \
         ../src/s2s_transport.c \
 	../src/sysop_interaction.c \
 	../src/s2s_keyring.c \
+	../src/server_corporation.c  \
         ../src/server_stardock.c
 
 bigbang_SOURCES = \
@@ -538,6 +545,8 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/s2s_keyring.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_corporation.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_stardock.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 
@@ -569,6 +578,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_combat.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_communication.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_config.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_corporation.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_cron.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_engine.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_envelope.Po@am__quote@ # am--include-marker
@@ -754,6 +764,7 @@ distclean: distclean-am
 	-rm -f ../src/$(DEPDIR)/server_combat.Po
 	-rm -f ../src/$(DEPDIR)/server_communication.Po
 	-rm -f ../src/$(DEPDIR)/server_config.Po
+	-rm -f ../src/$(DEPDIR)/server_corporation.Po
 	-rm -f ../src/$(DEPDIR)/server_cron.Po
 	-rm -f ../src/$(DEPDIR)/server_engine.Po
 	-rm -f ../src/$(DEPDIR)/server_envelope.Po
@@ -833,6 +844,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/$(DEPDIR)/server_combat.Po
 	-rm -f ../src/$(DEPDIR)/server_communication.Po
 	-rm -f ../src/$(DEPDIR)/server_config.Po
+	-rm -f ../src/$(DEPDIR)/server_corporation.Po
 	-rm -f ../src/$(DEPDIR)/server_cron.Po
 	-rm -f ../src/$(DEPDIR)/server_engine.Po
 	-rm -f ../src/$(DEPDIR)/server_envelope.Po

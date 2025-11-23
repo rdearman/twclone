@@ -488,6 +488,22 @@ const char *create_table_sql[] = {
   "   expires_at    INTEGER NOT NULL "
   " ); ",
 
+  " CREATE TABLE IF NOT EXISTS corp_invites ( "
+  "   id INTEGER PRIMARY KEY AUTOINCREMENT, "
+  "   corp_id INTEGER NOT NULL, "
+  "   player_id INTEGER NOT NULL, "
+  "   invited_at INTEGER NOT NULL, "   /* unix epoch seconds */
+  "   expires_at INTEGER NOT NULL, "   /* unix epoch seconds */
+  "   UNIQUE(corp_id, player_id), "
+  "   FOREIGN KEY(corp_id) REFERENCES corporations(id) ON DELETE CASCADE, "
+  "   FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE "
+  " ); ",
+
+  " CREATE INDEX IF NOT EXISTS idx_corp_invites_corp ON corp_invites(corp_id); ",
+  " CREATE INDEX IF NOT EXISTS idx_corp_invites_player ON corp_invites(player_id); ",
+
+  
+
   " CREATE TABLE IF NOT EXISTS tavern_loans ( "
   "   player_id      INTEGER PRIMARY KEY REFERENCES players(id), "
   "   principal      INTEGER NOT NULL, "
@@ -818,6 +834,8 @@ const char *create_table_sql[] = {
     "   owner_id INTEGER,  "
     "   tag TEXT COLLATE NOCASE,  "
     "   description TEXT,  "
+    "   tax_arrears INTEGER NOT NULL DEFAULT 0, "
+    "   credit_rating INTEGER NOT NULL DEFAULT 0, "
     "   created_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),  "
     "   updated_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),  "
     "   FOREIGN KEY(owner_id) REFERENCES players(id) ON DELETE SET NULL ON UPDATE CASCADE,  "
@@ -2749,7 +2767,8 @@ static const char *engine_bootstrap_sql_statements[] = {
   "('autouncloak_sweeper','every:15m',NULL,strftime('%s','now'),1,NULL),"
   "('npc_step','every:30s',NULL,strftime('%s','now'),1,NULL),"
   "('broadcast_ttl_cleanup','every:5m',NULL,strftime('%s','now'),1,NULL),"
-  "('daily_news_compiler','daily@06:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','6 hours'),1,NULL);",
+  "('daily_news_compiler','daily@06:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','6 hours'),1,NULL),"
+  "('daily_corp_tax','daily@05:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','5 hours'),1,NULL);",
   /* --- Server→Engine event rail (separate from your existing system_events) --- */
   "CREATE TABLE IF NOT EXISTS engine_events("
   "  id INTEGER PRIMARY KEY,"
@@ -7904,254 +7923,190 @@ cleanup:
     return threshold;
 }
 
-// Internal helper to add credits, assumes db_mutex is held and account_id is valid.
-// Can take an optional tx_group_id for multi-leg transactions.
-int h_add_credits_unlocked(sqlite3 *db, int account_id, long long amount, const char *tx_type, const char *tx_group_id, long long *new_balance) {
-    sqlite3_stmt *stmt = NULL;
-    int rc = SQLITE_ERROR;
+/******************************************************************************
+ *  BANKING – FINAL CANONICAL VERSIONS
+ *  Matches signatures in database.h exactly.
+ *  Must replace ALL previous versions of these functions.
+ ******************************************************************************/
 
-    if (!db || account_id <= 0 || amount <= 0 || !tx_type) {
+/*
+ * Internal helper: Add credits. Caller must hold db_mutex.
+ */
+int h_add_credits_unlocked(sqlite3 *db,
+                           int account_id,
+                           long long amount,
+                           const char *tx_type,
+                           const char *tx_group_id,
+                           long long *new_balance_out)
+{
+    if (!db || account_id <= 0 || amount <= 0 || !tx_type)
         return SQLITE_MISUSE;
-    }
-    
-    // Insert into bank_transactions table for the deposit
+
+    sqlite3_stmt *stmt = NULL;
+    int rc;
+
     const char *sql =
         "INSERT INTO bank_transactions (account_id, tx_type, direction, amount, currency, ts, tx_group_id) "
-        "VALUES (?, ?, 'CREDIT', ?, 'CRD', strftime('%s','now'), ?);"; // Default currency 'CRD'
+        "VALUES (?, ?, 'CREDIT', ?, 'CRD', strftime('%s','now'), ?);";
 
     rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("h_add_credits_unlocked: Failed to prepare statement for transaction log: %s", sqlite3_errmsg(db));
-        goto cleanup;
-    }
+    if (rc != SQLITE_OK)
+        return rc;
 
     sqlite3_bind_int(stmt, 1, account_id);
     sqlite3_bind_text(stmt, 2, tx_type, -1, SQLITE_STATIC);
     sqlite3_bind_int64(stmt, 3, amount);
-    if (tx_group_id) {
+
+    if (tx_group_id)
         sqlite3_bind_text(stmt, 4, tx_group_id, -1, SQLITE_STATIC);
-    } else {
+    else
         sqlite3_bind_null(stmt, 4);
-    }
 
     rc = sqlite3_step(stmt);
-    if (rc != SQLITE_DONE) {
-        LOGE("h_add_credits_unlocked: Failed to execute statement for transaction log: %s", sqlite3_errmsg(db));
-        goto cleanup;
-    }
+    sqlite3_finalize(stmt);
+    if (rc != SQLITE_DONE)
+        return rc;
 
-    // Get new balance after transaction (which is updated by the trigger)
-    if (new_balance) {
-        sqlite3_stmt *balance_stmt = NULL;
-        const char *balance_sql = "SELECT balance FROM bank_accounts WHERE id = ?;"; // Use account_id
-        rc = sqlite3_prepare_v2(db, balance_sql, -1, &balance_stmt, NULL);
+    if (new_balance_out) {
+        sqlite3_stmt *b = NULL;
+        rc = sqlite3_prepare_v2(db, "SELECT balance FROM bank_accounts WHERE id=?;", -1, &b, NULL);
         if (rc == SQLITE_OK) {
-            sqlite3_bind_int(balance_stmt, 1, account_id);
-            if (sqlite3_step(balance_stmt) == SQLITE_ROW) {
-                *new_balance = sqlite3_column_int64(balance_stmt, 0);
-            }
-            sqlite3_finalize(balance_stmt);
-        } else {
-            LOGE("h_add_credits_unlocked: Failed to prepare balance statement: %s", sqlite3_errmsg(db));
+            sqlite3_bind_int(b, 1, account_id);
+            if (sqlite3_step(b) == SQLITE_ROW)
+                *new_balance_out = sqlite3_column_int64(b, 0);
         }
+        sqlite3_finalize(b);
     }
 
-    // --- Large Transaction Alerting ---
-    char owner_type_str[32] = {0};
-    int owner_id = -1;
-    sqlite3_stmt *owner_info_stmt = NULL;
-    const char *sql_owner_info = "SELECT owner_type, owner_id FROM bank_accounts WHERE id = ?;";
-    
-    rc = sqlite3_prepare_v2(db, sql_owner_info, -1, &owner_info_stmt, NULL);
-    if (rc == SQLITE_OK) {
-        sqlite3_bind_int(owner_info_stmt, 1, account_id);
-        if (sqlite3_step(owner_info_stmt) == SQLITE_ROW) {
-            strncpy(owner_type_str, (const char*)sqlite3_column_text(owner_info_stmt, 0), sizeof(owner_type_str) - 1);
-            owner_id = sqlite3_column_int(owner_info_stmt, 1);
-        }
-        sqlite3_finalize(owner_info_stmt);
-    }
-
-    if (owner_id != -1) { // Only proceed if we found owner info
-        long long alert_threshold = h_get_account_alert_threshold_unlocked(db, account_id, owner_type_str);
-        if (alert_threshold > 0 && amount >= alert_threshold) {
-            char title[128];
-            char body[256];
-            snprintf(title, sizeof(title), "Large Transaction Alert: %s", tx_type);
-            snprintf(body, sizeof(body), "%s account %d received %lld credits. Total amount: %lld CRD.",
-                     owner_type_str, owner_id, amount, (new_balance ? *new_balance : 0));
-            db_notice_create(title, body, "info", time(NULL) + (24 * 3600)); // Expires in 24 hours
-        }
-    }
-    // --- End Large Transaction Alerting ---
-
-    rc = SQLITE_OK;
-
-cleanup:
-    if (stmt) {
-        sqlite3_finalize(stmt);
-    }
-    return rc;
+    return SQLITE_OK;
 }
 
 /*
- * Public helper function to add credits to an account.
- * Returns SQLITE_OK on success, or an SQLite error code.
- * If new_balance is not NULL, it will be set to the account's new balance.
+ * Internal helper: Deduct credits. Caller must hold db_mutex.
  */
-int h_add_credits(sqlite3 *db, const char *owner_type, int owner_id, long long amount, long long *new_balance) {
-    int rc = SQLITE_ERROR;
-    int account_id = -1;
-
-    if (!db || !owner_type || amount <= 0) {
+int h_deduct_credits_unlocked(sqlite3 *db,
+                              int account_id,
+                              long long amount,
+                              const char *tx_type,
+                              const char *tx_group_id,
+                              long long *new_balance_out)
+{
+    if (!db || account_id <= 0 || amount <= 0 || !tx_type)
         return SQLITE_MISUSE;
+
+    sqlite3_stmt *stmt = NULL;
+    int rc;
+
+    const char *sql =
+        "INSERT INTO bank_transactions (account_id, tx_type, direction, amount, currency, ts, tx_group_id) "
+        "VALUES (?, ?, 'DEBIT', ?, 'CRD', strftime('%s','now'), ?);";
+
+    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK)
+        return rc;
+
+    sqlite3_bind_int(stmt, 1, account_id);
+    sqlite3_bind_text(stmt, 2, tx_type, -1, SQLITE_STATIC);
+    sqlite3_bind_int64(stmt, 3, amount);
+
+    if (tx_group_id)
+        sqlite3_bind_text(stmt, 4, tx_group_id, -1, SQLITE_STATIC);
+    else
+        sqlite3_bind_null(stmt, 4);
+
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    /* SQLITE_CONSTRAINT means “insufficient funds” because of trigger */
+    if (rc != SQLITE_DONE)
+        return rc;
+
+    if (new_balance_out) {
+        sqlite3_stmt *b = NULL;
+        rc = sqlite3_prepare_v2(db, "SELECT balance FROM bank_accounts WHERE id=?;", -1, &b, NULL);
+        if (rc == SQLITE_OK) {
+            sqlite3_bind_int(b, 1, account_id);
+            if (sqlite3_step(b) == SQLITE_ROW)
+                *new_balance_out = sqlite3_column_int64(b, 0);
+        }
+        sqlite3_finalize(b);
     }
+
+    return SQLITE_OK;
+}
+
+/*
+ * Public: Add credits to owner's account.
+ */
+int h_add_credits(sqlite3 *db,
+                  const char *owner_type,
+                  int owner_id,
+                  long long amount,
+                  const char *tx_type,
+                  const char *tx_group_id,
+                  long long *new_balance_out)
+{
+    if (!db || !owner_type || amount <= 0)
+        return SQLITE_MISUSE;
 
     pthread_mutex_lock(&db_mutex);
 
-    // 1. Get account_id, or create account if it doesn't exist
-    rc = h_get_account_id_unlocked(db, owner_type, owner_id, &account_id);
+    int account_id = -1;
+    int rc = h_get_account_id_unlocked(db, owner_type, owner_id, &account_id);
+
     if (rc == SQLITE_NOTFOUND) {
-        rc = h_create_bank_account_unlocked(db, owner_type, owner_id, 0, &account_id); // Start with 0 balance for proper tx logging
+        rc = h_create_bank_account_unlocked(db, owner_type, owner_id, 0, &account_id);
         if (rc != SQLITE_OK) {
-            goto cleanup;
+            pthread_mutex_unlock(&db_mutex);
+            return rc;
         }
     } else if (rc != SQLITE_OK) {
-        goto cleanup; // Error in getting account_id
+        pthread_mutex_unlock(&db_mutex);
+        return rc;
     }
 
-    // Use the unlocked helper for the actual credit operation
-    rc = h_add_credits_unlocked(db, account_id, amount, "DEPOSIT", NULL, new_balance);
+    rc = h_add_credits_unlocked(db, account_id, amount,
+                                tx_type ? tx_type : "DEPOSIT",
+                                tx_group_id,
+                                new_balance_out);
 
-cleanup:
     pthread_mutex_unlock(&db_mutex);
-    return rc;
-}
-
-// Internal helper to deduct credits, assumes db_mutex is held and account_id is valid.
-// Can take an optional tx_group_id for multi-leg transactions.
-int h_deduct_credits_unlocked(sqlite3 *db, int account_id, long long amount, const char *tx_type, const char *tx_group_id, long long *new_balance) {
-    sqlite3_stmt *stmt = NULL;
-    int rc = SQLITE_ERROR;
-
-    if (!db || account_id <= 0 || amount <= 0 || !tx_type) {
-        return SQLITE_MISUSE;
-    }
-
-    // Insert into bank_transactions table for the deduction
-    const char *sql =
-        "INSERT INTO bank_transactions (account_id, tx_type, direction, amount, currency, ts, tx_group_id) "
-        "VALUES (?, ?, 'DEBIT', ?, 'CRD', strftime('%s','now'), ?);"; // Default currency 'CRD'
-
-    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("h_deduct_credits_unlocked: Failed to prepare statement for transaction log: %s", sqlite3_errmsg(db));
-        goto cleanup;
-    }
-
-    sqlite3_bind_int(stmt, 1, account_id);
-    sqlite3_bind_text(stmt, 2, tx_type, -1, SQLITE_STATIC);
-    sqlite3_bind_int64(stmt, 3, amount);
-    if (tx_group_id) {
-        sqlite3_bind_text(stmt, 4, tx_group_id, -1, SQLITE_STATIC);
-    } else {
-        sqlite3_bind_null(stmt, 4);
-    }
-
-    rc = sqlite3_step(stmt);
-    if (rc != SQLITE_DONE) {
-        if (rc == SQLITE_CONSTRAINT) {
-            // This indicates insufficient funds as per the trigger
-            LOGW("h_deduct_credits_unlocked: Insufficient funds for account %d to deduct %lld credits.", account_id, amount);
-        } else {
-            LOGE("h_deduct_credits_unlocked: Failed to execute statement for transaction log: %s", sqlite3_errmsg(db));
-        }
-        goto cleanup;
-    }
-
-    // Get new balance after transaction (which is updated by the trigger)
-    if (new_balance) {
-        sqlite3_stmt *balance_stmt = NULL;
-        const char *balance_sql = "SELECT balance FROM bank_accounts WHERE id = ?;"; // Use account_id
-        rc = sqlite3_prepare_v2(db, balance_sql, -1, &balance_stmt, NULL);
-        if (rc == SQLITE_OK) {
-            sqlite3_bind_int(balance_stmt, 1, account_id);
-            if (sqlite3_step(balance_stmt) == SQLITE_ROW) {
-                *new_balance = sqlite3_column_int64(balance_stmt, 0);
-            }
-            sqlite3_finalize(balance_stmt);
-        } else {
-            LOGE("h_deduct_credits_unlocked: Failed to prepare balance statement: %s", sqlite3_errmsg(db));
-        }
-    }
-
-    // --- Large Transaction Alerting ---
-    char owner_type_str[32] = {0};
-    int owner_id = -1;
-    sqlite3_stmt *owner_info_stmt = NULL;
-    const char *sql_owner_info = "SELECT owner_type, owner_id FROM bank_accounts WHERE id = ?;";
-    
-    rc = sqlite3_prepare_v2(db, sql_owner_info, -1, &owner_info_stmt, NULL);
-    if (rc == SQLITE_OK) {
-        sqlite3_bind_int(owner_info_stmt, 1, account_id);
-        if (sqlite3_step(owner_info_stmt) == SQLITE_ROW) {
-            strncpy(owner_type_str, (const char*)sqlite3_column_text(owner_info_stmt, 0), sizeof(owner_type_str) - 1);
-            owner_id = sqlite3_column_int(owner_info_stmt, 1);
-        }
-        sqlite3_finalize(owner_info_stmt);
-    }
-
-    if (owner_id != -1) { // Only proceed if we found owner info
-        long long alert_threshold = h_get_account_alert_threshold_unlocked(db, account_id, owner_type_str);
-        if (alert_threshold > 0 && amount >= alert_threshold) {
-            char title[128];
-            char body[256];
-            snprintf(title, sizeof(title), "Large Transaction Alert: %s", tx_type);
-            snprintf(body, sizeof(body), "%s account %d deducted %lld credits. Remaining amount: %lld CRD.",
-                     owner_type_str, owner_id, amount, (new_balance ? *new_balance : 0));
-            db_notice_create(title, body, "info", time(NULL) + (24 * 3600)); // Expires in 24 hours
-        }
-    }
-    // --- End Large Transaction Alerting ---
-
-    rc = SQLITE_OK;
-
-cleanup:
-    if (stmt) {
-        sqlite3_finalize(stmt);
-    }
     return rc;
 }
 
 /*
- * Public helper function to deduct credits from an account.
- * Returns SQLITE_OK on success, SQLITE_CONSTRAINT if insufficient funds, or an SQLite error code.
- * If new_balance is not NULL, it will be set to the account's new balance.
+ * Public: Deduct credits from owner's account.
  */
-int h_deduct_credits(sqlite3 *db, const char *owner_type, int owner_id, long long amount, long long *new_balance) {
-    int rc = SQLITE_ERROR;
-    int account_id = -1;
-
-    if (!db || !owner_type || amount <= 0) {
+int h_deduct_credits(sqlite3 *db,
+                     const char *owner_type,
+                     int owner_id,
+                     long long amount,
+                     const char *tx_type,
+                     const char *tx_group_id,
+                     long long *new_balance_out)
+{
+    if (!db || !owner_type || amount <= 0)
         return SQLITE_MISUSE;
-    }
 
     pthread_mutex_lock(&db_mutex);
 
-    // 1. Get account_id
-    rc = h_get_account_id_unlocked(db, owner_type, owner_id, &account_id);
+    int account_id = -1;
+    int rc = h_get_account_id_unlocked(db, owner_type, owner_id, &account_id);
     if (rc != SQLITE_OK) {
-        LOGW("h_deduct_credits: Account not found or error for %s:%d (rc=%d).", owner_type, owner_id, rc);
-        goto cleanup;
+        pthread_mutex_unlock(&db_mutex);
+        return rc;
     }
 
-    // Use the unlocked helper for the actual credit operation
-    rc = h_deduct_credits_unlocked(db, account_id, amount, "WITHDRAWAL", NULL, new_balance);
+    rc = h_deduct_credits_unlocked(db, account_id, amount,
+                                   tx_type ? tx_type : "DEBIT",
+                                   tx_group_id,
+                                   new_balance_out);
 
-cleanup:
     pthread_mutex_unlock(&db_mutex);
     return rc;
 }
+
+
 
 // Function to calculate fees and taxes for a given transaction type and amount
 int calculate_fees(sqlite3 *db, const char *tx_type, long long base_amount, const char *owner_type, fee_result_t *out) {
@@ -8600,28 +8555,36 @@ int db_bank_create_account(const char *owner_type, int owner_id, long long initi
     return rc;
 }
 
-/**
- * @brief Deposits a given amount into an owner's bank account.
- * @return SQLITE_OK on success, or an SQLite error code.
- */
-int db_bank_deposit(const char *owner_type, int owner_id, long long amount) {
-    if (amount <= 0) {
+int db_bank_deposit(const char *owner_type, int owner_id, long long amount)
+{
+    if (amount <= 0)
         return SQLITE_MISUSE;
-    }
-    // h_add_credits now handles account existence and creation logic.
-    return h_add_credits(db_get_handle(), owner_type, owner_id, amount, NULL);
+
+    return h_add_credits(
+        db_get_handle(),
+        owner_type,
+        owner_id,
+        amount,
+        "DEPOSIT",     // tx_type
+        NULL,          // tx_group_id
+        NULL           // new_balance_out
+    );
 }
 
-/**
- * @brief Withdraws a given amount from an owner's bank account.
- * @return SQLITE_OK on success, SQLITE_CONSTRAINT for insufficient funds.
- */
-int db_bank_withdraw(const char *owner_type, int owner_id, long long amount) {
-    if (amount <= 0) {
+int db_bank_withdraw(const char *owner_type, int owner_id, long long amount)
+{
+    if (amount <= 0)
         return SQLITE_MISUSE;
-    }
-    // h_deduct_credits now handles account existence, funds check, and transaction logging.
-    return h_deduct_credits(db_get_handle(), owner_type, owner_id, amount, NULL);
+
+    return h_deduct_credits(
+        db_get_handle(),
+        owner_type,
+        owner_id,
+        amount,
+        "WITHDRAWAL",  // tx_type
+        NULL,          // tx_group_id
+        NULL           // new_balance_out
+    );
 }
 
 /**
@@ -9031,6 +8994,160 @@ int db_get_shiptype_info(sqlite3 *db, int shiptype_id, int *holds, int *fighters
     sqlite3_finalize(st);
     return rc;
 }
+
+int db_player_land_on_planet(int player_id, int planet_id) {
+    sqlite3 *db = db_get_handle();
+    if (!db) return SQLITE_ERROR;
+
+    pthread_mutex_lock(&db_mutex);
+
+    sqlite3_stmt *st_find_ship = NULL;
+    sqlite3_stmt *st_update_ship = NULL;
+    sqlite3_stmt *st_update_player = NULL;
+    int ship_id = -1;
+    int rc = SQLITE_ERROR;
+
+    const char *sql_find_ship = "SELECT ship FROM players WHERE id = ?;";
+    if (sqlite3_prepare_v2(db, sql_find_ship, -1, &st_find_ship, NULL) != SQLITE_OK) {
+        goto cleanup_land;
+    }
+    sqlite3_bind_int(st_find_ship, 1, player_id);
+    if (sqlite3_step(st_find_ship) == SQLITE_ROW) {
+        ship_id = sqlite3_column_int(st_find_ship, 0);
+    }
+    sqlite3_finalize(st_find_ship);
+    st_find_ship = NULL;
+
+    if (ship_id == -1) {
+        goto cleanup_land;
+    }
+
+    // Use SAVEPOINT for nested transaction
+    sqlite3_exec(db, "SAVEPOINT land_on_planet;", NULL, NULL, NULL);
+
+    const char *sql_update_ship = "UPDATE ships SET onplanet = ?, sector = NULL, ported = 0 WHERE id = ?;";
+    if (sqlite3_prepare_v2(db, sql_update_ship, -1, &st_update_ship, NULL) != SQLITE_OK) {
+        sqlite3_exec(db, "ROLLBACK TO land_on_planet;", NULL, NULL, NULL);
+        goto cleanup_land;
+    }
+    sqlite3_bind_int(st_update_ship, 1, planet_id);
+    sqlite3_bind_int(st_update_ship, 2, ship_id);
+    if (sqlite3_step(st_update_ship) != SQLITE_DONE) {
+        sqlite3_exec(db, "ROLLBACK TO land_on_planet;", NULL, NULL, NULL);
+        goto cleanup_land;
+    }
+    
+    const char *sql_update_player = "UPDATE players SET lastplanet = ?, sector = NULL WHERE id = ?;";
+    if (sqlite3_prepare_v2(db, sql_update_player, -1, &st_update_player, NULL) != SQLITE_OK) {
+        sqlite3_exec(db, "ROLLBACK TO land_on_planet;", NULL, NULL, NULL);
+        goto cleanup_land;
+    }
+    sqlite3_bind_int(st_update_player, 1, planet_id);
+    sqlite3_bind_int(st_update_player, 2, player_id);
+    if (sqlite3_step(st_update_player) != SQLITE_DONE) {
+        sqlite3_exec(db, "ROLLBACK TO land_on_planet;", NULL, NULL, NULL);
+        goto cleanup_land;
+    }
+
+    sqlite3_exec(db, "RELEASE SAVEPOINT land_on_planet;", NULL, NULL, NULL);
+    rc = SQLITE_OK;
+
+cleanup_land:
+    if (st_find_ship) sqlite3_finalize(st_find_ship);
+    if (st_update_ship) sqlite3_finalize(st_update_ship);
+    if (st_update_player) sqlite3_finalize(st_update_player);
+    pthread_mutex_unlock(&db_mutex);
+    return rc;
+}
+
+int db_player_launch_from_planet(int player_id, int *out_sector_id) {
+    sqlite3 *db = db_get_handle();
+    if (!db) return SQLITE_ERROR;
+
+    pthread_mutex_lock(&db_mutex);
+
+    sqlite3_stmt *st = NULL;
+    int ship_id = -1;
+    int last_planet_id = -1;
+    int planet_sector_id = -1;
+    int rc = SQLITE_ERROR;
+
+    const char *sql_get_info = "SELECT ship, lastplanet FROM players WHERE id = ?;";
+    if (sqlite3_prepare_v2(db, sql_get_info, -1, &st, NULL) != SQLITE_OK) {
+        goto cleanup_launch;
+    }
+    sqlite3_bind_int(st, 1, player_id);
+    if (sqlite3_step(st) == SQLITE_ROW) {
+        ship_id = sqlite3_column_int(st, 0);
+        last_planet_id = sqlite3_column_int(st, 1);
+    }
+    sqlite3_finalize(st);
+    st = NULL;
+
+    if (ship_id == -1 || last_planet_id <= 0) {
+        // Player is not on a planet or has no ship
+        rc = SQLITE_MISUSE;
+        goto cleanup_launch;
+    }
+
+    const char *sql_get_planet_sector = "SELECT sector FROM planets WHERE id = ?;";
+    if (sqlite3_prepare_v2(db, sql_get_planet_sector, -1, &st, NULL) != SQLITE_OK) {
+        goto cleanup_launch;
+    }
+    sqlite3_bind_int(st, 1, last_planet_id);
+    if (sqlite3_step(st) == SQLITE_ROW) {
+        planet_sector_id = sqlite3_column_int(st, 0);
+    }
+    sqlite3_finalize(st);
+    st = NULL;
+
+    if (planet_sector_id <= 0) {
+        // Planet has no sector, shouldn't happen
+        rc = SQLITE_ERROR;
+        goto cleanup_launch;
+    }
+
+    // Use SAVEPOINT for nested transaction
+    sqlite3_exec(db, "SAVEPOINT launch_from_planet;", NULL, NULL, NULL);
+
+    const char *sql_update_ship = "UPDATE ships SET onplanet = NULL, sector = ? WHERE id = ?;";
+    if (sqlite3_prepare_v2(db, sql_update_ship, -1, &st, NULL) != SQLITE_OK) {
+        sqlite3_exec(db, "ROLLBACK TO launch_from_planet;", NULL, NULL, NULL);
+        goto cleanup_launch;
+    }
+    sqlite3_bind_int(st, 1, planet_sector_id);
+    sqlite3_bind_int(st, 2, ship_id);
+    if (sqlite3_step(st) != SQLITE_DONE) {
+        sqlite3_exec(db, "ROLLBACK TO launch_from_planet;", NULL, NULL, NULL);
+        goto cleanup_launch;
+    }
+    sqlite3_finalize(st);
+    st = NULL;
+    
+    const char *sql_update_player = "UPDATE players SET sector = ? WHERE id = ?;";
+    if (sqlite3_prepare_v2(db, sql_update_player, -1, &st, NULL) != SQLITE_OK) {
+        sqlite3_exec(db, "ROLLBACK TO launch_from_planet;", NULL, NULL, NULL);
+        goto cleanup_launch;
+    }
+    sqlite3_bind_int(st, 1, planet_sector_id);
+    sqlite3_bind_int(st, 2, player_id);
+    if (sqlite3_step(st) != SQLITE_DONE) {
+        sqlite3_exec(db, "ROLLBACK TO launch_from_planet;", NULL, NULL, NULL);
+        goto cleanup_launch;
+    }
+
+    sqlite3_exec(db, "RELEASE SAVEPOINT launch_from_planet;", NULL, NULL, NULL);
+    rc = SQLITE_OK;
+    if (out_sector_id) {
+        *out_sector_id = planet_sector_id;
+    }
+
+cleanup_launch:
+    if (st) sqlite3_finalize(st);
+    pthread_mutex_unlock(&db_mutex);
+    return rc;
+}
+
 
 /* Return 1 if path exists from `from` to `to`, 0 if no path, <0 on error. */
 int

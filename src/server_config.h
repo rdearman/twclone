@@ -10,6 +10,7 @@
 #include <stdint.h>
 
 #define DEFAULT_DB_NAME "twconfig.db"
+#define CORP_TAX_RATE_BP 500
 
 extern json_t *g_capabilities;
 struct twconfig;

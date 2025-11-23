@@ -181,6 +181,9 @@
 #define REASON_NO_OWNER		4003
 #define REASON_OVERCROWDING	4004
 
+/* 5000 - corporation errors */
+#define ERR_INVALID_CORP_STATE	5000
+
 
 /* 9000+ — Vendor/private extensions available */
 
