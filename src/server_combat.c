@@ -29,10 +29,6 @@
 #include "errors.h"
 #include "server_config.h"
 
-#define SECTOR_FIGHTER_CAP 50000
-#define SECTOR_MINE_CAP 50000
-#define MINE_SECTOR_CAP_PER_TYPE       100
-#define PLAYER_MINE_UNIVERSE_CAP_TOTAL 10000
 
 /* Forward decls from your codebase */
 json_t *db_get_stardock_sectors (void);

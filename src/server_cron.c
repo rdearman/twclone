@@ -81,6 +81,7 @@ static entry_t REG[] = {
   {"loan_shark_interest_cron", h_loan_shark_interest_cron},
   {"daily_corp_tax", h_daily_corp_tax},
   {"dividend_payout", h_dividend_payout},
+  {"daily_stock_price_recalculation", h_daily_stock_price_recalculation},
 };
 
 static int g_reg_inited = 0;
@@ -1572,45 +1573,19 @@ rollback_and_unlock:
 
         char *ticker = NULL;
 
-        int corp_id = 0;
+                int corp_id = 0;
 
-        int total_shares = 0;
+                int total_shares = 0;
 
-        // Need to use h_get_stock_info (declared in server_corporation.h)
+                // Use h_get_stock_info from server_corporation.h
 
-        // This implies including server_corporation.h in server_cron.c if not already there
+                if (h_get_stock_info(db, stock_id, NULL, &corp_id, &total_shares, NULL, NULL, NULL) != SQLITE_OK) {
 
-        // For now, let's assume direct SQL access within this cron for simplicity
+                    LOGE("h_dividend_payout: Failed to get stock info for stock %d via helper. Skipping this dividend.", stock_id);
 
-        // In a real scenario, proper helper functions would be in database.c or shared
+                    continue; // Skip this dividend if we can't get stock info
 
-        sqlite3_stmt *get_stock_info_st = NULL;
-
-        const char *sql_get_stock_info =
-
-          "SELECT corp_id, total_shares FROM stocks WHERE id = ?;";
-
-        if (sqlite3_prepare_v2(db, sql_get_stock_info, -1, &get_stock_info_st, NULL) == SQLITE_OK) {
-
-            sqlite3_bind_int(get_stock_info_st, 1, stock_id);
-
-            if (sqlite3_step(get_stock_info_st) == SQLITE_ROW) {
-
-                corp_id = sqlite3_column_int(get_stock_info_st, 0);
-
-                total_shares = sqlite3_column_int(get_stock_info_st, 1);
-
-            }
-
-            sqlite3_finalize(get_stock_info_st);
-
-        } else {
-
-            LOGE("h_dividend_payout: Failed to get stock info for stock %d: %s", stock_id, sqlite3_errmsg(db));
-
-            continue; // Skip this dividend if we can't get stock info
-
-        }
+                }
 
 
 
@@ -2317,6 +2292,848 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
 		  goto next_event_cleanup;
 		}
 	      body = body_str;
+	    }
+	}
+      else if (strcasecmp (event_type, "fedspace:tow") == 0)
+	{
+	  const char *reason =
+	    json_string_value (json_object_get (payload_obj, "reason"));
+	  if (reason)
+	    {
+	      category = "military";
+	      if (asprintf
+		  (&headline_str,
+		   "Federal Authorities Tow Ship from Sector %d!",
+		   sector_id) == -1)
+		{
+		  LOGE
+		    ("h_daily_news_compiler: Failed to allocate headline_str for fedspace:tow.");
+		  goto next_event_cleanup;
+		}
+	      headline = headline_str;
+	      if (asprintf
+		  (&body_str,
+		   "A ship was forcibly towed from FedSpace Sector %d due to a violation of Federal Law: %s. Owners are advised to review regulations.",
+		   sector_id, reason) == -1)
+		{
+		  LOGE
+		    ("h_daily_news_compiler: Failed to allocate body_str for fedspace:tow.");
+		  goto next_event_cleanup;
+		}
+	      body = body_str;
+	    }
+	}
+      else if (strcasecmp (event_type, "corp.tax.paid") == 0)
+	{
+	  int corp_id =
+	    json_integer_value (json_object_get (payload_obj, "corp_id"));
+	  long long amount =
+	    json_integer_value (json_object_get (payload_obj, "amount"));
+          long long total_assets =
+	    json_integer_value (json_object_get (payload_obj, "total_assets"));
+
+	  // Fetch corp name and tag
+	  sqlite3_stmt *corp_info_st = NULL;
+	  const char *sql_corp_info =
+	    "SELECT name, tag FROM corporations WHERE id = ?;";
+	  char corp_name_buf[64] = { 0 };
+	  char corp_tag_buf[16] = { 0 };
+
+	  if (sqlite3_prepare_v2 (db, sql_corp_info, -1, &corp_info_st, NULL)
+	      == SQLITE_OK)
+	    {
+	      sqlite3_bind_int (corp_info_st, 1, corp_id);
+	      if (sqlite3_step (corp_info_st) == SQLITE_ROW)
+		{
+		  strncpy (corp_name_buf,
+			   (const char *) sqlite3_column_text (corp_info_st,
+								0),
+			   sizeof (corp_name_buf) - 1);
+		  strncpy (corp_tag_buf,
+			   (const char *) sqlite3_column_text (corp_info_st,
+								1),
+			   sizeof (corp_tag_buf) - 1);
+		}
+	      sqlite3_finalize (corp_info_st);
+	    }
+
+	  if (corp_id > 0)
+	    {
+	      category = "economic";
+	      if (asprintf
+		  (&headline_str, "Corporation Tax Paid by %s [%s]!",
+		   corp_name_buf, corp_tag_buf) == -1)
+		{
+		  LOGE
+		    ("h_daily_news_compiler: Failed to allocate headline_str for corp.tax.paid.");
+		  goto next_event_cleanup;
+		}
+	      headline = headline_str;
+	      if (asprintf
+		  (&body_str,
+		   "%s [%s] has successfully paid %lld credits in daily corporate taxes on reported assets of %lld credits, maintaining good standing with the Federation.",
+		   corp_name_buf, corp_tag_buf, amount, total_assets) == -1)
+		{
+		  LOGE
+		    ("h_daily_news_compiler: Failed to allocate body_str for corp.tax.paid.");
+		  goto next_event_cleanup;
+		}
+	      body = body_str;
+	      json_object_set_new (context_data, "corp_id",
+				   json_integer (corp_id));
+	      json_object_set_new (context_data, "amount",
+				   json_integer (amount));
+              json_object_set_new (context_data, "total_assets",
+				   json_integer (total_assets));
+	    }
+	}
+      else if (strcasecmp (event_type, "corp.tax.failed") == 0)
+	{
+	  int corp_id =
+	    json_integer_value (json_object_get (payload_obj, "corp_id"));
+	  long long amount =
+	    json_integer_value (json_object_get (payload_obj, "amount"));
+          long long total_assets =
+	    json_integer_value (json_object_get (payload_obj, "total_assets"));
+
+	  // Fetch corp name and tag
+	  sqlite3_stmt *corp_info_st = NULL;
+	  const char *sql_corp_info =
+	    "SELECT name, tag, tax_arrears, credit_rating FROM corporations WHERE id = ?;";
+	  char corp_name_buf[64] = { 0 };
+	  char corp_tag_buf[16] = { 0 };
+          long long tax_arrears = 0;
+          int credit_rating = 0;
+
+	  if (sqlite3_prepare_v2 (db, sql_corp_info, -1, &corp_info_st, NULL)
+	      == SQLITE_OK)
+	    {
+	      sqlite3_bind_int (corp_info_st, 1, corp_id);
+	      if (sqlite3_step (corp_info_st) == SQLITE_ROW)
+		{
+		  strncpy (corp_name_buf,
+			   (const char *) sqlite3_column_text (corp_info_st,
+								0),
+			   sizeof (corp_name_buf) - 1);
+		  strncpy (corp_tag_buf,
+			   (const char *) sqlite3_column_text (corp_info_st,
+								1),
+			   sizeof (corp_tag_buf) - 1);
+                  tax_arrears = sqlite3_column_int64(corp_info_st, 2);
+                  credit_rating = sqlite3_column_int(corp_info_st, 3);
+		}
+	      sqlite3_finalize (corp_info_st);
+	    }
+
+	  if (corp_id > 0)
+	    {
+	      category = "economic";
+	      if (asprintf
+		  (&headline_str, "Corporation Tax Default by %s [%s]!",
+		   corp_name_buf, corp_tag_buf) == -1)
+		{
+		  LOGE
+		    ("h_daily_news_compiler: Failed to allocate headline_str for corp.tax.failed.");
+		  goto next_event_cleanup;
+		}
+	      headline = headline_str;
+	      if (asprintf
+		  (&body_str,
+		   "%s [%s] has failed to pay %lld credits in daily corporate taxes on reported assets of %lld credits. Total arrears now stand at %lld credits, and their credit rating has fallen to %d. Federation authorities are monitoring the situation.",
+		   corp_name_buf, corp_tag_buf, amount, total_assets, tax_arrears, credit_rating) == -1)
+		{
+		  LOGE
+		    ("h_daily_news_compiler: Failed to allocate body_str for corp.tax.failed.");
+		  goto next_event_cleanup;
+		}
+	      body = body_str;
+	      json_object_set_new (context_data, "corp_id",
+				   json_integer (corp_id));
+	      json_object_set_new (context_data, "amount",
+				   json_integer (amount));
+              json_object_set_new (context_data, "total_assets",
+				   json_integer (total_assets));
+              json_object_set_new (context_data, "tax_arrears",
+				   json_integer (tax_arrears));
+              json_object_set_new (context_data, "credit_rating",
+				   json_integer (credit_rating));
+	    }
+	}
+      else if (strcasecmp (event_type, "stock.ipo.registered") == 0)
+	{
+	  int corp_id =
+	    json_integer_value (json_object_get (payload_obj, "corp_id"));
+	  const char *ticker =
+	    json_string_value (json_object_get (payload_obj, "ticker"));
+
+	  // Fetch corp name
+	  sqlite3_stmt *corp_info_st = NULL;
+	  const char *sql_corp_name =
+	    "SELECT name FROM corporations WHERE id = ?;";
+	  char corp_name_buf[64] = { 0 };
+
+	  if (sqlite3_prepare_v2 (db, sql_corp_name, -1, &corp_info_st, NULL)
+	      == SQLITE_OK)
+	    {
+	      sqlite3_bind_int (corp_info_st, 1, corp_id);
+	      if (sqlite3_step (corp_info_st) == SQLITE_ROW)
+		{
+		  strncpy (corp_name_buf,
+			   (const char *) sqlite3_column_text (corp_info_st,
+								0),
+			   sizeof (corp_name_buf) - 1);
+		}
+	      sqlite3_finalize (corp_info_st);
+	    }
+
+	  if (corp_id > 0 && ticker)
+	    {
+	      category = "economic";
+	      if (asprintf
+		  (&headline_str, "%s [%s] Goes Public!", corp_name_buf,
+		   ticker) == -1)
+		{
+		  LOGE
+		    ("h_daily_news_compiler: Failed to allocate headline_str for stock.ipo.registered.");
+		  goto next_event_cleanup;
+		}
+	      headline = headline_str;
+	      if (asprintf
+		  (&body_str,
+		   "The corporation %s has successfully launched its Initial Public Offering under the ticker symbol [%s], opening new investment opportunities.",
+		   corp_name_buf, ticker) == -1)
+		{
+		  LOGE
+		    ("h_daily_news_compiler: Failed to allocate body_str for stock.ipo.registered.");
+		  goto next_event_cleanup;
+		}
+	      body = body_str;
+	      json_object_set_new (context_data, "corp_id",
+				   json_integer (corp_id));
+	      json_object_set_new (context_data, "ticker",
+				   json_string (ticker));
+	    }
+	}
+      else if (strcasecmp (event_type, "stock.dividend.declared") == 0)
+	{
+	  int corp_id =
+	    json_integer_value (json_object_get (payload_obj, "corp_id"));
+	  int stock_id =
+	    json_integer_value (json_object_get (payload_obj, "stock_id"));
+	  int amount_per_share =
+	    json_integer_value (json_object_get (payload_obj,
+						 "amount_per_share"));
+	  long long total_payout =
+	    json_integer_value (json_object_get (payload_obj, "total_payout"));
+
+	  // Fetch corp name and ticker
+	  sqlite3_stmt *info_st = NULL;
+	  const char *sql_info =
+	    "SELECT c.name, s.ticker FROM corporations c JOIN stocks s ON c.id = s.corp_id WHERE c.id = ? AND s.id = ?;";
+	  char corp_name_buf[64] = { 0 };
+	  char ticker_buf[16] = { 0 };
+
+	  if (sqlite3_prepare_v2 (db, sql_info, -1, &info_st, NULL) ==
+	      SQLITE_OK)
+	    {
+	      sqlite3_bind_int (info_st, 1, corp_id);
+	      sqlite3_bind_int (info_st, 2, stock_id);
+	      if (sqlite3_step (info_st) == SQLITE_ROW)
+		{
+		  strncpy (corp_name_buf,
+			   (const char *) sqlite3_column_text (info_st, 0),
+			   sizeof (corp_name_buf) - 1);
+		  strncpy (ticker_buf,
+			   (const char *) sqlite3_column_text (info_st, 1),
+			   sizeof (ticker_buf) - 1);
+		}
+	      sqlite3_finalize (info_st);
+	    }
+
+	  if (corp_id > 0 && stock_id > 0)
+	    {
+	      category = "economic";
+	      if (asprintf
+		  (&headline_str, "Dividend Declared by %s [%s]!",
+		   corp_name_buf, ticker_buf) == -1)
+		{
+		  LOGE
+		    ("h_daily_news_compiler: Failed to allocate headline_str for stock.dividend.declared.");
+		  goto next_event_cleanup;
+		}
+	      headline = headline_str;
+	      if (asprintf
+		  (&body_str,
+		   "%s [%s] has declared a dividend of %d credits per share, with a total payout of %lld credits, signaling strong financial performance.",
+		   corp_name_buf, ticker_buf, amount_per_share, total_payout)
+		  == -1)
+		{
+		  LOGE
+		    ("h_daily_news_compiler: Failed to allocate body_str for stock.dividend.declared.");
+		  goto next_event_cleanup;
+		}
+	      body = body_str;
+	      json_object_set_new (context_data, "corp_id",
+				   json_integer (corp_id));
+	      json_object_set_new (context_data, "stock_id",
+				   json_integer (stock_id));
+	      json_object_set_new (context_data, "amount_per_share",
+				   json_integer (amount_per_share));
+	      json_object_set_new (context_data, "total_payout",
+				   json_integer (total_payout));
+	    }
+	}
+      else if (strcasecmp (event_type, "stock.dividend.payout_failed") == 0)
+	{
+	  int corp_id =
+	    json_integer_value (json_object_get (payload_obj, "corp_id"));
+	  int stock_id =
+	    json_integer_value (json_object_get (payload_obj, "stock_id"));
+	  long long required_payout =
+	    json_integer_value (json_object_get (payload_obj, "required"));
+	  long long available_funds =
+	    json_integer_value (json_object_get (payload_obj, "available"));
+
+	  // Fetch corp name and ticker
+	  sqlite3_stmt *info_st = NULL;
+	  const char *sql_info =
+	    "SELECT c.name, s.ticker FROM corporations c JOIN stocks s ON c.id = s.corp_id WHERE c.id = ? AND s.id = ?;";
+	  char corp_name_buf[64] = { 0 };
+	  char ticker_buf[16] = { 0 };
+
+	  if (sqlite3_prepare_v2 (db, sql_info, -1, &info_st, NULL) ==
+	      SQLITE_OK)
+	    {
+	      sqlite3_bind_int (info_st, 1, corp_id);
+	      sqlite3_bind_int (info_st, 2, stock_id);
+	      if (sqlite3_step (info_st) == SQLITE_ROW)
+		{
+		  strncpy (corp_name_buf,
+			   (const char *) sqlite3_column_text (info_st, 0),
+			   sizeof (corp_name_buf) - 1);
+		  strncpy (ticker_buf,
+			   (const char *) sqlite3_column_text (info_st, 1),
+			   sizeof (ticker_buf) - 1);
+		}
+	      sqlite3_finalize (info_st);
+	    }
+
+	  if (corp_id > 0 && stock_id > 0)
+	    {
+	      category = "economic";
+	      if (asprintf
+		  (&headline_str, "Dividend Payout Failed for %s [%s]!",
+		   corp_name_buf, ticker_buf) == -1)
+		{
+		  LOGE
+		    ("h_daily_news_compiler: Failed to allocate headline_str for stock.dividend.payout_failed.");
+		  goto next_event_cleanup;
+		}
+	      headline = headline_str;
+	      if (asprintf
+		  (&body_str,
+		   "Due to insufficient corporate funds, %s [%s] has failed to pay a declared dividend. %lld credits were required, but only %lld credits were available.",
+		   corp_name_buf, ticker_buf, required_payout,
+		   available_funds) == -1)
+		{
+		  LOGE
+		    ("h_daily_news_compiler: Failed to allocate body_str for stock.dividend.payout_failed.");
+		  goto next_event_cleanup;
+		}
+	      body = body_str;
+	      json_object_set_new (context_data, "corp_id",
+				   json_integer (corp_id));
+	      json_object_set_new (context_data, "stock_id",
+				   json_integer (stock_id));
+	      json_object_set_new (context_data, "required_payout",
+				   json_integer (required_payout));
+	      json_object_set_new (context_data, "available_funds",
+				   json_integer (available_funds));
+	    }
+	}
+      else if (strcasecmp (event_type, "stock.dividend.payout_completed") == 0)
+	{
+	  int corp_id =
+	    json_integer_value (json_object_get (payload_obj, "corp_id"));
+	  int stock_id =
+	    json_integer_value (json_object_get (payload_obj, "stock_id"));
+	  long long actual_payout =
+	    json_integer_value (json_object_get (payload_obj,
+						 "actual_payout"));
+
+	  // Fetch corp name and ticker
+	  sqlite3_stmt *info_st = NULL;
+	  const char *sql_info =
+	    "SELECT c.name, s.ticker FROM corporations c JOIN stocks s ON c.id = s.corp_id WHERE c.id = ? AND s.id = ?;";
+	  char corp_name_buf[64] = { 0 };
+	  char ticker_buf[16] = { 0 };
+
+	  if (sqlite3_prepare_v2 (db, sql_info, -1, &info_st, NULL) ==
+	      SQLITE_OK)
+	    {
+	      sqlite3_bind_int (info_st, 1, corp_id);
+	      sqlite3_bind_int (info_st, 2, stock_id);
+	      if (sqlite3_step (info_st) == SQLITE_ROW)
+		{
+		  strncpy (corp_name_buf,
+			   (const char *) sqlite3_column_text (info_st, 0),
+			   sizeof (corp_name_buf) - 1);
+		  strncpy (ticker_buf,
+			   (const char *) sqlite3_column_text (info_st, 1),
+			   sizeof (ticker_buf) - 1);
+		}
+	      sqlite3_finalize (info_st);
+	    }
+
+	  if (corp_id > 0 && stock_id > 0)
+	    {
+	      category = "economic";
+	      if (asprintf
+		  (&headline_str, "Dividend Payout Completed by %s [%s]!",
+		   corp_name_buf, ticker_buf) == -1)
+		{
+		  LOGE
+		    ("h_daily_news_compiler: Failed to allocate headline_str for stock.dividend.payout_completed.");
+		  goto next_event_cleanup;
+		}
+	      headline = headline_str;
+	      if (asprintf
+		  (&body_str,
+		   "%s [%s] has successfully completed the payout of %lld credits in dividends to its shareholders.",
+		   corp_name_buf, ticker_buf, actual_payout) == -1)
+		{
+		  LOGE
+		    ("h_daily_news_compiler: Failed to allocate body_str for stock.dividend.payout_completed.");
+		  goto next_event_cleanup;
+		}
+	      body = body_str;
+	      json_object_set_new (context_data, "corp_id",
+				   json_integer (corp_id));
+	      json_object_set_new (context_data, "stock_id",
+				   json_integer (stock_id));
+	      json_object_set_new (context_data, "actual_payout",
+				   json_integer (actual_payout));
+	    }
+	}
+      else if (strcasecmp (event_type, "fedspace:tow") == 0)
+	{
+	  const char *reason =
+	    json_string_value (json_object_get (payload_obj, "reason"));
+	  if (reason)
+	    {
+	      category = "military";
+	      if (asprintf
+		  (&headline_str,
+		   "Federal Authorities Tow Ship from Sector %d!",
+		   sector_id) == -1)
+		{
+		  LOGE
+		    ("h_daily_news_compiler: Failed to allocate headline_str for fedspace:tow.");
+		  goto next_event_cleanup;
+		}
+	      headline = headline_str;
+	      if (asprintf
+		  (&body_str,
+		   "A ship was forcibly towed from FedSpace Sector %d due to a violation of Federal Law: %s. Owners are advised to review regulations.",
+		   sector_id, reason) == -1)
+		{
+		  LOGE
+		    ("h_daily_news_compiler: Failed to allocate body_str for fedspace:tow.");
+		  goto next_event_cleanup;
+		}
+	      body = body_str;
+	    }
+	}
+      else if (strcasecmp (event_type, "corp.tax.paid") == 0)
+	{
+	  int corp_id =
+	    json_integer_value (json_object_get (payload_obj, "corp_id"));
+	  long long amount =
+	    json_integer_value (json_object_get (payload_obj, "amount"));
+          long long total_assets =
+	    json_integer_value (json_object_get (payload_obj, "total_assets"));
+
+	  // Fetch corp name and tag
+	  sqlite3_stmt *corp_info_st = NULL;
+	  const char *sql_corp_info =
+	    "SELECT name, tag FROM corporations WHERE id = ?;";
+	  char corp_name_buf[64] = { 0 };
+	  char corp_tag_buf[16] = { 0 };
+
+	  if (sqlite3_prepare_v2 (db, sql_corp_info, -1, &corp_info_st, NULL)
+	      == SQLITE_OK)
+	    {
+	      sqlite3_bind_int (corp_info_st, 1, corp_id);
+	      if (sqlite3_step (corp_info_st) == SQLITE_ROW)
+		{
+		  strncpy (corp_name_buf,
+			   (const char *) sqlite3_column_text (corp_info_st,
+								0),
+			   sizeof (corp_name_buf) - 1);
+		  strncpy (corp_tag_buf,
+			   (const char *) sqlite3_column_text (corp_info_st,
+								1),
+			   sizeof (corp_tag_buf) - 1);
+		}
+	      sqlite3_finalize (corp_info_st);
+	    }
+
+	  if (corp_id > 0)
+	    {
+	      category = "economic";
+	      if (asprintf
+		  (&headline_str, "Corporation Tax Paid by %s [%s]!",
+		   corp_name_buf, corp_tag_buf) == -1)
+		{
+		  LOGE
+		    ("h_daily_news_compiler: Failed to allocate headline_str for corp.tax.paid.");
+		  goto next_event_cleanup;
+		}
+	      headline = headline_str;
+	      if (asprintf
+		  (&body_str,
+		   "%s [%s] has successfully paid %lld credits in daily corporate taxes on reported assets of %lld credits, maintaining good standing with the Federation.",
+		   corp_name_buf, corp_tag_buf, amount, total_assets) == -1)
+		{
+		  LOGE
+		    ("h_daily_news_compiler: Failed to allocate body_str for corp.tax.paid.");
+		  goto next_event_cleanup;
+		}
+	      body = body_str;
+	      json_object_set_new (context_data, "corp_id",
+				   json_integer (corp_id));
+	      json_object_set_new (context_data, "amount",
+				   json_integer (amount));
+              json_object_set_new (context_data, "total_assets",
+				   json_integer (total_assets));
+	    }
+	}
+      else if (strcasecmp (event_type, "corp.tax.failed") == 0)
+	{
+	  int corp_id =
+	    json_integer_value (json_object_get (payload_obj, "corp_id"));
+	  long long amount =
+	    json_integer_value (json_object_get (payload_obj, "amount"));
+          long long total_assets =
+	    json_integer_value (json_object_get (payload_obj, "total_assets"));
+
+	  // Fetch corp name and tag
+	  sqlite3_stmt *corp_info_st = NULL;
+	  const char *sql_corp_info =
+	    "SELECT name, tag, tax_arrears, credit_rating FROM corporations WHERE id = ?;";
+	  char corp_name_buf[64] = { 0 };
+	  char corp_tag_buf[16] = { 0 };
+          long long tax_arrears = 0;
+          int credit_rating = 0;
+
+	  if (sqlite3_prepare_v2 (db, sql_corp_info, -1, &corp_info_st, NULL)
+	      == SQLITE_OK)
+	    {
+	      sqlite3_bind_int (corp_info_st, 1, corp_id);
+	      if (sqlite3_step (corp_info_st) == SQLITE_ROW)
+		{
+		  strncpy (corp_name_buf,
+			   (const char *) sqlite3_column_text (corp_info_st,
+								0),
+			   sizeof (corp_name_buf) - 1);
+		  strncpy (corp_tag_buf,
+			   (const char *) sqlite3_column_text (corp_info_st,
+								1),
+			   sizeof (corp_tag_buf) - 1);
+                  tax_arrears = sqlite3_column_int64(corp_info_st, 2);
+                  credit_rating = sqlite3_column_int(corp_info_st, 3);
+		}
+	      sqlite3_finalize (corp_info_st);
+	    }
+
+	  if (corp_id > 0)
+	    {
+	      category = "economic";
+	      if (asprintf
+		  (&headline_str, "Corporation Tax Default by %s [%s]!",
+		   corp_name_buf, corp_tag_buf) == -1)
+		{
+		  LOGE
+		    ("h_daily_news_compiler: Failed to allocate headline_str for corp.tax.failed.");
+		  goto next_event_cleanup;
+		}
+	      headline = headline_str;
+	      if (asprintf
+		  (&body_str,
+		   "%s [%s] has failed to pay %lld credits in daily corporate taxes on reported assets of %lld credits. Total arrears now stand at %lld credits, and their credit rating has fallen to %d. Federation authorities are monitoring the situation.",
+		   corp_name_buf, corp_tag_buf, amount, total_assets, tax_arrears, credit_rating) == -1)
+		{
+		  LOGE
+		    ("h_daily_news_compiler: Failed to allocate body_str for corp.tax.failed.");
+		  goto next_event_cleanup;
+		}
+	      body = body_str;
+	      json_object_set_new (context_data, "corp_id",
+				   json_integer (corp_id));
+	      json_object_set_new (context_data, "amount",
+				   json_integer (amount));
+              json_object_set_new (context_data, "total_assets",
+				   json_integer (total_assets));
+              json_object_set_new (context_data, "tax_arrears",
+				   json_integer (tax_arrears));
+              json_object_set_new (context_data, "credit_rating",
+				   json_integer (credit_rating));
+	    }
+	}
+      else if (strcasecmp (event_type, "stock.ipo.registered") == 0)
+	{
+	  int corp_id =
+	    json_integer_value (json_object_get (payload_obj, "corp_id"));
+	  const char *ticker =
+	    json_string_value (json_object_get (payload_obj, "ticker"));
+
+	  // Fetch corp name
+	  sqlite3_stmt *corp_info_st = NULL;
+	  const char *sql_corp_name =
+	    "SELECT name FROM corporations WHERE id = ?;";
+	  char corp_name_buf[64] = { 0 };
+
+	  if (sqlite3_prepare_v2 (db, sql_corp_name, -1, &corp_info_st, NULL)
+	      == SQLITE_OK)
+	    {
+	      sqlite3_bind_int (corp_info_st, 1, corp_id);
+	      if (sqlite3_step (corp_info_st) == SQLITE_ROW)
+		{
+		  strncpy (corp_name_buf,
+			   (const char *) sqlite3_column_text (corp_info_st,
+								0),
+			   sizeof (corp_name_buf) - 1);
+		}
+	      sqlite3_finalize (corp_info_st);
+	    }
+
+	  if (corp_id > 0 && ticker)
+	    {
+	      category = "economic";
+	      if (asprintf
+		  (&headline_str, "%s [%s] Goes Public!", corp_name_buf,
+		   ticker) == -1)
+		{
+		  LOGE
+		    ("h_daily_news_compiler: Failed to allocate headline_str for stock.ipo.registered.");
+		  goto next_event_cleanup;
+		}
+	      headline = headline_str;
+	      if (asprintf
+		  (&body_str,
+		   "The corporation %s has successfully launched its Initial Public Offering under the ticker symbol [%s], opening new investment opportunities.",
+		   corp_name_buf, ticker) == -1)
+		{
+		  LOGE
+		    ("h_daily_news_compiler: Failed to allocate body_str for stock.ipo.registered.");
+		  goto next_event_cleanup;
+		}
+	      body = body_str;
+	      json_object_set_new (context_data, "corp_id",
+				   json_integer (corp_id));
+	      json_object_set_new (context_data, "ticker",
+				   json_string (ticker));
+	    }
+	}
+      else if (strcasecmp (event_type, "stock.dividend.declared") == 0)
+	{
+	  int corp_id =
+	    json_integer_value (json_object_get (payload_obj, "corp_id"));
+	  int stock_id =
+	    json_integer_value (json_object_get (payload_obj, "stock_id"));
+	  int amount_per_share =
+	    json_integer_value (json_object_get (payload_obj,
+						 "amount_per_share"));
+	  long long total_payout =
+	    json_integer_value (json_object_get (payload_obj, "total_payout"));
+
+	  // Fetch corp name and ticker
+	  sqlite3_stmt *info_st = NULL;
+	  const char *sql_info =
+	    "SELECT c.name, s.ticker FROM corporations c JOIN stocks s ON c.id = s.corp_id WHERE c.id = ? AND s.id = ?;";
+	  char corp_name_buf[64] = { 0 };
+	  char ticker_buf[16] = { 0 };
+
+	  if (sqlite3_prepare_v2 (db, sql_info, -1, &info_st, NULL) ==
+	      SQLITE_OK)
+	    {
+	      sqlite3_bind_int (info_st, 1, corp_id);
+	      sqlite3_bind_int (info_st, 2, stock_id);
+	      if (sqlite3_step (info_st) == SQLITE_ROW)
+		{
+		  strncpy (corp_name_buf,
+			   (const char *) sqlite3_column_text (info_st, 0),
+			   sizeof (corp_name_buf) - 1);
+		  strncpy (ticker_buf,
+			   (const char *) sqlite3_column_text (info_st, 1),
+			   sizeof (ticker_buf) - 1);
+		}
+	      sqlite3_finalize (info_st);
+	    }
+
+	  if (corp_id > 0 && stock_id > 0)
+	    {
+	      category = "economic";
+	      if (asprintf
+		  (&headline_str, "Dividend Declared by %s [%s]!",
+		   corp_name_buf, ticker_buf) == -1)
+		{
+		  LOGE
+		    ("h_daily_news_compiler: Failed to allocate headline_str for stock.dividend.declared.");
+		  goto next_event_cleanup;
+		}
+	      headline = headline_str;
+	      if (asprintf
+		  (&body_str,
+		   "%s [%s] has declared a dividend of %d credits per share, with a total payout of %lld credits, signaling strong financial performance.",
+		   corp_name_buf, ticker_buf, amount_per_share, total_payout)
+		  == -1)
+		{
+		  LOGE
+		    ("h_daily_news_compiler: Failed to allocate body_str for stock.dividend.declared.");
+		  goto next_event_cleanup;
+		}
+	      body = body_str;
+	      json_object_set_new (context_data, "corp_id",
+				   json_integer (corp_id));
+	      json_object_set_new (context_data, "stock_id",
+				   json_integer (stock_id));
+	      json_object_set_new (context_data, "amount_per_share",
+				   json_integer (amount_per_share));
+	      json_object_set_new (context_data, "total_payout",
+				   json_integer (total_payout));
+	    }
+	}
+      else if (strcasecmp (event_type, "stock.dividend.payout_failed") == 0)
+	{
+	  int corp_id =
+	    json_integer_value (json_object_get (payload_obj, "corp_id"));
+	  int stock_id =
+	    json_integer_value (json_object_get (payload_obj, "stock_id"));
+	  long long required_payout =
+	    json_integer_value (json_object_get (payload_obj, "required"));
+	  long long available_funds =
+	    json_integer_value (json_object_get (payload_obj, "available"));
+
+	  // Fetch corp name and ticker
+	  sqlite3_stmt *info_st = NULL;
+	  const char *sql_info =
+	    "SELECT c.name, s.ticker FROM corporations c JOIN stocks s ON c.id = s.corp_id WHERE c.id = ? AND s.id = ?;";
+	  char corp_name_buf[64] = { 0 };
+	  char ticker_buf[16] = { 0 };
+
+	  if (sqlite3_prepare_v2 (db, sql_info, -1, &info_st, NULL) ==
+	      SQLITE_OK)
+	    {
+	      sqlite3_bind_int (info_st, 1, corp_id);
+	      sqlite3_bind_int (info_st, 2, stock_id);
+	      if (sqlite3_step (info_st) == SQLITE_ROW)
+		{
+		  strncpy (corp_name_buf,
+			   (const char *) sqlite3_column_text (info_st, 0),
+			   sizeof (corp_name_buf) - 1);
+		  strncpy (ticker_buf,
+			   (const char *) sqlite3_column_text (info_st, 1),
+			   sizeof (ticker_buf) - 1);
+		}
+	      sqlite3_finalize (info_st);
+	    }
+
+	  if (corp_id > 0 && stock_id > 0)
+	    {
+	      category = "economic";
+	      if (asprintf
+		  (&headline_str, "Dividend Payout Failed for %s [%s]!",
+		   corp_name_buf, ticker_buf) == -1)
+		{
+		  LOGE
+		    ("h_daily_news_compiler: Failed to allocate headline_str for stock.dividend.payout_failed.");
+		  goto next_event_cleanup;
+		}
+	      headline = headline_str;
+	      if (asprintf
+		  (&body_str,
+		   "Due to insufficient corporate funds, %s [%s] has failed to pay a declared dividend. %lld credits were required, but only %lld credits were available.",
+		   corp_name_buf, ticker_buf, required_payout,
+		   available_funds) == -1)
+		{
+		  LOGE
+		    ("h_daily_news_compiler: Failed to allocate body_str for stock.dividend.payout_failed.");
+		  goto next_event_cleanup;
+		}
+	      body = body_str;
+	      json_object_set_new (context_data, "corp_id",
+				   json_integer (corp_id));
+	      json_object_set_new (context_data, "stock_id",
+				   json_integer (stock_id));
+	      json_object_set_new (context_data, "required_payout",
+				   json_integer (required_payout));
+	      json_object_set_new (context_data, "available_funds",
+				   json_integer (available_funds));
+	    }
+	}
+      else if (strcasecmp (event_type, "stock.dividend.payout_completed") == 0)
+	{
+	  int corp_id =
+	    json_integer_value (json_object_get (payload_obj, "corp_id"));
+	  int stock_id =
+	    json_integer_value (json_object_get (payload_obj, "stock_id"));
+	  long long actual_payout =
+	    json_integer_value (json_object_get (payload_obj,
+						 "actual_payout"));
+
+	  // Fetch corp name and ticker
+	  sqlite3_stmt *info_st = NULL;
+	  const char *sql_info =
+	    "SELECT c.name, s.ticker FROM corporations c JOIN stocks s ON c.id = s.corp_id WHERE c.id = ? AND s.id = ?;";
+	  char corp_name_buf[64] = { 0 };
+	  char ticker_buf[16] = { 0 };
+
+	  if (sqlite3_prepare_v2 (db, sql_info, -1, &info_st, NULL) ==
+	      SQLITE_OK)
+	    {
+	      sqlite3_bind_int (info_st, 1, corp_id);
+	      sqlite3_bind_int (info_st, 2, stock_id);
+	      if (sqlite3_step (info_st) == SQLITE_ROW)
+		{
+		  strncpy (corp_name_buf,
+			   (const char *) sqlite3_column_text (info_st, 0),
+			   sizeof (corp_name_buf) - 1);
+		  strncpy (ticker_buf,
+			   (const char *) sqlite3_column_text (info_st, 1),
+			   sizeof (ticker_buf) - 1);
+		}
+	      sqlite3_finalize (info_st);
+	    }
+
+	  if (corp_id > 0 && stock_id > 0)
+	    {
+	      category = "economic";
+	      if (asprintf
+		  (&headline_str, "Dividend Payout Completed by %s [%s]!",
+		   corp_name_buf, ticker_buf) == -1)
+		{
+		  LOGE
+		    ("h_daily_news_compiler: Failed to allocate headline_str for stock.dividend.payout_completed.");
+		  goto next_event_cleanup;
+		}
+	      headline = headline_str;
+	      if (asprintf
+		  (&body_str,
+		   "%s [%s] has successfully completed the payout of %lld credits in dividends to its shareholders.",
+		   corp_name_buf, ticker_buf, actual_payout) == -1)
+		{
+		  LOGE
+		    ("h_daily_news_compiler: Failed to allocate body_str for stock.dividend.payout_completed.");
+		  goto next_event_cleanup;
+		}
+	      body = body_str;
+	      json_object_set_new (context_data, "corp_id",
+				   json_integer (corp_id));
+	      json_object_set_new (context_data, "stock_id",
+				   json_integer (stock_id));
+	      json_object_set_new (context_data, "actual_payout",
+				   json_integer (actual_payout));
 	    }
 	}
       else if (strcasecmp (event_type, "combat.ship_destroyed") == 0)
@@ -3994,7 +4811,256 @@ rollback_and_unlock:
   return rc;
 }
 
+int h_daily_corp_tax (sqlite3 *db, int64_t now_s);
+
+
+
 int
+
+h_daily_stock_price_recalculation (sqlite3 *db, int64_t now_s)
+
+{
+
+  if (!try_lock (db, "daily_stock_price_recalculation", now_s))
+
+    return 0;
+
+
+
+  LOGI ("h_daily_stock_price_recalculation: Starting daily stock price recalculation.");
+
+
+
+  int rc = begin (db);
+
+  if (rc)
+
+    {
+
+      unlock (db, "daily_stock_price_recalculation");
+
+      return rc;
+
+    }
+
+
+
+  sqlite3_stmt *st_stocks = NULL;
+
+  const char *sql_select_stocks =
+
+    "SELECT s.id, s.corp_id, s.total_shares FROM stocks s WHERE s.corp_id > 0;";
+
+
+
+  rc = sqlite3_prepare_v2 (db, sql_select_stocks, -1, &st_stocks, NULL);
+
+  if (rc != SQLITE_OK)
+
+    {
+
+      LOGE
+
+	("h_daily_stock_price_recalculation: Failed to prepare select stocks statement: %s",
+
+	 sqlite3_errmsg (db));
+
+      goto rollback_and_unlock_stock_price;
+
+    }
+
+
+
+  while (sqlite3_step (st_stocks) == SQLITE_ROW)
+
+    {
+
+      int stock_id = sqlite3_column_int (st_stocks, 0);
+
+      int corp_id = sqlite3_column_int (st_stocks, 1);
+
+      long long total_shares = sqlite3_column_int64 (st_stocks, 2);
+
+
+
+      long long net_asset_value = 0;
+
+      long long bank_balance = 0;
+
+
+
+      // Get corp bank balance
+
+      db_get_corp_bank_balance (corp_id, &bank_balance);
+
+      net_asset_value += bank_balance;
+
+
+
+      // Get planet assets value for the corporation
+
+      sqlite3_stmt *st_planets = NULL;
+
+      const char *sql_select_planets =
+
+	"SELECT ore_on_hand, organics_on_hand, equipment_on_hand FROM planets WHERE owner_id = ? AND owner_type = 'corp';";
+
+      if (sqlite3_prepare_v2 (db, sql_select_planets, -1, &st_planets, NULL)
+
+	  == SQLITE_OK)
+
+	{
+
+	  sqlite3_bind_int (st_planets, 1, corp_id);
+
+	  while (sqlite3_step (st_planets) == SQLITE_ROW)
+
+	    {
+
+	      net_asset_value += sqlite3_column_int64 (st_planets, 0) * 100;	// estimated price of ore
+
+	      net_asset_value += sqlite3_column_int64 (st_planets, 1) * 150;	// estimated price of organics
+
+	      net_asset_value += sqlite3_column_int64 (st_planets, 2) * 200;	// estimated price of equipment
+
+	    }
+
+	  sqlite3_finalize (st_planets);
+
+	}
+
+      else
+
+	{
+
+	  LOGE
+
+	    ("h_daily_stock_price_recalculation: Failed to prepare select planets statement for corp %d: %s",
+
+	     corp_id, sqlite3_errmsg (db));
+
+	  // Continue to next stock or abort?
+
+	  continue;
+
+	}
+
+
+
+      long long new_current_price = 0;
+
+      if (total_shares > 0)
+
+	{
+
+	  // Calculate new price per share based on NAV (in minor units)
+
+	  new_current_price = net_asset_value / total_shares;
+
+	}
+
+
+
+      if (new_current_price < 1)
+
+	new_current_price = 1;	// Minimum price of 1 credit
+
+
+
+      // Update the stock's current_price
+
+      sqlite3_stmt *st_update_stock = NULL;
+
+      const char *sql_update_stock =
+
+	"UPDATE stocks SET current_price = ? WHERE id = ?;";
+
+      if (sqlite3_prepare_v2 (db, sql_update_stock, -1, &st_update_stock, NULL)
+
+	  == SQLITE_OK)
+
+	{
+
+	  sqlite3_bind_int64 (st_update_stock, 1, new_current_price);
+
+	  sqlite3_bind_int (st_update_stock, 2, stock_id);
+
+	  if (sqlite3_step (st_update_stock) != SQLITE_DONE)
+
+	    {
+
+	      LOGE
+
+		("h_daily_stock_price_recalculation: Failed to update stock %d price: %s",
+
+		 stock_id, sqlite3_errmsg (db));
+
+	    }
+
+	  sqlite3_finalize (st_update_stock);
+
+	}
+
+      else
+
+	{
+
+	  LOGE
+
+	    ("h_daily_stock_price_recalculation: Failed to prepare update stock price statement: %s",
+
+	     sqlite3_errmsg (db));
+
+	}
+
+    }
+
+  sqlite3_finalize (st_stocks);
+
+
+
+  rc = commit (db);
+
+  if (rc != SQLITE_OK)
+
+    {
+
+      LOGE ("h_daily_stock_price_recalculation: commit failed: %s",
+
+	    sqlite3_errmsg (db));
+
+      goto rollback_and_unlock_stock_price;
+
+    }
+
+
+
+  LOGI ("h_daily_stock_price_recalculation: Successfully recalculated stock prices.");
+
+  unlock (db, "daily_stock_price_recalculation");
+
+  return SQLITE_OK;
+
+
+
+rollback_and_unlock_stock_price:
+
+  if (st_stocks)
+
+    sqlite3_finalize (st_stocks);
+
+  rollback (db);
+
+  unlock (db, "daily_stock_price_recalculation");
+
+  return rc;
+
+}
+
+
+
+int
+
 h_daily_corp_tax (sqlite3 *db, int64_t now_s)
 {
   if (!try_lock (db, "daily_corp_tax", now_s))

@@ -613,6 +613,9 @@ def ctx_refresh_port_context(ctx):
                         if 'port' not in ctx.last_sector_desc:
                             ctx.last_sector_desc['port'] = {}
                         ctx.last_sector_desc['port']['id'] = d['port']['id']
+                    
+                    # Refresh corporation context as well
+                    _update_corp_context(ctx)
                     return True
         except Exception:
             pass
@@ -1320,6 +1323,64 @@ def compute_flags(ctx: Context) -> Dict[str, bool]:
     return flags
 
 
+        "has_tavern_access": ctx.state.get("has_tavern_access", False),
+        "has_hardware_access": ctx.state.get("has_hardware_access", False),
+        "in_corporation": ctx.state.get("in_corporation", False),
+        "is_ceo": ctx.state.get("is_ceo", False),
+        "is_ceo_or_officer": ctx.state.get("is_ceo_or_officer", False),
+        "not_in_corporation": not ctx.state.get("in_corporation", False),
+        "corp_not_public": not ctx.state.get("corp_is_public", False),
+        "corp_is_public": ctx.state.get("corp_is_public", False),
+    }
+    return flags
+
+def _update_corp_context(ctx: Context):
+    """
+    Fetches and updates corporation-related context flags in ctx.state.
+    Should be called after player_info changes or a corp-related action.
+    """
+    ctx.state["in_corporation"] = False
+    ctx.state["is_ceo"] = False
+    ctx.state["is_ceo_or_officer"] = False
+    ctx.state["corp_is_public"] = False
+    ctx.state["corp_not_public"] = True # Default until proven otherwise
+
+    # Fetch player_info to get basic corp membership status
+    my_info_resp = ctx.conn.rpc("player.my_info", {})
+    if my_info_resp.get("status") == "ok":
+        ctx.player_info = get_data(my_info_resp)
+    else:
+        # If player_info can't be fetched, can't determine corp status
+        return
+
+    corp_data = ctx.player_info.get("corporation")
+    if corp_data and isinstance(corp_data, dict):
+        ctx.state["in_corporation"] = True
+        
+        # Fetch corp.status to get role and public status
+        corp_status_resp = ctx.conn.rpc("corp.status", {})
+        if corp_status_resp.get("status") == "ok":
+            corp_status_data = get_data(corp_status_resp)
+            if corp_status_data.get("your_role") == "Leader":
+                ctx.state["is_ceo"] = True
+                ctx.state["is_ceo_or_officer"] = True
+            elif corp_status_data.get("your_role") == "Officer":
+                ctx.state["is_ceo_or_officer"] = True
+
+            # Check if corporation has public stock
+            corp_id = corp_status_data.get("corp_id")
+            if corp_id:
+                # Assuming stock.exchange.list_stocks can filter by corp_id
+                # Or a direct corp.stock_info command
+                list_stocks_resp = ctx.conn.rpc("stock.exchange.list_stocks", {"corp_id": corp_id})
+                if list_stocks_resp.get("status") == "ok":
+                    stocks = get_data(list_stocks_resp).get("stocks", [])
+                    if any(s.get("corp_id") == corp_id for s in stocks):
+                        ctx.state["corp_is_public"] = True
+                        ctx.state["corp_not_public"] = False
+        else:
+            print("[Warning] Could not fetch corporation status.")
+    
 @register("print_last_rpc")
 def print_last_rpc(ctx):
     resp = ctx.state.get("last_rpc")
@@ -1609,6 +1670,652 @@ def pretty_print_bank_leaderboard(ctx):
             print(f" {i+1:<4} | {item.get('player_name', 'Unknown'):<17} | {balance_display}")
     else:
         print("No bank leaderboard data available.")
+
+@register("pretty_print_corp_status")
+def pretty_print_corp_status(ctx):
+    resp = ctx.state.get("last_rpc")
+    if resp is None:
+        print("[no response captured]")
+        return
+
+    if resp.get("status") != "ok":
+        print(f"[Error] Failed to get corporation status: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+        return
+
+    data = resp.get("data")
+    if not isinstance(data, dict):
+        print("[Error] Invalid corporation status data.")
+        _pp(resp)
+        return
+
+    print("\n--- Corporation Status ---")
+    print(f"  Name: {data.get('name', 'N/A')} ({data.get('tag', 'N/A')})")
+    print(f"  ID: {data.get('corp_id', 'N/A')}")
+    print(f"  CEO Player ID: {data.get('ceo_id', 'N/A')}")
+    print(f"  Member Count: {data.get('member_count', 'N/A')}")
+    print(f"  Your Role: {data.get('your_role', 'N/A')}")
+    print(f"  Created At: {data.get('created_at', 'N/A')}")
+    # Add other relevant fields if they exist in the response
+    print("--------------------------")
+
+@register("pretty_print_corp_roster")
+def pretty_print_corp_roster(ctx):
+    resp = ctx.state.get("last_rpc")
+    if resp is None:
+        print("[no response captured]")
+        return
+
+    if resp.get("status") != "ok":
+        print(f"[Error] Failed to get corporation roster: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+        return
+
+    data = resp.get("data")
+    if not isinstance(data, dict) or "roster" not in data:
+        print("[Error] Invalid corporation roster data.")
+        _pp(resp)
+        return
+
+    roster_items = data.get("roster", [])
+    if roster_items:
+        print(f"\n--- Corporation Roster for Corp ID {data.get('corp_id', 'N/A')} ---")
+        print(" Player Name       | Role    | Player ID")
+        print("-------------------|---------|-----------")
+        for item in roster_items:
+            print(f" {item.get('name', 'Unknown'):<17} | {item.get('role', 'N/A'):<7} | {item.get('player_id', 'N/A')}")
+    else:
+        print("No members in this corporation.")
+    print("---------------------------------------")
+
+@register("pretty_print_corp_list")
+def pretty_print_corp_list(ctx):
+    resp = ctx.state.get("last_rpc")
+    if resp is None:
+        print("[no response captured]")
+        return
+
+    if resp.get("status") != "ok":
+        print(f"[Error] Failed to get corporation list: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+        return
+
+    data = resp.get("data")
+    if not isinstance(data, dict) or "corporations" not in data:
+        print("[Error] Invalid corporation list data.")
+        _pp(resp)
+        return
+
+    corporations = data.get("corporations", [])
+    if corporations:
+        print("\n--- All Corporations ---")
+        print(" Name                  | Tag   | CEO                | Members | ID")
+        print("-----------------------|-------|--------------------|---------|-----------")
+        for corp in corporations:
+            print(f" {corp.get('name', 'N/A'):<21} | {corp.get('tag', 'N/A'):<5} | {corp.get('ceo_name', 'Unknown'):<18} | {corp.get('member_count', 'N/A'):<7} | {corp.get('corp_id', 'N/A')}")
+    else:
+        print("No corporations found.")
+    print("---------------------------------------------------------------------")
+
+@register("pretty_print_corp_balance")
+def pretty_print_corp_balance(ctx):
+    resp = ctx.state.get("last_rpc")
+    if resp is None:
+        print("[no response captured]")
+        return
+
+    if resp.get("status") != "ok":
+        print(f"[Error] Failed to get corporation balance: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+        return
+
+    data = resp.get("data")
+    if not isinstance(data, dict) or "balance" not in data:
+        print("[Error] Invalid corporation balance data.")
+        _pp(resp)
+        return
+
+    balance = data.get("balance")
+    balance_display = f"{int(balance) / 100.0:.2f}" if isinstance(balance, (int, float)) else str(balance)
+
+    print("\n--- Corporation Treasury Balance ---")
+    print(f"  Current Balance: {balance_display} credits")
+    print("----------------------------------")
+
+@register("pretty_print_corp_statement")
+def pretty_print_corp_statement(ctx):
+    resp = ctx.state.get("last_rpc")
+    if resp is None:
+        print("[no response captured]")
+        return
+
+    if resp.get("status") != "ok":
+        print(f"[Error] Failed to get corporation statement: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+        return
+
+    data = resp.get("data")
+    if not isinstance(data, dict) or "transactions" not in data:
+        print("[Error] Invalid corporation statement data.")
+        _pp(resp)
+        return
+
+    transactions = data.get("transactions", [])
+    if transactions:
+        print("\n--- Corporation Treasury Statement ---")
+        print(" ID   | Timestamp          | Type       | Amount       | Balance After")
+        print("------|--------------------|------------|--------------|---------------")
+        for txn in transactions:
+            ts = txn.get("ts")
+            if isinstance(ts, (int, float)):
+                try:
+                    import datetime
+                    dt_object = datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc)
+                    formatted_ts = dt_object.isoformat(timespec='seconds')
+                except Exception:
+                    formatted_ts = str(ts)
+            else:
+                formatted_ts = str(ts)
+            
+            amount_display = f"{int(txn.get('amount')) / 100.0:.2f}" if isinstance(txn.get('amount'), (int, float)) else str(txn.get('amount'))
+            balance_display = f"{int(txn.get('balance')) / 100.0:.2f}" if isinstance(txn.get('balance'), (int, float)) else str(txn.get('balance'))
+
+            print(f" {str(txn.get('id')):<4} | {formatted_ts:<18} | {txn.get('type', 'N/A'):<10} | {amount_display:<12} | {balance_display}")
+        if data.get("has_next_page"):
+            print(f"More transactions available. Next cursor: {data.get('next_cursor')}")
+    else:
+        print("No transactions in corporation statement.")
+    print("---------------------------------------------------------------------")
+
+@register("pretty_print_stock_ipo_register")
+def pretty_print_stock_ipo_register(ctx):
+    resp = ctx.state.get("last_rpc")
+    if resp is None:
+        print("[no response captured]")
+        return
+    
+    if resp.get("status") != "ok":
+        print(f"[Error] Failed to register IPO: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+        return
+
+    data = resp.get("data")
+    if not isinstance(data, dict):
+        print("[Error] Invalid IPO registration data.")
+        _pp(resp)
+        return
+
+    print("\n--- IPO Registration Successful ---")
+    print(f"  Corporation ID: {data.get('corp_id')}")
+    print(f"  Stock ID: {data.get('stock_id')}")
+    print(f"  Ticker: {data.get('ticker')}")
+    print(f"  Message: {data.get('message')}")
+    print("---------------------------------")
+
+@register("pretty_print_stock_buy")
+def pretty_print_stock_buy(ctx):
+    resp = ctx.state.get("last_rpc")
+    if resp is None:
+        print("[no response captured]")
+        return
+    
+    if resp.get("status") != "ok":
+        print(f"[Error] Failed to buy stock: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+        return
+
+    data = resp.get("data")
+    if not isinstance(data, dict):
+        print("[Error] Invalid stock purchase data.")
+        _pp(resp)
+        return
+
+    print("\n--- Stock Purchase Successful ---")
+    print(f"  Stock ID: {data.get('stock_id')}")
+    print(f"  Ticker: {data.get('ticker')}")
+    print(f"  Quantity: {data.get('quantity')}")
+    print(f"  Total Cost: {data.get('total_cost')}")
+    print(f"  Message: {data.get('message')}")
+    print("-------------------------------")
+
+@register("pretty_print_stock_dividend_set")
+def pretty_print_stock_dividend_set(ctx):
+    resp = ctx.state.get("last_rpc")
+    if resp is None:
+        print("[no response captured]")
+        return
+    
+    if resp.get("status") != "ok":
+        print(f"[Error] Failed to declare dividend: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+        return
+
+    data = resp.get("data")
+    if not isinstance(data, dict):
+        print("[Error] Invalid dividend declaration data.")
+        _pp(resp)
+        return
+
+    print("\n--- Dividend Declared ---")
+    print(f"  Stock ID: {data.get('stock_id')}")
+    print(f"  Amount per share: {data.get('amount_per_share')}")
+    print(f"  Total Payout: {data.get('total_payout')}")
+    print(f"  Message: {data.get('message')}")
+    print("-------------------------")
+
+@register("pretty_print_stock_dividend_set")
+def pretty_print_stock_dividend_set(ctx):
+    resp = ctx.state.get("last_rpc")
+    if resp is None:
+        print("[no response captured]")
+        return
+    
+    if resp.get("status") != "ok":
+        print(f"[Error] Failed to declare dividend: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+        return
+
+    data = resp.get("data")
+    if not isinstance(data, dict):
+        print("[Error] Invalid dividend declaration data.")
+        _pp(resp)
+        return
+
+    print("\n--- Dividend Declared ---")
+    print(f"  Stock ID: {data.get('stock_id')}")
+    print(f"  Amount per share: {data.get('amount_per_share')}")
+    print(f"  Total Payout: {data.get('total_payout')}")
+    print(f"  Message: {data.get('message')}")
+    print("-------------------------")
+
+@register("corp_create_flow")
+def corp_create_flow(ctx: Context):
+    if ctx.state.get("in_corporation"):
+        print("You are already in a corporation. You must leave or dissolve it first.")
+        return
+
+    corp_name = input("Enter new corporation name: ").strip()
+    if not corp_name:
+        print("Corporation name cannot be empty. Cancelled.")
+        return
+    
+    corp_tag = input("Enter corporation tag (3-5 characters): ").strip().upper()
+    if not (3 <= len(corp_tag) <= 5):
+        print("Corporation tag must be 3-5 characters. Cancelled.")
+        return
+
+    resp = ctx.conn.rpc("corp.create", {"name": corp_name, "tag": corp_tag})
+    ctx.state["last_rpc"] = resp
+
+    if resp.get("status") == "ok":
+        print("Corporation created successfully!")
+        _pp(resp)
+        # Refresh player info to update corporation status
+        my_info_resp = ctx.conn.rpc("player.my_info", {})
+        if my_info_resp.get("status") == "ok":
+            ctx.player_info = get_data(my_info_resp)
+            _update_corp_context(ctx) # Update context flags
+    else:
+        print(f"[Error] Failed to create corporation: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+
+@register("corp_join_flow")
+def corp_join_flow(ctx: Context):
+    if ctx.state.get("in_corporation"):
+        print("You are already in a corporation.")
+        return
+    
+    corp_id_str = input("Enter Corporation ID to join: ").strip()
+    if not corp_id_str:
+        print("Cancelled.")
+        return
+    try:
+        corp_id = int(corp_id_str)
+    except ValueError:
+        print("Invalid Corporation ID.")
+        return
+
+    resp = ctx.conn.rpc("corp.join", {"corp_id": corp_id})
+    ctx.state["last_rpc"] = resp
+
+    if resp.get("status") == "ok":
+        print(f"Successfully joined corporation ID {corp_id}.")
+        _pp(resp)
+        my_info_resp = ctx.conn.rpc("player.my_info", {})
+        if my_info_resp.get("status") == "ok":
+            ctx.player_info = get_data(my_info_resp)
+            _update_corp_context(ctx)
+    else:
+        print(f"[Error] Failed to join corporation: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+
+@register("corp_leave_flow")
+def corp_leave_flow(ctx: Context):
+    if not ctx.state.get("in_corporation"):
+        print("You are not currently in a corporation.")
+        return
+    
+    if ctx.state.get("is_ceo"):
+        print("As CEO, you cannot simply leave. You must first transfer CEO role or dissolve the corporation.")
+        return
+
+    confirm = input("Are you sure you want to leave your corporation? (y/N): ").strip().lower()
+    if confirm != "y":
+        print("Cancelled.")
+        return
+
+    resp = ctx.conn.rpc("corp.leave", {})
+    ctx.state["last_rpc"] = resp
+
+    if resp.get("status") == "ok":
+        print("Successfully left the corporation.")
+        _pp(resp)
+        my_info_resp = ctx.conn.rpc("player.my_info", {})
+        if my_info_resp.get("status") == "ok":
+            ctx.player_info = get_data(my_info_resp)
+            _update_corp_context(ctx)
+    else:
+        print(f"[Error] Failed to leave corporation: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+
+@register("corp_kick_flow")
+def corp_kick_flow(ctx: Context):
+    if not ctx.state.get("in_corporation"):
+        print("You are not in a corporation.")
+        return
+    if not ctx.state.get("is_ceo_or_officer"):
+        print("You must be a CEO or Officer to kick members.")
+        return
+
+    target_player_id_str = input("Enter Player ID to kick: ").strip()
+    if not target_player_id_str:
+        print("Cancelled.")
+        return
+    try:
+        target_player_id = int(target_player_id_str)
+    except ValueError:
+        print("Invalid Player ID.")
+        return
+    
+    # Optional: confirm target name
+    resp_roster = ctx.conn.rpc("corp.roster", {})
+    roster = resp_roster.get("data", {}).get("roster", [])
+    target_name = "Unknown Player"
+    for member in roster:
+        if member.get("player_id") == target_player_id:
+            target_name = member.get("name")
+            break
+
+    confirm = input(f"Are you sure you want to kick {target_name} (ID: {target_player_id})? (y/N): ").strip().lower()
+    if confirm != "y":
+        print("Cancelled.")
+        return
+
+    resp = ctx.conn.rpc("corp.kick", {"target_player_id": target_player_id})
+    ctx.state["last_rpc"] = resp
+
+    if resp.get("status") == "ok":
+        print(f"Successfully kicked {target_name} from the corporation.")
+        _pp(resp)
+    else:
+        print(f"[Error] Failed to kick member: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+
+@register("corp_invite_flow")
+def corp_invite_flow(ctx: Context):
+    if not ctx.state.get("in_corporation"):
+        print("You are not in a corporation.")
+        return
+    if not ctx.state.get("is_ceo_or_officer"):
+        print("You must be a CEO or Officer to invite players.")
+        return
+
+    target_player_id_str = input("Enter Player ID to invite: ").strip()
+    if not target_player_id_str:
+        print("Cancelled.")
+        return
+    try:
+        target_player_id = int(target_player_id_str)
+    except ValueError:
+        print("Invalid Player ID.")
+        return
+
+    resp = ctx.conn.rpc("corp.invite", {"target_player_id": target_player_id})
+    ctx.state["last_rpc"] = resp
+
+    if resp.get("status") == "ok":
+        print(f"Successfully invited player ID {target_player_id}.")
+        _pp(resp)
+    else:
+        print(f"[Error] Failed to invite player: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+
+@register("corp_deposit_flow")
+def corp_deposit_flow(ctx: Context):
+    if not ctx.state.get("in_corporation"):
+        print("You are not in a corporation.")
+        return
+
+    amount_str = input("Enter amount to deposit to corporation treasury: ").strip()
+    if not amount_str:
+        print("Cancelled.")
+        return
+    try:
+        amount = int(float(amount_str) * 100) # Convert to minor units
+    except ValueError:
+        print("Invalid amount.")
+        return
+
+    resp = ctx.conn.rpc("corp.deposit", {"amount": amount})
+    ctx.state["last_rpc"] = resp
+
+    if resp.get("status") == "ok":
+        print(f"Successfully deposited {amount_str} credits to corporation treasury.")
+        _pp(resp)
+    else:
+        print(f"[Error] Failed to deposit to treasury: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+
+@register("corp_withdraw_flow")
+def corp_withdraw_flow(ctx: Context):
+    if not ctx.state.get("in_corporation"):
+        print("You are not in a corporation.")
+        return
+    if not ctx.state.get("is_ceo_or_officer"):
+        print("You must be a CEO or Officer to withdraw from treasury.")
+        return
+
+    amount_str = input("Enter amount to withdraw from corporation treasury: ").strip()
+    if not amount_str:
+        print("Cancelled.")
+        return
+    try:
+        amount = int(float(amount_str) * 100) # Convert to minor units
+    except ValueError:
+        print("Invalid amount.")
+        return
+
+    resp = ctx.conn.rpc("corp.withdraw", {"amount": amount})
+    ctx.state["last_rpc"] = resp
+
+    if resp.get("status") == "ok":
+        print(f"Successfully withdrew {amount_str} credits from corporation treasury.")
+        _pp(resp)
+    else:
+        print(f"[Error] Failed to withdraw from treasury: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+
+@register("corp_dissolve_flow")
+def corp_dissolve_flow(ctx: Context):
+    if not ctx.state.get("is_ceo"):
+        print("You must be the CEO to dissolve the corporation.")
+        return
+
+    corp_name = ctx.player_info.get("corporation", {}).get("name")
+    confirm = input(f"Are you absolutely sure you want to dissolve '{corp_name}'? This action cannot be undone. (y/N): ").strip().lower()
+    if confirm != "y":
+        print("Cancelled.")
+        return
+    
+    confirm2 = input(f"Type '{corp_name}' to confirm dissolution: ").strip()
+    if confirm2 != corp_name:
+        print("Confirmation failed. Cancelled.")
+        return
+
+    resp = ctx.conn.rpc("corp.dissolve", {})
+    ctx.state["last_rpc"] = resp
+
+    if resp.get("status") == "ok":
+        print(f"Corporation '{corp_name}' dissolved successfully.")
+        _pp(resp)
+        my_info_resp = ctx.conn.rpc("player.my_info", {})
+        if my_info_resp.get("status") == "ok":
+            ctx.player_info = get_data(my_info_resp)
+            _update_corp_context(ctx)
+    else:
+        print(f"[Error] Failed to dissolve corporation: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+
+@register("corp_transfer_ceo_flow")
+def corp_transfer_ceo_flow(ctx: Context):
+    if not ctx.state.get("is_ceo"):
+        print("You must be the CEO to transfer leadership.")
+        return
+    
+    target_player_id_str = input("Enter Player ID of new CEO: ").strip()
+    if not target_player_id_str:
+        print("Cancelled.")
+        return
+    try:
+        target_player_id = int(target_player_id_str)
+    except ValueError:
+        print("Invalid Player ID.")
+        return
+
+    # Optional: confirm target name
+    resp_roster = ctx.conn.rpc("corp.roster", {})
+    roster = resp_roster.get("data", {}).get("roster", [])
+    target_name = "Unknown Player"
+    for member in roster:
+        if member.get("player_id") == target_player_id:
+            target_name = member.get("name")
+            break
+    
+    confirm = input(f"Are you sure you want to transfer CEO role to {target_name} (ID: {target_player_id})? (y/N): ").strip().lower()
+    if confirm != "y":
+        print("Cancelled.")
+        return
+
+    resp = ctx.conn.rpc("corp.transfer_ceo", {"target_player_id": target_player_id})
+    ctx.state["last_rpc"] = resp
+
+    if resp.get("status") == "ok":
+        print(f"CEO role transferred to {target_name} successfully.")
+        _pp(resp)
+        my_info_resp = ctx.conn.rpc("player.my_info", {})
+        if my_info_resp.get("status") == "ok":
+            ctx.player_info = get_data(my_info_resp)
+            _update_corp_context(ctx)
+    else:
+        print(f"[Error] Failed to transfer CEO role: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+
+@register("stock_ipo_register_flow")
+def stock_ipo_register_flow(ctx: Context):
+    if not ctx.state.get("is_ceo"):
+        print("Only the CEO can register for an IPO.")
+        return
+    if ctx.state.get("corp_is_public"):
+        print("Your corporation is already publicly traded.")
+        return
+    
+    ticker = input("Enter stock ticker (3-5 characters, e.g., 'IBM'): ").strip().upper()
+    if not (3 <= len(ticker) <= 5):
+        print("Ticker must be 3-5 characters. Cancelled.")
+        return
+    
+    try:
+        total_shares = int(input("Enter total number of shares to issue: ").strip())
+        if total_shares <= 0:
+            print("Total shares must be positive.")
+            return
+        par_value = int(float(input("Enter par value per share (e.g., 100 for 1.00): ").strip()) * 100)
+        if par_value <= 0:
+            print("Par value must be positive.")
+            return
+    except ValueError:
+        print("Invalid number. Cancelled.")
+        return
+
+    resp = ctx.conn.rpc("stock.ipo.register", {
+        "ticker": ticker,
+        "total_shares": total_shares,
+        "par_value": par_value
+    })
+    ctx.state["last_rpc"] = resp
+
+    if resp.get("status") == "ok":
+        print("IPO registered successfully!")
+        _pp(resp)
+        _update_corp_context(ctx) # Refresh corp context
+    else:
+        print(f"[Error] Failed to register IPO: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+
+@register("stock_buy_flow")
+def stock_buy_flow(ctx: Context):
+    if not ctx.state.get("corp_is_public"):
+        print("Cannot buy stock: your corporation is not publicly traded.")
+        return
+
+    try:
+        stock_id = int(input("Enter Stock ID to buy: ").strip())
+        quantity = int(input("Enter quantity to buy: ").strip())
+        if quantity <= 0:
+            print("Quantity must be positive.")
+            return
+    except ValueError:
+        print("Invalid input.")
+        return
+
+    resp = ctx.conn.rpc("stock.buy", {"stock_id": stock_id, "quantity": quantity})
+    ctx.state["last_rpc"] = resp
+
+    if resp.get("status") == "ok":
+        print("Stock purchased successfully!")
+        _pp(resp)
+    else:
+        print(f"[Error] Failed to buy stock: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+
+@register("stock_dividend_set_flow")
+def stock_dividend_set_flow(ctx: Context):
+    if not ctx.state.get("is_ceo"):
+        print("Only the CEO can declare dividends.")
+        return
+    if not ctx.state.get("corp_is_public"):
+        print("Cannot declare dividend: your corporation is not publicly traded.")
+        return
+
+    try:
+        stock_id = int(input("Enter Stock ID to declare dividend for: ").strip())
+        amount_per_share = int(float(input("Enter amount per share (e.g., 0.50 for 50 cents): ").strip()) * 100)
+        if amount_per_share <= 0:
+            print("Amount per share must be positive.")
+            return
+    except ValueError:
+        print("Invalid input.")
+        return
+
+    resp = ctx.conn.rpc("stock.dividend.set", {"stock_id": stock_id, "amount_per_share": amount_per_share})
+    ctx.state["last_rpc"] = resp
+
+    if resp.get("status") == "ok":
+        print("Dividend declared successfully!")
+        _pp(resp)
+    else:
+        print(f"[Error] Failed to declare dividend: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
 
 @register("insurance_buy_flow")
 def insurance_buy_flow(ctx: Context):
@@ -3175,6 +3882,9 @@ def main():
 
             ctx = Context(conn=conn, menus=menus, last_sector_desc=norm)
             ctx.state["cli"] = {"host": args.host, "port": args.port, "user": user, "debug": bool(args.debug)}
+
+            # Initial update of corporation context after login
+            _update_corp_context(ctx)
 
             # First render sector header once
             call_handler("redisplay_sector", ctx)

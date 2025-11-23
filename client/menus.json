@@ -104,10 +104,11 @@
         },
         {
           "key": "o",
-          "label": "C(O)rrespondence (Mail)",
+          "label": "(O) Corporation",
           "action": {
-            "submenu": "MAIL"
-          }
+            "submenu": "CORPORATION_MAIN"
+          },
+          "show_if_ctx": ["in_corporation"]
         },
         {
           "key": "b",
@@ -275,7 +276,7 @@
           "action": {
             "pycall": "scan_sector"
           }
-        },
+	    },
 	  {
           "key": "r",
           "label": "(R) Rename Ship",
@@ -517,6 +518,150 @@
         }
       ]
     },
+    "CORPORATION_MAIN": {
+      "title": "--- Corporation Menu ---",
+      "options": [
+        {
+          "key": "c",
+          "label": "(C) Create Corporation",
+          "action": {
+            "pycall": "corp_create_flow"
+          },
+          "show_if_ctx": ["not_in_corporation"]
+        },
+        {
+          "key": "j",
+          "label": "(J) Join Corporation",
+          "action": {
+            "pycall": "corp_join_flow"
+          },
+          "show_if_ctx": ["not_in_corporation"]
+        },
+        {
+          "key": "s",
+          "label": "(S) Corporation Status",
+          "action": {
+            "rpc": {
+              "command": "corp.status",
+              "data": {}
+            },
+            "post": "pretty_print_corp_status"
+          },
+          "show_if_ctx": ["in_corporation"]
+        },
+        {
+          "key": "r",
+          "label": "(R) Roster",
+          "action": {
+            "rpc": {
+              "command": "corp.roster",
+              "data": {}
+            },
+            "post": "pretty_print_corp_roster"
+            },
+            "show_if_ctx": ["in_corporation"]
+        },
+        {
+          "key": "l",
+          "label": "(L) List All Corporations",
+          "action": {
+            "rpc": {
+              "command": "corp.list",
+              "data": {}
+            },
+            "post": "pretty_print_corp_list"
+          }
+        },
+        {
+          "key": "b",
+          "label": "(B) Treasury Balance",
+          "action": {
+            "rpc": {
+              "command": "corp.balance",
+              "data": {}
+            },
+            "post": "pretty_print_corp_balance"
+            },
+            "show_if_ctx": ["in_corporation"]
+        },
+        {
+          "key": "d",
+          "label": "(D) Deposit to Treasury",
+          "action": {
+            "pycall": "corp_deposit_flow"
+          },
+          "show_if_ctx": ["in_corporation"]
+        },
+        {
+          "key": "w",
+          "label": "(W) Withdraw from Treasury",
+          "action": {
+            "pycall": "corp_withdraw_flow"
+          },
+          "show_if_ctx": ["is_ceo_or_officer"]
+        },
+        {
+          "key": "t",
+          "label": "(T) Treasury Statement",
+          "action": {
+            "rpc": {
+              "command": "corp.statement",
+              "data": {}
+            },
+            "post": "pretty_print_corp_statement"
+            },
+            "show_if_ctx": ["is_ceo_or_officer"]
+        },
+        {
+          "key": "i",
+          "label": "(I) Invite Player",
+          "action": {
+            "pycall": "corp_invite_flow"
+          },
+          "show_if_ctx": ["is_ceo_or_officer"]
+        },
+        {
+          "key": "k",
+          "label": "(K) Kick Member",
+          "action": {
+            "pycall": "corp_kick_flow"
+          },
+          "show_if_ctx": ["is_ceo_or_officer"]
+        },
+        {
+          "key": "p",
+          "label": "(P) Transfer CEO",
+          "action": {
+            "pycall": "corp_transfer_ceo_flow"
+          },
+          "show_if_ctx": ["is_ceo"]
+        },
+        {
+          "key": "x",
+          "label": "(X) Dissolve Corporation",
+          "action": {
+            "pycall": "corp_dissolve_flow"
+          },
+          "show_if_ctx": ["is_ceo"]
+        },
+        {
+          "key": "e",
+          "label": "(E) Leave Corporation",
+          "action": {
+            "pycall": "corp_leave_flow"
+          },
+          "show_if_ctx": ["in_corporation", "not_is_ceo"]
+          
+        },
+        {
+          "key": "q",
+          "label": "(Q) Back to Main Menu",
+          "action": {
+            "back": true
+          }
+        }
+      ]
+    },
     "EXCHANGE_MAIN": {
       "title": "--- Exchange Menu ---",
       "options": [
@@ -541,6 +686,30 @@
             },
             "post": "print_last_rpc"
           }
+        },
+        {
+          "key": "i",
+          "label": "(I) Register IPO (CEO only)",
+          "action": {
+            "pycall": "stock_ipo_register_flow"
+          },
+          "show_if_ctx": ["is_ceo", "corp_not_public"]
+        },
+        {
+          "key": "b",
+          "label": "(B) Buy Stock",
+          "action": {
+            "pycall": "stock_buy_flow"
+          },
+          "show_if_ctx": ["corp_is_public"]
+        },
+        {
+          "key": "d",
+          "label": "(D) Declare Dividend (CEO only)",
+          "action": {
+            "pycall": "stock_dividend_set_flow"
+          },
+          "show_if_ctx": ["is_ceo", "corp_is_public"]
         },
         {
           "key": "q",

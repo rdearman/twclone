@@ -79,6 +79,17 @@ typedef enum
 #define MAX_FIGHTERS_PER_SECTOR 50000
 #endif
 
+#ifndef SECTOR_MINE_CAP
+#define SECTOR_MINE_CAP 500
+#endif
+
+#ifndef SECTOR_FIGHTER_CAP
+#define SECTOR_FIGHTER_CAP 10000
+#endif
+
+#ifndef MINE_SECTOR_CAP_PER_TYPE
+#define MINE_SECTOR_CAP_PER_TYPE 250
+#endif
 
 #ifndef START_HOLDS
 #define START_HOLDS 20

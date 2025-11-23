@@ -449,7 +449,6 @@ h_port_sells_commodity (sqlite3 *db, int port_id, const char *commodity)
   return sells;
 }
 
-
 static int
 h_update_credits (sqlite3 *db, const char *owner_type, int owner_id,
 		  long long delta, long long *new_balance_out)
