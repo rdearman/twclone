@@ -49,11 +49,11 @@ int cmd_move_describe_sector (client_ctx_t * ctx, json_t * root);
 int cmd_move_scan (client_ctx_t * ctx, json_t * root);
 int cmd_sector_set_beacon (client_ctx_t * ctx, json_t * root);
 void cmd_sector_info (int fd, json_t * root, int sector_id, int player_id);
-void cmd_sector_scan_density (void *ctx_in, json_t *root);
-void cmd_sector_scan (client_ctx_t *ctx, json_t *root);
+void cmd_sector_scan_density (void *ctx_in, json_t * root);
+void cmd_sector_scan (client_ctx_t * ctx, json_t * root);
 
 // Helper function to check if a warp exists between two sectors
-int h_warp_exists(sqlite3 *db, int from_sector_id, int to_sector_id);
+int h_warp_exists (sqlite3 * db, int from_sector_id, int to_sector_id);
 
 /**** Think this could be removed later. *******/
 #define MAX_CITADEL_LEVEL 5

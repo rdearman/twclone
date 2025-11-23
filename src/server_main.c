@@ -330,18 +330,18 @@ run_bigbang_if_needed (void)
     {
       LOGE ("BIGBANG: Failed.\n");
       //      fprintf (stderr, "BIGBANG: Failed.\n");
-            return -1;
-          }
-        return 0;
-      }
+      return -1;
+    }
+  return 0;
+}
 
 //////////////////////////////////////////////////
 int
 main (void)
 {
-  srand((unsigned) time(NULL)); // Seed random number generator once at program start
+  srand ((unsigned) time (NULL));	// Seed random number generator once at program start
 
-  int rc = 1; // Initialize rc to 1 (failure)
+  int rc = 1;			// Initialize rc to 1 (failure)
   g_running = 1;
 
   server_log_init_file ("./twclone.log", "[server]", 0, LOG_DEBUG);
@@ -380,13 +380,17 @@ main (void)
   // Load ports from DB, with fallback to defaults
   int server_port = 0;
   int s2s_port = 0;
-  if (db_load_ports(&server_port, &s2s_port) == 0) {
+  if (db_load_ports (&server_port, &s2s_port) == 0)
+    {
       g_cfg.server_port = server_port;
       g_cfg.s2s.tcp_port = s2s_port;
-      LOGI("Loaded ports from database: server=%d, s2s=%d", g_cfg.server_port, g_cfg.s2s.tcp_port);
-  } else {
-      LOGW("Could not load ports from database, using defaults.");
-  }
+      LOGI ("Loaded ports from database: server=%d, s2s=%d",
+	    g_cfg.server_port, g_cfg.s2s.tcp_port);
+    }
+  else
+    {
+      LOGW ("Could not load ports from database, using defaults.");
+    }
 
   // initalise the player settings if all the other DB stuff is done. 
   db_player_settings_init (db_get_handle ());

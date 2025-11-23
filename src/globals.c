@@ -157,21 +157,19 @@ struct timeval begin, end, t;
 
 // Global Armid Mine Configuration
 armid_mine_config_t g_armid_config = {
-    .armid = {
-        .enabled = true,
-        .base_trigger_chance = 0.02,
-        .max_trigger_chance = 0.95,
-        .damage_per_mine = 3,
-        .min_fraction_exploded = 0.05,
-        .max_fraction_exploded = 0.30
-    },
-    .sweep = {
-        .enabled = true,
-        .mines_per_fighter_avg = 3.0,
-        .mines_per_fighter_var = 0.5,
-        .fighter_loss_per_mine = 0.10,
-        .max_fraction_per_sweep = 0.80
-    }
+  .armid = {
+	    .enabled = true,
+	    .base_trigger_chance = 0.02,
+	    .max_trigger_chance = 0.95,
+	    .damage_per_mine = 3,
+	    .min_fraction_exploded = 0.05,
+	    .max_fraction_exploded = 0.30},
+  .sweep = {
+	    .enabled = true,
+	    .mines_per_fighter_avg = 3.0,
+	    .mines_per_fighter_var = 0.5,
+	    .fighter_loss_per_mine = 0.10,
+	    .max_fraction_per_sweep = 0.80}
 };
 
 

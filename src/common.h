@@ -30,20 +30,21 @@
 #include <string.h>
 
 
-typedef struct {
-  int fd;                                
-  volatile sig_atomic_t *running;        
-  struct sockaddr_in peer;               
-  uint64_t cid;                          
-  int player_id;                         
+typedef struct
+{
+  int fd;
+  volatile sig_atomic_t *running;
+  struct sockaddr_in peer;
+  uint64_t cid;
+  int player_id;
   int ship_id;
-  int sector_id;                         
-  int corp_id; // Added for corporation ID
-  /* --- rate limit hints --- */         
-  time_t rl_window_start;               
-  int rl_count;                          
-  int rl_limit;                          
-  int rl_window_sec;                     
+  int sector_id;
+  int corp_id;			// Added for corporation ID
+  /* --- rate limit hints --- */
+  time_t rl_window_start;
+  int rl_count;
+  int rl_limit;
+  int rl_window_sec;
 } client_ctx_t;
 
 // A simple structure to represent the result of the comsume player turn function
@@ -172,81 +173,88 @@ ship_clr_flag (int flags, int mask)
 }
 
 // Armid Mine Configuration
-typedef struct {
-    struct {
-        bool enabled;
-        double base_trigger_chance;
-        double max_trigger_chance;
-        int damage_per_mine;
-        double min_fraction_exploded;
-        double max_fraction_exploded;
-    } armid;
-    struct {
-        bool enabled;
-        double mines_per_fighter_avg;
-        double mines_per_fighter_var;
-        double fighter_loss_per_mine;
-        double max_fraction_per_sweep;
-    } sweep;
+typedef struct
+{
+  struct
+  {
+    bool enabled;
+    double base_trigger_chance;
+    double max_trigger_chance;
+    int damage_per_mine;
+    double min_fraction_exploded;
+    double max_fraction_exploded;
+  } armid;
+  struct
+  {
+    bool enabled;
+    double mines_per_fighter_avg;
+    double mines_per_fighter_var;
+    double fighter_loss_per_mine;
+    double max_fraction_per_sweep;
+  } sweep;
 } armid_mine_config_t;
 
 // Structure to mirror the sector_assets table for in-memory use
-typedef struct {
-    int id;
-    int sector;
-    int player;
-    int corporation;
-    int asset_type;
-    int offensive_setting;
-    int quantity;
-    time_t ttl; // Using time_t for UNIX epoch expiry
-    time_t deployed_at;
+typedef struct
+{
+  int id;
+  int sector;
+  int player;
+  int corporation;
+  int asset_type;
+  int offensive_setting;
+  int quantity;
+  time_t ttl;			// Using time_t for UNIX epoch expiry
+  time_t deployed_at;
 } sector_asset_t;
 
 // Structure to represent a ship's combat-relevant stats for damage application
-typedef struct {
-    int id;
-    int shields;
-    int fighters;
-    int hull;
-    // Add other relevant ship fields if needed for future combat logic
+typedef struct
+{
+  int id;
+  int shields;
+  int fighters;
+  int hull;
+  // Add other relevant ship fields if needed for future combat logic
 } ship_t;
 
-typedef struct {
-    int shields_lost;
-    int fighters_lost;
-    int hull_lost;
+typedef struct
+{
+  int shields_lost;
+  int fighters_lost;
+  int hull_lost;
 } armid_damage_breakdown_t;
 
-typedef struct {
-    int sector_id;
-    int armid_triggered;   /* total exploded */
-    int armid_remaining;   /* sum of remaining hostile mines after updates */
-    int limpet_triggered;  /* total limpets triggered */
-    int limpet_remaining;  /* sum of remaining limpets after updates */
-    int shields_lost;
-    int fighters_lost;
-    int hull_lost;
-    bool destroyed;
+typedef struct
+{
+  int sector_id;
+  int armid_triggered;		/* total exploded */
+  int armid_remaining;		/* sum of remaining hostile mines after updates */
+  int limpet_triggered;		/* total limpets triggered */
+  int limpet_remaining;		/* sum of remaining limpets after updates */
+  int shields_lost;
+  int fighters_lost;
+  int hull_lost;
+  bool destroyed;
 } armid_encounter_t;
 
 void now_iso8601 (char out[25]);	/* "YYYY-MM-DDTHH:MM:SSZ" */
 /* Remove ANSI escape sequences from src into dst (cap bytes incl NUL). */
 void strip_ansi (char *dst, const char *src, size_t cap);
-const char * get_tow_reason_string (int reason_code);
+const char *get_tow_reason_string (int reason_code);
 
 // Utility functions for random numbers and clamping
-double rand01();
-double rand_range(double min, double max);
-double clamp(double value, double min, double max);
-int get_random_int(int min, int max);
+double rand01 ();
+double rand_range (double min, double max);
+double clamp (double value, double min, double max);
+int get_random_int (int min, int max);
 
 
 
 
 
 // JSON helper functions (prototypes)
-bool json_get_int_flexible(json_t *data_obj, const char *key, int *out_val);
-const char *json_get_string_or_null(json_t *data_obj, const char *key);
+bool json_get_int_flexible (json_t * data_obj, const char *key, int *out_val);
+const char *json_get_string_or_null (json_t * data_obj, const char *key);
 
 #endif // COMMON_H

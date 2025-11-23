@@ -30,13 +30,13 @@
 #include "server_combat.h"
 
 
-#define SECTOR_LIST_BUF_SIZE 256 
+#define SECTOR_LIST_BUF_SIZE 256
 
 /* cache DB so fer_tick signature matches ISS style */
 extern sqlite3 *g_db;		/* <- global DB handle used elsewhere (ISS) */
 static sqlite3 *g_fer_db = NULL;	/* <- cached here for trader helpers */
 
-#define NPC_TRADE_PLAYER_ID 0 
+#define NPC_TRADE_PLAYER_ID 0
 
 /* Fallback logging macros  */
 
@@ -291,33 +291,35 @@ fer_event_json (const char *type, int sector_id, const char *fmt, ...)
 
   //LOGI("fer_event_json: Starting process for event type '%s' at sector %d.", type, sector_id);
 
-  if (!g_fer_db) {
-    // If the caller failed to provide the DB handle, we can't do anything
-    LOGE("fer_event_json: Received NULL DB handle. Cannot proceed.");
-    return;
-  }
-  
+  if (!g_fer_db)
+    {
+      // If the caller failed to provide the DB handle, we can't do anything
+      LOGE ("fer_event_json: Received NULL DB handle. Cannot proceed.");
+      return;
+    }
+
   //LOGI("fer_event_json: past g_fer_db check");
-  
-  if (!type) {
-    LOGE("fer_event_json: Event type is NULL. Cannot proceed.");
-    return;
-  }
+
+  if (!type)
+    {
+      LOGE ("fer_event_json: Event type is NULL. Cannot proceed.");
+      return;
+    }
 
   //LOGI("fer_event_json: past type check");
-  
+
   /* format JSON payload from ... */
   char payload[512];
   va_list ap;
   va_start (ap, fmt);
   vsnprintf (payload, sizeof payload, fmt, ap);
   va_end (ap);
-  
+
   // LOGI("fer_event_json: Payload formatted: %s", payload);
 
   // 1. ACQUIRE LOCK (This should now correctly recurse)
   //LOGI("fer_event_json: Attempting to acquire db_mutex.");
-  pthread_mutex_lock(&db_mutex);
+  pthread_mutex_lock (&db_mutex);
   //LOGI("fer_event_json: Mutex acquired.");
 
   /* INSERT into engine_events(type, sector_id, payload, ts) */
@@ -328,15 +330,15 @@ fer_event_json (const char *type, int sector_id, const char *fmt, ...)
 
   // 2. Prepare Statement: Using the passed 'db' handle
   int rc = sqlite3_prepare_v2 (g_fer_db, sql, -1, &st, NULL);
-  if (rc != SQLITE_OK) 
+  if (rc != SQLITE_OK)
     {
-      LOGE("fer_event_json: SQL Prepare FAILED (rc=%d).", rc);
-      LOGE("fer_event_json: Error message: %s", sqlite3_errmsg(g_fer_db));
-      
-      sqlite3_finalize(st); // Clean up even if prepare failed
-      pthread_mutex_unlock(&db_mutex); 
-      LOGI("fer_event_json: Mutex released on prepare failure.");
-      return; 
+      LOGE ("fer_event_json: SQL Prepare FAILED (rc=%d).", rc);
+      LOGE ("fer_event_json: Error message: %s", sqlite3_errmsg (g_fer_db));
+
+      sqlite3_finalize (st);	// Clean up even if prepare failed
+      pthread_mutex_unlock (&db_mutex);
+      LOGI ("fer_event_json: Mutex released on prepare failure.");
+      return;
     }
 
   //LOGI("fer_event_json: SQL prepared successfully.");
@@ -350,8 +352,11 @@ fer_event_json (const char *type, int sector_id, const char *fmt, ...)
   rc = sqlite3_step (st);
   if (rc != SQLITE_DONE)
     {
-      LOGE("fer_event_json: SQL Step FAILED (rc=%d). Expected SQLITE_DONE (%d).", rc, SQLITE_DONE);
-      LOGE("fer_event_json: Step error message: %s", sqlite3_errmsg(g_fer_db));
+      LOGE
+	("fer_event_json: SQL Step FAILED (rc=%d). Expected SQLITE_DONE (%d).",
+	 rc, SQLITE_DONE);
+      LOGE ("fer_event_json: Step error message: %s",
+	    sqlite3_errmsg (g_fer_db));
     }
   else
     {
@@ -363,7 +368,7 @@ fer_event_json (const char *type, int sector_id, const char *fmt, ...)
   //LOGI("fer_event_json: Statement finalized.");
 
   // 6. RELEASE LOCK
-  pthread_mutex_unlock(&db_mutex);
+  pthread_mutex_unlock (&db_mutex);
   //LOGI("fer_event_json: Mutex released. Function complete.");
 }
 
@@ -424,8 +429,10 @@ parse_sector_search_input (json_t *root,
 
   if (!type || strcasecmp (type, "any") == 0)
     *type_any = 1;
-      else if (strcasecmp (type, "sector") == 0)    *type_sector = 1;
-      else if (strcasecmp (type, "port") == 0)    *type_port = 1;
+  else if (strcasecmp (type, "sector") == 0)
+    *type_sector = 1;
+  else if (strcasecmp (type, "port") == 0)
+    *type_port = 1;
   else
     {
       free (*q_out);
@@ -473,27 +480,30 @@ int
 cmd_sector_search (client_ctx_t *ctx, json_t *root)
 {
   UNUSED (ctx);
-  if (!root) return -1;
+  if (!root)
+    return -1;
 
   char *q = NULL;
   int type_any = 0, type_sector = 0, type_port = 0;
   int limit = 0, offset = 0;
 
-  int prc = parse_sector_search_input (root, &q, &type_any, &type_sector, &type_port, &limit, &offset);
+  int prc =
+    parse_sector_search_input (root, &q, &type_any, &type_sector, &type_port,
+			       &limit, &offset);
   if (prc != 0)
-  {
-    free (q);
-    send_enveloped_error (ctx->fd, root, 400, "Expected data { ... }");
-    return 0;
-  }
+    {
+      free (q);
+      send_enveloped_error (ctx->fd, root, 400, "Expected data { ... }");
+      return 0;
+    }
 
   sqlite3 *db = db_get_handle ();
   if (!db)
-  {
-    free (q);
-    send_enveloped_error (ctx->fd, root, 500, "No database handle.");
-    return 0;
-  }
+    {
+      free (q);
+      send_enveloped_error (ctx->fd, root, 500, "No database handle.");
+      return 0;
+    }
 
   char likepat[512];
   snprintf (likepat, sizeof (likepat), "%%%s%%", q ? q : "");
@@ -501,24 +511,34 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
 
   // --- This SQL is now simple and robust ---
   char sql[1024];
-  const char *base_sql = "SELECT kind, id, name, sector_id, sector_name FROM sector_search_index ";
+  const char *base_sql =
+    "SELECT kind, id, name, sector_id, sector_name FROM sector_search_index ";
   const char *order_limit_sql = " ORDER BY kind, name, id LIMIT ?2 OFFSET ?3";
-  
+
   // Build the WHERE clause
   char where_sql[256];
-  if (type_any) {
-    // Match 'q' against the search term, and don't filter by kind
-    snprintf(where_sql, sizeof(where_sql), "WHERE ( (?1 = '') OR (search_term_1 LIKE ?1 COLLATE NOCASE) )");
-  } else if (type_sector) {
-    // Match 'q' AND kind = 'sector'
-    snprintf(where_sql, sizeof(where_sql), "WHERE kind = 'sector' AND ( (?1 = '') OR (search_term_1 LIKE ?1 COLLATE NOCASE) )");
-  } else { // type_port
-    // Match 'q' AND kind = 'port'
-    snprintf(where_sql, sizeof(where_sql), "WHERE kind = 'port' AND ( (?1 = '') OR (search_term_1 LIKE ?1 COLLATE NOCASE) )");
-  }
+  if (type_any)
+    {
+      // Match 'q' against the search term, and don't filter by kind
+      snprintf (where_sql, sizeof (where_sql),
+		"WHERE ( (?1 = '') OR (search_term_1 LIKE ?1 COLLATE NOCASE) )");
+    }
+  else if (type_sector)
+    {
+      // Match 'q' AND kind = 'sector'
+      snprintf (where_sql, sizeof (where_sql),
+		"WHERE kind = 'sector' AND ( (?1 = '') OR (search_term_1 LIKE ?1 COLLATE NOCASE) )");
+    }
+  else
+    {				// type_port
+      // Match 'q' AND kind = 'port'
+      snprintf (where_sql, sizeof (where_sql),
+		"WHERE kind = 'port' AND ( (?1 = '') OR (search_term_1 LIKE ?1 COLLATE NOCASE) )");
+    }
 
   // Combine the query
-  snprintf(sql, sizeof(sql), "%s %s %s", base_sql, where_sql, order_limit_sql);
+  snprintf (sql, sizeof (sql), "%s %s %s", base_sql, where_sql,
+	    order_limit_sql);
 
   // --- End of new SQL logic ---
 
@@ -528,11 +548,11 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
   sqlite3_stmt *st = NULL;
   int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
-  {
-    free (q);
-    send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
-    return 0;
-  }
+    {
+      free (q);
+      send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
+      return 0;
+    }
 
   // Bind parameters
   sqlite3_bind_text (st, 1, likepat, -1, SQLITE_TRANSIENT);
@@ -546,45 +566,45 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
   int row_count = 0;
 
   while ((rc = sqlite3_step (st)) == SQLITE_ROW)
-  {
-    const char *kind = (const char *) sqlite3_column_text (st, 0);
-    int id = sqlite3_column_int (st, 1);
-    const char *name = (const char *) sqlite3_column_text (st, 2);
-    int sector_id = sqlite3_column_int (st, 3);
-    const char *sector_name = (const char *) sqlite3_column_text (st, 4);
-
-    if (row_count < limit)
     {
-      json_t *it = json_object ();
-      json_object_set_new (it, "kind", json_string (kind ? kind : ""));
-      json_object_set_new (it, "id", json_integer (id));
-      json_object_set_new (it, "name", json_string (name ? name : ""));
-      json_object_set_new (it, "sector_id", json_integer (sector_id));
-      json_object_set_new (it, "sector_name",
-                           json_string (sector_name ? sector_name : ""));
-      json_array_append_new (items, it);
-    }
-    row_count++;
+      const char *kind = (const char *) sqlite3_column_text (st, 0);
+      int id = sqlite3_column_int (st, 1);
+      const char *name = (const char *) sqlite3_column_text (st, 2);
+      int sector_id = sqlite3_column_int (st, 3);
+      const char *sector_name = (const char *) sqlite3_column_text (st, 4);
 
-    if (row_count >= fetch)
-      break;
-  }
+      if (row_count < limit)
+	{
+	  json_t *it = json_object ();
+	  json_object_set_new (it, "kind", json_string (kind ? kind : ""));
+	  json_object_set_new (it, "id", json_integer (id));
+	  json_object_set_new (it, "name", json_string (name ? name : ""));
+	  json_object_set_new (it, "sector_id", json_integer (sector_id));
+	  json_object_set_new (it, "sector_name",
+			       json_string (sector_name ? sector_name : ""));
+	  json_array_append_new (items, it);
+	}
+      row_count++;
+
+      if (row_count >= fetch)
+	break;
+    }
 
   sqlite3_finalize (st);
-  free (q); 
+  free (q);
 
   json_t *jdata = json_object ();
   json_object_set_new (jdata, "items", items);
 
   if (row_count > limit)
-  {
-    json_object_set_new (jdata, "next_cursor",
-                         json_integer (offset + limit));
-  }
+    {
+      json_object_set_new (jdata, "next_cursor",
+			   json_integer (offset + limit));
+    }
   else
-  {
-    json_object_set_new (jdata, "next_cursor", json_null ());
-  }
+    {
+      json_object_set_new (jdata, "next_cursor", json_null ());
+    }
 
   send_enveloped_ok (ctx->fd, root, "sector.search_results_v1", jdata);
   return 0;
@@ -620,122 +640,126 @@ cmd_move_autopilot_status (client_ctx_t *ctx, json_t *root)
 
 
 json_t *
-build_sector_scan_json (int sector_id, int player_id, bool holo_scanner_active)
+build_sector_scan_json (int sector_id, int player_id,
+			bool holo_scanner_active)
 {
-    json_t *root = json_object ();
-    if (!root)
-        return NULL;
+  json_t *root = json_object ();
+  if (!root)
+    return NULL;
 
-    /* Basic sector info (id/name) */
-    json_t *basic = NULL;
-    if (db_sector_basic_json (sector_id, &basic) == SQLITE_OK && basic)
+  /* Basic sector info (id/name) */
+  json_t *basic = NULL;
+  if (db_sector_basic_json (sector_id, &basic) == SQLITE_OK && basic)
     {
-        json_object_set_new (root, "sector_id", json_integer (sector_id));
-        json_object_set_new (root, "name", json_object_get (basic, "name"));
-        json_decref (basic);
+      json_object_set_new (root, "sector_id", json_integer (sector_id));
+      json_object_set_new (root, "name", json_object_get (basic, "name"));
+      json_decref (basic);
     }
-    else
+  else
     {
-        json_object_set_new (root, "sector_id", json_integer (sector_id));
-    }
-
-    /* Adjacent warps */
-    json_t *adj = NULL;
-    if (db_adjacent_sectors_json (sector_id, &adj) == SQLITE_OK && adj)
-    {
-        json_object_set_new (root, "adjacent", adj);
-        json_object_set_new (root, "adjacent_count",
-                            json_integer ((int) json_array_size (adj)));
-    }
-    else
-    {
-        json_object_set_new (root, "adjacent", json_array ());
-        json_object_set_new (root, "adjacent_count", json_integer (0));
+      json_object_set_new (root, "sector_id", json_integer (sector_id));
     }
 
-    /* Ships (Filtered by Holo-Scanner) */
-    json_t *ships = NULL;
-    int rc = db_ships_at_sector_json (player_id, sector_id, &ships);
-    if (rc == SQLITE_OK)
+  /* Adjacent warps */
+  json_t *adj = NULL;
+  if (db_adjacent_sectors_json (sector_id, &adj) == SQLITE_OK && adj)
     {
-        json_object_set_new (root, "ships", ships ? ships : json_array ());
-        json_object_set_new (root, "ships_count",
-                            json_integer ((int) json_array_size (ships)));
+      json_object_set_new (root, "adjacent", adj);
+      json_object_set_new (root, "adjacent_count",
+			   json_integer ((int) json_array_size (adj)));
     }
-    else
+  else
     {
-        json_object_set_new (root, "ships", json_array ());
-        json_object_set_new (root, "ships_count", json_integer (0));
-    }
-    json_object_set_new(root, "holo_scanner_active", holo_scanner_active ? json_true() : json_false());
-
-
-    /* Ports */
-    json_t *ports = NULL;
-    if (db_ports_at_sector_json (sector_id, &ports) == SQLITE_OK && ports)
-    {
-        json_object_set_new (root, "ports", ports);
-        json_object_set_new (root, "has_port",
-                            json_array_size (ports) > 0 ? json_true () : json_false ());
-    }
-    else
-    {
-        json_object_set_new (root, "ports", json_array ());
-        json_object_set_new (root, "has_port", json_false ());
+      json_object_set_new (root, "adjacent", json_array ());
+      json_object_set_new (root, "adjacent_count", json_integer (0));
     }
 
-    /* Planets */
-    json_t *planets = NULL;
-    if (db_planets_at_sector_json (sector_id, &planets) == SQLITE_OK && planets)
+  /* Ships (Filtered by Holo-Scanner) */
+  json_t *ships = NULL;
+  int rc = db_ships_at_sector_json (player_id, sector_id, &ships);
+  if (rc == SQLITE_OK)
     {
-        json_object_set_new (root, "planets", planets);
-        json_object_set_new (root, "has_planet",
-                            json_array_size (planets) > 0 ? json_true () : json_false ());
-        json_object_set_new (root, "planets_count",
-                            json_integer ((int) json_array_size (planets)));
+      json_object_set_new (root, "ships", ships ? ships : json_array ());
+      json_object_set_new (root, "ships_count",
+			   json_integer ((int) json_array_size (ships)));
     }
-    else
+  else
     {
-        json_object_set_new (root, "planets", json_array ());
-        json_object_set_new (root, "has_planet", json_false ());
-        json_object_set_new (root, "planets_count", json_integer (0));
+      json_object_set_new (root, "ships", json_array ());
+      json_object_set_new (root, "ships_count", json_integer (0));
     }
-
-    /* Players (excluding those only visible by cloaked ships already filtered above) */
-    json_t *players = NULL;
-    if (db_players_at_sector_json (sector_id, &players) == SQLITE_OK && players)
-    {
-        json_object_set_new (root, "players", players);
-        json_object_set_new (root, "players_count",
-                            json_integer ((int) json_array_size (players)));
-    }
-    else
-    {
-        json_object_set_new (root, "players", json_array ());
-        json_object_set_new (root, "players_count", json_integer (0));
-    }
-    
+  json_object_set_new (root, "holo_scanner_active",
+		       holo_scanner_active ? json_true () : json_false ());
 
 
-
-
-    /* Beacons */
-    json_t *beacons = NULL;
-    if (db_beacons_at_sector_json (sector_id, &beacons) == SQLITE_OK && beacons)
+  /* Ports */
+  json_t *ports = NULL;
+  if (db_ports_at_sector_json (sector_id, &ports) == SQLITE_OK && ports)
     {
-        json_object_set_new (root, "beacons", beacons);
-        json_object_set_new (root, "beacons_count",
-                            json_integer ((int) json_array_size (beacons)));
+      json_object_set_new (root, "ports", ports);
+      json_object_set_new (root, "has_port",
+			   json_array_size (ports) >
+			   0 ? json_true () : json_false ());
     }
-    else
+  else
     {
-        json_object_set_new (root, "beacons", json_array ());
-        json_object_set_new (root, "beacons_count", json_integer (0));
+      json_object_set_new (root, "ports", json_array ());
+      json_object_set_new (root, "has_port", json_false ());
     }
-    
-    // You can attach other asset counts here if needed, similar to attach_sector_asset_counts(db, sector_id, root);
 
-    return root;
+  /* Planets */
+  json_t *planets = NULL;
+  if (db_planets_at_sector_json (sector_id, &planets) == SQLITE_OK && planets)
+    {
+      json_object_set_new (root, "planets", planets);
+      json_object_set_new (root, "has_planet",
+			   json_array_size (planets) >
+			   0 ? json_true () : json_false ());
+      json_object_set_new (root, "planets_count",
+			   json_integer ((int) json_array_size (planets)));
+    }
+  else
+    {
+      json_object_set_new (root, "planets", json_array ());
+      json_object_set_new (root, "has_planet", json_false ());
+      json_object_set_new (root, "planets_count", json_integer (0));
+    }
+
+  /* Players (excluding those only visible by cloaked ships already filtered above) */
+  json_t *players = NULL;
+  if (db_players_at_sector_json (sector_id, &players) == SQLITE_OK && players)
+    {
+      json_object_set_new (root, "players", players);
+      json_object_set_new (root, "players_count",
+			   json_integer ((int) json_array_size (players)));
+    }
+  else
+    {
+      json_object_set_new (root, "players", json_array ());
+      json_object_set_new (root, "players_count", json_integer (0));
+    }
+
+
+
+
+
+  /* Beacons */
+  json_t *beacons = NULL;
+  if (db_beacons_at_sector_json (sector_id, &beacons) == SQLITE_OK && beacons)
+    {
+      json_object_set_new (root, "beacons", beacons);
+      json_object_set_new (root, "beacons_count",
+			   json_integer ((int) json_array_size (beacons)));
+    }
+  else
+    {
+      json_object_set_new (root, "beacons", json_array ());
+      json_object_set_new (root, "beacons_count", json_integer (0));
+    }
+
+  // You can attach other asset counts here if needed, similar to attach_sector_asset_counts(db, sector_id, root);
+
+  return root;
 }
 
 
@@ -748,50 +772,53 @@ build_sector_scan_json (int sector_id, int player_id, bool holo_scanner_active)
  * * @param ctx The client context containing player, ship, and database info.
  * @param root The root JSON request object.
  */
-void 
+void
 cmd_sector_scan (client_ctx_t *ctx, json_t *root)
 {
-    sqlite3 *db = db_get_handle ();
-    int player_id = ctx->player_id;
-    int ship_id = h_get_active_ship_id (db, player_id);
-    int sector_id;
-    bool holo_scanner_active = false;
+  sqlite3 *db = db_get_handle ();
+  int player_id = ctx->player_id;
+  int ship_id = h_get_active_ship_id (db, player_id);
+  int sector_id;
+  bool holo_scanner_active = false;
 
-    // 1. Basic Checks
-    if (ship_id <= 0) {
-        send_enveloped_error (ctx->fd, root, 1501, 
-                              "You must be in a ship to perform a sector scan.");
-        return;
-    }
-    
-    // 2. Get Sector ID
-    sector_id = db_get_ship_sector_id(db, ship_id);
-    if (sector_id <= 0) {
-        send_enveloped_error (ctx->fd, root, 1502, 
-                              "Could not determine your current sector.");
-        return;
-    }
-    
-    // 3. Holo-Scanner Capability Check
-    // --- Holo-Scanner Check Placeholder ---
-    // The db_ship_has_holo_scanner() stub currently returns false.
-    // Uncomment the line below once the DB function is properly implemented
-    // to query the 'ships' table for the holo_scanner flag.
-    // holo_scanner_active = db_ship_has_holo_scanner(db, ship_id);
-    // --- End Placeholder ---
-    
-    // 4. Build JSON Payload
-    json_t *payload = build_sector_scan_json (sector_id, player_id, holo_scanner_active);
-    if (!payload)
+  // 1. Basic Checks
+  if (ship_id <= 0)
     {
-        send_enveloped_error (ctx->fd, root, 1503,
-                              "Out of memory building sector scan info");
-        return;
+      send_enveloped_error (ctx->fd, root, 1501,
+			    "You must be in a ship to perform a sector scan.");
+      return;
     }
 
-    // 5. Send Response
-    send_enveloped_ok (ctx->fd, root, "sector.scan", payload);
-    json_decref (payload);
+  // 2. Get Sector ID
+  sector_id = db_get_ship_sector_id (db, ship_id);
+  if (sector_id <= 0)
+    {
+      send_enveloped_error (ctx->fd, root, 1502,
+			    "Could not determine your current sector.");
+      return;
+    }
+
+  // 3. Holo-Scanner Capability Check
+  // --- Holo-Scanner Check Placeholder ---
+  // The db_ship_has_holo_scanner() stub currently returns false.
+  // Uncomment the line below once the DB function is properly implemented
+  // to query the 'ships' table for the holo_scanner flag.
+  // holo_scanner_active = db_ship_has_holo_scanner(db, ship_id);
+  // --- End Placeholder ---
+
+  // 4. Build JSON Payload
+  json_t *payload =
+    build_sector_scan_json (sector_id, player_id, holo_scanner_active);
+  if (!payload)
+    {
+      send_enveloped_error (ctx->fd, root, 1503,
+			    "Out of memory building sector scan info");
+      return;
+    }
+
+  // 5. Send Response
+  send_enveloped_ok (ctx->fd, root, "sector.scan", payload);
+  json_decref (payload);
 }
 
 ////////////////////////////////////////////////////////////////
@@ -801,178 +828,191 @@ cmd_sector_scan (client_ctx_t *ctx, json_t *root)
 
 
 // "sector.scan.density"
-void cmd_sector_scan_density (void *ctx_in, json_t *root)
+void
+cmd_sector_scan_density (void *ctx_in, json_t *root)
 {
-    // FIX: Use the correct structure name provided by the user (client_ctx_t)
-    client_ctx_t *ctx = (client_ctx_t *)ctx_in; 
-    
-    // --- START: INITIALIZATION LOGIC ---
-    // Determine the target sector_id from context or request data
-    int msector = ctx->sector_id > 0 ? ctx->sector_id : 0;                              
-    json_t *jdata = json_object_get (root, "data");                                     
-    json_t *jsec =                                                                  
-        json_is_object (jdata) ? json_object_get (jdata, "sector_id") : NULL;           
-    if (json_is_integer (jsec))                                                         
-        msector = (int) json_integer_value (jsec);                                      
-    if (msector <= 0)                                                                   
-        msector = 1;
-    // --- END: INITIALIZATION LOGIC ---
-    
-    sqlite3 *db = db_get_handle();  
+  // FIX: Use the correct structure name provided by the user (client_ctx_t)
+  client_ctx_t *ctx = (client_ctx_t *) ctx_in;
 
-    h_decloak_ship (db,
-             h_get_active_ship_id (db, ctx->player_id));
+  // --- START: INITIALIZATION LOGIC ---
+  // Determine the target sector_id from context or request data
+  int msector = ctx->sector_id > 0 ? ctx->sector_id : 0;
+  json_t *jdata = json_object_get (root, "data");
+  json_t *jsec =
+    json_is_object (jdata) ? json_object_get (jdata, "sector_id") : NULL;
+  if (json_is_integer (jsec))
+    msector = (int) json_integer_value (jsec);
+  if (msector <= 0)
+    msector = 1;
+  // --- END: INITIALIZATION LOGIC ---
 
-    TurnConsumeResult tc = h_consume_player_turn (db, ctx, "move.warp");
-    if (tc != TURN_CONSUME_SUCCESS)
+  sqlite3 *db = db_get_handle ();
+
+  h_decloak_ship (db, h_get_active_ship_id (db, ctx->player_id));
+
+  TurnConsumeResult tc = h_consume_player_turn (db, ctx, "move.warp");
+  if (tc != TURN_CONSUME_SUCCESS)
     {
-        handle_turn_consumption_error (ctx, tc, "sector.scan.density", root, NULL);
-        return;
+      handle_turn_consumption_error (ctx, tc, "sector.scan.density", root,
+				     NULL);
+      return;
     }
 
-    
-    const char *sql_adj = 
-        "SELECT to_sector FROM sector_warps WHERE from_sector = ?1 ORDER BY to_sector";
-    
-    const char *sql_density_template = 
-        "SELECT sector_id, total_density_score FROM sector_ops WHERE sector_id IN (%s) "
-        "ORDER BY (sector_id = %d) DESC, sector_id ASC;";
 
-    sqlite3_stmt *st = NULL;
-    sqlite3_stmt *st2 = NULL;
-    char *sql_formatted = NULL;
-    json_t *payload = NULL; 
-    int rc = SQLITE_ERROR;
-    
-    // Array to hold the current sector + adjacent sectors
-    // Assuming MAX_WARPS_PER_SECTOR and SECTOR_LIST_BUF_SIZE are defined
-    int adjacent[MAX_WARPS_PER_SECTOR + 1] = {0}; 
-    int count = 0;
+  const char *sql_adj =
+    "SELECT to_sector FROM sector_warps WHERE from_sector = ?1 ORDER BY to_sector";
 
-    pthread_mutex_lock (&db_mutex);
-    
-    // --- 1. Get Current and Adjacent Sectors ---
-    
-    adjacent[count++] = msector; // Add the current sector ID first
+  const char *sql_density_template =
+    "SELECT sector_id, total_density_score FROM sector_ops WHERE sector_id IN (%s) "
+    "ORDER BY (sector_id = %d) DESC, sector_id ASC;";
 
-    rc = sqlite3_prepare_v2 (db, sql_adj, -1, &st, NULL);
-    if (rc != SQLITE_OK)
+  sqlite3_stmt *st = NULL;
+  sqlite3_stmt *st2 = NULL;
+  char *sql_formatted = NULL;
+  json_t *payload = NULL;
+  int rc = SQLITE_ERROR;
+
+  // Array to hold the current sector + adjacent sectors
+  // Assuming MAX_WARPS_PER_SECTOR and SECTOR_LIST_BUF_SIZE are defined
+  int adjacent[MAX_WARPS_PER_SECTOR + 1] = { 0 };
+  int count = 0;
+
+  pthread_mutex_lock (&db_mutex);
+
+  // --- 1. Get Current and Adjacent Sectors ---
+
+  adjacent[count++] = msector;	// Add the current sector ID first
+
+  rc = sqlite3_prepare_v2 (db, sql_adj, -1, &st, NULL);
+  if (rc != SQLITE_OK)
     {
-        // Preparation failed, rc is the error code
-        goto done;
+      // Preparation failed, rc is the error code
+      goto done;
     }
 
-    sqlite3_bind_int (st, 1, msector);
+  sqlite3_bind_int (st, 1, msector);
 
-    while ((rc = sqlite3_step (st)) == SQLITE_ROW && count < (MAX_WARPS_PER_SECTOR + 1))
+  while ((rc = sqlite3_step (st)) == SQLITE_ROW
+	 && count < (MAX_WARPS_PER_SECTOR + 1))
     {
-        adjacent[count++] = sqlite3_column_int (st, 0);
-    }
-    
-    // CHECKPOINT: Check if the loop terminated due to an error other than SQLITE_DONE.
-    if (rc != SQLITE_DONE) 
-    {
-        // An error occurred during sqlite3_step (rc is the error code)
-        goto done; 
-    }
-    // Set rc back to OK since we successfully retrieved the list (even if the list was empty)
-    rc = SQLITE_OK;
-    
-    // st is now finalized in the 'done' block, we no longer need to finalize it here.
-    // sqlite3_finalize (st);
-    // st = NULL;
-
-    // --- 2. Build Comma-Separated Sector List (list) ---
-    char list[SECTOR_LIST_BUF_SIZE] = "";
-    int current_len = 0;
-    
-    for (int a = 0; a < count; a++)
-    {
-        int appended_len = snprintf(list + current_len, 
-                                    SECTOR_LIST_BUF_SIZE - current_len, 
-                                    "%d,", 
-                                    adjacent[a]); 
-
-        if (appended_len > 0 && current_len + appended_len < SECTOR_LIST_BUF_SIZE)
-        {
-            current_len += appended_len;
-        } else {
-            rc = ERROR_INTERNAL; // Buffer overflow
-            goto done;
-        }
+      adjacent[count++] = sqlite3_column_int (st, 0);
     }
 
-    // Remove the trailing comma
-    if (current_len > 0) {
-        list[current_len - 1] = '\0';
-    } else {
-        // This should only happen if the sector list is empty, which shouldn't be possible
-        // as msector is always added, but we handle it just in case.
-        if (count == 0) {
-             rc = SQLITE_OK; // No warps, no density to show, but no critical error
-        } else {
-             rc = ERROR_INTERNAL; 
-        }
-        goto done;
+  // CHECKPOINT: Check if the loop terminated due to an error other than SQLITE_DONE.
+  if (rc != SQLITE_DONE)
+    {
+      // An error occurred during sqlite3_step (rc is the error code)
+      goto done;
+    }
+  // Set rc back to OK since we successfully retrieved the list (even if the list was empty)
+  rc = SQLITE_OK;
+
+  // st is now finalized in the 'done' block, we no longer need to finalize it here.
+  // sqlite3_finalize (st);
+  // st = NULL;
+
+  // --- 2. Build Comma-Separated Sector List (list) ---
+  char list[SECTOR_LIST_BUF_SIZE] = "";
+  int current_len = 0;
+
+  for (int a = 0; a < count; a++)
+    {
+      int appended_len = snprintf (list + current_len,
+				   SECTOR_LIST_BUF_SIZE - current_len,
+				   "%d,",
+				   adjacent[a]);
+
+      if (appended_len > 0
+	  && current_len + appended_len < SECTOR_LIST_BUF_SIZE)
+	{
+	  current_len += appended_len;
+	}
+      else
+	{
+	  rc = ERROR_INTERNAL;	// Buffer overflow
+	  goto done;
+	}
     }
 
-    // --- 3. Prepare and Execute Density Query (FIXED) ---
-    
-    // Dynamically generate the SQL string using sqlite3_mprintf
-    sql_formatted = sqlite3_mprintf(sql_density_template, list, msector);
-    if (!sql_formatted) {
-        rc = SQLITE_NOMEM;
-        goto done;
+  // Remove the trailing comma
+  if (current_len > 0)
+    {
+      list[current_len - 1] = '\0';
     }
-    
-    rc = sqlite3_prepare_v2 (db, sql_formatted, -1, &st2, NULL);
-    // Free the result of sqlite3_mprintf immediately after use
-    sqlite3_free(sql_formatted); 
-    
-    if (rc != SQLITE_OK)
-        goto done;
+  else
+    {
+      // This should only happen if the sector list is empty, which shouldn't be possible
+      // as msector is always added, but we handle it just in case.
+      if (count == 0)
+	{
+	  rc = SQLITE_OK;	// No warps, no density to show, but no critical error
+	}
+      else
+	{
+	  rc = ERROR_INTERNAL;
+	}
+      goto done;
+    }
 
-    // --- 4. Process Results and Build JSON Payload ---
-    payload = json_array ();
-    while ((rc = sqlite3_step (st2)) == SQLITE_ROW)
+  // --- 3. Prepare and Execute Density Query (FIXED) ---
+
+  // Dynamically generate the SQL string using sqlite3_mprintf
+  sql_formatted = sqlite3_mprintf (sql_density_template, list, msector);
+  if (!sql_formatted)
     {
-        int sector_id = sqlite3_column_int (st2, 0);
-        int density = sqlite3_column_int (st2, 1);
-        
-        // Append sector ID and density score pair
-        json_array_append_new (payload, json_integer (sector_id));
-        json_array_append_new (payload, json_integer (density));
+      rc = SQLITE_NOMEM;
+      goto done;
     }
-    
-    if (rc == SQLITE_DONE)
+
+  rc = sqlite3_prepare_v2 (db, sql_formatted, -1, &st2, NULL);
+  // Free the result of sqlite3_mprintf immediately after use
+  sqlite3_free (sql_formatted);
+
+  if (rc != SQLITE_OK)
+    goto done;
+
+  // --- 4. Process Results and Build JSON Payload ---
+  payload = json_array ();
+  while ((rc = sqlite3_step (st2)) == SQLITE_ROW)
     {
-        // --- FINAL USER-REQUESTED RESPONSE LOGIC ---
-        send_enveloped_ok (ctx->fd, root, "sector.density.scan", payload);
-        json_decref (payload);
-        // --- FINAL USER-REQUESTED RESPONSE LOGIC ---
-        rc = SQLITE_OK;
+      int sector_id = sqlite3_column_int (st2, 0);
+      int density = sqlite3_column_int (st2, 1);
+
+      // Append sector ID and density score pair
+      json_array_append_new (payload, json_integer (sector_id));
+      json_array_append_new (payload, json_integer (density));
     }
-    else
+
+  if (rc == SQLITE_DONE)
     {
-        // An error occurred in the last sqlite3_step of st2
-        json_decref (payload);
-        // rc already holds the error code
+      // --- FINAL USER-REQUESTED RESPONSE LOGIC ---
+      send_enveloped_ok (ctx->fd, root, "sector.density.scan", payload);
+      json_decref (payload);
+      // --- FINAL USER-REQUESTED RESPONSE LOGIC ---
+      rc = SQLITE_OK;
+    }
+  else
+    {
+      // An error occurred in the last sqlite3_step of st2
+      json_decref (payload);
+      // rc already holds the error code
     }
 
 done:
-    // Finalize all statements and unlock mutex
-    // *MUST* finalize st and st2 if they were successfully prepared (st != NULL)
-    if (st)
-        sqlite3_finalize (st);
-    if (st2)
-        sqlite3_finalize (st2);
-        
-    pthread_mutex_unlock (&db_mutex);
+  // Finalize all statements and unlock mutex
+  // *MUST* finalize st and st2 if they were successfully prepared (st != NULL)
+  if (st)
+    sqlite3_finalize (st);
+  if (st2)
+    sqlite3_finalize (st2);
 
-    // Handle errors if the final RC is not OK
-    if (rc != SQLITE_OK && rc != SQLITE_DONE) {
-        // Assuming ERR_DB and send_enveloped_error are defined
-        send_enveloped_error(ctx->fd, root, ERR_DB, sqlite3_errstr(rc));
+  pthread_mutex_unlock (&db_mutex);
+
+  // Handle errors if the final RC is not OK
+  if (rc != SQLITE_OK && rc != SQLITE_DONE)
+    {
+      // Assuming ERR_DB and send_enveloped_error are defined
+      send_enveloped_error (ctx->fd, root, ERR_DB, sqlite3_errstr (rc));
     }
 }
 
@@ -983,26 +1023,30 @@ done:
  * Returns 1 if a warp exists, 0 otherwise.
  */
 int
-h_warp_exists(sqlite3 *db, int from_sector_id, int to_sector_id)
+h_warp_exists (sqlite3 *db, int from_sector_id, int to_sector_id)
 {
   sqlite3_stmt *st = NULL;
   int has_warp = 0;
 
-  const char *sql = "SELECT 1 FROM sector_warps WHERE from_sector = ?1 AND to_sector = ?2 LIMIT 1;";
+  const char *sql =
+    "SELECT 1 FROM sector_warps WHERE from_sector = ?1 AND to_sector = ?2 LIMIT 1;";
 
-  if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK) {
-    LOGE("Failed to prepare h_warp_exists statement: %s", sqlite3_errmsg(db));
-    return 0;
-  }
+  if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
+    {
+      LOGE ("Failed to prepare h_warp_exists statement: %s",
+	    sqlite3_errmsg (db));
+      return 0;
+    }
 
-  sqlite3_bind_int(st, 1, from_sector_id);
-  sqlite3_bind_int(st, 2, to_sector_id);
+  sqlite3_bind_int (st, 1, from_sector_id);
+  sqlite3_bind_int (st, 2, to_sector_id);
 
-  if (sqlite3_step(st) == SQLITE_ROW) {
-    has_warp = 1;
-  }
+  if (sqlite3_step (st) == SQLITE_ROW)
+    {
+      has_warp = 1;
+    }
 
-  sqlite3_finalize(st);
+  sqlite3_finalize (st);
   return has_warp;
 }
 
@@ -1153,25 +1197,32 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
     }
 
   int from = ctx->sector_id;
-  int turns_spent = 1; // Assuming 1 turn for a single warp, as per typical game mechanics.
+  int turns_spent = 1;		// Assuming 1 turn for a single warp, as per typical game mechanics.
 
-  LOGI("cmd_move_warp: Player %d (fd %d) attempting to warp from sector %d to %d", ctx->player_id, ctx->fd, from, to);
+  LOGI
+    ("cmd_move_warp: Player %d (fd %d) attempting to warp from sector %d to %d",
+     ctx->player_id, ctx->fd, from, to);
 
   /* Persist & update session */
   int prc = db_player_set_sector (ctx->player_id, to);
   if (prc != SQLITE_OK)
     {
-      LOGE("cmd_move_warp: db_player_set_sector failed for player %d, ship_id %d, to sector %d. Error code: %d", ctx->player_id, h_get_active_ship_id(db_handle, ctx->player_id), to, prc);
+      LOGE
+	("cmd_move_warp: db_player_set_sector failed for player %d, ship_id %d, to sector %d. Error code: %d",
+	 ctx->player_id, h_get_active_ship_id (db_handle, ctx->player_id), to,
+	 prc);
       send_enveloped_error (ctx->fd, root, 1502,
 			    "Failed to persist player sector");
       return 0;
     }
-  LOGI("cmd_move_warp: Player %d (fd %d) successfully warped from sector %d to %d. db_player_set_sector returned %d", ctx->player_id, ctx->fd, from, to, prc);
+  LOGI
+    ("cmd_move_warp: Player %d (fd %d) successfully warped from sector %d to %d. db_player_set_sector returned %d",
+     ctx->player_id, ctx->fd, from, to, prc);
   ctx->sector_id = to;
 
   // Apply Armid mines on entry
-    armid_encounter_t armid_enc = {0};
-  apply_armid_mines_on_entry(ctx, to, &armid_enc);
+  armid_encounter_t armid_enc = { 0 };
+  apply_armid_mines_on_entry (ctx, to, &armid_enc);
 
   /* 1) Send the direct reply for the actor */
   json_t *resp = json_object ();
@@ -1180,21 +1231,28 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
   json_object_set_new (resp, "to_sector_id", json_integer (to));
   json_object_set_new (resp, "turns_spent", json_integer (turns_spent));
 
-  if (armid_enc.armid_triggered > 0) {
-      json_t *damage_obj = json_object();
-      json_object_set_new(damage_obj, "shields_lost", json_integer(armid_enc.shields_lost));
-      json_object_set_new(damage_obj, "fighters_lost", json_integer(armid_enc.fighters_lost));
-      json_object_set_new(damage_obj, "hull_lost", json_integer(armid_enc.hull_lost));
-      json_object_set_new(damage_obj, "destroyed", json_boolean(armid_enc.destroyed));
+  if (armid_enc.armid_triggered > 0)
+    {
+      json_t *damage_obj = json_object ();
+      json_object_set_new (damage_obj, "shields_lost",
+			   json_integer (armid_enc.shields_lost));
+      json_object_set_new (damage_obj, "fighters_lost",
+			   json_integer (armid_enc.fighters_lost));
+      json_object_set_new (damage_obj, "hull_lost",
+			   json_integer (armid_enc.hull_lost));
+      json_object_set_new (damage_obj, "destroyed",
+			   json_boolean (armid_enc.destroyed));
 
-      json_t *encounter_obj = json_object();
-      json_object_set_new(encounter_obj, "kind", json_string("mines"));
-      json_object_set_new(encounter_obj, "armid_triggered", json_integer(armid_enc.armid_triggered));
-      json_object_set_new(encounter_obj, "armid_remaining", json_integer(armid_enc.armid_remaining));
-      json_object_set_new(encounter_obj, "damage", damage_obj);
+      json_t *encounter_obj = json_object ();
+      json_object_set_new (encounter_obj, "kind", json_string ("mines"));
+      json_object_set_new (encounter_obj, "armid_triggered",
+			   json_integer (armid_enc.armid_triggered));
+      json_object_set_new (encounter_obj, "armid_remaining",
+			   json_integer (armid_enc.armid_remaining));
+      json_object_set_new (encounter_obj, "damage", damage_obj);
 
-      json_object_set_new(resp, "encounter", encounter_obj);
-  }
+      json_object_set_new (resp, "encounter", encounter_obj);
+    }
 
   send_enveloped_ok (ctx->fd, root, "move.result", resp);
 
@@ -1231,36 +1289,42 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
   if (!ctx)
     return 1;
 
-  sqlite3 *db = db_get_handle();
+  sqlite3 *db = db_get_handle ();
   int max_id = 0;
   sqlite3_stmt *st = NULL;
 
-  json_t *data = root ? json_object_get(root, "data") : NULL;
+  json_t *data = root ? json_object_get (root, "data") : NULL;
 
   // default from = current sector
   int from = (ctx->sector_id > 0) ? ctx->sector_id : 1;
-  if (data) {
-    int tmp;
-    if (json_get_int_flexible(data, "from", &tmp) ||
-        json_get_int_flexible(data, "from_sector_id", &tmp)) {
-      from = tmp;
+  if (data)
+    {
+      int tmp;
+      if (json_get_int_flexible (data, "from", &tmp) ||
+	  json_get_int_flexible (data, "from_sector_id", &tmp))
+	{
+	  from = tmp;
+	}
     }
-  }
 
   // to = required
   int to = -1;
-  if (data) {
-    int tmp;
-    if (json_get_int_flexible(data, "to", &tmp) ||
-        json_get_int_flexible(data, "to_sector_id", &tmp)) {
-      to = tmp;
+  if (data)
+    {
+      int tmp;
+      if (json_get_int_flexible (data, "to", &tmp) ||
+	  json_get_int_flexible (data, "to_sector_id", &tmp))
+	{
+	  to = tmp;
+	}
     }
-  }
-  if (to <= 0) {
-    send_enveloped_error(ctx->fd, root, 1401, "Target sector not specified");
-    return 1;
-  }
-  
+  if (to <= 0)
+    {
+      send_enveloped_error (ctx->fd, root, 1401,
+			    "Target sector not specified");
+      return 1;
+    }
+
   pthread_mutex_lock (&db_mutex);
   if (sqlite3_prepare_v2 (db, "SELECT MAX(id) FROM sectors", -1, &st, NULL) ==
       SQLITE_OK && sqlite3_step (st) == SQLITE_ROW)
@@ -1483,36 +1547,42 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
 
 static const char *SQL_SECTOR_ASSET_COUNTS =
   "SELECT asset_type, COALESCE(SUM(quantity),0) AS qty "
-  "FROM sector_assets WHERE sector = ?1 "
-  "GROUP BY asset_type;";
+  "FROM sector_assets WHERE sector = ?1 " "GROUP BY asset_type;";
 
 static void
-attach_sector_asset_counts(sqlite3 *db, int sector_id, json_t *data_out)
+attach_sector_asset_counts (sqlite3 *db, int sector_id, json_t *data_out)
 {
   int ftrs = 0, armid = 0, limpet = 0;
 
   sqlite3_stmt *st = NULL;
-  if (sqlite3_prepare_v2(db, SQL_SECTOR_ASSET_COUNTS, -1, &st, NULL) == SQLITE_OK) {
-    sqlite3_bind_int(st, 1, sector_id);
-    while (sqlite3_step(st) == SQLITE_ROW) {
-      int type = sqlite3_column_int(st, 0);
-      int qty  = sqlite3_column_int(st, 1);
-      if (type == 2)            ftrs  += qty;   /* ASSET_FIGHTER */
-      else if (type == 1)       armid += qty;   /* ASSET_MINE (Armid) */
-      else if (type == 4)       limpet += qty;  /* ASSET_LIMPET_MINE */
+  if (sqlite3_prepare_v2 (db, SQL_SECTOR_ASSET_COUNTS, -1, &st, NULL) ==
+      SQLITE_OK)
+    {
+      sqlite3_bind_int (st, 1, sector_id);
+      while (sqlite3_step (st) == SQLITE_ROW)
+	{
+	  int type = sqlite3_column_int (st, 0);
+	  int qty = sqlite3_column_int (st, 1);
+	  if (type == 2)
+	    ftrs += qty;	/* ASSET_FIGHTER */
+	  else if (type == 1)
+	    armid += qty;	/* ASSET_MINE (Armid) */
+	  else if (type == 4)
+	    limpet += qty;	/* ASSET_LIMPET_MINE */
+	}
     }
-  }
-  if (st) sqlite3_finalize(st);
+  if (st)
+    sqlite3_finalize (st);
 
-  json_t *counts = json_object();
-  json_object_set_new(counts, "fighters",     json_integer(ftrs));
-  json_object_set_new(counts, "mines_armid",  json_integer(armid));
-  json_object_set_new(counts, "mines_limpet", json_integer(limpet));
-  json_object_set_new(counts, "mines",        json_integer(armid + limpet));
+  json_t *counts = json_object ();
+  json_object_set_new (counts, "fighters", json_integer (ftrs));
+  json_object_set_new (counts, "mines_armid", json_integer (armid));
+  json_object_set_new (counts, "mines_limpet", json_integer (limpet));
+  json_object_set_new (counts, "mines", json_integer (armid + limpet));
 
   /* If you also track ships/planets elsewhere and already had a counts obj,
      merge instead of overwrite. Otherwise, just set it: */
-  json_object_set_new(data_out, "counts", counts);
+  json_object_set_new (data_out, "counts", counts);
 }
 
 
@@ -1586,7 +1656,7 @@ cmd_sector_info (int fd, json_t *root, int sector_id, int player_id)
 			   json_integer (json_array_size (players)));
     }
 
-  attach_sector_asset_counts(db, sector_id, payload);
+  attach_sector_asset_counts (db, sector_id, payload);
 
   send_enveloped_ok (fd, root, "sector.info", payload);
   json_decref (payload);
@@ -1852,7 +1922,7 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
   if (!ctx || !root)
     return 1;
 
-  
+
   sqlite3 *db_handle = db_get_handle ();
   h_decloak_ship (db_handle,
 		  h_get_active_ship_id (db_handle, ctx->player_id));
@@ -2514,61 +2584,72 @@ nav_next_hop (int start, int goal)
 //////////////////////////////////////////////////////////////////////////////////
 /* --- Helper to read current quantity from port_commodities --- */
 static int
-h_get_port_commodity_quantity(int port_id, const char *commodity)
+h_get_port_commodity_quantity (int port_id, const char *commodity)
 {
-    sqlite3 *db = db_get_handle();
-    sqlite3_stmt *stmt = NULL; // Explicitly initialized to NULL
-    int quantity = 0;
-    const char *column_name = NULL;
+  sqlite3 *db = db_get_handle ();
+  sqlite3_stmt *stmt = NULL;	// Explicitly initialized to NULL
+  int quantity = 0;
+  const char *column_name = NULL;
 
-    // 1. Determine the correct stock column name based on the commodity string
-    if (strcasecmp(commodity, "ORE") == 0 )
-      {
-        column_name = "ore_on_hand";
-    } else if (strcasecmp(commodity, "ORG") == 0) {
-        column_name = "organics_on_hand";
-    } else if (strcasecmp(commodity, "EQU") == 0) {
-        column_name = "equipment_on_hand";
+  // 1. Determine the correct stock column name based on the commodity string
+  if (strcasecmp (commodity, "ORE") == 0)
+    {
+      column_name = "ore_on_hand";
+    }
+  else if (strcasecmp (commodity, "ORG") == 0)
+    {
+      column_name = "organics_on_hand";
+    }
+  else if (strcasecmp (commodity, "EQU") == 0)
+    {
+      column_name = "equipment_on_hand";
     }
 
-    if (column_name == NULL) {
-        // This is not a true error, just an unimplemented stock type or a temporary commodity
-        LOGW("h_get_port_commodity_quantity: Commodity %s has no matching stock column in 'ports'. Returning 0.", commodity);
-        return 0; 
+  if (column_name == NULL)
+    {
+      // This is not a true error, just an unimplemented stock type or a temporary commodity
+      LOGW
+	("h_get_port_commodity_quantity: Commodity %s has no matching stock column in 'ports'. Returning 0.",
+	 commodity);
+      return 0;
     }
 
 // 2. Build the dynamic SQL query
-    char sql_query[256];
-    // We use snprintf to safely construct the query string with the correct column name
-    snprintf(sql_query, sizeof(sql_query), 
-             "SELECT %s FROM ports WHERE id = ?;", column_name);
-
-    
-    // 1. Acquire Mutex Lock (Recursive lock works here)
-    pthread_mutex_lock(&db_mutex); 
+  char sql_query[256];
+  // We use snprintf to safely construct the query string with the correct column name
+  snprintf (sql_query, sizeof (sql_query),
+	    "SELECT %s FROM ports WHERE id = ?;", column_name);
 
 
-if (sqlite3_prepare_v2(db, sql_query, -1, &stmt, NULL) == SQLITE_OK) 
+  // 1. Acquire Mutex Lock (Recursive lock works here)
+  pthread_mutex_lock (&db_mutex);
+
+
+  if (sqlite3_prepare_v2 (db, sql_query, -1, &stmt, NULL) == SQLITE_OK)
     {
-        sqlite3_bind_int(stmt, 1, port_id);
+      sqlite3_bind_int (stmt, 1, port_id);
 
-        if (sqlite3_step(stmt) == SQLITE_ROW) {
-            // Success: Row found, read the quantity
-            quantity = sqlite3_column_int(stmt, 0);
-        }
-        // If sqlite3_step returns SQLITE_DONE (no port found), quantity remains 0.
-        
-        sqlite3_finalize(stmt);
-    } else {
-        // A true SQL error (e.g., failed to prepare, meaning bad SQL syntax or bad DB handle)
-        LOGE("DB Error in h_get_port_commodity_quantity: %s (SQL: %s)", sqlite3_errmsg(db), sql_query);
-        quantity = -1; // Return -1 only on a true DB error
+      if (sqlite3_step (stmt) == SQLITE_ROW)
+	{
+	  // Success: Row found, read the quantity
+	  quantity = sqlite3_column_int (stmt, 0);
+	}
+      // If sqlite3_step returns SQLITE_DONE (no port found), quantity remains 0.
+
+      sqlite3_finalize (stmt);
     }
-    
-    // 2. Release Mutex Lock
-    pthread_mutex_unlock(&db_mutex); 
-    
-    return quantity;
+  else
+    {
+      // A true SQL error (e.g., failed to prepare, meaning bad SQL syntax or bad DB handle)
+      LOGE ("DB Error in h_get_port_commodity_quantity: %s (SQL: %s)",
+	    sqlite3_errmsg (db), sql_query);
+      quantity = -1;		// Return -1 only on a true DB error
+    }
+
+  // 2. Release Mutex Lock
+  pthread_mutex_unlock (&db_mutex);
+
+  return quantity;
 }
 
 /* --- Trade Log Emitter Implementation --- */
@@ -2576,136 +2657,156 @@ if (sqlite3_prepare_v2(db, sql_query, -1, &stmt, NULL) == SQLITE_OK)
 
 /* --- Trade Log Emitter Implementation --- */
 static void
-fer_emit_trade_log(int port_id, int sector_id,
-                   const char *sold, int sold_qty,
-                   const char *bought, int bought_qty)
+fer_emit_trade_log (int port_id, int sector_id,
+		    const char *sold, int sold_qty,
+		    const char *bought, int bought_qty)
 {
-    // Local variables are reset for each potential transaction block
-    sqlite3_stmt *stmt = NULL;
-    int rc;
+  // Local variables are reset for each potential transaction block
+  sqlite3_stmt *stmt = NULL;
+  int rc;
 
-    // =========================================================
-    // 1. Acquire Mutex Lock (Must be RECURSIVE for nested calls)
-    // =========================================================
-    pthread_mutex_lock(&db_mutex);
-
-    
-    // --- Template SQL for reuse ---
-    const char *sql_insert =
-        "INSERT INTO trade_log (timestamp, sector_id, player_id, commodity, units, price_per_unit, action, port_id) "
-        "VALUES (strftime('%s','now'), ?, 0, ?, ?, ?, ?, ?);";
+  // =========================================================
+  // 1. Acquire Mutex Lock (Must be RECURSIVE for nested calls)
+  // =========================================================
+  pthread_mutex_lock (&db_mutex);
 
 
-    // =========================================================
-    // A. LOG THE SELL ACTION (If any quantity was sold)
-    // =========================================================
-    if (sold_qty != 0)
+  // --- Template SQL for reuse ---
+  const char *sql_insert =
+    "INSERT INTO trade_log (timestamp, sector_id, player_id, commodity, units, price_per_unit, action, port_id) "
+    "VALUES (strftime('%s','now'), ?, 0, ?, ?, ?, ?, ?);";
+
+
+  // =========================================================
+  // A. LOG THE SELL ACTION (If any quantity was sold)
+  // =========================================================
+  if (sold_qty != 0)
     {
       const char *action = "sell";
       const char *commodity = sold;
       double price = 0.0;
-        
-      // 1. Set QTY to the trade amount
-      int qty = (sold_qty != 0) ? sold_qty : 20; 
 
-      int sold_port_qty = h_get_port_commodity_quantity(port_id, sold);
+      // 1. Set QTY to the trade amount
+      int qty = (sold_qty != 0) ? sold_qty : 20;
+
+      int sold_port_qty = h_get_port_commodity_quantity (port_id, sold);
       //LOGI("sold_port_qty = %d", sold_port_qty);
-      
+
       // CRITICAL FIX: If lookup failed (returned -1), treat it as 0 stock.
-      if (sold_port_qty < 0) {
-        sold_port_qty = 0;
-      }
+      if (sold_port_qty < 0)
+	{
+	  sold_port_qty = 0;
+	}
 
       // 2. Price calculation is now guaranteed to run with a non-negative quantity
       // Price calculation MUST use sold_port_qty (the stock), not the trade qty
-      price = h_calculate_port_sell_price(g_fer_db, port_id, sold);
-      
-      // --- 3. Insert into trade_log for the SELL ---
-      if (sqlite3_prepare_v2(g_fer_db, sql_insert, -1, &stmt, NULL) == SQLITE_OK) 
-        {
-      sqlite3_bind_int(stmt, 1, sector_id);
-      sqlite3_bind_text(stmt, 2, commodity, -1, SQLITE_STATIC);
-      sqlite3_bind_int(stmt, 3, qty); 
-      sqlite3_bind_double(stmt, 4, price);
-      sqlite3_bind_text(stmt, 5, action, -1, SQLITE_STATIC);
-      sqlite3_bind_int(stmt, 6, port_id);
+      price = h_calculate_port_sell_price (g_fer_db, port_id, sold);
 
-      rc = sqlite3_step(stmt);
-      if (rc != SQLITE_DONE) {
-        LOGE("SQL Exec Error (trade_log, SELL): %s", sqlite3_errmsg(g_fer_db));
-      } else {
-        // Log the event only if the DB step was successful
-        fer_event_json ("npc.trade", sector_id,
-                "{ \"kind\":\"ferringhi\", \"id\":%d, \"port_id\":%d, \"sector\":%d, "
-                "\"sold\":\"%s\", \"qty\":%d, \"price\":%.2f, \"action\":\"%s\" }",
-                NPC_TRADE_PLAYER_ID, port_id, sector_id, sold, qty, price, action);
-      }
-      sqlite3_finalize(stmt);
-      stmt = NULL; // Reset statement pointer
-        } else {
-      LOGE("SQL Prep Error (trade_log, SELL): %s", sqlite3_errmsg(g_fer_db));
-        }
+      // --- 3. Insert into trade_log for the SELL ---
+      if (sqlite3_prepare_v2 (g_fer_db, sql_insert, -1, &stmt, NULL) ==
+	  SQLITE_OK)
+	{
+	  sqlite3_bind_int (stmt, 1, sector_id);
+	  sqlite3_bind_text (stmt, 2, commodity, -1, SQLITE_STATIC);
+	  sqlite3_bind_int (stmt, 3, qty);
+	  sqlite3_bind_double (stmt, 4, price);
+	  sqlite3_bind_text (stmt, 5, action, -1, SQLITE_STATIC);
+	  sqlite3_bind_int (stmt, 6, port_id);
+
+	  rc = sqlite3_step (stmt);
+	  if (rc != SQLITE_DONE)
+	    {
+	      LOGE ("SQL Exec Error (trade_log, SELL): %s",
+		    sqlite3_errmsg (g_fer_db));
+	    }
+	  else
+	    {
+	      // Log the event only if the DB step was successful
+	      fer_event_json ("npc.trade", sector_id,
+			      "{ \"kind\":\"ferringhi\", \"id\":%d, \"port_id\":%d, \"sector\":%d, "
+			      "\"sold\":\"%s\", \"qty\":%d, \"price\":%.2f, \"action\":\"%s\" }",
+			      NPC_TRADE_PLAYER_ID, port_id, sector_id, sold,
+			      qty, price, action);
+	    }
+	  sqlite3_finalize (stmt);
+	  stmt = NULL;		// Reset statement pointer
+	}
+      else
+	{
+	  LOGE ("SQL Prep Error (trade_log, SELL): %s",
+		sqlite3_errmsg (g_fer_db));
+	}
     }
 
 
-    // =========================================================
-    // B. LOG THE BUY ACTION (If any quantity was bought)
-    // =========================================================
-    if (bought_qty != 0)
+  // =========================================================
+  // B. LOG THE BUY ACTION (If any quantity was bought)
+  // =========================================================
+  if (bought_qty != 0)
     {
       const char *action = "buy";
       const char *commodity = bought;
       double price = 0.0;
-        
-      // 1. Set QTY to the trade amount
-      int qty = (bought_qty != 0) ? bought_qty : 20; 
 
-      int bought_port_qty = h_get_port_commodity_quantity(port_id, bought);
+      // 1. Set QTY to the trade amount
+      int qty = (bought_qty != 0) ? bought_qty : 20;
+
+      int bought_port_qty = h_get_port_commodity_quantity (port_id, bought);
       // LOGI("bought_port_qty = %d", bought_port_qty);
-      
+
       // CRITICAL FIX: If lookup failed (returned -1), treat it as 0 stock.
-      if (bought_port_qty < 0) {
-        bought_port_qty = 0;
-      }
+      if (bought_port_qty < 0)
+	{
+	  bought_port_qty = 0;
+	}
 
       // 2. Price calculation is now guaranteed to run with a non-negative quantity
       // Price calculation MUST use bought_port_qty (the stock), not the trade qty
-      price = h_calculate_port_buy_price(g_fer_db, port_id, bought);
+      price = h_calculate_port_buy_price (g_fer_db, port_id, bought);
 
 
       // --- 3. Insert into trade_log for the BUY ---
-      if (sqlite3_prepare_v2(g_fer_db, sql_insert, -1, &stmt, NULL) == SQLITE_OK) 
-        {
-      sqlite3_bind_int(stmt, 1, sector_id);
-      sqlite3_bind_text(stmt, 2, commodity, -1, SQLITE_STATIC);
-      sqlite3_bind_int(stmt, 3, qty); // Use bought_qty here
-      sqlite3_bind_double(stmt, 4, price);
-      sqlite3_bind_text(stmt, 5, action, -1, SQLITE_STATIC);
-      sqlite3_bind_int(stmt, 6, port_id);
+      if (sqlite3_prepare_v2 (g_fer_db, sql_insert, -1, &stmt, NULL) ==
+	  SQLITE_OK)
+	{
+	  sqlite3_bind_int (stmt, 1, sector_id);
+	  sqlite3_bind_text (stmt, 2, commodity, -1, SQLITE_STATIC);
+	  sqlite3_bind_int (stmt, 3, qty);	// Use bought_qty here
+	  sqlite3_bind_double (stmt, 4, price);
+	  sqlite3_bind_text (stmt, 5, action, -1, SQLITE_STATIC);
+	  sqlite3_bind_int (stmt, 6, port_id);
 
-      rc = sqlite3_step(stmt);
-      if (rc != SQLITE_DONE) {
-        LOGE("SQL Exec Error (trade_log, BUY): %s", sqlite3_errmsg(g_fer_db));
-      } else {
-        // Log the event only if the DB step was successful
-        fer_event_json ("npc.trade", sector_id,
-                "{ \"kind\":\"ferringhi\", \"id\":%d, \"port_id\":%d, \"sector\":%d, "
-                "\"sold\":\"%s\", \"qty\":%d, \"price\":%.2f, \"action\":\"%s\" }",
-                NPC_TRADE_PLAYER_ID, port_id, sector_id, bought, qty, price, action);
-      }
-      sqlite3_finalize(stmt);
-        } else {
-      LOGE("SQL Prep Error (trade_log, BUY): %s", sqlite3_errmsg(g_fer_db));
-        }
+	  rc = sqlite3_step (stmt);
+	  if (rc != SQLITE_DONE)
+	    {
+	      LOGE ("SQL Exec Error (trade_log, BUY): %s",
+		    sqlite3_errmsg (g_fer_db));
+	    }
+	  else
+	    {
+	      // Log the event only if the DB step was successful
+	      fer_event_json ("npc.trade", sector_id,
+			      "{ \"kind\":\"ferringhi\", \"id\":%d, \"port_id\":%d, \"sector\":%d, "
+			      "\"sold\":\"%s\", \"qty\":%d, \"price\":%.2f, \"action\":\"%s\" }",
+			      NPC_TRADE_PLAYER_ID, port_id, sector_id, bought,
+			      qty, price, action);
+	    }
+	  sqlite3_finalize (stmt);
+	}
+      else
+	{
+	  LOGE ("SQL Prep Error (trade_log, BUY): %s",
+		sqlite3_errmsg (g_fer_db));
+	}
     }
 
 
-    // =========================================================
-    // 4. Release Mutex Lock
-    // =========================================================
-    pthread_mutex_unlock(&db_mutex);
+  // =========================================================
+  // 4. Release Mutex Lock
+  // =========================================================
+  pthread_mutex_unlock (&db_mutex);
 
-    //LOGI("Exit fer_emit_trade_log");
+  //LOGI("Exit fer_emit_trade_log");
 }
 
 
@@ -2720,7 +2821,7 @@ fer_attach_db (sqlite3 *db)
 int
 fer_init_once (void)
 {
-  
+
   if (g_fer_inited)
     return 1;
   if (!g_fer_db)
@@ -2771,7 +2872,7 @@ fer_init_once (void)
       g_fer[i].hold_ore =
 	g_fer[i].hold_organics = g_fer[i].hold_equipment = FER_MAX_HOLD / 2;
     }
-  
+
 
   /* boot marker so you can query immediately */
   fer_event_json ("npc.online", 0,
@@ -2805,17 +2906,17 @@ fer_tick (int64_t now_ms)
 	    "SELECT sector FROM ports ORDER BY RANDOM() LIMIT 1;";
 	  sqlite3_stmt *st = NULL;
 	  int rc_prep = sqlite3_prepare_v2 (g_fer_db, sql, -1, &st, NULL);
-          if (rc_prep == SQLITE_OK)
-            {
-              int rc_step = sqlite3_step (st);
-              if (rc_step == SQLITE_ROW)
-                goal = sqlite3_column_int (st, 0);
-              else if (rc_step != SQLITE_DONE)
-                LOGE("fer_tick %d: DB Step Error: %s (%d)", i, sqlite3_errmsg(g_fer_db), rc_step); // Log 3 (Error Check)
-              sqlite3_finalize (st);
-            }
-          else
-            LOGE("fer_tick %d: DB Prep Error: %s (%d)", i, sqlite3_errmsg(g_fer_db), rc_prep); // Log 3 (Error Check)
+	  if (rc_prep == SQLITE_OK)
+	    {
+	      int rc_step = sqlite3_step (st);
+	      if (rc_step == SQLITE_ROW)
+		goal = sqlite3_column_int (st, 0);
+	      else if (rc_step != SQLITE_DONE)
+		LOGE ("fer_tick %d: DB Step Error: %s (%d)", i, sqlite3_errmsg (g_fer_db), rc_step);	// Log 3 (Error Check)
+	      sqlite3_finalize (st);
+	    }
+	  else
+	    LOGE ("fer_tick %d: DB Prep Error: %s (%d)", i, sqlite3_errmsg (g_fer_db), rc_prep);	// Log 3 (Error Check)
 
 	}
 
@@ -2838,15 +2939,18 @@ fer_tick (int64_t now_ms)
       if (sector_has_port (t->sector))
 	{
 
-	  int current_sector = t->sector; // Sector the NPC is in
-	  int actual_port_id = db_get_port_id_by_sector(current_sector);
-	  if (actual_port_id < 0) {
-	    LOGW("NPC in sector %d has no valid port_id. Skipping trade log.", current_sector);
-	    return;
-	  }
+	  int current_sector = t->sector;	// Sector the NPC is in
+	  int actual_port_id = db_get_port_id_by_sector (current_sector);
+	  if (actual_port_id < 0)
+	    {
+	      LOGW
+		("NPC in sector %d has no valid port_id. Skipping trade log.",
+		 current_sector);
+	      return;
+	    }
 
 	  /* simple rotating swap for legal commodities */
-	  int r = (t->trades_done % 3); // Change from %4 to %3
+	  int r = (t->trades_done % 3);	// Change from %4 to %3
 	  const char *sold = NULL, *bought = NULL;
 	  int *ps = NULL, *pb = NULL;
 	  switch (r)
@@ -2863,10 +2967,10 @@ fer_tick (int64_t now_ms)
 	      bought = "EQU";
 	      pb = &t->hold_equipment;
 	      break;
-	    case 2: // This will be the new 'default' case
+	    case 2:		// This will be the new 'default' case
 	      sold = "EQU";
 	      ps = &t->hold_equipment;
-	      bought = "ORE"; // Cycle back to ore
+	      bought = "ORE";	// Cycle back to ore
 	      pb = &t->hold_ore;
 	      break;
 	    }
@@ -2879,7 +2983,8 @@ fer_tick (int64_t now_ms)
 	  *ps -= sell_qty;
 	  *pb += buy_qty;
 
-	  fer_emit_trade_log (actual_port_id, t->sector, sold, sell_qty, bought, buy_qty);
+	  fer_emit_trade_log (actual_port_id, t->sector, sold, sell_qty,
+			      bought, buy_qty);
 
 	  t->trades_done++;
 	  if (t->trades_done >= FER_TRADES_BEFORE_RETURN)
@@ -2895,5 +3000,3 @@ fer_tick (int64_t now_ms)
 	}
     }
 }
-
-

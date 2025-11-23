@@ -6,7 +6,7 @@
 #include "common.h"		// client_ctx_t
 #include "server_envelope.h"	// send_enveloped_* prototypes
 #include "database.h"		// if your moved bodies call db_*
-#include "schemas.h"      // uncomment if you wire system.describe_schema to schemas.c
+#include "schemas.h"		// uncomment if you wire system.describe_schema to schemas.c
 #include <stdint.h>
 
 #define DEFAULT_DB_NAME "twconfig.db"
@@ -111,34 +111,36 @@ extern "C"
     } secrets;
     struct
     {
-      struct {
-        bool enabled;
-        bool fedspace_allowed;
-        bool msl_allowed;
-        bool sweep_enabled;
-        bool attack_enabled;
-        int sweep_rate_mines_per_fighter;
-        int sweep_rate_limpets_per_fighter_loss;
-        int attack_rate_limpets_per_fighter;
-        int attack_rate_limpets_per_fighter_loss;
-        int entry_trigger_rate_limpets_per_fighter;
-        int entry_damage_per_limpet;
-        int limpet_ttl_days;
-        int per_sector_cap;
-        int max_per_ship;
-        bool allow_multi_owner;
-        int scrub_cost;
+      struct
+      {
+	bool enabled;
+	bool fedspace_allowed;
+	bool msl_allowed;
+	bool sweep_enabled;
+	bool attack_enabled;
+	int sweep_rate_mines_per_fighter;
+	int sweep_rate_limpets_per_fighter_loss;
+	int attack_rate_limpets_per_fighter;
+	int attack_rate_limpets_per_fighter_loss;
+	int entry_trigger_rate_limpets_per_fighter;
+	int entry_damage_per_limpet;
+	int limpet_ttl_days;
+	int per_sector_cap;
+	int max_per_ship;
+	bool allow_multi_owner;
+	int scrub_cost;
       } limpet;
     } mines;
-    struct { // New death config
-        int max_per_day;
-        int xp_loss_flat;
-        int xp_loss_percent;
-        char drop_cargo[16]; // "all", "none", "percent"
-        char drop_credits_mode[16]; // "all_ship", "none", "percent"
-        int big_sleep_duration_seconds;
-        int big_sleep_clear_xp_below;
-        char escape_pod_spawn_mode[32]; // "previous_sector", "safe_path"
+    struct
+    {				// New death config
+      int max_per_day;
+      int xp_loss_flat;
+      int xp_loss_percent;
+      char drop_cargo[16];	// "all", "none", "percent"
+      char drop_credits_mode[16];	// "all_ship", "none", "percent"
+      int big_sleep_duration_seconds;
+      int big_sleep_clear_xp_below;
+      char escape_pod_spawn_mode[32];	// "previous_sector", "safe_path"
     } death;
   } server_config_t;
 

@@ -10,36 +10,38 @@ extern "C"
 #include "server_loop.h"	// for ctx_t definition used in the function bodies
 #include "common.h"		// adjust if client_ctx_t is defined in another header
 #include "errors.h"
-#include <sqlite3.h> // For sqlite3 *db parameter
-#include "server_config.h" // For g_cfg
+#include <sqlite3.h>		// For sqlite3 *db parameter
+#include "server_config.h"	// For g_cfg
 
 // Enum for kill causes
-typedef enum {
+  typedef enum
+  {
     KILL_CAUSE_COMBAT,
     KILL_CAUSE_MINES,
     KILL_CAUSE_QUASAR,
     KILL_CAUSE_NAVHAZ,
     KILL_CAUSE_SELF_DESTRUCT,
     KILL_CAUSE_OTHER
-} kill_cause_t;
+  } kill_cause_t;
 
 // Context struct for ship destruction
-typedef struct {
+  typedef struct
+  {
     int victim_player_id;
     int victim_ship_id;
-    int killer_player_id;   // 0 if NPC/neutral/hazard
+    int killer_player_id;	// 0 if NPC/neutral/hazard
     kill_cause_t cause;
     int sector_id;
-} ship_kill_context_t;
+  } ship_kill_context_t;
 
 // Central handler for ship destruction
-int handle_ship_destruction(sqlite3 *db, ship_kill_context_t *ctx);
+  int handle_ship_destruction (sqlite3 * db, ship_kill_context_t * ctx);
 
 // Big Sleep handling function
-int handle_big_sleep(sqlite3 *db, ship_kill_context_t *ctx);
+  int handle_big_sleep (sqlite3 * db, ship_kill_context_t * ctx);
 
 // Escape Pod spawning function
-int handle_escape_pod_spawn(sqlite3 *db, ship_kill_context_t *ctx);
+  int handle_escape_pod_spawn (sqlite3 * db, ship_kill_context_t * ctx);
 
 /* Exposed handlers implemented in server_ships.c */
   void handle_move_pathfind (client_ctx_t * ctx, json_t * root);
@@ -53,10 +55,10 @@ int handle_escape_pod_spawn(sqlite3 *db, ship_kill_context_t *ctx);
   int cmd_ship_jettison (client_ctx_t * ctx, json_t * root);
   int cmd_ship_upgrade (client_ctx_t * ctx, json_t * root);
   int cmd_ship_repair (client_ctx_t * ctx, json_t * root);
-  int cmd_ship_self_destruct (client_ctx_t *ctx, json_t *root);
+  int cmd_ship_self_destruct (client_ctx_t * ctx, json_t * root);
 
 // Helper to get active ship ID for a player
-int h_get_active_ship_id(sqlite3 *db, int player_id);
+  int h_get_active_ship_id (sqlite3 * db, int player_id);
 
 #ifdef __cplusplus
 }

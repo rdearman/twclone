@@ -37,7 +37,7 @@ static int db_ensure_auth_schema_unlocked (void);
 static int db_ensure_idempotency_schema_unlocked (void);
 static int db_create_tables_unlocked (bool schema_exists);
 static int db_insert_defaults_unlocked (void);
-static int db_seed_ai_qa_bot_bank_account_unlocked(void);
+static int db_seed_ai_qa_bot_bank_account_unlocked (void);
 static int db_ensure_ship_perms_column_unlocked (void);
 int db_seed_cron_tasks (sqlite3 * db);
 void db_handle_close_and_reset (void);
@@ -55,21 +55,25 @@ db_handle_close_and_reset (void)
 }
 
 static void
-db_init_recursive_mutex_once(void)
+db_init_recursive_mutex_once (void)
 {
-    if (db_mutex_initialized) {
-        return;
+  if (db_mutex_initialized)
+    {
+      return;
     }
 
-    // Set up recursive attributes
-    pthread_mutexattr_t attr;
-    if (pthread_mutexattr_init(&attr) == 0) {
-        pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
-        pthread_mutex_init(&db_mutex, &attr);
-        pthread_mutexattr_destroy(&attr);
-        db_mutex_initialized = true;
-    } else {
-        LOGE("FATAL: Failed to initialize mutex attributes for db_mutex.");
+  // Set up recursive attributes
+  pthread_mutexattr_t attr;
+  if (pthread_mutexattr_init (&attr) == 0)
+    {
+      pthread_mutexattr_settype (&attr, PTHREAD_MUTEX_RECURSIVE);
+      pthread_mutex_init (&db_mutex, &attr);
+      pthread_mutexattr_destroy (&attr);
+      db_mutex_initialized = true;
+    }
+  else
+    {
+      LOGE ("FATAL: Failed to initialize mutex attributes for db_mutex.");
     }
 }
 
@@ -81,7 +85,7 @@ sqlite3 *
 db_get_handle (void)
 {
   // Flag to ensure the mutex is initialized only once
-  static bool mutex_initialized = false; // Static ensures it's only checked once
+  static bool mutex_initialized = false;	// Static ensures it's only checked once
 
   // 1. Check if the handle is already open. If so, return it immediately.
   if (db_handle)
@@ -93,51 +97,55 @@ db_get_handle (void)
   // CRITICAL FIX: Mutex initialization runs ONCE before DB open
   // =================================================================
   if (!mutex_initialized)
-  {
+    {
       pthread_mutexattr_t attr;
-      if (pthread_mutexattr_init(&attr) != 0) {
-          LOGE("FATAL: Failed to initialize mutex attributes.");
-          return NULL;
-      }
-      
+      if (pthread_mutexattr_init (&attr) != 0)
+	{
+	  LOGE ("FATAL: Failed to initialize mutex attributes.");
+	  return NULL;
+	}
+
       // 1b. Set the mutex type to RECURSIVE (the core fix)
-      if (pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE) != 0) {
-          LOGE("FATAL: Failed to set mutex type to recursive.");
-          pthread_mutexattr_destroy(&attr);
-          return NULL;
-      }
-      
+      if (pthread_mutexattr_settype (&attr, PTHREAD_MUTEX_RECURSIVE) != 0)
+	{
+	  LOGE ("FATAL: Failed to set mutex type to recursive.");
+	  pthread_mutexattr_destroy (&attr);
+	  return NULL;
+	}
+
       // 1c. Initialize the global db_mutex with recursive attributes
-      if (pthread_mutex_init(&db_mutex, &attr) != 0) {
-          LOGE("FATAL: Failed to initialize recursive db_mutex.");
-          pthread_mutexattr_destroy(&attr);
-          return NULL;
-      }
-      
-      pthread_mutexattr_destroy(&attr);
+      if (pthread_mutex_init (&db_mutex, &attr) != 0)
+	{
+	  LOGE ("FATAL: Failed to initialize recursive db_mutex.");
+	  pthread_mutexattr_destroy (&attr);
+	  return NULL;
+	}
+
+      pthread_mutexattr_destroy (&attr);
 
       mutex_initialized = true;
-  }
+    }
   // =================================================================
-  
+
   // 2. The handle is NULL (due to a close_and_reset or initial load).
   //    Open a new connection using the full, robust V2 flags.
   // LOGI("db_get_handle: Attempting to open new database connection to '%s'", DEFAULT_DB_NAME);
   int rc = sqlite3_open_v2 (DEFAULT_DB_NAME,
-                           &db_handle,
-                           SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE |
-                           SQLITE_OPEN_URI,
-                           NULL);
+			    &db_handle,
+			    SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE |
+			    SQLITE_OPEN_URI,
+			    NULL);
 
   if (rc != SQLITE_OK)
     {
-      LOGE("db_get_handle: Can't open database '%s': %s (rc=%d)", DEFAULT_DB_NAME, sqlite3_errmsg(db_handle), rc);
+      LOGE ("db_get_handle: Can't open database '%s': %s (rc=%d)",
+	    DEFAULT_DB_NAME, sqlite3_errmsg (db_handle), rc);
       if (db_handle)
-        {
-          sqlite3_close (db_handle);
-          db_handle = NULL;
-        }
-      return NULL;  // Return NULL on failure
+	{
+	  sqlite3_close (db_handle);
+	  db_handle = NULL;
+	}
+      return NULL;		// Return NULL on failure
     }
   // LOGI("db_get_handle: Successfully opened database connection to '%s'", DEFAULT_DB_NAME);
 
@@ -145,9 +153,9 @@ db_get_handle (void)
   if (sqlite3_exec (db_handle, "PRAGMA journal_mode=WAL;", NULL, NULL, NULL)
       != SQLITE_OK)
     {
-   LOGW ("Failed to set WAL mode on fresh handle.");
+      LOGW ("Failed to set WAL mode on fresh handle.");
     }
-  sqlite3_busy_timeout (db_handle, 5000);    // 5 seconds
+  sqlite3_busy_timeout (db_handle, 5000);	// 5 seconds
 
   // 4. Return the newly opened handle.
   return db_handle;
@@ -388,8 +396,7 @@ const char *create_table_sql[] = {
     "  shipyard_require_fighters_fit INTEGER NOT NULL DEFAULT 1, "
     "  shipyard_require_shields_fit INTEGER NOT NULL DEFAULT 1, "
     "  shipyard_require_hardware_compat INTEGER NOT NULL DEFAULT 1, "
-    "  shipyard_tax_bp INTEGER NOT NULL DEFAULT 1000 "
-  " ); ",
+    "  shipyard_tax_bp INTEGER NOT NULL DEFAULT 1000 " " ); ",
 
   " CREATE TABLE IF NOT EXISTS trade_idempotency ( "
     " key          TEXT PRIMARY KEY, "
@@ -403,133 +410,112 @@ const char *create_table_sql[] = {
   " CREATE TABLE IF NOT EXISTS npc_shipnames (id INTEGER, name TEXT); ",
 
   " CREATE TABLE IF NOT EXISTS tavern_names ( "
-  "   id        INTEGER PRIMARY KEY AUTOINCREMENT, "
-  "   name      TEXT NOT NULL UNIQUE, "
-  "   enabled   INTEGER NOT NULL DEFAULT 1, "
-  "   weight    INTEGER NOT NULL DEFAULT 1 "
-  " ); ",
+    "   id        INTEGER PRIMARY KEY AUTOINCREMENT, "
+    "   name      TEXT NOT NULL UNIQUE, "
+    "   enabled   INTEGER NOT NULL DEFAULT 1, "
+    "   weight    INTEGER NOT NULL DEFAULT 1 " " ); ",
 
   " CREATE TABLE IF NOT EXISTS taverns ( "
-  "   sector_id   INTEGER PRIMARY KEY REFERENCES sectors(id), "
-  "   name_id     INTEGER NOT NULL REFERENCES tavern_names(id), "
-  "   enabled     INTEGER NOT NULL DEFAULT 1 "
-  " ); ",
+    "   sector_id   INTEGER PRIMARY KEY REFERENCES sectors(id), "
+    "   name_id     INTEGER NOT NULL REFERENCES tavern_names(id), "
+    "   enabled     INTEGER NOT NULL DEFAULT 1 " " ); ",
 
   " CREATE TABLE IF NOT EXISTS tavern_settings ( "
-  "   id                          INTEGER PRIMARY KEY CHECK (id = 1), "
-  "   max_bet_per_transaction     INTEGER NOT NULL DEFAULT 5000, "
-  "   daily_max_wager             INTEGER NOT NULL DEFAULT 50000, "
-  "   enable_dynamic_wager_limit  INTEGER NOT NULL DEFAULT 0, "
-  "   graffiti_max_posts          INTEGER NOT NULL DEFAULT 100, "
-  "   notice_expires_days         INTEGER NOT NULL DEFAULT 7, "
-  "   buy_round_cost              INTEGER NOT NULL DEFAULT 1000, "
-  "   buy_round_alignment_gain    INTEGER NOT NULL DEFAULT 5, "
-  "   loan_shark_enabled          INTEGER NOT NULL DEFAULT 1 "
-  " ); ",
+    "   id                          INTEGER PRIMARY KEY CHECK (id = 1), "
+    "   max_bet_per_transaction     INTEGER NOT NULL DEFAULT 5000, "
+    "   daily_max_wager             INTEGER NOT NULL DEFAULT 50000, "
+    "   enable_dynamic_wager_limit  INTEGER NOT NULL DEFAULT 0, "
+    "   graffiti_max_posts          INTEGER NOT NULL DEFAULT 100, "
+    "   notice_expires_days         INTEGER NOT NULL DEFAULT 7, "
+    "   buy_round_cost              INTEGER NOT NULL DEFAULT 1000, "
+    "   buy_round_alignment_gain    INTEGER NOT NULL DEFAULT 5, "
+    "   loan_shark_enabled          INTEGER NOT NULL DEFAULT 1 " " ); ",
 
   " CREATE TABLE IF NOT EXISTS tavern_lottery_state ( "
-  "   draw_date      TEXT PRIMARY KEY, "
-  "   winning_number INTEGER, "
-  "   jackpot        INTEGER NOT NULL, "
-  "   carried_over   INTEGER NOT NULL DEFAULT 0 "
-  " ); ",
+    "   draw_date      TEXT PRIMARY KEY, "
+    "   winning_number INTEGER, "
+    "   jackpot        INTEGER NOT NULL, "
+    "   carried_over   INTEGER NOT NULL DEFAULT 0 " " ); ",
   " CREATE TABLE IF NOT EXISTS tavern_lottery_tickets ( "
-  "   id             INTEGER PRIMARY KEY, "
-  "   draw_date      TEXT NOT NULL, "
-  "   player_id      INTEGER NOT NULL REFERENCES players(id), "
-  "   number         INTEGER NOT NULL, "
-  "   cost           INTEGER NOT NULL, "
-  "   purchased_at   INTEGER NOT NULL "
-  " ); ",
+    "   id             INTEGER PRIMARY KEY, "
+    "   draw_date      TEXT NOT NULL, "
+    "   player_id      INTEGER NOT NULL REFERENCES players(id), "
+    "   number         INTEGER NOT NULL, "
+    "   cost           INTEGER NOT NULL, "
+    "   purchased_at   INTEGER NOT NULL " " ); ",
 
   " CREATE TABLE IF NOT EXISTS tavern_deadpool_bets ( "
-  "   id             INTEGER PRIMARY KEY, "
-  "   bettor_id      INTEGER NOT NULL REFERENCES players(id), "
-  "   target_id      INTEGER NOT NULL REFERENCES players(id), "
-  "   amount         INTEGER NOT NULL, "
-  "   odds_bp        INTEGER NOT NULL, "
-  "   placed_at      INTEGER NOT NULL, "
-  "   expires_at     INTEGER NOT NULL, "
-  "   resolved       INTEGER NOT NULL DEFAULT 0, "
-  "   resolved_at    INTEGER, "
-  "   result         TEXT "
-  " ); ",
+    "   id             INTEGER PRIMARY KEY, "
+    "   bettor_id      INTEGER NOT NULL REFERENCES players(id), "
+    "   target_id      INTEGER NOT NULL REFERENCES players(id), "
+    "   amount         INTEGER NOT NULL, "
+    "   odds_bp        INTEGER NOT NULL, "
+    "   placed_at      INTEGER NOT NULL, "
+    "   expires_at     INTEGER NOT NULL, "
+    "   resolved       INTEGER NOT NULL DEFAULT 0, "
+    "   resolved_at    INTEGER, " "   result         TEXT " " ); ",
 
   " CREATE TABLE IF NOT EXISTS tavern_raffle_state ( "
-  "   id             INTEGER PRIMARY KEY CHECK (id = 1), "
-  "   pot            INTEGER NOT NULL, "
-  "   last_winner_id INTEGER, "
-  "   last_payout    INTEGER, "
-  "   last_win_ts    INTEGER "
-  " ); ",
+    "   id             INTEGER PRIMARY KEY CHECK (id = 1), "
+    "   pot            INTEGER NOT NULL, "
+    "   last_winner_id INTEGER, "
+    "   last_payout    INTEGER, " "   last_win_ts    INTEGER " " ); ",
 
   " CREATE TABLE IF NOT EXISTS tavern_graffiti ( "
-  "   id          INTEGER PRIMARY KEY, "
-  "   player_id   INTEGER NOT NULL REFERENCES players(id), "
-  "   text        TEXT NOT NULL, "
-  "   created_at  INTEGER NOT NULL "
-  " ); ",
+    "   id          INTEGER PRIMARY KEY, "
+    "   player_id   INTEGER NOT NULL REFERENCES players(id), "
+    "   text        TEXT NOT NULL, "
+    "   created_at  INTEGER NOT NULL " " ); ",
 
   " CREATE TABLE IF NOT EXISTS tavern_notices ( "
-  "   id          INTEGER PRIMARY KEY, "
-  "   author_id   INTEGER NOT NULL REFERENCES players(id), "
-  "   corp_id     INTEGER, "
-  "   text        TEXT NOT NULL, "
-  "   created_at  INTEGER NOT NULL, "
-  "   expires_at  INTEGER NOT NULL "
-  " ); ",
+    "   id          INTEGER PRIMARY KEY, "
+    "   author_id   INTEGER NOT NULL REFERENCES players(id), "
+    "   corp_id     INTEGER, "
+    "   text        TEXT NOT NULL, "
+    "   created_at  INTEGER NOT NULL, "
+    "   expires_at  INTEGER NOT NULL " " ); ",
 
   " CREATE TABLE IF NOT EXISTS corp_recruiting ( "
-  "   corp_id       INTEGER PRIMARY KEY REFERENCES corporations(id), "
-  "   tagline       TEXT NOT NULL, "
-  "   min_alignment INTEGER, "
-  "   play_style    TEXT, "
-  "   created_at    INTEGER NOT NULL, "
-  "   expires_at    INTEGER NOT NULL "
-  " ); ",
+    "   corp_id       INTEGER PRIMARY KEY REFERENCES corporations(id), "
+    "   tagline       TEXT NOT NULL, "
+    "   min_alignment INTEGER, "
+    "   play_style    TEXT, "
+    "   created_at    INTEGER NOT NULL, "
+    "   expires_at    INTEGER NOT NULL " " ); ",
 
-  " CREATE TABLE IF NOT EXISTS corp_invites ( "
-  "   id INTEGER PRIMARY KEY AUTOINCREMENT, "
-  "   corp_id INTEGER NOT NULL, "
-  "   player_id INTEGER NOT NULL, "
-  "   invited_at INTEGER NOT NULL, "   /* unix epoch seconds */
-  "   expires_at INTEGER NOT NULL, "   /* unix epoch seconds */
-  "   UNIQUE(corp_id, player_id), "
-  "   FOREIGN KEY(corp_id) REFERENCES corporations(id) ON DELETE CASCADE, "
-  "   FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE "
-  " ); ",
+  " CREATE TABLE IF NOT EXISTS corp_invites ( " "   id INTEGER PRIMARY KEY AUTOINCREMENT, " "   corp_id INTEGER NOT NULL, " "   player_id INTEGER NOT NULL, " "   invited_at INTEGER NOT NULL, "	/* unix epoch seconds */
+    "   expires_at INTEGER NOT NULL, "	/* unix epoch seconds */
+    "   UNIQUE(corp_id, player_id), "
+    "   FOREIGN KEY(corp_id) REFERENCES corporations(id) ON DELETE CASCADE, "
+    "   FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE "
+    " ); ",
 
   " CREATE INDEX IF NOT EXISTS idx_corp_invites_corp ON corp_invites(corp_id); ",
   " CREATE INDEX IF NOT EXISTS idx_corp_invites_player ON corp_invites(player_id); ",
 
-  
+
 
   " CREATE TABLE IF NOT EXISTS tavern_loans ( "
-  "   player_id      INTEGER PRIMARY KEY REFERENCES players(id), "
-  "   principal      INTEGER NOT NULL, "
-  "   interest_rate  INTEGER NOT NULL, "
-  "   due_date       INTEGER NOT NULL, "
-  "   is_defaulted   INTEGER NOT NULL DEFAULT 0 "
-  " ); ",
+    "   player_id      INTEGER PRIMARY KEY REFERENCES players(id), "
+    "   principal      INTEGER NOT NULL, "
+    "   interest_rate  INTEGER NOT NULL, "
+    "   due_date       INTEGER NOT NULL, "
+    "   is_defaulted   INTEGER NOT NULL DEFAULT 0 " " ); ",
 
 
 
   " CREATE TABLE IF NOT EXISTS planettypes (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE, typeDescription TEXT, typeName TEXT, citadelUpgradeTime_lvl1 INTEGER, citadelUpgradeTime_lvl2 INTEGER, citadelUpgradeTime_lvl3 INTEGER, citadelUpgradeTime_lvl4 INTEGER, citadelUpgradeTime_lvl5 INTEGER, citadelUpgradeTime_lvl6 INTEGER, citadelUpgradeOre_lvl1 INTEGER, citadelUpgradeOre_lvl2 INTEGER, citadelUpgradeOre_lvl3 INTEGER, citadelUpgradeOre_lvl4 INTEGER, citadelUpgradeOre_lvl5 INTEGER, citadelUpgradeOre_lvl6 INTEGER, citadelUpgradeOrganics_lvl1 INTEGER, citadelUpgradeOrganics_lvl2 INTEGER, citadelUpgradeOrganics_lvl3 INTEGER, citadelUpgradeOrganics_lvl4 INTEGER, citadelUpgradeOrganics_lvl5 INTEGER, citadelUpgradeOrganics_lvl6 INTEGER, citadelUpgradeEquipment_lvl1 INTEGER, citadelUpgradeEquipment_lvl2 INTEGER, citadelUpgradeEquipment_lvl3 INTEGER, citadelUpgradeEquipment_lvl4 INTEGER, citadelUpgradeEquipment_lvl5 INTEGER, citadelUpgradeEquipment_lvl6 INTEGER, citadelUpgradeColonist_lvl1 INTEGER, citadelUpgradeColonist_lvl2 INTEGER, citadelUpgradeColonist_lvl3 INTEGER, citadelUpgradeColonist_lvl4 INTEGER, citadelUpgradeColonist_lvl5 INTEGER, citadelUpgradeColonist_lvl6 INTEGER, maxColonist_ore INTEGER, maxColonist_organics INTEGER, maxColonist_equipment INTEGER, fighters INTEGER, fuelProduction INTEGER, organicsProduction INTEGER, equipmentProduction INTEGER, fighterProduction INTEGER, maxore INTEGER, maxorganics INTEGER, maxequipment INTEGER, maxfighters INTEGER, breeding REAL, genesis_weight INTEGER NOT NULL DEFAULT 10); ",
 
-  " CREATE TABLE IF NOT EXISTS ports ( "
-  " id INTEGER PRIMARY KEY AUTOINCREMENT, "
-  " number INTEGER, "
-  " name TEXT NOT NULL, "
-  " sector INTEGER NOT NULL, "    /* FK to sectors.id */
-  " size INTEGER, "
-  " techlevel INTEGER, "
-  " ore_on_hand INTEGER NOT NULL DEFAULT 0, "
-  " organics_on_hand INTEGER NOT NULL DEFAULT 0, "
-  " equipment_on_hand INTEGER NOT NULL DEFAULT 0, "
-  " petty_cash INTEGER NOT NULL DEFAULT 0, "
-  " invisible INTEGER DEFAULT 0, "
-  " type INTEGER DEFAULT 1, "
-  " FOREIGN KEY (sector) REFERENCES sectors(id)); ",
+  " CREATE TABLE IF NOT EXISTS ports ( " " id INTEGER PRIMARY KEY AUTOINCREMENT, " " number INTEGER, " " name TEXT NOT NULL, " " sector INTEGER NOT NULL, "	/* FK to sectors.id */
+    " size INTEGER, "
+    " techlevel INTEGER, "
+    " ore_on_hand INTEGER NOT NULL DEFAULT 0, "
+    " organics_on_hand INTEGER NOT NULL DEFAULT 0, "
+    " equipment_on_hand INTEGER NOT NULL DEFAULT 0, "
+    " petty_cash INTEGER NOT NULL DEFAULT 0, "
+    " invisible INTEGER DEFAULT 0, "
+    " type INTEGER DEFAULT 1, "
+    " FOREIGN KEY (sector) REFERENCES sectors(id)); ",
 
 
   " CREATE TABLE IF NOT EXISTS port_trade ( "
@@ -542,27 +528,26 @@ const char *create_table_sql[] = {
 
 
   " CREATE TABLE IF NOT EXISTS players ( "
-  " id INTEGER PRIMARY KEY AUTOINCREMENT,  "
-  " type INTEGER DEFAULT 2,  "
-  " number INTEGER,  "
-  " name TEXT NOT NULL,  "
-  " passwd TEXT NOT NULL,  "
-  " sector INTEGER,  "
-  " ship INTEGER,  "	
-  " experience INTEGER,  "
-  " alignment INTEGER,  "
-  " commission INTEGER DEFAULT 0,  "
-  " credits INTEGER,  "
-  " flags INTEGER,  "
-  " login_time INTEGER,  "
-  " last_update INTEGER,  "
-  " intransit INTEGER,  "
-  " beginmove INTEGER,  "
-  " movingto INTEGER,  "
-  " loggedin INTEGER,  "
-  " lastplanet INTEGER,  "
-  " score INTEGER,  "
-  " last_news_read_timestamp INTEGER DEFAULT 0);  ",
+    " id INTEGER PRIMARY KEY AUTOINCREMENT,  "
+    " type INTEGER DEFAULT 2,  "
+    " number INTEGER,  "
+    " name TEXT NOT NULL,  "
+    " passwd TEXT NOT NULL,  "
+    " sector INTEGER,  "
+    " ship INTEGER,  "
+    " experience INTEGER,  "
+    " alignment INTEGER,  "
+    " commission INTEGER DEFAULT 0,  "
+    " credits INTEGER,  "
+    " flags INTEGER,  "
+    " login_time INTEGER,  "
+    " last_update INTEGER,  "
+    " intransit INTEGER,  "
+    " beginmove INTEGER,  "
+    " movingto INTEGER,  "
+    " loggedin INTEGER,  "
+    " lastplanet INTEGER,  "
+    " score INTEGER,  " " last_news_read_timestamp INTEGER DEFAULT 0);  ",
 
 
   " CREATE TABLE IF NOT EXISTS player_types (type INTEGER PRIMARY KEY AUTOINCREMENT, description TEXT); ",
@@ -600,88 +585,54 @@ const char *create_table_sql[] = {
     "   maxphotons INTEGER, /* Photon torpedo count */  "
     "   max_cloaks INTEGER NOT NULL DEFAULT 0, "
     "   can_purchase INTEGER, /* Can be bought at a port (0/1) */  "
-    "   enabled INTEGER NOT NULL DEFAULT 1 "
-" );  ",
+    "   enabled INTEGER NOT NULL DEFAULT 1 " " );  ",
 
-    " CREATE TABLE IF NOT EXISTS ships (  "
+  " CREATE TABLE IF NOT EXISTS ships (  "
+    "   id INTEGER PRIMARY KEY AUTOINCREMENT,  "
+    "   name TEXT NOT NULL,  "
+    "   type_id INTEGER, /* Foreign Key to shiptypes.id */  "
+    "   attack INTEGER,  "
+    "   holds INTEGER,  "
+    "   mines INTEGER, /* Current quantity carried */  "
+    "   limpets INTEGER, /* Current quantity carried */  "
+    "   fighters INTEGER, /* Current quantity carried */  "
+    "   genesis INTEGER, /* Current quantity carried */  "
+    "   detonators INTEGER NOT NULL DEFAULT 0, "
+    "   probes INTEGER NOT NULL DEFAULT 0, "
+    "   photons INTEGER, /* Current quantity carried */  "
+    "   sector INTEGER, /* Foreign Key to sectors.id */  "
+    "   shields INTEGER,  "
+    "   beacons INTEGER, /* Current quantity carried */  "
+    "   colonists INTEGER,  "
+    "   equipment INTEGER,  "
+    "   organics INTEGER,  "
+    "   ore INTEGER,  "
+    "   flags INTEGER,  "
+    "   cloaking_devices INTEGER,  "
+    "   has_transwarp INTEGER NOT NULL DEFAULT 0, "
+    "   has_planet_scanner INTEGER NOT NULL DEFAULT 0, "
+    "   has_long_range_scanner INTEGER NOT NULL DEFAULT 0, "
+    "   cloaked TIMESTAMP,  "
+    "   ported INTEGER,  "
+    "   onplanet INTEGER,  "
+    "   destroyed INTEGER DEFAULT 0,  "
+    "   hull INTEGER NOT NULL DEFAULT 100, "
+    "   CONSTRAINT check_current_cargo_limit CHECK ( (colonists + equipment + organics + ore) <= holds ), "
+    "   FOREIGN KEY(type_id) REFERENCES shiptypes(id),  "
+    "   FOREIGN KEY(sector) REFERENCES sectors(id)  " " );  ",
 
-      "   id INTEGER PRIMARY KEY AUTOINCREMENT,  "
 
-      "   name TEXT NOT NULL,  "
 
-      "   type_id INTEGER, /* Foreign Key to shiptypes.id */  "
+  " CREATE TABLE IF NOT EXISTS ship_markers ( "
+    " ship_id        INTEGER NOT NULL REFERENCES ships(id), "
+    " owner_player   INTEGER NOT NULL, "
+    " owner_corp     INTEGER NOT NULL DEFAULT 0, "
+    " marker_type    TEXT NOT NULL, "
+    " PRIMARY KEY (ship_id, owner_player, marker_type) " " ); ",
 
-      "   attack INTEGER,  "
 
-      "   holds INTEGER,  "
 
-      "   mines INTEGER, /* Current quantity carried */  "
-
-      "   limpets INTEGER, /* Current quantity carried */  "
-
-      "   fighters INTEGER, /* Current quantity carried */  "
-
-      "   genesis INTEGER, /* Current quantity carried */  "
-      "   detonators INTEGER NOT NULL DEFAULT 0, "
-      "   probes INTEGER NOT NULL DEFAULT 0, "
-
-      "   photons INTEGER, /* Current quantity carried */  "
-
-      "   sector INTEGER, /* Foreign Key to sectors.id */  "
-
-      "   shields INTEGER,  "
-
-      "   beacons INTEGER, /* Current quantity carried */  "
-
-      "   colonists INTEGER,  "
-
-      "   equipment INTEGER,  "
-
-      "   organics INTEGER,  "
-
-      "   ore INTEGER,  "
-
-      "   flags INTEGER,  "
-
-      "   cloaking_devices INTEGER,  "
-      "   has_transwarp INTEGER NOT NULL DEFAULT 0, "
-      "   has_planet_scanner INTEGER NOT NULL DEFAULT 0, "
-      "   has_long_range_scanner INTEGER NOT NULL DEFAULT 0, "
-
-      "   cloaked TIMESTAMP,  "
-
-      "   ported INTEGER,  "
-
-      "   onplanet INTEGER,  "
-
-      "   destroyed INTEGER DEFAULT 0,  "  
-      "   hull INTEGER NOT NULL DEFAULT 100, "  
-
-      "   CONSTRAINT check_current_cargo_limit CHECK ( (colonists + equipment + organics + ore) <= holds ), "
-
-      "   FOREIGN KEY(type_id) REFERENCES shiptypes(id),  "
-
-      "   FOREIGN KEY(sector) REFERENCES sectors(id)  " " );  ",
-
-  
-
-    " CREATE TABLE IF NOT EXISTS ship_markers ( "
-
-      " ship_id        INTEGER NOT NULL REFERENCES ships(id), "
-
-      " owner_player   INTEGER NOT NULL, "
-
-      " owner_corp     INTEGER NOT NULL DEFAULT 0, "
-
-      " marker_type    TEXT NOT NULL, "
-
-      " PRIMARY KEY (ship_id, owner_player, marker_type) "
-
-    " ); ",
-
-  
-
-    " CREATE TABLE IF NOT EXISTS player_ships ( player_id INTEGER DEFAULT 0, ship_id INTEGER DEFAULT 0, role INTEGER DEFAULT 1, is_active INTEGER DEFAULT 1); ",
+  " CREATE TABLE IF NOT EXISTS player_ships ( player_id INTEGER DEFAULT 0, ship_id INTEGER DEFAULT 0, role INTEGER DEFAULT 1, is_active INTEGER DEFAULT 1); ",
   " CREATE TABLE IF NOT EXISTS ship_roles ( role_id INTEGER PRIMARY KEY, role INTEGER DEFAULT 1, role_description TEXT DEFAULT 1); ",
 
 
@@ -697,59 +648,51 @@ const char *create_table_sql[] = {
 
 
 
-  " CREATE TABLE IF NOT EXISTS planets ( "
-  " id INTEGER PRIMARY KEY AUTOINCREMENT,  "
-  " num INTEGER,  "	/* legacy planet ID */
-  " sector INTEGER NOT NULL,  "	/* FK to sectors.id */
-  " name TEXT NOT NULL,  "
-  " owner_id INTEGER NOT NULL, " /* Generic owner ID */
-  " owner_type TEXT NOT NULL DEFAULT 'player', " /* 'player' or 'corporation' */
-  " class TEXT NOT NULL DEFAULT 'M', " /* Canonical class string */
-  " population INTEGER,  "
-  " type INTEGER,  "	/* FK to planettypes.id */
-  " creator TEXT,  "
-  " colonist INTEGER,  "
-  " fighters INTEGER,  "
-  " created_at INTEGER NOT NULL, "
-  " created_by INTEGER NOT NULL, "
-  " genesis_flag INTEGER NOT NULL DEFAULT 1, "
-  " citadel_level INTEGER DEFAULT 0,  "
-  " ore_on_hand INTEGER NOT NULL DEFAULT 0, "
-  " organics_on_hand INTEGER NOT NULL DEFAULT 0, "
-  " equipment_on_hand INTEGER NOT NULL DEFAULT 0, "
-  " FOREIGN KEY (sector) REFERENCES sectors(id),  "
-  /* No direct FK for owner_id/owner_type due to polymorphic nature */
-  " FOREIGN KEY (type) REFERENCES planettypes(id) "
-  " ); ",
+  " CREATE TABLE IF NOT EXISTS planets ( " " id INTEGER PRIMARY KEY AUTOINCREMENT,  " " num INTEGER,  "	/* legacy planet ID */
+    " sector INTEGER NOT NULL,  "	/* FK to sectors.id */
+    " name TEXT NOT NULL,  " " owner_id INTEGER NOT NULL, "	/* Generic owner ID */
+    " owner_type TEXT NOT NULL DEFAULT 'player', "	/* 'player' or 'corporation' */
+    " class TEXT NOT NULL DEFAULT 'M', "	/* Canonical class string */
+    " population INTEGER,  " " type INTEGER,  "	/* FK to planettypes.id */
+    " creator TEXT,  "
+    " colonist INTEGER,  "
+    " fighters INTEGER,  "
+    " created_at INTEGER NOT NULL, "
+    " created_by INTEGER NOT NULL, "
+    " genesis_flag INTEGER NOT NULL DEFAULT 1, "
+    " citadel_level INTEGER DEFAULT 0,  "
+    " ore_on_hand INTEGER NOT NULL DEFAULT 0, "
+    " organics_on_hand INTEGER NOT NULL DEFAULT 0, "
+    " equipment_on_hand INTEGER NOT NULL DEFAULT 0, "
+    " FOREIGN KEY (sector) REFERENCES sectors(id),  "
+    /* No direct FK for owner_id/owner_type due to polymorphic nature */
+    " FOREIGN KEY (type) REFERENCES planettypes(id) " " ); ",
   " CREATE TRIGGER IF NOT EXISTS trg_planets_total_cap_before_insert "
-  " BEFORE INSERT ON planets "
-  " FOR EACH ROW "
-  " BEGIN "
-  "   SELECT CASE "
-  "     WHEN (SELECT COUNT(*) FROM planets) >= (SELECT max_total_planets FROM config WHERE id = 1) "
-  "     THEN RAISE(ABORT, 'ERR_UNIVERSE_FULL') "
-  "     ELSE 1 "
-  "   END; "
-  " END; ",
+    " BEFORE INSERT ON planets "
+    " FOR EACH ROW "
+    " BEGIN "
+    "   SELECT CASE "
+    "     WHEN (SELECT COUNT(*) FROM planets) >= (SELECT max_total_planets FROM config WHERE id = 1) "
+    "     THEN RAISE(ABORT, 'ERR_UNIVERSE_FULL') "
+    "     ELSE 1 " "   END; " " END; ",
 
   " CREATE TABLE IF NOT EXISTS citadel_requirements ( "
-  "   planet_type_id INTEGER NOT NULL REFERENCES planettypes(id) ON DELETE CASCADE, "
-  "   citadel_level INTEGER NOT NULL, "
-  "   ore_cost INTEGER NOT NULL DEFAULT 0, "
-  "   organics_cost INTEGER NOT NULL DEFAULT 0, "
-  "   equipment_cost INTEGER NOT NULL DEFAULT 0, "
-  "   colonist_cost INTEGER NOT NULL DEFAULT 0, "
-  "   time_cost_days INTEGER NOT NULL DEFAULT 0, "
-  "   PRIMARY KEY (planet_type_id, citadel_level) "
-  " ); ",
+    "   planet_type_id INTEGER NOT NULL REFERENCES planettypes(id) ON DELETE CASCADE, "
+    "   citadel_level INTEGER NOT NULL, "
+    "   ore_cost INTEGER NOT NULL DEFAULT 0, "
+    "   organics_cost INTEGER NOT NULL DEFAULT 0, "
+    "   equipment_cost INTEGER NOT NULL DEFAULT 0, "
+    "   colonist_cost INTEGER NOT NULL DEFAULT 0, "
+    "   time_cost_days INTEGER NOT NULL DEFAULT 0, "
+    "   PRIMARY KEY (planet_type_id, citadel_level) " " ); ",
   " CREATE TABLE IF NOT EXISTS planet_goods ( "
-  "    planet_id INTEGER NOT NULL, "
-  "    commodity TEXT NOT NULL CHECK(commodity IN ('ore', 'organics', 'equipment')), "
-  "    quantity INTEGER NOT NULL DEFAULT 0, "
-  "    max_capacity INTEGER NOT NULL, "
-  "    production_rate INTEGER NOT NULL, "
-  "    PRIMARY KEY (planet_id, commodity), "
-  "    FOREIGN KEY (planet_id) REFERENCES planets(id) " " ); ",
+    "    planet_id INTEGER NOT NULL, "
+    "    commodity TEXT NOT NULL CHECK(commodity IN ('ore', 'organics', 'equipment')), "
+    "    quantity INTEGER NOT NULL DEFAULT 0, "
+    "    max_capacity INTEGER NOT NULL, "
+    "    production_rate INTEGER NOT NULL, "
+    "    PRIMARY KEY (planet_id, commodity), "
+    "    FOREIGN KEY (planet_id) REFERENCES planets(id) " " ); ",
 
   " CREATE TABLE IF NOT EXISTS hardware_items ( "
     " id INTEGER PRIMARY KEY, "
@@ -759,12 +702,10 @@ const char *create_table_sql[] = {
     " requires_stardock INTEGER NOT NULL DEFAULT 1, "
     " sold_in_class0 INTEGER NOT NULL DEFAULT 0, "
     " max_per_ship INTEGER, "
-    " category TEXT NOT NULL, "
-    " enabled INTEGER NOT NULL DEFAULT 1 "
-  " ); ",
+    " category TEXT NOT NULL, " " enabled INTEGER NOT NULL DEFAULT 1 " " ); ",
 
-    /* --- citadels table (fixed, closed properly) --- */
-    " CREATE TABLE IF NOT EXISTS citadels ( " " id INTEGER PRIMARY KEY AUTOINCREMENT,  " " planet_id INTEGER UNIQUE NOT NULL,  "	/* 1:1 link to planets.id */
+  /* --- citadels table (fixed, closed properly) --- */
+  " CREATE TABLE IF NOT EXISTS citadels ( " " id INTEGER PRIMARY KEY AUTOINCREMENT,  " " planet_id INTEGER UNIQUE NOT NULL,  "	/* 1:1 link to planets.id */
     " level INTEGER,  " " treasury INTEGER,  " " militaryReactionLevel INTEGER,  " " qCannonAtmosphere INTEGER,  " " qCannonSector INTEGER,  " " planetaryShields INTEGER,  " " transporterlvl INTEGER,  " " interdictor INTEGER,  " " upgradePercent REAL,  " " upgradestart INTEGER,  " " owner INTEGER,  "	/* FK to players.id */
     " shields INTEGER,  "
     " torps INTEGER,  "
@@ -998,7 +939,7 @@ const char *create_table_sql[] = {
     "    FOREIGN KEY (sector_id) REFERENCES sectors(id)" ");",
 
   "CREATE INDEX IF NOT EXISTS ix_trade_log_ts ON trade_log(timestamp);",
-  
+
 
 
   "CREATE TABLE IF NOT EXISTS stardock_assets ("
@@ -1017,38 +958,31 @@ const char *create_table_sql[] = {
     "    port_id         INTEGER NOT NULL REFERENCES ports(id),"
     "    ship_type_id    INTEGER NOT NULL REFERENCES shiptypes(id),"
     "    enabled         INTEGER NOT NULL DEFAULT 1,"
-    "    PRIMARY KEY (port_id, ship_type_id)"
-  ");",
+    "    PRIMARY KEY (port_id, ship_type_id)" ");",
 
-    "CREATE TABLE IF NOT EXISTS shipyard_inventory ("    "    port_id         INTEGER NOT NULL REFERENCES ports(id),"    "    ship_type_id    INTEGER NOT NULL REFERENCES shiptypes(id),"    "    enabled         INTEGER NOT NULL DEFAULT 1,"    "    PRIMARY KEY (port_id, ship_type_id)"  ");",
+  "CREATE TABLE IF NOT EXISTS shipyard_inventory ("
+    "    port_id         INTEGER NOT NULL REFERENCES ports(id),"
+    "    ship_type_id    INTEGER NOT NULL REFERENCES shiptypes(id),"
+    "    enabled         INTEGER NOT NULL DEFAULT 1,"
+    "    PRIMARY KEY (port_id, ship_type_id)" ");",
 
-  
 
-      " CREATE TABLE IF NOT EXISTS podded_status ( "
 
-  
+  " CREATE TABLE IF NOT EXISTS podded_status ( "
+    "   player_id INTEGER PRIMARY KEY REFERENCES players(id), "
+    "   status TEXT NOT NULL DEFAULT 'active', "
+    "   big_sleep_until INTEGER, " "   reason TEXT " " ); ",
 
-      "   player_id INTEGER PRIMARY KEY REFERENCES players(id), "
 
-  
 
-      "   status TEXT NOT NULL DEFAULT 'active', "
-
-  
-
-      "   big_sleep_until INTEGER, "
-
-  
-
-      "   reason TEXT "
-
-  
-
-      " ); ",
-
-  
-
-    "CREATE TABLE IF NOT EXISTS planet_goods ("    "    planet_id      INTEGER NOT NULL,"    "    commodity      TEXT NOT NULL CHECK(commodity IN ('ore', 'organics', 'equipment', 'food', 'fuel')),"    "    quantity       INTEGER NOT NULL DEFAULT 0,"    "    max_capacity   INTEGER NOT NULL,"    "    production_rate INTEGER NOT NULL,"    "    PRIMARY KEY (planet_id, commodity),"    "    FOREIGN KEY (planet_id) REFERENCES planets(id)" ");",
+  "CREATE TABLE IF NOT EXISTS planet_goods ("
+    "    planet_id      INTEGER NOT NULL,"
+    "    commodity      TEXT NOT NULL CHECK(commodity IN ('ore', 'organics', 'equipment', 'food', 'fuel')),"
+    "    quantity       INTEGER NOT NULL DEFAULT 0,"
+    "    max_capacity   INTEGER NOT NULL,"
+    "    production_rate INTEGER NOT NULL,"
+    "    PRIMARY KEY (planet_id, commodity),"
+    "    FOREIGN KEY (planet_id) REFERENCES planets(id)" ");",
 
 
 
@@ -1241,8 +1175,7 @@ const char *create_table_sql[] = {
     "  END AS location_kind,\n"
     "  sh.ported AS is_ported,\n"
     "  sh.onplanet AS is_onplanet\n"
-    "FROM players p\n"
-    "LEFT JOIN ships sh ON sh.id = p.ship;",
+    "FROM players p\n" "LEFT JOIN ships sh ON sh.id = p.ship;",
 
 /* 15) Ships by sector */
   "CREATE VIEW IF NOT EXISTS ships_by_sector AS\n"
@@ -1254,43 +1187,43 @@ const char *create_table_sql[] = {
 /* ===================== OPS DASHBOARDS ===================== */
 
 /* 16) Sector ops (depends on sector_summary, sector_ports, sector_planets, ships_by_sector) */
-" CREATE VIEW IF NOT EXISTS sector_ops AS  "
-"  WITH weighted_assets AS (  "
-"     SELECT  "
-"         sector AS sector_id,  "
-"         COALESCE(SUM(  "
-"             quantity * CASE asset_type  "
-"                 WHEN 1 THEN 10  "
-"                 WHEN 2 THEN 5  "
-"                 WHEN 3 THEN 1  "
-"                 WHEN 4 THEN 10  "
-"                 ELSE 0  "
-"             END  "
-"         ), 0) AS asset_score  "
-"     FROM sector_assets  "
-"     GROUP BY sector  "
-"  )  "
-"  SELECT  "
-"     ss.sector_id,  "
-"     ss.outdeg,  "
-"     ss.indeg,  "
-"     sp.port_count,  "
-"     spp.planet_count,  "
-"     sbs.ship_count,  "
-"     (  "
-"         (COALESCE(spp.planet_count, 0) * 500)  "
-"       + (COALESCE(sp.port_count, 0) * 100)  "
-"       + (COALESCE(sbs.ship_count, 0) * 40)  "
-"       + (COALESCE(wa.asset_score, 0))  "
-"     ) AS total_density_score,  "
-"     wa.asset_score AS weighted_asset_score  "
-"  FROM sector_summary ss  "
-"  LEFT JOIN sector_ports    sp  ON sp.sector_id  = ss.sector_id  "
-"  LEFT JOIN sector_planets  spp ON spp.sector_id = ss.sector_id  "
-"  LEFT JOIN ships_by_sector sbs ON sbs.sector_id = ss.sector_id  "
-"  LEFT JOIN weighted_assets wa ON wa.sector_id = ss.sector_id;  ",
+  " CREATE VIEW IF NOT EXISTS sector_ops AS  "
+    "  WITH weighted_assets AS (  "
+    "     SELECT  "
+    "         sector AS sector_id,  "
+    "         COALESCE(SUM(  "
+    "             quantity * CASE asset_type  "
+    "                 WHEN 1 THEN 10  "
+    "                 WHEN 2 THEN 5  "
+    "                 WHEN 3 THEN 1  "
+    "                 WHEN 4 THEN 10  "
+    "                 ELSE 0  "
+    "             END  "
+    "         ), 0) AS asset_score  "
+    "     FROM sector_assets  "
+    "     GROUP BY sector  "
+    "  )  "
+    "  SELECT  "
+    "     ss.sector_id,  "
+    "     ss.outdeg,  "
+    "     ss.indeg,  "
+    "     sp.port_count,  "
+    "     spp.planet_count,  "
+    "     sbs.ship_count,  "
+    "     (  "
+    "         (COALESCE(spp.planet_count, 0) * 500)  "
+    "       + (COALESCE(sp.port_count, 0) * 100)  "
+    "       + (COALESCE(sbs.ship_count, 0) * 40)  "
+    "       + (COALESCE(wa.asset_score, 0))  "
+    "     ) AS total_density_score,  "
+    "     wa.asset_score AS weighted_asset_score  "
+    "  FROM sector_summary ss  "
+    "  LEFT JOIN sector_ports    sp  ON sp.sector_id  = ss.sector_id  "
+    "  LEFT JOIN sector_planets  spp ON spp.sector_id = ss.sector_id  "
+    "  LEFT JOIN ships_by_sector sbs ON sbs.sector_id = ss.sector_id  "
+    "  LEFT JOIN weighted_assets wa ON wa.sector_id = ss.sector_id;  ",
 
-  
+
 /* 17) World summary (one row) */
   "CREATE VIEW IF NOT EXISTS world_summary AS\n"
     "WITH a AS (SELECT COUNT(*) AS sectors FROM sectors),\n"
@@ -1315,69 +1248,64 @@ const char *create_table_sql[] = {
   /* --- player_info_v1 view and indexes --- */
 
   " CREATE VIEW IF NOT EXISTS player_info_v1  AS   "
-  " SELECT   "
-  "   p.id         AS player_id,   "
-  "   p.name       AS player_name,   "
-  "   p.number     AS player_number,   "
-  "   sh.sector    AS sector_id,    "
-  "   sctr.name    AS sector_name,   "
-  "   p.credits    AS petty_cash,   "
-  "   p.alignment  AS alignment,   "
-  "   p.experience AS experience,   "
-  "   p.ship       AS ship_number,   "
-  "   sh.id        AS ship_id,   "
-  "   sh.name      AS ship_name,   "
-  "   sh.type_id   AS ship_type_id,   "
-  "   st.name      AS ship_type_name,   "
-  "   st.maxholds  AS ship_holds_capacity,    "
-  "   sh.holds     AS ship_holds_current,    "
-  "   sh.fighters  AS ship_fighters,   "
-  "   sh.mines     AS ship_mines,            "
-  "   sh.limpets   AS ship_limpets,          "
-  "   sh.genesis   AS ship_genesis,          "
-  "   sh.photons   AS ship_photons,          "
-  "   sh.beacons   AS ship_beacons,          "
-  "   sh.colonists AS ship_colonists,        "
-  "   sh.equipment AS ship_equipment,        "
-  "   sh.organics  AS ship_organics,         "
-  "   sh.ore       AS ship_ore,              "
-  "   sh.ported    AS ship_ported,           "
-  "   sh.onplanet  AS ship_onplanet,         "
-  "   (COALESCE(p.credits,0) + COALESCE(sh.fighters,0)*2) AS approx_worth   "
-  " FROM players p   "
-  " LEFT JOIN ships      sh   ON sh.id = p.ship   "
-  " LEFT JOIN shiptypes  st   ON st.id = sh.type_id   "
-  " LEFT JOIN sectors    sctr ON sctr.id = sh.sector; ",
+    " SELECT   "
+    "   p.id         AS player_id,   "
+    "   p.name       AS player_name,   "
+    "   p.number     AS player_number,   "
+    "   sh.sector    AS sector_id,    "
+    "   sctr.name    AS sector_name,   "
+    "   p.credits    AS petty_cash,   "
+    "   p.alignment  AS alignment,   "
+    "   p.experience AS experience,   "
+    "   p.ship       AS ship_number,   "
+    "   sh.id        AS ship_id,   "
+    "   sh.name      AS ship_name,   "
+    "   sh.type_id   AS ship_type_id,   "
+    "   st.name      AS ship_type_name,   "
+    "   st.maxholds  AS ship_holds_capacity,    "
+    "   sh.holds     AS ship_holds_current,    "
+    "   sh.fighters  AS ship_fighters,   "
+    "   sh.mines     AS ship_mines,            "
+    "   sh.limpets   AS ship_limpets,          "
+    "   sh.genesis   AS ship_genesis,          "
+    "   sh.photons   AS ship_photons,          "
+    "   sh.beacons   AS ship_beacons,          "
+    "   sh.colonists AS ship_colonists,        "
+    "   sh.equipment AS ship_equipment,        "
+    "   sh.organics  AS ship_organics,         "
+    "   sh.ore       AS ship_ore,              "
+    "   sh.ported    AS ship_ported,           "
+    "   sh.onplanet  AS ship_onplanet,         "
+    "   (COALESCE(p.credits,0) + COALESCE(sh.fighters,0)*2) AS approx_worth   "
+    " FROM players p   "
+    " LEFT JOIN ships      sh   ON sh.id = p.ship   "
+    " LEFT JOIN shiptypes  st   ON st.id = sh.type_id   "
+    " LEFT JOIN sectors    sctr ON sctr.id = sh.sector; ",
 
 
   " CREATE VIEW IF NOT EXISTS sector_search_index  AS  "
-  " SELECT   "
-  "     'sector' AS kind,  "
-  "     s.id AS id,  "
-  "     s.name AS name,  "
-  "     s.id AS sector_id,  "
-  "     s.name AS sector_name,  "
-  "     s.name AS search_term_1  "
-  " FROM sectors s  "
-  " UNION ALL  "
-  " SELECT   "
-  "     'port' AS kind,  "
-  "     p.id AS id,  "
-  "     p.name AS name,  "
-  "     p.sector AS sector_id,  "
-  "     s.name AS sector_name,  "
-  "     p.name AS search_term_1  "
-  " FROM ports p  "
-  " JOIN sectors s ON s.id = p.sector;  "
-  
-  
+    " SELECT   "
+    "     'sector' AS kind,  "
+    "     s.id AS id,  "
+    "     s.name AS name,  "
+    "     s.id AS sector_id,  "
+    "     s.name AS sector_name,  "
+    "     s.name AS search_term_1  "
+    " FROM sectors s  "
+    " UNION ALL  "
+    " SELECT   "
+    "     'port' AS kind,  "
+    "     p.id AS id,  "
+    "     p.name AS name,  "
+    "     p.sector AS sector_id,  "
+    "     s.name AS sector_name,  "
+    "     p.name AS search_term_1  "
+    " FROM ports p  " " JOIN sectors s ON s.id = p.sector;  "
 //////////////////////////////////////////////////////////////////////
 /// CREATE INDEX
 //////////////////////////////////////////////////////////////////////
 /* ===================== INDEXES ===================== */
-
-
-  "CREATE INDEX IF NOT EXISTS idx_player_block_blocked "
+    "CREATE INDEX IF NOT EXISTS idx_player_block_blocked "
     "ON player_block (blocked_id);",
 
   "CREATE INDEX IF NOT EXISTS idx_notice_seen_player "
@@ -1548,7 +1476,7 @@ const char *insert_default_sql[] = {
   " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Ferrengi Warship', 150000, NULL, NULL, NULL, 5000, 20, 100, 15000, 5, 20, 0, 5, 0, 0, 0, 10, 5000, 15, 15, 50, 1, 1, 1, 0, 0, 1); ",
   " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Imperial Starship (NPC)', 329000, NULL, NULL, NULL, 10000, 40, 150, 50000, 4, 125, 0, 10, 0, 0, 1, 15, 2000, 15, 15, 150, 1, 1, 1, 0, 0, 1); ",
 /* Orion Syndicate Ship Types (Second Block) */
-    " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Orion Heavy Fighter Patrol', 150000, NULL, NULL, NULL, 5000, 20, 50, 20000, 5, 10, 0, 5, 0, 0, 0, 10, 5000, 20, 10, 25, 1, 1, 1, 0, 0, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Orion Heavy Fighter Patrol', 150000, NULL, NULL, NULL, 5000, 20, 50, 20000, 5, 10, 0, 5, 0, 0, 0, 10, 5000, 20, 10, 25, 1, 1, 1, 0, 0, 1); ",
   " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Orion Scout/Looter', 80000, NULL, NULL, NULL, 4000, 10, 150, 5000, 5, 10, 0, 5, 0, 0, 0, 10, 3000, 8, 8, 25, 1, 1, 1, 0, 0, 1); ",
   " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Orion Contraband Runner', 120000, NULL, NULL, NULL, 3000, 10, 200, 3000, 5, 10, 0, 5, 0, 0, 0, 10, 4000, 10, 5, 25, 1, 1, 1, 0, 0, 1); ",
   " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Orion Smuggler''s Kiss', 130000, NULL, NULL, NULL, 5000, 15, 100, 10000, 5, 10, 0, 5, 0, 0, 0, 10, 5000, 15, 15, 25, 1, 1, 1, 0, 0, 1); ",
@@ -1701,7 +1629,7 @@ const char *insert_default_sql[] = {
   " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
     " ((SELECT id FROM planets WHERE name='Earth'), 'organics', 10000000, 10000000, 0); ",
   " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
-  " ((SELECT id FROM planets WHERE name='Earth'), 'equipment', 10000000, 10000000, 0); ",
+    " ((SELECT id FROM planets WHERE name='Earth'), 'equipment', 10000000, 10000000, 0); ",
 
   /* Ferringhi planet in sector 0 (change in bigbang) */
   " INSERT OR IGNORE INTO planets (num, sector, name, owner_id, owner_type, population, type, creator, colonist, fighters) "
@@ -1725,7 +1653,7 @@ const char *insert_default_sql[] = {
     " ((SELECT id FROM planets WHERE name='Orion Hideout'), 'ore', 50000000, 50000000, 10); ",
   " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES " " ((SELECT id FROM planets WHERE name='Orion Hideout'), 'organics', 100, 100, 0); ",	/* Near Zero Capacity for Organics */
   " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
-  " ((SELECT id FROM planets WHERE name='Orion Hideout'), 'equipment', 30000000, 30000000, 10); ",
+    " ((SELECT id FROM planets WHERE name='Orion Hideout'), 'equipment', 30000000, 30000000, 10); ",
 
 
   /* Fedspace sectors 1–10 */
@@ -1740,9 +1668,8 @@ const char *insert_default_sql[] = {
   "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (9, 'Fedspace 9', 'The Federation -- Do Not Dump!', 'The Federation');",
   "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (10, 'Fedspace 10','The Federation -- Do Not Dump!', 'The Federation');",
 
-            " INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, ore_on_hand, organics_on_hand, equipment_on_hand, petty_cash, type) "
-
-            " VALUES (1, 1, 'Earth Port', 1, 10, 10, 10000, 10000, 10000, 0, 1); ",
+  " INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, ore_on_hand, organics_on_hand, equipment_on_hand, petty_cash, type) "
+    " VALUES (1, 1, 'Earth Port', 1, 10, 10, 10000, 10000, 10000, 0, 1); ",
 
   /* Fedspace warps (hard-coded) */
   "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (1,2);",
@@ -1843,8 +1770,7 @@ const char *insert_default_sql[] = {
     "(46, 'The Old Dog'),\n"
     "(47, 'The Wayfinder'),\n"
     "(48, 'The Horizon Breaker'),\n"
-    "(49, 'Stormchaser'),\n"
-    "(50, 'Beyond the Veil');\n",
+    "(49, 'Stormchaser'),\n" "(50, 'Beyond the Veil');\n",
 
   "INSERT OR IGNORE INTO tavern_names (name, enabled, weight) VALUES ('The Rusty Flange', 1, 10);",
   "INSERT OR IGNORE INTO tavern_names (name, enabled, weight) VALUES ('The Starfall Inn', 1, 10);",
@@ -1882,7 +1808,7 @@ const char *insert_default_sql[] = {
   /* ----------------------------- */
 
   "INSERT INTO ship_ownership (player_id, ship_id, is_primary, role_id) VALUES (1,1,1,0);",
-    "INSERT INTO player_types (description) VALUES ('NPC');"
+  "INSERT INTO player_types (description) VALUES ('NPC');"
     "INSERT INTO player_types (description) VALUES ('Human Player');"
     /* ------------------------------------------------------------------------------------- */
     /* ------------------------------------------------------------------------------------- */
@@ -1954,7 +1880,7 @@ const char *insert_default_sql[] = {
 
   /* -- Equipment (High Capacity) */
   " INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
-  " (2, 'equipment', 10000000, 10000000, 0);",
+    " (2, 'equipment', 10000000, 10000000, 0);",
 
   "INSERT INTO turns (player, turns_remaining, last_update)"
     "SELECT "
@@ -1962,777 +1888,703 @@ const char *insert_default_sql[] = {
     "    100, "
     "    strftime('%s', 'now') "
     "FROM " "    players " "WHERE " "    type = 2; "
-  ///////////////////////
+    ///////////////////////
+    " CREATE TABLE IF NOT EXISTS currencies (  "
+    "   code TEXT PRIMARY KEY,  "
+    "   name TEXT NOT NULL,  "
+    "   minor_unit INTEGER NOT NULL DEFAULT 1 CHECK (minor_unit > 0),  "
+    "   is_default INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0,1))  "
+    " );  "
+    " INSERT OR IGNORE INTO currencies(code, name, minor_unit, is_default)  "
+    " VALUES ('CRD','Galactic Credits',1,1);  "
+    " CREATE TABLE IF NOT EXISTS commodities (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   code TEXT UNIQUE NOT NULL,  "
+    "   name TEXT NOT NULL,  "
+    "   illegal INTEGER NOT NULL DEFAULT 0,  "
+    "   base_price INTEGER NOT NULL DEFAULT 0 CHECK (base_price >= 0),  "
+    "   volatility INTEGER NOT NULL DEFAULT 0 CHECK (volatility >= 0)  "
+    " );  "
+    " INSERT OR IGNORE INTO commodities (code, name, base_price, volatility)  "
+    " VALUES  "
+    "   ('ORE', 'Ore', 100, 20),  "
+    "   ('ORG', 'Organics', 150, 30),  "
+    "   ('EQU', 'Equipment', 200, 25);  "
+    " INSERT OR IGNORE INTO commodities (code, name, base_price, volatility, illegal)  "
+    " VALUES  "
+    "   ('SLV', 'Slaves', 1000, 50, 1),  "
+    "   ('WPN', 'Weapons', 750, 40, 1),  "
+    "   ('DRG', 'Drugs', 500, 60, 1);  "
+    " CREATE TABLE IF NOT EXISTS commodity_orders (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   actor_type TEXT NOT NULL CHECK (actor_type IN ('player','corp','npc_planet','port')),  "
+    "   actor_id INTEGER NOT NULL,  "
+    "   location_type TEXT NOT NULL CHECK (location_type IN ('planet','port')),  "
+    "   location_id INTEGER NOT NULL,  "
+    "   commodity_id INTEGER NOT NULL REFERENCES commodities(id) ON DELETE CASCADE,  "
+    "   side TEXT NOT NULL CHECK (side IN ('buy','sell')),  "
+    "   quantity INTEGER NOT NULL CHECK (quantity > 0),  "
+    "   price INTEGER NOT NULL CHECK (price >= 0),  "
+    "   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','filled','cancelled','expired')),  "
+    "   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))  "
+    " );  "
+    " CREATE INDEX IF NOT EXISTS idx_commodity_orders_comm ON commodity_orders(commodity_id, status);  "
+    " CREATE TABLE IF NOT EXISTS commodity_trades (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   commodity_id INTEGER NOT NULL REFERENCES commodities(id) ON DELETE CASCADE,  "
+    "   buyer_actor_type TEXT NOT NULL CHECK (buyer_actor_type IN ('player','corp','npc_planet','port')),  "
+    "   buyer_actor_id INTEGER NOT NULL,  "
+    "   buyer_location_type TEXT NOT NULL CHECK (buyer_location_type IN ('planet','port')),  "
+    "   buyer_location_id INTEGER NOT NULL,  "
+    "   seller_actor_type TEXT NOT NULL CHECK (seller_actor_type IN ('player','corp','npc_planet','port')),  "
+    "   seller_actor_id INTEGER NOT NULL,  "
+    "   seller_location_type TEXT NOT NULL CHECK (seller_location_type IN ('planet','port')),  "
+    "   seller_location_id INTEGER NOT NULL,  "
+    "   quantity INTEGER NOT NULL CHECK (quantity > 0),  "
+    "   price INTEGER NOT NULL CHECK (price >= 0),  "
+    "   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
+    "   settlement_tx_buy INTEGER,  "
+    "   settlement_tx_sell INTEGER  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS bank_accounts (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   owner_type TEXT NOT NULL,  "
+    "   owner_id INTEGER NOT NULL,  "
+    "   currency TEXT NOT NULL DEFAULT 'CRD' REFERENCES currencies(code),  "
+    "   balance INTEGER NOT NULL DEFAULT 0 CHECK (balance >= 0),  "
+    "   interest_rate_bp INTEGER NOT NULL DEFAULT 0,  "
+    "   last_interest_tick INTEGER,  "
+    "   tx_alert_threshold INTEGER DEFAULT 0,  "
+    "   is_active INTEGER NOT NULL DEFAULT 1  "
+    " );  "
+    " CREATE UNIQUE INDEX idx_bank_accounts_owner ON bank_accounts(owner_type, owner_id, currency);  "
+    " CREATE TABLE IF NOT EXISTS bank_transactions (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   account_id INTEGER NOT NULL REFERENCES bank_accounts(id),  "
+    "   tx_type TEXT NOT NULL CHECK (tx_type IN (  "
+    "     'DEPOSIT',  "
+    "     'WITHDRAWAL',  "
+    "     'TRANSFER',  "
+    "     'INTEREST',  "
+    "     'FEE',  "
+    "     'WIRE',  "
+    "     'TAX',  "
+    "     'TRADE_BUY_FEE',  "
+    "     'TRADE_SELL_FEE',  "
+    "     'WITHDRAWAL_FEE',  "
+    "     'ADJUSTMENT'  "
+    "   )),  "
+    "   direction TEXT NOT NULL CHECK(direction IN ('CREDIT','DEBIT')),  "
+    "   amount INTEGER NOT NULL CHECK (amount > 0),  "
+    "   currency TEXT NOT NULL,  "
+    "   tx_group_id TEXT,  "
+    "   related_account_id INTEGER,  "
+    "   description TEXT,  "
+    "   ts INTEGER NOT NULL,  "
+    "   balance_after INTEGER DEFAULT 0,  "
+    "   idempotency_key TEXT,  "
+    "   engine_event_id INTEGER  "
+    " );  "
+    " CREATE INDEX IF NOT EXISTS idx_bank_transactions_account_ts ON bank_transactions(account_id, ts DESC);  "
+    " CREATE INDEX IF NOT EXISTS idx_bank_transactions_tx_group ON bank_transactions(tx_group_id);  "
+    " CREATE UNIQUE INDEX IF NOT EXISTS idx_bank_transactions_idem ON bank_transactions(account_id, idempotency_key) WHERE idempotency_key IS NOT NULL;  "
+    " CREATE TRIGGER IF NOT EXISTS trg_bank_transactions_balance_after  "
+    " AFTER INSERT ON bank_transactions  "
+    " FOR EACH ROW  "
+    " BEGIN  "
+    "   UPDATE bank_transactions  "
+    "   SET balance_after = (SELECT balance FROM bank_accounts WHERE id = NEW.account_id)  "
+    "   WHERE id = NEW.id;  " " END; ",
 
-" CREATE TABLE IF NOT EXISTS currencies (  "
-"   code TEXT PRIMARY KEY,  "
-"   name TEXT NOT NULL,  "
-"   minor_unit INTEGER NOT NULL DEFAULT 1 CHECK (minor_unit > 0),  "
-"   is_default INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0,1))  "
-" );  "
-
-" INSERT OR IGNORE INTO currencies(code, name, minor_unit, is_default)  "
-" VALUES ('CRD','Galactic Credits',1,1);  "
-
-" CREATE TABLE IF NOT EXISTS commodities (  "
-"   id INTEGER PRIMARY KEY,  "
-"   code TEXT UNIQUE NOT NULL,  "
-"   name TEXT NOT NULL,  "
-"   illegal INTEGER NOT NULL DEFAULT 0,  "  
-"   base_price INTEGER NOT NULL DEFAULT 0 CHECK (base_price >= 0),  "
-"   volatility INTEGER NOT NULL DEFAULT 0 CHECK (volatility >= 0)  "
-" );  "
-
-
-" INSERT OR IGNORE INTO commodities (code, name, base_price, volatility)  "
-" VALUES  "
-"   ('ORE', 'Ore', 100, 20),  "
-"   ('ORG', 'Organics', 150, 30),  "
-"   ('EQU', 'Equipment', 200, 25);  "
-
-
-" INSERT OR IGNORE INTO commodities (code, name, base_price, volatility, illegal)  "
-" VALUES  "
-"   ('SLV', 'Slaves', 1000, 50, 1),  "
-"   ('WPN', 'Weapons', 750, 40, 1),  "
-"   ('DRG', 'Drugs', 500, 60, 1);  "
-  
-
-" CREATE TABLE IF NOT EXISTS commodity_orders (  "
-"   id INTEGER PRIMARY KEY,  "
-"   actor_type TEXT NOT NULL CHECK (actor_type IN ('player','corp','npc_planet','port')),  "
-"   actor_id INTEGER NOT NULL,  "
-"   location_type TEXT NOT NULL CHECK (location_type IN ('planet','port')),  "
-"   location_id INTEGER NOT NULL,  "
-"   commodity_id INTEGER NOT NULL REFERENCES commodities(id) ON DELETE CASCADE,  "
-"   side TEXT NOT NULL CHECK (side IN ('buy','sell')),  "
-"   quantity INTEGER NOT NULL CHECK (quantity > 0),  "
-"   price INTEGER NOT NULL CHECK (price >= 0),  "
-"   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','filled','cancelled','expired')),  "
-"   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))  "
-" );  "
-" CREATE INDEX IF NOT EXISTS idx_commodity_orders_comm ON commodity_orders(commodity_id, status);  "
-
-" CREATE TABLE IF NOT EXISTS commodity_trades (  "
-"   id INTEGER PRIMARY KEY,  "
-"   commodity_id INTEGER NOT NULL REFERENCES commodities(id) ON DELETE CASCADE,  "
-"   buyer_actor_type TEXT NOT NULL CHECK (buyer_actor_type IN ('player','corp','npc_planet','port')),  "
-"   buyer_actor_id INTEGER NOT NULL,  "
-"   buyer_location_type TEXT NOT NULL CHECK (buyer_location_type IN ('planet','port')),  "
-"   buyer_location_id INTEGER NOT NULL,  "
-"   seller_actor_type TEXT NOT NULL CHECK (seller_actor_type IN ('player','corp','npc_planet','port')),  "
-"   seller_actor_id INTEGER NOT NULL,  "
-"   seller_location_type TEXT NOT NULL CHECK (seller_location_type IN ('planet','port')),  "
-"   seller_location_id INTEGER NOT NULL,  "
-"   quantity INTEGER NOT NULL CHECK (quantity > 0),  "
-"   price INTEGER NOT NULL CHECK (price >= 0),  "
-"   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
-"   settlement_tx_buy INTEGER,  "
-"   settlement_tx_sell INTEGER  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS bank_accounts (  "
-"   id INTEGER PRIMARY KEY,  "
-"   owner_type TEXT NOT NULL,  "
-"   owner_id INTEGER NOT NULL,  "
-"   currency TEXT NOT NULL DEFAULT 'CRD' REFERENCES currencies(code),  "
-"   balance INTEGER NOT NULL DEFAULT 0 CHECK (balance >= 0),  "
-"   interest_rate_bp INTEGER NOT NULL DEFAULT 0,  "
-"   last_interest_tick INTEGER,  "
-"   tx_alert_threshold INTEGER DEFAULT 0,  "
-"   is_active INTEGER NOT NULL DEFAULT 1  "
-" );  "
-" CREATE UNIQUE INDEX idx_bank_accounts_owner ON bank_accounts(owner_type, owner_id, currency);  "
-
-" CREATE TABLE IF NOT EXISTS bank_transactions (  "
-"   id INTEGER PRIMARY KEY,  "
-"   account_id INTEGER NOT NULL REFERENCES bank_accounts(id),  "
-"   tx_type TEXT NOT NULL CHECK (tx_type IN (  "
-"     'DEPOSIT',  "
-"     'WITHDRAWAL',  "
-"     'TRANSFER',  "
-"     'INTEREST',  "
-"     'FEE',  "
-"     'WIRE',  "
-"     'TAX',  "
-"     'TRADE_BUY_FEE',  "
-"     'TRADE_SELL_FEE',  "
-"     'WITHDRAWAL_FEE',  "
-"     'ADJUSTMENT'  "
-"   )),  "
-"   direction TEXT NOT NULL CHECK(direction IN ('CREDIT','DEBIT')),  "
-"   amount INTEGER NOT NULL CHECK (amount > 0),  "
-"   currency TEXT NOT NULL,  "
-"   tx_group_id TEXT,  "
-"   related_account_id INTEGER,  "
-"   description TEXT,  "
-"   ts INTEGER NOT NULL,  "
-"   balance_after INTEGER DEFAULT 0,  "
-"   idempotency_key TEXT,  "
-"   engine_event_id INTEGER  "
-" );  "
-" CREATE INDEX IF NOT EXISTS idx_bank_transactions_account_ts ON bank_transactions(account_id, ts DESC);  "
-" CREATE INDEX IF NOT EXISTS idx_bank_transactions_tx_group ON bank_transactions(tx_group_id);  "
-" CREATE UNIQUE INDEX IF NOT EXISTS idx_bank_transactions_idem ON bank_transactions(account_id, idempotency_key) WHERE idempotency_key IS NOT NULL;  "
-
-  " CREATE TRIGGER IF NOT EXISTS trg_bank_transactions_balance_after  "
-  " AFTER INSERT ON bank_transactions  "
-  " FOR EACH ROW  "
-  " BEGIN  "
-  "   UPDATE bank_transactions  "
-  "   SET balance_after = (SELECT balance FROM bank_accounts WHERE id = NEW.account_id)  "
-  "   WHERE id = NEW.id;  "
-  " END; ",
-
-" CREATE TABLE IF NOT EXISTS bank_fee_schedules (  "
-"   id INTEGER PRIMARY KEY,  "
-"   tx_type TEXT NOT NULL,  "
-"   fee_code TEXT NOT NULL,  "
-"   owner_type TEXT,  "
-"   currency TEXT NOT NULL DEFAULT 'CRD',  "
-"   value INTEGER NOT NULL,  "
-"   is_percentage INTEGER NOT NULL DEFAULT 0 CHECK (is_percentage IN (0,1)),  "
-"   min_tx_amount INTEGER DEFAULT 0,  "
-"   max_tx_amount INTEGER,  "
-"   effective_from INTEGER NOT NULL,  "
-"   effective_to INTEGER  "
-" );  "
-" CREATE INDEX IF NOT EXISTS idx_bank_fee_active ON bank_fee_schedules(tx_type, owner_type, currency, effective_from, effective_to);  "
-" CREATE TABLE IF NOT EXISTS bank_interest_policy (  "
-"   id INTEGER PRIMARY KEY CHECK (id = 1),  "
-"   apr_bps INTEGER NOT NULL DEFAULT 0 CHECK (apr_bps >= 0),  "
-"   min_balance INTEGER NOT NULL DEFAULT 0 CHECK (min_balance >= 0),  "
-"   max_balance INTEGER NOT NULL DEFAULT 9223372036854775807,  "
-"   last_run_at TEXT,  "
-"   currency TEXT NOT NULL DEFAULT 'CRD' REFERENCES currencies(code)  "
-" );  "
-" INSERT OR IGNORE INTO bank_interest_policy (id, apr_bps, min_balance, max_balance, last_run_at, currency)  "
-" VALUES (1, 0, 0, 9223372036854775807, NULL, 'CRD');  "
-
-" CREATE TABLE IF NOT EXISTS bank_orders (  "
-"   id INTEGER PRIMARY KEY,  "
-"   player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,  "
-"   kind TEXT NOT NULL CHECK (kind IN ('recurring','once')),  "
-"   schedule TEXT NOT NULL,  "
-"   next_run_at TEXT,  "
-"   enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0,1)),  "
-"   amount INTEGER NOT NULL CHECK (amount > 0),  "
-"   currency TEXT NOT NULL DEFAULT 'CRD' REFERENCES currencies(code),  "
-"   to_entity TEXT NOT NULL CHECK (to_entity IN ('player','corp','gov','npc')),  "
-"   to_id INTEGER NOT NULL,  "
-"   memo TEXT  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS bank_flags (  "
-"   player_id INTEGER PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE,  "
-"   is_frozen INTEGER NOT NULL DEFAULT 0 CHECK (is_frozen IN (0,1)),  "
-"   risk_tier TEXT NOT NULL DEFAULT 'normal' CHECK (risk_tier IN ('normal','elevated','high','blocked'))  "
-" );  "
-
-" CREATE TRIGGER IF NOT EXISTS trg_bank_transactions_before_insert  "
-" BEFORE INSERT ON bank_transactions  "
-" FOR EACH ROW  "
-" BEGIN  "
-"   SELECT CASE  "
-"     WHEN NEW.direction = 'DEBIT'  "
-"       AND (SELECT balance FROM bank_accounts WHERE id = NEW.account_id) - NEW.amount < 0  "
-"     THEN RAISE(ABORT, 'BANK_INSUFFICIENT_FUNDS')  "
-"     ELSE 1  "
-"   END;  "
-" END;  "
-
-" CREATE TRIGGER IF NOT EXISTS trg_bank_transactions_after_insert  "
-" AFTER INSERT ON bank_transactions  "
-" FOR EACH ROW  "
-" BEGIN  "
-"   UPDATE bank_accounts  "
-"   SET balance = CASE NEW.direction  "
-"                   WHEN 'DEBIT'  THEN balance - NEW.amount  "
-"                   WHEN 'CREDIT' THEN balance + NEW.amount  "
-"                   ELSE balance  "
-"                 END  "
-"   WHERE id = NEW.account_id;  "
-
-"   UPDATE bank_transactions  "
-"   SET balance_after = (SELECT balance FROM bank_accounts WHERE id = NEW.account_id)  "
-"   WHERE id = NEW.id;  "
-" END;  "
-
-" CREATE TRIGGER IF NOT EXISTS trg_bank_transactions_before_delete  "
-" BEFORE DELETE ON bank_transactions  "
-" FOR EACH ROW  "
-" BEGIN  "
-"   SELECT RAISE(ABORT, 'BANK_LEDGER_APPEND_ONLY');  "
-" END;  "
-
-
-" CREATE TABLE IF NOT EXISTS corp_accounts (  "
-"   corp_id INTEGER PRIMARY KEY REFERENCES corps(id) ON DELETE CASCADE,  "
-"   currency TEXT NOT NULL DEFAULT 'CRD' REFERENCES currencies(code),  "
-"   balance INTEGER NOT NULL DEFAULT 0 CHECK (balance >= 0),  "
-"   last_interest_at TEXT  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS corp_tx (  "
-"   id INTEGER PRIMARY KEY,  "
-"   corp_id INTEGER NOT NULL REFERENCES corps(id) ON DELETE CASCADE,  "
-"   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
-"   kind TEXT NOT NULL CHECK (kind IN (  "
-"     'deposit',  "
-"     'withdraw',  "
-"     'transfer_in',  "
-"     'transfer_out',  "
-"     'interest',  "
-"     'dividend',  "
-"     'salary',  "
-"     'adjustment'  "
-"   )),  "
-"   amount INTEGER NOT NULL CHECK (amount > 0),  "
-"   balance_after INTEGER,  "
-"   currency TEXT NOT NULL DEFAULT 'CRD' REFERENCES currencies(code),  "
-"   memo TEXT,  "
-"   idempotency_key TEXT UNIQUE  "
-" );  "
-" CREATE INDEX IF NOT EXISTS idx_corp_tx_corp_ts ON corp_tx(corp_id, ts);  "
-
-" CREATE TABLE IF NOT EXISTS corp_interest_policy (  "
-"   id INTEGER PRIMARY KEY CHECK (id = 1),  "
-"   apr_bps INTEGER NOT NULL DEFAULT 0 CHECK (apr_bps >= 0),  "
-"   compounding TEXT NOT NULL DEFAULT 'none' CHECK (compounding IN ('none','daily','weekly','monthly')),  "
-"   last_run_at TEXT,  "
-"   currency TEXT NOT NULL DEFAULT 'CRD' REFERENCES currencies(code)  "
-" );  "
-" INSERT OR IGNORE INTO corp_interest_policy (id, apr_bps, compounding, last_run_at, currency)  "
-" VALUES (1, 0, 'none', NULL, 'CRD');  "
-
-" CREATE TRIGGER IF NOT EXISTS trg_corp_tx_before_insert  "
-" BEFORE INSERT ON corp_tx  "
-" FOR EACH ROW  "
-" BEGIN  "
-"   INSERT OR IGNORE INTO corp_accounts(corp_id, currency, balance, last_interest_at)  "
-"   VALUES (NEW.corp_id, COALESCE(NEW.currency,'CRD'), 0, NULL);  "
-
-"   SELECT CASE  "
-"     WHEN NEW.kind IN ('withdraw','transfer_out','dividend','salary')  "
-"       AND (SELECT balance FROM corp_accounts WHERE corp_id = NEW.corp_id) - NEW.amount < 0  "
-"     THEN RAISE(ABORT, 'CORP_INSUFFICIENT_FUNDS')  "
-"     ELSE 1  "
-"   END;  "
-" END;  "
-
-" CREATE TRIGGER IF NOT EXISTS trg_corp_tx_after_insert  "
-" AFTER INSERT ON corp_tx  "
-" FOR EACH ROW  "
-" BEGIN  "
-"   UPDATE corp_accounts  "
-"   SET balance = CASE NEW.kind  "
-"                   WHEN 'withdraw'     THEN balance - NEW.amount  "
-"                   WHEN 'transfer_out' THEN balance - NEW.amount  "
-"                   WHEN 'dividend'     THEN balance - NEW.amount  "
-"                   WHEN 'salary'       THEN balance - NEW.amount  "
-"                   ELSE balance + NEW.amount  "
-"                 END  "
-"   WHERE corp_id = NEW.corp_id;  "
-
-"   UPDATE corp_tx  "
-"   SET balance_after = (SELECT balance FROM corp_accounts WHERE corp_id = NEW.corp_id)  "
-"   WHERE id = NEW.id;  "
-" END;  "
-
-" CREATE TABLE IF NOT EXISTS stocks (  "
-"   id INTEGER PRIMARY KEY,  "
-"   corp_id INTEGER NOT NULL REFERENCES corps(id) ON DELETE CASCADE,  "
-"   ticker TEXT NOT NULL UNIQUE,  "
-"   total_shares INTEGER NOT NULL CHECK (total_shares > 0),  "
-"   par_value INTEGER NOT NULL DEFAULT 0 CHECK (par_value >= 0),  "
-"   current_price INTEGER NOT NULL DEFAULT 0 CHECK (current_price >= 0),  "
-"   last_dividend_ts TEXT  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS stock_orders (  "
-"   id INTEGER PRIMARY KEY,  "
-"   player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,  "
-"   stock_id INTEGER NOT NULL REFERENCES stocks(id) ON DELETE CASCADE,  "
-"   type TEXT NOT NULL CHECK (type IN ('buy','sell')),  "
-"   quantity INTEGER NOT NULL CHECK (quantity > 0),  "
-"   price INTEGER NOT NULL CHECK (price >= 0),  "
-"   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','filled','cancelled','expired')),  "
-"   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))  "
-" );  "
-" CREATE INDEX IF NOT EXISTS idx_stock_orders_stock ON stock_orders(stock_id, status);  "
-
-" CREATE TABLE IF NOT EXISTS stock_trades (  "
-"   id INTEGER PRIMARY KEY,  "
-"   stock_id INTEGER NOT NULL REFERENCES stocks(id) ON DELETE CASCADE,  "
-"   buyer_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,  "
-"   seller_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,  "
-"   quantity INTEGER NOT NULL CHECK (quantity > 0),  "
-"   price INTEGER NOT NULL CHECK (price >= 0),  "
-"   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
-"   settlement_tx_buy INTEGER,  "
-"   settlement_tx_sell INTEGER  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS stock_dividends (  "
-"   id INTEGER PRIMARY KEY,  "
-"   stock_id INTEGER NOT NULL REFERENCES stocks(id) ON DELETE CASCADE,  "
-"   amount_per_share INTEGER NOT NULL CHECK (amount_per_share >= 0),  "
-"   declared_ts TEXT NOT NULL,  "
-"   paid_ts TEXT  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS stock_indices (  "
-"   id INTEGER PRIMARY KEY,  "
-"   name TEXT UNIQUE NOT NULL  "
-" );  "
-" CREATE TABLE IF NOT EXISTS stock_index_members (  "
-"   index_id INTEGER NOT NULL REFERENCES stock_indices(id) ON DELETE CASCADE,  "
-"   stock_id INTEGER NOT NULL REFERENCES stocks(id) ON DELETE CASCADE,  "
-"   weight REAL NOT NULL DEFAULT 1.0,  "
-"   PRIMARY KEY (index_id, stock_id)  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS insurance_funds (  "
-"   id INTEGER PRIMARY KEY,  "
-"   owner_type TEXT NOT NULL CHECK (owner_type IN ('system','corp','player')),  "
-"   owner_id INTEGER,  "
-"   balance INTEGER NOT NULL DEFAULT 0 CHECK (balance >= 0)  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS insurance_policies (  "
-"   id INTEGER PRIMARY KEY,  "
-"   holder_type TEXT NOT NULL CHECK (holder_type IN ('player','corp')),  "
-"   holder_id INTEGER NOT NULL,  "
-"   subject_type TEXT NOT NULL CHECK (subject_type IN ('ship','cargo','planet')),  "
-"   subject_id INTEGER NOT NULL,  "
-"   premium INTEGER NOT NULL CHECK (premium >= 0),  "
-"   payout INTEGER NOT NULL CHECK (payout >= 0),  "
-"   fund_id INTEGER REFERENCES insurance_funds(id) ON DELETE SET NULL,  "
-"   start_ts TEXT NOT NULL,  "
-"   expiry_ts TEXT,  "
-"   active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1))  "
-" );  "
-" CREATE INDEX IF NOT EXISTS idx_policies_holder ON insurance_policies(holder_type, holder_id);  "
-
-" CREATE TABLE IF NOT EXISTS insurance_claims (  "
-"   id INTEGER PRIMARY KEY,  "
-"   policy_id INTEGER NOT NULL REFERENCES insurance_policies(id) ON DELETE CASCADE,  "
-"   event_id TEXT,  "
-"   amount INTEGER NOT NULL CHECK (amount >= 0),  "
-"   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','paid','denied')),  "
-"   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
-"   paid_bank_tx INTEGER  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS risk_profiles (  "
-"   id INTEGER PRIMARY KEY,  "
-"   entity_type TEXT NOT NULL CHECK (entity_type IN ('player','corp')),  "
-"   entity_id INTEGER NOT NULL,  "
-"   risk_score INTEGER NOT NULL DEFAULT 0  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS loans (  "
-"   id INTEGER PRIMARY KEY,  "
-"   lender_type TEXT NOT NULL CHECK (lender_type IN ('player','corp','bank')),  "
-"   lender_id INTEGER,  "
-"   borrower_type TEXT NOT NULL CHECK (borrower_type IN ('player','corp')),  "
-"   borrower_id INTEGER NOT NULL,  "
-"   principal INTEGER NOT NULL CHECK (principal > 0),  "
-"   rate_bps INTEGER NOT NULL DEFAULT 0 CHECK (rate_bps >= 0),  "
-"   term_days INTEGER NOT NULL CHECK (term_days > 0),  "
-"   next_due TEXT,  "
-"   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','paid','defaulted','written_off')),  "
-"   created_ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS loan_payments (  "
-"   id INTEGER PRIMARY KEY,  "
-"   loan_id INTEGER NOT NULL REFERENCES loans(id) ON DELETE CASCADE,  "
-"   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
-"   amount INTEGER NOT NULL CHECK (amount > 0),  "
-"   status TEXT NOT NULL DEFAULT 'posted' CHECK (status IN ('posted','reversed')),  "
-"   bank_tx_id INTEGER  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS collateral (  "
-"   id INTEGER PRIMARY KEY,  "
-"   loan_id INTEGER NOT NULL REFERENCES loans(id) ON DELETE CASCADE,  "
-"   asset_type TEXT NOT NULL CHECK (asset_type IN ('ship','planet','cargo','stock','other')),  "
-"   asset_id INTEGER NOT NULL,  "
-"   appraised_value INTEGER NOT NULL DEFAULT 0 CHECK (appraised_value >= 0)  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS credit_ratings (  "
-"   entity_type TEXT NOT NULL CHECK (entity_type IN ('player','corp')),  "
-"   entity_id INTEGER NOT NULL,  "
-"   score INTEGER NOT NULL DEFAULT 600 CHECK (score BETWEEN 300 AND 900),  "
-"   last_update TEXT,  "
-"   PRIMARY KEY (entity_type, entity_id)  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS charters (  "
-"   id INTEGER PRIMARY KEY,  "
-"   name TEXT NOT NULL UNIQUE,  "
-"   granted_by TEXT NOT NULL DEFAULT 'federation',  "
-"   monopoly_scope TEXT,  "
-"   start_ts TEXT NOT NULL,  "
-"   expiry_ts TEXT  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS expeditions (  "
-"   id INTEGER PRIMARY KEY,  "
-"   leader_player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,  "
-"   charter_id INTEGER REFERENCES charters(id) ON DELETE SET NULL,  "
-"   goal TEXT NOT NULL,  "
-"   target_region TEXT,  "
-"   pledged_total INTEGER NOT NULL DEFAULT 0 CHECK (pledged_total >= 0),  "
-"   duration_days INTEGER NOT NULL DEFAULT 7 CHECK (duration_days > 0),  "
-"   status TEXT NOT NULL DEFAULT 'planning' CHECK (status IN ('planning','launched','complete','failed','aborted')),  "
-"   created_ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS expedition_backers (  "
-"   expedition_id INTEGER NOT NULL REFERENCES expeditions(id) ON DELETE CASCADE,  "
-"   backer_type TEXT NOT NULL CHECK (backer_type IN ('player','corp')),  "
-"   backer_id INTEGER NOT NULL,  "
-"   pledged_amount INTEGER NOT NULL CHECK (pledged_amount >= 0),  "
-"   share_pct REAL NOT NULL CHECK (share_pct >= 0),  "
-"   PRIMARY KEY (expedition_id, backer_type, backer_id)  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS expedition_returns (  "
-"   id INTEGER PRIMARY KEY,  "
-"   expedition_id INTEGER NOT NULL REFERENCES expeditions(id) ON DELETE CASCADE,  "
-"   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
-"   amount INTEGER NOT NULL CHECK (amount >= 0),  "
-"   bank_tx_id INTEGER  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS commodity_orders (  "
-"   id INTEGER PRIMARY KEY,  "
-"   actor_type TEXT NOT NULL CHECK (actor_type IN ('player','corp','npc','port')),  "
-"   actor_id INTEGER NOT NULL,  "
-"   commodity_id INTEGER NOT NULL REFERENCES commodities(id) ON DELETE CASCADE,  "
-"   side TEXT NOT NULL CHECK (side IN ('buy','sell')),  "
-"   quantity INTEGER NOT NULL CHECK (quantity > 0),  "
-"   price INTEGER NOT NULL CHECK (price >= 0),  "
-"   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','filled','cancelled','expired')),  "
-"   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))  "
-" );  "
-" CREATE INDEX IF NOT EXISTS idx_commodity_orders_comm ON commodity_orders(commodity_id, status);  "
-
-" CREATE TABLE IF NOT EXISTS commodity_trades (  "
-"   id INTEGER PRIMARY KEY,  "
-"   commodity_id INTEGER NOT NULL REFERENCES commodities(id) ON DELETE CASCADE,  "
-"   buyer_type TEXT NOT NULL CHECK (buyer_type IN ('player','corp','npc','port')),  "
-"   buyer_id INTEGER NOT NULL,  "
-"   seller_type TEXT NOT NULL CHECK (seller_type IN ('player','corp','npc','port')),  "
-"   seller_id INTEGER NOT NULL,  "
-"   quantity INTEGER NOT NULL CHECK (quantity > 0),  "
-"   price INTEGER NOT NULL CHECK (price >= 0),  "
-"   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
-"   settlement_tx_buy INTEGER,  "
-"   settlement_tx_sell INTEGER  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS futures_contracts (  "
-"   id INTEGER PRIMARY KEY,  "
-"   commodity_id INTEGER NOT NULL REFERENCES commodities(id) ON DELETE CASCADE,  "
-"   buyer_type TEXT NOT NULL CHECK (buyer_type IN ('player','corp')),  "
-"   buyer_id INTEGER NOT NULL,  "
-"   seller_type TEXT NOT NULL CHECK (seller_type IN ('player','corp')),  "
-"   seller_id INTEGER NOT NULL,  "
-"   strike_price INTEGER NOT NULL CHECK (strike_price >= 0),  "
-"   expiry_ts TEXT NOT NULL,  "
-"   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','settled','defaulted','cancelled'))  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS warehouses (  "
-"   id INTEGER PRIMARY KEY,  "
-"   location_type TEXT NOT NULL CHECK (location_type IN ('sector','planet','port')),  "
-"   location_id INTEGER NOT NULL,  "
-"   owner_type TEXT NOT NULL CHECK (owner_type IN ('player','corp')),  "
-"   owner_id INTEGER NOT NULL  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS gov_accounts (  "
-"   id INTEGER PRIMARY KEY,  "
-"   name TEXT NOT NULL UNIQUE,  "
-"   balance INTEGER NOT NULL DEFAULT 0 CHECK (balance >= 0)  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS tax_policies (  "
-"   id INTEGER PRIMARY KEY,  "
-"   name TEXT NOT NULL,  "
-"   tax_type TEXT NOT NULL CHECK (tax_type IN ('trade','income','corp','wealth','transfer')),  "
-"   rate_bps INTEGER NOT NULL DEFAULT 0 CHECK (rate_bps >= 0),  "
-"   active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1))  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS tax_ledgers (  "
-"   id INTEGER PRIMARY KEY,  "
-"   policy_id INTEGER NOT NULL REFERENCES tax_policies(id) ON DELETE CASCADE,  "
-"   payer_type TEXT NOT NULL CHECK (payer_type IN ('player','corp')),  "
-"   payer_id INTEGER NOT NULL,  "
-"   amount INTEGER NOT NULL CHECK (amount >= 0),  "
-"   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
-"   bank_tx_id INTEGER  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS fines (  "
-"   id INTEGER PRIMARY KEY,  "
-"   issued_by TEXT NOT NULL DEFAULT 'federation',  "
-"   recipient_type TEXT NOT NULL CHECK (recipient_type IN ('player','corp')),  "
-"   recipient_id INTEGER NOT NULL,  "
-"   reason TEXT,  "
-"   amount INTEGER NOT NULL CHECK (amount >= 0),  "
-"   status TEXT NOT NULL DEFAULT 'unpaid' CHECK (status IN ('unpaid','paid','void')),  "
-"   issued_ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
-"   paid_bank_tx INTEGER  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS bounties (  "
-"   id INTEGER PRIMARY KEY,  "
-"   posted_by_type TEXT NOT NULL CHECK (posted_by_type IN ('player','corp','gov','npc')),  "
-"   posted_by_id INTEGER,  "
-"   target_type TEXT NOT NULL CHECK (target_type IN ('player','corp','npc')),  "
-"   target_id INTEGER NOT NULL,  "
-"   reward INTEGER NOT NULL CHECK (reward >= 0),  "
-"   escrow_bank_tx INTEGER,  "
-"   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','claimed','cancelled','expired')),  "
-"   posted_ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
-"   claimed_by INTEGER,  "
-"   paid_bank_tx INTEGER  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS grants (  "
-"   id INTEGER PRIMARY KEY,  "
-"   name TEXT NOT NULL,  "
-"   recipient_type TEXT NOT NULL CHECK (recipient_type IN ('player','corp')),  "
-"   recipient_id INTEGER NOT NULL,  "
-"   amount INTEGER NOT NULL CHECK (amount >= 0),  "
-"   awarded_ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
-"   bank_tx_id INTEGER  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS research_projects (  "
-"   id INTEGER PRIMARY KEY,  "
-"   sponsor_type TEXT NOT NULL CHECK (sponsor_type IN ('player','corp','gov')),  "
-"   sponsor_id INTEGER,  "
-"   title TEXT NOT NULL,  "
-"   field TEXT NOT NULL,  "
-"   cost INTEGER NOT NULL CHECK (cost >= 0),  "
-"   progress INTEGER NOT NULL DEFAULT 0 CHECK (progress BETWEEN 0 AND 100),  "
-"   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','paused','complete','failed')),  "
-"   created_ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS research_contributors (  "
-"   project_id INTEGER NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,  "
-"   actor_type TEXT NOT NULL CHECK (actor_type IN ('player','corp')),  "
-"   actor_id INTEGER NOT NULL,  "
-"   amount INTEGER NOT NULL CHECK (amount >= 0),  "
-"   PRIMARY KEY (project_id, actor_type, actor_id)  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS research_results (  "
-"   id INTEGER PRIMARY KEY,  "
-"   project_id INTEGER NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,  "
-"   blueprint_code TEXT NOT NULL,  "
-"   unlocked_ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))  "
-" );  ",
+  " CREATE TABLE IF NOT EXISTS bank_fee_schedules (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   tx_type TEXT NOT NULL,  "
+    "   fee_code TEXT NOT NULL,  "
+    "   owner_type TEXT,  "
+    "   currency TEXT NOT NULL DEFAULT 'CRD',  "
+    "   value INTEGER NOT NULL,  "
+    "   is_percentage INTEGER NOT NULL DEFAULT 0 CHECK (is_percentage IN (0,1)),  "
+    "   min_tx_amount INTEGER DEFAULT 0,  "
+    "   max_tx_amount INTEGER,  "
+    "   effective_from INTEGER NOT NULL,  "
+    "   effective_to INTEGER  "
+    " );  "
+    " CREATE INDEX IF NOT EXISTS idx_bank_fee_active ON bank_fee_schedules(tx_type, owner_type, currency, effective_from, effective_to);  "
+    " CREATE TABLE IF NOT EXISTS bank_interest_policy (  "
+    "   id INTEGER PRIMARY KEY CHECK (id = 1),  "
+    "   apr_bps INTEGER NOT NULL DEFAULT 0 CHECK (apr_bps >= 0),  "
+    "   min_balance INTEGER NOT NULL DEFAULT 0 CHECK (min_balance >= 0),  "
+    "   max_balance INTEGER NOT NULL DEFAULT 9223372036854775807,  "
+    "   last_run_at TEXT,  "
+    "   currency TEXT NOT NULL DEFAULT 'CRD' REFERENCES currencies(code)  "
+    " );  "
+    " INSERT OR IGNORE INTO bank_interest_policy (id, apr_bps, min_balance, max_balance, last_run_at, currency)  "
+    " VALUES (1, 0, 0, 9223372036854775807, NULL, 'CRD');  "
+    " CREATE TABLE IF NOT EXISTS bank_orders (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,  "
+    "   kind TEXT NOT NULL CHECK (kind IN ('recurring','once')),  "
+    "   schedule TEXT NOT NULL,  "
+    "   next_run_at TEXT,  "
+    "   enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0,1)),  "
+    "   amount INTEGER NOT NULL CHECK (amount > 0),  "
+    "   currency TEXT NOT NULL DEFAULT 'CRD' REFERENCES currencies(code),  "
+    "   to_entity TEXT NOT NULL CHECK (to_entity IN ('player','corp','gov','npc')),  "
+    "   to_id INTEGER NOT NULL,  "
+    "   memo TEXT  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS bank_flags (  "
+    "   player_id INTEGER PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE,  "
+    "   is_frozen INTEGER NOT NULL DEFAULT 0 CHECK (is_frozen IN (0,1)),  "
+    "   risk_tier TEXT NOT NULL DEFAULT 'normal' CHECK (risk_tier IN ('normal','elevated','high','blocked'))  "
+    " );  "
+    " CREATE TRIGGER IF NOT EXISTS trg_bank_transactions_before_insert  "
+    " BEFORE INSERT ON bank_transactions  "
+    " FOR EACH ROW  "
+    " BEGIN  "
+    "   SELECT CASE  "
+    "     WHEN NEW.direction = 'DEBIT'  "
+    "       AND (SELECT balance FROM bank_accounts WHERE id = NEW.account_id) - NEW.amount < 0  "
+    "     THEN RAISE(ABORT, 'BANK_INSUFFICIENT_FUNDS')  "
+    "     ELSE 1  "
+    "   END;  "
+    " END;  "
+    " CREATE TRIGGER IF NOT EXISTS trg_bank_transactions_after_insert  "
+    " AFTER INSERT ON bank_transactions  "
+    " FOR EACH ROW  "
+    " BEGIN  "
+    "   UPDATE bank_accounts  "
+    "   SET balance = CASE NEW.direction  "
+    "                   WHEN 'DEBIT'  THEN balance - NEW.amount  "
+    "                   WHEN 'CREDIT' THEN balance + NEW.amount  "
+    "                   ELSE balance  "
+    "                 END  "
+    "   WHERE id = NEW.account_id;  "
+    "   UPDATE bank_transactions  "
+    "   SET balance_after = (SELECT balance FROM bank_accounts WHERE id = NEW.account_id)  "
+    "   WHERE id = NEW.id;  "
+    " END;  "
+    " CREATE TRIGGER IF NOT EXISTS trg_bank_transactions_before_delete  "
+    " BEFORE DELETE ON bank_transactions  "
+    " FOR EACH ROW  "
+    " BEGIN  "
+    "   SELECT RAISE(ABORT, 'BANK_LEDGER_APPEND_ONLY');  "
+    " END;  "
+    " CREATE TABLE IF NOT EXISTS corp_accounts (  "
+    "   corp_id INTEGER PRIMARY KEY REFERENCES corps(id) ON DELETE CASCADE,  "
+    "   currency TEXT NOT NULL DEFAULT 'CRD' REFERENCES currencies(code),  "
+    "   balance INTEGER NOT NULL DEFAULT 0 CHECK (balance >= 0),  "
+    "   last_interest_at TEXT  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS corp_tx (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   corp_id INTEGER NOT NULL REFERENCES corps(id) ON DELETE CASCADE,  "
+    "   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
+    "   kind TEXT NOT NULL CHECK (kind IN (  "
+    "     'deposit',  "
+    "     'withdraw',  "
+    "     'transfer_in',  "
+    "     'transfer_out',  "
+    "     'interest',  "
+    "     'dividend',  "
+    "     'salary',  "
+    "     'adjustment'  "
+    "   )),  "
+    "   amount INTEGER NOT NULL CHECK (amount > 0),  "
+    "   balance_after INTEGER,  "
+    "   currency TEXT NOT NULL DEFAULT 'CRD' REFERENCES currencies(code),  "
+    "   memo TEXT,  "
+    "   idempotency_key TEXT UNIQUE  "
+    " );  "
+    " CREATE INDEX IF NOT EXISTS idx_corp_tx_corp_ts ON corp_tx(corp_id, ts);  "
+    " CREATE TABLE IF NOT EXISTS corp_interest_policy (  "
+    "   id INTEGER PRIMARY KEY CHECK (id = 1),  "
+    "   apr_bps INTEGER NOT NULL DEFAULT 0 CHECK (apr_bps >= 0),  "
+    "   compounding TEXT NOT NULL DEFAULT 'none' CHECK (compounding IN ('none','daily','weekly','monthly')),  "
+    "   last_run_at TEXT,  "
+    "   currency TEXT NOT NULL DEFAULT 'CRD' REFERENCES currencies(code)  "
+    " );  "
+    " INSERT OR IGNORE INTO corp_interest_policy (id, apr_bps, compounding, last_run_at, currency)  "
+    " VALUES (1, 0, 'none', NULL, 'CRD');  "
+    " CREATE TRIGGER IF NOT EXISTS trg_corp_tx_before_insert  "
+    " BEFORE INSERT ON corp_tx  "
+    " FOR EACH ROW  "
+    " BEGIN  "
+    "   INSERT OR IGNORE INTO corp_accounts(corp_id, currency, balance, last_interest_at)  "
+    "   VALUES (NEW.corp_id, COALESCE(NEW.currency,'CRD'), 0, NULL);  "
+    "   SELECT CASE  "
+    "     WHEN NEW.kind IN ('withdraw','transfer_out','dividend','salary')  "
+    "       AND (SELECT balance FROM corp_accounts WHERE corp_id = NEW.corp_id) - NEW.amount < 0  "
+    "     THEN RAISE(ABORT, 'CORP_INSUFFICIENT_FUNDS')  "
+    "     ELSE 1  "
+    "   END;  "
+    " END;  "
+    " CREATE TRIGGER IF NOT EXISTS trg_corp_tx_after_insert  "
+    " AFTER INSERT ON corp_tx  "
+    " FOR EACH ROW  "
+    " BEGIN  "
+    "   UPDATE corp_accounts  "
+    "   SET balance = CASE NEW.kind  "
+    "                   WHEN 'withdraw'     THEN balance - NEW.amount  "
+    "                   WHEN 'transfer_out' THEN balance - NEW.amount  "
+    "                   WHEN 'dividend'     THEN balance - NEW.amount  "
+    "                   WHEN 'salary'       THEN balance - NEW.amount  "
+    "                   ELSE balance + NEW.amount  "
+    "                 END  "
+    "   WHERE corp_id = NEW.corp_id;  "
+    "   UPDATE corp_tx  "
+    "   SET balance_after = (SELECT balance FROM corp_accounts WHERE corp_id = NEW.corp_id)  "
+    "   WHERE id = NEW.id;  "
+    " END;  "
+    " CREATE TABLE IF NOT EXISTS stocks (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   corp_id INTEGER NOT NULL REFERENCES corporations(id) ON DELETE CASCADE,  "
+    "   ticker TEXT NOT NULL UNIQUE,  "
+    "   total_shares INTEGER NOT NULL CHECK (total_shares > 0),  "
+    "   par_value INTEGER NOT NULL DEFAULT 0 CHECK (par_value >= 0),  "
+    "   current_price INTEGER NOT NULL DEFAULT 0 CHECK (current_price >= 0),  "
+    "   last_dividend_ts TEXT  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS corp_shareholders ( "
+    "   corp_id INTEGER NOT NULL REFERENCES corporations(id) ON DELETE CASCADE, "
+    "   player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE, "
+    "   shares INTEGER NOT NULL CHECK (shares >= 0), "
+    "   PRIMARY KEY (corp_id, player_id) "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS stock_orders (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,  "
+    "   stock_id INTEGER NOT NULL REFERENCES stocks(id) ON DELETE CASCADE,  "
+    "   type TEXT NOT NULL CHECK (type IN ('buy','sell')),  "
+    "   quantity INTEGER NOT NULL CHECK (quantity > 0),  "
+    "   price INTEGER NOT NULL CHECK (price >= 0),  "
+    "   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','filled','cancelled','expired')),  "
+    "   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))  "
+    " );  "
+    " CREATE INDEX IF NOT EXISTS idx_stock_orders_stock ON stock_orders(stock_id, status);  "
+    " CREATE TABLE IF NOT EXISTS stock_trades (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   stock_id INTEGER NOT NULL REFERENCES stocks(id) ON DELETE CASCADE,  "
+    "   buyer_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,  "
+    "   seller_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,  "
+    "   quantity INTEGER NOT NULL CHECK (quantity > 0),  "
+    "   price INTEGER NOT NULL CHECK (price >= 0),  "
+    "   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
+    "   settlement_tx_buy INTEGER,  "
+    "   settlement_tx_sell INTEGER  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS stock_dividends (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   stock_id INTEGER NOT NULL REFERENCES stocks(id) ON DELETE CASCADE,  "
+    "   amount_per_share INTEGER NOT NULL CHECK (amount_per_share >= 0),  "
+    "   declared_ts TEXT NOT NULL,  "
+    "   paid_ts TEXT  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS stock_indices (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   name TEXT UNIQUE NOT NULL  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS stock_index_members (  "
+    "   index_id INTEGER NOT NULL REFERENCES stock_indices(id) ON DELETE CASCADE,  "
+    "   stock_id INTEGER NOT NULL REFERENCES stocks(id) ON DELETE CASCADE,  "
+    "   weight REAL NOT NULL DEFAULT 1.0,  "
+    "   PRIMARY KEY (index_id, stock_id)  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS insurance_funds (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   owner_type TEXT NOT NULL CHECK (owner_type IN ('system','corp','player')),  "
+    "   owner_id INTEGER,  "
+    "   balance INTEGER NOT NULL DEFAULT 0 CHECK (balance >= 0)  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS insurance_policies (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   holder_type TEXT NOT NULL CHECK (holder_type IN ('player','corp')),  "
+    "   holder_id INTEGER NOT NULL,  "
+    "   subject_type TEXT NOT NULL CHECK (subject_type IN ('ship','cargo','planet')),  "
+    "   subject_id INTEGER NOT NULL,  "
+    "   premium INTEGER NOT NULL CHECK (premium >= 0),  "
+    "   payout INTEGER NOT NULL CHECK (payout >= 0),  "
+    "   fund_id INTEGER REFERENCES insurance_funds(id) ON DELETE SET NULL,  "
+    "   start_ts TEXT NOT NULL,  "
+    "   expiry_ts TEXT,  "
+    "   active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1))  "
+    " );  "
+    " CREATE INDEX IF NOT EXISTS idx_policies_holder ON insurance_policies(holder_type, holder_id);  "
+    " CREATE TABLE IF NOT EXISTS insurance_claims (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   policy_id INTEGER NOT NULL REFERENCES insurance_policies(id) ON DELETE CASCADE,  "
+    "   event_id TEXT,  "
+    "   amount INTEGER NOT NULL CHECK (amount >= 0),  "
+    "   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','paid','denied')),  "
+    "   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
+    "   paid_bank_tx INTEGER  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS risk_profiles (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   entity_type TEXT NOT NULL CHECK (entity_type IN ('player','corp')),  "
+    "   entity_id INTEGER NOT NULL,  "
+    "   risk_score INTEGER NOT NULL DEFAULT 0  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS loans (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   lender_type TEXT NOT NULL CHECK (lender_type IN ('player','corp','bank')),  "
+    "   lender_id INTEGER,  "
+    "   borrower_type TEXT NOT NULL CHECK (borrower_type IN ('player','corp')),  "
+    "   borrower_id INTEGER NOT NULL,  "
+    "   principal INTEGER NOT NULL CHECK (principal > 0),  "
+    "   rate_bps INTEGER NOT NULL DEFAULT 0 CHECK (rate_bps >= 0),  "
+    "   term_days INTEGER NOT NULL CHECK (term_days > 0),  "
+    "   next_due TEXT,  "
+    "   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','paid','defaulted','written_off')),  "
+    "   created_ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS loan_payments (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   loan_id INTEGER NOT NULL REFERENCES loans(id) ON DELETE CASCADE,  "
+    "   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
+    "   amount INTEGER NOT NULL CHECK (amount > 0),  "
+    "   status TEXT NOT NULL DEFAULT 'posted' CHECK (status IN ('posted','reversed')),  "
+    "   bank_tx_id INTEGER  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS collateral (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   loan_id INTEGER NOT NULL REFERENCES loans(id) ON DELETE CASCADE,  "
+    "   asset_type TEXT NOT NULL CHECK (asset_type IN ('ship','planet','cargo','stock','other')),  "
+    "   asset_id INTEGER NOT NULL,  "
+    "   appraised_value INTEGER NOT NULL DEFAULT 0 CHECK (appraised_value >= 0)  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS credit_ratings (  "
+    "   entity_type TEXT NOT NULL CHECK (entity_type IN ('player','corp')),  "
+    "   entity_id INTEGER NOT NULL,  "
+    "   score INTEGER NOT NULL DEFAULT 600 CHECK (score BETWEEN 300 AND 900),  "
+    "   last_update TEXT,  "
+    "   PRIMARY KEY (entity_type, entity_id)  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS charters (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   name TEXT NOT NULL UNIQUE,  "
+    "   granted_by TEXT NOT NULL DEFAULT 'federation',  "
+    "   monopoly_scope TEXT,  "
+    "   start_ts TEXT NOT NULL,  "
+    "   expiry_ts TEXT  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS expeditions (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   leader_player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,  "
+    "   charter_id INTEGER REFERENCES charters(id) ON DELETE SET NULL,  "
+    "   goal TEXT NOT NULL,  "
+    "   target_region TEXT,  "
+    "   pledged_total INTEGER NOT NULL DEFAULT 0 CHECK (pledged_total >= 0),  "
+    "   duration_days INTEGER NOT NULL DEFAULT 7 CHECK (duration_days > 0),  "
+    "   status TEXT NOT NULL DEFAULT 'planning' CHECK (status IN ('planning','launched','complete','failed','aborted')),  "
+    "   created_ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS expedition_backers (  "
+    "   expedition_id INTEGER NOT NULL REFERENCES expeditions(id) ON DELETE CASCADE,  "
+    "   backer_type TEXT NOT NULL CHECK (backer_type IN ('player','corp')),  "
+    "   backer_id INTEGER NOT NULL,  "
+    "   pledged_amount INTEGER NOT NULL CHECK (pledged_amount >= 0),  "
+    "   share_pct REAL NOT NULL CHECK (share_pct >= 0),  "
+    "   PRIMARY KEY (expedition_id, backer_type, backer_id)  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS expedition_returns (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   expedition_id INTEGER NOT NULL REFERENCES expeditions(id) ON DELETE CASCADE,  "
+    "   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
+    "   amount INTEGER NOT NULL CHECK (amount >= 0),  "
+    "   bank_tx_id INTEGER  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS commodity_orders (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   actor_type TEXT NOT NULL CHECK (actor_type IN ('player','corp','npc','port')),  "
+    "   actor_id INTEGER NOT NULL,  "
+    "   commodity_id INTEGER NOT NULL REFERENCES commodities(id) ON DELETE CASCADE,  "
+    "   side TEXT NOT NULL CHECK (side IN ('buy','sell')),  "
+    "   quantity INTEGER NOT NULL CHECK (quantity > 0),  "
+    "   price INTEGER NOT NULL CHECK (price >= 0),  "
+    "   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','filled','cancelled','expired')),  "
+    "   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))  "
+    " );  "
+    " CREATE INDEX IF NOT EXISTS idx_commodity_orders_comm ON commodity_orders(commodity_id, status);  "
+    " CREATE TABLE IF NOT EXISTS commodity_trades (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   commodity_id INTEGER NOT NULL REFERENCES commodities(id) ON DELETE CASCADE,  "
+    "   buyer_type TEXT NOT NULL CHECK (buyer_type IN ('player','corp','npc','port')),  "
+    "   buyer_id INTEGER NOT NULL,  "
+    "   seller_type TEXT NOT NULL CHECK (seller_type IN ('player','corp','npc','port')),  "
+    "   seller_id INTEGER NOT NULL,  "
+    "   quantity INTEGER NOT NULL CHECK (quantity > 0),  "
+    "   price INTEGER NOT NULL CHECK (price >= 0),  "
+    "   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
+    "   settlement_tx_buy INTEGER,  "
+    "   settlement_tx_sell INTEGER  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS futures_contracts (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   commodity_id INTEGER NOT NULL REFERENCES commodities(id) ON DELETE CASCADE,  "
+    "   buyer_type TEXT NOT NULL CHECK (buyer_type IN ('player','corp')),  "
+    "   buyer_id INTEGER NOT NULL,  "
+    "   seller_type TEXT NOT NULL CHECK (seller_type IN ('player','corp')),  "
+    "   seller_id INTEGER NOT NULL,  "
+    "   strike_price INTEGER NOT NULL CHECK (strike_price >= 0),  "
+    "   expiry_ts TEXT NOT NULL,  "
+    "   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','settled','defaulted','cancelled'))  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS warehouses (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   location_type TEXT NOT NULL CHECK (location_type IN ('sector','planet','port')),  "
+    "   location_id INTEGER NOT NULL,  "
+    "   owner_type TEXT NOT NULL CHECK (owner_type IN ('player','corp')),  "
+    "   owner_id INTEGER NOT NULL  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS gov_accounts (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   name TEXT NOT NULL UNIQUE,  "
+    "   balance INTEGER NOT NULL DEFAULT 0 CHECK (balance >= 0)  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS tax_policies (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   name TEXT NOT NULL,  "
+    "   tax_type TEXT NOT NULL CHECK (tax_type IN ('trade','income','corp','wealth','transfer')),  "
+    "   rate_bps INTEGER NOT NULL DEFAULT 0 CHECK (rate_bps >= 0),  "
+    "   active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1))  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS tax_ledgers (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   policy_id INTEGER NOT NULL REFERENCES tax_policies(id) ON DELETE CASCADE,  "
+    "   payer_type TEXT NOT NULL CHECK (payer_type IN ('player','corp')),  "
+    "   payer_id INTEGER NOT NULL,  "
+    "   amount INTEGER NOT NULL CHECK (amount >= 0),  "
+    "   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
+    "   bank_tx_id INTEGER  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS fines (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   issued_by TEXT NOT NULL DEFAULT 'federation',  "
+    "   recipient_type TEXT NOT NULL CHECK (recipient_type IN ('player','corp')),  "
+    "   recipient_id INTEGER NOT NULL,  "
+    "   reason TEXT,  "
+    "   amount INTEGER NOT NULL CHECK (amount >= 0),  "
+    "   status TEXT NOT NULL DEFAULT 'unpaid' CHECK (status IN ('unpaid','paid','void')),  "
+    "   issued_ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
+    "   paid_bank_tx INTEGER  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS bounties (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   posted_by_type TEXT NOT NULL CHECK (posted_by_type IN ('player','corp','gov','npc')),  "
+    "   posted_by_id INTEGER,  "
+    "   target_type TEXT NOT NULL CHECK (target_type IN ('player','corp','npc')),  "
+    "   target_id INTEGER NOT NULL,  "
+    "   reward INTEGER NOT NULL CHECK (reward >= 0),  "
+    "   escrow_bank_tx INTEGER,  "
+    "   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','claimed','cancelled','expired')),  "
+    "   posted_ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
+    "   claimed_by INTEGER,  "
+    "   paid_bank_tx INTEGER  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS grants (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   name TEXT NOT NULL,  "
+    "   recipient_type TEXT NOT NULL CHECK (recipient_type IN ('player','corp')),  "
+    "   recipient_id INTEGER NOT NULL,  "
+    "   amount INTEGER NOT NULL CHECK (amount >= 0),  "
+    "   awarded_ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
+    "   bank_tx_id INTEGER  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS research_projects (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   sponsor_type TEXT NOT NULL CHECK (sponsor_type IN ('player','corp','gov')),  "
+    "   sponsor_id INTEGER,  "
+    "   title TEXT NOT NULL,  "
+    "   field TEXT NOT NULL,  "
+    "   cost INTEGER NOT NULL CHECK (cost >= 0),  "
+    "   progress INTEGER NOT NULL DEFAULT 0 CHECK (progress BETWEEN 0 AND 100),  "
+    "   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','paused','complete','failed')),  "
+    "   created_ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS research_contributors (  "
+    "   project_id INTEGER NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,  "
+    "   actor_type TEXT NOT NULL CHECK (actor_type IN ('player','corp')),  "
+    "   actor_id INTEGER NOT NULL,  "
+    "   amount INTEGER NOT NULL CHECK (amount >= 0),  "
+    "   PRIMARY KEY (project_id, actor_type, actor_id)  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS research_results (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   project_id INTEGER NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,  "
+    "   blueprint_code TEXT NOT NULL,  "
+    "   unlocked_ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))  "
+    " );  ",
 
   "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, balance) "
-  "VALUES ('npc_planet', (SELECT id FROM planets WHERE name='Earth'), 1000000);",
+    "VALUES ('npc_planet', (SELECT id FROM planets WHERE name='Earth'), 1000000);",
   "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, balance) "
-  "VALUES ('npc_planet', (SELECT id FROM planets WHERE name='Ferringhi Homeworld'), 1000000);",
+    "VALUES ('npc_planet', (SELECT id FROM planets WHERE name='Ferringhi Homeworld'), 1000000);",
   "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, balance) "
-  "VALUES ('npc_planet', (SELECT id FROM planets WHERE name='Orion Hideout'), 1000000);"
-
-" CREATE TABLE IF NOT EXISTS black_accounts (  "
-"   id INTEGER PRIMARY KEY,  "
-"   owner_type TEXT NOT NULL CHECK (owner_type IN ('player','corp','npc')),  "
-"   owner_id INTEGER NOT NULL,  "
-"   balance INTEGER NOT NULL DEFAULT 0 CHECK (balance >= 0)  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS laundering_ops (  "
-"   id INTEGER PRIMARY KEY,  "
-"   from_black_id INTEGER REFERENCES black_accounts(id) ON DELETE SET NULL,  "
-"   to_player_id INTEGER REFERENCES players(id) ON DELETE SET NULL,  "
-"   amount INTEGER NOT NULL CHECK (amount > 0),  "
-"   risk_pct INTEGER NOT NULL DEFAULT 25 CHECK (risk_pct BETWEEN 0 AND 100),  "
-"   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','cleaned','seized','failed')),  "
-"   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS contracts_illicit (  "
-"   id INTEGER PRIMARY KEY,  "
-"   contractor_type TEXT NOT NULL CHECK (contractor_type IN ('player','corp','npc')),  "
-"   contractor_id INTEGER NOT NULL,  "
-"   target_type TEXT NOT NULL CHECK (target_type IN ('player','corp','npc')),  "
-"   target_id INTEGER NOT NULL,  "
-"   reward INTEGER NOT NULL CHECK (reward >= 0),  "
-"   escrow_black_id INTEGER REFERENCES black_accounts(id) ON DELETE SET NULL,  "
-"   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','fulfilled','failed','cancelled')),  "
-"   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS fences (  "
-"   id INTEGER PRIMARY KEY,  "
-"   npc_id INTEGER,  "
-"   sector_id INTEGER,  "
-"   reputation INTEGER NOT NULL DEFAULT 0  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS economic_indicators (  "
-"   id INTEGER PRIMARY KEY,  "
-"   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
-"   inflation_bps INTEGER NOT NULL DEFAULT 0,  "
-"   liquidity INTEGER NOT NULL DEFAULT 0,  "
-"   credit_velocity REAL NOT NULL DEFAULT 0.0  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS sector_gdp (  "
-"   sector_id INTEGER PRIMARY KEY,  "
-"   gdp INTEGER NOT NULL DEFAULT 0,  "
-"   last_update TEXT  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS event_triggers (  "
-"   id INTEGER PRIMARY KEY,  "
-"   name TEXT NOT NULL,  "
-"   condition_json TEXT NOT NULL,  "
-"   action_json TEXT NOT NULL  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS charities (  "
-"   id INTEGER PRIMARY KEY,  "
-"   name TEXT NOT NULL UNIQUE,  "
-"   description TEXT  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS donations (  "
-"   id INTEGER PRIMARY KEY,  "
-"   charity_id INTEGER NOT NULL REFERENCES charities(id) ON DELETE CASCADE,  "
-"   donor_type TEXT NOT NULL CHECK (donor_type IN ('player','corp')),  "
-"   donor_id INTEGER NOT NULL,  "
-"   amount INTEGER NOT NULL CHECK (amount >= 0),  "
-"   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
-"   bank_tx_id INTEGER  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS temples (  "
-"   id INTEGER PRIMARY KEY,  "
-"   name TEXT NOT NULL UNIQUE,  "
-"   sector_id INTEGER,  "
-"   favour INTEGER NOT NULL DEFAULT 0  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS guilds (  "
-"   id INTEGER PRIMARY KEY,  "
-"   name TEXT NOT NULL UNIQUE,  "
-"   description TEXT  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS guild_memberships (  "
-"   guild_id INTEGER NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,  "
-"   member_type TEXT NOT NULL CHECK (member_type IN ('player','corp')),  "
-"   member_id INTEGER NOT NULL,  "
-"   role TEXT NOT NULL DEFAULT 'member',  "
-"   PRIMARY KEY (guild_id, member_type, member_id)  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS guild_dues (  "
-"   id INTEGER PRIMARY KEY,  "
-"   guild_id INTEGER NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,  "
-"   amount INTEGER NOT NULL CHECK (amount >= 0),  "
-"   period TEXT NOT NULL DEFAULT 'monthly' CHECK (period IN ('weekly','monthly','quarterly','yearly'))  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS economy_snapshots (  "
-"   id INTEGER PRIMARY KEY,  "
-"   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
-"   money_supply INTEGER NOT NULL DEFAULT 0,  "
-"   total_deposits INTEGER NOT NULL DEFAULT 0,  "
-"   total_loans INTEGER NOT NULL DEFAULT 0,  "
-"   total_insured INTEGER NOT NULL DEFAULT 0,  "
-"   notes TEXT  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS ai_economy_agents (  "
-"   id INTEGER PRIMARY KEY,  "
-"   name TEXT NOT NULL,  "
-"   role TEXT NOT NULL,  "
-"   config_json TEXT NOT NULL  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS anomaly_reports (  "
-"   id INTEGER PRIMARY KEY,  "
-"   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
-"   severity TEXT NOT NULL CHECK (severity IN ('low','medium','high','critical')),  "
-"   subject TEXT NOT NULL,  "
-"   details TEXT NOT NULL,  "
-"   resolved INTEGER NOT NULL DEFAULT 0 CHECK (resolved IN (0,1))  "
-" );  "
-
-" CREATE TABLE IF NOT EXISTS economy_policies (  "
-"   id INTEGER PRIMARY KEY,  "
-"   name TEXT NOT NULL UNIQUE,  "
-"   config_json TEXT NOT NULL,  "
-"   active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1))  "
-" );  "
-
-" CREATE VIEW IF NOT EXISTS v_player_networth AS  "
-" SELECT  "
-"   p.id AS player_id,  "
-"   p.name AS player_name,  "
-"   COALESCE(ba.balance,0) AS bank_balance  "
-" FROM players p  "
-" LEFT JOIN bank_accounts ba ON ba.owner_type = 'player' AND ba.owner_id = p.id;  "
-
-" CREATE VIEW IF NOT EXISTS v_corp_treasury AS  "
-" SELECT  "
-"   c.id AS corp_id,  "
-"   c.name AS corp_name,  "
-"   COALESCE(ca.balance,0) AS bank_balance  "
-" FROM corps c  "
-" LEFT JOIN corp_accounts ca ON ca.corp_id = c.id;  "
-
-" CREATE VIEW IF NOT EXISTS v_bounty_board AS  "
-" SELECT  "
-"   b.id,  "
-"   b.target_type,  "
-"   b.target_id,  "
-"   p_target.name AS target_name,  "
-"   b.reward,  "
-"   b.status,  "
-"   b.posted_by_type,  "
-"   b.posted_by_id,  "
-"   CASE b.posted_by_type  "
-"     WHEN 'player' THEN p_poster.name  "
-"     WHEN 'corp' THEN c_poster.name  "
-"     ELSE b.posted_by_type  "
-"   END AS poster_name,  "
-"   b.posted_ts  "
-" FROM bounties b  "
-" LEFT JOIN players p_target ON b.target_type = 'player' AND b.target_id = p_target.id  "
-" LEFT JOIN players p_poster ON b.posted_by_type = 'player' AND b.posted_by_id = p_poster.id  "
-" LEFT JOIN corps c_poster ON b.posted_by_type = 'corp' AND b.posted_by_id = c_poster.id  "
-" WHERE b.status = 'open';  "
-
-" CREATE VIEW IF NOT EXISTS v_bank_leaderboard AS  "
-" SELECT  "
-"   ba.owner_id AS player_id,  "
-"   p.name,  "
-"   ba.balance  "
-" FROM bank_accounts ba  "
-" JOIN players p ON ba.owner_type = 'player' AND ba.owner_id = p.id  "
-" LEFT JOIN player_prefs pp ON ba.owner_id = pp.player_id AND pp.key = 'privacy.show_leaderboard'  "
-" WHERE COALESCE(pp.value, 'true') = 'true'  "
-" ORDER BY ba.balance DESC;  "
-  
-  ////////////////
+    "VALUES ('npc_planet', (SELECT id FROM planets WHERE name='Orion Hideout'), 1000000);"
+    " CREATE TABLE IF NOT EXISTS black_accounts (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   owner_type TEXT NOT NULL CHECK (owner_type IN ('player','corp','npc')),  "
+    "   owner_id INTEGER NOT NULL,  "
+    "   balance INTEGER NOT NULL DEFAULT 0 CHECK (balance >= 0)  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS laundering_ops (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   from_black_id INTEGER REFERENCES black_accounts(id) ON DELETE SET NULL,  "
+    "   to_player_id INTEGER REFERENCES players(id) ON DELETE SET NULL,  "
+    "   amount INTEGER NOT NULL CHECK (amount > 0),  "
+    "   risk_pct INTEGER NOT NULL DEFAULT 25 CHECK (risk_pct BETWEEN 0 AND 100),  "
+    "   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','cleaned','seized','failed')),  "
+    "   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS contracts_illicit (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   contractor_type TEXT NOT NULL CHECK (contractor_type IN ('player','corp','npc')),  "
+    "   contractor_id INTEGER NOT NULL,  "
+    "   target_type TEXT NOT NULL CHECK (target_type IN ('player','corp','npc')),  "
+    "   target_id INTEGER NOT NULL,  "
+    "   reward INTEGER NOT NULL CHECK (reward >= 0),  "
+    "   escrow_black_id INTEGER REFERENCES black_accounts(id) ON DELETE SET NULL,  "
+    "   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','fulfilled','failed','cancelled')),  "
+    "   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS fences (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   npc_id INTEGER,  "
+    "   sector_id INTEGER,  "
+    "   reputation INTEGER NOT NULL DEFAULT 0  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS economic_indicators (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
+    "   inflation_bps INTEGER NOT NULL DEFAULT 0,  "
+    "   liquidity INTEGER NOT NULL DEFAULT 0,  "
+    "   credit_velocity REAL NOT NULL DEFAULT 0.0  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS sector_gdp (  "
+    "   sector_id INTEGER PRIMARY KEY,  "
+    "   gdp INTEGER NOT NULL DEFAULT 0,  "
+    "   last_update TEXT  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS event_triggers (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   name TEXT NOT NULL,  "
+    "   condition_json TEXT NOT NULL,  "
+    "   action_json TEXT NOT NULL  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS charities (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   name TEXT NOT NULL UNIQUE,  "
+    "   description TEXT  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS donations (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   charity_id INTEGER NOT NULL REFERENCES charities(id) ON DELETE CASCADE,  "
+    "   donor_type TEXT NOT NULL CHECK (donor_type IN ('player','corp')),  "
+    "   donor_id INTEGER NOT NULL,  "
+    "   amount INTEGER NOT NULL CHECK (amount >= 0),  "
+    "   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
+    "   bank_tx_id INTEGER  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS temples (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   name TEXT NOT NULL UNIQUE,  "
+    "   sector_id INTEGER,  "
+    "   favour INTEGER NOT NULL DEFAULT 0  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS guilds (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   name TEXT NOT NULL UNIQUE,  "
+    "   description TEXT  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS guild_memberships (  "
+    "   guild_id INTEGER NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,  "
+    "   member_type TEXT NOT NULL CHECK (member_type IN ('player','corp')),  "
+    "   member_id INTEGER NOT NULL,  "
+    "   role TEXT NOT NULL DEFAULT 'member',  "
+    "   PRIMARY KEY (guild_id, member_type, member_id)  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS guild_dues (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   guild_id INTEGER NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,  "
+    "   amount INTEGER NOT NULL CHECK (amount >= 0),  "
+    "   period TEXT NOT NULL DEFAULT 'monthly' CHECK (period IN ('weekly','monthly','quarterly','yearly'))  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS economy_snapshots (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
+    "   money_supply INTEGER NOT NULL DEFAULT 0,  "
+    "   total_deposits INTEGER NOT NULL DEFAULT 0,  "
+    "   total_loans INTEGER NOT NULL DEFAULT 0,  "
+    "   total_insured INTEGER NOT NULL DEFAULT 0,  "
+    "   notes TEXT  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS ai_economy_agents (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   name TEXT NOT NULL,  "
+    "   role TEXT NOT NULL,  "
+    "   config_json TEXT NOT NULL  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS anomaly_reports (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
+    "   severity TEXT NOT NULL CHECK (severity IN ('low','medium','high','critical')),  "
+    "   subject TEXT NOT NULL,  "
+    "   details TEXT NOT NULL,  "
+    "   resolved INTEGER NOT NULL DEFAULT 0 CHECK (resolved IN (0,1))  "
+    " );  "
+    " CREATE TABLE IF NOT EXISTS economy_policies (  "
+    "   id INTEGER PRIMARY KEY,  "
+    "   name TEXT NOT NULL UNIQUE,  "
+    "   config_json TEXT NOT NULL,  "
+    "   active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1))  "
+    " );  "
+    " CREATE VIEW IF NOT EXISTS v_player_networth AS  "
+    " SELECT  "
+    "   p.id AS player_id,  "
+    "   p.name AS player_name,  "
+    "   COALESCE(ba.balance,0) AS bank_balance  "
+    " FROM players p  "
+    " LEFT JOIN bank_accounts ba ON ba.owner_type = 'player' AND ba.owner_id = p.id;  "
+    " CREATE VIEW IF NOT EXISTS v_corp_treasury AS  "
+    " SELECT  "
+    "   c.id AS corp_id,  "
+    "   c.name AS corp_name,  "
+    "   COALESCE(ca.balance,0) AS bank_balance  "
+    " FROM corps c  "
+    " LEFT JOIN corp_accounts ca ON ca.corp_id = c.id;  "
+    " CREATE VIEW IF NOT EXISTS v_bounty_board AS  "
+    " SELECT  "
+    "   b.id,  "
+    "   b.target_type,  "
+    "   b.target_id,  "
+    "   p_target.name AS target_name,  "
+    "   b.reward,  "
+    "   b.status,  "
+    "   b.posted_by_type,  "
+    "   b.posted_by_id,  "
+    "   CASE b.posted_by_type  "
+    "     WHEN 'player' THEN p_poster.name  "
+    "     WHEN 'corp' THEN c_poster.name  "
+    "     ELSE b.posted_by_type  "
+    "   END AS poster_name,  "
+    "   b.posted_ts  "
+    " FROM bounties b  "
+    " LEFT JOIN players p_target ON b.target_type = 'player' AND b.target_id = p_target.id  "
+    " LEFT JOIN players p_poster ON b.posted_by_type = 'player' AND b.posted_by_id = p_poster.id  "
+    " LEFT JOIN corps c_poster ON b.posted_by_type = 'corp' AND b.posted_by_id = c_poster.id  "
+    " WHERE b.status = 'open';  "
+    " CREATE VIEW IF NOT EXISTS v_bank_leaderboard AS  "
+    " SELECT  "
+    "   ba.owner_id AS player_id,  "
+    "   p.name,  "
+    "   ba.balance  "
+    " FROM bank_accounts ba  "
+    " JOIN players p ON ba.owner_type = 'player' AND ba.owner_id = p.id  "
+    " LEFT JOIN player_prefs pp ON ba.owner_id = pp.player_id AND pp.key = 'privacy.show_leaderboard'  "
+    " WHERE COALESCE(pp.value, 'true') = 'true'  "
+    " ORDER BY ba.balance DESC;  "
+    ////////////////
 };
 
 
@@ -2741,106 +2593,92 @@ const char *insert_default_sql[] = {
 static const char *engine_bootstrap_sql_statements[] = {
   /* --- S2S keyring (HMAC) --- */
   "CREATE TABLE IF NOT EXISTS s2s_keys("
-  "  key_id TEXT PRIMARY KEY,"
-  "  key_b64 TEXT NOT NULL,"
-  "  is_default_tx INTEGER NOT NULL DEFAULT 0,"
-  "  active INTEGER NOT NULL DEFAULT 1,"
-  "  created_ts INTEGER NOT NULL"
-  ");",
+    "  key_id TEXT PRIMARY KEY,"
+    "  key_b64 TEXT NOT NULL,"
+    "  is_default_tx INTEGER NOT NULL DEFAULT 0,"
+    "  active INTEGER NOT NULL DEFAULT 1,"
+    "  created_ts INTEGER NOT NULL" ");",
   "INSERT OR IGNORE INTO s2s_keys(key_id,key_b64,is_default_tx,active,created_ts)"
-  "VALUES('k0','c3VwZXJzZWNyZXRrZXlzZWNyZXRrZXlzZWNyZXQxMjM0NTY3OA==',1,1,strftime('%s','now'));",
+    "VALUES('k0','c3VwZXJzZWNyZXRrZXlzZWNyZXRrZXlzZWNyZXQxMjM0NTY3OA==',1,1,strftime('%s','now'));",
   /* --- Engine cron/scheduling --- */
   "CREATE TABLE IF NOT EXISTS cron_tasks("
-  "  id INTEGER PRIMARY KEY,"
-  "  name TEXT UNIQUE NOT NULL,"
-  "  schedule TEXT NOT NULL,"
-  "  last_run_at INTEGER,"
-  "  next_due_at INTEGER NOT NULL,"
-  "  enabled INTEGER NOT NULL DEFAULT 1,"
-  "  payload TEXT"
-  ");",
+    "  id INTEGER PRIMARY KEY,"
+    "  name TEXT UNIQUE NOT NULL,"
+    "  schedule TEXT NOT NULL,"
+    "  last_run_at INTEGER,"
+    "  next_due_at INTEGER NOT NULL,"
+    "  enabled INTEGER NOT NULL DEFAULT 1," "  payload TEXT" ");",
   "INSERT OR IGNORE INTO cron_tasks(name,schedule,last_run_at,next_due_at,enabled,payload) VALUES"
-  "('daily_turn_reset','daily@03:00Z',NULL,strftime('%s','now'),1,NULL),"
-  "('terra_replenish','daily@04:00Z',NULL,strftime('%s','now'),1,NULL),"
-  "('planet_growth','every:10m',NULL,strftime('%s','now'),1,NULL),"
-  "('fedspace_cleanup','every:2m',NULL,strftime('%s','now'),1,NULL),"
-  "('autouncloak_sweeper','every:15m',NULL,strftime('%s','now'),1,NULL),"
-  "('npc_step','every:30s',NULL,strftime('%s','now'),1,NULL),"
-  "('broadcast_ttl_cleanup','every:5m',NULL,strftime('%s','now'),1,NULL),"
-  "('daily_news_compiler','daily@06:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','6 hours'),1,NULL),"
-  "('daily_corp_tax','daily@05:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','5 hours'),1,NULL);",
+    "('daily_turn_reset','daily@03:00Z',NULL,strftime('%s','now'),1,NULL),"
+    "('terra_replenish','daily@04:00Z',NULL,strftime('%s','now'),1,NULL),"
+    "('planet_growth','every:10m',NULL,strftime('%s','now'),1,NULL),"
+    "('fedspace_cleanup','every:2m',NULL,strftime('%s','now'),1,NULL),"
+    "('autouncloak_sweeper','every:15m',NULL,strftime('%s','now'),1,NULL),"
+    "('npc_step','every:30s',NULL,strftime('%s','now'),1,NULL),"
+    "('broadcast_ttl_cleanup','every:5m',NULL,strftime('%s','now'),1,NULL),"
+    "('daily_news_compiler','daily@06:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','6 hours'),1,NULL),"
+    "('daily_corp_tax','daily@05:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','5 hours'),1,NULL);",
   /* --- Server→Engine event rail (separate from your existing system_events) --- */
   "CREATE TABLE IF NOT EXISTS engine_events("
-  "  id INTEGER PRIMARY KEY,"
-  "  ts INTEGER NOT NULL,"
-  "  type TEXT NOT NULL,"
-  "  actor_player_id INTEGER,"
-  "  sector_id INTEGER,"
-  "  payload TEXT NOT NULL,"
-  "  idem_key TEXT, "
-  " processed_at INTEGER"
-  ");",
+    "  id INTEGER PRIMARY KEY,"
+    "  ts INTEGER NOT NULL,"
+    "  type TEXT NOT NULL,"
+    "  actor_player_id INTEGER,"
+    "  sector_id INTEGER,"
+    "  payload TEXT NOT NULL,"
+    "  idem_key TEXT, " " processed_at INTEGER" ");",
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_engine_events_idem ON engine_events(idem_key) WHERE idem_key IS NOT NULL;",
   "CREATE INDEX IF NOT EXISTS idx_engine_events_ts ON engine_events(ts);",
   "CREATE INDEX IF NOT EXISTS idx_engine_events_actor_ts ON engine_events(actor_player_id, ts);",
   "CREATE INDEX IF NOT EXISTS idx_engine_events_sector_ts ON engine_events(sector_id, ts);",
   /* --- Engine watermark --- */
   "CREATE TABLE IF NOT EXISTS engine_offset("
-  "  key TEXT PRIMARY KEY,"
-  "  last_event_id INTEGER NOT NULL,"
-  "  last_event_ts INTEGER NOT NULL"
-  ");",
+    "  key TEXT PRIMARY KEY,"
+    "  last_event_id INTEGER NOT NULL,"
+    "  last_event_ts INTEGER NOT NULL" ");",
   "INSERT OR IGNORE INTO engine_offset(key,last_event_id,last_event_ts) VALUES('events',0,0);",
   /* --- Deadletter for bad events --- */
   "CREATE TABLE IF NOT EXISTS engine_events_deadletter("
-  "  id INTEGER PRIMARY KEY,"
-  "  ts INTEGER NOT NULL,"
-  "  type TEXT NOT NULL,"
-  "  payload TEXT NOT NULL,"
-  "  error TEXT NOT NULL,"
-  "  moved_at INTEGER NOT NULL"
-  ");",
+    "  id INTEGER PRIMARY KEY,"
+    "  ts INTEGER NOT NULL,"
+    "  type TEXT NOT NULL,"
+    "  payload TEXT NOT NULL,"
+    "  error TEXT NOT NULL," "  moved_at INTEGER NOT NULL" ");",
   /* --- Engine→Server command rail --- */
   "CREATE TABLE IF NOT EXISTS engine_commands("
-  "  id INTEGER PRIMARY KEY,"
-  "  type TEXT NOT NULL,"
-  "  payload TEXT NOT NULL,"
-  "  status TEXT NOT NULL DEFAULT 'ready',"
-  "  priority INTEGER NOT NULL DEFAULT 100,"
-  "  attempts INTEGER NOT NULL DEFAULT 0,"
-  "  created_at INTEGER NOT NULL,"
-  "  due_at INTEGER NOT NULL,"
-  "  started_at INTEGER,"
-  "  finished_at INTEGER,"
-  "  worker TEXT,"
-  "  idem_key TEXT"
-  ");",
+    "  id INTEGER PRIMARY KEY,"
+    "  type TEXT NOT NULL,"
+    "  payload TEXT NOT NULL,"
+    "  status TEXT NOT NULL DEFAULT 'ready',"
+    "  priority INTEGER NOT NULL DEFAULT 100,"
+    "  attempts INTEGER NOT NULL DEFAULT 0,"
+    "  created_at INTEGER NOT NULL,"
+    "  due_at INTEGER NOT NULL,"
+    "  started_at INTEGER,"
+    "  finished_at INTEGER," "  worker TEXT," "  idem_key TEXT" ");",
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_engine_cmds_idem ON engine_commands(idem_key) WHERE idem_key IS NOT NULL;",
   "CREATE INDEX IF NOT EXISTS idx_engine_cmds_status_due ON engine_commands(status, due_at);",
   "CREATE INDEX IF NOT EXISTS idx_engine_cmds_prio_due ON engine_commands(priority, due_at);",
   /* --- Engine audit trail --- */
   "CREATE TABLE IF NOT EXISTS engine_audit("
-  "  id INTEGER PRIMARY KEY,"
-  "  ts INTEGER NOT NULL,"
-  "  cmd_type TEXT NOT NULL,"
-  "  correlation_id TEXT,"
-  "  actor_player_id INTEGER,"
-  "  details TEXT"
-  ");",
+    "  id INTEGER PRIMARY KEY,"
+    "  ts INTEGER NOT NULL,"
+    "  cmd_type TEXT NOT NULL,"
+    "  correlation_id TEXT,"
+    "  actor_player_id INTEGER," "  details TEXT" ");",
   "CREATE TABLE IF NOT EXISTS news_feed(   "
-  "  news_id INTEGER PRIMARY KEY,   "
-  "  published_ts INTEGER NOT NULL,   "
-  "  expiration_ts INTEGER NOT NULL,   "
-  "  news_category TEXT NOT NULL,   "
-  "  article_text TEXT NOT NULL,   "
-  "  source_ids TEXT"
-  ");",
+    "  news_id INTEGER PRIMARY KEY,   "
+    "  published_ts INTEGER NOT NULL,   "
+    "  expiration_ts INTEGER NOT NULL,   "
+    "  news_category TEXT NOT NULL,   "
+    "  article_text TEXT NOT NULL,   " "  source_ids TEXT" ");",
   "CREATE INDEX IF NOT EXISTS ix_news_feed_pub_ts ON news_feed(published_ts);",
   "CREATE INDEX IF NOT EXISTS ix_news_feed_exp_ts ON news_feed(expiration_ts);"
 };
 
 static const size_t engine_bootstrap_sql_count =
-  sizeof (engine_bootstrap_sql_statements) / sizeof (engine_bootstrap_sql_statements[0]);
+  sizeof (engine_bootstrap_sql_statements) /
+  sizeof (engine_bootstrap_sql_statements[0]);
 
 static const char *CREATE_VIEWS_SQL =
   /* --- Human Readable view --- */
@@ -2924,10 +2762,8 @@ static const char *MIGRATE_B_SQL = "BEGIN IMMEDIATE;"
   "INSTEAD OF DELETE ON events "
   "BEGIN " "  SELECT RAISE(ABORT, 'events is append-only');" "END;" "COMMIT;";
 
-static const char *MIGRATE_C_SQL =
-  "BEGIN IMMEDIATE;"
-  "COMMIT;";
-  
+static const char *MIGRATE_C_SQL = "BEGIN IMMEDIATE;" "COMMIT;";
+
 /* Number of tables */
 static const size_t create_table_count =
   sizeof (create_table_sql) / sizeof (create_table_sql[0]);
@@ -2947,19 +2783,19 @@ db_engine_bootstrap (void)
     }
 
   char *err_msg = 0;
-  int rc = 0; // Declare rc here
+  int rc = 0;			// Declare rc here
   for (size_t i = 0; i < engine_bootstrap_sql_count; ++i)
     {
       const char *sql_stmt = engine_bootstrap_sql_statements[i];
       int rc = sqlite3_exec (db, sql_stmt, 0, 0, &err_msg);
 
       if (rc != SQLITE_OK)
-        {
-          LOGE ("Engine bootstrap SQL statement failed: %s", sql_stmt);
-          LOGE ("Engine bootstrap failed: %s", err_msg);
-          sqlite3_free (err_msg);
-          return 0;
-        }
+	{
+	  LOGE ("Engine bootstrap SQL statement failed: %s", sql_stmt);
+	  LOGE ("Engine bootstrap failed: %s", err_msg);
+	  sqlite3_free (err_msg);
+	  return 0;
+	}
     }
 
   rc = sqlite3_exec (db, CREATE_VIEWS_SQL, 0, 0, &err_msg);
@@ -3092,7 +2928,8 @@ db_init (void)
       LOGE ("DB Open Failed (%s): %s (rc=%d)", DEFAULT_DB_NAME,
 	    sqlite3_errstr (rc), rc);
       sqlite3_close (db_handle);
-      LOGE("FATAL ERROR: Could not open database! Code: %d, Message: %s", rc, sqlite3_errmsg (db_handle));
+      LOGE ("FATAL ERROR: Could not open database! Code: %d, Message: %s", rc,
+	    sqlite3_errmsg (db_handle));
       return -1;
     }
 
@@ -3109,7 +2946,7 @@ db_init (void)
   rc = sqlite3_prepare_v2 (db_handle, sql, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
-      LOGE("DB prepare check error: %s", sqlite3_errmsg (db_handle));
+      LOGE ("DB prepare check error: %s", sqlite3_errmsg (db_handle));
       ret_code = -1;
       goto cleanup;
     }
@@ -3121,7 +2958,7 @@ db_init (void)
   // We should treat this as an error.
   if (rc != SQLITE_ROW && rc != SQLITE_DONE)
     {
-      LOGE("DB step check error: %s", sqlite3_errmsg (db_handle));
+      LOGE ("DB step check error: %s", sqlite3_errmsg (db_handle));
       ret_code = -1;
       goto cleanup;
     }
@@ -3131,19 +2968,19 @@ db_init (void)
     {
       if (db_create_tables_unlocked (false) != 0)
 	{
-	  LOGE("Failed to create tables");
+	  LOGE ("Failed to create tables");
 	  ret_code = -1;
 	  goto cleanup;
 	}
       if (db_insert_defaults_unlocked () != 0)
 	{
-	  LOGE("Failed to insert default data");
+	  LOGE ("Failed to insert default data");
 	  ret_code = -1;
 	  goto cleanup;
 	}
-      if (db_seed_ai_qa_bot_bank_account_unlocked() != 0)
+      if (db_seed_ai_qa_bot_bank_account_unlocked () != 0)
 	{
-	  LOGE("Failed to seed AI QA bot bank account");
+	  LOGE ("Failed to seed AI QA bot bank account");
 	  ret_code = -1;
 	  goto cleanup;
 	}
@@ -3155,23 +2992,23 @@ db_init (void)
       /* // This handles cases where new tables/views are added after initial setup */
       /* fprintf (stderr, "Schema detected -- ensuring all tables and views are up-to-date...\n"); */
       /* if (db_create_tables_unlocked (true) != 0) */
-      /* 	{ */
-      /* 	  fprintf (stderr, "Failed to update tables/views\n"); */
-      /* 	  ret_code = -1; */
-      /* 	  goto cleanup; */
-      /* 	} */
+      /*        { */
+      /*          fprintf (stderr, "Failed to update tables/views\n"); */
+      /*          ret_code = -1; */
+      /*          goto cleanup; */
+      /*        } */
     }
-  if( !db_engine_bootstrap ())
+  if (!db_engine_bootstrap ())
     {
-      LOGE("PROBLEM WITH ENGINE CREATION");
+      LOGE ("PROBLEM WITH ENGINE CREATION");
     }
-  
+
   (void) db_seed_cron_tasks (db_handle);
 
 
   // If we've made it here, all steps were successful.
   ret_code = 0;
-  LOGI("db_init completed successfully");
+  LOGI ("db_init completed successfully");
 
 cleanup:
   /* Step 4: Finalize the statement if it was successfully prepared. */
@@ -3199,90 +3036,114 @@ cleanup:
 
 
 int
-db_load_ports(int *server_port, int *s2s_port)
+db_load_ports (int *server_port, int *s2s_port)
 {
-    sqlite3_stmt *stmt = NULL;
-    int rc;
-    int ret_code = -1;
+  sqlite3_stmt *stmt = NULL;
+  int rc;
+  int ret_code = -1;
 
-    if (!server_port || !s2s_port) {
-        return -1;
+  if (!server_port || !s2s_port)
+    {
+      return -1;
     }
 
-    pthread_mutex_lock(&db_mutex);
+  pthread_mutex_lock (&db_mutex);
 
-    if (!db_handle) {
-        goto cleanup;
+  if (!db_handle)
+    {
+      goto cleanup;
     }
 
-    const char *sql = "SELECT server_port, s2s_port FROM config WHERE id = 1;";
+  const char *sql = "SELECT server_port, s2s_port FROM config WHERE id = 1;";
 
-    rc = sqlite3_prepare_v2(db_handle, sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("DB prepare for port loading error: %s", sqlite3_errmsg(db_handle));
-        goto cleanup;
+  rc = sqlite3_prepare_v2 (db_handle, sql, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("DB prepare for port loading error: %s",
+	    sqlite3_errmsg (db_handle));
+      goto cleanup;
     }
 
-    rc = sqlite3_step(stmt);
-    if (rc == SQLITE_ROW) {
-        *server_port = sqlite3_column_int(stmt, 0);
-        *s2s_port = sqlite3_column_int(stmt, 1);
-        ret_code = 0; // Success
-    } else {
-        LOGE("DB step for port loading error: %s", sqlite3_errmsg(db_handle));
+  rc = sqlite3_step (stmt);
+  if (rc == SQLITE_ROW)
+    {
+      *server_port = sqlite3_column_int (stmt, 0);
+      *s2s_port = sqlite3_column_int (stmt, 1);
+      ret_code = 0;		// Success
+    }
+  else
+    {
+      LOGE ("DB step for port loading error: %s", sqlite3_errmsg (db_handle));
     }
 
 cleanup:
-    if (stmt) {
-        sqlite3_finalize(stmt);
+  if (stmt)
+    {
+      sqlite3_finalize (stmt);
     }
-    pthread_mutex_unlock(&db_mutex);
-    return ret_code;
+  pthread_mutex_unlock (&db_mutex);
+  return ret_code;
 }
 
 
 static int
-db_seed_ai_qa_bot_bank_account_unlocked(void)
+db_seed_ai_qa_bot_bank_account_unlocked (void)
 {
   int rc;
   int player_id = -1;
   int account_id = -1;
-  sqlite3 *db = db_get_handle();
+  sqlite3 *db = db_get_handle ();
 
   // Get the player_id for 'ai_qa_bot'
   sqlite3_stmt *st = NULL;
-  const char *sql_get_player_id = "SELECT id FROM players WHERE name = 'ai_qa_bot';";
-  rc = sqlite3_prepare_v2(db, sql_get_player_id, -1, &st, NULL);
-  if (rc != SQLITE_OK) {
-      LOGE("DB seed ai_qa_bot: Failed to prepare player ID lookup: %s", sqlite3_errmsg(db));
+  const char *sql_get_player_id =
+    "SELECT id FROM players WHERE name = 'ai_qa_bot';";
+  rc = sqlite3_prepare_v2 (db, sql_get_player_id, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("DB seed ai_qa_bot: Failed to prepare player ID lookup: %s",
+	    sqlite3_errmsg (db));
       return -1;
-  }
-  if (sqlite3_step(st) == SQLITE_ROW) {
-      player_id = sqlite3_column_int(st, 0);
-  }
-  sqlite3_finalize(st);
+    }
+  if (sqlite3_step (st) == SQLITE_ROW)
+    {
+      player_id = sqlite3_column_int (st, 0);
+    }
+  sqlite3_finalize (st);
 
-  if (player_id == -1) {
-      LOGE("DB seed ai_qa_bot: Player 'ai_qa_bot' not found.");
+  if (player_id == -1)
+    {
+      LOGE ("DB seed ai_qa_bot: Player 'ai_qa_bot' not found.");
       return -1;
-  }
+    }
 
   // Check if account already exists
-  rc = h_get_account_id_unlocked(db, "player", player_id, &account_id);
-  if (rc == SQLITE_OK) {
+  rc = h_get_account_id_unlocked (db, "player", player_id, &account_id);
+  if (rc == SQLITE_OK)
+    {
       // Account already exists, nothing to do
       return 0;
-  } else if (rc == SQLITE_NOTFOUND) {
+    }
+  else if (rc == SQLITE_NOTFOUND)
+    {
       // Account does not exist, create it
-      rc = h_create_bank_account_unlocked(db, "player", player_id, 10000, &account_id);
-      if (rc != SQLITE_OK) {
-          LOGE("DB seed ai_qa_bot: Failed to create bank account for 'ai_qa_bot' (rc=%d)", rc);
-          return -1;
-      }
-  } else {
-      LOGE("DB seed ai_qa_bot: Error checking for existing account (rc=%d)", rc);
+      rc =
+	h_create_bank_account_unlocked (db, "player", player_id, 10000,
+					&account_id);
+      if (rc != SQLITE_OK)
+	{
+	  LOGE
+	    ("DB seed ai_qa_bot: Failed to create bank account for 'ai_qa_bot' (rc=%d)",
+	     rc);
+	  return -1;
+	}
+    }
+  else
+    {
+      LOGE ("DB seed ai_qa_bot: Error checking for existing account (rc=%d)",
+	    rc);
       return -1;
-  }
+    }
 
   return 0;
 }
@@ -3316,15 +3177,18 @@ db_create_tables_unlocked (bool schema_exists)
       const char *sql_statement = create_table_sql[i];
 
       // If schema_exists is true, skip CREATE TABLE IF NOT EXISTS statements
-      if (schema_exists && strstr(sql_statement, "CREATE TABLE IF NOT EXISTS") == sql_statement) {
-          continue; // Skip this statement
-      }
+      if (schema_exists
+	  && strstr (sql_statement,
+		     "CREATE TABLE IF NOT EXISTS") == sql_statement)
+	{
+	  continue;		// Skip this statement
+	}
 
       rc = sqlite3_exec (db_handle, sql_statement, 0, 0, &errmsg);
       if (rc != SQLITE_OK)
 	{
-	  LOGE("SQL error at step %zu: %s", i, errmsg);
-	  LOGE("Failing SQL: %s", sql_statement);
+	  LOGE ("SQL error at step %zu: %s", i, errmsg);
+	  LOGE ("Failing SQL: %s", sql_statement);
 	  sqlite3_free (errmsg);
 	  return -1;
 	}
@@ -3405,7 +3269,7 @@ db_create (const char *table, json_t *row)
     }
 
   /* TODO: Build INSERT SQL dynamically based on JSON keys/values */
-  LOGE("db_create(%s, row) called (not implemented)", table);
+  LOGE ("db_create(%s, row) called (not implemented)", table);
 
   ret_code = 0;			// Assuming success for the placeholder
 
@@ -3430,7 +3294,7 @@ db_read (const char *table, int id)
     }
 
   /* TODO: Prepare SELECT ... WHERE id=? and return json_t * */
-  LOGE("db_read(%s, %d) called (not implemented)", table, id);
+  LOGE ("db_read(%s, %d) called (not implemented)", table, id);
 
   // result should be set here on success
 
@@ -3455,7 +3319,7 @@ db_update (const char *table, int id, json_t *row)
     }
 
   /* TODO: Build UPDATE SQL dynamically */
-  LOGE("db_update(%s, %d, row) called (not implemented)", table, id);
+  LOGE ("db_update(%s, %d, row) called (not implemented)", table, id);
 
   ret_code = 0;			// Assuming success for the placeholder
 
@@ -3480,7 +3344,7 @@ db_delete (const char *table, int id)
     }
 
   /* TODO: Prepare DELETE ... WHERE id=? */
-  LOGE("db_delete(%s, %d) called (not implemented)", table, id);
+  LOGE ("db_delete(%s, %d) called (not implemented)", table, id);
 
   ret_code = 0;			// Assuming success for the placeholder
 
@@ -3563,7 +3427,7 @@ rollback:
 fail:
   if (errmsg)
     {
-      LOGE("[DB] auth schema: %s", errmsg);
+      LOGE ("[DB] auth schema: %s", errmsg);
       sqlite3_free (errmsg);
     }
   return rc;
@@ -4047,7 +3911,7 @@ rollback:
 fail:
   if (errmsg)
     {
-      LOGE("[DB] idempotency schema: %s", errmsg);
+      LOGE ("[DB] idempotency schema: %s", errmsg);
       sqlite3_free (errmsg);
     }
   return rc;
@@ -4746,8 +4610,7 @@ db_port_info_json (int port_id, json_t **out_obj)
 		       json_integer (sqlite3_column_int (st, 4)));
   json_object_set_new (port, "sector_id",
 		       json_integer (sqlite3_column_int (st, 5)));
-  json_object_set_new (port, "petty_cash",
-		       json_integer (sqlite3_column_int (st, 9))); // petty_cash
+  json_object_set_new (port, "petty_cash", json_integer (sqlite3_column_int (st, 9)));	// petty_cash
 
   commodities_array = json_array ();
   if (!commodities_array)
@@ -4757,20 +4620,11 @@ db_port_info_json (int port_id, json_t **out_obj)
     }
 
   // Add Ore info
-  json_array_append_new (commodities_array,
-			 json_pack ("{s:s, s:i}",
-				    "commodity", "ore",
-				    "quantity", sqlite3_column_int (st, 6))); // ore_on_hand
+  json_array_append_new (commodities_array, json_pack ("{s:s, s:i}", "commodity", "ore", "quantity", sqlite3_column_int (st, 6)));	// ore_on_hand
   // Add Organics info
-  json_array_append_new (commodities_array,
-			 json_pack ("{s:s, s:i}",
-				    "commodity", "organics",
-				    "quantity", sqlite3_column_int (st, 7))); // organics_on_hand
+  json_array_append_new (commodities_array, json_pack ("{s:s, s:i}", "commodity", "organics", "quantity", sqlite3_column_int (st, 7)));	// organics_on_hand
   // Add Equipment info
-  json_array_append_new (commodities_array,
-			 json_pack ("{s:s, s:i}",
-				    "commodity", "equipment",
-				    "quantity", sqlite3_column_int (st, 8))); // equipment_on_hand
+  json_array_append_new (commodities_array, json_pack ("{s:s, s:i}", "commodity", "equipment", "quantity", sqlite3_column_int (st, 8)));	// equipment_on_hand
 
   sqlite3_finalize (st);
   st = NULL;
@@ -4798,6 +4652,7 @@ cleanup:
 
   return rc;
 }
+
 /* ---------- PLAYERS AT SECTOR (lightweight: id + name) ---------- */
 
 int
@@ -5143,7 +4998,8 @@ db_player_set_sector (int player_id, int sector_id)
 
   // Update the player's sector in the players table
   const char *sql_update_player = "UPDATE players SET sector=? WHERE id=?;";
-  rc = sqlite3_prepare_v2 (dbh, sql_update_player, -1, &st_update_player, NULL);
+  rc =
+    sqlite3_prepare_v2 (dbh, sql_update_player, -1, &st_update_player, NULL);
   if (rc != SQLITE_OK)
     {
       ret_code = rc;
@@ -5206,39 +5062,48 @@ cleanup:
   return ret_code;
 }
 
-int db_player_set_alignment(int player_id, int alignment) {
-    sqlite3 *db = db_get_handle();
-    if (!db || player_id <= 0) {
-        return SQLITE_MISUSE;
+int
+db_player_set_alignment (int player_id, int alignment)
+{
+  sqlite3 *db = db_get_handle ();
+  if (!db || player_id <= 0)
+    {
+      return SQLITE_MISUSE;
     }
 
-    int rc = SQLITE_ERROR;
-    sqlite3_stmt *stmt = NULL;
+  int rc = SQLITE_ERROR;
+  sqlite3_stmt *stmt = NULL;
 
-    pthread_mutex_lock(&db_mutex);
+  pthread_mutex_lock (&db_mutex);
 
-    static const char *SQL_UPDATE_ALIGNMENT = "UPDATE players SET alignment = ? WHERE id = ?;";
-    rc = sqlite3_prepare_v2(db, SQL_UPDATE_ALIGNMENT, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("ERROR: db_player_set_alignment prepare failed: %s", sqlite3_errmsg(db));
-        goto cleanup;
+  static const char *SQL_UPDATE_ALIGNMENT =
+    "UPDATE players SET alignment = ? WHERE id = ?;";
+  rc = sqlite3_prepare_v2 (db, SQL_UPDATE_ALIGNMENT, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("ERROR: db_player_set_alignment prepare failed: %s",
+	    sqlite3_errmsg (db));
+      goto cleanup;
     }
 
-    sqlite3_bind_int(stmt, 1, alignment);
-    sqlite3_bind_int(stmt, 2, player_id);
+  sqlite3_bind_int (stmt, 1, alignment);
+  sqlite3_bind_int (stmt, 2, player_id);
 
-    rc = sqlite3_step(stmt);
-    if (rc != SQLITE_DONE) {
-        LOGE("ERROR: db_player_set_alignment execution failed: %s", sqlite3_errmsg(db));
-        goto cleanup;
+  rc = sqlite3_step (stmt);
+  if (rc != SQLITE_DONE)
+    {
+      LOGE ("ERROR: db_player_set_alignment execution failed: %s",
+	    sqlite3_errmsg (db));
+      goto cleanup;
     }
 
-    rc = SQLITE_OK;
+  rc = SQLITE_OK;
 
 cleanup:
-    if (stmt) sqlite3_finalize(stmt);
-    pthread_mutex_unlock(&db_mutex);
-    return rc;
+  if (stmt)
+    sqlite3_finalize (stmt);
+  pthread_mutex_unlock (&db_mutex);
+  return rc;
 }
 
 int
@@ -5262,7 +5127,8 @@ db_player_get_sector (int player_id, int *out_sector)
       goto cleanup;
     }
 
-  const char *sql = "SELECT T2.sector FROM players AS T1 JOIN ships AS T2 ON T1.ship = T2.id WHERE T1.id = ?;";
+  const char *sql =
+    "SELECT T2.sector FROM players AS T1 JOIN ships AS T2 ON T1.ship = T2.id WHERE T1.id = ?;";
 
   // 2. Prepare the statement. This is the first point of failure.
   rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
@@ -5438,10 +5304,11 @@ cleanup:
 
 
 
-int db_player_info_json (int player_id, json_t **out)
+int
+db_player_info_json (int player_id, json_t **out)
 {
   sqlite3_stmt *st = NULL;
-  json_t *root_obj = NULL; /* Renamed from obj */
+  json_t *root_obj = NULL;	/* Renamed from obj */
   int ret_code = SQLITE_ERROR;
 
   pthread_mutex_lock (&db_mutex);
@@ -5456,25 +5323,21 @@ int db_player_info_json (int player_id, json_t **out)
     }
 
   // This SQL query is correct from our last fix
-  const char *sql = "SELECT "
-    " p.id, p.number, p.name, " // Player info (0, 1, 2)
-    " p.ship, " // Player's ship ID (3)
-    " s.id, " // (4)
-    " s.name, " // (5)
-    " s.type_id, " // (6)
-    " st.name, " // (7)
-    " s.holds, " // (8)
-    " s.fighters, " // (9)
-    " s.sector, " // (10)
-    " sec.name, " // (11)
-    " own.player_id AS owner_id, " // (12)
-    " COALESCE( (SELECT name FROM players WHERE id=own.player_id), 'derelict') AS owner_name, " // (13)
-    " s.ore, s.organics, s.equipment, s.colonists " // (14, 15, 16, 17)
-    "FROM players p "
-    "LEFT JOIN ships s      ON s.id = p.ship "
-    "LEFT JOIN shiptypes st ON st.id = s.type_id "
-    "LEFT JOIN sectors sec  ON sec.id = s.sector " // Join on ship's sector
-    "LEFT JOIN ship_ownership own ON s.id = own.ship_id AND own.role_id = 1 " // Join for owner
+  const char *sql = "SELECT " " p.id, p.number, p.name, "	// Player info (0, 1, 2)
+    " p.ship, "			// Player's ship ID (3)
+    " s.id, "			// (4)
+    " s.name, "			// (5)
+    " s.type_id, "		// (6)
+    " st.name, "		// (7)
+    " s.holds, "		// (8)
+    " s.fighters, "		// (9)
+    " s.sector, "		// (10)
+    " sec.name, "		// (11)
+    " own.player_id AS owner_id, "	// (12)
+    " COALESCE( (SELECT name FROM players WHERE id=own.player_id), 'derelict') AS owner_name, "	// (13)
+    " s.ore, s.organics, s.equipment, s.colonists "	// (14, 15, 16, 17)
+    "FROM players p " "LEFT JOIN ships s      ON s.id = p.ship " "LEFT JOIN shiptypes st ON st.id = s.type_id " "LEFT JOIN sectors sec  ON sec.id = s.sector "	// Join on ship's sector
+    "LEFT JOIN ship_ownership own ON s.id = own.ship_id AND own.role_id = 1 "	// Join for owner
     "WHERE p.id = ?";
 
   int rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
@@ -5494,73 +5357,77 @@ int db_player_info_json (int player_id, json_t **out)
       json_t *player_obj = json_object ();
       json_t *ship_obj = json_object ();
 
-      if (!root_obj || !player_obj || !ship_obj) {
-          // Out of memory
-          json_decref(root_obj);
-          json_decref(player_obj);
-          json_decref(ship_obj);
-          ret_code = SQLITE_NOMEM;
-          goto cleanup;
-      }
+      if (!root_obj || !player_obj || !ship_obj)
+	{
+	  // Out of memory
+	  json_decref (root_obj);
+	  json_decref (player_obj);
+	  json_decref (ship_obj);
+	  ret_code = SQLITE_NOMEM;
+	  goto cleanup;
+	}
 
-      json_object_set_new(root_obj, "player", player_obj);
-      json_object_set_new(root_obj, "ship", ship_obj);
+      json_object_set_new (root_obj, "player", player_obj);
+      json_object_set_new (root_obj, "ship", ship_obj);
 
       // --- Populate "player" object ---
       int p_id = sqlite3_column_int (st, 0);
       int p_number = sqlite3_column_int (st, 1);
-      const char *p_name = (const char *)sqlite3_column_text (st, 2);
-      int p_ship = sqlite3_column_int (st, 3); // Player's ship ID
-      json_object_set_new(player_obj, "id", json_integer(p_id));
-      json_object_set_new(player_obj, "number", json_integer(p_number));
-      json_object_set_new(player_obj, "name", json_string(p_name));
-      
+      const char *p_name = (const char *) sqlite3_column_text (st, 2);
+      int p_ship = sqlite3_column_int (st, 3);	// Player's ship ID
+      json_object_set_new (player_obj, "id", json_integer (p_id));
+      json_object_set_new (player_obj, "number", json_integer (p_number));
+      json_object_set_new (player_obj, "name", json_string (p_name));
+
       // --- Populate "ship" object (with location) ---
-      int s_id = sqlite3_column_int (st, 4); // s.id
-      int s_number = sqlite3_column_int (st, 4); // s.id again, for ship_number
-      const char *s_name = (const char *)sqlite3_column_text (st, 5); // s.name
-      json_object_set_new(ship_obj, "id", json_integer(s_id));
-      json_object_set_new(ship_obj, "number", json_integer(s_number));
-      json_object_set_new(ship_obj, "name", json_string(s_name));
-      
-      json_t* ship_type_obj = json_object();
+      int s_id = sqlite3_column_int (st, 4);	// s.id
+      int s_number = sqlite3_column_int (st, 4);	// s.id again, for ship_number
+      const char *s_name = (const char *) sqlite3_column_text (st, 5);	// s.name
+      json_object_set_new (ship_obj, "id", json_integer (s_id));
+      json_object_set_new (ship_obj, "number", json_integer (s_number));
+      json_object_set_new (ship_obj, "name", json_string (s_name));
+
+      json_t *ship_type_obj = json_object ();
       int st_id = sqlite3_column_int (st, 7);
-      const char *st_name = (const char *)sqlite3_column_text (st, 8);
-      json_object_set_new(ship_type_obj, "id", json_integer(st_id));
-      json_object_set_new(ship_type_obj, "name", json_string(st_name));
-      json_object_set_new(ship_obj, "type", ship_type_obj);
+      const char *st_name = (const char *) sqlite3_column_text (st, 8);
+      json_object_set_new (ship_type_obj, "id", json_integer (st_id));
+      json_object_set_new (ship_type_obj, "name", json_string (st_name));
+      json_object_set_new (ship_obj, "type", ship_type_obj);
 
       int s_holds = sqlite3_column_int (st, 8);
       int s_fighters = sqlite3_column_int (st, 9);
-      json_object_set_new(ship_obj, "holds", json_integer(s_holds));
-      json_object_set_new(ship_obj, "fighters", json_integer(s_fighters));
-      
-      json_t* location_obj = json_object();
+      json_object_set_new (ship_obj, "holds", json_integer (s_holds));
+      json_object_set_new (ship_obj, "fighters", json_integer (s_fighters));
+
+      json_t *location_obj = json_object ();
       int loc_sector_id = sqlite3_column_int (st, 10);
-      const char *loc_sector_name = (const char *)sqlite3_column_text (st, 11);
-      json_object_set_new(location_obj, "sector_id", json_integer(loc_sector_id));
-      json_object_set_new(location_obj, "sector_name", json_string(loc_sector_name));
-      json_object_set_new(ship_obj, "location", location_obj);
+      const char *loc_sector_name =
+	(const char *) sqlite3_column_text (st, 11);
+      json_object_set_new (location_obj, "sector_id",
+			   json_integer (loc_sector_id));
+      json_object_set_new (location_obj, "sector_name",
+			   json_string (loc_sector_name));
+      json_object_set_new (ship_obj, "location", location_obj);
 
       // Add owner information to ship_obj
       int owner_id = sqlite3_column_int (st, 12);
-      const char *owner_name = (const char *)sqlite3_column_text (st, 13);
-      json_t* owner_obj = json_object();
-      json_object_set_new(owner_obj, "id", json_integer(owner_id));
-      json_object_set_new(owner_obj, "name", json_string(owner_name));
-      json_object_set_new(ship_obj, "owner", owner_obj);
+      const char *owner_name = (const char *) sqlite3_column_text (st, 13);
+      json_t *owner_obj = json_object ();
+      json_object_set_new (owner_obj, "id", json_integer (owner_id));
+      json_object_set_new (owner_obj, "name", json_string (owner_name));
+      json_object_set_new (ship_obj, "owner", owner_obj);
 
       // Add cargo information to ship_obj
       int ore = sqlite3_column_int (st, 14);
       int organics = sqlite3_column_int (st, 15);
       int equipment = sqlite3_column_int (st, 16);
       int colonists = sqlite3_column_int (st, 17);
-      json_t* cargo_obj = json_pack ("{s:i s:i s:i s:i}",
-                                     "ore", ore,
-                                     "organics", organics,
-                                     "equipment", equipment,
-                                     "colonists", colonists);
-      json_object_set_new(ship_obj, "cargo", cargo_obj);
+      json_t *cargo_obj = json_pack ("{s:i s:i s:i s:i}",
+				     "ore", ore,
+				     "organics", organics,
+				     "equipment", equipment,
+				     "colonists", colonists);
+      json_object_set_new (ship_obj, "cargo", cargo_obj);
 
       ret_code = SQLITE_OK;
     }
@@ -5584,14 +5451,14 @@ cleanup:
   if (ret_code == SQLITE_OK)
     {
       if (out)
-        *out = root_obj;
+	*out = root_obj;
       else
-        json_decref (root_obj);
+	json_decref (root_obj);
     }
   else
     {
       if (root_obj)
-        json_decref (root_obj);
+	json_decref (root_obj);
     }
 
   pthread_mutex_unlock (&db_mutex);
@@ -5700,12 +5567,8 @@ db_ships_at_sector_json (int player_id, int sector_id, json_t **out)
     }
 
   /* 3) Query: ship name, type name, owner name, ship id (by sector) */
-  const char *sql = "SELECT s.name, st.name, p.name, s.id "
-                    "FROM ships s "
-                    "LEFT JOIN shiptypes st ON s.type_id = st.id "
-                    "LEFT JOIN ship_ownership so ON s.id = so.ship_id AND so.role_id = 1 " /* Assuming role_id 1 is the owner */
-                    "LEFT JOIN players p ON so.player_id = p.id "
-                    "WHERE s.sector=?;";
+  const char *sql = "SELECT s.name, st.name, p.name, s.id " "FROM ships s " "LEFT JOIN shiptypes st ON s.type_id = st.id " "LEFT JOIN ship_ownership so ON s.id = so.ship_id AND so.role_id = 1 "	/* Assuming role_id 1 is the owner */
+    "LEFT JOIN players p ON so.player_id = p.id " "WHERE s.sector=?;";
 
   int rc = sqlite3_prepare_v2 (db_get_handle (), sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
@@ -6746,7 +6609,7 @@ db_ship_claim (int player_id, int sector_id, int ship_id, json_t **out_ship)
 rollback:
   /* We only come here after BEGIN succeeded */
   const char *err = sqlite3_errmsg (db_handle);
-  LOGE("%s", err);
+  LOGE ("%s", err);
   sqlite3_exec (db_handle, "ROLLBACK", NULL, NULL, NULL);
   if (stmt)
     {
@@ -6846,15 +6709,19 @@ db_destroy_ship (sqlite3 *db, int player_id, int ship_id)
   char ship_name[256] = { 0 };
   int ship_sector = 0;
   {
-    const char *sql_get_ship_info = "SELECT name, sector FROM ships WHERE id = ?;";
-    rc = sqlite3_prepare_v2(db, sql_get_ship_info, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) goto rollback;
-    sqlite3_bind_int(stmt, 1, ship_id);
-    if (sqlite3_step(stmt) == SQLITE_ROW) {
-      strncpy(ship_name, (const char*)sqlite3_column_text(stmt, 0), sizeof(ship_name) - 1);
-      ship_sector = sqlite3_column_int(stmt, 1);
-    }
-    sqlite3_finalize(stmt);
+    const char *sql_get_ship_info =
+      "SELECT name, sector FROM ships WHERE id = ?;";
+    rc = sqlite3_prepare_v2 (db, sql_get_ship_info, -1, &stmt, NULL);
+    if (rc != SQLITE_OK)
+      goto rollback;
+    sqlite3_bind_int (stmt, 1, ship_id);
+    if (sqlite3_step (stmt) == SQLITE_ROW)
+      {
+	strncpy (ship_name, (const char *) sqlite3_column_text (stmt, 0),
+		 sizeof (ship_name) - 1);
+	ship_sector = sqlite3_column_int (stmt, 1);
+      }
+    sqlite3_finalize (stmt);
     stmt = NULL;
   }
 
@@ -6871,7 +6738,8 @@ db_destroy_ship (sqlite3 *db, int player_id, int ship_id)
     goto rollback;
 
   // 3. Delete from ship_ownership table
-  const char *sql_delete_ownership = "DELETE FROM ship_ownership WHERE ship_id = ?;";
+  const char *sql_delete_ownership =
+    "DELETE FROM ship_ownership WHERE ship_id = ?;";
   rc = sqlite3_prepare_v2 (db, sql_delete_ownership, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     goto rollback;
@@ -6883,7 +6751,8 @@ db_destroy_ship (sqlite3 *db, int player_id, int ship_id)
     goto rollback;
 
   // 4. Update player's active ship to 0 if it was the destroyed ship
-  const char *sql_update_player = "UPDATE players SET ship = 0 WHERE id = ? AND ship = ?;";
+  const char *sql_update_player =
+    "UPDATE players SET ship = 0 WHERE id = ? AND ship = ?;";
   rc = sqlite3_prepare_v2 (db, sql_update_player, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     goto rollback;
@@ -6896,13 +6765,13 @@ db_destroy_ship (sqlite3 *db, int player_id, int ship_id)
     goto rollback;
 
   // Log ship destroyed event
-  json_t *payload = json_object();
-  json_object_set_new(payload, "ship_id", json_integer(ship_id));
-  json_object_set_new(payload, "ship_name", json_string(ship_name));
-  json_object_set_new(payload, "player_id", json_integer(player_id));
+  json_t *payload = json_object ();
+  json_object_set_new (payload, "ship_id", json_integer (ship_id));
+  json_object_set_new (payload, "ship_name", json_string (ship_name));
+  json_object_set_new (payload, "player_id", json_integer (player_id));
   //  h_log_engine_event((long long)time(NULL), "ship.destroyed", "player", player_id, ship_sector, payload, NULL);
 
-  
+
   rc = sqlite3_exec (db, "COMMIT", NULL, NULL, NULL);
   if (rc != SQLITE_OK)
     goto out_unlock;
@@ -6919,91 +6788,96 @@ out_unlock:
   return rc;
 }
 
-int db_create_initial_ship(int player_id, const char *ship_name, int sector_id) {
-    sqlite3 *db = db_get_handle();
-    if (!db || player_id <= 0 || !ship_name || !*ship_name || sector_id <= 0) {
-        return -1; // Invalid input
+int
+db_create_initial_ship (int player_id, const char *ship_name, int sector_id)
+{
+  sqlite3 *db = db_get_handle ();
+  if (!db || player_id <= 0 || !ship_name || !*ship_name || sector_id <= 0)
+    {
+      return -1;		// Invalid input
     }
 
-    int rc = SQLITE_ERROR;
-    sqlite3_stmt *stmt = NULL;
-    int ship_type_id = -1;
-    int new_ship_id = -1;
+  int rc = SQLITE_ERROR;
+  sqlite3_stmt *stmt = NULL;
+  int ship_type_id = -1;
+  int new_ship_id = -1;
 
-    pthread_mutex_lock(&db_mutex);
-    rc = sqlite3_exec(db, "BEGIN IMMEDIATE", NULL, NULL, NULL);
-    if (rc != SQLITE_OK) goto rollback;
+  pthread_mutex_lock (&db_mutex);
+  rc = sqlite3_exec (db, "BEGIN IMMEDIATE", NULL, NULL, NULL);
+  if (rc != SQLITE_OK)
+    goto rollback;
 
-    // 1. Get shiptype_id for "Scout Marauder"
-    static const char *SQL_GET_SHIPTYPE_ID = "SELECT id FROM shiptypes WHERE name = 'Scout Marauder';";
-    rc = sqlite3_prepare_v2(db, SQL_GET_SHIPTYPE_ID, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) goto rollback;
-    if (sqlite3_step(stmt) == SQLITE_ROW) {
-        ship_type_id = sqlite3_column_int(stmt, 0);
+  // 1. Get shiptype_id for "Scout Marauder"
+  static const char *SQL_GET_SHIPTYPE_ID =
+    "SELECT id FROM shiptypes WHERE name = 'Scout Marauder';";
+  rc = sqlite3_prepare_v2 (db, SQL_GET_SHIPTYPE_ID, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    goto rollback;
+  if (sqlite3_step (stmt) == SQLITE_ROW)
+    {
+      ship_type_id = sqlite3_column_int (stmt, 0);
     }
-    sqlite3_finalize(stmt);
-    stmt = NULL;
+  sqlite3_finalize (stmt);
+  stmt = NULL;
 
-    if (ship_type_id == -1) {
-        rc = SQLITE_ERROR;
-        goto rollback;
-    }
-
-    // 2. Create a new ship in the ships table
-    static const char *SQL_CREATE_SHIP =
-        "INSERT INTO ships (type_id, name, sector, owner_player_id, "
-        "holds, fighters, shields, ore, organics, equipment, colonists, "
-        "flags, perms, turns, max_holds, max_fighters, max_shields, max_ore, "
-        "max_organics, max_equipment, max_colonists, max_turns, max_attack, "
-        "max_mines, max_limpets, max_genesis, twarp, transport_range, "
-        "max_beacons, holo, planet, max_photons, can_purchase) "
-        "SELECT "
-        "  st.id, ?, ?, ?, " // type_id, name, sector, owner_player_id
-        "  st.initialholds, st.maxfighters, st.maxshields, 0, 0, 0, 0, " // holds, fighters, shields, cargo
-        "  777, 731, st.turns, st.maxholds, st.maxfighters, st.maxshields, 0, " // flags, perms, turns, max_holds, etc.
-        "  0, 0, 0, st.turns, st.maxattack, " // max_ore, max_organics, max_equipment, max_colonists, max_turns, max_attack
-        "  st.maxmines, st.maxlimpets, st.maxgenesis, st.twarp, st.transportrange, " // max_mines, max_limpets, max_genesis, twarp, transport_range
-        "  st.maxbeacons, st.holo, st.planet, st.maxphotons, st.can_purchase " // max_beacons, holo, planet, max_photons, can_purchase
-        "FROM shiptypes st WHERE st.id = ?;"; // Use shiptype_id to get default values
-
-    rc = sqlite3_prepare_v2(db, SQL_CREATE_SHIP, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) goto rollback;
-
-    sqlite3_bind_text(stmt, 1, ship_name, -1, SQLITE_TRANSIENT);
-    sqlite3_bind_int(stmt, 2, sector_id);
-    sqlite3_bind_int(stmt, 3, player_id); // owner_player_id
-    sqlite3_bind_int(stmt, 4, ship_type_id); // shiptype_id for WHERE clause
-
-    rc = sqlite3_step(stmt);
-    if (rc != SQLITE_DONE) {
-        rc = SQLITE_ERROR;
-        sqlite3_finalize(stmt);
-        return 0;
-    }
-    sqlite3_finalize(stmt);
-    stmt = NULL;
-
-    new_ship_id = sqlite3_last_insert_rowid(db);
-
-    // 3. Assign ownership using db_ship_claim
-    // db_ship_claim also updates players.ship and sets primary status
-    rc = db_ship_claim(player_id, sector_id, new_ship_id, NULL);
-    if (rc != SQLITE_OK) {
-        goto rollback;
+  if (ship_type_id == -1)
+    {
+      rc = SQLITE_ERROR;
+      goto rollback;
     }
 
-    rc = sqlite3_exec(db, "COMMIT", NULL, NULL, NULL);
-    if (rc != SQLITE_OK) goto rollback;
+  // 2. Create a new ship in the ships table
+  static const char *SQL_CREATE_SHIP = "INSERT INTO ships (type_id, name, sector, owner_player_id, " "holds, fighters, shields, ore, organics, equipment, colonists, " "flags, perms, turns, max_holds, max_fighters, max_shields, max_ore, " "max_organics, max_equipment, max_colonists, max_turns, max_attack, " "max_mines, max_limpets, max_genesis, twarp, transport_range, " "max_beacons, holo, planet, max_photons, can_purchase) " "SELECT " "  st.id, ?, ?, ?, "	// type_id, name, sector, owner_player_id
+    "  st.initialholds, st.maxfighters, st.maxshields, 0, 0, 0, 0, "	// holds, fighters, shields, cargo
+    "  777, 731, st.turns, st.maxholds, st.maxfighters, st.maxshields, 0, "	// flags, perms, turns, max_holds, etc.
+    "  0, 0, 0, st.turns, st.maxattack, "	// max_ore, max_organics, max_equipment, max_colonists, max_turns, max_attack
+    "  st.maxmines, st.maxlimpets, st.maxgenesis, st.twarp, st.transportrange, "	// max_mines, max_limpets, max_genesis, twarp, transport_range
+    "  st.maxbeacons, st.holo, st.planet, st.maxphotons, st.can_purchase "	// max_beacons, holo, planet, max_photons, can_purchase
+    "FROM shiptypes st WHERE st.id = ?;";	// Use shiptype_id to get default values
 
-    pthread_mutex_unlock(&db_mutex);
-    return new_ship_id;
+  rc = sqlite3_prepare_v2 (db, SQL_CREATE_SHIP, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    goto rollback;
+
+  sqlite3_bind_text (stmt, 1, ship_name, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int (stmt, 2, sector_id);
+  sqlite3_bind_int (stmt, 3, player_id);	// owner_player_id
+  sqlite3_bind_int (stmt, 4, ship_type_id);	// shiptype_id for WHERE clause
+
+  rc = sqlite3_step (stmt);
+  if (rc != SQLITE_DONE)
+    {
+      rc = SQLITE_ERROR;
+      sqlite3_finalize (stmt);
+      return 0;
+    }
+  sqlite3_finalize (stmt);
+  stmt = NULL;
+
+  new_ship_id = sqlite3_last_insert_rowid (db);
+
+  // 3. Assign ownership using db_ship_claim
+  // db_ship_claim also updates players.ship and sets primary status
+  rc = db_ship_claim (player_id, sector_id, new_ship_id, NULL);
+  if (rc != SQLITE_OK)
+    {
+      goto rollback;
+    }
+
+  rc = sqlite3_exec (db, "COMMIT", NULL, NULL, NULL);
+  if (rc != SQLITE_OK)
+    goto rollback;
+
+  pthread_mutex_unlock (&db_mutex);
+  return new_ship_id;
 
 rollback:
-    sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
+  sqlite3_exec (db, "ROLLBACK", NULL, NULL, NULL);
 out_unlock:
-    if (stmt) sqlite3_finalize(stmt);
-    pthread_mutex_unlock(&db_mutex);
-    return -1;
+  if (stmt)
+    sqlite3_finalize (stmt);
+  pthread_mutex_unlock (&db_mutex);
+  return -1;
 }
 
 /* Decide if a player_id is an NPC (engine policy). 
@@ -7200,7 +7074,8 @@ db_ensure_ship_perms_column_unlocked (void)
 			 NULL, NULL, &errmsg);
       if (rc != SQLITE_OK)
 	{
-	  LOGE("ALTER TABLE ships ADD COLUMN perms failed: %s", errmsg ? errmsg : "(unknown)");
+	  LOGE ("ALTER TABLE ships ADD COLUMN perms failed: %s",
+		errmsg ? errmsg : "(unknown)");
 	  sqlite3_free (errmsg);
 	  return rc;
 	}
@@ -7246,8 +7121,8 @@ db_sector_scan_core (int sector_id, json_t **out_obj)
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
-      LOGE("[scan_core] prepare failed (sector=%d): %s",
-	       sector_id, sqlite3_errmsg (db));
+      LOGE ("[scan_core] prepare failed (sector=%d): %s",
+	    sector_id, sqlite3_errmsg (db));
       goto done;
     }
 
@@ -7469,9 +7344,11 @@ static const char *INSERT_ENGINE_EVENT_SQL =
   "INSERT INTO engine_events (ts, type, actor_owner_type, actor_owner_id, sector_id, payload) "
   "VALUES (?, ?, ?, ?, ?, ?);";
 
-int db_log_engine_event (long long ts,
+int
+db_log_engine_event (long long ts,
 		     const char *type,
-		     const char *actor_owner_type, int actor_player_id, int sector_id, json_t *payload, const char *idem_key)
+		     const char *actor_owner_type, int actor_player_id,
+		     int sector_id, json_t *payload, const char *idem_key)
 {
   sqlite3 *db = db_get_handle ();
   sqlite3_stmt *stmt = NULL;
@@ -7498,11 +7375,14 @@ int db_log_engine_event (long long ts,
   sqlite3_bind_text (stmt, 2, type, -1, SQLITE_STATIC);
 
   // Bind owner type and ID
-  if (actor_owner_type && strlen(actor_owner_type) > 0) {
-      sqlite3_bind_text(stmt, 3, actor_owner_type, -1, SQLITE_STATIC);
-  } else {
-      sqlite3_bind_null(stmt, 3);
-  }
+  if (actor_owner_type && strlen (actor_owner_type) > 0)
+    {
+      sqlite3_bind_text (stmt, 3, actor_owner_type, -1, SQLITE_STATIC);
+    }
+  else
+    {
+      sqlite3_bind_null (stmt, 3);
+    }
 
   if (actor_player_id > 0)
     {
@@ -7547,46 +7427,64 @@ cleanup:
 }
 
 
-int db_news_insert_feed_item(int ts, const char *category, const char *scope,
-                             const char *headline, const char *body, json_t *context_data)
+int
+db_news_insert_feed_item (int ts, const char *category, const char *scope,
+			  const char *headline, const char *body,
+			  json_t *context_data)
 {
   sqlite3 *db = db_get_handle ();
   sqlite3_stmt *stmt = NULL;
   int rc = SQLITE_ERROR;
   char *article_text = NULL;
   char *context_str = NULL;
-  int expiration_ts = ts + NEWS_EXPIRATION_SECONDS; // NEWS_EXPIRATION_SECONDS is defined in server_cron.h
+  int expiration_ts = ts + NEWS_EXPIRATION_SECONDS;	// NEWS_EXPIRATION_SECONDS is defined in server_cron.h
 
   // Combine headline and body into article_text
   // Add scope to context_data if it's not null
-  if (scope && strlen(scope) > 0) {
-      if (!context_data) {
-          context_data = json_object();
-      }
-      json_object_set_new(context_data, "scope", json_string(scope));
-  }
+  if (scope && strlen (scope) > 0)
+    {
+      if (!context_data)
+	{
+	  context_data = json_object ();
+	}
+      json_object_set_new (context_data, "scope", json_string (scope));
+    }
 
-  if (context_data) {
-      context_str = json_dumps(context_data, JSON_COMPACT);
-      if (!context_str) {
-          LOGE("ERROR: db_news_insert_feed_item Failed to serialize context_data.");
-          goto cleanup;
-      }
-      if (asprintf(&article_text, "HEADLINE: %s\nBODY: %s\nCONTEXT: %s", headline, body, context_str) == -1) {
-          LOGE("ERROR: db_news_insert_feed_item Failed to allocate article_text with context.");
-          goto cleanup;
-      }
-  } else {
-      if (asprintf(&article_text, "HEADLINE: %s\nBODY: %s", headline, body) == -1) {
-          LOGE("ERROR: db_news_insert_feed_item Failed to allocate article_text without context.");
-          goto cleanup;
-      }
-  }
+  if (context_data)
+    {
+      context_str = json_dumps (context_data, JSON_COMPACT);
+      if (!context_str)
+	{
+	  LOGE
+	    ("ERROR: db_news_insert_feed_item Failed to serialize context_data.");
+	  goto cleanup;
+	}
+      if (asprintf
+	  (&article_text, "HEADLINE: %s\nBODY: %s\nCONTEXT: %s", headline,
+	   body, context_str) == -1)
+	{
+	  LOGE
+	    ("ERROR: db_news_insert_feed_item Failed to allocate article_text with context.");
+	  goto cleanup;
+	}
+    }
+  else
+    {
+      if (asprintf (&article_text, "HEADLINE: %s\nBODY: %s", headline, body)
+	  == -1)
+	{
+	  LOGE
+	    ("ERROR: db_news_insert_feed_item Failed to allocate article_text without context.");
+	  goto cleanup;
+	}
+    }
 
-  if (!article_text) {
-      LOGE("ERROR: db_news_insert_feed_item Failed to allocate article_text.");
+  if (!article_text)
+    {
+      LOGE
+	("ERROR: db_news_insert_feed_item Failed to allocate article_text.");
       goto cleanup;
-  }
+    }
 
   const char *sql =
     "INSERT INTO news_feed (published_ts, expiration_ts, news_category, article_text) "
@@ -7595,7 +7493,8 @@ int db_news_insert_feed_item(int ts, const char *category, const char *scope,
   rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
-      LOGE("ERROR: db_news_insert_feed_item prepare failed: %s", sqlite3_errmsg (db));
+      LOGE ("ERROR: db_news_insert_feed_item prepare failed: %s",
+	    sqlite3_errmsg (db));
       goto cleanup;
     }
 
@@ -7607,7 +7506,8 @@ int db_news_insert_feed_item(int ts, const char *category, const char *scope,
   rc = sqlite3_step (stmt);
   if (rc != SQLITE_DONE)
     {
-      LOGE("ERROR: db_news_insert_feed_item execution failed: %s", sqlite3_errmsg (db));
+      LOGE ("ERROR: db_news_insert_feed_item execution failed: %s",
+	    sqlite3_errmsg (db));
       rc = SQLITE_ERROR;
     }
   else
@@ -7619,18 +7519,21 @@ cleanup:
   if (stmt)
     sqlite3_finalize (stmt);
   if (article_text)
-    free(article_text);
+    free (article_text);
   if (context_str)
-    free(context_str);
+    free (context_str);
   if (context_data)
-    json_decref(context_data); // Decref if created locally or passed in
+    json_decref (context_data);	// Decref if created locally or passed in
 
   return rc;
 }
 
-int db_is_sector_fedspace (int ck_sector)
+int
+db_is_sector_fedspace (int ck_sector)
 {
-  sqlite3 *db = db_get_handle ();                                                                                            sqlite3_stmt *stmt = NULL;                                                                                                int rc = SQLITE_ERROR;
+  sqlite3 *db = db_get_handle ();
+  sqlite3_stmt *stmt = NULL;
+  int rc = SQLITE_ERROR;
 
   static const char *FEDSPACE_SQL =
     "SELECT sector_id from stardock_location where sector_id=?1;";
@@ -7643,7 +7546,7 @@ int db_is_sector_fedspace (int ck_sector)
   rc = sqlite3_prepare_v2 (db, FEDSPACE_SQL, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
-      LOGE("db_is_sector_fedspace: %s", sqlite3_errmsg (db));
+      LOGE ("db_is_sector_fedspace: %s", sqlite3_errmsg (db));
       goto done;
     }
 
@@ -7653,10 +7556,10 @@ int db_is_sector_fedspace (int ck_sector)
   int sec_ret = 1;
   if (rc == SQLITE_ROW)
     {
-      sec_ret = sqlite3_column_int(st, 0);
+      sec_ret = sqlite3_column_int (st, 0);
     }
-  
-  if (ck_sector == sec_ret || ck_sector >=1 && ck_sector <= 10)
+
+  if (ck_sector == sec_ret || ck_sector >= 1 && ck_sector <= 10)
     {
       rc = 1;
     }
@@ -7671,256 +7574,335 @@ done:
   pthread_mutex_unlock (&db_mutex);
   return rc;
 }
-    
 
-  
+
+
 /* Returns the port_id (primary key) for a given sector, or -1 on error/not found */
 int
-db_get_port_id_by_sector(int sector_id)
+db_get_port_id_by_sector (int sector_id)
 {
-    sqlite3 *db = db_get_handle(); // Get the handle
-    sqlite3_stmt *stmt = NULL;
-    int port_id = -1;
+  sqlite3 *db = db_get_handle ();	// Get the handle
+  sqlite3_stmt *stmt = NULL;
+  int port_id = -1;
 
-    const char *sql = "SELECT id FROM ports WHERE sector=?1;";
+  const char *sql = "SELECT id FROM ports WHERE sector=?1;";
 
-    pthread_mutex_lock(&db_mutex); // Critical section starts
+  pthread_mutex_lock (&db_mutex);	// Critical section starts
 
-    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
-        LOGE("db_get_port_id_by_sector: %s", sqlite3_errmsg(db));
-        goto done;
+  if (sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL) != SQLITE_OK)
+    {
+      LOGE ("db_get_port_id_by_sector: %s", sqlite3_errmsg (db));
+      goto done;
     }
 
-    sqlite3_bind_int(stmt, 1, sector_id);
+  sqlite3_bind_int (stmt, 1, sector_id);
 
-    if (sqlite3_step(stmt) == SQLITE_ROW) {
-        port_id = sqlite3_column_int(stmt, 0);
+  if (sqlite3_step (stmt) == SQLITE_ROW)
+    {
+      port_id = sqlite3_column_int (stmt, 0);
     }
 
 done:
-    sqlite3_finalize(stmt);
-    pthread_mutex_unlock(&db_mutex); // Critical section ends
-    return port_id;
+  sqlite3_finalize (stmt);
+  pthread_mutex_unlock (&db_mutex);	// Critical section ends
+  return port_id;
 }
 
 
 int
 db_get_ship_sector_id (sqlite3 *db, int ship_id)
 {
-    sqlite3_stmt *st = NULL;
-    int rc; // For SQLite's intermediate return codes.
-    int out_sector = 0;
+  sqlite3_stmt *st = NULL;
+  int rc;			// For SQLite's intermediate return codes.
+  int out_sector = 0;
 
-    // 1. Acquire the lock at the very beginning of the function.
-    pthread_mutex_lock (&db_mutex);
+  // 1. Acquire the lock at the very beginning of the function.
+  pthread_mutex_lock (&db_mutex);
 
-    const char *sql = "SELECT sector FROM ships WHERE id=?";
+  const char *sql = "SELECT sector FROM ships WHERE id=?";
 
-    // 2. Prepare the statement. Use the passed 'db' handle.
-    rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
-    if (rc != SQLITE_OK)
+  // 2. Prepare the statement. Use the passed 'db' handle.
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
     {
-        // Log error if preparation fails
-      LOGE( "Failed to prepare SQL statement for ship sector ID.");
-        goto cleanup;
+      // Log error if preparation fails
+      LOGE ("Failed to prepare SQL statement for ship sector ID.");
+      goto cleanup;
     }
 
-    sqlite3_bind_int (st, 1, ship_id);
-    
-    // 3. Step the statement.
-    rc = sqlite3_step (st);
+  sqlite3_bind_int (st, 1, ship_id);
 
-    if (rc == SQLITE_ROW)
+  // 3. Step the statement.
+  rc = sqlite3_step (st);
+
+  if (rc == SQLITE_ROW)
     {
-        // Data found: safely read the column, treating NULL as 0
-        out_sector = sqlite3_column_type (st, 0) == SQLITE_NULL ? 0 : sqlite3_column_int (st, 0);
+      // Data found: safely read the column, treating NULL as 0
+      out_sector =
+	sqlite3_column_type (st,
+			     0) == SQLITE_NULL ? 0 : sqlite3_column_int (st,
+									 0);
     }
-    else if (rc != SQLITE_DONE)
+  else if (rc != SQLITE_DONE)
     {
-        // Handle step errors (not SQLITE_ROW and not SQLITE_DONE)
-        LOGE("Error stepping SQL statement for ship sector ID.");
-        // out_sector remains 0
+      // Handle step errors (not SQLITE_ROW and not SQLITE_DONE)
+      LOGE ("Error stepping SQL statement for ship sector ID.");
+      // out_sector remains 0
     }
-    // If rc == SQLITE_DONE, the ship was not found, and out_sector remains 0, which is correct.
+  // If rc == SQLITE_DONE, the ship was not found, and out_sector remains 0, which is correct.
 
 cleanup:
-    // 4. Finalize the statement. This must be done whether the function succeeded or failed.
-    if (st)
+  // 4. Finalize the statement. This must be done whether the function succeeded or failed.
+  if (st)
     {
-        sqlite3_finalize (st);
+      sqlite3_finalize (st);
     }
 
-    // 5. Release the lock. This is the final step before returning.
-    pthread_mutex_unlock (&db_mutex);
+  // 5. Release the lock. This is the final step before returning.
+  pthread_mutex_unlock (&db_mutex);
 
-    // 6. Return the result. 0 on error or not found, >0 on success.
-    return out_sector;
+  // 6. Return the result. 0 on error or not found, >0 on success.
+  return out_sector;
 }
 
 
-void h_generate_hex_uuid(char *buffer, size_t buffer_size) {
-    if (buffer_size < 33) { // 32 chars + null terminator
-        return;
+void
+h_generate_hex_uuid (char *buffer, size_t buffer_size)
+{
+  if (buffer_size < 33)
+    {				// 32 chars + null terminator
+      return;
     }
-    // A simple pseudo-random hex string generation. Not a true UUID.
-    // For a proper UUID, platform-specific functions or libuuid would be better.
-    // This is sufficient for grouping transactions in this context.
-    const char *hex_chars = "0123456789abcdef";
-    for (size_t i = 0; i < 32; ++i) {
-        buffer[i] = hex_chars[rand() % 16];
+  // A simple pseudo-random hex string generation. Not a true UUID.
+  // For a proper UUID, platform-specific functions or libuuid would be better.
+  // This is sufficient for grouping transactions in this context.
+  const char *hex_chars = "0123456789abcdef";
+  for (size_t i = 0; i < 32; ++i)
+    {
+      buffer[i] = hex_chars[rand () % 16];
     }
-    buffer[32] = '\0';
+  buffer[32] = '\0';
 }
 
 
 // Helper to get the account_id for a system-owned account (e.g., for fees/taxes)
-int h_get_system_account_id_unlocked(sqlite3 *db, const char *system_owner_type, int system_owner_id, int *account_id_out) {
-    int rc = h_get_account_id_unlocked(db, system_owner_type, system_owner_id, account_id_out);
-    if (rc == SQLITE_NOTFOUND) {
-        // Create the system account if it doesn't exist
-        rc = h_create_bank_account_unlocked(db, system_owner_type, system_owner_id, 0, account_id_out);
-        if (rc != SQLITE_OK) {
-            LOGE("h_get_system_account_id_unlocked: Failed to create system account %s:%d (rc=%d)", system_owner_type, system_owner_id, rc);
-        }
+int
+h_get_system_account_id_unlocked (sqlite3 *db, const char *system_owner_type,
+				  int system_owner_id, int *account_id_out)
+{
+  int rc =
+    h_get_account_id_unlocked (db, system_owner_type, system_owner_id,
+			       account_id_out);
+  if (rc == SQLITE_NOTFOUND)
+    {
+      // Create the system account if it doesn't exist
+      rc =
+	h_create_bank_account_unlocked (db, system_owner_type,
+					system_owner_id, 0, account_id_out);
+      if (rc != SQLITE_OK)
+	{
+	  LOGE
+	    ("h_get_system_account_id_unlocked: Failed to create system account %s:%d (rc=%d)",
+	     system_owner_type, system_owner_id, rc);
+	}
     }
-    return rc;
+  return rc;
 }
 
 // New helper to get account_id from owner_type and owner_id
-int h_get_account_id_unlocked(sqlite3 *db, const char *owner_type, int owner_id, int *account_id_out) {
-    sqlite3_stmt *stmt = NULL;
-    int rc = SQLITE_ERROR;
-    const char *sql = "SELECT id FROM bank_accounts WHERE owner_type = ?1 AND owner_id = ?2;";
+int
+h_get_account_id_unlocked (sqlite3 *db, const char *owner_type, int owner_id,
+			   int *account_id_out)
+{
+  sqlite3_stmt *stmt = NULL;
+  int rc = SQLITE_ERROR;
+  const char *sql =
+    "SELECT id FROM bank_accounts WHERE owner_type = ?1 AND owner_id = ?2;";
 
-    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("h_get_account_id_unlocked: Failed to prepare statement: %s", sqlite3_errmsg(db));
-        return rc;
+  rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_get_account_id_unlocked: Failed to prepare statement: %s",
+	    sqlite3_errmsg (db));
+      return rc;
     }
-    sqlite3_bind_text(stmt, 1, owner_type, -1, SQLITE_STATIC);
-    sqlite3_bind_int(stmt, 2, owner_id);
-    rc = sqlite3_step(stmt);
-    if (rc == SQLITE_ROW) {
-        *account_id_out = sqlite3_column_int(stmt, 0);
-        rc = SQLITE_OK;
-    } else if (rc == SQLITE_DONE) {
-        rc = SQLITE_NOTFOUND;
-    } else {
-        LOGE("h_get_account_id_unlocked: Failed to execute statement: %s", sqlite3_errmsg(db));
+  sqlite3_bind_text (stmt, 1, owner_type, -1, SQLITE_STATIC);
+  sqlite3_bind_int (stmt, 2, owner_id);
+  rc = sqlite3_step (stmt);
+  if (rc == SQLITE_ROW)
+    {
+      *account_id_out = sqlite3_column_int (stmt, 0);
+      rc = SQLITE_OK;
     }
-    sqlite3_finalize(stmt);
-    return rc;
+  else if (rc == SQLITE_DONE)
+    {
+      rc = SQLITE_NOTFOUND;
+    }
+  else
+    {
+      LOGE ("h_get_account_id_unlocked: Failed to execute statement: %s",
+	    sqlite3_errmsg (db));
+    }
+  sqlite3_finalize (stmt);
+  return rc;
 }
 
 // Helper to create a bank account and return its ID
-int h_create_bank_account_unlocked(sqlite3 *db, const char *owner_type, int owner_id, long long initial_balance, int *account_id_out) {
-    sqlite3_stmt *stmt = NULL;
-    int rc = SQLITE_ERROR;
-    // Current timestamp in epoch days for last_interest_tick
-    int current_epoch_day = (int)(time(NULL) / (24*60*60));
-    const char *sql = "INSERT INTO bank_accounts (owner_type, owner_id, currency, balance, interest_rate_bp, last_interest_tick, tx_alert_threshold, is_active) VALUES (?1, ?2, 'CRD', ?3, 0, ?4, 0, 1);"; // Using 'CRD' as default currency
+int
+h_create_bank_account_unlocked (sqlite3 *db, const char *owner_type,
+				int owner_id, long long initial_balance,
+				int *account_id_out)
+{
+  sqlite3_stmt *stmt = NULL;
+  int rc = SQLITE_ERROR;
+  // Current timestamp in epoch days for last_interest_tick
+  int current_epoch_day = (int) (time (NULL) / (24 * 60 * 60));
+  const char *sql = "INSERT INTO bank_accounts (owner_type, owner_id, currency, balance, interest_rate_bp, last_interest_tick, tx_alert_threshold, is_active) VALUES (?1, ?2, 'CRD', ?3, 0, ?4, 0, 1);";	// Using 'CRD' as default currency
 
-    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("h_create_bank_account_unlocked: Failed to prepare statement: %s", sqlite3_errmsg(db));
-        return rc;
+  rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_create_bank_account_unlocked: Failed to prepare statement: %s",
+	    sqlite3_errmsg (db));
+      return rc;
     }
-    sqlite3_bind_text(stmt, 1, owner_type, -1, SQLITE_STATIC);
-    sqlite3_bind_int(stmt, 2, owner_id);
-    sqlite3_bind_int64(stmt, 3, initial_balance);
-    sqlite3_bind_int(stmt, 4, current_epoch_day);
+  sqlite3_bind_text (stmt, 1, owner_type, -1, SQLITE_STATIC);
+  sqlite3_bind_int (stmt, 2, owner_id);
+  sqlite3_bind_int64 (stmt, 3, initial_balance);
+  sqlite3_bind_int (stmt, 4, current_epoch_day);
 
-    rc = sqlite3_step(stmt);
-    if (rc == SQLITE_DONE) {
-        *account_id_out = (int)sqlite3_last_insert_rowid(db);
-        rc = SQLITE_OK;
-    } else {
-        LOGE("h_create_bank_account_unlocked: Failed to execute statement: %s", sqlite3_errmsg(db));
+  rc = sqlite3_step (stmt);
+  if (rc == SQLITE_DONE)
+    {
+      *account_id_out = (int) sqlite3_last_insert_rowid (db);
+      rc = SQLITE_OK;
     }
-    sqlite3_finalize(stmt);
-    return rc;
+  else
+    {
+      LOGE ("h_create_bank_account_unlocked: Failed to execute statement: %s",
+	    sqlite3_errmsg (db));
+    }
+  sqlite3_finalize (stmt);
+  return rc;
 }
 
 
 // Helper to get a specific integer config value
-long long h_get_config_int_unlocked(sqlite3 *db, const char *key, long long default_value) {
+long long
+h_get_config_int_unlocked (sqlite3 *db, const char *key,
+			   long long default_value)
+{
 
 // Implementation of db_get_config_int (thread-safe wrapper)
-int db_get_config_int(sqlite3 *db, const char *key_col_name, int default_value) {
-    pthread_mutex_lock(&db_mutex);
-    long long value = h_get_config_int_unlocked(db, key_col_name, (long long)default_value);
-    pthread_mutex_unlock(&db_mutex);
-    return (int)value;
-}
+  int db_get_config_int (sqlite3 * db, const char *key_col_name,
+			 int default_value)
+  {
+    pthread_mutex_lock (&db_mutex);
+    long long value =
+      h_get_config_int_unlocked (db, key_col_name, (long long) default_value);
+    pthread_mutex_unlock (&db_mutex);
+    return (int) value;
+  }
 
 // Implementation of db_get_config_bool (thread-safe wrapper)
-bool db_get_config_bool(sqlite3 *db, const char *key_col_name, bool default_value) {
-    pthread_mutex_lock(&db_mutex);
-    long long value = h_get_config_int_unlocked(db, key_col_name, (long long)default_value);
-    pthread_mutex_unlock(&db_mutex);
-    return (bool)value;
-}
-    sqlite3_stmt *stmt = NULL;
-    long long value = default_value;
+  bool db_get_config_bool (sqlite3 * db, const char *key_col_name,
+			   bool default_value)
+  {
+    pthread_mutex_lock (&db_mutex);
+    long long value =
+      h_get_config_int_unlocked (db, key_col_name, (long long) default_value);
+    pthread_mutex_unlock (&db_mutex);
+    return (bool) value;
+  }
+  sqlite3_stmt *stmt = NULL;
+  long long value = default_value;
 
-    // Direct bind of column name is not possible with ?, so use sqlite3_mprintf
-    char *dynamic_sql = sqlite3_mprintf("SELECT %q FROM config WHERE id = 1;", key);
-    if (!dynamic_sql) {
-        LOGE("h_get_config_int_unlocked: Memory allocation failed for SQL query.");
-        return default_value;
+  // Direct bind of column name is not possible with ?, so use sqlite3_mprintf
+  char *dynamic_sql =
+    sqlite3_mprintf ("SELECT %q FROM config WHERE id = 1;", key);
+  if (!dynamic_sql)
+    {
+      LOGE
+	("h_get_config_int_unlocked: Memory allocation failed for SQL query.");
+      return default_value;
     }
 
-    int rc = sqlite3_prepare_v2(db, dynamic_sql, -1, &stmt, NULL);
-    sqlite3_free(dynamic_sql); // Free dynamic SQL string immediately
-    if (rc != SQLITE_OK) {
-        LOGE("h_get_config_int_unlocked: Failed to prepare statement for key %s: %s", key, sqlite3_errmsg(db));
-        goto cleanup;
+  int rc = sqlite3_prepare_v2 (db, dynamic_sql, -1, &stmt, NULL);
+  sqlite3_free (dynamic_sql);	// Free dynamic SQL string immediately
+  if (rc != SQLITE_OK)
+    {
+      LOGE
+	("h_get_config_int_unlocked: Failed to prepare statement for key %s: %s",
+	 key, sqlite3_errmsg (db));
+      goto cleanup;
     }
 
-    if (sqlite3_step(stmt) == SQLITE_ROW) {
-        value = sqlite3_column_int64(stmt, 0);
-    } else {
-        LOGW("h_get_config_int_unlocked: Config key %s not found or error. Using default value %lld.", key, default_value);
+  if (sqlite3_step (stmt) == SQLITE_ROW)
+    {
+      value = sqlite3_column_int64 (stmt, 0);
+    }
+  else
+    {
+      LOGW
+	("h_get_config_int_unlocked: Config key %s not found or error. Using default value %lld.",
+	 key, default_value);
     }
 
 cleanup:
-    if (stmt) {
-        sqlite3_finalize(stmt);
+  if (stmt)
+    {
+      sqlite3_finalize (stmt);
     }
-    return value;
+  return value;
 }
 
 // Helper to get tx_alert_threshold for an account
-static long long h_get_account_alert_threshold_unlocked(sqlite3 *db, int account_id, const char *owner_type) {
-    long long threshold = 0; // Default to 0 (disabled)
-    sqlite3_stmt *stmt = NULL;
-    int rc;
+static long long
+h_get_account_alert_threshold_unlocked (sqlite3 *db, int account_id,
+					const char *owner_type)
+{
+  long long threshold = 0;	// Default to 0 (disabled)
+  sqlite3_stmt *stmt = NULL;
+  int rc;
 
-    const char *sql = "SELECT tx_alert_threshold FROM bank_accounts WHERE id = ?;";
-    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("h_get_account_alert_threshold_unlocked: Failed to prepare statement: %s", sqlite3_errmsg(db));
-        goto cleanup;
+  const char *sql =
+    "SELECT tx_alert_threshold FROM bank_accounts WHERE id = ?;";
+  rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE
+	("h_get_account_alert_threshold_unlocked: Failed to prepare statement: %s",
+	 sqlite3_errmsg (db));
+      goto cleanup;
     }
-    sqlite3_bind_int(stmt, 1, account_id);
-    if (sqlite3_step(stmt) == SQLITE_ROW) {
-        threshold = sqlite3_column_int64(stmt, 0);
+  sqlite3_bind_int (stmt, 1, account_id);
+  if (sqlite3_step (stmt) == SQLITE_ROW)
+    {
+      threshold = sqlite3_column_int64 (stmt, 0);
     }
-    sqlite3_finalize(stmt);
-    stmt = NULL; // Reset stmt pointer
+  sqlite3_finalize (stmt);
+  stmt = NULL;			// Reset stmt pointer
 
-    // If account-specific threshold is 0, fall back to global defaults from config
-    if (threshold == 0) {
-        if (strcmp(owner_type, "player") == 0) {
-            threshold = h_get_config_int_unlocked(db, "bank_alert_threshold_player", 1000000);
-        } else if (strcmp(owner_type, "corp") == 0) {
-            threshold = h_get_config_int_unlocked(db, "bank_alert_threshold_corp", 5000000);
-        }
-        // For other owner_types, if no specific config, threshold remains 0
+  // If account-specific threshold is 0, fall back to global defaults from config
+  if (threshold == 0)
+    {
+      if (strcmp (owner_type, "player") == 0)
+	{
+	  threshold =
+	    h_get_config_int_unlocked (db, "bank_alert_threshold_player",
+				       1000000);
+	}
+      else if (strcmp (owner_type, "corp") == 0)
+	{
+	  threshold =
+	    h_get_config_int_unlocked (db, "bank_alert_threshold_corp",
+				       5000000);
+	}
+      // For other owner_types, if no specific config, threshold remains 0
     }
 
 cleanup:
-    return threshold;
+  return threshold;
 }
 
 /******************************************************************************
@@ -7932,260 +7914,286 @@ cleanup:
 /*
  * Internal helper: Add credits. Caller must hold db_mutex.
  */
-int h_add_credits_unlocked(sqlite3 *db,
-                           int account_id,
-                           long long amount,
-                           const char *tx_type,
-                           const char *tx_group_id,
-                           long long *new_balance_out)
+int
+h_add_credits_unlocked (sqlite3 *db,
+			int account_id,
+			long long amount,
+			const char *tx_type,
+			const char *tx_group_id, long long *new_balance_out)
 {
-    if (!db || account_id <= 0 || amount <= 0 || !tx_type)
-        return SQLITE_MISUSE;
+  if (!db || account_id <= 0 || amount <= 0 || !tx_type)
+    return SQLITE_MISUSE;
 
-    sqlite3_stmt *stmt = NULL;
-    int rc;
+  sqlite3_stmt *stmt = NULL;
+  int rc;
 
-    const char *sql =
-        "INSERT INTO bank_transactions (account_id, tx_type, direction, amount, currency, ts, tx_group_id) "
-        "VALUES (?, ?, 'CREDIT', ?, 'CRD', strftime('%s','now'), ?);";
+  const char *sql =
+    "INSERT INTO bank_transactions (account_id, tx_type, direction, amount, currency, ts, tx_group_id) "
+    "VALUES (?, ?, 'CREDIT', ?, 'CRD', strftime('%s','now'), ?);";
 
-    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK)
-        return rc;
+  rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    return rc;
 
-    sqlite3_bind_int(stmt, 1, account_id);
-    sqlite3_bind_text(stmt, 2, tx_type, -1, SQLITE_STATIC);
-    sqlite3_bind_int64(stmt, 3, amount);
+  sqlite3_bind_int (stmt, 1, account_id);
+  sqlite3_bind_text (stmt, 2, tx_type, -1, SQLITE_STATIC);
+  sqlite3_bind_int64 (stmt, 3, amount);
 
-    if (tx_group_id)
-        sqlite3_bind_text(stmt, 4, tx_group_id, -1, SQLITE_STATIC);
-    else
-        sqlite3_bind_null(stmt, 4);
+  if (tx_group_id)
+    sqlite3_bind_text (stmt, 4, tx_group_id, -1, SQLITE_STATIC);
+  else
+    sqlite3_bind_null (stmt, 4);
 
-    rc = sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
-    if (rc != SQLITE_DONE)
-        return rc;
+  rc = sqlite3_step (stmt);
+  sqlite3_finalize (stmt);
+  if (rc != SQLITE_DONE)
+    return rc;
 
-    if (new_balance_out) {
-        sqlite3_stmt *b = NULL;
-        rc = sqlite3_prepare_v2(db, "SELECT balance FROM bank_accounts WHERE id=?;", -1, &b, NULL);
-        if (rc == SQLITE_OK) {
-            sqlite3_bind_int(b, 1, account_id);
-            if (sqlite3_step(b) == SQLITE_ROW)
-                *new_balance_out = sqlite3_column_int64(b, 0);
-        }
-        sqlite3_finalize(b);
+  if (new_balance_out)
+    {
+      sqlite3_stmt *b = NULL;
+      rc =
+	sqlite3_prepare_v2 (db,
+			    "SELECT balance FROM bank_accounts WHERE id=?;",
+			    -1, &b, NULL);
+      if (rc == SQLITE_OK)
+	{
+	  sqlite3_bind_int (b, 1, account_id);
+	  if (sqlite3_step (b) == SQLITE_ROW)
+	    *new_balance_out = sqlite3_column_int64 (b, 0);
+	}
+      sqlite3_finalize (b);
     }
 
-    return SQLITE_OK;
+  return SQLITE_OK;
 }
 
 /*
  * Internal helper: Deduct credits. Caller must hold db_mutex.
  */
-int h_deduct_credits_unlocked(sqlite3 *db,
-                              int account_id,
-                              long long amount,
-                              const char *tx_type,
-                              const char *tx_group_id,
-                              long long *new_balance_out)
+int
+h_deduct_credits_unlocked (sqlite3 *db,
+			   int account_id,
+			   long long amount,
+			   const char *tx_type,
+			   const char *tx_group_id,
+			   long long *new_balance_out)
 {
-    if (!db || account_id <= 0 || amount <= 0 || !tx_type)
-        return SQLITE_MISUSE;
+  if (!db || account_id <= 0 || amount <= 0 || !tx_type)
+    return SQLITE_MISUSE;
 
-    sqlite3_stmt *stmt = NULL;
-    int rc;
+  sqlite3_stmt *stmt = NULL;
+  int rc;
 
-    const char *sql =
-        "INSERT INTO bank_transactions (account_id, tx_type, direction, amount, currency, ts, tx_group_id) "
-        "VALUES (?, ?, 'DEBIT', ?, 'CRD', strftime('%s','now'), ?);";
+  const char *sql =
+    "INSERT INTO bank_transactions (account_id, tx_type, direction, amount, currency, ts, tx_group_id) "
+    "VALUES (?, ?, 'DEBIT', ?, 'CRD', strftime('%s','now'), ?);";
 
-    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK)
-        return rc;
+  rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    return rc;
 
-    sqlite3_bind_int(stmt, 1, account_id);
-    sqlite3_bind_text(stmt, 2, tx_type, -1, SQLITE_STATIC);
-    sqlite3_bind_int64(stmt, 3, amount);
+  sqlite3_bind_int (stmt, 1, account_id);
+  sqlite3_bind_text (stmt, 2, tx_type, -1, SQLITE_STATIC);
+  sqlite3_bind_int64 (stmt, 3, amount);
 
-    if (tx_group_id)
-        sqlite3_bind_text(stmt, 4, tx_group_id, -1, SQLITE_STATIC);
-    else
-        sqlite3_bind_null(stmt, 4);
+  if (tx_group_id)
+    sqlite3_bind_text (stmt, 4, tx_group_id, -1, SQLITE_STATIC);
+  else
+    sqlite3_bind_null (stmt, 4);
 
-    rc = sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
+  rc = sqlite3_step (stmt);
+  sqlite3_finalize (stmt);
 
-    /* SQLITE_CONSTRAINT means “insufficient funds” because of trigger */
-    if (rc != SQLITE_DONE)
-        return rc;
+  /* SQLITE_CONSTRAINT means “insufficient funds” because of trigger */
+  if (rc != SQLITE_DONE)
+    return rc;
 
-    if (new_balance_out) {
-        sqlite3_stmt *b = NULL;
-        rc = sqlite3_prepare_v2(db, "SELECT balance FROM bank_accounts WHERE id=?;", -1, &b, NULL);
-        if (rc == SQLITE_OK) {
-            sqlite3_bind_int(b, 1, account_id);
-            if (sqlite3_step(b) == SQLITE_ROW)
-                *new_balance_out = sqlite3_column_int64(b, 0);
-        }
-        sqlite3_finalize(b);
+  if (new_balance_out)
+    {
+      sqlite3_stmt *b = NULL;
+      rc =
+	sqlite3_prepare_v2 (db,
+			    "SELECT balance FROM bank_accounts WHERE id=?;",
+			    -1, &b, NULL);
+      if (rc == SQLITE_OK)
+	{
+	  sqlite3_bind_int (b, 1, account_id);
+	  if (sqlite3_step (b) == SQLITE_ROW)
+	    *new_balance_out = sqlite3_column_int64 (b, 0);
+	}
+      sqlite3_finalize (b);
     }
 
-    return SQLITE_OK;
+  return SQLITE_OK;
 }
 
 /*
  * Public: Add credits to owner's account.
  */
-int h_add_credits(sqlite3 *db,
-                  const char *owner_type,
-                  int owner_id,
-                  long long amount,
-                  const char *tx_type,
-                  const char *tx_group_id,
-                  long long *new_balance_out)
+int
+h_add_credits (sqlite3 *db,
+	       const char *owner_type,
+	       int owner_id,
+	       long long amount,
+	       const char *tx_type,
+	       const char *tx_group_id, long long *new_balance_out)
 {
-    if (!db || !owner_type || amount <= 0)
-        return SQLITE_MISUSE;
+  if (!db || !owner_type || amount <= 0)
+    return SQLITE_MISUSE;
 
-    pthread_mutex_lock(&db_mutex);
+  pthread_mutex_lock (&db_mutex);
 
-    int account_id = -1;
-    int rc = h_get_account_id_unlocked(db, owner_type, owner_id, &account_id);
+  int account_id = -1;
+  int rc = h_get_account_id_unlocked (db, owner_type, owner_id, &account_id);
 
-    if (rc == SQLITE_NOTFOUND) {
-        rc = h_create_bank_account_unlocked(db, owner_type, owner_id, 0, &account_id);
-        if (rc != SQLITE_OK) {
-            pthread_mutex_unlock(&db_mutex);
-            return rc;
-        }
-    } else if (rc != SQLITE_OK) {
-        pthread_mutex_unlock(&db_mutex);
-        return rc;
+  if (rc == SQLITE_NOTFOUND)
+    {
+      rc =
+	h_create_bank_account_unlocked (db, owner_type, owner_id, 0,
+					&account_id);
+      if (rc != SQLITE_OK)
+	{
+	  pthread_mutex_unlock (&db_mutex);
+	  return rc;
+	}
+    }
+  else if (rc != SQLITE_OK)
+    {
+      pthread_mutex_unlock (&db_mutex);
+      return rc;
     }
 
-    rc = h_add_credits_unlocked(db, account_id, amount,
-                                tx_type ? tx_type : "DEPOSIT",
-                                tx_group_id,
-                                new_balance_out);
+  rc = h_add_credits_unlocked (db, account_id, amount,
+			       tx_type ? tx_type : "DEPOSIT",
+			       tx_group_id, new_balance_out);
 
-    pthread_mutex_unlock(&db_mutex);
-    return rc;
+  pthread_mutex_unlock (&db_mutex);
+  return rc;
 }
 
 /*
  * Public: Deduct credits from owner's account.
  */
-int h_deduct_credits(sqlite3 *db,
-                     const char *owner_type,
-                     int owner_id,
-                     long long amount,
-                     const char *tx_type,
-                     const char *tx_group_id,
-                     long long *new_balance_out)
+int
+h_deduct_credits (sqlite3 *db,
+		  const char *owner_type,
+		  int owner_id,
+		  long long amount,
+		  const char *tx_type,
+		  const char *tx_group_id, long long *new_balance_out)
 {
-    if (!db || !owner_type || amount <= 0)
-        return SQLITE_MISUSE;
+  if (!db || !owner_type || amount <= 0)
+    return SQLITE_MISUSE;
 
-    pthread_mutex_lock(&db_mutex);
+  pthread_mutex_lock (&db_mutex);
 
-    int account_id = -1;
-    int rc = h_get_account_id_unlocked(db, owner_type, owner_id, &account_id);
-    if (rc != SQLITE_OK) {
-        pthread_mutex_unlock(&db_mutex);
-        return rc;
+  int account_id = -1;
+  int rc = h_get_account_id_unlocked (db, owner_type, owner_id, &account_id);
+  if (rc != SQLITE_OK)
+    {
+      pthread_mutex_unlock (&db_mutex);
+      return rc;
     }
 
-    rc = h_deduct_credits_unlocked(db, account_id, amount,
-                                   tx_type ? tx_type : "DEBIT",
-                                   tx_group_id,
-                                   new_balance_out);
+  rc = h_deduct_credits_unlocked (db, account_id, amount,
+				  tx_type ? tx_type : "DEBIT",
+				  tx_group_id, new_balance_out);
 
-    pthread_mutex_unlock(&db_mutex);
-    return rc;
+  pthread_mutex_unlock (&db_mutex);
+  return rc;
 }
 
 
 
 // Function to calculate fees and taxes for a given transaction type and amount
-int calculate_fees(sqlite3 *db, const char *tx_type, long long base_amount, const char *owner_type, fee_result_t *out) {
-    if (!db || !tx_type || !out) {
-        return SQLITE_MISUSE;
+int
+calculate_fees (sqlite3 *db, const char *tx_type, long long base_amount,
+		const char *owner_type, fee_result_t *out)
+{
+  if (!db || !tx_type || !out)
+    {
+      return SQLITE_MISUSE;
     }
 
-    out->fee_total = 0;
-    out->fee_to_bank = 0;
-    out->tax_to_system = 0;
+  out->fee_total = 0;
+  out->fee_to_bank = 0;
+  out->tax_to_system = 0;
 
-    sqlite3_stmt *stmt = NULL;
-    int rc = SQLITE_ERROR;
-    long long current_time = time(NULL);
+  sqlite3_stmt *stmt = NULL;
+  int rc = SQLITE_ERROR;
+  long long current_time = time (NULL);
 
-    // Query for active fee rules
-    const char *sql =
-        "SELECT fee_code, value, is_percentage, min_tx_amount, max_tx_amount "
-        "FROM bank_fee_schedules "
-        "WHERE tx_type = ?1 "
-        "  AND (owner_type IS NULL OR owner_type = ?2) "
-        "  AND currency = 'CRD' " // Assuming CRD for now
-        "  AND effective_from <= ?3 "
-        "  AND (effective_to IS NULL OR effective_to >= ?3) "
-        "ORDER BY fee_code;"; // Deterministic order
+  // Query for active fee rules
+  const char *sql = "SELECT fee_code, value, is_percentage, min_tx_amount, max_tx_amount " "FROM bank_fee_schedules " "WHERE tx_type = ?1 " "  AND (owner_type IS NULL OR owner_type = ?2) " "  AND currency = 'CRD' "	// Assuming CRD for now
+    "  AND effective_from <= ?3 " "  AND (effective_to IS NULL OR effective_to >= ?3) " "ORDER BY fee_code;";	// Deterministic order
 
-    pthread_mutex_lock(&db_mutex);
+  pthread_mutex_lock (&db_mutex);
 
-    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("calculate_fees: Failed to prepare statement: %s", sqlite3_errmsg(db));
-        goto cleanup;
+  rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("calculate_fees: Failed to prepare statement: %s",
+	    sqlite3_errmsg (db));
+      goto cleanup;
     }
 
-    sqlite3_bind_text(stmt, 1, tx_type, -1, SQLITE_STATIC);
-    sqlite3_bind_text(stmt, 2, owner_type, -1, SQLITE_STATIC);
-    sqlite3_bind_int64(stmt, 3, current_time);
+  sqlite3_bind_text (stmt, 1, tx_type, -1, SQLITE_STATIC);
+  sqlite3_bind_text (stmt, 2, owner_type, -1, SQLITE_STATIC);
+  sqlite3_bind_int64 (stmt, 3, current_time);
 
-    while (sqlite3_step(stmt) == SQLITE_ROW) {
-        const char *fee_code = (const char *)sqlite3_column_text(stmt, 0);
-        long long value = sqlite3_column_int64(stmt, 1);
-        int is_percentage = sqlite3_column_int(stmt, 2);
-        long long min_tx_amount = sqlite3_column_int64(stmt, 3);
-        long long max_tx_amount = sqlite3_column_type(stmt, 4) == SQLITE_NULL ? -1 : sqlite3_column_int64(stmt, 4); // -1 for no max
+  while (sqlite3_step (stmt) == SQLITE_ROW)
+    {
+      const char *fee_code = (const char *) sqlite3_column_text (stmt, 0);
+      long long value = sqlite3_column_int64 (stmt, 1);
+      int is_percentage = sqlite3_column_int (stmt, 2);
+      long long min_tx_amount = sqlite3_column_int64 (stmt, 3);
+      long long max_tx_amount = sqlite3_column_type (stmt, 4) == SQLITE_NULL ? -1 : sqlite3_column_int64 (stmt, 4);	// -1 for no max
 
-        // Apply min/max transaction amount filters
-        if (base_amount < min_tx_amount) continue;
-        if (max_tx_amount != -1 && base_amount > max_tx_amount) continue;
+      // Apply min/max transaction amount filters
+      if (base_amount < min_tx_amount)
+	continue;
+      if (max_tx_amount != -1 && base_amount > max_tx_amount)
+	continue;
 
-        long long charge = 0;
-        if (is_percentage) {
-            charge = (base_amount * value) / 10000; // value is in basis points
-        } else {
-            charge = value; // flat fee
-        }
+      long long charge = 0;
+      if (is_percentage)
+	{
+	  charge = (base_amount * value) / 10000;	// value is in basis points
+	}
+      else
+	{
+	  charge = value;	// flat fee
+	}
 
-        // Clamp charge at 0 and max (optional, config-driven)
-        if (charge < 0) charge = 0;
-        // if (charge > MAX_CHARGE_AMOUNT) charge = MAX_CHARGE_AMOUNT; // Needs global config
+      // Clamp charge at 0 and max (optional, config-driven)
+      if (charge < 0)
+	charge = 0;
+      // if (charge > MAX_CHARGE_AMOUNT) charge = MAX_CHARGE_AMOUNT; // Needs global config
 
-        out->fee_total += charge;
+      out->fee_total += charge;
 
-        // Distribute charge to specific categories based on fee_code
-        // This is a placeholder; actual distribution logic may be more complex
-        if (strcmp(fee_code, "TAX_RATE") == 0 || strcmp(tx_type, "TAX") == 0) {
-            out->tax_to_system += charge;
-        } else {
-            out->fee_to_bank += charge;
-        }
+      // Distribute charge to specific categories based on fee_code
+      // This is a placeholder; actual distribution logic may be more complex
+      if (strcmp (fee_code, "TAX_RATE") == 0 || strcmp (tx_type, "TAX") == 0)
+	{
+	  out->tax_to_system += charge;
+	}
+      else
+	{
+	  out->fee_to_bank += charge;
+	}
     }
 
-    rc = SQLITE_OK;
+  rc = SQLITE_OK;
 
 cleanup:
-    if (stmt) {
-        sqlite3_finalize(stmt);
+  if (stmt)
+    {
+      sqlite3_finalize (stmt);
     }
-    pthread_mutex_unlock(&db_mutex);
-    return rc;
+  pthread_mutex_unlock (&db_mutex);
+  return rc;
 }
 
 /*
@@ -8193,60 +8201,77 @@ cleanup:
  * Returns SQLITE_OK on success, or an SQLite error code.
  * If new_quantity is not NULL, it will be set to the commodity's new quantity.
  */
-int h_update_planet_stock(sqlite3 *db, int planet_id, const char *commodity_code, int quantity_change, int *new_quantity) {
-    sqlite3_stmt *stmt = NULL;
-    int rc = SQLITE_ERROR;
+int
+h_update_planet_stock (sqlite3 *db, int planet_id, const char *commodity_code,
+		       int quantity_change, int *new_quantity)
+{
+  sqlite3_stmt *stmt = NULL;
+  int rc = SQLITE_ERROR;
 
-    if (!db || !commodity_code || planet_id <= 0) {
-        return SQLITE_MISUSE;
+  if (!db || !commodity_code || planet_id <= 0)
+    {
+      return SQLITE_MISUSE;
     }
 
-    pthread_mutex_lock(&db_mutex);
+  pthread_mutex_lock (&db_mutex);
 
-    const char *sql =
-        "UPDATE planet_goods SET quantity = quantity + ? "
-        "WHERE planet_id = ? AND commodity = ?;";
+  const char *sql =
+    "UPDATE planet_goods SET quantity = quantity + ? "
+    "WHERE planet_id = ? AND commodity = ?;";
 
-    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("h_update_planet_stock: Failed to prepare statement: %s", sqlite3_errmsg(db));
-        goto cleanup;
+  rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_update_planet_stock: Failed to prepare statement: %s",
+	    sqlite3_errmsg (db));
+      goto cleanup;
     }
 
-    sqlite3_bind_int(stmt, 1, quantity_change);
-    sqlite3_bind_int(stmt, 2, planet_id);
-    sqlite3_bind_text(stmt, 3, commodity_code, -1, SQLITE_STATIC);
+  sqlite3_bind_int (stmt, 1, quantity_change);
+  sqlite3_bind_int (stmt, 2, planet_id);
+  sqlite3_bind_text (stmt, 3, commodity_code, -1, SQLITE_STATIC);
 
-    rc = sqlite3_step(stmt);
-    if (rc != SQLITE_DONE) {
-        LOGE("h_update_planet_stock: Failed to execute statement: %s", sqlite3_errmsg(db));
-        goto cleanup;
+  rc = sqlite3_step (stmt);
+  if (rc != SQLITE_DONE)
+    {
+      LOGE ("h_update_planet_stock: Failed to execute statement: %s",
+	    sqlite3_errmsg (db));
+      goto cleanup;
     }
 
-    if (new_quantity) {
-        sqlite3_stmt *qty_stmt = NULL;
-        const char *qty_sql = "SELECT quantity FROM planet_goods WHERE planet_id = ? AND commodity = ?;";
-        rc = sqlite3_prepare_v2(db, qty_sql, -1, &qty_stmt, NULL);
-        if (rc == SQLITE_OK) {
-            sqlite3_bind_int(qty_stmt, 1, planet_id);
-            sqlite3_bind_text(qty_stmt, 2, commodity_code, -1, SQLITE_STATIC);
-            if (sqlite3_step(qty_stmt) == SQLITE_ROW) {
-                *new_quantity = sqlite3_column_int(qty_stmt, 0);
-            }
-            sqlite3_finalize(qty_stmt);
-        } else {
-            LOGE("h_update_planet_stock: Failed to prepare quantity statement: %s", sqlite3_errmsg(db));
-        }
+  if (new_quantity)
+    {
+      sqlite3_stmt *qty_stmt = NULL;
+      const char *qty_sql =
+	"SELECT quantity FROM planet_goods WHERE planet_id = ? AND commodity = ?;";
+      rc = sqlite3_prepare_v2 (db, qty_sql, -1, &qty_stmt, NULL);
+      if (rc == SQLITE_OK)
+	{
+	  sqlite3_bind_int (qty_stmt, 1, planet_id);
+	  sqlite3_bind_text (qty_stmt, 2, commodity_code, -1, SQLITE_STATIC);
+	  if (sqlite3_step (qty_stmt) == SQLITE_ROW)
+	    {
+	      *new_quantity = sqlite3_column_int (qty_stmt, 0);
+	    }
+	  sqlite3_finalize (qty_stmt);
+	}
+      else
+	{
+	  LOGE
+	    ("h_update_planet_stock: Failed to prepare quantity statement: %s",
+	     sqlite3_errmsg (db));
+	}
     }
 
-    rc = SQLITE_OK;
+  rc = SQLITE_OK;
 
 cleanup:
-    if (stmt) {
-        sqlite3_finalize(stmt);
+  if (stmt)
+    {
+      sqlite3_finalize (stmt);
     }
-    pthread_mutex_unlock(&db_mutex);
-    return rc;
+  pthread_mutex_unlock (&db_mutex);
+  return rc;
 }
 
 /*
@@ -8254,69 +8279,84 @@ cleanup:
  * Returns SQLITE_OK on success, or an SQLite error code.
  * If new_quantity is not NULL, it will be set to the commodity's new quantity.
  */
-int h_update_port_stock(sqlite3 *db, int port_id, const char *commodity_code, int quantity_change, int *new_quantity) {
-    sqlite3_stmt *stmt = NULL;
-    int rc = SQLITE_ERROR;
+int
+h_update_port_stock (sqlite3 *db, int port_id, const char *commodity_code,
+		     int quantity_change, int *new_quantity)
+{
+  sqlite3_stmt *stmt = NULL;
+  int rc = SQLITE_ERROR;
 
-    if (!db || !commodity_code || port_id <= 0) {
-        return SQLITE_MISUSE;
+  if (!db || !commodity_code || port_id <= 0)
+    {
+      return SQLITE_MISUSE;
     }
 
-    pthread_mutex_lock(&db_mutex);
+  pthread_mutex_lock (&db_mutex);
 
-    const char *sql =
-        "UPDATE ports SET "
-        "ore_on_hand = CASE WHEN ?3 = 'ore' THEN ore_on_hand + ?1 ELSE ore_on_hand END, "
-        "organics_on_hand = CASE WHEN ?3 = 'organics' THEN organics_on_hand + ?1 ELSE organics_on_hand END, "
-        "equipment_on_hand = CASE WHEN ?3 = 'equipment' THEN equipment_on_hand + ?1 ELSE equipment_on_hand END "
-        "WHERE id = ?2;";
+  const char *sql =
+    "UPDATE ports SET "
+    "ore_on_hand = CASE WHEN ?3 = 'ore' THEN ore_on_hand + ?1 ELSE ore_on_hand END, "
+    "organics_on_hand = CASE WHEN ?3 = 'organics' THEN organics_on_hand + ?1 ELSE organics_on_hand END, "
+    "equipment_on_hand = CASE WHEN ?3 = 'equipment' THEN equipment_on_hand + ?1 ELSE equipment_on_hand END "
+    "WHERE id = ?2;";
 
-    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("h_update_port_stock: Failed to prepare statement: %s", sqlite3_errmsg(db));
-        goto cleanup;
+  rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_update_port_stock: Failed to prepare statement: %s",
+	    sqlite3_errmsg (db));
+      goto cleanup;
     }
 
-    sqlite3_bind_int(stmt, 1, quantity_change);
-    sqlite3_bind_int(stmt, 2, port_id);
-    sqlite3_bind_text(stmt, 3, commodity_code, -1, SQLITE_STATIC);
+  sqlite3_bind_int (stmt, 1, quantity_change);
+  sqlite3_bind_int (stmt, 2, port_id);
+  sqlite3_bind_text (stmt, 3, commodity_code, -1, SQLITE_STATIC);
 
-    rc = sqlite3_step(stmt);
-    if (rc != SQLITE_DONE) {
-        LOGE("h_update_port_stock: Failed to execute statement: %s", sqlite3_errmsg(db));
-        goto cleanup;
+  rc = sqlite3_step (stmt);
+  if (rc != SQLITE_DONE)
+    {
+      LOGE ("h_update_port_stock: Failed to execute statement: %s",
+	    sqlite3_errmsg (db));
+      goto cleanup;
     }
 
-    if (new_quantity) {
-        sqlite3_stmt *qty_stmt = NULL;
-        const char *qty_sql =
-            "SELECT CASE "
-            "WHEN ?2 = 'ore' THEN ore_on_hand "
-            "WHEN ?2 = 'organics' THEN organics_on_hand "
-            "WHEN ?2 = 'equipment' THEN equipment_on_hand "
-            "ELSE 0 END "
-            "FROM ports WHERE id = ?1;";
-        rc = sqlite3_prepare_v2(db, qty_sql, -1, &qty_stmt, NULL);
-        if (rc == SQLITE_OK) {
-            sqlite3_bind_int(qty_stmt, 1, port_id);
-            sqlite3_bind_text(qty_stmt, 2, commodity_code, -1, SQLITE_STATIC);
-            if (sqlite3_step(qty_stmt) == SQLITE_ROW) {
-                *new_quantity = sqlite3_column_int(qty_stmt, 0);
-            }
-            sqlite3_finalize(qty_stmt);
-        } else {
-            LOGE("h_update_port_stock: Failed to prepare quantity statement: %s", sqlite3_errmsg(db));
-        }
+  if (new_quantity)
+    {
+      sqlite3_stmt *qty_stmt = NULL;
+      const char *qty_sql =
+	"SELECT CASE "
+	"WHEN ?2 = 'ore' THEN ore_on_hand "
+	"WHEN ?2 = 'organics' THEN organics_on_hand "
+	"WHEN ?2 = 'equipment' THEN equipment_on_hand "
+	"ELSE 0 END " "FROM ports WHERE id = ?1;";
+      rc = sqlite3_prepare_v2 (db, qty_sql, -1, &qty_stmt, NULL);
+      if (rc == SQLITE_OK)
+	{
+	  sqlite3_bind_int (qty_stmt, 1, port_id);
+	  sqlite3_bind_text (qty_stmt, 2, commodity_code, -1, SQLITE_STATIC);
+	  if (sqlite3_step (qty_stmt) == SQLITE_ROW)
+	    {
+	      *new_quantity = sqlite3_column_int (qty_stmt, 0);
+	    }
+	  sqlite3_finalize (qty_stmt);
+	}
+      else
+	{
+	  LOGE
+	    ("h_update_port_stock: Failed to prepare quantity statement: %s",
+	     sqlite3_errmsg (db));
+	}
     }
 
-    rc = SQLITE_OK;
+  rc = SQLITE_OK;
 
 cleanup:
-    if (stmt) {
-        sqlite3_finalize(stmt);
+  if (stmt)
+    {
+      sqlite3_finalize (stmt);
     }
-    pthread_mutex_unlock(&db_mutex);
-    return rc;
+  pthread_mutex_unlock (&db_mutex);
+  return rc;
 }
 
 int
@@ -8344,12 +8384,12 @@ db_fighters_at_sector_json (int sector_id, json_t **out_array)
    deployed_at INTEGER NOT NULL  ); */
 
 
-		 
+
   // 1. SELECT quantity, player, corporation in sector_assets WHERE asset_type=ASSET_FIGHTER
   // 2. if the corporation is not zero, then return the corporation as the owner not the player
   // 3. if corporation=0 then return player as owner.
   // 4. build the json with owner and quantity
-  
+
 }
 
 int
@@ -8383,7 +8423,7 @@ db_mines_at_sector_json (int sector_id, json_t **out_array)
   // -- because I haven't yet implemented limpet attachment, we'll just put a note in here for the moment
   // -- and just return the number in the sector. 
   // 4. build the json with owner and quantity and the two different types of mines. 
-  
+
 }
 
 /*
@@ -8407,111 +8447,144 @@ db_mines_at_sector_json (int sector_id, json_t **out_array)
  * @param out_balance Pointer to store the resulting balance.
  * @return SQLITE_OK on success, or an error code.
  */
-static int h_get_bank_balance(const char *owner_type, int owner_id, long long *out_balance) {
-    if (out_balance == NULL) {
-        return SQLITE_MISUSE;
+static int
+h_get_bank_balance (const char *owner_type, int owner_id,
+		    long long *out_balance)
+{
+  if (out_balance == NULL)
+    {
+      return SQLITE_MISUSE;
     }
 
-    *out_balance = 0; // Default to 0
+  *out_balance = 0;		// Default to 0
 
-    sqlite3 *db = db_get_handle();
-    if (!db) {
-        return SQLITE_ERROR;
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    {
+      return SQLITE_ERROR;
     }
 
-    int account_id = -1;
-    // Note: This helper already locks. We need to reconsider mutex strategy for nested calls.
-    // For now, assume this is called within a wider mutex scope or will acquire its own.
-    // Given the public wrappers don't lock, this needs to be thread-safe.
-    // Let's modify h_get_account_id_unlocked to be h_get_account_id and acquire its own lock.
-    // Or, ensure h_get_bank_balance itself is thread-safe.
-    // The previous h_get_account_id_unlocked is meant to be called when db_mutex is already held.
-    // h_get_bank_balance is static and called by public functions that also lock, so it's okay.
+  int account_id = -1;
+  // Note: This helper already locks. We need to reconsider mutex strategy for nested calls.
+  // For now, assume this is called within a wider mutex scope or will acquire its own.
+  // Given the public wrappers don't lock, this needs to be thread-safe.
+  // Let's modify h_get_account_id_unlocked to be h_get_account_id and acquire its own lock.
+  // Or, ensure h_get_bank_balance itself is thread-safe.
+  // The previous h_get_account_id_unlocked is meant to be called when db_mutex is already held.
+  // h_get_bank_balance is static and called by public functions that also lock, so it's okay.
 
-    int rc_account_id = h_get_account_id_unlocked(db, owner_type, owner_id, &account_id);
-    
-    if (rc_account_id == SQLITE_NOTFOUND) {
-        return SQLITE_OK; // No account means balance is 0
-    } else if (rc_account_id != SQLITE_OK) {
-        return rc_account_id; // Error in getting account_id
+  int rc_account_id =
+    h_get_account_id_unlocked (db, owner_type, owner_id, &account_id);
+
+  if (rc_account_id == SQLITE_NOTFOUND)
+    {
+      return SQLITE_OK;		// No account means balance is 0
+    }
+  else if (rc_account_id != SQLITE_OK)
+    {
+      return rc_account_id;	// Error in getting account_id
     }
 
-    const char *sql = "SELECT balance FROM bank_accounts WHERE id = ?1;"; // Use account_id
-    sqlite3_stmt *st = NULL;
-    int rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
-    if (rc != SQLITE_OK) {
-        return rc;
+  const char *sql = "SELECT balance FROM bank_accounts WHERE id = ?1;";	// Use account_id
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      return rc;
     }
 
-    sqlite3_bind_int(st, 1, account_id);
+  sqlite3_bind_int (st, 1, account_id);
 
-    rc = sqlite3_step(st);
-    if (rc == SQLITE_ROW) {
-        *out_balance = sqlite3_column_int64(st, 0);
-        rc = SQLITE_OK;
-    } else if (rc == SQLITE_DONE) {
-        // Should not happen if h_get_account_id_unlocked found an account, but handle defensively.
-        rc = SQLITE_OK;
-    } else {
-        rc = SQLITE_ERROR;
+  rc = sqlite3_step (st);
+  if (rc == SQLITE_ROW)
+    {
+      *out_balance = sqlite3_column_int64 (st, 0);
+      rc = SQLITE_OK;
+    }
+  else if (rc == SQLITE_DONE)
+    {
+      // Should not happen if h_get_account_id_unlocked found an account, but handle defensively.
+      rc = SQLITE_OK;
+    }
+  else
+    {
+      rc = SQLITE_ERROR;
     }
 
-    sqlite3_finalize(st);
-    return rc;
+  sqlite3_finalize (st);
+  return rc;
 }
 
 /**
  * @brief Gets the bank balance for a player.
  */
-int db_get_player_bank_balance(int player_id, long long *out_balance) {
-    return h_get_bank_balance("player", player_id, out_balance);
+int
+db_get_player_bank_balance (int player_id, long long *out_balance)
+{
+  return h_get_bank_balance ("player", player_id, out_balance);
 }
 
 /**
  * @brief Gets the bank balance for a corporation.
  */
-int db_get_corp_bank_balance(int corp_id, long long *out_balance) {
-    return h_get_bank_balance("corp", corp_id, out_balance);
+int
+db_get_corp_bank_balance (int corp_id, long long *out_balance)
+{
+  return h_get_bank_balance ("corp", corp_id, out_balance);
 }
 
 /**
  * @brief Gets the bank balance for an NPC.
  */
-int db_get_npc_bank_balance(int npc_id, long long *out_balance) {
-    return h_get_bank_balance("npc", npc_id, out_balance);
+int
+db_get_npc_bank_balance (int npc_id, long long *out_balance)
+{
+  return h_get_bank_balance ("npc", npc_id, out_balance);
 }
 
 /**
  * @brief Gets the bank balance for a port.
  */
-int db_get_port_bank_balance(int port_id, long long *out_balance) {
-    return h_get_bank_balance("port", port_id, out_balance);
+int
+db_get_port_bank_balance (int port_id, long long *out_balance)
+{
+  return h_get_bank_balance ("port", port_id, out_balance);
 }
 
 /**
  * @brief Gets the bank balance for a planet.
  */
-int db_get_planet_bank_balance(int planet_id, long long *out_balance) {
-    return h_get_bank_balance("planet", planet_id, out_balance);
+int
+db_get_planet_bank_balance (int planet_id, long long *out_balance)
+{
+  return h_get_bank_balance ("planet", planet_id, out_balance);
 }
 
-int db_bank_account_exists(const char *owner_type, int owner_id) {
-    sqlite3 *db = db_get_handle();
-    if (!db) {
-        return -1; // Error
+int
+db_bank_account_exists (const char *owner_type, int owner_id)
+{
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    {
+      return -1;		// Error
     }
-    int account_id = -1;
-    int rc;
-    pthread_mutex_lock(&db_mutex);
-    rc = h_get_account_id_unlocked(db, owner_type, owner_id, &account_id);
-    pthread_mutex_unlock(&db_mutex);
+  int account_id = -1;
+  int rc;
+  pthread_mutex_lock (&db_mutex);
+  rc = h_get_account_id_unlocked (db, owner_type, owner_id, &account_id);
+  pthread_mutex_unlock (&db_mutex);
 
-    if (rc == SQLITE_OK) {
-        return 1; // Account exists
-    } else if (rc == SQLITE_NOTFOUND) {
-        return 0; // Account does not exist
-    } else {
-        return -1; // Error
+  if (rc == SQLITE_OK)
+    {
+      return 1;			// Account exists
+    }
+  else if (rc == SQLITE_NOTFOUND)
+    {
+      return 0;			// Account does not exist
+    }
+  else
+    {
+      return -1;		// Error
     }
 }
 
@@ -8542,48 +8615,46 @@ int db_bank_account_exists(const char *owner_type, int owner_id) {
  * @param account_id_out Pointer to store the ID of the newly created account.
  * @return SQLITE_OK on success, or an SQLite error code.
  */
-int db_bank_create_account(const char *owner_type, int owner_id, long long initial_balance, int *account_id_out) {
-    sqlite3 *db = db_get_handle();
-    if (!db) {
-        return SQLITE_ERROR;
+int
+db_bank_create_account (const char *owner_type, int owner_id,
+			long long initial_balance, int *account_id_out)
+{
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    {
+      return SQLITE_ERROR;
     }
 
-    int rc;
-    pthread_mutex_lock(&db_mutex);
-    rc = h_create_bank_account_unlocked(db, owner_type, owner_id, initial_balance, account_id_out);
-    pthread_mutex_unlock(&db_mutex);
-    return rc;
+  int rc;
+  pthread_mutex_lock (&db_mutex);
+  rc =
+    h_create_bank_account_unlocked (db, owner_type, owner_id, initial_balance,
+				    account_id_out);
+  pthread_mutex_unlock (&db_mutex);
+  return rc;
 }
 
-int db_bank_deposit(const char *owner_type, int owner_id, long long amount)
+int
+db_bank_deposit (const char *owner_type, int owner_id, long long amount)
 {
-    if (amount <= 0)
-        return SQLITE_MISUSE;
+  if (amount <= 0)
+    return SQLITE_MISUSE;
 
-    return h_add_credits(
-        db_get_handle(),
-        owner_type,
-        owner_id,
-        amount,
-        "DEPOSIT",     // tx_type
-        NULL,          // tx_group_id
-        NULL           // new_balance_out
+  return h_add_credits (db_get_handle (), owner_type, owner_id, amount, "DEPOSIT",	// tx_type
+			NULL,	// tx_group_id
+			NULL	// new_balance_out
     );
 }
 
-int db_bank_withdraw(const char *owner_type, int owner_id, long long amount)
+int
+db_bank_withdraw (const char *owner_type, int owner_id, long long amount)
 {
-    if (amount <= 0)
-        return SQLITE_MISUSE;
+  if (amount <= 0)
+    return SQLITE_MISUSE;
 
-    return h_deduct_credits(
-        db_get_handle(),
-        owner_type,
-        owner_id,
-        amount,
-        "WITHDRAWAL",  // tx_type
-        NULL,          // tx_group_id
-        NULL           // new_balance_out
+  return h_deduct_credits (db_get_handle (), owner_type, owner_id, amount, "WITHDRAWAL",	// tx_type
+			   NULL,	// tx_group_id
+			   NULL	// new_balance_out
     );
 }
 
@@ -8591,561 +8662,758 @@ int db_bank_withdraw(const char *owner_type, int owner_id, long long amount)
  * @brief Transfers an amount between two bank accounts.
  * @return SQLITE_OK on success, or an error code from withdraw/deposit.
  */
-int db_bank_transfer(const char *from_owner_type, int from_owner_id, const char *to_owner_type, int to_owner_id, long long amount) {
-    sqlite3 *db = db_get_handle();
-    if (!db) {
-        return SQLITE_ERROR;
-    }
+int db_bank_transfer (const char *from_owner_type, int from_owner_id,
+		      const char *to_owner_type, int to_owner_id,
+		      long long amount)
+{
+  pthread_mutex_lock (&db_mutex);
+  int rc = h_bank_transfer_unlocked (db_get_handle(), from_owner_type, from_owner_id,
+                                     to_owner_type, to_owner_id,
+                                     amount, "TRANSFER", NULL);
+  pthread_mutex_unlock (&db_mutex);
+  return rc;
+}
 
-    if (amount <= 0) {
-        return SQLITE_MISUSE;
-    }
+int h_bank_transfer_unlocked (sqlite3 * db,
+                              const char *from_owner_type, int from_owner_id,
+                              const char *to_owner_type, int to_owner_id,
+                              long long amount,
+                              const char *tx_type, const char *tx_group_id)
+{
+  int from_account_id, to_account_id;
+  int rc;
 
-    int rc = SQLITE_ERROR;
-    int from_account_id = -1;
-    int to_account_id = -1;
-    char tx_group_id[33]; // For generated UUID
-    bool transaction_started = false;
+  // Get source account ID
+  rc = h_get_account_id_unlocked(db, from_owner_type, from_owner_id, &from_account_id);
+  if (rc != SQLITE_OK) {
+      // If source account doesn't exist, and it's not a system account, it's an error.
+      // System accounts might be implicit.
+      if (strcmp(from_owner_type, "system") != 0 && strcmp(from_owner_type, "gov") != 0) {
+          LOGW("h_bank_transfer_unlocked: Source account %s:%d not found.", from_owner_type, from_owner_id);
+          return SQLITE_NOTFOUND;
+      }
+      // For system/gov, if not found, it implies no balance to deduct from, so treat as insufficient funds
+      LOGW("h_bank_transfer_unlocked: Implicit system/gov source account %s:%d not found or created. Treating as insufficient funds.", from_owner_type, from_owner_id);
+      return SQLITE_CONSTRAINT; // Special return for insufficient funds
+  }
 
-    pthread_mutex_lock(&db_mutex);
+  // Get or create destination account ID
+  rc = h_get_account_id_unlocked(db, to_owner_type, to_owner_id, &to_account_id);
+  if (rc == SQLITE_NOTFOUND) {
+      rc = h_create_bank_account_unlocked(db, to_owner_type, to_owner_id, 0, &to_account_id);
+      if (rc != SQLITE_OK) {
+          LOGE("h_bank_transfer_unlocked: Failed to create destination account %s:%d: %s",
+               to_owner_type, to_owner_id, sqlite3_errmsg(db));
+          return rc;
+      }
+  } else if (rc != SQLITE_OK) {
+      LOGE("h_bank_transfer_unlocked: Failed to get destination account %s:%d: %s",
+           to_owner_type, to_owner_id, sqlite3_errmsg(db));
+      return rc;
+  }
 
-    rc = sqlite3_exec(db, "BEGIN IMMEDIATE;", NULL, NULL, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("db_bank_transfer: Failed to begin transaction: %s", sqlite3_errmsg(db));
-        goto cleanup;
-    }
-    transaction_started = true;
+  // Deduct from source
+  rc = h_deduct_credits_unlocked(db, from_account_id, amount, tx_type, tx_group_id, NULL);
+  if (rc != SQLITE_OK) {
+      LOGW("h_bank_transfer_unlocked: Failed to deduct %lld from %s:%d (account %d). Error: %d",
+           amount, from_owner_type, from_owner_id, from_account_id, rc);
+      return rc; // Insufficient funds or other deduction error
+  }
 
-    // 1. Get from_account_id, creating if not exists (should already exist for transfers)
-    rc = h_get_account_id_unlocked(db, from_owner_type, from_owner_id, &from_account_id);
-    if (rc == SQLITE_NOTFOUND) {
-        LOGW("db_bank_transfer: Source account not found for %s:%d. Creating with 0 balance.", from_owner_type, from_owner_id);
-        rc = h_create_bank_account_unlocked(db, from_owner_type, from_owner_id, 0, &from_account_id);
-        if (rc != SQLITE_OK) goto rollback;
-    } else if (rc != SQLITE_OK) {
-        goto rollback;
-    }
+  // Add to destination
+  rc = h_add_credits_unlocked(db, to_account_id, amount, tx_type, tx_group_id, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("h_bank_transfer_unlocked: Failed to add %lld to %s:%d (account %d). This should not happen after successful deduction. Error: %d",
+           amount, to_owner_type, to_owner_id, to_account_id, rc);
+      // Attempt to refund the source account (critical error recovery)
+      h_add_credits_unlocked(db, from_account_id, amount, "REFUND", "TRANSFER_FAILED", NULL);
+      return rc;
+  }
 
-    // 2. Get to_account_id, creating if not exists
-    rc = h_get_account_id_unlocked(db, to_owner_type, to_owner_id, &to_account_id);
-    if (rc == SQLITE_NOTFOUND) {
-        LOGI("db_bank_transfer: Destination account not found for %s:%d. Creating with 0 balance.", to_owner_type, to_owner_id);
-        rc = h_create_bank_account_unlocked(db, to_owner_type, to_owner_id, 0, &to_account_id);
-        if (rc != SQLITE_OK) goto rollback;
-    } else if (rc != SQLITE_OK) {
-        goto rollback;
-    }
-
-    // Prevent transfer to self, which could bypass fees/logic if ever introduced
-    if (from_account_id == to_account_id) {
-        LOGW("db_bank_transfer: Attempted transfer from account %d to itself.", from_account_id);
-        rc = SQLITE_CONSTRAINT; // Or a custom error code
-        goto rollback;
-    }
-    
-    // 3. Generate a transaction group ID
-    h_generate_hex_uuid(tx_group_id, sizeof(tx_group_id));
-
-    // 4. Deduct from source account
-    rc = h_deduct_credits_unlocked(db, from_account_id, amount, "TRANSFER", tx_group_id, NULL);
-    if (rc != SQLITE_OK) {
-        goto rollback; // h_deduct_credits_unlocked will return SQLITE_CONSTRAINT on insufficient funds
-    }
-
-    // 5. Add to destination account
-    rc = h_add_credits_unlocked(db, to_account_id, amount, "TRANSFER", tx_group_id, NULL);
-    if (rc != SQLITE_OK) {
-        // If deposit fails, the withdrawal has already been logged by its trigger.
-        // The rollback will revert the balance, but the transaction log will show the DEBIT.
-        // This is where proper error handling and a compensating transaction might be needed in a real system.
-        // For now, the rollback ensures balance consistency.
-        goto rollback;
-    }
-
-    rc = sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("db_bank_transfer: Failed to commit transaction: %s", sqlite3_errmsg(db));
-        goto cleanup;
-    }
-
-    rc = SQLITE_OK;
-    goto cleanup;
-
-rollback:
-    LOGW("db_bank_transfer: Transaction rolled back due to error (rc=%d): %s", rc, sqlite3_errmsg(db));
-    sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
-
-cleanup:
-    pthread_mutex_unlock(&db_mutex);
-    return rc;
+  return SQLITE_OK;
 }
 
 // NOTE: The remaining functions are placeholders and will need to be implemented.
-int db_bank_get_transactions(const char *owner_type, int owner_id, int limit, json_t **out_array) { return SQLITE_OK; }
-int db_bank_apply_interest() { return SQLITE_OK; }
-int db_bank_process_orders() { return SQLITE_OK; }
-int db_bank_set_flags(const char *owner_type, int owner_id, int flags) { return SQLITE_OK; }
-int db_bank_get_flags(const char *owner_type, int owner_id, int *out_flags) { return SQLITE_OK; }
-int db_commodity_get_price(const char *commodity_code, int *out_price) { return SQLITE_OK; }
-int db_commodity_update_price(const char *commodity_code, int new_price) { return SQLITE_OK; }
-int db_commodity_create_order(const char *actor_type, int actor_id, const char *commodity_code, const char *side, int quantity, int price) { return SQLITE_OK; }
-int db_commodity_fill_order(int order_id, int quantity) { return SQLITE_OK; }
-int db_commodity_get_orders(const char *commodity_code, const char *status, json_t **out_array) { return SQLITE_OK; }
-int db_commodity_get_trades(const char *commodity_code, int limit, json_t **out_array) { return SQLITE_OK; }
-int db_port_get_goods_on_hand(int port_id, const char *commodity_code, int *out_quantity) { return SQLITE_OK; }
-int db_port_update_goods_on_hand(int port_id, const char *commodity_code, int quantity_change) { return SQLITE_OK; }
-int db_planet_get_goods_on_hand(int planet_id, const char *commodity_code, int *out_quantity) { return SQLITE_OK; }
-int db_planet_update_goods_on_hand(int planet_id, const char *commodity_code, int quantity_change) { return SQLITE_OK; }
+int
+db_bank_get_transactions (const char *owner_type, int owner_id, int limit,
+			  json_t **out_array)
+{
+  return SQLITE_OK;
+}
+
+int
+db_bank_apply_interest ()
+{
+  return SQLITE_OK;
+}
+
+int
+db_bank_process_orders ()
+{
+  return SQLITE_OK;
+}
+
+int
+db_bank_set_flags (const char *owner_type, int owner_id, int flags)
+{
+  return SQLITE_OK;
+}
+
+int
+db_bank_get_flags (const char *owner_type, int owner_id, int *out_flags)
+{
+  return SQLITE_OK;
+}
+
+int
+db_commodity_get_price (const char *commodity_code, int *out_price)
+{
+  return SQLITE_OK;
+}
+
+int
+db_commodity_update_price (const char *commodity_code, int new_price)
+{
+  return SQLITE_OK;
+}
+
+int
+db_commodity_create_order (const char *actor_type, int actor_id,
+			   const char *commodity_code, const char *side,
+			   int quantity, int price)
+{
+  return SQLITE_OK;
+}
+
+int
+db_commodity_fill_order (int order_id, int quantity)
+{
+  return SQLITE_OK;
+}
+
+int
+db_commodity_get_orders (const char *commodity_code, const char *status,
+			 json_t **out_array)
+{
+  return SQLITE_OK;
+}
+
+int
+db_commodity_get_trades (const char *commodity_code, int limit,
+			 json_t **out_array)
+{
+  return SQLITE_OK;
+}
+
+int
+db_port_get_goods_on_hand (int port_id, const char *commodity_code,
+			   int *out_quantity)
+{
+  return SQLITE_OK;
+}
+
+int
+db_port_update_goods_on_hand (int port_id, const char *commodity_code,
+			      int quantity_change)
+{
+  return SQLITE_OK;
+}
+
+int
+db_planet_get_goods_on_hand (int planet_id, const char *commodity_code,
+			     int *out_quantity)
+{
+  return SQLITE_OK;
+}
+
+int
+db_planet_update_goods_on_hand (int planet_id, const char *commodity_code,
+				int quantity_change)
+{
+  return SQLITE_OK;
+}
 
 
 // New helper functions for ship destruction and player status
 
 // db_mark_ship_destroyed: Marks a ship as destroyed.
-int db_mark_ship_destroyed(sqlite3 *db, int ship_id) {
-    sqlite3_stmt *st = NULL;
-    int rc;
-    const char *sql = "UPDATE ships SET destroyed = 1 WHERE id = ?;";
-    
-    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("db_mark_ship_destroyed: prepare error: %s", sqlite3_errmsg(db));
-        return rc;
+int
+db_mark_ship_destroyed (sqlite3 *db, int ship_id)
+{
+  sqlite3_stmt *st = NULL;
+  int rc;
+  const char *sql = "UPDATE ships SET destroyed = 1 WHERE id = ?;";
+
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("db_mark_ship_destroyed: prepare error: %s", sqlite3_errmsg (db));
+      return rc;
     }
-    sqlite3_bind_int(st, 1, ship_id);
-    rc = sqlite3_step(st);
-    sqlite3_finalize(st);
-    
-    if (rc != SQLITE_DONE) {
-        LOGE("db_mark_ship_destroyed: execute error: %s", sqlite3_errmsg(db));
-        return rc;
+  sqlite3_bind_int (st, 1, ship_id);
+  rc = sqlite3_step (st);
+  sqlite3_finalize (st);
+
+  if (rc != SQLITE_DONE)
+    {
+      LOGE ("db_mark_ship_destroyed: execute error: %s", sqlite3_errmsg (db));
+      return rc;
     }
-    return SQLITE_OK;
+  return SQLITE_OK;
 }
 
 // db_clear_player_active_ship: Clears the active ship for a player.
-int db_clear_player_active_ship(sqlite3 *db, int player_id) {
-    sqlite3_stmt *st = NULL;
-    int rc;
-    const char *sql = "UPDATE players SET ship = 0 WHERE id = ?;"; // Set ship to 0 (NULL)
-    
-    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("db_clear_player_active_ship: prepare error: %s", sqlite3_errmsg(db));
-        return rc;
+int
+db_clear_player_active_ship (sqlite3 *db, int player_id)
+{
+  sqlite3_stmt *st = NULL;
+  int rc;
+  const char *sql = "UPDATE players SET ship = 0 WHERE id = ?;";	// Set ship to 0 (NULL)
+
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("db_clear_player_active_ship: prepare error: %s",
+	    sqlite3_errmsg (db));
+      return rc;
     }
-    sqlite3_bind_int(st, 1, player_id);
-    rc = sqlite3_step(st);
-    sqlite3_finalize(st);
-    
-    if (rc != SQLITE_DONE) {
-        LOGE("db_clear_player_active_ship: execute error: %s", sqlite3_errmsg(db));
-        return rc;
+  sqlite3_bind_int (st, 1, player_id);
+  rc = sqlite3_step (st);
+  sqlite3_finalize (st);
+
+  if (rc != SQLITE_DONE)
+    {
+      LOGE ("db_clear_player_active_ship: execute error: %s",
+	    sqlite3_errmsg (db));
+      return rc;
     }
-    return SQLITE_OK;
+  return SQLITE_OK;
 }
 
 // db_increment_player_stat: Increments a specified player statistic.
-int db_increment_player_stat(sqlite3 *db, int player_id, const char *stat_name) {
-    sqlite3_stmt *st = NULL;
-    int rc;
-    char *sql_query = NULL;
-    
-    // Using sqlite3_mprintf to safely construct the query with a dynamic column name
-    sql_query = sqlite3_mprintf("UPDATE players SET %q = %q + 1 WHERE id = ?;", stat_name, stat_name);
-    if (!sql_query) {
-        return SQLITE_NOMEM;
+int
+db_increment_player_stat (sqlite3 *db, int player_id, const char *stat_name)
+{
+  sqlite3_stmt *st = NULL;
+  int rc;
+  char *sql_query = NULL;
+
+  // Using sqlite3_mprintf to safely construct the query with a dynamic column name
+  sql_query =
+    sqlite3_mprintf ("UPDATE players SET %q = %q + 1 WHERE id = ?;",
+		     stat_name, stat_name);
+  if (!sql_query)
+    {
+      return SQLITE_NOMEM;
     }
 
-    rc = sqlite3_prepare_v2(db, sql_query, -1, &st, NULL);
-    sqlite3_free(sql_query); // Free the allocated string immediately after preparing
-    if (rc != SQLITE_OK) {
-        LOGE("db_increment_player_stat: prepare error for %s: %s", stat_name, sqlite3_errmsg(db));
-        return rc;
+  rc = sqlite3_prepare_v2 (db, sql_query, -1, &st, NULL);
+  sqlite3_free (sql_query);	// Free the allocated string immediately after preparing
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("db_increment_player_stat: prepare error for %s: %s", stat_name,
+	    sqlite3_errmsg (db));
+      return rc;
     }
-    sqlite3_bind_int(st, 1, player_id);
-    rc = sqlite3_step(st);
-    sqlite3_finalize(st);
-    
-    if (rc != SQLITE_DONE) {
-        LOGE("db_increment_player_stat: execute error for %s: %s", stat_name, sqlite3_errmsg(db));
-        return rc;
+  sqlite3_bind_int (st, 1, player_id);
+  rc = sqlite3_step (st);
+  sqlite3_finalize (st);
+
+  if (rc != SQLITE_DONE)
+    {
+      LOGE ("db_increment_player_stat: execute error for %s: %s", stat_name,
+	    sqlite3_errmsg (db));
+      return rc;
     }
-    return SQLITE_OK;
+  return SQLITE_OK;
 }
 
 // db_get_player_xp: Retrieves a player's experience points.
-int db_get_player_xp(sqlite3 *db, int player_id) {
-    sqlite3_stmt *st = NULL;
-    int rc;
-    int xp = 0;
-    const char *sql = "SELECT experience FROM players WHERE id = ?;";
-    
-    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("db_get_player_xp: prepare error: %s", sqlite3_errmsg(db));
-        return 0; // Return 0 on error
+int
+db_get_player_xp (sqlite3 *db, int player_id)
+{
+  sqlite3_stmt *st = NULL;
+  int rc;
+  int xp = 0;
+  const char *sql = "SELECT experience FROM players WHERE id = ?;";
+
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("db_get_player_xp: prepare error: %s", sqlite3_errmsg (db));
+      return 0;			// Return 0 on error
     }
-    sqlite3_bind_int(st, 1, player_id);
-    rc = sqlite3_step(st);
-    if (rc == SQLITE_ROW) {
-        xp = sqlite3_column_int(st, 0);
-    } else if (rc != SQLITE_DONE) {
-        LOGE("db_get_player_xp: execute error: %s", sqlite3_errmsg(db));
+  sqlite3_bind_int (st, 1, player_id);
+  rc = sqlite3_step (st);
+  if (rc == SQLITE_ROW)
+    {
+      xp = sqlite3_column_int (st, 0);
     }
-    sqlite3_finalize(st);
-    return xp;
+  else if (rc != SQLITE_DONE)
+    {
+      LOGE ("db_get_player_xp: execute error: %s", sqlite3_errmsg (db));
+    }
+  sqlite3_finalize (st);
+  return xp;
 }
 
 // db_update_player_xp: Updates a player's experience points.
-int db_update_player_xp(sqlite3 *db, int player_id, int new_xp) {
-    sqlite3_stmt *st = NULL;
-    int rc;
-    const char *sql = "UPDATE players SET experience = ? WHERE id = ?;";
-    
-    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("db_update_player_xp: prepare error: %s", sqlite3_errmsg(db));
-        return rc;
+int
+db_update_player_xp (sqlite3 *db, int player_id, int new_xp)
+{
+  sqlite3_stmt *st = NULL;
+  int rc;
+  const char *sql = "UPDATE players SET experience = ? WHERE id = ?;";
+
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("db_update_player_xp: prepare error: %s", sqlite3_errmsg (db));
+      return rc;
     }
-    sqlite3_bind_int(st, 1, new_xp);
-    sqlite3_bind_int(st, 2, player_id);
-    rc = sqlite3_step(st);
-    sqlite3_finalize(st);
-    
-    if (rc != SQLITE_DONE) {
-        LOGE("db_update_player_xp: execute error: %s", sqlite3_errmsg(db));
-        return rc;
+  sqlite3_bind_int (st, 1, new_xp);
+  sqlite3_bind_int (st, 2, player_id);
+  rc = sqlite3_step (st);
+  sqlite3_finalize (st);
+
+  if (rc != SQLITE_DONE)
+    {
+      LOGE ("db_update_player_xp: execute error: %s", sqlite3_errmsg (db));
+      return rc;
     }
-    return SQLITE_OK;
+  return SQLITE_OK;
 }
 
 // db_shiptype_has_escape_pod: Checks if a ship type has an escape pod.
-bool db_shiptype_has_escape_pod(sqlite3 *db, int ship_id) {
-    sqlite3_stmt *st = NULL;
-    int rc;
-    bool has_pod = false;
-    const char *sql = "SELECT T.has_escape_pod FROM ships S JOIN shiptypes T ON S.type_id = T.id WHERE S.id = ?;";
-    
-    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("db_shiptype_has_escape_pod: prepare error: %s", sqlite3_errmsg(db));
-        return false;
+bool
+db_shiptype_has_escape_pod (sqlite3 *db, int ship_id)
+{
+  sqlite3_stmt *st = NULL;
+  int rc;
+  bool has_pod = false;
+  const char *sql =
+    "SELECT T.has_escape_pod FROM ships S JOIN shiptypes T ON S.type_id = T.id WHERE S.id = ?;";
+
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("db_shiptype_has_escape_pod: prepare error: %s",
+	    sqlite3_errmsg (db));
+      return false;
     }
-    sqlite3_bind_int(st, 1, ship_id);
-    rc = sqlite3_step(st);
-    if (rc == SQLITE_ROW) {
-        has_pod = sqlite3_column_int(st, 0) == 1;
-    } else if (rc != SQLITE_DONE) {
-        LOGE("db_shiptype_has_escape_pod: execute error: %s", sqlite3_errmsg(db));
+  sqlite3_bind_int (st, 1, ship_id);
+  rc = sqlite3_step (st);
+  if (rc == SQLITE_ROW)
+    {
+      has_pod = sqlite3_column_int (st, 0) == 1;
     }
-    sqlite3_finalize(st);
-    return has_pod;
+  else if (rc != SQLITE_DONE)
+    {
+      LOGE ("db_shiptype_has_escape_pod: execute error: %s",
+	    sqlite3_errmsg (db));
+    }
+  sqlite3_finalize (st);
+  return has_pod;
 }
 
 // db_get_player_podded_count_today: Retrieves player's podded count for today.
-int db_get_player_podded_count_today(sqlite3 *db, int player_id) {
-    sqlite3_stmt *st = NULL;
-    int rc;
-    int count = 0;
-    const char *sql = "SELECT podded_count_today FROM podded_status WHERE player_id = ?;";
-    
-    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("db_get_player_podded_count_today: prepare error: %s", sqlite3_errmsg(db));
-        return 0;
+int
+db_get_player_podded_count_today (sqlite3 *db, int player_id)
+{
+  sqlite3_stmt *st = NULL;
+  int rc;
+  int count = 0;
+  const char *sql =
+    "SELECT podded_count_today FROM podded_status WHERE player_id = ?;";
+
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("db_get_player_podded_count_today: prepare error: %s",
+	    sqlite3_errmsg (db));
+      return 0;
     }
-    sqlite3_bind_int(st, 1, player_id);
-    rc = sqlite3_step(st);
-    if (rc == SQLITE_ROW) {
-        count = sqlite3_column_int(st, 0);
-    } else if (rc == SQLITE_DONE) {
-        // No entry, create one
-        db_create_podded_status_entry(db, player_id); // This will insert a default row
-        // After creation, count is 0
-    } else {
-        LOGE("db_get_player_podded_count_today: execute error: %s", sqlite3_errmsg(db));
+  sqlite3_bind_int (st, 1, player_id);
+  rc = sqlite3_step (st);
+  if (rc == SQLITE_ROW)
+    {
+      count = sqlite3_column_int (st, 0);
     }
-    sqlite3_finalize(st);
-    return count;
+  else if (rc == SQLITE_DONE)
+    {
+      // No entry, create one
+      db_create_podded_status_entry (db, player_id);	// This will insert a default row
+      // After creation, count is 0
+    }
+  else
+    {
+      LOGE ("db_get_player_podded_count_today: execute error: %s",
+	    sqlite3_errmsg (db));
+    }
+  sqlite3_finalize (st);
+  return count;
 }
 
 // db_get_player_podded_last_reset: Retrieves player's last podded reset timestamp.
-long long db_get_player_podded_last_reset(sqlite3 *db, int player_id) {
-    sqlite3_stmt *st = NULL;
-    int rc;
-    long long timestamp = 0;
-    const char *sql = "SELECT podded_last_reset FROM podded_status WHERE player_id = ?;";
-    
-    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("db_get_player_podded_last_reset: prepare error: %s", sqlite3_errmsg(db));
-        return 0;
+long long
+db_get_player_podded_last_reset (sqlite3 *db, int player_id)
+{
+  sqlite3_stmt *st = NULL;
+  int rc;
+  long long timestamp = 0;
+  const char *sql =
+    "SELECT podded_last_reset FROM podded_status WHERE player_id = ?;";
+
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("db_get_player_podded_last_reset: prepare error: %s",
+	    sqlite3_errmsg (db));
+      return 0;
     }
-    sqlite3_bind_int(st, 1, player_id);
-    rc = sqlite3_step(st);
-    if (rc == SQLITE_ROW) {
-        timestamp = sqlite3_column_int64(st, 0);
-    } else if (rc == SQLITE_DONE) {
-        // No entry, create one
-        db_create_podded_status_entry(db, player_id); // This will insert a default row
-        // After creation, current timestamp should be returned as default
-        timestamp = time(NULL);
-    } else {
-        LOGE("db_get_player_podded_last_reset: execute error: %s", sqlite3_errmsg(db));
+  sqlite3_bind_int (st, 1, player_id);
+  rc = sqlite3_step (st);
+  if (rc == SQLITE_ROW)
+    {
+      timestamp = sqlite3_column_int64 (st, 0);
     }
-    sqlite3_finalize(st);
-    return timestamp;
+  else if (rc == SQLITE_DONE)
+    {
+      // No entry, create one
+      db_create_podded_status_entry (db, player_id);	// This will insert a default row
+      // After creation, current timestamp should be returned as default
+      timestamp = time (NULL);
+    }
+  else
+    {
+      LOGE ("db_get_player_podded_last_reset: execute error: %s",
+	    sqlite3_errmsg (db));
+    }
+  sqlite3_finalize (st);
+  return timestamp;
 }
 
 // db_reset_player_podded_count: Resets player's podded count and updates last reset timestamp.
-int db_reset_player_podded_count(sqlite3 *db, int player_id, long long timestamp) {
-    sqlite3_stmt *st = NULL;
-    int rc;
-    const char *sql = "UPDATE podded_status SET podded_count_today = 0, podded_last_reset = ? WHERE player_id = ?;";
-    
-    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("db_reset_player_podded_count: prepare error: %s", sqlite3_errmsg(db));
-        return rc;
+int
+db_reset_player_podded_count (sqlite3 *db, int player_id, long long timestamp)
+{
+  sqlite3_stmt *st = NULL;
+  int rc;
+  const char *sql =
+    "UPDATE podded_status SET podded_count_today = 0, podded_last_reset = ? WHERE player_id = ?;";
+
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("db_reset_player_podded_count: prepare error: %s",
+	    sqlite3_errmsg (db));
+      return rc;
     }
-    sqlite3_bind_int64(st, 1, timestamp);
-    sqlite3_bind_int(st, 2, player_id);
-    rc = sqlite3_step(st);
-    sqlite3_finalize(st);
-    
-    if (rc != SQLITE_DONE) {
-        LOGE("db_reset_player_podded_count: execute error: %s", sqlite3_errmsg(db));
-        return rc;
+  sqlite3_bind_int64 (st, 1, timestamp);
+  sqlite3_bind_int (st, 2, player_id);
+  rc = sqlite3_step (st);
+  sqlite3_finalize (st);
+
+  if (rc != SQLITE_DONE)
+    {
+      LOGE ("db_reset_player_podded_count: execute error: %s",
+	    sqlite3_errmsg (db));
+      return rc;
     }
-    return SQLITE_OK;
+  return SQLITE_OK;
 }
 
 // db_update_player_podded_status: Updates a player's podded status.
-int db_update_player_podded_status(sqlite3 *db, int player_id, const char *status, long long big_sleep_until) {
-    sqlite3_stmt *st = NULL;
-    int rc;
-    const char *sql = "UPDATE podded_status SET status = ?, big_sleep_until = ? WHERE player_id = ?;";
-    
-    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("db_update_player_podded_status: prepare error: %s", sqlite3_errmsg(db));
-        return rc;
+int
+db_update_player_podded_status (sqlite3 *db, int player_id,
+				const char *status, long long big_sleep_until)
+{
+  sqlite3_stmt *st = NULL;
+  int rc;
+  const char *sql =
+    "UPDATE podded_status SET status = ?, big_sleep_until = ? WHERE player_id = ?;";
+
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("db_update_player_podded_status: prepare error: %s",
+	    sqlite3_errmsg (db));
+      return rc;
     }
-    sqlite3_bind_text(st, 1, status, -1, SQLITE_STATIC);
-    sqlite3_bind_int64(st, 2, big_sleep_until);
-    sqlite3_bind_int(st, 3, player_id);
-    rc = sqlite3_step(st);
-    sqlite3_finalize(st);
-    
-    if (rc != SQLITE_DONE) {
-        LOGE("db_update_player_podded_status: execute error: %s", sqlite3_errmsg(db));
-        return rc;
+  sqlite3_bind_text (st, 1, status, -1, SQLITE_STATIC);
+  sqlite3_bind_int64 (st, 2, big_sleep_until);
+  sqlite3_bind_int (st, 3, player_id);
+  rc = sqlite3_step (st);
+  sqlite3_finalize (st);
+
+  if (rc != SQLITE_DONE)
+    {
+      LOGE ("db_update_player_podded_status: execute error: %s",
+	    sqlite3_errmsg (db));
+      return rc;
     }
-    return SQLITE_OK;
+  return SQLITE_OK;
 }
 
 // db_create_podded_status_entry: Creates a default entry in podded_status for a player.
-int db_create_podded_status_entry(sqlite3 *db, int player_id) {
-    sqlite3_stmt *st = NULL;
-    int rc;
-    const char *sql = "INSERT OR IGNORE INTO podded_status (player_id, podded_count_today, podded_last_reset, status, big_sleep_until) VALUES (?, 0, ?, 'alive', 0);";
-    
-    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("db_create_podded_status_entry: prepare error: %s", sqlite3_errmsg(db));
-        return rc;
+int
+db_create_podded_status_entry (sqlite3 *db, int player_id)
+{
+  sqlite3_stmt *st = NULL;
+  int rc;
+  const char *sql =
+    "INSERT OR IGNORE INTO podded_status (player_id, podded_count_today, podded_last_reset, status, big_sleep_until) VALUES (?, 0, ?, 'alive', 0);";
+
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("db_create_podded_status_entry: prepare error: %s",
+	    sqlite3_errmsg (db));
+      return rc;
     }
-    sqlite3_bind_int(st, 1, player_id);
-    sqlite3_bind_int64(st, 2, time(NULL));
-    rc = sqlite3_step(st);
-    sqlite3_finalize(st);
-    
-    if (rc != SQLITE_DONE) {
-        LOGE("db_create_podded_status_entry: execute error: %s", sqlite3_errmsg(db));
-        return rc;
+  sqlite3_bind_int (st, 1, player_id);
+  sqlite3_bind_int64 (st, 2, time (NULL));
+  rc = sqlite3_step (st);
+  sqlite3_finalize (st);
+
+  if (rc != SQLITE_DONE)
+    {
+      LOGE ("db_create_podded_status_entry: execute error: %s",
+	    sqlite3_errmsg (db));
+      return rc;
     }
-    return SQLITE_OK;
+  return SQLITE_OK;
 }
 
 // db_get_shiptype_info: Retrieves holds, fighters, and shields for a shiptype.
-int db_get_shiptype_info(sqlite3 *db, int shiptype_id, int *holds, int *fighters, int *shields) {
-    sqlite3_stmt *st = NULL;
-    int rc;
-    const char *sql = "SELECT initialholds, maxfighters, maxshields FROM shiptypes WHERE id = ?;";
-    
-    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("db_get_shiptype_info: prepare error: %s", sqlite3_errmsg(db));
-        return rc;
+int
+db_get_shiptype_info (sqlite3 *db, int shiptype_id, int *holds, int *fighters,
+		      int *shields)
+{
+  sqlite3_stmt *st = NULL;
+  int rc;
+  const char *sql =
+    "SELECT initialholds, maxfighters, maxshields FROM shiptypes WHERE id = ?;";
+
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("db_get_shiptype_info: prepare error: %s", sqlite3_errmsg (db));
+      return rc;
     }
-    sqlite3_bind_int(st, 1, shiptype_id);
-    rc = sqlite3_step(st);
-    if (rc == SQLITE_ROW) {
-        *holds = sqlite3_column_int(st, 0);
-        *fighters = sqlite3_column_int(st, 1);
-        *shields = sqlite3_column_int(st, 2);
-        rc = SQLITE_OK;
-    } else if (rc == SQLITE_DONE) {
-        LOGW("db_get_shiptype_info: No shiptype found for ID %d.", shiptype_id);
-        rc = SQLITE_NOTFOUND;
-    } else {
-        LOGE("db_get_shiptype_info: execute error: %s", sqlite3_errmsg(db));
+  sqlite3_bind_int (st, 1, shiptype_id);
+  rc = sqlite3_step (st);
+  if (rc == SQLITE_ROW)
+    {
+      *holds = sqlite3_column_int (st, 0);
+      *fighters = sqlite3_column_int (st, 1);
+      *shields = sqlite3_column_int (st, 2);
+      rc = SQLITE_OK;
     }
-    sqlite3_finalize(st);
-    return rc;
+  else if (rc == SQLITE_DONE)
+    {
+      LOGW ("db_get_shiptype_info: No shiptype found for ID %d.",
+	    shiptype_id);
+      rc = SQLITE_NOTFOUND;
+    }
+  else
+    {
+      LOGE ("db_get_shiptype_info: execute error: %s", sqlite3_errmsg (db));
+    }
+  sqlite3_finalize (st);
+  return rc;
 }
 
-int db_player_land_on_planet(int player_id, int planet_id) {
-    sqlite3 *db = db_get_handle();
-    if (!db) return SQLITE_ERROR;
+int
+db_player_land_on_planet (int player_id, int planet_id)
+{
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return SQLITE_ERROR;
 
-    pthread_mutex_lock(&db_mutex);
+  pthread_mutex_lock (&db_mutex);
 
-    sqlite3_stmt *st_find_ship = NULL;
-    sqlite3_stmt *st_update_ship = NULL;
-    sqlite3_stmt *st_update_player = NULL;
-    int ship_id = -1;
-    int rc = SQLITE_ERROR;
+  sqlite3_stmt *st_find_ship = NULL;
+  sqlite3_stmt *st_update_ship = NULL;
+  sqlite3_stmt *st_update_player = NULL;
+  int ship_id = -1;
+  int rc = SQLITE_ERROR;
 
-    const char *sql_find_ship = "SELECT ship FROM players WHERE id = ?;";
-    if (sqlite3_prepare_v2(db, sql_find_ship, -1, &st_find_ship, NULL) != SQLITE_OK) {
-        goto cleanup_land;
+  const char *sql_find_ship = "SELECT ship FROM players WHERE id = ?;";
+  if (sqlite3_prepare_v2 (db, sql_find_ship, -1, &st_find_ship, NULL) !=
+      SQLITE_OK)
+    {
+      goto cleanup_land;
     }
-    sqlite3_bind_int(st_find_ship, 1, player_id);
-    if (sqlite3_step(st_find_ship) == SQLITE_ROW) {
-        ship_id = sqlite3_column_int(st_find_ship, 0);
+  sqlite3_bind_int (st_find_ship, 1, player_id);
+  if (sqlite3_step (st_find_ship) == SQLITE_ROW)
+    {
+      ship_id = sqlite3_column_int (st_find_ship, 0);
     }
-    sqlite3_finalize(st_find_ship);
-    st_find_ship = NULL;
+  sqlite3_finalize (st_find_ship);
+  st_find_ship = NULL;
 
-    if (ship_id == -1) {
-        goto cleanup_land;
-    }
-
-    // Use SAVEPOINT for nested transaction
-    sqlite3_exec(db, "SAVEPOINT land_on_planet;", NULL, NULL, NULL);
-
-    const char *sql_update_ship = "UPDATE ships SET onplanet = ?, sector = NULL, ported = 0 WHERE id = ?;";
-    if (sqlite3_prepare_v2(db, sql_update_ship, -1, &st_update_ship, NULL) != SQLITE_OK) {
-        sqlite3_exec(db, "ROLLBACK TO land_on_planet;", NULL, NULL, NULL);
-        goto cleanup_land;
-    }
-    sqlite3_bind_int(st_update_ship, 1, planet_id);
-    sqlite3_bind_int(st_update_ship, 2, ship_id);
-    if (sqlite3_step(st_update_ship) != SQLITE_DONE) {
-        sqlite3_exec(db, "ROLLBACK TO land_on_planet;", NULL, NULL, NULL);
-        goto cleanup_land;
-    }
-    
-    const char *sql_update_player = "UPDATE players SET lastplanet = ?, sector = NULL WHERE id = ?;";
-    if (sqlite3_prepare_v2(db, sql_update_player, -1, &st_update_player, NULL) != SQLITE_OK) {
-        sqlite3_exec(db, "ROLLBACK TO land_on_planet;", NULL, NULL, NULL);
-        goto cleanup_land;
-    }
-    sqlite3_bind_int(st_update_player, 1, planet_id);
-    sqlite3_bind_int(st_update_player, 2, player_id);
-    if (sqlite3_step(st_update_player) != SQLITE_DONE) {
-        sqlite3_exec(db, "ROLLBACK TO land_on_planet;", NULL, NULL, NULL);
-        goto cleanup_land;
+  if (ship_id == -1)
+    {
+      goto cleanup_land;
     }
 
-    sqlite3_exec(db, "RELEASE SAVEPOINT land_on_planet;", NULL, NULL, NULL);
-    rc = SQLITE_OK;
+  // Use SAVEPOINT for nested transaction
+  sqlite3_exec (db, "SAVEPOINT land_on_planet;", NULL, NULL, NULL);
+
+  const char *sql_update_ship =
+    "UPDATE ships SET onplanet = ?, sector = NULL, ported = 0 WHERE id = ?;";
+  if (sqlite3_prepare_v2 (db, sql_update_ship, -1, &st_update_ship, NULL) !=
+      SQLITE_OK)
+    {
+      sqlite3_exec (db, "ROLLBACK TO land_on_planet;", NULL, NULL, NULL);
+      goto cleanup_land;
+    }
+  sqlite3_bind_int (st_update_ship, 1, planet_id);
+  sqlite3_bind_int (st_update_ship, 2, ship_id);
+  if (sqlite3_step (st_update_ship) != SQLITE_DONE)
+    {
+      sqlite3_exec (db, "ROLLBACK TO land_on_planet;", NULL, NULL, NULL);
+      goto cleanup_land;
+    }
+
+  const char *sql_update_player =
+    "UPDATE players SET lastplanet = ?, sector = NULL WHERE id = ?;";
+  if (sqlite3_prepare_v2 (db, sql_update_player, -1, &st_update_player, NULL)
+      != SQLITE_OK)
+    {
+      sqlite3_exec (db, "ROLLBACK TO land_on_planet;", NULL, NULL, NULL);
+      goto cleanup_land;
+    }
+  sqlite3_bind_int (st_update_player, 1, planet_id);
+  sqlite3_bind_int (st_update_player, 2, player_id);
+  if (sqlite3_step (st_update_player) != SQLITE_DONE)
+    {
+      sqlite3_exec (db, "ROLLBACK TO land_on_planet;", NULL, NULL, NULL);
+      goto cleanup_land;
+    }
+
+  sqlite3_exec (db, "RELEASE SAVEPOINT land_on_planet;", NULL, NULL, NULL);
+  rc = SQLITE_OK;
 
 cleanup_land:
-    if (st_find_ship) sqlite3_finalize(st_find_ship);
-    if (st_update_ship) sqlite3_finalize(st_update_ship);
-    if (st_update_player) sqlite3_finalize(st_update_player);
-    pthread_mutex_unlock(&db_mutex);
-    return rc;
+  if (st_find_ship)
+    sqlite3_finalize (st_find_ship);
+  if (st_update_ship)
+    sqlite3_finalize (st_update_ship);
+  if (st_update_player)
+    sqlite3_finalize (st_update_player);
+  pthread_mutex_unlock (&db_mutex);
+  return rc;
 }
 
-int db_player_launch_from_planet(int player_id, int *out_sector_id) {
-    sqlite3 *db = db_get_handle();
-    if (!db) return SQLITE_ERROR;
+int
+db_player_launch_from_planet (int player_id, int *out_sector_id)
+{
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return SQLITE_ERROR;
 
-    pthread_mutex_lock(&db_mutex);
+  pthread_mutex_lock (&db_mutex);
 
-    sqlite3_stmt *st = NULL;
-    int ship_id = -1;
-    int last_planet_id = -1;
-    int planet_sector_id = -1;
-    int rc = SQLITE_ERROR;
+  sqlite3_stmt *st = NULL;
+  int ship_id = -1;
+  int last_planet_id = -1;
+  int planet_sector_id = -1;
+  int rc = SQLITE_ERROR;
 
-    const char *sql_get_info = "SELECT ship, lastplanet FROM players WHERE id = ?;";
-    if (sqlite3_prepare_v2(db, sql_get_info, -1, &st, NULL) != SQLITE_OK) {
-        goto cleanup_launch;
+  const char *sql_get_info =
+    "SELECT ship, lastplanet FROM players WHERE id = ?;";
+  if (sqlite3_prepare_v2 (db, sql_get_info, -1, &st, NULL) != SQLITE_OK)
+    {
+      goto cleanup_launch;
     }
-    sqlite3_bind_int(st, 1, player_id);
-    if (sqlite3_step(st) == SQLITE_ROW) {
-        ship_id = sqlite3_column_int(st, 0);
-        last_planet_id = sqlite3_column_int(st, 1);
+  sqlite3_bind_int (st, 1, player_id);
+  if (sqlite3_step (st) == SQLITE_ROW)
+    {
+      ship_id = sqlite3_column_int (st, 0);
+      last_planet_id = sqlite3_column_int (st, 1);
     }
-    sqlite3_finalize(st);
-    st = NULL;
+  sqlite3_finalize (st);
+  st = NULL;
 
-    if (ship_id == -1 || last_planet_id <= 0) {
-        // Player is not on a planet or has no ship
-        rc = SQLITE_MISUSE;
-        goto cleanup_launch;
-    }
-
-    const char *sql_get_planet_sector = "SELECT sector FROM planets WHERE id = ?;";
-    if (sqlite3_prepare_v2(db, sql_get_planet_sector, -1, &st, NULL) != SQLITE_OK) {
-        goto cleanup_launch;
-    }
-    sqlite3_bind_int(st, 1, last_planet_id);
-    if (sqlite3_step(st) == SQLITE_ROW) {
-        planet_sector_id = sqlite3_column_int(st, 0);
-    }
-    sqlite3_finalize(st);
-    st = NULL;
-
-    if (planet_sector_id <= 0) {
-        // Planet has no sector, shouldn't happen
-        rc = SQLITE_ERROR;
-        goto cleanup_launch;
+  if (ship_id == -1 || last_planet_id <= 0)
+    {
+      // Player is not on a planet or has no ship
+      rc = SQLITE_MISUSE;
+      goto cleanup_launch;
     }
 
-    // Use SAVEPOINT for nested transaction
-    sqlite3_exec(db, "SAVEPOINT launch_from_planet;", NULL, NULL, NULL);
+  const char *sql_get_planet_sector =
+    "SELECT sector FROM planets WHERE id = ?;";
+  if (sqlite3_prepare_v2 (db, sql_get_planet_sector, -1, &st, NULL) !=
+      SQLITE_OK)
+    {
+      goto cleanup_launch;
+    }
+  sqlite3_bind_int (st, 1, last_planet_id);
+  if (sqlite3_step (st) == SQLITE_ROW)
+    {
+      planet_sector_id = sqlite3_column_int (st, 0);
+    }
+  sqlite3_finalize (st);
+  st = NULL;
 
-    const char *sql_update_ship = "UPDATE ships SET onplanet = NULL, sector = ? WHERE id = ?;";
-    if (sqlite3_prepare_v2(db, sql_update_ship, -1, &st, NULL) != SQLITE_OK) {
-        sqlite3_exec(db, "ROLLBACK TO launch_from_planet;", NULL, NULL, NULL);
-        goto cleanup_launch;
-    }
-    sqlite3_bind_int(st, 1, planet_sector_id);
-    sqlite3_bind_int(st, 2, ship_id);
-    if (sqlite3_step(st) != SQLITE_DONE) {
-        sqlite3_exec(db, "ROLLBACK TO launch_from_planet;", NULL, NULL, NULL);
-        goto cleanup_launch;
-    }
-    sqlite3_finalize(st);
-    st = NULL;
-    
-    const char *sql_update_player = "UPDATE players SET sector = ? WHERE id = ?;";
-    if (sqlite3_prepare_v2(db, sql_update_player, -1, &st, NULL) != SQLITE_OK) {
-        sqlite3_exec(db, "ROLLBACK TO launch_from_planet;", NULL, NULL, NULL);
-        goto cleanup_launch;
-    }
-    sqlite3_bind_int(st, 1, planet_sector_id);
-    sqlite3_bind_int(st, 2, player_id);
-    if (sqlite3_step(st) != SQLITE_DONE) {
-        sqlite3_exec(db, "ROLLBACK TO launch_from_planet;", NULL, NULL, NULL);
-        goto cleanup_launch;
+  if (planet_sector_id <= 0)
+    {
+      // Planet has no sector, shouldn't happen
+      rc = SQLITE_ERROR;
+      goto cleanup_launch;
     }
 
-    sqlite3_exec(db, "RELEASE SAVEPOINT launch_from_planet;", NULL, NULL, NULL);
-    rc = SQLITE_OK;
-    if (out_sector_id) {
-        *out_sector_id = planet_sector_id;
+  // Use SAVEPOINT for nested transaction
+  sqlite3_exec (db, "SAVEPOINT launch_from_planet;", NULL, NULL, NULL);
+
+  const char *sql_update_ship =
+    "UPDATE ships SET onplanet = NULL, sector = ? WHERE id = ?;";
+  if (sqlite3_prepare_v2 (db, sql_update_ship, -1, &st, NULL) != SQLITE_OK)
+    {
+      sqlite3_exec (db, "ROLLBACK TO launch_from_planet;", NULL, NULL, NULL);
+      goto cleanup_launch;
+    }
+  sqlite3_bind_int (st, 1, planet_sector_id);
+  sqlite3_bind_int (st, 2, ship_id);
+  if (sqlite3_step (st) != SQLITE_DONE)
+    {
+      sqlite3_exec (db, "ROLLBACK TO launch_from_planet;", NULL, NULL, NULL);
+      goto cleanup_launch;
+    }
+  sqlite3_finalize (st);
+  st = NULL;
+
+  const char *sql_update_player =
+    "UPDATE players SET sector = ? WHERE id = ?;";
+  if (sqlite3_prepare_v2 (db, sql_update_player, -1, &st, NULL) != SQLITE_OK)
+    {
+      sqlite3_exec (db, "ROLLBACK TO launch_from_planet;", NULL, NULL, NULL);
+      goto cleanup_launch;
+    }
+  sqlite3_bind_int (st, 1, planet_sector_id);
+  sqlite3_bind_int (st, 2, player_id);
+  if (sqlite3_step (st) != SQLITE_DONE)
+    {
+      sqlite3_exec (db, "ROLLBACK TO launch_from_planet;", NULL, NULL, NULL);
+      goto cleanup_launch;
+    }
+
+  sqlite3_exec (db, "RELEASE SAVEPOINT launch_from_planet;", NULL, NULL,
+		NULL);
+  rc = SQLITE_OK;
+  if (out_sector_id)
+    {
+      *out_sector_id = planet_sector_id;
     }
 
 cleanup_launch:
-    if (st) sqlite3_finalize(st);
-    pthread_mutex_unlock(&db_mutex);
-    return rc;
+  if (st)
+    sqlite3_finalize (st);
+  pthread_mutex_unlock (&db_mutex);
+  return rc;
 }
 
 
@@ -9159,13 +9427,14 @@ db_path_exists (sqlite3 *db, int from, int to)
 
   /* Get max id once; in practice you can cache this in caller. */
   rc = sqlite3_prepare_v2 (db, "SELECT MAX(id) FROM sectors", -1, &st, NULL);
-  if (rc != SQLITE_OK) return -1;
+  if (rc != SQLITE_OK)
+    return -1;
   if (sqlite3_step (st) == SQLITE_ROW)
     max_id = sqlite3_column_int (st, 0);
   sqlite3_finalize (st);
 
   if (max_id <= 0 || from <= 0 || from > max_id || to <= 0 || to > max_id)
-    return 0; /* treat as “no path” */
+    return 0;			/* treat as “no path” */
 
   size_t N = (size_t) max_id + 1;
   unsigned char *seen = calloc (N, 1);
@@ -9179,8 +9448,8 @@ db_path_exists (sqlite3 *db, int from, int to)
 
   /* Prepare neighbour query */
   rc = sqlite3_prepare_v2 (db,
-      "SELECT to_sector FROM sector_warps WHERE from_sector = ?1",
-      -1, &st, NULL);
+			   "SELECT to_sector FROM sector_warps WHERE from_sector = ?1",
+			   -1, &st, NULL);
   if (rc != SQLITE_OK || !st)
     {
       free (seen);
@@ -9202,20 +9471,20 @@ db_path_exists (sqlite3 *db, int from, int to)
       sqlite3_bind_int (st, 1, u);
 
       while ((rc = sqlite3_step (st)) == SQLITE_ROW)
-        {
-          int v = sqlite3_column_int (st, 0);
-          if (v <= 0 || v > max_id)
-            continue;
-          if (seen[v])
-            continue;
-          seen[v] = 1;
-          if (v == to)
-            {
-              found = 1;
-              break;
-            }
-          queue[qt++] = v;
-        }
+	{
+	  int v = sqlite3_column_int (st, 0);
+	  if (v <= 0 || v > max_id)
+	    continue;
+	  if (seen[v])
+	    continue;
+	  seen[v] = 1;
+	  if (v == to)
+	    {
+	      found = 1;
+	      break;
+	    }
+	  queue[qt++] = v;
+	}
     }
 
   sqlite3_finalize (st);
@@ -9226,17 +9495,23 @@ db_path_exists (sqlite3 *db, int from, int to)
 }
 
 // Implementation of db_get_config_int (thread-safe wrapper)
-int db_get_config_int(sqlite3 *db, const char *key_col_name, int default_value) {
-    pthread_mutex_lock(&db_mutex);
-    long long value = h_get_config_int_unlocked(db, key_col_name, (long long)default_value);
-    pthread_mutex_unlock(&db_mutex);
-    return (int)value;
+int
+db_get_config_int (sqlite3 *db, const char *key_col_name, int default_value)
+{
+  pthread_mutex_lock (&db_mutex);
+  long long value =
+    h_get_config_int_unlocked (db, key_col_name, (long long) default_value);
+  pthread_mutex_unlock (&db_mutex);
+  return (int) value;
 }
 
 // Implementation of db_get_config_bool (thread-safe wrapper)
-bool db_get_config_bool(sqlite3 *db, const char *key_col_name, bool default_value) {
-    pthread_mutex_lock(&db_mutex);
-    long long value = h_get_config_int_unlocked(db, key_col_name, (long long)default_value);
-    pthread_mutex_unlock(&db_mutex);
-    return (bool)value;
+bool
+db_get_config_bool (sqlite3 *db, const char *key_col_name, bool default_value)
+{
+  pthread_mutex_lock (&db_mutex);
+  long long value =
+    h_get_config_int_unlocked (db, key_col_name, (long long) default_value);
+  pthread_mutex_unlock (&db_mutex);
+  return (bool) value;
 }

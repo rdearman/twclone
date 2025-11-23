@@ -33,7 +33,7 @@
 
 /* forward decls */
 static int create_derelicts (void);
-static int fix_traps_with_pathcheck (sqlite3 *db, int fedspace_max);
+static int fix_traps_with_pathcheck (sqlite3 * db, int fedspace_max);
 
 static int ensure_fedspace_exit (sqlite3 * db, int outer_min, int outer_max,
 				 int add_return_edge);
@@ -85,8 +85,7 @@ config_load (void)
     "       shipyard_require_fighters_fit, "
     "       shipyard_require_shields_fit, "
     "       shipyard_require_hardware_compat, "
-    "       shipyard_tax_bp "
-    "FROM config WHERE id=1;";
+    "       shipyard_tax_bp " "FROM config WHERE id=1;";
 
 
 
@@ -577,7 +576,7 @@ create_sectors (void)
   int sector_count = get_sector_count ();
   if (sector_count > 100)
     {
-      fprintf(stderr, "Sectors already exist!");
+      fprintf (stderr, "Sectors already exist!");
       return 1;
     }
 
@@ -808,7 +807,8 @@ bigbang (void)
   printf ("BIGBANG: Fixing trap components with path checks...\n");
   rc = fix_traps_with_pathcheck (db, 10);
   if (rc != SQLITE_OK)
-    fprintf (stderr, "fix_traps_with_pathcheck failed: %s\n", sqlite3_errmsg (db));
+    fprintf (stderr, "fix_traps_with_pathcheck failed: %s\n",
+	     sqlite3_errmsg (db));
 
   // After all sectors/warps are generated:
   int ferringhi = db_chain_traps_and_bridge (10);	// 1..10 are FedSpace by convention
@@ -1110,7 +1110,7 @@ create_planets (void)
  */
 int
 create_full_port (sqlite3 *db, int sector, int port_number,
-                  const char *base_name, int type_id, int *port_id_out)
+		  const char *base_name, int type_id, int *port_id_out)
 {
   sqlite3_stmt *port_stmt = NULL;
   int rc = SQLITE_OK;
@@ -1127,10 +1127,10 @@ create_full_port (sqlite3 *db, int sector, int port_number,
   int equipment_on_hand_val = 0;
 
   /* Default port stats */
-  int port_size = 5 + (rand () % 5); /* Random size 5-9 */
-  int port_tech = 1 + (rand () % 5); /* Random tech 1-5 */
+  int port_size = 5 + (rand () % 5);	/* Random size 5-9 */
+  int port_tech = 1 + (rand () % 5);	/* Random tech 1-5 */
   int port_credits = 50000 + (rand () % 50000);
-  int petty_cash_val = 0; // Default petty cash
+  int petty_cash_val = 0;	// Default petty cash
 
   /*
    * ===================================================================
@@ -1142,49 +1142,49 @@ create_full_port (sqlite3 *db, int sector, int port_number,
 
   switch (type_id)
     {
-    case 1: /* Sells Equipment */
-    case 2: /* Sells Equipment */
+    case 1:			/* Sells Equipment */
+    case 2:			/* Sells Equipment */
       ore_on_hand_val = DEF_PORT_PROD_ORE;
       organics_on_hand_val = DEF_PORT_MAX_ORG / 2;
       equipment_on_hand_val = DEF_PORT_PROD_EQU;
       break;
 
-    case 3: /* Buys Equipment */
-    case 4: /* Buys Equipment */
+    case 3:			/* Buys Equipment */
+    case 4:			/* Buys Equipment */
       ore_on_hand_val = DEF_PORT_PROD_ORE;
       organics_on_hand_val = DEF_PORT_MAX_ORG / 2;
       equipment_on_hand_val = DEF_PORT_MAX_EQU / 4;
       break;
 
-    case 5: /* Sells Organics */
-    case 6: /* Sells Organics */
+    case 5:			/* Sells Organics */
+    case 6:			/* Sells Organics */
       ore_on_hand_val = DEF_PORT_PROD_ORE;
       organics_on_hand_val = DEF_PORT_PROD_ORG;
       equipment_on_hand_val = DEF_PORT_MAX_EQU / 2;
       break;
 
-    case 7: /* Buys Organics */
-    case 8: /* Buys Organics */
+    case 7:			/* Buys Organics */
+    case 8:			/* Buys Organics */
       ore_on_hand_val = DEF_PORT_PROD_ORE;
       organics_on_hand_val = DEF_PORT_MAX_ORG / 4;
       equipment_on_hand_val = DEF_PORT_MAX_EQU / 2;
       break;
 
-    case 9: /* Stardock - Buys/Sells all, high stock */
+    case 9:			/* Stardock - Buys/Sells all, high stock */
       ore_on_hand_val = DEF_PORT_MAX_ORE;
       organics_on_hand_val = DEF_PORT_MAX_ORG;
       equipment_on_hand_val = DEF_PORT_MAX_EQU;
-      port_credits = 1000000; // Stardock has more credits
+      port_credits = 1000000;	// Stardock has more credits
       port_size = 10;
       port_tech = 10;
       break;
 
-    case 10: /* Orion Black Market - Special case, high ore, low organics, high equipment */
+    case 10:			/* Orion Black Market - Special case, high ore, low organics, high equipment */
       ore_on_hand_val = DEF_PORT_MAX_ORE * 2;
       organics_on_hand_val = DEF_PORT_MAX_ORG / 10;
       equipment_on_hand_val = DEF_PORT_MAX_EQU * 2;
-      port_credits = 2000000; // More credits for black market
-      petty_cash_val = 100000; // Significant petty cash
+      port_credits = 2000000;	// More credits for black market
+      petty_cash_val = 100000;	// Significant petty cash
       port_size = 8;
       port_tech = 8;
       break;
@@ -1204,56 +1204,53 @@ create_full_port (sqlite3 *db, int sector, int port_number,
   if (rc != SQLITE_OK)
     {
       fprintf (stderr, "create_full_port: BEGIN transaction failed: %s\n",
-               sqlite3_errmsg (db));
+	       sqlite3_errmsg (db));
       return rc;
     }
 
-    /*
-     * ===================================================================
-     * 3. INSERT INTO 'ports' TABLE
-     * ===================================================================
-     */
-        const char *port_sql =
-          "INSERT INTO ports ("
-              "  number, name, sector, size, techlevel, type, invisible, "
-              "  ore_on_hand, organics_on_hand, equipment_on_hand, petty_cash "
-              ") VALUES ("
-              "  ?1, ?2, ?3, ?4, ?5, ?6, 0, "  /* Params 1-6 */
-              "  ?7, ?8, ?9, ?10 "                /* New goods_on_hand and petty_cash params */
-              ");";  if (sqlite3_prepare_v2 (db, port_sql, -1, &port_stmt, NULL) != SQLITE_OK)
-        {
-          fprintf (stderr, "create_full_port: ports prepare failed: %s\n",
-                   sqlite3_errmsg (db));
-          rc = sqlite3_errcode (db);
-          goto rollback;
-        }
-    
-      /* Bind all 10 parameters */
-      sqlite3_bind_int (port_stmt, 1, port_number);
-      sqlite3_bind_text (port_stmt, 2, base_name, -1, SQLITE_STATIC);
-      sqlite3_bind_int (port_stmt, 3, sector);
-      sqlite3_bind_int (port_stmt, 4, port_size);
-      sqlite3_bind_int (port_stmt, 5, port_tech);
-      sqlite3_bind_int (port_stmt, 6, type_id);
-      /* Goods on Hand and Petty Cash */
-      sqlite3_bind_int (port_stmt, 7, ore_on_hand_val);
-      sqlite3_bind_int (port_stmt, 8, organics_on_hand_val);
-      sqlite3_bind_int (port_stmt, 9, equipment_on_hand_val);
-      sqlite3_bind_int (port_stmt, 10, petty_cash_val);
-    
-      if (sqlite3_step (port_stmt) != SQLITE_DONE)
-        {
-          fprintf (stderr, "create_full_port: ports insert failed: %s\n",
-                   sqlite3_errmsg (db));
-          rc = sqlite3_errcode (db);
-          goto rollback;
-        }
-      port_id = sqlite3_last_insert_rowid (db);
-      sqlite3_finalize (port_stmt);
-      port_stmt = NULL;
-    
-      // Create a bank account for the new port
-      h_add_credits(db, "port", (int)port_id, port_credits, "BIGBANG_SEED", NULL, NULL);
+  /*
+   * ===================================================================
+   * 3. INSERT INTO 'ports' TABLE
+   * ===================================================================
+   */
+  const char *port_sql = "INSERT INTO ports (" "  number, name, sector, size, techlevel, type, invisible, " "  ore_on_hand, organics_on_hand, equipment_on_hand, petty_cash " ") VALUES (" "  ?1, ?2, ?3, ?4, ?5, ?6, 0, "	/* Params 1-6 */
+    "  ?7, ?8, ?9, ?10 "	/* New goods_on_hand and petty_cash params */
+    ");";
+  if (sqlite3_prepare_v2 (db, port_sql, -1, &port_stmt, NULL) != SQLITE_OK)
+    {
+      fprintf (stderr, "create_full_port: ports prepare failed: %s\n",
+	       sqlite3_errmsg (db));
+      rc = sqlite3_errcode (db);
+      goto rollback;
+    }
+
+  /* Bind all 10 parameters */
+  sqlite3_bind_int (port_stmt, 1, port_number);
+  sqlite3_bind_text (port_stmt, 2, base_name, -1, SQLITE_STATIC);
+  sqlite3_bind_int (port_stmt, 3, sector);
+  sqlite3_bind_int (port_stmt, 4, port_size);
+  sqlite3_bind_int (port_stmt, 5, port_tech);
+  sqlite3_bind_int (port_stmt, 6, type_id);
+  /* Goods on Hand and Petty Cash */
+  sqlite3_bind_int (port_stmt, 7, ore_on_hand_val);
+  sqlite3_bind_int (port_stmt, 8, organics_on_hand_val);
+  sqlite3_bind_int (port_stmt, 9, equipment_on_hand_val);
+  sqlite3_bind_int (port_stmt, 10, petty_cash_val);
+
+  if (sqlite3_step (port_stmt) != SQLITE_DONE)
+    {
+      fprintf (stderr, "create_full_port: ports insert failed: %s\n",
+	       sqlite3_errmsg (db));
+      rc = sqlite3_errcode (db);
+      goto rollback;
+    }
+  port_id = sqlite3_last_insert_rowid (db);
+  sqlite3_finalize (port_stmt);
+  port_stmt = NULL;
+
+  // Create a bank account for the new port
+  h_add_credits (db, "port", (int) port_id, port_credits, "BIGBANG_SEED",
+		 NULL, NULL);
 
   /*
    * ===================================================================
@@ -1264,8 +1261,8 @@ create_full_port (sqlite3 *db, int sector, int port_number,
   if (rc != SQLITE_OK)
     {
       fprintf (stderr, "create_full_port: COMMIT failed: %s\n",
-               sqlite3_errmsg (db));
-      goto rollback; /* Technically already rolled back, but good practice */
+	       sqlite3_errmsg (db));
+      goto rollback;		/* Technically already rolled back, but good practice */
     }
 
   if (port_id_out)
@@ -1355,7 +1352,7 @@ create_ferringhi (int ferringhi_sector)
       fprintf (stderr, "create_ferringhi failed: %s\n", sqlite3_errmsg (db));
       return -1;
     }
-  h_add_credits(db, "npc_planet", 2, 0, "BIGBANG_SEED", NULL, NULL);
+  h_add_credits (db, "npc_planet", 2, 0, "BIGBANG_SEED", NULL, NULL);
 
   // Insert the citadel details into the citadels table
   char sql_citadel[512];
@@ -1720,7 +1717,7 @@ create_ferringhi (int ferringhi_sector)
 	       sqlite3_errmsg (db));
       return -1;
     }
-  h_add_credits(db, "npc_planet", 3, 0, "BIGBANG_SEED", NULL, NULL);
+  h_add_credits (db, "npc_planet", 3, 0, "BIGBANG_SEED", NULL, NULL);
 
 
 
@@ -1905,88 +1902,125 @@ create_taverns (void)
   // 1. Get a random tavern name ID
   int tavern_name_id = 0;
   sqlite3_stmt *st_name = NULL;
-  const char *sql_get_name = "SELECT id FROM tavern_names ORDER BY RANDOM() LIMIT 1;";
-  if (sqlite3_prepare_v2(db, sql_get_name, -1, &st_name, NULL) != SQLITE_OK) {
-      fprintf (stderr, "create_taverns: Failed to prepare name statement: %s\n", sqlite3_errmsg(db));
+  const char *sql_get_name =
+    "SELECT id FROM tavern_names ORDER BY RANDOM() LIMIT 1;";
+  if (sqlite3_prepare_v2 (db, sql_get_name, -1, &st_name, NULL) != SQLITE_OK)
+    {
+      fprintf (stderr,
+	       "create_taverns: Failed to prepare name statement: %s\n",
+	       sqlite3_errmsg (db));
       return -1;
-  }
-  if (sqlite3_step(st_name) == SQLITE_ROW) {
-      tavern_name_id = sqlite3_column_int(st_name, 0);
-  } else {
-      fprintf (stderr, "create_taverns: No tavern names found in database.\n");
-      sqlite3_finalize(st_name);
+    }
+  if (sqlite3_step (st_name) == SQLITE_ROW)
+    {
+      tavern_name_id = sqlite3_column_int (st_name, 0);
+    }
+  else
+    {
+      fprintf (stderr,
+	       "create_taverns: No tavern names found in database.\n");
+      sqlite3_finalize (st_name);
       return -1;
-  }
-  sqlite3_finalize(st_name);
-  if (tavern_name_id == 0) return -1; // Should not happen if data is seeded
+    }
+  sqlite3_finalize (st_name);
+  if (tavern_name_id == 0)
+    return -1;			// Should not happen if data is seeded
 
   // 2. Find Stardock sector_id
   int stardock_sector_id = 0;
   sqlite3_stmt *st_stardock = NULL;
-  const char *sql_get_stardock = "SELECT sector FROM ports WHERE type = 9 LIMIT 1;";
-  if (sqlite3_prepare_v2(db, sql_get_stardock, -1, &st_stardock, NULL) != SQLITE_OK) {
-      fprintf (stderr, "create_taverns: Failed to prepare stardock statement: %s\n", sqlite3_errmsg(db));
+  const char *sql_get_stardock =
+    "SELECT sector FROM ports WHERE type = 9 LIMIT 1;";
+  if (sqlite3_prepare_v2 (db, sql_get_stardock, -1, &st_stardock, NULL) !=
+      SQLITE_OK)
+    {
+      fprintf (stderr,
+	       "create_taverns: Failed to prepare stardock statement: %s\n",
+	       sqlite3_errmsg (db));
       return -1;
-  }
-  if (sqlite3_step(st_stardock) == SQLITE_ROW) {
-      stardock_sector_id = sqlite3_column_int(st_stardock, 0);
-  }
-  sqlite3_finalize(st_stardock);
-  if (stardock_sector_id == 0) {
+    }
+  if (sqlite3_step (st_stardock) == SQLITE_ROW)
+    {
+      stardock_sector_id = sqlite3_column_int (st_stardock, 0);
+    }
+  sqlite3_finalize (st_stardock);
+  if (stardock_sector_id == 0)
+    {
       fprintf (stderr, "create_taverns: Stardock not found.\n");
       return -1;
-  }
+    }
 
   // 3. Find Orion Black Market sector_id (port type 10)
   int orion_sector_id = 0;
   sqlite3_stmt *st_orion = NULL;
-  const char *sql_get_orion = "SELECT sector FROM ports WHERE type = 10 LIMIT 1;";
-  if (sqlite3_prepare_v2(db, sql_get_orion, -1, &st_orion, NULL) != SQLITE_OK) {
-      fprintf (stderr, "create_taverns: Failed to prepare orion statement: %s\n", sqlite3_errmsg(db));
+  const char *sql_get_orion =
+    "SELECT sector FROM ports WHERE type = 10 LIMIT 1;";
+  if (sqlite3_prepare_v2 (db, sql_get_orion, -1, &st_orion, NULL) !=
+      SQLITE_OK)
+    {
+      fprintf (stderr,
+	       "create_taverns: Failed to prepare orion statement: %s\n",
+	       sqlite3_errmsg (db));
       return -1;
-  }
-  if (sqlite3_step(st_orion) == SQLITE_ROW) {
-      orion_sector_id = sqlite3_column_int(st_orion, 0);
-  }
-  sqlite3_finalize(st_orion);
-  if (orion_sector_id == 0) {
-      fprintf (stderr, "create_taverns: Orion Black Market port not found.\n");
-  }
+    }
+  if (sqlite3_step (st_orion) == SQLITE_ROW)
+    {
+      orion_sector_id = sqlite3_column_int (st_orion, 0);
+    }
+  sqlite3_finalize (st_orion);
+  if (orion_sector_id == 0)
+    {
+      fprintf (stderr,
+	       "create_taverns: Orion Black Market port not found.\n");
+    }
 
   // 4. Insert taverns into the taverns table
-  const char *sql_insert_tavern = "INSERT OR IGNORE INTO taverns (sector_id, name_id, enabled) VALUES (?, ?, 1);";
+  const char *sql_insert_tavern =
+    "INSERT OR IGNORE INTO taverns (sector_id, name_id, enabled) VALUES (?, ?, 1);";
   sqlite3_stmt *st_insert = NULL;
   int rc = 0;
 
   // Insert Stardock tavern
-  if (sqlite3_prepare_v2(db, sql_insert_tavern, -1, &st_insert, NULL) != SQLITE_OK) {
-      fprintf (stderr, "create_taverns: Failed to prepare insert statement: %s\n", sqlite3_errmsg(db));
+  if (sqlite3_prepare_v2 (db, sql_insert_tavern, -1, &st_insert, NULL) !=
+      SQLITE_OK)
+    {
+      fprintf (stderr,
+	       "create_taverns: Failed to prepare insert statement: %s\n",
+	       sqlite3_errmsg (db));
       return -1;
-  }
-  sqlite3_bind_int(st_insert, 1, stardock_sector_id);
-  sqlite3_bind_int(st_insert, 2, tavern_name_id);
-  rc = sqlite3_step(st_insert);
-  if (rc != SQLITE_DONE) {
-      fprintf (stderr, "create_taverns: Failed to insert Stardock tavern: %s\n", sqlite3_errmsg(db));
-      sqlite3_finalize(st_insert);
+    }
+  sqlite3_bind_int (st_insert, 1, stardock_sector_id);
+  sqlite3_bind_int (st_insert, 2, tavern_name_id);
+  rc = sqlite3_step (st_insert);
+  if (rc != SQLITE_DONE)
+    {
+      fprintf (stderr,
+	       "create_taverns: Failed to insert Stardock tavern: %s\n",
+	       sqlite3_errmsg (db));
+      sqlite3_finalize (st_insert);
       return -1;
-  }
-  sqlite3_reset(st_insert);
+    }
+  sqlite3_reset (st_insert);
 
   // Insert Orion Black Market tavern (if found)
-  if (orion_sector_id != 0) {
-      sqlite3_bind_int(st_insert, 1, orion_sector_id);
-      sqlite3_bind_int(st_insert, 2, tavern_name_id); // Use the same name for simplicity
-      rc = sqlite3_step(st_insert);
-      if (rc != SQLITE_DONE) {
-          fprintf (stderr, "create_taverns: Failed to insert Orion tavern: %s\n", sqlite3_errmsg(db));
-          sqlite3_finalize(st_insert);
-          return -1;
-      }
-  }
-  sqlite3_finalize(st_insert);
+  if (orion_sector_id != 0)
+    {
+      sqlite3_bind_int (st_insert, 1, orion_sector_id);
+      sqlite3_bind_int (st_insert, 2, tavern_name_id);	// Use the same name for simplicity
+      rc = sqlite3_step (st_insert);
+      if (rc != SQLITE_DONE)
+	{
+	  fprintf (stderr,
+		   "create_taverns: Failed to insert Orion tavern: %s\n",
+		   sqlite3_errmsg (db));
+	  sqlite3_finalize (st_insert);
+	  return -1;
+	}
+    }
+  sqlite3_finalize (st_insert);
 
-  fprintf (stderr, "BIGBANG: Created taverns in sectors %d and %d.\n", stardock_sector_id, orion_sector_id);
+  fprintf (stderr, "BIGBANG: Created taverns in sectors %d and %d.\n",
+	   stardock_sector_id, orion_sector_id);
   return 0;
 }
 
@@ -2107,8 +2141,10 @@ ensure_fedspace_exit (sqlite3 *db, int outer_min, int outer_max,
       sqlite3_bind_int (st_ins, 2, to);
       int rc1 = sqlite3_step (st_ins);
       sqlite3_reset (st_ins);
-      if (rc1 ) {} //stop the compiler complaining
-      
+      if (rc1)
+	{
+	}			//stop the compiler complaining
+
       /* Optional return edge (keeps it safe from one-way pruning) */
       if (add_return_edge)
 	{
@@ -2764,20 +2800,15 @@ create_ports (void)
    * REFACTORED SQL: This query now includes all columns from fullschema.sql
    * ===================================================================
    */
-  const char *port_sql =
-    "INSERT INTO ports ("
-    "  number, name, sector, size, techlevel, type, invisible, "
-    "  ore_on_hand, organics_on_hand, equipment_on_hand, petty_cash "
-    ") VALUES ("
-    "  ?1, ?2, ?3, ?4, ?5, ?6, 0, "  /* Params 1-6 */
-    "  ?7, ?8, ?9, ?10 "                /* New goods_on_hand and petty_cash params */
+  const char *port_sql = "INSERT INTO ports (" "  number, name, sector, size, techlevel, type, invisible, " "  ore_on_hand, organics_on_hand, equipment_on_hand, petty_cash " ") VALUES (" "  ?1, ?2, ?3, ?4, ?5, ?6, 0, "	/* Params 1-6 */
+    "  ?7, ?8, ?9, ?10 "	/* New goods_on_hand and petty_cash params */
     ");";
 
   sqlite3_stmt *port_stmt;
   if (sqlite3_prepare_v2 (db, port_sql, -1, &port_stmt, NULL) != SQLITE_OK)
     {
       fprintf (stderr, "create_ports prepare failed: %s\n",
-               sqlite3_errmsg (db));
+	       sqlite3_errmsg (db));
       return -1;
     }
 
@@ -2791,7 +2822,7 @@ create_ports (void)
   if (sqlite3_prepare_v2 (db, trade_sql, -1, &trade_stmt, NULL) != SQLITE_OK)
     {
       fprintf (stderr, "create_ports prepare failed for trade data: %s\n",
-               sqlite3_errmsg (db));
+	       sqlite3_errmsg (db));
       sqlite3_finalize (port_stmt);
       return -1;
     }
@@ -2803,21 +2834,21 @@ create_ports (void)
   sqlite3_bind_int (port_stmt, 3, stardock_sector);
   sqlite3_bind_int (port_stmt, 4, 10);
   sqlite3_bind_int (port_stmt, 5, 5);
-  sqlite3_bind_int (port_stmt, 6, 9);    /* Type ID for Stardock */
+  sqlite3_bind_int (port_stmt, 6, 9);	/* Type ID for Stardock */
 
   /* Bind new commodity values (Type 9: Buy/Sell all) */
-  int start_stock = 25000; // Use start_stock for initial on_hand values
-  int petty_cash_val = 0; // Assuming petty_cash starts at 0 for Stardock
+  int start_stock = 25000;	// Use start_stock for initial on_hand values
+  int petty_cash_val = 0;	// Assuming petty_cash starts at 0 for Stardock
 
-  sqlite3_bind_int (port_stmt, 7, start_stock);    // ore_on_hand
-  sqlite3_bind_int (port_stmt, 8, start_stock);    // organics_on_hand
-  sqlite3_bind_int (port_stmt, 9, start_stock);    // equipment_on_hand
-  sqlite3_bind_int (port_stmt, 10, petty_cash_val); // petty_cash
+  sqlite3_bind_int (port_stmt, 7, start_stock);	// ore_on_hand
+  sqlite3_bind_int (port_stmt, 8, start_stock);	// organics_on_hand
+  sqlite3_bind_int (port_stmt, 9, start_stock);	// equipment_on_hand
+  sqlite3_bind_int (port_stmt, 10, petty_cash_val);	// petty_cash
 
   if (sqlite3_step (port_stmt) != SQLITE_DONE)
     {
       fprintf (stderr, "create_ports failed (Stardock): %s\n",
-               sqlite3_errmsg (db));
+	       sqlite3_errmsg (db));
       sqlite3_finalize (port_stmt);
       sqlite3_finalize (trade_stmt);
       return -1;
@@ -2890,63 +2921,63 @@ create_ports (void)
     sqlite3 *dbh = db_get_handle ();
     if (!dbh)
       {
-    fprintf (stderr, "create_ports: no DB handle\n");
-    return -1;
+	fprintf (stderr, "create_ports: no DB handle\n");
+	return -1;
       }
 
     for (int i = 2; i <= maxPorts; i++)
       {
-    /* pick a sector that is not the Stardock sector and not in the first 10 */
-    int sector;
-    do
-      {
-        sector = 11 + (rand () % (numSectors - 10));
-      }
-    while (sector == stardock_sector);
+	/* pick a sector that is not the Stardock sector and not in the first 10 */
+	int sector;
+	do
+	  {
+	    sector = 11 + (rand () % (numSectors - 10));
+	  }
+	while (sector == stardock_sector);
 
-    /* pick random non-Stardock type 1..8 */
-    int type_id = random_port_type_1_to_8 ();
+	/* pick random non-Stardock type 1..8 */
+	int type_id = random_port_type_1_to_8 ();
 
-    /* name: use your generator, special-case Ferrengi home */
-    randomname (name_buffer);
-    if (i == 7)
-      {
-        snprintf (name_buffer, sizeof (name_buffer), "Ferrengi Home");
-      }
+	/* name: use your generator, special-case Ferrengi home */
+	randomname (name_buffer);
+	if (i == 7)
+	  {
+	    snprintf (name_buffer, sizeof (name_buffer), "Ferrengi Home");
+	  }
 
-    /*
-     * This function MUST be refactored to populate all new columns in 'ports'
-     * (product_ore, max_ore, etc.) and 'port_trade' (buy/sell modes).
-     */
-    int port_id = 0;
-    int rc = create_full_port (dbh, sector, /*port number */ i,
-                               /*base name */ name_buffer,
-                               /*type */ type_id,
-                               &port_id);
-    if (rc != SQLITE_OK)
-      {
-        fprintf (stderr,
-                 "create_ports failed at %d (create_full_port rc=%d)\n",
-                 i, rc);
-        return -1;
-      }
+	/*
+	 * This function MUST be refactored to populate all new columns in 'ports'
+	 * (product_ore, max_ore, etc.) and 'port_trade' (buy/sell modes).
+	 */
+	int port_id = 0;
+	int rc = create_full_port (dbh, sector, /*port number */ i,
+				   /*base name */ name_buffer,
+				   /*type */ type_id,
+				   &port_id);
+	if (rc != SQLITE_OK)
+	  {
+	    fprintf (stderr,
+		     "create_ports failed at %d (create_full_port rc=%d)\n",
+		     i, rc);
+	    return -1;
+	  }
 
-    /* optional: tweak Ferrengi Home stats after insert to match your old special-case */
-    if (i == 7)
-      {
-        sqlite3_stmt *adj = NULL;
-        /* This UPDATE is now incomplete. It should also set prices/stock. */
-        const char *sql =
-          "UPDATE ports SET size=?, techlevel=? WHERE id=?";
-        if (sqlite3_prepare_v2 (dbh, sql, -1, &adj, NULL) == SQLITE_OK)
-          {
-        sqlite3_bind_int (adj, 1, 10);    /* size */
-        sqlite3_bind_int (adj, 2, 5);     /* techlevel */
-        sqlite3_bind_int (adj, 3, port_id);
-        (void) sqlite3_step (adj);
-          }
-        sqlite3_finalize (adj);
-      }
+	/* optional: tweak Ferrengi Home stats after insert to match your old special-case */
+	if (i == 7)
+	  {
+	    sqlite3_stmt *adj = NULL;
+	    /* This UPDATE is now incomplete. It should also set prices/stock. */
+	    const char *sql =
+	      "UPDATE ports SET size=?, techlevel=? WHERE id=?";
+	    if (sqlite3_prepare_v2 (dbh, sql, -1, &adj, NULL) == SQLITE_OK)
+	      {
+		sqlite3_bind_int (adj, 1, 10);	/* size */
+		sqlite3_bind_int (adj, 2, 5);	/* techlevel */
+		sqlite3_bind_int (adj, 3, port_id);
+		(void) sqlite3_step (adj);
+	      }
+	    sqlite3_finalize (adj);
+	  }
       }
   }
 
@@ -2954,20 +2985,22 @@ create_ports (void)
   sqlite3_finalize (port_stmt);
   sqlite3_finalize (trade_stmt);
   fprintf (stderr,
-           "BIGBANG: Stardock at sector %d, plus %d normal ports\n",
-           stardock_sector, maxPorts - 1);
+	   "BIGBANG: Stardock at sector %d, plus %d normal ports\n",
+	   stardock_sector, maxPorts - 1);
   return 0;
 }
 
 
-static int fix_traps_with_pathcheck (sqlite3 *db, int fedspace_max)
+static int
+fix_traps_with_pathcheck (sqlite3 *db, int fedspace_max)
 {
   int rc;
   int max_id = 0;
   sqlite3_stmt *st = NULL;
 
   rc = sqlite3_prepare_v2 (db, "SELECT MAX(id) FROM sectors", -1, &st, NULL);
-  if (rc != SQLITE_OK) return rc;
+  if (rc != SQLITE_OK)
+    return rc;
   if (sqlite3_step (st) == SQLITE_ROW)
     max_id = sqlite3_column_int (st, 0);
   sqlite3_finalize (st);
@@ -2977,29 +3010,30 @@ static int fix_traps_with_pathcheck (sqlite3 *db, int fedspace_max)
 
   /* Pre-prepare insert for escape warps */
   rc = sqlite3_prepare_v2 (db,
-      "INSERT OR IGNORE INTO sector_warps(from_sector,to_sector) VALUES(?1,?2)",
-      -1, &st, NULL);
-  if (rc != SQLITE_OK) return rc;
+			   "INSERT OR IGNORE INTO sector_warps(from_sector,to_sector) VALUES(?1,?2)",
+			   -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    return rc;
 
   for (int s = fedspace_max + 1; s <= max_id; ++s)
     {
       /* Is there a path from s back to sector 1? */
       int has_path = db_path_exists (db, s, 1);
       if (has_path < 0)
-        {
-          sqlite3_finalize (st);
-          return SQLITE_ERROR;
-        }
+	{
+	  sqlite3_finalize (st);
+	  return SQLITE_ERROR;
+	}
       if (!has_path)
-        {
-          /* No path home: add an escape warp back into FedSpace */
-          int escape = 1 + (rand () % fedspace_max);
-          sqlite3_reset (st);
-          sqlite3_clear_bindings (st);
-          sqlite3_bind_int (st, 1, s);
-          sqlite3_bind_int (st, 2, escape);
-          sqlite3_step (st);
-        }
+	{
+	  /* No path home: add an escape warp back into FedSpace */
+	  int escape = 1 + (rand () % fedspace_max);
+	  sqlite3_reset (st);
+	  sqlite3_clear_bindings (st);
+	  sqlite3_bind_int (st, 1, s);
+	  sqlite3_bind_int (st, 2, escape);
+	  sqlite3_step (st);
+	}
     }
 
   sqlite3_finalize (st);

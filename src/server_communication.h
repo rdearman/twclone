@@ -75,7 +75,8 @@ extern "C"
 
 // Broadcast an event (type + payload) to all currently-connected players
 // in a specific sector. Payload is borrowed (not stolen).
-  int server_broadcast_to_sector(int sector_id, const char *event_name, json_t *payload);
+  int server_broadcast_to_sector (int sector_id, const char *event_name,
+				  json_t * payload);
 
 
 

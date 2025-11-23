@@ -17,7 +17,7 @@ extern "C"
   int cmd_user_create (client_ctx_t * ctx, json_t * root);	// "user.create", legacy "new.user"
 
   int cmd_auth_refresh (client_ctx_t * ctx, json_t * root);
-  const char *get_welcome_message(int player_id);
+  const char *get_welcome_message (int player_id);
   int cmd_auth_mfa_totp_verify (client_ctx_t * ctx, json_t * root);
 
 

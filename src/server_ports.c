@@ -6,7 +6,7 @@
 #include <sqlite3.h>
 #include <stdio.h>
 #include <string.h>
-#include <math.h> // For pow() function
+#include <math.h>		// For pow() function
 /* local includes */
 #include "server_ports.h"
 #include "database.h"
@@ -20,24 +20,19 @@
 #include "common.h"
 #include "server_universe.h"
 #include "db_player_settings.h"
-
-
 #ifndef UNUSED
 #define UNUSED(x) (void)(x)
 #endif
-
-
 #define RULE_REFUSE(_code,_msg,_hint_json) \
     do { send_enveloped_refused(ctx->fd, root, (_code), (_msg), (_hint_json)); goto trade_buy_done; } while (0)
-
 #define RULE_ERROR(_code,_msg) \
     do { send_enveloped_error(ctx->fd, root, (_code), (_msg)); goto trade_buy_done; } while (0)
-
 void idemp_fingerprint_json (json_t * obj, char out[17]);
 void iso8601_utc (char out[32]);
 
 /* Forward declarations for static helper functions */
-int h_calculate_port_buy_price (sqlite3 *db, int port_id, const char *commodity);
+int h_calculate_port_buy_price (sqlite3 * db, int port_id,
+				const char *commodity);
 
 
 /* Helpers */
@@ -59,124 +54,6 @@ rollback (sqlite3 *db)
   return sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
 }
 
-int
-cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
-{
-  if (!ctx || ctx->player_id <= 0)
-    {
-      send_enveloped_refused (ctx->fd, root, 1401,
-                              "Not authenticated", NULL);
-      return 0;
-    }
-
-  sqlite3 *db = db_get_handle ();
-  if (!db)
-    {
-      send_enveloped_error (ctx->fd, root, 500,
-                            "No database handle");
-      return 0;
-    }
-
-  int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 0;
-  int port_id = 0;
-
-  json_t *data = json_object_get (root, "data");
-  LOGD("cmd_trade_port_info: Extracted data object (simplified): is_object: %d", json_is_object(data));
-
-  LOGD("cmd_trade_port_info: About to get jport from data object.");
-  json_t *jport = json_object_get (data, "port_id");
-  LOGD("cmd_trade_port_info: After jport extraction: jport (raw): %p", (void*)jport);
-  if (json_is_integer (jport))
-    port_id = (int) json_integer_value (jport);
-
-  LOGD("cmd_trade_port_info: About to get jsec from data object.");
-  json_t *jsec = json_object_get (data, "sector_id");
-  LOGD("cmd_trade_port_info: After jsec extraction: jsec (raw): %p", (void*)jsec);
-  if (json_is_integer (jsec))
-    sector_id = (int) json_integer_value (jsec);
-
-  LOGD("cmd_trade_port_info: Received port_id=%d, sector_id=%d", port_id, sector_id);
-
-  /* Resolve by port_id if supplied */
-  const char *sql = NULL;
-  if (port_id > 0)
-    {
-      sql =
-        "SELECT id, number, name, sector, size, techlevel, "
-        "ore_on_hand, organics_on_hand, equipment_on_hand, petty_cash, "
-        "type "
-        "FROM ports WHERE id = ?1 LIMIT 1;";
-    }
-  else if (sector_id > 0)
-    {
-      sql =
-        "SELECT id, number, name, sector, size, techlevel, "
-        "ore_on_hand, organics_on_hand, equipment_on_hand, petty_cash, "
-        "type "
-        "FROM ports WHERE sector = ?1 LIMIT 1;";
-    }
-  else
-    {
-      send_enveloped_error (ctx->fd, root, 400,
-                            "Missing port_id or sector_id");
-      return 0;
-    }
-
-  LOGD("cmd_trade_port_info: Preparing SQL: %s", sql);
-
-  sqlite3_stmt *st = NULL;
-  if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
-    {
-      send_enveloped_error (ctx->fd, root, 500,
-                            sqlite3_errmsg (db));
-      return 0;
-    }
-
-  if (port_id > 0)
-    {
-      sqlite3_bind_int (st, 1, port_id);
-      LOGD("cmd_trade_port_info: Bound port_id: %d", port_id);
-    }
-  else
-    {
-      sqlite3_bind_int (st, 1, sector_id);
-      LOGD("cmd_trade_port_info: Bound sector_id: %d", sector_id);
-    }
-
-  int rc = sqlite3_step (st);
-  LOGD("cmd_trade_port_info: sqlite3_step returned: %d", rc);
-  if (rc != SQLITE_ROW)
-    {
-      sqlite3_finalize (st);
-      send_enveloped_refused (ctx->fd, root, 1404,
-                              "No port in this sector", NULL);
-      return 0;
-    }
-
-  json_t *port = json_object ();
-  json_object_set_new (port, "id",          json_integer (sqlite3_column_int (st, 0)));
-  json_object_set_new (port, "number",      json_integer (sqlite3_column_int (st, 1)));
-  json_object_set_new (port, "name",        json_string  ((const char *) sqlite3_column_text (st, 2)));
-  json_object_set_new (port, "sector",      json_integer (sqlite3_column_int (st, 3)));
-  json_object_set_new (port, "size",        json_integer (sqlite3_column_int (st, 4)));
-  json_object_set_new (port, "techlevel",   json_integer (sqlite3_column_int (st, 5)));
-  json_object_set_new (port, "ore_on_hand", json_integer (sqlite3_column_int (st, 6)));
-  json_object_set_new (port, "organics_on_hand",json_integer (sqlite3_column_int (st, 7)));
-  json_object_set_new (port, "equipment_on_hand",json_integer(sqlite3_column_int (st, 8)));
-  json_object_set_new (port, "petty_cash", json_integer (sqlite3_column_int (st, 9)));
-  json_object_set_new (port, "credits",    json_integer (sqlite3_column_int (st, 9)));
-  json_object_set_new (port, "type",       json_integer (sqlite3_column_int (st,10)));
-
-  sqlite3_finalize (st);
-
-  json_t *payload = json_object ();
-  json_object_set_new (payload, "port", port);
-
-  send_enveloped_ok (ctx->fd, root, "trade.port_info", payload);
-
-  json_decref (payload);
-  return 0;
-}
 
 
 static const char *
@@ -190,11 +67,12 @@ commodity_to_code (const char *commodity)
     return NULL;
 
   sqlite3_stmt *st = NULL;
-  const char *sql = "SELECT code FROM commodities WHERE UPPER(name) = UPPER(?1) LIMIT 1;";
+  const char *sql =
+    "SELECT code FROM commodities WHERE UPPER(name) = UPPER(?1) LIMIT 1;";
 
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
-      LOGE("commodity_to_code: prepare failed: %s", sqlite3_errmsg(db));
+      LOGE ("commodity_to_code: prepare failed: %s", sqlite3_errmsg (db));
       return NULL;
     }
 
@@ -219,10 +97,11 @@ commodity_to_code (const char *commodity)
   // Let's strdup for safety.
 
   char *result = NULL;
-  if (canonical_code) {
-      result = strdup(canonical_code);
-  }
-  sqlite3_finalize(st);
+  if (canonical_code)
+    {
+      result = strdup (canonical_code);
+    }
+  sqlite3_finalize (st);
   return result;
 }
 
@@ -294,26 +173,20 @@ h_port_buys_commodity (sqlite3 *db, int port_id, const char *commodity)
   if (!db || port_id <= 0 || !commodity || !*commodity)
     return 0;
 
-  char *canonical_commodity_code = (char *)commodity_to_code(commodity);
-  if (!canonical_commodity_code) {
-      return 0; // Invalid or unsupported commodity
-  }
+  char *canonical_commodity_code = (char *) commodity_to_code (commodity);
+  if (!canonical_commodity_code)
+    {
+      return 0;			// Invalid or unsupported commodity
+    }
 
   sqlite3_stmt *st = NULL;
-  const char *sql =
-    "SELECT "
-    "CASE ?2 "
-    "WHEN 'ORE' THEN p.ore_on_hand "
-    "WHEN 'ORG' THEN p.organics_on_hand "
-    "WHEN 'EQU' THEN p.equipment_on_hand "
-    "ELSE 0 END AS quantity, "
-    "p.size * 1000 AS max_capacity " /* Using port size as a proxy for max_capacity for now */
+  const char *sql = "SELECT " "CASE ?2 " "WHEN 'ORE' THEN p.ore_on_hand " "WHEN 'ORG' THEN p.organics_on_hand " "WHEN 'EQU' THEN p.equipment_on_hand " "ELSE 0 END AS quantity, " "p.size * 1000 AS max_capacity "	/* Using port size as a proxy for max_capacity for now */
     "FROM ports p WHERE p.id = ?1 LIMIT 1;";
 
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
-      LOGE("h_port_buys_commodity: prepare failed: %s", sqlite3_errmsg(db));
-      free(canonical_commodity_code);
+      LOGE ("h_port_buys_commodity: prepare failed: %s", sqlite3_errmsg (db));
+      free (canonical_commodity_code);
       return 0;
     }
 
@@ -325,18 +198,20 @@ h_port_buys_commodity (sqlite3 *db, int port_id, const char *commodity)
     {
       int current_quantity = sqlite3_column_int (st, 0);
       int max_capacity = sqlite3_column_int (st, 1);
-      
+
       if (current_quantity < max_capacity)
-        buys = 1;
+	buys = 1;
     }
   else
     {
       // If no entry in port_stock, assume port doesn't trade this commodity or is full
-      LOGD("h_port_buys_commodity: No port_stock entry for port %d, commodity %s", port_id, canonical_commodity_code);
+      LOGD
+	("h_port_buys_commodity: No port_stock entry for port %d, commodity %s",
+	 port_id, canonical_commodity_code);
     }
 
   sqlite3_finalize (st);
-  free(canonical_commodity_code);
+  free (canonical_commodity_code);
   return buys;
 }
 
@@ -351,28 +226,33 @@ h_port_buys_commodity (sqlite3 *db, int port_id, const char *commodity)
  */
 int
 h_get_ship_cargo_and_holds (sqlite3 *db, int ship_id, int *ore, int *organics,
-                            int *equipment, int *holds, int *colonists)
+			    int *equipment, int *holds, int *colonists)
 {
 
   sqlite3_stmt *st = NULL;
-  const char *SQL_SEL = "SELECT ore, organics, equipment, holds, colonists FROM ships WHERE id = ?1";
-  int rc = sqlite3_prepare_v2(db, SQL_SEL, -1, &st, NULL);
-  if (rc != SQLITE_OK) return rc;
+  const char *SQL_SEL =
+    "SELECT ore, organics, equipment, holds, colonists FROM ships WHERE id = ?1";
+  int rc = sqlite3_prepare_v2 (db, SQL_SEL, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    return rc;
 
-  sqlite3_bind_int(st, 1, ship_id);
-  rc = sqlite3_step(st);
-  if (rc == SQLITE_ROW) {
-    *ore = sqlite3_column_int(st, 0);
-    *organics = sqlite3_column_int(st, 1);
-    *equipment = sqlite3_column_int(st, 2);
-    *holds = sqlite3_column_int(st, 3);
-    *colonists = sqlite3_column_int(st, 4);
-    rc = SQLITE_OK;
-  } else {
-    rc = SQLITE_NOTFOUND;
-  }
+  sqlite3_bind_int (st, 1, ship_id);
+  rc = sqlite3_step (st);
+  if (rc == SQLITE_ROW)
+    {
+      *ore = sqlite3_column_int (st, 0);
+      *organics = sqlite3_column_int (st, 1);
+      *equipment = sqlite3_column_int (st, 2);
+      *holds = sqlite3_column_int (st, 3);
+      *colonists = sqlite3_column_int (st, 4);
+      rc = SQLITE_OK;
+    }
+  else
+    {
+      rc = SQLITE_NOTFOUND;
+    }
 
-  sqlite3_finalize(st);
+  sqlite3_finalize (st);
   return rc;
 }
 
@@ -394,48 +274,52 @@ int
 h_calculate_port_sell_price (sqlite3 *db, int port_id, const char *commodity)
 {
   // LOGD("h_calculate_port_sell_price: Entering with port_id=%d, commodity=%s", port_id, commodity);
-  if (!db || port_id <= 0 || !commodity || !*commodity) {
-    LOGW("h_calculate_port_sell_price: Invalid input: db=%p, port_id=%d, commodity=%s", db, port_id, commodity);
-    return 0;
-  }
+  if (!db || port_id <= 0 || !commodity || !*commodity)
+    {
+      LOGW
+	("h_calculate_port_sell_price: Invalid input: db=%p, port_id=%d, commodity=%s",
+	 db, port_id, commodity);
+      return 0;
+    }
 
   // Assume commodity is already canonical code
   const char *canonical_commodity = commodity;
   // LOGD("h_calculate_port_sell_price: Canonical commodity for %s is %s", commodity, canonical_commodity);
 
   sqlite3_stmt *st = NULL;
-  const char *sql =
-    "SELECT c.base_price, c.volatility, "
-    "CASE ?2 "
-    "WHEN 'ORE' THEN p.ore_on_hand "
-    "WHEN 'ORG' THEN p.organics_on_hand "
-    "WHEN 'EQU' THEN p.equipment_on_hand "
-    "ELSE 0 END AS quantity, "
-    "p.size * 1000 AS max_capacity, p.techlevel " /* Using port size as a proxy for max_capacity for now */
+  const char *sql = "SELECT c.base_price, c.volatility, " "CASE ?2 " "WHEN 'ORE' THEN p.ore_on_hand " "WHEN 'ORG' THEN p.organics_on_hand " "WHEN 'EQU' THEN p.equipment_on_hand " "ELSE 0 END AS quantity, " "p.size * 1000 AS max_capacity, p.techlevel "	/* Using port size as a proxy for max_capacity for now */
     "FROM commodities c JOIN ports p ON p.id = ?1 "
     "WHERE UPPER(c.code) = UPPER(?2) LIMIT 1;";
 
   int rc_prepare = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc_prepare != SQLITE_OK)
     {
-      LOGE("h_calculate_port_sell_price: prepare failed: %s (rc=%d)", sqlite3_errmsg(db), rc_prepare);
+      LOGE ("h_calculate_port_sell_price: prepare failed: %s (rc=%d)",
+	    sqlite3_errmsg (db), rc_prepare);
       return 0;
     }
   // LOGD("h_calculate_port_sell_price: SQL prepared successfully for port_id=%d, canonical_commodity=%s", port_id, canonical_commodity);
 
   int rc_bind_int = sqlite3_bind_int (st, 1, port_id);
-  if (rc_bind_int != SQLITE_OK) {
-      LOGE("h_calculate_port_sell_price: bind_int failed for port_id %d: %s (rc=%d)", port_id, sqlite3_errmsg(db), rc_bind_int);
+  if (rc_bind_int != SQLITE_OK)
+    {
+      LOGE
+	("h_calculate_port_sell_price: bind_int failed for port_id %d: %s (rc=%d)",
+	 port_id, sqlite3_errmsg (db), rc_bind_int);
       sqlite3_finalize (st);
       return 0;
-  }
+    }
   // Bind the canonical commodity code
-  int rc_bind_text = sqlite3_bind_text (st, 2, canonical_commodity, -1, SQLITE_STATIC);
-  if (rc_bind_text != SQLITE_OK) {
-      LOGE("h_calculate_port_sell_price: bind_text failed for canonical_commodity %s: %s (rc=%d)", canonical_commodity, sqlite3_errmsg(db), rc_bind_text);
+  int rc_bind_text =
+    sqlite3_bind_text (st, 2, canonical_commodity, -1, SQLITE_STATIC);
+  if (rc_bind_text != SQLITE_OK)
+    {
+      LOGE
+	("h_calculate_port_sell_price: bind_text failed for canonical_commodity %s: %s (rc=%d)",
+	 canonical_commodity, sqlite3_errmsg (db), rc_bind_text);
       sqlite3_finalize (st);
       return 0;
-  }
+    }
   //LOGD("h_calculate_port_sell_price: Parameters bound for port_id=%d, canonical_commodity=%s", port_id, canonical_commodity);
 
   int base_price = 0;
@@ -456,38 +340,47 @@ h_calculate_port_sell_price (sqlite3 *db, int port_id, const char *commodity)
     }
   else
     {
-      LOGW("h_calculate_port_sell_price: No data found for canonical_commodity %s at port %d (rc_step=%d, errmsg=%s)", canonical_commodity, port_id, rc_step, sqlite3_errmsg(db));
+      LOGW
+	("h_calculate_port_sell_price: No data found for canonical_commodity %s at port %d (rc_step=%d, errmsg=%s)",
+	 canonical_commodity, port_id, rc_step, sqlite3_errmsg (db));
       sqlite3_finalize (st);
-      return 0; // Port not selling this commodity or no stock info
+      return 0;			// Port not selling this commodity or no stock info
     }
 
   sqlite3_finalize (st);
 
-  if (base_price <= 0) {
-    LOGW("h_calculate_port_sell_price: Base price is zero or less for canonical_commodity %s at port %d", canonical_commodity, port_id);
-    return 0;
-  }
+  if (base_price <= 0)
+    {
+      LOGW
+	("h_calculate_port_sell_price: Base price is zero or less for canonical_commodity %s at port %d",
+	 canonical_commodity, port_id);
+      return 0;
+    }
 
   double price_multiplier = 1.0;
 
-  if (max_capacity > 0) {
-      double fill_ratio = (double)quantity / max_capacity;
+  if (max_capacity > 0)
+    {
+      double fill_ratio = (double) quantity / max_capacity;
       // Port sells (player buys): price is higher when supply is low
       // If quantity is low (e.g., < 50% of max_capacity), price increases.
       // If quantity is high (e.g., > 50% of max_capacity), price decreases towards base.
-      if (fill_ratio < 0.5) {
-          // Price increases as supply decreases
-          price_multiplier = 1.0 + (1.0 - fill_ratio) * (volatility / 100.0);
-      } else {
-          // Price decreases towards base as supply increases
-          price_multiplier = 1.0 - (fill_ratio - 0.5) * (volatility / 100.0);
-      }
-  }
+      if (fill_ratio < 0.5)
+	{
+	  // Price increases as supply decreases
+	  price_multiplier = 1.0 + (1.0 - fill_ratio) * (volatility / 100.0);
+	}
+      else
+	{
+	  // Price decreases towards base as supply increases
+	  price_multiplier = 1.0 - (fill_ratio - 0.5) * (volatility / 100.0);
+	}
+    }
 
   // Adjust for techlevel (higher techlevel means better prices for the port, so higher sell price)
   price_multiplier *= (1.0 + (techlevel - 1) * 0.05);
 
-  long long price = (long long) (base_price * price_multiplier + 0.999999); /* ceil */
+  long long price = (long long) (base_price * price_multiplier + 0.999999);	/* ceil */
 
   if (price < 1)
     price = 1;
@@ -522,18 +415,20 @@ h_port_sells_commodity (sqlite3 *db, int port_id, const char *commodity)
     col = "organics_on_hand";
   else if (strcasecmp (commodity, "EQU") == 0)
     col = "equipment_on_hand";
-  else {
-    return 0; /* unsupported commodity */
-  }
+  else
+    {
+      return 0;			/* unsupported commodity */
+    }
 
   char sql[256];
   sqlite3_snprintf (sizeof (sql), sql,
-                    "SELECT %s FROM ports WHERE id = ?1 LIMIT 1;", col);
+		    "SELECT %s FROM ports WHERE id = ?1 LIMIT 1;", col);
 
   sqlite3_stmt *st = NULL;
-  if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK) {
-    return 0;
-  }
+  if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
+    {
+      return 0;
+    }
 
   if (sqlite3_bind_int (st, 1, port_id) != SQLITE_OK)
     {
@@ -547,7 +442,7 @@ h_port_sells_commodity (sqlite3 *db, int port_id, const char *commodity)
     {
       int qty = sqlite3_column_int (st, 0);
       if (qty > 0)
-        sells = 1;
+	sells = 1;
     }
 
   sqlite3_finalize (st);
@@ -556,51 +451,62 @@ h_port_sells_commodity (sqlite3 *db, int port_id, const char *commodity)
 
 
 static int
-h_update_credits(sqlite3 *db, const char *owner_type, int owner_id, long long delta, long long *new_balance_out)
+h_update_credits (sqlite3 *db, const char *owner_type, int owner_id,
+		  long long delta, long long *new_balance_out)
 {
-    sqlite3_stmt *st = NULL;
-    int rc = SQLITE_ERROR;
+  sqlite3_stmt *st = NULL;
+  int rc = SQLITE_ERROR;
 
-    // Ensure a bank account exists for the owner (INSERT OR IGNORE)
-    const char *SQL_ENSURE_ACCOUNT =
-      "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) VALUES (?1, ?2, 'CRD', 0);";
-    rc = sqlite3_prepare_v2(db, SQL_ENSURE_ACCOUNT, -1, &st, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("h_update_credits: ENSURE_ACCOUNT prepare error: %s", sqlite3_errmsg(db));
-        return rc;
+  // Ensure a bank account exists for the owner (INSERT OR IGNORE)
+  const char *SQL_ENSURE_ACCOUNT =
+    "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) VALUES (?1, ?2, 'CRD', 0);";
+  rc = sqlite3_prepare_v2 (db, SQL_ENSURE_ACCOUNT, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_update_credits: ENSURE_ACCOUNT prepare error: %s",
+	    sqlite3_errmsg (db));
+      return rc;
     }
-    sqlite3_bind_text(st, 1, owner_type, -1, SQLITE_STATIC);
-    sqlite3_bind_int(st, 2, owner_id);
-    sqlite3_step(st); // Execute the insert or ignore
-    sqlite3_finalize(st);
-    st = NULL; // Reset statement pointer
+  sqlite3_bind_text (st, 1, owner_type, -1, SQLITE_STATIC);
+  sqlite3_bind_int (st, 2, owner_id);
+  sqlite3_step (st);		// Execute the insert or ignore
+  sqlite3_finalize (st);
+  st = NULL;			// Reset statement pointer
 
-    const char *SQL_UPD = "UPDATE bank_accounts "
-                          "SET balance = balance + ?3 "
-                          "WHERE owner_type = ?1 AND owner_id = ?2 AND balance + ?3 >= 0 "
-                          "RETURNING balance;";
-    rc = sqlite3_prepare_v2(db, SQL_UPD, -1, &st, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("h_update_credits: UPDATE prepare error: %s", sqlite3_errmsg(db));
-        return rc;
+  const char *SQL_UPD = "UPDATE bank_accounts "
+    "SET balance = balance + ?3 "
+    "WHERE owner_type = ?1 AND owner_id = ?2 AND balance + ?3 >= 0 "
+    "RETURNING balance;";
+  rc = sqlite3_prepare_v2 (db, SQL_UPD, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_update_credits: UPDATE prepare error: %s",
+	    sqlite3_errmsg (db));
+      return rc;
     }
 
-    sqlite3_bind_text(st, 1, owner_type, -1, SQLITE_STATIC);
-    sqlite3_bind_int(st, 2, owner_id);
-    sqlite3_bind_int64(st, 3, delta);
+  sqlite3_bind_text (st, 1, owner_type, -1, SQLITE_STATIC);
+  sqlite3_bind_int (st, 2, owner_id);
+  sqlite3_bind_int64 (st, 3, delta);
 
-    rc = sqlite3_step(st);
-    if (rc == SQLITE_ROW) {
-        if (new_balance_out) *new_balance_out = sqlite3_column_int64(st, 0);
-        rc = SQLITE_OK;
-    } else if (rc == SQLITE_DONE) {
-        /* This means the WHERE clause failed (insufficient funds) */
-        rc = SQLITE_CONSTRAINT;
-    } else {
-        LOGE("h_update_credits: UPDATE step error: %s", sqlite3_errmsg(db));
+  rc = sqlite3_step (st);
+  if (rc == SQLITE_ROW)
+    {
+      if (new_balance_out)
+	*new_balance_out = sqlite3_column_int64 (st, 0);
+      rc = SQLITE_OK;
     }
-    sqlite3_finalize(st);
-    return rc;
+  else if (rc == SQLITE_DONE)
+    {
+      /* This means the WHERE clause failed (insufficient funds) */
+      rc = SQLITE_CONSTRAINT;
+    }
+  else
+    {
+      LOGE ("h_update_credits: UPDATE step error: %s", sqlite3_errmsg (db));
+    }
+  sqlite3_finalize (st);
+  return rc;
 }
 
 
@@ -654,39 +560,48 @@ cmd_trade_quote (client_ctx_t *ctx, json_t *root)
   if (port_id <= 0 || !commodity || quantity <= 0)
     {
       send_enveloped_error (ctx->fd, root, 400,
-                            "port_id, commodity, and quantity are required.");
+			    "port_id, commodity, and quantity are required.");
       return 0;
     }
 
   // Validate commodity using commodity_to_code
-  const char *commodity_code = commodity_to_code(commodity);
-  if (!commodity_code) {
+  const char *commodity_code = commodity_to_code (commodity);
+  if (!commodity_code)
+    {
       send_enveloped_error (ctx->fd, root, 400, "Invalid commodity.");
       return 0;
-  }
+    }
 
   // Calculate the price the port will CHARGE the player (player's buy price)
-  int player_buy_price_per_unit = h_calculate_port_sell_price (db, port_id, commodity_code);
-  long long total_player_buy_price = (long long)player_buy_price_per_unit * quantity;
+  int player_buy_price_per_unit =
+    h_calculate_port_sell_price (db, port_id, commodity_code);
+  long long total_player_buy_price =
+    (long long) player_buy_price_per_unit * quantity;
 
   // Calculate the price the port will PAY the player (player's sell price)
-  int player_sell_price_per_unit = h_calculate_port_buy_price (db, port_id, commodity_code);
-  long long total_player_sell_price = (long long)player_sell_price_per_unit * quantity;
+  int player_sell_price_per_unit =
+    h_calculate_port_buy_price (db, port_id, commodity_code);
+  long long total_player_sell_price =
+    (long long) player_sell_price_per_unit * quantity;
 
   payload = json_object ();
   json_object_set_new (payload, "port_id", json_integer (port_id));
   json_object_set_new (payload, "commodity", json_string (commodity));
   json_object_set_new (payload, "quantity", json_integer (quantity));
-  json_object_set_new (payload, "buy_price", json_real ((double)player_buy_price_per_unit));
-  json_object_set_new (payload, "sell_price", json_real ((double)player_sell_price_per_unit));
-  json_object_set_new (payload, "total_buy_price", json_integer (total_player_buy_price));
-  json_object_set_new (payload, "total_sell_price", json_integer (total_player_sell_price));
+  json_object_set_new (payload, "buy_price",
+		       json_real ((double) player_buy_price_per_unit));
+  json_object_set_new (payload, "sell_price",
+		       json_real ((double) player_sell_price_per_unit));
+  json_object_set_new (payload, "total_buy_price",
+		       json_integer (total_player_buy_price));
+  json_object_set_new (payload, "total_sell_price",
+		       json_integer (total_player_sell_price));
 
   send_enveloped_ok (ctx->fd, root, "trade.quote", payload);
   json_decref (payload);
 
   // Free the commodity_code
-  free((char *)commodity_code); // Cast to char* because strdup returns char*
+  free ((char *) commodity_code);	// Cast to char* because strdup returns char*
 
   return 0;
 }
@@ -711,14 +626,14 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
   player_ship_id = h_get_active_ship_id (db, ctx->player_id);
   if (player_ship_id <= 0)
     {
-      send_enveloped_refused (ctx->fd, root, 1404, "No active ship found.", NULL);
+      send_enveloped_refused (ctx->fd, root, 1404, "No active ship found.",
+			      NULL);
       return 0;
     }
 
   h_decloak_ship (db, player_ship_id);
 
-  TurnConsumeResult tc =
-    h_consume_player_turn (db, ctx, "ship.jettison");
+  TurnConsumeResult tc = h_consume_player_turn (db, ctx, "ship.jettison");
   if (tc != TURN_CONSUME_SUCCESS)
     {
       return handle_turn_consumption_error (ctx, tc, "ship.jettison", root,
@@ -742,14 +657,15 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
   if (!commodity || quantity <= 0)
     {
       send_enveloped_error (ctx->fd, root, 400,
-                            "commodity and quantity are required, and quantity must be positive.");
+			    "commodity and quantity are required, and quantity must be positive.");
       return 0;
     }
 
   // Check current cargo
   int cur_ore, cur_org, cur_eq, cur_holds, cur_colonists;
   if (h_get_ship_cargo_and_holds (db, player_ship_id,
-                                  &cur_ore, &cur_org, &cur_eq, &cur_holds, &cur_colonists) != SQLITE_OK)
+				  &cur_ore, &cur_org, &cur_eq, &cur_holds,
+				  &cur_colonists) != SQLITE_OK)
     {
       send_enveloped_error (ctx->fd, root, 500, "Could not read ship cargo.");
       return 0;
@@ -764,40 +680,57 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
     have = cur_eq;
   else
     {
-      send_enveloped_refused (ctx->fd, root, 1405, "Unknown commodity.", NULL);
+      send_enveloped_refused (ctx->fd, root, 1405, "Unknown commodity.",
+			      NULL);
       return 0;
     }
 
   if (have < quantity)
     {
       send_enveloped_refused (ctx->fd, root, 1402,
-                              "You do not carry enough of that commodity to jettison.",
-                              NULL);
+			      "You do not carry enough of that commodity to jettison.",
+			      NULL);
       return 0;
     }
 
   // Update ship cargo (jettisoning means negative delta)
   int new_qty = 0;
-  rc = h_update_ship_cargo (db, ctx->player_id, commodity, -quantity, &new_qty);
+  rc =
+    h_update_ship_cargo (db, ctx->player_id, commodity, -quantity, &new_qty);
   if (rc != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, 500, "Failed to update ship cargo.");
+      send_enveloped_error (ctx->fd, root, 500,
+			    "Failed to update ship cargo.");
       return 0;
     }
 
   // Construct response with remaining cargo
   payload = json_object ();
-  json_t *remaining_cargo_array = json_array();
-  
+  json_t *remaining_cargo_array = json_array ();
+
   // Re-fetch current cargo to ensure accurate remaining_cargo
   if (h_get_ship_cargo_and_holds (db, player_ship_id,
-                                  &cur_ore, &cur_org, &cur_eq, &cur_holds, &cur_colonists) == SQLITE_OK)
-  {
-      if (cur_ore > 0) json_array_append_new(remaining_cargo_array, json_pack("{s:s, s:i}", "commodity", "ore", "quantity", cur_ore));
-      if (cur_org > 0) json_array_append_new(remaining_cargo_array, json_pack("{s:s, s:i}", "commodity", "organics", "quantity", cur_org));
-      if (cur_eq > 0) json_array_append_new(remaining_cargo_array, json_pack("{s:s, s:i}", "commodity", "equipment", "quantity", cur_eq));
-      if (cur_colonists > 0) json_array_append_new(remaining_cargo_array, json_pack("{s:s, s:i}", "commodity", "colonists", "quantity", cur_colonists));
-  }
+				  &cur_ore, &cur_org, &cur_eq, &cur_holds,
+				  &cur_colonists) == SQLITE_OK)
+    {
+      if (cur_ore > 0)
+	json_array_append_new (remaining_cargo_array,
+			       json_pack ("{s:s, s:i}", "commodity", "ore",
+					  "quantity", cur_ore));
+      if (cur_org > 0)
+	json_array_append_new (remaining_cargo_array,
+			       json_pack ("{s:s, s:i}", "commodity",
+					  "organics", "quantity", cur_org));
+      if (cur_eq > 0)
+	json_array_append_new (remaining_cargo_array,
+			       json_pack ("{s:s, s:i}", "commodity",
+					  "equipment", "quantity", cur_eq));
+      if (cur_colonists > 0)
+	json_array_append_new (remaining_cargo_array,
+			       json_pack ("{s:s, s:i}", "commodity",
+					  "colonists", "quantity",
+					  cur_colonists));
+    }
   json_object_set_new (payload, "remaining_cargo", remaining_cargo_array);
 
   send_enveloped_ok (ctx->fd, root, "ship.jettisoned", payload);
@@ -939,6 +872,826 @@ cmd_trade_history (client_ctx_t *ctx, json_t *root)
 
   send_enveloped_ok (ctx->fd, root, "trade.history", payload);
 
+  return 0;
+}
+
+
+int
+cmd_trade_sell (client_ctx_t *ctx, json_t *root)
+{
+  sqlite3 *db = NULL;
+  json_t *receipt = NULL;
+  json_t *lines = NULL;
+  json_t *data = NULL;
+  json_t *jitems = NULL;
+  const char *key = NULL;
+  int sector_id = 0;
+  int port_id = 0;
+  long long total_credits_after_fees = 0;
+  fee_result_t charges = { 0 };
+  long long new_balance = 0;
+  long long total_credits = 0;
+  char tx_group_id[UUID_STR_LEN];
+  h_generate_hex_uuid (tx_group_id, sizeof (tx_group_id));
+  int rc = 0;
+  char *req_s = NULL;
+  char *resp_s = NULL;
+  int we_started_tx = 0;
+
+  if (!ctx || !root)
+    return -1;
+
+  db = db_get_handle ();
+  if (!db)
+    {
+      send_enveloped_error (ctx->fd, root, 500, "No database handle.");
+      return -1;
+    }
+
+  if (ctx->player_id <= 0)
+    {
+      send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+      return 0;
+    }
+
+  /* consume turn (may open a transaction) */
+  TurnConsumeResult tc = h_consume_player_turn (db, ctx, "trade.sell");
+  if (tc != TURN_CONSUME_SUCCESS)
+    {
+      return handle_turn_consumption_error (ctx, tc, "trade.sell", root,
+					    NULL);
+    }
+
+  /* decloak */
+  int player_ship_id = h_get_active_ship_id (db, ctx->player_id);
+  h_decloak_ship (db, player_ship_id);
+
+  data = json_object_get (root, "data");
+  if (!json_is_object (data))
+    {
+      send_enveloped_error (ctx->fd, root, 400, "Missing data object.");
+      return -1;
+    }
+
+  int account_type = db_get_player_pref_int (ctx->player_id, "trade.default_account", 0);	// Default to petty cash (0)
+  json_t *jaccount = json_object_get (data, "account");
+  if (json_is_integer (jaccount))
+    {
+      int requested_account_type = (int) json_integer_value (jaccount);
+      if (requested_account_type != 0 && requested_account_type != 1)
+	{
+	  send_enveloped_error (ctx->fd, root, 400,
+				"Invalid account type. Must be 0 (petty cash) or 1 (bank).");
+	  return -1;
+	}
+      account_type = requested_account_type;	// Override with explicit request
+    }
+  LOGD ("cmd_trade_sell: Account type for player_id=%d is %d", ctx->player_id,
+	account_type);
+
+  sector_id = ctx->sector_id;
+  json_t *jsec = json_object_get (data, "sector_id");
+  if (json_is_integer (jsec))
+    sector_id = (int) json_integer_value (jsec);
+  if (sector_id <= 0)
+    {
+      send_enveloped_error (ctx->fd, root, 400, "Invalid sector_id.");
+      return -1;
+    }
+
+  jitems = json_object_get (data, "items");
+  if (!json_is_array (jitems) || json_array_size (jitems) == 0)
+    {
+      send_enveloped_error (ctx->fd, root, 400, "items[] required.");
+      return -1;
+    }
+
+  json_t *jkey = json_object_get (data, "idempotency_key");
+  key = json_is_string (jkey) ? json_string_value (jkey) : NULL;
+  if (!key || !*key)
+    {
+      send_enveloped_error (ctx->fd, root, 400, "idempotency_key required.");
+      return -1;
+    }
+
+  /* idempotency fast-path */
+  {
+    static const char *SQL_GET =
+      "SELECT request_json, response_json "
+      "FROM trade_idempotency WHERE key = ?1 AND player_id = ?2 AND sector_id = ?3;";
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2 (db, SQL_GET, -1, &st, NULL) == SQLITE_OK)
+      {
+	sqlite3_bind_text (st, 1, key, -1, SQLITE_TRANSIENT);
+	sqlite3_bind_int (st, 2, ctx->player_id);
+	sqlite3_bind_int (st, 3, sector_id);
+	if (sqlite3_step (st) == SQLITE_ROW)
+	  {
+	    const unsigned char *req_s_stored = sqlite3_column_text (st, 0);
+	    const unsigned char *resp_s_stored = sqlite3_column_text (st, 1);
+	    json_error_t jerr;
+	    json_t *stored_req =
+	      req_s_stored ? json_loads ((const char *) req_s_stored, 0,
+					 &jerr) : NULL;
+	    json_t *incoming_req = json_incref (data);
+	    int same = (stored_req
+			&& json_equal_strict (stored_req, incoming_req));
+	    json_decref (incoming_req);
+	    if (stored_req)
+	      json_decref (stored_req);
+
+	    if (same)
+	      {
+		json_t *stored_resp =
+		  resp_s_stored ? json_loads ((const char *) resp_s_stored, 0,
+					      &jerr) : NULL;
+		sqlite3_finalize (st);
+		if (!stored_resp)
+		  {
+		    send_enveloped_error (ctx->fd, root, 500,
+					  "Stored response unreadable.");
+		    return -1;
+		  }
+		send_enveloped_ok (ctx->fd, root, "trade.sell_receipt_v1",
+				   stored_resp);
+		json_decref (stored_resp);
+		return 0;
+	      }
+	    sqlite3_finalize (st);
+	    send_enveloped_error (ctx->fd, root, 1105,
+				  "Same idempotency_key used with different request.");
+	    return -1;
+	  }
+	sqlite3_finalize (st);
+      }
+  }
+
+  /* resolve port from sector */
+  {
+    static const char *SQL_PORT =
+      "SELECT id FROM ports WHERE sector = ?1 LIMIT 1;";
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2 (db, SQL_PORT, -1, &st, NULL) != SQLITE_OK)
+      {
+	send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
+	return -1;
+      }
+    sqlite3_bind_int (st, 1, sector_id);
+    if (sqlite3_step (st) == SQLITE_ROW)
+      port_id = sqlite3_column_int (st, 0);
+    sqlite3_finalize (st);
+    if (port_id <= 0)
+      {
+	send_enveloped_refused (ctx->fd, root, 1404,
+				"No port in this sector.", NULL);
+	return 0;
+      }
+  }
+
+  /* start local tx only if not already in one */
+  if (sqlite3_get_autocommit (db))
+    {
+      if (begin (db) != SQLITE_OK)
+	{
+	  send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
+	  return -1;
+	}
+      we_started_tx = 1;
+    }
+
+  receipt = json_object ();
+  lines = json_array ();
+  if (!receipt || !lines)
+    {
+      rc = 500;
+      goto fail_tx;
+    }
+
+  json_object_set_new (receipt, "sector_id", json_integer (sector_id));
+  json_object_set_new (receipt, "port_id", json_integer (port_id));
+  json_object_set_new (receipt, "player_id", json_integer (ctx->player_id));
+  json_object_set_new (receipt, "lines", lines);
+
+  /* iterate items */
+  size_t n = json_array_size (jitems);
+  for (size_t i = 0; i < n; i++)
+    {
+      json_t *it = json_array_get (jitems, i);
+      const char *raw_commodity =
+	json_string_value (json_object_get (it, "commodity"));
+      int amount =
+	(int) json_integer_value (json_object_get (it, "quantity"));
+
+      if (!raw_commodity || amount <= 0)
+	{
+	  send_enveloped_refused (ctx->fd, root, 1405,
+				  "Invalid or unsupported commodity.", NULL);
+	  goto fail_tx;
+	}
+
+      char *canonical_commodity_code =
+	(char *) commodity_to_code (raw_commodity);
+      if (!canonical_commodity_code)
+	{
+	  send_enveloped_refused (ctx->fd, root, 1405,
+				  "Invalid or unsupported commodity.", NULL);
+	  goto fail_tx;
+	}
+
+      if (!h_port_buys_commodity (db, port_id, canonical_commodity_code))
+	{
+	  send_enveloped_refused (ctx->fd, root, 1405,
+				  "Port is not buying this commodity right now.",
+				  NULL);
+	  goto fail_tx;
+	}
+
+      int buy_price =
+	h_calculate_port_buy_price (db, port_id, canonical_commodity_code);
+      if (buy_price <= 0)
+	{
+	  send_enveloped_refused (ctx->fd, root, 1405,
+				  "Port is not buying this commodity right now.",
+				  NULL);
+	  goto fail_tx;
+	}
+
+      /* check cargo */
+      int ore, org, eq, holds, colonists;
+      if (h_get_ship_cargo_and_holds (db, player_ship_id,
+				      &ore, &org, &eq, &holds,
+				      &colonists) != SQLITE_OK)
+	{
+	  send_enveloped_error (ctx->fd, root, 500,
+				"Could not read ship cargo.");
+	  goto fail_tx;
+	}
+
+      int have = 0;
+      if (strcasecmp (canonical_commodity_code, "ore") == 0)
+	have = ore;
+      else if (strcasecmp (canonical_commodity_code, "organics") == 0)
+	have = org;
+      else if (strcasecmp (canonical_commodity_code, "equipment") == 0)
+	have = eq;
+      else if (strcasecmp (canonical_commodity_code, "colonists") == 0)
+	have = colonists;
+
+      if (have < amount)
+	{
+	  send_enveloped_refused (ctx->fd, root, 1402,
+				  "You do not carry enough of that commodity.",
+				  NULL);
+	  goto fail_tx;
+	}
+
+      /* log row */
+      {
+	static const char *LOG_SQL =
+	  "INSERT INTO trade_log "
+	  "(player_id, port_id, sector_id, commodity, units, price_per_unit, action, timestamp) "
+	  "VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'sell', ?7);";
+	sqlite3_stmt *st = NULL;
+	if (sqlite3_prepare_v2 (db, LOG_SQL, -1, &st, NULL) != SQLITE_OK)
+	  goto sql_err;
+	sqlite3_bind_int (st, 1, ctx->player_id);
+	sqlite3_bind_int (st, 2, port_id);
+	sqlite3_bind_int (st, 3, sector_id);
+	sqlite3_bind_text (st, 4, canonical_commodity_code, -1,
+			   SQLITE_STATIC);
+	sqlite3_bind_int (st, 5, amount);
+	sqlite3_bind_int (st, 6, buy_price);
+	sqlite3_bind_int64 (st, 7, (sqlite3_int64) time (NULL));
+	if (sqlite3_step (st) != SQLITE_DONE)
+	  {
+	    sqlite3_finalize (st);
+	    goto sql_err;
+	  }
+	sqlite3_finalize (st);
+      }
+
+      /* update ship cargo (−amount) */
+      {
+	int new_ship_qty = 0;
+	rc =
+	  h_update_ship_cargo (db, ctx->player_id, canonical_commodity_code,
+			       -amount, &new_ship_qty);
+	if (rc != SQLITE_OK)
+	  {
+	    if (rc == SQLITE_CONSTRAINT)
+	      {
+		send_enveloped_refused (ctx->fd, root, 1402,
+					"Insufficient cargo to sell (atomic check).",
+					NULL);
+	      }
+	    goto fail_tx;
+	  }
+      }
+
+      /* update port stock (+amount) */
+      {
+	int new_port_qty = 0;
+	rc =
+	  h_update_port_stock (db, port_id, canonical_commodity_code, amount,
+			       &new_port_qty);
+	if (rc != SQLITE_OK)
+	  {
+	    if (rc == SQLITE_CONSTRAINT)
+	      {
+		send_enveloped_refused (ctx->fd, root, 1403,
+					"Port cannot accept that much cargo (atomic check).",
+					NULL);
+	      }
+	    goto fail_tx;
+	  }
+      }
+
+      // Calculate total credits for this line item
+      long long line_credits = (long long) amount * buy_price;
+      total_credits += line_credits;
+
+      // No longer deducting port credits inside the loop.
+      // This will be handled as a single transaction outside the loop with total_credits.
+
+      json_t *jline = json_object ();
+      json_object_set_new (jline, "commodity",
+			   json_string (canonical_commodity_code));
+      json_object_set_new (jline, "quantity", json_integer (amount));
+      json_object_set_new (jline, "unit_price", json_integer (buy_price));
+      json_object_set_new (jline, "value", json_integer (line_credits));
+      json_array_append_new (lines, jline);
+      free (canonical_commodity_code);	// Free the dynamically allocated commodity code
+    }
+
+  rc =
+    calculate_fees (db, TX_TYPE_TRADE_SELL, total_credits, "player",
+		    &charges);
+  total_credits_after_fees = total_credits - charges.fee_total;
+
+  if (total_credits_after_fees < 0)
+    {
+      send_enveloped_refused (ctx->fd, root, 1402,
+			      "Selling this would result in negative credits after fees.",
+			      NULL);
+      goto fail_tx;
+    }
+
+  /* credit player (atomic helper) */
+  {
+    if (account_type == 0)
+      {				// Petty cash
+	rc =
+	  h_add_player_petty_cash (db, ctx->player_id,
+				   total_credits_after_fees, &new_balance);
+      }
+    else
+      {				// Bank account
+	int player_bank_account_id = -1;
+	int get_account_rc =
+	  h_get_account_id_unlocked (db, "player", ctx->player_id,
+				     &player_bank_account_id);
+	if (get_account_rc != SQLITE_OK)
+	  {
+	    LOGE
+	      ("cmd_trade_sell: Failed to get player bank account ID for player %d (rc=%d)",
+	       ctx->player_id, get_account_rc);
+	    rc = get_account_rc;
+	  }
+	else
+	  {
+	    rc =
+	      h_add_credits_unlocked (db, player_bank_account_id,
+				      total_credits_after_fees, "TRADE_SELL",
+				      tx_group_id, &new_balance);
+	  }
+      }
+
+    if (rc != SQLITE_OK)
+      {
+	send_enveloped_error (ctx->fd, root, 500, "Failed to credit player.");
+	goto fail_tx;
+      }
+    json_object_set_new (receipt, "credits_remaining",
+			 json_integer (new_balance));
+  }
+  LOGD ("cmd_trade_sell: Player credits credited. New balance=%lld",
+	json_integer_value (json_object_get (receipt, "credits_remaining")));
+
+  // Deduct total_credits from port's bank account
+  {
+    long long new_port_balance = 0;
+    int port_bank_account_id = -1;
+    int get_account_rc =
+      h_get_account_id_unlocked (db, "port", port_id, &port_bank_account_id);
+    if (get_account_rc != SQLITE_OK)
+      {
+	LOGE
+	  ("cmd_trade_sell: Failed to get port bank account ID for port %d (rc=%d)",
+	   port_id, get_account_rc);
+	rc = get_account_rc;
+	goto fail_tx;
+      }
+    else
+      {
+	rc =
+	  h_deduct_credits_unlocked (db, port_bank_account_id, total_credits,
+				     "TRADE_SELL", tx_group_id,
+				     &new_port_balance);
+      }
+    if (rc != SQLITE_OK)
+      {
+	LOGE ("cmd_trade_sell: Failed to deduct credits from port %d: %s",
+	      port_id, sqlite3_errmsg (db));
+	goto fail_tx;
+      }
+    LOGD
+      ("cmd_trade_sell: Deducted %lld credits from port %d. New balance=%lld",
+       total_credits, port_id, new_port_balance);
+  }
+
+  // Add fees to system bank account
+  if (charges.fee_to_bank > 0)
+    {
+      long long new_system_balance = 0;
+      int system_bank_account_id = -1;
+      int get_account_rc =
+	h_get_system_account_id_unlocked (db, "SYSTEM", 0,
+					  &system_bank_account_id);
+      if (get_account_rc != SQLITE_OK)
+	{
+	  LOGE
+	    ("cmd_trade_sell: Failed to get system bank account ID (rc=%d)",
+	     get_account_rc);
+	  rc = get_account_rc;
+	  goto fail_tx;
+	}
+      else
+	{
+	  rc =
+	    h_add_credits_unlocked (db, system_bank_account_id,
+				    charges.fee_to_bank, "TRADE_SELL_FEE",
+				    tx_group_id, &new_system_balance);
+	}
+      if (rc != SQLITE_OK)
+	{
+	  LOGE ("cmd_trade_sell: Failed to add fees to system bank: %s",
+		sqlite3_errmsg (db));
+	  goto fail_tx;
+	}
+      LOGD
+	("cmd_trade_sell: Added %lld fees to system bank. New balance=%lld",
+	 charges.fee_to_bank, new_system_balance);
+    }
+
+  json_object_set_new (receipt, "total_item_credits",
+		       json_integer (total_credits));
+  json_object_set_new (receipt, "total_credits_after_fees",
+		       json_integer (total_credits_after_fees));
+  json_object_set_new (receipt, "fees", json_integer (charges.fee_total));
+
+  /* idempotency insert */
+  {
+    req_s = json_dumps (data, JSON_COMPACT | JSON_SORT_KEYS);
+    resp_s = json_dumps (receipt, JSON_COMPACT | JSON_SORT_KEYS);
+    static const char *SQL_PUT =
+      "INSERT INTO trade_idempotency "
+      "(key, player_id, sector_id, request_json, response_json, created_at) "
+      "VALUES (?1, ?2, ?3, ?4, ?5, ?6);";
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2 (db, SQL_PUT, -1, &st, NULL) != SQLITE_OK)
+      goto sql_err;
+    sqlite3_bind_text (st, 1, key, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int (st, 2, ctx->player_id);
+    sqlite3_bind_int (st, 3, sector_id);
+    bind_text_or_null (st, 4, req_s);
+    bind_text_or_null (st, 5, resp_s);
+    sqlite3_bind_int64 (st, 6, (sqlite3_int64) time (NULL));
+
+    if (sqlite3_step (st) != SQLITE_DONE)
+      {
+	sqlite3_finalize (st);
+	goto idempotency_race;
+      }
+    sqlite3_finalize (st);
+  }
+
+  if (we_started_tx && commit (db) != SQLITE_OK)
+    {
+      send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
+      goto cleanup;
+    }
+
+  send_enveloped_ok (ctx->fd, root, "trade.sell_receipt_v1", receipt);
+  goto cleanup;
+
+sql_err:
+  send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
+fail_tx:
+  if (we_started_tx)
+    rollback (db);
+  goto cleanup;
+
+idempotency_race:
+  /* same pattern as buy(): read existing entry and return if match */
+  {
+    static const char *SQL_GET2 =
+      "SELECT request_json, response_json "
+      "FROM trade_idempotency "
+      "WHERE key = ?1 AND player_id = ?2 AND sector_id = ?3;";
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2 (db, SQL_GET2, -1, &st, NULL) == SQLITE_OK)
+      {
+	sqlite3_bind_text (st, 1, key, -1, SQLITE_TRANSIENT);
+	sqlite3_bind_int (st, 2, ctx->player_id);
+	sqlite3_bind_int (st, 3, sector_id);
+	if (sqlite3_step (st) == SQLITE_ROW)
+	  {
+	    const unsigned char *req_s_stored = sqlite3_column_text (st, 0);
+	    const unsigned char *resp_s_stored = sqlite3_column_text (st, 1);
+	    json_error_t jerr;
+	    json_t *stored_req =
+	      req_s_stored ? json_loads ((const char *) req_s_stored, 0,
+					 &jerr) : NULL;
+	    int same = (stored_req && json_equal_strict (stored_req, data));
+	    if (stored_req)
+	      json_decref (stored_req);
+	    if (same)
+	      {
+		json_t *stored_resp =
+		  resp_s_stored ? json_loads ((const char *) resp_s_stored, 0,
+					      &jerr) : NULL;
+		sqlite3_finalize (st);
+		if (!stored_resp)
+		  {
+		    send_enveloped_error (ctx->fd, root, 500,
+					  "Stored response unreadable.");
+		    goto cleanup;
+		  }
+		send_enveloped_ok (ctx->fd, root, "trade.sell_receipt_v1",
+				   stored_resp);
+		json_decref (stored_resp);
+		goto cleanup;
+	      }
+	  }
+	sqlite3_finalize (st);
+      }
+  }
+  send_enveloped_error (ctx->fd, root, 500,
+			"Could not resolve idempotency race.");
+
+cleanup:
+  if (we_started_tx)
+    {
+      /* if still in a tx here, something went wrong above;
+         make sure we don't leave it open */
+      if (!sqlite3_get_autocommit (db))
+	rollback (db);
+    }
+  if (receipt)
+    json_decref (receipt);
+  if (req_s)
+    free (req_s);
+  if (resp_s)
+    free (resp_s);
+  return 0;
+}
+
+int
+h_calculate_port_buy_price (sqlite3 *db, int port_id, const char *commodity)
+{
+  // LOGD("h_calculate_port_buy_price: Entering with port_id=%d, commodity=%s", port_id, commodity);
+  if (!db || port_id <= 0 || !commodity || !*commodity)
+    {
+      LOGW
+	("h_calculate_port_buy_price: Invalid input: db=%p, port_id=%d, commodity=%s",
+	 db, port_id, commodity);
+      return 0;
+    }
+
+  // Assume commodity is already canonical code
+  const char *canonical_commodity = commodity;
+  // LOGI("h_calculate_port_buy_price: Canonical commodity for %s is %s", commodity, canonical_commodity);
+
+  sqlite3_stmt *st = NULL;
+  const char *sql = "SELECT c.base_price, c.volatility, " "CASE ?2 " "WHEN 'ORE' THEN p.ore_on_hand " "WHEN 'ORG' THEN p.organics_on_hand " "WHEN 'EQU' THEN p.equipment_on_hand " "ELSE 0 END AS quantity, " "p.size * 1000 AS max_capacity, p.techlevel "	/* Using port size as a proxy for max_capacity for now */
+    "FROM commodities c JOIN ports p ON p.id = ?1 "
+    "WHERE UPPER(c.code) = UPPER(?2) LIMIT 1;";
+
+  int rc_prepare = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc_prepare != SQLITE_OK)
+    {
+      LOGE ("h_calculate_port_buy_price: prepare failed: %s (rc=%d)",
+	    sqlite3_errmsg (db), rc_prepare);
+      return 0;
+    }
+  // LOGD("h_calculate_port_buy_price: SQL prepared successfully for port_id=%d, canonical_commodity=%s", port_id, canonical_commodity);
+
+  int rc_bind_int = sqlite3_bind_int (st, 1, port_id);
+  if (rc_bind_int != SQLITE_OK)
+    {
+      LOGE
+	("h_calculate_port_buy_price: bind_int failed for port_id %d: %s (rc=%d)",
+	 port_id, sqlite3_errmsg (db), rc_bind_int);
+      sqlite3_finalize (st);
+      return 0;
+    }
+  // Bind the canonical commodity code
+  int rc_bind_text =
+    sqlite3_bind_text (st, 2, canonical_commodity, -1, SQLITE_STATIC);
+  if (rc_bind_text != SQLITE_OK)
+    {
+      LOGE
+	("h_calculate_port_buy_price: bind_text failed for canonical_commodity %s: %s (rc=%d)",
+	 canonical_commodity, sqlite3_errmsg (db), rc_bind_text);
+      sqlite3_finalize (st);
+      return 0;
+    }
+  // LOGD("h_calculate_port_buy_price: Parameters bound for port_id=%d, canonical_commodity=%s", port_id, canonical_commodity);
+
+  int base_price = 0;
+  int volatility = 0;
+  int quantity = 0;
+  int max_capacity = 0;
+  int techlevel = 0;
+  int rc_step = sqlite3_step (st);
+
+  if (rc_step == SQLITE_ROW)
+    {
+      base_price = sqlite3_column_int (st, 0);
+      volatility = sqlite3_column_int (st, 1);
+      quantity = sqlite3_column_int (st, 2);
+      max_capacity = sqlite3_column_int (st, 3);
+      techlevel = sqlite3_column_int (st, 4);
+      // LOGD("h_calculate_port_buy_price: Data found for port_id=%d, canonical_commodity=%s: base_price=%d, quantity=%d, max_capacity=%d", port_id, canonical_commodity, base_price, quantity, max_capacity);
+    }
+  else
+    {
+      LOGW
+	("h_calculate_port_buy_price: No data found for canonical_commodity %s at port %d (rc_step=%d, errmsg=%s)",
+	 canonical_commodity, port_id, rc_step, sqlite3_errmsg (db));
+      sqlite3_finalize (st);
+      return 0;			// Port not buying this commodity or no stock info
+    }
+
+  sqlite3_finalize (st);
+
+  if (base_price <= 0)
+    {
+      LOGW
+	("h_calculate_port_buy_price: Base price is zero or less for canonical_commodity %s at port %d",
+	 canonical_commodity, port_id);
+      return 0;
+    }
+
+  double price_multiplier = 1.0;
+
+  if (max_capacity > 0)
+    {
+      double fill_ratio = (double) quantity / max_capacity;
+      // Port buys (player sells): price is lower when supply is high
+      // If quantity is high (e.g., > 50% of max_capacity), price decreases.
+      // If quantity is low (e.g., < 50% of max_capacity), price increases towards base.
+      if (fill_ratio > 0.5)
+	{
+	  // Price decreases as supply increases
+	  price_multiplier = 1.0 - (fill_ratio - 0.5) * (volatility / 100.0);
+	}
+      else
+	{
+	  // Price increases towards base as supply decreases
+	  price_multiplier = 1.0 + (0.5 - fill_ratio) * (volatility / 100.0);
+	}
+    }
+
+  // Adjust for techlevel (higher techlevel means better prices for the port, so lower buy price)
+  price_multiplier *= (1.0 - (techlevel - 1) * 0.02);	// Port wants to buy low
+
+  long long price = (long long) (base_price * price_multiplier + 0.999999);	/* ceil */
+
+  if (price < 1)
+    price = 1;
+  if (price > 2000000000LL)
+    price = 2000000000LL;
+
+  return (int) price;
+}
+
+int
+cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
+{
+  if (!ctx || ctx->player_id <= 0)
+    {
+      send_enveloped_refused (ctx->fd, root, 1401,
+                              "Not authenticated", NULL);
+      return 0;
+    }
+
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    {
+      send_enveloped_error (ctx->fd, root, 500,
+                            "No database handle");
+      return 0;
+    }
+
+  int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 0;
+  int port_id = 0;
+
+  json_t *data = json_object_get (root, "data");
+  LOGD("cmd_trade_port_info: Extracted data object (simplified): is_object: %d", json_is_object(data));
+
+  LOGD("cmd_trade_port_info: About to get jport from data object.");
+  json_t *jport = json_object_get (data, "port_id");
+  LOGD("cmd_trade_port_info: After jport extraction: jport (raw): %p", (void*)jport);
+  if (json_is_integer (jport))
+    port_id = (int) json_integer_value (jport);
+
+  LOGD("cmd_trade_port_info: About to get jsec from data object.");
+  json_t *jsec = json_object_get (data, "sector_id");
+  LOGD("cmd_trade_port_info: After jsec extraction: jsec (raw): %p", (void*)jsec);
+  if (json_is_integer (jsec))
+    sector_id = (int) json_integer_value (jsec);
+
+  LOGD("cmd_trade_port_info: Received port_id=%d, sector_id=%d", port_id, sector_id);
+
+  /* Resolve by port_id if supplied */
+  const char *sql = NULL;
+  if (port_id > 0)
+    {
+      sql =
+        "SELECT id, number, name, sector, size, techlevel, "
+        "ore_on_hand, organics_on_hand, equipment_on_hand, petty_cash, "
+        "type "
+        "FROM ports WHERE id = ?1 LIMIT 1;";
+    }
+  else if (sector_id > 0)
+    {
+      sql =
+        "SELECT id, number, name, sector, size, techlevel, "
+        "ore_on_hand, organics_on_hand, equipment_on_hand, petty_cash, "
+        "type "
+        "FROM ports WHERE sector = ?1 LIMIT 1;";
+    }
+  else
+    {
+      send_enveloped_error (ctx->fd, root, 400,
+                            "Missing port_id or sector_id");
+      return 0;
+    }
+
+  LOGD("cmd_trade_port_info: Preparing SQL: %s", sql);
+
+  sqlite3_stmt *st = NULL;
+  if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
+    {
+      send_enveloped_error (ctx->fd, root, 500,
+                            sqlite3_errmsg (db));
+      return 0;
+    }
+
+  if (port_id > 0)
+    {
+      sqlite3_bind_int (st, 1, port_id);
+      LOGD("cmd_trade_port_info: Bound port_id: %d", port_id);
+    }
+  else
+    {
+      sqlite3_bind_int (st, 1, sector_id);
+      LOGD("cmd_trade_port_info: Bound sector_id: %d", sector_id);
+    }
+
+  int rc = sqlite3_step (st);
+  LOGD("cmd_trade_port_info: sqlite3_step returned: %d", rc);
+  if (rc != SQLITE_ROW)
+    {
+      sqlite3_finalize (st);
+      send_enveloped_refused (ctx->fd, root, 1404,
+                              "No port in this sector", NULL);
+      return 0;
+    }
+
+  json_t *port = json_object ();
+  json_object_set_new (port, "id",          json_integer (sqlite3_column_int (st, 0)));
+  json_object_set_new (port, "number",      json_integer (sqlite3_column_int (st, 1)));
+  json_object_set_new (port, "name",        json_string  ((const char *) sqlite3_column_text (st, 2)));
+  json_object_set_new (port, "sector",      json_integer (sqlite3_column_int (st, 3)));
+  json_object_set_new (port, "size",        json_integer (sqlite3_column_int (st, 4)));
+  json_object_set_new (port, "techlevel",   json_integer (sqlite3_column_int (st, 5)));
+  json_object_set_new (port, "ore_on_hand", json_integer (sqlite3_column_int (st, 6)));
+  json_object_set_new (port, "organics_on_hand",json_integer (sqlite3_column_int (st, 7)));
+  json_object_set_new (port, "equipment_on_hand",json_integer(sqlite3_column_int (st, 8)));
+  json_object_set_new (port, "petty_cash", json_integer (sqlite3_column_int (st, 9)));
+  json_object_set_new (port, "credits",    json_integer (sqlite3_column_int (st, 9)));
+  json_object_set_new (port, "type",       json_integer (sqlite3_column_int (st,10)));
+
+  sqlite3_finalize (st);
+
+  json_t *payload = json_object ();
+  json_object_set_new (payload, "port", port);
+
+  send_enveloped_ok (ctx->fd, root, "trade.port_info", payload);
+
+  json_decref (payload);
   return 0;
 }
 
@@ -1620,627 +2373,3 @@ cleanup:
   LOGD("cmd_trade_buy: Exiting cleanup.");
   return 0;
 }
-
-
-int
-cmd_trade_sell (client_ctx_t *ctx, json_t *root)
-{
-  sqlite3 *db = NULL;
-  json_t *receipt = NULL;
-  json_t *lines = NULL;
-  json_t *data = NULL;
-  json_t *jitems = NULL;
-  const char *key = NULL;
-  int sector_id = 0;
-  int port_id = 0;
-  long long total_credits_after_fees = 0;
-  fee_result_t charges = {0};
-  long long new_balance = 0;
-  long long total_credits = 0;
-  char tx_group_id[UUID_STR_LEN];
-  h_generate_hex_uuid(tx_group_id, sizeof(tx_group_id));
-  int rc = 0;
-  char *req_s = NULL;
-  char *resp_s = NULL;
-  int we_started_tx = 0;
-
-  if (!ctx || !root)
-    return -1;
-
-  db = db_get_handle ();
-  if (!db)
-    {
-      send_enveloped_error (ctx->fd, root, 500, "No database handle.");
-      return -1;
-    }
-
-  if (ctx->player_id <= 0)
-    {
-      send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
-      return 0;
-    }
-
-  /* consume turn (may open a transaction) */
-  TurnConsumeResult tc = h_consume_player_turn (db, ctx, "trade.sell");
-  if (tc != TURN_CONSUME_SUCCESS)
-    {
-      return handle_turn_consumption_error (ctx, tc, "trade.sell", root, NULL);
-    }
-
-  /* decloak */
-  int player_ship_id = h_get_active_ship_id (db, ctx->player_id);
-  h_decloak_ship (db, player_ship_id);
-
-  data = json_object_get (root, "data");
-  if (!json_is_object (data))
-    {
-      send_enveloped_error (ctx->fd, root, 400, "Missing data object.");
-      return -1;
-    }
-
-  int account_type = db_get_player_pref_int(ctx->player_id, "trade.default_account", 0); // Default to petty cash (0)
-  json_t *jaccount = json_object_get(data, "account");
-  if (json_is_integer(jaccount)) {
-      int requested_account_type = (int)json_integer_value(jaccount);
-      if (requested_account_type != 0 && requested_account_type != 1) {
-          send_enveloped_error(ctx->fd, root, 400, "Invalid account type. Must be 0 (petty cash) or 1 (bank).");
-          return -1;
-      }
-      account_type = requested_account_type; // Override with explicit request
-  }
-  LOGD("cmd_trade_sell: Account type for player_id=%d is %d", ctx->player_id, account_type);
-
-  sector_id = ctx->sector_id;
-  json_t *jsec = json_object_get (data, "sector_id");
-  if (json_is_integer (jsec))
-    sector_id = (int) json_integer_value (jsec);
-  if (sector_id <= 0)
-    {
-      send_enveloped_error (ctx->fd, root, 400, "Invalid sector_id.");
-      return -1;
-    }
-
-  jitems = json_object_get (data, "items");
-  if (!json_is_array (jitems) || json_array_size (jitems) == 0)
-    {
-      send_enveloped_error (ctx->fd, root, 400, "items[] required.");
-      return -1;
-    }
-
-  json_t *jkey = json_object_get (data, "idempotency_key");
-  key = json_is_string (jkey) ? json_string_value (jkey) : NULL;
-  if (!key || !*key)
-    {
-      send_enveloped_error (ctx->fd, root, 400, "idempotency_key required.");
-      return -1;
-    }
-
-  /* idempotency fast-path */
-  {
-    static const char *SQL_GET =
-      "SELECT request_json, response_json "
-      "FROM trade_idempotency WHERE key = ?1 AND player_id = ?2 AND sector_id = ?3;";
-    sqlite3_stmt *st = NULL;
-    if (sqlite3_prepare_v2 (db, SQL_GET, -1, &st, NULL) == SQLITE_OK)
-      {
-        sqlite3_bind_text (st, 1, key, -1, SQLITE_TRANSIENT);
-        sqlite3_bind_int (st, 2, ctx->player_id);
-        sqlite3_bind_int (st, 3, sector_id);
-        if (sqlite3_step (st) == SQLITE_ROW)
-          {
-            const unsigned char *req_s_stored = sqlite3_column_text (st, 0);
-            const unsigned char *resp_s_stored = sqlite3_column_text (st, 1);
-            json_error_t jerr;
-            json_t *stored_req =
-              req_s_stored ? json_loads ((const char *) req_s_stored, 0, &jerr) : NULL;
-            json_t *incoming_req = json_incref (data);
-            int same = (stored_req && json_equal_strict (stored_req, incoming_req));
-            json_decref (incoming_req);
-            if (stored_req)
-              json_decref (stored_req);
-
-            if (same)
-              {
-                json_t *stored_resp =
-                  resp_s_stored ? json_loads ((const char *) resp_s_stored, 0, &jerr) : NULL;
-                sqlite3_finalize (st);
-                if (!stored_resp)
-                  {
-                    send_enveloped_error (ctx->fd, root, 500,
-                                          "Stored response unreadable.");
-                    return -1;
-                  }
-                send_enveloped_ok (ctx->fd, root, "trade.sell_receipt_v1",
-                                   stored_resp);
-                json_decref (stored_resp);
-                return 0;
-              }
-            sqlite3_finalize (st);
-            send_enveloped_error (ctx->fd, root, 1105,
-                                  "Same idempotency_key used with different request.");
-            return -1;
-          }
-        sqlite3_finalize (st);
-      }
-  }
-
-  /* resolve port from sector */
-  {
-    static const char *SQL_PORT =
-      "SELECT id FROM ports WHERE sector = ?1 LIMIT 1;";
-    sqlite3_stmt *st = NULL;
-    if (sqlite3_prepare_v2 (db, SQL_PORT, -1, &st, NULL) != SQLITE_OK)
-      {
-        send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
-        return -1;
-      }
-    sqlite3_bind_int (st, 1, sector_id);
-    if (sqlite3_step (st) == SQLITE_ROW)
-      port_id = sqlite3_column_int (st, 0);
-    sqlite3_finalize (st);
-    if (port_id <= 0)
-      {
-        send_enveloped_refused (ctx->fd, root, 1404,
-                                "No port in this sector.", NULL);
-        return 0;
-      }
-  }
-
-  /* start local tx only if not already in one */
-  if (sqlite3_get_autocommit (db))
-    {
-      if (begin (db) != SQLITE_OK)
-        {
-          send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
-          return -1;
-        }
-      we_started_tx = 1;
-    }
-
-  receipt = json_object ();
-  lines = json_array ();
-  if (!receipt || !lines)
-    {
-      rc = 500;
-      goto fail_tx;
-    }
-
-  json_object_set_new (receipt, "sector_id", json_integer (sector_id));
-  json_object_set_new (receipt, "port_id", json_integer (port_id));
-  json_object_set_new (receipt, "player_id", json_integer (ctx->player_id));
-  json_object_set_new (receipt, "lines", lines);
-
-  /* iterate items */
-  size_t n = json_array_size (jitems);
-  for (size_t i = 0; i < n; i++)
-    {
-      json_t *it = json_array_get (jitems, i);
-      const char *raw_commodity = json_string_value (json_object_get (it, "commodity"));
-      int amount = (int) json_integer_value (json_object_get (it, "quantity"));
-
-      if (!raw_commodity || amount <= 0)
-        {
-          send_enveloped_refused (ctx->fd, root, 1405,
-                                  "Invalid or unsupported commodity.", NULL);
-          goto fail_tx;
-        }
-
-      char *canonical_commodity_code = (char *)commodity_to_code(raw_commodity);
-      if (!canonical_commodity_code)
-        {
-          send_enveloped_refused (ctx->fd, root, 1405,
-                                  "Invalid or unsupported commodity.", NULL);
-          goto fail_tx;
-        }
-
-      if (!h_port_buys_commodity (db, port_id, canonical_commodity_code))
-        {
-          send_enveloped_refused (ctx->fd, root, 1405,
-                                  "Port is not buying this commodity right now.",
-                                  NULL);
-          goto fail_tx;
-        }
-
-      int buy_price = h_calculate_port_buy_price (db, port_id, canonical_commodity_code);
-      if (buy_price <= 0)
-        {
-          send_enveloped_refused (ctx->fd, root, 1405,
-                                  "Port is not buying this commodity right now.",
-                                  NULL);
-          goto fail_tx;
-        }
-
-      /* check cargo */
-      int ore, org, eq, holds, colonists;
-      if (h_get_ship_cargo_and_holds (db, player_ship_id,
-                                      &ore, &org, &eq, &holds, &colonists) != SQLITE_OK)
-        {
-          send_enveloped_error (ctx->fd, root, 500,
-                                "Could not read ship cargo.");
-          goto fail_tx;
-        }
-
-      int have = 0;
-      if (strcasecmp (canonical_commodity_code, "ore") == 0)
-        have = ore;
-      else if (strcasecmp (canonical_commodity_code, "organics") == 0)
-        have = org;
-      else if (strcasecmp (canonical_commodity_code, "equipment") == 0)
-        have = eq;
-      else if (strcasecmp (canonical_commodity_code, "colonists") == 0)
-        have = colonists;
-
-      if (have < amount)
-        {
-          send_enveloped_refused (ctx->fd, root, 1402,
-                                  "You do not carry enough of that commodity.",
-                                  NULL);
-          goto fail_tx;
-        }
-
-      /* log row */
-      {
-        static const char *LOG_SQL =
-          "INSERT INTO trade_log "
-          "(player_id, port_id, sector_id, commodity, units, price_per_unit, action, timestamp) "
-          "VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'sell', ?7);";
-        sqlite3_stmt *st = NULL;
-        if (sqlite3_prepare_v2 (db, LOG_SQL, -1, &st, NULL) != SQLITE_OK)
-          goto sql_err;
-        sqlite3_bind_int (st, 1, ctx->player_id);
-        sqlite3_bind_int (st, 2, port_id);
-        sqlite3_bind_int (st, 3, sector_id);
-        sqlite3_bind_text (st, 4, canonical_commodity_code, -1, SQLITE_STATIC);
-        sqlite3_bind_int (st, 5, amount);
-        sqlite3_bind_int (st, 6, buy_price);
-        sqlite3_bind_int64 (st, 7, (sqlite3_int64) time (NULL));
-        if (sqlite3_step (st) != SQLITE_DONE)
-          {
-            sqlite3_finalize (st);
-            goto sql_err;
-          }
-        sqlite3_finalize (st);
-      }
-
-      /* update ship cargo (−amount) */
-      {
-        int new_ship_qty = 0;
-        rc = h_update_ship_cargo (db, ctx->player_id, canonical_commodity_code, -amount,
-                                  &new_ship_qty);
-        if (rc != SQLITE_OK)
-          {
-            if (rc == SQLITE_CONSTRAINT)
-              {
-                send_enveloped_refused (ctx->fd, root, 1402,
-                                        "Insufficient cargo to sell (atomic check).",
-                                        NULL);
-              }
-            goto fail_tx;
-          }
-      }
-
-      /* update port stock (+amount) */
-      {
-        int new_port_qty = 0;
-        rc = h_update_port_stock (db, port_id, canonical_commodity_code, amount,
-                                  &new_port_qty);
-        if (rc != SQLITE_OK)
-          {
-            if (rc == SQLITE_CONSTRAINT)
-              {
-                send_enveloped_refused (ctx->fd, root, 1403,
-                                        "Port cannot accept that much cargo (atomic check).",
-                                        NULL);
-              }
-            goto fail_tx;
-          }
-      }
-
-      // Calculate total credits for this line item
-      long long line_credits = (long long)amount * buy_price;
-      total_credits += line_credits;
-
-      // No longer deducting port credits inside the loop.
-      // This will be handled as a single transaction outside the loop with total_credits.
-
-      json_t *jline = json_object ();
-      json_object_set_new (jline, "commodity", json_string (canonical_commodity_code));
-      json_object_set_new (jline, "quantity", json_integer (amount));
-      json_object_set_new (jline, "unit_price", json_integer (buy_price));
-      json_object_set_new (jline, "value", json_integer (line_credits));
-      json_array_append_new (lines, jline);
-      free(canonical_commodity_code); // Free the dynamically allocated commodity code
-    }
-
-  rc = calculate_fees(db, TX_TYPE_TRADE_SELL, total_credits, "player", &charges);
-  total_credits_after_fees = total_credits - charges.fee_total;
-
-  if (total_credits_after_fees < 0) {
-      send_enveloped_refused(ctx->fd, root, 1402,
-                             "Selling this would result in negative credits after fees.", NULL);
-      goto fail_tx;
-  }
-
-  /* credit player (atomic helper) */
-  {
-    if (account_type == 0) { // Petty cash
-        rc = h_add_player_petty_cash(db, ctx->player_id, total_credits_after_fees, &new_balance);
-    } else { // Bank account
-        int player_bank_account_id = -1;
-        int get_account_rc = h_get_account_id_unlocked(db, "player", ctx->player_id, &player_bank_account_id);
-        if (get_account_rc != SQLITE_OK) {
-             LOGE("cmd_trade_sell: Failed to get player bank account ID for player %d (rc=%d)", ctx->player_id, get_account_rc);
-             rc = get_account_rc;
-        } else {
-            rc = h_add_credits_unlocked(db, player_bank_account_id, total_credits_after_fees, "TRADE_SELL", tx_group_id, &new_balance);
-        }
-    }
-    
-    if (rc != SQLITE_OK)
-      {
-        send_enveloped_error (ctx->fd, root, 500, "Failed to credit player.");
-        goto fail_tx;
-      }
-    json_object_set_new (receipt, "credits_remaining",
-                         json_integer (new_balance));
-  }
-  LOGD("cmd_trade_sell: Player credits credited. New balance=%lld", json_integer_value(json_object_get(receipt, "credits_remaining")));
-
-  // Deduct total_credits from port's bank account
-  {
-    long long new_port_balance = 0;
-    int port_bank_account_id = -1;
-    int get_account_rc = h_get_account_id_unlocked(db, "port", port_id, &port_bank_account_id);
-    if (get_account_rc != SQLITE_OK) {
-        LOGE("cmd_trade_sell: Failed to get port bank account ID for port %d (rc=%d)", port_id, get_account_rc);
-        rc = get_account_rc;
-        goto fail_tx;
-    } else {
-        rc = h_deduct_credits_unlocked(db, port_bank_account_id, total_credits, "TRADE_SELL", tx_group_id, &new_port_balance);
-    }
-    if (rc != SQLITE_OK) {
-      LOGE("cmd_trade_sell: Failed to deduct credits from port %d: %s", port_id, sqlite3_errmsg(db));
-      goto fail_tx;
-    }
-    LOGD("cmd_trade_sell: Deducted %lld credits from port %d. New balance=%lld", total_credits, port_id, new_port_balance);
-  }
-
-  // Add fees to system bank account
-  if (charges.fee_to_bank > 0) {
-    long long new_system_balance = 0;
-    int system_bank_account_id = -1;
-    int get_account_rc = h_get_system_account_id_unlocked(db, "SYSTEM", 0, &system_bank_account_id);
-    if (get_account_rc != SQLITE_OK) {
-        LOGE("cmd_trade_sell: Failed to get system bank account ID (rc=%d)", get_account_rc);
-        rc = get_account_rc;
-        goto fail_tx;
-    } else {
-        rc = h_add_credits_unlocked(db, system_bank_account_id, charges.fee_to_bank, "TRADE_SELL_FEE", tx_group_id, &new_system_balance);
-    }
-    if (rc != SQLITE_OK) {
-      LOGE("cmd_trade_sell: Failed to add fees to system bank: %s", sqlite3_errmsg(db));
-      goto fail_tx;
-    }
-    LOGD("cmd_trade_sell: Added %lld fees to system bank. New balance=%lld", charges.fee_to_bank, new_system_balance);
-  }
-
-  json_object_set_new (receipt, "total_item_credits",
-                       json_integer (total_credits));
-  json_object_set_new (receipt, "total_credits_after_fees",
-                       json_integer (total_credits_after_fees));
-  json_object_set_new (receipt, "fees",
-                       json_integer (charges.fee_total));
-
-  /* idempotency insert */
-  {
-    req_s = json_dumps (data, JSON_COMPACT | JSON_SORT_KEYS);
-    resp_s = json_dumps (receipt, JSON_COMPACT | JSON_SORT_KEYS);
-    static const char *SQL_PUT =
-      "INSERT INTO trade_idempotency "
-      "(key, player_id, sector_id, request_json, response_json, created_at) "
-      "VALUES (?1, ?2, ?3, ?4, ?5, ?6);";
-    sqlite3_stmt *st = NULL;
-    if (sqlite3_prepare_v2 (db, SQL_PUT, -1, &st, NULL) != SQLITE_OK)
-      goto sql_err;
-    sqlite3_bind_text (st, 1, key, -1, SQLITE_TRANSIENT);
-    sqlite3_bind_int (st, 2, ctx->player_id);
-    sqlite3_bind_int (st, 3, sector_id);
-    bind_text_or_null (st, 4, req_s);
-    bind_text_or_null (st, 5, resp_s);
-    sqlite3_bind_int64 (st, 6, (sqlite3_int64) time (NULL));
-
-    if (sqlite3_step (st) != SQLITE_DONE)
-      {
-        sqlite3_finalize (st);
-        goto idempotency_race;
-      }
-    sqlite3_finalize (st);
-  }
-
-  if (we_started_tx && commit (db) != SQLITE_OK)
-    {
-      send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
-      goto cleanup;
-    }
-
-  send_enveloped_ok (ctx->fd, root, "trade.sell_receipt_v1", receipt);
-  goto cleanup;
-
-sql_err:
-  send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
-fail_tx:
-  if (we_started_tx)
-    rollback (db);
-  goto cleanup;
-
-idempotency_race:
-  /* same pattern as buy(): read existing entry and return if match */
-  {
-    static const char *SQL_GET2 =
-      "SELECT request_json, response_json "
-      "FROM trade_idempotency "
-      "WHERE key = ?1 AND player_id = ?2 AND sector_id = ?3;";
-    sqlite3_stmt *st = NULL;
-    if (sqlite3_prepare_v2 (db, SQL_GET2, -1, &st, NULL) == SQLITE_OK)
-      {
-        sqlite3_bind_text (st, 1, key, -1, SQLITE_TRANSIENT);
-        sqlite3_bind_int (st, 2, ctx->player_id);
-        sqlite3_bind_int (st, 3, sector_id);
-        if (sqlite3_step (st) == SQLITE_ROW)
-          {
-            const unsigned char *req_s_stored = sqlite3_column_text (st, 0);
-            const unsigned char *resp_s_stored = sqlite3_column_text (st, 1);
-            json_error_t jerr;
-            json_t *stored_req =
-              req_s_stored ? json_loads ((const char *) req_s_stored, 0, &jerr) : NULL;
-            int same = (stored_req && json_equal_strict (stored_req, data));
-            if (stored_req)
-              json_decref (stored_req);
-            if (same)
-              {
-                json_t *stored_resp =
-                  resp_s_stored ? json_loads ((const char *) resp_s_stored, 0, &jerr) : NULL;
-                sqlite3_finalize (st);
-                if (!stored_resp)
-                  {
-                    send_enveloped_error (ctx->fd, root, 500,
-                                          "Stored response unreadable.");
-                    goto cleanup;
-                  }
-                send_enveloped_ok (ctx->fd, root, "trade.sell_receipt_v1",
-                                   stored_resp);
-                json_decref (stored_resp);
-                goto cleanup;
-              }
-          }
-        sqlite3_finalize (st);
-      }
-  }
-  send_enveloped_error (ctx->fd, root, 500, "Could not resolve idempotency race.");
-
-cleanup:
-  if (we_started_tx)
-    {
-      /* if still in a tx here, something went wrong above;
-         make sure we don't leave it open */
-      if (!sqlite3_get_autocommit (db))
-        rollback (db);
-    }
-  if (receipt)
-    json_decref (receipt);
-  if (req_s)
-    free (req_s);
-  if (resp_s)
-    free (resp_s);
-  return 0;
-}
-
-int
-h_calculate_port_buy_price (sqlite3 *db, int port_id, const char *commodity)
-{
-  // LOGD("h_calculate_port_buy_price: Entering with port_id=%d, commodity=%s", port_id, commodity);
-  if (!db || port_id <= 0 || !commodity || !*commodity) {
-    LOGW("h_calculate_port_buy_price: Invalid input: db=%p, port_id=%d, commodity=%s", db, port_id, commodity);
-    return 0;
-  }
-
-  // Assume commodity is already canonical code
-  const char *canonical_commodity = commodity;
-  // LOGI("h_calculate_port_buy_price: Canonical commodity for %s is %s", commodity, canonical_commodity);
-
-  sqlite3_stmt *st = NULL;
-  const char *sql =
-    "SELECT c.base_price, c.volatility, "
-    "CASE ?2 "
-    "WHEN 'ORE' THEN p.ore_on_hand "
-    "WHEN 'ORG' THEN p.organics_on_hand "
-    "WHEN 'EQU' THEN p.equipment_on_hand "
-    "ELSE 0 END AS quantity, "
-    "p.size * 1000 AS max_capacity, p.techlevel " /* Using port size as a proxy for max_capacity for now */
-    "FROM commodities c JOIN ports p ON p.id = ?1 "
-    "WHERE UPPER(c.code) = UPPER(?2) LIMIT 1;";
-
-  int rc_prepare = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
-  if (rc_prepare != SQLITE_OK)
-    {
-      LOGE("h_calculate_port_buy_price: prepare failed: %s (rc=%d)", sqlite3_errmsg(db), rc_prepare);
-      return 0;
-    }
-  // LOGD("h_calculate_port_buy_price: SQL prepared successfully for port_id=%d, canonical_commodity=%s", port_id, canonical_commodity);
-
-  int rc_bind_int = sqlite3_bind_int (st, 1, port_id);
-  if (rc_bind_int != SQLITE_OK) {
-      LOGE("h_calculate_port_buy_price: bind_int failed for port_id %d: %s (rc=%d)", port_id, sqlite3_errmsg(db), rc_bind_int);
-      sqlite3_finalize (st);
-      return 0;
-  }
-  // Bind the canonical commodity code
-  int rc_bind_text = sqlite3_bind_text (st, 2, canonical_commodity, -1, SQLITE_STATIC);
-  if (rc_bind_text != SQLITE_OK) {
-      LOGE("h_calculate_port_buy_price: bind_text failed for canonical_commodity %s: %s (rc=%d)", canonical_commodity, sqlite3_errmsg(db), rc_bind_text);
-      sqlite3_finalize (st);
-      return 0;
-  }
-  // LOGD("h_calculate_port_buy_price: Parameters bound for port_id=%d, canonical_commodity=%s", port_id, canonical_commodity);
-
-  int base_price = 0;
-  int volatility = 0;
-  int quantity = 0;
-  int max_capacity = 0;
-  int techlevel = 0;
-  int rc_step = sqlite3_step (st);
-
-  if (rc_step == SQLITE_ROW)
-    {
-      base_price = sqlite3_column_int (st, 0);
-      volatility = sqlite3_column_int (st, 1);
-      quantity = sqlite3_column_int (st, 2);
-      max_capacity = sqlite3_column_int (st, 3);
-      techlevel = sqlite3_column_int (st, 4);
-      // LOGD("h_calculate_port_buy_price: Data found for port_id=%d, canonical_commodity=%s: base_price=%d, quantity=%d, max_capacity=%d", port_id, canonical_commodity, base_price, quantity, max_capacity);
-    }
-  else
-    {
-      LOGW("h_calculate_port_buy_price: No data found for canonical_commodity %s at port %d (rc_step=%d, errmsg=%s)", canonical_commodity, port_id, rc_step, sqlite3_errmsg(db));
-      sqlite3_finalize (st);
-      return 0; // Port not buying this commodity or no stock info
-    }
-
-  sqlite3_finalize (st);
-
-  if (base_price <= 0) {
-    LOGW("h_calculate_port_buy_price: Base price is zero or less for canonical_commodity %s at port %d", canonical_commodity, port_id);
-    return 0;
-  }
-
-  double price_multiplier = 1.0;
-
-  if (max_capacity > 0) {
-      double fill_ratio = (double)quantity / max_capacity;
-      // Port buys (player sells): price is lower when supply is high
-      // If quantity is high (e.g., > 50% of max_capacity), price decreases.
-      // If quantity is low (e.g., < 50% of max_capacity), price increases towards base.
-      if (fill_ratio > 0.5) {
-          // Price decreases as supply increases
-          price_multiplier = 1.0 - (fill_ratio - 0.5) * (volatility / 100.0);
-      } else {
-          // Price increases towards base as supply decreases
-          price_multiplier = 1.0 + (0.5 - fill_ratio) * (volatility / 100.0);
-      }
-  }
-
-  // Adjust for techlevel (higher techlevel means better prices for the port, so lower buy price)
-  price_multiplier *= (1.0 - (techlevel - 1) * 0.02); // Port wants to buy low
-
-  long long price = (long long) (base_price * price_multiplier + 0.999999); /* ceil */
-
-  if (price < 1)
-    price = 1;
-  if (price > 2000000000LL)
-    price = 2000000000LL;
-
-  return (int) price;
-}
-
-
-

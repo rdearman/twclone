@@ -31,11 +31,16 @@ extern "C"
   //int player_credits (int player_id);
   //int cargo_space_free (int player_id);
   int port_is_open (int port_id, const char *commodity);
-  
-  int h_get_ship_cargo_and_holds (sqlite3 *db, int ship_id, int *ore, int *organics, int *equipment, int *holds, int *colonists);
-  int h_update_port_stock (sqlite3 *db, int port_id, const char *commodity, int delta, int *new_qty_out);
-  int h_calculate_port_buy_price (sqlite3 *db, int port_id, const char *commodity);
-  int h_calculate_port_sell_price (sqlite3 *db, int port_id, const char *commodity);
+
+  int h_get_ship_cargo_and_holds (sqlite3 * db, int ship_id, int *ore,
+				  int *organics, int *equipment, int *holds,
+				  int *colonists);
+  int h_update_port_stock (sqlite3 * db, int port_id, const char *commodity,
+			   int delta, int *new_qty_out);
+  int h_calculate_port_buy_price (sqlite3 * db, int port_id,
+				  const char *commodity);
+  int h_calculate_port_sell_price (sqlite3 * db, int port_id,
+				   const char *commodity);
 
 #ifdef __cplusplus
 }

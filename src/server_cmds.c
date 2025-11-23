@@ -8,8 +8,8 @@
 #include "server_envelope.h"
 #include "db_player_settings.h"
 #include "errors.h"
-#include "server_players.h" // Include for banking functions
-#include "server_cron.h" // Include for cron job functions
+#include "server_players.h"	// Include for banking functions
+#include "server_cron.h"	// Include for cron job functions
 #include "server_log.h"
 
 /* Constant-time string compare to reduce timing leakage (simple variant). */
@@ -41,9 +41,9 @@ play_login (const char *player_name, const char *password, int *out_player_id)
   if (!db)
     return AUTH_ERR_DB;
 
-  LOGI("play_login: attempting to lock db_mutex for player %s", player_name);
+  LOGI ("play_login: attempting to lock db_mutex for player %s", player_name);
   pthread_mutex_lock (&db_mutex);
-  LOGI("play_login: db_mutex locked for player %s", player_name);
+  LOGI ("play_login: db_mutex locked for player %s", player_name);
 
   const char *sql = "SELECT id, passwd, type FROM players WHERE name=?1;";
   sqlite3_stmt *st = NULL;
@@ -144,7 +144,7 @@ user_create (const char *player_name, const char *password,
       return AUTH_ERR_DB;
     }
 
- sqlite3_bind_text (st, 1, player_name, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text (st, 1, player_name, -1, SQLITE_TRANSIENT);
   sqlite3_bind_text (st, 2, password, -1, SQLITE_TRANSIENT);
 
   rc = sqlite3_step (st);
@@ -167,35 +167,39 @@ user_create (const char *player_name, const char *password,
     "INSERT INTO turns (player, turns_remaining, last_update) "
     "SELECT ?1, turnsperday, strftime('%s', 'now') FROM config WHERE id = 1;";
 
-  rc = sqlite3_prepare_v2(db, ins_turns, -1, &st, NULL);
+  rc = sqlite3_prepare_v2 (db, ins_turns, -1, &st, NULL);
 
-  if (rc == SQLITE_OK) {
-    // ?1 is the player ID
-    sqlite3_bind_int(st, 1, player_id); 
-    sqlite3_step(st);
-    sqlite3_finalize(st);
-  }
+  if (rc == SQLITE_OK)
+    {
+      // ?1 is the player ID
+      sqlite3_bind_int (st, 1, player_id);
+      sqlite3_step (st);
+      sqlite3_finalize (st);
+    }
 
 
   // Create ship
-  const char *ins_ship = "INSERT INTO ships (name, type_id, sector) VALUES ('new ship', 1, 1);";
-  rc = sqlite3_prepare_v2(db, ins_ship, -1, &st, NULL);
-  if (rc == SQLITE_OK) {
-    sqlite3_step(st);
-    sqlite3_finalize(st);
-  }
+  const char *ins_ship =
+    "INSERT INTO ships (name, type_id, sector) VALUES ('new ship', 1, 1);";
+  rc = sqlite3_prepare_v2 (db, ins_ship, -1, &st, NULL);
+  if (rc == SQLITE_OK)
+    {
+      sqlite3_step (st);
+      sqlite3_finalize (st);
+    }
 
-  int ship_id = (int) sqlite3_last_insert_rowid(db);
+  int ship_id = (int) sqlite3_last_insert_rowid (db);
 
   // Update player's ship
   const char *upd_player = "UPDATE players SET ship = ?1 WHERE id = ?2;";
-  rc = sqlite3_prepare_v2(db, upd_player, -1, &st, NULL);
-  if (rc == SQLITE_OK) {
-    sqlite3_bind_int(st, 1, ship_id);
-    sqlite3_bind_int(st, 2, player_id);
-    sqlite3_step(st);
-    sqlite3_finalize(st);
-  }
+  rc = sqlite3_prepare_v2 (db, upd_player, -1, &st, NULL);
+  if (rc == SQLITE_OK)
+    {
+      sqlite3_bind_int (st, 1, ship_id);
+      sqlite3_bind_int (st, 2, player_id);
+      sqlite3_step (st);
+      sqlite3_finalize (st);
+    }
 
   pthread_mutex_unlock (&db_mutex);
 
@@ -203,182 +207,245 @@ user_create (const char *player_name, const char *password,
 }
 
 int
-cmd_sys_test_news_cron(client_ctx_t *ctx, json_t *root)
+cmd_sys_test_news_cron (client_ctx_t *ctx, json_t *root)
 {
-    sqlite3 *db = db_get_handle();
-    json_t *data = json_object_get(root, "data");
-    const char *subcommand = NULL;
-    int rc = 0;
+  sqlite3 *db = db_get_handle ();
+  json_t *data = json_object_get (root, "data");
+  const char *subcommand = NULL;
+  int rc = 0;
 
-    if (!json_is_object(data)) {
-        send_enveloped_error(ctx->fd, root, 400, "Missing data object.");
-        return 0;
+  if (!json_is_object (data))
+    {
+      send_enveloped_error (ctx->fd, root, 400, "Missing data object.");
+      return 0;
     }
 
-    json_t *j_subcommand = json_object_get(data, "subcommand");
-    if (json_is_string(j_subcommand)) {
-        subcommand = json_string_value(j_subcommand);
-    } else {
-        send_enveloped_error(ctx->fd, root, 400, "Missing or invalid 'subcommand'.");
-        return 0;
+  json_t *j_subcommand = json_object_get (data, "subcommand");
+  if (json_is_string (j_subcommand))
+    {
+      subcommand = json_string_value (j_subcommand);
+    }
+  else
+    {
+      send_enveloped_error (ctx->fd, root, 400,
+			    "Missing or invalid 'subcommand'.");
+      return 0;
     }
 
-    if (strcasecmp(subcommand, "generate_event") == 0) {
-        const char *event_type = NULL;
-        int actor_player_id = 0;
-        int sector_id = 0;
-        json_t *payload = NULL;
+  if (strcasecmp (subcommand, "generate_event") == 0)
+    {
+      const char *event_type = NULL;
+      int actor_player_id = 0;
+      int sector_id = 0;
+      json_t *payload = NULL;
 
-        json_t *j_event_type = json_object_get(data, "event_type");
-        if (json_is_string(j_event_type)) {
-            event_type = json_string_value(j_event_type);
-        } else {
-            send_enveloped_error(ctx->fd, root, 400, "Missing or invalid 'event_type'.");
-            return 0;
-        }
+      json_t *j_event_type = json_object_get (data, "event_type");
+      if (json_is_string (j_event_type))
+	{
+	  event_type = json_string_value (j_event_type);
+	}
+      else
+	{
+	  send_enveloped_error (ctx->fd, root, 400,
+				"Missing or invalid 'event_type'.");
+	  return 0;
+	}
 
-        json_t *j_actor_player_id = json_object_get(data, "actor_player_id");
-        if (json_is_integer(j_actor_player_id)) {
-            actor_player_id = json_integer_value(j_actor_player_id);
-        }
+      json_t *j_actor_player_id = json_object_get (data, "actor_player_id");
+      if (json_is_integer (j_actor_player_id))
+	{
+	  actor_player_id = json_integer_value (j_actor_player_id);
+	}
 
-        json_t *j_sector_id = json_object_get(data, "sector_id");
-        if (json_is_integer(j_sector_id)) {
-            sector_id = json_integer_value(j_sector_id);
-        }
+      json_t *j_sector_id = json_object_get (data, "sector_id");
+      if (json_is_integer (j_sector_id))
+	{
+	  sector_id = json_integer_value (j_sector_id);
+	}
 
-        json_t *j_payload = json_object_get(data, "payload");
-        if (j_payload) {
-            payload = json_deep_copy(j_payload); // Make a copy as db_log_engine_event consumes reference
-        } else {
-            payload = json_object(); // Empty payload if not provided
-        }
+      json_t *j_payload = json_object_get (data, "payload");
+      if (j_payload)
+	{
+	  payload = json_deep_copy (j_payload);	// Make a copy as db_log_engine_event consumes reference
+	}
+      else
+	{
+	  payload = json_object ();	// Empty payload if not provided
+	}
 
-        rc = db_log_engine_event((long long)time(NULL), event_type, "player", actor_player_id, sector_id, payload, NULL);
-        if (rc == SQLITE_OK) {
-            send_enveloped_ok(ctx->fd, root, "sys.test_news_cron.event_generated", NULL);
-        } else {
-            send_enveloped_error(ctx->fd, root, 500, "Failed to generate engine event.");
-        }
-    } else if (strcasecmp(subcommand, "run_compiler") == 0) {
-        rc = h_daily_news_compiler(db, (long long)time(NULL));
-        if (rc == SQLITE_OK) {
-            send_enveloped_ok(ctx->fd, root, "sys.test_news_cron.compiler_ran", NULL);
-        } else {
-            send_enveloped_error(ctx->fd, root, 500, "Failed to run news compiler.");
-        }
-    } else if (strcasecmp(subcommand, "run_cleanup") == 0) {
-        rc = h_cleanup_old_news(db, (long long)time(NULL));
-        if (rc == SQLITE_OK) {
-            send_enveloped_ok(ctx->fd, root, "sys.test_news_cron.cleanup_ran", NULL);
-        } else {
-            send_enveloped_error(ctx->fd, root, 500, "Failed to run news cleanup.");
-        }
-    } else {
-        send_enveloped_error(ctx->fd, root, 400, "Unknown subcommand.");
+      rc =
+	db_log_engine_event ((long long) time (NULL), event_type, "player",
+			     actor_player_id, sector_id, payload, NULL);
+      if (rc == SQLITE_OK)
+	{
+	  send_enveloped_ok (ctx->fd, root,
+			     "sys.test_news_cron.event_generated", NULL);
+	}
+      else
+	{
+	  send_enveloped_error (ctx->fd, root, 500,
+				"Failed to generate engine event.");
+	}
+    }
+  else if (strcasecmp (subcommand, "run_compiler") == 0)
+    {
+      rc = h_daily_news_compiler (db, (long long) time (NULL));
+      if (rc == SQLITE_OK)
+	{
+	  send_enveloped_ok (ctx->fd, root, "sys.test_news_cron.compiler_ran",
+			     NULL);
+	}
+      else
+	{
+	  send_enveloped_error (ctx->fd, root, 500,
+				"Failed to run news compiler.");
+	}
+    }
+  else if (strcasecmp (subcommand, "run_cleanup") == 0)
+    {
+      rc = h_cleanup_old_news (db, (long long) time (NULL));
+      if (rc == SQLITE_OK)
+	{
+	  send_enveloped_ok (ctx->fd, root, "sys.test_news_cron.cleanup_ran",
+			     NULL);
+	}
+      else
+	{
+	  send_enveloped_error (ctx->fd, root, 500,
+				"Failed to run news cleanup.");
+	}
+    }
+  else
+    {
+      send_enveloped_error (ctx->fd, root, 400, "Unknown subcommand.");
     }
 
-    return 0;
+  return 0;
 }
 
 int
-cmd_sys_raw_sql_exec(client_ctx_t *ctx, json_t *root)
+cmd_sys_raw_sql_exec (client_ctx_t *ctx, json_t *root)
 {
-    sqlite3 *db = db_get_handle();
-    json_t *data = json_object_get(root, "data");
-    const char *sql_str = NULL;
-    char *err_msg = NULL;
-    int rc = 0;
+  sqlite3 *db = db_get_handle ();
+  json_t *data = json_object_get (root, "data");
+  const char *sql_str = NULL;
+  char *err_msg = NULL;
+  int rc = 0;
 
-    if (!json_is_object(data)) {
-        send_enveloped_error(ctx->fd, root, 400, "Missing data object.");
-        return 0;
+  if (!json_is_object (data))
+    {
+      send_enveloped_error (ctx->fd, root, 400, "Missing data object.");
+      return 0;
     }
 
-    json_t *j_sql = json_object_get(data, "sql");
-    if (json_is_string(j_sql)) {
-        sql_str = json_string_value(j_sql);
-    } else {
-        send_enveloped_error(ctx->fd, root, 400, "Missing or invalid 'sql' string.");
-        return 0;
+  json_t *j_sql = json_object_get (data, "sql");
+  if (json_is_string (j_sql))
+    {
+      sql_str = json_string_value (j_sql);
+    }
+  else
+    {
+      send_enveloped_error (ctx->fd, root, 400,
+			    "Missing or invalid 'sql' string.");
+      return 0;
     }
 
-    rc = sqlite3_exec(db, sql_str, NULL, NULL, &err_msg);
-    if (rc != SQLITE_OK) {
-        send_enveloped_error(ctx->fd, root, 500, err_msg ? err_msg : "Failed to execute SQL.");
-        sqlite3_free(err_msg);
-    } else {
-        send_enveloped_ok(ctx->fd, root, "sys.raw_sql_exec.success", NULL);
+  rc = sqlite3_exec (db, sql_str, NULL, NULL, &err_msg);
+  if (rc != SQLITE_OK)
+    {
+      send_enveloped_error (ctx->fd, root, 500,
+			    err_msg ? err_msg : "Failed to execute SQL.");
+      sqlite3_free (err_msg);
     }
-    return 0;
+  else
+    {
+      send_enveloped_ok (ctx->fd, root, "sys.raw_sql_exec.success", NULL);
+    }
+  return 0;
 }
 
 int
-cmd_player_set_trade_account_preference(client_ctx_t *ctx, json_t *root)
+cmd_player_set_trade_account_preference (client_ctx_t *ctx, json_t *root)
 {
-  if (ctx->player_id == 0) {
-    send_enveloped_error(ctx->fd, root, 1401, "Authentication required.");
-    return -1;
-  }
+  if (ctx->player_id == 0)
+    {
+      send_enveloped_error (ctx->fd, root, 1401, "Authentication required.");
+      return -1;
+    }
 
-  json_t *data = json_object_get(root, "data");
-  if (!json_is_object(data)) {
-    send_enveloped_error(ctx->fd, root, 400, "Missing data object.");
-    return -1;
-  }
+  json_t *data = json_object_get (root, "data");
+  if (!json_is_object (data))
+    {
+      send_enveloped_error (ctx->fd, root, 400, "Missing data object.");
+      return -1;
+    }
 
-  json_t *j_preference = json_object_get(data, "preference");
-  if (!json_is_integer(j_preference)) {
-    send_enveloped_error(ctx->fd, root, 400, "Missing or invalid 'preference' (must be 0 or 1).");
-    return -1;
-  }
+  json_t *j_preference = json_object_get (data, "preference");
+  if (!json_is_integer (j_preference))
+    {
+      send_enveloped_error (ctx->fd, root, 400,
+			    "Missing or invalid 'preference' (must be 0 or 1).");
+      return -1;
+    }
 
-  int preference = (int)json_integer_value(j_preference);
-  if (preference != 0 && preference != 1) {
-    send_enveloped_error(ctx->fd, root, 400, "Invalid preference value. Must be 0 (petty cash) or 1 (bank).");
-    return -1;
-  }
+  int preference = (int) json_integer_value (j_preference);
+  if (preference != 0 && preference != 1)
+    {
+      send_enveloped_error (ctx->fd, root, 400,
+			    "Invalid preference value. Must be 0 (petty cash) or 1 (bank).");
+      return -1;
+    }
 
   char pref_str[16];
-  snprintf(pref_str, sizeof(pref_str), "%d", preference);
-  int rc = db_prefs_set_one(ctx->player_id, "trade.default_account", PT_INT, pref_str);
-  if (rc != SQLITE_OK) {
-    send_enveloped_error(ctx->fd, root, 500, "Failed to set trade account preference.");
-    return -1;
-  }
+  snprintf (pref_str, sizeof (pref_str), "%d", preference);
+  int rc =
+    db_prefs_set_one (ctx->player_id, "trade.default_account", PT_INT,
+		      pref_str);
+  if (rc != SQLITE_OK)
+    {
+      send_enveloped_error (ctx->fd, root, 500,
+			    "Failed to set trade account preference.");
+      return -1;
+    }
 
-  send_enveloped_ok(ctx->fd, root, "player.set_trade_account_preference", NULL);
+  send_enveloped_ok (ctx->fd, root, "player.set_trade_account_preference",
+		     NULL);
   return 0;
 }
 
 // General JSON response helpers
-int send_error_response(client_ctx_t *ctx, json_t *root, int err_code, const char *msg) {
-    // server_envelope.h's send_enveloped_error expects the original root message for id/cmd matching.
-    // The err_code and msg are passed directly.
-    send_enveloped_error(ctx->fd, root, err_code, msg);
-    return 0; // Or -1 depending on desired return behavior
+int
+send_error_response (client_ctx_t *ctx, json_t *root, int err_code,
+		     const char *msg)
+{
+  // server_envelope.h's send_enveloped_error expects the original root message for id/cmd matching.
+  // The err_code and msg are passed directly.
+  send_enveloped_error (ctx->fd, root, err_code, msg);
+  return 0;			// Or -1 depending on desired return behavior
 }
 
-int send_json_response(client_ctx_t *ctx, json_t *response_json) {
-    // server_envelope.h's send_enveloped_ok expects the original root and a data object.
-    // Here, response_json *is* the data object we want to send.
-    // We create a temporary object to hold the response_json under a "data" key,
-    // or you might adjust send_enveloped_ok to directly accept the data.
-    // For now, let's assume response_json contains the actual data to be sent.
-    // If response_json needs to be wrapped in a "data" field, we'd do:
-    // json_t *wrapper = json_object();
-    // json_object_set_new(wrapper, "data", response_json);
-    // send_enveloped_ok(ctx->fd, root, "ok", wrapper);
-    // json_decref(wrapper); // assuming send_enveloped_ok takes ownership or copies.
+int
+send_json_response (client_ctx_t *ctx, json_t *response_json)
+{
+  // server_envelope.h's send_enveloped_ok expects the original root and a data object.
+  // Here, response_json *is* the data object we want to send.
+  // We create a temporary object to hold the response_json under a "data" key,
+  // or you might adjust send_enveloped_ok to directly accept the data.
+  // For now, let's assume response_json contains the actual data to be sent.
+  // If response_json needs to be wrapped in a "data" field, we'd do:
+  // json_t *wrapper = json_object();
+  // json_object_set_new(wrapper, "data", response_json);
+  // send_enveloped_ok(ctx->fd, root, "ok", wrapper);
+  // json_decref(wrapper); // assuming send_enveloped_ok takes ownership or copies.
 
-    // A more direct approach if send_enveloped_ok just sends "ok" and an arbitrary json_t
-    // For now, mimicking existing pattern where "data" is often implicitly handled,
-    // or the `response_json` is the actual payload.
-    // Looking at `send_enveloped_ok` in `server_envelope.h`... it takes `json_t *data`.
-    // So, we just pass the `response_json` directly as data.
-    // If `response_json` should be nested under a specific key, that logic would be here.
-    // Given the prototype: `send_enveloped_ok(int fd, json_t *original_request_root, const char *command_name, json_t *data)`
-    // `response_json` should likely be the `data` parameter.
-    send_enveloped_ok(ctx->fd, NULL, "ok", response_json); // original_request_root is not needed here
-    return 0;
+  // A more direct approach if send_enveloped_ok just sends "ok" and an arbitrary json_t
+  // For now, mimicking existing pattern where "data" is often implicitly handled,
+  // or the `response_json` is the actual payload.
+  // Looking at `send_enveloped_ok` in `server_envelope.h`... it takes `json_t *data`.
+  // So, we just pass the `response_json` directly as data.
+  // If `response_json` should be nested under a specific key, that logic would be here.
+  // Given the prototype: `send_enveloped_ok(int fd, json_t *original_request_root, const char *command_name, json_t *data)`
+  // `response_json` should likely be the `data` parameter.
+  send_enveloped_ok (ctx->fd, NULL, "ok", response_json);	// original_request_root is not needed here
+  return 0;
 }

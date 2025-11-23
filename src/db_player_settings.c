@@ -114,31 +114,42 @@ db_prefs_get_all (int64_t pid, sqlite3_stmt **it)
   return 0;
 }
 
-int db_get_player_pref_int(int player_id, const char *key, int default_value) {
-    char *value_str = NULL;
-    if (db_prefs_get_one(player_id, key, &value_str) != 0 || !value_str) {
-        return default_value;
+int
+db_get_player_pref_int (int player_id, const char *key, int default_value)
+{
+  char *value_str = NULL;
+  if (db_prefs_get_one (player_id, key, &value_str) != 0 || !value_str)
+    {
+      return default_value;
     }
-    int value = atoi(value_str);
-    free(value_str);
-    return value;
+  int value = atoi (value_str);
+  free (value_str);
+  return value;
 }
 
-int db_get_player_pref_string(int player_id, const char *key, const char *default_value, char *out_buffer, size_t buffer_size) {
-    char *value_str = NULL;
-    if (db_prefs_get_one(player_id, key, &value_str) != 0 || !value_str) {
-        if (default_value) {
-            strncpy(out_buffer, default_value, buffer_size - 1);
-            out_buffer[buffer_size - 1] = '\0';
-        } else {
-            out_buffer[0] = '\0';
-        }
-        return 0;
+int
+db_get_player_pref_string (int player_id, const char *key,
+			   const char *default_value, char *out_buffer,
+			   size_t buffer_size)
+{
+  char *value_str = NULL;
+  if (db_prefs_get_one (player_id, key, &value_str) != 0 || !value_str)
+    {
+      if (default_value)
+	{
+	  strncpy (out_buffer, default_value, buffer_size - 1);
+	  out_buffer[buffer_size - 1] = '\0';
+	}
+      else
+	{
+	  out_buffer[0] = '\0';
+	}
+      return 0;
     }
-    strncpy(out_buffer, value_str, buffer_size - 1);
-    out_buffer[buffer_size - 1] = '\0';
-    free(value_str);
-    return 0;
+  strncpy (out_buffer, value_str, buffer_size - 1);
+  out_buffer[buffer_size - 1] = '\0';
+  free (value_str);
+  return 0;
 }
 
 

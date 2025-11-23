@@ -40,7 +40,7 @@
 #include "server_bulk.h"
 #include "server_news.h"
 #include "server_log.h"
-#include "server_stardock.h" // Include for hardware commands
+#include "server_stardock.h"	// Include for hardware commands
 #include "server_corporation.h"
 
 
@@ -86,192 +86,194 @@ json_t *build_sector_info_json (int sector_id);
 
 
 static const cmd_desc_t k_supported_cmds_fallback[] = {
-    {"admin.notice", "Admin notice"},
-    {"admin.shutdown_warning", "Admin shutdown warning"},
-    {"auth.login", "Authenticate"},
-    {"auth.logout", "Log out"},
-    {"auth.mfa.totp.verify", "Second-factor code"},
-    {"auth.register", "Create a new player"},
-    {"auth.refresh", "Refresh session token"},
-    {"bank.balance", "Get player bank balance"},
-    {"bank.deposit", "Deposit credits to bank"},
-    {"bank.orders.cancel", "Cancel a recurring payment"},
-    {"bank.orders.create", "Create a recurring payment"},
-    {"bank.orders.list", "List recurring payments"},
-    {"bank.statement", "Get bank statement"},
-    {"bank.history", "Get bank history"},
-    {"bank.leaderboard", "Get bank leaderboard"},
-    {"bank.transfer", "Transfer credits between players"},
-    {"bank.withdraw", "Withdraw credits from bank"},
-    {"bounty.list", "List bounties"},
-    {"bounty.post", "Post a bounty"},
-    {"bulk.execute", "Execute a bulk command"},
-    {"chat.broadcast", "Broadcast a chat message"},
-    {"chat.history", "Chat history"},
-    {"chat.send", "Send a chat message"},
-    {"citadel.build", "Build a citadel"},
-    {"citadel.upgrade", "Upgrade a citadel"},
-    {"combat.attack", "Attack a target"},
-    {"combat.deploy_fighters", "Deploy fighters"},
-    {"combat.deploy_mines", "Deploy mines"},
-    {"combat.lay_mines", "Lay mines"},
-    {"combat.status", "Combat status"},
-    {"combat.sweep_mines", "Sweep for mines"},
-    {"corp.balance", "Get corporation balance"},
-    {"corp.deposit", "Deposit to corporation"},
-    {"corp.issue_dividend", "Issue a dividend"},
-    {"corp.set_tax", "Set corporation tax"},
-    {"corp.statement", "Get corporation statement"},
-    {"corp.stock.issue", "Issue corporation stock"},
-    {"corp.withdraw", "Withdraw from corporation"},
-    {"deploy.fighters.list", "List deployed fighters"},
-    {"deploy.mines.list", "List deployed mines"},
-    {"fighters.recall", "Recall deployed fighters"},
-    {"fine.list", "List fines"},
-    {"fine.pay", "Pay a fine"},
-    {"hardware.buy", "Buy ship hardware"},
-    {"hardware.list", "List available ship hardware"},
-    {"insurance.claim.file", "File an insurance claim"},
-    {"insurance.policies.buy", "Buy an insurance policy"},
-    {"insurance.policies.list", "List insurance policies"},
-    {"loan.accept", "Accept a loan"},
-    {"loan.apply", "Apply for a loan"},
-    {"loan.list_active", "List active loans"},
-    {"loan.offers.list", "List loan offers"},
-    {"loan.repay", "Repay a loan"},
-    {"mail.delete", "Delete mail"},
-    {"mail.inbox", "Mail inbox"},
-    {"mail.read", "Read mail"},
-    {"mail.send", "Send mail"},
-    {"market.contracts.buy", "Buy a market contract"},
-    {"market.contracts.list", "List market contracts"},
-    {"market.contracts.sell", "Sell a market contract"},
-    {"market.orders.cancel", "Cancel a market order"},
-    {"market.orders.create", "Create a market order"},
-    {"market.orders.list", "List market orders"},
-    {"mines.recall", "Recall deployed mines"},
-    {"move.autopilot.start", "Start autopilot"},
-    {"move.autopilot.status", "Autopilot status"},
-    {"move.autopilot.stop", "Stop autopilot"},
-    {"move.describe_sector", "Describe a sector"},
-    {"move.pathfind", "Find path between sectors"},
-    {"move.scan", "Scan adjacent sectors"},
-    {"move.transwarp", "Transwarp to a sector"},
-    {"move.warp", "Warp to sector"},
-    {"nav.avoid.add", "Add a sector to the avoid list"},
-    {"nav.avoid.list", "List avoided sectors"},
-    {"nav.avoid.remove", "Remove a sector from the avoid list"},
-    {"nav.avoid.set", "Set a sector to the avoid list"},
-    {"nav.bookmark.add", "Add a bookmark"},
-    {"nav.bookmark.list", "List bookmarks"},
-    {"nav.bookmark.remove", "Remove a bookmark"},
-    {"nav.bookmark.set", "Set a bookmark"},
-    {"news.get_feed", "Get the daily news feed"},
-    {"news.mark_feed_read", "Mark news feed as read"},
-    {"news.read", "Get the daily news feed"},
-    {"notice.ack", "Acknowledge a notice"},
-    {"notice.list", "List notices"},
-    {"notes.list", "List notes"},
-    {"planet.create", "Create a planet"},
-    {"planet.deposit", "Deposit to a planet"},
-    {"planet.genesis", "Create a planet"},
-    {"planet.genesis_create", "Create a genesis planet"},
-    {"planet.harvest", "Harvest from a planet"},
-    {"planet.info", "Planet information"},
-    {"planet.land", "Land on a planet"},
-    {"planet.launch", "Launch from a planet"},
-    {"planet.list_mine", "List my planets"},
-    {"planet.rename", "Rename a planet"},
-    {"planet.transfer_ownership", "Transfer planet ownership"},
-    {"planet.withdraw", "Withdraw from a planet"},
-    {"player.get_avoids", "Get player avoids"},
-    {"player.get_bookmarks", "Get player bookmarks"},
-    {"player.get_notes", "Get player notes"},
-    {"player.get_prefs", "Get player preferences"},
-    {"player.get_settings", "Get player settings"},
-    {"player.get_subscriptions", "Get player subscriptions"},
-    {"player.get_topics", "Get player topics"},
-    {"player.list_online", "List online players"},
-    {"player.my_info", "Current player info"},
-    {"player.rankings", "Player rankings"},
-    {"player.set_avoids", "Set player avoids"},
-    {"player.set_bookmarks", "Set player bookmarks"},
-    {"player.set_prefs", "Set player preferences"},
-    {"player.set_settings", "Set player settings"},
-    {"player.set_subscriptions", "Set player subscriptions"},
-    {"player.set_topics", "Set player topics"},
-    {"player.set_trade_account_preference", "Set trade account preference"},
-    {"port.describe", "Describe a port"},
-    {"port.info", "Port prices/stock in sector"},
-    {"port.status", "Port status"},
-    {"research.projects.fund", "Fund a research project"},
-    {"research.projects.list", "List research projects"},
-    {"s2s.event.relay", "S2S event relay"},
-    {"s2s.planet.genesis", "S2S planet genesis"},
-    {"s2s.planet.transfer", "S2S planet transfer"},
-    {"s2s.player.migrate", "S2S player migrate"},
-    {"s2s.port.restock", "S2S port restock"},
-    {"s2s.replication.heartbeat", "S2S replication heartbeat"},
-    {"sector.info", "Describe current sector"},
-    {"sector.scan", "Scan a sector"},
-    {"sector.scan.density", "Scan sector density"},
-    {"sector.search", "Search a sector"},
-    {"sector.set_beacon", "Set or clear sector beacon"},
-    {"session.disconnect", "Disconnect"},
-    {"session.hello", "Handshake / hello"},
-    {"session.ping", "Ping"},
-    {"ship.claim", "Claim a ship"},
-    {"ship.info", "Ship information"},
-    {"ship.inspect", "Inspect a ship"},
-    {"ship.jettison", "Jettison cargo"},
-    {"ship.repair", "Repair a ship"},
-    {"ship.rename", "Rename a ship"},
-    {"ship.reregister", "Re-register a ship"},
-    {"ship.self_destruct", "Self-destruct a ship"},
-    {"ship.status", "Ship status"},
-    {"ship.transfer_cargo", "Transfer cargo"},
-    {"ship.upgrade", "Upgrade a ship"},
-    {"shipyard.list", "List available ship hulls"},
-    {"shipyard.upgrade", "Upgrade to a new ship hull"},
-    {"tavern.deadpool.place_bet", "Place a bet on a player's destruction"},
-    {"tavern.dice.play", "Play bar dice"},
-    {"tavern.graffiti.post", "Post a message on the graffiti wall"},
-    {"tavern.highstakes.play", "Play at the high-stakes table"},
-    {"tavern.loan.pay", "Repay a loan from the loan shark"},
-    {"tavern.loan.take", "Take a loan from the loan shark"},
-    {"tavern.lottery.buy_ticket", "Buy a lottery ticket"},
-    {"tavern.lottery.status", "Check lottery status"},
-    {"tavern.raffle.buy_ticket", "Buy a raffle ticket"},
-    {"tavern.round.buy", "Buy a round for the tavern"},
-    {"tavern.rumour.get_hint", "Get a hint from the rumour mill"},
-    {"tavern.trader.buy_password", "Buy an underground password from the grimy trader"},
-    {"tavern.barcharts.get_prices_summary", "Get a summary of commodity prices"},
-    {"stock.exchange.list_stocks", "List stocks on the exchange"},
-    {"stock.exchange.orders.cancel", "Cancel a stock order"},
-    {"stock.exchange.orders.create", "Create a stock order"},
-    {"stock.portfolio.list", "List stock portfolio"},
-    {"subscribe.add", "Add a subscription"},
-    {"subscribe.catalog", "Subscription catalog"},
-    {"subscribe.list", "List subscriptions"},
-    {"subscribe.remove", "Remove a subscription"},
-    {"sys.notice.create", "Sysop command to create a notice"},
-    {"sys.raw_sql_exec", "Sysop command to execute raw SQL"},
-    {"sys.test_news_cron", "Sysop command to test news cron"},
-    {"system.capabilities", "Feature flags, schemas, counts"},
-    {"system.cmd_list", "Flat list of all commands"},
-    {"system.describe_schema", "Describe commands in a schema"},
-    {"system.disconnect", "Disconnect"},
-    {"system.hello", "Handshake / hello"},
-    {"system.schema_list", "List all schema namespaces"},
-    {"trade.accept", "Accept a private trade offer"},
-    {"trade.buy", "Buy commodity from port"},
-    {"trade.cancel", "Cancel a pending trade offer"},
-    {"trade.history", "View recent trade transactions"},
-    {"trade.jettison", "Dump cargo into space (Optional)"},
-    {"trade.offer", "Create a private player-to-player trade offer"},
-    {"trade.port_info", "Port prices/stock in sector"},
-    {"trade.quote", "Get a quote for a trade action (Optional)"},
-    {"trade.sell", "Sell commodity to port"},
+  {"admin.notice", "Admin notice"},
+  {"admin.shutdown_warning", "Admin shutdown warning"},
+  {"auth.login", "Authenticate"},
+  {"auth.logout", "Log out"},
+  {"auth.mfa.totp.verify", "Second-factor code"},
+  {"auth.register", "Create a new player"},
+  {"auth.refresh", "Refresh session token"},
+  {"bank.balance", "Get player bank balance"},
+  {"bank.deposit", "Deposit credits to bank"},
+  {"bank.orders.cancel", "Cancel a recurring payment"},
+  {"bank.orders.create", "Create a recurring payment"},
+  {"bank.orders.list", "List recurring payments"},
+  {"bank.statement", "Get bank statement"},
+  {"bank.history", "Get bank history"},
+  {"bank.leaderboard", "Get bank leaderboard"},
+  {"bank.transfer", "Transfer credits between players"},
+  {"bank.withdraw", "Withdraw credits from bank"},
+  {"bounty.list", "List bounties"},
+  {"bounty.post", "Post a bounty"},
+  {"bulk.execute", "Execute a bulk command"},
+  {"chat.broadcast", "Broadcast a chat message"},
+  {"chat.history", "Chat history"},
+  {"chat.send", "Send a chat message"},
+  {"citadel.build", "Build a citadel"},
+  {"citadel.upgrade", "Upgrade a citadel"},
+  {"combat.attack", "Attack a target"},
+  {"combat.deploy_fighters", "Deploy fighters"},
+  {"combat.deploy_mines", "Deploy mines"},
+  {"combat.lay_mines", "Lay mines"},
+  {"combat.status", "Combat status"},
+  {"combat.sweep_mines", "Sweep for mines"},
+  {"corp.balance", "Get corporation balance"},
+  {"corp.deposit", "Deposit to corporation"},
+  {"corp.issue_dividend", "Issue a dividend"},
+  {"corp.set_tax", "Set corporation tax"},
+  {"corp.statement", "Get corporation statement"},
+  {"corp.stock.issue", "Issue corporation stock"},
+  {"corp.withdraw", "Withdraw from corporation"},
+  {"deploy.fighters.list", "List deployed fighters"},
+  {"deploy.mines.list", "List deployed mines"},
+  {"fighters.recall", "Recall deployed fighters"},
+  {"fine.list", "List fines"},
+  {"fine.pay", "Pay a fine"},
+  {"hardware.buy", "Buy ship hardware"},
+  {"hardware.list", "List available ship hardware"},
+  {"insurance.claim.file", "File an insurance claim"},
+  {"insurance.policies.buy", "Buy an insurance policy"},
+  {"insurance.policies.list", "List insurance policies"},
+  {"loan.accept", "Accept a loan"},
+  {"loan.apply", "Apply for a loan"},
+  {"loan.list_active", "List active loans"},
+  {"loan.offers.list", "List loan offers"},
+  {"loan.repay", "Repay a loan"},
+  {"mail.delete", "Delete mail"},
+  {"mail.inbox", "Mail inbox"},
+  {"mail.read", "Read mail"},
+  {"mail.send", "Send mail"},
+  {"market.contracts.buy", "Buy a market contract"},
+  {"market.contracts.list", "List market contracts"},
+  {"market.contracts.sell", "Sell a market contract"},
+  {"market.orders.cancel", "Cancel a market order"},
+  {"market.orders.create", "Create a market order"},
+  {"market.orders.list", "List market orders"},
+  {"mines.recall", "Recall deployed mines"},
+  {"move.autopilot.start", "Start autopilot"},
+  {"move.autopilot.status", "Autopilot status"},
+  {"move.autopilot.stop", "Stop autopilot"},
+  {"move.describe_sector", "Describe a sector"},
+  {"move.pathfind", "Find path between sectors"},
+  {"move.scan", "Scan adjacent sectors"},
+  {"move.transwarp", "Transwarp to a sector"},
+  {"move.warp", "Warp to sector"},
+  {"nav.avoid.add", "Add a sector to the avoid list"},
+  {"nav.avoid.list", "List avoided sectors"},
+  {"nav.avoid.remove", "Remove a sector from the avoid list"},
+  {"nav.avoid.set", "Set a sector to the avoid list"},
+  {"nav.bookmark.add", "Add a bookmark"},
+  {"nav.bookmark.list", "List bookmarks"},
+  {"nav.bookmark.remove", "Remove a bookmark"},
+  {"nav.bookmark.set", "Set a bookmark"},
+  {"news.get_feed", "Get the daily news feed"},
+  {"news.mark_feed_read", "Mark news feed as read"},
+  {"news.read", "Get the daily news feed"},
+  {"notice.ack", "Acknowledge a notice"},
+  {"notice.list", "List notices"},
+  {"notes.list", "List notes"},
+  {"planet.create", "Create a planet"},
+  {"planet.deposit", "Deposit to a planet"},
+  {"planet.genesis", "Create a planet"},
+  {"planet.genesis_create", "Create a genesis planet"},
+  {"planet.harvest", "Harvest from a planet"},
+  {"planet.info", "Planet information"},
+  {"planet.land", "Land on a planet"},
+  {"planet.launch", "Launch from a planet"},
+  {"planet.list_mine", "List my planets"},
+  {"planet.rename", "Rename a planet"},
+  {"planet.transfer_ownership", "Transfer planet ownership"},
+  {"planet.withdraw", "Withdraw from a planet"},
+  {"player.get_avoids", "Get player avoids"},
+  {"player.get_bookmarks", "Get player bookmarks"},
+  {"player.get_notes", "Get player notes"},
+  {"player.get_prefs", "Get player preferences"},
+  {"player.get_settings", "Get player settings"},
+  {"player.get_subscriptions", "Get player subscriptions"},
+  {"player.get_topics", "Get player topics"},
+  {"player.list_online", "List online players"},
+  {"player.my_info", "Current player info"},
+  {"player.rankings", "Player rankings"},
+  {"player.set_avoids", "Set player avoids"},
+  {"player.set_bookmarks", "Set player bookmarks"},
+  {"player.set_prefs", "Set player preferences"},
+  {"player.set_settings", "Set player settings"},
+  {"player.set_subscriptions", "Set player subscriptions"},
+  {"player.set_topics", "Set player topics"},
+  {"player.set_trade_account_preference", "Set trade account preference"},
+  {"port.describe", "Describe a port"},
+  {"port.info", "Port prices/stock in sector"},
+  {"port.status", "Port status"},
+  {"research.projects.fund", "Fund a research project"},
+  {"research.projects.list", "List research projects"},
+  {"s2s.event.relay", "S2S event relay"},
+  {"s2s.planet.genesis", "S2S planet genesis"},
+  {"s2s.planet.transfer", "S2S planet transfer"},
+  {"s2s.player.migrate", "S2S player migrate"},
+  {"s2s.port.restock", "S2S port restock"},
+  {"s2s.replication.heartbeat", "S2S replication heartbeat"},
+  {"sector.info", "Describe current sector"},
+  {"sector.scan", "Scan a sector"},
+  {"sector.scan.density", "Scan sector density"},
+  {"sector.search", "Search a sector"},
+  {"sector.set_beacon", "Set or clear sector beacon"},
+  {"session.disconnect", "Disconnect"},
+  {"session.hello", "Handshake / hello"},
+  {"session.ping", "Ping"},
+  {"ship.claim", "Claim a ship"},
+  {"ship.info", "Ship information"},
+  {"ship.inspect", "Inspect a ship"},
+  {"ship.jettison", "Jettison cargo"},
+  {"ship.repair", "Repair a ship"},
+  {"ship.rename", "Rename a ship"},
+  {"ship.reregister", "Re-register a ship"},
+  {"ship.self_destruct", "Self-destruct a ship"},
+  {"ship.status", "Ship status"},
+  {"ship.transfer_cargo", "Transfer cargo"},
+  {"ship.upgrade", "Upgrade a ship"},
+  {"shipyard.list", "List available ship hulls"},
+  {"shipyard.upgrade", "Upgrade to a new ship hull"},
+  {"tavern.deadpool.place_bet", "Place a bet on a player's destruction"},
+  {"tavern.dice.play", "Play bar dice"},
+  {"tavern.graffiti.post", "Post a message on the graffiti wall"},
+  {"tavern.highstakes.play", "Play at the high-stakes table"},
+  {"tavern.loan.pay", "Repay a loan from the loan shark"},
+  {"tavern.loan.take", "Take a loan from the loan shark"},
+  {"tavern.lottery.buy_ticket", "Buy a lottery ticket"},
+  {"tavern.lottery.status", "Check lottery status"},
+  {"tavern.raffle.buy_ticket", "Buy a raffle ticket"},
+  {"tavern.round.buy", "Buy a round for the tavern"},
+  {"tavern.rumour.get_hint", "Get a hint from the rumour mill"},
+  {"tavern.trader.buy_password",
+   "Buy an underground password from the grimy trader"},
+  {"tavern.barcharts.get_prices_summary",
+   "Get a summary of commodity prices"},
+  {"stock.exchange.list_stocks", "List stocks on the exchange"},
+  {"stock.exchange.orders.cancel", "Cancel a stock order"},
+  {"stock.exchange.orders.create", "Create a stock order"},
+  {"stock.portfolio.list", "List stock portfolio"},
+  {"subscribe.add", "Add a subscription"},
+  {"subscribe.catalog", "Subscription catalog"},
+  {"subscribe.list", "List subscriptions"},
+  {"subscribe.remove", "Remove a subscription"},
+  {"sys.notice.create", "Sysop command to create a notice"},
+  {"sys.raw_sql_exec", "Sysop command to execute raw SQL"},
+  {"sys.test_news_cron", "Sysop command to test news cron"},
+  {"system.capabilities", "Feature flags, schemas, counts"},
+  {"system.cmd_list", "Flat list of all commands"},
+  {"system.describe_schema", "Describe commands in a schema"},
+  {"system.disconnect", "Disconnect"},
+  {"system.hello", "Handshake / hello"},
+  {"system.schema_list", "List all schema namespaces"},
+  {"trade.accept", "Accept a private trade offer"},
+  {"trade.buy", "Buy commodity from port"},
+  {"trade.cancel", "Cancel a pending trade offer"},
+  {"trade.history", "View recent trade transactions"},
+  {"trade.jettison", "Dump cargo into space (Optional)"},
+  {"trade.offer", "Create a private player-to-player trade offer"},
+  {"trade.port_info", "Port prices/stock in sector"},
+  {"trade.quote", "Get a quote for a trade action (Optional)"},
+  {"trade.sell", "Sell commodity to port"},
 };
 
 // Weak fallback: satisfies server_envelope.o at link time.
@@ -661,7 +663,7 @@ process_message (client_ctx_t *ctx, json_t *root)
       if (rc == SQLITE_OK && pid > 0)
 	{
 	  ctx->player_id = pid;
-    ctx->corp_id = h_get_player_corp_id(db_get_handle(), pid);
+	  ctx->corp_id = h_get_player_corp_id (db_get_handle (), pid);
 	  if (ctx->sector_id <= 0)
 	    ctx->sector_id = 1;	/* or load from DB */
 	}
@@ -734,9 +736,11 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       rc = cmd_system_describe_schema (ctx, root);
     }
-  else if ((!strcasecmp (c, "session.ping")) || (!strcasecmp (c, "session.hello")) || (!strcasecmp (c, "system.hello")))
+  else if ((!strcasecmp (c, "session.ping"))
+	   || (!strcasecmp (c, "session.hello"))
+	   || (!strcasecmp (c, "system.hello")))
     {
-      rc = cmd_system_hello (ctx, root); 
+      rc = cmd_system_hello (ctx, root);
     }
   else if (!strcasecmp (c, "session.disconnect")
 	   || !strcasecmp (c, "system.disconnect"))
@@ -895,110 +899,153 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       cmd_player_set_prefs (ctx, root);
     }
-    else if (streq (cmd, "player.set_trade_account_preference"))
-      {
-        rc = cmd_player_set_trade_account_preference (ctx, root);
-      }
+  else if (streq (cmd, "player.set_trade_account_preference"))
+    {
+      rc = cmd_player_set_trade_account_preference (ctx, root);
+    }
 
 /* ---------- CORPORATION & STOCK ---------- */
-  else if (!strcasecmp(c, "corp.create")) { rc = cmd_corp_create(ctx, root); }
-  else if (!strcasecmp(c, "corp.dissolve")) { rc = cmd_corp_dissolve(ctx, root); }
-  else if (!strcasecmp(c, "corp.invite")) { rc = cmd_corp_invite(ctx, root); }
-  else if (!strcasecmp(c, "corp.kick")) { rc = cmd_corp_kick(ctx, root); }
-  else if (!strcasecmp(c, "corp.join")) { rc = cmd_corp_join(ctx, root); }
-  else if (!strcasecmp(c, "corp.leave")) { rc = cmd_corp_leave(ctx, root); }
-  else if (!strcasecmp(c, "corp.list")) { rc = cmd_corp_list(ctx, root); }
-  else if (!strcasecmp(c, "corp.roster")) { rc = cmd_corp_roster(ctx, root); }
-  else if (!strcasecmp(c, "corp.balance")) { rc = cmd_corp_balance(ctx, root); }
-  else if (!strcasecmp(c, "corp.deposit")) { rc = cmd_corp_deposit(ctx, root); }
-  else if (!strcasecmp(c, "corp.withdraw")) { rc = cmd_corp_withdraw(ctx, root); }
-  else if (!strcasecmp(c, "corp.statement")) { rc = cmd_corp_statement(ctx, root); }
-  else if (!strcasecmp(c, "corp.status")) { rc = cmd_corp_status(ctx, root); }
-  else if (strncasecmp(c, "stock.", 6) == 0) { rc = cmd_stock(ctx, root); }
-    else if (!strcasecmp (c, "corp.transfer_ceo"))
+  else if (!strcasecmp (c, "corp.create"))
+    {
+      rc = cmd_corp_create (ctx, root);
+    }
+  else if (!strcasecmp (c, "corp.dissolve"))
+    {
+      rc = cmd_corp_dissolve (ctx, root);
+    }
+  else if (!strcasecmp (c, "corp.invite"))
+    {
+      rc = cmd_corp_invite (ctx, root);
+    }
+  else if (!strcasecmp (c, "corp.kick"))
+    {
+      rc = cmd_corp_kick (ctx, root);
+    }
+  else if (!strcasecmp (c, "corp.join"))
+    {
+      rc = cmd_corp_join (ctx, root);
+    }
+  else if (!strcasecmp (c, "corp.leave"))
+    {
+      rc = cmd_corp_leave (ctx, root);
+    }
+  else if (!strcasecmp (c, "corp.list"))
+    {
+      rc = cmd_corp_list (ctx, root);
+    }
+  else if (!strcasecmp (c, "corp.roster"))
+    {
+      rc = cmd_corp_roster (ctx, root);
+    }
+  else if (!strcasecmp (c, "corp.balance"))
+    {
+      rc = cmd_corp_balance (ctx, root);
+    }
+  else if (!strcasecmp (c, "corp.deposit"))
+    {
+      rc = cmd_corp_deposit (ctx, root);
+    }
+  else if (!strcasecmp (c, "corp.withdraw"))
+    {
+      rc = cmd_corp_withdraw (ctx, root);
+    }
+  else if (!strcasecmp (c, "corp.statement"))
+    {
+      rc = cmd_corp_statement (ctx, root);
+    }
+  else if (!strcasecmp (c, "corp.status"))
+    {
+      rc = cmd_corp_status (ctx, root);
+    }
+  else if (strncasecmp (c, "stock.", 6) == 0)
+    {
+      rc = cmd_stock (ctx, root);
+    }
+  else if (!strcasecmp (c, "corp.transfer_ceo"))
     {
       rc = cmd_corp_transfer_ceo (ctx, root);
     }
 
-  
+
   /* ---------- HARDWARE ---------- */
-    else if (!strcasecmp (c, "hardware.list"))
-      {
-        rc = cmd_hardware_list (ctx, root);
-      }
-    else if (!strcasecmp (c, "hardware.buy"))
-      {
-        rc = cmd_hardware_buy (ctx, root);
-      }
+  else if (!strcasecmp (c, "hardware.list"))
+    {
+      rc = cmd_hardware_list (ctx, root);
+    }
+  else if (!strcasecmp (c, "hardware.buy"))
+    {
+      rc = cmd_hardware_buy (ctx, root);
+    }
   /* ---------- SHIPYARD ---------- */
-    else if (!strcasecmp (c, "shipyard.list"))
-      {
-        rc = cmd_shipyard_list (ctx, root);
-      }
-    else if (!strcasecmp (c, "shipyard.upgrade"))
-      {
-        rc = cmd_shipyard_upgrade (ctx, root);
-      }
+  else if (!strcasecmp (c, "shipyard.list"))
+    {
+      rc = cmd_shipyard_list (ctx, root);
+    }
+  else if (!strcasecmp (c, "shipyard.upgrade"))
+    {
+      rc = cmd_shipyard_upgrade (ctx, root);
+    }
   /* ---------- TAVERN ---------- */
-    else if (!strcasecmp (c, "tavern.lottery.buy_ticket"))
-      {
-        rc = cmd_tavern_lottery_buy_ticket (ctx, root);
-      }
-    else if (!strcasecmp (c, "tavern.lottery.status"))
-      {
-        rc = cmd_tavern_lottery_status (ctx, root);
-      }
-    else if (!strcasecmp (c, "tavern.deadpool.place_bet"))
-      {
-        rc = cmd_tavern_deadpool_place_bet (ctx, root);
-      }
-    else if (!strcasecmp (c, "tavern.dice.play"))
-      {
-        rc = cmd_tavern_dice_play (ctx, root);
-      }
-    else if (!strcasecmp (c, "tavern.highstakes.play"))
-      {
-        rc = cmd_tavern_highstakes_play (ctx, root);
-      }
-    else if (!strcasecmp (c, "tavern.raffle.buy_ticket"))
-      {
-        rc = cmd_tavern_raffle_buy_ticket (ctx, root);
-      }
-    else if (!strcasecmp (c, "tavern.trader.buy_password"))
-      {
-        rc = cmd_tavern_trader_buy_password (ctx, root);
-      }
-    else if (!strcasecmp (c, "tavern.graffiti.post"))
-      {
-        rc = cmd_tavern_graffiti_post (ctx, root);
-      }
-    else if (!strcasecmp (c, "tavern.round.buy"))
-      {
-        rc = cmd_tavern_round_buy (ctx, root);
-      }
-    else if (!strcasecmp (c, "tavern.loan.take"))
-      {
-        rc = cmd_tavern_loan_take (ctx, root);
-      }
-    else if (!strcasecmp (c, "tavern.loan.pay"))
-      {
-        rc = cmd_tavern_loan_pay (ctx, root);
-      }
-    else if (!strcasecmp (c, "tavern.rumour.get_hint"))
-      {
-        rc = cmd_tavern_rumour_get_hint (ctx, root);
-      }
-    else if (!strcasecmp (c, "tavern.barcharts.get_prices_summary"))
-      {
-        rc = cmd_tavern_barcharts_get_prices_summary (ctx, root);
-      }
+  else if (!strcasecmp (c, "tavern.lottery.buy_ticket"))
+    {
+      rc = cmd_tavern_lottery_buy_ticket (ctx, root);
+    }
+  else if (!strcasecmp (c, "tavern.lottery.status"))
+    {
+      rc = cmd_tavern_lottery_status (ctx, root);
+    }
+  else if (!strcasecmp (c, "tavern.deadpool.place_bet"))
+    {
+      rc = cmd_tavern_deadpool_place_bet (ctx, root);
+    }
+  else if (!strcasecmp (c, "tavern.dice.play"))
+    {
+      rc = cmd_tavern_dice_play (ctx, root);
+    }
+  else if (!strcasecmp (c, "tavern.highstakes.play"))
+    {
+      rc = cmd_tavern_highstakes_play (ctx, root);
+    }
+  else if (!strcasecmp (c, "tavern.raffle.buy_ticket"))
+    {
+      rc = cmd_tavern_raffle_buy_ticket (ctx, root);
+    }
+  else if (!strcasecmp (c, "tavern.trader.buy_password"))
+    {
+      rc = cmd_tavern_trader_buy_password (ctx, root);
+    }
+  else if (!strcasecmp (c, "tavern.graffiti.post"))
+    {
+      rc = cmd_tavern_graffiti_post (ctx, root);
+    }
+  else if (!strcasecmp (c, "tavern.round.buy"))
+    {
+      rc = cmd_tavern_round_buy (ctx, root);
+    }
+  else if (!strcasecmp (c, "tavern.loan.take"))
+    {
+      rc = cmd_tavern_loan_take (ctx, root);
+    }
+  else if (!strcasecmp (c, "tavern.loan.pay"))
+    {
+      rc = cmd_tavern_loan_pay (ctx, root);
+    }
+  else if (!strcasecmp (c, "tavern.rumour.get_hint"))
+    {
+      rc = cmd_tavern_rumour_get_hint (ctx, root);
+    }
+  else if (!strcasecmp (c, "tavern.barcharts.get_prices_summary"))
+    {
+      rc = cmd_tavern_barcharts_get_prices_summary (ctx, root);
+    }
 
   /* ---------- SHIP ---------- */
-    else if (!strcasecmp (c, "ship.inspect"))
+  else if (!strcasecmp (c, "ship.inspect"))
     {
       rc = cmd_ship_inspect (ctx, root);
     }
-  else if (!strcasecmp (c, "ship.rename") || !strcasecmp (c, "ship.reregister"))
+  else if (!strcasecmp (c, "ship.rename")
+	   || !strcasecmp (c, "ship.reregister"))
     {
       rc = cmd_ship_rename (ctx, root);
     }
@@ -1037,7 +1084,8 @@ process_message (client_ctx_t *ctx, json_t *root)
 
 /* ---------- PORTS / TRADE ---------- */
   else if (!strcasecmp (c, "port.info") || !strcasecmp (c, "port.status")
-	   || !strcasecmp (c, "trade.port_info") || !strcasecmp (c, "port.describe"))
+	   || !strcasecmp (c, "trade.port_info")
+	   || !strcasecmp (c, "port.describe"))
     {
       rc = cmd_trade_port_info (ctx, root);
     }
@@ -1075,7 +1123,8 @@ process_message (client_ctx_t *ctx, json_t *root)
     }
 
 /* ---------- UNIVERSE / SECTOR / MOVE ---------- */
-  else if (!strcasecmp (c, "move.describe_sector") || !strcasecmp (c, "sector.info"))
+  else if (!strcasecmp (c, "move.describe_sector")
+	   || !strcasecmp (c, "sector.info"))
     {
       rc = cmd_move_describe_sector (ctx, root);	/* NIY or real */
     }
@@ -1113,11 +1162,11 @@ process_message (client_ctx_t *ctx, json_t *root)
     }
   else if (!strcasecmp (c, "sector.scan.density"))
     {
-      cmd_sector_scan_density (ctx, root); 
+      cmd_sector_scan_density (ctx, root);
     }
   else if (!strcasecmp (c, "sector.scan"))
     {
-      cmd_sector_scan (ctx, root);	
+      cmd_sector_scan (ctx, root);
     }
 
 /* ---------- PLANETS / CITADEL ---------- */
@@ -1193,15 +1242,15 @@ process_message (client_ctx_t *ctx, json_t *root)
     }
   else if (!strcasecmp (c, "deploy.fighters.list"))
     {
-      rc = cmd_deploy_fighters_list (ctx, root);        /* list deployed fighters */
+      rc = cmd_deploy_fighters_list (ctx, root);	/* list deployed fighters */
     }
   else if (!strcasecmp (c, "deploy.mines.list"))
     {
-      rc = cmd_deploy_mines_list (ctx, root);           /* list deployed mines */
-    }  
+      rc = cmd_deploy_mines_list (ctx, root);	/* list deployed mines */
+    }
   else if (!strcasecmp (c, "fighters.recall"))
     {
-      rc = cmd_fighters_recall (ctx, root);             /* recall deployed fighters */
+      rc = cmd_fighters_recall (ctx, root);	/* recall deployed fighters */
     }
   else if (!strcasecmp (c, "combat.deploy_mines"))
     {

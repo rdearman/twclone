@@ -125,8 +125,9 @@ cmd_sys_notice_create (client_ctx_t *ctx, json_t *root)
     }
 
   if (!sev
-            || (strcasecmp (sev, "info") && strcasecmp (sev, "warn")
-                && strcasecmp (sev, "error")))    {
+      || (strcasecmp (sev, "info") && strcasecmp (sev, "warn")
+	  && strcasecmp (sev, "error")))
+    {
       sev = "info";
     }
 
@@ -438,22 +439,29 @@ server_broadcast_event (const char *event_type, json_t *data)
 
 // Broadcast an event (type + payload) to all currently-connected players
 // in a specific sector. Payload is borrowed (not stolen).
-int server_broadcast_to_sector(int sector_id, const char *event_name, json_t *payload) {
-    if (!event_name || !payload || sector_id <= 0) {
-        return -1;
+int
+server_broadcast_to_sector (int sector_id, const char *event_name,
+			    json_t *payload)
+{
+  if (!event_name || !payload || sector_id <= 0)
+    {
+      return -1;
     }
 
-    // Create a copy of the payload for each recipient as comm_publish_sector_event consumes the reference
-    json_t *payload_copy = json_deep_copy(payload);
-    if (!payload_copy) {
-        LOGE("server_broadcast_to_sector: Failed to deep copy payload for sector %d.", sector_id);
-        return -1;
+  // Create a copy of the payload for each recipient as comm_publish_sector_event consumes the reference
+  json_t *payload_copy = json_deep_copy (payload);
+  if (!payload_copy)
+    {
+      LOGE
+	("server_broadcast_to_sector: Failed to deep copy payload for sector %d.",
+	 sector_id);
+      return -1;
     }
 
-    // This function acts as a wrapper to comm_publish_sector_event, ensuring sector-specific filtering
-    comm_publish_sector_event(sector_id, event_name, payload_copy);
+  // This function acts as a wrapper to comm_publish_sector_event, ensuring sector-specific filtering
+  comm_publish_sector_event (sector_id, event_name, payload_copy);
 
-    return 0; // Success
+  return 0;			// Success
 }
 
 /* ===================== broadcast ===================== */
@@ -1079,12 +1087,7 @@ cmd_mail_inbox (client_ctx_t *ctx, json_t *root)
   if (limit <= 0 || limit > 200)
     limit = 50;
 
-  const char *SQL = "SELECT m.id, m.thread_id, m.sender_id, p.name, m.subject, m.sent_at, m.read_at "
-    "FROM mail m JOIN players p ON m.sender_id = p.id "
-    "WHERE m.recipient_id=?1 AND m.deleted=0 AND m.archived=0 "
-    "  AND (?2=0 OR m.id<?2) "
-    "ORDER BY m.id DESC "
-    "LIMIT ?3;";	/* uses idx_mail_inbox */
+  const char *SQL = "SELECT m.id, m.thread_id, m.sender_id, p.name, m.subject, m.sent_at, m.read_at " "FROM mail m JOIN players p ON m.sender_id = p.id " "WHERE m.recipient_id=?1 AND m.deleted=0 AND m.archived=0 " "  AND (?2=0 OR m.id<?2) " "ORDER BY m.id DESC " "LIMIT ?3;";	/* uses idx_mail_inbox */
 
   sqlite3_stmt *st = NULL;
   if (sqlite3_prepare_v2 (db, SQL, -1, &st, NULL) != SQLITE_OK)
@@ -1108,10 +1111,14 @@ cmd_mail_inbox (client_ctx_t *ctx, json_t *root)
 	SQLITE_NULL ? 0 : sqlite3_column_int (st,
 					      1);
       int sender_id = sqlite3_column_int (st, 2);
-      char *sender_name = strdup((const char *) sqlite3_column_text (st, 3));
-      char *subject = strdup((const char *) sqlite3_column_text (st, 4));
-      char *sent_at = strdup((const char *) sqlite3_column_text (st, 5));
-      char *read_at = sqlite3_column_type(st, 6) == SQLITE_NULL ? NULL : strdup((const char *) sqlite3_column_text (st, 6));
+      char *sender_name = strdup ((const char *) sqlite3_column_text (st, 3));
+      char *subject = strdup ((const char *) sqlite3_column_text (st, 4));
+      char *sent_at = strdup ((const char *) sqlite3_column_text (st, 5));
+      char *read_at =
+	sqlite3_column_type (st,
+			     6) ==
+	SQLITE_NULL ? NULL : strdup ((const char *)
+				     sqlite3_column_text (st, 6));
 
       json_t *row = json_pack ("{s:i, s:i, s:i, s:s, s:s, s:s}",
 			       "id", id,
@@ -1124,10 +1131,10 @@ cmd_mail_inbox (client_ctx_t *ctx, json_t *root)
 	json_object_set_new (row, "read_at", json_string (read_at));
       json_array_append_new (items, row);
       last_id = id;
-      free(sender_name);
-      free(subject);
-      free(sent_at);
-      free(read_at);
+      free (sender_name);
+      free (subject);
+      free (sent_at);
+      free (read_at);
     }
   sqlite3_finalize (st);
 
@@ -1150,17 +1157,21 @@ cmd_mail_read (client_ctx_t *ctx, json_t *root)
 {
   sqlite3 *db = db_get_handle ();
   json_t *data = json_object_get (root, "data");
-  if (!data) {
-    send_enveloped_error (ctx->fd, root, 1300, "Invalid request schema");
-    return 0;
-  }
+  if (!data)
+    {
+      send_enveloped_error (ctx->fd, root, 1300, "Invalid request schema");
+      return 0;
+    }
 
   int id = (int) json_integer_value (json_object_get (data, "id"));
-  if (id <= 0) {
-    send_enveloped_error (ctx->fd, root, 1301, "Missing required field: id");
-    return 0;
-  }
-  LOGI("cmd_mail_read: reading mail id %d for player %d", id, ctx->player_id);
+  if (id <= 0)
+    {
+      send_enveloped_error (ctx->fd, root, 1301,
+			    "Missing required field: id");
+      return 0;
+    }
+  LOGI ("cmd_mail_read: reading mail id %d for player %d", id,
+	ctx->player_id);
 
   /* Load and verify ownership */
   const char *SEL =
@@ -1169,7 +1180,7 @@ cmd_mail_read (client_ctx_t *ctx, json_t *root)
   sqlite3_stmt *st = NULL;
   if (sqlite3_prepare_v2 (db, SEL, -1, &st, NULL) != SQLITE_OK)
     {
-      LOGE("cmd_mail_read: prepare failed: %s", sqlite3_errmsg(db));
+      LOGE ("cmd_mail_read: prepare failed: %s", sqlite3_errmsg (db));
       if (st)
 	sqlite3_finalize (st);
       send_enveloped_error (ctx->fd, root, 500, "db error");
@@ -1180,22 +1191,26 @@ cmd_mail_read (client_ctx_t *ctx, json_t *root)
 
   if (sqlite3_step (st) != SQLITE_ROW)
     {
-      LOGI("cmd_mail_read: mail not found or not owner");
+      LOGI ("cmd_mail_read: mail not found or not owner");
       sqlite3_finalize (st);
-      send_enveloped_error (ctx->fd, root, 1900, "Recipient not found or message not yours");
+      send_enveloped_error (ctx->fd, root, 1900,
+			    "Recipient not found or message not yours");
       return 0;
     }
 
-  LOGI("cmd_mail_read: mail found, processing...");
+  LOGI ("cmd_mail_read: mail found, processing...");
   int thread_id =
     sqlite3_column_type (st, 1) == SQLITE_NULL ? 0 : sqlite3_column_int (st,
 									 1);
   int sender_id = sqlite3_column_int (st, 2);
-  char *sender_name = strdup((const char *) sqlite3_column_text (st, 3));
-  char *subject = strdup((const char *) sqlite3_column_text (st, 4));
-  char *body = strdup((const char *) sqlite3_column_text (st, 5));
-  char *sent_at = strdup((const char *) sqlite3_column_text (st, 6));
-  char *read_at = sqlite3_column_type(st, 7) == SQLITE_NULL ? NULL : strdup((const char *) sqlite3_column_text (st, 7));
+  char *sender_name = strdup ((const char *) sqlite3_column_text (st, 3));
+  char *subject = strdup ((const char *) sqlite3_column_text (st, 4));
+  char *body = strdup ((const char *) sqlite3_column_text (st, 5));
+  char *sent_at = strdup ((const char *) sqlite3_column_text (st, 6));
+  char *read_at =
+    sqlite3_column_type (st,
+			 7) ==
+    SQLITE_NULL ? NULL : strdup ((const char *) sqlite3_column_text (st, 7));
   sqlite3_finalize (st);
 
   /* Mark read if needed */
@@ -1236,11 +1251,11 @@ cmd_mail_read (client_ctx_t *ctx, json_t *root)
     }
 
   send_enveloped_ok (ctx->fd, root, "mail.read_v1", resp);
-  free(sender_name);
-  free(subject);
-  free(body);
-  free(sent_at);
-  free(read_at);
+  free (sender_name);
+  free (subject);
+  free (body);
+  free (sent_at);
+  free (read_at);
   return 0;
 }
 

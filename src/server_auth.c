@@ -8,9 +8,9 @@
 #include "config.h"
 #include "server_cmds.h"
 #include "server_envelope.h"
-#include <stdlib.h> // For rand() and srand()
-#include <time.h>   // For time()
-#include "server_players.h" // For h_send_message_to_player
+#include <stdlib.h>		// For rand() and srand()
+#include <time.h>		// For time()
+#include "server_players.h"	// For h_send_message_to_player
 #include "server_config.h"
 #include "database.h"
 #include "db_player_settings.h"
@@ -231,7 +231,7 @@ hydrate_player_defaults (int player_id)
 int
 cmd_auth_login (client_ctx_t *ctx, json_t *root)
 {
-  LOGI("cmd_auth_login called");
+  LOGI ("cmd_auth_login called");
   /* NEW: pull fields from the "data" object, not the root */
   json_t *jdata = json_object_get (root, "data");
   const char *name = NULL, *pass = NULL;
@@ -243,7 +243,7 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
       if (!json_is_string (jname))
 	jname = json_object_get (jdata, "player_name");
       if (!json_is_string (jname))
-    jname = json_object_get (jdata, "username");
+	jname = json_object_get (jdata, "username");
       json_t *jpass = json_object_get (jdata, "password");
 
       name = json_is_string (jname) ? json_string_value (jname) : NULL;
@@ -259,55 +259,84 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
     {
       int player_id = 0;
       int rc = play_login (name, pass, &player_id);
-      LOGI("play_login returned %d for player %s", rc, name);
+      LOGI ("play_login returned %d for player %s", rc, name);
       if (rc == AUTH_OK)
 	{
-        sqlite3 *dbh = db_get_handle();
-        long long current_timestamp = time(NULL);
-        char podded_status_str[32] = {0};
-        long long big_sleep_until = 0;
+	  sqlite3 *dbh = db_get_handle ();
+	  long long current_timestamp = time (NULL);
+	  char podded_status_str[32] = { 0 };
+	  long long big_sleep_until = 0;
 
-        // Check player's podded status
-        sqlite3_stmt *ps_st = NULL;
-        const char *sql_get_podded_status = "SELECT status, big_sleep_until FROM podded_status WHERE player_id = ?;";
-        int ps_rc = sqlite3_prepare_v2(dbh, sql_get_podded_status, -1, &ps_st, NULL);
-        if (ps_rc == SQLITE_OK) {
-            sqlite3_bind_int(ps_st, 1, player_id);
-            if (sqlite3_step(ps_st) == SQLITE_ROW) {
-                strncpy(podded_status_str, (const char*)sqlite3_column_text(ps_st, 0), sizeof(podded_status_str) - 1);
-                big_sleep_until = sqlite3_column_int64(ps_st, 1);
-            }
-            sqlite3_finalize(ps_st);
-        } else {
-            LOGE("cmd_auth_login: Failed to query podded_status for player %d: %s", player_id, sqlite3_errmsg(dbh));
-            // Proceed as if not in big sleep to avoid blocking login due to DB error
-        }
+	  // Check player's podded status
+	  sqlite3_stmt *ps_st = NULL;
+	  const char *sql_get_podded_status =
+	    "SELECT status, big_sleep_until FROM podded_status WHERE player_id = ?;";
+	  int ps_rc =
+	    sqlite3_prepare_v2 (dbh, sql_get_podded_status, -1, &ps_st, NULL);
+	  if (ps_rc == SQLITE_OK)
+	    {
+	      sqlite3_bind_int (ps_st, 1, player_id);
+	      if (sqlite3_step (ps_st) == SQLITE_ROW)
+		{
+		  strncpy (podded_status_str,
+			   (const char *) sqlite3_column_text (ps_st, 0),
+			   sizeof (podded_status_str) - 1);
+		  big_sleep_until = sqlite3_column_int64 (ps_st, 1);
+		}
+	      sqlite3_finalize (ps_st);
+	    }
+	  else
+	    {
+	      LOGE
+		("cmd_auth_login: Failed to query podded_status for player %d: %s",
+		 player_id, sqlite3_errmsg (dbh));
+	      // Proceed as if not in big sleep to avoid blocking login due to DB error
+	    }
 
-        if (strcmp(podded_status_str, "big_sleep") == 0) {
-            if (current_timestamp < big_sleep_until) {
-                // Still in Big Sleep
-                json_t *err_data = json_pack("{s:i, s:i}", "player_id", player_id, "big_sleep_until", big_sleep_until);
-                send_enveloped_refused(ctx->fd, root, ERR_REF_BIG_SLEEP, "You are currently in Big Sleep.", err_data);
-                json_decref(err_data);
-                return 0; // Disallow login
-            } else {
-                // Big Sleep has ended, respawn player
-                LOGI("cmd_auth_login: Player %d's Big Sleep ended. Spawning new starter ship.", player_id);
-                // Assume default safe sector is 1
-                int respawn_sector_id = 1;
-                int spawn_rc = spawn_starter_ship(dbh, player_id, respawn_sector_id);
-                if (spawn_rc != SQLITE_OK) {
-                    LOGE("cmd_auth_login: Failed to spawn starter ship for player %d after Big Sleep: %s", player_id, sqlite3_errmsg(dbh));
-                    send_enveloped_error(ctx->fd, root, 1500, "Database error during respawn.");
-                    return 0;
-                }
-                // Emit event player.big_sleep_ended
-                json_t *event_payload = json_object();
-                json_object_set_new(event_payload, "player_id", json_integer(player_id));
-                db_log_engine_event(current_timestamp, "player.big_sleep_ended", "system", player_id, respawn_sector_id, event_payload, NULL);
-            }
-        }
-        
+	  if (strcmp (podded_status_str, "big_sleep") == 0)
+	    {
+	      if (current_timestamp < big_sleep_until)
+		{
+		  // Still in Big Sleep
+		  json_t *err_data =
+		    json_pack ("{s:i, s:i}", "player_id", player_id,
+			       "big_sleep_until", big_sleep_until);
+		  send_enveloped_refused (ctx->fd, root, ERR_REF_BIG_SLEEP,
+					  "You are currently in Big Sleep.",
+					  err_data);
+		  json_decref (err_data);
+		  return 0;	// Disallow login
+		}
+	      else
+		{
+		  // Big Sleep has ended, respawn player
+		  LOGI
+		    ("cmd_auth_login: Player %d's Big Sleep ended. Spawning new starter ship.",
+		     player_id);
+		  // Assume default safe sector is 1
+		  int respawn_sector_id = 1;
+		  int spawn_rc =
+		    spawn_starter_ship (dbh, player_id, respawn_sector_id);
+		  if (spawn_rc != SQLITE_OK)
+		    {
+		      LOGE
+			("cmd_auth_login: Failed to spawn starter ship for player %d after Big Sleep: %s",
+			 player_id, sqlite3_errmsg (dbh));
+		      send_enveloped_error (ctx->fd, root, 1500,
+					    "Database error during respawn.");
+		      return 0;
+		    }
+		  // Emit event player.big_sleep_ended
+		  json_t *event_payload = json_object ();
+		  json_object_set_new (event_payload, "player_id",
+				       json_integer (player_id));
+		  db_log_engine_event (current_timestamp,
+				       "player.big_sleep_ended", "system",
+				       player_id, respawn_sector_id,
+				       event_payload, NULL);
+		}
+	    }
+
 	  /* Read canonical sector from DB; fall back to 1 if missing/NULL */
 	  int sector_id = 0;
 	  if (db_player_get_sector (player_id, &sector_id) != SQLITE_OK
@@ -331,28 +360,34 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
 
 
 	  /* Reply with session info, including current_sector */
-          int unread_news_count = 0;
-          sqlite3_stmt *stmt = NULL;
-          const char *sql = "SELECT COUNT(*) FROM news_feed WHERE timestamp > (SELECT last_news_read_timestamp FROM players WHERE id = ?);";
-          if (sqlite3_prepare_v2(dbh, sql, -1, &stmt, NULL) == SQLITE_OK) {
-              sqlite3_bind_int(stmt, 1, player_id);
-              if (sqlite3_step(stmt) == SQLITE_ROW) {
-                  unread_news_count = sqlite3_column_int(stmt, 0);
-              }
-              sqlite3_finalize(stmt);
-          }
+	  int unread_news_count = 0;
+	  sqlite3_stmt *stmt = NULL;
+	  const char *sql =
+	    "SELECT COUNT(*) FROM news_feed WHERE timestamp > (SELECT last_news_read_timestamp FROM players WHERE id = ?);";
+	  if (sqlite3_prepare_v2 (dbh, sql, -1, &stmt, NULL) == SQLITE_OK)
+	    {
+	      sqlite3_bind_int (stmt, 1, player_id);
+	      if (sqlite3_step (stmt) == SQLITE_ROW)
+		{
+		  unread_news_count = sqlite3_column_int (stmt, 0);
+		}
+	      sqlite3_finalize (stmt);
+	    }
 
-      char session_token[65];
-      if (db_session_create(player_id, 86400, session_token) != SQLITE_OK) {
-          send_enveloped_error(ctx->fd, root, 1500, "Database error (session creation)");
-          return 1;
-      }
+	  char session_token[65];
+	  if (db_session_create (player_id, 86400, session_token) !=
+	      SQLITE_OK)
+	    {
+	      send_enveloped_error (ctx->fd, root, 1500,
+				    "Database error (session creation)");
+	      return 1;
+	    }
 
 	  json_t *data = json_pack ("{s:i, s:i, s:i, s:s}",
 				    "player_id", player_id,
 				    "current_sector", sector_id,
-                    "unread_news_count", unread_news_count,
-                    "session", session_token);
+				    "unread_news_count", unread_news_count,
+				    "session", session_token);
 	  if (!data)
 	    {
 	      send_enveloped_error (ctx->fd, root, 1500, "Out of memory");
@@ -361,7 +396,7 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
 	  /* Auto-subscribe this player to system.* on login (best-effort). */
 	  {
 	    sqlite3_stmt *st = NULL;
-	    if (sqlite3_prepare_v2 (dbh, // Use dbh which is already defined
+	    if (sqlite3_prepare_v2 (dbh,	// Use dbh which is already defined
 				    "INSERT OR IGNORE INTO subscriptions(player_id,event_type,delivery,enabled) "
 				    "VALUES(?1,'system.*','push',1);",
 				    -1, &st, NULL) == SQLITE_OK)
@@ -418,7 +453,7 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
   struct twconfig *cfg = NULL;
   int spawn_sector_id = 0;
   int new_ship_id = -1;
-  sqlite3 *db = db_get_handle();
+  sqlite3 *db = db_get_handle ();
 
   if (json_is_object (jdata))
     {
@@ -429,7 +464,7 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
       json_t *jtz = json_object_get (jdata, "ui_timezone");
 
       if (!json_is_string (jn))
-	jn = json_object_get (jdata, "player_name"); // Legacy support
+	jn = json_object_get (jdata, "player_name");	// Legacy support
       name = json_is_string (jn) ? json_string_value (jn) : NULL;
       pass = json_is_string (jp) ? json_string_value (jp) : NULL;
       ship_name = json_is_string (jsn) ? json_string_value (jsn) : NULL;
@@ -444,100 +479,120 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
     }
 
   // --- Start Transaction for player creation and initial setup ---
-  rc = sqlite3_exec(db, "BEGIN IMMEDIATE", NULL, NULL, NULL);
-  if (rc != SQLITE_OK) {
-      send_enveloped_error(ctx->fd, root, 1500, "Database error (BEGIN)");
+  rc = sqlite3_exec (db, "BEGIN IMMEDIATE", NULL, NULL, NULL);
+  if (rc != SQLITE_OK)
+    {
+      send_enveloped_error (ctx->fd, root, 1500, "Database error (BEGIN)");
       return 0;
-  }
+    }
 
   rc = user_create (name, pass, &player_id);
   if (rc == AUTH_OK)
     {
       // --- Configuration Loading ---
-      cfg = config_load();
-      if (!cfg) {
-          send_enveloped_error(ctx->fd, root, 1500, "Database error (config_load)");
-          goto rollback_and_error;
-      }
+      cfg = config_load ();
+      if (!cfg)
+	{
+	  send_enveloped_error (ctx->fd, root, 1500,
+				"Database error (config_load)");
+	  goto rollback_and_error;
+	}
 
       // --- Spawn Location ---
-      spawn_sector_id = (rand() % 10) + 1; // Random sector between 1 and 10
+      spawn_sector_id = (rand () % 10) + 1;	// Random sector between 1 and 10
 
       // --- Ship Creation & Naming ---
-      if (!ship_name || !*ship_name) {
-          ship_name = "Used Scout Marauder"; // Default ship name
-      }
-      new_ship_id = db_create_initial_ship(player_id, ship_name, spawn_sector_id);
-      if (new_ship_id == -1) {
-          send_enveloped_error(ctx->fd, root, 1500, "Database error (ship creation)");
-          goto rollback_and_error;
-      }
+      if (!ship_name || !*ship_name)
+	{
+	  ship_name = "Used Scout Marauder";	// Default ship name
+	}
+      new_ship_id =
+	db_create_initial_ship (player_id, ship_name, spawn_sector_id);
+      if (new_ship_id == -1)
+	{
+	  send_enveloped_error (ctx->fd, root, 1500,
+				"Database error (ship creation)");
+	  goto rollback_and_error;
+	}
 
       // --- Update Player's Sector and Ship ---
-      if (db_player_set_sector(player_id, spawn_sector_id) != SQLITE_OK) {
-          send_enveloped_error(ctx->fd, root, 1500, "Database error (set player sector)");
-          goto rollback_and_error;
-      }
+      if (db_player_set_sector (player_id, spawn_sector_id) != SQLITE_OK)
+	{
+	  send_enveloped_error (ctx->fd, root, 1500,
+				"Database error (set player sector)");
+	  goto rollback_and_error;
+	}
       // db_ship_claim already updates players.ship, but ensure ctx is updated
       ctx->sector_id = spawn_sector_id;
 
       // --- Starting Credits ---
-      if (h_add_credits(db, "player", player_id, cfg->startingcredits, "REGISTER_CREDITS", NULL, NULL) != SQLITE_OK) {
-          send_enveloped_error(ctx->fd, root, 1500, "Database error (add credits)");
-          goto rollback_and_error;
-      }
+      if (h_add_credits
+	  (db, "player", player_id, cfg->startingcredits, "REGISTER_CREDITS",
+	   NULL, NULL) != SQLITE_OK)
+	{
+	  send_enveloped_error (ctx->fd, root, 1500,
+				"Database error (add credits)");
+	  goto rollback_and_error;
+	}
 
       // --- Starting Alignment ---
-      if (db_player_set_alignment(player_id, 1) != SQLITE_OK) {
-          send_enveloped_error(ctx->fd, root, 1500, "Database error (set alignment)");
-          goto rollback_and_error;
-      }
+      if (db_player_set_alignment (player_id, 1) != SQLITE_OK)
+	{
+	  send_enveloped_error (ctx->fd, root, 1500,
+				"Database error (set alignment)");
+	  goto rollback_and_error;
+	}
 
       // --- Automatic Subscriptions ---
       // Already subscribed to system.*
       // Add news.* subscription
       sqlite3_stmt *st = NULL;
       if (sqlite3_prepare_v2 (db,
-                              "INSERT OR IGNORE INTO subscriptions(player_id,event_type,delivery,enabled) "
-                              "VALUES(?1,'news.*','push',1);",
-                              -1, &st, NULL) == SQLITE_OK)
-        {
-          sqlite3_bind_int64 (st, 1, player_id);
-          (void) sqlite3_step (st);
-        }
-      if (st) sqlite3_finalize (st);
+			      "INSERT OR IGNORE INTO subscriptions(player_id,event_type,delivery,enabled) "
+			      "VALUES(?1,'news.*','push',1);",
+			      -1, &st, NULL) == SQLITE_OK)
+	{
+	  sqlite3_bind_int64 (st, 1, player_id);
+	  (void) sqlite3_step (st);
+	}
+      if (st)
+	sqlite3_finalize (st);
 
       // --- Player Preferences (Override Defaults) ---
-      if (ui_locale) {
-          db_prefs_set_one(player_id, "ui.locale", PT_STRING, ui_locale);
-      }
-      if (ui_timezone) {
-          db_prefs_set_one(player_id, "ui.timezone", PT_STRING, ui_timezone);
-      }
+      if (ui_locale)
+	{
+	  db_prefs_set_one (player_id, "ui.locale", PT_STRING, ui_locale);
+	}
+      if (ui_timezone)
+	{
+	  db_prefs_set_one (player_id, "ui.timezone", PT_STRING, ui_timezone);
+	}
 
       // --- Welcome Message ---
-      h_send_message_to_player(player_id, 0, "Welcome to TWClone!", get_welcome_message(player_id));
+      h_send_message_to_player (player_id, 0, "Welcome to TWClone!",
+				get_welcome_message (player_id));
 
       // --- Issue Session Token ---
       char tok[65];
       if (db_session_create (player_id, 86400, tok) != SQLITE_OK)
-	    {
-	      send_enveloped_error (ctx->fd, root, 1500, "Database error (session token)");
-	      goto rollback_and_error;
-	    }
-	  else
-	    {
-	      ctx->player_id = player_id;
-	      json_t *data = json_pack ("{s:i, s:s}", "player_id", player_id,
-					"session_token", tok);
-	      send_enveloped_ok (ctx->fd, root, "auth.session", data);
-	      json_decref (data);
-	    }
+	{
+	  send_enveloped_error (ctx->fd, root, 1500,
+				"Database error (session token)");
+	  goto rollback_and_error;
+	}
+      else
+	{
+	  ctx->player_id = player_id;
+	  json_t *data = json_pack ("{s:i, s:s}", "player_id", player_id,
+				    "session_token", tok);
+	  send_enveloped_ok (ctx->fd, root, "auth.session", data);
+	  json_decref (data);
+	}
     }
   else if (rc == AUTH_ERR_NAME_TAKEN)
     {
       send_enveloped_error (ctx->fd, root, AUTH_ERR_NAME_TAKEN,
-				"Username already exists");
+			    "Username already exists");
       goto rollback_and_error;
     }
   else
@@ -547,19 +602,23 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
     }
 
   // --- Commit Transaction ---
-  sqlite3_exec(db, "COMMIT", NULL, NULL, NULL);
-  if (cfg) free(cfg);
+  sqlite3_exec (db, "COMMIT", NULL, NULL, NULL);
+  if (cfg)
+    free (cfg);
   return 0;
 
 rollback_and_error:
-  sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
-  if (cfg) free(cfg);
+  sqlite3_exec (db, "ROLLBACK", NULL, NULL, NULL);
+  if (cfg)
+    free (cfg);
   return 0;
 }
 
-const char *get_welcome_message(int player_id) {
-    (void)player_id; // Suppress unused parameter warning
-    return "Hello Player";
+const char *
+get_welcome_message (int player_id)
+{
+  (void) player_id;		// Suppress unused parameter warning
+  return "Hello Player";
 }
 
 /* ---------- auth.logout ---------- */
@@ -631,7 +690,7 @@ cmd_user_create (client_ctx_t *ctx, json_t *root)
 int
 cmd_auth_refresh (client_ctx_t *ctx, json_t *root)
 {
-  int pid = 0; /* Declare pid at function scope */
+  int pid = 0;			/* Declare pid at function scope */
   /* Try data.session_token */
   json_t *jdata = json_object_get (root, "data");
   const char *tok = NULL;

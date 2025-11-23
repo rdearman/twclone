@@ -224,30 +224,35 @@ int
 cmd_system_describe_schema (client_ctx_t *ctx, json_t *root)
 {
   const char *name = NULL;
-  const char *schema_type = NULL; // "command" or "event"
+  const char *schema_type = NULL;	// "command" or "event"
   json_t *d = json_object_get (root, "data");
   if (d)
     {
       name = json_string_value (json_object_get (d, "name"));
-      schema_type = json_string_value (json_object_get (d, "type")); // Assuming client sends "type"
+      schema_type = json_string_value (json_object_get (d, "type"));	// Assuming client sends "type"
     }
 
   if (!name || !*name)
     {
-      send_enveloped_error (ctx->fd, root, 1103, "Missing 'name' in data payload");
+      send_enveloped_error (ctx->fd, root, 1103,
+			    "Missing 'name' in data payload");
       return 0;
     }
   // Default to "command" if type is not provided or recognized
-  if (!schema_type || (strcasecmp(schema_type, "command") != 0 && strcasecmp(schema_type, "event") != 0)) {
+  if (!schema_type
+      || (strcasecmp (schema_type, "command") != 0
+	  && strcasecmp (schema_type, "event") != 0))
+    {
       schema_type = "command";
-  }
+    }
 
   // 1. Retrieve the actual schema for the requested command/event
   json_t *schema_obj = schema_get (name);
   if (!schema_obj)
     {
       // If schema_get returns NULL, it means the schema is not found/implemented
-      send_enveloped_error (ctx->fd, root, 1104, "Schema not found or not implemented");
+      send_enveloped_error (ctx->fd, root, 1104,
+			    "Schema not found or not implemented");
       return 0;
     }
 
@@ -255,7 +260,7 @@ cmd_system_describe_schema (client_ctx_t *ctx, json_t *root)
   json_t *response_data = json_object ();
   json_object_set_new (response_data, "name", json_string (name));
   json_object_set_new (response_data, "type", json_string (schema_type));
-  json_object_set_new (response_data, "schema", schema_obj); // schema_obj is a new reference from schema_get()
+  json_object_set_new (response_data, "schema", schema_obj);	// schema_obj is a new reference from schema_get()
 
   // 3. Send with correct type "system.schema"
   send_enveloped_ok (ctx->fd, root, "system.schema", response_data);
@@ -448,9 +453,10 @@ send_enveloped_ok (int fd, json_t *req, const char *type, json_t *data)
   json_object_set_new (resp, "meta", make_default_meta ());
 
   // ✨ sanitize all strings (strip ANSI) before sending
-  if (type && strcmp(type, "system.schema") != 0) {
+  if (type && strcmp (type, "system.schema") != 0)
+    {
       sanitize_json_strings (resp);
-  }
+    }
 
   // write one line
   char *s = json_dumps (resp, JSON_COMPACT);
@@ -907,7 +913,7 @@ j_get_integer (json_t *root, const char *path, int *result)
   if (!path_copy)
     {
       perror ("j_get_integer: strdup failed");
-      return -1; // Allocation failure
+      return -1;		// Allocation failure
     }
 
   char *saveptr;
@@ -916,44 +922,49 @@ j_get_integer (json_t *root, const char *path, int *result)
 
   // Use strtok_r to safely tokenize the path by '.'
   for (token = strtok_r (path_copy, ".", &saveptr);
-       token != NULL;
-       token = strtok_r (NULL, ".", &saveptr))
+       token != NULL; token = strtok_r (NULL, ".", &saveptr))
     {
       // 1. Ensure the current node is a JSON object before looking up a key
       if (!current || !json_is_object (current))
-        {
-          fprintf (stderr, "j_get_integer: Path segment '%s' expected an object, but found something else or NULL.\n", token);
-          free (path_copy);
-          return -1;
-        }
+	{
+	  fprintf (stderr,
+		   "j_get_integer: Path segment '%s' expected an object, but found something else or NULL.\n",
+		   token);
+	  free (path_copy);
+	  return -1;
+	}
 
       // 2. Find the child node for the current token
       json_t *next = json_object_get (current, token);
 
       if (!next)
-        {
-          fprintf (stderr, "j_get_integer: Key '%s' not found at this level.\n", token);
-          free (path_copy);
-          return -1;
-        }
+	{
+	  fprintf (stderr,
+		   "j_get_integer: Key '%s' not found at this level.\n",
+		   token);
+	  free (path_copy);
+	  return -1;
+	}
 
       // 3. Check if this is the last token in the path
       if (saveptr == NULL || *saveptr == '\0')
-        {
-          // We are on the final key: check type and extract value
-          if (json_is_integer (next))
-            {
-              *result = (int) json_integer_value (next);
-              free (path_copy);
-              return 0; // Success!
-            }
-          else
-            {
-              fprintf (stderr, "j_get_integer: Final key '%s' found, but value is not an integer.\n", token);
-              free (path_copy);
-              return -1; // Wrong type
-            }
-        }
+	{
+	  // We are on the final key: check type and extract value
+	  if (json_is_integer (next))
+	    {
+	      *result = (int) json_integer_value (next);
+	      free (path_copy);
+	      return 0;		// Success!
+	    }
+	  else
+	    {
+	      fprintf (stderr,
+		       "j_get_integer: Final key '%s' found, but value is not an integer.\n",
+		       token);
+	      free (path_copy);
+	      return -1;	// Wrong type
+	    }
+	}
 
       // 4. Not the final token, move to the next level for traversal
       current = next;
@@ -961,6 +972,7 @@ j_get_integer (json_t *root, const char *path, int *result)
 
   // Should only be reached if the path was malformed (e.g., ended in a dot)
   free (path_copy);
-  fprintf (stderr, "j_get_integer: Path traversal completed without finding a final value.\n");
+  fprintf (stderr,
+	   "j_get_integer: Path traversal completed without finding a final value.\n");
   return -1;
 }

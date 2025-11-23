@@ -448,7 +448,8 @@ engine_s2s_drain_once (s2s_conn_t *conn)
       // fprintf (stderr, "[engine] received shutdown command\n");
       // flip your engine running flag here…
     }
-      else if (type && strcasecmp (type, "s2s.health.check") == 0)    {
+  else if (type && strcasecmp (type, "s2s.health.check") == 0)
+    {
       // Optional: allow server to ping any time
       time_t now = time (NULL);
       static time_t start_ts;
@@ -787,7 +788,8 @@ engine_main_loop (int shutdown_fd)
       return 1;
     }
   LOGI ("[engine] connecting to 127.0.0.1:%d ...\n", g_cfg.s2s.tcp_port);
-  s2s_conn_t *conn = s2s_tcp_client_connect ("127.0.0.1", g_cfg.s2s.tcp_port, 5000);
+  s2s_conn_t *conn =
+    s2s_tcp_client_connect ("127.0.0.1", g_cfg.s2s.tcp_port, 5000);
   if (!conn)
     {
       LOGE ("[engine] connect failed\n");
@@ -1057,5 +1059,3 @@ sweeper_system_notice_ttl (sqlite3 *db, int64_t now_ms)
   sqlite3_finalize (st);
   return 0;
 }
-
-

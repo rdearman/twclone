@@ -2,7 +2,7 @@
 #define GLOBALS_H
 
 #include <time.h>		// You need this for the time_t type
-#include "common.h" // Include common.h for armid_mine_config_t
+#include "common.h"		// Include common.h for armid_mine_config_t
 
 extern int threadid;
 extern int threadcount;

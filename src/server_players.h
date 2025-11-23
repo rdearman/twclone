@@ -41,21 +41,30 @@ extern "C"
 			     int *new_balance);
   int h_update_ship_cargo (sqlite3 * db, int player_id, const char *commodity,
 			   int delta, int *new_qty_out);
-  int h_get_credits (sqlite3 *db, const char *owner_type, int owner_id, long long *credits_out);
-  int h_add_credits(sqlite3 *db, const char *owner_type, int owner_id, long long amount, const char *tx_type, const char *tx_group_id, long long *new_balance_out);
-  int h_deduct_credits(sqlite3 *db, const char *owner_type, int owner_id, long long amount, const char *tx_type, const char *tx_group_id, long long *new_balance_out);
-  int h_deduct_player_petty_cash (sqlite3 *db, int player_id, long long amount, long long *new_balance_out);
-  int h_add_player_petty_cash (sqlite3 *db, int player_id, long long amount, long long *new_balance_out);
-  int h_get_player_petty_cash (sqlite3 *db, int player_id, long long *credits_out);
+  int h_get_credits (sqlite3 * db, const char *owner_type, int owner_id,
+		     long long *credits_out);
+  int h_add_credits (sqlite3 * db, const char *owner_type, int owner_id,
+		     long long amount, const char *tx_type,
+		     const char *tx_group_id, long long *new_balance_out);
+  int h_deduct_credits (sqlite3 * db, const char *owner_type, int owner_id,
+			long long amount, const char *tx_type,
+			const char *tx_group_id, long long *new_balance_out);
+  int h_deduct_player_petty_cash (sqlite3 * db, int player_id,
+				  long long amount,
+				  long long *new_balance_out);
+  int h_add_player_petty_cash (sqlite3 * db, int player_id, long long amount,
+			       long long *new_balance_out);
+  int h_get_player_petty_cash (sqlite3 * db, int player_id,
+			       long long *credits_out);
   int cmd_get_news (client_ctx_t * ctx, json_t * root);
   int cmd_bank_balance (client_ctx_t * ctx, json_t * root);
   int cmd_bank_deposit (client_ctx_t * ctx, json_t * root);
   int cmd_bank_transfer (client_ctx_t * ctx, json_t * root);
   int cmd_bank_withdraw (client_ctx_t * ctx, json_t * root);
   int cmd_bank_history (client_ctx_t * ctx, json_t * root);
-int cmd_bank_leaderboard (client_ctx_t * ctx, json_t * root);
-int h_get_player_bank_account_id(sqlite3 *db, int player_id);
-TurnConsumeResult h_consume_player_turn (sqlite3 * db_conn,
+  int cmd_bank_leaderboard (client_ctx_t * ctx, json_t * root);
+  int h_get_player_bank_account_id (sqlite3 * db, int player_id);
+  TurnConsumeResult h_consume_player_turn (sqlite3 * db_conn,
 					   client_ctx_t * ctx,
 					   const char *reason_cmd);
   int handle_turn_consumption_error (client_ctx_t * ctx,
@@ -63,14 +72,15 @@ TurnConsumeResult h_consume_player_turn (sqlite3 * db_conn,
 				     const char *cmd, json_t * root,
 				     json_t * meta_data);
   /* Convenience wrappers used across the server */
-  int player_credits(client_ctx_t *ctx);
-  int cargo_space_free(client_ctx_t *ctx);
+  int player_credits (client_ctx_t * ctx);
+  int cargo_space_free (client_ctx_t * ctx);
 
   // Function to destroy a ship and handle its side effects
-  int destroy_ship_and_handle_side_effects(client_ctx_t *ctx, int sector_id, int player_id);
+  int destroy_ship_and_handle_side_effects (client_ctx_t * ctx, int sector_id,
+					    int player_id);
 
   // New function for Big Sleep respawn
-  int spawn_starter_ship(sqlite3 *db, int player_id, int sector_id);
+  int spawn_starter_ship (sqlite3 * db, int player_id, int sector_id);
 
 #ifdef __cplusplus
 }

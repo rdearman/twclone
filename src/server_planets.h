@@ -5,9 +5,9 @@
 #include <jansson.h>
 #include "common.h"
 
-#define GENESIS_ENABLED           1  // 1 to enable, 0 to disable
-#define GENESIS_BLOCK_AT_CAP      0  // 1 to hard-block if max_per_sector reached, 0 to allow overfill
-#define GENESIS_NAVHAZ_DELTA      0  // Change in navhaz when a planet is created
+#define GENESIS_ENABLED           1	// 1 to enable, 0 to disable
+#define GENESIS_BLOCK_AT_CAP      0	// 1 to hard-block if max_per_sector reached, 0 to allow overfill
+#define GENESIS_NAVHAZ_DELTA      0	// Change in navhaz when a planet is created
 
 // Planet class weights (used for weighted random selection)
 #define GENESIS_CLASS_WEIGHT_M    10
@@ -27,7 +27,7 @@ int cmd_planet_transfer_ownership (client_ctx_t * ctx, json_t * root);
 int cmd_planet_harvest (client_ctx_t * ctx, json_t * root);
 int cmd_planet_deposit (client_ctx_t * ctx, json_t * root);
 int cmd_planet_withdraw (client_ctx_t * ctx, json_t * root);
-int cmd_planet_genesis_create(client_ctx_t *ctx, json_t *root);
+int cmd_planet_genesis_create (client_ctx_t * ctx, json_t * root);
 
 
 

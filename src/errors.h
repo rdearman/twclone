@@ -73,6 +73,8 @@
 #define ERR_BAD_STATE             1409	/* Current Sector Unknown */
 #define TERRITORY_UNSAFE         1410
 #define ERR_FOREIGN_LIMPETS_PRESENT 1411
+#define DEPLOY_TYPE_FIGHTERS	1412
+#define SECTOR_FIGHTER_CAP	1413
 
 /* 2100 - Genesis Torpedo / Planet Creation */
 #define ERR_GENESIS_DISABLED          2100
@@ -113,6 +115,7 @@
 #define REF_TRADE_WINDOW_CLOSED  1706
 #define ERR_COMMODITY_NOT_SOLD   1707
 #define ERR_PRICE_INVALID	 1708
+#define ERR_TRADE_ILLEGAL_GOODS  1709
 
 
 /* 1800 — Ship / Combat */

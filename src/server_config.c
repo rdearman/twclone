@@ -79,11 +79,12 @@ set_defaults (void)
   g_cfg.death.max_per_day = 2;
   g_cfg.death.xp_loss_flat = 100;
   g_cfg.death.xp_loss_percent = 0;
-  snprintf(g_cfg.death.drop_cargo, sizeof(g_cfg.death.drop_cargo), "all");
-  snprintf(g_cfg.death.drop_credits_mode, sizeof(g_cfg.death.drop_credits_mode), "all_ship");
+  snprintf (g_cfg.death.drop_cargo, sizeof (g_cfg.death.drop_cargo), "all");
+  snprintf (g_cfg.death.drop_credits_mode,
+	    sizeof (g_cfg.death.drop_credits_mode), "all_ship");
   g_cfg.death.big_sleep_duration_seconds = 86400;
   g_cfg.death.big_sleep_clear_xp_below = 0;
-  snprintf(g_cfg.death.escape_pod_spawn_mode, sizeof(g_cfg.death.escape_pod_spawn_mode), "safe_path"); // Default to safe_path for general kills
+  snprintf (g_cfg.death.escape_pod_spawn_mode, sizeof (g_cfg.death.escape_pod_spawn_mode), "safe_path");	// Default to safe_path for general kills
 }
 
 
@@ -105,7 +106,8 @@ validate_cfg (void)
 	       g_cfg.s2s.transport);
       return 0;
     }
-  if (!strcasecmp (g_cfg.s2s.transport, "uds") && g_cfg.s2s.uds_path[0] == '\0')
+  if (!strcasecmp (g_cfg.s2s.transport, "uds")
+      && g_cfg.s2s.uds_path[0] == '\0')
     {
       fprintf (stderr,
 	       "ERROR config: s2s.uds_path required when s2s.transport=uds\n");
@@ -163,39 +165,39 @@ print_effective_config_redacted (void)
 	  g_cfg.secrets.key_id[0] ? "********" : "");
 
   printf (",\"mines\":{\"limpet\":{"
-          "\"enabled\":%s,"
-          "\"fedspace_allowed\":%s,"
-          "\"msl_allowed\":%s,"
-          "\"per_sector_cap\":%d,"
-          "\"max_per_ship\":%d,"
-          "\"allow_multi_owner\":%s,"
-          "\"scrub_cost\":%d}}}",
-          g_cfg.mines.limpet.enabled ? "true" : "false",
-          g_cfg.mines.limpet.fedspace_allowed ? "true" : "false",
-          g_cfg.mines.limpet.msl_allowed ? "true" : "false",
-          g_cfg.mines.limpet.per_sector_cap,
-          g_cfg.mines.limpet.max_per_ship,
-          g_cfg.mines.limpet.allow_multi_owner ? "true" : "false",
-          g_cfg.mines.limpet.scrub_cost);
+	  "\"enabled\":%s,"
+	  "\"fedspace_allowed\":%s,"
+	  "\"msl_allowed\":%s,"
+	  "\"per_sector_cap\":%d,"
+	  "\"max_per_ship\":%d,"
+	  "\"allow_multi_owner\":%s,"
+	  "\"scrub_cost\":%d}}}",
+	  g_cfg.mines.limpet.enabled ? "true" : "false",
+	  g_cfg.mines.limpet.fedspace_allowed ? "true" : "false",
+	  g_cfg.mines.limpet.msl_allowed ? "true" : "false",
+	  g_cfg.mines.limpet.per_sector_cap,
+	  g_cfg.mines.limpet.max_per_ship,
+	  g_cfg.mines.limpet.allow_multi_owner ? "true" : "false",
+	  g_cfg.mines.limpet.scrub_cost);
 
   // New death config printing
   printf (",\"death\":{"
-          "\"max_per_day\":%d,"
-          "\"xp_loss_flat\":%d,"
-          "\"xp_loss_percent\":%d,"
-          "\"drop_cargo\":\"%s\","
-          "\"drop_credits_mode\":\"%s\","
-          "\"big_sleep_duration_seconds\":%d,"
-          "\"big_sleep_clear_xp_below\":%d,"
-          "\"escape_pod_spawn_mode\":\"%s\"}}",
-          g_cfg.death.max_per_day,
-          g_cfg.death.xp_loss_flat,
-          g_cfg.death.xp_loss_percent,
-          g_cfg.death.drop_cargo,
-          g_cfg.death.drop_credits_mode,
-          g_cfg.death.big_sleep_duration_seconds,
-          g_cfg.death.big_sleep_clear_xp_below,
-          g_cfg.death.escape_pod_spawn_mode);
+	  "\"max_per_day\":%d,"
+	  "\"xp_loss_flat\":%d,"
+	  "\"xp_loss_percent\":%d,"
+	  "\"drop_cargo\":\"%s\","
+	  "\"drop_credits_mode\":\"%s\","
+	  "\"big_sleep_duration_seconds\":%d,"
+	  "\"big_sleep_clear_xp_below\":%d,"
+	  "\"escape_pod_spawn_mode\":\"%s\"}}",
+	  g_cfg.death.max_per_day,
+	  g_cfg.death.xp_loss_flat,
+	  g_cfg.death.xp_loss_percent,
+	  g_cfg.death.drop_cargo,
+	  g_cfg.death.drop_credits_mode,
+	  g_cfg.death.big_sleep_duration_seconds,
+	  g_cfg.death.big_sleep_clear_xp_below,
+	  g_cfg.death.escape_pod_spawn_mode);
   printf ("\n");
 }
 
@@ -208,7 +210,8 @@ apply_db (sqlite3 *db)
   if (sqlite3_prepare_v2
       (db, "SELECT key,value FROM app_config", -1, &st, NULL) != SQLITE_OK)
     {
-      LOGI("[config] no app_config table found, using defaults (%s)\n", sqlite3_errmsg(db));
+      LOGI ("[config] no app_config table found, using defaults (%s)\n",
+	    sqlite3_errmsg (db));
       return;
     }
   while (sqlite3_step (st) == SQLITE_ROW)
@@ -259,19 +262,19 @@ apply_db (sqlite3 *db)
 
       // Limpet Mine Configuration
       else if (!strcasecmp (k, "mines.limpet.enabled"))
-        g_cfg.mines.limpet.enabled = (bool)atoi(v);
+	g_cfg.mines.limpet.enabled = (bool) atoi (v);
       else if (!strcasecmp (k, "mines.limpet.fedspace_allowed"))
-        g_cfg.mines.limpet.fedspace_allowed = (bool)atoi(v);
+	g_cfg.mines.limpet.fedspace_allowed = (bool) atoi (v);
       else if (!strcasecmp (k, "mines.limpet.msl_allowed"))
-        g_cfg.mines.limpet.msl_allowed = (bool)atoi(v);
+	g_cfg.mines.limpet.msl_allowed = (bool) atoi (v);
       else if (!strcasecmp (k, "mines.limpet.per_sector_cap"))
-        g_cfg.mines.limpet.per_sector_cap = atoi(v);
+	g_cfg.mines.limpet.per_sector_cap = atoi (v);
       else if (!strcasecmp (k, "mines.limpet.max_per_ship"))
-        g_cfg.mines.limpet.max_per_ship = atoi(v);
+	g_cfg.mines.limpet.max_per_ship = atoi (v);
       else if (!strcasecmp (k, "mines.limpet.allow_multi_owner"))
-        g_cfg.mines.limpet.allow_multi_owner = (bool)atoi(v);
+	g_cfg.mines.limpet.allow_multi_owner = (bool) atoi (v);
       else if (!strcasecmp (k, "mines.limpet.scrub_cost"))
-        g_cfg.mines.limpet.scrub_cost = atoi(v);
+	g_cfg.mines.limpet.scrub_cost = atoi (v);
     }
   sqlite3_finalize (st);
 
