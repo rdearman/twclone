@@ -10,8 +10,9 @@ tests_all.json
 
 - [ ] WITHOUT MAKING ANY CHANGES, check the code and schema against the implementation plan implementation_plan.md and make sure all functions are complete. List anything not yet completed. 
 - [ ] Make the tests in the tests subdirectory for corporation json cmds for all the new code
-- [ ] In order to make the AI bot aware of new cmds they must be published by the server, ensure all implmented 
-- [ ] Update the PROTOCOL.v2.md documentation to include the new JSON
-- [ ] Might need to look at breaking this document up into files for easier editing. 
-- [ ] Make the client have a corp menu
+- [ ] In order to make the AI bot aware of new cmds they must be published by the server, ensure all implmented cmds are being published properly
+- [ ] Update the PROTOCOL.v2.md documentation to include the new JSON and cmds with examples. 
+- [ ] Make the client in the client/ subdirectory have a corp menu
+
+
 
