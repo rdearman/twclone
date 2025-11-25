@@ -232,11 +232,12 @@ int h_bank_transfer_unlocked (sqlite3 * db,
                               long long amount,
                               const char *tx_type, const char *tx_group_id);
 int db_bank_get_transactions (const char *owner_type, int owner_id, int limit,
-			      json_t ** out_array);
+			      const char *tx_type_filter, long long start_date, long long end_date,
+			      long long min_amount, long long max_amount, json_t ** out_array);
 int db_bank_apply_interest ();
 int db_bank_process_orders ();
-int db_bank_set_flags (const char *owner_type, int owner_id, int flags);
-int db_bank_get_flags (const char *owner_type, int owner_id, int *out_flags);
+int db_bank_set_frozen_status (const char *owner_type, int owner_id, int is_frozen);
+int db_bank_get_frozen_status (const char *owner_type, int owner_id, int *out_is_frozen);
 int db_commodity_get_price (const char *commodity_code, int *out_price);
 int db_commodity_update_price (const char *commodity_code, int new_price);
 int db_commodity_create_order (const char *actor_type, int actor_id,

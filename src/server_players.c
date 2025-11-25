@@ -138,7 +138,7 @@ TurnConsumeResult
 h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
 		       const char *reason_cmd)
 {
-  pthread_mutex_lock (&db_mutex); // Acquire lock
+  pthread_mutex_lock (&db_mutex);	// Acquire lock
 
   sqlite3_stmt *stmt = NULL;
   int player_id = ctx->player_id;
@@ -156,7 +156,7 @@ h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
   if (rc != SQLITE_OK)
     {
       LOGE ("DB Error (Prepare): %s\n", sqlite3_errmsg (db_conn));
-      pthread_mutex_unlock (&db_mutex); // Release lock
+      pthread_mutex_unlock (&db_mutex);	// Release lock
       return TURN_CONSUME_ERROR_DB_FAIL;
     }
 
@@ -172,7 +172,7 @@ h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
       LOGE ("DB Error (Execute %s): %s\n", reason_cmd,
 	    sqlite3_errmsg (db_conn));
       sqlite3_finalize (stmt);
-      pthread_mutex_unlock (&db_mutex); // Release lock
+      pthread_mutex_unlock (&db_mutex);	// Release lock
       return TURN_CONSUME_ERROR_DB_FAIL;
     }
 
@@ -195,7 +195,7 @@ h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
       if (rc != SQLITE_OK)
 	{
 	  LOGE ("DB Error (Prepare Check): %s\n", sqlite3_errmsg (db_conn));
-          pthread_mutex_unlock (&db_mutex); // Release lock
+	  pthread_mutex_unlock (&db_mutex);	// Release lock
 	  return TURN_CONSUME_ERROR_DB_FAIL;
 	}
 
@@ -210,7 +210,7 @@ h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
 	  LOGE
 	    ("Turn consumption failed for Player %d (%s): Turns remaining is 0.\n",
 	     player_id, reason_cmd);
-          pthread_mutex_unlock (&db_mutex); // Release lock
+	  pthread_mutex_unlock (&db_mutex);	// Release lock
 	  return TURN_CONSUME_ERROR_NO_TURNS;
 	}
       else if (rc == SQLITE_DONE)
@@ -220,7 +220,7 @@ h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
 	  LOGE
 	    ("Turn consumption failed for Player %d (%s): Player not found in turns table.\n",
 	     player_id, reason_cmd);
-          pthread_mutex_unlock (&db_mutex); // Release lock
+	  pthread_mutex_unlock (&db_mutex);	// Release lock
 	  return TURN_CONSUME_ERROR_PLAYER_NOT_FOUND;
 	}
       else
@@ -229,7 +229,7 @@ h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
 	  LOGE ("DB Error (Execute Check %s): %s\n", reason_cmd,
 		sqlite3_errmsg (db_conn));
 	  sqlite3_finalize (stmt);
-          pthread_mutex_unlock (&db_mutex); // Release lock
+	  pthread_mutex_unlock (&db_mutex);	// Release lock
 	  return TURN_CONSUME_ERROR_DB_FAIL;
 	}
     }
@@ -238,7 +238,7 @@ h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
   LOGD
     ("Player %d consumed 1 turn for command: %s. New turn count updated.\n",
      player_id, reason_cmd);
-  pthread_mutex_unlock (&db_mutex); // Release lock
+  pthread_mutex_unlock (&db_mutex);	// Release lock
   return TURN_CONSUME_SUCCESS;
 }
 
@@ -248,44 +248,54 @@ h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
  * This helper now *accepts* the db pointer.
  */
 int
-h_get_credits (sqlite3 *db, const char *owner_type, int owner_id, long long *credits_out)
+h_get_credits (sqlite3 *db, const char *owner_type, int owner_id,
+	       long long *credits_out)
 {
-    sqlite3_stmt *st = NULL;
-    int rc = SQLITE_ERROR;
+  sqlite3_stmt *st = NULL;
+  int rc = SQLITE_ERROR;
 
-    // Ensure a bank account exists for the owner (INSERT OR IGNORE)
-    const char *SQL_ENSURE_ACCOUNT =
-      "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) VALUES (?1, ?2, 'CRD', 0);";
-    rc = sqlite3_prepare_v2(db, SQL_ENSURE_ACCOUNT, -1, &st, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("h_get_credits: ENSURE_ACCOUNT prepare error: %s", sqlite3_errmsg(db));
-        return rc;
+  // Ensure a bank account exists for the owner (INSERT OR IGNORE)
+  const char *SQL_ENSURE_ACCOUNT =
+    "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) VALUES (?1, ?2, 'CRD', 0);";
+  rc = sqlite3_prepare_v2 (db, SQL_ENSURE_ACCOUNT, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_get_credits: ENSURE_ACCOUNT prepare error: %s",
+	    sqlite3_errmsg (db));
+      return rc;
     }
-    sqlite3_bind_text(st, 1, owner_type, -1, SQLITE_STATIC);
-    sqlite3_bind_int(st, 2, owner_id);
-    sqlite3_step(st); // Execute the insert or ignore
-    sqlite3_finalize(st);
-    st = NULL; // Reset statement pointer
+  sqlite3_bind_text (st, 1, owner_type, -1, SQLITE_STATIC);
+  sqlite3_bind_int (st, 2, owner_id);
+  sqlite3_step (st);		// Execute the insert or ignore
+  sqlite3_finalize (st);
+  st = NULL;			// Reset statement pointer
 
-    const char *SQL_SEL = "SELECT COALESCE(balance,0) FROM bank_accounts WHERE owner_type=?1 AND owner_id=?2";
-    rc = sqlite3_prepare_v2(db, SQL_SEL, -1, &st, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("h_get_credits: SELECT prepare error: %s", sqlite3_errmsg(db));
-        return rc;
+  const char *SQL_SEL =
+    "SELECT COALESCE(balance,0) FROM bank_accounts WHERE owner_type=?1 AND owner_id=?2";
+  rc = sqlite3_prepare_v2 (db, SQL_SEL, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_get_credits: SELECT prepare error: %s", sqlite3_errmsg (db));
+      return rc;
     }
 
-    sqlite3_bind_text(st, 1, owner_type, -1, SQLITE_STATIC);
-    sqlite3_bind_int (st, 2, owner_id);
+  sqlite3_bind_text (st, 1, owner_type, -1, SQLITE_STATIC);
+  sqlite3_bind_int (st, 2, owner_id);
 
-    if (sqlite3_step(st) == SQLITE_ROW) {
-        *credits_out = sqlite3_column_int64(st, 0);
-        rc = SQLITE_OK;
-    } else {
-        LOGE("h_get_credits: Owner type '%s', ID %d not found in bank_accounts.", owner_type, owner_id);
-        rc = SQLITE_NOTFOUND;
+  if (sqlite3_step (st) == SQLITE_ROW)
+    {
+      *credits_out = sqlite3_column_int64 (st, 0);
+      rc = SQLITE_OK;
     }
-    sqlite3_finalize(st);
-    return rc;
+  else
+    {
+      LOGE
+	("h_get_credits: Owner type '%s', ID %d not found in bank_accounts.",
+	 owner_type, owner_id);
+      rc = SQLITE_NOTFOUND;
+    }
+  sqlite3_finalize (st);
+  return rc;
 }
 
 
@@ -304,13 +314,12 @@ h_get_cargo_space_free (sqlite3 *db, int player_id, int *free_out)
   int total = 0;
 
   rc = sqlite3_prepare_v2 (db,
-                           "SELECT (COALESCE(s.holds, 0) - "
-                           "COALESCE(s.colonists + s.equipment + s.organics + s.ore, 0)) "
-                           "FROM players p "
-                           "JOIN ships s ON s.id = p.ship "
-                           "WHERE p.id = ?1",
-                           -1, &st, NULL);
-  
+			   "SELECT (COALESCE(s.holds, 0) - "
+			   "COALESCE(s.colonists + s.equipment + s.organics + s.ore, 0)) "
+			   "FROM players p "
+			   "JOIN ships s ON s.id = p.ship "
+			   "WHERE p.id = ?1", -1, &st, NULL);
+
   if (rc != SQLITE_OK)
     return rc;
   sqlite3_bind_int (st, 1, player_id);
@@ -334,12 +343,13 @@ h_get_cargo_space_free (sqlite3 *db, int player_id, int *free_out)
 
 /* server_players.c */
 int
-player_credits( client_ctx_t *ctx)
+player_credits (client_ctx_t *ctx)
 {
-  if (!ctx || ctx->player_id <= 0) return 0;
-  sqlite3 *db = db_get_handle();
+  if (!ctx || ctx->player_id <= 0)
+    return 0;
+  sqlite3 *db = db_get_handle ();
   long long c = 0;
-  if (h_get_credits(db, "player", ctx->player_id, &c) != SQLITE_OK)
+  if (h_get_credits (db, "player", ctx->player_id, &c) != SQLITE_OK)
     return 0;
   return c;
 }
@@ -349,8 +359,8 @@ int
 cargo_space_free (client_ctx_t *ctx)
 {
   int f = 0;
-  sqlite3 *db = db_get_handle();
-  if (h_get_cargo_space_free (db, ctx->player_id, &f) != SQLITE_OK) 
+  sqlite3 *db = db_get_handle ();
+  if (h_get_cargo_space_free (db, ctx->player_id, &f) != SQLITE_OK)
     return 0;
   return f;
 }
@@ -359,7 +369,7 @@ cargo_space_free (client_ctx_t *ctx)
 
 #include <sqlite3.h>
 #include <string.h>
-#include <stdio.h> // For fprintf, stderr
+#include <stdio.h>		// For fprintf, stderr
 
 /**
  * @brief Updates a player's ship cargo for one commodity by a delta (+/-).
@@ -383,113 +393,133 @@ cargo_space_free (client_ctx_t *ctx)
  */
 int
 h_update_ship_cargo (sqlite3 *db, int player_id,
-                       const char *commodity, int delta, int *new_qty_out)
+		     const char *commodity, int delta, int *new_qty_out)
 {
-    if (!db || !commodity || *commodity == '\0')
-        return SQLITE_MISUSE;
+  if (!db || !commodity || *commodity == '\0')
+    return SQLITE_MISUSE;
 
-    int rc;
-    sqlite3_stmt *stmt = NULL;
-    char *sql_query = NULL;
-    int ship_id = 0;
+  int rc;
+  sqlite3_stmt *stmt = NULL;
+  char *sql_query = NULL;
+  int ship_id = 0;
 
-    // 1. Identify the column name from the commodity string
-    const char *col_name = NULL;
-    if (strcasecmp(commodity, "ORE") == 0) col_name = "ore";
-    else if (strcasecmp(commodity, "ORG") == 0) col_name = "organics";
-    else if (strcasecmp(commodity, "EQU") == 0) col_name = "equipment";
-    else if (strcasecmp(commodity, "colonists") == 0) col_name = "colonists";
-    else {
-        LOGE("h_update_ship_cargo: Invalid commodity name '%s'\n", commodity);
-        return SQLITE_MISUSE; // Invalid commodity string
+  // 1. Identify the column name from the commodity string
+  const char *col_name = NULL;
+  if (strcasecmp (commodity, "ORE") == 0)
+    col_name = "ore";
+  else if (strcasecmp (commodity, "ORG") == 0)
+    col_name = "organics";
+  else if (strcasecmp (commodity, "EQU") == 0)
+    col_name = "equipment";
+  else if (strcasecmp (commodity, "colonists") == 0)
+    col_name = "colonists";
+  else
+    {
+      LOGE ("h_update_ship_cargo: Invalid commodity name '%s'\n", commodity);
+      return SQLITE_MISUSE;	// Invalid commodity string
     }
 
-    // 2. Get the player's active ship ID
-    const char *SQL_GET_SHIP = "SELECT ship FROM players WHERE id = ?1";
-    
-    rc = sqlite3_prepare_v2(db, SQL_GET_SHIP, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("h_update_ship_cargo: Failed to prepare get_ship: %s\n", sqlite3_errmsg(db));
-        return rc;
-    }
-    
-    sqlite3_bind_int(stmt, 1, player_id);
-    
-    rc = sqlite3_step(stmt);
-    if (rc == SQLITE_ROW) {
-        ship_id = sqlite3_column_int(stmt, 0);
-    }
-    sqlite3_finalize(stmt);
-    stmt = NULL;
-    
-    if (rc != SQLITE_ROW || ship_id <= 0) {
-        // This means no player was found, or the player has no ship (ship_id is 0 or NULL)
-        LOGE("h_update_ship_cargo: Player %d has no active ship (id: %d).\n", player_id, ship_id);
-        return SQLITE_ERROR; // No such player or no ship associated
+  // 2. Get the player's active ship ID
+  const char *SQL_GET_SHIP = "SELECT ship FROM players WHERE id = ?1";
+
+  rc = sqlite3_prepare_v2 (db, SQL_GET_SHIP, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_update_ship_cargo: Failed to prepare get_ship: %s\n",
+	    sqlite3_errmsg (db));
+      return rc;
     }
 
-    // 3. Build and execute the dynamic UPDATE ... RETURNING
-    // This query updates the value, clamps it at 0, and returns the new value.
-    // The CHECK constraint on the 'ships' table will catch (col + ... > holds)
-    LOGD("h_update_ship_cargo: col_name='%s', delta=%d, ship_id=%d\n", col_name, delta, ship_id);
-    sql_query = sqlite3_mprintf(
-        "UPDATE ships SET %q = MAX(0, COALESCE(%q, 0) + ?1) WHERE id = ?2 "
-        "RETURNING %q",
-        col_name, col_name, col_name
-    );
-    LOGD("h_update_ship_cargo: Generated SQL: %s\n", sql_query);
+  sqlite3_bind_int (stmt, 1, player_id);
 
-    if (!sql_query) {
-        return SQLITE_NOMEM;
+  rc = sqlite3_step (stmt);
+  if (rc == SQLITE_ROW)
+    {
+      ship_id = sqlite3_column_int (stmt, 0);
+    }
+  sqlite3_finalize (stmt);
+  stmt = NULL;
+
+  if (rc != SQLITE_ROW || ship_id <= 0)
+    {
+      // This means no player was found, or the player has no ship (ship_id is 0 or NULL)
+      LOGE ("h_update_ship_cargo: Player %d has no active ship (id: %d).\n",
+	    player_id, ship_id);
+      return SQLITE_ERROR;	// No such player or no ship associated
     }
 
-    rc = sqlite3_prepare_v2(db, sql_query, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("h_update_ship_cargo: Failed to prepare update: %s\n", sqlite3_errmsg(db));
-        sqlite3_free(sql_query);
-        return rc;
-    }
-    
-    sqlite3_bind_int(stmt, 1, delta);
-    sqlite3_bind_int(stmt, 2, ship_id);
-    
-    rc = sqlite3_step(stmt);
-    
-    // If the update was successful, rc will be SQLITE_ROW (due to RETURNING)
-    if (rc == SQLITE_ROW) {
-        // (Optional) Get the new quantity if requested
-        if (new_qty_out) {
-            *new_qty_out = sqlite3_column_int(stmt, 0);
-        }
-        rc = SQLITE_OK; // Set the final return code to success
-    } 
-    else if (rc == SQLITE_DONE) {
-        // This would mean the UPDATE affected 0 rows, e.g., ship_id was not found
-        // (which shouldn't happen if our SELECT above worked, but good to check)
-        LOGE("h_update_ship_cargo: Failed to find ship %d for update.\n", ship_id);
-        rc = SQLITE_ERROR;
-    }
-    // If rc is any other value (like SQLITE_CONSTRAINT), we will just return that
-    // error code, which is what we want.
+  // 3. Build and execute the dynamic UPDATE ... RETURNING
+  // This query updates the value, clamps it at 0, and returns the new value.
+  // The CHECK constraint on the 'ships' table will catch (col + ... > holds)
+  LOGD ("h_update_ship_cargo: col_name='%s', delta=%d, ship_id=%d\n",
+	col_name, delta, ship_id);
+  sql_query =
+    sqlite3_mprintf
+    ("UPDATE ships SET %q = MAX(0, COALESCE(%q, 0) + ?1) WHERE id = ?2 "
+     "RETURNING %q", col_name, col_name, col_name);
+  LOGD ("h_update_ship_cargo: Generated SQL: %s\n", sql_query);
 
-    // 4. Clean up
-    sqlite3_finalize(stmt);
-    sqlite3_free(sql_query);
-    
-    return rc; // Will be SQLITE_OK or an error code (e.g., SQLITE_CONSTRAINT)
+  if (!sql_query)
+    {
+      return SQLITE_NOMEM;
+    }
+
+  rc = sqlite3_prepare_v2 (db, sql_query, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_update_ship_cargo: Failed to prepare update: %s\n",
+	    sqlite3_errmsg (db));
+      sqlite3_free (sql_query);
+      return rc;
+    }
+
+  sqlite3_bind_int (stmt, 1, delta);
+  sqlite3_bind_int (stmt, 2, ship_id);
+
+  rc = sqlite3_step (stmt);
+
+  // If the update was successful, rc will be SQLITE_ROW (due to RETURNING)
+  if (rc == SQLITE_ROW)
+    {
+      // (Optional) Get the new quantity if requested
+      if (new_qty_out)
+	{
+	  *new_qty_out = sqlite3_column_int (stmt, 0);
+	}
+      rc = SQLITE_OK;		// Set the final return code to success
+    }
+  else if (rc == SQLITE_DONE)
+    {
+      // This would mean the UPDATE affected 0 rows, e.g., ship_id was not found
+      // (which shouldn't happen if our SELECT above worked, but good to check)
+      LOGE ("h_update_ship_cargo: Failed to find ship %d for update.\n",
+	    ship_id);
+      rc = SQLITE_ERROR;
+    }
+  // If rc is any other value (like SQLITE_CONSTRAINT), we will just return that
+  // error code, which is what we want.
+
+  // 4. Clean up
+  sqlite3_finalize (stmt);
+  sqlite3_free (sql_query);
+
+  return rc;			// Will be SQLITE_OK or an error code (e.g., SQLITE_CONSTRAINT)
 }
 
 int
 h_deduct_ship_credits (sqlite3 *db, int player_id, int amount,
-		     int *new_balance)
+		       int *new_balance)
 {
   long long new_balance_ll = 0;
   const char *transaction_type = "WITHDRAWAL";
   const char *transaction_group_id = NULL;
-  int rc = h_deduct_credits(db, "player", player_id, amount, transaction_type, transaction_group_id, &new_balance_ll);
-  if (rc == SQLITE_OK && new_balance) {
-    *new_balance = (int)new_balance_ll;
-  }
+  int rc =
+    h_deduct_credits (db, "player", player_id, amount, transaction_type,
+		      transaction_group_id, &new_balance_ll);
+  if (rc == SQLITE_OK && new_balance)
+    {
+      *new_balance = (int) new_balance_ll;
+    }
   return rc;
 }
 
@@ -777,11 +807,12 @@ cmd_player_my_info (client_ctx_t *ctx, json_t *root)
 
   // Add player credits
   long long credits_val = 0;
-  if (h_get_player_petty_cash(db, ctx->player_id, &credits_val) == SQLITE_OK) {
+  if (h_get_player_petty_cash (db, ctx->player_id, &credits_val) == SQLITE_OK)
+    {
       char credits_str[32];
-      snprintf(credits_str, sizeof(credits_str), "%lld.00", credits_val); // Format as string with decimals
-      json_object_set_new(player, "credits", json_string(credits_str));
-  }
+      snprintf (credits_str, sizeof (credits_str), "%lld.00", credits_val);	// Format as string with decimals
+      json_object_set_new (player, "credits", json_string (credits_str));
+    }
 
 
   send_enveloped_ok (ctx->fd, root, "player.info", pinfo);
@@ -1226,30 +1257,38 @@ cmd_player_set_prefs (client_ctx_t *ctx, json_t *root)
 	    }
 	  /* falls through to db_prefs_set_one with type='string' */
 	}
-      else if (strcasecmp(key, "news.fetch_mode") == 0)
-      {
-          if (!json_is_integer(val)) {
-              send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "news.fetch_mode must be an integer");
-              return -1;
-          }
-          int mode = json_integer_value(val);
-          if (mode < 0 || mode > 7) {
-              send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "news.fetch_mode must be between 0 and 7");
-              return -1;
-          }
-      }
-      else if (strcasecmp(key, "news.category_filter") == 0)
-      {
-          if (!json_is_string(val)) {
-              send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "news.category_filter must be a string");
-              return -1;
-          }
-          const char* filter = json_string_value(val);
-          if (strlen(filter) > 128) {
-              send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "news.category_filter is too long");
-              return -1;
-          }
-      }
+      else if (strcasecmp (key, "news.fetch_mode") == 0)
+	{
+	  if (!json_is_integer (val))
+	    {
+	      send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG,
+				    "news.fetch_mode must be an integer");
+	      return -1;
+	    }
+	  int mode = json_integer_value (val);
+	  if (mode < 0 || mode > 7)
+	    {
+	      send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG,
+				    "news.fetch_mode must be between 0 and 7");
+	      return -1;
+	    }
+	}
+      else if (strcasecmp (key, "news.category_filter") == 0)
+	{
+	  if (!json_is_string (val))
+	    {
+	      send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG,
+				    "news.category_filter must be a string");
+	      return -1;
+	    }
+	  const char *filter = json_string_value (val);
+	  if (strlen (filter) > 128)
+	    {
+	      send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG,
+				    "news.category_filter is too long");
+	      return -1;
+	    }
+	}
 
 
       it = json_object_iter_next (prefs, it);
@@ -1651,61 +1690,81 @@ bookmarks_as_array (int64_t pid)
 }
 
 int
-h_deduct_player_petty_cash (sqlite3 *db, int player_id, long long amount, long long *new_balance_out)
+h_deduct_player_petty_cash (sqlite3 *db, int player_id, long long amount,
+			    long long *new_balance_out)
 {
   char *errmsg = NULL;
   int rc = SQLITE_ERROR;
   long long current_balance = 0;
 
-  if (!db || player_id <= 0 || amount <= 0) {
-      LOGE("h_deduct_player_petty_cash: Invalid arguments. db=%p, player_id=%d, amount=%lld", db, player_id, amount);
+  if (!db || player_id <= 0 || amount <= 0)
+    {
+      LOGE
+	("h_deduct_player_petty_cash: Invalid arguments. db=%p, player_id=%d, amount=%lld",
+	 db, player_id, amount);
       return SQLITE_MISUSE;
-  }
+    }
 
   // 1. Get current petty cash balance
   sqlite3_stmt *select_stmt = NULL;
-  const char *sql_select_balance = "SELECT credits FROM players WHERE id = ?;";
-  rc = sqlite3_prepare_v2(db, sql_select_balance, -1, &select_stmt, NULL);
-  if (rc != SQLITE_OK) {
-      LOGE("h_deduct_player_petty_cash: SELECT prepare error: %s", sqlite3_errmsg(db));
+  const char *sql_select_balance =
+    "SELECT credits FROM players WHERE id = ?;";
+  rc = sqlite3_prepare_v2 (db, sql_select_balance, -1, &select_stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_deduct_player_petty_cash: SELECT prepare error: %s",
+	    sqlite3_errmsg (db));
       goto cleanup;
-  }
-  sqlite3_bind_int(select_stmt, 1, player_id);
+    }
+  sqlite3_bind_int (select_stmt, 1, player_id);
 
-  if (sqlite3_step(select_stmt) == SQLITE_ROW) {
-      current_balance = sqlite3_column_int64(select_stmt, 0);
-  } else {
-      LOGE("h_deduct_player_petty_cash: Player ID %d not found in players table.", player_id);
+  if (sqlite3_step (select_stmt) == SQLITE_ROW)
+    {
+      current_balance = sqlite3_column_int64 (select_stmt, 0);
+    }
+  else
+    {
+      LOGE
+	("h_deduct_player_petty_cash: Player ID %d not found in players table.",
+	 player_id);
       rc = SQLITE_NOTFOUND;
       goto cleanup;
-  }
-  sqlite3_finalize(select_stmt);
+    }
+  sqlite3_finalize (select_stmt);
   select_stmt = NULL;
 
   // 2. Check for sufficient funds
-  if (current_balance < amount) {
-      LOGW("h_deduct_player_petty_cash: Insufficient petty cash for player %d. Current: %lld, Attempted deduct: %lld", player_id, current_balance, amount);
-      rc = SQLITE_CONSTRAINT; // Or a custom error code for insufficient funds
+  if (current_balance < amount)
+    {
+      LOGW
+	("h_deduct_player_petty_cash: Insufficient petty cash for player %d. Current: %lld, Attempted deduct: %lld",
+	 player_id, current_balance, amount);
+      rc = SQLITE_CONSTRAINT;	// Or a custom error code for insufficient funds
       goto cleanup;
-  }
+    }
 
   // 3. Update petty cash balance
   long long new_balance = current_balance - amount;
   sqlite3_stmt *update_stmt = NULL;
-  const char *sql_update_balance = "UPDATE players SET credits = ? WHERE id = ?;";
-  rc = sqlite3_prepare_v2(db, sql_update_balance, -1, &update_stmt, NULL);
-  if (rc != SQLITE_OK) {
-      LOGE("h_deduct_player_petty_cash: UPDATE prepare error: %s", sqlite3_errmsg(db));
+  const char *sql_update_balance =
+    "UPDATE players SET credits = ? WHERE id = ?;";
+  rc = sqlite3_prepare_v2 (db, sql_update_balance, -1, &update_stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_deduct_player_petty_cash: UPDATE prepare error: %s",
+	    sqlite3_errmsg (db));
       goto cleanup;
-  }
-  sqlite3_bind_int64(update_stmt, 1, new_balance);
-  sqlite3_bind_int(update_stmt, 2, player_id);
+    }
+  sqlite3_bind_int64 (update_stmt, 1, new_balance);
+  sqlite3_bind_int (update_stmt, 2, player_id);
 
-  if (sqlite3_step(update_stmt) != SQLITE_DONE) {
-      LOGE("h_deduct_player_petty_cash: UPDATE step error: %s", sqlite3_errmsg(db));
+  if (sqlite3_step (update_stmt) != SQLITE_DONE)
+    {
+      LOGE ("h_deduct_player_petty_cash: UPDATE step error: %s",
+	    sqlite3_errmsg (db));
       goto cleanup;
-  }
-  sqlite3_finalize(update_stmt);
+    }
+  sqlite3_finalize (update_stmt);
   update_stmt = NULL;
 
   if (new_balance_out)
@@ -1714,61 +1773,81 @@ h_deduct_player_petty_cash (sqlite3 *db, int player_id, long long amount, long l
   return SQLITE_OK;
 
 cleanup:
-  if (select_stmt) sqlite3_finalize(select_stmt);
-  if (update_stmt) sqlite3_finalize(update_stmt);
-  if (errmsg) sqlite3_free(errmsg);
+  if (select_stmt)
+    sqlite3_finalize (select_stmt);
+  if (update_stmt)
+    sqlite3_finalize (update_stmt);
+  if (errmsg)
+    sqlite3_free (errmsg);
   return rc;
 }
 
 int
-h_add_player_petty_cash (sqlite3 *db, int player_id, long long amount, long long *new_balance_out)
+h_add_player_petty_cash (sqlite3 *db, int player_id, long long amount,
+			 long long *new_balance_out)
 {
   char *errmsg = NULL;
   int rc = SQLITE_ERROR;
   long long current_balance = 0;
 
-  if (!db || player_id <= 0 || amount <= 0) {
-      LOGE("h_add_player_petty_cash: Invalid arguments. db=%p, player_id=%d, amount=%lld", db, player_id, amount);
+  if (!db || player_id <= 0 || amount <= 0)
+    {
+      LOGE
+	("h_add_player_petty_cash: Invalid arguments. db=%p, player_id=%d, amount=%lld",
+	 db, player_id, amount);
       return SQLITE_MISUSE;
-  }
+    }
 
   // 1. Get current petty cash balance
   sqlite3_stmt *select_stmt = NULL;
-  const char *sql_select_balance = "SELECT credits FROM players WHERE id = ?;";
-  rc = sqlite3_prepare_v2(db, sql_select_balance, -1, &select_stmt, NULL);
-  if (rc != SQLITE_OK) {
-      LOGE("h_add_player_petty_cash: SELECT prepare error: %s", sqlite3_errmsg(db));
+  const char *sql_select_balance =
+    "SELECT credits FROM players WHERE id = ?;";
+  rc = sqlite3_prepare_v2 (db, sql_select_balance, -1, &select_stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_add_player_petty_cash: SELECT prepare error: %s",
+	    sqlite3_errmsg (db));
       goto cleanup;
-  }
-  sqlite3_bind_int(select_stmt, 1, player_id);
+    }
+  sqlite3_bind_int (select_stmt, 1, player_id);
 
-  if (sqlite3_step(select_stmt) == SQLITE_ROW) {
-      current_balance = sqlite3_column_int64(select_stmt, 0);
-  } else {
-      LOGE("h_add_player_petty_cash: Player ID %d not found in players table.", player_id);
+  if (sqlite3_step (select_stmt) == SQLITE_ROW)
+    {
+      current_balance = sqlite3_column_int64 (select_stmt, 0);
+    }
+  else
+    {
+      LOGE
+	("h_add_player_petty_cash: Player ID %d not found in players table.",
+	 player_id);
       rc = SQLITE_NOTFOUND;
       goto cleanup;
-  }
-  sqlite3_finalize(select_stmt);
+    }
+  sqlite3_finalize (select_stmt);
   select_stmt = NULL;
 
   // 2. Update petty cash balance
   long long new_balance = current_balance + amount;
   sqlite3_stmt *update_stmt = NULL;
-  const char *sql_update_balance = "UPDATE players SET credits = ? WHERE id = ?;";
-  rc = sqlite3_prepare_v2(db, sql_update_balance, -1, &update_stmt, NULL);
-  if (rc != SQLITE_OK) {
-      LOGE("h_add_player_petty_cash: UPDATE prepare error: %s", sqlite3_errmsg(db));
+  const char *sql_update_balance =
+    "UPDATE players SET credits = ? WHERE id = ?;";
+  rc = sqlite3_prepare_v2 (db, sql_update_balance, -1, &update_stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_add_player_petty_cash: UPDATE prepare error: %s",
+	    sqlite3_errmsg (db));
       goto cleanup;
-  }
-  sqlite3_bind_int64(update_stmt, 1, new_balance);
-  sqlite3_bind_int(update_stmt, 2, player_id);
+    }
+  sqlite3_bind_int64 (update_stmt, 1, new_balance);
+  sqlite3_bind_int (update_stmt, 2, player_id);
 
-  if (sqlite3_step(update_stmt) != SQLITE_DONE) {
-      LOGE("h_add_player_petty_cash: UPDATE step error: %s", sqlite3_errmsg(db));
+  if (sqlite3_step (update_stmt) != SQLITE_DONE)
+    {
+      LOGE ("h_add_player_petty_cash: UPDATE step error: %s",
+	    sqlite3_errmsg (db));
       goto cleanup;
-  }
-  sqlite3_finalize(update_stmt);
+    }
+  sqlite3_finalize (update_stmt);
   update_stmt = NULL;
 
   if (new_balance_out)
@@ -1777,40 +1856,54 @@ h_add_player_petty_cash (sqlite3 *db, int player_id, long long amount, long long
   return SQLITE_OK;
 
 cleanup:
-  if (select_stmt) sqlite3_finalize(select_stmt);
-  if (update_stmt) sqlite3_finalize(update_stmt);
-  if (errmsg) sqlite3_free(errmsg);
+  if (select_stmt)
+    sqlite3_finalize (select_stmt);
+  if (update_stmt)
+    sqlite3_finalize (update_stmt);
+  if (errmsg)
+    sqlite3_free (errmsg);
   return rc;
 }
 
 int
 h_get_player_petty_cash (sqlite3 *db, int player_id, long long *credits_out)
 {
-    sqlite3_stmt *select_stmt = NULL;
-    const char *sql_select_balance = "SELECT credits FROM players WHERE id = ?;";
-    int rc = SQLITE_ERROR;
+  sqlite3_stmt *select_stmt = NULL;
+  const char *sql_select_balance =
+    "SELECT credits FROM players WHERE id = ?;";
+  int rc = SQLITE_ERROR;
 
-    if (!db || player_id <= 0 || !credits_out) {
-        LOGE("h_get_player_petty_cash: Invalid arguments. db=%p, player_id=%d, credits_out=%p", db, player_id, credits_out);
-        return SQLITE_MISUSE;
+  if (!db || player_id <= 0 || !credits_out)
+    {
+      LOGE
+	("h_get_player_petty_cash: Invalid arguments. db=%p, player_id=%d, credits_out=%p",
+	 db, player_id, credits_out);
+      return SQLITE_MISUSE;
     }
 
-    rc = sqlite3_prepare_v2(db, sql_select_balance, -1, &select_stmt, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("h_get_player_petty_cash: SELECT prepare error: %s", sqlite3_errmsg(db));
-        return rc;
+  rc = sqlite3_prepare_v2 (db, sql_select_balance, -1, &select_stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_get_player_petty_cash: SELECT prepare error: %s",
+	    sqlite3_errmsg (db));
+      return rc;
     }
-    sqlite3_bind_int(select_stmt, 1, player_id);
+  sqlite3_bind_int (select_stmt, 1, player_id);
 
-    if (sqlite3_step(select_stmt) == SQLITE_ROW) {
-        *credits_out = sqlite3_column_int64(select_stmt, 0);
-        rc = SQLITE_OK;
-    } else {
-        LOGE("h_get_player_petty_cash: Player ID %d not found in players table.", player_id);
-        rc = SQLITE_NOTFOUND;
+  if (sqlite3_step (select_stmt) == SQLITE_ROW)
+    {
+      *credits_out = sqlite3_column_int64 (select_stmt, 0);
+      rc = SQLITE_OK;
     }
-    sqlite3_finalize(select_stmt);
-    return rc;
+  else
+    {
+      LOGE
+	("h_get_player_petty_cash: Player ID %d not found in players table.",
+	 player_id);
+      rc = SQLITE_NOTFOUND;
+    }
+  sqlite3_finalize (select_stmt);
+  return rc;
 }
 
 
@@ -1890,12 +1983,9 @@ cmd_player_get_settings (client_ctx_t *ctx, json_t *root)
 }
 
 
+/////////
 int cmd_bank_history (client_ctx_t *ctx, json_t *root)
 {
-  sqlite3 *db = db_get_handle ();
-  sqlite3_stmt *stmt = NULL;
-  int rc = SQLITE_ERROR;
-
   if (ctx->player_id <= 0)
     {
       send_enveloped_refused (ctx->fd, root, ERR_NOT_AUTHENTICATED, "Not authenticated", NULL);
@@ -1915,12 +2005,6 @@ int cmd_bank_history (client_ctx_t *ctx, json_t *root)
   if (json_is_integer(j_limit)) {
       limit = (int)json_integer_value(j_limit);
       if (limit <= 0 || limit > 50) limit = 20; // Clamp limit
-  }
-
-  const char *cursor = NULL;
-  json_t *j_cursor = json_object_get(data, "cursor");
-  if (json_is_string(j_cursor)) {
-      cursor = json_string_value(j_cursor);
   }
 
   const char *tx_type_filter = NULL;
@@ -1953,138 +2037,30 @@ int cmd_bank_history (client_ctx_t *ctx, json_t *root)
       max_amount = json_integer_value(j_max_amount);
   }
 
-  // --- Build SQL Query ---
-  char sql_query[1024];
-  char where_clause[512];
-  where_clause[0] = '\0'; // Initialize empty
+  json_t *transactions_array = NULL;
+  int rc = db_bank_get_transactions("player", ctx->player_id, limit, tx_type_filter,
+                                  start_date, end_date, min_amount, max_amount, &transactions_array);
 
-  // Base query to get transactions for the player's account
-  // First, get the player's account ID
-  int player_bank_account_id = -1;
-  rc = h_get_account_id_unlocked(db, "player", ctx->player_id, &player_bank_account_id);
   if (rc != SQLITE_OK) {
-      // If no account, then no history. Return empty.
-      json_t *payload = json_pack ("{s:o, s:b}", "history", json_array(), "has_next_page", json_false());
-      send_enveloped_ok (ctx->fd, root, "bank.history.response", payload);
-      json_decref(payload);
+      send_enveloped_error(ctx->fd, root, ERR_DB_QUERY_FAILED, "Failed to retrieve bank history.");
+      if (transactions_array) json_decref(transactions_array);
       return 0;
   }
-  snprintf(where_clause, sizeof(where_clause), "WHERE account_id = %d ", player_bank_account_id);
-
-
-  // Apply filters
-  if (tx_type_filter) {
-      char temp_clause[64];
-      snprintf(temp_clause, sizeof(temp_clause), "AND tx_type = '%s' ", tx_type_filter);
-      strcat(where_clause, temp_clause);
-  }
-  if (start_date > 0) {
-      char temp_clause[64];
-      snprintf(temp_clause, sizeof(temp_clause), "AND ts >= %lld ", start_date);
-      strcat(where_clause, temp_clause);
-  }
-  if (end_date > 0) {
-      char temp_clause[64];
-      snprintf(temp_clause, sizeof(temp_clause), "AND ts <= %lld ", end_date);
-      strcat(where_clause, temp_clause);
-  }
-  if (min_amount > 0) {
-      char temp_clause[64];
-      snprintf(temp_clause, sizeof(temp_clause), "AND amount >= %lld ", min_amount);
-      strcat(where_clause, temp_clause);
-  }
-  if (max_amount > 0) {
-      char temp_clause[64];
-      snprintf(temp_clause, sizeof(temp_clause), "AND amount <= %lld ", max_amount);
-      strcat(where_clause, temp_clause);
-  }
-
-  // Cursor-based pagination
-  long long cursor_ts = 0;
-  long long cursor_id = 0;
-  if (cursor) {
-      char *sep = strchr ((char *) cursor, '_');
-      if (sep) {
-          *sep = '\0'; // Temporarily null-terminate the timestamp part
-          cursor_ts = atoll (cursor);
-          cursor_id = atoll (sep + 1);
-          *sep = '_'; // Restore original cursor string
-      }
-      if (cursor_ts > 0 || cursor_id > 0) { // If a valid cursor was parsed
-          char temp_clause[128];
-          snprintf(temp_clause, sizeof(temp_clause), "AND (ts < %lld OR (ts = %lld AND id < %lld)) ", cursor_ts, cursor_ts, cursor_id);
-          strcat(where_clause, temp_clause);
-      }
-  }
-  
-  // Final SQL construction
-  snprintf(sql_query, sizeof(sql_query),
-           "SELECT id, tx_type, direction, amount, currency, ts, balance_after, description "
-           "FROM bank_transactions %s"
-           "ORDER BY ts DESC, id DESC "
-           "LIMIT %d;", where_clause, limit + 1); // Fetch limit + 1 to check for next page
-
-  // --- Execute Query and Build Response ---
-  rc = sqlite3_prepare_v2(db, sql_query, -1, &stmt, NULL);
-  if (rc != SQLITE_OK) {
-      LOGE("cmd_bank_history: Failed to prepare statement: %s", sqlite3_errmsg(db));
-      send_enveloped_error(ctx->fd, root, 500, "Database error.");
-      return 0;
-  }
-
-  json_t *history_array = json_array();
-  int count = 0;
-  long long last_ts = 0;
-  long long last_id = 0;
-  bool has_next_page = false;
-
-  while (sqlite3_step(stmt) == SQLITE_ROW) {
-      if (count < limit) {
-          json_t *tx = json_object();
-          json_object_set_new(tx, "id", json_integer(sqlite3_column_int64(stmt, 0)));
-          json_object_set_new(tx, "type", json_string((const char*)sqlite3_column_text(stmt, 1)));
-          json_object_set_new(tx, "direction", json_string((const char*)sqlite3_column_text(stmt, 2)));
-          json_object_set_new(tx, "amount", json_integer(sqlite3_column_int64(stmt, 3)));
-          json_object_set_new(tx, "currency", json_string((const char*)sqlite3_column_text(stmt, 4)));
-          json_object_set_new(tx, "timestamp", json_integer(sqlite3_column_int64(stmt, 5)));
-          json_object_set_new(tx, "balance_after", json_integer(sqlite3_column_int64(stmt, 6)));
-          
-          const char *description = (const char*)sqlite3_column_text(stmt, 7);
-          if (description) {
-              json_object_set_new(tx, "description", json_string(description));
-          } else {
-              json_object_set_new(tx, "description", json_string(""));
-          }
-          json_array_append_new(history_array, tx);
-          
-          last_id = sqlite3_column_int64(stmt, 0);
-          last_ts = sqlite3_column_int64(stmt, 5);
-          count++;
-      } else {
-          has_next_page = true;
-          break; // Stop if we've read one more than the limit
-      }
-  }
-  sqlite3_finalize(stmt);
 
   // --- Send Response ---
-  json_t *payload = json_object();
-  json_object_set_new(payload, "history", history_array);
-  json_object_set_new(payload, "has_next_page", json_boolean(has_next_page));
-
-  if (has_next_page) {
-      char next_cursor[64];
-      snprintf(next_cursor, sizeof(next_cursor), "%lld_%lld", last_ts, last_id);
-      json_object_set_new(payload, "next_cursor", json_string(next_cursor));
-  }
-
-  send_enveloped_ok (ctx->fd, root, "bank.history.response", payload);
-  json_decref(payload);
+  // The has_next_page logic is simplified here. A more robust implementation
+  // might involve fetching limit + 1 records to see if there are more.
+  json_t *payload = json_pack("{s:o, s:b}", "history", transactions_array, "has_next_page", json_false());
+  send_enveloped_ok(ctx->fd, root, "bank.history.response", payload);
+  json_decref(payload); // this will also decref transactions_array
 
   return 0;
 }
 
-int cmd_bank_leaderboard (client_ctx_t *ctx, json_t *root)
+
+////////
+int
+cmd_bank_leaderboard (client_ctx_t *ctx, json_t *root)
 {
   sqlite3 *db = db_get_handle ();
   sqlite3_stmt *stmt = NULL;
@@ -2092,61 +2068,70 @@ int cmd_bank_leaderboard (client_ctx_t *ctx, json_t *root)
 
   if (ctx->player_id <= 0)
     {
-      send_enveloped_refused (ctx->fd, root, ERR_NOT_AUTHENTICATED, "Not authenticated", NULL);
+      send_enveloped_refused (ctx->fd, root, ERR_NOT_AUTHENTICATED,
+			      "Not authenticated", NULL);
       return 0;
     }
 
   json_t *data = json_object_get (root, "data");
   if (!json_is_object (data))
     {
-      send_enveloped_error (ctx->fd, root, ERR_INVALID_SCHEMA, "data must be object");
+      send_enveloped_error (ctx->fd, root, ERR_INVALID_SCHEMA,
+			    "data must be object");
       return 0;
     }
 
   // --- Input Parameters ---
-  int limit = 20; // Default limit
-  json_t *j_limit = json_object_get(data, "limit");
-  if (json_is_integer(j_limit)) {
-      limit = (int)json_integer_value(j_limit);
-      if (limit <= 0 || limit > 100) limit = 20; // Clamp limit between 1 and 100
-  }
+  int limit = 20;		// Default limit
+  json_t *j_limit = json_object_get (data, "limit");
+  if (json_is_integer (j_limit))
+    {
+      limit = (int) json_integer_value (j_limit);
+      if (limit <= 0 || limit > 100)
+	limit = 20;		// Clamp limit between 1 and 100
+    }
 
   // --- Build SQL Query ---
   // We need player name from 'players' table and balance from 'bank_accounts' table
   const char *sql_query =
-      "SELECT P.name, BA.balance "
-      "FROM bank_accounts BA "
-      "JOIN players P ON P.id = BA.owner_id "
-      "WHERE BA.owner_type = 'player' "
-      "ORDER BY BA.balance DESC "
-      "LIMIT ?1;";
+    "SELECT P.name, BA.balance "
+    "FROM bank_accounts BA "
+    "JOIN players P ON P.id = BA.owner_id "
+    "WHERE BA.owner_type = 'player' " "ORDER BY BA.balance DESC " "LIMIT ?1;";
 
-  rc = sqlite3_prepare_v2(db, sql_query, -1, &stmt, NULL);
-  if (rc != SQLITE_OK) {
-      LOGE("cmd_bank_leaderboard: Failed to prepare statement: %s", sqlite3_errmsg(db));
-      send_enveloped_error(ctx->fd, root, 500, "Database error.");
+  rc = sqlite3_prepare_v2 (db, sql_query, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("cmd_bank_leaderboard: Failed to prepare statement: %s",
+	    sqlite3_errmsg (db));
+      send_enveloped_error (ctx->fd, root, 500, "Database error.");
       return 0;
-  }
-  sqlite3_bind_int(stmt, 1, limit);
+    }
+  sqlite3_bind_int (stmt, 1, limit);
 
   // --- Execute Query and Build Response ---
-  json_t *leaderboard_array = json_array();
+  json_t *leaderboard_array = json_array ();
 
-  while (sqlite3_step(stmt) == SQLITE_ROW) {
-      json_t *entry = json_object();
-      json_object_set_new(entry, "player_name", json_string((const char*)sqlite3_column_text(stmt, 0)));
-      json_object_set_new(entry, "balance", json_integer(sqlite3_column_int64(stmt, 1)));
-      json_array_append_new(leaderboard_array, entry);
-  }
-  sqlite3_finalize(stmt);
+  while (sqlite3_step (stmt) == SQLITE_ROW)
+    {
+      json_t *entry = json_object ();
+      json_object_set_new (entry, "player_name",
+			   json_string ((const char *)
+					sqlite3_column_text (stmt, 0)));
+      json_object_set_new (entry, "balance",
+			   json_integer (sqlite3_column_int64 (stmt, 1)));
+      json_array_append_new (leaderboard_array, entry);
+    }
+  sqlite3_finalize (stmt);
 
   // --- Send Response ---
   json_t *payload = json_pack ("{s:o}", "leaderboard", leaderboard_array);
   send_enveloped_ok (ctx->fd, root, "bank.leaderboard.response", payload);
-  json_decref(payload);
+  json_decref (payload);
 
   return 0;
 }
+
 int
 cmd_bank_deposit (client_ctx_t *ctx, json_t *root)
 {
@@ -2167,7 +2152,7 @@ cmd_bank_deposit (client_ctx_t *ctx, json_t *root)
   if (!json_is_integer (j_amount) || json_integer_value (j_amount) <= 0)
     {
       send_enveloped_error (ctx->fd, root, 400,
-                            "Deposit amount must be a positive integer.");
+			    "Deposit amount must be a positive integer.");
       return 0;
     }
 
@@ -2180,65 +2165,80 @@ cmd_bank_deposit (client_ctx_t *ctx, json_t *root)
     }
 
   long long player_petty_cash = 0;
-  int rc = h_get_player_petty_cash(db, ctx->player_id, &player_petty_cash);
-  if (rc != SQLITE_OK) {
-      send_enveloped_error(ctx->fd, root, 500, "Failed to retrieve petty cash balance.");
+  int rc = h_get_player_petty_cash (db, ctx->player_id, &player_petty_cash);
+  if (rc != SQLITE_OK)
+    {
+      send_enveloped_error (ctx->fd, root, 500,
+			    "Failed to retrieve petty cash balance.");
       return 0;
-  }
+    }
 
-  if (player_petty_cash < amount) {
-      send_enveloped_refused(ctx->fd, root, ERR_INSUFFICIENT_FUNDS, "Insufficient petty cash to deposit.", NULL);
+  if (player_petty_cash < amount)
+    {
+      send_enveloped_refused (ctx->fd, root, ERR_INSUFFICIENT_FUNDS,
+			      "Insufficient petty cash to deposit.", NULL);
       return 0;
-  }
+    }
 
   // Start transaction
   sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, NULL);
 
   // Deduct from player's petty cash
-  rc = h_deduct_player_petty_cash(db, ctx->player_id, amount, NULL); // new_balance_out can be NULL
-  if (rc != SQLITE_OK) {
+  rc = h_deduct_player_petty_cash (db, ctx->player_id, amount, NULL);	// new_balance_out can be NULL
+  if (rc != SQLITE_OK)
+    {
       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      if (rc == SQLITE_CONSTRAINT) {
-          send_enveloped_refused(ctx->fd, root, ERR_INSUFFICIENT_FUNDS, "Insufficient petty cash to deposit.", NULL);
-      } else {
-          send_enveloped_error(ctx->fd, root, 500, "Failed to deduct from petty cash.");
-      }
+      if (rc == SQLITE_CONSTRAINT)
+	{
+	  send_enveloped_refused (ctx->fd, root, ERR_INSUFFICIENT_FUNDS,
+				  "Insufficient petty cash to deposit.",
+				  NULL);
+	}
+      else
+	{
+	  send_enveloped_error (ctx->fd, root, 500,
+				"Failed to deduct from petty cash.");
+	}
       return 0;
-  }
+    }
 
   // Add to player's bank account
   long long new_bank_balance = 0;
   // rc = h_add_credits (db, "player", ctx->player_id, amount, &new_bank_balance);  
-   const char *transaction_type = "DEPOSIT";
-   const char *transaction_group_id = NULL; // Or an appropriate ID if part of a grouped transaction
-   rc = h_add_credits (db, "player", ctx->player_id, amount,
-                       transaction_type, transaction_group_id,
-                       &new_bank_balance);
+  const char *transaction_type = "DEPOSIT";
+  const char *transaction_group_id = NULL;	// Or an appropriate ID if part of a grouped transaction
+  rc = h_add_credits (db, "player", ctx->player_id, amount,
+		      transaction_type, transaction_group_id,
+		      &new_bank_balance);
 
-  
+
   if (rc != SQLITE_OK)
     {
       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      send_enveloped_error (ctx->fd, root, 500, "Failed to deposit credits to bank.");
+      send_enveloped_error (ctx->fd, root, 500,
+			    "Failed to deposit credits to bank.");
       return 0;
     }
 
   // Commit transaction
   sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
 
-  json_t *payload = json_pack ("{s:i, s:I}", "player_id", ctx->player_id, "new_balance", new_bank_balance);
+  json_t *payload =
+    json_pack ("{s:i, s:I}", "player_id", ctx->player_id, "new_balance",
+	       new_bank_balance);
   send_enveloped_ok (ctx->fd, root, "bank.deposit.confirmed", payload);
   json_decref (payload);
 
   return 0;
 }
 
-int cmd_bank_transfer (client_ctx_t * ctx, json_t * root)
+int
+cmd_bank_transfer (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id <= 0)
     {
       send_enveloped_refused (ctx->fd, root, ERR_NOT_AUTHENTICATED,
-                              "Not authenticated", NULL);
+			      "Not authenticated", NULL);
       return 0;
     }
 
@@ -2246,24 +2246,25 @@ int cmd_bank_transfer (client_ctx_t * ctx, json_t * root)
   if (!json_is_object (data))
     {
       send_enveloped_error (ctx->fd, root, ERR_INVALID_SCHEMA,
-                            "data must be object");
+			    "data must be object");
       return 0;
     }
 
   json_t *j_to_player_id = json_object_get (data, "to_player_id");
   json_t *j_amount = json_object_get (data, "amount");
 
-  if (!json_is_integer (j_to_player_id) || json_integer_value (j_to_player_id) <= 0)
+  if (!json_is_integer (j_to_player_id)
+      || json_integer_value (j_to_player_id) <= 0)
     {
       send_enveloped_refused (ctx->fd, root, ERR_INVALID_ARG,
-                              "Invalid recipient player ID", NULL);
+			      "Invalid recipient player ID", NULL);
       return 0;
     }
 
   if (!json_is_integer (j_amount) || json_integer_value (j_amount) <= 0)
     {
       send_enveloped_refused (ctx->fd, root, ERR_INVALID_ARG,
-                              "Invalid transfer amount", NULL);
+			      "Invalid transfer amount", NULL);
       return 0;
     }
 
@@ -2273,7 +2274,7 @@ int cmd_bank_transfer (client_ctx_t * ctx, json_t * root)
   if (ctx->player_id == to_player_id)
     {
       send_enveloped_refused (ctx->fd, root, ERR_INVALID_ARG,
-                              "Cannot transfer to self", NULL);
+			      "Cannot transfer to self", NULL);
       return 0;
     }
 
@@ -2286,88 +2287,91 @@ int cmd_bank_transfer (client_ctx_t * ctx, json_t * root)
   sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, NULL);
 
   // Check sender's balance
-        rc = h_get_credits (db, "player", ctx->player_id, &from_balance);
-        if (rc != SQLITE_OK)
-          {
-            sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-            send_enveloped_error (ctx->fd, root, ERR_UNKNOWN, "Failed to get sender balance");
-            return 0;
-          }
+  rc = h_get_credits (db, "player", ctx->player_id, &from_balance);
+  if (rc != SQLITE_OK)
+    {
+      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      send_enveloped_error (ctx->fd, root, ERR_UNKNOWN,
+			    "Failed to get sender balance");
+      return 0;
+    }
   if (from_balance < amount)
     {
       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
       send_enveloped_refused (ctx->fd, root, ERR_INSUFFICIENT_FUNDS,
-                              "Insufficient funds", NULL);
+			      "Insufficient funds", NULL);
       return 0;
     }
 
-   // Deduct from sender
-   const char *transaction_type = "TRANSFER";
-   char tx_group_id_buffer[UUID_STR_LEN];
-   h_generate_hex_uuid(tx_group_id_buffer, sizeof(tx_group_id_buffer));
-   const char *tx_group_id_for_transfer = tx_group_id_buffer;
+  // Deduct from sender
+  const char *transaction_type = "TRANSFER";
+  char tx_group_id_buffer[UUID_STR_LEN];
+  h_generate_hex_uuid (tx_group_id_buffer, sizeof (tx_group_id_buffer));
+  const char *tx_group_id_for_transfer = tx_group_id_buffer;
 
-   
-   rc = h_deduct_credits (db, "player", ctx->player_id, amount,
-                          transaction_type, tx_group_id_for_transfer,
-                          &from_balance);
-  
-        if (rc != SQLITE_OK)
-          {
-            sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-            send_enveloped_error (ctx->fd, root, ERR_UNKNOWN, "Failed to deduct funds");
-            return 0;
-          }
+
+  rc = h_deduct_credits (db, "player", ctx->player_id, amount,
+			 transaction_type, tx_group_id_for_transfer,
+			 &from_balance);
+
+  if (rc != SQLITE_OK)
+    {
+      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      send_enveloped_error (ctx->fd, root, ERR_UNKNOWN,
+			    "Failed to deduct funds");
+      return 0;
+    }
   // Add to recipient
-        // rc = h_add_credits (db, "player", to_player_id, amount, &to_balance);
+  // rc = h_add_credits (db, "player", to_player_id, amount, &to_balance);
 
-   // Use the same transaction_type and tx_group_id_for_transfer generated earlier for the sender's deduction.
-   const char *add_tx_type = "TRANSFER"; // Consistent with the deduction for the sender
-   
-   rc = h_add_credits (db, "player", to_player_id, amount,
-                       add_tx_type, tx_group_id_for_transfer, // Pass the same generated group ID
-                       &to_balance);
-        if (rc != SQLITE_OK)
-          {
-            sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-            send_enveloped_error (ctx->fd, root, ERR_UNKNOWN, "Failed to add funds to recipient");
-            return 0;
-          }
+  // Use the same transaction_type and tx_group_id_for_transfer generated earlier for the sender's deduction.
+  const char *add_tx_type = "TRANSFER";	// Consistent with the deduction for the sender
+
+  rc = h_add_credits (db, "player", to_player_id, amount, add_tx_type, tx_group_id_for_transfer,	// Pass the same generated group ID
+		      &to_balance);
+  if (rc != SQLITE_OK)
+    {
+      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      send_enveloped_error (ctx->fd, root, ERR_UNKNOWN,
+			    "Failed to add funds to recipient");
+      return 0;
+    }
   // Commit transaction
   sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
 
   json_t *payload = json_pack ("{s:i, s:i, s:I, s:I}",
-                               "from_player_id", ctx->player_id,
-                               "to_player_id", to_player_id,
-                               "from_balance", from_balance,
-                               "to_balance", to_balance);
+			       "from_player_id", ctx->player_id,
+			       "to_player_id", to_player_id,
+			       "from_balance", from_balance,
+			       "to_balance", to_balance);
   send_enveloped_ok (ctx->fd, root, "bank.transfer.confirmed", payload);
   json_decref (payload);
   return 0;
 }
 
-int cmd_bank_withdraw (client_ctx_t * ctx, json_t * root)
+int
+cmd_bank_withdraw (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id <= 0)
     {
       send_enveloped_refused (ctx->fd, root, ERR_NOT_AUTHENTICATED,
-                              "Not authenticated", NULL);
+			      "Not authenticated", NULL);
       return 0;
     }
 
-        json_t *data = json_object_get (root, "data");
-        if (!json_is_object (data))
-          {
-            send_enveloped_error (ctx->fd, root, ERR_INVALID_SCHEMA,
-                                  "data must be object");
-            return 0;
-          }
+  json_t *data = json_object_get (root, "data");
+  if (!json_is_object (data))
+    {
+      send_enveloped_error (ctx->fd, root, ERR_INVALID_SCHEMA,
+			    "data must be object");
+      return 0;
+    }
   json_t *j_amount = json_object_get (data, "amount");
 
   if (!json_is_integer (j_amount) || json_integer_value (j_amount) <= 0)
     {
       send_enveloped_refused (ctx->fd, root, ERR_INVALID_ARG,
-                              "Invalid withdrawal amount", NULL);
+			      "Invalid withdrawal amount", NULL);
       return 0;
     }
 
@@ -2381,31 +2385,36 @@ int cmd_bank_withdraw (client_ctx_t * ctx, json_t * root)
 
   // Deduct from player's bank account
   //rc = h_deduct_credits (db, "player", ctx->player_id, amount, &new_balance);
-   const char *transaction_type = "WITHDRAWAL";
-   const char *transaction_group_id = NULL; // Assuming this is a standalone withdrawal
-   
-   rc = h_deduct_credits (db, "player", ctx->player_id, amount,
-                          transaction_type, transaction_group_id,
-                          &new_balance);
+  const char *transaction_type = "WITHDRAWAL";
+  const char *transaction_group_id = NULL;	// Assuming this is a standalone withdrawal
+
+  rc = h_deduct_credits (db, "player", ctx->player_id, amount,
+			 transaction_type, transaction_group_id,
+			 &new_balance);
   if (rc != SQLITE_OK)
     {
       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      if (rc == SQLITE_CONSTRAINT) { // Assuming h_deduct_credits returns SQLITE_CONSTRAINT for insufficient funds
-          send_enveloped_refused (ctx->fd, root, ERR_INSUFFICIENT_FUNDS,
-                                  "Insufficient funds", NULL);
-                } else {
-                    send_enveloped_error (ctx->fd, root, ERR_UNKNOWN, "Failed to withdraw funds");
-                }
-                return 0;
-              }
+      if (rc == SQLITE_CONSTRAINT)
+	{			// Assuming h_deduct_credits returns SQLITE_CONSTRAINT for insufficient funds
+	  send_enveloped_refused (ctx->fd, root, ERR_INSUFFICIENT_FUNDS,
+				  "Insufficient funds", NULL);
+	}
+      else
+	{
+	  send_enveloped_error (ctx->fd, root, ERR_UNKNOWN,
+				"Failed to withdraw funds");
+	}
+      return 0;
+    }
   // Add to player's petty cash (players.credits)
-        rc = h_add_player_petty_cash (db, ctx->player_id, amount, NULL); // new_balance_out can be NULL if not needed
-        if (rc != SQLITE_OK)
-          {
-            sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-            send_enveloped_error (ctx->fd, root, ERR_UNKNOWN, "Failed to add to petty cash");
-            return 0;
-          }
+  rc = h_add_player_petty_cash (db, ctx->player_id, amount, NULL);	// new_balance_out can be NULL if not needed
+  if (rc != SQLITE_OK)
+    {
+      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      send_enveloped_error (ctx->fd, root, ERR_UNKNOWN,
+			    "Failed to add to petty cash");
+      return 0;
+    }
   // Commit transaction
   sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
 
@@ -2431,9 +2440,10 @@ cmd_bank_balance (client_ctx_t *ctx, json_t *root)
     }
 
   long long balance = 0;
-  if (db_get_player_bank_balance(ctx->player_id, &balance) != SQLITE_OK)
+  if (db_get_player_bank_balance (ctx->player_id, &balance) != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, 500, "Could not retrieve bank balance.");
+      send_enveloped_error (ctx->fd, root, 500,
+			    "Could not retrieve bank balance.");
       return 0;
     }
 
@@ -2445,219 +2455,275 @@ cmd_bank_balance (client_ctx_t *ctx, json_t *root)
   return 0;
 }
 
-int spawn_starter_ship(sqlite3 *db, int player_id, int sector_id) {
-    int rc = SQLITE_ERROR;
-    sqlite3_stmt *st = NULL;
-    int ship_type_id = 0;
-    int new_ship_id = 0;
-    const char *starter_ship_type_name = "Scout Marauder";
+int
+spawn_starter_ship (sqlite3 *db, int player_id, int sector_id)
+{
+  int rc = SQLITE_ERROR;
+  sqlite3_stmt *st = NULL;
+  int ship_type_id = 0;
+  int new_ship_id = 0;
+  const char *starter_ship_type_name = "Scout Marauder";
 
-    LOGI("spawn_starter_ship: Player %d respawning in starter ship at sector %d.", player_id, sector_id);
+  LOGI
+    ("spawn_starter_ship: Player %d respawning in starter ship at sector %d.",
+     player_id, sector_id);
 
-    // 1. Get the shiptype ID for the starter ship (Scout Marauder)
-    const char *sql_get_shiptype = "SELECT id, initialholds, maxfighters, maxshields FROM shiptypes WHERE name = ?;";
-    rc = sqlite3_prepare_v2(db, sql_get_shiptype, -1, &st, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("spawn_starter_ship: Failed to prepare shiptype select: %s", sqlite3_errmsg(db));
-        return rc;
+  // 1. Get the shiptype ID for the starter ship (Scout Marauder)
+  const char *sql_get_shiptype =
+    "SELECT id, initialholds, maxfighters, maxshields FROM shiptypes WHERE name = ?;";
+  rc = sqlite3_prepare_v2 (db, sql_get_shiptype, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("spawn_starter_ship: Failed to prepare shiptype select: %s",
+	    sqlite3_errmsg (db));
+      return rc;
     }
-    sqlite3_bind_text(st, 1, starter_ship_type_name, -1, SQLITE_STATIC);
-    
-    int initial_holds = 0;
-    int initial_fighters = 0;
-    int initial_shields = 0;
+  sqlite3_bind_text (st, 1, starter_ship_type_name, -1, SQLITE_STATIC);
 
-    if (sqlite3_step(st) == SQLITE_ROW) {
-        ship_type_id = sqlite3_column_int(st, 0);
-        initial_holds = sqlite3_column_int(st, 1);
-        initial_fighters = sqlite3_column_int(st, 2);
-        initial_shields = sqlite3_column_int(st, 3);
-    }
-    sqlite3_finalize(st);
-    st = NULL;
+  int initial_holds = 0;
+  int initial_fighters = 0;
+  int initial_shields = 0;
 
-    if (ship_type_id == 0) {
-        LOGE("spawn_starter_ship: Starter ship type '%s' not found.", starter_ship_type_name);
-        return SQLITE_NOTFOUND;
+  if (sqlite3_step (st) == SQLITE_ROW)
+    {
+      ship_type_id = sqlite3_column_int (st, 0);
+      initial_holds = sqlite3_column_int (st, 1);
+      initial_fighters = sqlite3_column_int (st, 2);
+      initial_shields = sqlite3_column_int (st, 3);
+    }
+  sqlite3_finalize (st);
+  st = NULL;
+
+  if (ship_type_id == 0)
+    {
+      LOGE ("spawn_starter_ship: Starter ship type '%s' not found.",
+	    starter_ship_type_name);
+      return SQLITE_NOTFOUND;
     }
 
-    // 2. Insert a new ship for the player
-    // We are no longer using owner_player_id in ships directly, rely on ship_ownership
-    const char *sql_insert_ship =
-        "INSERT INTO ships (name, type_id, holds, fighters, shields, sector, ported, onplanet) "
-        "VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, 0);"; // Assume not ported or on planet initially
-    rc = sqlite3_prepare_v2(db, sql_insert_ship, -1, &st, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("spawn_starter_ship: Failed to prepare ship insert: %s", sqlite3_errmsg(db));
-        return rc;
+  // 2. Insert a new ship for the player
+  // We are no longer using owner_player_id in ships directly, rely on ship_ownership
+  const char *sql_insert_ship = "INSERT INTO ships (name, type_id, holds, fighters, shields, sector, ported, onplanet) " "VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, 0);";	// Assume not ported or on planet initially
+  rc = sqlite3_prepare_v2 (db, sql_insert_ship, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("spawn_starter_ship: Failed to prepare ship insert: %s",
+	    sqlite3_errmsg (db));
+      return rc;
     }
-    sqlite3_bind_text(st, 1, "Starter Ship", -1, SQLITE_STATIC);
-    sqlite3_bind_int(st, 2, ship_type_id);
-    sqlite3_bind_int(st, 3, initial_holds);
-    sqlite3_bind_int(st, 4, initial_fighters);
-    sqlite3_bind_int(st, 5, initial_shields);
-    sqlite3_bind_int(st, 6, sector_id);
+  sqlite3_bind_text (st, 1, "Starter Ship", -1, SQLITE_STATIC);
+  sqlite3_bind_int (st, 2, ship_type_id);
+  sqlite3_bind_int (st, 3, initial_holds);
+  sqlite3_bind_int (st, 4, initial_fighters);
+  sqlite3_bind_int (st, 5, initial_shields);
+  sqlite3_bind_int (st, 6, sector_id);
 
-    if (sqlite3_step(st) != SQLITE_DONE) {
-        LOGE("spawn_starter_ship: Failed to insert new starter ship: %s", sqlite3_errmsg(db));
-        sqlite3_finalize(st);
-        return rc;
+  if (sqlite3_step (st) != SQLITE_DONE)
+    {
+      LOGE ("spawn_starter_ship: Failed to insert new starter ship: %s",
+	    sqlite3_errmsg (db));
+      sqlite3_finalize (st);
+      return rc;
     }
-    new_ship_id = sqlite3_last_insert_rowid(db);
-    sqlite3_finalize(st);
-    st = NULL;
+  new_ship_id = sqlite3_last_insert_rowid (db);
+  sqlite3_finalize (st);
+  st = NULL;
 
-    // 3. Assign ship ownership via ship_ownership table
-    const char *sql_insert_ship_ownership =
-        "INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary) VALUES (?1, ?2, 1, 1);"; // role_id 1 = owner, is_primary 1
-    rc = sqlite3_prepare_v2(db, sql_insert_ship_ownership, -1, &st, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("spawn_starter_ship: Failed to prepare ship_ownership insert: %s", sqlite3_errmsg(db));
-        return rc;
+  // 3. Assign ship ownership via ship_ownership table
+  const char *sql_insert_ship_ownership = "INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary) VALUES (?1, ?2, 1, 1);";	// role_id 1 = owner, is_primary 1
+  rc = sqlite3_prepare_v2 (db, sql_insert_ship_ownership, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("spawn_starter_ship: Failed to prepare ship_ownership insert: %s",
+	    sqlite3_errmsg (db));
+      return rc;
     }
-    sqlite3_bind_int(st, 1, new_ship_id);
-    sqlite3_bind_int(st, 2, player_id);
-    if (sqlite3_step(st) != SQLITE_DONE) {
-        LOGE("spawn_starter_ship: Failed to insert ship_ownership: %s", sqlite3_errmsg(db));
-        sqlite3_finalize(st);
-        return rc;
+  sqlite3_bind_int (st, 1, new_ship_id);
+  sqlite3_bind_int (st, 2, player_id);
+  if (sqlite3_step (st) != SQLITE_DONE)
+    {
+      LOGE ("spawn_starter_ship: Failed to insert ship_ownership: %s",
+	    sqlite3_errmsg (db));
+      sqlite3_finalize (st);
+      return rc;
     }
-    sqlite3_finalize(st);
-    st = NULL;
+  sqlite3_finalize (st);
+  st = NULL;
 
-    // 4. Update player's active ship and sector in the players table
-    const char *sql_update_player =
-        "UPDATE players SET ship = ?, sector = ? WHERE id = ?;";
-    rc = sqlite3_prepare_v2(db, sql_update_player, -1, &st, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("spawn_starter_ship: Failed to prepare player update: %s", sqlite3_errmsg(db));
-        return rc;
+  // 4. Update player's active ship and sector in the players table
+  const char *sql_update_player =
+    "UPDATE players SET ship = ?, sector = ? WHERE id = ?;";
+  rc = sqlite3_prepare_v2 (db, sql_update_player, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("spawn_starter_ship: Failed to prepare player update: %s",
+	    sqlite3_errmsg (db));
+      return rc;
     }
-    sqlite3_bind_int(st, 1, new_ship_id);
-    sqlite3_bind_int(st, 2, sector_id);
-    sqlite3_bind_int(st, 3, player_id);
-    if (sqlite3_step(st) != SQLITE_DONE) {
-        LOGE("spawn_starter_ship: Failed to update player's ship/sector: %s", sqlite3_errmsg(db));
-        sqlite3_finalize(st);
-        return rc;
+  sqlite3_bind_int (st, 1, new_ship_id);
+  sqlite3_bind_int (st, 2, sector_id);
+  sqlite3_bind_int (st, 3, player_id);
+  if (sqlite3_step (st) != SQLITE_DONE)
+    {
+      LOGE ("spawn_starter_ship: Failed to update player's ship/sector: %s",
+	    sqlite3_errmsg (db));
+      sqlite3_finalize (st);
+      return rc;
     }
-    sqlite3_finalize(st);
-    st = NULL;
-    
-    // 5. Update podded_status table
-    const char *sql_update_podded_status =
-        "UPDATE podded_status SET status = 'alive', podded_count_today = 0, big_sleep_until = 0 WHERE player_id = ?;";
-    rc = sqlite3_prepare_v2(db, sql_update_podded_status, -1, &st, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("spawn_starter_ship: Failed to prepare podded_status update: %s", sqlite3_errmsg(db));
-        return rc;
-    }
-    sqlite3_bind_int(st, 1, player_id);
-    if (sqlite3_step(st) != SQLITE_DONE) {
-        LOGE("spawn_starter_ship: Failed to update podded_status for player %d: %s", player_id, sqlite3_errmsg(db));
-        sqlite3_finalize(st);
-        return rc;
-    }
-    sqlite3_finalize(st);
-    st = NULL;
+  sqlite3_finalize (st);
+  st = NULL;
 
-    LOGI("spawn_starter_ship: Player %d successfully respawned in ship %d ('%s') at sector %d.", player_id, new_ship_id, starter_ship_type_name, sector_id);
-    return SQLITE_OK;
+  // 5. Update podded_status table
+  const char *sql_update_podded_status =
+    "UPDATE podded_status SET status = 'alive', podded_count_today = 0, big_sleep_until = 0 WHERE player_id = ?;";
+  rc = sqlite3_prepare_v2 (db, sql_update_podded_status, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("spawn_starter_ship: Failed to prepare podded_status update: %s",
+	    sqlite3_errmsg (db));
+      return rc;
+    }
+  sqlite3_bind_int (st, 1, player_id);
+  if (sqlite3_step (st) != SQLITE_DONE)
+    {
+      LOGE
+	("spawn_starter_ship: Failed to update podded_status for player %d: %s",
+	 player_id, sqlite3_errmsg (db));
+      sqlite3_finalize (st);
+      return rc;
+    }
+  sqlite3_finalize (st);
+  st = NULL;
+
+  LOGI
+    ("spawn_starter_ship: Player %d successfully respawned in ship %d ('%s') at sector %d.",
+     player_id, new_ship_id, starter_ship_type_name, sector_id);
+  return SQLITE_OK;
 }
 
 // Function to destroy a ship and handle its side effects
-int destroy_ship_and_handle_side_effects(client_ctx_t *ctx, int sector_id, int player_id) {
-    sqlite3 *db = db_get_handle();
-    if (!db) {
-        LOGE("destroy_ship_and_handle_side_effects: Database handle not available.");
-        return -1;
+int
+destroy_ship_and_handle_side_effects (client_ctx_t * /*ctx */ , int sector_id,
+				      int player_id)
+{
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    {
+      LOGE
+	("destroy_ship_and_handle_side_effects: Database handle not available.");
+      return -1;
     }
 
-    // Get the ship_id for the player
-    int ship_id = h_get_active_ship_id(db, player_id);
-    if (ship_id <= 0) {
-        LOGW("destroy_ship_and_handle_side_effects: No active ship found for player %d to destroy.", player_id);
-        return 0; // Nothing to destroy
+  // Get the ship_id for the player
+  int ship_id = h_get_active_ship_id (db, player_id);
+  if (ship_id <= 0)
+    {
+      LOGW
+	("destroy_ship_and_handle_side_effects: No active ship found for player %d to destroy.",
+	 player_id);
+      return 0;			// Nothing to destroy
     }
 
-    char *errmsg = NULL;
-    int rc;
+  char *errmsg = NULL;
+  int rc;
 
-    // Start a transaction
-    if (sqlite3_exec(db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg) != SQLITE_OK) {
-        LOGE("destroy_ship_and_handle_side_effects: Failed to start transaction: %s", errmsg);
-        if (errmsg) sqlite3_free(errmsg);
-        return -1;
+  // Start a transaction
+  if (sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg) != SQLITE_OK)
+    {
+      LOGE
+	("destroy_ship_and_handle_side_effects: Failed to start transaction: %s",
+	 errmsg);
+      if (errmsg)
+	sqlite3_free (errmsg);
+      return -1;
     }
 
-    // 1. Delete the ship from the 'ships' table
-    sqlite3_stmt *delete_ship_stmt = NULL;
-    const char *sql_delete_ship = "DELETE FROM ships WHERE id = ?;";
-    rc = sqlite3_prepare_v2(db, sql_delete_ship, -1, &delete_ship_stmt, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("destroy_ship_and_handle_side_effects: Failed to prepare delete ship statement: %s", sqlite3_errmsg(db));
-        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
-        return -1;
+  // 1. Delete the ship from the 'ships' table
+  sqlite3_stmt *delete_ship_stmt = NULL;
+  const char *sql_delete_ship = "DELETE FROM ships WHERE id = ?;";
+  rc = sqlite3_prepare_v2 (db, sql_delete_ship, -1, &delete_ship_stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE
+	("destroy_ship_and_handle_side_effects: Failed to prepare delete ship statement: %s",
+	 sqlite3_errmsg (db));
+      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      return -1;
     }
-    sqlite3_bind_int(delete_ship_stmt, 1, ship_id);
-    rc = sqlite3_step(delete_ship_stmt);
-    sqlite3_finalize(delete_ship_stmt);
-    if (rc != SQLITE_DONE) {
-        LOGE("destroy_ship_and_handle_side_effects: Failed to delete ship %d: %s", ship_id, sqlite3_errmsg(db));
-        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
-        return -1;
-    }
-
-    // 2. Update the player's active_ship to NULL or 0
-    sqlite3_stmt *update_player_stmt = NULL;
-    const char *sql_update_player_ship = "UPDATE players SET ship = NULL WHERE id = ?;";
-    rc = sqlite3_prepare_v2(db, sql_update_player_ship, -1, &update_player_stmt, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("destroy_ship_and_handle_side_effects: Failed to prepare update player ship statement: %s", sqlite3_errmsg(db));
-        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
-        return -1;
-    }
-    sqlite3_bind_int(update_player_stmt, 1, player_id);
-    rc = sqlite3_step(update_player_stmt);
-    sqlite3_finalize(update_player_stmt);
-    if (rc != SQLITE_DONE) {
-        LOGE("destroy_ship_and_handle_side_effects: Failed to update player %d active ship: %s", player_id, sqlite3_errmsg(db));
-        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
-        return -1;
+  sqlite3_bind_int (delete_ship_stmt, 1, ship_id);
+  rc = sqlite3_step (delete_ship_stmt);
+  sqlite3_finalize (delete_ship_stmt);
+  if (rc != SQLITE_DONE)
+    {
+      LOGE
+	("destroy_ship_and_handle_side_effects: Failed to delete ship %d: %s",
+	 ship_id, sqlite3_errmsg (db));
+      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      return -1;
     }
 
-    // Commit the transaction
-    if (sqlite3_exec(db, "COMMIT;", NULL, NULL, &errmsg) != SQLITE_OK) {
-        LOGE("destroy_ship_and_handle_side_effects: Failed to commit transaction: %s", errmsg);
-        if (errmsg) sqlite3_free(errmsg);
-        return -1;
+  // 2. Update the player's active_ship to NULL or 0
+  sqlite3_stmt *update_player_stmt = NULL;
+  const char *sql_update_player_ship =
+    "UPDATE players SET ship = NULL WHERE id = ?;";
+  rc =
+    sqlite3_prepare_v2 (db, sql_update_player_ship, -1, &update_player_stmt,
+			NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE
+	("destroy_ship_and_handle_side_effects: Failed to prepare update player ship statement: %s",
+	 sqlite3_errmsg (db));
+      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      return -1;
+    }
+  sqlite3_bind_int (update_player_stmt, 1, player_id);
+  rc = sqlite3_step (update_player_stmt);
+  sqlite3_finalize (update_player_stmt);
+  if (rc != SQLITE_DONE)
+    {
+      LOGE
+	("destroy_ship_and_handle_side_effects: Failed to update player %d active ship: %s",
+	 player_id, sqlite3_errmsg (db));
+      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      return -1;
     }
 
-    // 3. Log an engine event for ship destruction
-    json_t *evt = json_object();
-    if (evt) {
-        json_object_set_new(evt, "player_id", json_integer(player_id));
-        json_object_set_new(evt, "ship_id", json_integer(ship_id));
-        json_object_set_new(evt, "sector_id", json_integer(sector_id));
-        (void) db_log_engine_event((long long)time(NULL), "ship.destroyed", NULL, player_id, sector_id, evt, NULL);
-    } else {
-        LOGE("destroy_ship_and_handle_side_effects: Failed to create JSON event for ship.destroyed.");
+  // Commit the transaction
+  if (sqlite3_exec (db, "COMMIT;", NULL, NULL, &errmsg) != SQLITE_OK)
+    {
+      LOGE
+	("destroy_ship_and_handle_side_effects: Failed to commit transaction: %s",
+	 errmsg);
+      if (errmsg)
+	sqlite3_free (errmsg);
+      return -1;
     }
 
-    // 4. Send a message to the player about their ship being destroyed
-    // Assuming ctx->player_id is the player whose ship was destroyed.
-    // The brief implies row.player is the mine owner, so the message should go to ctx->player_id.
-    (void) h_send_message_to_player(player_id, 0, "Ship Destroyed!",
-                                   "Your ship has been destroyed! You will need to acquire a new one.");
+  // 3. Log an engine event for ship destruction
+  json_t *evt = json_object ();
+  if (evt)
+    {
+      json_object_set_new (evt, "player_id", json_integer (player_id));
+      json_object_set_new (evt, "ship_id", json_integer (ship_id));
+      json_object_set_new (evt, "sector_id", json_integer (sector_id));
+      (void) db_log_engine_event ((long long) time (NULL), "ship.destroyed",
+				  NULL, player_id, sector_id, evt, NULL);
+    }
+  else
+    {
+      LOGE
+	("destroy_ship_and_handle_side_effects: Failed to create JSON event for ship.destroyed.");
+    }
 
-    LOGI("Ship %d belonging to player %d destroyed in sector %d.", ship_id, player_id, sector_id);
+  // 4. Send a message to the player about their ship being destroyed
+  // Assuming ctx->player_id is the player whose ship was destroyed.
+  // The brief implies row.player is the mine owner, so the message should go to ctx->player_id.
+  (void) h_send_message_to_player (player_id, 0, "Ship Destroyed!",
+				   "Your ship has been destroyed! You will need to acquire a new one.");
 
-    return 0;
+  LOGI ("Ship %d belonging to player %d destroyed in sector %d.", ship_id,
+	player_id, sector_id);
+
+  return 0;
 }
-
-
-
-
-
-
-

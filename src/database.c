@@ -971,7 +971,10 @@ const char *create_table_sql[] = {
   " CREATE TABLE IF NOT EXISTS podded_status ( "
     "   player_id INTEGER PRIMARY KEY REFERENCES players(id), "
     "   status TEXT NOT NULL DEFAULT 'active', "
-    "   big_sleep_until INTEGER, " "   reason TEXT " " ); ",
+    "   big_sleep_until INTEGER, "
+    "   reason TEXT, "
+    "   podded_count_today INTEGER NOT NULL DEFAULT 0, "
+    "   podded_last_reset INTEGER " " ); ",
 
 
 
@@ -1671,6 +1674,7 @@ const char *insert_default_sql[] = {
   " INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, ore_on_hand, organics_on_hand, equipment_on_hand, petty_cash, type) "
     " VALUES (1, 1, 'Earth Port', 1, 10, 10, 10000, 10000, 10000, 0, 1); ",
 
+
   /* Fedspace warps (hard-coded) */
   "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (1,2);",
   "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (1,3);",
@@ -1969,6 +1973,8 @@ const char *insert_default_sql[] = {
     "     'FEE',  "
     "     'WIRE',  "
     "     'TAX',  "
+    "     'TRADE_BUY',  "
+    "     'TRADE_SELL',  "
     "     'TRADE_BUY_FEE',  "
     "     'TRADE_SELL_FEE',  "
     "     'WITHDRAWAL_FEE',  "
@@ -2416,6 +2422,8 @@ const char *insert_default_sql[] = {
     "   unlocked_ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))  "
     " );  ",
 
+  "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance, is_active) VALUES ('port', 1, 'CRD', 500000, 1); ",
+
   "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, balance) "
     "VALUES ('npc_planet', (SELECT id FROM planets WHERE name='Earth'), 1000000);",
   "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, balance) "
@@ -2617,7 +2625,21 @@ static const char *engine_bootstrap_sql_statements[] = {
     "('npc_step','every:30s',NULL,strftime('%s','now'),1,NULL),"
     "('broadcast_ttl_cleanup','every:5m',NULL,strftime('%s','now'),1,NULL),"
     "('daily_news_compiler','daily@06:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','6 hours'),1,NULL),"
+    "('traps_process','every:1m',NULL,strftime('%s','now'),1,NULL),"
+    "('cleanup_old_news','daily@07:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','7 hours'),1,NULL),"
+    "('limpet_ttl_cleanup','every:5m',NULL,strftime('%s','now'),1,NULL),"
+    "('daily_lottery_draw','daily@23:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','23 hours'),1,NULL),"
+    "('deadpool_resolution_cron','daily@01:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','1 hours'),1,NULL),"
+    "('tavern_notice_expiry_cron','daily@07:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','7 hours'),1,NULL),"
+    "('loan_shark_interest_cron','daily@00:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','0 hours'),1,NULL),"
+    "('dividend_payout','daily@05:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','5 hours'),1,NULL),"
+    "('daily_stock_price_recalculation','daily@04:30Z',NULL,strftime('%s','now','start of day','+1 day','utc','4 hours','+30 minutes'),1,NULL),"
+    "('daily_market_settlement','daily@05:30Z',NULL,strftime('%s','now','start of day','+1 day','utc','5 hours','+30 minutes'),1,NULL),"
+    "('system_notice_ttl','daily@00:05Z',NULL,strftime('%s','now','start of day','+1 day','utc','0 hours','+5 minutes'),1,NULL),"
+    "('deadletter_retry','every:1m',NULL,strftime('%s','now'),1,NULL),"
     "('daily_corp_tax','daily@05:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','5 hours'),1,NULL);",
+
+
   /* --- Server→Engine event rail (separate from your existing system_events) --- */
   "CREATE TABLE IF NOT EXISTS engine_events("
     "  id INTEGER PRIMARY KEY,"
@@ -2669,11 +2691,10 @@ static const char *engine_bootstrap_sql_statements[] = {
   "CREATE TABLE IF NOT EXISTS news_feed(   "
     "  news_id INTEGER PRIMARY KEY,   "
     "  published_ts INTEGER NOT NULL,   "
-    "  expiration_ts INTEGER NOT NULL,   "
     "  news_category TEXT NOT NULL,   "
-    "  article_text TEXT NOT NULL,   " "  source_ids TEXT" ");",
-  "CREATE INDEX IF NOT EXISTS ix_news_feed_pub_ts ON news_feed(published_ts);",
-  "CREATE INDEX IF NOT EXISTS ix_news_feed_exp_ts ON news_feed(expiration_ts);"
+    "  article_text TEXT NOT NULL,   "
+    "  author_id INTEGER,   " "  source_ids TEXT" ");",
+  "CREATE INDEX IF NOT EXISTS ix_news_feed_pub_ts ON news_feed(published_ts);"
 };
 
 static const size_t engine_bootstrap_sql_count =
@@ -3195,7 +3216,30 @@ db_create_tables_unlocked (bool schema_exists)
     }
 
   ret_code = 0;
-cleanup:
+
+  if (schema_exists)
+    {
+      // Execute migration scripts
+      if (sqlite3_exec (db, MIGRATE_A_SQL, 0, 0, &errmsg) != SQLITE_OK)
+	{
+	  LOGE ("MIGRATE_A_SQL failed: %s", errmsg);
+	  sqlite3_free (errmsg);
+	  return -1;
+	}
+      if (sqlite3_exec (db, MIGRATE_B_SQL, 0, 0, &errmsg) != SQLITE_OK)
+	{
+	  LOGE ("MIGRATE_B_SQL failed: %s", errmsg);
+	  sqlite3_free (errmsg);
+	  return -1;
+	}
+      if (sqlite3_exec (db, MIGRATE_C_SQL, 0, 0, &errmsg) != SQLITE_OK)
+	{
+	  LOGE ("MIGRATE_C_SQL failed: %s", errmsg);
+	  sqlite3_free (errmsg);
+	  return -1;
+	}
+    }
+
   return ret_code;
 }
 
@@ -3258,6 +3302,7 @@ db_close (void)
 int
 db_create (const char *table, json_t *row)
 {
+  (void) row;
   int ret_code = -1;		// Default to error
 
   // 1. Acquire the lock before accessing the database.
@@ -3308,6 +3353,7 @@ cleanup:
 int
 db_update (const char *table, int id, json_t *row)
 {
+  (void) row;
   int ret_code = -1;		// Default to error
 
   // 1. Acquire the lock before accessing the database.
@@ -5550,6 +5596,7 @@ cleanup:
 int
 db_ships_at_sector_json (int player_id, int sector_id, json_t **out)
 {
+  (void) player_id;
   sqlite3_stmt *st = NULL;
   int ret_code = SQLITE_ERROR;	/* default to error until succeeded */
   if (out)
@@ -6698,7 +6745,7 @@ db_destroy_ship (sqlite3 *db, int player_id, int ship_id)
 {
   int rc = SQLITE_ERROR;
   sqlite3_stmt *stmt = NULL;
-
+  int ship_sector = 0;
   pthread_mutex_lock (&db_mutex);
 
   rc = sqlite3_exec (db, "BEGIN IMMEDIATE", NULL, NULL, NULL);
@@ -6707,7 +6754,7 @@ db_destroy_ship (sqlite3 *db, int player_id, int ship_id)
 
   // 1. Get ship details before deletion for logging/event creation
   char ship_name[256] = { 0 };
-  int ship_sector = 0;
+  // int ship_sector = 0;
   {
     const char *sql_get_ship_info =
       "SELECT name, sector FROM ships WHERE id = ?;";
@@ -6873,7 +6920,8 @@ db_create_initial_ship (int player_id, const char *ship_name, int sector_id)
 
 rollback:
   sqlite3_exec (db, "ROLLBACK", NULL, NULL, NULL);
-out_unlock:
+
+  //out_unlock:
   if (stmt)
     sqlite3_finalize (stmt);
   pthread_mutex_unlock (&db_mutex);
@@ -7350,6 +7398,7 @@ db_log_engine_event (long long ts,
 		     const char *actor_owner_type, int actor_player_id,
 		     int sector_id, json_t *payload, const char *idem_key)
 {
+  (void) idem_key;
   sqlite3 *db = db_get_handle ();
   sqlite3_stmt *stmt = NULL;
   int rc = SQLITE_ERROR;
@@ -7532,7 +7581,7 @@ int
 db_is_sector_fedspace (int ck_sector)
 {
   sqlite3 *db = db_get_handle ();
-  sqlite3_stmt *stmt = NULL;
+  //sqlite3_stmt *stmt = NULL;
   int rc = SQLITE_ERROR;
 
   static const char *FEDSPACE_SQL =
@@ -7559,7 +7608,7 @@ db_is_sector_fedspace (int ck_sector)
       sec_ret = sqlite3_column_int (st, 0);
     }
 
-  if (ck_sector == sec_ret || ck_sector >= 1 && ck_sector <= 10)
+  if ((ck_sector == sec_ret) || (ck_sector >= 1 && ck_sector <= 10))
     {
       rc = 1;
     }
@@ -7690,9 +7739,8 @@ int
 h_get_system_account_id_unlocked (sqlite3 *db, const char *system_owner_type,
 				  int system_owner_id, int *account_id_out)
 {
-  int rc =
-    h_get_account_id_unlocked (db, system_owner_type, system_owner_id,
-			       account_id_out);
+  int rc = h_get_account_id_unlocked (db, system_owner_type, system_owner_id,
+				      account_id_out);
   if (rc == SQLITE_NOTFOUND)
     {
       // Create the system account if it doesn't exist
@@ -8362,6 +8410,8 @@ cleanup:
 int
 db_fighters_at_sector_json (int sector_id, json_t **out_array)
 {
+  (void) sector_id;
+  (void) out_array;
   /*** for my reference */
   /* typedef enum */
   /* { */
@@ -8395,6 +8445,9 @@ db_fighters_at_sector_json (int sector_id, json_t **out_array)
 int
 db_mines_at_sector_json (int sector_id, json_t **out_array)
 {
+  (void) sector_id;
+  (void) out_array;
+
   /*** for my reference */
   /* typedef enum */
   /* { */
@@ -8662,14 +8715,17 @@ db_bank_withdraw (const char *owner_type, int owner_id, long long amount)
  * @brief Transfers an amount between two bank accounts.
  * @return SQLITE_OK on success, or an error code from withdraw/deposit.
  */
-int db_bank_transfer (const char *from_owner_type, int from_owner_id,
-		      const char *to_owner_type, int to_owner_id,
-		      long long amount)
+int
+db_bank_transfer (const char *from_owner_type, int from_owner_id,
+		  const char *to_owner_type, int to_owner_id,
+		  long long amount)
 {
   pthread_mutex_lock (&db_mutex);
-  int rc = h_bank_transfer_unlocked (db_get_handle(), from_owner_type, from_owner_id,
-                                     to_owner_type, to_owner_id,
-                                     amount, "TRANSFER", NULL);
+  int rc =
+    h_bank_transfer_unlocked (db_get_handle (), from_owner_type,
+			      from_owner_id,
+			      to_owner_type, to_owner_id,
+			      amount, "TRANSFER", NULL);
   pthread_mutex_unlock (&db_mutex);
   return rc;
 }
@@ -8734,65 +8790,97 @@ int db_bank_transfer (const char *from_owner_type, int from_owner_id,
 /* } */
 
 
-extern long long h_get_account_alert_threshold_unlocked(sqlite3 *db, int account_id, const char *owner_type);
-extern int h_get_account_id_unlocked(sqlite3 *db, const char *owner_type, int owner_id, int *account_id_out);
-extern int h_create_bank_account_unlocked(sqlite3 *db, const char *owner_type, int owner_id, long long initial_balance, int *account_id_out);
-extern int h_deduct_credits_unlocked(sqlite3 *db, int account_id, long long amount, const char *tx_type, const char *tx_group_id, long long *new_balance_out);
-extern int h_add_credits_unlocked(sqlite3 *db, int account_id, long long amount, const char *tx_type, const char *tx_group_id, long long *new_balance_out);
-extern int db_notice_create(const char *title, const char *body, const char *severity, time_t expires_at); // Existing system notice creation
+extern long long h_get_account_alert_threshold_unlocked (sqlite3 * db,
+							 int account_id,
+							 const char
+							 *owner_type);
+extern int h_get_account_id_unlocked (sqlite3 * db, const char *owner_type,
+				      int owner_id, int *account_id_out);
+extern int h_create_bank_account_unlocked (sqlite3 * db,
+					   const char *owner_type,
+					   int owner_id,
+					   long long initial_balance,
+					   int *account_id_out);
+extern int h_deduct_credits_unlocked (sqlite3 * db, int account_id,
+				      long long amount, const char *tx_type,
+				      const char *tx_group_id,
+				      long long *new_balance_out);
+extern int h_add_credits_unlocked (sqlite3 * db, int account_id,
+				   long long amount, const char *tx_type,
+				   const char *tx_group_id,
+				   long long *new_balance_out);
+extern int db_notice_create (const char *title, const char *body, const char *severity, time_t expires_at);	// Existing system notice creation
 
 // --- NEW HELPER: For creating personalized bank alert notices ---
 // This helper function creates a system notice but includes context data
 // that can be used by a communication module to target specific players
 // or filter for relevant notices.
-static int h_create_personal_bank_alert_notice(sqlite3 *db, const char *target_owner_type, int target_owner_id, const char *title, const char *body, json_t *transfer_context) {
-    if (!db || !target_owner_type || target_owner_id <= 0 || !title || !body) {
-        LOGE("h_create_personal_bank_alert_notice: Invalid arguments.");
-        return -1;
+static int
+h_create_personal_bank_alert_notice (sqlite3 *db,
+				     const char *target_owner_type,
+				     int target_owner_id, const char *title,
+				     const char *body,
+				     json_t *transfer_context)
+{
+  if (!db || !target_owner_type || target_owner_id <= 0 || !title || !body)
+    {
+      LOGE ("h_create_personal_bank_alert_notice: Invalid arguments.");
+      return -1;
     }
 
-    json_t *full_context = json_object();
-    if (!full_context) {
-        LOGE("h_create_personal_bank_alert_notice: OOM creating context.");
-        return -1;
+  json_t *full_context = json_object ();
+  if (!full_context)
+    {
+      LOGE ("h_create_personal_bank_alert_notice: OOM creating context.");
+      return -1;
     }
 
-    // Add target owner info to the context
-    json_object_set_new(full_context, "target_owner_type", json_string(target_owner_type));
-    json_object_set_new(full_context, "target_owner_id", json_integer(target_owner_id));
+  // Add target owner info to the context
+  json_object_set_new (full_context, "target_owner_type",
+		       json_string (target_owner_type));
+  json_object_set_new (full_context, "target_owner_id",
+		       json_integer (target_owner_id));
 
-    // Add transfer-specific context
-    if (transfer_context) {
-        // Deep copy the transfer_context into full_context to avoid decref issues later
-        json_t *transfer_context_copy = json_deep_copy(transfer_context);
-        if (transfer_context_copy) {
-            json_object_update(full_context, transfer_context_copy);
-            json_decref(transfer_context_copy); // The update function increments ref, so we decref original copy
-        } else {
-            LOGE("h_create_personal_bank_alert_notice: OOM copying transfer_context.");
-        }
+  // Add transfer-specific context
+  if (transfer_context)
+    {
+      // Deep copy the transfer_context into full_context to avoid decref issues later
+      json_t *transfer_context_copy = json_deep_copy (transfer_context);
+      if (transfer_context_copy)
+	{
+	  json_object_update (full_context, transfer_context_copy);
+	  json_decref (transfer_context_copy);	// The update function increments ref, so we decref original copy
+	}
+      else
+	{
+	  LOGE
+	    ("h_create_personal_bank_alert_notice: OOM copying transfer_context.");
+	}
     }
 
-    // Dump context as body for db_notice_create
-    char *context_str = json_dumps(full_context, JSON_COMPACT);
-    if (!context_str) {
-        LOGE("h_create_personal_bank_alert_notice: OOM dumping context JSON.");
-        json_decref(full_context);
-        return -1;
+  // Dump context as body for db_notice_create
+  char *context_str = json_dumps (full_context, JSON_COMPACT);
+  if (!context_str)
+    {
+      LOGE ("h_create_personal_bank_alert_notice: OOM dumping context JSON.");
+      json_decref (full_context);
+      return -1;
     }
 
-    // For now, severity will be "info", expires_at will be current time + 7 days
-    // The actual delivery will be handled by the subscription/notification system.
-    time_t expires_at_ts = time(NULL) + (7 * 24 * 60 * 60); // 7 days from now
-    int rc = db_notice_create(title, context_str, "info", expires_at_ts); // Use the original db_notice_create
-    free(context_str);
-    json_decref(full_context);
-    
-    if (rc < 0) {
-        LOGE("h_create_personal_bank_alert_notice: Failed to create system notice.");
-        return -1;
+  // For now, severity will be "info", expires_at will be current time + 7 days
+  // The actual delivery will be handled by the subscription/notification system.
+  time_t expires_at_ts = time (NULL) + (7 * 24 * 60 * 60);	// 7 days from now
+  int rc = db_notice_create (title, context_str, "info", expires_at_ts);	// Use the original db_notice_create
+  free (context_str);
+  json_decref (full_context);
+
+  if (rc < 0)
+    {
+      LOGE
+	("h_create_personal_bank_alert_notice: Failed to create system notice.");
+      return -1;
     }
-    return 0;
+  return 0;
 }
 
 
@@ -8810,118 +8898,178 @@ static int h_create_personal_bank_alert_notice(sqlite3 *db, const char *target_o
  * @param tx_group_id An optional group ID for related transactions.
  * @return SQLITE_OK on success, or an SQLite error code.
  */
-int h_bank_transfer_unlocked (sqlite3 * db,
-                              const char *from_owner_type, int from_owner_id,
-                              const char *to_owner_type, int to_owner_id,
-                              long long amount,
-                              const char *tx_type, const char *tx_group_id)
+int
+h_bank_transfer_unlocked (sqlite3 *db,
+			  const char *from_owner_type, int from_owner_id,
+			  const char *to_owner_type, int to_owner_id,
+			  long long amount,
+			  const char *tx_type, const char *tx_group_id)
 {
   int from_account_id, to_account_id;
   int rc;
 
   // Get source account ID
-  rc = h_get_account_id_unlocked(db, from_owner_type, from_owner_id, &from_account_id);
-  if (rc != SQLITE_OK) {
+  rc =
+    h_get_account_id_unlocked (db, from_owner_type, from_owner_id,
+			       &from_account_id);
+  if (rc != SQLITE_OK)
+    {
       // If source account doesn't exist, and it's not a system account, it's an error.
       // System accounts might be implicit.
-      if (strcmp(from_owner_type, "system") != 0 && strcmp(from_owner_type, "gov") != 0) {
-          LOGW("h_bank_transfer_unlocked: Source account %s:%d not found.", from_owner_type, from_owner_id);
-          return SQLITE_NOTFOUND;
-      }
+      if (strcmp (from_owner_type, "system") != 0
+	  && strcmp (from_owner_type, "gov") != 0)
+	{
+	  LOGW ("h_bank_transfer_unlocked: Source account %s:%d not found.",
+		from_owner_type, from_owner_id);
+	  return SQLITE_NOTFOUND;
+	}
       // For system/gov, if not found, it implies no balance to deduct from, so treat as insufficient funds
-      LOGW("h_bank_transfer_unlocked: Implicit system/gov source account %s:%d not found or created. Treating as insufficient funds.", from_owner_type, from_owner_id);
-      return SQLITE_CONSTRAINT; // Special return for insufficient funds
-  }
+      LOGW
+	("h_bank_transfer_unlocked: Implicit system/gov source account %s:%d not found or created. Treating as insufficient funds.",
+	 from_owner_type, from_owner_id);
+      return SQLITE_CONSTRAINT;	// Special return for insufficient funds
+    }
 
   // Get or create destination account ID
-  rc = h_get_account_id_unlocked(db, to_owner_type, to_owner_id, &to_account_id);
-  if (rc == SQLITE_NOTFOUND) {
-      rc = h_create_bank_account_unlocked(db, to_owner_type, to_owner_id, 0, &to_account_id);
-      if (rc != SQLITE_OK) {
-          LOGE("h_bank_transfer_unlocked: Failed to create destination account %s:%d: %s",
-               to_owner_type, to_owner_id, sqlite3_errmsg(db));
-          return rc;
-      }
-  } else if (rc != SQLITE_OK) {
-      LOGE("h_bank_transfer_unlocked: Failed to get destination account %s:%d: %s",
-           to_owner_type, to_owner_id, sqlite3_errmsg(db));
+  rc =
+    h_get_account_id_unlocked (db, to_owner_type, to_owner_id,
+			       &to_account_id);
+  if (rc == SQLITE_NOTFOUND)
+    {
+      rc =
+	h_create_bank_account_unlocked (db, to_owner_type, to_owner_id, 0,
+					&to_account_id);
+      if (rc != SQLITE_OK)
+	{
+	  LOGE
+	    ("h_bank_transfer_unlocked: Failed to create destination account %s:%d: %s",
+	     to_owner_type, to_owner_id, sqlite3_errmsg (db));
+	  return rc;
+	}
+    }
+  else if (rc != SQLITE_OK)
+    {
+      LOGE
+	("h_bank_transfer_unlocked: Failed to get destination account %s:%d: %s",
+	 to_owner_type, to_owner_id, sqlite3_errmsg (db));
       return rc;
-  }
+    }
 
   // Deduct from source
-  rc = h_deduct_credits_unlocked(db, from_account_id, amount, tx_type, tx_group_id, NULL);
-  if (rc != SQLITE_OK) {
-      LOGW("h_bank_transfer_unlocked: Failed to deduct %lld from %s:%d (account %d). Error: %d",
-           amount, from_owner_type, from_owner_id, from_account_id, rc);
-      return rc; // Insufficient funds or other deduction error
-  }
+  rc =
+    h_deduct_credits_unlocked (db, from_account_id, amount, tx_type,
+			       tx_group_id, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGW
+	("h_bank_transfer_unlocked: Failed to deduct %lld from %s:%d (account %d). Error: %d",
+	 amount, from_owner_type, from_owner_id, from_account_id, rc);
+      return rc;		// Insufficient funds or other deduction error
+    }
 
   // Add to destination
-  rc = h_add_credits_unlocked(db, to_account_id, amount, tx_type, tx_group_id, NULL);
-  if (rc != SQLITE_OK) {
-      LOGE("h_bank_transfer_unlocked: Failed to add %lld to %s:%d (account %d). This should not happen after successful deduction. Error: %d",
-           amount, to_owner_type, to_owner_id, to_account_id, rc);
+  rc =
+    h_add_credits_unlocked (db, to_account_id, amount, tx_type, tx_group_id,
+			    NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE
+	("h_bank_transfer_unlocked: Failed to add %lld to %s:%d (account %d). This should not happen after successful deduction. Error: %d",
+	 amount, to_owner_type, to_owner_id, to_account_id, rc);
       // Attempt to refund the source account (critical error recovery)
-      h_add_credits_unlocked(db, from_account_id, amount, "REFUND", "TRANSFER_FAILED", NULL);
+      h_add_credits_unlocked (db, from_account_id, amount, "REFUND",
+			      "TRANSFER_FAILED", NULL);
       return rc;
-  }
+    }
 
   /* --------------------------------------------------------------------------
    * Issue 376: Logic for "bank.alerts"
    * Check thresholds and generate notices for large transfers.
    * -------------------------------------------------------------------------- */
   {
-      long long from_threshold = 0;
-      long long to_threshold = 0;
+    long long from_threshold = 0;
+    long long to_threshold = 0;
 
-      // 1. Check Thresholds
-      // We retrieve the alert threshold for both accounts. 
-      // h_get_account_alert_threshold_unlocked is assumed to return long long and take owner_type.
-      from_threshold = h_get_account_alert_threshold_unlocked(db, from_account_id, from_owner_type);
-      to_threshold = h_get_account_alert_threshold_unlocked(db, to_account_id, to_owner_type);
+    // 1. Check Thresholds
+    // We retrieve the alert threshold for both accounts. 
+    // h_get_account_alert_threshold_unlocked is assumed to return long long and take owner_type.
+    from_threshold =
+      h_get_account_alert_threshold_unlocked (db, from_account_id,
+					      from_owner_type);
+    to_threshold =
+      h_get_account_alert_threshold_unlocked (db, to_account_id,
+					      to_owner_type);
 
-      // 2. Evaluate Alert
-      // Trigger if amount meets/exceeds threshold, provided threshold is positive.
-      int alert_sender   = (from_threshold > 0 && amount >= from_threshold);
-      int alert_receiver = (to_threshold > 0 && amount >= to_threshold);
+    // 2. Evaluate Alert
+    // Trigger if amount meets/exceeds threshold, provided threshold is positive.
+    int alert_sender = (from_threshold > 0 && amount >= from_threshold);
+    int alert_receiver = (to_threshold > 0 && amount >= to_threshold);
 
-      if (alert_sender || alert_receiver) {
-          // Prepare context data common to both notices
-          json_t *transfer_context = json_object();
-          if (transfer_context) {
-              json_object_set_new(transfer_context, "amount", json_integer(amount));
-              json_object_set_new(transfer_context, "from_owner_type", json_string(from_owner_type));
-              json_object_set_new(transfer_context, "from_owner_id", json_integer(from_owner_id));
-              json_object_set_new(transfer_context, "to_owner_type", json_string(to_owner_type));
-              json_object_set_new(transfer_context, "to_owner_id", json_integer(to_owner_id));
-              json_object_set_new(transfer_context, "tx_type", json_string(tx_type));
-              // tx_group_id is optional, only add if not NULL
-              if (tx_group_id) {
-                  json_object_set_new(transfer_context, "tx_group_id", json_string(tx_group_id));
-              }
-          } else {
-              LOGE("h_bank_transfer_unlocked: OOM creating transfer_context for alert.");
-          }
+    if (alert_sender || alert_receiver)
+      {
+	// Prepare context data common to both notices
+	json_t *transfer_context = json_object ();
+	if (transfer_context)
+	  {
+	    json_object_set_new (transfer_context, "amount",
+				 json_integer (amount));
+	    json_object_set_new (transfer_context, "from_owner_type",
+				 json_string (from_owner_type));
+	    json_object_set_new (transfer_context, "from_owner_id",
+				 json_integer (from_owner_id));
+	    json_object_set_new (transfer_context, "to_owner_type",
+				 json_string (to_owner_type));
+	    json_object_set_new (transfer_context, "to_owner_id",
+				 json_integer (to_owner_id));
+	    json_object_set_new (transfer_context, "tx_type",
+				 json_string (tx_type));
+	    // tx_group_id is optional, only add if not NULL
+	    if (tx_group_id)
+	      {
+		json_object_set_new (transfer_context, "tx_group_id",
+				     json_string (tx_group_id));
+	      }
+	  }
+	else
+	  {
+	    LOGE
+	      ("h_bank_transfer_unlocked: OOM creating transfer_context for alert.");
+	  }
 
 
-          // 3. Construct and Create Notices
-          char title_buffer[128];
-          char body_buffer[512]; // Using snprintf for body might be better if complex, else just use context_str
+	// 3. Construct and Create Notices
+	char title_buffer[128];
+	char body_buffer[512];	// Using snprintf for body might be better if complex, else just use context_str
 
-          if (alert_sender) {
-              snprintf(title_buffer, sizeof(title_buffer), "Large Transfer Sent (ID: %d)", from_owner_id);
-              snprintf(body_buffer, sizeof(body_buffer), "You sent %lld credits to %s:%d.", amount, to_owner_type, to_owner_id);
-              h_create_personal_bank_alert_notice(db, from_owner_type, from_owner_id, title_buffer, body_buffer, transfer_context);
-          }
-          if (alert_receiver) {
-              snprintf(title_buffer, sizeof(title_buffer), "Large Transfer Received (ID: %d)", to_owner_id);
-              snprintf(body_buffer, sizeof(body_buffer), "You received %lld credits from %s:%d.", amount, from_owner_type, from_owner_id);
-              h_create_personal_bank_alert_notice(db, to_owner_type, to_owner_id, title_buffer, body_buffer, transfer_context);
-          }
-          
-          if (transfer_context) {
-              json_decref(transfer_context);
-          }
+	if (alert_sender)
+	  {
+	    snprintf (title_buffer, sizeof (title_buffer),
+		      "Large Transfer Sent (ID: %d)", from_owner_id);
+	    snprintf (body_buffer, sizeof (body_buffer),
+		      "You sent %lld credits to %s:%d.", amount,
+		      to_owner_type, to_owner_id);
+	    h_create_personal_bank_alert_notice (db, from_owner_type,
+						 from_owner_id, title_buffer,
+						 body_buffer,
+						 transfer_context);
+	  }
+	if (alert_receiver)
+	  {
+	    snprintf (title_buffer, sizeof (title_buffer),
+		      "Large Transfer Received (ID: %d)", to_owner_id);
+	    snprintf (body_buffer, sizeof (body_buffer),
+		      "You received %lld credits from %s:%d.", amount,
+		      from_owner_type, from_owner_id);
+	    h_create_personal_bank_alert_notice (db, to_owner_type,
+						 to_owner_id, title_buffer,
+						 body_buffer,
+						 transfer_context);
+	  }
+
+	if (transfer_context)
+	  {
+	    json_decref (transfer_context);
+	  }
       }
   }
   /* -------------------------------------------------------------------------- */
@@ -8931,82 +9079,752 @@ int h_bank_transfer_unlocked (sqlite3 * db,
 
 
 
-// NOTE: The remaining functions are placeholders and will need to be implemented.
+/* // NOTE: The remaining functions are placeholders and will need to be implemented. */
+/* int */
+/* db_bank_get_transactions (const char *owner_type, int owner_id, int limit, */
+/* 			  json_t **out_array) */
+/* { */
+/*   return SQLITE_OK; */
+/* } */
+
+/* int */
+/* db_bank_apply_interest () */
+/* { */
+/*   return SQLITE_OK; */
+/* } */
+
+/* int */
+/* db_bank_process_orders () */
+/* { */
+/*   return SQLITE_OK; */
+/* } */
+
+/* int */
+/* db_bank_set_flags (const char *owner_type, int owner_id, int flags) */
+/* { */
+/*   return SQLITE_OK; */
+/* } */
+
+/* int */
+/* db_bank_get_flags (const char *owner_type, int owner_id, int *out_flags) */
+/* { */
+/*   return SQLITE_OK; */
+/* } */
+
+/* int */
+/* db_commodity_get_price (const char *commodity_code, int *out_price) */
+/* { */
+/*   return SQLITE_OK; */
+/* } */
+
+/* int */
+/* db_commodity_update_price (const char *commodity_code, int new_price) */
+/* { */
+/*   return SQLITE_OK; */
+/* } */
+
+/* int */
+/* db_commodity_create_order (const char *actor_type, int actor_id, */
+/* 			   const char *commodity_code, const char *side, */
+/* 			   int quantity, int price) */
+/* { */
+/*   return SQLITE_OK; */
+/* } */
+
+/* int */
+/* db_commodity_fill_order (int order_id, int quantity) */
+/* { */
+/*   return SQLITE_OK; */
+/* } */
+
+/* int */
+/* db_commodity_get_orders (const char *commodity_code, const char *status, */
+/* 			 json_t **out_array) */
+/* { */
+/*   return SQLITE_OK; */
+/* } */
+
+/* int */
+/* db_commodity_get_trades (const char *commodity_code, int limit, */
+/* 			 json_t **out_array) */
+/* { */
+/*   return SQLITE_OK; */
+/* } */
+
+/* int */
+/* db_port_get_goods_on_hand (int port_id, const char *commodity_code, */
+/* 			   int *out_quantity) */
+/* { */
+/*   return SQLITE_OK; */
+/* } */
+
+/* int */
+/* db_port_update_goods_on_hand (int port_id, const char *commodity_code, */
+/* 			      int quantity_change) */
+/* { */
+/*   return SQLITE_OK; */
+/* } */
+
+/* int */
+/* db_planet_get_goods_on_hand (int planet_id, const char *commodity_code, */
+/* 			     int *out_quantity) */
+/* { */
+/*   return SQLITE_OK; */
+/* } */
+
+/* int */
+/* db_planet_update_goods_on_hand (int planet_id, const char *commodity_code, */
+/* 				int quantity_change) */
+/* { */
+/*   return SQLITE_OK; */
+/* } */
+
+
+static int
+stmt_to_json_array (sqlite3_stmt *st, json_t **out_array)
+{
+  if (!out_array)
+    {
+      /* Caller doesn’t want JSON, just drain the cursor */
+      int rc;
+      while ((rc = sqlite3_step (st)) == SQLITE_ROW)
+	;
+      if (rc == SQLITE_DONE)
+	return SQLITE_OK;
+      return rc;
+    }
+
+  json_t *arr = json_array ();
+  if (!arr)
+    return SQLITE_NOMEM;
+
+  int rc;
+  while ((rc = sqlite3_step (st)) == SQLITE_ROW)
+    {
+      int cols = sqlite3_column_count (st);
+      json_t *obj = json_object ();
+      if (!obj)
+	{
+	  rc = SQLITE_NOMEM;
+	  break;
+	}
+
+      for (int i = 0; i < cols; i++)
+	{
+	  const char *col_name = sqlite3_column_name (st, i);
+	  int col_type = sqlite3_column_type (st, i);
+	  json_t *val = NULL;
+
+	  switch (col_type)
+	    {
+	    case SQLITE_INTEGER:
+	      val = json_integer (sqlite3_column_int64 (st, i));
+	      break;
+	    case SQLITE_FLOAT:
+	      val = json_real (sqlite3_column_double (st, i));
+	      break;
+	    case SQLITE_TEXT:
+	      val = json_string ((const char *) sqlite3_column_text (st, i));
+	      break;
+	    case SQLITE_NULL:
+	    default:
+	      val = json_null ();
+	      break;
+	    }
+
+	  if (!val)
+	    {
+	      json_decref (obj);
+	      rc = SQLITE_NOMEM;
+	      goto done;
+	    }
+
+	  /* ignore failure here; names come from SQLite */
+	  json_object_set_new (obj, col_name, val);
+	}
+
+      if (json_array_append_new (arr, obj) != 0)
+	{
+	  json_decref (obj);
+	  rc = SQLITE_NOMEM;
+	  break;
+	}
+    }
+
+done:
+  if (rc == SQLITE_DONE)
+    {
+      *out_array = arr;
+      return SQLITE_OK;
+    }
+
+  json_decref (arr);
+  return rc;
+}
+
+
+
+/* ----------------------------------------------------------------------
+ * Bank: transactions
+ * ---------------------------------------------------------------------- */
+
 int
 db_bank_get_transactions (const char *owner_type, int owner_id, int limit,
-			  json_t **out_array)
+			  const char *tx_type_filter, long long start_date,
+			  long long end_date, long long min_amount,
+			  long long max_amount, json_t **out_array)
 {
+  if (!owner_type)
+    return SQLITE_MISUSE;
+
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return SQLITE_MISUSE;
+
+  if (limit <= 0)
+    limit = 100;
+
+  char sql[1024];
+  char where_clause[512];
+  int bind_pos = 3;
+
+  // Base query
+  strcpy (sql,
+	  "SELECT t.* FROM bank_transactions t JOIN bank_accounts a ON t.account_id = a.id WHERE a.owner_type = ?1 AND a.owner_id = ?2 ");
+
+  // Build WHERE clause
+  strcpy (where_clause, "");
+  if (tx_type_filter)
+    {
+      strcat (where_clause, "AND t.tx_type = ? ");
+    }
+  if (start_date > 0)
+    {
+      strcat (where_clause, "AND t.ts >= ? ");
+    }
+  if (end_date > 0)
+    {
+      strcat (where_clause, "AND t.ts <= ? ");
+    }
+  if (min_amount > 0)
+    {
+      strcat (where_clause, "AND t.amount >= ? ");
+    }
+  if (max_amount > 0)
+    {
+      strcat (where_clause, "AND t.amount <= ? ");
+    }
+
+  strcat (sql, where_clause);
+  strcat (sql, "ORDER BY t.ts DESC, t.id DESC LIMIT ?");
+
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("db_bank_get_transactions: SQL error: %s on query %s",
+	    sqlite3_errmsg (db), sql);
+      return rc;
+    }
+
+  sqlite3_bind_text (st, 1, owner_type, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int (st, 2, owner_id);
+
+  if (tx_type_filter)
+    {
+      sqlite3_bind_text (st, bind_pos++, tx_type_filter, -1,
+			 SQLITE_TRANSIENT);
+    }
+  if (start_date > 0)
+    {
+      sqlite3_bind_int64 (st, bind_pos++, start_date);
+    }
+  if (end_date > 0)
+    {
+      sqlite3_bind_int64 (st, bind_pos++, end_date);
+    }
+  if (min_amount > 0)
+    {
+      sqlite3_bind_int64 (st, bind_pos++, min_amount);
+    }
+  if (max_amount > 0)
+    {
+      sqlite3_bind_int64 (st, bind_pos++, max_amount);
+    }
+  sqlite3_bind_int (st, bind_pos, limit);
+
+  json_t *arr = NULL;
+  rc = stmt_to_json_array (st, out_array ? &arr : NULL);
+  sqlite3_finalize (st);
+
+  if (rc == SQLITE_OK && out_array)
+    *out_array = arr;
+  else if (arr)
+    json_decref (arr);
+
+  return rc;
+}
+
+/* ----------------------------------------------------------------------
+ * Bank: interest & orders
+ *
+ * NOTE: The schema excerpt you provided is too truncated to implement
+ * these correctly (we can't reliably see all NOT NULL columns of
+ * bank_interest_policy or bank_orders). They remain explicit TODO
+ * placeholders instead of silently doing the wrong thing.
+ * ---------------------------------------------------------------------- */
+
+int
+db_bank_apply_interest (void)
+{
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return SQLITE_MISUSE;
+
+  /* TODO: implement based on full bank_interest_policy / bank_accounts
+   * schema; for now this is an explicit no-op.
+   */
   return SQLITE_OK;
 }
 
 int
-db_bank_apply_interest ()
+db_bank_process_orders (void)
 {
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return SQLITE_MISUSE;
+
+  /* TODO: implement processing of bank_orders into bank_transactions.
+   * Left as a no-op because the bank_orders schema is truncated here.
+   */
   return SQLITE_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * Bank: flags (risk / behaviour flags)
+ *
+ * Assumes schema roughly:
+ *   CREATE TABLE bank_flags (
+ *      player_id INTEGER PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE,
+ *      flags     INTEGER NOT NULL DEFAULT 0,
+ *      risk_tier TEXT NOT NULL DEFAULT 'normal' CHECK(...)
+ *   );
+ *
+ * owner_type is accepted for future extension; currently only 'player'
+ * is supported and mapped directly to player_id.
+ * ---------------------------------------------------------------------- */
+
 int
-db_bank_process_orders ()
+db_bank_set_frozen_status (const char *owner_type, int owner_id,
+			   int is_frozen)
 {
-  return SQLITE_OK;
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return SQLITE_MISUSE;
+
+  /* At present the table is keyed by player_id only. */
+  if (!owner_type || strcmp (owner_type, "player") != 0)
+    return SQLITE_ERROR;
+
+  const char *sql =
+    "INSERT INTO bank_flags (player_id, is_frozen) "
+    "VALUES (?1, ?2) "
+    "ON CONFLICT(player_id) DO UPDATE SET is_frozen = excluded.is_frozen";
+
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    return rc;
+
+  sqlite3_bind_int (st, 1, owner_id);
+  sqlite3_bind_int (st, 2, is_frozen);
+
+  rc = sqlite3_step (st);
+  if (rc == SQLITE_DONE)
+    rc = SQLITE_OK;
+
+  sqlite3_finalize (st);
+  return rc;
 }
 
 int
-db_bank_set_flags (const char *owner_type, int owner_id, int flags)
+db_bank_get_frozen_status (const char *owner_type, int owner_id,
+			   int *out_is_frozen)
 {
-  return SQLITE_OK;
+  if (!out_is_frozen)
+    return SQLITE_MISUSE;
+
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return SQLITE_MISUSE;
+
+  if (!owner_type || strcmp (owner_type, "player") != 0)
+    return SQLITE_ERROR;
+
+  const char *sql =
+    "SELECT is_frozen " "FROM bank_flags " "WHERE player_id = ?1";
+
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    return rc;
+
+  sqlite3_bind_int (st, 1, owner_id);
+
+  rc = sqlite3_step (st);
+  if (rc == SQLITE_ROW)
+    {
+      *out_is_frozen = sqlite3_column_int (st, 0);
+      rc = SQLITE_OK;
+    }
+  else if (rc == SQLITE_DONE)
+    {
+      /* No row → treat as 0 flags. */
+      *out_is_frozen = 0;
+      rc = SQLITE_OK;
+    }
+
+  sqlite3_finalize (st);
+  return rc;
 }
 
-int
-db_bank_get_flags (const char *owner_type, int owner_id, int *out_flags)
+/* ----------------------------------------------------------------------
+ * Commodities: get / update price
+ *
+ * We don't know the exact price column name, so try a small set of
+ * plausible candidates in order.
+ * ---------------------------------------------------------------------- */
+
+static int
+select_price_with_column (sqlite3 *db, const char *col,
+			  const char *commodity_code, int *out_price)
 {
-  return SQLITE_OK;
+  const char *sql_tmpl = "SELECT %s FROM commodities WHERE code = ?1";
+  char sql[256];
+
+  snprintf (sql, sizeof sql, sql_tmpl, col);
+
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    return rc;
+
+  sqlite3_bind_text (st, 1, commodity_code, -1, SQLITE_TRANSIENT);
+
+  rc = sqlite3_step (st);
+  if (rc == SQLITE_ROW)
+    {
+      if (out_price)
+	*out_price = sqlite3_column_int (st, 0);
+      rc = SQLITE_OK;
+    }
+  else if (rc == SQLITE_DONE)
+    {
+      rc = SQLITE_NOTFOUND;
+    }
+
+  sqlite3_finalize (st);
+  return rc;
+}
+
+static int
+update_price_with_column (sqlite3 *db, const char *col,
+			  const char *commodity_code, int new_price)
+{
+  const char *sql_tmpl = "UPDATE commodities SET %s = ?1 WHERE code = ?2";
+  char sql[256];
+
+  snprintf (sql, sizeof sql, sql_tmpl, col);
+
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    return rc;
+
+  sqlite3_bind_int (st, 1, new_price);
+  sqlite3_bind_text (st, 2, commodity_code, -1, SQLITE_TRANSIENT);
+
+  rc = sqlite3_step (st);
+  if (rc == SQLITE_DONE)
+    rc = (sqlite3_changes (db) > 0) ? SQLITE_OK : SQLITE_NOTFOUND;
+
+  sqlite3_finalize (st);
+  return rc;
 }
 
 int
 db_commodity_get_price (const char *commodity_code, int *out_price)
 {
-  return SQLITE_OK;
+  if (!commodity_code || !out_price)
+    return SQLITE_MISUSE;
+
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return SQLITE_MISUSE;
+
+  static const char *cols[] = { "last_price", "price", "base_price", NULL };
+
+  for (int i = 0; cols[i]; i++)
+    {
+      int rc =
+	select_price_with_column (db, cols[i], commodity_code, out_price);
+      if (rc == SQLITE_OK || rc == SQLITE_NOTFOUND)
+	return rc;
+      /* SQLITE_ERROR / "no such column" → try next candidate. */
+    }
+
+  return SQLITE_ERROR;
 }
 
 int
 db_commodity_update_price (const char *commodity_code, int new_price)
 {
-  return SQLITE_OK;
+  if (!commodity_code)
+    return SQLITE_MISUSE;
+
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return SQLITE_MISUSE;
+
+  static const char *cols[] = { "last_price", "price", "base_price", NULL };
+
+  for (int i = 0; cols[i]; i++)
+    {
+      int rc =
+	update_price_with_column (db, cols[i], commodity_code, new_price);
+      if (rc == SQLITE_OK || rc == SQLITE_NOTFOUND)
+	return rc;
+    }
+
+  return SQLITE_ERROR;
 }
+
+/* ----------------------------------------------------------------------
+ * Commodities: orders & trades
+ * ---------------------------------------------------------------------- */
 
 int
 db_commodity_create_order (const char *actor_type, int actor_id,
 			   const char *commodity_code, const char *side,
 			   int quantity, int price)
 {
-  return SQLITE_OK;
+  if (!actor_type || !commodity_code || !side)
+    return SQLITE_MISUSE;
+
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return SQLITE_MISUSE;
+
+  /* Minimal insert – relies on defaults for status, timestamps, etc.
+   * May need extending once the full commodity_orders schema is final.
+   */
+  const char *sql =
+    "INSERT INTO commodity_orders "
+    "  (commodity_id, actor_type, actor_id, side, quantity, price) "
+    "SELECT c.id, ?2, ?3, ?4, ?5, ?6 "
+    "FROM commodities c " "WHERE c.code = ?1";
+
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    return rc;
+
+  sqlite3_bind_text (st, 1, commodity_code, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text (st, 2, actor_type, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int (st, 3, actor_id);
+  sqlite3_bind_text (st, 4, side, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int (st, 5, quantity);
+  sqlite3_bind_int (st, 6, price);
+
+  rc = sqlite3_step (st);
+  if (rc == SQLITE_DONE)
+    rc = (sqlite3_changes (db) > 0) ? SQLITE_OK : SQLITE_NOTFOUND;
+
+  sqlite3_finalize (st);
+  return rc;
 }
 
 int
 db_commodity_fill_order (int order_id, int quantity)
 {
-  return SQLITE_OK;
+  if (order_id <= 0 || quantity <= 0)
+    return SQLITE_MISUSE;
+
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return SQLITE_MISUSE;
+
+  /* Fetch current quantity & status */
+  const char *sql_sel =
+    "SELECT quantity, status " "FROM commodity_orders " "WHERE id = ?1";
+
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2 (db, sql_sel, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    return rc;
+
+  sqlite3_bind_int (st, 1, order_id);
+
+  rc = sqlite3_step (st);
+  if (rc != SQLITE_ROW)
+    {
+      sqlite3_finalize (st);
+      return (rc == SQLITE_DONE) ? SQLITE_NOTFOUND : rc;
+    }
+
+  int current_qty = sqlite3_column_int (st, 0);
+  const unsigned char *status_text = sqlite3_column_text (st, 1);
+
+  /* Optional: enforce only 'open' orders */
+  if (status_text && strcmp ((const char *) status_text, "open") != 0)
+    {
+      sqlite3_finalize (st);
+      return SQLITE_ERROR;
+    }
+
+  sqlite3_finalize (st);
+
+  int remaining = current_qty - quantity;
+  if (remaining < 0)
+    remaining = 0;
+
+  const char *new_status = (remaining == 0) ? "filled" : "open";
+
+  const char *sql_upd =
+    "UPDATE commodity_orders "
+    "SET quantity = ?1, status = ?2 " "WHERE id = ?3";
+
+  sqlite3_stmt *st2 = NULL;
+  rc = sqlite3_prepare_v2 (db, sql_upd, -1, &st2, NULL);
+  if (rc != SQLITE_OK)
+    return rc;
+
+  sqlite3_bind_int (st2, 1, remaining);
+  sqlite3_bind_text (st2, 2, new_status, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int (st2, 3, order_id);
+
+  rc = sqlite3_step (st2);
+  if (rc == SQLITE_DONE)
+    rc = SQLITE_OK;
+
+  sqlite3_finalize (st2);
+  return rc;
 }
 
 int
 db_commodity_get_orders (const char *commodity_code, const char *status,
 			 json_t **out_array)
 {
-  return SQLITE_OK;
+  if (!commodity_code)
+    return SQLITE_MISUSE;
+
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return SQLITE_MISUSE;
+
+  const char *sql_with_status =
+    "SELECT o.* "
+    "FROM commodity_orders o "
+    "JOIN commodities c ON o.commodity_id = c.id "
+    "WHERE c.code = ?1 AND o.status = ?2 " "ORDER BY o.id ASC";
+
+  const char *sql_no_status =
+    "SELECT o.* "
+    "FROM commodity_orders o "
+    "JOIN commodities c ON o.commodity_id = c.id "
+    "WHERE c.code = ?1 " "ORDER BY o.id ASC";
+
+  sqlite3_stmt *st = NULL;
+  int rc;
+
+  if (status)
+    {
+      rc = sqlite3_prepare_v2 (db, sql_with_status, -1, &st, NULL);
+      if (rc != SQLITE_OK)
+	return rc;
+
+      sqlite3_bind_text (st, 1, commodity_code, -1, SQLITE_TRANSIENT);
+      sqlite3_bind_text (st, 2, status, -1, SQLITE_TRANSIENT);
+    }
+  else
+    {
+      rc = sqlite3_prepare_v2 (db, sql_no_status, -1, &st, NULL);
+      if (rc != SQLITE_OK)
+	return rc;
+
+      sqlite3_bind_text (st, 1, commodity_code, -1, SQLITE_TRANSIENT);
+    }
+
+  json_t *arr = NULL;
+  rc = stmt_to_json_array (st, out_array ? &arr : NULL);
+  sqlite3_finalize (st);
+
+  if (rc == SQLITE_OK && out_array)
+    *out_array = arr;
+  else if (arr)
+    json_decref (arr);
+
+  return rc;
 }
 
 int
 db_commodity_get_trades (const char *commodity_code, int limit,
 			 json_t **out_array)
 {
-  return SQLITE_OK;
+  if (!commodity_code)
+    return SQLITE_MISUSE;
+
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return SQLITE_MISUSE;
+
+  if (limit <= 0)
+    limit = 100;
+
+  const char *sql =
+    "SELECT t.* "
+    "FROM commodity_trades t "
+    "JOIN commodities c ON t.commodity_id = c.id "
+    "WHERE c.code = ?1 " "ORDER BY t.id DESC " "LIMIT ?2";
+
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    return rc;
+
+  sqlite3_bind_text (st, 1, commodity_code, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int (st, 2, limit);
+
+  json_t *arr = NULL;
+  rc = stmt_to_json_array (st, out_array ? &arr : NULL);
+  sqlite3_finalize (st);
+
+  if (rc == SQLITE_OK && out_array)
+    *out_array = arr;
+  else if (arr)
+    json_decref (arr);
+
+  return rc;
 }
+
+/* ----------------------------------------------------------------------
+ * Ports: goods on hand
+ *
+ * NOTE: The provided schema excerpt shows planet_goods but does not
+ * show a dedicated port_goods table. Without the exact port stock
+ * schema this would be guesswork, so these remain explicit TODOs.
+ * ---------------------------------------------------------------------- */
 
 int
 db_port_get_goods_on_hand (int port_id, const char *commodity_code,
 			   int *out_quantity)
 {
+  (void) port_id;
+  (void) commodity_code;
+  if (out_quantity)
+    *out_quantity = 0;
+
+  /* TODO: implement once the port stock schema (port_goods / port_trade) is final. */
   return SQLITE_OK;
 }
 
@@ -9014,22 +9832,125 @@ int
 db_port_update_goods_on_hand (int port_id, const char *commodity_code,
 			      int quantity_change)
 {
+  (void) port_id;
+  (void) commodity_code;
+  (void) quantity_change;
+
+  /* TODO: implement once the port stock schema (port_goods / port_trade) is final. */
   return SQLITE_OK;
 }
+
+/* ----------------------------------------------------------------------
+ * Planets: goods on hand (planet_goods)
+ * ---------------------------------------------------------------------- */
 
 int
 db_planet_get_goods_on_hand (int planet_id, const char *commodity_code,
 			     int *out_quantity)
 {
-  return SQLITE_OK;
+  if (!commodity_code || !out_quantity)
+    return SQLITE_MISUSE;
+
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return SQLITE_MISUSE;
+
+  const char *sql =
+    "SELECT quantity "
+    "FROM planet_goods " "WHERE planet_id = ?1 AND commodity = ?2";
+
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    return rc;
+
+  sqlite3_bind_int (st, 1, planet_id);
+  sqlite3_bind_text (st, 2, commodity_code, -1, SQLITE_TRANSIENT);
+
+  rc = sqlite3_step (st);
+  if (rc == SQLITE_ROW)
+    {
+      *out_quantity = sqlite3_column_int (st, 0);
+      rc = SQLITE_OK;
+    }
+  else if (rc == SQLITE_DONE)
+    {
+      *out_quantity = 0;
+      rc = SQLITE_OK;
+    }
+
+  sqlite3_finalize (st);
+  return rc;
 }
 
 int
 db_planet_update_goods_on_hand (int planet_id, const char *commodity_code,
 				int quantity_change)
 {
-  return SQLITE_OK;
+  if (!commodity_code)
+    return SQLITE_MISUSE;
+
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return SQLITE_MISUSE;
+
+  int current = 0;
+  int rc = db_planet_get_goods_on_hand (planet_id, commodity_code, &current);
+  if (rc != SQLITE_OK)
+    return rc;
+
+  int new_qty = current + quantity_change;
+  if (new_qty < 0)
+    new_qty = 0;
+
+  /* Try update first */
+  const char *sql_upd =
+    "UPDATE planet_goods "
+    "SET quantity = ?1 " "WHERE planet_id = ?2 AND commodity = ?3";
+
+  sqlite3_stmt *st = NULL;
+  rc = sqlite3_prepare_v2 (db, sql_upd, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    return rc;
+
+  sqlite3_bind_int (st, 1, new_qty);
+  sqlite3_bind_int (st, 2, planet_id);
+  sqlite3_bind_text (st, 3, commodity_code, -1, SQLITE_TRANSIENT);
+
+  rc = sqlite3_step (st);
+  if (rc == SQLITE_DONE && sqlite3_changes (db) > 0)
+    {
+      sqlite3_finalize (st);
+      return SQLITE_OK;
+    }
+
+  sqlite3_finalize (st);
+
+  /* No row existed; insert if quantity > 0 */
+  if (new_qty == 0)
+    return SQLITE_OK;
+
+  const char *sql_ins =
+    "INSERT INTO planet_goods (planet_id, commodity, quantity) "
+    "VALUES (?1, ?2, ?3)";
+
+  rc = sqlite3_prepare_v2 (db, sql_ins, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    return rc;
+
+  sqlite3_bind_int (st, 1, planet_id);
+  sqlite3_bind_text (st, 2, commodity_code, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int (st, 3, new_qty);
+
+  rc = sqlite3_step (st);
+  if (rc == SQLITE_DONE)
+    rc = SQLITE_OK;
+
+  sqlite3_finalize (st);
+  return rc;
 }
+
+
 
 
 // New helper functions for ship destruction and player status
@@ -9188,22 +10109,22 @@ db_shiptype_has_escape_pod (sqlite3 *db, int ship_id)
 {
   sqlite3_stmt *st = NULL;
   int rc;
-  bool has_pod = false;
-  const char *sql =
-    "SELECT T.has_escape_pod FROM ships S JOIN shiptypes T ON S.type_id = T.id WHERE S.id = ?;";
+  int type_id = -1;
+  const char *sql = "SELECT type_id FROM ships WHERE id = ?;";
 
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
       LOGE ("db_shiptype_has_escape_pod: prepare error: %s",
 	    sqlite3_errmsg (db));
-      return false;
+      return false;		// Safest default
     }
   sqlite3_bind_int (st, 1, ship_id);
+
   rc = sqlite3_step (st);
   if (rc == SQLITE_ROW)
     {
-      has_pod = sqlite3_column_int (st, 0) == 1;
+      type_id = sqlite3_column_int (st, 0);
     }
   else if (rc != SQLITE_DONE)
     {
@@ -9211,7 +10132,15 @@ db_shiptype_has_escape_pod (sqlite3 *db, int ship_id)
 	    sqlite3_errmsg (db));
     }
   sqlite3_finalize (st);
-  return has_pod;
+
+  // Per game rules, only the Escape Pod (shiptype_id 0) itself lacks an escape pod.
+  // If we couldn't find the ship or its type, we default to false for safety.
+  if (type_id == -1)
+    {
+      return false;
+    }
+
+  return (type_id != 0);
 }
 
 // db_get_player_podded_count_today: Retrieves player's podded count for today.

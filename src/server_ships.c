@@ -166,13 +166,13 @@ handle_ship_destruction (sqlite3 *db, ship_kill_context_t *ctx)
 		       json_integer (ctx->killer_player_id));
   json_object_set_new (event_payload, "cause",
 		       json_string (ctx->cause ==
-				    KILL_CAUSE_COMBAT ? "combat" : ctx->
-				    cause ==
+				    KILL_CAUSE_COMBAT ? "combat" : ctx->cause
+				    ==
 				    KILL_CAUSE_MINES ? "mines" : ctx->cause ==
-				    KILL_CAUSE_QUASAR ? "quasar" : ctx->
-				    cause ==
-				    KILL_CAUSE_NAVHAZ ? "navhaz" : ctx->
-				    cause ==
+				    KILL_CAUSE_QUASAR ? "quasar" : ctx->cause
+				    ==
+				    KILL_CAUSE_NAVHAZ ? "navhaz" : ctx->cause
+				    ==
 				    KILL_CAUSE_SELF_DESTRUCT ? "self_destruct"
 				    : "other"));
   json_object_set_new (event_payload, "sector_id",
@@ -719,30 +719,7 @@ cmd_ship_info_compat (client_ctx_t *ctx, json_t *root)
 }
 
 
-void
-process_ship_destruction (int attacker_id, int victim_id,
-			  const char *victim_ship_name, int sector)
-{
-  sqlite3 *db = db_get_handle ();	// Get db handle
-  // Retrieve ship_sector here
-  int ship_sector = db_get_ship_sector_id (db, victim_id);	// Assuming victim_id is the ship_id
-  if (ship_sector == 0)
-    {				// If ship_sector is 0, it means the ship was not in a sector (e.g., in transit or error)
-      ship_sector = -1;		// Use -1 or another indicator for unknown/invalid sector
-    }
-  json_t *payload = json_object ();
-  json_object_set_new (payload, "ship_id", json_integer (victim_id));
-  json_object_set_new (payload, "ship_name", json_string (victim_ship_name));
-  json_object_set_new (payload, "player_id", json_integer (victim_id));	// Assuming victim_id is also player_id for logging
-  int rc =
-    db_log_engine_event ((long long) time (NULL), "ship.destroyed", "system",
-			 0, ship_sector, payload, NULL);
 
-  if (rc != SQLITE_OK)
-    {
-      // Log event logging failure
-    }
-}
 
 /*
  * cmd_ship_self_destruct: Initiate player ship self-destruct sequence.
@@ -759,7 +736,6 @@ int
 cmd_ship_self_destruct (client_ctx_t *ctx, json_t *root)
 {
   int confirmation = 0;
-  json_t *evt = NULL;
 
   json_t *data = json_object_get (root, "data");
   if (!data || json_unpack (data, "{s:i}", "confirmation", &confirmation) != 0

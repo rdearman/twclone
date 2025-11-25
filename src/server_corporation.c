@@ -5,7 +5,7 @@
 #include <time.h>
 #include <strings.h>
 #include <pthread.h>
-#include <ctype.h> // Required for isalnum and isupper
+#include <ctype.h>		// Required for isalnum and isupper
 
 #include "server_corporation.h"
 #include "database.h"
@@ -142,8 +142,7 @@ h_get_corp_credit_rating (sqlite3 *db, int corp_id, int *rating)
 {
   sqlite3_stmt *st = NULL;
   int rc = SQLITE_NOTFOUND;
-  const char *sql =
-    "SELECT credit_rating FROM corporations WHERE id = ?;";
+  const char *sql = "SELECT credit_rating FROM corporations WHERE id = ?;";
 
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
@@ -166,7 +165,7 @@ h_get_corp_credit_rating (sqlite3 *db, int corp_id, int *rating)
     {
       if (rating)
 	{
-	  *rating = 0; // Or some default value indicating not found
+	  *rating = 0;		// Or some default value indicating not found
 	}
       rc = SQLITE_NOTFOUND;
     }
@@ -269,8 +268,9 @@ h_update_player_shares (sqlite3 *db, int player_id, int stock_id,
       rc = sqlite3_prepare_v2 (db, sql_add, -1, &st, NULL);
       if (rc != SQLITE_OK)
 	{
-	  LOGE ("h_update_player_shares: Failed to prepare add shares statement: %s",
-		sqlite3_errmsg (db));
+	  LOGE
+	    ("h_update_player_shares: Failed to prepare add shares statement: %s",
+	     sqlite3_errmsg (db));
 	  return SQLITE_ERROR;
 	}
       sqlite3_bind_int (st, 1, player_id);
@@ -286,8 +286,9 @@ h_update_player_shares (sqlite3 *db, int player_id, int stock_id,
       rc = sqlite3_prepare_v2 (db, sql_deduct, -1, &st, NULL);
       if (rc != SQLITE_OK)
 	{
-	  LOGE ("h_update_player_shares: Failed to prepare deduct shares statement: %s",
-		sqlite3_errmsg (db));
+	  LOGE
+	    ("h_update_player_shares: Failed to prepare deduct shares statement: %s",
+	     sqlite3_errmsg (db));
 	  return SQLITE_ERROR;
 	}
       sqlite3_bind_int (st, 1, quantity_change);	// quantity_change is negative
@@ -304,20 +305,22 @@ h_update_player_shares (sqlite3 *db, int player_id, int stock_id,
       sqlite3_finalize (st);
       return SQLITE_ERROR;
     }
-  
-  if (sqlite3_changes(db) == 0 && quantity_change < 0) {
+
+  if (sqlite3_changes (db) == 0 && quantity_change < 0)
+    {
       // If no rows were updated for a deduction, it means insufficient shares
-      LOGW("h_update_player_shares: Player %d has insufficient shares for stock %d to deduct %d.",
-           player_id, stock_id, -quantity_change);
-      sqlite3_finalize(st);
-      return SQLITE_CONSTRAINT; // Indicate insufficient shares
-  }
+      LOGW
+	("h_update_player_shares: Player %d has insufficient shares for stock %d to deduct %d.",
+	 player_id, stock_id, -quantity_change);
+      sqlite3_finalize (st);
+      return SQLITE_CONSTRAINT;	// Indicate insufficient shares
+    }
 
   sqlite3_finalize (st);
-  
+
   // Clean up 0-share entries
   const char *sql_cleanup = "DELETE FROM corp_shareholders WHERE shares = 0;";
-  sqlite3_exec(db, sql_cleanup, NULL, NULL, NULL);
+  sqlite3_exec (db, sql_cleanup, NULL, NULL, NULL);
 
   return SQLITE_OK;
 }
@@ -1499,8 +1502,10 @@ cmd_corp_statement (client_ctx_t *ctx, json_t *root)
     }
 
   json_t *transactions = NULL;
-  if (db_bank_get_transactions ("corp", corp_id, limit, &transactions) !=
-      SQLITE_OK)
+  if (db_bank_get_transactions("corp", corp_id, limit,
+                               NULL, 0, 0, // tx_type_filter, start_date, end_date
+                               0, 0,       // min_amount, max_amount
+                               &transactions) != SQLITE_OK)
     {
       send_enveloped_error (ctx->fd, root, ERR_SERVER_ERROR,
 			    "Failed to retrieve corporation transactions.");
@@ -1738,14 +1743,18 @@ cmd_stock_ipo_register (client_ctx_t *ctx, json_t *root)
 		       json_string
 		       ("Corporation successfully registered for IPO."));
   json_object_set_new (response_data, "corp_id", json_integer (corp_id));
-  json_object_set_new (response_data, "stock_id", json_integer (new_stock_id));
+  json_object_set_new (response_data, "stock_id",
+		       json_integer (new_stock_id));
   json_object_set_new (response_data, "ticker", json_string (ticker));
   send_enveloped_ok (ctx->fd, root, "stock.ipo.register.success",
 		     response_data);
 
-  json_t *payload = json_pack("{s:i, s:i, s:s}", "corp_id", corp_id, "stock_id", new_stock_id, "ticker", ticker);
-  db_log_engine_event(time(NULL), "stock.ipo.registered", "corp", corp_id, 0, payload, NULL);
-  json_decref(payload);
+  json_t *payload =
+    json_pack ("{s:i, s:i, s:s}", "corp_id", corp_id, "stock_id",
+	       new_stock_id, "ticker", ticker);
+  db_log_engine_event (time (NULL), "stock.ipo.registered", "corp", corp_id,
+		       0, payload, NULL);
+  json_decref (payload);
 
   return 0;
 }
@@ -1796,7 +1805,8 @@ cmd_stock_buy (client_ctx_t *ctx, json_t *root)
 			     &par_value, &current_price, &last_dividend_ts);
   if (rc != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG, "Stock not found.");
+      send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG,
+			    "Stock not found.");
       free (ticker);
       return 0;
     }
@@ -1805,8 +1815,8 @@ cmd_stock_buy (client_ctx_t *ctx, json_t *root)
 
   // Check player balance
   long long player_balance;
-  if (db_get_player_bank_balance (ctx->player_id, &player_balance) != SQLITE_OK
-      || player_balance < total_cost)
+  if (db_get_player_bank_balance (ctx->player_id, &player_balance) !=
+      SQLITE_OK || player_balance < total_cost)
     {
       send_enveloped_error (ctx->fd, root, ERR_INSUFFICIENT_FUNDS,
 			    "Insufficient funds to purchase shares.");
@@ -1815,7 +1825,8 @@ cmd_stock_buy (client_ctx_t *ctx, json_t *root)
     }
 
   // Perform transfer
-  rc = db_bank_transfer ("player", ctx->player_id, "corp", corp_id, total_cost);
+  rc =
+    db_bank_transfer ("player", ctx->player_id, "corp", corp_id, total_cost);
   if (rc != SQLITE_OK)
     {
       LOGE ("cmd_stock_buy: Bank transfer failed for player %d, stock %d: %s",
@@ -1830,15 +1841,16 @@ cmd_stock_buy (client_ctx_t *ctx, json_t *root)
   rc = h_update_player_shares (db, ctx->player_id, stock_id, quantity);
   if (rc != SQLITE_OK)
     {
-      LOGE ("cmd_stock_buy: Failed to update player shares for player %d, stock %d: %s",
-	    ctx->player_id, stock_id, sqlite3_errstr (rc));
+      LOGE
+	("cmd_stock_buy: Failed to update player shares for player %d, stock %d: %s",
+	 ctx->player_id, stock_id, sqlite3_errstr (rc));
       // Critical error: funds transferred, but shares not updated. Manual intervention needed or complex rollback.
       send_enveloped_error (ctx->fd, root, ERR_SERVER_ERROR,
 			    "Failed to update player shares after purchase.");
       free (ticker);
       return 0;
     }
-  
+
 
   json_t *response_data = json_object ();
   json_object_set_new (response_data, "message",
@@ -1846,13 +1858,18 @@ cmd_stock_buy (client_ctx_t *ctx, json_t *root)
   json_object_set_new (response_data, "stock_id", json_integer (stock_id));
   json_object_set_new (response_data, "ticker", json_string (ticker));
   json_object_set_new (response_data, "quantity", json_integer (quantity));
-  json_object_set_new (response_data, "total_cost", json_integer (total_cost));
+  json_object_set_new (response_data, "total_cost",
+		       json_integer (total_cost));
   send_enveloped_ok (ctx->fd, root, "stock.buy.success", response_data);
 
-  json_t *payload = json_pack("{s:i, s:i, s:I, s:I}", "player_id", ctx->player_id, "stock_id", stock_id, "quantity", quantity, "cost", total_cost);
-  db_log_engine_event(time(NULL), "stock.buy", "player", ctx->player_id, 0, payload, NULL);
-  json_decref(payload);
-  
+  json_t *payload =
+    json_pack ("{s:i, s:i, s:I, s:I}", "player_id", ctx->player_id,
+	       "stock_id", stock_id, "quantity", quantity, "cost",
+	       total_cost);
+  db_log_engine_event (time (NULL), "stock.buy", "player", ctx->player_id, 0,
+		       payload, NULL);
+  json_decref (payload);
+
   free (ticker);
   return 0;
 }
@@ -1967,9 +1984,13 @@ cmd_stock_dividend_set (client_ctx_t *ctx, json_t *root)
   send_enveloped_ok (ctx->fd, root, "stock.dividend.set.success",
 		     response_data);
 
-  json_t *payload = json_pack("{s:i, s:i, s:I, s:I}", "corp_id", corp_id, "stock_id", stock_id, "amount_per_share", amount_per_share, "total_payout", total_payout);
-  db_log_engine_event(time(NULL), "stock.dividend.declared", "corp", corp_id, 0, payload, NULL);
-  json_decref(payload);
+  json_t *payload =
+    json_pack ("{s:i, s:i, s:I, s:I}", "corp_id", corp_id, "stock_id",
+	       stock_id, "amount_per_share", amount_per_share, "total_payout",
+	       total_payout);
+  db_log_engine_event (time (NULL), "stock.dividend.declared", "corp",
+		       corp_id, 0, payload, NULL);
+  json_decref (payload);
 
   return 0;
 }
@@ -1986,7 +2007,8 @@ cmd_stock (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  const char *subcommand = json_string_value (json_object_get (data, "subcommand"));
+  const char *subcommand =
+    json_string_value (json_object_get (data, "subcommand"));
   if (!subcommand)
     {
       send_enveloped_error (ctx->fd, root, ERR_BAD_REQUEST,
@@ -2013,4 +2035,3 @@ cmd_stock (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 }
-
