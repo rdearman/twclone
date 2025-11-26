@@ -5517,6 +5517,208 @@ cleanup:
   return ret_code;
 }
 
+// Mapping from client-friendly field names to player_info_v1 view column names
+static const struct {
+    const char *client_name;
+    const char *view_name;
+} player_field_map[] = {
+    {"id", "player_id"},
+    {"username", "player_name"},
+    {"number", "player_number"},
+    {"sector", "sector_id"},
+    {"sector_name", "sector_name"},
+    {"credits", "petty_cash"}, // Client requested "credits" maps to "petty_cash" in view
+    {"alignment", "alignment"},
+    {"experience", "experience"},
+    {"ship_number", "ship_number"},
+    {"ship_id", "ship_id"},
+    {"ship_name", "ship_name"},
+    {"ship_type_id", "ship_type_id"},
+    {"ship_type_name", "ship_type_name"},
+    {"ship_holds_capacity", "ship_holds_capacity"},
+    {"ship_holds_current", "ship_holds_current"},
+    {"ship_fighters", "ship_fighters"},
+    {"ship_mines", "ship_mines"},
+    {"ship_limpets", "ship_limpets"},
+    {"ship_genesis", "ship_genesis"},
+    {"ship_photons", "ship_photons"},
+    {"ship_beacons", "ship_beacons"},
+    {"ship_colonists", "ship_colonists"},
+    {"ship_equipment", "ship_equipment"},
+    {"ship_organics", "ship_organics"},
+    {"ship_ore", "ship_ore"},
+    {"ship_ported", "ship_ported"},
+    {"ship_onplanet", "ship_onplanet"},
+    {"approx_worth", "approx_worth"},
+    {NULL, NULL} // Sentinel
+};
+
+// Function to get the corresponding view column name
+static const char* get_player_view_column_name(const char *client_name) {
+    for (int i = 0; player_field_map[i].client_name != NULL; i++) {
+        if (strcmp(client_name, player_field_map[i].client_name) == 0) {
+            return player_field_map[i].view_name;
+        }
+    }
+    return NULL; // Not found
+}
+
+int db_player_info_selected_fields(int player_id, const json_t *fields_array, json_t **out) {
+    sqlite3 *db = db_get_handle();
+    sqlite3_stmt *stmt = NULL;
+    int rc = SQLITE_ERROR;
+    *out = NULL;
+
+    if (!db || !fields_array || !json_is_array(fields_array)) {
+        LOGE("db_player_info_selected_fields: Invalid arguments provided.\n");
+        return SQLITE_MISUSE;
+    }
+
+    json_t *selected_view_columns_json = json_array();
+    if (!selected_view_columns_json) {
+        LOGE("db_player_info_selected_fields: Failed to allocate JSON array for selected columns.\n");
+        return SQLITE_NOMEM;
+    }
+
+    size_t index;
+    json_t *value;
+
+    // Build the SELECT clause dynamically
+    json_array_foreach(fields_array, index, value) {
+        const char *client_field_name = json_string_value(value);
+        if (client_field_name) {
+            const char *view_col_name = get_player_view_column_name(client_field_name);
+            if (view_col_name) {
+                // Append the view's column name, not the client's.
+                // We'll map back to client name in the result parsing.
+                json_array_append_new(selected_view_columns_json, json_string(view_col_name));
+            } else {
+                LOGW("db_player_info_selected_fields: Requested field '%s' not mapped to a view column. Ignoring.\n", client_field_name);
+            }
+        }
+    }
+
+    if (json_array_size(selected_view_columns_json) == 0) {
+        LOGW("db_player_info_selected_fields: No valid fields to select. Returning empty object.\n");
+        *out = json_object(); // Return an empty object if no fields were valid.
+        json_decref(selected_view_columns_json);
+        return SQLITE_OK;
+    }
+
+    // Allocate buffer for the dynamic SELECT clause (e.g., "col1, col2, col3")
+    // Max 256 chars per column name, plus ", " separator. Max ~30 fields from player_field_map.
+    // 30 * (256 + 2) is ~7.5KB. So 8KB is a safe buffer size.
+    char select_clause_buffer[8192]; 
+    select_clause_buffer[0] = '\0';
+    size_t current_buffer_len = 0;
+
+    json_array_foreach(selected_view_columns_json, index, value) {
+        const char *col_name_in_view = json_string_value(value);
+        if (col_name_in_view) {
+            if (current_buffer_len > 0) {
+                strncat(select_clause_buffer, ", ", sizeof(select_clause_buffer) - current_buffer_len - 1);
+                current_buffer_len += 2;
+            }
+            strncat(select_clause_buffer, col_name_in_view, sizeof(select_clause_buffer) - current_buffer_len - 1);
+            current_buffer_len += strlen(col_name_in_view);
+        }
+    }
+    json_decref(selected_view_columns_json); // Free the temporary array
+
+
+    // Construct the full SQL query
+    char *sql_query = sqlite3_mprintf(
+        "SELECT %s FROM player_info_v1 WHERE player_id = ?1;",
+        select_clause_buffer
+    );
+
+    if (!sql_query) {
+        LOGE("db_player_info_selected_fields: SQL query string allocation failed.\n");
+        return SQLITE_NOMEM;
+    }
+
+    pthread_mutex_lock(&db_mutex);
+
+    rc = sqlite3_prepare_v2(db, sql_query, -1, &stmt, NULL);
+    sqlite3_free(sql_query); // Free sqlite3_mprintf'd string immediately
+
+    if (rc != SQLITE_OK) {
+        LOGE("db_player_info_selected_fields: Failed to prepare statement for player %d: %s\n", player_id, sqlite3_errmsg(db));
+        pthread_mutex_unlock(&db_mutex);
+        return rc;
+    }
+
+    sqlite3_bind_int(stmt, 1, player_id);
+
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        *out = json_object();
+        if (!*out) {
+            LOGE("db_player_info_selected_fields: Failed to allocate output JSON object.\n");
+            sqlite3_finalize(stmt);
+            pthread_mutex_unlock(&db_mutex);
+            return SQLITE_NOMEM;
+        }
+
+        // Iterate through the original requested fields_array to populate the output JSON
+        // This ensures the keys in the output match the client's request
+        json_array_foreach(fields_array, index, value) {
+            const char *client_field_name = json_string_value(value);
+            if (!client_field_name) continue;
+
+            const char *view_col_name = get_player_view_column_name(client_field_name);
+            if (!view_col_name) {
+                // This case should ideally be covered by the initial validation/logging
+                continue;
+            }
+            
+            // Find the column index in the result set by the view's column name
+            int col_idx = sqlite3_column_type(stmt, 0) == SQLITE_NULL ? -1 : sqlite3_column_count(stmt); // Initialize to invalid
+            for (int c = 0; c < sqlite3_column_count(stmt); ++c) {
+                if (strcmp(sqlite3_column_name(stmt, c), view_col_name) == 0) {
+                    col_idx = c;
+                    break;
+                }
+            }
+
+            if (col_idx != -1) {
+                json_t *col_value = NULL;
+                switch (sqlite3_column_type(stmt, col_idx)) {
+                    case SQLITE_INTEGER:
+                        col_value = json_integer(sqlite3_column_int64(stmt, col_idx));
+                        break;
+                    case SQLITE_FLOAT:
+                        col_value = json_real(sqlite3_column_double(stmt, col_idx));
+                        break;
+                    case SQLITE_TEXT:
+                        col_value = json_string((const char*)sqlite3_column_text(stmt, col_idx));
+                        break;
+                    case SQLITE_NULL:
+                        col_value = json_null();
+                        break;
+                    default:
+                        LOGW("db_player_info_selected_fields: Unsupported SQLITE type for column '%s'.\n", view_col_name);
+                        break;
+                }
+                if (col_value) {
+                    json_object_set_new(*out, client_field_name, col_value); // Use client_field_name for output key
+                }
+            } else {
+                LOGW("db_player_info_selected_fields: Internal error: Column '%s' (for client field '%s') not found in query result for player %d.\n", view_col_name, client_field_name, player_id);
+            }
+        }
+        rc = SQLITE_OK;
+    } else if (rc == SQLITE_DONE) {
+        LOGI("db_player_info_selected_fields: Player ID %d not found.\n", player_id);
+        rc = SQLITE_NOTFOUND;
+    } else {
+        LOGE("db_player_info_selected_fields: Query execution failed for player %d: %s\n", player_id, sqlite3_errmsg(db));
+    }
+
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&db_mutex);
+    return rc;
+}
+
 
 
 int

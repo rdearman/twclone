@@ -27,6 +27,15 @@
 #include "server_ships.h"
 #include "server_loop.h"
 
+static const char *DEFAULT_PLAYER_FIELDS[] = {
+    "id",
+    "username",
+    "credits",
+    "sector", // Assuming "sector" is a direct field in player info or easily derivable
+    "faction",
+    NULL // Sentinel value to mark the end of the array
+};
+
 extern sqlite3 *db_get_handle (void);
 
 // extern void send_enveloped_refused(int fd, json_t *root_cmd, int code, const char *message, json_t *meta);
@@ -778,6 +787,8 @@ get_online_players_json_array (int offset, int limit, const json_t * fields_arra
   int *online_player_ids = NULL;
   int total_online = 0;
   int current_count = 0; // Number of players actually added to players_list
+  json_t *effective_fields = (json_t *)fields_array; // Non-const pointer for modification
+  bool using_default_fields = false;
 
 
   pthread_mutex_lock (&g_clients_mu);
@@ -831,54 +842,41 @@ get_online_players_json_array (int offset, int limit, const json_t * fields_arra
   if (end_idx > total_online)
     end_idx = total_online;
 
+
+  // If no fields requested, use default fields
+  if (!effective_fields || json_array_size (effective_fields) == 0)
+    {
+      effective_fields = json_array();
+      for (int f = 0; DEFAULT_PLAYER_FIELDS[f] != NULL; f++) {
+          json_array_append_new(effective_fields, json_string(DEFAULT_PLAYER_FIELDS[f]));
+      }
+      using_default_fields = true;
+    }
+
+
   // Second pass: fetch player details from DB and apply field selection
   for (int i = start_idx; i < end_idx; i++)
     {
       int player_id = online_player_ids[i];
-      json_t *full_player_info = NULL;
-      int db_rc = db_player_info_json (player_id, &full_player_info);
+      json_t *full_player_info = NULL; // This will become the filtered info
+
+      // Use the new function that selects only the requested fields
+      int db_rc = db_player_info_selected_fields(player_id, effective_fields, &full_player_info);
 
       if (db_rc != SQLITE_OK || !full_player_info)
         {
-          LOGW ("Failed to retrieve player info for online player ID %d. Skipping. DB_RC: %d\n", player_id, db_rc);
+          LOGW ("Failed to retrieve player info (selected fields) for online player ID %d. Skipping. DB_RC: %d\n", player_id, db_rc);
           continue;
         }
 
-      json_t *player_obj_to_add = NULL;
-
-      // Apply field selection if requested
-      if (fields_array && json_array_size (fields_array) > 0)
-        {
-          player_obj_to_add = json_object ();
-          size_t index;
-          json_t *field_name_json;
-
-          json_array_foreach (fields_array, index, field_name_json)
-            {
-              const char *field_name = json_string_value (field_name_json);
-              if (field_name)
-                {
-                  json_t *value = json_object_get (full_player_info, field_name);
-                  if (value)
-                    {
-                      // Take ownership of the value
-                      json_object_set_new (player_obj_to_add, field_name, json_incref (value));
-                    }
-                }
-            }
-          json_decref (full_player_info); // Done with the full info
-        }
-      else
-        {
-          // No field selection, use full info
-          player_obj_to_add = full_player_info; // Transfer ownership
-        }
-
-      if (player_obj_to_add)
-        {
-          json_array_append_new (players_list, player_obj_to_add);
+      // full_player_info now already contains only the selected fields.
+      // We just need to append it.
+      if (json_object_size(full_player_info) > 0) { // Only add if it has fields
+          json_array_append_new (players_list, full_player_info); // Transfer ownership
           current_count++;
-        }
+      } else {
+          json_decref(full_player_info); // No fields were added, free it
+      }
     }
 
   // Free allocated player IDs array
@@ -886,6 +884,11 @@ get_online_players_json_array (int offset, int limit, const json_t * fields_arra
     {
       free (online_player_ids);
     }
+  
+  // Decref effective_fields if it was created from defaults
+  if (using_default_fields) {
+      json_decref(effective_fields);
+  }
 
   // Construct final response object
   response_obj = json_object ();

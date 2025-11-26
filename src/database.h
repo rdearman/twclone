@@ -99,6 +99,7 @@ int db_player_set_sector (int player_id, int sector_id);
 int db_player_set_alignment (int player_id, int alignment);
 int db_player_get_sector (int player_id, int *out_sector);
 int db_player_info_json (int player_id, json_t ** out);
+int db_player_info_selected_fields(int player_id, const json_t *fields, json_t **out);
 int db_sector_beacon_text (int sector_id, char **out_text);	// caller frees *out_text
 int db_planets_at_sector_json (int sector_id, json_t ** out_array);
 int db_players_at_sector_json (int sector_id, json_t ** out_array);
