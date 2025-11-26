@@ -1,0 +1,90 @@
+{
+  "description": "Bounty System Tests",
+  "suites": {
+    "bounty_basic": [
+      {
+        "name": "Verify Scout Marauder Exists",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "SELECT id FROM shiptypes WHERE name = 'Scout Marauder';" },
+        "expect": { "status": "ok", "data": { "rows": [ ["*"] ] } }
+      },
+      {
+        "name": "Setup Good Player",
+        "command": "auth.register",
+        "data": { "user_name": "goodguy", "password": "password" },
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Login Good Player",
+        "command": "auth.login",
+        "data": { "user_name": "goodguy", "password": "password" },
+        "expect": { "status": "ok" },
+        "save": {"good_id": "data.player_id"}
+      },
+      {
+        "name": "Setup Evil Player",
+        "command": "auth.register",
+        "data": { "user_name": "badguy", "password": "password" },
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Login Evil Player",
+        "command": "auth.login",
+        "data": { "user_name": "badguy", "password": "password" },
+        "expect": { "status": "ok" },
+        "save": {"evil_id": "data.player_id"}
+      },
+      {
+        "name": "Set Good Alignment via SQL",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "UPDATE players SET alignment = 100, credits = 10000 WHERE name = 'goodguy';" },
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Set Evil Alignment via SQL",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "UPDATE players SET alignment = -100, credits = 10000 WHERE name = 'badguy';" },
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Good posts Fed Bounty on Evil",
+        "command": "bounty.post_federation",
+        "data": { "target_player_id": "@evil_id", "amount": 1000, "description": "He is bad" },
+        "user": "goodguy",
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Good posts Fed Bounty on Good (Fail)",
+        "command": "bounty.post_federation",
+        "data": { "target_player_id": "@good_id", "amount": 1000 },
+        "user": "goodguy",
+        "expect": { "error": { "code": 1403 } } 
+      },
+      {
+        "name": "Move Evil to Orion (Sector 0) via SQL",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "UPDATE players SET sector = 0 WHERE name = 'badguy';" },
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Evil posts Hitlist on Good",
+        "command": "bounty.post_hitlist",
+        "data": { "target_player_id": "@good_id", "amount": 2000, "description": "Die hero" },
+        "user": "badguy",
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "List Bounties (Good View)",
+        "command": "bounty.list",
+        "user": "goodguy",
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "List Bounties (Evil View)",
+        "command": "bounty.list",
+        "user": "badguy",
+        "expect": { "status": "ok" }
+      }
+    ]
+  }
+}

@@ -1830,7 +1830,10 @@ create_imperial (void)
 
   // Using a prepared statement for safety and to correctly bind all new and existing columns.
   sqlite3_stmt *ins = NULL;
-  const char *sql_ship_insert = "INSERT INTO ships ( name, type_id, sector, fighters, shields, holds, photons, genesis, attack) " "VALUES ('Imperial Starship', ?, ?, ?, ?, ?, ?, ?, ?);";	// 10 columns/bind points
+  // Fixed SQL: Removed binding to non-existent owner column, mapped correct columns
+  const char *sql_ship_insert = 
+    "INSERT INTO ships (name, type_id, sector, fighters, shields, holds, photons, genesis, attack, hull, perms, flags) "
+    "VALUES ('Imperial Starship', ?, ?, ?, ?, ?, ?, ?, ?, 10000, 731, 777);";
 
   rc = sqlite3_prepare_v2 (db, sql_ship_insert, -1, &ins, NULL);
   if (rc != SQLITE_OK)
@@ -1843,23 +1846,21 @@ create_imperial (void)
 
   // Bind the ship properties
   int b = 1;
-  // (1) player_id (The ship must be linked to the NPC player)
-  sqlite3_bind_int64 (ins, b++, imperial_player_id);
-  // (2) type (FK to shiptypes, was previously the only identifier)
+  // (1) type (FK to shiptypes)
   sqlite3_bind_int (ins, b++, imperial_starship_id);
-  // (3) location
+  // (2) location
   sqlite3_bind_int (ins, b++, imperial_sector);
-  // (4) fighters (initial value from struct)
+  // (3) fighters (initial value from struct)
   sqlite3_bind_int (ins, b++, imperial_stats.fighters);
-  // (5) shields (initial value from struct)
+  // (4) shields (initial value from struct)
   sqlite3_bind_int (ins, b++, imperial_stats.shields);
-  // (6) holds (initial value from struct)
+  // (5) holds (initial value from struct)
   sqlite3_bind_int (ins, b++, imperial_stats.holds);
-  // (7) photons (initial value from struct)
+  // (6) photons (initial value from struct)
   sqlite3_bind_int (ins, b++, imperial_stats.photons);
-  // (8) genesis (initial value from struct)
+  // (7) genesis (initial value from struct)
   sqlite3_bind_int (ins, b++, imperial_stats.genesis);
-  // (9) attack (initial value from struct - FIXES THE BUG)
+  // (8) attack (initial value from struct)
   sqlite3_bind_int (ins, b++, imperial_stats.attack);
 
   // Execute the ship insert
@@ -1876,20 +1877,30 @@ create_imperial (void)
   sqlite3_int64 imperial_ship_id = sqlite3_last_insert_rowid (db);
   sqlite3_finalize (ins);	// Clean up the prepared statement
 
-  // --- 3. Link the ship ID back to the player entry ---
+  // --- 3. Link the ship ID back to the player entry AND create ownership ---
   char sql_update[512];
-  // Build the UPDATE into the right buffer with the right size
   snprintf (sql_update, sizeof (sql_update),
 	    "UPDATE players SET ship=%lld WHERE id=%lld;",
 	    (long long) imperial_ship_id, (long long) imperial_player_id);
 
-  // Execute the UPDATE
   if (sqlite3_exec (db, sql_update, NULL, NULL, NULL) != SQLITE_OK)
     {
       fprintf (stderr, "create_imperial failed to update player ship: %s\n",
 	       sqlite3_errmsg (db));
       pthread_mutex_unlock (&db_mutex);
       return -1;
+    }
+
+  // Create ownership record
+  char sql_own[512];
+  snprintf (sql_own, sizeof (sql_own),
+        "INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary) VALUES (%lld, %lld, 1, 1);",
+        (long long) imperial_ship_id, (long long) imperial_player_id);
+  
+  if (sqlite3_exec (db, sql_own, NULL, NULL, NULL) != SQLITE_OK)
+    {
+        fprintf(stderr, "create_imperial failed to insert ownership: %s\n", sqlite3_errmsg(db));
+        // non-fatal, but bad
     }
 
   fprintf (stderr,

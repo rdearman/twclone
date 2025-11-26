@@ -329,7 +329,7 @@ cmd_sys_raw_sql_exec (client_ctx_t *ctx, json_t *root)
   sqlite3 *db = db_get_handle ();
   json_t *data = json_object_get (root, "data");
   const char *sql_str = NULL;
-  char *err_msg = NULL;
+  sqlite3_stmt *stmt = NULL;
   int rc = 0;
 
   if (!json_is_object (data))
@@ -350,17 +350,54 @@ cmd_sys_raw_sql_exec (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  rc = sqlite3_exec (db, sql_str, NULL, NULL, &err_msg);
+  rc = sqlite3_prepare_v2 (db, sql_str, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, 500,
-			    err_msg ? err_msg : "Failed to execute SQL.");
-      sqlite3_free (err_msg);
+      send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg(db));
+      return 0;
     }
-  else
-    {
-      send_enveloped_ok (ctx->fd, root, "sys.raw_sql_exec.success", NULL);
-    }
+
+  json_t *rows = json_array();
+  int col_count = sqlite3_column_count(stmt);
+
+  while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+      json_t *row = json_array();
+      for (int i = 0; i < col_count; i++) {
+          int type = sqlite3_column_type(stmt, i);
+          switch (type) {
+              case SQLITE_INTEGER:
+                  json_array_append_new(row, json_integer(sqlite3_column_int64(stmt, i)));
+                  break;
+              case SQLITE_FLOAT:
+                  json_array_append_new(row, json_real(sqlite3_column_double(stmt, i)));
+                  break;
+              case SQLITE_TEXT:
+                  json_array_append_new(row, json_string((const char *)sqlite3_column_text(stmt, i)));
+                  break;
+              case SQLITE_NULL:
+                  json_array_append_new(row, json_null());
+                  break;
+              default:
+                  // Blob or other? Treat as string for now or null
+                  json_array_append_new(row, json_string("BLOB/UNKNOWN"));
+                  break;
+          }
+      }
+      json_array_append_new(rows, row);
+  }
+
+  if (rc != SQLITE_DONE) {
+       send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg(db));
+       sqlite3_finalize(stmt);
+       json_decref(rows);
+       return 0;
+  }
+
+  sqlite3_finalize(stmt);
+
+  json_t *resp = json_object();
+  json_object_set_new(resp, "rows", rows);
+  send_enveloped_ok (ctx->fd, root, "sys.raw_sql_exec.success", resp);
   return 0;
 }
 
@@ -447,4 +484,256 @@ send_json_response (client_ctx_t *ctx, json_t *response_json)
   // `response_json` should likely be the `data` parameter.
   send_enveloped_ok (ctx->fd, NULL, "ok", response_json);	// original_request_root is not needed here
   return 0;
+}
+
+/* --- Bounty Commands --- */
+
+// Helper: Check if sector is FedSpace
+static bool is_fedspace_sector(int sector_id) {
+    return (sector_id >= 1 && sector_id <= 10);
+}
+
+// Helper: Check if port is Black Market
+static bool is_black_market_port(sqlite3 *db, int port_id) {
+    sqlite3_stmt *st;
+    int rc = sqlite3_prepare_v2(db, "SELECT type, name FROM ports WHERE id = ?", -1, &st, NULL);
+    if (rc != SQLITE_OK) return false;
+    sqlite3_bind_int(st, 1, port_id);
+    bool is_bm = false;
+    if (sqlite3_step(st) == SQLITE_ROW) {
+        // int type = sqlite3_column_int(st, 0); // Unused
+        const char *name = (const char *)sqlite3_column_text(st, 1);
+        if (name && strstr(name, "Black Market")) is_bm = true;
+    }
+    sqlite3_finalize(st);
+    return is_bm;
+}
+
+int cmd_bounty_post_federation(client_ctx_t *ctx, json_t *root) {
+    if (ctx->player_id <= 0) {
+        send_enveloped_error(ctx->fd, root, 1401, "Authentication required.");
+        return 0;
+    }
+    sqlite3 *db = db_get_handle();
+    
+    json_t *data = json_object_get(root, "data");
+    if (!json_is_object(data)) {
+        send_enveloped_error(ctx->fd, root, 400, "Missing data object.");
+        return 0;
+    }
+    
+    int target_player_id = 0;
+    json_t *j_target_id = json_object_get(data, "target_player_id");
+    if (j_target_id) {
+        int type = json_typeof(j_target_id);
+        if (type == JSON_STRING) {
+            LOGD("cmd_bounty_post_federation: target_player_id is STRING: '%s'", json_string_value(j_target_id));
+        } else if (type == JSON_INTEGER) {
+            LOGD("cmd_bounty_post_federation: target_player_id is INTEGER: %lld", (long long)json_integer_value(j_target_id));
+        } else {
+            LOGD("cmd_bounty_post_federation: target_player_id is type %d", type);
+        }
+    } else {
+        LOGD("cmd_bounty_post_federation: target_player_id key missing.");
+    }
+
+    if (!json_get_int_flexible(data, "target_player_id", &target_player_id) || target_player_id <= 0) {
+        LOGE("cmd_bounty_post_federation: Invalid target_player_id received: %d", target_player_id);
+        send_enveloped_error(ctx->fd, root, 400, "Invalid target_player_id.");
+        return 0;
+    }
+    
+    long long amount;
+    if (!json_get_int64_flexible(data, "amount", &amount) || amount <= 0) {
+        send_enveloped_error(ctx->fd, root, 400, "Invalid amount.");
+        return 0;
+    }
+    
+    const char *desc = json_string_value(json_object_get(data, "description"));
+    if (!desc) desc = "Wanted for crimes against the Federation.";
+
+    int sector = 0;
+    db_player_get_sector(ctx->player_id, &sector);
+    if (!is_fedspace_sector(sector)) {
+        send_enveloped_error(ctx->fd, root, 1403, "Must be in FedSpace to post a Federation bounty.");
+        return 0;
+    }
+
+    int issuer_alignment = 0;
+    db_player_get_alignment(db, ctx->player_id, &issuer_alignment);
+    if (issuer_alignment < 0) {
+        send_enveloped_error(ctx->fd, root, 1403, "Evil players cannot post Federation bounties.");
+        return 0;
+    }
+
+    int target_alignment = 0;
+    if (db_player_get_alignment(db, target_player_id, &target_alignment) != SQLITE_OK) {
+        send_enveloped_error(ctx->fd, root, 404, "Target player not found.");
+        return 0;
+    }
+    if (target_alignment >= 0) {
+        send_enveloped_error(ctx->fd, root, 1403, "Target must be an evil player.");
+        return 0;
+    }
+    if (target_player_id == ctx->player_id) {
+        send_enveloped_error(ctx->fd, root, 400, "Cannot post bounty on yourself.");
+        return 0;
+    }
+
+    long long new_balance = 0;
+    if (h_deduct_credits(db, "player", ctx->player_id, amount, "WITHDRAWAL", NULL, &new_balance) != SQLITE_OK) {
+        send_enveloped_error(ctx->fd, root, 1402, "Insufficient funds.");
+        return 0;
+    }
+
+    if (db_bounty_create(db, "player", ctx->player_id, "player", target_player_id, amount, desc) != SQLITE_OK) {
+        h_add_credits(db, "player", ctx->player_id, amount, "DEPOSIT", NULL, &new_balance);
+        send_enveloped_error(ctx->fd, root, 500, "Database error creating bounty.");
+        return 0;
+    }
+
+    send_enveloped_ok(ctx->fd, root, "bounty.post_federation.confirmed", NULL);
+    return 0;
+}
+
+int cmd_bounty_post_hitlist(client_ctx_t *ctx, json_t *root) {
+    if (ctx->player_id <= 0) {
+        send_enveloped_error(ctx->fd, root, 1401, "Authentication required.");
+        return 0;
+    }
+    sqlite3 *db = db_get_handle();
+    
+    json_t *data = json_object_get(root, "data");
+    if (!json_is_object(data)) {
+        send_enveloped_error(ctx->fd, root, 400, "Missing data object.");
+        return 0;
+    }
+    
+    int target_player_id = 0;
+    json_t *j_target_id = json_object_get(data, "target_player_id");
+    if (j_target_id) {
+        int type = json_typeof(j_target_id);
+        if (type == JSON_STRING) {
+            LOGD("cmd_bounty_post_hitlist: target_player_id is STRING: '%s'", json_string_value(j_target_id));
+        } else if (type == JSON_INTEGER) {
+            LOGD("cmd_bounty_post_hitlist: target_player_id is INTEGER: %lld", (long long)json_integer_value(j_target_id));
+        } else {
+            LOGD("cmd_bounty_post_hitlist: target_player_id is type %d", type);
+        }
+    } else {
+        LOGD("cmd_bounty_post_hitlist: target_player_id key missing.");
+    }
+
+    if (!json_get_int_flexible(data, "target_player_id", &target_player_id) || target_player_id <= 0) {
+        LOGE("cmd_bounty_post_hitlist: Invalid target_player_id received: %d", target_player_id);
+        send_enveloped_error(ctx->fd, root, 400, "Invalid target_player_id.");
+        return 0;
+    }
+    
+    long long amount;
+    if (!json_get_int64_flexible(data, "amount", &amount) || amount <= 0) {
+        send_enveloped_error(ctx->fd, root, 400, "Invalid amount.");
+        return 0;
+    }
+    
+    const char *desc = json_string_value(json_object_get(data, "description"));
+    if (!desc) desc = "Hit ordered.";
+
+    int sector = 0;
+    db_player_get_sector(ctx->player_id, &sector);
+    if (sector != 0) {
+         send_enveloped_error(ctx->fd, root, 1403, "Must be in Orion Sector (0) to post a Hit List contract.");
+         return 0;
+    }
+
+    int issuer_alignment = 0;
+    db_player_get_alignment(db, ctx->player_id, &issuer_alignment);
+    if (issuer_alignment > 0) {
+        send_enveloped_error(ctx->fd, root, 1403, "Good players cannot post Hit List contracts.");
+        return 0;
+    }
+
+    int target_alignment = 0;
+    if (db_player_get_alignment(db, target_player_id, &target_alignment) != SQLITE_OK) {
+        send_enveloped_error(ctx->fd, root, 404, "Target player not found.");
+        return 0;
+    }
+    if (target_alignment <= 0) {
+        send_enveloped_error(ctx->fd, root, 1403, "Target must be a good player.");
+        return 0;
+    }
+    if (target_player_id == ctx->player_id) {
+        send_enveloped_error(ctx->fd, root, 400, "Cannot put a hit on yourself.");
+        return 0;
+    }
+
+    long long new_balance = 0;
+    if (h_deduct_credits(db, "player", ctx->player_id, amount, "WITHDRAWAL", NULL, &new_balance) != SQLITE_OK) {
+        send_enveloped_error(ctx->fd, root, 1402, "Insufficient funds.");
+        return 0;
+    }
+
+    if (db_bounty_create(db, "player", ctx->player_id, "player", target_player_id, amount, desc) != SQLITE_OK) {
+        h_add_credits(db, "player", ctx->player_id, amount, "DEPOSIT", NULL, &new_balance);
+        send_enveloped_error(ctx->fd, root, 500, "Database error creating bounty.");
+        return 0;
+    }
+
+    send_enveloped_ok(ctx->fd, root, "bounty.post_hitlist.confirmed", NULL);
+    return 0;
+}
+
+int cmd_bounty_list(client_ctx_t *ctx, json_t *root) {
+    if (ctx->player_id <= 0) {
+        send_enveloped_error(ctx->fd, root, 1401, "Authentication required.");
+        return 0;
+    }
+    sqlite3 *db = db_get_handle();
+
+    int alignment = 0;
+    db_player_get_alignment(db, ctx->player_id, &alignment);
+
+    char *sql = NULL;
+    if (alignment >= 0) {
+        sql = sqlite3_mprintf(
+            "SELECT b.id, b.target_id, p.name, b.reward, b.posted_by_type "
+            "FROM bounties b "
+            "JOIN players p ON b.target_id = p.id "
+            "WHERE b.status = 'open' AND p.alignment < 0 "
+            "ORDER BY b.reward DESC LIMIT 20;"
+        );
+    } else {
+        sql = sqlite3_mprintf(
+            "SELECT b.id, b.target_id, p.name, b.reward, b.posted_by_type "
+            "FROM bounties b "
+            "JOIN players p ON b.target_id = p.id "
+            "WHERE b.status = 'open' AND (p.alignment > 0 OR b.posted_by_type = 'gov') "
+            "ORDER BY b.reward DESC LIMIT 20;"
+        );
+    }
+
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK) {
+        sqlite3_free(sql);
+        send_enveloped_error(ctx->fd, root, 500, "Database error listing bounties.");
+        return 0;
+    }
+    sqlite3_free(sql);
+
+    json_t *arr = json_array();
+    while (sqlite3_step(st) == SQLITE_ROW) {
+        json_t *item = json_object();
+        json_object_set_new(item, "bounty_id", json_integer(sqlite3_column_int(st, 0)));
+        json_object_set_new(item, "target_id", json_integer(sqlite3_column_int(st, 1)));
+        json_object_set_new(item, "target_name", json_string((const char*)sqlite3_column_text(st, 2)));
+        json_object_set_new(item, "reward", json_integer(sqlite3_column_int64(st, 3)));
+        json_object_set_new(item, "posted_by_type", json_string((const char*)sqlite3_column_text(st, 4)));
+        json_array_append_new(arr, item);
+    }
+    sqlite3_finalize(st);
+
+    json_t *resp = json_object();
+    json_object_set_new(resp, "bounties", arr);
+    send_enveloped_ok(ctx->fd, root, "bounty.list.success", resp);
+    return 0;
 }

@@ -89,4 +89,9 @@ int send_json_response (client_ctx_t * ctx, json_t * response_json);
 int cmd_player_set_trade_account_preference (client_ctx_t * ctx,
 					     json_t * root);
 
+/* --- Bounty Commands --- */
+int cmd_bounty_post_federation(client_ctx_t *ctx, json_t *root);
+int cmd_bounty_post_hitlist(client_ctx_t *ctx, json_t *root);
+int cmd_bounty_list(client_ctx_t *ctx, json_t *root);
+
 #endif /* SERVER_CMDS_H */

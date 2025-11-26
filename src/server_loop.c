@@ -104,7 +104,8 @@ static const cmd_desc_t k_supported_cmds_fallback[] = {
   {"bank.transfer", "Transfer credits between players"},
   {"bank.withdraw", "Withdraw credits from bank"},
   {"bounty.list", "List bounties"},
-  {"bounty.post", "Post a bounty"},
+  {"bounty.post_federation", "Post a Federation bounty"},
+  {"bounty.post_hitlist", "Post a Hit List contract"},
   {"bulk.execute", "Execute a bulk command"},
   {"chat.broadcast", "Broadcast a chat message"},
   {"chat.history", "Chat history"},
@@ -813,6 +814,18 @@ process_message (client_ctx_t *ctx, json_t *root)
   else if (streq (cmd, "bank.leaderboard"))
     {
       rc = cmd_bank_leaderboard (ctx, root);
+    }
+  else if (streq (cmd, "bounty.list"))
+    {
+      rc = cmd_bounty_list (ctx, root);
+    }
+  else if (streq (cmd, "bounty.post_federation"))
+    {
+      rc = cmd_bounty_post_federation (ctx, root);
+    }
+  else if (streq (cmd, "bounty.post_hitlist"))
+    {
+      rc = cmd_bounty_post_hitlist (ctx, root);
     }
 
   else if (streq (cmd, "player.my_info"))

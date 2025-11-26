@@ -278,8 +278,7 @@ int db_get_shiptype_info (sqlite3 * db, int shiptype_id, int *holds,
 int db_player_land_on_planet (int player_id, int planet_id);
 int db_player_launch_from_planet (int player_id, int *out_sector_id);
 
-
-
-
+int db_bounty_create(sqlite3 *db, const char *posted_by_type, int posted_by_id, const char *target_type, int target_id, long long reward, const char *description);
+int db_player_get_alignment(sqlite3 *db, int player_id, int *alignment);
 
 #endif /* DATABASE_H */

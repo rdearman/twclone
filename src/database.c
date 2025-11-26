@@ -617,6 +617,7 @@ const char *create_table_sql[] = {
     "   onplanet INTEGER,  "
     "   destroyed INTEGER DEFAULT 0,  "
     "   hull INTEGER NOT NULL DEFAULT 100, "
+    "   perms INTEGER NOT NULL DEFAULT 731, "
     "   CONSTRAINT check_current_cargo_limit CHECK ( (colonists + equipment + organics + ore) <= holds ), "
     "   FOREIGN KEY(type_id) REFERENCES shiptypes(id),  "
     "   FOREIGN KEY(sector) REFERENCES sectors(id)  " " );  ",
@@ -3264,8 +3265,11 @@ db_insert_defaults_unlocked (void)
   if (!db)
     return -1;
 
+  LOGI("db_insert_defaults_unlocked: Starting default data insertion.");
+
   for (size_t i = 0; i < insert_default_count; i++)
     {
+      LOGD("db_insert_defaults_unlocked: Executing default SQL statement %zu: %s", i, insert_default_sql[i]);
       if (sqlite3_exec (db, insert_default_sql[i], NULL, NULL, &errmsg) !=
 	  SQLITE_OK)
 	{
@@ -3275,6 +3279,7 @@ db_insert_defaults_unlocked (void)
 	}
     }
   ret_code = 0;
+  LOGI("db_insert_defaults_unlocked: Default data insertion completed successfully.");
 cleanup:
   if (errmsg)
     sqlite3_free (errmsg);
@@ -6427,253 +6432,719 @@ out_unlock:
 
 
 //////////////////////////////////////////////////////
-int
-db_ship_claim (int player_id, int sector_id, int ship_id, json_t **out_ship)
+
+
+// Unlocked helper for ship claiming. Assumes db_mutex is held and transaction is active (or not needed).
+
+
+static int
+
+
+h_ship_claim_unlocked (sqlite3 *db, int player_id, int sector_id, int ship_id, json_t **out_ship)
+
+
 {
-  if (!out_ship)
-    return SQLITE_MISUSE;
-  *out_ship = NULL;
+
 
   // const int LOCK_MASK = SHIPF_LOCKED;        /* if you defined flags; else 0 */
+
+
   int rc = SQLITE_OK;
+
+
   sqlite3_stmt *stmt = NULL;
 
-  pthread_mutex_lock (&db_mutex);
 
-  rc = sqlite3_exec (db_handle, "BEGIN IMMEDIATE", NULL, NULL, NULL);
-  if (rc != SQLITE_OK)
-    goto out_unlock;
+
+
+
+  LOGD("h_ship_claim_unlocked: checking ship_id=%d, sector_id=%d", ship_id, sector_id);
+
+
+
+
 
   static const char *SQL_CHECK = "SELECT s.id FROM ships s " "LEFT JOIN players pil ON pil.ship = s.id "	// Changed from s.number to s.id
+
+
     "WHERE s.id=? AND s.sector=? "
+
+
     "  AND pil.id IS NULL AND (s.flags % 10) >= 1;";
 
-  rc = sqlite3_prepare_v2 (db_handle, SQL_CHECK, -1, &stmt, NULL);
+
+
+
+
+  rc = sqlite3_prepare_v2 (db, SQL_CHECK, -1, &stmt, NULL);
+
+
   if (rc != SQLITE_OK)
-    goto rollback;
 
-  sqlite3_bind_int (stmt, 1, ship_id);
-  sqlite3_bind_int (stmt, 2, sector_id);
 
-  rc = sqlite3_step (stmt);
-  sqlite3_finalize (stmt);
-  stmt = NULL;
-  if (rc != SQLITE_ROW)
     {
-      rc = SQLITE_CONSTRAINT;
-      goto rollback;
+
+
+      LOGE("h_ship_claim_unlocked: prepare failed: %s", sqlite3_errmsg(db));
+
+
+      return rc;
+
+
     }
 
-  /* Optional: strip defence so claims aren’t “free upgrades” */
-  static const char *SQL_NORMALISE =
-    "UPDATE ships SET fighters=fighters, shields=shields WHERE id=? AND 1=0;";
-  // "UPDATE ships SET fighters=0, shields=0 WHERE id=?;";
-  rc = sqlite3_prepare_v2 (db_handle, SQL_NORMALISE, -1, &stmt, NULL);
-  if (rc != SQLITE_OK)
-    goto rollback;
+
+
+
+
   sqlite3_bind_int (stmt, 1, ship_id);
+
+
+  sqlite3_bind_int (stmt, 2, sector_id);
+
+
+
+
+
   rc = sqlite3_step (stmt);
+
+
   sqlite3_finalize (stmt);
+
+
   stmt = NULL;
+
+
+  if (rc != SQLITE_ROW)
+
+
+    {
+
+
+      LOGE("h_ship_claim_unlocked: Ship check failed. rc=%d. ship_id=%d, sector_id=%d. (Maybe flags or pilot issue?)", rc, ship_id, sector_id);
+
+
+      return SQLITE_CONSTRAINT;
+
+
+    }
+
+
+  
+
+
+  LOGD("h_ship_claim_unlocked: Ship check passed.");
+
+
+
+
+
+  /* Optional: strip defence so claims aren’t “free upgrades” */
+
+
+  static const char *SQL_NORMALISE =
+
+
+    "UPDATE ships SET fighters=fighters, shields=shields WHERE id=? AND 1=0;";
+
+
+  // "UPDATE ships SET fighters=0, shields=0 WHERE id=?;";
+
+
+  rc = sqlite3_prepare_v2 (db, SQL_NORMALISE, -1, &stmt, NULL);
+
+
+  if (rc != SQLITE_OK)
+
+
+    return rc;
+
+
+  sqlite3_bind_int (stmt, 1, ship_id);
+
+
+  rc = sqlite3_step (stmt);
+
+
+  sqlite3_finalize (stmt);
+
+
+  stmt = NULL;
+
+
   if (rc != SQLITE_DONE)
-    goto rollback;
+
+
+    return rc;
+
+
+
+
 
   /* Switch current pilot */
+
+
   static const char *SQL_SET_PLAYER_SHIP =
+
+
     "UPDATE players " "SET ship = ? " "WHERE id = ?;";
-  rc = sqlite3_prepare_v2 (db_handle, SQL_SET_PLAYER_SHIP, -1, &stmt, NULL);
+
+
+  rc = sqlite3_prepare_v2 (db, SQL_SET_PLAYER_SHIP, -1, &stmt, NULL);
+
+
   if (rc != SQLITE_OK)
-    goto rollback;
+
+
+    return rc;
+
+
   sqlite3_bind_int (stmt, 1, ship_id);
+
+
   sqlite3_bind_int (stmt, 2, player_id);
+
+
   rc = sqlite3_step (stmt);
+
+
   sqlite3_finalize (stmt);
+
+
   stmt = NULL;
+
+
   if (rc != SQLITE_DONE)
-    goto rollback;
+
+
+    return rc;
+
+
+
+
+
+
 
 
   /* Grant ownership to the claimer and mark as primary */
+
+
   static const char *SQL_CLR_OLD_PRIMARY =
+
+
     "UPDATE ship_ownership SET is_primary=0 WHERE player_id=?;";
-  rc = sqlite3_prepare_v2 (db_handle, SQL_CLR_OLD_PRIMARY, -1, &stmt, NULL);
+
+
+  rc = sqlite3_prepare_v2 (db, SQL_CLR_OLD_PRIMARY, -1, &stmt, NULL);
+
+
   if (rc != SQLITE_OK)
-    goto rollback;
+
+
+    return rc;
+
+
   sqlite3_bind_int (stmt, 1, player_id);
+
+
   rc = sqlite3_step (stmt);
+
+
   sqlite3_finalize (stmt);
+
+
   stmt = NULL;
+
+
   if (rc != SQLITE_DONE)
-    goto rollback;
+
+
+    return rc;
+
+
+
+
 
   // Delete existing owner record for this ship (if any)
+
+
   static const char *SQL_DELETE_OLD_OWNER =
+
+
     "DELETE FROM ship_ownership WHERE ship_id=? AND role_id=1;";
-  rc = sqlite3_prepare_v2 (db_handle, SQL_DELETE_OLD_OWNER, -1, &stmt, NULL);
+
+
+  rc = sqlite3_prepare_v2 (db, SQL_DELETE_OLD_OWNER, -1, &stmt, NULL);
+
+
   if (rc != SQLITE_OK)
-    goto rollback;
+
+
+    return rc;
+
+
   sqlite3_bind_int (stmt, 1, ship_id);
+
+
   rc = sqlite3_step (stmt);
+
+
   sqlite3_finalize (stmt);
+
+
   stmt = NULL;
+
+
   if (rc != SQLITE_DONE)
-    goto rollback;
+
+
+    return rc;
+
+
+
+
 
   /* Insert new owner record */
+
+
   static const char *SQL_INSERT_NEW_OWNER =
+
+
     "INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary, acquired_at) "
+
+
     "VALUES (?, ?, 1, 1, strftime('%s','now'));";
-  rc = sqlite3_prepare_v2 (db_handle, SQL_INSERT_NEW_OWNER, -1, &stmt, NULL);
+
+
+  rc = sqlite3_prepare_v2 (db, SQL_INSERT_NEW_OWNER, -1, &stmt, NULL);
+
+
   if (rc != SQLITE_OK)
-    goto rollback;
+
+
+    return rc;
+
+
   sqlite3_bind_int (stmt, 1, ship_id);
+
+
   sqlite3_bind_int (stmt, 2, player_id);
+
+
   rc = sqlite3_step (stmt);
+
+
   sqlite3_finalize (stmt);
+
+
   stmt = NULL;
+
+
   if (rc != SQLITE_DONE)
-    goto rollback;
+
+
+    return rc;
+
+
+
+
+
+
 
 
   /* Fetch snapshot for reply (owner from ship_ownership, pilot = you now) */
+
+
   static const char *SQL_FETCH =
+
+
     "SELECT s.id AS ship_id, "
+
+
     "       COALESCE(NULLIF(s.name,''), st.name || ' #' || s.id) AS ship_name, "
+
+
     "       st.id AS type_id, st.name AS type_name, "
+
+
     "       s.sector AS sector_id, "
+
+
     "       own.player_id AS owner_id, "
+
+
     "       COALESCE( (SELECT name FROM players WHERE id=own.player_id), 'derelict') AS owner_name, "
+
+
     "       0 AS is_derelict, "
+
+
     "       s.fighters, s.shields, "
+
+
     "       s.holds AS holds_total, (s.holds - s.holds) AS holds_free, "
+
+
     "       s.ore, s.organics, s.equipment, s.colonists, "
+
+
     "       COALESCE(s.flags, 731) AS perms "
+
+
     "FROM ships s "
+
+
     "LEFT JOIN shiptypes st      ON st.id = s.type_id "
+
+
     "LEFT JOIN ship_ownership own ON own.ship_id = s.id " "WHERE s.id=?;";
-  rc = sqlite3_prepare_v2 (db_handle, SQL_FETCH, -1, &stmt, NULL);
+
+
+  rc = sqlite3_prepare_v2 (db, SQL_FETCH, -1, &stmt, NULL);
+
+
   if (rc != SQLITE_OK)
-    goto rollback;
+
+
+    return rc;
+
+
   sqlite3_bind_int (stmt, 1, ship_id);
 
+
+
+
+
   rc = sqlite3_step (stmt);
+
+
   if (rc != SQLITE_ROW)
+
+
     {
+
+
       sqlite3_finalize (stmt);
-      stmt = NULL;
-      goto rollback;
+
+
+      return rc; // Or some error
+
+
     }
+
+
+
+
 
   int c = 0;
+
+
   int ship_id_row = sqlite3_column_int (stmt, c++);
+
+
   const char *ship_nm = (const char *) sqlite3_column_text (stmt, c++);
+
+
   if (!ship_nm)
+
+
     ship_nm = "";
+
+
   int type_id = sqlite3_column_int (stmt, c++);
+
+
   const char *type_nm = (const char *) sqlite3_column_text (stmt, c++);
+
+
   if (!type_nm)
+
+
     type_nm = "";
+
+
   int sector_row = sqlite3_column_int (stmt, c++);
+
+
   int owner_id =
+
+
     (sqlite3_column_type (stmt, c) ==
+
+
      SQLITE_NULL) ? 0 : sqlite3_column_int (stmt, c);
+
+
   c++;
+
+
   const char *owner_nm = (const char *) sqlite3_column_text (stmt, c++);
+
+
   if (!owner_nm)
+
+
     owner_nm = "derelict";
+
+
   int is_derelict = sqlite3_column_int (stmt, c++);
+
+
   int fighters = sqlite3_column_int (stmt, c++);
+
+
   int shields = sqlite3_column_int (stmt, c++);
+
+
   int holds_total = sqlite3_column_int (stmt, c++);
+
+
   int holds_free = sqlite3_column_int (stmt, c++);
+
+
   int ore = sqlite3_column_int (stmt, c++);
+
+
   int organics = sqlite3_column_int (stmt, c++);
+
+
   int equipment = sqlite3_column_int (stmt, c++);
+
+
   int colonists = sqlite3_column_int (stmt, c++);
+
+
   int flags = sqlite3_column_int (stmt, c++);
+
+
   const char *reg = (const char *) sqlite3_column_text (stmt, c++);
+
+
   if (!reg)
+
+
     reg = "";
 
+
+
+
+
   /* build the JSON for the claimed ship */
+
+
   int perms = sqlite3_column_int (stmt, c++);
+
+
   char perm_str[8];
+
+
   snprintf (perm_str, sizeof (perm_str), "%03d", perms);
 
-  json_t *ship_json = json_pack ("{s:i s:s s:o s:i s:o s:o s:o s:o s:o s:s}",
-				 "id", ship_id_row,	/* <-- use the value from the SELECT row */
-				 "name", ship_nm,
-				 "type", json_pack ("{s:i s:s}", "id",
-						    type_id, "name", type_nm),
-				 "sector_id", sector_row,
-				 "owner", json_pack ("{s:i s:s}", "id",
-						     owner_id, "name",
-						     owner_nm),
-				 "flags", json_pack ("{s:b s:b s:i}",
-						     "derelict",
-						     is_derelict != 0,
-						     "boardable",
-						     is_derelict != 0,
-						     "raw", flags),
-				 "defence", json_pack ("{s:i s:i}", "shields",
-						       shields, "fighters",
-						       fighters),
-				 "holds", json_pack ("{s:i s:i}", "total",
-						     holds_total, "free",
-						     holds_free),
-				 "cargo", json_pack ("{s:i s:i s:i s:i}",
-						     "ore", ore, "organics",
-						     organics, "equipment",
-						     equipment, "colonists",
-						     colonists),
-				 "perms", json_pack ("{s:i s:s}", "value",
-						     perms, "octal",
-						     perm_str),
-				 "registration", reg);
+
+
+
+
+  if (out_ship) {
+
+
+      *out_ship = json_pack ("{s:i s:s s:o s:i s:o s:o s:o s:o s:o s:s}",
+
+
+                     "id", ship_id_row,	/* <-- use the value from the SELECT row */
+
+
+                     "name", ship_nm,
+
+
+                     "type", json_pack ("{s:i s:s}", "id",
+
+
+                            type_id, "name", type_nm),
+
+
+                     "sector_id", sector_row,
+
+
+                     "owner", json_pack ("{s:i s:s}", "id",
+
+
+                             owner_id, "name",
+
+
+                             owner_nm),
+
+
+                     "flags", json_pack ("{s:b s:b s:i}",
+
+
+                             "derelict",
+
+
+                             is_derelict != 0,
+
+
+                             "boardable",
+
+
+                             is_derelict != 0,
+
+
+                             "raw", flags),
+
+
+                     "defence", json_pack ("{s:i s:i}", "shields",
+
+
+                               shields, "fighters",
+
+
+                               fighters),
+
+
+                     "holds", json_pack ("{s:i s:i}", "total",
+
+
+                             holds_total, "free",
+
+
+                             holds_free),
+
+
+                     "cargo", json_pack ("{s:i s:i s:i s:i}",
+
+
+                             "ore", ore, "organics",
+
+
+                             organics, "equipment",
+
+
+                             equipment, "colonists",
+
+
+                             colonists),
+
+
+                     "perms", json_pack ("{s:i s:s}", "value",
+
+
+                             perms, "octal",
+
+
+                             perm_str),
+
+
+                     "registration", reg);
+
+
+  }
+
+
+
+
 
   sqlite3_finalize (stmt);
-  stmt = NULL;
 
-  if (!ship_json)
-    {
-      rc = SQLITE_NOMEM;
-      goto rollback;
-    }
 
-  rc = sqlite3_exec (db_handle, "COMMIT", NULL, NULL, NULL);
-  if (rc != SQLITE_OK)
-    {
-      json_decref (ship_json);
-      pthread_mutex_unlock (&db_mutex);
-      return rc;
-    }
-
-  pthread_mutex_unlock (&db_mutex);
-  *out_ship = ship_json;	/* return the single ship object */
   return SQLITE_OK;
 
 
-rollback:
-  /* We only come here after BEGIN succeeded */
-  const char *err = sqlite3_errmsg (db_handle);
-  LOGE ("%s", err);
-  sqlite3_exec (db_handle, "ROLLBACK", NULL, NULL, NULL);
-  if (stmt)
-    {
-      sqlite3_finalize (stmt);
-      stmt = NULL;
-    }
-  pthread_mutex_unlock (&db_mutex);
-  return rc;
+}
 
-out_unlock:
-  /* We come here if BEGIN failed or after a failed COMMIT */
-  if (stmt)
-    {
-      sqlite3_finalize (stmt);
-      stmt = NULL;
-    }
+
+
+
+
+int
+
+
+db_ship_claim (int player_id, int sector_id, int ship_id, json_t **out_ship)
+
+
+{
+
+
+  if (!out_ship)
+
+
+    return SQLITE_MISUSE;
+
+
+  *out_ship = NULL;
+
+
+
+
+
+  sqlite3 *db = db_get_handle();
+
+
+  int rc;
+
+
+
+
+
+  pthread_mutex_lock (&db_mutex);
+
+
+  rc = sqlite3_exec (db, "BEGIN IMMEDIATE", NULL, NULL, NULL);
+
+
+  if (rc != SQLITE_OK) {
+
+
+      pthread_mutex_unlock (&db_mutex);
+
+
+      return rc;
+
+
+  }
+
+
+
+
+
+  rc = h_ship_claim_unlocked(db, player_id, sector_id, ship_id, out_ship);
+
+
+
+
+
+  if (rc == SQLITE_OK) {
+
+
+      sqlite3_exec (db, "COMMIT", NULL, NULL, NULL);
+
+
+  } else {
+
+
+      sqlite3_exec (db, "ROLLBACK", NULL, NULL, NULL);
+
+
+      if (*out_ship) {
+
+
+          json_decref(*out_ship);
+
+
+          *out_ship = NULL;
+
+
+      }
+
+
+  }
+
+
+
+
+
   pthread_mutex_unlock (&db_mutex);
+
+
   return rc;
 
 
@@ -6841,6 +7312,7 @@ db_create_initial_ship (int player_id, const char *ship_name, int sector_id)
   sqlite3 *db = db_get_handle ();
   if (!db || player_id <= 0 || !ship_name || !*ship_name || sector_id <= 0)
     {
+      LOGE("db_create_initial_ship: Invalid input player_id=%d, ship_name='%s', sector_id=%d", player_id, ship_name, sector_id);
       return -1;		// Invalid input
     }
 
@@ -6849,79 +7321,110 @@ db_create_initial_ship (int player_id, const char *ship_name, int sector_id)
   int ship_type_id = -1;
   int new_ship_id = -1;
 
-  pthread_mutex_lock (&db_mutex);
-  rc = sqlite3_exec (db, "BEGIN IMMEDIATE", NULL, NULL, NULL);
-  if (rc != SQLITE_OK)
-    goto rollback;
-
   // 1. Get shiptype_id for "Scout Marauder"
   static const char *SQL_GET_SHIPTYPE_ID =
     "SELECT id FROM shiptypes WHERE name = 'Scout Marauder';";
   rc = sqlite3_prepare_v2 (db, SQL_GET_SHIPTYPE_ID, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
-    goto rollback;
+    {
+      LOGE("db_create_initial_ship: Failed to prepare shiptype ID lookup: %s", sqlite3_errmsg(db));
+      return -1;
+    }
   if (sqlite3_step (stmt) == SQLITE_ROW)
     {
       ship_type_id = sqlite3_column_int (stmt, 0);
+      LOGI("db_create_initial_ship: Found 'Scout Marauder' with ID: %d", ship_type_id);
+    } else {
+      LOGE("db_create_initial_ship: 'Scout Marauder' shiptype not found in DB. rc: %d", rc);
     }
   sqlite3_finalize (stmt);
   stmt = NULL;
 
   if (ship_type_id == -1)
     {
-      rc = SQLITE_ERROR;
-      goto rollback;
+      LOGE("db_create_initial_ship: Ship type ID for 'Scout Marauder' is -1.");
+      return -1;
     }
 
   // 2. Create a new ship in the ships table
-  static const char *SQL_CREATE_SHIP = "INSERT INTO ships (type_id, name, sector, owner_player_id, " "holds, fighters, shields, ore, organics, equipment, colonists, " "flags, perms, turns, max_holds, max_fighters, max_shields, max_ore, " "max_organics, max_equipment, max_colonists, max_turns, max_attack, " "max_mines, max_limpets, max_genesis, twarp, transport_range, " "max_beacons, holo, planet, max_photons, can_purchase) " "SELECT " "  st.id, ?, ?, ?, "	// type_id, name, sector, owner_player_id
-    "  st.initialholds, st.maxfighters, st.maxshields, 0, 0, 0, 0, "	// holds, fighters, shields, cargo
-    "  777, 731, st.turns, st.maxholds, st.maxfighters, st.maxshields, 0, "	// flags, perms, turns, max_holds, etc.
-    "  0, 0, 0, st.turns, st.maxattack, "	// max_ore, max_organics, max_equipment, max_colonists, max_turns, max_attack
-    "  st.maxmines, st.maxlimpets, st.maxgenesis, st.twarp, st.transportrange, "	// max_mines, max_limpets, max_genesis, twarp, transport_range
-    "  st.maxbeacons, st.holo, st.planet, st.maxphotons, st.can_purchase "	// max_beacons, holo, planet, max_photons, can_purchase
-    "FROM shiptypes st WHERE st.id = ?;";	// Use shiptype_id to get default values
+  static const char *SQL_CREATE_SHIP = 
+    "INSERT INTO ships ("
+    "  type_id, name, sector, "
+    "  holds, fighters, shields, "
+    "  ore, organics, equipment, colonists, "
+    "  flags, perms, "
+    "  attack, "
+    "  mines, limpets, genesis, "
+    "  detonators, probes, photons, beacons, "
+    "  cloaking_devices, "
+    "  has_transwarp, has_planet_scanner, has_long_range_scanner"
+    ") "
+    "SELECT "
+    "  st.id, ?, ?, "
+    "  st.initialholds, st.maxfighters, st.maxshields, "
+    "  0, 0, 0, 0, "
+    "  777, 731, "
+    "  st.maxattack, "
+    "  0, 0, 0, "
+    "  0, 0, 0, 0, "
+    "  0, "
+    "  st.can_transwarp, st.can_planet_scan, st.can_long_range_scan "
+    "FROM shiptypes st WHERE st.id = ?;";
 
   rc = sqlite3_prepare_v2 (db, SQL_CREATE_SHIP, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
-    goto rollback;
+    {
+      LOGE("db_create_initial_ship: Failed to prepare SQL_CREATE_SHIP: %s", sqlite3_errmsg(db));
+      return -1;
+    }
 
   sqlite3_bind_text (stmt, 1, ship_name, -1, SQLITE_TRANSIENT);
   sqlite3_bind_int (stmt, 2, sector_id);
-  sqlite3_bind_int (stmt, 3, player_id);	// owner_player_id
-  sqlite3_bind_int (stmt, 4, ship_type_id);	// shiptype_id for WHERE clause
+  sqlite3_bind_int (stmt, 3, ship_type_id);	// shiptype_id for WHERE clause
 
   rc = sqlite3_step (stmt);
   if (rc != SQLITE_DONE)
     {
-      rc = SQLITE_ERROR;
+      LOGE("db_create_initial_ship: Failed to execute SQL_CREATE_SHIP: %s", sqlite3_errmsg(db));
       sqlite3_finalize (stmt);
-      return 0;
+      return -1;
     }
   sqlite3_finalize (stmt);
   stmt = NULL;
 
   new_ship_id = sqlite3_last_insert_rowid (db);
+  if (new_ship_id <= 0) {
+      LOGE("db_create_initial_ship: Failed to get new_ship_id after insert.");
+      return -1;
+  }
+  LOGI("db_create_initial_ship: New ship created with ID: %d", new_ship_id);
 
-  // 3. Assign ownership using db_ship_claim
+  // 3. Assign ownership using h_ship_claim_unlocked
   // db_ship_claim also updates players.ship and sets primary status
-  rc = db_ship_claim (player_id, sector_id, new_ship_id, NULL);
+  // Since we are already in a transaction, use the unlocked version
+  rc = h_ship_claim_unlocked(db, player_id, sector_id, new_ship_id, NULL);
   if (rc != SQLITE_OK)
     {
+      LOGE("db_create_initial_ship: Failed to claim new ship: %s", sqlite3_errmsg(db));
       goto rollback;
     }
+  LOGI("db_create_initial_ship: Ship claimed by player %d.", player_id);
 
   rc = sqlite3_exec (db, "COMMIT", NULL, NULL, NULL);
   if (rc != SQLITE_OK)
-    goto rollback;
+    {
+      LOGE("db_create_initial_ship: Failed to commit transaction: %s", sqlite3_errmsg(db));
+      goto rollback;
+    }
+  LOGI("db_create_initial_ship: Ship creation and claim committed successfully.");
 
   pthread_mutex_unlock (&db_mutex);
   return new_ship_id;
 
 rollback:
   sqlite3_exec (db, "ROLLBACK", NULL, NULL, NULL);
+  LOGE("db_create_initial_ship: Transaction rolled back. Error: %s", sqlite3_errmsg(db));
 
-  //out_unlock:
   if (stmt)
     sqlite3_finalize (stmt);
   pthread_mutex_unlock (&db_mutex);
@@ -7840,28 +8343,6 @@ long long
 h_get_config_int_unlocked (sqlite3 *db, const char *key,
 			   long long default_value)
 {
-
-// Implementation of db_get_config_int (thread-safe wrapper)
-  int db_get_config_int (sqlite3 * db, const char *key_col_name,
-			 int default_value)
-  {
-    pthread_mutex_lock (&db_mutex);
-    long long value =
-      h_get_config_int_unlocked (db, key_col_name, (long long) default_value);
-    pthread_mutex_unlock (&db_mutex);
-    return (int) value;
-  }
-
-// Implementation of db_get_config_bool (thread-safe wrapper)
-  bool db_get_config_bool (sqlite3 * db, const char *key_col_name,
-			   bool default_value)
-  {
-    pthread_mutex_lock (&db_mutex);
-    long long value =
-      h_get_config_int_unlocked (db, key_col_name, (long long) default_value);
-    pthread_mutex_unlock (&db_mutex);
-    return (bool) value;
-  }
   sqlite3_stmt *stmt = NULL;
   long long value = default_value;
 
@@ -8080,41 +8561,48 @@ h_deduct_credits_unlocked (sqlite3 *db,
  * Public: Add credits to owner's account.
  */
 int
-h_add_credits (sqlite3 *db,
-	       const char *owner_type,
-	       int owner_id,
-	       long long amount,
-	       const char *tx_type,
-	       const char *tx_group_id, long long *new_balance_out)
+h_add_credits (sqlite3 *db, const char *owner_type, int owner_id,
+		   long long amount, const char *tx_type,
+		   const char *tx_group_id, long long *new_balance_out)
 {
-  if (!db || !owner_type || amount <= 0)
-    return SQLITE_MISUSE;
-
+  if (!db || owner_type == NULL || owner_id <= 0 || amount <= 0 || tx_type == NULL) {
+      LOGE("h_add_credits: Invalid input. owner_type=%s, owner_id=%d, amount=%lld, tx_type=%s", owner_type, owner_id, amount, tx_type);
+      return SQLITE_MISUSE;
+  }
+  
+  int rc;
   pthread_mutex_lock (&db_mutex);
 
+  // Get or create account ID
   int account_id = -1;
-  int rc = h_get_account_id_unlocked (db, owner_type, owner_id, &account_id);
-
+  rc = h_get_account_id_unlocked (db, owner_type, owner_id, &account_id);
   if (rc == SQLITE_NOTFOUND)
     {
+      LOGI("h_add_credits: Account not found for %s:%d, creating new account.", owner_type, owner_id);
       rc =
 	h_create_bank_account_unlocked (db, owner_type, owner_id, 0,
 					&account_id);
       if (rc != SQLITE_OK)
 	{
+	  LOGE("h_add_credits: Failed to create bank account for %s:%d, rc=%d", owner_type, owner_id, rc);
 	  pthread_mutex_unlock (&db_mutex);
 	  return rc;
 	}
     }
   else if (rc != SQLITE_OK)
     {
+      LOGE("h_add_credits: Failed to get bank account for %s:%d, rc=%d", owner_type, owner_id, rc);
       pthread_mutex_unlock (&db_mutex);
       return rc;
     }
 
-  rc = h_add_credits_unlocked (db, account_id, amount,
-			       tx_type ? tx_type : "DEPOSIT",
-			       tx_group_id, new_balance_out);
+  LOGI("h_add_credits: Adding %lld credits to account %d (%s:%d)", amount, account_id, owner_type, owner_id);
+  rc = h_add_credits_unlocked (db, account_id, amount, tx_type, tx_group_id, new_balance_out);
+  if (rc != SQLITE_OK) {
+      LOGE("h_add_credits: h_add_credits_unlocked failed for account %d, rc=%d", account_id, rc);
+  } else {
+      LOGI("h_add_credits: Credits added successfully. New balance: %lld", new_balance_out ? *new_balance_out : -1);
+  }
 
   pthread_mutex_unlock (&db_mutex);
   return rc;
@@ -10543,6 +11031,79 @@ cleanup_launch:
   return rc;
 }
 
+
+
+// db_bounty_create: Inserts a new bounty record.
+int
+db_bounty_create (sqlite3 *db, const char *posted_by_type, int posted_by_id,
+		  const char *target_type, int target_id, long long reward,
+		  const char *description)
+{
+  sqlite3_stmt *st = NULL;
+  int rc;
+  const char *sql =
+    "INSERT INTO bounties (posted_by_type, posted_by_id, target_type, target_id, reward, status, posted_ts) "
+    "VALUES (?, ?, ?, ?, ?, 'open', strftime('%Y-%m-%dT%H:%M:%fZ','now'));";
+
+  // Note: Ignoring description as per schema verification in plan
+
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("db_bounty_create: prepare error: %s", sqlite3_errmsg (db));
+      return rc;
+    }
+  sqlite3_bind_text (st, 1, posted_by_type, -1, SQLITE_STATIC);
+  sqlite3_bind_int (st, 2, posted_by_id);
+  sqlite3_bind_text (st, 3, target_type, -1, SQLITE_STATIC);
+  sqlite3_bind_int (st, 4, target_id);
+  sqlite3_bind_int64 (st, 5, reward);
+
+  rc = sqlite3_step (st);
+  sqlite3_finalize (st);
+
+  if (rc != SQLITE_DONE)
+    {
+      LOGE ("db_bounty_create: execute error: %s", sqlite3_errmsg (db));
+      return rc;
+    }
+  return SQLITE_OK;
+}
+
+// db_player_get_alignment: Retrieves a player's current alignment.
+int
+db_player_get_alignment (sqlite3 *db, int player_id, int *alignment)
+{
+  sqlite3_stmt *st = NULL;
+  int rc;
+  const char *sql = "SELECT alignment FROM players WHERE id = ?;";
+
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("db_player_get_alignment: prepare error: %s",
+	    sqlite3_errmsg (db));
+      return rc;
+    }
+  sqlite3_bind_int (st, 1, player_id);
+  rc = sqlite3_step (st);
+  if (rc == SQLITE_ROW)
+    {
+      *alignment = sqlite3_column_int (st, 0);
+      rc = SQLITE_OK;
+    }
+  else if (rc == SQLITE_DONE)
+    {
+      rc = SQLITE_NOTFOUND;
+    }
+  else
+    {
+      LOGE ("db_player_get_alignment: execute error: %s",
+	    sqlite3_errmsg (db));
+    }
+  sqlite3_finalize (st);
+  return rc;
+}
 
 /* Return 1 if path exists from `from` to `to`, 0 if no path, <0 on error. */
 int

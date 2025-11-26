@@ -527,7 +527,7 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
 
       // --- Starting Credits ---
       if (h_add_credits
-	  (db, "player", player_id, cfg->startingcredits, "REGISTER_CREDITS",
+	  (db, "player", player_id, cfg->startingcredits, "DEPOSIT",
 	   NULL, NULL) != SQLITE_OK)
 	{
 	  send_enveloped_error (ctx->fd, root, 1500,
