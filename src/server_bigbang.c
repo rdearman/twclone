@@ -1129,7 +1129,7 @@ create_full_port (sqlite3 *db, int sector, int port_number,
   /* Default port stats */
   int port_size = 5 + (rand () % 5);	/* Random size 5-9 */
   int port_tech = 1 + (rand () % 5);	/* Random tech 1-5 */
-  int port_credits = 50000 + (rand () % 50000);
+  int port_credits = 100000;
   int petty_cash_val = 0;	// Default petty cash
 
   /*
@@ -1249,7 +1249,7 @@ create_full_port (sqlite3 *db, int sector, int port_number,
   port_stmt = NULL;
 
   // Create a bank account for the new port
-  h_add_credits (db, "port", (int) port_id, port_credits, "BIGBANG_SEED",
+  h_add_credits (db, "port", (int) port_id, port_credits, "DEPOSIT",
 		 NULL, NULL);
 
   /*
@@ -1352,7 +1352,7 @@ create_ferringhi (int ferringhi_sector)
       fprintf (stderr, "create_ferringhi failed: %s\n", sqlite3_errmsg (db));
       return -1;
     }
-  h_add_credits (db, "npc_planet", 2, 0, "BIGBANG_SEED", NULL, NULL);
+  h_add_credits (db, "npc_planet", 2, 0, "DEPOSIT", NULL, NULL);
 
   // Insert the citadel details into the citadels table
   char sql_citadel[512];
@@ -1717,7 +1717,7 @@ create_ferringhi (int ferringhi_sector)
 	       sqlite3_errmsg (db));
       return -1;
     }
-  h_add_credits (db, "npc_planet", 3, 0, "BIGBANG_SEED", NULL, NULL);
+  h_add_credits (db, "npc_planet", 3, 0, "DEPOSIT", NULL, NULL);
 
 
 
@@ -1734,7 +1734,16 @@ create_ferringhi (int ferringhi_sector)
       return -1;
     }
 
-
+  // --- FIX: Create a bank account for the newly created Orion port ---
+  int orion_port_id = (int) sqlite3_last_insert_rowid (db);
+  if (orion_port_id > 0)
+    {
+      h_add_credits (db, "port", orion_port_id, 2000000, "DEPOSIT", NULL,
+		     NULL);
+      LOGD ("Created bank account for Orion Black Market port with ID: %d",
+	    orion_port_id);
+    }
+  // --- END FIX ---
 
   fprintf (stderr,
 	   "BIGBANG: Placed Ferringhi at sector %d (end of a long tunnel).\nBIGBANG: Placed Orion Syndicate at sector %d (end of a long tunnel).\n",

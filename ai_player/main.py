@@ -5,6 +5,7 @@ import json
 import logging
 import uuid
 import re
+import random # Add this import
 from datetime import datetime
 
 from bug_reporter import BugReporter
@@ -12,6 +13,7 @@ from planner import Planner
 from state_manager import StateManager
 from llm_client import get_ollama_response
 from bandit_policy import BanditPolicy, make_context_key 
+from typing import Optional
 
 # --- Standard Logging Setup ---
 logger = logging.getLogger()
@@ -236,6 +238,7 @@ You are a master space explorer. Your goal is to find new sectors and ports.
 Based on this filtered summary of the current game state, provide a high-level strategic plan.
 Return your plan as a sequence of simple goal strings, one goal per line.
 The goals MUST be in the format: "goto: <sector_id>" or "scan: density".
+Provide a plan of at least 3-5 distinct goals if possible.
 
 IMPORTANT RULES FOR GENERATING GOALS:
 1.  For "goto" goals:
@@ -246,9 +249,15 @@ IMPORTANT RULES FOR GENERATING GOALS:
     -   Use this to gather information about adjacent sectors, especially to find ports.
 
 Do not include any other text, commentary, or explanation.
+Do not wrap your response in JSON.
 
 Current state:
 {game_state}
+
+Example of a valid plan:
+scan: density
+goto: 123
+scan: density
 
 What is your plan?
 """
@@ -258,6 +267,7 @@ PROMPT_STRATEGY = """
     Based on this filtered summary of the current game state, provide a high-level strategic plan.
     Return your plan as a sequence of simple goal strings, one goal per line.
     The goals MUST be in the format: "goto: <sector_id>", "sell: <commodity_code>", "buy: <commodity_code>", or "scan: density".
+    Provide a plan of at least 3-5 distinct goals if possible.
     
     IMPORTANT RULES FOR GENERATING GOALS:
     1.  For "goto" goals:
@@ -268,6 +278,7 @@ PROMPT_STRATEGY = """
         -   You MUST be at a port. `can_trade_at_current_location` must be `true`. If it is `false`, you CANNOT buy or sell.
         -   When selling, you MUST have something in your `ship_info.cargo`. If `ship_info.cargo` is empty, you CANNOT sell.
         -   When buying, you MUST have space in your cargo hold. `ship_current_cargo_volume` must be less than `ship_cargo_capacity`.
+            -   Specifically, when buying, the quantity suggested must not exceed `ship_cargo_capacity - ship_current_cargo_volume`.
         -   The <commodity_code> MUST be one of the valid commodity names listed in `valid_commodity_names`.
         -   Refer to `current_port_commodities` for available items and their prices at the current port.
             -   Example: `current_port_commodities: [{"commodity": "ORE", "buy_price": 100, "sell_price": 80}]` means you can buy ORE for 100 and sell for 80.
@@ -278,6 +289,7 @@ PROMPT_STRATEGY = """
         - A `density` value of approximately 100 in `adjacent_sectors_info` often indicates the presence of a port. Prioritize `goto` goals to sectors with high density after a scan.
     
     Do not include any other text, commentary, or explanation.
+    Do not wrap your response in JSON.
     
     Current state:
     {game_state}
@@ -286,13 +298,53 @@ PROMPT_STRATEGY = """
     scan: density
     goto: 123
     buy: ORE
-    goto: 456
-    sell: ORE
     
     What is your plan?
     """
 
-def get_strategy_from_llm(game_state, model, stage):
+PROMPT_QA_OBJECTIVE = """
+You are a QA testing bot for a space game. Your current high-level objective is to "{qa_objective}".
+Based on this objective and the filtered summary of the current game state, provide a detailed strategic plan.
+Return your plan as a sequence of simple goal strings, one goal per line.
+The goals MUST be in the format: "goto: <sector_id>", "sell: <commodity_code>", "buy: <commodity_code>", "scan: density", "combat.attack", "combat.deploy_fighters", "combat.lay_mines", "planet.land", "planet.info".
+Provide a plan of at least 3-5 distinct goals if possible.
+
+IMPORTANT RULES FOR GENERATING GOALS:
+1.  For "goto" goals:
+    -   The <sector_id> MUST be one of the sector IDs listed in `valid_goto_sectors`.
+2.  For "buy" or "sell" goals:
+    -   You MUST be at a port. `can_trade_at_current_location` must be `true`.
+    -   The <commodity_code> MUST be one of the valid commodity names listed in `valid_commodity_names`.
+    -   When buying, the quantity suggested must not exceed `ship_cargo_capacity - ship_current_cargo_volume`.
+3.  For "combat.attack" goals:
+    -   Ensure there are other ships in the sector to attack.
+4.  For "combat.deploy_fighters" or "combat.lay_mines" goals:
+    -   Ensure your ship has the necessary modules or resources (fighters, mines).
+5.  For "planet.land" or "planet.info" goals:
+    -   Ensure the current sector has a planet (`current_sector_info.has_planet` is `true`).
+
+Do not include any other text, commentary, or explanation.
+Do not wrap your response in JSON.
+
+Current state:
+{game_state}
+
+Example of a valid plan:
+goto: 123
+buy: ORE
+
+What is your plan to achieve the QA objective "{qa_objective}"?
+"""
+
+QA_OBJECTIVES = [
+    "test combat system",
+    "test planet landing",
+    "test ship upgrades",
+    "test mining operations",
+    "test bounty hunting"
+]
+
+def get_strategy_from_llm(game_state, model, stage, qa_objective: Optional[str] = None):
     """
     Asks the LLM for a high-level strategic plan.
     """
@@ -301,25 +353,26 @@ def get_strategy_from_llm(game_state, model, stage):
 
     # --- FIX 3.1 & 3.2 ---
     # If we are not at a port, we must be exploring.
-    if not filtered_game_state.get("can_trade_at_current_location", False):
+    if not filtered_game_state.get("can_trade_at_current_location", False) and not qa_objective:
         stage = "explore"
     
-    if stage == "explore":
-        prompt = PROMPT_EXPLORE
+    if qa_objective:
+        prompt = PROMPT_QA_OBJECTIVE.format(qa_objective=qa_objective, game_state=json.dumps(filtered_game_state, indent=2))
+        logger.info(f"Using QA Objective prompt for LLM: {qa_objective}")
+    elif stage == "explore":
+        prompt = PROMPT_EXPLORE.format(game_state=json.dumps(filtered_game_state, indent=2))
     else:
-        prompt = PROMPT_STRATEGY
+        prompt = PROMPT_STRATEGY.format(game_state=json.dumps(filtered_game_state, indent=2))
 
     try:
         response_text = get_ollama_response(
             filtered_game_state, 
             model, 
-            "PROMPT_STRATEGY",
+            "PROMPT_STRATEGY", # This will need to be dynamic or a placeholder now
             override_prompt=prompt
         )
         
         if response_text:
-            import json, re
-
             plan = []
 
             # 1) Try JSON first
@@ -551,6 +604,7 @@ def main():
     
     state_manager.set_default("strategy_plan", [])
     state_manager.set_default("session_id", None)
+    state_manager.set_default("current_qa_objective", None) # NEW: For QA testing mode
     # We must reset session_id on start, as it's not persistent
     state_manager.set("session_id", None) 
 
@@ -645,21 +699,41 @@ def main():
                 port_info = game_state.get("port_info_by_sector", {}).get(current_sector_id)
                 survey_needed = at_port and (not port_info or not port_info.get("commodities"))
 
-                if survey_needed:
-                    logger.info("At a port, but survey is incomplete. Setting goal to survey.")
-                    state_manager.set("strategy_plan", ["survey: port"])
-                else:
-                    if game_state.get("player_info") and game_state.get("ship_info"): # Only ask if we are 'in-game'
-                        logger.info("Strategy plan is empty. Requesting a new one from LLM.")
-                        logger.debug(f"Calling LLM with model: {config.get('ollama_model')}")
-                        new_plan = get_strategy_from_llm(game_state, config.get("ollama_model"), planner.current_stage) 
-                        if new_plan and isinstance(new_plan, list) and all(isinstance(g, str) and ":" in g for g in new_plan):
-                            state_manager.set("strategy_plan", new_plan)
-                            strategy_plan = new_plan
-                        else:
-                            logger.warning(f"LLM provided an invalid plan: {new_plan}. Retrying.")
-                            time.sleep(2) # Wait a moment before retrying
-                            continue
+                if config.get("qa_mode"):
+                    current_qa_objective = state_manager.get("current_qa_objective")
+                    if current_qa_objective is None:
+                        current_qa_objective = random.choice(QA_OBJECTIVES)
+                        state_manager.set("current_qa_objective", current_qa_objective)
+                        logger.info(f"New QA Objective selected: {current_qa_objective}")
+                    
+                    logger.info(f"Requesting new plan for QA Objective: {current_qa_objective}")
+                    new_plan = get_strategy_from_llm(game_state, config.get("ollama_model"), planner.current_stage, qa_objective=current_qa_objective)
+                    
+                    if new_plan and isinstance(new_plan, list) and all(isinstance(g, str) and ":" in g for g in new_plan):
+                        state_manager.set("strategy_plan", new_plan)
+                        strategy_plan = new_plan
+                    else:
+                        logger.warning(f"LLM failed to provide a valid plan for QA Objective '{current_qa_objective}'. Clearing objective and plan.")
+                        state_manager.set("current_qa_objective", None) # Clear objective to pick a new one
+                        state_manager.set("strategy_plan", []) # Clear plan
+                        time.sleep(2) # Wait a moment before retrying
+                        continue
+                else: # Not in QA mode, revert to old strategy logic
+                    if survey_needed:
+                        logger.info("At a port, but survey is incomplete. Setting goal to survey.")
+                        state_manager.set("strategy_plan", ["survey: port"])
+                    else:
+                        if game_state.get("player_info") and game_state.get("ship_info"): # Only ask if we are 'in-game'
+                            logger.info("Strategy plan is empty. Requesting a new one from LLM.")
+                            logger.debug(f"Calling LLM with model: {config.get('ollama_model')}")
+                            new_plan = get_strategy_from_llm(game_state, config.get("ollama_model"), planner.current_stage) 
+                            if new_plan and isinstance(new_plan, list) and all(isinstance(g, str) and ":" in g for g in new_plan):
+                                state_manager.set("strategy_plan", new_plan)
+                                strategy_plan = new_plan
+                            else:
+                                logger.warning(f"LLM provided an invalid plan: {new_plan}. Retrying.")
+                                time.sleep(2) # Wait a moment before retrying
+                                continue
             
             # 6. Get the current goal
             if strategy_plan:
@@ -689,9 +763,16 @@ def main():
                 logger.info("Sending command: %s", full_command)
                 
                 if game_conn.send_command(full_command):
+                    state_manager.add_pending_command(full_command['id'], full_command)
                     state_manager.record_command_sent(command_name)
                     if config.get("qa_mode"):
                         bug_reporter.log_command(full_command)
+                    
+                    # If an invariant command was sent, prioritize waiting for its response
+                    if next_command_dict.get("is_invariant"):
+                        logger.info(f"Sent invariant command '{command_name}'. Pausing to await response.")
+                        time.sleep(1) # Wait a bit longer for crucial state updates
+                        continue # Immediately re-loop to process responses
                 else:
                     logger.warning("Failed to send command (connection issue).")
 
@@ -702,6 +783,9 @@ def main():
                     # Clear the plan to force a new one.
                     logger.warning(f"Planner failed to execute goal '{current_goal}'. Clearing strategy to get a new one.")
                     state_manager.set("strategy_plan", []) # Clear the plan
+                    # If in QA mode, also clear the current objective to force a new one
+                    if config.get("qa_mode"):
+                        state_manager.set("current_qa_objective", None)
                 else:
                     # If there was no goal, just wait for cooldowns.
                     logger.debug("Planner returned no command (no goal). Waiting for cooldowns.")
@@ -733,187 +817,138 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
     """
     Processes a list of responses from the server, updates state,
     and checks for goal completion.
-    
-    --- FIX: Added 'config' and 'bandit_policy' parameters ---
     """
     game_state_before = state_manager.get_all() # Get state before processing
 
     for response in responses:
         logger.info("Server response: %s", json.dumps(response, separators=(',', ':')))
         
-        # This is a known weak point. A real fix would map sent client-side
-        # IDs ('id') to the 'reply_to' field.
-        command_name = "unknown"
-        if response.get("meta", {}).get("command"):
-             command_name = response.get("meta").get("command")
+        request_id = response.get("reply_to")
+        sent_command = None
+        if request_id:
+            sent_command = state_manager.get_pending_command(request_id)
 
+        command_name = "unknown"
+        if sent_command:
+            command_name = sent_command.get("command", "unknown")
+        
         response_type = response.get("type", "unknown")
         response_data = response.get("data", {}) or {}
         
         if config.get("qa_mode"):
             bug_reporter.log_response(response)
 
+        if request_id:
+            state_manager.remove_pending_command(request_id)
+
         try:
             if response.get("status") == "ok":
+                last_action = game_state_before.get("last_action")
+                last_context = game_state_before.get("last_context_key")
+                reward = 0.1 # Default small reward for any successful action
+
+                if response_type == "trade.sell_receipt_v1":
+                    sold_items = response_data.get("lines", [])
+                    port_id = sent_command.get("data", {}).get("port_id") if sent_command else None
+                    if port_id:
+                        profit = state_manager.update_cargo_after_sell(sold_items, port_id)
+                        reward = profit / 1000.0 # Normalize profit for the reward
+                    state_manager.set("trade_successful", True)
+                    logger.info("Ship cargo state updated after successful trade.sell.")
                 
+                elif response_type == "trade.buy_receipt_v1":
+                    bought_items = response_data.get("lines", [])
+                    port_id = sent_command.get("data", {}).get("port_id") if sent_command else None
+                    if port_id:
+                        state_manager.update_cargo_after_buy(bought_items, port_id)
+                    state_manager.set("trade_successful", True)
+                    logger.info("Ship cargo state updated after successful trade.buy.")
+                
+                # Give feedback for the last action that led to this success
+                if last_action and last_context:
+                    bandit_policy.give_feedback(last_action, last_context, reward)
+
                 # --- Handle Schema Responses ---
                 if response_type == "system.schema":
                     schema_name = response_data.get("name")
                     if schema_name and 'schema' in response_data:
                         state_manager.add_schema(schema_name, response_data['schema'])
                         logger.debug(f"Cached schema for command: {schema_name}")
-                    continue # Don't process schema responses further
+                    continue
 
                 if response_type == "system.cmd_list":
                     commands_to_fetch = [cmd.get("cmd") for cmd in response_data.get("commands", [])]
                     logger.info(f"Received command list from server: {commands_to_fetch}")
                     
                     commands_to_ignore = [
-                        "system.hello", 
-                        "system.capabilities", 
-                        "system.describe_schema",
-                        "system.cmd_list"
+                        "system.hello", "system.capabilities", "system.describe_schema", "system.cmd_list", "system.schema_list", "player.list_online"
                     ]
 
-                    for command_name in commands_to_fetch:
-                        if command_name in commands_to_ignore:
+                    for command_name_to_fetch in commands_to_fetch:
+                        if command_name_to_fetch in commands_to_ignore:
                             continue
-                        if command_name in state_manager.get("schema_blacklist", []):
-                            logger.debug(f"Skipping schema request for blacklisted command: {command_name}")
+                        if command_name_to_fetch in state_manager.get("schema_blacklist", []):
+                            logger.debug(f"Skipping schema request for blacklisted command: {command_name_to_fetch}")
                             continue
 
                         idempotency_key = str(uuid.uuid4())
-                        request_id = f"c-{idempotency_key[:8]}"
+                        request_id_new = f"c-{idempotency_key[:8]}"
                         schema_request = {
-                            "id": request_id,
-                            "command": "system.describe_schema",
-                            "data": {
-                                "type": "command",
-                                "name": command_name
-                            },
-                            "meta": {
-                                "client_version": config.get("client_version"),
-                                "idempotency_key": idempotency_key
-                            }
+                            "id": request_id_new, "command": "system.describe_schema",
+                            "data": {"type": "command", "name": command_name_to_fetch},
+                            "meta": {"client_version": config.get("client_version"), "idempotency_key": idempotency_key}
                         }
-                        logger.debug(f"Requesting schema for command: {command_name}")
+                        logger.debug(f"Requesting schema for command: {command_name_to_fetch}")
                         game_conn.send_command(schema_request)
-                        state_manager.state["pending_schema_requests"][command_name] = request_id
+                        state_manager.state["pending_schema_requests"][command_name_to_fetch] = request_id_new
                         time.sleep(0.1)
                     continue
 
-                # --- FIX: Detect successful login ---
                 if response_type == "auth.session":
-                    session_id = response_data.get("session")
-                    state_manager.set("session_id", session_id)
+                    state_manager.set("session_id", response_data.get("session"))
                     state_manager.update_player_info(response_data)
                 
-                # 2) Player Info
-                if response_type == "player.info" or response_type == "player.my_info":
+                elif response_type == "player.info" or response_type == "player.my_info":
                     state_manager.update_player_info(response_data)
-                    if response_data.get("ship", {}).get("location"):
-                        state_manager.set("player_location_sector", response_data["ship"]["location"]["sector_id"])
                 
-                # 3) Ship Info
-                if response_type == "ship.info" or response_type == "ship.status":
-                    ship_data = response_data.get("ship", response_data) # Handle both .info and .status
-
-                    # --- START FIX for incorrect ship.holds ---
-                    ship_type_name = ship_data.get("type", {}).get("name")
-                    if ship_type_name and ship_type_name in SHIP_TYPE_HOLDS_MAP:
-                        corrected_holds = SHIP_TYPE_HOLDS_MAP[ship_type_name]
-                        if ship_data.get("holds") != corrected_holds:
-                            logger.warning(f"Overriding ship.holds for '{ship_type_name}'. Server reported {ship_data.get('holds')}, using corrected value {corrected_holds}.")
-                            ship_data["holds"] = corrected_holds
-                    # --- END FIX for incorrect ship.holds ---
-
+                elif response_type == "ship.info" or response_type == "ship.status":
+                    ship_data = response_data.get("ship", response_data)
                     state_manager.set("ship_info", ship_data)
-                    if ship_data.get("location"):
-                        state_manager.set("player_location_sector", ship_data["location"]["sector_id"])
-
-                # 4) Location Info
-                if response_type == "move.result":
-                    # --- Update player location immediately ---
-                    if response_data.get("current_sector"):
-                        new_sector = response_data.get("current_sector")
-                        state_manager.set("player_location_sector", new_sector)
-                        # --- FIX: Track recent sectors ---
-                        visits = state_manager.get("recent_sectors", [])
-                        visits.append(new_sector)
-                        state_manager.set("recent_sectors", visits[-10:])
-
-                        # --- FIX: Refresh player info after move ---
-                        idempotency_key = str(uuid.uuid4())
-                        refresh_cmd = {
-                            "id": f"c-{idempotency_key[:8]}",
-                            "command": "player.my_info",
-                            "data": {},
-                            "meta": {
-                                "client_version": config.get("client_version"),
-                                "idempotency_key": idempotency_key
-                            }
-                        }
-                        game_conn.send_command(refresh_cmd)
-
-                if response_type == "sector.info":
-                    # --- THIS IS THE FIX for the 'sector.info' loop ---
-                    sector_id = response_data.get("sector_id") # <-- WAS .get("id")
+                
+                elif response_type == "move.result":
+                    # Do not update player_location_sector here directly.
+                    # It should be updated by update_player_info when ship.info arrives,
+                    # which is the authoritative source.
+                    pass 
+                
+                elif response_type == "sector.info":
+                    sector_id = response_data.get("sector_id")
                     if sector_id:
                         state_manager.update_sector_data(str(sector_id), response_data)
-                        state_manager.set("player_location_sector", sector_id) 
                 
-                if response_type == "port.info":
+                elif response_type == "port.info":
                     port_id = response_data.get("port", {}).get("id")
                     sector_id = response_data.get("port", {}).get("sector_id")
                     if port_id and sector_id:
                         state_manager.update_port_info(str(sector_id), response_data.get("port"))
                 
-                # 5) Trade Info
-                if response_type == "trade.quote":
+                elif response_type == "trade.quote":
                     state_manager.update_price_cache(response_data)
                 
-                # 6) Bank Info
-                if response_type == "bank.balance":
+                elif response_type == "bank.balance":
                     state_manager.set("bank_balance", response_data.get("balance", 0))
 
-                # 7) Trade Receipts (Update Cargo)
-                if response_type == "trade.sell_receipt_v1":
-                    sold_items = response_data.get("lines", [])
-                    ship_info = state_manager.get("ship_info", {})
-                    current_cargo = ship_info.get("cargo", {})
-                    for item in sold_items:
-                        commodity = item.get("commodity", "").lower()
-                        if commodity:
-                            current_cargo[commodity] = current_cargo.get(commodity, 0) - item.get("quantity", 0)
-                            if current_cargo[commodity] <= 0:
-                                del current_cargo[commodity]
-                    ship_info["cargo"] = current_cargo
-                    state_manager.set("ship_info", ship_info)
-                    state_manager.set("trade_successful", True)
-                    logger.info("Ship cargo updated after successful trade.sell.")
-                
-                if response_type == "trade.buy_receipt_v1":
-                    bought_items = response_data.get("lines", [])
-                    ship_info = state_manager.get("ship_info", {})
-                    current_cargo = ship_info.get("cargo", {})
-                    for item in bought_items:
-                        commodity = item.get("commodity", "").lower()
-                        if commodity:
-                            current_cargo[commodity] = current_cargo.get(commodity, 0) + item.get("quantity", 0)
-                    ship_info["cargo"] = current_cargo
-                    state_manager.set("ship_info", ship_info)
-                    state_manager.set("trade_successful", True)
-                    logger.info("Ship cargo updated after successful trade.buy.")
-                
-                # --- GOAL COMPLETION CHECK ---
                 game_state_after = state_manager.get_all() 
                 strategy_plan = game_state_after.get("strategy_plan", [])
                 
+                if not state_manager.validate_state():
+                    bug_reporter.report_state_inconsistency(game_state_after, "State inconsistency detected after server response.")
+
                 if strategy_plan:
                     current_goal = strategy_plan[0]
                     if is_goal_complete(current_goal, game_state_after, response_data, response_type):
                         logger.info(f"Strategic goal '{current_goal}' is complete. Removing from plan.")
-                        strategy_plan.pop(0) # Pop the completed goal
+                        strategy_plan.pop(0)
                         state_manager.set("strategy_plan", strategy_plan)
                 
             else: # Error or refused
@@ -921,35 +956,32 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                 error_msg = error_data.get("message", "Unknown error")
                 error_code = error_data.get("code")
                 
-                log_command_name = "unknown"
-                # Try to get the command name from the reply_to ID
-                if response.get("reply_to"):
-                    # This is a hacky way to get the command name from the ID
-                    # A better way would be to store a map of ID to command name
-                    # when sending the command.
-                    for cmd_name, cmd_id in state_manager.get("pending_schema_requests", {}).items():
-                        if cmd_id == response["reply_to"]:
-                            log_command_name = cmd_name
-                            break
-
-                logger.warning("Server refused command '%s': %s (Code: %s)", log_command_name, error_msg, error_code)
+                logger.warning("Server refused command '%s': %s (Code: %s)", command_name, error_msg, error_code)
                 
-                state_manager.record_command_failure(log_command_name)
+                state_manager.record_command_failure(command_name)
+
+                last_action = game_state_before.get("last_action")
+                last_context = game_state_before.get("last_context_key")
+                if last_action and last_context:
+                    bandit_policy.give_feedback(last_action, last_context, -1.0) # Negative reward for failure
                 
-                # If schema request failed with 1104, add to blacklist
-                if response_type == "error" and error_code == 1104 and log_command_name != "unknown":
-                    state_manager.add_to_schema_blacklist(log_command_name)
+                if response_type == "error" and error_code == 1104 and command_name != "unknown":
+                    state_manager.add_to_schema_blacklist(command_name)
 
+                if sent_command and command_name == "move.warp" and error_code == 1402:
+                    to_sector_id = sent_command.get("data", {}).get("to_sector_id")
+                    if to_sector_id is not None:
+                        logger.warning(f"Move.warp to sector {to_sector_id} failed with 'No warp link'. Blacklisting for future attempts.")
+                        state_manager.add_to_warp_blacklist(to_sector_id)
 
-                # --- QA Mode: Triage Error ---
+                if sent_command and command_name == "move.warp":
+                    to_sector_id = sent_command.get("data", {}).get("to_sector_id")
+                    if error_code == 1402 and to_sector_id is not None:
+                        logger.warning(f"Move.warp to sector {to_sector_id} failed with 'No warp link'. Blacklisting for future attempts.")
+                        state_manager.add_to_warp_blacklist(to_sector_id)
+                
                 if config.get("qa_mode"):
-                    bug_reporter.triage_protocol_error(
-                        command_name,
-                        response,
-                        game_state_before, 
-                        error_code,
-                        error_msg
-                    )
+                    bug_reporter.triage_protocol_error(command_name, response, game_state_before, error_code, error_msg)
 
         except Exception as e:
             logger.error("Critical error in process_responses: %s", e, exc_info=True)

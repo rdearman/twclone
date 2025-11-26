@@ -358,7 +358,7 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
 
   // 5. Planet Naming Validation
   int max_name_len = db_get_config_int (db, "max_name_length", 50);	// Get from config table
-  if (strlen (planet_name) > max_name_len)
+  if (strlen (planet_name) > (size_t) max_name_len)
     {
       free (planet_name);
       return send_error_and_return (ctx, root, ERR_INVALID_PLANET_NAME_LENGTH,

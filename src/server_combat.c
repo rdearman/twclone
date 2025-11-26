@@ -1452,12 +1452,21 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
 
 static const char *SQL_SECTOR_MINE_SUM = "SELECT COALESCE(SUM(quantity),0) " "FROM sector_assets " "WHERE sector=?1 AND asset_type IN (1, 4);";	// 1 for Armid, 4 for Limpet
 
-static const char *SQL_SHIP_GET_MINE = "SELECT mines FROM ships WHERE id=?1;";	// Assuming 'mines' column for total mines
+										     /* static const char *SQL_SHIP_GET_MINE = "SELECT mines FROM ships WHERE id=?1;"; *//* Assuming 'mines' column for total mines */
 
-static const char *SQL_SHIP_DEC_MINE =
-  "UPDATE ships SET mines=mines-?1 WHERE id=?2;";
 
-static const char *SQL_ASSET_INSERT_MINES = "INSERT INTO sector_assets(sector, player, corporation, " "                          asset_type, quantity, offensive_setting, deployed_at) " "VALUES (?1, ?2, ?3, ?4, ?5, ?6, strftime('%s','now'));";	// ?4 for asset_type (1 or 4)
+
+/* static const char *SQL_SHIP_DEC_MINE = */
+
+/*   "UPDATE ships SET mines=mines-?1 WHERE id=?2;"; */
+
+
+
+/* static const char *SQL_ASSET_INSERT_MINES = "INSERT INTO sector_assets(sector, player, corporation, " */
+
+/* "                          asset_type, quantity, offensive_setting, deployed_at) " */
+
+								/* "VALUES (?1, ?2, ?3, ?4, ?5, ?6, strftime('%s','now'));"; *//* ?4 for asset_type (1 or 4) */
 
 /* Sum fighters already in the sector. */
 static int
@@ -3417,45 +3426,33 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
   sqlite3_finalize (foreign_limpet_st);
 
 
-  /* Ship Mine Inventory / Capacity */
-  int ship_current_mines = 0;
-  int ship_max_mines = 0;
-  int ship_current_limpets = 0;
-  int ship_max_limpets = 0;
+  // Check ship's mine capacity and count
+  int ship_mines = 0;
+  int ship_limpets = 0;
 
-  sqlite3_stmt *ship_item_st = NULL;
-  const char *sql_get_ship_mine_counts =
-    "SELECT mines, maxmines, limpets, maxlimpets FROM ships s JOIN shiptypes st ON s.type_id = st.id WHERE s.id = ?1;";
-  if (sqlite3_prepare_v2
-      (db, sql_get_ship_mine_counts, -1, &ship_item_st, NULL) != SQLITE_OK)
+  sqlite3_stmt *st = NULL;
+  const char *sql_ship_mines =
+    "SELECT mines, limpets FROM ships WHERE id = ?1;";
+  if (sqlite3_prepare_v2 (db, sql_ship_mines, -1, &st, NULL) == SQLITE_OK)
     {
-      LOGE ("Failed to prepare ship mine/limpet count statement: %s",
-	    sqlite3_errmsg (db));
-      send_enveloped_error (ctx->fd, root, ERR_DB,
-			    "Failed to check ship inventory.");
-      return 0;
-    }
-  sqlite3_bind_int (ship_item_st, 1, ship_id);
-  if (sqlite3_step (ship_item_st) == SQLITE_ROW)
-    {
-      ship_current_mines = sqlite3_column_int (ship_item_st, 0);
-      ship_max_mines = sqlite3_column_int (ship_item_st, 1);
-      ship_current_limpets = sqlite3_column_int (ship_item_st, 2);
-      ship_max_limpets = sqlite3_column_int (ship_item_st, 3);
+      sqlite3_bind_int (st, 1, ship_id);
+      if (sqlite3_step (st) == SQLITE_ROW)
+	{
+	  ship_mines = sqlite3_column_int (st, 0);
+	  ship_limpets = sqlite3_column_int (st, 1);
+	}
+      sqlite3_finalize (st);
     }
   else
     {
-      LOGE ("Ship %d not found for mine deployment capacity check.", ship_id);	// Changed LOGK to LOGE
-      send_enveloped_error (ctx->fd, root, ERR_SHIP_NOT_FOUND,
-			    "Ship not found for capacity check.");
-      sqlite3_finalize (ship_item_st);
+      send_enveloped_error (ctx->fd, root, ERR_DB,
+			    "Failed to query ship's mine count.");
       return 0;
     }
-  sqlite3_finalize (ship_item_st);
 
   if (mine_type == ASSET_MINE)
     {
-      if (ship_current_mines < amount)
+      if (ship_mines < amount)
 	{
 	  send_enveloped_error (ctx->fd, root, REF_AMMO_DEPLETED,
 				"Insufficient Armid mines on ship.");
@@ -3464,7 +3461,7 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
     }
   else if (mine_type == ASSET_LIMPET_MINE)
     {
-      if (ship_current_limpets < amount)
+      if (ship_limpets < amount)
 	{
 	  send_enveloped_error (ctx->fd, root, REF_AMMO_DEPLETED,
 				"Insufficient Limpet mines on ship.");
@@ -3505,9 +3502,8 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
     {
       if (counts.limpet_mines + amount > g_cfg.mines.limpet.per_sector_cap)
 	{
-	  json_t *data_opt =
-	    json_pack ("{s:i}", "configured_cap",
-		       g_cfg.mines.limpet.per_sector_cap);
+	  json_t *data_opt = json_pack ("{s:i}", "configured_cap",
+					g_cfg.mines.limpet.per_sector_cap);
 	  send_enveloped_refused (ctx->fd, root, ERR_SECTOR_OVERCROWDED,
 				  "Sector Limpet mine limit exceeded.",
 				  data_opt);

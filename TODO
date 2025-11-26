@@ -1,60 +1,113 @@
-Current things todo:
-[] Ensure all the commanline options for bigbang are working
-[] Change the string pop function to allow character strings of
-   variable sizes.
+
+  Summary of ALL Lost Fixes / Functionality (across all issues reviewed so far):
+
+
+  * 1. `err_unknown_1104` persists for `player.list_online`: The bot is attempting to fetch a schema for player.list_online, which doesn't seem to have one, causing a "Schema not found" error.
+       * Fix: Add "player.list_online" to the commands_to_ignore list in main.py.
+
+  * 4. Issue 367: "Titles ladder: alignment/experience thresholds (display + deltas)"
+       * Problem: The implementation for a "titles ladder" (rank/title based on player alignment/experience thresholds) is not found in the codebase.
+       * Impact: Players will not have dynamic titles or ranks based on their progression.
+       * Recommendation: Re-implement the titles ladder functionality.
+
+===
+
+   5. Issue 150: "One SQLite connection per worker thread (open with SQLITE_OPEN_NOMUTEX) and drop the global mutex."
+       * Problem: The architectural change to use thread-local SQLite connections (__thread sqlite3 *tls_db = NULL; with SQLITE_OPEN_NOMUTEX) and remove the global mutex has not been implemented. The global db_handle and
+         pthread_mutex_lock are still in use throughout database.c.
+       * Impact: The server's database access remains single-threaded or less performant than intended, potentially leading to bottlenecks under load.
+       * Recommendation: Re-implement the thread-local SQLite connection model as described in the issue.
+
+   6. Issue 142: "Add db error handling to all rollback calls in all db functions"
+       * Problem: The explicit check and logging of the rollback's return code are not consistently implemented after sqlite3_exec(db, "ROLLBACK", ...) calls.
+       * Impact: Rollback failures might occur silently without proper logging, hindering debugging and potentially leaving the database in an inconsistent state.
+       * Recommendation: Implement consistent error checking and logging for all ROLLBACK calls.
+
+   7. Issue 42: "move.autopilot.status + in-flight controls"
+       * Problem: The cmd_move_autopilot_status command handler in server_universe.c is currently a STUB_NIY (Not Implemented Yet).
+       * Impact: Players cannot query the status of their autopilot or issue in-flight controls.
+       * Recommendation: Implement the cmd_move_autopilot_status command.
+
+   8. Issue 14: "move.autopilot.status + in-flight controls" (Duplicate of Issue 42, likely linked to the same stub)
+       * Problem: The cmd_move_autopilot_status command handler in server_universe.c is currently a STUB_NIY.
+       * Impact: Players cannot query the status of their autopilot or issue in-flight controls.
+       * Recommendation: Implement the cmd_move_autopilot_status command.
+
+   9. Issue 12: "move.autopilot.start"
+       * Problem: The cmd_move_autopilot_start command handler in server_universe.c is currently a STUB_NIY.
+       * Recommendation: Implement the cmd_move_autopilot_start command.
 
 
 
-Possible future enhancements, which the original game lacked.
+int
+db_fighters_at_sector_json (int sector_id, json_t **out_array)
+{
+  (void) sector_id,;
+  (void) out_array;
+  /*** for my reference */
+  /* typedef enum */
+  /* { */
+  /*   ASSET_MINE = 1, */
+  /*   ASSET_FIGHTER = 2, */
+  /*   ASSET_BEACON = 3, */
+  /*   ASSET_LIMPET_MINE = 4 */
+  /* } asset_type_t; */
 
-
-- create the ships listed in the stardock library so that people can
-  find them
-
-- upgrade cidadel above level 6. 
-	* Allow planet cloaking.
-	* Allow funds transfer between cidadels
-	* transport colonists between planets.
-
-- have a built in "best trade" system in computer which will show you
-  paired ports from the places you have already visited 
-
-- Give users the ability to write a "module" to add in other aliens,
-  ships, etc without having to hack code. Possibly a perl or python
-  type interface, or maybe simple XML definitions.
-
-- Create a "master server" which all launched servers will report
-  themselves to. (Similar to Quake) Modify the server to allow the
-  user to define the master server to report to. Have a default value
-  for the master server. The server would update the master server on
-  start up and every 24 hours. The Master would then be able to
-  produce a report similar to the one below from the original game as
-  an HTML page for each reported server.
-	
---------------------------------------------------------------------
-Version          : 3.11.55 Gold         Host type           : TWGS
-Age of game      : 32 days              Days since BIGBANG  : 32 days
-Delete if idle   : 30 days
-
-Players in game  : 32   of max 200      Percent good        : 84%
-Ports in game    : 9509 of max 10000    Value of ports      : 486749766
-Planets in game  : 116  of max 4000     Percent w/ Citadels : 31%
-Ships in game    : 43   of max 800      Corps in game       : 5
-Figs in game     : 557762               Mines in game       : 2650
-
-Game type        : Open                 Turns per day       : 2000
-Planetary Trade %: 60%                  Steal from BUY port : Yes
-Initial fighters : 30                   Clear Busts Every   : 7 Days
-Initial credits  : 300                  Last Bust Clear     : 4 Days Ago
-Initial holds    : 20                   Multiple Photon fire: No
-Sectors in game  : 20000                Display StarDock    : Yes
-Ship delay factor: None                 Local display on    : Yes
-Start with planet: No                   Classic Ferrengi    : No
-Production Rate  : 25% / Day            Max Regen per Visit : 100%
-Rob/steal delay  : Yes                  Invincible Ferrengal: No
-Tournament Mode  : Off
---------------------------------------------------------------------
+/*   sqlite> .schema sector_assets */
+/* CREATE TABLE sector_assets (
+   id INTEGER PRIMARY KEY,
+   sector INTEGER NOT NULL REFERENCES sectors(id),
+   player INTEGER REFERENCES players(id),
+   corporation INTEGER NOT NULL DEFAULT 0,
+   asset_type INTEGER NOT NULL,
+   offensive_setting INTEGER DEFAULT 0,
+   quantity INTEGER,
+   ttl INTEGER,
+   deployed_at INTEGER NOT NULL  ); */
 
 
 
+  // 1. SELECT quantity, player, corporation in sector_assets WHERE asset_type=ASSET_FIGHTER
+  // 2. if the corporation is not zero, then return the corporation as the owner not the player
+  // 3. if corporation=0 then return player as owner.
+  // 4. build the json with owner and quantity
+
+}
+
+int
+db_mines_at_sector_json (int sector_id, json_t **out_array)
+{
+  (void) sector_id,;
+  (void) out_array;
+  
+  /*** for my reference */
+  /* typedef enum */
+  /* { */
+  /*   ASSET_MINE = 1, */
+  /*   ASSET_FIGHTER = 2, */
+  /*   ASSET_BEACON = 3, */
+  /*   ASSET_LIMPET_MINE = 4 */
+  /* } asset_type_t; */
+
+/*   sqlite> .schema sector_assets */
+/* CREATE TABLE sector_assets (
+   id INTEGER PRIMARY KEY,
+   sector INTEGER NOT NULL REFERENCES sectors(id),
+   player INTEGER REFERENCES players(id),
+   corporation INTEGER NOT NULL DEFAULT 0,
+   asset_type INTEGER NOT NULL,
+   offensive_setting INTEGER DEFAULT 0,
+   quantity INTEGER,
+   ttl INTEGER,
+   deployed_at INTEGER NOT NULL  ); */
+
+  // 1. SELECT quantity, player, corporation in sector_assets WHERE asset_type in (ASSET_MINE, ASSET_LIMPET_MINE)
+  // 2. if the corporation is not zero, then return the corporation as the owner not the player
+  // 3. if corporation=0 then return player as owner.
+  // -- potential issue to be resolved later. The player may have a limpet mine attached to the ship. BUT
+  // -- because I haven't yet implemented limpet attachment, we'll just put a note in here for the moment
+  // -- and just return the number in the sector. 
+  // 4. build the json with owner and quantity and the two different types of mines. 
+
+}
 

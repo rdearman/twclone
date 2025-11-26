@@ -2537,10 +2537,12 @@ cmd_tavern_rumour_get_hint (client_ctx_t *ctx, json_t *root)
     "Beware of pirates near the nebula in sector 103.",
     "Someone saw a derelict Imperial Starship in uncharted space."
   };
-  const char *random_hint =
-    hint_messages[get_random_int
-		  (0,
-		   (sizeof (hint_messages) / sizeof (hint_messages[0])) - 1)];
+  const char *random_hint = hint_messages[get_random_int (0,
+							  (sizeof
+							   (hint_messages) /
+							   sizeof
+							   (hint_messages[0]))
+							  - 1)];
 
   json_t *response_data =
     json_pack ("{s:s, s:s, s:I}", "status", "Rumour acquired.", "hint",

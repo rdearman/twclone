@@ -153,7 +153,7 @@ int shutdown_flag = 0;
 time_t next_process = 0;
 int sectorcount;
 int WARP_WAIT;
-struct timeval begin, end, t;
+struct timeval g_begin_timeval, g_end_timeval, g_t_timeval;
 
 // Global Armid Mine Configuration
 armid_mine_config_t g_armid_config = {

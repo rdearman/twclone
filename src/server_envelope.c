@@ -76,7 +76,7 @@ __attribute__((weak))
     // --- session / system ---
     {"session.hello", "Handshake / hello"},
     {"session.ping", "Ping"},
-    {"session.goodbye", "Client disconnect"},
+    {"session.disconnect", "Client disconnect"},
 
     {"system.schema_list", "List schema namespaces"},
     {"system.describe_schema", "Describe commands in a schema"},
@@ -86,13 +86,12 @@ __attribute__((weak))
     // --- auth ---
     {"auth.login", "Authenticate"},
     {"auth.logout", "Log out"},
-    {"auth.mfa", "Second-factor code"},
+    {"auth.mfa.totp.verify", "Second-factor code"},
     {"auth.register", "Create a new player"},
 
     // --- players / ship ---
-    {"players.me", "Current player info"},
-    {"players.online", "List online players"},
-    {"players.refresh", "Refresh player state"},
+    {"player.my_info", "Current player info"},
+    {"player.list_online", "List online players"},
     {"ship.info", "Ship information"},
 
     // --- sector / movement ---
@@ -101,7 +100,6 @@ __attribute__((weak))
     {"move.warp", "Warp to sector"},
     {"move.scan", "Scan adjacent sectors"},
     {"move.pathfind", "Find path between sectors"},
-    {"move.force_move", "Admin: force-move a ship"},
 
     // --- INSERT THESE ENTRIES (Alphabetically) ---
     {"trade.accept", "Accept player trade offer"},
@@ -236,6 +234,12 @@ cmd_system_describe_schema (client_ctx_t *ctx, json_t *root)
     {
       send_enveloped_error (ctx->fd, root, 1103,
 			    "Missing 'name' in data payload");
+      return 0;
+    }
+  // NEW: Check if command exists before trying to get schema
+  if (!have_cmd (name))
+    {
+      send_enveloped_error (ctx->fd, root, 1400, "Unknown command");
       return 0;
     }
   // Default to "command" if type is not provided or recognized

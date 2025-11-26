@@ -210,7 +210,7 @@ apply_db (sqlite3 *db)
   if (sqlite3_prepare_v2
       (db, "SELECT key,value FROM config", -1, &st, NULL) != SQLITE_OK)
     {
-      LOGI ("[config] no app_config table found, using defaults (%s)\n",
+      LOGI ("[config] no config table found, using defaults (%s)\n",
 	    sqlite3_errmsg (db));
       return;
     }

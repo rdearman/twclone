@@ -398,9 +398,8 @@ cmd_player_set_trade_account_preference (client_ctx_t *ctx, json_t *root)
 
   char pref_str[16];
   snprintf (pref_str, sizeof (pref_str), "%d", preference);
-  int rc =
-    db_prefs_set_one (ctx->player_id, "trade.default_account", PT_INT,
-		      pref_str);
+  int rc = db_prefs_set_one (ctx->player_id, "trade.default_account", PT_INT,
+			     pref_str);
   if (rc != SQLITE_OK)
     {
       send_enveloped_error (ctx->fd, root, 500,

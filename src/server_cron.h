@@ -7,6 +7,8 @@
 
 typedef int (*cron_handler_fn) (sqlite3 * db, int64_t now_s);
 
+int try_lock (sqlite3 *db, const char *name, int64_t now_s);
+
 /* Lookup by task name (e.g., "fedspace_cleanup"). */
 cron_handler_fn cron_find (const char *name);
 
@@ -49,6 +51,14 @@ int h_loan_shark_interest_cron (sqlite3 * db, int64_t now_s);
 int h_daily_corp_tax (sqlite3 * db, int64_t now_s);
 int h_dividend_payout (sqlite3 * db, int64_t now_s);
 int h_daily_stock_price_recalculation (sqlite3 * db, int64_t now_s);
+
+// Transaction / Utility Helpers (Declared in server_cron.h, Defined in server_cron.c)
+int begin(sqlite3 *db);
+int commit(sqlite3 *db);
+int rollback(sqlite3 *db);
+int unlock(sqlite3 *db, const char *name);
+int64_t get_utc_epoch_day(int64_t unix_timestamp);
+
 
 
 

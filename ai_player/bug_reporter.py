@@ -128,3 +128,27 @@ class BugReporter:
                 
             except OSError as e:
                 logger.error(f"Failed to save schema validation bug report: {e}")
+
+    def report_state_inconsistency(self, game_state, message):
+        """
+        Saves a detailed report when a state inconsistency is detected.
+        """
+        bug_id = f"err_state_inconsistent_{self._get_timestamp()}"
+        bug_dir = os.path.join(self.report_path, bug_id)
+
+        try:
+            os.makedirs(bug_dir)
+            logger.critical(f"State inconsistency detected: {message}. Saving report to {bug_dir}")
+
+            self._save_bug_report(bug_dir, "game_state.json", game_state)
+
+            summary = {
+                "bug_id": bug_id,
+                "first_seen": self._get_timestamp(),
+                "message": message,
+            }
+            self._save_bug_report(bug_dir, "summary.json", summary)
+
+        except OSError as e:
+            logger.error(f"Failed to save state inconsistency report: {e}")
+

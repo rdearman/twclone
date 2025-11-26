@@ -1436,8 +1436,8 @@ connection_thread (void *arg)
 		    linelen--;
 
 		  /* Parse and dispatch */
-		  LOGI ("CORE DUMP DEBUG: Received from client: %.*s\n",
-			(int) linelen, line);
+		  //LOGI ("CORE DUMP DEBUG: Received from client: %.*s\n",
+		  //	(int) linelen, line);
 		  json_error_t jerr;
 		  json_t *root = json_loadb (line, linelen, 0, &jerr);
 

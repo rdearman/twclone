@@ -222,3 +222,40 @@ cmd_news_mark_feed_read (client_ctx_t *ctx, json_t *root)
   send_enveloped_ok (ctx->fd, root, "news.marked_read", NULL);
   return 0;
 }
+
+int
+news_post (const char *body, const char *category, int author_id)
+{
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    {
+      LOGE ("news_post: Database handle not available.");
+      return -1;
+    }
+
+  sqlite3_stmt *stmt = NULL;
+  const char *sql =
+    "INSERT INTO news_feed (published_ts, news_category, article_text, author_id) VALUES (strftime('%s','now'), ?, ?, ?);";
+
+  int rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("news_post: Failed to prepare statement: %s",
+	    sqlite3_errmsg (db));
+      return rc;
+    }
+
+  sqlite3_bind_text (stmt, 1, category, -1, SQLITE_STATIC);
+  sqlite3_bind_text (stmt, 2, body, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int (stmt, 3, author_id);
+
+  rc = sqlite3_step (stmt);
+  if (rc != SQLITE_DONE)
+    {
+      LOGE ("news_post: Failed to execute statement: %s",
+	    sqlite3_errmsg (db));
+    }
+
+  sqlite3_finalize (stmt);
+  return (rc == SQLITE_DONE) ? SQLITE_OK : rc;
+}

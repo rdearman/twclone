@@ -46,12 +46,12 @@ server_SOURCES = \
         ../src/server_config.c \
         ../src/server_loop.c \
         ../src/server_main.c \
-        ../src/server_news.c \
         ../src/server_planets.c \
         ../src/server_players.c \
         ../src/server_ports.c \
         ../src/server_ships.c \
         ../src/server_universe.c \
+        ../src/server_news.c \
         ../src/server_s2s.c \
         ../src/server_warp_post_processing.c \
         ../src/server_log.c \

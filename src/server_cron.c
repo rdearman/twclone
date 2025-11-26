@@ -20,7 +20,7 @@
 #include "database.h"
 #include "server_config.h"
 #include "server_stardock.h"	// For Tavern-related declarations
-#include "server_corporation.h" // For corporation cron jobs
+#include "server_corporation.h"	// For corporation cron jobs
 
 #define INITIAL_QUEUE_CAPACITY 64
 #define FEDSPACE_SECTOR_START 1
@@ -30,14 +30,12 @@
 #define MIN_UNPROTECTED_SECTOR 11
 #define MAX_UNPROTECTED_SECTOR 999
 #define RANGE_SIZE (MAX_UNPROTECTED_SECTOR - MIN_UNPROTECTED_SECTOR + 1)
-
 #define NEWS_EXPIRATION_SECONDS 604800L
 #define MAX_ARTICLE_LEN 512
 
 
 int h_daily_news_compiler (sqlite3 * db, int64_t now_s);
 int h_cleanup_old_news (sqlite3 * db, int64_t now_s);
-int h_daily_bank_interest_tick (sqlite3 * db, int64_t now_s);
 
 static inline uint64_t
 monotonic_millis (void)
@@ -61,34 +59,15 @@ typedef struct
 
 int cron_limpet_ttl_cleanup (sqlite3 * db, int64_t now_s);	// Forward declaration
 
-static entry_t REG[] = {
-  {"daily_turn_reset", h_reset_turns_for_player},
-  {"fedspace_cleanup", h_fedspace_cleanup},
-  {"autouncloak_sweeper", h_autouncloak_sweeper},
-  {"terra_replenish", h_terra_replenish},
-  {"planet_growth", h_planet_growth},
-  {"broadcast_ttl_cleanup", h_broadcast_ttl_cleanup},
-  {"traps_process", h_traps_process},
-  {"npc_step", h_npc_step},
-  {"daily_market_settlement", h_daily_market_settlement},
-  {"daily_news_compiler", h_daily_news_compiler},
-  {"cleanup_old_news", h_cleanup_old_news},
-  {"limpet_ttl_cleanup", cron_limpet_ttl_cleanup},
-  {"daily_bank_interest_tick", h_daily_bank_interest_tick},
-  {"daily_lottery_draw", h_daily_lottery_draw},
-  {"deadpool_resolution_cron", h_deadpool_resolution_cron},
-  {"tavern_notice_expiry_cron", h_tavern_notice_expiry_cron},
-  {"loan_shark_interest_cron", h_loan_shark_interest_cron},
-  {"daily_corp_tax", h_daily_corp_tax},
-  {"dividend_payout", h_dividend_payout},
-  {"daily_stock_price_recalculation", h_daily_stock_price_recalculation},
-};
 
 static int g_reg_inited = 0;
 
 int
 get_random_sector (sqlite3 *db)
 {
+  if (db)
+    {
+    }
   int random_offset = rand () % RANGE_SIZE;
   int random_sector = MIN_UNPROTECTED_SECTOR + random_offset;
   return random_sector;
@@ -674,7 +653,7 @@ h_reset_turns_for_player (sqlite3 *db, int64_t now_s)
   return 0;
 }
 
-static int
+int
 try_lock (sqlite3 *db, const char *name, int64_t now_s)
 {
   sqlite3_stmt *st = NULL;
@@ -747,7 +726,7 @@ db_lock_status (sqlite3 *db, const char *name)
   return until_ms;
 }
 
-static void
+int
 unlock (sqlite3 *db, const char *name)
 {
   sqlite3_stmt *st = NULL;
@@ -759,6 +738,7 @@ unlock (sqlite3 *db, const char *name)
       sqlite3_step (st);
       sqlite3_finalize (st);
     }
+  return 0;			// Return 0 for success
 }
 
 void
@@ -767,19 +747,19 @@ cron_register_builtins (void)
   g_reg_inited = 1;
 }
 
-static int
+int
 begin (sqlite3 *db)
 {
   return sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, NULL);
 }
 
-static int
+int
 commit (sqlite3 *db)
 {
   return sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
 }
 
-static int
+int
 rollback (sqlite3 *db)
 {
   return sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
@@ -806,6 +786,8 @@ get_asset_name (int type)
 static int
 ship_callback (void *count_ptr, int argc, char **argv, char **azColName)
 {
+  (void) argc;			// tell the compiler I know about this, but I'm not using it.
+  (void) azColName;		// ditto
   int *count = (int *) count_ptr;
 
   if (argv[0])
@@ -837,94 +819,6 @@ uncloak_ships_in_fedspace (sqlite3 *db)
     }
 
   return cloaked_ship_count;
-}
-
-// Cron handler to clean up expired Limpet mines
-int
-cron_limpet_ttl_cleanup (sqlite3 *db, int64_t now_s)
-{
-  if (!g_cfg.mines.limpet.enabled)
-    {
-      return 0;			// Limpet mines disabled, no cleanup needed
-    }
-  if (g_cfg.mines.limpet.limpet_ttl_days <= 0)
-    {
-      LOGW
-	("limpet_ttl_days is not set or zero. Skipping Limpet TTL cleanup.");
-      return 0;			// No TTL is set, so no cleanup needed
-    }
-
-  if (!try_lock (db, "limpet_ttl_cleanup", now_s))
-    return 0;
-
-  LOGI ("limpet_ttl_cleanup: Starting Limpet mine TTL cleanup.");
-
-  int rc = begin (db);
-  if (rc)
-    {
-      unlock (db, "limpet_ttl_cleanup");
-      return rc;
-    }
-
-  sqlite3_stmt *st = NULL;
-  int removed_count = 0;
-
-  // Calculate the expiry timestamp: deployed_at + (limpet_ttl_days * seconds_in_day)
-  // Assuming deployed_at is UNIX epoch.
-  long long expiry_threshold_s =
-    now_s - ((long long) g_cfg.mines.limpet.limpet_ttl_days * 24 * 3600);
-
-  const char *sql_delete_expired =
-    "DELETE FROM sector_assets "
-    "WHERE asset_type = ?1 AND deployed_at <= ?2;";
-
-  rc = sqlite3_prepare_v2 (db, sql_delete_expired, -1, &st, NULL);
-  if (rc != SQLITE_OK)
-    {
-      LOGE ("limpet_ttl_cleanup: Failed to prepare delete statement: %s",
-	    sqlite3_errmsg (db));
-      rollback (db);
-      unlock (db, "limpet_ttl_cleanup");
-      return rc;
-    }
-
-  sqlite3_bind_int (st, 1, ASSET_LIMPET_MINE);
-  sqlite3_bind_int64 (st, 2, expiry_threshold_s);
-
-  rc = sqlite3_step (st);
-  if (rc != SQLITE_DONE)
-    {
-      LOGE ("limpet_ttl_cleanup: Failed to execute delete statement: %s",
-	    sqlite3_errmsg (db));
-      rollback (db);
-      unlock (db, "limpet_ttl_cleanup");
-      sqlite3_finalize (st);
-      return rc;
-    }
-  removed_count = sqlite3_changes (db);
-  sqlite3_finalize (st);
-
-  rc = commit (db);
-  if (rc != SQLITE_OK)
-    {
-      LOGE ("limpet_ttl_cleanup: Commit failed: %s", sqlite3_errmsg (db));
-      rollback (db);		// Attempt to rollback if commit fails
-      unlock (db, "limpet_ttl_cleanup");
-      return rc;
-    }
-
-  if (removed_count > 0)
-    {
-      LOGI ("limpet_ttl_cleanup: Removed %d expired Limpet mines.",
-	    removed_count);
-    }
-  else
-    {
-      LOGD ("limpet_ttl_cleanup: No expired Limpet mines found.");
-    }
-
-  unlock (db, "limpet_ttl_cleanup");
-  return SQLITE_OK;
 }
 
 int
@@ -1314,7 +1208,7 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
 }
 
 // Helper function to convert Unix epoch seconds to UTC epoch day (YYYYMMDD)
-static int
+int64_t
 get_utc_epoch_day (int64_t unix_timestamp)
 {
   time_t rawtime = unix_timestamp;
@@ -1330,502 +1224,204 @@ get_utc_epoch_day (int64_t unix_timestamp)
     info->tm_mday;
 }
 
-#define MAX_BACKLOG_DAYS 30	// Cap for how many days of interest can be applied retroactively
+
 
 int
-h_daily_bank_interest_tick (sqlite3 *db, int64_t now_s)
+h_dividend_payout (sqlite3 *db, int64_t now_s)
 {
-  if (!try_lock (db, "daily_bank_interest_tick", now_s))
+  if (!try_lock (db, "h_dividend_payout", now_s))
     return 0;
 
-  LOGI ("daily_bank_interest_tick: Starting daily bank interest accrual.");
-
+  LOGI ("h_dividend_payout: Starting dividend payout cron job.");
   int rc = begin (db);
-  if (rc)
+  if (rc != SQLITE_OK)
     {
-      unlock (db, "daily_bank_interest_tick");
+      LOGE ("h_dividend_payout: Failed to start transaction: %s",
+	    sqlite3_errmsg (db));
+      unlock (db, "h_dividend_payout");
       return rc;
     }
 
-  sqlite3_stmt *st = NULL;
-  const char *sql_select_accounts =
-    "SELECT id, owner_type, owner_id, balance, interest_rate_bp, last_interest_tick "
-    "FROM bank_accounts WHERE is_active = 1 AND interest_rate_bp > 0;";
+  sqlite3_stmt *select_dividends_st = NULL;
+  const char *sql_select_dividends =
+    "SELECT id, stock_id, amount_per_share, declared_ts "
+    "FROM stock_dividends WHERE paid_ts IS NULL;";
 
-  rc = sqlite3_prepare_v2 (db, sql_select_accounts, -1, &st, NULL);
+  rc =
+    sqlite3_prepare_v2 (db, sql_select_dividends, -1, &select_dividends_st,
+			NULL);
   if (rc != SQLITE_OK)
     {
       LOGE
-	("daily_bank_interest_tick: Failed to prepare select accounts statement: %s",
+	("h_dividend_payout: Failed to prepare select dividends statement: %s",
 	 sqlite3_errmsg (db));
       goto rollback_and_unlock;
     }
 
-  int current_epoch_day = get_utc_epoch_day (now_s);
-  int processed_accounts = 0;
-
-  long long min_balance_for_interest =
-    h_get_config_int_unlocked (db, "bank_min_balance_for_interest", 0);
-  long long max_daily_per_account =
-    h_get_config_int_unlocked (db, "bank_max_daily_interest_per_account",
-			       9223372036854775807LL);
-
-  while (sqlite3_step (st) == SQLITE_ROW)
+  int processed_dividends = 0;
+  while (sqlite3_step (select_dividends_st) == SQLITE_ROW)
     {
-      int account_id = sqlite3_column_int (st, 0);
-      const char *owner_type = (const char *) sqlite3_column_text (st, 1);
-      int owner_id = sqlite3_column_int (st, 2);
-      long long balance = sqlite3_column_int64 (st, 3);
-      int interest_rate_bp = sqlite3_column_int (st, 4);
-      int last_interest_tick = sqlite3_column_int (st, 5);
-
-      if (balance < min_balance_for_interest)
-	{
-	  continue;		// Skip accounts below minimum balance
-	}
-
-      int days_to_accrue = current_epoch_day - last_interest_tick;
-      if (days_to_accrue <= 0)
-	{
-	  continue;		// Already processed for today or future tick
-	}
-      if (days_to_accrue > MAX_BACKLOG_DAYS)
-	{
-	  days_to_accrue = MAX_BACKLOG_DAYS;	// Cap the backlog
-	}
-
-      char tx_group_id[33];
-      h_generate_hex_uuid (tx_group_id, sizeof (tx_group_id));
-
-      for (int i = 0; i < days_to_accrue; ++i)
-	{
-	  if (balance <= 0)
-	    break;		// No interest on zero or negative balance
-
-	  // interest = floor( balance * interest_rate_bp / (10000 * 365) )
-	  long long daily_interest =
-	    (balance * interest_rate_bp) / (10000 * 365);
-
-	  if (daily_interest > max_daily_per_account)
-	    {
-	      daily_interest = max_daily_per_account;
-	    }
-
-	  if (daily_interest > 0)
-	    {
-	      // Use h_add_credits_unlocked to record interest and update balance
-	      int add_rc =
-		h_add_credits_unlocked (db, account_id, daily_interest,
-					"INTEREST", tx_group_id, &balance);
-	      if (add_rc != SQLITE_OK)
-		{
-		  LOGE
-		    ("daily_bank_interest_tick: Failed to add interest to account %d (owner %s:%d): %s",
-		     account_id, owner_type, owner_id, sqlite3_errmsg (db));
-		  // Continue to next account or abort? Aborting for now.
-		  goto rollback_and_unlock;
-		}
-	    }
-	}
-
-      // Update last_interest_tick in bank_accounts
-      sqlite3_stmt *update_tick_st = NULL;
-      const char *sql_update_tick =
-	"UPDATE bank_accounts SET last_interest_tick = ? WHERE id = ?;";
-      int update_rc =
-	sqlite3_prepare_v2 (db, sql_update_tick, -1, &update_tick_st, NULL);
-      if (update_rc != SQLITE_OK)
+      int dividend_id = sqlite3_column_int (select_dividends_st, 0);
+      int stock_id = sqlite3_column_int (select_dividends_st, 1);
+      int amount_per_share = sqlite3_column_int (select_dividends_st, 2);
+      // long long declared_ts = sqlite3_column_int64 (select_dividends_st, 3);
+      // Get stock and corp info
+      // char *ticker = NULL;
+      int corp_id = 0;
+      int total_shares = 0;
+      // Use h_get_stock_info from server_corporation.h
+      if (h_get_stock_info
+	  (db, stock_id, NULL, &corp_id, &total_shares, NULL, NULL,
+	   NULL) != SQLITE_OK)
 	{
 	  LOGE
-	    ("daily_bank_interest_tick: Failed to prepare update last_interest_tick statement: %s",
-	     sqlite3_errmsg (db));
-	  goto rollback_and_unlock;
+	    ("h_dividend_payout: Failed to get stock info for stock %d via helper. Skipping this dividend.",
+	     stock_id);
+	  continue;		// Skip this dividend if we can't get stock info
 	}
-      sqlite3_bind_int (update_tick_st, 1, current_epoch_day);
-      sqlite3_bind_int (update_tick_st, 2, account_id);
-      update_rc = sqlite3_step (update_tick_st);
-      sqlite3_finalize (update_tick_st);
-      if (update_rc != SQLITE_DONE)
+
+      if (corp_id == 0)
+	{
+	  LOGW
+	    ("h_dividend_payout: Stock ID %d not linked to a corporation. Skipping.",
+	     stock_id);
+	  continue;
+	}
+
+      long long total_payout = (long long) amount_per_share * total_shares;
+      // Check if corporation has enough funds
+      long long corp_balance;
+      if (db_get_corp_bank_balance (corp_id, &corp_balance) != SQLITE_OK
+	  || corp_balance < total_payout)
+	{
+	  LOGW
+	    ("h_dividend_payout: Corp %d (stock %d) has insufficient funds for dividend %d. Required: %lld, Has: %lld. Skipping payout.",
+	     corp_id, stock_id, dividend_id, total_payout, corp_balance);
+	  json_t *payload =
+	    json_pack ("{s:i, s:i, s:I, s:I, s:s}", "corp_id", corp_id,
+		       "stock_id", stock_id, "required", total_payout,
+		       "available", corp_balance, "status",
+		       "failed_insufficient_funds");
+	  db_log_engine_event (now_s, "stock.dividend.payout_failed", "corp",
+			       corp_id, 0, payload, NULL);
+	  json_decref (payload);
+	  continue;
+	}
+
+      // Iterate through shareholders and pay out
+      sqlite3_stmt *select_shareholders_st = NULL;
+      const char *sql_select_shareholders =
+	"SELECT player_id, shares FROM corp_shareholders WHERE corp_id = ?;";
+      rc =
+	sqlite3_prepare_v2 (db, sql_select_shareholders, -1,
+			    &select_shareholders_st, NULL);
+      if (rc != SQLITE_OK)
 	{
 	  LOGE
-	    ("daily_bank_interest_tick: Failed to update last_interest_tick for account %d: %s",
-	     account_id, sqlite3_errmsg (db));
+	    ("h_dividend_payout: Failed to prepare select shareholders statement for corp %d: %s",
+	     corp_id, sqlite3_errmsg (db));
 	  goto rollback_and_unlock;
 	}
-      processed_accounts++;
+
+      long long actual_payout_sum = 0;
+      while (sqlite3_step (select_shareholders_st) == SQLITE_ROW)
+	{
+	  int player_id = sqlite3_column_int (select_shareholders_st, 0);
+	  int shares = sqlite3_column_int (select_shareholders_st, 1);
+	  if (player_id == 0)
+	    continue;		// Skip the corporation's own holdings in a direct payout
+	  long long player_dividend = (long long) shares * amount_per_share;
+	  char idempotency_key[UUID_STR_LEN];
+	  h_generate_hex_uuid (idempotency_key, sizeof (idempotency_key));
+	  int transfer_rc = h_bank_transfer_unlocked (db, "corp", corp_id,
+						      "player", player_id,
+						      player_dividend,
+						      "DIVIDEND",
+						      idempotency_key);
+	  if (transfer_rc != SQLITE_OK)
+	    {
+	      LOGE
+		("h_dividend_payout: Failed to pay dividend to player %d from corp %d for stock %d. Amount: %lld. Error: %s",
+		 player_id, corp_id, stock_id, player_dividend,
+		 sqlite3_errstr (transfer_rc));
+	      // Continue to next shareholder, but log the failure
+	    }
+	  else
+	    {
+	      actual_payout_sum += player_dividend;
+	    }
+	}
+
+      sqlite3_finalize (select_shareholders_st);
+      // Mark dividend as paid
+      sqlite3_stmt *update_dividend_st = NULL;
+      const char *sql_update_dividend =
+	"UPDATE stock_dividends SET paid_ts = ? WHERE id = ?;";
+      rc =
+	sqlite3_prepare_v2 (db, sql_update_dividend, -1, &update_dividend_st,
+			    NULL);
+      if (rc != SQLITE_OK)
+	{
+	  LOGE
+	    ("h_dividend_payout: Failed to prepare update dividend statement for id %d: %s",
+	     dividend_id, sqlite3_errmsg (db));
+	  goto rollback_and_unlock;
+	}
+
+      sqlite3_bind_int64 (update_dividend_st, 1, now_s);
+      sqlite3_bind_int (update_dividend_st, 2, dividend_id);
+      rc = sqlite3_step (update_dividend_st);
+      sqlite3_finalize (update_dividend_st);
+
+      if (rc != SQLITE_DONE)
+	{
+	  LOGE ("h_dividend_payout: Failed to mark dividend %d as paid: %s",
+		dividend_id, sqlite3_errmsg (db));
+	  goto rollback_and_unlock;
+	}
+
+      LOGI
+	("h_dividend_payout: Payout of %lld credits completed for dividend %d (stock %d, corp %d).",
+	 actual_payout_sum, dividend_id, stock_id, corp_id);
+
+      json_t *payload =
+	json_pack ("{s:i, s:i, s:I, s:I}", "corp_id", corp_id, "stock_id",
+		   stock_id, "dividend_id", dividend_id, "actual_payout",
+		   actual_payout_sum);
+
+      db_log_engine_event (now_s, "stock.dividend.payout_completed", "corp",
+			   corp_id, 0, payload, NULL);
+      json_decref (payload);
+      processed_dividends++;
     }
 
-  if (rc != SQLITE_DONE)
-    {
-      LOGE
-	("daily_bank_interest_tick: Error stepping through bank_accounts: %s",
-	 sqlite3_errmsg (db));
-      goto rollback_and_unlock;
-    }
-
-  sqlite3_finalize (st);
-  st = NULL;
-
+  sqlite3_finalize (select_dividends_st);
   rc = commit (db);
   if (rc != SQLITE_OK)
     {
-      LOGE ("daily_bank_interest_tick: commit failed: %s",
-	    sqlite3_errmsg (db));
+      LOGE ("h_dividend_payout: Commit failed: %s", sqlite3_errmsg (db));
       goto rollback_and_unlock;
     }
-
-  LOGI
-    ("daily_bank_interest_tick: Successfully processed interest for %d accounts.",
-     processed_accounts);
-  unlock (db, "daily_bank_interest_tick");
+  LOGI ("h_dividend_payout: Successfully processed %d dividends.",
+	processed_dividends);
+  unlock (db, "h_dividend_payout");
   return SQLITE_OK;
 
 rollback_and_unlock:
-  if (st)
-    sqlite3_finalize (st);
+  if (select_dividends_st)
+    sqlite3_finalize (select_dividends_st);
   rollback (db);
-  unlock (db, "daily_bank_interest_tick");
+  unlock (db, "h_dividend_payout");
   return rc;
 }
 
 
-
-
-
-
-  int
-
-  h_dividend_payout (sqlite3 *db, int64_t now_s)
-
-  {
-
-    if (!try_lock (db, "h_dividend_payout", now_s))
-
-      return 0;
-
-
-
-    LOGI ("h_dividend_payout: Starting dividend payout cron job.");
-
-
-
-    int rc = begin (db);
-
-    if (rc != SQLITE_OK)
-
-      {
-
-        LOGE ("h_dividend_payout: Failed to start transaction: %s",
-
-  	    sqlite3_errmsg (db));
-
-        unlock (db, "h_dividend_payout");
-
-        return rc;
-
-      }
-
-
-
-    sqlite3_stmt *select_dividends_st = NULL;
-
-    const char *sql_select_dividends =
-
-      "SELECT id, stock_id, amount_per_share, declared_ts "
-
-      "FROM stock_dividends WHERE paid_ts IS NULL;";
-
-
-
-    rc = sqlite3_prepare_v2 (db, sql_select_dividends, -1, &select_dividends_st, NULL);
-
-    if (rc != SQLITE_OK)
-
-      {
-
-        LOGE ("h_dividend_payout: Failed to prepare select dividends statement: %s",
-
-  	    sqlite3_errmsg (db));
-
-        goto rollback_and_unlock;
-
-      }
-
-
-
-    int processed_dividends = 0;
-
-    while (sqlite3_step (select_dividends_st) == SQLITE_ROW)
-
-      {
-
-        int dividend_id = sqlite3_column_int (select_dividends_st, 0);
-
-        int stock_id = sqlite3_column_int (select_dividends_st, 1);
-
-        int amount_per_share = sqlite3_column_int (select_dividends_st, 2);
-
-        long long declared_ts = sqlite3_column_int64 (select_dividends_st, 3);
-
-
-
-        // Get stock and corp info
-
-        char *ticker = NULL;
-
-                int corp_id = 0;
-
-                int total_shares = 0;
-
-                // Use h_get_stock_info from server_corporation.h
-
-                if (h_get_stock_info(db, stock_id, NULL, &corp_id, &total_shares, NULL, NULL, NULL) != SQLITE_OK) {
-
-                    LOGE("h_dividend_payout: Failed to get stock info for stock %d via helper. Skipping this dividend.", stock_id);
-
-                    continue; // Skip this dividend if we can't get stock info
-
-                }
-
-
-
-
-
-        if (corp_id == 0)
-
-  	{
-
-  	  LOGW ("h_dividend_payout: Stock ID %d not linked to a corporation. Skipping.", stock_id);
-
-  	  continue;
-
-  	}
-
-
-
-        long long total_payout = (long long) amount_per_share * total_shares;
-
-
-
-        // Check if corporation has enough funds
-
-        long long corp_balance;
-
-        if (db_get_corp_bank_balance (corp_id, &corp_balance) != SQLITE_OK
-
-  	  || corp_balance < total_payout)
-
-  	{
-
-  	  LOGW ("h_dividend_payout: Corp %d (stock %d) has insufficient funds for dividend %d. Required: %lld, Has: %lld. Skipping payout.",
-
-  		corp_id, stock_id, dividend_id, total_payout, corp_balance);
-
-            json_t *payload = json_pack("{s:i, s:i, s:I, s:I, s:s}", "corp_id", corp_id, "stock_id", stock_id, "required", total_payout, "available", corp_balance, "status", "failed_insufficient_funds");
-
-            db_log_engine_event(now_s, "stock.dividend.payout_failed", "corp", corp_id, 0, payload, NULL);
-
-            json_decref(payload);
-
-  	  continue;
-
-  	}
-
-
-
-        // Iterate through shareholders and pay out
-
-        sqlite3_stmt *select_shareholders_st = NULL;
-
-        const char *sql_select_shareholders =
-
-  	"SELECT player_id, shares FROM corp_shareholders WHERE corp_id = ?;";
-
-        rc = sqlite3_prepare_v2 (db, sql_select_shareholders, -1, &select_shareholders_st, NULL);
-
-        if (rc != SQLITE_OK)
-
-  	{
-
-  	  LOGE ("h_dividend_payout: Failed to prepare select shareholders statement for corp %d: %s",
-
-  		corp_id, sqlite3_errmsg (db));
-
-  	  goto rollback_and_unlock;
-
-  	}
-
-
-
-        long long actual_payout_sum = 0;
-
-        while (sqlite3_step (select_shareholders_st) == SQLITE_ROW)
-
-  	{
-
-  	  int player_id = sqlite3_column_int (select_shareholders_st, 0);
-
-  	  int shares = sqlite3_column_int (select_shareholders_st, 1);
-
-
-
-            if (player_id == 0) continue; // Skip the corporation's own holdings in a direct payout
-
-
-
-  	  long long player_dividend = (long long) shares * amount_per_share;
-
-
-
-  	  char idempotency_key[UUID_STR_LEN];
-
-  	  h_generate_hex_uuid (idempotency_key, sizeof (idempotency_key));
-
-
-
-  	  int transfer_rc = h_bank_transfer_unlocked (db, "corp", corp_id,
-
-  							"player", player_id,
-
-  							player_dividend,
-
-  							"DIVIDEND",
-
-  							idempotency_key);
-
-  	  if (transfer_rc != SQLITE_OK)
-
-  	    {
-
-  	      LOGE ("h_dividend_payout: Failed to pay dividend to player %d from corp %d for stock %d. Amount: %lld. Error: %s",
-
-  		    player_id, corp_id, stock_id, player_dividend, sqlite3_errstr (transfer_rc));
-
-  	      // Continue to next shareholder, but log the failure
-
-  	    } else {
-
-                  actual_payout_sum += player_dividend;
-
-              }
-
-  	}
-
-        sqlite3_finalize (select_shareholders_st);
-
-
-
-        // Mark dividend as paid
-
-        sqlite3_stmt *update_dividend_st = NULL;
-
-        const char *sql_update_dividend =
-
-  	"UPDATE stock_dividends SET paid_ts = ? WHERE id = ?;";
-
-        rc = sqlite3_prepare_v2 (db, sql_update_dividend, -1, &update_dividend_st, NULL);
-
-        if (rc != SQLITE_OK)
-
-  	{
-
-  	  LOGE ("h_dividend_payout: Failed to prepare update dividend statement for id %d: %s",
-
-  		dividend_id, sqlite3_errmsg (db));
-
-  	  goto rollback_and_unlock;
-
-  	}
-
-        sqlite3_bind_int64 (update_dividend_st, 1, now_s);
-
-        sqlite3_bind_int (update_dividend_st, 2, dividend_id);
-
-        rc = sqlite3_step (update_dividend_st);
-
-        sqlite3_finalize (update_dividend_st);
-
-
-
-        if (rc != SQLITE_DONE)
-
-  	{
-
-  	  LOGE ("h_dividend_payout: Failed to mark dividend %d as paid: %s",
-
-  		dividend_id, sqlite3_errmsg (db));
-
-  	  goto rollback_and_unlock;
-
-  	}
-
-
-
-        LOGI("h_dividend_payout: Payout of %lld credits completed for dividend %d (stock %d, corp %d).", actual_payout_sum, dividend_id, stock_id, corp_id);
-
-        json_t *payload = json_pack("{s:i, s:i, s:I, s:I}", "corp_id", corp_id, "stock_id", stock_id, "dividend_id", dividend_id, "actual_payout", actual_payout_sum);
-
-        db_log_engine_event(now_s, "stock.dividend.payout_completed", "corp", corp_id, 0, payload, NULL);
-
-        json_decref(payload);
-
-        processed_dividends++;
-
-      }
-
-    sqlite3_finalize (select_dividends_st);
-
-
-
-    rc = commit (db);
-
-    if (rc != SQLITE_OK)
-
-      {
-
-        LOGE ("h_dividend_payout: Commit failed: %s", sqlite3_errmsg (db));
-
-        goto rollback_and_unlock;
-
-      }
-
-
-
-    LOGI ("h_dividend_payout: Successfully processed %d dividends.", processed_dividends);
-
-    unlock (db, "h_dividend_payout");
-
-    return SQLITE_OK;
-
-
-
-  rollback_and_unlock:
-
-    if (select_dividends_st)
-
-      sqlite3_finalize (select_dividends_st);
-
-    rollback (db);
-
-    unlock (db, "h_dividend_payout");
-
-    return rc;
-
-  }
-
-
-
-  int
-
-  h_daily_turn_reset (sqlite3 *db, int64_t now_s)
-
-  {
-
-    if (!try_lock (db, "daily_turn_reset", now_s))
+int
+h_daily_turn_reset (sqlite3 *db, int64_t now_s)
+{
+  if (!try_lock (db, "daily_turn_reset", now_s))
     return 0;
-
   LOGI ("daily_turn_reset: starting daily turn reset.");
-
   int rc = begin (db);
   if (rc)
     {
@@ -1856,6 +1452,7 @@ rollback_and_unlock:
   unlock (db, "daily_turn_reset");
   return rc;
 }
+
 
 int
 h_autouncloak_sweeper (sqlite3 *db, int64_t now_s)
@@ -2007,10 +1604,9 @@ h_broadcast_ttl_cleanup (sqlite3 *db, int64_t now_s)
   if (!try_lock (db, "broadcast_ttl_cleanup", now_s))
     return 0;
   sqlite3_stmt *st = NULL;
-  int rc =
-    sqlite3_prepare_v2 (db,
-			"DELETE FROM broadcasts WHERE ttl_expires_at IS NOT NULL AND ttl_expires_at <= ?1;",
-			-1, &st, NULL);
+  int rc = sqlite3_prepare_v2 (db,
+			       "DELETE FROM broadcasts WHERE ttl_expires_at IS NOT NULL AND ttl_expires_at <= ?1;",
+			       -1, &st, NULL);
   if (rc == SQLITE_OK)
     {
       sqlite3_bind_int64 (st, 1, now_s);
@@ -2061,6 +1657,7 @@ h_traps_process (sqlite3 *db, int64_t now_s)
 int
 h_npc_step (sqlite3 *db, int64_t now_s)
 {
+  (void) now_s;
   int64_t now_ms = (int64_t) monotonic_millis ();
   if (iss_init_once () == 1)
     {
@@ -2329,8 +1926,9 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
 	    json_integer_value (json_object_get (payload_obj, "corp_id"));
 	  long long amount =
 	    json_integer_value (json_object_get (payload_obj, "amount"));
-          long long total_assets =
-	    json_integer_value (json_object_get (payload_obj, "total_assets"));
+	  long long total_assets =
+	    json_integer_value (json_object_get
+				(payload_obj, "total_assets"));
 
 	  // Fetch corp name and tag
 	  sqlite3_stmt *corp_info_st = NULL;
@@ -2347,11 +1945,11 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
 		{
 		  strncpy (corp_name_buf,
 			   (const char *) sqlite3_column_text (corp_info_st,
-								0),
+							       0),
 			   sizeof (corp_name_buf) - 1);
 		  strncpy (corp_tag_buf,
 			   (const char *) sqlite3_column_text (corp_info_st,
-								1),
+							       1),
 			   sizeof (corp_tag_buf) - 1);
 		}
 	      sqlite3_finalize (corp_info_st);
@@ -2383,7 +1981,7 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
 				   json_integer (corp_id));
 	      json_object_set_new (context_data, "amount",
 				   json_integer (amount));
-              json_object_set_new (context_data, "total_assets",
+	      json_object_set_new (context_data, "total_assets",
 				   json_integer (total_assets));
 	    }
 	}
@@ -2393,8 +1991,9 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
 	    json_integer_value (json_object_get (payload_obj, "corp_id"));
 	  long long amount =
 	    json_integer_value (json_object_get (payload_obj, "amount"));
-          long long total_assets =
-	    json_integer_value (json_object_get (payload_obj, "total_assets"));
+	  long long total_assets =
+	    json_integer_value (json_object_get
+				(payload_obj, "total_assets"));
 
 	  // Fetch corp name and tag
 	  sqlite3_stmt *corp_info_st = NULL;
@@ -2402,8 +2001,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
 	    "SELECT name, tag, tax_arrears, credit_rating FROM corporations WHERE id = ?;";
 	  char corp_name_buf[64] = { 0 };
 	  char corp_tag_buf[16] = { 0 };
-          long long tax_arrears = 0;
-          int credit_rating = 0;
+	  long long tax_arrears = 0;
+	  int credit_rating = 0;
 
 	  if (sqlite3_prepare_v2 (db, sql_corp_info, -1, &corp_info_st, NULL)
 	      == SQLITE_OK)
@@ -2413,14 +2012,14 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
 		{
 		  strncpy (corp_name_buf,
 			   (const char *) sqlite3_column_text (corp_info_st,
-								0),
+							       0),
 			   sizeof (corp_name_buf) - 1);
 		  strncpy (corp_tag_buf,
 			   (const char *) sqlite3_column_text (corp_info_st,
-								1),
+							       1),
 			   sizeof (corp_tag_buf) - 1);
-                  tax_arrears = sqlite3_column_int64(corp_info_st, 2);
-                  credit_rating = sqlite3_column_int(corp_info_st, 3);
+		  tax_arrears = sqlite3_column_int64 (corp_info_st, 2);
+		  credit_rating = sqlite3_column_int (corp_info_st, 3);
 		}
 	      sqlite3_finalize (corp_info_st);
 	    }
@@ -2440,7 +2039,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
 	      if (asprintf
 		  (&body_str,
 		   "%s [%s] has failed to pay %lld credits in daily corporate taxes on reported assets of %lld credits. Total arrears now stand at %lld credits, and their credit rating has fallen to %d. Federation authorities are monitoring the situation.",
-		   corp_name_buf, corp_tag_buf, amount, total_assets, tax_arrears, credit_rating) == -1)
+		   corp_name_buf, corp_tag_buf, amount, total_assets,
+		   tax_arrears, credit_rating) == -1)
 		{
 		  LOGE
 		    ("h_daily_news_compiler: Failed to allocate body_str for corp.tax.failed.");
@@ -2451,11 +2051,11 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
 				   json_integer (corp_id));
 	      json_object_set_new (context_data, "amount",
 				   json_integer (amount));
-              json_object_set_new (context_data, "total_assets",
+	      json_object_set_new (context_data, "total_assets",
 				   json_integer (total_assets));
-              json_object_set_new (context_data, "tax_arrears",
+	      json_object_set_new (context_data, "tax_arrears",
 				   json_integer (tax_arrears));
-              json_object_set_new (context_data, "credit_rating",
+	      json_object_set_new (context_data, "credit_rating",
 				   json_integer (credit_rating));
 	    }
 	}
@@ -2480,7 +2080,7 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
 		{
 		  strncpy (corp_name_buf,
 			   (const char *) sqlite3_column_text (corp_info_st,
-								0),
+							       0),
 			   sizeof (corp_name_buf) - 1);
 		}
 	      sqlite3_finalize (corp_info_st);
@@ -2524,7 +2124,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
 	    json_integer_value (json_object_get (payload_obj,
 						 "amount_per_share"));
 	  long long total_payout =
-	    json_integer_value (json_object_get (payload_obj, "total_payout"));
+	    json_integer_value (json_object_get
+				(payload_obj, "total_payout"));
 
 	  // Fetch corp name and ticker
 	  sqlite3_stmt *info_st = NULL;
@@ -2651,7 +2252,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
 				   json_integer (available_funds));
 	    }
 	}
-      else if (strcasecmp (event_type, "stock.dividend.payout_completed") == 0)
+      else if (strcasecmp (event_type, "stock.dividend.payout_completed") ==
+	       0)
 	{
 	  int corp_id =
 	    json_integer_value (json_object_get (payload_obj, "corp_id"));
@@ -2750,8 +2352,9 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
 	    json_integer_value (json_object_get (payload_obj, "corp_id"));
 	  long long amount =
 	    json_integer_value (json_object_get (payload_obj, "amount"));
-          long long total_assets =
-	    json_integer_value (json_object_get (payload_obj, "total_assets"));
+	  long long total_assets =
+	    json_integer_value (json_object_get
+				(payload_obj, "total_assets"));
 
 	  // Fetch corp name and tag
 	  sqlite3_stmt *corp_info_st = NULL;
@@ -2768,11 +2371,11 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
 		{
 		  strncpy (corp_name_buf,
 			   (const char *) sqlite3_column_text (corp_info_st,
-								0),
+							       0),
 			   sizeof (corp_name_buf) - 1);
 		  strncpy (corp_tag_buf,
 			   (const char *) sqlite3_column_text (corp_info_st,
-								1),
+							       1),
 			   sizeof (corp_tag_buf) - 1);
 		}
 	      sqlite3_finalize (corp_info_st);
@@ -2804,7 +2407,7 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
 				   json_integer (corp_id));
 	      json_object_set_new (context_data, "amount",
 				   json_integer (amount));
-              json_object_set_new (context_data, "total_assets",
+	      json_object_set_new (context_data, "total_assets",
 				   json_integer (total_assets));
 	    }
 	}
@@ -2814,8 +2417,9 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
 	    json_integer_value (json_object_get (payload_obj, "corp_id"));
 	  long long amount =
 	    json_integer_value (json_object_get (payload_obj, "amount"));
-          long long total_assets =
-	    json_integer_value (json_object_get (payload_obj, "total_assets"));
+	  long long total_assets =
+	    json_integer_value (json_object_get
+				(payload_obj, "total_assets"));
 
 	  // Fetch corp name and tag
 	  sqlite3_stmt *corp_info_st = NULL;
@@ -2823,8 +2427,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
 	    "SELECT name, tag, tax_arrears, credit_rating FROM corporations WHERE id = ?;";
 	  char corp_name_buf[64] = { 0 };
 	  char corp_tag_buf[16] = { 0 };
-          long long tax_arrears = 0;
-          int credit_rating = 0;
+	  long long tax_arrears = 0;
+	  int credit_rating = 0;
 
 	  if (sqlite3_prepare_v2 (db, sql_corp_info, -1, &corp_info_st, NULL)
 	      == SQLITE_OK)
@@ -2834,14 +2438,14 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
 		{
 		  strncpy (corp_name_buf,
 			   (const char *) sqlite3_column_text (corp_info_st,
-								0),
+							       0),
 			   sizeof (corp_name_buf) - 1);
 		  strncpy (corp_tag_buf,
 			   (const char *) sqlite3_column_text (corp_info_st,
-								1),
+							       1),
 			   sizeof (corp_tag_buf) - 1);
-                  tax_arrears = sqlite3_column_int64(corp_info_st, 2);
-                  credit_rating = sqlite3_column_int(corp_info_st, 3);
+		  tax_arrears = sqlite3_column_int64 (corp_info_st, 2);
+		  credit_rating = sqlite3_column_int (corp_info_st, 3);
 		}
 	      sqlite3_finalize (corp_info_st);
 	    }
@@ -2861,7 +2465,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
 	      if (asprintf
 		  (&body_str,
 		   "%s [%s] has failed to pay %lld credits in daily corporate taxes on reported assets of %lld credits. Total arrears now stand at %lld credits, and their credit rating has fallen to %d. Federation authorities are monitoring the situation.",
-		   corp_name_buf, corp_tag_buf, amount, total_assets, tax_arrears, credit_rating) == -1)
+		   corp_name_buf, corp_tag_buf, amount, total_assets,
+		   tax_arrears, credit_rating) == -1)
 		{
 		  LOGE
 		    ("h_daily_news_compiler: Failed to allocate body_str for corp.tax.failed.");
@@ -2872,11 +2477,11 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
 				   json_integer (corp_id));
 	      json_object_set_new (context_data, "amount",
 				   json_integer (amount));
-              json_object_set_new (context_data, "total_assets",
+	      json_object_set_new (context_data, "total_assets",
 				   json_integer (total_assets));
-              json_object_set_new (context_data, "tax_arrears",
+	      json_object_set_new (context_data, "tax_arrears",
 				   json_integer (tax_arrears));
-              json_object_set_new (context_data, "credit_rating",
+	      json_object_set_new (context_data, "credit_rating",
 				   json_integer (credit_rating));
 	    }
 	}
@@ -2901,7 +2506,7 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
 		{
 		  strncpy (corp_name_buf,
 			   (const char *) sqlite3_column_text (corp_info_st,
-								0),
+							       0),
 			   sizeof (corp_name_buf) - 1);
 		}
 	      sqlite3_finalize (corp_info_st);
@@ -2945,7 +2550,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
 	    json_integer_value (json_object_get (payload_obj,
 						 "amount_per_share"));
 	  long long total_payout =
-	    json_integer_value (json_object_get (payload_obj, "total_payout"));
+	    json_integer_value (json_object_get
+				(payload_obj, "total_payout"));
 
 	  // Fetch corp name and ticker
 	  sqlite3_stmt *info_st = NULL;
@@ -3072,7 +2678,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
 				   json_integer (available_funds));
 	    }
 	}
-      else if (strcasecmp (event_type, "stock.dividend.payout_completed") == 0)
+      else if (strcasecmp (event_type, "stock.dividend.payout_completed") ==
+	       0)
 	{
 	  int corp_id =
 	    json_integer_value (json_object_get (payload_obj, "corp_id"));
@@ -4811,14 +4418,12 @@ rollback_and_unlock:
   return rc;
 }
 
-int h_daily_corp_tax (sqlite3 *db, int64_t now_s);
+int h_daily_corp_tax (sqlite3 * db, int64_t now_s);
 
 
 
 int
-
 h_daily_stock_price_recalculation (sqlite3 *db, int64_t now_s)
-
 {
 
   if (!try_lock (db, "daily_stock_price_recalculation", now_s))
@@ -4827,7 +4432,8 @@ h_daily_stock_price_recalculation (sqlite3 *db, int64_t now_s)
 
 
 
-  LOGI ("h_daily_stock_price_recalculation: Starting daily stock price recalculation.");
+  LOGI
+    ("h_daily_stock_price_recalculation: Starting daily stock price recalculation.");
 
 
 
@@ -4848,7 +4454,6 @@ h_daily_stock_price_recalculation (sqlite3 *db, int64_t now_s)
   sqlite3_stmt *st_stocks = NULL;
 
   const char *sql_select_stocks =
-
     "SELECT s.id, s.corp_id, s.total_shares FROM stocks s WHERE s.corp_id > 0;";
 
 
@@ -4860,9 +4465,7 @@ h_daily_stock_price_recalculation (sqlite3 *db, int64_t now_s)
     {
 
       LOGE
-
 	("h_daily_stock_price_recalculation: Failed to prepare select stocks statement: %s",
-
 	 sqlite3_errmsg (db));
 
       goto rollback_and_unlock_stock_price;
@@ -4902,11 +4505,9 @@ h_daily_stock_price_recalculation (sqlite3 *db, int64_t now_s)
       sqlite3_stmt *st_planets = NULL;
 
       const char *sql_select_planets =
-
 	"SELECT ore_on_hand, organics_on_hand, equipment_on_hand FROM planets WHERE owner_id = ? AND owner_type = 'corp';";
 
       if (sqlite3_prepare_v2 (db, sql_select_planets, -1, &st_planets, NULL)
-
 	  == SQLITE_OK)
 
 	{
@@ -4930,13 +4531,10 @@ h_daily_stock_price_recalculation (sqlite3 *db, int64_t now_s)
 	}
 
       else
-
 	{
 
 	  LOGE
-
 	    ("h_daily_stock_price_recalculation: Failed to prepare select planets statement for corp %d: %s",
-
 	     corp_id, sqlite3_errmsg (db));
 
 	  // Continue to next stock or abort?
@@ -4972,12 +4570,10 @@ h_daily_stock_price_recalculation (sqlite3 *db, int64_t now_s)
       sqlite3_stmt *st_update_stock = NULL;
 
       const char *sql_update_stock =
-
 	"UPDATE stocks SET current_price = ? WHERE id = ?;";
 
-      if (sqlite3_prepare_v2 (db, sql_update_stock, -1, &st_update_stock, NULL)
-
-	  == SQLITE_OK)
+      if (sqlite3_prepare_v2
+	  (db, sql_update_stock, -1, &st_update_stock, NULL) == SQLITE_OK)
 
 	{
 
@@ -4990,9 +4586,7 @@ h_daily_stock_price_recalculation (sqlite3 *db, int64_t now_s)
 	    {
 
 	      LOGE
-
 		("h_daily_stock_price_recalculation: Failed to update stock %d price: %s",
-
 		 stock_id, sqlite3_errmsg (db));
 
 	    }
@@ -5002,13 +4596,10 @@ h_daily_stock_price_recalculation (sqlite3 *db, int64_t now_s)
 	}
 
       else
-
 	{
 
 	  LOGE
-
 	    ("h_daily_stock_price_recalculation: Failed to prepare update stock price statement: %s",
-
 	     sqlite3_errmsg (db));
 
 	}
@@ -5026,7 +4617,6 @@ h_daily_stock_price_recalculation (sqlite3 *db, int64_t now_s)
     {
 
       LOGE ("h_daily_stock_price_recalculation: commit failed: %s",
-
 	    sqlite3_errmsg (db));
 
       goto rollback_and_unlock_stock_price;
@@ -5035,7 +4625,8 @@ h_daily_stock_price_recalculation (sqlite3 *db, int64_t now_s)
 
 
 
-  LOGI ("h_daily_stock_price_recalculation: Successfully recalculated stock prices.");
+  LOGI
+    ("h_daily_stock_price_recalculation: Successfully recalculated stock prices.");
 
   unlock (db, "daily_stock_price_recalculation");
 
@@ -5060,7 +4651,6 @@ rollback_and_unlock_stock_price:
 
 
 int
-
 h_daily_corp_tax (sqlite3 *db, int64_t now_s)
 {
   if (!try_lock (db, "daily_corp_tax", now_s))

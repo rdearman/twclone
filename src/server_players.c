@@ -2450,7 +2450,7 @@ cmd_bank_balance (client_ctx_t *ctx, json_t *root)
   json_t *payload = json_object ();
   json_object_set_new (payload, "balance", json_integer (balance));
 
-  json_decref (payload);
+  send_enveloped_ok (ctx->fd, root, "bank.balance", payload);
 
   return 0;
 }

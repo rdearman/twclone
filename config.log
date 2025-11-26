@@ -31,10 +31,6 @@ PATH: /usr/local/bin/
 PATH: /usr/local/bin/
 PATH: /home/rick/.nvm/versions/node/v20.10.0/bin/
 PATH: /home/rick/anaconda3/bin/
-PATH: /usr/local/bin/
-PATH: /usr/local/bin/
-PATH: /home/rick/.nvm/versions/node/v20.10.0/bin/
-PATH: /home/rick/anaconda3/bin/
 PATH: /home/rick/.sdkman/candidates/kotlin/current/bin/
 PATH: /home/rick/.grit/bin/
 PATH: /home/rick/.cargo/bin/
@@ -47,11 +43,6 @@ PATH: /bin/
 PATH: /usr/games/
 PATH: /usr/local/games/
 PATH: /snap/bin/
-PATH: /home/rick/bin/
-PATH: /home/rick/flutter/bin/
-PATH: /home/rick/minipro/
-PATH: /home/rick/.local/bin/
-PATH: /usr/local/bin/
 PATH: /home/rick/bin/
 PATH: /home/rick/flutter/bin/
 PATH: /home/rick/minipro/
@@ -405,7 +396,7 @@ INSTALL_DATA='${INSTALL} -m 644'
 INSTALL_PROGRAM='${INSTALL}'
 INSTALL_SCRIPT='${INSTALL}'
 INSTALL_STRIP_PROGRAM='$(install_sh) -c -s'
-ISODATE='2025-11-23'
+ISODATE='2025-11-24'
 LDFLAGS=''
 LIBOBJS=''
 LIBS='-lpthread -lm '

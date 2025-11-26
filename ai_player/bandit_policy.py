@@ -116,7 +116,8 @@ def make_context_key(state: dict, config: dict) -> str:
 
     ship_info = state.get("ship_info", {})
     holds = ship_info.get("holds", 0)
-    cargo_total = sum(ship_info.get("cargo", {}).values()) if ship_info.get("cargo") else 0
+    cargo_list = ship_info.get("cargo", [])
+    cargo_total = sum(item.get("quantity", 0) for item in cargo_list) if cargo_list else 0
     holds_full = "full" if cargo_total >= holds and holds > 0 else "not_full"
 
     credits = state.get("current_credits", 0)
@@ -146,39 +147,35 @@ def _can_sell_any(state: dict, config: dict) -> bool:
     ship_info = state.get("ship_info")
     if not ship_info:
         return False
-    cargo = ship_info.get("cargo", {})
-    if not any(v > 0 for v in cargo.values()):
-        return False
-    sector = state.get("player_location_sector")
-    price_cache = state.get("price_cache", {})
-    sector_cache = price_cache.get(str(sector), {})
-    for port_id, port_prices in sector_cache.items():
-        for commodity, prices in port_prices.items():
-            if cargo.get(commodity, 0) > 0 and prices.get("sell") is not None and prices.get("sell") > 0:
-                return True
-    return False
+    cargo_list = ship_info.get("cargo", [])
+    if not isinstance(cargo_list, list):
+        return False  # Should be a list
+    return any(item.get("quantity", 0) > 0 for item in cargo_list)
 
 def _can_buy_any(state: dict, config: dict) -> bool:
-    ship = state.get("ship_info")
-    if not ship:
+    ship_info = state.get("ship_info")
+    if not ship_info:
         return False
-    holds = ship.get("holds", 0)
-    cargo = ship.get("cargo", {})
-    current_cargo = sum(cargo.values())
+    holds = ship_info.get("holds", 0)
+    cargo_list = ship_info.get("cargo", [])
+    if not isinstance(cargo_list, list):
+        return False  # should be a list
+    current_cargo = sum(item.get("quantity", 0) for item in cargo_list)
     free_holds = holds - current_cargo
     if free_holds <= 0:
         return False
-    current_credits = state.get("current_credits", 0.0)
-    if current_credits <= 0:
+    
+    player_info = state.get("player_info")
+    if not player_info or "player" not in player_info:
         return False
-    sector = state.get("player_location_sector")
-    price_cache = state.get("price_cache", {})
-    sector_cache = price_cache.get(str(sector), {})
-    for port_id, port_prices in sector_cache.items():
-        for commodity, prices in port_prices.items():
-            if prices.get("buy") is not None and prices.get("buy") > 0:
-                return True
-    return False
+
+    player_credits_str = player_info.get("player", {}).get("credits", "0")
+    try:
+        player_credits = float(player_credits_str)
+    except (ValueError, TypeError):
+        player_credits = 0.0
+    
+    return player_credits > 0
 
     # --- UCB1 (Upper Confidence Bound 1) - Future Enhancement ---
     def choose_action_ucb1(self, actions: list[str], context_key: str, total_plays: int) -> str:

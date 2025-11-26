@@ -1114,9 +1114,8 @@ cmd_mail_inbox (client_ctx_t *ctx, json_t *root)
       char *sender_name = strdup ((const char *) sqlite3_column_text (st, 3));
       char *subject = strdup ((const char *) sqlite3_column_text (st, 4));
       char *sent_at = strdup ((const char *) sqlite3_column_text (st, 5));
-      char *read_at =
-	sqlite3_column_type (st,
-			     6) ==
+      char *read_at = sqlite3_column_type (st,
+					   6) ==
 	SQLITE_NULL ? NULL : strdup ((const char *)
 				     sqlite3_column_text (st, 6));
 
@@ -1207,9 +1206,8 @@ cmd_mail_read (client_ctx_t *ctx, json_t *root)
   char *subject = strdup ((const char *) sqlite3_column_text (st, 4));
   char *body = strdup ((const char *) sqlite3_column_text (st, 5));
   char *sent_at = strdup ((const char *) sqlite3_column_text (st, 6));
-  char *read_at =
-    sqlite3_column_type (st,
-			 7) ==
+  char *read_at = sqlite3_column_type (st,
+				       7) ==
     SQLITE_NULL ? NULL : strdup ((const char *) sqlite3_column_text (st, 7));
   sqlite3_finalize (st);
 
@@ -1422,19 +1420,19 @@ cmd_subscribe_add (client_ctx_t *ctx, json_t *root)
       return -1;
     }
 
-  json_t *v = json_object_get (data, "event_type");
+  json_t *v = json_object_get (data, "topic");
   if (!json_is_string (v))
     {
       send_enveloped_error (ctx->fd, root, ERR_MISSING_FIELD,
-			    "missing field: event_type");
+			    "missing field: topic");
       return -1;
     }
-  const char *event_type = json_string_value (v);
-  if (!is_ascii_printable (event_type) || !len_leq (event_type, 64)
-      || !is_allowed_topic (event_type))
+  const char *topic = json_string_value (v);
+  if (!is_ascii_printable (topic) || !len_leq (topic, 64)
+      || !is_allowed_topic (topic))
     {
       send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG,
-			    "invalid event_type");
+			    "invalid topic");
       return -1;
     }
 
@@ -1488,7 +1486,7 @@ cmd_subscribe_add (client_ctx_t *ctx, json_t *root)
     }
 
   /* Upsert subscription */
-  int rc = db_subscribe_upsert (ctx->player_id, event_type, filter_json,
+  int rc = db_subscribe_upsert (ctx->player_id, topic, filter_json,
 				0 /*locked */ );
   if (rc != 0)
     {
@@ -1496,7 +1494,7 @@ cmd_subscribe_add (client_ctx_t *ctx, json_t *root)
       return -1;
     }
 
-  json_t *resp = json_pack ("{s:s}", "event_type", event_type);
+  json_t *resp = json_pack ("{s:s}", "topic", topic);
   send_enveloped_ok (ctx->fd, root, "subscribe.added", resp);
   json_decref (resp);
   return 0;
@@ -1520,24 +1518,24 @@ cmd_subscribe_remove (client_ctx_t *ctx, json_t *root)
       return -1;
     }
 
-  json_t *v = json_object_get (data, "event_type");
+  json_t *v = json_object_get (data, "topic");
   if (!json_is_string (v))
     {
       send_enveloped_error (ctx->fd, root, ERR_MISSING_FIELD,
-			    "missing field: event_type");
+			    "missing field: topic");
       return -1;
     }
-  const char *event_type = json_string_value (v);
-  if (!is_ascii_printable (event_type) || !len_leq (event_type, 64)
-      || !is_allowed_topic (event_type))
+  const char *topic = json_string_value (v);
+  if (!is_ascii_printable (topic) || !len_leq (topic, 64)
+      || !is_allowed_topic (topic))
     {
       send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG,
-			    "invalid event_type");
+			    "invalid topic");
       return -1;
     }
 
   int was_locked = 0;
-  int rc = db_subscribe_disable (ctx->player_id, event_type, &was_locked);
+  int rc = db_subscribe_disable (ctx->player_id, topic, &was_locked);
   if (rc == +1 || was_locked)
     {
       send_enveloped_refused (ctx->fd, root, REF_SAFE_ZONE_ONLY
@@ -1552,7 +1550,7 @@ cmd_subscribe_remove (client_ctx_t *ctx, json_t *root)
       return -1;
     }
 
-  json_t *resp = json_pack ("{s:s}", "event_type", event_type);
+  json_t *resp = json_pack ("{s:s}", "topic", topic);
   send_enveloped_ok (ctx->fd, root, "subscribe.removed", resp);
   json_decref (resp);
   return 0;
@@ -1578,13 +1576,13 @@ cmd_subscribe_list (client_ctx_t *ctx, json_t *root)
   json_t *items = json_array ();
   while (sqlite3_step (it) == SQLITE_ROW)
     {
-      const char *type = (const char *) sqlite3_column_text (it, 0);
+      const char *topic = (const char *) sqlite3_column_text (it, 0);
       int locked = sqlite3_column_int (it, 1);
       int enabled = sqlite3_column_int (it, 2);
       const char *deliv = (const char *) sqlite3_column_text (it, 3);
       const char *flt = (const char *) sqlite3_column_text (it, 4);
       json_t *row = json_pack ("{s:s,s:i,s:i,s:s,s:O?}",
-			       "event_type", type ? type : "",
+			       "topic", topic ? topic : "",
 			       "locked", locked,
 			       "enabled", enabled,
 			       "delivery", deliv ? deliv : "push",
