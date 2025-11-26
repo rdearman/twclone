@@ -9100,75 +9100,180 @@ cleanup:
 int
 db_fighters_at_sector_json (int sector_id, json_t **out_array)
 {
-  (void) sector_id;
-  (void) out_array;
-  /*** for my reference */
-  /* typedef enum */
-  /* { */
-  /*   ASSET_MINE = 1, */
-  /*   ASSET_FIGHTER = 2, */
-  /*   ASSET_BEACON = 3, */
-  /*   ASSET_LIMPET_MINE = 4 */
-  /* } asset_type_t; */
+  sqlite3 *db = db_get_handle ();
+  sqlite3_stmt *st = NULL;
+  json_t *arr = NULL;
+  int rc = SQLITE_ERROR;
 
-/*   sqlite> .schema sector_assets */
-/* CREATE TABLE sector_assets (
-   id INTEGER PRIMARY KEY,
-   sector INTEGER NOT NULL REFERENCES sectors(id),
-   player INTEGER REFERENCES players(id),
-   corporation INTEGER NOT NULL DEFAULT 0,
-   asset_type INTEGER NOT NULL,
-   offensive_setting INTEGER DEFAULT 0,
-   quantity INTEGER,
-   ttl INTEGER,
-   deployed_at INTEGER NOT NULL  ); */
+  pthread_mutex_lock (&db_mutex);
 
+  if (!out_array)
+    goto cleanup;
 
+  *out_array = NULL;
+  arr = json_array ();
+  if (!arr)
+    {
+      rc = SQLITE_NOMEM;
+      goto cleanup;
+    }
 
-  // 1. SELECT quantity, player, corporation in sector_assets WHERE asset_type=ASSET_FIGHTER
-  // 2. if the corporation is not zero, then return the corporation as the owner not the player
-  // 3. if corporation=0 then return player as owner.
-  // 4. build the json with owner and quantity
+  const char *sql =
+    "SELECT player, corporation, quantity "
+    "FROM sector_assets WHERE sector = ? AND asset_type = ?;";
 
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    goto cleanup;
+
+  sqlite3_bind_int (st, 1, sector_id);
+  sqlite3_bind_int (st, 2, ASSET_FIGHTER);
+
+  while ((rc = sqlite3_step (st)) == SQLITE_ROW)
+    {
+      int player_id = sqlite3_column_int (st, 0);
+      int corporation_id = sqlite3_column_int (st, 1);
+      int quantity = sqlite3_column_int (st, 2);
+
+      json_t *obj = json_object ();
+      if (!obj)
+	{
+	  rc = SQLITE_NOMEM;
+	  goto cleanup;
+	}
+
+      if (corporation_id > 0)
+	{
+	  json_object_set_new (obj, "owner_type", json_string ("corporation"));
+	  json_object_set_new (obj, "owner_id", json_integer (corporation_id));
+	}
+      else if (player_id > 0)
+	{
+	  json_object_set_new (obj, "owner_type", json_string ("player"));
+	  json_object_set_new (obj, "owner_id", json_integer (player_id));
+	}
+      else
+        {
+	  // Should not happen if asset has an owner
+          json_object_set_new (obj, "owner_type", json_string ("unknown"));
+          json_object_set_new (obj, "owner_id", json_integer (0));
+        }
+      
+      json_object_set_new (obj, "quantity", json_integer (quantity));
+      json_array_append_new (arr, obj);
+    }
+
+  if (rc == SQLITE_DONE)
+    {
+      *out_array = arr;
+      rc = SQLITE_OK;
+      arr = NULL; // Transfer ownership
+    }
+  else
+    {
+      // Error in sqlite3_step
+      rc = SQLITE_ERROR;
+    }
+
+cleanup:
+  if (st)
+    sqlite3_finalize (st);
+  if (arr)
+    json_decref (arr);
+  pthread_mutex_unlock (&db_mutex);
+  return rc;
 }
 
 int
 db_mines_at_sector_json (int sector_id, json_t **out_array)
 {
-  (void) sector_id;
-  (void) out_array;
+  sqlite3 *db = db_get_handle ();
+  sqlite3_stmt *st = NULL;
+  json_t *arr = NULL;
+  int rc = SQLITE_ERROR;
 
-  /*** for my reference */
-  /* typedef enum */
-  /* { */
-  /*   ASSET_MINE = 1, */
-  /*   ASSET_FIGHTER = 2, */
-  /*   ASSET_BEACON = 3, */
-  /*   ASSET_LIMPET_MINE = 4 */
-  /* } asset_type_t; */
+  pthread_mutex_lock (&db_mutex);
 
-/*   sqlite> .schema sector_assets */
-/* CREATE TABLE sector_assets (
-   id INTEGER PRIMARY KEY,
-   sector INTEGER NOT NULL REFERENCES sectors(id),
-   player INTEGER REFERENCES players(id),
-   corporation INTEGER NOT NULL DEFAULT 0,
-   asset_type INTEGER NOT NULL,
-   offensive_setting INTEGER DEFAULT 0,
-   quantity INTEGER,
-   ttl INTEGER,
-   deployed_at INTEGER NOT NULL  ); */
+  if (!out_array)
+    goto cleanup;
 
-  // 1. SELECT quantity, player, corporation in sector_assets WHERE asset_type in (ASSET_MINE, ASSET_LIMPET_MINE)
-  // 2. if the corporation is not zero, then return the corporation as the owner not the player
-  // 3. if corporation=0 then return player as owner.
-  // -- potential issue to be resolved later. The player may have a limpet mine attached to the ship. BUT
-  // -- because I haven't yet implemented limpet attachment, we'll just put a note in here for the moment
-  // -- and just return the number in the sector. 
-  // 4. build the json with owner and quantity and the two different types of mines. 
+  *out_array = NULL;
+  arr = json_array ();
+  if (!arr)
+    {
+      rc = SQLITE_NOMEM;
+      goto cleanup;
+    }
 
+  const char *sql =
+    "SELECT player, corporation, quantity, asset_type "
+    "FROM sector_assets WHERE sector = ? AND asset_type IN (?, ?);";
+
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    goto cleanup;
+
+  sqlite3_bind_int (st, 1, sector_id);
+  sqlite3_bind_int (st, 2, ASSET_MINE);
+  sqlite3_bind_int (st, 3, ASSET_LIMPET_MINE);
+
+  while ((rc = sqlite3_step (st)) == SQLITE_ROW)
+    {
+      int player_id = sqlite3_column_int (st, 0);
+      int corporation_id = sqlite3_column_int (st, 1);
+      int quantity = sqlite3_column_int (st, 2);
+      int asset_type = sqlite3_column_int (st, 3);
+
+      json_t *obj = json_object ();
+      if (!obj)
+	{
+	  rc = SQLITE_NOMEM;
+	  goto cleanup;
+	}
+
+      if (corporation_id > 0)
+	{
+	  json_object_set_new (obj, "owner_type", json_string ("corporation"));
+	  json_object_set_new (obj, "owner_id", json_integer (corporation_id));
+	}
+      else if (player_id > 0)
+	{
+	  json_object_set_new (obj, "owner_type", json_string ("player"));
+	  json_object_set_new (obj, "owner_id", json_integer (player_id));
+	}
+      else
+        {
+	  // Should not happen if asset has an owner
+          json_object_set_new (obj, "owner_type", json_string ("unknown"));
+          json_object_set_new (obj, "owner_id", json_integer (0));
+        }
+      
+      json_object_set_new (obj, "quantity", json_integer (quantity));
+      json_object_set_new (obj, "mine_type", json_integer (asset_type)); // Add mine type
+
+      json_array_append_new (arr, obj);
+    }
+
+  if (rc == SQLITE_DONE)
+    {
+      *out_array = arr;
+      rc = SQLITE_OK;
+      arr = NULL; // Transfer ownership
+    }
+  else
+    {
+      // Error in sqlite3_step
+      rc = SQLITE_ERROR;
+    }
+
+cleanup:
+  if (st)
+    sqlite3_finalize (st);
+  if (arr)
+    json_decref (arr);
+  pthread_mutex_unlock (&db_mutex);
+  return rc;
 }
-
 /*
 * =================================================================================
 * GENERIC BANK BALANCE FUNCTIONS

@@ -48,27 +48,55 @@ typedef struct
 } client_ctx_t;
 
 // A simple structure to represent the result of the comsume player turn function
+
 typedef enum
+
 {
+
   TURN_CONSUME_SUCCESS = 0,
+
   TURN_CONSUME_ERROR_DB_FAIL,
+
   TURN_CONSUME_ERROR_PLAYER_NOT_FOUND,
+
   TURN_CONSUME_ERROR_NO_TURNS
+
 } TurnConsumeResult;
 
-typedef enum
-{
-  ASSET_MINE = 1,
-  ASSET_FIGHTER = 2,
-  ASSET_BEACON = 3,
-  ASSET_LIMPET_MINE = 4
-} asset_type_t;
+
+
+#ifndef ASSET_TYPE_T_DEFINED
+
+#define ASSET_TYPE_T_DEFINED
 
 typedef enum
+
 {
+
+  ASSET_MINE = 1,
+
+  ASSET_FIGHTER = 2,
+
+  ASSET_BEACON = 3,
+
+  ASSET_LIMPET_MINE = 4
+
+} asset_type_t;
+
+#endif // ASSET_TYPE_T_DEFINED
+
+
+
+typedef enum
+
+{
+
   OFFENSE_TOLL = 1,
+
   OFFENSE_DEFEND = 2,
+
   OFFENSE_ATTACK = 3
+
 } offense_type_t;
 
 #ifndef START_FIGHTERS

@@ -92,6 +92,8 @@ int db_sector_info_json (int sector_id, json_t ** out);
 int db_sector_basic_json (int sector_id, json_t ** out_obj);
 int db_adjacent_sectors_json (int sector_id, json_t ** out_array);
 int db_ports_at_sector_json (int sector_id, json_t ** out_array);
+int db_fighters_at_sector_json (int sector_id, json_t ** out_array);
+int db_mines_at_sector_json (int sector_id, json_t ** out_array);
 int db_players_at_sector_json (int sector_id, json_t ** out_array);
 int db_beacons_at_sector_json (int sector_id, json_t ** out_array);
 int db_planets_at_sector_json (int sector_id, json_t ** out_array);

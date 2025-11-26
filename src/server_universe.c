@@ -80,6 +80,7 @@ static void post_iss_notice_move (int from, int to, const char *kind,
 				  const char *extra);
 static void iss_log_event_move (int from, int to, const char *kind,
 				const char *extra);
+static void attach_sector_asset_counts (sqlite3 *db, int sector_id, json_t *data_out);
 
 #ifndef UNUSED
 #define UNUSED(x) (void)(x)
@@ -777,6 +778,37 @@ build_sector_scan_json (int sector_id, int player_id,
     }
 
   // You can attach other asset counts here if needed, similar to attach_sector_asset_counts(db, sector_id, root);
+
+  // Attach Fighters
+  json_t *fighters = NULL;
+  if (db_fighters_at_sector_json (sector_id, &fighters) == SQLITE_OK && fighters)
+    {
+      json_object_set_new (root, "fighters", fighters);
+      json_object_set_new (root, "fighters_count",
+                           json_integer ((int) json_array_size (fighters)));
+    }
+  else
+    {
+      json_object_set_new (root, "fighters", json_array ());
+      json_object_set_new (root, "fighters_count", json_integer (0));
+    }
+
+  // Attach Mines
+  json_t *mines = NULL;
+  if (db_mines_at_sector_json (sector_id, &mines) == SQLITE_OK && mines)
+    {
+      json_object_set_new (root, "mines", mines);
+      json_object_set_new (root, "mines_count",
+                           json_integer ((int) json_array_size (mines)));
+    }
+  else
+    {
+      json_object_set_new (root, "mines", json_array ());
+      json_object_set_new (root, "mines_count", json_integer (0));
+    }
+
+  // Original call - keep it as it handles other asset types.
+  attach_sector_asset_counts (db_get_handle(), sector_id, root);
 
   return root;
 }
