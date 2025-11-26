@@ -406,14 +406,10 @@ broadcast_sweep_once (sqlite3 *db, int max_rows)
 
 /* ===== Client registry for broadcasts (#195) ===== */
 
-typedef struct client_node_s
-{
-  client_ctx_t *ctx;
-  struct client_node_s *next;
-} client_node_t;
 
-static client_node_t *g_clients = NULL;
-static pthread_mutex_t g_clients_mu = PTHREAD_MUTEX_INITIALIZER;
+
+client_node_t *g_clients = NULL;
+pthread_mutex_t g_clients_mu = PTHREAD_MUTEX_INITIALIZER;
 
 void
 server_register_client (client_ctx_t *ctx)

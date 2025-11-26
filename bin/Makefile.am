@@ -79,8 +79,8 @@ bigbang_SOURCES = \
 	../src/server_warp_post_processing.c \
 	../src/globals.c \
 	../src/common.c \
-	../src/test_bang.c \
-	../src/server_log.c
+	../src/server_log.c \
+	../src/test_bang.c
 
 
 

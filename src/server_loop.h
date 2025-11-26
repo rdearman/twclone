@@ -17,6 +17,15 @@ void rl_tick (client_ctx_t * ctx);
 void server_register_client (client_ctx_t * ctx);
 void server_unregister_client (client_ctx_t * ctx);
 
+typedef struct client_node_s
+{
+  client_ctx_t *ctx;
+  struct client_node_s *next;
+} client_node_t;
+
+extern client_node_t *g_clients;
+extern pthread_mutex_t g_clients_mu;
+
 /* Returns 0 if something was delivered; -1 if no online client for player_id.
    Does NOT steal 'data'. */
 int server_deliver_to_player (int player_id, const char *event_type,

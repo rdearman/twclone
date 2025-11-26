@@ -1,6 +1,7 @@
 #include <string.h>
 #include <strings.h>
 #include <jansson.h>
+#include <stdbool.h>
 #include "schemas.h"
 #include <stdlib.h>
 #include <string.h>
@@ -102,6 +103,8 @@ static json_t *schema_player_info (void);
 static json_t *schema_bank_balance (void);
 static json_t *schema_bank_history (void);
 static json_t *schema_bank_leaderboard (void);
+static json_t *schema_player_list_online_request (void);
+static json_t *schema_player_list_online_response (void);
 
 static json_t *
 schema_bank_history (void)
@@ -460,6 +463,10 @@ schema_get (const char *key)
     return schema_bank_history ();
   else if (strcasecmp (key, "bank.leaderboard") == 0)
     return schema_bank_leaderboard ();
+  else if (strcasecmp (key, "player.list_online") == 0)
+    return schema_player_list_online_request ();
+  else if (strcasecmp (key, "player.list_online.result") == 0)
+    return schema_player_list_online_response ();
 
 
 
@@ -2313,6 +2320,74 @@ schema_player_info (void)
 				   "type", "object",
 				   "properties", data_properties,
 				   "required", data_required,
+				   "additionalProperties", json_false ());
+
+  return data_schema;
+}
+
+static json_t *
+schema_player_list_online_request (void)
+{
+  json_t *properties = json_object();
+  json_t *required = json_array(); // No required fields for flexibility
+
+  // offset property
+  json_object_set_new(properties, "offset", json_pack("{s:s, s:i}", "type", "integer", "default", 0));
+
+  // limit property
+  json_object_set_new(properties, "limit", json_pack("{s:s, s:i, s:i}", "type", "integer", "minimum", 1, "maximum", 1000)); // Max 1000 for limit
+
+  // fields property (array of strings)
+  json_t *fields_items_schema = json_pack("{s:s}", "type", "string");
+  json_t *fields_schema = json_pack("{s:s, s:o, s:b}", "type", "array", "items", fields_items_schema, "uniqueItems", true);
+  json_object_set_new(properties, "fields", fields_schema);
+
+
+  json_t *data_schema = json_pack ("{s:s, s:s, s:s, s:o, s:o, s:b}",
+				   "$id", "ge://schema/player.list_online.request.json",
+				   "$schema", "https://json-schema.org/draft/2020-12/schema",
+				   "type", "object",
+				   "properties", properties,
+				   "required", required,
+				   "additionalProperties", json_false ());
+
+  return data_schema;
+}
+
+static json_t *
+schema_player_list_online_response (void)
+{
+  json_t *properties = json_object();
+  json_t *required = json_array();
+
+  // total_online property
+  json_object_set_new(properties, "total_online", json_pack("{s:s}", "type", "integer"));
+  json_array_append_new(required, json_string("total_online"));
+
+  // returned_count property
+  json_object_set_new(properties, "returned_count", json_pack("{s:s}", "type", "integer"));
+  json_array_append_new(required, json_string("returned_count"));
+
+  // offset property
+  json_object_set_new(properties, "offset", json_pack("{s:s}", "type", "integer"));
+  json_array_append_new(required, json_string("offset"));
+
+  // limit property
+  json_object_set_new(properties, "limit", json_pack("{s:s}", "type", "integer"));
+  json_array_append_new(required, json_string("limit"));
+
+  // players property (array of player objects)
+  json_t *player_item_schema = schema_player_info(); // Reuse existing player info schema
+  json_object_set_new(properties, "players", json_pack("{s:s, s:o}", "type", "array", "items", player_item_schema));
+  json_array_append_new(required, json_string("players"));
+
+
+  json_t *data_schema = json_pack ("{s:s, s:s, s:s, s:o, s:o, s:b}",
+				   "$id", "ge://schema/player.list_online.response.json",
+				   "$schema", "https://json-schema.org/draft/2020-12/schema",
+				   "type", "object",
+				   "properties", properties,
+				   "required", required,
 				   "additionalProperties", json_false ());
 
   return data_schema;

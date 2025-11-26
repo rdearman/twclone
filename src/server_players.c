@@ -25,6 +25,7 @@
 #include "common.h"
 #include "db_player_settings.h"
 #include "server_ships.h"
+#include "server_loop.h"
 
 extern sqlite3 *db_get_handle (void);
 
@@ -768,6 +769,136 @@ is_valid_key (const char *s, size_t max)
 }
 
 
+
+static json_t *
+get_online_players_json_array (int offset, int limit, const json_t * fields_array)
+{
+  json_t *response_obj = NULL;
+  json_t *players_list = json_array ();
+  int *online_player_ids = NULL;
+  int total_online = 0;
+  int current_count = 0; // Number of players actually added to players_list
+
+
+  pthread_mutex_lock (&g_clients_mu);
+
+  // First pass: collect all online player IDs and count total
+  client_node_t *n = g_clients;
+  while (n)
+    {
+      if (n->ctx && n->ctx->player_id > 0)
+        {
+          total_online++;
+        }
+      n = n->next;
+    }
+
+  // Allocate memory for player IDs
+  if (total_online > 0)
+    {
+      online_player_ids = (int *) malloc (sizeof (int) * total_online);
+      if (!online_player_ids)
+        {
+          LOGE ("Failed to allocate memory for online player IDs.\n");
+          pthread_mutex_unlock (&g_clients_mu);
+          json_decref (players_list);
+          return NULL;
+        }
+
+      int i = 0;
+      n = g_clients;
+      while (n && i < total_online)
+        {
+          if (n->ctx && n->ctx->player_id > 0)
+            {
+              online_player_ids[i++] = n->ctx->player_id;
+            }
+          n = n->next;
+        }
+    }
+
+  pthread_mutex_unlock (&g_clients_mu);
+
+
+  // Apply offset and limit
+  int start_idx = offset;
+  if (start_idx < 0)
+    start_idx = 0;
+  if (start_idx >= total_online)
+    start_idx = total_online;
+
+  int end_idx = start_idx + limit;
+  if (end_idx > total_online)
+    end_idx = total_online;
+
+  // Second pass: fetch player details from DB and apply field selection
+  for (int i = start_idx; i < end_idx; i++)
+    {
+      int player_id = online_player_ids[i];
+      json_t *full_player_info = NULL;
+      int db_rc = db_player_info_json (player_id, &full_player_info);
+
+      if (db_rc != SQLITE_OK || !full_player_info)
+        {
+          LOGW ("Failed to retrieve player info for online player ID %d. Skipping. DB_RC: %d\n", player_id, db_rc);
+          continue;
+        }
+
+      json_t *player_obj_to_add = NULL;
+
+      // Apply field selection if requested
+      if (fields_array && json_array_size (fields_array) > 0)
+        {
+          player_obj_to_add = json_object ();
+          size_t index;
+          json_t *field_name_json;
+
+          json_array_foreach (fields_array, index, field_name_json)
+            {
+              const char *field_name = json_string_value (field_name_json);
+              if (field_name)
+                {
+                  json_t *value = json_object_get (full_player_info, field_name);
+                  if (value)
+                    {
+                      // Take ownership of the value
+                      json_object_set_new (player_obj_to_add, field_name, json_incref (value));
+                    }
+                }
+            }
+          json_decref (full_player_info); // Done with the full info
+        }
+      else
+        {
+          // No field selection, use full info
+          player_obj_to_add = full_player_info; // Transfer ownership
+        }
+
+      if (player_obj_to_add)
+        {
+          json_array_append_new (players_list, player_obj_to_add);
+          current_count++;
+        }
+    }
+
+  // Free allocated player IDs array
+  if (online_player_ids)
+    {
+      free (online_player_ids);
+    }
+
+  // Construct final response object
+  response_obj = json_object ();
+  json_object_set_new (response_obj, "total_online", json_integer (total_online));
+  json_object_set_new (response_obj, "returned_count", json_integer (current_count));
+  json_object_set_new (response_obj, "offset", json_integer (offset));
+  json_object_set_new (response_obj, "limit", json_integer (limit));
+  json_object_set_new (response_obj, "players", players_list); // Ownership transferred
+
+
+  return response_obj;
+}
+
 int
 cmd_player_my_info (client_ctx_t *ctx, json_t *root)
 {
@@ -823,17 +954,51 @@ cmd_player_my_info (client_ctx_t *ctx, json_t *root)
 int
 cmd_player_list_online (client_ctx_t *ctx, json_t *root)
 {
-  /* Until a global connection registry exists, return current player only. */
-  json_t *arr = json_array ();
-  if (ctx->player_id > 0)
+  if (ctx->player_id <= 0)
     {
-      json_array_append_new (arr,
-			     json_pack ("{s:i}", "player_id",
-					ctx->player_id));
+      send_enveloped_refused (ctx->fd, root, ERR_NOT_AUTHENTICATED, "Not authenticated", NULL);
+      return 0;
     }
-  json_t *data = json_pack ("{s:o}", "players", arr);
-  send_enveloped_ok (ctx->fd, root, "player.list_online", data);
-  json_decref (data);
+
+  json_t *data_payload = json_object_get (root, "data");
+  if (!json_is_object (data_payload))
+    {
+      data_payload = json_object (); // Default to empty object if data is missing or not an object
+    }
+
+  int offset = 0;
+  json_t *offset_json = json_object_get (data_payload, "offset");
+  if (json_is_integer (offset_json))
+    {
+      offset = (int) json_integer_value (offset_json);
+      if (offset < 0) offset = 0;
+    }
+
+  int limit = 100; // Default limit
+  json_t *limit_json = json_object_get (data_payload, "limit");
+  if (json_is_integer (limit_json))
+    {
+      limit = (int) json_integer_value (limit_json);
+      if (limit < 1) limit = 1;
+      if (limit > 1000) limit = 1000; // Enforce maximum limit
+    }
+
+  json_t *fields_array = json_object_get (data_payload, "fields");
+  if (!json_is_array (fields_array))
+    {
+      fields_array = NULL; // Ensure it's NULL if not a valid array
+    }
+
+  json_t *response_data = get_online_players_json_array (offset, limit, fields_array);
+
+  if (!response_data)
+    {
+      send_enveloped_error (ctx->fd, root, ERR_UNKNOWN, "Failed to retrieve online players list.");
+      return 0;
+    }
+
+  send_enveloped_ok (ctx->fd, root, "player.list_online.result", response_data);
+  json_decref (response_data);
   return 0;
 }
 

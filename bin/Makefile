@@ -130,7 +130,7 @@ am_bigbang_OBJECTS = ../src/database.$(OBJEXT) \
 	../src/server_bigbang.$(OBJEXT) \
 	../src/server_warp_post_processing.$(OBJEXT) \
 	../src/globals.$(OBJEXT) ../src/common.$(OBJEXT) \
-	../src/test_bang.$(OBJEXT) ../src/server_log.$(OBJEXT)
+	../src/server_log.$(OBJEXT) ../src/test_bang.$(OBJEXT)
 bigbang_OBJECTS = $(am_bigbang_OBJECTS)
 bigbang_DEPENDENCIES =
 am_server_OBJECTS = ../src/server_communication.$(OBJEXT) \
@@ -269,7 +269,7 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-ISODATE = 2025-11-24
+ISODATE = 2025-11-26
 LDFLAGS = 
 LIBOBJS = 
 LIBS = -lpthread -lm 
@@ -390,8 +390,8 @@ bigbang_SOURCES = \
 	../src/server_warp_post_processing.c \
 	../src/globals.c \
 	../src/common.c \
-	../src/test_bang.c \
-	../src/server_log.c
+	../src/server_log.c \
+	../src/test_bang.c
 
 all: all-am
 
@@ -488,9 +488,9 @@ clean-binPROGRAMS:
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/common.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/test_bang.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_log.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
+../src/test_bang.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 
 bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEPENDENCIES) 
