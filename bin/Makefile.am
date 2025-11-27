@@ -68,7 +68,8 @@ server_SOURCES = \
 	../src/sysop_interaction.c \
 	../src/s2s_keyring.c \
 	../src/server_corporation.c  \
-        ../src/server_stardock.c
+        ../src/server_stardock.c \
+        ../src/server_clusters.c
 
 
 bigbang_SOURCES = \

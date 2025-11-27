@@ -20,6 +20,7 @@
 #include "common.h"
 #include "server_universe.h"
 #include "db_player_settings.h"
+#include "server_clusters.h"
 #ifndef UNUSED
 #define UNUSED(x) (void)(x)
 #endif
@@ -943,6 +944,12 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       return -1;
     }
 
+  if (!cluster_can_trade(db, sector_id, ctx->player_id))
+    {
+      send_enveloped_refused (ctx->fd, root, 1403, "Port refuses to trade: You are banned in this cluster.", NULL);
+      return -1;
+    }
+
   jitems = json_object_get (data, "items");
   if (!json_is_array (jitems) || json_array_size (jitems) == 0)
     {
@@ -1479,6 +1486,12 @@ cmd_dock_status (client_ctx_t *ctx, json_t *root)
   // Resolve port ID in current sector
   resolved_port_id = db_get_port_id_by_sector (ctx->sector_id);
 
+  if (resolved_port_id > 0 && !cluster_can_trade(db, ctx->sector_id, ctx->player_id))
+    {
+      send_enveloped_refused (ctx->fd, root, 1403, "Port refuses docking: You are banned in this cluster.", NULL);
+      return 0;
+    }
+
   // Update ships.ported status
   {
     sqlite3_stmt *st = NULL;
@@ -1908,6 +1921,12 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       return -1;
     }
   LOGD ("cmd_trade_buy: Resolved sector_id=%d for player_id=%d", sector_id, ctx->player_id);	// ADDED
+
+  if (!cluster_can_trade(db, sector_id, ctx->player_id))
+    {
+      send_enveloped_refused (ctx->fd, root, 1403, "Port refuses to trade: You are banned in this cluster.", NULL);
+      return 0;
+    }
 
 
   json_t *jport = json_object_get (data, "port_id");

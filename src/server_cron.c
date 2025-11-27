@@ -21,6 +21,7 @@
 #include "server_config.h"
 #include "server_stardock.h"	// For Tavern-related declarations
 #include "server_corporation.h"	// For corporation cron jobs
+#include "server_clusters.h"    // Cluster Economy & Law
 
 #define INITIAL_QUEUE_CAPACITY 64
 #define FEDSPACE_SECTOR_START 1
@@ -866,6 +867,12 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
   if (populate_msl_if_empty (db) != 0)
     {
       LOGE ("fedspace_cleanup: MSL population failed. Aborting cleanup.");
+    }
+  
+  /* Initialize Clusters (idempotent) */
+  if (clusters_init(db) != 0) 
+    {
+      LOGE("fedspace_cleanup: Cluster init failed.");
     }
 
   const char *select_assets_sql =

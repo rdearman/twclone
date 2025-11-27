@@ -36,6 +36,7 @@
 #include "server_cron.h"
 #include "common.h"
 #include "server_config.h"
+#include "server_clusters.h"
 
 /* handlers (implemented below) */
 /* static int sweeper_engine_deadletter_retry (sqlite3 * db, int64_t now_ms); */
@@ -94,6 +95,7 @@ static const CronHandler CRON_REGISTRY[] = {
   {"loan_shark_interest_cron", h_loan_shark_interest_cron},
   {"daily_corp_tax", h_daily_corp_tax},
   {"dividend_payout", h_dividend_payout},
+  {"cluster_economy", cluster_economy_step},
   {"daily_stock_price_recalculation", h_daily_stock_price_recalculation},
   {"traps_process", h_traps_process},
   {"npc_step", h_npc_step},

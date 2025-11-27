@@ -988,6 +988,48 @@ const char *create_table_sql[] = {
     "    PRIMARY KEY (planet_id, commodity),"
     "    FOREIGN KEY (planet_id) REFERENCES planets(id)" ");",
 
+  /* --- Clusters --- */
+  "CREATE TABLE IF NOT EXISTS clusters ("
+    "    id           INTEGER PRIMARY KEY,"
+    "    name         TEXT NOT NULL,"
+    "    role         TEXT NOT NULL,"
+    "    kind         TEXT NOT NULL,"
+    "    center_sector INTEGER,"
+    "    law_severity INTEGER NOT NULL DEFAULT 1,"
+    "    alignment    INTEGER NOT NULL DEFAULT 0,"
+    "    created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP"
+    ");",
+
+  "CREATE TABLE IF NOT EXISTS cluster_sectors ("
+    "    cluster_id   INTEGER NOT NULL,"
+    "    sector_id    INTEGER NOT NULL,"
+    "    PRIMARY KEY (cluster_id, sector_id),"
+    "    FOREIGN KEY (cluster_id) REFERENCES clusters(id),"
+    "    FOREIGN KEY (sector_id)  REFERENCES sectors(id)"
+    ");",
+  "CREATE INDEX IF NOT EXISTS idx_cluster_sectors_sector ON cluster_sectors(sector_id);",
+
+  "CREATE TABLE IF NOT EXISTS cluster_commodity_index ("
+    "    cluster_id     INTEGER NOT NULL,"
+    "    commodity_code TEXT    NOT NULL,"
+    "    mid_price      INTEGER NOT NULL,"
+    "    last_updated   TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+    "    PRIMARY KEY (cluster_id, commodity_code),"
+    "    FOREIGN KEY (cluster_id) REFERENCES clusters(id)"
+    ");",
+
+  "CREATE TABLE IF NOT EXISTS cluster_player_status ("
+    "    cluster_id   INTEGER NOT NULL,"
+    "    player_id    INTEGER NOT NULL,"
+    "    suspicion    INTEGER NOT NULL DEFAULT 0,"
+    "    bust_count   INTEGER NOT NULL DEFAULT 0,"
+    "    last_bust_at TEXT,"
+    "    wanted_level INTEGER NOT NULL DEFAULT 0,"
+    "    banned       INTEGER NOT NULL DEFAULT 0,"
+    "    PRIMARY KEY (cluster_id, player_id),"
+    "    FOREIGN KEY (cluster_id) REFERENCES clusters(id),"
+    "    FOREIGN KEY (player_id)  REFERENCES players(id)"
+    ");",
 
 
   //////////////////////////////////////////////////////////////////////
