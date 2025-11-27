@@ -150,6 +150,8 @@ int db_commands_accept (const char *cmd_type, const char *idem_key,
 			json_t * payload, int *out_cmd_id, int *out_duplicate,
 			int *out_due_at);
 int db_player_name (int64_t player_id, char **out);
+int db_get_ship_name (sqlite3 *db, int ship_id, char **out_name);
+int db_get_port_name (sqlite3 *db, int port_id, char **out_name);
 int db_chain_traps_and_bridge (int fedspace_max /* typically 10 */ );
 int db_path_exists (sqlite3 * db, int from, int to);
 int db_rand_npc_shipname (char *out, size_t out_sz);

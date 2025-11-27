@@ -1440,6 +1440,120 @@ cleanup:
 }
 
 int
+cmd_dock_status (client_ctx_t *ctx, json_t *root)
+{
+  sqlite3 *db = NULL;
+  int rc = 0;
+  int player_ship_id = 0;
+  int resolved_port_id = 0;
+  char *player_name = NULL;
+  char *ship_name = NULL;
+  char *port_name = NULL;
+  json_t *payload = NULL;
+
+  if (!ctx || !root)
+    return -1;
+
+  db = db_get_handle ();
+  if (!db)
+    {
+      send_enveloped_error (ctx->fd, root, 500, "No database handle.");
+      return -1;
+    }
+
+  if (ctx->player_id <= 0)
+    {
+      send_enveloped_refused (ctx->fd, root, ERR_NOT_AUTHENTICATED,
+			      "Not authenticated", NULL);
+      return 0;
+    }
+
+  player_ship_id = h_get_active_ship_id (db, ctx->player_id);
+  if (player_ship_id <= 0)
+    {
+      send_enveloped_refused (ctx->fd, root, ERR_NO_ACTIVE_SHIP,
+			      "No active ship found.", NULL);
+      return 0;
+    }
+
+  // Resolve port ID in current sector
+  resolved_port_id = db_get_port_id_by_sector (ctx->sector_id);
+
+  // Update ships.ported status
+  {
+    sqlite3_stmt *st = NULL;
+    const char *sql_update_ported =
+      "UPDATE ships SET ported = ?1, onplanet = 0 WHERE id = ?2;"; // Assume docking means not on a planet
+    rc = sqlite3_prepare_v2 (db, sql_update_ported, -1, &st, NULL);
+    if (rc != SQLITE_OK)
+      {
+	LOGE ("cmd_dock_status: Failed to prepare update ported statement: %s",
+	      sqlite3_errmsg (db));
+	send_enveloped_error (ctx->fd, root, ERR_DB, "Database error.");
+	return -1;
+      }
+    sqlite3_bind_int (st, 1, resolved_port_id);
+    sqlite3_bind_int (st, 2, player_ship_id);
+    if (sqlite3_step (st) != SQLITE_DONE)
+      {
+	LOGE ("cmd_dock_status: Failed to update ships.ported: %s",
+	      sqlite3_errmsg (db));
+	sqlite3_finalize (st);
+	send_enveloped_error (ctx->fd, root, ERR_DB, "Database error.");
+	return -1;
+      }
+    sqlite3_finalize (st);
+  }
+
+  // Generate System Notice if successfully docked at a port
+  if (resolved_port_id > 0)
+    {
+      // Fetch ship name
+      db_get_ship_name (db, player_ship_id, &ship_name);
+      // Fetch port name
+      db_get_port_name (db, resolved_port_id, &port_name);
+      // Fetch player name
+      db_player_name (ctx->player_id, &player_name);
+
+      char notice_body[512];
+      snprintf (notice_body, sizeof (notice_body),
+		"Player %s (ID: %d)'s ship '%s' (ID: %d) docked at port '%s' (ID: %d) in Sector %d.",
+		player_name ? player_name : "Unknown", ctx->player_id,
+		ship_name ? ship_name : "Unknown", player_ship_id,
+		port_name ? port_name : "Unknown", resolved_port_id,
+		ctx->sector_id);
+
+      db_notice_create ("Docking Log", notice_body, "info",
+			time (NULL) + (86400 * 7));	// Expires in 1 week
+    }
+
+  payload = json_object ();
+  if (!payload)
+    {
+      send_enveloped_error (ctx->fd, root, ERR_SERVER_ERROR, "Out of memory.");
+      goto cleanup;
+    }
+
+  json_object_set_new (payload, "port_id", json_integer (resolved_port_id));
+  json_object_set_new (payload, "sector_id", json_integer (ctx->sector_id));
+  json_object_set_new (payload, "docked", json_boolean (resolved_port_id > 0));
+
+  send_enveloped_ok (ctx->fd, root, "dock.status_v1", payload);
+  payload = NULL; /* Ownership transferred to send_enveloped_ok */
+
+cleanup:
+  if (player_name)
+    free (player_name);
+  if (ship_name)
+    free (ship_name);
+  if (port_name)
+    free (port_name);
+  if (payload)
+    json_decref(payload); // In case of error before ownership transfer
+  return 0;
+}
+
+int
 h_calculate_port_buy_price (sqlite3 *db, int port_id, const char *commodity)
 {
   // LOGD("h_calculate_port_buy_price: Entering with port_id=%d, commodity=%s", port_id, commodity);

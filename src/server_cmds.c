@@ -641,8 +641,10 @@ int cmd_bounty_post_hitlist(client_ctx_t *ctx, json_t *root) {
 
     int sector = 0;
     db_player_get_sector(ctx->player_id, &sector);
-    if (sector != 0) {
-         send_enveloped_error(ctx->fd, root, 1403, "Must be in Orion Sector (0) to post a Hit List contract.");
+
+    int port_id = db_get_port_id_by_sector(sector);
+    if (port_id <= 0 || !is_black_market_port(db, port_id)) {
+         send_enveloped_error(ctx->fd, root, 1403, "Must be at a Black Market port to post a Hit List contract.");
          return 0;
     }
 

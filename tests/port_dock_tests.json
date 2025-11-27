@@ -1,0 +1,66 @@
+[
+  {
+    "name": "Setup: Player, Ship, and Port for Docking",
+    "description": "ASSUMES: A player with ID 999 ('DockTestPlayer'), an active ship with ID 999 ('DockTestShip', type_id 99 'TestShuttle'), and a port with ID 99 ('TestPort') in sector 1 are pre-existing in the database. The ship should initially be UNDOCKED. These are typically set up by a wider test harness via SQL queries directly into the DB: INSERT OR IGNORE INTO players (id, name, passwd, sector, ship, type, credits) VALUES (999, 'DockTestPlayer', 'test', 1, 999, 2, 10000); INSERT OR IGNORE INTO shiptypes (id, name, basecost, initialholds, maxfighters, maxshields) VALUES (99, 'TestShuttle', 1000, 10, 0, 100); INSERT OR IGNORE INTO ships (id, name, type_id, sector, ported, onplanet) VALUES (999, 'DockTestShip', 99, 1, 0, 0); INSERT OR IGNORE INTO ship_ownership (ship_id, player_id, role_id, is_primary) VALUES (999, 999, 1, 1); INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel) VALUES (99, 1, 'TestPort', 1, 10, 10);",
+    "steps": []
+  },
+  {
+    "name": "Test: Successful Docking",
+    "description": "Verify that a player can successfully dock their ship at a port and the state is updated. Checks for status OK and that ship is ported, not onplanet, and no longer in a sector.",
+    "actor_id": 999,
+    "command": {
+      "command": "port.docked",
+      "data": {}
+    },
+    "expected_outcome": {
+      "status": "ok",
+      "message_contains": "DockTestShip is now docked at TestPort."
+    },
+    "asserts": [
+      {"path": "data.player_info.ship_ported", "op": "==", "value": 99},
+      {"path": "data.player_info.ship_onplanet", "op": "==", "value": null},
+      {"path": "data.player_info.ship_sector", "op": "==", "value": null}
+    ],
+    "capture": {
+        "ship_id": "data.player_info.ship_id",
+        "ship_name": "data.player_info.ship_name",
+        "ported_id": "data.player_info.ship_ported"
+    }
+  },
+  {
+    "name": "Test: Docking when already Docked",
+    "description": "Attempt to dock when the ship is already docked; should still return ok and confirm status. ASSUMES: The ship is already in a docked state from previous tests or setup.",
+    "actor_id": 999,
+    "steps": [],
+    "command": {
+      "command": "port.docked",
+      "data": {}
+    },
+    "expected_outcome": {
+      "status": "ok",
+      "message_contains": "DockTestShip is already docked at TestPort."
+    },
+    "asserts": [
+      {"path": "data.player_info.ship_ported", "op": "==", "value": 99},
+      {"path": "data.player_info.ship_onplanet", "op": "==", "value": null},
+      {"path": "data.player_info.ship_sector", "op": "==", "value": null}
+    ]
+  },
+  {
+    "name": "Test: Failed Docking - Not at a port",
+    "description": "Move the player to a sector without a port and attempt to dock. Should fail. This step explicitly requires SQL setup to move the player and ship.",
+    "actor_id": 999,
+    "steps": [
+        "Run SQL: UPDATE players SET sector = 2, lastplanet = 0 WHERE id = 999;",
+        "Run SQL: UPDATE ships SET sector = 2, ported = 0, onplanet = 0 WHERE id = 999;"
+    ],
+    "command": {
+      "command": "port.docked",
+      "data": {}
+    },
+    "expected_outcome": {
+      "status": "error",
+      "code": "ERR_NOT_AT_PORT"
+    }
+  }
+]

@@ -137,6 +137,7 @@ static const cmd_desc_t k_supported_cmds_fallback[] = {
   {"stock.dividend.set", "Declare a dividend"},
   {"deploy.fighters.list", "List deployed fighters"},
   {"deploy.mines.list", "List deployed mines"},
+  {"dock.status", "Check/set player docked status at current port"},
   {"fighters.recall", "Recall deployed fighters"},
   {"fine.list", "List fines"},
   {"fine.pay", "Pay a fine"},
@@ -1139,7 +1140,11 @@ process_message (client_ctx_t *ctx, json_t *root)
     }
   else if (!strcasecmp (c, "trade.history"))
     {
-      rc = cmd_trade_history (ctx, root);	/* NIY stub */
+      rc = cmd_trade_history (ctx, root);
+    }
+  else if (!strcasecmp (c, "dock.status"))
+    {
+      rc = cmd_dock_status (ctx, root);
     }
 
 /* ---------- UNIVERSE / SECTOR / MOVE ---------- */

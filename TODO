@@ -94,94 +94,41 @@ Recently there was a problem where some functionality was lost, and some was "po
 │ ion.: No such file or directory  
 =============================
 
-
-   7. Issue 42: "move.autopilot.status + in-flight controls"
-       * Problem: The cmd_move_autopilot_status command handler in server_universe.c is currently a STUB_NIY (Not Implemented Yet).
-       * Impact: Players cannot query the status of their autopilot or issue in-flight controls.
-       * Recommendation: Implement the cmd_move_autopilot_status command.
-
-   8. Issue 14: "move.autopilot.status + in-flight controls" (Duplicate of Issue 42, likely linked to the same stub)
-       * Problem: The cmd_move_autopilot_status command handler in server_universe.c is currently a STUB_NIY.
-       * Impact: Players cannot query the status of their autopilot or issue in-flight controls.
-       * Recommendation: Implement the cmd_move_autopilot_status command.
-
-   9. Issue 12: "move.autopilot.start"
-       * Problem: The cmd_move_autopilot_start command handler in server_universe.c is currently a STUB_NIY.
-       * Recommendation: Implement the cmd_move_autopilot_start command.
-
-
-
-int
-db_fighters_at_sector_json (int sector_id, json_t **out_array)
-{
-  (void) sector_id,;
-  (void) out_array;
-  /*** for my reference */
-  /* typedef enum */
-  /* { */
-  /*   ASSET_MINE = 1, */
-  /*   ASSET_FIGHTER = 2, */
-  /*   ASSET_BEACON = 3, */
-  /*   ASSET_LIMPET_MINE = 4 */
-  /* } asset_type_t; */
-
-/*   sqlite> .schema sector_assets */
-/* CREATE TABLE sector_assets (
-   id INTEGER PRIMARY KEY,
-   sector INTEGER NOT NULL REFERENCES sectors(id),
-   player INTEGER REFERENCES players(id),
-   corporation INTEGER NOT NULL DEFAULT 0,
-   asset_type INTEGER NOT NULL,
-   offensive_setting INTEGER DEFAULT 0,
-   quantity INTEGER,
-   ttl INTEGER,
-   deployed_at INTEGER NOT NULL  ); */
-
-
-
-  // 1. SELECT quantity, player, corporation in sector_assets WHERE asset_type=ASSET_FIGHTER
-  // 2. if the corporation is not zero, then return the corporation as the owner not the player
-  // 3. if corporation=0 then return player as owner.
-  // 4. build the json with owner and quantity
-
-}
-
-int
-db_mines_at_sector_json (int sector_id, json_t **out_array)
-{
-  (void) sector_id,;
-  (void) out_array;
-  
-  /*** for my reference */
-  /* typedef enum */
-  /* { */
-  /*   ASSET_MINE = 1, */
-  /*   ASSET_FIGHTER = 2, */
-  /*   ASSET_BEACON = 3, */
-  /*   ASSET_LIMPET_MINE = 4 */
-  /* } asset_type_t; */
-
-/*   sqlite> .schema sector_assets */
-/* CREATE TABLE sector_assets (
-   id INTEGER PRIMARY KEY,
-   sector INTEGER NOT NULL REFERENCES sectors(id),
-   player INTEGER REFERENCES players(id),
-   corporation INTEGER NOT NULL DEFAULT 0,
-   asset_type INTEGER NOT NULL,
-   offensive_setting INTEGER DEFAULT 0,
-   quantity INTEGER,
-   ttl INTEGER,
-   deployed_at INTEGER NOT NULL  ); */
-
-  // 1. SELECT quantity, player, corporation in sector_assets WHERE asset_type in (ASSET_MINE, ASSET_LIMPET_MINE)
-  // 2. if the corporation is not zero, then return the corporation as the owner not the player
-  // 3. if corporation=0 then return player as owner.
-  // -- potential issue to be resolved later. The player may have a limpet mine attached to the ship. BUT
-  // -- because I haven't yet implemented limpet attachment, we'll just put a note in here for the moment
-  // -- and just return the number in the sector. 
-  // 4. build the json with owner and quantity and the two different types of mines. 
-
-}
+=============================
+|   7. Issue 42: "move.autopilot.status + in-flight controls"
+|       * Problem: The cmd_move_autopilot_status command handler in server_universe.c is currently a STUB_NIY (Not Implemented Yet).
+|       * Impact: Players cannot query the status of their autopilot or issue in-flight controls.
+|       * Recommendation: Implement the cmd_move_autopilot_status command.
+|
+|   8. Issue 14: "move.autopilot.status + in-flight controls" (Duplicate of Issue 42, likely linked to the same stub)
+|       * Problem: The cmd_move_autopilot_status command handler in server_universe.c is currently a STUB_NIY.
+|       * Impact: Players cannot query the status of their autopilot or issue in-flight controls.
+|       * Recommendation: Implement the cmd_move_autopilot_status command.
+|
+|   9. Issue 12: "move.autopilot.start"
+|       * Problem: The cmd_move_autopilot_start command handler in server_universe.c is currently a STUB_NIY.
+|       * Recommendation: Implement the cmd_move_autopilot_start command.
+|
+│ Investigation of Autopilot Commands (Issues 42, 14, 12):                                                                                                                                                                                   │
+│                                                                                                                                                                                                                                            │
+│ **1. `cmd_move_autopilot_status` (Issues 42 & 14):**                                                                                                                                                                                       │
+│ - **Status: NOT IMPLEMENTED.**                                                                                                                                                                                                             │
+│ - **Details:** The function `cmd_move_autopilot_status` in `src/server_universe.c` (line 434) is explicitly a `STUB_NIY`. This means players cannot query the status of their autopilot.                                                   │
+│                                                                                                                                                                                                                                            │
+│ **2. `cmd_move_autopilot_start` (Issue 12):**                                                                                                                                                                                              │
+│ - **Status: IMPLEMENTED (via delegation).**                                                                                                                                                                                                │
+│ - **Details:** The function `cmd_move_autopilot_start` in `src/server_universe.c` (line 429) is *not* a stub. It delegates its functionality by directly calling `cmd_move_pathfind`. This suggests that initiating                        │
+│  autopilot translates to performing a pathfinding operation.                                                                                                                                                                               │
+│                                                                                                                                                                                                                                            │
+│ **3. `cmd_move_autopilot_stop` (related but not explicitly requested for investigation):**                                                                                                                                                 │
+│ - **Status: NOT IMPLEMENTED.**                                                                                                                                                                                                             │
+│ - **Details:** The function `cmd_move_autopilot_stop` in `src/server_universe.c` (line 431) is also explicitly a `STUB_NIY`. This means players cannot stop their autopilot.                                                               │
+│                                                                                                                                                                                                                                            │
+│ **Summary:**                                                                                                                                                                                                                               │
+│ - The functionality to query autopilot status (`cmd_move_autopilot_status`) is still missing.                                                                                                                                              │
+│ - The functionality to start autopilot (`cmd_move_autopilot_start`) is implemented by delegating to pathfinding.                                                                                                                           │
+│ - The functionality to stop autopilot (`cmd_move_autopilot_stop`) is still missing.   
+=============================
 
 
 

@@ -5425,7 +5425,7 @@ db_player_info_json (int player_id, json_t **out)
       int p_id = sqlite3_column_int (st, 0);
       int p_number = sqlite3_column_int (st, 1);
       const char *p_name = (const char *) sqlite3_column_text (st, 2);
-      int p_ship = sqlite3_column_int (st, 3);	// Player's ship ID
+      //int p_ship = sqlite3_column_int (st, 3);	// Player's ship ID
       json_object_set_new (player_obj, "id", json_integer (p_id));
       json_object_set_new (player_obj, "number", json_integer (p_number));
       json_object_set_new (player_obj, "name", json_string (p_name));
@@ -8092,6 +8092,100 @@ db_player_name (int64_t player_id, char **out)
   return -1;			/* not found */
 }
 
+int db_get_ship_name(sqlite3 *db, int ship_id, char **out_name) {
+    if (!out_name) return -2;
+    *out_name = NULL;
+
+    pthread_mutex_lock(&db_mutex);
+    sqlite3 *dbh = db;
+    if (!dbh) {
+        pthread_mutex_unlock(&db_mutex);
+        return -3;
+    }
+
+    static const char *SQL = "SELECT COALESCE(name, '') FROM ships WHERE id = ?1 LIMIT 1";
+    sqlite3_stmt *st = NULL;
+    int rc = sqlite3_prepare_v2(dbh, SQL, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("db_get_ship_name: prepare failed: %s", sqlite3_errmsg(dbh));
+        pthread_mutex_unlock(&db_mutex);
+        return -4;
+    }
+
+    sqlite3_bind_int(st, 1, ship_id);
+    rc = sqlite3_step(st);
+
+    if (rc == SQLITE_ROW) {
+        const unsigned char *txt = sqlite3_column_text(st, 0);
+        if (txt && txt[0]) {
+            *out_name = strdup((const char*)txt);
+            if (!*out_name) {
+                rc = SQLITE_NOMEM;
+            } else {
+                rc = SQLITE_OK;
+            }
+        } else {
+            rc = SQLITE_NOTFOUND; // Ship found, but name is empty
+        }
+    } else if (rc == SQLITE_DONE) {
+        rc = SQLITE_NOTFOUND; // No ship with that ID
+    } else {
+        LOGE("db_get_ship_name: execution failed: %s", sqlite3_errmsg(dbh));
+        rc = SQLITE_ERROR;
+    }
+
+    sqlite3_finalize(st);
+    pthread_mutex_unlock(&db_mutex);
+    return rc;
+}
+
+int db_get_port_name(sqlite3 *db, int port_id, char **out_name) {
+    if (!out_name) return -2;
+    *out_name = NULL;
+
+    pthread_mutex_lock(&db_mutex);
+    sqlite3 *dbh = db;
+    if (!dbh) {
+        pthread_mutex_unlock(&db_mutex);
+        return -3;
+    }
+
+    static const char *SQL = "SELECT COALESCE(name, '') FROM ports WHERE id = ?1 LIMIT 1";
+    sqlite3_stmt *st = NULL;
+    int rc = sqlite3_prepare_v2(dbh, SQL, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("db_get_port_name: prepare failed: %s", sqlite3_errmsg(dbh));
+        pthread_mutex_unlock(&db_mutex);
+        return -4;
+    }
+
+    sqlite3_bind_int(st, 1, port_id);
+    rc = sqlite3_step(st);
+
+    if (rc == SQLITE_ROW) {
+        const unsigned char *txt = sqlite3_column_text(st, 0);
+        if (txt && txt[0]) {
+            *out_name = strdup((const char*)txt);
+            if (!*out_name) {
+                rc = SQLITE_NOMEM;
+            } else {
+                rc = SQLITE_OK;
+            }
+        } else {
+            rc = SQLITE_NOTFOUND; // Port found, but name is empty
+        }
+    } else if (rc == SQLITE_DONE) {
+        rc = SQLITE_NOTFOUND; // No port with that ID
+    } else {
+        LOGE("db_get_port_name: execution failed: %s", sqlite3_errmsg(dbh));
+        rc = SQLITE_ERROR;
+    }
+
+    sqlite3_finalize(st);
+    pthread_mutex_unlock(&db_mutex);
+    return rc;
+}
+
 // Note: This SQL omits the 'id' (autoincrement) and 'processed_at' (defaults to NULL)
 static const char *INSERT_ENGINE_EVENT_SQL =
   "INSERT INTO engine_events (ts, type, actor_owner_type, actor_owner_id, sector_id, payload) "
@@ -8780,7 +8874,7 @@ h_add_credits (sqlite3 *db, const char *owner_type, int owner_id,
   rc = h_get_account_id_unlocked (db, owner_type, owner_id, &account_id);
   if (rc == SQLITE_NOTFOUND)
     {
-      LOGI("h_add_credits: Account not found for %s:%d, creating new account.", owner_type, owner_id);
+      LOGD("h_add_credits: Account not found for %s:%d, creating new account.", owner_type, owner_id);
       rc =
 	h_create_bank_account_unlocked (db, owner_type, owner_id, 0,
 					&account_id);
@@ -8798,12 +8892,12 @@ h_add_credits (sqlite3 *db, const char *owner_type, int owner_id,
       return rc;
     }
 
-  LOGI("h_add_credits: Adding %lld credits to account %d (%s:%d)", amount, account_id, owner_type, owner_id);
+  LOGD("h_add_credits: Adding %lld credits to account %d (%s:%d)", amount, account_id, owner_type, owner_id);
   rc = h_add_credits_unlocked (db, account_id, amount, tx_type, tx_group_id, new_balance_out);
   if (rc != SQLITE_OK) {
       LOGE("h_add_credits: h_add_credits_unlocked failed for account %d, rc=%d", account_id, rc);
   } else {
-      LOGI("h_add_credits: Credits added successfully. New balance: %lld", new_balance_out ? *new_balance_out : -1);
+      LOGD("h_add_credits: Credits added successfully. New balance: %lld", new_balance_out ? *new_balance_out : -1);
   }
 
   pthread_mutex_unlock (&db_mutex);

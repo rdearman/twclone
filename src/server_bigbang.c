@@ -824,6 +824,13 @@ bigbang (void)
       return -1;
     }
 
+  fprintf (stderr, "BIGBANG: Creating planets...\n");
+  if (create_planets () != 0)
+    {
+      free (cfg);
+      return -1;
+    }
+
   fprintf (stderr, "BIGBANG: Creating Ferringhi home sector...\n");
   if (create_ferringhi (ferringhi) != 0)
     {
@@ -832,18 +839,6 @@ bigbang (void)
     }
 
   fprintf (stderr, "BIGBANG: Creating Imperial ship...\n");
-  if (create_imperial () != 0)
-    {
-      free (cfg);
-      return -1;
-    }
-
-  fprintf (stderr, "BIGBANG: Creating planets...\n");
-  if (create_planets () != 0)
-    {
-      free (cfg);
-      return -1;
-    }
 
   fprintf (stderr, "BIGBANG: Creating derelicts...\n");
   if (create_derelicts () != 0)
@@ -1097,6 +1092,75 @@ get_purchasable_shiptype_id_by_name (sqlite3 *db, const char *name)
 int
 create_planets (void)
 {
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return -1;
+
+  fprintf (stderr, "BIGBANG: Ensuring core planets (Terra, Ferringhi, Orion) exist...\n");
+
+  char *errmsg = NULL;
+  if (sqlite3_exec (db, "BEGIN TRANSACTION;", NULL, NULL, &errmsg) != SQLITE_OK)
+    {
+       fprintf(stderr, "create_planets: BEGIN failed: %s\n", errmsg ? errmsg : sqlite3_errmsg(db));
+       sqlite3_free(errmsg);
+       return -1;
+    }
+
+  sqlite3_stmt *ins_fixed = NULL;
+  /* Included owner_id and created_by which are NOT NULL */
+  const char *sql_fixed =
+    "INSERT OR IGNORE INTO planets (id, name, sector, type, created_at, ore_on_hand, organics_on_hand, equipment_on_hand, owner_id, created_by) VALUES (?, ?, ?, ?, strftime('%s','now'), 0, 0, 0, 0, 0)";
+
+  if (sqlite3_prepare_v2 (db, sql_fixed, -1, &ins_fixed, NULL) != SQLITE_OK)
+    {
+      fprintf (stderr, "create_planets prepare fixed failed: %s\n",
+	       sqlite3_errmsg (db));
+      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      return -1;
+    }
+
+  /* Terra (ID 1) - Sector 1, Type 1 (Class M) */
+  sqlite3_bind_int (ins_fixed, 1, 1);
+  sqlite3_bind_text (ins_fixed, 2, "Terra", -1, SQLITE_STATIC);
+  sqlite3_bind_int (ins_fixed, 3, 1);
+  sqlite3_bind_int (ins_fixed, 4, 1);
+  if (sqlite3_step (ins_fixed) != SQLITE_DONE) {
+      fprintf(stderr, "create_planets: Failed to insert Terra: %s\n", sqlite3_errmsg(db));
+  }
+  sqlite3_reset (ins_fixed);
+
+  /* Ferringhi Homeworld (ID 2) - Sector 0 (Placeholder), Type 3 */
+  sqlite3_bind_int (ins_fixed, 1, 2);
+  sqlite3_bind_text (ins_fixed, 2, "Ferringhi Homeworld", -1, SQLITE_STATIC);
+  sqlite3_bind_int (ins_fixed, 3, 0);
+  sqlite3_bind_int (ins_fixed, 4, 3);
+  if (sqlite3_step (ins_fixed) != SQLITE_DONE) {
+      fprintf(stderr, "create_planets: Failed to insert Ferringhi: %s\n", sqlite3_errmsg(db));
+  }
+  sqlite3_reset (ins_fixed);
+
+  /* Orion Hideout (ID 3) - Sector 0 (Placeholder), Type 5 */
+  sqlite3_bind_int (ins_fixed, 1, 3);
+  sqlite3_bind_text (ins_fixed, 2, "Orion Hideout", -1, SQLITE_STATIC);
+  sqlite3_bind_int (ins_fixed, 3, 0);
+  sqlite3_bind_int (ins_fixed, 4, 5);
+  if (sqlite3_step (ins_fixed) != SQLITE_DONE) {
+      fprintf(stderr, "create_planets: Failed to insert Orion: %s\n", sqlite3_errmsg(db));
+  }
+  sqlite3_finalize (ins_fixed);
+
+  /* Ensure they have bank accounts. Use 1 credit to pass validation. */
+  h_add_credits (db, "npc_planet", 1, 1, "DEPOSIT", NULL, NULL);
+  h_add_credits (db, "npc_planet", 2, 1, "DEPOSIT", NULL, NULL);
+  h_add_credits (db, "npc_planet", 3, 1, "DEPOSIT", NULL, NULL);
+
+  if (sqlite3_exec (db, "COMMIT;", NULL, NULL, &errmsg) != SQLITE_OK)
+    {
+       fprintf(stderr, "create_planets: COMMIT failed: %s\n", errmsg ? errmsg : sqlite3_errmsg(db));
+       sqlite3_free(errmsg);
+       return -1;
+    }
+
   return 0;
 }
 
