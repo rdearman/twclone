@@ -663,7 +663,7 @@ process_message (client_ctx_t *ctx, json_t *root)
       if (json_is_string (jtok))
 	session_token = json_string_value (jtok);
     }
-  if (ctx->player_id == 0 && session_token)
+  if (session_token)
     {
       int pid = 0;
       long long exp = 0;
@@ -780,6 +780,14 @@ process_message (client_ctx_t *ctx, json_t *root)
   else if (streq (cmd, "sys.raw_sql_exec"))
     {
       rc = cmd_sys_raw_sql_exec (ctx, root);
+    }
+  else if (streq (cmd, "sys.cluster.init")) // NEW
+    {
+      rc = cmd_sys_cluster_init (ctx, root);
+    }
+  else if (streq (cmd, "sys.cluster.seed_illegal_goods")) // NEW
+    {
+      rc = cmd_sys_cluster_seed_illegal_goods (ctx, root);
     }
 
 
@@ -1086,10 +1094,7 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       rc = cmd_ship_transfer_cargo (ctx, root);	/* NIY stub */
     }
-  else if (!strcasecmp (c, "ship.jettison"))
-    {
-      rc = cmd_ship_jettison (ctx, root);	/* NIY stub */
-    }
+
   else if (!strcasecmp (c, "ship.upgrade"))
     {
       rc = cmd_ship_upgrade (ctx, root);	/* NIY stub */
@@ -1124,7 +1129,7 @@ process_message (client_ctx_t *ctx, json_t *root)
     }
   else if (!strcasecmp (c, "trade.jettison"))
     {
-      rc = cmd_ship_jettison (ctx, root);	/* NIY stub */
+      rc = cmd_trade_jettison (ctx, root);	/* NIY stub */
     }
   else if (!strcasecmp (c, "trade.offer"))
     {

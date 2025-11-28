@@ -154,7 +154,8 @@ am_server_OBJECTS = ../src/server_communication.$(OBJEXT) \
 	../src/sysop_interaction.$(OBJEXT) \
 	../src/s2s_keyring.$(OBJEXT) \
 	../src/server_corporation.$(OBJEXT) \
-	../src/server_stardock.$(OBJEXT)
+	../src/server_stardock.$(OBJEXT) \
+	../src/server_clusters.$(OBJEXT)
 server_OBJECTS = $(am_server_OBJECTS)
 server_DEPENDENCIES =
 AM_V_P = $(am__v_P_@AM_V@)
@@ -183,6 +184,7 @@ am__depfiles_remade = ../src/$(DEPDIR)/common.Po \
 	../src/$(DEPDIR)/server_bigbang.Po \
 	../src/$(DEPDIR)/server_bulk.Po \
 	../src/$(DEPDIR)/server_citadel.Po \
+	../src/$(DEPDIR)/server_clusters.Po \
 	../src/$(DEPDIR)/server_cmds.Po \
 	../src/$(DEPDIR)/server_combat.Po \
 	../src/$(DEPDIR)/server_communication.Po \
@@ -380,7 +382,8 @@ server_SOURCES = \
 	../src/sysop_interaction.c \
 	../src/s2s_keyring.c \
 	../src/server_corporation.c  \
-        ../src/server_stardock.c
+        ../src/server_stardock.c \
+        ../src/server_clusters.c
 
 bigbang_SOURCES = \
 	../src/database.c \
@@ -548,6 +551,8 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_stardock.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_clusters.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
 
 server$(EXEEXT): $(server_OBJECTS) $(server_DEPENDENCIES) $(EXTRA_server_DEPENDENCIES) 
 	@rm -f server$(EXEEXT)
@@ -573,6 +578,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_bigbang.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_bulk.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_citadel.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_clusters.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_cmds.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_combat.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_communication.Po@am__quote@ # am--include-marker
@@ -759,6 +765,7 @@ distclean: distclean-am
 	-rm -f ../src/$(DEPDIR)/server_bigbang.Po
 	-rm -f ../src/$(DEPDIR)/server_bulk.Po
 	-rm -f ../src/$(DEPDIR)/server_citadel.Po
+	-rm -f ../src/$(DEPDIR)/server_clusters.Po
 	-rm -f ../src/$(DEPDIR)/server_cmds.Po
 	-rm -f ../src/$(DEPDIR)/server_combat.Po
 	-rm -f ../src/$(DEPDIR)/server_communication.Po
@@ -839,6 +846,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/$(DEPDIR)/server_bigbang.Po
 	-rm -f ../src/$(DEPDIR)/server_bulk.Po
 	-rm -f ../src/$(DEPDIR)/server_citadel.Po
+	-rm -f ../src/$(DEPDIR)/server_clusters.Po
 	-rm -f ../src/$(DEPDIR)/server_cmds.Po
 	-rm -f ../src/$(DEPDIR)/server_combat.Po
 	-rm -f ../src/$(DEPDIR)/server_communication.Po

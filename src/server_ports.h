@@ -12,6 +12,18 @@ extern "C"
 {
 #endif
 
+
+typedef struct TradeLine
+{
+  char *commodity;
+  int amount;
+  int unit_price;
+  long long line_cost;
+} TradeLine;
+
+
+
+  
 /* Port info / status */
   int cmd_trade_port_info (client_ctx_t * ctx, json_t * root);
 
@@ -35,13 +47,20 @@ extern "C"
 
   int h_get_ship_cargo_and_holds (sqlite3 * db, int ship_id, int *ore,
 				  int *organics, int *equipment, int *holds,
-				  int *colonists);
+				  int *colonists, int *slaves, int *weapons,
+				  int *drugs);
+
   int h_update_port_stock (sqlite3 * db, int port_id, const char *commodity,
 			   int delta, int *new_qty_out);
   int h_calculate_port_buy_price (sqlite3 * db, int port_id,
 				  const char *commodity);
   int h_calculate_port_sell_price (sqlite3 * db, int port_id,
 				   const char *commodity);
+
+// Forward declaration for local helper
+// void free_trade_lines (struct TradeLine *lines, size_t n);
+  void free_trade_lines (TradeLine *lines, size_t n);
+
 
 #ifdef __cplusplus
 }

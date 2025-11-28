@@ -197,7 +197,12 @@ clusters_init(sqlite3 *db)
 
     if (ori_sector > 0) {
         int c_id = _create_cluster(db, "Orion Syndicate Space", "ORION", "FACTION", ori_sector, -100, 1);
-        _bfs_expand_cluster(db, c_id, ori_sector, 8);
+        if (c_id != -1) {
+            int added_sectors = _bfs_expand_cluster(db, c_id, ori_sector, 8);
+            LOGI("clusters_init: Created Orion cluster (ID: %d, Sector: %d) with %d sectors.", c_id, ori_sector, added_sectors);
+        } else {
+            LOGE("clusters_init: Failed to create Orion cluster.");
+        }
     }
 
     // 5. Random Clusters
@@ -251,6 +256,170 @@ clusters_init(sqlite3 *db)
     sqlite3_finalize(pick_stmt);
 
     LOGI("Cluster generation complete. Total clustered sectors: %d", current_clustered);
+    return 0;
+}
+
+/* New: Illegal Goods Seeding */
+int
+clusters_seed_illegal_goods(sqlite3 *db)
+{
+    if (!db) {
+        LOGE("clusters_seed_illegal_goods: Database handle is NULL.");
+        return -1;
+    }
+
+    LOGI("Seeding illegal goods in ports...");
+    sqlite3_stmt *port_stmt = NULL;
+    sqlite3_stmt *cluster_align_stmt = NULL;
+
+    // Prepare statement to select all ports
+    if (sqlite3_prepare_v2(db, "SELECT id, sector FROM ports", -1, &port_stmt, NULL) != SQLITE_OK) {
+        LOGE("Failed to prepare port select statement: %s", sqlite3_errmsg(db));
+        return -1;
+    }
+
+    // Prepare statement to get cluster alignment for a sector
+    const char *sql_cluster_align = 
+        "SELECT c.alignment FROM clusters c JOIN cluster_sectors cs ON cs.cluster_id = c.id WHERE cs.sector_id = ? LIMIT 1";
+    if (sqlite3_prepare_v2(db, sql_cluster_align, -1, &cluster_align_stmt, NULL) != SQLITE_OK) {
+        LOGE("Failed to prepare cluster alignment statement: %s", sqlite3_errmsg(db));
+        sqlite3_finalize(port_stmt);
+        return -1;
+    }
+
+    // Iterate through all ports
+    while (sqlite3_step(port_stmt) == SQLITE_ROW) {
+        int port_id = sqlite3_column_int(port_stmt, 0);
+        int sector_id = sqlite3_column_int(port_stmt, 1);
+        int cluster_alignment = 0; // Default to neutral
+
+        LOGI("Processing port: %d (sector: %d)", port_id, sector_id);
+
+
+        // Get cluster alignment for the port's sector
+        sqlite3_reset(cluster_align_stmt);
+        sqlite3_bind_int(cluster_align_stmt, 1, sector_id);
+        if (sqlite3_step(cluster_align_stmt) == SQLITE_ROW) {
+            cluster_alignment = sqlite3_column_int(cluster_align_stmt, 0);
+        }
+
+        int slaves_qty = 0;
+        int weapons_qty = 0;
+        int drugs_qty = 0;
+
+        // Check if cluster is evil
+        if (cluster_alignment <= CLUSTER_EVIL_MAX_ALIGN) {
+            // Scale by magnitude of evilness for more stock in deeper evil
+            int severity_factor = abs(cluster_alignment) / 25; // e.g., -100/25=4, -25/25=1
+            if (severity_factor < 1) severity_factor = 1;
+
+            slaves_qty = (rand() % 10 + 1) * severity_factor; // 1-10 * factor
+            weapons_qty = (rand() % 15 + 1) * severity_factor; // 1-15 * factor
+            drugs_qty = (rand() % 20 + 1) * severity_factor;   // 1-20 * factor
+        }
+
+        // Update port's illegal goods stocks
+        const char *sql_update_port = 
+            "UPDATE ports SET slaves_on_hand = ?, weapons_on_hand = ?, drugs_on_hand = ? WHERE id = ?";
+        sqlite3_stmt *update_stmt = NULL;
+        if (sqlite3_prepare_v2(db, sql_update_port, -1, &update_stmt, NULL) == SQLITE_OK) {
+            sqlite3_bind_int(update_stmt, 1, slaves_qty);
+            sqlite3_bind_int(update_stmt, 2, weapons_qty);
+            sqlite3_bind_int(update_stmt, 3, drugs_qty);
+            sqlite3_bind_int(update_stmt, 4, port_id);
+            LOGI("Seeding illegal goods for port %d (sector %d, alignment %d): SLV=%d, WPN=%d, DRG=%d", port_id, sector_id, cluster_alignment, slaves_qty, weapons_qty, drugs_qty);
+            int update_rc = sqlite3_step(update_stmt);
+            LOGI("Update port illegal goods RC: %d", update_rc);
+            sqlite3_finalize(update_stmt);
+        } else {
+            LOGE("Failed to prepare update port illegal goods statement: %s", sqlite3_errmsg(db));
+        }
+    }
+
+    sqlite3_finalize(port_stmt);
+    sqlite3_finalize(cluster_align_stmt);
+    return 0;
+}
+
+int
+cluster_black_market_step(sqlite3 *db, int64_t now_s)
+{
+    (void)now_s;
+    LOGI("Running Cluster Black Market Step...");
+
+    const char *illegal_commodities[] = {"SLV", "WPN", "DRG"};
+
+    // Iterate evil clusters only
+    sqlite3_stmt *cluster_stmt;
+    const char *sql_evil_clusters = "SELECT id, name FROM clusters WHERE alignment <= ?";
+    if (sqlite3_prepare_v2(db, sql_evil_clusters, -1, &cluster_stmt, NULL) != SQLITE_OK) {
+        LOGE("Failed to prepare evil clusters select statement: %s", sqlite3_errmsg(db));
+        return -1;
+    }
+    sqlite3_bind_int(cluster_stmt, 1, CLUSTER_EVIL_MAX_ALIGN);
+
+    while (sqlite3_step(cluster_stmt) == SQLITE_ROW) {
+        int cluster_id = sqlite3_column_int(cluster_stmt, 0);
+        
+        for (int i = 0; i < 3; i++) {
+            const char *comm = illegal_commodities[i];
+            
+            // Calculate Avg Price for illegal goods (same logic as legal goods for now)
+            double avg_price = 0;
+            sqlite3_stmt *avg_stmt;
+            const char *sql_avg_illegal = 
+                "SELECT AVG(price) FROM port_trade pt "
+                "JOIN ports p ON p.id = pt.port_id "
+                "JOIN cluster_sectors cs ON cs.sector_id = p.sector "
+                "WHERE cs.cluster_id = ? AND pt.commodity = ?";
+
+            if (sqlite3_prepare_v2(db, sql_avg_illegal, -1, &avg_stmt, NULL) == SQLITE_OK) {
+                sqlite3_bind_int(avg_stmt, 1, cluster_id);
+                sqlite3_bind_text(avg_stmt, 2, comm, -1, SQLITE_STATIC);
+                if (sqlite3_step(avg_stmt) == SQLITE_ROW) {
+                    avg_price = sqlite3_column_double(avg_stmt, 0);
+                }
+                sqlite3_finalize(avg_stmt);
+            }
+
+            if (avg_price < 1.0) continue;
+
+            int mid_price = (int)avg_price;
+
+            // Update Index (similar to legal goods)
+            sqlite3_stmt *idx_stmt;
+            const char *sql_idx_illegal = "INSERT INTO cluster_commodity_index (cluster_id, commodity_code, mid_price, last_updated) VALUES (?, ?, ?, CURRENT_TIMESTAMP) "
+                                  "ON CONFLICT(cluster_id, commodity_code) DO UPDATE SET mid_price=excluded.mid_price, last_updated=CURRENT_TIMESTAMP";
+            if (sqlite3_prepare_v2(db, sql_idx_illegal, -1, &idx_stmt, NULL) == SQLITE_OK) {
+                sqlite3_bind_int(idx_stmt, 1, cluster_id);
+                sqlite3_bind_text(idx_stmt, 2, comm, -1, SQLITE_STATIC);
+                sqlite3_bind_int(idx_stmt, 3, mid_price);
+                sqlite3_step(idx_stmt);
+                sqlite3_finalize(idx_stmt);
+            }
+
+            // Drift Ports (similar to legal goods)
+            sqlite3_stmt *drift_stmt;
+            const char *sql_drift_illegal = 
+                "UPDATE port_trade "
+                "SET price = CAST(price + ? * (? - price) AS INTEGER) "
+                "WHERE commodity = ? AND port_id IN ("
+                "  SELECT p.id FROM ports p "
+                "  JOIN cluster_sectors cs ON cs.sector_id = p.sector "
+                "  WHERE cs.cluster_id = ?"
+                ")";
+            
+            if (sqlite3_prepare_v2(db, sql_drift_illegal, -1, &drift_stmt, NULL) == SQLITE_OK) {
+                sqlite3_bind_double(drift_stmt, 1, CLUSTER_PRICE_ALPHA);
+                sqlite3_bind_int(drift_stmt, 2, mid_price);
+                sqlite3_bind_text(drift_stmt, 3, comm, -1, SQLITE_STATIC);
+                sqlite3_bind_int(drift_stmt, 4, cluster_id);
+                sqlite3_step(drift_stmt);
+                sqlite3_finalize(drift_stmt);
+            }
+        }
+    }
+    sqlite3_finalize(cluster_stmt);
     return 0;
 }
 

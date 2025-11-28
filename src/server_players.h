@@ -54,6 +54,13 @@ extern "C"
 				  long long *new_balance_out);
   int h_add_player_petty_cash (sqlite3 * db, int player_id, long long amount,
 			       long long *new_balance_out);
+  // Unlocked versions for use within existing transactions
+  int h_deduct_player_petty_cash_unlocked (sqlite3 * db, int player_id,
+				           long long amount,
+				           long long *new_balance_out);
+  int h_add_player_petty_cash_unlocked (sqlite3 * db, int player_id,
+				        long long amount,
+				        long long *new_balance_out);
   int h_get_player_petty_cash (sqlite3 * db, int player_id,
 			       long long *credits_out);
   int cmd_get_news (client_ctx_t * ctx, json_t * root);
@@ -81,6 +88,13 @@ extern "C"
 
   // New function for Big Sleep respawn
   int spawn_starter_ship (sqlite3 * db, int player_id, int sector_id);
+
+/* Player Types */
+#define PLAYER_TYPE_NPC     1
+#define PLAYER_TYPE_HUMAN   2
+#define PLAYER_TYPE_SYSOP   3
+
+int auth_player_get_type(int player_id);
 
 #ifdef __cplusplus
 }

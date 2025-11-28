@@ -462,18 +462,40 @@ send_enveloped_ok (int fd, json_t *req, const char *type, json_t *data)
       sanitize_json_strings (resp);
     }
 
-  // write one line
+  /* // write one line */
+  /* char *s = json_dumps (resp, JSON_COMPACT); */
+  /* // int toss; */
+  /* if (s) */
+  /*   { */
+  /*     size_t len = strlen (s); */
+  /*     if (len) */
+  /* 	toss = write (fd, s, len); */
+  /*     toss = write (fd, "\n", 1); */
+  /*     free (s); */
+  /*   } */
+  /* json_decref (resp); */
+
+// write one line
   char *s = json_dumps (resp, JSON_COMPACT);
-  // int toss;
+  
   if (s)
     {
       size_t len = strlen (s);
       if (len)
-	toss = write (fd, s, len);
-      toss = write (fd, "\n", 1);
+        {
+          // REPLACE write() with send() + MSG_NOSIGNAL
+          // toss = write (fd, s, len);
+          send (fd, s, len, MSG_NOSIGNAL); 
+        }
+      
+      // REPLACE write() with send() + MSG_NOSIGNAL
+      // toss = write (fd, "\n", 1);
+      send (fd, "\n", 1, MSG_NOSIGNAL);
+
       free (s);
     }
   json_decref (resp);
+
 }
 
 /* -------------------- ERROR -------------------- */

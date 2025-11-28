@@ -1,7 +1,7 @@
 #include <string.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <stdlib.h> // For malloc, free, calloc, realloc
+#include <string.h> // For memcpy, strlen, strncpy, strncat
 #include <sqlite3.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -9,6 +9,8 @@
 #include <jansson.h>
 #include <stdbool.h>
 #include <pthread.h>
+#include <stddef.h> // For size_t
+
 // local includes
 #include  "common.h"
 #include "server_config.h"
@@ -506,15 +508,29 @@ const char *create_table_sql[] = {
 
   " CREATE TABLE IF NOT EXISTS planettypes (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE, typeDescription TEXT, typeName TEXT, citadelUpgradeTime_lvl1 INTEGER, citadelUpgradeTime_lvl2 INTEGER, citadelUpgradeTime_lvl3 INTEGER, citadelUpgradeTime_lvl4 INTEGER, citadelUpgradeTime_lvl5 INTEGER, citadelUpgradeTime_lvl6 INTEGER, citadelUpgradeOre_lvl1 INTEGER, citadelUpgradeOre_lvl2 INTEGER, citadelUpgradeOre_lvl3 INTEGER, citadelUpgradeOre_lvl4 INTEGER, citadelUpgradeOre_lvl5 INTEGER, citadelUpgradeOre_lvl6 INTEGER, citadelUpgradeOrganics_lvl1 INTEGER, citadelUpgradeOrganics_lvl2 INTEGER, citadelUpgradeOrganics_lvl3 INTEGER, citadelUpgradeOrganics_lvl4 INTEGER, citadelUpgradeOrganics_lvl5 INTEGER, citadelUpgradeOrganics_lvl6 INTEGER, citadelUpgradeEquipment_lvl1 INTEGER, citadelUpgradeEquipment_lvl2 INTEGER, citadelUpgradeEquipment_lvl3 INTEGER, citadelUpgradeEquipment_lvl4 INTEGER, citadelUpgradeEquipment_lvl5 INTEGER, citadelUpgradeEquipment_lvl6 INTEGER, citadelUpgradeColonist_lvl1 INTEGER, citadelUpgradeColonist_lvl2 INTEGER, citadelUpgradeColonist_lvl3 INTEGER, citadelUpgradeColonist_lvl4 INTEGER, citadelUpgradeColonist_lvl5 INTEGER, citadelUpgradeColonist_lvl6 INTEGER, maxColonist_ore INTEGER, maxColonist_organics INTEGER, maxColonist_equipment INTEGER, fighters INTEGER, fuelProduction INTEGER, organicsProduction INTEGER, equipmentProduction INTEGER, fighterProduction INTEGER, maxore INTEGER, maxorganics INTEGER, maxequipment INTEGER, maxfighters INTEGER, breeding REAL, genesis_weight INTEGER NOT NULL DEFAULT 10); ",
 
-  " CREATE TABLE IF NOT EXISTS ports ( " " id INTEGER PRIMARY KEY AUTOINCREMENT, " " number INTEGER, " " name TEXT NOT NULL, " " sector INTEGER NOT NULL, "	/* FK to sectors.id */
-    " size INTEGER, "
-    " techlevel INTEGER, "
-    " ore_on_hand INTEGER NOT NULL DEFAULT 0, "
-    " organics_on_hand INTEGER NOT NULL DEFAULT 0, "
-    " equipment_on_hand INTEGER NOT NULL DEFAULT 0, "
-    " petty_cash INTEGER NOT NULL DEFAULT 0, "
-    " invisible INTEGER DEFAULT 0, "
-    " type INTEGER DEFAULT 1, "
+    " CREATE TABLE IF NOT EXISTS ports ( " " id INTEGER PRIMARY KEY AUTOINCREMENT,  " " number INTEGER, " " name TEXT NOT NULL, " " sector INTEGER NOT NULL, "	/* FK to sectors.id */
+
+      " size INTEGER, "
+
+      " techlevel INTEGER, "
+
+      " ore_on_hand INTEGER NOT NULL DEFAULT 0, "
+
+      " organics_on_hand INTEGER NOT NULL DEFAULT 0, "
+
+      " equipment_on_hand INTEGER NOT NULL DEFAULT 0, "
+
+      " slaves_on_hand INTEGER NOT NULL DEFAULT 0, "
+
+      " weapons_on_hand INTEGER NOT NULL DEFAULT 0, "
+
+      " drugs_on_hand INTEGER NOT NULL DEFAULT 0, "
+
+      " petty_cash INTEGER NOT NULL DEFAULT 0, "
+
+      " invisible INTEGER DEFAULT 0, "
+
+      " type INTEGER DEFAULT 1, "
     " FOREIGN KEY (sector) REFERENCES sectors(id)); ",
 
 
@@ -607,6 +623,9 @@ const char *create_table_sql[] = {
     "   equipment INTEGER,  "
     "   organics INTEGER,  "
     "   ore INTEGER,  "
+    "   slaves INTEGER DEFAULT 0,  "
+    "   weapons INTEGER DEFAULT 0,  "
+    "   drugs INTEGER DEFAULT 0,  "
     "   flags INTEGER,  "
     "   cloaking_devices INTEGER,  "
     "   has_transwarp INTEGER NOT NULL DEFAULT 0, "
@@ -3306,6 +3325,8 @@ db_insert_defaults_unlocked (void)
   sqlite3 *db = db_get_handle ();
   if (!db)
     return -1;
+  int rc; // Declared rc here
+
 
   LOGI("db_insert_defaults_unlocked: Starting default data insertion.");
 
@@ -3320,6 +3341,27 @@ db_insert_defaults_unlocked (void)
 	  goto cleanup;
 	}
     }
+  
+  // Ensure bank accounts for system, players, and ports
+  const char *insert_default_bank_account_sql[] = {
+    "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) VALUES ('system', 0, 'CRD', 1000000000);", // System bank
+    "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) SELECT 'player', id, 'CRD', 1000 FROM players WHERE name = 'System';",
+    "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) SELECT 'player', id, 'CRD', 1000 FROM players WHERE name = 'Federation Administrator';",
+    "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) SELECT 'player', id, 'CRD', 1000 FROM players WHERE name = 'newguy';",
+    "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) SELECT 'player', id, 'CRD', 1000 FROM players WHERE name = 'ai_qa_bot';",
+    // Player accounts for goodguy, badguy, admin will be created on auth.register if not present
+    "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) SELECT 'port', id, 'CRD', 100000 FROM ports WHERE name = 'Earth Port';"
+  };
+
+  for (size_t i = 0; i < sizeof(insert_default_bank_account_sql) / sizeof(insert_default_bank_account_sql[0]); i++) {
+    rc = sqlite3_exec(db, insert_default_bank_account_sql[i], NULL, NULL, &errmsg);
+    if (rc != SQLITE_OK) {
+        LOGE("db_insert_defaults_unlocked: SQL error inserting default bank account: %s", errmsg);
+        sqlite3_free(errmsg);
+        return -1;
+    }
+  }
+
   ret_code = 0;
   LOGI("db_insert_defaults_unlocked: Default data insertion completed successfully.");
 cleanup:
@@ -8603,38 +8645,38 @@ int
 h_get_account_id_unlocked (sqlite3 *db, const char *owner_type, int owner_id,
 			   int *account_id_out)
 {
-  sqlite3_stmt *stmt = NULL;
-  int rc = SQLITE_ERROR;
-  const char *sql =
-    "SELECT id FROM bank_accounts WHERE owner_type = ?1 AND owner_id = ?2;";
+  sqlite3_stmt *st = NULL;
+  int rc;
+  int account_id = -1;
 
-  rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
+  // Select the account ID
+  const char *SQL_GET_ID =
+    "SELECT id FROM bank_accounts WHERE owner_type = ?1 AND owner_id = ?2 AND currency = 'CRD'";
+  rc = sqlite3_prepare_v2 (db, SQL_GET_ID, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
       LOGE ("h_get_account_id_unlocked: Failed to prepare statement: %s",
 	    sqlite3_errmsg (db));
       return rc;
     }
-  sqlite3_bind_text (stmt, 1, owner_type, -1, SQLITE_STATIC);
-  sqlite3_bind_int (stmt, 2, owner_id);
-  rc = sqlite3_step (stmt);
-  if (rc == SQLITE_ROW)
+  sqlite3_bind_text (st, 1, owner_type, -1, SQLITE_STATIC);
+  sqlite3_bind_int (st, 2, owner_id);
+
+  if (sqlite3_step (st) == SQLITE_ROW)
     {
-      *account_id_out = sqlite3_column_int (stmt, 0);
+      account_id = sqlite3_column_int (st, 0);
       rc = SQLITE_OK;
-    }
-  else if (rc == SQLITE_DONE)
-    {
-      rc = SQLITE_NOTFOUND;
     }
   else
     {
-      LOGE ("h_get_account_id_unlocked: Failed to execute statement: %s",
-	    sqlite3_errmsg (db));
+      rc = SQLITE_NOTFOUND;
     }
-  sqlite3_finalize (stmt);
+
+  sqlite3_finalize (st);
+  *account_id_out = account_id;
   return rc;
 }
+
 
 // Helper to create a bank account and return its ID
 int
@@ -9171,7 +9213,10 @@ h_update_port_stock (sqlite3 *db, int port_id, const char *commodity_code,
     "UPDATE ports SET "
     "ore_on_hand = CASE WHEN ?3 = 'ore' THEN ore_on_hand + ?1 ELSE ore_on_hand END, "
     "organics_on_hand = CASE WHEN ?3 = 'organics' THEN organics_on_hand + ?1 ELSE organics_on_hand END, "
-    "equipment_on_hand = CASE WHEN ?3 = 'equipment' THEN equipment_on_hand + ?1 ELSE equipment_on_hand END "
+    "equipment_on_hand = CASE WHEN ?3 = 'equipment' THEN equipment_on_hand + ?1 ELSE equipment_on_hand END, "
+    "slaves_on_hand = CASE WHEN ?3 = 'SLV' THEN slaves_on_hand + ?1 ELSE slaves_on_hand END, "
+    "weapons_on_hand = CASE WHEN ?3 = 'WPN' THEN weapons_on_hand + ?1 ELSE weapons_on_hand END, "
+    "drugs_on_hand = CASE WHEN ?3 = 'DRG' THEN drugs_on_hand + ?1 ELSE drugs_on_hand END "
     "WHERE id = ?2;";
 
   rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
@@ -9202,6 +9247,9 @@ h_update_port_stock (sqlite3 *db, int port_id, const char *commodity_code,
 	"WHEN ?2 = 'ore' THEN ore_on_hand "
 	"WHEN ?2 = 'organics' THEN organics_on_hand "
 	"WHEN ?2 = 'equipment' THEN equipment_on_hand "
+    "WHEN ?2 = 'SLV' THEN slaves_on_hand "
+    "WHEN ?2 = 'WPN' THEN weapons_on_hand "
+    "WHEN ?2 = 'DRG' THEN drugs_on_hand "
 	"ELSE 0 END " "FROM ports WHERE id = ?1;";
       rc = sqlite3_prepare_v2 (db, qty_sql, -1, &qty_stmt, NULL);
       if (rc == SQLITE_OK)

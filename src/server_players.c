@@ -423,6 +423,12 @@ h_update_ship_cargo (sqlite3 *db, int player_id,
     col_name = "equipment";
   else if (strcasecmp (commodity, "colonists") == 0)
     col_name = "colonists";
+  else if (strcasecmp (commodity, "SLV") == 0) // NEW
+    col_name = "slaves";
+  else if (strcasecmp (commodity, "WPN") == 0) // NEW
+    col_name = "weapons";
+  else if (strcasecmp (commodity, "DRG") == 0) // NEW
+    col_name = "drugs";
   else
     {
       LOGE ("h_update_ship_cargo: Invalid commodity name '%s'\n", commodity);
@@ -1967,6 +1973,7 @@ h_add_player_petty_cash (sqlite3 *db, int player_id, long long amount,
     }
 
   // 1. Get current petty cash balance
+  pthread_mutex_lock (&db_mutex);	// Acquire lock
   sqlite3_stmt *select_stmt = NULL;
   const char *sql_select_balance =
     "SELECT credits FROM players WHERE id = ?;";
@@ -2021,6 +2028,186 @@ h_add_player_petty_cash (sqlite3 *db, int player_id, long long amount,
   if (new_balance_out)
     *new_balance_out = new_balance;
 
+  rc = SQLITE_OK;
+
+cleanup:
+  if (select_stmt)
+    sqlite3_finalize (select_stmt);
+  if (update_stmt)
+    sqlite3_finalize (update_stmt);
+  if (errmsg)
+    sqlite3_free (errmsg);
+  pthread_mutex_unlock (&db_mutex);	// Release lock
+  return rc;
+}
+
+// Unlocked version: Assumes db_mutex is already held by the caller
+int
+h_add_player_petty_cash_unlocked (sqlite3 *db, int player_id, long long amount,
+                                  long long *new_balance_out)
+{
+  char *errmsg = NULL;
+  int rc = SQLITE_ERROR;
+  long long current_balance = 0;
+
+  if (!db || player_id <= 0 || amount <= 0)
+    {
+      LOGE
+	("h_add_player_petty_cash_unlocked: Invalid arguments. db=%p, player_id=%d, amount=%lld",
+	 db, player_id, amount);
+      return SQLITE_MISUSE;
+    }
+
+  // 1. Get current petty cash balance (unlocked context)
+  sqlite3_stmt *select_stmt = NULL;
+  const char *sql_select_balance =
+    "SELECT credits FROM players WHERE id = ?;";
+  rc = sqlite3_prepare_v2 (db, sql_select_balance, -1, &select_stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_add_player_petty_cash_unlocked: SELECT prepare error: %s",
+	    sqlite3_errmsg (db));
+      goto cleanup;
+    }
+  sqlite3_bind_int (select_stmt, 1, player_id);
+
+  if (sqlite3_step (select_stmt) == SQLITE_ROW)
+    {
+      current_balance = sqlite3_column_int64 (select_stmt, 0);
+    }
+  else
+    {
+      LOGE
+	("h_add_player_petty_cash_unlocked: Player ID %d not found in players table.",
+	 player_id);
+      rc = SQLITE_NOTFOUND;
+      goto cleanup;
+    }
+  sqlite3_finalize (select_stmt);
+  select_stmt = NULL;
+
+  // 2. Update petty cash balance (unlocked context)
+  long long new_balance = current_balance + amount;
+  sqlite3_stmt *update_stmt = NULL;
+  const char *sql_update_balance =
+    "UPDATE players SET credits = ? WHERE id = ?;";
+  rc = sqlite3_prepare_v2 (db, sql_update_balance, -1, &update_stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_add_player_petty_cash_unlocked: UPDATE prepare error: %s",
+	    sqlite3_errmsg (db));
+      goto cleanup;
+    }
+  sqlite3_bind_int64 (update_stmt, 1, new_balance);
+  sqlite3_bind_int (update_stmt, 2, player_id);
+
+  if (sqlite3_step (update_stmt) != SQLITE_DONE)
+    {
+      LOGE ("h_add_player_petty_cash_unlocked: UPDATE step error: %s",
+	    sqlite3_errmsg (db));
+      goto cleanup;
+    }
+  sqlite3_finalize (update_stmt);
+  update_stmt = NULL;
+
+  if (new_balance_out)
+    *new_balance_out = new_balance;
+
+  rc = SQLITE_OK;
+
+cleanup:
+  if (select_stmt)
+    sqlite3_finalize (select_stmt);
+  if (update_stmt)
+    sqlite3_finalize (update_stmt);
+  if (errmsg)
+    sqlite3_free (errmsg);
+  return rc;
+}
+
+// Unlocked version: Assumes db_mutex is already held by the caller
+int
+h_deduct_player_petty_cash_unlocked (sqlite3 *db, int player_id,
+                                     long long amount,
+                                     long long *new_balance_out)
+{
+  char *errmsg = NULL;
+  int rc = SQLITE_ERROR;
+  long long current_balance = 0;
+
+  if (!db || player_id <= 0 || amount <= 0)
+    {
+      LOGE
+	("h_deduct_player_petty_cash_unlocked: Invalid arguments. db=%p, player_id=%d, amount=%lld",
+	 db, player_id, amount);
+      return SQLITE_MISUSE;
+    }
+
+  // 1. Get current petty cash balance (unlocked context)
+  sqlite3_stmt *select_stmt = NULL;
+  const char *sql_select_balance =
+    "SELECT credits FROM players WHERE id = ?;";
+  rc = sqlite3_prepare_v2 (db, sql_select_balance, -1, &select_stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_deduct_player_petty_cash_unlocked: SELECT prepare error: %s",
+	    sqlite3_errmsg (db));
+      goto cleanup;
+    }
+  sqlite3_bind_int (select_stmt, 1, player_id);
+
+  if (sqlite3_step (select_stmt) == SQLITE_ROW)
+    {
+      current_balance = sqlite3_column_int64 (select_stmt, 0);
+    }
+  else
+    {
+      LOGE
+	("h_deduct_player_petty_cash_unlocked: Player ID %d not found in players table.",
+	 player_id);
+      rc = SQLITE_NOTFOUND;
+      goto cleanup;
+    }
+  sqlite3_finalize (select_stmt);
+  select_stmt = NULL;
+
+  // 2. Check for sufficient funds
+  if (current_balance < amount)
+    {
+      LOGW
+	("h_deduct_player_petty_cash_unlocked: Insufficient petty cash for player %d. Current: %lld, Attempted deduct: %lld",
+	 player_id, current_balance, amount);
+      rc = SQLITE_CONSTRAINT;	// Or a custom error code for insufficient funds
+      goto cleanup;
+    }
+
+  // 3. Update petty cash balance (unlocked context)
+  long long new_balance = current_balance - amount;
+  sqlite3_stmt *update_stmt = NULL;
+  const char *sql_update_balance =
+    "UPDATE players SET credits = ? WHERE id = ?;";
+  rc = sqlite3_prepare_v2 (db, sql_update_balance, -1, &update_stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_deduct_player_petty_cash_unlocked: UPDATE prepare error: %s",
+	    sqlite3_errmsg (db));
+      goto cleanup;
+    }
+  sqlite3_bind_int64 (update_stmt, 1, new_balance);
+  sqlite3_bind_int (update_stmt, 2, player_id);
+
+  if (sqlite3_step (update_stmt) != SQLITE_DONE)
+    {
+      LOGE ("h_deduct_player_petty_cash_unlocked: UPDATE step error: %s",
+	    sqlite3_errmsg (db));
+      goto cleanup;
+    }
+  sqlite3_finalize (update_stmt);
+  update_stmt = NULL;
+
+  if (new_balance_out)
+    *new_balance_out = new_balance;
+
   return SQLITE_OK;
 
 cleanup:
@@ -2031,6 +2218,36 @@ cleanup:
   if (errmsg)
     sqlite3_free (errmsg);
   return rc;
+}
+
+int
+auth_player_get_type (int player_id)
+{
+  sqlite3 *db = db_get_handle ();
+  sqlite3_stmt *stmt = NULL;
+  int player_type = 0; // Default to 0 or an 'unknown' type
+
+  if (player_id <= 0)
+    return 0; // Invalid player_id
+
+  const char *sql = "SELECT type FROM players WHERE id = ?;";
+  int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+  if (rc != SQLITE_OK) {
+    LOGE("auth_player_get_type: Failed to prepare statement: %s", sqlite3_errmsg(db));
+    return 0;
+  }
+
+  sqlite3_bind_int(stmt, 1, player_id);
+
+  if (sqlite3_step(stmt) == SQLITE_ROW) {
+    player_type = sqlite3_column_int(stmt, 0);
+  } else {
+    // Player not found or no type defined
+    LOGW("auth_player_get_type: Player ID %d not found or type not set.", player_id);
+  }
+
+  sqlite3_finalize(stmt);
+  return player_type;
 }
 
 int

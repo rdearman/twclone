@@ -874,6 +874,9 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
     {
       LOGE("fedspace_cleanup: Cluster init failed.");
     }
+  
+  /* Seed Illegal Goods (idempotent-ish, runs on cleanup) */
+  clusters_seed_illegal_goods(db);
 
   const char *select_assets_sql =
     "SELECT player, asset_type, sector, quantity FROM sector_assets WHERE sector IN (SELECT sector_id FROM msl_sectors) AND player != 0;";

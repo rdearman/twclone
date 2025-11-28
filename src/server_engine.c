@@ -96,6 +96,7 @@ static const CronHandler CRON_REGISTRY[] = {
   {"daily_corp_tax", h_daily_corp_tax},
   {"dividend_payout", h_dividend_payout},
   {"cluster_economy", cluster_economy_step},
+  {"cluster_black_market", cluster_black_market_step},
   {"daily_stock_price_recalculation", h_daily_stock_price_recalculation},
   {"traps_process", h_traps_process},
   {"npc_step", h_npc_step},

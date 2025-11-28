@@ -8,6 +8,10 @@
 #define CLUSTER_BAN_THRESHOLD 2
 #define CLUSTER_SUSPICION_DECAY 0.9
 
+#define CLUSTER_GOOD_MIN_ALIGN 1
+#define CLUSTER_EVIL_MAX_ALIGN -1
+#define PLAYER_EVIL_ALIGNMENT_THRESHOLD -100
+
 /* Law Enforcement Status Structure */
 typedef struct {
     int cluster_id;
@@ -76,5 +80,26 @@ double cluster_get_bust_modifier(sqlite3 *db, int sector_id, int player_id);
  * @param busted 1 if the player was busted (increases bust count/wanted level).
  */
 void cluster_on_crime(sqlite3 *db, int sector_id, int player_id, int success, int busted);
+
+/**
+ * @brief Seeds illegal commodity stocks in ports based on cluster alignment.
+ *
+ * This function should be called once during server startup/initialization.
+ * 
+ * @param db Database handle.
+ * @return 0 on success, -1 on error.
+ */
+int clusters_seed_illegal_goods(sqlite3 *db);
+
+/**
+ * @brief Periodically runs the black market economy logic for illegal commodities.
+ * 
+ * Adjusts prices and potentially stock for illegal goods in evil clusters.
+ * 
+ * @param db Database handle.
+ * @param now_s Current timestamp.
+ * @return 0 on success.
+ */
+int cluster_black_market_step(sqlite3 *db, int64_t now_s);
 
 #endif /* SERVER_CLUSTERS_H */

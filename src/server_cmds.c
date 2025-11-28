@@ -12,6 +12,68 @@
 #include "server_cron.h"	// Include for cron job functions
 #include "server_log.h"
 
+#include "server_clusters.h" // NEW
+
+int
+cmd_sys_cluster_init (client_ctx_t *ctx, json_t *root)
+{
+  sqlite3 *db = db_get_handle ();
+  int rc = 0;
+
+  if (ctx->player_id <= 0) { // Very basic auth check, really should be admin
+      send_enveloped_error(ctx->fd, root, 1401, "Auth required");
+      return 0;
+  }
+  // Ensure player is an admin/sysop.
+  if (auth_player_get_type(ctx->player_id) != PLAYER_TYPE_SYSOP) {
+      send_enveloped_error(ctx->fd, root, 403, "Forbidden: Must be SysOp");
+      return 0;
+  }
+
+
+  rc = clusters_init(db);
+  if (rc != 0) {
+      send_enveloped_error(ctx->fd, root, 500, "clusters_init failed");
+      return 0;
+  }
+
+  rc = clusters_seed_illegal_goods(db);
+  if (rc != 0) {
+      send_enveloped_error(ctx->fd, root, 500, "seed failed");
+      return 0;
+  }
+
+  send_enveloped_ok(ctx->fd, root, "sys.cluster.init.ok", NULL);
+  return 0;
+}
+
+int
+cmd_sys_cluster_seed_illegal_goods (client_ctx_t *ctx, json_t *root)
+{
+  sqlite3 *db = db_get_handle ();
+  int rc = 0;
+
+  if (ctx->player_id <= 0) { // Very basic auth check, really should be admin
+      send_enveloped_error(ctx->fd, root, 1401, "Auth required");
+      return 0;
+  }
+  // Ensure player is an admin/sysop.
+  if (auth_player_get_type(ctx->player_id) != PLAYER_TYPE_SYSOP) {
+      send_enveloped_error(ctx->fd, root, 403, "Forbidden: Must be SysOp");
+      return 0;
+  }
+
+
+  rc = clusters_seed_illegal_goods(db);
+  if (rc != 0) {
+      send_enveloped_error(ctx->fd, root, 500, "seed failed");
+      return 0;
+  }
+
+  send_enveloped_ok(ctx->fd, root, "sys.cluster.seed_illegal_goods.ok", NULL);
+  return 0;
+}
+
 /* Constant-time string compare to reduce timing leakage (simple variant). */
 static int
 ct_str_eq (const char *a, const char *b)

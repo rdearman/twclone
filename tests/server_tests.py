@@ -146,9 +146,11 @@ def soft_match(actual: Any, expect: Any, strict: bool = False) -> bool:
         if not isinstance(actual, dict):
             return False
         for k, v in expect.items():
-            if k not in actual:
-                return False
-            if not soft_match(actual[k], v, strict=strict):
+            # Handle dot notation for nested keys in expect
+            actual_value = _get_by_path(actual, k) if "." in k else actual.get(k)
+            if actual_value is None and not (k in actual and actual.get(k) is None): # Check for key existence explicitly if value is None
+                return False # Key not found in actual, or actual.get(k) is genuinely None while expect has non-None value
+            if not soft_match(actual_value, v, strict=strict):
                 return False
         return True
 
@@ -208,7 +210,7 @@ def coerce_command_from_test(name: str, test: Dict[str, Any]) -> Dict[str, Any]:
 # Auth bootstrap (optional)
 # ----------------------------
 
-def try_register(sock: socket.socket, user: str, passwd: str) -> None:
+def try_register(sock: socket.socket, user: str, passwd: str, register_if_missing: bool = False) -> None:
     send_json_line(sock, {"command": "auth.register", "data": {"user_name": user, "password": passwd}})
     resp = json.loads(recv_line(sock) or "{}")
     # ok → proceed; error 1210 (exists) → proceed; any other error → print but continue to login
@@ -216,7 +218,7 @@ def try_register(sock: socket.socket, user: str, passwd: str) -> None:
         print(f"[auth.register] PASS  (user={user})")
         return
     err = (resp.get("error") or {}).get("code")
-    if err == 1210:
+    if err == 1210 and register_if_missing:
         print(f"[auth.register] SKIP (already exists)")
         return
     print(f"[auth.register] NOTE: {resp}")
@@ -324,7 +326,9 @@ def _expand_vars_in_obj(o: Any, vars: Dict[str, Any]) -> Any:
             import uuid
             val = val.replace("*uuid*", str(uuid.uuid4()))
         if val.startswith("@"):
-            return vars.get(val[1:], val)
+            resolved_val = vars.get(val[1:])
+            print(f"DEBUG: Resolving {val} to {resolved_val!r}") # DEBUG PRINT
+            return resolved_val if resolved_val is not None else val
         return val
     if isinstance(o, list):
         return [_expand_vars_in_obj(x, vars) for x in o]
@@ -357,6 +361,18 @@ def _run_asserts(resp: Dict[str, Any], assertions: List[Dict[str, Any]], vars: D
                 errs.append(f"assert delta failed (non-numeric?) at {path} actual={actual!r} baseline={baseline!r}")
             continue
 
+        if op == "defined":
+            if actual is None:
+                ok_all = False
+                errs.append(f"assert defined failed at {path}: actual is None")
+            continue
+
+        if op == "undefined":
+            if actual is not None:
+                ok_all = False
+                errs.append(f"assert undefined failed at {path}: actual={actual!r}")
+            continue
+
         expected = _resolve_value(a.get("value"), vars)
         try:
             if op == "==":  cond = (actual == expected)
@@ -379,21 +395,30 @@ def _run_asserts(resp: Dict[str, Any], assertions: List[Dict[str, Any]], vars: D
 def _generate_idempotency_key() -> str:
     return str(uuid.uuid4())
 
-def run_test(name: str, sock: socket.socket, test: Dict[str, Any], strict: bool = False, vars: Optional[Dict[str,Any]] = None) -> None:
+def run_test(name: str, sock: socket.socket, test: Dict[str, Any], strict: bool = False, vars: Optional[Dict[str,Any]] = None, session_tokens: Optional[Dict[str,str]] = None) -> None:
     if vars is None: vars = {}
+    if session_tokens is None: session_tokens = {} # Initialize if None
 
-    command = coerce_command_from_test(name, test)
+    command_envelope = coerce_command_from_test(name, test)
     expect = test.get("expect", {"status": "ok"})
+
+    # --- Auth handling: inject session token if user specified ---
+    test_user = test.get("user")
+    if test_user and test_user in session_tokens:
+        if "auth" not in command_envelope:
+            command_envelope["auth"] = {}
+        command_envelope["auth"]["session"] = session_tokens[test_user]
+    # -----------------------------------------------------------
 
     # Handle dynamic idempotency_key generation
     if test.get("idempotency_key") == "*generate*":
-        command["data"]["idempotency_key"] = _generate_idempotency_key()
-    elif isinstance(command.get("data"), dict) and "idempotency_key" in test:
-        command["data"].setdefault("idempotency_key", test["idempotency_key"])
+        command_envelope["data"]["idempotency_key"] = _generate_idempotency_key()
+    elif isinstance(command_envelope.get("data"), dict) and "idempotency_key" in test:
+        command_envelope["data"].setdefault("idempotency_key", test["idempotency_key"])
 
-    command = _expand_vars_in_obj(command, vars)        
+    command_envelope = _expand_vars_in_obj(command_envelope, vars)
         
-    send_json_line(sock, command)
+    send_json_line(sock, command_envelope)
     line = recv_line(sock)
     if not line.strip():
         print(f"[{name}] FAIL: empty response")
@@ -407,16 +432,32 @@ def run_test(name: str, sock: socket.socket, test: Dict[str, Any], strict: bool 
 
     # soft expect first
     ok = soft_match(resp, expect, strict=strict)
-    status = resp.get("status"); rtype = resp.get("type")
 
+    # Special handling for auth.register with register_if_missing
+    if command_envelope.get("command") == "auth.register" and test.get("register_if_missing"):
+        if resp.get("status") == "error":
+            err = (resp.get("error") or {}).get("code")
+            if err == 1210: # Username already exists
+                ok = True # Treat as a success (skip)
+                print(f"[{name}] SKIP (already exists)")
+                return # Exit early, as we've handled the outcome
+
+    status = resp.get("status")
+    rtype = resp.get("type")
     # handle save (and capture)
-    save_spec = test.get("save") or test.get("capture") # <-- THE FIX
+    save_spec = test.get("save") or test.get("capture")
     if isinstance(save_spec, dict):
         # Support both {"var": "name", "path": "..."}
         var = save_spec.get("var"); path = save_spec.get("path")
         if var and path:
             vars[var] = _get_by_path(resp, path)
         
+        # --- Save session token from login ---
+        if rtype == "auth.session" and test_user: # Only if it's an auth.session response and a user is specified
+            session_token = resp.get("data", {}).get("session")
+            if session_token:
+                session_tokens[test_user] = session_token
+        # -----------------------------------
         # Support {"name": "path", ...}
         else:
             for var_name, var_path in save_spec.items():
@@ -488,6 +529,7 @@ def run_test_suite():
             s.settimeout(TIMEOUT)
             s.connect((HOST, PORT))
 
+            session_tokens: Dict[str, str] = {}
             # Optional auth bootstrap
             if args.user and args.passwd:
                 if args.register_if_missing:
@@ -501,7 +543,7 @@ def run_test_suite():
                     raise TypeError(f"Test must be an object, got: {type(test)} -> {test!r}")
 
                 name = test.get("name", "<unnamed>")
-                run_test(name, s, test, strict=args.strict, vars=vars_store)
+                run_test(name, s, test, strict=args.strict, vars=vars_store, session_tokens=session_tokens)
                 # run_test(name, s, test, strict=args.strict)
 
     except ConnectionRefusedError:
