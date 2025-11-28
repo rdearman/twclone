@@ -40,6 +40,7 @@ typedef struct TradeLine
   int cmd_trade_jettison (client_ctx_t * ctx, json_t * root);
   int cmd_dock_status (client_ctx_t * ctx, json_t * root);
   int cmd_trade_port_info (client_ctx_t * ctx, json_t * root);
+  int cmd_port_rob (client_ctx_t * ctx, json_t * root);
 
   //int player_credits (int player_id);
   //int cargo_space_free (int player_id);

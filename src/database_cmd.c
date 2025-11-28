@@ -1427,6 +1427,36 @@ cleanup_launch:
   return rc;
 }
 
+int
+db_get_port_sector (int port_id)
+{
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    return 0;
+
+  sqlite3_stmt *st = NULL;
+  int sector = 0;
+  int rc;
+
+  pthread_mutex_lock (&db_mutex);
+
+  rc = sqlite3_prepare_v2 (db, "SELECT sector FROM ports WHERE id=?1", -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    goto done;
+
+  sqlite3_bind_int (st, 1, port_id);
+  if (sqlite3_step (st) == SQLITE_ROW)
+    {
+      sector = sqlite3_column_int (st, 0);
+    }
+
+done:
+  if (st)
+    sqlite3_finalize (st);
+  pthread_mutex_unlock (&db_mutex);
+  return sector;
+}
+
 
 
 // db_bounty_create: Inserts a new bounty record.
@@ -1997,10 +2027,10 @@ h_create_personal_bank_alert_notice (sqlite3 *db,
  */
 int
 h_bank_transfer_unlocked (sqlite3 *db,
-			  const char *from_owner_type, int from_owner_id,
-			  const char *to_owner_type, int to_owner_id,
-			  long long amount,
-			  const char *tx_type, const char *tx_group_id)
+                          const char *from_owner_type, int from_owner_id,
+                          const char *to_owner_type, int to_owner_id,
+                          long long amount,
+                          const char *tx_type, const char *tx_group_id)
 {
   int from_account_id, to_account_id;
   int rc;
@@ -6935,4 +6965,21 @@ cleanup:
 
   // 6. Return the final status code from a single point.
   return ret_code;
+}
+
+bool
+h_is_black_market_port(sqlite3 *db, int port_id)
+{
+    sqlite3_stmt *st;
+    int rc = sqlite3_prepare_v2(db, "SELECT type, name FROM ports WHERE id = ?", -1, &st, NULL);
+    if (rc != SQLITE_OK) return false;
+    sqlite3_bind_int(st, 1, port_id);
+    bool is_bm = false;
+    if (sqlite3_step(st) == SQLITE_ROW) {
+        // int type = sqlite3_column_int(st, 0); // Unused
+        const char *name = (const char *)sqlite3_column_text(st, 1);
+        if (name && strstr(name, "Black Market")) is_bm = true;
+    }
+    sqlite3_finalize(st);
+    return is_bm;
 }

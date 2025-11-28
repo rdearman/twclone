@@ -221,6 +221,7 @@ int db_player_get_last_rob_attempt(int player_id, int *last_port_id_out, long lo
 int db_player_set_last_rob_attempt(int player_id, int last_port_id, long long last_attempt_at);
 int db_port_add_bust_record(int port_id, int player_id, const char *bust_type, long long timestamp);
 int db_port_get_active_busts(int port_id, int player_id);
+bool h_is_black_market_port(sqlite3 *db, int port_id);
 
 
 

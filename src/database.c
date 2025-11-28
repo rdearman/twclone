@@ -1504,6 +1504,41 @@ const char *create_table_sql[] = {
     "   ON CONFLICT(corp_id, player_id) DO UPDATE SET role='Leader'; "
     " END; ",
 
+  /* Law Enforcement & Robbery */
+  "CREATE TABLE IF NOT EXISTS law_enforcement ("
+    "    id INTEGER PRIMARY KEY CHECK (id = 1),"
+    "    robbery_evil_threshold INTEGER DEFAULT -10,"
+    "    robbery_xp_per_hold    INTEGER DEFAULT 20,"
+    "    robbery_credits_per_xp INTEGER DEFAULT 10,"
+    "    robbery_bust_chance_base REAL DEFAULT 0.05,"
+    "    robbery_turn_cost      INTEGER DEFAULT 1,"
+    "    good_guy_bust_bonus      REAL DEFAULT 0.10,"
+    "    pro_criminal_bust_delta  REAL DEFAULT -0.02,"
+    "    evil_cluster_bust_bonus  REAL DEFAULT 0.05,"
+    "    good_align_penalty_mult  REAL DEFAULT 3.0,"
+    "    robbery_real_bust_ttl_days INTEGER DEFAULT 7"
+    ");",
+
+  "CREATE TABLE IF NOT EXISTS port_busts ("
+    "    port_id      INTEGER NOT NULL,"
+    "    player_id    INTEGER NOT NULL,"
+    "    last_bust_at INTEGER NOT NULL,"
+    "    bust_type    TEXT    NOT NULL,"
+    "    active       INTEGER NOT NULL DEFAULT 1,"
+    "    PRIMARY KEY (port_id, player_id),"
+    "    FOREIGN KEY (port_id) REFERENCES ports(id),"
+    "    FOREIGN KEY (player_id) REFERENCES players(id)"
+    ");",
+
+  "CREATE INDEX IF NOT EXISTS idx_port_busts_player ON port_busts (player_id);",
+
+  "CREATE TABLE IF NOT EXISTS player_last_rob ("
+    "    player_id    INTEGER PRIMARY KEY,"
+    "    port_id      INTEGER NOT NULL,"
+    "    last_attempt_at INTEGER NOT NULL,"
+    "    was_success  INTEGER NOT NULL"
+    ");",
+
 };
 
 
@@ -1511,6 +1546,8 @@ const char *insert_default_sql[] = {
   /* Config defaults */
   "INSERT OR IGNORE INTO config (id, turnsperday, maxwarps_per_sector, startingcredits, startingfighters, startingholds, processinterval, autosave, max_ports, max_planets_per_sector, max_total_planets, max_citadel_level, number_of_planet_types, max_ship_name_length, ship_type_count, hash_length, default_nodes, buff_size, max_name_length, planet_type_count, server_port, s2s_port, bank_alert_threshold_player, bank_alert_threshold_corp, genesis_enabled, genesis_block_at_cap, genesis_navhaz_delta, genesis_class_weight_M, genesis_class_weight_K, genesis_class_weight_O, genesis_class_weight_L, genesis_class_weight_C, genesis_class_weight_H, genesis_class_weight_U, shipyard_enabled, shipyard_trade_in_factor_bp, shipyard_require_cargo_fit, shipyard_require_fighters_fit, shipyard_require_shields_fit, shipyard_require_hardware_compat, shipyard_tax_bp) "
     "VALUES (1, 120, 6, 10000000, 10, 20, 1, 5, 200, 6, 300, 6, 8, 50, 8, 128, 500, 1024, 50, 8, 1234, 4321, 1000000, 5000000, 1, 0, 0, 10, 10, 10, 10, 10, 10, 5, 1, 5000, 1, 1, 1, 1, 1000);",
+
+  "INSERT OR IGNORE INTO law_enforcement (id) VALUES (1);",
 
 
 /* Shiptypes: name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled */

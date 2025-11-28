@@ -1427,6 +1427,45 @@ rollback_and_unlock:
 
 
 int
+h_robbery_daily_cleanup (sqlite3 *db, int64_t now_s)
+{
+  int rc;
+  // 1. Suspicion Decay (10% daily)
+  const char *sql_decay = 
+    "UPDATE cluster_player_status "
+    "SET suspicion = CAST(suspicion * 0.9 AS INTEGER) "
+    "WHERE suspicion > 0;";
+  
+  rc = sqlite3_exec(db, sql_decay, NULL, NULL, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("h_robbery_daily_cleanup: Suspicion decay failed: %s", sqlite3_errmsg(db));
+  }
+
+  // 2. Clear Busts
+  // Fake: Daily
+  // Real: After TTL days (default 7)
+  const char *sql_bust_clear = 
+    "UPDATE port_busts "
+    "SET active = 0 "
+    "WHERE active = 1 AND ( "
+    "    (bust_type = 'fake') "
+    "    OR "
+    "    (bust_type = 'real' AND last_bust_at < ? - (SELECT robbery_real_bust_ttl_days * 86400 FROM law_enforcement WHERE id=1)) "
+    ");";
+    
+  sqlite3_stmt *st = NULL;
+  if (sqlite3_prepare_v2(db, sql_bust_clear, -1, &st, NULL) == SQLITE_OK) {
+      sqlite3_bind_int64(st, 1, now_s);
+      sqlite3_step(st);
+      sqlite3_finalize(st);
+  } else {
+      LOGE("h_robbery_daily_cleanup: Bust clear prepare failed: %s", sqlite3_errmsg(db));
+  }
+  
+  return 0;
+}
+
+int
 h_daily_turn_reset (sqlite3 *db, int64_t now_s)
 {
   if (!try_lock (db, "daily_turn_reset", now_s))
@@ -1452,6 +1491,9 @@ h_daily_turn_reset (sqlite3 *db, int64_t now_s)
       unlock (db, "daily_turn_reset");
       return rc;
     }
+    
+  // Call Robbery Cleanup as part of daily maintenance (within transaction if possible, or just before commit)
+  h_robbery_daily_cleanup(db, now_s);
 
   rc = commit (db);
   if (rc != SQLITE_OK)

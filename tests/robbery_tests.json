@@ -1,0 +1,35 @@
+[
+    {
+        "test_name": "robbery_setup_move_to_port",
+        "command": "move.warp",
+        "payload": {
+            "to_sector_id": 1
+        },
+        "expected_status": "ok"
+    },
+    {
+        "test_name": "robbery_attempt_wrong_location",
+        "command": "port.rob",
+        "payload": {
+            "sector_id": 999,
+            "port_id": 1,
+            "mode": "credits",
+            "idempotency_key": "rob_test_fail_loc"
+        },
+        "expected_status": "error"
+    },
+    {
+        "test_name": "robbery_attempt_valid_credits",
+        "command": "port.rob",
+        "payload": {
+            "sector_id": 1,
+            "port_id": 1,
+            "mode": "credits",
+            "idempotency_key": "rob_test_valid_1"
+        },
+        "expected_status": "ok",
+        "validate_response": {
+            "rob_result": "regex:^(success|real_bust|fake_bust)$"
+        }
+    }
+]

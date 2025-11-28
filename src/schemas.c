@@ -55,6 +55,7 @@ static json_t *schema_hardware_buy (void);
 static json_t *schema_port_info (void);
 static json_t *schema_port_status (void);
 static json_t *schema_port_describe (void);
+static json_t *schema_port_rob (void);
 
 /* --- Trade --- */
 static json_t *schema_trade_port_info (void);
@@ -379,6 +380,8 @@ schema_get (const char *key)
     return schema_port_status ();
   else if (strcasecmp (key, "port.describe") == 0)
     return schema_port_describe ();
+  else if (strcasecmp (key, "port.rob") == 0)
+    return schema_port_rob ();
 
   /* Trade */
   else if (strcasecmp (key, "trade.port_info") == 0)
@@ -591,6 +594,7 @@ schema_keys (void)
   json_array_append_new (keys, json_string ("port.info"));
   json_array_append_new (keys, json_string ("port.status"));
   json_array_append_new (keys, json_string ("port.describe"));
+  json_array_append_new (keys, json_string ("port.rob"));
 
   /* Trade */
   json_array_append_new (keys, json_string ("trade.port_info"));
@@ -1369,6 +1373,31 @@ schema_port_describe (void)
 								  "required",
 								  "sector_id")),
 				   "additionalProperties", json_false ());
+  return data_schema;
+}
+
+static json_t *
+schema_port_rob (void)
+{
+  json_t *data_properties = json_pack ("{s:o, s:o, s:o, s:o, s:o, s:o}",
+				       "sector_id", json_pack ("{s:s}", "type", "integer"),
+				       "port_id", json_pack ("{s:s}", "type", "integer"),
+				       "mode", json_pack ("{s:s, s:[s,s]}", "type", "string", "enum", "credits", "goods"),
+				       "commodity", json_pack ("{s:s}", "type", "string"),
+				       "amount", json_pack ("{s:s, s:i}", "type", "integer", "minimum", 1),
+				       "idempotency_key", json_pack ("{s:s}", "type", "string"));
+
+  json_t *data_required = json_pack ("[s,s,s,s]", "sector_id", "port_id", "mode", "idempotency_key");
+
+  json_t *data_schema = json_pack ("{s:s, s:s, s:s, s:o, s:o, s:b}",
+				   "$id", "ge://schema/port.rob.json",
+				   "$schema",
+				   "https://json-schema.org/draft/2020-12/schema",
+				   "type", "object",
+				   "properties", data_properties,
+				   "required", data_required,
+				   "additionalProperties", json_false ());
+
   return data_schema;
 }
 
