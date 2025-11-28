@@ -211,7 +211,7 @@ def coerce_command_from_test(name: str, test: Dict[str, Any]) -> Dict[str, Any]:
 # ----------------------------
 
 def try_register(sock: socket.socket, user: str, passwd: str, register_if_missing: bool = False) -> None:
-    send_json_line(sock, {"command": "auth.register", "data": {"user_name": user, "password": passwd}})
+    send_json_line(sock, {"command": "auth.register", "data": {"username": user, "password": passwd}})
     resp = json.loads(recv_line(sock) or "{}")
     # ok → proceed; error 1210 (exists) → proceed; any other error → print but continue to login
     if resp.get("status") == "ok":
@@ -224,7 +224,7 @@ def try_register(sock: socket.socket, user: str, passwd: str, register_if_missin
     print(f"[auth.register] NOTE: {resp}")
 
 def do_login(sock: socket.socket, user: str, passwd: str) -> bool:
-    send_json_line(sock, {"command": "auth.login", "data": {"user_name": user, "password": passwd}})
+    send_json_line(sock, {"command": "auth.login", "data": {"username": user, "password": passwd}})
     resp = json.loads(recv_line(sock) or "{}")
     ok = (resp.get("status") == "ok")
     print(f"[auth.login] {'PASS' if ok else 'FAIL'} (user={user})")

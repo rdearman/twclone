@@ -20,7 +20,7 @@
       "comment": "Ensure player has a default ship type in shiptypes",
       "command": "sys.raw_sql_exec",
       "data": {
-        "sql": "INSERT OR IGNORE INTO shiptypes (id, name, basecost, maxholds, maxfighters, maxshields, maxgenesis, max_detonators, max_probes, can_transwarp, can_planet_scan, can_long_range_scan, can_cloak) VALUES (1, 'Test Freighter', 1000, 100, 1000, 500, 5, 5, 5, 1, 1, 1, 1);"
+        "sql": "INSERT OR IGNORE INTO shiptypes (id, name, basecost, maxholds, maxfighters, maxshields, maxgenesis, max_detonators, max_probes, can_transwarp, can_planet_scan, can_long_range_scan, max_cloaks) VALUES (1, 'Test Freighter', 1000, 100, 1000, 500, 5, 5, 5, 1, 1, 1, 1);"
       },
       "expect": {"status": "ok"}
     },

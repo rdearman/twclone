@@ -238,12 +238,14 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
 
   if (json_is_object (jdata))
     {
-      /* Accept "user_name" (new), "player_name" (legacy), and "username" */
-      json_t *jname = json_object_get (jdata, "user_name");
-      if (!json_is_string (jname))
-	jname = json_object_get (jdata, "player_name");
-      if (!json_is_string (jname))
-	jname = json_object_get (jdata, "username");
+    json_t *jname = json_object_get (jdata, "username");
+    if (!jname)
+    {
+        /* Legacy support for old tests/clients */
+        jname = json_object_get (jdata, "user_name");
+        if (!jname)
+            jname = json_object_get (jdata, "player_name");
+    }
       json_t *jpass = json_object_get (jdata, "password");
 
       name = json_is_string (jname) ? json_string_value (jname) : NULL;
@@ -457,14 +459,12 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
 
   if (json_is_object (jdata))
     {
-      json_t *jn = json_object_get (jdata, "user_name");
+      json_t *jn = json_object_get (jdata, "username");
       json_t *jp = json_object_get (jdata, "password");
       json_t *jsn = json_object_get (jdata, "ship_name");
       json_t *jloc = json_object_get (jdata, "ui_locale");
       json_t *jtz = json_object_get (jdata, "ui_timezone");
 
-      if (!json_is_string (jn))
-	jn = json_object_get (jdata, "player_name");	// Legacy support
       name = json_is_string (jn) ? json_string_value (jn) : NULL;
       pass = json_is_string (jp) ? json_string_value (jp) : NULL;
       ship_name = json_is_string (jsn) ? json_string_value (jsn) : NULL;
@@ -479,7 +479,7 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
     }
 
   // --- Start Transaction for player creation and initial setup ---
-  rc = sqlite3_exec (db, "BEGIN IMMEDIATE", NULL, NULL, NULL);
+  rc = sqlite3_exec (db, "BEGIN", NULL, NULL, NULL);
   if (rc != SQLITE_OK)
     {
       send_enveloped_error (ctx->fd, root, 1500, "Database error (BEGIN)");
@@ -489,10 +489,12 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
   rc = user_create (name, pass, &player_id);
   if (rc == AUTH_OK)
     {
+      LOGI("cmd_auth_register debug: user_create returned AUTH_OK for player %d", player_id);
       // --- Configuration Loading ---
       cfg = config_load ();
       if (!cfg)
 	{
+	  LOGE("cmd_auth_register debug: config_load failed for player %d", player_id);
 	  send_enveloped_error (ctx->fd, root, 1500,
 				"Database error (config_load)");
 	  goto rollback_and_error;
@@ -500,6 +502,7 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
 
       // --- Spawn Location ---
       spawn_sector_id = (rand () % 10) + 1;	// Random sector between 1 and 10
+      LOGI("cmd_auth_register debug: player %d assigned to spawn_sector_id %d", player_id, spawn_sector_id);
 
       // --- Ship Creation & Naming ---
       if (!ship_name || !*ship_name)
@@ -510,14 +513,17 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
 	db_create_initial_ship (player_id, ship_name, spawn_sector_id);
       if (new_ship_id == -1)
 	{
+	  LOGE("cmd_auth_register debug: db_create_initial_ship failed for player %d", player_id);
 	  send_enveloped_error (ctx->fd, root, 1500,
 				"Database error (ship creation)");
 	  goto rollback_and_error;
 	}
+      LOGI("cmd_auth_register debug: player %d assigned ship_id %d", player_id, new_ship_id);
 
       // --- Update Player's Sector and Ship ---
       if (db_player_set_sector (player_id, spawn_sector_id) != SQLITE_OK)
 	{
+	  LOGE("cmd_auth_register debug: db_player_set_sector failed for player %d", player_id);
 	  send_enveloped_error (ctx->fd, root, 1500,
 				"Database error (set player sector)");
 	  goto rollback_and_error;
@@ -525,23 +531,39 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
       // db_ship_claim already updates players.ship, but ensure ctx is updated
       ctx->sector_id = spawn_sector_id;
 
-      // --- Starting Credits ---
-      if (h_add_credits
-	  (db, "player", player_id, cfg->startingcredits, "DEPOSIT",
-	   NULL, NULL) != SQLITE_OK)
-	{
-	  send_enveloped_error (ctx->fd, root, 1500,
-				"Database error (add credits)");
-	  goto rollback_and_error;
-	}
+      // --- Starting Credits (Petty Cash) ---
+      // Update players.credits directly so they have cash on hand.
+      int start_creds = (cfg && cfg->startingcredits > 0) ? cfg->startingcredits : 1000;
+      sqlite3_stmt *st_creds = NULL;
+      if (sqlite3_prepare_v2 (db, "UPDATE players SET credits = ?1 WHERE id = ?2;", -1, &st_creds, NULL) == SQLITE_OK)
+        {
+          sqlite3_bind_int (st_creds, 1, start_creds);
+          sqlite3_bind_int (st_creds, 2, player_id);
+          if (sqlite3_step (st_creds) != SQLITE_DONE) {
+             LOGE("cmd_auth_register debug: Failed to set starting credits for player %d", player_id);
+             sqlite3_finalize(st_creds);
+             send_enveloped_error(ctx->fd, root, 1500, "Database error (set credits)");
+             goto rollback_and_error;
+          }
+          sqlite3_finalize (st_creds);
+        }
+      else
+        {
+             LOGE("cmd_auth_register debug: Failed to prepare credits update for player %d", player_id);
+             send_enveloped_error(ctx->fd, root, 1500, "Database error (prepare credits)");
+             goto rollback_and_error;
+        }
+      LOGI("cmd_auth_register debug: player %d granted %d starting credits (petty cash)", player_id, start_creds);
 
       // --- Starting Alignment ---
       if (db_player_set_alignment (player_id, 1) != SQLITE_OK)
 	{
+	  LOGE("cmd_auth_register debug: db_player_set_alignment failed for player %d", player_id);
 	  send_enveloped_error (ctx->fd, root, 1500,
 				"Database error (set alignment)");
 	  goto rollback_and_error;
 	}
+      LOGI("cmd_auth_register debug: player %d alignment set to 1", player_id);
 
       // --- Automatic Subscriptions ---
       // Already subscribed to system.*
@@ -557,25 +579,30 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
 	}
       if (st)
 	sqlite3_finalize (st);
+      LOGI("cmd_auth_register debug: player %d subscribed to news.*", player_id);
 
       // --- Player Preferences (Override Defaults) ---
       if (ui_locale)
 	{
 	  db_prefs_set_one (player_id, "ui.locale", PT_STRING, ui_locale);
+	  LOGI("cmd_auth_register debug: player %d ui.locale set to %s", player_id, ui_locale);
 	}
       if (ui_timezone)
 	{
 	  db_prefs_set_one (player_id, "ui.timezone", PT_STRING, ui_timezone);
+	  LOGI("cmd_auth_register debug: player %d ui.timezone set to %s", player_id, ui_timezone);
 	}
 
       // --- Welcome Message ---
       h_send_message_to_player (player_id, 0, "Welcome to TWClone!",
 				get_welcome_message (player_id));
+      LOGI("cmd_auth_register debug: player %d welcome message sent", player_id);
 
       // --- Issue Session Token ---
       char tok[65];
       if (db_session_create (player_id, 86400, tok) != SQLITE_OK)
 	{
+	  LOGE("cmd_auth_register debug: db_session_create failed for player %d", player_id);
 	  send_enveloped_error (ctx->fd, root, 1500,
 				"Database error (session token)");
 	  goto rollback_and_error;
@@ -587,27 +614,39 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
 				    "session_token", tok);
 	  send_enveloped_ok (ctx->fd, root, "auth.session", data);
 	  json_decref (data);
+	  LOGI("cmd_auth_register debug: player %d session created and sent", player_id);
 	}
     }
   else if (rc == AUTH_ERR_NAME_TAKEN)
     {
+      LOGW("cmd_auth_register debug: Username '%s' already taken", name);
       send_enveloped_error (ctx->fd, root, AUTH_ERR_NAME_TAKEN,
 			    "Username already exists");
       goto rollback_and_error;
     }
   else
     {
+      LOGE("cmd_auth_register debug: user_create failed for '%s' with rc=%d", name, rc);
       send_enveloped_error (ctx->fd, root, AUTH_ERR_DB, "Database error");
       goto rollback_and_error;
     }
 
   // --- Commit Transaction ---
-  sqlite3_exec (db, "COMMIT", NULL, NULL, NULL);
+  int commit_rc = sqlite3_exec (db, "COMMIT", NULL, NULL, NULL);
+  if (commit_rc != SQLITE_OK) {
+      LOGE("cmd_auth_register debug: COMMIT failed with rc=%d: %s", commit_rc, sqlite3_errmsg(db));
+      // Even if commit fails, we sent the session token.
+      // This is a problematic state, but we can't rollback the response.
+      // Best to log and try to continue gracefully or crash hard.
+  } else {
+      LOGI("cmd_auth_register debug: Transaction committed successfully for player %d", player_id);
+  }
   if (cfg)
     free (cfg);
   return 0;
 
 rollback_and_error:
+  LOGW("cmd_auth_register debug: Rolling back transaction for player registration of '%s'", name);
   sqlite3_exec (db, "ROLLBACK", NULL, NULL, NULL);
   if (cfg)
     free (cfg);
@@ -651,9 +690,7 @@ cmd_user_create (client_ctx_t *ctx, json_t *root)
   const char *name = NULL, *pass = NULL;
   if (json_is_object (jdata))
     {
-      json_t *jname = json_object_get (jdata, "user_name");
-      if (!json_is_string (jname))
-	jname = json_object_get (jdata, "player_name");
+      json_t *jname = json_object_get (jdata, "username");
       json_t *jpass = json_object_get (jdata, "password");
       name = json_is_string (jname) ? json_string_value (jname) : NULL;
       pass = json_is_string (jpass) ? json_string_value (jpass) : NULL;

@@ -12,7 +12,8 @@
 #include <string.h>
 // local includes
 #include "server_players.h"
-#include "database.h"		// play_login, user_create, db_player_info_json, db_player_get_sector, db_session_*
+#include "database.h"
+#include "database_cmd.h"
 #include "errors.h"
 #include "config.h"
 #include "server_cmds.h"

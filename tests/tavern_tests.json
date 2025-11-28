@@ -5,7 +5,8 @@
       {
         "name": "Register Tavern Player",
         "command": "auth.register",
-        "data": { "user_name": "taverntest", "password": "password" },
+        "register_if_missing": true,
+        "data": { "username": "taverntest", "password": "password" },
         "expect": { "status": "ok" },
         "user": "taverntest",
         "passwd": "password"
@@ -13,7 +14,7 @@
       {
         "name": "Login Tavern Player",
         "command": "auth.login",
-        "data": { "user_name": "taverntest", "password": "password" },
+        "data": { "username": "taverntest", "password": "password" },
         "expect": { "status": "ok" },
         "user": "taverntest",
         "passwd": "password",

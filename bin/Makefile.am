@@ -35,6 +35,7 @@ bin_PROGRAMS = \
 	bigbang
 
 server_SOURCES = \
+        ../src/database_cmd.c \
         ../src/server_communication.c \
         ../src/server_bulk.c \
         ../src/server_combat.c  \
@@ -74,6 +75,7 @@ server_SOURCES = \
 
 bigbang_SOURCES = \
 	../src/database.c \
+        ../src/database_cmd.c \
 	../src/schemas.c \
 	../src/namegen.c \
 	../src/server_bigbang.c \

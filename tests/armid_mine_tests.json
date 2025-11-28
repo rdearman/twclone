@@ -1,18 +1,30 @@
 {
   "tests": [
     {
+      "name": "Register Armid Test Player",
+      "cmd": "auth.register",
+      "register_if_missing": true,
+      "data": {
+        "username": "test_armid_player",
+        "password": "password123"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
       "name": "Auth and get player info",
       "cmd": "auth.login",
       "data": {
-        "user_name": "test_armid_player",
+        "username": "test_armid_player",
         "password": "password123"
       },
       "expect": {
         "status": "ok"
       },
       "capture": {
-        "my_id": "data.player.id",
-        "curSector": "data.ship.location.sector_id"
+        "my_id": "data.player_id",
+        "curSector": "data.current_sector"
       }
     },
     {

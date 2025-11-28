@@ -103,16 +103,11 @@ play_login (const char *player_name, const char *password, int *out_player_id)
   if (!db)
     return AUTH_ERR_DB;
 
-  LOGI ("play_login: attempting to lock db_mutex for player %s", player_name);
-  pthread_mutex_lock (&db_mutex);
-  LOGI ("play_login: db_mutex locked for player %s", player_name);
-
   const char *sql = "SELECT id, passwd, type FROM players WHERE name=?1;";
   sqlite3_stmt *st = NULL;
   int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
-      pthread_mutex_unlock (&db_mutex);
       return AUTH_ERR_DB;
     }
 
@@ -122,7 +117,6 @@ play_login (const char *player_name, const char *password, int *out_player_id)
   if (rc != SQLITE_ROW)
     {
       sqlite3_finalize (st);
-      pthread_mutex_unlock (&db_mutex);
       return AUTH_ERR_INVALID_CRED;	/* no such user */
     }
 
@@ -134,7 +128,6 @@ play_login (const char *player_name, const char *password, int *out_player_id)
   char *dbpass = dbpass_u8 ? strdup ((const char *) dbpass_u8) : NULL;
 
   sqlite3_finalize (st);
-  pthread_mutex_unlock (&db_mutex);
 
   /* Block NPC logins */
   if (player_type == 1)
@@ -145,11 +138,15 @@ play_login (const char *player_name, const char *password, int *out_player_id)
     }
 
   /* Compare password (constant-time helper) */
+  LOGI("play_login debug: player_id=%d, input_pass='%s', db_pass='%s'", player_id, password, dbpass ? dbpass : "(null)");
   int ok = (dbpass != NULL) && ct_str_eq (password, dbpass);
   if (dbpass)
     free (dbpass);
   if (!ok)
-    return AUTH_ERR_INVALID_CRED;
+    {
+      LOGI("play_login debug: Password mismatch");
+      return AUTH_ERR_INVALID_CRED;
+    }
 
   if (out_player_id)
     *out_player_id = player_id;
@@ -175,14 +172,11 @@ user_create (const char *player_name, const char *password,
   int rc;
   sqlite3_stmt *st = NULL;
 
-  pthread_mutex_lock (&db_mutex);
-
   /* 1) Name uniqueness check */
   const char *chk = "SELECT 1 FROM players WHERE name=?1 LIMIT 1;";
   rc = sqlite3_prepare_v2 (db, chk, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
-      pthread_mutex_unlock (&db_mutex);
       return AUTH_ERR_DB;
     }
   sqlite3_bind_text (st, 1, player_name, -1, SQLITE_TRANSIENT);
@@ -190,7 +184,6 @@ user_create (const char *player_name, const char *password,
   sqlite3_finalize (st);
   if (rc == SQLITE_ROW)
     {
-      pthread_mutex_unlock (&db_mutex);
       return AUTH_ERR_NAME_TAKEN;
     }
 
@@ -202,12 +195,13 @@ user_create (const char *player_name, const char *password,
   rc = sqlite3_prepare_v2 (db, ins, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
-      pthread_mutex_unlock (&db_mutex);
       return AUTH_ERR_DB;
     }
 
   sqlite3_bind_text (st, 1, player_name, -1, SQLITE_TRANSIENT);
   sqlite3_bind_text (st, 2, password, -1, SQLITE_TRANSIENT);
+
+  LOGI("user_create debug: Inserting player '%s' with password '%s'", player_name, password);
 
   rc = sqlite3_step (st);
   int done_ok = (rc == SQLITE_DONE);
@@ -215,7 +209,6 @@ user_create (const char *player_name, const char *password,
 
   if (!done_ok)
     {
-      pthread_mutex_unlock (&db_mutex);
       return AUTH_ERR_DB;
     }
 
@@ -235,35 +228,24 @@ user_create (const char *player_name, const char *password,
     {
       // ?1 is the player ID
       sqlite3_bind_int (st, 1, player_id);
-      sqlite3_step (st);
+      rc = sqlite3_step (st); // Capture the return code
       sqlite3_finalize (st);
+
+      if (rc != SQLITE_DONE) // Check for successful insertion
+        {
+          LOGE ("user_create: Failed to insert into turns table for player %d: %s",
+                player_id, sqlite3_errmsg (db));
+          // It's already in a transaction, so we rely on cmd_auth_register's rollback
+          // if this fails to be atomic with player creation.
+          return AUTH_ERR_DB; // Propagate the error
+        }
     }
-
-
-  // Create ship
-  const char *ins_ship =
-    "INSERT INTO ships (name, type_id, sector) VALUES ('new ship', 1, 1);";
-  rc = sqlite3_prepare_v2 (db, ins_ship, -1, &st, NULL);
-  if (rc == SQLITE_OK)
+  else
     {
-      sqlite3_step (st);
-      sqlite3_finalize (st);
+      LOGE ("user_create: Failed to prepare turns insert for player %d: %s",
+            player_id, sqlite3_errmsg (db));
+      return AUTH_ERR_DB; // Propagate the error
     }
-
-  int ship_id = (int) sqlite3_last_insert_rowid (db);
-
-  // Update player's ship
-  const char *upd_player = "UPDATE players SET ship = ?1 WHERE id = ?2;";
-  rc = sqlite3_prepare_v2 (db, upd_player, -1, &st, NULL);
-  if (rc == SQLITE_OK)
-    {
-      sqlite3_bind_int (st, 1, ship_id);
-      sqlite3_bind_int (st, 2, player_id);
-      sqlite3_step (st);
-      sqlite3_finalize (st);
-    }
-
-  pthread_mutex_unlock (&db_mutex);
 
   return AUTH_OK;
 }

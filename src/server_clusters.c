@@ -199,7 +199,7 @@ clusters_init(sqlite3 *db)
         int c_id = _create_cluster(db, "Orion Syndicate Space", "ORION", "FACTION", ori_sector, -100, 1);
         if (c_id != -1) {
             int added_sectors = _bfs_expand_cluster(db, c_id, ori_sector, 8);
-            LOGI("clusters_init: Created Orion cluster (ID: %d, Sector: %d) with %d sectors.", c_id, ori_sector, added_sectors);
+            LOGD("clusters_init: Created Orion cluster (ID: %d, Sector: %d) with %d sectors.", c_id, ori_sector, added_sectors);
         } else {
             LOGE("clusters_init: Failed to create Orion cluster.");
         }
@@ -217,7 +217,7 @@ clusters_init(sqlite3 *db)
     }
     sqlite3_finalize(stmt);
 
-    LOGI("Cluster Init: Total %d, Target Clustered %d, Current %d", total_sectors, target_clustered_sectors, current_clustered);
+    LOGD("Cluster Init: Total %d, Target Clustered %d, Current %d", total_sectors, target_clustered_sectors, current_clustered);
 
     // Prepare for random generation
     sqlite3_stmt *pick_stmt;
@@ -255,7 +255,7 @@ clusters_init(sqlite3 *db)
     }
     sqlite3_finalize(pick_stmt);
 
-    LOGI("Cluster generation complete. Total clustered sectors: %d", current_clustered);
+    LOGD("Cluster generation complete. Total clustered sectors: %d", current_clustered);
     return 0;
 }
 
@@ -268,7 +268,7 @@ clusters_seed_illegal_goods(sqlite3 *db)
         return -1;
     }
 
-    LOGI("Seeding illegal goods in ports...");
+    LOGD("Seeding illegal goods in ports...");
     sqlite3_stmt *port_stmt = NULL;
     sqlite3_stmt *cluster_align_stmt = NULL;
 
@@ -293,7 +293,7 @@ clusters_seed_illegal_goods(sqlite3 *db)
         int sector_id = sqlite3_column_int(port_stmt, 1);
         int cluster_alignment = 0; // Default to neutral
 
-        LOGI("Processing port: %d (sector: %d)", port_id, sector_id);
+        LOGD("Processing port: %d (sector: %d)", port_id, sector_id);
 
 
         // Get cluster alignment for the port's sector
@@ -327,9 +327,9 @@ clusters_seed_illegal_goods(sqlite3 *db)
             sqlite3_bind_int(update_stmt, 2, weapons_qty);
             sqlite3_bind_int(update_stmt, 3, drugs_qty);
             sqlite3_bind_int(update_stmt, 4, port_id);
-            LOGI("Seeding illegal goods for port %d (sector %d, alignment %d): SLV=%d, WPN=%d, DRG=%d", port_id, sector_id, cluster_alignment, slaves_qty, weapons_qty, drugs_qty);
+            LOGD("Seeding illegal goods for port %d (sector %d, alignment %d): SLV=%d, WPN=%d, DRG=%d", port_id, sector_id, cluster_alignment, slaves_qty, weapons_qty, drugs_qty);
             int update_rc = sqlite3_step(update_stmt);
-            LOGI("Update port illegal goods RC: %d", update_rc);
+            LOGD("Update port illegal goods RC: %d", update_rc);
             sqlite3_finalize(update_stmt);
         } else {
             LOGE("Failed to prepare update port illegal goods statement: %s", sqlite3_errmsg(db));
@@ -345,7 +345,7 @@ int
 cluster_black_market_step(sqlite3 *db, int64_t now_s)
 {
     (void)now_s;
-    LOGI("Running Cluster Black Market Step...");
+    LOGD("Running Cluster Black Market Step...");
 
     const char *illegal_commodities[] = {"SLV", "WPN", "DRG"};
 
@@ -430,7 +430,7 @@ cluster_economy_step(sqlite3 *db, int64_t now_s)
     // 1. Ensure clusters exist (safety)
     clusters_init(db);
 
-    LOGI("Running Cluster Economy Step...");
+    LOGD("Running Cluster Economy Step...");
 
     // Iterate all clusters
     sqlite3_stmt *cluster_stmt;

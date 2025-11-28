@@ -8,29 +8,37 @@
         "data": { "sql": "SELECT id FROM shiptypes WHERE name = 'Scout Marauder';" },
         "expect": { "status": "ok", "data": { "rows": [ ["*"] ] } }
       },
-      {
-        "name": "Setup Good Player",
-        "command": "auth.register",
-        "data": { "user_name": "goodguy", "password": "password" },
-        "expect": { "status": "ok" }
-      },
-      {
-        "name": "Login Good Player",
-        "command": "auth.login",
-        "data": { "user_name": "goodguy", "password": "password" },
-        "expect": { "status": "ok" },
-        "save": {"good_id": "data.player_id"}
-      },
-      {
-        "name": "Setup Evil Player",
-        "command": "auth.register",
-        "data": { "user_name": "badguy", "password": "password" },
-        "expect": { "status": "ok" }
-      },
+    {
+      "name": "Setup Good Player",
+      "command": "auth.register",
+      "register_if_missing": true,
+      "data": { "username": "goodguy", "password": "password" },
+      "expect": { "status": "ok" },
+      "user": "goodguy",
+      "passwd": "password"
+    },
+    {
+      "name": "Login Good Player",
+      "command": "auth.login",
+      "data": { "username": "goodguy", "password": "password" },
+      "expect": { "status": "ok", "type": "auth.session" },
+      "user": "goodguy",
+      "passwd": "password",
+      "save": { "good_id": "data.player_id" }
+    },
+    {
+      "name": "Setup Evil Player",
+      "command": "auth.register",
+      "register_if_missing": true,
+      "data": { "username": "badguy", "password": "password" },
+      "expect": { "status": "ok" },
+      "user": "badguy",
+      "passwd": "password"
+    },
       {
         "name": "Login Evil Player",
         "command": "auth.login",
-        "data": { "user_name": "badguy", "password": "password" },
+        "data": { "username": "badguy", "password": "password" },
         "expect": { "status": "ok" },
         "save": {"evil_id": "data.player_id"}
       },

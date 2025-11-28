@@ -142,6 +142,7 @@ extern "C"
       int big_sleep_clear_xp_below;
       char escape_pod_spawn_mode[32];	// "previous_sector", "safe_path"
     } death;
+    int startingcredits; /* Added missing startingcredits to server_config_t */
   } server_config_t;
 
   /* Single global instance (defined in server_config.c) */

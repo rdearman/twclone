@@ -11,6 +11,7 @@
 /* local includes */
 #include "server_ports.h"
 #include "database.h"
+#include "database_cmd.h"
 #include "errors.h"
 #include "config.h"
 #include "server_envelope.h"

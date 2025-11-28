@@ -1031,10 +1031,30 @@ schema_sector_set_beacon (void)
 static json_t *
 schema_auth_register (void)
 {
-  /* TODO: Implement this schema */
-  return json_pack ("{s:s, s:s}",
-		    "$id", "ge://schema/auth.register.json",
-		    "$comment", "Schema not yet implemented");
+  json_t *data_properties = json_pack ("{s:o, s:o, s:o, s:o, s:o}",
+				       "username", json_pack ("{s:s}", "type",
+							      "string"),
+				       "password", json_pack ("{s:s}", "type",
+							      "string"),
+				       "ship_name", json_pack ("{s:s}", "type",
+							       "string"),
+				       "ui_locale", json_pack ("{s:s}", "type",
+							      "string"),
+				       "ui_timezone", json_pack ("{s:s}", "type",
+							        "string"));
+
+  json_t *data_required = json_pack ("[s,s]", "username", "password");
+
+  json_t *data_schema = json_pack ("{s:s, s:s, s:s, s:o, s:o, s:b}",
+				   "$id", "ge://schema/auth.register.json",
+				   "$schema",
+				   "https://json-schema.org/draft/2020-12/schema",
+				   "type", "object",
+				   "properties", data_properties,
+				   "required", data_required,
+				   "additionalProperties", json_false ());
+
+  return data_schema;
 }
 
 static json_t *

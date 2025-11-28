@@ -2446,6 +2446,11 @@ create_derelicts (void)
       strncat (cols, ", cloaked", sizeof (cols) - strlen (cols) - 1);
       strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
     }
+  if (has_column (db, "ships", "perms"))
+    {
+      strncat (cols, ", perms", sizeof (cols) - strlen (cols) - 1);
+      strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
+    }
 
 
   snprintf (insert_sql, sizeof (insert_sql),
@@ -2509,6 +2514,7 @@ create_derelicts (void)
       int max_attack = sqlite3_column_int (sel, 8);	// NEW: maxattack
       int max_limpets = sqlite3_column_int (sel, 9);	// NEW: maxlimpets
       int max_genesis = sqlite3_column_int (sel, 10);	// NEW: maxgenesis
+
 
       /* Random fill percentage for “used” fields */
 #define MIN_FILL_PCT 25
@@ -2579,6 +2585,8 @@ create_derelicts (void)
       if (has_column (db, "ships", "beacons"))
 	sqlite3_bind_int (ins, b++, beacons_to_add);
 
+      if (has_column (db, "ships", "perms"))
+	sqlite3_bind_int (ins, b++, 777);
 
       // 3. Fixed value columns
       sqlite3_bind_int (ins, b++, 0);	/* flags (NPC derelict) */

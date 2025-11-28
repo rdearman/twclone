@@ -126,14 +126,15 @@ am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
 am__dirstamp = $(am__leading_dot)dirstamp
 am_bigbang_OBJECTS = ../src/database.$(OBJEXT) \
-	../src/schemas.$(OBJEXT) ../src/namegen.$(OBJEXT) \
-	../src/server_bigbang.$(OBJEXT) \
+	../src/database_cmd.$(OBJEXT) ../src/schemas.$(OBJEXT) \
+	../src/namegen.$(OBJEXT) ../src/server_bigbang.$(OBJEXT) \
 	../src/server_warp_post_processing.$(OBJEXT) \
 	../src/globals.$(OBJEXT) ../src/common.$(OBJEXT) \
 	../src/server_log.$(OBJEXT) ../src/test_bang.$(OBJEXT)
 bigbang_OBJECTS = $(am_bigbang_OBJECTS)
 bigbang_DEPENDENCIES =
-am_server_OBJECTS = ../src/server_communication.$(OBJEXT) \
+am_server_OBJECTS = ../src/database_cmd.$(OBJEXT) \
+	../src/server_communication.$(OBJEXT) \
 	../src/server_bulk.$(OBJEXT) ../src/server_combat.$(OBJEXT) \
 	../src/server_bigbang.$(OBJEXT) ../src/server_cmds.$(OBJEXT) \
 	../src/server_citadel.$(OBJEXT) \
@@ -174,7 +175,7 @@ DEFAULT_INCLUDES = -I. -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__maybe_remake_depfiles = depfiles
 am__depfiles_remade = ../src/$(DEPDIR)/common.Po \
-	../src/$(DEPDIR)/database.Po \
+	../src/$(DEPDIR)/database.Po ../src/$(DEPDIR)/database_cmd.Po \
 	../src/$(DEPDIR)/db_player_settings.Po \
 	../src/$(DEPDIR)/engine_consumer.Po \
 	../src/$(DEPDIR)/globals.Po ../src/$(DEPDIR)/namegen.Po \
@@ -271,7 +272,7 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-ISODATE = 2025-11-27
+ISODATE = 2025-11-28
 LDFLAGS = 
 LIBOBJS = 
 LIBS = -lpthread -lm 
@@ -349,6 +350,7 @@ server_LDADD = -ljansson -lsqlite3 -lcrypto -lpthread -lm
 bigbang_LDADD = -ljansson -lsqlite3 -lcrypto -lpthread -lm
 AUTOMAKE_OPTIONS = subdir-objects
 server_SOURCES = \
+        ../src/database_cmd.c \
         ../src/server_communication.c \
         ../src/server_bulk.c \
         ../src/server_combat.c  \
@@ -387,6 +389,7 @@ server_SOURCES = \
 
 bigbang_SOURCES = \
 	../src/database.c \
+        ../src/database_cmd.c \
 	../src/schemas.c \
 	../src/namegen.c \
 	../src/server_bigbang.c \
@@ -479,6 +482,8 @@ clean-binPROGRAMS:
 	@: > ../src/$(DEPDIR)/$(am__dirstamp)
 ../src/database.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
+../src/database_cmd.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/schemas.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/namegen.$(OBJEXT): ../src/$(am__dirstamp) \
@@ -567,6 +572,7 @@ distclean-compile:
 
 include ../src/$(DEPDIR)/common.Po # am--include-marker
 include ../src/$(DEPDIR)/database.Po # am--include-marker
+include ../src/$(DEPDIR)/database_cmd.Po # am--include-marker
 include ../src/$(DEPDIR)/db_player_settings.Po # am--include-marker
 include ../src/$(DEPDIR)/engine_consumer.Po # am--include-marker
 include ../src/$(DEPDIR)/globals.Po # am--include-marker
@@ -754,6 +760,7 @@ clean-am: clean-binPROGRAMS clean-generic mostlyclean-am
 distclean: distclean-am
 		-rm -f ../src/$(DEPDIR)/common.Po
 	-rm -f ../src/$(DEPDIR)/database.Po
+	-rm -f ../src/$(DEPDIR)/database_cmd.Po
 	-rm -f ../src/$(DEPDIR)/db_player_settings.Po
 	-rm -f ../src/$(DEPDIR)/engine_consumer.Po
 	-rm -f ../src/$(DEPDIR)/globals.Po
@@ -835,6 +842,7 @@ installcheck-am:
 maintainer-clean: maintainer-clean-am
 		-rm -f ../src/$(DEPDIR)/common.Po
 	-rm -f ../src/$(DEPDIR)/database.Po
+	-rm -f ../src/$(DEPDIR)/database_cmd.Po
 	-rm -f ../src/$(DEPDIR)/db_player_settings.Po
 	-rm -f ../src/$(DEPDIR)/engine_consumer.Po
 	-rm -f ../src/$(DEPDIR)/globals.Po

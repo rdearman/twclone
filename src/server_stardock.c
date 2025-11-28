@@ -281,11 +281,307 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
 int
 cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
 {
-  // This function was lost in a git restore, recovering from history.
-  // The user has fixed most errors, so this is a placeholder for now.
-  // I will need to get the correct implementation from the user if this is not right.
-  send_enveloped_error (ctx->fd, root, ERR_NOT_IMPLEMENTED,
-			"hardware.buy is not fully restored yet.");
+  sqlite3 *db = db_get_handle ();
+  if (!ctx || ctx->player_id <= 0)
+    {
+      return send_error_response (ctx, root, ERR_NOT_AUTHENTICATED,
+				  "Authentication required.");
+    }
+
+  json_t *data = json_object_get (root, "data");
+  if (!json_is_object (data))
+    {
+      return send_error_response (ctx, root, ERR_INVALID_SCHEMA,
+				  "Missing data object.");
+    }
+
+  const char *code = json_string_value (json_object_get (data, "code"));
+  int quantity = json_integer_value (json_object_get (data, "quantity"));
+
+  if (!code || quantity <= 0)
+    {
+      return send_error_response (ctx, root, 1301,
+				  "Missing or invalid 'quantity'.");
+    }
+
+  // 1. Get Context
+  int player_id = ctx->player_id;
+  int sector_id = ctx->sector_id;
+  int ship_id = h_get_active_ship_id (db, player_id);
+  if (ship_id <= 0)
+    {
+      return send_error_response (ctx, root, ERR_SHIP_NOT_FOUND,
+				  "No active ship.");
+    }
+
+  // 2. Check Port Location (Stardock or Class 0)
+  sqlite3_stmt *stmt = NULL;
+  int port_type = -1;
+  const char *sql_port =
+    "SELECT type FROM ports WHERE sector = ? AND (type = 9 OR type = 0);";
+  if (sqlite3_prepare_v2 (db, sql_port, -1, &stmt, NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_int (stmt, 1, sector_id);
+      if (sqlite3_step (stmt) == SQLITE_ROW)
+	{
+	  port_type = sqlite3_column_int (stmt, 0);
+	}
+    }
+  sqlite3_finalize (stmt);
+
+  if (port_type == -1)
+    {
+      return send_error_response (ctx, root, 1811,
+				  "Hardware can only be purchased at Stardock or Class-0 ports.");
+    }
+
+  // 3. Get Item Details
+  int price = 0;
+  int requires_stardock = 0;
+  int sold_in_class0 = 0;
+  int max_per_ship = 0;
+  char category[32] = { 0 };
+  const char *sql_item =
+    "SELECT price, requires_stardock, sold_in_class0, max_per_ship, category FROM hardware_items WHERE code = ? AND enabled = 1;";
+
+  bool item_found = false;
+  if (sqlite3_prepare_v2 (db, sql_item, -1, &stmt, NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_text (stmt, 1, code, -1, SQLITE_STATIC);
+      if (sqlite3_step (stmt) == SQLITE_ROW)
+	{
+	  price = sqlite3_column_int (stmt, 0);
+	  requires_stardock = sqlite3_column_int (stmt, 1);
+	  sold_in_class0 = sqlite3_column_int (stmt, 2);
+	  if (sqlite3_column_type (stmt, 3) != SQLITE_NULL)
+	    max_per_ship = sqlite3_column_int (stmt, 3);
+	  const char *cat = (const char *) sqlite3_column_text (stmt, 4);
+	  if (cat)
+	    strncpy (category, cat, sizeof (category) - 1);
+	  item_found = true;
+	}
+    }
+  sqlite3_finalize (stmt);
+
+  if (!item_found)
+    {
+      return send_error_response (ctx, root, 1812,
+				  "Invalid or unavailable hardware item.");
+    }
+
+  // 4. Validate Port Type vs Item Requirements
+  if (requires_stardock && port_type != 9)
+    {
+      return send_error_response (ctx, root, 1811,
+				  "This hardware item is not sold at Class-0 ports.");
+    }
+  if (!sold_in_class0 && port_type == 0)
+    {
+      return send_error_response (ctx, root, 1811,
+				  "This hardware item is not sold at Class-0 ports.");
+    }
+
+  // 5. Map Code to Column and Check Limits
+  const char *col_name = NULL;
+  // Mappings
+  if (strcmp (code, "FIGHTERS") == 0)
+    col_name = "fighters";
+  else if (strcmp (code, "SHIELDS") == 0)
+    col_name = "shields";
+  else if (strcmp (code, "HOLDS") == 0)
+    col_name = "holds";
+  else if (strcmp (code, "GENESIS") == 0)
+    col_name = "genesis";
+  else if (strcmp (code, "MINES") == 0)
+    col_name = "mines";
+  else if (strcmp (code, "BEACONS") == 0)
+    col_name = "beacons";
+  else if (strcmp (code, "CLOAK") == 0)
+    col_name = "cloaking_devices";
+  else if (strcmp (code, "DETONATOR") == 0)
+    col_name = "detonators";
+  else if (strcmp (code, "PROBE") == 0)
+    col_name = "probes";
+  else if (strcmp (code, "LSCANNER") == 0)
+    col_name = "has_long_range_scanner";
+  else if (strcmp (code, "PSCANNER") == 0)
+    col_name = "has_planet_scanner";
+  else if (strcmp (code, "TWARP") == 0)
+    col_name = "has_transwarp";
+
+  if (!col_name)
+    {
+      return send_error_response (ctx, root, 500,
+				  "Server configuration error: Unknown item mapping.");
+    }
+
+  // Check Limits logic
+  int current_val = 0;
+  int max_limit = 999999999;
+
+  char sql_info[512];
+  bool is_max_check_needed = true;
+  char limit_col[64] = { 0 };
+
+  if (strcmp (col_name, "fighters") == 0)
+    strcpy (limit_col, "maxfighters");
+  else if (strcmp (col_name, "shields") == 0)
+    strcpy (limit_col, "maxshields");
+  else if (strcmp (col_name, "holds") == 0)
+    strcpy (limit_col, "maxholds");
+  else if (strcmp (col_name, "genesis") == 0)
+    strcpy (limit_col, "maxgenesis");
+  else if (strcmp (col_name, "mines") == 0)
+    strcpy (limit_col, "maxmines");
+  else if (strcmp (col_name, "beacons") == 0)
+    strcpy (limit_col, "maxbeacons");
+  else if (strcmp (col_name, "cloaking_devices") == 0)
+    strcpy (limit_col, "max_cloaks");
+  else if (strcmp (col_name, "detonators") == 0)
+    strcpy (limit_col, "max_detonators");
+  else if (strcmp (col_name, "probes") == 0)
+    strcpy (limit_col, "max_probes");
+  else if (strncmp (col_name, "has_", 4) == 0)
+    {
+      is_max_check_needed = false;
+      max_limit = 1;
+    }
+  else
+    {
+      is_max_check_needed = false;
+    }
+
+  if (is_max_check_needed)
+    {
+      snprintf (sql_info, sizeof (sql_info),
+		"SELECT s.%s, st.%s FROM ships s JOIN shiptypes st ON s.type_id = st.id WHERE s.id = ?;",
+		col_name, limit_col);
+    }
+  else
+    {
+      snprintf (sql_info, sizeof (sql_info), "SELECT %s, 0 FROM ships WHERE id = ?;",
+		col_name);
+    }
+
+  if (sqlite3_prepare_v2 (db, sql_info, -1, &stmt, NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_int (stmt, 1, ship_id);
+      if (sqlite3_step (stmt) == SQLITE_ROW)
+	{
+	  current_val = sqlite3_column_int (stmt, 0);
+	  if (is_max_check_needed)
+	    {
+	      max_limit = sqlite3_column_int (stmt, 1);
+	    }
+	}
+      else
+	{
+	  sqlite3_finalize (stmt);
+	  return send_error_response (ctx, root, 500, "Ship info not found.");
+	}
+    }
+  else
+    {
+      LOGE ("cmd_hardware_buy: SQL prepare failed: %s", sqlite3_errmsg (db));
+      return send_error_response (ctx, root, 500,
+				  "Database error checking limits.");
+    }
+  sqlite3_finalize (stmt);
+
+  // 6. Check Logic
+  if (max_per_ship > 0)
+    {
+      if (current_val + quantity > max_per_ship)
+	{
+	  if (strcmp (col_name, "cloaking_devices") == 0)
+	    return send_error_response (ctx, root, 1814,
+					"Cloaking Device already installed.");
+	  else
+	    return send_error_response (ctx, root, 1814,
+					"Purchase would exceed ship type's maximum capacity.");
+	}
+    }
+
+  if (current_val + quantity > max_limit)
+    {
+      return send_error_response (ctx, root, 1814,
+				  "Purchase would exceed ship type's maximum capacity.");
+    }
+
+  // 7. Check Funds
+  long long total_cost = (long long) price * quantity;
+  long long balance = 0;
+  h_get_player_petty_cash (db, player_id, &balance);
+
+  if (balance < total_cost)
+    {
+      return send_error_response (ctx, root, 1813,
+				  "Insufficient credits on ship for purchase.");
+    }
+
+  // 8. Execute Transaction
+  pthread_mutex_lock (&db_mutex);
+  sqlite3_exec (db, "BEGIN IMMEDIATE", NULL, NULL, NULL);
+
+  long long new_balance = 0;
+  int rc_deduct =
+    h_deduct_player_petty_cash_unlocked (db, player_id, total_cost,
+					 &new_balance);
+  if (rc_deduct != SQLITE_OK)
+    {
+      sqlite3_exec (db, "ROLLBACK", NULL, NULL, NULL);
+      pthread_mutex_unlock (&db_mutex);
+      return send_error_response (ctx, root, 1813,
+				  "Insufficient credits (concurrent).");
+    }
+
+  char *sql_upd =
+    sqlite3_mprintf ("UPDATE ships SET %s = %s + %d WHERE id = %d;",
+		     col_name, col_name, quantity, ship_id);
+  int rc_upd = sqlite3_exec (db, sql_upd, NULL, NULL, NULL);
+  sqlite3_free (sql_upd);
+
+  if (rc_upd != SQLITE_OK)
+    {
+      sqlite3_exec (db, "ROLLBACK", NULL, NULL, NULL);
+      pthread_mutex_unlock (&db_mutex);
+      return send_error_response (ctx, root, 500, "Database update failed.");
+    }
+
+  sqlite3_exec (db, "COMMIT", NULL, NULL, NULL);
+  pthread_mutex_unlock (&db_mutex);
+
+  // 9. Response
+  int final_val = current_val + quantity;
+
+  json_t *ship_obj = json_object ();
+  json_object_set_new (ship_obj, col_name, json_integer (final_val));
+  if (strcmp (col_name, "cloaking_devices") == 0)
+    {
+      json_object_set_new (ship_obj, "cloaks_installed",
+			   json_integer (final_val));
+    }
+  if (strcmp (col_name, "genesis") == 0)
+    {
+      json_object_set_new (ship_obj, "genesis_torps",
+			   json_integer (final_val));
+    }
+  if (strcmp (col_name, "has_transwarp") == 0)
+    {
+        // The test expects "has_transwarp" which matches the col_name, 
+        // but verify if there's an alias.
+        // "has_transwarp" is fine.
+    }
+
+  json_t *resp = json_pack ("{s:s, s:i, s:I, s:o}",
+			    "code", code,
+			    "quantity", quantity,
+			    "credits_spent", (json_int_t) total_cost,
+			    "ship", ship_obj);
+
+  send_enveloped_ok (ctx->fd, root, "hardware.purchase_v1", resp);
+  json_decref (resp);
+
   return 0;
 }
 

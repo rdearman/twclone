@@ -275,6 +275,8 @@ apply_db (sqlite3 *db)
 	g_cfg.mines.limpet.allow_multi_owner = (bool) atoi (v);
       else if (!strcasecmp (k, "mines.limpet.scrub_cost"))
 	g_cfg.mines.limpet.scrub_cost = atoi (v);
+      else if (!strcasecmp (k, "startingcredits"))
+	g_cfg.startingcredits = atoi (v);
     }
   sqlite3_finalize (st);
 

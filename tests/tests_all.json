@@ -5,7 +5,7 @@
             "name": "auth.register (new user)",
             "cmd": "auth.register",
             "data": {
-                "user_name": "test_user_tbd",
+                "username": "test_user_tbd",
                 "password": "password123"
             },
             "expect": {
@@ -34,23 +34,20 @@
         {
             "name": "auth.register (second user)",
             "cmd": "auth.register",
+            "register_if_missing": true,
             "data": {
-                "user_name": "test_user_2",
+                "username": "test_user_2",
                 "password": "password123"
             },
             "expect": {
-                "status": "error",
-                "type": "error",
-                "error": {
-                    "code": 1210,
-                    "message": "Username already exists"
-                }
+                "status": "ok",
+                "type": "auth.session"
             }
         },
         {
             "name": "Login Player 2 (for bank transfer tests)",
             "command": "auth.login",
-            "data": { "user_name": "test_user_2", "password": "password123" },
+            "data": { "username": "test_user_2", "password": "password123" },
             "expect": { "status": "ok" },
             "user": "test_user_2",
             "passwd": "password123",
@@ -169,7 +166,7 @@
             "name": "auth.login",
             "cmd": "auth.login",
             "data": {
-                "user_name": "@user",
+                "username": "@user",
                 "password": "@passwd"
             },
             "expect": {
@@ -803,7 +800,7 @@
         {
             "name": "Register Tavern Player",
             "command": "auth.register",
-            "data": { "user_name": "taverntest", "password": "password" },
+            "data": { "username": "taverntest", "password": "password" },
             "expect": { "status": "ok" },
             "user": "taverntest",
             "passwd": "password"
@@ -811,7 +808,7 @@
         {
             "name": "Login Tavern Player",
             "command": "auth.login",
-            "data": { "user_name": "taverntest", "password": "password" },
+            "data": { "username": "taverntest", "password": "password" },
             "expect": { "status": "ok" },
             "user": "taverntest",
             "passwd": "password",
