@@ -393,6 +393,36 @@ const char *create_table_sql[] = {
     "  shipyard_require_hardware_compat INTEGER NOT NULL DEFAULT 1, "
     "  shipyard_tax_bp INTEGER NOT NULL DEFAULT 1000 " " ); ",
 
+
+  "CREATE TABLE IF NOT EXISTS commision ( "
+  " id INTEGER PRIMARY KEY, "
+  " is_evil BOOLEAN NOT NULL DEFAULT 0 CHECK (is_evil IN (0,1)), "
+  " min_exp INTEGER NOT NULL, "
+  " description TEXT NOT NULL ); ",
+
+
+ " CREATE TABLE IF NOT EXISTS alignment_band   ("
+ "   id            INTEGER PRIMARY KEY  ,"
+ "   code          TEXT NOT NULL UNIQUE,      "
+ "   name          TEXT NOT NULL,             "
+ "   min_align     INTEGER NOT NULL  ,"
+ "   max_align     INTEGER NOT NULL  ,"
+ "   is_good       INTEGER NOT NULL DEFAULT 0 CHECK (is_good IN (0,1))  ,"
+ "   is_evil       INTEGER NOT NULL DEFAULT 0 CHECK (is_evil IN (0,1))  ,"
+ "   can_buy_iss   INTEGER NOT NULL DEFAULT 0 CHECK (can_buy_iss IN (0,1))  ,"
+ "   can_rob_ports INTEGER NOT NULL DEFAULT 0 CHECK (can_rob_ports IN (0,1))  ,"
+ "   notes         TEXT"
+ " )  ;",
+
+ " INSERT INTO alignment_band (id, code, name, min_align, max_align, is_good, is_evil, can_buy_iss, can_rob_ports  )"
+ " VALUES "
+ "   (1, 'VERY_GOOD',  'Very Good',    750,  2000, 1, 0, 1, 0)  ,"
+ "   (2, 'GOOD',       'Good',         250,   749, 1, 0, 0, 0)  ,"
+ "   (3, 'NEUTRAL',    'Neutral',     -249,   249, 0, 0, 0, 0)  ,"
+ "   (4, 'SHADY',      'Shady',       -500,  -250, 0, 1, 0, 1)  ,"
+ "   (5, 'VERY_EVIL',  'Very Evil',  -1000,  -501, 0, 1, 0, 1)  ,"
+ "   (6, 'MONSTROUS',  'Monstrous',  -2000, -1001, 0, 1, 0, 1)  ;",
+
   " CREATE TABLE IF NOT EXISTS trade_idempotency ( "
     " key          TEXT PRIMARY KEY, "
     " player_id    INTEGER NOT NULL, "
@@ -537,26 +567,29 @@ const char *create_table_sql[] = {
 
 
   " CREATE TABLE IF NOT EXISTS players ( "
-    " id INTEGER PRIMARY KEY AUTOINCREMENT,  "
-    " type INTEGER DEFAULT 2,  "
-    " number INTEGER,  "
-    " name TEXT NOT NULL,  "
-    " passwd TEXT NOT NULL,  "
-    " sector INTEGER,  "
-    " ship INTEGER,  "
-    " experience INTEGER,  "
-    " alignment INTEGER,  "
-    " commission INTEGER DEFAULT 0,  "
-    " credits INTEGER,  "
-    " flags INTEGER,  "
-    " login_time INTEGER,  "
-    " last_update INTEGER,  "
-    " intransit INTEGER,  "
-    " beginmove INTEGER,  "
-    " movingto INTEGER,  "
-    " loggedin INTEGER,  "
-    " lastplanet INTEGER,  "
-    " score INTEGER,  " " last_news_read_timestamp INTEGER DEFAULT 0);  ",
+  " id INTEGER PRIMARY KEY AUTOINCREMENT,  "
+  " type INTEGER DEFAULT 2,  "
+  " number INTEGER,  "
+  " name TEXT NOT NULL,  "
+  " passwd TEXT NOT NULL,  "
+  " sector INTEGER DEFAULT 1,  "
+  " ship INTEGER,  "
+  " experience INTEGER DEFAULT 0,  "
+  " alignment INTEGER DEFAULT 0, "
+  " commission INTEGER DEFAULT 0,  "
+  " credits INTEGER DEFAULT 1500,  "
+  " flags INTEGER,  "
+  " login_time INTEGER,  "
+  " last_update INTEGER,  "
+  " intransit INTEGER,  "
+  " beginmove INTEGER,  "
+  " movingto INTEGER,  "
+  " loggedin INTEGER,  "
+  " lastplanet INTEGER,  "
+  " score INTEGER,  "
+  " last_news_read_timestamp INTEGER DEFAULT 0, "
+  " FOREIGN KEY (commission) REFERENCES commision(id) "
+  " );  ",
 
 
   " CREATE TABLE IF NOT EXISTS player_types (type INTEGER PRIMARY KEY AUTOINCREMENT, description TEXT); ",
@@ -594,23 +627,25 @@ const char *create_table_sql[] = {
     "   maxphotons INTEGER, /* Photon torpedo count */  "
     "   max_cloaks INTEGER NOT NULL DEFAULT 0, "
     "   can_purchase INTEGER, /* Can be bought at a port (0/1) */  "
-    "   enabled INTEGER NOT NULL DEFAULT 1 " " );  ",
+    "   enabled INTEGER NOT NULL DEFAULT 1, "
+    "   FOREIGN KEY (required_commission) REFERENCES commision(id) "
+  " );  ",
 
   " CREATE TABLE IF NOT EXISTS ships (  "
     "   id INTEGER PRIMARY KEY AUTOINCREMENT,  "
     "   name TEXT NOT NULL,  "
     "   type_id INTEGER, /* Foreign Key to shiptypes.id */  "
     "   attack INTEGER,  "
-    "   holds INTEGER,  "
+    "   holds INTEGER DEFAULT 1,  "
     "   mines INTEGER, /* Current quantity carried */  "
     "   limpets INTEGER, /* Current quantity carried */  "
-    "   fighters INTEGER, /* Current quantity carried */  "
+    "   fighters INTEGER DEFAULT 1, /* Current quantity carried */  "
     "   genesis INTEGER, /* Current quantity carried */  "
     "   detonators INTEGER NOT NULL DEFAULT 0, "
     "   probes INTEGER NOT NULL DEFAULT 0, "
     "   photons INTEGER, /* Current quantity carried */  "
     "   sector INTEGER, /* Foreign Key to sectors.id */  "
-    "   shields INTEGER,  "
+    "   shields INTEGER DEFAULT 1,  "
     "   beacons INTEGER, /* Current quantity carried */  "
     "   colonists INTEGER,  "
     "   equipment INTEGER,  "
@@ -633,8 +668,6 @@ const char *create_table_sql[] = {
     "   CONSTRAINT check_current_cargo_limit CHECK ( (colonists + equipment + organics + ore) <= holds ), "
     "   FOREIGN KEY(type_id) REFERENCES shiptypes(id),  "
     "   FOREIGN KEY(sector) REFERENCES sectors(id)  " " );  ",
-
-
 
   " CREATE TABLE IF NOT EXISTS ship_markers ( "
     " ship_id        INTEGER NOT NULL REFERENCES ships(id), "
@@ -1584,7 +1617,50 @@ const char *insert_default_sql[] = {
   "INSERT OR IGNORE INTO ship_roles (role_id, role, role_description) VALUES (6, 'corp',    'Corporate ownership/control (for future org/corp features)');",
   "INSERT OR IGNORE INTO ship_roles (role_id, role, role_description) VALUES (7, 'manager', 'Delegated admin; can assign crew/pilot but not sell');",
 
-
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 0, 'Civilian'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 0, 'Civilian'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 100, 'Cadet'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 100, 'Thug'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 400, 'Ensign'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 400, 'Pirate'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 1000, 'Lieutenant'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 1000, 'Raider'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 2500, 'Lt. Commander'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 2500, 'Marauder'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 5000, 'Commander'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 5000, 'Buccaneer'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 10000, 'Captain'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 10000, 'Corsair'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 20000, 'Commodore'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 20000, 'Terrorist'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 35000, 'Rear Admiral'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 35000, 'Anarchist'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 75000, 'Vice Admiral'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 75000, 'Warlord'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 100000, 'Admiral'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 100000, 'Despot'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 150000, 'Fleet Admiral'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 150000, 'Tyrant'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 200000, 'Grand Admiral'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 200000, 'Warmonger'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 300000, 'Lord Commander'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 300000, 'Dread Pirate'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 400000, 'High Commander'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 400000, 'Cosmic Destroyer'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 550000, 'Star Marshal'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 550000, 'Galactic Menace'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 700000, 'Grand Star Marshal'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 700000, 'Void Reaver'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 1000000, 'Supreme Commander'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 1000000, 'Grim Reaper'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 1500000, 'Galactic Commander'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 1500000, 'Annihilator'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 2000000, 'Galactic Captain'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 3000000, 'Supreme Annihilator'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 4000000, 'Galactic Commodore'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 4000000, 'Chaos Bringer'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 5000000, 'Galactic Admiral'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 5000000, 'Death Lord'); ",
 
   "INSERT OR IGNORE INTO planettypes (code, typeDescription, typeName, "
     "citadelUpgradeTime_lvl1, citadelUpgradeTime_lvl2, citadelUpgradeTime_lvl3, citadelUpgradeTime_lvl4, citadelUpgradeTime_lvl5, citadelUpgradeTime_lvl6, "
