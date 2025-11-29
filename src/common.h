@@ -47,6 +47,16 @@ typedef struct
   int rl_window_sec;
 } client_ctx_t;
 
+// Structure to represent a commodity's essential data
+typedef struct
+{
+  int id;
+  const char *code;
+  const char *name;
+  bool is_illegal; // From commodities.illegal
+  // Add other relevant commodity fields if needed, e.g., base_price, volatility
+} commodity_t;
+
 // A simple structure to represent the result of the comsume player turn function
 
 typedef enum

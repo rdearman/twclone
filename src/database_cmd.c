@@ -1881,6 +1881,104 @@ cleanup:
     return rc;
 }
 
+// h_get_cluster_id_for_sector: Retrieves the cluster ID for a given sector.
+int h_get_cluster_id_for_sector(sqlite3 *db, int sector_id, int *out_cluster_id) {
+    if (!db || !out_cluster_id) return SQLITE_MISUSE;
+
+    sqlite3_stmt *st = NULL;
+    int rc = SQLITE_ERROR;
+
+    const char *sql = "SELECT cluster_id FROM cluster_sectors WHERE sector_id = ?1;";
+
+    pthread_mutex_lock(&db_mutex);
+    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("h_get_cluster_id_for_sector: Prepare error: %s", sqlite3_errmsg(db));
+        goto cleanup;
+    }
+    sqlite3_bind_int(st, 1, sector_id);
+
+    if (sqlite3_step(st) == SQLITE_ROW) {
+        *out_cluster_id = sqlite3_column_int(st, 0);
+        rc = SQLITE_OK;
+    } else if (rc == SQLITE_DONE) {
+        LOGW("h_get_cluster_id_for_sector: No cluster found for sector ID %d.", sector_id);
+        rc = SQLITE_NOTFOUND;
+    } else {
+        LOGE("h_get_cluster_id_for_sector: Execute error: %s", sqlite3_errmsg(db));
+    }
+
+cleanup:
+    if (st) sqlite3_finalize(st);
+    pthread_mutex_unlock(&db_mutex);
+    return rc;
+}
+
+// h_get_cluster_alignment: Retrieves the raw alignment score for the cluster containing a given sector.
+int h_get_cluster_alignment(sqlite3 *db, int sector_id, int *out_alignment) {
+    if (!db || !out_alignment) return SQLITE_MISUSE;
+
+    int rc = SQLITE_ERROR;
+    int cluster_id = 0;
+
+    rc = h_get_cluster_id_for_sector(db, sector_id, &cluster_id);
+    if (rc != SQLITE_OK) {
+        LOGW("h_get_cluster_alignment: Failed to get cluster ID for sector %d. RC: %d", sector_id, rc);
+        // Fallback or specific error handling
+        *out_alignment = 0; // Default to neutral if no cluster
+        return rc;
+    }
+
+    sqlite3_stmt *st = NULL;
+    const char *sql = "SELECT alignment FROM clusters WHERE id = ?1;";
+
+    pthread_mutex_lock(&db_mutex);
+    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("h_get_cluster_alignment: Prepare error: %s", sqlite3_errmsg(db));
+        goto cleanup;
+    }
+    sqlite3_bind_int(st, 1, cluster_id);
+
+    if (sqlite3_step(st) == SQLITE_ROW) {
+        *out_alignment = sqlite3_column_int(st, 0);
+        rc = SQLITE_OK;
+    } else if (rc == SQLITE_DONE) {
+        LOGW("h_get_cluster_alignment: No alignment found for cluster ID %d.", cluster_id);
+        *out_alignment = 0; // Default to neutral if cluster found but no alignment
+        rc = SQLITE_NOTFOUND;
+    } else {
+        LOGE("h_get_cluster_alignment: Execute error: %s", sqlite3_errmsg(db));
+    }
+
+cleanup:
+    if (st) sqlite3_finalize(st);
+    pthread_mutex_unlock(&db_mutex);
+    return rc;
+}
+
+// h_get_cluster_alignment_band: Retrieves the alignment band ID for the cluster containing a given sector.
+int h_get_cluster_alignment_band(sqlite3 *db, int sector_id, int *out_band_id) {
+    if (!db || !out_band_id) return SQLITE_MISUSE;
+
+    int rc = SQLITE_ERROR;
+    int cluster_alignment_score = 0;
+
+    rc = h_get_cluster_alignment(db, sector_id, &cluster_alignment_score);
+    if (rc != SQLITE_OK && rc != SQLITE_NOTFOUND) { // SQLITE_NOTFOUND means default to neutral, which is fine
+        LOGE("h_get_cluster_alignment_band: Failed to get cluster alignment for sector %d. RC: %d", sector_id, rc);
+        return rc;
+    }
+
+    // Pass the raw alignment score to db_alignment_band_for_value to get the band ID
+    // db_alignment_band_for_value also handles its own locking, but we will pass it the mutex for this purpose.
+    // However, given it locks internally, calling it directly is fine.
+    // It returns SQLITE_OK even on synthetic neutral fallback, so checking rc is enough.
+    rc = db_alignment_band_for_value(db, cluster_alignment_score, out_band_id, NULL, NULL, NULL, NULL, NULL, NULL);
+    
+    return rc;
+}
+
 // db_port_add_bust_record: Adds a new bust record for a player at a port.
 int db_port_add_bust_record(int port_id, int player_id, const char *bust_type, long long timestamp) {
     sqlite3 *db = db_get_handle();

@@ -26,9 +26,11 @@
 #include "server_envelope.h"
 #include "server_config.h"
 #include "server_log.h"
+#include "globals.h" // Include globals.h for xp_align_config_t and g_xp_align declaration
 
 server_config_t g_cfg;
 json_t *g_capabilities = NULL;
+xp_align_config_t g_xp_align; // Define the global instance of xp_align_config_t
 
 /* Provided by your DB module; MUST be defined there (no 'static') */
 sqlite3 *g_db = NULL;
@@ -133,77 +135,271 @@ validate_cfg (void)
 /* --------- exported API --------- */
 
 
+
+
+
 void
+
 print_effective_config_redacted (void)
+
 {
+
   printf ("INFO config: effective (secrets redacted)\n");
+
   printf ("{\"engine\":{\"tick_ms\":%d,\"daily_align_sec\":%d},",
+
 	  g_cfg.engine.tick_ms, g_cfg.engine.daily_align_sec);
 
+
+
   printf
+
     ("\"batching\":{\"event_batch\":%d,\"command_batch\":%d,\"broadcast_batch\":%d},",
+
      g_cfg.batching.event_batch, g_cfg.batching.command_batch,
+
      g_cfg.batching.broadcast_batch);
 
+
+
   printf
+
     ("\"priorities\":{\"default_command_weight\":%d,\"default_event_weight\":%d},",
+
      g_cfg.priorities.default_command_weight,
+
      g_cfg.priorities.default_event_weight);
 
+
+
   printf
+
     ("\"s2s\":{\"transport\":\"%s\",\"uds_path\":\"%s\",\"tcp_host\":\"%s\",\"tcp_port\":%d,\"frame_size_limit\":%d},",
+
      g_cfg.s2s.transport, g_cfg.s2s.uds_path, g_cfg.s2s.tcp_host,
+
      g_cfg.s2s.tcp_port, g_cfg.s2s.frame_size_limit);
 
+
+
   printf ("\"safety\":{\"connect_ms\":%d,\"handshake_ms\":%d,\"rpc_ms\":%d,"
+
 	  "\"backoff_initial_ms\":%d,\"backoff_max_ms\":%d,\"backoff_factor\":%.2f},",
+
 	  g_cfg.safety.connect_ms, g_cfg.safety.handshake_ms,
+
 	  g_cfg.safety.rpc_ms, g_cfg.safety.backoff_initial_ms,
+
 	  g_cfg.safety.backoff_max_ms, g_cfg.safety.backoff_factor);
 
+
+
   printf ("\"secrets\":{\"key_id\":\"%s\",\"hmac\":\"********\"}}",
+
 	  g_cfg.secrets.key_id[0] ? "********" : "");
 
+
+
   printf (",\"mines\":{\"limpet\":{"
+
 	  "\"enabled\":%s,"
+
 	  "\"fedspace_allowed\":%s,"
+
 	  "\"msl_allowed\":%s,"
+
 	  "\"per_sector_cap\":%d,"
+
 	  "\"max_per_ship\":%d,"
+
 	  "\"allow_multi_owner\":%s,"
+
 	  "\"scrub_cost\":%d}}}",
+
 	  g_cfg.mines.limpet.enabled ? "true" : "false",
+
 	  g_cfg.mines.limpet.fedspace_allowed ? "true" : "false",
+
 	  g_cfg.mines.limpet.msl_allowed ? "true" : "false",
+
 	  g_cfg.mines.limpet.per_sector_cap,
+
 	  g_cfg.mines.limpet.max_per_ship,
+
 	  g_cfg.mines.limpet.allow_multi_owner ? "true" : "false",
+
 	  g_cfg.mines.limpet.scrub_cost);
 
+
+
   // New death config printing
+
   printf (",\"death\":{"
+
 	  "\"max_per_day\":%d,"
+
 	  "\"xp_loss_flat\":%d,"
+
 	  "\"xp_loss_percent\":%d,"
+
 	  "\"drop_cargo\":\"%s\","
+
 	  "\"drop_credits_mode\":\"%s\","
+
 	  "\"big_sleep_duration_seconds\":%d,"
+
 	  "\"big_sleep_clear_xp_below\":%d,"
+
 	  "\"escape_pod_spawn_mode\":\"%s\"}}",
+
 	  g_cfg.death.max_per_day,
+
 	  g_cfg.death.xp_loss_flat,
+
 	  g_cfg.death.xp_loss_percent,
+
 	  g_cfg.death.drop_cargo,
+
 	  g_cfg.death.drop_credits_mode,
+
 	  g_cfg.death.big_sleep_duration_seconds,
+
 	  g_cfg.death.big_sleep_clear_xp_below,
+
 	  g_cfg.death.escape_pod_spawn_mode);
+
   printf ("\n");
+
 }
 
 
 
+int
+
+xp_align_config_reload (sqlite3 *db)
+
+{
+
+  // Set sensible defaults first
+
+  g_xp_align.trade_xp_ratio = 10;
+
+  g_xp_align.ship_destroy_xp_multiplier = 2; // Default for non-specific ships
+
+  g_xp_align.illegal_base_align_divisor = 50000;
+
+  g_xp_align.illegal_align_factor_good = 2.0;
+
+  g_xp_align.illegal_align_factor_evil = 0.25;
+
+
+
+  sqlite3_stmt *st = NULL;
+
+  int rc;
+
+
+
+  const char *sql = "SELECT key, value FROM config WHERE key LIKE 'xp.%' OR key LIKE 'align.%';";
+
+
+
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+
+  if (rc != SQLITE_OK)
+
+    {
+
+      LOGE ("xp_align_config_reload: Failed to prepare statement: %s", sqlite3_errmsg (db));
+
+      return 1;
+
+    }
+
+
+
+  while (sqlite3_step (st) == SQLITE_ROW)
+
+    {
+
+      const char *key = (const char *) sqlite3_column_text (st, 0);
+
+      const char *value = (const char *) sqlite3_column_text (st, 1);
+
+
+
+      if (!strcasecmp (key, "xp.trade_ratio"))
+
+	{
+
+	  g_xp_align.trade_xp_ratio = atoi (value);
+
+	}
+
+      else if (!strcasecmp (key, "xp.ship_destroy_multiplier"))
+
+	{
+
+	  g_xp_align.ship_destroy_xp_multiplier = atoi (value);
+
+	}
+
+      else if (!strcasecmp (key, "align.illegal_base_divisor"))
+
+	{
+
+	  g_xp_align.illegal_base_align_divisor = atoi (value);
+
+	}
+
+      else if (!strcasecmp (key, "align.illegal_band_factor_good"))
+
+	{
+
+	  g_xp_align.illegal_align_factor_good = atof (value);
+
+	}
+
+      else if (!strcasecmp (key, "align.illegal_band_factor_evil"))
+
+	{
+
+	  g_xp_align.illegal_align_factor_evil = atof (value);
+
+	}
+
+      // Add more as needed
+
+    }
+
+
+
+  sqlite3_finalize (st);
+
+
+
+  LOGI ("XP/Alignment config reloaded: trade_xp_ratio=%d, ship_destroy_xp_multiplier=%d, "
+
+	"illegal_base_align_divisor=%d, illegal_align_factor_good=%.2f, illegal_align_factor_evil=%.2f",
+
+	g_xp_align.trade_xp_ratio, g_xp_align.ship_destroy_xp_multiplier,
+
+	g_xp_align.illegal_base_align_divisor, g_xp_align.illegal_align_factor_good,
+
+	g_xp_align.illegal_align_factor_evil);
+
+
+
+  return 0;
+
+}
+
+
+
+
+
 static void
+
 apply_db (sqlite3 *db)
 {
   sqlite3_stmt *st = NULL;
@@ -308,8 +504,10 @@ load_eng_config (void)
 
   // ensure DB is open/initialised here (you already do schema creation)
   extern sqlite3 *g_db;
-  if (g_db)
+  if (g_db) {
     apply_db (g_db);
+    xp_align_config_reload(g_db); // Call to load XP/Alignment specific config
+  }
 
   apply_env ();			// ENV overrides DB
   return validate_cfg ();

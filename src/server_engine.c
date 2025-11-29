@@ -37,6 +37,8 @@
 #include "common.h"
 #include "server_config.h"
 #include "server_clusters.h"
+#include "globals.h"        // For g_xp_align config
+#include "database_cmd.h"   // For h_player_apply_progress, db_player_get_alignment, h_get_cluster_alignment_band
 
 /* handlers (implemented below) */
 /* static int sweeper_engine_deadletter_retry (sqlite3 * db, int64_t now_ms); */
@@ -229,7 +231,7 @@ cron_next_due_from (int64_t now_s, const char *schedule)
 static eng_consumer_cfg_t G_CFG = {
   .batch_size = 200,
   .backlog_prio_threshold = 5000,
-  .priority_types_csv = "s2s.broadcast.sweep,player.login",
+  .priority_types_csv = "s2s.broadcast.sweep,player.login,player.trade.v1",
   .consumer_key = "game_engine"
 };
 
@@ -327,9 +329,121 @@ engine_demo_push (s2s_conn_t *c)
   return rc;
 }
 
+// Helper to calculate illegal alignment delta (from design brief)
+static int
+h_compute_illegal_alignment_delta(int player_alignment, int cluster_align_band_id, double value)
+{
+    sqlite3 *db = db_get_handle(); // Get a DB handle
 
+    int player_align_band_id = 0;
+    int player_band_is_good = 0;
+    int player_band_is_evil = 0;
+    db_alignment_band_for_value(db, player_alignment, &player_align_band_id, NULL, NULL, &player_band_is_good, &player_band_is_evil, NULL, NULL);
+
+    int cluster_band_is_good = 0;
+    int cluster_band_is_evil = 0;
+    // For cluster, we have the band ID, so query alignment_band directly
+    sqlite3_stmt *st = NULL;
+    int rc = SQLITE_ERROR;
+    const char *sql = "SELECT is_good, is_evil FROM alignment_band WHERE id = ?1;";
+    pthread_mutex_lock(&db_mutex);
+    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc == SQLITE_OK) {
+        sqlite3_bind_int(st, 1, cluster_align_band_id);
+        if (sqlite3_step(st) == SQLITE_ROW) {
+            cluster_band_is_good = sqlite3_column_int(st, 0);
+            cluster_band_is_evil = sqlite3_column_int(st, 1);
+        }
+    }
+    sqlite3_finalize(st);
+    pthread_mutex_unlock(&db_mutex);
+
+
+    int base_penalty = floor(value / g_xp_align.illegal_base_align_divisor);
+    if (base_penalty < 1) base_penalty = 1;
+
+    double factor = 1.0;
+
+    if (player_band_is_evil)       factor *= g_xp_align.illegal_align_factor_evil;  // Already evil; small incremental penalty
+    else if (player_band_is_good)  factor *= g_xp_align.illegal_align_factor_good;   // Good doing bad: harsher
+
+    if (cluster_band_is_good)  factor *= 1.5; // Good cluster makes it harsher (hardcoded for now, could be config)
+    else if (cluster_band_is_evil) factor *= 0.5; // Evil cluster makes it less harsh (hardcoded for now, could be config)
+
+    int align_delta = -(int)floor(base_penalty * factor);
+    if (align_delta == 0) align_delta = -1; // Ensure there's always a penalty
+
+    return align_delta;
+}
+
+// h_player_progress_from_event_payload: Processes an engine event payload to apply XP/Alignment changes.
+int h_player_progress_from_event_payload(json_t *ev_payload) {
+    if (!ev_payload || !json_is_object(ev_payload)) {
+        LOGE("h_player_progress_from_event_payload: Invalid event payload.");
+        return SQLITE_MISUSE;
+    }
+
+    sqlite3 *db = db_get_handle();
+    if (!db) {
+        LOGE("h_player_progress_from_event_payload: Failed to get DB handle.");
+        return SQLITE_ERROR;
+    }
+
+    json_t *j_player_id = json_object_get(ev_payload, "player_id");
+    json_t *j_event_type = json_object_get(ev_payload, "type"); // Event type from engine_events
+    
+    if (!json_is_integer(j_player_id) || !json_is_string(j_event_type)) {
+        LOGE("h_player_progress_from_event_payload: Missing player_id or event type in payload.");
+        return SQLITE_MISUSE;
+    }
+
+    int player_id = json_integer_value(j_player_id);
+    const char *event_type = json_string_value(j_event_type);
+
+    long long xp_delta = 0;
+    int align_delta = 0;
+    const char *reason = NULL; // For logging
+
+    if (strcasecmp(event_type, "player.trade.v1") == 0) {
+        json_t *j_credits_delta = json_object_get(ev_payload, "credits_delta");
+        json_t *j_is_illegal = json_object_get(ev_payload, "is_illegal");
+        json_t *j_sector_id = json_object_get(ev_payload, "sector_id");
+
+        if (!json_is_integer(j_credits_delta) || !json_is_boolean(j_is_illegal) || !json_is_integer(j_sector_id)) {
+            LOGE("h_player_progress_from_event_payload: Missing trade details in player.trade.v1 payload.");
+            return SQLITE_MISUSE;
+        }
+
+        long long credits_delta = json_integer_value(j_credits_delta);
+        bool is_illegal = json_is_true(j_is_illegal);
+        int sector_id = json_integer_value(j_sector_id);
+
+        if (credits_delta > 0) { // XP only for selling/profit
+            xp_delta = floor((double)credits_delta / g_xp_align.trade_xp_ratio);
+        }
+        
+        if (is_illegal) {
+            // Calculate alignment penalty for illegal trade
+            int player_alignment = 0;
+            if (db_player_get_alignment(db, player_id, &player_alignment) != SQLITE_OK) {
+                LOGE("h_player_progress_from_event_payload: Failed to get player %d alignment for illegal trade.", player_id);
+                return SQLITE_ERROR;
+            }
+
+            int cluster_align_band_id;
+            h_get_cluster_alignment_band(db, sector_id, &cluster_align_band_id);
+            
+            align_delta = h_compute_illegal_alignment_delta(player_alignment, cluster_align_band_id, fabs((double)credits_delta));
+        }
+        reason = "trade";
+    }
+    // TODO: Add more event types (player.destroy_ship.v1, etc.) here
+
+    return h_player_apply_progress(db, player_id, xp_delta, align_delta, reason);
+}
 
 /////////////////////////
+
 
 
 /////////////////////////

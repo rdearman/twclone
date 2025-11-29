@@ -236,6 +236,25 @@ handle_ship_self_destruct_initiated (sqlite3 *db, sqlite3_stmt *ev_row)
   return 0;			// Success
 }
 
+static int
+engine_event_handler_player_trade_v1 (sqlite3 *db, sqlite3_stmt *ev_row)
+{
+  int rc = SQLITE_ERROR;
+  const char *payload_str = (const char *) sqlite3_column_text (ev_row, 3); // Payload is the 4th column (index 3)
+
+  json_error_t jerr;
+  json_t *payload = json_loads(payload_str, 0, &jerr);
+  if (!payload) {
+    LOGE("engine_event_handler_player_trade_v1: Error parsing JSON payload: %s", jerr.text);
+    return 1; // Quarantine
+  }
+
+  rc = h_player_progress_from_event_payload(payload);
+
+  json_decref(payload);
+  return rc;
+}
+
 int
 handle_event (const char *type, sqlite3 *db, sqlite3_stmt *ev_row)
 {
@@ -249,6 +268,10 @@ handle_event (const char *type, sqlite3 *db, sqlite3_stmt *ev_row)
   else if (strcasecmp (type, "ship.self_destruct.initiated") == 0)
     {
       return handle_ship_self_destruct_initiated (db, ev_row);
+    }
+  else if (strcasecmp (type, "player.trade.v1") == 0)
+    {
+      return engine_event_handler_player_trade_v1 (db, ev_row);
     }
   /* Unknown type -> signal quarantine */
   return 1;

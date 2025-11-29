@@ -37,6 +37,7 @@ int h_calculate_port_buy_price (sqlite3 * db, int port_id,
 				const char *commodity);
 
 #define RULE_REFUSE(_code,_msg,_hint_json) do { send_enveloped_refused(ctx->fd, root, (_code), (_msg), (_hint_json)); goto trade_buy_done; } while (0)
+#define RULE_REFUSE_SELL(_code,_msg,_hint_json) do { send_enveloped_refused(ctx->fd, root, (_code), (_msg), (_hint_json)); goto trade_sell_done; } while (0)
 
 
 /* Helpers */
@@ -533,27 +534,7 @@ json_get_int_field (json_t *obj, const char *key, int *out)
  * @param sector_id The ID of the sector to query.
  * @return The cluster alignment (e.g., +100 for Fed, -100 for Orion, -25 for Ferrengi), 0 if no cluster found.
  */
-static int
-h_get_cluster_alignment(sqlite3 *db, int sector_id)
-{
-    sqlite3_stmt *stmt;
-    int alignment = 0;
-    const char *sql = 
-        "SELECT c.alignment FROM clusters c "
-        "JOIN cluster_sectors cs ON cs.cluster_id = c.id "
-        "WHERE cs.sector_id = ? LIMIT 1";
 
-    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) == SQLITE_OK) {
-        sqlite3_bind_int(stmt, 1, sector_id);
-        if (sqlite3_step(stmt) == SQLITE_ROW) {
-            alignment = sqlite3_column_int(stmt, 0);
-        }
-        sqlite3_finalize(stmt);
-    } else {
-        LOGE("h_get_cluster_alignment: Failed to prepare statement: %s", sqlite3_errmsg(db));
-    }
-    return alignment;
-}
 
 /**
  * @brief Checks if a commodity is marked as illegal in the commodities table.
@@ -664,27 +645,36 @@ h_can_trade_commodity(sqlite3 *db, int port_id, int player_id, const char *commo
     }
     if (sector_id == 0) return false; // Port not linked to a sector?
 
-    int cluster_alignment = h_get_cluster_alignment(db, sector_id);
+    int cluster_align_band_id = 0;
+    h_get_cluster_alignment_band(db, sector_id, &cluster_align_band_id);
+
+    int cluster_is_evil = 0;
+    int cluster_is_good = 0;
+    db_alignment_band_for_value(db, cluster_align_band_id, NULL, NULL, NULL, &cluster_is_good, &cluster_is_evil, NULL, NULL);
 
     // 4. Check cluster alignment for illegal trade
-    if (cluster_alignment >= CLUSTER_GOOD_MIN_ALIGN) {
+    if (cluster_is_good) {
         // Good cluster – no illegal trade
         return false;
     }
     // Neutral clusters are also assumed to prohibit illegal trade by default
-    if (cluster_alignment > CLUSTER_EVIL_MAX_ALIGN) {
-        return false;
-    }
+    // If cluster is evil, we can proceed to check player alignment
 
-    // Now we are in an 'evil' cluster (alignment <= CLUSTER_EVIL_MAX_ALIGN)
-    // 5. Check player alignment
-    int player_alignment = 0;
-    db_player_get_alignment(db, player_id, &player_alignment); // Assuming this helper exists
+    // Now we are in an 'evil' cluster (or neutral if configured)
+    // 5. Check player alignment band properties
+    int player_alignment = 0; // Declare player_alignment
+    db_player_get_alignment(db, player_id, &player_alignment); // Retrieve player's raw alignment score
+    int player_align_band_id = 0;
+    int player_is_evil = 0;
+    db_alignment_band_for_value(db, player_alignment, &player_align_band_id, NULL, NULL, NULL, &player_is_evil, NULL, NULL);
 
-    if (player_alignment > PLAYER_EVIL_ALIGNMENT_THRESHOLD) {
-        LOGI("h_can_trade_commodity: Port %d, Player %d, Cmd %s: Player alignment %d not evil enough (threshold %d). Refused.",
-             port_id, player_id, commodity_code, player_alignment, PLAYER_EVIL_ALIGNMENT_THRESHOLD);
-        return false;
+    if (!player_is_evil) {
+        // If player is not evil, check if neutral players are allowed to trade illegally in this cluster
+        if (!db_get_config_bool(db, "illegal.allowed_neutral", true)) {
+            LOGI("h_can_trade_commodity: Port %d, Player %d, Cmd %s: Player alignment is not evil, and neutral illegal trade is disallowed. Refused.",
+                 port_id, player_id, commodity_code);
+            return false;
+        }
     }
 
     LOGI("h_can_trade_commodity: Port %d, Player %d, Cmd %s: All conditions met. Allowed.",
@@ -2103,7 +2093,6 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
   json_t *lines = NULL;
   json_t *data = NULL;
   json_t *jitems = NULL;
-  int total_cargo_space_needed = 0;
   int rc = 0;
   char *req_s = NULL;
   char *resp_s = NULL;
@@ -3215,9 +3204,15 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
       }
   }
 
-  int cluster_align = h_get_cluster_alignment(db, sector_id);
-  int is_good_cluster = (cluster_align >= 50);
-  int is_evil_cluster = (cluster_align <= -25);
+  int cluster_align_band_id = 0;
+  h_get_cluster_alignment_band(db, sector_id, &cluster_align_band_id);
+
+  int cluster_is_evil = 0;
+  int cluster_is_good = 0;
+  db_alignment_band_for_value(db, cluster_align_band_id, NULL, NULL, NULL, &cluster_is_good, &cluster_is_evil, NULL, NULL);
+
+  int is_good_cluster = cluster_is_good;
+  int is_evil_cluster = cluster_is_evil;
   int is_good_player = (p_align > cfg_thresh);
 
   /* 5. Fake Bust Check */

@@ -19,6 +19,7 @@ typedef struct TradeLine
   int amount;
   int unit_price;
   long long line_cost;
+  bool is_illegal; // Added for illegal trade logic
 } TradeLine;
 
 
@@ -45,6 +46,7 @@ typedef struct TradeLine
   //int player_credits (int player_id);
   //int cargo_space_free (int player_id);
   int port_is_open (int port_id, const char *commodity);
+  int db_get_port_sector (int port_id); // Added declaration for db_get_port_sector
 
   int h_get_ship_cargo_and_holds (sqlite3 * db, int ship_id, int *ore,
 				  int *organics, int *equipment, int *holds,
@@ -57,6 +59,11 @@ typedef struct TradeLine
 				  const char *commodity);
   int h_calculate_port_sell_price (sqlite3 * db, int port_id,
 				   const char *commodity);
+
+  int h_port_build_inventory(sqlite3 *db, int port_id, int player_id, json_t **out_array);
+
+  bool h_illegal_visible(int player_align_band_id, int cluster_align_band_id, const commodity_t *comm);
+  bool h_illegal_trade_allowed(int player_align_band_id, int cluster_align_band_id, const commodity_t *comm);
 
 // Forward declaration for local helper
 // void free_trade_lines (struct TradeLine *lines, size_t n);

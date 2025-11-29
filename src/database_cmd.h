@@ -223,6 +223,10 @@ int db_port_add_bust_record(int port_id, int player_id, const char *bust_type, l
 int db_port_get_active_busts(int port_id, int player_id);
 int db_player_update_commission(sqlite3 *db, int player_id);
 
+int h_get_cluster_id_for_sector(sqlite3 *db, int sector_id, int *out_cluster_id);
+int h_get_cluster_alignment(sqlite3 *db, int sector_id, int *out_alignment);
+int h_get_cluster_alignment_band(sqlite3 *db, int sector_id, int *out_band_id);
+
 int db_commission_for_player(
     sqlite3 *db,
     int is_evil_track,

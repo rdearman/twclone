@@ -326,7 +326,7 @@ h_get_cargo_space_free (sqlite3 *db, int player_id, int *free_out)
 
   rc = sqlite3_prepare_v2 (db,
 			   "SELECT (COALESCE(s.holds, 0) - "
-			   "COALESCE(s.colonists + s.equipment + s.organics + s.ore, 0)) "
+			   "COALESCE(s.colonists + s.equipment + s.organics + s.ore + s.slaves + s.weapons + s.drugs, 0)) "
 			   "FROM players p "
 			   "JOIN ships s ON s.id = p.ship "
 			   "WHERE p.id = ?1", -1, &st, NULL);
