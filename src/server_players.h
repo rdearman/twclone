@@ -26,6 +26,7 @@ extern "C"
   int cmd_player_get_notes (client_ctx_t * ctx, json_t * root);
   int cmd_player_my_info (client_ctx_t * ctx, json_t * root);
   int cmd_player_list_online (client_ctx_t * ctx, json_t * root);
+  int cmd_player_rankings (client_ctx_t *ctx, json_t *root);
   void cmd_nav_bookmark_add (client_ctx_t * ctx, json_t * root);
   void cmd_nav_bookmark_remove (client_ctx_t * ctx, json_t * root);
   void cmd_nav_bookmark_list (client_ctx_t * ctx, json_t * root);
@@ -34,8 +35,6 @@ extern "C"
   void cmd_nav_avoid_list (client_ctx_t * ctx, json_t * root);
   int h_decloak_ship (sqlite3 * db, int ship_id);
   int h_get_active_ship_id (sqlite3 * db, int player_id);
-  int h_send_message_to_player (int player_id, int sender_id,
-				const char *subject, const char *message);
   int h_get_player_sector (int player_id);
   int h_deduct_ship_credits (struct sqlite3 *db, int player_id, int amount,
 			     int *new_balance);
@@ -95,7 +94,18 @@ extern "C"
 #define PLAYER_TYPE_SYSOP   3
 
 int auth_player_get_type(int player_id);
+int h_send_message_to_player (int player_id, int sender_id, const char *subject, const char *message);
+int h_player_apply_progress(sqlite3 *db,
+                        int player_id,
+                        long long delta_xp,
+                        int delta_align,
+                        const char *reason);
 
+int h_player_build_title_payload(sqlite3 *db,
+                             int player_id,
+                             json_t **out_json);
+
+  
 #ifdef __cplusplus
 }
 #endif

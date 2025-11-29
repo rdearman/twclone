@@ -19,6 +19,218 @@
 #include "server_cron.h"
 
 
+int db_player_update_commission(sqlite3 *db, int player_id) {
+    if (!db) return SQLITE_MISUSE;
+
+    sqlite3_stmt *st = NULL;
+    int rc = SQLITE_ERROR;
+    int player_alignment = 0;
+    long long player_experience = 0;
+    int new_commission_id = 0;
+
+    pthread_mutex_lock(&db_mutex); // Lock for thread safety
+
+    // 1. Get player's current alignment and experience
+    const char *sql_get_player_stats = "SELECT alignment, experience FROM players WHERE id = ?1;";
+    rc = sqlite3_prepare_v2(db, sql_get_player_stats, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("db_player_update_commission: Prepare get player stats error: %s", sqlite3_errmsg(db));
+        goto cleanup;
+    }
+    sqlite3_bind_int(st, 1, player_id);
+
+    if (sqlite3_step(st) == SQLITE_ROW) {
+        player_alignment = sqlite3_column_int(st, 0);
+        player_experience = sqlite3_column_int64(st, 1);
+        rc = SQLITE_OK;
+    } else if (rc == SQLITE_DONE) {
+        LOGW("db_player_update_commission: Player with ID %d not found.", player_id);
+        rc = SQLITE_NOTFOUND;
+        goto cleanup;
+    } else {
+        LOGE("db_player_update_commission: Execute get player stats error: %s", sqlite3_errmsg(db));
+        goto cleanup;
+    }
+    sqlite3_finalize(st);
+    st = NULL;
+
+    // 2. Determine moral track from alignment band
+    int band_id;
+    int is_evil_track; // This will be 0 for good/neutral, 1 for evil
+    // We only need the is_evil flag from alignment_band for this purpose
+    rc = db_alignment_band_for_value(db, player_alignment, &band_id, NULL, NULL, NULL, &is_evil_track, NULL, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("db_player_update_commission: Failed to get alignment band for player %d, alignment %d. RC: %d", player_id, player_alignment, rc);
+        goto cleanup;
+    }
+
+    // 3. Get the new commission ID based on moral track and experience
+    char *commission_title = NULL; // Not needed for update, but API requires it
+    int commission_is_evil_flag; // Not needed for update, but API requires it
+    rc = db_commission_for_player(db, is_evil_track, player_experience, &new_commission_id, &commission_title, &commission_is_evil_flag);
+    if (commission_title) free(commission_title); // Free strdup'd memory
+    if (rc != SQLITE_OK) {
+        LOGE("db_player_update_commission: Failed to get commission for player %d (XP %lld, track %d). RC: %d", player_id, player_experience, is_evil_track, rc);
+        goto cleanup;
+    }
+
+    // 4. Update the player's commission in the players table
+    const char *sql_update_commission = "UPDATE players SET commission = ?1 WHERE id = ?2;";
+    rc = sqlite3_prepare_v2(db, sql_update_commission, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("db_player_update_commission: Prepare update commission error: %s", sqlite3_errmsg(db));
+        goto cleanup;
+    }
+    sqlite3_bind_int(st, 1, new_commission_id);
+    sqlite3_bind_int(st, 2, player_id);
+
+    rc = sqlite3_step(st);
+    if (rc != SQLITE_DONE) {
+        LOGE("db_player_update_commission: Execute update commission error: %s", sqlite3_errmsg(db));
+        goto cleanup;
+    }
+    rc = SQLITE_OK; // If SQLITE_DONE, then successful
+
+cleanup:
+    if (st) sqlite3_finalize(st);
+    pthread_mutex_unlock(&db_mutex); // Unlock
+    return rc;
+}
+
+int db_commission_for_player(
+    sqlite3 *db,
+    int is_evil_track,
+    long long xp,
+    int *out_commission_id,
+    char **out_title,
+    int *out_is_evil
+) {
+    if (!db) return SQLITE_MISUSE;
+
+    sqlite3_stmt *st = NULL;
+    int rc = SQLITE_ERROR;
+
+    const char *sql =
+        "SELECT id, description, is_evil "
+        "FROM commision "
+        "WHERE is_evil = ?1 "
+        "AND min_exp <= ?2 "
+        "ORDER BY min_exp DESC "
+        "LIMIT 1;";
+
+    pthread_mutex_lock(&db_mutex); // Lock for thread safety
+
+    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("db_commission_for_player: Prepare error: %s", sqlite3_errmsg(db));
+        goto cleanup;
+    }
+
+    sqlite3_bind_int(st, 1, is_evil_track);
+    sqlite3_bind_int64(st, 2, xp);
+
+    if (sqlite3_step(st) == SQLITE_ROW) {
+        if (out_commission_id) *out_commission_id = sqlite3_column_int(st, 0);
+        if (out_title) *out_title = strdup((const char*)sqlite3_column_text(st, 1));
+        if (out_is_evil) *out_is_evil = sqlite3_column_int(st, 2);
+        rc = SQLITE_OK;
+    } else if (rc == SQLITE_DONE) {
+        // No matching commission found for given XP and track. Fallback to lowest rank.
+        const char *fallback_sql =
+            "SELECT id, description, is_evil FROM commision "
+            "WHERE is_evil = ?1 ORDER BY min_exp ASC LIMIT 1;";
+        sqlite3_finalize(st); // Finalize previous statement before new prepare
+        st = NULL; // Reset statement pointer
+
+        rc = sqlite3_prepare_v2(db, fallback_sql, -1, &st, NULL);
+        if (rc != SQLITE_OK) {
+            LOGE("db_commission_for_player: Fallback prepare error: %s", sqlite3_errmsg(db));
+            goto cleanup;
+        }
+        sqlite3_bind_int(st, 1, is_evil_track);
+
+        if (sqlite3_step(st) == SQLITE_ROW) {
+            if (out_commission_id) *out_commission_id = sqlite3_column_int(st, 0);
+            if (out_title) *out_title = strdup((const char*)sqlite3_column_text(st, 1));
+            if (out_is_evil) *out_is_evil = sqlite3_column_int(st, 2);
+            LOGW("db_commission_for_player: No commission found for XP %lld, track %d. Falling back to lowest rank.", xp, is_evil_track);
+            rc = SQLITE_OK;
+        } else {
+            LOGE("db_commission_for_player: No fallback commission found for track %d. DB might be empty.", is_evil_track);
+            rc = SQLITE_NOTFOUND; // Even fallback failed
+        }
+    } else {
+        LOGE("db_commission_for_player: Execute error: %s", sqlite3_errmsg(db));
+    }
+
+cleanup:
+    if (st) sqlite3_finalize(st); // Finalize if not NULL
+    pthread_mutex_unlock(&db_mutex); // Unlock
+    return rc;
+}
+
+int db_alignment_band_for_value(
+    sqlite3 *db,
+    int align,
+    int *out_id,
+    char **out_code,
+    char **out_name,
+    int *out_is_good,
+    int *out_is_evil,
+    int *out_can_buy_iss,
+    int *out_can_rob_ports
+) {
+    if (!db) return SQLITE_MISUSE;
+
+    sqlite3_stmt *st = NULL;
+    int rc = SQLITE_ERROR;
+
+    const char *sql =
+        "SELECT id, code, name, is_good, is_evil, can_buy_iss, can_rob_ports "
+        "FROM alignment_band "
+        "WHERE ?1 BETWEEN min_align AND max_align "
+        "LIMIT 1;";
+
+    pthread_mutex_lock(&db_mutex); // Lock for thread safety
+
+    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("db_alignment_band_for_value: Prepare error: %s", sqlite3_errmsg(db));
+        goto cleanup;
+    }
+
+    sqlite3_bind_int(st, 1, align);
+
+    if (sqlite3_step(st) == SQLITE_ROW) {
+        if (out_id) *out_id = sqlite3_column_int(st, 0);
+        if (out_code) *out_code = strdup((const char*)sqlite3_column_text(st, 1));
+        if (out_name) *out_name = strdup((const char*)sqlite3_column_text(st, 2));
+        if (out_is_good) *out_is_good = sqlite3_column_int(st, 3);
+        if (out_is_evil) *out_is_evil = sqlite3_column_int(st, 4);
+        if (out_can_buy_iss) *out_can_buy_iss = sqlite3_column_int(st, 5);
+        if (out_can_rob_ports) *out_can_rob_ports = sqlite3_column_int(st, 6);
+        rc = SQLITE_OK;
+    } else if (rc == SQLITE_DONE) {
+        // No matching band found, provide a synthetic "NEUTRAL" fallback
+        if (out_id) *out_id = -1; // Indicate a synthetic/default entry
+        if (out_code) *out_code = strdup("NEUTRAL");
+        if (out_name) *out_name = strdup("Neutral");
+        if (out_is_good) *out_is_good = 0;
+        if (out_is_evil) *out_is_evil = 0;
+        if (out_can_buy_iss) *out_can_buy_iss = 0;
+        if (out_can_rob_ports) *out_can_rob_ports = 0;
+        LOGW("db_alignment_band_for_value: No matching alignment band for value %d. Using neutral fallback.", align);
+        rc = SQLITE_OK;
+    } else {
+        LOGE("db_alignment_band_for_value: Execute error: %s", sqlite3_errmsg(db));
+    }
+
+cleanup:
+    sqlite3_finalize(st);
+    pthread_mutex_unlock(&db_mutex); // Unlock
+    return rc;
+}
+
 static int db_seed_ai_qa_bot_bank_account_unlocked (void);
 static int db_seed_law_enforcement_config_unlocked (void); // New declaration
 static int db_ensure_ship_perms_column_unlocked (void);

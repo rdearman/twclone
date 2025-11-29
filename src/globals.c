@@ -6,22 +6,7 @@
 #include "globals.h"
 
 // Global arrays originally defined in client.h and namegen.h
-char good_ranks[23][50] = { "Civilian", "Private", "Private 1st Class",
-  "Lance Corporal", "Corporal", "Sergeant", "Staff Sergeant",
-  "Gunner Sergeant", "1st Sergeant", "Sergeant Major",
-  "Warrant Officer", "Chief Warrant Officer", "Ensign",
-  "Lieutenant J.G.", "Lieutenant", "Lieutenant Commander", "Commander",
-  "Captain", "Commodore", "Rear Admiral", "Vice Admiral", "Admiral",
-  "Fleet Admiral"
-};
 
-char evil_ranks[23][50] = { "Civilian", "Nuisance 3rd Class",
-  "Nuisance 2nd Class", "Nuisance 1st Class", "Scoundrel", "Thug",
-  "Cutthroat", "Desperado", "Rogue", "Marauder", "Outlaw", "Renegade",
-  "Buccaneer", "Pirate", "Corsair", "Freebooter", "Swashbuckler",
-  "Dread Pirate", "Space Privateer", "Grand Pirate", "Lord of the Void",
-  "Emperor of the Void", "Master of the Universe"
-};
 
 
 char *nameCollection[] = { "Uncharted Space",

@@ -594,71 +594,6 @@ h_get_player_sector (int player_id)
 
 
 
-
-/** * Sends a complex mail message to a specific player, including a sender ID and subject.
- * The 'mail' table is assumed to now include sender_id, subject, and a 'read' status.
- *
- * @param player_id The ID of the player to receive the message (the recipient). 
- * @param sender_id The ID of the message sender (use 0 or a specific system ID for system messages).
- * @param subject The subject line of the mail message.
- * @param message The text content of the message body. 
- * @return 0 on success, or non-zero on error. 
- */
-int
-h_send_message_to_player (int player_id, int sender_id, const char *subject,
-			  const char *message)
-{
-  sqlite3 *db = db_get_handle ();
-  sqlite3_stmt *st = NULL;
-  int rc;
-
-  // Use current Unix timestamp for the message time 
-//   int timestamp = (int) time (NULL);
-
-  // Updated SQL statement to insert recipient_id (player_id), sender_id, timestamp, 
-  // subject, message, and set 'read' status to 0 (unread).
-  const char *sql =
-    "INSERT INTO mail (sender_id, recipient_id, subject, body) "
-    "VALUES (?, ?, ?, ?);";
-
-  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
-
-  if (rc != SQLITE_OK)
-    {
-      LOGE ("SQL error preparing complex message insert: %s\n",
-	    sqlite3_errmsg (db));
-      return 1;
-    }
-
-  // Bind parameters
-  // 1: recipient_id (player_id)
-  sqlite3_bind_int (st, 1, player_id);
-  // 2: sender_id
-  sqlite3_bind_int (st, 2, sender_id);
-  // 3: timestamp
-  sqlite3_bind_text (st, 3, subject, -1, SQLITE_TRANSIENT);
-  // 5: message (using SQLITE_TRANSIENT)
-  sqlite3_bind_text (st, 4, message, -1, SQLITE_TRANSIENT);
-
-  // Execute the statement 
-  if (sqlite3_step (st) != SQLITE_DONE)
-    {
-      LOGE ("SQL error executing complex message insert for player %d: %s\n",
-	    player_id, sqlite3_errmsg (db));
-      sqlite3_finalize (st);
-      return 1;
-    }
-
-  sqlite3_finalize (st);
-
-  LOGD ("Complex message sent to player %d from sender %d. Subject: '%s'\n",
-	player_id, sender_id, subject);
-
-  return 0;
-}
-
-
-
 int
 h_decloak_ship (sqlite3 *db, int ship_id)
 {
@@ -955,6 +890,16 @@ cmd_player_my_info (client_ctx_t *ctx, json_t *root)
       json_object_set_new (player, "credits", json_string (credits_str));
     }
 
+  // Add title info from the new helper
+  json_t *title_info = NULL;
+  int title_rc = h_player_build_title_payload(db, ctx->player_id, &title_info);
+  if (title_rc == SQLITE_OK && title_info) {
+      json_object_set_new(player, "title_info", title_info); // Embed title_info into the player object
+  } else {
+      LOGW("cmd_player_my_info: Failed to build title payload for player %d. RC: %d", ctx->player_id, title_rc);
+      // Decide how to handle this error: send without title_info, or return error.
+      // For now, it will just not include title_info on failure.
+  }
 
   send_enveloped_ok (ctx->fd, root, "player.info", pinfo);
   json_decref (pinfo);
@@ -1010,6 +955,141 @@ cmd_player_list_online (client_ctx_t *ctx, json_t *root)
   send_enveloped_ok (ctx->fd, root, "player.list_online.result", response_data);
   json_decref (response_data);
   return 0;
+}
+
+int
+cmd_player_rankings (client_ctx_t *ctx, json_t *root)
+{
+    if (ctx->player_id <= 0) {
+        send_enveloped_refused(ctx->fd, root, ERR_NOT_AUTHENTICATED, "Authentication required.", NULL);
+        return 0;
+    }
+
+    sqlite3 *db = db_get_handle();
+    if (!db) {
+        send_enveloped_error(ctx->fd, root, ERR_DB, "Database error.");
+        return 0;
+    }
+
+    json_t *data_payload = json_object_get(root, "data");
+    const char *order_by = "experience"; // Default ranking criterion
+    int limit = 10; // Default limit
+    int offset = 0; // Default offset
+
+    if (json_is_object(data_payload)) {
+        json_t *by_json = json_object_get(data_payload, "by");
+        if (json_is_string(by_json)) {
+            const char *requested_by = json_string_value(by_json);
+            // Only allow specific ranking criteria for now
+            if (strcmp(requested_by, "experience") == 0 || strcmp(requested_by, "net_worth") == 0) {
+                order_by = requested_by;
+            } else {
+                send_enveloped_refused(ctx->fd, root, ERR_INVALID_ARG, "Invalid ranking criterion. Supported: 'experience', 'net_worth'.", NULL);
+                return 0;
+            }
+        }
+
+        json_t *limit_json = json_object_get(data_payload, "limit");
+        if (json_is_integer(limit_json)) {
+            limit = (int)json_integer_value(limit_json);
+            if (limit < 1 || limit > 100) limit = 10; // Clamp limit
+        }
+        
+        json_t *offset_json = json_object_get(data_payload, "offset");
+        if (json_is_integer(offset_json)) {
+            offset = (int)json_integer_value(offset_json);
+            if (offset < 0) offset = 0;
+        }
+    }
+
+    json_t *rankings_array = json_array();
+    sqlite3_stmt *st = NULL;
+    char sql[512]; // Increased size for longer queries
+
+    // Base query for rankings
+    if (strcmp(order_by, "experience") == 0) {
+        snprintf(sql, sizeof(sql),
+            "SELECT id, name, alignment, experience FROM players "
+            "ORDER BY experience DESC LIMIT %d OFFSET %d;", limit, offset);
+    } else if (strcmp(order_by, "net_worth") == 0) {
+        // This assumes v_player_networth is a view or similar.
+        // For now, a simplified query. You might have a more complex net_worth calculation.
+        snprintf(sql, sizeof(sql),
+            "SELECT p.id, p.name, p.alignment, p.experience, COALESCE(ba.balance, 0) as net_worth "
+            "FROM players p LEFT JOIN bank_accounts ba ON p.id = ba.owner_id AND ba.owner_type = 'player' "
+            "ORDER BY net_worth DESC LIMIT %d OFFSET %d;", limit, offset);
+    } else {
+        // Should not happen due to prior validation, but defensive programming
+        send_enveloped_error(ctx->fd, root, ERROR_INTERNAL, "Internal ranking error.");
+        return 0;
+    }
+    
+    pthread_mutex_lock(&db_mutex); // Acquire lock for thread safety
+
+    int rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("cmd_player_rankings: Prepare error: %s", sqlite3_errmsg(db));
+        pthread_mutex_unlock(&db_mutex);
+        send_enveloped_error(ctx->fd, root, ERR_DB, "Database error retrieving rankings.");
+        return 0;
+    }
+
+    int rank_num = offset + 1;
+    while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
+        int player_id = sqlite3_column_int(st, 0);
+        const char *player_name = (const char*)sqlite3_column_text(st, 1);
+        int alignment = sqlite3_column_int(st, 2);
+        long long experience = sqlite3_column_int64(st, 3);
+        long long net_worth = 0;
+
+        json_t *player_rank_obj = json_object();
+        json_object_set_new(player_rank_obj, "rank", json_integer(rank_num++));
+        json_object_set_new(player_rank_obj, "id", json_integer(player_id));
+        json_object_set_new(player_rank_obj, "username", json_string(player_name));
+        json_object_set_new(player_rank_obj, "alignment", json_integer(alignment));
+        json_object_set_new(player_rank_obj, "experience", json_integer(experience));
+
+        if (strcmp(order_by, "net_worth") == 0) {
+             net_worth = sqlite3_column_int64(st, 4);
+             char net_worth_str[32];
+             snprintf(net_worth_str, sizeof(net_worth_str), "%lld.00", net_worth);
+             json_object_set_new(player_rank_obj, "net_worth", json_string(net_worth_str));
+        }
+
+
+        // Add title info
+        json_t *title_info = NULL;
+        // db_mutex is already locked, so h_player_build_title_payload needs to be adjusted not to lock itself, or we temporarily unlock here.
+        // For now, assuming h_player_build_title_payload handles its own locking safely or expects outer lock.
+        // Given db_player_update_commission temporarily unlocks and relocks, this should be fine.
+        pthread_mutex_unlock(&db_mutex); // Temporarily unlock before calling another function that locks db_mutex
+        int title_rc = h_player_build_title_payload(db, player_id, &title_info);
+        pthread_mutex_lock(&db_mutex); // Re-acquire lock
+
+        if (title_rc == SQLITE_OK && title_info) {
+            json_object_set_new(player_rank_obj, "title_info", title_info);
+        } else {
+            LOGW("cmd_player_rankings: Failed to build title payload for player %d. RC: %d", player_id, title_rc);
+            // Continue without title_info if it fails
+        }
+        json_array_append_new(rankings_array, player_rank_obj);
+    }
+    sqlite3_finalize(st);
+    pthread_mutex_unlock(&db_mutex); // Release lock
+
+    if (rc != SQLITE_DONE) {
+        LOGE("cmd_player_rankings: Execute error: %s", sqlite3_errmsg(db));
+        json_decref(rankings_array);
+        send_enveloped_error(ctx->fd, root, ERR_DB, "Database error retrieving rankings.");
+        return 0;
+    }
+
+    json_t *response_data = json_object();
+    json_object_set_new(response_data, "rankings", rankings_array);
+    send_enveloped_ok(ctx->fd, root, "player.rankings", response_data);
+    json_decref(response_data);
+
+    return 0;
 }
 
 /* ==================================================================== */
@@ -3112,4 +3192,287 @@ destroy_ship_and_handle_side_effects (client_ctx_t * /*ctx */ , int sector_id,
 	player_id, sector_id);
 
   return 0;
+}
+
+
+/*
+ * Helper for sending mail messages.
+ * This function should be located in src/server_players.c
+ */
+int
+h_send_message_to_player (int player_id, int sender_id, const char *subject,
+			  const char *message)
+{
+  sqlite3 *db = db_get_handle ();
+  sqlite3_stmt *st = NULL;
+  int rc;
+
+  // Updated SQL statement to insert recipient_id (player_id), sender_id, subject, message.
+  const char *sql =
+    "INSERT INTO mail (sender_id, recipient_id, subject, body) "
+    "VALUES (?, ?, ?, ?);";
+
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("SQL error preparing complex message insert: %s\n",
+	    sqlite3_errmsg (db));
+      return 1;
+    }
+
+  // Bind parameters
+  sqlite3_bind_int (st, 1, sender_id);
+  sqlite3_bind_int (st, 2, player_id);
+  sqlite3_bind_text (st, 3, subject, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text (st, 4, message, -1, SQLITE_TRANSIENT);
+
+  // Execute the statement
+  if (sqlite3_step (st) != SQLITE_DONE)
+    {
+      LOGE ("SQL error executing complex message insert for player %d: %s\n",
+	    player_id, sqlite3_errmsg (db));
+      sqlite3_finalize (st);
+      return 1;
+    }
+
+  sqlite3_finalize (st);
+
+  LOGD ("Complex message sent to player %d from sender %d. Subject: '%s'\n",
+	player_id, sender_id, subject);
+
+  return 0;
+}
+
+/*
+ * Helper for applying player progress (XP, alignment) and updating commission.
+ * This function should be located in src/server_players.c
+ */
+int
+h_player_apply_progress(sqlite3 *db,
+                        int player_id,
+                        long long delta_xp,
+                        int delta_align,
+                        const char *reason) // optional for audit
+{
+    if (!db || player_id <= 0) {
+        LOGE("h_player_apply_progress: Invalid arguments.");
+        return SQLITE_MISUSE;
+    }
+
+    sqlite3_stmt *st = NULL;
+    int rc = SQLITE_ERROR;
+    int current_alignment = 0;
+    long long current_experience = 0;
+
+    // 1. Load current xp/alignment
+    const char *sql_select_player = "SELECT alignment, experience FROM players WHERE id = ?1;";
+    pthread_mutex_lock(&db_mutex); // Acquire lock for this transaction
+
+    rc = sqlite3_prepare_v2(db, sql_select_player, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("h_player_apply_progress: Prepare select player error: %s", sqlite3_errmsg(db));
+        goto cleanup;
+    }
+    sqlite3_bind_int(st, 1, player_id);
+
+    if (sqlite3_step(st) == SQLITE_ROW) {
+        current_alignment = sqlite3_column_int(st, 0);
+        current_experience = sqlite3_column_int64(st, 1);
+    } else if (rc == SQLITE_DONE) {
+        LOGW("h_player_apply_progress: Player with ID %d not found.", player_id);
+        rc = SQLITE_NOTFOUND;
+        goto cleanup;
+    } else {
+        LOGE("h_player_apply_progress: Execute select player error: %s", sqlite3_errmsg(db));
+        goto cleanup;
+    }
+    sqlite3_finalize(st);
+    st = NULL;
+
+    // 2. Apply deltas + clamp (e.g. alignment [-2000, 2000], xp >= 0)
+    long long new_experience = current_experience + delta_xp;
+    if (new_experience < 0) new_experience = 0; // XP cannot be negative
+
+    int new_alignment = current_alignment + delta_align;
+    if (new_alignment > 2000) new_alignment = 2000; // Max alignment
+    if (new_alignment < -2000) new_alignment = -2000; // Min alignment
+
+    // 3. Write back to players table
+    const char *sql_update_player = "UPDATE players SET experience = ?1, alignment = ?2 WHERE id = ?3;";
+    rc = sqlite3_prepare_v2(db, sql_update_player, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("h_player_apply_progress: Prepare update player error: %s", sqlite3_errmsg(db));
+        goto cleanup;
+    }
+    sqlite3_bind_int64(st, 1, new_experience);
+    sqlite3_bind_int(st, 2, new_alignment);
+    sqlite3_bind_int(st, 3, player_id);
+
+    if (sqlite3_step(st) != SQLITE_DONE) {
+        LOGE("h_player_apply_progress: Execute update player error: %s", sqlite3_errmsg(db));
+        goto cleanup;
+    }
+    sqlite3_finalize(st);
+    st = NULL;
+
+    // 4. Call db_player_update_commission to update cached commission ID
+    // db_player_update_commission manages its own locking, so this is safe for now.
+    // If future changes require a single transaction for progress and commission update,
+    // this call might need to be re-evaluated for nested locks/transactions.
+    pthread_mutex_unlock(&db_mutex); // Release lock before calling another function that locks
+
+    rc = db_player_update_commission(db, player_id);
+
+    pthread_mutex_lock(&db_mutex); // Re-acquire lock
+
+    if (rc != SQLITE_OK) {
+        LOGE("h_player_apply_progress: Failed to update player commission for player %d. RC: %d", player_id, rc);
+        return rc;
+    }
+
+    // 5. Optionally log promotion/demotion events (future enhancement)
+    if (reason) {
+        LOGD("Player %d progress updated. XP: %lld (+%lld), Alignment: %d (%+d). Reason: %s",
+             player_id, new_experience, delta_xp, new_alignment, delta_align, reason);
+    } else {
+        LOGD("Player %d progress updated. XP: %lld (%+lld), Alignment: %d (%+d).",
+             player_id, new_experience, delta_xp, new_alignment, delta_align);
+    }
+
+    rc = SQLITE_OK;
+
+cleanup:
+    if (st) sqlite3_finalize(st);
+    pthread_mutex_unlock(&db_mutex); // Ensure unlock on all paths
+    return rc;
+}
+
+/*
+ * Helper for building JSON payload with player's title and alignment band info.
+ * This function should be located in src/server_players.c
+ */
+int
+h_player_build_title_payload(sqlite3 *db,
+                             int player_id,
+                             json_t **out_json)
+{
+    if (!db || player_id <= 0 || !out_json) {
+        LOGE("h_player_build_title_payload: Invalid arguments.");
+        return SQLITE_MISUSE;
+    }
+
+    sqlite3_stmt *st = NULL;
+    int rc = SQLITE_ERROR;
+    int player_alignment = 0;
+    long long player_experience = 0;
+    int player_commission_id = 0;
+
+    char *band_code = NULL;
+    char *band_name = NULL;
+    int band_is_good = 0;
+    int band_is_evil = 0;
+    int band_can_buy_iss = 0;
+    int band_can_rob_ports = 0;
+
+    char *commission_title = NULL;
+    int commission_is_evil_flag = 0;
+    int determined_commission_id = 0;
+
+    json_t *obj = NULL;
+    json_t *band_obj = NULL;
+
+    // Acquire lock for this function's operations
+    pthread_mutex_lock(&db_mutex);
+
+    // 1. Get player's current alignment, experience, and cached commission
+    const char *sql_get_player_info = "SELECT alignment, experience, commission FROM players WHERE id = ?1;";
+    rc = sqlite3_prepare_v2(db, sql_get_player_info, -1, &st, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("h_player_build_title_payload: Prepare get player info error: %s", sqlite3_errmsg(db));
+        goto cleanup;
+    }
+    sqlite3_bind_int(st, 1, player_id);
+
+    if (sqlite3_step(st) == SQLITE_ROW) {
+        player_alignment = sqlite3_column_int(st, 0);
+        player_experience = sqlite3_column_int64(st, 1);
+        player_commission_id = sqlite3_column_int(st, 2);
+    } else if (rc == SQLITE_DONE) {
+        LOGW("h_player_build_title_payload: Player with ID %d not found.", player_id);
+        rc = SQLITE_NOTFOUND;
+        goto cleanup;
+    } else {
+        LOGE("h_player_build_title_payload: Execute get player info error: %s", sqlite3_errmsg(db));
+        goto cleanup;
+    }
+    sqlite3_finalize(st);
+    st = NULL;
+
+    // 2. Get Alignment Band info
+    pthread_mutex_unlock(&db_mutex); // Temporarily unlock as db_alignment_band_for_value locks internally
+    rc = db_alignment_band_for_value(db, player_alignment, NULL, &band_code, &band_name,
+                                     &band_is_good, &band_is_evil,
+                                     &band_can_buy_iss, &band_can_rob_ports);
+    pthread_mutex_lock(&db_mutex); // Re-acquire lock
+    if (rc != SQLITE_OK) {
+        LOGE("h_player_build_title_payload: Failed to get alignment band for player %d. RC: %d", player_id, rc);
+        goto cleanup;
+    }
+
+    // 3. Get Commission (rank) info - use the is_evil from the band to pick the track
+    pthread_mutex_unlock(&db_mutex); // Temporarily unlock as db_commission_for_player locks internally
+    rc = db_commission_for_player(db, band_is_evil, player_experience, &determined_commission_id, &commission_title, &commission_is_evil_flag);
+    pthread_mutex_lock(&db_mutex); // Re-acquire lock
+    if (rc != SQLITE_OK) {
+        LOGE("h_player_build_title_payload: Failed to get commission for player %d. RC: %d", player_id, rc);
+        goto cleanup;
+    }
+
+    // Defensive check: if cached player_commission_id is different from determined, update it.
+    if (player_commission_id != determined_commission_id) {
+        LOGW("h_player_build_title_payload: Player %d cached commission (%d) outdated. Recalculating and updating to %d.",
+             player_id, player_commission_id, determined_commission_id);
+        pthread_mutex_unlock(&db_mutex); // Temporarily unlock as db_player_update_commission locks internally
+        rc = db_player_update_commission(db, player_id);
+        pthread_mutex_lock(&db_mutex); // Re-acquire lock
+        if (rc != SQLITE_OK) {
+            LOGE("h_player_build_title_payload: Failed to update outdated commission for player %d. RC: %d", player_id, rc);
+            goto cleanup;
+        }
+        player_commission_id = determined_commission_id; // Use the newly determined ID
+    }
+
+
+    // 4. Build JSON object
+    obj = json_object();
+    if (!obj) { rc = SQLITE_NOMEM; goto cleanup; }
+
+    json_object_set_new(obj, "title", json_string(commission_title ? commission_title : "Unknown"));
+    json_object_set_new(obj, "commission", json_integer(player_commission_id));
+    json_object_set_new(obj, "alignment", json_integer(player_alignment));
+    json_object_set_new(obj, "experience", json_integer(player_experience));
+
+    band_obj = json_object();
+    if (!band_obj) { rc = SQLITE_NOMEM; goto cleanup; }
+    json_object_set_new(band_obj, "code", json_string(band_code ? band_code : "UNKNOWN"));
+    json_object_set_new(band_obj, "name", json_string(band_name ? band_name : "Unknown"));
+    json_object_set_new(band_obj, "is_good", json_boolean(band_is_good));
+    json_object_set_new(band_obj, "is_evil", json_boolean(band_is_evil));
+    json_object_set_new(band_obj, "can_buy_iss", json_boolean(band_can_buy_iss));
+    json_object_set_new(band_obj, "can_rob_ports", json_boolean(band_can_rob_ports));
+    json_object_set_new(obj, "alignment_band", band_obj);
+    band_obj = NULL; // Ownership transferred
+
+    *out_json = obj;
+    rc = SQLITE_OK;
+
+cleanup:
+    if (band_code) free(band_code);
+    if (band_name) free(band_name);
+    if (commission_title) free(commission_title);
+    if (obj && rc != SQLITE_OK) json_decref(obj);
+    if (band_obj) json_decref(band_obj);
+    pthread_mutex_unlock(&db_mutex); // Ensure unlock on all paths
+    return rc;
 }

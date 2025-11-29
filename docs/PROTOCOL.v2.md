@@ -491,6 +491,20 @@ For asynchronous events pushed to the client (not in response to a specific comm
           "experience": 5000,
           "alignment": 0,
           "score": 123456,
+          "title_info": {
+            "title": "Cadet",
+            "commission": 1,
+            "alignment": 0,
+            "experience": 5000,
+            "alignment_band": {
+              "code": "NEUTRAL",
+              "name": "Neutral",
+              "is_good": false,
+              "is_evil": false,
+              "can_buy_iss": 0,
+              "can_rob_ports": 0
+            }
+          },
           "last_news_read_timestamp": 1678886400,
           "bank_balance": "50000.00",
           "corporation": {
@@ -640,8 +654,38 @@ For asynchronous events pushed to the client (not in response to a specific comm
       "type": "player.rankings",
       "data": {
         "rankings": [
-          { "rank": 1, "username": "richest_player", "net_worth": "100000000.00" },
-          { "rank": 2, "username": "player1", "net_worth": "50000000.00" }
+          { "rank": 1, "username": "richest_player", "net_worth": "100000000.00",
+            "title_info": {
+              "title": "Grand Admiral",
+              "commission": 22,
+              "alignment": 1500,
+              "experience": 1000000,
+              "alignment_band": {
+                "code": "VERY_GOOD",
+                "name": "Very Good",
+                "is_good": true,
+                "is_evil": false,
+                "can_buy_iss": 1,
+                "can_rob_ports": 0
+              }
+            }
+          },
+          { "rank": 2, "username": "player1", "net_worth": "50000000.00",
+            "title_info": {
+              "title": "Commander",
+              "commission": 16,
+              "alignment": 800,
+              "experience": 500000,
+              "alignment_band": {
+                "code": "GOOD",
+                "name": "Good",
+                "is_good": true,
+                "is_evil": false,
+                "can_buy_iss": 1,
+                "can_rob_ports": 0
+              }
+            }
+          }
         ]
       }
     }

@@ -221,7 +221,30 @@ int db_player_get_last_rob_attempt(int player_id, int *last_port_id_out, long lo
 int db_player_set_last_rob_attempt(int player_id, int last_port_id, long long last_attempt_at);
 int db_port_add_bust_record(int port_id, int player_id, const char *bust_type, long long timestamp);
 int db_port_get_active_busts(int port_id, int player_id);
-bool h_is_black_market_port(sqlite3 *db, int port_id);
+int db_player_update_commission(sqlite3 *db, int player_id);
+
+int db_commission_for_player(
+    sqlite3 *db,
+    int is_evil_track,
+    long long xp,
+    int *out_commission_id,
+    char **out_title,
+    int *out_is_evil
+);
+
+int db_alignment_band_for_value(
+    sqlite3 *db,
+    int align,
+    int *out_id,
+    char **out_code,
+    char **out_name,
+    int *out_is_good,
+    int *out_is_evil,
+    int *out_can_buy_iss,
+    int *out_can_rob_ports
+);
+
+static int db_seed_ai_qa_bot_bank_account_unlocked (void);
 
 
 
