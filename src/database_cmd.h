@@ -51,21 +51,21 @@ int db_player_decrement_beacon_count (int player_id);
 int db_get_player_bank_balance (int player_id, long long *out_balance);
 int db_ships_inspectable_at_sector_json (int player_id, int sector_id,
 					 json_t ** out_array);
-int db_ship_claim (int player_id, int sector_id, int ship_id,
-		   json_t ** out_ship);
+
 int db_ship_flags_set (int ship_id, int mask);
 int db_ship_flags_clear (int ship_id, int mask);
 /* List ships in sector (exclude caller’s piloted ship), include ownership & pilot status */
 int db_ships_inspectable_at_sector_json (int player_id, int sector_id,
 					 json_t ** out_array);
 /* Rename if caller owns the ship (via ship_ownership) */
-int db_ship_rename_if_owner (int player_id, int ship_id,
+int db_ship_rename_if_owner (sqlite3 *db, int player_id, int ship_id,
 			     const char *new_name);
 int db_destroy_ship (sqlite3 * db, int player_id, int ship_id);
 int db_create_initial_ship (int player_id, const char *ship_name,
 			    int sector_id);
+int h_ship_claim_unlocked (sqlite3 *db, int player_id, int sector_id, int ship_id, json_t ** out_ship);
 /* Claim an unpiloted ship (ownership unchanged); returns JSON of claimed ship */
-int db_ship_claim (int player_id, int sector_id, int ship_id,
+int db_ship_claim (sqlite3 *db, int player_id, int sector_id, int ship_id,
 		   json_t ** out_ship);
 int db_ensure_ship_perms_column (void);
 int db_sector_scan_core (int sector_id, json_t ** out_obj);
@@ -99,6 +99,7 @@ int db_news_insert_feed_item (int ts, const char *category, const char *scope,
 			      json_t * context_data);
 int db_is_sector_fedspace (int ck_sector);
 int db_get_port_id_by_sector (int sector_id);
+int db_get_port_sector (sqlite3 *db, int port_id);
 int db_get_ship_sector_id (sqlite3 * db, int ship_id);
 int db_recall_fighter_asset (int asset_id, int player_id);
 
@@ -208,8 +209,8 @@ int db_update_player_podded_status (sqlite3 * db, int player_id,
 int db_create_podded_status_entry (sqlite3 * db, int player_id);
 int db_get_shiptype_info (sqlite3 * db, int shiptype_id, int *holds,
 			  int *fighters, int *shields);
-int db_player_land_on_planet (int player_id, int planet_id);
-int db_player_launch_from_planet (int player_id, int *out_sector_id);
+int db_player_land_on_planet (sqlite3 *db, int player_id, int planet_id);
+int db_player_launch_from_planet (sqlite3 *db, int player_id, int *out_sector_id);
 
 int db_bounty_create(sqlite3 *db, const char *posted_by_type, int posted_by_id, const char *target_type, int target_id, long long reward, const char *description);
 int db_player_get_alignment(sqlite3 *db, int player_id, int *alignment);
@@ -248,7 +249,7 @@ int db_alignment_band_for_value(
     int *out_can_rob_ports
 );
 
-static int db_seed_ai_qa_bot_bank_account_unlocked (void);
+
 
 
 

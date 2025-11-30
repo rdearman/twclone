@@ -14,7 +14,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <jansson.h>		/* -ljansson */
+#include <jansson.h>            /* -ljansson */
 #include <stdbool.h>
 #include <sqlite3.h>
 /* local includes */
@@ -27,7 +27,7 @@
 #include "common.h"
 #include "server_envelope.h"
 #include "server_players.h"
-#include "server_ports.h"	// at top of server_loop.c
+#include "server_ports.h"       // at top of server_loop.c
 #include "server_auth.h"
 #include "server_s2s.h"
 #include "server_universe.h"
@@ -40,51 +40,50 @@
 #include "server_bulk.h"
 #include "server_news.h"
 #include "server_log.h"
-#include "server_stardock.h"	// Include for hardware commands
+#include "server_stardock.h"    // Include for hardware commands
 #include "server_corporation.h"
-
-
 #ifndef streq
-#define streq(a,b) (strcasecmp(json_string_value((a)), (b))==0)
+#define streq(a,b) (strcasecmp (json_string_value ((a)), (b)) == 0)
 #endif
 #define BUF_SIZE    8192
 #define RULE_REFUSE(_code,_msg,_hint_json) \
-    do { send_enveloped_refused(ctx->fd, root, (_code), (_msg), (_hint_json)); goto trade_buy_done; } while (0)
-
+        do { send_enveloped_refused (ctx->fd, \
+                                     root, \
+                                     (_code), \
+                                     (_msg), \
+                                     (_hint_json)); goto trade_buy_done; \
+          } while (0)
 #define RULE_ERROR(_code,_msg) \
-    do { send_enveloped_error(ctx->fd, root, (_code), (_msg)); goto trade_buy_done; } while (0)
-
+        do { send_enveloped_error (ctx->fd, root, (_code), (_msg)); \
+             goto trade_buy_done; } while (0)
 // static _Atomic uint64_t g_conn_seq = 0;
 /* global (file-scope) counter for server message ids */
 // static _Atomic uint64_t g_msg_seq = 0;
 static __thread client_ctx_t *g_ctx_for_send = NULL;
 /* forward declaration to avoid implicit extern */
-void send_all_json (int fd, json_t * obj);
-int db_player_info_json (int player_id, json_t ** out);
+void send_all_json (int fd, json_t *obj);
+int db_player_info_json (int player_id, json_t **out);
 /* rate-limit helper prototypes (defined later) */
-void attach_rate_limit_meta (json_t * env, client_ctx_t * ctx);
-void rl_tick (client_ctx_t * ctx);
-int db_sector_basic_json (int sector_id, json_t ** out_obj);
-int db_adjacent_sectors_json (int sector_id, json_t ** out_array);
-int db_ports_at_sector_json (int sector_id, json_t ** out_array);
-int db_sector_scan_core (int sector_id, json_t ** out_obj);
-int db_players_at_sector_json (int sector_id, json_t ** out_array);
-int db_beacons_at_sector_json (int sector_id, json_t ** out_array);
-int db_planets_at_sector_json (int sector_id, json_t ** out_array);
+void attach_rate_limit_meta (json_t *env, client_ctx_t *ctx);
+void rl_tick (client_ctx_t *ctx);
+int db_sector_basic_json (int sector_id, json_t **out_obj);
+int db_adjacent_sectors_json (int sector_id, json_t **out_array);
+int db_ports_at_sector_json (int sector_id, json_t **out_array);
+int db_sector_scan_core (int sector_id, json_t **out_obj);
+int db_players_at_sector_json (int sector_id, json_t **out_array);
+int db_beacons_at_sector_json (int sector_id, json_t **out_array);
+int db_planets_at_sector_json (int sector_id, json_t **out_array);
 int db_player_set_sector (int player_id, int sector_id);
 int db_player_get_sector (int player_id, int *out_sector);
-void handle_sector_info (int fd, json_t * root, int sector_id, int player_id);
-void handle_sector_set_beacon (client_ctx_t * ctx, json_t * root);
+void handle_sector_info (int fd, json_t *root, int sector_id, int player_id);
+void handle_sector_set_beacon (client_ctx_t *ctx, json_t *root);
 /* Fast sector scan handler (IDs+counts only) */
-void handle_move_scan (client_ctx_t * ctx, json_t * root);
-void handle_move_pathfind (client_ctx_t * ctx, json_t * root);
-void send_enveloped_ok (int fd, json_t * root, const char *type,
-			json_t * data);
+void handle_move_scan (client_ctx_t *ctx, json_t *root);
+void handle_move_pathfind (client_ctx_t *ctx, json_t *root);
+void send_enveloped_ok (int fd, json_t *root, const char *type,
+                        json_t *data);
 json_t *build_sector_info_json (int sector_id);
 // static int64_t g_next_notice_ttl_sweep = 0;
-
-
-
 static const cmd_desc_t k_supported_cmds_fallback[] = {
   {"admin.notice", "Admin notice"},
   {"admin.shutdown_warning", "Admin shutdown warning"},
@@ -216,6 +215,7 @@ static const cmd_desc_t k_supported_cmds_fallback[] = {
   {"port.describe", "Describe a port"},
   {"port.info", "Port prices/stock in sector"},
   {"port.status", "Port status"},
+  {"port.rob", "Attempt to rob a port"},
   {"research.projects.fund", "Fund a research project"},
   {"research.projects.list", "List research projects"},
   {"s2s.event.relay", "S2S event relay"},
@@ -287,22 +287,25 @@ static const cmd_desc_t k_supported_cmds_fallback[] = {
   {"trade.quote", "Get a quote for a trade action (Optional)"},
   {"trade.sell", "Sell commodity to port"},
 };
-
 // Weak fallback: satisfies server_envelope.o at link time.
 // If server_loop.c defines a strong version, it will override this.
 __attribute__((weak))
-     void
-     loop_get_supported_commands (const cmd_desc_t **out_tbl, size_t *out_n)
+
+
+void
+loop_get_supported_commands (const cmd_desc_t **out_tbl, size_t *out_n)
 {
   if (out_tbl)
-    *out_tbl = k_supported_cmds_fallback;
+    {
+      *out_tbl = k_supported_cmds_fallback;
+    }
   if (out_n)
-    *out_n =
-      sizeof (k_supported_cmds_fallback) /
-      sizeof (k_supported_cmds_fallback[0]);
+    {
+      *out_n =
+        sizeof (k_supported_cmds_fallback) /
+        sizeof (k_supported_cmds_fallback[0]);
+    }
 }
-
-
 
 
 static inline uint64_t
@@ -326,17 +329,19 @@ server_broadcast_to_all_online (json_t *data)
   json_decref (data);
 }
 
+
 /* Sector-scoped, ephemeral event to subscribers of sector.* / sector.{id}.
    NOTE: comm_publish_sector_event STEALS a ref to 'data'. */
-/*
-static void
-server_broadcast_to_sector (int sector_id, const char *event_type,
-			    json_t *data)
-{
-  comm_publish_sector_event (sector_id, event_type, data);	// steals 'data'
-}
-*/
 
+
+/*
+   static void
+   server_broadcast_to_sector (int sector_id, const char *event_type,
+                            json_t *data)
+   {
+   comm_publish_sector_event (sector_id, event_type, data);	// steals 'data'
+   }
+ */
 
 
 static int
@@ -347,19 +352,17 @@ broadcast_sweep_once (sqlite3 *db, int max_rows)
     "FROM system_notice "
     "WHERE id NOT IN (SELECT DISTINCT notice_id FROM notice_seen WHERE player_id=0) "
     "ORDER BY created_at ASC, id ASC LIMIT ?1;";
-
   sqlite3_stmt *st = NULL;
   int processed = 0;
-
   if (max_rows <= 0 || max_rows > 1000)
-    max_rows = 64;
-
+    {
+      max_rows = 64;
+    }
   if (sqlite3_prepare_v2 (db, SQL_SEL, -1, &st, NULL) != SQLITE_OK)
     {
       return 0;
     }
   sqlite3_bind_int (st, 1, max_rows);
-
   while (sqlite3_step (st) == SQLITE_ROW)
     {
       int id = sqlite3_column_int (st, 0);
@@ -368,49 +371,46 @@ broadcast_sweep_once (sqlite3 *db, int max_rows)
       const char *body = (const char *) sqlite3_column_text (st, 3);
       const char *severity = (const char *) sqlite3_column_text (st, 4);
       int expires_at =
-	(sqlite3_column_type (st, 5) ==
-	 SQLITE_NULL) ? 0 : sqlite3_column_int (st, 5);
-
+        (sqlite3_column_type (st, 5) ==
+         SQLITE_NULL) ? 0 : sqlite3_column_int (st, 5);
       json_t *data = json_pack ("{s:i, s:i, s:s, s:s, s:s, s:O}",
-				"id", id,
-				"ts", created_at,
-				"title", title ? title : "",
-				"body", body ? body : "",
-				"severity", severity ? severity : "info",
-				"expires_at",
-				expires_at ? json_integer (expires_at) :
-				json_null ());
-
-      server_broadcast_to_all_online (json_incref (data));	/* fan-out live */
+                                "id", id,
+                                "ts", created_at,
+                                "title", title ? title : "",
+                                "body", body ? body : "",
+                                "severity", severity ? severity : "info",
+                                "expires_at",
+                                expires_at ? json_integer (expires_at) :
+                                json_null ());
+      server_broadcast_to_all_online (json_incref (data));      /* fan-out live */
       json_decref (data);
-
       /* mark-as-published sentinel (player_id=0) to avoid re-sending */
       sqlite3_stmt *st2 = NULL;
       if (sqlite3_prepare_v2 (db,
-			      "INSERT OR IGNORE INTO notice_seen(notice_id, player_id, seen_at) "
-			      "VALUES(?1, 0, strftime('%s','now'));",
-			      -1, &st2, NULL) == SQLITE_OK)
-	{
-	  sqlite3_bind_int (st2, 1, id);
-	  (void) sqlite3_step (st2);
-	}
+                              "INSERT OR IGNORE INTO notice_seen(notice_id, player_id, seen_at) "
+                              "VALUES(?1, 0, strftime('%s','now'));",
+                              -1,
+                              &st2,
+                              NULL) == SQLITE_OK)
+        {
+          sqlite3_bind_int (st2, 1, id);
+          (void) sqlite3_step (st2);
+        }
       if (st2)
-	sqlite3_finalize (st2);
-
+        {
+          sqlite3_finalize (st2);
+        }
       processed++;
     }
-
   sqlite3_finalize (st);
   return processed;
 }
 
 
 /* ===== Client registry for broadcasts (#195) ===== */
-
-
-
 client_node_t *g_clients = NULL;
 pthread_mutex_t g_clients_mu = PTHREAD_MUTEX_INITIALIZER;
+
 
 void
 server_register_client (client_ctx_t *ctx)
@@ -426,6 +426,7 @@ server_register_client (client_ctx_t *ctx)
   pthread_mutex_unlock (&g_clients_mu);
 }
 
+
 void
 server_unregister_client (client_ctx_t *ctx)
 {
@@ -434,38 +435,39 @@ server_unregister_client (client_ctx_t *ctx)
   while (*pp)
     {
       if ((*pp)->ctx == ctx)
-	{
-	  client_node_t *dead = *pp;
-	  *pp = (*pp)->next;
-	  free (dead);
-	  break;
-	}
+        {
+          client_node_t *dead = *pp;
+          *pp = (*pp)->next;
+          free (dead);
+          break;
+        }
       pp = &((*pp)->next);
     }
   pthread_mutex_unlock (&g_clients_mu);
 }
+
 
 /* Deliver an envelope (type+data) to any online socket for player_id. */
 int
 server_deliver_to_player (int player_id, const char *event_type, json_t *data)
 {
   int delivered = 0;
-
   pthread_mutex_lock (&g_clients_mu);
-  for (client_node_t * n = g_clients; n; n = n->next)
+  for (client_node_t *n = g_clients; n; n = n->next)
     {
       client_ctx_t *c = n->ctx;
       if (!c)
-	continue;
+        {
+          continue;
+        }
       if (c->player_id == player_id && c->fd >= 0)
-	{
-	  /* send_enveloped_ok does its own timestamp/meta/sanitize. */
-	  send_enveloped_ok (c->fd, NULL, event_type, data);
-	  delivered++;
-	}
+        {
+          /* send_enveloped_ok does its own timestamp/meta/sanitize. */
+          send_enveloped_ok (c->fd, NULL, event_type, json_incref (data));
+          delivered++;
+        }
     }
   pthread_mutex_unlock (&g_clients_mu);
-
   return (delivered > 0) ? 0 : -1;
 }
 
@@ -486,6 +488,7 @@ fnv1a64 (const unsigned char *s, size_t n)
   return h;
 }
 
+
 static void
 hex64 (uint64_t v, char out[17])
 {
@@ -497,6 +500,7 @@ hex64 (uint64_t v, char out[17])
     }
   out[16] = '\0';
 }
+
 
 /* Canonicalize a JSON object (sorted keys, compact) then FNV-1a */
 void
@@ -513,7 +517,9 @@ idemp_fingerprint_json (json_t *obj, char out[17])
   hex64 (h, out);
 }
 
+
 /* ------------------------ socket helpers ------------------------ */
+
 
 static int
 set_reuseaddr (int fd)
@@ -521,6 +527,7 @@ set_reuseaddr (int fd)
   int yes = 1;
   return setsockopt (fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof (yes));
 }
+
 
 static int
 make_listen_socket (uint16_t port)
@@ -531,20 +538,17 @@ make_listen_socket (uint16_t port)
       perror ("socket");
       return -1;
     }
-
   if (set_reuseaddr (fd) < 0)
     {
       perror ("setsockopt(SO_REUSEADDR)");
       close (fd);
       return -1;
     }
-
   struct sockaddr_in sa;
   memset (&sa, 0, sizeof (sa));
   sa.sin_family = AF_INET;
   sa.sin_addr.s_addr = htonl (INADDR_ANY);
   sa.sin_port = htons (port);
-
   if (bind (fd, (struct sockaddr *) &sa, sizeof (sa)) < 0)
     {
       perror ("bind");
@@ -560,26 +564,27 @@ make_listen_socket (uint16_t port)
   return fd;
 }
 
+
 /*
-static int
-send_all (int fd, const void *buf, size_t n)
-{
-  const char *p = (const char *) buf;
-  size_t off = 0;
-  while (off < n)
+   static int
+   send_all (int fd, const void *buf, size_t n)
+   {
+   const char *p = (const char *) buf;
+   size_t off = 0;
+   while (off < n)
     {
       ssize_t w = write (fd, p + off, n - off);
       if (w < 0)
-	{
-	  if (errno == EINTR)
-	    continue;
-	  return -1;
-	}
+        {
+          if (errno == EINTR)
+            continue;
+          return -1;
+        }
       off += (size_t) w;
     }
-  return 0;
-}
-*/
+   return 0;
+   }
+ */
 
 
 /* Roll the window and increment count for this response */
@@ -587,12 +592,14 @@ void
 rl_tick (client_ctx_t *ctx)
 {
   if (!ctx)
-    return;
+    {
+      return;
+    }
   time_t now = time (NULL);
   if (ctx->rl_limit <= 0)
     {
       ctx->rl_limit = 60;
-    }				/* safety */
+    }                           /* safety */
   if (ctx->rl_window_sec <= 0)
     {
       ctx->rl_window_sec = 60;
@@ -605,29 +612,39 @@ rl_tick (client_ctx_t *ctx)
   ctx->rl_count++;
 }
 
+
 /* Build {limit, remaining, reset} */
 static json_t *
 rl_build_meta (const client_ctx_t *ctx)
 {
   if (!ctx)
-    return json_null ();
+    {
+      return json_null ();
+    }
   time_t now = time (NULL);
   int reset = (int) (ctx->rl_window_start + ctx->rl_window_sec - now);
   if (reset < 0)
-    reset = 0;
+    {
+      reset = 0;
+    }
   int remaining = ctx->rl_limit - ctx->rl_count;
   if (remaining < 0)
-    remaining = 0;
+    {
+      remaining = 0;
+    }
   return json_pack ("{s:i,s:i,s:i}", "limit", ctx->rl_limit, "remaining",
-		    remaining, "reset", reset);
+                    remaining, "reset", reset);
 }
+
 
 /* Ensure env.meta exists and add meta.rate_limit */
 void
 attach_rate_limit_meta (json_t *env, client_ctx_t *ctx)
 {
   if (!env || !ctx)
-    return;
+    {
+      return;
+    }
   json_t *meta = json_object_get (env, "meta");
   if (!json_is_object (meta))
     {
@@ -646,7 +663,6 @@ process_message (client_ctx_t *ctx, json_t *root)
   g_ctx_for_send = ctx;
   json_t *cmd = json_object_get (root, "command");
   json_t *evt = json_object_get (root, "event");
-
   /* Auto-auth from meta.session_token (transport-agnostic clients) */
   json_t *jmeta = json_object_get (root, "meta");
   json_t *jauth = json_object_get (root, "auth");
@@ -655,13 +671,17 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       json_t *jtok = json_object_get (jmeta, "session_token");
       if (json_is_string (jtok))
-	session_token = json_string_value (jtok);
+        {
+          session_token = json_string_value (jtok);
+        }
     }
   if (session_token == NULL && json_is_object (jauth))
     {
       json_t *jtok = json_object_get (jauth, "session");
       if (json_is_string (jtok))
-	session_token = json_string_value (jtok);
+        {
+          session_token = json_string_value (jtok);
+        }
     }
   if (session_token)
     {
@@ -669,49 +689,45 @@ process_message (client_ctx_t *ctx, json_t *root)
       long long exp = 0;
       int rc = db_session_lookup (session_token, &pid, &exp);
       if (rc == SQLITE_OK && pid > 0)
-	{
-	  ctx->player_id = pid;
-	  ctx->corp_id = h_get_player_corp_id (db_get_handle (), pid);
-	  if (ctx->sector_id <= 0)
-	    ctx->sector_id = 1;	/* or load from DB */
-	}
+        {
+          ctx->player_id = pid;
+          ctx->corp_id = h_get_player_corp_id (db_get_handle (), pid);
+          if (ctx->sector_id <= 0)
+            {
+              ctx->sector_id = 1; /* or load from DB */
+            }
+        }
       /* If invalid/expired, we silently ignore; individual commands can refuse with 1401 */
     }
-
   if (ctx->player_id == 0 && ctx->sector_id <= 0)
     {
       ctx->sector_id = 1;
     }
-
   if (!(cmd && json_is_string (cmd)) && !(evt && json_is_string (evt)))
     {
       send_enveloped_error (ctx->fd, root, 1300, "Invalid request schema");
       return;
     }
-
   if (evt && json_is_string (evt))
     {
       send_enveloped_error (ctx->fd, root, 1300, "Invalid request schema");
       return;
     }
-
   /* Rate-limit defaults: 60 responses / 60 seconds */
   ctx->rl_limit = 60;
   ctx->rl_window_sec = 60;
   ctx->rl_window_start = time (NULL);
   ctx->rl_count = 0;
-
   const char *c = json_string_value (cmd);
   int rc = 0;
-
 /* ---------- AUTH / USER ---------- */
   if (!strcasecmp (c, "login") || !strcasecmp (c, "auth.login"))
     {
       rc = cmd_auth_login (ctx, root);
       if (rc)
-	{
-	  push_unseen_notices_for_player (ctx, ctx->player_id);
-	}
+        {
+          push_unseen_notices_for_player (ctx, ctx->player_id);
+        }
     }
   else if (!strcasecmp (c, "auth.register"))
     {
@@ -728,13 +744,12 @@ process_message (client_ctx_t *ctx, json_t *root)
   /*   } */
   else if (!strcasecmp (c, "auth.refresh"))
     {
-      rc = cmd_auth_refresh (ctx, root);	/* NIY stub */
+      rc = cmd_auth_refresh (ctx, root);        /* NIY stub */
     }
   else if (!strcasecmp (c, "auth.mfa.totp.verify"))
     {
-      rc = cmd_auth_mfa_totp_verify (ctx, root);	/* NIY stub */
+      rc = cmd_auth_mfa_totp_verify (ctx, root);        /* NIY stub */
     }
-
 /* ---------- SYSTEM / SESSION ---------- */
   else if (!strcasecmp (c, "system.capabilities"))
     {
@@ -745,16 +760,16 @@ process_message (client_ctx_t *ctx, json_t *root)
       rc = cmd_system_describe_schema (ctx, root);
     }
   else if ((!strcasecmp (c, "session.ping"))
-	   || (!strcasecmp (c, "player.ping"))
-	   || (!strcasecmp (c, "session.hello"))
-	   || (!strcasecmp (c, "system.hello")))
+           || (!strcasecmp (c, "player.ping"))
+           || (!strcasecmp (c, "session.hello"))
+           || (!strcasecmp (c, "system.hello")))
     {
       rc = cmd_system_hello (ctx, root);
     }
   else if (!strcasecmp (c, "session.disconnect")
-	   || !strcasecmp (c, "system.disconnect"))
+           || !strcasecmp (c, "system.disconnect"))
     {
-      rc = cmd_session_disconnect (ctx, root);	/* NIY stub */
+      rc = cmd_session_disconnect (ctx, root);  /* NIY stub */
     }
   else if (streq (cmd, "system.cmd_list"))
     {
@@ -789,8 +804,6 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       rc = cmd_sys_cluster_seed_illegal_goods (ctx, root);
     }
-
-
 /* ---------- PLAYER ---------- */
   else if (streq (cmd, "player.get_settings"))
     {
@@ -832,7 +845,6 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       rc = cmd_bounty_post_hitlist (ctx, root);
     }
-
   else if (streq (cmd, "player.my_info"))
     {
       cmd_player_my_info (ctx, root);
@@ -849,7 +861,6 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       cmd_player_set_settings (ctx, root);
     }
-
   else if (streq (cmd, "player.get_prefs"))
     {
       cmd_player_get_prefs (ctx, root);
@@ -858,31 +869,28 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       cmd_player_set_prefs (ctx, root);
     }
-
   else if (streq (cmd, "player.get_topics") ||
-	   streq (cmd, "player.get_subscriptions"))
+           streq (cmd, "player.get_subscriptions"))
     {
       cmd_player_get_topics (ctx, root);
     }
   else if (streq (cmd, "player.set_topics") ||
-	   streq (cmd, "player.set_subscriptions"))
+           streq (cmd, "player.set_subscriptions"))
     {
       cmd_player_set_topics (ctx, root);
     }
-
   else if (streq (cmd, "player.get_bookmarks") ||
-	   streq (cmd, "nav.bookmark.list"))
+           streq (cmd, "nav.bookmark.list"))
     {
       cmd_player_get_bookmarks (ctx, root);
     }
   else if (streq (cmd, "player.set_bookmarks") ||
-	   streq (cmd, "nav.bookmark.set") ||
-	   streq (cmd, "nav.bookmark.add") ||
-	   streq (cmd, "nav.bookmark.remove"))
+           streq (cmd, "nav.bookmark.set") ||
+           streq (cmd, "nav.bookmark.add") ||
+           streq (cmd, "nav.bookmark.remove"))
     {
       cmd_player_set_bookmarks (ctx, root);
     }
-
   else if (streq (cmd, "nav.avoid.add"))
     {
       cmd_nav_avoid_add (ctx, root);
@@ -895,22 +903,19 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       cmd_nav_avoid_list (ctx, root);
     }
-
   else if (streq (cmd, "player.get_avoids") || streq (cmd, "nav.avoid.list"))
     {
       cmd_player_get_avoids (ctx, root);
     }
   else if (streq (cmd, "player.set_avoids") ||
-	   streq (cmd, "nav.avoid.set") || streq (cmd, "nav.avoid.add"))
+           streq (cmd, "nav.avoid.set") || streq (cmd, "nav.avoid.add"))
     {
       cmd_player_set_avoids (ctx, root);
     }
-
   else if (streq (cmd, "player.get_notes") || streq (cmd, "notes.list"))
     {
       cmd_player_get_notes (ctx, root);
     }
-
   else if (streq (cmd, "player.get_settings"))
     {
       cmd_player_get_settings (ctx, root);
@@ -919,7 +924,6 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       cmd_player_set_settings (ctx, root);
     }
-
   else if (streq (cmd, "player.get_prefs"))
     {
       cmd_player_get_prefs (ctx, root);
@@ -932,7 +936,6 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       rc = cmd_player_set_trade_account_preference (ctx, root);
     }
-
 /* ---------- CORPORATION & STOCK ---------- */
   else if (!strcasecmp (c, "corp.create"))
     {
@@ -994,8 +997,6 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       rc = cmd_corp_transfer_ceo (ctx, root);
     }
-
-
   /* ---------- HARDWARE ---------- */
   else if (!strcasecmp (c, "hardware.list"))
     {
@@ -1067,14 +1068,13 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       rc = cmd_tavern_barcharts_get_prices_summary (ctx, root);
     }
-
   /* ---------- SHIP ---------- */
   else if (!strcasecmp (c, "ship.inspect"))
     {
       rc = cmd_ship_inspect (ctx, root);
     }
   else if (!strcasecmp (c, "ship.rename")
-	   || !strcasecmp (c, "ship.reregister"))
+           || !strcasecmp (c, "ship.reregister"))
     {
       rc = cmd_ship_rename (ctx, root);
     }
@@ -1088,32 +1088,34 @@ process_message (client_ctx_t *ctx, json_t *root)
     }
   else if (!strcasecmp (c, "ship.info"))
     {
-      rc = cmd_ship_info_compat (ctx, root);	/* legacy alias */
+      rc = cmd_ship_info_compat (ctx, root);    /* legacy alias */
     }
   else if (!strcasecmp (c, "ship.transfer_cargo"))
     {
-      rc = cmd_ship_transfer_cargo (ctx, root);	/* NIY stub */
+      rc = cmd_ship_transfer_cargo (ctx, root); /* NIY stub */
     }
-
   else if (!strcasecmp (c, "ship.upgrade"))
     {
-      rc = cmd_ship_upgrade (ctx, root);	/* NIY stub */
+      rc = cmd_ship_upgrade (ctx, root);        /* NIY stub */
     }
   else if (!strcasecmp (c, "ship.repair"))
     {
-      rc = cmd_ship_repair (ctx, root);	/* NIY stub */
+      rc = cmd_ship_repair (ctx, root); /* NIY stub */
     }
   else if (!strcasecmp (c, "ship.self_destruct"))
     {
-      rc = cmd_ship_self_destruct (ctx, root);	/* NIY stub */
+      rc = cmd_ship_self_destruct (ctx, root);  /* NIY stub */
     }
-
 /* ---------- PORTS / TRADE ---------- */
   else if (!strcasecmp (c, "port.info") || !strcasecmp (c, "port.status")
-	   || !strcasecmp (c, "trade.port_info")
-	   || !strcasecmp (c, "port.describe"))
+           || !strcasecmp (c, "trade.port_info")
+           || !strcasecmp (c, "port.describe"))
     {
       rc = cmd_trade_port_info (ctx, root);
+    }
+  else if (!strcasecmp (c, "port.rob"))
+    {
+      rc = cmd_port_rob (ctx, root);
     }
   else if (!strcasecmp (c, "trade.buy"))
     {
@@ -1121,27 +1123,27 @@ process_message (client_ctx_t *ctx, json_t *root)
     }
   else if (!strcasecmp (c, "trade.sell"))
     {
-      rc = cmd_trade_sell (ctx, root);	/* NIY stub (or real) */
+      rc = cmd_trade_sell (ctx, root);  /* NIY stub (or real) */
     }
   else if (!strcasecmp (c, "trade.quote"))
     {
-      rc = cmd_trade_quote (ctx, root);	/* NIY stub */
+      rc = cmd_trade_quote (ctx, root); /* NIY stub */
     }
   else if (!strcasecmp (c, "trade.jettison"))
     {
-      rc = cmd_trade_jettison (ctx, root);	/* NIY stub */
+      rc = cmd_trade_jettison (ctx, root);      /* NIY stub */
     }
   else if (!strcasecmp (c, "trade.offer"))
     {
-      rc = cmd_trade_offer (ctx, root);	/* NIY stub */
+      rc = cmd_trade_offer (ctx, root); /* NIY stub */
     }
   else if (!strcasecmp (c, "trade.accept"))
     {
-      rc = cmd_trade_accept (ctx, root);	/* NIY stub */
+      rc = cmd_trade_accept (ctx, root);        /* NIY stub */
     }
   else if (!strcasecmp (c, "trade.cancel"))
     {
-      rc = cmd_trade_cancel (ctx, root);	/* NIY stub */
+      rc = cmd_trade_cancel (ctx, root);        /* NIY stub */
     }
   else if (!strcasecmp (c, "trade.history"))
     {
@@ -1151,32 +1153,31 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       rc = cmd_dock_status (ctx, root);
     }
-
 /* ---------- UNIVERSE / SECTOR / MOVE ---------- */
   else if (!strcasecmp (c, "move.describe_sector")
-	   || !strcasecmp (c, "sector.info"))
+           || !strcasecmp (c, "sector.info"))
     {
-      rc = cmd_move_describe_sector (ctx, root);	/* NIY or real */
+      rc = cmd_move_describe_sector (ctx, root);        /* NIY or real */
     }
   else if (!strcasecmp (c, "move.scan"))
     {
-      cmd_move_scan (ctx, root);	/* NIY or real */
+      cmd_move_scan (ctx, root);        /* NIY or real */
     }
   else if (!strcasecmp (c, "move.warp"))
     {
-      rc = cmd_move_warp (ctx, root);	/* NIY or real */
+      rc = cmd_move_warp (ctx, root);   /* NIY or real */
     }
   else if (!strcasecmp (c, "move.pathfind"))
     {
-      rc = cmd_move_pathfind (ctx, root);	/* NIY stub */
+      rc = cmd_move_pathfind (ctx, root);       /* NIY stub */
     }
   else if (!strcasecmp (c, "move.autopilot.start"))
     {
-      rc = cmd_move_autopilot_start (ctx, root);	/* NIY stub */
+      rc = cmd_move_autopilot_start (ctx, root);        /* NIY stub */
     }
   else if (!strcasecmp (c, "move.autopilot.stop"))
     {
-      rc = cmd_move_autopilot_stop (ctx, root);	/* NIY stub */
+      rc = cmd_move_autopilot_stop (ctx, root); /* NIY stub */
     }
   else if (!strcasecmp (c, "move.autopilot.status"))
     {
@@ -1198,43 +1199,42 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       cmd_sector_scan (ctx, root);
     }
-
 /* ---------- PLANETS / CITADEL ---------- */
   else if (!strcasecmp (c, "planet.genesis"))
     {
-      rc = cmd_planet_genesis (ctx, root);	/* NIY stub */
+      rc = cmd_planet_genesis (ctx, root);      /* NIY stub */
     }
   else if (!strcasecmp (c, "planet.info"))
     {
-      rc = cmd_planet_info (ctx, root);	/* NIY stub */
+      rc = cmd_planet_info (ctx, root); /* NIY stub */
     }
   else if (!strcasecmp (c, "planet.rename"))
     {
-      rc = cmd_planet_rename (ctx, root);	/* NIY stub */
+      rc = cmd_planet_rename (ctx, root);       /* NIY stub */
     }
   else if (!strcasecmp (c, "planet.land"))
     {
-      rc = cmd_planet_land (ctx, root);	/* NIY stub */
+      rc = cmd_planet_land (ctx, root); /* NIY stub */
     }
   else if (!strcasecmp (c, "planet.launch"))
     {
-      rc = cmd_planet_launch (ctx, root);	/* NIY stub */
+      rc = cmd_planet_launch (ctx, root);       /* NIY stub */
     }
   else if (!strcasecmp (c, "planet.transfer_ownership"))
     {
-      rc = cmd_planet_transfer_ownership (ctx, root);	/* NIY stub */
+      rc = cmd_planet_transfer_ownership (ctx, root);   /* NIY stub */
     }
   else if (!strcasecmp (c, "planet.harvest"))
     {
-      rc = cmd_planet_harvest (ctx, root);	/* NIY stub */
+      rc = cmd_planet_harvest (ctx, root);      /* NIY stub */
     }
   else if (!strcasecmp (c, "planet.deposit"))
     {
-      rc = cmd_planet_deposit (ctx, root);	/* NIY stub */
+      rc = cmd_planet_deposit (ctx, root);      /* NIY stub */
     }
   else if (!strcasecmp (c, "planet.withdraw"))
     {
-      rc = cmd_planet_withdraw (ctx, root);	/* NIY stub */
+      rc = cmd_planet_withdraw (ctx, root);     /* NIY stub */
     }
   else if (!strcasecmp (c, "planet.genesis_create"))
     {
@@ -1242,45 +1242,44 @@ process_message (client_ctx_t *ctx, json_t *root)
     }
   else if (!strcasecmp (c, "citadel.build"))
     {
-      rc = cmd_citadel_build (ctx, root);	/* NIY stub */
+      rc = cmd_citadel_build (ctx, root);       /* NIY stub */
     }
   else if (!strcasecmp (c, "citadel.upgrade"))
     {
-      rc = cmd_citadel_upgrade (ctx, root);	/* NIY stub */
+      rc = cmd_citadel_upgrade (ctx, root);     /* NIY stub */
     }
-
 /* ---------- COMBAT ---------- */
   else if (!strcasecmp (c, "combat.attack"))
     {
-      rc = cmd_combat_attack (ctx, root);	/* NIY stub */
+      rc = cmd_combat_attack (ctx, root);       /* NIY stub */
     }
   else if (!strcasecmp (c, "combat.deploy_fighters"))
     {
-      rc = cmd_combat_deploy_fighters (ctx, root);	/* NIY stub */
+      rc = cmd_combat_deploy_fighters (ctx, root);      /* NIY stub */
     }
   else if (!strcasecmp (c, "combat.lay_mines"))
     {
-      rc = cmd_combat_lay_mines (ctx, root);	/* NIY stub */
+      rc = cmd_combat_lay_mines (ctx, root);    /* NIY stub */
     }
   else if (!strcasecmp (c, "combat.sweep_mines"))
     {
-      rc = cmd_combat_sweep_mines (ctx, root);	/* NIY stub */
+      rc = cmd_combat_sweep_mines (ctx, root);  /* NIY stub */
     }
   else if (!strcasecmp (c, "combat.status"))
     {
-      rc = cmd_combat_status (ctx, root);	/* NIY stub */
+      rc = cmd_combat_status (ctx, root);       /* NIY stub */
     }
   else if (!strcasecmp (c, "deploy.fighters.list"))
     {
-      rc = cmd_deploy_fighters_list (ctx, root);	/* list deployed fighters */
+      rc = cmd_deploy_fighters_list (ctx, root);        /* list deployed fighters */
     }
   else if (!strcasecmp (c, "deploy.mines.list"))
     {
-      rc = cmd_deploy_mines_list (ctx, root);	/* list deployed mines */
+      rc = cmd_deploy_mines_list (ctx, root);   /* list deployed mines */
     }
   else if (!strcasecmp (c, "fighters.recall"))
     {
-      rc = cmd_fighters_recall (ctx, root);	/* recall deployed fighters */
+      rc = cmd_fighters_recall (ctx, root);     /* recall deployed fighters */
     }
   else if (!strcasecmp (c, "combat.deploy_mines"))
     {
@@ -1290,21 +1289,19 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       rc = cmd_mines_recall (ctx, root);
     }
-
 /* ---------- CHAT ---------- */
   else if (!strcasecmp (c, "chat.send"))
     {
-      rc = cmd_chat_send (ctx, root);	/* NIY stub */
+      rc = cmd_chat_send (ctx, root);   /* NIY stub */
     }
   else if (!strcasecmp (c, "chat.broadcast"))
     {
-      rc = cmd_chat_broadcast (ctx, root);	/* NIY stub */
+      rc = cmd_chat_broadcast (ctx, root);      /* NIY stub */
     }
   else if (!strcasecmp (c, "chat.history"))
     {
-      rc = cmd_chat_history (ctx, root);	/* NIY stub */
+      rc = cmd_chat_history (ctx, root);        /* NIY stub */
     }
-
 /* ---------- MAIL/Announcements ---------- */
   else if (!strcasecmp (c, "mail.send"))
     {
@@ -1343,163 +1340,154 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       rc = cmd_news_mark_feed_read (ctx, root);
     }
-
 /* ---------- SUBSCRIBE ---------- */
   else if (!strcasecmp (c, "subscribe.add"))
     {
-      rc = cmd_subscribe_add (ctx, root);	/* NIY stub */
+      rc = cmd_subscribe_add (ctx, root);       /* NIY stub */
     }
   else if (!strcasecmp (c, "subscribe.remove"))
     {
-      rc = cmd_subscribe_remove (ctx, root);	/* NIY stub */
+      rc = cmd_subscribe_remove (ctx, root);    /* NIY stub */
     }
   else if (!strcasecmp (c, "subscribe.list"))
     {
-      rc = cmd_subscribe_list (ctx, root);	/* NIY stub */
+      rc = cmd_subscribe_list (ctx, root);      /* NIY stub */
     }
   else if (strcasecmp (c, "subscribe.catalog") == 0)
     {
       cmd_subscribe_catalog (ctx, root);
     }
-
 /* ---------- BULK ---------- */
   else if (!strcasecmp (c, "bulk.execute"))
     {
-      rc = cmd_bulk_execute (ctx, root);	/* NIY stub */
+      rc = cmd_bulk_execute (ctx, root);        /* NIY stub */
     }
-
 /* ---------- ADMIN ---------- */
   else if (!strcasecmp (c, "admin.notice"))
     {
-      rc = cmd_admin_notice (ctx, root);	/* NIY stub */
+      rc = cmd_admin_notice (ctx, root);        /* NIY stub */
     }
   else if (!strcasecmp (c, "admin.shutdown_warning"))
     {
-      rc = cmd_admin_shutdown_warning (ctx, root);	/* NIY stub */
+      rc = cmd_admin_shutdown_warning (ctx, root);      /* NIY stub */
     }
-
   /* ---------- S2S ---------- */
   else if (!strcasecmp (c, "s2s.planet.genesis"))
     {
-      rc = cmd_s2s_planet_genesis (ctx, root);	/* NIY stub */
+      rc = cmd_s2s_planet_genesis (ctx, root);  /* NIY stub */
     }
   else if (!strcasecmp (c, "s2s.planet.transfer"))
     {
-      rc = cmd_s2s_planet_transfer (ctx, root);	/* NIY stub */
+      rc = cmd_s2s_planet_transfer (ctx, root); /* NIY stub */
     }
   else if (!strcasecmp (c, "s2s.player.migrate"))
     {
-      rc = cmd_s2s_player_migrate (ctx, root);	/* NIY stub */
+      rc = cmd_s2s_player_migrate (ctx, root);  /* NIY stub */
     }
   else if (!strcasecmp (c, "s2s.port.restock"))
     {
-      rc = cmd_s2s_port_restock (ctx, root);	/* NIY stub */
+      rc = cmd_s2s_port_restock (ctx, root);    /* NIY stub */
     }
   else if (!strcasecmp (c, "s2s.event.relay"))
     {
-      rc = cmd_s2s_event_relay (ctx, root);	/* NIY stub */
+      rc = cmd_s2s_event_relay (ctx, root);     /* NIY stub */
     }
   else if (!strcasecmp (c, "s2s.replication.heartbeat"))
     {
-      rc = cmd_s2s_replication_heartbeat (ctx, root);	/* NIY stub */
+      rc = cmd_s2s_replication_heartbeat (ctx, root);   /* NIY stub */
     }
-
 /* ---------- FALLBACK ---------- */
   else
     {
       send_enveloped_error (ctx->fd, root, 1400, "Unknown command");
       rc = 0;
     }
-
 }
 
 
 /* ------------------------ per-connection loop (thread body) ------------------------ */
+
 
 static void *
 connection_thread (void *arg)
 {
   client_ctx_t *ctx = (client_ctx_t *) arg;
   int fd = ctx->fd;
-
   /* Per-thread initialisation (DB/session/etc.) goes here */
   /* ctx->db = thread_db_open(); */
-
   /* Make recv interruptible via timeout so we can stop promptly */
   struct timeval tv = {.tv_sec = 1,.tv_usec = 0 };
   setsockopt (fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof (tv));
-
   char buf[BUF_SIZE];
   size_t have = 0;
-
   for (;;)
     {
       if (!*ctx->running)
-	break;
-
+        {
+          break;
+        }
       ssize_t n = recv (fd, buf + have, sizeof (buf) - have, 0);
       if (n > 0)
-	{
-	  have += (size_t) n;
-
-	  /* Process complete lines (newline-terminated frames) */
-	  size_t start = 0;
-	  for (size_t i = 0; i < have; ++i)
-	    {
-	      if (buf[i] == '\n')
-		{
-		  /* Trim optional CR */
-		  size_t linelen = i - start;
-		  const char *line = buf + start;
-		  while (linelen && line[linelen - 1] == '\r')
-		    linelen--;
-
-		  /* Parse and dispatch */
-		  //LOGI ("CORE DUMP DEBUG: Received from client: %.*s\n",
-		  //	(int) linelen, line);
-		  json_error_t jerr;
-		  json_t *root = json_loadb (line, linelen, 0, &jerr);
-
-		  if (!root || !json_is_object (root))
-		    {
-		      send_enveloped_error (fd, NULL, 1300,
-					    "Invalid request schema");
-		    }
-		  else
-		    {
-		      process_message (ctx, root);
-		    }
-
-		  start = i + 1;
-		}
-	    }
-	  /* Shift any partial line to front */
-	  if (start > 0)
-	    {
-	      memmove (buf, buf + start, have - start);
-	      have -= start;
-	    }
-	  /* Overflow without newline → guard & reset */
-	  if (have == sizeof (buf))
-	    {
-	      send_error_json (fd, 1300, "invalid request schema");
-	      have = 0;
-	    }
-	}
+        {
+          have += (size_t) n;
+          /* Process complete lines (newline-terminated frames) */
+          size_t start = 0;
+          for (size_t i = 0; i < have; ++i)
+            {
+              if (buf[i] == '\n')
+                {
+                  /* Trim optional CR */
+                  size_t linelen = i - start;
+                  const char *line = buf + start;
+                  while (linelen && line[linelen - 1] == '\r')
+                    {
+                      linelen--;
+                    }
+                  /* Parse and dispatch */
+                  //LOGI ("CORE DUMP DEBUG: Received from client: %.*s\n",
+                  //	(int) linelen, line);
+                  json_error_t jerr;
+                  json_t *root = json_loadb (line, linelen, 0, &jerr);
+                  if (!root || !json_is_object (root))
+                    {
+                      send_enveloped_error (fd, NULL, 1300,
+                                            "Invalid request schema");
+                    }
+                  else
+                    {
+                      process_message (ctx, root);
+                    }
+                  start = i + 1;
+                }
+            }
+          /* Shift any partial line to front */
+          if (start > 0)
+            {
+              memmove (buf, buf + start, have - start);
+              have -= start;
+            }
+          /* Overflow without newline → guard & reset */
+          if (have == sizeof (buf))
+            {
+              send_error_json (fd, 1300, "invalid request schema");
+              have = 0;
+            }
+        }
       else if (n == 0)
-	{
-	  /* peer closed */
-	  break;
-	}
+        {
+          /* peer closed */
+          break;
+        }
       else
-	{
-	  if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
-	    continue;
-	  /* hard error */
-	  break;
-	}
+        {
+          if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
+            {
+              continue;
+            }
+          /* hard error */
+          break;
+        }
     }
-
   /* Per-thread teardown */
   /* thread_db_close(ctx->db); */
   close (fd);
@@ -1507,18 +1495,18 @@ connection_thread (void *arg)
   return NULL;
 }
 
+
 /* ------------------------ accept loop (spawns thread per client) ------------------------ */
+
 
 int
 server_loop (volatile sig_atomic_t *running)
 {
   LOGI ("Server loop starting...\n");
   //  fprintf (stderr, "Server loop starting...\n");
-
 #ifdef SIGPIPE
-  signal (SIGPIPE, SIG_IGN);	/* don’t die on write to closed socket */
+  signal (SIGPIPE, SIG_IGN);    /* don’t die on write to closed socket */
 #endif
-
   int listen_fd = make_listen_socket (g_cfg.server_port);
   if (listen_fd < 0)
     {
@@ -1528,102 +1516,92 @@ server_loop (volatile sig_atomic_t *running)
     }
   LOGI ("Listening on 0.0.0.0:%d\n", g_cfg.server_port);
   //  fprintf (stderr, "Listening on 0.0.0.0:%d\n", LISTEN_PORT);
-
   struct pollfd pfd = {.fd = listen_fd,.events = POLLIN,.revents = 0 };
-
   pthread_attr_t attr;
   pthread_attr_init (&attr);
   pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED);
-
   while (*running)
     {
-      int rc = poll (&pfd, 1, 100);	/* was 1000; 100ms gives us a ~10Hz tick */
+      int rc = poll (&pfd, 1, 100);     /* was 1000; 100ms gives us a ~10Hz tick */
       // int rc = poll (&pfd, 1, 1000); /* 1s tick re-checks *running */
-
       /* === Broadcast pump tick (every ~500ms) === */
       {
-	static uint64_t last_broadcast_ms = 0;
-	uint64_t now_ms = monotonic_millis ();
-
-	if (now_ms - last_broadcast_ms >= 500)
-	  {
-	    (void) broadcast_sweep_once (db_get_handle (), 64);
-	    last_broadcast_ms = now_ms;
-	  }
+        static uint64_t last_broadcast_ms = 0;
+        uint64_t now_ms = monotonic_millis ();
+        if (now_ms - last_broadcast_ms >= 500)
+          {
+            (void) broadcast_sweep_once (db_get_handle (), 64);
+            last_broadcast_ms = now_ms;
+          }
       }
-
       if (rc < 0)
-	{
-	  if (errno == EINTR)
-	    continue;
-	  perror ("poll");
-	  break;
-	}
-
+        {
+          if (errno == EINTR)
+            {
+              continue;
+            }
+          perror ("poll");
+          break;
+        }
       if (rc == 0)
-	{
-	  /* timeout only: we still ran the pump above; just loop again */
-	  continue;
-	}
-
+        {
+          /* timeout only: we still ran the pump above; just loop again */
+          continue;
+        }
       if (pfd.revents & POLLIN)
-	{
-	  client_ctx_t *ctx = calloc (1, sizeof (*ctx));
-	  if (!ctx)
-	    {
-	      LOGE ("malloc failed\n");
-	      //              fprintf (stderr, "malloc failed\n");
-	      continue;
-	    }
-	  server_register_client (ctx);
-
-	  socklen_t sl = sizeof (ctx->peer);
-	  int cfd = accept (listen_fd, (struct sockaddr *) &ctx->peer, &sl);
-	  if (cfd < 0)
-	    {
-	      free (ctx);
-	      if (errno == EINTR)
-		continue;
-	      if (errno == EAGAIN || errno == EWOULDBLOCK)
-		continue;
-	      perror ("accept");
-	      continue;
-	    }
-
-	  ctx->fd = cfd;
-	  ctx->running = running;
-
-	  char ip[INET_ADDRSTRLEN];
-	  inet_ntop (AF_INET, &ctx->peer.sin_addr, ip, sizeof (ip));
-	  LOGI ("Client connected: %s:%u (fd=%d)\n",
-		ip, (unsigned) ntohs (ctx->peer.sin_port), cfd);
-
-	  //      fprintf (stderr, "Client connected: %s:%u (fd=%d)\n",
-	  //       ip, (unsigned) ntohs (ctx->peer.sin_port), cfd);
-
-	  // after filling ctx->fd, ctx->running, ctx->peer, and assigning ctx->cid
-	  pthread_t th;
-	  int prc = pthread_create (&th, &attr, connection_thread, ctx);
-	  if (prc == 0)
-	    {
-	      LOGI ("[cid=%" PRIu64 "] thread created (pthread=%lu)\n",
-		    ctx->cid, (unsigned long) th);
-
-	      //              fprintf (stderr,
-	      //       "[cid=%" PRIu64 "] thread created (pthread=%lu)\n",
-	      //       ctx->cid, (unsigned long) th);
-	    }
-	  else
-	    {
-	      LOGE ("pthread_create: %s\n", strerror (prc));
-	      //              fprintf (stderr, "pthread_create: %s\n", strerror (prc));
-	      close (cfd);
-	      free (ctx);
-	    }
-
-	}
+        {
+          client_ctx_t *ctx = calloc (1, sizeof (*ctx));
+          if (!ctx)
+            {
+              LOGE ("malloc failed\n");
+              //              fprintf (stderr, "malloc failed\n");
+              continue;
+            }
+          server_register_client (ctx);
+          socklen_t sl = sizeof (ctx->peer);
+          int cfd = accept (listen_fd, (struct sockaddr *) &ctx->peer, &sl);
+          if (cfd < 0)
+            {
+              free (ctx);
+              if (errno == EINTR)
+                {
+                  continue;
+                }
+              if (errno == EAGAIN || errno == EWOULDBLOCK)
+                {
+                  continue;
+                }
+              perror ("accept");
+              continue;
+            }
+          ctx->fd = cfd;
+          ctx->running = running;
+          char ip[INET_ADDRSTRLEN];
+          inet_ntop (AF_INET, &ctx->peer.sin_addr, ip, sizeof (ip));
+          LOGI ("Client connected: %s:%u (fd=%d)\n",
+                ip, (unsigned) ntohs (ctx->peer.sin_port), cfd);
+          //      fprintf (stderr, "Client connected: %s:%u (fd=%d)\n",
+          //       ip, (unsigned) ntohs (ctx->peer.sin_port), cfd);
+          // after filling ctx->fd, ctx->running, ctx->peer, and assigning ctx->cid
+          pthread_t th;
+          int prc = pthread_create (&th, &attr, connection_thread, ctx);
+          if (prc == 0)
+            {
+              LOGI ("[cid=%" PRIu64 "] thread created (pthread=%lu)\n",
+                    ctx->cid, (unsigned long) th);
+              //              fprintf (stderr,
+              //       "[cid=%" PRIu64 "] thread created (pthread=%lu)\n",
+              //       ctx->cid, (unsigned long) th);
+            }
+          else
+            {
+              LOGE ("pthread_create: %s\n", strerror (prc));
+              //              fprintf (stderr, "pthread_create: %s\n", strerror (prc));
+              close (cfd);
+              free (ctx);
+            }
+        }
     }
-
   // server_unregister_client(ctx);
   pthread_attr_destroy (&attr);
   close (listen_fd);
@@ -1631,3 +1609,4 @@ server_loop (volatile sig_atomic_t *running)
   //  fprintf (stderr, "Server loop exiting...\n");
   return 0;
 }
+

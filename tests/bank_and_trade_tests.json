@@ -6,7 +6,7 @@
             "name": "Setup Player 1 (testuser)",
             "command": "auth.register",
             "register_if_missing": true,
-            "data": { "username": "testuser", "password": "password" },
+            "data": { "username": "testuser", "passwd": "password" },
             "expect": { "status": "ok" },
             "user": "testuser",
             "passwd": "password"
@@ -15,14 +15,14 @@
             "name": "Setup Player 2 (testuser2)",
             "command": "auth.register",
             "register_if_missing": true,
-            "data": { "username": "testuser2", "password": "password2" },
+            "data": { "username": "testuser2", "passwd": "password2" },
             "expect": { "status": "ok" },
             "user": "testuser2",
             "passwd": "password2"
           },      {
         "name": "Login Player 1",
         "command": "auth.login",
-        "data": { "username": "testuser", "password": "password" },
+        "data": { "username": "testuser", "passwd": "password" },
         "expect": { "status": "ok" },
         "user": "testuser",
         "passwd": "password",
@@ -31,7 +31,7 @@
       {
         "name": "Login Player 2",
         "command": "auth.login",
-        "data": { "username": "testuser2", "password": "password2" },
+        "data": { "username": "testuser2", "passwd": "password2" },
         "expect": { "status": "ok" },
         "user": "testuser2",
         "passwd": "password2",

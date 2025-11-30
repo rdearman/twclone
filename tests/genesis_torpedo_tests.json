@@ -6,7 +6,7 @@
         "name": "Register Player for Genesis Tests",
         "command": "auth.register",
         "register_if_missing": true,
-        "data": { "username": "genesis_player", "password": "password" },
+        "data": { "username": "genesis_player", "passwd": "password" },
         "expect": { "status": "ok" },
         "user": "genesis_player",
         "passwd": "password",
@@ -15,8 +15,7 @@
       {
         "name": "Register Corp Player for Genesis Tests",
         "command": "auth.register",
-        "register_if_missing": true,
-        "data": { "username": "genesis_corp_player", "password": "password" },
+        "data": { "username": "genesis_corp_player", "passwd": "password" },
         "expect": { "status": "ok" },
         "user": "genesis_corp_player",
         "passwd": "password",
@@ -34,7 +33,7 @@
       {
         "name": "Login Player for Genesis Tests",
         "command": "auth.login",
-        "data": { "username": "genesis_player", "password": "password" },
+        "data": { "username": "genesis_player", "passwd": "password" },
         "user": "genesis_player",
         "passwd": "password",
         "expect": { "status": "ok" }
@@ -42,15 +41,15 @@
       {
         "name": "Login Corp Player for Genesis Tests",
         "command": "auth.login",
-        "data": { "username": "genesis_corp_player", "password": "password" },
+        "data": { "username": "genesis_corp_player", "passwd": "password" },
         "user": "genesis_corp_player",
         "passwd": "password",
         "expect": { "status": "ok" }
       },
       {
         "name": "Grant Genesis Torpedoes to Genesis Player",
-        "command": "sysop.give_item",
-        "data": { "item": "genesis_torpedo", "quantity": 10, "target_player_id": "@player_id" },
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "UPDATE ships SET genesis = 1 WHERE id = @player_id;" },
         "user": "sysop_user",
         "passwd": "sysop_password",
         "expect": { "status": "ok" }
@@ -65,16 +64,16 @@
       },
       {
         "name": "Add test sectors to msl_sectors (prohibited for genesis)",
-        "command": "sysop.raw_sql_exec",
-        "data": { "sql": "INSERT OR IGNORE INTO msl_sectors (sector_id) VALUES (1), (2), (3);" },
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "INSERT OR IGNORE INTO msl_sectors (sector_id) VALUES (400), (401), (402);" },
         "user": "sysop_user",
         "passwd": "sysop_password",
         "expect": { "status": "ok" }
       },
       {
         "name": "Ensure planettypes have genesis_weight",
-        "command": "sysop.raw_sql_exec",
-        "data": { "sql": "UPDATE planettypes SET genesis_weight = 10 WHERE code IN ('M','K','O','L','C','H','U');" },
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "UPDATE planettypes SET genesis_weight = 100 WHERE id BETWEEN 1 AND 7;" },
         "user": "sysop_user",
         "passwd": "sysop_password",
         "expect": { "status": "ok" }

@@ -6,7 +6,7 @@
             "cmd": "auth.register",
             "data": {
                 "username": "test_user_tbd",
-                "password": "password123"
+                "passwd": "password123"
             },
             "expect": {
                 "status": "error",
@@ -37,7 +37,7 @@
             "register_if_missing": true,
             "data": {
                 "username": "test_user_2",
-                "password": "password123"
+                "passwd": "password123"
             },
             "expect": {
                 "status": "ok",
@@ -47,7 +47,7 @@
         {
             "name": "Login Player 2 (for bank transfer tests)",
             "command": "auth.login",
-            "data": { "username": "test_user_2", "password": "password123" },
+            "data": { "username": "test_user_2", "passwd": "password123" },
             "expect": { "status": "ok" },
             "user": "test_user_2",
             "passwd": "password123",
@@ -167,7 +167,7 @@
             "cmd": "auth.login",
             "data": {
                 "username": "@user",
-                "password": "@passwd"
+                "passwd": "@passwd"
             },
             "expect": {
                 "status": "ok",

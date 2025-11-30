@@ -6,7 +6,7 @@
         "name": "Register Tavern Player",
         "command": "auth.register",
         "register_if_missing": true,
-        "data": { "username": "taverntest", "password": "password" },
+        "data": { "username": "taverntest", "passwd": "password" },
         "expect": { "status": "ok" },
         "user": "taverntest",
         "passwd": "password"
@@ -14,7 +14,7 @@
       {
         "name": "Login Tavern Player",
         "command": "auth.login",
-        "data": { "username": "taverntest", "password": "password" },
+        "data": { "username": "taverntest", "passwd": "password" },
         "expect": { "status": "ok" },
         "user": "taverntest",
         "passwd": "password",
@@ -170,7 +170,7 @@
         "user": "taverntest",
         "expect": { "status": "refused", "error.code": 1836 }
       }
-      // Cannot test success case directly without changing player alignment.
+
     ],
     "tavern_graffiti_tests": [
       {

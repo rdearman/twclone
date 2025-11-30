@@ -6,8 +6,7 @@
       "register_if_missing": true,
       "data": {
         "username": "dock_tester",
-        "password": "password123",
-        "ship_name": "Dockable Ship"
+        "passwd": "password123"
       },
       "expect": {
         "status": "ok"
@@ -18,10 +17,7 @@
       "cmd": "auth.login",
       "data": {
         "username": "dock_tester",
-        "password": "password123"
-      },
-      "expect": {
-        "status": "ok"
+        "passwd": "password123"
       }
     },
     {

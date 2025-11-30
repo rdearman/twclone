@@ -46,7 +46,6 @@ typedef struct TradeLine
   //int player_credits (int player_id);
   //int cargo_space_free (int player_id);
   int port_is_open (int port_id, const char *commodity);
-  int db_get_port_sector (int port_id); // Added declaration for db_get_port_sector
 
   int h_get_ship_cargo_and_holds (sqlite3 * db, int ship_id, int *ore,
 				  int *organics, int *equipment, int *holds,

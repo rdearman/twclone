@@ -13,8 +13,7 @@
 #define CORP_TAX_RATE_BP 500
 
 extern json_t *g_capabilities;
-struct twconfig;
-struct twconfig *config_load (void);
+
 
 #ifndef TW_CMD_DESC_T_DEFINED
 #define TW_CMD_DESC_T_DEFINED

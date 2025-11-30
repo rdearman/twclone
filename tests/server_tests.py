@@ -7,6 +7,7 @@ import argparse
 from typing import Any, Dict, List, Optional
 # --- add near top ---
 from typing import Tuple
+import re
 
 
 # ----------------------------
@@ -211,7 +212,7 @@ def coerce_command_from_test(name: str, test: Dict[str, Any]) -> Dict[str, Any]:
 # ----------------------------
 
 def try_register(sock: socket.socket, user: str, passwd: str, register_if_missing: bool = False) -> None:
-    send_json_line(sock, {"command": "auth.register", "data": {"username": user, "password": passwd}})
+    send_json_line(sock, {"command": "auth.register", "data": {"username": user, "passwd": passwd}})
     resp = json.loads(recv_line(sock) or "{}")
     # ok → proceed; error 1210 (exists) → proceed; any other error → print but continue to login
     if resp.get("status") == "ok":
@@ -224,7 +225,7 @@ def try_register(sock: socket.socket, user: str, passwd: str, register_if_missin
     print(f"[auth.register] NOTE: {resp}")
 
 def do_login(sock: socket.socket, user: str, passwd: str) -> bool:
-    send_json_line(sock, {"command": "auth.login", "data": {"username": user, "password": passwd}})
+    send_json_line(sock, {"command": "auth.login", "data": {"username": user, "passwd": passwd}})
     resp = json.loads(recv_line(sock) or "{}")
     ok = (resp.get("status") == "ok")
     print(f"[auth.login] {'PASS' if ok else 'FAIL'} (user={user})")
@@ -325,10 +326,15 @@ def _expand_vars_in_obj(o: Any, vars: Dict[str, Any]) -> Any:
         if "*uuid*" in val:
             import uuid
             val = val.replace("*uuid*", str(uuid.uuid4()))
-        if val.startswith("@"):
-            resolved_val = vars.get(val[1:])
-            print(f"DEBUG: Resolving {val} to {resolved_val!r}") # DEBUG PRINT
-            return resolved_val if resolved_val is not None else val
+
+        def replace_var(match):
+            var_name = match.group(1)
+            resolved_val = vars.get(var_name)
+            print(f"DEBUG: Resolving embedded @{var_name} to {resolved_val!r} (type: {type(resolved_val)})")
+            return str(resolved_val) if resolved_val is not None else match.group(0)
+
+        val = re.sub(r"@(\w+)", replace_var, val)
+
         return val
     if isinstance(o, list):
         return [_expand_vars_in_obj(x, vars) for x in o]
@@ -398,6 +404,7 @@ def _generate_idempotency_key() -> str:
 def run_test(name: str, sock: socket.socket, test: Dict[str, Any], strict: bool = False, vars: Optional[Dict[str,Any]] = None, session_tokens: Optional[Dict[str,str]] = None) -> None:
     if vars is None: vars = {}
     if session_tokens is None: session_tokens = {} # Initialize if None
+    print(f"DEBUG: Vars for '{name}' before expand: {vars}")
 
     command_envelope = coerce_command_from_test(name, test)
     expect = test.get("expect", {"status": "ok"})
@@ -416,18 +423,41 @@ def run_test(name: str, sock: socket.socket, test: Dict[str, Any], strict: bool 
     elif isinstance(command_envelope.get("data"), dict) and "idempotency_key" in test:
         command_envelope["data"].setdefault("idempotency_key", test["idempotency_key"])
 
+    if vars is None: vars = {} # Ensure vars is initialized if None
+    print(f"DEBUG: Vars for '{name}' before expand: {vars}")
+    print(f"DEBUG: Command envelope for '{name}' before expansion: {command_envelope}")
     command_envelope = _expand_vars_in_obj(command_envelope, vars)
+    print(f"DEBUG: Command envelope for '{name}' after expansion: {command_envelope}")
+    print(f"DEBUG: Vars before save for '{name}': {vars}")
         
     send_json_line(sock, command_envelope)
-    line = recv_line(sock)
-    if not line.strip():
-        print(f"[{name}] FAIL: empty response")
-        return
+    
+    max_reads = 10
+    resp = {}
+    
+    for _ in range(max_reads):
+        line = recv_line(sock)
+        if not line.strip():
+            print(f"[{name}] FAIL: empty response")
+            return
 
-    try:
-        resp = json.loads(line)
-    except Exception as e:
-        print(f"[{name}] FAIL: could not parse JSON response: {e}\n  raw: {line!r}")
+        try:
+            current_resp = json.loads(line)
+            rtype = current_resp.get("type")
+            
+            # Skip system notices which are asynchronous broadcasts
+            if rtype == "system.notice":
+                # print(f"DEBUG: Ignoring system.notice: {current_resp}")
+                continue
+                
+            resp = current_resp
+            break
+            
+        except Exception as e:
+            print(f"[{name}] FAIL: could not parse JSON response: {e}\n  raw: {line!r}")
+            return
+    else:
+        print(f"[{name}] FAIL: timed out waiting for non-notice response")
         return
 
     # soft expect first
@@ -444,25 +474,29 @@ def run_test(name: str, sock: socket.socket, test: Dict[str, Any], strict: bool 
 
     status = resp.get("status")
     rtype = resp.get("type")
+    if rtype == "auth.session" and test_user: # Only if it's an auth.session response and a user is specified
+        session_token = resp.get("data", {}).get("session")
+        player_id = resp.get("data", {}).get("player_id")
+        if session_token:
+            session_tokens[test_user] = session_token
+        if player_id:
+            vars[test_user + "_id"] = player_id
     # handle save (and capture)
+    print(f"DEBUG: id(vars) before save: {id(vars)}")
     save_spec = test.get("save") or test.get("capture")
     if isinstance(save_spec, dict):
         # Support both {"var": "name", "path": "..."}
         var = save_spec.get("var"); path = save_spec.get("path")
         if var and path:
             vars[var] = _get_by_path(resp, path)
-        
-        # --- Save session token from login ---
-        if rtype == "auth.session" and test_user: # Only if it's an auth.session response and a user is specified
-            session_token = resp.get("data", {}).get("session")
-            if session_token:
-                session_tokens[test_user] = session_token
         # -----------------------------------
         # Support {"name": "path", ...}
         else:
             for var_name, var_path in save_spec.items():
                 if isinstance(var_path, str):
                     vars[var_name] = _get_by_path(resp, var_path)
+    print(f"DEBUG: id(vars) after save: {id(vars)}")
+    print(f"DEBUG: Vars after save for '{name}': {vars}")
 
     # handle asserts
     asserts = test.get("asserts")

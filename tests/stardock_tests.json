@@ -1,356 +1,131 @@
 {
-  "setup_stardock_test_env": [
-    {
-      "comment": "Create player at Stardock",
-      "command": "sys.raw_sql_exec",
-      "data": {
-        "sql": "INSERT OR IGNORE INTO players (id, name, passwd, sector, ship, credits) VALUES (90001, 'test_player_stardock', 'test', (SELECT sector_id FROM stardock_location LIMIT 1), (SELECT id FROM ships LIMIT 1), 1000000);"
+  "suites": {
+    "setup_stardock_test_env": [
+      {
+        "name": "Register Admin",
+        "command": "auth.register",
+        "data": { "username": "admin", "passwd": "password" },
+        "register_if_missing": true,
+        "expect": { "status": "ok" }
       },
-      "expect": {"status": "ok"}
-    },
-    {
-      "comment": "Ensure player has a ship and assign it",
-      "command": "sys.raw_sql_exec",
-      "data": {
-        "sql": "UPDATE players SET ship = (SELECT id FROM ships LIMIT 1) WHERE id = 90001;"
+      {
+        "name": "Login Admin",
+        "command": "auth.login",
+        "data": { "username": "admin", "passwd": "password" },
+        "expect": { "status": "ok" },
+        "user": "admin"
       },
-      "expect": {"status": "ok"}
-    },
-    {
-      "comment": "Ensure player has a default ship type in shiptypes",
-      "command": "sys.raw_sql_exec",
-      "data": {
-        "sql": "INSERT OR IGNORE INTO shiptypes (id, name, basecost, maxholds, maxfighters, maxshields, maxgenesis, max_detonators, max_probes, can_transwarp, can_planet_scan, can_long_range_scan, max_cloaks) VALUES (1, 'Test Freighter', 1000, 100, 1000, 500, 5, 5, 5, 1, 1, 1, 1);"
+      {
+        "comment": "Create player at Stardock",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "INSERT OR IGNORE INTO players (id, name, passwd, sector, ship, credits) VALUES (90001, 'test_player_stardock', 'test', (SELECT sector_id FROM stardock_location LIMIT 1), (SELECT id FROM ships LIMIT 1), 1000000);"
+        },
+        "user": "admin",
+        "expect": {"status": "ok"}
       },
-      "expect": {"status": "ok"}
-    },
-    {
-      "comment": "Ensure player's ship is of a type that can carry hardware",
-      "command": "sys.raw_sql_exec",
-      "data": {
-        "sql": "UPDATE ships SET type_id = 1 WHERE id = (SELECT ship FROM players WHERE id = 90001);"
+      {
+        "comment": "Ensure player has a ship and assign it",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "UPDATE players SET ship = (SELECT id FROM ships LIMIT 1) WHERE id = 90001;"
+        },
+        "user": "admin",
+        "expect": {"status": "ok"}
       },
-      "expect": {"status": "ok"}
-    },
-    {
-      "comment": "Create a Class-0 port for testing",
-      "command": "sys.raw_sql_exec",
-      "data": {
-        "sql": "INSERT OR IGNORE INTO ports (id, name, sector, type) VALUES (9000, 'Class0 Port', 1, 0);"
+      {
+        "comment": "Ensure player has a default ship type in shiptypes",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "INSERT OR IGNORE INTO shiptypes (id, name, basecost, maxholds, maxfighters, maxshields, maxgenesis, max_detonators, max_probes, can_transwarp, can_planet_scan, can_long_range_scan, max_cloaks) VALUES (1, 'Test Freighter', 1000, 100, 1000, 500, 5, 5, 5, 1, 1, 1, 1);"
+        },
+        "user": "admin",
+        "expect": {"status": "ok"}
       },
-      "expect": {"status": "ok"}
-    },
-    {
-      "comment": "Create a player at Class-0 port",
-      "command": "sys.raw_sql_exec",
-      "data": {
-        "sql": "INSERT OR IGNORE INTO players (id, name, passwd, sector, ship, credits) VALUES (90002, 'test_player_class0', 'test', 1, (SELECT id FROM ships LIMIT 1 OFFSET 1), 50000);"
+      {
+        "comment": "Ensure player's ship is of a type that can carry hardware",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "UPDATE ships SET type_id = 1 WHERE id = (SELECT ship FROM players WHERE id = 90001);"
+        },
+        "user": "admin",
+        "expect": {"status": "ok"}
       },
-      "expect": {"status": "ok"}
-    },
-    {
-      "comment": "Ensure player's ship at Class-0 port is of a type that can carry hardware",
-      "command": "sys.raw_sql_exec",
-      "data": {
-        "sql": "UPDATE ships SET type_id = 1 WHERE id = (SELECT ship FROM players WHERE id = 90002);"
+      {
+        "comment": "Create a Class-0 port for testing",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "INSERT OR IGNORE INTO ports (id, name, sector, type) VALUES (9000, 'Class0 Port', 1, 0);"
+        },
+        "user": "admin",
+        "expect": {"status": "ok"}
       },
-      "expect": {"status": "ok"}
-    },
-    {
-      "comment": "Create a regular port for negative testing",
-      "command": "sys.raw_sql_exec",
-      "data": {
-        "sql": "INSERT OR IGNORE INTO ports (id, name, sector, type) VALUES (9001, 'Regular Port', 2, 1);"
+      {
+        "comment": "Create a player at Class-0 port",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "INSERT OR IGNORE INTO players (id, name, passwd, sector, ship, credits) VALUES (90002, 'test_player_class0', 'test', 1, (SELECT id FROM ships LIMIT 1 OFFSET 1), 50000);"
+        },
+        "user": "admin",
+        "expect": {"status": "ok"}
       },
-      "expect": {"status": "ok"}
-    },
-    {
-      "comment": "Create a player at regular port",
-      "command": "sys.raw_sql_exec",
-      "data": {
-        "sql": "INSERT OR IGNORE INTO players (id, name, passwd, sector, ship, credits) VALUES (90003, 'test_player_regular_port', 'test', 2, (SELECT id FROM ships LIMIT 1 OFFSET 2), 50000);"
+      {
+        "comment": "Ensure player's ship at Class-0 port is of a type that can carry hardware",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "UPDATE ships SET type_id = 1 WHERE id = (SELECT ship FROM players WHERE id = 90002);"
+        },
+        "user": "admin",
+        "expect": {"status": "ok"}
       },
-      "expect": {"status": "ok"}
-    },
-    {
-      "comment": "Ensure player's ship at regular port is of a type that can carry hardware",
-      "command": "sys.raw_sql_exec",
-      "data": {
-        "sql": "UPDATE ships SET type_id = 1 WHERE id = (SELECT ship FROM players WHERE id = 90003);"
+      {
+        "comment": "Create a regular port for negative testing",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "INSERT OR IGNORE INTO ports (id, name, sector, type) VALUES (9001, 'Regular Port', 2, 1);"
+        },
+        "user": "admin",
+        "expect": {"status": "ok"}
       },
-      "expect": {"status": "ok"}
-    }
-  ],
-  "hardware_list_tests": [
-    {
-      "comment": "List hardware at Stardock (full catalog)",
-      "command": "hardware.list",
-      "player_id": 90001,
-      "expect": {
-        "status": "ok",
-        "type": "hardware.list_v1",
+      {
+        "comment": "Create a player at regular port",
+        "command": "sys.raw_sql_exec",
         "data": {
-          "location_type": "STARDOCK",
-          "items": [
-            {"code": "FIGHTERS", "name": "Fighters", "price": 100, "max_purchase": 1000},
-            {"code": "SHIELDS", "name": "Shields", "price": 200, "max_purchase": 500},
-            {"code": "HOLDS", "name": "Holds", "price": 50, "max_purchase": 100},
-            {"code": "GENESIS", "name": "Genesis Torpedo", "price": 25000, "max_purchase": 5},
-            {"code": "DETONATOR", "name": "Atomic Detonator", "price": 10000, "max_purchase": 5},
-            {"code": "CLOAK", "name": "Cloaking Device", "price": 50000, "max_purchase": 1},
-            {"code": "LSCANNER", "name": "Long-Range Scanner", "price": 30000, "max_purchase": 1},
-            {"code": "PSCANNER", "name": "Planet Scanner", "price": 15000, "max_purchase": 1},
-            {"code": "TWARP", "name": "TransWarp Drive", "price": 100000, "max_purchase": 1}
-          ]
-        }
-      }
-    },
-    {
-      "comment": "List hardware at Class-0 port (basic only)",
-      "command": "hardware.list",
-      "player_id": 90002,
-      "expect": {
-        "status": "ok",
-        "type": "hardware.list_v1",
-        "data": {
-          "location_type": "CLASS0",
-          "items": [
-            {"code": "FIGHTERS", "name": "Fighters", "price": 100, "max_purchase": 1000},
-            {"code": "SHIELDS", "name": "Shields", "price": 200, "max_purchase": 500},
-            {"code": "HOLDS", "name": "Holds", "price": 50, "max_purchase": 100}
-          ]
-        }
-      }
-    },
-    {
-      "comment": "List hardware at a regular port (none)",
-      "command": "hardware.list",
-      "player_id": 90003,
-      "expect": {
-        "status": "ok",
-        "type": "hardware.list_v1",
-        "data": {
-          "location_type": "OTHER",
-          "items": []
-        }
-      }
-    },
-    {
-      "comment": "List hardware with ship at max holds capacity",
-      "command": "sys.raw_sql_exec",
-      "data": {
-        "sql": "UPDATE ships SET holds = 100 WHERE id = (SELECT ship FROM players WHERE id = 90001);"
+          "sql": "INSERT OR IGNORE INTO players (id, name, passwd, sector, ship, credits) VALUES (90003, 'test_player_regular_port', 'test', 2, (SELECT id FROM ships LIMIT 1 OFFSET 2), 50000);"
+        },
+        "user": "admin",
+        "expect": {"status": "ok"}
       },
-      "expect": {"status": "ok"}
-    },
-    {
-      "comment": "Verify HOLDS are not listed when at max capacity",
-      "command": "hardware.list",
-      "player_id": 90001,
-      "expect": {
-        "status": "ok",
-        "type": "hardware.list_v1",
+      {
+        "comment": "Ensure player's ship at regular port is of a type that can carry hardware",
+        "command": "sys.raw_sql_exec",
         "data": {
-          "location_type": "STARDOCK",
-          "items": [
-            {"code": "FIGHTERS", "name": "Fighters", "price": 100, "max_purchase": 1000},
-            {"code": "SHIELDS", "name": "Shields", "price": 200, "max_purchase": 500},
-            {"code": "GENESIS", "name": "Genesis Torpedo", "price": 25000, "max_purchase": 5},
-            {"code": "DETONATOR", "name": "Atomic Detonator", "price": 10000, "max_purchase": 5},
-            {"code": "CLOAK", "name": "Cloaking Device", "price": 50000, "max_purchase": 1},
-            {"code": "LSCANNER", "name": "Long-Range Scanner", "price": 30000, "max_purchase": 1},
-            {"code": "PSCANNER", "name": "Planet Scanner", "price": 15000, "max_purchase": 1},
-            {"code": "TWARP", "name": "TransWarp Drive", "price": 100000, "max_purchase": 1}
-          ]
-        }
-      }
-    },
-    {
-      "comment": "Reset holds for further tests",
-      "command": "sys.raw_sql_exec",
-      "data": {
-        "sql": "UPDATE ships SET holds = 0 WHERE id = (SELECT ship FROM players WHERE id = 90001);"
+          "sql": "UPDATE ships SET type_id = 1 WHERE id = (SELECT ship FROM players WHERE id = 90003);"
+        },
+        "user": "admin",
+        "expect": {"status": "ok"}
       },
-      "expect": {"status": "ok"}
-    }
-  ],
-  "hardware_buy_tests": [
-    {
-      "comment": "Buy Fighters - Success",
-      "command": "hardware.buy",
-      "player_id": 90001,
-      "data": {"code": "FIGHTERS", "quantity": 10},
-      "expect": {
-        "status": "ok",
-        "type": "hardware.purchase_v1",
-        "data": {
-          "code": "FIGHTERS",
-          "quantity": 10,
-          "credits_spent": 1000,
-          "ship": {"fighters": 10}
-        }
+      {
+        "name": "Login Stardock Player",
+        "command": "auth.login",
+        "data": { "username": "test_player_stardock", "passwd": "test" },
+        "expect": { "status": "ok" },
+        "user": "test_player_stardock"
+      },
+      {
+        "name": "Login Class0 Player",
+        "command": "auth.login",
+        "data": { "username": "test_player_class0", "passwd": "test" },
+        "expect": { "status": "ok" },
+        "user": "test_player_class0"
+      },
+      {
+        "name": "Login Regular Port Player",
+        "command": "auth.login",
+        "data": { "username": "test_player_regular_port", "passwd": "test" },
+        "expect": { "status": "ok" },
+        "user": "test_player_regular_port"
       }
-    },
-    {
-      "comment": "Buy Shields - Success",
-      "command": "hardware.buy",
-      "player_id": 90001,
-      "data": {"code": "SHIELDS", "quantity": 5},
-      "expect": {
-        "status": "ok",
-        "type": "hardware.purchase_v1",
-        "data": {
-          "code": "SHIELDS",
-          "quantity": 5,
-          "credits_spent": 1000,
-          "ship": {"shields": 5}
-        }
-      }
-    },
-    {
-      "comment": "Buy Holds - Success",
-      "command": "hardware.buy",
-      "player_id": 90001,
-      "data": {"code": "HOLDS", "quantity": 2},
-      "expect": {
-        "status": "ok",
-        "type": "hardware.purchase_v1",
-        "data": {
-          "code": "HOLDS",
-          "quantity": 2,
-          "credits_spent": 100,
-          "ship": {"holds": 2}
-        }
-      }
-    },
-    {
-      "comment": "Buy Genesis - Success",
-      "command": "hardware.buy",
-      "player_id": 90001,
-      "data": {"code": "GENESIS", "quantity": 1},
-      "expect": {
-        "status": "ok",
-        "type": "hardware.purchase_v1",
-        "data": {
-          "code": "GENESIS",
-          "quantity": 1,
-          "credits_spent": 25000,
-          "ship": {"genesis_torps": 1}
-        }
-      }
-    },
-    {
-      "comment": "Buy Cloak - Success (Module)",
-      "command": "hardware.buy",
-      "player_id": 90001,
-      "data": {"code": "CLOAK", "quantity": 1},
-      "expect": {
-        "status": "ok",
-        "type": "hardware.purchase_v1",
-        "data": {
-          "code": "CLOAK",
-          "quantity": 1,
-          "credits_spent": 50000,
-          "ship": {"cloaks_installed": 1}
-        }
-      }
-    },
-    {
-      "comment": "Buy Cloak again - Refused (Capacity Exceeded)",
-      "command": "hardware.buy",
-      "player_id": 90001,
-      "data": {"code": "CLOAK", "quantity": 1},
-      "expect": {"status": "refused", "error": {"code": 1814, "message": "Cloaking Device already installed."}}
-    },
-    {
-      "comment": "Buy TransWarp - Success (Module)",
-      "command": "hardware.buy",
-      "player_id": 90001,
-      "data": {"code": "TWARP", "quantity": 1},
-      "expect": {
-        "status": "ok",
-        "type": "hardware.purchase_v1",
-        "data": {
-          "code": "TWARP",
-          "quantity": 1,
-          "credits_spent": 100000,
-          "ship": {"has_transwarp": 1}
-        }
-      }
-    },
-    {
-      "comment": "Buy Fighters - Insufficient Funds",
-      "command": "hardware.buy",
-      "player_id": 90001,
-      "data": {"code": "FIGHTERS", "quantity": 1000},
-      "expect": {"status": "refused", "error": {"code": 1813, "message": "Insufficient credits on ship for purchase."}}
-    },
-    {
-      "comment": "Buy Holds - Exceeds Ship Max Capacity",
-      "command": "hardware.buy",
-      "player_id": 90001,
-      "data": {"code": "HOLDS", "quantity": 100},
-      "expect": {"status": "refused", "error": {"code": 1814, "message": "Purchase would exceed ship type's maximum capacity."}}
-    },
-    {
-      "comment": "Buy Genesis - Not available at regular port",
-      "command": "hardware.buy",
-      "player_id": 90003,
-      "data": {"code": "GENESIS", "quantity": 1},
-      "expect": {"status": "refused", "error": {"code": 1811, "message": "Hardware can only be purchased at Stardock or Class-0 ports."}}
-    },
-    {
-      "comment": "Buy Genesis - Not sold at Class-0 port",
-      "command": "hardware.buy",
-      "player_id": 90002,
-      "data": {"code": "GENESIS", "quantity": 1},
-      "expect": {"status": "refused", "error": {"code": 1811, "message": "This hardware item is not sold at Class-0 ports."}}
-    },
-    {
-      "comment": "Buy Invalid Item",
-      "command": "hardware.buy",
-      "player_id": 90001,
-      "data": {"code": "INVALID_ITEM", "quantity": 1},
-      "expect": {"status": "refused", "error": {"code": 1812, "message": "Invalid or unavailable hardware item."}}
-    },
-    {
-      "comment": "Buy with Invalid Quantity (zero)",
-      "command": "hardware.buy",
-      "player_id": 90001,
-      "data": {"code": "FIGHTERS", "quantity": 0},
-      "expect": {"status": "error", "error": {"code": 1301, "message": "Missing or invalid 'quantity'."}}
-    },
-    {
-      "comment": "Buy Fighters (Idempotency Key - first request)",
-      "command": "hardware.buy",
-      "player_id": 90001,
-      "data": {"code": "FIGHTERS", "quantity": 5, "idempotency_key": "test-idempotency-1"},
-      "expect": {
-        "status": "ok",
-        "type": "hardware.purchase_v1",
-        "data": {
-          "code": "FIGHTERS",
-          "quantity": 5,
-          "credits_spent": 500,
-          "ship": {"fighters": 15}
-        }
-      }
-    },
-    {
-      "comment": "Buy Fighters (Idempotency Key - repeated request)",
-      "command": "hardware.buy",
-      "player_id": 90001,
-      "data": {"code": "FIGHTERS", "quantity": 5, "idempotency_key": "test-idempotency-1"},
-      "expect": {
-        "status": "ok",
-        "type": "hardware.purchase_v1",
-        "data": {
-          "code": "FIGHTERS",
-          "quantity": 5,
-          "credits_spent": 500,
-          "ship": {"fighters": 15}
-        }
-      }
-    }
-  ]
+    ]
+  }
 }

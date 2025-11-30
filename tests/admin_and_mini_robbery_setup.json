@@ -1,0 +1,109 @@
+{
+  "suites": {
+    "admin_setup": [
+      {
+        "name": "Register Admin",
+        "command": "auth.register",
+        "data": { "username": "admin", "passwd": "password" },
+        "register_if_missing": true,
+        "expect": { "status": "ok" },
+        "save": { "admin_id": "data.player_id" }
+      },
+      {
+        "name": "Login Admin",
+        "command": "auth.login",
+        "data": { "username": "admin", "passwd": "password" },
+        "expect": { "status": "ok" },
+        "user": "admin",
+        "save": { "admin_id": "data.player_id" }
+      },
+      {
+        "test_name": "Count rows in sector_warps table",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "SELECT COUNT(*) FROM sector_warps;"
+        },
+        "user": "admin",
+        "expect": { "status": "ok" },
+        "save": { "warp_count": "data.rows.0.0" }
+      }
+    ],
+    "setup_robbery_player": [
+      {
+        "test_name": "Setup Robbery Test Player",
+        "command": "auth.register",
+        "data": { "username": "robtestuser", "passwd": "password" },
+        "expect": { "status": "ok" },
+        "user": "robtestuser",
+        "passwd": "password",
+        "save": { "robtestuser_id": "data.player_id" }
+      },
+      {
+        "test_name": "Login Robbery Test Player",
+        "command": "auth.login",
+        "data": { "username": "robtestuser", "passwd": "password" },
+        "expect": { "status": "ok" },
+        "user": "robtestuser",
+        "passwd": "password",
+        "save": { "robtestuser_id": "data.player_id" }
+      },
+      {
+        "test_name": "Ensure Player has a ship - Insert Ship",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "INSERT OR IGNORE INTO ships (id, type_id, name, holds, sector, ported) VALUES (@robtestuser_id, 1, 'RobShip', 100, 4, 0);"
+        },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "test_name": "Ensure Player has a ship - Update Player",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "UPDATE players SET ship = @robtestuser_id, sector = 4 WHERE id = @robtestuser_id;"
+        },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "test_name": "Ensure Player has a ship - Insert Ownership",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "INSERT OR IGNORE INTO ship_ownership (ship_id, player_id, is_primary) VALUES (@robtestuser_id, @robtestuser_id, 1);"
+        },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "test_name": "Ensure Player has turns",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "INSERT OR REPLACE INTO turns (player, turns_remaining, last_update) VALUES (@robtestuser_id, 100, strftime('%s', 'now'));"
+        },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "test_name": "Move player to sector 1",
+        "command": "move.warp",
+        "data": {
+          "from_sector_id": 4,
+          "to_sector_id": 1
+        },
+        "user": "robtestuser",
+        "expected_status": "ok"
+      },
+      {
+        "test_name": "Verify warp link (4,1) exists",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "SELECT COUNT(*) FROM sector_warps;"
+        },
+        "user": "admin",
+        "expect": {
+          "status": "ok"
+        }
+      }
+    ]
+  }
+}

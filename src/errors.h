@@ -39,13 +39,14 @@
 #define ERR_WEAK_PASSWORD        1206
 #define ERR_MFA_REQUIRED         1207
 #define ERR_MFA_INVALID          1208
+#define ERR_NOT_IN_CORP          1225
+#define ERR_IS_NPC               1226
 #define ERR_PLAYER_BANNED        1210
 #define ERR_ALIGNMENT_RESTRICTED 1211
 #define ERR_REF_BIG_SLEEP        1212
-#define ERR_INVALID_CREDENTIAL   1220
+#define ERR_INVALID_CRED         1220
 #define ERR_REGISTRATION_DISABLED 1221
-#define ERR_IS_NPC		 1222
-#define ERR_NOT_IN_CORP          1223
+
 
 /* 1300 — Validation / Quota */
 #define ERR_INVALID_SCHEMA       1300	/* bad top-level shape */

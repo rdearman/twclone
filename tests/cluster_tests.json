@@ -10,18 +10,17 @@
         "expect": { "status": "ok" }
       },
       {
-        "name": "Setup Good Player (goodguy)",
-        "command": "auth.register",
-        "data": { "username": "goodguy", "password": "password" },
-        "expect": { "status": "ok" },
-        "user": "goodguy",
+              "name": "Setup Good Player (goodguy)",
+              "command": "auth.register",
+              "data": { "username": "goodguy", "passwd": "password" },
+              "expect": { "status": "ok" },        "user": "goodguy",
         "passwd": "password",
         "register_if_missing": true
       },
       {
         "name": "Setup Evil Player (badguy)",
         "command": "auth.register",
-        "data": { "username": "badguy", "password": "password" },
+      "data": { "username": "badguy", "passwd": "password" },
         "expect": { "status": "ok" },
         "user": "badguy",
         "passwd": "password",
@@ -30,25 +29,24 @@
       {
         "name": "Setup Admin Player (admin)",
         "command": "auth.register",
-        "data": { "username": "admin", "password": "password" },
-        "expect": { "status": "ok" },
+      "data": { "username": "admin", "passwd": "password" },
+      "expect": { "status": "ok" },
         "user": "admin",
         "passwd": "password",
         "register_if_missing": true
       },
       {
-        "name": "Login Good Player",
-        "command": "auth.login",
-        "data": { "username": "goodguy", "password": "password" },
-        "expect": { "status": "ok" },
-        "user": "goodguy",
+              "name": "Login Good Player",
+              "command": "auth.login",
+              "data": { "username": "goodguy", "passwd": "password" },
+              "expect": { "status": "ok" },        "user": "goodguy",
         "passwd": "password",
         "save": {"goodguy_id": "data.player_id", "goodguy_session": "data.session"}
       },
       {
         "name": "Login Evil Player",
         "command": "auth.login",
-        "data": { "username": "badguy", "password": "password" },
+        "data": { "username": "badguy", "passwd": "password" },
         "expect": { "status": "ok" },
         "user": "badguy",
         "passwd": "password",
@@ -57,7 +55,7 @@
       {
         "name": "Login Admin Player",
         "command": "auth.login",
-        "data": { "username": "admin", "password": "password" },
+        "data": { "username": "admin", "passwd": "password" },
         "expect": { "status": "ok" },
         "user": "admin",
         "passwd": "password",

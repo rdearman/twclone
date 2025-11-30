@@ -6,7 +6,7 @@
         "name": "Register CEO Player",
         "command": "auth.register",
         "register_if_missing": true,
-        "data": { "username": "ceo_player", "password": "password" },
+        "data": { "username": "ceo_player", "passwd": "password" },
         "expect": { "status": "ok" },
         "user": "ceo_player",
         "passwd": "password",
@@ -16,7 +16,7 @@
         "name": "Register Member Player",
         "command": "auth.register",
         "register_if_missing": true,
-        "data": { "username": "member_player", "password": "password" },
+        "data": { "username": "member_player", "passwd": "password" },
         "expect": { "status": "ok" },
         "user": "member_player",
         "passwd": "password",
@@ -26,7 +26,7 @@
         "name": "Register Officer Player",
         "command": "auth.register",
         "register_if_missing": true,
-        "data": { "username": "officer_player", "password": "password" },
+        "data": { "username": "officer_player", "passwd": "password" },
         "expect": { "status": "ok" },
         "user": "officer_player",
         "passwd": "password",
@@ -36,7 +36,7 @@
         "name": "Register Investor Player",
         "command": "auth.register",
         "register_if_missing": true,
-        "data": { "username": "investor_player", "password": "password" },
+        "data": { "username": "investor_player", "passwd": "password" },
         "expect": { "status": "ok" },
         "user": "investor_player",
         "passwd": "password",
@@ -45,7 +45,7 @@
       {
         "name": "Login CEO Player",
         "command": "auth.login",
-        "data": { "username": "ceo_player", "password": "password" },
+        "data": { "username": "ceo_player", "passwd": "password" },
         "user": "ceo_player",
         "passwd": "password",
         "expect": { "status": "ok" }
@@ -53,7 +53,7 @@
       {
         "name": "Login Member Player",
         "command": "auth.login",
-        "data": { "username": "member_player", "password": "password" },
+        "data": { "username": "member_player", "passwd": "password" },
         "user": "member_player",
         "passwd": "password",
         "expect": { "status": "ok" }
@@ -61,7 +61,7 @@
       {
         "name": "Login Officer Player",
         "command": "auth.login",
-        "data": { "username": "officer_player", "password": "password" },
+        "data": { "username": "officer_player", "passwd": "password" },
         "user": "officer_player",
         "passwd": "password",
         "expect": { "status": "ok" }
@@ -69,7 +69,7 @@
       {
         "name": "Login Investor Player",
         "command": "auth.login",
-        "data": { "username": "investor_player", "password": "password" },
+        "data": { "username": "investor_player", "passwd": "password" },
         "user": "investor_player",
         "passwd": "password",
         "expect": { "status": "ok" }

@@ -6,10 +6,7 @@
 #include "namegen.h"
 #include "common.h"
 #include "globals.h"
-
-
 extern int randomnum (int min, int max);
-
 char *
 randomname (char *name)
 {
@@ -21,11 +18,11 @@ randomname (char *name)
   return name;
 }
 
+
 char *
 consellationName (char *name)
 {
   int randIndex;
-
   if (randomnum (0, 1) == 0)
     {
       // 50% chance to return a constellation name
@@ -36,13 +33,10 @@ consellationName (char *name)
       // 50% chance to return "Uncharted Space"
       randIndex = 0;
     }
-
   // Copy the name at the random index to the buffer.
   sprintf (name, "%s", nameCollection[randIndex]);
-
   return name;
 }
-
 
 
 /* char * */
@@ -59,7 +53,6 @@ consellationName (char *name)
 /*     { */
 /*       randIndex = randomnum (0, nameCount); */
 /*     } */
-
 /*   if (usedNames[randIndex] == -1) */
 /*     { */
 /*       usedNames[randIndex] = randIndex; */
@@ -78,8 +71,6 @@ consellationName (char *name)
 /*   sprintf (name, "%s", nameCollection[randIndex]); */
 /*   return name; */
 /* } */
-
-
 /* void */
 /* init_usedNames (void) */
 /* { */

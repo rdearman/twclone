@@ -33,6 +33,12 @@ int db_load_ports (int *server_port, int *s2s_port);
 /* Get the shared database handle */
 sqlite3 *db_get_handle (void);
 
+/* Session management functions */
+int db_session_create (int player_id, int ttl_seconds, char token_out[65]);
+int db_session_revoke (const char *token);
+int db_session_refresh (const char *token, int ttl_seconds, char new_token_out[65], int *out_player_id);
+int db_session_lookup (const char *token, int *out_player_id, long long *out_expires);
+
 /* Cleanup */
 void db_close (void);
 

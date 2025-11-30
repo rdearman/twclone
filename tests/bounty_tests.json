@@ -12,7 +12,7 @@
       "name": "Setup Good Player",
       "command": "auth.register",
       "register_if_missing": true,
-      "data": { "username": "goodguy", "password": "password" },
+      "data": { "username": "goodguy", "passwd": "password" },
       "expect": { "status": "ok" },
       "user": "goodguy",
       "passwd": "password"
@@ -20,7 +20,7 @@
     {
       "name": "Login Good Player",
       "command": "auth.login",
-      "data": { "username": "goodguy", "password": "password" },
+      "data": { "username": "goodguy", "passwd": "password" },
       "expect": { "status": "ok", "type": "auth.session" },
       "user": "goodguy",
       "passwd": "password",
@@ -29,8 +29,7 @@
     {
       "name": "Setup Evil Player",
       "command": "auth.register",
-      "register_if_missing": true,
-      "data": { "username": "badguy", "password": "password" },
+      "data": { "username": "badguy", "passwd": "password" },
       "expect": { "status": "ok" },
       "user": "badguy",
       "passwd": "password"
@@ -38,7 +37,7 @@
       {
         "name": "Login Evil Player",
         "command": "auth.login",
-        "data": { "username": "badguy", "password": "password" },
+        "data": { "username": "badguy", "passwd": "password" },
         "expect": { "status": "ok" },
         "save": {"evil_id": "data.player_id"}
       },

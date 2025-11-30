@@ -35,7 +35,7 @@ extern "C"
 
 /* Create a new player (auto-assigns legacy 'number' sequentially).
    Returns new player_id in out_player_id. */
-  int user_create (const char *player_name,
+  int user_create (sqlite3 *db, const char *player_name,
 		   const char *password, int *out_player_id);
 
 
@@ -86,5 +86,8 @@ int cmd_player_set_trade_account_preference (client_ctx_t * ctx, json_t * root);
 int cmd_bounty_post_federation(client_ctx_t *ctx, json_t *root);
 int cmd_bounty_post_hitlist(client_ctx_t *ctx, json_t *root);
 int cmd_bounty_list(client_ctx_t *ctx, json_t *root);
+
+int send_error_response (client_ctx_t *ctx, json_t *root, int err_code, const char *msg);
+int send_json_response (client_ctx_t *ctx, json_t *response_json);
 
 #endif /* SERVER_CMDS_H */

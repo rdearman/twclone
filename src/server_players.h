@@ -100,11 +100,19 @@ int h_player_apply_progress(sqlite3 *db,
                         long long delta_xp,
                         int delta_align,
                         const char *reason);
+int h_player_apply_progress(sqlite3 *db,
+                        int player_id,
+                        long long delta_xp,
+                        int delta_align,
+                        const char *reason);
 
 int h_player_build_title_payload(sqlite3 *db,
                              int player_id,
                              json_t **out_json);
 
+  int h_get_cargo_space_free (sqlite3 *db, int player_id, int *free_out);
+
+  
   
 #ifdef __cplusplus
 }

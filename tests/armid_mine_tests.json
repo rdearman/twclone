@@ -6,7 +6,7 @@
       "register_if_missing": true,
       "data": {
         "username": "test_armid_player",
-        "password": "password123"
+        "passwd": "password123"
       },
       "expect": {
         "status": "ok"
@@ -17,7 +17,7 @@
       "cmd": "auth.login",
       "data": {
         "username": "test_armid_player",
-        "password": "password123"
+        "passwd": "password123"
       },
       "expect": {
         "status": "ok"
