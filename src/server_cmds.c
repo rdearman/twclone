@@ -189,11 +189,13 @@ user_create (sqlite3 *db, const char *player_name, const char *password, int *ou
    *   (e.g. from an old test run or seed data), we UPDATE it
    *   instead of throwing SQLITE_CONSTRAINT.
    */
+
+
   const char *ins_turns =
     "INSERT INTO turns (player, turns_remaining, last_update) "
     "SELECT "
     "  ?1, "
-    "  turnsperday, "
+    "  turnsperday, "  // Correct: selects column directly
     "  strftime('%s','now') "
     "FROM config "
     "WHERE id = 1 "

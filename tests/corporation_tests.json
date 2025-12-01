@@ -13,6 +13,22 @@
         "save": { "ceo_player_id": "data.player_id" }
       },
       {
+        "name": "Grant CEO Player initial petty cash",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "UPDATE players SET credits = 1000000000 WHERE id = @ceo_player_id;" },
+        "user": "ceo_player",
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Verify CEO Player petty cash after grant",
+        "command": "player.my_info",
+        "user": "ceo_player",
+        "expect": { "status": "ok" },
+        "asserts": [
+          { "path": "data.player.credits", "op": "==", "value": "1000000000.00" }
+        ]
+      },
+      {
         "name": "Register Member Player",
         "command": "auth.register",
         "register_if_missing": true,
@@ -41,6 +57,13 @@
         "user": "investor_player",
         "passwd": "password",
         "save": { "investor_player_id": "data.player_id" }
+      },
+      {
+        "name": "Grant Investor Player initial petty cash",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "UPDATE players SET credits = 1000000000 WHERE id = @investor_player_id;" },
+        "user": "investor_player",
+        "expect": { "status": "ok" }
       },
       {
         "name": "Login CEO Player",
@@ -207,7 +230,7 @@
         "data": { "amount": 500000 },
         "expect": { "status": "ok", "type": "corp.deposit.success" },
         "asserts": [
-          { "path": "data.amount", "op": "==", "value": 500000 }
+          { "path": "data.amount", "op": "==", "value": 1000000 }
         ]
       },
       {

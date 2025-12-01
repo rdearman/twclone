@@ -45,6 +45,15 @@ db_handle_close_and_reset (void)
     }
 }
 
+// New helpers to manage global db_mutex externally
+void db_mutex_lock(void) {
+    pthread_mutex_lock(&db_mutex);
+}
+
+void db_mutex_unlock(void) {
+    pthread_mutex_unlock(&db_mutex);
+}
+
 
 static void
 db_init_recursive_mutex_once (void)

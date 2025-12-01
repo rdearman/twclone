@@ -16,6 +16,10 @@
 /* External declaration for the mutex */
 extern pthread_mutex_t db_mutex;
 
+// New helpers to manage global db_mutex externally
+void db_mutex_lock(void);
+void db_mutex_unlock(void);
+
 /* Forward declare to avoid including jansson here */
 typedef struct json_t json_t;
 /* Initialise database (creates file if not exists) */
@@ -38,6 +42,10 @@ int db_session_create (int player_id, int ttl_seconds, char token_out[65]);
 int db_session_revoke (const char *token);
 int db_session_refresh (const char *token, int ttl_seconds, char new_token_out[65], int *out_player_id);
 int db_session_lookup (const char *token, int *out_player_id, long long *out_expires);
+
+void db_mutex_lock(void);
+void db_mutex_unlock(void);
+
 
 /* Cleanup */
 void db_close (void);

@@ -69,81 +69,113 @@ extern "C"
     int shipyard_tax_bp;
   };
 
-  typedef struct
+/* REPLACE THE TYPEDEF IN src/server_config.h WITH THIS */
+typedef struct
+{
+  int server_port;
+  struct
   {
-    int server_port;
+    int tick_ms;
+    int daily_align_sec;
+    int processinterval; /* Moved here from flat to match usage in apply_db */
+  } engine;
+  struct
+  {
+    int event_batch;
+    int command_batch;
+    int broadcast_batch;
+  } batching;
+  struct
+  {
+    int default_command_weight;
+    int default_event_weight;
+  } priorities;
+  struct
+  {
+    char transport[8];
+    char uds_path[256];
+    char tcp_host[128];
+    int tcp_port;
+    int frame_size_limit;
+  } s2s;
+  struct
+  {
+    int connect_ms, handshake_ms, rpc_ms;
+    int backoff_initial_ms, backoff_max_ms;
+    double backoff_factor;
+  } safety;
+  struct
+  {
+    char key_id[64];
+    unsigned char key[64];
+    int key_len;
+  } secrets;
+  struct
+  {
     struct
     {
-      int tick_ms;
-      int daily_align_sec;
-    } engine;
-    struct
-    {
-      int event_batch;
-      int command_batch;
-      int broadcast_batch;
-    } batching;
-    struct
-    {
-      int default_command_weight;
-      int default_event_weight;
-    } priorities;
-    struct
-    {
-      char transport[8];	/* "uds" | "tcp" */
-      char uds_path[256];
-      char tcp_host[128];
-      int tcp_port;
-      int frame_size_limit;	/* bytes */
-    } s2s;
-    struct
-    {
-      int connect_ms, handshake_ms, rpc_ms;
-      int backoff_initial_ms, backoff_max_ms;
-      double backoff_factor;
-    } safety;
-    struct
-    {
-      char key_id[64];		/* shown as redacted in printout */
-      unsigned char key[64];	/* if you decode b64, optional */
-      int key_len;
-    } secrets;
-    struct
-    {
-      struct
-      {
-	bool enabled;
-	bool fedspace_allowed;
-	bool msl_allowed;
-	bool sweep_enabled;
-	bool attack_enabled;
-	int sweep_rate_mines_per_fighter;
-	int sweep_rate_limpets_per_fighter_loss;
-	int attack_rate_limpets_per_fighter;
-	int attack_rate_limpets_per_fighter_loss;
-	int entry_trigger_rate_limpets_per_fighter;
-	int entry_damage_per_limpet;
-	int limpet_ttl_days;
-	int per_sector_cap;
-	int max_per_ship;
-	bool allow_multi_owner;
-	int scrub_cost;
-      } limpet;
-    } mines;
-    struct
-    {				// New death config
-      int max_per_day;
-      int xp_loss_flat;
-      int xp_loss_percent;
-      char drop_cargo[16];	// "all", "none", "percent"
-      char drop_credits_mode[16];	// "all_ship", "none", "percent"
-      int big_sleep_duration_seconds;
-      int big_sleep_clear_xp_below;
-      char escape_pod_spawn_mode[32];	// "previous_sector", "safe_path"
-    } death;
-    int startingcredits; /* Added missing startingcredits to server_config_t */
-  } server_config_t;
+      bool enabled;
+      bool fedspace_allowed;
+      bool msl_allowed;
+      bool sweep_enabled;
+      bool attack_enabled;
+      int sweep_rate_mines_per_fighter;
+      int sweep_rate_limpets_per_fighter_loss;
+      int attack_rate_limpets_per_fighter;
+      int attack_rate_limpets_per_fighter_loss;
+      int entry_trigger_rate_limpets_per_fighter;
+      int entry_damage_per_limpet;
+      int limpet_ttl_days;
+      int per_sector_cap;
+      int max_per_ship;
+      bool allow_multi_owner;
+      int scrub_cost;
+    } limpet;
+  } mines;
+  struct
+  {
+    int max_per_day;
+    int xp_loss_flat;
+    int xp_loss_percent;
+    char drop_cargo[16];
+    char drop_credits_mode[16];
+    int big_sleep_duration_seconds;
+    int big_sleep_clear_xp_below;
+    char escape_pod_spawn_mode[32];
+  } death;
 
+  /* --- NEWLY ADDED FIELDS TO MATCH DB SCHEMA --- */
+  int64_t startingcredits;
+  int64_t bank_alert_threshold_player;
+  int64_t bank_alert_threshold_corp;
+  
+  /* Genesis Config */
+  int genesis_enabled;
+  int genesis_block_at_cap;
+  int genesis_navhaz_delta;
+  int genesis_class_weight_M;
+  int genesis_class_weight_K;
+  int genesis_class_weight_O;
+  int genesis_class_weight_L;
+  int genesis_class_weight_C;
+  int genesis_class_weight_H;
+  int genesis_class_weight_U;
+
+  /* Shipyard Config */
+  int shipyard_enabled;
+  int shipyard_trade_in_factor_bp;
+  int shipyard_require_cargo_fit;
+  int shipyard_require_fighters_fit;
+  int shipyard_require_shields_fit;
+  int shipyard_require_hardware_compat;
+  int shipyard_tax_bp;
+
+  /* Misc */
+  int illegal_allowed_neutral;
+  int max_ship_name_length; /* Used in stardock */
+
+} server_config_t;
+  
   /* Single global instance (defined in server_config.c) */
   extern server_config_t g_cfg;
 

@@ -203,58 +203,24 @@ print_effective_config_redacted (void)
 int
 xp_align_config_reload (sqlite3 *db)
 {
-  // Set sensible defaults first
+  (void)db; // Unused now as we are using defaults until schema supports XP config
+
+  // Set sensible defaults directly since config table doesn't have these keys
   g_xp_align.trade_xp_ratio = 10;
-  g_xp_align.ship_destroy_xp_multiplier = 2; // Default for non-specific ships
+  g_xp_align.ship_destroy_xp_multiplier = 2; 
   g_xp_align.illegal_base_align_divisor = 50000;
   g_xp_align.illegal_align_factor_good = 2.0;
   g_xp_align.illegal_align_factor_evil = 0.25;
-  sqlite3_stmt *st = NULL;
-  int rc;
-  const char *sql =
-    "SELECT key, value FROM config WHERE key LIKE 'xp.%' OR key LIKE 'align.%';";
-  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
-  if (rc != SQLITE_OK)
-    {
-      LOGE ("xp_align_config_reload: Failed to prepare statement: %s",
-            sqlite3_errmsg (db));
-      return 1;
-    }
-  while (sqlite3_step (st) == SQLITE_ROW)
-    {
-      const char *key = (const char *) sqlite3_column_text (st, 0);
-      const char *value = (const char *) sqlite3_column_text (st, 1);
-      if (!strcasecmp (key, "xp.trade_ratio"))
-        {
-          g_xp_align.trade_xp_ratio = atoi (value);
-        }
-      else if (!strcasecmp (key, "xp.ship_destroy_multiplier"))
-        {
-          g_xp_align.ship_destroy_xp_multiplier = atoi (value);
-        }
-      else if (!strcasecmp (key, "align.illegal_base_divisor"))
-        {
-          g_xp_align.illegal_base_align_divisor = atoi (value);
-        }
-      else if (!strcasecmp (key, "align.illegal_band_factor_good"))
-        {
-          g_xp_align.illegal_align_factor_good = atof (value);
-        }
-      else if (!strcasecmp (key, "align.illegal_band_factor_evil"))
-        {
-          g_xp_align.illegal_align_factor_evil = atof (value);
-        }
-      // Add more as needed
-    }
-  sqlite3_finalize (st);
+
   LOGI (
-    "XP/Alignment config reloaded: trade_xp_ratio=%d, ship_destroy_xp_multiplier=%d, "
+    "XP/Alignment config loaded (defaults): trade_xp_ratio=%d, ship_destroy_xp_multiplier=%d, "
     "illegal_base_align_divisor=%d, illegal_align_factor_good=%.2f, illegal_align_factor_evil=%.2f",
     g_xp_align.trade_xp_ratio,
     g_xp_align.ship_destroy_xp_multiplier,
     g_xp_align.illegal_base_align_divisor,
     g_xp_align.illegal_align_factor_good,
     g_xp_align.illegal_align_factor_evil);
+
   return 0;
 }
 
@@ -263,126 +229,64 @@ static void
 apply_db (sqlite3 *db)
 {
   sqlite3_stmt *st = NULL;
-  if (sqlite3_prepare_v2
-        (db, "SELECT key,value FROM config", -1, &st, NULL) != SQLITE_OK)
+  // This query explicitly selects the columns that match the 'wide table' schema in fullschema.sql
+  const char *sql = "SELECT startingcredits, server_port, s2s_port, bank_alert_threshold_player, bank_alert_threshold_corp, "
+                    "genesis_enabled, genesis_block_at_cap, genesis_navhaz_delta, genesis_class_weight_M, genesis_class_weight_K, "
+                    "genesis_class_weight_O, genesis_class_weight_L, genesis_class_weight_C, genesis_class_weight_H, genesis_class_weight_U, "
+                    "shipyard_enabled, shipyard_trade_in_factor_bp, shipyard_require_cargo_fit, shipyard_require_fighters_fit, "
+                    "shipyard_require_shields_fit, shipyard_require_hardware_compat, illegal_allowed_neutral, shipyard_tax_bp, "
+                    "processinterval, max_ship_name_length FROM config WHERE id = 1";
+
+  if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
       LOGI ("[config] no config table found, using defaults (%s)\n",
             sqlite3_errmsg (db));
       return;
     }
-  while (sqlite3_step (st) == SQLITE_ROW)
+
+  if (sqlite3_step (st) == SQLITE_ROW)
     {
-      const char *k = (const char *) sqlite3_column_text (st, 0);
-      const char *v = (const char *) sqlite3_column_text (st, 1);
-      // map k -> g_cfg fields; parse ints/doubles where needed
-      if (!strcasecmp (k, "engine.tick_ms"))
-        {
-          g_cfg.engine.tick_ms = atoi (v);
-        }
-      else if (!strcasecmp (k, "engine.daily_align_sec"))
-        {
-          g_cfg.engine.daily_align_sec = atoi (v);
-        }
-      else if (!strcasecmp (k, "batch.event_batch"))
-        {
-          g_cfg.batching.event_batch = atoi (v);
-        }
-      else if (!strcasecmp (k, "batch.command_batch"))
-        {
-          g_cfg.batching.command_batch = atoi (v);
-        }
-      else if (!strcasecmp (k, "batch.broadcast_batch"))
-        {
-          g_cfg.batching.broadcast_batch = atoi (v);
-        }
-      else if (!strcasecmp (k, "prio.default_command_weight"))
-        {
-          g_cfg.priorities.default_command_weight = atoi (v);
-        }
-      else if (!strcasecmp (k, "prio.default_event_weight"))
-        {
-          g_cfg.priorities.default_event_weight = atoi (v);
-        }
-      else if (!strcasecmp (k, "s2s.transport"))
-        {
-          snprintf (g_cfg.s2s.transport, sizeof g_cfg.s2s.transport, "%s", v);
-        }
-      else if (!strcasecmp (k, "s2s.uds_path"))
-        {
-          snprintf (g_cfg.s2s.uds_path, sizeof g_cfg.s2s.uds_path, "%s", v);
-        }
-      else if (!strcasecmp (k, "s2s.tcp_host"))
-        {
-          snprintf (g_cfg.s2s.tcp_host, sizeof g_cfg.s2s.tcp_host, "%s", v);
-        }
-      else if (!strcasecmp (k, "s2s.tcp_port"))
-        {
-          g_cfg.s2s.tcp_port = atoi (v);
-        }
-      else if (!strcasecmp (k, "s2s.frame_size_limit"))
-        {
-          g_cfg.s2s.frame_size_limit = atoi (v);
-        }
-      else if (!strcasecmp (k, "safety.connect_ms"))
-        {
-          g_cfg.safety.connect_ms = atoi (v);
-        }
-      else if (!strcasecmp (k, "safety.handshake_ms"))
-        {
-          g_cfg.safety.handshake_ms = atoi (v);
-        }
-      else if (!strcasecmp (k, "safety.rpc_ms"))
-        {
-          g_cfg.safety.rpc_ms = atoi (v);
-        }
-      else if (!strcasecmp (k, "safety.backoff_initial_ms"))
-        {
-          g_cfg.safety.backoff_initial_ms = atoi (v);
-        }
-      else if (!strcasecmp (k, "safety.backoff_max_ms"))
-        {
-          g_cfg.safety.backoff_max_ms = atoi (v);
-        }
-      else if (!strcasecmp (k, "safety.backoff_factor"))
-        {
-          g_cfg.safety.backoff_factor = atof (v);
-        }
-      // Limpet Mine Configuration
-      else if (!strcasecmp (k, "mines.limpet.enabled"))
-        {
-          g_cfg.mines.limpet.enabled = (bool) atoi (v);
-        }
-      else if (!strcasecmp (k, "mines.limpet.fedspace_allowed"))
-        {
-          g_cfg.mines.limpet.fedspace_allowed = (bool) atoi (v);
-        }
-      else if (!strcasecmp (k, "mines.limpet.msl_allowed"))
-        {
-          g_cfg.mines.limpet.msl_allowed = (bool) atoi (v);
-        }
-      else if (!strcasecmp (k, "mines.limpet.per_sector_cap"))
-        {
-          g_cfg.mines.limpet.per_sector_cap = atoi (v);
-        }
-      else if (!strcasecmp (k, "mines.limpet.max_per_ship"))
-        {
-          g_cfg.mines.limpet.max_per_ship = atoi (v);
-        }
-      else if (!strcasecmp (k, "mines.limpet.allow_multi_owner"))
-        {
-          g_cfg.mines.limpet.allow_multi_owner = (bool) atoi (v);
-        }
-      else if (!strcasecmp (k, "mines.limpet.scrub_cost"))
-        {
-          g_cfg.mines.limpet.scrub_cost = atoi (v);
-        }
-      else if (!strcasecmp (k, "startingcredits"))
-        {
-          g_cfg.startingcredits = atoi (v);
-        }
+      int i = 0;
+      // Map columns to the struct fields. IMPORTANT: g_cfg structure must match these types.
+      // Assuming g_cfg struct has been updated as per step 2 below.
+      g_cfg.startingcredits = sqlite3_column_int64 (st, i++);
+      g_cfg.server_port = sqlite3_column_int (st, i++);
+      g_cfg.s2s.tcp_port = sqlite3_column_int (st, i++);
+      g_cfg.bank_alert_threshold_player = sqlite3_column_int64 (st, i++);
+      g_cfg.bank_alert_threshold_corp = sqlite3_column_int64 (st, i++);
+      
+      g_cfg.genesis_enabled = sqlite3_column_int (st, i++);
+      g_cfg.genesis_block_at_cap = sqlite3_column_int (st, i++);
+      g_cfg.genesis_navhaz_delta = sqlite3_column_int (st, i++);
+      g_cfg.genesis_class_weight_M = sqlite3_column_int (st, i++);
+      g_cfg.genesis_class_weight_K = sqlite3_column_int (st, i++);
+      g_cfg.genesis_class_weight_O = sqlite3_column_int (st, i++);
+      g_cfg.genesis_class_weight_L = sqlite3_column_int (st, i++);
+      g_cfg.genesis_class_weight_C = sqlite3_column_int (st, i++);
+      g_cfg.genesis_class_weight_H = sqlite3_column_int (st, i++);
+      g_cfg.genesis_class_weight_U = sqlite3_column_int (st, i++);
+      
+      g_cfg.shipyard_enabled = sqlite3_column_int (st, i++);
+      g_cfg.shipyard_trade_in_factor_bp = sqlite3_column_int (st, i++);
+      g_cfg.shipyard_require_cargo_fit = sqlite3_column_int (st, i++);
+      g_cfg.shipyard_require_fighters_fit = sqlite3_column_int (st, i++);
+      g_cfg.shipyard_require_shields_fit = sqlite3_column_int (st, i++);
+      g_cfg.shipyard_require_hardware_compat = sqlite3_column_int (st, i++);
+      g_cfg.illegal_allowed_neutral = sqlite3_column_int (st, i++);
+      g_cfg.shipyard_tax_bp = sqlite3_column_int (st, i++);
+      
+      g_cfg.engine.processinterval = sqlite3_column_int (st, i++); // Nested in engine struct
+      g_cfg.max_ship_name_length = sqlite3_column_int (st, i++);
+
+      LOGI ("[config] Loaded configuration from database.");
+    }
+  else
+    {
+      LOGW ("[config] No configuration found in database (id=1), using defaults.");
     }
   sqlite3_finalize (st);
-  // Secrets: pick active key (redacted in print)
+
+  // Secrets loading (unchanged)
   sqlite3_stmt *ks = NULL;
   if (sqlite3_prepare_v2 (db,
                           "SELECT key_id,key_b64 FROM s2s_keys WHERE active=1 AND is_default_tx=1 LIMIT 1",
@@ -392,14 +296,11 @@ apply_db (sqlite3 *db)
       && sqlite3_step (ks) == SQLITE_ROW)
     {
       const char *kid = (const char *) sqlite3_column_text (ks, 0);
-//       const char *b64 = (const char *) sqlite3_column_text (ks, 1);
       snprintf (g_cfg.secrets.key_id, sizeof g_cfg.secrets.key_id, "%s",
                 kid ? kid : "");
-      // decode b64 → g_cfg.secrets.key / key_len (or keep it where your transport already expects it)
     }
   sqlite3_finalize (ks);
 }
-
 
 static void
 apply_env (void)
