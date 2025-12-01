@@ -236,6 +236,23 @@ h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
 }
 
 
+int
+h_get_player_bank_account_id (sqlite3 * db, int player_id)
+{
+    int account_id = -1;
+    // h_get_account_id_unlocked expects the db_mutex to be locked by the caller.
+    // For h_get_player_bank_account_id, it is often called outside an existing locked context,
+    // so we should ensure it's thread-safe by acquiring the lock here.
+    pthread_mutex_lock(&db_mutex);
+    int rc = h_get_account_id_unlocked(db, "player", player_id, &account_id);
+    pthread_mutex_unlock(&db_mutex);
+    if (rc != SQLITE_OK) {
+        LOGE("h_get_player_bank_account_id: Failed to get account ID for player %d: %s", player_id, sqlite3_errstr(rc));
+        return -1;
+    }
+    return account_id;
+}
+
 /*
  * In server_players.c
  * This helper now *accepts* the db pointer.

@@ -506,6 +506,7 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
       LOGI (
         "cmd_auth_register debug: user_create returned AUTH_OK for player %d",
         player_id);
+
       // --- Configuration Loading ---
       cfg = config_load ();
       if (!cfg)
@@ -516,6 +517,16 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
                                 "Database error (config_load)");
           goto rollback_and_error;
         }
+
+      // --- Create Bank Account for the new player ---
+      int new_account_id = -1;
+      int create_bank_rc = db_bank_create_account("player", player_id, cfg->startingcredits, &new_account_id);
+      if (create_bank_rc != SQLITE_OK) {
+          LOGE("cmd_auth_register debug: Failed to create bank account for player %d: %s", player_id, sqlite3_errmsg(db)); // db is still available for logging error messages
+          send_enveloped_error(ctx->fd, root, 1500, "Database error (bank account creation)");
+          goto rollback_and_error; // Needs proper rollback of player creation if this fails.
+      }
+      LOGI("cmd_auth_register debug: player %d bank account created with ID %d and starting credits %lld", player_id, new_account_id, (long long)cfg->startingcredits);
       // --- Spawn Location ---
       spawn_sector_id = (rand () % 10) + 1;     // Random sector between 1 and 10
       LOGI ("cmd_auth_register debug: player %d assigned to spawn_sector_id %d",

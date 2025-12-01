@@ -584,24 +584,44 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
   if (!json_is_string (j_name) || (name = json_string_value (j_name)) == NULL
       || name[0] == '\0')
     {
-      send_enveloped_error (ctx->fd, root, ERR_BAD_REQUEST,
-                            "Missing or invalid corporation name.");
+      send_enveloped_refused (ctx->fd, root, ERR_BAD_REQUEST,
+                            "Missing or invalid corporation name.", NULL); // Fixed send_enveloped_refused
       return 0;
     }
+  // Use ctx->player_id for player_id
   if (h_get_player_corp_id (db, ctx->player_id) > 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG,
-                            "You are already a member of a corporation.");
+      send_enveloped_refused (ctx->fd, root, ERR_INVALID_ARG,
+                            "You are already a member of a corporation.", NULL); // Fixed send_enveloped_refused
+      return 0;
+    }
+  // Start a transaction for atomicity
+  int rc = sqlite3_exec (db, "BEGIN IMMEDIATE TRANSACTION;", NULL, NULL, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("cmd_corp_create: Failed to start transaction: %s",
+            sqlite3_errmsg (db));
+      send_enveloped_error (ctx->fd, root, ERR_DB,
+                            "Database error starting transaction.");
       return 0;
     }
   long long creation_fee = 100000;
   long long player_new_balance;
-  if (h_deduct_credits
-        (db, "player", ctx->player_id, creation_fee, "CORP_CREATION_FEE", NULL,
+  int player_bank_account_id = h_get_player_bank_account_id(db, ctx->player_id);
+  if (player_bank_account_id <= 0) {
+      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      send_enveloped_error (ctx->fd, root, ERR_DB,
+                            "Could not retrieve player bank account for deduction.");
+      return 0;
+  }
+  // Use h_deduct_credits_unlocked as we are inside a transaction
+  if (h_deduct_credits_unlocked
+        (db, player_bank_account_id, creation_fee, "CORP_CREATION_FEE", NULL,
         &player_new_balance) != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, ERR_INSUFFICIENT_FUNDS,
-                            "Insufficient funds to create a corporation.");
+      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      send_enveloped_refused (ctx->fd, root, ERR_INSUFFICIENT_FUNDS,
+                            "Insufficient funds to create a corporation.", NULL); // Fixed send_enveloped_refused
       return 0;
     }
   sqlite3_stmt *st = NULL;
@@ -611,90 +631,100 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
     {
       LOGE ("cmd_corp_create: Failed to prepare corp insert: %s",
             sqlite3_errmsg (db));
-      h_add_credits (db, "player", ctx->player_id, creation_fee,
+      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      // Refund credits if preparation failed
+      h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
                      "CORP_FEE_REFUND", NULL, &player_new_balance);
-      send_enveloped_error (ctx->fd, root, ERR_SERVER_ERROR,
-                            "Database error during corporation creation.");
+      send_enveloped_error (ctx->fd, root, ERR_DB,
+                            "Database error during corporation creation preparation.");
       return 0;
     }
   sqlite3_bind_text (st, 1, name, -1, SQLITE_STATIC);
-  sqlite3_bind_int (st, 2, ctx->player_id);
-  int rc = sqlite3_step (st);
+  sqlite3_bind_int (st, 2, ctx->player_id); // Changed from ctx->player->id
+  rc = sqlite3_step (st);
   sqlite3_finalize (st);
+  st = NULL;                    // Reset st after finalize
   if (rc != SQLITE_DONE)
     {
       LOGE ("cmd_corp_create: Failed to insert corporation: %s",
             sqlite3_errmsg (db));
-      h_add_credits (db, "player", ctx->player_id, creation_fee,
+      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      // Refund credits
+      h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
                      "CORP_FEE_REFUND", NULL, &player_new_balance);
       if (sqlite3_errcode (db) == SQLITE_CONSTRAINT)
         {
-          send_enveloped_error (ctx->fd, root, ERR_NAME_TAKEN,
-                                "A corporation with that name already exists.");
+          send_enveloped_refused (ctx->fd, root, ERR_NAME_TAKEN,
+                                "A corporation with that name already exists.", NULL); // Fixed send_enveloped_refused
         }
       else
         {
-          send_enveloped_error (ctx->fd, root, ERR_SERVER_ERROR,
-                                "Database error during corporation creation.");
+          send_enveloped_error (ctx->fd, root, ERR_DB,
+                                "Database error inserting corporation.");
         }
       return 0;
     }
   int corp_id = (int) sqlite3_last_insert_rowid (db);
-  char role_buf[16];
-  if (h_get_player_corp_role
-        (db, ctx->player_id, corp_id, role_buf, sizeof (role_buf)) != SQLITE_OK)
+  // Explicitly insert player as Leader. Do not rely on trigger or manual fallback.
+  const char *sql_insert_member =
+    "INSERT INTO corp_members (corp_id, player_id, role) VALUES (?, ?, 'Leader');";
+  if (sqlite3_prepare_v2 (db, sql_insert_member, -1, &st, NULL) == SQLITE_OK)
     {
-      LOGW
-      (
-        "cmd_corp_create: Trigger did not add player %d to corp_members for corp %d. Doing it manually.",
-        ctx->player_id,
-        corp_id);
-      const char *sql_insert_member =
-        "INSERT INTO corp_members (corp_id, player_id, role) VALUES (?, ?, 'Leader');";
-      if (sqlite3_prepare_v2 (db, sql_insert_member, -1, &st, NULL) ==
-          SQLITE_OK)
-        {
-          sqlite3_bind_int (st, 1, corp_id);
-          sqlite3_bind_int (st, 2, ctx->player_id);
-          if (sqlite3_step (st) != SQLITE_DONE)
-            {
-              LOGE
-              (
-                "cmd_corp_create: Failed to manually insert player %d into corp_members for corp %d: %s",
-                ctx->player_id,
-                corp_id,
-                sqlite3_errmsg (db));
-              sqlite3_finalize (st);
-              h_add_credits (db, "player", ctx->player_id, creation_fee,
-                             "CORP_FEE_REFUND", NULL, &player_new_balance);
-              send_enveloped_error (ctx->fd, root, ERR_SERVER_ERROR,
-                                    "Database error during corporation creation (member insert).");
-              return 0;
-            }
-          sqlite3_finalize (st);
-        }
-      else
+      sqlite3_bind_int (st, 1, corp_id);
+      sqlite3_bind_int (st, 2, ctx->player_id); // Changed from ctx->player->id
+      if (sqlite3_step (st) != SQLITE_DONE)
         {
           LOGE
           (
-            "cmd_corp_create: Failed to prepare manual member insert for player %d into corp %d: %s",
-            ctx->player_id,
+            "cmd_corp_create: Failed to insert player %d into corp_members for corp %d: %s",
+            ctx->player_id, // Changed from ctx->player->id
             corp_id,
             sqlite3_errmsg (db));
-          h_add_credits (db, "player", ctx->player_id, creation_fee,
-                         "CORP_FEE_REFUND", NULL, &player_new_balance);
-          send_enveloped_error (ctx->fd, root, ERR_SERVER_ERROR,
-                                "Database error during corporation creation (prepare member insert).");
+          sqlite3_finalize (st);
+          sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+          h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
+                         "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
+          send_enveloped_error (ctx->fd, root, ERR_DB,
+                                "Database error adding CEO to corporation.");
           return 0;
         }
+      sqlite3_finalize (st);
+      st = NULL;
+    }
+  else
+    {
+      LOGE
+      (
+        "cmd_corp_create: Failed to prepare member insert for player %d into corp %d: %s",
+        ctx->player_id, // Changed from ctx->player->id
+        corp_id,
+        sqlite3_errmsg (db));
+      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
+                     "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
+      send_enveloped_error (ctx->fd, root, ERR_DB,
+                            "Database error preparing CEO addition.");
+      return 0;
     }
   const char *sql_create_bank =
     "INSERT INTO bank_accounts (owner_type, owner_id, currency) VALUES ('corp', ?, 'CRD');";
   if (sqlite3_prepare_v2 (db, sql_create_bank, -1, &st, NULL) == SQLITE_OK)
     {
       sqlite3_bind_int (st, 1, corp_id);
-      sqlite3_step (st);
+      if (sqlite3_step (st) != SQLITE_DONE)
+        {
+          LOGE ("cmd_corp_create: Failed to insert bank account for corp %d: %s",
+                corp_id, sqlite3_errmsg (db));
+          sqlite3_finalize (st);
+          sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+          h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
+                         "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
+          send_enveloped_error (ctx->fd, root, ERR_DB,
+                                "Database error creating bank account for corporation.");
+          return 0;
+        }
       sqlite3_finalize (st);
+      st = NULL;
     }
   else
     {
@@ -703,6 +733,12 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
         "cmd_corp_create: Failed to prepare bank account creation for corp %d: %s",
         corp_id,
         sqlite3_errmsg (db));
+      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
+                     "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
+      send_enveloped_error (ctx->fd, root, ERR_DB,
+                            "Database error preparing bank account creation.");
+      return 0;
     }
   const char *sql_convert_planets =
     "UPDATE planets SET owner_id = ?, owner_type = 'corp' WHERE owner_id = ? AND owner_type = 'player';";
@@ -710,18 +746,53 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
       SQLITE_OK)
     {
       sqlite3_bind_int (st, 1, corp_id);
-      sqlite3_bind_int (st, 2, ctx->player_id);
-      sqlite3_step (st);
+      sqlite3_bind_int (st, 2, ctx->player_id); // Changed from ctx->player->id
+      if (sqlite3_step (st) != SQLITE_DONE)
+        {
+          LOGE
+          (
+            "cmd_corp_create: Failed to update planet ownership for player %d: %s",
+            ctx->player_id, // Changed from ctx->player->id
+            sqlite3_errmsg (db));
+          sqlite3_finalize (st);
+          sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+          h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
+                         "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
+          send_enveloped_error (ctx->fd, root, ERR_DB,
+                                "Database error updating planet ownership.");
+          return 0;
+        }
       sqlite3_finalize (st);
+      st = NULL;
     }
   else
     {
       LOGE
       (
         "cmd_corp_create: Failed to prepare planet conversion for player %d: %s",
-        ctx->player_id,
+        ctx->player_id, // Changed from ctx->player->id
         sqlite3_errmsg (db));
+      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
+                     "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
+      send_enveloped_error (ctx->fd, root, ERR_DB,
+                            "Database error preparing planet ownership update.");
+      return 0;
     }
+  // If all steps succeeded, commit the transaction
+  rc = sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("cmd_corp_create: Failed to commit transaction: %s",
+            sqlite3_errmsg (db));
+      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL); // Attempt rollback on commit failure
+      h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
+                     "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
+      send_enveloped_error (ctx->fd, root, ERR_DB,
+                            "Database error committing transaction.");
+      return 0;
+    }
+  // Only update ctx->corp_id AFTER successful commit
   ctx->corp_id = corp_id;
   json_t *response_data = json_object ();
   json_object_set_new (response_data, "corp_id", json_integer (corp_id));
