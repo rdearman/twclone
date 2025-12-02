@@ -10,8 +10,6 @@
 #include <string.h>
 #include <strings.h>
 #include "server_corporation.h"
-
-
 // Helper to get the player's current planet_id from their active ship.
 // Returns planet_id > 0 on success, 0 if not on a planet or error.
 static int

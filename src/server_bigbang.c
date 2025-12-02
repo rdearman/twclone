@@ -48,8 +48,6 @@ static int ensure_all_sectors_have_exits (sqlite3 *db);
 int create_ownership (void);
 static bool has_column (sqlite3 *db, const char *table, const char *column);
 struct twconfig *
-
-
 config_load (void)
 {
   const char *sql =
@@ -140,13 +138,9 @@ typedef struct
   int from;
   int to;
 } Warp;
-
-
 /* ----------------------------------------------------
  * Small helpers / guards
  * ---------------------------------------------------- */
-
-
 static void
 prune_tunnel_edges (sqlite3 *db)
 {
@@ -594,8 +588,6 @@ bigbang_create_tunnels (void)
 /* ----------------------------------------------------
  * Sector creation (names / nebulae / beacon every 64th)
  * ---------------------------------------------------- */
-
-
 int
 create_sectors (void)
 {
@@ -697,8 +689,6 @@ create_sectors (void)
 /* ----------------------------------------------------
  * Port creation (placeholder — keep your original behaviour)
  * ---------------------------------------------------- */
-
-
 /*
    static const char *
    trade_code_for_type (int t)
@@ -726,8 +716,6 @@ create_sectors (void)
     }
    }
  */
-
-
 static int
 random_port_type_1_to_8 (void)
 {
@@ -745,8 +733,6 @@ random_port_type_1_to_8 (void)
    return 0;
    }
  */
-
-
 /* ----------------------------------------------------
  * Orchestration
  * ---------------------------------------------------- */
@@ -900,8 +886,6 @@ sector_degree_in_memory (const Warp *warps, int warp_count, int sector_id)
 
 
 /* ------- tunnel helpers ------- */
-
-
 /*
    static int
    sw_add_edge (sqlite3 *db, int a, int b)
@@ -921,11 +905,7 @@ sector_degree_in_memory (const Warp *warps, int warp_count, int sector_id)
    return (rc == SQLITE_DONE || rc == SQLITE_OK) ? SQLITE_OK : rc;
    }
  */
-
-
 /* Pick a random sector in [lo,hi] that isn't equal to 'avoid' and exists in sectors */
-
-
 /*
    static int
    pick_sector_in_range (sqlite3 *db, int lo, int hi, int avoid,
@@ -952,11 +932,7 @@ sector_degree_in_memory (const Warp *warps, int warp_count, int sector_id)
    return 0;
    }
  */
-
-
 /************* Tunneling *******************/
-
-
 int
 count_edges ()
 {
@@ -1028,11 +1004,7 @@ sw_has_edge (int from, int to)
 
 
 /************* End Tunneling *******************/
-
-
 /* Internal helpers */
-
-
 /* Returns the ID of an NPC shiptype by its name. Returns -1 on error. */
 static int
 get_npc_shiptype_id_by_name (sqlite3 *db, const char *name)
@@ -1097,8 +1069,6 @@ get_purchasable_shiptype_id_by_name (sqlite3 *db, const char *name)
 /* ----------------------------------------------------
  * Universe population functions
  * ---------------------------------------------------- */
-
-
 int
 create_planets (void)
 {
@@ -1799,8 +1769,6 @@ struct ImperialStats
   .genesis = 10,
   .attack = 5000                // High attack rating for Imperial ship
 };
-
-
 int
 create_imperial (void)
 {
@@ -2059,8 +2027,6 @@ create_taverns (void)
 
 
 /* /\* ---------- small helpers ---------- *\/ */
-
-
 /*
    static int
    prepare_first_ok (sqlite3 *db, sqlite3_stmt **stmt,
@@ -2074,89 +2040,33 @@ create_taverns (void)
    return SQLITE_ERROR;
    }
  */
-
-
 /* /\* Check if a sector exists *\/ */
-
-
 /* static int */
-
-
 /* sector_exists (sqlite3 *db, int sector_id) */
-
-
 /* { */
-
-
 /*   static sqlite3_stmt *st = NULL; */
-
-
 /*   int rc; */
-
-
 /*   if (!st) */
-
-
 /*     { */
-
-
 /*       rc = */
-
-
 /*      sqlite3_prepare_v2 (db, */
-
-
 /*                          "SELECT 1 FROM sectors WHERE id = ?1 LIMIT 1;", */
-
-
 /*                          -1, &st, NULL); */
-
-
 /*       if (rc != SQLITE_OK) */
-
-
 /*      return 0; */
-
-
 /*     } */
-
-
 /*   sqlite3_reset (st); */
-
-
 /*   sqlite3_clear_bindings (st); */
-
-
 /*   sqlite3_bind_int (st, 1, sector_id); */
-
-
 /*   rc = sqlite3_step (st); */
-
-
 /*   return (rc == SQLITE_ROW); */
-
-
 /* } */
-
-
 /* /\* random int in [lo, hi] inclusive *\/ */
-
-
 /* static int */
-
-
 /* rand_incl (int lo, int hi) */
-
-
 /* { */
-
-
 /*   return lo + (int) (rand () % (hi - lo + 1)); */
-
-
 /* } */
-
-
 /* Ensure there are at least N exits from Fedspace (2..10) to [outer_min..outer_max].
    If fewer exist, create more (and optionally the return edge). */
 static int
@@ -2292,8 +2202,6 @@ has_column (sqlite3 *db, const char *table, const char *column)
 
 
 //////////////////////////////////////////
-
-
 int
 create_derelicts (void)
 {
@@ -2727,8 +2635,6 @@ ensure_all_sectors_have_exits (sqlite3 *db)
 #include <stdio.h>
 #include <time.h>
 #include <string.h>
-
-
 /**
  * @brief Migrates existing beacons from the sectors table to the new
  * sector_assets table by inserting an ownership record (player 0).

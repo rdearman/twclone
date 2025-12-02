@@ -52,8 +52,6 @@ int h_daily_bank_interest_tick (sqlite3 *db, int64_t now_s);
 static int engine_notice_ttl_sweep (sqlite3 *db, int64_t now_ms);
 static int sweeper_engine_deadletter_retry (sqlite3 *db, int64_t now_ms);
 int cron_limpet_ttl_cleanup (sqlite3 *db, int64_t now_s);
-
-
 static inline uint64_t
 monotonic_millis (void)
 {
@@ -102,53 +100,21 @@ static const CronHandler CRON_REGISTRY[] = {
   {"system_notice_ttl", engine_notice_ttl_sweep},
   {"deadletter_retry", sweeper_engine_deadletter_retry}
 };
-
-
 /* static const CronHandler CRON_REGISTRY[] = { */
-
-
 /* {"traps_process", h_traps_process}, */
-
-
 /* {"npc_step", h_npc_step}, */
-
-
 /* {"autouncloak_sweeper", h_autouncloak_sweeper}, */
-
-
 /* {"fedspace_cleanup", h_fedspace_cleanup}, */
-
-
 /* {"broadcast_ttl_cleanup", h_broadcast_ttl_cleanup}, */
-
-
 /* {"planet_growth", h_planet_growth}, */
-
-
 /* {"daily_turn_reset", h_daily_turn_reset}, */
-
-
 /* {"terra_replenish", h_terra_replenish}, */
-
-
 /* {"daily_market_settlement", h_daily_market_settlement}, */
-
-
 /* {"daily_news_compiler", h_daily_news_compiler}, */
-
-
 /* {"cleanup_old_news", h_cleanup_old_news}, */
-
-
 /* {"system_notice_ttl", engine_notice_ttl_sweep}, */
-
-
 /* {"deadletter_retry", sweeper_engine_deadletter_retry} */
-
-
 /* }; */
-
-
 /* Lookup by task name (e.g., "fedspace_cleanup"). */
 cron_handler_fn
 cron_find (const char *name)
@@ -165,11 +131,7 @@ cron_find (const char *name)
 
 
 /* ---- Cron framework (schema: cron_tasks uses schedule + next_due_at) ---- */
-
-
 /* Schema: cron_tasks(id, name, schedule, last_run_at, next_due_at, enabled, payload) */
-
-
 /* Parse schedule -> next due (seconds since epoch)
    Supports: every:Ns | every:Nm | daily@HH:MMZ (UTC) */
 static int64_t
@@ -258,8 +220,6 @@ static eng_consumer_cfg_t G_CFG = {
   .priority_types_csv = "s2s.broadcast.sweep,player.login,player.trade.v1",
   .consumer_key = "game_engine"
 };
-
-
 void
 engine_tick (sqlite3 *db)
 {
@@ -505,8 +465,6 @@ h_player_progress_from_event_payload (json_t *ev_payload)
 
 
 /////////////////////////
-
-
 /////////////////////////
 static void
 log_s2s_metrics (const char *who)
@@ -828,14 +786,8 @@ server_commands_tick (sqlite3 *db, int max_rows)
 
 
 /////////////////////////////////////////////////////////////////////////////
-
-
 //////////////   MAIN ENGINE LOOP
-
-
 /////////////////////////////////////////////////////////////////////////////
-
-
 static int
 engine_main_loop (int shutdown_fd)
 {
@@ -1148,8 +1100,6 @@ engine_wait (pid_t pid, int timeout_ms)
 
 
 /* configurable knobs */
-
-
 static int
 engine_notice_ttl_sweep (sqlite3 *db, int64_t now_ms)
 {

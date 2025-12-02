@@ -1,12 +1,10 @@
 #ifndef SCHEMAS_H
 #define SCHEMAS_H
 #include <jansson.h>
-
 /**
  * @brief Build the system.capabilities payload.
  */
 json_t *capabilities_build (void);
-
 /**
  * @brief (C2S) Return a JSON Schema object for a client-facing key.
  *
@@ -14,14 +12,12 @@ json_t *capabilities_build (void);
  * @return A new json_t* reference to the schema, or NULL if not found.
  */
 json_t *schema_get (const char *key);
-
 /**
  * @brief (C2S) Return an array of all available client-facing schema keys.
  *
  * @return A new json_t* reference to an array of strings.
  */
 json_t *schema_keys (void);
-
 /**
  * @brief (C2S) Validate a client payload against its registered JSON Schema.
  *
@@ -30,8 +26,7 @@ json_t *schema_keys (void);
  * @param why A pointer to a char* that will be set to an error message on failure.
  * @return 0 on success, -1 on failure.
  */
-int schema_validate_payload (const char *type, json_t * payload, char **why);
-
+int schema_validate_payload (const char *type, json_t *payload, char **why);
 /**
  * @brief (S2S) Manually validate an inter-server (s2s) payload.
  *
@@ -40,6 +35,5 @@ int schema_validate_payload (const char *type, json_t * payload, char **why);
  * @param why A pointer to a char* that will be set to an error message on failure.
  * @return 0 on success, -1 on failure.
  */
-int s2s_validate_payload (const char *type, json_t * payload, char **why);
-
+int s2s_validate_payload (const char *type, json_t *payload, char **why);
 #endif

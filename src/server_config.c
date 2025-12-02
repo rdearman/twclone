@@ -204,14 +204,12 @@ int
 xp_align_config_reload (sqlite3 *db)
 {
   (void)db; // Unused now as we are using defaults until schema supports XP config
-
   // Set sensible defaults directly since config table doesn't have these keys
   g_xp_align.trade_xp_ratio = 10;
-  g_xp_align.ship_destroy_xp_multiplier = 2; 
+  g_xp_align.ship_destroy_xp_multiplier = 2;
   g_xp_align.illegal_base_align_divisor = 50000;
   g_xp_align.illegal_align_factor_good = 2.0;
   g_xp_align.illegal_align_factor_evil = 0.25;
-
   LOGI (
     "XP/Alignment config loaded (defaults): trade_xp_ratio=%d, ship_destroy_xp_multiplier=%d, "
     "illegal_base_align_divisor=%d, illegal_align_factor_good=%.2f, illegal_align_factor_evil=%.2f",
@@ -220,7 +218,6 @@ xp_align_config_reload (sqlite3 *db)
     g_xp_align.illegal_base_align_divisor,
     g_xp_align.illegal_align_factor_good,
     g_xp_align.illegal_align_factor_evil);
-
   return 0;
 }
 
@@ -230,20 +227,19 @@ apply_db (sqlite3 *db)
 {
   sqlite3_stmt *st = NULL;
   // This query explicitly selects the columns that match the 'wide table' schema in fullschema.sql
-  const char *sql = "SELECT startingcredits, server_port, s2s_port, bank_alert_threshold_player, bank_alert_threshold_corp, "
-                    "genesis_enabled, genesis_block_at_cap, genesis_navhaz_delta, genesis_class_weight_M, genesis_class_weight_K, "
-                    "genesis_class_weight_O, genesis_class_weight_L, genesis_class_weight_C, genesis_class_weight_H, genesis_class_weight_U, "
-                    "shipyard_enabled, shipyard_trade_in_factor_bp, shipyard_require_cargo_fit, shipyard_require_fighters_fit, "
-                    "shipyard_require_shields_fit, shipyard_require_hardware_compat, illegal_allowed_neutral, shipyard_tax_bp, "
-                    "processinterval, max_ship_name_length FROM config WHERE id = 1";
-
+  const char *sql =
+    "SELECT startingcredits, server_port, s2s_port, bank_alert_threshold_player, bank_alert_threshold_corp, "
+    "genesis_enabled, genesis_block_at_cap, genesis_navhaz_delta, genesis_class_weight_M, genesis_class_weight_K, "
+    "genesis_class_weight_O, genesis_class_weight_L, genesis_class_weight_C, genesis_class_weight_H, genesis_class_weight_U, "
+    "shipyard_enabled, shipyard_trade_in_factor_bp, shipyard_require_cargo_fit, shipyard_require_fighters_fit, "
+    "shipyard_require_shields_fit, shipyard_require_hardware_compat, illegal_allowed_neutral, shipyard_tax_bp, "
+    "processinterval, max_ship_name_length FROM config WHERE id = 1";
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
       LOGI ("[config] no config table found, using defaults (%s)\n",
             sqlite3_errmsg (db));
       return;
     }
-
   if (sqlite3_step (st) == SQLITE_ROW)
     {
       int i = 0;
@@ -254,7 +250,6 @@ apply_db (sqlite3 *db)
       g_cfg.s2s.tcp_port = sqlite3_column_int (st, i++);
       g_cfg.bank_alert_threshold_player = sqlite3_column_int64 (st, i++);
       g_cfg.bank_alert_threshold_corp = sqlite3_column_int64 (st, i++);
-      
       g_cfg.genesis_enabled = sqlite3_column_int (st, i++);
       g_cfg.genesis_block_at_cap = sqlite3_column_int (st, i++);
       g_cfg.genesis_navhaz_delta = sqlite3_column_int (st, i++);
@@ -265,7 +260,6 @@ apply_db (sqlite3 *db)
       g_cfg.genesis_class_weight_C = sqlite3_column_int (st, i++);
       g_cfg.genesis_class_weight_H = sqlite3_column_int (st, i++);
       g_cfg.genesis_class_weight_U = sqlite3_column_int (st, i++);
-      
       g_cfg.shipyard_enabled = sqlite3_column_int (st, i++);
       g_cfg.shipyard_trade_in_factor_bp = sqlite3_column_int (st, i++);
       g_cfg.shipyard_require_cargo_fit = sqlite3_column_int (st, i++);
@@ -274,18 +268,16 @@ apply_db (sqlite3 *db)
       g_cfg.shipyard_require_hardware_compat = sqlite3_column_int (st, i++);
       g_cfg.illegal_allowed_neutral = sqlite3_column_int (st, i++);
       g_cfg.shipyard_tax_bp = sqlite3_column_int (st, i++);
-      
       g_cfg.engine.processinterval = sqlite3_column_int (st, i++); // Nested in engine struct
       g_cfg.max_ship_name_length = sqlite3_column_int (st, i++);
-
       LOGI ("[config] Loaded configuration from database.");
     }
   else
     {
-      LOGW ("[config] No configuration found in database (id=1), using defaults.");
+      LOGW (
+        "[config] No configuration found in database (id=1), using defaults.");
     }
   sqlite3_finalize (st);
-
   // Secrets loading (unchanged)
   sqlite3_stmt *ks = NULL;
   if (sqlite3_prepare_v2 (db,
@@ -301,6 +293,7 @@ apply_db (sqlite3 *db)
     }
   sqlite3_finalize (ks);
 }
+
 
 static void
 apply_env (void)

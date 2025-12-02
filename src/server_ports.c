@@ -1002,14 +1002,12 @@ cmd_dock_status (client_ctx_t *ctx, json_t *root)
     }
   // Resolve port ID in current sector
   resolved_port_id = db_get_port_id_by_sector (ctx->sector_id);
-  
   const char *action = NULL;
   json_t *j_action = json_object_get (json_object_get (root, "data"), "action");
   if (json_is_string (j_action))
     {
       action = json_string_value (j_action);
     }
-
   int new_ported_status = resolved_port_id;
   if (action && strcasecmp (action, "undock") == 0)
     {
@@ -1021,19 +1019,20 @@ cmd_dock_status (client_ctx_t *ctx, json_t *root)
     }
   else if (action)
     {
-       // Optional: handle unknown action, or default to current behavior (status check)
-       // For now, if action is present but invalid, maybe error? Or ignore?
-       // existing tests might rely on no action = status check.
-       // If action is "dock" but no port, resolved_port_id is 0, so it works.
+      // Optional: handle unknown action, or default to current behavior (status check)
+      // For now, if action is present but invalid, maybe error? Or ignore?
+      // existing tests might rely on no action = status check.
+      // If action is "dock" but no port, resolved_port_id is 0, so it works.
     }
-    
   // If action is specified, perform update. If not, it's just a status check.
   // Actually, the test "Test: Successful Docking" sends action: "dock".
   // "Test: Undocking" sends action: "undock".
   // "Test: Docking Status" sends no data.
-  
-  if (action) {
-      if (new_ported_status > 0 && !cluster_can_trade (db, ctx->sector_id, ctx->player_id))
+  if (action)
+    {
+      if (new_ported_status > 0 && !cluster_can_trade (db,
+                                                       ctx->sector_id,
+                                                       ctx->player_id))
         {
           send_enveloped_refused (ctx->fd,
                                   root,
@@ -1042,7 +1041,6 @@ cmd_dock_status (client_ctx_t *ctx, json_t *root)
                                   NULL);
           return 0;
         }
-
       // Update ships.ported status
       {
         sqlite3_stmt *st = NULL;
@@ -1051,8 +1049,9 @@ cmd_dock_status (client_ctx_t *ctx, json_t *root)
         rc = sqlite3_prepare_v2 (db, sql_update_ported, -1, &st, NULL);
         if (rc != SQLITE_OK)
           {
-            LOGE ("cmd_dock_status: Failed to prepare update ported statement: %s",
-                  sqlite3_errmsg (db));
+            LOGE (
+              "cmd_dock_status: Failed to prepare update ported statement: %s",
+              sqlite3_errmsg (db));
             send_enveloped_error (ctx->fd, root, ERR_DB, "Database error.");
             return -1;
           }
@@ -1091,23 +1090,25 @@ cmd_dock_status (client_ctx_t *ctx, json_t *root)
           db_notice_create ("Docking Log", notice_body, "info",
                             time (NULL) + (86400 * 7));     // Expires in 1 week
         }
-        
       // Use new status for response
       resolved_port_id = new_ported_status;
-  } else {
+    }
+  else
+    {
       // Status check only - fetch actual status from DB
       sqlite3_stmt *st = NULL;
       const char *sql_check = "SELECT ported FROM ships WHERE id = ?1";
       rc = sqlite3_prepare_v2 (db, sql_check, -1, &st, NULL);
-      if (rc == SQLITE_OK) {
-          sqlite3_bind_int(st, 1, player_ship_id);
-          if (sqlite3_step(st) == SQLITE_ROW) {
-              resolved_port_id = sqlite3_column_int(st, 0);
-          }
-          sqlite3_finalize(st);
-      }
-  }
-
+      if (rc == SQLITE_OK)
+        {
+          sqlite3_bind_int (st, 1, player_ship_id);
+          if (sqlite3_step (st) == SQLITE_ROW)
+            {
+              resolved_port_id = sqlite3_column_int (st, 0);
+            }
+          sqlite3_finalize (st);
+        }
+    }
   payload = json_object ();
   if (!payload)
     {
@@ -3420,7 +3421,6 @@ cmd_port_rob (client_ctx_t *ctx,
   json_t *resp = NULL; // Initialize here, allocate later as json_object()
   sqlite3_stmt *upd = NULL; // Declare here
   int amount_to_steal = 10; // Declare and initialize here
-
   if (sector_id <= 0 || port_id <= 0 || !mode)
     {
       send_enveloped_error (ctx->fd, root, 400, "Invalid parameters.");
@@ -3428,7 +3428,6 @@ cmd_port_rob (client_ctx_t *ctx,
     }
   /* 2. Pre-Checks (No Turn Cost) */
   /* Location Check */
-
   if (h_get_player_sector (ctx->player_id) != sector_id)
     {
       send_enveloped_error (ctx->fd, root, 1403, "You are not in that sector.");
@@ -4027,7 +4026,7 @@ cmd_port_rob (client_ctx_t *ctx,
       send_enveloped_ok (ctx->fd, root, "port.rob", resp);
       json_decref (resp);
     }
- fail_tx:
+fail_tx:
   return 0;
 }
 

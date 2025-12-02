@@ -31,8 +31,6 @@
 #include "server_log.h"
 #include "server_ports.h"
 #include <strings.h>
-
-
 // Central handler for ship destruction
 int
 handle_ship_destruction (sqlite3 *db, ship_kill_context_t *ctx)
@@ -362,8 +360,6 @@ void send_enveloped_ok (int fd, json_t *root, const char *type,
 void send_enveloped_error (int fd, json_t *root, int code, const char *msg);
 void send_enveloped_refused (int fd, json_t *root, int code, const char *msg,
                              json_t *data_opt);
-
-
 int
 cmd_ship_transfer_cargo (client_ctx_t *ctx, json_t *root)
 {
@@ -389,8 +385,6 @@ cmd_ship_repair (client_ctx_t *ctx, json_t *root)
 
 
 /* ship.inspect */
-
-
 /* ship.inspect */
 int
 cmd_ship_inspect (client_ctx_t *ctx, json_t *root)

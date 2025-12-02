@@ -4,28 +4,7 @@
 Recently there was a problem where some functionality was lost, and some was "potentially" lost. I want you to invetigate if some functionlity has been lost. Do NOT change anything. I just need you to investigate and report back to me.   
 
 
-=============================
-|  * 4. Issue 367: "Titles ladder: alignment/experience thresholds (display + deltas)"
-|       * Problem: The implementation for a "titles ladder" (rank/title based on player alignment/experience thresholds) is not found in the codebase.
-|       * Impact: Players will not have dynamic titles or ranks based on their progression.
-|       * Recommendation: Re-implement the titles ladder functionality.
-|
-│ The 'Titles ladder' functionality, as described in Issue 367, has NOT been implemented.                                                                                                                                                    │
-│                                                                                                                                                                                                                                            │
-│ Current State:                                                                                                                                                                                                                             │
-│ - Rank names (`good_ranks` and `evil_ranks`) are defined in `src/globals.c`.                                                                                                                                                               │
-│ - Player `alignment` and `experience` are stored in the database and used for various game mechanics (e.g., ship requirements, bounty eligibility, tow notices).                                                                           │
-│ - The `player.rankings` command is listed as supported in `server_loop.c`.                                                                                                                                                                 │
-│                                                                                                                                                                                                                                            │
-│ Missing Functionality:                                                                                                                                                                                                                     │
-│ - There is NO discernible code that actively maps a player's `alignment` or `experience` values to the defined `good_ranks` or `evil_ranks` strings based on thresholds to determine a dynamic title or rank.                              │
-│ - The C implementation function for the `player.rankings` command (e.g., `cmd_player_rankings`) is MISSING from the codebase.                                                                                                              │
-│                                                                                                                                                                                                                                            │
-│ Impact:                                                                                                                                                                                                                                    │
-│ As stated in the original problem, players currently will not have dynamic titles or ranks based on their progression because the logic to assign these titles and the command to display them are not implemented.  
-=============================
-
-=============================
+============================= ****** FIX THIS NEXT ******
 |
 |   5. Issue 150: "One SQLite connection per worker thread (open with SQLITE_OPEN_NOMUTEX) and drop the global mutex."
 |       * Problem: The architectural change to use thread-local SQLite connections (__thread sqlite3 *tls_db = NULL; with SQLITE_OPEN_NOMUTEX) and remove the global mutex has not been implemented. The global db_handle and

@@ -31,8 +31,6 @@ static int db_insert_defaults_unlocked (void);
 static int db_seed_ai_qa_bot_bank_account_unlocked (void);
 int db_seed_cron_tasks (sqlite3 *db);
 void db_handle_close_and_reset (void);
-
-
 // New function to add
 void
 db_handle_close_and_reset (void)
@@ -45,13 +43,19 @@ db_handle_close_and_reset (void)
     }
 }
 
+
 // New helpers to manage global db_mutex externally
-void db_mutex_lock(void) {
-    pthread_mutex_lock(&db_mutex);
+void
+db_mutex_lock (void)
+{
+  pthread_mutex_lock (&db_mutex);
 }
 
-void db_mutex_unlock(void) {
-    pthread_mutex_unlock(&db_mutex);
+
+void
+db_mutex_unlock (void)
+{
+  pthread_mutex_unlock (&db_mutex);
 }
 
 
@@ -79,8 +83,6 @@ db_init_recursive_mutex_once (void)
 
 
 // database.c
-
-
 sqlite3 *
 db_get_handle (void)
 {
@@ -246,8 +248,6 @@ db_commands_accept (const char *cmd_type,
 
 
 ////////////////////
-
-
 /**
  * @brief Thread-safe wrapper for a simple column update.
  *
@@ -375,8 +375,6 @@ const char *create_table_sql[] = {
   "  shipyard_require_hardware_compat INTEGER NOT NULL DEFAULT 1, "
   "  illegal_allowed_neutral INTEGER NOT NULL DEFAULT 0, "
   "  shipyard_tax_bp INTEGER NOT NULL DEFAULT 1000 " " ); ",
-
-
   "CREATE TABLE IF NOT EXISTS commision ( "
   " id INTEGER PRIMARY KEY, "
   " is_evil BOOLEAN NOT NULL DEFAULT 0 CHECK (is_evil IN (0,1)), "
@@ -715,9 +713,7 @@ const char *create_table_sql[] = {
   "   last_update TIMESTAMP NOT NULL, "
   "   PRIMARY KEY (player), "
   "   FOREIGN KEY (player) REFERENCES players(id) ON DELETE CASCADE ); ",
-
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_turns_player ON turns(player);",
-  
   " CREATE TABLE IF NOT EXISTS mail ( "
   "   id INTEGER PRIMARY KEY AUTOINCREMENT,  "
   "   thread_id INTEGER,  "
@@ -2736,8 +2732,6 @@ static const size_t create_table_count =
 /* Number of default inserts */
 static const size_t insert_default_count =
   sizeof (insert_default_sql) / sizeof (insert_default_sql[0]);
-
-
 int
 db_engine_bootstrap (void)
 {
@@ -3351,8 +3345,6 @@ cleanup:
 
 
 /* Helper: safe text access (returns "" if NULL) */
-
-
 // This function is already fine as-is because it doesn't access the global
 // database handle, only the statement passed to it.
 static const char *
@@ -3442,14 +3434,8 @@ fail:
 
 
 ///////////////////////
-
-
 /// Helpers
-
-
 /* ---------- db_sector_scan_snapshot: thread-safe, single statement ---------- */
-
-
 /* Out shape (core fields only; handler will add adjacency + flags):
    {
      "name": TEXT,
@@ -4117,8 +4103,6 @@ cleanup:
 
 
 /* Helper: prepare, bind one int, and return stmt or NULL */
-
-
 // This is now an internal helper. The caller must hold the mutex.
 static sqlite3_stmt *
 prep1i_unlocked (sqlite3 *db, const char *sql, int v)

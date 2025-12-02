@@ -580,19 +580,21 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   const char *name;
-  json_t *j_name = json_object_get (data, "name");
+  json_t *j_name = json_object_get (data,
+                                    "name");
   if (!json_is_string (j_name) || (name = json_string_value (j_name)) == NULL
       || name[0] == '\0')
     {
       send_enveloped_refused (ctx->fd, root, ERR_BAD_REQUEST,
-                            "Missing or invalid corporation name.", NULL); // Fixed send_enveloped_refused
+                              "Missing or invalid corporation name.", NULL); // Fixed send_enveloped_refused
       return 0;
     }
   // Use ctx->player_id for player_id
   if (h_get_player_corp_id (db, ctx->player_id) > 0)
     {
       send_enveloped_refused (ctx->fd, root, ERR_INVALID_ARG,
-                            "You are already a member of a corporation.", NULL); // Fixed send_enveloped_refused
+                              "You are already a member of a corporation.",
+                              NULL);                                             // Fixed send_enveloped_refused
       return 0;
     }
   // Start a transaction for atomicity
@@ -607,21 +609,28 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
     }
   long long creation_fee = 100000;
   long long player_new_balance;
-  int player_bank_account_id = h_get_player_bank_account_id(db, ctx->player_id);
-  if (player_bank_account_id <= 0) {
+  int player_bank_account_id = h_get_player_bank_account_id (db,
+                                                             ctx->player_id);
+  if (player_bank_account_id <= 0)
+    {
       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      send_enveloped_error (ctx->fd, root, ERR_DB,
+      send_enveloped_error (ctx->fd,
+                            root,
+                            ERR_DB,
                             "Could not retrieve player bank account for deduction.");
       return 0;
-  }
+    }
   // Use h_deduct_credits_unlocked as we are inside a transaction
   if (h_deduct_credits_unlocked
         (db, player_bank_account_id, creation_fee, "CORP_CREATION_FEE", NULL,
         &player_new_balance) != SQLITE_OK)
     {
       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      send_enveloped_refused (ctx->fd, root, ERR_INSUFFICIENT_FUNDS,
-                            "Insufficient funds to create a corporation.", NULL); // Fixed send_enveloped_refused
+      send_enveloped_refused (ctx->fd,
+                              root,
+                              ERR_INSUFFICIENT_FUNDS,
+                              "Insufficient funds to create a corporation.",
+                              NULL);                                              // Fixed send_enveloped_refused
       return 0;
     }
   sqlite3_stmt *st = NULL;
@@ -634,8 +643,10 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
       // Refund credits if preparation failed
       h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
-                     "CORP_FEE_REFUND", NULL, &player_new_balance);
-      send_enveloped_error (ctx->fd, root, ERR_DB,
+                              "CORP_FEE_REFUND", NULL, &player_new_balance);
+      send_enveloped_error (ctx->fd,
+                            root,
+                            ERR_DB,
                             "Database error during corporation creation preparation.");
       return 0;
     }
@@ -651,11 +662,14 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
       // Refund credits
       h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
-                     "CORP_FEE_REFUND", NULL, &player_new_balance);
+                              "CORP_FEE_REFUND", NULL, &player_new_balance);
       if (sqlite3_errcode (db) == SQLITE_CONSTRAINT)
         {
-          send_enveloped_refused (ctx->fd, root, ERR_NAME_TAKEN,
-                                "A corporation with that name already exists.", NULL); // Fixed send_enveloped_refused
+          send_enveloped_refused (ctx->fd,
+                                  root,
+                                  ERR_NAME_TAKEN,
+                                  "A corporation with that name already exists.",
+                                  NULL);                                               // Fixed send_enveloped_refused
         }
       else
         {
@@ -677,13 +691,14 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
           LOGE
           (
             "cmd_corp_create: Failed to insert player %d into corp_members for corp %d: %s",
-            ctx->player_id, // Changed from ctx->player->id
+            ctx->player_id,
+            // Changed from ctx->player->id
             corp_id,
             sqlite3_errmsg (db));
           sqlite3_finalize (st);
           sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
           h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
-                         "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
+                                  "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
           send_enveloped_error (ctx->fd, root, ERR_DB,
                                 "Database error adding CEO to corporation.");
           return 0;
@@ -696,12 +711,13 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
       LOGE
       (
         "cmd_corp_create: Failed to prepare member insert for player %d into corp %d: %s",
-        ctx->player_id, // Changed from ctx->player->id
+        ctx->player_id,
+        // Changed from ctx->player->id
         corp_id,
         sqlite3_errmsg (db));
       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
       h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
-                     "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
+                              "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
       send_enveloped_error (ctx->fd, root, ERR_DB,
                             "Database error preparing CEO addition.");
       return 0;
@@ -713,13 +729,17 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
       sqlite3_bind_int (st, 1, corp_id);
       if (sqlite3_step (st) != SQLITE_DONE)
         {
-          LOGE ("cmd_corp_create: Failed to insert bank account for corp %d: %s",
-                corp_id, sqlite3_errmsg (db));
+          LOGE (
+            "cmd_corp_create: Failed to insert bank account for corp %d: %s",
+            corp_id,
+            sqlite3_errmsg (db));
           sqlite3_finalize (st);
           sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
           h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
-                         "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
-          send_enveloped_error (ctx->fd, root, ERR_DB,
+                                  "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
+          send_enveloped_error (ctx->fd,
+                                root,
+                                ERR_DB,
                                 "Database error creating bank account for corporation.");
           return 0;
         }
@@ -735,7 +755,7 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
         sqlite3_errmsg (db));
       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
       h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
-                     "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
+                              "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
       send_enveloped_error (ctx->fd, root, ERR_DB,
                             "Database error preparing bank account creation.");
       return 0;
@@ -752,12 +772,13 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
           LOGE
           (
             "cmd_corp_create: Failed to update planet ownership for player %d: %s",
-            ctx->player_id, // Changed from ctx->player->id
+            ctx->player_id,
+            // Changed from ctx->player->id
             sqlite3_errmsg (db));
           sqlite3_finalize (st);
           sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
           h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
-                         "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
+                                  "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
           send_enveloped_error (ctx->fd, root, ERR_DB,
                                 "Database error updating planet ownership.");
           return 0;
@@ -770,11 +791,12 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
       LOGE
       (
         "cmd_corp_create: Failed to prepare planet conversion for player %d: %s",
-        ctx->player_id, // Changed from ctx->player->id
+        ctx->player_id,
+        // Changed from ctx->player->id
         sqlite3_errmsg (db));
       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
       h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
-                     "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
+                              "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
       send_enveloped_error (ctx->fd, root, ERR_DB,
                             "Database error preparing planet ownership update.");
       return 0;
@@ -787,7 +809,7 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
             sqlite3_errmsg (db));
       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL); // Attempt rollback on commit failure
       h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
-                     "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
+                              "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
       send_enveloped_error (ctx->fd, root, ERR_DB,
                             "Database error committing transaction.");
       return 0;

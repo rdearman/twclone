@@ -28,8 +28,6 @@ static bool is_player_in_tavern_sector (sqlite3 *db, int sector_id);
 bool get_player_loan (sqlite3 *db, int player_id, long long *principal,
                       int *interest_rate, int *due_date, int *is_defaulted);
 static void sanitize_text (char *text, size_t max_len);
-
-
 // Implementation for hardware.list RPC
 int
 cmd_hardware_list (client_ctx_t *ctx, json_t *root)

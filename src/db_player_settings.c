@@ -6,6 +6,34 @@
 #include "database.h"           // db_get_handle()
 #include "db_player_settings.h" // our prototypes
 static sqlite3 *g_db_ps = NULL;
+static bool
+player_is_sysop (sqlite3 *db, int player_id)
+{
+  bool is_sysop = false;
+  sqlite3_stmt *st = NULL;
+  if (sqlite3_prepare_v2 (db,
+                          "SELECT COALESCE(type,2), COALESCE(flags,0) FROM players WHERE id=?1",
+                          -1,
+                          &st,
+                          NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_int (st, 1, player_id);
+      if (sqlite3_step (st) == SQLITE_ROW)
+        {
+          int type = sqlite3_column_int (st, 0);
+          int flags = sqlite3_column_int (st, 1);
+          if (type == 1 || (flags & 0x1))
+            {
+              is_sysop = true;  /* adjust rule if needed */
+            }
+        }
+    }
+  if (st)
+    {
+      sqlite3_finalize (st);
+    }
+  return is_sysop;
+}
 
 
 /* Prepared statements (kept simple; one-shot prepare each call to avoid lifetime headaches) */
@@ -25,8 +53,6 @@ db_player_settings_init (sqlite3 *db)
 
 
 /* ---------- Prefs ---------- */
-
-
 /* Upsert a single preference (typed) */
 int
 db_prefs_set_one (int64_t pid, const char *key, pref_type t,
@@ -175,8 +201,6 @@ type_to_s (pref_type t)
 
 
 /* ---------- Subscriptions ---------- */
-
-
 int
 db_subscribe_upsert (int64_t pid, const char *topic, const char *filter_json,
                      int locked)
@@ -265,8 +289,6 @@ db_subscribe_list (int64_t pid, sqlite3_stmt **it)
 
 
 /* ---------- Bookmarks ---------- */
-
-
 int
 db_bookmark_upsert (int64_t pid, const char *name, int64_t sector_id)
 {
@@ -321,8 +343,6 @@ db_bookmark_list (int64_t pid, sqlite3_stmt **it)
 
 
 /* ---------- Avoid ---------- */
-
-
 int
 db_avoid_add (int64_t pid, int64_t sector_id)
 {
@@ -374,8 +394,6 @@ db_avoid_list (int64_t pid, sqlite3_stmt **it)
 
 
 /* ---------- Notes ---------- */
-
-
 int
 db_note_set (int64_t pid, const char *scope, const char *key,
              const char *note)

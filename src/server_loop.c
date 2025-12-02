@@ -290,8 +290,6 @@ static const cmd_desc_t k_supported_cmds_fallback[] = {
 // Weak fallback: satisfies server_envelope.o at link time.
 // If server_loop.c defines a strong version, it will override this.
 __attribute__((weak))
-
-
 void
 loop_get_supported_commands (const cmd_desc_t **out_tbl, size_t *out_n)
 {
@@ -318,8 +316,6 @@ monotonic_millis (void)
 
 
 /* ===== Client registry for broadcasts  ===== */
-
-
 /* Broadcast a system.notice to everyone (uses subscription infra).
    Data is BORROWED here; we incref for the call. */
 static void
@@ -332,8 +328,6 @@ server_broadcast_to_all_online (json_t *data)
 
 /* Sector-scoped, ephemeral event to subscribers of sector.* / sector.{id}.
    NOTE: comm_publish_sector_event STEALS a ref to 'data'. */
-
-
 /*
    static void
    server_broadcast_to_sector (int sector_id, const char *event_type,
@@ -342,8 +336,6 @@ server_broadcast_to_all_online (json_t *data)
    comm_publish_sector_event (sector_id, event_type, data);	// steals 'data'
    }
  */
-
-
 static int
 broadcast_sweep_once (sqlite3 *db, int max_rows)
 {
@@ -410,8 +402,6 @@ broadcast_sweep_once (sqlite3 *db, int max_rows)
 /* ===== Client registry for broadcasts (#195) ===== */
 client_node_t *g_clients = NULL;
 pthread_mutex_t g_clients_mu = PTHREAD_MUTEX_INITIALIZER;
-
-
 void
 server_register_client (client_ctx_t *ctx)
 {
@@ -473,8 +463,6 @@ server_deliver_to_player (int player_id, const char *event_type, json_t *data)
 
 
 /* ------------------------ idempotency helpers  ------------------------ */
-
-
 /* FNV-1a 64-bit */
 static uint64_t
 fnv1a64 (const unsigned char *s, size_t n)
@@ -519,8 +507,6 @@ idemp_fingerprint_json (json_t *obj, char out[17])
 
 
 /* ------------------------ socket helpers ------------------------ */
-
-
 static int
 set_reuseaddr (int fd)
 {
@@ -585,8 +571,6 @@ make_listen_socket (uint16_t port)
    return 0;
    }
  */
-
-
 /* Roll the window and increment count for this response */
 void
 rl_tick (client_ctx_t *ctx)
@@ -1406,8 +1390,6 @@ process_message (client_ctx_t *ctx, json_t *root)
 
 
 /* ------------------------ per-connection loop (thread body) ------------------------ */
-
-
 static void *
 connection_thread (void *arg)
 {
@@ -1497,8 +1479,6 @@ connection_thread (void *arg)
 
 
 /* ------------------------ accept loop (spawns thread per client) ------------------------ */
-
-
 int
 server_loop (volatile sig_atomic_t *running)
 {

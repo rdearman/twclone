@@ -8,8 +8,6 @@
 // Forward declarations of internal helper functions
 static int get_high_degree_sector (sqlite3 *db);
 static int get_tunnel_end (sqlite3 *db, int start_sector);
-
-
 /**
  * @brief Finds a random sector with a high out-degree (many warps).
  * This is used to create "safe" exit points for one-way and dead-end

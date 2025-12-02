@@ -8,11 +8,7 @@
 #include "server_communication.h"       // (optional if you want to also emit immediately)
 #include "engine_consumer.h"
 #include "server_log.h"
-
-
 /* --- helpers -------------------------------------------------------------- */
-
-
 static int
 get_now_epoch ()
 {
@@ -165,8 +161,6 @@ static const char *BASE_SELECT =
   "WHERE id > ?1 "
   "  AND (?2 = 0 OR type IN (SELECT trim(value) FROM json_each(?3))) "
   "ORDER BY id ASC " "LIMIT ?4;";
-
-
 static int
 handle_ship_self_destruct_initiated (sqlite3 *db, sqlite3_stmt *ev_row)
 {
@@ -294,8 +288,6 @@ handle_event (const char *type, sqlite3 *db, sqlite3_stmt *ev_row)
 
 
 /* --- main tick ------------------------------------------------------------- */
-
-
 int
 engine_consume_tick (sqlite3 *db,
                      const eng_consumer_cfg_t *cfg,

@@ -1147,7 +1147,9 @@ cmd_move_describe_sector (client_ctx_t *ctx, json_t *root)
 int
 cmd_move_warp (client_ctx_t *ctx, json_t *root)
 {
-  LOGI ("cmd_move_warp: ctx->player_id=%d, ctx->sector_id=%d", ctx->player_id, ctx->sector_id);
+  LOGI ("cmd_move_warp: ctx->player_id=%d, ctx->sector_id=%d",
+        ctx->player_id,
+        ctx->sector_id);
   sqlite3 *db_handle = db_get_handle ();
   h_decloak_ship (db_handle,
                   h_get_active_ship_id (db_handle, ctx->player_id));
@@ -1213,7 +1215,7 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
     from,
     to,
     prc,
-    sqlite3_changes(db_handle));
+    sqlite3_changes (db_handle));
   ctx->sector_id = to;
   // Apply Armid mines on entry
   armid_encounter_t armid_enc = { 0 };

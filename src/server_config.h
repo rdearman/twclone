@@ -1,74 +1,64 @@
 #ifndef SERVER_CONFIG_H
 #define SERVER_CONFIG_H
-
 #include <stdint.h>
 #include <jansson.h>
-#include "common.h"		// client_ctx_t
-#include "server_envelope.h"	// send_enveloped_* prototypes
-#include "database.h"		// if your moved bodies call db_*
-#include "schemas.h"		// uncomment if you wire system.describe_schema to schemas.c
+#include "common.h"             // client_ctx_t
+#include "server_envelope.h"    // send_enveloped_* prototypes
+#include "database.h"           // if your moved bodies call db_*
+#include "schemas.h"            // uncomment if you wire system.describe_schema to schemas.c
 #include <stdint.h>
-
 #define DEFAULT_DB_NAME "twconfig.db"
 #define CORP_TAX_RATE_BP 500
-
 extern json_t *g_capabilities;
-
-
 #ifndef TW_CMD_DESC_T_DEFINED
 #define TW_CMD_DESC_T_DEFINED
 typedef struct cmd_desc_s
 {
-  const char *name;		// e.g. "move.warp"
-  const char *summary;		// optional; may be ""
+  const char *name;             // e.g. "move.warp"
+  const char *summary;          // optional; may be ""
 } cmd_desc_t;
 #endif
-
 // Exported by server_loop.c (or weak-fallback elsewhere)
-void loop_get_supported_commands (const cmd_desc_t ** out_tbl, size_t *out_n);
-
+void loop_get_supported_commands (const cmd_desc_t **out_tbl, size_t *out_n);
 #ifdef __cplusplus
 extern "C"
 {
 #endif
-
-  struct twconfig
-  {
-    int turnsperday;
-    int maxwarps_per_sector;
-    int startingcredits;
-    int startingfighters;
-    int startingholds;
-    int processinterval;
-    int autosave;
-    int max_players;
-    int max_ships;
-    int max_ports;
-    int max_planets_per_sector;
-    int max_total_planets;
-    int max_safe_planets;
-    int max_citadel_level;
-    int number_of_planet_types;
-    int max_ship_name_length;
-    int ship_type_count;
-    int hash_length;
-    int default_port;
-    int default_nodes;
-    int warps_per_sector;
-    int buff_size;
-    int max_name_length;
-    int planet_type_count;
-
-    /* Shipyard Configuration */
-    int shipyard_enabled;
-    int shipyard_trade_in_factor_bp;
-    int shipyard_require_cargo_fit;
-    int shipyard_require_fighters_fit;
-    int shipyard_require_shields_fit;
-    int shipyard_require_hardware_compat;
-    int shipyard_tax_bp;
-  };
-
+struct twconfig
+{
+  int turnsperday;
+  int maxwarps_per_sector;
+  int startingcredits;
+  int startingfighters;
+  int startingholds;
+  int processinterval;
+  int autosave;
+  int max_players;
+  int max_ships;
+  int max_ports;
+  int max_planets_per_sector;
+  int max_total_planets;
+  int max_safe_planets;
+  int max_citadel_level;
+  int number_of_planet_types;
+  int max_ship_name_length;
+  int ship_type_count;
+  int hash_length;
+  int default_port;
+  int default_nodes;
+  int warps_per_sector;
+  int buff_size;
+  int max_name_length;
+  int planet_type_count;
+  /* Shipyard Configuration */
+  int shipyard_enabled;
+  int shipyard_trade_in_factor_bp;
+  int shipyard_require_cargo_fit;
+  int shipyard_require_fighters_fit;
+  int shipyard_require_shields_fit;
+  int shipyard_require_hardware_compat;
+  int shipyard_tax_bp;
+};
 /* REPLACE THE TYPEDEF IN src/server_config.h WITH THIS */
 typedef struct
 {
@@ -143,12 +133,10 @@ typedef struct
     int big_sleep_clear_xp_below;
     char escape_pod_spawn_mode[32];
   } death;
-
   /* --- NEWLY ADDED FIELDS TO MATCH DB SCHEMA --- */
   int64_t startingcredits;
   int64_t bank_alert_threshold_player;
   int64_t bank_alert_threshold_corp;
-  
   /* Genesis Config */
   int genesis_enabled;
   int genesis_block_at_cap;
@@ -160,7 +148,6 @@ typedef struct
   int genesis_class_weight_C;
   int genesis_class_weight_H;
   int genesis_class_weight_U;
-
   /* Shipyard Config */
   int shipyard_enabled;
   int shipyard_trade_in_factor_bp;
@@ -169,24 +156,19 @@ typedef struct
   int shipyard_require_shields_fit;
   int shipyard_require_hardware_compat;
   int shipyard_tax_bp;
-
   /* Misc */
   int illegal_allowed_neutral;
   int max_ship_name_length; /* Used in stardock */
-
 } server_config_t;
-  
-  /* Single global instance (defined in server_config.c) */
-  extern server_config_t g_cfg;
-
-  /* Loader name (you said load_config() conflicted elsewhere) */
-  int load_eng_config (void);
-  void print_effective_config_redacted (void);
-  int cmd_system_capabilities (client_ctx_t * ctx, json_t * root);
-  int cmd_system_describe_schema (client_ctx_t * ctx, json_t * root);	// optional, if you expose it
-  int cmd_session_ping (client_ctx_t * ctx, json_t * root);
-  int cmd_session_hello (client_ctx_t * ctx, json_t * root);
-  int cmd_system_hello (client_ctx_t * ctx, json_t * root);
-  int cmd_session_disconnect (client_ctx_t * ctx, json_t * root);
-
+/* Single global instance (defined in server_config.c) */
+extern server_config_t g_cfg;
+/* Loader name (you said load_config() conflicted elsewhere) */
+int load_eng_config (void);
+void print_effective_config_redacted (void);
+int cmd_system_capabilities (client_ctx_t *ctx, json_t *root);
+int cmd_system_describe_schema (client_ctx_t *ctx, json_t *root);       // optional, if you expose it
+int cmd_session_ping (client_ctx_t *ctx, json_t *root);
+int cmd_session_hello (client_ctx_t *ctx, json_t *root);
+int cmd_system_hello (client_ctx_t *ctx, json_t *root);
+int cmd_session_disconnect (client_ctx_t *ctx, json_t *root);
 #endif

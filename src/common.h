@@ -1,6 +1,5 @@
 #ifndef COMMON_H
 #define COMMON_H
-
 #include <stdatomic.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -16,7 +15,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <jansson.h>		/* -ljansson */
+#include <jansson.h>            /* -ljansson */
 #include <stdbool.h>
 #include <sqlite3.h>
 #include <netinet/in.h>
@@ -28,8 +27,6 @@
 #include <stdatomic.h>
 #include <netinet/in.h>
 #include <string.h>
-
-
 typedef struct
 {
   int fd;
@@ -39,14 +36,13 @@ typedef struct
   int player_id;
   int ship_id;
   int sector_id;
-  int corp_id;			// Added for corporation ID
+  int corp_id;                  // Added for corporation ID
   /* --- rate limit hints --- */
   time_t rl_window_start;
   int rl_count;
   int rl_limit;
   int rl_window_sec;
 } client_ctx_t;
-
 // Structure to represent a commodity's essential data
 typedef struct
 {
@@ -56,117 +52,73 @@ typedef struct
   bool is_illegal; // From commodities.illegal
   // Add other relevant commodity fields if needed, e.g., base_price, volatility
 } commodity_t;
-
 // A simple structure to represent the result of the comsume player turn function
-
 typedef enum
-
 {
-
   TURN_CONSUME_SUCCESS = 0,
-
   TURN_CONSUME_ERROR_DB_FAIL,
-
   TURN_CONSUME_ERROR_PLAYER_NOT_FOUND,
-
   TURN_CONSUME_ERROR_NO_TURNS
-
 } TurnConsumeResult;
-
-
-
 #ifndef ASSET_TYPE_T_DEFINED
-
 #define ASSET_TYPE_T_DEFINED
-
 typedef enum
-
 {
-
   ASSET_MINE = 1,
-
   ASSET_FIGHTER = 2,
-
   ASSET_BEACON = 3,
-
   ASSET_LIMPET_MINE = 4
-
 } asset_type_t;
-
 #endif // ASSET_TYPE_T_DEFINED
-
-
-
 typedef enum
-
 {
-
   OFFENSE_TOLL = 1,
-
   OFFENSE_DEFEND = 2,
-
   OFFENSE_ATTACK = 3
-
 } offense_type_t;
-
 #ifndef START_FIGHTERS
 #define START_FIGHTERS 20
 #endif
-
 #ifndef MAX_FIGHTERS_PER_SECTOR
 #define MAX_FIGHTERS_PER_SECTOR 50000
 #endif
-
 #ifndef SECTOR_MINE_CAP
 #define SECTOR_MINE_CAP 500
 #endif
-
 #ifndef SECTOR_FIGHTER_CAP
 #define SECTOR_FIGHTER_CAP 10000
 #endif
-
 #ifndef MINE_SECTOR_CAP_PER_TYPE
 #define MINE_SECTOR_CAP_PER_TYPE 250
 #endif
-
 #ifndef START_HOLDS
 #define START_HOLDS 20
 #endif
-
 #ifndef PROCESS_INTERVAL
 #define PROCESS_INTERVAL 2
 #endif
-
 #ifndef AUTOSAVE
 #define AUTOSAVE 10
 #endif
-
 #ifndef MAX_SHIP_NAME
 #define MAX_SHIP_NAME 12
 #endif
-
 #ifndef SHIP_TYPES
 #define SHIP_TYPES 10
 #endif
-
 #ifndef BUFF_SIZE
 #define BUFF_SIZE 5000
 #endif
-
 #ifndef MAX_TOTAL_PLANETS
 #define MAX_TOTAL_PLANETS 200
 #endif
-
 #ifndef MAX_WARPS_PER_SECTOR
 #define MAX_WARPS_PER_SECTOR 6
 #endif
-
-#define MIN(a,b) (((a)<(b))?(a):(b))
-#define MAX(a,b) (((a)>(b))?(a):(b))
-
+#define MIN(a,b) (((a) < (b))?(a):(b))
+#define MAX(a,b) (((a) > (b))?(a):(b))
 int init_sockaddr (int, struct sockaddr_in *);
 int init_clientnetwork (char *hostname, int new_port);
-
 //int sendinfo (int sockid, char *buffer);
 //int recvinfo (int sockid, char *buffer);
 int acceptnewconnection (int sockid);
@@ -192,16 +144,13 @@ enum porttype
   pn_listnodes,
   pn_travel
 };
-
 extern int *usedNames;
 extern time_t *timeptr;
-
 /* ships.flags bitmask */
-#define SHIPF_FOR_SALE   0x0001	/* Owner intends to sell at Stardock */
-#define SHIPF_LOCKED     0x0002	/* Cannot be claimed (admin/quest/Fed/NPC protected) */
-#define SHIPF_NO_TRADE   0x0004	/* Cannot be traded/sold at any port */
-#define SHIPF_NPC        0x0008	/* Piloted by NPC subsystem when assigned */
-
+#define SHIPF_FOR_SALE   0x0001 /* Owner intends to sell at Stardock */
+#define SHIPF_LOCKED     0x0002 /* Cannot be claimed (admin/quest/Fed/NPC protected) */
+#define SHIPF_NO_TRADE   0x0004 /* Cannot be traded/sold at any port */
+#define SHIPF_NPC        0x0008 /* Piloted by NPC subsystem when assigned */
 /* Bit helpers */
 static inline int
 ship_has_flag (int flags, int mask)
@@ -209,17 +158,20 @@ ship_has_flag (int flags, int mask)
   return (flags & mask) != 0;
 }
 
+
 static inline int
 ship_set_flag (int flags, int mask)
 {
   return flags | mask;
 }
 
+
 static inline int
 ship_clr_flag (int flags, int mask)
 {
   return flags & ~mask;
 }
+
 
 // Armid Mine Configuration
 typedef struct
@@ -242,7 +194,6 @@ typedef struct
     double max_fraction_per_sweep;
   } sweep;
 } armid_mine_config_t;
-
 // Structure to mirror the sector_assets table for in-memory use
 typedef struct
 {
@@ -253,10 +204,9 @@ typedef struct
   int asset_type;
   int offensive_setting;
   int quantity;
-  time_t ttl;			// Using time_t for UNIX epoch expiry
+  time_t ttl;                   // Using time_t for UNIX epoch expiry
   time_t deployed_at;
 } sector_asset_t;
-
 // Structure to represent a ship's combat-relevant stats for damage application
 typedef struct
 {
@@ -266,44 +216,34 @@ typedef struct
   int hull;
   // Add other relevant ship fields if needed for future combat logic
 } ship_t;
-
 typedef struct
 {
   int shields_lost;
   int fighters_lost;
   int hull_lost;
 } armid_damage_breakdown_t;
-
 typedef struct
 {
   int sector_id;
-  int armid_triggered;		/* total exploded */
-  int armid_remaining;		/* sum of remaining hostile mines after updates */
-  int limpet_triggered;		/* total limpets triggered */
-  int limpet_remaining;		/* sum of remaining limpets after updates */
+  int armid_triggered;          /* total exploded */
+  int armid_remaining;          /* sum of remaining hostile mines after updates */
+  int limpet_triggered;         /* total limpets triggered */
+  int limpet_remaining;         /* sum of remaining limpets after updates */
   int shields_lost;
   int fighters_lost;
   int hull_lost;
   bool destroyed;
 } armid_encounter_t;
-
-void now_iso8601 (char out[25]);	/* "YYYY-MM-DDTHH:MM:SSZ" */
+void now_iso8601 (char out[25]);        /* "YYYY-MM-DDTHH:MM:SSZ" */
 /* Remove ANSI escape sequences from src into dst (cap bytes incl NUL). */
 void strip_ansi (char *dst, const char *src, size_t cap);
 const char *get_tow_reason_string (int reason_code);
-
 // Utility functions for random numbers and clamping
 double rand01 ();
 double rand_range (double min, double max);
 double clamp (double value, double min, double max);
 int get_random_int (int min, int max);
-
-
-
-
-
 // JSON helper functions (prototypes)
-bool json_get_int_flexible (json_t * data_obj, const char *key, int *out_val);
-const char *json_get_string_or_null (json_t * data_obj, const char *key);
-
+bool json_get_int_flexible (json_t *data_obj, const char *key, int *out_val);
+const char *json_get_string_or_null (json_t *data_obj, const char *key);
 #endif // COMMON_H

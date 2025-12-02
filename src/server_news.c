@@ -8,8 +8,6 @@
 #include "database.h"
 #include "server_log.h"
 #include "server_players.h"     // For db_get_player_pref_*
-
-
 // Helper to check if a category is in the filter string
 static int
 is_category_in_filter (const char *filter, const char *category)

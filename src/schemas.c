@@ -93,8 +93,6 @@ static json_t *schema_bank_history (void);
 static json_t *schema_bank_leaderboard (void);
 static json_t *schema_player_list_online_request (void);
 static json_t *schema_player_list_online_response (void);
-
-
 static json_t *
 schema_bank_history (void)
 {
@@ -265,15 +263,11 @@ static json_t *schema_subscribe_list (void);
 static json_t *schema_subscribe_catalog (void);
 /* --- Bulk --- */
 static json_t *schema_bulk_execute (void);
-
-
 /*
  * =============================================================================
  * --- Helper Functions ---
  * =============================================================================
  */
-
-
 static char *
 why_dup (const char *m)
 {
@@ -314,8 +308,6 @@ my_json_schema_validate_placeholder (json_t *schema, json_t *payload,
  * --- PUBLIC API: C2S Schema Registry ---
  * =============================================================================
  */
-
-
 json_t *
 schema_get (const char *key)
 {
@@ -883,8 +875,6 @@ capabilities_build (void)
  * --- PUBLIC API: C2S Schema Validation ---
  * =============================================================================
  */
-
-
 int
 schema_validate_payload (const char *type, json_t *payload, char **why)
 {
@@ -946,8 +936,6 @@ schema_validate_payload (const char *type, json_t *payload, char **why)
  * --- PUBLIC API: S2S Manual Validation ---
  * =============================================================================
  */
-
-
 int
 s2s_validate_payload (const char *type, json_t *payload, char **why)
 {
@@ -1091,11 +1079,7 @@ s2s_validate_payload (const char *type, json_t *payload, char **why)
  * All the stub functions and real schema definitions go here.
  * =============================================================================
  */
-
-
 /* ----- Implemented Schemas ----- */
-
-
 static json_t *
 schema_envelope (void)
 {
@@ -1128,7 +1112,7 @@ schema_auth_login (void)
                                        "username", json_pack ("{s:s}", "type",
                                                               "string"),
                                        "passwd", json_pack ("{s:s}", "type",
-                                                             "string"));
+                                                            "string"));
   json_t *data_required = json_pack ("[s,s]", "username", "passwd");
   json_t *data_schema = json_pack ("{s:s, s:s, s:s, s:o, s:o, s:b}",
                                    "$id",
@@ -1236,11 +1220,7 @@ schema_sector_set_beacon (void)
 
 
 /* ----- Stub Schemas ----- */
-
-
 /* --- Auth --- */
-
-
 static json_t *
 schema_auth_register (void)
 {
@@ -1248,7 +1228,7 @@ schema_auth_register (void)
                                        "username", json_pack ("{s:s}", "type",
                                                               "string"),
                                        "passwd", json_pack ("{s:s}", "type",
-                                                              "string"),
+                                                            "string"),
                                        "ship_name", json_pack ("{s:s}", "type",
                                                                "string"),
                                        "ui_locale", json_pack ("{s:s}", "type",
@@ -1305,8 +1285,6 @@ schema_auth_mfa_totp_verify (void)
 
 
 /* --- System --- */
-
-
 static json_t *
 schema_system_capabilities (void)
 {
@@ -1408,8 +1386,6 @@ schema_system_disconnect (void)
 
 
 /* --- Session --- */
-
-
 static json_t *
 schema_session_ping (void)
 {
@@ -1463,8 +1439,6 @@ schema_session_disconnect (void)
 
 
 /* --- Ship --- */
-
-
 static json_t *
 schema_ship_inspect (void)
 {
@@ -1585,8 +1559,6 @@ schema_ship_self_destruct (void)
 
 
 /* --- Port --- */
-
-
 static json_t *
 schema_port_info (void)
 {
@@ -1711,8 +1683,6 @@ schema_port_rob (void)
 
 
 /* --- Trade --- */
-
-
 static json_t *
 schema_trade_port_info (void)
 {
@@ -1877,8 +1847,6 @@ schema_trade_history (void)
 
 
 /* --- Move --- */
-
-
 static json_t *
 schema_move_describe_sector (void)
 {
@@ -1951,8 +1919,6 @@ schema_move_autopilot_status (void)
 
 
 /* --- Sector --- */
-
-
 static json_t *
 schema_sector_info (void)
 {
@@ -1989,29 +1955,13 @@ schema_sector_search (void)
 
 
 /* static json_t * */
-
-
 /* schema_sector_set_beacon (void) */
-
-
 /* { */
-
-
 /*   /\* TODO: Implement this schema *\/ */
-
-
 /*   return json_pack ("{s:s, s:s}", */
-
-
 /*                     "$id", "ge://schema/sector.set_beacon.json", */
-
-
 /*                     "$comment", "Schema not yet implemented"); */
-
-
 /* } */
-
-
 static json_t *
 schema_sector_scan_density (void)
 {
@@ -2033,8 +1983,6 @@ schema_sector_scan (void)
 
 
 /* --- Planet --- */
-
-
 static json_t *
 schema_planet_genesis (void)
 {
@@ -2161,8 +2109,6 @@ schema_planet_genesis_create (void)
 
 
 /* --- Citadel --- */
-
-
 static json_t *
 schema_citadel_build (void)
 {
@@ -2184,8 +2130,6 @@ schema_citadel_upgrade (void)
 
 
 /* --- Combat --- */
-
-
 static json_t *
 schema_combat_attack (void)
 {
@@ -2339,8 +2283,6 @@ schema_mines_recall (void)
 
 
 /* --- Deploy --- */
-
-
 static json_t *
 schema_deploy_fighters_list (void)
 {
@@ -2384,8 +2326,6 @@ schema_deploy_mines_list (void)
 
 
 /* --- Chat --- */
-
-
 static json_t *
 schema_chat_send (void)
 {
@@ -2417,8 +2357,6 @@ schema_chat_history (void)
 
 
 /* --- Mail --- */
-
-
 static json_t *
 schema_mail_send (void)
 {
@@ -2504,8 +2442,6 @@ schema_mail_delete (void)
 
 
 /* --- Notice --- */
-
-
 static json_t *
 schema_sys_notice_create (void)
 {
@@ -2583,8 +2519,6 @@ schema_notice_ack (void)
 
 
 /* --- News --- */
-
-
 static json_t *
 schema_news_read (void)
 {
@@ -2607,8 +2541,6 @@ schema_news_read (void)
 
 
 /* --- Subscribe --- */
-
-
 static json_t *
 schema_subscribe_add (void)
 {
@@ -2661,8 +2593,6 @@ schema_subscribe_catalog (void)
 
 
 /* --- Bulk --- */
-
-
 static json_t *
 schema_bulk_execute (void)
 {

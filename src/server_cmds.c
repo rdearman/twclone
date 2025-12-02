@@ -155,6 +155,7 @@ play_login (const char *player_name, const char *password, int *out_player_id)
   return AUTH_OK;
 }
 
+
 /* Create a new player and initialise their turns row.
  *
  * On success:
@@ -163,34 +164,35 @@ play_login (const char *player_name, const char *password, int *out_player_id)
  *   - optionally returns player_id via out_player_id
  */
 int
-user_create (sqlite3 *db, const char *player_name, const char *password, int *out_player_id)
+user_create (sqlite3 *db,
+             const char *player_name,
+             const char *password,
+             int *out_player_id)
 {
   if (!player_name || !password)
-  // sqlite3 *db = db_get_handle (); // No longer needed, db is passed as argument
-  if (!db)
     {
-      LOGE ("user_create: db handle is NULL");
-      return AUTH_ERR_DB;
+      // sqlite3 *db = db_get_handle (); // No longer needed, db is passed as argument
+      if (!db)
+        {
+          LOGE ("user_create: db handle is NULL");
+          return AUTH_ERR_DB;
+        }
     }
-
   int rc = 0;
   int rc_prepared = 0;
   int player_id = 0;
   sqlite3_stmt *stmt = NULL;
-
   const char *ins_players =
     "INSERT INTO players "
     "  (name, passwd) "
     "VALUES "
     "  (?1, ?2);";  /* NOTE: this is now an UPSERT on turns.player.
-   *
-   * - First-time registration → INSERT row with starting turns.
-   * - If a stale row already exists in turns for this player_id
-   *   (e.g. from an old test run or seed data), we UPDATE it
-   *   instead of throwing SQLITE_CONSTRAINT.
-   */
-
-
+                     *
+                     * - First-time registration → INSERT row with starting turns.
+                     * - If a stale row already exists in turns for this player_id
+                     *   (e.g. from an old test run or seed data), we UPDATE it
+                     *   instead of throwing SQLITE_CONSTRAINT.
+                     */
   const char *ins_turns =
     "INSERT INTO turns (player, turns_remaining, last_update) "
     "SELECT "
@@ -202,76 +204,72 @@ user_create (sqlite3 *db, const char *player_name, const char *password, int *ou
     "ON CONFLICT(player) DO UPDATE SET "
     "  turns_remaining = excluded.turns_remaining, "
     "  last_update    = excluded.last_update;";
-
   LOGE ("user_create debug: Inserting player '%s' with passwd '%s'",
-            player_name, password);
-
+        player_name, password);
   /* Insert into players */
   rc_prepared = sqlite3_prepare_v2 (db, ins_players, -1, &stmt, NULL);
   if (rc_prepared != SQLITE_OK)
     {
       LOGE ("user_create: Failed to prepare players insert: %s",
-                 sqlite3_errmsg (db));
+            sqlite3_errmsg (db));
       if (stmt)
-        sqlite3_finalize (stmt);
+        {
+          sqlite3_finalize (stmt);
+        }
       return AUTH_ERR_DB;
     }
-
   sqlite3_bind_text (stmt, 1, player_name, -1, SQLITE_TRANSIENT);
   sqlite3_bind_text (stmt, 2, password, -1, SQLITE_TRANSIENT);
-
   rc = sqlite3_step (stmt);
   if (rc != SQLITE_DONE)
     {
       int ext_err = sqlite3_extended_errcode (db);
-
-      if (ext_err == SQLITE_CONSTRAINT_UNIQUE || ext_err == SQLITE_CONSTRAINT_PRIMARYKEY)
+      if (ext_err == SQLITE_CONSTRAINT_UNIQUE ||
+          ext_err == SQLITE_CONSTRAINT_PRIMARYKEY)
         {
-          LOGE ("user_create: Username '%s' already exists (constraint)", player_name);
+          LOGE ("user_create: Username '%s' already exists (constraint)",
+                player_name);
           sqlite3_finalize (stmt);
           return ERR_NAME_TAKEN;
         }
-
       LOGE ("user_create: Failed to insert into players: rc=%d, err=%s",
-                 rc, sqlite3_errmsg (db));
-
+            rc, sqlite3_errmsg (db));
       sqlite3_finalize (stmt);
       return AUTH_ERR_DB;
     }
-
   sqlite3_finalize (stmt);
   stmt = NULL;
-
   /* Get new player_id */
   player_id = (int) sqlite3_last_insert_rowid (db);
   if (out_player_id)
-    *out_player_id = player_id;
-
+    {
+      *out_player_id = player_id;
+    }
   /* Upsert into turns for this player */
   rc_prepared = sqlite3_prepare_v2 (db, ins_turns, -1, &stmt, NULL);
   if (rc_prepared != SQLITE_OK)
     {
       LOGE ("user_create: Failed to prepare turns upsert for player %d: %s",
-                 player_id, sqlite3_errmsg (db));
+            player_id, sqlite3_errmsg (db));
       if (stmt)
-        sqlite3_finalize (stmt);
+        {
+          sqlite3_finalize (stmt);
+        }
       return AUTH_ERR_DB;
     }
-
   sqlite3_bind_int (stmt, 1, player_id);
-
   rc = sqlite3_step (stmt);
   if (rc != SQLITE_DONE)
     {
       LOGE (
         "user_create: Failed to upsert into turns table for player %d: rc=%d, err=%s",
-        player_id, rc, sqlite3_errmsg (db));
+        player_id,
+        rc,
+        sqlite3_errmsg (db));
       sqlite3_finalize (stmt);
       return AUTH_ERR_DB;
     }
-
   sqlite3_finalize (stmt);
-
   return AUTH_OK;
 }
 
@@ -408,18 +406,21 @@ cmd_sys_raw_sql_exec (client_ctx_t *ctx, json_t *root)
                             "Missing or invalid 'sql' string.");
       return 0;
     }
-
   json_t *rows = json_array ();
   const char *tail = sql_str;
-
   while (tail && *tail)
     {
       sqlite3_stmt *stmt = NULL;
       // trim leading whitespace
-      while (*tail && (*tail == ' ' || *tail == '\t' || *tail == '\r' || *tail == '\n'))
-        tail++;
-      if (!*tail) break;
-
+      while (*tail &&
+             (*tail == ' ' || *tail == '\t' || *tail == '\r' || *tail == '\n'))
+        {
+          tail++;
+        }
+      if (!*tail)
+        {
+          break;
+        }
       rc = sqlite3_prepare_v2 (db, tail, -1, &stmt, &tail);
       if (rc != SQLITE_OK)
         {
@@ -427,31 +428,32 @@ cmd_sys_raw_sql_exec (client_ctx_t *ctx, json_t *root)
           json_decref (rows);
           return 0;
         }
-
       if (!stmt)
         {
           // Comment or whitespace-only statement
           continue;
         }
-
       int col_count = sqlite3_column_count (stmt);
       while ((rc = sqlite3_step (stmt)) == SQLITE_ROW)
         {
           json_t *row = json_array ();
           for (int i = 0; i < col_count; i++)
             {
-              int type = sqlite3_column_type (stmt, i);
+              int type = sqlite3_column_type (stmt,
+                                              i);
               switch (type)
                 {
                   case SQLITE_INTEGER:
                     json_array_append_new (row,
-                                           json_integer (sqlite3_column_int64 (stmt,
-                                                                               i)));
+                                           json_integer (sqlite3_column_int64 (
+                                                           stmt,
+                                                           i)));
                     break;
                   case SQLITE_FLOAT:
                     json_array_append_new (row,
-                                           json_real (sqlite3_column_double (stmt,
-                                                                             i)));
+                                           json_real (sqlite3_column_double (
+                                                        stmt,
+                                                        i)));
                     break;
                   case SQLITE_TEXT:
                     json_array_append_new (row,
@@ -470,7 +472,6 @@ cmd_sys_raw_sql_exec (client_ctx_t *ctx, json_t *root)
             }
           json_array_append_new (rows, row);
         }
-
       if (rc != SQLITE_DONE)
         {
           send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
@@ -480,7 +481,6 @@ cmd_sys_raw_sql_exec (client_ctx_t *ctx, json_t *root)
         }
       sqlite3_finalize (stmt);
     }
-
   json_t *resp = json_object ();
   json_object_set_new (resp, "rows", rows);
   send_enveloped_ok (ctx->fd, root, "sys.raw_sql_exec.success", resp);

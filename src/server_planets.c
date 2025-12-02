@@ -153,7 +153,8 @@ cmd_planet_launch (client_ctx_t *ctx, json_t *root)
     }
   sqlite3 *db = db_get_handle ();
   int sector_id = 0;
-  if (db_player_launch_from_planet (db, ctx->player_id, &sector_id) != SQLITE_OK)
+  if (db_player_launch_from_planet (db, ctx->player_id,
+                                    &sector_id) != SQLITE_OK)
     {
       send_enveloped_error (ctx->fd, root, ERR_SERVER_ERROR,
                             "Failed to launch from planet. Are you on a planet?");

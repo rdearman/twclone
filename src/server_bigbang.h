@@ -1,9 +1,6 @@
 #ifndef SERVER_BIGBANG_H
 #define SERVER_BIGBANG_H
-
 #include <sqlite3.h>
-
-
 /* Shared defaults for warp generation */
 #ifndef DEFAULT_PERCENT_DEADEND
 #define DEFAULT_PERCENT_DEADEND 25
@@ -14,20 +11,15 @@
 #ifndef DEFAULT_PERCENT_JUMP
 #define DEFAULT_PERCENT_JUMP 10
 #endif
-
-
-
 /* Initialise and populate the universe if missing */
 int bigbang (void);
-
 /* Internal helpers */
 int create_sectors (void);
 int create_ports (void);
 int create_ferringhi (int sector);
 int create_planets (void);
-extern int create_complex_warps (sqlite3 * db, int numSectors);
+extern int create_complex_warps (sqlite3 *db, int numSectors);
 int create_imperial (void);
 int create_taverns (void);
 // static int create_ports (sqlite3 * db, const char *path_to_db, int num_ports);
-
 #endif /* SERVER_BIGBANG_H */

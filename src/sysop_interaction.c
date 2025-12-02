@@ -10,11 +10,7 @@
 #include <stdarg.h>
 #include <time.h>
 #include <unistd.h>
-
-
 /* ================== small helpers ================== */
-
-
 static void
 trim (char *s)
 {
@@ -58,8 +54,6 @@ next_id (void)
 /* ================== envelope output ==================
    Matches your SYSOP reply shape so this can later be exposed
    over TCP without changing handlers.                       */
-
-
 static void
 reply_ok (const char *type, const char *fmt_data_json)
 {
@@ -110,8 +104,6 @@ reply_error (const char *msg)
 
 
 /* ================== handlers (MVP) ================== */
-
-
 /* sysop.dashboard.get -> sysop.dashboard_v1 (stub; wire real counters later) */
 static void
 h_dashboard_get (void)
@@ -212,8 +204,6 @@ h_level (const char *lvl)
 /* ================== parser & REPL ================== */
 static pthread_t g_thr;
 static int g_run = 0;
-
-
 void
 sysop_dispatch_line (char *line)
 {

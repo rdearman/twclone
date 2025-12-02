@@ -40,41 +40,17 @@ static int ship_consume_fighters (sqlite3 *db, int ship_id, int amount);
 static int insert_sector_fighters (sqlite3 *db, int sector_id,
                                    int owner_player_id, json_t *corp_id_json,
                                    int offense_mode, int amount);
-
-
 /* typedef enum { */
-
-
 /*   ASSET_MINE         = 1,   /\* Armid *\/ */
-
-
 /*   ASSET_FIGHTER      = 2, */
-
-
 /*   ASSET_BEACON       = 3, */
-
-
 /*   ASSET_LIMPET_MINE  = 4 */
-
-
 /* } asset_type_t; */
-
-
 /* typedef enum { */
-
-
 /*   OFFENSE_TOLL   = 1, */
-
-
 /*   OFFENSE_DEFEND = 2, */
-
-
 /*   OFFENSE_ATTACK = 3 */
-
-
 /* } offense_type_t; */
-
-
 /* --- common helpers --- */
 static inline int
 require_auth (client_ctx_t *ctx, json_t *root)
@@ -1157,8 +1133,6 @@ static const char *SQL_ASSET_INSERT_FIGHTERS =
   "INSERT INTO sector_assets(sector, player, corporation, "
   "                          asset_type, quantity, offensive_setting, deployed_at) "
   "VALUES (?1, ?2, ?3, 2, ?4, ?5, strftime('%s','now'));";
-
-
 /* ---------- combat.deploy_fighters ---------- */
 int
 cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
@@ -1425,26 +1399,12 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
 static const char *SQL_SECTOR_MINE_SUM =
   "SELECT COALESCE(SUM(quantity),0) " "FROM sector_assets "
   "WHERE sector=?1 AND asset_type IN (1, 4);";                                                                                                  // 1 for Armid, 4 for Limpet
-
-
 /* static const char *SQL_SHIP_GET_MINE = "SELECT mines FROM ships WHERE id=?1;"; *//* Assuming 'mines' column for total mines */
-
-
 /* static const char *SQL_SHIP_DEC_MINE = */
-
-
 /*   "UPDATE ships SET mines=mines-?1 WHERE id=?2;"; */
-
-
 /* static const char *SQL_ASSET_INSERT_MINES = "INSERT INTO sector_assets(sector, player, corporation, " */
-
-
 /* "                          asset_type, quantity, offensive_setting, deployed_at) " */
-
-
 /* "VALUES (?1, ?2, ?3, ?4, ?5, ?6, strftime('%s','now'));"; *//* ?4 for asset_type (1 or 4) */
-
-
 /* Sum fighters already in the sector. */
 static int
 sum_sector_fighters (sqlite3 *db, int sector_id, int *total_out)
@@ -1473,8 +1433,6 @@ sum_sector_fighters (sqlite3 *db, int sector_id, int *total_out)
 
 
 /* Debit ship fighters safely (returns SQLITE_TOOBIG if insufficient). */
-
-
 /* Debit ship fighters safely (returns SQLITE_TOOBIG if insufficient). */
 static int
 ship_consume_fighters (sqlite3 *db, int ship_id, int amount)
@@ -1669,8 +1627,6 @@ insert_sector_mines (sqlite3 *db,
 
 
 /* Insert a sector_assets row for fighters. */
-
-
 /* Insert a sector_assets row for fighters. */
 static int
 insert_sector_fighters (sqlite3 *db,
@@ -1721,8 +1677,6 @@ insert_sector_fighters (sqlite3 *db,
  * Populates sector_mine_counts_t with counts of different mine types in a sector.
 
  */
-
-
 int
 get_sector_mine_counts (int sector_id, sector_mine_counts_t *out)
 {

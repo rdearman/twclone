@@ -360,11 +360,17 @@ cleanup:
 
 // Static prototypes for internal helper functions
 static int db_is_npc_player (sqlite3 *db, int player_id);
-static int column_exists_unlocked (sqlite3 *db, const char *table, const char *col);
+static int column_exists_unlocked (sqlite3 *db,
+                                   const char *table,
+                                   const char *col);
 static int column_exists (sqlite3 *db, const char *table, const char *col);
 static int db_ensure_ship_perms_column_unlocked (sqlite3 *db);
-static long long h_get_account_alert_threshold_unlocked (sqlite3 *db, int account_id, const char *owner_type);
-static int h_get_bank_balance (const char *owner_type, int owner_id, long long *out_balance);
+static long long h_get_account_alert_threshold_unlocked (sqlite3 *db,
+                                                         int account_id,
+                                                         const char *owner_type);
+static int h_get_bank_balance (const char *owner_type,
+                               int owner_id,
+                               long long *out_balance);
 static const char *get_player_view_column_name (const char *client_name);
 // Unused static declarations (from original file, kept for now)
 static int db_seed_ai_qa_bot_bank_account_unlocked (void);
@@ -1607,215 +1613,75 @@ db_get_shiptype_info (sqlite3 *db, int shiptype_id, int *holds, int *fighters,
 
 
 int
-
-
 db_player_land_on_planet (sqlite3 *db, int player_id, int planet_id)
-
-
 {
-
-
   if (!db)
-
-
     {
-
-
       return SQLITE_ERROR;
-
-
     }
-
-
   sqlite3_stmt *st_find_ship = NULL;
-
-
   sqlite3_stmt *st_update_ship = NULL;
-
-
   sqlite3_stmt *st_update_player = NULL;
-
-
   int ship_id = -1;
-
-
   int rc = SQLITE_ERROR;
-
-
   const char *sql_find_ship = "SELECT ship FROM players WHERE id = ?;";
-
-
   if (sqlite3_prepare_v2 (db, sql_find_ship, -1, &st_find_ship, NULL) !=
-
-
       SQLITE_OK)
-
-
     {
-
-
       return rc;
-
-
     }
-
-
   sqlite3_bind_int (st_find_ship, 1, player_id);
-
-
   if (sqlite3_step (st_find_ship) == SQLITE_ROW)
-
-
     {
-
-
       ship_id = sqlite3_column_int (st_find_ship, 0);
-
-
     }
-
-
   sqlite3_finalize (st_find_ship);
-
-
   st_find_ship = NULL;
-
-
   if (ship_id == -1)
-
-
     {
-
-
       return SQLITE_ERROR; // Player has no ship or not found
-
-
     }
-
-
   const char *sql_update_ship =
-
-
     "UPDATE ships SET onplanet = ?, sector = NULL, ported = 0 WHERE id = ?;";
-
-
   if (sqlite3_prepare_v2 (db, sql_update_ship, -1, &st_update_ship, NULL) !=
-
-
       SQLITE_OK)
-
-
     {
-
-
       return rc;
-
-
     }
-
-
   sqlite3_bind_int (st_update_ship, 1, planet_id);
-
-
   sqlite3_bind_int (st_update_ship, 2, ship_id);
-
-
   if (sqlite3_step (st_update_ship) != SQLITE_DONE)
-
-
     {
-
-
       return rc;
-
-
     }
-
-
   const char *sql_update_player =
-
-
     "UPDATE players SET lastplanet = ?, sector = NULL WHERE id = ?;";
-
-
   if (sqlite3_prepare_v2 (db, sql_update_player, -1, &st_update_player, NULL)
-
-
       !=
-
-
       SQLITE_OK)
-
-
     {
-
-
       return rc;
-
-
     }
-
-
   sqlite3_bind_int (st_update_player, 1, planet_id);
-
-
   sqlite3_bind_int (st_update_player, 2, player_id);
-
-
   if (sqlite3_step (st_update_player) != SQLITE_DONE)
-
-
     {
-
-
       return rc;
-
-
     }
-
-
   rc = SQLITE_OK;
-
-
   if (st_find_ship)
-
-
     {
-
-
       sqlite3_finalize (st_find_ship);
-
-
     }
-
-
   if (st_update_ship)
-
-
     {
-
-
       sqlite3_finalize (st_update_ship);
-
-
     }
-
-
   if (st_update_player)
-
-
     {
-
-
       sqlite3_finalize (st_update_player);
-
-
     }
-
-
   return rc;
-
-
 }
 
 
@@ -3042,7 +2908,10 @@ h_bank_transfer_unlocked (sqlite3 *db,
 
 ////////////////////////////////////////////////////////////////////
 int
-db_ship_rename_if_owner (sqlite3 *db, int player_id, int ship_id, const char *new_name)
+db_ship_rename_if_owner (sqlite3 *db,
+                         int player_id,
+                         int ship_id,
+                         const char *new_name)
 {
   if (!new_name || !*new_name)
     {
@@ -3277,6 +3146,7 @@ db_create_initial_ship (int player_id, const char *ship_name, int sector_id)
   return new_ship_id;
 }
 
+
 // Helper to check if player is NPC
 static int
 db_is_npc_player (sqlite3 *db, int player_id)
@@ -3313,7 +3183,9 @@ db_is_npc_player (sqlite3 *db, int player_id)
 
 /* Call when a ship’s pilot changes (or after spawning an NPC ship). */
 int
-db_apply_lock_policy_for_pilot (sqlite3 *db, int ship_id, int new_pilot_player_id_or_0)
+db_apply_lock_policy_for_pilot (sqlite3 *db,
+                                int ship_id,
+                                int new_pilot_player_id_or_0)
 {
   int rc;
   if (new_pilot_player_id_or_0 > 0
@@ -5563,7 +5435,11 @@ h_ship_claim_unlocked (sqlite3 *db,
 
 
 int
-db_ship_claim (sqlite3 *db, int player_id, int sector_id, int ship_id, json_t **out_ship)
+db_ship_claim (sqlite3 *db,
+               int player_id,
+               int sector_id,
+               int ship_id,
+               json_t **out_ship)
 {
   if (!out_ship)
     {
@@ -7643,179 +7519,85 @@ cleanup:
 
 
 int
-
-
 db_player_set_sector (int player_id, int sector_id)
-
-
 {
-
-
   sqlite3 *db = db_get_handle ();
-
-
   if (!db)
-
-
     {
-
-
       return SQLITE_MISUSE;
-
-
     }
-
-
   // First, update the player's sector
-
-
   sqlite3_stmt *st = NULL;
-
-
   int rc =
-
-
     sqlite3_prepare_v2 (db, "UPDATE players SET sector=?1 WHERE id=?2;", -1,
-
-
                         &st, NULL);
-
-
   if (rc != SQLITE_OK)
-
-
     {
-
-
-      LOGE("db_player_set_sector: Prepare failed for players update: %s", sqlite3_errmsg(db));
-
-
+      LOGE ("db_player_set_sector: Prepare failed for players update: %s",
+            sqlite3_errmsg (db));
       return rc;
-
-
     }
-
-
   sqlite3_bind_int (st, 1, sector_id);
-
-
   sqlite3_bind_int (st, 2, player_id);
-
-
   rc = sqlite3_step (st);
-
-
   sqlite3_finalize (st);
-
-
-  if (rc != SQLITE_DONE) {
-
-
-      LOGE("db_player_set_sector: Step failed for players update: %s", sqlite3_errmsg(db));
-
-
+  if (rc != SQLITE_DONE)
+    {
+      LOGE ("db_player_set_sector: Step failed for players update: %s",
+            sqlite3_errmsg (db));
       return rc; // Propagate error
-
-
-  }
-
-
-  if (sqlite3_changes(db) == 0) {
-
-
-      LOGW("db_player_set_sector: No player updated for id %d. Does player exist?", player_id);
-
-
-  }
-
-
-
-
-
+    }
+  if (sqlite3_changes (db) == 0)
+    {
+      LOGW (
+        "db_player_set_sector: No player updated for id %d. Does player exist?",
+        player_id);
+    }
   // Second, update the ship's sector if the player is piloting a ship
-
-
   // We need to find the ship ID first.
-
-
   int ship_id = 0;
-
-
   sqlite3_stmt *st_ship = NULL;
-
-
-  if (sqlite3_prepare_v2 (db, "SELECT ship FROM players WHERE id=?1;", -1, &st_ship, NULL) == SQLITE_OK) {
-
-
+  if (sqlite3_prepare_v2 (db,
+                          "SELECT ship FROM players WHERE id=?1;",
+                          -1,
+                          &st_ship,
+                          NULL) == SQLITE_OK)
+    {
       sqlite3_bind_int (st_ship, 1, player_id);
-
-
-      if (sqlite3_step (st_ship) == SQLITE_ROW) {
-
-
+      if (sqlite3_step (st_ship) == SQLITE_ROW)
+        {
           ship_id = sqlite3_column_int (st_ship, 0);
-
-
-      }
-
-
+        }
       sqlite3_finalize (st_ship);
-
-
-  }
-
-
-
-
-
-  if (ship_id > 0) {
-
-
+    }
+  if (ship_id > 0)
+    {
       sqlite3_stmt *st_upd_ship = NULL;
-
-
-      if (sqlite3_prepare_v2 (db, "UPDATE ships SET sector=?1 WHERE id=?2;", -1, &st_upd_ship, NULL) == SQLITE_OK) {
-
-
+      if (sqlite3_prepare_v2 (db,
+                              "UPDATE ships SET sector=?1 WHERE id=?2;",
+                              -1,
+                              &st_upd_ship,
+                              NULL) == SQLITE_OK)
+        {
           sqlite3_bind_int (st_upd_ship, 1, sector_id);
-
-
           sqlite3_bind_int (st_upd_ship, 2, ship_id);
-
-
           sqlite3_step (st_upd_ship);
-
-
           sqlite3_finalize (st_upd_ship);
-
-
-          if (sqlite3_changes(db) == 0) {
-
-
-             LOGW("db_player_set_sector: No ship updated for id %d (player %d).", ship_id, player_id);
-
-
-          }
-
-
-      } else {
-
-
-          LOGE("db_player_set_sector: Prepare failed for ships update: %s", sqlite3_errmsg(db));
-
-
-      }
-
-
-  }
-
-
-
-
-
+          if (sqlite3_changes (db) == 0)
+            {
+              LOGW (
+                "db_player_set_sector: No ship updated for id %d (player %d).",
+                ship_id,
+                player_id);
+            }
+        }
+      else
+        {
+          LOGE ("db_player_set_sector: Prepare failed for ships update: %s",
+                sqlite3_errmsg (db));
+        }
+    }
   return SQLITE_OK;
-
-
 }
 
 

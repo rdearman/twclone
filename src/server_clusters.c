@@ -5,11 +5,7 @@
 #include "server_clusters.h"
 #include "server_log.h"
 #include "database.h"
-
-
 /* Internal Helpers */
-
-
 static int
 _get_sector_count (sqlite3 *db)
 {
@@ -183,8 +179,6 @@ _bfs_expand_cluster (sqlite3 *db,
 
 
 /* Public API Implementation */
-
-
 int
 clusters_init (sqlite3 *db)
 {
@@ -624,8 +618,6 @@ cluster_economy_step (sqlite3 *db, int64_t now_s)
 
 
 /* Law Enforcement */
-
-
 int
 cluster_can_trade (sqlite3 *db, int sector_id, int player_id)
 {
