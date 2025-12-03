@@ -15,8 +15,6 @@
 #include "common.h"
 #include "server_cron.h"
 extern pthread_mutex_t db_mutex;
-
-
 int
 h_get_player_corp_role (sqlite3 *db, int player_id, int corp_id,
                         char *role_buffer, size_t buffer_size)
@@ -546,7 +544,7 @@ cmd_corp_transfer_ceo (client_ctx_t *ctx, json_t *root)
     }
   if (!ok)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       send_enveloped_error (ctx->fd, root, ERR_DB,
                             "Failed to transfer CEO role.");
       return 0;
@@ -613,7 +611,7 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
                                                              ctx->player_id);
   if (player_bank_account_id <= 0)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       send_enveloped_error (ctx->fd,
                             root,
                             ERR_DB,
@@ -625,7 +623,7 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
         (db, player_bank_account_id, creation_fee, "CORP_CREATION_FEE", NULL,
         &player_new_balance) != SQLITE_OK)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       send_enveloped_refused (ctx->fd,
                               root,
                               ERR_INSUFFICIENT_FUNDS,
@@ -640,7 +638,7 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
     {
       LOGE ("cmd_corp_create: Failed to prepare corp insert: %s",
             sqlite3_errmsg (db));
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       // Refund credits if preparation failed
       h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
                               "CORP_FEE_REFUND", NULL, &player_new_balance);
@@ -659,7 +657,7 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
     {
       LOGE ("cmd_corp_create: Failed to insert corporation: %s",
             sqlite3_errmsg (db));
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       // Refund credits
       h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
                               "CORP_FEE_REFUND", NULL, &player_new_balance);
@@ -696,7 +694,7 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
             corp_id,
             sqlite3_errmsg (db));
           sqlite3_finalize (st);
-          sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+          db_safe_rollback (db, "Safe rollback");
           h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
                                   "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
           send_enveloped_error (ctx->fd, root, ERR_DB,
@@ -715,7 +713,7 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
         // Changed from ctx->player->id
         corp_id,
         sqlite3_errmsg (db));
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
                               "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
       send_enveloped_error (ctx->fd, root, ERR_DB,
@@ -734,7 +732,7 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
             corp_id,
             sqlite3_errmsg (db));
           sqlite3_finalize (st);
-          sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+          db_safe_rollback (db, "Safe rollback");
           h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
                                   "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
           send_enveloped_error (ctx->fd,
@@ -753,7 +751,7 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
         "cmd_corp_create: Failed to prepare bank account creation for corp %d: %s",
         corp_id,
         sqlite3_errmsg (db));
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
                               "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
       send_enveloped_error (ctx->fd, root, ERR_DB,
@@ -776,7 +774,7 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
             // Changed from ctx->player->id
             sqlite3_errmsg (db));
           sqlite3_finalize (st);
-          sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+          db_safe_rollback (db, "Safe rollback");
           h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
                                   "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
           send_enveloped_error (ctx->fd, root, ERR_DB,
@@ -794,7 +792,7 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
         ctx->player_id,
         // Changed from ctx->player->id
         sqlite3_errmsg (db));
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
                               "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
       send_enveloped_error (ctx->fd, root, ERR_DB,
@@ -807,7 +805,7 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
     {
       LOGE ("cmd_corp_create: Failed to commit transaction: %s",
             sqlite3_errmsg (db));
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL); // Attempt rollback on commit failure
+      db_safe_rollback (db, "Safe rollback"); // Attempt rollback on commit failure
       h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
                               "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
       send_enveloped_error (ctx->fd, root, ERR_DB,

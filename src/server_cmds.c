@@ -488,52 +488,6 @@ cmd_sys_raw_sql_exec (client_ctx_t *ctx, json_t *root)
 }
 
 
-int
-cmd_player_set_trade_account_preference (client_ctx_t *ctx, json_t *root)
-{
-  if (ctx->player_id == 0)
-    {
-      send_enveloped_error (ctx->fd, root, 1401, "Authentication required.");
-      return -1;
-    }
-  json_t *data = json_object_get (root, "data");
-  if (!json_is_object (data))
-    {
-      send_enveloped_error (ctx->fd, root, 400, "Missing data object.");
-      return -1;
-    }
-  json_t *j_preference = json_object_get (data, "preference");
-  if (!json_is_integer (j_preference))
-    {
-      send_enveloped_error (ctx->fd, root, 400,
-                            "Missing or invalid 'preference' (must be 0 or 1).");
-      return -1;
-    }
-  int preference = (int) json_integer_value (j_preference);
-  if (preference != 0 && preference != 1)
-    {
-      send_enveloped_error (ctx->fd,
-                            root,
-                            400,
-                            "Invalid preference value. Must be 0 (petty cash) or 1 (bank).");
-      return -1;
-    }
-  char pref_str[16];
-  snprintf (pref_str, sizeof (pref_str), "%d", preference);
-  int rc = db_prefs_set_one (ctx->player_id, "trade.default_account", PT_INT,
-                             pref_str);
-  if (rc != SQLITE_OK)
-    {
-      send_enveloped_error (ctx->fd, root, 500,
-                            "Failed to set trade account preference.");
-      return -1;
-    }
-  send_enveloped_ok (ctx->fd, root, "player.set_trade_account_preference",
-                     NULL);
-  return 0;
-}
-
-
 // General JSON response helpers
 int
 send_error_response (client_ctx_t *ctx, json_t *root, int err_code,

@@ -6,36 +6,6 @@
 #include "database.h"           // db_get_handle()
 #include "db_player_settings.h" // our prototypes
 static sqlite3 *g_db_ps = NULL;
-static bool
-player_is_sysop (sqlite3 *db, int player_id)
-{
-  bool is_sysop = false;
-  sqlite3_stmt *st = NULL;
-  if (sqlite3_prepare_v2 (db,
-                          "SELECT COALESCE(type,2), COALESCE(flags,0) FROM players WHERE id=?1",
-                          -1,
-                          &st,
-                          NULL) == SQLITE_OK)
-    {
-      sqlite3_bind_int (st, 1, player_id);
-      if (sqlite3_step (st) == SQLITE_ROW)
-        {
-          int type = sqlite3_column_int (st, 0);
-          int flags = sqlite3_column_int (st, 1);
-          if (type == 1 || (flags & 0x1))
-            {
-              is_sysop = true;  /* adjust rule if needed */
-            }
-        }
-    }
-  if (st)
-    {
-      sqlite3_finalize (st);
-    }
-  return is_sysop;
-}
-
-
 /* Prepared statements (kept simple; one-shot prepare each call to avoid lifetime headaches) */
 static int
 prep (sqlite3 *db, sqlite3_stmt **st, const char *sql)

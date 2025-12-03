@@ -4,7 +4,6 @@
 #include "common.h"             // client_ctx_t
 #include "server_envelope.h"    // send_enveloped_* prototypes
 #include "database.h"           // play_login, user_create, db_session_*, etc. (when you paste bodies)
-#include "db_player_settings.c"
 #ifdef __cplusplus
 extern "C"
 {

@@ -1747,89 +1747,229 @@ Commands for interacting with the ledger-based economy. Most are only available 
     }
     ```
 
-*   `move.autopilot.start`: (ALIAS for `move.pathfind`) Start server-side autopilot. (NIY - Not Yet Implemented)
+*   `move.transwarp`: Execute a long-range jump (requires special drive).
 
     *Example Client Request:*
     ```json
     {
-      "id": "e1f2a3b4-c5d6-e7f8-a9b0-c1d2e3f4a5b6",
-      "ts": "2025-11-07T15:20:00.000Z",
-      "command": "move.autopilot.start",
+      "id": "d1e2f3a4-b5c6-d7e8-f9a0-b1c2d3e4f5a6",
+      "ts": "2025-11-07T15:15:00.000Z",
+      "command": "move.transwarp",
       "auth": { "session": "eyJhbGciOi..." },
-      "data": {}
+      "data": {
+        "sector_id": 50
+      }
     }
     ```
 
     *Example Server Response:*
     ```json
     {
-      "id": "se1f2a3b4-c5d6-e7f8-a9b0-c1d2e3f4a5b6",
-      "ts": "2025-11-07T15:20:00.100Z",
-      "reply_to": "e1f2a3b4-c5d6-e7f8-a9b0-c1d2e3f4a5b6",
+      "id": "sd1e2f3a4-b5c6-d7e8-f9a0-b1c2d3e4f5a6",
+      "ts": "2025-11-07T15:15:00.100Z",
+      "reply_to": "d1e2f3a4-b5c6-d7e8-f9a0-b1c2d3e4f5a6",
       "status": "ok",
-      "type": "move.path_v1",
+      "type": "move.transwarp_complete",
       "data": {
-        "steps": [1, 2, 5, 8, 10],
-        "total_cost": 4
+        "new_sector_id": 50,
+        "new_sector_name": "Sirius"
       }
     }
     ```
+## Autopilot (Client-Side Mode)
 
-*   `move.autopilot.stop`: Stop server-side autopilot. (NIY - Not Yet Implemented)
+Autopilot in TWClone is **client-side only**.
 
-    *Example Client Request:*
-    ```json
-    {
-      "id": "f1a2b3c4-d5e6-f7a8-b9c0-d1e2f3a4b5c6",
-      "ts": "2025-11-07T15:21:00.000Z",
-      "command": "move.autopilot.stop",
-      "auth": { "session": "eyJhbGciOi..." },
-      "data": {}
-    }
-    ```
+- The **server**:
+  - Computes routes between sectors.
+  - Executes single-step movement commands (e.g. `move.warp`) when explicitly requested.
+  - Provides a simple readiness/status query and a no-op stop acknowledgement.
+- The **client**:
+  - Requests a route via `move.autopilot.start`.
+  - Walks the route one hop at a time using `move.warp`.
+  - Stops “autopilot” by simply not sending the next `move.warp` (optionally calling `move.autopilot.stop` for UI bookkeeping).
 
-    *Example Server Response (Error):*
-    ```json
-    {
-      "id": "sf1a2b3c4-d5e6-f7a8-b9c0-d1e2f3a4b5c6",
-      "ts": "2025-11-07T15:21:00.100Z",
-      "reply_to": "f1a2b3c4-d5e6-f7a8-b9c0-d1e2f3a4b5c6",
-      "status": "error",
-      "type": "move.autopilot.stop",
-      "error": {
-        "code": 1101,
-        "message": "Not Implemented"
-      }
-    }
-    ```
+The server never runs a background movement loop for autopilot.
 
-*   `move.autopilot.status`: Get current server-side autopilot status. (NIY - Not Yet Implemented)
+---
 
-    *Example Client Request:*
-    ```json
-    {
-      "id": "g1h2i3j4-k5l6-m7n8-o9p0-q1r2s3t4u5v6",
-      "ts": "2025-11-07T15:22:00.000Z",
-      "command": "move.autopilot.status",
-      "auth": { "session": "eyJhbGciOi..." },
-      "data": {}
-    }
-    ```
+### `move.autopilot.start` – Get Autopilot Route
 
-    *Example Server Response (Error):*
-    ```json
-    {
-      "id": "sg1h2i3j4-k5l6-m7n8-o9p0-q1r2s3t4u5v6",
-      "ts": "2025-11-07T15:22:00.100Z",
-      "reply_to": "g1h2i3j4-k5l6-m7n8-o9p0-q1r2s3t4u5v6",
-      "status": "error",
-      "type": "move.autopilot.status",
-      "error": {
-        "code": 1101,
-        "message": "Not Implemented"
-      }
-    }
-    ```
+Compute a path between sectors suitable for client-side autopilot.  
+This command **does not move** the ship and consumes no turns.
+
+#### Request
+
+The exact request shape mirrors the existing `move.pathfind` implementation. A typical form is:
+
+```json
+{
+  "type": "move.autopilot.start",
+  "data": {
+    "to_sector_id": 542,
+    "from_sector_id": 101,           // optional; defaults to current sector if omitted
+    "avoid_sectors": [13, 666]       // optional
+  }
+}
+```
+(My current implementation does not support `max_hops` yet, but supports `from_sector_id` and `avoid_sectors`.)
+
+Successful Response
+
+```json
+{
+  "status": "ok",
+  "type": "move.autopilot.route_v1",
+  "data": {
+    "from_sector_id": 101,
+    "to_sector_id": 542,
+    "path": [101, 200, 333, 542],
+    "hops": 3
+  }
+}
+```
+
+Fields:
+
+    `from_sector_id`: Start sector used by the pathfinder (usually the ship’s current sector).
+
+    `to_sector_id`: Destination sector.
+
+    `path`: Ordered list of sector IDs including start and end.
+
+    `hops`: Number of steps in the route (typically path.length - 1).
+
+Error Responses
+
+Error semantics match move.pathfind:
+
+    Invalid or missing destination sector ID.
+
+    No route found.
+
+    Domain-specific constraints (e.g. max hops exceeded).
+
+Example:
+
+```json
+{
+  "status": "error",
+  "type": "move.autopilot.route_v1",
+  "code": 1406,
+  "message": "Path not found",
+  "data": {
+    "from_sector_id": 101,
+    "to_sector_id": 9999
+  }
+}
+```
+
+Client-Side Autopilot Loop (Informative)
+
+A typical client-side loop:
+
+    Call `move.autopilot.start` to get a path.
+
+    Iterate over each adjacent pair in `path`:
+
+        Send a `move.warp` request for that hop.
+
+        Inspect the response for:
+
+            Mines, combat, ISS summons
+
+            Turn consumption
+
+            Any other events
+
+        Decide whether to continue.
+
+    Stop by:
+
+        Not sending further `move.warp` requests, and optionally
+
+        Calling `move.autopilot.stop` for UX consistency.
+
+The server does not automatically advance along the route.
+### `move.autopilot.status` – Autopilot Readiness
+
+Reports whether the ship is in a state suitable for client-side autopilot.
+In this version, it is deliberately simple: it does not track remaining hops or a server-side movement loop.
+#### Request
+
+```json
+{
+  "type": "move.autopilot.status"
+}
+```
+
+Successful Response
+
+```json
+{
+  "status": "ok",
+  "type": "move.autopilot.status_v1",
+  "data": {
+    "mode": "client",
+    "state": "ready",
+    "current_sector_id": 333,
+    "reason": null
+  }
+}
+```
+
+Fields:
+
+    `mode`:
+
+        Always "client" in this version.
+
+    `state`:
+
+        "ready" – Server currently considers the ship free to move.
+
+        Other states ("immobilized", "cooldown", etc.) may be added later.
+
+    `current_sector_id`:
+
+        Player’s active ship sector.
+
+    `reason`:
+
+        `null` for "ready".
+
+        Reserved for a short code when state != "ready".
+
+### `move.autopilot.stop` – Stop Autopilot (Acknowledgement Only)
+
+This command is idempotent and stateless.
+The server does not maintain a long-running autopilot loop, so there is nothing to cancel server-side. The command exists for UI clarity and future extension.
+#### Request
+
+```json
+{
+  "type": "move.autopilot.stop"
+}
+```
+
+Successful Response
+
+```json
+{
+  "status": "ok",
+  "type": "move.autopilot.stopped_v1",
+  "data": {
+    "state": "idle"
+  }
+}
+```
+
+Fields:
+
+    `state`:
+
+        Always "idle" in this version, indicating no server-managed autopilot is running.
+```
 
 *   `nav.avoid.add`: Add a sector to the player's avoid list.
 

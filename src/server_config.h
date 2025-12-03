@@ -7,7 +7,7 @@
 #include "database.h"           // if your moved bodies call db_*
 #include "schemas.h"            // uncomment if you wire system.describe_schema to schemas.c
 #include <stdint.h>
-#define DEFAULT_DB_NAME "twconfig.db"
+// #define DEFAULT_DB_NAME "twconfig.db"
 #define CORP_TAX_RATE_BP 500
 extern json_t *g_capabilities;
 #ifndef TW_CMD_DESC_T_DEFINED

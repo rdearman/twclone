@@ -31,6 +31,7 @@
 #include "server_auth.h"
 #include "server_s2s.h"
 #include "server_universe.h"
+#include "server_autopilot.h"
 #include "server_config.h"
 #include "server_communication.h"
 #include "server_players.h"
@@ -1389,14 +1390,14 @@ process_message (client_ctx_t *ctx, json_t *root)
 }
 
 
-/* ------------------------ per-connection loop (thread body) ------------------------ */
+/* src/server_loop.c */
 static void *
 connection_thread (void *arg)
 {
   client_ctx_t *ctx = (client_ctx_t *) arg;
   int fd = ctx->fd;
   /* Per-thread initialisation (DB/session/etc.) goes here */
-  /* ctx->db = thread_db_open(); */
+  /* Note: db_get_handle() called inside cmd_* functions handles init implicitly */
   /* Make recv interruptible via timeout so we can stop promptly */
   struct timeval tv = {.tv_sec = 1,.tv_usec = 0 };
   setsockopt (fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof (tv));
@@ -1427,7 +1428,7 @@ connection_thread (void *arg)
                     }
                   /* Parse and dispatch */
                   //LOGI ("CORE DUMP DEBUG: Received from client: %.*s\n",
-                  //	(int) linelen, line);
+                  //    (int) linelen, line);
                   json_error_t jerr;
                   json_t *root = json_loadb (line, linelen, 0, &jerr);
                   if (!root || !json_is_object (root))
@@ -1471,14 +1472,14 @@ connection_thread (void *arg)
         }
     }
   /* Per-thread teardown */
-  /* thread_db_close(ctx->db); */
+  /* FIX: Explicitly close the thread-local database connection */
+  db_close_thread ();
   close (fd);
   free (ctx);
   return NULL;
 }
 
 
-/* ------------------------ accept loop (spawns thread per client) ------------------------ */
 int
 server_loop (volatile sig_atomic_t *running)
 {

@@ -998,7 +998,7 @@ cmd_combat_attack (client_ctx_t *ctx, json_t *root)
           (
             "Failed to prepare mine quantity update statement during attack: %s",
             sqlite3_errmsg (db));
-          sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+          db_safe_rollback (db, "Safe rollback");
           send_enveloped_error (ctx->fd, root, ERR_DB,
                                 "Failed to update mine quantity.");
           return 0;
@@ -1009,7 +1009,7 @@ cmd_combat_attack (client_ctx_t *ctx, json_t *root)
         {
           LOGE ("Failed to update mine quantity during attack: %s",
                 sqlite3_errmsg (db));
-          sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+          db_safe_rollback (db, "Safe rollback");
           send_enveloped_error (ctx->fd, root, ERR_DB,
                                 "Failed to update mine quantity.");
           return 0;
@@ -1026,7 +1026,7 @@ cmd_combat_attack (client_ctx_t *ctx, json_t *root)
         {
           LOGE ("Failed to prepare mine delete statement during attack: %s",
                 sqlite3_errmsg (db));
-          sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+          db_safe_rollback (db, "Safe rollback");
           send_enveloped_error (ctx->fd, root, ERR_DB,
                                 "Failed to delete mine.");
           return 0;
@@ -1036,7 +1036,7 @@ cmd_combat_attack (client_ctx_t *ctx, json_t *root)
         {
           LOGE ("Failed to delete mine during attack: %s",
                 sqlite3_errmsg (db));
-          sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+          db_safe_rollback (db, "Safe rollback");
           send_enveloped_error (ctx->fd, root, ERR_DB,
                                 "Failed to delete mine.");
           return 0;
@@ -1053,7 +1053,7 @@ cmd_combat_attack (client_ctx_t *ctx, json_t *root)
       LOGE
         ("Failed to prepare ship fighters update statement during attack: %s",
         sqlite3_errmsg (db));
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       send_enveloped_error (ctx->fd, root, ERR_DB,
                             "Failed to update ship fighters.");
       return 0;
@@ -1064,7 +1064,7 @@ cmd_combat_attack (client_ctx_t *ctx, json_t *root)
     {
       LOGE ("Failed to update ship fighters during attack: %s",
             sqlite3_errmsg (db));
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       send_enveloped_error (ctx->fd, root, ERR_DB,
                             "Failed to update ship fighters.");
       return 0;
@@ -1257,14 +1257,14 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
   int rc = ship_consume_fighters (db, ship_id, amount);
   if (rc == SQLITE_TOOBIG)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       send_enveloped_error (ctx->fd, root, REF_AMMO_DEPLETED,
                             "Insufficient fighters on ship");
       return 0;
     }
   if (rc != SQLITE_OK)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       send_enveloped_error (ctx->fd, root, REF_AMMO_DEPLETED,
                             "Failed to update ship fighters");
       return 0;
@@ -1274,7 +1274,7 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
                             amount);
   if (rc != SQLITE_OK)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       send_enveloped_error (ctx->fd, root, SECTOR_ERR,
                             "Failed to create sector assets record");
       return 0;
@@ -2121,7 +2121,7 @@ cmd_combat_sweep_mines (client_ctx_t *ctx, json_t *root)
             (
               "Failed to prepare mine quantity update statement during sweep: %s",
               sqlite3_errmsg (db));
-            sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+            db_safe_rollback (db, "Safe rollback");
             json_decref (hostile_stacks_json);
             return -1;
           }
@@ -2131,7 +2131,7 @@ cmd_combat_sweep_mines (client_ctx_t *ctx, json_t *root)
           {
             LOGE ("Failed to update mine quantity during sweep: %s",
                   sqlite3_errmsg (db));
-            sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+            db_safe_rollback (db, "Safe rollback");
             json_decref (hostile_stacks_json);
             return -1;
           }
@@ -2147,7 +2147,7 @@ cmd_combat_sweep_mines (client_ctx_t *ctx, json_t *root)
           {
             LOGE ("Failed to prepare mine delete statement during sweep: %s",
                   sqlite3_errmsg (db));
-            sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+            db_safe_rollback (db, "Safe rollback");
             json_decref (hostile_stacks_json);
             return -1;
           }
@@ -2156,7 +2156,7 @@ cmd_combat_sweep_mines (client_ctx_t *ctx, json_t *root)
           {
             LOGE ("Failed to delete mine during sweep: %s",
                   sqlite3_errmsg (db));
-            sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+            db_safe_rollback (db, "Safe rollback");
             json_decref (hostile_stacks_json);
             return -1;
           }
@@ -2173,7 +2173,7 @@ cmd_combat_sweep_mines (client_ctx_t *ctx, json_t *root)
       LOGE
         ("Failed to prepare ship fighters update statement during sweep: %s",
         sqlite3_errmsg (db));
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       json_decref (hostile_stacks_json);
       return -1;
     }
@@ -2183,7 +2183,7 @@ cmd_combat_sweep_mines (client_ctx_t *ctx, json_t *root)
     {
       LOGE ("Failed to update ship fighters during sweep: %s",
             sqlite3_errmsg (db));
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       json_decref (hostile_stacks_json);
       return -1;
     }
@@ -2447,7 +2447,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
   if (sqlite3_prepare_v2 (db, sql_update_ship, -1, &stmt_update_ship, NULL) !=
       SQLITE_OK)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       send_enveloped_error (ctx->fd, root, ERR_DB,
                             "Failed to prepare ship update.");
       return 0;
@@ -2456,7 +2456,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
   sqlite3_bind_int (stmt_update_ship, 2, player_ship_id);
   if (sqlite3_step (stmt_update_ship) != SQLITE_DONE)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       send_enveloped_error (ctx->fd, root, ERR_DB,
                             "Failed to update ship fighters.");
       return 0;
@@ -2471,7 +2471,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
       if (sqlite3_prepare_v2
             (db, sql_delete_asset, -1, &stmt_delete_asset, NULL) != SQLITE_OK)
         {
-          sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+          db_safe_rollback (db, "Safe rollback");
           send_enveloped_error (ctx->fd, root, ERR_DB,
                                 "Failed to prepare asset delete.");
           return 0;
@@ -2479,7 +2479,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
       sqlite3_bind_int (stmt_delete_asset, 1, asset_id);
       if (sqlite3_step (stmt_delete_asset) != SQLITE_DONE)
         {
-          sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+          db_safe_rollback (db, "Safe rollback");
           send_enveloped_error (ctx->fd, root, ERR_DB,
                                 "Failed to delete asset record.");
           return 0;
@@ -2494,7 +2494,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
       if (sqlite3_prepare_v2
             (db, sql_update_asset, -1, &stmt_update_asset, NULL) != SQLITE_OK)
         {
-          sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+          db_safe_rollback (db, "Safe rollback");
           send_enveloped_error (ctx->fd, root, ERR_DB,
                                 "Failed to prepare asset update.");
           return 0;
@@ -2503,7 +2503,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
       sqlite3_bind_int (stmt_update_asset, 2, asset_id);
       if (sqlite3_step (stmt_update_asset) != SQLITE_DONE)
         {
-          sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+          db_safe_rollback (db, "Safe rollback");
           send_enveloped_error (ctx->fd, root, ERR_DB,
                                 "Failed to update asset quantity.");
           return 0;
@@ -2663,7 +2663,7 @@ cmd_combat_scrub_mines (client_ctx_t *ctx, json_t *root)
         {
           LOGE ("Failed to prepare specific scrub statement: %s",
                 sqlite3_errmsg (db));
-          sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+          db_safe_rollback (db, "Safe rollback");
           send_enveloped_error (ctx->fd, root, ERR_DB,
                                 "Failed to prepare scrub operation.");
           return 0;
@@ -2685,7 +2685,7 @@ cmd_combat_scrub_mines (client_ctx_t *ctx, json_t *root)
         {
           LOGE ("Failed to prepare all scrub statement: %s",
                 sqlite3_errmsg (db));
-          sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+          db_safe_rollback (db, "Safe rollback");
           send_enveloped_error (ctx->fd, root, ERR_DB,
                                 "Failed to prepare scrub operation.");
           return 0;
@@ -2699,7 +2699,7 @@ cmd_combat_scrub_mines (client_ctx_t *ctx, json_t *root)
   if (rc != SQLITE_DONE)
     {
       LOGE ("Scrub mines step failed: %s", sqlite3_errmsg (db));
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       send_enveloped_error (ctx->fd, root, ERR_DB,
                             "Failed to execute scrub operation.");
       sqlite3_finalize (scrub_st);
@@ -2709,7 +2709,7 @@ cmd_combat_scrub_mines (client_ctx_t *ctx, json_t *root)
   sqlite3_finalize (scrub_st);
   if (total_scrubbed == 0)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       send_enveloped_refused (ctx->fd, root, ERR_NOT_FOUND,
                               "No Limpet mines found to scrub.", NULL);
       return 0;
@@ -2725,7 +2725,7 @@ cmd_combat_scrub_mines (client_ctx_t *ctx, json_t *root)
         {
           LOGE ("Failed to debit credits for scrubbing: %s",
                 sqlite3_errmsg (db));
-          sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+          db_safe_rollback (db, "Safe rollback");
           send_enveloped_error (ctx->fd, root, ERR_DB,
                                 "Failed to debit credits.");
           return 0;
@@ -2908,14 +2908,14 @@ cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root)
   int rc = ship_consume_mines (db, ship_id, mine_type, amount);
   if (rc == SQLITE_TOOBIG)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       send_enveloped_error (ctx->fd, root, REF_AMMO_DEPLETED,
                             "Insufficient mines on ship");
       return 0;
     }
   if (rc != SQLITE_OK)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       send_enveloped_error (ctx->fd, root, REF_AMMO_DEPLETED,
                             "Failed to update ship mines");
       return 0;
@@ -2925,7 +2925,7 @@ cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root)
                          offense, amount);
   if (rc != SQLITE_OK)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       send_enveloped_error (ctx->fd, root, SECTOR_ERR,
                             "Failed to create sector assets record");
       return 0;
@@ -3356,7 +3356,7 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
     }
   if (rc == SQLITE_TOOBIG)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       if (mine_type == ASSET_MINE)
         {
           send_enveloped_error (ctx->fd, root, REF_AMMO_DEPLETED,
@@ -3371,7 +3371,7 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
     }
   if (rc != SQLITE_OK)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       if (mine_type == ASSET_MINE)
         {
           send_enveloped_error (ctx->fd, root, REF_AMMO_DEPLETED,
@@ -3394,7 +3394,7 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
                          mine_type, offense, amount);
   if (rc != SQLITE_OK)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       send_enveloped_error (ctx->fd, root, SECTOR_ERR,
                             "Failed to create sector assets record");
       return 0;
@@ -3639,7 +3639,7 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
   if (sqlite3_prepare_v2 (db, sql_delete, -1, &stmt_delete, NULL) !=
       SQLITE_OK)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       send_enveloped_error (ctx->fd, root, ERR_DB,
                             "Failed to prepare delete asset query.");
       return 0;
@@ -3647,7 +3647,7 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
   sqlite3_bind_int (stmt_delete, 1, asset_id);
   if (sqlite3_step (stmt_delete) != SQLITE_DONE)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       send_enveloped_error (ctx->fd, root, ERR_DB,
                             "Failed to delete asset from sector.");
       sqlite3_finalize (stmt_delete);
@@ -3661,7 +3661,7 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
   if (sqlite3_prepare_v2 (db, sql_credit, -1, &stmt_credit, NULL) !=
       SQLITE_OK)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       send_enveloped_error (ctx->fd, root, ERR_DB,
                             "Failed to prepare credit ship query.");
       return 0;
@@ -3670,7 +3670,7 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
   sqlite3_bind_int (stmt_credit, 2, player_ship_id);
   if (sqlite3_step (stmt_credit) != SQLITE_DONE)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_safe_rollback (db, "Safe rollback");
       send_enveloped_error (ctx->fd, root, ERR_DB,
                             "Failed to credit mines to ship.");
       sqlite3_finalize (stmt_credit);

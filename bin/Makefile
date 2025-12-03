@@ -142,8 +142,10 @@ am_server_OBJECTS = ../src/database_cmd.$(OBJEXT) \
 	../src/server_config.$(OBJEXT) ../src/server_loop.$(OBJEXT) \
 	../src/server_main.$(OBJEXT) ../src/server_planets.$(OBJEXT) \
 	../src/server_players.$(OBJEXT) ../src/server_ports.$(OBJEXT) \
-	../src/server_ships.$(OBJEXT) ../src/server_universe.$(OBJEXT) \
-	../src/server_news.$(OBJEXT) ../src/server_s2s.$(OBJEXT) \
+	../src/server_ships.$(OBJEXT) \
+	../src/server_autopilot.$(OBJEXT) \
+	../src/server_universe.$(OBJEXT) ../src/server_news.$(OBJEXT) \
+	../src/server_s2s.$(OBJEXT) \
 	../src/server_warp_post_processing.$(OBJEXT) \
 	../src/server_log.$(OBJEXT) ../src/server_cron.$(OBJEXT) \
 	../src/namegen.$(OBJEXT) ../src/globals.$(OBJEXT) \
@@ -182,6 +184,7 @@ am__depfiles_remade = ../src/$(DEPDIR)/common.Po \
 	../src/$(DEPDIR)/s2s_keyring.Po \
 	../src/$(DEPDIR)/s2s_transport.Po ../src/$(DEPDIR)/schemas.Po \
 	../src/$(DEPDIR)/server_auth.Po \
+	../src/$(DEPDIR)/server_autopilot.Po \
 	../src/$(DEPDIR)/server_bigbang.Po \
 	../src/$(DEPDIR)/server_bulk.Po \
 	../src/$(DEPDIR)/server_citadel.Po \
@@ -272,7 +275,7 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-ISODATE = 2025-11-28
+ISODATE = 2025-12-02
 LDFLAGS = 
 LIBOBJS = 
 LIBS = -lpthread -lm 
@@ -366,6 +369,7 @@ server_SOURCES = \
         ../src/server_players.c \
         ../src/server_ports.c \
         ../src/server_ships.c \
+        ../src/server_autopilot.c \
         ../src/server_universe.c \
         ../src/server_news.c \
         ../src/server_s2s.c \
@@ -532,6 +536,8 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_ships.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_autopilot.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_universe.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_news.$(OBJEXT): ../src/$(am__dirstamp) \
@@ -581,6 +587,7 @@ include ../src/$(DEPDIR)/s2s_keyring.Po # am--include-marker
 include ../src/$(DEPDIR)/s2s_transport.Po # am--include-marker
 include ../src/$(DEPDIR)/schemas.Po # am--include-marker
 include ../src/$(DEPDIR)/server_auth.Po # am--include-marker
+include ../src/$(DEPDIR)/server_autopilot.Po # am--include-marker
 include ../src/$(DEPDIR)/server_bigbang.Po # am--include-marker
 include ../src/$(DEPDIR)/server_bulk.Po # am--include-marker
 include ../src/$(DEPDIR)/server_citadel.Po # am--include-marker
@@ -769,6 +776,7 @@ distclean: distclean-am
 	-rm -f ../src/$(DEPDIR)/s2s_transport.Po
 	-rm -f ../src/$(DEPDIR)/schemas.Po
 	-rm -f ../src/$(DEPDIR)/server_auth.Po
+	-rm -f ../src/$(DEPDIR)/server_autopilot.Po
 	-rm -f ../src/$(DEPDIR)/server_bigbang.Po
 	-rm -f ../src/$(DEPDIR)/server_bulk.Po
 	-rm -f ../src/$(DEPDIR)/server_citadel.Po
@@ -851,6 +859,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/$(DEPDIR)/s2s_transport.Po
 	-rm -f ../src/$(DEPDIR)/schemas.Po
 	-rm -f ../src/$(DEPDIR)/server_auth.Po
+	-rm -f ../src/$(DEPDIR)/server_autopilot.Po
 	-rm -f ../src/$(DEPDIR)/server_bigbang.Po
 	-rm -f ../src/$(DEPDIR)/server_bulk.Po
 	-rm -f ../src/$(DEPDIR)/server_citadel.Po

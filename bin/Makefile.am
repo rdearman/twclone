@@ -51,6 +51,7 @@ server_SOURCES = \
         ../src/server_players.c \
         ../src/server_ports.c \
         ../src/server_ships.c \
+        ../src/server_autopilot.c \
         ../src/server_universe.c \
         ../src/server_news.c \
         ../src/server_s2s.c \

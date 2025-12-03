@@ -580,27 +580,6 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
 ///////////////////////////////////
 
 
-int
-cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
-{
-  return cmd_move_pathfind (ctx, root);
-}
-
-
-int
-cmd_move_autopilot_stop (client_ctx_t *ctx, json_t *root)
-{
-  STUB_NIY (ctx, root, "move.autopilot.stop");
-}
-
-
-int
-cmd_move_autopilot_status (client_ctx_t *ctx, json_t *root)
-{
-  STUB_NIY (ctx, root, "move.autopilot.status");
-}
-
-
 ////////////////////////////////////////////////////////////////
 
 

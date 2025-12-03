@@ -515,32 +515,68 @@ main (void)
       s2s_listen_fd = -1;
     }
 shutdown_and_exit:
-  /* Ask engine to shut down and reap it (preserves your previous logic) */
+  /* 1. Request Graceful Shutdown via Pipe */
   if (g_engine_shutdown_fd >= 0)
     {
-      engine_request_shutdown (g_engine_shutdown_fd);   /* close pipe -> child exits */
+      engine_request_shutdown (g_engine_shutdown_fd);   /* close pipe -> child POLLIN/EOF */
       g_engine_shutdown_fd = -1;
     }
+  /* 2. Wait for Engine to Exit, escalating to SIGKILL if stuck */
   if (g_engine_pid > 0)
     {
-      int waited = engine_wait (g_engine_pid, 3000);    /* wait up to 3s */
-      if (waited == 1)
+      LOGW ("Waiting for engine (pid=%d) to exit...\n", g_engine_pid);
+      int loops = 0;
+      int status = 0;
+      int reaped = 0;
+      // Wait up to 2 seconds (20 * 100ms)
+      while (loops < 20)
         {
-          LOGW (" engine still running; sending SIGTERM.\n");
-          //      fprintf (stderr,
-          //       " engine still running; sending SIGTERM.\n");
-          kill (g_engine_pid, SIGTERM);
-          (void) engine_wait (g_engine_pid, 2000);
+          pid_t r = waitpid (g_engine_pid, &status, WNOHANG);
+          if (r == g_engine_pid)
+            {
+              reaped = 1;
+              break;
+            }
+          usleep (100000); // 100ms
+          loops++;
         }
+      // If not reaped, send SIGTERM
+      if (!reaped)
+        {
+          LOGW ("Engine unresponsive. Sending SIGTERM.\n");
+          kill (g_engine_pid, SIGTERM);
+          loops = 0;
+          while (loops < 10) // Wait another 1 second
+            {
+              pid_t r = waitpid (g_engine_pid, &status, WNOHANG);
+              if (r == g_engine_pid)
+                {
+                  reaped = 1;
+                  break;
+                }
+              usleep (100000);
+              loops++;
+            }
+        }
+      // If STILL not reaped, send SIGKILL (Nuclear option)
+      if (!reaped)
+        {
+          LOGW ("Engine stuck. Sending SIGKILL.\n");
+          kill (g_engine_pid, SIGKILL);
+          waitpid (g_engine_pid, &status, 0); // Blocking wait for SIGKILL result
+        }
+      LOGW ("Engine reaped.\n");
       g_engine_pid = -1;
     }
-  /* 8) Capabilities cleanup */
+  /* 3. Capabilities cleanup */
   if (g_capabilities)
     {
       json_decref (g_capabilities);
       g_capabilities = NULL;
     }
   sysop_stop ();
+  /* 4. FIX: Close Main Thread DB Connection */
+  db_close_thread ();
   server_log_close ();
   return (rc == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
