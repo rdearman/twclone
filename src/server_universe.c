@@ -91,8 +91,6 @@ static int ori_owner_id = -1;
 static int ori_home_sector_id = -1;
 /* Private function to move all Orion ships */
 static void ori_move_all_ships (void);
-
-
 /* Helper to execute a single SELECT query and return an int value */
 static int
 get_int_value (sqlite3 *db, const char *sql)
@@ -262,11 +260,7 @@ ori_move_all_ships (void)
 
 
 ////////////////////// ORION NPC ////////////////////////////////
-
-
 /* --- minimal event writer for tests (engine_events) --- */
-
-
 static void
 fer_event_json (const char *type, int sector_id, const char *fmt, ...)
 {
@@ -294,7 +288,7 @@ fer_event_json (const char *type, int sector_id, const char *fmt, ...)
   // LOGI("fer_event_json: Payload formatted: %s", payload);
   // 1. ACQUIRE LOCK (This should now correctly recurse)
   //LOGI("fer_event_json: Attempting to acquire db_mutex.");
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   //LOGI("fer_event_json: Mutex acquired.");
   /* INSERT into engine_events(type, sector_id, payload, ts) */
   const char *sql =
@@ -308,7 +302,7 @@ fer_event_json (const char *type, int sector_id, const char *fmt, ...)
       LOGE ("fer_event_json: SQL Prepare FAILED (rc=%d).", rc);
       LOGE ("fer_event_json: Error message: %s", sqlite3_errmsg (g_fer_db));
       sqlite3_finalize (st);    // Clean up even if prepare failed
-      pthread_mutex_unlock (&db_mutex);
+      db_mutex_unlock ();
       LOGI ("fer_event_json: Mutex released on prepare failure.");
       return;
     }
@@ -335,7 +329,7 @@ fer_event_json (const char *type, int sector_id, const char *fmt, ...)
   sqlite3_finalize (st);
   //LOGI("fer_event_json: Statement finalized.");
   // 6. RELEASE LOCK
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   //LOGI("fer_event_json: Mutex released. Function complete.");
 }
 
@@ -518,7 +512,7 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
             order_limit_sql);
   // --- End of new SQL logic ---
   // This will print the *much simpler* SQL query for debugging
-  // fprintf(stderr, "\n[DEBUG] SQL (View): [%s]\n\n", sql);
+  // // fprintf(stderr, "\n[DEBUG] SQL (View): [%s]\n\n", sql);
   sqlite3_stmt *st = NULL;
   int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
@@ -578,26 +572,12 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
 
 
 ///////////////////////////////////
-
-
 ////////////////////////////////////////////////////////////////
-
-
 // "sector.scan"
-
-
 /* void cmd_sector_scan (client_ctx_t *ctx, json_t *root) */
-
-
 /* { */
-
-
 /*   STUB_NIY (ctx, root, "scan.sector");   */
-
-
 /* } */
-
-
 json_t *
 build_sector_scan_json (int sector_id, int player_id,
                         bool holo_scanner_active)
@@ -740,11 +720,7 @@ build_sector_scan_json (int sector_id, int player_id,
 
 
 // ====================================================================
-
-
 // --- PRIMARY COMMAND HANDLER: cmd_sector_scan (Replaces Mock) ---
-
-
 /**
  * @brief Executes a detailed tactical scan of the current sector.
  * * Implements the "sector.scan" command.
@@ -797,14 +773,8 @@ cmd_sector_scan (client_ctx_t *ctx, json_t *root)
 
 
 ////////////////////////////////////////////////////////////////
-
-
 ////////////////////////////////////////////////////////////////
-
-
 // "sector.scan.density"
-
-
 // "sector.scan.density"
 void
 cmd_sector_scan_density (void *ctx_in, json_t *root)
@@ -849,7 +819,7 @@ cmd_sector_scan_density (void *ctx_in, json_t *root)
   // Assuming MAX_WARPS_PER_SECTOR and SECTOR_LIST_BUF_SIZE are defined
   int adjacent[MAX_WARPS_PER_SECTOR + 1] = { 0 };
   int count = 0;
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   // --- 1. Get Current and Adjacent Sectors ---
   adjacent[count++] = msector;  // Add the current sector ID first
   rc = sqlite3_prepare_v2 (db, sql_adj, -1, &st, NULL);
@@ -972,7 +942,7 @@ done:
     {
       sqlite3_finalize (st2);
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   // Handle errors if the final RC is not OK
   if (rc != SQLITE_OK && rc != SQLITE_DONE)
     {
@@ -1018,8 +988,8 @@ universe_init (void)
   const char *sql = "SELECT COUNT(*) FROM sectors;";
   if (sqlite3_prepare_v2 (handle, sql, -1, &stmt, NULL) != SQLITE_OK)
     {
-      fprintf (stderr, "DB universe_init error: %s\n",
-               sqlite3_errmsg (handle));
+      LOGE ( "DB universe_init error: %s\n",
+             sqlite3_errmsg (handle));
       return -1;
     }
   int count = 0;
@@ -1030,7 +1000,7 @@ universe_init (void)
   sqlite3_finalize (stmt);
   if (count == 0)
     {
-      fprintf (stderr, "Universe empty, running bigbang...\n");
+      LOGE ( "Universe empty, running bigbang...\n");
       return bigbang ();
     }
   return 0;
@@ -1046,8 +1016,6 @@ universe_shutdown (void)
 
 
 /* -------- helpers -------- */
-
-
 /* Return REFUSED(1402) if no link; otherwise OK. */
 decision_t
 validate_warp_rule (int from_sector, int to_sector)
@@ -1072,7 +1040,7 @@ validate_warp_rule (int from_sector, int to_sector)
   int has = 0;
   sqlite3_stmt *st = NULL;
   /* Fast adjacency check */
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   int rc = sqlite3_prepare_v2 (db,
                                "SELECT 1 FROM sector_warps WHERE from_sector = ?1 AND to_sector = ?2 LIMIT 1",
                                -1,
@@ -1091,7 +1059,7 @@ validate_warp_rule (int from_sector, int to_sector)
     {
       sqlite3_finalize (st);
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   if (!has)
     {
       return refused (REF_NO_WARP_LINK, "No warp link");
@@ -1101,8 +1069,6 @@ validate_warp_rule (int from_sector, int to_sector)
 
 
 /* -------- MOVEMENT -------- */
-
-
 int
 cmd_move_describe_sector (client_ctx_t *ctx, json_t *root)
 {
@@ -1286,7 +1252,7 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
                             "Target sector not specified");
       return 1;
     }
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   if (sqlite3_prepare_v2 (db, "SELECT MAX(id) FROM sectors", -1, &st, NULL) ==
       SQLITE_OK && sqlite3_step (st) == SQLITE_ROW)
     {
@@ -1297,7 +1263,7 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
       sqlite3_finalize (st);
       st = NULL;
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   if (max_id <= 0)
     {
       send_enveloped_error (ctx->fd, root, 1401, "No sectors");
@@ -1371,13 +1337,13 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
       return 1;
     }
   /* Prepare neighbor query once */
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   int rc = sqlite3_prepare_v2 (db,
                                "SELECT to_sector FROM sector_warps WHERE from_sector = ?1",
                                -1,
                                &st,
                                NULL);
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   if (rc != SQLITE_OK || !st)
     {
       free (avoid);
@@ -1400,7 +1366,7 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
     {
       int u = queue[qh++];
       /* fetch neighbors of u */
-      pthread_mutex_lock (&db_mutex);
+      db_mutex_lock ();
       sqlite3_reset (st);
       sqlite3_clear_bindings (st);
       sqlite3_bind_int (st, 1, u);
@@ -1425,16 +1391,16 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
               /* break after unlock */
             }
         }
-      pthread_mutex_unlock (&db_mutex);
+      db_mutex_unlock ();
       if (found)
         {
           break;
         }
     }
   /* finalize stmt */
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   sqlite3_finalize (st);
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   if (!found)
     {
       free (avoid);
@@ -1503,8 +1469,6 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
 static const char *SQL_SECTOR_ASSET_COUNTS =
   "SELECT asset_type, COALESCE(SUM(quantity),0) AS qty "
   "FROM sector_assets WHERE sector = ?1 " "GROUP BY asset_type;";
-
-
 static void
 attach_sector_asset_counts (sqlite3 *db, int sector_id, json_t *data_out)
 {
@@ -2005,68 +1969,26 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
 
 
 /////////  ISS BOT ////////////
-
-
 /* ===== Imperial Starship (ISS) — internal state + helpers ============ */
-
-
 /* static void */
-
-
 /* log_iss_event_move (int actor_player_id, int sector, const char *etype, */
-
-
 /*                  const char *payload_json) */
-
-
 /* { */
-
-
 /*   sqlite3 *db = db_get_handle (); */
-
-
 /*   sqlite3_stmt *st = NULL; */
-
-
 /*   if (sqlite3_prepare_v2 (db, */
-
-
 /*                        "INSERT INTO engine_events(ts,type,actor_player_id,sector_id,payload) " */
-
-
 /*                        "VALUES(strftime('%s','now'), ?1, ?2, ?3, ?4);", -1, */
-
-
 /*                        &st, NULL) == SQLITE_OK) */
-
-
 /*     { */
-
-
 /*       sqlite3_bind_text (st, 1, etype, -1, SQLITE_STATIC); */
-
-
 /*       sqlite3_bind_int (st, 2, actor_player_id); */
-
-
 /*       sqlite3_bind_int (st, 3, sector); */
-
-
 /*       sqlite3_bind_text (st, 4, payload_json, -1, SQLITE_STATIC); */
-
-
 /*       sqlite3_step (st); */
-
-
 /*     } */
-
-
 /*   sqlite3_finalize (st); */
-
-
 /* } */
-
-
 void
 iss_log_event_move (int from, int to, const char *kind, const char *extra)
 {
@@ -2253,8 +2175,6 @@ iss_try_consume_summon (void)
 
 
 /* --- public API -------------------------------------------------------- */
-
-
 int
 iss_init_once (void)
 {
@@ -2393,11 +2313,7 @@ typedef struct
 } fer_trader_t;
 static fer_trader_t g_fer[FER_TRADER_COUNT];
 static int g_fer_inited = 0;
-
-
 /* ---------- DB helpers ---------- */
-
-
 int
 sector_has_port (int sector)
 {
@@ -2423,8 +2339,6 @@ sector_has_port (int sector)
 
 
 /* ---------- Graph helpers over sector_warps ---------- */
-
-
 int
 nav_random_neighbor (int sector)
 {
@@ -2468,8 +2382,6 @@ nav_next_hop (int start, int goal)
   } kv_t;
   kv_t seen[MAX_SEEN];
   int seen_n = 0;
-
-
   auto int
   seen_get (int key)
   {
@@ -2563,15 +2475,9 @@ nav_next_hop (int start, int goal)
 
 
 /* ---------- (optional) internal event emitters ---------- */
-
-
 /* If you have a helper already for engine_events, call it here.
    Otherwise keep these INFO_LOGs for visibility and add event writes later. */
-
-
 //////////////////////////////////////////////////////////////////////////////////
-
-
 /* --- Helper to read current quantity from port_commodities --- */
 static int
 h_get_port_commodity_quantity (int port_id, const char *commodity)
@@ -2608,7 +2514,7 @@ h_get_port_commodity_quantity (int port_id, const char *commodity)
   snprintf (sql_query, sizeof (sql_query),
             "SELECT %s FROM ports WHERE id = ?;", column_name);
   // 1. Acquire Mutex Lock (Recursive lock works here)
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   if (sqlite3_prepare_v2 (db, sql_query, -1, &stmt, NULL) == SQLITE_OK)
     {
       sqlite3_bind_int (stmt, 1, port_id);
@@ -2628,14 +2534,12 @@ h_get_port_commodity_quantity (int port_id, const char *commodity)
       quantity = -1;            // Return -1 only on a true DB error
     }
   // 2. Release Mutex Lock
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return quantity;
 }
 
 
 /* --- Trade Log Emitter Implementation --- */
-
-
 /* --- Trade Log Emitter Implementation --- */
 static void
 fer_emit_trade_log (int port_id, int sector_id,
@@ -2648,7 +2552,7 @@ fer_emit_trade_log (int port_id, int sector_id,
   // =========================================================
   // 1. Acquire Mutex Lock (Must be RECURSIVE for nested calls)
   // =========================================================
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   // --- Template SQL for reuse ---
   const char *sql_insert =
     "INSERT INTO trade_log (timestamp, sector_id, player_id, commodity, units, price_per_unit, action, port_id) "
@@ -2775,7 +2679,7 @@ fer_emit_trade_log (int port_id, int sector_id,
   // =========================================================
   // 4. Release Mutex Lock
   // =========================================================
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   //LOGI("Exit fer_emit_trade_log");
 }
 
@@ -2783,13 +2687,16 @@ fer_emit_trade_log (int port_id, int sector_id,
 void
 fer_attach_db (sqlite3 *db)
 {
+  // fprintf(stderr, "[engine] fer_attach_db enter\n");
   g_fer_db = db;
+  // fprintf(stderr, "[engine] fer_attach_db exit\n");
 }
 
 
 int
 fer_init_once (void)
 {
+  // fprintf(stderr, "[engine] fer_init_once enter\n");
   if (g_fer_inited)
     {
       return 1;
@@ -2840,21 +2747,25 @@ fer_init_once (void)
                   "{ \"kind\":\"ferringhi\", \"count\": %d }",
                   FER_TRADER_COUNT);
   g_fer_inited = 1;
-  return 1;
+  // fprintf(stderr, "[engine] fer_init_once exit\n");
+  return g_fer_inited;
 }
 
 
 void
 fer_tick (int64_t now_ms)
 {
+  // fprintf(stderr, "[engine] TOP OF fer_tick fucntion\n");
   (void) now_ms;                /* reserved for rate logic later */
   if (!g_fer_inited)
     {
       if (!fer_init_once ())
         {
+          // fprintf(stderr, "Have we silently failed here insed the fer_tick()\t If you are seeing this, then yes!\n");
           return;
         }
     }
+  // fprintf(stderr, "[engine] 1 OF fer_tick fucntion\n");
   for (int i = 0; i < FER_TRADER_COUNT; ++i)
     {
       fer_trader_t *t = &g_fer[i];
@@ -2974,6 +2885,8 @@ fer_tick (int64_t now_ms)
           t->trades_done = 0;
           t->state = FER_STATE_ROAM;
         }
+      // fprintf(stderr, "[engine] end LOOP OF fer_tick fucntion\n");
     }
+  // fprintf(stderr, "[engine] fer_tick fucntion EXIT\n");
 }
 

@@ -5,6 +5,7 @@
 #include "server_config.h"
 #include "server_bigbang.h"
 #include "database.h"           // Needed for db_get_handle()
+#include "server_log.h"
 // Forward declarations of internal helper functions
 static int get_high_degree_sector (sqlite3 *db);
 static int get_tunnel_end (sqlite3 *db, int start_sector);
@@ -26,8 +27,8 @@ get_high_degree_sector (sqlite3 *db)
   int sector_id = -1;
   if (sqlite3_prepare_v2 (db, q, -1, &st, NULL) != SQLITE_OK)
     {
-      fprintf (stderr, "get_high_degree_sector prepare failed: %s\n",
-               sqlite3_errmsg (db));
+      LOGE ( "get_high_degree_sector prepare failed: %s\n",
+             sqlite3_errmsg (db));
       return -1;
     }
   if (sqlite3_step (st) == SQLITE_ROW)
@@ -53,8 +54,8 @@ get_tunnel_end (sqlite3 *db, int start_sector)
   int end_sector = -1;
   if (sqlite3_prepare_v2 (db, q, -1, &st, NULL) != SQLITE_OK)
     {
-      fprintf (stderr, "get_tunnel_end prepare failed: %s\n",
-               sqlite3_errmsg (db));
+      LOGE ( "get_tunnel_end prepare failed: %s\n",
+             sqlite3_errmsg (db));
       return -1;
     }
   sqlite3_bind_int (st, 1, start_sector);
@@ -79,7 +80,7 @@ create_complex_warps (sqlite3 *db, int numSectors)
 {
   char *errmsg = 0;
   int rc;
-  fprintf (stderr, "BIGBANG: Creating complex warps...\n");
+  LOGE ( "BIGBANG: Creating complex warps...\n");
   // Step 1: Create longer tunnels by splicing two existing tunnels
   const char *q_find_tunnels =
     "SELECT from_sector FROM (SELECT from_sector, COUNT(to_sector) AS out_degree FROM sector_warps GROUP BY from_sector) WHERE out_degree = 1 ORDER BY RANDOM() LIMIT 2;";
@@ -87,8 +88,8 @@ create_complex_warps (sqlite3 *db, int numSectors)
   int start_sector1 = -1, start_sector2 = -1;
   if (sqlite3_prepare_v2 (db, q_find_tunnels, -1, &st, NULL) != SQLITE_OK)
     {
-      fprintf (stderr, "find_tunnels prepare failed: %s\n",
-               sqlite3_errmsg (db));
+      LOGE ( "find_tunnels prepare failed: %s\n",
+             sqlite3_errmsg (db));
       return -1;
     }
   rc = sqlite3_step (st);
@@ -119,7 +120,7 @@ create_complex_warps (sqlite3 *db, int numSectors)
           sqlite3_exec (db, sql_delete_warp, NULL, NULL, &errmsg);
           if (errmsg)
             {
-              fprintf (stderr, "SQL error: %s\n", errmsg);
+              LOGE ( "SQL error: %s\n", errmsg);
               sqlite3_free (errmsg);
               return -1;
             }
@@ -132,7 +133,7 @@ create_complex_warps (sqlite3 *db, int numSectors)
           sqlite3_exec (db, sql_insert_warp, NULL, NULL, &errmsg);
           if (errmsg)
             {
-              fprintf (stderr, "SQL error: %s\n", errmsg);
+              LOGE ( "SQL error: %s\n", errmsg);
               sqlite3_free (errmsg);
               // Re-insert the original warp to restore state
               char sql_reinsert_original[128];
@@ -144,8 +145,8 @@ create_complex_warps (sqlite3 *db, int numSectors)
               sqlite3_exec (db, sql_reinsert_original, NULL, NULL, &errmsg);    // errmsg is reused, but should be handled if this also fails
               if (errmsg)
                 {
-                  fprintf (stderr, "CRITICAL SQL error during rollback: %s\n",
-                           errmsg);
+                  LOGE ( "CRITICAL SQL error during rollback: %s\n",
+                         errmsg);
                   sqlite3_free (errmsg);
                 }
               return -1;
@@ -155,8 +156,8 @@ create_complex_warps (sqlite3 *db, int numSectors)
   // Step 2: Create one-way warps by converting bidirectional warps
   const int num_one_way_warps =
     (int) (numSectors * (DEFAULT_PERCENT_ONEWAY / 100.0));
-  fprintf (stderr, "BIGBANG: Creating %d one-way warps...\n",
-           num_one_way_warps);
+  LOGE ( "BIGBANG: Creating %d one-way warps...\n",
+         num_one_way_warps);
   for (int i = 0; i < num_one_way_warps; i++)
     {
       const char *q_find_bidirectional =
@@ -166,8 +167,8 @@ create_complex_warps (sqlite3 *db, int numSectors)
       if (sqlite3_prepare_v2 (db, q_find_bidirectional, -1, &st, NULL) !=
           SQLITE_OK)
         {
-          fprintf (stderr, "find_bidirectional prepare failed: %s\n",
-                   sqlite3_errmsg (db));
+          LOGE ( "find_bidirectional prepare failed: %s\n",
+                 sqlite3_errmsg (db));
           continue;
         }
       if (sqlite3_step (st) == SQLITE_ROW)
@@ -187,7 +188,7 @@ create_complex_warps (sqlite3 *db, int numSectors)
           sqlite3_exec (db, sql_delete_return, NULL, NULL, &errmsg);
           if (errmsg)
             {
-              fprintf (stderr, "SQL error: %s\n", errmsg);
+              LOGE ( "SQL error: %s\n", errmsg);
               sqlite3_free (errmsg);
             }
         }
@@ -195,8 +196,8 @@ create_complex_warps (sqlite3 *db, int numSectors)
   // Step 3: Create dead-end warps by converting low-degree sectors
   const int num_dead_end_warps =
     (int) (numSectors * (DEFAULT_PERCENT_DEADEND / 100.0));
-  fprintf (stderr, "BIGBANG: Creating %d dead-end warps...\n",
-           num_dead_end_warps);
+  LOGE ( "BIGBANG: Creating %d dead-end warps...\n",
+         num_dead_end_warps);
   for (int i = 0; i < num_dead_end_warps; i++)
     {
       const char *q_find_low_degree =
@@ -208,8 +209,8 @@ create_complex_warps (sqlite3 *db, int numSectors)
       if (sqlite3_prepare_v2 (db, q_find_low_degree, -1, &st, NULL) !=
           SQLITE_OK)
         {
-          fprintf (stderr, "find_low_degree prepare failed: %s\n",
-                   sqlite3_errmsg (db));
+          LOGE ( "find_low_degree prepare failed: %s\n",
+                 sqlite3_errmsg (db));
           continue;
         }
       if (sqlite3_step (st) == SQLITE_ROW)
@@ -229,7 +230,7 @@ create_complex_warps (sqlite3 *db, int numSectors)
               sqlite3_exec (db, sql_delete, NULL, NULL, &errmsg);
               if (errmsg)
                 {
-                  fprintf (stderr, "SQL error: %s\n", errmsg);
+                  LOGE ( "SQL error: %s\n", errmsg);
                   sqlite3_free (errmsg);
                 }
               char sql_insert[128];
@@ -241,7 +242,7 @@ create_complex_warps (sqlite3 *db, int numSectors)
               sqlite3_exec (db, sql_insert, NULL, NULL, &errmsg);
               if (errmsg)
                 {
-                  fprintf (stderr, "SQL error: %s\n", errmsg);
+                  LOGE ( "SQL error: %s\n", errmsg);
                   sqlite3_free (errmsg);
                 }
             }

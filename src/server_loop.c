@@ -1484,7 +1484,7 @@ int
 server_loop (volatile sig_atomic_t *running)
 {
   LOGI ("Server loop starting...\n");
-  //  fprintf (stderr, "Server loop starting...\n");
+  //  LOGE( "Server loop starting...\n");
 #ifdef SIGPIPE
   signal (SIGPIPE, SIG_IGN);    /* don’t die on write to closed socket */
 #endif
@@ -1492,11 +1492,11 @@ server_loop (volatile sig_atomic_t *running)
   if (listen_fd < 0)
     {
       LOGE ("Server loop exiting due to listen socket error.\n");
-      //      fprintf (stderr, "Server loop exiting due to listen socket error.\n");
+      //      LOGE( "Server loop exiting due to listen socket error.\n");
       return -1;
     }
   LOGI ("Listening on 0.0.0.0:%d\n", g_cfg.server_port);
-  //  fprintf (stderr, "Listening on 0.0.0.0:%d\n", LISTEN_PORT);
+  //  LOGE( "Listening on 0.0.0.0:%d\n", LISTEN_PORT);
   struct pollfd pfd = {.fd = listen_fd,.events = POLLIN,.revents = 0 };
   pthread_attr_t attr;
   pthread_attr_init (&attr);
@@ -1535,7 +1535,7 @@ server_loop (volatile sig_atomic_t *running)
           if (!ctx)
             {
               LOGE ("malloc failed\n");
-              //              fprintf (stderr, "malloc failed\n");
+              //              LOGE( "malloc failed\n");
               continue;
             }
           server_register_client (ctx);
@@ -1561,7 +1561,7 @@ server_loop (volatile sig_atomic_t *running)
           inet_ntop (AF_INET, &ctx->peer.sin_addr, ip, sizeof (ip));
           LOGI ("Client connected: %s:%u (fd=%d)\n",
                 ip, (unsigned) ntohs (ctx->peer.sin_port), cfd);
-          //      fprintf (stderr, "Client connected: %s:%u (fd=%d)\n",
+          //      LOGE( "Client connected: %s:%u (fd=%d)\n",
           //       ip, (unsigned) ntohs (ctx->peer.sin_port), cfd);
           // after filling ctx->fd, ctx->running, ctx->peer, and assigning ctx->cid
           pthread_t th;
@@ -1570,14 +1570,14 @@ server_loop (volatile sig_atomic_t *running)
             {
               LOGI ("[cid=%" PRIu64 "] thread created (pthread=%lu)\n",
                     ctx->cid, (unsigned long) th);
-              //              fprintf (stderr,
+              //              LOGE(
               //       "[cid=%" PRIu64 "] thread created (pthread=%lu)\n",
               //       ctx->cid, (unsigned long) th);
             }
           else
             {
               LOGE ("pthread_create: %s\n", strerror (prc));
-              //              fprintf (stderr, "pthread_create: %s\n", strerror (prc));
+              //              LOGE( "pthread_create: %s\n", strerror (prc));
               close (cfd);
               free (ctx);
             }
@@ -1587,7 +1587,7 @@ server_loop (volatile sig_atomic_t *running)
   pthread_attr_destroy (&attr);
   close (listen_fd);
   LOGI ("Server loop exiting...\n");
-  //  fprintf (stderr, "Server loop exiting...\n");
+  //  LOGE( "Server loop exiting...\n");
   return 0;
 }
 

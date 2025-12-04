@@ -554,7 +554,7 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
                                   "Insufficient credits on ship for purchase.");
     }
   // 8. Execute Transaction
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   sqlite3_exec (db, "BEGIN IMMEDIATE", NULL, NULL, NULL);
   long long new_balance = 0;
   int rc_deduct =
@@ -563,7 +563,7 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
   if (rc_deduct != SQLITE_OK)
     {
       sqlite3_exec (db, "ROLLBACK", NULL, NULL, NULL);
-      pthread_mutex_unlock (&db_mutex);
+      db_mutex_unlock ();
       return send_error_response (ctx, root, 1813,
                                   "Insufficient credits (concurrent).");
     }
@@ -575,11 +575,11 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
   if (rc_upd != SQLITE_OK)
     {
       sqlite3_exec (db, "ROLLBACK", NULL, NULL, NULL);
-      pthread_mutex_unlock (&db_mutex);
+      db_mutex_unlock ();
       return send_error_response (ctx, root, 500, "Database update failed.");
     }
   sqlite3_exec (db, "COMMIT", NULL, NULL, NULL);
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   // 9. Response
   int final_val = current_val + quantity;
   json_t *ship_obj = json_object ();

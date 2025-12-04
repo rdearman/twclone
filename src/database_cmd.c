@@ -17,8 +17,6 @@
 #include "database_cmd.h"
 #include "server_log.h"
 #include "server_cron.h"
-
-
 int
 db_player_update_commission (sqlite3 *db, int player_id)
 {
@@ -31,7 +29,7 @@ db_player_update_commission (sqlite3 *db, int player_id)
   int player_alignment = 0;
   long long player_experience = 0;
   int new_commission_id = 0;
-  pthread_mutex_lock (&db_mutex);  // Lock for thread safety
+  db_mutex_lock ();  // Lock for thread safety
   // 1. Get player's current alignment and experience
   const char *sql_get_player_stats =
     "SELECT alignment, experience FROM players WHERE id = ?1;";
@@ -134,7 +132,7 @@ cleanup:
     {
       sqlite3_finalize (st);
     }
-  pthread_mutex_unlock (&db_mutex);  // Unlock
+  db_mutex_unlock ();  // Unlock
   return rc;
 }
 
@@ -162,7 +160,7 @@ db_commission_for_player (
     "AND min_exp <= ?2 "
     "ORDER BY min_exp DESC "
     "LIMIT 1;";
-  pthread_mutex_lock (&db_mutex);  // Lock for thread safety
+  db_mutex_lock ();  // Lock for thread safety
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -240,7 +238,7 @@ cleanup:
     {
       sqlite3_finalize (st);      // Finalize if not NULL
     }
-  pthread_mutex_unlock (&db_mutex);  // Unlock
+  db_mutex_unlock ();  // Unlock
   return rc;
 }
 
@@ -269,7 +267,7 @@ db_alignment_band_for_value (
     "FROM alignment_band "
     "WHERE ?1 BETWEEN min_align AND max_align "
     "LIMIT 1;";
-  pthread_mutex_lock (&db_mutex);  // Lock for thread safety
+  db_mutex_lock ();  // Lock for thread safety
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -353,7 +351,7 @@ db_alignment_band_for_value (
     }
 cleanup:
   sqlite3_finalize (st);
-  pthread_mutex_unlock (&db_mutex);  // Unlock
+  db_mutex_unlock ();  // Unlock
   return rc;
 }
 
@@ -375,8 +373,6 @@ static const char *get_player_view_column_name (const char *client_name);
 // Unused static declarations (from original file, kept for now)
 static int db_seed_ai_qa_bot_bank_account_unlocked (void);
 static int db_seed_law_enforcement_config_unlocked (void);
-
-
 /* Parse "2,3,4,5" -> [2,3,4,5] */
 json_t *
 parse_neighbors_csv (const unsigned char *txt)
@@ -505,8 +501,6 @@ done:
 /* ----------------------------------------------------------------------
  * Bank: transactions
  * ---------------------------------------------------------------------- */
-
-
 int
 db_bank_get_transactions (const char *owner_type, int owner_id, int limit,
                           const char *tx_type_filter, long long start_date,
@@ -611,8 +605,6 @@ db_bank_get_transactions (const char *owner_type, int owner_id, int limit,
  * bank_interest_policy or bank_orders). They remain explicit TODO
  * placeholders instead of silently doing the wrong thing.
  * ---------------------------------------------------------------------- */
-
-
 int
 db_bank_apply_interest (void)
 {
@@ -656,8 +648,6 @@ db_bank_process_orders (void)
  * owner_type is accepted for future extension; currently only 'player'
  * is supported and mapped directly to player_id.
  * ---------------------------------------------------------------------- */
-
-
 int
 db_bank_set_frozen_status (const char *owner_type, int owner_id,
                            int is_frozen)
@@ -743,8 +733,6 @@ db_bank_get_frozen_status (const char *owner_type, int owner_id,
  * We don't know the exact price column name, so try a small set of
  * plausible candidates in order.
  * ---------------------------------------------------------------------- */
-
-
 static int
 select_price_with_column (sqlite3 *db, const char *col,
                           const char *commodity_code, int *out_price)
@@ -858,8 +846,6 @@ db_commodity_update_price (const char *commodity_code, int new_price)
 /* ----------------------------------------------------------------------
  * Commodities: orders & trades
  * ---------------------------------------------------------------------- */
-
-
 int
 db_commodity_create_order (const char *actor_type, int actor_id,
                            const char *commodity_code, const char *side,
@@ -1080,8 +1066,6 @@ db_commodity_get_trades (const char *commodity_code, int limit,
  * show a dedicated port_goods table. Without the exact port stock
  * schema this would be guesswork, so these remain explicit TODOs.
  * ---------------------------------------------------------------------- */
-
-
 int
 db_port_get_goods_on_hand (int port_id, const char *commodity_code,
                            int *out_quantity)
@@ -1112,8 +1096,6 @@ db_port_update_goods_on_hand (int port_id, const char *commodity_code,
 /* ----------------------------------------------------------------------
  * Planets: goods on hand (planet_goods)
  * ---------------------------------------------------------------------- */
-
-
 int
 db_planet_get_goods_on_hand (int planet_id, const char *commodity_code,
                              int *out_quantity)
@@ -1225,8 +1207,6 @@ db_planet_update_goods_on_hand (int planet_id, const char *commodity_code,
 
 
 // New helper functions for ship destruction and player status
-
-
 // db_mark_ship_destroyed: Marks a ship as destroyed.
 int
 db_mark_ship_destroyed (sqlite3 *db, int ship_id)
@@ -1894,7 +1874,7 @@ db_get_law_config_int (const char *key, int default_value)
   int value = default_value;
   const char *sql =
     "SELECT value FROM law_enforcement_config WHERE key = ? AND value_type = 'INTEGER';";
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -1920,7 +1900,7 @@ cleanup:
     {
       sqlite3_finalize (st);
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return value;
 }
 
@@ -1939,7 +1919,7 @@ db_get_law_config_text (const char *key, const char *default_value)
   char *value = NULL;
   const char *sql =
     "SELECT value FROM law_enforcement_config WHERE key = ? AND value_type = 'TEXT';";
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -1967,7 +1947,7 @@ cleanup:
     {
       sqlite3_finalize (st);
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return value;   // Caller is responsible for freeing this memory
 }
 
@@ -1995,7 +1975,7 @@ db_player_get_last_rob_attempt (int player_id,
     }
   const char *sql =
     "SELECT last_port_id, last_attempt_at FROM player_last_rob WHERE player_id = ?;";
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -2030,7 +2010,7 @@ cleanup:
     {
       sqlite3_finalize (st);
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -2051,7 +2031,7 @@ db_player_set_last_rob_attempt (int player_id,
   const char *sql =
     "INSERT INTO player_last_rob (player_id, last_port_id, last_attempt_at) VALUES (?, ?, ?) "
     "ON CONFLICT(player_id) DO UPDATE SET last_port_id = excluded.last_port_id, last_attempt_at = excluded.last_attempt_at;";
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -2076,7 +2056,7 @@ cleanup:
     {
       sqlite3_finalize (st);
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -2093,7 +2073,7 @@ h_get_cluster_id_for_sector (sqlite3 *db, int sector_id, int *out_cluster_id)
   int rc = SQLITE_ERROR;
   const char *sql =
     "SELECT cluster_id FROM cluster_sectors WHERE sector_id = ?1;";
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -2123,7 +2103,7 @@ cleanup:
     {
       sqlite3_finalize (st);
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -2151,7 +2131,7 @@ h_get_cluster_alignment (sqlite3 *db, int sector_id, int *out_alignment)
     }
   sqlite3_stmt *st = NULL;
   const char *sql = "SELECT alignment FROM clusters WHERE id = ?1;";
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -2180,7 +2160,7 @@ cleanup:
     {
       sqlite3_finalize (st);
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -2239,7 +2219,7 @@ db_port_add_bust_record (int port_id,
   const char *sql =
     "INSERT INTO port_busts (port_id, player_id, last_bust_at, bust_type, active) VALUES (?, ?, ?, ?, 1) "
     "ON CONFLICT(port_id, player_id) DO UPDATE SET last_bust_at = excluded.last_bust_at, bust_type = excluded.bust_type, active = 1;";
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -2263,7 +2243,7 @@ cleanup:
     {
       sqlite3_finalize (st);
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -2282,7 +2262,7 @@ db_port_get_active_busts (int port_id, int player_id)
   int rc = SQLITE_ERROR;
   const char *sql =
     "SELECT COUNT(*) FROM port_busts WHERE port_id = ? AND player_id = ? AND active = 1;";
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -2307,7 +2287,7 @@ cleanup:
     {
       sqlite3_finalize (st);
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -2393,211 +2373,79 @@ db_path_exists (sqlite3 *db, int from, int to)
 
 
 /* /\* Return 1 if path exists from `from` to `to`, 0 if no path, <0 on error. *\/ */
-
-
 /* int */
-
-
 /* db_path_exists (sqlite3 *db, int from, int to) */
-
-
 /* { */
-
-
 /*   int max_id = 0; */
-
-
 /*   sqlite3_stmt *st = NULL; */
-
-
 /*   int rc; */
-
-
 /*   /\* Get max id once; in practice you can cache this in caller. *\/ */
-
-
 /*   rc = sqlite3_prepare_v2 (db, "SELECT MAX(id) FROM sectors", -1, &st, NULL); */
-
-
 /*   if (rc != SQLITE_OK) */
-
-
 /*     return -1; */
-
-
 /*   if (sqlite3_step (st) == SQLITE_ROW) */
-
-
 /*     max_id = sqlite3_column_int (st, 0); */
-
-
 /*   sqlite3_finalize (st); */
-
-
 /*   if (max_id <= 0 || from <= 0 || from > max_id || to <= 0 || to > max_id) */
-
-
 /*     return 0;			/\* treat as “no path” *\/ */
-
-
 /*   size_t N = (size_t) max_id + 1; */
-
-
 /*   unsigned char *seen = calloc (N, 1); */
-
-
 /*   int *queue = malloc (N * sizeof (int)); */
-
-
 /*   if (!seen || !queue) */
-
-
 /*     { */
-
-
 /*       free (seen); */
-
-
 /*       free (queue); */
-
-
 /*       return -1; */
-
-
 /*     } */
-
-
 /*   /\* Prepare neighbour query *\/ */
-
-
 /*   rc = sqlite3_prepare_v2 (db, */
-
-
 /*                         "SELECT to_sector FROM sector_warps WHERE from_sector = ?1", */
-
-
 /*                         -1, &st, NULL); */
-
-
 /*   if (rc != SQLITE_OK || !st) */
-
-
 /*     { */
-
-
 /*       free (seen); */
-
-
 /*       free (queue); */
-
-
 /*       return -1; */
-
-
 /*     } */
-
-
 /*   int qh = 0, qt = 0; */
-
-
 /*   queue[qt++] = from; */
-
-
 /*   seen[from] = 1; */
-
-
 /*   int found = 0; */
-
-
 /*   while (qh < qt && !found) */
-
-
 /*     { */
-
-
 /*       int u = queue[qh++]; */
-
-
 /*       sqlite3_reset (st); */
-
-
 /*       sqlite3_clear_bindings (st); */
-
-
 /*       sqlite3_bind_int (st, 1, u); */
-
-
 /*       while ((rc = sqlite3_step (st)) == SQLITE_ROW) */
-
-
 /*      { */
-
-
 /*        int v = sqlite3_column_int (st, 0); */
-
-
 /*        if (v <= 0 || v > max_id) */
-
-
 /*          continue; */
-
-
 /*        if (seen[v]) */
-
-
 /*          continue; */
-
-
 /*        seen[v] = 1; */
-
-
 /*        if (v == to) */
-
-
 /*          { */
-
-
 /*            found = 1; */
-
-
 /*            break; */
-
-
 /*          } */
-
-
 /*        queue[qt++] = v; */
-
-
 /*      } */
-
-
 /*     } */
-
-
 /*   sqlite3_finalize (st); */
-
-
 /*   free (seen); */
-
-
 /*   free (queue); */
-
-
 /*   return found; */
-
-
 /* } */
-
-
 // Implementation of db_get_config_int (thread-safe wrapper)
 int
 db_get_config_int (sqlite3 *db, const char *key_col_name, int default_value)
 {
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   long long value =
     h_get_config_int_unlocked (db, key_col_name, (long long) default_value);
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return (int) value;
 }
 
@@ -2606,10 +2454,10 @@ db_get_config_int (sqlite3 *db, const char *key_col_name, int default_value)
 bool
 db_get_config_bool (sqlite3 *db, const char *key_col_name, bool default_value)
 {
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   long long value =
     h_get_config_int_unlocked (db, key_col_name, (long long) default_value);
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return (bool) value;
 }
 
@@ -2637,8 +2485,6 @@ extern int db_notice_create (const char *title,
                              const char *body,
                              const char *severity,
                              time_t expires_at);                                                                // Existing system notice creation
-
-
 // --- NEW HELPER: For creating personalized bank alert notices ---
 // This helper function creates a system notice but includes context data
 // that can be used by a communication module to target specific players
@@ -3237,7 +3083,7 @@ db_rand_npc_shipname (char *out, size_t out_sz)
       out[0] = '\0';
     }
   int rc;
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   sqlite3_stmt *st = NULL;
   static const char *SQL =
     "SELECT name FROM npc_shipnames ORDER BY RANDOM() LIMIT 1;";
@@ -3276,7 +3122,7 @@ db_rand_npc_shipname (char *out, size_t out_sz)
     {
       sqlite3_finalize (st);
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -3286,16 +3132,14 @@ db_ensure_ship_perms_column (void)
 {
   int rc;
   sqlite3 *db = db_get_handle ();
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   rc = db_ensure_ship_perms_column_unlocked (db);
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
 
 /////////////////////////////////
-
-
 /* Unlocked: caller MUST already hold db_mutex */
 static int
 column_exists_unlocked (sqlite3 *db, const char *table, const char *col)
@@ -3327,9 +3171,9 @@ static int
 column_exists (sqlite3 *db, const char *table, const char *col)
 {
   int ret;
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   ret = column_exists_unlocked (db, table, col);
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return ret;
 }
 
@@ -3364,8 +3208,6 @@ db_ensure_ship_perms_column_unlocked (sqlite3 *db)
 
 
 /* ---------- SECTOR SCAN CORE (thread-safe, single statement) ---------- */
-
-
 /* Shape returned via *out_obj:
    {
      "name": TEXT,
@@ -3398,7 +3240,7 @@ db_sector_scan_core (int sector_id, json_t **out_obj)
   int rc = SQLITE_ERROR;
   sqlite3_stmt *st = NULL;
   /* Full critical section: prepare → bind → step → finalize */
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -3438,7 +3280,7 @@ done:
     {
       sqlite3_finalize (st);
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -3569,11 +3411,11 @@ db_player_name (int64_t player_id, char **out)
     }
   *out = NULL;
   /* Use the same handle + mutex model as the rest of database.c */
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   sqlite3 *dbh = db_get_handle ();
   if (!dbh)
     {
-      pthread_mutex_unlock (&db_mutex);
+      db_mutex_unlock ();
       return -3;
     }
   static const char *SQL =
@@ -3583,14 +3425,14 @@ db_player_name (int64_t player_id, char **out)
   int rc = sqlite3_prepare_v2 (dbh, SQL, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
-      pthread_mutex_unlock (&db_mutex);
+      db_mutex_unlock ();
       return -4;
     }
   rc = sqlite3_bind_int64 (st, 1, (sqlite3_int64) player_id);
   if (rc != SQLITE_OK)
     {
       sqlite3_finalize (st);
-      pthread_mutex_unlock (&db_mutex);
+      db_mutex_unlock ();
       return -5;
     }
   rc = sqlite3_step (st);
@@ -3604,19 +3446,19 @@ db_player_name (int64_t player_id, char **out)
           if (!dup)
             {
               sqlite3_finalize (st);
-              pthread_mutex_unlock (&db_mutex);
+              db_mutex_unlock ();
               return -6;
             }
           memcpy (dup, txt, n + 1);
           *out = dup;           /* caller will free() */
           sqlite3_finalize (st);
-          pthread_mutex_unlock (&db_mutex);
+          db_mutex_unlock ();
           return 0;
         }
       /* had a row but empty name — treat as not found */
     }
   sqlite3_finalize (st);
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return -1;                    /* not found */
 }
 
@@ -3629,11 +3471,11 @@ db_get_ship_name (sqlite3 *db, int ship_id, char **out_name)
       return -2;
     }
   *out_name = NULL;
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   sqlite3 *dbh = db;
   if (!dbh)
     {
-      pthread_mutex_unlock (&db_mutex);
+      db_mutex_unlock ();
       return -3;
     }
   static const char *SQL =
@@ -3643,7 +3485,7 @@ db_get_ship_name (sqlite3 *db, int ship_id, char **out_name)
   if (rc != SQLITE_OK)
     {
       LOGE ("db_get_ship_name: prepare failed: %s", sqlite3_errmsg (dbh));
-      pthread_mutex_unlock (&db_mutex);
+      db_mutex_unlock ();
       return -4;
     }
   sqlite3_bind_int (st, 1, ship_id);
@@ -3678,7 +3520,7 @@ db_get_ship_name (sqlite3 *db, int ship_id, char **out_name)
       rc = SQLITE_ERROR;
     }
   sqlite3_finalize (st);
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -3691,11 +3533,11 @@ db_get_port_name (sqlite3 *db, int port_id, char **out_name)
       return -2;
     }
   *out_name = NULL;
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   sqlite3 *dbh = db;
   if (!dbh)
     {
-      pthread_mutex_unlock (&db_mutex);
+      db_mutex_unlock ();
       return -3;
     }
   static const char *SQL =
@@ -3705,7 +3547,7 @@ db_get_port_name (sqlite3 *db, int port_id, char **out_name)
   if (rc != SQLITE_OK)
     {
       LOGE ("db_get_port_name: prepare failed: %s", sqlite3_errmsg (dbh));
-      pthread_mutex_unlock (&db_mutex);
+      db_mutex_unlock ();
       return -4;
     }
   sqlite3_bind_int (st, 1, port_id);
@@ -3740,7 +3582,7 @@ db_get_port_name (sqlite3 *db, int port_id, char **out_name)
       rc = SQLITE_ERROR;
     }
   sqlite3_finalize (st);
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -3749,8 +3591,6 @@ db_get_port_name (sqlite3 *db, int port_id, char **out_name)
 static const char *INSERT_ENGINE_EVENT_SQL =
   "INSERT INTO engine_events (ts, type, actor_owner_type, actor_owner_id, sector_id, payload) "
   "VALUES (?, ?, ?, ?, ?, ?);";
-
-
 int
 db_log_engine_event (long long ts,
                      const char *type,
@@ -3939,7 +3779,7 @@ db_is_sector_fedspace (int ck_sector)
     "SELECT sector_id from stardock_location where sector_id=?1;";
   sqlite3_stmt *st = NULL;
   /* Full critical section: prepare → bind → step → finalize */
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   rc = sqlite3_prepare_v2 (db, FEDSPACE_SQL, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -3966,7 +3806,7 @@ done:
     {
       sqlite3_finalize (st);
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -3979,7 +3819,7 @@ db_get_port_id_by_sector (int sector_id)
   sqlite3_stmt *stmt = NULL;
   int port_id = -1;
   const char *sql = "SELECT id FROM ports WHERE sector=?1;";
-  pthread_mutex_lock (&db_mutex);       // Critical section starts
+  db_mutex_lock ();       // Critical section starts
   if (sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL) != SQLITE_OK)
     {
       LOGE ("db_get_port_id_by_sector: %s", sqlite3_errmsg (db));
@@ -3992,7 +3832,7 @@ db_get_port_id_by_sector (int sector_id)
     }
 done:
   sqlite3_finalize (stmt);
-  pthread_mutex_unlock (&db_mutex);     // Critical section ends
+  db_mutex_unlock ();     // Critical section ends
   return port_id;
 }
 
@@ -4004,7 +3844,7 @@ db_get_ship_sector_id (sqlite3 *db, int ship_id)
   int rc;                       // For SQLite's intermediate return codes.
   int out_sector = 0;
   // 1. Acquire the lock at the very beginning of the function.
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   const char *sql = "SELECT sector FROM ships WHERE id=?";
   // 2. Prepare the statement. Use the passed 'db' handle.
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
@@ -4039,7 +3879,7 @@ cleanup:
       sqlite3_finalize (st);
     }
   // 5. Release the lock. This is the final step before returning.
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   // 6. Return the result. 0 on error or not found, >0 on success.
   return out_sector;
 }
@@ -4266,8 +4106,6 @@ cleanup:
 *  Matches signatures in database.h exactly.
 *  Must replace ALL previous versions of these functions.
 ******************************************************************************/
-
-
 /*
  * Internal helper: Add credits. Caller must hold db_mutex.
  */
@@ -4414,7 +4252,7 @@ h_add_credits (sqlite3 *db, const char *owner_type, int owner_id,
       return SQLITE_MISUSE;
     }
   int rc;
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   // Get or create account ID
   int account_id = -1;
   rc = h_get_account_id_unlocked (db, owner_type, owner_id, &account_id);
@@ -4432,7 +4270,7 @@ h_add_credits (sqlite3 *db, const char *owner_type, int owner_id,
                 owner_type,
                 owner_id,
                 rc);
-          pthread_mutex_unlock (&db_mutex);
+          db_mutex_unlock ();
           return rc;
         }
     }
@@ -4442,7 +4280,7 @@ h_add_credits (sqlite3 *db, const char *owner_type, int owner_id,
             owner_type,
             owner_id,
             rc);
-      pthread_mutex_unlock (&db_mutex);
+      db_mutex_unlock ();
       return rc;
     }
   LOGD ("h_add_credits: Adding %lld credits to account %d (%s:%d)",
@@ -4468,7 +4306,7 @@ h_add_credits (sqlite3 *db, const char *owner_type, int owner_id,
       LOGD ("h_add_credits: Credits added successfully. New balance: %lld",
             new_balance_out ? *new_balance_out : -1);
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -4488,18 +4326,18 @@ h_deduct_credits (sqlite3 *db,
     {
       return SQLITE_MISUSE;
     }
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   int account_id = -1;
   int rc = h_get_account_id_unlocked (db, owner_type, owner_id, &account_id);
   if (rc != SQLITE_OK)
     {
-      pthread_mutex_unlock (&db_mutex);
+      db_mutex_unlock ();
       return rc;
     }
   rc = h_deduct_credits_unlocked (db, account_id, amount,
                                   tx_type ? tx_type : "DEBIT",
                                   tx_group_id, new_balance_out);
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -4526,7 +4364,7 @@ calculate_fees (sqlite3 *db, const char *tx_type, long long base_amount,
     "  AND (owner_type IS NULL OR owner_type = ?2) " "  AND currency = 'CRD' "                                                                                                                                          // Assuming CRD for now
     "  AND effective_from <= ?3 "
     "  AND (effective_to IS NULL OR effective_to >= ?3) " "ORDER BY fee_code;";                                 // Deterministic order
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -4591,7 +4429,7 @@ cleanup:
     {
       sqlite3_finalize (stmt);
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -4611,7 +4449,7 @@ h_update_planet_stock (sqlite3 *db, int planet_id, const char *commodity_code,
     {
       return SQLITE_MISUSE;
     }
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   const char *sql =
     "UPDATE planet_goods SET quantity = quantity + ? "
     "WHERE planet_id = ? AND commodity = ?;";
@@ -4661,7 +4499,7 @@ cleanup:
     {
       sqlite3_finalize (stmt);
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -4681,7 +4519,7 @@ h_update_port_stock (sqlite3 *db, int port_id, const char *commodity_code,
     {
       return SQLITE_MISUSE;
     }
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   const char *sql =
     "UPDATE ports SET "
     "ore_on_hand = CASE WHEN ?3 = 'ore' THEN ore_on_hand + ?1 ELSE ore_on_hand END, "
@@ -4744,7 +4582,7 @@ cleanup:
     {
       sqlite3_finalize (stmt);
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -4756,7 +4594,7 @@ db_fighters_at_sector_json (int sector_id, json_t **out_array)
   sqlite3_stmt *st = NULL;
   json_t *arr = NULL;
   int rc = SQLITE_ERROR;
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   if (!out_array)
     {
       goto cleanup;
@@ -4828,7 +4666,7 @@ cleanup:
     {
       json_decref (arr);
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -4840,7 +4678,7 @@ db_mines_at_sector_json (int sector_id, json_t **out_array)
   sqlite3_stmt *st = NULL;
   json_t *arr = NULL;
   int rc = SQLITE_ERROR;
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   if (!out_array)
     {
       goto cleanup;
@@ -4915,7 +4753,7 @@ cleanup:
     {
       json_decref (arr);
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -4933,8 +4771,6 @@ cleanup:
  * entity type.
  *
  */
-
-
 /**
  * @brief Generic helper to get a bank balance for any owner type.
  * @param owner_type The type of the owner (e.g., "player", "corp").
@@ -5062,9 +4898,9 @@ db_bank_account_exists (const char *owner_type, int owner_id)
     }
   int account_id = -1;
   int rc;
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   rc = h_get_account_id_unlocked (db, owner_type, owner_id, &account_id);
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   if (rc == SQLITE_OK)
     {
       return 1;                 // Account exists
@@ -5098,8 +4934,6 @@ db_bank_account_exists (const char *owner_type, int owner_id)
  *       sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
  *   }
  */
-
-
 /**
  * @brief Creates a new bank account for a given owner.
  * @param owner_type The type of the owner (e.g., "player", "corp").
@@ -5118,11 +4952,11 @@ db_bank_create_account (const char *owner_type, int owner_id,
       return SQLITE_ERROR;
     }
   int rc;
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   rc =
     h_create_bank_account_unlocked (db, owner_type, owner_id, initial_balance,
                                     account_id_out);
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -5176,13 +5010,13 @@ db_bank_transfer (const char *from_owner_type, int from_owner_id,
                   const char *to_owner_type, int to_owner_id,
                   long long amount)
 {
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   int rc =
     h_bank_transfer_unlocked (db_get_handle (), from_owner_type,
                               from_owner_id,
                               to_owner_type, to_owner_id,
                               amount, "TRANSFER", NULL);
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -5458,7 +5292,7 @@ db_player_info_json (int player_id, json_t **out)
   sqlite3_stmt *st = NULL;
   json_t *root_obj = NULL;      /* Renamed from obj */
   int ret_code = SQLITE_ERROR;
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   if (out)
     {
       *out = NULL;
@@ -5601,7 +5435,7 @@ cleanup:
           json_decref (root_obj);
         }
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return ret_code;
 }
 
@@ -5641,8 +5475,6 @@ static const struct {
   {"approx_worth", "approx_worth"},
   {NULL, NULL}   // Sentinel
 };
-
-
 // Function to get the corresponding view column name
 static const char *
 get_player_view_column_name (const char *client_name)
@@ -5745,7 +5577,7 @@ db_player_info_selected_fields (int player_id,
         "db_player_info_selected_fields: SQL query string allocation failed.\n");
       return SQLITE_NOMEM;
     }
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   rc = sqlite3_prepare_v2 (db, sql_query, -1, &stmt, NULL);
   sqlite3_free (sql_query);  // Free sqlite3_mprintf'd string immediately
   if (rc != SQLITE_OK)
@@ -5754,7 +5586,7 @@ db_player_info_selected_fields (int player_id,
         "db_player_info_selected_fields: Failed to prepare statement for player %d: %s\n",
         player_id,
         sqlite3_errmsg (db));
-      pthread_mutex_unlock (&db_mutex);
+      db_mutex_unlock ();
       return rc;
     }
   sqlite3_bind_int (stmt, 1, player_id);
@@ -5766,7 +5598,7 @@ db_player_info_selected_fields (int player_id,
           LOGE (
             "db_player_info_selected_fields: Failed to allocate output JSON object.\n");
           sqlite3_finalize (stmt);
-          pthread_mutex_unlock (&db_mutex);
+          db_mutex_unlock ();
           return SQLITE_NOMEM;
         }
       // Iterate through the original requested fields_array to populate the output JSON
@@ -5852,7 +5684,7 @@ db_player_info_selected_fields (int player_id,
         sqlite3_errmsg (db));
     }
   sqlite3_finalize (stmt);
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -5865,7 +5697,7 @@ db_sector_beacon_text (int sector_id, char **out_text)
   // The final return code for the function.
   int ret_code = SQLITE_ERROR;
   // 1. Acquire the lock at the beginning of the function.
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   // Initialize the output pointer.
   if (out_text)
     {
@@ -5921,7 +5753,7 @@ cleanup:
       sqlite3_finalize (st);
     }
   // 6. Always release the lock at the very end.
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   // 7. A single return statement, as per the pattern.
   return ret_code;
 }
@@ -5938,7 +5770,7 @@ db_ships_at_sector_json (int player_id, int sector_id, json_t **out)
       *out = NULL;
     }
   /* 1) Lock DB */
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   /* 2) Result array */
   json_t *ships = json_array ();
   if (!ships)
@@ -6014,7 +5846,7 @@ cleanup:
     {
       json_decref (ships);
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return ret_code;
 }
 
@@ -6029,7 +5861,7 @@ db_ports_at_sector_json (int sector_id, json_t **out_array)
   int rc;                       // For SQLite return codes.
   int ret_code = -1;            // The final return code for the function.
   // 1. Acquire the lock at the beginning of the function.
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   // Allocate the JSON array. If this fails, we jump to cleanup.
   ports = json_array ();
   if (!ports)
@@ -6080,7 +5912,7 @@ cleanup:
       json_decref (ports);
     }
   // 7. Always release the lock at the very end.
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return ret_code;
 }
 
@@ -6091,7 +5923,7 @@ db_sector_has_beacon (int sector_id)
 {
   sqlite3_stmt *stmt;
   // 1. Acquire the lock before any database interaction.
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   // 2. Prepare the statement. This is the first place an error could occur.
   const char *sql = "SELECT beacon FROM sectors WHERE id = ?;";
   if (sqlite3_prepare_v2 (db_get_handle (), sql, -1, &stmt, NULL) !=
@@ -6123,7 +5955,7 @@ cleanup:
       sqlite3_finalize (stmt);
     }
   // 6. Release the lock at the end of the function, regardless of success or failure.
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return has_beacon;
 }
 
@@ -6135,7 +5967,7 @@ db_sector_set_beacon (int sector_id, const char *beacon_text, int player_id)
   sqlite3_stmt *st_sel = NULL, *st_upd = NULL;
   sqlite3_stmt *st_asset = NULL;
   int rc = SQLITE_ERROR, had_beacon = 0;
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   // 1. SELECT: Check for existing beacon
   const char *sql_sel = "SELECT beacon FROM sectors WHERE id=?1;";
   rc = sqlite3_prepare_v2 (dbh, sql_sel, -1, &st_sel, NULL);
@@ -6249,7 +6081,7 @@ cleanup:
     {
       sqlite3_finalize (st_asset);
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -6260,7 +6092,7 @@ db_player_has_beacon_on_ship (int player_id)
 {
   sqlite3_stmt *stmt;
   // 1. Acquire the lock before any database interaction.
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   const char *sql =
     "SELECT T2.beacons FROM players AS T1 JOIN ships AS T2 ON T1.ship = T2.id WHERE T1.id = ?;";
   // 2. Prepare the statement. This is the first place an error could occur.
@@ -6289,7 +6121,7 @@ cleanup:
       sqlite3_finalize (stmt);
     }
   // 6. Release the lock at the end of the function, regardless of success or failure.
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   // sqlite3_finalize(stmt);
   return has_beacon;
 }
@@ -6302,7 +6134,7 @@ db_player_decrement_beacon_count (int player_id)
   sqlite3_stmt *stmt = NULL;
   int rc = -1;                  // Initialize return code to a non-OK value.
   // 1. Acquire the lock before any database interaction.
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   const char *sql =
     "UPDATE ships SET beacons = beacons - 1 WHERE id = (SELECT ship FROM players WHERE id = ?);";
   // 2. Prepare the statement. This is the first place an error could occur.
@@ -6324,7 +6156,7 @@ cleanup:
       sqlite3_finalize (stmt);
     }
   // 6. Release the lock at the end of the function, regardless of success or failure.
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -6536,7 +6368,7 @@ db_ships_inspectable_at_sector_json (int player_id, int sector_id,
   int rc = SQLITE_OK;
   sqlite3_stmt *stmt = NULL;
   json_t *arr = NULL;
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   rc = sqlite3_prepare_v2 (db_get_handle (), SQL, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -6633,7 +6465,7 @@ db_ships_inspectable_at_sector_json (int player_id, int sector_id,
       goto fail_locked;
     }
   sqlite3_finalize (stmt);
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   *out_array = arr;
   return SQLITE_OK;
 fail_locked:
@@ -6641,7 +6473,7 @@ fail_locked:
     {
       sqlite3_finalize (stmt);
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   if (arr)
     {
       json_decref (arr);
@@ -6651,13 +6483,11 @@ fail_locked:
 
 
 //////////////////////////////////////////////////////////////////////////////////////////
-
-
 int
 db_ship_flags_set (int ship_id, int mask)
 {
   int rc;
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   rc = sqlite3_exec (db_get_handle (), "BEGIN IMMEDIATE", NULL, NULL, NULL);
   if (rc != SQLITE_OK)
     {
@@ -6685,7 +6515,7 @@ db_ship_flags_set (int ship_id, int mask)
       sqlite3_exec (db_get_handle (), "ROLLBACK", NULL, NULL, NULL);
     }
 out_unlock:
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -6694,7 +6524,7 @@ int
 db_ship_flags_clear (int ship_id, int mask)
 {
   int rc;
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   rc = sqlite3_exec (db_get_handle (), "BEGIN IMMEDIATE", NULL, NULL, NULL);
   if (rc != SQLITE_OK)
     {
@@ -6722,7 +6552,7 @@ db_ship_flags_clear (int ship_id, int mask)
       sqlite3_exec (db_get_handle (), "ROLLBACK", NULL, NULL, NULL);
     }
 out_unlock:
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -6735,7 +6565,7 @@ db_sector_info_json (int sector_id, json_t **out)
   json_t *root = NULL;
   int rc = SQLITE_ERROR;        // Default to error
   // 1. Acquire the lock FIRST to ensure thread safety
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   if (out)
     {
       *out = NULL;
@@ -6995,14 +6825,12 @@ cleanup:
     {
       sqlite3_finalize (st);
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
 
 /* ---------- BASIC SECTOR (id + name) ---------- */
-
-
 int
 db_sector_basic_json (int sector_id, json_t **out_obj)
 {
@@ -7010,7 +6838,7 @@ db_sector_basic_json (int sector_id, json_t **out_obj)
   sqlite3_stmt *st = NULL;
   int rc = SQLITE_ERROR;        // Default to error
   // Acquire the lock first
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   if (!out_obj)
     {
       goto cleanup;             // Nothing to return the data to
@@ -7050,14 +6878,12 @@ cleanup:
       sqlite3_finalize (st);
     }
   // Release the lock
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
 
 /* ---------- ADJACENT WARPS (from sector_warps) ---------- */
-
-
 /**
  * @brief Retrieves a list of adjacent sectors for a given sector, returning them as a JSON array.
  * * This function is thread-safe as all database operations are protected by a mutex lock.
@@ -7068,8 +6894,6 @@ cleanup:
  * @param out_array A pointer to a json_t* where the resulting JSON array will be stored.
  * @return SQLITE_OK on success, or an SQLite error code on failure.
  */
-
-
 //////////////////
 int
 db_adjacent_sectors_json (int sector_id, json_t **out_array)
@@ -7087,7 +6911,7 @@ db_adjacent_sectors_json (int sector_id, json_t **out_array)
     "SELECT to_sector FROM sector_warps WHERE from_sector = ?1 ORDER BY to_sector";
   sqlite3_stmt *st = NULL;
   int rc = SQLITE_ERROR;
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -7118,17 +6942,13 @@ done:
     {
       sqlite3_finalize (st);
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
 
 ////////////////
-
-
 /* ---------- PORTS AT SECTOR (visible only) ---------- */
-
-
 int
 db_port_info_json (int port_id,
                    json_t **out_obj)
@@ -7138,7 +6958,7 @@ db_port_info_json (int port_id,
   json_t *commodities_array = NULL;
   int rc = SQLITE_ERROR;        // Default to error
   sqlite3 *dbh = NULL;
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   if (!out_obj)
     {
       goto cleanup;
@@ -7238,14 +7058,12 @@ cleanup:
           json_decref (commodities_array);
         }
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
 
 /* ---------- PLAYERS AT SECTOR (lightweight: id + name) ---------- */
-
-
 int
 db_players_at_sector_json (int sector_id, json_t **out_array)
 {
@@ -7254,7 +7072,7 @@ db_players_at_sector_json (int sector_id, json_t **out_array)
   json_t *arr = NULL;
   int rc = SQLITE_ERROR;        // Default to error
   // 1. Acquire the lock FIRST
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   if (!out_array)
     {
       goto cleanup;
@@ -7316,14 +7134,12 @@ cleanup:
       sqlite3_finalize (st);
     }
   // 2. Release the lock LAST
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
 
 /* ---------- BEACONS AT SECTOR (optional table) ---------- */
-
-
 int
 db_beacons_at_sector_json (int sector_id, json_t **out_array)
 {
@@ -7332,7 +7148,7 @@ db_beacons_at_sector_json (int sector_id, json_t **out_array)
   json_t *arr = NULL;
   int rc = SQLITE_ERROR;
   // 1. Acquire the lock FIRST
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   if (!out_array)
     {
       goto cleanup;
@@ -7390,14 +7206,12 @@ cleanup:
       sqlite3_finalize (st);
     }
   // 2. Release the lock LAST
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
 
 /* ---------- PLANETS AT SECTOR ---------- */
-
-
 int
 db_planets_at_sector_json (int sector_id, json_t **out_array)
 {
@@ -7406,7 +7220,7 @@ db_planets_at_sector_json (int sector_id, json_t **out_array)
   json_t *arr = NULL;
   int rc = SQLITE_ERROR;        // Default to error
   // 1. Acquire the lock FIRST
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   if (!out_array)
     {
       goto cleanup;
@@ -7513,7 +7327,7 @@ cleanup:
       sqlite3_finalize (st);
     }
   // 2. Release the lock LAST
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -7611,7 +7425,7 @@ db_player_set_alignment (int player_id, int alignment)
     }
   int rc = SQLITE_ERROR;
   sqlite3_stmt *stmt = NULL;
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   static const char *SQL_UPDATE_ALIGNMENT =
     "UPDATE players SET alignment = ? WHERE id = ?;";
   rc = sqlite3_prepare_v2 (db, SQL_UPDATE_ALIGNMENT, -1, &stmt, NULL);
@@ -7636,7 +7450,7 @@ cleanup:
     {
       sqlite3_finalize (stmt);
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -7648,7 +7462,7 @@ db_player_get_sector (int player_id, int *out_sector)
   int ret_code = SQLITE_ERROR;
   int rc;                       // For SQLite's intermediate return codes.
   // 1. Acquire the lock at the very beginning of the function.
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   // Initialize the output value to a safe default.
   if (out_sector)
     {
@@ -7701,7 +7515,7 @@ cleanup:
       sqlite3_finalize (st);
     }
   // 5. Release the lock. This is the final step before returning.
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   // 6. Return the final status code from a single point.
   return ret_code;
 }

@@ -52,4 +52,6 @@ int s2s_recv_json (s2s_conn_t *c, json_t **out, int timeout_ms);
 void s2s_get_counters (uint64_t *sent_ok, uint64_t *recv_ok,
                        uint64_t *auth_fail, uint64_t *toolarge);
 void s2s_debug_dump_conn (const char *who, s2s_conn_t *c);
+extern s2s_key_t g_keys[8];
+extern size_t g_key_count;
 #endif

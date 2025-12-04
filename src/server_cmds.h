@@ -38,8 +38,6 @@ typedef struct
   int code;                     /* for REFUSED/ERROR */
   const char *message;          /* short msg */
 } decision_t;
-
-
 static inline decision_t
 ok (void)
 {

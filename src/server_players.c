@@ -38,17 +38,9 @@ static const char *DEFAULT_PLAYER_FIELDS[] = {
 extern sqlite3 *db_get_handle (void);
 extern client_node_t *g_clients;
 extern pthread_mutex_t g_clients_mu;
-
-
 /* ==================================================================== */
-
-
 /* STATIC HELPER DEFINITIONS (Bodies placed BEFORE usage)               */
-
-
 /* ==================================================================== */
-
-
 static int
 is_ascii_printable (const char *s)
 {
@@ -265,14 +257,8 @@ players_list_notes (client_ctx_t *ctx, json_t *req)
 
 
 /* ==================================================================== */
-
-
 /* CORE LOGIC HANDLERS (Transactional)                                  */
-
-
 /* ==================================================================== */
-
-
 static const char *
 get_turn_error_message (TurnConsumeResult result)
 {
@@ -1113,14 +1099,8 @@ destroy_ship_and_handle_side_effects (client_ctx_t *ctx,
 
 
 /* ==================================================================== */
-
-
 /* COMMAND HANDLERS                                                     */
-
-
 /* ==================================================================== */
-
-
 int
 cmd_player_set_settings (client_ctx_t *ctx, json_t *root)
 {
@@ -1224,8 +1204,6 @@ get_online_players_json_array (int offset, int limit,
 
 
 /* src/server_players.c */
-
-
 int
 cmd_player_my_info (client_ctx_t *ctx, json_t *root)
 {
@@ -1758,8 +1736,6 @@ cmd_nav_avoid_list (client_ctx_t *c, json_t *r)
 
 
 /* Bank Commands */
-
-
 int
 cmd_bank_history (client_ctx_t *ctx, json_t *root)
 {

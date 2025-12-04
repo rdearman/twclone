@@ -16,8 +16,6 @@
 #include "db_player_settings.h"
 #include "server_log.h"
 extern struct twconfig *config_load (void);
-
-
 static bool
 player_is_sysop (sqlite3 *db, int player_id)
 {
@@ -49,8 +47,6 @@ player_is_sysop (sqlite3 *db, int player_id)
 
 
 /* --- login hydration: locked default subscriptions ----------------------- */
-
-
 static int
 subs_upsert_locked_defaults (sqlite3 *db, int player_id, bool is_sysop)
 {
@@ -158,8 +154,6 @@ static const default_pref_t k_default_prefs[] = {
   {"privacy.dm_allowed", "bool", "true"},
   /* add more defaults as needed */
 };
-
-
 /* Upsert a locked=1, enabled=1 subscription; preserve lock with MAX() */
 static int
 upsert_locked_subscription (sqlite3 *db, int player_id, const char *topic)
@@ -243,8 +237,6 @@ hydrate_player_defaults (int player_id)
 
 
 //// CMD Handlers ////////
-
-
 int
 cmd_auth_login (client_ctx_t *ctx, json_t *root)
 {

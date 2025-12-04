@@ -23,7 +23,15 @@ int db_create_tables (bool schema_exists);
 int db_insert_defaults (void);
 /* Load ports from config table */
 int db_load_ports (int *server_port, int *s2s_port);
-/* Get the shared database handle */
+int db_get_int_config (sqlite3 *db, const char *key, int *out);
+/* DB handle access
+ *
+ * Each worker thread has its own SQLite connection.
+ * - Always call db_get_handle() from the current thread.
+ * - Do NOT cache sqlite3* in global/static variables.
+ * - Do NOT use external pthread mutexes around db handles; SQLite is used
+ *   in its own serialized/thread-safe mode per connection.
+ */
 sqlite3 *db_get_handle (void);
 void db_handle_close_and_reset (void);
 void db_mutex_lock (void);

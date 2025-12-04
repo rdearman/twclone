@@ -198,22 +198,6 @@ cron_next_due_from (int64_t now_s, const char *schedule)
         }
       return now_s + n;         /* default seconds */
     }
-  /* dogdy, will sometimes not run after midnight */
-  /* if (strncmp (schedule, "daily@", 6) == 0) */
-  /*   { */
-  /*     int HH = 0, MM = 0; */
-  /*     if (sscanf (schedule + 6, "%2d:%2dZ", &HH, &MM) == 2) */
-  /*    { */
-  /*      /\* compute next UTC wall-clock occurrence >= now *\/ */
-  /*      time_t t = (time_t) now_s; */
-  /*      struct tm g; */
-  /*      gmtime_r (&t, &g); */
-  /*      int64_t today = */
-  /*        now_s - (g.tm_hour * 3600 + g.tm_min * 60 + g.tm_sec); */
-  /*      int64_t target = today + HH * 3600 + MM * 60; */
-  /*      return (now_s <= target) ? target : (target + 86400); */
-  /*    } */
-  /*   } */
   if (strncmp (schedule, "daily@", 6) == 0)
     {
       int HH = 0, MM = 0;
@@ -268,9 +252,9 @@ engine_tick (sqlite3 *db)
     {
       LOGE ("events: processed=%d quarantined=%d last_id=%lld lag=%lld\n",
             m.processed, m.quarantined, m.last_event_id, m.lag);
-      // fprintf (stderr,
-      //       "[engine] events: processed=%d quarantined=%d last_id=%lld lag=%lld\n",
-      //       m.processed, m.quarantined, m.last_event_id, m.lag);
+      // LOGE(
+      //             "[engine] events: processed=%d quarantined=%d last_id=%lld lag=%lld\n",
+      //     m.processed, m.quarantined, m.last_event_id, m.lag);
     }
 }
 
@@ -328,7 +312,7 @@ engine_demo_push (s2s_conn_t *c)
   int rc = s2s_send_env (c, env, 3000);
   json_decref (env);
   LOGI ("command.push send rc=%d\n", rc);
-  //  fprintf (stderr, "[engine] command.push send rc=%d\n", rc);
+  // LOGE( "[engine] command.push send rc=%d\n", rc);
   if (rc != 0)
     {
       return rc;
@@ -336,7 +320,7 @@ engine_demo_push (s2s_conn_t *c)
   json_t *resp = NULL;
   rc = s2s_recv_env (c, &resp, 3000);
   LOGI ("command.push recv rc=%d\n", rc);
-  //  fprintf (stderr, "[engine] command.push recv rc=%d\n", rc);
+  // LOGE( "[engine] command.push recv rc=%d\n", rc);
   if (rc == 0 && resp)
     {
       const char *ty = s2s_env_type (resp);
@@ -346,13 +330,13 @@ engine_demo_push (s2s_conn_t *c)
           json_t *dup = json_object_get (ackpl, "duplicate");
           LOGW ("ack duplicate=%s\n",
                 (dup && json_is_true (dup)) ? "true" : "false");
-          //      fprintf (stderr, "[engine] ack duplicate=%s\n",
-          //       (dup && json_is_true (dup)) ? "true" : "false");
+          // LOGE( "[engine] ack duplicate=%s\n",
+          // (dup && json_is_true (dup)) ? "true" : "false");
         }
       else
         {
           LOGE ("got non-ack (%s)\n", ty ? ty : "null");
-          //      fprintf (stderr, "[engine] got non-ack (%s)\n", ty ? ty : "null");
+          // LOGE( "[engine] got non-ack (%s)\n", ty ? ty : "null");
         }
       json_decref (resp);
     }
@@ -386,7 +370,7 @@ h_compute_illegal_alignment_delta (int player_alignment,
   int rc = SQLITE_ERROR;
   const char *sql =
     "SELECT is_good, is_evil FROM alignment_band WHERE id = ?1;";
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc == SQLITE_OK)
     {
@@ -398,7 +382,7 @@ h_compute_illegal_alignment_delta (int player_alignment,
         }
     }
   sqlite3_finalize (st);
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   int base_penalty = floor (value / g_xp_align.illegal_base_align_divisor);
   if (base_penalty < 1)
     {
@@ -516,9 +500,9 @@ log_s2s_metrics (const char *who)
   LOGI ("[%s] s2s metrics: sent=%" PRIu64 " recv=%" PRIu64
         " auth_fail=%" PRIu64 " too_big=%" PRIu64 "\n",
         who, sent, recv, auth_fail, too_big);
-  //fprintf (stderr, "[%s] s2s metrics: sent=%" PRIu64 " recv=%" PRIu64
+  // LOGE( "[%s] s2s metrics: sent=%" PRIu64 " recv=%" PRIu64
   //       " auth_fail=%" PRIu64 " too_big=%" PRIu64 "\n",
-  //       who, sent, recv, auth_fail, too_big);
+  //      who, sent, recv, auth_fail, too_big);
 }
 
 
@@ -536,7 +520,7 @@ engine_s2s_drain_once (s2s_conn_t *conn)
     {
       // Begin graceful shutdown: set your running flag false, close down
       LOGI ("received shutdown command\n");
-      // fprintf (stderr, "[engine] received shutdown command\n");
+      // // LOGE( "[engine] received shutdown command\n");
       // flip your engine running flag here…
     }
   else if (type && strcasecmp (type, "s2s.health.check") == 0)
@@ -828,36 +812,21 @@ server_commands_tick (sqlite3 *db, int max_rows)
 
 
 /////////////////////////////////////////////////////////////////////////////
+
+
 //////////////   MAIN ENGINE LOOP
+
+
 /////////////////////////////////////////////////////////////////////////////
-/* src/server_engine.c */
-/* --- ADD THESE GLOBALS/HELPERS ABOVE engine_main_loop --- */
-static volatile sig_atomic_t g_engine_running = 1;
 
 
-static void
-engine_sig_handler (int sig)
-{
-  (void) sig;
-  g_engine_running = 0;
-}
-
-
-/* --- REPLACE THE ENTIRE engine_main_loop FUNCTION --- */
 static int
 engine_main_loop (int shutdown_fd)
 {
   server_log_init_file ("./twclone.log", "[engine]", 0, LOG_INFO);
   LOGI ("engine boot pid=%d", getpid ());
-  /* 1. Signal Handling setup */
-  struct sigaction sa;
-  memset (&sa, 0, sizeof (sa));
-  sa.sa_handler = engine_sig_handler;
-  sigemptyset (&sa.sa_mask);
-  sa.sa_flags = 0;
-  sigaction (SIGTERM, &sa, NULL);
-  sigaction (SIGINT, &sa, NULL);
-  // 2. Shut down and re-initialize SQLite (discard parent state)
+  // 1. *** CRITICAL NEW STEP: Shut down and re-initialize SQLite ***
+  //    This discards all inherited global VFS and memory state.
   sqlite3_shutdown ();
   int rc = sqlite3_initialize ();
   if (rc != SQLITE_OK)
@@ -865,32 +834,58 @@ engine_main_loop (int shutdown_fd)
       LOGE ("FATAL: SQLite re-initialization failed! rc=%d", rc);
       return 1;
     }
-  // 3. Close the stale handle inherited from the parent
+  // 2. Close the stale handle inherited from the parent (which you already added)
   db_handle_close_and_reset ();
-  // 4. Get a fresh, new handle for this process
+  // 3. Get a fresh, new handle (which you already fixed to be idempotent)
   sqlite3 *db_handle = db_get_handle ();
   if (db_handle == NULL)
     {
       LOGE ("The fresh open failed.");
       return 1;
     }
+  // CRITICAL FIX: Reload configuration in the child process
+  if (!load_eng_config ())
+    {
+      LOGE ("[engine] FATAL: Failed to load engine configuration.\n");
+      return 1;
+    }
+  int server_port_unused = 0; // Not needed by engine, but db_load_ports requires it
+  int s2s_port = 0;
+  if (db_load_ports (&server_port_unused, &s2s_port) != 0)
+    {
+      LOGW (
+        "[engine] Could not load ports from database in child, using defaults.");
+      // If s2s_port is critical and not loaded, we might need a FATAL here
+      // For now, allow it to proceed with defaults if any are set in g_cfg
+    }
+  else
+    {
+      g_cfg.s2s.tcp_port = s2s_port;   // Ensure g_cfg is updated with the loaded s2s_port
+      LOGI ("[engine] Loaded s2s port from database: %d", g_cfg.s2s.tcp_port);
+    }
+  LOGI ("[engine] child up. pid=%d\n", getpid ());
+  //printf ("[engine] child up. pid=%d\n", getpid ());
+  const int tick_ms = CRON_PERIOD_MS;   // quick tick; we can fetch from DB config later
+  struct pollfd pfd = {.fd = shutdown_fd,.events = POLLIN };
+  LOGI ("[engine] loading s2s key ...\n");
+  // LOGE( "[engine] loading s2s key ...\n");
   if (s2s_install_default_key (db_handle) != 0)
     {
       LOGE ("[engine] FATAL: S2S key missing/invalid.\n");
+      // LOGE( "[engine] FATAL: S2S key missing/invalid.\n");
       return 1;
     }
-  LOGI ("[engine] child up. pid=%d\n", getpid ());
-  const int tick_ms = CRON_PERIOD_MS;
-  struct pollfd pfd = {.fd = shutdown_fd,.events = POLLIN };
   LOGI ("[engine] connecting to 127.0.0.1:%d ...\n", g_cfg.s2s.tcp_port);
   s2s_conn_t *conn =
     s2s_tcp_client_connect ("127.0.0.1", g_cfg.s2s.tcp_port, 5000);
   if (!conn)
     {
       LOGE ("[engine] connect failed\n");
+      // LOGE( "[engine] connect failed\n");
       return 1;
     }
-  /* ... Handshake logic ... */
+  s2s_debug_dump_conn ("engine", conn); // optional debug
+  /* Engine initiates: send hello, then expect ack */
   time_t now = time (NULL);
   json_t *hello = json_pack ("{s:i,s:s,s:s,s:I,s:o}",
                              "v", 1,
@@ -902,21 +897,31 @@ engine_main_loop (int shutdown_fd)
                                                    "version", "0.1"));
   rc = s2s_send_json (conn, hello, 5000);
   json_decref (hello);
+  LOGI ("[engine] hello send rc=%d\n", rc);
+  // LOGE( "[engine] hello send rc=%d\n", rc);
   json_t *msg = NULL;
   rc = s2s_recv_json (conn, &msg, 5000);
+  LOGI ("[engine] first frame rc=%d\n", rc);
+  // LOGE( "[engine] first frame rc=%d\n", rc);
   if (rc == S2S_OK && msg)
     {
+      const char *type = json_string_value (json_object_get (msg, "type"));
+      if (type && strcmp (type, "s2s.health.ack") == 0)
+        {
+          LOGI ("[engine] Ping test complete\n");
+        }
       json_decref (msg);
     }
   LOGI ("[engine] Running Smoke Test\n");
   (void) engine_demo_push (conn);
+  LOGI ("[engine] Running Smoke Test\n");
   static time_t last_metrics = 0;
   static time_t last_cmd_tick_ms = 0;
-  int iss_ok = iss_init_once ();
+  /* One-time ISS bootstrap */
+  int iss_ok = iss_init_once ();        // 1 if ISS+Stardock found, else 0
   fer_attach_db (db_handle);
   int fer_ok = fer_init_once ();
-  /* --- MAIN LOOP --- */
-  while (g_engine_running)
+  for (;;)
     {
       engine_s2s_drain_once (conn);
       uint64_t now_ms = monotonic_millis ();
@@ -940,47 +945,42 @@ engine_main_loop (int shutdown_fd)
           last_metrics = now;
           engine_tick (db_handle);
         }
-      // Poll for shutdown signal from pipe or timeout for next tick
+      // Sleep until next tick or until shutdown pipe changes
       int rc = poll (&pfd, 1, tick_ms);
       if (rc > 0)
         {
-          // Pipe has data or closed -> Parent requested shutdown
-          LOGI ("[engine] shutdown pipe signal received.\n");
-          g_engine_running = 0;
+          // either data or EOF on the pipe means: time to exit
+          char buf[8];
+          ssize_t n = read (shutdown_fd, buf, sizeof (buf));
+          (void) n;             // We don't care what's read; any activity/EOF = shutdown
+          LOGI ("[engine] shutdown signal received.\n");
           break;
         }
-      else if (rc < 0)
-        {
-          if (errno == EINTR)
-            {
-              // Interrupted by signal (SIGTERM/SIGINT)
-              // Loop will check g_engine_running at the top
-              continue;
-            }
-          LOGE ("[engine] poll error: %s\n", strerror (errno));
-          break;
-        }
-      else // rc == 0 (timeout) -> Run Cron
+      if (rc == 0)
         {
           /* ---- Stale cron lock sweeper ---- */
           {
-            int64_t stale_threshold_ms = monotonic_millis () -
-                                         CRON_LOCK_STALE_MS;
+            int64_t stale_threshold_ms =
+              monotonic_millis () - CRON_LOCK_STALE_MS;
             sqlite3_stmt *reclaim = NULL;
-            if (sqlite3_prepare_v2 (db_handle,
-                                    "DELETE FROM locks WHERE owner='server' AND until_ms < ?1;",
-                                    -1,
-                                    &reclaim,
-                                    NULL) == SQLITE_OK)
+            if (sqlite3_prepare_v2
+                  (db_handle,
+                  "DELETE FROM locks WHERE owner='server' AND until_ms < ?1;",
+                  -1, &reclaim, NULL) == SQLITE_OK)
               {
                 sqlite3_bind_int64 (reclaim, 1, stale_threshold_ms);
                 sqlite3_step (reclaim);
+                int reclaimed = sqlite3_changes (db_handle);
+                if (reclaimed > 0)
+                  {
+                    LOGI ("cron: reclaimed %d stale lock(s)", reclaimed);
+                  }
               }
             sqlite3_finalize (reclaim);
           }
-          /* ---- Cron Runner ---- */
+          /* ---- bounded cron runner (inline) ---- */
           const int LIMIT = CRON_BATCH_LIMIT;
-          int64_t now_s = (int64_t) time (NULL);
+          uint64_t now_s = (int64_t) time (NULL);
           sqlite3_stmt *pick = NULL;
           if (sqlite3_prepare_v2 (db_handle,
                                   "SELECT id, name, schedule FROM cron_tasks "
@@ -993,15 +993,19 @@ engine_main_loop (int shutdown_fd)
               while (sqlite3_step (pick) == SQLITE_ROW)
                 {
                   int64_t id = sqlite3_column_int64 (pick, 0);
-                  const char *nm = (const char *) sqlite3_column_text (pick, 1);
-                  const char *sch = (const char *) sqlite3_column_text (pick,
-                                                                        2);
+                  const char *nm =
+                    (const char *) sqlite3_column_text (pick, 1);
+                  const char *sch =
+                    (const char *) sqlite3_column_text (pick, 2);
+                  /* run handler if registered */
+                  int task_rc = 0;
                   cron_handler_fn fn = cron_find (nm);
+                  LOGI ("cron: starting handler '%s'", nm);
                   if (fn)
                     {
-                      LOGI ("cron: starting handler '%s'", nm);
-                      fn (db_handle, now_s);
+                      task_rc = fn (db_handle, now_s);
                     }
+                  /* reschedule deterministically */
                   int64_t next_due = cron_next_due_from (now_s, sch);
                   sqlite3_stmt *upd = NULL;
                   if (sqlite3_prepare_v2 (db_handle,
@@ -1016,693 +1020,22 @@ engine_main_loop (int shutdown_fd)
                       sqlite3_step (upd);
                       sqlite3_finalize (upd);
                     }
+                  (void) task_rc;       /* optional: log rc */
                 }
               sqlite3_finalize (pick);
             }
+          /* (keep anything else you want here; short, bounded work only) */
+        }
+      else if (rc < 0 && errno != EINTR)
+        {
+          LOGE ("[engine] poll error: %s\n", strerror (errno));
+          break;
         }
     }
-  /* --- CLEANUP --- */
-  if (conn)
-    {
-      s2s_close (conn);
-    }
-  // FIX: Close the engine's private DB connection
-  db_close_thread ();
+  db_close ();
   LOGI ("[engine] child exiting cleanly.\n");
   return 0;
 }
-
-
-/* static int */
-
-
-/* engine_main_loop (int shutdown_fd) */
-
-
-/* { */
-
-
-/*   server_log_init_file ("./twclone.log", "[engine]", 0, LOG_INFO); */
-
-
-/*   LOGI ("engine boot pid=%d", getpid ()); */
-
-
-/*   // 1. *** CRITICAL NEW STEP: Shut down and re-initialize SQLite *** */
-
-
-/*   //    This discards all inherited global VFS and memory state. */
-
-
-/*   sqlite3_shutdown (); */
-
-
-/*   int rc = sqlite3_initialize (); */
-
-
-/*   if (rc != SQLITE_OK) */
-
-
-/*     { */
-
-
-/*       LOGE ("FATAL: SQLite re-initialization failed! rc=%d", rc); */
-
-
-/*       return 1; */
-
-
-/*     } */
-
-
-/*   // 2. Close the stale handle inherited from the parent (which you already added) */
-
-
-/*   db_handle_close_and_reset (); */
-
-
-/*   // 3. Get a fresh, new handle (which you already fixed to be idempotent) */
-
-
-/*   sqlite3 *db_handle = db_get_handle (); */
-
-
-/*   if (db_handle == NULL) */
-
-
-/*     { */
-
-
-/*       // This LOGE is no longer strictly necessary if db_get_handle() logs the error, */
-
-
-/*       // but it confirms the fresh open failed. */
-
-
-/*       LOGE ("The fresh open failed."); */
-
-
-/*       return 1; */
-
-
-/*     } */
-
-
-/*   if (s2s_install_default_key (db_handle) != 0) */
-
-
-/*     { */
-
-
-/*       LOGW ("[server] FATAL: S2S key missing/invalid.\n"); */
-
-
-/*       //fprintf (stderr, "[server] FATAL: S2S key missing/invalid.\n"); */
-
-
-/*       return 1;                 // or exit(1) */
-
-
-/*     } */
-
-
-/*   LOGI ("[engine] child up. pid=%d\n", getpid ()); */
-
-
-/*   //printf ("[engine] child up. pid=%d\n", getpid ()); */
-
-
-/*   const int tick_ms = CRON_PERIOD_MS;   // quick tick; we can fetch from DB config later */
-
-
-/*   struct pollfd pfd = {.fd = shutdown_fd,.events = POLLIN }; */
-
-
-/*   LOGI ("[engine] loading s2s key ...\n"); */
-
-
-/*   //fprintf (stderr, "[engine] loading s2s key ...\n"); */
-
-
-/*   if (s2s_install_default_key (db_handle) != 0) */
-
-
-/*     { */
-
-
-/*       LOGE ("[engine] FATAL: S2S key missing/invalid.\n"); */
-
-
-/*       //  fprintf (stderr, "[engine] FATAL: S2S key missing/invalid.\n"); */
-
-
-/*       return 1; */
-
-
-/*     } */
-
-
-/*   LOGI ("[engine] connecting to 127.0.0.1:%d ...\n", g_cfg.s2s.tcp_port); */
-
-
-/*   s2s_conn_t *conn = */
-
-
-/*     s2s_tcp_client_connect ("127.0.0.1", g_cfg.s2s.tcp_port, 5000); */
-
-
-/*   if (!conn) */
-
-
-/*     { */
-
-
-/*       LOGE ("[engine] connect failed\n"); */
-
-
-/*       //  fprintf (stderr, "[engine] connect failed\n"); */
-
-
-/*       return 1; */
-
-
-/*     } */
-
-
-/*   s2s_debug_dump_conn ("engine", conn); // optional debug */
-
-
-/*   /\* Engine initiates: send hello, then expect ack *\/ */
-
-
-/*   time_t now = time (NULL); */
-
-
-/*   json_t *hello = json_pack ("{s:i,s:s,s:s,s:I,s:o}", */
-
-
-/*                              "v", 1, */
-
-
-/*                              "type", "s2s.health.hello", */
-
-
-/*                              "id", "boot-1", */
-
-
-/*                              "ts", (json_int_t) now, */
-
-
-/*                              "payload", json_pack ("{s:s,s:s}", */
-
-
-/*                                                    "role", "engine", */
-
-
-/*                                                    "version", "0.1")); */
-
-
-/*   rc = s2s_send_json (conn, hello, 5000); */
-
-
-/*   json_decref (hello); */
-
-
-/*   LOGI ("[engine] hello send rc=%d\n", rc); */
-
-
-/*   //fprintf (stderr, "[engine] hello send rc=%d\n", rc); */
-
-
-/*   json_t *msg = NULL; */
-
-
-/*   rc = s2s_recv_json (conn, &msg, 5000); */
-
-
-/*   LOGI ("[engine] first frame rc=%d\n", rc); */
-
-
-/*   //fprintf (stderr, "[engine] first frame rc=%d\n", rc); */
-
-
-/*   if (rc == S2S_OK && msg) */
-
-
-/*     { */
-
-
-/*       const char *type = json_string_value (json_object_get (msg, "type")); */
-
-
-/*       if (type && strcmp (type, "s2s.health.ack") == 0) */
-
-
-/*         { */
-
-
-/*           LOGI ("[engine] Ping test complete\n"); */
-
-
-/*           //      fprintf (stderr, "[engine] Ping test complete\n"); */
-
-
-/*         } */
-
-
-/*       json_decref (msg); */
-
-
-/*     } */
-
-
-/*   LOGI ("[engine] Running Smoke Test\n"); */
-
-
-/*   //  fprintf (stderr, "[engine] Running Smoke Test\n"); */
-
-
-/*   (void) engine_demo_push (conn); */
-
-
-/*   static time_t last_metrics = 0; */
-
-
-/*   static time_t last_cmd_tick_ms = 0; */
-
-
-/*   /\* One-time ISS bootstrap *\/ */
-
-
-/*   int iss_ok = iss_init_once ();        // 1 if ISS+Stardock found, else 0 */
-
-
-/*   fer_attach_db (db_handle); */
-
-
-/*   int fer_ok = fer_init_once (); */
-
-
-/*   for (;;) */
-
-
-/*     { */
-
-
-/*       engine_s2s_drain_once (conn); */
-
-
-/*       uint64_t now_ms = monotonic_millis (); */
-
-
-/*       if (iss_ok) */
-
-
-/*         { */
-
-
-/*           iss_tick (now_ms); */
-
-
-/*         } */
-
-
-/*       if (fer_ok) */
-
-
-/*         { */
-
-
-/*           fer_tick (now_ms); */
-
-
-/*         } */
-
-
-/*       if (now_ms - last_cmd_tick_ms >= CRON_PERIOD_MS) */
-
-
-/*         { */
-
-
-/*           (void) server_commands_tick (db_get_handle (), CRON_BATCH_LIMIT); */
-
-
-/*           last_cmd_tick_ms = now_ms; */
-
-
-/*         } */
-
-
-/*       time_t now = time (NULL); */
-
-
-/*       if (now - last_metrics >= 3600) */
-
-
-/*         { */
-
-
-/*           log_s2s_metrics ("engine"); */
-
-
-/*           last_metrics = now; */
-
-
-/*           engine_tick (db_handle); */
-
-
-/*         } */
-
-
-/*       /\* file-scope static, near other engine globals *\/ */
-
-
-/*       /\* static int64_t g_next_notice_ttl_sweep = 0; *\/ */
-
-
-/*       /\* inside the engine’s main loop / tick *\/ */
-
-
-/*       /\* { */
-
-
-/*          int64_t now_ts = (int64_t) time (NULL); */
-
-
-/*          if (g_next_notice_ttl_sweep == 0) */
-
-
-/*          { */
-
-
-/*          // schedule first run ~5 minutes from start */
-
-
-/*          g_next_notice_ttl_sweep = now_ts + 300; */
-
-
-/*          } */
-
-
-/*          if (now_ts >= g_next_notice_ttl_sweep) */
-
-
-/*          { */
-
-
-/*          (void) engine_notice_ttl_sweep (db_get_handle (), now_ts); */
-
-
-/*          g_next_notice_ttl_sweep = now_ts + 24 * 3600;  // run daily */
-
-
-/*          } */
-
-
-/*          } *\/ */
-
-
-/*       // Sleep until next tick or until shutdown pipe changes */
-
-
-/*       int rc = poll (&pfd, 1, tick_ms); */
-
-
-/*       if (rc > 0) */
-
-
-/*         { */
-
-
-/*           // either data or EOF on the pipe means: time to exit */
-
-
-/*           char buf[8]; */
-
-
-/*           ssize_t n = read (shutdown_fd, buf, sizeof (buf)); */
-
-
-/*           (void) n;             // We don't care what's read; any activity/EOF = shutdown */
-
-
-/*           LOGI ("[engine] shutdown signal received.\n"); */
-
-
-/*           //printf ("[engine] shutdown signal received.\n"); */
-
-
-/*           break; */
-
-
-/*         } */
-
-
-/*       if (rc == 0) */
-
-
-/*         { */
-
-
-/*           /\* ---- Stale cron lock sweeper ---- *\/ */
-
-
-/*           { */
-
-
-/*             int64_t stale_threshold_ms = */
-
-
-/*               monotonic_millis () - CRON_LOCK_STALE_MS; */
-
-
-/*             sqlite3_stmt *reclaim = NULL; */
-
-
-/*             if (sqlite3_prepare_v2 */
-
-
-/*                   (db_handle, */
-
-
-/*                   "DELETE FROM locks WHERE owner='server' AND until_ms < ?1;", */
-
-
-/*                   -1, &reclaim, NULL) == SQLITE_OK) */
-
-
-/*               { */
-
-
-/*                 sqlite3_bind_int64 (reclaim, 1, stale_threshold_ms); */
-
-
-/*                 sqlite3_step (reclaim); */
-
-
-/*                 int reclaimed = sqlite3_changes (db_handle); */
-
-
-/*                 if (reclaimed > 0) */
-
-
-/*                   { */
-
-
-/*                     LOGI ("cron: reclaimed %d stale lock(s)", reclaimed); */
-
-
-/*                   } */
-
-
-/*               } */
-
-
-/*             sqlite3_finalize (reclaim); */
-
-
-/*           } */
-
-
-/*           /\* ---- bounded cron runner (inline) ---- *\/ */
-
-
-/*           const int LIMIT = CRON_BATCH_LIMIT; */
-
-
-/*           int64_t now_s = (int64_t) time (NULL); */
-
-
-/*           sqlite3_stmt *pick = NULL; */
-
-
-/*           if (sqlite3_prepare_v2 (db_handle, */
-
-
-/*                                   "SELECT id, name, schedule FROM cron_tasks " */
-
-
-/*                                   "WHERE enabled=1 AND next_due_at <= ?1 " */
-
-
-/*                                   "ORDER BY next_due_at ASC " */
-
-
-/*                                   "LIMIT ?2;", -1, &pick, NULL) == SQLITE_OK) */
-
-
-/*             { */
-
-
-/*               sqlite3_bind_int64 (pick, 1, now_s); */
-
-
-/*               sqlite3_bind_int (pick, 2, LIMIT); */
-
-
-/*               while (sqlite3_step (pick) == SQLITE_ROW) */
-
-
-/*                 { */
-
-
-/*                   int64_t id = sqlite3_column_int64 (pick, 0); */
-
-
-/*                   const char *nm = */
-
-
-/*                     (const char *) sqlite3_column_text (pick, 1); */
-
-
-/*                   const char *sch = */
-
-
-/*                     (const char *) sqlite3_column_text (pick, 2); */
-
-
-/*                   /\* run handler if registered *\/ */
-
-
-/*                   int task_rc = 0; */
-
-
-/*                   cron_handler_fn fn = cron_find (nm); */
-
-
-/*                   LOGI ("cron: starting handler '%s'", nm); */
-
-
-/*                   if (fn) */
-
-
-/*                     { */
-
-
-/*                       task_rc = fn (db_handle, now_s); */
-
-
-/*                     } */
-
-
-/*                   /\* reschedule deterministically *\/ */
-
-
-/*                   int64_t next_due = cron_next_due_from (now_s, sch); */
-
-
-/*                   sqlite3_stmt *upd = NULL; */
-
-
-/*                   if (sqlite3_prepare_v2 (db_handle, */
-
-
-/*                                           "UPDATE cron_tasks " */
-
-
-/*                                           "SET last_run_at=?2, next_due_at=?3 " */
-
-
-/*                                           "WHERE id=?1;", -1, &upd, */
-
-
-/*                                           NULL) == SQLITE_OK) */
-
-
-/*                     { */
-
-
-/*                       sqlite3_bind_int64 (upd, 1, id); */
-
-
-/*                       sqlite3_bind_int64 (upd, 2, now_s); */
-
-
-/*                       sqlite3_bind_int64 (upd, 3, next_due); */
-
-
-/*                       sqlite3_step (upd); */
-
-
-/*                       sqlite3_finalize (upd); */
-
-
-/*                     } */
-
-
-/*                   (void) task_rc;       /\* optional: log rc *\/ */
-
-
-/*                 } */
-
-
-/*               sqlite3_finalize (pick); */
-
-
-/*             } */
-
-
-/*           /\* (keep anything else you want here; short, bounded work only) *\/ */
-
-
-/*         } */
-
-
-/*       else if (rc < 0 && errno != EINTR) */
-
-
-/*         { */
-
-
-/*           LOGE ("[engine] poll error: %s\n", strerror (errno)); */
-
-
-/*           //      fprintf (stderr, "[engine] poll error: %s\n", strerror (errno)); */
-
-
-/*           break; */
-
-
-/*         } */
-
-
-/*     } */
-
-
-/*   db_close (); */
-
-
-/*   LOGI ("[engine] child exiting cleanly.\n"); */
-
-
-/*   //  printf ("[engine] child exiting cleanly.\n"); */
-
-
-/*   return 0; */
-
-
-/* } */
 
 
 int

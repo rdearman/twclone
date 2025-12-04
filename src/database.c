@@ -36,6 +36,8 @@ static int db_ensure_idempotency_schema_unlocked (void);
 static int db_create_tables_unlocked (bool schema_exists);
 static int db_insert_defaults_unlocked (void);
 static int db_seed_ai_qa_bot_bank_account_unlocked (void);
+static int db_check_legacy_schema (sqlite3 *db);
+int db_get_int_config (sqlite3 *db, const char *key, int *out);
 int db_seed_cron_tasks (sqlite3 *db);
 void db_handle_close_and_reset (void);
 
@@ -82,7 +84,7 @@ db_configure_connection (sqlite3 *db)
   int rc = sqlite3_exec (db, "PRAGMA journal_mode=WAL;", NULL, NULL, &err_msg);
   if (rc != SQLITE_OK)
     {
-      fprintf (stderr, "DB Error setting WAL mode: %s\n", err_msg);
+      // fprintf(stderr, "DB Error setting WAL mode: %s\n", err_msg);
       sqlite3_free (err_msg);
     }
   /* * FIX: DISABLE FOREIGN KEYS.
@@ -116,7 +118,7 @@ void
 db_mutex_lock (void)
 {
   /* NO-OP: Global locking is disabled in favor of per-thread connections. */
-  //pthread_mutex_lock(&db_mutex);
+  //db_mutex_lock();
 }
 
 
@@ -124,7 +126,7 @@ void
 db_mutex_unlock (void)
 {
   /* NO-OP: Global locking is disabled in favor of per-thread connections. */
-  // pthread_mutex_unlock(&db_mutex);
+  // db_mutex_unlock();
 }
 
 
@@ -172,9 +174,7 @@ db_get_handle (void)
                             NULL);
   if (rc != SQLITE_OK)
     {
-      fprintf (stderr,
-               "FATAL: Cannot open database for thread: %s\n",
-               sqlite3_errmsg (tls_db));
+      // fprintf(stderr, "FATAL: Cannot open database for thread: %s\n", sqlite3_errmsg(tls_db));
       /* In a real server, you might handle this more gracefully, but for now: */
       if (tls_db)
         {
@@ -325,13 +325,13 @@ db_thread_safe_update_single_column (const char *table, int id,
   char *sql = NULL;
   sqlite3_stmt *stmt = NULL;
   // 1. Acquire the lock before accessing the shared database handle
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   // Build the SQL query string
   const char *template = " UPDATE %s SET %s = ? WHERE id = ?; ";
   sql = sqlite3_mprintf (template, table, column);
   if (!sql)
     {
-      pthread_mutex_unlock (&db_mutex);
+      db_mutex_unlock ();
       return SQLITE_NOMEM;
     }
   // 2. Prepare the SQL statement
@@ -374,7 +374,7 @@ cleanup:
       sqlite3_finalize (stmt);
     }
   // 5. Release the lock before the function returns
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -387,51 +387,12 @@ const char *create_table_sql[] = {
 /* Engine KV */
   "CREATE TABLE IF NOT EXISTS engine_state ("
   "  state_key TEXT PRIMARY KEY," "  state_val TEXT NOT NULL" ");",
-/* ----------------------- original ------------------- */
+/* ----------------------- New Key-Value-Type Config ------------------- */
   " CREATE TABLE IF NOT EXISTS config ( "
-  "  id INTEGER PRIMARY KEY CHECK (id = 1), "
-  "  turnsperday INTEGER, "
-  "  maxwarps_per_sector INTEGER, "
-  "  startingcredits INTEGER, "
-  "  startingfighters INTEGER, "
-  "  startingholds INTEGER, "
-  "  processinterval INTEGER, "
-  "  autosave INTEGER, "
-  "  max_ports INTEGER, "
-  "  max_planets_per_sector INTEGER, "
-  "  max_total_planets INTEGER, "
-  "  max_citadel_level INTEGER, "
-  "  number_of_planet_types INTEGER, "
-  "  max_ship_name_length INTEGER, "
-  "  ship_type_count INTEGER, "
-  "  hash_length INTEGER, "
-  "  default_nodes INTEGER, "
-  "  buff_size INTEGER, "
-  "  max_name_length INTEGER, "
-  "  max_cloak_duration INTEGER DEFAULT 24, "
-  "  planet_type_count INTEGER, "
-  "  server_port INTEGER, "
-  "  s2s_port INTEGER, "
-  "  bank_alert_threshold_player INTEGER DEFAULT 1000000, "
-  "  bank_alert_threshold_corp INTEGER DEFAULT 5000000, "
-  "  genesis_enabled INTEGER NOT NULL DEFAULT 1, "
-  "  genesis_block_at_cap INTEGER NOT NULL DEFAULT 0, "
-  "  genesis_navhaz_delta INTEGER NOT NULL DEFAULT 0, "
-  "  genesis_class_weight_M INTEGER NOT NULL DEFAULT 10, "
-  "  genesis_class_weight_K INTEGER NOT NULL DEFAULT 10, "
-  "  genesis_class_weight_O INTEGER NOT NULL DEFAULT 10, "
-  "  genesis_class_weight_L INTEGER NOT NULL DEFAULT 10, "
-  "  genesis_class_weight_C INTEGER NOT NULL DEFAULT 10, "
-  "  genesis_class_weight_H INTEGER NOT NULL DEFAULT 10, "
-  "  genesis_class_weight_U INTEGER NOT NULL DEFAULT 5, "
-  "  shipyard_enabled INTEGER NOT NULL DEFAULT 1, "
-  "  shipyard_trade_in_factor_bp INTEGER NOT NULL DEFAULT 5000, "
-  "  shipyard_require_cargo_fit INTEGER NOT NULL DEFAULT 1, "
-  "  shipyard_require_fighters_fit INTEGER NOT NULL DEFAULT 1, "
-  "  shipyard_require_shields_fit INTEGER NOT NULL DEFAULT 1, "
-  "  shipyard_require_hardware_compat INTEGER NOT NULL DEFAULT 1, "
-  "  illegal_allowed_neutral INTEGER NOT NULL DEFAULT 0, "
-  "  shipyard_tax_bp INTEGER NOT NULL DEFAULT 1000 " " ); ",
+  "  key TEXT PRIMARY KEY, "
+  "  value TEXT NOT NULL, "
+  "  type TEXT NOT NULL CHECK (type IN ('int', 'bool', 'string', 'double')) "
+  " ); ",
   /* CORPORATIONS + MEMBERS */
   " CREATE TABLE IF NOT EXISTS corporations ( "
   "   id INTEGER PRIMARY KEY,  "
@@ -758,7 +719,7 @@ const char *create_table_sql[] = {
   " FOR EACH ROW "
   " BEGIN "
   "   SELECT CASE "
-  "     WHEN (SELECT COUNT(*) FROM planets) >= (SELECT max_total_planets FROM config WHERE id = 1) "
+  "     WHEN (SELECT COUNT(*) FROM planets) >= (SELECT CAST(value AS INTEGER) FROM config WHERE key = 'max_total_planets') "
   "     THEN RAISE(ABORT, 'ERR_UNIVERSE_FULL') "
   "     ELSE 1 " "   END; " " END; ",
   " CREATE TABLE IF NOT EXISTS citadel_requirements ( "
@@ -1451,9 +1412,49 @@ const char *create_table_sql[] = {
   ");",
 };
 const char *insert_default_sql[] = {
-  /* Config defaults */
-  "INSERT OR IGNORE INTO config (id, turnsperday, maxwarps_per_sector, startingcredits, startingfighters, startingholds, processinterval, autosave, max_ports, max_planets_per_sector, max_total_planets, max_citadel_level, number_of_planet_types, max_ship_name_length, ship_type_count, hash_length, default_nodes, buff_size, max_name_length, planet_type_count, server_port, s2s_port, bank_alert_threshold_player, bank_alert_threshold_corp, genesis_enabled, genesis_block_at_cap, genesis_navhaz_delta, genesis_class_weight_M, genesis_class_weight_K, genesis_class_weight_O, genesis_class_weight_L, genesis_class_weight_C, genesis_class_weight_H, genesis_class_weight_U, shipyard_enabled, shipyard_trade_in_factor_bp, shipyard_require_cargo_fit, shipyard_require_fighters_fit, shipyard_require_shields_fit, shipyard_require_hardware_compat, shipyard_tax_bp) "
-  "VALUES (1, 120, 6, 10000000, 10, 20, 1, 5, 200, 6, 300, 6, 8, 50, 8, 128, 500, 1024, 50, 8, 1234, 4321, 1000000, 5000000, 1, 0, 0, 10, 10, 10, 10, 10, 10, 5, 1, 5000, 1, 1, 1, 1, 1000);",
+  /* Config defaults - Key-Value-Type Schema */
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('turnsperday', '120', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('maxwarps_per_sector', '6', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('startingcredits', '10000000', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('startingfighters', '10', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('startingholds', '20', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('processinterval', '1', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('autosave', '5', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_ports', '200', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_planets_per_sector', '6', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_total_planets', '300', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_citadel_level', '6', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('number_of_planet_types', '8', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_ship_name_length', '50', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('ship_type_count', '8', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('hash_length', '128', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('default_nodes', '500', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('buff_size', '1024', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_name_length', '50', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('planet_type_count', '8', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('server_port', '1234', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('s2s_port', '4321', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('bank_alert_threshold_player', '1000000', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('bank_alert_threshold_corp', '5000000', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_enabled', '1', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_block_at_cap', '0', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_navhaz_delta', '0', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_M', '10', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_K', '10', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_O', '10', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_L', '10', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_C', '10', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_H', '10', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_U', '5', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_enabled', '1', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_trade_in_factor_bp', '5000', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_require_cargo_fit', '1', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_require_fighters_fit', '1', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_require_shields_fit', '1', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_require_hardware_compat', '1', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_tax_bp', '1000', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('illegal_allowed_neutral', '0', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_cloak_duration', '24', 'int');",
   "INSERT OR IGNORE INTO law_enforcement (id) VALUES (1);",
 /* Shiptypes: name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled */
 /* Initial Ship Types (First Block) */
@@ -2988,6 +2989,16 @@ db_init (void)
       ret_code = -1;
       goto cleanup;
     }
+  sqlite3_finalize (stmt);
+  stmt = NULL;
+  if (table_exists)
+    {
+      if (db_check_legacy_schema (db) != 0)
+        {
+          ret_code = -1;
+          goto cleanup;
+        }
+    }
   /* Step 3: if no config table, create schema + defaults */
   if (!table_exists)
     {
@@ -3034,12 +3045,69 @@ cleanup:
 }
 
 
+static int
+db_check_legacy_schema (sqlite3 *db)
+{
+  // Check if 'config' table has 'type' column
+  const char *sql =
+    "SELECT 1 FROM pragma_table_info('config') WHERE name='type';";
+  sqlite3_stmt *stmt;
+  int rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      return 0;                  // Assume no legacy if check fails
+    }
+  rc = sqlite3_step (stmt);
+  int has_type = (rc == SQLITE_ROW);
+  sqlite3_finalize (stmt);
+  if (!has_type)
+    {
+      LOGE (
+        "FATAL: Legacy 'config' table detected. Please backup and delete your database file (e.g. %s) to migrate to the new Key-Value-Type schema.",
+        DEFAULT_DB_NAME);
+      return -1;
+    }
+  return 0;
+}
+
+
 int
-db_load_ports (int *server_port, int *s2s_port)
+db_get_int_config (sqlite3 *db, const char *key, int *out)
 {
   sqlite3_stmt *stmt = NULL;
   int rc;
   int ret_code = -1;
+  const char *sql = "SELECT value FROM config WHERE key = ? AND type = 'int';";
+  rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      return -1;
+    }
+  sqlite3_bind_text (stmt, 1, key, -1, SQLITE_STATIC);
+  if (sqlite3_step (stmt) == SQLITE_ROW)
+    {
+      const char *val_str = (const char *)sqlite3_column_text (stmt, 0);
+      if (val_str)
+        {
+          char *endptr;
+          errno = 0;
+          long val = strtol (val_str, &endptr, 10);
+          if (errno == 0 && endptr != val_str && *endptr == '\0')
+            {
+              *out = (int)val;
+              ret_code = 0;
+            }
+        }
+    }
+  sqlite3_finalize (stmt);
+  return ret_code;
+}
+
+
+int
+db_load_ports (int *server_port, int *s2s_port)
+{
+  int ret_code = 0;
   if (!server_port || !s2s_port)
     {
       return -1;
@@ -3049,29 +3117,18 @@ db_load_ports (int *server_port, int *s2s_port)
     {
       return -1;
     }
-  const char *sql = "SELECT server_port, s2s_port FROM config WHERE id = 1;";
-  rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
-  if (rc != SQLITE_OK)
+  /* Try to load server_port */
+  if (db_get_int_config (db, "server_port", server_port) != 0)
     {
-      LOGE ("DB prepare for port loading error: %s",
-            sqlite3_errmsg (db));
-      goto cleanup;
+      LOGW (
+        "[config] 'server_port' missing or invalid in DB, using default: %d",
+        *server_port);
     }
-  rc = sqlite3_step (stmt);
-  if (rc == SQLITE_ROW)
+  /* Try to load s2s_port */
+  if (db_get_int_config (db, "s2s_port", s2s_port) != 0)
     {
-      *server_port = sqlite3_column_int (stmt, 0);
-      *s2s_port = sqlite3_column_int (stmt, 1);
-      ret_code = 0;             // Success
-    }
-  else
-    {
-      LOGE ("DB step for port loading error: %s", sqlite3_errmsg (db));
-    }
-cleanup:
-  if (stmt)
-    {
-      sqlite3_finalize (stmt);
+      LOGW ("[config] 's2s_port' missing or invalid in DB, using default: %d",
+            *s2s_port);
     }
   return ret_code;
 }
@@ -3142,9 +3199,9 @@ int
 db_create_tables (bool schema_exists)
 {
   int rc;
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   rc = db_create_tables_unlocked (schema_exists);
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -3381,9 +3438,9 @@ int
 db_insert_defaults (void)
 {
   int rc;
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   rc = db_insert_defaults_unlocked ();
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -3689,9 +3746,9 @@ int
 db_ensure_auth_schema (void)
 {
   int rc;
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   rc = db_ensure_auth_schema_unlocked ();
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -3805,7 +3862,7 @@ db_sector_scan_snapshot (int sector_id, json_t **out_core)
     "FROM sectors s WHERE s.id = ?1";
   int rc = SQLITE_ERROR;
   sqlite3_stmt *st = NULL;
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -3855,7 +3912,7 @@ done:
     {
       sqlite3_finalize (st);
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -3867,7 +3924,7 @@ db_session_create (int player_id, int ttl_seconds, char token_out[65])
   sqlite3_stmt *st = NULL;
   int rc = SQLITE_ERROR;        // Default to error
   // 1. Acquire the lock FIRST.
-  // pthread_mutex_lock (&db_mutex); // Removed: db_get_handle() is recursive
+  // db_mutex_lock(); // Removed: db_get_handle() is recursive
   if (!token_out || player_id <= 0 || ttl_seconds <= 0)
     {
       rc = SQLITE_MISUSE;
@@ -3913,7 +3970,7 @@ cleanup:
       sqlite3_finalize (st);
     }
   // 2. Release the lock at the end.
-  // pthread_mutex_unlock (&db_mutex); // Removed: db_get_handle() is recursive
+  // db_mutex_unlock(); // Removed: db_get_handle() is recursive
   return rc;
 }
 
@@ -3926,7 +3983,7 @@ db_session_lookup (const char *token, int *out_player_id,
   sqlite3_stmt *st = NULL;
   int rc = SQLITE_ERROR;        // Default to error
   // 1. Acquire the lock before any database access
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   // Sanity checks
   if (!token)
     {
@@ -3988,7 +4045,7 @@ cleanup:
       sqlite3_finalize (st);
     }
   // 3. Release the lock before returning
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -4001,7 +4058,7 @@ db_session_revoke (const char *token)
   sqlite3_stmt *st = NULL;
   int rc = SQLITE_ERROR;        // Default to error
   // 1. Acquire the lock FIRST to ensure thread safety
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   if (!token)
     {
       rc = SQLITE_MISUSE;
@@ -4032,7 +4089,7 @@ cleanup:
       sqlite3_finalize (st);
     }
   // 3. Release the lock at the end
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -4159,7 +4216,7 @@ db_session_refresh (const char *old_token, int ttl_seconds,
   long long exp = 0;
   int rc = SQLITE_ERROR;
   // 1. Acquire the lock to make the entire sequence atomic.
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   // 2. Perform all operations using the unlocked helpers.
   rc = db_session_lookup_unlocked (old_token, &pid, &exp);
   if (rc != SQLITE_OK)
@@ -4178,7 +4235,7 @@ db_session_refresh (const char *old_token, int ttl_seconds,
     }
 cleanup:
   // 3. Release the lock before returning.
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -4188,9 +4245,9 @@ int
 db_ensure_idempotency_schema (void)
 {
   int rc;
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   rc = db_ensure_idempotency_schema_unlocked ();
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -4260,7 +4317,7 @@ db_idemp_try_begin (const char *key, const char *cmd, const char *req_fp)
   sqlite3_stmt *st = NULL;
   int rc = SQLITE_ERROR;        // Default to error
   // 1. Acquire the lock before accessing the database
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   if (!key || !cmd || !req_fp)
     {
       rc = SQLITE_MISUSE;
@@ -4304,7 +4361,7 @@ cleanup:
       sqlite3_finalize (st);
     }
   // 3. Release the lock before returning
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -4317,7 +4374,7 @@ db_idemp_fetch (const char *key, char **out_cmd, char **out_req_fp,
   sqlite3_stmt *st = NULL;
   int rc = SQLITE_ERROR;        // Default to error
   // 1. Acquire the lock FIRST to ensure thread safety
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   if (!key)
     {
       rc = SQLITE_MISUSE;
@@ -4381,7 +4438,7 @@ cleanup:
       sqlite3_finalize (st);
     }
   // 3. Release the lock before returning
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 
@@ -4393,7 +4450,7 @@ db_idemp_store_response (const char *key, const char *response_json)
   sqlite3_stmt *st = NULL;
   int rc = SQLITE_ERROR;        // Default to error
   // 1. Acquire the lock FIRST to ensure thread safety
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   if (!key || !response_json)
     {
       rc = SQLITE_MISUSE;
@@ -4432,7 +4489,7 @@ cleanup:
       sqlite3_finalize (st);
     }
   // 3. Release the lock before returning
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return rc;
 }
 

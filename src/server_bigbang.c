@@ -50,82 +50,132 @@ static bool has_column (sqlite3 *db, const char *table, const char *column);
 struct twconfig *
 config_load (void)
 {
-  const char *sql =
-    "SELECT turnsperday, "
-    "       maxwarps_per_sector, "
-    "       startingcredits, "
-    "       startingfighters, "
-    "       startingholds, "
-    "       processinterval, "
-    "       autosave, "
-    "       max_ports, "
-    "       max_planets_per_sector, "
-    "       max_total_planets, "
-    "       max_citadel_level, "
-    "       number_of_planet_types, "
-    "       max_ship_name_length, "
-    "       ship_type_count, "
-    "       hash_length, "
-    "       default_nodes, "
-    "       buff_size, "
-    "       max_name_length, "
-    "       planet_type_count, "
-    "       shipyard_enabled, "
-    "       shipyard_trade_in_factor_bp, "
-    "       shipyard_require_cargo_fit, "
-    "       shipyard_require_fighters_fit, "
-    "       shipyard_require_shields_fit, "
-    "       shipyard_require_hardware_compat, "
-    "       shipyard_tax_bp " "FROM config WHERE id=1;";
+  const char *sql = "SELECT key, value FROM config;";
   sqlite3_stmt *stmt;
-  if (sqlite3_prepare_v2 (db_get_handle (), sql, -1, &stmt, NULL) !=
-      SQLITE_OK)
+  if (sqlite3_prepare_v2 (db_get_handle (), sql, -1, &stmt, NULL) != SQLITE_OK)
     {
       fprintf (stderr, "config_load prepare error: %s\n",
                sqlite3_errmsg (db_get_handle ()));
       return NULL;
     }
-  struct twconfig *cfg = malloc (sizeof (struct twconfig));
+  struct twconfig *cfg = calloc (1, sizeof (struct twconfig));
   if (!cfg)
     {
       sqlite3_finalize (stmt);
       return NULL;
     }
-  if (sqlite3_step (stmt) == SQLITE_ROW)
+  while (sqlite3_step (stmt) == SQLITE_ROW)
     {
-      cfg->turnsperday = sqlite3_column_int (stmt, 0);
-      cfg->maxwarps_per_sector = sqlite3_column_int (stmt, 1);
-      cfg->startingcredits = sqlite3_column_int (stmt, 2);
-      cfg->startingfighters = sqlite3_column_int (stmt, 3);
-      cfg->startingholds = sqlite3_column_int (stmt, 4);
-      cfg->processinterval = sqlite3_column_int (stmt, 5);
-      cfg->autosave = sqlite3_column_int (stmt, 6);
-      cfg->max_ports = sqlite3_column_int (stmt, 7);
-      cfg->max_planets_per_sector = sqlite3_column_int (stmt, 8);
-      cfg->max_total_planets = sqlite3_column_int (stmt, 9);
-      cfg->max_citadel_level = sqlite3_column_int (stmt, 10);
-      cfg->number_of_planet_types = sqlite3_column_int (stmt, 11);
-      cfg->max_ship_name_length = sqlite3_column_int (stmt, 12);
-      cfg->ship_type_count = sqlite3_column_int (stmt, 13);
-      cfg->hash_length = sqlite3_column_int (stmt, 14);
-      cfg->default_nodes = sqlite3_column_int (stmt, 15);
-      cfg->buff_size = sqlite3_column_int (stmt, 16);
-      cfg->max_name_length = sqlite3_column_int (stmt, 17);
-      cfg->planet_type_count = sqlite3_column_int (stmt, 18);
-      cfg->shipyard_enabled = sqlite3_column_int (stmt, 19);
-      cfg->shipyard_trade_in_factor_bp = sqlite3_column_int (stmt, 20);
-      cfg->shipyard_require_cargo_fit = sqlite3_column_int (stmt, 21);
-      cfg->shipyard_require_fighters_fit = sqlite3_column_int (stmt, 22);
-      cfg->shipyard_require_shields_fit = sqlite3_column_int (stmt, 23);
-      cfg->shipyard_require_hardware_compat = sqlite3_column_int (stmt, 24);
-      cfg->shipyard_tax_bp = sqlite3_column_int (stmt, 25);
-      // fprintf(stderr, "DEBUG:
-      //        cfg->maxwarps_per_sector);
-    }
-  else
-    {
-      free (cfg);
-      cfg = NULL;
+      const char *key = (const char *) sqlite3_column_text (stmt, 0);
+      const char *val = (const char *) sqlite3_column_text (stmt, 1);
+      if (!key || !val)
+        {
+          continue;
+        }
+      if (strcmp (key, "turnsperday") == 0)
+        {
+          cfg->turnsperday = atoi (val);
+        }
+      else if (strcmp (key, "maxwarps_per_sector") == 0)
+        {
+          cfg->maxwarps_per_sector = atoi (val);
+        }
+      else if (strcmp (key, "startingcredits") == 0)
+        {
+          cfg->startingcredits = atoi (val);
+        }
+      else if (strcmp (key, "startingfighters") == 0)
+        {
+          cfg->startingfighters = atoi (val);
+        }
+      else if (strcmp (key, "startingholds") == 0)
+        {
+          cfg->startingholds = atoi (val);
+        }
+      else if (strcmp (key, "processinterval") == 0)
+        {
+          cfg->processinterval = atoi (val);
+        }
+      else if (strcmp (key, "autosave") == 0)
+        {
+          cfg->autosave = atoi (val);
+        }
+      else if (strcmp (key, "max_ports") == 0)
+        {
+          cfg->max_ports = atoi (val);
+        }
+      else if (strcmp (key, "max_planets_per_sector") == 0)
+        {
+          cfg->max_planets_per_sector = atoi (val);
+        }
+      else if (strcmp (key, "max_total_planets") == 0)
+        {
+          cfg->max_total_planets = atoi (val);
+        }
+      else if (strcmp (key, "max_citadel_level") == 0)
+        {
+          cfg->max_citadel_level = atoi (val);
+        }
+      else if (strcmp (key, "number_of_planet_types") == 0)
+        {
+          cfg->number_of_planet_types = atoi (val);
+        }
+      else if (strcmp (key, "max_ship_name_length") == 0)
+        {
+          cfg->max_ship_name_length = atoi (val);
+        }
+      else if (strcmp (key, "ship_type_count") == 0)
+        {
+          cfg->ship_type_count = atoi (val);
+        }
+      else if (strcmp (key, "hash_length") == 0)
+        {
+          cfg->hash_length = atoi (val);
+        }
+      else if (strcmp (key, "default_nodes") == 0)
+        {
+          cfg->default_nodes = atoi (val);
+        }
+      else if (strcmp (key, "buff_size") == 0)
+        {
+          cfg->buff_size = atoi (val);
+        }
+      else if (strcmp (key, "max_name_length") == 0)
+        {
+          cfg->max_name_length = atoi (val);
+        }
+      else if (strcmp (key, "planet_type_count") == 0)
+        {
+          cfg->planet_type_count = atoi (val);
+        }
+      else if (strcmp (key, "shipyard_enabled") == 0)
+        {
+          cfg->shipyard_enabled = atoi (val);
+        }
+      else if (strcmp (key, "shipyard_trade_in_factor_bp") == 0)
+        {
+          cfg->shipyard_trade_in_factor_bp = atoi (val);
+        }
+      else if (strcmp (key, "shipyard_require_cargo_fit") == 0)
+        {
+          cfg->shipyard_require_cargo_fit = atoi (val);
+        }
+      else if (strcmp (key, "shipyard_require_fighters_fit") == 0)
+        {
+          cfg->shipyard_require_fighters_fit = atoi (val);
+        }
+      else if (strcmp (key, "shipyard_require_shields_fit") == 0)
+        {
+          cfg->shipyard_require_shields_fit = atoi (val);
+        }
+      else if (strcmp (key, "shipyard_require_hardware_compat") == 0)
+        {
+          cfg->shipyard_require_hardware_compat = atoi (val);
+        }
+      else if (strcmp (key, "shipyard_tax_bp") == 0)
+        {
+          cfg->shipyard_tax_bp = atoi (val);
+        }
     }
   sqlite3_finalize (stmt);
   return cfg;
@@ -765,7 +815,7 @@ bigbang (void)
       return -1;
     }
   fprintf (stderr, "BIGBANG: Ensuring FedSpace Exits...\n");
-  int rc2 = ensure_fedspace_exit (db, 11, 500, 1);
+  int rc2 = ensure_fedspace_exit (db, 11, numSectors, 1);
   if (rc2 != SQLITE_OK)
     {
       fprintf (stderr, "ensure_fedspace_exit failed rc=%d\n", rc2);
@@ -1773,19 +1823,19 @@ int
 create_imperial (void)
 {
   int rc;
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   sqlite3 *db = db_get_handle ();
   if (!db)
     {
       fprintf (stderr, "create_imperial: Failed to get DB handle\n");
-      pthread_mutex_unlock (&db_mutex);
+      db_mutex_unlock ();
       return -1;
     }
   struct twconfig *cfg = config_load ();
   if (!cfg)
     {
       fprintf (stderr, "create_imperial: could not load config\n");
-      pthread_mutex_unlock (&db_mutex);
+      db_mutex_unlock ();
       return -1;
     }
   // Dynamically retrieve the NPC shiptype ID, filtered by can_purchase = 0
@@ -1796,7 +1846,7 @@ create_imperial (void)
       fprintf (stderr,
                "create_imperial: Failed to get required NPC shiptype ID.\n");
       free (cfg);
-      pthread_mutex_unlock (&db_mutex);
+      db_mutex_unlock ();
       return -1;
     }
   // Randomly place the Imperial Starship in a sector
@@ -1813,7 +1863,7 @@ create_imperial (void)
     {
       fprintf (stderr, "create_imperial failed to create player: %s\n",
                sqlite3_errmsg (db));
-      pthread_mutex_unlock (&db_mutex);
+      db_mutex_unlock ();
       return -1;
     }
   sqlite3_int64 imperial_player_id = sqlite3_last_insert_rowid (db);
@@ -1829,7 +1879,7 @@ create_imperial (void)
     {
       fprintf (stderr, "create_imperial: Failed to prepare ship INSERT: %s\n",
                sqlite3_errmsg (db));
-      pthread_mutex_unlock (&db_mutex);
+      db_mutex_unlock ();
       return -1;
     }
   // Bind the ship properties
@@ -1857,7 +1907,7 @@ create_imperial (void)
       fprintf (stderr, "create_imperial failed to create ship: %s\n",
                sqlite3_errmsg (db));
       sqlite3_finalize (ins);
-      pthread_mutex_unlock (&db_mutex);
+      db_mutex_unlock ();
       return -1;
     }
   sqlite3_int64 imperial_ship_id = sqlite3_last_insert_rowid (db);
@@ -1871,7 +1921,7 @@ create_imperial (void)
     {
       fprintf (stderr, "create_imperial failed to update player ship: %s\n",
                sqlite3_errmsg (db));
-      pthread_mutex_unlock (&db_mutex);
+      db_mutex_unlock ();
       return -1;
     }
   // Create ownership record
@@ -1891,7 +1941,7 @@ create_imperial (void)
   fprintf (stderr,
            "BIGBANG: Imperial Starship placed at sector %d.\n",
            imperial_sector);
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   return 0;
 }
 

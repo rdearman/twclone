@@ -62,6 +62,23 @@ struct twconfig
 /* REPLACE THE TYPEDEF IN src/server_config.h WITH THIS */
 typedef struct
 {
+  /* --- Basic Game Settings --- */
+  int turnsperday;
+  int maxwarps_per_sector;
+  int startingfighters;
+  int startingholds;
+  int autosave;
+  int max_ports;
+  int max_planets_per_sector;
+  int max_total_planets;
+  int max_citadel_level;
+  int number_of_planet_types;
+  int ship_type_count;
+  int hash_length;
+  int default_nodes;
+  int buff_size;
+  int max_name_length;
+  int planet_type_count;
   int server_port;
   struct
   {

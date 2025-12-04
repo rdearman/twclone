@@ -70,8 +70,8 @@ s2s_get_counters (uint64_t *a, uint64_t *b, uint64_t *c, uint64_t *d)
 
 
 /* --- keyring --- */
-static s2s_key_t g_keys[8];
-static size_t g_key_count = 0;
+s2s_key_t g_keys[8];
+size_t g_key_count = 0;
 // s2s_transport.c
 #include <arpa/inet.h>
 void
@@ -80,7 +80,7 @@ s2s_debug_dump_conn (const char *who, s2s_conn_t *c)
   if (!c || c->fd < 0)
     {
       LOGI ("[%s] conn=NULL\n", who);
-      //      fprintf (stderr, "[%s] conn=NULL\n", who);
+      //      // fprintf (stderr, "[%s] conn=NULL\n", who);
       return;
     }
   struct sockaddr_in la, ra;
@@ -93,7 +93,7 @@ s2s_debug_dump_conn (const char *who, s2s_conn_t *c)
   LOGI ("[%s] fd=%d local=%s:%u peer=%s:%u\n", who, c->fd,
         lip, (unsigned) ntohs (la.sin_port), rip,
         (unsigned) ntohs (ra.sin_port));
-  //  fprintf (stderr, "[%s] fd=%d local=%s:%u peer=%s:%u\n", who, c->fd,
+  //  // fprintf (stderr, "[%s] fd=%d local=%s:%u peer=%s:%u\n", who, c->fd,
   //       lip, (unsigned) ntohs (la.sin_port), rip,
   //       (unsigned) ntohs (ra.sin_port));
 }

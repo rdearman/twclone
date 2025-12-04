@@ -45,8 +45,6 @@ int h_calculate_port_buy_price (sqlite3 *db, int port_id,
                                                                   (_msg), \
                                                                   (_hint_json)); \
                                           goto trade_sell_done; } while (0)
-
-
 /* Helpers */
 static const char *
 commodity_to_code (const char *commodity)
@@ -96,8 +94,6 @@ commodity_to_code (const char *commodity)
 
 
 /////////// STUBS ///////////////////////
-
-
 int
 cmd_trade_offer (client_ctx_t *ctx, json_t *root)
 {
@@ -126,11 +122,7 @@ cmd_trade_cancel (client_ctx_t *ctx, json_t *root)
 
 
 //////////////////////////////////////////////////
-
-
 // --- helpers ---------------------------------------------------------------
-
-
 static int
 json_equal_strict (json_t *a, json_t *b)
 {
@@ -533,19 +525,13 @@ h_update_credits (sqlite3 *db, const char *owner_type, int owner_id,
  * out = (int) json_integer_value (v);
    return 1;
    } */
-
-
 /* New Helpers for Illegal Goods and Cluster Alignment */
-
-
 /**
  * @brief Retrieves the alignment of the cluster associated with a given sector.
  * @param db The SQLite database handle.
  * @param sector_id The ID of the sector to query.
  * @return The cluster alignment (e.g., +100 for Fed, -100 for Orion, -25 for Ferrengi), 0 if no cluster found.
  */
-
-
 /**
  * @brief Checks if a commodity is marked as illegal in the commodities table.
  * @param db The SQLite database handle.
@@ -3276,8 +3262,6 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
 
 
 /* --- Port Robbery --- */
-
-
 static int
 h_robbery_get_config (sqlite3 *db,
                       int *threshold,

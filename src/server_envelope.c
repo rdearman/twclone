@@ -12,11 +12,14 @@
 #include "server_envelope.h"
 #include "schemas.h"
 #include "server_config.h"
+#include "server_log.h"
 #include "server_envelope.h"
 #include "server_config.h"
 #include "s2s_transport.h"
 #include "common.h"             /* now_iso8601, strip_ansi */
 int toss;
+
+
 /* Recursively strip ANSI from all JSON strings in 'node'. */
 static void
 sanitize_json_strings (json_t *node)
@@ -67,6 +70,8 @@ sanitize_json_strings (json_t *node)
 // --- Weak fallback so linking succeeds even if server_loop.c doesn't define it ---
 // If a strong version exists in server_loop.c, the linker will prefer that one.
 __attribute__((weak))
+
+
 void
 loop_get_supported_commands (const cmd_desc_t **out_tbl,
                              size_t *out_n)
@@ -121,6 +126,8 @@ loop_get_supported_commands (const cmd_desc_t **out_tbl,
 // Provided by server_loop.c
 extern void loop_get_supported_commands (const cmd_desc_t **out_tbl,
                                          size_t *out_n);
+
+
 // ---- Helpers ----
 static void
 get_cmd_table (const cmd_desc_t **out_tbl, size_t *out_n)
@@ -607,7 +614,11 @@ send_enveloped_refused (int fd, json_t *req, int code, const char *msg,
 
 
 ////////////////////////   S2S SECTION //////////////////////////////
+
+
 // server_envelope.c
+
+
 /* ---------- tiny helpers ---------- */
 static int
 urand_bytes (void *buf, size_t n)
@@ -933,7 +944,7 @@ s2s_recv_env (s2s_conn_t *c, json_t **out_env, int timeout_ms)
     {
       if (why)
         {
-          fprintf (stderr, "[s2s] envelope min-validate failed: %s\n", why);
+          //fprintf (stderr, "[s2s] envelope min-validate failed: %s\n", why);
           free (why);
         }
       json_decref (root);
@@ -966,7 +977,7 @@ j_get_integer (json_t *root, const char *path, int *result)
 {
   if (!root || !path || !result || *path == '\0')
     {
-      fprintf (stderr, "j_get_integer: Invalid input parameters.\n");
+      LOGE ( "j_get_integer: Invalid input parameters.\n");
       return -1;
     }
   // Make a mutable copy of the path for strtok_r to work on.
@@ -986,9 +997,9 @@ j_get_integer (json_t *root, const char *path, int *result)
       // 1. Ensure the current node is a JSON object before looking up a key
       if (!current || !json_is_object (current))
         {
-          fprintf (stderr,
-                   "j_get_integer: Path segment '%s' expected an object, but found something else or NULL.\n",
-                   token);
+          LOGE (
+            "j_get_integer: Path segment '%s' expected an object, but found something else or NULL.\n",
+            token);
           free (path_copy);
           return -1;
         }
@@ -996,9 +1007,8 @@ j_get_integer (json_t *root, const char *path, int *result)
       json_t *next = json_object_get (current, token);
       if (!next)
         {
-          fprintf (stderr,
-                   "j_get_integer: Key '%s' not found at this level.\n",
-                   token);
+          LOGD ( "j_get_integer: Key '%s' not found at this level.\n",
+                 token);
           free (path_copy);
           return -1;
         }
@@ -1014,9 +1024,9 @@ j_get_integer (json_t *root, const char *path, int *result)
             }
           else
             {
-              fprintf (stderr,
-                       "j_get_integer: Final key '%s' found, but value is not an integer.\n",
-                       token);
+              LOGE (
+                "j_get_integer: Final key '%s' found, but value is not an integer.\n",
+                token);
               free (path_copy);
               return -1;        // Wrong type
             }
@@ -1026,8 +1036,8 @@ j_get_integer (json_t *root, const char *path, int *result)
     }
   // Should only be reached if the path was malformed (e.g., ended in a dot)
   free (path_copy);
-  fprintf (stderr,
-           "j_get_integer: Path traversal completed without finding a final value.\n");
+  LOGE (
+    "j_get_integer: Path traversal completed without finding a final value.\n");
   return -1;
 }
 

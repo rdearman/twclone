@@ -39,8 +39,6 @@ extern void db_mutex_lock (void);
 extern void db_mutex_unlock (void);
 int h_daily_news_compiler (sqlite3 *db, int64_t now_s);
 int h_cleanup_old_news (sqlite3 *db, int64_t now_s);
-
-
 static inline uint64_t
 monotonic_millis (void)
 {
@@ -61,8 +59,6 @@ typedef struct
 } entry_t;
 int cron_limpet_ttl_cleanup (sqlite3 *db, int64_t now_s);       // Forward declaration
 static int g_reg_inited = 0;
-
-
 int
 get_random_sector (sqlite3 *db)
 {
@@ -211,8 +207,6 @@ tow_ship (sqlite3 *db, int ship_id, int new_sector_id, int admin_id,
 
 
 #define MSL_TABLE_NAME "msl_sectors"
-
-
 static int *
 universe_pathfind_get_sectors (sqlite3 *db, int start_sector, int end_sector,
                                const int *avoid_list)
@@ -1335,20 +1329,13 @@ h_autouncloak_sweeper (sqlite3 *db, int64_t now_s)
   sqlite3_stmt *q_ccap = NULL;
   int rc;
   int max_hours = 0;
-  rc =
-    sqlite3_prepare_v2 (db, "SELECT max_cloak_duration FROM config;", -1,
-                        &q_ccap, NULL);
-  if (rc != SQLITE_OK)
+  if (db_get_int_config (db, "max_cloak_duration", &max_hours) != 0)
     {
-      LOGE ("Can't prepare config SELECT: %s", sqlite3_errmsg (db));
+      LOGE ("Can't retrieve config 'max_cloak_duration': %s",
+            sqlite3_errmsg (db));
       unlock (db, "autouncloak_sweeper");
       return 0;
     }
-  if (sqlite3_step (q_ccap) == SQLITE_ROW)
-    {
-      max_hours = sqlite3_column_int (q_ccap, 0);
-    }
-  sqlite3_finalize (q_ccap);
   if (max_hours <= 0)
     {
       LOGI
@@ -1561,8 +1548,6 @@ h_npc_step (sqlite3 *db, int64_t now_s)
 
 
 //////////////////////// NEWS BLOCK ////////////////////////
-
-
 int
 h_daily_news_compiler (sqlite3 *db, int64_t now_s)
 {
@@ -3722,8 +3707,6 @@ h_daily_market_settlement (sqlite3 *db, int64_t now_s)
 
 
 int h_daily_corp_tax (sqlite3 *db, int64_t now_s);
-
-
 int
 h_daily_stock_price_recalculation (sqlite3 *db,
                                    int64_t now_s)

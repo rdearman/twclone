@@ -12,8 +12,6 @@
 #include "server_corporation.h"
 // Forward declaration
 void send_enveloped_error (int fd, json_t *root, int code, const char *msg);
-
-
 int
 cmd_planet_genesis (client_ctx_t *ctx, json_t *root)
 {

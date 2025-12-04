@@ -66,7 +66,7 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
       return 1;
     }
   /* Get Max Sector ID to size arrays */
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   if (sqlite3_prepare_v2 (db, "SELECT MAX(id) FROM sectors", -1, &st, NULL) ==
       SQLITE_OK && sqlite3_step (st) == SQLITE_ROW)
     {
@@ -77,7 +77,7 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
       sqlite3_finalize (st);
       st = NULL;
     }
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   if (max_id <= 0)
     {
       send_enveloped_error (ctx->fd, root, 1401, "No sectors");
@@ -153,13 +153,13 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   /* Prepare neighbor query once */
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   int rc = sqlite3_prepare_v2 (db,
                                "SELECT to_sector FROM sector_warps WHERE from_sector = ?1",
                                -1,
                                &st,
                                NULL);
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   if (rc != SQLITE_OK || !st)
     {
       free (avoid);
@@ -182,7 +182,7 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
     {
       int u = queue[qh++];
       /* fetch neighbors of u */
-      pthread_mutex_lock (&db_mutex);
+      db_mutex_lock ();
       sqlite3_reset (st);
       sqlite3_clear_bindings (st);
       sqlite3_bind_int (st, 1, u);
@@ -206,16 +206,16 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
               /* still finish stepping rows to keep stmt sane, or break after unlock */
             }
         }
-      pthread_mutex_unlock (&db_mutex);
+      db_mutex_unlock ();
       if (found)
         {
           break;
         }
     }
   /* finalize stmt */
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   sqlite3_finalize (st);
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   if (!found)
     {
       free (avoid);

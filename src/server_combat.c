@@ -594,11 +594,11 @@ cmd_deploy_assets_list_internal (client_ctx_t *ctx,
   int self_player_id = ctx->player_id;
   // --- 2. Prepare SQL Statement ---
   sqlite3_stmt *st = NULL;
-  pthread_mutex_lock (&db_mutex);
+  db_mutex_lock ();
   int rc = sqlite3_prepare_v2 (db, sql_query, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
-      pthread_mutex_unlock (&db_mutex);
+      db_mutex_unlock ();
       send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
       return 0;
     }
@@ -651,7 +651,7 @@ cmd_deploy_assets_list_internal (client_ctx_t *ctx,
     }
   // --- 5. Finalize Statement and Unlock Mutex ---
   sqlite3_finalize (st);
-  pthread_mutex_unlock (&db_mutex);
+  db_mutex_unlock ();
   if (rc != SQLITE_DONE)
     {
       json_decref (entries);    // Clean up on error
@@ -1732,8 +1732,8 @@ db_get_stardock_sectors (void)
   json_t *sector_list = json_array ();
   if (!sector_list)
     {
-      fprintf (stderr,
-               "ERROR: Failed to allocate JSON array for stardock sectors.\n");
+      LOGE (
+        "ERROR: Failed to allocate JSON array for stardock sectors.\n");
       return NULL;
     }
   const char *sql = "SELECT sector_id FROM stardock_location;";
@@ -1741,8 +1741,8 @@ db_get_stardock_sectors (void)
   rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
-      fprintf (stderr, "DB Error: Could not prepare stardock query: %s\n",
-               sqlite3_errmsg (db));
+      LOGE ( "DB Error: Could not prepare stardock query: %s\n",
+             sqlite3_errmsg (db));
       json_decref (sector_list);
       return NULL;
     }
@@ -1756,8 +1756,8 @@ db_get_stardock_sectors (void)
       // Append the new JSON object to the array (json_array_append_new consumes the reference)
       if (json_array_append_new (sector_list, j_sector) != 0)
         {
-          fprintf (stderr, "ERROR: Failed to append sector ID %d to list.\n",
-                   sector_id);
+          LOGE ( "ERROR: Failed to append sector ID %d to list.\n",
+                 sector_id);
           json_decref (j_sector);       // Clean up the orphaned reference
           // You may choose to stop here or continue
         }
@@ -1765,8 +1765,8 @@ db_get_stardock_sectors (void)
   // 3. Handle step errors if the loop didn't finish normally (SQLITE_DONE)
   if (rc != SQLITE_DONE)
     {
-      fprintf (stderr, "DB Error: Failed to step stardock query: %s\n",
-               sqlite3_errmsg (db));
+      LOGE ( "DB Error: Failed to step stardock query: %s\n",
+             sqlite3_errmsg (db));
       json_decref (sector_list);        // Cleanup the partially built list
       sqlite3_finalize (stmt);
       return NULL;

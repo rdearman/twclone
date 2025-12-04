@@ -12,8 +12,6 @@
 #include "server_cron.h"        // Include for cron job functions
 #include "server_log.h"
 #include "server_clusters.h" // NEW
-
-
 int
 cmd_sys_cluster_init (client_ctx_t *ctx, json_t *root)
 {
@@ -527,8 +525,6 @@ send_json_response (client_ctx_t *ctx, json_t *response_json)
 
 
 /* --- Bounty Commands --- */
-
-
 // Helper: Check if sector is FedSpace
 static bool
 is_fedspace_sector (int sector_id)

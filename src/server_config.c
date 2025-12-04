@@ -38,10 +38,52 @@ sqlite3 *g_db = NULL;
 
 
 static void
-set_defaults (void)
+config_set_defaults (void)
 {
   memset (&g_cfg, 0, sizeof g_cfg);
+  /* --- Legacy "config" table defaults --- */
+  g_cfg.turnsperday = 120;
+  g_cfg.maxwarps_per_sector = 6;
+  g_cfg.startingcredits = 10000000;
+  g_cfg.startingfighters = 10;
+  g_cfg.startingholds = 20;
+  g_cfg.engine.processinterval = 1;
+  g_cfg.autosave = 5;
+  g_cfg.max_ports = 200;
+  g_cfg.max_planets_per_sector = 6;
+  g_cfg.max_total_planets = 300;
+  g_cfg.max_citadel_level = 6;
+  g_cfg.number_of_planet_types = 8;
+  g_cfg.max_ship_name_length = 50;
+  g_cfg.ship_type_count = 8;
+  g_cfg.hash_length = 128;
+  g_cfg.default_nodes = 500;
+  g_cfg.buff_size = 1024;
+  g_cfg.max_name_length = 50;
+  g_cfg.planet_type_count = 8;
   g_cfg.server_port = 1234;
+  g_cfg.s2s.tcp_port = 4321;
+  g_cfg.bank_alert_threshold_player = 1000000;
+  g_cfg.bank_alert_threshold_corp = 5000000;
+  g_cfg.genesis_enabled = 1;
+  g_cfg.genesis_block_at_cap = 0;
+  g_cfg.genesis_navhaz_delta = 0;
+  g_cfg.genesis_class_weight_M = 10;
+  g_cfg.genesis_class_weight_K = 10;
+  g_cfg.genesis_class_weight_O = 10;
+  g_cfg.genesis_class_weight_L = 10;
+  g_cfg.genesis_class_weight_C = 10;
+  g_cfg.genesis_class_weight_H = 10;
+  g_cfg.genesis_class_weight_U = 5;
+  g_cfg.shipyard_enabled = 1;
+  g_cfg.shipyard_trade_in_factor_bp = 5000;
+  g_cfg.shipyard_require_cargo_fit = 1;
+  g_cfg.shipyard_require_fighters_fit = 1;
+  g_cfg.shipyard_require_shields_fit = 1;
+  g_cfg.shipyard_require_hardware_compat = 1;
+  g_cfg.shipyard_tax_bp = 1000;
+  g_cfg.illegal_allowed_neutral = 0;
+  /* --- Internal / Other defaults --- */
   g_cfg.engine.tick_ms = 50;
   g_cfg.engine.daily_align_sec = 0;
   g_cfg.batching.event_batch = 128;
@@ -51,7 +93,6 @@ set_defaults (void)
   g_cfg.priorities.default_event_weight = 100;
   snprintf (g_cfg.s2s.transport, sizeof g_cfg.s2s.transport, "tcp");
   snprintf (g_cfg.s2s.tcp_host, sizeof g_cfg.s2s.tcp_host, "127.0.0.1");
-  g_cfg.s2s.tcp_port = 4321;
   g_cfg.s2s.frame_size_limit = 2 * 1024 * 1024;
   g_cfg.safety.connect_ms = 1500;
   g_cfg.safety.handshake_ms = 1500;
@@ -79,7 +120,91 @@ set_defaults (void)
   g_cfg.death.big_sleep_duration_seconds = 86400;
   g_cfg.death.big_sleep_clear_xp_below = 0;
   snprintf (g_cfg.death.escape_pod_spawn_mode,
-            sizeof (g_cfg.death.escape_pod_spawn_mode), "safe_path");                                           // Default to safe_path for general kills
+            sizeof (g_cfg.death.escape_pod_spawn_mode), "safe_path");
+}
+
+
+typedef enum {
+  CFG_T_INT,
+  CFG_T_BOOL,
+  CFG_T_STRING,
+  CFG_T_DOUBLE
+} cfg_type_t;
+
+
+static int
+cfg_parse_int (const char *val_str, const char *type_str, int *out)
+{
+  if (strcmp (type_str, "int") != 0)
+    {
+      return -1;
+    }
+  char *endptr;
+  errno = 0;
+  long val = strtol (val_str, &endptr, 10);
+  if (errno != 0 || endptr == val_str || *endptr != '\0')
+    {
+      return -1;
+    }
+  *out = (int) val;
+  return 0;
+}
+
+
+static int
+cfg_parse_int64 (const char *val_str, const char *type_str, int64_t *out)
+{
+  /* Treat as 'int' type from DB perspective, but parse to int64 */
+  if (strcmp (type_str, "int") != 0)
+    {
+      return -1;
+    }
+  char *endptr;
+  errno = 0;
+  long long val = strtoll (val_str, &endptr, 10);
+  if (errno != 0 || endptr == val_str || *endptr != '\0')
+    {
+      return -1;
+    }
+  *out = (int64_t) val;
+  return 0;
+}
+
+
+static int
+cfg_parse_bool (const char *val_str, const char *type_str, int *out)
+{
+  if (strcmp (type_str, "bool") != 0)
+    {
+      return -1;
+    }
+  /* Strict check for "0" or "1" */
+  if (strcmp (val_str, "1") == 0)
+    {
+      *out = 1;
+      return 0;
+    }
+  if (strcmp (val_str, "0") == 0)
+    {
+      *out = 0;
+      return 0;
+    }
+  return -1;
+}
+
+
+static int
+cfg_parse_string (const char *val_str,
+                  const char *type_str,
+                  char *out_buf,
+                  size_t buf_size)
+{
+  if (strcmp (type_str, "string") != 0)
+    {
+      return -1;
+    }
+  snprintf (out_buf, buf_size, "%s", val_str);
+  return 0;
 }
 
 
@@ -88,37 +213,37 @@ validate_cfg (void)
 {
   if (g_cfg.engine.tick_ms < 1)
     {
-      fprintf (stderr, "ERROR config: engine.tick_ms must be >= 1 (got %d)\n",
-               g_cfg.engine.tick_ms);
+      LOGE ( "ERROR config: engine.tick_ms must be >= 1 (got %d)\n",
+             g_cfg.engine.tick_ms);
       return 0;
     }
   if (strcasecmp (g_cfg.s2s.transport, "uds") != 0
       && strcasecmp (g_cfg.s2s.transport, "tcp") != 0)
     {
-      fprintf (stderr,
-               "ERROR config: s2s.transport must be one of [uds|tcp] (got \"%s\")\n",
-               g_cfg.s2s.transport);
+      LOGE (
+        "ERROR config: s2s.transport must be one of [uds|tcp] (got \"%s\")\n",
+        g_cfg.s2s.transport);
       return 0;
     }
   if (!strcasecmp (g_cfg.s2s.transport, "uds")
       && g_cfg.s2s.uds_path[0] == '\0')
     {
-      fprintf (stderr,
-               "ERROR config: s2s.uds_path required when s2s.transport=uds\n");
+      LOGE (
+        "ERROR config: s2s.uds_path required when s2s.transport=uds\n");
       return 0;
     }
   if (!strcasecmp (g_cfg.s2s.transport, "tcp") &&
       (g_cfg.s2s.tcp_host[0] == '\0' || g_cfg.s2s.tcp_port <= 0))
     {
-      fprintf (stderr,
-               "ERROR config: s2s.tcp_host/tcp_port required when s2s.transport=tcp\n");
+      LOGE (
+        "ERROR config: s2s.tcp_host/tcp_port required when s2s.transport=tcp\n");
       return 0;
     }
   if (g_cfg.s2s.frame_size_limit > 8 * 1024 * 1024)
     {
-      fprintf (stderr,
-               "ERROR config: s2s.frame_size_limit exceeds 8 MiB (%d)\n",
-               g_cfg.s2s.frame_size_limit);
+      LOGE (
+        "ERROR config: s2s.frame_size_limit exceeds 8 MiB (%d)\n",
+        g_cfg.s2s.frame_size_limit);
       return 0;
     }
   return 1;
@@ -226,58 +351,201 @@ static void
 apply_db (sqlite3 *db)
 {
   sqlite3_stmt *st = NULL;
-  // This query explicitly selects the columns that match the 'wide table' schema in fullschema.sql
-  const char *sql =
-    "SELECT startingcredits, server_port, s2s_port, bank_alert_threshold_player, bank_alert_threshold_corp, "
-    "genesis_enabled, genesis_block_at_cap, genesis_navhaz_delta, genesis_class_weight_M, genesis_class_weight_K, "
-    "genesis_class_weight_O, genesis_class_weight_L, genesis_class_weight_C, genesis_class_weight_H, genesis_class_weight_U, "
-    "shipyard_enabled, shipyard_trade_in_factor_bp, shipyard_require_cargo_fit, shipyard_require_fighters_fit, "
-    "shipyard_require_shields_fit, shipyard_require_hardware_compat, illegal_allowed_neutral, shipyard_tax_bp, "
-    "processinterval, max_ship_name_length FROM config WHERE id = 1";
+  /* New Key-Value-Type Query */
+  const char *sql = "SELECT key, value, type FROM config;";
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
-      LOGI ("[config] no config table found, using defaults (%s)\n",
-            sqlite3_errmsg (db));
+      LOGW ("[config] Failed to prepare config query: %s", sqlite3_errmsg (db));
       return;
     }
-  if (sqlite3_step (st) == SQLITE_ROW)
+  while (sqlite3_step (st) == SQLITE_ROW)
     {
-      int i = 0;
-      // Map columns to the struct fields. IMPORTANT: g_cfg structure must match these types.
-      // Assuming g_cfg struct has been updated as per step 2 below.
-      g_cfg.startingcredits = sqlite3_column_int64 (st, i++);
-      g_cfg.server_port = sqlite3_column_int (st, i++);
-      g_cfg.s2s.tcp_port = sqlite3_column_int (st, i++);
-      g_cfg.bank_alert_threshold_player = sqlite3_column_int64 (st, i++);
-      g_cfg.bank_alert_threshold_corp = sqlite3_column_int64 (st, i++);
-      g_cfg.genesis_enabled = sqlite3_column_int (st, i++);
-      g_cfg.genesis_block_at_cap = sqlite3_column_int (st, i++);
-      g_cfg.genesis_navhaz_delta = sqlite3_column_int (st, i++);
-      g_cfg.genesis_class_weight_M = sqlite3_column_int (st, i++);
-      g_cfg.genesis_class_weight_K = sqlite3_column_int (st, i++);
-      g_cfg.genesis_class_weight_O = sqlite3_column_int (st, i++);
-      g_cfg.genesis_class_weight_L = sqlite3_column_int (st, i++);
-      g_cfg.genesis_class_weight_C = sqlite3_column_int (st, i++);
-      g_cfg.genesis_class_weight_H = sqlite3_column_int (st, i++);
-      g_cfg.genesis_class_weight_U = sqlite3_column_int (st, i++);
-      g_cfg.shipyard_enabled = sqlite3_column_int (st, i++);
-      g_cfg.shipyard_trade_in_factor_bp = sqlite3_column_int (st, i++);
-      g_cfg.shipyard_require_cargo_fit = sqlite3_column_int (st, i++);
-      g_cfg.shipyard_require_fighters_fit = sqlite3_column_int (st, i++);
-      g_cfg.shipyard_require_shields_fit = sqlite3_column_int (st, i++);
-      g_cfg.shipyard_require_hardware_compat = sqlite3_column_int (st, i++);
-      g_cfg.illegal_allowed_neutral = sqlite3_column_int (st, i++);
-      g_cfg.shipyard_tax_bp = sqlite3_column_int (st, i++);
-      g_cfg.engine.processinterval = sqlite3_column_int (st, i++); // Nested in engine struct
-      g_cfg.max_ship_name_length = sqlite3_column_int (st, i++);
-      LOGI ("[config] Loaded configuration from database.");
-    }
-  else
-    {
-      LOGW (
-        "[config] No configuration found in database (id=1), using defaults.");
+      const char *key = (const char *) sqlite3_column_text (st, 0);
+      const char *val = (const char *) sqlite3_column_text (st, 1);
+      const char *type = (const char *) sqlite3_column_text (st, 2);
+      if (!key || !val || !type)
+        {
+          continue;
+        }
+      /* --- Map keys to g_cfg fields --- */
+      /* Integers */
+      if (strcmp (key, "turnsperday") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.turnsperday);
+        }
+      else if (strcmp (key, "maxwarps_per_sector") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.maxwarps_per_sector);
+        }
+      else if (strcmp (key, "startingcredits") == 0)
+        {
+          cfg_parse_int64 (val, type, &g_cfg.startingcredits);                                            /* int64 */
+        }
+      else if (strcmp (key, "startingfighters") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.startingfighters);
+        }
+      else if (strcmp (key, "startingholds") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.startingholds);
+        }
+      else if (strcmp (key, "processinterval") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.engine.processinterval);
+        }
+      else if (strcmp (key, "autosave") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.autosave);
+        }
+      else if (strcmp (key, "max_ports") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.max_ports);
+        }
+      else if (strcmp (key, "max_planets_per_sector") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.max_planets_per_sector);
+        }
+      else if (strcmp (key, "max_total_planets") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.max_total_planets);
+        }
+      else if (strcmp (key, "max_citadel_level") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.max_citadel_level);
+        }
+      else if (strcmp (key, "number_of_planet_types") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.number_of_planet_types);
+        }
+      else if (strcmp (key, "max_ship_name_length") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.max_ship_name_length);
+        }
+      else if (strcmp (key, "ship_type_count") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.ship_type_count);
+        }
+      else if (strcmp (key, "hash_length") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.hash_length);
+        }
+      else if (strcmp (key, "default_nodes") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.default_nodes);
+        }
+      else if (strcmp (key, "buff_size") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.buff_size);
+        }
+      else if (strcmp (key, "max_name_length") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.max_name_length);
+        }
+      else if (strcmp (key, "planet_type_count") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.planet_type_count);
+        }
+      else if (strcmp (key, "server_port") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.server_port);
+        }
+      else if (strcmp (key, "s2s_port") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.s2s.tcp_port);
+        }
+      else if (strcmp (key, "bank_alert_threshold_player") == 0)
+        {
+          cfg_parse_int64 (val, type, &g_cfg.bank_alert_threshold_player);                                                        /* int64 */
+        }
+      else if (strcmp (key, "bank_alert_threshold_corp") == 0)
+        {
+          cfg_parse_int64 (val, type, &g_cfg.bank_alert_threshold_corp);                                                      /* int64 */
+        }
+      /* Genesis */
+      else if (strcmp (key, "genesis_enabled") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.genesis_enabled);
+        }
+      else if (strcmp (key, "genesis_block_at_cap") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.genesis_block_at_cap);
+        }
+      else if (strcmp (key, "genesis_navhaz_delta") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.genesis_navhaz_delta);
+        }
+      else if (strcmp (key, "genesis_class_weight_M") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.genesis_class_weight_M);
+        }
+      else if (strcmp (key, "genesis_class_weight_K") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.genesis_class_weight_K);
+        }
+      else if (strcmp (key, "genesis_class_weight_O") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.genesis_class_weight_O);
+        }
+      else if (strcmp (key, "genesis_class_weight_L") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.genesis_class_weight_L);
+        }
+      else if (strcmp (key, "genesis_class_weight_C") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.genesis_class_weight_C);
+        }
+      else if (strcmp (key, "genesis_class_weight_H") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.genesis_class_weight_H);
+        }
+      else if (strcmp (key, "genesis_class_weight_U") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.genesis_class_weight_U);
+        }
+      /* Shipyard */
+      else if (strcmp (key, "shipyard_enabled") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.shipyard_enabled);
+        }
+      else if (strcmp (key, "shipyard_trade_in_factor_bp") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.shipyard_trade_in_factor_bp);
+        }
+      else if (strcmp (key, "shipyard_require_cargo_fit") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.shipyard_require_cargo_fit);
+        }
+      else if (strcmp (key, "shipyard_require_fighters_fit") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.shipyard_require_fighters_fit);
+        }
+      else if (strcmp (key, "shipyard_require_shields_fit") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.shipyard_require_shields_fit);
+        }
+      else if (strcmp (key, "shipyard_require_hardware_compat") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.shipyard_require_hardware_compat);
+        }
+      else if (strcmp (key, "shipyard_tax_bp") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.shipyard_tax_bp);
+        }
+      else if (strcmp (key, "illegal_allowed_neutral") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.illegal_allowed_neutral);
+        }
+      /* Log unknown keys as debug (ignore) */
+      else
+        {
+          LOGD ("[config] Unknown key in DB: '%s' (type=%s, val=%s)",
+                key,
+                type,
+                val);
+        }
     }
   sqlite3_finalize (st);
+  LOGI ("[config] Configuration loaded from Key-Value-Type table.");
   // Secrets loading (unchanged)
   sqlite3_stmt *ks = NULL;
   if (sqlite3_prepare_v2 (db,
@@ -304,7 +572,7 @@ apply_env (void)
 int
 load_eng_config (void)
 {
-  set_defaults ();
+  config_set_defaults ();
   // ensure DB is open/initialised here (you already do schema creation)
   extern sqlite3 *g_db;
   g_db = db_get_handle (); // Initialize g_db with the correct handle

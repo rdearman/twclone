@@ -16,7 +16,7 @@
 #include "server_envelope.h"
 #include "s2s_transport.h"
 #include "schemas.h"
-#include <time.h>
+#include "server_log.h"
 static int
 handle_command_push (s2s_conn_t *c, json_t *env)
 {
@@ -25,8 +25,8 @@ handle_command_push (s2s_conn_t *c, json_t *env)
   const char *idem_key = json_string_value (json_object_get (pl, "idem_key"));
   json_t *cmd_payload = json_object_get (pl, "payload");
   /* now it's safe to log */
-  fprintf (stderr, "[server] handle_command_push: %s %s\n",
-           cmd_type ? cmd_type : "(null)", idem_key ? idem_key : "(null)");
+  LOGE ( "[server] handle_command_push: %s %s\n",
+         cmd_type ? cmd_type : "(null)", idem_key ? idem_key : "(null)");
   int cmd_id = 0, duplicate = 0, due_at = (int) time (NULL);
   int rcdb = db_commands_accept (cmd_type, idem_key, cmd_payload,
                                  &cmd_id, &duplicate, &due_at);
