@@ -222,6 +222,10 @@ def _get_filtered_game_state_for_llm(game_state, state_manager):
     elif not valid_gotos:
          filtered_state["valid_goto_sectors"] = "NONE_YET" # Hint to LLM
 
+    # --- Feedback Loop ---
+    filtered_state["last_action_result"] = game_state.get("last_action_result")
+    # ---------------------
+
     if current_sector_details:
         filtered_state["current_sector_info"] = {
             "sector_id": current_sector_details.get("sector_id"),
@@ -272,59 +276,97 @@ def _get_filtered_game_state_for_llm(game_state, state_manager):
 
     return filtered_state
 
-PROMPT_EXPLORE = """You are a master space explorer. Your goal is to find new sectors and ports.
-Based on this filtered summary of the current game state, provide a high-level strategic plan.
+PROMPT_CONTRACT_BLOCK = """
+Below is the complete snapshot of the current game state.
+Use this information EXACTLY as provided, and obey all constraints strictly.
 
-OUTPUT FORMAT: A strict JSON list of strings. No other text.
-Example: ["scan: density", "goto: 123"]
-
-IMPORTANT RULES FOR GENERATING GOALS:
-1.  For "goto" goals:
-    -   The <sector_id> MUST be an integer. It MUST be one of the sector IDs explicitly listed in `valid_goto_sectors` (for adjacent moves) OR one of `all_known_sectors` (for longer-range plans). Do NOT invent sector IDs.
-    -   Prioritize sectors that have not been explored yet (i.e., not in `adjacent_sectors_info`).
-2.  For "scan: density" goals:
-    -   You should only use this goal if `has_density_scanner` is `true`.
-    -   Use this to gather information about adjacent sectors, especially to find ports.
-
-Current state:
+------------------------------
+GAME STATE (JSON INPUT)
 {game_state}
+------------------------------
 
-What is your plan?
+## ALLOWED ACTIONS (YOU MAY ONLY USE THESE)
+
+You may output a plan consisting only of the following four goal types:
+
+1. "goto: <sector_id>"
+     - Move the ship to an adjacent sector.
+     - You may ONLY use sector IDs from the list `valid_goto_sectors` unless exploring.
+
+2. "scan: density"
+     - Perform a density scan in the current sector.
+
+3. "buy: <COMMODITY>"
+4. "sell: <COMMODITY>"
+     - Commodities must be taken ONLY from `valid_commodity_names`.
+     - You may ONLY propose buy/sell actions if `can_trade_at_current_location` is true.
+     - Do NOT propose buy/sell unless the current sector has a port.
+
+## HARD RULES (MUST FOLLOW)
+
+- You MUST select destinations for "goto:" ONLY from `valid_goto_sectors`.
+- You MUST select commodities ONLY from `valid_commodity_names`.
+- Do NOT trade SLAVES, WEAPONS, or DRUGS unless your alignment is Evil (check player_info).
+- If `can_trade_at_current_location` is false, you MUST NOT propose any "buy:" or "sell:" actions.
+- You MUST NOT propose commands like "land", "planet.land", "combat.*", "move_to_safe_location",
+  "negotiate", or ANY action not listed in the ALLOWED ACTIONS above.
+- If there are no valid goto targets, you may still output ["scan: density"].
+- If the port or warp action previously failed, the field `last_action_result` will contain an
+  error. Avoid repeating actions that will logically fail again.
+
+## OUTPUT FORMAT (STRICT — DO NOT VIOLATE)
+
+You MUST output a single JSON object with this structure:
+
+{{
+  "plan": [
+    "goto: <sector_id>",
+    "scan: density",
+    "buy: <COMMODITY>",
+    "sell: <COMMODITY>"
+  ]
+}}
+
+Rules:
+
+- The top-level value MUST be an object.
+- It MUST contain a key "plan".
+- "plan" MUST be an array.
+- Each element of "plan" MUST be a string representing a single goal.
+- Allowed goal formats are:
+    - "goto: <sector_id>"
+    - "scan: density"
+    - "buy: <COMMODITY_CODE>"
+    - "sell: <COMMODITY_CODE>"
+- Do NOT include any other top-level keys.
+- Do NOT include natural language explanation.
+
+### VALID EXAMPLES:
+{{ "plan": ["scan: density"] }}
+
+{{ "plan": ["goto: 5", "scan: density"] }}
+
+{{ "plan": ["goto: 7", "buy: ORE", "goto: 5", "sell: ORE"] }}
+
+{{ "plan": [] }}
+
+------------------------------
+
+NOW OUTPUT YOUR PLAN AS A JSON OBJECT AND NOTHING ELSE.
 """
+
+PROMPT_EXPLORE = """You are a master space explorer. Your goal is to find new sectors and ports.
+""" + PROMPT_CONTRACT_BLOCK
 
 PROMPT_STRATEGY = """You are a master space trader. Your goal is to make profit.
-Based on this filtered summary of the current game state, provide a high-level strategic plan.
+""" + PROMPT_CONTRACT_BLOCK
 
-OUTPUT FORMAT: A strict JSON list of strings. No other text.
-Example: ["scan: density", "goto: 123", "buy: ORE"]
-
-IMPORTANT RULES FOR GENERATING GOALS:
-1.  For "goto" goals:
-    -   The <sector_id> MUST be an integer. It MUST be one of the sector IDs explicitly listed in `valid_goto_sectors` (for adjacent moves) OR one of `all_known_sectors` (for longer-range plans). Do NOT invent sector IDs.
-2.  For "buy" or "sell" goals:
-    -   You MUST be at a port. `can_trade_at_current_location` must be `true`. If it is `false`, you CANNOT buy or sell.
-    -   When selling, you MUST have something in your `ship_info.cargo`. If `ship_info.cargo` is empty, you CANNOT sell.
-    -   When buying, you MUST have space in your cargo hold. `ship_current_cargo_volume` must be less than `ship_cargo_capacity`.
-        -   Specifically, when buying, the quantity suggested must not exceed `ship_cargo_capacity - ship_current_cargo_volume`.
-    -   The <commodity_code> MUST be one of the valid commodity names listed in `valid_commodity_names`.
-    -   Refer to `current_port_commodities` for available items and their prices at the current port.
-        -   Example: `current_port_commodities: [{{"commodity": "ORE", "buy_price": 100, "sell_price": 80}}]` means you can buy ORE for 100 and sell for 80.
-
-3. For "scan: density" goals:
-    - You should only use this goal if `has_density_scanner` is `true`.
-    - Use this to gather information about adjacent sectors, especially to find ports.
-    - A `density` value of approximately 100 in `adjacent_sectors_info` often indicates the presence of a port. Prioritize `goto` goals to sectors with high density after a scan.
-
-Current state:
-{game_state}
-
-What is your plan?
-"""
-
-# QA Prompt aligned with STRATEGY for now to avoid unsupported verbs
-PROMPT_QA_OBJECTIVE = PROMPT_STRATEGY
+PROMPT_QA_OBJECTIVE = """You are a QA testing bot for a space game. Your current high-level objective is to "{qa_objective}".
+Based on this objective, provide a detailed strategic plan.
+""" + PROMPT_CONTRACT_BLOCK
 
 QA_OBJECTIVES = [
+    "test basic trading",
     "test combat system",
     "test planet landing",
     "test ship upgrades",
@@ -346,12 +388,14 @@ def get_strategy_from_llm(game_state, model, stage, state_manager, qa_objective:
         stage = "explore"
     
     if qa_objective:
-        prompt = PROMPT_QA_OBJECTIVE.format(qa_objective=qa_objective, game_state=json.dumps(filtered_game_state, indent=2))
+        # Pre-format the QA objective into the specific prompt section
+        qa_intro = PROMPT_QA_OBJECTIVE.format(qa_objective=qa_objective)
+        prompt = qa_intro + PROMPT_CONTRACT_BLOCK.format(game_state=json.dumps(filtered_game_state, indent=2))
         logger.info(f"Using QA Objective prompt for LLM: {qa_objective}")
     elif stage == "explore":
-        prompt = PROMPT_EXPLORE.format(game_state=json.dumps(filtered_game_state, indent=2))
+        prompt = "You are a master space explorer. Your goal is to find new sectors and ports.\n" + PROMPT_CONTRACT_BLOCK.format(game_state=json.dumps(filtered_game_state, indent=2))
     else:
-        prompt = PROMPT_STRATEGY.format(game_state=json.dumps(filtered_game_state, indent=2))
+        prompt = "You are a master space trader. Your goal is to make profit.\n" + PROMPT_CONTRACT_BLOCK.format(game_state=json.dumps(filtered_game_state, indent=2))
 
     try:
         response_text = get_ollama_response(
@@ -361,120 +405,136 @@ def get_strategy_from_llm(game_state, model, stage, state_manager, qa_objective:
             override_prompt=prompt
         )
         
-        if response_text:
-            plan = []
+        if not response_text:
+            return None
 
-            # 1) Try strict JSON first
-            try:
-                json_response = json.loads(response_text)
-                
-                if isinstance(json_response, list):
-                    for item in json_response:
-                        if isinstance(item, str):
-                            plan.append(item.strip())
-                        elif isinstance(item, dict):
-                            for k, v in item.items():
-                                if v is None: 
-                                    plan.append(k)
-                                else:
-                                    plan.append(f"{k}: {v}")
+        raw_plan = []
 
-                elif isinstance(json_response, dict):
+        # 1) Strict JSON parsing
+        try:
+            json_response = json.loads(response_text)
+            
+            if isinstance(json_response, list):
+                for item in json_response:
+                    if isinstance(item, str):
+                        raw_plan.append(item.strip())
+                    else:
+                        logger.warning(f"Invalid item type in plan list: {type(item)}. Expected string.")
+            elif isinstance(json_response, dict):
+                 # Primary Contract: {"plan": ["goal1", "goal2"]}
+                 if "plan" in json_response and isinstance(json_response["plan"], list):
+                     for item in json_response["plan"]:
+                         if isinstance(item, str):
+                             raw_plan.append(item.strip())
+                         elif isinstance(item, dict) and "goal" in item: # Support rich objects {goal: "...", reason: "..."}
+                             raw_plan.append(str(item["goal"]).strip())
+                 
+                 # Fallback: Flat dict {"goto": 123} (Legacy)
+                 else:
                     for k, v in json_response.items():
                         key = k.strip()
                         if key in ["goto", "buy", "sell", "scan"] or "." in key:
                             if isinstance(v, (str, int, float)):
-                                plan.append(f"{key}: {v}")
+                                raw_plan.append(f"{key}: {v}")
                             elif v is None or v == "":
-                                plan.append(key)
+                                raw_plan.append(key)
                             elif isinstance(v, list):
-                                # Handle rare case like "buy": ["ORE", "FUEL"]
                                 for item in v:
-                                    plan.append(f"{key}: {item}")
+                                    raw_plan.append(f"{key}: {item}")
                         elif ":" in key:
-                            plan.append(key)
+                            raw_plan.append(key)
                         elif isinstance(v, list):
                             for item in v:
                                 if isinstance(item, str):
-                                    plan.append(item.strip())
+                                    raw_plan.append(item.strip())
                         elif isinstance(v, str):
-                                plan.append(v.strip())
+                                raw_plan.append(v.strip())
+            else:
+                logger.warning(f"LLM returned JSON of type {type(json_response)}, expected list or dict. Raw: {response_text}")
 
-            except json.JSONDecodeError:
-                logger.warning("LLM returned invalid JSON. Falling back to text parsing.")
-                # 2) Fallback: Text parsing
-                lines = response_text.strip().split('\n')
-                for line in lines:
-                    line = line.strip()
-                    line = re.sub(r'^[\d\-\*\.]+\s*', '', line)
-                    if ":" in line or "scan" in line or "." in line:
-                        plan.append(line)
+        except json.JSONDecodeError:
+            logger.warning("LLM returned invalid JSON. Attempting to recover text lines.")
+            # Fallback: Try to extract lines that look like goals
+            lines = response_text.strip().split('\n')
+            for line in lines:
+                line = line.strip()
+                # Basic cleanup
+                line = re.sub(r'^[\d\-\*\.]+\s*', '', line).strip('"').strip("'").strip(',')
+                if ":" in line:
+                    raw_plan.append(line)
 
-            # Filter out empty strings and duplicates
-            plan = list(filter(None, plan))
-            plan = list(dict.fromkeys(plan))
+        # 2) Validation & Normalization
+        validated_plan = []
         
-            validated = []
-            valid_gotos = set(filtered_game_state.get("valid_goto_sectors", []))
-            all_known = set(filtered_game_state.get("all_known_sectors", []))
-            valid_comms = set(c.upper() for c in filtered_game_state.get("valid_commodity_names", []))
-            can_trade_here = filtered_game_state.get("can_trade_at_current_location", False)
+        # Context for validation
+        valid_gotos = set(filtered_game_state.get("valid_goto_sectors", []))
+        all_known = set(filtered_game_state.get("all_known_sectors", []))
+        valid_comms = set(c.upper() for c in filtered_game_state.get("valid_commodity_names", []))
+        can_trade = filtered_game_state.get("can_trade_at_current_location", False)
+        
+        goal_pattern = re.compile(r'^(goto|buy|sell|scan)\s*:\s*(.+)$', re.IGNORECASE)
 
-            for goal in plan:
-                if not isinstance(goal, str): continue
+        for goal in raw_plan:
+            if not isinstance(goal, str): continue
+            
+            match = goal_pattern.match(goal)
+            if not match:
+                # Allow "scan: density" which might match, but double check strictness
+                # Actually the regex covers it.
+                logger.debug(f"Skipping malformed goal string: {goal}")
+                continue
+
+            verb = match.group(1).lower()
+            arg = match.group(2).strip()
+            
+            # Reconstruct goal string
+            clean_goal = f"{verb}: {arg}"
+
+            if verb == "goto":
+                try:
+                    sid = int(arg)
+                    # Relaxed validation: Allow any integer target.
+                    # The Planner will handle pathfinding or rejection if truly unreachable.
+                    validated_plan.append(f"goto: {sid}")
+                except ValueError:
+                    logger.warning(f"Skipping invalid goto format: {goal}")
+
+            elif verb in ("buy", "sell"):
+                if not can_trade:
+                    logger.warning(f"Skipping trade goal '{clean_goal}': Not at a port/can't trade.")
+                    continue
                 
-                parts = goal.split(":", 1)
-                verb = parts[0].strip().lower()
-                arg = parts[1].strip() if len(parts) > 1 else ""
-
-                if verb == "goto":
-                    try:
-                        sid = int(arg)
-                        # RELAXED VALIDATION: Accept any integer sector ID.
-                        # The Planner will handle pathfinding or rejection if truly unreachable.
-                        validated.append(f"goto: {sid}")
-                    except ValueError:
-                        logger.warning(f"Skipping invalid goto format: {goal}")
-
-                elif verb in ("buy", "sell"):
-                    if not can_trade_here:
-                        logger.warning(f"Skipping trade goal '{goal}': Not at a port.")
-                        continue
-                    comm = arg.upper()
+                # Handle comma-separated commodities
+                commodities = [c.strip().upper() for c in arg.split(",")]
+                
+                for comm in commodities:
                     if comm in valid_comms:
-                        validated.append(f"{verb}: {comm}")
+                        validated_plan.append(f"{verb}: {comm}")
                     else:
-                        logger.warning(f"Skipping trade goal '{goal}': Invalid commodity '{comm}'")
+                        logger.warning(f"Skipping trade goal '{verb}: {comm}': Invalid commodity '{comm}'")
 
-                elif verb == "scan":
-                    validated.append("scan: density")
-                
-                elif verb == "survey":
-                    validated.append("survey: port")
+            elif verb == "scan":
+                if "density" in arg.lower():
+                    validated_plan.append("scan: density")
+            
+            else:
+                logger.debug(f"Skipping unknown verb: {verb}")
 
-                # Allow unsupported/QA verbs to pass through for now (planner will handle or ignore)
-                # This matches the "Soft Validation" requirement
-                elif verb in ["combat.attack", "combat.deploy_fighters", "combat.lay_mines", "planet.land", "planet.info"]:
-                    validated.append(goal)
-                
-                else:
-                    logger.debug(f"Skipping unknown goal: {goal}")
+        # Deduplicate adjacent identical goals
+        final_plan = []
+        for g in validated_plan:
+            if not final_plan or g != final_plan[-1]:
+                final_plan.append(g)
 
-            # Deduplicate
-            deduped = []
-            for g in validated:
-                if not deduped or g != deduped[-1]:
-                    deduped.append(g)
-
-            if deduped:
-                logger.info(f"LLM provided new strategy: {deduped}")
-                return deduped
-
-            logger.warning(f"LLM response yielded no valid goals. Response was: {response_text}")
-            return None
+        if final_plan:
+            logger.info(f"LLM provided valid plan: {final_plan}")
+            return final_plan
+        
+        logger.warning(f"LLM response yielded no valid goals after validation. Raw goals: {raw_plan}, response_text: {response_text}")
+        return None
 
     except Exception as e:
-        logger.error(f"Error parsing strategy from LLM response: {e}")
+        logger.error(f"Error parsing strategy from LLM response: {e}", exc_info=True)
         return None
 
 def is_goal_complete(goal_str, game_state, response_data, response_type):
@@ -608,6 +668,7 @@ def main():
     # --- Main Loop ---
     while not shutdown_flag:
         try:
+            game_state = state_manager.get_all() # Always get the freshest state here
             # 1. Handle Connection
             if not game_conn.sock:
                 if not game_conn.connect():
@@ -645,6 +706,7 @@ def main():
             if responses:
                 # --- FIX: Pass config object to fix NameError ---
                 process_responses(responses, game_conn, state_manager, bug_reporter, bandit_policy, config)
+                game_state = state_manager.get_all() # Re-fetch state after processing responses
                 last_heartbeat = time.time()
             
             # 3. Handle Heartbeat (Ping)
@@ -715,7 +777,7 @@ def main():
                 continue
 
             if not strategy_plan:
-                game_state = state_manager.get_all() # get fresh state
+                # game_state is already fresh from above
                 current_sector_id = str(game_state.get("player_location_sector"))
                 current_sector_data = game_state.get("sector_data", {}).get(current_sector_id, {})
                 at_port = current_sector_data.get("has_port", False)
@@ -882,6 +944,16 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
 
         try:
             if response.get("status") == "ok":
+                # --- Feedback Loop: Record Success ---
+                state_manager.set_last_action_result({
+                    "status": "ok",
+                    "command": command_name,
+                    "request_id": request_id,
+                    "response_type": response_type,
+                    "ts": response.get("ts")
+                })
+                # -------------------------------------
+
                 last_action = game_state_before.get("last_action")
                 last_context = game_state_before.get("last_context_key")
                 reward = 0.1 # Default small reward for any successful action
@@ -1023,6 +1095,17 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                 error_code = error_data.get("code")
                 
                 logger.warning("Server refused command '%s': %s (Code: %s)", command_name, error_msg, error_code)
+                
+                # --- Feedback Loop: Record Failure ---
+                state_manager.set_last_action_result({
+                    "status": "error",
+                    "command": command_name,
+                    "error_code": error_code,
+                    "error_msg": error_msg,
+                    "sector_id": game_state_before.get("player_location_sector"),
+                    "sent_command": sent_command
+                })
+                # -------------------------------------
                 
                 state_manager.record_command_failure(command_name)
 

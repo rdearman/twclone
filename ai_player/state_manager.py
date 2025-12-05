@@ -33,6 +33,7 @@ class StateManager:
             "port_trade_blacklist": [], # NEW: List of ports that failed on trade
             "warp_blacklist": [],       # NEW: List of sectors that are unreachable via warp
             "current_path": [],         # NEW: Stores the server-provided path for navigation
+            "last_action_result": None, # NEW: Feedback loop for LLM
         }
         self.load_state()
 
@@ -59,6 +60,7 @@ class StateManager:
                     self.state["port_trade_blacklist"] = [] # NEW: Clear port blacklist on load
                     self.state["warp_blacklist"] = [] # NEW: Clear warp blacklist on load
                     self.state["current_path"] = [] # NEW: Clear current path on load
+                    self.state["last_action_result"] = None # NEW: Clear feedback on load
                     
                     # --- ADD THESE LINES TO CLEAR CACHES & FORCE BOOTSTRAP ---
                     logger.warning("Clearing cached world data to force re-exploration.")
@@ -107,6 +109,11 @@ class StateManager:
         """Sets a value in the state only if it doesn't exist."""
         if key not in self.state:
             self.state[key] = default_value
+
+    def set_last_action_result(self, result_dict):
+        """Updates the result of the last attempted action for LLM feedback."""
+        self.state["last_action_result"] = result_dict
+        self.save_state()
 
     # --- Command Retry & Cooldown Logic ---
 

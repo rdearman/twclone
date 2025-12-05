@@ -144,6 +144,13 @@ class Planner:
                     return None 
                 
                 commodity_to_sell = goal_target.upper() 
+
+                # --- NEW: Filter illegal commodities early ---
+                LEGAL_COMMODITIES = {"ORE", "ORGANICS", "EQUIPMENT", "COLONISTS"} # Define legal commodities
+                if commodity_to_sell not in LEGAL_COMMODITIES:
+                    logger.warning(f"Rejecting sell goal for illegal commodity '{commodity_to_sell}'.")
+                    return None
+                # ---------------------------------------------
                 
                 # Validation: Check if port actually trades this commodity
                 port_info = current_state.get("port_info_by_sector", {}).get(str(current_sector), {})
@@ -174,7 +181,7 @@ class Planner:
                 }}
 
             elif goal_type == "buy":
-                port_id = self._find_port_in_sector(current_state, current_sector)
+                port_id = self._find_port_in_sector(current_state, current_state.get("player_location_sector"))
                 if port_id in current_state.get("port_trade_blacklist", []):
                     logger.warning(f"Goal 'buy' failed: port {port_id} is in trade blacklist.")
                     return None
@@ -183,6 +190,13 @@ class Planner:
                     return None 
                 
                 commodity_to_buy = goal_target.upper() 
+
+                # --- NEW: Filter illegal commodities early ---
+                LEGAL_COMMODITIES = {"ORE", "ORGANICS", "EQUIPMENT", "COLONISTS"} # Define legal commodities
+                if commodity_to_buy not in LEGAL_COMMODITIES:
+                    logger.warning(f"Rejecting buy goal for illegal commodity '{commodity_to_buy}'.")
+                    return None
+                # ---------------------------------------------
                 
                 # Validation: Check if port actually trades this commodity
                 port_info = current_state.get("port_info_by_sector", {}).get(str(current_sector), {})
@@ -221,10 +235,12 @@ class Planner:
                     logger.info("Fuzzer decided to buy 0, but max is > 0. Skipping to avoid wasting a turn.")
                     return None # Don't issue a command that will definitely do nothing
 
-                return {"command": "trade.buy", "data": {
-                    "port_id": port_id,
-                    "items": [{"commodity": commodity_to_buy, "quantity": quantity}]
-                }}
+                if quantity > 0:
+                    logger.info(f"Preparing to BUY {quantity} of {commodity_to_buy} at port {port_id}. Price: {buy_price}.")
+                    return {"command": "trade.buy", "data": {
+                        "port_id": port_id,
+                        "items": [{"commodity": commodity_to_buy, "quantity": quantity}]
+                    }}
 
             elif goal_type == "survey" and goal_target == "port":
                 if not self._at_port(current_state):
@@ -631,29 +647,21 @@ class Planner:
         return sector_data.get("has_port", False)
 
     def _survey_complete(self, current_state):
-        """Checks if we have price data for all commodities at the current port."""
+        """Checks if we have price data for any commodity at the current port."""
         sector_id = str(current_state.get("player_location_sector"))
         port_id = self._find_port_in_sector(current_state, sector_id)
         if not port_id:
             return False  # No port here; nothing to survey
 
         port_id_str = str(port_id)
-        port_info = current_state.get("port_info_by_sector", {}).get(sector_id, {})
-        port_commodities = [c.get("symbol") for c in port_info.get("commodities", [])]
-        
-        if not port_commodities:
-            # If port_info doesn't list commodities, we can't know if survey is complete.
-            # Assume complete if we have any price data.
-            price_cache = current_state.get("price_cache", {}).get(port_id_str, {})
-            return bool(price_cache.get("buy", {})) and bool(price_cache.get("sell", {}))
-
         price_cache = current_state.get("price_cache", {}).get(port_id_str, {})
-        for commodity_symbol in port_commodities:
-            if not (price_cache.get("buy", {}).get(commodity_symbol) is not None and
-                    price_cache.get("sell", {}).get(commodity_symbol) is not None):
-                return False # Missing price data for at least one commodity
-        
-        return True
+
+        # New simple rule: if we know any buy OR sell prices for any commodity at this port,
+        # consider the survey "good enough" to move to exploit.
+        has_any_buy_price = bool(price_cache.get("buy") and any(v is not None for v in price_cache["buy"].values()))
+        has_any_sell_price = bool(price_cache.get("sell") and any(v is not None for v in price_cache["sell"].values()))
+
+        return has_any_buy_price or has_any_sell_price
 
     def _can_sell(self, current_state):
         """Checks if there is any profitable commodity to sell."""
@@ -661,16 +669,27 @@ class Planner:
 
     def _can_buy(self, current_state):
         """Checks if we have free holds and are at a port that sells something."""
-        if not self._at_port(current_state) or not self._survey_complete(current_state):
+        if not self._at_port(current_state):
+            logger.debug("Cannot buy: Not at a port.")
             return False
-            
+
         if self._get_free_holds(current_state) <= 0:
-            return False # No space
-            
-        port_id = str(self._find_port_in_sector(current_state, current_state.get("player_location_sector")))
-        port_buy_prices = current_state.get("price_cache", {}).get(port_id, {}).get("buy", {})
-        
-        return bool(port_buy_prices)
+            logger.debug("Cannot buy: No free holds.")
+            return False
+
+        port_id = self._find_port_in_sector(current_state, current_state.get("player_location_sector"))
+        if not port_id:
+            logger.debug("Cannot buy: No port ID found for current sector.")
+            return False
+
+        port_id_str = str(port_id)
+        port_buy_prices = current_state.get("price_cache", {}).get(port_id_str, {}).get("buy", {})
+
+        # New rule: can buy if we have any non-None price entries at all
+        can_buy_any = any(price is not None for price in port_buy_prices.values())
+        if not can_buy_any:
+            logger.debug("Cannot buy: No known buy prices at this port.")
+        return can_buy_any
 
     def _build_payload(self, command_name: str, context: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         logger.debug(f"[_build_payload] command_name: {command_name}, context: {context}")
