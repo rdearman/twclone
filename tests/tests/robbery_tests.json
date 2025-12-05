@@ -1,0 +1,333 @@
+{
+  "suites": {
+    "setup_robbery_player": [
+      {
+        "test_name": "Setup Robbery Test Player",
+        "command": "auth.register",
+        "data": { "username": "robtestuser", "passwd": "password" },
+        "expect": { "status": "ok" },
+        "user": "robtestuser",
+        "passwd": "password",
+        "save": { "rob_player_id": "data.player_id" }
+      },
+      {
+        "test_name": "Login Robbery Test Player",
+        "command": "auth.login",
+        "data": { "username": "robtestuser", "passwd": "password" },
+        "expect": { "status": "ok" },
+        "user": "robtestuser",
+        "passwd": "password",
+        "save": { "robtestuser_id": "data.player_id" }
+      },
+      {
+        "test_name": "Ensure Player has a ship - Insert Ship",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "INSERT OR IGNORE INTO ships (id, type_id, name, holds, sector, ported) VALUES (@robtestuser_id, 1, 'RobShip', 100, 4, 0);"
+        },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "test_name": "Ensure Player has a ship - Update Player",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "UPDATE players SET ship = @robtestuser_id, sector = 4 WHERE id = @robtestuser_id;"
+        },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "test_name": "Ensure Player has a ship - Insert Ownership",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "INSERT OR IGNORE INTO ship_ownership (ship_id, player_id, is_primary) VALUES (@robtestuser_id, @robtestuser_id, 1);"
+        },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "test_name": "Ensure Player has turns",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "INSERT OR REPLACE INTO turns (player, turns_remaining, last_update) VALUES (@robtestuser_id, 100, strftime('%s', 'now'));"
+        },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "test_name": "Move player to sector 1",
+        "command": "move.warp",
+        "data": {
+          "from_sector_id": 4,
+          "to_sector_id": 1
+        },
+        "user": "robtestuser",
+        "expected_status": "ok"
+      }
+    ],
+    "robbery_tests": [
+      {
+        "test_name": "robbery_setup_player_evil_enough",
+        "comment": "Ensure player has alignment to rob ports (e.g., set to SHADY band) and enough XP",
+        "command": "sys.raw_sql_exec",
+        "data": {
+            "sql": "UPDATE players SET alignment = -300, experience = 1000 WHERE id = @robtestuser_id;"
+        },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "test_name": "robbery_attempt_refused_by_alignment",
+        "comment": "Player with alignment that cannot rob ports attempts to rob.",
+        "command": "sys.raw_sql_exec",
+        "data": {
+            "sql": "UPDATE players SET alignment = 1000 WHERE id = @robtestuser_id;"
+        },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "test_name": "robbery_attempt_refused_by_alignment_action",
+        "command": "port.rob",
+        "data": {
+            "sector_id": 1,
+            "port_id": 1,
+            "mode": "credits",
+            "idempotency_key": "rob_test_align_refused"
+        },
+        "user": "robtestuser",
+        "expect": { 
+            "status": "refused",
+            "error": {"code": 1403}
+        }
+      },
+      {
+        "test_name": "robbery_attempt_wrong_location",
+        "command": "port.rob",
+        "data": {
+            "sector_id": 999,
+            "port_id": 1,
+            "mode": "credits",
+            "idempotency_key": "rob_test_fail_loc"
+        },
+        "user": "robtestuser",
+        "expect": { "status": "error" }
+      },
+      {
+        "test_name": "robbery_setup_valid_credits",
+        "comment": "Setup for credits robbery",
+        "command": "sys.raw_sql_exec",
+        "data": {
+            "sql": "UPDATE players SET credits = 1000000, experience = 1000, alignment = -300 WHERE id = @robtestuser_id; UPDATE ports SET petty_cash = 100000 WHERE id = 1;"
+        },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "test_name": "robbery_attempt_valid_credits_before_info",
+        "comment": "Get player info and port info before credits robbery to check deltas",
+        "command": "player.my_info",
+        "idempotency_key": "rob_test_valid_credits_before",
+        "user": "robtestuser",
+        "expect": { "status": "ok" },
+        "save": {
+            "credits_before": "data.player.credits",
+            "xp_before": "data.player.experience",
+            "align_before": "data.player.alignment"
+        }
+      },
+      {
+        "test_name": "robbery_attempt_valid_credits",
+        "command": "port.rob",
+        "data": {
+            "sector_id": 1,
+            "port_id": 1,
+            "mode": "credits",
+            "idempotency_key": "rob_test_valid_credits"
+        },
+        "user": "robtestuser",
+        "expect": {
+            "status": "ok",
+            "data": {
+                "rob_result": "success"
+            }
+        },
+        "save": {
+            "stolen_credits": "data.credits_stolen"
+        }
+      },
+      {
+        "test_name": "robbery_attempt_valid_credits_after_info",
+        "comment": "Get player info after successful credits robbery to check deltas",
+        "command": "player.my_info",
+        "idempotency_key": "rob_test_valid_credits_after",
+        "user": "robtestuser",
+        "expect": { "status": "ok" },
+        "asserts": [
+            {"op": "delta", "path": "data.player.credits", "baseline": "@credits_before", "value": "@stolen_credits"},
+            {"op": ">", "path": "data.player.experience", "value": "@xp_before"},
+            {"op": "<", "path": "data.player.alignment", "value": "@align_before"}
+        ]
+      },
+      {
+        "test_name": "robbery_setup_valid_goods",
+        "comment": "Setup for goods robbery",
+        "command": "sys.raw_sql_exec",
+        "data": {
+            "sql": "UPDATE players SET credits = 1000000, experience = 1000, alignment = -300 WHERE id = @robtestuser_id; UPDATE ships SET ore = 0, holds = 100 WHERE id = @robtestuser_id; UPDATE ports SET ore_on_hand = 100 WHERE id = 1;"
+        },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "test_name": "robbery_attempt_valid_goods_before_info",
+        "comment": "Get player info before goods robbery",
+        "command": "player.my_info",
+        "idempotency_key": "rob_test_valid_goods_before",
+        "user": "robtestuser",
+        "expect": { "status": "ok" },
+        "save": {
+            "xp_before_goods": "data.player.experience",
+            "align_before_goods": "data.player.alignment"
+        }
+      },
+      {
+        "test_name": "robbery_attempt_valid_goods",
+        "command": "port.rob",
+        "data": {
+            "sector_id": 1,
+            "port_id": 1,
+            "mode": "goods",
+            "commodity": "ORE",
+            "idempotency_key": "rob_test_valid_goods"
+        },
+        "user": "robtestuser",
+        "expect": {
+            "status": "ok",
+            "data": {
+                "rob_result": "success",
+                "goods_stolen": {
+                    "commodity": "ORE",
+                    "quantity": 10
+                }
+            }
+        }
+      },
+      {
+        "test_name": "robbery_attempt_valid_goods_after_info",
+        "comment": "Get player info after successful goods robbery to check deltas",
+        "command": "player.my_info",
+        "idempotency_key": "rob_test_valid_goods_after",
+        "user": "robtestuser",
+        "expect": { "status": "ok" },
+        "asserts": [
+            {"op": ">", "path": "data.player.experience", "value": "@xp_before_goods"},
+            {"op": "<", "path": "data.player.alignment", "value": "@align_before_goods"}
+        ]
+      },
+      {
+        "test_name": "robbery_setup_goods_no_stock",
+        "comment": "Setup for goods robbery (insufficient stock)",
+        "command": "sys.raw_sql_exec",
+        "data": {
+            "sql": "UPDATE ports SET ore_on_hand = 5 WHERE id = 1;"
+        },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "test_name": "robbery_attempt_goods_no_stock",
+        "command": "port.rob",
+        "data": {
+            "sector_id": 1,
+            "port_id": 1,
+            "mode": "goods",
+            "commodity": "ORE",
+            "idempotency_key": "rob_test_goods_no_stock"
+        },
+        "user": "robtestuser",
+        "expect": {
+            "status": "refused",
+            "error": {"code": 1405}
+        }
+      },
+      {
+        "test_name": "robbery_setup_goods_no_space",
+        "comment": "Setup for goods robbery (insufficient space)",
+        "command": "sys.raw_sql_exec",
+        "data": {
+            "sql": "UPDATE ships SET ore = 95, holds = 100 WHERE id = @robtestuser_id; UPDATE ports SET ore_on_hand = 100 WHERE id = 1;"
+        },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "test_name": "robbery_attempt_goods_no_space",
+        "command": "port.rob",
+        "data": {
+            "sector_id": 1,
+            "port_id": 1,
+            "mode": "goods",
+            "commodity": "ORE",
+            "idempotency_key": "rob_test_goods_no_space"
+        },
+        "user": "robtestuser",
+        "expect": {
+            "status": "refused",
+            "error": {"code": 1403}
+        }
+      },
+      {
+        "test_name": "robbery_setup_real_bust",
+        "comment": "Setup for real bust",
+        "command": "sys.raw_sql_exec",
+        "data": {
+            "sql": "UPDATE law_enforcement SET robbery_bust_chance_base = 1.0 WHERE id = 1; UPDATE players SET experience = 1000, alignment = -300 WHERE id = @robtestuser_id;"
+        },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "test_name": "robbery_attempt_real_bust_before_info",
+        "command": "player.my_info",
+        "idempotency_key": "rob_test_real_bust_before",
+        "user": "robtestuser",
+        "expect": { "status": "ok" },
+        "save": {
+            "xp_before_bust": "data.player.experience",
+            "align_before_bust": "data.player.alignment"
+        }
+      },
+      {
+        "test_name": "robbery_attempt_real_bust",
+        "command": "port.rob",
+        "data": {
+            "sector_id": 1,
+            "port_id": 1,
+            "mode": "credits",
+            "idempotency_key": "rob_test_real_bust"
+        },
+        "user": "robtestuser",
+        "expect": {
+            "status": "ok",
+            "data": {
+                "rob_result": "real_bust"
+            }
+        }
+      },
+      {
+        "test_name": "robbery_attempt_real_bust_after_info",
+        "comment": "Get player info after real bust to check deltas",
+        "command": "player.my_info",
+        "idempotency_key": "rob_test_real_bust_after",
+        "user": "robtestuser",
+        "expect": { "status": "ok" },
+        "asserts": [
+            {"op": "<", "path": "data.player.experience", "value": "@xp_before_bust"},
+            {"op": ">", "path": "data.player.alignment", "value": "@align_before_bust"}
+        ]
+      }
+    ]
+  }
+}

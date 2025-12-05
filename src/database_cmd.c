@@ -4015,7 +4015,7 @@ h_get_config_int_unlocked (sqlite3 *db, const char *key,
   long long value = default_value;
   // Direct bind of column name is not possible with ?, so use sqlite3_mprintf
   char *dynamic_sql =
-    sqlite3_mprintf ("SELECT %q FROM config WHERE id = 1;", key);
+    sqlite3_mprintf ("SELECT value FROM config WHERE key = %Q;", key);
   if (!dynamic_sql)
     {
       LOGE

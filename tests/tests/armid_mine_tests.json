@@ -1,0 +1,52 @@
+{
+  "tests": [
+    {
+      "name": "Register Armid Test Player",
+      "cmd": "auth.register",
+      "register_if_missing": true,
+      "data": {
+        "username": "test_armid_player",
+        "passwd": "password123"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Auth and get player info",
+      "cmd": "auth.login",
+      "data": {
+        "username": "test_armid_player",
+        "passwd": "password123"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "capture": {
+        "my_id": "data.player_id",
+        "curSector": "data.current_sector"
+      }
+    },
+    {
+      "name": "Enter sector with no Armids",
+      "cmd": "move.warp",
+      "data": {
+        "from_sector_id": "@curSector",
+        "to_sector_id": 100
+      },
+      "expect": {
+        "status": "ok",
+        "type": "move.result",
+        "data": {
+          "from": "@curSector",
+          "to": 100,
+          "turns_spent": "*",
+          "encounter": null
+        }
+      },
+      "capture": {
+        "curSector": "data.to"
+      }
+    }
+  ]
+}

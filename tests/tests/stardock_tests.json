@@ -1,0 +1,131 @@
+{
+  "suites": {
+    "setup_stardock_test_env": [
+      {
+        "name": "Register Admin",
+        "command": "auth.register",
+        "data": { "username": "admin", "passwd": "password" },
+        "register_if_missing": true,
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Login Admin",
+        "command": "auth.login",
+        "data": { "username": "admin", "passwd": "password" },
+        "expect": { "status": "ok" },
+        "user": "admin"
+      },
+      {
+        "comment": "Create player at Stardock",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "INSERT OR IGNORE INTO players (id, name, passwd, sector, ship, credits) VALUES (90001, 'test_player_stardock', 'test', (SELECT sector_id FROM stardock_location LIMIT 1), (SELECT id FROM ships LIMIT 1), 1000000);"
+        },
+        "user": "admin",
+        "expect": {"status": "ok"}
+      },
+      {
+        "comment": "Ensure player has a ship and assign it",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "UPDATE players SET ship = (SELECT id FROM ships LIMIT 1) WHERE id = 90001;"
+        },
+        "user": "admin",
+        "expect": {"status": "ok"}
+      },
+      {
+        "comment": "Ensure player has a default ship type in shiptypes",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "INSERT OR IGNORE INTO shiptypes (id, name, basecost, maxholds, maxfighters, maxshields, maxgenesis, max_detonators, max_probes, can_transwarp, can_planet_scan, can_long_range_scan, max_cloaks) VALUES (1, 'Test Freighter', 1000, 100, 1000, 500, 5, 5, 5, 1, 1, 1, 1);"
+        },
+        "user": "admin",
+        "expect": {"status": "ok"}
+      },
+      {
+        "comment": "Ensure player's ship is of a type that can carry hardware",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "UPDATE ships SET type_id = 1 WHERE id = (SELECT ship FROM players WHERE id = 90001);"
+        },
+        "user": "admin",
+        "expect": {"status": "ok"}
+      },
+      {
+        "comment": "Create a Class-0 port for testing",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "INSERT OR IGNORE INTO ports (id, name, sector, type) VALUES (9000, 'Class0 Port', 1, 0);"
+        },
+        "user": "admin",
+        "expect": {"status": "ok"}
+      },
+      {
+        "comment": "Create a player at Class-0 port",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "INSERT OR IGNORE INTO players (id, name, passwd, sector, ship, credits) VALUES (90002, 'test_player_class0', 'test', 1, (SELECT id FROM ships LIMIT 1 OFFSET 1), 50000);"
+        },
+        "user": "admin",
+        "expect": {"status": "ok"}
+      },
+      {
+        "comment": "Ensure player's ship at Class-0 port is of a type that can carry hardware",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "UPDATE ships SET type_id = 1 WHERE id = (SELECT ship FROM players WHERE id = 90002);"
+        },
+        "user": "admin",
+        "expect": {"status": "ok"}
+      },
+      {
+        "comment": "Create a regular port for negative testing",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "INSERT OR IGNORE INTO ports (id, name, sector, type) VALUES (9001, 'Regular Port', 2, 1);"
+        },
+        "user": "admin",
+        "expect": {"status": "ok"}
+      },
+      {
+        "comment": "Create a player at regular port",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "INSERT OR IGNORE INTO players (id, name, passwd, sector, ship, credits) VALUES (90003, 'test_player_regular_port', 'test', 2, (SELECT id FROM ships LIMIT 1 OFFSET 2), 50000);"
+        },
+        "user": "admin",
+        "expect": {"status": "ok"}
+      },
+      {
+        "comment": "Ensure player's ship at regular port is of a type that can carry hardware",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "UPDATE ships SET type_id = 1 WHERE id = (SELECT ship FROM players WHERE id = 90003);"
+        },
+        "user": "admin",
+        "expect": {"status": "ok"}
+      },
+      {
+        "name": "Login Stardock Player",
+        "command": "auth.login",
+        "data": { "username": "test_player_stardock", "passwd": "test" },
+        "expect": { "status": "ok" },
+        "user": "test_player_stardock"
+      },
+      {
+        "name": "Login Class0 Player",
+        "command": "auth.login",
+        "data": { "username": "test_player_class0", "passwd": "test" },
+        "expect": { "status": "ok" },
+        "user": "test_player_class0"
+      },
+      {
+        "name": "Login Regular Port Player",
+        "command": "auth.login",
+        "data": { "username": "test_player_regular_port", "passwd": "test" },
+        "expect": { "status": "ok" },
+        "user": "test_player_regular_port"
+      }
+    ]
+  }
+}

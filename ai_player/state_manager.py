@@ -32,6 +32,7 @@ class StateManager:
             "pending_commands": {},     # NEW: To track sent commands for error correlation
             "port_trade_blacklist": [], # NEW: List of ports that failed on trade
             "warp_blacklist": [],       # NEW: List of sectors that are unreachable via warp
+            "current_path": [],         # NEW: Stores the server-provided path for navigation
         }
         self.load_state()
 
@@ -57,12 +58,19 @@ class StateManager:
                     self.state["pending_commands"] = {} # NEW: Clear pending commands on load
                     self.state["port_trade_blacklist"] = [] # NEW: Clear port blacklist on load
                     self.state["warp_blacklist"] = [] # NEW: Clear warp blacklist on load
+                    self.state["current_path"] = [] # NEW: Clear current path on load
                     
-                    # --- ADD THESE LINES TO CLEAR CACHES ---
+                    # --- ADD THESE LINES TO CLEAR CACHES & FORCE BOOTSTRAP ---
                     logger.warning("Clearing cached world data to force re-exploration.")
                     self.state["sector_data"] = {}
                     self.state["port_info_by_sector"] = {}
                     self.state["price_cache"] = {}
+                    
+                    # Force re-fetch of player state
+                    self.state["player_info"] = None
+                    self.state["ship_info"] = {"cargo": []}
+                    self.state["player_location_sector"] = None
+                    self.state["needs_bootstrap"] = True
                     # --- END FIX ---
 
         except json.JSONDecodeError:
@@ -129,6 +137,51 @@ class StateManager:
                      command_name, failures, backoff_time)
         self.save_state()
 
+    def get_valid_goto_sectors(self):
+        """Return a list of sector_ids that are adjacent to the current sector and not warp-blacklisted."""
+        current_sector = self.state.get("player_location_sector")
+        if current_sector is None:
+            return []
+            
+        sector_data = self.state.get("sector_data", {}).get(str(current_sector), {})
+        adj = sector_data.get("adjacent", []) or []
+        warp_blacklist = set(self.state.get("warp_blacklist", []))
+        
+        return [s for s in adj if s not in warp_blacklist]
+
+    def find_path(self, from_sector, to_sector):
+        """
+        Finds the shortest path between from_sector and to_sector using BFS on cached sector data.
+        Returns a list of sector IDs [from, ..., to] or None if no path found.
+        """
+        start = str(from_sector)
+        goal = str(to_sector)
+        
+        if start == goal:
+            return [from_sector]
+            
+        queue = [(start, [from_sector])]
+        visited = {start}
+        
+        while queue:
+            current, path = queue.pop(0)
+            sector_data = self.state.get("sector_data", {}).get(current, {})
+            adjacent = sector_data.get("adjacent", [])
+            
+            for neighbor in adjacent:
+                neighbor_str = str(neighbor)
+                if neighbor_str == goal:
+                    return path + [neighbor]
+                
+                if neighbor_str not in visited:
+                    visited.add(neighbor_str)
+                    # Only traverse if we have data for the neighbor? 
+                    # Actually, for navigation, we assume adjacency is bidirectional/valid 
+                    # even if we haven't visited the neighbor yet.
+                    queue.append((neighbor_str, path + [neighbor]))
+                    
+        return None
+
     # --- State Updaters ---
 
     def update_sector_data(self, sector_id, data):
@@ -153,12 +206,24 @@ class StateManager:
         """Updates the cache for a specific port, keyed by sector ID."""
         if 'port_info_by_sector' not in self.state:
             self.state['port_info_by_sector'] = {}
+        
+        # Construct commodities list from flat fields
+        commodities = []
+        if "ore_on_hand" in port_data:
+            commodities.append({"commodity": "ORE", "supply": port_data["ore_on_hand"]})
+        if "organics_on_hand" in port_data:
+            commodities.append({"commodity": "ORGANICS", "supply": port_data["organics_on_hand"]})
+        if "equipment_on_hand" in port_data:
+            commodities.append({"commodity": "EQUIPMENT", "supply": port_data["equipment_on_hand"]})
+        if "fuel_on_hand" in port_data: # Assuming fuel might be there or added later
+             commodities.append({"commodity": "FUEL", "supply": port_data["fuel_on_hand"]})
+        
         # We only care about one port per sector for this bot
         self.state['port_info_by_sector'][str(sector_id)] = {
             "port_id": port_data.get("id"),
             "name": port_data.get("name"),
             "class": port_data.get("class"),
-            "commodities": port_data.get("commodities", []) # Store commodities
+            "commodities": commodities 
         }
         self.save_state()
 
@@ -275,6 +340,14 @@ class StateManager:
             if self.state['player_info'] is None:
                 self.state['player_info'] = {}
             self.state['player_info']['player'] = player_data['player']
+            
+            # Update location from player info
+            if 'sector' in player_data['player']:
+                new_sector = player_data['player']['sector']
+                self.state['player_location_sector'] = new_sector
+                self.state['recent_sectors'] = (self.state.get('recent_sectors', []) + [new_sector])[-10:]
+                logger.info(f"Player location updated to sector {new_sector} (from player_info)")
+
             logger.info(f"Player info updated. Turns remaining: {player_data['player'].get('turns_remaining')}")
 
         if 'ship' in player_data:
@@ -288,11 +361,10 @@ class StateManager:
             self.state['ship_info'] = player_data['ship']
             self.state['ship_info']['cargo'] = existing_cargo
 
-            # NEW: Always update player_location_sector from the authoritative ship data
+            # Update location from ship info (authoritative)
             if 'location' in player_data['ship'] and 'sector_id' in player_data['ship']['location']:
                 new_sector = player_data['ship']['location']['sector_id']
                 self.state['player_location_sector'] = new_sector
-                # Append to recent sectors, keeping only the last 10
                 self.state['recent_sectors'] = (self.state.get('recent_sectors', []) + [new_sector])[-10:]
                 logger.info(f"Player location updated to sector {new_sector} (from ship_info)")
 
@@ -357,18 +429,28 @@ class StateManager:
         # 1. Cargo Validation
         ship_info = self.state.get("ship_info")
         if ship_info:
-            cargo_list = ship_info.get("cargo", [])
+            cargo_data = ship_info.get("cargo", [])
             max_holds = ship_info.get("holds", 0)
             current_cargo_sum = 0
 
-            for item in cargo_list:
-                commodity = item.get("commodity")
-                quantity = item.get("quantity", 0)
-                
-                if quantity < 0:
-                    logger.warning(f"State inconsistency: Negative quantity ({quantity}) for commodity '{commodity}' in cargo.")
-                    is_consistent = False
-                current_cargo_sum += quantity
+            if isinstance(cargo_data, dict):
+                # Handle raw server format {commodity: quantity}
+                for commodity, quantity in cargo_data.items():
+                    if quantity < 0:
+                        logger.warning(f"State inconsistency: Negative quantity ({quantity}) for commodity '{commodity}' in cargo.")
+                        is_consistent = False
+                    current_cargo_sum += quantity
+            elif isinstance(cargo_data, list):
+                # Handle internal format [{"commodity":..., "quantity":...}]
+                for item in cargo_data:
+                    if not isinstance(item, dict): continue
+                    commodity = item.get("commodity")
+                    quantity = item.get("quantity", 0)
+                    
+                    if quantity < 0:
+                        logger.warning(f"State inconsistency: Negative quantity ({quantity}) for commodity '{commodity}' in cargo.")
+                        is_consistent = False
+                    current_cargo_sum += quantity
             
             if max_holds > 0 and current_cargo_sum > max_holds:
                 logger.warning(f"State inconsistency: Cargo ({current_cargo_sum}) exceeds ship holds ({max_holds}).")

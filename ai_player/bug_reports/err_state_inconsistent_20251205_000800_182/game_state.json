@@ -29,7 +29,7 @@
     "ship_info": {
         "cargo": []
     },
-    "player_location_sector": 2,
+    "player_location_sector": 1,
     "sector_data": {
         "5": {
             "sector_id": 5,
@@ -69,142 +69,15 @@
                 "mines_limpet": 0,
                 "mines": 1
             }
-        },
-        "1": {
-            "sector_id": 1,
-            "name": "Fedspace 1System Volume",
-            "adjacent": [
-                2,
-                3,
-                4,
-                5,
-                6,
-                7
-            ],
-            "adjacent_count": 6,
-            "ports": [
-                {
-                    "id": 1,
-                    "name": "Earth Port",
-                    "type": "1"
-                }
-            ],
-            "has_port": true,
-            "players": [],
-            "players_count": 0,
-            "beacons": [],
-            "beacons_count": 0,
-            "planets": [],
-            "has_planet": false,
-            "planets_count": 0,
-            "beacon": "The Federation -- Do Not Dump!",
-            "has_beacon": true,
-            "ships": [
-                {
-                    "id": 1,
-                    "name": "Bit Banger",
-                    "type": "Merchant Cruiser",
-                    "ship_name": "Bit Banger",
-                    "ship_type": "Merchant Cruiser",
-                    "owner": "derelict"
-                },
-                {
-                    "id": 2,
-                    "name": "QA Bot 1",
-                    "type": "Scout Marauder",
-                    "ship_name": "QA Bot 1",
-                    "ship_type": "Scout Marauder",
-                    "owner": "ai_qa_bot"
-                }
-            ],
-            "ships_count": 2,
-            "ports_count": 1,
-            "counts": {
-                "fighters": 0,
-                "mines_armid": 1,
-                "mines_limpet": 0,
-                "mines": 1
-            }
-        },
-        "2": {
-            "sector_id": 2,
-            "name": "Fedspace 2",
-            "adjacent": [
-                1,
-                3,
-                7,
-                8,
-                9,
-                10,
-                713
-            ],
-            "adjacent_count": 7,
-            "ports": [],
-            "has_port": false,
-            "players": [],
-            "players_count": 0,
-            "beacons": [],
-            "beacons_count": 0,
-            "planets": [],
-            "has_planet": false,
-            "planets_count": 0,
-            "beacon": "The Federation -- Do Not Dump!",
-            "has_beacon": true,
-            "ships": [
-                {
-                    "id": 2,
-                    "name": "QA Bot 1",
-                    "type": "Scout Marauder",
-                    "ship_name": "QA Bot 1",
-                    "ship_type": "Scout Marauder",
-                    "owner": "ai_qa_bot"
-                }
-            ],
-            "ships_count": 1,
-            "ports_count": 0,
-            "counts": {
-                "fighters": 0,
-                "mines_armid": 1,
-                "mines_limpet": 0,
-                "mines": 1
-            }
         }
     },
     "universe_map": {
         "5": {
             "is_explored": true,
             "has_port": false
-        },
-        "1": {
-            "is_explored": true,
-            "has_port": true
-        },
-        "2": {
-            "is_explored": true,
-            "has_port": false
         }
     },
-    "port_info_by_sector": {
-        "1": {
-            "port_id": 1,
-            "name": "Earth Port",
-            "class": null,
-            "commodities": [
-                {
-                    "commodity": "ORE",
-                    "supply": 10000
-                },
-                {
-                    "commodity": "ORGANICS",
-                    "supply": 10000
-                },
-                {
-                    "commodity": "EQUIPMENT",
-                    "supply": 10000
-                }
-            ]
-        }
-    },
+    "port_info_by_sector": {},
     "price_cache": {},
     "bank_balance": 0,
     "command_retry_info": {
@@ -212,36 +85,21 @@
             "next_retry_time": 1764893273.204228
         },
         "sector.info": {
-            "next_retry_time": 1764893322.408353
+            "next_retry_time": 1764893279.5333931
         },
         "sector.scan.density": {
-            "next_retry_time": 1764893350.6335175
+            "next_retry_time": 1764893282.944431
         },
         "move.warp": {
-            "next_retry_time": 1764893381.4832635
-        },
-        "trade.port_info": {
-            "next_retry_time": 1764893373.145072
-        },
-        "trade.quote": {
-            "next_retry_time": 1764893377.9238603,
-            "failures": 2
+            "next_retry_time": 1764893284.6752424
         }
     },
-    "strategy_plan": [],
+    "strategy_plan": [
+        "goto: 1"
+    ],
     "trade_successful": false,
-    "q_table": {
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 0.1,
-            "trade.quote": -0.33999999999999997
-        }
-    },
-    "n_table": {
-        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
-            "trade.port_info": 4,
-            "trade.quote": 5
-        }
-    },
+    "q_table": {},
+    "n_table": {},
     "command_schemas": {
         "session.hello": {
             "$id": "ge://schema/session.hello.json",
@@ -573,23 +431,12 @@
         "trade.sell": "c-b5f4f625"
     },
     "recent_sectors": [
-        1,
         5,
-        1,
-        2,
-        1,
-        5,
-        1,
-        2,
-        1,
-        2
+        1
     ],
     "pending_commands": {},
     "port_trade_blacklist": [],
     "warp_blacklist": [],
     "current_path": [],
-    "current_qa_objective": null,
-    "last_action": "trade.port_info",
-    "last_context_key": "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:cannot_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds",
-    "last_stage": "survey"
+    "current_qa_objective": null
 }

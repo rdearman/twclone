@@ -582,6 +582,7 @@ const char *create_table_sql[] = {
   " commodity TEXT CHECK(commodity IN ('ore','organics','equipment')),  "
   " mode TEXT CHECK(mode IN ('buy','sell')),  "
   " FOREIGN KEY (port_id) REFERENCES ports(id)); ",
+
   " CREATE TABLE IF NOT EXISTS players ( "
   " id INTEGER PRIMARY KEY AUTOINCREMENT,  "
   " type INTEGER DEFAULT 2,  "
@@ -606,6 +607,7 @@ const char *create_table_sql[] = {
   " last_news_read_timestamp INTEGER DEFAULT 0, "
   " FOREIGN KEY (commission) REFERENCES commision(id) "
   " );  ",
+
   " CREATE TABLE IF NOT EXISTS player_types (type INTEGER PRIMARY KEY AUTOINCREMENT, description TEXT); ",
   " CREATE TABLE IF NOT EXISTS sectors (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, beacon TEXT, nebulae TEXT); ",
   " CREATE TABLE IF NOT EXISTS sector_warps (from_sector INTEGER, to_sector INTEGER, PRIMARY KEY (from_sector, to_sector), FOREIGN KEY (from_sector) REFERENCES sectors(id) ON DELETE CASCADE, FOREIGN KEY (to_sector) REFERENCES sectors(id) ON DELETE CASCADE); ",

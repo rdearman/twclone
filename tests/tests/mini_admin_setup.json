@@ -1,0 +1,18 @@
+{
+  "mini_admin_setup": [
+    {
+      "name": "Register Admin",
+      "command": "auth.register",
+      "data": { "username": "admin", "passwd": "password" },
+      "register_if_missing": true,
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Login Admin",
+      "command": "auth.login",
+      "data": { "username": "admin", "passwd": "password" },
+      "expect": { "status": "ok" },
+      "user": "admin"
+    }
+  ]
+}

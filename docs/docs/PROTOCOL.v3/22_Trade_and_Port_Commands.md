@@ -1,0 +1,40 @@
+# 22. Trade & Port Commands
+
+## 1. Port Interaction
+
+### `port.dock`
+Dock at a port in the current sector.
+**Events**: Emits `player.dock.v1`.
+**Note**: Often implies a check for `sector.info` or `port.info`.
+
+### `trade.buy` / `trade.sell`
+Trade commodities.
+**Args**:
+*   `port_id`: ID of the port.
+*   `commodity`: "ore", "organics", etc.
+*   `quantity`: Amount.
+**Events**: Emits `player.trade.v1` and `trade.deal.matched`.
+
+## 2. Hardware & Services (Stardock)
+
+### `hardware.list`
+List available upgrades (ships, equipment) at the current port.
+
+### `hardware.buy`
+Purchase equipment.
+
+### `shipyard.*`
+Commands for buying/selling ships (specifics usually covered under `hardware` or specific shipyard commands).
+
+## 3. Events
+
+*   **`trade.deal.matched`**: Broadcast when a trade occurs.
+    ```json
+    {
+      "type": "trade.deal.matched",
+      "data": {
+        "player_id": 14, "port_id": 501, "commodity": "ore",
+        "quantity": 100, "price_per_unit": 45, "total_price": 4500
+      }
+    }
+    ```

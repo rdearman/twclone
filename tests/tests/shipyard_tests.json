@@ -1,0 +1,76 @@
+{
+  "tests": [
+    {
+      "name": "Register Shipyard Tester",
+      "cmd": "auth.register",
+      "register_if_missing": true,
+      "data": {
+        "username": "shipyard_tester",
+        "passwd": "password123"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Login",
+      "cmd": "auth.login",
+      "data": {
+        "username": "shipyard_tester",
+        "passwd": "password123"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Ensure at Stardock",
+      "cmd": "sys.raw_sql_exec",
+      "data": {
+        "sql": "UPDATE players SET sector = 1 WHERE name = 'shipyard_tester'; UPDATE ships SET sector = 1, ported = 1, onplanet = 0 WHERE id = (SELECT ship FROM players WHERE name = 'shipyard_tester');"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+        "name": "Ensure Inventory Exists",
+        "cmd": "sys.raw_sql_exec",
+        "data": {
+            "sql": "INSERT OR IGNORE INTO shipyard_inventory (port_id, ship_type_id, enabled) VALUES (1, 2, 1);"
+        },
+        "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test: shipyard.list at Stardock",
+      "cmd": "shipyard.list",
+      "expect": {
+        "status": "ok",
+        "type": "shipyard.list_v1"
+      },
+      "asserts": [
+          {"path": "data.available", "op": "*array"}
+      ]
+    },
+    {
+        "name": "Test: Successful Upgrade",
+        "cmd": "shipyard.upgrade",
+        "data": {
+            "new_type_id": 2,
+            "new_ship_name": "Upgraded Scout"
+        },
+        "expect": {
+            "status": "ok"
+        }
+    },
+    {
+        "name": "Test: Verify Upgrade",
+        "cmd": "player.my_info",
+        "expect": {
+            "status": "ok",
+            "data": {
+                "player": {
+                    "ship": {
+                        "type_id": 2,
+                        "name": "Upgraded Scout"
+                    }
+                }
+            }
+        }
+    }
+  ]
+}

@@ -1221,7 +1221,7 @@ cmd_player_my_info (client_ctx_t *ctx, json_t *root)
   /* 1. Fetch Basic Player Data directly (Bypass db_player_info_json) */
   sqlite3_stmt *st = NULL;
   const char *sql =
-    "SELECT name, credits, turns_remaining, sector, ship, alignment, experience, corp_id FROM players JOIN turns ON turns.player = players.id WHERE players.id = ?1";
+    " SELECT  p.name, p.credits, t.turns_remaining, p.sector, p.ship, p.alignment, p.experience, cm.corp_id FROM players AS p JOIN turns AS t ON t.player = p.id  LEFT JOIN corp_members AS cm ON cm.player_id = p.id  WHERE p.id = ?1";
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
       send_enveloped_error (ctx->fd,

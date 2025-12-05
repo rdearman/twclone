@@ -51,7 +51,6 @@ class Planner:
         logger.warning(f"Could not find port_id in sector {sector_id}")
         return None
 
-
     def _achieve_goal(self, current_state, goal_str):
         """
         Returns the specific command dictionary needed to work towards the goal.
@@ -71,27 +70,69 @@ class Planner:
                 try:
                     target_sector = int(goal_target)
                 except ValueError:
-                    logger.error(f"Invalid target sector ID in goal '{goal_str}'. Expected an integer.")
+                    logger.error(f"Invalid target sector ID in goal '{goal_str}'.")
                     return None
                 
-                logger.debug(f"GOTO goal: current_sector={current_sector}, target_sector={target_sector}")
                 if current_sector == target_sector:
-                    logger.debug("Goal 'goto' already complete (at target).")
+                    logger.debug("Goal 'goto' complete (at target).")
                     return None 
-                
+
                 sector_data = current_state.get("sector_data", {}).get(str(current_sector), {})
                 adjacent_sectors = sector_data.get("adjacent", [])
-                logger.debug(f"GOTO goal: sector_data for current_sector {current_sector}: {sector_data}") # ADDED THIS LINE
-                logger.debug(f"GOTO goal: adjacent_sectors for current_sector {current_sector}: {adjacent_sectors}") # ADDED THIS LINE
+
+                # 0. Missing Adjacency Data -> Fetch it
+                if not adjacent_sectors:
+                    logger.info(f"Goto goal but no adjacency data for sector {current_sector}. Requesting sector.info.")
+                    return {"command": "sector.info", "data": {"sector_id": int(current_sector)}}
+
+                # 1. If adjacent, just warp
                 if target_sector in adjacent_sectors:
                     if self._is_command_ready("move.warp", current_state.get("command_retry_info", {})):
                         return {"command": "move.warp", "data": {"to_sector_id": target_sector}}
                     else:
-                        logger.warning(f"Goal 'goto: {target_sector}' wants move.warp, but it's on cooldown/blacklisted. Skipping for now.")
+                        logger.warning(f"Goal 'goto: {target_sector}' wants move.warp, but it's on cooldown/blacklisted.")
                         return None
-                else:
-                    logger.warning(f"Cannot 'goto' {target_sector}. Not adjacent to {current_sector}. Falling back to explore.")
-                    return None
+
+                # 2. Try Local Pathfinding (BFS on known sectors)
+                local_path = self.state_manager.find_path(current_sector, target_sector)
+                if local_path and len(local_path) > 1:
+                    next_hop = local_path[1]
+                    logger.info(f"Local path found to {target_sector}: {local_path}. Next hop: {next_hop}")
+                    if self._is_command_ready("move.warp", current_state.get("command_retry_info", {})):
+                        return {"command": "move.warp", "data": {"to_sector_id": next_hop}}
+                    else:
+                        logger.warning(f"Warp to {next_hop} on cooldown.")
+                        return None
+
+                # 3. Try Server Pathfinding (Cached)
+                server_path = current_state.get("current_path", [])
+                if (server_path and len(server_path) > 1 and 
+                    server_path[0] == current_sector and server_path[-1] == target_sector):
+                    
+                    next_hop = server_path[1]
+                    logger.info(f"Using cached server path to {target_sector}. Next hop: {next_hop}")
+                    if self._is_command_ready("move.warp", current_state.get("command_retry_info", {})):
+                        return {"command": "move.warp", "data": {"to_sector_id": next_hop}}
+                    else:
+                        return None
+
+                # 4. Request Server Path (if acceptable)
+                # Only ask if we haven't asked recently
+                if self._is_command_ready("move.pathfind", current_state.get("command_retry_info", {})):
+                    logger.info(f"Requesting server path to {target_sector}...")
+                    return {"command": "move.pathfind", "data": {"to_sector_id": target_sector}}
+
+                # 5. Fallback: Explore Random Adjacent (Step toward unknown)
+                # If we can't pathfind, just move somewhere to expand the map
+                warp_blacklist = self.state_manager.get("warp_blacklist", [])
+                candidates = [s for s in adjacent_sectors if s not in warp_blacklist and s != current_sector]
+                
+                if candidates and self._is_command_ready("move.warp", current_state.get("command_retry_info", {})):
+                    chosen = random.choice(candidates)
+                    logger.info(f"Goto {target_sector} path unknown; exploring via warp to {chosen}.")
+                    return {"command": "move.warp", "data": {"to_sector_id": chosen}}
+                
+                return None
 
             elif goal_type == "sell":
                 port_id = self._find_port_in_sector(current_state, current_sector)
@@ -104,6 +145,13 @@ class Planner:
                 
                 commodity_to_sell = goal_target.upper() 
                 
+                # Validation: Check if port actually trades this commodity
+                port_info = current_state.get("port_info_by_sector", {}).get(str(current_sector), {})
+                traded_commodities = [c.get("symbol") for c in port_info.get("commodities", [])]
+                if traded_commodities and commodity_to_sell not in traded_commodities:
+                     logger.warning(f"Goal 'sell' failed: Port {port_id} does not trade {commodity_to_sell}.")
+                     return None
+
                 port_id_str = str(port_id)
                 sell_price = current_state.get("price_cache", {}).get(port_id_str, {}).get("sell", {}).get(commodity_to_sell)
 
@@ -136,6 +184,13 @@ class Planner:
                 
                 commodity_to_buy = goal_target.upper() 
                 
+                # Validation: Check if port actually trades this commodity
+                port_info = current_state.get("port_info_by_sector", {}).get(str(current_sector), {})
+                traded_commodities = [c.get("symbol") for c in port_info.get("commodities", [])]
+                if traded_commodities and commodity_to_buy not in traded_commodities:
+                     logger.warning(f"Goal 'buy' failed: Port {port_id} does not trade {commodity_to_buy}.")
+                     return None
+
                 port_id_str = str(port_id)
                 buy_price = current_state.get("price_cache", {}).get(port_id_str, {}).get("buy", {}).get(commodity_to_buy)
                 
@@ -210,6 +265,48 @@ class Planner:
         
         return None # Fallback
 
+    # --- Bootstrap Logic (Priority 0) ---
+    def ensure_minimum_world_state(self, current_state):
+        """
+        If the bot has just started or world caches are empty,
+        return a command to rebuild the minimal world state.
+        """
+        if not self.state_manager.get("needs_bootstrap"):
+            return None
+
+        # 1. Player Info
+        if not current_state.get("player_info"):
+            logger.info("Bootstrap: Fetching player info.")
+            return {"command": "player.my_info", "data": {}}
+
+        # 2. Ship Info
+        ship_info = current_state.get("ship_info")
+        if not ship_info or not ship_info.get("id"):
+            logger.info("Bootstrap: Fetching ship info.")
+            return {"command": "ship.info", "data": {}}
+
+        # 3. Sector Info & Adjacency
+        current_sector = current_state.get("player_location_sector")
+        if current_sector is None:
+            # Fallback to player info if location not yet set in root state
+            p_info = current_state.get("player_info", {}).get("player", {})
+            current_sector = p_info.get("sector")
+        
+        if current_sector:
+            sector_data = current_state.get("sector_data", {}).get(str(current_sector))
+            # If we don't have sector data, OR we don't have adjacency info
+            if not sector_data or not sector_data.get("adjacent"):
+                logger.info(f"Bootstrap: Fetching sector info for {current_sector} to build map.")
+                return {"command": "sector.info", "data": {"sector_id": int(current_sector)}}
+            
+            # Optional: If we have sector info but no adjacency (rare but possible), maybe scan?
+            # For now, sector.info should be enough for adjacency.
+
+        # If we reached here, we have the basics.
+        logger.info("Bootstrap complete: World state is ready.")
+        self.state_manager.set("needs_bootstrap", False)
+        return None
+
     # --- Main Planner Entry Point ---
 
     def get_next_command(self, current_state, current_goal=None):
@@ -217,6 +314,10 @@ class Planner:
         Selects the next command, prioritizing the strategic goal.
         """
         
+        # --- 0. Bootstrap Check ---
+        bootstrap_cmd = self.ensure_minimum_world_state(current_state)
+        if bootstrap_cmd:
+            return bootstrap_cmd
         
         # --- Check for turns remaining ---
         player_turns_remaining = (current_state.get("player_info") or {}).get("player", {}).get("turns_remaining")
@@ -326,11 +427,19 @@ class Planner:
         if current_sector_id is not None and str(current_sector_id) != "None":
             current_sector_data = current_state.get("sector_data", {}).get(str(current_sector_id))
             
-            # Check for missing or incomplete current sector data (e.g., missing adjacent sectors)
-            if not current_sector_data or not current_sector_data.get("adjacent"):
-                logger.info(f"Invariant check: Missing or incomplete sector_data for current sector {current_sector_id}. Fetching.")
+            # Check for missing or incomplete current sector data
+            # We need to know adjacency AND if there is a port
+            if not current_sector_data or "adjacent" not in current_sector_data or "has_port" not in current_sector_data:
+                logger.info(f"Invariant check: Incomplete sector_data (adjacent/has_port) for current sector {current_sector_id}. Fetching.")
                 return {"command": "sector.info", "data": {"sector_id": int(current_sector_id)}, "is_invariant": True}
             
+            # If we are at a port, ensure we have port details (commodities, etc.)
+            if current_sector_data.get("has_port"):
+                port_info = current_state.get("port_info_by_sector", {}).get(str(current_sector_id))
+                if not port_info:
+                    logger.info(f"Invariant check: At port in sector {current_sector_id} but missing port info. Fetching.")
+                    return {"command": "trade.port_info", "data": {}, "is_invariant": True}
+
             # Check for missing schema for sector.scan.density if we have the scanner
             if (current_state.get("has_density_scanner") and 
                 "sector.scan.density" not in self.state_manager.get("schema_blacklist", []) and # Check blacklist
@@ -466,6 +575,10 @@ class Planner:
     
     def _is_command_ready(self, command_name, retry_info):
         """Checks if a single command is on cooldown or has failed too many times."""
+        # TEMP FIX: Always allow move.warp
+        if command_name == "move.warp":
+            return True
+
         info = retry_info.get(command_name, {})
         failures = info.get("failures", 0)
         
@@ -669,7 +782,11 @@ class Planner:
         current_sector = current_state.get("player_location_sector")
 
         if field_name == "to_sector_id":
-            return self._get_next_warp_target(current_state)
+            target = self._get_next_warp_target(current_state)
+            if target is None:
+                logger.error(f"Could not determine valid to_sector_id for command {command_name}.")
+                return None
+            return target
         if field_name == "ship_id":
             return ship_id
         if field_name == "sector_id":
@@ -841,21 +958,26 @@ class Planner:
 
         warp_blacklist = self.state_manager.get("warp_blacklist", [])
         
+        # Strictly exclude current_sector to prevent self-warps
         possible_targets = [s for s in adjacent_sectors if s != current_sector and s not in warp_blacklist]
+        
+        logger.debug(f"Warp candidates from {current_sector}: {possible_targets} (Raw adj: {adjacent_sectors})")
+
         if not possible_targets:
-            logger.warning(f"No valid warp targets available from {current_sector} after filtering for self, and warp_blacklist: {warp_blacklist}. Falling back to ignoring blacklist.")
-            # If all valid adjacent are blacklisted, perhaps try a blacklisted one anyway (might have been transient)
-            possible_targets = [s for s in adjacent_sectors if s != current_sector]
-            if not possible_targets: return None # Still no valid targets
+            logger.warning(f"No valid warp targets available from {current_sector}. Candidates empty.")
+            return None
 
         # New exploration logic using universe_map
         universe_map = current_state.get("universe_map", {})
-        unexplored_targets = [s for s in possible_targets if not universe_map.get(str(s), {}).get('is_explored')]
+        unexplored_adjacent = [s for s in possible_targets if not universe_map.get(str(s), {}).get('is_explored')]
 
-        if unexplored_targets:
-            logger.info(f"Prioritizing unexplored sectors. Choosing from: {unexplored_targets}")
-            return random.choice(unexplored_targets)
+        if unexplored_adjacent:
+            logger.info(f"Prioritizing unexplored adjacent sectors. Choosing from: {unexplored_adjacent}")
+            return random.choice(unexplored_adjacent)
 
+        # If no adjacent sectors are unexplored, find the nearest unexplored sector in the KNOWN universe
+        # ... (keep existing Expanding Wave logic) ...
+        
         # Fallback to original logic if all adjacent sectors are explored
         recent = set(current_state.get("recent_sectors", [])[-5:])
         non_recent_targets = [s for s in possible_targets if s not in recent]
