@@ -345,6 +345,59 @@ cleanup:
 }
 
 
+/**
+ * @brief Creates a default bank account for a player.
+ * @param db The SQLite database connection.
+ * @param player_id The ID of the player for whom to create the account.
+ * @return 0 on success, -1 on failure.
+ */
+int db_bank_account_create_default_for_player(sqlite3 *db, int player_id) {
+    sqlite3_stmt *stmt;
+    int rc;
+
+    // 1. Check if a bank account already exists for this player/currency combination
+    const char *check_sql = "SELECT id FROM bank_accounts WHERE owner_type = 'player' AND owner_id = ? AND currency = 'CRD';";
+    rc = sqlite3_prepare_v2(db, check_sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("Failed to prepare check statement for default bank account: %s", sqlite3_errmsg(db));
+        return -1;
+    }
+    sqlite3_bind_int(stmt, 1, player_id);
+    rc = sqlite3_step(stmt);
+    if (rc == SQLITE_ROW) {
+        // Account already exists, return success
+        LOGD("Default bank account for player %d (CRD) already exists.", player_id);
+        sqlite3_finalize(stmt);
+        return 0;
+    }
+    sqlite3_finalize(stmt);
+
+    // 2. If account does not exist, proceed with insert
+    const char *insert_sql = "INSERT INTO bank_accounts (owner_type, owner_id, currency, balance) VALUES (?, ?, ?, ?);";
+    rc = sqlite3_prepare_v2(db, insert_sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("Failed to prepare insert statement for default bank account: %s", sqlite3_errmsg(db));
+        return -1;
+    }
+
+    sqlite3_bind_text(stmt, 1, "player", -1, SQLITE_STATIC); // owner_type
+    sqlite3_bind_int(stmt, 2, player_id); // owner_id
+    sqlite3_bind_text(stmt, 3, "CRD", -1, SQLITE_STATIC); // currency
+    sqlite3_bind_int(stmt, 4, 0); // balance
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        LOGE("Failed to create default bank account for player %d: %s", player_id, sqlite3_errmsg(db));
+        sqlite3_finalize(stmt);
+        return -1;
+    }
+
+    sqlite3_finalize(stmt);
+    LOGD("Created default bank account for player %d", player_id);
+    return 0;
+}
+
+
 const char *create_table_sql[] = {
 /* Advisory locks */
   "CREATE TABLE IF NOT EXISTS locks ("
@@ -2137,6 +2190,7 @@ const char *insert_default_sql[] = {
   "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_tax_bp', '1000', 'int');",
   "INSERT OR IGNORE INTO config (key, value, type) VALUES ('illegal_allowed_neutral', '0', 'int');",
   "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_cloak_duration', '24', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('corporation_creation_fee', '1000', 'int');",
   "INSERT OR IGNORE INTO law_enforcement (id) VALUES (1);",
 /* Shiptypes: name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled */
 /* Initial Ship Types (First Block) */

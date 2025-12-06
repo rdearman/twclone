@@ -153,6 +153,7 @@ typedef struct
   } death;
   /* --- NEWLY ADDED FIELDS TO MATCH DB SCHEMA --- */
   int64_t startingcredits;
+  int64_t corporation_creation_fee;
   int64_t bank_alert_threshold_player;
   int64_t bank_alert_threshold_corp;
   /* Genesis Config */

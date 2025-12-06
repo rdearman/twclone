@@ -531,6 +531,36 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
         player_id,
         new_account_id,
         (long long)cfg->startingcredits);
+
+      // --- Create Turns Entry for the new player ---
+      // Use 750 as a default for starting turns.
+      sqlite3_stmt *st_turns = NULL;
+      int prepare_turns_rc = sqlite3_prepare_v2(db,
+                                                "INSERT OR IGNORE INTO turns (player, turns_remaining, last_update) VALUES (?1, ?2, strftime('%s', 'now'));",
+                                                -1,
+                                                &st_turns,
+                                                NULL);
+      if (prepare_turns_rc == SQLITE_OK) {
+          sqlite3_bind_int(st_turns, 1, player_id);
+          sqlite3_bind_int(st_turns, 2, 750); // Set initial turns to 750
+          int step_turns_rc = sqlite3_step(st_turns);
+          if (step_turns_rc != SQLITE_DONE) {
+              LOGE("cmd_auth_register debug: Failed to create turns entry for player %d: %s",
+                   player_id, sqlite3_errmsg(db));
+              sqlite3_finalize(st_turns);
+              send_enveloped_error(ctx->fd, root, 1500, "Database error (turns entry creation)");
+              goto rollback_and_error;
+          }
+          sqlite3_finalize(st_turns);
+      } else {
+          LOGE("cmd_auth_register debug: Failed to prepare turns insert for player %d: %s",
+               player_id, sqlite3_errmsg(db));
+          send_enveloped_error(ctx->fd, root, 1500, "Database error (prepare turns insert)");
+          goto rollback_and_error;
+      }
+      LOGI("cmd_auth_register debug: player %d turns entry created with 750 turns",
+           player_id);
+
       // --- Spawn Location ---
       spawn_sector_id = (rand () % 10) + 1;     // Random sector between 1 and 10
       LOGI ("cmd_auth_register debug: player %d assigned to spawn_sector_id %d",

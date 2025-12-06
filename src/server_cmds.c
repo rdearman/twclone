@@ -169,7 +169,6 @@ user_create (sqlite3 *db,
 {
   if (!player_name || !password)
     {
-      // sqlite3 *db = db_get_handle (); // No longer needed, db is passed as argument
       if (!db)
         {
           LOGE ("user_create: db handle is NULL");
@@ -194,11 +193,11 @@ user_create (sqlite3 *db,
   const char *ins_turns =
     "INSERT INTO turns (player, turns_remaining, last_update) "
     "SELECT "
-    "  ?1, "
-    "  turnsperday, "  // Correct: selects column directly
+    " ?1, "
+    " value, " 
     "  strftime('%s','now') "
     "FROM config "
-    "WHERE id = 1 "
+    "WHERE key='turnsperday' "
     "ON CONFLICT(player) DO UPDATE SET "
     "  turns_remaining = excluded.turns_remaining, "
     "  last_update    = excluded.last_update;";
@@ -267,10 +266,16 @@ user_create (sqlite3 *db,
       sqlite3_finalize (stmt);
       return AUTH_ERR_DB;
     }
-  sqlite3_finalize (stmt);
-  return AUTH_OK;
-}
-
+      sqlite3_finalize (stmt);
+  
+      /* Create default bank account for this player */
+      if (db_bank_account_create_default_for_player(db, player_id) != 0) {
+          LOGE("user_create: Failed to create default bank account for player %d", player_id);
+          return AUTH_ERR_DB; // Or a more specific error
+      }
+  
+      return AUTH_OK;
+  }
 
 int
 cmd_sys_test_news_cron (client_ctx_t *ctx, json_t *root)

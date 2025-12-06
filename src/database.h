@@ -47,4 +47,7 @@ int db_session_lookup (const char *token,
                        long long *out_expires);
 /* Cleanup */
 void db_close (void);
+// Bank accounts
+int db_bank_account_create_default_for_player(sqlite3 *db, int player_id);
+
 #endif /* DATABASE_H */

@@ -41,6 +41,7 @@ config_set_defaults (void)
   g_cfg.turnsperday = 120;
   g_cfg.maxwarps_per_sector = 6;
   g_cfg.startingcredits = 10000000;
+  g_cfg.corporation_creation_fee = 1000;
   g_cfg.startingfighters = 10;
   g_cfg.startingholds = 20;
   g_cfg.engine.processinterval = 1;
@@ -415,6 +416,10 @@ apply_db (sqlite3 *db)
       else if (strcmp (key, "bank_alert_threshold_corp") == 0)
         {
           cfg_parse_int64 (val, type, &g_cfg.bank_alert_threshold_corp);                                                      /* int64 */
+        }
+      else if (strcmp (key, "corporation_creation_fee") == 0)
+        {
+          cfg_parse_int64 (val, type, &g_cfg.corporation_creation_fee);                                                    /* int64 */
         }
       /* Genesis */
       else if (strcmp (key, "genesis_enabled") == 0)

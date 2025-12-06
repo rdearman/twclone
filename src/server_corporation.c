@@ -7,6 +7,7 @@
 #include <pthread.h>
 #include <ctype.h>              // Required for isalnum and isupper
 #include "server_corporation.h"
+#include "server_config.h"
 #include "database.h"
 #include "server_log.h"
 #include "server_envelope.h"
@@ -605,7 +606,7 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
                             "Database error starting transaction.");
       return 0;
     }
-  long long creation_fee = 100000;
+  long long creation_fee = g_cfg.corporation_creation_fee;
   long long player_new_balance;
   int player_bank_account_id = h_get_player_bank_account_id (db,
                                                              ctx->player_id);

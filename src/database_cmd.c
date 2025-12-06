@@ -4043,14 +4043,37 @@ h_get_account_id_unlocked (sqlite3 *db, const char *owner_type, int owner_id,
   int rc;
   int account_id = -1;
   // Select the account ID
-  const char *SQL_GET_ID =
-    "SELECT id FROM bank_accounts WHERE owner_type = ?1 AND owner_id = ?2 AND currency = 'CRD'";
-  rc = sqlite3_prepare_v2 (db, SQL_GET_ID, -1, &st, NULL);
+  const char *sql_insert =
+    "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, balance, currency, interest_rate_bp, last_interest_tick, tx_alert_threshold, is_active) "
+    "VALUES (?1, ?2, 0, 'CRD', 0, (CAST(strftime('%s','now') AS INTEGER) / (24 * 60 * 60)), 0, 1);";
+  rc = sqlite3_prepare_v2 (db, sql_insert, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
-      LOGE ("h_get_account_id_unlocked: Failed to prepare statement: %s",
+      LOGE ("h_get_account_id_unlocked: Failed to prepare insert statement: %s",
             sqlite3_errmsg (db));
-      return rc;
+      goto cleanup;
+    }
+  sqlite3_bind_text (st, 1, owner_type, -1, SQLITE_STATIC);
+  sqlite3_bind_int (st, 2, owner_id);
+  rc = sqlite3_step (st);
+  sqlite3_finalize (st);
+  st = NULL;
+
+  if (rc != SQLITE_DONE && rc != SQLITE_OK)
+    {
+      LOGE ("h_get_account_id_unlocked: Failed to execute insert statement: %s",
+            sqlite3_errmsg (db));
+      goto cleanup;
+    }
+
+  const char *sql_select = "SELECT id FROM bank_accounts WHERE owner_type = ?1 AND owner_id = ?2";
+
+  rc = sqlite3_prepare_v2 (db, sql_select, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_get_account_id_unlocked: Failed to prepare select statement: %s",
+            sqlite3_errmsg (db));
+      goto cleanup;
     }
   sqlite3_bind_text (st, 1, owner_type, -1, SQLITE_STATIC);
   sqlite3_bind_int (st, 2, owner_id);
@@ -4063,8 +4086,15 @@ h_get_account_id_unlocked (sqlite3 *db, const char *owner_type, int owner_id,
     {
       rc = SQLITE_NOTFOUND;
     }
-  sqlite3_finalize (st);
-  *account_id_out = account_id;
+
+cleanup:
+  if (st)
+    {
+      sqlite3_finalize (st);
+    }
+  if (account_id_out) {
+    *account_id_out = account_id;
+  }
   return rc;
 }
 
@@ -4080,7 +4110,7 @@ h_create_bank_account_unlocked (sqlite3 *db, const char *owner_type,
   // Current timestamp in epoch days for last_interest_tick
   int current_epoch_day = (int) (time (NULL) / (24 * 60 * 60));
   const char *sql =
-    "INSERT INTO bank_accounts (owner_type, owner_id, currency, balance, interest_rate_bp, last_interest_tick, tx_alert_threshold, is_active) VALUES (?1, ?2, 'CRD', ?3, 0, ?4, 0, 1);";
+    "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance, interest_rate_bp, last_interest_tick, tx_alert_threshold, is_active) VALUES (?1, ?2, 'CRD', ?3, 0, ?4, 0, 1);";
   // Using 'CRD' as default currency
   rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
