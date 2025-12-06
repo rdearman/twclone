@@ -8,6 +8,7 @@
 // Helper for flexible JSON integer parsing
 bool json_get_int_flexible (json_t *json, const char *key, int *out);
 bool json_get_int64_flexible (json_t *json, const char *key, long long *out);
+
 /* No JSON here on purpose: this layer does pure logic/DB.
    server_loop.c still builds/sends the envelopes. */
 #ifdef __cplusplus
@@ -26,6 +27,7 @@ enum
 /* Look up player by name, verify password, return player_id on success. */
 int play_login (const char *player_name,
                 const char *password, int *out_player_id);
+
 /* Create a new player (auto-assigns legacy 'number' sequentially).
    Returns new player_id in out_player_id. */
 int user_create (sqlite3 *db, const char *player_name,
@@ -38,6 +40,8 @@ typedef struct
   int code;                     /* for REFUSED/ERROR */
   const char *message;          /* short msg */
 } decision_t;
+
+
 static inline decision_t
 ok (void)
 {

@@ -21,6 +21,8 @@ static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
 /* FILE backend state */
 static int g_fd = -1;           /* open file descriptor */
 static char g_path[512] = "";   /* remembered for reopen() */
+
+
 /* ---- helpers ---- */
 static int
 priority_allows (int pri)
@@ -37,6 +39,8 @@ write_all (int fd, const char *buf, size_t len)
   while (off < len)
     {
       ssize_t w = write (fd, buf + off, len - off);
+
+
       if (w > 0)
         {
           off += (size_t) w;
@@ -58,6 +62,8 @@ now_iso8601 (char *dst, size_t n)
   struct timespec ts;
   clock_gettime (CLOCK_REALTIME, &ts);
   struct tm tm;
+
+
   localtime_r (&ts.tv_sec, &tm);
   strftime (dst, n, "%Y-%m-%d %H:%M:%S", &tm);
 }
@@ -133,6 +139,8 @@ server_log_init_file (const char *filepath,
     }
   /* open with O_APPEND for atomic multi-process appends; create if missing */
   int fd = open (g_path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
+
+
   if (fd < 0)
     {
       /* fall back to stderr-only if the path is not writable */
@@ -149,6 +157,8 @@ server_log_init_file (const char *filepath,
 
 /* Optional syslog backend (unchanged semantics if you keep it) */
 #include <syslog.h>
+
+
 void
 server_log_init (const char *prog_tag,
                  const char *prefix,
@@ -169,6 +179,8 @@ server_log_init (const char *prog_tag,
       g_prefix[0] = 0;
     }
   int flags = LOG_PID | LOG_NDELAY;
+
+
   if (g_echo_stderr)
     {
       flags |= LOG_PERROR;
@@ -193,6 +205,8 @@ server_log_reopen (void)
   if (g_backend == BACKEND_FILE && g_path[0])
     {
       int fd = open (g_path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
+
+
       if (fd >= 0)
         {
           if (g_fd != -1)
@@ -234,6 +248,8 @@ server_log_vprintf (int priority, const char *fmt, va_list ap)
   const backend_t be = g_backend;
   const int fd = g_fd;
   char prefix[64];
+
+
   prefix[0] = 0;
   if (g_prefix[0])
     {
@@ -246,12 +262,18 @@ server_log_vprintf (int priority, const char *fmt, va_list ap)
     }
   /* Build one line with timestamp + prefix + message */
   char when[32];
+
+
   now_iso8601 (when, sizeof when);
   char msgbuf[1400];
+
+
   vsnprintf (msgbuf, sizeof msgbuf, fmt ? fmt : "", ap);
   char line[1600];
   int n = snprintf (line, sizeof line, "%s %s%s",
                     when, prefix, msgbuf);
+
+
   if (n < 0)
     {
       return;

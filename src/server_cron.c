@@ -72,6 +72,8 @@ get_random_sector (sqlite3 *db)
     }
   int random_offset = rand () % RANGE_SIZE;
   int random_sector = MIN_UNPROTECTED_SECTOR + random_offset;
+
+
   return random_sector;
 }
 
@@ -106,6 +108,8 @@ tow_ship (sqlite3 *db, int ship_id, int new_sector_id, int admin_id,
   sqlite3_finalize (stmt);
   const char *reason_str;
   const char *subject_str;
+
+
   switch (reason_code)
     {
       case REASON_EVIL_ALIGN:
@@ -134,6 +138,8 @@ tow_ship (sqlite3 *db, int ship_id, int new_sector_id, int admin_id,
         break;
     }
   const char *sql_update_ship = "UPDATE ships SET sector = ? WHERE id = ?;";
+
+
   if (sqlite3_prepare_v2 (db, sql_update_ship, -1, &stmt, NULL) != SQLITE_OK)
     {
       LOGE ("tow_ship: Prepare UPDATE ship failed: %s", sqlite3_errmsg (db));
@@ -152,6 +158,8 @@ tow_ship (sqlite3 *db, int ship_id, int new_sector_id, int admin_id,
     {
       const char *sql_update_player =
         "UPDATE players SET sector = ? WHERE id = ?;";
+
+
       if (sqlite3_prepare_v2 (db, sql_update_player, -1, &stmt, NULL) !=
           SQLITE_OK)
         {
@@ -170,6 +178,8 @@ tow_ship (sqlite3 *db, int ship_id, int new_sector_id, int admin_id,
             }
         }
       char message_buffer[256];
+
+
       snprintf (message_buffer,
                 sizeof (message_buffer),
                 "Your ship was found parked in FedSpace (Sector %d) without protection. It has been towed to Sector %d for violating FedLaw: %s. The ship is now exposed to danger.",
@@ -191,6 +201,8 @@ tow_ship (sqlite3 *db, int ship_id, int new_sector_id, int admin_id,
     admin_id);
   int64_t current_time_s = (int64_t) time (NULL);
   json_t *fedspace_payload = json_object ();
+
+
   if (fedspace_payload)
     {
       json_object_set_new (fedspace_payload, "reason",
@@ -221,6 +233,8 @@ universe_pathfind_get_sectors (sqlite3 *db, int start_sector, int end_sector,
   if (start_sector == end_sector)
     {
       int *path = malloc (2 * sizeof (int));
+
+
       if (path)
         {
           path[0] = start_sector;
@@ -230,6 +244,8 @@ universe_pathfind_get_sectors (sqlite3 *db, int start_sector, int end_sector,
     }
   int max_sector_id = 0;
   sqlite3_stmt *max_st = NULL;
+
+
   if (sqlite3_prepare_v2
         (db, "SELECT MAX(id) FROM sectors;", -1, &max_st, NULL) == SQLITE_OK)
     {
@@ -244,6 +260,8 @@ universe_pathfind_get_sectors (sqlite3 *db, int start_sector, int end_sector,
       max_sector_id = 2000;
     }
   int *parent = calloc (max_sector_id + 1, sizeof (int));
+
+
   if (!parent)
     {
       return NULL;
@@ -252,6 +270,8 @@ universe_pathfind_get_sectors (sqlite3 *db, int start_sector, int end_sector,
   int queue_head = 0;
   int queue_tail = 0;
   int queue_capacity = INITIAL_QUEUE_CAPACITY;
+
+
   if (!queue)
     {
       free (parent);
@@ -273,6 +293,8 @@ universe_pathfind_get_sectors (sqlite3 *db, int start_sector, int end_sector,
   sqlite3_stmt *warp_st = NULL;
   const char *sql_warps =
     "SELECT to_sector FROM sector_warps WHERE from_sector = ?1;";
+
+
   if (sqlite3_prepare_v2 (db, sql_warps, -1, &warp_st, NULL) != SQLITE_OK)
     {
       free (parent);
@@ -282,6 +304,8 @@ universe_pathfind_get_sectors (sqlite3 *db, int start_sector, int end_sector,
   while (queue_head < queue_tail)
     {
       int current_sector = queue[queue_head++];
+
+
       if (current_sector == end_sector)
         {
           path_found = 1;
@@ -291,6 +315,8 @@ universe_pathfind_get_sectors (sqlite3 *db, int start_sector, int end_sector,
       while (sqlite3_step (warp_st) == SQLITE_ROW)
         {
           int neighbor = sqlite3_column_int (warp_st, 0);
+
+
           if (neighbor <= 0 || neighbor > max_sector_id
               || parent[neighbor] != 0)
             {
@@ -301,6 +327,8 @@ universe_pathfind_get_sectors (sqlite3 *db, int start_sector, int end_sector,
             {
               queue_capacity *= 2;
               int *new_queue = realloc (queue, queue_capacity * sizeof (int));
+
+
               if (!new_queue)
                 {
                   path_found = 0;
@@ -322,6 +350,8 @@ universe_pathfind_get_sectors (sqlite3 *db, int start_sector, int end_sector,
     }
   int path_length = 0;
   int temp_sector = end_sector;
+
+
   while (temp_sector != -1)
     {
       path_length++;
@@ -333,12 +363,16 @@ universe_pathfind_get_sectors (sqlite3 *db, int start_sector, int end_sector,
       temp_sector = parent[temp_sector];
     }
   int *result_path = malloc ((path_length + 1) * sizeof (int));
+
+
   if (!result_path)
     {
       free (parent);
       return NULL;
     }
   int i = path_length - 1;
+
+
   temp_sector = end_sector;
   while (temp_sector != -1)
     {
@@ -398,6 +432,8 @@ populate_msl_if_empty (sqlite3 *db)
   snprintf (sql_buffer, sizeof (sql_buffer),
             "SELECT COUNT(sector_id) FROM %s;", MSL_TABLE_NAME);
   sqlite3_stmt *count_st = NULL;
+
+
   if (sqlite3_prepare_v2 (db, sql_buffer, -1, &count_st, NULL) == SQLITE_OK
       && sqlite3_step (count_st) == SQLITE_ROW)
     {
@@ -428,6 +464,8 @@ populate_msl_if_empty (sqlite3 *db)
   sqlite3_stmt *select_st = NULL;
   const char *sql_select_stardocks =
     "SELECT sector_id FROM stardock_location;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_select_stardocks, -1, &select_st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -437,6 +475,8 @@ populate_msl_if_empty (sqlite3 *db)
   int *stardock_sectors = NULL;
   int stardock_count = 0;
   int stardock_capacity = 8;
+
+
   stardock_sectors = malloc (stardock_capacity * sizeof (int));
   if (!stardock_sectors)
     {
@@ -447,11 +487,15 @@ populate_msl_if_empty (sqlite3 *db)
   while (sqlite3_step (select_st) == SQLITE_ROW)
     {
       int id = sqlite3_column_int (select_st, 0);
+
+
       if (stardock_count == stardock_capacity)
         {
           stardock_capacity *= 2;
           int *new_arr =
             realloc (stardock_sectors, stardock_capacity * sizeof (int));
+
+
           if (!new_arr)
             {
               LOGE ("Failed to reallocate stardock sector array.");
@@ -473,6 +517,8 @@ populate_msl_if_empty (sqlite3 *db)
       return 0;
     }
   sqlite3_stmt *insert_st = NULL;
+
+
   snprintf (sql_buffer, sizeof (sql_buffer),
             "INSERT OR IGNORE INTO %s (sector_id) VALUES (?);",
             MSL_TABLE_NAME);
@@ -492,12 +538,16 @@ populate_msl_if_empty (sqlite3 *db)
       return -1;
     }
   int total_unique_sectors_added = 0;
+
+
   for (int start_sector = FEDSPACE_SECTOR_START;
        start_sector <= FEDSPACE_SECTOR_END; start_sector++)
     {
       for (int i = 0; i < stardock_count; i++)
         {
           int stardock_id = stardock_sectors[i];
+
+
           LOGI ("Calculating path %d -> %d", start_sector, stardock_id);
           _insert_path_sectors (db, insert_st, start_sector, stardock_id,
                                 avoid_list, &total_unique_sectors_added);
@@ -547,6 +597,8 @@ h_reset_turns_for_player (sqlite3 *db, int64_t now_s)
       return -1;
     }
   const char *sql_select_players = "SELECT player FROM turns;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_select_players, -1, &select_st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -555,6 +607,8 @@ h_reset_turns_for_player (sqlite3 *db, int64_t now_s)
     }
   const char *sql_update =
     "UPDATE turns SET turns_remaining = ?, last_update = ? WHERE player = ?;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_update, -1, &update_st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -572,6 +626,8 @@ h_reset_turns_for_player (sqlite3 *db, int64_t now_s)
   while (sqlite3_step (select_st) == SQLITE_ROW)
     {
       int player_id = sqlite3_column_int (select_st, 0);
+
+
       sqlite3_reset (update_st);
       sqlite3_bind_int (update_st, 1, max_turns);
       sqlite3_bind_int64 (update_st, 2, now_s);
@@ -648,9 +704,13 @@ try_lock (sqlite3 *db, const char *name, int64_t now_s)
     }
   sqlite3_bind_text (st, 1, name, -1, SQLITE_STATIC);
   int ok = 0;
+
+
   if (sqlite3_step (st) == SQLITE_ROW)
     {
       const unsigned char *o = sqlite3_column_text (st, 0);
+
+
       ok = (o && strcmp ((const char *) o, "server") == 0);
     }
   sqlite3_finalize (st);
@@ -744,6 +804,8 @@ ship_callback (void *count_ptr, int argc, char **argv, char **azColName)
   (void) argc;                  // tell the compiler I know about this, but I'm not using it.
   (void) azColName;             // ditto
   int *count = (int *) count_ptr;
+
+
   if (argv[0])
     {
       printf ("Found cloaked ship (Timestamp: %s)\n", argv[0]);
@@ -790,6 +852,8 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
   LOGI ("fedspace_cleanup: Lock acquired, starting cleanup operations.");
   /* 2. Heavy Ops: Uncloak & MSL & Clusters (These are largely idempotent/fast or own their own tx) */
   int uncloak = uncloak_ships_in_fedspace (db);
+
+
   if (uncloak > 0)
     {
       LOGI ("Uncloaked %d ships in FedSpace.", uncloak);
@@ -810,6 +874,8 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
   /* 3. Asset Clearing (Requires Transaction) */
   db_mutex_lock ();
   int rc; // Declare rc
+
+
   rc = begin (db);
   if (rc != SQLITE_OK)
     {
@@ -819,12 +885,16 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
     }
   const char *select_assets_sql =
     "SELECT player, asset_type, sector, quantity FROM sector_assets WHERE sector IN (SELECT sector_id FROM msl_sectors) AND player != 0;";
+
+
   rc = sqlite3_prepare_v2 (db, select_assets_sql, -1, &select_stmt, NULL);
   if (rc == SQLITE_OK)
     {
       char message[256];
       const char *delete_sql =
         "DELETE FROM sector_assets WHERE player = ?1 AND asset_type = ?2 AND sector = ?3 AND quantity = ?4;";
+
+
       if (sqlite3_prepare_v2 (db, delete_sql, -1, &delete_stmt,
                               NULL) == SQLITE_OK)
         {
@@ -834,6 +904,8 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
               int asset_type = sqlite3_column_int (select_stmt, 1);
               int sector_id = sqlite3_column_int (select_stmt, 2);
               int quantity = sqlite3_column_int (select_stmt, 3);
+
+
               // Send message (this actually does DB work too, but fine for now)
               snprintf (message,
                         sizeof (message),
@@ -875,6 +947,8 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
     }
   const char *sql_timeout_logout =
     "UPDATE players SET loggedin = 0 WHERE loggedin = 1 AND ?1 - last_update > ?2;";
+
+
   if (sqlite3_prepare_v2 (db, sql_timeout_logout, -1, &select_stmt,
                           NULL) == SQLITE_OK)
     {
@@ -894,6 +968,8 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
   sqlite3_exec (db, "DELETE FROM eligible_tows", NULL, NULL, NULL);
   const char *sql_insert_eligible =
     "INSERT INTO eligible_tows (ship_id, sector_id, owner_id, fighters, alignment, experience) SELECT T1.id, T1.sector, T2.id, T1.fighters, COALESCE(T2.alignment, 0), COALESCE(T2.experience, 0) FROM ships T1 LEFT JOIN players T2 ON T1.id = T2.ship WHERE T1.sector BETWEEN ?1 AND ?2 AND (T2.loggedin = 0 OR T2.id IS NULL) ORDER BY T1.id ASC;";
+
+
   if (sqlite3_prepare_v2 (db, sql_insert_eligible, -1, &select_stmt,
                           NULL) == SQLITE_OK)
     {
@@ -918,6 +994,8 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
   /* A. Evil Alignment Tows */
   const char *sql_evil_alignment =
     "SELECT ship_id FROM eligible_tows WHERE owner_id IS NOT NULL AND alignment < 0 LIMIT ?1;";
+
+
   if (sqlite3_prepare_v2 (db, sql_evil_alignment, -1, &select_stmt,
                           NULL) == SQLITE_OK)
     {
@@ -926,6 +1004,8 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
              tows < MAX_TOWS_PER_PASS)
         {
           int ship_id = sqlite3_column_int (select_stmt, 0);
+
+
           tow_ship (db,
                     ship_id,
                     get_random_sector (db),
@@ -943,6 +1023,8 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
     {
       const char *sql_excess_fighters =
         "SELECT ship_id FROM eligible_tows WHERE fighters > ?1 LIMIT ?2;";
+
+
       if (sqlite3_prepare_v2 (db, sql_excess_fighters, -1, &select_stmt,
                               NULL) == SQLITE_OK)
         {
@@ -952,6 +1034,8 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
                  tows < MAX_TOWS_PER_PASS)
             {
               int ship_id = sqlite3_column_int (select_stmt, 0);
+
+
               tow_ship (db,
                         ship_id,
                         get_random_sector (db),
@@ -970,6 +1054,8 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
       // ... (Same pattern for High Exp) ...
       const char *sql_high_exp =
         "SELECT ship_id FROM eligible_tows WHERE owner_id IS NOT NULL AND experience >= 1000 LIMIT ?1;";
+
+
       if (sqlite3_prepare_v2 (db, sql_high_exp, -1, &select_stmt,
                               NULL) == SQLITE_OK)
         {
@@ -978,6 +1064,8 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
                  tows < MAX_TOWS_PER_PASS)
             {
               int ship_id = sqlite3_column_int (select_stmt, 0);
+
+
               tow_ship (db,
                         ship_id,
                         get_random_sector (db),
@@ -993,6 +1081,8 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
     {
       const char *sql_no_owner =
         "SELECT ship_id FROM eligible_tows WHERE owner_id IS NULL LIMIT ?1;";
+
+
       if (sqlite3_prepare_v2 (db, sql_no_owner, -1, &select_stmt,
                               NULL) == SQLITE_OK)
         {
@@ -1001,6 +1091,8 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
                  tows < MAX_TOWS_PER_PASS)
             {
               int ship_id = sqlite3_column_int (select_stmt, 0);
+
+
               tow_ship (db,
                         ship_id,
                         CONFISCATION_SECTOR,
@@ -1050,6 +1142,8 @@ h_dividend_payout (sqlite3 *db, int64_t now_s)
     }
   LOGI ("h_dividend_payout: Starting dividend payout cron job.");
   int rc = begin (db);
+
+
   if (rc != SQLITE_OK)
     {
       LOGE ("h_dividend_payout: Failed to start transaction: %s",
@@ -1061,6 +1155,8 @@ h_dividend_payout (sqlite3 *db, int64_t now_s)
   const char *sql_select_dividends =
     "SELECT id, stock_id, amount_per_share, declared_ts "
     "FROM stock_dividends WHERE paid_ts IS NULL;";
+
+
   rc =
     sqlite3_prepare_v2 (db, sql_select_dividends, -1, &select_dividends_st,
                         NULL);
@@ -1072,6 +1168,8 @@ h_dividend_payout (sqlite3 *db, int64_t now_s)
       goto rollback_and_unlock;
     }
   int processed_dividends = 0;
+
+
   while (sqlite3_step (select_dividends_st) == SQLITE_ROW)
     {
       int dividend_id = sqlite3_column_int (select_dividends_st, 0);
@@ -1082,6 +1180,8 @@ h_dividend_payout (sqlite3 *db, int64_t now_s)
       // char *ticker = NULL;
       int corp_id = 0;
       int total_shares = 0;
+
+
       // Use h_get_stock_info from server_corporation.h
       if (h_get_stock_info
             (db, stock_id, NULL, &corp_id, &total_shares, NULL, NULL,
@@ -1104,6 +1204,8 @@ h_dividend_payout (sqlite3 *db, int64_t now_s)
       long long total_payout = (long long) amount_per_share * total_shares;
       // Check if corporation has enough funds
       long long corp_balance;
+
+
       if (db_get_corp_bank_balance (corp_id, &corp_balance) != SQLITE_OK
           || corp_balance < total_payout)
         {
@@ -1120,6 +1222,8 @@ h_dividend_payout (sqlite3 *db, int64_t now_s)
                        "stock_id", stock_id, "required", total_payout,
                        "available", corp_balance, "status",
                        "failed_insufficient_funds");
+
+
           db_log_engine_event (now_s, "stock.dividend.payout_failed", "corp",
                                corp_id, 0, payload, NULL);
           json_decref (payload);
@@ -1129,6 +1233,8 @@ h_dividend_payout (sqlite3 *db, int64_t now_s)
       sqlite3_stmt *select_shareholders_st = NULL;
       const char *sql_select_shareholders =
         "SELECT player_id, shares FROM corp_shareholders WHERE corp_id = ?;";
+
+
       rc =
         sqlite3_prepare_v2 (db, sql_select_shareholders, -1,
                             &select_shareholders_st, NULL);
@@ -1142,22 +1248,30 @@ h_dividend_payout (sqlite3 *db, int64_t now_s)
           goto rollback_and_unlock;
         }
       long long actual_payout_sum = 0;
+
+
       while (sqlite3_step (select_shareholders_st) == SQLITE_ROW)
         {
           int player_id = sqlite3_column_int (select_shareholders_st, 0);
           int shares = sqlite3_column_int (select_shareholders_st, 1);
+
+
           if (player_id == 0)
             {
               continue;         // Skip the corporation's own holdings in a direct payout
             }
           long long player_dividend = (long long) shares * amount_per_share;
           char idempotency_key[UUID_STR_LEN];
+
+
           h_generate_hex_uuid (idempotency_key, sizeof (idempotency_key));
           int transfer_rc = h_bank_transfer_unlocked (db, "corp", corp_id,
                                                       "player", player_id,
                                                       player_dividend,
                                                       "DIVIDEND",
                                                       idempotency_key);
+
+
           if (transfer_rc != SQLITE_OK)
             {
               LOGE
@@ -1180,6 +1294,8 @@ h_dividend_payout (sqlite3 *db, int64_t now_s)
       sqlite3_stmt *update_dividend_st = NULL;
       const char *sql_update_dividend =
         "UPDATE stock_dividends SET paid_ts = ? WHERE id = ?;";
+
+
       rc =
         sqlite3_prepare_v2 (db, sql_update_dividend, -1, &update_dividend_st,
                             NULL);
@@ -1213,6 +1329,8 @@ h_dividend_payout (sqlite3 *db, int64_t now_s)
         json_pack ("{s:i, s:i, s:I, s:I}", "corp_id", corp_id, "stock_id",
                    stock_id, "dividend_id", dividend_id, "actual_payout",
                    actual_payout_sum);
+
+
       db_log_engine_event (now_s, "stock.dividend.payout_completed", "corp",
                            corp_id, 0, payload, NULL);
       json_decref (payload);
@@ -1267,6 +1385,8 @@ h_robbery_daily_cleanup (sqlite3 *db, int64_t now_s)
     "    (bust_type = 'real' AND last_bust_at < ? - (SELECT robbery_real_bust_ttl_days * 86400 FROM law_enforcement WHERE id=1)) "
     ");";
   sqlite3_stmt *st = NULL;
+
+
   if (sqlite3_prepare_v2 (db, sql_bust_clear, -1, &st, NULL) == SQLITE_OK)
     {
       sqlite3_bind_int64 (st, 1, now_s);
@@ -1291,6 +1411,8 @@ h_daily_turn_reset (sqlite3 *db, int64_t now_s)
     }
   LOGI ("daily_turn_reset: starting daily turn reset.");
   int rc = begin (db);
+
+
   if (rc)
     {
       unlock (db, "daily_turn_reset");
@@ -1332,6 +1454,8 @@ h_autouncloak_sweeper (sqlite3 *db, int64_t now_s)
   sqlite3_stmt *st = NULL;
   int rc;
   int max_hours = 0;
+
+
   if (db_get_int_config (db, "max_cloak_duration", &max_hours) != 0)
     {
       LOGE ("Can't retrieve config 'max_cloak_duration': %s",
@@ -1350,6 +1474,8 @@ h_autouncloak_sweeper (sqlite3 *db, int64_t now_s)
   const int SECONDS_IN_HOUR = 3600;
   int64_t max_duration_seconds = (int64_t) max_hours * SECONDS_IN_HOUR;
   int64_t uncloak_threshold_s = now_s - max_duration_seconds;
+
+
   rc =
     sqlite3_prepare_v2 (db,
                         "UPDATE ships SET cloaked = NULL WHERE cloaked IS NOT NULL AND cloaked < ?;",
@@ -1381,6 +1507,8 @@ h_terra_replenish (sqlite3 *db, int64_t now_s)
     }
   (void) now_s;
   int rc = begin (db);
+
+
   if (rc)
     {
       return rc;
@@ -1424,6 +1552,8 @@ h_planet_growth (sqlite3 *db, int64_t now_s)
     }
   (void) now_s;
   int rc = begin (db);
+
+
   if (rc)
     {
       return rc;
@@ -1460,6 +1590,8 @@ h_planet_growth (sqlite3 *db, int64_t now_s)
     "WHERE (pp.base_prod_rate > 0 OR pp.base_cons_rate > 0) "
     "ON CONFLICT(entity_type, entity_id, commodity_code) DO UPDATE SET "
     "quantity = excluded.quantity, last_updated_ts = excluded.last_updated_ts;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_update_commodities, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -1502,6 +1634,8 @@ h_broadcast_ttl_cleanup (sqlite3 *db, int64_t now_s)
                                -1,
                                &st,
                                NULL);
+
+
   if (rc == SQLITE_OK)
     {
       sqlite3_bind_int64 (st, 1, now_s);
@@ -1522,6 +1656,8 @@ h_traps_process (sqlite3 *db, int64_t now_s)
       return 0;
     }
   int rc = begin (db);
+
+
   if (rc)
     {
       return rc;
@@ -1561,6 +1697,8 @@ h_npc_step (sqlite3 *db, int64_t now_s)
 {
   (void) now_s;
   int64_t now_ms = (int64_t) monotonic_millis ();
+
+
   if (iss_init_once () == 1)
     {
       iss_tick (now_ms);
@@ -1594,6 +1732,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
   const char *sql_select_events =
     "SELECT id, ts, type, actor_player_id, sector_id, payload "
     "FROM engine_events " "WHERE ts >= ?1 AND ts < ?2 " "ORDER BY ts ASC;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_select_events, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -1614,6 +1754,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
       const char *payload_str = (const char *) sqlite3_column_text (st, 5);
       json_error_t jerr;
       json_t *payload_obj = json_loads (payload_str, 0, &jerr);
+
+
       if (!payload_obj)
         {
           LOGW
@@ -1631,6 +1773,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
       char *headline_str = NULL;        // For asprintf
       char *body_str = NULL;    // For asprintf
       char *scope_str = NULL;   // For asprintf
+
+
       // Add common context data
       json_object_set_new (context_data, "event_type",
                            json_string (event_type));
@@ -1661,6 +1805,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
             json_string_value (json_object_get (payload_obj, "location"));
           double price =
             json_real_value (json_object_get (payload_obj, "price"));
+
+
           if (commodity && location)
             {
               category = "economic";
@@ -1732,6 +1878,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
             json_integer_value (json_object_get (payload_obj, "ship_id"));
           const char *ship_name =
             json_string_value (json_object_get (payload_obj, "ship_name"));
+
+
           if (ship_name)
             {
               category = "military";
@@ -1771,6 +1919,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
         {
           const char *reason =
             json_string_value (json_object_get (payload_obj, "reason"));
+
+
           if (reason)
             {
               category = "military";
@@ -1803,6 +1953,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
         {
           const char *reason =
             json_string_value (json_object_get (payload_obj, "reason"));
+
+
           if (reason)
             {
               category = "military";
@@ -1846,6 +1998,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
             "SELECT name, tag FROM corporations WHERE id = ?;";
           char corp_name_buf[64] = { 0 };
           char corp_tag_buf[16] = { 0 };
+
+
           if (sqlite3_prepare_v2 (db, sql_corp_info, -1, &corp_info_st, NULL)
               == SQLITE_OK)
             {
@@ -1915,6 +2069,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
           char corp_tag_buf[16] = { 0 };
           long long tax_arrears = 0;
           int credit_rating = 0;
+
+
           if (sqlite3_prepare_v2 (db, sql_corp_info, -1, &corp_info_st, NULL)
               == SQLITE_OK)
             {
@@ -1986,6 +2142,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
           const char *sql_corp_name =
             "SELECT name FROM corporations WHERE id = ?;";
           char corp_name_buf[64] = { 0 };
+
+
           if (sqlite3_prepare_v2 (db, sql_corp_name, -1, &corp_info_st, NULL)
               == SQLITE_OK)
             {
@@ -2048,6 +2206,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
             "SELECT c.name, s.ticker FROM corporations c JOIN stocks s ON c.id = s.corp_id WHERE c.id = ? AND s.id = ?;";
           char corp_name_buf[64] = { 0 };
           char ticker_buf[16] = { 0 };
+
+
           if (sqlite3_prepare_v2 (db, sql_info, -1, &info_st, NULL) ==
               SQLITE_OK)
             {
@@ -2118,6 +2278,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
             "SELECT c.name, s.ticker FROM corporations c JOIN stocks s ON c.id = s.corp_id WHERE c.id = ? AND s.id = ?;";
           char corp_name_buf[64] = { 0 };
           char ticker_buf[16] = { 0 };
+
+
           if (sqlite3_prepare_v2 (db, sql_info, -1, &info_st, NULL) ==
               SQLITE_OK)
             {
@@ -2187,6 +2349,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
             "SELECT c.name, s.ticker FROM corporations c JOIN stocks s ON c.id = s.corp_id WHERE c.id = ? AND s.id = ?;";
           char corp_name_buf[64] = { 0 };
           char ticker_buf[16] = { 0 };
+
+
           if (sqlite3_prepare_v2 (db, sql_info, -1, &info_st, NULL) ==
               SQLITE_OK)
             {
@@ -2241,6 +2405,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
         {
           const char *reason =
             json_string_value (json_object_get (payload_obj, "reason"));
+
+
           if (reason)
             {
               category = "military";
@@ -2284,6 +2450,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
             "SELECT name, tag FROM corporations WHERE id = ?;";
           char corp_name_buf[64] = { 0 };
           char corp_tag_buf[16] = { 0 };
+
+
           if (sqlite3_prepare_v2 (db, sql_corp_info, -1, &corp_info_st, NULL)
               == SQLITE_OK)
             {
@@ -2353,6 +2521,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
           char corp_tag_buf[16] = { 0 };
           long long tax_arrears = 0;
           int credit_rating = 0;
+
+
           if (sqlite3_prepare_v2 (db, sql_corp_info, -1, &corp_info_st, NULL)
               == SQLITE_OK)
             {
@@ -2424,6 +2594,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
           const char *sql_corp_name =
             "SELECT name FROM corporations WHERE id = ?;";
           char corp_name_buf[64] = { 0 };
+
+
           if (sqlite3_prepare_v2 (db, sql_corp_name, -1, &corp_info_st, NULL)
               == SQLITE_OK)
             {
@@ -2486,6 +2658,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
             "SELECT c.name, s.ticker FROM corporations c JOIN stocks s ON c.id = s.corp_id WHERE c.id = ? AND s.id = ?;";
           char corp_name_buf[64] = { 0 };
           char ticker_buf[16] = { 0 };
+
+
           if (sqlite3_prepare_v2 (db, sql_info, -1, &info_st, NULL) ==
               SQLITE_OK)
             {
@@ -2556,6 +2730,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
             "SELECT c.name, s.ticker FROM corporations c JOIN stocks s ON c.id = s.corp_id WHERE c.id = ? AND s.id = ?;";
           char corp_name_buf[64] = { 0 };
           char ticker_buf[16] = { 0 };
+
+
           if (sqlite3_prepare_v2 (db, sql_info, -1, &info_st, NULL) ==
               SQLITE_OK)
             {
@@ -2625,6 +2801,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
             "SELECT c.name, s.ticker FROM corporations c JOIN stocks s ON c.id = s.corp_id WHERE c.id = ? AND s.id = ?;";
           char corp_name_buf[64] = { 0 };
           char ticker_buf[16] = { 0 };
+
+
           if (sqlite3_prepare_v2 (db, sql_info, -1, &info_st, NULL) ==
               SQLITE_OK)
             {
@@ -2685,6 +2863,8 @@ h_daily_news_compiler (sqlite3 *db, int64_t now_s)
           int attacker_player_id =
             json_integer_value (json_object_get
                                   (payload_obj, "attacker_player_id"));
+
+
           if (ship_name)
             {
               category = "military";
@@ -2778,6 +2958,8 @@ h_cleanup_old_news (sqlite3 *db, int64_t now_s)
   sqlite3_stmt *stmt = NULL;
   const char *sql = "DELETE FROM news_feed WHERE timestamp < ?;";
   int rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       LOGE ("cleanup_old_news: Failed to prepare delete statement: %s",
@@ -2796,6 +2978,8 @@ h_cleanup_old_news (sqlite3 *db, int64_t now_s)
   else
     {
       int changes = sqlite3_changes (db);
+
+
       if (changes > 0)
         {
           LOGI ("cleanup_old_news: Deleted %d old news articles.", changes);
@@ -2816,6 +3000,8 @@ h_daily_lottery_draw (sqlite3 *db, int64_t now_s)
     }
   LOGI ("daily_lottery_draw: Starting daily lottery draw.");
   int rc = begin (db);
+
+
   if (rc)
     {
       unlock (db, "daily_lottery_draw");
@@ -2823,11 +3009,15 @@ h_daily_lottery_draw (sqlite3 *db, int64_t now_s)
     }
   char draw_date_str[32];
   struct tm *tm_info = localtime (&now_s);
+
+
   strftime (draw_date_str, sizeof (draw_date_str), "%Y-%m-%d", tm_info);
   // Check if today's draw is already processed
   sqlite3_stmt *st_check = NULL;
   const char *sql_check =
     "SELECT winning_number, jackpot, carried_over FROM tavern_lottery_state WHERE draw_date = ?;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_check, -1, &st_check, NULL);
   if (rc != SQLITE_OK)
     {
@@ -2851,11 +3041,15 @@ h_daily_lottery_draw (sqlite3 *db, int64_t now_s)
   long long yesterday_carried_over = 0;
   char yesterday_date_str[32];
   time_t yesterday_s = now_s - (24 * 60 * 60);
+
+
   tm_info = localtime (&yesterday_s);
   strftime (yesterday_date_str, sizeof (yesterday_date_str), "%Y-%m-%d",
             tm_info);
   const char *sql_yesterday_state =
     "SELECT jackpot, carried_over FROM tavern_lottery_state WHERE draw_date = ?;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_yesterday_state, -1, &st_check, NULL);
   if (rc == SQLITE_OK)
     {
@@ -2874,6 +3068,8 @@ h_daily_lottery_draw (sqlite3 *db, int64_t now_s)
   long long total_pot_from_tickets = 0;
   const char *sql_sum_tickets =
     "SELECT COUNT(*), SUM(cost) FROM tavern_lottery_tickets WHERE draw_date = ?;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_sum_tickets, -1, &st_tickets, NULL);
   if (rc != SQLITE_OK)
     {
@@ -2899,6 +3095,8 @@ h_daily_lottery_draw (sqlite3 *db, int64_t now_s)
   sqlite3_stmt *st_winners = NULL;
   const char *sql_winners =
     "SELECT player_id, number, cost FROM tavern_lottery_tickets WHERE draw_date = ? AND number = ?;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_winners, -1, &st_winners, NULL);
   if (rc != SQLITE_OK)
     {
@@ -2909,6 +3107,8 @@ h_daily_lottery_draw (sqlite3 *db, int64_t now_s)
   sqlite3_bind_text (st_winners, 1, draw_date_str, -1, SQLITE_STATIC);
   sqlite3_bind_int (st_winners, 2, winning_number);
   json_t *winners_array = json_array ();        // To store winners for logging
+
+
   while (sqlite3_step (st_winners) == SQLITE_ROW)
     {
       winner_found = true;
@@ -2916,6 +3116,8 @@ h_daily_lottery_draw (sqlite3 *db, int64_t now_s)
       // For simplicity, total jackpot split evenly among winners
       // In a real game, might want to consider partial matches, etc.
       json_t *winner_obj = json_object ();
+
+
       json_object_set_new (winner_obj, "player_id", json_integer (player_id));
       json_array_append_new (winners_array, winner_obj);
     }
@@ -2925,6 +3127,8 @@ h_daily_lottery_draw (sqlite3 *db, int64_t now_s)
     {
       long long payout_per_winner =
         current_jackpot / json_array_size (winners_array);
+
+
       for (size_t i = 0; i < json_array_size (winners_array); i++)
         {
           json_t *winner_obj = json_array_get (winners_array, i);
@@ -2934,6 +3138,8 @@ h_daily_lottery_draw (sqlite3 *db, int64_t now_s)
           int add_rc =
             h_add_credits (db, "player", player_id, payout_per_winner,
                            "LOTTERY_WIN", NULL, NULL);
+
+
           if (add_rc != SQLITE_OK)
             {
               LOGE
@@ -2963,6 +3169,8 @@ h_daily_lottery_draw (sqlite3 *db, int64_t now_s)
   const char *sql_update_state =
     "INSERT INTO tavern_lottery_state (draw_date, winning_number, jackpot, carried_over) VALUES (?, ?, ?, ?) "
     "ON CONFLICT(draw_date) DO UPDATE SET winning_number = excluded.winning_number, jackpot = excluded.jackpot, carried_over = excluded.carried_over;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_update_state, -1, &st_update_state, NULL);
   if (rc != SQLITE_OK)
     {
@@ -3041,6 +3249,8 @@ h_deadpool_resolution_cron (sqlite3 *db, int64_t now_s)
     }
   LOGI ("deadpool_resolution_cron: Starting Dead Pool bet resolution.");
   int rc = begin (db);
+
+
   if (rc)
     {
       unlock (db, "deadpool_resolution_cron");
@@ -3051,6 +3261,8 @@ h_deadpool_resolution_cron (sqlite3 *db, int64_t now_s)
   sqlite3_stmt *st_expire = NULL;
   const char *sql_expire =
     "UPDATE tavern_deadpool_bets SET resolved = 1, result = 'expired', resolved_at = ? WHERE resolved = 0 AND expires_at <= ?;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_expire, -1, &st_expire, NULL);
   if (rc != SQLITE_OK)
     {
@@ -3073,6 +3285,8 @@ h_deadpool_resolution_cron (sqlite3 *db, int64_t now_s)
   sqlite3_stmt *st_events = NULL;
   const char *sql_events =
     "SELECT payload FROM engine_events WHERE type = 'ship.destroyed' AND ts > (SELECT COALESCE(MAX(resolved_at), 0) FROM tavern_deadpool_bets WHERE result IS NOT NULL AND result != 'expired');";
+
+
   rc = sqlite3_prepare_v2 (db, sql_events, -1, &st_events, NULL);
   if (rc != SQLITE_OK)
     {
@@ -3087,6 +3301,8 @@ h_deadpool_resolution_cron (sqlite3 *db, int64_t now_s)
         (const char *) sqlite3_column_text (st_events, 0);
       json_error_t jerr;
       json_t *payload_obj = json_loads (payload_str, 0, &jerr);
+
+
       if (!payload_obj)
         {
           LOGW ("deadpool_resolution_cron: Failed to parse event payload: %s",
@@ -3095,6 +3311,8 @@ h_deadpool_resolution_cron (sqlite3 *db, int64_t now_s)
         }
       int destroyed_player_id =
         json_integer_value (json_object_get (payload_obj, "player_id"));
+
+
       json_decref (payload_obj);
       if (destroyed_player_id <= 0)
         {
@@ -3104,6 +3322,8 @@ h_deadpool_resolution_cron (sqlite3 *db, int64_t now_s)
       sqlite3_stmt *st_bets = NULL;
       const char *sql_bets =
         "SELECT id, bettor_id, amount, odds_bp FROM tavern_deadpool_bets WHERE target_id = ? AND resolved = 0;";
+
+
       rc = sqlite3_prepare_v2 (db, sql_bets, -1, &st_bets, NULL);
       if (rc != SQLITE_OK)
         {
@@ -3120,6 +3340,8 @@ h_deadpool_resolution_cron (sqlite3 *db, int64_t now_s)
           long long amount = sqlite3_column_int64 (st_bets, 2);
           int odds_bp = sqlite3_column_int (st_bets, 3);
           long long payout = (amount * odds_bp) / 10000;        // Calculate payout
+
+
           if (payout < 0)
             {
               payout = 0;       // Ensure payout is not negative
@@ -3128,6 +3350,8 @@ h_deadpool_resolution_cron (sqlite3 *db, int64_t now_s)
           int add_rc =
             h_add_credits (db, "player", bettor_id, payout, "DEADPOOL_WIN",
                            NULL, NULL);
+
+
           if (add_rc != SQLITE_OK)
             {
               LOGE
@@ -3142,6 +3366,8 @@ h_deadpool_resolution_cron (sqlite3 *db, int64_t now_s)
           sqlite3_stmt *st_update_bet = NULL;
           const char *sql_update_bet =
             "UPDATE tavern_deadpool_bets SET resolved = 1, result = 'won', resolved_at = ? WHERE id = ?;";
+
+
           rc =
             sqlite3_prepare_v2 (db, sql_update_bet, -1, &st_update_bet, NULL);
           if (rc != SQLITE_OK)
@@ -3170,6 +3396,8 @@ h_deadpool_resolution_cron (sqlite3 *db, int64_t now_s)
       sqlite3_stmt *st_lost_bets = NULL;
       const char *sql_lost_bets =
         "UPDATE tavern_deadpool_bets SET resolved = 1, result = 'lost', resolved_at = ? WHERE target_id = ? AND resolved = 0;";
+
+
       rc = sqlite3_prepare_v2 (db, sql_lost_bets, -1, &st_lost_bets, NULL);
       if (rc != SQLITE_OK)
         {
@@ -3243,6 +3471,8 @@ h_tavern_notice_expiry_cron (sqlite3 *db, int64_t now_s)
   (
     "tavern_notice_expiry_cron: Starting Tavern notice and corp recruiting expiry cleanup.");
   int rc = begin (db);
+
+
   if (rc)
     {
       unlock (db, "tavern_notice_expiry_cron");
@@ -3253,6 +3483,8 @@ h_tavern_notice_expiry_cron (sqlite3 *db, int64_t now_s)
   // Delete expired tavern_notices
   const char *sql_delete_notices =
     "DELETE FROM tavern_notices WHERE expires_at <= ?;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_delete_notices, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -3275,6 +3507,8 @@ h_tavern_notice_expiry_cron (sqlite3 *db, int64_t now_s)
   // Delete expired corp_recruiting entries
   const char *sql_delete_corp_recruiting =
     "DELETE FROM corp_recruiting WHERE expires_at <= ?;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_delete_corp_recruiting, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -3339,6 +3573,8 @@ h_loan_shark_interest_cron (sqlite3 *db, int64_t now_s)
   (
     "loan_shark_interest_cron: Starting Loan Shark interest and default processing.");
   int rc = begin (db);
+
+
   if (rc)
     {
       unlock (db, "loan_shark_interest_cron");
@@ -3347,6 +3583,8 @@ h_loan_shark_interest_cron (sqlite3 *db, int64_t now_s)
   sqlite3_stmt *st = NULL;
   const char *sql_select_loans =
     "SELECT player_id, principal, interest_rate, due_date, is_defaulted FROM tavern_loans WHERE principal > 0;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_select_loans, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -3357,6 +3595,8 @@ h_loan_shark_interest_cron (sqlite3 *db, int64_t now_s)
       goto rollback_and_unlock;
     }
   int processed_loans = 0;
+
+
   while (sqlite3_step (st) == SQLITE_ROW)
     {
       int player_id = sqlite3_column_int (st, 0);
@@ -3367,6 +3607,8 @@ h_loan_shark_interest_cron (sqlite3 *db, int64_t now_s)
       // Apply interest
       int apply_rc =
         apply_loan_interest (db, player_id, principal, interest_rate);
+
+
       if (apply_rc != SQLITE_OK)
         {
           LOGE
@@ -3421,6 +3663,8 @@ h_daily_market_settlement (sqlite3 *db, int64_t now_s)
     }
   LOGI ("daily_market_settlement: Starting market settlement.");
   int rc = begin (db);
+
+
   if (rc != SQLITE_OK)
     {
       unlock (db, "daily_market_settlement");
@@ -3433,6 +3677,8 @@ h_daily_market_settlement (sqlite3 *db, int64_t now_s)
     "JOIN ports p ON es.entity_id = p.id "
     "JOIN economy_curve ec ON p.economy_curve_id = ec.id "
     "WHERE es.entity_type = 'port'";
+
+
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -3444,6 +3690,8 @@ h_daily_market_settlement (sqlite3 *db, int64_t now_s)
   sqlite3_stmt *upd = NULL;
   const char *upd_sql =
     "UPDATE entity_stock SET quantity = ?, last_updated_ts = ? WHERE entity_type='port' AND entity_id=? AND commodity_code=?";
+
+
   if (sqlite3_prepare_v2 (db, upd_sql, -1, &upd, NULL) != SQLITE_OK)
     {
       LOGE ("daily_market_settlement: Prepare update failed: %s",
@@ -3454,6 +3702,8 @@ h_daily_market_settlement (sqlite3 *db, int64_t now_s)
       return rc;
     }
   int updates = 0;
+
+
   while (sqlite3_step (st) == SQLITE_ROW)
     {
       int port_id = sqlite3_column_int (st, 0);
@@ -3465,14 +3715,20 @@ h_daily_market_settlement (sqlite3 *db, int64_t now_s)
       // Logic: Move stock towards target
       int diff = target - qty;
       int change = (int)(diff * rate);
+
+
       // Apply volatility (random noise)
       if (vol > 0.001)
         {
           double noise = ((double)rand () / RAND_MAX - 0.5) * 2.0; // -1.0 to 1.0
           int vol_change = (int)(qty * vol * noise);
+
+
           change += vol_change;
         }
       int new_qty = qty + change;
+
+
       if (new_qty < 0)
         {
           new_qty = 0;
@@ -3507,6 +3763,8 @@ h_daily_stock_price_recalculation (sqlite3 *db,
   (
     "h_daily_stock_price_recalculation: Starting daily stock price recalculation.");
   int rc = begin (db);
+
+
   if (rc)
     {
       unlock (db, "daily_stock_price_recalculation");
@@ -3515,6 +3773,8 @@ h_daily_stock_price_recalculation (sqlite3 *db,
   sqlite3_stmt *st_stocks = NULL;
   const char *sql_select_stocks =
     "SELECT s.id, s.corp_id, s.total_shares FROM stocks s WHERE s.corp_id > 0;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_select_stocks, -1, &st_stocks, NULL);
   if (rc != SQLITE_OK)
     {
@@ -3531,6 +3791,8 @@ h_daily_stock_price_recalculation (sqlite3 *db,
       long long total_shares = sqlite3_column_int64 (st_stocks, 2);
       long long net_asset_value = 0;
       long long bank_balance = 0;
+
+
       // Get corp bank balance
       db_get_corp_bank_balance (corp_id, &bank_balance);
       net_asset_value += bank_balance;
@@ -3538,6 +3800,8 @@ h_daily_stock_price_recalculation (sqlite3 *db,
       sqlite3_stmt *st_planets = NULL;
       const char *sql_select_planets =
         "SELECT ore_on_hand, organics_on_hand, equipment_on_hand FROM planets WHERE owner_id = ? AND owner_type = 'corp';";
+
+
       if (sqlite3_prepare_v2 (db, sql_select_planets, -1, &st_planets, NULL)
           == SQLITE_OK)
         {
@@ -3561,6 +3825,8 @@ h_daily_stock_price_recalculation (sqlite3 *db,
           continue;
         }
       long long new_current_price = 0;
+
+
       if (total_shares > 0)
         {
           // Calculate new price per share based on NAV (in minor units)
@@ -3574,6 +3840,8 @@ h_daily_stock_price_recalculation (sqlite3 *db,
       sqlite3_stmt *st_update_stock = NULL;
       const char *sql_update_stock =
         "UPDATE stocks SET current_price = ? WHERE id = ?;";
+
+
       if (sqlite3_prepare_v2
             (db, sql_update_stock, -1, &st_update_stock, NULL) == SQLITE_OK)
         {
@@ -3630,6 +3898,8 @@ h_daily_corp_tax (sqlite3 *db, int64_t now_s)
     }
   LOGI ("h_daily_corp_tax: Starting daily corporation tax collection.");
   int rc = begin (db);
+
+
   if (rc)
     {
       unlock (db, "daily_corp_tax");
@@ -3637,6 +3907,8 @@ h_daily_corp_tax (sqlite3 *db, int64_t now_s)
     }
   sqlite3_stmt *st_corps = NULL;
   const char *sql_select_corps = "SELECT id FROM corporations WHERE id > 0;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_select_corps, -1, &st_corps, NULL);
   if (rc != SQLITE_OK)
     {
@@ -3650,6 +3922,8 @@ h_daily_corp_tax (sqlite3 *db, int64_t now_s)
       int corp_id = sqlite3_column_int (st_corps, 0);
       long long total_assets = 0;
       long long bank_balance = 0;
+
+
       // Get corp bank balance
       db_get_corp_bank_balance (corp_id, &bank_balance);
       total_assets += bank_balance;
@@ -3657,6 +3931,8 @@ h_daily_corp_tax (sqlite3 *db, int64_t now_s)
       sqlite3_stmt *st_planets = NULL;
       const char *sql_select_planets =
         "SELECT ore_on_hand, organics_on_hand, equipment_on_hand FROM planets WHERE owner_id = ? AND owner_type = 'corp';";
+
+
       if (sqlite3_prepare_v2 (db, sql_select_planets, -1, &st_planets, NULL)
           == SQLITE_OK)
         {
@@ -3670,6 +3946,8 @@ h_daily_corp_tax (sqlite3 *db, int64_t now_s)
           sqlite3_finalize (st_planets);
         }
       long long tax_amount = (total_assets * CORP_TAX_RATE_BP) / 10000;
+
+
       if (tax_amount <= 0)
         {
           continue;
@@ -3680,6 +3958,8 @@ h_daily_corp_tax (sqlite3 *db, int64_t now_s)
           sqlite3_stmt *st_update_corp = NULL;
           const char *sql_update_corp =
             "UPDATE corporations SET tax_arrears = tax_arrears + ?, credit_rating = credit_rating - 1 WHERE id = ?;";
+
+
           if (sqlite3_prepare_v2
                 (db, sql_update_corp, -1, &st_update_corp, NULL) == SQLITE_OK)
             {

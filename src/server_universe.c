@@ -29,6 +29,8 @@
 #include "server_players.h"
 #include "server_log.h"
 #include "server_combat.h"
+
+
 #define SECTOR_LIST_BUF_SIZE 256
 /* cache DB so fer_tick signature matches ISS style */
 extern sqlite3 *g_db;           /* <- global DB handle used elsewhere (ISS) */
@@ -56,6 +58,8 @@ static int g_patrol_budget = 0;
 /* pending summon (if set, next tick warps immediately) */
 static int g_summon_sector = 0;
 static int g_summon_offender = 0;
+
+
 typedef struct
 {
   int sector;
@@ -89,6 +93,8 @@ static bool ori_initialized = false;
 static sqlite3 *ori_db = NULL;
 static int ori_owner_id = -1;
 static int ori_home_sector_id = -1;
+
+
 /* Private function to move all Orion ships */
 static void ori_move_all_ships (void);
 
@@ -135,6 +141,8 @@ ori_init_once (void)
   // --- Step 1: Find the Orion Syndicate owner ID (from the corporation tag) ---
   const char *sql_find_owner =
     "SELECT owner_id FROM corporations WHERE tag='ORION';";
+
+
   ori_owner_id = get_int_value (ori_db, sql_find_owner);
   if (ori_owner_id == -1)
     {
@@ -145,6 +153,8 @@ ori_init_once (void)
   // --- Step 2: Find the Black Market home sector ID (from Port ID 10) ---
   const char *sql_find_sector =
     "SELECT sector FROM ports WHERE id=10 AND name='Orion Black Market Dock';";
+
+
   ori_home_sector_id = get_int_value (ori_db, sql_find_sector);
   if (ori_home_sector_id == -1)
     {
@@ -199,6 +209,8 @@ ori_move_all_ships (void)
       int current_sector = sqlite3_column_int (select_stmt, 1);
       int target_sector = sqlite3_column_int (select_stmt, 2);
       int new_target = target_sector;
+
+
       // --- Core Orion Movement Strategy ---
       // If the ship has no current target (target_sector == 0) or has reached its target:
       if (new_target == 0 || new_target == current_sector)
@@ -231,6 +243,8 @@ ori_move_all_ships (void)
       sqlite3_stmt *update_stmt = NULL;
       const char *sql_update_target =
         "UPDATE ships SET target_sector = ?1 WHERE id = ?2;";
+
+
       if (sqlite3_prepare_v2
             (ori_db, sql_update_target, -1, &update_stmt, NULL) == SQLITE_OK)
         {
@@ -286,6 +300,8 @@ fer_event_json (const char *type, int sector_id, const char *fmt, ...)
   /* format JSON payload from ... */
   char payload[512];
   va_list ap;
+
+
   va_start (ap, fmt);
   vsnprintf (payload, sizeof payload, fmt, ap);
   va_end (ap);
@@ -301,6 +317,8 @@ fer_event_json (const char *type, int sector_id, const char *fmt, ...)
   sqlite3_stmt *st = NULL;
   // 2. Prepare Statement: Using the passed 'db' handle
   int rc = sqlite3_prepare_v2 (g_fer_db, sql, -1, &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       LOGE ("fer_event_json: SQL Prepare FAILED (rc=%d).", rc);
@@ -348,6 +366,8 @@ make_player_object (int64_t player_id)
   json_t *player = json_object ();
   json_object_set_new (player, "id", json_integer (player_id));
   char *pname = NULL;
+
+
   if (db_player_name (player_id, &pname) == 0 && pname)
     {
       json_object_set_new (player, "name", json_string (pname));
@@ -368,15 +388,21 @@ parse_sector_search_input (json_t *root,
   *limit_out = SEARCH_DEFAULT_LIMIT;
   *offset_out = 0;
   json_t *data = json_object_get (root, "data");
+
+
   if (!json_is_object (data))
     {
       return -1;
     }
   // q (optional, empty means “match all”)
   json_t *jq = json_object_get (data, "q");
+
+
   if (json_is_string (jq))
     {
       const char *qs = json_string_value (jq);
+
+
       *q_out = strdup (qs ? qs : "");
     }
   else
@@ -390,6 +416,8 @@ parse_sector_search_input (json_t *root,
   // type
   const char *type = "any";
   json_t *jtype = json_object_get (data, "type");
+
+
   if (json_is_string (jtype))
     {
       type = json_string_value (jtype);
@@ -413,9 +441,13 @@ parse_sector_search_input (json_t *root,
     }
   // limit
   json_t *jlimit = json_object_get (data, "limit");
+
+
   if (json_is_integer (jlimit))
     {
       int lim = (int) json_integer_value (jlimit);
+
+
       if (lim <= 0)
         {
           lim = SEARCH_DEFAULT_LIMIT;
@@ -428,6 +460,8 @@ parse_sector_search_input (json_t *root,
     }
   // cursor (offset)
   json_t *jcur = json_object_get (data, "cursor");
+
+
   if (json_is_integer (jcur))
     {
       *offset_out = (int) json_integer_value (jcur);
@@ -440,6 +474,8 @@ parse_sector_search_input (json_t *root,
     {
       // allow stringified integers too
       const char *s = json_string_value (jcur);
+
+
       if (s && *s)
         {
           *offset_out = atoi (s);
@@ -468,6 +504,8 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
   int prc =
     parse_sector_search_input (root, &q, &type_any, &type_sector, &type_port,
                                &limit, &offset);
+
+
   if (prc != 0)
     {
       free (q);
@@ -475,6 +513,8 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   sqlite3 *db = db_get_handle ();
+
+
   if (!db)
     {
       free (q);
@@ -482,6 +522,8 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   char likepat[512];
+
+
   snprintf (likepat, sizeof (likepat), "%%%s%%", q ? q : "");
   int fetch = limit + 1;
   // --- This SQL is now simple and robust ---
@@ -491,6 +533,8 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
   const char *order_limit_sql = " ORDER BY kind, name, id LIMIT ?2 OFFSET ?3";
   // Build the WHERE clause
   char where_sql[256];
+
+
   if (type_any)
     {
       // Match 'q' against the search term, and don't filter by kind
@@ -519,6 +563,8 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
   // // fprintf(stderr, "\n[DEBUG] SQL (View): [%s]\n\n", sql);
   sqlite3_stmt *st = NULL;
   int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       free (q);
@@ -533,6 +579,8 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
   // ... (This part of your code was already correct) ...
   json_t *items = json_array ();
   int row_count = 0;
+
+
   while ((rc = sqlite3_step (st)) == SQLITE_ROW)
     {
       const char *kind = (const char *) sqlite3_column_text (st, 0);
@@ -540,9 +588,13 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
       const char *name = (const char *) sqlite3_column_text (st, 2);
       int sector_id = sqlite3_column_int (st, 3);
       const char *sector_name = (const char *) sqlite3_column_text (st, 4);
+
+
       if (row_count < limit)
         {
           json_t *it = json_object ();
+
+
           json_object_set_new (it, "kind", json_string (kind ? kind : ""));
           json_object_set_new (it, "id", json_integer (id));
           json_object_set_new (it, "name", json_string (name ? name : ""));
@@ -560,6 +612,8 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
   sqlite3_finalize (st);
   free (q);
   json_t *jdata = json_object ();
+
+
   json_object_set_new (jdata, "items", items);
   if (row_count > limit)
     {
@@ -605,6 +659,8 @@ build_sector_scan_json (int sector_id, int player_id,
     }
   /* Basic sector info (id/name) */
   json_t *basic = NULL;
+
+
   if (db_sector_basic_json (sector_id, &basic) == SQLITE_OK && basic)
     {
       json_object_set_new (root, "sector_id", json_integer (sector_id));
@@ -617,6 +673,8 @@ build_sector_scan_json (int sector_id, int player_id,
     }
   /* Adjacent warps */
   json_t *adj = NULL;
+
+
   if (db_adjacent_sectors_json (sector_id, &adj) == SQLITE_OK && adj)
     {
       json_object_set_new (root, "adjacent", adj);
@@ -631,6 +689,8 @@ build_sector_scan_json (int sector_id, int player_id,
   /* Ships (Filtered by Holo-Scanner) */
   json_t *ships = NULL;
   int rc = db_ships_at_sector_json (player_id, sector_id, &ships);
+
+
   if (rc == SQLITE_OK)
     {
       json_object_set_new (root, "ships", ships ? ships : json_array ());
@@ -646,6 +706,8 @@ build_sector_scan_json (int sector_id, int player_id,
                        holo_scanner_active ? json_true () : json_false ());
   /* Ports */
   json_t *ports = NULL;
+
+
   if (db_ports_at_sector_json (sector_id, &ports) == SQLITE_OK && ports)
     {
       json_object_set_new (root, "ports", ports);
@@ -660,6 +722,8 @@ build_sector_scan_json (int sector_id, int player_id,
     }
   /* Planets */
   json_t *planets = NULL;
+
+
   if (db_planets_at_sector_json (sector_id, &planets) == SQLITE_OK && planets)
     {
       json_object_set_new (root, "planets", planets);
@@ -677,6 +741,8 @@ build_sector_scan_json (int sector_id, int player_id,
     }
   /* Players (excluding those only visible by cloaked ships already filtered above) */
   json_t *players = NULL;
+
+
   if (db_players_at_sector_json (sector_id, &players) == SQLITE_OK && players)
     {
       json_object_set_new (root, "players", players);
@@ -690,6 +756,8 @@ build_sector_scan_json (int sector_id, int player_id,
     }
   /* Beacons */
   json_t *beacons = NULL;
+
+
   if (db_beacons_at_sector_json (sector_id, &beacons) == SQLITE_OK && beacons)
     {
       json_object_set_new (root, "beacons", beacons);
@@ -704,6 +772,8 @@ build_sector_scan_json (int sector_id, int player_id,
   // You can attach other asset counts here if needed, similar to attach_sector_asset_counts(db, sector_id, root);
   // Attach Fighters
   json_t *fighters = NULL;
+
+
   if (db_fighters_at_sector_json (sector_id,
                                   &fighters) == SQLITE_OK && fighters)
     {
@@ -718,6 +788,8 @@ build_sector_scan_json (int sector_id, int player_id,
     }
   // Attach Mines
   json_t *mines = NULL;
+
+
   if (db_mines_at_sector_json (sector_id, &mines) == SQLITE_OK && mines)
     {
       json_object_set_new (root, "mines", mines);
@@ -780,6 +852,8 @@ cmd_sector_scan (client_ctx_t *ctx, json_t *root)
   // 4. Build JSON Payload
   json_t *payload =
     build_sector_scan_json (sector_id, player_id, holo_scanner_active);
+
+
   if (!payload)
     {
       send_enveloped_error (ctx->fd, root, 1503,
@@ -817,8 +891,12 @@ cmd_sector_scan_density (void *ctx_in, json_t *root)
     }
   // --- END: INITIALIZATION LOGIC ---
   sqlite3 *db = db_get_handle ();
+
+
   h_decloak_ship (db, h_get_active_ship_id (db, ctx->player_id));
-  TurnConsumeResult tc = h_consume_player_turn (db, ctx);
+  TurnConsumeResult tc = h_consume_player_turn (db, ctx,1);
+
+
   if (tc != TURN_CONSUME_SUCCESS)
     {
       handle_turn_consumption_error (ctx, tc, "sector.scan.density", root,
@@ -839,6 +917,8 @@ cmd_sector_scan_density (void *ctx_in, json_t *root)
   // Assuming MAX_WARPS_PER_SECTOR and SECTOR_LIST_BUF_SIZE are defined
   int adjacent[MAX_WARPS_PER_SECTOR + 1] = { 0 };
   int count = 0;
+
+
   db_mutex_lock ();
   // --- 1. Get Current and Adjacent Sectors ---
   adjacent[count++] = msector;  // Add the current sector ID first
@@ -876,12 +956,16 @@ cmd_sector_scan_density (void *ctx_in, json_t *root)
   // --- 2. Build Comma-Separated Sector List (list) ---
   char list[SECTOR_LIST_BUF_SIZE] = "";
   int current_len = 0;
+
+
   for (int a = 0; a < count; a++)
     {
       int appended_len = snprintf (list + current_len,
                                    SECTOR_LIST_BUF_SIZE - current_len,
                                    "%d,",
                                    adjacent[a]);
+
+
       if (appended_len > 0
           && current_len + appended_len < SECTOR_LIST_BUF_SIZE)
         {
@@ -933,6 +1017,8 @@ cmd_sector_scan_density (void *ctx_in, json_t *root)
     {
       int sector_id = sqlite3_column_int (st2, 0);
       int density = sqlite3_column_int (st2, 1);
+
+
       // Append sector ID and density score pair
       json_array_append_new (payload, json_integer (sector_id));
       json_array_append_new (payload, json_integer (density));
@@ -1013,6 +1099,8 @@ universe_init (void)
       return -1;
     }
   int count = 0;
+
+
   if (sqlite3_step (stmt) == SQLITE_ROW)
     {
       count = sqlite3_column_int (stmt, 0);
@@ -1055,12 +1143,16 @@ validate_warp_rule (int from_sector, int to_sector)
       return ok ();             /* no-op warp is fine (cheap “success”) */
     }
   sqlite3 *db = db_get_handle ();
+
+
   if (!db)
     {
       return err (ERR_DB, "No database handle");
     }
   int has = 0;
   sqlite3_stmt *st = NULL;
+
+
   /* Fast adjacency check */
   db_mutex_lock ();
   int rc = sqlite3_prepare_v2 (db,
@@ -1068,6 +1160,8 @@ validate_warp_rule (int from_sector, int to_sector)
                                -1,
                                &st,
                                NULL);
+
+
   if (rc == SQLITE_OK)
     {
       sqlite3_bind_int (st, 1, from_sector);
@@ -1118,24 +1212,34 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
         ctx->player_id,
         ctx->sector_id);
   sqlite3 *db_handle = db_get_handle ();
+
+
   h_decloak_ship (db_handle,
                   h_get_active_ship_id (db_handle, ctx->player_id));
-  TurnConsumeResult tc = h_consume_player_turn (db_handle, ctx);
+  TurnConsumeResult tc = h_consume_player_turn (db_handle, ctx,1);
+
+
   if (tc != TURN_CONSUME_SUCCESS)
     {
       return handle_turn_consumption_error (ctx, tc, "move.warp", root, NULL);
     }
   json_t *jdata = json_object_get (root, "data");
   int to = 0;
+
+
   if (json_is_object (jdata))
     {
       json_t *jto = json_object_get (jdata, "to_sector_id");
+
+
       if (json_is_integer (jto))
         {
           to = (int) json_integer_value (jto);
         }
     }
   decision_t d = validate_warp_rule (ctx->sector_id, to);
+
+
   if (d.status == DEC_ERROR)
     {
       send_enveloped_error (ctx->fd, root, d.code, d.message);
@@ -1150,17 +1254,23 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
                                 (d.code ==
                                  REF_NO_WARP_LINK ? "no_warp_link" :
                                  "refused"));
+
+
       send_enveloped_refused (ctx->fd, root, d.code, d.message, meta);
       json_decref (meta);
       return 0;
     }
   int from = ctx->sector_id;
   int turns_spent = 1;          // Assuming 1 turn for a single warp, as per typical game mechanics.
+
+
   LOGI
     ("cmd_move_warp: Player %d (fd %d) attempting to warp from sector %d to %d",
     ctx->player_id, ctx->fd, from, to);
   /* Persist & update session */
   int prc = db_player_set_sector (ctx->player_id, to);
+
+
   if (prc != SQLITE_OK)
     {
       LOGE
@@ -1186,9 +1296,13 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
   ctx->sector_id = to;
   // Apply Armid mines on entry
   armid_encounter_t armid_enc = { 0 };
+
+
   apply_armid_mines_on_entry (ctx, to, &armid_enc);
   /* 1) Send the direct reply for the actor */
   json_t *resp = json_object ();
+
+
   json_object_set_new (resp, "player_id", json_integer (ctx->player_id));
   json_object_set_new (resp, "from_sector_id", json_integer (from));
   json_object_set_new (resp, "to_sector_id", json_integer (to));
@@ -1196,6 +1310,8 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
   if (armid_enc.armid_triggered > 0)
     {
       json_t *damage_obj = json_object ();
+
+
       json_object_set_new (damage_obj, "shields_lost",
                            json_integer (armid_enc.shields_lost));
       json_object_set_new (damage_obj, "fighters_lost",
@@ -1205,6 +1321,8 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
       json_object_set_new (damage_obj, "destroyed",
                            json_boolean (armid_enc.destroyed));
       json_t *encounter_obj = json_object ();
+
+
       json_object_set_new (encounter_obj, "kind", json_string ("mines"));
       json_object_set_new (encounter_obj, "armid_triggered",
                            json_integer (armid_enc.armid_triggered));
@@ -1217,6 +1335,8 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
   /* 2) Broadcast LEFT (from) then ENTERED (to) to subscribers */
   /* LEFT event: sector = 'from' */
   json_t *left = json_object ();
+
+
   json_object_set_new (left, "player_id", json_integer (ctx->player_id));
   json_object_set_new (left, "sector_id", json_integer (from));
   json_object_set_new (left, "to_sector_id", json_integer (to));
@@ -1224,6 +1344,8 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
   comm_publish_sector_event (from, "sector.player_left", left);
   /* ENTERED event: sector = 'to' */
   json_t *entered = json_object ();
+
+
   json_object_set_new (entered, "player_id", json_integer (ctx->player_id));
   json_object_set_new (entered, "sector_id", json_integer (to));
   json_object_set_new (entered, "from_sector_id", json_integer (from));
@@ -1248,9 +1370,13 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
   json_t *data = root ? json_object_get (root, "data") : NULL;
   // default from = current sector
   int from = (ctx->sector_id > 0) ? ctx->sector_id : 1;
+
+
   if (data)
     {
       int tmp;
+
+
       if (json_get_int_flexible (data, "from", &tmp) ||
           json_get_int_flexible (data, "from_sector_id", &tmp))
         {
@@ -1259,9 +1385,13 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
     }
   // to = required
   int to = -1;
+
+
   if (data)
     {
       int tmp;
+
+
       if (json_get_int_flexible (data, "to", &tmp) ||
           json_get_int_flexible (data, "to_sector_id", &tmp))
         {
@@ -1303,6 +1433,8 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
   int *prev = (int *) malloc (N * sizeof (int));
   unsigned char *seen = (unsigned char *) calloc (N, 1);
   int *queue = (int *) malloc (N * sizeof (int));
+
+
   if (!avoid || !prev || !seen || !queue)
     {
       free (avoid);
@@ -1316,15 +1448,23 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
   if (data)
     {
       json_t *javoid = json_object_get (data, "avoid");
+
+
       if (javoid && json_is_array (javoid))
         {
           size_t i, len = json_array_size (javoid);
+
+
           for (i = 0; i < len; ++i)
             {
               json_t *v = json_array_get (javoid, i);
+
+
               if (json_is_integer (v))
                 {
                   int sid = (int) json_integer_value (v);
+
+
                   if (sid > 0 && sid <= max_id)
                     {
                       avoid[sid] = 1;
@@ -1347,8 +1487,12 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
   if (from == to)
     {
       json_t *steps = json_array ();
+
+
       json_array_append_new (steps, json_integer (from));
       json_t *out = json_object ();
+
+
       json_object_set_new (out, "steps", steps);
       json_object_set_new (out, "total_cost", json_integer (0));
       send_enveloped_ok (ctx->fd, root, "move.path_v1", out);
@@ -1365,6 +1509,8 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
                                -1,
                                &st,
                                NULL);
+
+
   db_mutex_unlock ();
   if (rc != SQLITE_OK || !st)
     {
@@ -1381,12 +1527,18 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
       prev[i] = -1;
     }
   int qh = 0, qt = 0;
+
+
   queue[qt++] = from;
   seen[from] = 1;
   int found = 0;
+
+
   while (qh < qt)
     {
       int u = queue[qh++];
+
+
       /* fetch neighbors of u */
       db_mutex_lock ();
       sqlite3_reset (st);
@@ -1395,6 +1547,8 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
       while ((rc = sqlite3_step (st)) == SQLITE_ROW)
         {
           int v = sqlite3_column_int (st, 0);
+
+
           if (v <= 0 || v > max_id)
             {
               continue;
@@ -1438,6 +1592,8 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
   int hops = 0;
   /* backtrack into a simple stack (we can append to a temp C array then JSON) */
   int *stack = (int *) malloc (N * sizeof (int));
+
+
   if (!stack)
     {
       free (avoid);
@@ -1448,6 +1604,8 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
       return 1;
     }
   int sp = 0;
+
+
   while (cur != -1)
     {
       stack[sp++] = cur;
@@ -1477,6 +1635,8 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
   free (stack);
   /* Build rootponse */
   json_t *out = json_object ();
+
+
   json_object_set_new (out, "steps", steps);
   json_object_set_new (out, "total_cost", json_integer (hops));
   send_enveloped_ok (ctx->fd, root, "move.path_v1", out);
@@ -1506,6 +1666,8 @@ attach_sector_asset_counts (sqlite3 *db, int sector_id, json_t *data_out)
         {
           int type = sqlite3_column_int (st, 0);
           int qty = sqlite3_column_int (st, 1);
+
+
           if (type == 2)
             {
               ftrs += qty;      /* ASSET_FIGHTER */
@@ -1525,10 +1687,13 @@ attach_sector_asset_counts (sqlite3 *db, int sector_id, json_t *data_out)
       sqlite3_finalize (st);
     }
   json_t *counts = json_object ();
+
+
   json_object_set_new (counts, "fighters", json_integer (ftrs));
   json_object_set_new (counts, "mines_armid", json_integer (armid));
   json_object_set_new (counts, "mines_limpet", json_integer (limpet));
   json_object_set_new (counts, "mines", json_integer (armid + limpet));
+
   /* If you also track ships/planets elsewhere and already had a counts obj,
      merge instead of overwrite. Otherwise, just set it: */
   json_object_set_new (data_out, "counts", counts);
@@ -1548,6 +1713,8 @@ cmd_sector_info (int fd, json_t *root, int sector_id, int player_id)
     }
   // Add beacon info
   char *btxt = NULL;
+
+
   if (db_sector_beacon_text (sector_id, &btxt) == SQLITE_OK && btxt && *btxt)
     {
       json_object_set_new (payload, "beacon", json_string (btxt));
@@ -1562,6 +1729,8 @@ cmd_sector_info (int fd, json_t *root, int sector_id, int player_id)
   // Add ships info
   json_t *ships = NULL;
   int rc = db_ships_at_sector_json (player_id, sector_id, &ships);
+
+
   if (rc == SQLITE_OK)
     {
       json_object_set_new (payload, "ships", ships ? ships : json_array ());
@@ -1571,6 +1740,8 @@ cmd_sector_info (int fd, json_t *root, int sector_id, int player_id)
   // Add port info
   json_t *ports = NULL;
   int pt = db_ports_at_sector_json (sector_id, &ports);
+
+
   if (pt == SQLITE_OK)
     {
       json_object_set_new (payload, "ports", ports ? ports : json_array ());
@@ -1580,6 +1751,8 @@ cmd_sector_info (int fd, json_t *root, int sector_id, int player_id)
   // Add planet info
   json_t *planets = NULL;
   int plt = db_planets_at_sector_json (sector_id, &planets);
+
+
   if (plt == SQLITE_OK)
     {
       json_object_set_new (payload, "planets",
@@ -1590,6 +1763,8 @@ cmd_sector_info (int fd, json_t *root, int sector_id, int player_id)
   // Add planet info
   json_t *players = NULL;
   int py = db_players_at_sector_json (sector_id, &players);
+
+
   if (py == SQLITE_OK)
     {
       json_object_set_new (payload, "players",
@@ -1614,10 +1789,14 @@ build_sector_info_json (int sector_id)
     }
   /* Basic info (id/name) */
   json_t *basic = NULL;
+
+
   if (db_sector_basic_json (sector_id, &basic) == SQLITE_OK && basic)
     {
       json_t *sid = json_object_get (basic, "sector_id");
       json_t *name = json_object_get (basic, "name");
+
+
       if (sid)
         {
           json_object_set (root, "sector_id", sid);
@@ -1634,6 +1813,8 @@ build_sector_info_json (int sector_id)
     }
   /* Adjacent warps */
   json_t *adj = NULL;
+
+
   if (db_adjacent_sectors_json (sector_id, &adj) == SQLITE_OK && adj)
     {
       json_object_set_new (root, "adjacent", adj);
@@ -1647,6 +1828,8 @@ build_sector_info_json (int sector_id)
     }
 /* Ports */
   json_t *ports = NULL;
+
+
   if (db_ports_at_sector_json (sector_id, &ports) == SQLITE_OK && ports)
     {
       json_object_set_new (root, "ports", ports);
@@ -1661,6 +1844,8 @@ build_sector_info_json (int sector_id)
     }
   /* Players */
   json_t *players = NULL;
+
+
   if (db_players_at_sector_json (sector_id, &players) == SQLITE_OK && players)
     {
       json_object_set_new (root, "players", players);
@@ -1674,6 +1859,8 @@ build_sector_info_json (int sector_id)
     }
   /* Beacons (always include array) */
   json_t *beacons = NULL;
+
+
   if (db_beacons_at_sector_json (sector_id, &beacons) == SQLITE_OK && beacons)
     {
       json_object_set_new (root, "beacons", beacons);
@@ -1687,6 +1874,8 @@ build_sector_info_json (int sector_id)
     }
   /* Planets */
   json_t *planets = NULL;
+
+
   if (db_planets_at_sector_json (sector_id, &planets) == SQLITE_OK && planets)
     {
       json_object_set_new (root, "planets", planets);   /* takes ownership */
@@ -1728,18 +1917,26 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
       return 1;
     }
   sqlite3 *db_handle = db_get_handle ();
+
+
   h_decloak_ship (db_handle,
                   h_get_active_ship_id (db_handle, ctx->player_id));
-  TurnConsumeResult tc = h_consume_player_turn (db_handle, ctx);
+  TurnConsumeResult tc = h_consume_player_turn (db_handle, ctx,1);
+
+
   if (tc != TURN_CONSUME_SUCCESS)
     {
       return handle_turn_consumption_error (ctx, tc, "move.scan", root, NULL);
     }
   /* Resolve sector id (default to 1 if session is unset) */
   int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 1;
+
+
   LOGI ("[move.scan] sector_id=%d\n", sector_id);
   /* 1) Core snapshot from DB (uses sectors.name/beacon; ports.location; ships.location; planets.sector) */
   json_t *core = NULL;
+
+
   if (db_sector_scan_core (sector_id, &core) != SQLITE_OK || !core)
     {
       send_enveloped_error (ctx->fd, root, 1401, "Sector not found");
@@ -1747,6 +1944,8 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
     }
   /* 2) Adjacent IDs (array) */
   json_t *adj = NULL;
+
+
   if (db_adjacent_sectors_json (sector_id, &adj) != SQLITE_OK || !adj)
     {
       adj = json_array ();      /* never null */
@@ -1755,6 +1954,8 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
   int in_fed = (sector_id >= 1 && sector_id <= 10);
   int safe_zone = json_integer_value (json_object_get (core, "safe_zone"));     /* 0 with your schema */
   json_t *security = json_object ();
+
+
   if (!security)
     {
       json_decref (core);
@@ -1770,6 +1971,8 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
   /* 4) Port summary (presence only) */
   int port_cnt = json_integer_value (json_object_get (core, "port_count"));
   json_t *port = json_object ();
+
+
   if (!port)
     {
       json_decref (core);
@@ -1785,6 +1988,8 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
   int ships = json_integer_value (json_object_get (core, "ship_count"));
   int planets = json_integer_value (json_object_get (core, "planet_count"));
   json_t *counts = json_object ();
+
+
   if (!counts)
     {
       json_decref (core);
@@ -1802,6 +2007,8 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
   const char *btxt =
     json_string_value (json_object_get (core, "beacon_text"));
   json_t *beacon = (btxt && *btxt) ? json_string (btxt) : json_null ();
+
+
   if (!beacon)
     {                           /* json_string can OOM */
       beacon = json_null ();
@@ -1810,6 +2017,8 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
   const char *name = json_string_value (json_object_get (core, "name"));
   /* 8) Build data object explicitly (no json_pack; no chance of NULL from format mismatch) */
   json_t *data = json_object ();
+
+
   if (!data)
     {
       json_decref (core);
@@ -1851,11 +2060,15 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
       return 1;
     }
   sqlite3 *db_handle = db_get_handle ();
+
+
   h_decloak_ship (db_handle,
                   h_get_active_ship_id (db_handle, ctx->player_id));
   json_t *jdata = json_object_get (root, "data");
   json_t *jsector_id = json_object_get (jdata, "sector_id");
   json_t *jtext = json_object_get (jdata, "text");
+
+
   /* Guard 0: schema */
   if (!json_is_integer (jsector_id) || !json_is_string (jtext))
     {
@@ -1864,6 +2077,8 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
     }
   /* Guard 1: player must be in that sector */
   int req_sector_id = (int) json_integer_value (jsector_id);
+
+
   if (ctx->sector_id != req_sector_id)
     {
       send_enveloped_error (ctx->fd, root, 1400,
@@ -1884,11 +2099,14 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
                             "Player does not have a beacon on their ship.");
       return 1;
     }
+
   /* NOTE: Canon behavior: if a beacon already exists, launching another destroys BOTH.
      So we DO NOT reject here. We only check 'had_beacon' to craft a user message. */
   int had_beacon = db_sector_has_beacon (req_sector_id);
   /* Text length guard (<=80) */
   const char *beacon_text = json_string_value (jtext);
+
+
   if (!beacon_text)
     {
       beacon_text = "";
@@ -1899,10 +2117,13 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
                             "Beacon text is too long (max 80 characters).");
       return 1;
     }
+
   /* Perform the update:
      - if none existed → set text
      - if one existed  → clear (explode both) */
   int rc = db_sector_set_beacon (req_sector_id, beacon_text, ctx->player_id);
+
+
   if (rc != SQLITE_OK)
     {
       send_enveloped_error (ctx->fd, root, 1500,
@@ -1913,6 +2134,8 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
   db_player_decrement_beacon_count (ctx->player_id);
   /* ===== Build sector.info payload (same fields as handle_sector_info) ===== */
   json_t *payload = build_sector_info_json (req_sector_id);
+
+
   if (!payload)
     {
       send_enveloped_error (ctx->fd, root, 1500,
@@ -1921,6 +2144,8 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
     }
   /* Beacon text */
   char *btxt = NULL;
+
+
   if (db_sector_beacon_text (req_sector_id, &btxt) == SQLITE_OK && btxt
       && *btxt)
     {
@@ -1935,6 +2160,8 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
   free (btxt);
   /* Ships */
   json_t *ships = NULL;
+
+
   rc = db_ships_at_sector_json (ctx->player_id, req_sector_id, &ships);
   if (rc == SQLITE_OK)
     {
@@ -1945,6 +2172,8 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
   /* Ports */
   json_t *ports = NULL;
   int pt = db_ports_at_sector_json (req_sector_id, &ports);
+
+
   if (pt == SQLITE_OK)
     {
       json_object_set_new (payload, "ports", ports ? ports : json_array ());
@@ -1954,6 +2183,8 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
   /* Planets */
   json_t *planets = NULL;
   int plt = db_planets_at_sector_json (req_sector_id, &planets);
+
+
   if (plt == SQLITE_OK)
     {
       json_object_set_new (payload, "planets",
@@ -1964,6 +2195,8 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
   /* Players */
   json_t *players = NULL;
   int py = db_players_at_sector_json (req_sector_id, &players);
+
+
   if (py == SQLITE_OK)
     {
       json_object_set_new (payload, "players",
@@ -1973,10 +2206,14 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
     }
   /* ===== Send envelope with a nice meta.message ===== */
   json_t *env = make_base_envelope (root, "sector.info");
+
+
   json_object_set_new (env, "status", json_string ("ok"));
   json_object_set_new (env, "type", json_string ("sector.info"));
   json_object_set_new (env, "data", payload);   /* take ownership */
   json_t *meta = json_object ();
+
+
   json_object_set_new (meta, "message",
                        json_string (had_beacon
                                     ?
@@ -2142,6 +2379,8 @@ post_iss_notice_move (int from, int to, const char *kind, const char *extra)
   (void) kind;
   (void) extra;
   char news_body[256];
+
+
   // In the future, the ISS name could be dynamic. Using "Warrior" for now.
   snprintf (news_body, sizeof (news_body),
             "Federation Starship ISS Warrior has been sighted in sector %d!",
@@ -2161,6 +2400,8 @@ iss_move_to (int next_sector, int warp, const char *extra)
     }
   sqlite3 *db = db_get_handle ();
   sqlite3_stmt *up = NULL;
+
+
   if (sqlite3_prepare_v2 (db,
                           "UPDATE players SET sector=?1, intransit=0, movingto=NULL, beginmove=NULL "
                           "WHERE id=?2;",
@@ -2203,6 +2444,8 @@ iss_patrol_step (void)
       g_iss_sector = g_stardock_sector;
     }
   int next;
+
+
   /* ~30% chance move “toward” home by picking an adjacent at random anyway;
      keep it simple (pathing can be improved later). */
   if ((rand () % 10) < 3)
@@ -2227,6 +2470,8 @@ iss_try_consume_summon (void)
   if (g_summon_sector > 0)
     {
       char extra[64];
+
+
       snprintf (extra, sizeof (extra), "summoned to sector %d (offender %d)",
                 g_summon_sector, g_summon_offender);
       iss_move_to (g_summon_sector, /*warp= */ 1, extra);
@@ -2252,6 +2497,8 @@ iss_init_once (void)
       return 0;
     }
   int sector = 0;
+
+
   if (!db_get_iss_player (&g_iss_id, &sector))
     {
       return 0;
@@ -2390,6 +2637,8 @@ sector_has_port (int sector)
   const char *sql = "SELECT 1 FROM ports WHERE sector=?1 LIMIT 1;";
   sqlite3_stmt *st = NULL;
   int ok = 0;
+
+
   if (sqlite3_prepare_v2 (g_fer_db, sql, -1, &st, NULL) != SQLITE_OK)
     {
       return 0;
@@ -2417,6 +2666,8 @@ nav_random_neighbor (int sector)
     "ORDER BY RANDOM() LIMIT 1;";
   sqlite3_stmt *st = NULL;
   int next = 0;
+
+
   if (sqlite3_prepare_v2 (g_fer_db, sql, -1, &st, NULL) != SQLITE_OK)
     {
       return 0;
@@ -2442,6 +2693,8 @@ nav_next_hop (int start, int goal)
   enum
   { MAX_Q = 4096, MAX_SEEN = 8192 };
   int q[MAX_Q], head = 0, tail = 0;
+
+
   typedef struct
   {
     int key, prev;
@@ -2483,20 +2736,28 @@ nav_next_hop (int start, int goal)
   const char *sql =
     "SELECT to_sector FROM sector_warps WHERE from_sector=?1;";
   sqlite3_stmt *st = NULL;
+
+
   if (sqlite3_prepare_v2 (g_fer_db, sql, -1, &st, NULL) != SQLITE_OK)
     {
       return 0;
     }
   int found = -1;
+
+
   while (head != tail && found == -1)
     {
       int cur = q[head++ % MAX_Q];
+
+
       sqlite3_reset (st);
       sqlite3_clear_bindings (st);
       sqlite3_bind_int (st, 1, cur);
       while (sqlite3_step (st) == SQLITE_ROW)
         {
           int nb = sqlite3_column_int (st, 0);
+
+
           if (seen_get (nb) != -1)
             {
               continue;
@@ -2520,9 +2781,13 @@ nav_next_hop (int start, int goal)
     }
   /* reconstruct one hop toward goal */
   int step = found, prev = -2;
+
+
   for (;;)
     {
       int i = seen_get (step);
+
+
       if (i < 0)
         {
           break;
@@ -2575,6 +2840,8 @@ fer_emit_trade_log (int port_id, int sector_id,
   const char *sql_insert =
     "INSERT INTO trade_log (timestamp, sector_id, player_id, commodity, units, price_per_unit, action, port_id) "
     "VALUES (strftime('%s','now'), ?, 0, ?, ?, ?, ?, ?);";
+
+
   // =========================================================
   // A. LOG THE SELL ACTION (If any quantity was sold)
   // =========================================================
@@ -2586,9 +2853,13 @@ fer_emit_trade_log (int port_id, int sector_id,
       // 1. Set QTY to the trade amount
       int qty = (sold_qty != 0) ? sold_qty : 20;
       int sold_port_qty_val; // Use a temporary variable for the quantity output
+
+
       h_get_port_commodity_quantity (g_fer_db, port_id, sold,
                                      &sold_port_qty_val);
       int sold_port_qty = sold_port_qty_val;
+
+
       //LOGI("sold_port_qty = %d", sold_port_qty);
       // CRITICAL FIX: If lookup failed (returned -1), treat it as 0 stock.
       if (sold_port_qty < 0)
@@ -2649,11 +2920,15 @@ fer_emit_trade_log (int port_id, int sector_id,
       // 1. Set QTY to the trade amount
       int qty = (bought_qty != 0) ? bought_qty : 20;
       int bought_port_qty_val; // Use a temporary variable for the quantity output
+
+
       h_get_port_commodity_quantity (g_fer_db,
                                      port_id,
                                      bought,
                                      &bought_port_qty_val);
       int bought_port_qty = bought_port_qty_val;
+
+
       // LOGI("bought_port_qty = %d", bought_port_qty);
       // CRITICAL FIX: If lookup failed (returned -1), treat it as 0 stock.
       if (bought_port_qty < 0)
@@ -2738,6 +3013,8 @@ fer_init_once (void)
   {
     const char *sql = "SELECT sector FROM planets WHERE id=2 LIMIT 1;"; // Simplified query
     sqlite3_stmt *st = NULL;
+
+
     // 1. Prepare the statement
     if (sqlite3_prepare_v2 (g_fer_db, sql, -1, &st, NULL) == SQLITE_OK)
       {
@@ -2752,6 +3029,8 @@ fer_init_once (void)
       }
     // Optional: Add an else block here to handle a prepare error if needed.
   }
+
+
   if (home <= 0)
     {
       LOGW ("[fer] no 'Ferringhi' planet found; disabling traders");
@@ -2795,21 +3074,29 @@ fer_tick (int64_t now_ms)
   for (int i = 0; i < FER_TRADER_COUNT; ++i)
     {
       fer_trader_t *t = &g_fer[i];
+
+
       if (t->home_sector <= 0)
         {
           continue;
         }
       /* choose goal: roam to random port, or return home */
       int goal = (t->state == FER_STATE_RETURNING) ? t->home_sector : 0;
+
+
       if (goal == 0)
         {
           const char *sql =
             "SELECT sector FROM ports ORDER BY RANDOM() LIMIT 1;";
           sqlite3_stmt *st = NULL;
           int rc_prep = sqlite3_prepare_v2 (g_fer_db, sql, -1, &st, NULL);
+
+
           if (rc_prep == SQLITE_OK)
             {
               int rc_step = sqlite3_step (st);
+
+
               if (rc_step == SQLITE_ROW)
                 {
                   goal = sqlite3_column_int (st, 0);
@@ -2835,6 +3122,8 @@ fer_tick (int64_t now_ms)
         }
       /* one hop; drift if no path */
       int next = nav_next_hop (t->sector, goal);
+
+
       if (next == 0)
         {
           next = nav_random_neighbor (t->sector);
@@ -2851,6 +3140,8 @@ fer_tick (int64_t now_ms)
         {
           int current_sector = t->sector;       // Sector the NPC is in
           int actual_port_id = db_get_port_id_by_sector (current_sector);
+
+
           if (actual_port_id < 0)
             {
               LOGW
@@ -2862,6 +3153,8 @@ fer_tick (int64_t now_ms)
           int r = (t->trades_done % 3); // Change from %4 to %3
           const char *sold = NULL, *bought = NULL;
           int *ps = NULL, *pb = NULL;
+
+
           switch (r)
             {
               case 0:
@@ -2885,6 +3178,8 @@ fer_tick (int64_t now_ms)
             }
           int sell_qty = (*ps > 10) ? 10 : *ps;
           int buy_qty = 10;
+
+
           if ((*pb + buy_qty) > FER_MAX_HOLD)
             {
               buy_qty = FER_MAX_HOLD - *pb;
@@ -2914,5 +3209,370 @@ fer_tick (int64_t now_ms)
       // fprintf(stderr, "[engine] end LOOP OF fer_tick fucntion\n");
     }
   // fprintf(stderr, "[engine] fer_tick fucntion EXIT\n");
+}
+
+
+int
+cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
+{
+  LOGI ("cmd_move_transwarp: ctx->player_id=%d, ctx->sector_id=%d",
+        ctx->player_id,
+        ctx->sector_id);
+  sqlite3 *db_handle = db_get_handle ();
+
+
+  if (!db_handle)
+    {
+      send_enveloped_error (ctx->fd, root, ERR_DB, "No database handle");
+      return 0;
+    }
+
+  if (!ctx || ctx->player_id <= 0)
+    {
+      send_enveloped_refused (ctx->fd,
+                              root,
+                              ERR_NOT_AUTHENTICATED,
+                              "Not authenticated",
+                              NULL);
+      return 0;
+    }
+
+  json_t *jdata = json_object_get (root, "data");
+  int to_sector_id = 0;
+
+
+  if (json_is_object (jdata))
+    {
+      json_t *jto = json_object_get (jdata, "to_sector_id");
+
+
+      if (json_is_integer (jto))
+        {
+          to_sector_id = (int) json_integer_value (jto);
+        }
+    }
+
+  if (to_sector_id <= 0)
+    {
+      send_enveloped_refused (ctx->fd,
+                              root,
+                              ERR_INVALID_ARG,
+                              "Target sector not specified",
+                              NULL);
+      return 0;
+    }
+
+  // 1. Capability Check (TransWarp Drive)
+  int ship_id = h_get_active_ship_id (db_handle, ctx->player_id);
+
+
+  if (ship_id <= 0)
+    {
+      send_enveloped_refused (ctx->fd,
+                              root,
+                              ERR_NO_ACTIVE_SHIP,
+                              "No active ship found.",
+                              NULL);
+      return 0;
+    }
+
+  // Check if player is towing a ship
+  int towing_ship_id = 0;
+  sqlite3_stmt *stmt_towing_status = NULL;
+  const char *sql_towing_status =
+    "SELECT towing_ship_id FROM ships WHERE id = ?;";
+  int rc_tow_check = sqlite3_prepare_v2 (db_handle,
+                                         sql_towing_status,
+                                         -1,
+                                         &stmt_towing_status,
+                                         NULL);
+
+
+  if (rc_tow_check == SQLITE_OK)
+    {
+      sqlite3_bind_int (stmt_towing_status, 1, ship_id);
+      if (sqlite3_step (stmt_towing_status) == SQLITE_ROW)
+        {
+          towing_ship_id = sqlite3_column_int (stmt_towing_status, 0);
+        }
+      sqlite3_finalize (stmt_towing_status);
+    }
+  else
+    {
+      LOGE ("cmd_move_transwarp: Failed to prepare towing status check: %s",
+            sqlite3_errmsg (db_handle));
+      send_enveloped_error (ctx->fd, root, ERR_DB_QUERY_FAILED,
+                            "Database error");
+      return 0;
+    }
+
+  if (towing_ship_id != 0)
+    {
+      send_enveloped_refused (ctx->fd,
+                              root,
+                              REF_CANNOT_TRANSWARP_WHILE_TOWING,
+                              "Cannot TransWarp while towing another ship.",
+                              NULL);
+      return 0;
+    }
+
+  int has_transwarp = 0;
+  sqlite3_stmt *stmt = NULL;
+  const char *sql_check_transwarp =
+    "SELECT has_transwarp FROM ships WHERE id = ?;";
+  int rc = sqlite3_prepare_v2 (db_handle,
+                               sql_check_transwarp,
+                               -1,
+                               &stmt,
+                               NULL);
+
+
+  if (rc == SQLITE_OK)
+    {
+      sqlite3_bind_int (stmt, 1, ship_id);
+      if (sqlite3_step (stmt) == SQLITE_ROW)
+        {
+          has_transwarp = sqlite3_column_int (stmt, 0);
+        }
+      sqlite3_finalize (stmt);
+    }
+  else
+    {
+      LOGE (
+        "cmd_move_transwarp: Failed to prepare transwarp check statement: %s",
+        sqlite3_errmsg (db_handle));
+      send_enveloped_error (ctx->fd, root, ERR_DB_QUERY_FAILED,
+                            "Database error");
+      return 0;
+    }
+
+  if (has_transwarp == 0)
+    {
+      send_enveloped_refused (ctx->fd,
+                              root,
+                              REF_TRANSWARP_UNAVAILABLE,
+                              "You do not have a TransWarp drive.",
+                              NULL);
+      return 0;
+    }
+
+  // 2. Destination Validation
+  int max_sector_id = 0;
+  const char *sql_max_sector = "SELECT MAX(id) FROM sectors;";
+
+
+  rc = sqlite3_prepare_v2 (db_handle,
+                           sql_max_sector,
+                           -1,
+                           &stmt,
+                           NULL);
+  if (rc == SQLITE_OK)
+    {
+      if (sqlite3_step (stmt) == SQLITE_ROW)
+        {
+          max_sector_id = sqlite3_column_int (stmt, 0);
+        }
+      sqlite3_finalize (stmt);
+    }
+  else
+    {
+      LOGE ("cmd_move_transwarp: Failed to prepare max sector check: %s",
+            sqlite3_errmsg (db_handle));
+      send_enveloped_error (ctx->fd, root, ERR_DB_QUERY_FAILED,
+                            "Database error");
+      return 0;
+    }
+
+  if (to_sector_id <= 0 || to_sector_id > max_sector_id)
+    {
+      send_enveloped_refused (ctx->fd,
+                              root,
+                              ERR_INVALID_ARG,
+                              "Invalid TransWarp coordinates: Sector does not exist.",
+                              NULL);
+      return 0;
+    }
+
+  if (to_sector_id == ctx->sector_id)
+    {
+      send_enveloped_ok (ctx->fd, root, "move.transwarp.result",
+                         json_pack ("{s:s}",
+                                    "message",
+                                    "You transwarp to your current sector. Nothing happens."));
+      return 0;
+    }
+
+  // 3. Turn Cost & Consumption
+  const int TRANSWARP_TURN_COST = 3;
+  TurnConsumeResult tc = h_consume_player_turn (db_handle,
+                                                ctx,
+                                                TRANSWARP_TURN_COST);
+
+
+  if (tc != TURN_CONSUME_SUCCESS)
+    {
+      return handle_turn_consumption_error (ctx,
+                                            tc,
+                                            "move.transwarp",
+                                            root,
+                                            NULL);
+    }
+
+  // Execute TransWarp
+  int from_sector_id = ctx->sector_id;
+  int prc = db_player_set_sector (ctx->player_id, to_sector_id);
+
+
+  if (prc != SQLITE_OK)
+    {
+      LOGE
+      (
+        "cmd_move_warp: db_player_set_sector failed for player %d, ship_id %d, to sector %d. Error code: %d",
+        ctx->player_id,
+        h_get_active_ship_id (db_handle, ctx->player_id),
+        to_sector_id,
+        prc);
+      send_enveloped_error (ctx->fd, root, 1502,
+                            "Failed to persist player sector");
+      return 0;
+    }
+
+  // If player is towing a ship, update its sector as well
+  int player_ship_id_for_towing = h_get_active_ship_id (db_handle,
+                                                        ctx->player_id);
+  int towed_ship_id = 0;
+  sqlite3_stmt *stmt_towed_ship = NULL;
+  const char *sql_get_towed_ship =
+    "SELECT towing_ship_id FROM ships WHERE id = ?;";
+  int rc_get_towed = sqlite3_prepare_v2 (db_handle,
+                                         sql_get_towed_ship,
+                                         -1,
+                                         &stmt_towed_ship,
+                                         NULL);
+
+
+  if (rc_get_towed == SQLITE_OK)
+    {
+      sqlite3_bind_int (stmt_towed_ship, 1, player_ship_id_for_towing);
+      if (sqlite3_step (stmt_towed_ship) == SQLITE_ROW)
+        {
+          towed_ship_id = sqlite3_column_int (stmt_towed_ship, 0);
+        }
+      sqlite3_finalize (stmt_towed_ship);
+    }
+  else
+    {
+      LOGE ("cmd_move_warp: Failed to prepare towed ship check: %s",
+            sqlite3_errmsg (db_handle));
+      // Log error but don't stop movement
+    }
+
+  if (towed_ship_id > 0)
+    {
+      const char *sql_update_towed_ship =
+        "UPDATE ships SET sector = ? WHERE id = ?;";
+      sqlite3_stmt *stmt_update_towed = NULL;
+      int rc_update_towed = sqlite3_prepare_v2 (db_handle,
+                                                sql_update_towed_ship,
+                                                -1,
+                                                &stmt_update_towed,
+                                                NULL);
+
+
+      if (rc_update_towed == SQLITE_OK)
+        {
+          sqlite3_bind_int (stmt_update_towed, 1, to_sector_id);
+          sqlite3_bind_int (stmt_update_towed, 2, towed_ship_id);
+          if (sqlite3_step (stmt_update_towed) != SQLITE_DONE)
+            {
+              LOGE (
+                "cmd_move_warp: Failed to update sector for towed ship %d: %s",
+                towed_ship_id,
+                sqlite3_errmsg (db_handle));
+            }
+          sqlite3_finalize (stmt_update_towed);
+        }
+      else
+        {
+          LOGE (
+            "cmd_move_warp: Failed to prepare update towed ship statement: %s",
+            sqlite3_errmsg (db_handle));
+        }
+      LOGI ("cmd_move_warp: Towed ship %d moved to sector %d.",
+            towed_ship_id,
+            to_sector_id);
+    }
+  LOGI (
+    "cmd_move_warp: Player %d (fd %d) successfully warped from sector %d to %d."
+    " db_player_set_sector returned %d. Rows updated: %d",
+    ctx->player_id,
+    ctx->player_id,
+    from_sector_id,
+    to_sector_id,
+    to_sector_id,
+    1);
+
+  // Blind Entry - Apply sector effects immediately
+  armid_encounter_t armid_enc = { 0 };
+
+
+  apply_armid_mines_on_entry (ctx, to_sector_id, &armid_enc);
+  // Future: Trigger combat checks, quasar cannons, etc.
+
+  // 1) Send the direct reply for the actor
+  json_t *resp = json_object ();
+
+
+  json_object_set_new (resp, "player_id", json_integer (ctx->player_id));
+  json_object_set_new (resp, "from_sector_id", json_integer (from_sector_id));
+  json_object_set_new (resp, "to_sector_id", json_integer (to_sector_id));
+  json_object_set_new (resp, "turns_spent", json_integer (TRANSWARP_TURN_COST));
+  if (armid_enc.armid_triggered > 0)
+    {
+      json_t *damage_obj = json_object ();
+
+
+      json_object_set_new (damage_obj, "shields_lost",
+                           json_integer (armid_enc.shields_lost));
+      json_object_set_new (damage_obj, "fighters_lost",
+                           json_integer (armid_enc.fighters_lost));
+      json_object_set_new (damage_obj, "hull_lost",
+                           json_integer (armid_enc.hull_lost));
+      json_object_set_new (damage_obj, "destroyed",
+                           json_boolean (armid_enc.destroyed));
+      json_t *encounter_obj = json_object ();
+
+
+      json_object_set_new (encounter_obj, "kind", json_string ("mines"));
+      json_object_set_new (encounter_obj, "armid_triggered",
+                           json_integer (armid_enc.armid_triggered));
+      json_object_set_new (encounter_obj, "armid_remaining",
+                           json_integer (armid_enc.armid_remaining));
+      json_object_set_new (encounter_obj, "damage", damage_obj);
+      json_object_set_new (resp, "encounter", encounter_obj);
+    }
+  send_enveloped_ok (ctx->fd, root, "move.transwarp.result", resp);
+
+  // 2) Broadcast LEFT (from) then ENTERED (to) to subscribers
+  json_t *left = json_object ();
+
+
+  json_object_set_new (left, "player_id", json_integer (ctx->player_id));
+  json_object_set_new (left, "sector_id", json_integer (from_sector_id));
+  json_object_set_new (left, "to_sector_id", json_integer (to_sector_id));
+  json_object_set_new (left, "player", make_player_object (ctx->player_id));
+  comm_publish_sector_event (from_sector_id, "sector.player_left", left);
+
+  json_t *entered = json_object ();
+
+
+  json_object_set_new (entered, "player_id", json_integer (ctx->player_id));
+  json_object_set_new (entered, "sector_id", json_integer (to_sector_id));
+  json_object_set_new (entered, "from_sector_id",
+                       json_integer (from_sector_id));
+  json_object_set_new (entered, "player", make_player_object (ctx->player_id));
+  comm_publish_sector_event (to_sector_id, "sector.player_entered", entered);
+
+  return 0;
 }
 

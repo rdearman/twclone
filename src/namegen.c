@@ -7,6 +7,8 @@
 #include "common.h"
 #include "globals.h"
 extern int randomnum (int min, int max);
+
+
 char *
 randomname (char *name)
 {

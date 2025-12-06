@@ -9,6 +9,8 @@
 #include "engine_consumer.h"
 #include "server_engine.h" // For h_player_progress_from_event_payload
 #include "server_log.h"
+
+
 /* --- helpers -------------------------------------------------------------- */
 static int
 get_now_epoch ()
@@ -26,6 +28,8 @@ csv_contains (const char *csv, const char *needle)
     }
   size_t nlen = strlen (needle);
   const char *p = csv;
+
+
   while (*p)
     {
       while (*p == ' ' || *p == ',')
@@ -33,11 +37,15 @@ csv_contains (const char *csv, const char *needle)
           ++p;
         }
       const char *start = p;
+
+
       while (*p && *p != ',')
         {
           ++p;
         }
       size_t len = (size_t) (p - start);
+
+
       if (len == nlen && strncmp (start, needle, len) == 0)
         {
           return 1;
@@ -162,6 +170,8 @@ static const char *BASE_SELECT =
   "WHERE id > ?1 "
   "  AND (?2 = 0 OR type IN (SELECT trim(value) FROM json_each(?3))) "
   "ORDER BY id ASC " "LIMIT ?4;";
+
+
 static int
 handle_ship_self_destruct_initiated (sqlite3 *db, sqlite3_stmt *ev_row)
 {
@@ -181,6 +191,8 @@ handle_ship_self_destruct_initiated (sqlite3 *db, sqlite3_stmt *ev_row)
   {
     sqlite3_stmt *st_ship = NULL;
     const char *sql_get_ship_id = "SELECT ship FROM players WHERE id = ?;";
+
+
     if (sqlite3_prepare_v2 (db, sql_get_ship_id, -1, &st_ship, NULL) ==
         SQLITE_OK)
       {
@@ -192,6 +204,8 @@ handle_ship_self_destruct_initiated (sqlite3 *db, sqlite3_stmt *ev_row)
         sqlite3_finalize (st_ship);
       }
   }
+
+
   if (ship_id == 0)
     {
       LOGE ("Error: Player %d has no active ship to self-destruct.",
@@ -204,6 +218,8 @@ handle_ship_self_destruct_initiated (sqlite3 *db, sqlite3_stmt *ev_row)
   {
     sqlite3_stmt *st_name = NULL;
     const char *sql_get_ship_name = "SELECT name FROM ships WHERE id = ?;";
+
+
     if (sqlite3_prepare_v2 (db, sql_get_ship_name, -1, &st_name, NULL) ==
         SQLITE_OK)
       {
@@ -217,6 +233,8 @@ handle_ship_self_destruct_initiated (sqlite3 *db, sqlite3_stmt *ev_row)
         sqlite3_finalize (st_name);
       }
   }
+
+
   // Perform ship destruction
   rc = db_destroy_ship (db, player_id, ship_id);
   if (rc != SQLITE_OK)
@@ -231,6 +249,8 @@ handle_ship_self_destruct_initiated (sqlite3 *db, sqlite3_stmt *ev_row)
                                          "player_id", player_id,
                                          "ship_id", ship_id,
                                          "ship_name", ship_name);
+
+
   if (!destroyed_payload)
     {
       LOGE ("Error creating ship.destroyed payload.");
@@ -297,6 +317,8 @@ engine_consume_tick (sqlite3 *db,
   memset (out, 0, sizeof (*out));
   long long last_id = 0, last_ts = 0, max_id = 0;
   int rc;
+
+
   /* Load watermark and lag */
   rc = load_watermark (db, cfg->consumer_key, &last_id, &last_ts);
   if (rc)
@@ -314,12 +336,16 @@ engine_consume_tick (sqlite3 *db,
   int prio_phase = (cfg->priority_types_csv && *cfg->priority_types_csv &&
                     out->lag >= (cfg->backlog_prio_threshold >
                                  0 ? cfg->backlog_prio_threshold : 0));
+
+
   /* We may run up to two passes: priority-only, then non-priority. */
   for (int pass = 0; pass < (prio_phase ? 2 : 1); ++pass)
     {
       int priority_only = (prio_phase && pass == 0);
       /* Build a JSON array string for json_each, e.g. ["a","b"] */
       char prio_json[512] = "[]";
+
+
       if (priority_only)
         {
           /* Convert CSV to simple JSON array on the fly (best-effort, tiny buffer). */
@@ -340,6 +366,8 @@ engine_consume_tick (sqlite3 *db,
       while (remaining > 0)
         {
           sqlite3_stmt *st = NULL;
+
+
           rc = sqlite3_prepare_v2 (db, BASE_SELECT, -1, &st, NULL);
           if (rc)
             {
@@ -354,12 +382,16 @@ engine_consume_tick (sqlite3 *db,
           long long batch_max_id = last_id;
           long long batch_max_ts = last_ts;
           int processed_this_stmt = 0;
+
+
           while ((rc = sqlite3_step (st)) == SQLITE_ROW)
             {
               long long ev_id = sqlite3_column_int64 (st, 0);
               long long ev_ts = sqlite3_column_int64 (st, 1);
               const char *ev_type =
                 (const char *) sqlite3_column_text (st, 2);
+
+
               /* Prioritisation second pass: skip priority types to avoid reprocessing. */
               if (!priority_only && cfg->priority_types_csv &&
                   csv_contains (cfg->priority_types_csv, ev_type))
@@ -367,6 +399,8 @@ engine_consume_tick (sqlite3 *db,
                   continue;     /* Leave for next tick; preserves per-pass order. */
                 }
               int hrc = handle_event (ev_type, db, st);
+
+
               if (hrc != 0)
                 {
                   /* Quarantine and continue (clear error path) */

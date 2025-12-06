@@ -32,6 +32,8 @@ json_t *g_capabilities = NULL;
 xp_align_config_t g_xp_align; // Define the global instance of xp_align_config_t
 /* Provided by your DB module; MUST be defined there (no 'static') */
 sqlite3 *g_db = NULL;
+
+
 /* --------- static helpers (not visible to linker) --------- */
 static void
 config_set_defaults (void)
@@ -127,6 +129,8 @@ typedef enum {
   CFG_T_STRING,
   CFG_T_DOUBLE
 } cfg_type_t;
+
+
 static int
 cfg_parse_int (const char *val_str, const char *type_str, int *out)
 {
@@ -135,8 +139,12 @@ cfg_parse_int (const char *val_str, const char *type_str, int *out)
       return -1;
     }
   char *endptr;
+
+
   errno = 0;
   long val = strtol (val_str, &endptr, 10);
+
+
   if (errno != 0 || endptr == val_str || *endptr != '\0')
     {
       return -1;
@@ -155,8 +163,12 @@ cfg_parse_int64 (const char *val_str, const char *type_str, int64_t *out)
       return -1;
     }
   char *endptr;
+
+
   errno = 0;
   long long val = strtoll (val_str, &endptr, 10);
+
+
   if (errno != 0 || endptr == val_str || *endptr != '\0')
     {
       return -1;
@@ -319,6 +331,8 @@ apply_db (sqlite3 *db)
       const char *key = (const char *) sqlite3_column_text (st, 0);
       const char *val = (const char *) sqlite3_column_text (st, 1);
       const char *type = (const char *) sqlite3_column_text (st, 2);
+
+
       if (!key || !val || !type)
         {
           continue;
@@ -508,6 +522,8 @@ apply_db (sqlite3 *db)
   LOGI ("[config] Configuration loaded from Key-Value-Type table.");
   // Secrets loading (unchanged)
   sqlite3_stmt *ks = NULL;
+
+
   if (sqlite3_prepare_v2 (db,
                           "SELECT key_id,key_b64 FROM s2s_keys WHERE active=1 AND is_default_tx=1 LIMIT 1",
                           -1,
@@ -516,6 +532,8 @@ apply_db (sqlite3 *db)
       && sqlite3_step (ks) == SQLITE_ROW)
     {
       const char *kid = (const char *) sqlite3_column_text (ks, 0);
+
+
       snprintf (g_cfg.secrets.key_id, sizeof g_cfg.secrets.key_id, "%s",
                 kid ? kid : "");
     }
@@ -535,6 +553,8 @@ load_eng_config (void)
   config_set_defaults ();
   // ensure DB is open/initialised here (you already do schema creation)
   extern sqlite3 *g_db;
+
+
   g_db = db_get_handle (); // Initialize g_db with the correct handle
   if (g_db)
     {
@@ -550,6 +570,8 @@ void send_enveloped_ok (int fd, json_t *root, const char *type,
                         json_t *data);
 // exported by server_loop.c
 void loop_get_supported_commands (const cmd_desc_t **out_tbl, size_t *out_n);
+
+
 /*
    static int
    resolve_current_sector_from_info (json_t *info_obj, int fallback)
@@ -580,6 +602,8 @@ void loop_get_supported_commands (const cmd_desc_t **out_tbl, size_t *out_n);
    return fallback;
    }
  */
+
+
 /////////////////////////// NEW
 static json_t *
 make_session_hello_payload (int is_authed, int player_id, int sector_id)
@@ -604,6 +628,8 @@ make_session_hello_payload (int is_authed, int player_id, int sector_id)
     }
   /* NEW: ISO-8601 UTC timestamp for clients that prefer strings */
   char iso[32];
+
+
   iso8601_utc (iso);
   json_object_set_new (payload, "server_time", json_string (iso));
   return payload;
@@ -631,42 +657,116 @@ cmd_system_capabilities (client_ctx_t *ctx, json_t *root)
 
 
 /* /\* ---------- system.describe_schema (optional) ---------- *\/ */
+
+
 /* int */
+
+
 /* cmd_system_describe_schema (client_ctx_t *ctx, json_t *root) */
+
+
 /* { */
+
+
 /*   json_t *jdata = json_object_get (root, "data"); */
+
+
 /*   const char *key = NULL; */
+
+
 /*   if (json_is_object (jdata)) */
+
+
 /*     { */
+
+
 /*       json_t *jkey = json_object_get (jdata, "key"); */
+
+
 /*       if (json_is_string (jkey)) */
+
+
 /*      key = json_string_value (jkey); */
+
+
 /*     } */
+
+
 /*   if (!key) */
+
+
 /*     { */
+
+
 /*       /\* Return the list of keys we have *\/ */
+
+
 /*       json_t *data = json_pack ("{s:o}", "available", schema_keys ()); */
+
+
 /*       send_enveloped_ok (ctx->fd, root, "system.schema_list", data); */
+
+
 /*       json_decref (data); */
+
+
 /*     } */
+
+
 /*   else */
+
+
 /*     { */
+
+
 /*       json_t *schema = schema_get (key); */
+
+
 /*       if (!schema) */
+
+
 /*      { */
+
+
 /*        send_enveloped_error (ctx->fd, root, 1306, "Schema not found"); */
+
+
 /*      } */
+
+
 /*       else */
+
+
 /*      { */
+
+
 /*        json_t *data = */
+
+
 /*          json_pack ("{s:s, s:o}", "key", key, "schema", schema); */
+
+
 /*        send_enveloped_ok (ctx->fd, root, "system.schema", data); */
+
+
 /*        json_decref (schema); */
+
+
 /*        json_decref (data); */
+
+
 /*      } */
+
+
 /*     } */
+
+
 /*   return 0; */
+
+
 /* } */
+
+
 /* ---------- session.ping ---------- */
 int
 cmd_session_ping (client_ctx_t *ctx, json_t *root)

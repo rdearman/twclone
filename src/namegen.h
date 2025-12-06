@@ -2,6 +2,8 @@
 #define NAMEGEN_H
 #include <stdlib.h>
 extern int flip;
+
+
 // Function prototypes
 char *randomname (char *name);
 char *consellationName (char *name);

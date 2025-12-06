@@ -10,6 +10,8 @@
 #include <string.h>
 #include <strings.h>
 #include "server_corporation.h"
+
+
 // Helper to get the player's current planet_id from their active ship.
 // Returns planet_id > 0 on success, 0 if not on a planet or error.
 static int
@@ -22,12 +24,16 @@ get_player_planet (sqlite3 *db, int player_id)
     }
   sqlite3_stmt *st = NULL;
   const char *sql = "SELECT onplanet FROM ships WHERE id = ?1;";
+
+
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
       return 0;
     }
   sqlite3_bind_int (st, 1, ship_id);
   int planet_id = 0;
+
+
   if (sqlite3_step (st) == SQLITE_ROW)
     {
       planet_id = sqlite3_column_int (st, 0);
@@ -66,6 +72,8 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   sqlite3 *db = db_get_handle ();
+
+
   if (!db)
     {
       send_enveloped_error (ctx->fd, root, 500, "Database unavailable.");
@@ -73,6 +81,8 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
     }
   // 1. Get Player Location & Planet Info
   int planet_id = get_player_planet (db, ctx->player_id);
+
+
   if (planet_id <= 0)
     {
       send_enveloped_refused (ctx->fd,
@@ -85,6 +95,8 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
   sqlite3_stmt *planet_st = NULL;
   const char *sql_planet =
     "SELECT type, owner_id, owner_type, colonist, ore_on_hand, organics_on_hand, equipment_on_hand FROM planets WHERE id = ?1;";
+
+
   if (sqlite3_prepare_v2 (db, sql_planet, -1, &planet_st, NULL) != SQLITE_OK)
     {
       send_enveloped_error (ctx->fd, root, 500,
@@ -95,6 +107,8 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
   int planet_type = 0, owner_id = 0;
   const char *owner_type = NULL;
   long long p_colonists = 0, p_ore = 0, p_org = 0, p_equip = 0;
+
+
   if (sqlite3_step (planet_st) == SQLITE_ROW)
     {
       planet_type = sqlite3_column_int (planet_st, 0);
@@ -107,6 +121,8 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
     }
   sqlite3_finalize (planet_st);
   bool can_build = false;
+
+
   if (strcmp (owner_type, "player") == 0)
     {
       if (owner_id == ctx->player_id)
@@ -117,6 +133,8 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
   else if (strcmp (owner_type, "corp") == 0)
     {
       int player_corp_id = h_get_player_corp_id (db, ctx->player_id);
+
+
       if (player_corp_id > 0 && player_corp_id == owner_id)
         {
           can_build = true;
@@ -137,6 +155,8 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
     "SELECT level, construction_status FROM citadels WHERE planet_id = ?1;";
   int current_level = 0;
   const char *construction_status = "idle";
+
+
   if (sqlite3_prepare_v2 (db, sql_citadel, -1, &citadel_st, NULL) ==
       SQLITE_OK)
     {
@@ -176,6 +196,8 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
   sqlite3_stmt *req_st = NULL;
   long long r_colonists = 0, r_ore = 0, r_org = 0, r_equip = 0;
   int r_days = 0;
+
+
   if (sqlite3_prepare_v2 (db, sql_req_query, -1, &req_st, NULL) == SQLITE_OK)
     {
       if (sqlite3_step (req_st) == SQLITE_ROW)
@@ -202,6 +224,8 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
       || p_equip < r_equip)
     {
       json_t *missing = json_object ();
+
+
       if (p_colonists < r_colonists)
         {
           json_object_set_new (missing, "colonists",
@@ -222,6 +246,8 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
                                json_integer (r_equip - p_equip));
         }
       json_t *meta = json_object ();
+
+
       json_object_set_new (meta, "missing", missing);
       send_enveloped_refused (ctx->fd,
                               root,
@@ -236,6 +262,8 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
   sqlite3_stmt *update_planet_st = NULL;
   const char *sql_update_planet =
     "UPDATE planets SET ore_on_hand = ore_on_hand - ?1, organics_on_hand = organics_on_hand - ?2, equipment_on_hand = equipment_on_hand - ?3 WHERE id = ?4;";
+
+
   if (sqlite3_prepare_v2 (db, sql_update_planet, -1, &update_planet_st, NULL)
       == SQLITE_OK)
     {
@@ -266,6 +294,8 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
     "INSERT INTO citadels (planet_id, level, owner, construction_status, target_level, construction_start_time, construction_end_time) VALUES (?1, ?2, ?3, 'upgrading', ?4, ?5, ?6) ON CONFLICT(planet_id) DO UPDATE SET construction_status='upgrading', target_level=?4, construction_start_time=?5, construction_end_time=?6;";
   long long start_time = time (NULL);
   long long end_time = start_time + (r_days * 86400);   // Assuming 1 day = 86400 seconds
+
+
   if (sqlite3_prepare_v2
         (db, sql_update_citadel, -1, &update_citadel_st, NULL) == SQLITE_OK)
     {
@@ -295,6 +325,8 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
   sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
   // Log the event for news generation
   json_t *event_payload = json_object ();
+
+
   json_object_set_new (event_payload, "planet_id", json_integer (planet_id));
   json_object_set_new (event_payload, "current_level",
                        json_integer (current_level));
@@ -306,6 +338,8 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
                        "player", ctx->player_id, 0, event_payload, NULL);
   // 6. Send Response
   json_t *payload = json_object ();
+
+
   json_object_set_new (payload, "planet_id", json_integer (planet_id));
   json_object_set_new (payload, "target_level", json_integer (target_level));
   json_object_set_new (payload, "completion_time", json_integer (end_time));

@@ -29,6 +29,7 @@ int cmd_admin_notice (client_ctx_t *ctx, json_t *root);
 int cmd_admin_shutdown_warning (client_ctx_t *ctx, json_t *root);
 /* Optional: free subs for a disconnected client; call from your disconnect path */
 void comm_clear_subscriptions (client_ctx_t *ctx);
+
 /* Publish an event to subscribers of sector.* and sector.{sector_id}.
    Ownership: this function steals a ref to 'data' (it will json_decref it). */
 void comm_publish_sector_event (int sector_id, const char *event_name,
@@ -43,6 +44,7 @@ typedef enum
   COMM_SCOPE_CORP,              /* topic: corp.{id}       */
   COMM_SCOPE_PLAYER             /* topic: player.{id}     */
 } comm_scope_t;
+
 /* Sends a transient broadcast to subscribed clients only.
    - message: short, human-readable string (required)
    - extra: optional JSON payload to attach (steals a ref; pass NULL if none)

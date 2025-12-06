@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "server_log.h"
+
 /*
  * =============================================================================
  * --- Forward Declarations ---
@@ -93,6 +94,8 @@ static json_t *schema_bank_history (void);
 static json_t *schema_bank_leaderboard (void);
 static json_t *schema_player_list_online_request (void);
 static json_t *schema_player_list_online_response (void);
+
+
 static json_t *
 schema_bank_history (void)
 {
@@ -263,6 +266,8 @@ static json_t *schema_subscribe_list (void);
 static json_t *schema_subscribe_catalog (void);
 /* --- Bulk --- */
 static json_t *schema_bulk_execute (void);
+
+
 /*
  * =============================================================================
  * --- Helper Functions ---
@@ -900,6 +905,8 @@ schema_validate_payload (const char *type, json_t *payload, char **why)
     }
   /* 1. GET THE SCHEMA from your registry */
   json_t *schema = schema_get (type);
+
+
   if (!schema)
     {
       if (why)
@@ -908,6 +915,7 @@ schema_validate_payload (const char *type, json_t *payload, char **why)
         }
       return -1;
     }
+
   /*
    * ===================================================================
    * === ADD YOUR DEBUG CODE HERE ===
@@ -915,13 +923,18 @@ schema_validate_payload (const char *type, json_t *payload, char **why)
    */
   /* Use the 'payload' variable, which exists in this function */
   char *dump = json_dumps (payload, 0);
+
+
   LOGD ("[VALIDATOR] Checking 'sector.set_beacon' with payload: %s",
         dump ? dump : "(null)");
   free (dump);
+
   /* ===================================================================
    */
   /* 2. VALIDATE THE PAYLOAD against the schema */
   int result = my_json_schema_validate_placeholder (schema, payload, why);
+
+
   /*
    * schema_get() returns a new reference (from json_pack),
    * so we MUST decref it when we are done.
@@ -969,6 +982,8 @@ s2s_validate_payload (const char *type, json_t *payload, char **why)
   if (strcasecmp (type, "s2s.broadcast.sweep") == 0)
     {
       json_t *since = json_object_get (payload, "since_ts");
+
+
       if (!since || !json_is_integer (since))
         {
           if (why)
@@ -1029,6 +1044,8 @@ s2s_validate_payload (const char *type, json_t *payload, char **why)
           return -1;
         }
       json_t *pl = json_object_get (payload, "payload");
+
+
       if (!pl || !json_is_object (pl))
         {
           if (why)
@@ -1039,6 +1056,8 @@ s2s_validate_payload (const char *type, json_t *payload, char **why)
         }
       /* optional: correlation_id (string), priority (int), due_at (int) */
       json_t *cid = json_object_get (payload, "correlation_id");
+
+
       if (cid && !json_is_string (cid))
         {
           if (why)
@@ -1048,6 +1067,8 @@ s2s_validate_payload (const char *type, json_t *payload, char **why)
           return -1;
         }
       json_t *prio = json_object_get (payload, "priority");
+
+
       if (prio && !json_is_integer (prio))
         {
           if (why)
@@ -1057,6 +1078,8 @@ s2s_validate_payload (const char *type, json_t *payload, char **why)
           return -1;
         }
       json_t *due = json_object_get (payload, "due_at");
+
+
       if (due && !json_is_integer (due))
         {
           if (why)
@@ -1079,6 +1102,8 @@ s2s_validate_payload (const char *type, json_t *payload, char **why)
  * All the stub functions and real schema definitions go here.
  * =============================================================================
  */
+
+
 /* ----- Implemented Schemas ----- */
 static json_t *
 schema_envelope (void)
@@ -1220,6 +1245,8 @@ schema_sector_set_beacon (void)
 
 
 /* ----- Stub Schemas ----- */
+
+
 /* --- Auth --- */
 static json_t *
 schema_auth_register (void)
@@ -1955,12 +1982,26 @@ schema_sector_search (void)
 
 
 /* static json_t * */
+
+
 /* schema_sector_set_beacon (void) */
+
+
 /* { */
+
+
 /*   /\* TODO: Implement this schema *\/ */
+
+
 /*   return json_pack ("{s:s, s:s}", */
+
+
 /*                     "$id", "ge://schema/sector.set_beacon.json", */
+
+
 /*                     "$comment", "Schema not yet implemented"); */
+
+
 /* } */
 static json_t *
 schema_sector_scan_density (void)
@@ -2911,6 +2952,8 @@ schema_player_list_online_request (void)
                                      fields_items_schema,
                                      "uniqueItems",
                                      true);
+
+
   json_object_set_new (properties, "fields", fields_schema);
   json_t *data_schema = json_pack ("{s:s, s:s, s:s, s:o, s:o, s:b}",
                                    "$id",
@@ -2925,6 +2968,8 @@ schema_player_list_online_request (void)
                                    required,
                                    "additionalProperties",
                                    json_false ());
+
+
   return data_schema;
 }
 
@@ -2956,6 +3001,8 @@ schema_player_list_online_response (void)
   json_array_append_new (required, json_string ("limit"));
   // players property (array of player objects)
   json_t *player_item_schema = schema_player_info (); // Reuse existing player info schema
+
+
   json_object_set_new (properties, "players", json_pack ("{s:s, s:o}",
                                                          "type",
                                                          "array",
@@ -2975,6 +3022,8 @@ schema_player_list_online_response (void)
                                    required,
                                    "additionalProperties",
                                    json_false ());
+
+
   return data_schema;
 }
 

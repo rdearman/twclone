@@ -8,9 +8,6 @@
 #include "server_log.h"
 
 
-
-
-
 static int
 update_config_int (sqlite3 *db, const char *key, int value)
 {
@@ -25,10 +22,14 @@ update_config_int (sqlite3 *db, const char *key, int value)
       return -1;
     }
   char val_str[32];
+
+
   snprintf (val_str, sizeof(val_str), "%d", value);
   sqlite3_bind_text (stmt, 1, val_str, -1, SQLITE_TRANSIENT);
   sqlite3_bind_text (stmt, 2, key, -1, SQLITE_STATIC);
   int rc = sqlite3_step (stmt);
+
+
   sqlite3_finalize (stmt);
   if (rc != SQLITE_DONE)
     {
@@ -54,6 +55,8 @@ get_config_int (sqlite3 *db, const char *key, int default_val)
   if (sqlite3_step (stmt) == SQLITE_ROW)
     {
       const char *val = (const char *)sqlite3_column_text (stmt, 0);
+
+
       if (val)
         {
           result = atoi (val);
@@ -86,7 +89,7 @@ print_usage (const char *progname)
 int
 main (int argc, char *argv[])
 {
-  server_log_init_file ("./twclone.log", "[server]", 0, LOG_INFO); 
+  server_log_init_file ("./twclone.log", "[server]", 0, LOG_INFO);
   sqlite3 *handle = db_get_handle ();
   /* Default values loaded from DB (so we honor defaults if arguments aren't provided) */
   int sectors = get_config_int (handle, "default_nodes", 500);
@@ -111,6 +114,8 @@ main (int argc, char *argv[])
   };
   int opt;
   int option_index = 0;
+
+
   while ((opt = getopt_long (argc,
                              argv,
                              "s:d:r:R:c:f:H:t:h",
@@ -188,6 +193,8 @@ main (int argc, char *argv[])
   if (port_ratio != -1)
     {
       int max_ports = (int)((long long)sectors * port_ratio / 100);
+
+
       if (max_ports < 1)
         {
           max_ports = 1;
@@ -199,6 +206,8 @@ main (int argc, char *argv[])
     {
       // Default behavior: 40% if not specified
       int max_ports = (int)((long long)sectors * 40 / 100);
+
+
       if (max_ports < 1)
         {
           max_ports = 1;
@@ -209,6 +218,8 @@ main (int argc, char *argv[])
   if (planet_ratio != -1)
     {
       int max_planets = (int)((long long)sectors * planet_ratio / 100);
+
+
       if (max_planets < 1)
         {
           max_planets = 1;
@@ -236,6 +247,7 @@ main (int argc, char *argv[])
       update_config_int (handle, "turnsperday", turns);
       printf ("  Turns Per Day: %d\n", turns);
     }
+
   /* clear tables before bigbang if we are re-running?
      Actually, standard bigbang logic usually checks if universe exists.
      But since this is the 'bigbang' tool, we might imply a fresh start.

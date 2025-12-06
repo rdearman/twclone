@@ -9,6 +9,8 @@
 #include <ctype.h>
 #include "common.h"
 #include "errors.h"
+
+
 static inline uint64_t
 monotonic_millis (void)
 {
@@ -187,6 +189,8 @@ doprocess ()
 
 
 #include <time.h>
+
+
 void
 now_iso8601 (char out[25])
 {
@@ -206,9 +210,13 @@ strip_ansi (char *dst, const char *src, size_t cap)
       return;
     }
   size_t w = 0;
+
+
   for (size_t r = 0; src[r] != '\0' && w + 1 < cap;)
     {
       unsigned char c = (unsigned char) src[r];
+
+
       if (c == 0x1B)
         {                       /* ESC */
           /* Skip CSI: ESC '[' ... letter */
@@ -367,6 +375,17 @@ get_tow_reason_string (int reason_code)
         return "Movement blocked by mines.";
       case REF_TRANSWARP_UNAVAILABLE:
         return "Transwarp drive unavailable or damaged.";
+      case REF_CANNOT_TRANSWARP_WHILE_TOWING:
+        return "Cannot TransWarp while towing another ship.";
+      case REF_SHIP_NOT_OWNED_OR_PILOTED:
+        return
+          "Target ship not found, not owned by you/your corp, or is piloted.";
+      case REF_ALREADY_TOWING:
+        return "You are already towing a ship.";
+      case REF_ALREADY_BEING_TOWED:
+        return "Target ship is already being towed.";
+      case REF_TARGET_SHIP_INVALID:
+        return "Target ship is invalid for towing.";
       case ERR_BAD_STATE:
         return "Bad state encountered.";
       case TERRITORY_UNSAFE:
@@ -522,6 +541,8 @@ json_get_int_flexible (json_t *data_obj, const char *key, int *out_val)
       return false;
     }
   json_t *val = json_object_get (data_obj, key);
+
+
   if (json_is_integer (val))
     {
       *out_val = (int) json_integer_value (val);
@@ -530,12 +551,16 @@ json_get_int_flexible (json_t *data_obj, const char *key, int *out_val)
   if (json_is_string (val))
     {
       const char *s = json_string_value (val);
+
+
       if (!s || !*s)
         {
           return false;
         }
       char *endptr;
       long lval = strtol (s, &endptr, 10);
+
+
       if (*endptr == '\0' && endptr != s)
         {                       // Check that conversion actually happened
           *out_val = (int) lval;
@@ -555,6 +580,8 @@ json_get_int64_flexible (json_t *json, const char *key, long long *out)
       return false;
     }
   json_t *value = json_object_get (json, key);
+
+
   if (!value)
     {
       return false;
@@ -568,6 +595,8 @@ json_get_int64_flexible (json_t *json, const char *key, long long *out)
     {
       // Attempt to parse string as long long
       long long ll_val;
+
+
       if (sscanf (json_string_value (value), "%lld", &ll_val) == 1)
         {
           *out = ll_val;
@@ -587,6 +616,8 @@ json_get_string_or_null (json_t *data_obj, const char *key)
       return NULL;
     }
   json_t *val = json_object_get (data_obj, key);
+
+
   if (json_is_string (val))
     {
       return json_string_value (val);

@@ -1,6 +1,7 @@
 #pragma once
 #include <sqlite3.h>
 #include "s2s_transport.h"
+
 /* Loads the default active key from DB (or env override) and installs it.
    Returns 0 on success, -1 on error. */
 int s2s_install_default_key (sqlite3 *db);

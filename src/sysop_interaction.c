@@ -10,6 +10,8 @@
 #include <stdarg.h>
 #include <time.h>
 #include <unistd.h>
+
+
 /* ================== small helpers ================== */
 static void
 trim (char *s)
@@ -22,6 +24,8 @@ trim (char *s)
       s[--n] = 0;
     }
   size_t i = 0;
+
+
   while (s[i] && isspace ((unsigned char) s[i]))
     {
       i++;
@@ -104,6 +108,8 @@ reply_error (const char *msg)
 
 
 /* ================== handlers (MVP) ================== */
+
+
 /* sysop.dashboard.get -> sysop.dashboard_v1 (stub; wire real counters later) */
 static void
 h_dashboard_get (void)
@@ -204,6 +210,8 @@ h_level (const char *lvl)
 /* ================== parser & REPL ================== */
 static pthread_t g_thr;
 static int g_run = 0;
+
+
 void
 sysop_dispatch_line (char *line)
 {
@@ -253,6 +261,8 @@ sysop_dispatch_line (char *line)
   if (!strncmp (line, "players search", 14))
     {
       char *s = line + 14;
+
+
       while (*s && isspace ((unsigned char) *s))
         {
           s++;
@@ -263,6 +273,8 @@ sysop_dispatch_line (char *line)
   if (!strncmp (line, "level", 5))
     {
       char *s = line + 5;
+
+
       while (*s && isspace ((unsigned char) *s))
         {
           s++;
@@ -301,11 +313,15 @@ repl (void *arg)
   (void) arg;
   char *line = NULL;
   size_t cap = 0;
+
+
   while (g_run)
     {
       fputs ("sysop +> ", stdout);
       fflush (stdout);
       ssize_t n = getline (&line, &cap, stdin);
+
+
       if (n < 0)
         {
           break;

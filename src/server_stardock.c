@@ -19,6 +19,8 @@
 #include "server_log.h"         // For LOGE
 #include "server_communication.h"       // For server_broadcast_to_sector
 struct tavern_settings g_tavern_cfg;
+
+
 // Static Forward Declarations for helper functions
 static bool has_sufficient_funds (sqlite3 *db, int player_id,
                                   long long required_amount);
@@ -30,6 +32,8 @@ static bool is_player_in_tavern_sector (sqlite3 *db, int sector_id);
 bool get_player_loan (sqlite3 *db, int player_id, long long *principal,
                       int *interest_rate, int *due_date, int *is_defaulted);
 static void sanitize_text (char *text, size_t max_len);
+
+
 // Implementation for hardware.list RPC
 int
 cmd_hardware_list (client_ctx_t *ctx, json_t *root)
@@ -62,6 +66,8 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
     "SELECT id, type FROM ports WHERE sector = ? AND (type = " QUOTE (
       PORT_TYPE_STARDOCK) " OR type = " QUOTE (PORT_TYPE_CLASS0) ");";                                                                                                  // type 9 for Stardock, 0 for Class-0
   int rc = sqlite3_prepare_v2 (db, sql_loc_check, -1, &stmt, NULL);
+
+
   if (rc == SQLITE_OK)
     {
       sqlite3_bind_int (stmt, 1, sector_id);
@@ -101,6 +107,8 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
   // Get ship current state
   const char *sql_ship_state =
     "SELECT s.holds, s.fighters, s.shields, s.genesis, s.detonators, s.probes, s.cloaking_devices, s.has_transwarp, s.has_planet_scanner, s.has_long_range_scanner, st.maxholds, st.maxfighters, st.maxshields, st.maxgenesis, st.max_detonators, st.max_probes, st.can_transwarp, st.can_planet_scan, st.can_long_range_scan, st.max_cloaks FROM ships s JOIN shiptypes st ON s.type_id = st.id WHERE s.id = ?;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_ship_state, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -138,6 +146,8 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
     "SELECT code, name, price, max_per_ship, category FROM hardware_items WHERE enabled = 1 AND (? = '"
     LOCATION_STARDOCK "' OR (? = '" LOCATION_CLASS0
     "' AND sold_in_class0 = 1))";
+
+
   rc = sqlite3_prepare_v2 (db, sql_hardware, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -159,6 +169,8 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
       int max_purchase = 0;
       bool ship_has_capacity = true;
       bool item_supported = true;
+
+
       if (strcasecmp (category, HW_CATEGORY_FIGHTER) == 0)
         {
           max_purchase = MAX (0, max_fighters - current_fighters);
@@ -178,6 +190,8 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
               int limit = (max_per_ship_hw != HW_MAX_PER_SHIP_DEFAULT
                            && max_per_ship_hw <
                            max_genesis) ? max_per_ship_hw : max_genesis;
+
+
               max_purchase = MAX (0, limit - current_genesis);
             }
           else if (strcasecmp (code, HW_ITEM_DETONATOR) == 0)
@@ -186,6 +200,8 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
                            && max_per_ship_hw <
                            max_detonators_st) ? max_per_ship_hw :
                           max_detonators_st;
+
+
               max_purchase = MAX (0, limit - current_detonators);
             }
           else if (strcasecmp (code, HW_ITEM_PROBE) == 0)
@@ -193,6 +209,8 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
               int limit = (max_per_ship_hw != HW_MAX_PER_SHIP_DEFAULT
                            && max_per_ship_hw <
                            max_probes_st) ? max_per_ship_hw : max_probes_st;
+
+
               max_purchase = MAX (0, limit - current_probes);
             }
           else
@@ -250,6 +268,8 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
               || strcmp (category, HW_CATEGORY_MODULE) == 0))
         {
           json_t *item_obj = json_object ();
+
+
           json_object_set_new (item_obj, "code", json_string (code));
           json_object_set_new (item_obj, "name", json_string (name));
           json_object_set_new (item_obj, "price", json_integer (price));
@@ -280,6 +300,8 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
                                   "Authentication required.");
     }
   json_t *data = json_object_get (root, "data");
+
+
   if (!json_is_object (data))
     {
       return send_error_response (ctx, root, ERR_INVALID_SCHEMA,
@@ -287,6 +309,8 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
     }
   const char *code = json_string_value (json_object_get (data, "code"));
   int quantity = json_integer_value (json_object_get (data, "quantity"));
+
+
   if (!code || quantity <= 0)
     {
       return send_error_response (ctx, root, 1301,
@@ -296,6 +320,8 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
   int player_id = ctx->player_id;
   int sector_id = ctx->sector_id;
   int ship_id = h_get_active_ship_id (db, player_id);
+
+
   if (ship_id <= 0)
     {
       return send_error_response (ctx, root, ERR_SHIP_NOT_FOUND,
@@ -306,6 +332,8 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
   int port_type = -1;
   const char *sql_port =
     "SELECT type FROM ports WHERE sector = ? AND (type = 9 OR type = 0);";
+
+
   if (sqlite3_prepare_v2 (db, sql_port, -1, &stmt, NULL) == SQLITE_OK)
     {
       sqlite3_bind_int (stmt, 1, sector_id);
@@ -331,6 +359,8 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
   const char *sql_item =
     "SELECT price, requires_stardock, sold_in_class0, max_per_ship, category FROM hardware_items WHERE code = ? AND enabled = 1;";
   bool item_found = false;
+
+
   if (sqlite3_prepare_v2 (db, sql_item, -1, &stmt, NULL) == SQLITE_OK)
     {
       sqlite3_bind_text (stmt, 1, code, -1, SQLITE_STATIC);
@@ -344,6 +374,8 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
               max_per_ship = sqlite3_column_int (stmt, 3);
             }
           const char *cat = (const char *) sqlite3_column_text (stmt, 4);
+
+
           if (cat)
             {
               strncpy (category, cat, sizeof (category) - 1);
@@ -374,6 +406,8 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
     }
   // 5. Map Code to Column and Check Limits
   const char *col_name = NULL;
+
+
   // Mappings
   if (strcmp (code, "FIGHTERS") == 0)
     {
@@ -436,6 +470,8 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
   char sql_info[512];
   bool is_max_check_needed = true;
   char limit_col[64] = { 0 };
+
+
   if (strcmp (col_name, "fighters") == 0)
     {
       strcpy (limit_col, "maxfighters");
@@ -549,6 +585,8 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
   // 7. Check Funds
   long long total_cost = (long long) price * quantity;
   long long balance = 0;
+
+
   h_get_player_petty_cash (db, player_id, &balance);
   if (balance < total_cost)
     {
@@ -562,6 +600,8 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
   int rc_deduct =
     h_deduct_player_petty_cash_unlocked (db, player_id, total_cost,
                                          &new_balance);
+
+
   if (rc_deduct != SQLITE_OK)
     {
       sqlite3_exec (db, "ROLLBACK", NULL, NULL, NULL);
@@ -573,6 +613,8 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
     sqlite3_mprintf ("UPDATE ships SET %s = %s + %d WHERE id = %d;",
                      col_name, col_name, quantity, ship_id);
   int rc_upd = sqlite3_exec (db, sql_upd, NULL, NULL, NULL);
+
+
   sqlite3_free (sql_upd);
   if (rc_upd != SQLITE_OK)
     {
@@ -585,6 +627,8 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
   // 9. Response
   int final_val = current_val + quantity;
   json_t *ship_obj = json_object ();
+
+
   json_object_set_new (ship_obj, col_name, json_integer (final_val));
   if (strcmp (col_name, "cloaking_devices") == 0)
     {
@@ -607,6 +651,8 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
                             "quantity", quantity,
                             "credits_spent", (json_int_t) total_cost,
                             "ship", ship_obj);
+
+
   send_enveloped_ok (ctx->fd, root, "hardware.purchase_v1", resp);
   json_decref (resp);
   return 0;
@@ -632,6 +678,8 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
                         "JOIN players pl ON pl.ship = s.id "
                         "WHERE p.sector = ? AND pl.id = ? AND (p.type = 9 OR p.type = 10);";
   int rc = sqlite3_prepare_v2 (db, sql_loc, -1, &stmt, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       return send_error_response (ctx, root, ERR_DB_QUERY_FAILED,
@@ -647,10 +695,14 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
                                   "You are not docked at a shipyard.");
     }
   int port_id = sqlite3_column_int (stmt, 0);
+
+
   sqlite3_finalize (stmt);
   stmt = NULL;
   // Load configuration
   struct twconfig *cfg = config_load ();
+
+
   if (!cfg)
     {
       return send_error_response (ctx, root, ERR_SERVER_ERROR,
@@ -665,6 +717,8 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
                          "s.has_transwarp, s.has_planet_scanner, s.has_long_range_scanner "
                          "FROM players p JOIN ships s ON p.ship = s.id JOIN shiptypes st ON s.type_id = st.id "
                          "WHERE p.id = ?;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_info, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -704,9 +758,13 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
     floor (current_ship_basecost *
            (cfg->shipyard_trade_in_factor_bp / 10000.0));
   json_t *response_data = json_object ();
+
+
   json_object_set_new (response_data, "sector_id", json_integer (sector_id));
   json_object_set_new (response_data, "is_shipyard", json_true ());
   json_t *current_ship_obj = json_object ();
+
+
   json_object_set_new (current_ship_obj, "type",
                        json_string ((const char *)
                                     sqlite3_column_text (stmt, 5)));
@@ -723,6 +781,8 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
     "SELECT si.ship_type_id, st.name, st.basecost, st.required_alignment, st.required_commission, st.required_experience, st.maxholds, st.maxfighters, st.maxshields, st.maxgenesis, st.max_detonators, st.max_probes, st.max_cloaks, st.can_transwarp, st.can_planet_scan, st.can_long_range_scan, st.maxmines, st.maxlimpets "
     "FROM shipyard_inventory si JOIN shiptypes st ON si.ship_type_id = st.id "
     "WHERE si.port_id = ? AND si.enabled = 1 AND st.enabled = 1;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_inventory, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -740,10 +800,14 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
       const char *type_name = (const char *) sqlite3_column_text (stmt, 1);
       long long new_ship_basecost = sqlite3_column_int64 (stmt, 2);
       long long net_cost = new_ship_basecost - trade_in_value;
+
+
       /* Corporate Flagship: CEO-only */
       if (type_name && !strcasecmp (type_name, "Corporate Flagship"))
         {
           int dummy_corp_id = 0;
+
+
           if (!h_is_player_corp_ceo (db, player_id, &dummy_corp_id))
             {
               eligible = false;
@@ -886,6 +950,8 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
                                   "Authentication required.");
     }
   json_t *data = json_object_get (root, "data");
+
+
   if (!data)
     {
       return send_error_response (ctx, root, ERR_BAD_REQUEST,
@@ -893,6 +959,8 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
     }
   int new_type_id = 0;
   const char *new_ship_name = NULL;
+
+
   if (!json_get_int_flexible (data, "new_type_id", &new_type_id)
       || new_type_id <= 0)
     {
@@ -913,6 +981,8 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
                         "JOIN ships s ON s.ported = p.id "
                         "JOIN players pl ON pl.ship = s.id "
                         "WHERE p.sector = ? AND pl.id = ? AND (p.type = 9 OR p.type = 10);";
+
+
   // Begin transaction
   if (sqlite3_exec (db, "BEGIN IMMEDIATE TRANSACTION;", NULL, NULL, NULL) !=
       SQLITE_OK)
@@ -922,6 +992,8 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
     }
   // Re-validate location
   int rc = sqlite3_prepare_v2 (db, sql_loc, -1, &stmt, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
@@ -942,6 +1014,8 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
   sqlite3_finalize (stmt);
   stmt = NULL;
   struct twconfig *cfg = config_load ();
+
+
   if (!cfg)
     {
       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
@@ -962,6 +1036,8 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
                          "s.has_transwarp, s.has_planet_scanner, s.has_long_range_scanner, s.id, s.type_id, st.basecost "
                          "FROM players p JOIN ships s ON p.ship = s.id JOIN shiptypes st ON s.type_id = st.id "
                          "WHERE p.id = ?;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_info, -1, &stmt, NULL);
   if (rc != SQLITE_OK
       || sqlite3_bind_int (stmt, 1, ctx->player_id) != SQLITE_OK
@@ -997,10 +1073,14 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
   int has_long_range_scanner = sqlite3_column_int (stmt, 18);
   int current_ship_id = sqlite3_column_int (stmt, 19);
   long long old_ship_basecost = sqlite3_column_int64 (stmt, 21);
+
+
   sqlite3_finalize (stmt);
   stmt = NULL;
   const char *sql_target_type =
     "SELECT basecost, required_alignment, required_commission, required_experience, maxholds, maxfighters, maxshields, maxgenesis, max_detonators, max_probes, max_cloaks, can_transwarp, can_planet_scan, can_long_range_scan, maxmines, maxlimpets, name FROM shiptypes WHERE id = ? AND enabled = 1;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_target_type, -1, &stmt, NULL);
   if (rc != SQLITE_OK || sqlite3_bind_int (stmt, 1, new_type_id) != SQLITE_OK
       || sqlite3_step (stmt) != SQLITE_ROW)
@@ -1017,6 +1097,8 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
                                   "Target ship type not found or is not available.");
     }
   bool eligible_for_upgrade = true;
+
+
   if (sqlite3_column_type (stmt, 1) != SQLITE_NULL
       && player_alignment < sqlite3_column_int (stmt, 1))
     {
@@ -1033,17 +1115,23 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
       eligible_for_upgrade = false;
     }
   int new_max_holds = sqlite3_column_int (stmt, 4);
+
+
   if (cfg->shipyard_require_cargo_fit && current_cargo > new_max_holds)
     {
       eligible_for_upgrade = false;
     }
   int new_max_fighters = sqlite3_column_int (stmt, 5);
+
+
   if (cfg->shipyard_require_fighters_fit
       && current_fighters > new_max_fighters)
     {
       eligible_for_upgrade = false;
     }
   int new_max_shields = sqlite3_column_int (stmt, 6);
+
+
   if (cfg->shipyard_require_shields_fit && current_shields > new_max_shields)
     {
       eligible_for_upgrade = false;
@@ -1100,10 +1188,14 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
   long long new_shiptype_basecost = sqlite3_column_int64 (stmt, 0);
   const char *target_ship_name =
     (const char *) sqlite3_column_text (stmt, 16);
+
+
   if (target_ship_name
       && strcasecmp (target_ship_name, "Corporate Flagship") == 0)
     {
       int dummy_corp_id = 0;
+
+
       if (!h_is_player_corp_ceo (db, ctx->player_id, &dummy_corp_id))
         {
           sqlite3_finalize (stmt);
@@ -1121,6 +1213,8 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
     floor (old_ship_basecost * (cfg->shipyard_trade_in_factor_bp / 10000.0));
   long tax = floor (new_shiptype_basecost * (cfg->shipyard_tax_bp / 10000.0));
   long long final_cost = new_shiptype_basecost - trade_in_value + tax;
+
+
   if (current_credits < final_cost)
     {
       free (cfg);
@@ -1130,6 +1224,8 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
     }
   const char *sql_update =
     "UPDATE ships SET type_id = ?, name = ?, credits = credits - ? WHERE id = ?;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_update, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -1160,6 +1256,8 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
   json_t *event_payload =
     json_pack ("{s:i, s:i}", "player_id", ctx->player_id, "new_type_id",
                new_type_id);
+
+
   db_log_engine_event (time (NULL), "shipyard.upgrade", "player",
                        ctx->player_id, ctx->sector_id, event_payload, NULL);
   // json_t *response_data = json_pack ("{s:s}", "status", "success"); // Unused variable
@@ -1285,6 +1383,8 @@ sanitize_text (char *text, size_t max_len)
       return;
     }
   size_t len = strnlen (text, max_len);
+
+
   for (size_t i = 0; i < len; i++)
     {
       // Allow basic alphanumeric, spaces, and common punctuation
@@ -1320,6 +1420,8 @@ validate_bet_limits (sqlite3 *db, int player_id, long long bet_amount)
       long long player_credits = 0;
       sqlite3_stmt *stmt = NULL;
       const char *sql_credits = "SELECT credits FROM players WHERE id = ?;";
+
+
       if (sqlite3_prepare_v2 (db, sql_credits, -1, &stmt, NULL) == SQLITE_OK)
         {
           sqlite3_bind_int (stmt, 1, player_id);
@@ -1427,6 +1529,8 @@ check_loan_default (sqlite3 *db, int player_id, int current_time)
           const char *sql_default =
             "UPDATE tavern_loans SET is_defaulted = 1 WHERE player_id = ?;";
           sqlite3_stmt *stmt = NULL;
+
+
           if (sqlite3_prepare_v2 (db, sql_default, -1, &stmt, NULL) ==
               SQLITE_OK)
             {
@@ -1509,12 +1613,16 @@ cmd_tavern_lottery_buy_ticket (client_ctx_t *ctx, json_t *root)
                                   "You are not in a tavern sector.");
     }
   json_t *data = json_object_get (root, "data");
+
+
   if (!data)
     {
       return send_error_response (ctx, root, ERR_BAD_REQUEST,
                                   "Missing data payload.");
     }
   int ticket_number = 0;
+
+
   if (!json_get_int_flexible (data, "number", &ticket_number)
       || ticket_number <= 0 || ticket_number > 999)
     {
@@ -1527,6 +1635,8 @@ cmd_tavern_lottery_buy_ticket (client_ctx_t *ctx, json_t *root)
   long long ticket_price = 100; // This could be configurable in tavern_settings
   // Validate bet limits
   int limit_check = validate_bet_limits (db, ctx->player_id, ticket_price);
+
+
   if (limit_check == -1)
     {
       return send_error_response (ctx, root, ERR_TAVERN_BET_TOO_HIGH,
@@ -1554,6 +1664,8 @@ cmd_tavern_lottery_buy_ticket (client_ctx_t *ctx, json_t *root)
   char draw_date_str[32];
   time_t now = time (NULL);
   struct tm *tm_info = localtime (&now);
+
+
   strftime (draw_date_str, sizeof (draw_date_str), "%Y-%m-%d", tm_info);
   // Deduct ticket price and insert ticket
   // This should ideally be wrapped in a transaction, but per user instruction, we avoid explicit BEGIN/COMMIT.
@@ -1562,6 +1674,8 @@ cmd_tavern_lottery_buy_ticket (client_ctx_t *ctx, json_t *root)
                                            ctx->player_id,
                                            ticket_price,
                                            false);                                      // Deduct
+
+
   if (rc != 0)
     {
       return send_error_response (ctx, root, ERR_DB,
@@ -1570,6 +1684,8 @@ cmd_tavern_lottery_buy_ticket (client_ctx_t *ctx, json_t *root)
   const char *sql_insert_ticket =
     "INSERT INTO tavern_lottery_tickets (draw_date, player_id, number, cost, purchased_at) VALUES (?, ?, ?, ?, ?);";
   sqlite3_stmt *stmt = NULL;
+
+
   rc = sqlite3_prepare_v2 (db, sql_insert_ticket, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -1594,6 +1710,8 @@ cmd_tavern_lottery_buy_ticket (client_ctx_t *ctx, json_t *root)
   json_t *response_data =
     json_pack ("{s:s, s:i, s:s}", "status", "Ticket purchased",
                "ticket_number", ticket_number, "draw_date", draw_date_str);
+
+
   send_enveloped_ok (ctx->fd, root, "tavern.lottery.buy_ticket_v1",
                      response_data);
   return 0;
@@ -1616,6 +1734,8 @@ cmd_tavern_lottery_status (client_ctx_t *ctx, json_t *root)
                                   "You are not in a tavern sector.");
     }
   json_t *response_data = json_object ();
+
+
   json_object_set_new (response_data, "draw_date", json_null ());
   json_object_set_new (response_data, "winning_number", json_null ());
   json_object_set_new (response_data, "jackpot", json_integer (0));
@@ -1624,6 +1744,8 @@ cmd_tavern_lottery_status (client_ctx_t *ctx, json_t *root)
   char draw_date_str[32];
   time_t now = time (NULL);
   struct tm *tm_info = localtime (&now);
+
+
   strftime (draw_date_str, sizeof (draw_date_str), "%Y-%m-%d", tm_info);
   json_object_set_new (response_data, "current_draw_date",
                        json_string (draw_date_str));
@@ -1632,6 +1754,8 @@ cmd_tavern_lottery_status (client_ctx_t *ctx, json_t *root)
   const char *sql_state =
     "SELECT draw_date, winning_number, jackpot FROM tavern_lottery_state WHERE draw_date = ?;";
   int rc = sqlite3_prepare_v2 (db, sql_state, -1, &stmt, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       json_decref (response_data);
@@ -1658,6 +1782,8 @@ cmd_tavern_lottery_status (client_ctx_t *ctx, json_t *root)
   json_t *player_tickets_array = json_array ();
   const char *sql_player_tickets =
     "SELECT number, cost, purchased_at FROM tavern_lottery_tickets WHERE player_id = ? AND draw_date = ?;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_player_tickets, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -1670,6 +1796,8 @@ cmd_tavern_lottery_status (client_ctx_t *ctx, json_t *root)
   while (sqlite3_step (stmt) == SQLITE_ROW)
     {
       json_t *ticket_obj = json_object ();
+
+
       json_object_set_new (ticket_obj, "number",
                            json_integer (sqlite3_column_int (stmt, 0)));
       json_object_set_new (ticket_obj, "cost",
@@ -1703,6 +1831,8 @@ cmd_tavern_deadpool_place_bet (client_ctx_t *ctx,
                                   "You are not in a tavern sector.");
     }
   json_t *data = json_object_get (root, "data");
+
+
   if (!data)
     {
       return send_error_response (ctx, root, ERR_BAD_REQUEST,
@@ -1710,6 +1840,8 @@ cmd_tavern_deadpool_place_bet (client_ctx_t *ctx,
     }
   int target_id = 0;
   long long bet_amount = 0;
+
+
   if (!json_get_int_flexible (data, "target_id", &target_id)
       || target_id <= 0)
     {
@@ -1730,6 +1862,8 @@ cmd_tavern_deadpool_place_bet (client_ctx_t *ctx,
   // Check if target player exists
   sqlite3_stmt *stmt = NULL;
   const char *sql_target_exists = "SELECT 1 FROM players WHERE id = ?;";
+
+
   if (sqlite3_prepare_v2 (db, sql_target_exists, -1, &stmt, NULL) !=
       SQLITE_OK)
     {
@@ -1747,6 +1881,8 @@ cmd_tavern_deadpool_place_bet (client_ctx_t *ctx,
   stmt = NULL;
   // Validate bet limits
   int limit_check = validate_bet_limits (db, ctx->player_id, bet_amount);
+
+
   if (limit_check == -1)
     {
       return send_error_response (ctx, root, ERR_TAVERN_BET_TOO_HIGH,
@@ -1773,6 +1909,8 @@ cmd_tavern_deadpool_place_bet (client_ctx_t *ctx,
   // Deduct bet amount
   int rc = update_player_credits_gambling (db, ctx->player_id, bet_amount,
                                            false);                                      // Deduct
+
+
   if (rc != 0)
     {
       return send_error_response (ctx, root, ERR_DB,
@@ -1787,6 +1925,8 @@ cmd_tavern_deadpool_place_bet (client_ctx_t *ctx,
   // Insert bet into tavern_deadpool_bets
   const char *sql_insert_bet =
     "INSERT INTO tavern_deadpool_bets (bettor_id, target_id, amount, odds_bp, placed_at, expires_at, resolved) VALUES (?, ?, ?, ?, ?, ?, 0);";
+
+
   rc = sqlite3_prepare_v2 (db, sql_insert_bet, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -1812,6 +1952,8 @@ cmd_tavern_deadpool_place_bet (client_ctx_t *ctx,
     json_pack ("{s:s, s:i, s:i, s:i}", "status", "Dead Pool bet placed.",
                "target_id", target_id, "amount", bet_amount, "odds_bp",
                odds_bp);
+
+
   send_enveloped_ok (ctx->fd, root, "tavern.deadpool.place_bet_v1",
                      response_data);
   return 0;
@@ -1835,12 +1977,16 @@ cmd_tavern_dice_play (client_ctx_t *ctx,
                                   "You are not in a tavern sector.");
     }
   json_t *data = json_object_get (root, "data");
+
+
   if (!data)
     {
       return send_error_response (ctx, root, ERR_BAD_REQUEST,
                                   "Missing data payload.");
     }
   long long bet_amount = 0;
+
+
   if (!json_get_int64_flexible (data, "amount", &bet_amount)
       || bet_amount <= 0)
     {
@@ -1849,6 +1995,8 @@ cmd_tavern_dice_play (client_ctx_t *ctx,
     }
   // Validate bet limits
   int limit_check = validate_bet_limits (db, ctx->player_id, bet_amount);
+
+
   if (limit_check == -1)
     {
       return send_error_response (ctx, root, ERR_TAVERN_BET_TOO_HIGH,
@@ -1875,6 +2023,8 @@ cmd_tavern_dice_play (client_ctx_t *ctx,
   // Deduct bet amount
   int rc = update_player_credits_gambling (db, ctx->player_id, bet_amount,
                                            false);                                      // Deduct
+
+
   if (rc != 0)
     {
       return send_error_response (ctx, root, ERR_DB,
@@ -1886,6 +2036,8 @@ cmd_tavern_dice_play (client_ctx_t *ctx,
   int total = die1 + die2;
   bool win = (total == 7);
   long long winnings = 0;
+
+
   if (win)
     {
       winnings = bet_amount * 2;        // Example: 2x payout for winning
@@ -1901,6 +2053,8 @@ cmd_tavern_dice_play (client_ctx_t *ctx,
   long long current_credits = 0;
   sqlite3_stmt *stmt = NULL;
   const char *sql_credits = "SELECT credits FROM players WHERE id = ?;";
+
+
   if (sqlite3_prepare_v2 (db, sql_credits, -1, &stmt, NULL) == SQLITE_OK)
     {
       sqlite3_bind_int (stmt, 1, ctx->player_id);
@@ -1918,6 +2072,8 @@ cmd_tavern_dice_play (client_ctx_t *ctx,
                                      "win", win,
                                      "winnings", winnings,
                                      "player_credits", current_credits);
+
+
   send_enveloped_ok (ctx->fd, root, "tavern.dice.play_v1", response_data);
   return 0;
 }
@@ -1940,6 +2096,8 @@ cmd_tavern_highstakes_play (client_ctx_t *ctx,
                                   "You are not in a tavern sector.");
     }
   json_t *data = json_object_get (root, "data");
+
+
   if (!data)
     {
       return send_error_response (ctx, root, ERR_BAD_REQUEST,
@@ -1947,6 +2105,8 @@ cmd_tavern_highstakes_play (client_ctx_t *ctx,
     }
   long long bet_amount = 0;
   int rounds = 0;
+
+
   if (!json_get_int64_flexible (data, "amount", &bet_amount)
       || bet_amount <= 0)
     {
@@ -1961,6 +2121,8 @@ cmd_tavern_highstakes_play (client_ctx_t *ctx,
     }
   // Validate initial bet limits
   int limit_check = validate_bet_limits (db, ctx->player_id, bet_amount);
+
+
   if (limit_check == -1)
     {
       return send_error_response (ctx, root, ERR_TAVERN_BET_TOO_HIGH,
@@ -1989,6 +2151,8 @@ cmd_tavern_highstakes_play (client_ctx_t *ctx,
   // Deduct initial bet amount
   int rc = update_player_credits_gambling (db, ctx->player_id, bet_amount,
                                            false);                                      // Deduct
+
+
   if (rc != 0)
     {
       return send_error_response (ctx,
@@ -1998,10 +2162,14 @@ cmd_tavern_highstakes_play (client_ctx_t *ctx,
     }
   long long current_pot = bet_amount;
   bool player_won_all_rounds = true;
+
+
   for (int i = 0; i < rounds; i++)
     {
       // Simulate a biased coin flip (e.g., 60% chance to win)
       int roll = get_random_int (1, 100);
+
+
       if (roll <= 60)
         {                       // Win this round
           current_pot *= 2;
@@ -2013,6 +2181,8 @@ cmd_tavern_highstakes_play (client_ctx_t *ctx,
         }
     }
   long long winnings = 0;
+
+
   if (player_won_all_rounds)
     {
       winnings = current_pot;
@@ -2028,6 +2198,8 @@ cmd_tavern_highstakes_play (client_ctx_t *ctx,
   long long player_credits_after_game = 0;
   sqlite3_stmt *stmt_credits = NULL;
   const char *sql_credits = "SELECT credits FROM players WHERE id = ?;";
+
+
   if (sqlite3_prepare_v2 (db, sql_credits, -1, &stmt_credits, NULL) ==
       SQLITE_OK)
     {
@@ -2057,6 +2229,8 @@ cmd_tavern_highstakes_play (client_ctx_t *ctx,
                                      winnings,
                                      "player_credits",
                                      player_credits_after_game);
+
+
   send_enveloped_ok (ctx->fd, root, "tavern.highstakes.play_v1",
                      response_data);
   return 0;
@@ -2082,6 +2256,8 @@ cmd_tavern_raffle_buy_ticket (client_ctx_t *ctx, json_t *root)
   long long ticket_price = 10;  // Example: 10 credits per raffle ticket
   // Validate bet limits (using ticket_price as the bet)
   int limit_check = validate_bet_limits (db, ctx->player_id, ticket_price);
+
+
   if (limit_check == -1)
     {
       return send_error_response (ctx,
@@ -2112,6 +2288,8 @@ cmd_tavern_raffle_buy_ticket (client_ctx_t *ctx, json_t *root)
                                            ctx->player_id,
                                            ticket_price,
                                            false);                                      // Deduct
+
+
   if (rc != 0)
     {
       return send_error_response (ctx, root, ERR_DB,
@@ -2126,6 +2304,8 @@ cmd_tavern_raffle_buy_ticket (client_ctx_t *ctx, json_t *root)
   sqlite3_stmt *stmt = NULL;
   const char *sql_get_raffle =
     "SELECT pot, last_winner_id, last_payout, last_win_ts FROM tavern_raffle_state WHERE id = 1;";
+
+
   if (sqlite3_prepare_v2 (db, sql_get_raffle, -1, &stmt, NULL) == SQLITE_OK)
     {
       if (sqlite3_step (stmt) == SQLITE_ROW)
@@ -2151,6 +2331,8 @@ cmd_tavern_raffle_buy_ticket (client_ctx_t *ctx, json_t *root)
   bool player_wins = (get_random_int (1, 1000) == 1);   // 1 in 1000 chance to win
   long long winnings = 0;
   const char *sql_update_raffle = NULL;
+
+
   if (player_wins)
     {
       winnings = current_pot;
@@ -2217,6 +2399,8 @@ cmd_tavern_raffle_buy_ticket (client_ctx_t *ctx, json_t *root)
   long long player_credits_after_game = 0;
   sqlite3_stmt *stmt_credits = NULL;
   const char *sql_credits = "SELECT credits FROM players WHERE id = ?;";
+
+
   if (sqlite3_prepare_v2 (db, sql_credits, -1, &stmt_credits, NULL) ==
       SQLITE_OK)
     {
@@ -2236,6 +2420,8 @@ cmd_tavern_raffle_buy_ticket (client_ctx_t *ctx, json_t *root)
                                      "current_pot", current_pot,
                                      "player_credits",
                                      player_credits_after_game);
+
+
   send_enveloped_ok (ctx->fd, root, "tavern.raffle.buy_ticket_v1",
                      response_data);
   return 0;
@@ -2261,6 +2447,8 @@ cmd_tavern_trader_buy_password (client_ctx_t *ctx, json_t *root)
   long long player_alignment = 0;
   sqlite3_stmt *stmt_align = NULL;
   const char *sql_align = "SELECT alignment FROM players WHERE id = ?;";
+
+
   if (sqlite3_prepare_v2 (db, sql_align, -1, &stmt_align, NULL) == SQLITE_OK)
     {
       sqlite3_bind_int (stmt_align, 1, ctx->player_id);
@@ -2289,6 +2477,8 @@ cmd_tavern_trader_buy_password (client_ctx_t *ctx, json_t *root)
   long long password_price = 5000;      // Fixed price for underground password
   // Validate bet limits (using password_price as the bet)
   int limit_check = validate_bet_limits (db, ctx->player_id, password_price);
+
+
   if (limit_check == -1)
     {
       return send_error_response (ctx,
@@ -2323,6 +2513,8 @@ cmd_tavern_trader_buy_password (client_ctx_t *ctx, json_t *root)
                                            ctx->player_id,
                                            password_price,
                                            false);                                      // Deduct
+
+
   if (rc != 0)
     {
       return send_error_response (ctx, root, ERR_DB,
@@ -2335,6 +2527,8 @@ cmd_tavern_trader_buy_password (client_ctx_t *ctx, json_t *root)
                                      "Underground password purchased.",
                                      "password", "UndergroundAccessCode-XYZ",   // Example password
                                      "cost", password_price);
+
+
   send_enveloped_ok (ctx->fd, root, "tavern.trader.buy_password_v1",
                      response_data);
   return 0;
@@ -2357,18 +2551,24 @@ cmd_tavern_graffiti_post (client_ctx_t *ctx, json_t *root)
                                   "You are not in a tavern sector.");
     }
   json_t *data = json_object_get (root, "data");
+
+
   if (!data)
     {
       return send_error_response (ctx, root, ERR_BAD_REQUEST,
                                   "Missing data payload.");
     }
   const char *post_text_raw = json_get_string_or_null (data, "text");
+
+
   if (!post_text_raw || strlen (post_text_raw) == 0)
     {
       return send_error_response (ctx, root, ERR_INVALID_ARG,
                                   "Graffiti text cannot be empty.");
     }
   char post_text[256];          // Max length for graffiti post
+
+
   strncpy (post_text, post_text_raw, sizeof (post_text) - 1);
   post_text[sizeof (post_text) - 1] = '\0';
   sanitize_text (post_text, sizeof (post_text));
@@ -2385,6 +2585,8 @@ cmd_tavern_graffiti_post (client_ctx_t *ctx, json_t *root)
     "INSERT INTO tavern_graffiti (player_id, text, created_at) VALUES (?, ?, ?);";
   sqlite3_stmt *stmt = NULL;
   int rc = sqlite3_prepare_v2 (db, sql_insert, -1, &stmt, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       return send_error_response (ctx, root, ERR_DB_QUERY_FAILED,
@@ -2403,6 +2605,8 @@ cmd_tavern_graffiti_post (client_ctx_t *ctx, json_t *root)
   // Optional: Implement FIFO logic - if count exceeds graffiti_max_posts, delete the oldest
   const char *sql_count = "SELECT COUNT(*) FROM tavern_graffiti;";
   long long current_graffiti_count = 0;
+
+
   if (sqlite3_prepare_v2 (db, sql_count, -1, &stmt, NULL) == SQLITE_OK)
     {
       if (sqlite3_step (stmt) == SQLITE_ROW)
@@ -2415,6 +2619,8 @@ cmd_tavern_graffiti_post (client_ctx_t *ctx, json_t *root)
     {
       const char *sql_delete_oldest =
         "DELETE FROM tavern_graffiti WHERE id IN (SELECT id FROM tavern_graffiti ORDER BY created_at ASC LIMIT ?);";
+
+
       if (sqlite3_prepare_v2 (db, sql_delete_oldest, -1, &stmt, NULL) ==
           SQLITE_OK)
         {
@@ -2434,6 +2640,8 @@ cmd_tavern_graffiti_post (client_ctx_t *ctx, json_t *root)
   json_t *response_data =
     json_pack ("{s:s, s:s, s:I}", "status", "Graffiti posted successfully.",
                "text", post_text, "created_at", (long long) now);
+
+
   send_enveloped_ok (ctx->fd, root, "tavern.graffiti.post_v1", response_data);
   return 0;
 }
@@ -2458,6 +2666,8 @@ cmd_tavern_round_buy (client_ctx_t *ctx, json_t *root)
   int alignment_gain = g_tavern_cfg.buy_round_alignment_gain;
   // Validate bet limits (using cost as the bet)
   int limit_check = validate_bet_limits (db, ctx->player_id, cost);
+
+
   if (limit_check == -1)
     {
       return send_error_response (ctx,
@@ -2490,6 +2700,8 @@ cmd_tavern_round_buy (client_ctx_t *ctx, json_t *root)
                                            ctx->player_id,
                                            cost,
                                            false);                              // Deduct
+
+
   if (rc != 0)
     {
       return send_error_response (ctx, root, ERR_DB,
@@ -2499,6 +2711,8 @@ cmd_tavern_round_buy (client_ctx_t *ctx, json_t *root)
   const char *sql_update_alignment =
     "UPDATE players SET alignment = alignment + ? WHERE id = ?;";
   sqlite3_stmt *stmt = NULL;
+
+
   if (sqlite3_prepare_v2 (db, sql_update_alignment, -1, &stmt, NULL) ==
       SQLITE_OK)
     {
@@ -2526,11 +2740,15 @@ cmd_tavern_round_buy (client_ctx_t *ctx, json_t *root)
                                          ctx->player_id,
                                          "sector_id",
                                          ctx->sector_id);
+
+
   server_broadcast_to_sector (ctx->sector_id, "tavern.round.bought",
                               broadcast_payload);
   json_t *response_data =
     json_pack ("{s:s, s:I, s:i}", "status", "Round bought successfully!",
                "cost", cost, "alignment_gain", alignment_gain);
+
+
   send_enveloped_ok (ctx->fd, root, "tavern.round.buy_v1", response_data);
   return 0;
 }
@@ -2557,6 +2775,8 @@ cmd_tavern_loan_take (client_ctx_t *ctx, json_t *root)
                                   "The Loan Shark is not currently available.");
     }
   long long current_loan_principal = 0;
+
+
   if (get_player_loan
         (db, ctx->player_id, &current_loan_principal, NULL, NULL,
         NULL) == SQLITE_OK && current_loan_principal > 0)
@@ -2565,12 +2785,16 @@ cmd_tavern_loan_take (client_ctx_t *ctx, json_t *root)
                                   "You already have an outstanding loan.");
     }
   json_t *data = json_object_get (root, "data");
+
+
   if (!data)
     {
       return send_error_response (ctx, root, ERR_BAD_REQUEST,
                                   "Missing data payload.");
     }
   long long loan_amount = 0;
+
+
   if (!json_get_int64_flexible (data, "amount", &loan_amount)
       || loan_amount <= 0 || loan_amount > 100000)
     {                           // Example max loan
@@ -2587,6 +2811,8 @@ cmd_tavern_loan_take (client_ctx_t *ctx, json_t *root)
     "INSERT INTO tavern_loans (player_id, principal, interest_rate, due_date, is_defaulted) VALUES (?, ?, ?, ?, 0);";
   sqlite3_stmt *stmt = NULL;
   int rc = sqlite3_prepare_v2 (db, sql_insert_loan, -1, &stmt, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       return send_error_response (ctx, root, ERR_DB_QUERY_FAILED,
@@ -2616,6 +2842,8 @@ cmd_tavern_loan_take (client_ctx_t *ctx, json_t *root)
                                      "amount", loan_amount,
                                      "interest_rate_bp", interest_rate_bp,
                                      "due_date", (long long) due_date);
+
+
   send_enveloped_ok (ctx->fd, root, "tavern.loan.take_v1", response_data);
   return 0;
 }
@@ -2646,6 +2874,8 @@ cmd_tavern_loan_pay (client_ctx_t *ctx,
   int current_loan_interest_rate = 0;
   int current_loan_due_date = 0;
   int current_loan_is_defaulted = 0;
+
+
   if (get_player_loan
         (db, ctx->player_id, &current_loan_principal,
         &current_loan_interest_rate, &current_loan_due_date,
@@ -2656,12 +2886,16 @@ cmd_tavern_loan_pay (client_ctx_t *ctx,
                                   "You do not have an outstanding loan.");
     }
   json_t *data = json_object_get (root, "data");
+
+
   if (!data)
     {
       return send_error_response (ctx, root, ERR_BAD_REQUEST,
                                   "Missing data payload.");
     }
   long long pay_amount = 0;
+
+
   if (!json_get_int64_flexible (data, "amount", &pay_amount)
       || pay_amount <= 0)
     {
@@ -2676,18 +2910,24 @@ cmd_tavern_loan_pay (client_ctx_t *ctx,
   // Deduct payment amount from player's credits
   int rc = update_player_credits_gambling (db, ctx->player_id, pay_amount,
                                            false);                                      // Deduct
+
+
   if (rc != 0)
     {
       return send_error_response (ctx, root, ERR_DB,
                                   "Failed to deduct credits for loan payment.");
     }
   long long new_principal = current_loan_principal - pay_amount;
+
+
   if (new_principal < 0)
     {
       new_principal = 0;        // Cannot overpay beyond principal
     }
   const char *sql_update_loan = NULL;
   sqlite3_stmt *stmt = NULL;
+
+
   if (new_principal == 0)
     {
       // Loan fully paid, delete it
@@ -2731,6 +2971,8 @@ cmd_tavern_loan_pay (client_ctx_t *ctx,
                                      "Loan payment successful.",
                                      "paid_amount", pay_amount,
                                      "remaining_principal", new_principal);
+
+
   send_enveloped_ok (ctx->fd, root, "tavern.loan.pay_v1", response_data);
   return 0;
 }
@@ -2756,6 +2998,8 @@ cmd_tavern_rumour_get_hint (client_ctx_t *ctx, json_t *root)
   int limit_check = validate_bet_limits (db,
                                          ctx->player_id,
                                          hint_cost);
+
+
   if (limit_check == -1)
     {
       return send_error_response (ctx, root, ERR_TAVERN_BET_TOO_HIGH,
@@ -2781,6 +3025,8 @@ cmd_tavern_rumour_get_hint (client_ctx_t *ctx, json_t *root)
   // Deduct cost
   int rc = update_player_credits_gambling (db, ctx->player_id, hint_cost,
                                            false);                                      // Deduct
+
+
   if (rc != 0)
     {
       return send_error_response (ctx, root, ERR_DB,
@@ -2803,6 +3049,8 @@ cmd_tavern_rumour_get_hint (client_ctx_t *ctx, json_t *root)
   json_t *response_data =
     json_pack ("{s:s, s:s, s:I}", "status", "Rumour acquired.", "hint",
                random_hint, "cost", hint_cost);
+
+
   send_enveloped_ok (ctx->fd, root, "tavern.rumour.get_hint_v1",
                      response_data);
   return 0;
@@ -2827,6 +3075,8 @@ cmd_tavern_barcharts_get_prices_summary (client_ctx_t *ctx, json_t *root)
   long long summary_cost = 100; // Fixed price for market summary
   // Validate bet limits
   int limit_check = validate_bet_limits (db, ctx->player_id, summary_cost);
+
+
   if (limit_check == -1)
     {
       return send_error_response (ctx,
@@ -2856,6 +3106,8 @@ cmd_tavern_barcharts_get_prices_summary (client_ctx_t *ctx, json_t *root)
                                            ctx->player_id,
                                            summary_cost,
                                            false);                                      // Deduct
+
+
   if (rc != 0)
     {
       return send_error_response (ctx, root, ERR_DB,
@@ -2868,6 +3120,8 @@ cmd_tavern_barcharts_get_prices_summary (client_ctx_t *ctx, json_t *root)
     "SELECT p.sector, c.name, pt.mode, pt.maxproduct, (c.base_price * (10000 + c.volatility * (RANDOM() % 200 - 100)) / 10000) AS price "
     "FROM ports p JOIN port_trade pt ON p.id = pt.port_id JOIN commodities c ON c.code = pt.commodity "
     "ORDER BY price DESC LIMIT 5;";                                                                                                                                                                                                                                                                     // Top 5 prices example
+
+
   if (sqlite3_prepare_v2 (db, sql_prices, -1, &stmt, NULL) != SQLITE_OK)
     {
       LOGE
@@ -2881,6 +3135,8 @@ cmd_tavern_barcharts_get_prices_summary (client_ctx_t *ctx, json_t *root)
   while (sqlite3_step (stmt) == SQLITE_ROW)
     {
       json_t *price_obj = json_object ();
+
+
       json_object_set_new (price_obj, "sector_id",
                            json_integer (sqlite3_column_int (stmt, 0)));
       json_object_set_new (price_obj, "commodity",
@@ -2899,6 +3155,8 @@ cmd_tavern_barcharts_get_prices_summary (client_ctx_t *ctx, json_t *root)
   json_t *response_data =
     json_pack ("{s:s, s:o, s:I}", "status", "Market summary acquired.",
                "prices", prices_array, "cost", summary_cost);
+
+
   send_enveloped_ok (ctx->fd, root, "tavern.barcharts.get_prices_summary_v1",
                      response_data);
   return 0;

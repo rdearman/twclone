@@ -16,6 +16,8 @@
 #include "db_player_settings.h"
 #include "server_log.h"
 extern struct twconfig *config_load (void);
+
+
 static bool
 player_is_sysop (sqlite3 *db, int player_id)
 {
@@ -32,6 +34,8 @@ player_is_sysop (sqlite3 *db, int player_id)
         {
           int type = sqlite3_column_int (st, 0);
           int flags = sqlite3_column_int (st, 1);
+
+
           if (type == 1 || (flags & 0x1))
             {
               is_sysop = true;  /* adjust rule if needed */
@@ -76,6 +80,8 @@ subs_upsert_locked_defaults (sqlite3 *db, int player_id, bool is_sysop)
   rc = SQLITE_OK;
   /* 2) 'player.<id>' */
   char chan[64];
+
+
   snprintf (chan, sizeof (chan), "player.%d", player_id);
   rc = sqlite3_prepare_v2 (db,
                            "INSERT INTO subscriptions(player_id, event_type, delivery, locked, enabled) "
@@ -139,6 +145,8 @@ static const char *k_required_locked_topics[] = {
   "system.notice",
   /* add more here if you need: "system.motd", ... */
 };
+
+
 /* Default prefs to seed if missing */
 typedef struct
 {
@@ -154,6 +162,8 @@ static const default_pref_t k_default_prefs[] = {
   {"privacy.dm_allowed", "bool", "true"},
   /* add more defaults as needed */
 };
+
+
 /* Upsert a locked=1, enabled=1 subscription; preserve lock with MAX() */
 static int
 upsert_locked_subscription (sqlite3 *db, int player_id, const char *topic)
@@ -171,6 +181,8 @@ upsert_locked_subscription (sqlite3 *db, int player_id, const char *topic)
   sqlite3_bind_int (st, 1, player_id);
   sqlite3_bind_text (st, 2, topic, -1, SQLITE_STATIC);
   int rc = sqlite3_step (st);
+
+
   sqlite3_finalize (st);
   return (rc == SQLITE_DONE) ? 0 : -1;
 }
@@ -198,6 +210,8 @@ insert_default_pref_if_missing (sqlite3 *db, int player_id,
   sqlite3_bind_int (st, 5, player_id);
   sqlite3_bind_text (st, 6, key, -1, SQLITE_STATIC);
   int rc = sqlite3_step (st);
+
+
   sqlite3_finalize (st);
   return (rc == SQLITE_DONE) ? 0 : -1;
 }
@@ -243,9 +257,13 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
   /* NEW: pull fields from the "data" object, not the root */
   json_t *jdata = json_object_get (root, "data");
   const char *name = NULL, *pass = NULL;
+
+
   if (json_is_object (jdata))
     {
       json_t *jname = json_object_get (jdata, "username");
+
+
       if (!jname)
         {
           /* Legacy support for old tests/clients */
@@ -256,6 +274,8 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
             }
         } // Add missing brace here
       json_t *jpass = json_object_get (jdata, "passwd");
+
+
       name = json_is_string (jname) ? json_string_value (jname) : NULL;
       pass = json_is_string (jpass) ? json_string_value (jpass) : NULL;
     }
@@ -268,9 +288,22 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
     {
       int player_id = 0;
       int rc = play_login (name, pass, &player_id);
+
+
       LOGI ("play_login returned %d for player %s", rc, name);
       if (rc == AUTH_OK)
         {
+          /* check is npc */
+          sqlite3 *dbh_npc = db_get_handle ();
+
+
+          if (!h_player_is_npc (dbh_npc, &player_id))
+            {
+              send_enveloped_error (ctx->fd, root, ERR_IS_NPC,
+                                    "NPC login is not allowed");
+              return 0;
+            }
+          /* check podded */
           sqlite3 *dbh = db_get_handle ();
           long long current_timestamp = time (NULL);
           char podded_status_str[32] = { 0 };
@@ -281,6 +314,8 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
             "SELECT status, big_sleep_until FROM podded_status WHERE player_id = ?;";
           int ps_rc =
             sqlite3_prepare_v2 (dbh, sql_get_podded_status, -1, &ps_st, NULL);
+
+
           if (ps_rc == SQLITE_OK)
             {
               sqlite3_bind_int (ps_st, 1, player_id);
@@ -310,6 +345,8 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
                   json_t *err_data =
                     json_pack ("{s:i, s:i}", "player_id", player_id,
                                "big_sleep_until", big_sleep_until);
+
+
                   send_enveloped_refused (ctx->fd, root, ERR_REF_BIG_SLEEP,
                                           "You are currently in Big Sleep.",
                                           err_data);
@@ -327,6 +364,8 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
                   int respawn_sector_id = 1;
                   int spawn_rc =
                     spawn_starter_ship (dbh, player_id, respawn_sector_id);
+
+
                   if (spawn_rc != SQLITE_OK)
                     {
                       LOGE
@@ -340,6 +379,8 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
                     }
                   // Emit event player.big_sleep_ended
                   json_t *event_payload = json_object ();
+
+
                   json_object_set_new (event_payload, "player_id",
                                        json_integer (player_id));
                   db_log_engine_event (current_timestamp,
@@ -350,6 +391,8 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
             }
           /* Read canonical sector from DB; fall back to 1 if missing/NULL */
           int sector_id = 0;
+
+
           if (db_player_get_sector (player_id, &sector_id) != SQLITE_OK
               || sector_id <= 0)
             {
@@ -365,6 +408,8 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
           bool is_sysop = player_is_sysop (dbh, ctx->player_id);
           int subs_rc =
             subs_upsert_locked_defaults (dbh, ctx->player_id, is_sysop);
+
+
           if (subs_rc != SQLITE_OK)
             {
               send_enveloped_error (ctx->fd, root, 1503,
@@ -376,6 +421,8 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
           sqlite3_stmt *stmt = NULL;
           const char *sql =
             "SELECT COUNT(*) FROM news_feed WHERE timestamp > (SELECT last_news_read_timestamp FROM players WHERE id = ?);";
+
+
           if (sqlite3_prepare_v2 (dbh, sql, -1, &stmt, NULL) == SQLITE_OK)
             {
               sqlite3_bind_int (stmt, 1, player_id);
@@ -386,6 +433,8 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
               sqlite3_finalize (stmt);
             }
           char session_token[65];
+
+
           if (db_session_create (player_id, 86400, session_token) !=
               SQLITE_OK)
             {
@@ -398,6 +447,8 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
                                     "current_sector", sector_id,
                                     "unread_news_count", unread_news_count,
                                     "session", session_token);
+
+
           if (!data)
             {
               send_enveloped_error (ctx->fd, root, 1500, "Out of memory");
@@ -406,6 +457,8 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
           /* Auto-subscribe this player to system.* on login (best-effort). */
           {
             sqlite3_stmt *st = NULL;
+
+
             if (sqlite3_prepare_v2 (dbh,
                                     // Use dbh which is already defined
                                     "INSERT OR IGNORE INTO subscriptions(player_id,event_type,delivery,enabled) "
@@ -424,6 +477,8 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
           }
           {
             char *cur = NULL;   // must be char*
+
+
             if (db_prefs_get_one (ctx->player_id, "ui.locale", &cur) !=
                 SQLITE_OK || !cur)
               {
@@ -473,6 +528,8 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
       json_t *jsn = json_object_get (jdata, "ship_name");
       json_t *jloc = json_object_get (jdata, "ui_locale");
       json_t *jtz = json_object_get (jdata, "ui_timezone");
+
+
       name = json_is_string (jn) ? json_string_value (jn) : NULL;
       pass = json_is_string (jp) ? json_string_value (jp) : NULL;
       ship_name = json_is_string (jsn) ? json_string_value (jsn) : NULL;
@@ -514,6 +571,8 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
                                                    player_id,
                                                    cfg->startingcredits,
                                                    &new_account_id);
+
+
       if (create_bank_rc != SQLITE_OK)
         {
           LOGE (
@@ -535,31 +594,50 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
       // --- Create Turns Entry for the new player ---
       // Use 750 as a default for starting turns.
       sqlite3_stmt *st_turns = NULL;
-      int prepare_turns_rc = sqlite3_prepare_v2(db,
-                                                "INSERT OR IGNORE INTO turns (player, turns_remaining, last_update) VALUES (?1, ?2, strftime('%s', 'now'));",
-                                                -1,
-                                                &st_turns,
-                                                NULL);
-      if (prepare_turns_rc == SQLITE_OK) {
-          sqlite3_bind_int(st_turns, 1, player_id);
-          sqlite3_bind_int(st_turns, 2, 750); // Set initial turns to 750
-          int step_turns_rc = sqlite3_step(st_turns);
-          if (step_turns_rc != SQLITE_DONE) {
-              LOGE("cmd_auth_register debug: Failed to create turns entry for player %d: %s",
-                   player_id, sqlite3_errmsg(db));
-              sqlite3_finalize(st_turns);
-              send_enveloped_error(ctx->fd, root, 1500, "Database error (turns entry creation)");
+      int prepare_turns_rc = sqlite3_prepare_v2 (db,
+                                                 "INSERT OR IGNORE INTO turns (player, turns_remaining, last_update) VALUES (?1, ?2, strftime('%s', 'now'));",
+                                                 -1,
+                                                 &st_turns,
+                                                 NULL);
+
+
+      if (prepare_turns_rc == SQLITE_OK)
+        {
+          sqlite3_bind_int (st_turns, 1, player_id);
+          sqlite3_bind_int (st_turns, 2, 750); // Set initial turns to 750
+          int step_turns_rc = sqlite3_step (st_turns);
+
+
+          if (step_turns_rc != SQLITE_DONE)
+            {
+              LOGE (
+                "cmd_auth_register debug: Failed to create turns entry for player %d: %s",
+                player_id,
+                sqlite3_errmsg (db));
+              sqlite3_finalize (st_turns);
+              send_enveloped_error (ctx->fd,
+                                    root,
+                                    1500,
+                                    "Database error (turns entry creation)");
               goto rollback_and_error;
-          }
-          sqlite3_finalize(st_turns);
-      } else {
-          LOGE("cmd_auth_register debug: Failed to prepare turns insert for player %d: %s",
-               player_id, sqlite3_errmsg(db));
-          send_enveloped_error(ctx->fd, root, 1500, "Database error (prepare turns insert)");
+            }
+          sqlite3_finalize (st_turns);
+        }
+      else
+        {
+          LOGE (
+            "cmd_auth_register debug: Failed to prepare turns insert for player %d: %s",
+            player_id,
+            sqlite3_errmsg (db));
+          send_enveloped_error (ctx->fd,
+                                root,
+                                1500,
+                                "Database error (prepare turns insert)");
           goto rollback_and_error;
-      }
-      LOGI("cmd_auth_register debug: player %d turns entry created with 750 turns",
-           player_id);
+        }
+      LOGI (
+        "cmd_auth_register debug: player %d turns entry created with 750 turns",
+        player_id);
 
       // --- Spawn Location ---
       spawn_sector_id = (rand () % 10) + 1;     // Random sector between 1 and 10
@@ -592,6 +670,8 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
             new_ship_id);
       // --- Update Player's Sector and Ship ---
       int set_sector_rc = db_player_set_sector (player_id, spawn_sector_id);
+
+
       LOGI (
         "cmd_auth_register debug: db_player_set_sector returned %d for player %d",
         set_sector_rc,
@@ -620,6 +700,8 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
                                                  -1,
                                                  &st_creds,
                                                  NULL);
+
+
       LOGI ("cmd_auth_register debug: prepare_creds returned %d",
             prepare_creds_rc);
       if (prepare_creds_rc == SQLITE_OK)
@@ -627,6 +709,8 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
           sqlite3_bind_int (st_creds, 1, start_creds);
           sqlite3_bind_int (st_creds, 2, player_id);
           int step_creds_rc = sqlite3_step (st_creds);
+
+
           LOGI ("cmd_auth_register debug: step_creds returned %d",
                 step_creds_rc);
           if (step_creds_rc != SQLITE_DONE)
@@ -662,6 +746,8 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
         start_creds);
       // --- Starting Alignment ---
       int set_align_rc = db_player_set_alignment (player_id, 1);
+
+
       LOGI (
         "cmd_auth_register debug: db_player_set_alignment returned %d for player %d",
         set_align_rc,
@@ -687,12 +773,16 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
                                                 -1,
                                                 &st,
                                                 NULL);
+
+
       LOGI ("cmd_auth_register debug: prepare_subs returned %d",
             prepare_subs_rc);
       if (prepare_subs_rc == SQLITE_OK)
         {
           sqlite3_bind_int64 (st, 1, player_id);
           int step_subs_rc = sqlite3_step (st);
+
+
           LOGI ("cmd_auth_register debug: step_subs returned %d", step_subs_rc);
         }
       if (st)
@@ -708,6 +798,8 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
                                                   "ui.locale",
                                                   PT_STRING,
                                                   ui_locale);
+
+
           LOGI (
             "cmd_auth_register debug: db_prefs_set_one (ui.locale) returned %d for player %d",
             prefs_locale_rc,
@@ -722,6 +814,8 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
                                                     "ui.timezone",
                                                     PT_STRING,
                                                     ui_timezone);
+
+
           LOGI (
             "cmd_auth_register debug: db_prefs_set_one (ui.timezone) returned %d for player %d",
             prefs_timezone_rc,
@@ -738,6 +832,8 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
       // --- Issue Session Token ---
       char tok[65];
       int session_create_rc = db_session_create (player_id, 86400, tok);
+
+
       LOGI (
         "cmd_auth_register debug: db_session_create returned %d for player %d",
         session_create_rc,
@@ -757,6 +853,8 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
           ctx->player_id = player_id;
           json_t *data = json_pack ("{s:i, s:s}", "player_id", player_id,
                                     "session_token", tok);
+
+
           send_enveloped_ok (ctx->fd, root, "auth.session", data);
           json_decref (data);
           LOGI ("cmd_auth_register debug: player %d session created and sent",
@@ -814,6 +912,8 @@ cmd_auth_logout (client_ctx_t *ctx, json_t *root)
   if (json_is_object (jdata))
     {
       json_t *jt = json_object_get (jdata, "session_token");
+
+
       if (json_is_string (jt))
         {
           tok = json_string_value (jt);
@@ -826,6 +926,8 @@ cmd_auth_logout (client_ctx_t *ctx, json_t *root)
     }
   ctx->player_id = 0;           /* drop connection auth state */
   json_t *data = json_pack ("{s:s}", "message", "Logged out");
+
+
   send_enveloped_ok (ctx->fd, root, "auth.logged_out", data);
   json_decref (data);
   return 0;
@@ -841,6 +943,8 @@ cmd_user_create (client_ctx_t *ctx, json_t *root)
     {
       json_t *jname = json_object_get (jdata, "username");
       json_t *jpass = json_object_get (jdata, "passwd");
+
+
       name = json_is_string (jname) ? json_string_value (jname) : NULL;
       pass = json_is_string (jpass) ? json_string_value (jpass) : NULL;
     }
@@ -853,9 +957,13 @@ cmd_user_create (client_ctx_t *ctx, json_t *root)
     {
       int player_id = 0;
       int rc = user_create (db_get_handle (), name, pass, &player_id);
+
+
       if (rc == AUTH_OK)
         {
           json_t *data = json_pack ("{s:i}", "player_id", player_id);
+
+
           send_enveloped_ok (ctx->fd, root, "user.created", data);
           json_decref (data);
         }
@@ -883,6 +991,8 @@ cmd_auth_refresh (client_ctx_t *ctx, json_t *root)
   if (json_is_object (jdata))
     {
       json_t *jt = json_object_get (jdata, "session_token");
+
+
       if (json_is_string (jt))
         {
           tok = json_string_value (jt);
@@ -892,9 +1002,13 @@ cmd_auth_refresh (client_ctx_t *ctx, json_t *root)
   if (!tok)
     {
       json_t *jmeta = json_object_get (root, "meta");
+
+
       if (json_is_object (jmeta))
         {
           json_t *jt = json_object_get (jmeta, "session_token");
+
+
           if (json_is_string (jt))
             {
               tok = json_string_value (jt);
@@ -907,6 +1021,8 @@ cmd_auth_refresh (client_ctx_t *ctx, json_t *root)
       sqlite3 *dbh = db_get_handle ();
       bool is_sysop = player_is_sysop (dbh, ctx->player_id);
       int rc = subs_upsert_locked_defaults (dbh, ctx->player_id, is_sysop);
+
+
       if (rc != SQLITE_OK)
         {
           send_enveloped_error (ctx->fd, root, 1503,
@@ -914,6 +1030,8 @@ cmd_auth_refresh (client_ctx_t *ctx, json_t *root)
           return 0;
         }
       char newtok[65];
+
+
       if (db_session_create (ctx->player_id, 86400, newtok) != SQLITE_OK)
         {
           send_enveloped_error (ctx->fd, root, 1500, "Database error");
@@ -922,6 +1040,8 @@ cmd_auth_refresh (client_ctx_t *ctx, json_t *root)
         {
           json_t *data = json_pack ("{s:i, s:s}", "player_id", ctx->player_id,
                                     "session_token", newtok);
+
+
           send_enveloped_ok (ctx->fd, root, "auth.session", data);
           json_decref (data);
         }
@@ -930,6 +1050,8 @@ cmd_auth_refresh (client_ctx_t *ctx, json_t *root)
     {
       sqlite3 *dbh = db_get_handle ();
       bool is_sysop = player_is_sysop (dbh, pid);
+
+
       if (subs_upsert_locked_defaults (dbh, pid, is_sysop) != SQLITE_OK)
         {
           send_enveloped_error (ctx->fd, root, 1503,
@@ -939,6 +1061,8 @@ cmd_auth_refresh (client_ctx_t *ctx, json_t *root)
       /* Rotate provided token */
       char newtok[65];
       int rc = db_session_refresh (tok, 86400, newtok, &pid);
+
+
       if (rc == SQLITE_OK)
         {
           ctx->player_id = pid;
@@ -949,6 +1073,8 @@ cmd_auth_refresh (client_ctx_t *ctx, json_t *root)
           json_t *data =
             json_pack ("{s:i, s:s}", "player_id", pid, "session_token",
                        newtok);
+
+
           send_enveloped_ok (ctx->fd, root, "auth.session", data);
           json_decref (data);
         }

@@ -21,6 +21,7 @@ int h_get_stock_info (sqlite3 *db, int stock_id, char **out_ticker,
                       long long *out_last_dividend_ts);
 int h_update_player_shares (sqlite3 *db, int player_id, int stock_id,
                             int quantity_change);
+
 /* Returns 1 if player is the active CEO of some corporation, 0 otherwise.
  * If out_corp_id is non-NULL, it will be set to that corporation id.
  */

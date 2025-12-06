@@ -61,6 +61,8 @@
 /* global (file-scope) counter for server message ids */
 // static _Atomic uint64_t g_msg_seq = 0;
 static __thread client_ctx_t *g_ctx_for_send = NULL;
+
+
 /* forward declaration to avoid implicit extern */
 void send_all_json (int fd, json_t *obj);
 int db_player_info_json (int player_id, json_t **out);
@@ -288,9 +290,13 @@ static const cmd_desc_t k_supported_cmds_fallback[] = {
   {"trade.quote", "Get a quote for a trade action (Optional)"},
   {"trade.sell", "Sell commodity to port"},
 };
+
+
 // Weak fallback: satisfies server_envelope.o at link time.
 // If server_loop.c defines a strong version, it will override this.
 __attribute__((weak))
+
+
 void
 loop_get_supported_commands (const cmd_desc_t **out_tbl, size_t *out_n)
 {
@@ -317,6 +323,8 @@ monotonic_millis (void)
 
 
 /* ===== Client registry for broadcasts  ===== */
+
+
 /* Broadcast a system.notice to everyone (uses subscription infra).
    Data is BORROWED here; we incref for the call. */
 static void
@@ -329,6 +337,8 @@ server_broadcast_to_all_online (json_t *data)
 
 /* Sector-scoped, ephemeral event to subscribers of sector.* / sector.{id}.
    NOTE: comm_publish_sector_event STEALS a ref to 'data'. */
+
+
 /*
    static void
    server_broadcast_to_sector (int sector_id, const char *event_type,
@@ -375,10 +385,14 @@ broadcast_sweep_once (sqlite3 *db, int max_rows)
                                 "expires_at",
                                 expires_at ? json_integer (expires_at) :
                                 json_null ());
+
+
       server_broadcast_to_all_online (json_incref (data));      /* fan-out live */
       json_decref (data);
       /* mark-as-published sentinel (player_id=0) to avoid re-sending */
       sqlite3_stmt *st2 = NULL;
+
+
       if (sqlite3_prepare_v2 (db,
                               "INSERT OR IGNORE INTO notice_seen(notice_id, player_id, seen_at) "
                               "VALUES(?1, 0, strftime('%s','now'));",
@@ -403,11 +417,15 @@ broadcast_sweep_once (sqlite3 *db, int max_rows)
 /* ===== Client registry for broadcasts (#195) ===== */
 client_node_t *g_clients = NULL;
 pthread_mutex_t g_clients_mu = PTHREAD_MUTEX_INITIALIZER;
+
+
 void
 server_register_client (client_ctx_t *ctx)
 {
   pthread_mutex_lock (&g_clients_mu);
   client_node_t *n = (client_node_t *) calloc (1, sizeof (*n));
+
+
   if (n)
     {
       n->ctx = ctx;
@@ -423,11 +441,15 @@ server_unregister_client (client_ctx_t *ctx)
 {
   pthread_mutex_lock (&g_clients_mu);
   client_node_t **pp = &g_clients;
+
+
   while (*pp)
     {
       if ((*pp)->ctx == ctx)
         {
           client_node_t *dead = *pp;
+
+
           *pp = (*pp)->next;
           free (dead);
           break;
@@ -447,6 +469,8 @@ server_deliver_to_player (int player_id, const char *event_type, json_t *data)
   for (client_node_t *n = g_clients; n; n = n->next)
     {
       client_ctx_t *c = n->ctx;
+
+
       if (!c)
         {
           continue;
@@ -464,6 +488,8 @@ server_deliver_to_player (int player_id, const char *event_type, json_t *data)
 
 
 /* ------------------------ idempotency helpers  ------------------------ */
+
+
 /* FNV-1a 64-bit */
 static uint64_t
 fnv1a64 (const unsigned char *s, size_t n)
@@ -502,6 +528,8 @@ idemp_fingerprint_json (json_t *obj, char out[17])
       return;
     }
   uint64_t h = fnv1a64 ((const unsigned char *) s, strlen (s));
+
+
   free (s);
   hex64 (h, out);
 }
@@ -532,6 +560,8 @@ make_listen_socket (uint16_t port)
       return -1;
     }
   struct sockaddr_in sa;
+
+
   memset (&sa, 0, sizeof (sa));
   sa.sin_family = AF_INET;
   sa.sin_addr.s_addr = htonl (INADDR_ANY);
@@ -572,6 +602,8 @@ make_listen_socket (uint16_t port)
    return 0;
    }
  */
+
+
 /* Roll the window and increment count for this response */
 void
 rl_tick (client_ctx_t *ctx)
@@ -581,6 +613,8 @@ rl_tick (client_ctx_t *ctx)
       return;
     }
   time_t now = time (NULL);
+
+
   if (ctx->rl_limit <= 0)
     {
       ctx->rl_limit = 60;
@@ -608,11 +642,15 @@ rl_build_meta (const client_ctx_t *ctx)
     }
   time_t now = time (NULL);
   int reset = (int) (ctx->rl_window_start + ctx->rl_window_sec - now);
+
+
   if (reset < 0)
     {
       reset = 0;
     }
   int remaining = ctx->rl_limit - ctx->rl_count;
+
+
   if (remaining < 0)
     {
       remaining = 0;
@@ -631,12 +669,16 @@ attach_rate_limit_meta (json_t *env, client_ctx_t *ctx)
       return;
     }
   json_t *meta = json_object_get (env, "meta");
+
+
   if (!json_is_object (meta))
     {
       meta = json_object ();
       json_object_set_new (env, "meta", meta);
     }
   json_t *rl = rl_build_meta (ctx);
+
+
   json_object_set_new (meta, "rate_limit", rl);
 }
 
@@ -652,9 +694,13 @@ process_message (client_ctx_t *ctx, json_t *root)
   json_t *jmeta = json_object_get (root, "meta");
   json_t *jauth = json_object_get (root, "auth");
   const char *session_token = NULL;
+
+
   if (json_is_object (jmeta))
     {
       json_t *jtok = json_object_get (jmeta, "session_token");
+
+
       if (json_is_string (jtok))
         {
           session_token = json_string_value (jtok);
@@ -663,6 +709,8 @@ process_message (client_ctx_t *ctx, json_t *root)
   if (session_token == NULL && json_is_object (jauth))
     {
       json_t *jtok = json_object_get (jauth, "session");
+
+
       if (json_is_string (jtok))
         {
           session_token = json_string_value (jtok);
@@ -673,6 +721,8 @@ process_message (client_ctx_t *ctx, json_t *root)
       int pid = 0;
       long long exp = 0;
       int rc = db_session_lookup (session_token, &pid, &exp);
+
+
       if (rc == SQLITE_OK && pid > 0)
         {
           ctx->player_id = pid;
@@ -705,6 +755,8 @@ process_message (client_ctx_t *ctx, json_t *root)
   ctx->rl_count = 0;
   const char *c = json_string_value (cmd);
   int rc = 0;
+
+
 /* ---------- AUTH / USER ---------- */
   if (!strcasecmp (c, "login") || !strcasecmp (c, "auth.login"))
     {
@@ -1152,6 +1204,10 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       rc = cmd_move_warp (ctx, root);   /* NIY or real */
     }
+  else if (!strcasecmp (c, "move.transwarp"))
+    {
+      rc = cmd_move_transwarp (ctx, root);
+    }
   else if (!strcasecmp (c, "move.pathfind"))
     {
       rc = cmd_move_pathfind (ctx, root);       /* NIY stub */
@@ -1403,6 +1459,8 @@ connection_thread (void *arg)
   setsockopt (fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof (tv));
   char buf[BUF_SIZE];
   size_t have = 0;
+
+
   for (;;)
     {
       if (!*ctx->running)
@@ -1410,11 +1468,15 @@ connection_thread (void *arg)
           break;
         }
       ssize_t n = recv (fd, buf + have, sizeof (buf) - have, 0);
+
+
       if (n > 0)
         {
           have += (size_t) n;
           /* Process complete lines (newline-terminated frames) */
           size_t start = 0;
+
+
           for (size_t i = 0; i < have; ++i)
             {
               if (buf[i] == '\n')
@@ -1422,6 +1484,8 @@ connection_thread (void *arg)
                   /* Trim optional CR */
                   size_t linelen = i - start;
                   const char *line = buf + start;
+
+
                   while (linelen && line[linelen - 1] == '\r')
                     {
                       linelen--;
@@ -1431,6 +1495,8 @@ connection_thread (void *arg)
                   //    (int) linelen, line);
                   json_error_t jerr;
                   json_t *root = json_loadb (line, linelen, 0, &jerr);
+
+
                   if (!root || !json_is_object (root))
                     {
                       send_enveloped_error (fd, NULL, 1300,
@@ -1489,6 +1555,8 @@ server_loop (volatile sig_atomic_t *running)
   signal (SIGPIPE, SIG_IGN);    /* don’t die on write to closed socket */
 #endif
   int listen_fd = make_listen_socket (g_cfg.server_port);
+
+
   if (listen_fd < 0)
     {
       LOGE ("Server loop exiting due to listen socket error.\n");
@@ -1499,6 +1567,8 @@ server_loop (volatile sig_atomic_t *running)
   //  LOGE( "Listening on 0.0.0.0:%d\n", LISTEN_PORT);
   struct pollfd pfd = {.fd = listen_fd,.events = POLLIN,.revents = 0 };
   pthread_attr_t attr;
+
+
   pthread_attr_init (&attr);
   pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED);
   while (*running)
@@ -1509,12 +1579,16 @@ server_loop (volatile sig_atomic_t *running)
       {
         static uint64_t last_broadcast_ms = 0;
         uint64_t now_ms = monotonic_millis ();
+
+
         if (now_ms - last_broadcast_ms >= 500)
           {
             (void) broadcast_sweep_once (db_get_handle (), 64);
             last_broadcast_ms = now_ms;
           }
       }
+
+
       if (rc < 0)
         {
           if (errno == EINTR)
@@ -1532,6 +1606,8 @@ server_loop (volatile sig_atomic_t *running)
       if (pfd.revents & POLLIN)
         {
           client_ctx_t *ctx = calloc (1, sizeof (*ctx));
+
+
           if (!ctx)
             {
               LOGE ("malloc failed\n");
@@ -1541,6 +1617,8 @@ server_loop (volatile sig_atomic_t *running)
           server_register_client (ctx);
           socklen_t sl = sizeof (ctx->peer);
           int cfd = accept (listen_fd, (struct sockaddr *) &ctx->peer, &sl);
+
+
           if (cfd < 0)
             {
               free (ctx);
@@ -1558,6 +1636,8 @@ server_loop (volatile sig_atomic_t *running)
           ctx->fd = cfd;
           ctx->running = running;
           char ip[INET_ADDRSTRLEN];
+
+
           inet_ntop (AF_INET, &ctx->peer.sin_addr, ip, sizeof (ip));
           LOGI ("Client connected: %s:%u (fd=%d)\n",
                 ip, (unsigned) ntohs (ctx->peer.sin_port), cfd);
@@ -1566,6 +1646,8 @@ server_loop (volatile sig_atomic_t *running)
           // after filling ctx->fd, ctx->running, ctx->peer, and assigning ctx->cid
           pthread_t th;
           int prc = pthread_create (&th, &attr, connection_thread, ctx);
+
+
           if (prc == 0)
             {
               LOGI ("[cid=%" PRIu64 "] thread created (pthread=%lu)\n",

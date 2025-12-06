@@ -11,6 +11,7 @@ typedef struct
   long long fee_to_bank;        // amount credited to bank revenue account
   long long tax_to_system;      // amount credited to system tax account
 } fee_result_t;
+
 /* Store final response JSON for a key (after a successful op).
    Returns SQLITE_OK on success. */
 json_t *parse_neighbors_csv (const unsigned char *txt);
@@ -95,6 +96,11 @@ int db_is_sector_fedspace (int ck_sector);
 int db_get_port_id_by_sector (int sector_id);
 int db_get_port_sector (sqlite3 *db, int port_id);
 int db_get_ship_sector_id (sqlite3 *db, int ship_id);
+int db_get_ship_owner_id (sqlite3 *db,
+                          int ship_id,
+                          int *out_player_id,
+                          int *out_corp_id);
+bool db_is_ship_piloted (sqlite3 *db, int ship_id);
 int db_recall_fighter_asset (int asset_id, int player_id);
 // Banking and Stock Management for Market Settlement
 // Configuration helpers (thread-safe wrappers)
@@ -126,6 +132,8 @@ int h_deduct_credits_unlocked (sqlite3 *db, int account_id, long long amount,
                                long long *new_balance);
 long long h_get_config_int_unlocked (sqlite3 *db, const char *key,
                                      long long default_value);
+
+
 void h_generate_hex_uuid (char *buffer, size_t buffer_size);
 // Function to calculate fees for a given transaction type and amount
 int calculate_fees (sqlite3 *db, const char *tx_type, long long base_amount,
@@ -203,6 +211,8 @@ int db_update_player_xp (sqlite3 *db, int player_id, int new_xp);
 bool db_shiptype_has_escape_pod (sqlite3 *db, int ship_id);
 int db_get_player_podded_count_today (sqlite3 *db, int player_id);
 long long db_get_player_podded_last_reset (sqlite3 *db, int player_id);
+
+
 int db_reset_player_podded_count (sqlite3 *db, int player_id,
                                   long long timestamp);
 int db_update_player_podded_status (sqlite3 *db, int player_id,

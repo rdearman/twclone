@@ -31,10 +31,14 @@ db_player_update_commission (sqlite3 *db, int player_id)
   int player_alignment = 0;
   long long player_experience = 0;
   int new_commission_id = 0;
+
+
   db_mutex_lock ();  // Lock for thread safety
   // 1. Get player's current alignment and experience
   const char *sql_get_player_stats =
     "SELECT alignment, experience FROM players WHERE id = ?1;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_get_player_stats, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -67,6 +71,8 @@ db_player_update_commission (sqlite3 *db, int player_id)
   // 2. Determine moral track from alignment band
   int band_id;
   int is_evil_track;   // This will be 0 for good/neutral, 1 for evil
+
+
   // We only need the is_evil flag from alignment_band for this purpose
   rc = db_alignment_band_for_value (db,
                                     player_alignment,
@@ -89,6 +95,8 @@ db_player_update_commission (sqlite3 *db, int player_id)
   // 3. Get the new commission ID based on moral track and experience
   char *commission_title = NULL;   // Not needed for update, but API requires it
   int commission_is_evil_flag;   // Not needed for update, but API requires it
+
+
   rc = db_commission_for_player (db,
                                  is_evil_track,
                                  player_experience,
@@ -112,6 +120,8 @@ db_player_update_commission (sqlite3 *db, int player_id)
   // 4. Update the player's commission in the players table
   const char *sql_update_commission =
     "UPDATE players SET commission = ?1 WHERE id = ?2;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_update_commission, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -162,6 +172,8 @@ db_commission_for_player (
     "AND min_exp <= ?2 "
     "ORDER BY min_exp DESC "
     "LIMIT 1;";
+
+
   db_mutex_lock ();  // Lock for thread safety
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
@@ -193,6 +205,8 @@ db_commission_for_player (
       const char *fallback_sql =
         "SELECT id, description, is_evil FROM commision "
         "WHERE is_evil = ?1 ORDER BY min_exp ASC LIMIT 1;";
+
+
       sqlite3_finalize (st);  // Finalize previous statement before new prepare
       st = NULL;   // Reset statement pointer
       rc = sqlite3_prepare_v2 (db, fallback_sql, -1, &st, NULL);
@@ -269,6 +283,8 @@ db_alignment_band_for_value (
     "FROM alignment_band "
     "WHERE ?1 BETWEEN min_align AND max_align "
     "LIMIT 1;";
+
+
   db_mutex_lock ();  // Lock for thread safety
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
@@ -367,6 +383,8 @@ static int db_ensure_ship_perms_column_unlocked (sqlite3 *db);
 static long long h_get_account_alert_threshold_unlocked (sqlite3 *db,
                                                          int account_id,
                                                          const char *owner_type);
+
+
 static int h_get_bank_balance (const char *owner_type,
                                int owner_id,
                                long long *out_balance);
@@ -383,6 +401,8 @@ parse_neighbors_csv (const unsigned char *txt)
       return arr;
     }
   const char *p = (const char *) txt;
+
+
   while (*p)
     {
       while (*p == ' ' || *p == '\t')
@@ -390,14 +410,20 @@ parse_neighbors_csv (const unsigned char *txt)
           p++;                  /* trim left */
         }
       const char *start = p;
+
+
       while (*p && *p != ',')
         {
           p++;
         }
       int len = (int) (p - start);
+
+
       if (len > 0)
         {
           char buf[32];
+
+
           if (len >= (int) sizeof (buf))
             {
               len = (int) sizeof (buf) - 1;     /* defensive */
@@ -405,6 +431,8 @@ parse_neighbors_csv (const unsigned char *txt)
           memcpy (buf, start, len);
           buf[len] = '\0';
           int id = atoi (buf);
+
+
           if (id > 0)
             {
               json_array_append_new (arr, json_integer (id));
@@ -426,6 +454,8 @@ stmt_to_json_array (sqlite3_stmt *st, json_t **out_array)
     {
       /* Caller doesn’t want JSON, just drain the cursor */
       int rc;
+
+
       while ((rc = sqlite3_step (st)) == SQLITE_ROW)
         {
         }
@@ -436,15 +466,21 @@ stmt_to_json_array (sqlite3_stmt *st, json_t **out_array)
       return rc;
     }
   json_t *arr = json_array ();
+
+
   if (!arr)
     {
       return SQLITE_NOMEM;
     }
   int rc;
+
+
   while ((rc = sqlite3_step (st)) == SQLITE_ROW)
     {
       int cols = sqlite3_column_count (st);
       json_t *obj = json_object ();
+
+
       if (!obj)
         {
           rc = SQLITE_NOMEM;
@@ -455,6 +491,8 @@ stmt_to_json_array (sqlite3_stmt *st, json_t **out_array)
           const char *col_name = sqlite3_column_name (st, i);
           int col_type = sqlite3_column_type (st, i);
           json_t *val = NULL;
+
+
           switch (col_type)
             {
               case SQLITE_INTEGER:
@@ -512,6 +550,8 @@ db_bank_get_transactions (const char *owner_type, int owner_id, int limit,
       return SQLITE_MISUSE;
     }
   sqlite3 *db = db_get_handle ();
+
+
   if (!db)
     {
       return SQLITE_MISUSE;
@@ -523,6 +563,8 @@ db_bank_get_transactions (const char *owner_type, int owner_id, int limit,
   char sql[1024];
   char where_clause[512];
   int bind_pos = 3;
+
+
   // Base query
   strcpy (sql,
           "SELECT t.* FROM bank_transactions t JOIN bank_accounts a ON t.account_id = a.id WHERE a.owner_type = ?1 AND a.owner_id = ?2 ");
@@ -552,6 +594,8 @@ db_bank_get_transactions (const char *owner_type, int owner_id, int limit,
   strcat (sql, "ORDER BY t.ts DESC, t.id DESC LIMIT ?");
   sqlite3_stmt *st = NULL;
   int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       LOGE ("db_bank_get_transactions: SQL error: %s on query %s",
@@ -583,6 +627,8 @@ db_bank_get_transactions (const char *owner_type, int owner_id, int limit,
     }
   sqlite3_bind_int (st, bind_pos, limit);
   json_t *arr = NULL;
+
+
   rc = stmt_to_json_array (st, out_array ? &arr : NULL);
   sqlite3_finalize (st);
   if (rc == SQLITE_OK && out_array)
@@ -613,6 +659,7 @@ db_bank_apply_interest (void)
     {
       return SQLITE_MISUSE;
     }
+
   /* TODO: implement based on full bank_interest_policy / bank_accounts
    * schema; for now this is an explicit no-op.
    */
@@ -628,6 +675,7 @@ db_bank_process_orders (void)
     {
       return SQLITE_MISUSE;
     }
+
   /* TODO: implement processing of bank_orders into bank_transactions.
    * Left as a no-op because the bank_orders schema is truncated here.
    */
@@ -668,6 +716,8 @@ db_bank_set_frozen_status (const char *owner_type, int owner_id,
     "ON CONFLICT(player_id) DO UPDATE SET is_frozen = excluded.is_frozen";
   sqlite3_stmt *st = NULL;
   int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       return rc;
@@ -693,6 +743,8 @@ db_bank_get_frozen_status (const char *owner_type, int owner_id,
       return SQLITE_MISUSE;
     }
   sqlite3 *db = db_get_handle ();
+
+
   if (!db)
     {
       return SQLITE_MISUSE;
@@ -705,6 +757,8 @@ db_bank_get_frozen_status (const char *owner_type, int owner_id,
     "SELECT is_frozen " "FROM bank_flags " "WHERE player_id = ?1";
   sqlite3_stmt *st = NULL;
   int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       return rc;
@@ -742,6 +796,8 @@ select_price_with_column (sqlite3 *db, const char *col,
   snprintf (sql, sizeof sql, sql_tmpl, col);
   sqlite3_stmt *st = NULL;
   int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       return rc;
@@ -774,6 +830,8 @@ update_price_with_column (sqlite3 *db, const char *col,
   snprintf (sql, sizeof sql, sql_tmpl, col);
   sqlite3_stmt *st = NULL;
   int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       return rc;
@@ -798,15 +856,21 @@ db_commodity_get_price (const char *commodity_code, int *out_price)
       return SQLITE_MISUSE;
     }
   sqlite3 *db = db_get_handle ();
+
+
   if (!db)
     {
       return SQLITE_MISUSE;
     }
   static const char *cols[] = { "last_price", "price", "base_price", NULL };
+
+
   for (int i = 0; cols[i]; i++)
     {
       int rc =
         select_price_with_column (db, cols[i], commodity_code, out_price);
+
+
       if (rc == SQLITE_OK || rc == SQLITE_NOTFOUND)
         {
           return rc;
@@ -825,15 +889,21 @@ db_commodity_update_price (const char *commodity_code, int new_price)
       return SQLITE_MISUSE;
     }
   sqlite3 *db = db_get_handle ();
+
+
   if (!db)
     {
       return SQLITE_MISUSE;
     }
   static const char *cols[] = { "last_price", "price", "base_price", NULL };
+
+
   for (int i = 0; cols[i]; i++)
     {
       int rc =
         update_price_with_column (db, cols[i], commodity_code, new_price);
+
+
       if (rc == SQLITE_OK || rc == SQLITE_NOTFOUND)
         {
           return rc;
@@ -856,10 +926,13 @@ db_commodity_create_order (const char *actor_type, int actor_id,
       return SQLITE_MISUSE;
     }
   sqlite3 *db = db_get_handle ();
+
+
   if (!db)
     {
       return SQLITE_MISUSE;
     }
+
   /* Minimal insert – relies on defaults for status, timestamps, etc.
    * May need extending once the full commodity_orders schema is final.
    */
@@ -870,6 +943,8 @@ db_commodity_create_order (const char *actor_type, int actor_id,
     "FROM commodities c " "WHERE c.code = ?1";
   sqlite3_stmt *st = NULL;
   int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       return rc;
@@ -898,6 +973,8 @@ db_commodity_fill_order (int order_id, int quantity)
       return SQLITE_MISUSE;
     }
   sqlite3 *db = db_get_handle ();
+
+
   if (!db)
     {
       return SQLITE_MISUSE;
@@ -907,6 +984,8 @@ db_commodity_fill_order (int order_id, int quantity)
     "SELECT quantity, status " "FROM commodity_orders " "WHERE id = ?1";
   sqlite3_stmt *st = NULL;
   int rc = sqlite3_prepare_v2 (db, sql_sel, -1, &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       return rc;
@@ -920,6 +999,8 @@ db_commodity_fill_order (int order_id, int quantity)
     }
   int current_qty = sqlite3_column_int (st, 0);
   const unsigned char *status_text = sqlite3_column_text (st, 1);
+
+
   /* Optional: enforce only 'open' orders */
   if (status_text && strcmp ((const char *) status_text, "open") != 0)
     {
@@ -928,6 +1009,8 @@ db_commodity_fill_order (int order_id, int quantity)
     }
   sqlite3_finalize (st);
   int remaining = current_qty - quantity;
+
+
   if (remaining < 0)
     {
       remaining = 0;
@@ -937,6 +1020,8 @@ db_commodity_fill_order (int order_id, int quantity)
     "UPDATE commodity_orders "
     "SET quantity = ?1, status = ?2 " "WHERE id = ?3";
   sqlite3_stmt *st2 = NULL;
+
+
   rc = sqlite3_prepare_v2 (db, sql_upd, -1, &st2, NULL);
   if (rc != SQLITE_OK)
     {
@@ -964,6 +1049,8 @@ db_commodity_get_orders (const char *commodity_code, const char *status,
       return SQLITE_MISUSE;
     }
   sqlite3 *db = db_get_handle ();
+
+
   if (!db)
     {
       return SQLITE_MISUSE;
@@ -980,6 +1067,8 @@ db_commodity_get_orders (const char *commodity_code, const char *status,
     "WHERE c.code = ?1 " "ORDER BY o.id ASC";
   sqlite3_stmt *st = NULL;
   int rc;
+
+
   if (status)
     {
       rc = sqlite3_prepare_v2 (db, sql_with_status, -1, &st, NULL);
@@ -1000,6 +1089,8 @@ db_commodity_get_orders (const char *commodity_code, const char *status,
       sqlite3_bind_text (st, 1, commodity_code, -1, SQLITE_TRANSIENT);
     }
   json_t *arr = NULL;
+
+
   rc = stmt_to_json_array (st, out_array ? &arr : NULL);
   sqlite3_finalize (st);
   if (rc == SQLITE_OK && out_array)
@@ -1023,6 +1114,8 @@ db_commodity_get_trades (const char *commodity_code, int limit,
       return SQLITE_MISUSE;
     }
   sqlite3 *db = db_get_handle ();
+
+
   if (!db)
     {
       return SQLITE_MISUSE;
@@ -1038,6 +1131,8 @@ db_commodity_get_trades (const char *commodity_code, int limit,
     "WHERE c.code = ?1 " "ORDER BY t.id DESC " "LIMIT ?2";
   sqlite3_stmt *st = NULL;
   int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       return rc;
@@ -1045,6 +1140,8 @@ db_commodity_get_trades (const char *commodity_code, int limit,
   sqlite3_bind_text (st, 1, commodity_code, -1, SQLITE_TRANSIENT);
   sqlite3_bind_int (st, 2, limit);
   json_t *arr = NULL;
+
+
   rc = stmt_to_json_array (st, out_array ? &arr : NULL);
   sqlite3_finalize (st);
   if (rc == SQLITE_OK && out_array)
@@ -1078,6 +1175,8 @@ db_planet_get_goods_on_hand (int planet_id, const char *commodity_code,
       return SQLITE_MISUSE;
     }
   sqlite3 *db = db_get_handle ();
+
+
   if (!db)
     {
       return SQLITE_MISUSE;
@@ -1087,6 +1186,8 @@ db_planet_get_goods_on_hand (int planet_id, const char *commodity_code,
     "FROM planet_goods " "WHERE planet_id = ?1 AND commodity = ?2";
   sqlite3_stmt *st = NULL;
   int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       return rc;
@@ -1118,17 +1219,23 @@ db_planet_update_goods_on_hand (int planet_id, const char *commodity_code,
       return SQLITE_MISUSE;
     }
   sqlite3 *db = db_get_handle ();
+
+
   if (!db)
     {
       return SQLITE_MISUSE;
     }
   int current = 0;
   int rc = db_planet_get_goods_on_hand (planet_id, commodity_code, &current);
+
+
   if (rc != SQLITE_OK)
     {
       return rc;
     }
   int new_qty = current + quantity_change;
+
+
   if (new_qty < 0)
     {
       new_qty = 0;
@@ -1138,6 +1245,8 @@ db_planet_update_goods_on_hand (int planet_id, const char *commodity_code,
     "UPDATE planet_goods "
     "SET quantity = ?1 " "WHERE planet_id = ?2 AND commodity = ?3";
   sqlite3_stmt *st = NULL;
+
+
   rc = sqlite3_prepare_v2 (db, sql_upd, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -1161,6 +1270,8 @@ db_planet_update_goods_on_hand (int planet_id, const char *commodity_code,
   const char *sql_ins =
     "INSERT INTO planet_goods (planet_id, commodity, quantity) "
     "VALUES (?1, ?2, ?3)";
+
+
   rc = sqlite3_prepare_v2 (db, sql_ins, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -1578,6 +1689,8 @@ db_player_land_on_planet (sqlite3 *db, int player_id, int planet_id)
   int ship_id = -1;
   int rc = SQLITE_ERROR;
   const char *sql_find_ship = "SELECT ship FROM players WHERE id = ?;";
+
+
   if (sqlite3_prepare_v2 (db, sql_find_ship, -1, &st_find_ship, NULL) !=
       SQLITE_OK)
     {
@@ -1596,6 +1709,8 @@ db_player_land_on_planet (sqlite3 *db, int player_id, int planet_id)
     }
   const char *sql_update_ship =
     "UPDATE ships SET onplanet = ?, sector = NULL, ported = 0 WHERE id = ?;";
+
+
   if (sqlite3_prepare_v2 (db, sql_update_ship, -1, &st_update_ship, NULL) !=
       SQLITE_OK)
     {
@@ -1609,6 +1724,8 @@ db_player_land_on_planet (sqlite3 *db, int player_id, int planet_id)
     }
   const char *sql_update_player =
     "UPDATE players SET lastplanet = ?, sector = NULL WHERE id = ?;";
+
+
   if (sqlite3_prepare_v2 (db, sql_update_player, -1, &st_update_player, NULL)
       !=
       SQLITE_OK)
@@ -1652,6 +1769,8 @@ db_player_launch_from_planet (sqlite3 *db, int player_id, int *out_sector_id)
   int rc = SQLITE_ERROR;
   const char *sql_get_info =
     "SELECT ship, lastplanet FROM players WHERE id = ?;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_get_info, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -1672,6 +1791,8 @@ db_player_launch_from_planet (sqlite3 *db, int player_id, int *out_sector_id)
     }
   const char *sql_get_planet_sector =
     "SELECT sector FROM planets WHERE id = ?;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_get_planet_sector, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -1691,6 +1812,8 @@ db_player_launch_from_planet (sqlite3 *db, int player_id, int *out_sector_id)
     }
   const char *sql_update_ship =
     "UPDATE ships SET onplanet = NULL, sector = ? WHERE id = ?;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_update_ship, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -1706,6 +1829,8 @@ db_player_launch_from_planet (sqlite3 *db, int player_id, int *out_sector_id)
   st = NULL;
   const char *sql_update_player =
     "UPDATE players SET sector = ? WHERE id = ?;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_update_player, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -1740,6 +1865,8 @@ db_get_port_sector (sqlite3 *db, int port_id)
   sqlite3_stmt *st = NULL;
   int sector = 0;
   int rc;
+
+
   rc = sqlite3_prepare_v2 (db,
                            "SELECT sector FROM ports WHERE id=?1",
                            -1,
@@ -1775,6 +1902,8 @@ db_bounty_create (sqlite3 *db, const char *posted_by_type, int posted_by_id,
   const char *sql =
     "INSERT INTO bounties (posted_by_type, posted_by_id, target_type, target_id, reward, status, posted_ts) "
     "VALUES (?, ?, ?, ?, ?, 'open', strftime('%Y-%m-%dT%H:%M:%fZ','now'));";
+
+
   // Note: Ignoring description as per schema verification in plan
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
@@ -1847,8 +1976,12 @@ db_get_law_config_int (const char *key, int default_value)
   int value = default_value;
   const char *sql =
     "SELECT value FROM law_enforcement_config WHERE key = ? AND value_type = 'INTEGER';";
+
+
   db_mutex_lock ();
   int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       LOGE ("db_get_law_config_int: Prepare failed for key '%s': %s",
@@ -1892,8 +2025,12 @@ db_get_law_config_text (const char *key, const char *default_value)
   char *value = NULL;
   const char *sql =
     "SELECT value FROM law_enforcement_config WHERE key = ? AND value_type = 'TEXT';";
+
+
   db_mutex_lock ();
   int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       LOGE ("db_get_law_config_text: Prepare failed for key '%s': %s",
@@ -1905,6 +2042,8 @@ db_get_law_config_text (const char *key, const char *default_value)
   if (sqlite3_step (st) == SQLITE_ROW)
     {
       const unsigned char *text_val = sqlite3_column_text (st, 0);
+
+
       value = strdup ((const char *)text_val);
     }
   else
@@ -1938,6 +2077,8 @@ db_player_get_last_rob_attempt (int player_id,
     }
   sqlite3_stmt *st = NULL;
   int rc = SQLITE_ERROR;
+
+
   if (last_port_id_out)
     {
       *last_port_id_out = 0;
@@ -1948,6 +2089,8 @@ db_player_get_last_rob_attempt (int player_id,
     }
   const char *sql =
     "SELECT last_port_id, last_attempt_at FROM player_last_rob WHERE player_id = ?;";
+
+
   db_mutex_lock ();
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
@@ -2004,6 +2147,8 @@ db_player_set_last_rob_attempt (int player_id,
   const char *sql =
     "INSERT INTO player_last_rob (player_id, last_port_id, last_attempt_at) VALUES (?, ?, ?) "
     "ON CONFLICT(player_id) DO UPDATE SET last_port_id = excluded.last_port_id, last_attempt_at = excluded.last_attempt_at;";
+
+
   db_mutex_lock ();
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
@@ -2046,6 +2191,8 @@ h_get_cluster_id_for_sector (sqlite3 *db, int sector_id, int *out_cluster_id)
   int rc = SQLITE_ERROR;
   const char *sql =
     "SELECT cluster_id FROM cluster_sectors WHERE sector_id = ?1;";
+
+
   db_mutex_lock ();
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
@@ -2091,6 +2238,8 @@ h_get_cluster_alignment (sqlite3 *db, int sector_id, int *out_alignment)
     }
   int rc = SQLITE_ERROR;
   int cluster_id = 0;
+
+
   rc = h_get_cluster_id_for_sector (db, sector_id, &cluster_id);
   if (rc != SQLITE_OK)
     {
@@ -2104,6 +2253,8 @@ h_get_cluster_alignment (sqlite3 *db, int sector_id, int *out_alignment)
     }
   sqlite3_stmt *st = NULL;
   const char *sql = "SELECT alignment FROM clusters WHERE id = ?1;";
+
+
   db_mutex_lock ();
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
@@ -2148,6 +2299,8 @@ h_get_cluster_alignment_band (sqlite3 *db, int sector_id, int *out_band_id)
     }
   int rc = SQLITE_ERROR;
   int cluster_alignment_score = 0;
+
+
   rc = h_get_cluster_alignment (db, sector_id, &cluster_alignment_score);
   if (rc != SQLITE_OK && rc != SQLITE_NOTFOUND)     // SQLITE_NOTFOUND means default to neutral, which is fine
     {
@@ -2192,6 +2345,8 @@ db_port_add_bust_record (int port_id,
   const char *sql =
     "INSERT INTO port_busts (port_id, player_id, last_bust_at, bust_type, active) VALUES (?, ?, ?, ?, 1) "
     "ON CONFLICT(port_id, player_id) DO UPDATE SET last_bust_at = excluded.last_bust_at, bust_type = excluded.bust_type, active = 1;";
+
+
   db_mutex_lock ();
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
@@ -2235,6 +2390,8 @@ db_port_get_active_busts (int port_id, int player_id)
   int rc = SQLITE_ERROR;
   const char *sql =
     "SELECT COUNT(*) FROM port_busts WHERE port_id = ? AND player_id = ? AND active = 1;";
+
+
   db_mutex_lock ();
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
@@ -2290,6 +2447,8 @@ db_path_exists (sqlite3 *db, int from, int to)
   size_t N = (size_t) max_id + 1;
   unsigned char *seen = calloc (N, 1);
   int *queue = malloc (N * sizeof (int));
+
+
   if (!seen || !queue)
     {
       free (seen);
@@ -2309,18 +2468,26 @@ db_path_exists (sqlite3 *db, int from, int to)
       return -1;
     }
   int qh = 0, qt = 0;
+
+
   queue[qt++] = from;
   seen[from] = 1;
   int found = 0;
+
+
   while (qh < qt && !found)
     {
       int u = queue[qh++];
+
+
       sqlite3_reset (st);
       sqlite3_clear_bindings (st);
       sqlite3_bind_int (st, 1, u);
       while ((rc = sqlite3_step (st)) == SQLITE_ROW)
         {
           int v = sqlite3_column_int (st, 0);
+
+
           if (v <= 0 || v > max_id)
             {
               continue;
@@ -2550,6 +2717,8 @@ db_get_config_int (sqlite3 *db, const char *key_col_name, int default_value)
   db_mutex_lock ();
   long long value =
     h_get_config_int_unlocked (db, key_col_name, (long long) default_value);
+
+
   db_mutex_unlock ();
   return (int) value;
 }
@@ -2562,6 +2731,8 @@ db_get_config_bool (sqlite3 *db, const char *key_col_name, bool default_value)
   db_mutex_lock ();
   long long value =
     h_get_config_int_unlocked (db, key_col_name, (long long) default_value);
+
+
   db_mutex_unlock ();
   return (bool) value;
 }
@@ -2571,6 +2742,8 @@ extern long long h_get_account_alert_threshold_unlocked (sqlite3 *db,
                                                          int account_id,
                                                          const char
                                                          *owner_type);
+
+
 extern int h_get_account_id_unlocked (sqlite3 *db, const char *owner_type,
                                       int owner_id, int *account_id_out);
 extern int h_create_bank_account_unlocked (sqlite3 *db,
@@ -2609,6 +2782,8 @@ h_create_personal_bank_alert_notice (sqlite3 *db,
       return -1;
     }
   json_t *full_context = json_object ();
+
+
   if (!full_context)
     {
       LOGE ("h_create_personal_bank_alert_notice: OOM creating context.");
@@ -2624,6 +2799,8 @@ h_create_personal_bank_alert_notice (sqlite3 *db,
     {
       // Deep copy the transfer_context into full_context to avoid decref issues later
       json_t *transfer_context_copy = json_deep_copy (transfer_context);
+
+
       if (transfer_context_copy)
         {
           json_object_update (full_context, transfer_context_copy);
@@ -2638,6 +2815,8 @@ h_create_personal_bank_alert_notice (sqlite3 *db,
     }
   // Dump context as body for db_notice_create
   char *context_str = json_dumps (full_context, JSON_COMPACT);
+
+
   if (!context_str)
     {
       LOGE ("h_create_personal_bank_alert_notice: OOM dumping context JSON.");
@@ -2648,6 +2827,8 @@ h_create_personal_bank_alert_notice (sqlite3 *db,
   // The actual delivery will be handled by the subscription/notification system.
   time_t expires_at_ts = time (NULL) + (7 * 24 * 60 * 60);      // 7 days from now
   int rc = db_notice_create (title, context_str, "info", expires_at_ts);        // Use the original db_notice_create
+
+
   free (context_str);
   json_decref (full_context);
   if (rc < 0)
@@ -2770,6 +2951,7 @@ h_bank_transfer_unlocked (sqlite3 *db,
                               "TRANSFER_FAILED", NULL);
       return rc;
     }
+
   /* --------------------------------------------------------------------------
    * Issue 376: Logic for "bank.alerts"
    * Check thresholds and generate notices for large transfers.
@@ -2777,6 +2959,8 @@ h_bank_transfer_unlocked (sqlite3 *db,
   {
     long long from_threshold = 0;
     long long to_threshold = 0;
+
+
     // 1. Check Thresholds
     // We retrieve the alert threshold for both accounts.
     // h_get_account_alert_threshold_unlocked is assumed to return long long and take owner_type.
@@ -2790,10 +2974,14 @@ h_bank_transfer_unlocked (sqlite3 *db,
     // Trigger if amount meets/exceeds threshold, provided threshold is positive.
     int alert_sender = (from_threshold > 0 && amount >= from_threshold);
     int alert_receiver = (to_threshold > 0 && amount >= to_threshold);
+
+
     if (alert_sender || alert_receiver)
       {
         // Prepare context data common to both notices
         json_t *transfer_context = json_object ();
+
+
         if (transfer_context)
           {
             json_object_set_new (transfer_context, "amount",
@@ -2824,6 +3012,8 @@ h_bank_transfer_unlocked (sqlite3 *db,
         // 3. Construct and Create Notices
         char title_buffer[128];
         char body_buffer[512];  // Using snprintf for body might be better if complex, else just use context_str
+
+
         if (alert_sender)
           {
             snprintf (title_buffer, sizeof (title_buffer),
@@ -2875,6 +3065,8 @@ db_ship_rename_if_owner (sqlite3 *db,
   /* Verify ownership in ship_ownership */
   static const char *SQL_OWN =
     "SELECT 1 FROM ship_ownership WHERE ship_id=? AND player_id=?;";
+
+
   rc = sqlite3_prepare_v2 (db, SQL_OWN, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -2891,6 +3083,8 @@ db_ship_rename_if_owner (sqlite3 *db,
     }
   /* Do the rename */
   static const char *SQL_REN = "UPDATE ships SET name=? WHERE id=?;";
+
+
   rc = sqlite3_prepare_v2 (db, SQL_REN, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -2915,6 +3109,8 @@ db_destroy_ship (sqlite3 *db, int player_id, int ship_id)
   {
     const char *sql_get_ship_info =
       "SELECT name, sector FROM ships WHERE id = ?;";
+
+
     rc = sqlite3_prepare_v2 (db, sql_get_ship_info, -1, &stmt, NULL);
     if (rc != SQLITE_OK)
       {
@@ -2948,6 +3144,8 @@ db_destroy_ship (sqlite3 *db, int player_id, int ship_id)
   // 3. Delete from ship_ownership table
   const char *sql_delete_ownership =
     "DELETE FROM ship_ownership WHERE ship_id = ?;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_delete_ownership, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -2964,6 +3162,8 @@ db_destroy_ship (sqlite3 *db, int player_id, int ship_id)
   // 4. Update player's active ship to 0 if it was the destroyed ship
   const char *sql_update_player =
     "UPDATE players SET ship = 0 WHERE id = ? AND ship = ?;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_update_player, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -2980,6 +3180,8 @@ db_destroy_ship (sqlite3 *db, int player_id, int ship_id)
     }
   // Log ship destroyed event
   json_t *payload = json_object ();
+
+
   json_object_set_new (payload, "ship_id", json_integer (ship_id));
   json_object_set_new (payload, "ship_name", json_string (ship_name));
   json_object_set_new (payload, "player_id", json_integer (player_id));
@@ -3008,6 +3210,8 @@ db_create_initial_ship (int player_id, const char *ship_name, int sector_id)
   // 1. Get shiptype_id for "Scout Marauder"
   static const char *SQL_GET_SHIPTYPE_ID =
     "SELECT id FROM shiptypes WHERE name = 'Scout Marauder';";
+
+
   rc = sqlite3_prepare_v2 (db, SQL_GET_SHIPTYPE_ID, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -3058,6 +3262,8 @@ db_create_initial_ship (int player_id, const char *ship_name, int sector_id)
     "  0, "
     "  st.can_transwarp, st.can_planet_scan, st.can_long_range_scan "
     "FROM shiptypes st WHERE st.id = ?;";
+
+
   rc = sqlite3_prepare_v2 (db, SQL_CREATE_SHIP, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -3107,6 +3313,7 @@ db_is_npc_player (sqlite3 *db, int player_id)
   int rc;
   sqlite3_stmt *st = NULL;
   int is_npc = 0;
+
   /* Example policy:
      - players.flags has an NPC bit, OR
      - player name is 'Ferrengi' or 'Imperial Starship' (fallback) */
@@ -3146,6 +3353,8 @@ db_apply_lock_policy_for_pilot (sqlite3 *db,
     {
       /* NPC piloted -> lock it */
       sqlite3_stmt *st = NULL;
+
+
       rc = sqlite3_prepare_v2 (db,
                                "UPDATE ships SET flags = COALESCE(flags,0) | ? WHERE id=?;",
                                -1,
@@ -3163,6 +3372,8 @@ db_apply_lock_policy_for_pilot (sqlite3 *db,
     {
       /* Not NPC piloted (or unpiloted) -> clear LOCK (engine managed) */
       sqlite3_stmt *st = NULL;
+
+
       rc = sqlite3_prepare_v2 (db,
                                "UPDATE ships SET flags = COALESCE(flags,0) & ~? WHERE id=?;",
                                -1,
@@ -3190,10 +3401,14 @@ db_rand_npc_shipname (char *out, size_t out_sz)
       out[0] = '\0';
     }
   int rc;
+
+
   db_mutex_lock ();
   sqlite3_stmt *st = NULL;
   static const char *SQL =
     "SELECT name FROM npc_shipnames ORDER BY RANDOM() LIMIT 1;";
+
+
   rc =
     sqlite3_prepare_v3 (db_get_handle (),
                         SQL,
@@ -3208,6 +3423,8 @@ db_rand_npc_shipname (char *out, size_t out_sz)
         {
           const unsigned char *uc = sqlite3_column_text (st, 0);
           const char *name = (const char *) (uc ? (const char *) uc : "");
+
+
           // const char *name = (const char *) (uc ? uc : "");
           if (out && out_sz)
             {
@@ -3265,6 +3482,8 @@ column_exists_unlocked (sqlite3 *db, const char *table, const char *col)
   while (sqlite3_step (st) == SQLITE_ROW)
     {
       const char *name = (const char *) sqlite3_column_text (st, 1);
+
+
       if (strcasecmp (name, col) == 0)
         {
           exists = 1;
@@ -3289,6 +3508,8 @@ db_ensure_ship_perms_column_unlocked (sqlite3 *db)
   if (!column_exists_unlocked (db, "ships", "perms"))
     {
       char *errmsg = NULL;
+
+
       rc = sqlite3_exec (db,
                          "ALTER TABLE ships ADD COLUMN perms INTEGER NOT NULL DEFAULT 731;",
                          NULL,
@@ -3327,6 +3548,8 @@ db_sector_scan_core (int sector_id, json_t **out_obj)
       *out_obj = NULL;
     }
   sqlite3 *db = db_get_handle ();
+
+
   if (!db)
     {
       return SQLITE_ERROR;
@@ -3340,6 +3563,8 @@ db_sector_scan_core (int sector_id, json_t **out_obj)
     "       s.beacon AS beacon_text " "FROM sectors s WHERE s.id = ?1";
   int rc = SQLITE_ERROR;
   sqlite3_stmt *st = NULL;
+
+
   /* Full critical section: prepare → bind → step → finalize */
   db_mutex_lock ();
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
@@ -3360,6 +3585,8 @@ db_sector_scan_core (int sector_id, json_t **out_obj)
       int planet_count = sqlite3_column_int (st, 4);
       const char *btxt = (const char *) sqlite3_column_text (st, 5);
       json_t *o = json_object ();
+
+
       json_object_set_new (o, "name", json_string (name ? name : "Unknown"));
       json_object_set_new (o, "safe_zone", json_integer (safe_zone));
       json_object_set_new (o, "port_count", json_integer (port_count));
@@ -3399,6 +3626,8 @@ db_notice_create (const char *title, const char *body,
       return -1;
     }
   sqlite3_stmt *stmt = NULL;
+
+
   if (sqlite3_prepare_v2 (db, SQL, -1, &stmt, NULL) != SQLITE_OK)
     {
       return -1;
@@ -3417,6 +3646,8 @@ db_notice_create (const char *title, const char *body,
     }
   int rc = sqlite3_step (stmt);
   int ok = (rc == SQLITE_DONE);
+
+
   sqlite3_finalize (stmt);
   if (!ok)
     {
@@ -3442,12 +3673,16 @@ db_notice_list_unseen_for_player (int player_id)
       return NULL;
     }
   sqlite3_stmt *stmt = NULL;
+
+
   if (sqlite3_prepare_v2 (db, SQL, -1, &stmt, NULL) != SQLITE_OK)
     {
       return NULL;
     }
   sqlite3_bind_int (stmt, 1, player_id);
   json_t *arr = json_array ();
+
+
   if (!arr)
     {
       sqlite3_finalize (stmt);
@@ -3469,6 +3704,8 @@ db_notice_list_unseen_for_player (int player_id)
                                "body", body ? (const char *) body : "",
                                "severity", sev ? (const char *) sev : "info",
                                "expires_at", (int) expires_i64);
+
+
       if (obj)
         {
           json_array_append_new (arr, obj);
@@ -3491,6 +3728,8 @@ db_notice_mark_seen (int notice_id, int player_id)
       return -1;
     }
   sqlite3_stmt *stmt = NULL;
+
+
   if (sqlite3_prepare_v2 (db, SQL, -1, &stmt, NULL) != SQLITE_OK)
     {
       return -1;
@@ -3498,6 +3737,8 @@ db_notice_mark_seen (int notice_id, int player_id)
   sqlite3_bind_int (stmt, 1, notice_id);
   sqlite3_bind_int (stmt, 2, player_id);
   int rc = sqlite3_step (stmt);
+
+
   sqlite3_finalize (stmt);
   return (rc == SQLITE_DONE) ? 0 : -1;
 }
@@ -3514,6 +3755,8 @@ db_player_name (int64_t player_id, char **out)
   /* Use the same handle + mutex model as the rest of database.c */
   db_mutex_lock ();
   sqlite3 *dbh = db_get_handle ();
+
+
   if (!dbh)
     {
       db_mutex_unlock ();
@@ -3524,6 +3767,8 @@ db_player_name (int64_t player_id, char **out)
     "FROM players " "WHERE id = ?1 " "LIMIT 1";
   sqlite3_stmt *st = NULL;
   int rc = sqlite3_prepare_v2 (dbh, SQL, -1, &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       db_mutex_unlock ();
@@ -3540,10 +3785,14 @@ db_player_name (int64_t player_id, char **out)
   if (rc == SQLITE_ROW)
     {
       const unsigned char *txt = sqlite3_column_text (st, 0);
+
+
       if (txt && txt[0])
         {
           size_t n = strlen ((const char *) txt);
           char *dup = (char *) malloc (n + 1);
+
+
           if (!dup)
             {
               sqlite3_finalize (st);
@@ -3574,6 +3823,8 @@ db_get_ship_name (sqlite3 *db, int ship_id, char **out_name)
   *out_name = NULL;
   db_mutex_lock ();
   sqlite3 *dbh = db;
+
+
   if (!dbh)
     {
       db_mutex_unlock ();
@@ -3583,6 +3834,8 @@ db_get_ship_name (sqlite3 *db, int ship_id, char **out_name)
     "SELECT COALESCE(name, '') FROM ships WHERE id = ?1 LIMIT 1";
   sqlite3_stmt *st = NULL;
   int rc = sqlite3_prepare_v2 (dbh, SQL, -1, &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       LOGE ("db_get_ship_name: prepare failed: %s", sqlite3_errmsg (dbh));
@@ -3594,6 +3847,8 @@ db_get_ship_name (sqlite3 *db, int ship_id, char **out_name)
   if (rc == SQLITE_ROW)
     {
       const unsigned char *txt = sqlite3_column_text (st, 0);
+
+
       if (txt && txt[0])
         {
           *out_name = strdup ((const char *)txt);
@@ -3636,6 +3891,8 @@ db_get_port_name (sqlite3 *db, int port_id, char **out_name)
   *out_name = NULL;
   db_mutex_lock ();
   sqlite3 *dbh = db;
+
+
   if (!dbh)
     {
       db_mutex_unlock ();
@@ -3645,6 +3902,8 @@ db_get_port_name (sqlite3 *db, int port_id, char **out_name)
     "SELECT COALESCE(name, '') FROM ports WHERE id = ?1 LIMIT 1";
   sqlite3_stmt *st = NULL;
   int rc = sqlite3_prepare_v2 (dbh, SQL, -1, &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       LOGE ("db_get_port_name: prepare failed: %s", sqlite3_errmsg (dbh));
@@ -3656,6 +3915,8 @@ db_get_port_name (sqlite3 *db, int port_id, char **out_name)
   if (rc == SQLITE_ROW)
     {
       const unsigned char *txt = sqlite3_column_text (st, 0);
+
+
       if (txt && txt[0])
         {
           *out_name = strdup ((const char *)txt);
@@ -3706,6 +3967,8 @@ db_log_engine_event (long long ts,
   int rc = SQLITE_ERROR;
   // 1. Convert the JSON payload object into a serialised string
   char *payload_str = json_dumps (payload, JSON_COMPACT);
+
+
   if (!payload_str)
     {
       // fprintf(stderr, "Error: Failed to serialize JSON payload.\n");
@@ -3829,6 +4092,8 @@ db_news_insert_feed_item (int ts, const char *category, const char *scope,
   const char *sql =
     "INSERT INTO news_feed (published_ts, expiration_ts, news_category, article_text) "
     "VALUES (?, ?, ?, ?);";
+
+
   rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -3892,6 +4157,8 @@ db_is_sector_fedspace (int ck_sector)
   sqlite3_bind_int (st, 1, ck_sector);
   rc = sqlite3_step (st);
   int sec_ret = 1;
+
+
   if (rc == SQLITE_ROW)
     {
       sec_ret = sqlite3_column_int (st, 0);
@@ -3949,6 +4216,8 @@ db_get_ship_sector_id (sqlite3 *db, int ship_id)
   // 1. Acquire the lock at the very beginning of the function.
   db_mutex_lock ();
   const char *sql = "SELECT sector FROM ships WHERE id=?";
+
+
   // 2. Prepare the statement. Use the passed 'db' handle.
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
@@ -3988,6 +4257,115 @@ cleanup:
 }
 
 
+/**
+ * @brief Retrieves the owner player ID and/or corporation ID for a given ship.
+ *
+ * @param db The SQLite database handle.
+ * @param ship_id The ID of the ship to query.
+ * @param out_player_id Optional: Pointer to store the owner player ID.
+ * @param out_corp_id Optional: Pointer to store the owner corporation ID.
+ * @return SQLITE_OK on success, SQLITE_NOTFOUND if ship has no owner, or SQLite error code.
+ */
+int
+db_get_ship_owner_id (sqlite3 *db,
+                      int ship_id,
+                      int *out_player_id,
+                      int *out_corp_id)
+{
+  sqlite3_stmt *st = NULL;
+  int rc = SQLITE_ERROR;
+  db_mutex_lock ();
+  const char *sql =
+    "SELECT so.player_id, cm.corp_id "
+    "FROM ship_ownership so "
+    "LEFT JOIN corp_members cm ON so.player_id = cm.player_id " // Assuming players own ships and are in corps
+    "WHERE so.ship_id = ? AND so.role_id = 1;"; // role_id 1 typically means primary owner
+
+
+  if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
+    {
+      LOGE ("db_get_ship_owner_id: Prepare error: %s", sqlite3_errmsg (db));
+      goto cleanup;
+    }
+
+  sqlite3_bind_int (st, 1, ship_id);
+
+  if (sqlite3_step (st) == SQLITE_ROW)
+    {
+      if (out_player_id)
+        {
+          *out_player_id = sqlite3_column_int (st, 0);
+        }
+      if (out_corp_id)
+        {
+          // Check if corp_id is NULL before reading
+          if (sqlite3_column_type (st, 1) != SQLITE_NULL)
+            {
+              *out_corp_id = sqlite3_column_int (st, 1);
+            }
+          else
+            {
+              *out_corp_id = 0; // No corp owner
+            }
+        }
+      rc = SQLITE_OK;
+    }
+  else if (rc == SQLITE_DONE)
+    {
+      rc = SQLITE_NOTFOUND; // Ship found, but no owner_id in ship_ownership
+    }
+  else
+    {
+      LOGE ("db_get_ship_owner_id: Execute error: %s", sqlite3_errmsg (db));
+    }
+
+cleanup:
+  if (st)
+    {
+      sqlite3_finalize (st);
+    }
+  db_mutex_unlock ();
+  return rc;
+}
+
+
+/**
+ * @brief Checks if a given ship is currently piloted by an active player.
+ *
+ * @param db The SQLite database handle.
+ * @param ship_id The ID of the ship to check.
+ * @return true if the ship is piloted, false otherwise or on error.
+ */
+bool
+db_is_ship_piloted (sqlite3 *db, int ship_id)
+{
+  sqlite3_stmt *st = NULL;
+  bool piloted = false;
+  int rc;
+  db_mutex_lock ();
+  const char *sql = "SELECT 1 FROM players WHERE ship = ? AND loggedin = 1;"; // Assuming 'loggedin' indicates active player
+
+
+  if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
+    {
+      LOGE ("db_is_ship_piloted: Prepare error: %s", sqlite3_errmsg (db));
+      goto cleanup;
+    }
+  sqlite3_bind_int (st, 1, ship_id);
+  if (sqlite3_step (st) == SQLITE_ROW)
+    {
+      piloted = true;
+    }
+cleanup:
+  if (st)
+    {
+      sqlite3_finalize (st);
+    }
+  db_mutex_unlock ();
+  return piloted;
+}
+
+
 void
 h_generate_hex_uuid (char *buffer, size_t buffer_size)
 {
@@ -3999,6 +4377,8 @@ h_generate_hex_uuid (char *buffer, size_t buffer_size)
   // For a proper UUID, platform-specific functions or libuuid would be better.
   // This is sufficient for grouping transactions in this context.
   const char *hex_chars = "0123456789abcdef";
+
+
   for (size_t i = 0; i < 32; ++i)
     {
       buffer[i] = hex_chars[rand () % 16];
@@ -4066,7 +4446,9 @@ h_get_account_id_unlocked (sqlite3 *db, const char *owner_type, int owner_id,
       goto cleanup;
     }
 
-  const char *sql_select = "SELECT id FROM bank_accounts WHERE owner_type = ?1 AND owner_id = ?2";
+  const char *sql_select =
+    "SELECT id FROM bank_accounts WHERE owner_type = ?1 AND owner_id = ?2";
+
 
   rc = sqlite3_prepare_v2 (db, sql_select, -1, &st, NULL);
   if (rc != SQLITE_OK)
@@ -4092,9 +4474,10 @@ cleanup:
     {
       sqlite3_finalize (st);
     }
-  if (account_id_out) {
-    *account_id_out = account_id;
-  }
+  if (account_id_out)
+    {
+      *account_id_out = account_id;
+    }
   return rc;
 }
 
@@ -4156,6 +4539,8 @@ h_get_config_int_unlocked (sqlite3 *db, const char *key,
       return default_value;
     }
   int rc = sqlite3_prepare_v2 (db, dynamic_sql, -1, &stmt, NULL);
+
+
   sqlite3_free (dynamic_sql);   // Free dynamic SQL string immediately
   if (rc != SQLITE_OK)
     {
@@ -4260,6 +4645,8 @@ h_add_credits_unlocked (sqlite3 *db,
   const char *sql =
     "INSERT INTO bank_transactions (account_id, tx_type, direction, amount, currency, ts, tx_group_id) "
     "VALUES (?, ?, 'CREDIT', ?, 'CRD', strftime('%s','now'), ?);";
+
+
   rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -4285,6 +4672,8 @@ h_add_credits_unlocked (sqlite3 *db,
   if (new_balance_out)
     {
       sqlite3_stmt *b = NULL;
+
+
       rc =
         sqlite3_prepare_v2 (db,
                             "SELECT balance FROM bank_accounts WHERE id=?;",
@@ -4323,6 +4712,8 @@ h_deduct_credits_unlocked (sqlite3 *db,
   const char *sql =
     "INSERT INTO bank_transactions (account_id, tx_type, direction, amount, currency, ts, tx_group_id) "
     "VALUES (?, ?, 'DEBIT', ?, 'CRD', strftime('%s','now'), ?);";
+
+
   rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -4349,6 +4740,8 @@ h_deduct_credits_unlocked (sqlite3 *db,
   if (new_balance_out)
     {
       sqlite3_stmt *b = NULL;
+
+
       rc =
         sqlite3_prepare_v2 (db,
                             "SELECT balance FROM bank_accounts WHERE id=?;",
@@ -4387,9 +4780,13 @@ h_add_credits (sqlite3 *db, const char *owner_type, int owner_id,
       return SQLITE_MISUSE;
     }
   int rc;
+
+
   db_mutex_lock ();
   // Get or create account ID
   int account_id = -1;
+
+
   rc = h_get_account_id_unlocked (db, owner_type, owner_id, &account_id);
   if (rc == SQLITE_NOTFOUND)
     {
@@ -4464,6 +4861,8 @@ h_deduct_credits (sqlite3 *db,
   db_mutex_lock ();
   int account_id = -1;
   int rc = h_get_account_id_unlocked (db, owner_type, owner_id, &account_id);
+
+
   if (rc != SQLITE_OK)
     {
       db_mutex_unlock ();
@@ -4499,6 +4898,8 @@ calculate_fees (sqlite3 *db, const char *tx_type, long long base_amount,
     "  AND (owner_type IS NULL OR owner_type = ?2) " "  AND currency = 'CRD' "                                                                                                                                          // Assuming CRD for now
     "  AND effective_from <= ?3 "
     "  AND (effective_to IS NULL OR effective_to >= ?3) " "ORDER BY fee_code;";                                 // Deterministic order
+
+
   db_mutex_lock ();
   rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
@@ -4522,6 +4923,8 @@ calculate_fees (sqlite3 *db, const char *tx_type, long long base_amount,
                                                      4) ==
                                 SQLITE_NULL ? -1 : sqlite3_column_int64 (stmt,
                                                                          4);                                            // -1 for no max
+
+
       // Apply min/max transaction amount filters
       if (base_amount < min_tx_amount)
         {
@@ -4532,6 +4935,8 @@ calculate_fees (sqlite3 *db, const char *tx_type, long long base_amount,
           continue;
         }
       long long charge = 0;
+
+
       if (is_percentage)
         {
           charge = (base_amount * value) / 10000;       // value is in basis points
@@ -4588,6 +4993,8 @@ h_update_planet_stock (sqlite3 *db, int planet_id, const char *commodity_code,
   const char *sql =
     "UPDATE planet_goods SET quantity = quantity + ? "
     "WHERE planet_id = ? AND commodity = ?;";
+
+
   rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -4610,6 +5017,8 @@ h_update_planet_stock (sqlite3 *db, int planet_id, const char *commodity_code,
       sqlite3_stmt *qty_stmt = NULL;
       const char *qty_sql =
         "SELECT quantity FROM planet_goods WHERE planet_id = ? AND commodity = ?;";
+
+
       rc = sqlite3_prepare_v2 (db, qty_sql, -1, &qty_stmt, NULL);
       if (rc == SQLITE_OK)
         {
@@ -4661,6 +5070,8 @@ db_fighters_at_sector_json (int sector_id, json_t **out_array)
   const char *sql =
     "SELECT player, corporation, quantity "
     "FROM sector_assets WHERE sector = ? AND asset_type = ?;";
+
+
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -4674,6 +5085,8 @@ db_fighters_at_sector_json (int sector_id, json_t **out_array)
       int corporation_id = sqlite3_column_int (st, 1);
       int quantity = sqlite3_column_int (st, 2);
       json_t *obj = json_object ();
+
+
       if (!obj)
         {
           rc = SQLITE_NOMEM;
@@ -4745,6 +5158,8 @@ db_mines_at_sector_json (int sector_id, json_t **out_array)
   const char *sql =
     "SELECT player, corporation, quantity, asset_type "
     "FROM sector_assets WHERE sector = ? AND asset_type IN (?, ?);";
+
+
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -4760,6 +5175,8 @@ db_mines_at_sector_json (int sector_id, json_t **out_array)
       int quantity = sqlite3_column_int (st, 2);
       int asset_type = sqlite3_column_int (st, 3);
       json_t *obj = json_object ();
+
+
       if (!obj)
         {
           rc = SQLITE_NOMEM;
@@ -5035,6 +5452,8 @@ h_get_bank_balance (const char *owner_type, int owner_id,
     }
   *out_balance = 0;             // Default to 0
   sqlite3 *db = db_get_handle ();
+
+
   if (!db)
     {
       return SQLITE_ERROR;
@@ -5049,6 +5468,8 @@ h_get_bank_balance (const char *owner_type, int owner_id,
   // h_get_bank_balance is static and called by public functions that also lock, so it's okay.
   int rc_account_id =
     h_get_account_id_unlocked (db, owner_type, owner_id, &account_id);
+
+
   if (rc_account_id == SQLITE_NOTFOUND)
     {
       return SQLITE_OK;         // No account means balance is 0
@@ -5060,6 +5481,8 @@ h_get_bank_balance (const char *owner_type, int owner_id,
   const char *sql = "SELECT balance FROM bank_accounts WHERE id = ?1;"; // Use account_id
   sqlite3_stmt *st = NULL;
   int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       return rc;
@@ -5145,6 +5568,8 @@ db_bank_account_exists (const char *owner_type, int owner_id)
     }
   int account_id = -1;
   int rc;
+
+
   db_mutex_lock ();
   rc = h_get_account_id_unlocked (db, owner_type, owner_id, &account_id);
   db_mutex_unlock ();
@@ -5201,6 +5626,8 @@ db_bank_create_account (const char *owner_type, int owner_id,
       return SQLITE_ERROR;
     }
   int rc;
+
+
   db_mutex_lock ();
   rc =
     h_create_bank_account_unlocked (db, owner_type, owner_id, initial_balance,
@@ -5265,6 +5692,8 @@ db_bank_transfer (const char *from_owner_type, int from_owner_id,
                               from_owner_id,
                               to_owner_type, to_owner_id,
                               amount, "TRANSFER", NULL);
+
+
   db_mutex_unlock ();
   return rc;
 }
@@ -5288,6 +5717,8 @@ h_ship_claim_unlocked (sqlite3 *db,
     "LEFT JOIN players pil ON pil.ship = s.id "
     "WHERE s.id=? AND s.sector=? "
     "AND pil.id IS NULL AND (s.flags % 10) >= 1;";
+
+
   rc = sqlite3_prepare_v2 (db, SQL_CHECK, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -5312,6 +5743,8 @@ h_ship_claim_unlocked (sqlite3 *db,
   /* Optional: strip defence so claims aren’t “free upgrades” */
   static const char *SQL_NORMALISE =
     "UPDATE ships SET fighters=fighters, shields=shields WHERE id=? AND 1=0;";
+
+
   rc = sqlite3_prepare_v2 (db, SQL_NORMALISE, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -5328,6 +5761,8 @@ h_ship_claim_unlocked (sqlite3 *db,
   /* Switch current pilot */
   static const char *SQL_SET_PLAYER_SHIP =
     "UPDATE players SET ship = ? WHERE id = ?;";
+
+
   rc = sqlite3_prepare_v2 (db, SQL_SET_PLAYER_SHIP, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -5345,6 +5780,8 @@ h_ship_claim_unlocked (sqlite3 *db,
   /* Grant ownership to the claimer and mark as primary */
   static const char *SQL_CLR_OLD_PRIMARY =
     "UPDATE ship_ownership SET is_primary=0 WHERE player_id=?;";
+
+
   rc = sqlite3_prepare_v2 (db, SQL_CLR_OLD_PRIMARY, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -5361,6 +5798,8 @@ h_ship_claim_unlocked (sqlite3 *db,
   // Delete existing owner record for this ship (if any)
   static const char *SQL_DELETE_OLD_OWNER =
     "DELETE FROM ship_ownership WHERE ship_id=? AND role_id=1;";
+
+
   rc = sqlite3_prepare_v2 (db, SQL_DELETE_OLD_OWNER, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -5378,6 +5817,8 @@ h_ship_claim_unlocked (sqlite3 *db,
   static const char *SQL_INSERT_NEW_OWNER =
     "INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary, acquired_at) "
     "VALUES (?, ?, 1, 1, strftime('%s','now'));";
+
+
   rc = sqlite3_prepare_v2 (db, SQL_INSERT_NEW_OWNER, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -5409,6 +5850,8 @@ h_ship_claim_unlocked (sqlite3 *db,
     "LEFT JOIN shiptypes st       ON st.id = s.type_id "
     "LEFT JOIN ship_ownership own ON own.ship_id = s.id "
     "WHERE s.id=?;";
+
+
   rc = sqlite3_prepare_v2 (db, SQL_FETCH, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -5424,12 +5867,16 @@ h_ship_claim_unlocked (sqlite3 *db,
   int c = 0;
   int ship_id_row = sqlite3_column_int (stmt, c++);
   const char *ship_nm = (const char *)sqlite3_column_text (stmt, c++);
+
+
   if (!ship_nm)
     {
       ship_nm = "";
     }
   int type_id = sqlite3_column_int (stmt, c++);
   const char *type_nm = (const char *)sqlite3_column_text (stmt, c++);
+
+
   if (!type_nm)
     {
       type_nm = "";
@@ -5438,8 +5885,12 @@ h_ship_claim_unlocked (sqlite3 *db,
   int owner_id = (sqlite3_column_type (stmt,
                                        c) ==
                   SQLITE_NULL) ? 0 : sqlite3_column_int (stmt, c);
+
+
   c++;
   const char *owner_nm = (const char *)sqlite3_column_text (stmt, c++);
+
+
   if (!owner_nm)
     {
       owner_nm = "derelict";
@@ -5455,6 +5906,8 @@ h_ship_claim_unlocked (sqlite3 *db,
   int colonists = sqlite3_column_int (stmt, c++);
   int flags = sqlite3_column_int (stmt, c++);
   const char *reg = (const char *)sqlite3_column_text (stmt, c++);
+
+
   if (!reg)
     {
       reg = "";
@@ -5462,6 +5915,8 @@ h_ship_claim_unlocked (sqlite3 *db,
   /* build the JSON for the claimed ship */
   int perms = sqlite3_column_int (stmt, c++);
   char perm_str[8];
+
+
   snprintf (perm_str, sizeof(perm_str), "%03d", perms);
   if (out_ship)
     {
@@ -5530,6 +5985,8 @@ db_ship_claim (sqlite3 *db,
     }
   *out_ship = NULL;
   int rc;
+
+
   rc = h_ship_claim_unlocked (db, player_id, sector_id, ship_id, out_ship);
   return rc;
 }
@@ -5547,6 +6004,8 @@ db_player_info_json (int player_id, json_t **out)
       *out = NULL;
     }
   sqlite3 *dbh = db_get_handle ();
+
+
   if (!dbh)
     {
       goto cleanup;
@@ -5573,6 +6032,8 @@ db_player_info_json (int player_id, json_t **out)
                     // Join for owner
                     "WHERE p.id = ?";
   int rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       ret_code = rc;
@@ -5586,6 +6047,8 @@ db_player_info_json (int player_id, json_t **out)
       root_obj = json_object ();
       json_t *player_obj = json_object ();
       json_t *ship_obj = json_object ();
+
+
       if (!root_obj || !player_obj || !ship_obj)
         {
           // Out of memory
@@ -5601,6 +6064,8 @@ db_player_info_json (int player_id, json_t **out)
       int p_id = sqlite3_column_int (st, 0);
       int p_number = sqlite3_column_int (st, 1);
       const char *p_name = (const char *) sqlite3_column_text (st, 2);
+
+
       //int p_ship = sqlite3_column_int (st, 3);	// Player's ship ID
       json_object_set_new (player_obj, "id", json_integer (p_id));
       json_object_set_new (player_obj, "number", json_integer (p_number));
@@ -5609,23 +6074,31 @@ db_player_info_json (int player_id, json_t **out)
       int s_id = sqlite3_column_int (st, 4);    // s.id
       int s_number = sqlite3_column_int (st, 4);        // s.id again, for ship_number
       const char *s_name = (const char *) sqlite3_column_text (st, 5);  // s.name
+
+
       json_object_set_new (ship_obj, "id", json_integer (s_id));
       json_object_set_new (ship_obj, "number", json_integer (s_number));
       json_object_set_new (ship_obj, "name", json_string (s_name));
       json_t *ship_type_obj = json_object ();
       int st_id = sqlite3_column_int (st, 7);
       const char *st_name = (const char *) sqlite3_column_text (st, 8);
+
+
       json_object_set_new (ship_type_obj, "id", json_integer (st_id));
       json_object_set_new (ship_type_obj, "name", json_string (st_name));
       json_object_set_new (ship_obj, "type", ship_type_obj);
       int s_holds = sqlite3_column_int (st, 8);
       int s_fighters = sqlite3_column_int (st, 9);
+
+
       json_object_set_new (ship_obj, "holds", json_integer (s_holds));
       json_object_set_new (ship_obj, "fighters", json_integer (s_fighters));
       json_t *location_obj = json_object ();
       int loc_sector_id = sqlite3_column_int (st, 10);
       const char *loc_sector_name =
         (const char *) sqlite3_column_text (st, 11);
+
+
       json_object_set_new (location_obj, "sector_id",
                            json_integer (loc_sector_id));
       json_object_set_new (location_obj, "sector_name",
@@ -5635,6 +6108,8 @@ db_player_info_json (int player_id, json_t **out)
       int owner_id = sqlite3_column_int (st, 12);
       const char *owner_name = (const char *) sqlite3_column_text (st, 13);
       json_t *owner_obj = json_object ();
+
+
       json_object_set_new (owner_obj, "id", json_integer (owner_id));
       json_object_set_new (owner_obj, "name", json_string (owner_name));
       json_object_set_new (ship_obj, "owner", owner_obj);
@@ -5648,6 +6123,8 @@ db_player_info_json (int player_id, json_t **out)
                                      "organics", organics,
                                      "equipment", equipment,
                                      "colonists", colonists);
+
+
       json_object_set_new (ship_obj, "cargo", cargo_obj);
       ret_code = SQLITE_OK;
     }
@@ -5756,6 +6233,8 @@ db_player_info_selected_fields (int player_id,
       return SQLITE_MISUSE;
     }
   json_t *selected_view_columns_json = json_array ();
+
+
   if (!selected_view_columns_json)
     {
       LOGE (
@@ -5764,6 +6243,8 @@ db_player_info_selected_fields (int player_id,
     }
   size_t index;
   json_t *value;
+
+
   // Build the SELECT clause dynamically
   json_array_foreach (fields_array, index, value) {
     const char *client_field_name = json_string_value (value);
@@ -5771,6 +6252,8 @@ db_player_info_selected_fields (int player_id,
       {
         const char *view_col_name =
           get_player_view_column_name (client_field_name);
+
+
         if (view_col_name)
           {
             // Append the view's column name, not the client's.
@@ -5798,8 +6281,12 @@ db_player_info_selected_fields (int player_id,
   // Max 256 chars per column name, plus ", " separator. Max ~30 fields from player_field_map.
   // 30 * (256 + 2) is ~7.5KB. So 8KB is a safe buffer size.
   char select_clause_buffer[8192];
+
+
   select_clause_buffer[0] = '\0';
   size_t current_buffer_len = 0;
+
+
   json_array_foreach (selected_view_columns_json, index, value) {
     const char *col_name_in_view = json_string_value (value);
     if (col_name_in_view)
@@ -5822,6 +6309,8 @@ db_player_info_selected_fields (int player_id,
     "SELECT %s FROM player_info_v1 WHERE player_id = ?1;",
     select_clause_buffer
     );
+
+
   if (!sql_query)
     {
       LOGE (
@@ -5862,6 +6351,8 @@ db_player_info_selected_fields (int player_id,
           }
         const char *view_col_name =
           get_player_view_column_name (client_field_name);
+
+
         if (!view_col_name)
           {
             // This case should ideally be covered by the initial validation/logging
@@ -5871,6 +6362,8 @@ db_player_info_selected_fields (int player_id,
         int col_idx = sqlite3_column_type (stmt,
                                            0) ==
                       SQLITE_NULL ? -1 : sqlite3_column_count (stmt);                                    // Initialize to invalid
+
+
         for (int c = 0; c < sqlite3_column_count (stmt); ++c)
           {
             if (strcmp (sqlite3_column_name (stmt, c), view_col_name) == 0)
@@ -5882,6 +6375,8 @@ db_player_info_selected_fields (int player_id,
         if (col_idx != -1)
           {
             json_t *col_value = NULL;
+
+
             switch (sqlite3_column_type (stmt, col_idx))
               {
                 case SQLITE_INTEGER:
@@ -5956,6 +6451,8 @@ db_sector_beacon_text (int sector_id, char **out_text)
     }
   // Get the database handle.
   sqlite3 *dbh = db_get_handle ();
+
+
   if (!dbh)
     {
       ret_code = SQLITE_ERROR;
@@ -5964,6 +6461,8 @@ db_sector_beacon_text (int sector_id, char **out_text)
   const char *sql = "SELECT beacon FROM sectors WHERE id=?";
   // 2. Prepare the statement. Check for errors and jump to cleanup if needed.
   int rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       ret_code = rc;
@@ -5976,9 +6475,13 @@ db_sector_beacon_text (int sector_id, char **out_text)
   if (rc == SQLITE_ROW)
     {
       const unsigned char *txt = sqlite3_column_text (st, 0);
+
+
       if (txt && *txt)
         {
           const char *c = (const char *) txt;
+
+
           if (out_text)
             {
               // The caller is now responsible for freeing this memory.
@@ -6016,6 +6519,8 @@ db_ships_at_sector_json (int player_id, int sector_id, json_t **out)
   (void) player_id;
   sqlite3_stmt *st = NULL;
   int ret_code = SQLITE_ERROR;  /* default to error until succeeded */
+
+
   if (out)
     {
       *out = NULL;
@@ -6024,6 +6529,8 @@ db_ships_at_sector_json (int player_id, int sector_id, json_t **out)
   db_mutex_lock ();
   /* 2) Result array */
   json_t *ships = json_array ();
+
+
   if (!ships)
     {
       ret_code = SQLITE_NOMEM;
@@ -6037,6 +6544,8 @@ db_ships_at_sector_json (int player_id, int sector_id, json_t **out)
     "LEFT JOIN players p ON so.player_id = p.id "
     "WHERE s.sector=?;";
   int rc = sqlite3_prepare_v2 (db_get_handle (), sql, -1, &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       ret_code = rc;
@@ -6051,6 +6560,8 @@ db_ships_at_sector_json (int player_id, int sector_id, json_t **out)
       const char *owner_name = (const char *) sqlite3_column_text (st, 2);
       int ship_id = sqlite3_column_int (st, 3);
       json_t *ship = json_object ();
+
+
       if (!ship)
         {
           ret_code = SQLITE_NOMEM;
@@ -6111,6 +6622,8 @@ db_ports_at_sector_json (int sector_id, json_t **out_array)
   sqlite3_stmt *st = NULL;
   int rc;                       // For SQLite return codes.
   int ret_code = -1;            // The final return code for the function.
+
+
   // 1. Acquire the lock at the beginning of the function.
   db_mutex_lock ();
   // Allocate the JSON array. If this fails, we jump to cleanup.
@@ -6121,6 +6634,8 @@ db_ports_at_sector_json (int sector_id, json_t **out_array)
       goto cleanup;
     }
   const char *sql = "SELECT id, name, type FROM ports WHERE sector=?;";
+
+
   // 2. Prepare the statement. Check for errors and jump to cleanup if needed.
   rc = sqlite3_prepare_v2 (db_get_handle (), sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
@@ -6137,6 +6652,8 @@ db_ports_at_sector_json (int sector_id, json_t **out_array)
       const char *port_name = (const char *) sqlite3_column_text (st, 1);
       const char *port_type = (const char *) sqlite3_column_text (st, 2);
       json_t *port = json_object ();
+
+
       if (!port)
         {
           ret_code = SQLITE_NOMEM;
@@ -6178,6 +6695,8 @@ db_sector_has_beacon (int sector_id)
   db_mutex_lock ();
   // 2. Prepare the statement. This is the first place an error could occur.
   const char *sql = "SELECT beacon FROM sectors WHERE id = ?;";
+
+
   if (sqlite3_prepare_v2 (db_get_handle (), sql, -1, &stmt, NULL) !=
       SQLITE_OK)
     {
@@ -6191,6 +6710,8 @@ db_sector_has_beacon (int sector_id)
   sqlite3_bind_int (stmt, 1, sector_id);
   // 4. Execute the statement.
   int rc = sqlite3_step (stmt);
+
+
   if (rc == SQLITE_ROW)
     {
       if (sqlite3_column_text (stmt, 0) != NULL)
@@ -6221,6 +6742,8 @@ db_sector_set_beacon (int sector_id, const char *beacon_text, int player_id)
   db_mutex_lock ();
   // 1. SELECT: Check for existing beacon
   const char *sql_sel = "SELECT beacon FROM sectors WHERE id=?1;";
+
+
   rc = sqlite3_prepare_v2 (dbh, sql_sel, -1, &st_sel, NULL);
   if (rc != SQLITE_OK)
     {
@@ -6231,6 +6754,8 @@ db_sector_set_beacon (int sector_id, const char *beacon_text, int player_id)
   if (rc == SQLITE_ROW)
     {
       const unsigned char *txt = sqlite3_column_text (st_sel, 0);
+
+
       had_beacon = (txt && txt[0]) ? 1 : 0;
     }
   else if (rc != SQLITE_DONE)
@@ -6241,6 +6766,8 @@ db_sector_set_beacon (int sector_id, const char *beacon_text, int player_id)
   st_sel = NULL;
   // 2. UPDATE: Update the sectors table (beacon text)
   const char *sql_upd = "UPDATE sectors SET beacon=?1 WHERE id=?2;";
+
+
   rc = sqlite3_prepare_v2 (dbh, sql_upd, -1, &st_upd, NULL);
   if (rc != SQLITE_OK)
     {
@@ -6280,6 +6807,8 @@ db_sector_set_beacon (int sector_id, const char *beacon_text, int player_id)
       // Case A: Beacon removed (Exploded/Cancelled) - DELETE asset ownership
       const char *sql_del_asset =
         "DELETE FROM sector_assets WHERE sector=?1 AND asset_type='3';";
+
+
       rc = sqlite3_exec (dbh, sql_del_asset, NULL, NULL, NULL);
       if (rc != SQLITE_OK)
         {
@@ -6294,6 +6823,8 @@ db_sector_set_beacon (int sector_id, const char *beacon_text, int player_id)
       const char *sql_ins_asset =
         "INSERT OR REPLACE INTO sector_assets (sector, asset_type, player, quantity, deployed_at) "
         "VALUES (?1, ?2, ?3, 1, ?4);";                                                                                                                          // *** ADDED: quantity and deployed_at ***
+
+
       rc = sqlite3_prepare_v2 (dbh, sql_ins_asset, -1, &st_asset, NULL);
       if (rc != SQLITE_OK)
         {
@@ -6307,6 +6838,8 @@ db_sector_set_beacon (int sector_id, const char *beacon_text, int player_id)
         }
       // Get current timestamp here if not available globally
       int64_t now_s = (int64_t) time (NULL);
+
+
       sqlite3_bind_int (st_asset, 1, sector_id);
       sqlite3_bind_text (st_asset, 2, "3", -1, SQLITE_STATIC);  // Use "3" as you were using
       sqlite3_bind_int (st_asset, 3, player_id);        // BIND the player_id
@@ -6349,6 +6882,8 @@ db_player_has_beacon_on_ship (int player_id)
     "SELECT T2.beacons FROM players AS T1 JOIN ships AS T2 ON T1.ship = T2.id WHERE T1.id = ?;";
   // 2. Prepare the statement. This is the first place an error could occur.
   int rc = sqlite3_prepare_v2 (db_get_handle (), sql, -1, &stmt, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       // If preparation fails, we jump to the cleanup block to release the lock.
@@ -6388,6 +6923,8 @@ db_player_decrement_beacon_count (int player_id)
   db_mutex_lock ();
   const char *sql =
     "UPDATE ships SET beacons = beacons - 1 WHERE id = (SELECT ship FROM players WHERE id = ?);";
+
+
   // 2. Prepare the statement. This is the first place an error could occur.
   rc = sqlite3_prepare_v2 (db_get_handle (), sql, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
@@ -6437,6 +6974,8 @@ db_chain_traps_and_bridge (int fedspace_max /* typically 10 */ )
     "LEFT JOIN iw ON iw.id = s.id "
     "WHERE s.id > ?1 AND COALESCE(ow.c,0)=0 AND COALESCE(iw.c,0)=0 "
     "ORDER BY s.id;";
+
+
   rc = sqlite3_prepare_v2 (dbh, sql_traps, -1, &st_traps, NULL);
   if (rc != SQLITE_OK)
     {
@@ -6446,6 +6985,8 @@ db_chain_traps_and_bridge (int fedspace_max /* typically 10 */ )
   // We’ll store trap ids in memory first.
   int cap = 64, n = 0;
   int *traps = (int *) malloc (sizeof (int) * cap);
+
+
   if (!traps)
     {
       rc = SQLITE_NOMEM;
@@ -6457,6 +6998,8 @@ db_chain_traps_and_bridge (int fedspace_max /* typically 10 */ )
         {
           cap *= 2;
           int *tmp = (int *) realloc (traps, sizeof (int) * cap);
+
+
           if (!tmp)
             {
               free (traps);
@@ -6481,6 +7024,8 @@ db_chain_traps_and_bridge (int fedspace_max /* typically 10 */ )
   // 2) Chain them bidirectionally: (a<->b), (b<->c), ...
   const char *sql_ins =
     "INSERT OR IGNORE INTO sector_warps(from_sector, to_sector) VALUES (?1, ?2);";
+
+
   rc = sqlite3_prepare_v2 (dbh, sql_ins, -1, &st_ins, NULL);
   if (rc != SQLITE_OK)
     {
@@ -6519,6 +7064,8 @@ db_chain_traps_and_bridge (int fedspace_max /* typically 10 */ )
     "    SELECT 1 FROM sector_warps w "
     "    WHERE w.from_sector = s.id OR w.to_sector = s.id"
     "  )" ") SELECT id FROM x ORDER BY RANDOM() LIMIT 1;";
+
+
   rc = sqlite3_prepare_v2 (dbh, sql_anchor, -1, &st_anchor, NULL);
   if (rc != SQLITE_OK)
     {
@@ -6527,6 +7074,8 @@ db_chain_traps_and_bridge (int fedspace_max /* typically 10 */ )
     }
   sqlite3_bind_int (st_anchor, 1, fedspace_max);
   int anchor = 0;
+
+
   rc = sqlite3_step (st_anchor);
   if (rc == SQLITE_ROW)
     {
@@ -6619,6 +7168,8 @@ db_ships_inspectable_at_sector_json (int player_id, int sector_id,
   int rc = SQLITE_OK;
   sqlite3_stmt *stmt = NULL;
   json_t *arr = NULL;
+
+
   db_mutex_lock ();
   rc = sqlite3_prepare_v2 (db_get_handle (), SQL, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
@@ -6638,12 +7189,16 @@ db_ships_inspectable_at_sector_json (int player_id, int sector_id,
       int c = 0;
       int ship_id = sqlite3_column_int (stmt, c++);
       const char *ship_nm = (const char *) sqlite3_column_text (stmt, c++);
+
+
       if (!ship_nm)
         {
           ship_nm = "";
         }
       int type_id = sqlite3_column_int (stmt, c++);
       const char *type_nm = (const char *) sqlite3_column_text (stmt, c++);
+
+
       if (!type_nm)
         {
           type_nm = "";
@@ -6652,8 +7207,12 @@ db_ships_inspectable_at_sector_json (int player_id, int sector_id,
       int owner_id =
         (sqlite3_column_type (stmt, c) ==
          SQLITE_NULL) ? 0 : sqlite3_column_int (stmt, c);
+
+
       c++;
       const char *owner_nm = (const char *) sqlite3_column_text (stmt, c++);
+
+
       if (!owner_nm)
         {
           owner_nm = "derelict";
@@ -6669,12 +7228,16 @@ db_ships_inspectable_at_sector_json (int player_id, int sector_id,
       int colonists = sqlite3_column_int (stmt, c++);
       int flags = sqlite3_column_int (stmt, c++);
       const char *reg = (const char *) sqlite3_column_text (stmt, c++);
+
+
       if (!reg)
         {
           reg = "";
         }
       int perms = sqlite3_column_int (stmt, c++);
       char perm_str[8];
+
+
       snprintf (perm_str, sizeof (perm_str), "%03d", perms);
       json_t *row = json_pack ("{s:i s:s s:o s:i s:o s:o s:o s:o s:o s:s}",
                                "id", ship_id,
@@ -6704,6 +7267,8 @@ db_ships_inspectable_at_sector_json (int player_id, int sector_id,
                                "perms", json_pack ("{s:i s:s}", "value",
                                                    perms, "octal", perm_str),
                                "registration", reg);
+
+
       if (!row)
         {
           rc = SQLITE_NOMEM;
@@ -6745,6 +7310,8 @@ db_ship_flags_set (int ship_id, int mask)
       goto out_unlock;
     }
   sqlite3_stmt *st = NULL;
+
+
   rc = sqlite3_prepare_v2 (db_get_handle (),
                            "UPDATE ships SET flags = COALESCE(flags,0) | ? WHERE id=?;",
                            -1,
@@ -6782,6 +7349,8 @@ db_ship_flags_clear (int ship_id, int mask)
       goto out_unlock;
     }
   sqlite3_stmt *st = NULL;
+
+
   rc = sqlite3_prepare_v2 (db_get_handle (),
                            "UPDATE ships SET flags = COALESCE(flags,0) & ~? WHERE id=?;",
                            -1,
@@ -6831,12 +7400,16 @@ db_sector_info_json (int sector_id, json_t **out)
   /* 0) Sector core: name (+ optional beacon if present in schema) */
   {
     const char *sql_min = "SELECT name FROM sectors WHERE id=?1;";
+
+
     if (sqlite3_prepare_v2 (db, sql_min, -1, &st, NULL) == SQLITE_OK)
       {
         sqlite3_bind_int (st, 1, sector_id);
         if (sqlite3_step (st) == SQLITE_ROW)
           {
             const char *nm = (const char *) sqlite3_column_text (st, 0);
+
+
             if (nm)
               {
                 json_object_set_new (root, "name", json_string (nm));
@@ -6850,6 +7423,8 @@ db_sector_info_json (int sector_id, json_t **out)
       "  COALESCE(beacon_text, ''), COALESCE(beacon_by, 0), "
       "  COALESCE(security_level, 0), COALESCE(safe_zone, 0) "
       "FROM sectors WHERE id=?1;";
+
+
     if (sqlite3_prepare_v2 (db, sql_rich, -1, &st, NULL) == SQLITE_OK)
       {
         sqlite3_bind_int (st, 1, sector_id);
@@ -6859,10 +7434,14 @@ db_sector_info_json (int sector_id, json_t **out)
             int bby = sqlite3_column_int (st, 1);
             int sec_level = sqlite3_column_int (st, 2);
             int safe = sqlite3_column_int (st, 3);
+
+
             if (btxt && btxt[0])
               {
                 json_t *b =
                   json_pack ("{s:s, s:i}", "text", btxt, "by_player_id", bby);
+
+
                 json_object_set_new (root, "beacon", b);
               }
             if (sec_level != 0 || safe != 0)
@@ -6870,6 +7449,8 @@ db_sector_info_json (int sector_id, json_t **out)
                 json_t *sec =
                   json_pack ("{s:i, s:b}", "level", sec_level, "is_safe_zone",
                              safe ? 1 : 0);
+
+
                 json_object_set_new (root, "security", sec);
               }
           }
@@ -6881,6 +7462,8 @@ db_sector_info_json (int sector_id, json_t **out)
   {
     const char *sql =
       "SELECT neighbors FROM sector_adjacency WHERE sector_id=?1;";
+
+
     if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) == SQLITE_OK)
       {
         sqlite3_bind_int (st, 1, sector_id);
@@ -6888,6 +7471,8 @@ db_sector_info_json (int sector_id, json_t **out)
           {
             const unsigned char *neighbors = sqlite3_column_text (st, 0);
             json_t *adj = parse_neighbors_csv (neighbors);
+
+
             if (json_array_size (adj) > 0)
               {
                 json_object_set_new (root, "adjacent", adj);
@@ -6906,6 +7491,8 @@ db_sector_info_json (int sector_id, json_t **out)
     const char *sql =
       "SELECT port_id, port_name, COALESCE(type_code,''), COALESCE(is_open,1) "
       "FROM sector_ports WHERE sector_id=?1 ORDER BY port_id LIMIT 1;";
+
+
     if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) == SQLITE_OK)
       {
         sqlite3_bind_int (st, 1, sector_id);
@@ -6916,6 +7503,8 @@ db_sector_info_json (int sector_id, json_t **out)
             const char *ptype = (const char *) sqlite3_column_text (st, 2);
             int is_open = sqlite3_column_int (st, 3);
             json_t *port = json_object ();
+
+
             json_object_set_new (port, "id", json_integer (pid));
             if (pname)
               {
@@ -6938,10 +7527,14 @@ db_sector_info_json (int sector_id, json_t **out)
     const char *sql =
       "SELECT planet_id, planet_name, COALESCE(owner_id,0) "
       "FROM sector_planets WHERE sector_id=?1 ORDER BY planet_id;";
+
+
     if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) == SQLITE_OK)
       {
         sqlite3_bind_int (st, 1, sector_id);
         json_t *arr = json_array ();
+
+
         while (sqlite3_step (st) == SQLITE_ROW)
           {
             int id = sqlite3_column_int (st, 0);
@@ -6949,6 +7542,8 @@ db_sector_info_json (int sector_id, json_t **out)
             int owner = sqlite3_column_int (st, 2);
             json_t *pl =
               json_pack ("{s:i, s:i}", "id", id, "owner_id", owner);
+
+
             if (nm)
               {
                 json_object_set_new (pl, "name", json_string (nm));
@@ -6972,10 +7567,14 @@ db_sector_info_json (int sector_id, json_t **out)
     const char *sql =
       "SELECT ship_id, COALESCE(ship_name,''), COALESCE(owner_player_id,0) "
       "FROM ships_by_sector WHERE sector_id=?1 ORDER BY ship_id;";
+
+
     if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) == SQLITE_OK)
       {
         sqlite3_bind_int (st, 1, sector_id);
         json_t *arr = json_array ();
+
+
         while (sqlite3_step (st) == SQLITE_ROW)
           {
             int id = sqlite3_column_int (st, 0);
@@ -6984,6 +7583,8 @@ db_sector_info_json (int sector_id, json_t **out)
             json_t *e =
               json_pack ("{s:i, s:s, s:i}", "id", id, "kind", "ship",
                          "owner_id", owner);
+
+
             if (nm && *nm)
               {
                 json_object_set_new (e, "name", json_string (nm));
@@ -7011,6 +7612,8 @@ db_sector_info_json (int sector_id, json_t **out)
       "  COALESCE(dead_out, NULL), "
       "  COALESCE(is_isolated, NULL) "
       "FROM sector_summary WHERE sector_id=?1;";
+
+
     if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) == SQLITE_OK)
       {
         sqlite3_bind_int (st, 1, sector_id);
@@ -7018,6 +7621,8 @@ db_sector_info_json (int sector_id, json_t **out)
           {
             int has_any = 0;
             json_t *sec = json_object ();
+
+
             if (sqlite3_column_type (st, 0) != SQLITE_NULL)
               {
                 json_object_set_new (sec, "degree",
@@ -7101,6 +7706,8 @@ db_sector_basic_json (int sector_id, json_t **out_obj)
       goto cleanup;
     }
   const char *sql = "SELECT id, name FROM sectors WHERE id = ?";
+
+
   rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -7158,6 +7765,8 @@ db_adjacent_sectors_json (int sector_id, json_t **out_array)
       *out_array = NULL;
     }
   sqlite3 *db = db_get_handle ();
+
+
   if (!db)
     {
       return SQLITE_ERROR;
@@ -7166,6 +7775,8 @@ db_adjacent_sectors_json (int sector_id, json_t **out_array)
     "SELECT to_sector FROM sector_warps WHERE from_sector = ?1 ORDER BY to_sector";
   sqlite3_stmt *st = NULL;
   int rc = SQLITE_ERROR;
+
+
   db_mutex_lock ();
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
@@ -7174,9 +7785,13 @@ db_adjacent_sectors_json (int sector_id, json_t **out_array)
     }
   sqlite3_bind_int (st, 1, sector_id);
   json_t *arr = json_array ();
+
+
   while ((rc = sqlite3_step (st)) == SQLITE_ROW)
     {
       int to = sqlite3_column_int (st, 0);
+
+
       json_array_append_new (arr, json_integer (to));
     }
   if (rc == SQLITE_DONE)
@@ -7237,6 +7852,8 @@ db_port_info_json (int port_id,
     "SELECT id, name, type, techlevel, credits, sector, "
     "ore_on_hand, organics_on_hand, equipment_on_hand, petty_cash "
     "FROM ports WHERE id=?;";
+
+
   rc = sqlite3_prepare_v2 (dbh, port_sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -7343,12 +7960,16 @@ db_players_at_sector_json (int sector_id, json_t **out_array)
   /* Prefer explicit 'sector' and 'name' columns */
   const char *sql =
     "SELECT id, COALESCE(name, player_name) AS pname FROM players WHERE sector = ? ORDER BY id";
+
+
   rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
       /* Fallback if some builds use 'sector' instead of 'sector' */
       const char *sql2 =
         "SELECT id, COALESCE(name, player_name) AS pname FROM players WHERE sector = ? ORDER BY id";
+
+
       rc = sqlite3_prepare_v2 (dbh, sql2, -1, &st, NULL);
       if (rc != SQLITE_OK)
         {
@@ -7368,6 +7989,8 @@ db_players_at_sector_json (int sector_id, json_t **out_array)
       json_t *o = json_pack ("{s:i s:s}",
                              "id", sqlite3_column_int (st, 0),
                              "name", nm ? (const char *) nm : "");
+
+
       if (!o)
         {
           rc = SQLITE_NOMEM;
@@ -7419,6 +8042,8 @@ db_beacons_at_sector_json (int sector_id, json_t **out_array)
   const char *sql =
     "SELECT id, owner_id, message "
     "FROM beacons WHERE sector_id = ? ORDER BY id";
+
+
   rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -7438,6 +8063,8 @@ db_beacons_at_sector_json (int sector_id, json_t **out_array)
                              "owner_id", sqlite3_column_int (st, 1),
                              "message",
                              (const char *) sqlite3_column_text (st, 2));
+
+
       if (!o)
         {
           rc = SQLITE_NOMEM;
@@ -7491,6 +8118,8 @@ db_planets_at_sector_json (int sector_id, json_t **out_array)
   const char *sql =
     "SELECT id, name, owner, fighters, colonist, "
     "fuel, organics, equipment, citadel_level FROM planets WHERE sector = ? ORDER BY id;";
+
+
   rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -7506,6 +8135,8 @@ db_planets_at_sector_json (int sector_id, json_t **out_array)
   while ((rc = sqlite3_step (st)) == SQLITE_ROW)
     {
       json_t *o_planet = json_object ();
+
+
       if (!o_planet)
         {
           rc = SQLITE_NOMEM;
@@ -7525,6 +8156,8 @@ db_planets_at_sector_json (int sector_id, json_t **out_array)
                             SQLITE_NULL) ? json_null () :
                            json_integer (sqlite3_column_int (st, 3)));
       json_t *colonists = json_object ();
+
+
       if (!colonists)
         {
           json_decref (o_planet);
@@ -7545,6 +8178,8 @@ db_planets_at_sector_json (int sector_id, json_t **out_array)
                            json_integer (sqlite3_column_int (st, 6)));
       json_object_set_new (o_planet, "colonists", colonists);
       json_t *resources = json_object ();
+
+
       if (!resources)
         {
           json_decref (o_planet);
@@ -7602,6 +8237,8 @@ db_player_set_sector (int player_id, int sector_id)
   int rc =
     sqlite3_prepare_v2 (db, "UPDATE players SET sector=?1 WHERE id=?2;", -1,
                         &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       LOGE ("db_player_set_sector: Prepare failed for players update: %s",
@@ -7628,6 +8265,8 @@ db_player_set_sector (int player_id, int sector_id)
   // We need to find the ship ID first.
   int ship_id = 0;
   sqlite3_stmt *st_ship = NULL;
+
+
   if (sqlite3_prepare_v2 (db,
                           "SELECT ship FROM players WHERE id=?1;",
                           -1,
@@ -7644,6 +8283,8 @@ db_player_set_sector (int player_id, int sector_id)
   if (ship_id > 0)
     {
       sqlite3_stmt *st_upd_ship = NULL;
+
+
       if (sqlite3_prepare_v2 (db,
                               "UPDATE ships SET sector=?1 WHERE id=?2;",
                               -1,
@@ -7682,9 +8323,13 @@ db_player_set_alignment (int player_id, int alignment)
     }
   int rc = SQLITE_ERROR;
   sqlite3_stmt *stmt = NULL;
+
+
   db_mutex_lock ();
   static const char *SQL_UPDATE_ALIGNMENT =
     "UPDATE players SET alignment = ? WHERE id = ?;";
+
+
   rc = sqlite3_prepare_v2 (db, SQL_UPDATE_ALIGNMENT, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -7726,6 +8371,8 @@ db_player_get_sector (int player_id, int *out_sector)
       *out_sector = 0;
     }
   sqlite3 *dbh = db_get_handle ();
+
+
   if (!dbh)
     {
       // The database handle is not valid, set return code and go to cleanup.
@@ -7733,6 +8380,8 @@ db_player_get_sector (int player_id, int *out_sector)
     }
   const char *sql =
     "SELECT T2.sector FROM players AS T1 JOIN ships AS T2 ON T1.ship = T2.id WHERE T1.id = ?;";
+
+
   // 2. Prepare the statement. This is the first point of failure.
   rc = sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
@@ -7793,10 +8442,14 @@ h_is_black_market_port (sqlite3 *db, int port_id)
     }
   sqlite3_bind_int (st, 1, port_id);
   bool is_bm = false;
+
+
   if (sqlite3_step (st) == SQLITE_ROW)
     {
       // int type = sqlite3_column_int(st, 0); // Unused
       const char *name = (const char *)sqlite3_column_text (st, 1);
+
+
       if (name && strstr (name, "Black Market"))
         {
           is_bm = true;
@@ -7811,6 +8464,7 @@ h_is_black_market_port (sqlite3 *db, int port_id)
  * Ports: goods on hand
  * ---------------------------------------------------------------------- */
 int
+
 /* ----------------------------------------------------------------------
  * Ports: goods on hand
  * ---------------------------------------------------------------------- */
@@ -7824,6 +8478,8 @@ db_port_get_goods_on_hand (int port_id, const char *commodity_code,
       return SQLITE_MISUSE;
     }
   sqlite3 *db = db_get_handle ();
+
+
   if (!db)
     {
       return SQLITE_ERROR;
@@ -7836,6 +8492,8 @@ db_port_get_goods_on_hand (int port_id, const char *commodity_code,
     "SELECT quantity FROM entity_stock WHERE entity_type='port' AND entity_id=?1 AND commodity_code=?2";
   sqlite3_stmt *st = NULL;
   int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       LOGE ("db_port_get_goods_on_hand prepare failed: %s",
@@ -7880,6 +8538,8 @@ h_get_port_commodity_quantity (sqlite3 *db,
   const char *sql =
     "SELECT quantity FROM entity_stock WHERE entity_type = 'port' AND entity_id = ?1 AND commodity_code = ?2 LIMIT 1;";
   int rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       LOGE ("h_get_port_commodity_quantity: prepare failed: %s",

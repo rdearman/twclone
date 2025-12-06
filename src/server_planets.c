@@ -52,7 +52,20 @@ cmd_planet_land (client_ctx_t *ctx, json_t *root)
                             "Authentication required.");
       return -1;
     }
+  sqlite3 *db = db_get_handle ();
+
+  // Consume 1 turn for landing
+  TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);
+
+
+  if (tc != TURN_CONSUME_SUCCESS)
+    {
+      return handle_turn_consumption_error (ctx, tc, "planet.land", root, NULL);
+    }
+
   json_t *data = json_object_get (root, "data");
+
+
   if (!data)
     {
       send_enveloped_error (ctx->fd, root, ERR_BAD_REQUEST,
@@ -60,6 +73,8 @@ cmd_planet_land (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   int planet_id = 0;
+
+
   json_unpack (data, "{s:i}", "planet_id", &planet_id);
   if (planet_id <= 0)
     {
@@ -67,13 +82,16 @@ cmd_planet_land (client_ctx_t *ctx, json_t *root)
                             "Missing or invalid 'planet_id'.");
       return 0;
     }
-  sqlite3 *db = db_get_handle ();
   // Check if player is in the same sector as the planet
   int player_sector = 0;
+
+
   db_player_get_sector (ctx->player_id, &player_sector);
   sqlite3_stmt *st = NULL;
   const char *sql_planet_info =
     "SELECT sector, owner_id, owner_type FROM planets WHERE id = ?;";
+
+
   if (sqlite3_prepare_v2 (db, sql_planet_info, -1, &st, NULL) != SQLITE_OK)
     {
       send_enveloped_error (ctx->fd, root, ERR_DB_QUERY_FAILED,
@@ -84,6 +102,8 @@ cmd_planet_land (client_ctx_t *ctx, json_t *root)
   int planet_sector = 0;
   int owner_id = 0;
   const char *owner_type = NULL;
+
+
   if (sqlite3_step (st) == SQLITE_ROW)
     {
       planet_sector = sqlite3_column_int (st, 0);
@@ -105,6 +125,8 @@ cmd_planet_land (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   bool can_land = false;
+
+
   if (owner_id == 0)
     {                           // unowned
       can_land = true;
@@ -119,6 +141,8 @@ cmd_planet_land (client_ctx_t *ctx, json_t *root)
   else if (strcmp (owner_type, "corp") == 0)
     {
       int player_corp_id = h_get_player_corp_id (db, ctx->player_id);
+
+
       if (player_corp_id > 0 && player_corp_id == owner_id)
         {
           can_land = true;
@@ -139,6 +163,8 @@ cmd_planet_land (client_ctx_t *ctx, json_t *root)
   // Update context
   ctx->sector_id = 0;           // Not in a sector anymore
   json_t *response_data = json_object ();
+
+
   json_object_set_new (response_data, "message",
                        json_string ("Landed successfully."));
   json_object_set_new (response_data, "planet_id", json_integer (planet_id));
@@ -161,6 +187,8 @@ cmd_planet_launch (client_ctx_t *ctx, json_t *root)
     }
   sqlite3 *db = db_get_handle ();
   int sector_id = 0;
+
+
   if (db_player_launch_from_planet (db, ctx->player_id,
                                     &sector_id) != SQLITE_OK)
     {
@@ -171,6 +199,8 @@ cmd_planet_launch (client_ctx_t *ctx, json_t *root)
   // Update context
   ctx->sector_id = sector_id;
   json_t *response_data = json_object ();
+
+
   json_object_set_new (response_data, "message",
                        json_string ("Launched successfully."));
   json_object_set_new (response_data, "sector_id", json_integer (sector_id));
@@ -272,6 +302,8 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
     }
   // MANDATORY: name
   const char *requested_name = json_get_string_or_null (data, "name");
+
+
   if (!requested_name || strlen (requested_name) == 0)
     {
       return send_error_and_return (ctx, root, ERR_MISSING_FIELD,
@@ -298,6 +330,8 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
       sqlite3_stmt *stmt_idem_check;
       const char *sql_check_idem =
         "SELECT response FROM idempotency WHERE key = ? AND cmd = 'planet.genesis_create';";
+
+
       sqlite3_prepare_v2 (db, sql_check_idem, -1, &stmt_idem_check, NULL);
       sqlite3_bind_text (stmt_idem_check, 1, idempotency_key, -1,
                          SQLITE_STATIC);
@@ -305,10 +339,14 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
         {
           const char *prev_response_json =
             (const char *) sqlite3_column_text (stmt_idem_check, 0);
+
+
           if (prev_response_json)
             {
               json_t *prev_response =
                 json_loads (prev_response_json, 0, NULL);
+
+
               if (prev_response)
                 {
                   send_json_response (ctx, prev_response);      // Assumes send_json_response handles decref
@@ -334,6 +372,8 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
   sqlite3_stmt *stmt_msl;
   const char *sql_check_msl =
     "SELECT 1 FROM msl_sectors WHERE sector_id = ?;";
+
+
   sqlite3_prepare_v2 (db, sql_check_msl, -1, &stmt_msl, NULL);
   sqlite3_bind_int (stmt_msl, 1, target_sector_id);
   if (sqlite3_step (stmt_msl) == SQLITE_ROW)
@@ -349,6 +389,8 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
   sqlite3_stmt *stmt_count_sector;
   const char *sql_count_planets_sector =
     "SELECT COUNT(*) FROM planets WHERE sector = ?;";
+
+
   sqlite3_prepare_v2 (db, sql_count_planets_sector, -1, &stmt_count_sector,
                       NULL);
   sqlite3_bind_int (stmt_count_sector, 1, target_sector_id);
@@ -358,6 +400,8 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
     }
   sqlite3_finalize (stmt_count_sector);
   int max_per_sector_cfg = db_get_config_int (db, "max_planets_per_sector", 6); // Get from config table
+
+
   over_cap_flag = (current_planet_count_sector + 1 > max_per_sector_cfg);
   if (GENESIS_BLOCK_AT_CAP
       && current_planet_count_sector >= max_per_sector_cfg)
@@ -368,6 +412,8 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
     }
   // 5. Planet Naming Validation
   int max_name_len = db_get_config_int (db, "max_name_length", 50);     // Get from config table
+
+
   if (strlen (planet_name) > (size_t) max_name_len)
     {
       free (planet_name);
@@ -396,6 +442,8 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
   int genesis_torps_on_ship = 0;
   sqlite3_stmt *stmt_ship_inv;
   const char *sql_get_torps = "SELECT genesis FROM ships WHERE id = ?;";
+
+
   sqlite3_prepare_v2 (db, sql_get_torps, -1, &stmt_ship_inv, NULL);
   sqlite3_bind_int (stmt_ship_inv, 1, ship_id);
   if (sqlite3_step (stmt_ship_inv) == SQLITE_ROW)
@@ -419,8 +467,12 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
   sqlite3_stmt *stmt_get_weights;
   const char *sql_get_weights =
     "SELECT code, genesis_weight FROM planettypes ORDER BY id;";
+
+
   sqlite3_prepare_v2 (db, sql_get_weights, -1, &stmt_get_weights, NULL);
   int class_idx_counter = 0;    // Use a counter for the fixed 'classes' array
+
+
   while (sqlite3_step (stmt_get_weights) == SQLITE_ROW
          && class_idx_counter < 7)
     {
@@ -429,6 +481,8 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
       int weight = sqlite3_column_int (stmt_get_weights, 1);
       // Find the index for this 'code' in our 'classes' array
       int current_class_fixed_idx = -1;
+
+
       for (int i = 0; i < 7; ++i)
         {
           if (strcasecmp (code, classes[i]) == 0)
@@ -475,6 +529,8 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
   int random_val = randomnum (0, total_weight - 1);
   int selected_idx = 0;
   int current_sum = 0;
+
+
   for (int i = 0; i < 7; ++i)
     {
       current_sum += weights[i];
@@ -491,6 +547,8 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
   sqlite3_stmt *stmt_get_planet_type;
   const char *sql_get_planet_type =
     "SELECT id FROM planettypes WHERE code = ?;";
+
+
   sqlite3_prepare_v2 (db, sql_get_planet_type, -1, &stmt_get_planet_type,
                       NULL);
   sqlite3_bind_text (stmt_get_planet_type, 1, planet_class_str, -1,
@@ -517,6 +575,8 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
   const char *sql_insert_planet =
     "INSERT INTO planets (num, sector, name, owner_id, owner_type, class, population, type, creator, colonist, fighters, created_at, created_by, genesis_flag, citadel_level, ore_on_hand, organics_on_hand, equipment_on_hand) "
     "VALUES (NULL, ?, ?, ?, ?, 0, ?, '', 0, 0, ?, ?, 1, 0, 0, 0, 0);";                                                                                                                                                                                                                                                                  // Populate initial fields
+
+
   sqlite3_prepare_v2 (db, sql_insert_planet, -1, &stmt_insert_planet, NULL);
   sqlite3_bind_int (stmt_insert_planet, 1, target_sector_id);
   sqlite3_bind_text (stmt_insert_planet, 2, planet_name, -1,
@@ -560,6 +620,8 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
   sqlite3_stmt *stmt_update_ship;
   const char *sql_update_ship =
     "UPDATE ships SET genesis = genesis - 1 WHERE id = ? AND genesis >= 1;";
+
+
   sqlite3_prepare_v2 (db, sql_update_ship, -1, &stmt_update_ship, NULL);
   sqlite3_bind_int (stmt_update_ship, 1, ship_id);
   rc = sqlite3_step (stmt_update_ship);
@@ -586,6 +648,8 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
       sqlite3_stmt *stmt_update_sector;
       const char *sql_update_sector =
         "UPDATE sectors SET navhaz = MAX(0, COALESCE(navhaz, 0) + ?) WHERE id = ?;";
+
+
       rc =
         sqlite3_prepare_v2 (db, sql_update_sector, -1, &stmt_update_sector,
                             NULL);
@@ -629,6 +693,8 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
       const char *sql_record_idem =
         "INSERT INTO idempotency (key, cmd, req_fp, response, created_at, updated_at) "
         "VALUES (?, 'planet.genesis_create', ?, ?, ?, ?);";                                                                                                             // req_fp is hash of original request
+
+
       sqlite3_prepare_v2 (db, sql_record_idem, -1, &stmt_idem_record, NULL);
       sqlite3_bind_text (stmt_idem_record, 1, idempotency_key, -1,
                          SQLITE_STATIC);
@@ -679,6 +745,8 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
   const char *sql_log_event =
     "INSERT INTO engine_events (ts, type, actor_player_id, sector_id, payload, idem_key) "
     "VALUES (?, 'planet.genesis_created', ?, ?, ?, ?);";
+
+
   sqlite3_prepare_v2 (db, sql_log_event, -1, &stmt_log_event, NULL);
   sqlite3_bind_int (stmt_log_event, 1, current_unix_ts);
   sqlite3_bind_int (stmt_log_event, 2, player_id);

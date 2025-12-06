@@ -62,5 +62,7 @@ struct planetType_struct
   int maxfighters;
   float breeding;
 };
+
+
 typedef struct planetType_struct planetClass;
 #endif /* SERVER_UNIVERSE_H */

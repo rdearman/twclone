@@ -1,5 +1,6 @@
 #ifndef ERRORS_H
 #define ERRORS_H
+
 /* ------------------------------------------------------------------
    Canonical error catalogue for envelopes.
    Use:
@@ -43,6 +44,7 @@
 #define ERR_REF_BIG_SLEEP        1212
 #define ERR_INVALID_CRED         1220
 #define ERR_REGISTRATION_DISABLED 1221
+#define ERR_IS_NPC               1226
 /* 1300 — Validation / Quota */
 #define ERR_INVALID_SCHEMA       1300   /* bad top-level shape */
 #define ERR_MISSING_FIELD        1301
@@ -66,10 +68,16 @@
 #define REF_BLOCKED_BY_MINES     1407   /* REFUSED */
 #define REF_TRANSWARP_UNAVAILABLE 1408  /* REFUSED */
 #define ERR_BAD_STATE             1409  /* Current Sector Unknown */
-#define TERRITORY_UNSAFE         1410
-#define ERR_FOREIGN_LIMPETS_PRESENT 1411
-#define DEPLOY_TYPE_FIGHTERS    1412
-#define SECTOR_FIGHTER_CAP      1413
+#define REF_CANNOT_TRANSWARP_WHILE_TOWING 1410 /* REFUSED */
+#define REF_SHIP_NOT_OWNED_OR_PILOTED 1411 /* REFUSED */
+#define REF_ALREADY_TOWING        1412 /* REFUSED */
+#define REF_ALREADY_BEING_TOWED   1413 /* REFUSED */
+#define REF_TARGET_SHIP_INVALID   1414 /* REFUSED */
+#define TERRITORY_UNSAFE         1415
+#define ERR_FOREIGN_LIMPETS_PRESENT 1416
+#define DEPLOY_TYPE_FIGHTERS    1417
+#define SECTOR_FIGHTER_CAP      1418
+#define TURN_CONSUME_ERROR_INVALID_AMOUNT 1419
 /* 2100 - Genesis Torpedo / Planet Creation */
 #define ERR_GENESIS_DISABLED          2100
 #define ERR_GENESIS_MSL_PROHIBITED    2101

@@ -8,6 +8,8 @@
 #include "database.h"
 #include "server_log.h"
 #include "server_players.h"     // For db_get_player_pref_*
+
+
 // Helper to check if a category is in the filter string
 static int
 is_category_in_filter (const char *filter, const char *category)
@@ -18,8 +20,12 @@ is_category_in_filter (const char *filter, const char *category)
     }
   // For safety, wrap with commas to ensure we match whole words
   char padded_filter[512];
+
+
   snprintf (padded_filter, sizeof (padded_filter), ",%s,", filter);
   char padded_category[512];
+
+
   snprintf (padded_category, sizeof (padded_category), ",%s,", category);
   return strstr (padded_filter, padded_category) != NULL;
 }
@@ -35,6 +41,8 @@ cmd_news_get_feed (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   sqlite3 *db = db_get_handle ();
+
+
   if (!db)
     {
       send_enveloped_error (ctx->fd, root, 1301, "Database unavailable.");
@@ -44,12 +52,16 @@ cmd_news_get_feed (client_ctx_t *ctx, json_t *root)
   int fetch_mode = db_get_player_pref_int (ctx->player_id, "news.fetch_mode",
                                            7);                                          // Default to 7 days
   char category_filter[256];
+
+
   db_get_player_pref_string (ctx->player_id, "news.category_filter", "all",
                              category_filter, sizeof (category_filter));
   // 2. Build and execute the time-based part of the query
   char sql[512];
   sqlite3_stmt *stmt = NULL;
   int rc;
+
+
   if (fetch_mode == 0)
     {                           // Unread
       snprintf (sql,
@@ -81,9 +93,13 @@ cmd_news_get_feed (client_ctx_t *ctx, json_t *root)
     }
   // 3. Fetch results and filter by category
   json_t *articles = json_array ();
+
+
   while (sqlite3_step (stmt) == SQLITE_ROW)
     {
       const char *category = (const char *) sqlite3_column_text (stmt, 2);
+
+
       if (is_category_in_filter (category_filter, category))
         {
           json_t *article = json_object ();
@@ -94,11 +110,15 @@ cmd_news_get_feed (client_ctx_t *ctx, json_t *root)
           const char *body_start = strstr (full_article_text, "\nBODY: ");
           char *extracted_headline = NULL;
           char *extracted_body = NULL;
+
+
           if (headline_start && body_start && body_start > headline_start)
             {
               headline_start += strlen ("HEADLINE: ");
               // Extract headline
               size_t headline_len = body_start - headline_start;
+
+
               extracted_headline = (char *) malloc (headline_len + 1);
               if (extracted_headline)
                 {
@@ -130,10 +150,14 @@ cmd_news_get_feed (client_ctx_t *ctx, json_t *root)
                                             ""));
           const char *context_data_str =
             (const char *) sqlite3_column_text (stmt, 4);
+
+
           if (context_data_str)
             {
               json_error_t error;
               json_t *context_data = json_loads (context_data_str, 0, &error);
+
+
               if (context_data)
                 {
                   json_object_set_new (article, "context_data", context_data);
@@ -148,6 +172,8 @@ cmd_news_get_feed (client_ctx_t *ctx, json_t *root)
   sqlite3_finalize (stmt);
   // 4. Send response
   json_t *data = json_object ();
+
+
   json_object_set_new (data, "articles", articles);
   send_enveloped_ok (ctx->fd, root, "news.feed", data);
   json_decref (data);
@@ -165,6 +191,8 @@ cmd_news_mark_feed_read (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   sqlite3 *db = db_get_handle ();
+
+
   if (!db)
     {
       send_enveloped_error (ctx->fd, root, 1301, "Database unavailable.");
@@ -174,6 +202,8 @@ cmd_news_mark_feed_read (client_ctx_t *ctx, json_t *root)
   const char *sql =
     "UPDATE players SET last_news_read_timestamp = strftime('%s','now') WHERE id = ?;";
   int rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       LOGE ("cmd_news_mark_feed_read: Failed to prepare statement: %s",
@@ -216,6 +246,8 @@ news_post (const char *body, const char *category, int author_id)
   const char *sql =
     "INSERT INTO news_feed (published_ts, news_category, article_text, author_id) VALUES (strftime('%s','now'), ?, ?, ?);";
   int rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       LOGE ("news_post: Failed to prepare statement: %s",

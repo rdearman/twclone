@@ -65,6 +65,8 @@ struct tavern_settings
   int loan_shark_enabled;
 };
 extern struct tavern_settings g_tavern_cfg;
+
+
 int tavern_settings_load (void);
 // Helper function declarations
 bool get_player_loan (sqlite3 *db, int player_id, long long *principal,

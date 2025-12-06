@@ -120,6 +120,8 @@ _bfs_expand_cluster (sqlite3 *db,
   sqlite3_stmt *warp_stmt;
   const char *sql_warps =
     "SELECT to_sector FROM sector_warps WHERE from_sector = ?";
+
+
   if (sqlite3_prepare_v2 (db, sql_warps, -1, &warp_stmt, NULL) != SQLITE_OK)
     {
       free (queue);
@@ -128,6 +130,8 @@ _bfs_expand_cluster (sqlite3 *db,
   // Check statement for existing assignment
   sqlite3_stmt *check_stmt;
   const char *sql_check = "SELECT 1 FROM cluster_sectors WHERE sector_id = ?";
+
+
   if (sqlite3_prepare_v2 (db, sql_check, -1, &check_stmt, NULL) != SQLITE_OK)
     {
       sqlite3_finalize (warp_stmt);
@@ -137,11 +141,15 @@ _bfs_expand_cluster (sqlite3 *db,
   while (head < tail && count < target_size)
     {
       int current = queue[head++];
+
+
       sqlite3_reset (warp_stmt);
       sqlite3_bind_int (warp_stmt, 1, current);
       while (sqlite3_step (warp_stmt) == SQLITE_ROW && count < target_size)
         {
           int neighbor = sqlite3_column_int (warp_stmt, 0);
+
+
           // Check if already in ANY cluster
           sqlite3_reset (check_stmt);
           sqlite3_bind_int (check_stmt, 1, neighbor);
@@ -159,6 +167,8 @@ _bfs_expand_cluster (sqlite3 *db,
           // and check DB count or just assume success if check_stmt failed.
           // Proper way: check queue
           int in_queue = 0;
+
+
           for (int i = 0; i < tail; i++)
             {
               if (queue[i] == neighbor)
@@ -208,12 +218,16 @@ clusters_init (sqlite3 *db)
                                 1,
                                 100,
                                 3);
+
+
   for (int i = 1; i <= 10; i++)
     {
       _add_sector_to_cluster (db, fed_id, i);
     }
   // 3. Ferrengi
   int fer_sector = 0;
+
+
   rc = sqlite3_prepare_v2 (db,
                            "SELECT sector FROM planets WHERE num=2",
                            -1,
@@ -233,10 +247,14 @@ clusters_init (sqlite3 *db)
                                   fer_sector,
                                   -25,
                                   2);
+
+
       _bfs_expand_cluster (db, c_id, fer_sector, 8);  // Expand
     }
   // 4. Orion
   int ori_sector = 0;
+
+
   rc = sqlite3_prepare_v2 (db,
                            "SELECT sector FROM planets WHERE num=3",
                            -1,
@@ -256,9 +274,13 @@ clusters_init (sqlite3 *db)
                                   ori_sector,
                                   -100,
                                   1);
+
+
       if (c_id != -1)
         {
           int added_sectors = _bfs_expand_cluster (db, c_id, ori_sector, 8);
+
+
           LOGD (
             "clusters_init: Created Orion cluster (ID: %d, Sector: %d) with %d sectors.",
             c_id,
@@ -275,6 +297,8 @@ clusters_init (sqlite3 *db)
   int target_clustered_sectors = (int)(total_sectors * 0.15);
   // Count currently clustered
   int current_clustered = 0;
+
+
   rc = sqlite3_prepare_v2 (db,
                            "SELECT COUNT(*) FROM cluster_sectors",
                            -1,
@@ -291,6 +315,8 @@ clusters_init (sqlite3 *db)
         current_clustered);
   // Prepare for random generation
   sqlite3_stmt *pick_stmt;
+
+
   rc = sqlite3_prepare_v2 (db,
                            "SELECT id FROM sectors WHERE id > 10 AND id NOT IN (SELECT sector_id FROM cluster_sectors) ORDER BY RANDOM() LIMIT 1",
                            -1,
@@ -302,14 +328,20 @@ clusters_init (sqlite3 *db)
       return -1;
     }
   int attempts = 0;
+
+
   while (current_clustered < target_clustered_sectors && attempts < 1000)
     {
       if (sqlite3_step (pick_stmt) == SQLITE_ROW)
         {
           int seed = sqlite3_column_int (pick_stmt, 0);
+
+
           sqlite3_reset (pick_stmt);  // Reset for next iteration
           // Generate params
           char name[64];
+
+
           snprintf (name, sizeof(name), "Cluster %d", seed);
           int alignment = (rand () % 101) - 50;  // -50 to 50
           int c_id = _create_cluster (db,
@@ -321,6 +353,8 @@ clusters_init (sqlite3 *db)
                                       1);
           int size = 4 + (rand () % 7);  // 4 to 10
           int added = _bfs_expand_cluster (db, c_id, seed, size);
+
+
           current_clustered += added;
           // If we added nothing (trapped?), don't loop forever
           if (added == 0)
@@ -351,6 +385,8 @@ cluster_economy_step (sqlite3 *db, int64_t now_s)
   LOGD ("Running Cluster Economy Step...");
   // Iterate all clusters
   sqlite3_stmt *cluster_stmt;
+
+
   if (sqlite3_prepare_v2 (db,
                           "SELECT id, name FROM clusters",
                           -1,
@@ -363,6 +399,8 @@ cluster_economy_step (sqlite3 *db, int64_t now_s)
     {
       int cluster_id = sqlite3_column_int (cluster_stmt, 0);
       const char *commodities[] = {"ore", "organics", "equipment"};
+
+
       for (int i = 0; i < 3; i++)
         {
           const char *comm = commodities[i];
@@ -374,6 +412,8 @@ cluster_economy_step (sqlite3 *db, int64_t now_s)
             "JOIN ports p ON p.id = pt.port_id "
             "JOIN cluster_sectors cs ON cs.sector_id = p.sector "
             "WHERE cs.cluster_id = ? AND pt.commodity = ?";
+
+
           if (sqlite3_prepare_v2 (db, sql_avg_real, -1, &avg_stmt,
                                   NULL) == SQLITE_OK)
             {
@@ -395,6 +435,8 @@ cluster_economy_step (sqlite3 *db, int64_t now_s)
           const char *sql_idx =
             "INSERT INTO cluster_commodity_index (cluster_id, commodity_code, mid_price, last_updated) VALUES (?, ?, ?, CURRENT_TIMESTAMP) "
             "ON CONFLICT(cluster_id, commodity_code) DO UPDATE SET mid_price=excluded.mid_price, last_updated=CURRENT_TIMESTAMP";
+
+
           if (sqlite3_prepare_v2 (db, sql_idx, -1, &idx_stmt,
                                   NULL) == SQLITE_OK)
             {
@@ -416,6 +458,8 @@ cluster_economy_step (sqlite3 *db, int64_t now_s)
             "  JOIN cluster_sectors cs ON cs.sector_id = p.sector "
             "  WHERE cs.cluster_id = ?"
             ")";
+
+
           if (sqlite3_prepare_v2 (db, sql_drift, -1, &drift_stmt,
                                   NULL) == SQLITE_OK)
             {
@@ -443,6 +487,8 @@ cluster_can_trade (sqlite3 *db, int sector_id, int player_id)
     }
   sqlite3_stmt *stmt;
   int banned = 0;
+
+
   if (sqlite3_prepare_v2 (db,
                           "SELECT banned FROM cluster_player_status WHERE cluster_id = ? AND player_id = ?",
                           -1,
@@ -472,6 +518,8 @@ cluster_get_bust_modifier (sqlite3 *db, int sector_id, int player_id)
   int suspicion = 0;
   int wanted = 0;
   sqlite3_stmt *stmt;
+
+
   if (sqlite3_prepare_v2 (db,
                           "SELECT suspicion, wanted_level FROM cluster_player_status WHERE cluster_id = ? AND player_id = ?",
                           -1,
@@ -491,6 +539,8 @@ cluster_get_bust_modifier (sqlite3 *db, int sector_id, int player_id)
   // e.g. Wanted level 1 = +10%, Level 2 = +25%, Level 3 = +50%
   // Suspicion adds tiny bits.
   double mod = (wanted * 0.15) + (suspicion * 0.01);
+
+
   return mod;
 }
 
@@ -510,6 +560,8 @@ cluster_on_crime (sqlite3 *db,
   // Upsert row
   sqlite3_stmt *stmt;
   int susp_inc = success ? 2 : 0;
+
+
   if (busted)
     {
       susp_inc += 10;
@@ -526,6 +578,8 @@ cluster_on_crime (sqlite3 *db,
     cluster_id,
     player_id
     );
+
+
   sqlite3_exec (db, sql_update, NULL, NULL, NULL);
   sqlite3_free (sql_update);
   sqlite3_bind_int (stmt, 1, cluster_id);
@@ -547,6 +601,8 @@ clusters_seed_illegal_goods (sqlite3 *db)
   LOGD ("Seeding illegal goods in ports...");
   sqlite3_stmt *port_stmt = NULL;
   sqlite3_stmt *cluster_align_stmt = NULL;
+
+
   // Prepare statement to select all ports
   if (sqlite3_prepare_v2 (db,
                           "SELECT id, sector FROM ports",
@@ -560,6 +616,8 @@ clusters_seed_illegal_goods (sqlite3 *db)
   // Prepare statement to get cluster alignment for a sector
   const char *sql_cluster_align =
     "SELECT c.alignment FROM clusters c JOIN cluster_sectors cs ON cs.cluster_id = c.id WHERE cs.sector_id = ? LIMIT 1";
+
+
   if (sqlite3_prepare_v2 (db, sql_cluster_align, -1, &cluster_align_stmt,
                           NULL) != SQLITE_OK)
     {
@@ -574,6 +632,8 @@ clusters_seed_illegal_goods (sqlite3 *db)
     "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) "
     "VALUES ('port', ?, ?, ?, 0, strftime('%s','now')) "
     "ON CONFLICT(entity_type, entity_id, commodity_code) DO UPDATE SET quantity = excluded.quantity, last_updated_ts = excluded.last_updated_ts;";
+
+
   if (sqlite3_prepare_v2 (db, sql_update_stock, -1, &update_stock_stmt,
                           NULL) != SQLITE_OK)
     {
@@ -589,6 +649,8 @@ clusters_seed_illegal_goods (sqlite3 *db)
       int port_id = sqlite3_column_int (port_stmt, 0);
       int sector_id = sqlite3_column_int (port_stmt, 1);
       int cluster_alignment = 0;   // Default to neutral
+
+
       // LOGD ("Processing port: %d (sector: %d)", port_id, sector_id); // Reduced logging
       // Get cluster alignment for the port's sector
       sqlite3_reset (cluster_align_stmt);
@@ -601,6 +663,8 @@ clusters_seed_illegal_goods (sqlite3 *db)
       if (cluster_alignment <= CLUSTER_EVIL_MAX_ALIGN)
         {
           int severity_factor = abs (cluster_alignment) / 25;  // e.g., -100/25=4, -25/25=1
+
+
           if (severity_factor < 1)
             {
               severity_factor = 1;
@@ -608,6 +672,8 @@ clusters_seed_illegal_goods (sqlite3 *db)
           int slaves_qty = (rand () % 10 + 1) * severity_factor;
           int weapons_qty = (rand () % 15 + 1) * severity_factor;
           int drugs_qty = (rand () % 20 + 1) * severity_factor;
+
+
           // Update SLV
           sqlite3_reset (update_stock_stmt);
           sqlite3_bind_int (update_stock_stmt, 1, port_id);

@@ -87,6 +87,8 @@ handle_ship_destruction (sqlite3 *db, ship_kill_context_t *ctx)
     g_cfg.death.xp_loss_flat +
     (int) (current_xp * (g_cfg.death.xp_loss_percent / 100.0));
   int new_xp = current_xp - xp_loss;
+
+
   if (new_xp < 0)
     {
       new_xp = 0;               // XP cannot go below 0
@@ -109,6 +111,8 @@ handle_ship_destruction (sqlite3 *db, ship_kill_context_t *ctx)
   // Check if podded_last_reset needs to be reset for a new day
   long long last_reset_timestamp =
     db_get_player_podded_last_reset (db, ctx->victim_player_id);
+
+
   if (current_timestamp - last_reset_timestamp >= 86400)
     {                           // If it's been a day
       podded_count_today = 0;   // Reset for the new day
@@ -117,6 +121,8 @@ handle_ship_destruction (sqlite3 *db, ship_kill_context_t *ctx)
     }
   bool can_pod = has_escape_pod
                  && (podded_count_today < g_cfg.death.max_per_day);
+
+
   if (can_pod)
     {
       rc = handle_escape_pod_spawn (db, ctx);
@@ -146,6 +152,8 @@ handle_ship_destruction (sqlite3 *db, ship_kill_context_t *ctx)
     }
   // --- 1.6 Emit Engine Events ---
   json_t *event_payload = json_object ();
+
+
   if (!event_payload)
     {
       LOGE
@@ -199,6 +207,8 @@ handle_big_sleep (sqlite3 *db, ship_kill_context_t *ctx)
   const char *sql_update_podded_status =
     "INSERT OR REPLACE INTO podded_status (player_id, status, big_sleep_until) "
     "VALUES (?1, 'big_sleep', ?2);";
+
+
   rc = sqlite3_prepare_v2 (db, sql_update_podded_status, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -219,6 +229,8 @@ handle_big_sleep (sqlite3 *db, ship_kill_context_t *ctx)
   sqlite3_finalize (st);
   // Emit event
   json_t *event_payload = json_object ();
+
+
   json_object_set_new (event_payload, "player_id",
                        json_integer (ctx->victim_player_id));
   json_object_set_new (event_payload, "until",
@@ -246,6 +258,8 @@ handle_escape_pod_spawn (sqlite3 *db, ship_kill_context_t *ctx)
   const char *sql_insert_pod =
     "INSERT INTO ships (name, type_id, holds, fighters, shields, sector, ported, onplanet) "
     "VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, 0);";                                                                                                                           // Assume not ported or on planet initially
+
+
   rc = sqlite3_prepare_v2 (db, sql_insert_pod, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -273,6 +287,8 @@ handle_escape_pod_spawn (sqlite3 *db, ship_kill_context_t *ctx)
   // 2. Assign ship ownership via ship_ownership table
   const char *sql_insert_ship_ownership =
     "INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary) VALUES (?1, ?2, 1, 1);";
+
+
   // role_id 1 = owner, is_primary 1
   rc = sqlite3_prepare_v2 (db, sql_insert_ship_ownership, -1, &st, NULL);
   if (rc != SQLITE_OK)
@@ -298,6 +314,8 @@ handle_escape_pod_spawn (sqlite3 *db, ship_kill_context_t *ctx)
   // 3. Update player's active ship and sector in the players table
   const char *sql_update_player =
     "UPDATE players SET ship = ?, sector = ? WHERE id = ?;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_update_player, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -323,6 +341,8 @@ handle_escape_pod_spawn (sqlite3 *db, ship_kill_context_t *ctx)
   const char *sql_update_podded_status =
     "INSERT OR REPLACE INTO podded_status (player_id, podded_count_today, podded_last_reset, status, big_sleep_until) "
     "VALUES (?1, (SELECT podded_count_today FROM podded_status WHERE player_id = ?1) + 1, (SELECT podded_last_reset FROM podded_status WHERE player_id = ?1), 'alive', 0);";
+
+
   rc = sqlite3_prepare_v2 (db, sql_update_podded_status, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -409,12 +429,18 @@ cmd_ship_inspect (client_ctx_t *ctx, json_t *root)
     }
   int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 1;
   json_t *jdata = json_object_get (root, "data");
+
+
   if (json_is_object (jdata))
     {
       json_t *jsec = json_object_get (jdata, "sector_id");
+
+
       if (json_is_integer (jsec))
         {
           int s = (int) json_integer_value (jsec);
+
+
           if (s > 0)
             {
               sector_id = s;
@@ -424,6 +450,8 @@ cmd_ship_inspect (client_ctx_t *ctx, json_t *root)
   json_t *ships = NULL;
   int rc =
     db_ships_inspectable_at_sector_json (ctx->player_id, sector_id, &ships);
+
+
   if (rc != SQLITE_OK || !ships)
     {
       send_enveloped_error (ctx->fd, root, 1500, "Database error");
@@ -431,6 +459,8 @@ cmd_ship_inspect (client_ctx_t *ctx, json_t *root)
     }
   json_t *payload =
     json_pack ("{s:i s:o}", "sector", sector_id, "ships", ships);
+
+
   send_enveloped_ok (ctx->fd, root, "ship.inspect", payload);
   json_decref (payload);
   return 0;
@@ -447,6 +477,8 @@ cmd_ship_rename (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   json_t *data = json_object_get (root, "data");
+
+
   if (!json_is_object (data))
     {
       send_enveloped_refused (ctx->fd, root, 1400, "Bad request", NULL);
@@ -454,6 +486,8 @@ cmd_ship_rename (client_ctx_t *ctx, json_t *root)
     }
   json_t *j_ship = json_object_get (data, "ship_id");
   json_t *j_name = json_object_get (data, "new_name");
+
+
   if (!json_is_integer (j_ship) || !json_is_string (j_name))
     {
       send_enveloped_refused (ctx->fd, root, 1400, "Missing ship_id/new_name",
@@ -464,6 +498,8 @@ cmd_ship_rename (client_ctx_t *ctx, json_t *root)
   const char *new_name = json_string_value (j_name);
   sqlite3 *db = db_get_handle ();
   int rc = db_ship_rename_if_owner (db, ctx->player_id, ship_id, new_name);
+
+
   if (rc == SQLITE_CONSTRAINT)
     {
       send_enveloped_refused (ctx->fd, root, 1403, "Permission denied", NULL);
@@ -476,6 +512,8 @@ cmd_ship_rename (client_ctx_t *ctx, json_t *root)
     }
   json_t *payload =
     json_pack ("{s:i s:s}", "ship_id", ship_id, "name", new_name);
+
+
   send_enveloped_ok (ctx->fd, root, "ship.renamed", payload);
   json_decref (payload);
   return 0;
@@ -496,12 +534,18 @@ cmd_ship_claim (client_ctx_t *ctx, json_t *root)
     }
   int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 1;
   json_t *data = json_object_get (root, "data");
+
+
   if (json_is_object (data))
     {
       json_t *jsec = json_object_get (data, "sector_id");
+
+
       if (json_is_integer (jsec))
         {
           int s = (int) json_integer_value (jsec);
+
+
           if (s > 0)
             {
               sector_id = s;
@@ -509,9 +553,13 @@ cmd_ship_claim (client_ctx_t *ctx, json_t *root)
         }
     }
   int ship_id = -1;
+
+
   if (json_is_object (data))
     {
       json_t *j_ship = json_object_get (data, "ship_id");
+
+
       if (json_is_integer (j_ship))
         {
           ship_id = (int) json_integer_value (j_ship);
@@ -524,6 +572,8 @@ cmd_ship_claim (client_ctx_t *ctx, json_t *root)
     }
   json_t *ship = NULL;
   int rc = db_ship_claim (db_handle, ctx->player_id, sector_id, ship_id, &ship);
+
+
   if (rc != SQLITE_OK || !ship)
     {
       send_enveloped_refused (ctx->fd, root, 1406, "Ship not claimable",
@@ -531,6 +581,8 @@ cmd_ship_claim (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   json_t *payload = json_pack ("{s:o}", "ship", ship);
+
+
   send_enveloped_ok (ctx->fd, root, "ship.claimed", payload);
   json_decref (payload);
   return 0;
@@ -547,6 +599,8 @@ cmd_ship_status (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   json_t *player_info = NULL;
+
+
   if (db_player_info_json (ctx->player_id, &player_info) != SQLITE_OK
       || !player_info)
     {
@@ -555,6 +609,8 @@ cmd_ship_status (client_ctx_t *ctx, json_t *root)
     }
   // Extract ship-only view from player_info (adjust keys to match your schema)
   json_t *ship = json_object_get (player_info, "ship");
+
+
   if (!json_is_object (ship))
     {
       json_decref (player_info);
@@ -563,6 +619,8 @@ cmd_ship_status (client_ctx_t *ctx, json_t *root)
     }
   // Build payload (clone or pack fields as needed)
   json_t *payload = json_pack ("{s:O}", "ship", ship);
+
+
   send_enveloped_ok (ctx->fd, root, "ship.status", payload);
   json_decref (payload);
   json_decref (player_info);
@@ -628,6 +686,8 @@ cmd_ship_self_destruct (client_ctx_t *ctx, json_t *root)
     .sector_id = ship_sector > 0 ? ship_sector : 1      // Fallback to sector 1 if current sector is invalid
   };
   int destroy_rc = handle_ship_destruction (db, &kill_ctx);
+
+
   if (destroy_rc != SQLITE_OK)
     {
       LOGE
@@ -642,6 +702,305 @@ cmd_ship_self_destruct (client_ctx_t *ctx, json_t *root)
     }
   /* 4. Response: command acknowledged and processed */
   send_enveloped_ok (ctx->fd, root, "ship.self_destruct.confirmed", NULL);
+  return 0;
+}
+
+
+int
+cmd_ship_tow (client_ctx_t *ctx, json_t *root)
+{
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    {
+      send_enveloped_error (ctx->fd, root, ERR_DB, "No database handle");
+      return 0;
+    }
+
+  if (!ctx || ctx->player_id <= 0)
+    {
+      send_enveloped_refused (ctx->fd,
+                              root,
+                              ERR_NOT_AUTHENTICATED,
+                              "Not authenticated",
+                              NULL);
+      return 0;
+    }
+
+  int player_ship_id = h_get_active_ship_id (db,
+                                             ctx->player_id);
+
+
+  if (player_ship_id <= 0)
+    {
+      send_enveloped_refused (ctx->fd,
+                              root,
+                              ERR_NO_ACTIVE_SHIP,
+                              "You do not have an active ship.",
+                              NULL);
+      return 0;
+    }
+
+  /* -----------------------------------------------------------
+     1. Get Player's Current Tow Status
+     ----------------------------------------------------------- */
+  int current_towing_ship_id = 0;
+  sqlite3_stmt *stmt = NULL;
+  const char *sql_get_tow = "SELECT towing_ship_id FROM ships WHERE id = ?;";
+
+
+  if (sqlite3_prepare_v2 (db, sql_get_tow, -1, &stmt, NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_int (stmt, 1, player_ship_id);
+      if (sqlite3_step (stmt) == SQLITE_ROW)
+        {
+          current_towing_ship_id = sqlite3_column_int (stmt, 0);
+        }
+      sqlite3_finalize (stmt);
+    }
+  else
+    {
+      LOGE ("cmd_ship_tow: DB error checking status: %s", sqlite3_errmsg (db));
+      send_enveloped_error (ctx->fd, root, ERR_DB_QUERY_FAILED,
+                            "Database error");
+      return 0;
+    }
+
+  /* -----------------------------------------------------------
+     2. Parse Input
+     ----------------------------------------------------------- */
+  json_t *data = json_object_get (root, "data");
+  int target_ship_id = 0;
+
+
+  if (json_is_object (data))
+    {
+      json_t *j_target = json_object_get (data, "target_ship_id");
+
+
+      if (json_is_integer (j_target))
+        {
+          target_ship_id = (int)json_integer_value (j_target);
+        }
+    }
+
+  /* -----------------------------------------------------------
+     3. DISENGAGE LOGIC
+     If we are towing, and target is 0 OR matches current, drop it.
+     ----------------------------------------------------------- */
+  if (current_towing_ship_id != 0)
+    {
+      if (target_ship_id == 0 || target_ship_id == current_towing_ship_id)
+        {
+          sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, NULL);
+
+          // 3a. Clear player's towing field
+          const char *sql_untow_player =
+            "UPDATE ships SET towing_ship_id = 0 WHERE id = ?;";
+
+
+          if (sqlite3_prepare_v2 (db, sql_untow_player, -1, &stmt,
+                                  NULL) != SQLITE_OK)
+            {
+              goto rollback;
+            }
+          sqlite3_bind_int (stmt, 1, player_ship_id);
+          if (sqlite3_step (stmt) != SQLITE_DONE)
+            {
+              goto rollback;
+            }
+          sqlite3_finalize (stmt);
+
+          // 3b. Clear target's "being towed" field
+          const char *sql_untow_target =
+            "UPDATE ships SET is_being_towed_by = 0 WHERE id = ?;";
+
+
+          if (sqlite3_prepare_v2 (db, sql_untow_target, -1, &stmt,
+                                  NULL) != SQLITE_OK)
+            {
+              goto rollback;
+            }
+          sqlite3_bind_int (stmt, 1, current_towing_ship_id);
+          if (sqlite3_step (stmt) != SQLITE_DONE)
+            {
+              goto rollback;
+            }
+          sqlite3_finalize (stmt);
+
+          sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
+
+          send_enveloped_ok (ctx->fd, root, "ship.tow.disengaged",
+                             json_pack ("{s:s,s:i}",
+                                        "message",
+                                        "Tow cable disengaged.",
+                                        "towed_ship_id",
+                                        current_towing_ship_id));
+          return 0;
+        }
+      else
+        {
+          send_enveloped_refused (ctx->fd,
+                                  root,
+                                  REF_ALREADY_TOWING,
+                                  "You are already towing another ship. Release it first.",
+                                  NULL);
+          return 0;
+        }
+    }
+
+  /* -----------------------------------------------------------
+     4. ENGAGE LOGIC - Prerequisites
+     ----------------------------------------------------------- */
+  if (target_ship_id <= 0)
+    {
+      send_enveloped_refused (ctx->fd,
+                              root,
+                              ERR_MISSING_FIELD,
+                              "Invalid target ship ID.",
+                              NULL);
+      return 0;
+    }
+  if (target_ship_id == player_ship_id)
+    {
+      send_enveloped_refused (ctx->fd,
+                              root,
+                              REF_TARGET_SHIP_INVALID,
+                              "You cannot tow yourself.",
+                              NULL);
+      return 0;
+    }
+
+  // Helper lookups (Assuming these helpers exist and work as expected)
+  int target_sector = db_get_ship_sector_id (db, target_ship_id);
+  int player_sector = db_get_ship_sector_id (db, player_ship_id);
+
+
+  if (target_sector <= 0 || target_sector != player_sector)
+    {
+      send_enveloped_refused (ctx->fd,
+                              root,
+                              REF_TARGET_SHIP_INVALID,
+                              "Target ship not in your sector.",
+                              NULL);
+      return 0;
+    }
+
+  // Ownership Check
+  int owner_id = 0, corp_id = 0;
+
+
+  db_get_ship_owner_id (db, target_ship_id, &owner_id, &corp_id);
+
+  bool is_mine = (owner_id == ctx->player_id);
+  bool is_corp = (ctx->corp_id > 0 && corp_id == ctx->corp_id);
+
+
+  if (!is_mine && !is_corp)
+    {
+      send_enveloped_refused (ctx->fd,
+                              root,
+                              REF_SHIP_NOT_OWNED_OR_PILOTED,
+                              "You do not own that ship.",
+                              NULL);
+      return 0;
+    }
+
+  // Unmanned Check
+  if (db_is_ship_piloted (db, target_ship_id))
+    {
+      send_enveloped_refused (ctx->fd,
+                              root,
+                              REF_SHIP_NOT_OWNED_OR_PILOTED,
+                              "Target ship is currently piloted.",
+                              NULL);
+      return 0;
+    }
+
+  // Already Towed Check
+  const char *sql_check_towed =
+    "SELECT is_being_towed_by FROM ships WHERE id = ?;";
+  int is_being_towed = 0;
+
+
+  if (sqlite3_prepare_v2 (db, sql_check_towed, -1, &stmt, NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_int (stmt, 1, target_ship_id);
+      if (sqlite3_step (stmt) == SQLITE_ROW)
+        {
+          is_being_towed = sqlite3_column_int (stmt, 0);
+        }
+      sqlite3_finalize (stmt);
+    }
+
+  if (is_being_towed != 0)
+    {
+      send_enveloped_refused (ctx->fd,
+                              root,
+                              REF_ALREADY_BEING_TOWED,
+                              "Target is already under tow.",
+                              NULL);
+      return 0;
+    }
+
+  /* -----------------------------------------------------------
+     5. ENGAGE LOGIC - Execution
+     ----------------------------------------------------------- */
+  sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, NULL);
+
+  // 5a. Set player's towing_ship_id -> target
+  const char *sql_set_tow = "UPDATE ships SET towing_ship_id = ? WHERE id = ?;";
+
+
+  if (sqlite3_prepare_v2 (db, sql_set_tow, -1, &stmt, NULL) != SQLITE_OK)
+    {
+      goto rollback;
+    }
+  sqlite3_bind_int (stmt, 1, target_ship_id);
+  sqlite3_bind_int (stmt, 2, player_ship_id);
+  if (sqlite3_step (stmt) != SQLITE_DONE)
+    {
+      goto rollback;
+    }
+  sqlite3_finalize (stmt);
+
+  // 5b. Set target's is_being_towed_by -> player
+  const char *sql_set_towed_by =
+    "UPDATE ships SET is_being_towed_by = ? WHERE id = ?;";
+
+
+  if (sqlite3_prepare_v2 (db, sql_set_towed_by, -1, &stmt, NULL) != SQLITE_OK)
+    {
+      goto rollback;
+    }
+  sqlite3_bind_int (stmt, 1, player_ship_id);
+  sqlite3_bind_int (stmt, 2, target_ship_id);
+  if (sqlite3_step (stmt) != SQLITE_DONE)
+    {
+      goto rollback;
+    }
+  sqlite3_finalize (stmt);
+
+  sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
+
+  send_enveloped_ok (ctx->fd, root, "ship.tow.engaged",
+                     json_pack ("{s:s,s:i}",
+                                "message",
+                                "Tow cable engaged.",
+                                "towed_ship_id",
+                                target_ship_id));
+  return 0;
+
+rollback:
+  if (stmt)
+    {
+      sqlite3_finalize (stmt);
+    }
+  sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+  LOGE ("cmd_ship_tow: DB Transaction failed: %s", sqlite3_errmsg (db));
+  send_enveloped_error (ctx->fd,
+                        root,
+                        ERR_DB_QUERY_FAILED,
+                        "Database transaction error");
   return 0;
 }
 

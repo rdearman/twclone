@@ -12,6 +12,8 @@
 #include "server_cron.h"        // Include for cron job functions
 #include "server_log.h"
 #include "server_clusters.h" // NEW
+
+
 int
 cmd_sys_cluster_init (client_ctx_t *ctx, json_t *root)
 {
@@ -84,6 +86,8 @@ ct_str_eq (const char *a, const char *b)
     {
       unsigned char ca = (i < la) ? (unsigned char) a[i] : 0;
       unsigned char cb = (i < lb) ? (unsigned char) b[i] : 0;
+
+
       diff |= (unsigned char) (ca ^ cb);
     }
   return diff == 0;
@@ -98,6 +102,8 @@ play_login (const char *player_name, const char *password, int *out_player_id)
       return AUTH_ERR_BAD_REQUEST;
     }
   sqlite3 *db = db_get_handle ();
+
+
   if (!db)
     {
       return AUTH_ERR_DB;
@@ -105,6 +111,8 @@ play_login (const char *player_name, const char *password, int *out_player_id)
   const char *sql = "SELECT id, passwd, type FROM players WHERE name=?1;";
   sqlite3_stmt *st = NULL;
   int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       return AUTH_ERR_DB;
@@ -121,6 +129,8 @@ play_login (const char *player_name, const char *password, int *out_player_id)
   const int player_type = sqlite3_column_int (st, 2);
   /* Copy the password BEFORE finalize; column_text ptr is invalid after finalize */
   char *dbpass = dbpass_u8 ? strdup ((const char *) dbpass_u8) : NULL;
+
+
   sqlite3_finalize (st);
   /* Block NPC logins */
   if (player_type == 1)
@@ -137,6 +147,8 @@ play_login (const char *player_name, const char *password, int *out_player_id)
         password,
         dbpass ? dbpass : "(null)");
   int ok = (dbpass != NULL) && ct_str_eq (password, dbpass);
+
+
   if (dbpass)
     {
       free (dbpass);
@@ -194,13 +206,15 @@ user_create (sqlite3 *db,
     "INSERT INTO turns (player, turns_remaining, last_update) "
     "SELECT "
     " ?1, "
-    " value, " 
+    " value, "
     "  strftime('%s','now') "
     "FROM config "
     "WHERE key='turnsperday' "
     "ON CONFLICT(player) DO UPDATE SET "
     "  turns_remaining = excluded.turns_remaining, "
     "  last_update    = excluded.last_update;";
+
+
   LOGE ("user_create debug: Inserting player '%s' with passwd '%s'",
         player_name, password);
   /* Insert into players */
@@ -221,6 +235,8 @@ user_create (sqlite3 *db,
   if (rc != SQLITE_DONE)
     {
       int ext_err = sqlite3_extended_errcode (db);
+
+
       if (ext_err == SQLITE_CONSTRAINT_UNIQUE ||
           ext_err == SQLITE_CONSTRAINT_PRIMARYKEY)
         {
@@ -266,16 +282,19 @@ user_create (sqlite3 *db,
       sqlite3_finalize (stmt);
       return AUTH_ERR_DB;
     }
-      sqlite3_finalize (stmt);
-  
-      /* Create default bank account for this player */
-      if (db_bank_account_create_default_for_player(db, player_id) != 0) {
-          LOGE("user_create: Failed to create default bank account for player %d", player_id);
-          return AUTH_ERR_DB; // Or a more specific error
-      }
-  
-      return AUTH_OK;
-  }
+  sqlite3_finalize (stmt);
+
+  /* Create default bank account for this player */
+  if (db_bank_account_create_default_for_player (db, player_id) != 0)
+    {
+      LOGE ("user_create: Failed to create default bank account for player %d",
+            player_id);
+      return AUTH_ERR_DB;     // Or a more specific error
+    }
+
+  return AUTH_OK;
+}
+
 
 int
 cmd_sys_test_news_cron (client_ctx_t *ctx, json_t *root)
@@ -290,6 +309,8 @@ cmd_sys_test_news_cron (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   json_t *j_subcommand = json_object_get (data, "subcommand");
+
+
   if (json_is_string (j_subcommand))
     {
       subcommand = json_string_value (j_subcommand);
@@ -307,6 +328,8 @@ cmd_sys_test_news_cron (client_ctx_t *ctx, json_t *root)
       int sector_id = 0;
       json_t *payload = NULL;
       json_t *j_event_type = json_object_get (data, "event_type");
+
+
       if (json_is_string (j_event_type))
         {
           event_type = json_string_value (j_event_type);
@@ -318,16 +341,22 @@ cmd_sys_test_news_cron (client_ctx_t *ctx, json_t *root)
           return 0;
         }
       json_t *j_actor_player_id = json_object_get (data, "actor_player_id");
+
+
       if (json_is_integer (j_actor_player_id))
         {
           actor_player_id = json_integer_value (j_actor_player_id);
         }
       json_t *j_sector_id = json_object_get (data, "sector_id");
+
+
       if (json_is_integer (j_sector_id))
         {
           sector_id = json_integer_value (j_sector_id);
         }
       json_t *j_payload = json_object_get (data, "payload");
+
+
       if (j_payload)
         {
           payload = json_deep_copy (j_payload); // Make a copy as db_log_engine_event consumes reference
@@ -399,6 +428,8 @@ cmd_sys_raw_sql_exec (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   json_t *j_sql = json_object_get (data, "sql");
+
+
   if (json_is_string (j_sql))
     {
       sql_str = json_string_value (j_sql);
@@ -411,9 +442,13 @@ cmd_sys_raw_sql_exec (client_ctx_t *ctx, json_t *root)
     }
   json_t *rows = json_array ();
   const char *tail = sql_str;
+
+
   while (tail && *tail)
     {
       sqlite3_stmt *stmt = NULL;
+
+
       // trim leading whitespace
       while (*tail &&
              (*tail == ' ' || *tail == '\t' || *tail == '\r' || *tail == '\n'))
@@ -437,13 +472,19 @@ cmd_sys_raw_sql_exec (client_ctx_t *ctx, json_t *root)
           continue;
         }
       int col_count = sqlite3_column_count (stmt);
+
+
       while ((rc = sqlite3_step (stmt)) == SQLITE_ROW)
         {
           json_t *row = json_array ();
+
+
           for (int i = 0; i < col_count; i++)
             {
               int type = sqlite3_column_type (stmt,
                                               i);
+
+
               switch (type)
                 {
                   case SQLITE_INTEGER:
@@ -485,6 +526,8 @@ cmd_sys_raw_sql_exec (client_ctx_t *ctx, json_t *root)
       sqlite3_finalize (stmt);
     }
   json_t *resp = json_object ();
+
+
   json_object_set_new (resp, "rows", rows);
   send_enveloped_ok (ctx->fd, root, "sys.raw_sql_exec.success", resp);
   return 0;
@@ -530,6 +573,8 @@ send_json_response (client_ctx_t *ctx, json_t *response_json)
 
 
 /* --- Bounty Commands --- */
+
+
 // Helper: Check if sector is FedSpace
 static bool
 is_fedspace_sector (int sector_id)
@@ -554,10 +599,14 @@ is_black_market_port (sqlite3 *db, int port_id)
     }
   sqlite3_bind_int (st, 1, port_id);
   bool is_bm = false;
+
+
   if (sqlite3_step (st) == SQLITE_ROW)
     {
       // int type = sqlite3_column_int(st, 0); // Unused
       const char *name = (const char *)sqlite3_column_text (st, 1);
+
+
       if (name && strstr (name, "Black Market"))
         {
           is_bm = true;
@@ -578,6 +627,8 @@ cmd_bounty_post_federation (client_ctx_t *ctx, json_t *root)
     }
   sqlite3 *db = db_get_handle ();
   json_t *data = json_object_get (root, "data");
+
+
   if (!json_is_object (data))
     {
       send_enveloped_error (ctx->fd, root, 400, "Missing data object.");
@@ -585,9 +636,13 @@ cmd_bounty_post_federation (client_ctx_t *ctx, json_t *root)
     }
   int target_player_id = 0;
   json_t *j_target_id = json_object_get (data, "target_player_id");
+
+
   if (j_target_id)
     {
       int type = json_typeof (j_target_id);
+
+
       if (type == JSON_STRING)
         {
           LOGD ("cmd_bounty_post_federation: target_player_id is STRING: '%s'",
@@ -617,17 +672,23 @@ cmd_bounty_post_federation (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   long long amount;
+
+
   if (!json_get_int64_flexible (data, "amount", &amount) || amount <= 0)
     {
       send_enveloped_error (ctx->fd, root, 400, "Invalid amount.");
       return 0;
     }
   const char *desc = json_string_value (json_object_get (data, "description"));
+
+
   if (!desc)
     {
       desc = "Wanted for crimes against the Federation.";
     }
   int sector = 0;
+
+
   db_player_get_sector (ctx->player_id, &sector);
   if (!is_fedspace_sector (sector))
     {
@@ -638,6 +699,8 @@ cmd_bounty_post_federation (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   int issuer_alignment = 0;
+
+
   db_player_get_alignment (db, ctx->player_id, &issuer_alignment);
   if (issuer_alignment < 0)
     {
@@ -648,6 +711,8 @@ cmd_bounty_post_federation (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   int target_alignment = 0;
+
+
   if (db_player_get_alignment (db, target_player_id,
                                &target_alignment) != SQLITE_OK)
     {
@@ -671,6 +736,8 @@ cmd_bounty_post_federation (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   long long new_balance = 0;
+
+
   if (h_deduct_credits (db,
                         "player",
                         ctx->player_id,
@@ -718,6 +785,8 @@ cmd_bounty_post_hitlist (client_ctx_t *ctx, json_t *root)
     }
   sqlite3 *db = db_get_handle ();
   json_t *data = json_object_get (root, "data");
+
+
   if (!json_is_object (data))
     {
       send_enveloped_error (ctx->fd, root, 400, "Missing data object.");
@@ -725,9 +794,13 @@ cmd_bounty_post_hitlist (client_ctx_t *ctx, json_t *root)
     }
   int target_player_id = 0;
   json_t *j_target_id = json_object_get (data, "target_player_id");
+
+
   if (j_target_id)
     {
       int type = json_typeof (j_target_id);
+
+
       if (type == JSON_STRING)
         {
           LOGD ("cmd_bounty_post_hitlist: target_player_id is STRING: '%s'",
@@ -756,19 +829,27 @@ cmd_bounty_post_hitlist (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   long long amount;
+
+
   if (!json_get_int64_flexible (data, "amount", &amount) || amount <= 0)
     {
       send_enveloped_error (ctx->fd, root, 400, "Invalid amount.");
       return 0;
     }
   const char *desc = json_string_value (json_object_get (data, "description"));
+
+
   if (!desc)
     {
       desc = "Hit ordered.";
     }
   int sector = 0;
+
+
   db_player_get_sector (ctx->player_id, &sector);
   int port_id = db_get_port_id_by_sector (sector);
+
+
   if (port_id <= 0 || !is_black_market_port (db, port_id))
     {
       send_enveloped_error (ctx->fd,
@@ -778,6 +859,8 @@ cmd_bounty_post_hitlist (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   int issuer_alignment = 0;
+
+
   db_player_get_alignment (db,
                            ctx->player_id,
                            &issuer_alignment);
@@ -790,6 +873,8 @@ cmd_bounty_post_hitlist (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   int target_alignment = 0;
+
+
   if (db_player_get_alignment (db, target_player_id,
                                &target_alignment) != SQLITE_OK)
     {
@@ -809,6 +894,8 @@ cmd_bounty_post_hitlist (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   long long new_balance = 0;
+
+
   if (h_deduct_credits (db,
                         "player",
                         ctx->player_id,
@@ -856,8 +943,12 @@ cmd_bounty_list (client_ctx_t *ctx, json_t *root)
     }
   sqlite3 *db = db_get_handle ();
   int alignment = 0;
+
+
   db_player_get_alignment (db, ctx->player_id, &alignment);
   char *sql = NULL;
+
+
   if (alignment >= 0)
     {
       sql = sqlite3_mprintf (
@@ -879,6 +970,8 @@ cmd_bounty_list (client_ctx_t *ctx, json_t *root)
         );
     }
   sqlite3_stmt *st = NULL;
+
+
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
       sqlite3_free (sql);
@@ -890,9 +983,13 @@ cmd_bounty_list (client_ctx_t *ctx, json_t *root)
     }
   sqlite3_free (sql);
   json_t *arr = json_array ();
+
+
   while (sqlite3_step (st) == SQLITE_ROW)
     {
       json_t *item = json_object ();
+
+
       json_object_set_new (item, "bounty_id",
                            json_integer (sqlite3_column_int (st,
                                                              0)));
@@ -912,6 +1009,8 @@ cmd_bounty_list (client_ctx_t *ctx, json_t *root)
     }
   sqlite3_finalize (st);
   json_t *resp = json_object ();
+
+
   json_object_set_new (resp, "bounties", arr);
   send_enveloped_ok (ctx->fd, root, "bounty.list.success", resp);
   return 0;

@@ -17,11 +17,13 @@
 #include "database_cmd.h"
 #include "server_log.h"
 #include "server_cron.h"
+
 /* * CHANGE 1: Replace the global static handle with Thread Local Storage (TLS).
  * "static __thread" ensures every thread has its own pointer initialized to NULL.
  */
 // OLD: static sqlite3 *db_handle = NULL;
 static __thread sqlite3 *tls_db = NULL;
+
 /* * CHANGE 2: Keep the mutex definition to prevent link errors,
  * but we will stop initializing or using it.
  */
@@ -29,6 +31,8 @@ pthread_mutex_t db_mutex;
 // Helper flag to ensure initialization runs only once
 //static sqlite3 *db_handle = NULL;
 extern sqlite3 *g_db;
+
+
 /* Unlocked helpers (call only when db_mutex is already held) */
 static int db_ensure_auth_schema_unlocked (void);
 static int db_ensure_idempotency_schema_unlocked (void);
@@ -39,7 +43,11 @@ static int db_check_legacy_schema (sqlite3 *db);
 int db_get_int_config (sqlite3 *db, const char *key, int *out);
 int db_seed_cron_tasks (sqlite3 *db);
 void db_handle_close_and_reset (void);
+
+
 /* src/database.c */
+
+
 /* src/database.c */
 void
 db_safe_rollback (sqlite3 *db, const char *context_name)
@@ -50,6 +58,8 @@ db_safe_rollback (sqlite3 *db, const char *context_name)
     }
   char *errmsg = NULL;
   int rc = sqlite3_exec (db, "ROLLBACK;", NULL, NULL, &errmsg);
+
+
   if (rc != SQLITE_OK)
     {
       /* Issue 142: Log rollback failures explicitly */
@@ -75,11 +85,14 @@ db_configure_connection (sqlite3 *db)
   sqlite3_busy_timeout (db, 5000);
   /* Enable Write-Ahead Logging (WAL) for concurrency */
   int rc = sqlite3_exec (db, "PRAGMA journal_mode=WAL;", NULL, NULL, &err_msg);
+
+
   if (rc != SQLITE_OK)
     {
       // fprintf(stderr, "DB Error setting WAL mode: %s\n", err_msg);
       sqlite3_free (err_msg);
     }
+
   /* * FIX: DISABLE FOREIGN KEYS.
    * The legacy schema relies on "Sector 0" (Void) and potentially out-of-order
    * inserts. Enforcing keys causes "constraint failed" errors during init.
@@ -98,6 +111,7 @@ db_handle_close_and_reset (void)
   /*     sqlite3_close (db_handle); */
   /*     db_handle = NULL; */
   /*   } */
+
   /* * Previously closed the global handle.
    * Now, it closes the handle for the calling thread (usually the parent before fork,
    * or the child immediately after fork).
@@ -131,6 +145,7 @@ db_get_handle (void)
     {
       return tls_db;
     }
+
   /* * Open a new connection for this thread.
    * flags:
    * - READWRITE | CREATE: Standard file modes.
@@ -142,6 +157,8 @@ db_get_handle (void)
                             SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE |
                             SQLITE_OPEN_NOMUTEX | SQLITE_OPEN_URI,
                             NULL);
+
+
   if (rc != SQLITE_OK)
     {
       // fprintf(stderr, "FATAL: Cannot open database for thread: %s\n", sqlite3_errmsg(tls_db));
@@ -199,15 +216,21 @@ db_commands_accept (const char *cmd_type,
     ");";
   sqlite3_stmt *st = NULL;
   int rc = sqlite3_prepare_v2 (db, SQL_INS, -1, &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       return -2;
     }
   char *payload_str = json_dumps (payload, JSON_COMPACT);
+
+
   sqlite3_bind_text (st, 1, cmd_type, -1, SQLITE_STATIC);
   sqlite3_bind_text (st, 2, payload_str, -1, SQLITE_TRANSIENT);
   sqlite3_bind_text (st, 3, idem_key, -1, SQLITE_STATIC);
   int dup = 0, cmd_id = 0, due_at = 0;
+
+
   rc = sqlite3_step (st);
   if (rc == SQLITE_DONE)
     {
@@ -221,6 +244,8 @@ db_commands_accept (const char *cmd_type,
         "SELECT id, COALESCE(due_at, strftime('%s','now')) "
         "FROM engine_commands WHERE idem_key = ?;";
       sqlite3_stmt *gt = NULL;
+
+
       sqlite3_prepare_v2 (db, SQL_GET, -1, &gt, NULL);
       sqlite3_bind_text (gt, 1, idem_key, -1, SQLITE_STATIC);
       if (sqlite3_step (gt) == SQLITE_ROW)
@@ -246,6 +271,8 @@ db_commands_accept (const char *cmd_type,
         "SELECT COALESCE(due_at, strftime('%s','now')) "
         "FROM engine_commands WHERE id = ?;";
       sqlite3_stmt *sd = NULL;
+
+
       sqlite3_prepare_v2 (db, SQL_DUE, -1, &sd, NULL);
       sqlite3_bind_int (sd, 1, cmd_id);
       if (sqlite3_step (sd) == SQLITE_ROW)
@@ -271,6 +298,8 @@ db_commands_accept (const char *cmd_type,
 
 
 ////////////////////
+
+
 /**
  * @brief Thread-safe wrapper for a simple column update.
  *
@@ -294,6 +323,8 @@ db_thread_safe_update_single_column (const char *table, int id,
   db_mutex_lock ();
   // Build the SQL query string
   const char *template = " UPDATE %s SET %s = ? WHERE id = ?; ";
+
+
   sql = sqlite3_mprintf (template, table, column);
   if (!sql)
     {
@@ -351,50 +382,65 @@ cleanup:
  * @param player_id The ID of the player for whom to create the account.
  * @return 0 on success, -1 on failure.
  */
-int db_bank_account_create_default_for_player(sqlite3 *db, int player_id) {
-    sqlite3_stmt *stmt;
-    int rc;
+int
+db_bank_account_create_default_for_player (sqlite3 *db, int player_id)
+{
+  sqlite3_stmt *stmt;
+  int rc;
 
-    // 1. Check if a bank account already exists for this player/currency combination
-    const char *check_sql = "SELECT id FROM bank_accounts WHERE owner_type = 'player' AND owner_id = ? AND currency = 'CRD';";
-    rc = sqlite3_prepare_v2(db, check_sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("Failed to prepare check statement for default bank account: %s", sqlite3_errmsg(db));
-        return -1;
+  // 1. Check if a bank account already exists for this player/currency combination
+  const char *check_sql =
+    "SELECT id FROM bank_accounts WHERE owner_type = 'player' AND owner_id = ? AND currency = 'CRD';";
+  rc = sqlite3_prepare_v2 (db, check_sql, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("Failed to prepare check statement for default bank account: %s",
+            sqlite3_errmsg (db));
+      return -1;
     }
-    sqlite3_bind_int(stmt, 1, player_id);
-    rc = sqlite3_step(stmt);
-    if (rc == SQLITE_ROW) {
-        // Account already exists, return success
-        LOGD("Default bank account for player %d (CRD) already exists.", player_id);
-        sqlite3_finalize(stmt);
-        return 0;
+  sqlite3_bind_int (stmt, 1, player_id);
+  rc = sqlite3_step (stmt);
+  if (rc == SQLITE_ROW)
+    {
+      // Account already exists, return success
+      LOGD ("Default bank account for player %d (CRD) already exists.",
+            player_id);
+      sqlite3_finalize (stmt);
+      return 0;
     }
-    sqlite3_finalize(stmt);
+  sqlite3_finalize (stmt);
 
-    // 2. If account does not exist, proceed with insert
-    const char *insert_sql = "INSERT INTO bank_accounts (owner_type, owner_id, currency, balance) VALUES (?, ?, ?, ?);";
-    rc = sqlite3_prepare_v2(db, insert_sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("Failed to prepare insert statement for default bank account: %s", sqlite3_errmsg(db));
-        return -1;
-    }
+  // 2. If account does not exist, proceed with insert
+  const char *insert_sql =
+    "INSERT INTO bank_accounts (owner_type, owner_id, currency, balance) VALUES (?, ?, ?, ?);";
 
-    sqlite3_bind_text(stmt, 1, "player", -1, SQLITE_STATIC); // owner_type
-    sqlite3_bind_int(stmt, 2, player_id); // owner_id
-    sqlite3_bind_text(stmt, 3, "CRD", -1, SQLITE_STATIC); // currency
-    sqlite3_bind_int(stmt, 4, 0); // balance
 
-    rc = sqlite3_step(stmt);
-    if (rc != SQLITE_DONE) {
-        LOGE("Failed to create default bank account for player %d: %s", player_id, sqlite3_errmsg(db));
-        sqlite3_finalize(stmt);
-        return -1;
+  rc = sqlite3_prepare_v2 (db, insert_sql, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("Failed to prepare insert statement for default bank account: %s",
+            sqlite3_errmsg (db));
+      return -1;
     }
 
-    sqlite3_finalize(stmt);
-    LOGD("Created default bank account for player %d", player_id);
-    return 0;
+  sqlite3_bind_text (stmt, 1, "player", -1, SQLITE_STATIC);  // owner_type
+  sqlite3_bind_int (stmt, 2, player_id);  // owner_id
+  sqlite3_bind_text (stmt, 3, "CRD", -1, SQLITE_STATIC);  // currency
+  sqlite3_bind_int (stmt, 4, 0);  // balance
+
+  rc = sqlite3_step (stmt);
+  if (rc != SQLITE_DONE)
+    {
+      LOGE ("Failed to create default bank account for player %d: %s",
+            player_id,
+            sqlite3_errmsg (db));
+      sqlite3_finalize (stmt);
+      return -1;
+    }
+
+  sqlite3_finalize (stmt);
+  LOGD ("Created default bank account for player %d", player_id);
+  return 0;
 }
 
 
@@ -598,6 +644,8 @@ const char *create_table_sql[] = {
   " commodity TEXT CHECK(commodity IN ('ore','organics','equipment')),  "
   " mode TEXT CHECK(mode IN ('buy','sell')),  "
   " FOREIGN KEY (port_id) REFERENCES ports(id)); ",
+
+
   " CREATE TABLE IF NOT EXISTS players ( "
   " id INTEGER PRIMARY KEY AUTOINCREMENT,  "
   " type INTEGER DEFAULT 2,  "
@@ -619,6 +667,7 @@ const char *create_table_sql[] = {
   " loggedin INTEGER,  "
   " lastplanet INTEGER,  "
   " score INTEGER,  "
+  " is_npc INTEGER DEFAULT 0,  "
   " last_news_read_timestamp INTEGER DEFAULT 0, "
   " FOREIGN KEY (commission) REFERENCES commision(id) "
   " );  ",
@@ -2558,12 +2607,12 @@ const char *insert_default_sql[] = {
   "INSERT INTO ships (name, type_id, attack, holds, mines, limpets, fighters, genesis, photons, sector, shields, beacons, colonists, equipment, organics, ore, flags, cloaking_devices, cloaked, ported, onplanet) "
   "VALUES ('Bit Banger', 1, 110, 20, 25, 5, 2300, 5, 1, 1, 400, 10, 5, 5, 5, 5, 0, 5, NULL, 1, 1);",
   /* CHANGE: Added 'commission' column and value '1' to these inserts */
-  "INSERT OR IGNORE INTO players (number, name, passwd, sector, ship, type, commission) VALUES (1, 'System', 'BOT',1,1,1,1);",
-  "INSERT OR IGNORE INTO players (number, name, passwd, sector, ship, type, commission) VALUES (1, 'Federation Administrator', 'BOT',1,1,1,1);",
+  "INSERT OR IGNORE INTO players (number, is_npc,loggedin, name, passwd, sector, ship, type, commission) VALUES (1,1,1, 'System', 'BOT',1,1,1,1);",
+  "INSERT OR IGNORE INTO players (number, is_npc,loggedin, name, passwd, sector, ship, type, commission) VALUES (1,1,1, 'Federation Administrator', 'BOT',1,1,1,1);",
   "INSERT OR IGNORE INTO players (number, name, passwd, sector, ship, type, commission) VALUES (7, 'newguy', 'pass123',1,1,2,1);",
   /* ---- AI QA Bot Test Player ---- */
   "INSERT INTO ships (name, type_id, attack, holds, fighters, shields, sector, onplanet, ported) SELECT 'QA Bot 1', T.id, T.maxattack, T.maxholds, T.maxfighters, T.maxshields, 1, 0, 0 FROM shiptypes T WHERE T.name = 'Scout Marauder';",
-  "INSERT OR IGNORE INTO players (number, name, passwd, sector, credits, type, commission) VALUES (8, 'ai_qa_bot', 'quality', 1, 10000, 2, 1);",
+  "INSERT OR IGNORE INTO players (number,  is_npc, name, passwd, sector, credits, type, commission) VALUES (8,1, 'ai_qa_bot', 'quality', 1, 10000, 2, 1);",
   "UPDATE players SET ship = (SELECT id FROM ships WHERE name = 'QA Bot 1') WHERE name = 'ai_qa_bot';",
   "INSERT INTO ship_ownership (player_id, ship_id, is_primary, role_id) VALUES ((SELECT id FROM players WHERE name = 'ai_qa_bot'), (SELECT id FROM ships WHERE name = 'QA Bot 1'), 1, 1);",
   /* ----------------------------- */
@@ -2604,20 +2653,13 @@ const char *insert_default_sql[] = {
   /* 3. Insert 5 Orion Captains and assign ships (FIXED: players columns and ship ownership) */
   /* ------------------------------------------------------------------------------------- */
   /* Insert 5 Orion Captains (Players) - Removed non-schema columns (faction_id, empire, turns) */
-  "INSERT OR IGNORE INTO players (type, name, passwd, sector, experience, alignment, credits) "
-  "SELECT 1, 'Zydras, Heavy Fighter Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
-  "SELECT 1, 'Krell, Scout Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
-  "SELECT 1, 'Vex, Contraband Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
-  "SELECT 1, 'Jaxx, Smuggler Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
-  "SELECT 1, 'Sira, Market Guard Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3;"
-/* Insert 5 Orion Captains (Players) - Removed non-schema columns (faction_id, empire, turns) */
-  "INSERT OR IGNORE INTO players (type, name, passwd, sector, experience, alignment, credits, commission) "
-  "SELECT 1, 'Zydras, Heavy Fighter Captain', '', P.sector, 100, -100, 1000, 1 FROM planets P WHERE P.num=3 UNION ALL "
-  "SELECT 1, 'Krell, Scout Captain', '', P.sector, 100, -100, 1000, 1 FROM planets P WHERE P.num=3 UNION ALL "
-  "SELECT 1, 'Vex, Contraband Captain', '', P.sector, 100, -100, 1000, 1 FROM planets P WHERE P.num=3 UNION ALL "
-  "SELECT 1, 'Jaxx, Smuggler Captain', '', P.sector, 100, -100, 1000, 1 FROM planets P WHERE P.num=3 UNION ALL "
-  "SELECT 1, 'Sira, Market Guard Captain', '', P.sector, 100, -100, 1000, 1 FROM planets P WHERE P.num=3;"
-  "SELECT 1, 'Fer', '', P.sector, 200, -100, 1000, 1 FROM planets P WHERE P.num=2;"
+  "INSERT OR IGNORE INTO players (type, is_npc, loggedin, name, passwd, sector, experience, alignment, credits) "
+  "SELECT 1, 1, 1, 'Zydras, Heavy Fighter Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
+  "SELECT 1, 1, 1, 'Krell, Scout Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
+  "SELECT 1, 1, 1, 'Vex, Contraband Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
+  "SELECT 1, 1, 1, 'Jaxx, Smuggler Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
+  "SELECT 1, 1, 1, 'Sira, Market Guard Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3;"
+  "SELECT 1, 1, 1, 'Fer', '', P.sector, 200, -100, 1000, 1 FROM planets P WHERE P.num=2;"
   /* ------------------------------------------------------------------------------------- */
   /*  -- 1. Create the Orion Syndicate Corporation */
   "INSERT INTO corporations (name, owner_id, tag) VALUES ('Orion Syndicate', (SELECT id FROM players WHERE name LIKE 'Zydras%'), 'ORION');",
@@ -2840,6 +2882,8 @@ static const size_t create_table_count =
 /* Number of default inserts */
 static const size_t insert_default_count =
   sizeof (insert_default_sql) / sizeof (insert_default_sql[0]);
+
+
 int
 db_engine_bootstrap (void)
 {
@@ -2851,10 +2895,14 @@ db_engine_bootstrap (void)
     }
   char *err_msg = 0;
   int rc = 0;                   // Declare rc here
+
+
   for (size_t i = 0; i < engine_bootstrap_sql_count; ++i)
     {
       const char *sql_stmt = engine_bootstrap_sql_statements[i];
       int rc = sqlite3_exec (db, sql_stmt, 0, 0, &err_msg);
+
+
       if (rc != SQLITE_OK)
         {
           LOGE ("Engine bootstrap SQL statement failed: %s", sql_stmt);
@@ -2883,6 +2931,8 @@ urandom_bytes (void *buf, size_t n)
       return -1;
     }
   ssize_t rd = read (fd, buf, n);
+
+
   close (fd);
   return (rd == (ssize_t) n) ? 0 : -1;
 }
@@ -2924,6 +2974,8 @@ db_seed_cron_tasks (sqlite3 *db)
   /* Wrap in a small transaction for atomicity */
   char *err = NULL;
   int rc = sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, &err);
+
+
   if (rc != SQLITE_OK)
     {
       if (err)
@@ -2946,6 +2998,7 @@ db_seed_cron_tasks (sqlite3 *db)
     {
       goto done;
     }
+
   /* Seed: broadcast TTL cleanup runs every 5 minutes.
      Idempotent: only inserts if the name doesn't exist. */
   rc = sqlite3_exec (db,
@@ -2975,6 +3028,8 @@ done:
   if (rc == SQLITE_OK)
     {
       char *msg = NULL;
+
+
       if (sqlite3_exec (db, "COMMIT;", NULL, NULL, &msg) != SQLITE_OK)
         {
           LOGE ("db_seed_cron_tasks: Commit failed: %s", msg);
@@ -3009,7 +3064,9 @@ db_init (void)
       return -1;
     }
   else
-    LOGI ("DB handle aquired");
+    {
+      LOGI ("DB handle aquired");
+    }
   // Ensure mandatory schemas
   // Note: These functions call db_get_handle() internally, so they are safe.
   if (db_ensure_auth_schema_unlocked () != SQLITE_OK)
@@ -3025,6 +3082,8 @@ db_init (void)
   /* Step 2: check if config table exists */
   const char *sql =
     "SELECT name FROM sqlite_master WHERE type='table' AND name='config';";
+
+
   rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -3034,6 +3093,8 @@ db_init (void)
     }
   rc = sqlite3_step (stmt);
   int table_exists = (rc == SQLITE_ROW);
+
+
   if (rc != SQLITE_ROW && rc != SQLITE_DONE)
     {
       LOGE ("DB step check error: %s", sqlite3_errmsg (db));
@@ -3110,6 +3171,8 @@ db_check_legacy_schema (sqlite3 *db)
     }
   rc = sqlite3_step (stmt);
   int has_type = (rc == SQLITE_ROW);
+
+
   sqlite3_finalize (stmt);
   if (!has_type)
     {
@@ -3138,11 +3201,17 @@ db_get_int_config (sqlite3 *db, const char *key, int *out)
   if (sqlite3_step (stmt) == SQLITE_ROW)
     {
       const char *val_str = (const char *)sqlite3_column_text (stmt, 0);
+
+
       if (val_str)
         {
           char *endptr;
+
+
           errno = 0;
           long val = strtol (val_str, &endptr, 10);
+
+
           if (errno == 0 && endptr != val_str && *endptr == '\0')
             {
               *out = (int)val;
@@ -3164,6 +3233,8 @@ db_load_ports (int *server_port, int *s2s_port)
       return -1;
     }
   sqlite3 *db = db_get_handle ();
+
+
   if (!db)
     {
       return -1;
@@ -3258,60 +3329,170 @@ db_create_tables (bool schema_exists)
 
 
 /* /\* Actual work; assumes db_mutex is already held *\/ */
+
+
 /* static int */
+
+
 /* db_create_tables_unlocked (bool schema_exists) */
+
+
 /* { */
+
+
 /*   char *errmsg = NULL; */
+
+
 /*   int ret_code = -1; */
+
+
 /*   sqlite3 *db = db_get_handle (); */
+
+
 /*   if (!db) */
+
+
 /*     { */
+
+
 /*       return -1; */
+
+
 /*     } */
+
+
 /*   int rc; */
+
+
 /*   for (size_t i = 0; i < create_table_count; i++) */
+
+
 /*     { */
+
+
 /*       const char *sql_statement = create_table_sql[i]; */
+
+
 /*       // If schema_exists is true, skip CREATE TABLE IF NOT EXISTS statements */
+
+
 /*       if (schema_exists */
+
+
 /*           && strstr (sql_statement, */
+
+
 /*                      "CREATE TABLE IF NOT EXISTS") == sql_statement) */
+
+
 /*         { */
+
+
 /*           continue;             // Skip this statement */
+
+
 /*         } */
+
+
 /*       rc = sqlite3_exec (db_handle, sql_statement, 0, 0, &errmsg); */
+
+
 /*       if (rc != SQLITE_OK) */
+
+
 /*         { */
+
+
 /*           LOGE ("SQL error at step %zu: %s", i, errmsg); */
+
+
 /*           LOGE ("Failing SQL: %s", sql_statement); */
+
+
 /*           sqlite3_free (errmsg); */
+
+
 /*           return -1; */
+
+
 /*         } */
+
+
 /*     } */
+
+
 /*   ret_code = 0; */
+
+
 /*   if (schema_exists) */
+
+
 /*     { */
+
+
 /*       // Execute migration scripts */
+
+
 /*       if (sqlite3_exec (db, MIGRATE_A_SQL, 0, 0, &errmsg) != SQLITE_OK) */
+
+
 /*         { */
+
+
 /*           LOGE ("MIGRATE_A_SQL failed: %s", errmsg); */
+
+
 /*           sqlite3_free (errmsg); */
+
+
 /*           return -1; */
+
+
 /*         } */
+
+
 /*       if (sqlite3_exec (db, MIGRATE_B_SQL, 0, 0, &errmsg) != SQLITE_OK) */
+
+
 /*         { */
+
+
 /*           LOGE ("MIGRATE_B_SQL failed: %s", errmsg); */
+
+
 /*           sqlite3_free (errmsg); */
+
+
 /*           return -1; */
+
+
 /*         } */
+
+
 /*       if (sqlite3_exec (db, MIGRATE_C_SQL, 0, 0, &errmsg) != SQLITE_OK) */
+
+
 /*         { */
+
+
 /*           LOGE ("MIGRATE_C_SQL failed: %s", errmsg); */
+
+
 /*           sqlite3_free (errmsg); */
+
+
 /*           return -1; */
+
+
 /*         } */
+
+
 /*     } */
+
+
 /*   return ret_code; */
+
+
 /* } */
 static int
 db_create_tables_unlocked (bool schema_exists)
@@ -3325,9 +3506,13 @@ db_create_tables_unlocked (bool schema_exists)
       return -1;
     }
   int rc;
+
+
   for (size_t i = 0; i < create_table_count; i++)
     {
       const char *sql_statement = create_table_sql[i];
+
+
       // If schema_exists is true, skip CREATE TABLE IF NOT EXISTS statements
       if (schema_exists
           && strstr (sql_statement,
@@ -3385,73 +3570,209 @@ db_insert_defaults (void)
 
 
 /* /\* Actual work; assumes db_mutex is already held *\/ */
+
+
 /* static int */
+
+
 /* db_insert_defaults_unlocked (void) */
+
+
 /* { */
+
+
 /*   char *errmsg = NULL; */
+
+
 /*   int ret_code = -1; */
+
+
 /*   sqlite3 *db = db_get_handle (); */
+
+
 /*   if (!db) */
+
+
 /*     { */
+
+
 /*       return -1; */
+
+
 /*     } */
+
+
 /*   int rc; // Declared rc here */
+
+
 /*   LOGD ("db_insert_defaults_unlocked: Starting default data insertion."); */
+
+
 /*   for (size_t i = 0; i < insert_default_count; i++) */
+
+
 /*     { */
+
+
 /*       LOGD ( */
+
+
 /*         "db_insert_defaults_unlocked: Executing default SQL statement %zu: %s", */
+
+
 /*         i, */
+
+
 /*         insert_default_sql[i]); */
+
+
 /*       if (sqlite3_exec (db, insert_default_sql[i], NULL, NULL, &errmsg) != */
+
+
 /*           SQLITE_OK) */
+
+
 /*         { */
+
+
 /*           LOGE ("DB insert_defaults error (%zu): %s", i, errmsg); */
+
+
 /*           LOGE ("Failing SQL: %s", insert_default_sql[i]); */
+
+
 /*           goto cleanup; */
+
+
 /*         } */
+
+
 /*     } */
+
+
 /*   // Ensure bank accounts for system, players, and ports */
+
+
 /*   const char *insert_default_bank_account_sql[] = { */
+
+
 /*     "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) VALUES ('system', 0, 'CRD', 1000000000);", */
+
+
 /*     // System bank */
+
+
 /*     "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) SELECT 'player', id, 'CRD', 1000 FROM players WHERE name = 'System';", */
+
+
 /*     "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) SELECT 'player', id, 'CRD', 1000 FROM players WHERE name = 'Federation Administrator';", */
+
+
 /*     "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) SELECT 'player', id, 'CRD', 1000 FROM players WHERE name = 'newguy';", */
+
+
 /*     "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) SELECT 'player', id, 'CRD', 1000 FROM players WHERE name = 'ai_qa_bot';", */
+
+
 /*     // Player accounts for goodguy, badguy, admin will be created on auth.register if not present */
+
+
 /*     "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) SELECT 'port', id, 'CRD', 100000 FROM ports WHERE name = 'Earth Port';" */
+
+
 /*   }; */
+
+
 /*   for (size_t i = */
+
+
 /*          0; */
+
+
 /*        i < */
+
+
 /*        sizeof(insert_default_bank_account_sql) / */
+
+
 /*        sizeof(insert_default_bank_account_sql[0]); */
+
+
 /*        i++) */
+
+
 /*     { */
+
+
 /*       rc = sqlite3_exec (db, */
+
+
 /*                          insert_default_bank_account_sql[i], */
+
+
 /*                          NULL, */
+
+
 /*                          NULL, */
+
+
 /*                          &errmsg); */
+
+
 /*       if (rc != SQLITE_OK) */
+
+
 /*         { */
+
+
 /*           LOGE ( */
+
+
 /*             "db_insert_defaults_unlocked: SQL error inserting default bank account: %s", */
+
+
 /*             errmsg); */
+
+
 /*           sqlite3_free (errmsg); */
+
+
 /*           return -1; */
+
+
 /*         } */
+
+
 /*     } */
+
+
 /*   ret_code = 0; */
+
+
 /*   LOGD ( */
+
+
 /*     "db_insert_defaults_unlocked: Default data insertion completed successfully."); */
+
+
 /* cleanup: */
+
+
 /*   if (errmsg) */
+
+
 /*     { */
+
+
 /*       sqlite3_free (errmsg); */
+
+
 /*     } */
+
+
 /*   return ret_code; */
+
+
 /* } */
 static int
 db_insert_defaults_unlocked (void)
@@ -3464,6 +3785,8 @@ db_insert_defaults_unlocked (void)
       return -1;
     }
   int rc;
+
+
   LOGD ("db_insert_defaults_unlocked: Starting default data insertion.");
   for (size_t i = 0; i < insert_default_count; i++)
     {
@@ -3488,6 +3811,8 @@ db_insert_defaults_unlocked (void)
     // Player accounts for goodguy, badguy, admin will be created on auth.register if not present
     "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) SELECT 'port', id, 'CRD', 100000 FROM ports WHERE name = 'Earth Port';"
   };
+
+
   for (size_t i =
          0;
        i <
@@ -3608,8 +3933,14 @@ fail:
 
 
 ///////////////////////
+
+
 /// Helpers
+
+
 /* ---------- db_sector_scan_snapshot: thread-safe, single statement ---------- */
+
+
 /* Out shape (core fields only; handler will add adjacency + flags):
    {
      "name": TEXT,
@@ -3630,6 +3961,8 @@ db_sector_scan_snapshot (int sector_id, json_t **out_core)
       *out_core = NULL;
     }
   sqlite3 *db = db_get_handle ();
+
+
   if (!db)
     {
       return SQLITE_ERROR;
@@ -3644,6 +3977,8 @@ db_sector_scan_snapshot (int sector_id, json_t **out_core)
     "FROM sectors s WHERE s.id = ?1";
   int rc = SQLITE_ERROR;
   sqlite3_stmt *st = NULL;
+
+
   db_mutex_lock ();
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
@@ -3663,6 +3998,8 @@ db_sector_scan_snapshot (int sector_id, json_t **out_core)
       int fighters = sqlite3_column_int (st, 6);
       const char *beacon = (const char *) sqlite3_column_text (st, 7);
       json_t *core = json_object ();
+
+
       json_object_set_new (core, "name",
                            json_string (name ? name : "Unknown"));
       json_object_set_new (core, "safe_zone", json_integer (safe_zone));
@@ -3727,6 +4064,8 @@ db_session_create (int player_id, int ttl_seconds, char token_out[65])
   long long exp = (long long) now + ttl_seconds;
   const char *sql =
     "INSERT INTO sessions(token, player_id, expires, created_at) VALUES(?1, ?2, ?3, ?4);";
+
+
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -3788,6 +4127,8 @@ db_session_lookup (const char *token, int *out_player_id,
       goto cleanup;
     }
   const char *sql = "SELECT player_id, expires FROM sessions WHERE token=?1;";
+
+
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -3800,6 +4141,8 @@ db_session_lookup (const char *token, int *out_player_id,
       int pid = sqlite3_column_int (st, 0);
       long long exp = sqlite3_column_int64 (st, 1);
       time_t now = time (NULL);
+
+
       if (exp <= (long long) now)
         {
           rc = SQLITE_NOTFOUND; // Token expired
@@ -3853,6 +4196,8 @@ db_session_revoke (const char *token)
       goto cleanup;
     }
   const char *sql = "DELETE FROM sessions WHERE token=?1;";
+
+
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -3888,6 +4233,8 @@ db_session_revoke_unlocked (const char *token)
   const char *sql = "DELETE FROM sessions WHERE token=?1;";
   sqlite3_stmt *st = NULL;
   int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       return rc;
@@ -3909,6 +4256,8 @@ db_session_lookup_unlocked (const char *token, int *out_player_id,
       return SQLITE_MISUSE;
     }
   sqlite3 *db = db_get_handle ();
+
+
   if (!db)
     {
       return SQLITE_ERROR;
@@ -3916,6 +4265,8 @@ db_session_lookup_unlocked (const char *token, int *out_player_id,
   const char *sql = "SELECT player_id, expires FROM sessions WHERE token=?1;";
   sqlite3_stmt *st = NULL;
   int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       return rc;
@@ -3926,8 +4277,12 @@ db_session_lookup_unlocked (const char *token, int *out_player_id,
     {
       int pid = sqlite3_column_int (st, 0);
       long long exp = sqlite3_column_int64 (st, 1);
+
+
       sqlite3_finalize (st);
       time_t now = time (NULL);
+
+
       if (exp <= (long long) now)
         {
           return SQLITE_NOTFOUND; /* expired */
@@ -3961,6 +4316,8 @@ db_session_create_unlocked (int player_id, int ttl_seconds,
       return SQLITE_ERROR;
     }
   sqlite3 *db = db_get_handle ();
+
+
   if (!db)
     {
       return SQLITE_ERROR;
@@ -3971,6 +4328,8 @@ db_session_create_unlocked (int player_id, int ttl_seconds,
     "INSERT INTO sessions(token, player_id, expires, created_at) VALUES(?1, ?2, ?3, ?4);";
   sqlite3_stmt *st = NULL;
   int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       return rc;
@@ -3997,6 +4356,8 @@ db_session_refresh (const char *old_token, int ttl_seconds,
   int pid = 0;
   long long exp = 0;
   int rc = SQLITE_ERROR;
+
+
   // 1. Acquire the lock to make the entire sequence atomic.
   db_mutex_lock ();
   // 2. Perform all operations using the unlocked helpers.
@@ -4114,6 +4475,8 @@ db_idemp_try_begin (const char *key, const char *cmd, const char *req_fp)
   time_t now = time (NULL);
   const char *sql =
     "INSERT INTO idempotency(key, cmd, req_fp, created_at) VALUES(?1, ?2, ?3, ?4);";
+
+
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -4183,6 +4546,8 @@ db_idemp_fetch (const char *key, char **out_cmd, char **out_req_fp,
     }
   const char *sql =
     "SELECT cmd, req_fp, response FROM idempotency WHERE key=?1;";
+
+
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -4195,16 +4560,22 @@ db_idemp_fetch (const char *key, char **out_cmd, char **out_req_fp,
       if (out_cmd)
         {
           const unsigned char *t = sqlite3_column_text (st, 0);
+
+
           *out_cmd = t ? strdup ((const char *) t) : NULL;
         }
       if (out_req_fp)
         {
           const unsigned char *t = sqlite3_column_text (st, 1);
+
+
           *out_req_fp = t ? strdup ((const char *) t) : NULL;
         }
       if (out_response_json)
         {
           const unsigned char *t = sqlite3_column_text (st, 2);
+
+
           *out_response_json = t ? strdup ((const char *) t) : NULL;
         }
       rc = SQLITE_OK;
@@ -4247,6 +4618,8 @@ db_idemp_store_response (const char *key, const char *response_json)
   time_t now = time (NULL);
   const char *sql =
     "UPDATE idempotency SET response=?1, updated_at=?2 WHERE key=?3;";
+
+
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {

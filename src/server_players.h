@@ -60,15 +60,10 @@ int h_add_player_petty_cash_unlocked (sqlite3 *db, int player_id,
 int h_get_player_petty_cash (sqlite3 *db, int player_id,
                              long long *credits_out);
 int cmd_get_news (client_ctx_t *ctx, json_t *root);
-int cmd_bank_balance (client_ctx_t *ctx, json_t *root);
-int cmd_bank_deposit (client_ctx_t *ctx, json_t *root);
-int cmd_bank_transfer (client_ctx_t *ctx, json_t *root);
-int cmd_bank_withdraw (client_ctx_t *ctx, json_t *root);
-int cmd_bank_history (client_ctx_t *ctx, json_t *root);
-int cmd_bank_leaderboard (client_ctx_t *ctx, json_t *root);
 int h_get_player_bank_account_id (sqlite3 *db, int player_id);
 TurnConsumeResult h_consume_player_turn (sqlite3 *db_conn,
-                                         client_ctx_t *ctx);
+                                         client_ctx_t *ctx,
+                                         int turns_to_consume);
 int handle_turn_consumption_error (client_ctx_t *ctx,
                                    TurnConsumeResult consume_result,
                                    const char *cmd, json_t *root,
@@ -104,6 +99,9 @@ int h_player_build_title_payload (sqlite3 *db,
                                   int player_id,
                                   json_t **out_json);
 int h_get_cargo_space_free (sqlite3 *db, int player_id, int *free_out);
+int h_player_is_npc (sqlite3 *db, int player_id);
+
+
 #ifdef __cplusplus
 }
 #endif

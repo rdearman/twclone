@@ -62,6 +62,7 @@
 #define PACKAGE_URL ""
 /* Define to the version of this package. */
 #define PACKAGE_VERSION "0.0.2"
+
 /* Define to 1 if all of the C90 standard headers exist (not just the ones
    required in a freestanding environment). This macro is provided for
    backward compatibility; new code need not use it. */

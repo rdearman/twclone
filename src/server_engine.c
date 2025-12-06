@@ -51,10 +51,14 @@
 static const int64_t CRON_PERIOD_MS = 500;      /* run every 0.5s */
 static const int CRON_BATCH_LIMIT = 8;  /* max tasks per runner tick */
 static const int64_t CRON_LOCK_STALE_MS = 120000;       /* reclaim after 2 min */
+
+
 int h_daily_bank_interest_tick (sqlite3 *db, int64_t now_s);
 static int engine_notice_ttl_sweep (sqlite3 *db, int64_t now_ms);
 static int sweeper_engine_deadletter_retry (sqlite3 *db, int64_t now_ms);
 int cron_limpet_ttl_cleanup (sqlite3 *db, int64_t now_s);
+
+
 static inline uint64_t
 monotonic_millis (void)
 {
@@ -103,21 +107,8 @@ static const CronHandler CRON_REGISTRY[] = {
   {"system_notice_ttl", engine_notice_ttl_sweep},
   {"deadletter_retry", sweeper_engine_deadletter_retry}
 };
-/* static const CronHandler CRON_REGISTRY[] = { */
-/* {"traps_process", h_traps_process}, */
-/* {"npc_step", h_npc_step}, */
-/* {"autouncloak_sweeper", h_autouncloak_sweeper}, */
-/* {"fedspace_cleanup", h_fedspace_cleanup}, */
-/* {"broadcast_ttl_cleanup", h_broadcast_ttl_cleanup}, */
-/* {"planet_growth", h_planet_growth}, */
-/* {"daily_turn_reset", h_daily_turn_reset}, */
-/* {"terra_replenish", h_terra_replenish}, */
-/* {"daily_market_settlement", h_daily_market_settlement}, */
-/* {"daily_news_compiler", h_daily_news_compiler}, */
-/* {"cleanup_old_news", h_cleanup_old_news}, */
-/* {"system_notice_ttl", engine_notice_ttl_sweep}, */
-/* {"deadletter_retry", sweeper_engine_deadletter_retry} */
-/* }; */
+
+
 /* Lookup by task name (e.g., "fedspace_cleanup"). */
 cron_handler_fn
 cron_find (const char *name)
@@ -135,6 +126,8 @@ cron_find (const char *name)
 
 /* ---- Cron framework (schema: cron_tasks uses schedule + next_due_at) ---- */
 /* Schema: cron_tasks(id, name, schedule, last_run_at, next_due_at, enabled, payload) */
+
+
 /* Parse schedule -> next due (seconds since epoch)
    Supports: every:Ns | every:Nm | daily@HH:MMZ (UTC) */
 static int64_t
@@ -149,6 +142,8 @@ cron_next_due_from (int64_t now_s, const char *schedule)
       const char *p = schedule + 6;
       char *end = NULL;
       long n = strtol (p, &end, 10);
+
+
       if (n <= 0)
         {
           return now_s + 60;
@@ -166,11 +161,15 @@ cron_next_due_from (int64_t now_s, const char *schedule)
   if (strncmp (schedule, "daily@", 6) == 0)
     {
       int HH = 0, MM = 0;
+
+
       if (sscanf (schedule + 6, "%2d:%2dZ", &HH, &MM) == 2)
         {
           /* 1. Get current broken-down time in UTC */
           time_t t_now = (time_t) now_s;
           struct tm g;
+
+
           // Use gmtime_r for thread safety
           gmtime_r (&t_now, &g);
           /* 2. Set the target time components for "Today" */
@@ -183,6 +182,8 @@ cron_next_due_from (int64_t now_s, const char *schedule)
           // timegm is the inverse of gmtime. It handles normalization perfectly.
           // It calculates the timestamp for Today @ HH:MM:00 UTC.
           time_t target = timegm (&g);
+
+
           /* 4. Comparison Logic (Fixing Issue #2) */
           // If the calculated target is in the past OR is exactly now,
           // we must schedule it for tomorrow.
@@ -207,6 +208,8 @@ static eng_consumer_cfg_t G_CFG = {
   .priority_types_csv = "s2s.broadcast.sweep,player.login,player.trade.v1",
   .consumer_key = "game_engine"
 };
+
+
 void
 engine_tick (sqlite3 *db)
 {
@@ -245,11 +248,15 @@ engine_build_command_push (const char *cmd_type,
                           "idem_key", idem_key,
                           "payload", payload_obj,
                           "priority", priority);
+
+
   if (correlation_id)
     {
       json_object_set_new (pl, "correlation_id", json_string (correlation_id));
     }
   json_t *env = s2s_make_env ("s2s.command.push", "engine", "server", pl);
+
+
   json_decref (pl);
   return env;
 }
@@ -273,6 +280,8 @@ engine_demo_push (s2s_conn_t *c)
   json_t *env = s2s_make_env ("s2s.command.push", "engine", "server", cmdpl);
   json_decref (cmdpl);
   int rc = s2s_send_env (c, env, 3000);
+
+
   json_decref (env);
   LOGI ("command.push send rc=%d\n", rc);
   // LOGE( "[engine] command.push send rc=%d\n", rc);
@@ -281,16 +290,22 @@ engine_demo_push (s2s_conn_t *c)
       return rc;
     }
   json_t *resp = NULL;
+
+
   rc = s2s_recv_env (c, &resp, 3000);
   LOGI ("command.push recv rc=%d\n", rc);
   // LOGE( "[engine] command.push recv rc=%d\n", rc);
   if (rc == 0 && resp)
     {
       const char *ty = s2s_env_type (resp);
+
+
       if (ty && strcasecmp (ty, "s2s.ack") == 0)
         {
           json_t *ackpl = s2s_env_payload (resp);
           json_t *dup = json_object_get (ackpl, "duplicate");
+
+
           LOGW ("ack duplicate=%s\n",
                 (dup && json_is_true (dup)) ? "true" : "false");
           // LOGE( "[engine] ack duplicate=%s\n",
@@ -333,6 +348,8 @@ h_compute_illegal_alignment_delta (int player_alignment,
   int rc = SQLITE_ERROR;
   const char *sql =
     "SELECT is_good, is_evil FROM alignment_band WHERE id = ?1;";
+
+
   db_mutex_lock ();
   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
   if (rc == SQLITE_OK)
@@ -347,11 +364,15 @@ h_compute_illegal_alignment_delta (int player_alignment,
   sqlite3_finalize (st);
   db_mutex_unlock ();
   int base_penalty = floor (value / g_xp_align.illegal_base_align_divisor);
+
+
   if (base_penalty < 1)
     {
       base_penalty = 1;
     }
   double factor = 1.0;
+
+
   if (player_band_is_evil)
     {
       factor *= g_xp_align.illegal_align_factor_evil;                               // Already evil; small incremental penalty
@@ -369,6 +390,8 @@ h_compute_illegal_alignment_delta (int player_alignment,
       factor *= 0.5;                              // Evil cluster makes it less harsh (hardcoded for now, could be config)
     }
   int align_delta = -(int)floor (base_penalty * factor);
+
+
   if (align_delta == 0)
     {
       align_delta = -1;                     // Ensure there's always a penalty
@@ -387,6 +410,8 @@ h_player_progress_from_event_payload (json_t *ev_payload)
       return SQLITE_MISUSE;
     }
   sqlite3 *db = db_get_handle ();
+
+
   if (!db)
     {
       LOGE ("h_player_progress_from_event_payload: Failed to get DB handle.");
@@ -394,6 +419,8 @@ h_player_progress_from_event_payload (json_t *ev_payload)
     }
   json_t *j_player_id = json_object_get (ev_payload, "player_id");
   json_t *j_event_type = json_object_get (ev_payload, "type");  // Event type from engine_events
+
+
   if (!json_is_integer (j_player_id) || !json_is_string (j_event_type))
     {
       LOGE (
@@ -405,11 +432,15 @@ h_player_progress_from_event_payload (json_t *ev_payload)
   long long xp_delta = 0;
   int align_delta = 0;
   const char *reason = NULL;   // For logging
+
+
   if (strcasecmp (event_type, "player.trade.v1") == 0)
     {
       json_t *j_credits_delta = json_object_get (ev_payload, "credits_delta");
       json_t *j_is_illegal = json_object_get (ev_payload, "is_illegal");
       json_t *j_sector_id = json_object_get (ev_payload, "sector_id");
+
+
       if (!json_is_integer (j_credits_delta) ||
           !json_is_boolean (j_is_illegal) || !json_is_integer (j_sector_id))
         {
@@ -420,6 +451,8 @@ h_player_progress_from_event_payload (json_t *ev_payload)
       long long credits_delta = json_integer_value (j_credits_delta);
       bool is_illegal = json_is_true (j_is_illegal);
       int sector_id = json_integer_value (j_sector_id);
+
+
       if (credits_delta > 0)     // XP only for selling/profit
         {
           xp_delta = floor ((double)credits_delta / g_xp_align.trade_xp_ratio);
@@ -428,6 +461,8 @@ h_player_progress_from_event_payload (json_t *ev_payload)
         {
           // Calculate alignment penalty for illegal trade
           int player_alignment = 0;
+
+
           if (db_player_get_alignment (db, player_id,
                                        &player_alignment) != SQLITE_OK)
             {
@@ -437,6 +472,8 @@ h_player_progress_from_event_payload (json_t *ev_payload)
               return SQLITE_ERROR;
             }
           int cluster_align_band_id;
+
+
           h_get_cluster_alignment_band (db, sector_id, &cluster_align_band_id);
           align_delta = h_compute_illegal_alignment_delta (player_alignment,
                                                            cluster_align_band_id,
@@ -477,6 +514,8 @@ engine_s2s_drain_once (s2s_conn_t *conn)
       return;
     }
   const char *type = json_string_value (json_object_get (msg, "type"));
+
+
   if (type && strcasecmp (type, "s2s.engine.shutdown") == 0)
     {
       // Begin graceful shutdown: set your running flag false, close down
@@ -489,6 +528,8 @@ engine_s2s_drain_once (s2s_conn_t *conn)
       // Optional: allow server to ping any time
       time_t now = time (NULL);
       static time_t start_ts;
+
+
       if (!start_ts)
         {
           start_ts = now;
@@ -503,6 +544,8 @@ engine_s2s_drain_once (s2s_conn_t *conn)
                                                      "uptime_s",
                                                      (json_int_t) (now -
                                                                    start_ts)));
+
+
       s2s_send_json (conn, ack, 5000);
       json_decref (ack);
     }
@@ -514,6 +557,8 @@ engine_s2s_drain_once (s2s_conn_t *conn)
                                "ts", (json_int_t) time (NULL),
                                "payload", json_pack ("{s:s}", "reason",
                                                      "unknown_type"));
+
+
       s2s_send_json (conn, err, 5000);
       json_decref (err);
     }
@@ -529,6 +574,8 @@ exec_broadcast_create (sqlite3 *db, json_t *payload, const char *idem_key,
   (void) idem_key;              /* idempotency handled at engine_commands layer */
   const char *title = NULL, *body = NULL, *severity = "info";
   int64_t expires_at = 0;
+
+
   if (!json_is_object (payload))
     {
       return SQLITE_MISMATCH;
@@ -537,6 +584,8 @@ exec_broadcast_create (sqlite3 *db, json_t *payload, const char *idem_key,
   json_t *jb = json_object_get (payload, "body");
   json_t *js = json_object_get (payload, "severity");
   json_t *je = json_object_get (payload, "expires_at");
+
+
   if (jt && json_is_string (jt))
     {
       title = json_string_value (jt);
@@ -564,6 +613,8 @@ exec_broadcast_create (sqlite3 *db, json_t *payload, const char *idem_key,
                                -1,
                                &st,
                                NULL);
+
+
   if (rc != SQLITE_OK)
     {
       return rc;
@@ -601,6 +652,8 @@ exec_notice_publish (sqlite3 *db, json_t *payload, const char *idem_key,
   (void) idem_key;              /* idempotency handled at engine_commands layer */
   const char *scope = NULL, *message = NULL;
   int player_id = 0;
+
+
   if (!json_is_object (payload))
     {
       return SQLITE_MISMATCH;
@@ -608,6 +661,8 @@ exec_notice_publish (sqlite3 *db, json_t *payload, const char *idem_key,
   json_t *js = json_object_get (payload, "scope");
   json_t *jp = json_object_get (payload, "player_id");
   json_t *jm = json_object_get (payload, "message");
+
+
   if (js && json_is_string (js))
     {
       scope = json_string_value (js);
@@ -634,6 +689,8 @@ exec_notice_publish (sqlite3 *db, json_t *payload, const char *idem_key,
                                -1,
                                &st,
                                NULL);
+
+
   if (rc != SQLITE_OK)
     {
       return rc;
@@ -683,6 +740,8 @@ server_commands_tick (sqlite3 *db, int max_rows)
                                -1,
                                &st,
                                NULL);
+
+
   if (rc != SQLITE_OK)
     {
       return 0;
@@ -696,6 +755,8 @@ server_commands_tick (sqlite3 *db, int max_rows)
       const char *idem_key = (const char *) sqlite3_column_text (st, 3);
       /* mark running */
       sqlite3_stmt *upr = NULL;
+
+
       if (sqlite3_prepare_v2 (db,
                               "UPDATE engine_commands SET status='running', started_at=strftime('%s','now') WHERE id=?1;",
                               -1,
@@ -712,9 +773,13 @@ server_commands_tick (sqlite3 *db, int max_rows)
       int ok = -1;
       json_error_t jerr;
       json_t *pl = payload_json ? json_loads (payload_json, 0, &jerr) : NULL;
+
+
       if (type && strcasecmp (type, "broadcast.create") == 0)
         {
           int64_t notice_id = 0;
+
+
           ok =
             (exec_broadcast_create (db, pl, idem_key, &notice_id) ==
              SQLITE_OK) ? 0 : -1;
@@ -722,6 +787,8 @@ server_commands_tick (sqlite3 *db, int max_rows)
       else if (type && strcasecmp (type, "notice.publish") == 0)
         {
           int64_t notice_id = 0;
+
+
           ok =
             (exec_notice_publish (db, pl, idem_key, &notice_id) ==
              SQLITE_OK) ? 0 : -1;
@@ -737,6 +804,8 @@ server_commands_tick (sqlite3 *db, int max_rows)
         }
       /* finalize status */
       sqlite3_stmt *upf = NULL;
+
+
       if (ok == 0)
         {
           if (sqlite3_prepare_v2 (db,
@@ -784,6 +853,8 @@ engine_main_loop (int shutdown_fd)
   //    This discards all inherited global VFS and memory state.
   sqlite3_shutdown ();
   int rc = sqlite3_initialize ();
+
+
   if (rc != SQLITE_OK)
     {
       LOGE ("FATAL: SQLite re-initialization failed! rc=%d", rc);
@@ -793,6 +864,8 @@ engine_main_loop (int shutdown_fd)
   db_handle_close_and_reset ();
   // 3. Get a fresh, new handle (which you already fixed to be idempotent)
   sqlite3 *db_handle = db_get_handle ();
+
+
   if (db_handle == NULL)
     {
       LOGE ("The fresh open failed.");
@@ -806,6 +879,8 @@ engine_main_loop (int shutdown_fd)
     }
   int server_port_unused = 0; // Not needed by engine, but db_load_ports requires it
   int s2s_port = 0;
+
+
   if (db_load_ports (&server_port_unused, &s2s_port) != 0)
     {
       LOGW (
@@ -822,6 +897,8 @@ engine_main_loop (int shutdown_fd)
   //printf ("[engine] child up. pid=%d\n", getpid ());
   const int tick_ms = CRON_PERIOD_MS;   // quick tick; we can fetch from DB config later
   struct pollfd pfd = {.fd = shutdown_fd,.events = POLLIN };
+
+
   LOGI ("[engine] loading s2s key ...\n");
   // LOGE( "[engine] loading s2s key ...\n");
   if (s2s_install_default_key (db_handle) != 0)
@@ -833,6 +910,8 @@ engine_main_loop (int shutdown_fd)
   LOGI ("[engine] connecting to 127.0.0.1:%d ...\n", g_cfg.s2s.tcp_port);
   s2s_conn_t *conn =
     s2s_tcp_client_connect ("127.0.0.1", g_cfg.s2s.tcp_port, 5000);
+
+
   if (!conn)
     {
       LOGE ("[engine] connect failed\n");
@@ -850,17 +929,23 @@ engine_main_loop (int shutdown_fd)
                              "payload", json_pack ("{s:s,s:s}",
                                                    "role", "engine",
                                                    "version", "0.1"));
+
+
   rc = s2s_send_json (conn, hello, 5000);
   json_decref (hello);
   LOGI ("[engine] hello send rc=%d\n", rc);
   // LOGE( "[engine] hello send rc=%d\n", rc);
   json_t *msg = NULL;
+
+
   rc = s2s_recv_json (conn, &msg, 5000);
   LOGI ("[engine] first frame rc=%d\n", rc);
   // LOGE( "[engine] first frame rc=%d\n", rc);
   if (rc == S2S_OK && msg)
     {
       const char *type = json_string_value (json_object_get (msg, "type"));
+
+
       if (type && strcmp (type, "s2s.health.ack") == 0)
         {
           LOGI ("[engine] Ping test complete\n");
@@ -874,12 +959,18 @@ engine_main_loop (int shutdown_fd)
   static time_t last_cmd_tick_ms = 0;
   /* One-time ISS bootstrap */
   int iss_ok = iss_init_once ();        // 1 if ISS+Stardock found, else 0
+
+
   fer_attach_db (db_handle);
   int fer_ok = fer_init_once ();
+
+
   for (;;)
     {
       engine_s2s_drain_once (conn);
       uint64_t now_ms = monotonic_millis ();
+
+
       if (iss_ok)
         {
           iss_tick (now_ms);
@@ -894,6 +985,8 @@ engine_main_loop (int shutdown_fd)
           last_cmd_tick_ms = now_ms;
         }
       time_t now = time (NULL);
+
+
       if (now - last_metrics >= 3600)
         {
           log_s2s_metrics ("engine");
@@ -902,11 +995,15 @@ engine_main_loop (int shutdown_fd)
         }
       // Sleep until next tick or until shutdown pipe changes
       int rc = poll (&pfd, 1, tick_ms);
+
+
       if (rc > 0)
         {
           // either data or EOF on the pipe means: time to exit
           char buf[8];
           ssize_t n = read (shutdown_fd, buf, sizeof (buf));
+
+
           (void) n;             // We don't care what's read; any activity/EOF = shutdown
           LOGI ("[engine] shutdown signal received.\n");
           break;
@@ -918,6 +1015,8 @@ engine_main_loop (int shutdown_fd)
             int64_t stale_threshold_ms =
               monotonic_millis () - CRON_LOCK_STALE_MS;
             sqlite3_stmt *reclaim = NULL;
+
+
             if (sqlite3_prepare_v2
                   (db_handle,
                   "DELETE FROM locks WHERE owner='server' AND until_ms < ?1;",
@@ -926,6 +1025,8 @@ engine_main_loop (int shutdown_fd)
                 sqlite3_bind_int64 (reclaim, 1, stale_threshold_ms);
                 sqlite3_step (reclaim);
                 int reclaimed = sqlite3_changes (db_handle);
+
+
                 if (reclaimed > 0)
                   {
                     LOGI ("cron: reclaimed %d stale lock(s)", reclaimed);
@@ -937,6 +1038,8 @@ engine_main_loop (int shutdown_fd)
           const int LIMIT = CRON_BATCH_LIMIT;
           uint64_t now_s = (int64_t) time (NULL);
           sqlite3_stmt *pick = NULL;
+
+
           if (sqlite3_prepare_v2 (db_handle,
                                   "SELECT id, name, schedule FROM cron_tasks "
                                   "WHERE enabled=1 AND next_due_at <= ?1 "
@@ -955,6 +1058,8 @@ engine_main_loop (int shutdown_fd)
                   /* run handler if registered */
                   int task_rc = 0;
                   cron_handler_fn fn = cron_find (nm);
+
+
                   LOGI ("cron: starting handler '%s'", nm);
                   if (fn)
                     {
@@ -963,6 +1068,8 @@ engine_main_loop (int shutdown_fd)
                   /* reschedule deterministically */
                   int64_t next_due = cron_next_due_from (now_s, sch);
                   sqlite3_stmt *upd = NULL;
+
+
                   if (sqlite3_prepare_v2 (db_handle,
                                           "UPDATE cron_tasks "
                                           "SET last_run_at=?2, next_due_at=?3 "
@@ -1003,6 +1110,8 @@ engine_spawn (pid_t *out_pid, int *out_shutdown_fd)
       return -1;
     }
   pid_t pid = fork ();
+
+
   if (pid < 0)
     {
       perror ("fork");
@@ -1017,6 +1126,8 @@ engine_spawn (pid_t *out_pid, int *out_shutdown_fd)
       close (pipefd[1]);
       /* Run the engine and exit the process (never return to server main) */
       int ec = engine_main_loop (pipefd[0]);
+
+
       _exit (ec == 0 ? 0 : 1);
     }
   /* --- PARENT PROCESS: server --- */
@@ -1058,6 +1169,8 @@ engine_wait (pid_t pid, int timeout_ms)
     {
       int status = 0;
       pid_t r = waitpid (pid, &status, WNOHANG);
+
+
       if (r == pid)
         {
           return 0;             // reaped
@@ -1083,6 +1196,8 @@ engine_notice_ttl_sweep (sqlite3 *db, int64_t now_ms)
   (void) now_ms;
   /* delete ephemerals whose ttl expired; bounded batch */
   sqlite3_stmt *st = NULL;
+
+
   if (sqlite3_prepare_v2 (db,
                           "DELETE FROM system_notice "
                           "WHERE expires_at IS NOT NULL AND expires_at <= now "
@@ -1108,6 +1223,8 @@ sweeper_engine_deadletter_retry (sqlite3 *db, int64_t now_ms)
   // Select error commands ready for retry
   const char *sql_select_deadletters =
     "SELECT id, attempts FROM engine_commands WHERE status='error' AND attempts < ?1 LIMIT 500;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_select_deadletters, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -1120,6 +1237,8 @@ sweeper_engine_deadletter_retry (sqlite3 *db, int64_t now_ms)
   sqlite3_bind_int (st, 1, MAX_RETRIES);
   const char *sql_update_deadletter =
     "UPDATE engine_commands SET status='ready', due_at=strftime('%s','now') + (attempts * 60) WHERE id=?1;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_update_deadletter, -1, &update_st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -1133,6 +1252,8 @@ sweeper_engine_deadletter_retry (sqlite3 *db, int64_t now_ms)
   while (sqlite3_step (st) == SQLITE_ROW)
     {
       int64_t cmd_id = sqlite3_column_int64 (st, 0);
+
+
       sqlite3_bind_int64 (update_st, 1, cmd_id);
       rc = sqlite3_step (update_st);
       if (rc != SQLITE_DONE)
@@ -1186,6 +1307,8 @@ cron_limpet_ttl_cleanup (sqlite3 *db, int64_t now_s)
     }
   LOGI ("limpet_ttl_cleanup: Starting Limpet mine TTL cleanup.");
   int rc = begin (db);
+
+
   if (rc)
     {
       unlock (db, "limpet_ttl_cleanup");
@@ -1200,6 +1323,8 @@ cron_limpet_ttl_cleanup (sqlite3 *db, int64_t now_s)
   const char *sql_delete_expired =
     "DELETE FROM sector_assets "
     "WHERE asset_type = ?1 AND deployed_at <= ?2;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_delete_expired, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -1254,6 +1379,8 @@ h_daily_bank_interest_tick (sqlite3 *db, int64_t now_s)
     }
   LOGI ("daily_bank_interest_tick: Starting daily bank interest accrual.");
   int rc = begin (db);
+
+
   if (rc)
     {
       unlock (db, "daily_bank_interest_tick");
@@ -1263,6 +1390,8 @@ h_daily_bank_interest_tick (sqlite3 *db, int64_t now_s)
   const char *sql_select_accounts =
     "SELECT id, owner_type, owner_id, balance, interest_rate_bp, last_interest_tick "
     "FROM bank_accounts WHERE is_active = 1 AND interest_rate_bp > 0;";
+
+
   rc = sqlite3_prepare_v2 (db, sql_select_accounts, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
@@ -1279,6 +1408,8 @@ h_daily_bank_interest_tick (sqlite3 *db, int64_t now_s)
   long long max_daily_per_account =
     h_get_config_int_unlocked (db, "bank_max_daily_interest_per_account",
                                9223372036854775807LL);
+
+
   while (sqlite3_step (st) == SQLITE_ROW)
     {
       int account_id = sqlite3_column_int (st, 0);
@@ -1287,11 +1418,15 @@ h_daily_bank_interest_tick (sqlite3 *db, int64_t now_s)
       long long balance = sqlite3_column_int64 (st, 3);
       int interest_rate_bp = sqlite3_column_int (st, 4);
       int last_interest_tick = sqlite3_column_int (st, 5);
+
+
       if (balance < min_balance_for_interest)
         {
           continue;             // Skip accounts below minimum balance
         }
       int days_to_accrue = current_epoch_day - last_interest_tick;
+
+
       if (days_to_accrue <= 0)
         {
           continue;             // Already processed for today or future tick
@@ -1301,6 +1436,8 @@ h_daily_bank_interest_tick (sqlite3 *db, int64_t now_s)
           days_to_accrue = MAX_BACKLOG_DAYS;    // Cap the backlog
         }
       char tx_group_id[33];
+
+
       h_generate_hex_uuid (tx_group_id, sizeof (tx_group_id));
       for (int i = 0; i < days_to_accrue; ++i)
         {
@@ -1311,6 +1448,8 @@ h_daily_bank_interest_tick (sqlite3 *db, int64_t now_s)
           // interest = floor( balance * interest_rate_bp / (10000 * 365) )
           long long daily_interest =
             (balance * interest_rate_bp) / (10000 * 365);
+
+
           if (daily_interest > max_daily_per_account)
             {
               daily_interest = max_daily_per_account;
@@ -1321,6 +1460,8 @@ h_daily_bank_interest_tick (sqlite3 *db, int64_t now_s)
               int add_rc =
                 h_add_credits_unlocked (db, account_id, daily_interest,
                                         "INTEREST", tx_group_id, &balance);
+
+
               if (add_rc != SQLITE_OK)
                 {
                   LOGE
@@ -1341,6 +1482,8 @@ h_daily_bank_interest_tick (sqlite3 *db, int64_t now_s)
         "UPDATE bank_accounts SET last_interest_tick = ? WHERE id = ?;";
       int update_rc =
         sqlite3_prepare_v2 (db, sql_update_tick, -1, &update_tick_st, NULL);
+
+
       if (update_rc != SQLITE_OK)
         {
           LOGE

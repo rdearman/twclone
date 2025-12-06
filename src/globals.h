@@ -9,6 +9,8 @@ extern int msgidout;
 extern int shutdown_flag;
 extern time_t next_process;
 extern armid_mine_config_t g_armid_config;
+
+
 // Struct for XP/Alignment configuration parameters
 typedef struct {
   int trade_xp_ratio;                 // xp.trade_ratio

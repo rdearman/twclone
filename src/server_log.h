@@ -6,6 +6,7 @@
 extern "C"
 {
 #endif
+
 /* ---- FILE BACKEND ----
  * Write logs to a plain file (no syslog).
  * echo_stderr: 0 = silent to console; 1 = also mirror to stderr

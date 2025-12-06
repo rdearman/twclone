@@ -9,6 +9,8 @@
 // Forward declarations of internal helper functions
 static int get_high_degree_sector (sqlite3 *db);
 static int get_tunnel_end (sqlite3 *db, int start_sector);
+
+
 /**
  * @brief Finds a random sector with a high out-degree (many warps).
  * This is used to create "safe" exit points for one-way and dead-end
@@ -86,6 +88,8 @@ create_complex_warps (sqlite3 *db, int numSectors)
     "SELECT from_sector FROM (SELECT from_sector, COUNT(to_sector) AS out_degree FROM sector_warps GROUP BY from_sector) WHERE out_degree = 1 ORDER BY RANDOM() LIMIT 2;";
   sqlite3_stmt *st = NULL;
   int start_sector1 = -1, start_sector2 = -1;
+
+
   if (sqlite3_prepare_v2 (db, q_find_tunnels, -1, &st, NULL) != SQLITE_OK)
     {
       LOGE ( "find_tunnels prepare failed: %s\n",
@@ -108,10 +112,14 @@ create_complex_warps (sqlite3 *db, int numSectors)
     {
       int end_sector1 = get_tunnel_end (db, start_sector1);
       int end_sector2 = get_tunnel_end (db, start_sector2);
+
+
       if (end_sector1 != -1 && end_sector2 != -1
           && end_sector1 != end_sector2)
         {
           char sql_delete_warp[128];
+
+
           snprintf (sql_delete_warp,
                     sizeof (sql_delete_warp),
                     "DELETE FROM sector_warps WHERE from_sector = %d AND to_sector = %d;",
@@ -125,6 +133,8 @@ create_complex_warps (sqlite3 *db, int numSectors)
               return -1;
             }
           char sql_insert_warp[128];
+
+
           snprintf (sql_insert_warp,
                     sizeof (sql_insert_warp),
                     "INSERT INTO sector_warps (from_sector, to_sector) VALUES (%d, %d);",
@@ -137,6 +147,8 @@ create_complex_warps (sqlite3 *db, int numSectors)
               sqlite3_free (errmsg);
               // Re-insert the original warp to restore state
               char sql_reinsert_original[128];
+
+
               snprintf (sql_reinsert_original,
                         sizeof (sql_reinsert_original),
                         "INSERT INTO sector_warps (from_sector, to_sector) VALUES (%d, %d);",
@@ -156,6 +168,8 @@ create_complex_warps (sqlite3 *db, int numSectors)
   // Step 2: Create one-way warps by converting bidirectional warps
   const int num_one_way_warps =
     (int) (numSectors * (DEFAULT_PERCENT_ONEWAY / 100.0));
+
+
   LOGE ( "BIGBANG: Creating %d one-way warps...\n",
          num_one_way_warps);
   for (int i = 0; i < num_one_way_warps; i++)
@@ -163,6 +177,8 @@ create_complex_warps (sqlite3 *db, int numSectors)
       const char *q_find_bidirectional =
         "SELECT a, b FROM v_bidirectional_warps ORDER BY RANDOM() LIMIT 1;";
       int one_way_from = -1, one_way_to = -1;
+
+
       st = NULL;
       if (sqlite3_prepare_v2 (db, q_find_bidirectional, -1, &st, NULL) !=
           SQLITE_OK)
@@ -180,6 +196,8 @@ create_complex_warps (sqlite3 *db, int numSectors)
       if (one_way_from > 0 && one_way_to > 0)
         {
           char sql_delete_return[128];
+
+
           snprintf (sql_delete_return,
                     sizeof (sql_delete_return),
                     "DELETE FROM sector_warps WHERE from_sector = %d AND to_sector = %d;",
@@ -196,6 +214,8 @@ create_complex_warps (sqlite3 *db, int numSectors)
   // Step 3: Create dead-end warps by converting low-degree sectors
   const int num_dead_end_warps =
     (int) (numSectors * (DEFAULT_PERCENT_DEADEND / 100.0));
+
+
   LOGE ( "BIGBANG: Creating %d dead-end warps...\n",
          num_dead_end_warps);
   for (int i = 0; i < num_dead_end_warps; i++)
@@ -205,6 +225,8 @@ create_complex_warps (sqlite3 *db, int numSectors)
         "FROM sector_warps GROUP BY from_sector) "
         "WHERE out_degree = 1 ORDER BY RANDOM() LIMIT 1;";
       int dead_end_sector = -1;
+
+
       st = NULL;
       if (sqlite3_prepare_v2 (db, q_find_low_degree, -1, &st, NULL) !=
           SQLITE_OK)
@@ -221,9 +243,13 @@ create_complex_warps (sqlite3 *db, int numSectors)
       if (dead_end_sector > 0)
         {
           int exit_sector = get_high_degree_sector (db);
+
+
           if (exit_sector > 0 && dead_end_sector != exit_sector)
             {
               char sql_delete[128];
+
+
               snprintf (sql_delete, sizeof (sql_delete),
                         "DELETE FROM sector_warps WHERE from_sector = %d;",
                         dead_end_sector);
@@ -234,6 +260,8 @@ create_complex_warps (sqlite3 *db, int numSectors)
                   sqlite3_free (errmsg);
                 }
               char sql_insert[128];
+
+
               snprintf (sql_insert,
                         sizeof (sql_insert),
                         "INSERT INTO sector_warps (from_sector, to_sector) VALUES (%d, %d);",

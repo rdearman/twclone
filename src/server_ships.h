@@ -48,6 +48,7 @@ int cmd_ship_jettison (client_ctx_t *ctx, json_t *root);
 int cmd_ship_upgrade (client_ctx_t *ctx, json_t *root);
 int cmd_ship_repair (client_ctx_t *ctx, json_t *root);
 int cmd_ship_self_destruct (client_ctx_t *ctx, json_t *root);
+int cmd_ship_tow (client_ctx_t *ctx, json_t *root);
 // Helper to get active ship ID for a player
 int h_get_active_ship_id (sqlite3 *db, int player_id);
 #ifdef __cplusplus

@@ -11,6 +11,8 @@
 #define DEFAULT_DB_NAME "twconfig.db"
 /* External declaration for the mutex */
 extern pthread_mutex_t db_mutex;
+
+
 /* Issue 142: Helper for robust rollback logging */
 void db_safe_rollback (sqlite3 *db, const char *context_name);
 /* Forward declare to avoid including jansson here */
@@ -24,6 +26,7 @@ int db_insert_defaults (void);
 /* Load ports from config table */
 int db_load_ports (int *server_port, int *s2s_port);
 int db_get_int_config (sqlite3 *db, const char *key, int *out);
+
 /* DB handle access
  *
  * Each worker thread has its own SQLite connection.
@@ -48,6 +51,6 @@ int db_session_lookup (const char *token,
 /* Cleanup */
 void db_close (void);
 // Bank accounts
-int db_bank_account_create_default_for_player(sqlite3 *db, int player_id);
+int db_bank_account_create_default_for_player (sqlite3 *db, int player_id);
 
 #endif /* DATABASE_H */

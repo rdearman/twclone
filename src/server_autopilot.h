@@ -1,6 +1,7 @@
 #ifndef SERVER_AUTOPILOT_H
 #define SERVER_AUTOPILOT_H
 #include "common.h"
+
 /* Autopilot is purely client-side.
  * These commands provide pathing data and simple status checks,
  * but no server-side state or automated movement loop is maintained.

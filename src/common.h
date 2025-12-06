@@ -160,6 +160,8 @@ extern time_t *timeptr;
 #define SHIPF_LOCKED     0x0002 /* Cannot be claimed (admin/quest/Fed/NPC protected) */
 #define SHIPF_NO_TRADE   0x0004 /* Cannot be traded/sold at any port */
 #define SHIPF_NPC        0x0008 /* Piloted by NPC subsystem when assigned */
+
+
 /* Bit helpers */
 static inline int
 ship_has_flag (int flags, int mask)

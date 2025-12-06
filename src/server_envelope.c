@@ -18,6 +18,8 @@
 #include "s2s_transport.h"
 #include "common.h"             /* now_iso8601, strip_ansi */
 int toss;
+
+
 /* Recursively strip ANSI from all JSON strings in 'node'. */
 static void
 sanitize_json_strings (json_t *node)
@@ -29,11 +31,15 @@ sanitize_json_strings (json_t *node)
   if (json_is_string (node))
     {
       const char *s = json_string_value (node);
+
+
       if (!s)
         {
           return;
         }
       char buf[4096];
+
+
       strip_ansi (buf, s, sizeof (buf));
       if (strcmp (buf, s) != 0)
         {
@@ -45,6 +51,8 @@ sanitize_json_strings (json_t *node)
     {
       size_t i;
       json_t *it;
+
+
       json_array_foreach (node, i, it)
       {
         sanitize_json_strings (it);
@@ -54,9 +62,13 @@ sanitize_json_strings (json_t *node)
   if (json_is_object (node))
     {
       void *iter = json_object_iter (node);
+
+
       while (iter)
         {
           json_t *v = json_object_iter_value (iter);    /* ← only iter */
+
+
           sanitize_json_strings (v);
           iter = json_object_iter_next (node, iter);    /* ← object + iter */
         }
@@ -68,6 +80,8 @@ sanitize_json_strings (json_t *node)
 // --- Weak fallback so linking succeeds even if server_loop.c doesn't define it ---
 // If a strong version exists in server_loop.c, the linker will prefer that one.
 __attribute__((weak))
+
+
 void
 loop_get_supported_commands (const cmd_desc_t **out_tbl,
                              size_t *out_n)
@@ -122,6 +136,8 @@ loop_get_supported_commands (const cmd_desc_t **out_tbl,
 // Provided by server_loop.c
 extern void loop_get_supported_commands (const cmd_desc_t **out_tbl,
                                          size_t *out_n);
+
+
 // ---- Helpers ----
 static void
 get_cmd_table (const cmd_desc_t **out_tbl, size_t *out_n)
@@ -155,24 +171,34 @@ collect_schema_names (void)
   get_cmd_table (&tbl, &n);
   // use an object as a set of schema prefixes
   json_t *set = json_object ();
+
+
   for (size_t i = 0; i < n; i++)
     {
       const char *cmd = tbl[i].name;
+
+
       if (!cmd)
         {
           continue;
         }
       const char *dot = strchr (cmd, '.');
+
+
       if (!dot || dot == cmd)
         {
           continue;
         }
       size_t len = (size_t) (dot - cmd);
+
+
       if (len == 0)
         {
           continue;
         }
       char buf[64];
+
+
       if (len >= sizeof (buf))
         {
           len = sizeof (buf) - 1;
@@ -184,9 +210,13 @@ collect_schema_names (void)
   // convert set → array
   json_t *arr = json_array ();
   void *it = json_object_iter (set);
+
+
   while (it)
     {
       const char *key = json_object_iter_key (it);
+
+
       json_array_append_new (arr, json_string (key));
       it = json_object_iter_next (set, it);
     }
@@ -203,8 +233,12 @@ cmd_system_cmd_list (client_ctx_t *ctx, json_t *root)
   (void) ctx;                   // used via ctx->fd below
   const cmd_desc_t *tbl = NULL;
   size_t n = 0;
+
+
   get_cmd_table (&tbl, &n);
   json_t *arr = json_array ();
+
+
   for (size_t i = 0; i < n; i++)
     {
       if (!tbl[i].name)
@@ -212,6 +246,8 @@ cmd_system_cmd_list (client_ctx_t *ctx, json_t *root)
           continue;
         }
       json_t *o = json_object ();
+
+
       json_object_set_new (o, "cmd", json_string (tbl[i].name));
       if (tbl[i].summary && tbl[i].summary[0])
         {
@@ -220,6 +256,8 @@ cmd_system_cmd_list (client_ctx_t *ctx, json_t *root)
       json_array_append_new (arr, o);
     }
   json_t *data = json_pack ("{s:o, s:i}", "commands", arr, "count", (int) n);
+
+
   send_enveloped_ok (ctx->fd, root, "system.cmd_list", data);
   return 0;
 }
@@ -258,6 +296,8 @@ cmd_system_describe_schema (client_ctx_t *ctx, json_t *root)
     }
   // 1. Retrieve the actual schema for the requested command/event
   json_t *schema_obj = schema_get (name);
+
+
   if (!schema_obj)
     {
       // If schema_get returns NULL, it means the schema is not found/implemented
@@ -267,6 +307,8 @@ cmd_system_describe_schema (client_ctx_t *ctx, json_t *root)
     }
   // 2. Construct the correct 'data' payload for the response
   json_t *response_data = json_object ();
+
+
   json_object_set_new (response_data, "name", json_string (name));
   json_object_set_new (response_data, "type", json_string (schema_type));
   json_object_set_new (response_data, "schema", schema_obj);    // schema_obj is a new reference from schema_get()
@@ -297,6 +339,8 @@ send_all (int fd, const char *buf, size_t len)
   while (off < len)
     {
       ssize_t n = send (fd, buf + off, len - off, MSG_NOSIGNAL);
+
+
       if (n < 0)
         {
           if (errno == EINTR)
@@ -350,19 +394,29 @@ make_base_envelope (json_t *req, const char *type)
   char ts[32];
   iso8601_utc (ts);
   json_t *meta = json_object ();
+
+
   json_object_set_new (meta, "id", json_string (next_msg_id ()));
   json_object_set_new (meta, "ts", json_string (ts));
   json_t *env = json_object ();
+
+
   json_object_set_new (env, "type", json_string (type));
   json_object_set_new (env, "meta", meta);
   // If request has meta.id, echo it as in_reply_to (best-effort)
   const char *in_reply_to = NULL;
+
+
   if (req && json_is_object (req))
     {
       json_t *m = json_object_get (req, "meta");
+
+
       if (json_is_object (m))
         {
           json_t *rid = json_object_get (m, "id");
+
+
           if (json_is_string (rid))
             {
               in_reply_to = json_string_value (rid);
@@ -425,6 +479,8 @@ make_default_meta (void)
   json_object_set_new (rate, "remaining", json_integer (60));
   json_object_set_new (rate, "reset", json_integer (60));       // seconds
   json_t *meta = json_object ();
+
+
   json_object_set_new (meta, "rate_limit", rate);
   return meta;                  // caller owns
 }
@@ -438,9 +494,13 @@ send_enveloped_ok (int fd, json_t *req, const char *type, json_t *data)
   // ids
   json_object_set_new (resp, "id", json_string ("srv-ok"));
   const char *req_id = NULL;
+
+
   if (req && json_is_object (req))
     {
       json_t *jid = json_object_get (req, "id");
+
+
       if (json_is_string (jid))
         {
           req_id = json_string_value (jid);
@@ -452,6 +512,8 @@ send_enveloped_ok (int fd, json_t *req, const char *type, json_t *data)
     }
   // timestamp (ISO 8601, UTC)
   char tsbuf[32];
+
+
   iso8601_utc (tsbuf);
   json_object_set_new (resp, "ts", json_string (tsbuf));
   // status/type
@@ -488,9 +550,13 @@ send_enveloped_ok (int fd, json_t *req, const char *type, json_t *data)
   /* json_decref (resp); */
 // write one line
   char *s = json_dumps (resp, JSON_COMPACT);
+
+
   if (s)
     {
       size_t len = strlen (s);
+
+
       if (len)
         {
           // REPLACE write() with send() + MSG_NOSIGNAL
@@ -513,9 +579,13 @@ send_enveloped_error (int fd, json_t *req, int code, const char *message)
   json_t *resp = json_object ();
   json_object_set_new (resp, "id", json_string ("srv-err"));
   const char *req_id = NULL;
+
+
   if (req && json_is_object (req))
     {
       json_t *jid = json_object_get (req, "id");
+
+
       if (json_is_string (jid))
         {
           req_id = json_string_value (jid);
@@ -526,11 +596,15 @@ send_enveloped_error (int fd, json_t *req, int code, const char *message)
       json_object_set_new (resp, "reply_to", json_string (req_id));
     }
   char tsbuf[32];
+
+
   iso8601_utc (tsbuf);
   json_object_set_new (resp, "ts", json_string (tsbuf));
   json_object_set_new (resp, "status", json_string ("error"));
   json_object_set_new (resp, "type", json_string ("error"));
   json_t *err = json_object ();
+
+
   json_object_set_new (err, "code", json_integer (code));
   json_object_set_new (err, "message",
                        json_string (message ? message : "Error"));
@@ -541,9 +615,13 @@ send_enveloped_error (int fd, json_t *req, int code, const char *message)
   sanitize_json_strings (resp);
   //  int toss;
   char *s = json_dumps (resp, JSON_COMPACT);
+
+
   if (s)
     {
       size_t len = strlen (s);
+
+
       if (len)
         {
           send (fd, s, len, MSG_NOSIGNAL);
@@ -563,9 +641,13 @@ send_enveloped_refused (int fd, json_t *req, int code, const char *msg,
   json_t *resp = json_object ();
   json_object_set_new (resp, "id", json_string ("srv-refuse"));
   const char *req_id = NULL;
+
+
   if (req && json_is_object (req))
     {
       json_t *jid = json_object_get (req, "id");
+
+
       if (json_is_string (jid))
         {
           req_id = json_string_value (jid);
@@ -576,6 +658,8 @@ send_enveloped_refused (int fd, json_t *req, int code, const char *msg,
       json_object_set_new (resp, "reply_to", json_string (req_id));
     }
   char tsbuf[32];
+
+
   iso8601_utc (tsbuf);
   json_object_set_new (resp, "ts", json_string (tsbuf));
   json_object_set_new (resp, "status", json_string ("refused"));
@@ -583,6 +667,8 @@ send_enveloped_refused (int fd, json_t *req, int code, const char *msg,
   json_t *err = json_pack ("{s:i, s:s}",
                            "code", code,
                            "message", msg ? msg : "");
+
+
   if (data_opt)
     {
       json_object_set (err, "data", data_opt);  // borrow
@@ -593,9 +679,13 @@ send_enveloped_refused (int fd, json_t *req, int code, const char *msg,
   // ✨ sanitize all strings (strip ANSI) before sending
   sanitize_json_strings (resp);
   char *s = json_dumps (resp, JSON_COMPACT);
+
+
   if (s)
     {
       size_t len = strlen (s);
+
+
       if (len)
         {
           send (fd, s, len, MSG_NOSIGNAL);
@@ -608,7 +698,11 @@ send_enveloped_refused (int fd, json_t *req, int code, const char *msg,
 
 
 ////////////////////////   S2S SECTION //////////////////////////////
+
+
 // server_envelope.c
+
+
 /* ---------- tiny helpers ---------- */
 static int
 urand_bytes (void *buf, size_t n)
@@ -619,9 +713,13 @@ urand_bytes (void *buf, size_t n)
       return -1;
     }
   size_t off = 0;
+
+
   while (off < n)
     {
       ssize_t r = read (fd, (char *) buf + off, n - off);
+
+
       if (r <= 0)
         {
           close (fd);
@@ -648,11 +746,15 @@ gen_uuid_v4 (void)
   b[8] = (unsigned char) ((b[8] & 0x3F) | 0x80);
   static const char *hex = "0123456789abcdef";
   char *s = (char *) malloc (37);
+
+
   if (!s)
     {
       return NULL;
     }
   int p = 0;
+
+
   for (int i = 0; i < 16; ++i)
     {
       s[p++] = hex[(b[i] >> 4) & 0xF];
@@ -690,6 +792,8 @@ s2s_make_env (const char *type, const char *src, const char *dst,
       return NULL;
     }
   char *id = gen_uuid_v4 ();
+
+
   if (!id)
     {
       return NULL;
@@ -705,6 +809,8 @@ s2s_make_env (const char *type, const char *src, const char *dst,
                            "src", src,
                            "dst", dst,
                            "payload", pl);
+
+
   json_decref (pl);
   free (id);
   return env;                   /* caller must json_decref */
@@ -720,6 +826,8 @@ s2s_make_ack (const char *src, const char *dst, const char *ack_of,
       return NULL;
     }
   char *id = gen_uuid_v4 ();
+
+
   if (!id)
     {
       return NULL;
@@ -735,6 +843,8 @@ s2s_make_ack (const char *src, const char *dst, const char *ack_of,
                            "dst", dst,
                            "ack_of", ack_of,
                            "payload", pl);
+
+
   json_decref (pl);
   free (id);
   return env;
@@ -752,6 +862,8 @@ s2s_make_error (const char *src, const char *dst,
       return NULL;
     }
   char *id = gen_uuid_v4 ();
+
+
   if (!id)
     {
       return NULL;
@@ -762,6 +874,8 @@ s2s_make_error (const char *src, const char *dst,
                            "code", code,
                            "message", message ? message : "",
                            "details", det);
+
+
   json_decref (det);
   json_t *env = json_pack ("{s:i, s:s, s:s, s:I, s:s, s:s, s:s, s:o, s:o}",
                            "v", 1,
@@ -774,6 +888,8 @@ s2s_make_error (const char *src, const char *dst,
                            "error", err,
                            "payload", json_object ()    /* keep payload an object for uniformity */
                            );
+
+
   json_decref (err);
   free (id);
   return env;
@@ -846,6 +962,8 @@ s2s_env_validate_min (json_t *env, char **why)
   json_t *src = json_object_get (env, "src");
   json_t *dst = json_object_get (env, "dst");
   json_t *pl = json_object_get (env, "payload");
+
+
   if (!json_is_integer (v) || json_integer_value (v) != 1)
     {
       if (why)
@@ -924,12 +1042,16 @@ s2s_recv_env (s2s_conn_t *c, json_t **out_env, int timeout_ms)
     }
   json_t *root = NULL;
   int rc = s2s_recv_json (c, &root, timeout_ms);
+
+
   if (rc != 0)
     {
       return rc;
     }
   char *why = NULL;
   int vrc = s2s_env_validate_min (root, &why);
+
+
   if (vrc != 0)
     {
       if (why)
@@ -972,6 +1094,8 @@ j_get_integer (json_t *root, const char *path, int *result)
     }
   // Make a mutable copy of the path for strtok_r to work on.
   char *path_copy = strdup (path);
+
+
   if (!path_copy)
     {
       perror ("j_get_integer: strdup failed");
@@ -980,6 +1104,8 @@ j_get_integer (json_t *root, const char *path, int *result)
   char *saveptr;
   char *token;
   json_t *current = root;
+
+
   // Use strtok_r to safely tokenize the path by '.'
   for (token = strtok_r (path_copy, ".", &saveptr);
        token != NULL; token = strtok_r (NULL, ".", &saveptr))
@@ -995,6 +1121,8 @@ j_get_integer (json_t *root, const char *path, int *result)
         }
       // 2. Find the child node for the current token
       json_t *next = json_object_get (current, token);
+
+
       if (!next)
         {
           LOGD ( "j_get_integer: Key '%s' not found at this level.\n",

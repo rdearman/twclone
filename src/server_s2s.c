@@ -17,6 +17,8 @@
 #include "s2s_transport.h"
 #include "schemas.h"
 #include "server_log.h"
+
+
 static int
 handle_command_push (s2s_conn_t *c, json_t *env)
 {
@@ -30,10 +32,14 @@ handle_command_push (s2s_conn_t *c, json_t *env)
   int cmd_id = 0, duplicate = 0, due_at = (int) time (NULL);
   int rcdb = db_commands_accept (cmd_type, idem_key, cmd_payload,
                                  &cmd_id, &duplicate, &due_at);
+
+
   if (rcdb != 0)
     {
       json_t *err = s2s_make_error ("server", "engine", s2s_env_id (env),
                                     "internal_error", "db error", NULL);
+
+
       s2s_send_env (c, err, 2000);
       json_decref (err);
       return 0;
@@ -45,8 +51,12 @@ handle_command_push (s2s_conn_t *c, json_t *env)
                              "status", "ready",
                              "due_at", due_at);
   json_t *ack = s2s_make_ack ("server", "engine", s2s_env_id (env), ackpl);
+
+
   json_decref (ackpl);
   int rcsend = s2s_send_env (c, ack, 2000);
+
+
   json_decref (ack);
   return rcsend;
 }
@@ -66,6 +76,8 @@ handle_broadcast_sweep (s2s_conn_t *c, json_t *env)
   json_t *ack = s2s_make_ack ("server", "engine", s2s_env_id (env), ackpl);
   json_decref (ackpl);
   int rc = s2s_send_env (c, ack, 2000);
+
+
   json_decref (ack);
   return rc;
 }
@@ -82,6 +94,8 @@ handle_health_check (s2s_conn_t *c, json_t *env)
   json_t *ack = s2s_make_ack ("server", "engine", s2s_env_id (env), pl);
   json_decref (pl);
   int rc = s2s_send_env (c, ack, 2000);
+
+
   json_decref (ack);
   return rc;
 }
@@ -99,11 +113,15 @@ server_s2s_dispatch (s2s_conn_t *c, json_t *env)
   /* payload validation (lightweight, per catalogue) */
   json_t *payload = s2s_env_payload (env);
   char *why = NULL;
+
+
   if (schema_validate_payload (type, payload, &why) != 0)
     {
       json_t *err = s2s_make_error ("server", "engine", s2s_env_id (env),
                                     "bad_request",
                                     (why ? why : "invalid payload"), NULL);
+
+
       free (why);
       s2s_send_env (c, err, 2000);
       json_decref (err);
@@ -123,6 +141,8 @@ server_s2s_dispatch (s2s_conn_t *c, json_t *env)
     }
   json_t *err = s2s_make_error ("server", "engine", s2s_env_id (env),
                                 "unsupported_type", type, NULL);
+
+
   s2s_send_env (c, err, 2000);
   json_decref (err);
   return 0;
@@ -135,6 +155,8 @@ typedef struct
   s2s_conn_t *conn;
   volatile sig_atomic_t *running_flag;
 } s2s_thr_ctx_t;
+
+
 static void *
 s2s_control_thread_fn (void *arg)
 {
@@ -144,6 +166,8 @@ s2s_control_thread_fn (void *arg)
     {
       json_t *env = NULL;
       int rc = s2s_recv_env (c, &env, 1000);    /* 1s poll */
+
+
       if (rc == 0 && env)
         {
           server_s2s_dispatch (c, env);
@@ -179,6 +203,8 @@ server_s2s_start (s2s_conn_t *conn, pthread_t *out_thr,
       return -1;
     }
   s2s_thr_ctx_t *ctx = (s2s_thr_ctx_t *) calloc (1, sizeof (*ctx));
+
+
   if (!ctx)
     {
       return -1;
@@ -200,6 +226,8 @@ server_s2s_stop (pthread_t thr)
 
 
 ///////////////////////////////////////////
+
+
 /* --------- S2S auth gate (customize later) ---------
    Looks for meta.s2s_token or meta.api_key on the request and
    compares with a server-side key (e.g., from config).
@@ -214,14 +242,20 @@ require_s2s (json_t *root, const char **why_out)
     }
   json_t *meta = json_object_get (root, "meta");
   const char *tok = NULL, *api_key = NULL;
+
+
   if (json_is_object (meta))
     {
       json_t *jtok = json_object_get (meta, "s2s_token");
+
+
       if (json_is_string (jtok))
         {
           tok = json_string_value (jtok);
         }
       json_t *jkey = json_object_get (meta, "api_key");
+
+
       if (json_is_string (jkey))
         {
           api_key = json_string_value (jkey);
@@ -342,6 +376,8 @@ cmd_s2s_replication_heartbeat (client_ctx_t *ctx, json_t *root)
     }
   // TODO: update replication status; reply with ack + version/lsn
   json_t *payload = json_pack ("{s:s}", "status", "ok");
+
+
   send_enveloped_ok (ctx->fd, root, "s2s.heartbeat", payload);
   json_decref (payload);
   return 0;

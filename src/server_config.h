@@ -60,6 +60,8 @@ struct twconfig
   int shipyard_require_hardware_compat;
   int shipyard_tax_bp;
 };
+
+
 /* REPLACE THE TYPEDEF IN src/server_config.h WITH THIS */
 typedef struct
 {
@@ -81,6 +83,8 @@ typedef struct
   int max_name_length;
   int planet_type_count;
   int server_port;
+
+
   struct
   {
     int tick_ms;
@@ -181,6 +185,8 @@ typedef struct
 } server_config_t;
 /* Single global instance (defined in server_config.c) */
 extern server_config_t g_cfg;
+
+
 /* Loader name (you said load_config() conflicted elsewhere) */
 int load_eng_config (void);
 void print_effective_config_redacted (void);

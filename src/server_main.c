@@ -37,6 +37,8 @@ static pthread_t g_s2s_thr;
 static volatile int g_s2s_run = 0;
 volatile sig_atomic_t g_running = 1;    // global stop flag the loop can read
 static volatile sig_atomic_t g_saw_signal = 0;
+
+
 static void
 on_signal (int sig)
 {
@@ -70,11 +72,15 @@ build_capabilities (void)
     }
   g_capabilities = json_object ();
   json_t *limits = json_object ();
+
+
   json_object_set_new (limits, "max_bulk", json_integer (100));
   json_object_set_new (limits, "max_page_size", json_integer (50));
   json_object_set_new (limits, "max_beacon_len", json_integer (256));
   json_object_set_new (g_capabilities, "limits", limits);
   json_t *features = json_object ();
+
+
   json_object_set_new (features, "auth", json_true ());
   json_object_set_new (features, "warp", json_true ());
   json_object_set_new (features, "sector.describe", json_true ());
@@ -110,10 +116,14 @@ s2s_control_thread (void *arg)
     {
       json_t *msg = NULL;
       int rc = s2s_recv_json (g_s2s_conn, &msg, 1000);  // 1s tick; lets us notice shutdowns
+
+
       if (rc == S2S_OK && msg)
         {
           const char *type =
             json_string_value (json_object_get (msg, "type"));
+
+
           if (type && strcasecmp (type, "s2s.health.ack") == 0)
             {
               // optional: read payload, surface metrics
@@ -124,6 +134,8 @@ s2s_control_thread (void *arg)
               const char *reason =
                 pl ? json_string_value (json_object_get (pl, "reason")) :
                 NULL;
+
+
               LOGE ("s2s.error%s%s\n", reason ? ": " : "",
                     reason ? reason : "");
               //              LOGE( "[server] s2s.error%s%s\n", reason ? ": " : "",
@@ -171,6 +183,8 @@ s2s_control_thread (void *arg)
 
 
 //////////////////////
+
+
 /*
    static int
    s2s_accept_once (int lfd)
@@ -180,6 +194,8 @@ s2s_control_thread (void *arg)
    return accept (lfd, (struct sockaddr *) &peer, &slen);
    }
  */
+
+
 /*
    static int
    send_all (int fd, const char *s)
@@ -195,6 +211,8 @@ s2s_control_thread (void *arg)
    return 0;
    }
  */
+
+
 /*
    static int
    recv_line (int fd, char *buf, size_t cap)
@@ -214,8 +232,14 @@ s2s_control_thread (void *arg)
    return (int) off;
    }
  */
+
+
 /////////////////////////////
+
+
 /* Convenience: send a NUL-terminated C string. Returns 0 on success, -1 on error. */
+
+
 /*
    static int
    send_cstr (int fd, const char *s)
@@ -223,6 +247,8 @@ s2s_control_thread (void *arg)
    return send_all (fd, s);
    }
  */
+
+
 ////////
 //static int s2s_listen_fd = -1, s2s_conn_fd = -1;
 static int
@@ -232,6 +258,8 @@ s2s_listen (void)
   int yes = 1;
   setsockopt (fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof (yes));
   struct sockaddr_in addr = { 0 };
+
+
   addr.sin_family = AF_INET;
   addr.sin_port = htons (g_cfg.s2s.tcp_port);
   inet_pton (AF_INET, "127.0.0.1", &addr.sin_addr);
@@ -253,9 +281,15 @@ void universe_shutdown (void);
 int load_config (void);
 int load_eng_config (void);
 static volatile sig_atomic_t running = 1;
+
+
 /* forward decl: your bigbang entry point (adjust name/signature if different) */
 int bigbang (void);             /* if your function is named differently, change this */
+
+
 /*-------------------  Bigbang ---------------------------------*/
+
+
 // Return first column of first row as int, or -1 on error
 static int
 get_scalar_int (const char *sql)
@@ -266,12 +300,16 @@ get_scalar_int (const char *sql)
       return -1;
     }
   sqlite3_stmt *st = NULL;
+
+
   if (sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL) != SQLITE_OK)
     {
       return -1;
     }
   int rc = sqlite3_step (st);
   int v = (rc == SQLITE_ROW) ? sqlite3_column_int (st, 0) : -1;
+
+
   sqlite3_finalize (st);
   return v;
 }
@@ -291,6 +329,8 @@ needs_bigbang (void)
   int sectors = get_scalar_int ("SELECT COUNT(*) FROM sectors");
   int warps = get_scalar_int ("SELECT COUNT(*) FROM sector_warps");
   int ports = get_scalar_int ("SELECT COUNT(*) FROM ports");
+
+
   if (sectors <= 10)
     {
       return 1;                 // only the 10 Fedspace rows exist
@@ -316,6 +356,8 @@ run_bigbang_if_needed (void)
       return 0;
     }
   sqlite3 *dbh = db_get_handle ();
+
+
   if (!dbh)
     {
       LOGE ("BIGBANG: DB handle unavailable.\n");
@@ -340,6 +382,8 @@ main (void)
 {
   srand ((unsigned) time (NULL));       // Seed random number generator once at program start
   int rc = 1;                   // Initialize rc to 1 (failure)
+
+
   g_running = 1;
   server_log_init_file ("./twclone.log", "[server]", 0, LOG_INFO);
   LOGI ("starting up");
@@ -372,6 +416,8 @@ main (void)
   // Load ports from DB, with fallback to defaults
   int server_port = 0;
   int s2s_port = 0;
+
+
   if (db_load_ports (&server_port, &s2s_port) == 0)
     {
       g_cfg.server_port = server_port;
@@ -408,6 +454,8 @@ main (void)
     }
   /* NEW: prevent child from inheriting this fd on exec */
   int fl = fcntl (s2s_listen_fd, F_GETFD, 0);
+
+
   if (fl != -1)
     {
       fcntl (s2s_listen_fd, F_SETFD, fl | FD_CLOEXEC);
@@ -428,6 +476,8 @@ main (void)
   LOGW (" accepting engine…\n");
   //  LOGE( " accepting engine…\n");
   s2s_conn_t *conn = s2s_tcp_server_accept (s2s_listen_fd, 5000);
+
+
   if (!conn)
     {
       LOGW (" accept failed\n");
@@ -439,12 +489,16 @@ main (void)
   s2s_debug_dump_conn ("server", conn);
   /* Receive engine hello first */
   json_t *msg = NULL;
+
+
   rc = s2s_recv_json (conn, &msg, 5000);
   LOGW (" first frame rc=%d\n", rc);
   //  LOGE( " first frame rc=%d\n", rc);
   if (rc == S2S_OK && msg)
     {
       const char *type = json_string_value (json_object_get (msg, "type"));
+
+
       if (type && strcasecmp (type, "s2s.health.hello") == 0)
         {
           LOGW (" accepted hello\n");
@@ -458,6 +512,8 @@ main (void)
                                    "payload", json_pack ("{s:s}", "status",
                                                          "ok"));
           int rc2 = s2s_send_json (conn, ack, 5000);
+
+
           LOGW (" ack send rc=%d\n", rc2);
           //      LOGE( " ack send rc=%d\n", rc2);
           json_decref (ack);
@@ -497,6 +553,7 @@ main (void)
   rc = server_loop (&g_running);
   LOGW ("Server loop exiting...\n");
   //  LOGE( "Server loop exiting...\n");
+
   /* 7) Teardown in the right order:
      - stop control thread (s2s_close unblocks recv)
      - close listener
@@ -528,10 +585,14 @@ shutdown_and_exit:
       int loops = 0;
       int status = 0;
       int reaped = 0;
+
+
       // Wait up to 2 seconds (20 * 100ms)
       while (loops < 20)
         {
           pid_t r = waitpid (g_engine_pid, &status, WNOHANG);
+
+
           if (r == g_engine_pid)
             {
               reaped = 1;
@@ -549,6 +610,8 @@ shutdown_and_exit:
           while (loops < 10) // Wait another 1 second
             {
               pid_t r = waitpid (g_engine_pid, &status, WNOHANG);
+
+
               if (r == g_engine_pid)
                 {
                   reaped = 1;
@@ -610,6 +673,8 @@ load_config (void)
   rc = sqlite3_step (stmt);
   /* SQLITE_ROW means at least one row exists */
   int ok = (rc == SQLITE_ROW) ? 1 : 0;
+
+
   sqlite3_finalize (stmt);
   sqlite3_close (db);
   return ok;

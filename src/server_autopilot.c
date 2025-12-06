@@ -4,6 +4,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <sqlite3.h>
+
+
 /*
  * cmd_move_autopilot_start
  *
@@ -39,9 +41,13 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
   json_t *data = root ? json_object_get (root, "data") : NULL;
   // default from = current sector
   int from = (ctx->sector_id > 0) ? ctx->sector_id : 1;
+
+
   if (data)
     {
       int tmp;
+
+
       if (json_get_int_flexible (data, "from", &tmp) ||
           json_get_int_flexible (data, "from_sector_id", &tmp))
         {
@@ -50,9 +56,13 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
     }
   // to = required
   int to = -1;
+
+
   if (data)
     {
       int tmp;
+
+
       if (json_get_int_flexible (data, "to", &tmp) ||
           json_get_int_flexible (data, "to_sector_id", &tmp))
         {
@@ -95,6 +105,8 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
   int *prev = (int *) malloc (N * sizeof (int));
   unsigned char *seen = (unsigned char *) calloc (N, 1);
   int *queue = (int *) malloc (N * sizeof (int));
+
+
   if (!avoid || !prev || !seen || !queue)
     {
       free (avoid);
@@ -108,15 +120,23 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
   if (data)
     {
       json_t *javoid = json_object_get (data, "avoid");
+
+
       if (javoid && json_is_array (javoid))
         {
           size_t i, len = json_array_size (javoid);
+
+
           for (i = 0; i < len; ++i)
             {
               json_t *v = json_array_get (javoid, i);
+
+
               if (json_is_integer (v))
                 {
                   int sid = (int) json_integer_value (v);
+
+
                   if (sid > 0 && sid <= max_id)
                     {
                       avoid[sid] = 1;
@@ -139,8 +159,12 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
   if (from == to)
     {
       json_t *steps = json_array ();
+
+
       json_array_append_new (steps, json_integer (from));
       json_t *out = json_object ();
+
+
       json_object_set_new (out, "from_sector_id", json_integer (from));
       json_object_set_new (out, "to_sector_id", json_integer (to));
       json_object_set_new (out, "path", steps);
@@ -159,6 +183,8 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
                                -1,
                                &st,
                                NULL);
+
+
   db_mutex_unlock ();
   if (rc != SQLITE_OK || !st)
     {
@@ -175,12 +201,18 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
       prev[i] = -1;
     }
   int qh = 0, qt = 0;
+
+
   queue[qt++] = from;
   seen[from] = 1;
   int found = 0;
+
+
   while (qh < qt)
     {
       int u = queue[qh++];
+
+
       /* fetch neighbors of u */
       db_mutex_lock ();
       sqlite3_reset (st);
@@ -189,6 +221,8 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
       while ((rc = sqlite3_step (st)) == SQLITE_ROW)
         {
           int v = sqlite3_column_int (st, 0);
+
+
           if (v <= 0 || v > max_id)
             {
               continue;
@@ -231,6 +265,8 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
   int hops = 0;
   /* backtrack into a simple stack */
   int *stack = (int *) malloc (N * sizeof (int));
+
+
   if (!stack)
     {
       free (avoid);
@@ -241,6 +277,8 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
       return 1;
     }
   int sp = 0;
+
+
   while (cur != -1)
     {
       stack[sp++] = cur;
@@ -270,6 +308,8 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
   free (stack);
   /* Build response */
   json_t *out = json_object ();
+
+
   json_object_set_new (out, "from_sector_id", json_integer (from));
   json_object_set_new (out, "to_sector_id", json_integer (to));
   json_object_set_new (out, "path", steps);
@@ -296,6 +336,8 @@ cmd_move_autopilot_status (client_ctx_t *ctx, json_t *root)
       return 1;
     }
   json_t *out = json_object ();
+
+
   json_object_set_new (out, "mode", json_string ("client"));
   json_object_set_new (out, "state", json_string ("ready"));
   json_object_set_new (out, "current_sector_id", json_integer (ctx->sector_id));
@@ -318,6 +360,8 @@ cmd_move_autopilot_stop (client_ctx_t *ctx, json_t *root)
       return 1;
     }
   json_t *out = json_object ();
+
+
   json_object_set_new (out, "state", json_string ("idle"));
   send_enveloped_ok (ctx->fd, root, "move.autopilot.stopped_v1", out);
   return 0;
