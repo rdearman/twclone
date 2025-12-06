@@ -31,6 +31,8 @@
 #include "server_log.h"
 #include "server_ports.h"
 #include <strings.h>
+
+
 // Central handler for ship destruction
 int
 handle_ship_destruction (sqlite3 *db, ship_kill_context_t *ctx)
@@ -360,31 +362,42 @@ void send_enveloped_ok (int fd, json_t *root, const char *type,
 void send_enveloped_error (int fd, json_t *root, int code, const char *msg);
 void send_enveloped_refused (int fd, json_t *root, int code, const char *msg,
                              json_t *data_opt);
+
+
 int
 cmd_ship_transfer_cargo (client_ctx_t *ctx, json_t *root)
 {
   sqlite3 *db_handle = db_get_handle ();
   h_decloak_ship (db_handle,
                   h_get_active_ship_id (db_handle, ctx->player_id));
-  STUB_NIY (ctx, root, "ship.transfer_cargo");
+  send_enveloped_error (ctx->fd,
+                        root,
+                        1101,
+                        "Not implemented: " "ship.transfer_cargo");
+  return 0;
 }
 
 
 int
 cmd_ship_upgrade (client_ctx_t *ctx, json_t *root)
 {
-  STUB_NIY (ctx, root, "ship.upgrade");
+  send_enveloped_error (ctx->fd, root, 1101,
+                        "Not implemented: " "ship.upgrade");
+  return 0;
 }
 
 
 int
 cmd_ship_repair (client_ctx_t *ctx, json_t *root)
 {
-  STUB_NIY (ctx, root, "ship.repair");
+  send_enveloped_error (ctx->fd, root, 1101, "Not implemented: " "ship.repair");
+  return 0;
 }
 
 
 /* ship.inspect */
+
+
 /* ship.inspect */
 int
 cmd_ship_inspect (client_ctx_t *ctx, json_t *root)

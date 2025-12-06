@@ -12,24 +12,34 @@
 #include "server_corporation.h"
 // Forward declaration
 void send_enveloped_error (int fd, json_t *root, int code, const char *msg);
+
+
 int
 cmd_planet_genesis (client_ctx_t *ctx, json_t *root)
 {
-  STUB_NIY (ctx, root, "planet.genesis");
+  send_enveloped_error (ctx->fd,
+                        root,
+                        1101,
+                        "Not implemented: " "planet.genesis");
+  return 0;
 }
 
 
 int
 cmd_planet_info (client_ctx_t *ctx, json_t *root)
 {
-  STUB_NIY (ctx, root, "planet.info");
+  send_enveloped_error (ctx->fd, root, 1101, "Not implemented: " "planet.info");
+  return 0;
 }
 
 
 int
-cmd_planet_rename (client_ctx_t *ctx, json_t *root)
+cmd_planet_rename (client_ctx_t *ctx,
+                   json_t *root)
 {
-  STUB_NIY (ctx, root, "planet.rename");
+  send_enveloped_error (ctx->fd, root, 1101,
+                        "Not implemented: " "planet.rename");
+  return 0;
 }
 
 
@@ -172,28 +182,44 @@ cmd_planet_launch (client_ctx_t *ctx, json_t *root)
 int
 cmd_planet_transfer_ownership (client_ctx_t *ctx, json_t *root)
 {
-  STUB_NIY (ctx, root, "planet.transfer_ownership");
+  send_enveloped_error (ctx->fd,
+                        root,
+                        1101,
+                        "Not implemented: " "planet.transfer_ownership");
+  return 0;
 }
 
 
 int
 cmd_planet_harvest (client_ctx_t *ctx, json_t *root)
 {
-  STUB_NIY (ctx, root, "planet.harvest");
+  send_enveloped_error (ctx->fd,
+                        root,
+                        1101,
+                        "Not implemented: " "planet.harvest");
+  return 0;
 }
 
 
 int
 cmd_planet_deposit (client_ctx_t *ctx, json_t *root)
 {
-  STUB_NIY (ctx, root, "planet.deposit");
+  send_enveloped_error (ctx->fd,
+                        root,
+                        1101,
+                        "Not implemented: " "planet.deposit");
+  return 0;
 }
 
 
 int
 cmd_planet_withdraw (client_ctx_t *ctx, json_t *root)
 {
-  STUB_NIY (ctx, root, "planet.withdraw");
+  send_enveloped_error (ctx->fd,
+                        root,
+                        1101,
+                        "Not implemented: " "planet.withdraw");
+  return 0;
 }
 
 

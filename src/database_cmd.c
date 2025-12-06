@@ -17,6 +17,8 @@
 #include "database_cmd.h"
 #include "server_log.h"
 #include "server_cron.h"
+
+
 int
 db_player_update_commission (sqlite3 *db, int player_id)
 {
@@ -361,7 +363,6 @@ static int db_is_npc_player (sqlite3 *db, int player_id);
 static int column_exists_unlocked (sqlite3 *db,
                                    const char *table,
                                    const char *col);
-static int column_exists (sqlite3 *db, const char *table, const char *col);
 static int db_ensure_ship_perms_column_unlocked (sqlite3 *db);
 static long long h_get_account_alert_threshold_unlocked (sqlite3 *db,
                                                          int account_id,
@@ -370,9 +371,8 @@ static int h_get_bank_balance (const char *owner_type,
                                int owner_id,
                                long long *out_balance);
 static const char *get_player_view_column_name (const char *client_name);
-// Unused static declarations (from original file, kept for now)
-static int db_seed_ai_qa_bot_bank_account_unlocked (void);
-static int db_seed_law_enforcement_config_unlocked (void);
+
+
 /* Parse "2,3,4,5" -> [2,3,4,5] */
 json_t *
 parse_neighbors_csv (const unsigned char *txt)
@@ -1064,36 +1064,9 @@ db_commodity_get_trades (const char *commodity_code, int limit,
  *
  * NOTE: The provided schema excerpt shows planet_goods but does not
  * show a dedicated port_goods table. Without the exact port stock
- * schema this would be guesswork, so these remain explicit TODOs.
- * ---------------------------------------------------------------------- */
-int
-db_port_get_goods_on_hand (int port_id, const char *commodity_code,
-                           int *out_quantity)
-{
-  (void) port_id;
-  (void) commodity_code;
-  if (out_quantity)
-    {
-      *out_quantity = 0;
-    }
-  /* TODO: implement once the port stock schema (port_goods / port_trade) is final. */
-  return SQLITE_OK;
-}
 
 
-int
-db_port_update_goods_on_hand (int port_id, const char *commodity_code,
-                              int quantity_change)
-{
-  (void) port_id;
-  (void) commodity_code;
-  (void) quantity_change;
-  /* TODO: implement once the port stock schema (port_goods / port_trade) is final. */
-  return SQLITE_OK;
-}
-
-
-/* ----------------------------------------------------------------------
+   /* ----------------------------------------------------------------------
  * Planets: goods on hand (planet_goods)
  * ---------------------------------------------------------------------- */
 int
@@ -2274,7 +2247,7 @@ db_port_get_active_busts (int port_id, int player_id)
   sqlite3_bind_int (st, 2, player_id);
   if (sqlite3_step (st) == SQLITE_ROW)
     {
-      int count = sqlite3_column_int (st, 0);
+      sqlite3_column_int (st, 0); // Read the column to advance the statement, but ignore the value
       rc = SQLITE_OK;
     }
   else
@@ -2373,71 +2346,203 @@ db_path_exists (sqlite3 *db, int from, int to)
 
 
 /* /\* Return 1 if path exists from `from` to `to`, 0 if no path, <0 on error. *\/ */
+
+
 /* int */
+
+
 /* db_path_exists (sqlite3 *db, int from, int to) */
+
+
 /* { */
+
+
 /*   int max_id = 0; */
+
+
 /*   sqlite3_stmt *st = NULL; */
+
+
 /*   int rc; */
+
+
 /*   /\* Get max id once; in practice you can cache this in caller. *\/ */
+
+
 /*   rc = sqlite3_prepare_v2 (db, "SELECT MAX(id) FROM sectors", -1, &st, NULL); */
+
+
 /*   if (rc != SQLITE_OK) */
+
+
 /*     return -1; */
+
+
 /*   if (sqlite3_step (st) == SQLITE_ROW) */
+
+
 /*     max_id = sqlite3_column_int (st, 0); */
+
+
 /*   sqlite3_finalize (st); */
+
+
 /*   if (max_id <= 0 || from <= 0 || from > max_id || to <= 0 || to > max_id) */
+
+
 /*     return 0;			/\* treat as “no path” *\/ */
+
+
 /*   size_t N = (size_t) max_id + 1; */
+
+
 /*   unsigned char *seen = calloc (N, 1); */
+
+
 /*   int *queue = malloc (N * sizeof (int)); */
+
+
 /*   if (!seen || !queue) */
+
+
 /*     { */
+
+
 /*       free (seen); */
+
+
 /*       free (queue); */
+
+
 /*       return -1; */
+
+
 /*     } */
+
+
 /*   /\* Prepare neighbour query *\/ */
+
+
 /*   rc = sqlite3_prepare_v2 (db, */
+
+
 /*                         "SELECT to_sector FROM sector_warps WHERE from_sector = ?1", */
+
+
 /*                         -1, &st, NULL); */
+
+
 /*   if (rc != SQLITE_OK || !st) */
+
+
 /*     { */
+
+
 /*       free (seen); */
+
+
 /*       free (queue); */
+
+
 /*       return -1; */
+
+
 /*     } */
+
+
 /*   int qh = 0, qt = 0; */
+
+
 /*   queue[qt++] = from; */
+
+
 /*   seen[from] = 1; */
+
+
 /*   int found = 0; */
+
+
 /*   while (qh < qt && !found) */
+
+
 /*     { */
+
+
 /*       int u = queue[qh++]; */
+
+
 /*       sqlite3_reset (st); */
+
+
 /*       sqlite3_clear_bindings (st); */
+
+
 /*       sqlite3_bind_int (st, 1, u); */
+
+
 /*       while ((rc = sqlite3_step (st)) == SQLITE_ROW) */
+
+
 /*      { */
+
+
 /*        int v = sqlite3_column_int (st, 0); */
+
+
 /*        if (v <= 0 || v > max_id) */
+
+
 /*          continue; */
+
+
 /*        if (seen[v]) */
+
+
 /*          continue; */
+
+
 /*        seen[v] = 1; */
+
+
 /*        if (v == to) */
+
+
 /*          { */
+
+
 /*            found = 1; */
+
+
 /*            break; */
+
+
 /*          } */
+
+
 /*        queue[qt++] = v; */
+
+
 /*      } */
+
+
 /*     } */
+
+
 /*   sqlite3_finalize (st); */
+
+
 /*   free (seen); */
+
+
 /*   free (queue); */
+
+
 /*   return found; */
+
+
 /* } */
+
+
 // Implementation of db_get_config_int (thread-safe wrapper)
 int
 db_get_config_int (sqlite3 *db, const char *key_col_name, int default_value)
@@ -2485,6 +2590,8 @@ extern int db_notice_create (const char *title,
                              const char *body,
                              const char *severity,
                              time_t expires_at);                                                                // Existing system notice creation
+
+
 // --- NEW HELPER: For creating personalized bank alert notices ---
 // This helper function creates a system notice but includes context data
 // that can be used by a communication module to target specific players
@@ -3139,42 +3246,34 @@ db_ensure_ship_perms_column (void)
 }
 
 
-/////////////////////////////////
-/* Unlocked: caller MUST already hold db_mutex */
+/* Unlocked: caller already holds db_mutex */
 static int
 column_exists_unlocked (sqlite3 *db, const char *table, const char *col)
 {
   sqlite3_stmt *st = NULL;
+  const char *sql =
+    "PRAGMA table_info(?)";
   int exists = 0;
-  char sql[256];
-  snprintf (sql, sizeof (sql), "PRAGMA table_info(%s);", table);
-  if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
+  int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
     {
-      return 0;
+      LOGE ("column_exists_unlocked: Failed to prepare statement: %s",
+            sqlite3_errmsg (db));
+      goto cleanup;
     }
+  sqlite3_bind_text (st, 1, table, -1, SQLITE_STATIC);
   while (sqlite3_step (st) == SQLITE_ROW)
     {
-      const unsigned char *name = sqlite3_column_text (st, 1);
-      if (name && strcmp ((const char *) name, col) == 0)
+      const char *name = (const char *) sqlite3_column_text (st, 1);
+      if (strcasecmp (name, col) == 0)
         {
           exists = 1;
           break;
         }
     }
+cleanup:
   sqlite3_finalize (st);
   return exists;
-}
-
-
-/* Optional wrapper for callers that do NOT already hold db_mutex */
-static int
-column_exists (sqlite3 *db, const char *table, const char *col)
-{
-  int ret;
-  db_mutex_lock ();
-  ret = column_exists_unlocked (db, table, col);
-  db_mutex_unlock ();
-  return ret;
 }
 
 
@@ -3208,6 +3307,8 @@ db_ensure_ship_perms_column_unlocked (sqlite3 *db)
 
 
 /* ---------- SECTOR SCAN CORE (thread-safe, single statement) ---------- */
+
+
 /* Shape returned via *out_obj:
    {
      "name": TEXT,
@@ -3591,6 +3692,8 @@ db_get_port_name (sqlite3 *db, int port_id, char **out_name)
 static const char *INSERT_ENGINE_EVENT_SQL =
   "INSERT INTO engine_events (ts, type, actor_owner_type, actor_owner_id, sector_id, payload) "
   "VALUES (?, ?, ?, ?, ?, ?);";
+
+
 int
 db_log_engine_event (long long ts,
                      const char *type,
@@ -4106,6 +4209,8 @@ cleanup:
 *  Matches signatures in database.h exactly.
 *  Must replace ALL previous versions of these functions.
 ******************************************************************************/
+
+
 /*
  * Internal helper: Add credits. Caller must hold db_mutex.
  */
@@ -4504,89 +4609,6 @@ cleanup:
 }
 
 
-/*
- * Helper function to update commodity stock on a port.
- * Returns SQLITE_OK on success, or an SQLite error code.
- * If new_quantity is not NULL, it will be set to the commodity's new quantity.
- */
-int
-h_update_port_stock (sqlite3 *db, int port_id, const char *commodity_code,
-                     int quantity_change, int *new_quantity)
-{
-  sqlite3_stmt *stmt = NULL;
-  int rc = SQLITE_ERROR;
-  if (!db || !commodity_code || port_id <= 0)
-    {
-      return SQLITE_MISUSE;
-    }
-  db_mutex_lock ();
-  const char *sql =
-    "UPDATE ports SET "
-    "ore_on_hand = CASE WHEN ?3 = 'ore' THEN ore_on_hand + ?1 ELSE ore_on_hand END, "
-    "organics_on_hand = CASE WHEN ?3 = 'organics' THEN organics_on_hand + ?1 ELSE organics_on_hand END, "
-    "equipment_on_hand = CASE WHEN ?3 = 'equipment' THEN equipment_on_hand + ?1 ELSE equipment_on_hand END, "
-    "slaves_on_hand = CASE WHEN ?3 = 'SLV' THEN slaves_on_hand + ?1 ELSE slaves_on_hand END, "
-    "weapons_on_hand = CASE WHEN ?3 = 'WPN' THEN weapons_on_hand + ?1 ELSE weapons_on_hand END, "
-    "drugs_on_hand = CASE WHEN ?3 = 'DRG' THEN drugs_on_hand + ?1 ELSE drugs_on_hand END "
-    "WHERE id = ?2;";
-  rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
-  if (rc != SQLITE_OK)
-    {
-      LOGE ("h_update_port_stock: Failed to prepare statement: %s",
-            sqlite3_errmsg (db));
-      goto cleanup;
-    }
-  sqlite3_bind_int (stmt, 1, quantity_change);
-  sqlite3_bind_int (stmt, 2, port_id);
-  sqlite3_bind_text (stmt, 3, commodity_code, -1, SQLITE_STATIC);
-  rc = sqlite3_step (stmt);
-  if (rc != SQLITE_DONE)
-    {
-      LOGE ("h_update_port_stock: Failed to execute statement: %s",
-            sqlite3_errmsg (db));
-      goto cleanup;
-    }
-  if (new_quantity)
-    {
-      sqlite3_stmt *qty_stmt = NULL;
-      const char *qty_sql =
-        "SELECT CASE "
-        "WHEN ?2 = 'ore' THEN ore_on_hand "
-        "WHEN ?2 = 'organics' THEN organics_on_hand "
-        "WHEN ?2 = 'equipment' THEN equipment_on_hand "
-        "WHEN ?2 = 'SLV' THEN slaves_on_hand "
-        "WHEN ?2 = 'WPN' THEN weapons_on_hand "
-        "WHEN ?2 = 'DRG' THEN drugs_on_hand "
-        "ELSE 0 END " "FROM ports WHERE id = ?1;";
-      rc = sqlite3_prepare_v2 (db, qty_sql, -1, &qty_stmt, NULL);
-      if (rc == SQLITE_OK)
-        {
-          sqlite3_bind_int (qty_stmt, 1, port_id);
-          sqlite3_bind_text (qty_stmt, 2, commodity_code, -1, SQLITE_STATIC);
-          if (sqlite3_step (qty_stmt) == SQLITE_ROW)
-            {
-              *new_quantity = sqlite3_column_int (qty_stmt, 0);
-            }
-          sqlite3_finalize (qty_stmt);
-        }
-      else
-        {
-          LOGE
-            ("h_update_port_stock: Failed to prepare quantity statement: %s",
-            sqlite3_errmsg (db));
-        }
-    }
-  rc = SQLITE_OK;
-cleanup:
-  if (stmt)
-    {
-      sqlite3_finalize (stmt);
-    }
-  db_mutex_unlock ();
-  return rc;
-}
-
-
 int
 db_fighters_at_sector_json (int sector_id, json_t **out_array)
 {
@@ -4771,6 +4793,201 @@ cleanup:
  * entity type.
  *
  */
+
+
+/**
+ * @brief Generic helper to get a bank balance for any owner type.
+ * @param owner_type The type of the owner (e.g., "player", "corp").
+ * @param owner_id The ID of the owner.
+
+
+
+   int
+   db_fighters_at_sector_json (int sector_id, json_t **out_array)
+   {
+   sqlite3 *db = db_get_handle ();
+   sqlite3_stmt *st = NULL;
+   json_t *arr = NULL;
+   int rc = SQLITE_ERROR;
+   db_mutex_lock ();
+   if (!out_array)
+    {
+      goto cleanup;
+    }
+ * out_array = NULL;
+   arr = json_array ();
+   if (!arr)
+    {
+      rc = SQLITE_NOMEM;
+      goto cleanup;
+    }
+   const char *sql =
+    "SELECT player, corporation, quantity "
+    "FROM sector_assets WHERE sector = ? AND asset_type = ?;";
+   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+   if (rc != SQLITE_OK)
+    {
+      goto cleanup;
+    }
+   sqlite3_bind_int (st, 1, sector_id);
+   sqlite3_bind_int (st, 2, ASSET_FIGHTER);
+   while ((rc = sqlite3_step (st)) == SQLITE_ROW)
+    {
+      int player_id = sqlite3_column_int (st, 0);
+      int corporation_id = sqlite3_column_int (st, 1);
+      int quantity = sqlite3_column_int (st, 2);
+      json_t *obj = json_object ();
+      if (!obj)
+        {
+          rc = SQLITE_NOMEM;
+          goto cleanup;
+        }
+      if (corporation_id > 0)
+        {
+          json_object_set_new (obj, "owner_type", json_string ("corporation"));
+          json_object_set_new (obj, "owner_id", json_integer (corporation_id));
+        }
+      else if (player_id > 0)
+        {
+          json_object_set_new (obj, "owner_type", json_string ("player"));
+          json_object_set_new (obj, "owner_id", json_integer (player_id));
+        }
+      else
+        {
+          // Should not happen if asset has an owner
+          json_object_set_new (obj, "owner_type", json_string ("unknown"));
+          json_object_set_new (obj, "owner_id", json_integer (0));
+        }
+      json_object_set_new (obj, "quantity", json_integer (quantity));
+      json_array_append_new (arr, obj);
+    }
+   if (rc == SQLITE_DONE)
+    {
+ * out_array = arr;
+      rc = SQLITE_OK;
+      arr = NULL; // Transfer ownership
+    }
+   else
+    {
+      // Error in sqlite3_step
+      rc = SQLITE_ERROR;
+    }
+   cleanup:
+   if (st)
+    {
+      sqlite3_finalize (st);
+    }
+   if (arr)
+    {
+      json_decref (arr);
+    }
+   db_mutex_unlock ();
+   return rc;
+   }
+
+
+   int
+   db_mines_at_sector_json (int sector_id, json_t **out_array)
+   {
+   sqlite3 *db = db_get_handle ();
+   sqlite3_stmt *st = NULL;
+   json_t *arr = NULL;
+   int rc = SQLITE_ERROR;
+   db_mutex_lock ();
+   if (!out_array)
+    {
+      goto cleanup;
+    }
+ * out_array = NULL;
+   arr = json_array ();
+   if (!arr)
+    {
+      rc = SQLITE_NOMEM;
+      goto cleanup;
+    }
+   const char *sql =
+    "SELECT player, corporation, quantity, asset_type "
+    "FROM sector_assets WHERE sector = ? AND asset_type IN (?, ?);";
+   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+   if (rc != SQLITE_OK)
+    {
+      goto cleanup;
+    }
+   sqlite3_bind_int (st, 1, sector_id);
+   sqlite3_bind_int (st, 2, ASSET_MINE);
+   sqlite3_bind_int (st, 3, ASSET_LIMPET_MINE);
+   while ((rc = sqlite3_step (st)) == SQLITE_ROW)
+    {
+      int player_id = sqlite3_column_int (st, 0);
+      int corporation_id = sqlite3_column_int (st, 1);
+      int quantity = sqlite3_column_int (st, 2);
+      int asset_type = sqlite3_column_int (st, 3);
+      json_t *obj = json_object ();
+      if (!obj)
+        {
+          rc = SQLITE_NOMEM;
+          goto cleanup;
+        }
+      if (corporation_id > 0)
+        {
+          json_object_set_new (obj, "owner_type", json_string ("corporation"));
+          json_object_set_new (obj, "owner_id", json_integer (corporation_id));
+        }
+      else if (player_id > 0)
+        {
+          json_object_set_new (obj, "owner_type", json_string ("player"));
+          json_object_set_new (obj, "owner_id", json_integer (player_id));
+        }
+      else
+        {
+          // Should not happen if asset has an owner
+          json_object_set_new (obj, "owner_type", json_string ("unknown"));
+          json_object_set_new (obj, "owner_id", json_integer (0));
+        }
+      json_object_set_new (obj, "quantity", json_integer (quantity));
+      json_object_set_new (obj, "mine_type", json_integer (asset_type)); // Add mine type
+      json_array_append_new (arr, obj);
+    }
+   if (rc == SQLITE_DONE)
+    {
+ * out_array = arr;
+      rc = SQLITE_OK;
+      arr = NULL; // Transfer ownership
+    }
+   else
+    {
+      // Error in sqlite3_step
+      rc = SQLITE_ERROR;
+    }
+   cleanup:
+   if (st)
+    {
+      sqlite3_finalize (st);
+    }
+   if (arr)
+    {
+      json_decref (arr);
+    }
+   db_mutex_unlock ();
+   return rc;
+   }
+
+
+   /*
+ * =================================================================================
+ * GENERIC BANK BALANCE FUNCTIONS
+ * =================================================================================
+ *
+ * This section provides a generic way to retrieve bank balances for different
+ * entity types (player, corp, npc, port, planet).
+ *
+ * It uses a single static helper function `h_get_bank_balance` to perform
+ * the database query, and then exposes public wrapper functions for each
+ * entity type.
+ *
+ */
+
+
 /**
  * @brief Generic helper to get a bank balance for any owner type.
  * @param owner_type The type of the owner (e.g., "player", "corp").
@@ -4934,6 +5151,8 @@ db_bank_account_exists (const char *owner_type, int owner_id)
  *       sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
  *   }
  */
+
+
 /**
  * @brief Creates a new bank account for a given owner.
  * @param owner_type The type of the owner (e.g., "player", "corp").
@@ -5475,6 +5694,8 @@ static const struct {
   {"approx_worth", "approx_worth"},
   {NULL, NULL}   // Sentinel
 };
+
+
 // Function to get the corresponding view column name
 static const char *
 get_player_view_column_name (const char *client_name)
@@ -5921,7 +6142,8 @@ cleanup:
 int
 db_sector_has_beacon (int sector_id)
 {
-  sqlite3_stmt *stmt;
+  sqlite3_stmt *stmt = NULL;
+  int has_beacon = 0; // Moved declaration and initialization to top
   // 1. Acquire the lock before any database interaction.
   db_mutex_lock ();
   // 2. Prepare the statement. This is the first place an error could occur.
@@ -5939,7 +6161,6 @@ db_sector_has_beacon (int sector_id)
   sqlite3_bind_int (stmt, 1, sector_id);
   // 4. Execute the statement.
   int rc = sqlite3_step (stmt);
-  int has_beacon = 0;
   if (rc == SQLITE_ROW)
     {
       if (sqlite3_column_text (stmt, 0) != NULL)
@@ -6090,7 +6311,8 @@ cleanup:
 int
 db_player_has_beacon_on_ship (int player_id)
 {
-  sqlite3_stmt *stmt;
+  sqlite3_stmt *stmt = NULL;
+  int has_beacon = 0; // Moved declaration and initialization to top
   // 1. Acquire the lock before any database interaction.
   db_mutex_lock ();
   const char *sql =
@@ -6105,7 +6327,6 @@ db_player_has_beacon_on_ship (int player_id)
   // 3. Bind the parameter.
   sqlite3_bind_int (stmt, 1, player_id);
   // 4. Execute the statement.
-  int has_beacon = 0;
   if (sqlite3_step (stmt) == SQLITE_ROW)
     {
       if (sqlite3_column_int (stmt, 0) > 0)
@@ -6884,6 +7105,8 @@ cleanup:
 
 
 /* ---------- ADJACENT WARPS (from sector_warps) ---------- */
+
+
 /**
  * @brief Retrieves a list of adjacent sectors for a given sector, returning them as a JSON array.
  * * This function is thread-safe as all database operations are protected by a mutex lock.
@@ -6894,6 +7117,8 @@ cleanup:
  * @param out_array A pointer to a json_t* where the resulting JSON array will be stored.
  * @return SQLITE_OK on success, or an SQLite error code on failure.
  */
+
+
 //////////////////
 int
 db_adjacent_sectors_json (int sector_id, json_t **out_array)
@@ -6948,6 +7173,8 @@ done:
 
 
 ////////////////
+
+
 /* ---------- PORTS AT SECTOR (visible only) ---------- */
 int
 db_port_info_json (int port_id,
@@ -7547,5 +7774,108 @@ h_is_black_market_port (sqlite3 *db, int port_id)
     }
   sqlite3_finalize (st);
   return is_bm;
+}
+
+
+/* ----------------------------------------------------------------------
+ * Ports: goods on hand
+ * ---------------------------------------------------------------------- */
+int
+/* ----------------------------------------------------------------------
+ * Ports: goods on hand
+ * ---------------------------------------------------------------------- */
+
+
+db_port_get_goods_on_hand (int port_id, const char *commodity_code,
+                           int *out_quantity)
+{
+  if (!commodity_code)
+    {
+      return SQLITE_MISUSE;
+    }
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    {
+      return SQLITE_ERROR;
+    }
+  if (out_quantity)
+    {
+      *out_quantity = 0;
+    }
+  const char *sql =
+    "SELECT quantity FROM entity_stock WHERE entity_type='port' AND entity_id=?1 AND commodity_code=?2";
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("db_port_get_goods_on_hand prepare failed: %s",
+            sqlite3_errmsg (db));
+      return rc;
+    }
+  sqlite3_bind_int (st, 1, port_id);
+  sqlite3_bind_text (st, 2, commodity_code, -1, SQLITE_TRANSIENT);
+  rc = sqlite3_step (st);
+  if (rc == SQLITE_ROW)
+    {
+      if (out_quantity)
+        {
+          *out_quantity = sqlite3_column_int (st, 0);
+        }
+      rc = SQLITE_OK;
+    }
+  else if (rc == SQLITE_DONE)
+    {
+      rc = SQLITE_NOTFOUND;
+    }
+  else
+    {
+      LOGE ("db_port_get_goods_on_hand step failed: %s", sqlite3_errmsg (db));
+    }
+  sqlite3_finalize (st);
+  return rc;
+}
+
+
+int
+h_get_port_commodity_quantity (sqlite3 *db,
+                               int port_id,
+                               const char *commodity_code,
+                               int *quantity_out)
+{
+  if (!db || port_id <= 0 || !commodity_code || !quantity_out)
+    {
+      return SQLITE_MISUSE;
+    }
+  sqlite3_stmt *stmt = NULL;
+  const char *sql =
+    "SELECT quantity FROM entity_stock WHERE entity_type = 'port' AND entity_id = ?1 AND commodity_code = ?2 LIMIT 1;";
+  int rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_get_port_commodity_quantity: prepare failed: %s",
+            sqlite3_errmsg (db));
+      return rc;
+    }
+  sqlite3_bind_int (stmt, 1, port_id);
+  sqlite3_bind_text (stmt, 2, commodity_code, -1, SQLITE_STATIC);
+  rc = sqlite3_step (stmt);
+  if (rc == SQLITE_ROW)
+    {
+      *quantity_out = sqlite3_column_int (stmt, 0);
+      rc = SQLITE_OK;
+    }
+  else if (rc == SQLITE_DONE)
+    {
+      *quantity_out = 0;        // Commodity not found in stock
+      rc = SQLITE_NOTFOUND;
+    }
+  else
+    {
+      LOGE ("h_get_port_commodity_quantity: step failed: %s",
+            sqlite3_errmsg (db));
+      rc = SQLITE_ERROR;
+    }
+  sqlite3_finalize (stmt);
+  return rc;
 }
 

@@ -24,6 +24,7 @@ void loop_get_supported_commands (const cmd_desc_t **out_tbl, size_t *out_n);
 extern "C"
 {
 #endif
+extern struct twconfig *config_load (void); // Declare config_load function
 struct twconfig
 {
   int turnsperday;

@@ -6,6 +6,8 @@
 #include "server_stardock.h"
 #include "common.h"
 #include "database.h"
+#include "database_cmd.h" // For player petty cash functions
+#include "server_players.h" // For player petty cash functions
 #include "server_envelope.h"
 #include "errors.h"
 #include "server_ports.h"       // For port types, etc.
@@ -903,6 +905,14 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
       return send_error_response (ctx, root, ERR_MISSING_FIELD,
                                   "Missing or invalid 'new_ship_name'.");
     }
+  // FIX: Declare variables here
+  sqlite3_stmt *stmt = NULL;
+  int port_id = 0;
+  // FIX: Define the missing SQL query string
+  const char *sql_loc = "SELECT p.id FROM ports p "
+                        "JOIN ships s ON s.ported = p.id "
+                        "JOIN players pl ON pl.ship = s.id "
+                        "WHERE p.sector = ? AND pl.id = ? AND (p.type = 9 OR p.type = 10);";
   // Begin transaction
   if (sqlite3_exec (db, "BEGIN IMMEDIATE TRANSACTION;", NULL, NULL, NULL) !=
       SQLITE_OK)
@@ -911,12 +921,6 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
                                   "Failed to start transaction.");
     }
   // Re-validate location
-  int port_id = 0;
-  sqlite3_stmt *stmt = NULL;
-  const char *sql_loc = "SELECT p.id FROM ports p "
-                        "JOIN ships s ON s.ported = p.id "
-                        "JOIN players pl ON pl.ship = s.id "
-                        "WHERE p.sector = ? AND pl.id = ? AND (p.type = 9 OR p.type = 10);";
   int rc = sqlite3_prepare_v2 (db, sql_loc, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
@@ -944,7 +948,7 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
       return send_error_response (ctx, root, ERR_SERVER_ERROR,
                                   "Could not load server configuration.");
     }
-  if (strlen (new_ship_name) > cfg->max_ship_name_length)
+  if (strlen (new_ship_name) > (size_t)cfg->max_ship_name_length)
     {
       free (cfg);
       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
@@ -1158,7 +1162,7 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
                new_type_id);
   db_log_engine_event (time (NULL), "shipyard.upgrade", "player",
                        ctx->player_id, ctx->sector_id, event_payload, NULL);
-  json_t *response_data = json_pack ("{s:s}", "status", "success");
+  // json_t *response_data = json_pack ("{s:s}", "status", "success"); // Unused variable
   free (cfg);
   return 0;
 }
@@ -2114,8 +2118,9 @@ cmd_tavern_raffle_buy_ticket (client_ctx_t *ctx, json_t *root)
                                   "Failed to deduct credits for raffle ticket.");
     }
   long long current_pot = 0;
-  long long last_payout = 0;
+  // FIX: Declare missing variables
   int last_winner_id = 0;
+  long long last_payout = 0;
   int last_win_ts = 0;
   // Get and update raffle state
   sqlite3_stmt *stmt = NULL;

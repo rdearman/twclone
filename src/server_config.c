@@ -32,11 +32,7 @@ json_t *g_capabilities = NULL;
 xp_align_config_t g_xp_align; // Define the global instance of xp_align_config_t
 /* Provided by your DB module; MUST be defined there (no 'static') */
 sqlite3 *g_db = NULL;
-
-
 /* --------- static helpers (not visible to linker) --------- */
-
-
 static void
 config_set_defaults (void)
 {
@@ -130,8 +126,6 @@ typedef enum {
   CFG_T_STRING,
   CFG_T_DOUBLE
 } cfg_type_t;
-
-
 static int
 cfg_parse_int (const char *val_str, const char *type_str, int *out)
 {
@@ -167,43 +161,6 @@ cfg_parse_int64 (const char *val_str, const char *type_str, int64_t *out)
       return -1;
     }
   *out = (int64_t) val;
-  return 0;
-}
-
-
-static int
-cfg_parse_bool (const char *val_str, const char *type_str, int *out)
-{
-  if (strcmp (type_str, "bool") != 0)
-    {
-      return -1;
-    }
-  /* Strict check for "0" or "1" */
-  if (strcmp (val_str, "1") == 0)
-    {
-      *out = 1;
-      return 0;
-    }
-  if (strcmp (val_str, "0") == 0)
-    {
-      *out = 0;
-      return 0;
-    }
-  return -1;
-}
-
-
-static int
-cfg_parse_string (const char *val_str,
-                  const char *type_str,
-                  char *out_buf,
-                  size_t buf_size)
-{
-  if (strcmp (type_str, "string") != 0)
-    {
-      return -1;
-    }
-  snprintf (out_buf, buf_size, "%s", val_str);
   return 0;
 }
 
@@ -251,8 +208,6 @@ validate_cfg (void)
 
 
 /* --------- exported API --------- */
-
-
 void
 print_effective_config_redacted (void)
 {
@@ -590,8 +545,6 @@ void send_enveloped_ok (int fd, json_t *root, const char *type,
                         json_t *data);
 // exported by server_loop.c
 void loop_get_supported_commands (const cmd_desc_t **out_tbl, size_t *out_n);
-
-
 /*
    static int
    resolve_current_sector_from_info (json_t *info_obj, int fallback)
@@ -622,11 +575,7 @@ void loop_get_supported_commands (const cmd_desc_t **out_tbl, size_t *out_n);
    return fallback;
    }
  */
-
-
 /////////////////////////// NEW
-
-
 static json_t *
 make_session_hello_payload (int is_authed, int player_id, int sector_id)
 {
@@ -666,8 +615,6 @@ cmd_system_hello (client_ctx_t *ctx, json_t *root)
 
 
 //////////////////
-
-
 // Define the handler function
 int
 cmd_system_capabilities (client_ctx_t *ctx, json_t *root)
@@ -679,116 +626,42 @@ cmd_system_capabilities (client_ctx_t *ctx, json_t *root)
 
 
 /* /\* ---------- system.describe_schema (optional) ---------- *\/ */
-
-
 /* int */
-
-
 /* cmd_system_describe_schema (client_ctx_t *ctx, json_t *root) */
-
-
 /* { */
-
-
 /*   json_t *jdata = json_object_get (root, "data"); */
-
-
 /*   const char *key = NULL; */
-
-
 /*   if (json_is_object (jdata)) */
-
-
 /*     { */
-
-
 /*       json_t *jkey = json_object_get (jdata, "key"); */
-
-
 /*       if (json_is_string (jkey)) */
-
-
 /*      key = json_string_value (jkey); */
-
-
 /*     } */
-
-
 /*   if (!key) */
-
-
 /*     { */
-
-
 /*       /\* Return the list of keys we have *\/ */
-
-
 /*       json_t *data = json_pack ("{s:o}", "available", schema_keys ()); */
-
-
 /*       send_enveloped_ok (ctx->fd, root, "system.schema_list", data); */
-
-
 /*       json_decref (data); */
-
-
 /*     } */
-
-
 /*   else */
-
-
 /*     { */
-
-
 /*       json_t *schema = schema_get (key); */
-
-
 /*       if (!schema) */
-
-
 /*      { */
-
-
 /*        send_enveloped_error (ctx->fd, root, 1306, "Schema not found"); */
-
-
 /*      } */
-
-
 /*       else */
-
-
 /*      { */
-
-
 /*        json_t *data = */
-
-
 /*          json_pack ("{s:s, s:o}", "key", key, "schema", schema); */
-
-
 /*        send_enveloped_ok (ctx->fd, root, "system.schema", data); */
-
-
 /*        json_decref (schema); */
-
-
 /*        json_decref (data); */
-
-
 /*      } */
-
-
 /*     } */
-
-
 /*   return 0; */
-
-
 /* } */
-
-
 /* ---------- session.ping ---------- */
 int
 cmd_session_ping (client_ctx_t *ctx, json_t *root)

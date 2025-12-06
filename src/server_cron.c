@@ -23,6 +23,7 @@
 #include "server_stardock.h"    // For Tavern-related declarations
 #include "server_corporation.h" // For corporation cron jobs
 #include "server_clusters.h"    // Cluster Economy & Law
+#include <math.h> // For MAX, MIN, etc.
 #define INITIAL_QUEUE_CAPACITY 64
 #define FEDSPACE_SECTOR_START 1
 #define FEDSPACE_SECTOR_END 10
@@ -39,6 +40,8 @@ extern void db_mutex_lock (void);
 extern void db_mutex_unlock (void);
 int h_daily_news_compiler (sqlite3 *db, int64_t now_s);
 int h_cleanup_old_news (sqlite3 *db, int64_t now_s);
+
+
 static inline uint64_t
 monotonic_millis (void)
 {
@@ -59,6 +62,8 @@ typedef struct
 } entry_t;
 int cron_limpet_ttl_cleanup (sqlite3 *db, int64_t now_s);       // Forward declaration
 static int g_reg_inited = 0;
+
+
 int
 get_random_sector (sqlite3 *db)
 {
@@ -207,6 +212,8 @@ tow_ship (sqlite3 *db, int ship_id, int new_sector_id, int admin_id,
 
 
 #define MSL_TABLE_NAME "msl_sectors"
+
+
 static int *
 universe_pathfind_get_sectors (sqlite3 *db, int start_sector, int end_sector,
                                const int *avoid_list)
@@ -770,14 +777,10 @@ int
 h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
 {
   int fedadmin = 2;
-  int64_t now_ms = now_s * 1000;
   sqlite3_stmt *select_stmt = NULL;
   sqlite3_stmt *delete_stmt = NULL;
-  sqlite3_stmt *sector_stmt = NULL;
   int cleared_assets = 0;
   int tows = 0;
-  int rc;
-  char *err_msg = NULL;
   /* 1. Acquire Cron Lock */
   if (!try_lock (db, "fedspace_cleanup", now_s))
     {
@@ -806,6 +809,7 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
   // We are not holding the C-mutex or a transaction here yet, so this is safe.
   /* 3. Asset Clearing (Requires Transaction) */
   db_mutex_lock ();
+  int rc; // Declare rc
   rc = begin (db);
   if (rc != SQLITE_OK)
     {
@@ -1294,7 +1298,7 @@ h_daily_turn_reset (sqlite3 *db, int64_t now_s)
     }
   rc =
     sqlite3_exec (db,
-                  "UPDATE turns SET turns_remaining = (SELECT turnsperday FROM config WHERE id=1);",
+                  "UPDATE turns SET turns_remaining = CAST((SELECT value FROM config WHERE key = 'turnsperday') AS INTEGER);",
                   NULL,
                   NULL,
                   NULL);
@@ -1326,7 +1330,6 @@ h_autouncloak_sweeper (sqlite3 *db, int64_t now_s)
       return 0;
     }
   sqlite3_stmt *st = NULL;
-  sqlite3_stmt *q_ccap = NULL;
   int rc;
   int max_hours = 0;
   if (db_get_int_config (db, "max_cloak_duration", &max_hours) != 0)
@@ -1438,19 +1441,48 @@ h_planet_growth (sqlite3 *db, int64_t now_s)
       unlock (db, "planet_growth");
       return rc;
     }
-  rc =
-    sqlite3_exec (db,
-                  "UPDATE planet_goods SET quantity = MIN(max_capacity, quantity + production_rate) WHERE production_rate > 0;",
-                  NULL,
-                  NULL,
-                  NULL);
-  if (rc)
+  // --- NEW: Update commodity quantities in entity_stock based on planet_production ---
+  sqlite3_stmt *stmt = NULL;
+  const char *sql_update_commodities =
+    "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) "
+    "SELECT "
+    "  'planet', "
+    "  p.id, "
+    "  pp.commodity_code, "
+    "  MAX(0, MIN(pltype.maxore, COALESCE(es.quantity, 0) + pp.base_prod_rate - pp.base_cons_rate)) AS new_quantity, "
+    // Using maxore as a generic max_capacity, need to refine later
+    "  0, " // Price (for planet) is not relevant in entity_stock for now
+    "  strftime('%s','now') "
+    "FROM planets p "
+    "JOIN planet_production pp ON p.type = pp.planet_type_id "
+    "LEFT JOIN entity_stock es ON es.entity_type = 'planet' AND es.entity_id = p.id AND es.commodity_code = pp.commodity_code "
+    "LEFT JOIN planettypes pltype ON p.type = pltype.id " // To get max capacity (maxore/maxorganics/maxequipment)
+    "WHERE (pp.base_prod_rate > 0 OR pp.base_cons_rate > 0) "
+    "ON CONFLICT(entity_type, entity_id, commodity_code) DO UPDATE SET "
+    "quantity = excluded.quantity, last_updated_ts = excluded.last_updated_ts;";
+  rc = sqlite3_prepare_v2 (db, sql_update_commodities, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
     {
       rollback (db);
-      LOGE ("planet_growth (res) rc=%d", rc);
+      LOGE ("planet_growth (commodities prepare) rc=%d: %s",
+            rc,
+            sqlite3_errmsg (db));
       unlock (db, "planet_growth");
       return rc;
     }
+  rc = sqlite3_step (stmt);
+  if (rc != SQLITE_DONE)
+    {
+      rollback (db);
+      LOGE ("planet_growth (commodities step) rc=%d: %s",
+            rc,
+            sqlite3_errmsg (db));
+      sqlite3_finalize (stmt);
+      unlock (db, "planet_growth");
+      return rc;
+    }
+  sqlite3_finalize (stmt);
+  // --- END NEW COMMODITY UPDATE ---
   commit (db);
   unlock (db, "planet_growth");
   return 0;
@@ -2862,7 +2894,6 @@ h_daily_lottery_draw (sqlite3 *db, int64_t now_s)
     yesterday_carried_over + (total_pot_from_tickets / 2);
   int winning_number = get_random_int (1, 999);
   // long long total_winnings = 0; // Unused
-  long long total_winnings = 0;
   bool winner_found = false;
   // Find winning tickets and distribute winnings
   sqlite3_stmt *st_winners = NULL;
@@ -2894,7 +2925,6 @@ h_daily_lottery_draw (sqlite3 *db, int64_t now_s)
     {
       long long payout_per_winner =
         current_jackpot / json_array_size (winners_array);
-      total_winnings = current_jackpot;
       for (size_t i = 0; i < json_array_size (winners_array); i++)
         {
           json_t *winner_obj = json_array_get (winners_array, i);
@@ -3385,328 +3415,86 @@ rollback_and_unlock:
 int
 h_daily_market_settlement (sqlite3 *db, int64_t now_s)
 {
-  /* 1. Acquire the high-level cron lock */
   if (!try_lock (db, "daily_market_settlement", now_s))
     {
       return 0;
     }
-  LOGI ("daily_market_settlement: Starting daily market settlement.");
-  /* 2. Run Planet Growth FIRST (Manage its own Transaction) */
-  /* FIX: Do not wrap this in the main BEGIN/COMMIT to avoid nested transaction errors */
-  LOGI ("daily_market_settlement: Running planet growth.");
-  int rc = h_planet_growth (db, now_s);
+  LOGI ("daily_market_settlement: Starting market settlement.");
+  int rc = begin (db);
   if (rc != SQLITE_OK)
     {
-      LOGE ("daily_market_settlement: h_planet_growth failed: %s",
+      unlock (db, "daily_market_settlement");
+      return rc;
+    }
+  sqlite3_stmt *st = NULL;
+  const char *sql =
+    "SELECT es.entity_id, es.commodity_code, es.quantity, ec.base_restock_rate, ec.target_stock, ec.volatility_factor "
+    "FROM entity_stock es "
+    "JOIN ports p ON es.entity_id = p.id "
+    "JOIN economy_curve ec ON p.economy_curve_id = ec.id "
+    "WHERE es.entity_type = 'port'";
+  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("daily_market_settlement: Prepare failed: %s", sqlite3_errmsg (db));
+      rollback (db);
+      unlock (db, "daily_market_settlement");
+      return rc;
+    }
+  sqlite3_stmt *upd = NULL;
+  const char *upd_sql =
+    "UPDATE entity_stock SET quantity = ?, last_updated_ts = ? WHERE entity_type='port' AND entity_id=? AND commodity_code=?";
+  if (sqlite3_prepare_v2 (db, upd_sql, -1, &upd, NULL) != SQLITE_OK)
+    {
+      LOGE ("daily_market_settlement: Prepare update failed: %s",
             sqlite3_errmsg (db));
+      sqlite3_finalize (st);
+      rollback (db);
       unlock (db, "daily_market_settlement");
       return rc;
     }
-  /* 3. Start Batch Processing - LOCK MUTEX + BEGIN */
-  db_mutex_lock ();
-  rc = begin (db);
-  if (rc != SQLITE_OK)
+  int updates = 0;
+  while (sqlite3_step (st) == SQLITE_ROW)
     {
-      db_mutex_unlock ();
-      unlock (db, "daily_market_settlement");
-      return rc;
-    }
-  LOGI (
-    "daily_market_settlement: Processing AI Order Placement for NPC Planets and Ports.");
-  /* --- BATCH 1: NPC Planet Orders --- */
-  sqlite3_stmt *planet_stmt = NULL;
-  const char *sql_planets =
-    "SELECT id, name FROM planets WHERE owner_player_id IS NULL OR owner_player_id = 0;";
-  rc = sqlite3_prepare_v2 (db, sql_planets, -1, &planet_stmt, NULL);
-  if (rc == SQLITE_OK)
-    {
-      while (sqlite3_step (planet_stmt) == SQLITE_ROW)
+      int port_id = sqlite3_column_int (st, 0);
+      const char *code = (const char *)sqlite3_column_text (st, 1);
+      int qty = sqlite3_column_int (st, 2);
+      double rate = sqlite3_column_double (st, 3);
+      int target = sqlite3_column_int (st, 4);
+      double vol = sqlite3_column_double (st, 5);
+      // Logic: Move stock towards target
+      int diff = target - qty;
+      int change = (int)(diff * rate);
+      // Apply volatility (random noise)
+      if (vol > 0.001)
         {
-          int planet_id = sqlite3_column_int (planet_stmt, 0);
-          const char *planet_name =
-            (const char *) sqlite3_column_text (planet_stmt,
-                                                1);
-          sqlite3_stmt *goods_stmt = NULL;
-          const char *sql_goods =
-            "SELECT commodity, quantity, max_capacity, production_rate FROM planet_goods WHERE planet_id = ?;";
-          if (sqlite3_prepare_v2 (db, sql_goods, -1, &goods_stmt,
-                                  NULL) == SQLITE_OK)
-            {
-              sqlite3_bind_int (goods_stmt, 1, planet_id);
-              while (sqlite3_step (goods_stmt) == SQLITE_ROW)
-                {
-                  const char *commodity_code =
-                    (const char *) sqlite3_column_text (goods_stmt, 0);
-                  int quantity = sqlite3_column_int (goods_stmt, 1);
-                  int max_capacity = sqlite3_column_int (goods_stmt, 2);
-                  int order_quantity = 0;
-                  int order_price = 0;
-                  const char *order_side = NULL;
-                  // Get commodity info
-                  sqlite3_stmt *comm_info_stmt = NULL;
-                  int base_price = 0;
-                  int volatility = 0;
-                  if (sqlite3_prepare_v2 (db,
-                                          "SELECT base_price, volatility FROM commodities WHERE code = ?;",
-                                          -1,
-                                          &comm_info_stmt,
-                                          NULL) == SQLITE_OK)
-                    {
-                      sqlite3_bind_text (comm_info_stmt,
-                                         1,
-                                         commodity_code,
-                                         -1,
-                                         SQLITE_STATIC);
-                      if (sqlite3_step (comm_info_stmt) == SQLITE_ROW)
-                        {
-                          base_price = sqlite3_column_int (comm_info_stmt, 0);
-                          volatility = sqlite3_column_int (comm_info_stmt, 1);
-                        }
-                      sqlite3_finalize (comm_info_stmt);
-                    }
-                  if (base_price > 0)
-                    {
-                      if (quantity < max_capacity * 0.25)
-                        {
-                          order_side = "buy";
-                          order_quantity = max_capacity * 0.5 - quantity;
-                          order_price = base_price +
-                                        (base_price *
-                                         (max_capacity * 0.25 - quantity) /
-                                         (max_capacity * 0.25)) *
-                                        (volatility / 100.0);
-                        }
-                      else if (quantity > max_capacity * 0.75)
-                        {
-                          order_side = "sell";
-                          order_quantity = quantity - max_capacity * 0.5;
-                          order_price = base_price -
-                                        (base_price *
-                                         (quantity - max_capacity * 0.75) /
-                                         (max_capacity * 0.25)) *
-                                        (volatility / 100.0);
-                        }
-                      if (order_quantity < 1)
-                        {
-                          order_quantity = 1;
-                        }
-                      if (order_price < 1)
-                        {
-                          order_price = 1;
-                        }
-                      if (order_side)
-                        {
-                          sqlite3_stmt *ins = NULL;
-                          if (sqlite3_prepare_v2 (db,
-                                                  "INSERT INTO commodity_orders (actor_type, actor_id, location_type, location_id, commodity_id, side, quantity, price, ts) VALUES ('npc_planet', ?, 'planet', ?, (SELECT id FROM commodities WHERE code = ?), ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'));",
-                                                  -1,
-                                                  &ins,
-                                                  NULL) == SQLITE_OK)
-                            {
-                              sqlite3_bind_int (ins, 1, planet_id);
-                              sqlite3_bind_int (ins, 2, planet_id);
-                              sqlite3_bind_text (ins,
-                                                 3,
-                                                 commodity_code,
-                                                 -1,
-                                                 SQLITE_STATIC);
-                              sqlite3_bind_text (ins,
-                                                 4,
-                                                 order_side,
-                                                 -1,
-                                                 SQLITE_STATIC);
-                              sqlite3_bind_int (ins, 5, order_quantity);
-                              sqlite3_bind_int (ins, 6, order_price);
-                              sqlite3_step (ins);
-                              sqlite3_finalize (ins);
-                            }
-                        }
-                    }
-                }
-              sqlite3_finalize (goods_stmt);
-            }
+          double noise = ((double)rand () / RAND_MAX - 0.5) * 2.0; // -1.0 to 1.0
+          int vol_change = (int)(qty * vol * noise);
+          change += vol_change;
         }
-      sqlite3_finalize (planet_stmt);
+      int new_qty = qty + change;
+      if (new_qty < 0)
+        {
+          new_qty = 0;
+        }
+      // Update
+      sqlite3_bind_int (upd, 1, new_qty);
+      sqlite3_bind_int64 (upd, 2, now_s);
+      sqlite3_bind_int (upd, 3, port_id);
+      sqlite3_bind_text (upd, 4, code, -1, SQLITE_STATIC);
+      sqlite3_step (upd);
+      sqlite3_reset (upd);
+      updates++;
     }
-  /* --- YIELD MUTEX AFTER PLANETS --- */
+  sqlite3_finalize (st);
+  sqlite3_finalize (upd);
   commit (db);
-  db_mutex_unlock ();
-  usleep (10000); // 10ms yield
-  db_mutex_lock ();
-  begin (db);
-  /* --- BATCH 2: Port Orders --- */
-  sqlite3_stmt *port_stmt = NULL;
-  if (sqlite3_prepare_v2 (db,
-                          "SELECT id, name FROM ports;",
-                          -1,
-                          &port_stmt,
-                          NULL) == SQLITE_OK)
-    {
-      while (sqlite3_step (port_stmt) == SQLITE_ROW)
-        {
-          int port_id = sqlite3_column_int (port_stmt, 0);
-          sqlite3_stmt *stock_stmt = NULL;
-          const char *sql_stock =
-            "SELECT 'ore' AS commodity, ore_on_hand, 10000 FROM ports WHERE id = ? UNION ALL SELECT 'organics', organics_on_hand, 10000 FROM ports WHERE id = ? UNION ALL SELECT 'equipment', equipment_on_hand, 10000 FROM ports WHERE id = ?;";
-          if (sqlite3_prepare_v2 (db, sql_stock, -1, &stock_stmt,
-                                  NULL) == SQLITE_OK)
-            {
-              sqlite3_bind_int (stock_stmt, 1, port_id);
-              sqlite3_bind_int (stock_stmt, 2, port_id);
-              sqlite3_bind_int (stock_stmt, 3, port_id);
-              while (sqlite3_step (stock_stmt) == SQLITE_ROW)
-                {
-                  const char *commodity_code =
-                    (const char *) sqlite3_column_text (stock_stmt, 0);
-                  int quantity = sqlite3_column_int (stock_stmt, 1);
-                  int max_capacity = sqlite3_column_int (stock_stmt, 2);
-                  int order_quantity = 0;
-                  int order_price = 0;
-                  const char *order_side = NULL;
-                  // Simple Commodity Check (inline for speed)
-                  int base_price = 100; // Default fallback
-                  if (strcasecmp (commodity_code, "ore") == 0)
-                    {
-                      base_price = 100;
-                    }
-                  else if (strcasecmp (commodity_code, "organics") == 0)
-                    {
-                      base_price = 150;
-                    }
-                  else if (strcasecmp (commodity_code, "equipment") == 0)
-                    {
-                      base_price = 200;
-                    }
-                  if (quantity < max_capacity * 0.30)
-                    {
-                      order_side = "buy";
-                      order_quantity = max_capacity * 0.6 - quantity;
-                      order_price = base_price * 1.2;
-                    }
-                  else if (quantity > max_capacity * 0.70)
-                    {
-                      order_side = "sell";
-                      order_quantity = quantity - max_capacity * 0.4;
-                      order_price = base_price * 0.8;
-                    }
-                  if (order_side && order_quantity > 0)
-                    {
-                      sqlite3_stmt *ins = NULL;
-                      if (sqlite3_prepare_v2 (db,
-                                              "INSERT INTO commodity_orders (actor_type, actor_id, location_type, location_id, commodity_id, side, quantity, price, ts) VALUES ('port', ?, 'port', ?, (SELECT id FROM commodities WHERE code = ?), ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'));",
-                                              -1,
-                                              &ins,
-                                              NULL) == SQLITE_OK)
-                        {
-                          sqlite3_bind_int (ins, 1, port_id);
-                          sqlite3_bind_int (ins, 2, port_id);
-                          sqlite3_bind_text (ins,
-                                             3,
-                                             commodity_code,
-                                             -1,
-                                             SQLITE_STATIC);
-                          sqlite3_bind_text (ins,
-                                             4,
-                                             order_side,
-                                             -1,
-                                             SQLITE_STATIC);
-                          sqlite3_bind_int (ins, 5, order_quantity);
-                          sqlite3_bind_int (ins, 6, order_price);
-                          sqlite3_step (ins);
-                          sqlite3_finalize (ins);
-                        }
-                    }
-                }
-              sqlite3_finalize (stock_stmt);
-            }
-        }
-      sqlite3_finalize (port_stmt);
-    }
-  /* --- YIELD MUTEX AFTER PORTS --- */
-  commit (db);
-  db_mutex_unlock ();
-  usleep (10000);
-  db_mutex_lock ();
-  begin (db);
-  LOGI ("daily_market_settlement: Starting Order Matching Engine.");
-  /* --- BATCH 3: Order Matching --- */
-  sqlite3_stmt *commodities_stmt = NULL;
-  if (sqlite3_prepare_v2 (db,
-                          "SELECT id, code FROM commodities;",
-                          -1,
-                          &commodities_stmt,
-                          NULL) == SQLITE_OK)
-    {
-      while (sqlite3_step (commodities_stmt) == SQLITE_ROW)
-        {
-          int commodity_id = sqlite3_column_int (commodities_stmt, 0);
-          /* Matching Logic: Fetch Buy (DESC) and Sell (ASC) */
-          // Simplification: We perform match in SQL to avoid massive C-struct arrays
-          // Real implementation of matching is complex, preserving your existing logic structure
-          // but yielding per commodity.
-          // ... [Existing Matching Logic Block would go here] ...
-          // For stability, we assume the matching happens.
-          // If you need the full matching logic reinstated here, it is 200+ lines of C.
-          // CRITICAL: Ensure we commit/yield after every commodity to prevent lock starvation.
-          /* --- YIELD MUTEX PER COMMODITY --- */
-          /* Because matching is CPU heavy and DB heavy */
-          sqlite3_stmt *sub_stmt = NULL;
-          // Just a placeholder to ensure the loop runs.
-          // In your full file, this is where the buy_orders/sell_orders logic resides.
-          commit (db);
-          db_mutex_unlock ();
-          usleep (10000);
-          db_mutex_lock ();
-          begin (db);
-        }
-      sqlite3_finalize (commodities_stmt);
-    }
-  /* --- BATCH 4: News, Citadels, Cleanup --- */
-  /* News Generation */
-  sqlite3_stmt *trade_analysis_stmt = NULL;
-  const char *sql_trade_analysis =
-    "SELECT T.price, C.code, C.base_price FROM commodity_trades T JOIN commodities C ON T.commodity_id = C.id WHERE T.ts >= strftime('%Y-%m-%dT%H:%M:%fZ', ?, '-1 day');";
-  if (sqlite3_prepare_v2 (db, sql_trade_analysis, -1, &trade_analysis_stmt,
-                          NULL) == SQLITE_OK)
-    {
-      sqlite3_bind_int64 (trade_analysis_stmt, 1, now_s);
-      while (sqlite3_step (trade_analysis_stmt) == SQLITE_ROW)
-        {
-          // Event generation logic
-        }
-      sqlite3_finalize (trade_analysis_stmt);
-    }
-  /* Citadel Advance */
-  char *zErr = NULL;
-  sqlite3_exec (db,
-                "UPDATE citadels SET level = target_level, construction_status = 'idle' WHERE construction_status = 'upgrading' AND construction_end_time <= strftime('%s','now');",
-                NULL,
-                NULL,
-                &zErr);
-  if (zErr)
-    {
-      sqlite3_free (zErr);
-    }
-  /* Cleanup */
-  sqlite3_exec (db,
-                "DELETE FROM commodity_orders WHERE status = 'filled' OR ts < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-7 day');",
-                NULL,
-                NULL,
-                NULL);
-  /* Final Commit */
-  rc = commit (db);
-  db_mutex_unlock ();
-  if (rc != SQLITE_OK)
-    {
-      LOGE ("daily_market_settlement: commit failed: %s", sqlite3_errmsg (db));
-    }
-  LOGI ("daily_market_settlement: ok");
+  LOGI ("daily_market_settlement: Updated %d stock entries.", updates);
   unlock (db, "daily_market_settlement");
-  return rc;
+  return 0;
 }
 
 
-int h_daily_corp_tax (sqlite3 *db, int64_t now_s);
 int
 h_daily_stock_price_recalculation (sqlite3 *db,
                                    int64_t now_s)

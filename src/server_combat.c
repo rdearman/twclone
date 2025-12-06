@@ -393,7 +393,7 @@ apply_armid_mines_on_entry (client_ctx_t *ctx, int new_sector_id,
           if (ship_stats.hull <= 0)
             {
               // Call existing ship destruction flow:
-              destroy_ship_and_handle_side_effects (ctx, new_sector_id,
+              destroy_ship_and_handle_side_effects (ctx,
                                                     ctx->player_id);
               if (out_enc)
                 {
@@ -563,7 +563,7 @@ apply_armid_mines_on_entry (client_ctx_t *ctx, int new_sector_id,
     {
       // This case should ideally be handled by Armid mines if they destroy the ship.
       // But as a safeguard, if hull is 0 and out_enc->destroyed wasn't set, set it.
-      destroy_ship_and_handle_side_effects (ctx, new_sector_id,
+      destroy_ship_and_handle_side_effects (ctx,
                                             ctx->player_id);
       if (out_enc)
         {
@@ -750,7 +750,7 @@ handle_combat_flee (client_ctx_t *ctx, json_t *root)
   h_decloak_ship (db_handle,
                   h_get_active_ship_id (db_handle, (ctx->player_id)));
   TurnConsumeResult tc =
-    h_consume_player_turn (db_handle, ctx, "combat.flee");
+    h_consume_player_turn (db_handle, ctx);
   if (tc != TURN_CONSUME_SUCCESS)
     {
       return handle_turn_consumption_error (ctx, tc, "combat.flee", root,
@@ -778,7 +778,7 @@ cmd_combat_attack (client_ctx_t *ctx, json_t *root)
     }
   // All combat actions reveal the ship
   h_decloak_ship (db, h_get_active_ship_id (db, ctx->player_id));
-  TurnConsumeResult tc = h_consume_player_turn (db, ctx, "combat.attack");
+  TurnConsumeResult tc = h_consume_player_turn (db, ctx);
   if (tc != TURN_CONSUME_SUCCESS)
     {
       return handle_turn_consumption_error (ctx, tc, "combat.attack", root,

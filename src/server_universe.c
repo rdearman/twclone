@@ -91,6 +91,8 @@ static int ori_owner_id = -1;
 static int ori_home_sector_id = -1;
 /* Private function to move all Orion ships */
 static void ori_move_all_ships (void);
+
+
 /* Helper to execute a single SELECT query and return an int value */
 static int
 get_int_value (sqlite3 *db, const char *sql)
@@ -260,6 +262,8 @@ ori_move_all_ships (void)
 
 
 ////////////////////// ORION NPC ////////////////////////////////
+
+
 /* --- minimal event writer for tests (engine_events) --- */
 static void
 fer_event_json (const char *type, int sector_id, const char *fmt, ...)
@@ -572,11 +576,23 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
 
 
 ///////////////////////////////////
+
+
 ////////////////////////////////////////////////////////////////
+
+
 // "sector.scan"
+
+
 /* void cmd_sector_scan (client_ctx_t *ctx, json_t *root) */
+
+
 /* { */
+
+
 /*   STUB_NIY (ctx, root, "scan.sector");   */
+
+
 /* } */
 json_t *
 build_sector_scan_json (int sector_id, int player_id,
@@ -720,7 +736,11 @@ build_sector_scan_json (int sector_id, int player_id,
 
 
 // ====================================================================
+
+
 // --- PRIMARY COMMAND HANDLER: cmd_sector_scan (Replaces Mock) ---
+
+
 /**
  * @brief Executes a detailed tactical scan of the current sector.
  * * Implements the "sector.scan" command.
@@ -798,7 +818,7 @@ cmd_sector_scan_density (void *ctx_in, json_t *root)
   // --- END: INITIALIZATION LOGIC ---
   sqlite3 *db = db_get_handle ();
   h_decloak_ship (db, h_get_active_ship_id (db, ctx->player_id));
-  TurnConsumeResult tc = h_consume_player_turn (db, ctx, "move.warp");
+  TurnConsumeResult tc = h_consume_player_turn (db, ctx);
   if (tc != TURN_CONSUME_SUCCESS)
     {
       handle_turn_consumption_error (ctx, tc, "sector.scan.density", root,
@@ -1016,6 +1036,8 @@ universe_shutdown (void)
 
 
 /* -------- helpers -------- */
+
+
 /* Return REFUSED(1402) if no link; otherwise OK. */
 decision_t
 validate_warp_rule (int from_sector, int to_sector)
@@ -1098,7 +1120,7 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
   sqlite3 *db_handle = db_get_handle ();
   h_decloak_ship (db_handle,
                   h_get_active_ship_id (db_handle, ctx->player_id));
-  TurnConsumeResult tc = h_consume_player_turn (db_handle, ctx, "move.warp");
+  TurnConsumeResult tc = h_consume_player_turn (db_handle, ctx);
   if (tc != TURN_CONSUME_SUCCESS)
     {
       return handle_turn_consumption_error (ctx, tc, "move.warp", root, NULL);
@@ -1469,6 +1491,8 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
 static const char *SQL_SECTOR_ASSET_COUNTS =
   "SELECT asset_type, COALESCE(SUM(quantity),0) AS qty "
   "FROM sector_assets WHERE sector = ?1 " "GROUP BY asset_type;";
+
+
 static void
 attach_sector_asset_counts (sqlite3 *db, int sector_id, json_t *data_out)
 {
@@ -1706,7 +1730,7 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
   sqlite3 *db_handle = db_get_handle ();
   h_decloak_ship (db_handle,
                   h_get_active_ship_id (db_handle, ctx->player_id));
-  TurnConsumeResult tc = h_consume_player_turn (db_handle, ctx, "move.scan");
+  TurnConsumeResult tc = h_consume_player_turn (db_handle, ctx);
   if (tc != TURN_CONSUME_SUCCESS)
     {
       return handle_turn_consumption_error (ctx, tc, "move.scan", root, NULL);
@@ -1969,25 +1993,65 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
 
 
 /////////  ISS BOT ////////////
+
+
 /* ===== Imperial Starship (ISS) — internal state + helpers ============ */
+
+
 /* static void */
+
+
 /* log_iss_event_move (int actor_player_id, int sector, const char *etype, */
+
+
 /*                  const char *payload_json) */
+
+
 /* { */
+
+
 /*   sqlite3 *db = db_get_handle (); */
+
+
 /*   sqlite3_stmt *st = NULL; */
+
+
 /*   if (sqlite3_prepare_v2 (db, */
+
+
 /*                        "INSERT INTO engine_events(ts,type,actor_player_id,sector_id,payload) " */
+
+
 /*                        "VALUES(strftime('%s','now'), ?1, ?2, ?3, ?4);", -1, */
+
+
 /*                        &st, NULL) == SQLITE_OK) */
+
+
 /*     { */
+
+
 /*       sqlite3_bind_text (st, 1, etype, -1, SQLITE_STATIC); */
+
+
 /*       sqlite3_bind_int (st, 2, actor_player_id); */
+
+
 /*       sqlite3_bind_int (st, 3, sector); */
+
+
 /*       sqlite3_bind_text (st, 4, payload_json, -1, SQLITE_STATIC); */
+
+
 /*       sqlite3_step (st); */
+
+
 /*     } */
+
+
 /*   sqlite3_finalize (st); */
+
+
 /* } */
 void
 iss_log_event_move (int from, int to, const char *kind, const char *extra)
@@ -2313,6 +2377,8 @@ typedef struct
 } fer_trader_t;
 static fer_trader_t g_fer[FER_TRADER_COUNT];
 static int g_fer_inited = 0;
+
+
 /* ---------- DB helpers ---------- */
 int
 sector_has_port (int sector)
@@ -2382,6 +2448,8 @@ nav_next_hop (int start, int goal)
   } kv_t;
   kv_t seen[MAX_SEEN];
   int seen_n = 0;
+
+
   auto int
   seen_get (int key)
   {
@@ -2475,71 +2543,21 @@ nav_next_hop (int start, int goal)
 
 
 /* ---------- (optional) internal event emitters ---------- */
+
+
 /* If you have a helper already for engine_events, call it here.
    Otherwise keep these INFO_LOGs for visibility and add event writes later. */
+
+
 //////////////////////////////////////////////////////////////////////////////////
+
+
 /* --- Helper to read current quantity from port_commodities --- */
-static int
-h_get_port_commodity_quantity (int port_id, const char *commodity)
-{
-  sqlite3 *db = db_get_handle ();
-  sqlite3_stmt *stmt = NULL;    // Explicitly initialized to NULL
-  int quantity = 0;
-  const char *column_name = NULL;
-  // 1. Determine the correct stock column name based on the commodity string
-  if (strcasecmp (commodity, "ORE") == 0)
-    {
-      column_name = "ore_on_hand";
-    }
-  else if (strcasecmp (commodity, "ORG") == 0)
-    {
-      column_name = "organics_on_hand";
-    }
-  else if (strcasecmp (commodity, "EQU") == 0)
-    {
-      column_name = "equipment_on_hand";
-    }
-  if (column_name == NULL)
-    {
-      // This is not a true error, just an unimplemented stock type or a temporary commodity
-      LOGW
-      (
-        "h_get_port_commodity_quantity: Commodity %s has no matching stock column in 'ports'. Returning 0.",
-        commodity);
-      return 0;
-    }
-// 2. Build the dynamic SQL query
-  char sql_query[256];
-  // We use snprintf to safely construct the query string with the correct column name
-  snprintf (sql_query, sizeof (sql_query),
-            "SELECT %s FROM ports WHERE id = ?;", column_name);
-  // 1. Acquire Mutex Lock (Recursive lock works here)
-  db_mutex_lock ();
-  if (sqlite3_prepare_v2 (db, sql_query, -1, &stmt, NULL) == SQLITE_OK)
-    {
-      sqlite3_bind_int (stmt, 1, port_id);
-      if (sqlite3_step (stmt) == SQLITE_ROW)
-        {
-          // Success: Row found, read the quantity
-          quantity = sqlite3_column_int (stmt, 0);
-        }
-      // If sqlite3_step returns SQLITE_DONE (no port found), quantity remains 0.
-      sqlite3_finalize (stmt);
-    }
-  else
-    {
-      // A true SQL error (e.g., failed to prepare, meaning bad SQL syntax or bad DB handle)
-      LOGE ("DB Error in h_get_port_commodity_quantity: %s (SQL: %s)",
-            sqlite3_errmsg (db), sql_query);
-      quantity = -1;            // Return -1 only on a true DB error
-    }
-  // 2. Release Mutex Lock
-  db_mutex_unlock ();
-  return quantity;
-}
 
 
 /* --- Trade Log Emitter Implementation --- */
+
+
 /* --- Trade Log Emitter Implementation --- */
 static void
 fer_emit_trade_log (int port_id, int sector_id,
@@ -2567,7 +2585,10 @@ fer_emit_trade_log (int port_id, int sector_id,
       double price = 0.0;
       // 1. Set QTY to the trade amount
       int qty = (sold_qty != 0) ? sold_qty : 20;
-      int sold_port_qty = h_get_port_commodity_quantity (port_id, sold);
+      int sold_port_qty_val; // Use a temporary variable for the quantity output
+      h_get_port_commodity_quantity (g_fer_db, port_id, sold,
+                                     &sold_port_qty_val);
+      int sold_port_qty = sold_port_qty_val;
       //LOGI("sold_port_qty = %d", sold_port_qty);
       // CRITICAL FIX: If lookup failed (returned -1), treat it as 0 stock.
       if (sold_port_qty < 0)
@@ -2627,7 +2648,12 @@ fer_emit_trade_log (int port_id, int sector_id,
       double price = 0.0;
       // 1. Set QTY to the trade amount
       int qty = (bought_qty != 0) ? bought_qty : 20;
-      int bought_port_qty = h_get_port_commodity_quantity (port_id, bought);
+      int bought_port_qty_val; // Use a temporary variable for the quantity output
+      h_get_port_commodity_quantity (g_fer_db,
+                                     port_id,
+                                     bought,
+                                     &bought_port_qty_val);
+      int bought_port_qty = bought_port_qty_val;
       // LOGI("bought_port_qty = %d", bought_port_qty);
       // CRITICAL FIX: If lookup failed (returned -1), treat it as 0 stock.
       if (bought_port_qty < 0)

@@ -212,7 +212,6 @@ hydrate_player_defaults (int player_id)
     {
       return;
     }
-  char *errmsg = NULL;
   // (void) sqlite3_exec (db, "BEGIN", NULL, NULL, &errmsg);
   /* locked subs */
   for (size_t i = 0;

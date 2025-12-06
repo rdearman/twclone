@@ -185,6 +185,10 @@ int db_port_get_goods_on_hand (int port_id, const char *commodity_code,
                                int *out_quantity);
 int db_port_update_goods_on_hand (int port_id, const char *commodity_code,
                                   int quantity_change);
+int h_get_port_commodity_quantity (sqlite3 *db,
+                                   int port_id,
+                                   const char *commodity_code,
+                                   int *quantity_out);
 int db_planet_get_goods_on_hand (int planet_id, const char *commodity_code,
                                  int *out_quantity);
 int db_planet_update_goods_on_hand (int planet_id, const char *commodity_code,

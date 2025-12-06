@@ -3,7 +3,7 @@
 # Copyright (C) 2002, Nathan Paul Simons (npsimons@hardcorehackers.com)
 #
 # This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
+# it under the terms of the GNU General Public License for published by
 # the Free Software Foundation; either version 2 of the License, or
 # (at your option) any later version.
 #
@@ -84,9 +84,5 @@ bigbang_SOURCES = \
 	../src/globals.c \
 	../src/common.c \
 	../src/server_log.c \
-	../src/test_bang.c
-
-
-
-
-
+	../src/test_bang.c \
+	../src/server_clusters.c

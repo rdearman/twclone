@@ -27,7 +27,6 @@ static __thread sqlite3 *tls_db = NULL;
  */
 pthread_mutex_t db_mutex;
 // Helper flag to ensure initialization runs only once
-static bool db_mutex_initialized = false;
 //static sqlite3 *db_handle = NULL;
 extern sqlite3 *g_db;
 /* Unlocked helpers (call only when db_mutex is already held) */
@@ -40,14 +39,8 @@ static int db_check_legacy_schema (sqlite3 *db);
 int db_get_int_config (sqlite3 *db, const char *key, int *out);
 int db_seed_cron_tasks (sqlite3 *db);
 void db_handle_close_and_reset (void);
-
-
 /* src/database.c */
-
-
 /* src/database.c */
-
-
 void
 db_safe_rollback (sqlite3 *db, const char *context_name)
 {
@@ -130,29 +123,6 @@ db_mutex_unlock (void)
 }
 
 
-static void
-db_init_recursive_mutex_once (void)
-{
-  if (db_mutex_initialized)
-    {
-      return;
-    }
-  // Set up recursive attributes
-  pthread_mutexattr_t attr;
-  if (pthread_mutexattr_init (&attr) == 0)
-    {
-      pthread_mutexattr_settype (&attr, PTHREAD_MUTEX_RECURSIVE);
-      pthread_mutex_init (&db_mutex, &attr);
-      pthread_mutexattr_destroy (&attr);
-      db_mutex_initialized = true;
-    }
-  else
-    {
-      LOGE ("FATAL: Failed to initialize mutex attributes for db_mutex.");
-    }
-}
-
-
 sqlite3 *
 db_get_handle (void)
 {
@@ -190,8 +160,6 @@ db_get_handle (void)
 
 
 /* src/database.c */
-
-
 void
 db_close_thread (void)
 {
@@ -303,8 +271,6 @@ db_commands_accept (const char *cmd_type,
 
 
 ////////////////////
-
-
 /**
  * @brief Thread-safe wrapper for a simple column update.
  *
@@ -393,6 +359,7 @@ const char *create_table_sql[] = {
   "  value TEXT NOT NULL, "
   "  type TEXT NOT NULL CHECK (type IN ('int', 'bool', 'string', 'double')) "
   " ); ",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('turnsperday', '120', 'int');",
   /* CORPORATIONS + MEMBERS */
   " CREATE TABLE IF NOT EXISTS corporations ( "
   "   id INTEGER PRIMARY KEY,  "
@@ -562,19 +529,15 @@ const char *create_table_sql[] = {
   " CREATE TABLE IF NOT EXISTS planettypes (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE, typeDescription TEXT, typeName TEXT, citadelUpgradeTime_lvl1 INTEGER, citadelUpgradeTime_lvl2 INTEGER, citadelUpgradeTime_lvl3 INTEGER, citadelUpgradeTime_lvl4 INTEGER, citadelUpgradeTime_lvl5 INTEGER, citadelUpgradeTime_lvl6 INTEGER, citadelUpgradeOre_lvl1 INTEGER, citadelUpgradeOre_lvl2 INTEGER, citadelUpgradeOre_lvl3 INTEGER, citadelUpgradeOre_lvl4 INTEGER, citadelUpgradeOre_lvl5 INTEGER, citadelUpgradeOre_lvl6 INTEGER, citadelUpgradeOrganics_lvl1 INTEGER, citadelUpgradeOrganics_lvl2 INTEGER, citadelUpgradeOrganics_lvl3 INTEGER, citadelUpgradeOrganics_lvl4 INTEGER, citadelUpgradeOrganics_lvl5 INTEGER, citadelUpgradeOrganics_lvl6 INTEGER, citadelUpgradeEquipment_lvl1 INTEGER, citadelUpgradeEquipment_lvl2 INTEGER, citadelUpgradeEquipment_lvl3 INTEGER, citadelUpgradeEquipment_lvl4 INTEGER, citadelUpgradeEquipment_lvl5 INTEGER, citadelUpgradeEquipment_lvl6 INTEGER, citadelUpgradeColonist_lvl1 INTEGER, citadelUpgradeColonist_lvl2 INTEGER, citadelUpgradeColonist_lvl3 INTEGER, citadelUpgradeColonist_lvl4 INTEGER, citadelUpgradeColonist_lvl5 INTEGER, citadelUpgradeColonist_lvl6 INTEGER, maxColonist_ore INTEGER, maxColonist_organics INTEGER, maxColonist_equipment INTEGER, fighters INTEGER, fuelProduction INTEGER, organicsProduction INTEGER, equipmentProduction INTEGER, fighterProduction INTEGER, maxore INTEGER, maxorganics INTEGER, maxequipment INTEGER, maxfighters INTEGER, breeding REAL, genesis_weight INTEGER NOT NULL DEFAULT 10); ",
   " CREATE TABLE IF NOT EXISTS ports ( "
   " id INTEGER PRIMARY KEY AUTOINCREMENT,  " " number INTEGER, "
-  " name TEXT NOT NULL, " " sector INTEGER NOT NULL, "                                                                                                          /* FK to sectors.id */
+  " name TEXT NOT NULL, " " sector INTEGER NOT NULL, "                                                                                                            /* FK to sectors.id */
   " size INTEGER, "
   " techlevel INTEGER, "
-  " ore_on_hand INTEGER NOT NULL DEFAULT 0, "
-  " organics_on_hand INTEGER NOT NULL DEFAULT 0, "
-  " equipment_on_hand INTEGER NOT NULL DEFAULT 0, "
-  " slaves_on_hand INTEGER NOT NULL DEFAULT 0, "
-  " weapons_on_hand INTEGER NOT NULL DEFAULT 0, "
-  " drugs_on_hand INTEGER NOT NULL DEFAULT 0, "
-  " petty_cash INTEGER NOT NULL DEFAULT 0, "
-  " invisible INTEGER DEFAULT 0, "
-  " type INTEGER DEFAULT 1, "
-  " FOREIGN KEY (sector) REFERENCES sectors(id)); ",
+  " petty_cash INTEGER NOT NULL DEFAULT 0,  "
+  " invisible INTEGER DEFAULT 0,  "
+  " type INTEGER DEFAULT 1,  "
+  "   economy_curve_id INTEGER NOT NULL DEFAULT 1,  "
+  "   FOREIGN KEY (economy_curve_id) REFERENCES economy_curve(id),  "
+  "   FOREIGN KEY (sector) REFERENCES sectors(id)); ",
   " CREATE TABLE IF NOT EXISTS port_trade ( "
   " id INTEGER PRIMARY KEY AUTOINCREMENT,  "
   " port_id INTEGER NOT NULL,  "
@@ -582,7 +545,6 @@ const char *create_table_sql[] = {
   " commodity TEXT CHECK(commodity IN ('ore','organics','equipment')),  "
   " mode TEXT CHECK(mode IN ('buy','sell')),  "
   " FOREIGN KEY (port_id) REFERENCES ports(id)); ",
-
   " CREATE TABLE IF NOT EXISTS players ( "
   " id INTEGER PRIMARY KEY AUTOINCREMENT,  "
   " type INTEGER DEFAULT 2,  "
@@ -607,7 +569,6 @@ const char *create_table_sql[] = {
   " last_news_read_timestamp INTEGER DEFAULT 0, "
   " FOREIGN KEY (commission) REFERENCES commision(id) "
   " );  ",
-
   " CREATE TABLE IF NOT EXISTS player_types (type INTEGER PRIMARY KEY AUTOINCREMENT, description TEXT); ",
   " CREATE TABLE IF NOT EXISTS sectors (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, beacon TEXT, nebulae TEXT); ",
   " CREATE TABLE IF NOT EXISTS sector_warps (from_sector INTEGER, to_sector INTEGER, PRIMARY KEY (from_sector, to_sector), FOREIGN KEY (from_sector) REFERENCES sectors(id) ON DELETE CASCADE, FOREIGN KEY (to_sector) REFERENCES sectors(id) ON DELETE CASCADE); ",
@@ -733,14 +694,6 @@ const char *create_table_sql[] = {
   "   colonist_cost INTEGER NOT NULL DEFAULT 0, "
   "   time_cost_days INTEGER NOT NULL DEFAULT 0, "
   "   PRIMARY KEY (planet_type_id, citadel_level) " " ); ",
-  " CREATE TABLE IF NOT EXISTS planet_goods ( "
-  "    planet_id INTEGER NOT NULL, "
-  "    commodity TEXT NOT NULL CHECK(commodity IN ('ore', 'organics', 'equipment')), "
-  "    quantity INTEGER NOT NULL DEFAULT 0, "
-  "    max_capacity INTEGER NOT NULL, "
-  "    production_rate INTEGER NOT NULL, "
-  "    PRIMARY KEY (planet_id, commodity), "
-  "    FOREIGN KEY (planet_id) REFERENCES planets(id) " " ); ",
   " CREATE TABLE IF NOT EXISTS hardware_items ( "
   " id INTEGER PRIMARY KEY, "
   " code TEXT UNIQUE NOT NULL, "
@@ -1412,492 +1365,6 @@ const char *create_table_sql[] = {
   "    last_attempt_at INTEGER NOT NULL,"
   "    was_success  INTEGER NOT NULL"
   ");",
-};
-const char *insert_default_sql[] = {
-  /* Config defaults - Key-Value-Type Schema */
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('turnsperday', '120', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('maxwarps_per_sector', '6', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('startingcredits', '10000000', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('startingfighters', '10', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('startingholds', '20', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('processinterval', '1', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('autosave', '5', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_ports', '200', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_planets_per_sector', '6', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_total_planets', '300', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_citadel_level', '6', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('number_of_planet_types', '8', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_ship_name_length', '50', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('ship_type_count', '8', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('hash_length', '128', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('default_nodes', '500', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('buff_size', '1024', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_name_length', '50', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('planet_type_count', '8', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('server_port', '1234', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('s2s_port', '4321', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('bank_alert_threshold_player', '1000000', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('bank_alert_threshold_corp', '5000000', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_enabled', '1', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_block_at_cap', '0', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_navhaz_delta', '0', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_M', '10', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_K', '10', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_O', '10', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_L', '10', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_C', '10', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_H', '10', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_U', '5', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_enabled', '1', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_trade_in_factor_bp', '5000', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_require_cargo_fit', '1', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_require_fighters_fit', '1', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_require_shields_fit', '1', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_require_hardware_compat', '1', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_tax_bp', '1000', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('illegal_allowed_neutral', '0', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_cloak_duration', '24', 'int');",
-  "INSERT OR IGNORE INTO law_enforcement (id) VALUES (1);",
-/* Shiptypes: name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled */
-/* Initial Ship Types (First Block) */
-  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Merchant Cruiser', 41300, NULL, NULL, NULL, 750, 20, 75, 2500, 3, 50, 0, 5, 0, 0, 0, 5, 400, 10, 10, 0, 1, 1, 0, 0, 1, 1); ",
-  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Scout Marauder', 15950, NULL, NULL, NULL, 250, 10, 25, 250, 2, 0, 0, 0, 0, 0, 0, 0, 100, 20, 20, 0, 1, 1, 0, 0, 1, 1); ",
-  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Missile Frigate', 100000, NULL, NULL, NULL, 2000, 12, 60, 5000, 3, 5, 0, 0, 0, 0, 0, 2, 400, 13, 13, 5, 0, 0, 1, 0, 1, 1); ",
-  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Battleship', 88500, NULL, NULL, NULL, 3000, 16, 80, 10000, 4, 25, 0, 1, 0, 0, 0, 8, 750, 16, 16, 50, 1, 1, 0, 0, 1, 1); ",
-  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Corporate Flagship', 163500, NULL, NULL, NULL, 6000, 20, 85, 20000, 3, 100, 0, 10, 0, 0, 1, 10, 1500, 12, 12, 100, 1, 1, 1, 0, 1, 1); ",
-  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Colonial Transport', 63600, NULL, NULL, NULL, 100, 50, 250, 200, 6, 0, 0, 5, 0, 0, 0, 7, 500, 6, 6, 10, 0, 1, 0, 0, 1, 1); ",
-  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Cargo Transport', 51950, NULL, NULL, NULL, 125, 50, 125, 400, 4, 1, 0, 2, 0, 0, 0, 5, 1000, 8, 8, 20, 1, 1, 0, 0, 1, 1); ",
-  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Merchant Freighter', 33400, NULL, NULL, NULL, 100, 30, 65, 300, 2, 2, 0, 2, 0, 0, 0, 5, 500, 8, 8, 20, 1, 1, 0, 0, 1, 1); ",
-  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Imperial Starship', 329000, NULL, NULL, NULL, 10000, 40, 150, 50000, 4, 125, 0, 10, 0, 0, 1, 15, 2000, 15, 15, 150, 1, 1, 1, 0, 1, 1); ",
-  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Havoc Gunstar', 79000, NULL, NULL, NULL, 1000, 12, 50, 10000, 3, 5, 0, 1, 0, 0, 1, 6, 3000, 13, 13, 5, 1, 0, 0, 0, 1, 1); ",
-  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Constellation', 72500, NULL, NULL, NULL, 2000, 20, 80, 5000, 3, 25, 0, 2, 0, 0, 0, 6, 750, 14, 14, 50, 1, 1, 0, 0, 1, 1); ",
-  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('T''khasi Orion', 42500, NULL, NULL, NULL, 250, 30, 60, 750, 2, 5, 0, 1, 0, 0, 0, 3, 750, 11, 11, 20, 1, 1, 0, 0, 1, 1); ",
-  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Tholian Sentinel', 47500, NULL, NULL, NULL, 800, 10, 50, 2500, 4, 50, 0, 1, 0, 0, 0, 3, 4000, 1, 1, 10, 1, 0, 0, 0, 1, 1); ",
-  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Taurean Mule', 63600, NULL, NULL, NULL, 150, 50, 150, 300, 4, 0, 0, 1, 0, 0, 0, 5, 600, 5, 5, 20, 1, 1, 0, 0, 1, 1); ",
-  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Interdictor Cruiser', 539000, NULL, NULL, NULL, 15000, 10, 40, 100000, 15, 200, 0, 20, 0, 0, 0, 20, 4000, 12, 12, 100, 1, 1, 0, 0, 1, 1); ",
-  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Ferrengi Warship', 150000, NULL, NULL, NULL, 5000, 20, 100, 15000, 5, 20, 0, 5, 0, 0, 0, 10, 5000, 15, 15, 50, 1, 1, 1, 0, 0, 1); ",
-  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Imperial Starship (NPC)', 329000, NULL, NULL, NULL, 10000, 40, 150, 50000, 4, 125, 0, 10, 0, 0, 1, 15, 2000, 15, 15, 150, 1, 1, 1, 0, 0, 1); ",
-/* Orion Syndicate Ship Types (Second Block) */
-  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Orion Heavy Fighter Patrol', 150000, NULL, NULL, NULL, 5000, 20, 50, 20000, 5, 10, 0, 5, 0, 0, 0, 10, 5000, 20, 10, 25, 1, 1, 1, 0, 0, 1); ",
-  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Orion Scout/Looter', 80000, NULL, NULL, NULL, 4000, 10, 150, 5000, 5, 10, 0, 5, 0, 0, 0, 10, 3000, 8, 8, 25, 1, 1, 1, 0, 0, 1); ",
-  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Orion Contraband Runner', 120000, NULL, NULL, NULL, 3000, 10, 200, 3000, 5, 10, 0, 5, 0, 0, 0, 10, 4000, 10, 5, 25, 1, 1, 1, 0, 0, 1); ",
-  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Orion Smuggler''s Kiss', 130000, NULL, NULL, NULL, 5000, 15, 100, 10000, 5, 10, 0, 5, 0, 0, 0, 10, 5000, 15, 15, 25, 1, 1, 1, 0, 0, 1); ",
-  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Orion Black Market Guard', 180000, NULL, NULL, NULL, 6000, 20, 60, 8000, 5, 10, 0, 5, 0, 0, 0, 10, 8000, 12, 25, 25, 1, 1, 1, 0, 0, 1); "
-  "INSERT OR IGNORE INTO ship_roles (role_id, role, role_description) VALUES (1, 'owner',   'Legal owner; can sell/rename, set availability, assign others');",
-  "INSERT OR IGNORE INTO ship_roles (role_id, role, role_description) VALUES (2, 'pilot',   'Currently flying the ship; usually the active ship for the player');",
-  "INSERT OR IGNORE INTO ship_roles (role_id, role, role_description) VALUES (3, 'crew',    'Can board and use limited functions (e.g., scan, fire fighters)');",
-  "INSERT OR IGNORE INTO ship_roles (role_id, role, role_description) VALUES (4, 'leasee',  'Temporary control with limits; can pilot but not sell/rename');",
-  "INSERT OR IGNORE INTO ship_roles (role_id, role, role_description) VALUES (5, 'lender',  'Party that lent/leased the ship; can revoke lease');",
-  "INSERT OR IGNORE INTO ship_roles (role_id, role, role_description) VALUES (6, 'corp',    'Corporate ownership/control (for future org/corp features)');",
-  "INSERT OR IGNORE INTO ship_roles (role_id, role, role_description) VALUES (7, 'manager', 'Delegated admin; can assign crew/pilot but not sell');",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 0, 'Civilian'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 0, 'Civilian'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 100, 'Cadet'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 100, 'Thug'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 400, 'Ensign'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 400, 'Pirate'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 1000, 'Lieutenant'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 1000, 'Raider'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 2500, 'Lt. Commander'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 2500, 'Marauder'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 5000, 'Commander'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 5000, 'Buccaneer'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 10000, 'Captain'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 10000, 'Corsair'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 20000, 'Commodore'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 20000, 'Terrorist'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 35000, 'Rear Admiral'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 35000, 'Anarchist'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 75000, 'Vice Admiral'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 75000, 'Warlord'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 100000, 'Admiral'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 100000, 'Despot'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 150000, 'Fleet Admiral'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 150000, 'Tyrant'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 200000, 'Grand Admiral'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 200000, 'Warmonger'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 300000, 'Lord Commander'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 300000, 'Dread Pirate'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 400000, 'High Commander'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 400000, 'Cosmic Destroyer'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 550000, 'Star Marshal'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 550000, 'Galactic Menace'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 700000, 'Grand Star Marshal'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 700000, 'Void Reaver'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 1000000, 'Supreme Commander'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 1000000, 'Grim Reaper'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 1500000, 'Galactic Commander'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 1500000, 'Annihilator'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 2000000, 'Galactic Captain'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 3000000, 'Supreme Annihilator'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 4000000, 'Galactic Commodore'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 4000000, 'Chaos Bringer'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 5000000, 'Galactic Admiral'); ",
-  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 5000000, 'Death Lord'); ",
-  "INSERT OR IGNORE INTO planettypes (code, typeDescription, typeName, "
-  "citadelUpgradeTime_lvl1, citadelUpgradeTime_lvl2, citadelUpgradeTime_lvl3, citadelUpgradeTime_lvl4, citadelUpgradeTime_lvl5, citadelUpgradeTime_lvl6, "
-  "citadelUpgradeOre_lvl1, citadelUpgradeOre_lvl2, citadelUpgradeOre_lvl3, citadelUpgradeOre_lvl4, citadelUpgradeOre_lvl5, citadelUpgradeOre_lvl6, "
-  "citadelUpgradeOrganics_lvl1, citadelUpgradeOrganics_lvl2, citadelUpgradeOrganics_lvl3, citadelUpgradeOrganics_lvl4, citadelUpgradeOrganics_lvl5, citadelUpgradeOrganics_lvl6, "
-  "citadelUpgradeEquipment_lvl1, citadelUpgradeEquipment_lvl2, citadelUpgradeEquipment_lvl3, citadelUpgradeEquipment_lvl4, citadelUpgradeEquipment_lvl5, citadelUpgradeEquipment_lvl6, "
-  "citadelUpgradeColonist_lvl1, citadelUpgradeColonist_lvl2, citadelUpgradeColonist_lvl3, citadelUpgradeColonist_lvl4, citadelUpgradeColonist_lvl5, citadelUpgradeColonist_lvl6, "
-  "maxColonist_ore, maxColonist_organics, maxColonist_equipment, "
-  "fighters, fuelProduction, organicsProduction, equipmentProduction, fighterProduction, "
-  "maxore, maxorganics, maxequipment, maxfighters, breeding) "
-  "VALUES ('M','Earth type','Earth', "
-  "4,4,5,10,5,15, "
-  "300,200,500,1000,300,1000, "
-  "200,50,250,1200,400,1200, "
-  "250,250,500,1000,1000,2000, "
-  "1000000,2000000,4000000,6000000,6000000,6000000, "
-  "100000,100000,100000, "
-  "0,0,0,0,0, " "10000000,100000,100000,1000000,0.75);",
-  /* Mountainous (L) */
-  "INSERT OR IGNORE INTO planettypes (code, typeDescription, typeName, "
-  "citadelUpgradeTime_lvl1, citadelUpgradeTime_lvl2, citadelUpgradeTime_lvl3, citadelUpgradeTime_lvl4, citadelUpgradeTime_lvl5, citadelUpgradeTime_lvl6, "
-  "citadelUpgradeOre_lvl1, citadelUpgradeOre_lvl2, citadelUpgradeOre_lvl3, citadelUpgradeOre_lvl4, citadelUpgradeOre_lvl5, citadelUpgradeOre_lvl6, "
-  "citadelUpgradeOrganics_lvl1, citadelUpgradeOrganics_lvl2, citadelUpgradeOrganics_lvl3, citadelUpgradeOrganics_lvl4, citadelUpgradeOrganics_lvl5, citadelUpgradeOrganics_lvl6, "
-  "citadelUpgradeEquipment_lvl1, citadelUpgradeEquipment_lvl2, citadelUpgradeEquipment_lvl3, citadelUpgradeEquipment_lvl4, citadelUpgradeEquipment_lvl5, citadelUpgradeEquipment_lvl6, "
-  "citadelUpgradeColonist_lvl1, citadelUpgradeColonist_lvl2, citadelUpgradeColonist_lvl3, citadelUpgradeColonist_lvl4, citadelUpgradeColonist_lvl5, citadelUpgradeColonist_lvl6, "
-  "maxColonist_ore, maxColonist_organics, maxColonist_equipment, "
-  "fighters, fuelProduction, organicsProduction, equipmentProduction, fighterProduction, "
-  "maxore, maxorganics, maxequipment, maxfighters, breeding) "
-  "VALUES ('L','Mountainous','Mountain', "
-  "2,5,5,8,5,12, "
-  "150,200,600,1000,300,1000, "
-  "100,50,250,1200,400,1200, "
-  "150,250,700,1000,1000,2000, "
-  "400000,1400000,3600000,5600000,7000000,5600000, "
-  "200000,200000,200000, "
-  "0,0,0,0,0, " "200000,200000,100000,1000000,0.24);",
-  /* Oceanic (O) */
-  "INSERT OR IGNORE INTO planettypes (code, typeDescription, typeName, "
-  "citadelUpgradeTime_lvl1, citadelUpgradeTime_lvl2, citadelUpgradeTime_lvl3, citadelUpgradeTime_lvl4, citadelUpgradeTime_lvl5, citadelUpgradeTime_lvl6, "
-  "citadelUpgradeOre_lvl1, citadelUpgradeOre_lvl2, citadelUpgradeOre_lvl3, citadelUpgradeOre_lvl4, citadelUpgradeOre_lvl5, citadelUpgradeOre_lvl6, "
-  "citadelUpgradeOrganics_lvl1, citadelUpgradeOrganics_lvl2, citadelUpgradeOrganics_lvl3, citadelUpgradeOrganics_lvl4, citadelUpgradeOrganics_lvl5, citadelUpgradeOrganics_lvl6, "
-  "citadelUpgradeEquipment_lvl1, citadelUpgradeEquipment_lvl2, citadelUpgradeEquipment_lvl3, citadelUpgradeEquipment_lvl4, citadelUpgradeEquipment_lvl5, citadelUpgradeEquipment_lvl6, "
-  "citadelUpgradeColonist_lvl1, citadelUpgradeColonist_lvl2, citadelUpgradeColonist_lvl3, citadelUpgradeColonist_lvl4, citadelUpgradeColonist_lvl5, citadelUpgradeColonist_lvl6, "
-  "maxColonist_ore, maxColonist_organics, maxColonist_equipment, "
-  "fighters, fuelProduction, organicsProduction, equipmentProduction, fighterProduction, "
-  "maxore, maxorganics, maxequipment, maxfighters, breeding) "
-  "VALUES ('O','Oceanic','Ocean', "
-  "6,5,8,5,4,8, "
-  "500,200,600,700,300,700, "
-  "200,50,400,900,400,900, "
-  "400,300,650,800,1000,1600, "
-  "1400000,2400000,4400000,7000000,8000000,7000000, "
-  "100000,1000000,1000000, "
-  "0,0,0,0,0, " "50000,1000000,50000,1000000,0.30);",
-  /* Desert Wasteland (K) */
-  "INSERT OR IGNORE INTO planettypes (code, typeDescription, typeName, "
-  "citadelUpgradeTime_lvl1, citadelUpgradeTime_lvl2, citadelUpgradeTime_lvl3, citadelUpgradeTime_lvl4, citadelUpgradeTime_lvl5, citadelUpgradeTime_lvl6, "
-  "citadelUpgradeOre_lvl1, citadelUpgradeOre_lvl2, citadelUpgradeOre_lvl3, citadelUpgradeOre_lvl4, citadelUpgradeOre_lvl5, citadelUpgradeOre_lvl6, "
-  "citadelUpgradeOrganics_lvl1, citadelUpgradeOrganics_lvl2, citadelUpgradeOrganics_lvl3, citadelUpgradeOrganics_lvl4, citadelUpgradeOrganics_lvl5, citadelUpgradeOrganics_lvl6, "
-  "citadelUpgradeEquipment_lvl1, citadelUpgradeEquipment_lvl2, citadelUpgradeEquipment_lvl3, citadelUpgradeEquipment_lvl4, citadelUpgradeEquipment_lvl5, citadelUpgradeEquipment_lvl6, "
-  "citadelUpgradeColonist_lvl1, citadelUpgradeColonist_lvl2, citadelUpgradeColonist_lvl3, citadelUpgradeColonist_lvl4, citadelUpgradeColonist_lvl5, citadelUpgradeColonist_lvl6, "
-  "maxColonist_ore, maxColonist_organics, maxColonist_equipment, "
-  "fighters, fuelProduction, organicsProduction, equipmentProduction, fighterProduction, "
-  "maxore, maxorganics, maxequipment, maxfighters, breeding) "
-  "VALUES ('K','Desert Wasteland','Desert', "
-  "6,5,8,5,4,8, "
-  "400,300,700,700,300,700, "
-  "300,80,900,900,400,900, "
-  "600,400,800,800,1000,1600, "
-  "1000000,2400000,4000000,7000000,8000000,7000000, "
-  "200000,50000,50000, " "0,0,0,0,0, " "200000,50000,10000,1000000,0.50);",
-  /* Volcanic (H) */
-  "INSERT OR IGNORE INTO planettypes (code, typeDescription, typeName, "
-  "citadelUpgradeTime_lvl1, citadelUpgradeTime_lvl2, citadelUpgradeTime_lvl3, citadelUpgradeTime_lvl4, citadelUpgradeTime_lvl5, citadelUpgradeTime_lvl6, "
-  "citadelUpgradeOre_lvl1, citadelUpgradeOre_lvl2, citadelUpgradeOre_lvl3, citadelUpgradeOre_lvl4, citadelUpgradeOre_lvl5, citadelUpgradeOre_lvl6, "
-  "citadelUpgradeOrganics_lvl1, citadelUpgradeOrganics_lvl2, citadelUpgradeOrganics_lvl3, citadelUpgradeOrganics_lvl4, citadelUpgradeOrganics_lvl5, citadelUpgradeOrganics_lvl6, "
-  "citadelUpgradeEquipment_lvl1, citadelUpgradeEquipment_lvl2, citadelUpgradeEquipment_lvl3, citadelUpgradeEquipment_lvl4, citadelUpgradeEquipment_lvl5, citadelUpgradeEquipment_lvl6, "
-  "citadelUpgradeColonist_lvl1, citadelUpgradeColonist_lvl2, citadelUpgradeColonist_lvl3, citadelUpgradeColonist_lvl4, citadelUpgradeColonist_lvl5, citadelUpgradeColonist_lvl6, "
-  "maxColonist_ore, maxColonist_organics, maxColonist_equipment, "
-  "fighters, fuelProduction, organicsProduction, equipmentProduction, fighterProduction, "
-  "maxore, maxorganics, maxequipment, maxfighters, breeding) "
-  "VALUES ('H','Volcanic','Volcano', "
-  "4,5,8,12,18,8, "
-  "500,300,1200,2000,3000,2000, "
-  "300,100,400,2000,1200,2000, "
-  "600,400,1500,2500,2000,5000, "
-  "800000,1600000,4400000,7000000,10000000,7000000, "
-  "1000000,10000,10000, " "0,0,0,0,0, "
-  "1000000,10000,100000,1000000,0.30);",
-  /* Gaseous (U) */
-  "INSERT OR IGNORE INTO planettypes (code, typeDescription, typeName, "
-  "citadelUpgradeTime_lvl1, citadelUpgradeTime_lvl2, citadelUpgradeTime_lvl3, citadelUpgradeTime_lvl4, citadelUpgradeTime_lvl5, citadelUpgradeTime_lvl6, "
-  "citadelUpgradeOre_lvl1, citadelUpgradeOre_lvl2, citadelUpgradeOre_lvl3, citadelUpgradeOre_lvl4, citadelUpgradeOre_lvl5, citadelUpgradeOre_lvl6, "
-  "citadelUpgradeOrganics_lvl1, citadelUpgradeOrganics_lvl2, citadelUpgradeOrganics_lvl3, citadelUpgradeOrganics_lvl4, citadelUpgradeOrganics_lvl5, citadelUpgradeOrganics_lvl6, "
-  "citadelUpgradeEquipment_lvl1, citadelUpgradeEquipment_lvl2, citadelUpgradeEquipment_lvl3, citadelUpgradeEquipment_lvl4, citadelUpgradeEquipment_lvl5, citadelUpgradeEquipment_lvl6, "
-  "citadelUpgradeColonist_lvl1, citadelUpgradeColonist_lvl2, citadelUpgradeColonist_lvl3, citadelUpgradeColonist_lvl4, citadelUpgradeColonist_lvl5, citadelUpgradeColonist_lvl6, "
-  "maxColonist_ore, maxColonist_organics, maxColonist_equipment, "
-  "fighters, fuelProduction, organicsProduction, equipmentProduction, fighterProduction, "
-  "maxore, maxorganics, maxequipment, maxfighters, breeding) "
-  "VALUES ('U','Gaseous','Gas Giant', "
-  "8,4,5,5,4,8, "
-  "1200,300,500,500,200,500, "
-  "400,100,500,200,200,200, "
-  "2500,400,2000,600,600,1200, "
-  "3000000,3000000,8000000,6000000,8000000,6000000, "
-  "10000,10000,10000, " "0,0,0,0,0, " "10000,10000,10000,1000000,-0.10);",
-  /* Glacial/Ice (C) */
-  "INSERT OR IGNORE INTO planettypes (code, typeDescription, typeName, "
-  "citadelUpgradeTime_lvl1, citadelUpgradeTime_lvl2, citadelUpgradeTime_lvl3, citadelUpgradeTime_lvl4, citadelUpgradeTime_lvl5, citadelUpgradeTime_lvl6, "
-  "citadelUpgradeOre_lvl1, citadelUpgradeOre_lvl2, citadelUpgradeOre_lvl3, citadelUpgradeOre_lvl4, citadelUpgradeOre_lvl5, citadelUpgradeOre_lvl6, "
-  "citadelUpgradeOrganics_lvl1, citadelUpgradeOrganics_lvl2, citadelUpgradeOrganics_lvl3, citadelUpgradeOrganics_lvl4, citadelUpgradeOrganics_lvl5, citadelUpgradeOrganics_lvl6, "
-  "citadelUpgradeEquipment_lvl1, citadelUpgradeEquipment_lvl2, citadelUpgradeEquipment_lvl3, citadelUpgradeEquipment_lvl4, citadelUpgradeEquipment_lvl5, citadelUpgradeEquipment_lvl6, "
-  "citadelUpgradeColonist_lvl1, citadelUpgradeColonist_lvl2, citadelUpgradeColonist_lvl3, citadelUpgradeColonist_lvl4, citadelUpgradeColonist_lvl5, citadelUpgradeColonist_lvl6, "
-  "maxColonist_ore, maxColonist_organics, maxColonist_equipment, "
-  "fighters, fuelProduction, organicsProduction, equipmentProduction, fighterProduction, "
-  "maxore, maxorganics, maxequipment, maxfighters, breeding) "
-  "VALUES ('C','Glacial/Ice','Ice World', "
-  "5,5,7,5,4,8, "
-  "400,300,600,700,300,700, "
-  "300,80,400,900,400,900, "
-  "600,400,650,700,1000,1400, "
-  "1000000,24000000,4400000,6600000,9000000,6600000, "
-  "20000,50000,20000, " "0,0,0,0,0, " "20000,50000,10000,1000000,-0.10);",
-  /* Earth planet in sector 1 */
-  " INSERT OR IGNORE INTO planets (num, sector, name, owner_id, owner_type, population, type, creator, colonist, fighters) "
-  " VALUES (1, 1, 'Earth', 0, 'player', 8000000000, 1, 'System', 18000000, 1000000); ",
-  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
-  " ((SELECT id FROM planets WHERE name='Earth'), 'ore', 10000000, 10000000, 0); ",
-  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
-  " ((SELECT id FROM planets WHERE name='Earth'), 'organics', 10000000, 10000000, 0); ",
-  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
-  " ((SELECT id FROM planets WHERE name='Earth'), 'equipment', 10000000, 10000000, 0); ",
-  /* Ferringhi planet in sector 0 (change in bigbang) */
-  " INSERT OR IGNORE INTO planets (num, sector, name, owner_id, owner_type, population, type, creator, colonist, fighters) "
-  " VALUES (2, 0, 'Ferringhi Homeworld', 0, 'npc_faction', 8000000000, 1, 'System', 18000000, 1000000); ",
-  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
-  " ((SELECT id FROM planets WHERE name='Earth'), 'ore', 10000000, 10000000, 0); ",
-  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
-  " ((SELECT id FROM planets WHERE name='Earth'), 'organics', 10000000, 10000000, 0); ",
-  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
-  " ((SELECT id FROM planets WHERE name='Earth'), 'equipment', 10000000, 10000000, 0); ",
-  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
-  " ((SELECT id FROM planets WHERE name='Earth'), 'fuel', 100000, 100000, 0); ",
-  /* NPC Planet: Orion Hideout (Contraband Outpost) */
-  " INSERT OR IGNORE INTO planets (num, sector, name, owner_id, owner_type, population, type, creator, colonist, fighters) "
-  " VALUES (3, 0, 'Orion Hideout', 0, 'npc_faction', 20000000, 1, 'Syndicate', 20010000, 200000); ",
-  " /* Orion Hideout Commodity Stock and Capacity */ "
-  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
-  " ((SELECT id FROM planets WHERE name='Orion Hideout'), 'ore', 50000000, 50000000, 10); ",
-  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
-  " ((SELECT id FROM planets WHERE name='Orion Hideout'), 'organics', 100, 100, 0); ",
-  /* Near Zero Capacity for Organics */
-  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
-  " ((SELECT id FROM planets WHERE name='Orion Hideout'), 'equipment', 30000000, 30000000, 10); ",
-  /* Fedspace sectors 1–10 */
-  "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (1, 'Fedspace 1System Volume', 'The Federation -- Do Not Dump!', 'The Federation');",
-  "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (1, 'Fedspace 1', 'The Federation -- Do Not Dump!', 'The Federation');",
-  "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (2, 'Fedspace 2', 'The Federation -- Do Not Dump!', 'The Federation');",
-  "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (3, 'Fedspace 3', 'The Federation -- Do Not Dump!', 'The Federation');",
-  "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (4, 'Fedspace 4', 'The Federation -- Do Not Dump!', 'The Federation');",
-  "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (5, 'Fedspace 5', 'The Federation -- Do Not Dump!', 'The Federation');",
-  "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (6, 'Fedspace 6', 'The Federation -- Do Not Dump!', 'The Federation');",
-  "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (7, 'Fedspace 7', 'The Federation -- Do Not Dump!', 'The Federation');",
-  "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (8, 'Fedspace 8', 'The Federation -- Do Not Dump!', 'The Federation');",
-  "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (9, 'Fedspace 9', 'The Federation -- Do Not Dump!', 'The Federation');",
-  "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (10, 'Fedspace 10','The Federation -- Do Not Dump!', 'The Federation');",
-  " INSERT OR IGNORE INTO ports (id, number, name, sector, size, techlevel, ore_on_hand, organics_on_hand, equipment_on_hand, petty_cash, type) "
-  " VALUES (1, 1, 'Earth Port', 1, 10, 10, 10000, 10000, 10000, 0, 1); ",
-  /* Fedspace warps (hard-coded) */
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (1,2);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (1,3);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (1,4);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (1,5);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (1,6);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (1,7);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (2,1);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (2,3);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (2,7);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (2,8);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (2,9);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (2,10);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (3,1);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (3,2);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (3,4);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (4,1);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (4,3);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (4,5);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (5,1);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (5,4);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (5,6);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (6,1);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (6,5);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (6,7);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (7,1);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (7,2);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (7,6);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (7,8);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (8,2);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (8,7);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (9,2);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (9,10);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (10,2);",
-  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (10,9);",
-  "INSERT INTO shiptypes\n"
-  "(name, basecost, maxattack, initialholds, maxholds, maxfighters, "
-  " turns, maxmines, maxlimpets, maxgenesis, can_transwarp, transportrange, maxshields, "
-  " offense, defense, maxbeacons, maxphotons, can_purchase)\n"
-  " SELECT"
-  " 'Mary Celeste Class', basecost, maxattack, initialholds, maxholds, maxfighters, "
-  " turns, maxmines, maxlimpets, maxgenesis, can_transwarp, transportrange, maxshields, "
-  " offense, defense, maxbeacons, maxphotons, 0\n"
-  " FROM shiptypes "
-  "WHERE name='Corporate Flagship'"
-  " AND NOT EXISTS (SELECT 1 FROM shiptypes WHERE name='Mary Celeste Class');",
-  "INSERT INTO npc_shipnames (id, name) VALUES\n"
-  "(1, 'Starlight Voyager'),\n"
-  "(2, 'Iron Sentinel'),\n"
-  "(3, 'Crimson Horizon'),\n"
-  "(4, 'The Unrelenting'),\n"
-  "(5, 'Vanguard of Sol'),\n"
-  "(6, 'Aether''s Echo'),\n"
-  "(7, 'Voiddrifter'),\n"
-  "(8, 'Celestia'),\n"
-  "(9, 'The Final Word'),\n"
-  "(10, 'Sovereign''s Might'),\n"
-  "(11, 'The Silence'),\n"
-  "(12, 'Ghost of Proxima'),\n"
-  "(13, 'Harbinger of Ruin'),\n"
-  "(14, 'Blackstar'),\n"
-  "(15, 'Fallen Angel'),\n"
-  "(16, 'Grave Digger'),\n"
-  "(17, 'The Empty Sky'),\n"
-  "(18, 'Cinderclaw'),\n"
-  "(19, 'Whisper of the Abyss'),\n"
-  "(20, 'The Nameless Dread'),\n"
-  "(21, 'Not My Fault'),\n"
-  "(22, 'Totally Not a Trap'),\n"
-  "(23, 'The Gravitational Pull'),\n"
-  "(24, 'Unlicensed & Uninsured'),\n"
-  "(25, 'Ship Happens'),\n"
-  "(26, 'The Loan Shark''s Repossession'),\n"
-  "(27, 'Where Are We Going?'),\n"
-  "(28, 'Taxes Included'),\n"
-  "(29, 'Error 404: Ship Not Found'),\n"
-  "(30, 'The Padded Cell'),\n"
-  "(31, 'Quantum Leap'),\n"
-  "(32, 'The Data Stream'),\n"
-  "(33, 'Sub-Light Cruiser'),\n"
-  "(34, 'Temporal Paradox'),\n"
-  "(35, 'Neon Genesis'),\n"
-  "(36, 'The Warp Core'),\n"
-  "(37, 'The Nanite Swarm'),\n"
-  "(38, 'Synthetic Dream'),\n"
-  "(39, 'The Singularity'),\n"
-  "(40, 'Blink Drive'),\n"
-  "(41, 'The Last Endeavor'),\n"
-  "(42, 'Odyssey''s End'),\n"
-  "(43, 'The Magellan'),\n"
-  "(44, 'Star''s Fury'),\n"
-  "(45, 'Cosmic Drifter'),\n"
-  "(46, 'The Old Dog'),\n"
-  "(47, 'The Wayfinder'),\n"
-  "(48, 'The Horizon Breaker'),\n"
-  "(49, 'Stormchaser'),\n" "(50, 'Beyond the Veil');\n",
-  "INSERT OR IGNORE INTO tavern_names (name, enabled, weight) VALUES ('The Rusty Flange', 1, 10);",
-  "INSERT OR IGNORE INTO tavern_names (name, enabled, weight) VALUES ('The Starfall Inn', 1, 10);",
-  "INSERT OR IGNORE INTO tavern_names (name, enabled, weight) VALUES ('Orions Den', 1, 5);",
-  "INSERT OR IGNORE INTO tavern_names (name, enabled, weight) VALUES ('FedSpace Cantina', 1, 8);",
-  "INSERT OR IGNORE INTO tavern_settings (id, max_bet_per_transaction, daily_max_wager, enable_dynamic_wager_limit, graffiti_max_posts, notice_expires_days, buy_round_cost, buy_round_alignment_gain, loan_shark_enabled)\n"
-  "VALUES (1, 5000, 50000, 0, 100, 7, 1000, 5, 1);",
-  "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('FIGHTERS', 'Fighters', 100, 0, 1, NULL, 'FIGHTER', 1);",
-  "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('SHIELDS', 'Shields', 200, 0, 1, NULL, 'SHIELD', 1);",
-  "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('HOLDS', 'Holds', 50, 0, 1, NULL, 'HOLD', 1);",
-  "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('GENESIS', 'Genesis Torpedo', 25000, 1, 0, NULL, 'SPECIAL', 1);",
-  "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('DETONATOR', 'Atomic Detonator', 10000, 1, 0, NULL, 'SPECIAL', 1);",
-  "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('CLOAK', 'Cloaking Device', 50000, 1, 0, 1, 'MODULE', 1);",
-  "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('LSCANNER', 'Long-Range Scanner', 30000, 1, 0, 1, 'MODULE', 1);",
-  "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('PSCANNER', 'Planet Scanner', 15000, 1, 0, 1, 'MODULE', 1);",
-  "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('TWARP', 'TransWarp Drive', 100000, 1, 0, 1, 'MODULE', 1);",
-  /* fix a problem with the terraforming cron */
-  "ALTER TABLE planets ADD COLUMN terraform_turns_left INTEGER NOT NULL DEFAULT 1;",
-  "INSERT INTO ships (name, type_id, attack, holds, mines, limpets, fighters, genesis, photons, sector, shields, beacons, colonists, equipment, organics, ore, flags, cloaking_devices, cloaked, ported, onplanet) "
-  "VALUES ('Bit Banger', 1, 110, 20, 25, 5, 2300, 5, 1, 1, 400, 10, 5, 5, 5, 5, 0, 5, NULL, 1, 1);",
-  /* CHANGE: Added 'commission' column and value '1' to these inserts */
-  "INSERT OR IGNORE INTO players (number, name, passwd, sector, ship, type, commission) VALUES (1, 'System', 'BOT',1,1,1,1);",
-  "INSERT OR IGNORE INTO players (number, name, passwd, sector, ship, type, commission) VALUES (1, 'Federation Administrator', 'BOT',1,1,1,1);",
-  "INSERT OR IGNORE INTO players (number, name, passwd, sector, ship, type, commission) VALUES (7, 'newguy', 'pass123',1,1,2,1);",
-  /* ---- AI QA Bot Test Player ---- */
-  "INSERT INTO ships (name, type_id, attack, holds, fighters, shields, sector, onplanet, ported) SELECT 'QA Bot 1', T.id, T.maxattack, T.maxholds, T.maxfighters, T.maxshields, 1, 0, 0 FROM shiptypes T WHERE T.name = 'Scout Marauder';",
-  "INSERT OR IGNORE INTO players (number, name, passwd, sector, credits, type, commission) VALUES (8, 'ai_qa_bot', 'quality', 1, 10000, 2, 1);",
-  "UPDATE players SET ship = (SELECT id FROM ships WHERE name = 'QA Bot 1') WHERE name = 'ai_qa_bot';",
-  "INSERT INTO ship_ownership (player_id, ship_id, is_primary, role_id) VALUES ((SELECT id FROM players WHERE name = 'ai_qa_bot'), (SELECT id FROM ships WHERE name = 'QA Bot 1'), 1, 1);",
-  /* ----------------------------- */
-  "INSERT INTO ship_ownership (player_id, ship_id, is_primary, role_id) VALUES (1,1,1,0);",
-  "INSERT INTO player_types (description) VALUES ('NPC');"
-  "INSERT INTO player_types (description) VALUES ('Human Player');"
-/* ------------------------------------------------------------------------------------- */
-/* Insert five maxed-out Orion Syndicate ships (FULL SCHEMA APPLIED) */
-/* ------------------------------------------------------------------------------------- */
-  " INSERT INTO ships ( "
-  "  name, type_id, attack, holds, mines, limpets, fighters, genesis, photons, sector, shields, beacons, colonists, equipment, organics, ore, flags, cloaking_devices, cloaked, ported, onplanet "
-  " ) "
-  " SELECT "
-  "  'Orion Heavy Fighter Alpha', T.id, 0, T.maxholds, T.maxmines, 0, T.maxfighters, T.maxgenesis, T.maxphotons, P.sector, T.maxshields, T.maxbeacons, 0, 0, 0, 0, 0, 0, NULL, 0, 0 "
-  " FROM shiptypes T, planets P "
-  " WHERE P.num=3 AND T.name='Orion Heavy Fighter Patrol' "
-  " UNION ALL "
-  " SELECT "
-  "  'Orion Scout Gamma', T.id, 0, T.maxholds, T.maxmines, 0, T.maxfighters, T.maxgenesis, T.maxphotons, P.sector, T.maxshields, T.maxbeacons, 0, 0, 0, 0, 0, 0, NULL, 0, 0 "
-  " FROM shiptypes T, planets P "
-  " WHERE P.num=3 AND T.name='Orion Scout/Looter' "
-  " UNION ALL "
-  " SELECT "
-  "  'Orion Contraband Delta', T.id, 0, T.maxholds, T.maxmines, 0, T.maxfighters, T.maxgenesis, T.maxphotons, P.sector, T.maxshields, T.maxbeacons, 0, 0, 0, 0, 0, 0, NULL, 0, 0 "
-  " FROM shiptypes T, planets P "
-  " WHERE P.num=3 AND T.name='Orion Contraband Runner' "
-  " UNION ALL "
-  " SELECT "
-  "  'Orion Smuggler Beta', T.id, 0, T.maxholds, T.maxmines, 0, T.maxfighters, T.maxgenesis, T.maxphotons, P.sector, T.maxshields, T.maxbeacons, 0, 0, 0, 0, 0, 0, NULL, 0, 0 "
-  " FROM shiptypes T, planets P "
-  " WHERE P.num=3 AND T.name='Orion Smuggler''s Kiss' "
-  " UNION ALL "
-  " SELECT "
-  "  'Orion Guard Epsilon', T.id, 0, T.maxholds, T.maxmines, 0, T.maxfighters, T.maxgenesis, T.maxphotons, P.sector, T.maxshields, T.maxbeacons, 0, 0, 0, 0, 0, 0, NULL, 0, 0 "
-  " FROM shiptypes T, planets P "
-  " WHERE P.num=3 AND T.name='Orion Black Market Guard';"
-  /* ------------------------------------------------------------------------------------- */
-  /* 3. Insert 5 Orion Captains and assign ships (FIXED: players columns and ship ownership) */
-  /* ------------------------------------------------------------------------------------- */
-  /* Insert 5 Orion Captains (Players) - Removed non-schema columns (faction_id, empire, turns) */
-  "INSERT OR IGNORE INTO players (type, name, passwd, sector, experience, alignment, credits) "
-  "SELECT 1, 'Zydras, Heavy Fighter Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
-  "SELECT 1, 'Krell, Scout Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
-  "SELECT 1, 'Vex, Contraband Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
-  "SELECT 1, 'Jaxx, Smuggler Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
-  "SELECT 1, 'Sira, Market Guard Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3;"
-/* Insert 5 Orion Captains (Players) - Removed non-schema columns (faction_id, empire, turns) */
-  "INSERT OR IGNORE INTO players (type, name, passwd, sector, experience, alignment, credits, commission) "
-  "SELECT 1, 'Zydras, Heavy Fighter Captain', '', P.sector, 100, -100, 1000, 1 FROM planets P WHERE P.num=3 UNION ALL "
-  "SELECT 1, 'Krell, Scout Captain', '', P.sector, 100, -100, 1000, 1 FROM planets P WHERE P.num=3 UNION ALL "
-  "SELECT 1, 'Vex, Contraband Captain', '', P.sector, 100, -100, 1000, 1 FROM planets P WHERE P.num=3 UNION ALL "
-  "SELECT 1, 'Jaxx, Smuggler Captain', '', P.sector, 100, -100, 1000, 1 FROM planets P WHERE P.num=3 UNION ALL "
-  "SELECT 1, 'Sira, Market Guard Captain', '', P.sector, 100, -100, 1000, 1 FROM planets P WHERE P.num=3;"
-  "SELECT 1, 'Fer', '', P.sector, 200, -100, 1000, 1 FROM planets P WHERE P.num=2;"
-  /* ------------------------------------------------------------------------------------- */
-  /*  -- 1. Create the Orion Syndicate Corporation */
-  "INSERT INTO corporations (name, owner_id, tag) VALUES ('Orion Syndicate', (SELECT id FROM players WHERE name LIKE 'Zydras%'), 'ORION');",
-  "INSERT INTO corporations (name, owner_id, tag) VALUES ('Ferrengi Alliance', (SELECT id FROM players WHERE name LIKE'Fer%'), 'FENG');",
-  /* Ferringhi Homeworld (Planet ID 2) Commodities */
-  /* -- Ore (High Capacity) */
-  " INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
-  " (2, 'ore', 10000000, 10000000, 0); \n",
-  /* -- Organics (Very High Capacity/Focus) */
-  " INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
-  " (2, 'organics', 50000000, 50000000, 10); \n ",
-  /* -- Equipment (High Capacity) */
-  " INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
-  " (2, 'equipment', 10000000, 10000000, 0); \n ",
-  " INSERT INTO turns (player, turns_remaining, last_update)"
-  " SELECT "
-  "    id, "
-  "    100, "
-  "    strftime('%s', 'now') "
-  " FROM " "    players " "WHERE " "    type = 2; "
-  ///////////////////////
   " CREATE TABLE IF NOT EXISTS currencies (  "
   "   code TEXT PRIMARY KEY,  "
   "   name TEXT NOT NULL,  "
@@ -1955,6 +1422,36 @@ const char *insert_default_sql[] = {
   "   settlement_tx_buy INTEGER,  "
   "   settlement_tx_sell INTEGER  "
   " );  "
+  // New table for unified stock and price
+  " CREATE TABLE IF NOT EXISTS entity_stock (  "
+  "    entity_type      TEXT NOT NULL CHECK(entity_type IN ('port','planet')),  "
+  "    entity_id        INTEGER NOT NULL,  "
+  "    commodity_code   TEXT NOT NULL,  "
+  "    quantity         INTEGER NOT NULL,  "
+  "    price            INTEGER NULL,  "
+  "    last_updated_ts  INTEGER NOT NULL DEFAULT (strftime('%s','now')),  "
+  "    PRIMARY KEY (entity_type, entity_id, commodity_code),  "
+  "    FOREIGN KEY (commodity_code) REFERENCES commodities(code)  "
+  " );  ",
+  // New table for economy configuration curves
+  " CREATE TABLE IF NOT EXISTS economy_curve (  "
+  "    id                      INTEGER PRIMARY KEY,  "
+  "    curve_name              TEXT NOT NULL UNIQUE,  "
+  "    base_restock_rate       REAL NOT NULL,  "
+  "    price_elasticity        REAL NOT NULL,  "
+  "    target_stock            INTEGER NOT NULL,  "
+  "    volatility_factor       REAL NOT NULL  "
+  " );  ",
+  // New table for planet production rates
+  " CREATE TABLE IF NOT EXISTS planet_production (  "
+  "    planet_type_id      INTEGER NOT NULL,  "
+  "    commodity_code      TEXT NOT NULL,  "
+  "    base_prod_rate      INTEGER NOT NULL,  "
+  "    base_cons_rate      INTEGER NOT NULL,  "
+  "    PRIMARY KEY (planet_type_id, commodity_code),  "
+  "    FOREIGN KEY (planet_type_id) REFERENCES planettypes(id),  "
+  "    FOREIGN KEY (commodity_code) REFERENCES commodities(code)  "
+  " );  ",
   " CREATE TABLE IF NOT EXISTS bank_accounts (  "
   "   id INTEGER PRIMARY KEY,  "
   "   owner_type TEXT NOT NULL,  "
@@ -2596,6 +2093,502 @@ const char *insert_default_sql[] = {
   " ORDER BY ba.balance DESC;  "
   ////////////////
 };
+const char *insert_default_sql[] = {
+  /* Config defaults - Key-Value-Type Schema */
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('turnsperday', '120', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('maxwarps_per_sector', '6', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('startingcredits', '10000000', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('startingfighters', '10', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('startingholds', '20', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('processinterval', '1', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('autosave', '5', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_ports', '200', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_planets_per_sector', '6', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_total_planets', '300', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_citadel_level', '6', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('number_of_planet_types', '8', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_ship_name_length', '50', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('ship_type_count', '8', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('hash_length', '128', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('default_nodes', '500', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('buff_size', '1024', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_name_length', '50', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('planet_type_count', '8', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('server_port', '1234', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('s2s_port', '4321', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('bank_alert_threshold_player', '1000000', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('bank_alert_threshold_corp', '5000000', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_enabled', '1', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_block_at_cap', '0', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_navhaz_delta', '0', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_M', '10', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_K', '10', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_O', '10', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_L', '10', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_C', '10', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_H', '10', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_U', '5', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_enabled', '1', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_trade_in_factor_bp', '5000', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_require_cargo_fit', '1', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_require_fighters_fit', '1', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_require_shields_fit', '1', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_require_hardware_compat', '1', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_tax_bp', '1000', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('illegal_allowed_neutral', '0', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_cloak_duration', '24', 'int');",
+  "INSERT OR IGNORE INTO law_enforcement (id) VALUES (1);",
+/* Shiptypes: name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled */
+/* Initial Ship Types (First Block) */
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Merchant Cruiser', 41300, NULL, NULL, NULL, 750, 20, 75, 2500, 3, 50, 0, 5, 0, 0, 0, 5, 400, 10, 10, 0, 1, 1, 0, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Scout Marauder', 15950, NULL, NULL, NULL, 250, 10, 25, 250, 2, 0, 0, 0, 0, 0, 0, 0, 100, 20, 20, 0, 1, 1, 0, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Missile Frigate', 100000, NULL, NULL, NULL, 2000, 12, 60, 5000, 3, 5, 0, 0, 0, 0, 0, 2, 400, 13, 13, 5, 0, 0, 1, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Battleship', 88500, NULL, NULL, NULL, 3000, 16, 80, 10000, 4, 25, 0, 1, 0, 0, 0, 8, 750, 16, 16, 50, 1, 1, 0, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Corporate Flagship', 163500, NULL, NULL, NULL, 6000, 20, 85, 20000, 3, 100, 0, 10, 0, 0, 1, 10, 1500, 12, 12, 100, 1, 1, 1, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Colonial Transport', 63600, NULL, NULL, NULL, 100, 50, 250, 200, 6, 0, 0, 5, 0, 0, 0, 7, 500, 6, 6, 10, 0, 1, 0, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Cargo Transport', 51950, NULL, NULL, NULL, 125, 50, 125, 400, 4, 1, 0, 2, 0, 0, 0, 5, 1000, 8, 8, 20, 1, 1, 0, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Merchant Freighter', 33400, NULL, NULL, NULL, 100, 30, 65, 300, 2, 2, 0, 2, 0, 0, 0, 5, 500, 8, 8, 20, 1, 1, 0, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Imperial Starship', 329000, NULL, NULL, NULL, 10000, 40, 150, 50000, 4, 125, 0, 10, 0, 0, 1, 15, 2000, 15, 15, 150, 1, 1, 1, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Havoc Gunstar', 79000, NULL, NULL, NULL, 1000, 12, 50, 10000, 3, 5, 0, 1, 0, 0, 1, 6, 3000, 13, 13, 5, 1, 0, 0, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Constellation', 72500, NULL, NULL, NULL, 2000, 20, 80, 5000, 3, 25, 0, 2, 0, 0, 0, 6, 750, 14, 14, 50, 1, 1, 0, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('T''khasi Orion', 42500, NULL, NULL, NULL, 250, 30, 60, 750, 2, 5, 0, 1, 0, 0, 0, 3, 750, 11, 11, 20, 1, 1, 0, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Tholian Sentinel', 47500, NULL, NULL, NULL, 800, 10, 50, 2500, 4, 50, 0, 1, 0, 0, 0, 3, 4000, 1, 1, 10, 1, 0, 0, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Taurean Mule', 63600, NULL, NULL, NULL, 150, 50, 150, 300, 4, 0, 0, 1, 0, 0, 0, 5, 600, 5, 5, 20, 1, 1, 0, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Interdictor Cruiser', 539000, NULL, NULL, NULL, 15000, 10, 40, 100000, 15, 200, 0, 20, 0, 0, 0, 20, 4000, 12, 12, 100, 1, 1, 0, 0, 1, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Ferrengi Warship', 150000, NULL, NULL, NULL, 5000, 20, 100, 15000, 5, 20, 0, 5, 0, 0, 0, 10, 5000, 15, 15, 50, 1, 1, 1, 0, 0, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Imperial Starship (NPC)', 329000, NULL, NULL, NULL, 10000, 40, 150, 50000, 4, 125, 0, 10, 0, 0, 1, 15, 2000, 15, 15, 150, 1, 1, 1, 0, 0, 1); ",
+/* Orion Syndicate Ship Types (Second Block) */
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Orion Heavy Fighter Patrol', 150000, NULL, NULL, NULL, 5000, 20, 50, 20000, 5, 10, 0, 5, 0, 0, 0, 10, 5000, 20, 10, 25, 1, 1, 1, 0, 0, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Orion Scout/Looter', 80000, NULL, NULL, NULL, 4000, 10, 150, 5000, 5, 10, 0, 5, 0, 0, 0, 10, 3000, 8, 8, 25, 1, 1, 1, 0, 0, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Orion Contraband Runner', 120000, NULL, NULL, NULL, 3000, 10, 200, 3000, 5, 10, 0, 5, 0, 0, 0, 10, 4000, 10, 5, 25, 1, 1, 1, 0, 0, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Orion Smuggler''s Kiss', 130000, NULL, NULL, NULL, 5000, 15, 100, 10000, 5, 10, 0, 5, 0, 0, 0, 10, 5000, 15, 15, 25, 1, 1, 1, 0, 0, 1); ",
+  " INSERT OR IGNORE INTO shiptypes (name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled) VALUES ('Orion Black Market Guard', 180000, NULL, NULL, NULL, 6000, 20, 60, 8000, 5, 10, 0, 5, 0, 0, 0, 10, 8000, 12, 25, 25, 1, 1, 1, 0, 0, 1); "
+  "INSERT OR IGNORE INTO ship_roles (role_id, role, role_description) VALUES (1, 'owner',   'Legal owner; can sell/rename, set availability, assign others');",
+  "INSERT OR IGNORE INTO ship_roles (role_id, role, role_description) VALUES (2, 'pilot',   'Currently flying the ship; usually the active ship for the player');",
+  "INSERT OR IGNORE INTO ship_roles (role_id, role, role_description) VALUES (3, 'crew',    'Can board and use limited functions (e.g., scan, fire fighters)');",
+  "INSERT OR IGNORE INTO ship_roles (role_id, role, role_description) VALUES (4, 'leasee',  'Temporary control with limits; can pilot but not sell/rename');",
+  "INSERT OR IGNORE INTO ship_roles (role_id, role, role_description) VALUES (5, 'lender',  'Party that lent/leased the ship; can revoke lease');",
+  "INSERT OR IGNORE INTO ship_roles (role_id, role, role_description) VALUES (6, 'corp',    'Corporate ownership/control (for future org/corp features)');",
+  "INSERT OR IGNORE INTO ship_roles (role_id, role, role_description) VALUES (7, 'manager', 'Delegated admin; can assign crew/pilot but not sell');",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 0, 'Civilian'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 0, 'Civilian'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 100, 'Cadet'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 100, 'Thug'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 400, 'Ensign'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 400, 'Pirate'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 1000, 'Lieutenant'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 1000, 'Raider'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 2500, 'Lt. Commander'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 2500, 'Marauder'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 5000, 'Commander'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 5000, 'Buccaneer'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 10000, 'Captain'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 10000, 'Corsair'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 20000, 'Commodore'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 20000, 'Terrorist'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 35000, 'Rear Admiral'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 35000, 'Anarchist'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 75000, 'Vice Admiral'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 75000, 'Warlord'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 100000, 'Admiral'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 100000, 'Despot'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 150000, 'Fleet Admiral'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 150000, 'Tyrant'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 200000, 'Grand Admiral'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 200000, 'Warmonger'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 300000, 'Lord Commander'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 300000, 'Dread Pirate'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 400000, 'High Commander'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 400000, 'Cosmic Destroyer'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 550000, 'Star Marshal'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 550000, 'Galactic Menace'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 700000, 'Grand Star Marshal'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 700000, 'Void Reaver'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 1000000, 'Supreme Commander'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 1000000, 'Grim Reaper'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 1500000, 'Galactic Commander'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 1500000, 'Annihilator'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 2000000, 'Galactic Captain'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 3000000, 'Supreme Annihilator'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 4000000, 'Galactic Commodore'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 4000000, 'Chaos Bringer'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (0, 5000000, 'Galactic Admiral'); ",
+  "INSERT OR IGNORE INTO commision (is_evil, min_exp, description) values (1, 5000000, 'Death Lord'); ",
+  "INSERT OR IGNORE INTO planettypes (code, typeDescription, typeName, "
+  "citadelUpgradeTime_lvl1, citadelUpgradeTime_lvl2, citadelUpgradeTime_lvl3, citadelUpgradeTime_lvl4, citadelUpgradeTime_lvl5, citadelUpgradeTime_lvl6, "
+  "citadelUpgradeOre_lvl1, citadelUpgradeOre_lvl2, citadelUpgradeOre_lvl3, citadelUpgradeOre_lvl4, citadelUpgradeOre_lvl5, citadelUpgradeOre_lvl6, "
+  "citadelUpgradeOrganics_lvl1, citadelUpgradeOrganics_lvl2, citadelUpgradeOrganics_lvl3, citadelUpgradeOrganics_lvl4, citadelUpgradeOrganics_lvl5, citadelUpgradeOrganics_lvl6, "
+  "citadelUpgradeEquipment_lvl1, citadelUpgradeEquipment_lvl2, citadelUpgradeEquipment_lvl3, citadelUpgradeEquipment_lvl4, citadelUpgradeEquipment_lvl5, citadelUpgradeEquipment_lvl6, "
+  "citadelUpgradeColonist_lvl1, citadelUpgradeColonist_lvl2, citadelUpgradeColonist_lvl3, citadelUpgradeColonist_lvl4, citadelUpgradeColonist_lvl5, citadelUpgradeColonist_lvl6, "
+  "maxColonist_ore, maxColonist_organics, maxColonist_equipment, "
+  "fighters, fuelProduction, organicsProduction, equipmentProduction, fighterProduction, "
+  "maxore, maxorganics, maxequipment, maxfighters, breeding) "
+  "VALUES ('M','Earth type','Earth', "
+  "4,4,5,10,5,15, "
+  "300,200,500,1000,300,1000, "
+  "200,50,250,1200,400,1200, "
+  "250,250,500,1000,1000,2000, "
+  "1000000,2000000,4000000,6000000,6000000,6000000, "
+  "100000,100000,100000, "
+  "0,0,0,0,0, " "10000000,100000,100000,1000000,0.75);",
+  /* Mountainous (L) */
+  "INSERT OR IGNORE INTO planettypes (code, typeDescription, typeName, "
+  "citadelUpgradeTime_lvl1, citadelUpgradeTime_lvl2, citadelUpgradeTime_lvl3, citadelUpgradeTime_lvl4, citadelUpgradeTime_lvl5, citadelUpgradeTime_lvl6, "
+  "citadelUpgradeOre_lvl1, citadelUpgradeOre_lvl2, citadelUpgradeOre_lvl3, citadelUpgradeOre_lvl4, citadelUpgradeOre_lvl5, citadelUpgradeOre_lvl6, "
+  "citadelUpgradeOrganics_lvl1, citadelUpgradeOrganics_lvl2, citadelUpgradeOrganics_lvl3, citadelUpgradeOrganics_lvl4, citadelUpgradeOrganics_lvl5, citadelUpgradeOrganics_lvl6, "
+  "citadelUpgradeEquipment_lvl1, citadelUpgradeEquipment_lvl2, citadelUpgradeEquipment_lvl3, citadelUpgradeEquipment_lvl4, citadelUpgradeEquipment_lvl5, citadelUpgradeEquipment_lvl6, "
+  "citadelUpgradeColonist_lvl1, citadelUpgradeColonist_lvl2, citadelUpgradeColonist_lvl3, citadelUpgradeColonist_lvl4, citadelUpgradeColonist_lvl5, citadelUpgradeColonist_lvl6, "
+  "maxColonist_ore, maxColonist_organics, maxColonist_equipment, "
+  "fighters, fuelProduction, organicsProduction, equipmentProduction, fighterProduction, "
+  "maxore, maxorganics, maxequipment, maxfighters, breeding) "
+  "VALUES ('L','Mountainous','Mountain', "
+  "2,5,5,8,5,12, "
+  "150,200,600,1000,300,1000, "
+  "100,50,250,1200,400,1200, "
+  "150,250,700,1000,1000,2000, "
+  "400000,1400000,3600000,5600000,7000000,5600000, "
+  "200000,200000,200000, "
+  "0,0,0,0,0, " "200000,200000,100000,1000000,0.24);",
+  /* Oceanic (O) */
+  "INSERT OR IGNORE INTO planettypes (code, typeDescription, typeName, "
+  "citadelUpgradeTime_lvl1, citadelUpgradeTime_lvl2, citadelUpgradeTime_lvl3, citadelUpgradeTime_lvl4, citadelUpgradeTime_lvl5, citadelUpgradeTime_lvl6, "
+  "citadelUpgradeOre_lvl1, citadelUpgradeOre_lvl2, citadelUpgradeOre_lvl3, citadelUpgradeOre_lvl4, citadelUpgradeOre_lvl5, citadelUpgradeOre_lvl6, "
+  "citadelUpgradeOrganics_lvl1, citadelUpgradeOrganics_lvl2, citadelUpgradeOrganics_lvl3, citadelUpgradeOrganics_lvl4, citadelUpgradeOrganics_lvl5, citadelUpgradeOrganics_lvl6, "
+  "citadelUpgradeEquipment_lvl1, citadelUpgradeEquipment_lvl2, citadelUpgradeEquipment_lvl3, citadelUpgradeEquipment_lvl4, citadelUpgradeEquipment_lvl5, citadelUpgradeEquipment_lvl6, "
+  "citadelUpgradeColonist_lvl1, citadelUpgradeColonist_lvl2, citadelUpgradeColonist_lvl3, citadelUpgradeColonist_lvl4, citadelUpgradeColonist_lvl5, citadelUpgradeColonist_lvl6, "
+  "maxColonist_ore, maxColonist_organics, maxColonist_equipment, "
+  "fighters, fuelProduction, organicsProduction, equipmentProduction, fighterProduction, "
+  "maxore, maxorganics, maxequipment, maxfighters, breeding) "
+  "VALUES ('O','Oceanic','Ocean', "
+  "6,5,8,5,4,8, "
+  "500,200,600,700,300,700, "
+  "200,50,400,900,400,900, "
+  "400,300,650,800,1000,1600, "
+  "1400000,2400000,4400000,7000000,8000000,7000000, "
+  "100000,1000000,1000000, "
+  "0,0,0,0,0, " "50000,1000000,50000,1000000,0.30);",
+  /* Desert Wasteland (K) */
+  "INSERT OR IGNORE INTO planettypes (code, typeDescription, typeName, "
+  "citadelUpgradeTime_lvl1, citadelUpgradeTime_lvl2, citadelUpgradeTime_lvl3, citadelUpgradeTime_lvl4, citadelUpgradeTime_lvl5, citadelUpgradeTime_lvl6, "
+  "citadelUpgradeOre_lvl1, citadelUpgradeOre_lvl2, citadelUpgradeOre_lvl3, citadelUpgradeOre_lvl4, citadelUpgradeOre_lvl5, citadelUpgradeOre_lvl6, "
+  "citadelUpgradeOrganics_lvl1, citadelUpgradeOrganics_lvl2, citadelUpgradeOrganics_lvl3, citadelUpgradeOrganics_lvl4, citadelUpgradeOrganics_lvl5, citadelUpgradeOrganics_lvl6, "
+  "citadelUpgradeEquipment_lvl1, citadelUpgradeEquipment_lvl2, citadelUpgradeEquipment_lvl3, citadelUpgradeEquipment_lvl4, citadelUpgradeEquipment_lvl5, citadelUpgradeEquipment_lvl6, "
+  "citadelUpgradeColonist_lvl1, citadelUpgradeColonist_lvl2, citadelUpgradeColonist_lvl3, citadelUpgradeColonist_lvl4, citadelUpgradeColonist_lvl5, citadelUpgradeColonist_lvl6, "
+  "maxColonist_ore, maxColonist_organics, maxColonist_equipment, "
+  "fighters, fuelProduction, organicsProduction, equipmentProduction, fighterProduction, "
+  "maxore, maxorganics, maxequipment, maxfighters, breeding) "
+  "VALUES ('K','Desert Wasteland','Desert', "
+  "6,5,8,5,4,8, "
+  "400,300,700,700,300,700, "
+  "300,80,900,900,400,900, "
+  "600,400,800,800,1000,1600, "
+  "1000000,2400000,4000000,7000000,8000000,7000000, "
+  "200000,50000,50000, " "0,0,0,0,0, " "200000,50000,10000,1000000,0.50);",
+  /* Volcanic (H) */
+  "INSERT OR IGNORE INTO planettypes (code, typeDescription, typeName, "
+  "citadelUpgradeTime_lvl1, citadelUpgradeTime_lvl2, citadelUpgradeTime_lvl3, citadelUpgradeTime_lvl4, citadelUpgradeTime_lvl5, citadelUpgradeTime_lvl6, "
+  "citadelUpgradeOre_lvl1, citadelUpgradeOre_lvl2, citadelUpgradeOre_lvl3, citadelUpgradeOre_lvl4, citadelUpgradeOre_lvl5, citadelUpgradeOre_lvl6, "
+  "citadelUpgradeOrganics_lvl1, citadelUpgradeOrganics_lvl2, citadelUpgradeOrganics_lvl3, citadelUpgradeOrganics_lvl4, citadelUpgradeOrganics_lvl5, citadelUpgradeOrganics_lvl6, "
+  "citadelUpgradeEquipment_lvl1, citadelUpgradeEquipment_lvl2, citadelUpgradeEquipment_lvl3, citadelUpgradeEquipment_lvl4, citadelUpgradeEquipment_lvl5, citadelUpgradeEquipment_lvl6, "
+  "citadelUpgradeColonist_lvl1, citadelUpgradeColonist_lvl2, citadelUpgradeColonist_lvl3, citadelUpgradeColonist_lvl4, citadelUpgradeColonist_lvl5, citadelUpgradeColonist_lvl6, "
+  "maxColonist_ore, maxColonist_organics, maxColonist_equipment, "
+  "fighters, fuelProduction, organicsProduction, equipmentProduction, fighterProduction, "
+  "maxore, maxorganics, maxequipment, maxfighters, breeding) "
+  "VALUES ('H','Volcanic','Volcano', "
+  "4,5,8,12,18,8, "
+  "500,300,1200,2000,3000,2000, "
+  "300,100,400,2000,1200,2000, "
+  "600,400,1500,2500,2000,5000, "
+  "800000,1600000,4400000,7000000,10000000,7000000, "
+  "1000000,10000,10000, " "0,0,0,0,0, "
+  "1000000,10000,100000,1000000,0.30);",
+  /* Gaseous (U) */
+  "INSERT OR IGNORE INTO planettypes (code, typeDescription, typeName, "
+  "citadelUpgradeTime_lvl1, citadelUpgradeTime_lvl2, citadelUpgradeTime_lvl3, citadelUpgradeTime_lvl4, citadelUpgradeTime_lvl5, citadelUpgradeTime_lvl6, "
+  "citadelUpgradeOre_lvl1, citadelUpgradeOre_lvl2, citadelUpgradeOre_lvl3, citadelUpgradeOre_lvl4, citadelUpgradeOre_lvl5, citadelUpgradeOre_lvl6, "
+  "citadelUpgradeOrganics_lvl1, citadelUpgradeOrganics_lvl2, citadelUpgradeOrganics_lvl3, citadelUpgradeOrganics_lvl4, citadelUpgradeOrganics_lvl5, citadelUpgradeOrganics_lvl6, "
+  "citadelUpgradeEquipment_lvl1, citadelUpgradeEquipment_lvl2, citadelUpgradeEquipment_lvl3, citadelUpgradeEquipment_lvl4, citadelUpgradeEquipment_lvl5, citadelUpgradeEquipment_lvl6, "
+  "citadelUpgradeColonist_lvl1, citadelUpgradeColonist_lvl2, citadelUpgradeColonist_lvl3, citadelUpgradeColonist_lvl4, citadelUpgradeColonist_lvl5, citadelUpgradeColonist_lvl6, "
+  "maxColonist_ore, maxColonist_organics, maxColonist_equipment, "
+  "fighters, fuelProduction, organicsProduction, equipmentProduction, fighterProduction, "
+  "maxore, maxorganics, maxequipment, maxfighters, breeding) "
+  "VALUES ('U','Gaseous','Gas Giant', "
+  "8,4,5,5,4,8, "
+  "1200,300,500,500,200,500, "
+  "400,100,500,200,200,200, "
+  "2500,400,2000,600,600,1200, "
+  "3000000,3000000,8000000,6000000,8000000,6000000, "
+  "10000,10000,10000, " "0,0,0,0,0, " "10000,10000,10000,1000000,-0.10);",
+  /* Glacial/Ice (C) */
+  "INSERT OR IGNORE INTO planettypes (code, typeDescription, typeName, "
+  "citadelUpgradeTime_lvl1, citadelUpgradeTime_lvl2, citadelUpgradeTime_lvl3, citadelUpgradeTime_lvl4, citadelUpgradeTime_lvl5, citadelUpgradeTime_lvl6, "
+  "citadelUpgradeOre_lvl1, citadelUpgradeOre_lvl2, citadelUpgradeOre_lvl3, citadelUpgradeOre_lvl4, citadelUpgradeOre_lvl5, citadelUpgradeOre_lvl6, "
+  "citadelUpgradeOrganics_lvl1, citadelUpgradeOrganics_lvl2, citadelUpgradeOrganics_lvl3, citadelUpgradeOrganics_lvl4, citadelUpgradeOrganics_lvl5, citadelUpgradeOrganics_lvl6, "
+  "citadelUpgradeEquipment_lvl1, citadelUpgradeEquipment_lvl2, citadelUpgradeEquipment_lvl3, citadelUpgradeEquipment_lvl4, citadelUpgradeEquipment_lvl5, citadelUpgradeEquipment_lvl6, "
+  "citadelUpgradeColonist_lvl1, citadelUpgradeColonist_lvl2, citadelUpgradeColonist_lvl3, citadelUpgradeColonist_lvl4, citadelUpgradeColonist_lvl5, citadelUpgradeColonist_lvl6, "
+  "maxColonist_ore, maxColonist_organics, maxColonist_equipment, "
+  "fighters, fuelProduction, organicsProduction, equipmentProduction, fighterProduction, "
+  "maxore, maxorganics, maxequipment, maxfighters, breeding) "
+  "VALUES ('C','Glacial/Ice','Ice World', "
+  "5,5,7,5,4,8, "
+  "400,300,600,700,300,700, "
+  "300,80,400,900,400,900, "
+  "600,400,650,700,1000,1400, "
+  "1000000,24000000,4400000,6600000,9000000,6600000, "
+  "20000,50000,20000, " "0,0,0,0,0, " "20000,50000,10000,1000000,-0.10);",
+  /* Earth planet in sector 1 */
+  " INSERT OR IGNORE INTO planets (num, sector, name, owner_id, owner_type, population, type, creator, colonist, fighters) "
+  " VALUES (1, 1, 'Earth', 0, 'player', 8000000000, 1, 'System', 18000000, 1000000); ",
+  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " ((SELECT id FROM planets WHERE name='Earth'), 'ore', 10000000, 10000000, 0); ",
+  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " ((SELECT id FROM planets WHERE name='Earth'), 'organics', 10000000, 10000000, 0); ",
+  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " ((SELECT id FROM planets WHERE name='Earth'), 'equipment', 10000000, 10000000, 0); ",
+  /* Ferringhi planet in sector 0 (change in bigbang) */
+  " INSERT OR IGNORE INTO planets (num, sector, name, owner_id, owner_type, population, type, creator, colonist, fighters) "
+  " VALUES (2, 0, 'Ferringhi Homeworld', 0, 'npc_faction', 8000000000, 1, 'System', 18000000, 1000000); ",
+  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " ((SELECT id FROM planets WHERE name='Earth'), 'ore', 10000000, 10000000, 0); ",
+  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " ((SELECT id FROM planets WHERE name='Earth'), 'organics', 10000000, 10000000, 0); ",
+  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " ((SELECT id FROM planets WHERE name='Earth'), 'equipment', 10000000, 10000000, 0); ",
+  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " ((SELECT id FROM planets WHERE name='Earth'), 'fuel', 100000, 100000, 0); ",
+  /* NPC Planet: Orion Hideout (Contraband Outpost) */
+  " INSERT OR IGNORE INTO planets (num, sector, name, owner_id, owner_type, population, type, creator, colonist, fighters) "
+  " VALUES (3, 0, 'Orion Hideout', 0, 'npc_faction', 20000000, 1, 'Syndicate', 20010000, 200000); ",
+  " /* Orion Hideout Commodity Stock and Capacity */ "
+  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " ((SELECT id FROM planets WHERE name='Orion Hideout'), 'ore', 50000000, 50000000, 10); ",
+  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " ((SELECT id FROM planets WHERE name='Orion Hideout'), 'organics', 100, 100, 0); ",
+  /* Near Zero Capacity for Organics */
+  " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " ((SELECT id FROM planets WHERE name='Orion Hideout'), 'equipment', 30000000, 30000000, 10); ",
+  /* Fedspace sectors 1–10 */
+  "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (1, 'Fedspace 1System Volume', 'The Federation -- Do Not Dump!', 'The Federation');",
+  "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (1, 'Fedspace 1', 'The Federation -- Do Not Dump!', 'The Federation');",
+  "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (2, 'Fedspace 2', 'The Federation -- Do Not Dump!', 'The Federation');",
+  "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (3, 'Fedspace 3', 'The Federation -- Do Not Dump!', 'The Federation');",
+  "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (4, 'Fedspace 4', 'The Federation -- Do Not Dump!', 'The Federation');",
+  "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (5, 'Fedspace 5', 'The Federation -- Do Not Dump!', 'The Federation');",
+  "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (6, 'Fedspace 6', 'The Federation -- Do Not Dump!', 'The Federation');",
+  "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (7, 'Fedspace 7', 'The Federation -- Do Not Dump!', 'The Federation');",
+  "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (8, 'Fedspace 8', 'The Federation -- Do Not Dump!', 'The Federation');",
+  "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (9, 'Fedspace 9', 'The Federation -- Do Not Dump!', 'The Federation');",
+  "INSERT OR IGNORE INTO sectors (id, name, beacon, nebulae) VALUES (10, 'Fedspace 10','The Federation -- Do Not Dump!', 'The Federation');",
+  /**************************************   HERE  **********************************************************************/
+  /* Fixed Earth Port Insert */
+
+  "INSERT OR IGNORE INTO ports (number, name, sector, size, techlevel, invisible, economy_curve_id) "
+  " VALUES (1, 'Earth Port', 1, 10, 10, 0, 1); ",
+  /* Initial Stock for Earth Port */
+  " INSERT OR IGNORE INTO entity_stock (entity_type, entity_id, commodity_code, quantity) VALUES ('port', 1, 'ORE', 10000); ",
+  " INSERT OR IGNORE INTO entity_stock (entity_type, entity_id, commodity_code, quantity) VALUES ('port', 1, 'ORG', 10000); ",
+  " INSERT OR IGNORE INTO entity_stock (entity_type, entity_id, commodity_code, quantity) VALUES ('port', 1, 'EQU', 10000); ",
+  /* Fedspace warps (hard-coded) */
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (1,2);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (1,3);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (1,4);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (1,5);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (1,6);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (1,7);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (2,1);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (2,3);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (2,7);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (2,8);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (2,9);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (2,10);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (3,1);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (3,2);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (3,4);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (4,1);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (4,3);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (4,5);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (5,1);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (5,4);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (5,6);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (6,1);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (6,5);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (6,7);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (7,1);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (7,2);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (7,6);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (7,8);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (8,2);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (8,7);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (9,2);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (9,10);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (10,2);",
+  "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (10,9);",
+  "INSERT INTO shiptypes\n"
+  "(name, basecost, maxattack, initialholds, maxholds, maxfighters, "
+  " turns, maxmines, maxlimpets, maxgenesis, can_transwarp, transportrange, maxshields, "
+  " offense, defense, maxbeacons, maxphotons, can_purchase)\n"
+  " SELECT"
+  " 'Mary Celeste Class', basecost, maxattack, initialholds, maxholds, maxfighters, "
+  " turns, maxmines, maxlimpets, maxgenesis, can_transwarp, transportrange, maxshields, "
+  " offense, defense, maxbeacons, maxphotons, 0\n"
+  " FROM shiptypes "
+  "WHERE name='Corporate Flagship'"
+  " AND NOT EXISTS (SELECT 1 FROM shiptypes WHERE name='Mary Celeste Class');",
+  "INSERT INTO npc_shipnames (id, name) VALUES\n"
+  "(1, 'Starlight Voyager'),\n"
+  "(2, 'Iron Sentinel'),\n"
+  "(3, 'Crimson Horizon'),\n"
+  "(4, 'The Unrelenting'),\n"
+  "(5, 'Vanguard of Sol'),\n"
+  "(6, 'Aether''s Echo'),\n"
+  "(7, 'Voiddrifter'),\n"
+  "(8, 'Celestia'),\n"
+  "(9, 'The Final Word'),\n"
+  "(10, 'Sovereign''s Might'),\n"
+  "(11, 'The Silence'),\n"
+  "(12, 'Ghost of Proxima'),\n"
+  "(13, 'Harbinger of Ruin'),\n"
+  "(14, 'Blackstar'),\n"
+  "(15, 'Fallen Angel'),\n"
+  "(16, 'Grave Digger'),\n"
+  "(17, 'The Empty Sky'),\n"
+  "(18, 'Cinderclaw'),\n"
+  "(19, 'Whisper of the Abyss'),\n"
+  "(20, 'The Nameless Dread'),\n"
+  "(21, 'Not My Fault'),\n"
+  "(22, 'Totally Not a Trap'),\n"
+  "(23, 'The Gravitational Pull'),\n"
+  "(24, 'Unlicensed & Uninsured'),\n"
+  "(25, 'Ship Happens'),\n"
+  "(26, 'The Loan Shark''s Repossession'),\n"
+  "(27, 'Where Are We Going?'),\n"
+  "(28, 'Taxes Included'),\n"
+  "(29, 'Error 404: Ship Not Found'),\n"
+  "(30, 'The Padded Cell'),\n"
+  "(31, 'Quantum Leap'),\n"
+  "(32, 'The Data Stream'),\n"
+  "(33, 'Sub-Light Cruiser'),\n"
+  "(34, 'Temporal Paradox'),\n"
+  "(35, 'Neon Genesis'),\n"
+  "(36, 'The Warp Core'),\n"
+  "(37, 'The Nanite Swarm'),\n"
+  "(38, 'Synthetic Dream'),\n"
+  "(39, 'The Singularity'),\n"
+  "(40, 'Blink Drive'),\n"
+  "(41, 'The Last Endeavor'),\n"
+  "(42, 'Odyssey''s End'),\n"
+  "(43, 'The Magellan'),\n"
+  "(44, 'Star''s Fury'),\n"
+  "(45, 'Cosmic Drifter'),\n"
+  "(46, 'The Old Dog'),\n"
+  "(47, 'The Wayfinder'),\n"
+  "(48, 'The Horizon Breaker'),\n"
+  "(49, 'Stormchaser'),\n" "(50, 'Beyond the Veil');\n",
+  "INSERT OR IGNORE INTO tavern_names (name, enabled, weight) VALUES ('The Rusty Flange', 1, 10);",
+  "INSERT OR IGNORE INTO tavern_names (name, enabled, weight) VALUES ('The Starfall Inn', 1, 10);",
+  "INSERT OR IGNORE INTO tavern_names (name, enabled, weight) VALUES ('Orions Den', 1, 5);",
+  "INSERT OR IGNORE INTO tavern_names (name, enabled, weight) VALUES ('FedSpace Cantina', 1, 8);",
+  "INSERT OR IGNORE INTO tavern_settings (id, max_bet_per_transaction, daily_max_wager, enable_dynamic_wager_limit, graffiti_max_posts, notice_expires_days, buy_round_cost, buy_round_alignment_gain, loan_shark_enabled)\n"
+  "VALUES (1, 5000, 50000, 0, 100, 7, 1000, 5, 1);",
+  "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('FIGHTERS', 'Fighters', 100, 0, 1, NULL, 'FIGHTER', 1);",
+  "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('SHIELDS', 'Shields', 200, 0, 1, NULL, 'SHIELD', 1);",
+  "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('HOLDS', 'Holds', 50, 0, 1, NULL, 'HOLD', 1);",
+  "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('GENESIS', 'Genesis Torpedo', 25000, 1, 0, NULL, 'SPECIAL', 1);",
+  "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('DETONATOR', 'Atomic Detonator', 10000, 1, 0, NULL, 'SPECIAL', 1);",
+  "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('CLOAK', 'Cloaking Device', 50000, 1, 0, 1, 'MODULE', 1);",
+  "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('LSCANNER', 'Long-Range Scanner', 30000, 1, 0, 1, 'MODULE', 1);",
+  "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('PSCANNER', 'Planet Scanner', 15000, 1, 0, 1, 'MODULE', 1);",
+  "INSERT OR IGNORE INTO hardware_items (code, name, price, requires_stardock, sold_in_class0, max_per_ship, category, enabled) VALUES ('TWARP', 'TransWarp Drive', 100000, 1, 0, 1, 'MODULE', 1);",
+  /* fix a problem with the terraforming cron */
+  "ALTER TABLE planets ADD COLUMN terraform_turns_left INTEGER NOT NULL DEFAULT 1;",
+  "INSERT INTO ships (name, type_id, attack, holds, mines, limpets, fighters, genesis, photons, sector, shields, beacons, colonists, equipment, organics, ore, flags, cloaking_devices, cloaked, ported, onplanet) "
+  "VALUES ('Bit Banger', 1, 110, 20, 25, 5, 2300, 5, 1, 1, 400, 10, 5, 5, 5, 5, 0, 5, NULL, 1, 1);",
+  /* CHANGE: Added 'commission' column and value '1' to these inserts */
+  "INSERT OR IGNORE INTO players (number, name, passwd, sector, ship, type, commission) VALUES (1, 'System', 'BOT',1,1,1,1);",
+  "INSERT OR IGNORE INTO players (number, name, passwd, sector, ship, type, commission) VALUES (1, 'Federation Administrator', 'BOT',1,1,1,1);",
+  "INSERT OR IGNORE INTO players (number, name, passwd, sector, ship, type, commission) VALUES (7, 'newguy', 'pass123',1,1,2,1);",
+  /* ---- AI QA Bot Test Player ---- */
+  "INSERT INTO ships (name, type_id, attack, holds, fighters, shields, sector, onplanet, ported) SELECT 'QA Bot 1', T.id, T.maxattack, T.maxholds, T.maxfighters, T.maxshields, 1, 0, 0 FROM shiptypes T WHERE T.name = 'Scout Marauder';",
+  "INSERT OR IGNORE INTO players (number, name, passwd, sector, credits, type, commission) VALUES (8, 'ai_qa_bot', 'quality', 1, 10000, 2, 1);",
+  "UPDATE players SET ship = (SELECT id FROM ships WHERE name = 'QA Bot 1') WHERE name = 'ai_qa_bot';",
+  "INSERT INTO ship_ownership (player_id, ship_id, is_primary, role_id) VALUES ((SELECT id FROM players WHERE name = 'ai_qa_bot'), (SELECT id FROM ships WHERE name = 'QA Bot 1'), 1, 1);",
+  /* ----------------------------- */
+  "INSERT INTO ship_ownership (player_id, ship_id, is_primary, role_id) VALUES (1,1,1,0);",
+  "INSERT INTO player_types (description) VALUES ('NPC');"
+  "INSERT INTO player_types (description) VALUES ('Human Player');"
+/* ------------------------------------------------------------------------------------- */
+/* Insert five maxed-out Orion Syndicate ships (FULL SCHEMA APPLIED) */
+/* ------------------------------------------------------------------------------------- */
+  " INSERT INTO ships ( "
+  "  name, type_id, attack, holds, mines, limpets, fighters, genesis, photons, sector, shields, beacons, colonists, equipment, organics, ore, flags, cloaking_devices, cloaked, ported, onplanet "
+  " ) "
+  " SELECT "
+  "  'Orion Heavy Fighter Alpha', T.id, 0, T.maxholds, T.maxmines, 0, T.maxfighters, T.maxgenesis, T.maxphotons, P.sector, T.maxshields, T.maxbeacons, 0, 0, 0, 0, 0, 0, NULL, 0, 0 "
+  " FROM shiptypes T, planets P "
+  " WHERE P.num=3 AND T.name='Orion Heavy Fighter Patrol' "
+  " UNION ALL "
+  " SELECT "
+  "  'Orion Scout Gamma', T.id, 0, T.maxholds, T.maxmines, 0, T.maxfighters, T.maxgenesis, T.maxphotons, P.sector, T.maxshields, T.maxbeacons, 0, 0, 0, 0, 0, 0, NULL, 0, 0 "
+  " FROM shiptypes T, planets P "
+  " WHERE P.num=3 AND T.name='Orion Scout/Looter' "
+  " UNION ALL "
+  " SELECT "
+  "  'Orion Contraband Delta', T.id, 0, T.maxholds, T.maxmines, 0, T.maxfighters, T.maxgenesis, T.maxphotons, P.sector, T.maxshields, T.maxbeacons, 0, 0, 0, 0, 0, 0, NULL, 0, 0 "
+  " FROM shiptypes T, planets P "
+  " WHERE P.num=3 AND T.name='Orion Contraband Runner' "
+  " UNION ALL "
+  " SELECT "
+  "  'Orion Smuggler Beta', T.id, 0, T.maxholds, T.maxmines, 0, T.maxfighters, T.maxgenesis, T.maxphotons, P.sector, T.maxshields, T.maxbeacons, 0, 0, 0, 0, 0, 0, NULL, 0, 0 "
+  " FROM shiptypes T, planets P "
+  " WHERE P.num=3 AND T.name='Orion Smuggler''s Kiss' "
+  " UNION ALL "
+  " SELECT "
+  "  'Orion Guard Epsilon', T.id, 0, T.maxholds, T.maxmines, 0, T.maxfighters, T.maxgenesis, T.maxphotons, P.sector, T.maxshields, T.maxbeacons, 0, 0, 0, 0, 0, 0, NULL, 0, 0 "
+  " FROM shiptypes T, planets P "
+  " WHERE P.num=3 AND T.name='Orion Black Market Guard';"
+  /* ------------------------------------------------------------------------------------- */
+  /* 3. Insert 5 Orion Captains and assign ships (FIXED: players columns and ship ownership) */
+  /* ------------------------------------------------------------------------------------- */
+  /* Insert 5 Orion Captains (Players) - Removed non-schema columns (faction_id, empire, turns) */
+  "INSERT OR IGNORE INTO players (type, name, passwd, sector, experience, alignment, credits) "
+  "SELECT 1, 'Zydras, Heavy Fighter Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
+  "SELECT 1, 'Krell, Scout Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
+  "SELECT 1, 'Vex, Contraband Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
+  "SELECT 1, 'Jaxx, Smuggler Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
+  "SELECT 1, 'Sira, Market Guard Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3;"
+/* Insert 5 Orion Captains (Players) - Removed non-schema columns (faction_id, empire, turns) */
+  "INSERT OR IGNORE INTO players (type, name, passwd, sector, experience, alignment, credits, commission) "
+  "SELECT 1, 'Zydras, Heavy Fighter Captain', '', P.sector, 100, -100, 1000, 1 FROM planets P WHERE P.num=3 UNION ALL "
+  "SELECT 1, 'Krell, Scout Captain', '', P.sector, 100, -100, 1000, 1 FROM planets P WHERE P.num=3 UNION ALL "
+  "SELECT 1, 'Vex, Contraband Captain', '', P.sector, 100, -100, 1000, 1 FROM planets P WHERE P.num=3 UNION ALL "
+  "SELECT 1, 'Jaxx, Smuggler Captain', '', P.sector, 100, -100, 1000, 1 FROM planets P WHERE P.num=3 UNION ALL "
+  "SELECT 1, 'Sira, Market Guard Captain', '', P.sector, 100, -100, 1000, 1 FROM planets P WHERE P.num=3;"
+  "SELECT 1, 'Fer', '', P.sector, 200, -100, 1000, 1 FROM planets P WHERE P.num=2;"
+  /* ------------------------------------------------------------------------------------- */
+  /*  -- 1. Create the Orion Syndicate Corporation */
+  "INSERT INTO corporations (name, owner_id, tag) VALUES ('Orion Syndicate', (SELECT id FROM players WHERE name LIKE 'Zydras%'), 'ORION');",
+  "INSERT INTO corporations (name, owner_id, tag) VALUES ('Ferrengi Alliance', (SELECT id FROM players WHERE name LIKE'Fer%'), 'FENG');",
+  /* Ferringhi Homeworld (Planet ID 2) Commodities */
+  /* -- Ore (High Capacity) */
+  " INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " (2, 'ore', 10000000, 10000000, 0); \n",
+  /* -- Organics (Very High Capacity/Focus) */
+  " INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " (2, 'organics', 50000000, 50000000, 10); \n ",
+  /* -- Equipment (High Capacity) */
+  " INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
+  " (2, 'equipment', 10000000, 10000000, 0); \n ",
+  " INSERT INTO turns (player, turns_remaining, last_update)"
+  " SELECT "
+  "    id, "
+  "    100, "
+  "    strftime('%s', 'now') "
+  " FROM " "    players " "WHERE " "    type = 2; "
+
+  "INSERT OR IGNORE INTO economy_curve (id, curve_name, base_restock_rate, price_elasticity, target_stock, volatility_factor) VALUES (1, 'default', 0.1, 0.5, 10000, 0.2);"
+
+  ///////////////////////
+};
 ///////////// S2S /////////////////////////
 static const char *engine_bootstrap_sql_statements[] = {
   /* --- S2S keyring (HMAC) --- */
@@ -2793,8 +2786,6 @@ static const size_t create_table_count =
 /* Number of default inserts */
 static const size_t insert_default_count =
   sizeof (insert_default_sql) / sizeof (insert_default_sql[0]);
-
-
 int
 db_engine_bootstrap (void)
 {
@@ -2963,14 +2954,18 @@ db_init (void)
         "FATAL: Could not acquire DB handle for main thread initialization.");
       return -1;
     }
+  else
+    LOGI ("DB handle aquired");
   // Ensure mandatory schemas
   // Note: These functions call db_get_handle() internally, so they are safe.
   if (db_ensure_auth_schema_unlocked () != SQLITE_OK)
     {
+      LOGI ("db_ensure_auth_schema_unlocked: FAIL");
       return -1;
     }
   if (db_ensure_idempotency_schema_unlocked () != SQLITE_OK)
     {
+      LOGI ("db_ensure_idempotency_schema_unlocked: FAIL");
       return -1;
     }
   /* Step 2: check if config table exists */
@@ -3209,173 +3204,61 @@ db_create_tables (bool schema_exists)
 
 
 /* /\* Actual work; assumes db_mutex is already held *\/ */
-
-
 /* static int */
-
-
 /* db_create_tables_unlocked (bool schema_exists) */
-
-
 /* { */
-
-
 /*   char *errmsg = NULL; */
-
-
 /*   int ret_code = -1; */
-
-
 /*   sqlite3 *db = db_get_handle (); */
-
-
 /*   if (!db) */
-
-
 /*     { */
-
-
 /*       return -1; */
-
-
 /*     } */
-
-
 /*   int rc; */
-
-
 /*   for (size_t i = 0; i < create_table_count; i++) */
-
-
 /*     { */
-
-
 /*       const char *sql_statement = create_table_sql[i]; */
-
-
 /*       // If schema_exists is true, skip CREATE TABLE IF NOT EXISTS statements */
-
-
 /*       if (schema_exists */
-
-
 /*           && strstr (sql_statement, */
-
-
 /*                      "CREATE TABLE IF NOT EXISTS") == sql_statement) */
-
-
 /*         { */
-
-
 /*           continue;             // Skip this statement */
-
-
 /*         } */
-
-
 /*       rc = sqlite3_exec (db_handle, sql_statement, 0, 0, &errmsg); */
-
-
 /*       if (rc != SQLITE_OK) */
-
-
 /*         { */
-
-
 /*           LOGE ("SQL error at step %zu: %s", i, errmsg); */
-
-
 /*           LOGE ("Failing SQL: %s", sql_statement); */
-
-
 /*           sqlite3_free (errmsg); */
-
-
 /*           return -1; */
-
-
 /*         } */
-
-
 /*     } */
-
-
 /*   ret_code = 0; */
-
-
 /*   if (schema_exists) */
-
-
 /*     { */
-
-
 /*       // Execute migration scripts */
-
-
 /*       if (sqlite3_exec (db, MIGRATE_A_SQL, 0, 0, &errmsg) != SQLITE_OK) */
-
-
 /*         { */
-
-
 /*           LOGE ("MIGRATE_A_SQL failed: %s", errmsg); */
-
-
 /*           sqlite3_free (errmsg); */
-
-
 /*           return -1; */
-
-
 /*         } */
-
-
 /*       if (sqlite3_exec (db, MIGRATE_B_SQL, 0, 0, &errmsg) != SQLITE_OK) */
-
-
 /*         { */
-
-
 /*           LOGE ("MIGRATE_B_SQL failed: %s", errmsg); */
-
-
 /*           sqlite3_free (errmsg); */
-
-
 /*           return -1; */
-
-
 /*         } */
-
-
 /*       if (sqlite3_exec (db, MIGRATE_C_SQL, 0, 0, &errmsg) != SQLITE_OK) */
-
-
 /*         { */
-
-
 /*           LOGE ("MIGRATE_C_SQL failed: %s", errmsg); */
-
-
 /*           sqlite3_free (errmsg); */
-
-
 /*           return -1; */
-
-
 /*         } */
-
-
 /*     } */
-
-
 /*   return ret_code; */
-
-
 /* } */
-
-
 static int
 db_create_tables_unlocked (bool schema_exists)
 {
@@ -3448,212 +3331,74 @@ db_insert_defaults (void)
 
 
 /* /\* Actual work; assumes db_mutex is already held *\/ */
-
-
 /* static int */
-
-
 /* db_insert_defaults_unlocked (void) */
-
-
 /* { */
-
-
 /*   char *errmsg = NULL; */
-
-
 /*   int ret_code = -1; */
-
-
 /*   sqlite3 *db = db_get_handle (); */
-
-
 /*   if (!db) */
-
-
 /*     { */
-
-
 /*       return -1; */
-
-
 /*     } */
-
-
 /*   int rc; // Declared rc here */
-
-
 /*   LOGD ("db_insert_defaults_unlocked: Starting default data insertion."); */
-
-
 /*   for (size_t i = 0; i < insert_default_count; i++) */
-
-
 /*     { */
-
-
 /*       LOGD ( */
-
-
 /*         "db_insert_defaults_unlocked: Executing default SQL statement %zu: %s", */
-
-
 /*         i, */
-
-
 /*         insert_default_sql[i]); */
-
-
 /*       if (sqlite3_exec (db, insert_default_sql[i], NULL, NULL, &errmsg) != */
-
-
 /*           SQLITE_OK) */
-
-
 /*         { */
-
-
 /*           LOGE ("DB insert_defaults error (%zu): %s", i, errmsg); */
-
-
 /*           LOGE ("Failing SQL: %s", insert_default_sql[i]); */
-
-
 /*           goto cleanup; */
-
-
 /*         } */
-
-
 /*     } */
-
-
 /*   // Ensure bank accounts for system, players, and ports */
-
-
 /*   const char *insert_default_bank_account_sql[] = { */
-
-
 /*     "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) VALUES ('system', 0, 'CRD', 1000000000);", */
-
-
 /*     // System bank */
-
-
 /*     "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) SELECT 'player', id, 'CRD', 1000 FROM players WHERE name = 'System';", */
-
-
 /*     "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) SELECT 'player', id, 'CRD', 1000 FROM players WHERE name = 'Federation Administrator';", */
-
-
 /*     "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) SELECT 'player', id, 'CRD', 1000 FROM players WHERE name = 'newguy';", */
-
-
 /*     "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) SELECT 'player', id, 'CRD', 1000 FROM players WHERE name = 'ai_qa_bot';", */
-
-
 /*     // Player accounts for goodguy, badguy, admin will be created on auth.register if not present */
-
-
 /*     "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) SELECT 'port', id, 'CRD', 100000 FROM ports WHERE name = 'Earth Port';" */
-
-
 /*   }; */
-
-
 /*   for (size_t i = */
-
-
 /*          0; */
-
-
 /*        i < */
-
-
 /*        sizeof(insert_default_bank_account_sql) / */
-
-
 /*        sizeof(insert_default_bank_account_sql[0]); */
-
-
 /*        i++) */
-
-
 /*     { */
-
-
 /*       rc = sqlite3_exec (db, */
-
-
 /*                          insert_default_bank_account_sql[i], */
-
-
 /*                          NULL, */
-
-
 /*                          NULL, */
-
-
 /*                          &errmsg); */
-
-
 /*       if (rc != SQLITE_OK) */
-
-
 /*         { */
-
-
 /*           LOGE ( */
-
-
 /*             "db_insert_defaults_unlocked: SQL error inserting default bank account: %s", */
-
-
 /*             errmsg); */
-
-
 /*           sqlite3_free (errmsg); */
-
-
 /*           return -1; */
-
-
 /*         } */
-
-
 /*     } */
-
-
 /*   ret_code = 0; */
-
-
 /*   LOGD ( */
-
-
 /*     "db_insert_defaults_unlocked: Default data insertion completed successfully."); */
-
-
 /* cleanup: */
-
-
 /*   if (errmsg) */
-
-
 /*     { */
-
-
 /*       sqlite3_free (errmsg); */
-
-
 /*     } */
-
-
 /*   return ret_code; */
-
-
 /* } */
-
-
 static int
 db_insert_defaults_unlocked (void)
 {
@@ -3727,19 +3472,6 @@ db_close (void)
 {
   // New way!
   db_close_thread ();
-}
-
-
-/* Helper: safe text access (returns "" if NULL) */
-
-
-// This function is already fine as-is because it doesn't access the global
-// database handle, only the statement passed to it.
-static const char *
-col_text_or_empty (sqlite3_stmt *st, int col)
-{
-  const unsigned char *t = sqlite3_column_text (st, col);
-  return t ? (const char *) t : "";
 }
 
 
@@ -3822,14 +3554,8 @@ fail:
 
 
 ///////////////////////
-
-
 /// Helpers
-
-
 /* ---------- db_sector_scan_snapshot: thread-safe, single statement ---------- */
-
-
 /* Out shape (core fields only; handler will add adjacency + flags):
    {
      "name": TEXT,
@@ -4493,22 +4219,5 @@ cleanup:
   // 3. Release the lock before returning
   db_mutex_unlock ();
   return rc;
-}
-
-
-/* Helper: prepare, bind one int, and return stmt or NULL */
-
-
-// This is now an internal helper. The caller must hold the mutex.
-static sqlite3_stmt *
-prep1i_unlocked (sqlite3 *db, const char *sql, int v)
-{
-  sqlite3_stmt *st = NULL;
-  if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
-    {
-      return NULL;
-    }
-  sqlite3_bind_int (st, 1, v);
-  return st;
 }
 

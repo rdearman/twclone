@@ -17,7 +17,13 @@ int bigbang (void);
 int create_sectors (void);
 int create_ports (void);
 int create_ferringhi (int sector);
-int create_planets (void);
+extern int create_planets (void);
+extern int create_full_port (sqlite3 *db,
+                             int sector,
+                             int port_number,
+                             const char *base_name,
+                             int type_id,
+                             int *port_id_out);
 extern int create_complex_warps (sqlite3 *db, int numSectors);
 int create_imperial (void);
 int create_taverns (void);

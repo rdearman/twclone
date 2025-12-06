@@ -7,6 +7,7 @@
 #include "database.h"
 #include "server_communication.h"       // (optional if you want to also emit immediately)
 #include "engine_consumer.h"
+#include "server_engine.h" // For h_player_progress_from_event_payload
 #include "server_log.h"
 /* --- helpers -------------------------------------------------------------- */
 static int
@@ -429,78 +430,6 @@ engine_consume_tick (sqlite3 *db,
     }
   out->lag =
     (max_id > out->last_event_id) ? (max_id - out->last_event_id) : 0;
-  return SQLITE_OK;
-}
-
-
-/* returns SQLITE_OK; writes new notice id to *out_id (or 0 on failure) */
-static int
-exec_broadcast_create (sqlite3 *db, json_t *payload, const char *idem_key,
-                       int64_t *out_id)
-{
-  const char *title = NULL, *body = NULL, *severity = "info";
-  int64_t expires_at = 0;
-  if (!json_is_object (payload))
-    {
-      return SQLITE_MISMATCH;
-    }
-  json_t *jt = json_object_get (payload, "title");
-  json_t *jb = json_object_get (payload, "body");
-  json_t *js = json_object_get (payload, "severity");
-  json_t *je = json_object_get (payload, "expires_at");
-  if (jt && json_is_string (jt))
-    {
-      title = json_string_value (jt);
-    }
-  if (jb && json_is_string (jb))
-    {
-      body = json_string_value (jb);
-    }
-  if (js && json_is_string (js))
-    {
-      severity = json_string_value (js);
-    }
-  if (je && json_is_integer (je))
-    {
-      expires_at = (int64_t) json_integer_value (je);
-    }
-  if (!title || !body)
-    {
-      return SQLITE_MISUSE;
-    }
-  sqlite3_stmt *st = NULL;
-  int rc = sqlite3_prepare_v2 (db,
-                               "INSERT INTO system_notice(id, created_at, title, body, severity, expires_at) "
-                               "VALUES(NULL, strftime('%s','now'), ?1, ?2, ?3, ?4);",
-                               -1,
-                               &st,
-                               NULL);
-  if (rc != SQLITE_OK)
-    {
-      return rc;
-    }
-  sqlite3_bind_text (st, 1, title, -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text (st, 2, body, -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text (st, 3, severity ? severity : "info", -1,
-                     SQLITE_TRANSIENT);
-  if (expires_at > 0)
-    {
-      sqlite3_bind_int64 (st, 4, expires_at);
-    }
-  else
-    {
-      sqlite3_bind_null (st, 4);
-    }
-  rc = sqlite3_step (st);
-  sqlite3_finalize (st);
-  if (rc != SQLITE_DONE)
-    {
-      return SQLITE_ERROR;
-    }
-  if (out_id)
-    {
-      *out_id = (int64_t) sqlite3_last_insert_rowid (db);
-    }
   return SQLITE_OK;
 }
 

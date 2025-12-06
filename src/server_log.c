@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <time.h>
 #include <sys/stat.h>
+
 /* Backend selector */
 typedef enum
 { BACKEND_NONE = 0, BACKEND_FILE, BACKEND_SYSLOG } backend_t;

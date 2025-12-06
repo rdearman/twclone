@@ -68,8 +68,7 @@ int cmd_bank_history (client_ctx_t *ctx, json_t *root);
 int cmd_bank_leaderboard (client_ctx_t *ctx, json_t *root);
 int h_get_player_bank_account_id (sqlite3 *db, int player_id);
 TurnConsumeResult h_consume_player_turn (sqlite3 *db_conn,
-                                         client_ctx_t *ctx,
-                                         const char *reason_cmd);
+                                         client_ctx_t *ctx);
 int handle_turn_consumption_error (client_ctx_t *ctx,
                                    TurnConsumeResult consume_result,
                                    const char *cmd, json_t *root,
@@ -78,7 +77,7 @@ int handle_turn_consumption_error (client_ctx_t *ctx,
 int player_credits (client_ctx_t *ctx);
 int cargo_space_free (client_ctx_t *ctx);
 // Function to destroy a ship and handle its side effects
-int destroy_ship_and_handle_side_effects (client_ctx_t *ctx, int sector_id,
+int destroy_ship_and_handle_side_effects (client_ctx_t *ctx,
                                           int player_id);
 // New function for Big Sleep respawn
 int spawn_starter_ship (sqlite3 *db, int player_id, int sector_id);

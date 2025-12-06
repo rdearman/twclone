@@ -94,6 +94,15 @@ typedef enum
 #ifndef START_HOLDS
 #define START_HOLDS 20
 #endif
+#ifndef DEF_PORT_MAX_SLV
+#define DEF_PORT_MAX_SLV 10000
+#endif
+#ifndef DEF_PORT_MAX_WPN
+#define DEF_PORT_MAX_WPN 10000
+#endif
+#ifndef DEF_PORT_MAX_DRG
+#define DEF_PORT_MAX_DRG 10000
+#endif
 #ifndef PROCESS_INTERVAL
 #define PROCESS_INTERVAL 2
 #endif

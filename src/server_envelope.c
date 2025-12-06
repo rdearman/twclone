@@ -18,8 +18,6 @@
 #include "s2s_transport.h"
 #include "common.h"             /* now_iso8601, strip_ansi */
 int toss;
-
-
 /* Recursively strip ANSI from all JSON strings in 'node'. */
 static void
 sanitize_json_strings (json_t *node)
@@ -70,8 +68,6 @@ sanitize_json_strings (json_t *node)
 // --- Weak fallback so linking succeeds even if server_loop.c doesn't define it ---
 // If a strong version exists in server_loop.c, the linker will prefer that one.
 __attribute__((weak))
-
-
 void
 loop_get_supported_commands (const cmd_desc_t **out_tbl,
                              size_t *out_n)
@@ -126,8 +122,6 @@ loop_get_supported_commands (const cmd_desc_t **out_tbl,
 // Provided by server_loop.c
 extern void loop_get_supported_commands (const cmd_desc_t **out_tbl,
                                          size_t *out_n);
-
-
 // ---- Helpers ----
 static void
 get_cmd_table (const cmd_desc_t **out_tbl, size_t *out_n)
@@ -614,11 +608,7 @@ send_enveloped_refused (int fd, json_t *req, int code, const char *msg,
 
 
 ////////////////////////   S2S SECTION //////////////////////////////
-
-
 // server_envelope.c
-
-
 /* ---------- tiny helpers ---------- */
 static int
 urand_bytes (void *buf, size_t n)

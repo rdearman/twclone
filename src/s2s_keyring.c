@@ -6,8 +6,6 @@
 // local includes
 #include "s2s_keyring.h"
 #include "server_log.h"
-
-
 /*
  * Generates and inserts a new S2S key into the database if none exists.
  * NOTE: Key ID and Key B64 should be securely generated in a production environment.

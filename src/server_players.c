@@ -38,8 +38,14 @@ static const char *DEFAULT_PLAYER_FIELDS[] = {
 extern sqlite3 *db_get_handle (void);
 extern client_node_t *g_clients;
 extern pthread_mutex_t g_clients_mu;
+
+
 /* ==================================================================== */
+
+
 /* STATIC HELPER DEFINITIONS (Bodies placed BEFORE usage)               */
+
+
 /* ==================================================================== */
 static int
 is_ascii_printable (const char *s)
@@ -83,31 +89,6 @@ is_valid_key (const char *s, size_t max)
       char c = s[i];
       if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' ||
             c == '_' || c == '-'))
-        {
-          return 0;
-        }
-    }
-  return 1;
-}
-
-
-static int
-is_valid_locale (const char *s)
-{
-  if (!s)
-    {
-      return 0;
-    }
-  size_t n = strlen (s);
-  if (n < 2 || n > 16)
-    {
-      return 0;
-    }
-  for (size_t i = 0; i < n; i++)
-    {
-      char c = s[i];
-      if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
-            (c >= '0' && c <= '9') || c == '-'))
         {
           return 0;
         }
@@ -257,7 +238,11 @@ players_list_notes (client_ctx_t *ctx, json_t *req)
 
 
 /* ==================================================================== */
+
+
 /* CORE LOGIC HANDLERS (Transactional)                                  */
+
+
 /* ==================================================================== */
 static const char *
 get_turn_error_message (TurnConsumeResult result)
@@ -308,8 +293,7 @@ handle_turn_consumption_error (client_ctx_t *ctx,
 
 
 TurnConsumeResult
-h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
-                       const char *reason_cmd)
+h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx)
 {
   sqlite3_stmt *stmt = NULL;
   int player_id = ctx->player_id;
@@ -1061,7 +1045,6 @@ spawn_starter_ship (sqlite3 *db, int player_id, int sector_id)
 
 int
 destroy_ship_and_handle_side_effects (client_ctx_t *ctx,
-                                      int sector_id,
                                       int player_id)
 {
   (void) ctx;
@@ -1099,12 +1082,20 @@ destroy_ship_and_handle_side_effects (client_ctx_t *ctx,
 
 
 /* ==================================================================== */
+
+
 /* COMMAND HANDLERS                                                     */
+
+
 /* ==================================================================== */
 int
 cmd_player_set_settings (client_ctx_t *ctx, json_t *root)
 {
-  STUB_NIY (ctx, root, "player.set_settings");
+  send_enveloped_error (ctx->fd,
+                        root,
+                        1101,
+                        "Not implemented: " "player.set_settings");
+  return 0;
   return 0;
 }
 
@@ -1494,7 +1485,11 @@ cmd_player_get_prefs (client_ctx_t *ctx, json_t *root)
 int
 cmd_player_set_topics (client_ctx_t *ctx, json_t *root)
 {
-  STUB_NIY (ctx, root, "player.set_topics");
+  send_enveloped_error (ctx->fd,
+                        root,
+                        1101,
+                        "Not implemented: " "player.set_topics");
+  return 0;
   return 0;
 }
 
@@ -1514,7 +1509,11 @@ cmd_player_get_topics (client_ctx_t *ctx, json_t *root)
 int
 cmd_player_set_bookmarks (client_ctx_t *ctx, json_t *root)
 {
-  STUB_NIY (ctx, root, "player.set_bookmarks");
+  send_enveloped_error (ctx->fd,
+                        root,
+                        1101,
+                        "Not implemented: " "player.set_bookmarks");
+  return 0;
   return 0;
 }
 
@@ -1534,7 +1533,11 @@ cmd_player_get_bookmarks (client_ctx_t *ctx, json_t *root)
 int
 cmd_player_set_avoids (client_ctx_t *ctx, json_t *root)
 {
-  STUB_NIY (ctx, root, "player.set_avoids");
+  send_enveloped_error (ctx->fd,
+                        root,
+                        1101,
+                        "Not implemented: " "player.set_avoids");
+  return 0;
   return 0;
 }
 
@@ -1717,21 +1720,24 @@ cmd_nav_bookmark_list (client_ctx_t *ctx, json_t *root)
 void
 cmd_nav_avoid_add (client_ctx_t *c, json_t *r)
 {
-  STUB_NIY (c, r, "nav.avoid.add");
+  send_enveloped_error (c->fd, r, 1101, "Not implemented: " "nav.avoid.add");
+  return 0;
 }
 
 
 void
 cmd_nav_avoid_remove (client_ctx_t *c, json_t *r)
 {
-  STUB_NIY (c, r, "nav.avoid.remove");
+  send_enveloped_error (c->fd, r, 1101, "Not implemented: " "nav.avoid.remove");
+  return 0;
 }
 
 
 void
 cmd_nav_avoid_list (client_ctx_t *c, json_t *r)
 {
-  STUB_NIY (c, r, "nav.avoid.list");
+  send_enveloped_error (c->fd, r, 1101, "Not implemented: " "nav.avoid.list");
+  return 0;
 }
 
 
@@ -2087,7 +2093,6 @@ cmd_bank_balance (client_ctx_t *ctx, json_t *root)
       send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
       return 0;
     }
-  sqlite3 *db = db_get_handle ();
   long long balance = 0;
   if (db_get_player_bank_balance (ctx->player_id, &balance) != SQLITE_OK)
     {

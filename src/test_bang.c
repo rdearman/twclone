@@ -5,52 +5,10 @@
 #include <string.h>
 #include "database.h"
 #include "server_bigbang.h"
+#include "server_log.h"
 
 
-static void
-dump_sectors (void)
-{
-  sqlite3 *handle = db_get_handle ();
-  const char *sql = "SELECT id, name FROM sectors;";
-  sqlite3_stmt *stmt;
-  if (sqlite3_prepare_v2 (handle, sql, -1, &stmt, NULL) != SQLITE_OK)
-    {
-      fprintf (stderr, "dump_sectors prepare error: %s\n",
-               sqlite3_errmsg (handle));
-      return;
-    }
-  printf ("Sectors:\n");
-  while (sqlite3_step (stmt) == SQLITE_ROW)
-    {
-      int id = sqlite3_column_int (stmt, 0);
-      const unsigned char *name = sqlite3_column_text (stmt, 1);
-      printf ("  %d: %s\n", id, name);
-    }
-  sqlite3_finalize (stmt);
-}
 
-
-static void
-dump_warps (void)
-{
-  sqlite3 *handle = db_get_handle ();
-  const char *sql = "SELECT from_sector, to_sector FROM sector_warps;";
-  sqlite3_stmt *stmt;
-  if (sqlite3_prepare_v2 (handle, sql, -1, &stmt, NULL) != SQLITE_OK)
-    {
-      fprintf (stderr, "dump_warps prepare error: %s\n",
-               sqlite3_errmsg (handle));
-      return;
-    }
-  printf ("Warps:\n");
-  while (sqlite3_step (stmt) == SQLITE_ROW)
-    {
-      int from = sqlite3_column_int (stmt, 0);
-      int to = sqlite3_column_int (stmt, 1);
-      printf ("  %d -> %d\n", from, to);
-    }
-  sqlite3_finalize (stmt);
-}
 
 
 static int
@@ -128,6 +86,7 @@ print_usage (const char *progname)
 int
 main (int argc, char *argv[])
 {
+  server_log_init_file ("./twclone.log", "[server]", 0, LOG_INFO); 
   sqlite3 *handle = db_get_handle ();
   /* Default values loaded from DB (so we honor defaults if arguments aren't provided) */
   int sectors = get_config_int (handle, "default_nodes", 500);
