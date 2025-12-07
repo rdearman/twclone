@@ -80,15 +80,8 @@ int db_port_info_json (int port_id, json_t **out_obj);
 int cmd_sys_test_news_cron (client_ctx_t *ctx, json_t *root);
 int cmd_sys_raw_sql_exec (client_ctx_t *ctx, json_t *root);
 int cmd_sys_cluster_init (client_ctx_t *ctx, json_t *root);
-int cmd_sys_cluster_seed_illegal_goods (client_ctx_t *ctx, json_t *root);   // NEW
-int cmd_player_set_trade_account_preference (client_ctx_t *ctx, json_t *root);
-/* --- Bounty Commands --- */
-int cmd_bounty_post_federation (client_ctx_t *ctx, json_t *root);
-int cmd_bounty_post_hitlist (client_ctx_t *ctx, json_t *root);
-int cmd_bounty_list (client_ctx_t *ctx, json_t *root);
-int send_error_response (client_ctx_t *ctx,
-                         json_t *root,
-                         int err_code,
-                         const char *msg);
-int send_json_response (client_ctx_t *ctx, json_t *response_json);
-#endif /* SERVER_CMDS_H */
+int cmd_sys_cluster_seed_illegal_goods (client_ctx_t *ctx, json_t *root);
+int cmd_sys_econ_port_status (client_ctx_t *ctx, json_t *root);
+int cmd_sys_econ_orders_summary (client_ctx_t *ctx, json_t *root);
+
+#endif

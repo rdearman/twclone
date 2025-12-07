@@ -12,7 +12,8 @@
 #include "server_cron.h"        // Include for cron job functions
 #include "server_log.h"
 #include "server_clusters.h" // NEW
-
+#include "database_market.h"   // NEW
+#include "server_ports.h"      // NEW: For h_get_port_commodity_quantity if needed, or direct DB queries
 
 int
 cmd_sys_cluster_init (client_ctx_t *ctx, json_t *root)
@@ -1013,6 +1014,110 @@ cmd_bounty_list (client_ctx_t *ctx, json_t *root)
 
   json_object_set_new (resp, "bounties", arr);
   send_enveloped_ok (ctx->fd, root, "bounty.list.success", resp);
+  return 0;
+}
+
+
+int
+cmd_sys_econ_port_status (client_ctx_t *ctx, json_t *root)
+{
+  sqlite3 *db = db_get_handle ();
+  if (ctx->player_id <= 0 || auth_player_get_type (ctx->player_id) != PLAYER_TYPE_SYSOP)
+    {
+      send_enveloped_error (ctx->fd, root, 403, "Forbidden: Must be SysOp");
+      return 0;
+    }
+
+  json_t *data = json_object_get (root, "data");
+  if (!data) {
+      send_enveloped_error (ctx->fd, root, 400, "Missing data object");
+      return 0;
+  }
+
+  int port_id = json_integer_value(json_object_get(data, "port_id"));
+  if (port_id <= 0) {
+      send_enveloped_error (ctx->fd, root, 400, "Invalid or missing port_id");
+      return 0;
+  }
+
+  json_t *response = json_object();
+  
+  // 1. Port Basic Info
+  sqlite3_stmt *st_port = NULL;
+  const char *sql_port = "SELECT id, name, size FROM ports WHERE id = ?;";
+  if (sqlite3_prepare_v2(db, sql_port, -1, &st_port, NULL) == SQLITE_OK) {
+      sqlite3_bind_int(st_port, 1, port_id);
+      if (sqlite3_step(st_port) == SQLITE_ROW) {
+          json_object_set_new(response, "id", json_integer(sqlite3_column_int(st_port, 0)));
+          json_object_set_new(response, "name", json_string((const char*)sqlite3_column_text(st_port, 1)));
+          json_object_set_new(response, "size", json_integer(sqlite3_column_int(st_port, 2)));
+      }
+      sqlite3_finalize(st_port);
+  } else {
+      send_enveloped_error (ctx->fd, root, 500, "DB error fetching port");
+      json_decref(response);
+      return 0;
+  }
+
+  // 2. Current Stock
+  json_t *stock_arr = json_array();
+  sqlite3_stmt *st_stock = NULL;
+  const char *sql_stock = 
+      "SELECT es.commodity_code, c.id, es.quantity "
+      "FROM entity_stock es "
+      "JOIN commodities c ON es.commodity_code = c.code "
+      "WHERE es.entity_type = 'port' AND es.entity_id = ?;";
+  
+  if (sqlite3_prepare_v2(db, sql_stock, -1, &st_stock, NULL) == SQLITE_OK) {
+      sqlite3_bind_int(st_stock, 1, port_id);
+      while (sqlite3_step(st_stock) == SQLITE_ROW) {
+          json_t *item = json_object();
+          // const char *code = (const char*)sqlite3_column_text(st_stock, 0);
+          int cid = sqlite3_column_int(st_stock, 1);
+          int qty = sqlite3_column_int(st_stock, 2);
+          
+          json_object_set_new(item, "commodity_id", json_integer(cid));
+          json_object_set_new(item, "quantity", json_integer(qty));
+          json_array_append_new(stock_arr, item);
+      }
+      sqlite3_finalize(st_stock);
+  }
+  json_object_set_new(response, "stock", stock_arr);
+
+  // 3. Open Orders
+  json_t *orders = db_list_port_orders(db, port_id);
+  json_object_set_new(response, "orders", orders);
+
+  send_enveloped_ok (ctx->fd, root, "sys.econ.port_status", response);
+  // json_decref(response); // send_enveloped_ok might assume ownership or not? 
+  // Usually send_enveloped_ok copies or takes. Looking at other cmds...
+  // Other cmds do json_decref(payload) after send. So I should too.
+  json_decref(response);
+  return 0;
+}
+
+int
+cmd_sys_econ_orders_summary (client_ctx_t *ctx, json_t *root)
+{
+  sqlite3 *db = db_get_handle ();
+  if (ctx->player_id <= 0 || auth_player_get_type (ctx->player_id) != PLAYER_TYPE_SYSOP)
+    {
+      send_enveloped_error (ctx->fd, root, 403, "Forbidden: Must be SysOp");
+      return 0;
+    }
+
+  json_t *data = json_object_get (root, "data");
+  int commodity_id = 0;
+  if (data) {
+      json_t *jcomm = json_object_get(data, "commodity_id");
+      if (json_is_integer(jcomm)) {
+          commodity_id = json_integer_value(jcomm);
+      }
+  }
+
+  json_t *summary = db_orders_summary(db, commodity_id);
+  send_enveloped_ok (ctx->fd, root, "sys.econ.orders_summary", summary);
+  json_decref(summary);
   return 0;
 }
 

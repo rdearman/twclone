@@ -16,7 +16,20 @@ typedef struct TradeLine
   int unit_price;
   long long line_cost;
   bool is_illegal; // Added for illegal trade logic
+  int current_port_stock; // Current stock at the port for this commodity
+  int max_port_capacity; // Max capacity of the port for this commodity
+  bool is_port_selling_this; // Flag if port is actively selling this commodity
+  bool is_port_buying_this; // Flag if port is actively buying this commodity
 } TradeLine;
+
+/* Helper to get port commodity details */
+int h_get_port_commodity_details(sqlite3 *db, int port_id, const char *commodity_code,
+                                 int *current_quantity_out, int *max_capacity_out,
+                                 bool *is_port_selling_this_out, bool *is_port_buying_this_out);
+
+/* Helper to build the commodities JSON array for port info/update events */
+json_t *h_get_commodities_for_port_payload(sqlite3 *db, int port_id, int player_id);
+
 /* Port info / status */
 int cmd_trade_port_info (client_ctx_t *ctx, json_t *root);
 /* Trading */
@@ -41,6 +54,7 @@ int h_get_ship_cargo_and_holds (sqlite3 *db, int ship_id, int *ore,
                                 int *drugs);
 int h_update_port_stock (sqlite3 *db, int port_id, const char *commodity,
                          int delta, int *new_qty_out);
+int h_market_move_port_stock(sqlite3 *db, int port_id, const char *commodity_code, int quantity_delta);
 int h_calculate_port_buy_price (sqlite3 *db, int port_id,
                                 const char *commodity);
 int h_calculate_port_sell_price (sqlite3 *db, int port_id,

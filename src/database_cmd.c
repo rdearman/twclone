@@ -5716,7 +5716,7 @@ h_ship_claim_unlocked (sqlite3 *db,
     "SELECT s.id FROM ships s "
     "LEFT JOIN players pil ON pil.ship = s.id "
     "WHERE s.id=? AND s.sector=? "
-    "AND pil.id IS NULL AND (s.flags % 10) >= 1;";
+    "AND pil.id IS NULL;";
 
 
   rc = sqlite3_prepare_v2 (db, SQL_CHECK, -1, &stmt, NULL);

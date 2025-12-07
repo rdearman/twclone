@@ -16,6 +16,23 @@
 enum
 { MAX_SUBSCRIPTIONS_PER_PLAYER = 64 };
 
+
+static int
+matches_pattern (const char *topic, const char *pattern)
+{
+  const char *star = strchr (pattern, '*');
+  if (!star)
+    {
+      return strcasecmp (topic, pattern) == 0;  /* exact */
+    }
+  /* suffix wildcard: "prefix.*" */
+  size_t plen = (size_t) (star - pattern);
+
+
+  return strncmp (topic, pattern, plen) == 0;
+}
+
+
 /* ---- topic validation ----
    Accept either exact catalogue items or simple suffix wildcard "prefix.*".
    Adjust ALLOWED list as you add more feeds. */
@@ -65,35 +82,7 @@ is_allowed_topic (const char *t)
     }
   for (int i = 0; allowed[i]; ++i)
     {
-      if (strcasecmp (t, allowed[i]) == 0)
-        {
-          return 1;
-        }
-    }
-  const char *dot = strchr (t, '.');
-
-
-  if (!dot || strcasecmp (dot + 1, "*") != 0)
-    {
-      return 0;
-    }
-  static const char *const public_domains[] = {
-    "system", "sector", "chat", "combat", "trade", "nav", "iss", "corp",
-    "player", NULL
-  };
-  size_t n = (size_t) (dot - t);
-  char dom[32];
-
-
-  if (n >= sizeof dom)
-    {
-      return 0;
-    }
-  memcpy (dom, t, n);
-  dom[n] = '\0';
-  for (int i = 0; public_domains[i]; ++i)
-    {
-      if (strcasecmp (dom, public_domains[i]) == 0)
+      if (matches_pattern (t, allowed[i]))
         {
           return 1;
         }
@@ -455,32 +444,7 @@ static sub_map_t *g_submaps = NULL;
 
 
 /* } */
-static int
-matches_pattern (const char *topic, const char *pattern)
-{
-  const char *star = strchr (pattern, '*');
-  if (!star)
-    {
-      return strcasecmp (topic, pattern) == 0;  /* exact */
-    }
-  /* suffix wildcard: "prefix.*" */
-  size_t plen = (size_t) (star - pattern);
 
-
-  return strncmp (topic, pattern, plen) == 0;
-}
-
-
-/* static int */
-/* is_valid_topic (const char *topic) */
-/* { */
-/*   if (!topic || !*topic) */
-/*     return 0; */
-/*   for (const char **p = ALLOWED_TOPICS; *p; ++p) */
-/*     if (matches_pattern (topic, *p)) */
-/*       return 1; */
-/*   return 0; */
-/* } */
 struct bc_ctx
 {
   const char *event_type;
@@ -672,82 +636,92 @@ comm_broadcast_message (comm_scope_t scope, long long scope_id,
 
 
 /* ---------- sector event publisher ---------- */
+
+
 void
+
+
 comm_publish_sector_event (int sector_id, const char *event_name,
+
+
                            json_t *data)
+
+
 {
   if (sector_id <= 0 || !event_name || !*event_name)
+
+
+    {
+      if (data)
+
+
+        {
+          json_decref (data);
+        }
+
+
+      return;
+    }
+
+
+  sqlite3 *db = db_get_handle ();
+
+
+  if (!db)
+
+
     {
       if (data)
         {
           json_decref (data);
         }
+
+
       return;
     }
+
+
   /* Build concrete topic once (e.g., "sector.42") */
+
+
   char topic[64];
 
 
   snprintf (topic, sizeof (topic), "sector.%d", sector_id);
-  /* Walk all connections; deliver to any that subscribed to sector.* or sector.{id} */
-  for (sub_map_t *m = g_submaps; m; m = m->next)
-    {
-      int deliver = 0;
 
 
-      for (sub_node_t *n = m->head; n; n = n->next)
-        {
-          /* pattern is subscriber’s topic; subject is our concrete topic */
-          if (matches_pattern (topic, n->topic))
-            {
-              deliver = 1;
-              break;
-            }
-        }
-      if (!deliver)
-        {
-          continue;
-        }
-      /* Envelope: event + data */
-      json_t *env = json_object ();
+  /* Use DB-based subscription lookup instead of broken g_submaps */
 
 
-      if (!env)
-        {
-          continue;
-        }
-      /* NOTE: we move 'data' into the envelope; if multiple recipients, clone */
-      json_t *payload = data;
+  /* We pass 'event_name' (e.g. sector.player_entered) as the type for the envelope */
 
 
-      if (m->next)              /* more recipients ahead? clone so each gets its own */
-        {
-          payload = data ? json_deep_copy (data) : json_object ();
-        }
-      json_object_set_new (env, "id", json_string ("evt"));     /* simple id */
-      // json_object_set_new(env, "ts", json_string(current_rfc3339()));
-      json_object_set_new (env, "event", json_string (event_name));
-      json_object_set_new (env, "data", payload);
-      /* Optional: include topic for client-side routing convenience */
-      json_t *meta = json_object ();
+  struct bc_ctx bc = { .event_type = event_name, .data = data,
+                       .deliveries = 0 };
 
 
-      if (meta)
-        {
-          json_object_set_new (meta, "topic", json_string (topic));
-          json_object_set_new (env, "meta", meta);
-        }
-      /* Your usual send path + rate-limit hints, if desired */
-      attach_rate_limit_meta (env, m->ctx);
-      rl_tick (m->ctx);
-      send_all_json (m->ctx->fd, env);
-      json_decref (env);
-    }
-  /* Original 'data' consumed (moved or deep-copied), drop our ref */
-  if (data)
-    {
-      json_decref (data);
-    }
+  /* db_for_each_subscriber finds players subscribed to 'topic' (exact or wildcard) */
+
+
+  /* and calls bc_cb for each, which sends the event. */
+
+
+  db_for_each_subscriber (db, topic, bc_cb, &bc);
+
+
+  /* data is consumed by bc_cb's json_incref, but we own the original reference?
+
+
+     bc_cb does json_incref(bc->data).
+
+
+     So we must decref our reference at the end.
+
+
+   */
+
+
+  json_decref (data);
 }
 
 

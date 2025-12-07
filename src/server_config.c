@@ -120,6 +120,17 @@ config_set_defaults (void)
   g_cfg.death.big_sleep_clear_xp_below = 0;
   snprintf (g_cfg.death.escape_pod_spawn_mode,
             sizeof (g_cfg.death.escape_pod_spawn_mode), "safe_path");
+  // Combat Configuration Defaults
+  g_cfg.combat.turn_cost = 1;
+  g_cfg.combat.base_hit = 1.0;
+  g_cfg.combat.offense_coeff = 1.0;
+  g_cfg.combat.defense_coeff = 1.0;
+  g_cfg.combat.flee.engine_weight = 1.0;
+  g_cfg.combat.flee.mass_weight = 1.0;
+  // Shield Regen Defaults
+  g_cfg.regen.enabled = true;
+  g_cfg.regen.shield_rate_pct_per_tick = 0.05;
+  g_cfg.regen.tick_seconds = 60;
 }
 
 
@@ -132,9 +143,27 @@ typedef enum {
 
 
 static int
+cfg_parse_double (const char *val_str, const char *type_str, double *out)
+{
+  if (strcmp (type_str, "double") != 0)
+    {
+      return -1;
+    }
+  char *endptr;
+  errno = 0;
+  double val = strtod (val_str, &endptr);
+  if (errno != 0 || endptr == val_str || *endptr != '\0')
+    {
+      return -1;
+    }
+  *out = val;
+  return 0;
+}
+
+static int
 cfg_parse_int (const char *val_str, const char *type_str, int *out)
 {
-  if (strcmp (type_str, "int") != 0)
+  if (strcmp (type_str, "int") != 0 && strcmp(type_str, "bool") != 0)
     {
       return -1;
     }
@@ -289,6 +318,22 @@ print_effective_config_redacted (void)
           g_cfg.death.big_sleep_duration_seconds,
           g_cfg.death.big_sleep_clear_xp_below,
           g_cfg.death.escape_pod_spawn_mode);
+  printf (",\"combat\":{"
+          "\"turn_cost\":%d,"
+          "\"base_hit\":%.2f,"
+          "\"offense_coeff\":%.2f,"
+          "\"defense_coeff\":%.2f}}",
+          g_cfg.combat.turn_cost,
+          g_cfg.combat.base_hit,
+          g_cfg.combat.offense_coeff,
+          g_cfg.combat.defense_coeff);
+  printf (",\"regen\":{"
+          "\"enabled\":%s,"
+          "\"rate\":%.2f,"
+          "\"tick\":%d}}",
+          g_cfg.regen.enabled ? "true" : "false",
+          g_cfg.regen.shield_rate_pct_per_tick,
+          g_cfg.regen.tick_seconds);
   printf ("\n");
 }
 
@@ -342,6 +387,43 @@ apply_db (sqlite3 *db)
       if (strcmp (key, "turnsperday") == 0)
         {
           cfg_parse_int (val, type, &g_cfg.turnsperday);
+        }
+      else if (strcmp (key, "combat.turn_cost") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.combat.turn_cost);
+        }
+      else if (strcmp (key, "combat.base_hit") == 0)
+        {
+          cfg_parse_double (val, type, &g_cfg.combat.base_hit);
+        }
+      else if (strcmp (key, "combat.offense_coeff") == 0)
+        {
+          cfg_parse_double (val, type, &g_cfg.combat.offense_coeff);
+        }
+      else if (strcmp (key, "combat.defense_coeff") == 0)
+        {
+          cfg_parse_double (val, type, &g_cfg.combat.defense_coeff);
+        }
+      else if (strcmp (key, "combat.flee.engine_weight") == 0)
+        {
+          cfg_parse_double (val, type, &g_cfg.combat.flee.engine_weight);
+        }
+      else if (strcmp (key, "combat.flee.mass_weight") == 0)
+        {
+          cfg_parse_double (val, type, &g_cfg.combat.flee.mass_weight);
+        }
+      else if (strcmp (key, "regen.enabled") == 0)
+        {
+          int tmp;
+          if (cfg_parse_int (val, type, &tmp) == 0) g_cfg.regen.enabled = tmp;
+        }
+      else if (strcmp (key, "regen.shield_rate_pct_per_tick") == 0)
+        {
+          cfg_parse_double (val, type, &g_cfg.regen.shield_rate_pct_per_tick);
+        }
+      else if (strcmp (key, "regen.tick_seconds") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.regen.tick_seconds);
         }
       else if (strcmp (key, "maxwarps_per_sector") == 0)
         {

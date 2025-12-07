@@ -60,7 +60,7 @@ h_player_is_npc (sqlite3 *db, int player_id)
   int is_npc = 0;   // Default to 0 (false) if player not found or error
 
   if (sqlite3_prepare_v2 (db,
-                          "SELECT is_npc FROM players WHERE player_id = ?",
+                          "SELECT is_npc FROM players WHERE id = ?",
                           -1,
                           &stmt,
                           NULL) != SQLITE_OK)
@@ -351,21 +351,12 @@ h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
   int player_id = ctx->player_id;
   int rc;
   int changes;
-  char *err_msg = NULL;
+
   if (turns_to_consume <= 0)
     {
       return TURN_CONSUME_ERROR_INVALID_AMOUNT;
     }
-  /* Start Transaction */
-  rc = sqlite3_exec (db_conn, "BEGIN IMMEDIATE;", NULL, NULL, &err_msg);
-  if (rc != SQLITE_OK)
-    {
-      if (err_msg)
-        {
-          sqlite3_free (err_msg);
-        }
-      return TURN_CONSUME_ERROR_DB_FAIL;
-    }
+
   // Check if player has enough turns first
   int turns_remaining = 0;
   const char *sql_select_turns =
@@ -375,7 +366,6 @@ h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
   rc = sqlite3_prepare_v2 (db_conn, sql_select_turns, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
-      sqlite3_exec (db_conn, "ROLLBACK;", NULL, NULL, NULL);
       return TURN_CONSUME_ERROR_DB_FAIL;
     }
   sqlite3_bind_int (stmt, 1, player_id);
@@ -386,11 +376,12 @@ h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
     }
   sqlite3_finalize (stmt);
   stmt = NULL;
+
   if (turns_remaining < turns_to_consume)
     {
-      sqlite3_exec (db_conn, "ROLLBACK;", NULL, NULL, NULL);
       return TURN_CONSUME_ERROR_NO_TURNS;
     }
+
   const char *sql_update =
     "UPDATE turns SET turns_remaining = turns_remaining - ?, last_update = strftime('%s', 'now') "
     "WHERE player = ? AND turns_remaining >= ?;"; // Ensure turns don't go negative on concurrent access
@@ -399,7 +390,6 @@ h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
   rc = sqlite3_prepare_v2 (db_conn, sql_update, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
-      sqlite3_exec (db_conn, "ROLLBACK;", NULL, NULL, NULL);
       return TURN_CONSUME_ERROR_DB_FAIL;
     }
   sqlite3_bind_int (stmt, 1, turns_to_consume);
@@ -409,19 +399,15 @@ h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
   if (rc != SQLITE_DONE)
     {
       sqlite3_finalize (stmt);
-      sqlite3_exec (db_conn, "ROLLBACK;", NULL, NULL, NULL);
       return TURN_CONSUME_ERROR_DB_FAIL;
     }
   changes = sqlite3_changes (db_conn);
   sqlite3_finalize (stmt);
   if (changes == 0)
     {
-      // This should ideally not happen if the initial select and update are in a transaction
-      // but as a fallback, ensure we report no turns if somehow it failed to update
-      sqlite3_exec (db_conn, "ROLLBACK;", NULL, NULL, NULL);
       return TURN_CONSUME_ERROR_NO_TURNS;
     }
-  sqlite3_exec (db_conn, "COMMIT;", NULL, NULL, NULL);
+
   return TURN_CONSUME_SUCCESS;
 }
 

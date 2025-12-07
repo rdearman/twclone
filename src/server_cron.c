@@ -20,6 +20,8 @@
 #include "server_planets.h"
 #include "database.h"
 #include "server_config.h"
+#include "database_market.h" // For market order helpers
+#include "database_cmd.h"    // For bank helpers
 #include "server_stardock.h"    // For Tavern-related declarations
 #include "server_corporation.h" // For corporation cron jobs
 #include "server_clusters.h"    // Cluster Economy & Law
@@ -1716,6 +1718,368 @@ h_npc_step (sqlite3 *db, int64_t now_s)
   return 0;
 }
 
+
+/* int */
+/* h_npc_step (sqlite3 *db, int64_t now_s) */
+/* { */
+/*   (void) now_s; */
+/*   int64_t now_ms = (int64_t) monotonic_millis (); */
+
+
+/*   if (iss_init_once () == 1) */
+/*     { */
+/*       iss_tick (now_ms); */
+/*     } */
+/*   if (fer_init_once () == 1) */
+/*     { */
+/*       fer_attach_db (db); */
+/*       fer_tick (now_ms); */
+/*     } */
+/*   if (ori_init_once () == 1) */
+/*     { */
+/*       ori_attach_db (db); */
+/*       ori_tick (now_ms); */
+/*     } */
+/*   return 0; */
+/* } */
+
+
+int
+h_port_economy_tick (sqlite3 *db, int64_t now_s)
+{
+  if (!try_lock (db, "port_economy_tick", now_s))
+    {
+      return 0;
+    }
+  // LOGI ("port_economy_tick: Starting port economy update.");
+  int rc = begin (db);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("port_economy_tick: Failed to start transaction: %s",
+            sqlite3_errmsg (db));
+      unlock (db, "port_economy_tick");
+      return rc;
+    }
+  sqlite3_stmt *stmt = NULL;
+  const char *sql_select_ports_commodities =
+    "SELECT p.id AS port_id, "
+    "       p.size AS port_size, "
+    "       p.type AS port_type, " /* ADDED: To differentiate Stardocks */
+    "       es.commodity_code, "
+    "       es.quantity AS current_quantity, "
+    "       ec.base_restock_rate, "
+    "       ec.target_stock, "
+    "       c.id AS commodity_id " /* ADDED: Need ID for orders */
+    "FROM ports p "
+    "JOIN entity_stock es ON p.id = es.entity_id AND es.entity_type = 'port' "
+    "JOIN economy_curve ec ON p.economy_curve_id = ec.id "
+    "JOIN commodities c ON es.commodity_code = c.code;";
+
+  rc = sqlite3_prepare_v2 (db, sql_select_ports_commodities, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("port_economy_tick: Failed to prepare select statement: %s",
+            sqlite3_errmsg (db));
+      rollback (db);
+      unlock (db, "port_economy_tick");
+      return rc;
+    }
+
+  int orders_processed = 0;
+  while (sqlite3_step (stmt) == SQLITE_ROW)
+    {
+      int port_id = sqlite3_column_int (stmt, 0);
+      int port_size = sqlite3_column_int (stmt, 1);
+      int port_type = sqlite3_column_int (stmt, 2);
+      const char *commodity_code = (const char *) sqlite3_column_text (stmt, 3);
+      int current_quantity = sqlite3_column_int (stmt, 4);
+      double base_restock_rate = sqlite3_column_double (stmt, 5);
+      // int target_stock = sqlite3_column_int (stmt, 6); // Ignored
+      int commodity_id = sqlite3_column_int (stmt, 7);
+
+      int max_capacity = port_size * 1000; 
+
+      double desired_level_ratio = 0.5; // Default for most ports
+      if (port_type == PORT_TYPE_STARDOCK) { 
+          desired_level_ratio = 0.9;
+      }
+
+      int desired_stock = (int) (max_capacity * desired_level_ratio);
+      
+      int shortage = 0;
+      int surplus = 0;
+      
+      if (desired_stock > current_quantity) {
+          shortage = desired_stock - current_quantity;
+      } else if (current_quantity > desired_stock) {
+          surplus = current_quantity - desired_stock;
+      }
+
+      int order_qty = 0;
+      const char *side = NULL;
+
+      if (shortage > 0) {
+          order_qty = (int)(shortage * base_restock_rate);
+          side = "buy";
+      } else if (surplus > 0) {
+          order_qty = (int)(surplus * base_restock_rate);
+          side = "sell";
+      }
+
+      // Ensure minimal order if there is a need and rate allows
+      if ((shortage > 0 || surplus > 0) && base_restock_rate > 0 && order_qty == 0) {
+          order_qty = 1;
+      }
+
+      if (order_qty > 0 && side != NULL) {
+          int price = 0;
+          if (strcmp(side, "buy") == 0) {
+             price = h_calculate_port_buy_price(db, port_id, commodity_code);
+          } else {
+             price = h_calculate_port_sell_price(db, port_id, commodity_code);
+          }
+          
+          // Check for existing open order
+          commodity_order_t existing_order;
+          int find_rc = db_get_open_order_for_port(db, port_id, commodity_id, side, &existing_order);
+          
+          if (find_rc == SQLITE_OK) {
+              // Update existing order
+              // We update quantity to the NEW calculated order_qty (replacing old intent)
+              // Or should we add? Spec says "update its quantity". Usually implies setting to current need.
+              // Spec says: "update its quantity (e.g., to order_qty or by adding...)"
+              // Let's set it to order_qty to reflect current market need.
+              // Also need to handle remaining_quantity logic in db_update_commodity_order.
+              // db_update_commodity_order takes new TOTAL quantity.
+              // If we want the *remaining* to be order_qty, we need to be careful.
+              // Simplest MVP: Set total quantity = order_qty + filled_quantity? 
+              // Actually, if we just want to buy/sell 'order_qty' MORE, we might create a new order if one exists?
+              // Spec says: "If an open buy order exists, update its quantity."
+              // Let's assume 'order_qty' is the TOTAL desired open amount.
+              
+              // Let's just update the total quantity to be (filled + order_qty) so that remaining = order_qty.
+              int new_total = existing_order.filled_quantity + order_qty;
+              db_update_commodity_order(db, existing_order.id, new_total, existing_order.filled_quantity, "open");
+          } else {
+              // Insert new order
+              db_insert_commodity_order(db, "port", port_id, commodity_id, side, order_qty, price, 0);
+          }
+          orders_processed++;
+      } else {
+          // No shortage/surplus significant enough to order (or satisfied).
+          // Cancel existing open orders for this port/commodity.
+          db_cancel_commodity_orders_for_port_and_commodity(db, port_id, commodity_id, "buy");
+          db_cancel_commodity_orders_for_port_and_commodity(db, port_id, commodity_id, "sell");
+      }
+    }
+
+  sqlite3_finalize (stmt);
+
+  rc = commit (db);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("port_economy_tick: Commit failed: %s", sqlite3_errmsg (db));
+      rollback (db);
+    }
+  
+  unlock (db, "port_economy_tick");
+  return rc;
+}
+
+int
+h_daily_market_settlement (sqlite3 *db, int64_t now_s)
+{
+  // 1. Acquire Lock
+  if (!try_lock (db, "daily_market_settlement", now_s))
+    {
+      return 0;
+    }
+  
+  // 2. Start Transaction
+  int rc = begin (db);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_daily_market_settlement: Failed to start transaction: %s", sqlite3_errmsg (db));
+      unlock (db, "daily_market_settlement");
+      return rc;
+    }
+
+  // 3. Get list of commodities to iterate over
+  // We can iterate over all commodities that have orders, but iterating all commodities is safer/simpler
+  sqlite3_stmt *stmt_comm = NULL;
+  rc = sqlite3_prepare_v2(db, "SELECT id, code FROM commodities;", -1, &stmt_comm, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE ("h_daily_market_settlement: Failed to prepare commodities select: %s", sqlite3_errmsg (db));
+      rollback(db);
+      unlock (db, "daily_market_settlement");
+      return rc;
+  }
+
+  while (sqlite3_step(stmt_comm) == SQLITE_ROW) {
+      int commodity_id = sqlite3_column_int(stmt_comm, 0);
+      const char *commodity_code = (const char *)sqlite3_column_text(stmt_comm, 1);
+      
+      // 4. Load Orders
+      int buy_count = 0;
+      commodity_order_t *buy_orders = db_load_open_orders_for_commodity(db, commodity_id, "buy", &buy_count);
+      
+      int sell_count = 0;
+      commodity_order_t *sell_orders = db_load_open_orders_for_commodity(db, commodity_id, "sell", &sell_count);
+      
+      // 5. Matching Loop
+      int b_idx = 0;
+      int s_idx = 0;
+      
+      while (b_idx < buy_count && s_idx < sell_count) {
+          commodity_order_t *buy = &buy_orders[b_idx];
+          commodity_order_t *sell = &sell_orders[s_idx];
+          
+          // Price check: Buyer's max price >= Seller's min price
+          // Note: Port orders use the calculated price. 
+          // For ports, BUY price is what they pay (low), SELL price is what they charge (high).
+          // Typically, Port BUY price < Port SELL price.
+          // So two ports won't trade unless one is desperate or prices fluctuate wildly.
+          // However, the logic simply follows the matching rule.
+          
+          if (buy->price >= sell->price) {
+              // Match possible
+              
+              // Caps
+              // 1. Order remaining quantities
+              int qty_buy_rem = buy->quantity - buy->filled_quantity;
+              int qty_sell_rem = sell->quantity - sell->filled_quantity;
+              
+              // 2. Seller Stock (Physical limit)
+              // We assume actors are ports for now (MVP).
+              int seller_stock = 0;
+              h_get_port_commodity_quantity(db, sell->actor_id, commodity_code, &seller_stock);
+              
+              // 3. Buyer Credits (Financial limit)
+              long long buyer_credits = 0;
+              db_get_port_bank_balance(buy->actor_id, &buyer_credits); // Helper wrapper needed or direct query?
+              // We have db_get_port_bank_balance declared in database_cmd.h
+              
+              int max_affordable = 0;
+              if (sell->price > 0) {
+                  max_affordable = (int)(buyer_credits / sell->price);
+              }
+              
+              // Calculate Trade Quantity
+              int trade_qty = qty_buy_rem;
+              if (qty_sell_rem < trade_qty) trade_qty = qty_sell_rem;
+              if (seller_stock < trade_qty) trade_qty = seller_stock;
+              if (max_affordable < trade_qty) trade_qty = max_affordable;
+              
+              if (trade_qty > 0) {
+                  int trade_price = sell->price; // Seller's price rules (or mid-point, spec says seller dominant)
+                  long long total_cost = (long long)trade_qty * trade_price;
+                  
+                  // Execute Trade
+                  
+                  // 1. Credits
+                  int buyer_acct = 0;
+                  h_get_account_id_unlocked(db, "port", buy->actor_id, &buyer_acct);
+                  int seller_acct = 0;
+                  h_get_account_id_unlocked(db, "port", sell->actor_id, &seller_acct);
+                  
+                  // We need unlocked helpers because we are in a transaction
+                  long long new_bal;
+                  // Generate unique TX group ID?
+                  // For MVP, just NULL or a string
+                  h_deduct_credits_unlocked(db, buyer_acct, total_cost, "TRADE_BUY", "MARKET_SETTLEMENT", &new_bal);
+                  h_add_credits_unlocked(db, seller_acct, total_cost, "TRADE_SELL", "MARKET_SETTLEMENT", &new_bal);
+                  
+                  // 2. Stock
+                  h_market_move_port_stock(db, sell->actor_id, commodity_code, -trade_qty);
+                  h_market_move_port_stock(db, buy->actor_id, commodity_code, trade_qty);
+                  
+                  // 3. Record Trade
+                  // We don't have bank_tx IDs easily from h_add/deduct helpers (they return RC).
+                  // We can pass 0 for now or modify helper. 
+                  // For MVP, 0 is acceptable if we can't easily get them without changing helpers.
+                  db_insert_commodity_trade(db, buy->id, sell->id, trade_qty, trade_price, 
+                                            buy->actor_type, buy->actor_id, 
+                                            sell->actor_type, sell->actor_id, 
+                                            0, 0);
+                  
+                  // 4. Update Orders
+                  buy->filled_quantity += trade_qty;
+                  sell->filled_quantity += trade_qty;
+                  
+                  // Update DB
+                  const char *b_status = (buy->filled_quantity >= buy->quantity) ? "filled" : "partial";
+                  db_update_commodity_order(db, buy->id, buy->quantity, buy->filled_quantity, b_status);
+                  
+                  const char *s_status = (sell->filled_quantity >= sell->quantity) ? "filled" : "partial";
+                  db_update_commodity_order(db, sell->id, sell->quantity, sell->filled_quantity, s_status);
+                  
+                  // 5. Advance Iterators
+                  // If buy order filled or out of money (effectively filled for this round), move to next
+                  if (buy->filled_quantity >= buy->quantity || max_affordable == 0) {
+                      b_idx++;
+                  }
+                  // If sell order filled or out of stock, move to next
+                  if (sell->filled_quantity >= sell->quantity || seller_stock <= 0) {
+                      s_idx++;
+                  }
+                  
+                  // If neither advanced (e.g. partial fill), we loop again.
+                  // BUT we must ensure progress.
+                  // If trade_qty was > 0, something changed.
+                  // If we are stuck (e.g. caps prevent full fill but we can't advance), we should probably force advance the one that was limited?
+                  // Logic: If trade happened, we re-evaluate. 
+                  // If buy order still has qty but hit a limit (e.g. money), it might match with a CHEAPER seller?
+                  // But sellers are sorted Price ASC. So next seller is more expensive. So no.
+                  // So if buyer runs out of money, they are done.
+                  if (max_affordable == 0 && buy->filled_quantity < buy->quantity) {
+                      b_idx++; // Skip this buyer
+                  }
+                  // If seller runs out of stock, they are done.
+                  if (seller_stock <= 0 && sell->filled_quantity < sell->quantity) {
+                      s_idx++;
+                  }
+                  
+              } else {
+                  // trade_qty <= 0 means we hit a limit (stock or money) or just logic weirdness
+                  // If seller has no stock, skip seller
+                  if (seller_stock <= 0) s_idx++;
+                  // If buyer has no money, skip buyer
+                  else if (max_affordable <= 0) b_idx++;
+                  // Else force advance to avoid infinite loop (shouldn't happen if logic sound)
+                  else {
+                      s_idx++; // Advance seller
+                  }
+              }
+              
+          } else {
+              // Prices don't match.
+              // Best BUY is < Best SELL.
+              // Since BUYs are sorted DESC and SELLs sorted ASC, no further matches possible for this pair of lists.
+              break;
+          }
+      }
+      
+      // Cleanup memory
+      free(buy_orders);
+      free(sell_orders);
+  }
+  
+  sqlite3_finalize(stmt_comm);
+  
+  // 6. Handle Expiry (Placeholder for MVP)
+  // UPDATE commodity_orders SET status='expired' WHERE status='open' AND expires_at < now;
+  sqlite3_exec(db, "UPDATE commodity_orders SET status='expired' WHERE status='open' AND expires_at IS NOT NULL AND expires_at < strftime('%s','now');", NULL, NULL, NULL);
+
+  rc = commit (db);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_daily_market_settlement: Commit failed: %s", sqlite3_errmsg (db));
+      rollback (db);
+    }
+  
+  unlock (db, "daily_market_settlement");
+  return rc;
+}
 
 //////////////////////// NEWS BLOCK ////////////////////////
 int
@@ -3654,101 +4018,7 @@ rollback_and_unlock:
 }
 
 
-int
-h_daily_market_settlement (sqlite3 *db, int64_t now_s)
-{
-  if (!try_lock (db, "daily_market_settlement", now_s))
-    {
-      return 0;
-    }
-  LOGI ("daily_market_settlement: Starting market settlement.");
-  int rc = begin (db);
 
-
-  if (rc != SQLITE_OK)
-    {
-      unlock (db, "daily_market_settlement");
-      return rc;
-    }
-  sqlite3_stmt *st = NULL;
-  const char *sql =
-    "SELECT es.entity_id, es.commodity_code, es.quantity, ec.base_restock_rate, ec.target_stock, ec.volatility_factor "
-    "FROM entity_stock es "
-    "JOIN ports p ON es.entity_id = p.id "
-    "JOIN economy_curve ec ON p.economy_curve_id = ec.id "
-    "WHERE es.entity_type = 'port'";
-
-
-  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
-  if (rc != SQLITE_OK)
-    {
-      LOGE ("daily_market_settlement: Prepare failed: %s", sqlite3_errmsg (db));
-      rollback (db);
-      unlock (db, "daily_market_settlement");
-      return rc;
-    }
-  sqlite3_stmt *upd = NULL;
-  const char *upd_sql =
-    "UPDATE entity_stock SET quantity = ?, last_updated_ts = ? WHERE entity_type='port' AND entity_id=? AND commodity_code=?";
-
-
-  if (sqlite3_prepare_v2 (db, upd_sql, -1, &upd, NULL) != SQLITE_OK)
-    {
-      LOGE ("daily_market_settlement: Prepare update failed: %s",
-            sqlite3_errmsg (db));
-      sqlite3_finalize (st);
-      rollback (db);
-      unlock (db, "daily_market_settlement");
-      return rc;
-    }
-  int updates = 0;
-
-
-  while (sqlite3_step (st) == SQLITE_ROW)
-    {
-      int port_id = sqlite3_column_int (st, 0);
-      const char *code = (const char *)sqlite3_column_text (st, 1);
-      int qty = sqlite3_column_int (st, 2);
-      double rate = sqlite3_column_double (st, 3);
-      int target = sqlite3_column_int (st, 4);
-      double vol = sqlite3_column_double (st, 5);
-      // Logic: Move stock towards target
-      int diff = target - qty;
-      int change = (int)(diff * rate);
-
-
-      // Apply volatility (random noise)
-      if (vol > 0.001)
-        {
-          double noise = ((double)rand () / RAND_MAX - 0.5) * 2.0; // -1.0 to 1.0
-          int vol_change = (int)(qty * vol * noise);
-
-
-          change += vol_change;
-        }
-      int new_qty = qty + change;
-
-
-      if (new_qty < 0)
-        {
-          new_qty = 0;
-        }
-      // Update
-      sqlite3_bind_int (upd, 1, new_qty);
-      sqlite3_bind_int64 (upd, 2, now_s);
-      sqlite3_bind_int (upd, 3, port_id);
-      sqlite3_bind_text (upd, 4, code, -1, SQLITE_STATIC);
-      sqlite3_step (upd);
-      sqlite3_reset (upd);
-      updates++;
-    }
-  sqlite3_finalize (st);
-  sqlite3_finalize (upd);
-  commit (db);
-  LOGI ("daily_market_settlement: Updated %d stock entries.", updates);
-  unlock (db, "daily_market_settlement");
-  return 0;
-}
 
 
 int
@@ -3877,7 +4147,7 @@ h_daily_stock_price_recalculation (sqlite3 *db,
   (
     "h_daily_stock_price_recalculation: Successfully recalculated stock prices.");
   unlock (db, "daily_stock_price_recalculation");
-  return SQLITE_OK;
+  return 0;
 rollback_and_unlock_stock_price:
   if (st_stocks)
     {
@@ -3886,6 +4156,62 @@ rollback_and_unlock_stock_price:
   rollback (db);
   unlock (db, "daily_stock_price_recalculation");
   return rc;
+}
+
+int
+h_shield_regen_tick (sqlite3 *db, int64_t now_s)
+{
+  if (!g_cfg.regen.enabled) 
+    {
+      return 0;
+    }
+
+  if (!try_lock (db, "shield_regen", now_s))
+    {
+      return 0;
+    }
+  
+  // LOGD("h_shield_regen_tick: Starting shield regeneration."); 
+
+  int rc = begin (db);
+  if (rc != SQLITE_OK)
+    {
+      unlock (db, "shield_regen");
+      return rc;
+    }
+
+  // Calculate regen amount based on config or default 5%
+  double rate = g_cfg.regen.shield_rate_pct_per_tick > 0 ? g_cfg.regen.shield_rate_pct_per_tick : 0.05;
+  
+  char *sql = sqlite3_mprintf(
+    "UPDATE ships "
+    "SET shields = MIN( "
+    "  (SELECT maxshields FROM shiptypes WHERE id = ships.type_id), "
+    "  shields + MAX(1, CAST((SELECT maxshields FROM shiptypes WHERE id = ships.type_id) * %f AS INTEGER)) "
+    ") "
+    "WHERE shields > 0 "
+    "  AND shields < (SELECT maxshields FROM shiptypes WHERE id = ships.type_id);", rate);
+
+  if (!sql) {
+      rollback(db);
+      unlock(db, "shield_regen");
+      return SQLITE_NOMEM;
+  }
+
+  rc = sqlite3_exec (db, sql, NULL, NULL, NULL);
+  sqlite3_free(sql);
+
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_shield_regen_tick: SQL error: %s", sqlite3_errmsg (db));
+      rollback (db);
+      unlock (db, "shield_regen");
+      return rc;
+    }
+
+  commit (db);
+  unlock (db, "shield_regen");
+  return 0;
 }
 
 

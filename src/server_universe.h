@@ -27,6 +27,7 @@ int universe_init (void);
 /* Shutdown universe (cleanup hooks if needed) */
 void universe_shutdown (void);
 json_t *build_sector_info_json (int sector_id);
+json_t *make_player_object (int64_t player_id); // Exported helper
 int cmd_move_warp (client_ctx_t *ctx, json_t *root);
 int cmd_move_pathfind (client_ctx_t *ctx, json_t *root);
 int cmd_sector_search (client_ctx_t *ctx, json_t *root);

@@ -297,7 +297,7 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
           sqlite3 *dbh_npc = db_get_handle ();
 
 
-          if (!h_player_is_npc (dbh_npc, &player_id))
+          if (h_player_is_npc (dbh_npc, player_id))
             {
               send_enveloped_error (ctx->fd, root, ERR_IS_NPC,
                                     "NPC login is not allowed");

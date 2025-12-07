@@ -94,6 +94,8 @@ static json_t *schema_bank_history (void);
 static json_t *schema_bank_leaderboard (void);
 static json_t *schema_player_list_online_request (void);
 static json_t *schema_player_list_online_response (void);
+/* --- Port Update Event --- */
+static json_t *schema_port_update (void); // New forward declaration
 
 
 static json_t *
@@ -728,6 +730,10 @@ schema_get (const char *key)
     {
       return schema_bulk_execute ();
     }
+  else if (strcasecmp (key, "port.update") == 0)
+    {
+      return schema_port_update ();
+    }
   /* No match found */
   return NULL;
 }
@@ -849,7 +855,8 @@ schema_keys (void)
   json_array_append_new (keys, json_string ("subscribe.list"));
   json_array_append_new (keys, json_string ("subscribe.catalog"));
   /* Bulk */
-  json_array_append_new (keys, json_string ("bulk.execute"));
+  json_array_append_new (keys, json_string ("bulk"));
+  json_array_append_new (keys, json_string ("port.update"));
   return keys;
 }
 
@@ -1870,6 +1877,60 @@ schema_trade_history (void)
                                    "additionalProperties",
                                    json_false ());
   return data_schema;
+}
+
+
+static json_t *
+schema_port_update (void)
+{
+    // Reusing the structure of trade.port_info response for the event payload
+    json_t *commodity_item_schema = json_pack("{s:s, s:o, s:o, s:o, s:o, s:o, s:o, s:b}",
+        "type", "object",
+        "properties", json_pack("{s:o, s:o, s:o, s:o, s:o, s:o}",
+            "code", json_pack("{s:s}", "type", "string"),
+            "quantity", json_pack("{s:s}", "type", "integer"),
+            "buy_price", json_pack("{s:s}", "type", "integer"),
+            "sell_price", json_pack("{s:s}", "type", "integer"),
+            "capacity", json_pack("{s:s}", "type", "integer"),
+            "illegal", json_pack("{s:s}", "type", "boolean")
+        ),
+        "required", json_pack("[s,s,s,s,s,s]", "code", "quantity", "buy_price", "sell_price", "capacity", "illegal"),
+        "additionalProperties", json_false()
+    );
+
+    json_t *port_properties = json_pack("{s:o, s:o, s:o, s:o, s:o, s:o, s:o, s:o, s:o}",
+        "id", json_pack("{s:s}", "type", "integer"),
+        "number", json_pack("{s:s}", "type", "integer"),
+        "name", json_pack("{s:s}", "type", "string"),
+        "sector", json_pack("{s:s}", "type", "integer"),
+        "size", json_pack("{s:s}", "type", "integer"),
+        "techlevel", json_pack("{s:s}", "type", "integer"),
+        "petty_cash", json_pack("{s:s}", "type", "integer"),
+        "type", json_pack("{s:s}", "type", "integer"),
+        "commodities", json_pack("{s:s, s:o}", "type", "array", "items", commodity_item_schema)
+    );
+    
+    json_t *port_required = json_pack("[s,s,s,s,s,s,s,s,s]", "id", "number", "name", "sector", "size", "techlevel", "petty_cash", "type", "commodities");
+
+    json_t *data_properties = json_pack("{s:o}",
+        "port", json_pack("{s:s, s:o, s:o}", "type", "object", "properties", port_properties, "required", port_required)
+    );
+
+    json_t *data_schema = json_pack ("{s:s, s:s, s:s, s:o, s:o, s:b}",
+                                   "$id",
+                                   "ge://schema/port.update.json",
+                                   "$schema",
+                                   "https://json-schema.org/draft/2020-12/schema",
+                                   "type",
+                                   "object",
+                                   "properties",
+                                   data_properties,
+                                   "required",
+                                   json_pack("[s]", "port"),
+                                   "additionalProperties",
+                                   json_false ());
+
+    return data_schema;
 }
 
 

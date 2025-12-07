@@ -1,33 +1,12 @@
-#include "server_autopilot.h"
-#include "server_universe.h"
-#include "database.h"
 #include <string.h>
 #include <stdlib.h>
 #include <sqlite3.h>
+//local includes
+#include "server_autopilot.h"
+#include "server_universe.h"
+#include "database.h"
 
 
-/*
- * cmd_move_autopilot_start
- *
- * Calculates a BFS route between sectors, respecting an 'avoid' list.
- * Returns the path so the client can execute the moves.
- *
- * Input:
- *  data: {
- *    to_sector_id: int,
- *    from_sector_id: int (optional, default=current),
- *    avoid: [int, ...] (optional)
- *  }
- *
- * Output:
- *  type: "move.autopilot.route_v1"
- *  data: {
- *    from_sector_id: int,
- *    to_sector_id: int,
- *    path: [int, ...],
- *    hops: int
- *  }
- */
 int
 cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
 {

@@ -45,6 +45,8 @@ int h_loan_shark_interest_cron (sqlite3 *db, int64_t now_s);
 int h_daily_corp_tax (sqlite3 *db, int64_t now_s);
 int h_dividend_payout (sqlite3 *db, int64_t now_s);
 int h_daily_stock_price_recalculation (sqlite3 *db, int64_t now_s);
+int h_port_economy_tick (sqlite3 *db, int64_t now_s);
+int h_shield_regen_tick (sqlite3 *db, int64_t now_s);
 // Transaction / Utility Helpers (Declared in server_cron.h, Defined in server_cron.c)
 int begin (sqlite3 *db);
 int commit (sqlite3 *db);

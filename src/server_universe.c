@@ -29,7 +29,7 @@
 #include "server_players.h"
 #include "server_log.h"
 #include "server_combat.h"
-
+#include "database_cmd.h"
 
 #define SECTOR_LIST_BUF_SIZE 256
 /* cache DB so fer_tick signature matches ISS style */
@@ -360,7 +360,7 @@ fer_event_json (const char *type, int sector_id, const char *fmt, ...)
  * Build a nested player object { id, name? } for event payloads.
  * Name lookup is best-effort; if not found, we emit only {id}.
  */
-static json_t *
+json_t *
 make_player_object (int64_t player_id)
 {
   json_t *player = json_object ();
@@ -657,6 +657,7 @@ build_sector_scan_json (int sector_id, int player_id,
     {
       return NULL;
     }
+  json_object_set_new (root, "server_tick", json_integer (g_server_tick));
   /* Basic sector info (id/name) */
   json_t *basic = NULL;
 
@@ -1260,7 +1261,64 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
       json_decref (meta);
       return 0;
     }
+
+  /* START TRANSACTION */
+  char *errmsg = NULL;
+
+
+  if (sqlite3_exec (db_handle, "BEGIN IMMEDIATE;", NULL, NULL,
+                    &errmsg) != SQLITE_OK)
+    {
+      if (errmsg)
+        {
+          sqlite3_free (errmsg);
+        }
+      send_enveloped_error (ctx->fd, root, 1500, "DB Transaction Error");
+      return 0;
+    }
+
+  /* 1. Verify Current Sector (Authoritative) */
+  int auth_from = 0;
+  sqlite3_stmt *st_chk = NULL;
+
+
+  if (sqlite3_prepare_v2 (db_handle,
+                          "SELECT sector FROM players WHERE id=?1",
+                          -1,
+                          &st_chk,
+                          NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_int (st_chk, 1, ctx->player_id);
+      if (sqlite3_step (st_chk) == SQLITE_ROW)
+        {
+          auth_from = sqlite3_column_int (st_chk, 0);
+        }
+      sqlite3_finalize (st_chk);
+    }
+
   int from = ctx->sector_id;
+
+
+  if (auth_from != from)
+    {
+      LOGW ("Warp mismatch: Client thinks %d, DB says %d. Using DB.",
+            from,
+            auth_from);
+      from = auth_from;
+      ctx->sector_id = auth_from;
+
+      /* Re-validate with authoritative source */
+      decision_t d2 = validate_warp_rule (from, to);
+
+
+      if (d2.status != DEC_OK)
+        {
+          sqlite3_exec (db_handle, "ROLLBACK;", NULL, NULL, NULL);
+          send_enveloped_error (ctx->fd, root, d2.code, d2.message);
+          return 0;
+        }
+    }
+
   int turns_spent = 1;          // Assuming 1 turn for a single warp, as per typical game mechanics.
 
 
@@ -1273,6 +1331,7 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
 
   if (prc != SQLITE_OK)
     {
+      sqlite3_exec (db_handle, "ROLLBACK;", NULL, NULL, NULL);
       LOGE
       (
         "cmd_move_warp: db_player_set_sector failed for player %d, ship_id %d, to sector %d. Error code: %d",
@@ -1298,7 +1357,16 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
   armid_encounter_t armid_enc = { 0 };
 
 
-  apply_armid_mines_on_entry (ctx, to, &armid_enc);
+  if (apply_armid_mines_on_entry (ctx, to, &armid_enc) != 0)
+    {
+      sqlite3_exec (db_handle, "ROLLBACK;", NULL, NULL, NULL);
+      send_enveloped_error (ctx->fd, root, 1500, "Mine trigger error");
+      return 0;
+    }
+
+  sqlite3_exec (db_handle, "COMMIT;", NULL, NULL, NULL);
+  g_warps_performed++; // Increment atomic counter
+
   /* 1) Send the direct reply for the actor */
   json_t *resp = json_object ();
 
@@ -1787,6 +1855,7 @@ build_sector_info_json (int sector_id)
     {
       return NULL;
     }
+  json_object_set_new (root, "server_tick", json_integer (g_server_tick));
   /* Basic info (id/name) */
   json_t *basic = NULL;
 

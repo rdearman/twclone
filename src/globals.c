@@ -240,3 +240,10 @@ const char portconversion[11][3] = {
 };
 const float sell_base_prices[3] = { 4.8, 21.6, 63.4 };
 const float buy_base_prices[3] = { 53.2, 76.5, 147.5 };
+
+// Global Atomic Counters
+atomic_int_fast64_t g_trades_executed = 0;
+atomic_int_fast64_t g_warps_performed = 0;
+atomic_int_fast64_t g_combat_rounds = 0;
+atomic_int_fast64_t g_failed_operations = 0;
+atomic_int_fast64_t g_server_tick = 0;

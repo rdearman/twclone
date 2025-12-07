@@ -552,8 +552,12 @@ h_can_trade_commodity (sqlite3 *db,
     {
       return false;
     }
+  bool illegal_commodity_status = h_is_illegal_commodity (db, commodity_code);
+  LOGD ("h_can_trade_commodity: Port %d, Player %d, Cmd %s: illegal_commodity_status=%d",
+        port_id, player_id, commodity_code, illegal_commodity_status);
+
   // 2. If commodity is not illegal, allow (subject to existing rules)
-  if (!h_is_illegal_commodity (db, commodity_code))
+  if (!illegal_commodity_status)
     {
       return true;
     }
@@ -578,6 +582,7 @@ h_can_trade_commodity (sqlite3 *db,
     }
   if (sector_id == 0)
     {
+      LOGD ("h_can_trade_commodity: Port %d not linked to a sector.", port_id);
       return false;                   // Port not linked to a sector?
     }
   int cluster_align_band_id = 0;
@@ -597,10 +602,16 @@ h_can_trade_commodity (sqlite3 *db,
                                &cluster_is_evil,
                                NULL,
                                NULL);
+
+  LOGD ("h_can_trade_commodity: Port %d, Sector %d (Cluster Band %d): cluster_is_good=%d, cluster_is_evil=%d",
+        port_id, sector_id, cluster_align_band_id, cluster_is_good, cluster_is_evil);
+
   // 4. Check cluster alignment for illegal trade
   if (cluster_is_good)
     {
       // Good cluster – no illegal trade
+      LOGD ("h_can_trade_commodity: Port %d, Cmd %s: Refused because cluster is good.",
+            port_id, commodity_code);
       return false;
     }
   // Neutral clusters are also assumed to prohibit illegal trade by default
@@ -624,13 +635,30 @@ h_can_trade_commodity (sqlite3 *db,
                                &player_is_evil,
                                NULL,
                                NULL);
+  int neutral_band_value = db_get_config_int(db, "neutral_band", 75); // Get neutral_band from config
+
+  LOGD ("h_can_trade_commodity: Port %d, Player %d (Alignment %d, Band %d): player_is_evil=%d, neutral_band_value=%d",
+        port_id, player_id, player_alignment, player_align_band_id, player_is_evil, neutral_band_value);
+
+  // If player is Good (alignment > neutral_band), refuse illegal trade.
+  if (player_alignment > neutral_band_value)
+    {
+      LOGI (
+        "h_can_trade_commodity: Port %d, Player %d, Cmd %s: Player alignment is too good (%d). Refused illegal trade.",
+        port_id,
+        player_id,
+        commodity_code,
+        player_alignment);
+      return false;
+    }
+
   if (!player_is_evil)
     {
-      // If player is not evil, check if neutral players are allowed to trade illegally in this cluster
+      // If player is not evil (i.e., neutral), then check 'illegal_allowed_neutral' config
       if (!db_get_config_bool (db, "illegal_allowed_neutral", true))
         {
           LOGI (
-            "h_can_trade_commodity: Port %d, Player %d, Cmd %s: Player alignment is not evil, and neutral illegal trade is disallowed. Refused.",
+            "h_can_trade_commodity: Port %d, Player %d, Cmd %s: Player alignment is neutral, and neutral illegal trade is disallowed. Refused.",
             port_id,
             player_id,
             commodity_code);
@@ -713,6 +741,95 @@ h_update_port_stock (sqlite3 *db,
       *new_quantity_out = new_quantity;
     }
   sqlite3_finalize (stmt);
+  return SQLITE_OK;
+}
+
+/**
+ * @brief Adjusts a port's stock for market settlement purposes.
+ *
+ * Explicitly enforces that the resulting quantity stays within [0, max_capacity].
+ * Does NOT generate logs or messages (other than debug/error logs).
+ *
+ * @param db Database handle.
+ * @param port_id The ID of the port.
+ * @param commodity_code The canonical code of the commodity.
+ * @param quantity_delta The amount to add (positive) or subtract (negative).
+ * @return SQLITE_OK on success, or an SQLite error code.
+ */
+int
+h_market_move_port_stock (sqlite3 *db,
+                          int port_id,
+                          const char *commodity_code,
+                          int quantity_delta)
+{
+  if (!db || port_id <= 0 || !commodity_code)
+    {
+      return SQLITE_MISUSE;
+    }
+  
+  if (quantity_delta == 0) {
+      return SQLITE_OK;
+  }
+
+  // 1. Get current quantity and port size (for max capacity)
+  sqlite3_stmt *stmt = NULL;
+  const char *sql_info = 
+      "SELECT es.quantity, p.size * 1000 AS max_capacity "
+      "FROM ports p "
+      "LEFT JOIN entity_stock es ON p.id = es.entity_id AND es.entity_type = 'port' AND es.commodity_code = ?2 "
+      "WHERE p.id = ?1;";
+  
+  int rc = sqlite3_prepare_v2(db, sql_info, -1, &stmt, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("h_market_move_port_stock: prepare info failed: %s", sqlite3_errmsg(db));
+      return rc;
+  }
+  
+  sqlite3_bind_int(stmt, 1, port_id);
+  sqlite3_bind_text(stmt, 2, commodity_code, -1, SQLITE_STATIC);
+  
+  int current_quantity = 0;
+  int max_capacity = 0;
+  
+  if (sqlite3_step(stmt) == SQLITE_ROW) {
+      current_quantity = sqlite3_column_int(stmt, 0); // NULL becomes 0
+      max_capacity = sqlite3_column_int(stmt, 1);
+  } else {
+      LOGE("h_market_move_port_stock: Port %d not found.", port_id);
+      sqlite3_finalize(stmt);
+      return SQLITE_NOTFOUND;
+  }
+  sqlite3_finalize(stmt);
+
+  // 2. Calculate new quantity with bounds checking
+  int new_quantity = current_quantity + quantity_delta;
+  new_quantity = (new_quantity < 0) ? 0 : new_quantity;
+  new_quantity = (new_quantity > max_capacity) ? max_capacity : new_quantity;
+
+  // 3. Update DB
+  const char *sql_upsert =
+    "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) "
+    "VALUES ('port', ?1, ?2, ?3, 0, strftime('%s','now')) "
+    "ON CONFLICT(entity_type, entity_id, commodity_code) DO UPDATE SET quantity = ?3, last_updated_ts = strftime('%s','now');";
+
+  rc = sqlite3_prepare_v2(db, sql_upsert, -1, &stmt, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("h_market_move_port_stock: prepare upsert failed: %s", sqlite3_errmsg(db));
+      return rc;
+  }
+  
+  sqlite3_bind_int(stmt, 1, port_id);
+  sqlite3_bind_text(stmt, 2, commodity_code, -1, SQLITE_STATIC);
+  sqlite3_bind_int(stmt, 3, new_quantity);
+  
+  rc = sqlite3_step(stmt);
+  if (rc != SQLITE_DONE) {
+       LOGE("h_market_move_port_stock: upsert failed: %s", sqlite3_errmsg(db));
+       sqlite3_finalize(stmt);
+       return SQLITE_ERROR;
+  }
+  
+  sqlite3_finalize(stmt);
   return SQLITE_OK;
 }
 
@@ -1223,7 +1340,7 @@ h_calculate_port_buy_price (sqlite3 *db, int port_id, const char *commodity)
       techlevel = sqlite3_column_int (st, 4);
       price_elasticity = sqlite3_column_double (st, 5);
       volatility_factor = sqlite3_column_double (st, 6);
-      // LOGD("h_calculate_port_buy_price: Data found for port_id=%d, canonical_commodity=%s: base_price=%d, quantity=%d, max_capacity=%d", port_id, canonical_commodity, base_price, quantity, max_capacity);
+      // LOGD("h_calculate_port_buy_price: Data found and will check: port_id=%d, commodity=%s, quantity=%d, max_capacity=%d", port_id, canonical_commodity, quantity, max_capacity);
     }
   else
     {
@@ -1238,8 +1355,10 @@ h_calculate_port_buy_price (sqlite3 *db, int port_id, const char *commodity)
       return 0;                 // Port not buying this commodity or no stock info
     }
   sqlite3_finalize (st);
+  // LOGD("h_calculate_port_buy_price: Checking quantity (%d) >= max_capacity (%d) for port_id=%d, commodity=%s", quantity, max_capacity, port_id, canonical_commodity);
   if (quantity >= max_capacity)
     {
+      // LOGD("h_calculate_port_buy_price: Port %d, commodity %s is full (quantity=%d, max_capacity=%d)", port_id, canonical_commodity, quantity, max_capacity);
       return 0;                 // Port is full, it won't buy.
     }
   if (base_price <= 0)
@@ -1311,181 +1430,204 @@ cmd_trade_port_info (client_ctx_t *ctx,
                               NULL);
       return 0;
     }
-  sqlite3 *db = db_get_handle ();
-
-
-  if (!db)
-    {
-      send_enveloped_error (ctx->fd, root, ERR_DB, "No database handle");
-      return 0;
-    }
-  int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 0;
-  int requested_port_id = 0;
-  json_t *data = json_object_get (root, "data");
-
-
-  if (json_is_object (data))
-    {
-      json_t *jport_id = json_object_get (data, "port_id");
-
-
-      if (json_is_integer (jport_id))
-        {
-          requested_port_id = (int) json_integer_value (jport_id);
+    sqlite3 *db = db_get_handle ();
+  
+  
+    if (!db)
+      {
+        send_enveloped_error (ctx->fd, root, ERR_DB, "No database handle");
+        return 0;
+      }
+  
+    // --- DEBUG: Verify entity_stock visibility ---
+    sqlite3_stmt *debug_st = NULL;
+    int debug_count = 0;
+    const char *debug_sql = "SELECT COUNT(*) FROM entity_stock WHERE entity_type = 'port' AND entity_id = ?1;";
+    if (sqlite3_prepare_v2(db, debug_sql, -1, &debug_st, NULL) == SQLITE_OK) {
+        sqlite3_bind_int(debug_st, 1, port_id_val);
+        if (sqlite3_step(debug_st) == SQLITE_ROW) {
+            debug_count = sqlite3_column_int(debug_st, 0);
         }
-      json_t *jsec = json_object_get (data, "sector_id");
-
-
-      if (json_is_integer (jsec))
-        {
-          sector_id = (int) json_integer_value (jsec);
-        }
+        sqlite3_finalize(debug_st);
     }
-  /* Resolve by port_id if supplied */
-  const char *sql_port_info = NULL;
-
-
-  if (requested_port_id > 0)
-    {
-      sql_port_info =
-        "SELECT id, number, name, sector, size, techlevel, petty_cash, type "
-        "FROM ports WHERE id = ?1 LIMIT 1;";
-      port_id_val = requested_port_id;
-    }
-  else if (sector_id > 0)
-    {
-      sql_port_info =
-        "SELECT id, number, name, sector, size, techlevel, petty_cash, type "
-        "FROM ports WHERE sector = ?1 LIMIT 1;";
-    }
-  else
-    {
-      send_enveloped_refused (ctx->fd, root, ERR_MISSING_FIELD,
-                              "Missing port_id or sector_id", NULL);
-      return 0;
-    }
-  rc = sqlite3_prepare_v2 (db, sql_port_info, -1, &st, NULL);
-  if (rc != SQLITE_OK)
-    {
-      LOGE ("cmd_trade_port_info: port prepare failed: %s",
-            sqlite3_errmsg (db));
-      send_enveloped_error (ctx->fd, root, ERR_DB, "Database error.");
-      return -1;
-    }
-  if (requested_port_id > 0)
-    {
-      sqlite3_bind_int (st, 1, requested_port_id);
-    }
-  else
-    {
-      sqlite3_bind_int (st, 1, sector_id);
-    }
-  rc = sqlite3_step (st);
-  if (rc == SQLITE_ROW)
-    {
-      port = json_object ();
-      if (!port)
-        {
-          LOGE ("cmd_trade_port_info: Out of memory for port object.");
-          rc = SQLITE_NOMEM;
-          goto cleanup;
-        }
-      int col_idx = 0;
-
-
-      port_id_val = sqlite3_column_int (st, col_idx++);
-      json_object_set_new (port, "id", json_integer (port_id_val));
-      json_object_set_new (port,
-                           "number",
-                           json_integer (sqlite3_column_int (st,
-                                                             col_idx
-                                                             ++)));
-      json_object_set_new (port, "name",
-                           json_string ((const char *)sqlite3_column_text (st,
-                                                                           col_idx
-                                                                           ++)));
-      json_object_set_new (port,
-                           "sector",
-                           json_integer (sqlite3_column_int (st,
-                                                             col_idx
-                                                             ++)));
-      json_object_set_new (port, "size", json_integer (sqlite3_column_int (st,
-                                                                           col_idx
-                                                                           ++)));
-      json_object_set_new (port, "techlevel",
-                           json_integer (sqlite3_column_int (st,
-                                                             col_idx++)));
-      json_object_set_new (port, "petty_cash",
-                           json_integer (sqlite3_column_int (st, col_idx++)));
-      json_object_set_new (port, "type", json_integer (sqlite3_column_int (st,
-                                                                           col_idx
-                                                                           ++)));
-    }
-  else
-    {
-      LOGW ("cmd_trade_port_info: No port found for id=%d or sector=%d",
-            requested_port_id,
-            sector_id);
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              ERR_PORT_NOT_FOUND,
-                              "No port found.",
-                              NULL);
-      rc = SQLITE_NOTFOUND;
-      goto cleanup;
-    }
-  sqlite3_finalize (st);
-  st = NULL;
-  // --- Retrieve commodities from entity_stock ---
-  const char *sql_commodities =
-    "SELECT es.commodity_code, es.quantity, es.price, c.illegal "
-    "FROM entity_stock es JOIN commodities c ON es.commodity_code = c.code "
-    "WHERE es.entity_type = 'port' AND es.entity_id = ?1;";
-
-
-  rc = sqlite3_prepare_v2 (db, sql_commodities, -1, &commodity_st, NULL);
-  if (rc != SQLITE_OK)
-    {
-      LOGE ("cmd_trade_port_info: commodities prepare failed: %s",
-            sqlite3_errmsg (db));
-      send_enveloped_error (ctx->fd, root, ERR_DB, "Database error.");
-      goto cleanup;
-    }
-  sqlite3_bind_int (commodity_st, 1, port_id_val);
-  commodities_array = json_array ();
-  if (!commodities_array)
-    {
-      LOGE ("cmd_trade_port_info: Out of memory for commodities array.");
-      rc = SQLITE_NOMEM;
-      goto cleanup;
-    }
-  while ((rc = sqlite3_step (commodity_st)) == SQLITE_ROW)
-    {
-      const char *commodity_code =
-        (const char *)sqlite3_column_text (commodity_st,
-                                           0);
-      int quantity = sqlite3_column_int (commodity_st, 1);
-      int price = sqlite3_column_int (commodity_st, 2);
-      int illegal = sqlite3_column_int (commodity_st, 3);
-
-
-      // Apply h_can_trade_commodity rules for visibility of illegal goods
-      if (illegal && !h_can_trade_commodity (db,
-                                             port_id_val,
-                                             ctx->player_id,
-                                             commodity_code))
-        {
-          continue; // Player not allowed to see/trade this illegal commodity
-        }
-      json_t *commodity_obj = json_object ();
-
-
-      if (!commodity_obj)
-        {
-          LOGE ("cmd_trade_port_info: Out of memory for commodity object.");
-          rc = SQLITE_NOMEM;
-          goto cleanup;
-        }
+    LOGD("cmd_trade_port_info: DEBUG: entity_stock count for port %d: %d rows visible.", port_id_val, debug_count);
+    // --- END DEBUG ---
+  
+  
+    int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 0;
+    int requested_port_id = 0;
+    json_t *data = json_object_get (root, "data");
+  
+  
+    if (json_is_object (data))
+      {
+        json_t *jport_id = json_object_get (data, "port_id");
+  
+  
+        if (json_is_integer (jport_id))
+          {
+            requested_port_id = (int) json_integer_value (jport_id);
+          }
+        json_t *jsec = json_object_get (data, "sector_id");
+  
+  
+        if (json_is_integer (jsec))
+          {
+            sector_id = (int) json_integer_value (jsec);
+          }
+      }
+    /* Resolve by port_id if supplied */
+    const char *sql_port_info = NULL;
+  
+  
+    if (requested_port_id > 0)
+      {
+        sql_port_info =
+          "SELECT id, number, name, sector, size, techlevel, petty_cash, type "
+          "FROM ports WHERE id = ?1 LIMIT 1;";
+        port_id_val = requested_port_id;
+      }
+    else if (sector_id > 0)
+      {
+        sql_port_info =
+          "SELECT id, number, name, sector, size, techlevel, petty_cash, type "
+          "FROM ports WHERE sector = ?1 LIMIT 1;";
+      }
+    else
+      {
+        send_enveloped_refused (ctx->fd, root, ERR_MISSING_FIELD,
+                                "Missing port_id or sector_id", NULL);
+        return 0;
+      }
+    rc = sqlite3_prepare_v2 (db, sql_port_info, -1, &st, NULL);
+    if (rc != SQLITE_OK)
+      {
+        LOGE ("cmd_trade_port_info: port prepare failed: %s",
+              sqlite3_errmsg (db));
+        send_enveloped_error (ctx->fd, root, ERR_DB, "Database error.");
+        return -1;
+      }
+    if (requested_port_id > 0)
+      {
+        sqlite3_bind_int (st, 1, requested_port_id);
+      }
+    else
+      {
+        sqlite3_bind_int (st, 1, sector_id);
+      }
+    rc = sqlite3_step (st);
+    if (rc == SQLITE_ROW)
+      {
+        port = json_object ();
+        if (!port)
+          {
+            LOGE ("cmd_trade_port_info: Out of memory for port object.");
+            rc = SQLITE_NOMEM;
+            goto cleanup;
+          }
+        int col_idx = 0;
+  
+  
+        port_id_val = sqlite3_column_int (st, col_idx++);
+        json_object_set_new (port, "id", json_integer (port_id_val));
+        json_object_set_new (port,
+                             "number",
+                             json_integer (sqlite3_column_int (st,
+                                                               col_idx
+                                                               ++)));
+        json_object_set_new (port, "name",
+                             json_string ((const char *)sqlite3_column_text (st,
+                                                                             col_idx
+                                                                             ++)));
+        json_object_set_new (port,
+                             "sector",
+                             json_integer (sqlite3_column_int (st,
+                                                               col_idx
+                                                               ++)));
+        json_object_set_new (port, "size", json_integer (sqlite3_column_int (st,
+                                                                             col_idx
+                                                                             ++)));
+        json_object_set_new (port, "techlevel",
+                             json_integer (sqlite3_column_int (st,
+                                                               col_idx++)));
+        json_object_set_new (port, "petty_cash",
+                             json_integer (sqlite3_column_int (st, col_idx++)));
+        json_object_set_new (port, "type", json_integer (sqlite3_column_int (st,
+                                                                             col_idx
+                                                                             ++)));
+      }
+    else
+      {
+        LOGW ("cmd_trade_port_info: No port found for id=%d or sector=%d",
+              requested_port_id,
+              sector_id);
+        send_enveloped_refused (ctx->fd,
+                                root,
+                                ERR_PORT_NOT_FOUND,
+                                "No port found.",
+                                NULL);
+        rc = SQLITE_NOTFOUND;
+        goto cleanup;
+      }
+    sqlite3_finalize (st);
+    st = NULL;
+    // --- Retrieve commodities from entity_stock ---
+    // Restoring original JOIN query
+    const char *sql_commodities =
+      "SELECT es.commodity_code, es.quantity, es.price, c.illegal "
+      "FROM entity_stock es JOIN commodities c ON es.commodity_code = c.code "
+      "WHERE es.entity_type = 'port' AND es.entity_id = ?1;";
+  
+  
+    LOGD("cmd_trade_port_info: Executing SQL_COMMODITIES for port_id_val=%d: %s", port_id_val, sql_commodities);
+  
+    rc = sqlite3_prepare_v2 (db, sql_commodities, -1, &commodity_st, NULL);
+    if (rc != SQLITE_OK)
+      {
+        LOGE ("cmd_trade_port_info: commodities prepare failed: %s (rc=%d, errmsg=%s)",
+              sqlite3_errmsg (db), rc, sqlite3_errmsg(db));
+        send_enveloped_error (ctx->fd, root, ERR_DB, "Database error.");
+        goto cleanup;
+      }
+    sqlite3_bind_int (commodity_st, 1, port_id_val);
+    commodities_array = json_array ();
+    if (!commodities_array)
+      {
+        LOGE ("cmd_trade_port_info: Out of memory for commodities array.");
+        rc = SQLITE_NOMEM;
+        goto cleanup;
+      }
+    int row_count = 0;
+    while ((rc = sqlite3_step (commodity_st)) == SQLITE_ROW)
+      {
+        row_count++;
+        const char *commodity_code =
+          (const char *)sqlite3_column_text (commodity_st,
+                                             0);
+        int quantity = sqlite3_column_int (commodity_st, 1);
+        int price = sqlite3_column_int (commodity_st, 2);
+        int illegal = sqlite3_column_int (commodity_st, 3);
+        LOGD("cmd_trade_port_info: Processing commodity: code=%s, quantity=%d, illegal=%d", commodity_code, quantity, illegal);
+  
+  
+        // Apply h_can_trade_commodity rules for visibility of illegal goods
+        if (illegal && !h_can_trade_commodity (db,
+                                               port_id_val,
+                                               ctx->player_id,
+                                               commodity_code))
+          {
+            LOGD("cmd_trade_port_info: Commodity %s filtered for player %d (illegal=%d)", commodity_code, ctx->player_id, illegal);
+            continue; // Player not allowed to see/trade this illegal commodity
+          }
+        json_t *commodity_obj = json_object ();
+  
+  
+        if (!commodity_obj)
+          {
+            LOGE ("cmd_trade_port_info: Out of memory for commodity object.");
+            rc = SQLITE_NOMEM;
+            goto cleanup;
+          }
       json_object_set_new (commodity_obj, "code", json_string (commodity_code));
       json_object_set_new (commodity_obj, "quantity", json_integer (quantity));
       json_object_set_new (commodity_obj, "price", json_integer (price)); // 'price' from entity_stock is not current buy/sell price, needs clarification. Assuming 0 for now.
@@ -2112,6 +2254,24 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       LOGD ("cmd_trade_buy: Ship cargo updated for item %zu, new_qty=%d",
             i,
             dummy_qty);                                                                         // ADDED
+
+      // Apply alignment penalty if commodity is illegal
+      if (h_is_illegal_commodity(db, trade_lines[i].commodity)) {
+          LOGI("cmd_trade_buy: Player %d purchased illegal commodity %s. Deducting 10 alignment points.",
+               ctx->player_id, trade_lines[i].commodity);
+          char *err_msg = NULL;
+          int update_rc = sqlite3_exec(db,
+                                       sqlite3_mprintf("UPDATE players SET alignment = alignment - 10 WHERE id = %d;", ctx->player_id),
+                                       NULL, NULL, &err_msg);
+          if (update_rc != SQLITE_OK) {
+              LOGE("cmd_trade_buy: Failed to deduct alignment for player %d: %s", ctx->player_id, err_msg);
+              sqlite3_free(err_msg);
+          } else {
+              LOGD("cmd_trade_buy: Alignment deducted for player %d. New alignment will be reflected on next player.my_info.", ctx->player_id);
+          }
+          sqlite3_free(err_msg);
+      }
+
       /* port stock - */
       LOGD ("cmd_trade_buy: Updating port stock for item %zu", i);      // ADDED
       int dummy_port = 0;

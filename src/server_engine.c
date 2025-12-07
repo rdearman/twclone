@@ -42,6 +42,9 @@
 #include "server_clusters.h"
 #include "globals.h"        // For g_xp_align config
 #include "database_cmd.h"   // For h_player_apply_progress, db_player_get_alignment, h_get_cluster_alignment_band
+
+
+
 /* handlers (implemented below) */
 /* static int sweeper_engine_deadletter_retry (sqlite3 * db, int64_t now_ms); */
 // Define the interval for the main game loop ticks in seconds
@@ -99,11 +102,8 @@ static const CronHandler CRON_REGISTRY[] = {
   {"cluster_economy", cluster_economy_step},
   {"cluster_black_market", cluster_black_market_step},
   {"daily_stock_price_recalculation", h_daily_stock_price_recalculation},
-  {"traps_process", h_traps_process},
-  {"npc_step", h_npc_step},
-  {"autouncloak_sweeper", h_autouncloak_sweeper},
-  {"fedspace_cleanup", h_fedspace_cleanup},
-  {"broadcast_ttl_cleanup", h_broadcast_ttl_cleanup},
+  {"port_economy", h_port_economy_tick},
+  {"shield_regen", h_shield_regen_tick},
   {"system_notice_ttl", engine_notice_ttl_sweep},
   {"deadletter_retry", sweeper_engine_deadletter_retry}
 };
@@ -1059,8 +1059,7 @@ engine_main_loop (int shutdown_fd)
                   int task_rc = 0;
                   cron_handler_fn fn = cron_find (nm);
 
-
-                  LOGI ("cron: starting handler '%s'", nm);
+                  // LOGI ("cron: starting handler '%s'", nm);
                   if (fn)
                     {
                       task_rc = fn (db_handle, now_s);

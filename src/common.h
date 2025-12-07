@@ -257,4 +257,12 @@ int get_random_int (int min, int max);
 // JSON helper functions (prototypes)
 bool json_get_int_flexible (json_t *data_obj, const char *key, int *out_val);
 const char *json_get_string_or_null (json_t *data_obj, const char *key);
+
+// Global Atomic Counters
+extern atomic_int_fast64_t g_trades_executed;
+extern atomic_int_fast64_t g_warps_performed;
+extern atomic_int_fast64_t g_combat_rounds;
+extern atomic_int_fast64_t g_failed_operations;
+extern atomic_int_fast64_t g_server_tick;
+
 #endif // COMMON_H

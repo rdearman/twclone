@@ -43,6 +43,9 @@
 #include "server_log.h"
 #include "server_stardock.h"    // Include for hardware commands
 #include "server_corporation.h"
+
+
+
 #ifndef streq
 #define streq(a,b) (strcasecmp (json_string_value ((a)), (b)) == 0)
 #endif
@@ -686,6 +689,13 @@ attach_rate_limit_meta (json_t *env, client_ctx_t *ctx)
 static void
 process_message (client_ctx_t *ctx, json_t *root)
 {
+  db_close_thread ();                   /* Ensure a fresh DB connection */
+  sqlite3 *db = db_get_handle ();       /* Re-open (or get) fresh DB conn */
+  if (!db) {                            /* Handle case where we can't get a connection */
+      send_enveloped_error (ctx->fd, root, 1500, "Database connection error");
+      return;
+  }
+
   /* Make ctx visible to send helpers for rate-limit meta */
   g_ctx_for_send = ctx;
   json_t *cmd = json_object_get (root, "command");
@@ -840,6 +850,14 @@ process_message (client_ctx_t *ctx, json_t *root)
   else if (streq (cmd, "sys.cluster.seed_illegal_goods")) // NEW
     {
       rc = cmd_sys_cluster_seed_illegal_goods (ctx, root);
+    }
+  else if (streq (cmd, "sys.econ.port_status")) // NEW
+    {
+      rc = cmd_sys_econ_port_status (ctx, root);
+    }
+  else if (streq (cmd, "sys.econ.orders_summary")) // NEW
+    {
+      rc = cmd_sys_econ_orders_summary (ctx, root);
     }
 /* ---------- PLAYER ---------- */
   else if (streq (cmd, "player.get_settings"))
@@ -1573,6 +1591,7 @@ server_loop (volatile sig_atomic_t *running)
   pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED);
   while (*running)
     {
+      g_server_tick++;          /* Increment server tick */
       int rc = poll (&pfd, 1, 100);     /* was 1000; 100ms gives us a ~10Hz tick */
       // int rc = poll (&pfd, 1, 1000); /* 1s tick re-checks *running */
       /* === Broadcast pump tick (every ~500ms) === */

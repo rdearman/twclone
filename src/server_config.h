@@ -155,6 +155,24 @@ typedef struct
     int big_sleep_clear_xp_below;
     char escape_pod_spawn_mode[32];
   } death;
+  struct
+  {
+    int turn_cost;
+    double base_hit;
+    double offense_coeff;
+    double defense_coeff;
+    struct
+    {
+      double engine_weight;
+      double mass_weight;
+    } flee;
+  } combat;
+  struct
+  {
+    bool enabled;
+    double shield_rate_pct_per_tick;
+    int tick_seconds;
+  } regen;
   /* --- NEWLY ADDED FIELDS TO MATCH DB SCHEMA --- */
   int64_t startingcredits;
   int64_t corporation_creation_fee;
