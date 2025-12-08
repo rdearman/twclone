@@ -16,13 +16,14 @@ int cmd_deploy_mines_list (client_ctx_t *ctx, json_t *root);
 int cmd_fighters_recall (client_ctx_t *ctx, json_t *root);
 int cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root);
 int cmd_mines_recall (client_ctx_t *ctx, json_t *root);
-bool armid_stack_is_hostile (const sector_asset_t *mine_asset,
-                             int ship_player_id, int ship_corp_id);
+bool is_asset_hostile (int asset_player_id, int asset_corp_id,
+                       int ship_player_id, int ship_corp_id);
 bool armid_stack_is_active (const sector_asset_t *row, time_t now);
 void apply_armid_damage_to_ship (ship_t *ship, int total_damage,
                                  armid_damage_breakdown_t *b);
 int apply_armid_mines_on_entry (client_ctx_t *ctx, int new_sector_id,
                                 armid_encounter_t *out_enc);
+int h_handle_sector_entry_hazards(sqlite3 *db, client_ctx_t *ctx, int sector_id);
 typedef struct
 {
   int total_mines;              // all mine types

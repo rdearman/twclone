@@ -123,20 +123,20 @@ cmd_combat_attack (client_ctx_t *ctx, json_t *root)
 
 
 /*
- * Returns true if the mine stack is hostile to the given ship context,
+ * Returns true if the asset is hostile to the given ship context,
  * false otherwise (friendly or neutral).
  */
 bool
-armid_stack_is_hostile (const sector_asset_t *mine_asset,
-                        int ship_player_id, int ship_corp_id)
+is_asset_hostile (int asset_player_id, int asset_corp_id,
+                  int ship_player_id, int ship_corp_id)
 {
   /* Friendly if same player */
-  if (mine_asset->player == ship_player_id)
+  if (asset_player_id == ship_player_id)
     {
       return false;
     }
   /* Friendly if same non-zero corporation */
-  if (mine_asset->corporation != 0 && mine_asset->corporation == ship_corp_id)
+  if (asset_corp_id != 0 && asset_corp_id == ship_corp_id)
     {
       return false;
     }
@@ -266,7 +266,12 @@ apply_armid_mines_on_entry (client_ctx_t *ctx, int new_sector_id,
       return 0;                 // No ship, no encounter
     }
   sqlite3_finalize (ship_st);
-  // --- Process Armid Mines ---
+  
+  // Config for damage
+  int damage_per_mine = 10;
+  db_get_int_config(db, "armid_damage_per_mine", &damage_per_mine);
+
+  // --- Process Armid Mines (Asset Type 1) ---
   if (g_armid_config.armid.enabled)
     {
       sqlite3_stmt *st = NULL;
@@ -287,7 +292,6 @@ apply_armid_mines_on_entry (client_ctx_t *ctx, int new_sector_id,
         {
           int mine_id = sqlite3_column_int (st, 0);
           int mine_quantity = sqlite3_column_int (st, 1);
-          // int offensive_setting = sqlite3_column_int (st, 2); // Keep for logging if needed
           sector_asset_t mine_asset_row = {
             .id = mine_id,
             .quantity = mine_quantity,
@@ -295,356 +299,219 @@ apply_armid_mines_on_entry (client_ctx_t *ctx, int new_sector_id,
             .corporation = sqlite3_column_int (st, 4),
             .ttl = sqlite3_column_int (st, 5)
           };
-          // Get current time for TTL check
-          time_t current_time = time (NULL);
-
-
-          // Skip if mine is not active
-          if (!armid_stack_is_active (&mine_asset_row, current_time))
+          
+          // Check Hostility using new helper
+          if (!is_asset_hostile(mine_asset_row.player, mine_asset_row.corporation, ship_player_id, ship_corp_id))
             {
-              continue;
+              continue; // Friendly
             }
-          // Skip if mine is not hostile
-          if (!armid_stack_is_hostile
-                (&mine_asset_row, ship_player_id, ship_corp_id))
-            {
-              continue;
-            }
-          // If ship->hull <= 0, stop processing further stacks.
-          if (ship_stats.hull <= 0)
-            {
-              if (out_enc)
-                {
-                  out_enc->destroyed = true;
-                }
-              break;
-            }
-          // Compute trigger probability
-          double p_base = g_armid_config.armid.base_trigger_chance;
-          double p_max = g_armid_config.armid.max_trigger_chance;
-          double p_trigger =
-            1.0 - pow (1.0 - p_base, mine_asset_row.quantity);
 
-
-          if (p_trigger > p_max)
-            {
-              p_trigger = p_max;
-            }
-          // Roll for trigger
-          if (rand01 () > p_trigger)
-            {
-              continue;         // This stack doesn’t fire
-            }
-          // If it fires:
-          double f_min = g_armid_config.armid.min_fraction_exploded;
-          double f_max = g_armid_config.armid.max_fraction_exploded;
-          double f = rand_range (f_min, f_max);
-
-
-          f = clamp (f, 0.0, 1.0);
-          int exploded = (int) ceil (mine_asset_row.quantity * f);
-
-
-          exploded = clamp (exploded, 1, mine_asset_row.quantity);
-          int damage = exploded * g_armid_config.armid.damage_per_mine;
+          // Canonical Rule: All hostile mines detonate
+          int exploded = mine_quantity;
+          int damage = exploded * damage_per_mine;
           armid_damage_breakdown_t d = { 0 };
 
-
           apply_armid_damage_to_ship (&ship_stats, damage, &d);
-          // Update DB:
-          int remaining = mine_asset_row.quantity - exploded;
-
-
-          if (remaining > 0)
+          
+          // Remove Mines (Consumed)
+          sqlite3_stmt *delete_st = NULL;
+          const char *sql_delete_mine = "DELETE FROM sector_assets WHERE id = ?1;";
+          if (sqlite3_prepare_v2 (db, sql_delete_mine, -1, &delete_st, NULL) == SQLITE_OK)
             {
-              sqlite3_stmt *update_st = NULL;
-              const char *sql_update_mine_qty =
-                "UPDATE sector_assets SET quantity = ?1 WHERE id = ?2;";
-
-
-              if (sqlite3_prepare_v2
-                    (db, sql_update_mine_qty, -1, &update_st,
-                    NULL) != SQLITE_OK)
-                {
-                  LOGE
-                    ("Failed to prepare mine quantity update statement: %s",
-                    sqlite3_errmsg (db));
-                  sqlite3_finalize (st);
-                  return -1;
-                }
-              sqlite3_bind_int (update_st, 1, remaining);
-              sqlite3_bind_int (update_st, 2, mine_id);
-              if (sqlite3_step (update_st) != SQLITE_DONE)
-                {
-                  LOGE ("Failed to update mine quantity: %s",
-                        sqlite3_errmsg (db));
-                }
-              sqlite3_finalize (update_st);
-            }
-          else
-            {
-              sqlite3_stmt *delete_st = NULL;
-              const char *sql_delete_mine =
-                "DELETE FROM sector_assets WHERE id = ?1;";
-
-
-              if (sqlite3_prepare_v2
-                    (db, sql_delete_mine, -1, &delete_st, NULL) != SQLITE_OK)
-                {
-                  LOGE ("Failed to prepare mine delete statement: %s",
-                        sqlite3_errmsg (db));
-                  sqlite3_finalize (st);
-                  return -1;
-                }
               sqlite3_bind_int (delete_st, 1, mine_id);
-              if (sqlite3_step (delete_st) != SQLITE_DONE)
-                {
-                  LOGE ("Failed to delete mine: %s", sqlite3_errmsg (db));
-                }
+              sqlite3_step (delete_st);
               sqlite3_finalize (delete_st);
             }
-          // Accumulate into armid_encounter_t:
+
+          // Accumulate stats
           if (out_enc)
             {
               out_enc->armid_triggered += exploded;
-              out_enc->armid_remaining += MAX (remaining, 0);
               out_enc->shields_lost += d.shields_lost;
               out_enc->fighters_lost += d.fighters_lost;
               out_enc->hull_lost += d.hull_lost;
             }
-          // Emit combat.hit async event
+          
+          // Log Event
           json_t *hit_data = json_object ();
-
-
           json_object_set_new (hit_data, "v", json_integer (1));
-          json_object_set_new (hit_data, "attacker_id",
-                               json_integer (mine_asset_row.player));                           // Mine owner
-          json_object_set_new (hit_data, "defender_id",
-                               json_integer (ctx->player_id));                          // Ship owner
-          json_object_set_new (hit_data, "weapon",
-                               json_string ("armid_mines"));
-          json_object_set_new (hit_data, "sector_id",
-                               json_integer (new_sector_id));
-          json_object_set_new (hit_data, "damage_total",
-                               json_integer (damage));
-          json_t *breakdown_obj = json_object ();
+          json_object_set_new (hit_data, "attacker_id", json_integer (mine_asset_row.player));
+          json_object_set_new (hit_data, "defender_id", json_integer (ctx->player_id));
+          json_object_set_new (hit_data, "weapon", json_string ("armid_mines"));
+          json_object_set_new (hit_data, "damage_total", json_integer (damage));
+          json_object_set_new (hit_data, "mines_exploded", json_integer (exploded));
+          (void) db_log_engine_event ((long long) time (NULL), "combat.hit", "player", ctx->player_id, new_sector_id, hit_data, NULL);
 
-
-          json_object_set_new (breakdown_obj, "shields_lost",
-                               json_integer (d.shields_lost));
-          json_object_set_new (breakdown_obj, "fighters_lost",
-                               json_integer (d.fighters_lost));
-          json_object_set_new (breakdown_obj, "hull_lost",
-                               json_integer (d.hull_lost));
-          json_object_set_new (hit_data, "breakdown", breakdown_obj);
-          json_object_set_new (hit_data, "destroyed",
-                               json_boolean (ship_stats.hull <= 0));
-          (void) db_log_engine_event ((long long) time (NULL),
-                                      "combat.hit", NULL,
-                                      mine_asset_row.player, new_sector_id,
-                                      hit_data, NULL);
           // If ship is destroyed, handle it
           if (ship_stats.hull <= 0)
             {
-              // Call existing ship destruction flow:
-              destroy_ship_and_handle_side_effects (ctx,
-                                                    ctx->player_id);
+              // Persist damage first? No, destroy_ship handles it? 
+              // We should update the ship stats in DB before destroying so the final state is captured?
+              // destroy_ship usually reads from DB. 
+              // But wait, we haven't updated DB with damage yet!
+              // We must update ship DB before calling destroy or breaking.
+              
+              // Actually, we should update DB after *every* stack? Or accumulate and update once?
+              // For safety (crash resilience), update now.
+              // But to be clean, let's update at the end of loop or immediately.
+              // Let's update immediately.
+              sqlite3_stmt *upd_ship;
+              if (sqlite3_prepare_v2(db, "UPDATE ships SET hull=?1, fighters=?2, shields=?3 WHERE id=?4", -1, &upd_ship, NULL) == SQLITE_OK) {
+                  sqlite3_bind_int(upd_ship, 1, ship_stats.hull);
+                  sqlite3_bind_int(upd_ship, 2, ship_stats.fighters);
+                  sqlite3_bind_int(upd_ship, 3, ship_stats.shields);
+                  sqlite3_bind_int(upd_ship, 4, ship_id);
+                  sqlite3_step(upd_ship);
+                  sqlite3_finalize(upd_ship);
+              }
+
+              destroy_ship_and_handle_side_effects (ctx, ctx->player_id);
               if (out_enc)
                 {
                   out_enc->destroyed = true;
                 }
-              LOGI ("Ship %d destroyed by Armid mine %d in sector %d",
-                    ship_id, mine_id, new_sector_id);
-              break;            // Stop processing further stacks
+              LOGI ("Ship %d destroyed by Armid mine %d in sector %d", ship_id, mine_id, new_sector_id);
+              break; // Stop processing further stacks
             }
+            
+            // Update ship DB if not destroyed (so next stack sees correct HP)
+             sqlite3_stmt *upd_ship;
+              if (sqlite3_prepare_v2(db, "UPDATE ships SET hull=?1, fighters=?2, shields=?3 WHERE id=?4", -1, &upd_ship, NULL) == SQLITE_OK) {
+                  sqlite3_bind_int(upd_ship, 1, ship_stats.hull);
+                  sqlite3_bind_int(upd_ship, 2, ship_stats.fighters);
+                  sqlite3_bind_int(upd_ship, 3, ship_stats.shields);
+                  sqlite3_bind_int(upd_ship, 4, ship_id);
+                  sqlite3_step(upd_ship);
+                  sqlite3_finalize(upd_ship);
+              }
         }
       sqlite3_finalize (st);
     }                           // End Armid mine processing
-  // --- Process Limpet Mines ---
-  if (g_cfg.mines.limpet.enabled)
-    {
-      sqlite3_stmt *st = NULL;
-      const char *sql_select_limpet_mines =
-        "SELECT id, quantity, offensive_setting, player, corporation, ttl "
-        "FROM sector_assets " "WHERE sector = ?1 AND asset_type = 4;";                                                                                                          // asset_type 4 for Limpet Mines
-
-
-      if (sqlite3_prepare_v2 (db, sql_select_limpet_mines, -1, &st, NULL) !=
-          SQLITE_OK)
-        {
-          LOGE ("Failed to prepare Limpet mine selection statement: %s",
-                sqlite3_errmsg (db));
-          return -1;            // Indicate error
-        }
-      sqlite3_bind_int (st, 1, new_sector_id);
-      while (sqlite3_step (st) == SQLITE_ROW)
-        {
-          int mine_id = sqlite3_column_int (st, 0);
-          int mine_quantity = sqlite3_column_int (st, 1);
-          // int offensive_setting = sqlite3_column_int (st, 2); // Keep for logging if needed
-          sector_asset_t mine_asset_row = {
-            .id = mine_id,
-            .quantity = mine_quantity,
-            .player = sqlite3_column_int (st, 3),
-            .corporation = sqlite3_column_int (st, 4),
-            .ttl = sqlite3_column_int (st, 5)
-          };
-          // Get current time for TTL check
-          time_t current_time = time (NULL);
-
-
-          // Skip if mine is not active
-          if (!armid_stack_is_active (&mine_asset_row, current_time))
-            {
-              continue;
-            }
-          // Limpets are always triggered, no hostility check needed.
-          // Limpets are triggered at a fixed rate (e.g., 1 limpet per 10 fighters).
-          // Limpets apply a fixed amount of damage (e.g., 1 damage per limpet).
-          // Limpets are removed after triggering.
-          // Limpets do *not* destroy the ship. They only apply damage.
-          int limpets_to_trigger = 0;
-
-
-          // Example: 1 limpet per 10 fighters, up to mine_quantity
-          // This logic needs to be defined in g_cfg.mines.limpet
-          // For now, let's assume a simple trigger: all limpets in the stack trigger.
-          // Or, a fraction based on ship fighters.
-          // Let's use a simple fixed trigger rate for now, e.g., 1 limpet per X ship fighters
-          // Or, a fixed percentage of the stack.
-          // For simplicity, let's say a fixed number of limpets trigger per ship fighter
-          // This needs to be configurable in g_cfg.mines.limpet
-          // For now, let's assume a fixed trigger rate of 1:1 with ship fighters, capped by mine_quantity
-          limpets_to_trigger =
-            MIN (ship_stats.fighters *
-                 g_cfg.mines.limpet.entry_trigger_rate_limpets_per_fighter,
-                 mine_quantity);
-          if (limpets_to_trigger < 0)
-            {
-              limpets_to_trigger = 0;
-            }
-          if (limpets_to_trigger == 0)
-            {
-              continue;         // No limpets triggered from this stack
-            }
-          int damage =
-            limpets_to_trigger * g_cfg.mines.limpet.entry_damage_per_limpet;
-          armid_damage_breakdown_t d = { 0 };   // Re-using for Limpet damage breakdown
-
-
-          apply_armid_damage_to_ship (&ship_stats, damage, &d); // Apply damage to ship
-          // Update DB:
-          int remaining = mine_asset_row.quantity - limpets_to_trigger;
-
-
-          if (remaining > 0)
-            {
-              sqlite3_stmt *update_st = NULL;
-              const char *sql_update_mine_qty =
-                "UPDATE sector_assets SET quantity = ?1 WHERE id = ?2;";
-
-
-              if (sqlite3_prepare_v2
-                    (db, sql_update_mine_qty, -1, &update_st,
-                    NULL) != SQLITE_OK)
-                {
-                  LOGE
-                    ("Failed to prepare Limpet quantity update statement: %s",
-                    sqlite3_errmsg (db));
-                  sqlite3_finalize (st);
-                  return -1;
-                }
-              sqlite3_bind_int (update_st, 1, remaining);
-              sqlite3_bind_int (update_st, 2, mine_id);
-              if (sqlite3_step (update_st) != SQLITE_DONE)
-                {
-                  LOGE ("Failed to update Limpet quantity: %s",
-                        sqlite3_errmsg (db));
-                }
-              sqlite3_finalize (update_st);
-            }
-          else
-            {
-              sqlite3_stmt *delete_st = NULL;
-              const char *sql_delete_mine =
-                "DELETE FROM sector_assets WHERE id = ?1;";
-
-
-              if (sqlite3_prepare_v2
-                    (db, sql_delete_mine, -1, &delete_st, NULL) != SQLITE_OK)
-                {
-                  LOGE ("Failed to prepare Limpet delete statement: %s",
-                        sqlite3_errmsg (db));
-                  sqlite3_finalize (st);
-                  return -1;
-                }
-              sqlite3_bind_int (delete_st, 1, mine_id);
-              if (sqlite3_step (delete_st) != SQLITE_DONE)
-                {
-                  LOGE ("Failed to delete Limpet: %s", sqlite3_errmsg (db));
-                }
-              sqlite3_finalize (delete_st);
-            }
-          // Accumulate into armid_encounter_t:
-          if (out_enc)
-            {
-              out_enc->limpet_triggered += limpets_to_trigger;
-              out_enc->limpet_remaining += MAX (remaining, 0);
-              out_enc->shields_lost += d.shields_lost;
-              out_enc->fighters_lost += d.fighters_lost;
-              out_enc->hull_lost += d.hull_lost;
-            }
-          // Emit combat.hit async event for Limpets
-          json_t *hit_data = json_object ();
-
-
-          json_object_set_new (hit_data, "v", json_integer (1));
-          json_object_set_new (hit_data, "attacker_id",
-                               json_integer (mine_asset_row.player));                           // Mine owner
-          json_object_set_new (hit_data, "defender_id",
-                               json_integer (ctx->player_id));                          // Ship owner
-          json_object_set_new (hit_data, "weapon",
-                               json_string ("limpet_mines"));
-          json_object_set_new (hit_data, "sector_id",
-                               json_integer (new_sector_id));
-          json_object_set_new (hit_data, "damage_total",
-                               json_integer (damage));
-          json_t *breakdown_obj = json_object ();
-
-
-          json_object_set_new (breakdown_obj, "shields_lost",
-                               json_integer (d.shields_lost));
-          json_object_set_new (breakdown_obj, "fighters_lost",
-                               json_integer (d.fighters_lost));
-          json_object_set_new (breakdown_obj, "hull_lost",
-                               json_integer (d.hull_lost));
-          json_object_set_new (hit_data, "breakdown", breakdown_obj);
-          json_object_set_new (hit_data, "destroyed", json_boolean (false));    // Limpets do not destroy ship
-          (void) db_log_engine_event ((long long) time (NULL),
-                                      "combat.hit", NULL,
-                                      mine_asset_row.player, new_sector_id,
-                                      hit_data, NULL);
-          // Limpets do not destroy the ship, so no destroy_ship_and_handle_side_effects call here.
-          // If ship_stats.hull <= 0, it means Armid mines already destroyed it, or it was already destroyed.
-          // We continue processing Limpets to remove them, but don't re-destroy the ship.
-        }
-      sqlite3_finalize (st);
-    }                           // End Limpet mine processing
-  // Final check for ship destruction after all mine types
-  if (ship_stats.hull <= 0 && !out_enc->destroyed)
-    {
-      // This case should ideally be handled by Armid mines if they destroy the ship.
-      // But as a safeguard, if hull is 0 and out_enc->destroyed wasn't set, set it.
-      destroy_ship_and_handle_side_effects (ctx,
-                                            ctx->player_id);
-      if (out_enc)
-        {
-          out_enc->destroyed = true;
-        }
-      LOGI ("Ship %d destroyed by mine encounter in sector %d", ship_id,
-            new_sector_id);
-    }
+  
   return 0;                     // Success
+}
+
+int
+apply_limpet_mines_on_entry (client_ctx_t *ctx, int new_sector_id,
+                            armid_encounter_t *out_enc)
+{
+  (void) out_enc;
+  sqlite3 *db = db_get_handle ();
+  if (!db) return -1;
+
+  int ship_id = h_get_active_ship_id (db, ctx->player_id);
+  if (ship_id <= 0) return 0;
+
+  int ship_player_id = ctx->player_id;
+  int ship_corp_id = ctx->corp_id;
+
+  if (!g_cfg.mines.limpet.enabled)
+    {
+      return 0; 
+    }
+
+  sqlite3_stmt *st = NULL;
+  const char *sql_select_limpets =
+    "SELECT id, quantity, player, corporation, ttl "
+    "FROM sector_assets "
+    "WHERE sector = ?1 AND asset_type = 4 AND quantity > 0;";
+
+  if (sqlite3_prepare_v2 (db, sql_select_limpets, -1, &st, NULL) != SQLITE_OK)
+    {
+      LOGE ("Failed to prepare Limpet mine selection: %s", sqlite3_errmsg (db));
+      return -1;
+    }
+
+  sqlite3_bind_int (st, 1, new_sector_id);
+
+  while (sqlite3_step (st) == SQLITE_ROW)
+    {
+      int asset_id = sqlite3_column_int (st, 0);
+      int quantity = sqlite3_column_int (st, 1);
+      int owner_id = sqlite3_column_int (st, 2);
+      int corp_id = sqlite3_column_int (st, 3);
+      time_t ttl = sqlite3_column_int64 (st, 4);
+
+      sector_asset_t asset = { .quantity = quantity, .ttl = ttl };
+      
+      if (!is_asset_hostile(owner_id, corp_id, ship_player_id, ship_corp_id))
+        {
+          continue;
+        }
+
+      if (!armid_stack_is_active(&asset, time(NULL)))
+        {
+          continue;
+        }
+
+      sqlite3_stmt *check_st = NULL;
+      const char *sql_check_attached = 
+        "SELECT 1 FROM limpet_attached WHERE ship_id=?1 AND owner_player_id=?2;";
+      if (sqlite3_prepare_v2(db, sql_check_attached, -1, &check_st, NULL) != SQLITE_OK)
+        {
+           LOGE("Failed prepare limpet check: %s", sqlite3_errmsg(db));
+           continue;
+        }
+      sqlite3_bind_int(check_st, 1, ship_id);
+      sqlite3_bind_int(check_st, 2, owner_id);
+      int already_attached = (sqlite3_step(check_st) == SQLITE_ROW);
+      sqlite3_finalize(check_st);
+
+      if (already_attached)
+        {
+          continue;
+        }
+
+      sqlite3_stmt *upd_st = NULL;
+      if (quantity > 1)
+        {
+           if (sqlite3_prepare_v2(db, "UPDATE sector_assets SET quantity=quantity-1 WHERE id=?1", -1, &upd_st, NULL) == SQLITE_OK)
+           {
+             sqlite3_bind_int(upd_st, 1, asset_id);
+             sqlite3_step(upd_st);
+             sqlite3_finalize(upd_st);
+           }
+        }
+      else
+        {
+           if (sqlite3_prepare_v2(db, "DELETE FROM sector_assets WHERE id=?1", -1, &upd_st, NULL) == SQLITE_OK)
+           {
+             sqlite3_bind_int(upd_st, 1, asset_id);
+             sqlite3_step(upd_st);
+             sqlite3_finalize(upd_st);
+           }
+        }
+
+      sqlite3_stmt *ins_st = NULL;
+      const char *sql_attach = "INSERT OR REPLACE INTO limpet_attached (ship_id, owner_player_id, created_ts) VALUES (?1, ?2, strftime('%s','now'));";
+      if (sqlite3_prepare_v2(db, sql_attach, -1, &ins_st, NULL) == SQLITE_OK)
+        {
+          sqlite3_bind_int(ins_st, 1, ship_id);
+          sqlite3_bind_int(ins_st, 2, owner_id);
+          sqlite3_step(ins_st);
+          sqlite3_finalize(ins_st);
+        }
+
+      json_t *event_data = json_object();
+      json_object_set_new(event_data, "target_ship_id", json_integer(ship_id));
+      json_object_set_new(event_data, "target_player_id", json_integer(ship_player_id));
+      json_object_set_new(event_data, "sector_id", json_integer(new_sector_id));
+      
+      db_log_engine_event(
+        (long long)time(NULL),
+        "combat.limpet.attached",
+        "player", 
+        owner_id,
+        new_sector_id,
+        event_data,
+        NULL
+      );
+      
+      LOGI("Limpet attached! Ship %d tagged by Player %d in Sector %d", ship_id, owner_id, new_sector_id);
+    }
+  sqlite3_finalize(st);
+
+  return 0;
 }
 
 
@@ -1799,8 +1666,8 @@ cmd_combat_sweep_mines (client_ctx_t *ctx, json_t *root)
       if (mine_type == ASSET_MINE)
         {
           is_hostile_or_limpet =
-            armid_stack_is_hostile (&mine_asset_for_check, ctx->player_id,
-                                    ship_corp_id);
+            is_asset_hostile (mine_asset_for_check.player, mine_asset_for_check.corporation,
+                              ctx->player_id, ship_corp_id);
         }
       else if (mine_type == ASSET_LIMPET_MINE)
         {
@@ -4000,4 +3867,137 @@ cmd_combat_status (client_ctx_t *ctx, json_t *root)
   }
   sqlite3_finalize(st);
   return 0;
+}
+
+/*
+ * Applies Fighter hazards (Toll or Attack).
+ */
+static int
+apply_sector_fighters_on_entry(client_ctx_t *ctx, int sector_id)
+{
+  sqlite3 *db = db_get_handle();
+  int ship_id = h_get_active_ship_id(db, ctx->player_id);
+  if (ship_id <= 0) return 0;
+
+  /* Config */
+  int toll_per_unit = 5;
+  int damage_per_unit = 10;
+  db_get_int_config(db, "fighter_toll_per_unit", &toll_per_unit);
+  db_get_int_config(db, "fighter_damage_per_unit", &damage_per_unit);
+
+  /* Get Ship Stats */
+  ship_t ship = {0};
+  sqlite3_stmt *st = NULL;
+  if (sqlite3_prepare_v2(db, "SELECT hull, fighters, shields FROM ships WHERE id=?1", -1, &st, NULL) != SQLITE_OK) return -1;
+  sqlite3_bind_int(st, 1, ship_id);
+  if (sqlite3_step(st) == SQLITE_ROW) {
+      ship.hull = sqlite3_column_int(st, 0);
+      ship.fighters = sqlite3_column_int(st, 1);
+      ship.shields = sqlite3_column_int(st, 2);
+  } else {
+      sqlite3_finalize(st);
+      return 0;
+  }
+  sqlite3_finalize(st);
+
+  int ship_corp_id = ctx->corp_id;
+
+  /* Scan Fighters (Type 2) */
+  const char *sql_ftr = "SELECT id, quantity, player, corporation, offensive_setting FROM sector_assets WHERE sector=?1 AND asset_type=2 AND quantity>0";
+  if (sqlite3_prepare_v2(db, sql_ftr, -1, &st, NULL) != SQLITE_OK) return -1;
+  sqlite3_bind_int(st, 1, sector_id);
+
+  while (sqlite3_step(st) == SQLITE_ROW) {
+      int asset_id = sqlite3_column_int(st, 0);
+      int quantity = sqlite3_column_int(st, 1);
+      int owner_id = sqlite3_column_int(st, 2);
+      int corp_id = sqlite3_column_int(st, 3);
+      int mode = sqlite3_column_int(st, 4); // 1=Toll, 2=Attack
+
+      if (!is_asset_hostile(owner_id, corp_id, ctx->player_id, ship_corp_id)) {
+          continue;
+      }
+
+      bool attack = true;
+
+      /* Toll Mode */
+      if (mode == 1) { // TOLL
+          long long toll_cost = (long long)quantity * toll_per_unit;
+          long long player_creds = 0;
+          h_get_player_petty_cash(db, ctx->player_id, &player_creds);
+
+          if (player_creds >= toll_cost) {
+              /* Auto-pay */
+              char idem[64];
+              h_generate_hex_uuid(idem, sizeof(idem));
+              // Transfer to asset owner (player)
+              const char *dest_type = (corp_id > 0 && owner_id == 0) ? "corp" : "player";
+              int dest_id = (corp_id > 0 && owner_id == 0) ? corp_id : owner_id;
+
+              if (h_bank_transfer_unlocked(db, "player", ctx->player_id, dest_type, dest_id, toll_cost, "TOLL", idem) == SQLITE_OK) {
+                  attack = false;
+                  // Log Toll Paid
+                  db_log_engine_event((long long)time(NULL), "combat.toll.paid", "player", ctx->player_id, sector_id, NULL, NULL);
+              }
+          }
+      }
+
+      if (attack) {
+          int damage = quantity * damage_per_unit;
+          
+          /* Apply Damage */
+          armid_damage_breakdown_t breakdown = {0};
+          apply_armid_damage_to_ship(&ship, damage, &breakdown); // Reusing damage helper
+
+          /* Update Ship */
+          sqlite3_stmt *upd;
+          if (sqlite3_prepare_v2(db, "UPDATE ships SET hull=?1, fighters=?2, shields=?3 WHERE id=?4", -1, &upd, NULL) == SQLITE_OK) {
+              sqlite3_bind_int(upd, 1, ship.hull);
+              sqlite3_bind_int(upd, 2, ship.fighters);
+              sqlite3_bind_int(upd, 3, ship.shields);
+              sqlite3_bind_int(upd, 4, ship_id);
+              sqlite3_step(upd);
+              sqlite3_finalize(upd);
+          }
+
+          /* Consume Fighters (One-time attack) */
+          sqlite3_stmt *del_st;
+          if (sqlite3_prepare_v2(db, "DELETE FROM sector_assets WHERE id=?1", -1, &del_st, NULL) == SQLITE_OK) {
+              sqlite3_bind_int(del_st, 1, asset_id);
+              sqlite3_step(del_st);
+              sqlite3_finalize(del_st);
+          }
+
+          /* Log Hit */
+          json_t *evt = json_object();
+          json_object_set_new(evt, "damage", json_integer(damage));
+          json_object_set_new(evt, "fighters_engaged", json_integer(quantity));
+          db_log_engine_event((long long)time(NULL), "combat.hit.fighters", "player", ctx->player_id, sector_id, evt, NULL);
+
+          /* Check Destruction */
+          if (ship.hull <= 0) {
+              destroy_ship_and_handle_side_effects(ctx, ctx->player_id);
+              sqlite3_finalize(st); // Clean up outer loop stmt
+              return 1; // Destroyed
+          }
+      }
+  }
+  sqlite3_finalize(st);
+  return 0;
+}
+
+/* Central Hazard Handler */
+int
+h_handle_sector_entry_hazards(sqlite3 *db, client_ctx_t *ctx, int sector_id)
+{
+    (void)db; // Unused, usually available via ctx logic but passed for consistency
+    /* Armid Mines First */
+    if (apply_armid_mines_on_entry(ctx, sector_id, NULL)) return 1; // Destroyed
+
+    /* Fighters Second */
+    if (apply_sector_fighters_on_entry(ctx, sector_id)) return 1; // Destroyed
+
+    /* Limpets (Phase 2) - Placeholder */
+    
+    return 0;
 }

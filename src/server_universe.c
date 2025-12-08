@@ -224,7 +224,10 @@ ori_move_all_ships (void)
   int rc;
   // Select all ships owned by the Orion Syndicate
   const char *sql_select_orion_ships =
-    "SELECT id, sector, target_sector FROM ships WHERE owner_id = ?;";
+    "SELECT s.id, s.sector, s.target_sector "
+    "FROM ships s "
+    "JOIN ship_ownership so ON s.id = so.ship_id "
+    "WHERE so.player_id = ?;";
   rc =
     sqlite3_prepare_v2 (ori_db, sql_select_orion_ships, -1, &select_stmt,
                         NULL);
@@ -1364,19 +1367,15 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
     prc,
     sqlite3_changes (db_handle));
   ctx->sector_id = to;
-  // Apply Armid mines on entry
-  armid_encounter_t armid_enc = { 0 };
-
-
-  if (apply_armid_mines_on_entry (ctx, to, &armid_enc) != 0)
-    {
-      sqlite3_exec (db_handle, "ROLLBACK;", NULL, NULL, NULL);
-      send_enveloped_error (ctx->fd, root, 1500, "Mine trigger error");
-      return 0;
-    }
-
   sqlite3_exec (db_handle, "COMMIT;", NULL, NULL, NULL);
   g_warps_performed++; // Increment atomic counter
+
+  // Apply Sector Entry Hazards (Armid, Fighters)
+  h_handle_sector_entry_hazards(db_handle, ctx, to);
+
+  // Apply Sector Entry Hazards (Armid, Fighters)
+  // Must be called AFTER commit to ensure move is persisted before hazards apply.
+  h_handle_sector_entry_hazards(db_handle, ctx, to);
 
   /* 1) Send the direct reply for the actor */
   json_t *resp = json_object ();
@@ -1386,30 +1385,7 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
   json_object_set_new (resp, "from_sector_id", json_integer (from));
   json_object_set_new (resp, "to_sector_id", json_integer (to));
   json_object_set_new (resp, "turns_spent", json_integer (turns_spent));
-  if (armid_enc.armid_triggered > 0)
-    {
-      json_t *damage_obj = json_object ();
 
-
-      json_object_set_new (damage_obj, "shields_lost",
-                           json_integer (armid_enc.shields_lost));
-      json_object_set_new (damage_obj, "fighters_lost",
-                           json_integer (armid_enc.fighters_lost));
-      json_object_set_new (damage_obj, "hull_lost",
-                           json_integer (armid_enc.hull_lost));
-      json_object_set_new (damage_obj, "destroyed",
-                           json_boolean (armid_enc.destroyed));
-      json_t *encounter_obj = json_object ();
-
-
-      json_object_set_new (encounter_obj, "kind", json_string ("mines"));
-      json_object_set_new (encounter_obj, "armid_triggered",
-                           json_integer (armid_enc.armid_triggered));
-      json_object_set_new (encounter_obj, "armid_remaining",
-                           json_integer (armid_enc.armid_remaining));
-      json_object_set_new (encounter_obj, "damage", damage_obj);
-      json_object_set_new (resp, "encounter", encounter_obj);
-    }
   send_enveloped_ok (ctx->fd, root, "move.result", resp);
   /* 2) Broadcast LEFT (from) then ENTERED (to) to subscribers */
   /* LEFT event: sector = 'from' */

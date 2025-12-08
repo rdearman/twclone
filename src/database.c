@@ -949,6 +949,15 @@ const char *create_table_sql[] = {
   "    offensive_setting INTEGER DEFAULT 0,  "
   "    quantity INTEGER, "
   "    ttl INTEGER,  " "    deployed_at INTEGER NOT NULL  " "); ",
+  " CREATE TABLE IF NOT EXISTS limpet_attached ( "
+  "   id INTEGER PRIMARY KEY, "
+  "   ship_id INTEGER NOT NULL, "
+  "   owner_player_id INTEGER NOT NULL, "
+  "   created_ts INTEGER NOT NULL, "
+  "   UNIQUE(ship_id, owner_player_id), "
+  "   FOREIGN KEY(ship_id) REFERENCES ships(id) ON DELETE CASCADE, "
+  "   FOREIGN KEY(owner_player_id) REFERENCES players(id) ON DELETE CASCADE "
+  " ); ",
   "CREATE TABLE IF NOT EXISTS msl_sectors ("
   "  sector_id INTEGER PRIMARY KEY REFERENCES sectors(id)" ");",
   "CREATE TABLE IF NOT EXISTS trade_log ("
