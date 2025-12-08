@@ -863,6 +863,10 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       rc = cmd_sys_econ_planet_status (ctx, root);
     }
+  else if (streq (cmd, "sys.npc.ferengi_tick_once"))
+    {
+      rc = cmd_sys_npc_ferengi_tick_once (ctx, root);
+    }
 /* ---------- PLAYER ---------- */
   else if (streq (cmd, "player.get_settings"))
     {

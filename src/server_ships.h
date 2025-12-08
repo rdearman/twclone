@@ -51,6 +51,12 @@ int cmd_ship_self_destruct (client_ctx_t *ctx, json_t *root);
 int cmd_ship_tow (client_ctx_t *ctx, json_t *root);
 // Helper to get active ship ID for a player
 int h_get_active_ship_id (sqlite3 *db, int player_id);
+// Helper to update ship cargo with constraints
+int h_update_ship_cargo (sqlite3 *db, int ship_id, const char *commodity_code, int delta);
+// Helper to generate a hex UUID
+void h_generate_hex_uuid(char *buffer, size_t buffer_size);
+// Helper to get ship cargo and holds
+int h_get_ship_cargo_and_holds(sqlite3 *db, int ship_id, int *ore, int *organics, int *equipment, int *holds, int *free_holds, int *max_holds, int *cargo_capacity_used, int *cargo_capacity_max);
 #ifdef __cplusplus
 }
 #endif

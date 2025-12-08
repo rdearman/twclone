@@ -2239,6 +2239,7 @@ const char *insert_default_sql[] = {
   "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_tax_bp', '1000', 'int');",
   "INSERT OR IGNORE INTO config (key, value, type) VALUES ('illegal_allowed_neutral', '0', 'int');",
   "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_cloak_duration', '24', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('neutral_band', '125', 'int');",
   "INSERT OR IGNORE INTO config (key, value, type) VALUES ('corporation_creation_fee', '1000', 'int');",
   "INSERT OR IGNORE INTO law_enforcement (id) VALUES (1);",
 /* Shiptypes: name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled */
@@ -3809,7 +3810,9 @@ db_insert_defaults_unlocked (void)
     "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) SELECT 'player', id, 'CRD', 1000 FROM players WHERE name = 'newguy';",
     "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) SELECT 'player', id, 'CRD', 1000 FROM players WHERE name = 'ai_qa_bot';",
     // Player accounts for goodguy, badguy, admin will be created on auth.register if not present
-    "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) SELECT 'port', id, 'CRD', 100000 FROM ports WHERE name = 'Earth Port';"
+    "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) SELECT 'port', id, 'CRD', 100000 FROM ports WHERE name = 'Earth Port';",
+    // Seed Ferengi Corp Bank Account
+    "INSERT OR IGNORE INTO bank_accounts (owner_type, owner_id, currency, balance) SELECT 'corp', id, 'CRD', 10000000 FROM corporations WHERE tag='FENG';"
   };
 
 

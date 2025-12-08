@@ -15,6 +15,8 @@
 #include <arpa/inet.h>
 #include <jansson.h>            /* -ljansson */
 #include <stdbool.h>
+#include <uuid/uuid.h>          // For UUID generation
+#define UUID_STR_LEN 37         // 36 chars + null terminator
 #include <sqlite3.h>
 /* local includes */
 #include "schemas.h"
@@ -1030,3 +1032,137 @@ h_get_active_ship_id (sqlite3 *db, int player_id)
   return ship_id;
 }
 
+/**
+ * @brief Updates the cargo of a ship.
+ * 
+ * Enforces non-negative quantities and ensures total cargo does not exceed holds.
+ *
+ * @param db The SQLite database handle.
+ * @param ship_id The ID of the ship to update.
+ * @param commodity_code The commodity code ("ORE", "ORG", "EQU").
+ * @param delta The amount to change the quantity by (positive or negative).
+ * @return SQLITE_OK on success, SQLITE_CONSTRAINT if limits violated, or error code.
+ */
+int
+h_update_ship_cargo (sqlite3 *db, int ship_id, const char *commodity_code, int delta)
+{
+  if (!db || ship_id <= 0 || !commodity_code || delta == 0)
+    {
+      return SQLITE_MISUSE;
+    }
+
+  // Determine column name based on commodity code
+  const char *col_name = NULL;
+  if (strcasecmp(commodity_code, "ORE") == 0) col_name = "ore";
+  else if (strcasecmp(commodity_code, "ORG") == 0) col_name = "organics";
+  else if (strcasecmp(commodity_code, "EQU") == 0) col_name = "equipment";
+  else {
+      LOGE("h_update_ship_cargo: Invalid commodity code %s", commodity_code);
+      return SQLITE_MISUSE;
+  }
+
+  sqlite3_stmt *stmt = NULL;
+  // Check current values and capacity
+  const char *sql_check = "SELECT ore, organics, equipment, holds FROM ships WHERE id = ?;";
+  int rc = sqlite3_prepare_v2(db, sql_check, -1, &stmt, NULL);
+  if (rc != SQLITE_OK) return rc;
+
+  sqlite3_bind_int(stmt, 1, ship_id);
+  
+  int ore = 0, org = 0, equ = 0, holds = 0;
+  if (sqlite3_step(stmt) == SQLITE_ROW) {
+      ore = sqlite3_column_int(stmt, 0);
+      org = sqlite3_column_int(stmt, 1);
+      equ = sqlite3_column_int(stmt, 2);
+      holds = sqlite3_column_int(stmt, 3);
+  } else {
+      sqlite3_finalize(stmt);
+      return SQLITE_NOTFOUND;
+  }
+  sqlite3_finalize(stmt);
+
+  // Calculate new totals
+  int current_qty = 0;
+  if (strcmp(col_name, "ore") == 0) current_qty = ore;
+  else if (strcmp(col_name, "organics") == 0) current_qty = org;
+  else if (strcmp(col_name, "equipment") == 0) current_qty = equ;
+
+  int new_qty = current_qty + delta;
+  
+  // Invariant 1: No negative quantities
+  if (new_qty < 0) {
+      LOGE("h_update_ship_cargo: Resulting quantity negative for %s (curr=%d, delta=%d)", commodity_code, current_qty, delta);
+      return SQLITE_CONSTRAINT;
+  }
+
+  // Invariant 2: Total cargo <= holds
+  int total_cargo = ore + org + equ; // Current total
+  int total_new = total_cargo + delta; // New total (assuming one commodity changes)
+  
+  if (total_new > holds) {
+      LOGE("h_update_ship_cargo: Resulting total %d exceeds holds %d", total_new, holds);
+      return SQLITE_CONSTRAINT;
+  }
+
+  // Perform Update
+  char sql_update[256];
+  snprintf(sql_update, sizeof(sql_update), "UPDATE ships SET %s = ? WHERE id = ?;", col_name);
+  
+  rc = sqlite3_prepare_v2(db, sql_update, -1, &stmt, NULL);
+  if (rc != SQLITE_OK) return rc;
+
+  sqlite3_bind_int(stmt, 1, new_qty);
+  sqlite3_bind_int(stmt, 2, ship_id);
+  
+  rc = sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+  
+  return (rc == SQLITE_DONE) ? SQLITE_OK : rc;
+}
+
+
+
+int h_get_ship_cargo_and_holds(sqlite3 *db, int ship_id, 
+                               int *ore, int *organics, int *equipment, int *holds,
+                               int *free_holds, int *max_holds, 
+                               int *cargo_capacity_used, int *cargo_capacity_max) {
+    if (!db || ship_id <= 0) {
+        return SQLITE_MISUSE;
+    }
+
+    sqlite3_stmt *stmt = NULL;
+    const char *sql = "SELECT ore, organics, equipment, holds, shiptypes.maxholds FROM ships JOIN shiptypes ON ships.type_id = shiptypes.id WHERE ships.id = ?;";
+    int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("h_get_ship_cargo_and_holds: Failed to prepare statement: %s", sqlite3_errmsg(db));
+        return rc;
+    }
+
+    sqlite3_bind_int(stmt, 1, ship_id);
+
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        if (ore) *ore = sqlite3_column_int(stmt, 0);
+        if (organics) *organics = sqlite3_column_int(stmt, 1);
+        if (equipment) *equipment = sqlite3_column_int(stmt, 2);
+        if (holds) *holds = sqlite3_column_int(stmt, 3); // Current holds on ship (can be upgraded)
+        if (max_holds) *max_holds = sqlite3_column_int(stmt, 4); // Base holds from shiptype
+
+        int current_total_cargo = 0;
+        if (ore) current_total_cargo += *ore;
+        if (organics) current_total_cargo += *organics;
+        if (equipment) current_total_cargo += *equipment;
+
+        int current_holds_val = (holds) ? *holds : 0; // Use the value if holds ptr was provided
+
+        if (free_holds) *free_holds = current_holds_val - current_total_cargo;
+        if (cargo_capacity_used) *cargo_capacity_used = current_total_cargo;
+        if (cargo_capacity_max) *cargo_capacity_max = current_holds_val; // Max capacity is current holds
+
+    } else {
+        LOGW("h_get_ship_cargo_and_holds: Ship ID %d not found.", ship_id);
+        rc = SQLITE_NOTFOUND;
+    }
+
+    sqlite3_finalize(stmt);
+    return rc;
+}

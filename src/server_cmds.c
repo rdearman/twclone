@@ -14,6 +14,7 @@
 #include "server_clusters.h" // NEW
 #include "database_market.h"   // NEW
 #include "server_ports.h"      // NEW: For h_get_port_commodity_quantity if needed, or direct DB queries
+#include "server_universe.h"   // NEW: For fer_tick
 
 int
 cmd_sys_cluster_init (client_ctx_t *ctx, json_t *root)
@@ -1208,3 +1209,20 @@ cmd_sys_econ_orders_summary (client_ctx_t *ctx, json_t *root)
   return 0;
 }
 
+
+int
+cmd_sys_npc_ferengi_tick_once (client_ctx_t *ctx, json_t *root)
+{
+  if (ctx->player_id <= 0 || auth_player_get_type (ctx->player_id) != PLAYER_TYPE_SYSOP)
+    {
+      send_enveloped_error (ctx->fd, root, 403, "Forbidden: Must be SysOp");
+      return 0;
+    }
+
+  // Trigger one tick of Ferengi logic
+  // Passing 0 as now_ms as it's reserved/unused for rate limiting in the current implementation
+  fer_tick(0);
+
+  send_enveloped_ok (ctx->fd, root, "sys.npc.ferengi_tick_once", NULL);
+  return 0;
+}

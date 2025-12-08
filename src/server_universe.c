@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <sqlite3.h>
 #include <stdarg.h>
+#include <inttypes.h> // For PRId64
 // local include
 #include "server_universe.h"
 #include "server_ports.h"
@@ -30,6 +31,26 @@
 #include "server_log.h"
 #include "server_combat.h"
 #include "database_cmd.h"
+#include "server_ships.h"
+#include "server_corporation.h"
+#include "database_market.h"
+#include "server_ports.h"
+
+typedef enum
+{
+  FER_STATE_ROAM = 0,
+  FER_STATE_RETURNING = 1
+} fer_state_t;
+typedef struct
+{
+  int id;                       /* 0..N-1 */
+  int ship_id;                  /* Real DB ship ID */
+  int sector;                   /* current location */
+  int home_sector;              /* Ferringhi homeworld sector */
+  int trades_done;              /* trades since last refill */
+  fer_state_t state;            /* ROAM or RETURNING */
+} fer_trader_t;
+
 
 #define SECTOR_LIST_BUF_SIZE 256
 /* cache DB so fer_tick signature matches ISS style */
@@ -46,6 +67,13 @@ static sqlite3 *g_fer_db = NULL;        /* <- cached here for trader helpers */
 #ifndef FER_MAX_HOLD
 #define FER_MAX_HOLD                100
 #endif
+
+#define FERENGI_CORP_TAG "FENG"
+
+static fer_trader_t g_fer[FER_TRADER_COUNT];
+static int g_fer_inited = 0;
+static int g_fer_corp_id = 0;
+static int g_fer_player_id = 0;
 static const int kIssPatrolBudget = 8;  /* hops before we drift home */
 static const char *kIssName = "Imperial Starship";
 static const char *kIssNoticePrefix = "[ISS • Capt. Zyrain]";
@@ -74,6 +102,10 @@ static void iss_log_event_move (int from, int to, const char *kind,
 static void attach_sector_asset_counts (sqlite3 *db,
                                         int sector_id,
                                         json_t *data_out);
+static int ferengi_trade_at_port(sqlite3 *db, fer_trader_t *trader, int port_id);
+
+
+
 #ifndef UNUSED
 #define UNUSED(x) (void)(x)
 #endif
@@ -629,25 +661,6 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
 }
 
 
-///////////////////////////////////
-
-
-////////////////////////////////////////////////////////////////
-
-
-// "sector.scan"
-
-
-/* void cmd_sector_scan (client_ctx_t *ctx, json_t *root) */
-
-
-/* { */
-
-
-/*   STUB_NIY (ctx, root, "scan.sector");   */
-
-
-/* } */
 json_t *
 build_sector_scan_json (int sector_id, int player_id,
                         bool holo_scanner_active)
@@ -809,8 +822,6 @@ build_sector_scan_json (int sector_id, int player_id,
 
 
 // ====================================================================
-
-
 // --- PRIMARY COMMAND HANDLER: cmd_sector_scan (Replaces Mock) ---
 
 
@@ -2298,67 +2309,9 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
 }
 
 
-/////////  ISS BOT ////////////
-
 
 /* ===== Imperial Starship (ISS) — internal state + helpers ============ */
 
-
-/* static void */
-
-
-/* log_iss_event_move (int actor_player_id, int sector, const char *etype, */
-
-
-/*                  const char *payload_json) */
-
-
-/* { */
-
-
-/*   sqlite3 *db = db_get_handle (); */
-
-
-/*   sqlite3_stmt *st = NULL; */
-
-
-/*   if (sqlite3_prepare_v2 (db, */
-
-
-/*                        "INSERT INTO engine_events(ts,type,actor_player_id,sector_id,payload) " */
-
-
-/*                        "VALUES(strftime('%s','now'), ?1, ?2, ?3, ?4);", -1, */
-
-
-/*                        &st, NULL) == SQLITE_OK) */
-
-
-/*     { */
-
-
-/*       sqlite3_bind_text (st, 1, etype, -1, SQLITE_STATIC); */
-
-
-/*       sqlite3_bind_int (st, 2, actor_player_id); */
-
-
-/*       sqlite3_bind_int (st, 3, sector); */
-
-
-/*       sqlite3_bind_text (st, 4, payload_json, -1, SQLITE_STATIC); */
-
-
-/*       sqlite3_step (st); */
-
-
-/*     } */
-
-
-/*   sqlite3_finalize (st); */
-
-
-/* } */
 void
 iss_log_event_move (int from, int to, const char *kind, const char *extra)
 {
@@ -2552,7 +2505,6 @@ iss_try_consume_summon (void)
 }
 
 
-/* --- public API -------------------------------------------------------- */
 int
 iss_init_once (void)
 {
@@ -2670,32 +2622,10 @@ iss_tick (int64_t now_ms)
    sqlite3_finalize (u);
 
    return 1;
-   } */
-/* ================================
- *  Ferringhi Trader NPCs (path-following)
- *  - No warps; they move along sector links so players can tail them.
- *  - They only trade at sectors that actually have ports (ports.location).
- *  - Trades only adjust NPC-local holds (no port economy changes yet).
- * ================================ */
-typedef enum
-{
-  FER_STATE_ROAM = 0,
-  FER_STATE_RETURNING = 1
-} fer_state_t;
-typedef struct
-{
-  int id;                       /* 0..N-1 */
-  int sector;                   /* current location */
-  int home_sector;              /* Ferringhi homeworld sector */
-  int trades_done;              /* trades since last refill */
-  fer_state_t state;            /* ROAM or RETURNING */
-  int hold_ore, hold_organics, hold_equipment;  /* local-only holds */
-} fer_trader_t;
-static fer_trader_t g_fer[FER_TRADER_COUNT];
-static int g_fer_inited = 0;
+   }
+*/
 
 
-/* ---------- DB helpers ---------- */
 int
 sector_has_port (int sector)
 {
@@ -2877,182 +2807,8 @@ nav_next_hop (int start, int goal)
 
 
 /* ---------- (optional) internal event emitters ---------- */
-
-
 /* If you have a helper already for engine_events, call it here.
    Otherwise keep these INFO_LOGs for visibility and add event writes later. */
-
-
-//////////////////////////////////////////////////////////////////////////////////
-
-
-/* --- Helper to read current quantity from port_commodities --- */
-
-
-/* --- Trade Log Emitter Implementation --- */
-
-
-/* --- Trade Log Emitter Implementation --- */
-static void
-fer_emit_trade_log (int port_id, int sector_id,
-                    const char *sold, int sold_qty,
-                    const char *bought, int bought_qty)
-{
-  // Local variables are reset for each potential transaction block
-  sqlite3_stmt *stmt = NULL;
-  int rc;
-  // =========================================================
-  // 1. Acquire Mutex Lock (Must be RECURSIVE for nested calls)
-  // =========================================================
-  db_mutex_lock ();
-  // --- Template SQL for reuse ---
-  const char *sql_insert =
-    "INSERT INTO trade_log (timestamp, sector_id, player_id, commodity, units, price_per_unit, action, port_id) "
-    "VALUES (strftime('%s','now'), ?, 0, ?, ?, ?, ?, ?);";
-
-
-  // =========================================================
-  // A. LOG THE SELL ACTION (If any quantity was sold)
-  // =========================================================
-  if (sold_qty != 0)
-    {
-      const char *action = "sell";
-      const char *commodity = sold;
-      double price = 0.0;
-      // 1. Set QTY to the trade amount
-      int qty = (sold_qty != 0) ? sold_qty : 20;
-      int sold_port_qty_val; // Use a temporary variable for the quantity output
-
-
-      h_get_port_commodity_quantity (g_fer_db, port_id, sold,
-                                     &sold_port_qty_val);
-      int sold_port_qty = sold_port_qty_val;
-
-
-      //LOGI("sold_port_qty = %d", sold_port_qty);
-      // CRITICAL FIX: If lookup failed (returned -1), treat it as 0 stock.
-      if (sold_port_qty < 0)
-        {
-          sold_port_qty = 0;
-        }
-      // 2. Price calculation is now guaranteed to run with a non-negative quantity
-      // Price calculation MUST use sold_port_qty (the stock), not the trade qty
-      price = h_calculate_port_sell_price (g_fer_db, port_id, sold);
-      // --- 3. Insert into trade_log for the SELL ---
-      if (sqlite3_prepare_v2 (g_fer_db, sql_insert, -1, &stmt, NULL) ==
-          SQLITE_OK)
-        {
-          sqlite3_bind_int (stmt, 1, sector_id);
-          sqlite3_bind_text (stmt, 2, commodity, -1, SQLITE_STATIC);
-          sqlite3_bind_int (stmt, 3, qty);
-          sqlite3_bind_double (stmt, 4, price);
-          sqlite3_bind_text (stmt, 5, action, -1, SQLITE_STATIC);
-          sqlite3_bind_int (stmt, 6, port_id);
-          rc = sqlite3_step (stmt);
-          if (rc != SQLITE_DONE)
-            {
-              LOGE ("SQL Exec Error (trade_log, SELL): %s",
-                    sqlite3_errmsg (g_fer_db));
-            }
-          else
-            {
-              // Log the event only if the DB step was successful
-              fer_event_json ("npc.trade",
-                              sector_id,
-                              "{ \"kind\":\"ferringhi\", \"id\":%d, \"port_id\":%d, \"sector\":%d, "
-                              "\"sold\":\"%s\", \"qty\":%d, \"price\":%.2f, \"action\":\"%s\" }",
-                              NPC_TRADE_PLAYER_ID,
-                              port_id,
-                              sector_id,
-                              sold,
-                              qty,
-                              price,
-                              action);
-            }
-          sqlite3_finalize (stmt);
-          stmt = NULL;          // Reset statement pointer
-        }
-      else
-        {
-          LOGE ("SQL Prep Error (trade_log, SELL): %s",
-                sqlite3_errmsg (g_fer_db));
-        }
-    }
-  // =========================================================
-  // B. LOG THE BUY ACTION (If any quantity was bought)
-  // =========================================================
-  if (bought_qty != 0)
-    {
-      const char *action = "buy";
-      const char *commodity = bought;
-      double price = 0.0;
-      // 1. Set QTY to the trade amount
-      int qty = (bought_qty != 0) ? bought_qty : 20;
-      int bought_port_qty_val; // Use a temporary variable for the quantity output
-
-
-      h_get_port_commodity_quantity (g_fer_db,
-                                     port_id,
-                                     bought,
-                                     &bought_port_qty_val);
-      int bought_port_qty = bought_port_qty_val;
-
-
-      // LOGI("bought_port_qty = %d", bought_port_qty);
-      // CRITICAL FIX: If lookup failed (returned -1), treat it as 0 stock.
-      if (bought_port_qty < 0)
-        {
-          bought_port_qty = 0;
-        }
-      // 2. Price calculation is now guaranteed to run with a non-negative quantity
-      // Price calculation MUST use bought_port_qty (the stock), not the trade qty
-      price = h_calculate_port_buy_price (g_fer_db, port_id, bought);
-      // --- 3. Insert into trade_log for the BUY ---
-      if (sqlite3_prepare_v2 (g_fer_db, sql_insert, -1, &stmt, NULL) ==
-          SQLITE_OK)
-        {
-          sqlite3_bind_int (stmt, 1, sector_id);
-          sqlite3_bind_text (stmt, 2, commodity, -1, SQLITE_STATIC);
-          sqlite3_bind_int (stmt, 3, qty);      // Use bought_qty here
-          sqlite3_bind_double (stmt, 4, price);
-          sqlite3_bind_text (stmt, 5, action, -1, SQLITE_STATIC);
-          sqlite3_bind_int (stmt, 6, port_id);
-          rc = sqlite3_step (stmt);
-          if (rc != SQLITE_DONE)
-            {
-              LOGE ("SQL Exec Error (trade_log, BUY): %s",
-                    sqlite3_errmsg (g_fer_db));
-            }
-          else
-            {
-              // Log the event only if the DB step was successful
-              fer_event_json ("npc.trade",
-                              sector_id,
-                              "{ \"kind\":\"ferringhi\", \"id\":%d, \"port_id\":%d, \"sector\":%d, "
-                              "\"sold\":\"%s\", \"qty\":%d, \"price\":%.2f, \"action\":\"%s\" }",
-                              NPC_TRADE_PLAYER_ID,
-                              port_id,
-                              sector_id,
-                              bought,
-                              qty,
-                              price,
-                              action);
-            }
-          sqlite3_finalize (stmt);
-        }
-      else
-        {
-          LOGE ("SQL Prep Error (trade_log, BUY): %s",
-                sqlite3_errmsg (g_fer_db));
-        }
-    }
-  // =========================================================
-  // 4. Release Mutex Lock
-  // =========================================================
-  db_mutex_unlock ();
-  //LOGI("Exit fer_emit_trade_log");
-}
-
 
 void
 fer_attach_db (sqlite3 *db)
@@ -3066,7 +2822,6 @@ fer_attach_db (sqlite3 *db)
 int
 fer_init_once (void)
 {
-  // fprintf(stderr, "[engine] fer_init_once enter\n");
   if (g_fer_inited)
     {
       return 1;
@@ -3074,54 +2829,145 @@ fer_init_once (void)
   if (!g_fer_db)
     {
       LOGW ("[fer] no DB handle; traders disabled");
-      g_fer_inited = 1;
       return 0;
     }
-  /* find home sector */
-  int home = 0;
-  {
-    const char *sql = "SELECT sector FROM planets WHERE id=2 LIMIT 1;"; // Simplified query
-    sqlite3_stmt *st = NULL;
 
+  sqlite3_stmt *st = NULL;
 
-    // 1. Prepare the statement
-    if (sqlite3_prepare_v2 (g_fer_db, sql, -1, &st, NULL) == SQLITE_OK)
-      {
-        // NOTE: Removed the unnecessary sqlite3_bind_text call.
-        // 2. Execute the query and check for a row
-        if (sqlite3_step (st) == SQLITE_ROW)
-          {
-            home = sqlite3_column_int (st, 0);
+  // 1. Find Ferengi Corp ID and its CEO player ID
+  const char *sql_find_corp_info = "SELECT id, owner_id FROM corporations WHERE tag='FENG' LIMIT 1;";
+  if (sqlite3_prepare_v2(g_fer_db, sql_find_corp_info, -1, &st, NULL) == SQLITE_OK) {
+      if (sqlite3_step(st) == SQLITE_ROW) {
+          g_fer_corp_id = sqlite3_column_int(st, 0);
+          g_fer_player_id = sqlite3_column_int(st, 1); // This player owns the corp
+          if (g_fer_player_id == 0) {
+              g_fer_player_id = 1; // Fallback to System player if no owner assigned
           }
-        // 3. Clean up
-        sqlite3_finalize (st);
       }
-    // Optional: Add an else block here to handle a prepare error if needed.
+      sqlite3_finalize(st);
   }
 
-
-  if (home <= 0)
-    {
-      LOGW ("[fer] no 'Ferringhi' planet found; disabling traders");
-      g_fer_inited = 1;
+  if (g_fer_corp_id == 0) {
+      LOGW("[fer] Ferrengi Alliance corporation not found. Traders disabled.");
       return 0;
-    }
+  }
+  
+  // 2. Find Home Sector (Ferengi Homeworld Planet)
+  int home = 0;
+  const char *sql_find_home_sector = "SELECT sector FROM planets WHERE id=2 LIMIT 1;"; // Assumed Ferengi Homeworld is Planet ID 2
+  if (sqlite3_prepare_v2(g_fer_db, sql_find_home_sector, -1, &st, NULL) == SQLITE_OK) {
+      if (sqlite3_step(st) == SQLITE_ROW) {
+          home = sqlite3_column_int(st, 0);
+      }
+      sqlite3_finalize(st);
+  }
+
+  if (home <= 0) {
+      LOGW("[fer] no 'Ferringhi' homeworld planet found; disabling traders");
+      return 0;
+  }
+
+  // 3. Get ship type ID for "Ferrengi Warship" (or a suitable fallback)
+  int ship_type_id = 0;
+  const char *sql_find_shiptype = "SELECT id FROM shiptypes WHERE name='Ferrengi Warship' LIMIT 1;";
+  if (sqlite3_prepare_v2(g_fer_db, sql_find_shiptype, -1, &st, NULL) == SQLITE_OK) {
+      if (sqlite3_step(st) == SQLITE_ROW) {
+          ship_type_id = sqlite3_column_int(st, 0);
+      }
+      sqlite3_finalize(st);
+  }
+  if (ship_type_id == 0) { // Fallback if Ferengi Warship is missing
+      sql_find_shiptype = "SELECT id FROM shiptypes WHERE name='Scout Marauder' LIMIT 1;";
+      if (sqlite3_prepare_v2(g_fer_db, sql_find_shiptype, -1, &st, NULL) == SQLITE_OK) {
+          if (sqlite3_step(st) == SQLITE_ROW) {
+              ship_type_id = sqlite3_column_int(st, 0);
+          }
+          sqlite3_finalize(st);
+      }
+  }
+  if (ship_type_id == 0) {
+      LOGE("[fer] No suitable shiptype found for Ferengi traders. Disabling.");
+      return 0;
+  }
+
+  // 4. Initialize Traders: Create/Find persistent ships for each Ferengi trader
   for (int i = 0; i < FER_TRADER_COUNT; ++i)
     {
       g_fer[i].id = i;
       g_fer[i].home_sector = home;
-      g_fer[i].sector = home;
       g_fer[i].trades_done = 0;
       g_fer[i].state = FER_STATE_ROAM;
-      g_fer[i].hold_ore =
-        g_fer[i].hold_organics = g_fer[i].hold_equipment = FER_MAX_HOLD / 2;
+      
+      char ship_name[64];
+      snprintf(ship_name, sizeof(ship_name), "Ferengi Trader %d", i + 1);
+      
+      int ship_id = 0;
+      int current_sector = home; // Default to home, will update from DB if ship found
+
+      // Check if ship already exists for this NPC player/name
+      const char *sql_find_ship = 
+        "SELECT s.id, s.sector FROM ships s "
+        "JOIN ship_ownership so ON s.id = so.ship_id "
+        "WHERE so.player_id = ? AND s.name = ?;";
+      if (sqlite3_prepare_v2(g_fer_db, sql_find_ship, -1, &st, NULL) == SQLITE_OK) {
+          sqlite3_bind_int(st, 1, g_fer_player_id);
+          sqlite3_bind_text(st, 2, ship_name, -1, SQLITE_STATIC);
+          if (sqlite3_step(st) == SQLITE_ROW) {
+              ship_id = sqlite3_column_int(st, 0);
+              current_sector = sqlite3_column_int(st, 1); // Sync sector from DB
+          }
+          sqlite3_finalize(st);
+      }
+
+      if (ship_id == 0) {
+          // Ship doesn't exist, create it
+          const char *sql_create_ship = 
+            "INSERT INTO ships (name, type_id, sector, ported, onplanet, holds, ore, organics, equipment) "
+            "VALUES (?, ?, ?, 0, 0, ?, ?, ?, ?);"; // Set initial cargo, holds
+          if (sqlite3_prepare_v2(g_fer_db, sql_create_ship, -1, &st, NULL) == SQLITE_OK) {
+              sqlite3_bind_text(st, 1, ship_name, -1, SQLITE_STATIC);
+              sqlite3_bind_int(st, 2, ship_type_id);
+              sqlite3_bind_int(st, 3, home); // Start at home sector
+              sqlite3_bind_int(st, 4, FER_MAX_HOLD); // Max holds
+              sqlite3_bind_int(st, 5, FER_MAX_HOLD / 2); // Initial cargo
+              sqlite3_bind_int(st, 6, FER_MAX_HOLD / 2); 
+              sqlite3_bind_int(st, 7, FER_MAX_HOLD / 2); 
+              if (sqlite3_step(st) != SQLITE_DONE) {
+                  LOGE("[fer] Failed to create ship %s: %s", ship_name, sqlite3_errmsg(g_fer_db));
+                  sqlite3_finalize(st);
+                  return 0; // Fatal error for this trader
+              }
+              ship_id = sqlite3_last_insert_rowid(g_fer_db);
+              sqlite3_finalize(st);
+              
+              // Assign ownership
+              const char *sql_create_ownership = "INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary) VALUES (?, ?, 1, 0);"; // role_id 1 = owner
+              if (sqlite3_prepare_v2(g_fer_db, sql_create_ownership, -1, &st, NULL) == SQLITE_OK) {
+                  sqlite3_bind_int(st, 1, ship_id);
+                  sqlite3_bind_int(st, 2, g_fer_player_id);
+                  if (sqlite3_step(st) != SQLITE_DONE) {
+                      LOGE("[fer] Failed to assign ownership for ship %s: %s", ship_name, sqlite3_errmsg(g_fer_db));
+                      sqlite3_finalize(st);
+                      return 0; // Fatal
+                  }
+                  sqlite3_finalize(st);
+              } else {
+                  LOGE("[fer] Failed to prepare ownership statement for ship %s: %s", ship_name, sqlite3_errmsg(g_fer_db));
+                  return 0; // Fatal
+              }
+          } else {
+              LOGE("[fer] Failed to prepare create ship statement for %s: %s", ship_name, sqlite3_errmsg(g_fer_db));
+              return 0; // Fatal
+          }
+      }
+      g_fer[i].ship_id = ship_id;
+      g_fer[i].sector = current_sector; // Ensure struct reflects DB
     }
-  /* boot marker so you can query immediately */
+
   fer_event_json ("npc.online", 0,
                   "{ \"kind\":\"ferringhi\", \"count\": %d }",
                   FER_TRADER_COUNT);
   g_fer_inited = 1;
-  // fprintf(stderr, "[engine] fer_init_once exit\n");
   return g_fer_inited;
 }
 
@@ -3129,519 +2975,595 @@ fer_init_once (void)
 void
 fer_tick (int64_t now_ms)
 {
-  // fprintf(stderr, "[engine] TOP OF fer_tick fucntion\n");
   (void) now_ms;                /* reserved for rate logic later */
   if (!g_fer_inited)
     {
       if (!fer_init_once ())
         {
-          // fprintf(stderr, "Have we silently failed here insed the fer_tick()\t If you are seeing this, then yes!\n");
           return;
         }
     }
-  // fprintf(stderr, "[engine] 1 OF fer_tick fucntion\n");
+
+  sqlite3 *db = g_fer_db; // Use the attached DB handle
+
   for (int i = 0; i < FER_TRADER_COUNT; ++i)
     {
       fer_trader_t *t = &g_fer[i];
 
-
-      if (t->home_sector <= 0)
+      if (t->home_sector <= 0 || t->ship_id <= 0)
         {
-          continue;
+          continue; // Skip if no home sector or ship assigned
         }
+      
+      // Update the trader's current sector from DB (authoritative)
+      int current_db_sector = db_get_ship_sector_id(db, t->ship_id);
+      if (current_db_sector > 0) {
+          t->sector = current_db_sector;
+      } else {
+          LOGW("Ferengi Trader %d (ship %d) has invalid sector in DB. Skipping.", t->id, t->ship_id);
+          continue;
+      }
+
       /* choose goal: roam to random port, or return home */
       int goal = (t->state == FER_STATE_RETURNING) ? t->home_sector : 0;
 
-
       if (goal == 0)
         {
-          const char *sql =
+          // Select random port from DB
+          const char *sql_random_port_sector =
             "SELECT sector FROM ports ORDER BY RANDOM() LIMIT 1;";
           sqlite3_stmt *st = NULL;
-          int rc_prep = sqlite3_prepare_v2 (g_fer_db, sql, -1, &st, NULL);
-
-
-          if (rc_prep == SQLITE_OK)
+          if (sqlite3_prepare_v2 (db, sql_random_port_sector, -1, &st, NULL) == SQLITE_OK)
             {
-              int rc_step = sqlite3_step (st);
-
-
-              if (rc_step == SQLITE_ROW)
+              if (sqlite3_step (st) == SQLITE_ROW)
                 {
                   goal = sqlite3_column_int (st, 0);
                 }
-              else if (rc_step != SQLITE_DONE)
-                {
-                  LOGE ("fer_tick %d: DB Step Error: %s (%d)",
-                        i,
-                        sqlite3_errmsg (g_fer_db),
-                        rc_step);                                                                       // Log 3 (Error Check)
-                }
               sqlite3_finalize (st);
-            }
-          else
-            {
-              LOGE ("fer_tick %d: DB Prep Error: %s (%d)", i,
-                    sqlite3_errmsg (g_fer_db), rc_prep);                                                // Log 3 (Error Check)
             }
         }
       if (goal <= 0)
         {
-          continue;
+          continue; // No valid goal found
         }
+      
       /* one hop; drift if no path */
-      int next = nav_next_hop (t->sector, goal);
+      int next_sector = nav_next_hop (t->sector, goal);
 
+      if (next_sector <= 0 || next_sector == t->sector)
+        {
+          // If no path or stuck, try a random neighbor
+          next_sector = nav_random_neighbor (t->sector);
+        }
+      
+      if (next_sector <= 0 || next_sector == t->sector)
+	{
+          continue; // Still no valid move
+	}	
 
-      if (next == 0)
-        {
-          next = nav_random_neighbor (t->sector);
-        }
-      if (next <= 0 || next == t->sector)
-        {
-          continue;
-        }
-      t->sector = next;
-      // Disable engine notification of move, it is filling up the table with crap
-      // fer_emit_move (t->id, from, next);
+      // Update ship's sector in DB
+      db_player_set_sector(g_fer_player_id, next_sector); // Use Ferengi player ID for player-ship link
+      // Also update the ship's sector directly in the ships table (db_player_set_sector only sets player sector)
+      sqlite3_stmt *update_ship_st = NULL;
+      if (sqlite3_prepare_v2(db, "UPDATE ships SET sector = ? WHERE id = ?;", -1, &update_ship_st, NULL) == SQLITE_OK)
+	{
+          sqlite3_bind_int(update_ship_st, 1, next_sector);
+          sqlite3_bind_int(update_ship_st, 2, t->ship_id);
+          sqlite3_step(update_ship_st);
+          sqlite3_finalize(update_ship_st);
+	}
+      t->sector = next_sector; // Update in-memory cache
+
       /* trade only when actually on a port sector */
       if (sector_has_port (t->sector))
         {
-          int current_sector = t->sector;       // Sector the NPC is in
-          int actual_port_id = db_get_port_id_by_sector (current_sector);
-
-
-          if (actual_port_id < 0)
-            {
-              LOGW
-                ("NPC in sector %d has no valid port_id. Skipping trade log.",
-                current_sector);
-              return;
-            }
-          /* simple rotating swap for legal commodities */
-          int r = (t->trades_done % 3); // Change from %4 to %3
-          const char *sold = NULL, *bought = NULL;
-          int *ps = NULL, *pb = NULL;
-
-
-          switch (r)
-            {
-              case 0:
-                sold = "ORE";
-                ps = &t->hold_ore;
-                bought = "ORG";
-                pb = &t->hold_organics;
-                break;
-              case 1:
-                sold = "ORG";
-                ps = &t->hold_organics;
-                bought = "EQU";
-                pb = &t->hold_equipment;
-                break;
-              case 2:           // This will be the new 'default' case
-                sold = "EQU";
-                ps = &t->hold_equipment;
-                bought = "ORE"; // Cycle back to ore
-                pb = &t->hold_ore;
-                break;
-            }
-          int sell_qty = (*ps > 10) ? 10 : *ps;
-          int buy_qty = 10;
-
-
-          if ((*pb + buy_qty) > FER_MAX_HOLD)
-            {
-              buy_qty = FER_MAX_HOLD - *pb;
-            }
-          if (buy_qty < 0)
-            {
-              buy_qty = 0;
-            }
-          *ps -= sell_qty;
-          *pb += buy_qty;
-          fer_emit_trade_log (actual_port_id, t->sector, sold, sell_qty,
-                              bought, buy_qty);
-          t->trades_done++;
-          if (t->trades_done >= FER_TRADES_BEFORE_RETURN)
-            {
-              t->state = FER_STATE_RETURNING;
-            }
+          int port_id = db_get_port_id_by_sector (t->sector);
+          if (port_id > 0)
+	    {
+              ferengi_trade_at_port(db, t, port_id);
+              t->trades_done++;
+              if (t->trades_done >= FER_TRADES_BEFORE_RETURN)
+		{
+                  t->state = FER_STATE_RETURNING;
+		}
+	    }
         }
-      /* reached home while returning → refill and go roam again */
+      
+      /* reached home while returning → reset state */
       if (t->state == FER_STATE_RETURNING && t->sector == t->home_sector)
         {
-          t->hold_ore = t->hold_organics = t->hold_equipment =
-            FER_MAX_HOLD / 2;
           t->trades_done = 0;
           t->state = FER_STATE_ROAM;
-        }
-      // fprintf(stderr, "[engine] end LOOP OF fer_tick fucntion\n");
+	}
     }
-  // fprintf(stderr, "[engine] fer_tick fucntion EXIT\n");
 }
 
 
-int
-cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
-{
-  LOGI ("cmd_move_transwarp: ctx->player_id=%d, ctx->sector_id=%d",
-        ctx->player_id,
-        ctx->sector_id);
-  sqlite3 *db_handle = db_get_handle ();
+int ferengi_trade_at_port(sqlite3 *db, fer_trader_t *trader, int port_id) {
+    int rc = SQLITE_OK;
+    char tx_group_id[UUID_STR_LEN];
+    h_generate_hex_uuid(tx_group_id, sizeof(tx_group_id));
 
+    // Get current Ferengi ship state
+    int fer_ore = 0, fer_organics = 0, fer_equipment = 0;
+    int fer_holds = 0; // Current total holds, not empty
+    h_get_ship_cargo_and_holds(db, trader->ship_id, &fer_ore, &fer_organics, &fer_equipment, &fer_holds, NULL, NULL, NULL, NULL);
+    int fer_current_cargo_total = fer_ore + fer_organics + fer_equipment;
+    int fer_empty_holds = fer_holds - fer_current_cargo_total;
 
-  if (!db_handle)
-    {
-      send_enveloped_error (ctx->fd, root, ERR_DB, "No database handle");
-      return 0;
-    }
+    long long fer_credits = 0;
+    db_get_corp_bank_balance(g_fer_corp_id, &fer_credits); // Get Ferengi Corp balance
 
-  if (!ctx || ctx->player_id <= 0)
-    {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              ERR_NOT_AUTHENTICATED,
-                              "Not authenticated",
-                              NULL);
-      return 0;
-    }
+    // Get Port's stock and prices
+    int port_ore_qty = 0, port_org_qty = 0, port_equ_qty = 0;
+    int dummy_cap = 0; bool dummy_bool = false; // For h_get_port_commodity_details
+    
+    h_get_port_commodity_details(db, port_id, "ORE", &port_ore_qty, &dummy_cap, &dummy_bool, &dummy_bool);
+    h_get_port_commodity_details(db, port_id, "ORG", &port_org_qty, &dummy_cap, &dummy_bool, &dummy_bool);
+    h_get_port_commodity_details(db, port_id, "EQU", &port_equ_qty, &dummy_cap, &dummy_bool, &dummy_bool);
+    
+    int port_ore_buy_price = h_calculate_port_buy_price(db, port_id, "ORE");
+    int port_ore_sell_price = h_calculate_port_sell_price(db, port_id, "ORE");
+    int port_org_buy_price = h_calculate_port_buy_price(db, port_id, "ORG");
+    int port_org_sell_price = h_calculate_port_sell_price(db, port_id, "ORG");
+    int port_equ_buy_price = h_calculate_port_buy_price(db, port_id, "EQU");
+    int port_equ_sell_price = h_calculate_port_sell_price(db, port_id, "EQU");
 
-  json_t *jdata = json_object_get (root, "data");
-  int to_sector_id = 0;
+    const char *commodities[] = {"ORE", "ORG", "EQU"};
+    int fer_hold_values[] = {fer_ore, fer_organics, fer_equipment}; // Use values directly
+    int port_buy_prices[] = {port_ore_buy_price, port_org_buy_price, port_equ_buy_price};
+    int port_sell_prices[] = {port_ore_sell_price, port_org_sell_price, port_equ_sell_price};
+    int port_quantities[] = {port_ore_qty, port_org_qty, port_equ_qty};
 
+    int best_sell_idx = -1;
+    int best_buy_idx = -1;
 
-  if (json_is_object (jdata))
-    {
-      json_t *jto = json_object_get (jdata, "to_sector_id");
-
-
-      if (json_is_integer (jto))
-        {
-          to_sector_id = (int) json_integer_value (jto);
-        }
-    }
-
-  if (to_sector_id <= 0)
-    {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              ERR_INVALID_ARG,
-                              "Target sector not specified",
-                              NULL);
-      return 0;
-    }
-
-  // 1. Capability Check (TransWarp Drive)
-  int ship_id = h_get_active_ship_id (db_handle, ctx->player_id);
-
-
-  if (ship_id <= 0)
-    {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              ERR_NO_ACTIVE_SHIP,
-                              "No active ship found.",
-                              NULL);
-      return 0;
-    }
-
-  // Check if player is towing a ship
-  int towing_ship_id = 0;
-  sqlite3_stmt *stmt_towing_status = NULL;
-  const char *sql_towing_status =
-    "SELECT towing_ship_id FROM ships WHERE id = ?;";
-  int rc_tow_check = sqlite3_prepare_v2 (db_handle,
-                                         sql_towing_status,
-                                         -1,
-                                         &stmt_towing_status,
-                                         NULL);
-
-
-  if (rc_tow_check == SQLITE_OK)
-    {
-      sqlite3_bind_int (stmt_towing_status, 1, ship_id);
-      if (sqlite3_step (stmt_towing_status) == SQLITE_ROW)
-        {
-          towing_ship_id = sqlite3_column_int (stmt_towing_status, 0);
-        }
-      sqlite3_finalize (stmt_towing_status);
-    }
-  else
-    {
-      LOGE ("cmd_move_transwarp: Failed to prepare towing status check: %s",
-            sqlite3_errmsg (db_handle));
-      send_enveloped_error (ctx->fd, root, ERR_DB_QUERY_FAILED,
-                            "Database error");
-      return 0;
-    }
-
-  if (towing_ship_id != 0)
-    {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              REF_CANNOT_TRANSWARP_WHILE_TOWING,
-                              "Cannot TransWarp while towing another ship.",
-                              NULL);
-      return 0;
-    }
-
-  int has_transwarp = 0;
-  sqlite3_stmt *stmt = NULL;
-  const char *sql_check_transwarp =
-    "SELECT has_transwarp FROM ships WHERE id = ?;";
-  int rc = sqlite3_prepare_v2 (db_handle,
-                               sql_check_transwarp,
-                               -1,
-                               &stmt,
-                               NULL);
-
-
-  if (rc == SQLITE_OK)
-    {
-      sqlite3_bind_int (stmt, 1, ship_id);
-      if (sqlite3_step (stmt) == SQLITE_ROW)
-        {
-          has_transwarp = sqlite3_column_int (stmt, 0);
-        }
-      sqlite3_finalize (stmt);
-    }
-  else
-    {
-      LOGE (
-        "cmd_move_transwarp: Failed to prepare transwarp check statement: %s",
-        sqlite3_errmsg (db_handle));
-      send_enveloped_error (ctx->fd, root, ERR_DB_QUERY_FAILED,
-                            "Database error");
-      return 0;
-    }
-
-  if (has_transwarp == 0)
-    {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              REF_TRANSWARP_UNAVAILABLE,
-                              "You do not have a TransWarp drive.",
-                              NULL);
-      return 0;
-    }
-
-  // 2. Destination Validation
-  int max_sector_id = 0;
-  const char *sql_max_sector = "SELECT MAX(id) FROM sectors;";
-
-
-  rc = sqlite3_prepare_v2 (db_handle,
-                           sql_max_sector,
-                           -1,
-                           &stmt,
-                           NULL);
-  if (rc == SQLITE_OK)
-    {
-      if (sqlite3_step (stmt) == SQLITE_ROW)
-        {
-          max_sector_id = sqlite3_column_int (stmt, 0);
-        }
-      sqlite3_finalize (stmt);
-    }
-  else
-    {
-      LOGE ("cmd_move_transwarp: Failed to prepare max sector check: %s",
-            sqlite3_errmsg (db_handle));
-      send_enveloped_error (ctx->fd, root, ERR_DB_QUERY_FAILED,
-                            "Database error");
-      return 0;
-    }
-
-  if (to_sector_id <= 0 || to_sector_id > max_sector_id)
-    {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              ERR_INVALID_ARG,
-                              "Invalid TransWarp coordinates: Sector does not exist.",
-                              NULL);
-      return 0;
-    }
-
-  if (to_sector_id == ctx->sector_id)
-    {
-      send_enveloped_ok (ctx->fd, root, "move.transwarp.result",
-                         json_pack ("{s:s}",
-                                    "message",
-                                    "You transwarp to your current sector. Nothing happens."));
-      return 0;
-    }
-
-  // 3. Turn Cost & Consumption
-  const int TRANSWARP_TURN_COST = 3;
-  TurnConsumeResult tc = h_consume_player_turn (db_handle,
-                                                ctx,
-                                                TRANSWARP_TURN_COST);
-
-
-  if (tc != TURN_CONSUME_SUCCESS)
-    {
-      return handle_turn_consumption_error (ctx,
-                                            tc,
-                                            "move.transwarp",
-                                            root,
-                                            NULL);
-    }
-
-  // Execute TransWarp
-  int from_sector_id = ctx->sector_id;
-  int prc = db_player_set_sector (ctx->player_id, to_sector_id);
-
-
-  if (prc != SQLITE_OK)
-    {
-      LOGE
-      (
-        "cmd_move_warp: db_player_set_sector failed for player %d, ship_id %d, to sector %d. Error code: %d",
-        ctx->player_id,
-        h_get_active_ship_id (db_handle, ctx->player_id),
-        to_sector_id,
-        prc);
-      send_enveloped_error (ctx->fd, root, 1502,
-                            "Failed to persist player sector");
-      return 0;
-    }
-
-  // If player is towing a ship, update its sector as well
-  int player_ship_id_for_towing = h_get_active_ship_id (db_handle,
-                                                        ctx->player_id);
-  int towed_ship_id = 0;
-  sqlite3_stmt *stmt_towed_ship = NULL;
-  const char *sql_get_towed_ship =
-    "SELECT towing_ship_id FROM ships WHERE id = ?;";
-  int rc_get_towed = sqlite3_prepare_v2 (db_handle,
-                                         sql_get_towed_ship,
-                                         -1,
-                                         &stmt_towed_ship,
-                                         NULL);
-
-
-  if (rc_get_towed == SQLITE_OK)
-    {
-      sqlite3_bind_int (stmt_towed_ship, 1, player_ship_id_for_towing);
-      if (sqlite3_step (stmt_towed_ship) == SQLITE_ROW)
-        {
-          towed_ship_id = sqlite3_column_int (stmt_towed_ship, 0);
-        }
-      sqlite3_finalize (stmt_towed_ship);
-    }
-  else
-    {
-      LOGE ("cmd_move_warp: Failed to prepare towed ship check: %s",
-            sqlite3_errmsg (db_handle));
-      // Log error but don't stop movement
-    }
-
-  if (towed_ship_id > 0)
-    {
-      const char *sql_update_towed_ship =
-        "UPDATE ships SET sector = ? WHERE id = ?;";
-      sqlite3_stmt *stmt_update_towed = NULL;
-      int rc_update_towed = sqlite3_prepare_v2 (db_handle,
-                                                sql_update_towed_ship,
-                                                -1,
-                                                &stmt_update_towed,
-                                                NULL);
-
-
-      if (rc_update_towed == SQLITE_OK)
-        {
-          sqlite3_bind_int (stmt_update_towed, 1, to_sector_id);
-          sqlite3_bind_int (stmt_update_towed, 2, towed_ship_id);
-          if (sqlite3_step (stmt_update_towed) != SQLITE_DONE)
-            {
-              LOGE (
-                "cmd_move_warp: Failed to update sector for towed ship %d: %s",
-                towed_ship_id,
-                sqlite3_errmsg (db_handle));
+    // Determine best commodity to SELL
+    for (int c_idx = 0; c_idx < 3; ++c_idx) {
+        if (fer_hold_values[c_idx] > 0 && port_buy_prices[c_idx] > 0) {
+            if (best_sell_idx == -1 || port_buy_prices[c_idx] > port_buy_prices[best_sell_idx]) { // Prioritize highest buy price
+                best_sell_idx = c_idx;
             }
-          sqlite3_finalize (stmt_update_towed);
         }
-      else
-        {
-          LOGE (
-            "cmd_move_warp: Failed to prepare update towed ship statement: %s",
-            sqlite3_errmsg (db_handle));
+    }
+
+    // Determine best commodity to BUY
+    for (int c_idx = 0; c_idx < 3; ++c_idx) {
+        if (fer_empty_holds > 0 && port_quantities[c_idx] > 0 && port_sell_prices[c_idx] > 0) {
+            if (best_buy_idx == -1 || port_sell_prices[c_idx] < port_sell_prices[best_buy_idx]) { // Prioritize lowest sell price
+                best_buy_idx = c_idx;
+            }
         }
-      LOGI ("cmd_move_warp: Towed ship %d moved to sector %d.",
-            towed_ship_id,
-            to_sector_id);
     }
-  LOGI (
-    "cmd_move_warp: Player %d (fd %d) successfully warped from sector %d to %d."
-    " db_player_set_sector returned %d. Rows updated: %d",
-    ctx->player_id,
-    ctx->player_id,
-    from_sector_id,
-    to_sector_id,
-    to_sector_id,
-    1);
 
-  // Blind Entry - Apply sector effects immediately
-  armid_encounter_t armid_enc = { 0 };
+    // Start transaction
+    sqlite3_exec(db, "BEGIN IMMEDIATE;", NULL, NULL, NULL);
 
+    if (best_sell_idx != -1) {
+        const char *commodity = commodities[best_sell_idx];
+        int price_per_unit = port_buy_prices[best_sell_idx];
+        
+        // Quantity to sell: limited by Ferengi stock, port capacity to buy, and port's available credits
+        int max_sell_to_port = port_quantities[best_sell_idx] / 2; // Port won't buy more than half its stock
+        if (max_sell_to_port == 0) max_sell_to_port = 1;
 
-  apply_armid_mines_on_entry (ctx, to_sector_id, &armid_enc);
-  // Future: Trigger combat checks, quasar cannons, etc.
+        int qty_to_trade = MIN(fer_hold_values[best_sell_idx], max_sell_to_port);
+        qty_to_trade = MIN(qty_to_trade, (int)(db_get_port_bank_balance(port_id, NULL) / price_per_unit)); // Port can afford it
 
-  // 1) Send the direct reply for the actor
-  json_t *resp = json_object ();
+        if (qty_to_trade > 0 && price_per_unit > 0) {
+            long long total_credits = (long long)qty_to_trade * price_per_unit;
+            rc = h_bank_transfer_unlocked(db, "port", port_id, "corp", g_fer_corp_id, total_credits, "TRADE_SELL", tx_group_id);
+            if (rc == SQLITE_OK) {
+                rc = h_update_ship_cargo(db, trader->ship_id, commodity, -qty_to_trade);
+                if (rc == SQLITE_OK) {
+                    rc = h_market_move_port_stock(db, port_id, commodity, qty_to_trade);
+                }
+            }
+            if (rc == SQLITE_OK) {
+                fer_event_json("npc.trade", trader->sector,
+                               "{ \"kind\":\"ferrengi_sell\", \"ship_id\":%d, \"port_id\":%d, \"commodity\":\"%s\", \"qty\":%d, \"price\":%d, \"total_credits\":%" PRId64 " }",
+                               trader->ship_id, port_id, commodity, qty_to_trade, price_per_unit, total_credits);
+                LOGI("Ferengi %d (ship %d) SOLD %d %s to Port %d for %lld credits.", trader->id, trader->ship_id, qty_to_trade, commodity, port_id, total_credits);
+            } else {
+                LOGW("Ferengi %d failed to sell %d %s to Port %d (trade error %d).", trader->id, qty_to_trade, commodity, port_id, rc);
+            }
+        }
+    } 
+    
+    // If no selling, or selling was done, try buying
+    if (rc == SQLITE_OK && best_buy_idx != -1 && fer_empty_holds > 0) {
+        const char *commodity = commodities[best_buy_idx];
+        int price_per_unit = port_sell_prices[best_buy_idx];
+        
+        // Quantity to buy: limited by empty holds, port stock, and Ferengi credits
+        int qty_to_trade = MIN(fer_empty_holds, port_quantities[best_buy_idx]);
+        if (qty_to_trade <= 0) qty_to_trade = 1; // Ensure minimal trade attempt
 
+        long long total_credits = (long long)qty_to_trade * price_per_unit;
 
-  json_object_set_new (resp, "player_id", json_integer (ctx->player_id));
-  json_object_set_new (resp, "from_sector_id", json_integer (from_sector_id));
-  json_object_set_new (resp, "to_sector_id", json_integer (to_sector_id));
-  json_object_set_new (resp, "turns_spent", json_integer (TRANSWARP_TURN_COST));
-  if (armid_enc.armid_triggered > 0)
-    {
-      json_t *damage_obj = json_object ();
-
-
-      json_object_set_new (damage_obj, "shields_lost",
-                           json_integer (armid_enc.shields_lost));
-      json_object_set_new (damage_obj, "fighters_lost",
-                           json_integer (armid_enc.fighters_lost));
-      json_object_set_new (damage_obj, "hull_lost",
-                           json_integer (armid_enc.hull_lost));
-      json_object_set_new (damage_obj, "destroyed",
-                           json_boolean (armid_enc.destroyed));
-      json_t *encounter_obj = json_object ();
-
-
-      json_object_set_new (encounter_obj, "kind", json_string ("mines"));
-      json_object_set_new (encounter_obj, "armid_triggered",
-                           json_integer (armid_enc.armid_triggered));
-      json_object_set_new (encounter_obj, "armid_remaining",
-                           json_integer (armid_enc.armid_remaining));
-      json_object_set_new (encounter_obj, "damage", damage_obj);
-      json_object_set_new (resp, "encounter", encounter_obj);
+        if (qty_to_trade > 0 && total_credits > 0 && fer_credits >= total_credits) {
+            // Corp buys from Port
+            rc = h_bank_transfer_unlocked(db, "corp", g_fer_corp_id, "port", port_id, total_credits, "TRADE_BUY", tx_group_id);
+            if (rc == SQLITE_OK) {
+                rc = h_update_ship_cargo(db, trader->ship_id, commodity, qty_to_trade);
+                if (rc == SQLITE_OK) {
+                    rc = h_market_move_port_stock(db, port_id, commodity, -qty_to_trade);
+                }
+            }
+            if (rc == SQLITE_OK) {
+                fer_event_json("npc.trade", trader->sector,
+                               "{ \"kind\":\"ferrengi_buy\", \"ship_id\":%d, \"port_id\":%d, \"commodity\":\"%s\", \"qty\":%d, \"price\":%d, \"total_credits\":%" PRId64 " }",
+                               trader->ship_id, port_id, commodity, qty_to_trade, price_per_unit, total_credits);
+                LOGI("Ferengi %d (ship %d) BOUGHT %d %s from Port %d for %lld credits.", trader->id, trader->ship_id, qty_to_trade, commodity, port_id, total_credits);
+            } else {
+                LOGW("Ferengi %d failed to buy %d %s from Port %d (bank transfer error %d).", trader->id, qty_to_trade, commodity, port_id, rc);
+            }
+        }
     }
-  send_enveloped_ok (ctx->fd, root, "move.transwarp.result", resp);
 
-  // 2) Broadcast LEFT (from) then ENTERED (to) to subscribers
-  json_t *left = json_object ();
-
-
-  json_object_set_new (left, "player_id", json_integer (ctx->player_id));
-  json_object_set_new (left, "sector_id", json_integer (from_sector_id));
-  json_object_set_new (left, "to_sector_id", json_integer (to_sector_id));
-  json_object_set_new (left, "player", make_player_object (ctx->player_id));
-  comm_publish_sector_event (from_sector_id, "sector.player_left", left);
-
-  json_t *entered = json_object ();
-
-
-  json_object_set_new (entered, "player_id", json_integer (ctx->player_id));
-  json_object_set_new (entered, "sector_id", json_integer (to_sector_id));
-  json_object_set_new (entered, "from_sector_id",
-                       json_integer (from_sector_id));
-  json_object_set_new (entered, "player", make_player_object (ctx->player_id));
-  comm_publish_sector_event (to_sector_id, "sector.player_entered", entered);
-
-  return 0;
+    if (rc == SQLITE_OK) {
+        sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL); // End transaction
+    } else {
+        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL); // Rollback on error
+        LOGE("Ferengi trade transaction rolled back due to error %d.", rc);
+    }
+    return rc;
 }
 
+
+ int
+   cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
+ {
+   sqlite3 *db_handle = db_get_handle ();
+
+   if (!db_handle)
+     {
+       send_enveloped_error (ctx->fd, root, ERR_DB, "No database handle");
+       return 0;
+     }
+
+   if (!ctx || ctx->player_id <= 0)
+     {
+       send_enveloped_refused (ctx->fd,
+			       root,
+			       ERR_NOT_AUTHENTICATED,
+			       "Not authenticated",
+			       NULL);
+       return 0;
+     }
+
+   json_t *jdata = json_object_get (root, "data");
+   int to_sector_id = 0;
+
+   if (json_is_object (jdata))
+     {
+       json_t *jto = json_object_get (jdata, "to_sector_id");
+       if (json_is_integer (jto))
+	 {
+	   to_sector_id = (int) json_integer_value (jto);
+	 }
+     }
+
+   if (to_sector_id <= 0)
+     {
+       send_enveloped_refused (ctx->fd,
+			       root,
+			       ERR_INVALID_ARG,
+			       "Target sector not specified",
+			       NULL);
+       return 0;
+     }
+
+   // 1. Capability Check (TransWarp Drive)
+   int ship_id = h_get_active_ship_id (db_handle, ctx->player_id);
+
+
+   if (ship_id <= 0)
+     {
+       send_enveloped_refused (ctx->fd,
+			       root,
+			       ERR_NO_ACTIVE_SHIP,
+			       "No active ship found.",
+			       NULL);
+       return 0;
+     }
+
+   // Check if player is towing a ship
+   int towing_ship_id = 0;
+   sqlite3_stmt *stmt_towing_status = NULL;
+   const char *sql_towing_status =
+     "SELECT towing_ship_id FROM ships WHERE id = ?;";
+   int rc_tow_check = sqlite3_prepare_v2 (db_handle,
+					  sql_towing_status,
+					  -1,
+					  &stmt_towing_status,
+					  NULL);
+
+
+   if (rc_tow_check == SQLITE_OK)
+     {
+       sqlite3_bind_int (stmt_towing_status, 1, ship_id);
+       if (sqlite3_step (stmt_towing_status) == SQLITE_ROW)
+	 {
+	   towing_ship_id = sqlite3_column_int (stmt_towing_status, 0);
+	 }
+       sqlite3_finalize (stmt_towing_status);
+     }
+   else
+     {
+       LOGE ("cmd_move_transwarp: Failed to prepare towing status check: %s",
+	     sqlite3_errmsg (db_handle));
+       send_enveloped_error (ctx->fd, root, ERR_DB_QUERY_FAILED,
+			     "Database error");
+       return 0;
+     }
+
+   if (towing_ship_id != 0)
+     {
+       send_enveloped_refused (ctx->fd,
+			       root,
+			       REF_CANNOT_TRANSWARP_WHILE_TOWING,
+			       "Cannot TransWarp while towing another ship.",
+			       NULL);
+       return 0;
+     }
+
+   int has_transwarp = 0;
+   sqlite3_stmt *stmt = NULL;
+   const char *sql_check_transwarp =
+     "SELECT has_transwarp FROM ships WHERE id = ?;";
+   int rc = sqlite3_prepare_v2 (db_handle,
+				sql_check_transwarp,
+				-1,
+				&stmt,
+				NULL);
+
+
+   if (rc == SQLITE_OK)
+     {
+       sqlite3_bind_int (stmt, 1, ship_id);
+       if (sqlite3_step (stmt) == SQLITE_ROW)
+	 {
+	   has_transwarp = sqlite3_column_int (stmt, 0);
+	 }
+       sqlite3_finalize (stmt);
+     }
+   else
+     {
+       LOGE (
+	     "cmd_move_transwarp: Failed to prepare transwarp check statement: %s",
+	     sqlite3_errmsg (db_handle));
+       send_enveloped_error (ctx->fd, root, ERR_DB_QUERY_FAILED,
+			     "Database error");
+       return 0;
+     }
+
+   if (has_transwarp == 0)
+     {
+       send_enveloped_refused (ctx->fd,
+			       root,
+			       REF_TRANSWARP_UNAVAILABLE,
+			       "You do not have a TransWarp drive.",
+			       NULL);
+       return 0;
+     }
+
+   // 2. Destination Validation
+   int max_sector_id = 0;
+   const char *sql_max_sector = "SELECT MAX(id) FROM sectors;";
+
+
+   rc = sqlite3_prepare_v2 (db_handle,
+			    sql_max_sector,
+			    -1,
+			    &stmt,
+			    NULL);
+   if (rc == SQLITE_OK)
+     {
+       if (sqlite3_step (stmt) == SQLITE_ROW)
+	 {
+	   max_sector_id = sqlite3_column_int (stmt, 0);
+	 }
+       sqlite3_finalize (stmt);
+     }
+   else
+     {
+       LOGE ("cmd_move_transwarp: Failed to prepare max sector check: %s",
+	     sqlite3_errmsg (db_handle));
+       send_enveloped_error (ctx->fd, root, ERR_DB_QUERY_FAILED,
+			     "Database error");
+       return 0;
+     }
+
+   if (to_sector_id <= 0 || to_sector_id > max_sector_id)
+     {
+       send_enveloped_refused (ctx->fd,
+			       root,
+			       ERR_INVALID_ARG,
+			       "Invalid TransWarp coordinates: Sector does not exist.",
+			       NULL);
+       return 0;
+     }
+
+   if (to_sector_id == ctx->sector_id)
+     {
+       send_enveloped_ok (ctx->fd, root, "move.transwarp.result",
+			  json_pack ("{s:s}",
+				     "message",
+				     "You transwarp to your current sector. Nothing happens."));
+       return 0;
+     }
+
+   // 3. Turn Cost & Consumption
+   const int TRANSWARP_TURN_COST = 3;
+   TurnConsumeResult tc = h_consume_player_turn (db_handle,
+						 ctx,
+						 TRANSWARP_TURN_COST);
+
+
+   if (tc != TURN_CONSUME_SUCCESS)
+     {
+       return handle_turn_consumption_error (ctx,
+					     tc,
+					     "move.transwarp",
+					     root,
+					     NULL);
+     }
+
+   // Execute TransWarp
+   int from_sector_id = ctx->sector_id;
+   int prc = db_player_set_sector (ctx->player_id, to_sector_id);
+
+
+   if (prc != SQLITE_OK)
+     {
+       LOGE
+	 (
+	  "cmd_move_warp: db_player_set_sector failed for player %d, ship_id %d, to sector %d. Error code: %d",
+	  ctx->player_id,
+	  h_get_active_ship_id (db_handle, ctx->player_id),
+	  to_sector_id,
+	  prc);
+       send_enveloped_error (ctx->fd, root, 1502,
+			     "Failed to persist player sector");
+       return 0;
+     }
+
+   // If player is towing a ship, update its sector as well
+   int player_ship_id_for_towing = h_get_active_ship_id (db_handle,
+							 ctx->player_id);
+   int towed_ship_id = 0;
+   sqlite3_stmt *stmt_towed_ship = NULL;
+   const char *sql_get_towed_ship =
+     "SELECT towing_ship_id FROM ships WHERE id = ?;";
+   int rc_get_towed = sqlite3_prepare_v2 (db_handle,
+					  sql_get_towed_ship,
+					  -1,
+					  &stmt_towed_ship,
+					  NULL);
+
+
+   if (rc_get_towed == SQLITE_OK)
+     {
+       sqlite3_bind_int (stmt_towed_ship, 1, player_ship_id_for_towing);
+       if (sqlite3_step (stmt_towed_ship) == SQLITE_ROW)
+	 {
+	   towed_ship_id = sqlite3_column_int (stmt_towed_ship, 0);
+	 }
+       sqlite3_finalize (stmt_towed_ship);
+     }
+   else
+     {
+       LOGE ("cmd_move_warp: Failed to prepare towed ship check: %s",
+	     sqlite3_errmsg (db_handle));
+       // Log error but don't stop movement
+     }
+
+   if (towed_ship_id > 0)
+     {
+       const char *sql_update_towed_ship =
+	 "UPDATE ships SET sector = ? WHERE id = ?;";
+       sqlite3_stmt *stmt_update_towed = NULL;
+       int rc_update_towed = sqlite3_prepare_v2 (db_handle,
+						 sql_update_towed_ship,
+						 -1,
+						 &stmt_update_towed,
+						 NULL);
+
+
+       if (rc_update_towed == SQLITE_OK)
+	 {
+	   sqlite3_bind_int (stmt_update_towed, 1, to_sector_id);
+	   sqlite3_bind_int (stmt_update_towed, 2, towed_ship_id);
+	   if (sqlite3_step (stmt_update_towed) != SQLITE_DONE)
+	     {
+	       LOGE (
+		     "cmd_move_warp: Failed to update sector for towed ship %d: %s",
+		     towed_ship_id,
+		     sqlite3_errmsg (db_handle));
+	     }
+	   sqlite3_finalize (stmt_update_towed);
+	 }
+       else
+	 {
+	   LOGE (
+		 "cmd_move_warp: Failed to prepare update towed ship statement: %s",
+		 sqlite3_errmsg (db_handle));
+	 }
+       LOGI ("cmd_move_warp: Towed ship %d moved to sector %d.",
+	     towed_ship_id,
+	     to_sector_id);
+     }
+   LOGI (
+	 "cmd_move_warp: Player %d (fd %d) successfully warped from sector %d to %d."
+	 " db_player_set_sector returned %d. Rows updated: %d",
+	 ctx->player_id,
+	 ctx->player_id,
+	 from_sector_id,
+	 to_sector_id,
+	 to_sector_id,
+	 1);
+
+   // Blind Entry - Apply sector effects immediately
+   armid_encounter_t armid_enc = { 0 };
+
+
+   apply_armid_mines_on_entry (ctx, to_sector_id, &armid_enc);
+   // Future: Trigger combat checks, quasar cannons, etc.
+
+   // 1) Send the direct reply for the actor
+   json_t *resp = json_object ();
+
+
+   json_object_set_new (resp, "player_id", json_integer (ctx->player_id));
+   json_object_set_new (resp, "from_sector_id", json_integer (from_sector_id));
+   json_object_set_new (resp, "to_sector_id", json_integer (to_sector_id));
+   json_object_set_new (resp, "turns_spent", json_integer (TRANSWARP_TURN_COST));
+   if (armid_enc.armid_triggered > 0)
+     {
+       json_t *damage_obj = json_object ();
+
+
+       json_object_set_new (damage_obj, "shields_lost",
+			    json_integer (armid_enc.shields_lost));
+       json_object_set_new (damage_obj, "fighters_lost",
+			    json_integer (armid_enc.fighters_lost));
+       json_object_set_new (damage_obj, "hull_lost",
+			    json_integer (armid_enc.hull_lost));
+       json_object_set_new (damage_obj, "destroyed",
+			    json_boolean (armid_enc.destroyed));
+       json_t *encounter_obj = json_object ();
+
+
+       json_object_set_new (encounter_obj, "kind", json_string ("mines"));
+       json_object_set_new (encounter_obj, "armid_triggered",
+			    json_integer (armid_enc.armid_triggered));
+       json_object_set_new (encounter_obj, "armid_remaining",
+			    json_integer (armid_enc.armid_remaining));
+       json_object_set_new (encounter_obj, "damage", damage_obj);
+       json_object_set_new (resp, "encounter", encounter_obj);
+     }
+   send_enveloped_ok (ctx->fd, root, "move.transwarp.result", resp);
+
+   // 2) Broadcast LEFT (from) then ENTERED (to) to subscribers
+   json_t *left = json_object ();
+
+
+   json_object_set_new (left, "player_id", json_integer (ctx->player_id));
+   json_object_set_new (left, "sector_id", json_integer (from_sector_id));
+   json_object_set_new (left, "to_sector_id", json_integer (to_sector_id));
+   json_object_set_new (left, "player", make_player_object (ctx->player_id));
+   comm_publish_sector_event (from_sector_id, "sector.player_left", left);
+
+   json_t *entered = json_object ();
+
+
+   json_object_set_new (entered, "player_id", json_integer (ctx->player_id));
+   json_object_set_new (entered, "sector_id", json_integer (to_sector_id));
+   json_object_set_new (entered, "from_sector_id",
+			json_integer (from_sector_id));
+   json_object_set_new (entered, "player", make_player_object (ctx->player_id));
+   comm_publish_sector_event (to_sector_id, "sector.player_entered", entered);
+
+   return 0;
+ }
