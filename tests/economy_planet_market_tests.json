@@ -1,0 +1,154 @@
+[
+  {
+    "name": "Register Admin User",
+    "command": "auth.register",
+    "data": {"username": "admin", "passwd": "password"},
+    "assert": {"success": true},
+    "save": {"admin_player_id": "data.player_id"}
+  },
+  {
+    "name": "Login Admin User",
+    "command": "auth.login",
+    "data": {"username": "admin", "passwd": "password"},
+    "assert": {"success": true},
+    "save": {"admin_session_token": "data.session_token"}
+  },
+  {
+    "name": "Set Admin User to SysOp Type",
+    "command": "sys.raw_sql_exec",
+    "auth": {"session": "@admin_session_token"},
+    "data": {"sql": "UPDATE players SET type = 3 WHERE id = @admin_player_id;"},
+    "assert": {"success": true}
+  },
+  {
+    "name": "Setup: Update cron schedule for testing",
+    "command": "sys.raw_sql_exec",
+    "auth": {"session": "@admin_session_token"},
+          "data": {
+            "sql": "UPDATE cron_tasks SET schedule = 'every:5s' WHERE name IN ('planet_growth', 'port_economy_tick', 'daily_market_settlement');"
+          },    "assert": {
+      "success": true
+    }
+  },
+  {
+    "name": "Setup: Initialize fresh universe, planet, and commodities",
+    "command": "sys.raw_sql_exec",
+    "auth": {"session": "@admin_session_token"},
+    "data": {
+      "sql": "DELETE FROM commodity_orders; DELETE FROM commodity_trades; DELETE FROM entity_stock WHERE entity_type='planet' AND entity_id=100; DELETE FROM planets WHERE id=100; DELETE FROM bank_accounts WHERE owner_type='planet' AND owner_id=100; INSERT OR IGNORE INTO planettypes (id, typeDescription, typeName, maxore, maxorganics, maxequipment) VALUES (1, 'Terra', 'Earthlike', 100000, 100000, 100000); INSERT OR IGNORE INTO commodities (id, code, name, base_price) VALUES (1, 'ORE', 'Ore', 100); INSERT OR IGNORE INTO commodities (id, code, name, base_price) VALUES (2, 'ORG', 'Organics', 150); INSERT OR IGNORE INTO commodities (id, code, name, base_price) VALUES (3, 'EQU', 'Equipment', 200); INSERT INTO planets (id, num, sector, name, owner_id, owner_type, type, created_at, created_by) VALUES (100, 100, 1, 'TestPlanet', 0, 'system', 1, strftime('%s','now'), 0); INSERT OR REPLACE INTO planet_production (planet_type_id, commodity_code, base_prod_rate, base_cons_rate) VALUES (1, 'ORE', 1000, 0); INSERT OR REPLACE INTO planet_production (planet_type_id, commodity_code, base_prod_rate, base_cons_rate) VALUES (1, 'ORG', 0, 500); INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity) VALUES ('planet', 100, 'ORE', 10000); INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity) VALUES ('planet', 100, 'ORG', 10000); INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity) VALUES ('planet', 100, 'EQU', 0);"
+    },
+    "assert": {
+      "success": true
+    }
+  },
+  {
+    "name": "Trigger Planet Growth (ORE Surplus -> SELL)",
+    "comment": "Cron will run planet_growth shortly",
+    "command": "sys.raw_sql_exec",
+    "auth": {"session": "@admin_session_token"},
+    "data": { "sql": "SELECT 1;" },
+    "assert": { "success": true }
+  },
+  { "name": "Wait for planet_growth cron to run", "command": "wait", "data": { "duration": 6 }, "assert": {"success": true} },
+  {
+    "name": "Verify: sys.econ.planet_status after ORE surplus",
+    "command": "sys.econ.planet_status",
+    "auth": {"session": "@admin_session_token"},
+    "data": { "planet_id": 100 },
+    "assert": {
+      "success": true,
+      "data.id": 100,
+      "data.name": "TestPlanet",
+      "data.stock.0.commodity_id": 1,
+      "data.orders.0.side": "sell",
+      "data.orders.0.quantity": ">= 1"
+    }
+  },
+  {
+    "name": "Trigger Planet Growth (ORG Deficit -> BUY)",
+    "comment": "Cron will run planet_growth shortly",
+    "command": "sys.raw_sql_exec",
+    "auth": {"session": "@admin_session_token"},
+    "data": { "sql": "SELECT 1;" },
+    "assert": { "success": true }
+  },
+  { "name": "Wait for planet_growth cron to run again", "command": "wait", "data": { "duration": 6 }, "assert": {"success": true} },
+  {
+    "name": "Verify: sys.econ.planet_status after ORG deficit",
+    "command": "sys.econ.planet_status",
+    "auth": {"session": "@admin_session_token"},
+    "data": { "planet_id": 100 },
+    "assert": {
+      "success": true,
+      "data.id": 100,
+      "data.stock.1.commodity_id": 2,
+      "data.orders.1.side": "buy",
+      "data.orders.1.quantity": ">= 1"
+    }
+  },
+  {
+    "name": "Setup: Port 1 (Stardock) with Credits and Need for ORE",
+    "command": "sys.raw_sql_exec",
+    "auth": {"session": "@admin_session_token"},
+    "data": {
+      "sql": "UPDATE ports SET size=1000, type=9 WHERE id=1; UPDATE bank_accounts SET balance=1000000 WHERE owner_type='port' AND owner_id=1; INSERT OR REPLACE INTO entity_stock (entity_type, entity_id, commodity_code, quantity) VALUES ('port', 1, 'ORE', 10000); INSERT OR REPLACE INTO economy_curve (id, curve_name, base_restock_rate, price_elasticity, target_stock, volatility_factor) VALUES (1, 'Default', 0.1, 0.5, 50000, 0.1);"
+    },
+    "assert": {
+      "success": true
+    }
+  },
+  {
+    "name": "Trigger Port Economy Tick (generates BUY order for ORE)",
+    "comment": "Cron will run port_economy_tick shortly",
+    "command": "sys.raw_sql_exec",
+    "auth": {"session": "@admin_session_token"},
+    "data": { "sql": "SELECT 1;" },
+    "assert": { "success": true }
+  },
+  { "name": "Wait for port_economy_tick cron to run", "command": "wait", "data": { "duration": 6 }, "assert": {"success": true} },
+  {
+    "name": "Verify: Port 1 has BUY order for ORE",
+    "command": "sys.econ.port_status",
+    "auth": {"session": "@admin_session_token"},
+    "data": { "port_id": 1 },
+    "assert": {
+      "success": true,
+      "data.orders.*.commodity_id": 1,
+      "data.orders.*.side": "buy",
+      "data.orders.*.status": "open"
+    }
+  },
+  {
+    "name": "Trigger Daily Market Settlement (Planet 100 SELL ORE and Port 1 BUY ORE)",
+    "comment": "Cron will run daily_market_settlement shortly",
+    "command": "sys.raw_sql_exec",
+    "auth": {"session": "@admin_session_token"},
+    "data": { "sql": "SELECT 1;" },
+    "assert": { "success": true }
+  },
+  { "name": "Wait for daily_market_settlement cron to run", "command": "wait", "data": { "duration": 6 }, "assert": {"success": true} },
+  {
+    "name": "Verify: Planet 100 stock decreased, credits increased, order filled/partial",
+    "command": "sys.econ.planet_status",
+    "auth": {"session": "@admin_session_token"},
+    "data": { "planet_id": 100 },
+    "assert": {
+      "success": true,
+      "data.stock.0.commodity_id": 1,
+      "data.stock.0.quantity": "< 10000",
+      "data.bank_balance": "> 0"
+    }
+  },
+  {
+    "name": "Verify: Port 1 stock increased, credits decreased, order filled/partial",
+    "command": "sys.econ.port_status",
+    "auth": {"session": "@admin_session_token"},
+    "data": { "port_id": 1 },
+    "assert": {
+      "success": true,
+      "data.stock.0.commodity_id": 1,
+      "data.stock.0.quantity": "> 10000",
+      "data.bank_balance": "< 1000000"
+    }
+  }
+]

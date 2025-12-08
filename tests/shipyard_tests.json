@@ -17,15 +17,56 @@
         "username": "shipyard_tester",
         "passwd": "password123"
       },
+      "expect": { "status": "ok" },
+      "save": { "shipyard_tester_id": "data.player_id" }
+    },
+    {
+      "name": "Ensure 'Scout Marauder' shiptype exists (Shipyard Tester)",
+      "cmd": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT OR IGNORE INTO shiptypes (id, name, basecost, maxholds, maxfighters, maxshields, maxgenesis, max_detonators, max_probes, can_transwarp, can_planet_scan, can_long_range_scan, max_cloaks) VALUES (1, 'Scout Marauder', 1000, 100, 1000, 500, 5, 5, 5, 1, 1, 1, 1);" },
+      "user": "admin",
       "expect": { "status": "ok" }
     },
     {
-      "name": "Ensure at Stardock",
+      "name": "Ensure Player has a ship - Insert Ship (Shipyard Tester)",
       "cmd": "sys.raw_sql_exec",
       "data": {
-        "sql": "UPDATE players SET sector = 1 WHERE name = 'shipyard_tester'; UPDATE ships SET sector = 1, ported = 1, onplanet = 0 WHERE id = (SELECT ship FROM players WHERE name = 'shipyard_tester');"
+        "sql": "INSERT OR IGNORE INTO ships (id, type_id, name, holds, sector, ported) VALUES (@shipyard_tester_id, 1, 'ShipyardTestShip', 100, 1, 0);"
       },
+      "user": "admin",
       "expect": { "status": "ok" }
+    },
+    {
+      "name": "Ensure Player has a ship - Update Player (Shipyard Tester)",
+      "cmd": "sys.raw_sql_exec",
+      "data": {
+        "sql": "UPDATE players SET ship = @shipyard_tester_id, sector = 1 WHERE id = @shipyard_tester_id;"
+      },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Ensure Player has a ship - Insert Ownership (Shipyard Tester)",
+      "cmd": "sys.raw_sql_exec",
+      "data": {
+        "sql": "INSERT OR IGNORE INTO ship_ownership (ship_id, player_id, is_primary) VALUES (@shipyard_tester_id, @shipyard_tester_id, 1);"
+      },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Dock at Port",
+      "cmd": "port.dock",
+      "user": "shipyard_tester",
+      "expect": {
+        "status": "ok",
+        "type": "player.dock.v1",
+        "data": {
+            "player_id": "@shipyard_tester_id",
+            "sector_id": 1,
+            "port_id": 1
+        }
+      }
     },
     {
         "name": "Ensure Inventory Exists",
@@ -54,7 +95,8 @@
             "new_ship_name": "Upgraded Scout"
         },
         "expect": {
-            "status": "ok"
+            "status": "ok",
+            "type": "shipyard.upgrade.success"
         }
     },
     {

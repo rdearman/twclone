@@ -17,12 +17,13 @@ int db_insert_commodity_order(
     long long expires_at
 ) {
     sqlite3_stmt *stmt;
+    int rc; // Declare rc here
     const char *sql =
         "INSERT INTO commodity_orders ("
-        "actor_type, actor_id, commodity_id, side, quantity, price, created_at, expires_at) "
+        "actor_type, actor_id, commodity_id, side, quantity, price, ts, expires_at) "
         "VALUES (?, ?, ?, ?, ?, ?, strftime('%s', 'now'), ?);";
 
-    int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
     if (rc != SQLITE_OK) {
         LOGE("db_insert_commodity_order: Failed to prepare statement: %s", sqlite3_errmsg(db));
         return -1;
@@ -88,32 +89,34 @@ int db_update_commodity_order(
     return SQLITE_OK;
 }
 
-// Helper to cancel open commodity orders for a given port and commodity on a specific side.
+// Helper to cancel open commodity orders for a given actor and commodity on a specific side.
 // Returns SQLITE_OK on success.
-int db_cancel_commodity_orders_for_port_and_commodity(
+int db_cancel_commodity_orders_for_actor_and_commodity(
     sqlite3 *db,
-    int port_id,
+    const char *actor_type,
+    int actor_id,
     int commodity_id,
     const char *side
 ) {
     sqlite3_stmt *stmt;
     const char *sql =
         "UPDATE commodity_orders SET status = 'cancelled' "
-        "WHERE actor_type = 'port' AND actor_id = ? AND commodity_id = ? AND side = ? AND status = 'open';";
+        "WHERE actor_type = ? AND actor_id = ? AND commodity_id = ? AND side = ? AND status = 'open';";
 
     int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
     if (rc != SQLITE_OK) {
-        LOGE("db_cancel_commodity_orders_for_port_and_commodity: Failed to prepare statement: %s", sqlite3_errmsg(db));
+        LOGE("db_cancel_commodity_orders_for_actor_and_commodity: Failed to prepare statement: %s", sqlite3_errmsg(db));
         return rc;
     }
 
-    sqlite3_bind_int(stmt, 1, port_id);
-    sqlite3_bind_int(stmt, 2, commodity_id);
-    sqlite3_bind_text(stmt, 3, side, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 1, actor_type, -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 2, actor_id);
+    sqlite3_bind_int(stmt, 3, commodity_id);
+    sqlite3_bind_text(stmt, 4, side, -1, SQLITE_STATIC);
 
     rc = sqlite3_step(stmt);
     if (rc != SQLITE_DONE) {
-        LOGE("db_cancel_commodity_orders_for_port_and_commodity: Failed to execute statement: %s", sqlite3_errmsg(db));
+        LOGE("db_cancel_commodity_orders_for_actor_and_commodity: Failed to execute statement: %s", sqlite3_errmsg(db));
         sqlite3_finalize(stmt);
         return rc;
     }
@@ -122,33 +125,46 @@ int db_cancel_commodity_orders_for_port_and_commodity(
     return SQLITE_OK;
 }
 
-// Helper to get a specific open order for a port.
-// Returns SQLITE_OK if found (populating out_order), SQLITE_NOTFOUND if not found, or error code.
-int db_get_open_order_for_port(
+// Helper to cancel open commodity orders for a given port and commodity on a specific side.
+// Returns SQLITE_OK on success.
+int db_cancel_commodity_orders_for_port_and_commodity(
     sqlite3 *db,
     int port_id,
+    int commodity_id,
+    const char *side
+) {
+    return db_cancel_commodity_orders_for_actor_and_commodity(db, "port", port_id, commodity_id, side);
+}
+
+// Helper to load open commodity orders for a given commodity and side.
+// Returns a dynamically allocated array of commodity_order_t structs.
+int db_get_open_order(
+    sqlite3 *db,
+    const char *actor_type,
+    int actor_id,
     int commodity_id,
     const char *side,
     commodity_order_t *out_order
 ) {
-    if (!out_order) return SQLITE_MISUSE;
+    if (!out_order || !actor_type) return SQLITE_MISUSE;
 
     sqlite3_stmt *stmt;
     const char *sql =
-        "SELECT id, actor_type, actor_id, commodity_id, side, quantity, price, status, created_at, expires_at, filled_quantity "
+        "SELECT id, actor_type, actor_id, commodity_id, side, quantity, price, status, ts, expires_at, filled_quantity "
         "FROM commodity_orders "
-        "WHERE actor_type = 'port' AND actor_id = ? AND commodity_id = ? AND side = ? AND status = 'open' "
+        "WHERE actor_type = ? AND actor_id = ? AND commodity_id = ? AND side = ? AND status = 'open' "
         "LIMIT 1;";
 
     int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
     if (rc != SQLITE_OK) {
-        LOGE("db_get_open_order_for_port: Failed to prepare statement: %s", sqlite3_errmsg(db));
+        LOGE("db_get_open_order: Failed to prepare statement: %s", sqlite3_errmsg(db));
         return rc;
     }
 
-    sqlite3_bind_int(stmt, 1, port_id);
-    sqlite3_bind_int(stmt, 2, commodity_id);
-    sqlite3_bind_text(stmt, 3, side, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 1, actor_type, -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 2, actor_id);
+    sqlite3_bind_int(stmt, 3, commodity_id);
+    sqlite3_bind_text(stmt, 4, side, -1, SQLITE_STATIC);
 
     rc = sqlite3_step(stmt);
     if (rc == SQLITE_ROW) {
@@ -163,7 +179,7 @@ int db_get_open_order_for_port(
         out_order->price = sqlite3_column_int(stmt, 6);
         strncpy(out_order->status, (const char*)sqlite3_column_text(stmt, 7), sizeof(out_order->status) - 1);
         out_order->status[sizeof(out_order->status) - 1] = '\0';
-        out_order->created_at = sqlite3_column_int64(stmt, 8);
+        out_order->ts = sqlite3_column_int64(stmt, 8);
         out_order->expires_at = sqlite3_column_int64(stmt, 9);
         out_order->filled_quantity = sqlite3_column_int(stmt, 10);
         out_order->remaining_quantity = out_order->quantity - out_order->filled_quantity;
@@ -171,11 +187,23 @@ int db_get_open_order_for_port(
     } else if (rc == SQLITE_DONE) {
         rc = SQLITE_NOTFOUND;
     } else {
-        LOGE("db_get_open_order_for_port: Failed to step statement: %s", sqlite3_errmsg(db));
+        LOGE("db_get_open_order: Failed to step statement: %s", sqlite3_errmsg(db));
     }
 
     sqlite3_finalize(stmt);
     return rc;
+}
+
+// Helper to get a specific open order for a port.
+// Returns SQLITE_OK if found (populating out_order), SQLITE_NOTFOUND if not found, or error code.
+int db_get_open_order_for_port(
+    sqlite3 *db,
+    int port_id,
+    int commodity_id,
+    const char *side,
+    commodity_order_t *out_order
+) {
+    return db_get_open_order(db, "port", port_id, commodity_id, side, out_order);
 }
 
 // Helper to load open commodity orders for a given commodity and side.
@@ -195,16 +223,16 @@ commodity_order_t* db_load_open_orders_for_commodity(
     // Adjust sort order based on side
     if (strcmp(side, "buy") == 0) {
         sql = sqlite3_mprintf(
-            "SELECT id, actor_type, actor_id, commodity_id, side, quantity, price, status, created_at, expires_at, filled_quantity "
+            "SELECT id, actor_type, actor_id, commodity_id, side, quantity, price, status, ts, expires_at, filled_quantity "
             "FROM commodity_orders "
             "WHERE commodity_id = ? AND side = ? AND status = 'open' "
-            "ORDER BY price DESC, created_at ASC;");
+            "ORDER BY price DESC, ts ASC;");
     } else if (strcmp(side, "sell") == 0) {
         sql = sqlite3_mprintf(
-            "SELECT id, actor_type, actor_id, commodity_id, side, quantity, price, status, created_at, expires_at, filled_quantity "
+            "SELECT id, actor_type, actor_id, commodity_id, side, quantity, price, status, ts, expires_at, filled_quantity "
             "FROM commodity_orders "
             "WHERE commodity_id = ? AND side = ? AND status = 'open' "
-            "ORDER BY price ASC, created_at ASC;");
+            "ORDER BY price ASC, ts ASC;");
     } else {
         LOGE("db_load_open_orders_for_commodity: Invalid side '%s'", side);
         return NULL;
@@ -257,7 +285,7 @@ commodity_order_t* db_load_open_orders_for_commodity(
         orders[i].price = sqlite3_column_int(stmt, 6);
         strncpy(orders[i].status, (const char*)sqlite3_column_text(stmt, 7), sizeof(orders[i].status) - 1);
         orders[i].status[sizeof(orders[i].status) - 1] = '\0';
-        orders[i].created_at = sqlite3_column_int64(stmt, 8);
+        orders[i].ts = sqlite3_column_int64(stmt, 8);
         orders[i].expires_at = sqlite3_column_int64(stmt, 9);
         orders[i].filled_quantity = sqlite3_column_int(stmt, 10);
         orders[i].remaining_quantity = orders[i].quantity - orders[i].filled_quantity;
@@ -321,21 +349,24 @@ int db_insert_commodity_trade(
     return new_trade_id;
 }
 
-json_t *db_list_port_orders(sqlite3 *db, int port_id) {
+// Helper to list orders for a specific actor (read-only, for diagnostics)
+// Returns a JSON array of order objects (caller owns reference)
+json_t *db_list_actor_orders(sqlite3 *db, const char *actor_type, int actor_id) {
     json_t *orders = json_array();
     sqlite3_stmt *stmt;
     const char *sql = 
-        "SELECT id, side, commodity_id, quantity, filled_quantity, price, status, created_at, expires_at "
+        "SELECT id, side, commodity_id, quantity, filled_quantity, price, status, ts, expires_at "
         "FROM commodity_orders "
-        "WHERE actor_type = 'port' AND actor_id = ? "
-        "ORDER BY status ASC, created_at DESC;";
+        "WHERE actor_type = ? AND actor_id = ? "
+        "ORDER BY status ASC, ts DESC;";
 
     if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
-        LOGE("db_list_port_orders: Prepare failed: %s", sqlite3_errmsg(db));
+        LOGE("db_list_actor_orders: Prepare failed: %s", sqlite3_errmsg(db));
         return orders; // Return empty array on error
     }
 
-    sqlite3_bind_int(stmt, 1, port_id);
+    sqlite3_bind_text(stmt, 1, actor_type, -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 2, actor_id);
 
     while (sqlite3_step(stmt) == SQLITE_ROW) {
         int id = sqlite3_column_int(stmt, 0);
@@ -345,7 +376,7 @@ json_t *db_list_port_orders(sqlite3 *db, int port_id) {
         int filled = sqlite3_column_int(stmt, 4);
         int price = sqlite3_column_int(stmt, 5);
         const char *status = (const char *)sqlite3_column_text(stmt, 6);
-        long long created = sqlite3_column_int64(stmt, 7);
+        long long ts_val = sqlite3_column_int64(stmt, 7);
         long long expires = sqlite3_column_int64(stmt, 8); // Can be NULL, but will be 0
 
         json_t *obj = json_object();
@@ -356,7 +387,7 @@ json_t *db_list_port_orders(sqlite3 *db, int port_id) {
         json_object_set_new(obj, "remaining_quantity", json_integer(qty - filled));
         json_object_set_new(obj, "price", json_integer(price));
         json_object_set_new(obj, "status", json_string(status ? status : ""));
-        json_object_set_new(obj, "created_at", json_integer(created));
+        json_object_set_new(obj, "ts", json_integer(ts_val));
         json_object_set_new(obj, "expires_at", json_integer(expires));
         
         json_array_append_new(orders, obj);
@@ -365,6 +396,13 @@ json_t *db_list_port_orders(sqlite3 *db, int port_id) {
     sqlite3_finalize(stmt);
     return orders;
 }
+
+// Helper to list open orders for a specific port (read-only, for diagnostics)
+// Returns a JSON array of order objects (caller owns reference)
+json_t *db_list_port_orders(sqlite3 *db, int port_id) {
+    return db_list_actor_orders(db, "port", port_id);
+}
+
 
 json_t *db_orders_summary(sqlite3 *db, int filter_commodity_id) {
     json_t *summary = json_object();

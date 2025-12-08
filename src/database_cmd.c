@@ -8464,12 +8464,6 @@ h_is_black_market_port (sqlite3 *db, int port_id)
  * Ports: goods on hand
  * ---------------------------------------------------------------------- */
 int
-
-/* ----------------------------------------------------------------------
- * Ports: goods on hand
- * ---------------------------------------------------------------------- */
-
-
 db_port_get_goods_on_hand (int port_id, const char *commodity_code,
                            int *out_quantity)
 {

@@ -5,6 +5,7 @@ import uuid
 import os
 import argparse
 from typing import Any, Dict, List, Optional
+import traceback
 # --- add near top ---
 from typing import Tuple
 import re
@@ -55,6 +56,7 @@ def resolve_suite(args) -> Optional[str]:
     return args.suite or os.getenv("TW_SUITE")
 
 def load_json(path: str) -> Any:
+    print(f"DEBUG: Loading JSON file: {path}") # ADD THIS LINE
     with open(path, "r", encoding="utf-8") as fh:
         return json.load(fh)
 
@@ -172,38 +174,38 @@ def soft_match(actual: Any, expect: Any, strict: bool = False) -> bool:
 # ----------------------------
 
 def coerce_command_from_test(name: str, test: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Accept either:
-      - test["command"] is a dict -> use as-is
-      - test["command"] is a string -> wrap to {"command": "<string>", "data": test.get("data")}
-      - legacy: test has "type" or "cmd" -> wrap accordingly
-    """
-    frame = {}
-
-    if "command" in test:
-        cmd = test["command"]
-        if isinstance(cmd, dict):
-            return cmd  # The "command" field is the whole frame
-        if isinstance(cmd, str):
-            frame["command"] = cmd
-            if "data" in test:
-                frame["data"] = test["data"] # <-- THE FIX
-            return frame
-
-    # legacy fallback:
-    if "type" in test and isinstance(test["type"], str):
-        frame["command"] = test["type"]
+    # Check if the test dictionary itself IS the command envelope
+    # (i.e., 'command' is a top-level string, and 'data'/'auth' are also top-level)
+    if "command" in test and isinstance(test["command"], str):
+        cmd_envelope = {"command": test["command"]}
         if "data" in test:
-            frame["data"] = test["data"] # <-- THE FIX
-        return frame
+            cmd_envelope["data"] = test["data"]
+        if "auth" in test:
+            cmd_envelope["auth"] = test["auth"]
+        return cmd_envelope
+
+    # Legacy: Check for "type" or "cmd" as top-level keys
+    if "type" in test and isinstance(test["type"], str):
+        cmd_envelope = {"command": test["type"]}
+        if "data" in test:
+            cmd_envelope["data"] = test["data"]
+        if "auth" in test:
+            cmd_envelope["auth"] = test["auth"]
+        return cmd_envelope
         
     if "cmd" in test and isinstance(test["cmd"], str):
-        frame["command"] = test["cmd"]
+        cmd_envelope = {"command": test["cmd"]}
         if "data" in test:
-            frame["data"] = test["data"] # <-- THE FIX
-        return frame
+            cmd_envelope["data"] = test["data"]
+        if "auth" in test:
+            cmd_envelope["auth"] = test["auth"]
+        return cmd_envelope
         
-    raise TypeError(f"Test '{name}': 'command' must be an object with 'command' field, a string, or legacy 'type'/'cmd'.")
+    # If none of the above, it's a malformed test without a recognized command key.
+    # Log a debug message and return an empty dict, which will cause a controlled
+    # failure in the calling run_test function for this specific malformed test.
+    print(f"DEBUG: Malformed test '{name}': Missing 'command', 'type', or 'cmd' key. Test will be marked as failed.")
+    return {}
 
 
 
@@ -292,31 +294,43 @@ def _find_turns_value(obj: Any) -> Optional[Any]:
     return best
 
 
-def _get_by_path_one(obj: Any, path: str) -> Any:
-    if not path:
-        return obj
-    cur = obj
-    for part in path.split("."):
-        if isinstance(cur, dict):
-            cur = cur.get(part)
-        elif isinstance(cur, list) and part.isdigit():
+def _get_value_from_obj_by_part(obj: Any, part: str) -> Any:
+    if isinstance(obj, dict):
+        return obj.get(part)
+    elif isinstance(obj, list):
+        # Handle array filtering: *[key=value]
+        match_filter = re.match(r"\*\[(\w+)=([^\]]+)\]", part)
+        if match_filter:
+            filter_key = match_filter.group(1)
+            filter_value = match_filter.group(2)
+            for item in obj:
+                if isinstance(item, dict) and item.get(filter_key) == filter_value:
+                    return item
+            return None # No matching item found
+        elif part.isdigit():
             idx = int(part)
-            if 0 <= idx < len(cur):
-                cur = cur[idx]
+            if 0 <= idx < len(obj):
+                return obj[idx]
             else:
                 return None
         else:
             return None
-    return cur
+    return None
 
 def _get_by_path(obj: Any, path: str) -> Any:
     if path == "$turns":
         return _find_turns_value(obj)
     # support fallback: "a.b|x.y|z"
     for candidate in path.split("|"):
-        val = _get_by_path_one(obj, candidate.strip())
-        if val is not None:
-            return val
+        current_obj = obj
+        found = True
+        for part in candidate.strip().split("."):
+            current_obj = _get_value_from_obj_by_part(current_obj, part)
+            if current_obj is None: # Explicitly check for None, allowing 0 or "" to pass
+                found = False
+                break
+        if found:
+            return current_obj
     return None
 
 
@@ -355,6 +369,13 @@ def _run_asserts(resp: Dict[str, Any], assertions: List[Dict[str, Any]], vars: D
         path = a.get("path")
         op = a.get("op", "==")
         actual = _get_by_path(resp, path)
+        # New: Handle *array operator
+        if op == "*array":
+            if not isinstance(actual, list):
+                ok_all = False
+                errs.append(f"assert *array failed at {path}: actual={actual!r} is not a list")
+            continue
+
         if op == "delta":
             baseline = _resolve_value(a.get("baseline"), vars)
             want_delta = _resolve_value(a.get("value"), vars)
@@ -387,6 +408,21 @@ def _run_asserts(resp: Dict[str, Any], assertions: List[Dict[str, Any]], vars: D
             elif op == "<":  cond = (actual <  expected)
             elif op == ">=": cond = (actual >= expected)
             elif op == "<=": cond = (actual <= expected)
+            elif op == "glob":
+                if not isinstance(actual, str):
+                    cond = False
+                else:
+                    # Simple glob: 'prefix * suffix'
+                    parts = expected.split('*')
+                    if len(parts) == 2:
+                        prefix, suffix = parts
+                        cond = actual.startswith(prefix) and actual.endswith(suffix)
+                    elif len(parts) == 1:
+                        cond = actual == expected # No wildcard, exact match
+                    else:
+                        cond = False # More complex globs not supported
+                if not cond:
+                    errs.append(f"assert glob failed at {path}: actual={actual!r} expected={expected!r}")
             else:
                 cond = False
                 errs.append(f"unknown op '{op}'")
@@ -584,6 +620,7 @@ def run_test_suite():
         print(f"\nERROR: Could not connect to {HOST}:{PORT}. Ensure the server is running.")
     except Exception as e:
         print(f"\nUnexpected error: {e}")
+        print(traceback.format_exc()) # ADD THIS LINE
 
 # ----------------------------
 # Main

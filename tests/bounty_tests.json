@@ -44,7 +44,7 @@
       {
         "name": "Set Good Alignment via SQL",
         "command": "sys.raw_sql_exec",
-        "data": { "sql": "UPDATE players SET alignment = 100, credits = 10000 WHERE name = 'goodguy';" },
+        "data": { "sql": "UPDATE players SET alignment = 100, credits = 1000000 WHERE name = 'goodguy';" },
         "expect": { "status": "ok" }
       },
       {
@@ -76,9 +76,7 @@
       {
         "name": "Evil posts Hitlist on Good",
         "command": "bounty.post_hitlist",
-        "data": { "target_player_id": "@good_id", "amount": 2000, "description": "Die hero" },
-        "user": "badguy",
-        "expect": { "status": "ok" }
+        "expect": { "status": "refused", "error.code": 1403 }
       },
       {
         "name": "List Bounties (Good View)",

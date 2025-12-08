@@ -859,6 +859,10 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       rc = cmd_sys_econ_orders_summary (ctx, root);
     }
+  else if (streq (cmd, "sys.econ.planet_status")) // NEW
+    {
+      rc = cmd_sys_econ_planet_status (ctx, root);
+    }
 /* ---------- PLAYER ---------- */
   else if (streq (cmd, "player.get_settings"))
     {

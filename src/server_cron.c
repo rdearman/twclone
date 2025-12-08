@@ -1617,9 +1617,123 @@ h_planet_growth (sqlite3 *db, int64_t now_s)
     }
   sqlite3_finalize (stmt);
   // --- END NEW COMMODITY UPDATE ---
+  
+  // Now call the new market tick for planets
+  h_planet_market_tick(db, now_s);
+
   commit (db);
   unlock (db, "planet_growth");
   return 0;
+}
+
+// New function to handle market-related planet ticks (order generation)
+int
+h_planet_market_tick (sqlite3 *db, int64_t now_s)
+{
+  // This function is assumed to be called within a transaction by h_planet_growth
+  sqlite3_stmt *stmt = NULL;
+  const char *sql_select_planets_commodities =
+    "SELECT p.id AS planet_id, "
+    "       pt.maxore, pt.maxorganics, pt.maxequipment, " // Max capacities for common commodities
+    "       pp.commodity_code, "
+    "       c.id AS commodity_id, " // Needed for orders
+    "       es.quantity AS current_quantity, "
+    "       pp.base_prod_rate, pp.base_cons_rate, "
+    "       c.base_price " // Base price for orders
+    "FROM planets p "
+    "JOIN planettypes pt ON p.type = pt.id "
+    "JOIN planet_production pp ON p.type = pp.planet_type_id "
+    "LEFT JOIN entity_stock es ON es.entity_type = 'planet' AND es.entity_id = p.id AND es.commodity_code = pp.commodity_code "
+    "JOIN commodities c ON pp.commodity_code = c.code "
+    "WHERE (pp.base_prod_rate > 0 OR pp.base_cons_rate > 0);";
+
+  int rc = sqlite3_prepare_v2 (db, sql_select_planets_commodities, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_planet_market_tick: Failed to prepare select statement: %s",
+            sqlite3_errmsg (db));
+      return rc; // Error, transaction will be rolled back by caller
+    }
+
+  while (sqlite3_step (stmt) == SQLITE_ROW)
+    {
+      int planet_id = sqlite3_column_int (stmt, 0);
+      int maxore = sqlite3_column_int (stmt, 1);
+      int maxorganics = sqlite3_column_int (stmt, 2);
+      int maxequipment = sqlite3_column_int (stmt, 3);
+      const char *commodity_code = (const char *) sqlite3_column_text (stmt, 4);
+      int commodity_id = sqlite3_column_int (stmt, 5);
+      int current_quantity = sqlite3_column_int (stmt, 6);
+      int base_prod_rate = sqlite3_column_int (stmt, 7);
+      int base_cons_rate = sqlite3_column_int (stmt, 8);
+      int base_price = sqlite3_column_int (stmt, 9);
+      
+      (void) now_s; // Suppress unused variable warning
+      (void) base_prod_rate; // Suppress unused variable warning
+      (void) base_cons_rate; // Suppress unused variable warning
+
+      if (!commodity_code) continue; // Skip if commodity_code is NULL
+
+      int max_capacity = 0;
+      if (strcasecmp(commodity_code, "ORE") == 0) max_capacity = maxore;
+      else if (strcasecmp(commodity_code, "ORG") == 0) max_capacity = maxorganics;
+      else if (strcasecmp(commodity_code, "EQU") == 0) max_capacity = maxequipment;
+      else max_capacity = 999999; // Fallback, should not happen for normal commodities
+
+      // Desired stock is 50% of max capacity for planets, similar to generic ports
+      int desired_stock = max_capacity / 2; 
+      
+      int shortage = 0;
+      int surplus = 0;
+      
+      if (desired_stock > current_quantity) {
+          shortage = desired_stock - current_quantity;
+      } else if (current_quantity > desired_stock) {
+          surplus = current_quantity - desired_stock; // Fixed typo desired_quantity -> desired_stock
+      }
+
+      int order_qty = 0;
+      const char *side = NULL;
+
+      // Use a simple fraction of the shortage/surplus as order quantity
+      // No explicit base_restock_rate for planets yet, so use a fixed fraction (e.g., 0.1)
+      const double planet_order_fraction = 0.1;
+
+      if (shortage > 0) {
+          order_qty = (int)(shortage * planet_order_fraction);
+          side = "buy";
+      } else if (surplus > 0) {
+          order_qty = (int)(surplus * planet_order_fraction);
+          side = "sell";
+      }
+
+      // Ensure minimal order if there is a need
+      if ((shortage > 0 || surplus > 0) && order_qty == 0) {
+          order_qty = 1;
+      }
+
+      if (order_qty > 0 && side != NULL) {
+          // Use base price as the order price for planets for now
+          int price = base_price;
+          
+          commodity_order_t existing_order;
+          int find_rc = db_get_open_order(db, "planet", planet_id, commodity_id, side, &existing_order);
+          
+          if (find_rc == SQLITE_OK) {
+              int new_total = existing_order.filled_quantity + order_qty;
+              db_update_commodity_order(db, existing_order.id, new_total, existing_order.filled_quantity, "open");
+          } else {
+              db_insert_commodity_order(db, "planet", planet_id, commodity_id, side, order_qty, price, 0);
+          }
+      } else {
+          // Cancel existing orders if balance is reached
+          db_cancel_commodity_orders_for_actor_and_commodity(db, "planet", planet_id, commodity_id, "buy");
+          db_cancel_commodity_orders_for_actor_and_commodity(db, "planet", planet_id, commodity_id, "sell");
+      }
+    }
+
+  sqlite3_finalize (stmt);
+  return SQLITE_OK;
 }
 
 
@@ -1978,9 +2092,9 @@ h_daily_market_settlement (sqlite3 *db, int64_t now_s)
                   
                   // 1. Credits
                   int buyer_acct = 0;
-                  h_get_account_id_unlocked(db, "port", buy->actor_id, &buyer_acct);
+                  h_get_account_id_unlocked(db, buy->actor_type, buy->actor_id, &buyer_acct);
                   int seller_acct = 0;
-                  h_get_account_id_unlocked(db, "port", sell->actor_id, &seller_acct);
+                  h_get_account_id_unlocked(db, sell->actor_type, sell->actor_id, &seller_acct);
                   
                   // We need unlocked helpers because we are in a transaction
                   long long new_bal;
@@ -1990,8 +2104,18 @@ h_daily_market_settlement (sqlite3 *db, int64_t now_s)
                   h_add_credits_unlocked(db, seller_acct, total_cost, "TRADE_SELL", "MARKET_SETTLEMENT", &new_bal);
                   
                   // 2. Stock
-                  h_market_move_port_stock(db, sell->actor_id, commodity_code, -trade_qty);
-                  h_market_move_port_stock(db, buy->actor_id, commodity_code, trade_qty);
+                  // Determine which stock movement helper to call based on actor_type
+                  if (strcmp(sell->actor_type, "port") == 0) {
+                      h_market_move_port_stock(db, sell->actor_id, commodity_code, -trade_qty);
+                  } else if (strcmp(sell->actor_type, "planet") == 0) {
+                      h_market_move_planet_stock(db, sell->actor_id, commodity_code, -trade_qty);
+                  }
+                  
+                  if (strcmp(buy->actor_type, "port") == 0) {
+                      h_market_move_port_stock(db, buy->actor_id, commodity_code, trade_qty);
+                  } else if (strcmp(buy->actor_type, "planet") == 0) {
+                      h_market_move_planet_stock(db, buy->actor_id, commodity_code, trade_qty);
+                  }
                   
                   // 3. Record Trade
                   // We don't have bank_tx IDs easily from h_add/deduct helpers (they return RC).

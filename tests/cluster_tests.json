@@ -126,6 +126,29 @@
         "expect": { "status": "ok" }
       },
       {
+        "name": "Ensure Illegal Commodities Exist",
+        "comment": "Define SLV, WPN, DRG in the commodities table",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "INSERT OR IGNORE INTO commodities (id, code, name, illegal, base_price) VALUES (4, 'SLV', 'Slaves', 1, 1000); INSERT OR IGNORE INTO commodities (id, code, name, illegal, base_price) VALUES (5, 'WPN', 'Weapons', 1, 2000); INSERT OR IGNORE INTO commodities (id, code, name, illegal, base_price) VALUES (6, 'DRG', 'Drugs', 1, 5000);" },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Stock Evil Port with Illegal Goods",
+        "comment": "Add initial stock of illegal goods to Evil Port 100 in entity_stock",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "INSERT OR REPLACE INTO entity_stock (entity_type, entity_id, commodity_code, quantity) VALUES ('port', @evil_port_id, 'SLV', 100); INSERT OR REPLACE INTO entity_stock (entity_type, entity_id, commodity_code, quantity) VALUES ('port', @evil_port_id, 'WPN', 100); INSERT OR REPLACE INTO entity_stock (entity_type, entity_id, commodity_code, quantity) VALUES ('port', @evil_port_id, 'DRG', 100);" },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "DEBUG: Verify Evil Port Stock",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "SELECT commodity_code, quantity FROM entity_stock WHERE entity_type = 'port' AND entity_id = @evil_port_id;" },
+        "user": "admin",
+        "expect": { "status": "ok", "data.rows.0.0": "DRG", "data.rows.0.1": 100, "data.rows.1.0": "SLV", "data.rows.1.1": 100, "data.rows.2.0": "WPN", "data.rows.2.1": 100 }
+      },
+      {
         "name": "DEBUG: Dump Clusters Table",
         "command": "sys.raw_sql_exec",
         "data": { "sql": "SELECT * FROM clusters;" },
@@ -170,7 +193,7 @@
       {
         "name": "Grant Goodguy Starting Credits",
         "command": "sys.raw_sql_exec",
-        "data": { "sql": "UPDATE players SET credits = 1000000 WHERE name = 'goodguy';" },
+        "data": { "sql": "UPDATE players SET credits = 100000000 WHERE name = 'goodguy';" },
         "user": "admin",
         "expect": { "status": "ok" }
       },
@@ -198,9 +221,9 @@
         "expect": { "status": "ok" },
         "save": { "evil_port_id": "data.port.id" },
         "asserts": [
-          {"op": "defined", "path": "data.port.slaves_on_hand"},
-          {"op": "defined", "path": "data.port.weapons_on_hand"},
-          {"op": "defined", "path": "data.port.drugs_on_hand"}
+          {"path": "data.port.stock.*[commodity_code=SLV].quantity", "op": ">", "value": 0},
+          {"path": "data.port.stock.*[commodity_code=WPN].quantity", "op": ">", "value": 0},
+          {"path": "data.port.stock.*[commodity_code=DRG].quantity", "op": ">", "value": 0}
         ]
       },
       {
@@ -210,34 +233,42 @@
         "user": "goodguy",
         "expect": { "status": "ok" },
         "asserts": [
-          {"op": "undefined", "path": "data.port.slaves_on_hand"},
-          {"op": "undefined", "path": "data.port.weapons_on_hand"},
-          {"op": "undefined", "path": "data.port.drugs_on_hand"}
+          {"op": "undefined", "path": "data.port.stock.*[commodity_code=SLV]"},
+          {"op": "undefined", "path": "data.port.stock.*[commodity_code=WPN]"},
+          {"op": "undefined", "path": "data.port.stock.*[commodity_code=DRG]"}
         ]
       },
-            {
+      {
+        "name": "DEBUG: Good Player current credits check",
+        "command": "player.my_info",
+        "user": "goodguy",
+        "expect": { "status": "ok" },
+        "save": { "goodguy_credits_before_trade": "data.player.credits" }
+      },
+      {
               "name": "Good Player attempts to buy Drugs (Refused)",
               "command": "trade.buy",
               "data": {
                   "sector_id": 100,
                   "port_id": "@evil_port_id",
                   "items": [{"commodity": "DRG", "quantity": 1}],
+                  "account": 0,
                   "idempotency_key": "good_player_refused_drug_buy"
               },
               "user": "goodguy",
               "expect": { "status": "refused", "error.code": 1406 }
-            },      {
+            },
+            {
         "name": "Evil Player buys Drugs (Success)",
         "command": "trade.buy",
-        "data": { 
+        "data": {
             "sector_id": 100,
             "port_id": "@evil_port_id",
             "items": [{"commodity": "DRG", "quantity": 1}],
-            "idempotency_key": "evil_player_drug_buy_success"
+            "idempotency_key": "evil_player_buys_drugs_success"
         },
-        "user": "badguy",
         "expect": { "status": "ok" }
-      }
+    }
     ]
   }
 }

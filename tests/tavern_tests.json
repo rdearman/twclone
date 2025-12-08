@@ -21,21 +21,25 @@
         "save": { "tavern_player_id": "data.player_id", "tavern_player_sector": "data.current_sector" }
       },
       {
+        "name": "Grant Tavern Player initial petty cash",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "UPDATE players SET credits = 1000000000 WHERE id = @tavern_player_id;" },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Ensure Tavern Exists in Sector 1",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "INSERT OR IGNORE INTO tavern_names (id, name) VALUES (1, 'The Salty Siren'); INSERT OR IGNORE INTO taverns (sector_id, name_id) VALUES (1, 1);" },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
         "name": "Deposit initial funds to Tavern Player bank (100k)",
         "command": "bank.deposit",
         "data": { "amount": 10000000 },
         "user": "taverntest",
         "expect": { "status": "ok" }
-      },
-      {
-        "name": "Travel to a Tavern Sector (sector 1 for now)",
-        "command": "move.warp",
-        "data": { "to_sector_id": 1 },
-        "user": "taverntest",
-        "expect": { "status": "ok", "type": "move.result" },
-        "asserts": [
-          { "path": "to_sector_id", "op": "==", "value": 1 }
-        ]
       }
     ],
     "tavern_lottery_tests": [
@@ -46,8 +50,8 @@
         "user": "taverntest",
         "expect": { "status": "ok", "type": "tavern.lottery.buy_ticket_v1" },
         "asserts": [
-          { "path": "status", "op": "==", "value": "Ticket purchased" },
-          { "path": "ticket_number", "op": "==", "value": 123 }
+          { "path": "data.status", "op": "==", "value": "Ticket purchased" },
+          { "path": "data.ticket_number", "op": "==", "value": 123 }
         ]
       },
       {
@@ -64,9 +68,9 @@
         "user": "taverntest",
         "expect": { "status": "ok", "type": "tavern.lottery.status_v1" },
         "asserts": [
-          { "path": "jackpot", "op": ">", "value": 0 },
-          { "path": "player_tickets", "op": "*array" },
-          { "path": "player_tickets.0.number", "op": "==", "value": 123 }
+          { "path": "data.jackpot", "op": ">", "value": 0 },
+          { "path": "data.player_tickets", "op": "*array" },
+          { "path": "data.player_tickets.0.number", "op": "==", "value": 123 }
         ]
       }
     ],
@@ -74,12 +78,11 @@
       {
         "name": "Dead Pool - Place Bet Success",
         "command": "tavern.deadpool.place_bet",
-        "data": { "target_id": "@player_id", "amount": 500 },
+        "data": { "target_id": "@tavern_player_id", "amount": 500 },
         "user": "taverntest",
-        "save": { "player_id": "tavern_player_id" },
         "expect": { "status": "ok", "type": "tavern.deadpool.place_bet_v1" },
         "asserts": [
-          { "path": "status", "op": "==", "value": "Dead Pool bet placed." },
+          { "path": "data.status", "op": "==", "value": "Dead Pool bet placed." },
           { "path": "target_id", "op": "==", "value": "@player_id" },
           { "path": "amount", "op": "==", "value": 500 }
         ]
@@ -107,10 +110,10 @@
         "user": "taverntest",
         "expect": { "status": "ok", "type": "tavern.dice.play_v1" },
         "asserts": [
-          { "path": "status", "op": "==", "value": "Dice game played." },
-          { "path": "die1", "op": ">", "value": 0 },
-          { "path": "die2", "op": ">", "value": 0 },
-          { "path": "total", "op": ">", "value": 1 }
+          { "path": "data.status", "op": "==", "value": "Dice game played." },
+          { "path": "data.die1", "op": ">", "value": 0 },
+          { "path": "data.die2", "op": ">", "value": 0 },
+          { "path": "data.total", "op": ">", "value": 1 }
         ]
       },
       {
@@ -129,9 +132,9 @@
         "user": "taverntest",
         "expect": { "status": "ok", "type": "tavern.highstakes.play_v1" },
         "asserts": [
-          { "path": "status", "op": "==", "value": "High-stakes game played." },
-          { "path": "initial_bet", "op": "==", "value": 1000 },
-          { "path": "rounds_played", "op": ">", "value": 0 }
+          { "path": "data.status", "op": "==", "value": "High-stakes game played." },
+          { "path": "data.initial_bet", "op": "==", "value": 1000 },
+          { "path": "data.rounds_played", "op": ">", "value": 0 }
         ]
       },
       {
@@ -150,8 +153,8 @@
         "user": "taverntest",
         "expect": { "status": "ok", "type": "tavern.raffle.buy_ticket_v1" },
         "asserts": [
-          { "path": "status", "op": "glob", "value": "You *" },
-          { "path": "current_pot", "op": ">=", "value": 0 }
+          { "path": "data.status", "op": "glob", "value": "You *" },
+          { "path": "data.current_pot", "op": ">=", "value": 0 }
         ]
       },
       {
@@ -180,8 +183,8 @@
         "user": "taverntest",
         "expect": { "status": "ok", "type": "tavern.graffiti.post_v1" },
         "asserts": [
-          { "path": "status", "op": "==", "value": "Graffiti posted successfully." },
-          { "path": "text", "op": "==", "value": "Hello World from TavernTest!" }
+          { "path": "data.status", "op": "==", "value": "Graffiti posted successfully." },
+          { "path": "data.text", "op": "==", "value": "Hello World from TavernTest!" }
         ]
       },
       {
@@ -200,9 +203,9 @@
         "user": "taverntest",
         "expect": { "status": "ok", "type": "tavern.round.buy_v1" },
         "asserts": [
-          { "path": "status", "op": "==", "value": "Round bought successfully!" },
-          { "path": "cost", "op": ">", "value": 0 },
-          { "path": "alignment_gain", "op": ">", "value": 0 }
+          { "path": "data.status", "op": "==", "value": "Round bought successfully!" },
+          { "path": "data.cost", "op": ">", "value": 0 },
+          { "path": "data.alignment_gain", "op": ">", "value": 0 }
         ]
       },
       {
@@ -221,9 +224,9 @@
         "user": "taverntest",
         "expect": { "status": "ok", "type": "tavern.loan.take_v1" },
         "asserts": [
-          { "path": "status", "op": "==", "value": "Loan taken successfully!" },
-          { "path": "amount", "op": "==", "value": 10000 },
-          { "path": "interest_rate_bp", "op": ">", "value": 0 }
+          { "path": "data.status", "op": "==", "value": "Loan taken successfully!" },
+          { "path": "data.amount", "op": "==", "value": 10000 },
+          { "path": "data.interest_rate_bp", "op": ">", "value": 0 }
         ]
       },
       {
@@ -240,9 +243,9 @@
         "user": "taverntest",
         "expect": { "status": "ok", "type": "tavern.loan.pay_v1" },
         "asserts": [
-          { "path": "status", "op": "==", "value": "Loan payment successful." },
-          { "path": "paid_amount", "op": "==", "value": 5000 },
-          { "path": "remaining_principal", "op": ">", "value": 0 }
+          { "path": "data.status", "op": "==", "value": "Loan payment successful." },
+          { "path": "data.paid_amount", "op": "==", "value": 5000 },
+          { "path": "data.remaining_principal", "op": ">", "value": 0 }
         ]
       },
       {
@@ -252,8 +255,8 @@
         "user": "taverntest",
         "expect": { "status": "ok", "type": "tavern.loan.pay_v1" },
         "asserts": [
-          { "path": "status", "op": "==", "value": "Loan fully paid!" },
-          { "path": "remaining_principal", "op": "==", "value": 0 }
+          { "path": "data.status", "op": "==", "value": "Loan fully paid!" },
+          { "path": "data.remaining_principal", "op": "==", "value": 0 }
         ]
       },
       {
@@ -272,8 +275,8 @@
         "user": "taverntest",
         "expect": { "status": "ok", "type": "tavern.rumour.get_hint_v1" },
         "asserts": [
-          { "path": "status", "op": "==", "value": "Rumour acquired." },
-          { "path": "hint", "op": "glob", "value": "I heard *" }
+          { "path": "data.status", "op": "==", "value": "Rumour acquired." },
+          { "path": "data.hint", "op": "glob", "value": "I heard *" }
         ]
       },
       {
@@ -292,9 +295,9 @@
         "user": "taverntest",
         "expect": { "status": "ok", "type": "tavern.barcharts.get_prices_summary_v1" },
         "asserts": [
-          { "path": "status", "op": "==", "value": "Market summary acquired." },
-          { "path": "prices", "op": "*array" },
-          { "path": "prices.0.sector_id", "op": ">", "value": 0 }
+          { "path": "data.status", "op": "==", "value": "Market summary acquired." },
+          { "path": "data.prices", "op": "*array" },
+          { "path": "data.prices.0.sector_id", "op": ">", "value": 0 }
         ]
       },
       {

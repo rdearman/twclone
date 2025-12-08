@@ -28,6 +28,33 @@
       }
     },
     {
+      "name": "Ensure Sector 6 Exists",
+      "cmd": "sys.raw_sql_exec",
+      "data": {
+        "sql": "INSERT OR IGNORE INTO sectors (id, name) VALUES (6, 'Test Sector 6');"
+      },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Ensure Sector 100 Exists",
+      "cmd": "sys.raw_sql_exec",
+      "data": {
+        "sql": "INSERT OR IGNORE INTO sectors (id, name) VALUES (100, 'Test Sector 100');"
+      },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Create Warp Link 6 -> 100",
+      "cmd": "sys.raw_sql_exec",
+      "data": {
+        "sql": "INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (6, 100);"
+      },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Enter sector with no Armids",
       "cmd": "move.warp",
       "data": {

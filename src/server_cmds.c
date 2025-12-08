@@ -997,23 +997,110 @@ cmd_bounty_list (client_ctx_t *ctx, json_t *root)
       json_object_set_new (item, "target_id",
                            json_integer (sqlite3_column_int (st,
                                                              1)));
-      json_object_set_new (item, "target_name",
-                           json_string ((const char *)sqlite3_column_text (st,
-                                                                           2)));
+json_object_set_new (item, "target_name",
+                           json_string (sqlite3_column_text (st, 2)));
       json_object_set_new (item, "reward",
-                           json_integer (sqlite3_column_int64 (st,
-                                                               3)));
+                           json_integer (sqlite3_column_int (st, 3)));
       json_object_set_new (item, "posted_by_type",
-                           json_string ((const char *)sqlite3_column_text (st,
-                                                                           4)));
+                           json_string (sqlite3_column_text (st, 4)));
       json_array_append_new (arr, item);
     }
   sqlite3_finalize (st);
-  json_t *resp = json_object ();
+  json_t *payload = json_object ();
 
 
-  json_object_set_new (resp, "bounties", arr);
-  send_enveloped_ok (ctx->fd, root, "bounty.list.success", resp);
+  json_object_set_new (payload, "bounties", arr);
+  send_enveloped_ok (ctx->fd, root, "bounty.list.success", payload);
+  json_decref (payload);
+  return 0;
+}
+
+
+int
+cmd_sys_econ_planet_status (client_ctx_t *ctx, json_t *root)
+{
+  sqlite3 *db = db_get_handle ();
+  if (ctx->player_id <= 0 || auth_player_get_type (ctx->player_id) != PLAYER_TYPE_SYSOP)
+    {
+      send_enveloped_error (ctx->fd, root, 403, "Forbidden: Must be SysOp");
+      return 0;
+    }
+
+  json_t *data = json_object_get (root, "data");
+  if (!data) {
+      send_enveloped_error (ctx->fd, root, 400, "Missing data object.");
+      return 0;
+  }
+
+  int planet_id = json_integer_value(json_object_get(data, "planet_id"));
+  if (planet_id <= 0) {
+      send_enveloped_error (ctx->fd, root, 400, "Invalid or missing planet_id.");
+      return 0;
+  }
+
+  json_t *response = json_object();
+  
+  // 1. Planet Basic Info
+  sqlite3_stmt *st_planet = NULL;
+  const char *sql_planet = "SELECT id, name, type, owner_id, owner_type FROM planets WHERE id = ?;";
+  if (sqlite3_prepare_v2(db, sql_planet, -1, &st_planet, NULL) == SQLITE_OK) {
+      sqlite3_bind_int(st_planet, 1, planet_id);
+      if (sqlite3_step(st_planet) == SQLITE_ROW) {
+          json_object_set_new(response, "id", json_integer(sqlite3_column_int(st_planet, 0)));
+          json_object_set_new(response, "name", json_string((const char*)sqlite3_column_text(st_planet, 1)));
+          json_object_set_new(response, "type", json_integer(sqlite3_column_int(st_planet, 2)));
+          json_object_set_new(response, "owner_id", json_integer(sqlite3_column_int(st_planet, 3)));
+          json_object_set_new(response, "owner_type", json_string((const char*)sqlite3_column_text(st_planet, 4)));
+      } else {
+        send_enveloped_error (ctx->fd, root, 404, "Planet not found.");
+        sqlite3_finalize(st_planet);
+        json_decref(response);
+        return 0;
+      }
+      sqlite3_finalize(st_planet);
+  } else {
+      send_enveloped_error (ctx->fd, root, 500, "DB error fetching planet info.");
+      json_decref(response);
+      return 0;
+  }
+
+  // 2. Current Stock
+  json_t *stock_arr = json_array();
+  sqlite3_stmt *st_stock = NULL;
+  const char *sql_stock = 
+      "SELECT es.commodity_code, c.id, es.quantity "
+      "FROM entity_stock es "
+      "JOIN commodities c ON es.commodity_code = c.code "
+      "WHERE es.entity_type = 'planet' AND es.entity_id = ?;";
+  
+  if (sqlite3_prepare_v2(db, sql_stock, -1, &st_stock, NULL) == SQLITE_OK) {
+      sqlite3_bind_int(st_stock, 1, planet_id);
+      while (sqlite3_step(st_stock) == SQLITE_ROW) {
+          json_t *item = json_object();
+          int cid = sqlite3_column_int(st_stock, 1);
+          int qty = sqlite3_column_int(st_stock, 2);
+          
+          json_object_set_new(item, "commodity_id", json_integer(cid));
+          json_object_set_new(item, "quantity", json_integer(qty));
+          json_array_append_new(stock_arr, item);
+      }
+      sqlite3_finalize(st_stock);
+  } else {
+      LOGE("cmd_sys_econ_planet_status: DB error fetching stock: %s", sqlite3_errmsg(db));
+  }
+  json_object_set_new(response, "stock", stock_arr);
+
+  // 3. Open Orders
+  json_t *orders = db_list_actor_orders(db, "planet", planet_id);
+  json_object_set_new(response, "orders", orders);
+
+  // 4. Bank Balance
+  long long balance = 0;
+  db_get_planet_bank_balance(planet_id, &balance); // Assuming this helper exists
+  json_object_set_new(response, "bank_balance", json_integer(balance));
+
+  send_enveloped_ok (ctx->fd, root, "sys.econ.planet_status", response);
+  json_decref(response);
   return 0;
 }
 

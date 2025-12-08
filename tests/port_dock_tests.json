@@ -18,7 +18,12 @@
       "data": {
         "username": "dock_tester",
         "passwd": "password123"
-      }
+      },
+      "expect": {
+        "status": "ok",
+        "type": "auth.session"
+      },
+      "save": { "dock_tester_id": "data.player_id" }
     },
     {
       "name": "Ensure Player at Port",
@@ -32,12 +37,13 @@
     },
     {
       "name": "Test: Successful Docking",
-      "cmd": "dock.status",
-      "data": { "action": "dock" },
+      "cmd": "port.dock",
       "expect": {
         "status": "ok",
+        "type": "player.dock.v1",
         "data": {
-            "docked": true,
+            "player_id": "@dock_tester_id",
+            "sector_id": 1,
             "port_id": 1
         }
       }

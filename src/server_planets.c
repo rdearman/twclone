@@ -769,3 +769,107 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
   return 0;                     // Success
 }
 
+/**
+ * @brief Adjusts a planet's stock for market settlement purposes.
+ *
+ * Explicitly enforces that the resulting quantity stays within [0, max_capacity].
+ *
+ * @param db Database handle.
+ * @param planet_id The ID of the planet.
+ * @param commodity_code The canonical code of the commodity.
+ * @param quantity_delta The amount to add (positive) or subtract (negative).
+ * @return SQLITE_OK on success, or an SQLite error code.
+ */
+int
+h_market_move_planet_stock (sqlite3 *db,
+                            int planet_id,
+                            const char *commodity_code,
+                            int quantity_delta)
+{
+  if (!db || planet_id <= 0 || !commodity_code)
+    {
+      return SQLITE_MISUSE;
+    }
+  
+  if (quantity_delta == 0) {
+      return SQLITE_OK;
+  }
+
+  // 1. Get current quantity and capacity
+  sqlite3_stmt *stmt = NULL;
+  
+  // We need to join planettypes to get max capacity for the specific commodity.
+  // Assuming commodity_code is 'ORE', 'ORG', or 'EQU'.
+  // We need to select the correct column based on code.
+  // Since we can't dynamic SQL binding for column name easily in this constrained env,
+  // we fetch all maxes and pick one in C.
+  
+  const char *sql_info = 
+      "SELECT es.quantity, pt.maxore, pt.maxorganics, pt.maxequipment "
+      "FROM planets p "
+      "JOIN planettypes pt ON p.type = pt.id "
+      "LEFT JOIN entity_stock es ON p.id = es.entity_id AND es.entity_type = 'planet' AND es.commodity_code = ?2 "
+      "WHERE p.id = ?1;";
+  
+  int rc = sqlite3_prepare_v2(db, sql_info, -1, &stmt, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("h_market_move_planet_stock: prepare info failed: %s", sqlite3_errmsg(db));
+      return rc;
+  }
+  
+  sqlite3_bind_int(stmt, 1, planet_id);
+  sqlite3_bind_text(stmt, 2, commodity_code, -1, SQLITE_STATIC);
+  
+  int current_quantity = 0;
+  int max_capacity = 0;
+  
+  if (sqlite3_step(stmt) == SQLITE_ROW) {
+      current_quantity = sqlite3_column_int(stmt, 0); // NULL becomes 0
+      int maxore = sqlite3_column_int(stmt, 1);
+      int maxorg = sqlite3_column_int(stmt, 2);
+      int maxequ = sqlite3_column_int(stmt, 3);
+      
+      if (strcasecmp(commodity_code, "ORE") == 0) max_capacity = maxore;
+      else if (strcasecmp(commodity_code, "ORG") == 0) max_capacity = maxorg;
+      else if (strcasecmp(commodity_code, "EQU") == 0) max_capacity = maxequ;
+      else max_capacity = 999999; // Fallback
+      
+  } else {
+      LOGE("h_market_move_planet_stock: Planet %d not found.", planet_id);
+      sqlite3_finalize(stmt);
+      return SQLITE_NOTFOUND;
+  }
+  sqlite3_finalize(stmt);
+
+  // 2. Calculate new quantity with bounds checking
+  int new_quantity = current_quantity + quantity_delta;
+  new_quantity = (new_quantity < 0) ? 0 : new_quantity;
+  new_quantity = (new_quantity > max_capacity) ? max_capacity : new_quantity;
+
+  // 3. Update DB
+  const char *sql_upsert =
+    "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) "
+    "VALUES ('planet', ?1, ?2, ?3, 0, strftime('%s','now')) "
+    "ON CONFLICT(entity_type, entity_id, commodity_code) DO UPDATE SET quantity = ?3, last_updated_ts = strftime('%s','now');";
+
+  rc = sqlite3_prepare_v2(db, sql_upsert, -1, &stmt, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("h_market_move_planet_stock: prepare upsert failed: %s", sqlite3_errmsg(db));
+      return rc;
+  }
+  
+  sqlite3_bind_int(stmt, 1, planet_id);
+  sqlite3_bind_text(stmt, 2, commodity_code, -1, SQLITE_STATIC);
+  sqlite3_bind_int(stmt, 3, new_quantity);
+  
+  rc = sqlite3_step(stmt);
+  if (rc != SQLITE_DONE) {
+       LOGE("h_market_move_planet_stock: upsert failed: %s", sqlite3_errmsg(db));
+       sqlite3_finalize(stmt);
+       return SQLITE_ERROR;
+  }
+  
+  sqlite3_finalize(stmt);
+  return SQLITE_OK;
+}
+

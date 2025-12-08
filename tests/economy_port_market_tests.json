@@ -1,0 +1,107 @@
+[
+  {
+    "name": "Register Admin for Port Tests",
+    "command": "auth.register",
+    "data": {
+      "username": "port_admin",
+      "passwd": "password"
+    },
+    "assert": {
+      "success": true
+    },
+    "save_vars": {
+      "admin_id": "id",
+      "admin_session": "session"
+    }
+  },
+  {
+    "name": "Login Admin for Port Tests",
+    "command": "auth.login",
+    "data": {
+      "username": "port_admin",
+      "passwd": "password"
+    },
+    "assert": {
+      "success": true
+    },
+    "save_vars": {
+      "admin_session": "session"
+    }
+  },
+  {
+    "name": "Set Admin to SysOp",
+    "command": "sys.raw_sql_exec",
+    "data": {
+      "sql": "UPDATE players SET type = 3 WHERE name = 'port_admin';"
+    },
+    "auth": {
+      "session": "@admin_session"
+    },
+    "assert": {
+      "success": true
+    }
+  },
+  {
+    "name": "Setup: Initialize Port 1",
+    "command": "sys.raw_sql_exec",
+    "data": {
+      "sql": "DELETE FROM commodity_orders; DELETE FROM commodity_trades; DELETE FROM entity_stock WHERE entity_type='port' AND entity_id=1; UPDATE ports SET size=100, type=1 WHERE id=1; UPDATE bank_accounts SET balance=1000000 WHERE owner_type='port' AND owner_id=1; INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity) VALUES ('port', 1, 'ORE', 10000); INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity) VALUES ('port', 1, 'ORG', 90000);"
+    },
+    "auth": {
+      "session": "@admin_session"
+    },
+    "assert": {
+      "success": true
+    }
+  },
+  {
+    "name": "Trigger Port Economy Tick (Accelerate Cron)",
+    "command": "sys.raw_sql_exec",
+    "data": {
+      "sql": "UPDATE cron_tasks SET schedule = 'every:5s' WHERE name = 'port_economy';"
+    },
+    "auth": {
+      "session": "@admin_session"
+    },
+    "assert": {
+      "success": true
+    }
+  },
+  {
+    "name": "Wait for Cron",
+    "command": "wait",
+    "data": {
+      "duration": 6
+    }
+  },
+  {
+    "name": "Verify: Port 1 has BUY order for ORE (Shortage)",
+    "command": "sys.econ.port_status",
+    "data": {
+      "port_id": 1
+    },
+    "auth": {
+      "session": "@admin_session"
+    },
+    "assert": {
+      "success": true,
+      "data.stock.0.commodity_code": "ORE",
+      "data.stock.0.quantity": 10000,
+      "data.orders.#": 1,
+      "data.orders.0.commodity_id": 1,
+      "data.orders.0.side": "buy"
+    }
+  },
+  {
+    "name": "Test: sys.econ.orders_summary",
+    "command": "sys.econ.orders_summary",
+    "data": {},
+    "auth": {
+      "session": "@admin_session"
+    },
+    "assert": {
+      "success": true,
+      "data.1.count_buy": 1
+    }
+  }
+]

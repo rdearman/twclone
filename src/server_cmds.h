@@ -83,5 +83,6 @@ int cmd_sys_cluster_init (client_ctx_t *ctx, json_t *root);
 int cmd_sys_cluster_seed_illegal_goods (client_ctx_t *ctx, json_t *root);
 int cmd_sys_econ_port_status (client_ctx_t *ctx, json_t *root);
 int cmd_sys_econ_orders_summary (client_ctx_t *ctx, json_t *root);
+int cmd_sys_econ_planet_status (client_ctx_t *ctx, json_t *root);
 
 #endif

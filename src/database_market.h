@@ -14,7 +14,7 @@ typedef struct {
     int quantity;
     int price;
     char status[16];     // "open", "filled", "cancelled", "expired"
-    long long created_at;
+    long long ts;
     long long expires_at;
     int filled_quantity;
     int remaining_quantity; // Derived: quantity - filled_quantity
@@ -52,6 +52,16 @@ int db_cancel_commodity_orders_for_port_and_commodity(
     const char *side
 );
 
+// Helper to cancel open commodity orders for a given actor and commodity on a specific side.
+// Returns SQLITE_OK on success.
+int db_cancel_commodity_orders_for_actor_and_commodity(
+    sqlite3 *db,
+    const char *actor_type,
+    int actor_id,
+    int commodity_id,
+    const char *side
+);
+
 // Helper to load open commodity orders for a given commodity and side.
 // Returns a dynamically allocated array of commodity_order_t structs.
 // The caller is responsible for freeing the returned array.
@@ -68,6 +78,17 @@ commodity_order_t* db_load_open_orders_for_commodity(
 int db_get_open_order_for_port(
     sqlite3 *db,
     int port_id,
+    int commodity_id,
+    const char *side,
+    commodity_order_t *out_order
+);
+
+// Helper to get a specific open order for any actor type.
+// Returns SQLITE_OK if found (populating out_order), SQLITE_NOTFOUND if not found, or error code.
+int db_get_open_order(
+    sqlite3 *db,
+    const char *actor_type,
+    int actor_id,
     int commodity_id,
     const char *side,
     commodity_order_t *out_order
@@ -92,6 +113,10 @@ int db_insert_commodity_trade(
 // Helper to list open orders for a specific port (read-only, for diagnostics)
 // Returns a JSON array of order objects (caller owns reference)
 json_t *db_list_port_orders(sqlite3 *db, int port_id);
+
+// Helper to list orders for a specific actor (read-only, for diagnostics)
+// Returns a JSON array of order objects (caller owns reference)
+json_t *db_list_actor_orders(sqlite3 *db, const char *actor_type, int actor_id);
 
 // Helper to summarize orders by commodity (read-only, for diagnostics)
 // Returns a JSON object (caller owns reference)

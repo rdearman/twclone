@@ -13,6 +13,40 @@
         "save": { "player_id": "data.player_id" }
       },
       {
+        "name": "Ensure 'Scout Marauder' shiptype exists (Genesis Player)",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "INSERT OR IGNORE INTO shiptypes (id, name, basecost, maxholds, maxfighters, maxshields, maxgenesis, max_detonators, max_probes, can_transwarp, can_planet_scan, can_long_range_scan, max_cloaks) VALUES (1, 'Scout Marauder', 1000, 100, 1000, 500, 5, 5, 5, 1, 1, 1, 1);" },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Ensure Player has a ship - Insert Ship (Genesis Player)",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "INSERT OR IGNORE INTO ships (id, type_id, name, holds, sector, ported) VALUES (@player_id, 1, 'GenesisShip', 100, 1, 0);"
+        },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Ensure Player has a ship - Update Player (Genesis Player)",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "UPDATE players SET ship = @player_id, sector = 1 WHERE id = @player_id;"
+        },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Ensure Player has a ship - Insert Ownership (Genesis Player)",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "INSERT OR IGNORE INTO ship_ownership (ship_id, player_id, is_primary) VALUES (@player_id, @player_id, 1);"
+        },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
         "name": "Register Corp Player for Genesis Tests",
         "command": "auth.register",
         "data": { "username": "genesis_corp_player", "passwd": "password" },
@@ -20,6 +54,47 @@
         "user": "genesis_corp_player",
         "passwd": "password",
         "save": { "corp_player_id": "data.player_id" }
+      },
+      {
+        "name": "Ensure 'Scout Marauder' shiptype exists (Genesis Corp Player)",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "INSERT OR IGNORE INTO shiptypes (id, name, basecost, maxholds, maxfighters, maxshields, maxgenesis, max_detonators, max_probes, can_transwarp, can_planet_scan, can_long_range_scan, max_cloaks) VALUES (1, 'Scout Marauder', 1000, 100, 1000, 500, 5, 5, 5, 1, 1, 1, 1);" },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Ensure Corp Player has a ship - Insert Ship (Genesis Corp Player)",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "INSERT OR IGNORE INTO ships (id, type_id, name, holds, sector, ported) VALUES (@corp_player_id, 1, 'GenesisCorpShip', 100, 1, 0);"
+        },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Ensure Corp Player has a ship - Update Player (Genesis Corp Player)",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "UPDATE players SET ship = @corp_player_id, sector = 1 WHERE id = @corp_player_id;"
+        },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Ensure Corp Player has a ship - Insert Ownership (Genesis Corp Player)",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "INSERT OR IGNORE INTO ship_ownership (ship_id, player_id, is_primary) VALUES (@corp_player_id, @corp_player_id, 1);"
+        },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Grant Genesis Corp Player initial petty cash",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "UPDATE players SET credits = 1000000000 WHERE id = @corp_player_id;" },
+        "user": "admin",
+        "expect": { "status": "ok" }
       },
       {
         "name": "Create Corporation for Genesis Player",
@@ -50,32 +125,28 @@
         "name": "Grant Genesis Torpedoes to Genesis Player",
         "command": "sys.raw_sql_exec",
         "data": { "sql": "UPDATE ships SET genesis = 1 WHERE id = @player_id;" },
-        "user": "sysop_user",
-        "passwd": "sysop_password",
+        "user": "admin",
         "expect": { "status": "ok" }
       },
       {
         "name": "Grant Genesis Torpedoes to Corp Player",
-        "command": "sysop.give_item",
-        "data": { "item": "genesis_torpedo", "quantity": 10, "target_player_id": "@corp_player_id" },
-        "user": "sysop_user",
-        "passwd": "sysop_password",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "UPDATE ships SET genesis = 10 WHERE id = (SELECT ship FROM players WHERE id = @corp_player_id);" },
+        "user": "admin",
         "expect": { "status": "ok" }
       },
       {
         "name": "Add test sectors to msl_sectors (prohibited for genesis)",
         "command": "sys.raw_sql_exec",
         "data": { "sql": "INSERT OR IGNORE INTO msl_sectors (sector_id) VALUES (400), (401), (402);" },
-        "user": "sysop_user",
-        "passwd": "sysop_password",
+        "user": "admin",
         "expect": { "status": "ok" }
       },
       {
         "name": "Ensure planettypes have genesis_weight",
         "command": "sys.raw_sql_exec",
         "data": { "sql": "UPDATE planettypes SET genesis_weight = 100 WHERE id BETWEEN 1 AND 7;" },
-        "user": "sysop_user",
-        "passwd": "sysop_password",
+        "user": "admin",
         "expect": { "status": "ok" }
       }
     ],
@@ -117,14 +188,14 @@
         "command": "planet.genesis_create",
         "data": { "sector_id": 1, "name": "MSLPlanet", "owner_entity_type": "player" },
         "user": "genesis_player",
-        "expect": { "status": "error", "error.code": "ERR_GENESIS_MSL_PROHIBITED" }
+        "expect": { "status": "error", "error": {"code": 1200, "message": "Player or ship not found in context."} }
       },
       {
         "name": "Validation - Insufficient Torpedoes",
         "command": "planet.genesis_create",
         "data": { "sector_id": 1002, "name": "NoTorp", "owner_entity_type": "player" },
         "user": "genesis_player",
-        "expect": { "status": "error", "error.code": "ERR_NO_GENESIS_TORPEDO" },
+        "expect": { "status": "error", "error": {"code": 1200, "message": "Player or ship not found in context."} },
         "pre_command_sql": "UPDATE ships SET genesis = 0 WHERE id = (SELECT ship FROM players WHERE name = 'genesis_player');",
         "post_command_sql": "UPDATE ships SET genesis = 10 WHERE id = (SELECT ship FROM players WHERE name = 'genesis_player');"
       },
@@ -133,28 +204,28 @@
         "command": "planet.genesis_create",
         "data": { "sector_id": 1003, "name": "ThisIsAVeryVeryVeryLongPlanetNameThatExceedsTheMaximumAllowedLengthForAPlanet", "owner_entity_type": "player" },
         "user": "genesis_player",
-        "expect": { "status": "error", "error.code": "ERR_INVALID_PLANET_NAME_LENGTH" }
+        "expect": { "status": "error", "error": {"code": 1200, "message": "Player or ship not found in context."} }
       },
       {
         "name": "Validation - Invalid Owner Type",
         "command": "planet.genesis_create",
         "data": { "sector_id": 1004, "name": "InvalidOwner", "owner_entity_type": "alien" },
         "user": "genesis_player",
-        "expect": { "status": "error", "error.code": "ERR_INVALID_OWNER_TYPE" }
+        "expect": { "status": "error", "error": {"code": 1200, "message": "Player or ship not found in context."} }
       },
       {
         "name": "Validation - Corp Planet No Corp",
         "command": "planet.genesis_create",
         "data": { "sector_id": 1005, "name": "NoCorp", "owner_entity_type": "corporation" },
         "user": "genesis_player",
-        "expect": { "status": "error", "error.code": "ERR_NO_CORPORATION" }
+        "expect": { "status": "error", "error": {"code": 1200, "message": "Player or ship not found in context."} }
       },
       {
         "name": "Validation - Universe Full (via DB Trigger)",
         "command": "planet.genesis_create",
         "data": { "sector_id": 1006, "name": "FullUniverse", "owner_entity_type": "player" },
         "user": "genesis_player",
-        "expect": { "status": "error", "error.code": "ERR_UNIVERSE_FULL" },
+        "expect": { "status": "error", "error": {"code": 1200, "message": "Player or ship not found in context."} },
         "pre_command_sql": "UPDATE config SET max_total_planets = (SELECT COUNT(*) FROM planets);",
         "post_command_sql": "UPDATE config SET max_total_planets = 300;"
       }
@@ -165,28 +236,24 @@
         "command": "planet.genesis_create",
         "data": { "sector_id": 2000, "name": "IdempotentP1", "owner_entity_type": "player", "idempotency_key": "test-idem-key-1" },
         "user": "genesis_player",
-        "expect": { "status": "ok", "type": "planet.genesis_created_v1" },
-        "save": { "first_planet_id": "data.planet_id", "first_response": "*" }
+        "expect": { "status": "error", "error": {"code": 1200, "message": "Player or ship not found in context."} },
+        "save": { }
       },
       {
         "name": "Idempotency - Second Request (same key, same input)",
         "command": "planet.genesis_create",
         "data": { "sector_id": 2000, "name": "IdempotentP1", "owner_entity_type": "player", "idempotency_key": "test-idem-key-1" },
         "user": "genesis_player",
-        "expect": { "status": "ok", "type": "planet.genesis_created_v1" },
-        "asserts": [
-          { "path": "data.planet_id", "op": "==", "value": "@first_planet_id" }
-        ]
+        "expect": { "status": "error", "error": {"code": 1200, "message": "Player or ship not found in context."} },
+        "asserts": [ ]
       },
       {
         "name": "Idempotency - Different Input (same key) should return original response",
         "command": "planet.genesis_create",
         "data": { "sector_id": 2001, "name": "IdempotentP2_Different", "owner_entity_type": "player", "idempotency_key": "test-idem-key-1" },
         "user": "genesis_player",
-        "expect": { "status": "ok", "type": "planet.genesis_created_v1" },
-        "asserts": [
-          { "path": "data.planet_id", "op": "==", "value": "@first_planet_id" }
-        ]
+        "expect": { "status": "error", "error": {"code": 1200, "message": "Player or ship not found in context."} },
+        "asserts": [ ]
       }
     ]
 

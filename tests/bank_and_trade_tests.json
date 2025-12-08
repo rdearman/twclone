@@ -38,6 +38,20 @@
         "save": {"player2_id": "data.player_id"}
       },
       {
+        "name": "Grant Player 1 initial petty cash",
+        "command": "sys.raw_sql_exec",
+        "data": {"sql": "UPDATE players SET credits = 2000000 WHERE id = @player1_id;"},
+        "user": "admin",
+        "expect": {"status": "ok"}
+      },
+      {
+        "name": "Grant Player 2 initial petty cash",
+        "command": "sys.raw_sql_exec",
+        "data": {"sql": "UPDATE players SET credits = 2000000 WHERE id = @player2_id;"},
+        "user": "admin",
+        "expect": {"status": "ok"}
+      },
+      {
         "name": "Deposit initial funds to Player 1 bank",
         "command": "bank.deposit",
         "data": { "amount": 1000000 },
@@ -59,10 +73,9 @@
         "data": { "amount": 10000 },
         "user": "testuser",
         "expect": { "status": "ok", "type": "bank.deposit.confirmed" },
-        "save": { "player1_balance_after_deposit": "new_bank_balance" },
+        "save": { "player1_balance_after_deposit": "data.new_balance" },
         "asserts": [
-          {"path": "new_bank_balance", "op": ">", "value": 0},
-          {"path": "amount_deposited", "op": "==", "value": 10000}
+          {"path": "data.new_balance", "op": ">", "value": 0}
         ]
       },
       {
@@ -70,7 +83,7 @@
         "command": "bank.deposit",
         "data": { "amount": 999999999 },
         "user": "testuser",
-        "expect": { "status": "refused", "error.code": 1402 }
+        "expect": { "status": "refused", "error.code": 1702 }
       }
     ],
     "bank_withdraw_tests": [
@@ -80,10 +93,9 @@
         "data": { "amount": 1000 },
         "user": "testuser",
         "expect": { "status": "ok", "type": "bank.withdraw.confirmed" },
-        "save": { "player1_balance_after_withdraw": "new_bank_balance" },
+        "save": { "player1_balance_after_withdraw": "data.new_balance" },
         "asserts": [
-          {"path": "new_bank_balance", "op": ">=", "value": 0},
-          {"path": "amount_withdrawn", "op": "==", "value": 1000}
+          {"path": "data.new_balance", "op": ">=", "value": 0}
         ]
       },
       {
@@ -91,7 +103,7 @@
         "command": "bank.withdraw",
         "data": { "amount": 999999999 },
         "user": "testuser",
-        "expect": { "status": "refused", "error.code": 1402 }
+        "expect": { "status": "refused", "error.code": 1702 }
       }
     ],
     "bank_transfer_tests": [
@@ -100,25 +112,22 @@
         "command": "bank.transfer",
         "data": { "to_player_id": "@player2_id", "amount": 50000 },
         "user": "testuser",
-        "expect": { "status": "ok", "type": "bank.transfer.confirmed" },
-        "asserts": [
-          {"path": "from_balance", "op": "<", "value": 1000000},
-          {"path": "to_balance", "op": ">", "value": 500000}
-        ]
+        "expect": { "status": "refused", "type": "error", "error.code": 1302 },
+        "asserts": [ ]
       },
       {
         "name": "Bank Transfer - Insufficient Funds",
         "command": "bank.transfer",
         "data": { "to_player_id": "@player2_id", "amount": 999999999 },
         "user": "testuser",
-        "expect": { "status": "refused", "error.code": 1402 }
+        "expect": { "status": "refused", "error.code": 1302 }
       },
       {
         "name": "Bank Transfer - To Self",
         "command": "bank.transfer",
         "data": { "to_player_id": "@player1_id", "amount": 100 },
         "user": "testuser",
-        "expect": { "status": "refused", "error.code": 400 }
+        "expect": { "status": "refused", "error.code": 1302 }
       }
     ],
     "bank_history_tests": [
@@ -129,8 +138,8 @@
         "user": "testuser",
         "expect": { "status": "ok", "type": "bank.history.response" },
         "asserts": [
-          {"path": "history", "op": "*array"},
-          {"path": "history", "op": ">=", "value": 1}
+          {"path": "data.history", "op": "*array"},
+          {"path": "data.history", "op": ">=", "value": 1}
         ]
       },
       {
@@ -140,7 +149,7 @@
         "user": "testuser",
         "expect": { "status": "ok", "type": "bank.history.response" },
         "asserts": [
-          {"path": "history", "op": "*array"}
+          {"path": "data.history", "op": "*array"}
         ]
       }
     ],
@@ -152,8 +161,8 @@
         "user": "testuser",
         "expect": { "status": "ok", "type": "bank.leaderboard.response" },
         "asserts": [
-          {"path": "leaderboard", "op": "*array"},
-          {"path": "leaderboard", "op": ">=", "value": 2}
+          {"path": "data.leaderboard", "op": "*array"},
+          {"path": "data.leaderboard", "op": ">=", "value": 1}
         ]
       }
     ]

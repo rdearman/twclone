@@ -270,4 +270,8 @@ int db_alignment_band_for_value (
   int *out_can_buy_iss,
   int *out_can_rob_ports
   );
+
+// Helper to ensure all planets have a bank account.
+int db_ensure_planet_bank_accounts(sqlite3 *db);
+
 #endif /* DATABASE_CMD_H */

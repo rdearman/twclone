@@ -19,7 +19,7 @@
         "comment": "Create player at Stardock",
         "command": "sys.raw_sql_exec",
         "data": {
-          "sql": "INSERT OR IGNORE INTO players (id, name, passwd, sector, ship, credits) VALUES (90001, 'test_player_stardock', 'test', (SELECT sector_id FROM stardock_location LIMIT 1), (SELECT id FROM ships LIMIT 1), 1000000);"
+          "sql": "INSERT OR IGNORE INTO players (id, name, passwd, sector, ship, credits) VALUES (90001, 'test_player_stardock', 'password', (SELECT sector_id FROM stardock_location LIMIT 1), (SELECT id FROM ships LIMIT 1), 1000000);"
         },
         "user": "admin",
         "expect": {"status": "ok"}
@@ -64,7 +64,7 @@
         "comment": "Create a player at Class-0 port",
         "command": "sys.raw_sql_exec",
         "data": {
-          "sql": "INSERT OR IGNORE INTO players (id, name, passwd, sector, ship, credits) VALUES (90002, 'test_player_class0', 'test', 1, (SELECT id FROM ships LIMIT 1 OFFSET 1), 50000);"
+          "sql": "INSERT OR IGNORE INTO players (id, name, passwd, sector, ship, credits) VALUES (90002, 'test_player_class0', 'password', 1, (SELECT id FROM ships LIMIT 1 OFFSET 1), 50000);"
         },
         "user": "admin",
         "expect": {"status": "ok"}
@@ -91,7 +91,7 @@
         "comment": "Create a player at regular port",
         "command": "sys.raw_sql_exec",
         "data": {
-          "sql": "INSERT OR IGNORE INTO players (id, name, passwd, sector, ship, credits) VALUES (90003, 'test_player_regular_port', 'test', 2, (SELECT id FROM ships LIMIT 1 OFFSET 2), 50000);"
+          "sql": "INSERT OR IGNORE INTO players (id, name, passwd, sector, ship, credits) VALUES (90003, 'test_player_regular_port', 'password', 2, (SELECT id FROM ships LIMIT 1 OFFSET 2), 50000);"
         },
         "user": "admin",
         "expect": {"status": "ok"}
@@ -106,23 +106,44 @@
         "expect": {"status": "ok"}
       },
       {
+        "name": "Update test_player_stardock password",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "UPDATE players SET passwd = 'password' WHERE id = 90001;" },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Update test_player_class0 password",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "UPDATE players SET passwd = 'password' WHERE id = 90002;" },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Update test_player_regular_port password",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "UPDATE players SET passwd = 'password' WHERE id = 90003;" },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
         "name": "Login Stardock Player",
         "command": "auth.login",
-        "data": { "username": "test_player_stardock", "passwd": "test" },
+        "data": { "username": "test_player_stardock", "passwd": "password" },
         "expect": { "status": "ok" },
         "user": "test_player_stardock"
       },
       {
         "name": "Login Class0 Player",
         "command": "auth.login",
-        "data": { "username": "test_player_class0", "passwd": "test" },
+        "data": { "username": "test_player_class0", "passwd": "password" },
         "expect": { "status": "ok" },
         "user": "test_player_class0"
       },
       {
         "name": "Login Regular Port Player",
         "command": "auth.login",
-        "data": { "username": "test_player_regular_port", "passwd": "test" },
+        "data": { "username": "test_player_regular_port", "passwd": "password" },
         "expect": { "status": "ok" },
         "user": "test_player_regular_port"
       }
