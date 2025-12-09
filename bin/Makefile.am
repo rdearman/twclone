@@ -35,44 +35,45 @@ bin_PROGRAMS = \
 	bigbang
 
 server_SOURCES = \
-        ../src/database_cmd.c \
-        ../src/server_communication.c \
-        ../src/server_bulk.c \
-        ../src/server_combat.c  \
-        ../src/server_bigbang.c \
-        ../src/server_cmds.c \
-        ../src/server_citadel.c \
-        ../src/server_envelope.c \
-        ../src/server_auth.c \
-        ../src/server_config.c \
-        ../src/server_loop.c \
-        ../src/server_main.c \
-        ../src/server_planets.c \
-        ../src/server_players.c \
-        ../src/server_ports.c \
-        ../src/server_ships.c \
-        ../src/server_autopilot.c \
-        ../src/server_universe.c \
-        ../src/server_news.c \
-        ../src/server_s2s.c \
-        ../src/server_warp_post_processing.c \
-        ../src/server_log.c \
-        ../src/server_cron.c \
-        ../src/namegen.c \
-        ../src/globals.c \
-        ../src/database.c \
-        ../src/schemas.c \
-        ../src/common.c \
-        ../src/server_engine.c \
-        ../src/engine_consumer.c \
-        ../src/db_player_settings.c \
-        ../src/s2s_transport.c \
-	../src/sysop_interaction.c \
+	../src/common.c \
+	../src/database.c \
+	../src/database_cmd.c \
+	../src/database_market.c \
+	../src/db_player_settings.c \
+	../src/engine_consumer.c \
+	../src/globals.c \
+	../src/namegen.c \
 	../src/s2s_keyring.c \
-	../src/server_corporation.c  \
-        ../src/server_stardock.c \
-        ../src/server_clusters.c
-
+	../src/s2s_transport.c \
+	../src/schemas.c \
+	../src/server_auth.c \
+	../src/server_autopilot.c \
+	../src/server_bank.c \
+	../src/server_bigbang.c \
+	../src/server_bulk.c \
+	../src/server_citadel.c \
+	../src/server_clusters.c \
+	../src/server_cmds.c \
+	../src/server_combat.c  \
+	../src/server_communication.c \
+	../src/server_config.c \
+	../src/server_corporation.c \
+	../src/server_cron.c \
+	../src/server_engine.c \
+	../src/server_envelope.c \
+	../src/server_log.c \
+	../src/server_loop.c \
+	../src/server_main.c \
+	../src/server_news.c \
+	../src/server_planets.c \
+	../src/server_players.c \
+	../src/server_ports.c \
+	../src/server_s2s.c \
+	../src/server_ships.c \
+	../src/server_stardock.c \
+	../src/server_universe.c \
+	../src/server_warp_post_processing.c \
+	../src/sysop_interaction.c
 
 bigbang_SOURCES = \
 	../src/database.c \
