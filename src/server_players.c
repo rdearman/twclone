@@ -1070,7 +1070,6 @@ destroy_ship_and_handle_side_effects (client_ctx_t *ctx,
   (void) ctx;
   sqlite3 *db = db_get_handle ();
 
-
   if (!db)
     {
       return -1;
@@ -1837,7 +1836,7 @@ void
 cmd_nav_avoid_add (client_ctx_t *c, json_t *r)
 {
   send_enveloped_error (c->fd, r, 1101, "Not implemented: " "nav.avoid.add");
-  return 0;
+  return ;
 }
 
 
@@ -1845,7 +1844,7 @@ void
 cmd_nav_avoid_remove (client_ctx_t *c, json_t *r)
 {
   send_enveloped_error (c->fd, r, 1101, "Not implemented: " "nav.avoid.remove");
-  return 0;
+  return ;
 }
 
 
@@ -1853,7 +1852,7 @@ void
 cmd_nav_avoid_list (client_ctx_t *c, json_t *r)
 {
   send_enveloped_error (c->fd, r, 1101, "Not implemented: " "nav.avoid.list");
-  return 0;
+  return ;
 }
 
 

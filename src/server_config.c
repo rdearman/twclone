@@ -591,6 +591,14 @@ apply_db (sqlite3 *db)
         {
           cfg_parse_int (val, type, &g_cfg.illegal_allowed_neutral);
         }
+      else if (strcmp (key, "max_cloak_duration") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.death.max_cloak_duration);
+        }
+      else if (strcmp (key, "neutral_band") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.combat.neutral_band);
+        }
       /* Log unknown keys as debug (ignore) */
       else
         {

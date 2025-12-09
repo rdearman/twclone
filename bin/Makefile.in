@@ -19,7 +19,7 @@
 # Copyright (C) 2002, Nathan Paul Simons (npsimons@hardcorehackers.com)
 #
 # This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
+# it under the terms of the GNU General Public License for published by
 # the Free Software Foundation; either version 2 of the License, or
 # (at your option) any later version.
 #
@@ -130,7 +130,8 @@ am_bigbang_OBJECTS = ../src/database.$(OBJEXT) \
 	../src/namegen.$(OBJEXT) ../src/server_bigbang.$(OBJEXT) \
 	../src/server_warp_post_processing.$(OBJEXT) \
 	../src/globals.$(OBJEXT) ../src/common.$(OBJEXT) \
-	../src/server_log.$(OBJEXT) ../src/test_bang.$(OBJEXT)
+	../src/server_log.$(OBJEXT) ../src/test_bang.$(OBJEXT) \
+	../src/server_clusters.$(OBJEXT)
 bigbang_OBJECTS = $(am_bigbang_OBJECTS)
 bigbang_DEPENDENCIES =
 am_server_OBJECTS = ../src/database_cmd.$(OBJEXT) \
@@ -401,7 +402,8 @@ bigbang_SOURCES = \
 	../src/globals.c \
 	../src/common.c \
 	../src/server_log.c \
-	../src/test_bang.c
+	../src/test_bang.c \
+	../src/server_clusters.c
 
 all: all-am
 
@@ -504,6 +506,8 @@ clean-binPROGRAMS:
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/test_bang.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_clusters.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
 
 bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEPENDENCIES) 
 	@rm -f bigbang$(EXEEXT)
@@ -561,8 +565,6 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 ../src/server_corporation.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_stardock.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/server_clusters.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 
 server$(EXEEXT): $(server_OBJECTS) $(server_DEPENDENCIES) $(EXTRA_server_DEPENDENCIES) 

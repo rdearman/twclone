@@ -43,7 +43,7 @@ handle_ship_destruction (sqlite3 *db, ship_kill_context_t *ctx)
   int current_timestamp = time (NULL);
   LOGI
     ("handle_ship_destruction: Victim Player ID: %d, Ship ID: %d, Cause: %d",
-    ctx->victim_player_id, ctx->victim_ship_id, ctx->cause);
+     ctx->victim_player_id, ctx->victim_ship_id, ctx->cause);
   // --- 1.2 Implement Loot Resolution ---
   // (Skipping for now as per design brief - "Loot is NOT part of this implementation." )
   LOGD
@@ -55,7 +55,7 @@ handle_ship_destruction (sqlite3 *db, ship_kill_context_t *ctx)
     {
       LOGE
         ("handle_ship_destruction: Failed to mark ship %d as destroyed: %s",
-        ctx->victim_ship_id, sqlite3_errmsg (db));
+	 ctx->victim_ship_id, sqlite3_errmsg (db));
       return rc;
     }
   // Remove ship from player's active ship slot
@@ -63,10 +63,10 @@ handle_ship_destruction (sqlite3 *db, ship_kill_context_t *ctx)
   if (rc != SQLITE_OK)
     {
       LOGE
-      (
-        "handle_ship_destruction: Failed to clear active ship for player %d: %s",
-        ctx->victim_player_id,
-        sqlite3_errmsg (db));
+	(
+	 "handle_ship_destruction: Failed to clear active ship for player %d: %s",
+	 ctx->victim_player_id,
+	 sqlite3_errmsg (db));
       return rc;
     }
   LOGD ("handle_ship_destruction: Ship %d removed/detached from player %d.",
@@ -77,10 +77,10 @@ handle_ship_destruction (sqlite3 *db, ship_kill_context_t *ctx)
   if (rc != SQLITE_OK)
     {
       LOGW
-      (
-        "handle_ship_destruction: Failed to increment times_blown_up for player %d: %s",
-        ctx->victim_player_id,
-        sqlite3_errmsg (db));
+	(
+	 "handle_ship_destruction: Failed to increment times_blown_up for player %d: %s",
+	 ctx->victim_player_id,
+	 sqlite3_errmsg (db));
       // Continue despite error, as this is non-critical for core destruction flow
     }
   // Apply XP penalty
@@ -104,7 +104,7 @@ handle_ship_destruction (sqlite3 *db, ship_kill_context_t *ctx)
     }
   LOGD
     ("handle_ship_destruction: Player %d XP updated from %d to %d (lost %d).",
-    ctx->victim_player_id, current_xp, new_xp, xp_loss);
+     ctx->victim_player_id, current_xp, new_xp, xp_loss);
   // --- 1.5 Implement Escape Pod vs. Big Sleep Decision Logic ---
   // Check if the ship type allows escape pods and if the player is within daily limit
   bool has_escape_pod = db_shiptype_has_escape_pod (db, ctx->victim_ship_id);
@@ -122,7 +122,7 @@ handle_ship_destruction (sqlite3 *db, ship_kill_context_t *ctx)
                                     current_timestamp);
     }
   bool can_pod = has_escape_pod
-                 && (podded_count_today < g_cfg.death.max_per_day);
+    && (podded_count_today < g_cfg.death.max_per_day);
 
 
   if (can_pod)
@@ -131,10 +131,10 @@ handle_ship_destruction (sqlite3 *db, ship_kill_context_t *ctx)
       if (rc != SQLITE_OK)
         {
           LOGE
-          (
-            "handle_ship_destruction: Failed to spawn escape pod for player %d, forcing Big Sleep: %s",
-            ctx->victim_player_id,
-            sqlite3_errmsg (db));
+	    (
+	     "handle_ship_destruction: Failed to spawn escape pod for player %d, forcing Big Sleep: %s",
+	     ctx->victim_player_id,
+	     sqlite3_errmsg (db));
           handle_big_sleep (db, ctx);   // Fallback to big sleep on escape pod spawn failure
         }
     }
@@ -144,10 +144,10 @@ handle_ship_destruction (sqlite3 *db, ship_kill_context_t *ctx)
       if (rc != SQLITE_OK)
         {
           LOGE
-          (
-            "handle_ship_destruction: Failed to initiate Big Sleep for player %d: %s",
-            ctx->victim_player_id,
-            sqlite3_errmsg (db));
+	    (
+	     "handle_ship_destruction: Failed to initiate Big Sleep for player %d: %s",
+	     ctx->victim_player_id,
+	     sqlite3_errmsg (db));
           // Critical error, can't recover from this without further action
           return rc;
         }
@@ -159,8 +159,8 @@ handle_ship_destruction (sqlite3 *db, ship_kill_context_t *ctx)
   if (!event_payload)
     {
       LOGE
-      (
-        "handle_ship_destruction: Failed to allocate event_payload for engine event.");
+	(
+	 "handle_ship_destruction: Failed to allocate event_payload for engine event.");
       return SQLITE_NOMEM;      // Memory allocation failure
     }
   json_object_set_new (event_payload, "victim_ship_id",
@@ -224,7 +224,7 @@ handle_big_sleep (sqlite3 *db, ship_kill_context_t *ctx)
     {
       LOGE
         ("handle_big_sleep: Failed to update podded_status for player %d: %s",
-        ctx->victim_player_id, sqlite3_errmsg (db));
+	 ctx->victim_player_id, sqlite3_errmsg (db));
       sqlite3_finalize (st);
       return rc;
     }
@@ -296,9 +296,9 @@ handle_escape_pod_spawn (sqlite3 *db, ship_kill_context_t *ctx)
   if (rc != SQLITE_OK)
     {
       LOGE
-      (
-        "handle_escape_pod_spawn: Failed to prepare pod ship_ownership insert: %s",
-        sqlite3_errmsg (db));
+	(
+	 "handle_escape_pod_spawn: Failed to prepare pod ship_ownership insert: %s",
+	 sqlite3_errmsg (db));
       return rc;
     }
   sqlite3_bind_int (st, 1, new_pod_ship_id);
@@ -307,7 +307,7 @@ handle_escape_pod_spawn (sqlite3 *db, ship_kill_context_t *ctx)
     {
       LOGE
         ("handle_escape_pod_spawn: Failed to insert pod ship_ownership: %s",
-        sqlite3_errmsg (db));
+	 sqlite3_errmsg (db));
       sqlite3_finalize (st);
       return rc;
     }
@@ -331,9 +331,9 @@ handle_escape_pod_spawn (sqlite3 *db, ship_kill_context_t *ctx)
   if (sqlite3_step (st) != SQLITE_DONE)
     {
       LOGE
-      (
-        "handle_escape_pod_spawn: Failed to update player's ship/sector for pod: %s",
-        sqlite3_errmsg (db));
+	(
+	 "handle_escape_pod_spawn: Failed to update player's ship/sector for pod: %s",
+	 sqlite3_errmsg (db));
       sqlite3_finalize (st);
       return rc;
     }
@@ -350,7 +350,7 @@ handle_escape_pod_spawn (sqlite3 *db, ship_kill_context_t *ctx)
     {
       LOGE
         ("handle_escape_pod_spawn: Failed to prepare podded_status update: %s",
-        sqlite3_errmsg (db));
+	 sqlite3_errmsg (db));
       return rc;
     }
   sqlite3_bind_int (st, 1, ctx->victim_player_id);
@@ -359,21 +359,21 @@ handle_escape_pod_spawn (sqlite3 *db, ship_kill_context_t *ctx)
   if (sqlite3_step (st) != SQLITE_DONE)
     {
       LOGE
-      (
-        "handle_escape_pod_spawn: Failed to update podded_status for player %d: %s",
-        ctx->victim_player_id,
-        sqlite3_errmsg (db));
+	(
+	 "handle_escape_pod_spawn: Failed to update podded_status for player %d: %s",
+	 ctx->victim_player_id,
+	 sqlite3_errmsg (db));
       sqlite3_finalize (st);
       return rc;
     }
   sqlite3_finalize (st);
   st = NULL;
   LOGI
-  (
-    "handle_escape_pod_spawn: Player %d successfully spawned in escape pod %d at sector %d.",
-    ctx->victim_player_id,
-    new_pod_ship_id,
-    pod_sector_id);
+    (
+     "handle_escape_pod_spawn: Player %d successfully spawned in escape pod %d at sector %d.",
+     ctx->victim_player_id,
+     new_pod_ship_id,
+     pod_sector_id);
   return SQLITE_OK;
 }
 
@@ -693,11 +693,11 @@ cmd_ship_self_destruct (client_ctx_t *ctx, json_t *root)
   if (destroy_rc != SQLITE_OK)
     {
       LOGE
-      (
-        "cmd_ship_self_destruct: handle_ship_destruction failed for player %d, ship %d: %s",
-        ctx->player_id,
-        ship_id,
-        sqlite3_errmsg (db));
+	(
+	 "cmd_ship_self_destruct: handle_ship_destruction failed for player %d, ship %d: %s",
+	 ctx->player_id,
+	 ship_id,
+	 sqlite3_errmsg (db));
       send_enveloped_error (ctx->fd, root, 1500,
                             "Failed to process self-destruction.");
       return 0;
@@ -728,17 +728,17 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
+
   int player_ship_id = h_get_active_ship_id (db,
                                              ctx->player_id);
-
-
+  
   if (player_ship_id <= 0)
     {
       send_enveloped_refused (ctx->fd,
-                              root,
-                              ERR_NO_ACTIVE_SHIP,
-                              "You do not have an active ship.",
-                              NULL);
+			      root,
+			      ERR_NO_ACTIVE_SHIP,
+			      "You do not have an active ship.",
+			      NULL);
       return 0;
     }
 
@@ -992,7 +992,7 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
                                 target_ship_id));
   return 0;
 
-rollback:
+ rollback:
   if (stmt)
     {
       sqlite3_finalize (stmt);
@@ -1011,7 +1011,8 @@ rollback:
 int
 h_get_active_ship_id (sqlite3 *db, int player_id)
 {
-  sqlite3_stmt *stmt;
+  LOGE("DEBUG: h_get_active_ship_id called for player_id=%d", player_id); // NEW
+  sqlite3_stmt *stmt = NULL; // Initialize to NULL for safety
   int ship_id = 0;
   const char *sql = "SELECT ship FROM players WHERE id = ?;";
   if (sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL) == SQLITE_OK)
@@ -1021,15 +1022,16 @@ h_get_active_ship_id (sqlite3 *db, int player_id)
         {
           ship_id = sqlite3_column_int (stmt, 0);
         }
+      sqlite3_finalize (stmt); // Finalize here if prepare was OK
     }
   else
     {
       // Log an error if prepare fails
       LOGE ("Failed to prepare statement for h_get_active_ship_id: %s",
             sqlite3_errmsg (db));
+      // No finalize needed if prepare failed, as stmt is NULL or invalid
     }
-  sqlite3_finalize (stmt);
-  return ship_id;
+  return ship_id; // Always return ship_id at the end of the function
 }
 
 /**
@@ -1057,8 +1059,8 @@ h_update_ship_cargo (sqlite3 *db, int ship_id, const char *commodity_code, int d
   else if (strcasecmp(commodity_code, "ORG") == 0) col_name = "organics";
   else if (strcasecmp(commodity_code, "EQU") == 0) col_name = "equipment";
   else {
-      LOGE("h_update_ship_cargo: Invalid commodity code %s", commodity_code);
-      return SQLITE_MISUSE;
+    LOGE("h_update_ship_cargo: Invalid commodity code %s", commodity_code);
+    return SQLITE_MISUSE;
   }
 
   sqlite3_stmt *stmt = NULL;
@@ -1071,13 +1073,13 @@ h_update_ship_cargo (sqlite3 *db, int ship_id, const char *commodity_code, int d
   
   int ore = 0, org = 0, equ = 0, holds = 0;
   if (sqlite3_step(stmt) == SQLITE_ROW) {
-      ore = sqlite3_column_int(stmt, 0);
-      org = sqlite3_column_int(stmt, 1);
-      equ = sqlite3_column_int(stmt, 2);
-      holds = sqlite3_column_int(stmt, 3);
+    ore = sqlite3_column_int(stmt, 0);
+    org = sqlite3_column_int(stmt, 1);
+    equ = sqlite3_column_int(stmt, 2);
+    holds = sqlite3_column_int(stmt, 3);
   } else {
-      sqlite3_finalize(stmt);
-      return SQLITE_NOTFOUND;
+    sqlite3_finalize(stmt);
+    return SQLITE_NOTFOUND;
   }
   sqlite3_finalize(stmt);
 
@@ -1091,8 +1093,8 @@ h_update_ship_cargo (sqlite3 *db, int ship_id, const char *commodity_code, int d
   
   // Invariant 1: No negative quantities
   if (new_qty < 0) {
-      LOGE("h_update_ship_cargo: Resulting quantity negative for %s (curr=%d, delta=%d)", commodity_code, current_qty, delta);
-      return SQLITE_CONSTRAINT;
+    LOGE("h_update_ship_cargo: Resulting quantity negative for %s (curr=%d, delta=%d)", commodity_code, current_qty, delta);
+    return SQLITE_CONSTRAINT;
   }
 
   // Invariant 2: Total cargo <= holds
@@ -1100,8 +1102,8 @@ h_update_ship_cargo (sqlite3 *db, int ship_id, const char *commodity_code, int d
   int total_new = total_cargo + delta; // New total (assuming one commodity changes)
   
   if (total_new > holds) {
-      LOGE("h_update_ship_cargo: Resulting total %d exceeds holds %d", total_new, holds);
-      return SQLITE_CONSTRAINT;
+    LOGE("h_update_ship_cargo: Resulting total %d exceeds holds %d", total_new, holds);
+    return SQLITE_CONSTRAINT;
   }
 
   // Perform Update
@@ -1126,43 +1128,43 @@ int h_get_ship_cargo_and_holds(sqlite3 *db, int ship_id,
                                int *ore, int *organics, int *equipment, int *holds,
                                int *free_holds, int *max_holds, 
                                int *cargo_capacity_used, int *cargo_capacity_max) {
-    if (!db || ship_id <= 0) {
-        return SQLITE_MISUSE;
-    }
+  if (!db || ship_id <= 0) {
+    return SQLITE_MISUSE;
+  }
 
-    sqlite3_stmt *stmt = NULL;
-    const char *sql = "SELECT ore, organics, equipment, holds, shiptypes.maxholds FROM ships JOIN shiptypes ON ships.type_id = shiptypes.id WHERE ships.id = ?;";
-    int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("h_get_ship_cargo_and_holds: Failed to prepare statement: %s", sqlite3_errmsg(db));
-        return rc;
-    }
-
-    sqlite3_bind_int(stmt, 1, ship_id);
-
-    if (sqlite3_step(stmt) == SQLITE_ROW) {
-        if (ore) *ore = sqlite3_column_int(stmt, 0);
-        if (organics) *organics = sqlite3_column_int(stmt, 1);
-        if (equipment) *equipment = sqlite3_column_int(stmt, 2);
-        if (holds) *holds = sqlite3_column_int(stmt, 3); // Current holds on ship (can be upgraded)
-        if (max_holds) *max_holds = sqlite3_column_int(stmt, 4); // Base holds from shiptype
-
-        int current_total_cargo = 0;
-        if (ore) current_total_cargo += *ore;
-        if (organics) current_total_cargo += *organics;
-        if (equipment) current_total_cargo += *equipment;
-
-        int current_holds_val = (holds) ? *holds : 0; // Use the value if holds ptr was provided
-
-        if (free_holds) *free_holds = current_holds_val - current_total_cargo;
-        if (cargo_capacity_used) *cargo_capacity_used = current_total_cargo;
-        if (cargo_capacity_max) *cargo_capacity_max = current_holds_val; // Max capacity is current holds
-
-    } else {
-        LOGW("h_get_ship_cargo_and_holds: Ship ID %d not found.", ship_id);
-        rc = SQLITE_NOTFOUND;
-    }
-
-    sqlite3_finalize(stmt);
+  sqlite3_stmt *stmt = NULL;
+  const char *sql = "SELECT ore, organics, equipment, holds, shiptypes.maxholds FROM ships JOIN shiptypes ON ships.type_id = shiptypes.id WHERE ships.id = ?;";
+  int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+  if (rc != SQLITE_OK) {
+    LOGE("h_get_ship_cargo_and_holds: Failed to prepare statement: %s", sqlite3_errmsg(db));
     return rc;
+  }
+
+  sqlite3_bind_int(stmt, 1, ship_id);
+
+  if (sqlite3_step(stmt) == SQLITE_ROW) {
+    if (ore) *ore = sqlite3_column_int(stmt, 0);
+    if (organics) *organics = sqlite3_column_int(stmt, 1);
+    if (equipment) *equipment = sqlite3_column_int(stmt, 2);
+    if (holds) *holds = sqlite3_column_int(stmt, 3); // Current holds on ship (can be upgraded)
+    if (max_holds) *max_holds = sqlite3_column_int(stmt, 4); // Base holds from shiptype
+
+    int current_total_cargo = 0;
+    if (ore) current_total_cargo += *ore;
+    if (organics) current_total_cargo += *organics;
+    if (equipment) current_total_cargo += *equipment;
+
+    int current_holds_val = (holds) ? *holds : 0; // Use the value if holds ptr was provided
+
+    if (free_holds) *free_holds = current_holds_val - current_total_cargo;
+    if (cargo_capacity_used) *cargo_capacity_used = current_total_cargo;
+    if (cargo_capacity_max) *cargo_capacity_max = current_holds_val; // Max capacity is current holds
+
+  } else {
+    LOGW("h_get_ship_cargo_and_holds: Ship ID %d not found.", ship_id);
+    rc = SQLITE_NOTFOUND;
+  }
+
+  sqlite3_finalize(stmt);
+  return rc;
 }

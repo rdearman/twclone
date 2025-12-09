@@ -1352,7 +1352,7 @@ const char *create_table_sql[] = {
   "CREATE INDEX IF NOT EXISTS idx_planets_sector ON planets(sector);",
   "CREATE INDEX IF NOT EXISTS idx_citadels_planet ON citadels(planet_id);",
   "CREATE INDEX IF NOT EXISTS ix_warps_from_to ON sector_warps(from_sector, to_sector);",
-  "CREATE INDEX IF NOT EXISTS idx_players_name     ON players(name);",
+  
   "CREATE INDEX IF NOT EXISTS idx_players_sector   ON players(sector);",
   "CREATE INDEX IF NOT EXISTS idx_players_ship     ON players(ship);",
   "CREATE INDEX IF NOT EXISTS idx_ships_id         ON ships(id);",
@@ -1363,7 +1363,7 @@ const char *create_table_sql[] = {
   "DROP INDEX IF EXISTS idx_sectors_id;",
   //-- Make player names unique if that’s a rule:
   "DROP INDEX IF EXISTS idx_players_name;",
-  //  "CREATE UNIQUE INDEX idx_players_name ON players(name);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_players_name ON players(name COLLATE NOCASE);",
   // -- `ports.number` probably unique (if that’s your design):
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_ports_number ON ports(number);",
   //-- Ship ownership lookups by player or ship:

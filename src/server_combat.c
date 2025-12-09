@@ -28,8 +28,34 @@
 #include "server_log.h"
 #include "errors.h"
 #include "server_config.h"
+
+/* Global Combat Constants (Physics) */
+/* TODO: Move to config table */
+static const double OFFENSE_SCALE = 0.05;
+static const double DEFENSE_SCALE = 0.05;
+static const int DAMAGE_PER_FIGHTER = 1;
+
+
+typedef struct {
+    int id;
+    int player_id;
+    int corp_id;
+    int hull;
+    int shields;
+    int fighters;
+    int attack_power; // shiptypes.offense
+    int defense_power; // shiptypes.defense
+    int max_attack;   // shiptypes.maxattack
+    char name[64];
+    int sector; // Added for combat checks
+} combat_ship_t;
+
+
+
+
 /* Forward decls from your codebase */
 json_t *db_get_stardock_sectors (void);
+int handle_ship_attack(client_ctx_t *ctx, json_t *root, json_t *data, sqlite3 *db);
 static int ship_consume_mines (sqlite3 *db, int ship_id, int asset_type,
                                int amount);
 static int insert_sector_mines (sqlite3 *db, int sector_id,
@@ -97,6 +123,7 @@ is_msl_sector (sqlite3 *db, int sector_id)
 int
 cmd_combat_attack (client_ctx_t *ctx, json_t *root)
 {
+  int rc; // Declare rc
   if (!require_auth (ctx, root))
     {
       return 0;
@@ -117,7 +144,8 @@ cmd_combat_attack (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  return handle_ship_attack (ctx, root, data, db);
+  rc = handle_ship_attack (ctx, root, data, db);
+  return rc;
 }
 
 
@@ -696,25 +724,85 @@ cmd_deploy_mines_list (client_ctx_t *ctx, json_t *root)
 int
 handle_combat_flee (client_ctx_t *ctx, json_t *root)
 {
-  sqlite3 *db_handle = db_get_handle ();
-  // Attempting to flee reveals the ship
-  h_decloak_ship (db_handle,
-                  h_get_active_ship_id (db_handle, (ctx->player_id)));
-  TurnConsumeResult tc =
-    h_consume_player_turn (db_handle, ctx, 1);
+  sqlite3 *db = db_get_handle ();
+  int ship_id = h_get_active_ship_id (db, ctx->player_id);
+  if (ship_id <= 0) {
+      send_enveloped_error(ctx->fd, root, ERR_SHIP_NOT_FOUND, "No active ship");
+      return 0;
+  }
 
+  h_decloak_ship (db, ship_id);
+  TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);
+  if (tc != TURN_CONSUME_SUCCESS) {
+      return handle_turn_consumption_error (ctx, tc, "combat.flee", root, NULL);
+  }
 
-  if (tc != TURN_CONSUME_SUCCESS)
-    {
-      return handle_turn_consumption_error (ctx, tc, "combat.flee", root,
-                                            NULL);
-    }
-  // --- COMBAT FLEE LOGIC GOES HERE ---
-  // 2. Determine success chance based on ship speed, opponent status, etc.
-  // 3. If successful, potentially move the ship one warp or clear the combat status flag.
-  // 4. If unsuccessful, opponent might get a free attack or the ship remains in combat.
-  // 5. Send successful ACK/status to client
-  return 0;                     // Success
+  // Load Engine/Mass (MVP: Engine=10 fixed, Mass=maxholds)
+  int mass = 100;
+  int engine = 10;
+  int sector_id = 0;
+
+  sqlite3_stmt *st;
+  if (sqlite3_prepare_v2(db, "SELECT t.maxholds, s.sector FROM ships s JOIN shiptypes t ON s.type_id=t.id WHERE s.id=?1", -1, &st, NULL) == SQLITE_OK) {
+      sqlite3_bind_int(st, 1, ship_id);
+      if (sqlite3_step(st) == SQLITE_ROW) {
+          mass = sqlite3_column_int(st, 0);
+          sector_id = sqlite3_column_int(st, 1);
+      }
+      sqlite3_finalize(st);
+  }
+
+  // Deterministic check: (Engine * 10) / (Mass + 1) > 0.5
+  double score = ((double)engine * 10.0) / ((double)mass + 1.0);
+  bool success = (score > 0.5); 
+
+  if (success) {
+      // Pick first adjacent sector
+      int dest = 0;
+      if (sqlite3_prepare_v2(db, "SELECT to_sector FROM sector_warps WHERE from_sector=?1 ORDER BY to_sector ASC LIMIT 1", -1, &st, NULL) == SQLITE_OK) {
+          sqlite3_bind_int(st, 1, sector_id);
+          if (sqlite3_step(st) == SQLITE_ROW) {
+              dest = sqlite3_column_int(st, 0);
+          }
+          sqlite3_finalize(st);
+      }
+
+      if (dest > 0) {
+          char *err = NULL;
+          sqlite3_exec(db, "BEGIN IMMEDIATE", NULL, NULL, NULL);
+          sqlite3_stmt *ust = NULL;
+          // Update Ship
+          sqlite3_prepare_v2(db, "UPDATE ships SET sector=?1 WHERE id=?2", -1, &ust, NULL);
+          sqlite3_bind_int(ust, 1, dest);
+          sqlite3_bind_int(ust, 2, ship_id);
+          sqlite3_step(ust);
+          sqlite3_finalize(ust);
+          
+          // Update Player
+          sqlite3_prepare_v2(db, "UPDATE players SET sector=?1 WHERE id=?2", -1, &ust, NULL);
+          sqlite3_bind_int(ust, 1, dest);
+          sqlite3_bind_int(ust, 2, ctx->player_id);
+          sqlite3_step(ust);
+          sqlite3_finalize(ust);
+          
+          sqlite3_exec(db, "COMMIT", NULL, NULL, &err);
+          
+          // Hazards
+          h_handle_sector_entry_hazards(db, ctx, dest);
+          
+          json_t *res = json_object();
+          json_object_set_new(res, "success", json_true());
+          json_object_set_new(res, "to_sector", json_integer(dest));
+          send_enveloped_ok(ctx->fd, root, "combat.flee", res);
+          return 0;
+      }
+  }
+
+  // Failure
+  json_t *res = json_object();
+  json_object_set_new(res, "success", json_false());
+  send_enveloped_ok(ctx->fd, root, "combat.flee", res);
+  return 0;
 }
 
 /* ---------- combat.deploy_fighters (fixed-SQL) ---------- */
@@ -3037,7 +3125,7 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
         {
           send_enveloped_refused (ctx->fd,
                                   root,
-                                  TERRITORY_UNSAFE,
+                                  REF_TERRITORY_UNSAFE,
                                   "Cannot deploy Limpet mines in Federation space.",
                                   NULL);
           return 0;
@@ -3046,7 +3134,7 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
         {
           send_enveloped_refused (ctx->fd,
                                   root,
-                                  TERRITORY_UNSAFE,
+                                  REF_TERRITORY_UNSAFE,
                                   "Cannot deploy Limpet mines in Major Space Lanes.",
                                   NULL);
           return 0;
@@ -3598,274 +3686,229 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
   return 0;
 }
 
-/*
- * Handles ship-to-ship combat logic.
- * Returns 0 on success (even if attack failed/fled), error code on failure.
- */
-int
-handle_ship_attack (client_ctx_t *ctx, json_t *root, json_t *data, sqlite3 *db)
+/* --- Phase 3: Ship vs Ship Combat --- */
+/* Helper to get full ship combat stats */
+static int load_ship_combat_stats(sqlite3 *db, int ship_id, combat_ship_t *out) {
+    const char *sql = 
+        "SELECT s.id, s.hull, s.shields, s.fighters, s.sector, s.name, "
+        "       st.offense, st.defense, st.maxattack, "
+        "       op.player_id, cm.corp_id "
+        "FROM ships s "
+        "JOIN shiptypes st ON s.type_id = st.id "
+        "JOIN ship_ownership op ON op.ship_id = s.id AND op.is_primary = 1 "
+        "LEFT JOIN corp_members cm ON cm.player_id = op.player_id "
+        "WHERE s.id = ?1;";
+    
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK) return -1;
+    sqlite3_bind_int(st, 1, ship_id);
+    
+    int rc = sqlite3_step(st);
+    if (rc == SQLITE_ROW) {
+        out->id = sqlite3_column_int(st, 0);
+        out->hull = sqlite3_column_int(st, 1);
+        out->shields = sqlite3_column_int(st, 2);
+        out->fighters = sqlite3_column_int(st, 3);
+        out->sector = sqlite3_column_int(st, 4); // New: Assign sector
+        strncpy(out->name, (const char*)sqlite3_column_text(st, 5), sizeof(out->name)-1);
+        out->attack_power = sqlite3_column_int(st, 6);
+        out->defense_power = sqlite3_column_int(st, 7);
+        out->max_attack = sqlite3_column_int(st, 8);
+        out->player_id = sqlite3_column_int(st, 9);
+        out->corp_id = sqlite3_column_int(st, 10);
+        sqlite3_finalize(st);
+        return 0;
+    }
+    sqlite3_finalize(st);
+    return -1; // Not found
+}
+
+static void apply_combat_damage(combat_ship_t *target, int damage, int *shields_lost, int *hull_lost) {
+    *shields_lost = 0;
+    *hull_lost = 0;
+    int remaining = damage;
+    
+    // 1. Shields
+    if (target->shields > 0) {
+        int absorb = MIN(remaining, target->shields);
+        target->shields -= absorb;
+        remaining -= absorb;
+        *shields_lost = absorb;
+    }
+    
+    // 2. Hull
+    if (remaining > 0) {
+        target->hull -= remaining;
+        *hull_lost = remaining;
+    }
+}
+
+static int persist_ship_damage(sqlite3 *db, combat_ship_t *ship, int fighters_lost)
 {
-  int attacker_id = h_get_active_ship_id (db, ctx->player_id);
-  if (attacker_id <= 0) { send_enveloped_error(ctx->fd, root, ERR_SHIP_NOT_FOUND, "No active ship."); return 0; }
+    const char *sql = "UPDATE ships SET hull=?1, shields=?2, fighters=MAX(0, fighters-?3) WHERE id=?4;";
+    sqlite3_stmt *st = NULL;
+    sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    sqlite3_bind_int(st, 1, MAX(0, ship->hull));
+    sqlite3_bind_int(st, 2, MAX(0, ship->shields));
+    sqlite3_bind_int(st, 3, fighters_lost);
+    sqlite3_bind_int(st, 4, ship->id);
+    sqlite3_step(st);
+    sqlite3_finalize(st);
+    return 0;
+}
 
-  int target_id = json_integer_value(json_object_get(data, "target_ship_id"));
-  int commit = json_integer_value(json_object_get(data, "commit_fighters"));
-  bool try_flee = json_is_true(json_object_get(data, "flee"));
-
-  if (target_id <= 0) { send_enveloped_error(ctx->fd, root, 400, "Invalid target_ship_id."); return 0; }
-  if (target_id == attacker_id) { send_enveloped_error(ctx->fd, root, 400, "Cannot attack self."); return 0; }
-  if (commit < 0) commit = 0; // Clamp negative commit
-
-  // 1. Decloak & Consume Turn
-  h_decloak_ship(db, attacker_id);
-  TurnConsumeResult tc = h_consume_player_turn(db, ctx, g_cfg.combat.turn_cost);
-  if (tc != TURN_CONSUME_SUCCESS) {
-      return handle_turn_consumption_error(ctx, tc, "combat.attack", root, NULL);
+int handle_ship_attack(client_ctx_t *ctx, json_t *root, json_t *data, sqlite3 *db)
+{
+  int target_ship_id = 0;
+  if (!json_get_int_flexible(data, "target_ship_id", &target_ship_id) || target_ship_id <= 0) {
+    send_enveloped_error(ctx->fd, root, ERR_MISSING_FIELD, "Missing or invalid target_ship_id");
+    return 0;
+  }
+    
+  int req_fighters = 0;
+  if (!json_get_int_flexible(data, "commit_fighters", &req_fighters)) {
+    // Optional, defaults to 0 (all available logic handled below)
+    req_fighters = 0;
   }
 
-  // 2. Load Stats (Attacker & Defender)
-  // Need: sector, fighters, shields, hull, type_id -> (offense, defense, maxholds/mass)
-  const char *sql_stats = 
-    "SELECT s.id, s.sector, s.fighters, s.shields, s.hull, t.offense, t.defense, t.maxholds, t.maxshields "
-    "FROM ships s JOIN shiptypes t ON s.type_id = t.id WHERE s.id = ?1";
-  
-  sqlite3_stmt *st = NULL;
-  if (sqlite3_prepare_v2(db, sql_stats, -1, &st, NULL) != SQLITE_OK) {
-      send_enveloped_error(ctx->fd, root, 500, "DB error preparing stats"); return 0;
+  int attacker_ship_id = h_get_active_ship_id(db, ctx->player_id);
+  if (attacker_ship_id <= 0) {
+    send_enveloped_error(ctx->fd, root, ERR_SHIP_NOT_FOUND, "No active ship");
+    return 0;
   }
 
-  // Attacker
-  sqlite3_bind_int(st, 1, attacker_id);
-  if (sqlite3_step(st) != SQLITE_ROW) {
-      sqlite3_finalize(st);
-      send_enveloped_error(ctx->fd, root, 500, "Attacker ship not found."); return 0;
+  // Load Stats
+  combat_ship_t attacker = {0};
+  combat_ship_t defender = {0};
+  if (load_ship_combat_stats(db, attacker_ship_id, &attacker) != 0) {
+    send_enveloped_error(ctx->fd, root, ERR_SHIP_NOT_FOUND, "Attacker ship not found");
+    return 0;
   }
-  int att_sector = sqlite3_column_int(st, 1);
-  int att_fighters = sqlite3_column_int(st, 2);
-  // int att_shields = sqlite3_column_int(st, 3);
-  // int att_hull = sqlite3_column_int(st, 4);
-  int att_offense = sqlite3_column_int(st, 5);
-  // int att_defense = sqlite3_column_int(st, 6);
-  int att_mass = sqlite3_column_int(st, 7); // Use maxholds as mass proxy
-  sqlite3_reset(st);
-
-  // Defender
-  sqlite3_bind_int(st, 1, target_id);
-  if (sqlite3_step(st) != SQLITE_ROW) {
-      sqlite3_finalize(st);
-      send_enveloped_error(ctx->fd, root, 404, "Target ship not found."); return 0;
-  }
-  int def_sector = sqlite3_column_int(st, 1);
-  int def_fighters = sqlite3_column_int(st, 2);
-  int def_shields = sqlite3_column_int(st, 3);
-  // int def_hull = sqlite3_column_int(st, 4);
-  // int def_offense = sqlite3_column_int(st, 5);
-  int def_defense = sqlite3_column_int(st, 6); (void)def_defense;
-  int def_mass = sqlite3_column_int(st, 7); // Use maxholds as mass proxy
-  // int def_max_shields = sqlite3_column_int(st, 8);
-  sqlite3_finalize(st);
-
-  if (att_sector != def_sector) {
-      send_enveloped_error(ctx->fd, root, 400, "Target is not in the same sector."); return 0;
+  if (load_ship_combat_stats(db, target_ship_id, &defender) != 0) {
+    send_enveloped_error(ctx->fd, root, ERR_SHIP_NOT_FOUND, "Target ship not found");
+    return 0;
   }
 
-  if (commit > att_fighters) commit = att_fighters;
-
-  // 3. Flee Logic
-  if (try_flee) {
-      double att_eng = 100.0; // Constant engine power for MVP
-      double def_eng = 100.0;
-      
-      double esc_att = att_eng * g_cfg.combat.flee.engine_weight - att_mass * g_cfg.combat.flee.mass_weight;
-      double esc_def = def_eng * g_cfg.combat.flee.engine_weight - def_mass * g_cfg.combat.flee.mass_weight;
-      
-      // Deterministic success check
-      if (esc_att > esc_def) {
-          // Success! Warp to random adjacent sector
-          int dest_sector = 0;
-          sqlite3_stmt *wst = NULL;
-          if (sqlite3_prepare_v2(db, "SELECT to_sector FROM sector_warps WHERE from_sector=?1 ORDER BY RANDOM() LIMIT 1", -1, &wst, NULL) == SQLITE_OK) {
-              sqlite3_bind_int(wst, 1, att_sector);
-              if (sqlite3_step(wst) == SQLITE_ROW) {
-                  dest_sector = sqlite3_column_int(wst, 0);
-              }
-              sqlite3_finalize(wst);
-          }
-
-          if (dest_sector > 0) {
-              // Execute Warp
-              // Using direct DB update for MVP simplicity, ideally reuse move logic but that's complex
-              char *err = NULL;
-              sqlite3_exec(db, "BEGIN IMMEDIATE", NULL, NULL, NULL);
-              sqlite3_stmt *ust = NULL;
-              sqlite3_prepare_v2(db, "UPDATE ships SET sector=?1 WHERE id=?2", -1, &ust, NULL);
-              sqlite3_bind_int(ust, 1, dest_sector);
-              sqlite3_bind_int(ust, 2, attacker_id);
-              if (sqlite3_step(ust) == SQLITE_DONE) {
-                  sqlite3_finalize(ust);
-                  // Update player sector too if needed (usually db_player_set_sector does both)
-                  sqlite3_prepare_v2(db, "UPDATE players SET sector=?1 WHERE id=?2", -1, &ust, NULL);
-                  sqlite3_bind_int(ust, 1, dest_sector);
-                  sqlite3_bind_int(ust, 2, ctx->player_id);
-                  sqlite3_step(ust);
-                  sqlite3_finalize(ust);
-                  
-                  sqlite3_exec(db, "COMMIT", NULL, NULL, &err);
-                  
-                  json_t *res = json_pack("{s:b, s:i, s:i, s:i}", "fled", 1, "from_sector", att_sector, "to_sector", dest_sector, "turns_spent", g_cfg.combat.turn_cost);
-                  send_enveloped_ok(ctx->fd, root, "combat.attack_v1", res);
-                  json_decref(res);
-                  
-                  // Events
-                  json_t *left = json_object();
-                  json_object_set_new(left, "player_id", json_integer(ctx->player_id));
-                  json_object_set_new(left, "sector_id", json_integer(att_sector));
-                  json_object_set_new(left, "to_sector_id", json_integer(dest_sector));
-                  json_object_set_new(left, "player", make_player_object(ctx->player_id));
-                  comm_publish_sector_event(att_sector, "sector.player_left", left);
-
-                  json_t *entered = json_object();
-                  json_object_set_new(entered, "player_id", json_integer(ctx->player_id));
-                  json_object_set_new(entered, "sector_id", json_integer(dest_sector));
-                  json_object_set_new(entered, "from_sector_id", json_integer(att_sector));
-                  json_object_set_new(entered, "player", make_player_object(ctx->player_id));
-                  comm_publish_sector_event(dest_sector, "sector.player_entered", entered);
-                  
-                  return 0;
-              } else {
-                  sqlite3_finalize(ust);
-                  sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
-              }
-          }
-          // If no warp found or DB error, fall through to attack (failed flee?) 
-          // Or return error? Design brief says "If flee fails, proceed with attack." 
-          // But this was a system failure to find a sector. We'll treat as failed flee.
-      }
-      // Flee failed, proceed to attack
+  // Validate Sector (must be co-located)
+  int att_sector = attacker.sector;
+  int def_sector = defender.sector;
+  LOGI("DEBUG: handle_ship_attack: attacker %d sector %d, defender %d sector %d", attacker.id, att_sector, defender.id, def_sector);
+  if (att_sector != def_sector || att_sector <= 0) {
+    send_enveloped_error(ctx->fd, root, ERR_TARGET_INVALID, "Target not in same sector");
+    return 0;
   }
 
-  // 4. Attack Resolution
-  double base_hit = g_cfg.combat.base_hit;
-  double atk_val = base_hit * commit * (g_cfg.combat.offense_coeff * att_offense);
-  // double def_val = def_shields * (g_cfg.combat.defense_coeff * def_defense); // Used for mitigation?
-  // MVP: "raw damage = min(Atk, attacker.fighters)" - wait, brief says "damage equals committed fighter count" 
-  // But the formula "Atk = ..." implies scaling.
-  // Brief step 3: "Compute raw damage = min(Atk, attacker.fighters) (v1.0: damage equals committed fighter count; simple and deterministic)."
-  // This implies Atk might be > fighters if coefficients > 1.
-  
-  int raw_damage = (int)floor(atk_val); 
-  // "damage equals committed fighter count" suggests raw_damage SHOULD be just 'commit' if we ignore the formula?
-  // "Atk = ... " formula is listed in step 2. 
-  // Let's use the formula. It respects coefficients.
-  
-  // Apply to defender
-  int shields_taken = 0;
-  int fighters_taken = 0;
-  int remaining_dmg = raw_damage;
+  // --- Round 1: Attacker Strikes ---
+    
+  // Calculate Committed Fighters (Invariant: <= MaxAttack, <= Onboard)
+  int att_committed = attacker.max_attack; 
+  if (req_fighters > 0) att_committed = MIN(req_fighters, attacker.max_attack);
+  att_committed = MIN(att_committed, attacker.fighters);
+    
+  if (att_committed < 0) att_committed = 0;
 
-  if (def_shields > 0) {
-      shields_taken = (remaining_dmg > def_shields) ? def_shields : remaining_dmg;
-      remaining_dmg -= shields_taken;
-  }
-  if (remaining_dmg > 0 && def_fighters > 0) {
-      fighters_taken = (remaining_dmg > def_fighters) ? def_fighters : remaining_dmg;
-      remaining_dmg -= fighters_taken;
-  }
+  // Calculate Attack Strength
+  // atk = commit * (1 + offense * scale)
+  double att_mult = 1.0 + ((double)attacker.attack_power * OFFENSE_SCALE);
+  int att_raw_dmg = att_committed * DAMAGE_PER_FIGHTER;
+  int att_total_dmg = (int)(att_raw_dmg * att_mult);
+  LOGI("DEBUG: combat: ATTACKER att_committed=%d, att_power=%d, OFFENSE_SCALE=%.2f, DAMAGE_PER_FIGHTER=%d, att_mult=%.2f, att_raw_dmg=%d, att_total_dmg=%d",
+       att_committed, attacker.attack_power, OFFENSE_SCALE, DAMAGE_PER_FIGHTER, att_mult, att_raw_dmg, att_total_dmg);
 
-  int def_shields_new = def_shields - shields_taken;
-  int def_fighters_new = def_fighters - fighters_taken;
+  // Calculate Defense Strength
+  // def_factor = 1 + defense * scale
+  double def_factor = 1.0 + ((double)defender.defense_power * DEFENSE_SCALE);
+  int effective_dmg_to_def = (int)(att_total_dmg / def_factor);
+  LOGI("DEBUG: combat: DEFENDER def_power=%d, DEFENSE_SCALE=%.2f, def_factor=%.2f, effective_dmg_to_def=%d",
+       defender.defense_power, DEFENSE_SCALE, def_factor, effective_dmg_to_def);
 
-  // 5. Update DB
-  sqlite3_exec(db, "BEGIN IMMEDIATE", NULL, NULL, NULL);
-  sqlite3_stmt *ust = NULL;
-  if (sqlite3_prepare_v2(db, "UPDATE ships SET shields=?1, fighters=?2 WHERE id=?3", -1, &ust, NULL) == SQLITE_OK) {
-      sqlite3_bind_int(ust, 1, def_shields_new);
-      sqlite3_bind_int(ust, 2, def_fighters_new);
-      sqlite3_bind_int(ust, 3, target_id);
-      sqlite3_step(ust);
-      sqlite3_finalize(ust);
-      sqlite3_exec(db, "COMMIT", NULL, NULL, NULL);
+  // Apply Damage
+  int def_shields_lost = 0, def_hull_lost = 0;
+  apply_combat_damage(&defender, effective_dmg_to_def, &def_shields_lost, &def_hull_lost);
+    
+  bool defender_destroyed = (defender.hull <= 0);
+    
+  // Persist Defender
+  if (!defender_destroyed) {
+    // Defender survives, update HP/Shields.
+    persist_ship_damage(db, &defender, 0);
   } else {
-      sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
-      send_enveloped_error(ctx->fd, root, 500, "DB update failed"); return 0;
+    // Destroy!
+    destroy_ship_and_handle_side_effects(NULL, defender.player_id);
   }
 
-  // 6. Response
-  json_t *res_data = json_object();
-  json_t *atk_obj = json_pack("{s:i, s:i, s:i, s:i}", "id", attacker_id, "fighters", att_fighters, "shields", 0 /* att_shields unused */, "turns_spent", g_cfg.combat.turn_cost);
-  json_t *def_obj = json_pack("{s:i, s:i, s:i}", "id", target_id, "fighters", def_fighters_new, "shields", def_shields_new);
-  json_t *dmg_obj = json_pack("{s:i, s:i}", "to_shields", shields_taken, "to_fighters", fighters_taken);
-  
-  json_object_set_new(res_data, "attacker", atk_obj);
-  json_object_set_new(res_data, "defender", def_obj);
-  json_object_set_new(res_data, "damage", dmg_obj);
-  json_object_set_new(res_data, "fled", json_false());
+  // --- Round 2: Defender Counter-Fire (if alive) ---
+  int att_shields_lost = 0, att_hull_lost = 0;
+  bool attacker_destroyed = false;
+  int def_committed = 0;
 
-  send_enveloped_ok(ctx->fd, root, "combat.attack_v1", res_data);
-  json_decref(res_data);
+  if (!defender_destroyed) {
+    // Defender commits max possible
+    def_committed = MIN(defender.fighters, defender.max_attack);
+        
+    double def_mult = 1.0 + ((double)defender.attack_power * OFFENSE_SCALE);
+    int def_raw_dmg = def_committed * DAMAGE_PER_FIGHTER;
+    int def_total_dmg = (int)(def_raw_dmg * def_mult);
+    LOGI("DEBUG: combat: DEFENDER def_committed=%d, def_power=%d, OFFENSE_SCALE=%.2f, DAMAGE_PER_FIGHTER=%d, def_mult=%.2f, def_raw_dmg=%d, def_total_dmg=%d",
+         def_committed, defender.attack_power, OFFENSE_SCALE, DAMAGE_PER_FIGHTER, def_mult, def_raw_dmg, def_total_dmg);
+        
+    double att_def_factor = 1.0 + ((double)attacker.defense_power * DEFENSE_SCALE);
+    int effective_dmg_to_att = (int)(def_total_dmg / att_def_factor);
+    LOGI("DEBUG: combat: ATTACKER att_defense_power=%d, DEFENSE_SCALE=%.2f, att_def_factor=%.2f, effective_dmg_to_att=%d",
+         attacker.defense_power, DEFENSE_SCALE, att_def_factor, effective_dmg_to_att);
+        
+    apply_combat_damage(&attacker, effective_dmg_to_att, &att_shields_lost, &att_hull_lost);
+    attacker_destroyed = (attacker.hull <= 0);
+        
+    if (!attacker_destroyed) {
+      // Persist Attacker
+      persist_ship_damage(db, &attacker, 0); 
+    } else {
+      destroy_ship_and_handle_side_effects(ctx, attacker.player_id);
+    }
+  }
+    
+  LOGI("DEBUG: combat: FINAL effective_dmg_to_def=%d, att_shields_lost=%d, att_hull_lost=%d, defender_destroyed=%s, attacker_destroyed=%s",
+       effective_dmg_to_def, att_shields_lost, att_hull_lost, defender_destroyed ? "true" : "false", attacker_destroyed ? "true" : "false");
 
+  // Response
+  json_t *resp = json_object();
+  json_object_set_new(resp, "fighters_committed", json_integer(att_committed));
+  json_object_set_new(resp, "damage_dealt", json_integer(effective_dmg_to_def));
+  json_object_set_new(resp, "damage_received", json_integer(defender_destroyed ? 0 : att_hull_lost + att_shields_lost)); 
+  json_object_set_new(resp, "defender_destroyed", json_boolean(defender_destroyed));
+  json_object_set_new(resp, "attacker_destroyed", json_boolean(attacker_destroyed));
+    
+  send_enveloped_ok(ctx->fd, root, "combat.attack.result", resp);
   return 0;
 }
 
 
-/* ---------- combat.status ---------- */
-int
-cmd_combat_status (client_ctx_t *ctx, json_t *root)
-{
-  if (!require_auth (ctx, root)) return 0;
-  sqlite3 *db = db_get_handle ();
-  if (!db) { 
-      send_enveloped_error (ctx->fd, root, ERR_SERVICE_UNAVAILABLE, "DB unavailable"); 
-      return 0; 
+int cmd_combat_status(client_ctx_t *ctx, json_t *root) {
+  if (!require_auth(ctx, root)) return 0;
+  sqlite3 *db = db_get_handle();
+    
+  int ship_id = h_get_active_ship_id(db, ctx->player_id);
+  if (ship_id <= 0) {
+    send_enveloped_error(ctx->fd, root, ERR_SHIP_NOT_FOUND, "No active ship");
+    return 0;
   }
-
-  json_t *data = json_object_get (root, "data");
-  int active_ship_id = h_get_active_ship_id (db, ctx->player_id);
-  int target_ship_id = active_ship_id;
-
-  if (data) {
-      json_t *j_ship = json_object_get(data, "ship_id");
-      if (j_ship && json_is_integer(j_ship)) {
-          target_ship_id = (int)json_integer_value(j_ship);
-      }
+    
+  combat_ship_t ship = {0};
+  if (load_ship_combat_stats(db, ship_id, &ship) != 0) {
+    send_enveloped_error(ctx->fd, root, ERR_DB, "Failed to load ship stats");
+    return 0;
   }
-
-  if (target_ship_id <= 0) {
-      send_enveloped_error(ctx->fd, root, ERR_SHIP_NOT_FOUND, "No ship specified or active.");
-      return 0;
-  }
-
-  // Query ship + max stats
-  const char *sql = 
-    "SELECT s.id, s.fighters, s.shields, t.maxshields "
-    "FROM ships s JOIN shiptypes t ON s.type_id = t.id "
-    "WHERE s.id = ?1;";
-  
-  sqlite3_stmt *st = NULL;
-  if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK) {
-      send_enveloped_error(ctx->fd, root, ERR_DB, sqlite3_errmsg(db));
-      return 0;
-  }
-  sqlite3_bind_int(st, 1, target_ship_id);
-
-  if (sqlite3_step(st) == SQLITE_ROW) {
-      json_t *ship_obj = json_object();
-      json_object_set_new(ship_obj, "id", json_integer(sqlite3_column_int(st, 0)));
-      json_object_set_new(ship_obj, "fighters", json_integer(sqlite3_column_int(st, 1)));
-      json_object_set_new(ship_obj, "shields", json_integer(sqlite3_column_int(st, 2)));
-      json_object_set_new(ship_obj, "max_shields", json_integer(sqlite3_column_int(st, 3)));
-
-      json_t *res = json_object();
-      json_object_set_new(res, "ship", ship_obj);
-      // last_combat is placeholder for now as we don't store combat history yet
-      json_object_set_new(res, "last_combat", json_null()); 
-
-      send_enveloped_ok(ctx->fd, root, "combat.status_v1", res);
-      json_decref(res);
-  } else {
-      send_enveloped_error(ctx->fd, root, ERR_SHIP_NOT_FOUND, "Ship not found.");
-  }
-  sqlite3_finalize(st);
+    
+  json_t *res = json_object();
+  json_object_set_new(res, "hull", json_integer(ship.hull));
+  json_object_set_new(res, "shields", json_integer(ship.shields));
+  json_object_set_new(res, "fighters", json_integer(ship.fighters));
+  json_object_set_new(res, "attack_power", json_integer(ship.attack_power));
+  json_object_set_new(res, "defense_power", json_integer(ship.defense_power));
+  json_object_set_new(res, "max_attack", json_integer(ship.max_attack));
+    
+  send_enveloped_ok(ctx->fd, root, "combat.status", res);
   return 0;
 }
 

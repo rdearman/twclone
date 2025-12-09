@@ -154,6 +154,7 @@ typedef struct
     int big_sleep_duration_seconds;
     int big_sleep_clear_xp_below;
     char escape_pod_spawn_mode[32];
+    int max_cloak_duration; // Added to match DB config
   } death;
   struct
   {
@@ -166,6 +167,7 @@ typedef struct
       double engine_weight;
       double mass_weight;
     } flee;
+    int neutral_band; // Added to match DB config
   } combat;
   struct
   {

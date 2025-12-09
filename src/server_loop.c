@@ -689,6 +689,7 @@ attach_rate_limit_meta (json_t *env, client_ctx_t *ctx)
 static void
 process_message (client_ctx_t *ctx, json_t *root)
 {
+  LOGE("DEBUG: process_message entered for fd=%d, ctx->player_id=%d", ctx->fd, ctx->player_id); // NEW
   db_close_thread ();                   /* Ensure a fresh DB connection */
   sqlite3 *db = db_get_handle ();       /* Re-open (or get) fresh DB conn */
   if (!db) {                            /* Handle case where we can't get a connection */

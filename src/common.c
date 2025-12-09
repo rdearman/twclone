@@ -388,7 +388,7 @@ get_tow_reason_string (int reason_code)
         return "Target ship is invalid for towing.";
       case ERR_BAD_STATE:
         return "Bad state encountered.";
-      case TERRITORY_UNSAFE:
+      case REF_TERRITORY_UNSAFE:
         return "Territory is unsafe for this action.";
       case ERR_FOREIGN_LIMPETS_PRESENT:
         return "Foreign limpets present, cannot perform action.";
