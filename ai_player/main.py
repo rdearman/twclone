@@ -616,19 +616,18 @@ def bootstrap_schemas(game_conn, state_manager, config):
     state_manager.state["pending_schema_requests"]["system.cmd_list"] = request_id
     time.sleep(0.1) # Avoid overwhelming the server
 
-
-def main():
+def main(config_path="config.json"):
     global shutdown_flag
-    
+
     # Load configuration
     try:
-        with open('config.json', 'r') as f:
+        with open(config_path, 'r') as f:
             config = json.load(f)
     except FileNotFoundError:
-        logger.critical("config.json not found. Exiting.")
+        logger.critical("%s not found. Exiting.", config_path)
         return
     except json.JSONDecodeError:
-        logger.critical("config.json is not valid JSON. Exiting.")
+        logger.critical("%s is not valid JSON. Exiting.", config_path)
         return
     
     # --- Setup Logging from Config ---
@@ -1144,4 +1143,6 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
 
 
 if __name__ == "__main__":
-    main()
+    # Allow: python main.py config_bot_001.json
+    cfg = sys.argv[1] if len(sys.argv) > 1 else "config.json"
+    main(cfg)

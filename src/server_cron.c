@@ -584,7 +584,7 @@ h_reset_turns_for_player (sqlite3 *db, int64_t now_s)
   int max_turns = 0;
   int rc;
   int updated_count = 0;
-  const char *sql_config = "SELECT turnsperday FROM config WHERE id = 1;";
+  const char *sql_config = "SELECT value FROM config WHERE key='turnsperday';";
   rc = sqlite3_prepare_v2 (db, sql_config, -1, &select_st, NULL);
   if (rc == SQLITE_OK && sqlite3_step (select_st) == SQLITE_ROW)
     {
@@ -1813,7 +1813,6 @@ h_npc_step (sqlite3 *db, int64_t now_s)
 {
   (void) now_s;
   int64_t now_ms = (int64_t) monotonic_millis ();
-
 
   if (iss_init_once () == 1)
     {
@@ -4282,61 +4281,6 @@ rollback_and_unlock_stock_price:
   return rc;
 }
 
-int
-h_shield_regen_tick (sqlite3 *db, int64_t now_s)
-{
-  if (!g_cfg.regen.enabled) 
-    {
-      return 0;
-    }
-
-  if (!try_lock (db, "shield_regen", now_s))
-    {
-      return 0;
-    }
-  
-  // LOGD("h_shield_regen_tick: Starting shield regeneration."); 
-
-  int rc = begin (db);
-  if (rc != SQLITE_OK)
-    {
-      unlock (db, "shield_regen");
-      return rc;
-    }
-
-  // Calculate regen amount based on config or default 5%
-  double rate = g_cfg.regen.shield_rate_pct_per_tick > 0 ? g_cfg.regen.shield_rate_pct_per_tick : 0.05;
-  
-  char *sql = sqlite3_mprintf(
-    "UPDATE ships "
-    "SET shields = MIN( "
-    "  (SELECT maxshields FROM shiptypes WHERE id = ships.type_id), "
-    "  shields + MAX(1, CAST((SELECT maxshields FROM shiptypes WHERE id = ships.type_id) * %f AS INTEGER)) "
-    ") "
-    "WHERE shields > 0 "
-    "  AND shields < (SELECT maxshields FROM shiptypes WHERE id = ships.type_id);", rate);
-
-  if (!sql) {
-      rollback(db);
-      unlock(db, "shield_regen");
-      return SQLITE_NOMEM;
-  }
-
-  rc = sqlite3_exec (db, sql, NULL, NULL, NULL);
-  sqlite3_free(sql);
-
-  if (rc != SQLITE_OK)
-    {
-      LOGE ("h_shield_regen_tick: SQL error: %s", sqlite3_errmsg (db));
-      rollback (db);
-      unlock (db, "shield_regen");
-      return rc;
-    }
-
-  commit (db);
-  unlock (db, "shield_regen");
-  return 0;
-}
 
 
 int
@@ -4439,3 +4383,109 @@ rollback_and_unlock_tax:
   return rc;
 }
 
+
+/* cron adapter: called by engine via cron_handler_fn, loads JSON payload and
+ * then calls h_shield_regen(db, payload).
+ */
+int
+h_shield_regen_tick (sqlite3 *db, int64_t now_s)
+{
+  /* Lock so only one engine instance runs shield_regen at a time */
+  if (!try_lock (db, "shield_regen", now_s))
+    {
+      /* Someone else holds the lock; treat as no-op. */
+      return 0;
+    }
+
+  sqlite3_stmt *st = NULL;
+  json_t *payload = NULL;
+  int rc;
+
+  const char *SQL =
+    "SELECT payload FROM cron_tasks WHERE name = 'shield_regen' LIMIT 1;";
+
+  rc = sqlite3_prepare_v2 (db, SQL, -1, &st, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_shield_regen_tick: prepare failed: %s", sqlite3_errmsg (db));
+      unlock (db, "shield_regen");
+      return rc;
+    }
+
+  if (sqlite3_step (st) == SQLITE_ROW)
+    {
+      const unsigned char *txt = sqlite3_column_text (st, 0);
+      if (txt && txt[0])
+        {
+          json_error_t jerr;
+          payload = json_loads ((const char *) txt, 0, &jerr);
+          if (!payload)
+            {
+              LOGE (
+                "h_shield_regen_tick: invalid JSON payload '%s': %s (line %d)",
+                (const char *) txt,
+                jerr.text,
+                jerr.line);
+            }
+        }
+      else
+        {
+          LOGI ("h_shield_regen_tick: NULL/empty payload, will use default.");
+        }
+    }
+  sqlite3_finalize (st);
+  st = NULL;
+
+  /* Fallback if payload missing/bad: either config or a hard-coded default */
+  if (!payload)
+    {
+      payload = json_object ();
+      /* Either use config, or fixed 5%.  Example with config: */
+      /* json_object_set_new(payload, "regen_percent",
+           json_integer(g_cfg.regen.shield_rate_pct_per_tick)); */
+      json_object_set_new (payload, "regen_percent", json_integer (5));
+    }
+
+  h_shield_regen (db, payload);
+
+  json_decref (payload);
+  unlock (db, "shield_regen");
+
+  return 0;   /* 0 = success */
+}
+
+
+void
+h_shield_regen(sqlite3 *db, const json_t *payload)
+{
+
+  json_t *val = json_object_get(payload, "regen_percent");
+    if (!json_is_integer(val)) {
+        return; /* or default to 5 */
+    }
+    int regen_percent = (int) json_integer_value(val);
+    if (regen_percent <= 0) {
+        return;
+    }
+    // LOGI ("h_shield_regen: regen at: %d percent",regen_percent);
+    const char *sql =
+        "UPDATE ships "
+        "SET shields = MIN(installed_shields, "
+        "                   shields + ((installed_shields * ?1) / 100)) "
+        "WHERE destroyed = 0 "
+        "  AND installed_shields > 0;";
+
+    sqlite3_stmt *stmt = NULL;
+    int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK)
+      {
+        /* log error */
+	LOGI ("h_shield_regen: SQL Error: %s",sqlite3_errmsg (db));		
+        return;
+    }
+
+    sqlite3_bind_int(stmt, 1, regen_percent);
+    rc = sqlite3_step(stmt);
+    /* optionally check rc == SQLITE_DONE */
+    sqlite3_finalize(stmt);
+}

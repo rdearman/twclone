@@ -2013,7 +2013,11 @@ create_ferringhi (int ferringhi_sector)
                    sqlite3_errmsg (db));
         }
       sqlite3_finalize (stoso);
-    }
+     }
+
+
+
+  
   // --- Ferringhi Homeworld (num=2) Update ---
   if (longest_tunnel_sector == oso_tunnel || oso_tunnel < 20)
     {
@@ -2059,6 +2063,20 @@ create_ferringhi (int ferringhi_sector)
                sqlite3_errmsg (db));
       return -1;
     }
+
+  char oso_player_sector[1024];
+  snprintf (oso_player_sector,
+            sizeof (oso_player_sector),
+	    "UPDATE players set sector=%d where name like '%%Captain';",
+	    oso_tunnel); 
+
+  if (sqlite3_exec (db, oso_player_sector, NULL, NULL, NULL ) != SQLITE_OK)
+    {
+      fprintf (stderr, "Orion Syndicate Player Sector Update failed: %s\n",
+               sqlite3_errmsg (db));
+      return -1;
+    }
+
   h_add_credits (db, "npc_planet", 3, 0, "DEPOSIT", NULL, NULL);
 
   /* Place the new Black Market Port in the Orion Hideout Sector (Correction IV.2) */

@@ -4768,6 +4768,7 @@ h_add_credits (sqlite3 *db, const char *owner_type, int owner_id,
                long long amount, const char *tx_type,
                const char *tx_group_id, long long *new_balance_out)
 {
+  if (amount <=0) { amount=1;}
   if (!db || owner_type == NULL || owner_id <= 0 || amount <= 0 ||
       tx_type == NULL)
     {
@@ -4815,11 +4816,6 @@ h_add_credits (sqlite3 *db, const char *owner_type, int owner_id,
       db_mutex_unlock ();
       return rc;
     }
-  LOGD ("h_add_credits: Adding %lld credits to account %d (%s:%d)",
-        amount,
-        account_id,
-        owner_type,
-        owner_id);
   rc = h_add_credits_unlocked (db,
                                account_id,
                                amount,
@@ -4833,11 +4829,7 @@ h_add_credits (sqlite3 *db, const char *owner_type, int owner_id,
         account_id,
         rc);
     }
-  else
-    {
-      LOGD ("h_add_credits: Credits added successfully. New balance: %lld",
-            new_balance_out ? *new_balance_out : -1);
-    }
+
   db_mutex_unlock ();
   return rc;
 }

@@ -105,7 +105,8 @@ static const CronHandler CRON_REGISTRY[] = {
   {"port_economy", h_port_economy_tick},
   {"shield_regen", h_shield_regen_tick},
   {"system_notice_ttl", engine_notice_ttl_sweep},
-  {"deadletter_retry", sweeper_engine_deadletter_retry}
+  {"deadletter_retry", sweeper_engine_deadletter_retry},
+  {NULL,NULL} /* required terminator */
 };
 
 
@@ -967,6 +968,7 @@ engine_main_loop (int shutdown_fd)
 
   for (;;)
     {
+      
       engine_s2s_drain_once (conn);
       uint64_t now_ms = monotonic_millis ();
 
@@ -1040,17 +1042,26 @@ engine_main_loop (int shutdown_fd)
           sqlite3_stmt *pick = NULL;
 
 
-          if (sqlite3_prepare_v2 (db_handle,
-                                  "SELECT id, name, schedule FROM cron_tasks "
-                                  "WHERE enabled=1 AND next_due_at <= ?1 "
-                                  "ORDER BY next_due_at ASC "
-                                  "LIMIT ?2;", -1, &pick, NULL) == SQLITE_OK)
-            {
-              sqlite3_bind_int64 (pick, 1, now_s);
+          /* if (sqlite3_prepare_v2 (db_handle, */
+          /*                         "SELECT id, name, schedule FROM cron_tasks " */
+          /*                         "WHERE enabled=1 AND next_due_at <= ?1 " */
+          /*                         "ORDER BY next_due_at ASC " */
+          /*                         "LIMIT ?2;", -1, &pick, NULL) == SQLITE_OK) */
+          /*   { */
+
+	  if (sqlite3_prepare_v2 (db_handle,
+				  "SELECT id, name, schedule FROM cron_tasks "
+				  "WHERE enabled=1 "
+				  "  AND (next_due_at IS NULL OR next_due_at <= ?1) "
+				  "ORDER BY next_due_at ASC "
+				  "LIMIT ?2;",
+				  -1, &pick, NULL) == SQLITE_OK)
+	    {
+	      sqlite3_bind_int64 (pick, 1, now_s);
               sqlite3_bind_int (pick, 2, LIMIT);
               while (sqlite3_step (pick) == SQLITE_ROW)
                 {
-                  int64_t id = sqlite3_column_int64 (pick, 0);
+		  int64_t id = sqlite3_column_int64 (pick, 0);
                   const char *nm =
                     (const char *) sqlite3_column_text (pick, 1);
                   const char *sch =
@@ -1537,4 +1548,5 @@ rollback_and_unlock:
   unlock (db, "daily_bank_interest_tick");
   return rc;
 }
+
 

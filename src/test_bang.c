@@ -179,6 +179,11 @@ main (int argc, char *argv[])
       fprintf (stderr, "DB init failed\n");
       return 1;
     }
+  /* populate the cron_tasks table */
+  
+  sqlite3 *handle2 = db_get_handle();
+  db_seed_cron_tasks(handle2);
+  
   /* Update Config in DB */
   printf ("Configuring Universe:\n");
   if (update_config_int (handle, "default_nodes", sectors) == 0)

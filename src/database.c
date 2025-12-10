@@ -182,7 +182,7 @@ db_close_thread (void)
 {
   if (tls_db != NULL)
     {
-      LOGI ("DEBUG: Closing thread-local DB connection.");  // Add this!
+      // LOGI ("DEBUG: Closing thread-local DB connection.");  // Add this!
       sqlite3_close (tls_db);
       tls_db = NULL;
     }
@@ -458,7 +458,8 @@ const char *create_table_sql[] = {
   "  value TEXT NOT NULL, "
   "  type TEXT NOT NULL CHECK (type IN ('int', 'bool', 'string', 'double')) "
   " ); ",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('turnsperday', '120', 'int');",
+  
+
   /* CORPORATIONS + MEMBERS */
   " CREATE TABLE IF NOT EXISTS corporations ( "
   "   id INTEGER PRIMARY KEY,  "
@@ -674,6 +675,7 @@ const char *create_table_sql[] = {
   " CREATE TABLE IF NOT EXISTS player_types (type INTEGER PRIMARY KEY AUTOINCREMENT, description TEXT); ",
   " CREATE TABLE IF NOT EXISTS sectors (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, beacon TEXT, nebulae TEXT); ",
   " CREATE TABLE IF NOT EXISTS sector_warps (from_sector INTEGER, to_sector INTEGER, PRIMARY KEY (from_sector, to_sector), FOREIGN KEY (from_sector) REFERENCES sectors(id) ON DELETE CASCADE, FOREIGN KEY (to_sector) REFERENCES sectors(id) ON DELETE CASCADE); ",
+  
   " CREATE TABLE IF NOT EXISTS shiptypes (  "
   "   id INTEGER PRIMARY KEY AUTOINCREMENT,  "
   "   name TEXT NOT NULL UNIQUE,  "
@@ -705,6 +707,7 @@ const char *create_table_sql[] = {
   "   enabled INTEGER NOT NULL DEFAULT 1, "
   "   FOREIGN KEY (required_commission) REFERENCES commision(id) "
   " );  ",
+  
   " CREATE TABLE IF NOT EXISTS ships (  "
   "   id INTEGER PRIMARY KEY AUTOINCREMENT,  "
   "   name TEXT NOT NULL,  "
@@ -720,6 +723,7 @@ const char *create_table_sql[] = {
   "   photons INTEGER, /* Current quantity carried */  "
   "   sector INTEGER, /* Foreign Key to sectors.id */  "
   "   shields INTEGER DEFAULT 1,  "
+  "   installed_shields INTEGER DEFAULT 1,  "  
   "   beacons INTEGER, /* Current quantity carried */  "
   "   colonists INTEGER,  "
   "   equipment INTEGER,  "
@@ -742,7 +746,25 @@ const char *create_table_sql[] = {
   "   CONSTRAINT check_current_cargo_limit CHECK ( (colonists + equipment + organics + ore) <= holds ), "
   "   FOREIGN KEY(type_id) REFERENCES shiptypes(id),  "
   "   FOREIGN KEY(sector) REFERENCES sectors(id)  " " );  ",
-  " CREATE TABLE IF NOT EXISTS ship_markers ( "
+
+  "  CREATE TRIGGER ships_ai_set_installed_shields "
+  "  AFTER INSERT ON ships "
+  "  FOR EACH ROW "
+  "  BEGIN "
+  "    UPDATE ships "
+  "    SET installed_shields = MIN( "
+  "        NEW.shields, "
+  "        COALESCE( "
+  "          (SELECT maxshields "
+  "           FROM shiptypes st "
+  "           WHERE st.id = NEW.type_id), "
+  "          NEW.shields "
+  "        ) "
+  "      ) "
+  "  WHERE id = NEW.id; "
+  "END; "
+
+   " CREATE TABLE IF NOT EXISTS ship_markers ( "
   " ship_id        INTEGER NOT NULL REFERENCES ships(id), "
   " owner_player   INTEGER NOT NULL, "
   " owner_corp     INTEGER NOT NULL DEFAULT 0, "
@@ -759,6 +781,7 @@ const char *create_table_sql[] = {
   " PRIMARY KEY (ship_id, player_id, role_id), "
   " FOREIGN KEY(ship_id)  REFERENCES ships(id), "
   " FOREIGN KEY(player_id) REFERENCES players(id)); ",
+
   " CREATE TABLE IF NOT EXISTS planets ( "
   " id INTEGER PRIMARY KEY AUTOINCREMENT,  " " num INTEGER,  "                                          /* legacy planet ID */
   " sector INTEGER NOT NULL,  "         /* FK to sectors.id */
@@ -787,6 +810,7 @@ const char *create_table_sql[] = {
   "     WHEN (SELECT COUNT(*) FROM planets) >= (SELECT CAST(value AS INTEGER) FROM config WHERE key = 'max_total_planets') "
   "     THEN RAISE(ABORT, 'ERR_UNIVERSE_FULL') "
   "     ELSE 1 " "   END; " " END; ",
+
   " CREATE TABLE IF NOT EXISTS citadel_requirements ( "
   "   planet_type_id INTEGER NOT NULL REFERENCES planettypes(id) ON DELETE CASCADE, "
   "   citadel_level INTEGER NOT NULL, "
@@ -2206,7 +2230,7 @@ const char *create_table_sql[] = {
 };
 const char *insert_default_sql[] = {
   /* Config defaults - Key-Value-Type Schema */
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('turnsperday', '120', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('turnsperday', '125', 'int');",
   "INSERT OR IGNORE INTO config (key, value, type) VALUES ('maxwarps_per_sector', '6', 'int');",
   "INSERT OR IGNORE INTO config (key, value, type) VALUES ('startingcredits', '10000000', 'int');",
   "INSERT OR IGNORE INTO config (key, value, type) VALUES ('startingfighters', '10', 'int');",
@@ -2451,7 +2475,7 @@ const char *insert_default_sql[] = {
   "20000,50000,20000, " "0,0,0,0,0, " "20000,50000,10000,1000000,-0.10);",
   /* Earth planet in sector 1 */
   " INSERT OR IGNORE INTO planets (num, sector, name, owner_id, owner_type, population, type, creator, colonist, fighters) "
-  " VALUES (1, 1, 'Earth', 0, 'player', 8000000000, 1, 'System', 18000000, 1000000); ",
+  " VALUES (1, 1, 'Earth', (SELECT id FROM players where name='Federation Administrator'), 'npc_fraction', 8000000000, 1, 'System', 18000000, 1000000); ",
   " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
   " ((SELECT id FROM planets WHERE name='Earth'), 'ore', 10000000, 10000000, 0); ",
   " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
@@ -2460,7 +2484,7 @@ const char *insert_default_sql[] = {
   " ((SELECT id FROM planets WHERE name='Earth'), 'equipment', 10000000, 10000000, 0); ",
   /* Ferringhi planet in sector 0 (change in bigbang) */
   " INSERT OR IGNORE INTO planets (num, sector, name, owner_id, owner_type, population, type, creator, colonist, fighters) "
-  " VALUES (2, 0, 'Ferringhi Homeworld', 0, 'npc_faction', 8000000000, 1, 'System', 18000000, 1000000); ",
+  " VALUES (2, 0, 'Ferringhi Homeworld', (SELECT id FROM players where name='Ferrengi Trader 1'), 'npc_faction', 8000000000, 1, 'System', 18000000, 1000000); ",
   " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
   " ((SELECT id FROM planets WHERE name='Earth'), 'ore', 10000000, 10000000, 0); ",
   " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
@@ -2471,7 +2495,7 @@ const char *insert_default_sql[] = {
   " ((SELECT id FROM planets WHERE name='Earth'), 'fuel', 100000, 100000, 0); ",
   /* NPC Planet: Orion Hideout (Contraband Outpost) */
   " INSERT OR IGNORE INTO planets (num, sector, name, owner_id, owner_type, population, type, creator, colonist, fighters) "
-  " VALUES (3, 0, 'Orion Hideout', 0, 'npc_faction', 20000000, 1, 'Syndicate', 20010000, 200000); ",
+  " VALUES (3, 0, 'Orion Hideout', (SELECT id FROM players WHERE name LIKE 'Zydras%'), 'npc_faction', 20000000, 1, 'Syndicate', 20010000, 200000); ",
   " /* Orion Hideout Commodity Stock and Capacity */ "
   " INSERT OR IGNORE INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES "
   " ((SELECT id FROM planets WHERE name='Orion Hideout'), 'ore', 50000000, 50000000, 10); ",
@@ -2622,7 +2646,7 @@ const char *insert_default_sql[] = {
   "INSERT OR IGNORE INTO players (number, name, passwd, sector, ship, type, commission) VALUES (7, 'newguy', 'pass123',1,1,2,1);",
   /* ---- AI QA Bot Test Player ---- */
   "INSERT INTO ships (name, type_id, attack, holds, fighters, shields, sector, onplanet, ported) SELECT 'QA Bot 1', T.id, T.maxattack, T.maxholds, T.maxfighters, T.maxshields, 1, 0, 0 FROM shiptypes T WHERE T.name = 'Scout Marauder';",
-  "INSERT OR IGNORE INTO players (number,  is_npc, name, passwd, sector, credits, type, commission) VALUES (8,1, 'ai_qa_bot', 'quality', 1, 10000, 2, 1);",
+  "INSERT OR IGNORE INTO players (number, name, passwd, sector, credits, type, commission) VALUES (8, 'ai_qa_bot', 'quality', 1, 10000, 2, 1);",
   "UPDATE players SET ship = (SELECT id FROM ships WHERE name = 'QA Bot 1') WHERE name = 'ai_qa_bot';",
   "INSERT INTO ship_ownership (player_id, ship_id, is_primary, role_id) VALUES ((SELECT id FROM players WHERE name = 'ai_qa_bot'), (SELECT id FROM ships WHERE name = 'QA Bot 1'), 1, 1);",
   /* ----------------------------- */
@@ -2662,14 +2686,20 @@ const char *insert_default_sql[] = {
   /* ------------------------------------------------------------------------------------- */
   /* 3. Insert 5 Orion Captains and assign ships (FIXED: players columns and ship ownership) */
   /* ------------------------------------------------------------------------------------- */
-  /* Insert 5 Orion Captains (Players) - Removed non-schema columns (faction_id, empire, turns) */
-  "INSERT OR IGNORE INTO players (type, is_npc, loggedin, name, passwd, sector, experience, alignment, credits) "
-  "SELECT 1, 1, 1, 'Zydras, Heavy Fighter Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
-  "SELECT 1, 1, 1, 'Krell, Scout Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
-  "SELECT 1, 1, 1, 'Vex, Contraband Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
-  "SELECT 1, 1, 1, 'Jaxx, Smuggler Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3 UNION ALL "
-  "SELECT 1, 1, 1, 'Sira, Market Guard Captain', '', P.sector, 100, -100, 1000 FROM planets P WHERE P.num=3;"
-  "SELECT 1, 1, 1, 'Fer', '', P.sector, 200, -100, 1000, 1 FROM planets P WHERE P.num=2;"
+  /* Insert 5 Orion Captains (Players) (and Fer) - Just stick them in 50 to start, the Orion in bigbang should move them to the right sector Removed non-schema columns (faction_id, empire, turns) */
+
+  "INSERT OR IGNORE INTO players "
+  "(type, is_npc, loggedin, name, passwd, sector, experience, alignment, credits) "
+  "VALUES "
+  "(1, 1, 1, 'Zydras, Heavy Fighter Captain', '', 50, 550000, -10000, 9000), "
+  "(1, 1, 1, 'Krell, Scout Captain',          '', 50, 300000,  -1900, 8000), "
+  "(1, 1, 1, 'Vex, Contraband Captain',       '', 50, 200000,  -1000, 7000), "
+  "(1, 1, 1, 'Jaxx, Smuggler Captain',        '', 50, 100000,   -750, 6000), "
+  "(1, 1, 1, 'Sira, Market Guard Captain',    '', 50,  10000,   -500, 5000), "
+  "(1, 1, 1, 'Fer',                           '', 50,    200,   -100, 1000);",
+
+  "INSERT OR IGNORE INTO players (type, is_npc, loggedin, name, passwd, sector, experience, alignment, credits) VALUES ( 1, 1, 1, 'Fer', '', 50, 200, -100, 1000 );",
+
   /* ------------------------------------------------------------------------------------- */
   /*  -- 1. Create the Orion Syndicate Corporation */
   "INSERT INTO corporations (name, owner_id, tag) VALUES ('Orion Syndicate', (SELECT id FROM players WHERE name LIKE 'Zydras%'), 'ORION');",
@@ -2693,7 +2723,7 @@ const char *insert_default_sql[] = {
 
   "INSERT OR IGNORE INTO economy_curve (id, curve_name, base_restock_rate, price_elasticity, target_stock, volatility_factor) VALUES (1, 'default', 0.1, 0.5, 10000, 0.2);"
 
-  ///////////////////////
+
 };
 ///////////// S2S /////////////////////////
 static const char *engine_bootstrap_sql_statements[] = {
@@ -2714,28 +2744,31 @@ static const char *engine_bootstrap_sql_statements[] = {
   "  last_run_at INTEGER,"
   "  next_due_at INTEGER NOT NULL,"
   "  enabled INTEGER NOT NULL DEFAULT 1," "  payload TEXT" ");",
+
   "INSERT OR IGNORE INTO cron_tasks(name,schedule,last_run_at,next_due_at,enabled,payload) VALUES"
-  "('daily_turn_reset','daily@03:00Z',NULL,strftime('%s','now'),1,NULL),"
-  "('terra_replenish','daily@04:00Z',NULL,strftime('%s','now'),1,NULL),"
-  "('planet_growth','every:10m',NULL,strftime('%s','now'),1,NULL),"
-  "('fedspace_cleanup','every:2m',NULL,strftime('%s','now'),1,NULL),"
-  "('autouncloak_sweeper','every:15m',NULL,strftime('%s','now'),1,NULL),"
-  "('npc_step','every:30s',NULL,strftime('%s','now'),1,NULL),"
-  "('broadcast_ttl_cleanup','every:5m',NULL,strftime('%s','now'),1,NULL),"
-  "('daily_news_compiler','daily@06:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','6 hours'),1,NULL),"
-  "('traps_process','every:1m',NULL,strftime('%s','now'),1,NULL),"
-  "('cleanup_old_news','daily@07:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','7 hours'),1,NULL),"
-  "('limpet_ttl_cleanup','every:5m',NULL,strftime('%s','now'),1,NULL),"
-  "('daily_lottery_draw','daily@23:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','23 hours'),1,NULL),"
-  "('deadpool_resolution_cron','daily@01:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','1 hours'),1,NULL),"
-  "('tavern_notice_expiry_cron','daily@07:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','7 hours'),1,NULL),"
-  "('loan_shark_interest_cron','daily@00:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','0 hours'),1,NULL),"
-  "('dividend_payout','daily@05:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','5 hours'),1,NULL),"
-  "('daily_stock_price_recalculation','daily@04:30Z',NULL,strftime('%s','now','start of day','+1 day','utc','4 hours','+30 minutes'),1,NULL),"
-  "('daily_market_settlement','daily@05:30Z',NULL,strftime('%s','now','start of day','+1 day','utc','5 hours','+30 minutes'),1,NULL),"
-  "('system_notice_ttl','daily@00:05Z',NULL,strftime('%s','now','start of day','+1 day','utc','0 hours','+5 minutes'),1,NULL),"
-  "('deadletter_retry','every:1m',NULL,strftime('%s','now'),1,NULL),"
-  "('daily_corp_tax','daily@05:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','5 hours'),1,NULL);",
+  " ('daily_turn_reset','daily@03:00Z',NULL,strftime('%s','now'),1,NULL), "
+  " ('terra_replenish','daily@04:00Z',NULL,strftime('%s','now'),1,NULL), "
+  " ('planet_growth','every:10m',NULL,strftime('%s','now'),1,NULL), "
+  " ('fedspace_cleanup','every:2m',NULL,strftime('%s','now'),1,NULL), "
+  " ('autouncloak_sweeper','every:15m',NULL,strftime('%s','now'),1,NULL), "
+  " ('npc_step','every:30s',NULL,strftime('%s','now'),1,NULL), "
+  " ('broadcast_ttl_cleanup','every:5m',NULL,strftime('%s','now'),1,NULL), "
+  " ('daily_news_compiler','daily@06:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','6 hours'),1,NULL), "
+  " ('traps_process','every:1m',NULL,strftime('%s','now'),1,NULL), "
+  " ('cleanup_old_news','daily@07:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','7 hours'),1,NULL), "
+  " ('limpet_ttl_cleanup','every:5m',NULL,strftime('%s','now'),1,NULL), "
+  " ('daily_lottery_draw','daily@23:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','23 hours'),1,NULL), "
+  " ('deadpool_resolution_cron','daily@01:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','1 hours'),1,NULL), "
+  " ('tavern_notice_expiry_cron','daily@07:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','7 hours'),1,NULL), "
+  " ('loan_shark_interest_cron','daily@00:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','0 hours'),1,NULL), "
+  " ('dividend_payout','daily@05:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','5 hours'),1,NULL), "
+  " ('daily_stock_price_recalculation','daily@04:30Z',NULL,strftime('%s','now','start of day','+1 day','utc','4 hours','+30 minutes'),1,NULL), "
+  " ('daily_market_settlement','daily@05:30Z',NULL,strftime('%s','now','start of day','+1 day','utc','5 hours','+30 minutes'),1,NULL), "
+  " ('system_notice_ttl','daily@00:05Z',NULL,strftime('%s','now','start of day','+1 day','utc','0 hours','+5 minutes'),1,NULL), "
+  " ('shield_regen','every:1m',NULL,strftime('%s','now'),1, '{\"regen_percent\":5}'), " 
+  " ('deadletter_retry','every:1m',NULL,strftime('%s','now'),1,NULL),"
+  " ('daily_corp_tax','daily@05:00Z',NULL,strftime('%s','now','start of day','+1 day','utc','5 hours'),1,NULL);",
+
   /* --- Server→Engine event rail (separate from your existing system_events) --- */
   "CREATE TABLE IF NOT EXISTS engine_events("
   "  id INTEGER PRIMARY KEY,"
