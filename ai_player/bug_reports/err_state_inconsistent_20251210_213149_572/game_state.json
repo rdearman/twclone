@@ -1,0 +1,415 @@
+{
+    "session_id": "d0f62760b79338c54308e2cd8a6cadd3832bf05f346313b57484566b6ba5be57",
+    "player_info": {
+        "player": {
+            "id": 61,
+            "username": "\u0001",
+            "credits": "1000000.00",
+            "turns_remaining": 750,
+            "sector": 7,
+            "ship_id": 72,
+            "corp_id": 0,
+            "alignment": 1,
+            "experience": 0,
+            "title_info": {
+                "title": "Civilian",
+                "commission": 1,
+                "alignment": 1,
+                "experience": 0,
+                "alignment_band": {
+                    "code": "NEUTRAL",
+                    "name": "Neutral",
+                    "is_good": false,
+                    "is_evil": false,
+                    "can_buy_iss": false,
+                    "can_rob_ports": false
+                }
+            }
+        }
+    },
+    "ship_info": {
+        "id": 72,
+        "number": 72,
+        "name": "ai_qa_bot_045's ship",
+        "type": {
+            "id": 0,
+            "name": "10"
+        },
+        "holds": 10,
+        "fighters": 250,
+        "location": {
+            "sector_id": 7,
+            "sector_name": "Fedspace 7"
+        },
+        "owner": {
+            "id": 61,
+            "name": "ai_qa_bot_045"
+        },
+        "cargo": []
+    },
+    "player_location_sector": 7,
+    "sector_data": {},
+    "universe_map": {},
+    "port_info_by_sector": {},
+    "price_cache": {},
+    "bank_balance": 0,
+    "command_retry_info": {
+        "player.my_info": {
+            "next_retry_time": 1765402312.5372798
+        },
+        "ship.info": {
+            "next_retry_time": 1765402313.5694988
+        }
+    },
+    "strategy_plan": [],
+    "trade_successful": false,
+    "q_table": {},
+    "n_table": {},
+    "command_schemas": {
+        "session.hello": {
+            "$id": "ge://schema/session.hello.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+        },
+        "session.ping": {
+            "$id": "ge://schema/session.ping.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+        },
+        "session.disconnect": {
+            "$id": "ge://schema/session.disconnect.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "auth.login": {
+            "$id": "ge://schema/auth.login.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "username": {
+                    "type": "string"
+                },
+                "passwd": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "username",
+                "passwd"
+            ],
+            "additionalProperties": true
+        },
+        "auth.logout": {
+            "$id": "ge://schema/auth.logout.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "auth.mfa.totp.verify": {
+            "$id": "ge://schema/auth.mfa.totp.verify.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "auth.register": {
+            "$id": "ge://schema/auth.register.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "username": {
+                    "type": "string"
+                },
+                "passwd": {
+                    "type": "string"
+                },
+                "ship_name": {
+                    "type": "string"
+                },
+                "ui_locale": {
+                    "type": "string"
+                },
+                "ui_timezone": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "username",
+                "passwd"
+            ],
+            "additionalProperties": true
+        },
+        "player.my_info": {
+            "$id": "ge://schema/player.my_info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+        },
+        "ship.info": {
+            "$id": "ge://schema/ship.info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+        },
+        "sector.info": {
+            "$id": "ge://schema/sector.info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [],
+            "additionalProperties": true
+        },
+        "sector.set_beacon": {
+            "$id": "ge://schema/sector.set_beacon.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "text": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "sector_id",
+                "text"
+            ],
+            "additionalProperties": false
+        },
+        "move.warp": {
+            "$id": "ge://schema/move_warp.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "to_sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "to_sector_id"
+            ],
+            "additionalProperties": true
+        },
+        "move.scan": {
+            "$id": "ge://schema/move.scan.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {}
+        },
+        "move.pathfind": {
+            "$id": "ge://schema/move.pathfind.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.accept": {
+            "$id": "ge://schema/trade.accept.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.buy": {
+            "$id": "ge://schema/trade.buy.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "port_id": {
+                    "type": "integer"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "commodity": {
+                                "type": "string"
+                            },
+                            "quantity": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "commodity",
+                            "quantity"
+                        ],
+                        "additionalProperties": true
+                    }
+                },
+                "idempotency_key": {
+                    "type": "string"
+                },
+                "account": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ]
+                },
+                "sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "port_id",
+                "items",
+                "idempotency_key",
+                "account",
+                "sector_id"
+            ],
+            "additionalProperties": true
+        },
+        "trade.cancel": {
+            "$id": "ge://schema/trade.cancel.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.history": {
+            "$id": "ge://schema/trade.history.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50
+                },
+                "cursor": {
+                    "type": "string"
+                }
+            },
+            "required": [],
+            "additionalProperties": true
+        },
+        "trade.jettison": {
+            "$id": "ge://schema/trade.jettison.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.offer": {
+            "$id": "ge://schema/trade.offer.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.port_info": {
+            "$id": "ge://schema/trade.port_info.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.quote": {
+            "$id": "ge://schema/trade.quote.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "port_id": {
+                    "type": "integer"
+                },
+                "commodity": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "port_id",
+                "commodity",
+                "quantity"
+            ],
+            "additionalProperties": true
+        },
+        "trade.sell": {
+            "$id": "ge://schema/trade.sell.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "port_id": {
+                    "type": "integer"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "commodity": {
+                                "type": "string"
+                            },
+                            "quantity": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "commodity",
+                            "quantity"
+                        ],
+                        "additionalProperties": true
+                    }
+                },
+                "idempotency_key": {
+                    "type": "string"
+                },
+                "account": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ]
+                }
+            },
+            "required": [
+                "sector_id",
+                "port_id",
+                "items",
+                "idempotency_key",
+                "account"
+            ],
+            "additionalProperties": true
+        }
+    },
+    "schema_blacklist": [],
+    "pending_schema_requests": {
+        "system.cmd_list": "c-612687c1",
+        "session.hello": "c-28fb994f",
+        "session.ping": "c-129c6561",
+        "session.disconnect": "c-f149425e",
+        "auth.login": "c-041fee28",
+        "auth.logout": "c-e2ba54b2",
+        "auth.mfa.totp.verify": "c-f7dd8fcc",
+        "auth.register": "c-ee310dd8",
+        "player.my_info": "c-171d4f28",
+        "ship.info": "c-cc193247",
+        "sector.info": "c-bb27e801",
+        "sector.set_beacon": "c-2dcdf5bf",
+        "move.warp": "c-c3044988",
+        "move.scan": "c-0d696721",
+        "move.pathfind": "c-72a40f51",
+        "trade.accept": "c-5eaa994b",
+        "trade.buy": "c-23db0280",
+        "trade.cancel": "c-c47c9999",
+        "trade.history": "c-a0015f65",
+        "trade.jettison": "c-ea193f79",
+        "trade.offer": "c-a334224f",
+        "trade.port_info": "c-060a9828",
+        "trade.quote": "c-645cc6b1",
+        "trade.sell": "c-03fa2a7e"
+    },
+    "recent_sectors": [
+        7,
+        7
+    ],
+    "pending_commands": {},
+    "port_trade_blacklist": [],
+    "warp_blacklist": [],
+    "current_path": [],
+    "last_action_result": {
+        "status": "ok",
+        "command": "ship.info",
+        "request_id": "c-7d37d82b",
+        "response_type": "ship.status",
+        "ts": "2025-12-10T21:31:48Z"
+    },
+    "current_qa_objective": null,
+    "needs_bootstrap": true
+}

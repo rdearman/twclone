@@ -1,0 +1,916 @@
+{
+    "session_id": "6d35e51a455ec7c609453e0c58b8e16208ee43684d967ce6f83f15634cce17a1",
+    "player_info": {
+        "player": {
+            "id": 188,
+            "username": "\u0001",
+            "credits": "1000000.00",
+            "turns_remaining": 750,
+            "sector": 10,
+            "ship_id": 199,
+            "corp_id": 0,
+            "alignment": 1,
+            "experience": 0,
+            "title_info": {
+                "title": "Civilian",
+                "commission": 1,
+                "alignment": 1,
+                "experience": 0,
+                "alignment_band": {
+                    "code": "NEUTRAL",
+                    "name": "Neutral",
+                    "is_good": false,
+                    "is_evil": false,
+                    "can_buy_iss": false,
+                    "can_rob_ports": false
+                }
+            }
+        }
+    },
+    "ship_info": {
+        "cargo": []
+    },
+    "player_location_sector": 10,
+    "sector_data": {},
+    "universe_map": {
+        "1": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "7": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "6": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "5": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "4": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "3": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "4122": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2930": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "3137": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2592": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1518": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "173": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1118": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2640": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "3311": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2059": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2927": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "3947": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2464": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "3338": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "117": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2881": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1013": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1861": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2190": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "4346": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "4188": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "276": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "3409": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "3534": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2638": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1863": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1415": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "251": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2056": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2986": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "4358": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "260": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "450": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1542": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "3587": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "3803": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "4867": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "774": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "4979": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "3878": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "4858": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "4662": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "4400": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "3154": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "3808": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2417": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "3285": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1810": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1745": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "355": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2205": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "3153": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "3632": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1501": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "979": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1360": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "10": {
+            "is_explored": true,
+            "has_port": false
+        }
+    },
+    "port_info_by_sector": {},
+    "price_cache": {},
+    "bank_balance": 0,
+    "command_retry_info": {
+        "player.my_info": {
+            "next_retry_time": 1765403183.936421
+        }
+    },
+    "strategy_plan": [],
+    "trade_successful": true,
+    "q_table": {
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "trade.buy": -0.44999999999999996,
+            "combat.attack": 0.0,
+            "combat.deploy_fighters": 0.0,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "move.warp": 0.1,
+            "bank.balance": 0.1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:431-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "trade.buy": -0.44999999999999996,
+            "combat.attack": 0.0,
+            "combat.deploy_fighters": 0.0,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:464-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "combat.attack": 0.0,
+            "combat.deploy_fighters": 0.0,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1602-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "combat.attack": 0.0,
+            "combat.deploy_fighters": 0.0,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:617-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "trade.buy": -0.44999999999999996,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:186-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1027-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:528-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1750-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:834-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1138-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1297-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:737-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:807-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1092-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:92-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:813-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:558-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1218-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1265-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.1
+        }
+    },
+    "n_table": {
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "trade.buy": 2,
+            "combat.attack": 0,
+            "combat.deploy_fighters": 0,
+            "move.warp": 2,
+            "bank.deposit": 0,
+            "bank.balance": 1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "move.warp": 98,
+            "bank.balance": 11
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:431-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "trade.buy": 2,
+            "combat.attack": 0,
+            "combat.deploy_fighters": 0,
+            "move.warp": 3,
+            "bank.deposit": 0,
+            "bank.balance": 0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:464-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "combat.attack": 0,
+            "combat.deploy_fighters": 0,
+            "move.warp": 3,
+            "bank.deposit": 0,
+            "bank.balance": 0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1602-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "combat.attack": 0,
+            "combat.deploy_fighters": 0,
+            "move.warp": 2,
+            "bank.deposit": 0,
+            "bank.balance": 1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:617-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "trade.buy": 2,
+            "move.warp": 2,
+            "bank.deposit": 0,
+            "bank.balance": 1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:186-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "move.warp": 2,
+            "bank.deposit": 0,
+            "bank.balance": 0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1027-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "move.warp": 2,
+            "bank.deposit": 0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:528-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "move.warp": 2,
+            "bank.deposit": 0,
+            "bank.balance": 1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1750-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "move.warp": 2,
+            "bank.deposit": 0,
+            "bank.balance": 0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:834-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "move.warp": 3,
+            "bank.deposit": 0,
+            "bank.balance": 1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1138-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "move.warp": 2,
+            "bank.deposit": 0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1297-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "move.warp": 2,
+            "bank.deposit": 0,
+            "bank.balance": 0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:737-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "move.warp": 3,
+            "bank.deposit": 0,
+            "bank.balance": 1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:807-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "move.warp": 2,
+            "bank.deposit": 0,
+            "bank.balance": 0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1092-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "move.warp": 3,
+            "bank.deposit": 0,
+            "bank.balance": 1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:92-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "move.warp": 3,
+            "bank.deposit": 0,
+            "bank.balance": 1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:813-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "move.warp": 2,
+            "bank.deposit": 0,
+            "bank.balance": 0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:558-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "move.warp": 2,
+            "bank.deposit": 0,
+            "bank.balance": 0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1218-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "move.warp": 3,
+            "bank.deposit": 0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1265-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "move.warp": 100,
+            "bank.deposit": 0,
+            "bank.balance": 1
+        }
+    },
+    "command_schemas": {
+        "session.hello": {
+            "$id": "ge://schema/session.hello.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+        },
+        "session.ping": {
+            "$id": "ge://schema/session.ping.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+        },
+        "session.disconnect": {
+            "$id": "ge://schema/session.disconnect.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "auth.login": {
+            "$id": "ge://schema/auth.login.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "username": {
+                    "type": "string"
+                },
+                "passwd": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "username",
+                "passwd"
+            ],
+            "additionalProperties": true
+        },
+        "auth.logout": {
+            "$id": "ge://schema/auth.logout.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "auth.mfa.totp.verify": {
+            "$id": "ge://schema/auth.mfa.totp.verify.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "auth.register": {
+            "$id": "ge://schema/auth.register.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "username": {
+                    "type": "string"
+                },
+                "passwd": {
+                    "type": "string"
+                },
+                "ship_name": {
+                    "type": "string"
+                },
+                "ui_locale": {
+                    "type": "string"
+                },
+                "ui_timezone": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "username",
+                "passwd"
+            ],
+            "additionalProperties": true
+        },
+        "player.my_info": {
+            "$id": "ge://schema/player.my_info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+        },
+        "ship.info": {
+            "$id": "ge://schema/ship.info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+        },
+        "sector.info": {
+            "$id": "ge://schema/sector.info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [],
+            "additionalProperties": true
+        },
+        "sector.set_beacon": {
+            "$id": "ge://schema/sector.set_beacon.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "text": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "sector_id",
+                "text"
+            ],
+            "additionalProperties": false
+        },
+        "move.warp": {
+            "$id": "ge://schema/move_warp.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "to_sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "to_sector_id"
+            ],
+            "additionalProperties": true
+        },
+        "move.scan": {
+            "$id": "ge://schema/move.scan.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {}
+        },
+        "move.pathfind": {
+            "$id": "ge://schema/move.pathfind.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.accept": {
+            "$id": "ge://schema/trade.accept.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.buy": {
+            "$id": "ge://schema/trade.buy.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "port_id": {
+                    "type": "integer"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "commodity": {
+                                "type": "string"
+                            },
+                            "quantity": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "commodity",
+                            "quantity"
+                        ],
+                        "additionalProperties": true
+                    }
+                },
+                "idempotency_key": {
+                    "type": "string"
+                },
+                "account": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ]
+                },
+                "sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "port_id",
+                "items",
+                "idempotency_key",
+                "account",
+                "sector_id"
+            ],
+            "additionalProperties": true
+        },
+        "trade.cancel": {
+            "$id": "ge://schema/trade.cancel.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.history": {
+            "$id": "ge://schema/trade.history.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50
+                },
+                "cursor": {
+                    "type": "string"
+                }
+            },
+            "required": [],
+            "additionalProperties": true
+        },
+        "trade.jettison": {
+            "$id": "ge://schema/trade.jettison.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.offer": {
+            "$id": "ge://schema/trade.offer.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.port_info": {
+            "$id": "ge://schema/trade.port_info.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.quote": {
+            "$id": "ge://schema/trade.quote.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "port_id": {
+                    "type": "integer"
+                },
+                "commodity": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "port_id",
+                "commodity",
+                "quantity"
+            ],
+            "additionalProperties": true
+        },
+        "trade.sell": {
+            "$id": "ge://schema/trade.sell.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "port_id": {
+                    "type": "integer"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "commodity": {
+                                "type": "string"
+                            },
+                            "quantity": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "commodity",
+                            "quantity"
+                        ],
+                        "additionalProperties": true
+                    }
+                },
+                "idempotency_key": {
+                    "type": "string"
+                },
+                "account": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ]
+                }
+            },
+            "required": [
+                "sector_id",
+                "port_id",
+                "items",
+                "idempotency_key",
+                "account"
+            ],
+            "additionalProperties": true
+        }
+    },
+    "schema_blacklist": [],
+    "pending_schema_requests": {
+        "system.cmd_list": "c-8d1216a7",
+        "session.hello": "c-c717d7b9",
+        "session.ping": "c-3c4c53a8",
+        "session.disconnect": "c-51f68290",
+        "auth.login": "c-5e5ccad3",
+        "auth.logout": "c-6df11fb5",
+        "auth.mfa.totp.verify": "c-bd6fec8c",
+        "auth.register": "c-6584547b",
+        "player.my_info": "c-bffdd480",
+        "ship.info": "c-66489ac1",
+        "sector.info": "c-ee6d0da7",
+        "sector.set_beacon": "c-c445dfe8",
+        "move.warp": "c-041f1b74",
+        "move.scan": "c-af5d477a",
+        "move.pathfind": "c-2143d354",
+        "trade.accept": "c-a40cc4cf",
+        "trade.buy": "c-dd549012",
+        "trade.cancel": "c-60d7b287",
+        "trade.history": "c-2f64bb7b",
+        "trade.jettison": "c-febfb11d",
+        "trade.offer": "c-bb18d20e",
+        "trade.port_info": "c-dad6ade2",
+        "trade.quote": "c-7b5fa208",
+        "trade.sell": "c-890a79fb"
+    },
+    "recent_sectors": [
+        10
+    ],
+    "pending_commands": {},
+    "port_trade_blacklist": [],
+    "warp_blacklist": [],
+    "current_path": [],
+    "last_action_result": {
+        "status": "ok",
+        "command": "player.my_info",
+        "request_id": "c-8b0d5f68",
+        "response_type": "player.info",
+        "ts": "2025-12-10T21:46:18Z"
+    },
+    "current_qa_objective": null,
+    "needs_bootstrap": true,
+    "last_action": "move.warp",
+    "last_context_key": "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1265-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds",
+    "last_stage": "exploit"
+}

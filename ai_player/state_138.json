@@ -1,0 +1,542 @@
+{
+    "session_id": "12fae8be209cf8465ba16b1013636bd0e4e60b329c707c8f5421e432339e8811",
+    "player_info": null,
+    "ship_info": {
+        "cargo": []
+    },
+    "player_location_sector": null,
+    "sector_data": {},
+    "universe_map": {},
+    "port_info_by_sector": {},
+    "price_cache": {},
+    "bank_balance": 0,
+    "command_retry_info": {
+        "player.my_info": {
+            "next_retry_time": 1765403295.8468785
+        }
+    },
+    "strategy_plan": [],
+    "trade_successful": false,
+    "q_table": {},
+    "n_table": {},
+    "command_schemas": {},
+    "schema_blacklist": [],
+    "pending_schema_requests": {
+        "system.cmd_list": "c-d2834581",
+        "session.hello": "c-421d378a",
+        "session.ping": "c-0f66c21d",
+        "session.disconnect": "c-d908c84b",
+        "auth.login": "c-f670d11d",
+        "auth.logout": "c-851fd149",
+        "auth.mfa.totp.verify": "c-159cb9c2",
+        "auth.register": "c-70115046",
+        "player.my_info": "c-ceaecc9d",
+        "ship.info": "c-438ca282",
+        "sector.info": "c-bbc16e55",
+        "sector.set_beacon": "c-1de5e628",
+        "move.warp": "c-044db436",
+        "move.scan": "c-fcd5ccf8",
+        "move.pathfind": "c-69749e05",
+        "trade.accept": "c-89ac5895",
+        "trade.buy": "c-eac7b37e",
+        "trade.cancel": "c-262862b3",
+        "trade.history": "c-423db57c",
+        "trade.jettison": "c-deb9a694",
+        "trade.offer": "c-85da1d97",
+        "trade.port_info": "c-f13e789f",
+        "trade.quote": "c-0f73b80e",
+        "trade.sell": "c-ffeb33cc"
+    },
+    "recent_sectors": [],
+    "pending_commands": {
+        "c-763ed174": {
+            "id": "c-763ed174",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "763ed174-30d7-4d89-b8b4-a868a90d68b3"
+            }
+        },
+        "c-e7e32b2b": {
+            "id": "c-e7e32b2b",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "e7e32b2b-4cea-4ffc-85cb-717a90bf326e"
+            }
+        },
+        "c-590967bf": {
+            "id": "c-590967bf",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "590967bf-310a-46ed-a71c-28df0d468df7"
+            }
+        },
+        "c-bbad94ad": {
+            "id": "c-bbad94ad",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "bbad94ad-df80-4750-b129-8e935cb84813"
+            }
+        },
+        "c-1067eff2": {
+            "id": "c-1067eff2",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "1067eff2-2cf7-407a-905b-2b38fa396937"
+            }
+        },
+        "c-db5a4281": {
+            "id": "c-db5a4281",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "db5a4281-c367-4f68-94fe-b8089c156b73"
+            }
+        },
+        "c-58672ce8": {
+            "id": "c-58672ce8",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "58672ce8-f51d-405a-921b-f0b2717eece0"
+            }
+        },
+        "c-43b51669": {
+            "id": "c-43b51669",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "43b51669-7879-4f96-931a-058d88392bd2"
+            }
+        },
+        "c-de4e56d0": {
+            "id": "c-de4e56d0",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "de4e56d0-0c22-4e34-8418-700b7d4425f4"
+            }
+        },
+        "c-02ab0fd7": {
+            "id": "c-02ab0fd7",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "02ab0fd7-aa9e-45c1-891a-675da753ad6f"
+            }
+        },
+        "c-73aaba33": {
+            "id": "c-73aaba33",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "73aaba33-1895-4645-a946-5eda5b875a37"
+            }
+        },
+        "c-4f2c608c": {
+            "id": "c-4f2c608c",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "4f2c608c-95b8-43e8-83cc-1f9c981ca1e8"
+            }
+        },
+        "c-7dc4e99c": {
+            "id": "c-7dc4e99c",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "7dc4e99c-c78f-4c2e-90c6-3940ccece4cc"
+            }
+        },
+        "c-27645b1b": {
+            "id": "c-27645b1b",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "27645b1b-771f-4a69-8337-2abc0e5aae26"
+            }
+        },
+        "c-5114845a": {
+            "id": "c-5114845a",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "5114845a-29a7-44d5-8e7e-c4be68feaa29"
+            }
+        },
+        "c-0700cdfd": {
+            "id": "c-0700cdfd",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "0700cdfd-342e-4b4f-b7cd-08ab38405fc7"
+            }
+        },
+        "c-bb9a15d8": {
+            "id": "c-bb9a15d8",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "bb9a15d8-4b8f-4de7-ac04-7032b2dd4bb4"
+            }
+        },
+        "c-555f66c3": {
+            "id": "c-555f66c3",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "555f66c3-6855-432f-a65e-5f325afa7dff"
+            }
+        },
+        "c-e9b432be": {
+            "id": "c-e9b432be",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "e9b432be-03bd-4805-94a4-b27918e070ce"
+            }
+        },
+        "c-e7acf22d": {
+            "id": "c-e7acf22d",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "e7acf22d-da5c-40e7-bc23-68b8d6893223"
+            }
+        },
+        "c-5dd17ebd": {
+            "id": "c-5dd17ebd",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "5dd17ebd-4ff1-4696-afc1-3ddf241c5f33"
+            }
+        },
+        "c-94b76fd6": {
+            "id": "c-94b76fd6",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "94b76fd6-625f-42d9-b431-30b32cbadee5"
+            }
+        },
+        "c-21457d6a": {
+            "id": "c-21457d6a",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "21457d6a-6fa3-40f7-82d9-488c5189e961"
+            }
+        },
+        "c-d592ab48": {
+            "id": "c-d592ab48",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "d592ab48-f565-4261-9544-646e6ae9f655"
+            }
+        },
+        "c-3804da4d": {
+            "id": "c-3804da4d",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "3804da4d-c4cd-4c2b-ad27-7fb85fc156ef"
+            }
+        },
+        "c-6f68e933": {
+            "id": "c-6f68e933",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "6f68e933-8042-4307-b6c7-c84b3d9d3eda"
+            }
+        },
+        "c-b629a40c": {
+            "id": "c-b629a40c",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "b629a40c-f4c6-4033-9a76-b013b7a47a29"
+            }
+        },
+        "c-c2bc6e0a": {
+            "id": "c-c2bc6e0a",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "c2bc6e0a-11ac-43e2-8e1a-5b5be21099e4"
+            }
+        },
+        "c-3e20c9dd": {
+            "id": "c-3e20c9dd",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "3e20c9dd-8658-46b0-b9cc-c6e542b92ac6"
+            }
+        },
+        "c-0df8cb05": {
+            "id": "c-0df8cb05",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "0df8cb05-de43-41b9-922c-0f5cbbd138eb"
+            }
+        },
+        "c-9ba8b488": {
+            "id": "c-9ba8b488",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "9ba8b488-9551-4b4b-b2b8-3eb073ad5763"
+            }
+        },
+        "c-f5682cd8": {
+            "id": "c-f5682cd8",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "f5682cd8-1b41-4a76-8651-188653d908ba"
+            }
+        },
+        "c-df642423": {
+            "id": "c-df642423",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "df642423-8fcf-48a8-8540-d6c6e6909cdf"
+            }
+        },
+        "c-221457ba": {
+            "id": "c-221457ba",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "221457ba-82b0-4b54-bdbe-adc36d467003"
+            }
+        },
+        "c-0bb820f1": {
+            "id": "c-0bb820f1",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "0bb820f1-7bd9-4149-9eb4-b8ff17e04009"
+            }
+        },
+        "c-3834a7e8": {
+            "id": "c-3834a7e8",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "3834a7e8-2f1c-4752-9923-83e0089d3748"
+            }
+        },
+        "c-35b1a4b9": {
+            "id": "c-35b1a4b9",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "35b1a4b9-0465-475f-afbe-56d348f18d9f"
+            }
+        },
+        "c-057532cf": {
+            "id": "c-057532cf",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "057532cf-1381-477e-bca5-9fa4e2b7fbd8"
+            }
+        },
+        "c-2f9e07ed": {
+            "id": "c-2f9e07ed",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "2f9e07ed-d8fc-4811-b2b7-e23bea226176"
+            }
+        },
+        "c-c80de50a": {
+            "id": "c-c80de50a",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "c80de50a-f7ec-4153-b6e5-b51525b98a56"
+            }
+        },
+        "c-7e918fff": {
+            "id": "c-7e918fff",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "7e918fff-3603-4aeb-8f86-ea8f10da2f2d"
+            }
+        },
+        "c-ea647a29": {
+            "id": "c-ea647a29",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "ea647a29-ae43-46ae-94b1-83d421273850"
+            }
+        },
+        "c-91980ac1": {
+            "id": "c-91980ac1",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "91980ac1-3063-4154-8284-ed03c13c56c1"
+            }
+        },
+        "c-1a086820": {
+            "id": "c-1a086820",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "1a086820-f3a2-4b64-8003-16ba9080da67"
+            }
+        },
+        "c-beb04b75": {
+            "id": "c-beb04b75",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "beb04b75-a791-4c51-9f3a-5769991f1d2b"
+            }
+        },
+        "c-59c5f799": {
+            "id": "c-59c5f799",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "59c5f799-794f-4d5e-9a65-b82d67ef188b"
+            }
+        },
+        "c-d40cccc6": {
+            "id": "c-d40cccc6",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "d40cccc6-5c5d-498f-a084-563094a8eea0"
+            }
+        },
+        "c-4d0a012f": {
+            "id": "c-4d0a012f",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "4d0a012f-4092-45a4-bdea-6a44ef393b6d"
+            }
+        },
+        "c-aee4e9f5": {
+            "id": "c-aee4e9f5",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "aee4e9f5-034b-4e5a-9173-d4972a382a41"
+            }
+        },
+        "c-fd43221c": {
+            "id": "c-fd43221c",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "fd43221c-2557-4c42-b296-ddaaa883a759"
+            }
+        },
+        "c-03adbef9": {
+            "id": "c-03adbef9",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "03adbef9-f84c-447d-9875-dee356529824"
+            }
+        },
+        "c-c0e8a810": {
+            "id": "c-c0e8a810",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "c0e8a810-6acf-4fbf-bf92-61fa4a802b9b"
+            }
+        },
+        "c-a54eaae8": {
+            "id": "c-a54eaae8",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "a54eaae8-f74a-4380-848a-d237496bedc9"
+            }
+        }
+    },
+    "port_trade_blacklist": [],
+    "warp_blacklist": [],
+    "current_path": [],
+    "last_action_result": {
+        "status": "ok",
+        "command": "unknown",
+        "request_id": "c-d2834581",
+        "response_type": "system.cmd_list",
+        "ts": "2025-12-10T21:47:14Z"
+    },
+    "current_qa_objective": null,
+    "needs_bootstrap": true
+}

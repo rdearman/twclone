@@ -1,0 +1,1716 @@
+{
+    "session_id": "307f8a62cd77836af390552178d7dba46a9d6b91fc8bce043e4cadedd80bd37e",
+    "player_info": {
+        "player": {
+            "id": 267,
+            "username": "\u0001",
+            "credits": "1000000.00",
+            "turns_remaining": 750,
+            "sector": 1,
+            "ship_id": 278,
+            "corp_id": 0,
+            "alignment": 1,
+            "experience": 0,
+            "title_info": {
+                "title": "Civilian",
+                "commission": 1,
+                "alignment": 1,
+                "experience": 0,
+                "alignment_band": {
+                    "code": "NEUTRAL",
+                    "name": "Neutral",
+                    "is_good": false,
+                    "is_evil": false,
+                    "can_buy_iss": false,
+                    "can_rob_ports": false
+                }
+            }
+        }
+    },
+    "ship_info": {
+        "id": 278,
+        "number": 278,
+        "name": "ai_qa_bot_101's ship",
+        "type": {
+            "id": 0,
+            "name": "10"
+        },
+        "holds": 10,
+        "fighters": 250,
+        "location": {
+            "sector_id": 1,
+            "sector_name": "Fedspace 1System Volume"
+        },
+        "owner": {
+            "id": 267,
+            "name": "ai_qa_bot_101"
+        },
+        "cargo": []
+    },
+    "player_location_sector": 3658,
+    "sector_data": {
+        "1": {
+            "server_tick": 2069,
+            "sector_id": 1,
+            "name": "Fedspace 1System Volume",
+            "adjacent": [
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+            ],
+            "adjacent_count": 6,
+            "ports": [
+                {
+                    "id": 1,
+                    "name": "Earth Port",
+                    "type": "1"
+                }
+            ],
+            "has_port": true,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": "The Federation -- Do Not Dump!",
+            "has_beacon": true,
+            "ships": [
+                {
+                    "id": 145,
+                    "name": "ai_qa_bot_118's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_118's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 163,
+                    "name": "ai_qa_bot_136's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_136's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 165,
+                    "name": "ai_qa_bot_138's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_138's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 169,
+                    "name": "ai_qa_bot_142's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_142's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 171,
+                    "name": "ai_qa_bot_144's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_144's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 278,
+                    "name": "ai_qa_bot_101's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_101's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_101"
+                },
+                {
+                    "id": 281,
+                    "name": "ai_qa_bot_104's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_104's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_104"
+                },
+                {
+                    "id": 287,
+                    "name": "ai_qa_bot_110's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_110's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_110"
+                }
+            ],
+            "ships_count": 8,
+            "ports_count": 1,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "2": {
+            "server_tick": 2125,
+            "sector_id": 2,
+            "name": "Fedspace 2",
+            "adjacent": [
+                1,
+                3,
+                7,
+                8,
+                9,
+                10,
+                713
+            ],
+            "adjacent_count": 7,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": "The Federation -- Do Not Dump!",
+            "has_beacon": true,
+            "ships": [
+                {
+                    "id": 160,
+                    "name": "ai_qa_bot_133's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_133's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 170,
+                    "name": "ai_qa_bot_143's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_143's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 181,
+                    "name": "ai_qa_bot_004's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_004's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_004"
+                },
+                {
+                    "id": 182,
+                    "name": "ai_qa_bot_005's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_005's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_005"
+                },
+                {
+                    "id": 195,
+                    "name": "ai_qa_bot_018's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_018's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_018"
+                },
+                {
+                    "id": 215,
+                    "name": "ai_qa_bot_038's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_038's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_038"
+                },
+                {
+                    "id": 226,
+                    "name": "ai_qa_bot_049's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_049's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_049"
+                },
+                {
+                    "id": 247,
+                    "name": "ai_qa_bot_070's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_070's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_070"
+                },
+                {
+                    "id": 262,
+                    "name": "ai_qa_bot_085's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_085's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_085"
+                },
+                {
+                    "id": 263,
+                    "name": "ai_qa_bot_086's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_086's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_086"
+                },
+                {
+                    "id": 265,
+                    "name": "ai_qa_bot_088's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_088's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_088"
+                },
+                {
+                    "id": 272,
+                    "name": "ai_qa_bot_095's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_095's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_095"
+                },
+                {
+                    "id": 278,
+                    "name": "ai_qa_bot_101's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_101's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_101"
+                },
+                {
+                    "id": 280,
+                    "name": "ai_qa_bot_103's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_103's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_103"
+                }
+            ],
+            "ships_count": 14,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "713": {
+            "server_tick": 2144,
+            "sector_id": 713,
+            "name": "Menkalinan",
+            "adjacent": [
+                833
+            ],
+            "adjacent_count": 1,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 278,
+                    "name": "ai_qa_bot_101's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_101's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_101"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "833": {
+            "server_tick": 2162,
+            "sector_id": 833,
+            "name": "Mirfak",
+            "adjacent": [
+                2518,
+                3355,
+                3926,
+                4409,
+                4417,
+                4752
+            ],
+            "adjacent_count": 6,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 278,
+                    "name": "ai_qa_bot_101's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_101's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_101"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "4752": {
+            "server_tick": 2181,
+            "sector_id": 4752,
+            "name": "Cetus",
+            "adjacent": [
+                833,
+                4543
+            ],
+            "adjacent_count": 2,
+            "ports": [
+                {
+                    "id": 1657,
+                    "name": "Larioecan",
+                    "type": "1"
+                },
+                {
+                    "id": 1673,
+                    "name": "Ferreiidd",
+                    "type": "5"
+                }
+            ],
+            "has_port": true,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 278,
+                    "name": "ai_qa_bot_101's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_101's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_101"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 2,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "4543": {
+            "server_tick": 2225,
+            "sector_id": 4543,
+            "name": "Uncharted Space",
+            "adjacent": [
+                470,
+                471,
+                4501,
+                4752
+            ],
+            "adjacent_count": 4,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 278,
+                    "name": "ai_qa_bot_101's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_101's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_101"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "470": {
+            "server_tick": 2250,
+            "sector_id": 470,
+            "name": "Caph",
+            "adjacent": [
+                245,
+                1717,
+                4273
+            ],
+            "adjacent_count": 3,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 278,
+                    "name": "ai_qa_bot_101's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_101's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_101"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "245": {
+            "server_tick": 2268,
+            "sector_id": 245,
+            "name": "Uncharted Space",
+            "adjacent": [
+                470,
+                1898,
+                2462,
+                2503,
+                2990,
+                3281,
+                3658,
+                4864
+            ],
+            "adjacent_count": 8,
+            "ports": [
+                {
+                    "id": 1480,
+                    "name": "Adwirevix",
+                    "type": "1"
+                }
+            ],
+            "has_port": true,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 278,
+                    "name": "ai_qa_bot_101's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_101's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_101"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 1,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        }
+    },
+    "universe_map": {
+        "6": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "713": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "833": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "4752": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "4543": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "470": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "245": {
+            "is_explored": true,
+            "has_port": true
+        }
+    },
+    "port_info_by_sector": {
+        "1": {
+            "port_id": 1,
+            "name": "Earth Port",
+            "class": null,
+            "commodities": []
+        },
+        "4752": {
+            "port_id": 1657,
+            "name": "Larioecan",
+            "class": null,
+            "commodities": []
+        },
+        "245": {
+            "port_id": 1480,
+            "name": "Adwirevix",
+            "class": null,
+            "commodities": []
+        }
+    },
+    "price_cache": {
+        "1": {
+            "buy": {
+                "ORE": 138.0
+            },
+            "sell": {
+                "ORE": 0.0
+            }
+        },
+        "1657": {
+            "buy": {
+                "ORE": 114.0
+            },
+            "sell": {
+                "ORE": 93.0
+            }
+        },
+        "1480": {
+            "buy": {
+                "ORE": 97.0
+            },
+            "sell": {
+                "ORE": 97.0
+            }
+        }
+    },
+    "bank_balance": 0,
+    "command_retry_info": {
+        "player.my_info": {
+            "next_retry_time": 1765403219.651892
+        },
+        "ship.info": {
+            "next_retry_time": 1765403220.6821938
+        },
+        "sector.info": {
+            "next_retry_time": 1765403296.4994674
+        },
+        "trade.port_info": {
+            "next_retry_time": 1765403238.9193375
+        },
+        "trade.quote": {
+            "next_retry_time": 1765403240.4396412
+        },
+        "bank.balance": {
+            "next_retry_time": 1765403235.3674617
+        },
+        "move.warp": {
+            "next_retry_time": 1765403240.9526794
+        }
+    },
+    "strategy_plan": [
+        "survey: port"
+    ],
+    "trade_successful": false,
+    "q_table": {
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "trade.buy": 0.0,
+            "combat.attack": 0.0,
+            "combat.deploy_fighters": 0.0,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "move.warp": 0.1,
+            "bank.balance": 0.1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1657-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "trade.buy": 0.0,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1480-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "trade.buy": 0.0,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.0
+        }
+    },
+    "n_table": {
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "trade.buy": 0,
+            "combat.attack": 0,
+            "combat.deploy_fighters": 0,
+            "move.warp": 2,
+            "bank.deposit": 0,
+            "bank.balance": 1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "move.warp": 12,
+            "bank.balance": 1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1657-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "trade.buy": 0,
+            "move.warp": 2,
+            "bank.deposit": 0,
+            "bank.balance": 0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1480-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "trade.buy": 0,
+            "move.warp": 1,
+            "bank.deposit": 0,
+            "bank.balance": 0
+        }
+    },
+    "command_schemas": {
+        "session.hello": {
+            "$id": "ge://schema/session.hello.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+        },
+        "session.ping": {
+            "$id": "ge://schema/session.ping.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+        },
+        "session.disconnect": {
+            "$id": "ge://schema/session.disconnect.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "auth.login": {
+            "$id": "ge://schema/auth.login.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "username": {
+                    "type": "string"
+                },
+                "passwd": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "username",
+                "passwd"
+            ],
+            "additionalProperties": true
+        },
+        "auth.logout": {
+            "$id": "ge://schema/auth.logout.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "auth.mfa.totp.verify": {
+            "$id": "ge://schema/auth.mfa.totp.verify.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "auth.register": {
+            "$id": "ge://schema/auth.register.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "username": {
+                    "type": "string"
+                },
+                "passwd": {
+                    "type": "string"
+                },
+                "ship_name": {
+                    "type": "string"
+                },
+                "ui_locale": {
+                    "type": "string"
+                },
+                "ui_timezone": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "username",
+                "passwd"
+            ],
+            "additionalProperties": true
+        },
+        "player.my_info": {
+            "$id": "ge://schema/player.my_info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+        },
+        "ship.info": {
+            "$id": "ge://schema/ship.info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+        },
+        "sector.info": {
+            "$id": "ge://schema/sector.info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [],
+            "additionalProperties": true
+        },
+        "sector.set_beacon": {
+            "$id": "ge://schema/sector.set_beacon.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "text": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "sector_id",
+                "text"
+            ],
+            "additionalProperties": false
+        },
+        "move.warp": {
+            "$id": "ge://schema/move_warp.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "to_sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "to_sector_id"
+            ],
+            "additionalProperties": true
+        },
+        "move.scan": {
+            "$id": "ge://schema/move.scan.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {}
+        },
+        "move.pathfind": {
+            "$id": "ge://schema/move.pathfind.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.accept": {
+            "$id": "ge://schema/trade.accept.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.buy": {
+            "$id": "ge://schema/trade.buy.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "port_id": {
+                    "type": "integer"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "commodity": {
+                                "type": "string"
+                            },
+                            "quantity": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "commodity",
+                            "quantity"
+                        ],
+                        "additionalProperties": true
+                    }
+                },
+                "idempotency_key": {
+                    "type": "string"
+                },
+                "account": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ]
+                },
+                "sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "port_id",
+                "items",
+                "idempotency_key",
+                "account",
+                "sector_id"
+            ],
+            "additionalProperties": true
+        },
+        "trade.cancel": {
+            "$id": "ge://schema/trade.cancel.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.history": {
+            "$id": "ge://schema/trade.history.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50
+                },
+                "cursor": {
+                    "type": "string"
+                }
+            },
+            "required": [],
+            "additionalProperties": true
+        },
+        "trade.jettison": {
+            "$id": "ge://schema/trade.jettison.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.offer": {
+            "$id": "ge://schema/trade.offer.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.port_info": {
+            "$id": "ge://schema/trade.port_info.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.quote": {
+            "$id": "ge://schema/trade.quote.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "port_id": {
+                    "type": "integer"
+                },
+                "commodity": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "port_id",
+                "commodity",
+                "quantity"
+            ],
+            "additionalProperties": true
+        },
+        "trade.sell": {
+            "$id": "ge://schema/trade.sell.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "port_id": {
+                    "type": "integer"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "commodity": {
+                                "type": "string"
+                            },
+                            "quantity": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "commodity",
+                            "quantity"
+                        ],
+                        "additionalProperties": true
+                    }
+                },
+                "idempotency_key": {
+                    "type": "string"
+                },
+                "account": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ]
+                }
+            },
+            "required": [
+                "sector_id",
+                "port_id",
+                "items",
+                "idempotency_key",
+                "account"
+            ],
+            "additionalProperties": true
+        }
+    },
+    "schema_blacklist": [
+        "bank.deposit"
+    ],
+    "pending_schema_requests": {
+        "system.cmd_list": "c-e127dab5",
+        "session.hello": "c-c2d1ae3f",
+        "session.ping": "c-1438d8d8",
+        "session.disconnect": "c-9cfa5c6e",
+        "auth.login": "c-3ed9ad6b",
+        "auth.logout": "c-6f28f70d",
+        "auth.mfa.totp.verify": "c-2577d7d1",
+        "auth.register": "c-633ab1ef",
+        "player.my_info": "c-71c0f4e2",
+        "ship.info": "c-c4cc2c98",
+        "sector.info": "c-ea3d4f80",
+        "sector.set_beacon": "c-bbd83184",
+        "move.warp": "c-66f5e7ad",
+        "move.scan": "c-3f1f9682",
+        "move.pathfind": "c-482d4987",
+        "trade.accept": "c-30581848",
+        "trade.buy": "c-471462bc",
+        "trade.cancel": "c-47ef6d90",
+        "trade.history": "c-d695f212",
+        "trade.jettison": "c-1b051ccc",
+        "trade.offer": "c-56c7ebfa",
+        "trade.port_info": "c-d9bbf057",
+        "trade.quote": "c-57096913",
+        "trade.sell": "c-106039a4"
+    },
+    "recent_sectors": [
+        1,
+        1,
+        2,
+        713,
+        833,
+        4752,
+        4543,
+        470,
+        245,
+        3658
+    ],
+    "pending_commands": {
+        "c-27e227dc": {
+            "id": "c-27e227dc",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "27e227dc-5e04-4abe-94a5-f5a1add3c3a3"
+            }
+        },
+        "c-cf17dc37": {
+            "id": "c-cf17dc37",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "cf17dc37-825e-4cd3-86dd-41faf203c963"
+            }
+        },
+        "c-60b0629a": {
+            "id": "c-60b0629a",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "60b0629a-8017-40d7-8091-e10458544d94"
+            }
+        },
+        "c-148638d9": {
+            "id": "c-148638d9",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "148638d9-a948-47f2-a0f9-290649fffe83"
+            }
+        },
+        "c-87bd8981": {
+            "id": "c-87bd8981",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "87bd8981-6e8b-4d5c-bcc9-1b5fb4cda3fb"
+            }
+        },
+        "c-128c3dcc": {
+            "id": "c-128c3dcc",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "128c3dcc-341c-47ea-88fe-c4cdd317f570"
+            }
+        },
+        "c-ddbcc525": {
+            "id": "c-ddbcc525",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "ddbcc525-54b5-4848-b914-244dfd570954"
+            }
+        },
+        "c-d2e638fb": {
+            "id": "c-d2e638fb",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "d2e638fb-ae92-400c-b5d9-2e31528c643a"
+            }
+        },
+        "c-de03d209": {
+            "id": "c-de03d209",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "de03d209-6087-425a-8a19-d504d5b89a91"
+            }
+        },
+        "c-200631e5": {
+            "id": "c-200631e5",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "200631e5-8c8a-4d01-b4b5-03d690cae729"
+            }
+        },
+        "c-03dbdde8": {
+            "id": "c-03dbdde8",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "03dbdde8-c203-4cd5-8ee7-1bd248d05d39"
+            }
+        },
+        "c-32095835": {
+            "id": "c-32095835",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "32095835-dd5e-499e-815f-c6c98de03bae"
+            }
+        },
+        "c-b7b1f557": {
+            "id": "c-b7b1f557",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "b7b1f557-27ca-4a18-b954-1a0d69918cbf"
+            }
+        },
+        "c-6dbe4317": {
+            "id": "c-6dbe4317",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "6dbe4317-3080-47a4-9e17-9053273ca643"
+            }
+        },
+        "c-247be792": {
+            "id": "c-247be792",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "247be792-f4c6-4da3-8fa3-94e25c6076e1"
+            }
+        },
+        "c-a8d56b15": {
+            "id": "c-a8d56b15",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "a8d56b15-23f4-400b-a1c5-ba1c52603941"
+            }
+        },
+        "c-b0cfd381": {
+            "id": "c-b0cfd381",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "b0cfd381-0c2f-4f4a-b4fe-539dd1906581"
+            }
+        },
+        "c-7ec84bd3": {
+            "id": "c-7ec84bd3",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "7ec84bd3-0980-4bff-8d52-6c895e0e9986"
+            }
+        },
+        "c-fddd7155": {
+            "id": "c-fddd7155",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "fddd7155-3de8-40fc-9afd-350474a2b0ba"
+            }
+        },
+        "c-5d030b53": {
+            "id": "c-5d030b53",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "5d030b53-bffe-4c0e-b7e2-4f83310a5ecc"
+            }
+        },
+        "c-e564f7a6": {
+            "id": "c-e564f7a6",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "e564f7a6-0ad9-4588-82f5-356586e01708"
+            }
+        },
+        "c-4ce91372": {
+            "id": "c-4ce91372",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "4ce91372-9b21-4a5d-80f1-b9d5319221c2"
+            }
+        },
+        "c-b5ce4527": {
+            "id": "c-b5ce4527",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "b5ce4527-615b-4164-9dbc-f25964f29dae"
+            }
+        },
+        "c-6b562a14": {
+            "id": "c-6b562a14",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "6b562a14-5569-4f13-b405-bd751f3628d4"
+            }
+        },
+        "c-d9286587": {
+            "id": "c-d9286587",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "d9286587-bf61-4299-a037-001af6f018ee"
+            }
+        },
+        "c-d1137155": {
+            "id": "c-d1137155",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "d1137155-0959-4168-95e2-c73aa4843935"
+            }
+        },
+        "c-f39926b5": {
+            "id": "c-f39926b5",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "f39926b5-3d68-482c-90b8-3b9dface14ac"
+            }
+        },
+        "c-77b6fbef": {
+            "id": "c-77b6fbef",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "77b6fbef-9f1c-4a95-b355-c3d2234420bc"
+            }
+        },
+        "c-fddc1312": {
+            "id": "c-fddc1312",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "fddc1312-cfd1-4388-90c1-708dcc4c63ac"
+            }
+        },
+        "c-8d673b23": {
+            "id": "c-8d673b23",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "8d673b23-5266-4606-845f-7e340af212fc"
+            }
+        },
+        "c-e5d19ad0": {
+            "id": "c-e5d19ad0",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "e5d19ad0-e012-408c-b705-eb0eb0d09608"
+            }
+        },
+        "c-f8088932": {
+            "id": "c-f8088932",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "f8088932-c261-4436-8859-850aae862408"
+            }
+        },
+        "c-57e22814": {
+            "id": "c-57e22814",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "57e22814-1a34-4f9d-8e85-3e6413925d0e"
+            }
+        },
+        "c-b9334516": {
+            "id": "c-b9334516",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "b9334516-1315-4d38-b03b-c7639be9871a"
+            }
+        },
+        "c-a0ac0591": {
+            "id": "c-a0ac0591",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "a0ac0591-cce1-425a-be7b-db5b25a11249"
+            }
+        },
+        "c-be73577f": {
+            "id": "c-be73577f",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "be73577f-7813-4d91-b26d-d3b32090779a"
+            }
+        },
+        "c-d0faa55e": {
+            "id": "c-d0faa55e",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "d0faa55e-1e07-48ae-acaf-2b39f3f763e5"
+            }
+        },
+        "c-24a4ad48": {
+            "id": "c-24a4ad48",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "24a4ad48-6c40-4f2c-8109-a8729cde34ec"
+            }
+        },
+        "c-9063f7d1": {
+            "id": "c-9063f7d1",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "9063f7d1-015c-4e55-8709-43b35f55b5d6"
+            }
+        },
+        "c-a6ca5d6c": {
+            "id": "c-a6ca5d6c",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "a6ca5d6c-4507-4625-ada5-22f4f2e7cf81"
+            }
+        },
+        "c-c06b5ae8": {
+            "id": "c-c06b5ae8",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "c06b5ae8-e058-4bd1-bdb4-cdccb4494434"
+            }
+        },
+        "c-2a56e8a6": {
+            "id": "c-2a56e8a6",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "2a56e8a6-d8e7-449a-b5f4-36f332d5d3c5"
+            }
+        },
+        "c-36c05abf": {
+            "id": "c-36c05abf",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "36c05abf-7916-4357-bcb8-576c0006e0b3"
+            }
+        },
+        "c-4c01d060": {
+            "id": "c-4c01d060",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "4c01d060-a9e3-4b87-9932-2ac8c3b8e216"
+            }
+        },
+        "c-f69bdae8": {
+            "id": "c-f69bdae8",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "f69bdae8-a7a7-4fe0-8e9e-84aba637481e"
+            }
+        },
+        "c-b5bcf87a": {
+            "id": "c-b5bcf87a",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "b5bcf87a-2208-467c-8d28-9669476f0134"
+            }
+        },
+        "c-75a28a9b": {
+            "id": "c-75a28a9b",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "75a28a9b-c336-442e-b92c-82d8e1a4a401"
+            }
+        },
+        "c-ff520849": {
+            "id": "c-ff520849",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "ff520849-baa4-4e6c-b833-6b96ca8ba78c"
+            }
+        },
+        "c-98a9a012": {
+            "id": "c-98a9a012",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "98a9a012-27c8-45e4-8e06-f1df04b789d9"
+            }
+        },
+        "c-b1aabc89": {
+            "id": "c-b1aabc89",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "b1aabc89-ad0c-4406-9a8e-4a5875ae9fc2"
+            }
+        },
+        "c-81c5e509": {
+            "id": "c-81c5e509",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "81c5e509-a9ce-4467-8d74-d53cffe64485"
+            }
+        },
+        "c-d467f68a": {
+            "id": "c-d467f68a",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "d467f68a-cc3b-410c-8476-b29608ed1dba"
+            }
+        },
+        "c-91f3a376": {
+            "id": "c-91f3a376",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "91f3a376-bf38-4b10-8c4c-1f8ec7045488"
+            }
+        },
+        "c-baa9d499": {
+            "id": "c-baa9d499",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "baa9d499-9988-4be2-9528-6eaa44a67724"
+            }
+        },
+        "c-3d58330a": {
+            "id": "c-3d58330a",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "3d58330a-506a-4b25-8515-62d213cf9f3b"
+            }
+        },
+        "c-e7b8b51c": {
+            "id": "c-e7b8b51c",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 3658
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "e7b8b51c-7cef-41d1-9b2f-a6f45e1372aa"
+            }
+        }
+    },
+    "port_trade_blacklist": [],
+    "warp_blacklist": [],
+    "current_path": [],
+    "last_action_result": {
+        "status": "ok",
+        "command": "move.warp",
+        "request_id": "c-ec54b68d",
+        "response_type": "move.result",
+        "ts": "2025-12-10T21:47:15Z"
+    },
+    "current_qa_objective": null,
+    "needs_bootstrap": false,
+    "last_action": "move.warp",
+    "last_context_key": "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1480-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds",
+    "last_stage": "exploit"
+}

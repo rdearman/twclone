@@ -1,0 +1,902 @@
+{
+    "session_id": "1c7cab392961d664f71488cc60719f1aa31b97693d3d43cc717f929c9862f099",
+    "player_info": {
+        "player": {
+            "id": 299,
+            "username": "\u0001",
+            "credits": "1000000.00",
+            "turns_remaining": 750,
+            "sector": 3,
+            "ship_id": 310,
+            "corp_id": 0,
+            "alignment": 1,
+            "experience": 0,
+            "title_info": {
+                "title": "Civilian",
+                "commission": 1,
+                "alignment": 1,
+                "experience": 0,
+                "alignment_band": {
+                    "code": "NEUTRAL",
+                    "name": "Neutral",
+                    "is_good": false,
+                    "is_evil": false,
+                    "can_buy_iss": false,
+                    "can_rob_ports": false
+                }
+            }
+        }
+    },
+    "ship_info": {
+        "cargo": []
+    },
+    "player_location_sector": 3,
+    "sector_data": {},
+    "universe_map": {},
+    "port_info_by_sector": {},
+    "price_cache": {},
+    "bank_balance": 0,
+    "command_retry_info": {
+        "player.my_info": {
+            "next_retry_time": 1765403240.5322948
+        },
+        "ship.info": {
+            "next_retry_time": 1765403296.58665
+        }
+    },
+    "strategy_plan": [],
+    "trade_successful": false,
+    "q_table": {},
+    "n_table": {},
+    "command_schemas": {
+        "session.hello": {
+            "$id": "ge://schema/session.hello.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+        },
+        "session.ping": {
+            "$id": "ge://schema/session.ping.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+        },
+        "session.disconnect": {
+            "$id": "ge://schema/session.disconnect.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "auth.login": {
+            "$id": "ge://schema/auth.login.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "username": {
+                    "type": "string"
+                },
+                "passwd": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "username",
+                "passwd"
+            ],
+            "additionalProperties": true
+        },
+        "auth.logout": {
+            "$id": "ge://schema/auth.logout.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "auth.mfa.totp.verify": {
+            "$id": "ge://schema/auth.mfa.totp.verify.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "auth.register": {
+            "$id": "ge://schema/auth.register.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "username": {
+                    "type": "string"
+                },
+                "passwd": {
+                    "type": "string"
+                },
+                "ship_name": {
+                    "type": "string"
+                },
+                "ui_locale": {
+                    "type": "string"
+                },
+                "ui_timezone": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "username",
+                "passwd"
+            ],
+            "additionalProperties": true
+        },
+        "player.my_info": {
+            "$id": "ge://schema/player.my_info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+        },
+        "ship.info": {
+            "$id": "ge://schema/ship.info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+        },
+        "sector.info": {
+            "$id": "ge://schema/sector.info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [],
+            "additionalProperties": true
+        },
+        "sector.set_beacon": {
+            "$id": "ge://schema/sector.set_beacon.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "text": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "sector_id",
+                "text"
+            ],
+            "additionalProperties": false
+        },
+        "move.warp": {
+            "$id": "ge://schema/move_warp.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "to_sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "to_sector_id"
+            ],
+            "additionalProperties": true
+        },
+        "move.scan": {
+            "$id": "ge://schema/move.scan.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {}
+        },
+        "move.pathfind": {
+            "$id": "ge://schema/move.pathfind.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.accept": {
+            "$id": "ge://schema/trade.accept.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.buy": {
+            "$id": "ge://schema/trade.buy.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "port_id": {
+                    "type": "integer"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "commodity": {
+                                "type": "string"
+                            },
+                            "quantity": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "commodity",
+                            "quantity"
+                        ],
+                        "additionalProperties": true
+                    }
+                },
+                "idempotency_key": {
+                    "type": "string"
+                },
+                "account": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ]
+                },
+                "sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "port_id",
+                "items",
+                "idempotency_key",
+                "account",
+                "sector_id"
+            ],
+            "additionalProperties": true
+        },
+        "trade.cancel": {
+            "$id": "ge://schema/trade.cancel.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.history": {
+            "$id": "ge://schema/trade.history.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50
+                },
+                "cursor": {
+                    "type": "string"
+                }
+            },
+            "required": [],
+            "additionalProperties": true
+        },
+        "trade.jettison": {
+            "$id": "ge://schema/trade.jettison.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.offer": {
+            "$id": "ge://schema/trade.offer.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.port_info": {
+            "$id": "ge://schema/trade.port_info.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.quote": {
+            "$id": "ge://schema/trade.quote.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "port_id": {
+                    "type": "integer"
+                },
+                "commodity": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "port_id",
+                "commodity",
+                "quantity"
+            ],
+            "additionalProperties": true
+        },
+        "trade.sell": {
+            "$id": "ge://schema/trade.sell.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "port_id": {
+                    "type": "integer"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "commodity": {
+                                "type": "string"
+                            },
+                            "quantity": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "commodity",
+                            "quantity"
+                        ],
+                        "additionalProperties": true
+                    }
+                },
+                "idempotency_key": {
+                    "type": "string"
+                },
+                "account": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ]
+                }
+            },
+            "required": [
+                "sector_id",
+                "port_id",
+                "items",
+                "idempotency_key",
+                "account"
+            ],
+            "additionalProperties": true
+        }
+    },
+    "schema_blacklist": [],
+    "pending_schema_requests": {
+        "system.cmd_list": "c-0870ea06",
+        "session.hello": "c-7273c5fd",
+        "session.ping": "c-bc64b814",
+        "session.disconnect": "c-0a733cf9",
+        "auth.login": "c-e4681e51",
+        "auth.logout": "c-89d80624",
+        "auth.mfa.totp.verify": "c-c712c4ff",
+        "auth.register": "c-946f701d",
+        "player.my_info": "c-52d028c0",
+        "ship.info": "c-e1b76443",
+        "sector.info": "c-00f665bb",
+        "sector.set_beacon": "c-21a53a58",
+        "move.warp": "c-d862be39",
+        "move.scan": "c-56f19a53",
+        "move.pathfind": "c-a41410e8",
+        "trade.accept": "c-6dd1b45e",
+        "trade.buy": "c-e64c9b4e",
+        "trade.cancel": "c-e77867b2",
+        "trade.history": "c-762c3bde",
+        "trade.jettison": "c-0df6ade0",
+        "trade.offer": "c-19495290",
+        "trade.port_info": "c-8b56a63e",
+        "trade.quote": "c-5fca177d",
+        "trade.sell": "c-f7b89628"
+    },
+    "recent_sectors": [
+        3
+    ],
+    "pending_commands": {
+        "c-89f0620e": {
+            "id": "c-89f0620e",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "89f0620e-7e6b-4e8a-920f-941507799ee4"
+            }
+        },
+        "c-de18b8e5": {
+            "id": "c-de18b8e5",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "de18b8e5-b66b-403a-b79f-861c2b763fe1"
+            }
+        },
+        "c-1b3ed53f": {
+            "id": "c-1b3ed53f",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "1b3ed53f-95f7-43a1-91a6-1bc813e46b88"
+            }
+        },
+        "c-a5a02224": {
+            "id": "c-a5a02224",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "a5a02224-3d37-4a7b-982e-eaab6e076732"
+            }
+        },
+        "c-19b9e112": {
+            "id": "c-19b9e112",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "19b9e112-0b3d-43a1-bd58-1752ee3f979d"
+            }
+        },
+        "c-e22ad285": {
+            "id": "c-e22ad285",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "e22ad285-6a5e-429c-92e9-071621bd4768"
+            }
+        },
+        "c-b5226f4a": {
+            "id": "c-b5226f4a",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "b5226f4a-d23d-4eb8-b2c3-6ce942f06412"
+            }
+        },
+        "c-ee8bfd6d": {
+            "id": "c-ee8bfd6d",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "ee8bfd6d-5ca1-45a9-8a50-be42ed4c6b1f"
+            }
+        },
+        "c-69dfbae6": {
+            "id": "c-69dfbae6",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "69dfbae6-7725-4fbc-aad1-f44f394e67af"
+            }
+        },
+        "c-8c41aa6b": {
+            "id": "c-8c41aa6b",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "8c41aa6b-acab-4eab-b94b-1f071d373bf9"
+            }
+        },
+        "c-9f22dbb4": {
+            "id": "c-9f22dbb4",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "9f22dbb4-70b9-4fac-9717-fbdcd357ba3c"
+            }
+        },
+        "c-75bb98d5": {
+            "id": "c-75bb98d5",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "75bb98d5-d3ff-497e-bad7-4833ca80dfc5"
+            }
+        },
+        "c-0e7330e8": {
+            "id": "c-0e7330e8",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "0e7330e8-da51-4e90-a86a-1609aadea651"
+            }
+        },
+        "c-349103e7": {
+            "id": "c-349103e7",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "349103e7-afd6-4e4e-8416-a5c486f8a63f"
+            }
+        },
+        "c-443624ad": {
+            "id": "c-443624ad",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "443624ad-75d0-48bf-8f11-cc97d1695419"
+            }
+        },
+        "c-44b40e1c": {
+            "id": "c-44b40e1c",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "44b40e1c-70b0-4203-b56d-baaa8bd6d246"
+            }
+        },
+        "c-a656bc86": {
+            "id": "c-a656bc86",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "a656bc86-3da0-4d0d-b081-646b931c8981"
+            }
+        },
+        "c-11e8b06a": {
+            "id": "c-11e8b06a",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "11e8b06a-852e-4c70-8eae-aa40d495f957"
+            }
+        },
+        "c-13d26363": {
+            "id": "c-13d26363",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "13d26363-6975-4710-8d1b-8c03c50bfe32"
+            }
+        },
+        "c-4b08bcaa": {
+            "id": "c-4b08bcaa",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "4b08bcaa-13dc-4e87-8db3-bc9167a95229"
+            }
+        },
+        "c-b54adf14": {
+            "id": "c-b54adf14",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "b54adf14-3ca6-444f-a46a-aa794168a58f"
+            }
+        },
+        "c-39eb070a": {
+            "id": "c-39eb070a",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "39eb070a-ae5c-4d19-8433-90faca4528f9"
+            }
+        },
+        "c-de48d709": {
+            "id": "c-de48d709",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "de48d709-0ab1-43da-9d1a-3180d6ed495c"
+            }
+        },
+        "c-93ed6f15": {
+            "id": "c-93ed6f15",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "93ed6f15-e51f-44ca-bd85-80089c9f0fb2"
+            }
+        },
+        "c-f5934e9e": {
+            "id": "c-f5934e9e",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "f5934e9e-f5cd-4007-a2bf-1dc543511f75"
+            }
+        },
+        "c-861301fd": {
+            "id": "c-861301fd",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "861301fd-2ccf-4e4e-9119-52147d154edc"
+            }
+        },
+        "c-5c4e68c9": {
+            "id": "c-5c4e68c9",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "5c4e68c9-fbc6-4057-8aee-2059f4c12be4"
+            }
+        },
+        "c-23f1ca02": {
+            "id": "c-23f1ca02",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "23f1ca02-e0c7-4d58-ae22-1deb6be67370"
+            }
+        },
+        "c-da4b2b0e": {
+            "id": "c-da4b2b0e",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "da4b2b0e-0b1c-4883-9f5e-c7348d4f0864"
+            }
+        },
+        "c-1885f841": {
+            "id": "c-1885f841",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "1885f841-ae5d-4d03-bec0-89971a819518"
+            }
+        },
+        "c-cc995cbc": {
+            "id": "c-cc995cbc",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "cc995cbc-5594-4c6e-82b1-67e518b1db0c"
+            }
+        },
+        "c-e30c244a": {
+            "id": "c-e30c244a",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "e30c244a-60fe-4270-a4a6-f9443b4c7c67"
+            }
+        },
+        "c-dc0527ed": {
+            "id": "c-dc0527ed",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "dc0527ed-4b9a-4d61-b64f-1ccaa575c6b2"
+            }
+        },
+        "c-4f876451": {
+            "id": "c-4f876451",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "4f876451-fdbc-4ee0-987d-26120d797860"
+            }
+        },
+        "c-df2cce51": {
+            "id": "c-df2cce51",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "df2cce51-0d00-4bdd-be82-e2d1122639c6"
+            }
+        },
+        "c-933df47c": {
+            "id": "c-933df47c",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "933df47c-6118-4367-ba1e-69b25fa9e8b3"
+            }
+        },
+        "c-158ba90e": {
+            "id": "c-158ba90e",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "158ba90e-2002-47dc-963f-125753cfc98d"
+            }
+        },
+        "c-b6ff1554": {
+            "id": "c-b6ff1554",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "b6ff1554-a3a5-434f-86bb-24cb86ef289a"
+            }
+        },
+        "c-fdce99f0": {
+            "id": "c-fdce99f0",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "fdce99f0-de52-459b-a96c-d1759674c2da"
+            }
+        },
+        "c-5a2ebd2f": {
+            "id": "c-5a2ebd2f",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "5a2ebd2f-6e02-445d-8d83-6265f016fe7e"
+            }
+        },
+        "c-5e3fa05c": {
+            "id": "c-5e3fa05c",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "5e3fa05c-95bb-4865-8cf0-ebb90ca7c0ea"
+            }
+        },
+        "c-bbf9369d": {
+            "id": "c-bbf9369d",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "bbf9369d-e79e-453d-8c82-2f5dcbc2d7a8"
+            }
+        },
+        "c-d8acfe99": {
+            "id": "c-d8acfe99",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "d8acfe99-7168-41ac-b7ec-4e750b6489ba"
+            }
+        },
+        "c-77df3ff6": {
+            "id": "c-77df3ff6",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "77df3ff6-a48c-4ebe-bf78-aa54d7647353"
+            }
+        },
+        "c-f24d26f5": {
+            "id": "c-f24d26f5",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "f24d26f5-64a5-4892-88bd-76c27a6160a1"
+            }
+        },
+        "c-49c8b543": {
+            "id": "c-49c8b543",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "49c8b543-479b-4a1d-bfaa-7bd7ca506b7a"
+            }
+        },
+        "c-c9ba6a44": {
+            "id": "c-c9ba6a44",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "c9ba6a44-72d0-41cc-8df4-f06fda06ae63"
+            }
+        },
+        "c-09da9aa1": {
+            "id": "c-09da9aa1",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "09da9aa1-0d1e-4499-950a-d3a2ef8a3f8a"
+            }
+        },
+        "c-a2b54071": {
+            "id": "c-a2b54071",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "a2b54071-a8dc-4653-aeed-d4cfc39ba89f"
+            }
+        },
+        "c-00b859c4": {
+            "id": "c-00b859c4",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "00b859c4-c72b-45e8-8447-d90c810a683c"
+            }
+        },
+        "c-a81058c0": {
+            "id": "c-a81058c0",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "a81058c0-df1f-4f3f-80a6-2d0317818ad5"
+            }
+        },
+        "c-ead7c536": {
+            "id": "c-ead7c536",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "ead7c536-b403-4843-afe5-54ec8aa151d4"
+            }
+        },
+        "c-fb3044d0": {
+            "id": "c-fb3044d0",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "fb3044d0-00c0-41a8-9612-af352a75ffb7"
+            }
+        },
+        "c-edbda225": {
+            "id": "c-edbda225",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "edbda225-a58a-427d-8290-098e255b66b1"
+            }
+        },
+        "c-73ffd8b8": {
+            "id": "c-73ffd8b8",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "73ffd8b8-7ab4-4db4-be23-cbc61d6e0815"
+            }
+        },
+        "c-db6fb930": {
+            "id": "c-db6fb930",
+            "command": "ship.info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "db6fb930-5505-4ec4-8dd7-23fc39f974da"
+            }
+        }
+    },
+    "port_trade_blacklist": [],
+    "warp_blacklist": [],
+    "current_path": [],
+    "last_action_result": {
+        "status": "ok",
+        "command": "player.my_info",
+        "request_id": "c-ea97b0c4",
+        "response_type": "player.info",
+        "ts": "2025-12-10T21:47:15Z"
+    },
+    "current_qa_objective": null,
+    "needs_bootstrap": true
+}

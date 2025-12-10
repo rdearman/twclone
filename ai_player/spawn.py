@@ -8,6 +8,7 @@ import time
 import uuid
 from pathlib import Path
 
+from datetime import datetime, timezone
 DEFAULT_TIMEOUT = 5.0
 
 
@@ -33,44 +34,94 @@ def recv_response(sock, timeout=DEFAULT_TIMEOUT):
 
 
 def ensure_account(host, port, username, password, client_version):
-    """
-    Create an account if needed, idempotently.
+    import socket, json, uuid, time
+    from datetime import datetime, timezone
 
-    Tries auth.register; if the username already exists (1210) we treat that as success.
-    Adjust the payload keys if your server wants `user_name` / `passwd` instead.
-    """
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect((host, port))
-    try:
-        req_id = f"reg-{uuid.uuid4().hex[:8]}"
-        cmd = {
-            "id": req_id,
-            "command": "auth.register",
-            "data": {
-                # If your server expects `user_name`/`passwd`, change these keys.
-                "username": username,
-                "password": password,
-            },
-            "meta": {
-                "client_version": client_version,
-                "idempotency_key": str(uuid.uuid4()),
-            },
-        }
-        send_command(s, cmd)
-        resp = recv_response(s)
-        status = resp.get("status")
-        if status == "ok":
-            return True
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect((host, port))
 
-        err = resp.get("error") or {}
-        code = err.get("code")
-        # 1210 is "Username already exists" in your protocol docs.
-        if status in ("error", "refused") and code == 1210:
-            return True
+    buf = b""
 
-        raise RuntimeError(f"auth.register failed for {username}: {resp}")
-    finally:
-        s.close()
+    def send(cmd):
+        sock.sendall((json.dumps(cmd) + "\n").encode("utf-8"))
+
+    def recv_all():
+        nonlocal buf
+        try:
+            data = sock.recv(4096)
+            if not data:
+                return []
+            buf += data
+        except BlockingIOError:
+            return []
+        resps = []
+        while b"\n" in buf:
+            line, buf = buf.split(b"\n", 1)
+            line = line.strip()
+            if line:
+                resps.append(json.loads(line))
+        return resps
+
+    # 1) Try login first
+    login_id = f"login-{uuid.uuid4().hex[:8]}"
+    login_cmd = {
+        "id": login_id,
+        "command": "auth.login",
+        "data": {
+            "username": username,
+            "passwd": password,  # IMPORTANT: use 'passwd' here
+        },
+        "meta": {
+            "client_version": client_version,
+            "idempotency_key": login_id,
+        },
+    }
+    send(login_cmd)
+
+    # give server a moment
+    time.sleep(0.2)
+    for resp in recv_all():
+        if resp.get("reply_to") == login_id and resp.get("status") == "ok":
+            sock.close()
+            return  # account already exists
+
+    # 2) Register
+    reg_id = f"reg-{uuid.uuid4().hex[:8]}"
+    ts = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    register_cmd = {
+        "id": reg_id,
+        "ts": ts,
+        "command": "auth.register",
+        "auth": None,
+        "data": {
+            "username": username,
+            "passwd": password,        # ← FIX: server expects 'passwd'
+            "ship_name": f"{username}'s ship",
+            "ui_locale": "en_GB",
+            "ui_timezone": "Europe/London",
+        },
+        "meta": {
+            "client_version": client_version,
+            "idempotency_key": reg_id,
+        },
+    }
+
+    send(register_cmd)
+    time.sleep(0.2)
+    responses = recv_all()
+    sock.close()
+
+    # look for reply
+    for resp in responses:
+        if resp.get("reply_to") == reg_id:
+            if resp.get("status") == "ok":
+                return
+            else:
+                raise RuntimeError(
+                    f"auth.register failed for {username}: {resp}"
+                )
+
+    raise RuntimeError(f"No response to auth.register for {username}")
 
 
 def make_bot_config(base_cfg, idx, username, password, out_path: Path):

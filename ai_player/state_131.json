@@ -1,0 +1,1035 @@
+{
+    "session_id": "9a4a90e67f2a357db4e7993530adc73fa77cc29d54e0dd30f435298dfbdd3c6c",
+    "player_info": {
+        "player": {
+            "id": 297,
+            "username": "\u0001",
+            "credits": "1000000.00",
+            "turns_remaining": 750,
+            "sector": 10,
+            "ship_id": 308,
+            "corp_id": 0,
+            "alignment": 1,
+            "experience": 0,
+            "title_info": {
+                "title": "Civilian",
+                "commission": 1,
+                "alignment": 1,
+                "experience": 0,
+                "alignment_band": {
+                    "code": "NEUTRAL",
+                    "name": "Neutral",
+                    "is_good": false,
+                    "is_evil": false,
+                    "can_buy_iss": false,
+                    "can_rob_ports": false
+                }
+            }
+        }
+    },
+    "ship_info": {
+        "id": 308,
+        "number": 308,
+        "name": "ai_qa_bot_131's ship",
+        "type": {
+            "id": 0,
+            "name": "10"
+        },
+        "holds": 10,
+        "fighters": 250,
+        "location": {
+            "sector_id": 10,
+            "sector_name": "Fedspace 10"
+        },
+        "owner": {
+            "id": 297,
+            "name": "ai_qa_bot_131"
+        },
+        "cargo": []
+    },
+    "player_location_sector": 10,
+    "sector_data": {},
+    "universe_map": {},
+    "port_info_by_sector": {},
+    "price_cache": {},
+    "bank_balance": 0,
+    "command_retry_info": {
+        "player.my_info": {
+            "next_retry_time": 1765403239.1984878
+        },
+        "ship.info": {
+            "next_retry_time": 1765403240.2355976
+        },
+        "sector.info": {
+            "next_retry_time": 1765403296.2633286
+        }
+    },
+    "strategy_plan": [],
+    "trade_successful": false,
+    "q_table": {},
+    "n_table": {},
+    "command_schemas": {
+        "session.hello": {
+            "$id": "ge://schema/session.hello.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+        },
+        "session.ping": {
+            "$id": "ge://schema/session.ping.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+        },
+        "session.disconnect": {
+            "$id": "ge://schema/session.disconnect.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "auth.login": {
+            "$id": "ge://schema/auth.login.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "username": {
+                    "type": "string"
+                },
+                "passwd": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "username",
+                "passwd"
+            ],
+            "additionalProperties": true
+        },
+        "auth.logout": {
+            "$id": "ge://schema/auth.logout.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "auth.mfa.totp.verify": {
+            "$id": "ge://schema/auth.mfa.totp.verify.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "auth.register": {
+            "$id": "ge://schema/auth.register.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "username": {
+                    "type": "string"
+                },
+                "passwd": {
+                    "type": "string"
+                },
+                "ship_name": {
+                    "type": "string"
+                },
+                "ui_locale": {
+                    "type": "string"
+                },
+                "ui_timezone": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "username",
+                "passwd"
+            ],
+            "additionalProperties": true
+        },
+        "player.my_info": {
+            "$id": "ge://schema/player.my_info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+        },
+        "ship.info": {
+            "$id": "ge://schema/ship.info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+        },
+        "sector.info": {
+            "$id": "ge://schema/sector.info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [],
+            "additionalProperties": true
+        },
+        "sector.set_beacon": {
+            "$id": "ge://schema/sector.set_beacon.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "text": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "sector_id",
+                "text"
+            ],
+            "additionalProperties": false
+        },
+        "move.warp": {
+            "$id": "ge://schema/move_warp.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "to_sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "to_sector_id"
+            ],
+            "additionalProperties": true
+        },
+        "move.scan": {
+            "$id": "ge://schema/move.scan.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {}
+        },
+        "move.pathfind": {
+            "$id": "ge://schema/move.pathfind.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.accept": {
+            "$id": "ge://schema/trade.accept.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.buy": {
+            "$id": "ge://schema/trade.buy.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "port_id": {
+                    "type": "integer"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "commodity": {
+                                "type": "string"
+                            },
+                            "quantity": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "commodity",
+                            "quantity"
+                        ],
+                        "additionalProperties": true
+                    }
+                },
+                "idempotency_key": {
+                    "type": "string"
+                },
+                "account": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ]
+                },
+                "sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "port_id",
+                "items",
+                "idempotency_key",
+                "account",
+                "sector_id"
+            ],
+            "additionalProperties": true
+        },
+        "trade.cancel": {
+            "$id": "ge://schema/trade.cancel.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.history": {
+            "$id": "ge://schema/trade.history.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50
+                },
+                "cursor": {
+                    "type": "string"
+                }
+            },
+            "required": [],
+            "additionalProperties": true
+        },
+        "trade.jettison": {
+            "$id": "ge://schema/trade.jettison.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.offer": {
+            "$id": "ge://schema/trade.offer.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.port_info": {
+            "$id": "ge://schema/trade.port_info.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.quote": {
+            "$id": "ge://schema/trade.quote.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "port_id": {
+                    "type": "integer"
+                },
+                "commodity": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "port_id",
+                "commodity",
+                "quantity"
+            ],
+            "additionalProperties": true
+        },
+        "trade.sell": {
+            "$id": "ge://schema/trade.sell.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "port_id": {
+                    "type": "integer"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "commodity": {
+                                "type": "string"
+                            },
+                            "quantity": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "commodity",
+                            "quantity"
+                        ],
+                        "additionalProperties": true
+                    }
+                },
+                "idempotency_key": {
+                    "type": "string"
+                },
+                "account": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ]
+                }
+            },
+            "required": [
+                "sector_id",
+                "port_id",
+                "items",
+                "idempotency_key",
+                "account"
+            ],
+            "additionalProperties": true
+        }
+    },
+    "schema_blacklist": [],
+    "pending_schema_requests": {
+        "system.cmd_list": "c-4a8336b3",
+        "session.hello": "c-6a4ffe18",
+        "session.ping": "c-baf8d322",
+        "session.disconnect": "c-d45937c9",
+        "auth.login": "c-12f64c96",
+        "auth.logout": "c-e1266b6f",
+        "auth.mfa.totp.verify": "c-2bc61439",
+        "auth.register": "c-82fe6ea8",
+        "player.my_info": "c-3609863a",
+        "ship.info": "c-d2eb287f",
+        "sector.info": "c-f5e0a516",
+        "sector.set_beacon": "c-637ffda6",
+        "move.warp": "c-98266b77",
+        "move.scan": "c-f59434b0",
+        "move.pathfind": "c-fc441c93",
+        "trade.accept": "c-8f49c565",
+        "trade.buy": "c-fc0c9525",
+        "trade.cancel": "c-c74a87d8",
+        "trade.history": "c-e24d6ea9",
+        "trade.jettison": "c-e44628ea",
+        "trade.offer": "c-eb3923e1",
+        "trade.port_info": "c-d3429510",
+        "trade.quote": "c-e68629ac",
+        "trade.sell": "c-2e5c00d0"
+    },
+    "recent_sectors": [
+        10,
+        10
+    ],
+    "pending_commands": {
+        "c-19984fd1": {
+            "id": "c-19984fd1",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "19984fd1-21b0-4811-834b-b47f87e32fbb"
+            }
+        },
+        "c-b8738e5b": {
+            "id": "c-b8738e5b",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "b8738e5b-c109-4a89-8de5-e2feebe479bd"
+            }
+        },
+        "c-177ccf50": {
+            "id": "c-177ccf50",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "177ccf50-8c1b-43e2-a171-aa85fcb036a0"
+            }
+        },
+        "c-1c400021": {
+            "id": "c-1c400021",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "1c400021-a57c-4863-ac45-0b86c64887fd"
+            }
+        },
+        "c-d2b10743": {
+            "id": "c-d2b10743",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "d2b10743-3e32-481c-b22d-f150fe38b7e4"
+            }
+        },
+        "c-efe3f76c": {
+            "id": "c-efe3f76c",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "efe3f76c-8b9f-4c7a-a202-afa35c2dc103"
+            }
+        },
+        "c-30f25fc4": {
+            "id": "c-30f25fc4",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "30f25fc4-b3a6-4501-ab0a-ad850a1355a2"
+            }
+        },
+        "c-2eb7385d": {
+            "id": "c-2eb7385d",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "2eb7385d-cf9c-4489-8827-df990a38aa5a"
+            }
+        },
+        "c-5c0402c3": {
+            "id": "c-5c0402c3",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "5c0402c3-54c8-482a-8d49-f5419796367c"
+            }
+        },
+        "c-c020aef7": {
+            "id": "c-c020aef7",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "c020aef7-80e8-4538-b31b-d27800c14348"
+            }
+        },
+        "c-e6a37744": {
+            "id": "c-e6a37744",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "e6a37744-f98a-47a8-bcff-b38be5b1bf18"
+            }
+        },
+        "c-ac016824": {
+            "id": "c-ac016824",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "ac016824-cbec-44fb-9862-daabe0e69268"
+            }
+        },
+        "c-fdbaef32": {
+            "id": "c-fdbaef32",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "fdbaef32-87eb-4913-8454-2e6f299b70e8"
+            }
+        },
+        "c-3629cc73": {
+            "id": "c-3629cc73",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "3629cc73-7104-4806-9fd5-01eaa351886e"
+            }
+        },
+        "c-267c878e": {
+            "id": "c-267c878e",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "267c878e-8777-4b22-bab8-0193c26af720"
+            }
+        },
+        "c-fe20cf43": {
+            "id": "c-fe20cf43",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "fe20cf43-5731-442e-b41c-d2600f4d9451"
+            }
+        },
+        "c-99b209fe": {
+            "id": "c-99b209fe",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "99b209fe-b4bb-4796-aeb4-5bc67a86efcd"
+            }
+        },
+        "c-a970db89": {
+            "id": "c-a970db89",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "a970db89-d348-492c-9bb6-12796617e76a"
+            }
+        },
+        "c-ba7bfb14": {
+            "id": "c-ba7bfb14",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "ba7bfb14-222f-4446-8e1c-173ce0e22894"
+            }
+        },
+        "c-674abecc": {
+            "id": "c-674abecc",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "674abecc-bfaf-4282-902f-9d2de916cfc6"
+            }
+        },
+        "c-7de9d5d7": {
+            "id": "c-7de9d5d7",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "7de9d5d7-7091-42ea-8fab-780b2e2898ae"
+            }
+        },
+        "c-d2bc11d3": {
+            "id": "c-d2bc11d3",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "d2bc11d3-5f3d-478e-bd80-e6608100ec28"
+            }
+        },
+        "c-c327ffee": {
+            "id": "c-c327ffee",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "c327ffee-9d8d-4e6c-9f43-29ab87b43f00"
+            }
+        },
+        "c-00510c2e": {
+            "id": "c-00510c2e",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "00510c2e-1818-40c2-8d72-0418d327b8bd"
+            }
+        },
+        "c-3c1f2007": {
+            "id": "c-3c1f2007",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "3c1f2007-853c-4b8c-a714-8f4329aea486"
+            }
+        },
+        "c-beebf7df": {
+            "id": "c-beebf7df",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "beebf7df-7d13-48ef-8953-30aa82ebc2bf"
+            }
+        },
+        "c-623a64f9": {
+            "id": "c-623a64f9",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "623a64f9-b923-45ad-aff3-b31bb22acbdb"
+            }
+        },
+        "c-dde72068": {
+            "id": "c-dde72068",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "dde72068-c3ae-4269-8344-9e148079cbbd"
+            }
+        },
+        "c-295e48d1": {
+            "id": "c-295e48d1",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "295e48d1-1617-4ff3-96d8-79fa96825772"
+            }
+        },
+        "c-578ad602": {
+            "id": "c-578ad602",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "578ad602-2aac-4de4-b0e7-0198ac87bf25"
+            }
+        },
+        "c-bbb2e8f6": {
+            "id": "c-bbb2e8f6",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "bbb2e8f6-8888-4490-96d7-a71a218f8073"
+            }
+        },
+        "c-02ffc54d": {
+            "id": "c-02ffc54d",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "02ffc54d-69f5-4d41-99c5-15dbee5ffb34"
+            }
+        },
+        "c-3aef3bd0": {
+            "id": "c-3aef3bd0",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "3aef3bd0-7b05-4232-ba3e-c59ed65e3a6a"
+            }
+        },
+        "c-a082291e": {
+            "id": "c-a082291e",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "a082291e-eaf0-44f8-b43e-244b132f3454"
+            }
+        },
+        "c-184675ec": {
+            "id": "c-184675ec",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "184675ec-ed89-43ce-87ed-9b75e98c8782"
+            }
+        },
+        "c-c022c72b": {
+            "id": "c-c022c72b",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "c022c72b-1265-4f7d-9223-e1b5200984a5"
+            }
+        },
+        "c-e14226f3": {
+            "id": "c-e14226f3",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "e14226f3-325b-403a-91c7-4587b53b9c1b"
+            }
+        },
+        "c-b2fe1c67": {
+            "id": "c-b2fe1c67",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "b2fe1c67-91a5-4bc7-84ee-96bdbbb766c9"
+            }
+        },
+        "c-0ae4aef7": {
+            "id": "c-0ae4aef7",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "0ae4aef7-e7c1-4d0e-9be5-170c172a4d96"
+            }
+        },
+        "c-a4ec7bac": {
+            "id": "c-a4ec7bac",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "a4ec7bac-e211-47d3-a532-137c8cc41a22"
+            }
+        },
+        "c-ddfe0583": {
+            "id": "c-ddfe0583",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "ddfe0583-9780-44d3-bb75-faa2c5a0e362"
+            }
+        },
+        "c-71446026": {
+            "id": "c-71446026",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "71446026-f178-4d5e-86c1-02d887590638"
+            }
+        },
+        "c-13289065": {
+            "id": "c-13289065",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "13289065-5cb1-4b7d-a70a-c5c7b23dd6a8"
+            }
+        },
+        "c-769b3939": {
+            "id": "c-769b3939",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "769b3939-a899-45c1-bb9c-94d46785c1b3"
+            }
+        },
+        "c-b5e13b66": {
+            "id": "c-b5e13b66",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "b5e13b66-0b24-42a1-baa5-7d74a141bdc3"
+            }
+        },
+        "c-af83a491": {
+            "id": "c-af83a491",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "af83a491-3330-4f36-bf96-7893d8f82b4d"
+            }
+        },
+        "c-28e4cf75": {
+            "id": "c-28e4cf75",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "28e4cf75-459a-4b68-916c-5dea36b22071"
+            }
+        },
+        "c-ff902ab7": {
+            "id": "c-ff902ab7",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "ff902ab7-b6ee-46b5-ae7d-3844ed3623a7"
+            }
+        },
+        "c-52989695": {
+            "id": "c-52989695",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "52989695-10f4-41d4-a031-6a3d72df4126"
+            }
+        },
+        "c-b6908e56": {
+            "id": "c-b6908e56",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "b6908e56-a12a-4823-b8be-739c096b9b61"
+            }
+        },
+        "c-a7722b2f": {
+            "id": "c-a7722b2f",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "a7722b2f-8595-4d36-8eb0-fbdc936a9081"
+            }
+        },
+        "c-e6308d48": {
+            "id": "c-e6308d48",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "e6308d48-62ab-42f6-a55e-f94d21afcc60"
+            }
+        },
+        "c-baa89f48": {
+            "id": "c-baa89f48",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "baa89f48-802b-41ed-a091-831542fc852b"
+            }
+        },
+        "c-48859554": {
+            "id": "c-48859554",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "48859554-6f64-423a-8752-13a468343baf"
+            }
+        },
+        "c-f9ec01a1": {
+            "id": "c-f9ec01a1",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "f9ec01a1-4741-4641-a4f9-f190eec67194"
+            }
+        },
+        "c-0ce5ffdb": {
+            "id": "c-0ce5ffdb",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 10
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "0ce5ffdb-56cd-4af2-a279-77a88ba9f74a"
+            }
+        }
+    },
+    "port_trade_blacklist": [],
+    "warp_blacklist": [],
+    "current_path": [],
+    "last_action_result": {
+        "status": "ok",
+        "command": "ship.info",
+        "request_id": "c-38349960",
+        "response_type": "ship.status",
+        "ts": "2025-12-10T21:47:15Z"
+    },
+    "current_qa_objective": null,
+    "needs_bootstrap": true
+}

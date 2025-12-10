@@ -1,0 +1,1135 @@
+{
+    "session_id": "d9aac9ee617c7fdcc952a4d79b06fa7375d9c8f36bcadf81b56029704196f8c7",
+    "player_info": {
+        "player": {
+            "id": 293,
+            "username": "\u0001",
+            "credits": "1000000.00",
+            "turns_remaining": 750,
+            "sector": 1,
+            "ship_id": 304,
+            "corp_id": 0,
+            "alignment": 1,
+            "experience": 0,
+            "title_info": {
+                "title": "Civilian",
+                "commission": 1,
+                "alignment": 1,
+                "experience": 0,
+                "alignment_band": {
+                    "code": "NEUTRAL",
+                    "name": "Neutral",
+                    "is_good": false,
+                    "is_evil": false,
+                    "can_buy_iss": false,
+                    "can_rob_ports": false
+                }
+            }
+        }
+    },
+    "ship_info": {
+        "id": 304,
+        "number": 304,
+        "name": "ai_qa_bot_127's ship",
+        "type": {
+            "id": 0,
+            "name": "10"
+        },
+        "holds": 10,
+        "fighters": 250,
+        "location": {
+            "sector_id": 1,
+            "sector_name": "Fedspace 1System Volume"
+        },
+        "owner": {
+            "id": 293,
+            "name": "ai_qa_bot_127"
+        },
+        "cargo": []
+    },
+    "player_location_sector": 1,
+    "sector_data": {
+        "1": {
+            "server_tick": 2277,
+            "sector_id": 1,
+            "name": "Fedspace 1System Volume",
+            "adjacent": [
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+            ],
+            "adjacent_count": 6,
+            "ports": [
+                {
+                    "id": 1,
+                    "name": "Earth Port",
+                    "type": "1"
+                }
+            ],
+            "has_port": true,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": "The Federation -- Do Not Dump!",
+            "has_beacon": true,
+            "ships": [
+                {
+                    "id": 145,
+                    "name": "ai_qa_bot_118's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_118's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 163,
+                    "name": "ai_qa_bot_136's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_136's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 165,
+                    "name": "ai_qa_bot_138's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_138's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 169,
+                    "name": "ai_qa_bot_142's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_142's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 171,
+                    "name": "ai_qa_bot_144's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_144's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 304,
+                    "name": "ai_qa_bot_127's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_127's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_127"
+                }
+            ],
+            "ships_count": 6,
+            "ports_count": 1,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        }
+    },
+    "universe_map": {
+        "1": {
+            "is_explored": true,
+            "has_port": true
+        }
+    },
+    "port_info_by_sector": {
+        "1": {
+            "port_id": 1,
+            "name": "Earth Port",
+            "class": null,
+            "commodities": []
+        }
+    },
+    "price_cache": {
+        "1": {
+            "buy": {
+                "ORE": 138.0
+            },
+            "sell": {
+                "ORE": 0.0
+            }
+        }
+    },
+    "bank_balance": 0,
+    "command_retry_info": {
+        "player.my_info": {
+            "next_retry_time": 1765403236.5963433
+        },
+        "ship.info": {
+            "next_retry_time": 1765403237.6277964
+        },
+        "sector.info": {
+            "next_retry_time": 1765403238.631898
+        },
+        "trade.port_info": {
+            "next_retry_time": 1765403239.6376247
+        },
+        "trade.quote": {
+            "next_retry_time": 1765403241.15562
+        },
+        "move.warp": {
+            "next_retry_time": 1765403294.8576233
+        },
+        "trade.buy": {
+            "next_retry_time": 1765403294.3340166
+        },
+        "bank.balance": {
+            "next_retry_time": 1765403292.8087168
+        }
+    },
+    "strategy_plan": [],
+    "trade_successful": false,
+    "q_table": {
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "trade.buy": 0.0,
+            "combat.attack": 0.0,
+            "combat.deploy_fighters": 0.0,
+            "move.warp": 0.0,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:pending_cmds": {
+            "trade.buy": 0.0,
+            "combat.attack": 0.0,
+            "combat.deploy_fighters": 0.0,
+            "move.warp": 0.0,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.0
+        }
+    },
+    "n_table": {
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "trade.buy": 0,
+            "combat.attack": 0,
+            "combat.deploy_fighters": 0,
+            "move.warp": 0,
+            "bank.deposit": 0,
+            "bank.balance": 0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:pending_cmds": {
+            "trade.buy": 0,
+            "combat.attack": 0,
+            "combat.deploy_fighters": 0,
+            "move.warp": 0,
+            "bank.deposit": 0,
+            "bank.balance": 0
+        }
+    },
+    "command_schemas": {
+        "session.hello": {
+            "$id": "ge://schema/session.hello.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+        },
+        "session.ping": {
+            "$id": "ge://schema/session.ping.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+        },
+        "session.disconnect": {
+            "$id": "ge://schema/session.disconnect.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "auth.login": {
+            "$id": "ge://schema/auth.login.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "username": {
+                    "type": "string"
+                },
+                "passwd": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "username",
+                "passwd"
+            ],
+            "additionalProperties": true
+        },
+        "auth.logout": {
+            "$id": "ge://schema/auth.logout.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "auth.mfa.totp.verify": {
+            "$id": "ge://schema/auth.mfa.totp.verify.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "auth.register": {
+            "$id": "ge://schema/auth.register.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "username": {
+                    "type": "string"
+                },
+                "passwd": {
+                    "type": "string"
+                },
+                "ship_name": {
+                    "type": "string"
+                },
+                "ui_locale": {
+                    "type": "string"
+                },
+                "ui_timezone": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "username",
+                "passwd"
+            ],
+            "additionalProperties": true
+        },
+        "player.my_info": {
+            "$id": "ge://schema/player.my_info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+        },
+        "ship.info": {
+            "$id": "ge://schema/ship.info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+        },
+        "sector.info": {
+            "$id": "ge://schema/sector.info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [],
+            "additionalProperties": true
+        },
+        "sector.set_beacon": {
+            "$id": "ge://schema/sector.set_beacon.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "text": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "sector_id",
+                "text"
+            ],
+            "additionalProperties": false
+        },
+        "move.warp": {
+            "$id": "ge://schema/move_warp.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "to_sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "to_sector_id"
+            ],
+            "additionalProperties": true
+        },
+        "move.scan": {
+            "$id": "ge://schema/move.scan.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {}
+        },
+        "move.pathfind": {
+            "$id": "ge://schema/move.pathfind.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.accept": {
+            "$id": "ge://schema/trade.accept.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.buy": {
+            "$id": "ge://schema/trade.buy.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "port_id": {
+                    "type": "integer"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "commodity": {
+                                "type": "string"
+                            },
+                            "quantity": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "commodity",
+                            "quantity"
+                        ],
+                        "additionalProperties": true
+                    }
+                },
+                "idempotency_key": {
+                    "type": "string"
+                },
+                "account": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ]
+                },
+                "sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "port_id",
+                "items",
+                "idempotency_key",
+                "account",
+                "sector_id"
+            ],
+            "additionalProperties": true
+        },
+        "trade.cancel": {
+            "$id": "ge://schema/trade.cancel.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.history": {
+            "$id": "ge://schema/trade.history.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50
+                },
+                "cursor": {
+                    "type": "string"
+                }
+            },
+            "required": [],
+            "additionalProperties": true
+        },
+        "trade.jettison": {
+            "$id": "ge://schema/trade.jettison.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.offer": {
+            "$id": "ge://schema/trade.offer.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.port_info": {
+            "$id": "ge://schema/trade.port_info.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.quote": {
+            "$id": "ge://schema/trade.quote.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "port_id": {
+                    "type": "integer"
+                },
+                "commodity": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "port_id",
+                "commodity",
+                "quantity"
+            ],
+            "additionalProperties": true
+        },
+        "trade.sell": {
+            "$id": "ge://schema/trade.sell.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "port_id": {
+                    "type": "integer"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "commodity": {
+                                "type": "string"
+                            },
+                            "quantity": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "commodity",
+                            "quantity"
+                        ],
+                        "additionalProperties": true
+                    }
+                },
+                "idempotency_key": {
+                    "type": "string"
+                },
+                "account": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ]
+                }
+            },
+            "required": [
+                "sector_id",
+                "port_id",
+                "items",
+                "idempotency_key",
+                "account"
+            ],
+            "additionalProperties": true
+        }
+    },
+    "schema_blacklist": [
+        "combat.attack",
+        "bank.deposit",
+        "combat.deploy_fighters"
+    ],
+    "pending_schema_requests": {
+        "system.cmd_list": "c-671794fd",
+        "session.hello": "c-7eea291f",
+        "session.ping": "c-15e4d42d",
+        "session.disconnect": "c-f59af516",
+        "auth.login": "c-86fe9a86",
+        "auth.logout": "c-2c886a91",
+        "auth.mfa.totp.verify": "c-34ac064d",
+        "auth.register": "c-01c64dc4",
+        "player.my_info": "c-522ada19",
+        "ship.info": "c-cfb1ecfc",
+        "sector.info": "c-2b26d004",
+        "sector.set_beacon": "c-be6424cb",
+        "move.warp": "c-7e0fd833",
+        "move.scan": "c-33777bf4",
+        "move.pathfind": "c-180e650b",
+        "trade.accept": "c-9794fa2a",
+        "trade.buy": "c-cd81a1f1",
+        "trade.cancel": "c-76ae1d2b",
+        "trade.history": "c-fb21c0cd",
+        "trade.jettison": "c-95fdf06e",
+        "trade.offer": "c-3e11cf9f",
+        "trade.port_info": "c-69359b7d",
+        "trade.quote": "c-4e06294b",
+        "trade.sell": "c-c8a27313"
+    },
+    "recent_sectors": [
+        1,
+        1
+    ],
+    "pending_commands": {
+        "c-df05eadd": {
+            "id": "c-df05eadd",
+            "command": "move.warp",
+            "data": {
+                "to_sector_id": 2
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "df05eadd-2944-47fa-b9f4-db7f9c147d2e"
+            }
+        },
+        "c-a75a9c64": {
+            "id": "c-a75a9c64",
+            "command": "trade.buy",
+            "data": {
+                "port_id": 1,
+                "items": [
+                    {
+                        "commodity": "ORE",
+                        "quantity": 1
+                    }
+                ],
+                "idempotency_key": "4fc33c7e-36e5-46c6-8c1e-b330b8a87483",
+                "account": 0,
+                "sector_id": 1
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "a75a9c64-0cd3-467a-8e24-bf1348b6e414"
+            }
+        },
+        "c-eba15964": {
+            "id": "c-eba15964",
+            "command": "move.warp",
+            "data": {
+                "to_sector_id": 3
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "eba15964-0d95-4c27-9acb-601cba432c08"
+            }
+        },
+        "c-e65e9238": {
+            "id": "c-e65e9238",
+            "command": "move.warp",
+            "data": {
+                "to_sector_id": 2
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "e65e9238-9dd7-4d8c-a50c-1ac986e8edc9"
+            }
+        },
+        "c-d01cd6b8": {
+            "id": "c-d01cd6b8",
+            "command": "bank.balance",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "d01cd6b8-e209-43b4-bfbd-f134d3df7e02"
+            }
+        },
+        "c-df0cebb3": {
+            "id": "c-df0cebb3",
+            "command": "move.warp",
+            "data": {
+                "to_sector_id": 2
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "df0cebb3-94f4-47b8-a633-80991fee6cc1"
+            }
+        },
+        "c-f6a0cde2": {
+            "id": "c-f6a0cde2",
+            "command": "trade.buy",
+            "data": {
+                "port_id": 1,
+                "items": [
+                    {
+                        "commodity": "ORE",
+                        "quantity": 1
+                    }
+                ],
+                "idempotency_key": "2db48933-2424-4861-8f03-680503db640b",
+                "account": 0,
+                "sector_id": 1
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "f6a0cde2-32ab-4dfc-87ff-ec2226b17ca0"
+            }
+        },
+        "c-3e20c3ac": {
+            "id": "c-3e20c3ac",
+            "command": "move.warp",
+            "data": {
+                "to_sector_id": 4
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "3e20c3ac-f425-412d-a468-d613da13870b"
+            }
+        },
+        "c-4db9c5ac": {
+            "id": "c-4db9c5ac",
+            "command": "bank.balance",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "4db9c5ac-5ea4-45fc-a894-4393882f5452"
+            }
+        },
+        "c-4935f044": {
+            "id": "c-4935f044",
+            "command": "move.warp",
+            "data": {
+                "to_sector_id": 6
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "4935f044-98a7-486b-8257-7d04260e23c5"
+            }
+        },
+        "c-c35749f2": {
+            "id": "c-c35749f2",
+            "command": "move.warp",
+            "data": {
+                "to_sector_id": 4
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "c35749f2-331a-4e5f-9a8b-b47c11995a20"
+            }
+        },
+        "c-ff7352ec": {
+            "id": "c-ff7352ec",
+            "command": "trade.buy",
+            "data": {
+                "port_id": 1,
+                "items": [
+                    {
+                        "commodity": "ORE",
+                        "quantity": 4
+                    }
+                ],
+                "idempotency_key": "7ff4cce9-52ce-4332-822d-4031ea57b520",
+                "account": 0,
+                "sector_id": 1
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "ff7352ec-d8f4-400e-8bbd-633fa9ab1d18"
+            }
+        },
+        "c-2671e770": {
+            "id": "c-2671e770",
+            "command": "move.warp",
+            "data": {
+                "to_sector_id": 2
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "2671e770-e41f-49c3-a8bb-92f85e67cdad"
+            }
+        },
+        "c-86692fc1": {
+            "id": "c-86692fc1",
+            "command": "move.warp",
+            "data": {
+                "to_sector_id": 2
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "86692fc1-55de-42e5-9302-4342d9f0de88"
+            }
+        },
+        "c-7860d112": {
+            "id": "c-7860d112",
+            "command": "move.warp",
+            "data": {
+                "to_sector_id": 2
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "7860d112-3646-4559-abf6-240f2be1f53c"
+            }
+        },
+        "c-02754318": {
+            "id": "c-02754318",
+            "command": "bank.balance",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "02754318-7345-49ab-9527-25ed93846842"
+            }
+        },
+        "c-cb584de6": {
+            "id": "c-cb584de6",
+            "command": "trade.buy",
+            "data": {
+                "port_id": 1,
+                "items": [
+                    {
+                        "commodity": "ORE",
+                        "quantity": 10
+                    }
+                ],
+                "idempotency_key": "89f4990e-f42f-4d61-b2ad-8866b0036780",
+                "account": 0,
+                "sector_id": 1
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "cb584de6-f3e5-4b9c-b7b7-87a6d257a64d"
+            }
+        },
+        "c-bc4e2027": {
+            "id": "c-bc4e2027",
+            "command": "move.warp",
+            "data": {
+                "to_sector_id": 6
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "bc4e2027-fd66-4977-b053-515971187a18"
+            }
+        },
+        "c-2f646fe5": {
+            "id": "c-2f646fe5",
+            "command": "bank.balance",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "2f646fe5-72fa-45a2-8713-66705ad168cc"
+            }
+        },
+        "c-dae78f4a": {
+            "id": "c-dae78f4a",
+            "command": "move.warp",
+            "data": {
+                "to_sector_id": 4
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "dae78f4a-1f46-4e74-bb53-d5d968c8669d"
+            }
+        },
+        "c-4dc04903": {
+            "id": "c-4dc04903",
+            "command": "trade.buy",
+            "data": {
+                "port_id": 1,
+                "items": [
+                    {
+                        "commodity": "ORE",
+                        "quantity": 5
+                    }
+                ],
+                "idempotency_key": "0e2eea5f-7aac-4629-b2b3-bda066486188",
+                "account": 0,
+                "sector_id": 1
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "4dc04903-7529-4a5d-9d7c-5d1adc3a5c2a"
+            }
+        },
+        "c-884a61c5": {
+            "id": "c-884a61c5",
+            "command": "move.warp",
+            "data": {
+                "to_sector_id": 7
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "884a61c5-9772-4b4a-b0d6-997a7b1ef691"
+            }
+        },
+        "c-fbe3526c": {
+            "id": "c-fbe3526c",
+            "command": "bank.balance",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "fbe3526c-264e-4c07-bd91-49b7de6acc58"
+            }
+        },
+        "c-c216f963": {
+            "id": "c-c216f963",
+            "command": "trade.buy",
+            "data": {
+                "port_id": 1,
+                "items": [
+                    {
+                        "commodity": "ORE",
+                        "quantity": 2
+                    }
+                ],
+                "idempotency_key": "25e01f2b-3e46-4fdd-8091-ca45f1bfdbc8",
+                "account": 0,
+                "sector_id": 1
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "c216f963-e942-4fe9-87a0-c1536020ece3"
+            }
+        },
+        "c-4a76b0e7": {
+            "id": "c-4a76b0e7",
+            "command": "move.warp",
+            "data": {
+                "to_sector_id": 4
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "4a76b0e7-08d8-4071-8055-8731a0ad79d8"
+            }
+        },
+        "c-c3f93b38": {
+            "id": "c-c3f93b38",
+            "command": "move.warp",
+            "data": {
+                "to_sector_id": 3
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "c3f93b38-c619-4bb8-b171-35feed7985fa"
+            }
+        },
+        "c-c3e45b1d": {
+            "id": "c-c3e45b1d",
+            "command": "move.warp",
+            "data": {
+                "to_sector_id": 3
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "c3e45b1d-6fd6-47db-9d91-6f153ec40a15"
+            }
+        },
+        "c-13acc99f": {
+            "id": "c-13acc99f",
+            "command": "move.warp",
+            "data": {
+                "to_sector_id": 2
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "13acc99f-5672-4fd9-90b5-5f3cf39aa6d2"
+            }
+        },
+        "c-731505e7": {
+            "id": "c-731505e7",
+            "command": "trade.buy",
+            "data": {
+                "port_id": 1,
+                "items": [
+                    {
+                        "commodity": "ORE",
+                        "quantity": 1
+                    }
+                ],
+                "idempotency_key": "07229800-c5b1-45e2-8f47-193963111c08",
+                "account": 0,
+                "sector_id": 1
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "731505e7-5d56-4d84-96fc-c89407f411e2"
+            }
+        },
+        "c-5374d203": {
+            "id": "c-5374d203",
+            "command": "bank.balance",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "5374d203-3dd5-457c-98b9-b7f0957e0023"
+            }
+        },
+        "c-25ea746c": {
+            "id": "c-25ea746c",
+            "command": "move.warp",
+            "data": {
+                "to_sector_id": 3
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "25ea746c-726a-4273-a007-4b1824b2216a"
+            }
+        },
+        "c-f17081e9": {
+            "id": "c-f17081e9",
+            "command": "trade.buy",
+            "data": {
+                "port_id": 1,
+                "items": [
+                    {
+                        "commodity": "ORE",
+                        "quantity": 8
+                    }
+                ],
+                "idempotency_key": "71760c61-67e7-4779-b997-a9126afbb5da",
+                "account": 0,
+                "sector_id": 1
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "f17081e9-9eb6-4401-9355-dfdc812567a2"
+            }
+        },
+        "c-676eab0c": {
+            "id": "c-676eab0c",
+            "command": "move.warp",
+            "data": {
+                "to_sector_id": 3
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "676eab0c-9332-4c9b-a07d-d9bb48b81089"
+            }
+        },
+        "c-b83f6a58": {
+            "id": "c-b83f6a58",
+            "command": "bank.balance",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "b83f6a58-e6bb-4bab-8f47-86f9cc5367ed"
+            }
+        },
+        "c-5ee63123": {
+            "id": "c-5ee63123",
+            "command": "move.warp",
+            "data": {
+                "to_sector_id": 7
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "5ee63123-8e27-4aa2-b829-7de53bd618eb"
+            }
+        },
+        "c-5e996883": {
+            "id": "c-5e996883",
+            "command": "move.warp",
+            "data": {
+                "to_sector_id": 5
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "5e996883-fdcb-46b2-a6ff-d9f48ad2da65"
+            }
+        },
+        "c-ba012e56": {
+            "id": "c-ba012e56",
+            "command": "move.warp",
+            "data": {
+                "to_sector_id": 2
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "ba012e56-e681-4b0a-abdc-dac9ac97e196"
+            }
+        },
+        "c-112bff9a": {
+            "id": "c-112bff9a",
+            "command": "trade.buy",
+            "data": {
+                "port_id": 1,
+                "items": [
+                    {
+                        "commodity": "ORE",
+                        "quantity": 6
+                    }
+                ],
+                "idempotency_key": "4e87497b-2bd4-45cd-a3eb-14c07b7013af",
+                "account": 0,
+                "sector_id": 1
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "112bff9a-82ad-4e94-83dc-c5508e7d3fa5"
+            }
+        },
+        "c-f0dc7edc": {
+            "id": "c-f0dc7edc",
+            "command": "move.warp",
+            "data": {
+                "to_sector_id": 6
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "f0dc7edc-e734-44fc-96eb-9c8493f3e01b"
+            }
+        },
+        "c-11d4e373": {
+            "id": "c-11d4e373",
+            "command": "move.warp",
+            "data": {
+                "to_sector_id": 3
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "11d4e373-00ef-42be-b840-4186842da5dc"
+            }
+        },
+        "c-7e517791": {
+            "id": "c-7e517791",
+            "command": "bank.balance",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "7e517791-9593-46df-9b22-2c6aef238bae"
+            }
+        },
+        "c-c6ccd285": {
+            "id": "c-c6ccd285",
+            "command": "trade.buy",
+            "data": {
+                "port_id": 1,
+                "items": [
+                    {
+                        "commodity": "ORE",
+                        "quantity": 5
+                    }
+                ],
+                "idempotency_key": "35395565-0c98-4c23-9c48-a36b5f99a6ad",
+                "account": 0,
+                "sector_id": 1
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "c6ccd285-fbd4-420a-b5a6-da57da8f8381"
+            }
+        },
+        "c-7841c9c2": {
+            "id": "c-7841c9c2",
+            "command": "move.warp",
+            "data": {
+                "to_sector_id": 3
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "7841c9c2-be6e-4630-b5fc-caac64865437"
+            }
+        }
+    },
+    "port_trade_blacklist": [],
+    "warp_blacklist": [],
+    "current_path": [],
+    "last_action_result": {
+        "status": "ok",
+        "command": "trade.quote",
+        "request_id": "c-44dd4575",
+        "response_type": "trade.quote",
+        "ts": "2025-12-10T21:47:16Z"
+    },
+    "current_qa_objective": null,
+    "needs_bootstrap": false,
+    "last_action": "move.warp",
+    "last_context_key": "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:pending_cmds",
+    "last_stage": "exploit"
+}

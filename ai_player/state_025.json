@@ -1,0 +1,2518 @@
+{
+    "session_id": "63eddfe1330c6a2079449d5b8f34edb063aba6a4136100bc7b40079553c3ea72",
+    "player_info": {
+        "player": {
+            "id": 191,
+            "username": "\u0001",
+            "credits": "1000000.00",
+            "turns_remaining": 750,
+            "sector": 1,
+            "ship_id": 202,
+            "corp_id": 0,
+            "alignment": 1,
+            "experience": 0,
+            "title_info": {
+                "title": "Civilian",
+                "commission": 1,
+                "alignment": 1,
+                "experience": 0,
+                "alignment_band": {
+                    "code": "NEUTRAL",
+                    "name": "Neutral",
+                    "is_good": false,
+                    "is_evil": false,
+                    "can_buy_iss": false,
+                    "can_rob_ports": false
+                }
+            }
+        }
+    },
+    "ship_info": {
+        "id": 202,
+        "number": 202,
+        "name": "ai_qa_bot_025's ship",
+        "type": {
+            "id": 0,
+            "name": "10"
+        },
+        "holds": 10,
+        "fighters": 250,
+        "location": {
+            "sector_id": 1,
+            "sector_name": "Fedspace 1System Volume"
+        },
+        "owner": {
+            "id": 191,
+            "name": "ai_qa_bot_025"
+        },
+        "cargo": []
+    },
+    "player_location_sector": 1129,
+    "sector_data": {
+        "1": {
+            "server_tick": 289,
+            "sector_id": 1,
+            "name": "Fedspace 1System Volume",
+            "adjacent": [
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+            ],
+            "adjacent_count": 6,
+            "ports": [
+                {
+                    "id": 1,
+                    "name": "Earth Port",
+                    "type": "1"
+                }
+            ],
+            "has_port": true,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": "The Federation -- Do Not Dump!",
+            "has_beacon": true,
+            "ships": [
+                {
+                    "id": 135,
+                    "name": "ai_qa_bot_108's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_108's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 136,
+                    "name": "ai_qa_bot_109's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_109's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 145,
+                    "name": "ai_qa_bot_118's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_118's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 163,
+                    "name": "ai_qa_bot_136's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_136's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 165,
+                    "name": "ai_qa_bot_138's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_138's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 169,
+                    "name": "ai_qa_bot_142's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_142's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 171,
+                    "name": "ai_qa_bot_144's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_144's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 8,
+            "ports_count": 1,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 1,
+                "mines_limpet": 0,
+                "mines": 1
+            }
+        },
+        "7": {
+            "server_tick": 333,
+            "sector_id": 7,
+            "name": "Fedspace 7",
+            "adjacent": [
+                1,
+                2,
+                6,
+                8,
+                3353
+            ],
+            "adjacent_count": 5,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": "The Federation -- Do Not Dump!",
+            "has_beacon": true,
+            "ships": [
+                {
+                    "id": 152,
+                    "name": "ai_qa_bot_125's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_125's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 167,
+                    "name": "ai_qa_bot_140's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_140's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 173,
+                    "name": "ai_qa_bot_146's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_146's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 176,
+                    "name": "ai_qa_bot_149's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_149's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 177,
+                    "name": "ai_qa_bot_150's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_150's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 179,
+                    "name": "ai_qa_bot_002's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_002's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_002"
+                },
+                {
+                    "id": 184,
+                    "name": "ai_qa_bot_007's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_007's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_007"
+                },
+                {
+                    "id": 192,
+                    "name": "ai_qa_bot_015's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_015's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_015"
+                },
+                {
+                    "id": 196,
+                    "name": "ai_qa_bot_019's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_019's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_019"
+                },
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 10,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "6": {
+            "server_tick": 358,
+            "sector_id": 6,
+            "name": "Fedspace 6",
+            "adjacent": [
+                5,
+                7
+            ],
+            "adjacent_count": 2,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": "The Federation -- Do Not Dump!",
+            "has_beacon": true,
+            "ships": [
+                {
+                    "id": 102,
+                    "name": "ai_qa_bot_075's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_075's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 107,
+                    "name": "ai_qa_bot_080's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_080's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 114,
+                    "name": "ai_qa_bot_087's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_087's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 126,
+                    "name": "ai_qa_bot_099's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_099's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 128,
+                    "name": "ai_qa_bot_101's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_101's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 138,
+                    "name": "ai_qa_bot_111's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_111's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 139,
+                    "name": "ai_qa_bot_112's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_112's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 154,
+                    "name": "ai_qa_bot_127's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_127's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 156,
+                    "name": "ai_qa_bot_129's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_129's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 158,
+                    "name": "ai_qa_bot_131's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_131's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 168,
+                    "name": "ai_qa_bot_141's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_141's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 180,
+                    "name": "ai_qa_bot_003's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_003's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_003"
+                },
+                {
+                    "id": 193,
+                    "name": "ai_qa_bot_016's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_016's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_016"
+                },
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                },
+                {
+                    "id": 210,
+                    "name": "ai_qa_bot_033's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_033's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_033"
+                },
+                {
+                    "id": 212,
+                    "name": "ai_qa_bot_035's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_035's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_035"
+                },
+                {
+                    "id": 220,
+                    "name": "ai_qa_bot_043's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_043's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_043"
+                }
+            ],
+            "ships_count": 17,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "5": {
+            "server_tick": 376,
+            "sector_id": 5,
+            "name": "Fedspace 5",
+            "adjacent": [
+                4,
+                6
+            ],
+            "adjacent_count": 2,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": "The Federation -- Do Not Dump!",
+            "has_beacon": true,
+            "ships": [
+                {
+                    "id": 94,
+                    "name": "ai_qa_bot_067's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_067's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 98,
+                    "name": "ai_qa_bot_071's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_071's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 100,
+                    "name": "ai_qa_bot_073's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_073's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 113,
+                    "name": "ai_qa_bot_086's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_086's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 125,
+                    "name": "ai_qa_bot_098's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_098's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 127,
+                    "name": "ai_qa_bot_100's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_100's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 130,
+                    "name": "ai_qa_bot_103's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_103's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 134,
+                    "name": "ai_qa_bot_107's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_107's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 137,
+                    "name": "ai_qa_bot_110's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_110's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 162,
+                    "name": "ai_qa_bot_135's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_135's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 164,
+                    "name": "ai_qa_bot_137's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_137's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 186,
+                    "name": "ai_qa_bot_009's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_009's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_009"
+                },
+                {
+                    "id": 190,
+                    "name": "ai_qa_bot_013's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_013's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_013"
+                },
+                {
+                    "id": 201,
+                    "name": "ai_qa_bot_024's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_024's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_024"
+                },
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                },
+                {
+                    "id": 205,
+                    "name": "ai_qa_bot_028's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_028's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_028"
+                },
+                {
+                    "id": 211,
+                    "name": "ai_qa_bot_034's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_034's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_034"
+                },
+                {
+                    "id": 213,
+                    "name": "ai_qa_bot_036's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_036's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_036"
+                },
+                {
+                    "id": 214,
+                    "name": "ai_qa_bot_037's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_037's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_037"
+                },
+                {
+                    "id": 216,
+                    "name": "ai_qa_bot_039's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_039's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_039"
+                }
+            ],
+            "ships_count": 20,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "4": {
+            "server_tick": 396,
+            "sector_id": 4,
+            "name": "Fedspace 4",
+            "adjacent": [
+                1,
+                3,
+                5
+            ],
+            "adjacent_count": 3,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": "The Federation -- Do Not Dump!",
+            "has_beacon": true,
+            "ships": [
+                {
+                    "id": 86,
+                    "name": "ai_qa_bot_059's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_059's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 89,
+                    "name": "ai_qa_bot_062's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_062's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 91,
+                    "name": "ai_qa_bot_064's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_064's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 103,
+                    "name": "ai_qa_bot_076's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_076's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 108,
+                    "name": "ai_qa_bot_081's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_081's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 123,
+                    "name": "ai_qa_bot_096's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_096's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 124,
+                    "name": "ai_qa_bot_097's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_097's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 140,
+                    "name": "ai_qa_bot_113's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_113's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 142,
+                    "name": "ai_qa_bot_115's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_115's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 146,
+                    "name": "ai_qa_bot_119's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_119's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 149,
+                    "name": "ai_qa_bot_122's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_122's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 198,
+                    "name": "ai_qa_bot_021's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_021's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_021"
+                },
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                },
+                {
+                    "id": 206,
+                    "name": "ai_qa_bot_029's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_029's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_029"
+                },
+                {
+                    "id": 218,
+                    "name": "ai_qa_bot_041's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_041's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_041"
+                }
+            ],
+            "ships_count": 15,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "3": {
+            "server_tick": 420,
+            "sector_id": 3,
+            "name": "Fedspace 3",
+            "adjacent": [
+                1,
+                4,
+                4122
+            ],
+            "adjacent_count": 3,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": "The Federation -- Do Not Dump!",
+            "has_beacon": true,
+            "ships": [
+                {
+                    "id": 93,
+                    "name": "ai_qa_bot_066's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_066's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 95,
+                    "name": "ai_qa_bot_068's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_068's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 133,
+                    "name": "ai_qa_bot_106's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_106's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 143,
+                    "name": "ai_qa_bot_116's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_116's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 144,
+                    "name": "ai_qa_bot_117's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_117's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 147,
+                    "name": "ai_qa_bot_120's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_120's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 151,
+                    "name": "ai_qa_bot_124's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_124's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 157,
+                    "name": "ai_qa_bot_130's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_130's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 159,
+                    "name": "ai_qa_bot_132's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_132's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 161,
+                    "name": "ai_qa_bot_134's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_134's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 166,
+                    "name": "ai_qa_bot_139's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_139's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 174,
+                    "name": "ai_qa_bot_147's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_147's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 183,
+                    "name": "ai_qa_bot_006's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_006's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_006"
+                },
+                {
+                    "id": 185,
+                    "name": "ai_qa_bot_008's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_008's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_008"
+                },
+                {
+                    "id": 191,
+                    "name": "ai_qa_bot_014's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_014's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_014"
+                },
+                {
+                    "id": 197,
+                    "name": "ai_qa_bot_020's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_020's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_020"
+                },
+                {
+                    "id": 200,
+                    "name": "ai_qa_bot_023's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_023's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_023"
+                },
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                },
+                {
+                    "id": 207,
+                    "name": "ai_qa_bot_030's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_030's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_030"
+                },
+                {
+                    "id": 209,
+                    "name": "ai_qa_bot_032's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_032's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_032"
+                },
+                {
+                    "id": 217,
+                    "name": "ai_qa_bot_040's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_040's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_040"
+                },
+                {
+                    "id": 221,
+                    "name": "ai_qa_bot_044's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_044's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_044"
+                }
+            ],
+            "ships_count": 22,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "2": {
+            "server_tick": 444,
+            "sector_id": 2,
+            "name": "Fedspace 2",
+            "adjacent": [
+                1,
+                3,
+                7,
+                8,
+                9,
+                10,
+                713
+            ],
+            "adjacent_count": 7,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": "The Federation -- Do Not Dump!",
+            "has_beacon": true,
+            "ships": [
+                {
+                    "id": 104,
+                    "name": "ai_qa_bot_077's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_077's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 120,
+                    "name": "ai_qa_bot_093's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_093's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 131,
+                    "name": "ai_qa_bot_104's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_104's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 160,
+                    "name": "ai_qa_bot_133's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_133's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 170,
+                    "name": "ai_qa_bot_143's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_143's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 181,
+                    "name": "ai_qa_bot_004's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_004's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_004"
+                },
+                {
+                    "id": 182,
+                    "name": "ai_qa_bot_005's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_005's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_005"
+                },
+                {
+                    "id": 195,
+                    "name": "ai_qa_bot_018's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_018's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_018"
+                },
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                },
+                {
+                    "id": 215,
+                    "name": "ai_qa_bot_038's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_038's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_038"
+                },
+                {
+                    "id": 226,
+                    "name": "ai_qa_bot_049's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_049's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_049"
+                }
+            ],
+            "ships_count": 11,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "8": {
+            "server_tick": 462,
+            "sector_id": 8,
+            "name": "Fedspace 8",
+            "adjacent": [
+                7
+            ],
+            "adjacent_count": 1,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": "The Federation -- Do Not Dump!",
+            "has_beacon": true,
+            "ships": [
+                {
+                    "id": 88,
+                    "name": "ai_qa_bot_061's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_061's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 101,
+                    "name": "ai_qa_bot_074's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_074's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 109,
+                    "name": "ai_qa_bot_082's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_082's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 119,
+                    "name": "ai_qa_bot_092's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_092's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 141,
+                    "name": "ai_qa_bot_114's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_114's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 172,
+                    "name": "ai_qa_bot_145's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_145's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 194,
+                    "name": "ai_qa_bot_017's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_017's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_017"
+                },
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                },
+                {
+                    "id": 203,
+                    "name": "ai_qa_bot_026's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_026's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_026"
+                },
+                {
+                    "id": 222,
+                    "name": "ai_qa_bot_045's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_045's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_045"
+                }
+            ],
+            "ships_count": 10,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "3353": {
+            "server_tick": 494,
+            "sector_id": 3353,
+            "name": "Chamaleon",
+            "adjacent": [
+                372
+            ],
+            "adjacent_count": 1,
+            "ports": [
+                {
+                    "id": 1307,
+                    "name": "Adwotan",
+                    "type": "6"
+                }
+            ],
+            "has_port": true,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 1,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "372": {
+            "server_tick": 546,
+            "sector_id": 372,
+            "name": "Uncharted Space",
+            "adjacent": [
+                536,
+                708,
+                1110,
+                2214,
+                2828,
+                3504,
+                4289,
+                4713
+            ],
+            "adjacent_count": 8,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "536": {
+            "server_tick": 564,
+            "sector_id": 536,
+            "name": "Uncharted Space",
+            "adjacent": [
+                302,
+                2423,
+                2615,
+                3212
+            ],
+            "adjacent_count": 4,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "2423": {
+            "server_tick": 589,
+            "sector_id": 2423,
+            "name": "Uncharted Space",
+            "adjacent": [
+                277,
+                291,
+                2198,
+                2677,
+                3241,
+                3872,
+                3960
+            ],
+            "adjacent_count": 7,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "3872": {
+            "server_tick": 607,
+            "sector_id": 3872,
+            "name": "Uncharted Space",
+            "adjacent": [
+                1407,
+                1547,
+                1666,
+                2069,
+                2174,
+                3414,
+                3869
+            ],
+            "adjacent_count": 7,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "3414": {
+            "server_tick": 627,
+            "sector_id": 3414,
+            "name": "Uncharted Space",
+            "adjacent": [
+                288,
+                1127,
+                2045,
+                2156,
+                2259,
+                4286
+            ],
+            "adjacent_count": 6,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "2156": {
+            "server_tick": 645,
+            "sector_id": 2156,
+            "name": "Uncharted Space",
+            "adjacent": [
+                298,
+                1289,
+                2091,
+                2295,
+                2976,
+                3136,
+                3485,
+                3502,
+                3746,
+                4162,
+                4191
+            ],
+            "adjacent_count": 11,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "298": {
+            "server_tick": 665,
+            "sector_id": 298,
+            "name": "Epsilon Sgr",
+            "adjacent": [
+                2156
+            ],
+            "adjacent_count": 1,
+            "ports": [
+                {
+                    "id": 783,
+                    "name": "Prioeydd",
+                    "type": "1"
+                }
+            ],
+            "has_port": true,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 73,
+                    "name": "ai_qa_bot_046's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_046's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 2,
+            "ports_count": 1,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "3746": {
+            "server_tick": 722,
+            "sector_id": 3746,
+            "name": "Uncharted Space",
+            "adjacent": [
+                1746,
+                2029,
+                2156,
+                2500,
+                2503
+            ],
+            "adjacent_count": 5,
+            "ports": [
+                {
+                    "id": 845,
+                    "name": "Reairele",
+                    "type": "5"
+                }
+            ],
+            "has_port": true,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 1,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "2029": {
+            "server_tick": 815,
+            "sector_id": 2029,
+            "name": "Uncharted Space",
+            "adjacent": [
+                301,
+                2814,
+                2963,
+                3746,
+                4145
+            ],
+            "adjacent_count": 5,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "4145": {
+            "server_tick": 830,
+            "sector_id": 4145,
+            "name": "Uncharted Space",
+            "adjacent": [
+                2497,
+                3532,
+                4610
+            ],
+            "adjacent_count": 3,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "4610": {
+            "server_tick": 851,
+            "sector_id": 4610,
+            "name": "Uncharted Space",
+            "adjacent": [
+                54,
+                628,
+                1943
+            ],
+            "adjacent_count": 3,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "1943": {
+            "server_tick": 867,
+            "sector_id": 1943,
+            "name": "Uncharted Space",
+            "adjacent": [
+                4610
+            ],
+            "adjacent_count": 1,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "628": {
+            "server_tick": 888,
+            "sector_id": 628,
+            "name": "Mu Peg",
+            "adjacent": [
+                1118,
+                1448,
+                1673,
+                2693,
+                3218,
+                3589,
+                4155,
+                4429,
+                4610,
+                4727
+            ],
+            "adjacent_count": 10,
+            "ports": [
+                {
+                    "id": 572,
+                    "name": "Nareron",
+                    "type": "1"
+                },
+                {
+                    "id": 1198,
+                    "name": "Cadalinad",
+                    "type": "6"
+                }
+            ],
+            "has_port": true,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 2,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "1673": {
+            "server_tick": 923,
+            "sector_id": 1673,
+            "name": "Uncharted Space",
+            "adjacent": [
+                3749
+            ],
+            "adjacent_count": 1,
+            "ports": [
+                {
+                    "id": 546,
+                    "name": "Riratua",
+                    "type": "5"
+                },
+                {
+                    "id": 1354,
+                    "name": "Abereyth",
+                    "type": "1"
+                },
+                {
+                    "id": 1588,
+                    "name": "Sendannon",
+                    "type": "7"
+                }
+            ],
+            "has_port": true,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 3,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "3749": {
+            "server_tick": 980,
+            "sector_id": 3749,
+            "name": "Upsilon Sco",
+            "adjacent": [
+                1819,
+                3496,
+                4003,
+                4569,
+                4871
+            ],
+            "adjacent_count": 5,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "4569": {
+            "server_tick": 1001,
+            "sector_id": 4569,
+            "name": "Uncharted Space",
+            "adjacent": [
+                1979,
+                2457
+            ],
+            "adjacent_count": 2,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "2457": {
+            "server_tick": 1017,
+            "sector_id": 2457,
+            "name": "Uncharted Space",
+            "adjacent": [
+                28,
+                433,
+                517,
+                561,
+                3482,
+                4180,
+                4569,
+                4747,
+                4942
+            ],
+            "adjacent_count": 9,
+            "ports": [
+                {
+                    "id": 2,
+                    "name": "Stardock",
+                    "type": "9"
+                },
+                {
+                    "id": 1708,
+                    "name": "Alarewan",
+                    "type": "5"
+                }
+            ],
+            "has_port": true,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 2,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "4180": {
+            "server_tick": 1084,
+            "sector_id": 4180,
+            "name": "Algorab",
+            "adjacent": [
+                710,
+                1999
+            ],
+            "adjacent_count": 2,
+            "ports": [
+                {
+                    "id": 1508,
+                    "name": "Ociatoa",
+                    "type": "4"
+                }
+            ],
+            "has_port": true,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 1,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "710": {
+            "server_tick": 1125,
+            "sector_id": 710,
+            "name": "Theta Leo",
+            "adjacent": [
+                1982,
+                2043,
+                2548,
+                3117,
+                3980,
+                4180,
+                4726
+            ],
+            "adjacent_count": 7,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "2043": {
+            "server_tick": 1146,
+            "sector_id": 2043,
+            "name": "Uncharted Space",
+            "adjacent": [
+                2814,
+                3405,
+                3990
+            ],
+            "adjacent_count": 3,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "2814": {
+            "server_tick": 1162,
+            "sector_id": 2814,
+            "name": "Uncharted Space",
+            "adjacent": [
+                109,
+                577,
+                2029,
+                2821,
+                4260,
+                4579
+            ],
+            "adjacent_count": 6,
+            "ports": [
+                {
+                    "id": 154,
+                    "name": "Fiawyn",
+                    "type": "4"
+                },
+                {
+                    "id": 158,
+                    "name": "Deriwa",
+                    "type": "1"
+                },
+                {
+                    "id": 654,
+                    "name": "Bytilamar",
+                    "type": "7"
+                }
+            ],
+            "has_port": true,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 3,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "4260": {
+            "server_tick": 1203,
+            "sector_id": 4260,
+            "name": "Uncharted Space",
+            "adjacent": [
+                550,
+                1250,
+                1457,
+                2814,
+                3025,
+                4834
+            ],
+            "adjacent_count": 6,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "1250": {
+            "server_tick": 1219,
+            "sector_id": 1250,
+            "name": "Uncharted Space",
+            "adjacent": [
+                1058,
+                4645
+            ],
+            "adjacent_count": 2,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "4645": {
+            "server_tick": 1234,
+            "sector_id": 4645,
+            "name": "Uncharted Space",
+            "adjacent": [
+                2613,
+                2956,
+                3440,
+                4087,
+                4756
+            ],
+            "adjacent_count": 5,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "4756": {
+            "server_tick": 1250,
+            "sector_id": 4756,
+            "name": "Algol",
+            "adjacent": [
+                2161,
+                4645
+            ],
+            "adjacent_count": 2,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "2161": {
+            "server_tick": 1271,
+            "sector_id": 2161,
+            "name": "Uncharted Space",
+            "adjacent": [
+                523,
+                722,
+                766,
+                838,
+                1554,
+                3134,
+                3471,
+                3530,
+                3823,
+                4756
+            ],
+            "adjacent_count": 10,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "722": {
+            "server_tick": 1286,
+            "sector_id": 722,
+            "name": "El Nath",
+            "adjacent": [
+                823,
+                2161,
+                2169,
+                2349,
+                2659,
+                3489,
+                4938
+            ],
+            "adjacent_count": 7,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "4938": {
+            "server_tick": 1302,
+            "sector_id": 4938,
+            "name": "Uncharted Space",
+            "adjacent": [
+                4476
+            ],
+            "adjacent_count": 1,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": "Barreik was here!",
+            "has_beacon": true,
+            "ships": [
+                {
+                    "id": 202,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                

@@ -1,0 +1,778 @@
+{
+    "session_id": "95cc2cc5053c8ee01474c7596c24c3dc2d8731f20b0c40d203f7a5c0ec238b41",
+    "player_info": null,
+    "ship_info": {
+        "cargo": []
+    },
+    "player_location_sector": null,
+    "sector_data": {},
+    "universe_map": {},
+    "port_info_by_sector": {},
+    "price_cache": {},
+    "bank_balance": 0,
+    "command_retry_info": {
+        "player.my_info": {
+            "next_retry_time": 1765403295.8836424
+        }
+    },
+    "strategy_plan": [],
+    "trade_successful": false,
+    "q_table": {},
+    "n_table": {},
+    "command_schemas": {
+        "session.hello": {
+            "$id": "ge://schema/session.hello.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+        },
+        "session.ping": {
+            "$id": "ge://schema/session.ping.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+        },
+        "session.disconnect": {
+            "$id": "ge://schema/session.disconnect.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "auth.login": {
+            "$id": "ge://schema/auth.login.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "username": {
+                    "type": "string"
+                },
+                "passwd": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "username",
+                "passwd"
+            ],
+            "additionalProperties": true
+        },
+        "auth.logout": {
+            "$id": "ge://schema/auth.logout.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "auth.mfa.totp.verify": {
+            "$id": "ge://schema/auth.mfa.totp.verify.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "auth.register": {
+            "$id": "ge://schema/auth.register.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "username": {
+                    "type": "string"
+                },
+                "passwd": {
+                    "type": "string"
+                },
+                "ship_name": {
+                    "type": "string"
+                },
+                "ui_locale": {
+                    "type": "string"
+                },
+                "ui_timezone": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "username",
+                "passwd"
+            ],
+            "additionalProperties": true
+        },
+        "player.my_info": {
+            "$id": "ge://schema/player.my_info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+        },
+        "ship.info": {
+            "$id": "ge://schema/ship.info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+        },
+        "sector.info": {
+            "$id": "ge://schema/sector.info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [],
+            "additionalProperties": true
+        },
+        "sector.set_beacon": {
+            "$id": "ge://schema/sector.set_beacon.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "text": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "sector_id",
+                "text"
+            ],
+            "additionalProperties": false
+        },
+        "move.warp": {
+            "$id": "ge://schema/move_warp.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "to_sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "to_sector_id"
+            ],
+            "additionalProperties": true
+        },
+        "move.scan": {
+            "$id": "ge://schema/move.scan.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {}
+        },
+        "move.pathfind": {
+            "$id": "ge://schema/move.pathfind.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.accept": {
+            "$id": "ge://schema/trade.accept.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.buy": {
+            "$id": "ge://schema/trade.buy.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "port_id": {
+                    "type": "integer"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "commodity": {
+                                "type": "string"
+                            },
+                            "quantity": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "commodity",
+                            "quantity"
+                        ],
+                        "additionalProperties": true
+                    }
+                },
+                "idempotency_key": {
+                    "type": "string"
+                },
+                "account": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ]
+                },
+                "sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "port_id",
+                "items",
+                "idempotency_key",
+                "account",
+                "sector_id"
+            ],
+            "additionalProperties": true
+        },
+        "trade.cancel": {
+            "$id": "ge://schema/trade.cancel.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.history": {
+            "$id": "ge://schema/trade.history.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50
+                },
+                "cursor": {
+                    "type": "string"
+                }
+            },
+            "required": [],
+            "additionalProperties": true
+        }
+    },
+    "schema_blacklist": [],
+    "pending_schema_requests": {
+        "system.cmd_list": "c-0b565413",
+        "session.hello": "c-a3766859",
+        "session.ping": "c-d698e5e4",
+        "session.disconnect": "c-5cdfa34b",
+        "auth.login": "c-8ca37577",
+        "auth.logout": "c-0c0625b5",
+        "auth.mfa.totp.verify": "c-37789e4c",
+        "auth.register": "c-29d04f6e",
+        "player.my_info": "c-2763fe85",
+        "ship.info": "c-92095479",
+        "sector.info": "c-966f7ea0",
+        "sector.set_beacon": "c-89570fde",
+        "move.warp": "c-b40650d0",
+        "move.scan": "c-55ed7779",
+        "move.pathfind": "c-97d1baf2",
+        "trade.accept": "c-26d43845",
+        "trade.buy": "c-5d2ade18",
+        "trade.cancel": "c-058392b2",
+        "trade.history": "c-02967dd8",
+        "trade.jettison": "c-8e9ce973",
+        "trade.offer": "c-6c8bf8f6",
+        "trade.port_info": "c-7a90b8cc",
+        "trade.quote": "c-4df1ae0d",
+        "trade.sell": "c-77209837"
+    },
+    "recent_sectors": [],
+    "pending_commands": {
+        "c-a80dca2a": {
+            "id": "c-a80dca2a",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "a80dca2a-4a47-4421-97d3-9560e1da89b3"
+            }
+        },
+        "c-3f880333": {
+            "id": "c-3f880333",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "3f880333-76c4-409f-81fb-03f6eea92b21"
+            }
+        },
+        "c-e24afd63": {
+            "id": "c-e24afd63",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "e24afd63-04a2-465b-b564-6d07ebee726e"
+            }
+        },
+        "c-fa22523c": {
+            "id": "c-fa22523c",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "fa22523c-c0c4-4082-b722-8f10e11f5687"
+            }
+        },
+        "c-2cca10ed": {
+            "id": "c-2cca10ed",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "2cca10ed-64ec-48ff-b8c6-c956393c3a3f"
+            }
+        },
+        "c-8c18a8a7": {
+            "id": "c-8c18a8a7",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "8c18a8a7-0884-4fb9-9e83-4d7dae780a91"
+            }
+        },
+        "c-3cf04dd9": {
+            "id": "c-3cf04dd9",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "3cf04dd9-9abe-432e-afc1-04c9d57b9a13"
+            }
+        },
+        "c-7a31e658": {
+            "id": "c-7a31e658",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "7a31e658-6ade-4945-ba99-097808f6c3af"
+            }
+        },
+        "c-6a7b1eca": {
+            "id": "c-6a7b1eca",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "6a7b1eca-dc86-43f7-ad04-b6242001a4bd"
+            }
+        },
+        "c-a8032017": {
+            "id": "c-a8032017",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "a8032017-e52c-4cc5-97f6-12f608b18e93"
+            }
+        },
+        "c-6b2f2582": {
+            "id": "c-6b2f2582",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "6b2f2582-b524-4e18-b5cb-85d67b55603a"
+            }
+        },
+        "c-1e97c1ae": {
+            "id": "c-1e97c1ae",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "1e97c1ae-3a77-46d2-b6df-d15860098951"
+            }
+        },
+        "c-807aedac": {
+            "id": "c-807aedac",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "807aedac-9804-44b7-a589-8148069ba6e3"
+            }
+        },
+        "c-849bf0b9": {
+            "id": "c-849bf0b9",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "849bf0b9-dba6-4241-9f14-0fba976f3b10"
+            }
+        },
+        "c-a0b36287": {
+            "id": "c-a0b36287",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "a0b36287-0e54-4f10-9bbb-07d86571e116"
+            }
+        },
+        "c-fd73496b": {
+            "id": "c-fd73496b",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "fd73496b-1367-4ac6-986b-8d3697ebc67b"
+            }
+        },
+        "c-6cc4c83e": {
+            "id": "c-6cc4c83e",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "6cc4c83e-5645-4fa5-9ff3-7fd69860af23"
+            }
+        },
+        "c-bc2ea8c9": {
+            "id": "c-bc2ea8c9",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "bc2ea8c9-4c7f-4856-b2ef-75a2a7f6c454"
+            }
+        },
+        "c-dff6762d": {
+            "id": "c-dff6762d",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "dff6762d-b2a1-4e70-979e-0e0312ef648e"
+            }
+        },
+        "c-5e28a863": {
+            "id": "c-5e28a863",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "5e28a863-702c-4fa7-9894-6566d92464ab"
+            }
+        },
+        "c-0f93b4e8": {
+            "id": "c-0f93b4e8",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "0f93b4e8-ec03-4b71-a482-af0dc614ac5a"
+            }
+        },
+        "c-0e2a8fed": {
+            "id": "c-0e2a8fed",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "0e2a8fed-b4dd-4fb0-ab4f-144800db50db"
+            }
+        },
+        "c-539f7b38": {
+            "id": "c-539f7b38",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "539f7b38-4846-4642-a9ba-6a5800782825"
+            }
+        },
+        "c-5b01bbcd": {
+            "id": "c-5b01bbcd",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "5b01bbcd-aef7-4487-b89a-d9b7bf7ac871"
+            }
+        },
+        "c-ac5a8add": {
+            "id": "c-ac5a8add",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "ac5a8add-a1ef-4126-b631-5d9b3e6b8114"
+            }
+        },
+        "c-f525145b": {
+            "id": "c-f525145b",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "f525145b-713f-41c8-8ad3-71ed465ead4f"
+            }
+        },
+        "c-07c9a4a8": {
+            "id": "c-07c9a4a8",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "07c9a4a8-07e9-43b6-947a-2f90a4b42864"
+            }
+        },
+        "c-02b977b1": {
+            "id": "c-02b977b1",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "02b977b1-24e5-44df-ac4f-75e592fd9601"
+            }
+        },
+        "c-9c6ae73b": {
+            "id": "c-9c6ae73b",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "9c6ae73b-eaa0-48a8-b9e1-43cf5a489494"
+            }
+        },
+        "c-4348a328": {
+            "id": "c-4348a328",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "4348a328-0417-432f-b01c-748e98135533"
+            }
+        },
+        "c-0f6e9918": {
+            "id": "c-0f6e9918",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "0f6e9918-14f6-4088-8032-b83de618e98c"
+            }
+        },
+        "c-b893fb6b": {
+            "id": "c-b893fb6b",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "b893fb6b-fc54-4be6-bd06-b91dbf1a46e3"
+            }
+        },
+        "c-94e0e993": {
+            "id": "c-94e0e993",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "94e0e993-5f84-40c0-af61-2061eeb6d7ca"
+            }
+        },
+        "c-7ca6592d": {
+            "id": "c-7ca6592d",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "7ca6592d-33ba-4d53-b252-3ff3a9d977f2"
+            }
+        },
+        "c-b9476441": {
+            "id": "c-b9476441",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "b9476441-8d62-4a6f-8b22-5745924a1c34"
+            }
+        },
+        "c-0cddb4af": {
+            "id": "c-0cddb4af",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "0cddb4af-fdcc-417f-889d-996f87757c0f"
+            }
+        },
+        "c-ae9e2410": {
+            "id": "c-ae9e2410",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "ae9e2410-3b23-4ae6-b9b9-51a1e5e0382e"
+            }
+        },
+        "c-361edbe2": {
+            "id": "c-361edbe2",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "361edbe2-a918-4998-8d0f-1e73783ba803"
+            }
+        },
+        "c-263d4608": {
+            "id": "c-263d4608",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "263d4608-83c5-4d85-8829-94bcd2480c2b"
+            }
+        },
+        "c-596e04a4": {
+            "id": "c-596e04a4",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "596e04a4-dace-49bf-91b1-d6b814ac492f"
+            }
+        },
+        "c-b3a1489f": {
+            "id": "c-b3a1489f",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "b3a1489f-37f9-4bcc-a108-7e07944a18fb"
+            }
+        },
+        "c-29d6e301": {
+            "id": "c-29d6e301",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "29d6e301-7d71-425b-a1b1-294add510577"
+            }
+        },
+        "c-aa38024f": {
+            "id": "c-aa38024f",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "aa38024f-41c4-40d5-8349-546b30ebf8e2"
+            }
+        },
+        "c-88130111": {
+            "id": "c-88130111",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "88130111-1b0e-4783-8ead-ca33f5279fdb"
+            }
+        },
+        "c-933340ae": {
+            "id": "c-933340ae",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "933340ae-7c3b-470c-8ab9-5f3921ce827e"
+            }
+        },
+        "c-1371c5a2": {
+            "id": "c-1371c5a2",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "1371c5a2-a67b-4ffe-bf5b-db4e48c75415"
+            }
+        },
+        "c-d08cb79a": {
+            "id": "c-d08cb79a",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "d08cb79a-f6a4-45d1-8770-627d8645efbf"
+            }
+        },
+        "c-6e071860": {
+            "id": "c-6e071860",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "6e071860-4f4a-4899-a899-5be2cd9eb292"
+            }
+        },
+        "c-22f2b079": {
+            "id": "c-22f2b079",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "22f2b079-a93d-4add-be15-c7cb3fc6e9db"
+            }
+        },
+        "c-fca6682d": {
+            "id": "c-fca6682d",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "fca6682d-41be-4de4-8119-261ac67e3260"
+            }
+        },
+        "c-7559e4d7": {
+            "id": "c-7559e4d7",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "7559e4d7-211b-41c7-8a6b-57f6849f82bb"
+            }
+        },
+        "c-d5dda57d": {
+            "id": "c-d5dda57d",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "d5dda57d-3c55-4e80-93e3-48a850a34a14"
+            }
+        },
+        "c-04bb88a6": {
+            "id": "c-04bb88a6",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "04bb88a6-0d5a-4c89-a076-08c8298513fb"
+            }
+        },
+        "c-01c89881": {
+            "id": "c-01c89881",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "01c89881-d023-4299-a1d9-57aaed6cf365"
+            }
+        },
+        "c-eafd0b61": {
+            "id": "c-eafd0b61",
+            "command": "player.my_info",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "eafd0b61-246c-400b-89ba-5365922f9b74"
+            }
+        }
+    },
+    "port_trade_blacklist": [],
+    "warp_blacklist": [],
+    "current_path": [],
+    "last_action_result": {
+        "status": "ok",
+        "command": "unknown",
+        "request_id": "c-02967dd8",
+        "response_type": "system.schema",
+        "ts": "2025-12-10T21:47:16Z"
+    },
+    "current_qa_objective": null,
+    "needs_bootstrap": true
+}

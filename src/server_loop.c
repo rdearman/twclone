@@ -690,7 +690,7 @@ static void
 process_message (client_ctx_t *ctx, json_t *root)
 {
   LOGE("DEBUG: process_message entered for fd=%d, ctx->player_id=%d", ctx->fd, ctx->player_id); // NEW
-  db_close_thread ();                   /* Ensure a fresh DB connection */
+  // db_close_thread ();                   /* Ensure a fresh DB connection */
   sqlite3 *db = db_get_handle ();       /* Re-open (or get) fresh DB conn */
   if (!db) {                            /* Handle case where we can't get a connection */
       send_enveloped_error (ctx->fd, root, 1500, "Database connection error");
@@ -1528,10 +1528,15 @@ connection_thread (void *arg)
                     {
                       send_enveloped_error (fd, NULL, 1300,
                                             "Invalid request schema");
+                      if (root)
+                        {
+                          json_decref (root);
+                        }
                     }
                   else
                     {
                       process_message (ctx, root);
+                      json_decref (root);
                     }
                   start = i + 1;
                 }

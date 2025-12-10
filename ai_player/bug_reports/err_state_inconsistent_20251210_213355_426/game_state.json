@@ -1,0 +1,3666 @@
+{
+    "session_id": "bce9ba9ea899b67ddc5f7a31419dab1421b4c091d0dbf5ca2755de5a4111815d",
+    "player_info": {
+        "player": {
+            "id": 41,
+            "username": "\u0001",
+            "credits": "1000000.00",
+            "turns_remaining": 750,
+            "sector": 1,
+            "ship_id": 52,
+            "corp_id": 0,
+            "alignment": 1,
+            "experience": 0,
+            "title_info": {
+                "title": "Civilian",
+                "commission": 1,
+                "alignment": 1,
+                "experience": 0,
+                "alignment_band": {
+                    "code": "NEUTRAL",
+                    "name": "Neutral",
+                    "is_good": false,
+                    "is_evil": false,
+                    "can_buy_iss": false,
+                    "can_rob_ports": false
+                }
+            }
+        }
+    },
+    "ship_info": {
+        "id": 52,
+        "number": 52,
+        "name": "ai_qa_bot_025's ship",
+        "type": {
+            "id": 0,
+            "name": "10"
+        },
+        "holds": 10,
+        "fighters": 250,
+        "location": {
+            "sector_id": 1,
+            "sector_name": "Fedspace 1System Volume"
+        },
+        "owner": {
+            "id": 41,
+            "name": "ai_qa_bot_025"
+        },
+        "cargo": []
+    },
+    "player_location_sector": 2234,
+    "sector_data": {
+        "1": {
+            "server_tick": 273,
+            "sector_id": 1,
+            "name": "Fedspace 1System Volume",
+            "adjacent": [
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+            ],
+            "adjacent_count": 6,
+            "ports": [
+                {
+                    "id": 1,
+                    "name": "Earth Port",
+                    "type": "1"
+                }
+            ],
+            "has_port": true,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": "The Federation -- Do Not Dump!",
+            "has_beacon": true,
+            "ships": [
+                {
+                    "id": 1,
+                    "name": "Bit Banger",
+                    "type": "Merchant Cruiser",
+                    "ship_name": "Bit Banger",
+                    "ship_type": "Merchant Cruiser",
+                    "owner": "derelict"
+                },
+                {
+                    "id": 2,
+                    "name": "QA Bot 1",
+                    "type": "Scout Marauder",
+                    "ship_name": "QA Bot 1",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot"
+                },
+                {
+                    "id": 47,
+                    "name": "ai_qa_bot_020's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_020's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_020"
+                },
+                {
+                    "id": 49,
+                    "name": "ai_qa_bot_022's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_022's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_022"
+                },
+                {
+                    "id": 52,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                },
+                {
+                    "id": 59,
+                    "name": "ai_qa_bot_032's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_032's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_032"
+                },
+                {
+                    "id": 64,
+                    "name": "ai_qa_bot_037's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_037's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_037"
+                },
+                {
+                    "id": 74,
+                    "name": "ai_qa_bot_047's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_047's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_047"
+                },
+                {
+                    "id": 90,
+                    "name": "ai_qa_bot_063's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_063's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_063"
+                },
+                {
+                    "id": 97,
+                    "name": "ai_qa_bot_070's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_070's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_070"
+                },
+                {
+                    "id": 106,
+                    "name": "ai_qa_bot_079's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_079's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_079"
+                },
+                {
+                    "id": 110,
+                    "name": "ai_qa_bot_083's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_083's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_083"
+                },
+                {
+                    "id": 118,
+                    "name": "ai_qa_bot_091's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_091's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_091"
+                },
+                {
+                    "id": 121,
+                    "name": "ai_qa_bot_094's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_094's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_094"
+                },
+                {
+                    "id": 122,
+                    "name": "ai_qa_bot_095's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_095's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_095"
+                },
+                {
+                    "id": 135,
+                    "name": "ai_qa_bot_108's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_108's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_108"
+                },
+                {
+                    "id": 136,
+                    "name": "ai_qa_bot_109's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_109's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_109"
+                },
+                {
+                    "id": 145,
+                    "name": "ai_qa_bot_118's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_118's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_118"
+                },
+                {
+                    "id": 163,
+                    "name": "ai_qa_bot_136's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_136's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_136"
+                },
+                {
+                    "id": 165,
+                    "name": "ai_qa_bot_138's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_138's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_138"
+                },
+                {
+                    "id": 169,
+                    "name": "ai_qa_bot_142's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_142's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_142"
+                },
+                {
+                    "id": 171,
+                    "name": "ai_qa_bot_144's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_144's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_144"
+                }
+            ],
+            "ships_count": 22,
+            "ports_count": 1,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 1,
+                "mines_limpet": 0,
+                "mines": 1
+            }
+        },
+        "3": {
+            "server_tick": 332,
+            "sector_id": 3,
+            "name": "Fedspace 3",
+            "adjacent": [
+                1,
+                4,
+                4122
+            ],
+            "adjacent_count": 3,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": "The Federation -- Do Not Dump!",
+            "has_beacon": true,
+            "ships": [
+                {
+                    "id": 29,
+                    "name": "ai_qa_bot_002's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_002's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_002"
+                },
+                {
+                    "id": 36,
+                    "name": "ai_qa_bot_009's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_009's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_009"
+                },
+                {
+                    "id": 41,
+                    "name": "ai_qa_bot_014's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_014's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_014"
+                },
+                {
+                    "id": 46,
+                    "name": "ai_qa_bot_019's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_019's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_019"
+                },
+                {
+                    "id": 50,
+                    "name": "ai_qa_bot_023's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_023's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_023"
+                },
+                {
+                    "id": 52,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                },
+                {
+                    "id": 62,
+                    "name": "ai_qa_bot_035's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_035's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_035"
+                },
+                {
+                    "id": 67,
+                    "name": "ai_qa_bot_040's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_040's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_040"
+                },
+                {
+                    "id": 79,
+                    "name": "ai_qa_bot_052's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_052's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_052"
+                },
+                {
+                    "id": 82,
+                    "name": "ai_qa_bot_055's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_055's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_055"
+                },
+                {
+                    "id": 93,
+                    "name": "ai_qa_bot_066's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_066's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_066"
+                },
+                {
+                    "id": 95,
+                    "name": "ai_qa_bot_068's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_068's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_068"
+                },
+                {
+                    "id": 133,
+                    "name": "ai_qa_bot_106's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_106's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_106"
+                },
+                {
+                    "id": 143,
+                    "name": "ai_qa_bot_116's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_116's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_116"
+                },
+                {
+                    "id": 144,
+                    "name": "ai_qa_bot_117's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_117's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_117"
+                },
+                {
+                    "id": 147,
+                    "name": "ai_qa_bot_120's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_120's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_120"
+                },
+                {
+                    "id": 151,
+                    "name": "ai_qa_bot_124's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_124's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_124"
+                },
+                {
+                    "id": 157,
+                    "name": "ai_qa_bot_130's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_130's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_130"
+                },
+                {
+                    "id": 159,
+                    "name": "ai_qa_bot_132's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_132's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_132"
+                },
+                {
+                    "id": 161,
+                    "name": "ai_qa_bot_134's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_134's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_134"
+                },
+                {
+                    "id": 166,
+                    "name": "ai_qa_bot_139's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_139's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_139"
+                },
+                {
+                    "id": 174,
+                    "name": "ai_qa_bot_147's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_147's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_147"
+                }
+            ],
+            "ships_count": 22,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "4122": {
+            "server_tick": 354,
+            "sector_id": 4122,
+            "name": "Alpha Her",
+            "adjacent": [
+                3,
+                129,
+                1306,
+                2930,
+                4059
+            ],
+            "adjacent_count": 5,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 36,
+                    "name": "ai_qa_bot_009's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_009's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_009"
+                },
+                {
+                    "id": 52,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 2,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "4059": {
+            "server_tick": 373,
+            "sector_id": 4059,
+            "name": "Uncharted Space",
+            "adjacent": [
+                1365,
+                4122
+            ],
+            "adjacent_count": 2,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 52,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "1365": {
+            "server_tick": 393,
+            "sector_id": 1365,
+            "name": "Crater",
+            "adjacent": [
+                389,
+                852,
+                891,
+                1050,
+                2887,
+                3303,
+                3523,
+                4059,
+                4220
+            ],
+            "adjacent_count": 9,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 52,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "891": {
+            "server_tick": 421,
+            "sector_id": 891,
+            "name": "Xi Per",
+            "adjacent": [
+                322,
+                1365,
+                2282,
+                4555,
+                4998
+            ],
+            "adjacent_count": 5,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 52,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "322": {
+            "server_tick": 440,
+            "sector_id": 322,
+            "name": "Uncharted Space",
+            "adjacent": [
+                504,
+                505,
+                564,
+                891,
+                892,
+                2056,
+                2434,
+                3288,
+                4239
+            ],
+            "adjacent_count": 9,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 52,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "4239": {
+            "server_tick": 462,
+            "sector_id": 4239,
+            "name": "Epsilon Aqr",
+            "adjacent": [
+                4459
+            ],
+            "adjacent_count": 1,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 52,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "4459": {
+            "server_tick": 481,
+            "sector_id": 4459,
+            "name": "Gamma Lyr",
+            "adjacent": [
+                794,
+                1610,
+                2842,
+                2857,
+                4905
+            ],
+            "adjacent_count": 5,
+            "ports": [
+                {
+                    "id": 331,
+                    "name": "Aggrirahireg",
+                    "type": "4"
+                },
+                {
+                    "id": 1042,
+                    "name": "Ferrardofila",
+                    "type": "3"
+                },
+                {
+                    "id": 1248,
+                    "name": "Ogerraldan",
+                    "type": "6"
+                }
+            ],
+            "has_port": true,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 52,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 3,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "794": {
+            "server_tick": 528,
+            "sector_id": 794,
+            "name": "Uncharted Space",
+            "adjacent": [
+                1509,
+                2382,
+                3038,
+                4459
+            ],
+            "adjacent_count": 4,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 52,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "2382": {
+            "server_tick": 554,
+            "sector_id": 2382,
+            "name": "Uncharted Space",
+            "adjacent": [
+                794,
+                1121,
+                2144,
+                3794,
+                3936,
+                4047
+            ],
+            "adjacent_count": 6,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 52,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "3936": {
+            "server_tick": 575,
+            "sector_id": 3936,
+            "name": "Uncharted Space",
+            "adjacent": [
+                574,
+                863,
+                915,
+                2382,
+                4127,
+                4159,
+                4339
+            ],
+            "adjacent_count": 7,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 52,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "4127": {
+            "server_tick": 595,
+            "sector_id": 4127,
+            "name": "Eta UMa",
+            "adjacent": [
+                410,
+                1734,
+                2756,
+                3702,
+                3936
+            ],
+            "adjacent_count": 5,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 52,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "2756": {
+            "server_tick": 617,
+            "sector_id": 2756,
+            "name": "Uncharted Space",
+            "adjacent": [
+                1386,
+                4496
+            ],
+            "adjacent_count": 2,
+            "ports": [
+                {
+                    "id": 1542,
+                    "name": "Aseitam",
+                    "type": "1"
+                }
+            ],
+            "has_port": true,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 52,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 1,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "4496": {
+            "server_tick": 663,
+            "sector_id": 4496,
+            "name": "Uncharted Space",
+            "adjacent": [
+                445,
+                1339,
+                1949,
+                3755,
+                4475
+            ],
+            "adjacent_count": 5,
+            "ports": [
+                {
+                    "id": 232,
+                    "name": "Sevelithrem",
+                    "type": "8"
+                }
+            ],
+            "has_port": true,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 52,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 1,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "1339": {
+            "server_tick": 738,
+            "sector_id": 1339,
+            "name": "Uncharted Space",
+            "adjacent": [
+                3630
+            ],
+            "adjacent_count": 1,
+            "ports": [
+                {
+                    "id": 195,
+                    "name": "Wicitan",
+                    "type": "6"
+                },
+                {
+                    "id": 1241,
+                    "name": "Lereth",
+                    "type": "3"
+                }
+            ],
+            "has_port": true,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 52,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 2,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "3630": {
+            "server_tick": 838,
+            "sector_id": 3630,
+            "name": "Mu Dra",
+            "adjacent": [
+                1207,
+                1339,
+                3002,
+                3755,
+                4826
+            ],
+            "adjacent_count": 5,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 52,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "3755": {
+            "server_tick": 858,
+            "sector_id": 3755,
+            "name": "Zeta UMa",
+            "adjacent": [
+                1213,
+                1611,
+                4636
+            ],
+            "adjacent_count": 3,
+            "ports": [
+                {
+                    "id": 262,
+                    "name": "Mireyewyth",
+                    "type": "8"
+                },
+                {
+                    "id": 1057,
+                    "name": "Agreliwoli",
+                    "type": "1"
+                }
+            ],
+            "has_port": true,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 52,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 2,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "1611": {
+            "server_tick": 906,
+            "sector_id": 1611,
+            "name": "Uncharted Space",
+            "adjacent": [
+                1661,
+                1679,
+                1886,
+                2199,
+                2205,
+                3755,
+                3868,
+                4023
+            ],
+            "adjacent_count": 8,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 52,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "4023": {
+            "server_tick": 927,
+            "sector_id": 4023,
+            "name": "Rukbat",
+            "adjacent": [
+                507,
+                1235,
+                2697,
+                3399
+            ],
+            "adjacent_count": 4,
+            "ports": [
+                {
+                    "id": 1263,
+                    "name": "Lotheiond",
+                    "type": "5"
+                }
+            ],
+            "has_port": true,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 52,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 1,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "507": {
+            "server_tick": 962,
+            "sector_id": 507,
+            "name": "Uncharted Space",
+            "adjacent": [
+                1605,
+                2217,
+                4351,
+                4511,
+                4743,
+                4805
+            ],
+            "adjacent_count": 6,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 52,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "4743": {
+            "server_tick": 983,
+            "sector_id": 4743,
+            "name": "Uncharted Space",
+            "adjacent": [
+                507
+            ],
+            "adjacent_count": 1,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 52,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "1605": {
+            "server_tick": 1004,
+            "sector_id": 1605,
+            "name": "Theta Peg",
+            "adjacent": [
+                507,
+                2310,
+                3362
+            ],
+            "adjacent_count": 3,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 52,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "2310": {
+            "server_tick": 1019,
+            "sector_id": 2310,
+            "name": "Uncharted Space",
+            "adjacent": [
+                610,
+                1561,
+                1605,
+                2276,
+                2413,
+                3985,
+                4289
+            ],
+            "adjacent_count": 7,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 52,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "3985": {
+            "server_tick": 1035,
+            "sector_id": 3985,
+            "name": "Beta Oph",
+            "adjacent": [
+                537
+            ],
+            "adjacent_count": 1,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [
+                {
+                    "id": 52,
+                    "name": "ai_qa_bot_025's ship",
+                    "type": "Scout Marauder",
+                    "ship_name": "ai_qa_bot_025's ship",
+                    "ship_type": "Scout Marauder",
+                    "owner": "ai_qa_bot_025"
+                }
+            ],
+            "ships_count": 1,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "537": {
+            "server_tick": 1050,
+            "sector_id": 537,
+            "name": "Aquila",
+            "adjacent": [
+                1032,
+                1989,
+                2261,
+                4110,
+                4988
+            ],
+            "adjacent_count": 5,
+            "ports": [
+                {
+                    "id": 1752,
+                    "name": "Orion Black Market",
+                    "type": "10"
+                }
+            ],
+            "has_port": true,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 1,
+            "counts": {
+                "fighters": 50000,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "1989": {
+            "server_tick": 1112,
+            "sector_id": 1989,
+            "name": "Alterf",
+            "adjacent": [
+                537,
+                1402,
+                1739,
+                4004
+            ],
+            "adjacent_count": 4,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "1739": {
+            "server_tick": 1127,
+            "sector_id": 1739,
+            "name": "Gienah",
+            "adjacent": [
+                991,
+                1777,
+                1989
+            ],
+            "adjacent_count": 3,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "1777": {
+            "server_tick": 1148,
+            "sector_id": 1777,
+            "name": "Uncharted Space",
+            "adjacent": [
+                1739,
+                1822,
+                1866,
+                3203,
+                4229
+            ],
+            "adjacent_count": 5,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "1822": {
+            "server_tick": 1164,
+            "sector_id": 1822,
+            "name": "Uncharted Space",
+            "adjacent": [
+                437,
+                874,
+                2077,
+                2321,
+                3266,
+                3880,
+                4427,
+                4793
+            ],
+            "adjacent_count": 8,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "4793": {
+            "server_tick": 1179,
+            "sector_id": 4793,
+            "name": "Theta Peg",
+            "adjacent": [
+                195,
+                1872,
+                2397,
+                2716,
+                2751,
+                2860,
+                4596,
+                4678
+            ],
+            "adjacent_count": 8,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "2751": {
+            "server_tick": 1194,
+            "sector_id": 2751,
+            "name": "Uncharted Space",
+            "adjacent": [
+                893,
+                2295,
+                2401,
+                3891
+            ],
+            "adjacent_count": 4,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "2295": {
+            "server_tick": 1215,
+            "sector_id": 2295,
+            "name": "Uncharted Space",
+            "adjacent": [
+                1474,
+                1973,
+                2751,
+                3125,
+                3397,
+                3795,
+                4462
+            ],
+            "adjacent_count": 7,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "3125": {
+            "server_tick": 1231,
+            "sector_id": 3125,
+            "name": "Gamma UMi",
+            "adjacent": [
+                272
+            ],
+            "adjacent_count": 1,
+            "ports": [
+                {
+                    "id": 861,
+                    "name": "Etittilath",
+                    "type": "3"
+                },
+                {
+                    "id": 1039,
+                    "name": "Palejia",
+                    "type": "6"
+                }
+            ],
+            "has_port": true,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 2,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "272": {
+            "server_tick": 1272,
+            "sector_id": 272,
+            "name": "Uncharted Space",
+            "adjacent": [
+                609,
+                1250,
+                3055,
+                3744,
+                4884
+            ],
+            "adjacent_count": 5,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "4884": {
+            "server_tick": 1287,
+            "sector_id": 4884,
+            "name": "Uncharted Space",
+            "adjacent": [
+                3381,
+                3997,
+                4048,
+                4966
+            ],
+            "adjacent_count": 4,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "4048": {
+            "server_tick": 1303,
+            "sector_id": 4048,
+            "name": "Beta Leo",
+            "adjacent": [
+                432,
+                919,
+                2548,
+                3116,
+                4197,
+                4884
+            ],
+            "adjacent_count": 6,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "4197": {
+            "server_tick": 1318,
+            "sector_id": 4197,
+            "name": "Maaz",
+            "adjacent": [
+                1142,
+                1191,
+                3092,
+                3859,
+                4048,
+                4532
+            ],
+            "adjacent_count": 6,
+            "ports": [
+                {
+                    "id": 968,
+                    "name": "Terrali",
+                    "type": "4"
+                }
+            ],
+            "has_port": true,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 1,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "4532": {
+            "server_tick": 1354,
+            "sector_id": 4532,
+            "name": "Uncharted Space",
+            "adjacent": [
+                508,
+                1092,
+                2545,
+                2580,
+                4197,
+                4305,
+                4678
+            ],
+            "adjacent_count": 7,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "508": {
+            "server_tick": 1375,
+            "sector_id": 508,
+            "name": "Alpha Lep",
+            "adjacent": [
+                718,
+                1086,
+                1188,
+                1827,
+                2850,
+                2967,
+                3159,
+                3779,
+                3938,
+                4532
+            ],
+            "adjacent_count": 10,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "3938": {
+            "server_tick": 1391,
+            "sector_id": 3938,
+            "name": "Albali",
+            "adjacent": [
+                1325,
+                1419,
+                3355,
+                3638,
+                4473
+            ],
+            "adjacent_count": 5,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "1325": {
+            "server_tick": 1406,
+            "sector_id": 1325,
+            "name": "Antlia",
+            "adjacent": [
+                506,
+                2110
+            ],
+            "adjacent_count": 2,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "2110": {
+            "server_tick": 1427,
+            "sector_id": 2110,
+            "name": "Beta Col",
+            "adjacent": [
+                414,
+                1325
+            ],
+            "adjacent_count": 2,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "414": {
+            "server_tick": 1442,
+            "sector_id": 414,
+            "name": "Xi Cep",
+            "adjacent": [
+                752,
+                872,
+                2097,
+                2110,
+                2312,
+                2675,
+                3595,
+                3665,
+                4610
+            ],
+            "adjacent_count": 9,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "2312": {
+            "server_tick": 1458,
+            "sector_id": 2312,
+            "name": "Uncharted Space",
+            "adjacent": [
+                1011,
+                3323,
+                3497
+            ],
+            "adjacent_count": 3,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "1011": {
+            "server_tick": 1473,
+            "sector_id": 1011,
+            "name": "Uncharted Space",
+            "adjacent": [
+                1707
+            ],
+            "adjacent_count": 1,
+            "ports": [
+                {
+                    "id": 509,
+                    "name": "Eraelgrin",
+                    "type": "6"
+                }
+            ],
+            "has_port": true,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 1,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "1707": {
+            "server_tick": 1509,
+            "sector_id": 1707,
+            "name": "Uncharted Space",
+            "adjacent": [
+                592,
+                1473,
+                1795,
+                2277,
+                3317,
+                4115,
+                4484,
+                4978
+            ],
+            "adjacent_count": 8,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "2277": {
+            "server_tick": 1530,
+            "sector_id": 2277,
+            "name": "Uncharted Space",
+            "adjacent": [
+                1707,
+                3237
+            ],
+            "adjacent_count": 2,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "3237": {
+            "server_tick": 1546,
+            "sector_id": 3237,
+            "name": "Alpha Oph",
+            "adjacent": [
+                315,
+                418,
+                2014,
+                2233,
+                2973
+            ],
+            "adjacent_count": 5,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "2233": {
+            "server_tick": 1561,
+            "sector_id": 2233,
+            "name": "Dschubba",
+            "adjacent": [
+                70,
+                1007,
+                1087,
+                1162,
+                2044,
+                3146,
+                3237,
+                3698,
+                3859,
+                4488
+            ],
+            "adjacent_count": 10,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "3859": {
+            "server_tick": 1577,
+            "sector_id": 3859,
+            "name": "Auriga",
+            "adjacent": [
+                3460,
+                4197
+            ],
+            "adjacent_count": 2,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "3460": {
+            "server_tick": 1593,
+            "sector_id": 3460,
+            "name": "Auva",
+            "adjacent": [
+                1600,
+                2078,
+                3439,
+                3608,
+                3646,
+                3859,
+                4995
+            ],
+            "adjacent_count": 7,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "3439": {
+            "server_tick": 1613,
+            "sector_id": 3439,
+            "name": "Uncharted Space",
+            "adjacent": [
+                257,
+                1763,
+                3031,
+                3262,
+                3753
+            ],
+            "adjacent_count": 5,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "3753": {
+            "server_tick": 1629,
+            "sector_id": 3753,
+            "name": "Uncharted Space",
+            "adjacent": [
+                4194,
+                4486
+            ],
+            "adjacent_count": 2,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "4194": {
+            "server_tick": 1644,
+            "sector_id": 4194,
+            "name": "Uncharted Space",
+            "adjacent": [
+                393,
+                1620,
+                1661,
+                2747,
+                3386,
+                3753,
+                4534
+            ],
+            "adjacent_count": 7,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "393": {
+            "server_tick": 1665,
+            "sector_id": 393,
+            "name": "Maasym",
+            "adjacent": [
+                1349,
+                1741
+            ],
+            "adjacent_count": 2,
+            "ports": [
+                {
+                    "id": 1295,
+                    "name": "Acillitore",
+                    "type": "2"
+                }
+            ],
+            "has_port": true,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 1,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "1349": {
+            "server_tick": 1712,
+            "sector_id": 1349,
+            "name": "Alhena",
+            "adjacent": [
+                335,
+                679,
+                2521,
+                4727,
+                4975,
+                4977
+            ],
+            "adjacent_count": 6,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "679": {
+            "server_tick": 1733,
+            "sector_id": 679,
+            "name": "Uncharted Space",
+            "adjacent": [
+                132,
+                964,
+                1349,
+                2481,
+                3159,
+                3344,
+                3612,
+                4268
+            ],
+            "adjacent_count": 8,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "132": {
+            "server_tick": 1749,
+            "sector_id": 132,
+            "name": "Alpha Tau",
+            "adjacent": [
+                402,
+                3127,
+                4282
+            ],
+            "adjacent_count": 3,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        },
+        "4282": {
+            "server_tick": 1764,
+            "sector_id": 4282,
+            "name": "Antlia",
+            "adjacent": [
+                132,
+                1861,
+                2234
+            ],
+            "adjacent_count": 3,
+            "ports": [],
+            "has_port": false,
+            "players": [],
+            "players_count": 0,
+            "beacons": [],
+            "beacons_count": 0,
+            "planets": [],
+            "has_planet": false,
+            "planets_count": 0,
+            "beacon": null,
+            "has_beacon": false,
+            "ships": [],
+            "ships_count": 0,
+            "ports_count": 0,
+            "counts": {
+                "fighters": 0,
+                "mines_armid": 0,
+                "mines_limpet": 0,
+                "mines": 0
+            }
+        }
+    },
+    "universe_map": {
+        "1": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "3": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "4122": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "4059": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1365": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "891": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "322": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "4239": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "4459": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "794": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2382": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "3936": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "4127": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2756": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "4496": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1339": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "3630": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "3755": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1611": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "4023": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "507": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "4743": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1605": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2310": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "3985": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "537": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1989": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1739": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1777": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1822": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "4793": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2751": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2295": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "3125": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "272": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "4884": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "4048": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "4197": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "4532": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "508": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "3938": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1325": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2110": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "414": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2312": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1011": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1707": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2277": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "3237": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2233": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "3859": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "3460": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "3439": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "3753": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "4194": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "393": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1349": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "679": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "132": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "4282": {
+            "is_explored": true,
+            "has_port": false
+        }
+    },
+    "port_info_by_sector": {
+        "1": {
+            "port_id": 1,
+            "name": "Earth Port",
+            "class": null,
+            "commodities": []
+        },
+        "4459": {
+            "port_id": 331,
+            "name": "Aggrirahireg",
+            "class": null,
+            "commodities": []
+        },
+        "2756": {
+            "port_id": 1542,
+            "name": "Aseitam",
+            "class": null,
+            "commodities": []
+        },
+        "4496": {
+            "port_id": 232,
+            "name": "Sevelithrem",
+            "class": null,
+            "commodities": []
+        },
+        "1339": {
+            "port_id": 195,
+            "name": "Wicitan",
+            "class": null,
+            "commodities": []
+        },
+        "3755": {
+            "port_id": 262,
+            "name": "Mireyewyth",
+            "class": null,
+            "commodities": []
+        },
+        "4023": {
+            "port_id": 1263,
+            "name": "Lotheiond",
+            "class": null,
+            "commodities": []
+        },
+        "537": {
+            "port_id": 1752,
+            "name": "Orion Black Market",
+            "class": null,
+            "commodities": []
+        },
+        "3125": {
+            "port_id": 861,
+            "name": "Etittilath",
+            "class": null,
+            "commodities": []
+        },
+        "4197": {
+            "port_id": 968,
+            "name": "Terrali",
+            "class": null,
+            "commodities": []
+        },
+        "1011": {
+            "port_id": 509,
+            "name": "Eraelgrin",
+            "class": null,
+            "commodities": []
+        },
+        "393": {
+            "port_id": 1295,
+            "name": "Acillitore",
+            "class": null,
+            "commodities": []
+        }
+    },
+    "price_cache": {
+        "1": {
+            "buy": {
+                "ORE": 138.0
+            },
+            "sell": {
+                "ORE": 0.0
+            }
+        },
+        "331": {
+            "buy": {
+                "ORE": 109.0
+            },
+            "sell": {
+                "ORE": 95.0
+            }
+        },
+        "1542": {
+            "buy": {
+                "ORE": 97.0
+            },
+            "sell": {
+                "ORE": 97.0
+            }
+        },
+        "232": {
+            "buy": {
+                "ORE": 116.0
+            },
+            "sell": {
+                "ORE": 89.0
+            }
+        },
+        "195": {
+            "buy": {
+                "ORE": 114.0
+            },
+            "sell": {
+                "ORE": 93.0
+            }
+        },
+        "262": {
+            "buy": {
+                "ORE": 115.0
+            },
+            "sell": {
+                "ORE": 94.0
+            }
+        },
+        "1263": {
+            "buy": {
+                "ORE": 115.0
+            },
+            "sell": {
+                "ORE": 94.0
+            }
+        },
+        "1752": {
+            "buy": {
+                "ORE": 108.0
+            },
+            "sell": {
+                "ORE": 0.0
+            }
+        },
+        "861": {
+            "buy": {
+                "ORE": 112.0
+            },
+            "sell": {
+                "ORE": 91.0
+            }
+        },
+        "968": {
+            "buy": {
+                "ORE": 97.0
+            },
+            "sell": {
+                "ORE": 97.0
+            }
+        },
+        "509": {
+            "buy": {
+                "ORE": 104.0
+            },
+            "sell": {
+                "ORE": 97.0
+            }
+        },
+        "1295": {
+            "buy": {
+                "ORE": 100.0
+            },
+            "sell": {
+                "ORE": 100.0
+            }
+        }
+    },
+    "bank_balance": 0,
+    "command_retry_info": {
+        "player.my_info": {
+            "next_retry_time": 1765402303.5060048
+        },
+        "ship.info": {
+            "next_retry_time": 1765402304.5463653
+        },
+        "sector.info": {
+            "next_retry_time": 1765402438.865779
+        },
+        "trade.port_info": {
+            "next_retry_time": 1765402429.9970486
+        },
+        "trade.quote": {
+            "next_retry_time": 1765402431.5479648
+        },
+        "trade.buy": {
+            "next_retry_time": 1765402405.941439,
+            "failures": 3
+        },
+        "move.warp": {
+            "next_retry_time": 1765402439.9070532
+        },
+        "bank.balance": {
+            "next_retry_time": 1765402434.6855145
+        }
+    },
+    "strategy_plan": [
+        "survey: port"
+    ],
+    "trade_successful": true,
+    "q_table": {
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "trade.buy": -0.44999999999999996,
+            "combat.attack": 0.0,
+            "combat.deploy_fighters": 0.0,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "move.warp": 0.1,
+            "bank.balance": 0.1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:331-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "trade.buy": 0.0,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1542-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "trade.buy": 0.0,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:232-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "trade.buy": 0.0,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:195-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "trade.buy": -0.44999999999999996,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:262-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1263-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1752-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "trade.buy": -1.0,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:861-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:968-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:509-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1295-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 0.1,
+            "move.warp": 0.1,
+            "bank.deposit": 0.0,
+            "bank.balance": 0.0
+        }
+    },
+    "n_table": {
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "trade.buy": 2,
+            "combat.attack": 0,
+            "combat.deploy_fighters": 0,
+            "move.warp": 2,
+            "bank.deposit": 0,
+            "bank.balance": 0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "move.warp": 105,
+            "bank.balance": 11
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:331-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "trade.buy": 0,
+            "move.warp": 2,
+            "bank.deposit": 0,
+            "bank.balance": 0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1542-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "trade.buy": 0,
+            "move.warp": 3,
+            "bank.deposit": 0,
+            "bank.balance": 0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:232-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "trade.buy": 0,
+            "move.warp": 3,
+            "bank.deposit": 0,
+            "bank.balance": 0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:195-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "trade.buy": 2,
+            "move.warp": 2,
+            "bank.deposit": 0,
+            "bank.balance": 1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:262-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "move.warp": 2,
+            "bank.deposit": 0,
+            "bank.balance": 0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1263-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "move.warp": 2,
+            "bank.deposit": 0,
+            "bank.balance": 0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1752-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "trade.buy": 1,
+            "move.warp": 2,
+            "bank.deposit": 0,
+            "bank.balance": 1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:861-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "move.warp": 2,
+            "bank.deposit": 0,
+            "bank.balance": 1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:968-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "move.warp": 2,
+            "bank.deposit": 0,
+            "bank.balance": 0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:509-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "move.warp": 2,
+            "bank.deposit": 0,
+            "bank.balance": 0
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-port:1295-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "trade.quote": 1,
+            "move.warp": 2,
+            "bank.deposit": 0,
+            "bank.balance": 0
+        }
+    },
+    "command_schemas": {
+        "session.hello": {
+            "$id": "ge://schema/session.hello.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+        },
+        "session.ping": {
+            "$id": "ge://schema/session.ping.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+        },
+        "session.disconnect": {
+            "$id": "ge://schema/session.disconnect.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "auth.login": {
+            "$id": "ge://schema/auth.login.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "username": {
+                    "type": "string"
+                },
+                "passwd": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "username",
+                "passwd"
+            ],
+            "additionalProperties": true
+        },
+        "auth.logout": {
+            "$id": "ge://schema/auth.logout.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "auth.mfa.totp.verify": {
+            "$id": "ge://schema/auth.mfa.totp.verify.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "auth.register": {
+            "$id": "ge://schema/auth.register.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "username": {
+                    "type": "string"
+                },
+                "passwd": {
+                    "type": "string"
+                },
+                "ship_name": {
+                    "type": "string"
+                },
+                "ui_locale": {
+                    "type": "string"
+                },
+                "ui_timezone": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "username",
+                "passwd"
+            ],
+            "additionalProperties": true
+        },
+        "player.my_info": {
+            "$id": "ge://schema/player.my_info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+        },
+        "ship.info": {
+            "$id": "ge://schema/ship.info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+        },
+        "sector.info": {
+            "$id": "ge://schema/sector.info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [],
+            "additionalProperties": true
+        },
+        "sector.set_beacon": {
+            "$id": "ge://schema/sector.set_beacon.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "text": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "sector_id",
+                "text"
+            ],
+            "additionalProperties": false
+        },
+        "move.warp": {
+            "$id": "ge://schema/move_warp.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "to_sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "to_sector_id"
+            ],
+            "additionalProperties": true
+        },
+        "move.scan": {
+            "$id": "ge://schema/move.scan.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {}
+        },
+        "move.pathfind": {
+            "$id": "ge://schema/move.pathfind.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.accept": {
+            "$id": "ge://schema/trade.accept.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.buy": {
+            "$id": "ge://schema/trade.buy.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "port_id": {
+                    "type": "integer"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "commodity": {
+                                "type": "string"
+                            },
+                            "quantity": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "commodity",
+                            "quantity"
+                        ],
+                        "additionalProperties": true
+                    }
+                },
+                "idempotency_key": {
+                    "type": "string"
+                },
+                "account": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ]
+                },
+                "sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "port_id",
+                "items",
+                "idempotency_key",
+                "account",
+                "sector_id"
+            ],
+            "additionalProperties": true
+        },
+        "trade.cancel": {
+            "$id": "ge://schema/trade.cancel.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.history": {
+            "$id": "ge://schema/trade.history.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50
+                },
+                "cursor": {
+                    "type": "string"
+                }
+            },
+            "required": [],
+            "additionalProperties": true
+        },
+        "trade.jettison": {
+            "$id": "ge://schema/trade.jettison.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.offer": {
+            "$id": "ge://schema/trade.offer.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.port_info": {
+            "$id": "ge://schema/trade.port_info.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.quote": {
+            "$id": "ge://schema/trade.quote.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "port_id": {
+                    "type": "integer"
+                },
+                "commodity": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "port_id",
+                "commodity",
+                "quantity"
+            ],
+            "additionalProperties": true
+        },
+        "trade.sell": {
+            "$id": "ge://schema/trade.sell.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "port_id": {
+                    "type": "integer"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "commodity": {
+                                "type": "string"
+                            },
+                            "quantity": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "commodity",
+                            "quantity"
+                        ],
+                        "additionalProperties": true
+                    }
+                },
+                "idempotency_key": {
+                    "type": "string"
+                },
+                "account": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ]
+                }
+            },
+            "required": [
+                "sector_id",
+                "port_id",
+                "items",
+                "idempotency_key",
+                "account"
+            ],
+            "additionalProperties": true
+        }
+    },
+    "schema_blacklist": [
+        "combat.deploy_fighters",
+        "bank.deposit"
+    ],
+    "pending_schema_requests": {
+        "system.cmd_list": "c-118e5cee",
+        "session.hello": "c-2ea4da16",
+        "session.ping": "c-f9bffa29",
+        "session.disconnect": "c-7ba56c4f",
+        "auth.login": "c-57f8bd26",
+        "auth.logout": "c-2a6fc490",
+        "auth.mfa.totp.verify": "c-2bdb7361",
+        "auth.register": "c-589d3b7e",
+        "player.my_info": "c-35a24cdc",
+        "ship.info": "c-7a44a67d",
+        "sector.info": "c-12db9b12",
+        "sector.set_beacon": "c-68efd93c",
+        "move.warp": "c-69fd440c",
+        "move.scan": "c-790265e8",
+        "move.pathfind": "c-f9f96ec7",
+        "trade.accept": "c-a4af5f9a",
+        "trade.buy": "c-396f4185",
+        "trade.cancel": "c-cd0c14aa",
+        "trade.history": "c-15b4d485",
+        "trade.jettison": "c-d926d9c1",
+        "trade.offer": "c-7ed440ab",
+        "trade.port_info": "c-62cb2e28",
+        "trade.quote": "c-77c7a5c7",
+        "trade.sell": "c-b0b9a956"
+    },
+    "recent_sectors": [
+        3460,
+        3439,
+        3753,
+        4194,
+        393,
+        1349,
+        679,
+        132,
+        4282,
+        2234
+    ],
+    "pending_commands": {},
+    "port_trade_blacklist": [],
+    "warp_blacklist": [],
+    "current_path": [],
+    "last_action_result": {
+        "status": "ok",
+        "command": "move.warp",
+        "request_id": "c-c6b794f3",
+        "response_type": "move.result",
+        "ts": "2025-12-10T21:33:54Z"
+    },
+    "current_qa_objective": null,
+    "needs_bootstrap": false,
+    "last_action": "move.warp",
+    "last_context_key": "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds",
+    "last_stage": "explore"
+}

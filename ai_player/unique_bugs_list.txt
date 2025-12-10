@@ -1,0 +1,12 @@
+Found 2 unique bugs in the bug_reports directory:
+
+1.  **State inconsistency detected after server response.**
+    *   **Count:** 1757 occurrences
+    *   **Description:** This is a frequent, systemic error where the client's local state (e.g., location, inventory) does not match the server's state after a command execution.
+    *   **Directories:** `bug_reports/err_state_inconsistent_*`
+
+2.  **No warp link (Code 1402)**
+    *   **Count:** 1 occurrence (plus 3 logged in qa_log.jsonl)
+    *   **Description:** The ship attempted to warp between sectors that are not connected.
+    *   **Details:** `{"from": 210, "to": 37, "reason": "no_warp_link"}`
+    *   **Directory:** `bug_reports/err_move.warp_1402`
