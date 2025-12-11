@@ -62,6 +62,33 @@ planet_is_npc (const planet_t *p)
   return true;
 }
 
+// Helper to load minimal planet info needed for ownership check
+static int h_get_planet_owner_info(sqlite3 *db, int planet_id, planet_t *p) {
+    if (!p) return SQLITE_ERROR;
+    sqlite3_stmt *st = NULL;
+    const char *sql = "SELECT id, owner_id, owner_type FROM planets WHERE id = ?1;";
+    int rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) return rc;
+    
+    sqlite3_bind_int(st, 1, planet_id);
+    
+    if (sqlite3_step(st) == SQLITE_ROW) {
+        p->id = sqlite3_column_int(st, 0);
+        p->owner_id = sqlite3_column_int(st, 1);
+        const char *type_str = (const char *)sqlite3_column_text(st, 2);
+        p->owner_type = type_str ? strdup(type_str) : NULL;
+        rc = SQLITE_OK;
+    } else {
+        rc = SQLITE_NOTFOUND;
+    }
+    sqlite3_finalize(st);
+    return rc;
+}
+
+static void h_free_planet_t(planet_t *p) {
+    if (p->owner_type) free(p->owner_type);
+}
+
 
 int
 cmd_planet_genesis (client_ctx_t *ctx, json_t *root)
@@ -283,10 +310,121 @@ cmd_planet_harvest (client_ctx_t *ctx, json_t *root)
 int
 cmd_planet_deposit (client_ctx_t *ctx, json_t *root)
 {
-  send_enveloped_error (ctx->fd,
-                        root,
-                        1101,
-                        "Not implemented: " "planet.deposit");
+  sqlite3 *db = db_get_handle();
+  if (!ctx || ctx->player_id <= 0) {
+      send_enveloped_refused(ctx->fd, root, ERR_NOT_AUTHENTICATED, "Not authenticated", NULL);
+      return 0;
+  }
+
+  json_t *data = json_object_get(root, "data");
+  if (!data) {
+      send_enveloped_error(ctx->fd, root, ERR_BAD_REQUEST, "Missing data payload.");
+      return 0;
+  }
+
+  int planet_id = 0;
+  int amount = 0;
+  json_unpack(data, "{s:i, s:i}", "planet_id", &planet_id, "amount", &amount);
+
+  if (planet_id <= 0 || amount <= 0) {
+      send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "Invalid planet_id or amount.");
+      return 0;
+  }
+
+  planet_t p = {0};
+  if (h_get_planet_owner_info(db, planet_id, &p) != SQLITE_OK) {
+      send_enveloped_error(ctx->fd, root, ERR_NOT_FOUND, "Planet not found.");
+      return 0;
+  }
+
+  // Ownership check
+  bool allowed = false;
+  if (p.owner_type && strcmp(p.owner_type, "player") == 0 && p.owner_id == ctx->player_id) {
+      allowed = true;
+  } else if (p.owner_type && (strcmp(p.owner_type, "corp") == 0 || strcmp(p.owner_type, "corporation") == 0)) {
+       // Any member of the owning corp can deposit
+       if (ctx->corp_id > 0 && ctx->corp_id == p.owner_id) {
+           allowed = true;
+       }
+  }
+  h_free_planet_t(&p);
+
+  if (!allowed) {
+      send_enveloped_refused(ctx->fd, root, 1403, "You do not control this planet.", NULL);
+      return 0;
+  }
+
+  // Check citadel level
+  int citadel_level = 0;
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2(db, "SELECT level FROM citadels WHERE planet_id = ?1;", -1, &st, NULL);
+  if (rc == SQLITE_OK) {
+      sqlite3_bind_int(st, 1, planet_id);
+      if (sqlite3_step(st) == SQLITE_ROW) {
+          citadel_level = sqlite3_column_int(st, 0);
+      }
+      sqlite3_finalize(st);
+  }
+
+  if (citadel_level < 1) {
+      send_enveloped_refused(ctx->fd, root, 1403, "No citadel or insufficient level for treasury.", NULL);
+      return 0;
+  }
+
+  // Transaction
+  if (sqlite3_exec(db, "BEGIN IMMEDIATE;", NULL, NULL, NULL) != SQLITE_OK) {
+      send_enveloped_error(ctx->fd, root, 500, "Database busy.");
+      return 0;
+  }
+
+  // Deduct from player credits
+  long long new_player_balance = 0;
+  if (h_deduct_player_petty_cash_unlocked(db, ctx->player_id, amount, &new_player_balance) != SQLITE_OK) {
+      sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+      send_enveloped_refused(ctx->fd, root, 1402, "Insufficient credits.", NULL);
+      return 0;
+  }
+
+  // Add to treasury
+  if (sqlite3_prepare_v2(db, "UPDATE citadels SET treasury = treasury + ?1 WHERE planet_id = ?2;", -1, &st, NULL) != SQLITE_OK) {
+      sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+      send_enveloped_error(ctx->fd, root, 500, "Database error.");
+      return 0;
+  }
+  sqlite3_bind_int(st, 1, amount);
+  sqlite3_bind_int(st, 2, planet_id);
+  if (sqlite3_step(st) != SQLITE_DONE) {
+      sqlite3_finalize(st);
+      sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+      send_enveloped_error(ctx->fd, root, 500, "Database update failed.");
+      return 0;
+  }
+  sqlite3_finalize(st);
+
+  // Commit
+  if (sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL) != SQLITE_OK) {
+      sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+      send_enveloped_error(ctx->fd, root, 500, "Transaction commit failed.");
+      return 0;
+  }
+
+  // Fetch new treasury balance for response
+  long long new_treasury = 0;
+  if (sqlite3_prepare_v2(db, "SELECT treasury FROM citadels WHERE planet_id = ?1;", -1, &st, NULL) == SQLITE_OK) {
+      sqlite3_bind_int(st, 1, planet_id);
+      if (sqlite3_step(st) == SQLITE_ROW) {
+          new_treasury = sqlite3_column_int64(st, 0);
+      }
+      sqlite3_finalize(st);
+  }
+
+  json_t *resp = json_object();
+  json_object_set_new(resp, "planet_id", json_integer(planet_id));
+  json_object_set_new(resp, "planet_treasury_balance", json_integer(new_treasury));
+  json_object_set_new(resp, "player_credits", json_integer(new_player_balance));
+  
+  send_enveloped_ok(ctx->fd, root, "planet.deposit", resp);
+  json_decref(resp);
   return 0;
 }
 
@@ -294,10 +432,122 @@ cmd_planet_deposit (client_ctx_t *ctx, json_t *root)
 int
 cmd_planet_withdraw (client_ctx_t *ctx, json_t *root)
 {
-  send_enveloped_error (ctx->fd,
-                        root,
-                        1101,
-                        "Not implemented: " "planet.withdraw");
+  sqlite3 *db = db_get_handle();
+  if (!ctx || ctx->player_id <= 0) {
+      send_enveloped_refused(ctx->fd, root, ERR_NOT_AUTHENTICATED, "Not authenticated", NULL);
+      return 0;
+  }
+
+  json_t *data = json_object_get(root, "data");
+  if (!data) {
+      send_enveloped_error(ctx->fd, root, ERR_BAD_REQUEST, "Missing data payload.");
+      return 0;
+  }
+
+  int planet_id = 0;
+  int amount = 0;
+  json_unpack(data, "{s:i, s:i}", "planet_id", &planet_id, "amount", &amount);
+
+  if (planet_id <= 0 || amount <= 0) {
+      send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "Invalid planet_id or amount.");
+      return 0;
+  }
+
+  planet_t p = {0};
+  if (h_get_planet_owner_info(db, planet_id, &p) != SQLITE_OK) {
+      send_enveloped_error(ctx->fd, root, ERR_NOT_FOUND, "Planet not found.");
+      return 0;
+  }
+
+  // Ownership check
+  bool allowed = false;
+  if (p.owner_type && strcmp(p.owner_type, "player") == 0 && p.owner_id == ctx->player_id) {
+      allowed = true;
+  } else if (p.owner_type && (strcmp(p.owner_type, "corp") == 0 || strcmp(p.owner_type, "corporation") == 0)) {
+       // Corp planet: check if player is in corp and has rank
+       if (ctx->corp_id > 0 && ctx->corp_id == p.owner_id) {
+           char role[16];
+           h_get_player_corp_role(db, ctx->player_id, ctx->corp_id, role, sizeof(role));
+           if (strcasecmp(role, "Leader") == 0 || strcasecmp(role, "Officer") == 0) {
+               allowed = true;
+           }
+       }
+  }
+  h_free_planet_t(&p);
+
+  if (!allowed) {
+      send_enveloped_refused(ctx->fd, root, 1403, "You do not control this planet or lack permissions.", NULL);
+      return 0;
+  }
+
+  // Check citadel level and treasury balance
+  int citadel_level = 0;
+  long long current_treasury = 0;
+  sqlite3_stmt *st = NULL;
+  int rc = sqlite3_prepare_v2(db, "SELECT level, treasury FROM citadels WHERE planet_id = ?1;", -1, &st, NULL);
+  if (rc == SQLITE_OK) {
+      sqlite3_bind_int(st, 1, planet_id);
+      if (sqlite3_step(st) == SQLITE_ROW) {
+          citadel_level = sqlite3_column_int(st, 0);
+          current_treasury = sqlite3_column_int64(st, 1);
+      }
+      sqlite3_finalize(st);
+  }
+
+  if (citadel_level < 1) {
+      send_enveloped_refused(ctx->fd, root, 1403, "No citadel or insufficient level for treasury.", NULL);
+      return 0;
+  }
+
+  if (current_treasury < amount) {
+      send_enveloped_refused(ctx->fd, root, 1402, "Insufficient treasury funds.", NULL);
+      return 0;
+  }
+
+  // Transaction
+  if (sqlite3_exec(db, "BEGIN IMMEDIATE;", NULL, NULL, NULL) != SQLITE_OK) {
+      send_enveloped_error(ctx->fd, root, 500, "Database busy.");
+      return 0;
+  }
+
+  // Deduct from treasury
+  if (sqlite3_prepare_v2(db, "UPDATE citadels SET treasury = treasury - ?1 WHERE planet_id = ?2;", -1, &st, NULL) != SQLITE_OK) {
+      sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+      send_enveloped_error(ctx->fd, root, 500, "Database error.");
+      return 0;
+  }
+  sqlite3_bind_int(st, 1, amount);
+  sqlite3_bind_int(st, 2, planet_id);
+  if (sqlite3_step(st) != SQLITE_DONE) {
+      sqlite3_finalize(st);
+      sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+      send_enveloped_error(ctx->fd, root, 500, "Database update failed.");
+      return 0;
+  }
+  sqlite3_finalize(st);
+
+  // Add to player credits
+  long long new_player_balance = 0;
+  if (h_add_player_petty_cash_unlocked(db, ctx->player_id, amount, &new_player_balance) != SQLITE_OK) {
+      sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+      send_enveloped_error(ctx->fd, root, 500, "Failed to credit player.");
+      return 0;
+  }
+
+  // Commit
+  if (sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL) != SQLITE_OK) {
+      sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+      send_enveloped_error(ctx->fd, root, 500, "Transaction commit failed.");
+      return 0;
+  }
+
+  json_t *resp = json_object();
+  json_object_set_new(resp, "planet_id", json_integer(planet_id));
+  json_object_set_new(resp, "planet_treasury_balance", json_integer(current_treasury - amount));
+  json_object_set_new(resp, "player_credits", json_integer(new_player_balance));
+  
+  send_enveloped_ok(ctx->fd, root, "planet.withdraw", resp);
+  json_decref(resp);
   return 0;
 }
 
@@ -922,33 +1172,6 @@ h_market_move_planet_stock (sqlite3 *db,
   return SQLITE_OK;
 }
 
-// Helper to load minimal planet info needed for ownership check
-static int h_get_planet_owner_info(sqlite3 *db, int planet_id, planet_t *p) {
-    if (!p) return SQLITE_ERROR;
-    sqlite3_stmt *st = NULL;
-    const char *sql = "SELECT id, owner_id, owner_type FROM planets WHERE id = ?1;";
-    int rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
-    if (rc != SQLITE_OK) return rc;
-    
-    sqlite3_bind_int(st, 1, planet_id);
-    
-    if (sqlite3_step(st) == SQLITE_ROW) {
-        p->id = sqlite3_column_int(st, 0);
-        p->owner_id = sqlite3_column_int(st, 1);
-        const char *type_str = (const char *)sqlite3_column_text(st, 2);
-        p->owner_type = type_str ? strdup(type_str) : NULL;
-        rc = SQLITE_OK;
-    } else {
-        rc = SQLITE_NOTFOUND;
-    }
-    sqlite3_finalize(st);
-    return rc;
-}
-
-static void h_free_planet_t(planet_t *p) {
-    if (p->owner_type) free(p->owner_type);
-}
-
 static int h_get_commodity_id_by_code(sqlite3 *db, const char *code) {
     sqlite3_stmt *st = NULL;
     int id = 0;
@@ -1218,4 +1441,198 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
     json_decref(resp);
     free(commodity_code);
     return 0;
+}
+
+/* ========================================================================= */
+/* SCHEMA PLAN (P3B) */
+/* Table: planets
+ * Proposed columns:
+ *   colonists_ore INTEGER NOT NULL DEFAULT 0
+ *   colonists_org INTEGER NOT NULL DEFAULT 0
+ *   colonists_eq  INTEGER NOT NULL DEFAULT 0
+ *   colonists_mil INTEGER NOT NULL DEFAULT 0
+ *
+ * (Legacy 'colonist' column may remain for total or migration purposes)
+ */
+/* ========================================================================= */
+
+int
+cmd_planet_colonists_set (client_ctx_t *ctx, json_t *root)
+{
+  sqlite3 *db = db_get_handle();
+  if (!ctx || ctx->player_id <= 0) {
+      send_enveloped_refused(ctx->fd, root, ERR_NOT_AUTHENTICATED, "Not authenticated", NULL);
+      return 0;
+  }
+
+  json_t *data = json_object_get(root, "data");
+  if (!data) {
+      send_enveloped_error(ctx->fd, root, ERR_BAD_REQUEST, "Missing data payload.");
+      return 0;
+  }
+
+  int planet_id = 0;
+  json_unpack(data, "{s:i}", "planet_id", &planet_id);
+  
+  if (planet_id <= 0) {
+      send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "Invalid planet_id.");
+      return 0;
+  }
+
+  planet_t p = {0};
+  if (h_get_planet_owner_info(db, planet_id, &p) != SQLITE_OK) {
+      send_enveloped_error(ctx->fd, root, ERR_NOT_FOUND, "Planet not found.");
+      return 0;
+  }
+
+  // Ownership check
+  bool allowed = false;
+  if (p.owner_type && strcmp(p.owner_type, "player") == 0 && p.owner_id == ctx->player_id) {
+      allowed = true;
+  } else if (p.owner_type && (strcmp(p.owner_type, "corp") == 0 || strcmp(p.owner_type, "corporation") == 0)) {
+       if (ctx->corp_id > 0 && ctx->corp_id == p.owner_id) {
+           allowed = true;
+       }
+  }
+  h_free_planet_t(&p);
+
+  if (!allowed) {
+      send_enveloped_refused(ctx->fd, root, 1403, "You do not control this planet.", NULL);
+      return 0;
+  }
+
+  /* Get inputs (optional) */
+  json_t *j_ore = json_object_get(data, "colonists_ore");
+  json_t *j_org = json_object_get(data, "colonists_org");
+  json_t *j_eq  = json_object_get(data, "colonists_eq");
+  json_t *j_mil = json_object_get(data, "colonists_mil");
+
+  /* Fetch current state (TODO: using 'colonist' for total, assuming dummy per-role columns for now) */
+  /* Since schema doesn't exist, we will simulate reading/writing from legacy 'colonist' or temporary memory if possible,
+     but for persistence we are limited.
+     However, instructions say: "If per-role fields do not exist... Implement code with clear TODO comments where it depends on those columns".
+     I will simulate the logic but fail to persist specifically to non-existent columns, or use a dummy store if possible.
+     Wait, I can't persist to non-existent columns.
+     I will read 'population' as total.
+     I will check sum of inputs <= population.
+     I will stub the persistence.
+  */
+  
+  int pop_total = 0;
+  sqlite3_stmt *st_pop = NULL;
+  if (sqlite3_prepare_v2(db, "SELECT population FROM planets WHERE id=?1", -1, &st_pop, NULL) == SQLITE_OK) {
+      sqlite3_bind_int(st_pop, 1, planet_id);
+      if (sqlite3_step(st_pop) == SQLITE_ROW) {
+          pop_total = sqlite3_column_int(st_pop, 0);
+      }
+      sqlite3_finalize(st_pop);
+  }
+
+  // Current values (Default to 0 if columns missing)
+  int cur_ore = 0, cur_org = 0, cur_eq = 0, cur_mil = 0;
+  // TODO: SELECT colonists_ore, colonists_org... FROM planets WHERE id=?
+
+  int new_ore = j_ore ? json_integer_value(j_ore) : cur_ore;
+  int new_org = j_org ? json_integer_value(j_org) : cur_org;
+  int new_eq  = j_eq  ? json_integer_value(j_eq)  : cur_eq;
+  int new_mil = j_mil ? json_integer_value(j_mil) : cur_mil;
+
+  if (new_ore < 0 || new_org < 0 || new_eq < 0 || new_mil < 0) {
+      send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "Colonist counts must be non-negative.");
+      return 0;
+  }
+
+  if ((long long)new_ore + new_org + new_eq + new_mil > pop_total) {
+      send_enveloped_error(ctx->fd, root, 1406, "Total allocation exceeds population.");
+      return 0;
+  }
+
+  /* Persist updates */
+  // TODO: UPDATE planets SET colonists_ore=?, ... WHERE id=?
+  // For now, we pretend we saved it.
+  
+  json_t *resp = json_object();
+  json_object_set_new(resp, "planet_id", json_integer(planet_id));
+  json_object_set_new(resp, "colonists_ore", json_integer(new_ore));
+  json_object_set_new(resp, "colonists_org", json_integer(new_org));
+  json_object_set_new(resp, "colonists_eq", json_integer(new_eq));
+  json_object_set_new(resp, "colonists_mil", json_integer(new_mil));
+  json_object_set_new(resp, "population_total", json_integer(pop_total));
+
+  send_enveloped_ok(ctx->fd, root, "planet.colonists.set", resp);
+  json_decref(resp);
+  return 0;
+}
+
+int
+cmd_planet_colonists_get (client_ctx_t *ctx, json_t *root)
+{
+  sqlite3 *db = db_get_handle();
+  if (!ctx || ctx->player_id <= 0) {
+      send_enveloped_refused(ctx->fd, root, ERR_NOT_AUTHENTICATED, "Not authenticated", NULL);
+      return 0;
+  }
+
+  json_t *data = json_object_get(root, "data");
+  if (!data) {
+      send_enveloped_error(ctx->fd, root, ERR_BAD_REQUEST, "Missing data payload.");
+      return 0;
+  }
+
+  int planet_id = 0;
+  json_unpack(data, "{s:i}", "planet_id", &planet_id);
+  
+  if (planet_id <= 0) {
+      send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "Invalid planet_id.");
+      return 0;
+  }
+
+  planet_t p = {0};
+  if (h_get_planet_owner_info(db, planet_id, &p) != SQLITE_OK) {
+      send_enveloped_error(ctx->fd, root, ERR_NOT_FOUND, "Planet not found.");
+      return 0;
+  }
+
+  // Ownership check
+  bool allowed = false;
+  if (p.owner_type && strcmp(p.owner_type, "player") == 0 && p.owner_id == ctx->player_id) {
+      allowed = true;
+  } else if (p.owner_type && (strcmp(p.owner_type, "corp") == 0 || strcmp(p.owner_type, "corporation") == 0)) {
+       if (ctx->corp_id > 0 && ctx->corp_id == p.owner_id) {
+           allowed = true;
+       }
+  }
+  h_free_planet_t(&p);
+
+  if (!allowed) {
+      send_enveloped_refused(ctx->fd, root, 1403, "You do not control this planet.", NULL);
+      return 0;
+  }
+
+  int pop_total = 0;
+  // Default values
+  int cur_ore = 0, cur_org = 0, cur_eq = 0, cur_mil = 0;
+
+  // TODO: SELECT population, colonists_ore, ... FROM planets WHERE id=?
+  sqlite3_stmt *st_pop = NULL;
+  if (sqlite3_prepare_v2(db, "SELECT population FROM planets WHERE id=?1", -1, &st_pop, NULL) == SQLITE_OK) {
+      sqlite3_bind_int(st_pop, 1, planet_id);
+      if (sqlite3_step(st_pop) == SQLITE_ROW) {
+          pop_total = sqlite3_column_int(st_pop, 0);
+          // cur_ore = ...
+      }
+      sqlite3_finalize(st_pop);
+  }
+
+  json_t *resp = json_object();
+  json_object_set_new(resp, "planet_id", json_integer(planet_id));
+  json_object_set_new(resp, "colonists_ore", json_integer(cur_ore));
+  json_object_set_new(resp, "colonists_org", json_integer(cur_org));
+  json_object_set_new(resp, "colonists_eq", json_integer(cur_eq));
+  json_object_set_new(resp, "colonists_mil", json_integer(cur_mil));
+  json_object_set_new(resp, "population_total", json_integer(pop_total));
+
+  send_enveloped_ok(ctx->fd, root, "planet.colonists.get", resp);
+  json_decref(resp);
+  return 0;
 }

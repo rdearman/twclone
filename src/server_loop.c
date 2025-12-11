@@ -43,8 +43,7 @@
 #include "server_log.h"
 #include "server_stardock.h"    // Include for hardware commands
 #include "server_corporation.h"
-
-
+#include "server_bank.h"        // Added missing include
 
 #ifndef streq
 #define streq(a,b) (strcasecmp (json_string_value ((a)), (b)) == 0)
@@ -60,11 +59,8 @@
 #define RULE_ERROR(_code,_msg) \
         do { send_enveloped_error (ctx->fd, root, (_code), (_msg)); \
              goto trade_buy_done; } while (0)
-// static _Atomic uint64_t g_conn_seq = 0;
-/* global (file-scope) counter for server message ids */
-// static _Atomic uint64_t g_msg_seq = 0;
-static __thread client_ctx_t *g_ctx_for_send = NULL;
 
+static __thread client_ctx_t *g_ctx_for_send = NULL;
 
 /* forward declaration to avoid implicit extern */
 void send_all_json (int fd, json_t *obj);
@@ -89,232 +85,13 @@ void handle_move_pathfind (client_ctx_t *ctx, json_t *root);
 void send_enveloped_ok (int fd, json_t *root, const char *type,
                         json_t *data);
 json_t *build_sector_info_json (int sector_id);
-// static int64_t g_next_notice_ttl_sweep = 0;
-static const cmd_desc_t k_supported_cmds_fallback[] = {
-  {"admin.notice", "Admin notice"},
-  {"admin.shutdown_warning", "Admin shutdown warning"},
-  {"auth.login", "Authenticate"},
-  {"auth.logout", "Log out"},
-  {"auth.mfa.totp.verify", "Second-factor code"},
-  {"auth.register", "Create a new player"},
-  {"auth.refresh", "Refresh session token"},
-  {"bank.balance", "Get player bank balance"},
-  {"bank.deposit", "Deposit credits to bank"},
-  {"bank.orders.cancel", "Cancel a recurring payment"},
-  {"bank.orders.create", "Create a recurring payment"},
-  {"bank.orders.list", "List recurring payments"},
-  {"bank.statement", "Get bank statement"},
-  {"bank.history", "Get bank history"},
-  {"bank.leaderboard", "Get bank leaderboard"},
-  {"bank.transfer", "Transfer credits between players"},
-  {"bank.withdraw", "Withdraw credits from bank"},
-  {"bounty.list", "List bounties"},
-  {"bounty.post_federation", "Post a Federation bounty"},
-  {"bounty.post_hitlist", "Post a Hit List contract"},
-  {"bulk.execute", "Execute a bulk command"},
-  {"chat.broadcast", "Broadcast a chat message"},
-  {"chat.history", "Chat history"},
-  {"chat.send", "Send a chat message"},
-  {"citadel.build", "Build a citadel"},
-  {"citadel.upgrade", "Upgrade a citadel"},
-  {"combat.attack", "Attack a target"},
-  {"combat.deploy_fighters", "Deploy fighters"},
-  {"combat.deploy_mines", "Deploy mines"},
-  {"combat.lay_mines", "Lay mines"},
-  {"combat.status", "Combat status"},
-  {"combat.sweep_mines", "Sweep for mines"},
-  {"corp.balance", "Get corporation balance"},
-  {"corp.deposit", "Deposit to corporation"},
-  {"corp.withdraw", "Withdraw from corporation"},
-  {"corp.statement", "Get corporation statement"},
-  {"corp.status", "Get corporation status"},
-  {"corp.transfer_ceo", "Transfer corporation CEO role"},
-  {"corp.create", "Create a new corporation"},
-  {"corp.dissolve", "Dissolve a corporation"},
-  {"corp.invite", "Invite player to corporation"},
-  {"corp.join", "Join a corporation via invite"},
-  {"corp.leave", "Leave current corporation"},
-  {"corp.kick", "Kick member from corporation"},
-  {"corp.list", "List all corporations"},
-  {"corp.roster", "List corporation members"},
-  {"stock.ipo.register", "Register corporation for IPO"},
-  {"stock.buy", "Buy shares in a corporation"},
-  {"stock.dividend.set", "Declare a dividend"},
-  {"deploy.fighters.list", "List deployed fighters"},
-  {"deploy.mines.list", "List deployed mines"},
-  {"dock.status", "Check/set player docked status at current port"},
-  {"fighters.recall", "Recall deployed fighters"},
-  {"fine.list", "List fines"},
-  {"fine.pay", "Pay a fine"},
-  {"hardware.buy", "Buy ship hardware"},
-  {"hardware.list", "List available ship hardware"},
-  {"insurance.claim.file", "File an insurance claim"},
-  {"insurance.policies.buy", "Buy an insurance policy"},
-  {"insurance.policies.list", "List insurance policies"},
-  {"loan.accept", "Accept a loan"},
-  {"loan.apply", "Apply for a loan"},
-  {"loan.list_active", "List active loans"},
-  {"loan.offers.list", "List loan offers"},
-  {"loan.repay", "Repay a loan"},
-  {"mail.delete", "Delete mail"},
-  {"mail.inbox", "Mail inbox"},
-  {"mail.read", "Read mail"},
-  {"mail.send", "Send mail"},
-  {"market.contracts.buy", "Buy a market contract"},
-  {"market.contracts.list", "List market contracts"},
-  {"market.contracts.sell", "Sell a market contract"},
-  {"market.orders.cancel", "Cancel a market order"},
-  {"market.orders.create", "Create a market order"},
-  {"market.orders.list", "List market orders"},
-  {"mines.recall", "Recall deployed mines"},
-  {"move.autopilot.start", "Start autopilot"},
-  {"move.autopilot.status", "Autopilot status"},
-  {"move.autopilot.stop", "Stop autopilot"},
-  {"move.describe_sector", "Describe a sector"},
-  {"move.pathfind", "Find path between sectors"},
-  {"move.scan", "Scan adjacent sectors"},
-  {"move.transwarp", "Transwarp to a sector"},
-  {"move.warp", "Warp to sector"},
-  {"nav.avoid.add", "Add a sector to the avoid list"},
-  {"nav.avoid.list", "List avoided sectors"},
-  {"nav.avoid.remove", "Remove a sector from the avoid list"},
-  {"nav.avoid.set", "Set a sector to the avoid list"},
-  {"nav.bookmark.add", "Add a bookmark"},
-  {"nav.bookmark.list", "List bookmarks"},
-  {"nav.bookmark.remove", "Remove a bookmark"},
-  {"nav.bookmark.set", "Set a bookmark"},
-  {"news.get_feed", "Get the daily news feed"},
-  {"news.mark_feed_read", "Mark news feed as read"},
-  {"news.read", "Get the daily news feed"},
-  {"notice.ack", "Acknowledge a notice"},
-  {"notice.list", "List notices"},
-  {"notes.list", "List notes"},
-  {"planet.create", "Create a planet"},
-  {"planet.deposit", "Deposit to a planet"},
-  {"planet.genesis", "Create a planet"},
-  {"planet.genesis_create", "Create a genesis planet"},
-  {"planet.harvest", "Harvest from a planet"},
-  {"planet.info", "Planet information"},
-  {"planet.land", "Land on a planet"},
-  {"planet.launch", "Launch from a planet"},
-  {"planet.list_mine", "List my planets"},
-  {"planet.rename", "Rename a planet"},
-  {"planet.transfer_ownership", "Transfer planet ownership"},
-  {"planet.withdraw", "Withdraw from a planet"},
-  {"player.get_avoids", "Get player avoids"},
-  {"player.get_bookmarks", "Get player bookmarks"},
-  {"player.get_notes", "Get player notes"},
-  {"player.get_prefs", "Get player preferences"},
-  {"player.get_settings", "Get player settings"},
-  {"player.get_subscriptions", "Get player subscriptions"},
-  {"player.get_topics", "Get player topics"},
-  {"player.list_online", "List online players"},
-  {"player.my_info", "Current player info"},
-  {"player.rankings", "Player rankings"},
-  {"player.set_avoids", "Set player avoids"},
-  {"player.set_bookmarks", "Set player bookmarks"},
-  {"player.set_prefs", "Set player preferences"},
-  {"player.set_settings", "Set player settings"},
-  {"player.set_subscriptions", "Set player subscriptions"},
-  {"player.set_topics", "Set player topics"},
-  {"player.set_trade_account_preference", "Set trade account preference"},
-  {"port.describe", "Describe a port"},
-  {"port.info", "Port prices/stock in sector"},
-  {"port.status", "Port status"},
-  {"port.rob", "Attempt to rob a port"},
-  {"research.projects.fund", "Fund a research project"},
-  {"research.projects.list", "List research projects"},
-  {"s2s.event.relay", "S2S event relay"},
-  {"s2s.planet.genesis", "S2S planet genesis"},
-  {"s2s.planet.transfer", "S2S planet transfer"},
-  {"s2s.player.migrate", "S2S player migrate"},
-  {"s2s.port.restock", "S2S port restock"},
-  {"s2s.replication.heartbeat", "S2S replication heartbeat"},
-  {"sector.info", "Describe current sector"},
-  {"sector.scan", "Scan a sector"},
-  {"sector.scan.density", "Scan sector density"},
-  {"sector.search", "Search a sector"},
-  {"sector.set_beacon", "Set or clear sector beacon"},
-  {"session.disconnect", "Disconnect"},
-  {"session.hello", "Handshake / hello"},
-  {"session.ping", "Ping"},
-  {"ship.claim", "Claim a ship"},
-  {"ship.info", "Ship information"},
-  {"ship.inspect", "Inspect a ship"},
-  {"ship.jettison", "Jettison cargo"},
-  {"ship.repair", "Repair a ship"},
-  {"ship.rename", "Rename a ship"},
-  {"ship.reregister", "Re-register a ship"},
-  {"ship.self_destruct", "Self-destruct a ship"},
-  {"ship.status", "Ship status"},
-  {"ship.transfer_cargo", "Transfer cargo"},
-  {"ship.upgrade", "Upgrade a ship"},
-  {"shipyard.list", "List available ship hulls"},
-  {"shipyard.upgrade", "Upgrade to a new ship hull"},
-  {"tavern.deadpool.place_bet", "Place a bet on a player's destruction"},
-  {"tavern.dice.play", "Play bar dice"},
-  {"tavern.graffiti.post", "Post a message on the graffiti wall"},
-  {"tavern.highstakes.play", "Play at the high-stakes table"},
-  {"tavern.loan.pay", "Repay a loan from the loan shark"},
-  {"tavern.loan.take", "Take a loan from the loan shark"},
-  {"tavern.lottery.buy_ticket", "Buy a lottery ticket"},
-  {"tavern.lottery.status", "Check lottery status"},
-  {"tavern.raffle.buy_ticket", "Buy a raffle ticket"},
-  {"tavern.round.buy", "Buy a round for the tavern"},
-  {"tavern.rumour.get_hint", "Get a hint from the rumour mill"},
-  {"tavern.trader.buy_password",
-   "Buy an underground password from the grimy trader"},
-  {"tavern.barcharts.get_prices_summary",
-   "Get a summary of commodity prices"},
-  {"stock.exchange.list_stocks", "List stocks on the exchange"},
-  {"stock.exchange.orders.cancel", "Cancel a stock order"},
-  {"stock.exchange.orders.create", "Create a stock order"},
-  {"stock.portfolio.list", "List stock portfolio"},
-  {"subscribe.add", "Add a subscription"},
-  {"subscribe.catalog", "Subscription catalog"},
-  {"subscribe.list", "List subscriptions"},
-  {"subscribe.remove", "Remove a subscription"},
-  {"sys.notice.create", "Sysop command to create a notice"},
-  {"sys.raw_sql_exec", "Sysop command to execute raw SQL"},
-  {"sys.test_news_cron", "Sysop command to test news cron"},
-  {"system.capabilities", "Feature flags, schemas, counts"},
-  {"system.cmd_list", "Flat list of all commands"},
-  {"system.describe_schema", "Describe commands in a schema"},
-  {"system.disconnect", "Disconnect"},
-  {"system.hello", "Handshake / hello"},
-  {"system.schema_list", "List all schema namespaces"},
-  {"trade.accept", "Accept a private trade offer"},
-  {"trade.buy", "Buy commodity from port"},
-  {"trade.cancel", "Cancel a pending trade offer"},
-  {"trade.history", "View recent trade transactions"},
-  {"trade.jettison", "Dump cargo into space (Optional)"},
-  {"trade.offer", "Create a private player-to-player trade offer"},
-  {"trade.port_info", "Port prices/stock in sector"},
-  {"trade.quote", "Get a quote for a trade action (Optional)"},
-  {"trade.sell", "Sell commodity to port"},
-};
 
-
-// Weak fallback: satisfies server_envelope.o at link time.
-// If server_loop.c defines a strong version, it will override this.
-__attribute__((weak))
-
-
-void
-loop_get_supported_commands (const cmd_desc_t **out_tbl, size_t *out_n)
-{
-  if (out_tbl)
-    {
-      *out_tbl = k_supported_cmds_fallback;
-    }
-  if (out_n)
-    {
-      *out_n =
-        sizeof (k_supported_cmds_fallback) /
-        sizeof (k_supported_cmds_fallback[0]);
-    }
-}
-
+/* Missing declarations for commands found in .c files but not headers */
+extern int cmd_bounty_list (client_ctx_t *ctx, json_t *root);
+extern int cmd_bounty_post_federation (client_ctx_t *ctx, json_t *root);
+extern int cmd_bounty_post_hitlist (client_ctx_t *ctx, json_t *root);
+extern int cmd_player_set_trade_account_preference (client_ctx_t *ctx, json_t *root);
+extern int cmd_move_transwarp (client_ctx_t *ctx, json_t *root);
 
 static inline uint64_t
 monotonic_millis (void)
@@ -324,9 +101,340 @@ monotonic_millis (void)
   return (uint64_t) ts.tv_sec * 1000ULL + (uint64_t) ts.tv_nsec / 1000000ULL;
 }
 
+/* --------------------------------------------------------------------------
+   Command Registry & Dispatch
+   -------------------------------------------------------------------------- */
 
-/* ===== Client registry for broadcasts  ===== */
+typedef int (*command_handler_fn)(client_ctx_t *ctx, json_t *root);
 
+#define CMD_FLAG_DEBUG_ONLY 1
+
+typedef struct {
+    const char *name;
+    command_handler_fn handler;
+    const char *summary;
+    int flags;
+} command_entry_t;
+
+/* Wrappers for void or mismatched handlers */
+static int w_nav_avoid_add(client_ctx_t *ctx, json_t *root) { cmd_nav_avoid_add(ctx, root); return 0; }
+static int w_nav_avoid_remove(client_ctx_t *ctx, json_t *root) { cmd_nav_avoid_remove(ctx, root); return 0; }
+static int w_nav_avoid_list(client_ctx_t *ctx, json_t *root) { cmd_nav_avoid_list(ctx, root); return 0; }
+static int w_sector_scan(client_ctx_t *ctx, json_t *root) { cmd_sector_scan(ctx, root); return 0; }
+static int w_sector_scan_density(client_ctx_t *ctx, json_t *root) { cmd_sector_scan_density((void*)ctx, root); return 0; }
+
+/* Special logic for auth.login to push notices */
+static int w_auth_login(client_ctx_t *ctx, json_t *root) {
+    int rc = cmd_auth_login(ctx, root);
+    if (rc) {
+        /* Matches original process_message logic:
+           if (rc) { push_unseen_notices_for_player (ctx, ctx->player_id); }
+           (Logic seems questionable if rc=0 is success, but preserving as-is) */
+        push_unseen_notices_for_player (ctx, ctx->player_id);
+    }
+    return rc;
+}
+
+static const command_entry_t k_command_registry[] = {
+    /* Admin */
+    {"admin.notice", cmd_admin_notice, "Admin notice"},
+    {"admin.shutdown_warning", cmd_admin_shutdown_warning, "Admin shutdown warning"},
+    
+    /* Auth */
+    {"auth.login", w_auth_login, "Authenticate"},
+    {"login", w_auth_login, "Authenticate"},
+    {"auth.logout", cmd_auth_logout, "Log out"},
+    {"auth.mfa.totp.verify", cmd_auth_mfa_totp_verify, "Second-factor code"},
+    {"auth.register", cmd_auth_register, "Create a new player"},
+    {"auth.refresh", cmd_auth_refresh, "Refresh session token"},
+
+    /* Bank */
+    {"bank.balance", cmd_bank_balance, "Get player bank balance"},
+    {"bank.deposit", cmd_bank_deposit, "Deposit credits to bank"},
+    {"bank.history", cmd_bank_history, "Get bank history"},
+    {"bank.leaderboard", cmd_bank_leaderboard, "Get bank leaderboard"},
+    {"bank.transfer", cmd_bank_transfer, "Transfer credits between players"},
+    {"bank.withdraw", cmd_bank_withdraw, "Withdraw credits from bank"},
+
+    /* Bounty */
+    {"bounty.list", cmd_bounty_list, "List bounties"},
+    {"bounty.post_federation", cmd_bounty_post_federation, "Post a Federation bounty"},
+    {"bounty.post_hitlist", cmd_bounty_post_hitlist, "Post a Hit List contract"},
+
+    /* Bulk */
+    {"bulk.execute", cmd_bulk_execute, "Execute a bulk command"},
+
+    /* Chat */
+    {"chat.broadcast", cmd_chat_broadcast, "Broadcast a chat message"},
+    {"chat.history", cmd_chat_history, "Chat history"},
+    {"chat.send", cmd_chat_send, "Send a chat message"},
+
+    /* Citadel */
+    {"citadel.build", cmd_citadel_build, "Build a citadel"},
+    {"citadel.upgrade", cmd_citadel_upgrade, "Upgrade a citadel"},
+
+    /* Combat */
+    {"combat.attack", cmd_combat_attack, "Attack a target"},
+    {"combat.attack_planet", cmd_combat_attack_planet, "Attack a planet"},
+    {"combat.deploy_fighters", cmd_combat_deploy_fighters, "Deploy fighters"},
+    {"combat.deploy_mines", cmd_combat_deploy_mines, "Deploy mines"},
+    {"combat.lay_mines", cmd_combat_lay_mines, "Lay mines"},
+    {"combat.status", cmd_combat_status, "Combat status"},
+    {"combat.sweep_mines", cmd_combat_sweep_mines, "Sweep for mines"},
+    {"deploy.fighters.list", cmd_deploy_fighters_list, "List deployed fighters"},
+    {"deploy.mines.list", cmd_deploy_mines_list, "List deployed mines"},
+    {"fighters.recall", cmd_fighters_recall, "Recall deployed fighters"},
+    {"mines.recall", cmd_mines_recall, "Recall deployed mines"},
+
+    /* Corporation */
+    {"corp.balance", cmd_corp_balance, "Get corporation balance"},
+    {"corp.create", cmd_corp_create, "Create a new corporation"},
+    {"corp.deposit", cmd_corp_deposit, "Deposit to corporation"},
+    {"corp.dissolve", cmd_corp_dissolve, "Dissolve a corporation"},
+    {"corp.invite", cmd_corp_invite, "Invite player to corporation"},
+    {"corp.join", cmd_corp_join, "Join a corporation via invite"},
+    {"corp.kick", cmd_corp_kick, "Kick member from corporation"},
+    {"corp.leave", cmd_corp_leave, "Leave current corporation"},
+    {"corp.list", cmd_corp_list, "List all corporations"},
+    {"corp.roster", cmd_corp_roster, "List corporation members"},
+    {"corp.statement", cmd_corp_statement, "Get corporation statement"},
+    {"corp.status", cmd_corp_status, "Get corporation status"},
+    {"corp.transfer_ceo", cmd_corp_transfer_ceo, "Transfer corporation CEO role"},
+    {"corp.withdraw", cmd_corp_withdraw, "Withdraw from corporation"},
+
+    /* Dock */
+    {"dock.status", cmd_dock_status, "Check/set player docked status at current port"},
+
+    /* Hardware */
+    {"hardware.buy", cmd_hardware_buy, "Buy ship hardware"},
+    {"hardware.list", cmd_hardware_list, "List available ship hardware"},
+
+    /* Mail */
+    {"mail.delete", cmd_mail_delete, "Delete mail"},
+    {"mail.inbox", cmd_mail_inbox, "Mail inbox"},
+    {"mail.read", cmd_mail_read, "Read mail"},
+    {"mail.send", cmd_mail_send, "Send mail"},
+
+    /* Move */
+    {"move.autopilot.start", cmd_move_autopilot_start, "Start autopilot"},
+    {"move.autopilot.status", cmd_move_autopilot_status, "Autopilot status"},
+    {"move.autopilot.stop", cmd_move_autopilot_stop, "Stop autopilot"},
+    {"move.describe_sector", cmd_move_describe_sector, "Describe a sector"},
+    {"move.pathfind", cmd_move_pathfind, "Find path between sectors"},
+    {"move.scan", cmd_move_scan, "Scan adjacent sectors"},
+    {"move.transwarp", cmd_move_transwarp, "Transwarp to a sector"},
+    {"move.warp", cmd_move_warp, "Warp to sector"},
+
+    /* Nav / Bookmarks / Avoids */
+    {"nav.avoid.add", w_nav_avoid_add, "Add a sector to the avoid list"},
+    {"nav.avoid.list", w_nav_avoid_list, "List avoided sectors"},
+    {"nav.avoid.remove", w_nav_avoid_remove, "Remove a sector from the avoid list"},
+    {"nav.avoid.set", cmd_player_set_avoids, "Set a sector to the avoid list"},
+    {"nav.bookmark.add", cmd_player_set_bookmarks, "Add a bookmark"},
+    {"nav.bookmark.list", cmd_player_get_bookmarks, "List bookmarks"},
+    {"nav.bookmark.remove", cmd_player_set_bookmarks, "Remove a bookmark"},
+    {"nav.bookmark.set", cmd_player_set_bookmarks, "Set a bookmark"},
+
+    /* News */
+    {"news.get_feed", cmd_news_get_feed, "Get the daily news feed"},
+    {"news.mark_feed_read", cmd_news_mark_feed_read, "Mark news feed as read"},
+    {"news.read", cmd_news_get_feed, "Get the daily news feed"},
+
+    /* Notes */
+    {"notes.list", cmd_player_get_notes, "List notes"},
+
+    /* Notice */
+    {"notice.ack", cmd_notice_ack, "Acknowledge a notice"},
+    {"notice.list", cmd_notice_list, "List notices"},
+
+    /* Planet */
+    {"planet.create", cmd_planet_genesis, "Create a planet"},
+    {"planet.deposit", cmd_planet_deposit, "Deposit to a planet"},
+    {"planet.genesis", cmd_planet_genesis, "Create a planet"},
+    {"planet.genesis_create", cmd_planet_genesis_create, "Create a genesis planet"},
+    {"planet.harvest", cmd_planet_harvest, "Harvest from a planet"},
+    {"planet.info", cmd_planet_info, "Planet information"},
+    {"planet.land", cmd_planet_land, "Land on a planet"},
+    {"planet.launch", cmd_planet_launch, "Launch from a planet"},
+    {"planet.market.buy_order", cmd_planet_market_buy_order, "Create planet market buy order"},
+    {"planet.market.sell", cmd_planet_market_sell, "Sell to planet market"},
+    {"planet.rename", cmd_planet_rename, "Rename a planet"},
+    {"planet.transfer_ownership", cmd_planet_transfer_ownership, "Transfer planet ownership"},
+    {"planet.withdraw", cmd_planet_withdraw, "Withdraw from a planet"},
+
+    /* Player */
+    {"player.get_avoids", cmd_player_get_avoids, "Get player avoids"},
+    {"player.get_bookmarks", cmd_player_get_bookmarks, "Get player bookmarks"},
+    {"player.get_notes", cmd_player_get_notes, "Get player notes"},
+    {"player.get_prefs", cmd_player_get_prefs, "Get player preferences"},
+    {"player.get_settings", cmd_player_get_settings, "Get player settings"},
+    {"player.get_subscriptions", cmd_player_get_topics, "Get player subscriptions"},
+    {"player.get_topics", cmd_player_get_topics, "Get player topics"},
+    {"player.list_online", cmd_player_list_online, "List online players"},
+    {"player.my_info", cmd_player_my_info, "Current player info"},
+    {"player.rankings", cmd_player_rankings, "Player rankings"},
+    {"player.set_avoids", cmd_player_set_avoids, "Set player avoids"},
+    {"player.set_bookmarks", cmd_player_set_bookmarks, "Set player bookmarks"},
+    {"player.set_prefs", cmd_player_set_prefs, "Set player preferences"},
+    {"player.set_settings", cmd_player_set_settings, "Set player settings"},
+    {"player.set_subscriptions", cmd_player_set_topics, "Set player subscriptions"},
+    {"player.set_topics", cmd_player_set_topics, "Set player topics"},
+    {"player.set_trade_account_preference", cmd_player_set_trade_account_preference, "Set trade account preference"},
+
+    /* Port */
+    {"port.describe", cmd_trade_port_info, "Describe a port"},
+    {"port.info", cmd_trade_port_info, "Port prices/stock in sector"},
+    {"port.rob", cmd_port_rob, "Attempt to rob a port"},
+    {"port.status", cmd_trade_port_info, "Port status"},
+
+    /* S2S */
+    {"s2s.event.relay", cmd_s2s_event_relay, "S2S event relay"},
+    {"s2s.planet.genesis", cmd_s2s_planet_genesis, "S2S planet genesis"},
+    {"s2s.planet.transfer", cmd_s2s_planet_transfer, "S2S planet transfer"},
+    {"s2s.player.migrate", cmd_s2s_player_migrate, "S2S player migrate"},
+    {"s2s.port.restock", cmd_s2s_port_restock, "S2S port restock"},
+    {"s2s.replication.heartbeat", cmd_s2s_replication_heartbeat, "S2S replication heartbeat"},
+
+    /* Sector */
+    {"sector.info", cmd_move_describe_sector, "Describe current sector"},
+    {"sector.scan", w_sector_scan, "Scan a sector"},
+    {"sector.scan.density", w_sector_scan_density, "Scan sector density"},
+    {"sector.search", cmd_sector_search, "Search a sector"},
+    {"sector.set_beacon", cmd_sector_set_beacon, "Set or clear sector beacon"},
+
+    /* Session / System */
+    {"session.disconnect", cmd_session_disconnect, "Disconnect"},
+    {"session.hello", cmd_system_hello, "Handshake / hello"},
+    {"session.ping", cmd_system_hello, "Ping"},
+    {"player.ping", cmd_system_hello, "Ping"}, // Alias
+    {"sys.cluster.init", cmd_sys_cluster_init, "Cluster init", CMD_FLAG_DEBUG_ONLY},
+    {"sys.cluster.seed_illegal_goods", cmd_sys_cluster_seed_illegal_goods, "Seed illegal goods", CMD_FLAG_DEBUG_ONLY},
+    {"sys.econ.orders_summary", cmd_sys_econ_orders_summary, "Economy orders summary"},
+    {"sys.econ.planet_status", cmd_sys_econ_planet_status, "Economy planet status"},
+    {"sys.econ.port_status", cmd_sys_econ_port_status, "Economy port status"},
+    {"sys.notice.create", cmd_sys_notice_create, "Sysop command to create a notice"},
+    {"sys.npc.ferengi_tick_once", cmd_sys_npc_ferengi_tick_once, "Tick Ferengi"},
+    {"sys.raw_sql_exec", cmd_sys_raw_sql_exec, "Sysop command to execute raw SQL", CMD_FLAG_DEBUG_ONLY},
+    {"sys.test_news_cron", cmd_sys_test_news_cron, "Sysop command to test news cron"},
+    {"system.capabilities", cmd_system_capabilities, "Feature flags, schemas, counts"},
+    {"system.cmd_list", cmd_system_cmd_list, "Flat list of all commands"},
+    {"system.describe_schema", cmd_system_describe_schema, "Describe commands in a schema"},
+    {"system.disconnect", cmd_session_disconnect, "Disconnect"},
+    {"system.hello", cmd_system_hello, "Handshake / hello"},
+    {"system.schema_list", cmd_system_schema_list, "List all schema namespaces"},
+
+    /* Ship */
+    {"ship.claim", cmd_ship_claim, "Claim a ship"},
+    {"ship.info", cmd_ship_info_compat, "Ship information"},
+    {"ship.inspect", cmd_ship_inspect, "Inspect a ship"},
+    {"ship.jettison", cmd_trade_jettison, "Jettison cargo"},
+    {"ship.rename", cmd_ship_rename, "Rename a ship"},
+    {"ship.repair", cmd_ship_repair, "Repair a ship"},
+    {"ship.reregister", cmd_ship_rename, "Re-register a ship"},
+    {"ship.self_destruct", cmd_ship_self_destruct, "Self-destruct a ship"},
+    {"ship.status", cmd_ship_status, "Ship status"},
+    {"ship.transfer_cargo", cmd_ship_transfer_cargo, "Transfer cargo"},
+    {"ship.upgrade", cmd_ship_upgrade, "Upgrade a ship"},
+
+    /* Shipyard */
+    {"shipyard.list", cmd_shipyard_list, "List available ship hulls"},
+    {"shipyard.upgrade", cmd_shipyard_upgrade, "Upgrade to a new ship hull"},
+
+    /* Stock */
+    {"stock.buy", cmd_stock, "Buy shares in a corporation"},
+    {"stock.dividend.set", cmd_stock, "Declare a dividend"},
+    {"stock.exchange.list_stocks", cmd_stock, "List stocks on the exchange"},
+    {"stock.exchange.orders.cancel", cmd_stock, "Cancel a stock order"},
+    {"stock.exchange.orders.create", cmd_stock, "Create a stock order"},
+    {"stock.ipo.register", cmd_stock, "Register corporation for IPO"},
+    {"stock.portfolio.list", cmd_stock, "List stock portfolio"},
+
+    /* Subscribe */
+    {"subscribe.add", cmd_subscribe_add, "Add a subscription"},
+    {"subscribe.catalog", cmd_subscribe_catalog, "Subscription catalog"},
+    {"subscribe.list", cmd_subscribe_list, "List subscriptions"},
+    {"subscribe.remove", cmd_subscribe_remove, "Remove a subscription"},
+
+    /* Tavern */
+    {"tavern.barcharts.get_prices_summary", cmd_tavern_barcharts_get_prices_summary, "Get a summary of commodity prices"},
+    {"tavern.deadpool.place_bet", cmd_tavern_deadpool_place_bet, "Place a bet on a player's destruction"},
+    {"tavern.dice.play", cmd_tavern_dice_play, "Play bar dice"},
+    {"tavern.graffiti.post", cmd_tavern_graffiti_post, "Post a message on the graffiti wall"},
+    {"tavern.highstakes.play", cmd_tavern_highstakes_play, "Play at the high-stakes table"},
+    {"tavern.loan.pay", cmd_tavern_loan_pay, "Repay a loan from the loan shark"},
+    {"tavern.loan.take", cmd_tavern_loan_take, "Take a loan from the loan shark"},
+    {"tavern.lottery.buy_ticket", cmd_tavern_lottery_buy_ticket, "Buy a lottery ticket"},
+    {"tavern.lottery.status", cmd_tavern_lottery_status, "Check lottery status"},
+    {"tavern.raffle.buy_ticket", cmd_tavern_raffle_buy_ticket, "Buy a raffle ticket"},
+    {"tavern.round.buy", cmd_tavern_round_buy, "Buy a round for the tavern"},
+    {"tavern.rumour.get_hint", cmd_tavern_rumour_get_hint, "Get a hint from the rumour mill"},
+    {"tavern.trader.buy_password", cmd_tavern_trader_buy_password, "Buy an underground password from the grimy trader"},
+
+    /* Trade */
+    {"trade.accept", cmd_trade_accept, "Accept a private trade offer"},
+    {"trade.buy", cmd_trade_buy, "Buy commodity from port"},
+    {"trade.cancel", cmd_trade_cancel, "Cancel a pending trade offer"},
+    {"trade.history", cmd_trade_history, "View recent trade transactions"},
+    {"trade.jettison", cmd_trade_jettison, "Dump cargo into space"},
+    {"trade.offer", cmd_trade_offer, "Create a private player-to-player trade offer"},
+    {"trade.port_info", cmd_trade_port_info, "Port prices/stock in sector"},
+    {"trade.quote", cmd_trade_quote, "Get a quote for a trade action"},
+    {"trade.sell", cmd_trade_sell, "Sell commodity to port"},
+
+    {NULL, NULL, NULL} /* Sentinel */
+};
+
+/* Provide authoritative list to others */
+void
+loop_get_supported_commands (const cmd_desc_t **out_tbl, size_t *out_n)
+{
+    static cmd_desc_t *s_descs = NULL;
+    static size_t s_count = 0;
+    
+    if (!s_descs) {
+        /* Count entries */
+        size_t n = 0;
+        size_t count = 0;
+        while (k_command_registry[n].name) {
+#ifdef BUILD_PRODUCTION
+            if (k_command_registry[n].flags & CMD_FLAG_DEBUG_ONLY) {
+                n++;
+                continue;
+            }
+#endif
+            n++;
+            count++;
+        }
+        
+        /* Allocate static array once (or use a large static buffer if malloc disallowed) */
+        /* Since we are in phase G0, we can use malloc/calloc once. */
+        s_descs = calloc(count, sizeof(cmd_desc_t));
+        if (s_descs) {
+            size_t j = 0;
+            size_t i = 0;
+            while (k_command_registry[i].name) {
+#ifdef BUILD_PRODUCTION
+                if (k_command_registry[i].flags & CMD_FLAG_DEBUG_ONLY) {
+                    i++;
+                    continue;
+                }
+#endif
+                s_descs[j].name = k_command_registry[i].name;
+                s_descs[j].summary = k_command_registry[i].summary;
+                j++;
+                i++;
+            }
+            s_count = count;
+        }
+    }
+    
+    if (out_tbl) *out_tbl = s_descs;
+    if (out_n) *out_n = s_count;
+}
+
+/* --------------------------------------------------------------------------
+   Broadcast / Registry
+   -------------------------------------------------------------------------- */
 
 /* Broadcast a system.notice to everyone (uses subscription infra).
    Data is BORROWED here; we incref for the call. */
@@ -347,7 +455,7 @@ server_broadcast_to_all_online (json_t *data)
    server_broadcast_to_sector (int sector_id, const char *event_type,
                             json_t *data)
    {
-   comm_publish_sector_event (sector_id, event_type, data);	// steals 'data'
+   comm_publish_sector_event (sector_id, event_type, data); // steals 'data'
    }
  */
 static int
@@ -585,28 +693,6 @@ make_listen_socket (uint16_t port)
 }
 
 
-/*
-   static int
-   send_all (int fd, const void *buf, size_t n)
-   {
-   const char *p = (const char *) buf;
-   size_t off = 0;
-   while (off < n)
-    {
-      ssize_t w = write (fd, p + off, n - off);
-      if (w < 0)
-        {
-          if (errno == EINTR)
-            continue;
-          return -1;
-        }
-      off += (size_t) w;
-    }
-   return 0;
-   }
- */
-
-
 /* Roll the window and increment count for this response */
 void
 rl_tick (client_ctx_t *ctx)
@@ -765,719 +851,22 @@ process_message (client_ctx_t *ctx, json_t *root)
   ctx->rl_window_start = time (NULL);
   ctx->rl_count = 0;
   const char *c = json_string_value (cmd);
-  int rc = 0;
+  
+  /* Dispatch via Registry */
+  for (int i = 0; k_command_registry[i].name != NULL; i++) {
+      if (strcasecmp(c, k_command_registry[i].name) == 0) {
+#ifdef BUILD_PRODUCTION
+          if (k_command_registry[i].flags & CMD_FLAG_DEBUG_ONLY) {
+              break; /* Treat as unknown/disabled */
+          }
+#endif
+          int rc = k_command_registry[i].handler(ctx, root);
+          (void)rc; /* return value ignored in loop logic mostly, wrapper handles side-effects */
+          return;
+      }
+  }
 
-
-/* ---------- AUTH / USER ---------- */
-  if (!strcasecmp (c, "login") || !strcasecmp (c, "auth.login"))
-    {
-      rc = cmd_auth_login (ctx, root);
-      if (rc)
-        {
-          push_unseen_notices_for_player (ctx, ctx->player_id);
-        }
-    }
-  else if (!strcasecmp (c, "auth.register"))
-    {
-      rc = cmd_auth_register (ctx, root);
-    }
-  else if (!strcasecmp (c, "auth.logout"))
-    {
-      rc = cmd_auth_logout (ctx, root);
-    }
-  // use auth.register
-  /* else if (!strcmp (c, "user.create") || !strcmp (c, "new.user")) */
-  /*   { */
-  /*     rc = cmd_user_create (ctx, root); */
-  /*   } */
-  else if (!strcasecmp (c, "auth.refresh"))
-    {
-      rc = cmd_auth_refresh (ctx, root);        /* NIY stub */
-    }
-  else if (!strcasecmp (c, "auth.mfa.totp.verify"))
-    {
-      rc = cmd_auth_mfa_totp_verify (ctx, root);        /* NIY stub */
-    }
-/* ---------- SYSTEM / SESSION ---------- */
-  else if (!strcasecmp (c, "system.capabilities"))
-    {
-      rc = cmd_system_capabilities (ctx, root);
-    }
-  else if (!strcasecmp (c, "system.describe_schema"))
-    {
-      rc = cmd_system_describe_schema (ctx, root);
-    }
-  else if ((!strcasecmp (c, "session.ping"))
-           || (!strcasecmp (c, "player.ping"))
-           || (!strcasecmp (c, "session.hello"))
-           || (!strcasecmp (c, "system.hello")))
-    {
-      rc = cmd_system_hello (ctx, root);
-    }
-  else if (!strcasecmp (c, "session.disconnect")
-           || !strcasecmp (c, "system.disconnect"))
-    {
-      rc = cmd_session_disconnect (ctx, root);  /* NIY stub */
-    }
-  else if (streq (cmd, "system.cmd_list"))
-    {
-      cmd_system_cmd_list (ctx, root);
-    }
-  else if (streq (cmd, "system.describe_schema"))
-    {
-      cmd_system_describe_schema (ctx, root);
-    }
-  // (If not already present:)
-  else if (streq (cmd, "system.schema_list"))
-    {
-      cmd_system_schema_list (ctx, root);
-    }
-  else if (streq (cmd, "system.capabilities"))
-    {
-      cmd_system_capabilities (ctx, root);
-    }
-  else if (streq (cmd, "sys.test_news_cron"))
-    {
-      rc = cmd_sys_test_news_cron (ctx, root);
-    }
-  else if (streq (cmd, "sys.raw_sql_exec"))
-    {
-      rc = cmd_sys_raw_sql_exec (ctx, root);
-    }
-  else if (streq (cmd, "sys.cluster.init")) // NEW
-    {
-      rc = cmd_sys_cluster_init (ctx, root);
-    }
-  else if (streq (cmd, "sys.cluster.seed_illegal_goods")) // NEW
-    {
-      rc = cmd_sys_cluster_seed_illegal_goods (ctx, root);
-    }
-  else if (streq (cmd, "sys.econ.port_status")) // NEW
-    {
-      rc = cmd_sys_econ_port_status (ctx, root);
-    }
-  else if (streq (cmd, "sys.econ.orders_summary")) // NEW
-    {
-      rc = cmd_sys_econ_orders_summary (ctx, root);
-    }
-  else if (streq (cmd, "sys.econ.planet_status")) // NEW
-    {
-      rc = cmd_sys_econ_planet_status (ctx, root);
-    }
-  else if (streq (cmd, "sys.npc.ferengi_tick_once"))
-    {
-      rc = cmd_sys_npc_ferengi_tick_once (ctx, root);
-    }
-/* ---------- PLAYER ---------- */
-  else if (streq (cmd, "player.get_settings"))
-    {
-      rc = cmd_player_get_settings (ctx, root);
-    }
-  else if (streq (cmd, "bank.balance"))
-    {
-      rc = cmd_bank_balance (ctx, root);
-    }
-  else if (streq (cmd, "bank.deposit"))
-    {
-      rc = cmd_bank_deposit (ctx, root);
-    }
-  else if (streq (cmd, "bank.transfer"))
-    {
-      rc = cmd_bank_transfer (ctx, root);
-    }
-  else if (streq (cmd, "bank.withdraw"))
-    {
-      rc = cmd_bank_withdraw (ctx, root);
-    }
-  else if (streq (cmd, "bank.history"))
-    {
-      rc = cmd_bank_history (ctx, root);
-    }
-  else if (streq (cmd, "bank.leaderboard"))
-    {
-      rc = cmd_bank_leaderboard (ctx, root);
-    }
-  else if (streq (cmd, "bounty.list"))
-    {
-      rc = cmd_bounty_list (ctx, root);
-    }
-  else if (streq (cmd, "bounty.post_federation"))
-    {
-      rc = cmd_bounty_post_federation (ctx, root);
-    }
-  else if (streq (cmd, "bounty.post_hitlist"))
-    {
-      rc = cmd_bounty_post_hitlist (ctx, root);
-    }
-  else if (streq (cmd, "player.my_info"))
-    {
-      cmd_player_my_info (ctx, root);
-    }
-  else if (streq (cmd, "player.list_online"))
-    {
-      cmd_player_list_online (ctx, root);
-    }
-  else if (streq (cmd, "player.get_settings"))
-    {
-      cmd_player_get_settings (ctx, root);
-    }
-  else if (streq (cmd, "player.set_settings"))
-    {
-      cmd_player_set_settings (ctx, root);
-    }
-  else if (streq (cmd, "player.get_prefs"))
-    {
-      cmd_player_get_prefs (ctx, root);
-    }
-  else if (streq (cmd, "player.set_prefs"))
-    {
-      cmd_player_set_prefs (ctx, root);
-    }
-  else if (streq (cmd, "player.get_topics") ||
-           streq (cmd, "player.get_subscriptions"))
-    {
-      cmd_player_get_topics (ctx, root);
-    }
-  else if (streq (cmd, "player.set_topics") ||
-           streq (cmd, "player.set_subscriptions"))
-    {
-      cmd_player_set_topics (ctx, root);
-    }
-  else if (streq (cmd, "player.get_bookmarks") ||
-           streq (cmd, "nav.bookmark.list"))
-    {
-      cmd_player_get_bookmarks (ctx, root);
-    }
-  else if (streq (cmd, "player.set_bookmarks") ||
-           streq (cmd, "nav.bookmark.set") ||
-           streq (cmd, "nav.bookmark.add") ||
-           streq (cmd, "nav.bookmark.remove"))
-    {
-      cmd_player_set_bookmarks (ctx, root);
-    }
-  else if (streq (cmd, "nav.avoid.add"))
-    {
-      cmd_nav_avoid_add (ctx, root);
-    }
-  else if (streq (cmd, "nav.avoid.remove"))
-    {
-      cmd_nav_avoid_remove (ctx, root);
-    }
-  else if (streq (cmd, "nav.avoid.list"))
-    {
-      cmd_nav_avoid_list (ctx, root);
-    }
-  else if (streq (cmd, "player.get_avoids") || streq (cmd, "nav.avoid.list"))
-    {
-      cmd_player_get_avoids (ctx, root);
-    }
-  else if (streq (cmd, "player.set_avoids") ||
-           streq (cmd, "nav.avoid.set") || streq (cmd, "nav.avoid.add"))
-    {
-      cmd_player_set_avoids (ctx, root);
-    }
-  else if (streq (cmd, "player.get_notes") || streq (cmd, "notes.list"))
-    {
-      cmd_player_get_notes (ctx, root);
-    }
-  else if (streq (cmd, "player.get_settings"))
-    {
-      cmd_player_get_settings (ctx, root);
-    }
-  else if (streq (cmd, "player.set_settings"))
-    {
-      cmd_player_set_settings (ctx, root);
-    }
-  else if (streq (cmd, "player.get_prefs"))
-    {
-      cmd_player_get_prefs (ctx, root);
-    }
-  else if (streq (cmd, "player.set_prefs"))
-    {
-      cmd_player_set_prefs (ctx, root);
-    }
-  else if (streq (cmd, "player.set_trade_account_preference"))
-    {
-      rc = cmd_player_set_trade_account_preference (ctx, root);
-    }
-/* ---------- CORPORATION & STOCK ---------- */
-  else if (!strcasecmp (c, "corp.create"))
-    {
-      rc = cmd_corp_create (ctx, root);
-    }
-  else if (!strcasecmp (c, "corp.dissolve"))
-    {
-      rc = cmd_corp_dissolve (ctx, root);
-    }
-  else if (!strcasecmp (c, "corp.invite"))
-    {
-      rc = cmd_corp_invite (ctx, root);
-    }
-  else if (!strcasecmp (c, "corp.kick"))
-    {
-      rc = cmd_corp_kick (ctx, root);
-    }
-  else if (!strcasecmp (c, "corp.join"))
-    {
-      rc = cmd_corp_join (ctx, root);
-    }
-  else if (!strcasecmp (c, "corp.leave"))
-    {
-      rc = cmd_corp_leave (ctx, root);
-    }
-  else if (!strcasecmp (c, "corp.list"))
-    {
-      rc = cmd_corp_list (ctx, root);
-    }
-  else if (!strcasecmp (c, "corp.roster"))
-    {
-      rc = cmd_corp_roster (ctx, root);
-    }
-  else if (!strcasecmp (c, "corp.balance"))
-    {
-      rc = cmd_corp_balance (ctx, root);
-    }
-  else if (!strcasecmp (c, "corp.deposit"))
-    {
-      rc = cmd_corp_deposit (ctx, root);
-    }
-  else if (!strcasecmp (c, "corp.withdraw"))
-    {
-      rc = cmd_corp_withdraw (ctx, root);
-    }
-  else if (!strcasecmp (c, "corp.statement"))
-    {
-      rc = cmd_corp_statement (ctx, root);
-    }
-  else if (!strcasecmp (c, "corp.status"))
-    {
-      rc = cmd_corp_status (ctx, root);
-    }
-  else if (strncasecmp (c, "stock.", 6) == 0)
-    {
-      rc = cmd_stock (ctx, root);
-    }
-  else if (!strcasecmp (c, "corp.transfer_ceo"))
-    {
-      rc = cmd_corp_transfer_ceo (ctx, root);
-    }
-  /* ---------- HARDWARE ---------- */
-  else if (!strcasecmp (c, "hardware.list"))
-    {
-      rc = cmd_hardware_list (ctx, root);
-    }
-  else if (!strcasecmp (c, "hardware.buy"))
-    {
-      rc = cmd_hardware_buy (ctx, root);
-    }
-  /* ---------- SHIPYARD ---------- */
-  else if (!strcasecmp (c, "shipyard.list"))
-    {
-      rc = cmd_shipyard_list (ctx, root);
-    }
-  else if (!strcasecmp (c, "shipyard.upgrade"))
-    {
-      rc = cmd_shipyard_upgrade (ctx, root);
-    }
-  /* ---------- TAVERN ---------- */
-  else if (!strcasecmp (c, "tavern.lottery.buy_ticket"))
-    {
-      rc = cmd_tavern_lottery_buy_ticket (ctx, root);
-    }
-  else if (!strcasecmp (c, "tavern.lottery.status"))
-    {
-      rc = cmd_tavern_lottery_status (ctx, root);
-    }
-  else if (!strcasecmp (c, "tavern.deadpool.place_bet"))
-    {
-      rc = cmd_tavern_deadpool_place_bet (ctx, root);
-    }
-  else if (!strcasecmp (c, "tavern.dice.play"))
-    {
-      rc = cmd_tavern_dice_play (ctx, root);
-    }
-  else if (!strcasecmp (c, "tavern.highstakes.play"))
-    {
-      rc = cmd_tavern_highstakes_play (ctx, root);
-    }
-  else if (!strcasecmp (c, "tavern.raffle.buy_ticket"))
-    {
-      rc = cmd_tavern_raffle_buy_ticket (ctx, root);
-    }
-  else if (!strcasecmp (c, "tavern.trader.buy_password"))
-    {
-      rc = cmd_tavern_trader_buy_password (ctx, root);
-    }
-  else if (!strcasecmp (c, "tavern.graffiti.post"))
-    {
-      rc = cmd_tavern_graffiti_post (ctx, root);
-    }
-  else if (!strcasecmp (c, "tavern.round.buy"))
-    {
-      rc = cmd_tavern_round_buy (ctx, root);
-    }
-  else if (!strcasecmp (c, "tavern.loan.take"))
-    {
-      rc = cmd_tavern_loan_take (ctx, root);
-    }
-  else if (!strcasecmp (c, "tavern.loan.pay"))
-    {
-      rc = cmd_tavern_loan_pay (ctx, root);
-    }
-  else if (!strcasecmp (c, "tavern.rumour.get_hint"))
-    {
-      rc = cmd_tavern_rumour_get_hint (ctx, root);
-    }
-  else if (!strcasecmp (c, "tavern.barcharts.get_prices_summary"))
-    {
-      rc = cmd_tavern_barcharts_get_prices_summary (ctx, root);
-    }
-  /* ---------- SHIP ---------- */
-  else if (!strcasecmp (c, "ship.inspect"))
-    {
-      rc = cmd_ship_inspect (ctx, root);
-    }
-  else if (!strcasecmp (c, "ship.rename")
-           || !strcasecmp (c, "ship.reregister"))
-    {
-      rc = cmd_ship_rename (ctx, root);
-    }
-  else if (!strcasecmp (c, "ship.claim"))
-    {
-      rc = cmd_ship_claim (ctx, root);
-    }
-  else if (!strcasecmp (c, "ship.status"))
-    {
-      rc = cmd_ship_status (ctx, root);
-    }
-  else if (!strcasecmp (c, "ship.info"))
-    {
-      rc = cmd_ship_info_compat (ctx, root);    /* legacy alias */
-    }
-  else if (!strcasecmp (c, "ship.transfer_cargo"))
-    {
-      rc = cmd_ship_transfer_cargo (ctx, root); /* NIY stub */
-    }
-  else if (!strcasecmp (c, "ship.upgrade"))
-    {
-      rc = cmd_ship_upgrade (ctx, root);        /* NIY stub */
-    }
-  else if (!strcasecmp (c, "ship.repair"))
-    {
-      rc = cmd_ship_repair (ctx, root); /* NIY stub */
-    }
-  else if (!strcasecmp (c, "ship.self_destruct"))
-    {
-      rc = cmd_ship_self_destruct (ctx, root);  /* NIY stub */
-    }
-/* ---------- PORTS / TRADE ---------- */
-  else if (!strcasecmp (c, "port.info") || !strcasecmp (c, "port.status")
-           || !strcasecmp (c, "trade.port_info")
-           || !strcasecmp (c, "port.describe"))
-    {
-      rc = cmd_trade_port_info (ctx, root);
-    }
-  else if (!strcasecmp (c, "port.rob"))
-    {
-      rc = cmd_port_rob (ctx, root);
-    }
-  else if (!strcasecmp (c, "trade.buy"))
-    {
-      rc = cmd_trade_buy (ctx, root);
-    }
-  else if (!strcasecmp (c, "trade.sell"))
-    {
-      rc = cmd_trade_sell (ctx, root);  /* NIY stub (or real) */
-    }
-  else if (!strcasecmp (c, "trade.quote"))
-    {
-      rc = cmd_trade_quote (ctx, root); /* NIY stub */
-    }
-  else if (!strcasecmp (c, "trade.jettison"))
-    {
-      rc = cmd_trade_jettison (ctx, root);      /* NIY stub */
-    }
-  else if (!strcasecmp (c, "trade.offer"))
-    {
-      rc = cmd_trade_offer (ctx, root); /* NIY stub */
-    }
-  else if (!strcasecmp (c, "trade.accept"))
-    {
-      rc = cmd_trade_accept (ctx, root);        /* NIY stub */
-    }
-  else if (!strcasecmp (c, "trade.cancel"))
-    {
-      rc = cmd_trade_cancel (ctx, root);        /* NIY stub */
-    }
-  else if (!strcasecmp (c, "trade.history"))
-    {
-      rc = cmd_trade_history (ctx, root);
-    }
-  else if (!strcasecmp (c, "dock.status"))
-    {
-      rc = cmd_dock_status (ctx, root);
-    }
-/* ---------- UNIVERSE / SECTOR / MOVE ---------- */
-  else if (!strcasecmp (c, "move.describe_sector")
-           || !strcasecmp (c, "sector.info"))
-    {
-      rc = cmd_move_describe_sector (ctx, root);        /* NIY or real */
-    }
-  else if (!strcasecmp (c, "move.scan"))
-    {
-      cmd_move_scan (ctx, root);        /* NIY or real */
-    }
-  else if (!strcasecmp (c, "move.warp"))
-    {
-      rc = cmd_move_warp (ctx, root);   /* NIY or real */
-    }
-  else if (!strcasecmp (c, "move.transwarp"))
-    {
-      rc = cmd_move_transwarp (ctx, root);
-    }
-  else if (!strcasecmp (c, "move.pathfind"))
-    {
-      rc = cmd_move_pathfind (ctx, root);       /* NIY stub */
-    }
-  else if (!strcasecmp (c, "move.autopilot.start"))
-    {
-      rc = cmd_move_autopilot_start (ctx, root);        /* NIY stub */
-    }
-  else if (!strcasecmp (c, "move.autopilot.stop"))
-    {
-      rc = cmd_move_autopilot_stop (ctx, root); /* NIY stub */
-    }
-  else if (!strcasecmp (c, "move.autopilot.status"))
-    {
-      rc = cmd_move_autopilot_status (ctx, root);
-    }
-  else if (!strcasecmp (c, "sector.search"))
-    {
-      rc = cmd_sector_search (ctx, root);
-    }
-  else if (!strcasecmp (c, "sector.set_beacon"))
-    {
-      rc = cmd_sector_set_beacon (ctx, root);
-    }
-  else if (!strcasecmp (c, "sector.scan.density"))
-    {
-      cmd_sector_scan_density (ctx, root);
-    }
-  else if (!strcasecmp (c, "sector.scan"))
-    {
-      cmd_sector_scan (ctx, root);
-    }
-/* ---------- PLANETS / CITADEL ---------- */
-  else if (!strcasecmp (c, "planet.genesis"))
-    {
-      rc = cmd_planet_genesis (ctx, root);      /* NIY stub */
-    }
-  else if (!strcasecmp (c, "planet.info"))
-    {
-      rc = cmd_planet_info (ctx, root); /* NIY stub */
-    }
-  else if (!strcasecmp (c, "planet.rename"))
-    {
-      rc = cmd_planet_rename (ctx, root);       /* NIY stub */
-    }
-  else if (!strcasecmp (c, "planet.land"))
-    {
-      rc = cmd_planet_land (ctx, root); /* NIY stub */
-    }
-  else if (!strcasecmp (c, "planet.launch"))
-    {
-      rc = cmd_planet_launch (ctx, root);       /* NIY stub */
-    }
-  else if (!strcasecmp (c, "planet.transfer_ownership"))
-    {
-      rc = cmd_planet_transfer_ownership (ctx, root);   /* NIY stub */
-    }
-  else if (!strcasecmp (c, "planet.harvest"))
-    {
-      rc = cmd_planet_harvest (ctx, root);      /* NIY stub */
-    }
-  else if (!strcasecmp (c, "planet.deposit"))
-    {
-      rc = cmd_planet_deposit (ctx, root);      /* NIY stub */
-    }
-  else if (!strcasecmp (c, "planet.withdraw"))
-    {
-      rc = cmd_planet_withdraw (ctx, root);     /* NIY stub */
-    }
-  else if (!strcasecmp (c, "planet.genesis_create"))
-    {
-      rc = cmd_planet_genesis_create (ctx, root);
-    }
-  else if (!strcasecmp (c, "planet.market.sell"))
-    {
-      rc = cmd_planet_market_sell (ctx, root);
-    }
-  else if (!strcasecmp (c, "planet.market.buy_order"))
-    {
-      rc = cmd_planet_market_buy_order (ctx, root);
-    }
-  else if (!strcasecmp (c, "citadel.build"))
-    {
-      rc = cmd_citadel_build (ctx, root);       /* NIY stub */
-    }
-  else if (!strcasecmp (c, "citadel.upgrade"))
-    {
-      rc = cmd_citadel_upgrade (ctx, root);     /* NIY stub */
-    }
-/* ---------- COMBAT ---------- */
-  else if (!strcasecmp (c, "combat.attack"))
-    {
-      rc = cmd_combat_attack (ctx, root);       /* NIY stub */
-    }
-  else if (!strcasecmp (c, "combat.deploy_fighters"))
-    {
-      rc = cmd_combat_deploy_fighters (ctx, root);      /* NIY stub */
-    }
-  else if (!strcasecmp (c, "combat.lay_mines"))
-    {
-      rc = cmd_combat_lay_mines (ctx, root);    /* NIY stub */
-    }
-  else if (!strcasecmp (c, "combat.sweep_mines"))
-    {
-      rc = cmd_combat_sweep_mines (ctx, root);  /* NIY stub */
-    }
-  else if (!strcasecmp (c, "combat.status"))
-    {
-      rc = cmd_combat_status (ctx, root);       /* NIY stub */
-    }
-  else if (!strcasecmp (c, "deploy.fighters.list"))
-    {
-      rc = cmd_deploy_fighters_list (ctx, root);        /* list deployed fighters */
-    }
-  else if (!strcasecmp (c, "deploy.mines.list"))
-    {
-      rc = cmd_deploy_mines_list (ctx, root);   /* list deployed mines */
-    }
-  else if (!strcasecmp (c, "fighters.recall"))
-    {
-      rc = cmd_fighters_recall (ctx, root);     /* recall deployed fighters */
-    }
-  else if (!strcasecmp (c, "combat.deploy_mines"))
-    {
-      rc = cmd_combat_deploy_mines (ctx, root);
-    }
-  else if (!strcasecmp (c, "mines.recall"))
-    {
-      rc = cmd_mines_recall (ctx, root);
-    }
-/* ---------- CHAT ---------- */
-  else if (!strcasecmp (c, "chat.send"))
-    {
-      rc = cmd_chat_send (ctx, root);   /* NIY stub */
-    }
-  else if (!strcasecmp (c, "chat.broadcast"))
-    {
-      rc = cmd_chat_broadcast (ctx, root);      /* NIY stub */
-    }
-  else if (!strcasecmp (c, "chat.history"))
-    {
-      rc = cmd_chat_history (ctx, root);        /* NIY stub */
-    }
-/* ---------- MAIL/Announcements ---------- */
-  else if (!strcasecmp (c, "mail.send"))
-    {
-      rc = cmd_mail_send (ctx, root);
-    }
-  else if (!strcasecmp (c, "mail.inbox"))
-    {
-      rc = cmd_mail_inbox (ctx, root);
-    }
-  else if (!strcasecmp (c, "mail.read"))
-    {
-      rc = cmd_mail_read (ctx, root);
-    }
-  else if (!strcasecmp (c, "mail.delete"))
-    {
-      rc = cmd_mail_delete (ctx, root);
-    }
-  else if (strcasecmp (c, "sys.notice.create") == 0)
-    {
-      rc = cmd_sys_notice_create (ctx, root);
-    }
-  else if (strcasecmp (c, "notice.list") == 0)
-    {
-      rc = cmd_notice_list (ctx, root);
-    }
-  else if (strcasecmp (c, "notice.ack") == 0)
-    {
-      rc = cmd_notice_ack (ctx, root);
-    }
-/* ---------- NEWS ---------- */
-  else if (strcasecmp (c, "news.get_feed") == 0)
-    {
-      rc = cmd_news_get_feed (ctx, root);
-    }
-  else if (strcasecmp (c, "news.mark_feed_read") == 0)
-    {
-      rc = cmd_news_mark_feed_read (ctx, root);
-    }
-/* ---------- SUBSCRIBE ---------- */
-  else if (!strcasecmp (c, "subscribe.add"))
-    {
-      rc = cmd_subscribe_add (ctx, root);       /* NIY stub */
-    }
-  else if (!strcasecmp (c, "subscribe.remove"))
-    {
-      rc = cmd_subscribe_remove (ctx, root);    /* NIY stub */
-    }
-  else if (!strcasecmp (c, "subscribe.list"))
-    {
-      rc = cmd_subscribe_list (ctx, root);      /* NIY stub */
-    }
-  else if (strcasecmp (c, "subscribe.catalog") == 0)
-    {
-      cmd_subscribe_catalog (ctx, root);
-    }
-/* ---------- BULK ---------- */
-  else if (!strcasecmp (c, "bulk.execute"))
-    {
-      rc = cmd_bulk_execute (ctx, root);        /* NIY stub */
-    }
-/* ---------- ADMIN ---------- */
-  else if (!strcasecmp (c, "admin.notice"))
-    {
-      rc = cmd_admin_notice (ctx, root);        /* NIY stub */
-    }
-  else if (!strcasecmp (c, "admin.shutdown_warning"))
-    {
-      rc = cmd_admin_shutdown_warning (ctx, root);      /* NIY stub */
-    }
-  /* ---------- S2S ---------- */
-  else if (!strcasecmp (c, "s2s.planet.genesis"))
-    {
-      rc = cmd_s2s_planet_genesis (ctx, root);  /* NIY stub */
-    }
-  else if (!strcasecmp (c, "s2s.planet.transfer"))
-    {
-      rc = cmd_s2s_planet_transfer (ctx, root); /* NIY stub */
-    }
-  else if (!strcasecmp (c, "s2s.player.migrate"))
-    {
-      rc = cmd_s2s_player_migrate (ctx, root);  /* NIY stub */
-    }
-  else if (!strcasecmp (c, "s2s.port.restock"))
-    {
-      rc = cmd_s2s_port_restock (ctx, root);    /* NIY stub */
-    }
-  else if (!strcasecmp (c, "s2s.event.relay"))
-    {
-      rc = cmd_s2s_event_relay (ctx, root);     /* NIY stub */
-    }
-  else if (!strcasecmp (c, "s2s.replication.heartbeat"))
-    {
-      rc = cmd_s2s_replication_heartbeat (ctx, root);   /* NIY stub */
-    }
-/* ---------- FALLBACK ---------- */
-  else
-    {
-      send_enveloped_error (ctx->fd, root, 1400, "Unknown command");
-      rc = 0;
-    }
+  send_enveloped_error (ctx->fd, root, 1400, "Unknown command");
 }
 
 
@@ -1691,10 +1080,10 @@ server_loop (volatile sig_atomic_t *running)
 
           if (prc == 0)
             {
-              LOGI ("[cid=%" PRIu64 "] thread created (pthread=%lu)\n",
+              LOGI ("[cid=%%" PRIu64 "] thread created (pthread=%%lu)\n",
                     ctx->cid, (unsigned long) th);
               //              LOGE(
-              //       "[cid=%" PRIu64 "] thread created (pthread=%lu)\n",
+              //       "[cid=%%" PRIu64 "] thread created (pthread=%%lu)\n",
               //       ctx->cid, (unsigned long) th);
             }
           else
@@ -1713,4 +1102,3 @@ server_loop (volatile sig_atomic_t *running)
   //  LOGE( "Server loop exiting...\n");
   return 0;
 }
-

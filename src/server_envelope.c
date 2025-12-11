@@ -77,62 +77,6 @@ sanitize_json_strings (json_t *node)
 }
 
 
-// --- Weak fallback so linking succeeds even if server_loop.c doesn't define it ---
-// If a strong version exists in server_loop.c, the linker will prefer that one.
-__attribute__((weak))
-
-
-void
-loop_get_supported_commands (const cmd_desc_t **out_tbl,
-                             size_t *out_n)
-{
-  static const cmd_desc_t k_supported_cmds[] = {
-    // --- session / system ---
-    {"session.hello", "Handshake / hello"},
-    {"session.ping", "Ping"},
-    {"session.disconnect", "Client disconnect"},
-    {"system.schema_list", "List schema namespaces"},
-    {"system.describe_schema", "Describe commands in a schema"},
-    {"system.capabilities", "Feature flags, schemas, counts"},
-    {"system.cmd_list", "Flat list of all commands"},
-    // --- auth ---
-    {"auth.login", "Authenticate"},
-    {"auth.logout", "Log out"},
-    {"auth.mfa.totp.verify", "Second-factor code"},
-    {"auth.register", "Create a new player"},
-    // --- players / ship ---
-    {"player.my_info", "Current player info"},
-    {"player.list_online", "List online players"},
-    {"ship.info", "Ship information"},
-    // --- sector / movement ---
-    {"sector.info", "Describe current sector"},
-    {"sector.set_beacon", "Set or clear sector beacon"},
-    {"move.warp", "Warp to sector"},
-    {"move.scan", "Scan adjacent sectors"},
-    {"move.pathfind", "Find path between sectors"},
-    // --- INSERT THESE ENTRIES (Alphabetically) ---
-    {"trade.accept", "Accept player trade offer"},
-    {"trade.buy", "Buy commodity from port"},
-    {"trade.cancel", "Cancel player trade offer"},
-    {"trade.history", "View trade history (paginated)"},
-    {"trade.jettison", "Jettison cargo"},
-    {"trade.offer", "Create player trade offer"},
-    {"trade.port_info", "Port info (alias to sector.info/port)"},
-    {"trade.quote", "Get buy/sell quote"},
-    {"trade.sell", "Sell commodity to port"},
-    {"trade.port_info", "Port prices/stock in sector"},
-  };
-  if (out_tbl)
-    {
-      *out_tbl = k_supported_cmds;
-    }
-  if (out_n)
-    {
-      *out_n = sizeof (k_supported_cmds) / sizeof (k_supported_cmds[0]);
-    }
-}
-
-
 // Provided by server_loop.c
 extern void loop_get_supported_commands (const cmd_desc_t **out_tbl,
                                          size_t *out_n);

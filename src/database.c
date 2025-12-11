@@ -799,6 +799,11 @@ const char *create_table_sql[] = {
   " ore_on_hand INTEGER NOT NULL DEFAULT 0, "
   " organics_on_hand INTEGER NOT NULL DEFAULT 0, "
   " equipment_on_hand INTEGER NOT NULL DEFAULT 0, "
+  " colonists_ore INTEGER NOT NULL DEFAULT 0, "
+  " colonists_org INTEGER NOT NULL DEFAULT 0, "
+  " colonists_eq INTEGER NOT NULL DEFAULT 0, "
+  " colonists_mil INTEGER NOT NULL DEFAULT 0, "
+  " colonists_unassigned INTEGER NOT NULL DEFAULT 0, "  
   " FOREIGN KEY (sector) REFERENCES sectors(id),  "
   /* No direct FK for owner_id/owner_type due to polymorphic nature */
   " FOREIGN KEY (type) REFERENCES planettypes(id) " " ); ",

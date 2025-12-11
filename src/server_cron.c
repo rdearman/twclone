@@ -1546,6 +1546,124 @@ h_terra_replenish (sqlite3 *db, int64_t now_s)
 
 
 int
+h_planet_population_tick (sqlite3 *db, int64_t now_s)
+{
+  (void)now_s;
+  sqlite3_stmt *stmt = NULL;
+  int rc;
+
+  // Logistic growth parameters
+  // Growth rate: 1% per tick? Or slower? 
+  // Let's say 0.05 (5%) per tick for visible growth, clamped to max.
+  const double GROWTH_RATE = 0.05; 
+
+  const char *sql = 
+    "SELECT p.id, p.population, "
+    "       COALESCE(pt.maxColonist_ore, 0) + COALESCE(pt.maxColonist_organics, 0) + COALESCE(pt.maxColonist_equipment, 0) AS max_pop "
+    "FROM planets p "
+    "JOIN planettypes pt ON p.type = pt.id "
+    "WHERE p.owner_id > 0 AND p.population > 0;";
+
+  rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+  if (rc != SQLITE_OK) {
+      LOGE("h_planet_population_tick: prepare failed: %s", sqlite3_errmsg(db));
+      return rc;
+  }
+
+  // buffer updates to avoid nested transaction issues if called from within one?
+  // Actually, we are likely inside a transaction in h_planet_growth.
+  // But we need to update row by row or use a complex update statement.
+  // A complex UPDATE with JOIN/calculations is better but SQLite support for that can be tricky.
+  // We'll iterate and run simple UPDATEs. Since we are inside a transaction (from h_planet_growth), it's fine.
+
+  // Prepare update stmt once
+  sqlite3_stmt *update_stmt = NULL;
+  if (sqlite3_prepare_v2(db, "UPDATE planets SET population = ?1 WHERE id = ?2;", -1, &update_stmt, NULL) != SQLITE_OK) {
+      LOGE("h_planet_population_tick: prepare update failed: %s", sqlite3_errmsg(db));
+      sqlite3_finalize(stmt);
+      return SQLITE_ERROR;
+  }
+
+  while (sqlite3_step(stmt) == SQLITE_ROW) {
+      int planet_id = sqlite3_column_int(stmt, 0);
+      int current_pop = sqlite3_column_int(stmt, 1);
+      int max_pop = sqlite3_column_int(stmt, 2);
+
+      if (max_pop <= 0) max_pop = 10000; // Fallback default
+
+      if (current_pop < max_pop) {
+          double delta = (double)current_pop * GROWTH_RATE * (1.0 - (double)current_pop / (double)max_pop);
+          int delta_int = (int)delta;
+          if (delta_int < 1 && current_pop < max_pop) delta_int = 1; // Minimum growth
+
+          int new_pop = current_pop + delta_int;
+          if (new_pop > max_pop) new_pop = max_pop;
+
+          sqlite3_reset(update_stmt);
+          sqlite3_bind_int(update_stmt, 1, new_pop);
+          sqlite3_bind_int(update_stmt, 2, planet_id);
+          sqlite3_step(update_stmt);
+      }
+  }
+
+  sqlite3_finalize(stmt);
+  sqlite3_finalize(update_stmt);
+  return SQLITE_OK;
+}
+
+int
+h_planet_treasury_interest_tick (sqlite3 *db, int64_t now_s)
+{
+  (void)now_s;
+  
+  int bps = 0;
+  if (db_get_int_config(db, "planet_treasury_interest_rate_bps", &bps) != 0 || bps <= 0) {
+      bps = 10; // Default 0.1%
+  }
+  
+  double rate = (double)bps / 10000.0;
+
+  sqlite3_stmt *stmt = NULL;
+  const char *sql = "SELECT id, treasury FROM citadels WHERE level >= 1 AND treasury > 0;";
+  
+  if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+      LOGE("h_planet_treasury_interest_tick: prepare failed: %s", sqlite3_errmsg(db));
+      return SQLITE_ERROR;
+  }
+
+  sqlite3_stmt *update_stmt = NULL;
+  if (sqlite3_prepare_v2(db, "UPDATE citadels SET treasury = ?1 WHERE id = ?2;", -1, &update_stmt, NULL) != SQLITE_OK) {
+      LOGE("h_planet_treasury_interest_tick: prepare update failed: %s", sqlite3_errmsg(db));
+      sqlite3_finalize(stmt);
+      return SQLITE_ERROR;
+  }
+
+  while (sqlite3_step(stmt) == SQLITE_ROW) {
+      int citadel_id = sqlite3_column_int(stmt, 0);
+      long long current_treasury = sqlite3_column_int64(stmt, 1);
+      
+      long long delta = (long long)floor((double)current_treasury * rate);
+      
+      if (delta > 0) {
+          long long next_treasury = current_treasury + delta;
+          
+          if (next_treasury < 0) { // Overflow
+              next_treasury = 9223372036854775807LL; // LLONG_MAX
+          }
+
+          sqlite3_reset(update_stmt);
+          sqlite3_bind_int64(update_stmt, 1, next_treasury);
+          sqlite3_bind_int(update_stmt, 2, citadel_id);
+          sqlite3_step(update_stmt);
+      }
+  }
+
+  sqlite3_finalize(stmt);
+  sqlite3_finalize(update_stmt);
+  return SQLITE_OK;
+}
+
+int
 h_planet_growth (sqlite3 *db, int64_t now_s)
 {
   if (!try_lock (db, "planet_growth", now_s))
@@ -1560,19 +1678,31 @@ h_planet_growth (sqlite3 *db, int64_t now_s)
     {
       return rc;
     }
-  rc =
-    sqlite3_exec (db,
-                  "UPDATE planets SET population = population + CAST(population*0.001 AS INT) WHERE population > 0 AND owner > 0;",
-                  NULL,
-                  NULL,
-                  NULL);
-  if (rc)
-    {
-      rollback (db);
-      LOGE ("planet_growth (pop) rc=%d", rc);
-      unlock (db, "planet_growth");
-      return rc;
-    }
+  
+  // 1. Population Growth
+  if (h_planet_population_tick(db, now_s) != SQLITE_OK) {
+      LOGE("h_planet_growth: Population tick failed.");
+  }
+
+  // 2. Treasury Interest (T2)
+  if (h_planet_treasury_interest_tick(db, now_s) != SQLITE_OK) {
+      LOGE("h_planet_growth: Treasury tick failed.");
+  }
+
+  /*
+   * P3B Colonist-Driven Production Note:
+   * 
+   * Once schema columns `colonists_ore`, `colonists_org`, etc. are added to `planets` table,
+   * the production query below should be updated to:
+   * 
+   * new_quantity = quantity + 
+   *    (pp.base_prod_rate) + 
+   *    (COALESCE(p.colonists_ore, 0) * [Efficiency_Ore_Factor]) ... etc.
+   * 
+   * Since those columns do not exist yet, we fall back to the existing static production
+   * (base_prod_rate - base_cons_rate) as per P3B requirements.
+   */
+
   // --- NEW: Update commodity quantities in entity_stock based on planet_production ---
   sqlite3_stmt *stmt = NULL;
   const char *sql_update_commodities =
@@ -1581,15 +1711,33 @@ h_planet_growth (sqlite3 *db, int64_t now_s)
     "  'planet', "
     "  p.id, "
     "  pp.commodity_code, "
-    "  MAX(0, MIN(pltype.maxore, COALESCE(es.quantity, 0) + pp.base_prod_rate - pp.base_cons_rate)) AS new_quantity, "
-    // Using maxore as a generic max_capacity, need to refine later
-    "  0, " // Price (for planet) is not relevant in entity_stock for now
+    "  MAX(0, MIN("
+    "    CASE pp.commodity_code "
+    "        WHEN 'ORE' THEN pltype.maxore "
+    "        WHEN 'ORG' THEN pltype.maxorganics "
+    "        WHEN 'EQU' THEN pltype.maxequipment "
+    "        ELSE 999999 "
+    "    END, "
+    "    COALESCE(es.quantity, 0) + "
+    "    pp.base_prod_rate + "
+    "    ("
+    "      CASE pp.commodity_code "
+    "        WHEN 'ORE' THEN p.colonists_ore * 1 " // No oreProduction column, use 1
+    "        WHEN 'ORG' THEN p.colonists_org * pltype.organicsProduction "
+    "        WHEN 'EQU' THEN p.colonists_eq * pltype.equipmentProduction "
+    "        WHEN 'FUE' THEN p.colonists_unassigned * pltype.fuelProduction "
+    "        ELSE p.colonists_unassigned * 1 " // Illegal/other goods use unassigned
+    "      END"
+    "    ) - "
+    "    pp.base_cons_rate"
+    ")) AS new_quantity, "
+    "  0, "
     "  strftime('%s','now') "
     "FROM planets p "
     "JOIN planet_production pp ON p.type = pp.planet_type_id "
     "LEFT JOIN entity_stock es ON es.entity_type = 'planet' AND es.entity_id = p.id AND es.commodity_code = pp.commodity_code "
-    "LEFT JOIN planettypes pltype ON p.type = pltype.id " // To get max capacity (maxore/maxorganics/maxequipment)
-    "WHERE (pp.base_prod_rate > 0 OR pp.base_cons_rate > 0) "
+    "LEFT JOIN planettypes pltype ON p.type = pltype.id "
+    "WHERE (pp.base_prod_rate > 0 OR pp.base_cons_rate > 0 OR p.colonists_ore > 0 OR p.colonists_org > 0 OR p.colonists_eq > 0 OR p.colonists_unassigned > 0) "
     "ON CONFLICT(entity_type, entity_id, commodity_code) DO UPDATE SET "
     "quantity = excluded.quantity, last_updated_ts = excluded.last_updated_ts;";
 
@@ -1632,6 +1780,7 @@ h_planet_market_tick (sqlite3 *db, int64_t now_s)
 {
   // This function is assumed to be called within a transaction by h_planet_growth
   sqlite3_stmt *stmt = NULL;
+  int rc; // Declare rc here
   const char *sql_select_planets_commodities =
     "SELECT p.id AS planet_id, "
     "       pt.maxore, pt.maxorganics, pt.maxequipment, " // Max capacities for common commodities
@@ -1639,15 +1788,16 @@ h_planet_market_tick (sqlite3 *db, int64_t now_s)
     "       c.id AS commodity_id, " // Needed for orders
     "       es.quantity AS current_quantity, "
     "       pp.base_prod_rate, pp.base_cons_rate, "
-    "       c.base_price " // Base price for orders
+    "       c.base_price, " // Base price for orders
+    "       c.illegal " // ADDED: To check for illegal commodities
     "FROM planets p "
     "JOIN planettypes pt ON p.type = pt.id "
     "JOIN planet_production pp ON p.type = pp.planet_type_id "
     "LEFT JOIN entity_stock es ON es.entity_type = 'planet' AND es.entity_id = p.id AND es.commodity_code = pp.commodity_code "
     "JOIN commodities c ON pp.commodity_code = c.code "
-    "WHERE (pp.base_prod_rate > 0 OR pp.base_cons_rate > 0);";
+    "WHERE (pp.base_prod_rate > 0 OR pp.base_cons_rate > 0) AND c.illegal = 0;";
 
-  int rc = sqlite3_prepare_v2 (db, sql_select_planets_commodities, -1, &stmt, NULL);
+  rc = sqlite3_prepare_v2 (db, sql_select_planets_commodities, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
       LOGE ("h_planet_market_tick: Failed to prepare select statement: %s",

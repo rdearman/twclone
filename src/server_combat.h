@@ -16,6 +16,7 @@ int cmd_deploy_mines_list (client_ctx_t *ctx, json_t *root);
 int cmd_fighters_recall (client_ctx_t *ctx, json_t *root);
 int cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root);
 int cmd_mines_recall (client_ctx_t *ctx, json_t *root);
+int cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root); // Added Phase C0+C1
 bool is_asset_hostile (int asset_player_id, int asset_corp_id,
                        int ship_player_id, int ship_corp_id);
 bool armid_stack_is_active (const sector_asset_t *row, time_t now);

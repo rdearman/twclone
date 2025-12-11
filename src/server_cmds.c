@@ -19,6 +19,10 @@
 int
 cmd_sys_cluster_init (client_ctx_t *ctx, json_t *root)
 {
+#ifdef BUILD_PRODUCTION
+  send_enveloped_error(ctx->fd, root, 1403, "Command disabled in production");
+  return 0;
+#else
   sqlite3 *db = db_get_handle ();
   int rc = 0;
   if (ctx->player_id <= 0)   // Very basic auth check, really should be admin
@@ -46,12 +50,17 @@ cmd_sys_cluster_init (client_ctx_t *ctx, json_t *root)
     }
   send_enveloped_ok (ctx->fd, root, "sys.cluster.init.ok", NULL);
   return 0;
+#endif
 }
 
 
 int
 cmd_sys_cluster_seed_illegal_goods (client_ctx_t *ctx, json_t *root)
 {
+#ifdef BUILD_PRODUCTION
+  send_enveloped_error(ctx->fd, root, 1403, "Command disabled in production");
+  return 0;
+#else
   sqlite3 *db = db_get_handle ();
   int rc = 0;
   if (ctx->player_id <= 0)   // Very basic auth check, really should be admin
@@ -73,6 +82,7 @@ cmd_sys_cluster_seed_illegal_goods (client_ctx_t *ctx, json_t *root)
     }
   send_enveloped_ok (ctx->fd, root, "sys.cluster.seed_illegal_goods.ok", NULL);
   return 0;
+#endif
 }
 
 
@@ -420,119 +430,37 @@ cmd_sys_test_news_cron (client_ctx_t *ctx, json_t *root)
 int
 cmd_sys_raw_sql_exec (client_ctx_t *ctx, json_t *root)
 {
-  sqlite3 *db = db_get_handle ();
-  json_t *data = json_object_get (root, "data");
-  const char *sql_str = NULL;
-  int rc = 0;
-  if (!json_is_object (data))
+#ifdef BUILD_PRODUCTION
+  send_enveloped_error(ctx->fd, root, 1403, "Command disabled in production");
+  return 0;
+#else
+  json_t *jdata = json_object_get (root, "data");
+  const char *sql = NULL;
+  if (json_is_object (jdata))
     {
-      send_enveloped_error (ctx->fd, root, 400, "Missing data object.");
+      sql = json_string_value (json_object_get (jdata, "sql"));
+    }
+  if (!sql)
+    {
+      send_enveloped_error (ctx->fd, root, 1301, "Missing sql");
       return 0;
     }
-  json_t *j_sql = json_object_get (data, "sql");
-
-
-  if (json_is_string (j_sql))
+  sqlite3 *db = db_get_handle ();
+  char *err = NULL;
+  int rc = sqlite3_exec (db, sql, NULL, NULL, &err);
+  if (rc != SQLITE_OK)
     {
-      sql_str = json_string_value (j_sql);
+      send_enveloped_error (ctx->fd, root, 1500, err ? err : "SQL error");
+      if (err)
+        sqlite3_free (err);
     }
   else
     {
-      send_enveloped_error (ctx->fd, root, 400,
-                            "Missing or invalid 'sql' string.");
-      return 0;
+      send_enveloped_ok (ctx->fd, root, "sys.raw_sql_exec",
+                         json_string ("Executed"));
     }
-  json_t *rows = json_array ();
-  const char *tail = sql_str;
-
-
-  while (tail && *tail)
-    {
-      sqlite3_stmt *stmt = NULL;
-
-
-      // trim leading whitespace
-      while (*tail &&
-             (*tail == ' ' || *tail == '\t' || *tail == '\r' || *tail == '\n'))
-        {
-          tail++;
-        }
-      if (!*tail)
-        {
-          break;
-        }
-      rc = sqlite3_prepare_v2 (db, tail, -1, &stmt, &tail);
-      if (rc != SQLITE_OK)
-        {
-          send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
-          json_decref (rows);
-          return 0;
-        }
-      if (!stmt)
-        {
-          // Comment or whitespace-only statement
-          continue;
-        }
-      int col_count = sqlite3_column_count (stmt);
-
-
-      while ((rc = sqlite3_step (stmt)) == SQLITE_ROW)
-        {
-          json_t *row = json_array ();
-
-
-          for (int i = 0; i < col_count; i++)
-            {
-              int type = sqlite3_column_type (stmt,
-                                              i);
-
-
-              switch (type)
-                {
-                  case SQLITE_INTEGER:
-                    json_array_append_new (row,
-                                           json_integer (sqlite3_column_int64 (
-                                                           stmt,
-                                                           i)));
-                    break;
-                  case SQLITE_FLOAT:
-                    json_array_append_new (row,
-                                           json_real (sqlite3_column_double (
-                                                        stmt,
-                                                        i)));
-                    break;
-                  case SQLITE_TEXT:
-                    json_array_append_new (row,
-                                           json_string (
-                                             (const char *)sqlite3_column_text (
-                                               stmt,
-                                               i)));
-                    break;
-                  case SQLITE_NULL:
-                    json_array_append_new (row, json_null ());
-                    break;
-                  default:
-                    json_array_append_new (row, json_string ("BLOB/UNKNOWN"));
-                    break;
-                }
-            }
-          json_array_append_new (rows, row);
-        }
-      if (rc != SQLITE_DONE)
-        {
-          send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
-          sqlite3_finalize (stmt);
-          json_decref (rows);
-          return 0;
-        }
-      sqlite3_finalize (stmt);
-    }
-  json_t *resp = json_object ();
-
-
-  json_object_set_new (resp, "rows", rows);
-  send_enveloped_ok (ctx->fd, root, "sys.raw_sql_exec.success", resp);
   return 0;
+#endif
 }
 
 

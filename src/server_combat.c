@@ -28,6 +28,7 @@
 #include "server_log.h"
 #include "errors.h"
 #include "server_config.h"
+#include "server_planets.h"
 
 /* Global Combat Constants (Physics) */
 /* TODO: Move to config table */
@@ -4043,4 +4044,168 @@ h_handle_sector_entry_hazards(sqlite3 *db, client_ctx_t *ctx, int sector_id)
     /* Limpets (Phase 2) - Placeholder */
     
     return 0;
+}
+
+/* ---------- combat.attack_planet ---------- */
+int
+cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
+{
+  if (!require_auth (ctx, root)) return 0;
+  
+  sqlite3 *db = db_get_handle ();
+  if (!db) {
+      send_enveloped_error (ctx->fd, root, ERR_SERVICE_UNAVAILABLE, "Database unavailable");
+      return 0;
+  }
+
+  json_t *data = json_object_get (root, "data");
+  if (!data) {
+      send_enveloped_error (ctx->fd, root, ERR_MISSING_FIELD, "Missing data");
+      return 0;
+  }
+
+  json_t *j_pid = json_object_get (data, "planet_id");
+  if (!j_pid || !json_is_integer (j_pid)) {
+      send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG, "Missing planet_id");
+      return 0;
+  }
+  int planet_id = (int)json_integer_value(j_pid);
+
+  // 1. Get Ship
+  int ship_id = h_get_active_ship_id (db, ctx->player_id);
+  if (ship_id <= 0) {
+      send_enveloped_error (ctx->fd, root, ERR_SHIP_NOT_FOUND, "No active ship");
+      return 0;
+  }
+  
+  // 2. Get Sector
+  int current_sector = h_get_player_sector(ctx->player_id); 
+  if (current_sector <= 0) {
+       sqlite3_stmt *st = NULL;
+       sqlite3_prepare_v2(db, "SELECT sector FROM ships WHERE id=?1", -1, &st, NULL);
+       sqlite3_bind_int(st, 1, ship_id);
+       if (sqlite3_step(st) == SQLITE_ROW) current_sector = sqlite3_column_int(st, 0);
+       sqlite3_finalize(st);
+  }
+
+  // 3. Get Planet Info
+  int p_sector = 0;
+  int p_fighters = 0;
+  int p_owner_id = 0;
+  bool p_exists = false;
+  
+  sqlite3_stmt *pst = NULL;
+  if (sqlite3_prepare_v2(db, "SELECT sector_id, owner_id, fighters FROM planets WHERE id=?1", -1, &pst, NULL) == SQLITE_OK) {
+      sqlite3_bind_int(pst, 1, planet_id);
+      if (sqlite3_step(pst) == SQLITE_ROW) {
+          p_exists = true;
+          p_sector = sqlite3_column_int(pst, 0);
+          p_owner_id = sqlite3_column_int(pst, 1);
+          p_fighters = sqlite3_column_int(pst, 2);
+      }
+      sqlite3_finalize(pst);
+  }
+
+  if (!p_exists) {
+      send_enveloped_error (ctx->fd, root, ERR_NOT_FOUND, "Planet not found");
+      return 0;
+  }
+
+  if (p_sector != current_sector) {
+      send_enveloped_error (ctx->fd, root, REF_NOT_IN_SECTOR, "Planet not in current sector");
+      return 0;
+  }
+
+  // 4. Terra Protection
+  if (planet_id == 1 || p_sector == 1) {
+      destroy_ship_and_handle_side_effects(ctx, ctx->player_id);
+      
+      json_t *evt = json_object();
+      json_object_set_new(evt, "planet_id", json_integer(planet_id));
+      db_log_engine_event((long long)time(NULL), "player.terra_attack_sanction.v1", "player", ctx->player_id, current_sector, evt, NULL);
+
+      send_enveloped_error(ctx->fd, root, 403, "You have attacked Terra! Federation forces have destroyed your ship.");
+      return 0;
+  }
+
+  // 5. Combat
+  int s_fighters = 0;
+  if (sqlite3_prepare_v2(db, "SELECT fighters FROM ships WHERE id=?1", -1, &pst, NULL) == SQLITE_OK) {
+      sqlite3_bind_int(pst, 1, ship_id);
+      if (sqlite3_step(pst) == SQLITE_ROW) s_fighters = sqlite3_column_int(pst, 0);
+      sqlite3_finalize(pst);
+  }
+
+  if (s_fighters <= 0) {
+      send_enveloped_error(ctx->fd, root, 400, "You have no fighters to attack with.");
+      return 0;
+  }
+
+  bool attacker_wins = (s_fighters > p_fighters);
+  int ship_loss = 0;
+  int planet_loss = 0;
+  bool captured = false;
+
+  if (attacker_wins) {
+      ship_loss = p_fighters;
+      planet_loss = p_fighters;
+      captured = true;
+  } else {
+      ship_loss = s_fighters;
+      planet_loss = s_fighters;
+      captured = false;
+  }
+
+  char *err = NULL;
+  sqlite3_exec(db, "BEGIN IMMEDIATE", NULL, NULL, NULL);
+
+  sqlite3_stmt *ust = NULL;
+  sqlite3_prepare_v2(db, "UPDATE ships SET fighters = fighters - ?1 WHERE id = ?2", -1, &ust, NULL);
+  sqlite3_bind_int(ust, 1, ship_loss);
+  sqlite3_bind_int(ust, 2, ship_id);
+  sqlite3_step(ust);
+  sqlite3_finalize(ust);
+
+  if (captured) {
+      int corp_id = ctx->corp_id;
+      const char *new_type = (corp_id > 0) ? "corporation" : "player";
+      int new_owner = (corp_id > 0) ? corp_id : ctx->player_id;
+
+      sqlite3_prepare_v2(db, "UPDATE planets SET fighters=0, owner_id=?1, owner_type=?2 WHERE id=?3", -1, &ust, NULL);
+      sqlite3_bind_int(ust, 1, new_owner);
+      sqlite3_bind_text(ust, 2, new_type, -1, SQLITE_STATIC);
+      sqlite3_bind_int(ust, 3, planet_id);
+      sqlite3_step(ust);
+      sqlite3_finalize(ust);
+      
+      json_t *cap_evt = json_object();
+      json_object_set_new(cap_evt, "planet_id", json_integer(planet_id));
+      json_object_set_new(cap_evt, "previous_owner", json_integer(p_owner_id));
+      db_log_engine_event((long long)time(NULL), "player.capture_planet.v1", "player", ctx->player_id, current_sector, cap_evt, NULL);
+
+  } else {
+      sqlite3_prepare_v2(db, "UPDATE planets SET fighters = fighters - ?1 WHERE id = ?2", -1, &ust, NULL);
+      sqlite3_bind_int(ust, 1, planet_loss);
+      sqlite3_bind_int(ust, 2, planet_id);
+      sqlite3_step(ust);
+      sqlite3_finalize(ust);
+  }
+
+  sqlite3_exec(db, "COMMIT", NULL, NULL, &err);
+
+  json_t *atk_evt = json_object();
+  json_object_set_new(atk_evt, "planet_id", json_integer(planet_id));
+  json_object_set_new(atk_evt, "result", json_string(attacker_wins ? "win" : "loss"));
+  json_object_set_new(atk_evt, "ship_loss", json_integer(ship_loss));
+  json_object_set_new(atk_evt, "planet_loss", json_integer(planet_loss));
+  db_log_engine_event((long long)time(NULL), "player.attack_planet.v1", "player", ctx->player_id, current_sector, atk_evt, NULL);
+
+  json_t *res = json_object();
+  json_object_set_new(res, "planet_id", json_integer(planet_id));
+  json_object_set_new(res, "attacker_remaining_fighters", json_integer(s_fighters - ship_loss));
+  json_object_set_new(res, "defender_remaining_fighters", json_integer(p_fighters - planet_loss));
+  json_object_set_new(res, "captured", json_boolean(captured));
+  
+  send_enveloped_ok(ctx->fd, root, "combat.attack_planet", res);
+  return 0;
 }
