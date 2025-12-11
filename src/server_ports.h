@@ -54,6 +54,11 @@ int h_get_ship_cargo_and_holds (sqlite3 *db, int ship_id, int *ore,
                                 int *drugs);
 int h_update_port_stock (sqlite3 *db, int port_id, const char *commodity,
                          int delta, int *new_qty_out);
+// Phase 0: Generic entity trade helpers
+int h_update_entity_stock(sqlite3 *db, const char *entity_type, int entity_id, const char *commodity_code, int quantity_delta, int *new_quantity_out);
+int h_entity_calculate_buy_price(sqlite3 *db, const char *entity_type, int entity_id, const char *commodity);
+int h_entity_calculate_sell_price(sqlite3 *db, const char *entity_type, int entity_id, const char *commodity);
+
 int h_market_move_port_stock(sqlite3 *db, int port_id, const char *commodity_code, int quantity_delta);
 int h_calculate_port_buy_price (sqlite3 *db, int port_id,
                                 const char *commodity);
@@ -69,6 +74,10 @@ bool h_illegal_visible (int player_align_band_id,
 bool h_illegal_trade_allowed (int player_align_band_id,
                               int cluster_align_band_id,
                               const commodity_t *comm);
+// Helper to canonicalize commodity code (caller must free result if non-NULL, wait, check impl)
+// The implementation returns a strdup'd string, so caller MUST free it.
+const char *commodity_to_code (const char *commodity);
+
 // Forward declaration for local helper
 // void free_trade_lines (struct TradeLine *lines, size_t n);
 void free_trade_lines (TradeLine *lines, size_t n);

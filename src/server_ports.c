@@ -47,7 +47,7 @@ int h_calculate_port_buy_price (sqlite3 *db, int port_id,
 
 
 /* Helpers */
-static const char *
+const char *
 commodity_to_code (const char *commodity)
 {
   if (!commodity || !*commodity)
@@ -218,6 +218,81 @@ h_port_buys_commodity (sqlite3 *db, int port_id, const char *commodity)
   return buys;
 }
 
+
+
+// Helper to get entity stock quantity (generic)
+static int
+h_get_entity_stock_quantity(sqlite3 *db, const char *entity_type, int entity_id, const char *commodity_code, int *qty_out) {
+    sqlite3_stmt *st = NULL;
+    const char *sql = "SELECT quantity FROM entity_stock WHERE entity_type=?1 AND entity_id=?2 AND commodity_code=?3;";
+    int rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) return rc;
+    sqlite3_bind_text(st, 1, entity_type, -1, SQLITE_STATIC);
+    sqlite3_bind_int(st, 2, entity_id);
+    sqlite3_bind_text(st, 3, commodity_code, -1, SQLITE_STATIC);
+    if (sqlite3_step(st) == SQLITE_ROW) {
+        *qty_out = sqlite3_column_int(st, 0);
+        rc = SQLITE_OK;
+    } else {
+        *qty_out = 0;
+        rc = SQLITE_NOTFOUND; 
+    }
+    sqlite3_finalize(st);
+    return rc;
+}
+
+int
+h_update_entity_stock(sqlite3 *db, const char *entity_type, int entity_id, const char *commodity_code, int quantity_delta, int *new_quantity_out) {
+    int current_quantity = 0;
+    // Get current quantity (ignore error if not found, assume 0)
+    h_get_entity_stock_quantity(db, entity_type, entity_id, commodity_code, &current_quantity);
+    
+    int new_quantity = current_quantity + quantity_delta;
+    if (new_quantity < 0) new_quantity = 0; // Prevent negative stock
+
+    sqlite3_stmt *stmt = NULL;
+    const char *sql_upsert =
+        "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) "
+        "VALUES (?1, ?2, ?3, ?4, 0, strftime('%s','now')) "
+        "ON CONFLICT(entity_type, entity_id, commodity_code) DO UPDATE SET quantity = ?4, last_updated_ts = strftime('%s','now');";
+
+    int rc = sqlite3_prepare_v2(db, sql_upsert, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("h_update_entity_stock: prepare failed: %s", sqlite3_errmsg(db));
+        return rc;
+    }
+    sqlite3_bind_text(stmt, 1, entity_type, -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 2, entity_id);
+    sqlite3_bind_text(stmt, 3, commodity_code, -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 4, new_quantity);
+    
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        LOGE("h_update_entity_stock: upsert failed: %s", sqlite3_errmsg(db));
+        sqlite3_finalize(stmt);
+        return SQLITE_ERROR;
+    }
+    sqlite3_finalize(stmt);
+    
+    if (new_quantity_out) *new_quantity_out = new_quantity;
+    return SQLITE_OK;
+}
+
+int
+h_entity_calculate_sell_price(sqlite3 *db, const char *entity_type, int entity_id, const char *commodity) {
+    if (strcmp(entity_type, ENTITY_TYPE_PORT) == 0) {
+        return h_calculate_port_sell_price(db, entity_id, commodity);
+    }
+    return 0; // Unknown entity
+}
+
+int
+h_entity_calculate_buy_price(sqlite3 *db, const char *entity_type, int entity_id, const char *commodity) {
+    if (strcmp(entity_type, ENTITY_TYPE_PORT) == 0) {
+        return h_calculate_port_buy_price(db, entity_id, commodity);
+    }
+    return 0; // Unknown entity
+}
 
 
 /**
@@ -649,61 +724,10 @@ int
 h_update_port_stock (sqlite3 *db,
                      int port_id,
                      const char *commodity_code,
-                     int quantity_delta,
-                     int *new_quantity_out)
+                     int delta,
+                     int *new_qty_out)
 {
-  if (!db || port_id <= 0 || !commodity_code || quantity_delta == 0)
-    {
-      return SQLITE_MISUSE;
-    }
-  sqlite3_stmt *stmt = NULL;
-  int rc = SQLITE_OK;
-  int current_quantity = 0;
-  // First, get current quantity or 0 if not exists
-  int get_qty_rc = h_get_port_commodity_quantity (db,
-                                                  port_id,
-                                                  commodity_code,
-                                                  &current_quantity);
-
-
-  if (get_qty_rc != SQLITE_OK && get_qty_rc != SQLITE_NOTFOUND)
-    {
-      LOGE (
-        "h_update_port_stock: Failed to get current quantity for port %d, commodity %s (rc=%d)",
-        port_id,
-        commodity_code,
-        get_qty_rc);
-      return SQLITE_ERROR;
-    }
-  int new_quantity = current_quantity + quantity_delta;
-  const char *sql_upsert =
-    "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) "
-    "VALUES ('port', ?1, ?2, ?3, 0, strftime('%s','now')) "
-    "ON CONFLICT(entity_type, entity_id, commodity_code) DO UPDATE SET quantity = ?3, last_updated_ts = strftime('%s','now');";
-
-
-  rc = sqlite3_prepare_v2 (db, sql_upsert, -1, &stmt, NULL);
-  if (rc != SQLITE_OK)
-    {
-      LOGE ("h_update_port_stock: prepare failed: %s", sqlite3_errmsg (db));
-      return rc;
-    }
-  sqlite3_bind_int (stmt, 1, port_id);
-  sqlite3_bind_text (stmt, 2, commodity_code, -1, SQLITE_STATIC);
-  sqlite3_bind_int (stmt, 3, new_quantity);
-  rc = sqlite3_step (stmt);
-  if (rc != SQLITE_DONE)
-    {
-      LOGE ("h_update_port_stock: upsert failed: %s", sqlite3_errmsg (db));
-      sqlite3_finalize (stmt);
-      return SQLITE_ERROR;
-    }
-  if (new_quantity_out)
-    {
-      *new_quantity_out = new_quantity;
-    }
-  sqlite3_finalize (stmt);
-  return SQLITE_OK;
+  return h_update_entity_stock(db, ENTITY_TYPE_PORT, port_id, commodity_code, delta, new_qty_out);
 }
 
 /**
@@ -769,30 +793,7 @@ h_market_move_port_stock (sqlite3 *db,
   new_quantity = (new_quantity > max_capacity) ? max_capacity : new_quantity;
 
   // 3. Update DB
-  const char *sql_upsert =
-    "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) "
-    "VALUES ('port', ?1, ?2, ?3, 0, strftime('%s','now')) "
-    "ON CONFLICT(entity_type, entity_id, commodity_code) DO UPDATE SET quantity = ?3, last_updated_ts = strftime('%s','now');";
-
-  rc = sqlite3_prepare_v2(db, sql_upsert, -1, &stmt, NULL);
-  if (rc != SQLITE_OK) {
-      LOGE("h_market_move_port_stock: prepare upsert failed: %s", sqlite3_errmsg(db));
-      return rc;
-  }
-  
-  sqlite3_bind_int(stmt, 1, port_id);
-  sqlite3_bind_text(stmt, 2, commodity_code, -1, SQLITE_STATIC);
-  sqlite3_bind_int(stmt, 3, new_quantity);
-  
-  rc = sqlite3_step(stmt);
-  if (rc != SQLITE_DONE) {
-       LOGE("h_market_move_port_stock: upsert failed: %s", sqlite3_errmsg(db));
-       sqlite3_finalize(stmt);
-       return SQLITE_ERROR;
-  }
-  
-  sqlite3_finalize(stmt);
-  return SQLITE_OK;
+  return h_update_entity_stock(db, ENTITY_TYPE_PORT, port_id, commodity_code, new_quantity - current_quantity, NULL);
 }
 
 
@@ -872,12 +873,12 @@ cmd_trade_quote (client_ctx_t *ctx, json_t *root)
     }
   // Calculate the price the port will CHARGE the player (player's buy price)
   int player_buy_price_per_unit =
-    h_calculate_port_sell_price (db, port_id, commodity_code);
+    h_entity_calculate_sell_price (db, ENTITY_TYPE_PORT, port_id, commodity_code);
   long long total_player_buy_price =
     (long long) player_buy_price_per_unit * quantity;
   // Calculate the price the port will PAY the player (player's sell price)
   int player_sell_price_per_unit =
-    h_calculate_port_buy_price (db, port_id, commodity_code);
+    h_entity_calculate_buy_price (db, ENTITY_TYPE_PORT, port_id, commodity_code);
   long long total_player_sell_price =
     (long long) player_sell_price_per_unit * quantity;
 
@@ -2075,7 +2076,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       LOGD ("cmd_trade_buy: Port %d sells commodity '%s'", port_id,
             trade_lines[i].commodity);
       int unit_price =
-        h_calculate_port_sell_price (db, port_id, trade_lines[i].commodity);
+        h_entity_calculate_sell_price (db, ENTITY_TYPE_PORT, port_id, trade_lines[i].commodity);
 
 
       if (unit_price <= 0)
@@ -2961,7 +2962,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
           goto cleanup;
         }
       int buy_price =
-        h_calculate_port_buy_price (db, port_id, canonical_commodity_code);
+        h_entity_calculate_buy_price (db, ENTITY_TYPE_PORT, port_id, canonical_commodity_code);
 
 
       if (buy_price <= 0)

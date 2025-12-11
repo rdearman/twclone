@@ -1308,6 +1308,14 @@ process_message (client_ctx_t *ctx, json_t *root)
     {
       rc = cmd_planet_genesis_create (ctx, root);
     }
+  else if (!strcasecmp (c, "planet.market.sell"))
+    {
+      rc = cmd_planet_market_sell (ctx, root);
+    }
+  else if (!strcasecmp (c, "planet.market.buy_order"))
+    {
+      rc = cmd_planet_market_buy_order (ctx, root);
+    }
   else if (!strcasecmp (c, "citadel.build"))
     {
       rc = cmd_citadel_build (ctx, root);       /* NIY stub */

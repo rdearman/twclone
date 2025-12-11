@@ -27,6 +27,11 @@
 #include <stdatomic.h>
 #include <netinet/in.h>
 #include <string.h>
+
+// Entity types for generic trading
+#define ENTITY_TYPE_PORT "port"
+#define ENTITY_TYPE_PLANET "planet"
+
 typedef struct
 {
   int fd;
