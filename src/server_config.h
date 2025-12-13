@@ -202,6 +202,10 @@ typedef struct
   /* Misc */
   int illegal_allowed_neutral;
   int max_ship_name_length; /* Used in stardock */
+  int num_sectors; /* Added to match DB config */
+  int planet_treasury_interest_rate_bps; /* Added to match DB config */
+  int64_t bank_min_balance_for_interest; /* Added to match DB config */
+  int64_t bank_max_daily_interest_per_account; /* Added to match DB config */
 } server_config_t;
 /* Single global instance (defined in server_config.c) */
 extern server_config_t g_cfg;

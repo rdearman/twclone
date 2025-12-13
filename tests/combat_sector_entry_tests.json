@@ -1,0 +1,356 @@
+[
+  {
+    "name": "Register Admin",
+    "command": "auth.register",
+    "data": {
+      "username": "combat_admin",
+      "passwd": "password"
+    },
+    "save_vars": {
+      "admin_id": "id",
+      "admin_session": "session"
+    }
+  },
+  {
+    "name": "Login Admin",
+    "command": "auth.login",
+    "data": {
+      "username": "combat_admin",
+      "passwd": "password"
+    },
+    "save_vars": {
+      "admin_session": "session"
+    }
+  },
+  {
+    "name": "Set Admin to SysOp",
+    "command": "sys.raw_sql_exec",
+    "data": {
+      "sql": "UPDATE players SET type = 3 WHERE name = 'combat_admin';"
+    },
+    "auth": {
+      "session": "@admin_session"
+    }
+  },
+  {
+    "name": "Register Victim Player",
+    "command": "auth.register",
+    "data": {
+      "username": "victim",
+      "passwd": "password",
+      "ship_name": "Victim Ship"
+    },
+    "save_vars": {
+      "victim_id": "id",
+      "victim_session": "session"
+    }
+  },
+  {
+    "name": "Login Victim Player",
+    "command": "auth.login",
+    "data": {
+      "username": "victim",
+      "passwd": "password"
+    },
+    "save_vars": {
+      "victim_session": "session"
+    }
+  },
+  {
+    "name": "Setup: Initialize Sectors 202-206 (Bi-directional)",
+    "command": "sys.raw_sql_exec",
+    "data": {
+      "sql": "INSERT OR IGNORE INTO sectors (id, name) VALUES (202, 'Minefield'), (203, 'Friendly Mines'), (204, 'Toll Booth'), (205, 'Toll Fail'), (206, 'Ambush'); INSERT OR IGNORE INTO sector_warps (from_sector, to_sector) VALUES (1, 202), (202, 1), (1, 203), (203, 1), (1, 204), (204, 1), (1, 205), (205, 1), (1, 206), (206, 1), (6, 1);"
+    },
+    "auth": {
+      "session": "@admin_session"
+    }
+  },
+  {
+    "name": "Setup: Clear Assets",
+    "command": "sys.raw_sql_exec",
+    "data": {
+      "sql": "DELETE FROM sector_assets WHERE sector IN (202,203,204,205,206);"
+    },
+    "auth": {
+      "session": "@admin_session"
+    }
+  },
+  {
+    "name": "Reset Victim State (DB)",
+    "command": "sys.raw_sql_exec",
+    "data": {
+      "sql": "UPDATE players SET sector=1 WHERE id=@victim_id; UPDATE ships SET sector=1, shields=200, hull=100 WHERE id IN (SELECT ship_id FROM ship_ownership WHERE player_id=@victim_id);"
+    },
+    "auth": {
+      "session": "@admin_session"
+    }
+  },
+  {
+    "name": "Sync Victim Context (Warp to 1)",
+    "command": "move.warp",
+    "data": {
+      "to_sector_id": 1
+    },
+    "auth": {
+      "session": "@victim_session"
+    },
+    "assert": {
+      "success": true
+    }
+  },
+  {
+    "name": "Test 1: Hostile Armid Mines",
+    "command": "sys.raw_sql_exec",
+    "data": {
+      "sql": "INSERT INTO sector_assets (sector, player, asset_type, quantity, offensive_setting, deployed_at) VALUES (202, @admin_id, 1, 10, 1, strftime('%s','now'));"
+    },
+    "auth": {
+      "session": "@admin_session"
+    }
+  },
+  {
+    "name": "Test 1: Victim Enters Sector 202",
+    "command": "move.warp",
+    "data": {
+      "to_sector_id": 202
+    },
+    "auth": {
+      "session": "@victim_session"
+    },
+    "assert": {
+      "success": true
+    }
+  },
+  {
+    "name": "Test 1: Verify Damage (10 mines * 10 dmg = 100 shield loss)",
+    "command": "sys.raw_sql_exec",
+    "data": {
+      "sql": "SELECT shields, hull FROM ships WHERE id IN (SELECT ship_id FROM ship_ownership WHERE player_id=@victim_id);"
+    },
+    "auth": {
+      "session": "@admin_session"
+    },
+    "assert": {
+      "success": true,
+      "data.0.0": 100, 
+      "data.0.1": 100
+    }
+  },
+  {
+    "name": "Test 1: Verify Mines Consumed",
+    "command": "sys.raw_sql_exec",
+    "data": {
+      "sql": "SELECT quantity FROM sector_assets WHERE sector=202 AND asset_type=1;"
+    },
+    "auth": {
+      "session": "@admin_session"
+    },
+    "assert": {
+      "success": true,
+      "data": []
+    }
+  },
+  {
+    "name": "Reset Victim (Warp back to 1)",
+    "command": "move.warp",
+    "data": {
+      "to_sector_id": 1
+    },
+    "auth": {
+      "session": "@victim_session"
+    },
+    "assert": {
+      "success": true
+    }
+  },
+  {
+    "name": "Reset Victim (Repair)",
+    "command": "sys.raw_sql_exec",
+    "data": {
+      "sql": "UPDATE ships SET shields=200, hull=100 WHERE id IN (SELECT ship_id FROM ship_ownership WHERE player_id=@victim_id);"
+    },
+    "auth": {
+      "session": "@admin_session"
+    }
+  },
+  {
+    "name": "Test 2: Friendly Mines",
+    "command": "sys.raw_sql_exec",
+    "data": {
+      "sql": "INSERT INTO sector_assets (sector, player, asset_type, quantity, offensive_setting, deployed_at) VALUES (203, @victim_id, 1, 10, 1, strftime('%s','now'));"
+    },
+    "auth": {
+      "session": "@admin_session"
+    }
+  },
+  {
+    "name": "Test 2: Victim Enters Sector 203",
+    "command": "move.warp",
+    "data": {
+      "to_sector_id": 203
+    },
+    "auth": {
+      "session": "@victim_session"
+    },
+    "assert": {
+      "success": true
+    }
+  },
+  {
+    "name": "Test 2: Verify No Damage",
+    "command": "sys.raw_sql_exec",
+    "data": {
+      "sql": "SELECT shields FROM ships WHERE id IN (SELECT ship_id FROM ship_ownership WHERE player_id=@victim_id);"
+    },
+    "auth": {
+      "session": "@admin_session"
+    },
+    "assert": {
+      "success": true,
+      "data.0.0": 200
+    }
+  },
+  {
+    "name": "Reset Victim (Warp back to 1)",
+    "command": "move.warp",
+    "data": {
+      "to_sector_id": 1
+    },
+    "auth": {
+      "session": "@victim_session"
+    },
+    "assert": {
+      "success": true
+    }
+  },
+  {
+    "name": "Test 3: Fighter Toll (Success)",
+    "command": "sys.raw_sql_exec",
+    "data": {
+      "sql": "INSERT INTO sector_assets (sector, player, asset_type, quantity, offensive_setting, deployed_at) VALUES (204, @admin_id, 2, 10, 1, strftime('%s','now')); UPDATE bank_accounts SET balance=1000 WHERE owner_type='player' AND owner_id=@victim_id; UPDATE bank_accounts SET balance=0 WHERE owner_type='player' AND owner_id=@admin_id;"
+    },
+    "auth": {
+      "session": "@admin_session"
+    }
+  },
+  {
+    "name": "Test 3: Victim Enters Sector 204",
+    "command": "move.warp",
+    "data": {
+      "to_sector_id": 204
+    },
+    "auth": {
+      "session": "@victim_session"
+    },
+    "assert": {
+      "success": true
+    }
+  },
+  {
+    "name": "Test 3: Verify Toll Paid (10 fighters * 5 credits = 50)",
+    "command": "sys.raw_sql_exec",
+    "data": {
+      "sql": "SELECT balance FROM bank_accounts WHERE owner_type='player' AND owner_id=@victim_id;"
+    },
+    "auth": {
+      "session": "@admin_session"
+    },
+    "assert": {
+      "success": true,
+      "data.0.0": 950
+    }
+  },
+  {
+    "name": "Test 3: Verify Admin Received Toll",
+    "command": "sys.raw_sql_exec",
+    "data": {
+      "sql": "SELECT balance FROM bank_accounts WHERE owner_type='player' AND owner_id=@admin_id;"
+    },
+    "auth": {
+      "session": "@admin_session"
+    },
+    "assert": {
+      "success": true,
+      "data.0.0": 50
+    }
+  },
+  {
+    "name": "Test 3: Verify No Damage",
+    "command": "sys.raw_sql_exec",
+    "data": {
+      "sql": "SELECT shields FROM ships WHERE id IN (SELECT ship_id FROM ship_ownership WHERE player_id=@victim_id);"
+    },
+    "auth": {
+      "session": "@admin_session"
+    },
+    "assert": {
+      "success": true,
+      "data.0.0": 200
+    }
+  },
+  {
+    "name": "Reset Victim (Warp back to 1)",
+    "command": "move.warp",
+    "data": {
+      "to_sector_id": 1
+    },
+    "auth": {
+      "session": "@victim_session"
+    },
+    "assert": {
+      "success": true
+    }
+  },
+  {
+    "name": "Test 4: Fighter Toll (Fail -> Attack)",
+    "command": "sys.raw_sql_exec",
+    "data": {
+      "sql": "INSERT INTO sector_assets (sector, player, asset_type, quantity, offensive_setting, deployed_at) VALUES (205, @admin_id, 2, 10, 1, strftime('%s','now')); UPDATE bank_accounts SET balance=0 WHERE owner_type='player' AND owner_id=@victim_id;"
+    },
+    "auth": {
+      "session": "@admin_session"
+    }
+  },
+  {
+    "name": "Test 4: Victim Enters Sector 205",
+    "command": "move.warp",
+    "data": {
+      "to_sector_id": 205
+    },
+    "auth": {
+      "session": "@victim_session"
+    },
+    "assert": {
+      "success": true
+    }
+  },
+  {
+    "name": "Test 4: Verify Damage (10 fighters * 10 dmg = 100 shield loss)",
+    "command": "sys.raw_sql_exec",
+    "data": {
+      "sql": "SELECT shields FROM ships WHERE id IN (SELECT ship_id FROM ship_ownership WHERE player_id=@victim_id);"
+    },
+    "auth": {
+      "session": "@admin_session"
+    },
+    "assert": {
+      "success": true,
+      "data.0.0": 100
+    }
+  },
+  {
+    "name": "Test 4: Verify Fighters Removed (Consumed)",
+    "command": "sys.raw_sql_exec",
+    "data": {
+      "sql": "SELECT quantity FROM sector_assets WHERE sector=205 AND asset_type=2;"
+    },
+    "auth": {
+      "session": "@admin_session"
+    },
+    "assert": {
+      "success": true,
+      "data": []
+    }
+  }
+]

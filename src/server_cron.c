@@ -69,12 +69,9 @@ static int g_reg_inited = 0;
 int
 get_random_sector (sqlite3 *db)
 {
-  if (db)
-    {
-    }
-  int random_offset = rand () % RANGE_SIZE;
-  int random_sector = MIN_UNPROTECTED_SECTOR + random_offset;
-
+  (void) db; // no longer use the db use preloaded config data.
+  int random_offset = rand () % g_cfg.default_nodes;
+  int random_sector = 11 + random_offset;
 
   return random_sector;
 }
@@ -1616,13 +1613,12 @@ h_planet_treasury_interest_tick (sqlite3 *db, int64_t now_s)
 {
   (void)now_s;
   
-  int bps = 0;
-  if (db_get_int_config(db, "planet_treasury_interest_rate_bps", &bps) != 0 || bps <= 0) {
-      bps = 10; // Default 0.1%
+  int rate_bps = 0; // Basis points for interest rate
+  // Try to get interest rate from config, otherwise use default 100 bps (1.00%)
+  if (db_get_int_config(db, "planet_treasury_interest_rate_bps", &rate_bps) != 0 || rate_bps <= 0) {
+      rate_bps = 100; // Default: 1.00%
   }
   
-  double rate = (double)bps / 10000.0;
-
   sqlite3_stmt *stmt = NULL;
   const char *sql = "SELECT id, treasury FROM citadels WHERE level >= 1 AND treasury > 0;";
   
@@ -1631,8 +1627,14 @@ h_planet_treasury_interest_tick (sqlite3 *db, int64_t now_s)
       return SQLITE_ERROR;
   }
 
+  // Use a single UPDATE statement for efficiency and atomicity, performing calculation within SQL
+  const char *sql_update =
+    "UPDATE citadels "
+    "SET treasury = treasury + ( (treasury * ?) / 10000 ) "
+    "WHERE id = ?;";
+  
   sqlite3_stmt *update_stmt = NULL;
-  if (sqlite3_prepare_v2(db, "UPDATE citadels SET treasury = ?1 WHERE id = ?2;", -1, &update_stmt, NULL) != SQLITE_OK) {
+  if (sqlite3_prepare_v2(db, sql_update, -1, &update_stmt, NULL) != SQLITE_OK) {
       LOGE("h_planet_treasury_interest_tick: prepare update failed: %s", sqlite3_errmsg(db));
       sqlite3_finalize(stmt);
       return SQLITE_ERROR;
@@ -1642,19 +1644,21 @@ h_planet_treasury_interest_tick (sqlite3 *db, int64_t now_s)
       int citadel_id = sqlite3_column_int(stmt, 0);
       long long current_treasury = sqlite3_column_int64(stmt, 1);
       
-      long long delta = (long long)floor((double)current_treasury * rate);
+      // Calculate delta using integer arithmetic to avoid floating point issues
+      long long delta = (current_treasury * rate_bps) / 10000;
       
       if (delta > 0) {
           long long next_treasury = current_treasury + delta;
           
-          if (next_treasury < 0) { // Overflow
-              next_treasury = 9223372036854775807LL; // LLONG_MAX
+          // Basic overflow check (SQLite integers are 64-bit, overflow is unlikely but good practice)
+          if (next_treasury < current_treasury) { // Implies overflow occurred
+              next_treasury = 9223372036854775807LL; // Clamp to LLONG_MAX
           }
 
           sqlite3_reset(update_stmt);
-          sqlite3_bind_int64(update_stmt, 1, next_treasury);
+          sqlite3_bind_int(update_stmt, 1, rate_bps); // Bind rate_bps for the calculation
           sqlite3_bind_int(update_stmt, 2, citadel_id);
-          sqlite3_step(update_stmt);
+          sqlite3_step(update_stmt); // Execute the update for this specific citadel
       }
   }
 
@@ -1789,7 +1793,9 @@ h_planet_market_tick (sqlite3 *db, int64_t now_s)
     "       es.quantity AS current_quantity, "
     "       pp.base_prod_rate, pp.base_cons_rate, "
     "       c.base_price, " // Base price for orders
-    "       c.illegal " // ADDED: To check for illegal commodities
+    "       c.illegal, " // ADDED: To check for illegal commodities
+    "       p.owner_id, " // ADDED for PE1
+    "       p.owner_type " // ADDED for PE1
     "FROM planets p "
     "JOIN planettypes pt ON p.type = pt.id "
     "JOIN planet_production pp ON p.type = pp.planet_type_id "
@@ -1817,10 +1823,36 @@ h_planet_market_tick (sqlite3 *db, int64_t now_s)
       int base_prod_rate = sqlite3_column_int (stmt, 7);
       int base_cons_rate = sqlite3_column_int (stmt, 8);
       int base_price = sqlite3_column_int (stmt, 9);
+      // int illegal = sqlite3_column_int (stmt, 10); // Unused variable
+      int owner_id = sqlite3_column_int(stmt, 11);
+      const char *owner_type = (const char *)sqlite3_column_text(stmt, 12);
       
       (void) now_s; // Suppress unused variable warning
       (void) base_prod_rate; // Suppress unused variable warning
       (void) base_cons_rate; // Suppress unused variable warning
+
+      // --- PE1: NPC Check ---
+      bool is_npc = false;
+      if (owner_id == 0) {
+          is_npc = true;
+      } else {
+          if (owner_type) {
+              if (strcasecmp(owner_type, "player") == 0 ||
+                  strcasecmp(owner_type, "corp") == 0 ||
+                  strcasecmp(owner_type, "corporation") == 0) {
+                  is_npc = false;
+              } else {
+                  is_npc = true; // Other types assumed NPC
+              }
+          } else {
+              is_npc = true; // No type, owned? Assume NPC/System
+          }
+      }
+
+      if (!is_npc) {
+          continue; // Skip auto-market for player/corp planets
+      }
+      // ----------------------
 
       if (!commodity_code) continue; // Skip if commodity_code is NULL
 
@@ -1873,7 +1905,7 @@ h_planet_market_tick (sqlite3 *db, int64_t now_s)
               int new_total = existing_order.filled_quantity + order_qty;
               db_update_commodity_order(db, existing_order.id, new_total, existing_order.filled_quantity, "open");
           } else {
-              db_insert_commodity_order(db, "planet", planet_id, commodity_id, side, order_qty, price, 0);
+              db_insert_commodity_order(db, "planet", planet_id, "planet", planet_id, commodity_id, side, order_qty, price, 0);
           }
       } else {
           // Cancel existing orders if balance is reached
@@ -1922,36 +1954,58 @@ h_traps_process (sqlite3 *db, int64_t now_s)
       return 0;
     }
   int rc = begin (db);
+  if (rc)
+    {
+      return rc;
+    }
 
+  sqlite3_stmt *stmt = NULL;
+  const char *sql_insert =
+    "INSERT INTO engine_commands(type, payload, created_at, due_at) "
+    "SELECT 'trap.trigger', json_object('trap_id',id), ?1, ?1 "
+    "FROM traps WHERE armed=1 AND trigger_at IS NOT NULL AND trigger_at <= ?1;";
 
-  if (rc)
+  rc = sqlite3_prepare_v2 (db, sql_insert, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
     {
-      return rc;
-    }
-  rc =
-    sqlite3_exec (db,
-                  "INSERT INTO jobs(type, payload, created_at) SELECT 'trap.trigger', json_object('trap_id',id), ?1 FROM traps WHERE armed=1 AND trigger_at IS NOT NULL AND trigger_at <= ?1;",
-                  NULL,
-                  NULL,
-                  NULL);
-  if (rc)
-    {
+      LOGE ("traps_process insert prepare failed: %s", sqlite3_errmsg (db));
       rollback (db);
-      LOGE ("traps_process insert rc=%d", rc);
+      unlock (db, "traps_process");
       return rc;
     }
-  rc =
-    sqlite3_exec (db,
-                  "DELETE FROM traps WHERE armed=1 AND trigger_at IS NOT NULL AND trigger_at <= ?1;",
-                  NULL,
-                  NULL,
-                  NULL);
-  if (rc)
+  sqlite3_bind_int64 (stmt, 1, now_s);
+  if (sqlite3_step (stmt) != SQLITE_DONE)
     {
+      LOGE ("traps_process insert step failed: %s", sqlite3_errmsg (db));
+      sqlite3_finalize (stmt);
       rollback (db);
-      LOGE ("traps_process delete rc=%d", rc);
+      unlock (db, "traps_process");
+      return SQLITE_ERROR;
+    }
+  sqlite3_finalize (stmt);
+
+  const char *sql_delete =
+    "DELETE FROM traps WHERE armed=1 AND trigger_at IS NOT NULL AND trigger_at <= ?1;";
+  
+  rc = sqlite3_prepare_v2 (db, sql_delete, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("traps_process delete prepare failed: %s", sqlite3_errmsg (db));
+      rollback (db);
+      unlock (db, "traps_process");
       return rc;
     }
+  sqlite3_bind_int64 (stmt, 1, now_s);
+  if (sqlite3_step (stmt) != SQLITE_DONE)
+    {
+      LOGE ("traps_process delete step failed: %s", sqlite3_errmsg (db));
+      sqlite3_finalize (stmt);
+      rollback (db);
+      unlock (db, "traps_process");
+      return SQLITE_ERROR;
+    }
+  sqlite3_finalize (stmt);
+
   commit (db);
   unlock (db, "traps_process");
   return 0;
@@ -1959,26 +2013,146 @@ h_traps_process (sqlite3 *db, int64_t now_s)
 
 
 int
+
+
 h_npc_step (sqlite3 *db, int64_t now_s)
+
+
 {
+
+
   (void) now_s;
+
+
   int64_t now_ms = (int64_t) monotonic_millis ();
 
+
+
+
+
+
+
+
   if (iss_init_once () == 1)
+
+
     {
+
+
       iss_tick (now_ms);
+
+
     }
+
+
   if (fer_init_once () == 1)
+
+
     {
+
+
       fer_attach_db (db);
+
+
       fer_tick (now_ms);
+
+
     }
+
+
   if (ori_init_once () == 1)
+
+
     {
+
+
       ori_attach_db (db);
+
+
       ori_tick (now_ms);
+
+
     }
+
+
   return 0;
+
+
+}
+
+
+
+
+
+int
+
+
+cmd_sys_cron_planet_tick_once (client_ctx_t *ctx, json_t *root)
+
+
+{
+
+
+  if (ctx->player_id != 0 && ctx->player_id != 1)
+
+
+    {
+
+
+      send_enveloped_refused (ctx->fd, root, 1403, "Permission denied", NULL);
+
+
+      return 0;
+
+
+    }
+
+
+  sqlite3 *db = db_get_handle ();
+
+
+  if (!db)
+
+
+    {
+
+
+      send_enveloped_error (ctx->fd, root, 500, "Database unavailable");
+
+
+      return 0;
+
+
+    }
+
+
+  int64_t now_s = time (NULL);
+
+
+  // Call the main planet growth handler, which also orchestrates the market tick
+
+
+  if (h_planet_growth (db, now_s) != 0)
+
+
+    {
+
+
+      send_enveloped_error (ctx->fd, root, 500, "Planet cron tick failed.");
+
+
+      return 0;
+
+
+    }
+
+
+  send_enveloped_ok (ctx->fd, root, "sys.cron.planet_tick_once.success", NULL);
+
+
+  return 0;
+
+
 }
 
 
@@ -2125,7 +2299,7 @@ h_port_economy_tick (sqlite3 *db, int64_t now_s)
               db_update_commodity_order(db, existing_order.id, new_total, existing_order.filled_quantity, "open");
           } else {
               // Insert new order
-              db_insert_commodity_order(db, "port", port_id, commodity_id, side, order_qty, price, 0);
+              db_insert_commodity_order(db, "port", port_id, "port", port_id, commodity_id, side, order_qty, price, 0);
           }
           orders_processed++;
       } else {
@@ -3593,7 +3767,7 @@ h_cleanup_old_news (sqlite3 *db, int64_t now_s)
     }
   LOGI ("cleanup_old_news: Starting cleanup of old news articles.");
   sqlite3_stmt *stmt = NULL;
-  const char *sql = "DELETE FROM news_feed WHERE timestamp < ?;";
+  const char *sql = "DELETE FROM news_feed WHERE published_ts < ?;";
   int rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
 
 

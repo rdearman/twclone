@@ -89,7 +89,9 @@ print_usage (const char *progname)
 int
 main (int argc, char *argv[])
 {
+
   server_log_init_file ("./twclone.log", "[server]", 0, LOG_INFO);
+
   sqlite3 *handle = db_get_handle ();
   /* Default values loaded from DB (so we honor defaults if arguments aren't provided) */
   int sectors = get_config_int (handle, "default_nodes", 500);

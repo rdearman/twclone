@@ -823,8 +823,9 @@ bigbang (void)
       fprintf (stderr, "bigbang: config_load failed\n");
       return -1;
     }
-  int numSectors = cfg->default_nodes;
 
+  int numSectors = cfg->default_nodes;
+  fprintf (stderr, "bigbang: int numSectors = %d\n", numSectors); 
 
   fprintf (stderr, "BIGBANG: Creating sectors...\n");
   if (create_sectors () != 0)
@@ -1672,6 +1673,12 @@ create_ferringhi (int ferringhi_sector)
     }
   sqlite3_finalize (st);
 
+  if (longest_tunnel_sector == 0)
+  {
+    longest_tunnel_sector = 20;
+  }
+
+  
   // --- Ferringhi Homeworld (num=2) Update (Correction IV.1) ---
   char planet_sector[256];
 

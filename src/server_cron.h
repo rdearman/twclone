@@ -3,6 +3,7 @@
 #include <sqlite3.h>
 #include <stdint.h>
 #include <jansson.h>
+#include "common.h"
 #include <stdbool.h>
 typedef int (*cron_handler_fn) (sqlite3 *db, int64_t now_s);
 #define NEWS_EXPIRATION_SECONDS 604800L // 7 days in seconds
@@ -55,4 +56,6 @@ int commit (sqlite3 *db);
 int rollback (sqlite3 *db);
 int unlock (sqlite3 *db, const char *name);
 int64_t get_utc_epoch_day (int64_t unix_timestamp);
+int cmd_sys_cron_planet_tick_once(client_ctx_t *ctx, json_t *root);
+
 #endif /* SERVER_CRON_H */

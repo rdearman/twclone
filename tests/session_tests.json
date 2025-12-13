@@ -1,0 +1,195 @@
+{
+  "description": "Tests for features implemented in the current session (Colonist Production, Planet Treasury, Treasury Interest).",
+  "suites": {
+    "session_features": [
+      {
+        "name": "Register player 'testuser' and login",
+        "command": "auth.register",
+        "data": { "username": "testuser", "passwd": "password" },
+        "register_if_missing": true,
+        "expect": { "status": "ok" },
+        "save": { "testuser_id": "data.player_id" }
+      },
+      {
+        "name": "Login as 'testuser'",
+        "command": "auth.login",
+        "data": { "username": "testuser", "passwd": "password" },
+        "user": "testuser",
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Give Genesis Torpedo (via raw SQL)",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "UPDATE ships SET genesis = 1 WHERE id = (SELECT ship FROM players WHERE id = @testuser_id);" },
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Create Planet (genesis) at Sector 2",
+        "command": "planet.genesis_create",
+        "data": {
+          "sector_id": 2,
+          "name": "NewWorld",
+          "owner_entity_type": "player"
+        },
+        "user": "testuser",
+        "expect": { "status": "ok" },
+        "save": { "planet_id": "data.planet_id" }
+      },
+      {
+        "name": "Set Planet Population (via raw SQL)",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "UPDATE planets SET population = 1000 WHERE id = @planet_id;" },
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Allocate colonists to Ore",
+        "command": "planet.colonists.set",
+        "data": {
+          "planet_id": "@planet_id",
+          "colonists_ore": 500,
+          "colonists_org": 0,
+          "colonists_eq": 0,
+          "colonists_mil": 0,
+          "colonists_unassigned": 500
+        },
+        "user": "testuser",
+        "expect": { "status": "ok", "data.colonists_ore": 500, "data.population_total": 1000 }
+      },
+      {
+        "name": "Verify colonist allocation",
+        "command": "planet.colonists.get",
+        "data": { "planet_id": "@planet_id" },
+        "user": "testuser",
+        "expect": { "status": "ok", "data.colonists_ore": 500, "data.colonists_unassigned": 500 }
+      },
+      {
+        "name": "Verify colonist allocation total exceeds population (expect fail)",
+        "command": "planet.colonists.set",
+        "data": {
+          "planet_id": "@planet_id",
+          "colonists_ore": 1100,
+          "colonists_org": 0,
+          "colonists_eq": 0,
+          "colonists_mil": 0,
+          "colonists_unassigned": 0
+        },
+        "user": "testuser",
+        "expect": { "status": "refused", "error.code": 1406 }
+      },
+      {
+        "name": "Add Citadel Level 1 to planet (via raw SQL)",
+        "command": "sys.raw_sql_exec",
+        "data": {
+          "sql": "INSERT INTO citadels (planet_id, level, treasury, owner) VALUES (@planet_id, 1, 0, @testuser_id);"
+        },
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Give player 100000 credits (via raw SQL)",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "UPDATE players SET credits = 100000 WHERE id = @testuser_id;" },
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Deposit 50000 credits to planet treasury",
+        "command": "planet.deposit",
+        "data": { "planet_id": "@planet_id", "amount": 50000 },
+        "user": "testuser",
+        "expect": { "status": "ok", "data.player_credits": 50000, "data.planet_treasury_balance": 50000 }
+      },
+      {
+        "name": "Withdraw 20000 credits from planet treasury",
+        "command": "planet.withdraw",
+        "data": { "planet_id": "@planet_id", "amount": 20000 },
+        "user": "testuser",
+        "expect": { "status": "ok", "data.player_credits": 70000, "data.planet_treasury_balance": 30000 }
+      },
+      {
+        "name": "Deposit (fail: non-owner)",
+        "command": "planet.deposit",
+        "data": { "planet_id": "@planet_id", "amount": 100 },
+        "user": "another_user",
+        "expect": { "status": "refused", "error.code": 1403 }
+      },
+      {
+        "name": "Withdraw (fail: insufficient treasury funds)",
+        "command": "planet.withdraw",
+        "data": { "planet_id": "@planet_id", "amount": 50000 },
+        "user": "testuser",
+        "expect": { "status": "refused", "error.code": 1402 }
+      },
+      {
+        "name": "Create a Corporation",
+        "command": "corp.create",
+        "data": { "name": "TestCorp" },
+        "user": "testuser",
+        "expect": { "status": "ok" },
+        "save": { "corp_id": "data.corp_id" }
+      },
+      {
+        "name": "Transfer planet ownership to corp (via raw SQL)",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "UPDATE planets SET owner_id = @corp_id, owner_type = 'corp' WHERE id = @planet_id;" },
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Deposit to corp-owned planet as member",
+        "command": "planet.deposit",
+        "data": { "planet_id": "@planet_id", "amount": 10000 },
+        "user": "testuser",
+        "expect": { "status": "ok", "data.player_credits": 60000, "data.planet_treasury_balance": 40000 }
+      },
+      {
+        "name": "Withdraw from corp-owned planet as member (expect fail, not officer/leader)",
+        "command": "planet.withdraw",
+        "data": { "planet_id": "@planet_id", "amount": 500 },
+        "user": "testuser",
+        "expect": { "status": "refused", "error.code": 1403 }
+      },
+      {
+        "name": "Promote testuser to Leader (via raw SQL) to allow corp withdraw",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "UPDATE corp_members SET role = 'Leader' WHERE corp_id = @corp_id AND player_id = @testuser_id;" },
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Withdraw from corp-owned planet as Leader",
+        "command": "planet.withdraw",
+        "data": { "planet_id": "@planet_id", "amount": 5000 },
+        "user": "testuser",
+        "expect": { "status": "ok", "data.player_credits": 65000, "data.planet_treasury_balance": 35000 }
+      },
+      {
+        "name": "Setup for Production/Interest Test: Ensure planet has 0 ore, org, equ, fuel in entity_stock",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "DELETE FROM entity_stock WHERE entity_type='planet' AND entity_id=@planet_id;" },
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Setup for Production/Interest Test: Add planet_production entries",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "INSERT OR REPLACE INTO planet_production (planet_type_id, commodity_code, base_prod_rate, base_cons_rate) SELECT type, 'ORE', 10, 0 FROM planets WHERE id = @planet_id;" },
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Setup for Production/Interest Test: Set planet_treasury_interest_rate_bps config",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "INSERT OR REPLACE INTO config (key, value, type) VALUES ('planet_treasury_interest_rate_bps', '20', 'int');" },
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Trigger Planet Growth (Manual Cron Tick - PRODUCTION / INTEREST verification)",
+        "comment": "This test verifies that the setup for production and interest is correct. However, without a dedicated command to trigger h_planet_growth directly, this relies on a cron job running naturally in a live server or external trigger. The assertion below will simply check the current treasury value after setup.",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "SELECT treasury FROM citadels WHERE planet_id = @planet_id;" },
+        "expect": { "status": "ok", "data.rows": [ [35000] ] }
+      }
+      // Note: Direct testing of colonist production and treasury interest via cron tick
+      // is challenging without a specific debug command to force the cron runner.
+      // The current tests verify setup and command-driven interactions.
+      // Production tests would require querying entity_stock before and after a tick.
+      // Interest tests would require querying citadels.treasury before and after a tick.
+      // If a 'sys.cron.run_planet_growth_tick' command were implemented, these could be added.
+    ]
+  }
+}

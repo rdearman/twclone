@@ -4030,20 +4030,255 @@ apply_sector_fighters_on_entry(client_ctx_t *ctx, int sector_id)
   return 0;
 }
 
+/* Helper to apply Quasar damage (Fighters -> Shields -> Hull) */
+static int
+h_apply_quasar_damage (client_ctx_t *ctx, int damage, const char *source_desc)
+{
+  if (damage <= 0) return 0;
+
+  sqlite3 *db = db_get_handle();
+  int ship_id = h_get_active_ship_id(db, ctx->player_id);
+  if (ship_id <= 0) return 0;
+
+  combat_ship_t ship = {0};
+  if (load_ship_combat_stats(db, ship_id, &ship) != 0) return 0;
+
+  int remaining = damage;
+  int fighters_lost = 0;
+  int shields_lost = 0;
+  int hull_lost = 0;
+
+  // 1. Fighters
+  if (ship.fighters > 0) {
+      int absorb = MIN(remaining, ship.fighters);
+      ship.fighters -= absorb;
+      remaining -= absorb;
+      fighters_lost = absorb;
+  }
+
+  // 2. Shields
+  if (remaining > 0 && ship.shields > 0) {
+      int absorb = MIN(remaining, ship.shields);
+      ship.shields -= absorb;
+      remaining -= absorb;
+      shields_lost = absorb;
+  }
+
+  // 3. Hull
+  if (remaining > 0) {
+      ship.hull -= remaining;
+      hull_lost = remaining;
+  }
+
+  // Update DB
+  persist_ship_damage(db, &ship, fighters_lost);
+
+  // Log Event
+  json_t *hit_data = json_object();
+  json_object_set_new(hit_data, "damage_total", json_integer(damage));
+  json_object_set_new(hit_data, "fighters_lost", json_integer(fighters_lost));
+  json_object_set_new(hit_data, "shields_lost", json_integer(shields_lost));
+  json_object_set_new(hit_data, "hull_lost", json_integer(hull_lost));
+  json_object_set_new(hit_data, "source", json_string(source_desc));
+  
+  db_log_engine_event((long long)time(NULL), "combat.hit", "player", ctx->player_id, ship.sector, hit_data, NULL);
+
+  // Check destruction
+  if (ship.hull <= 0) {
+      destroy_ship_and_handle_side_effects(ctx, ctx->player_id);
+      return 1;
+  }
+
+  return 0;
+}
+
+static int
+apply_sector_quasar_on_entry (client_ctx_t *ctx, int sector_id)
+{
+  if (sector_id == 1) return 0; // Terra Safe
+
+  sqlite3 *db = db_get_handle();
+  int ship_corp_id = ctx->corp_id;
+
+  sqlite3_stmt *st = NULL;
+  const char *sql = 
+      "SELECT p.id, p.owner_id, p.owner_type, c.level, c.qCannonSector, c.militaryReactionLevel "
+      "FROM planets p "
+      "JOIN citadels c ON p.id = c.planet_id "
+      "WHERE p.sector = ?1 AND c.level >= 3 AND c.qCannonSector > 0;";
+  
+  if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK) {
+      LOGE("apply_sector_quasar_on_entry: prepare failed: %s", sqlite3_errmsg(db));
+      return 0;
+  }
+
+  sqlite3_bind_int(st, 1, sector_id);
+  int shot_fired = 0;
+
+  while (sqlite3_step(st) == SQLITE_ROW) {
+      int planet_id = sqlite3_column_int(st, 0);
+      int owner_id = sqlite3_column_int(st, 1);
+      const char *owner_type = (const char*)sqlite3_column_text(st, 2);
+      // int level = sqlite3_column_int(st, 3); // Unused, filter handles it
+      int base_strength = sqlite3_column_int(st, 4);
+      int reaction = sqlite3_column_int(st, 5);
+
+      // Resolve Corp ID for hostility check
+      int p_corp_id = 0;
+      if (owner_type && (strcasecmp(owner_type, "corp") == 0 || strcasecmp(owner_type, "corporation") == 0)) {
+          p_corp_id = owner_id;
+      }
+
+      if (is_asset_hostile(owner_id, p_corp_id, ctx->player_id, ship_corp_id)) {
+          // Fire!
+          int pct = 100;
+          if (reaction == 1) pct = 125;
+          else if (reaction >= 2) pct = 150;
+
+          int damage = (int)floor((double)base_strength * (double)pct / 100.0);
+          
+          char source_desc[64];
+          snprintf(source_desc, sizeof(source_desc), "Quasar Sector Shot (Planet %d)", planet_id);
+          
+          if (h_apply_quasar_damage(ctx, damage, source_desc)) {
+              shot_fired = 1; // Destroyed
+          } else {
+              shot_fired = 2; // Damaged
+          }
+          break; // Single shot per sector entry
+      }
+  }
+  sqlite3_finalize(st);
+
+  return (shot_fired == 1); // Return 1 if destroyed
+}
+
 /* Central Hazard Handler */
 int
 h_handle_sector_entry_hazards(sqlite3 *db, client_ctx_t *ctx, int sector_id)
 {
     (void)db; // Unused, usually available via ctx logic but passed for consistency
-    /* Armid Mines First */
+    
+    /* Quasar First (Long Range) */
+    if (apply_sector_quasar_on_entry(ctx, sector_id)) return 1; // Destroyed
+
+    /* Armid Mines Second */
     if (apply_armid_mines_on_entry(ctx, sector_id, NULL)) return 1; // Destroyed
 
-    /* Fighters Second */
+    /* Fighters Third */
     if (apply_sector_fighters_on_entry(ctx, sector_id)) return 1; // Destroyed
 
     /* Limpets (Phase 2) - Placeholder */
     
     return 0;
+}
+
+int
+h_trigger_atmosphere_quasar(sqlite3 *db, client_ctx_t *ctx, int planet_id)
+{
+    // 1. Get Planet/Citadel Info
+    sqlite3_stmt *st = NULL;
+    const char *sql = 
+        "SELECT p.owner_id, p.owner_type, c.level, c.qCannonAtmosphere, c.militaryReactionLevel "
+        "FROM planets p "
+        "JOIN citadels c ON p.id = c.planet_id "
+        "WHERE p.id = ?1 AND c.level >= 3 AND c.qCannonAtmosphere > 0;";
+    
+    if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK) return 0;
+    sqlite3_bind_int(st, 1, planet_id);
+    
+    if (sqlite3_step(st) == SQLITE_ROW) {
+        int owner_id = sqlite3_column_int(st, 0);
+        const char *owner_type = (const char*)sqlite3_column_text(st, 1);
+        int base_strength = sqlite3_column_int(st, 3);
+        int reaction = sqlite3_column_int(st, 4);
+        
+        int p_corp_id = 0;
+        if (owner_type && (strcasecmp(owner_type, "corp") == 0 || strcasecmp(owner_type, "corporation") == 0)) {
+            p_corp_id = owner_id;
+        }
+        
+        if (is_asset_hostile(owner_id, p_corp_id, ctx->player_id, ctx->corp_id)) {
+            int pct = 100;
+            if (reaction == 1) pct = 125;
+            else if (reaction >= 2) pct = 150;
+
+            int damage = (int)floor((double)base_strength * (double)pct / 100.0);
+            
+            sqlite3_finalize(st); // Done with query
+            
+            char source_desc[64];
+            snprintf(source_desc, sizeof(source_desc), "Quasar Atmosphere Shot (Planet %d)", planet_id);
+            
+            if (h_apply_quasar_damage(ctx, damage, source_desc)) {
+                return 1; // Destroyed
+            }
+            return 0; // Survived
+        }
+    }
+    sqlite3_finalize(st);
+    return 0;
+}
+
+#include "server_news.h"
+
+/* Helper to apply Terra sanctions */
+static void h_apply_terra_sanctions(sqlite3 *db, int player_id) {
+    sqlite3_stmt *st = NULL;
+
+    // 1. Wipe Ships
+    if (sqlite3_prepare_v2(db, "DELETE FROM ships WHERE id IN (SELECT ship_id FROM ship_ownership WHERE player_id = ?1)", -1, &st, NULL) == SQLITE_OK) {
+        sqlite3_bind_int(st, 1, player_id);
+        sqlite3_step(st);
+        sqlite3_finalize(st);
+    }
+
+    // 2. Zero Player Credits
+    if (sqlite3_prepare_v2(db, "UPDATE players SET credits = 0 WHERE id = ?1", -1, &st, NULL) == SQLITE_OK) {
+        sqlite3_bind_int(st, 1, player_id);
+        sqlite3_step(st);
+        sqlite3_finalize(st);
+    }
+
+    // 3. Zero Bank Accounts
+    if (sqlite3_prepare_v2(db, "UPDATE bank_accounts SET balance = 0 WHERE owner_type = 'player' AND owner_id = ?1", -1, &st, NULL) == SQLITE_OK) {
+        sqlite3_bind_int(st, 1, player_id);
+        sqlite3_step(st);
+        sqlite3_finalize(st);
+    }
+
+    // 4. Delete Sector Assets
+    if (sqlite3_prepare_v2(db, "DELETE FROM sector_assets WHERE player = ?1", -1, &st, NULL) == SQLITE_OK) {
+        sqlite3_bind_int(st, 1, player_id);
+        sqlite3_step(st);
+        sqlite3_finalize(st);
+    }
+
+    // 5. Delete Limpets
+    if (sqlite3_prepare_v2(db, "DELETE FROM limpet_attached WHERE owner_player_id = ?1", -1, &st, NULL) == SQLITE_OK) {
+        sqlite3_bind_int(st, 1, player_id);
+        sqlite3_step(st);
+        sqlite3_finalize(st);
+    }
+
+    // 6. Zero Planet Treasuries
+    if (sqlite3_prepare_v2(db, "UPDATE citadels SET treasury = 0 WHERE planet_id IN (SELECT id FROM planets WHERE owner_id = ?1 AND owner_type = 'player')", -1, &st, NULL) == SQLITE_OK) {
+        sqlite3_bind_int(st, 1, player_id);
+        sqlite3_step(st);
+        sqlite3_finalize(st);
+    }
+
+    // 7. Zero Planet Fighters
+    if (sqlite3_prepare_v2(db, "UPDATE planets SET fighters = 0 WHERE owner_id = ?1 AND owner_type = 'player'", -1, &st, NULL) == SQLITE_OK) {
+        sqlite3_bind_int(st, 1, player_id);
+        sqlite3_step(st);
+        sqlite3_finalize(st);
+    }
+
+    // 8. Global News
+    char msg[256];
+    snprintf(msg, sizeof(msg), "Player %d has attacked Terra and has been sanctioned by the Federation. All assets seized.", player_id);
+    news_post(msg, "Federation", 0);
 }
 
 /* ---------- combat.attack_planet ---------- */
@@ -4119,16 +4354,18 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
   // 4. Terra Protection
   if (planet_id == 1 || p_sector == 1) {
       destroy_ship_and_handle_side_effects(ctx, ctx->player_id);
+      h_apply_terra_sanctions(db, ctx->player_id);
       
       json_t *evt = json_object();
       json_object_set_new(evt, "planet_id", json_integer(planet_id));
+      json_object_set_new(evt, "sanctioned", json_true());
       db_log_engine_event((long long)time(NULL), "player.terra_attack_sanction.v1", "player", ctx->player_id, current_sector, evt, NULL);
 
-      send_enveloped_error(ctx->fd, root, 403, "You have attacked Terra! Federation forces have destroyed your ship.");
+      send_enveloped_error(ctx->fd, root, 403, "You have attacked Terra! Federation forces have destroyed your ship and seized your assets.");
       return 0;
   }
 
-  // 5. Combat
+  // 5. Get Attacker Ship Info
   int s_fighters = 0;
   if (sqlite3_prepare_v2(db, "SELECT fighters FROM ships WHERE id=?1", -1, &pst, NULL) == SQLITE_OK) {
       sqlite3_bind_int(pst, 1, ship_id);
@@ -4141,20 +4378,69 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
       return 0;
   }
 
-  bool attacker_wins = (s_fighters > p_fighters);
+  // 6. Citadel Defence Hooks (Shields + CCC)
+  int cit_level = 0;
+  int cit_shields = 0;
+  int cit_reaction = 0;
+  
+  if (sqlite3_prepare_v2(db, "SELECT level, planetaryShields, militaryReactionLevel FROM citadels WHERE planet_id=?1", -1, &pst, NULL) == SQLITE_OK) {
+      sqlite3_bind_int(pst, 1, planet_id);
+      if (sqlite3_step(pst) == SQLITE_ROW) {
+          cit_level = sqlite3_column_int(pst, 0);
+          cit_shields = sqlite3_column_int(pst, 1);
+          cit_reaction = sqlite3_column_int(pst, 2);
+      }
+      sqlite3_finalize(pst);
+  }
+
+  int fighters_absorbed = 0;
+
+  // 6.1 Shields (Level >= 5)
+  if (cit_level >= 5 && cit_shields > 0) {
+      int absorbed = (s_fighters < cit_shields) ? s_fighters : cit_shields;
+      s_fighters -= absorbed;
+      fighters_absorbed = absorbed;
+      int new_shields = cit_shields - absorbed;
+      
+      // Persist shield damage immediately
+      sqlite3_stmt *upd = NULL;
+      if (sqlite3_prepare_v2(db, "UPDATE citadels SET planetaryShields=?1 WHERE planet_id=?2", -1, &upd, NULL) == SQLITE_OK) {
+          sqlite3_bind_int(upd, 1, new_shields);
+          sqlite3_bind_int(upd, 2, planet_id);
+          sqlite3_step(upd);
+          sqlite3_finalize(upd);
+      }
+      
+      // If all fighters absorbed, attack fails immediately (but logic continues with 0 fighters likely resulting in loss)
+  }
+
+  // 6.2 CCC / Military Reaction (Level >= 2)
+  int effective_p_fighters = p_fighters;
+  if (cit_level >= 2 && cit_reaction > 0) {
+      int pct = 100;
+      if (cit_reaction == 1) pct = 125;
+      else if (cit_reaction >= 2) pct = 150;
+      
+      effective_p_fighters = (int)floor((double)p_fighters * (double)pct / 100.0);
+  }
+
+  // 7. Combat Resolution
+  bool attacker_wins = (s_fighters > effective_p_fighters);
   int ship_loss = 0;
   int planet_loss = 0;
   bool captured = false;
 
   if (attacker_wins) {
-      ship_loss = p_fighters;
-      planet_loss = p_fighters;
+      ship_loss = effective_p_fighters; // Attacker loses fighters equal to effective defense
+      planet_loss = p_fighters;         // Planet loses all real fighters
       captured = true;
   } else {
-      ship_loss = s_fighters;
-      planet_loss = s_fighters;
+      ship_loss = s_fighters;           // Attacker loses all remaining fighters
+      planet_loss = s_fighters;         // Planet loses fighters equal to attacker strength
       captured = false;
   }
+  
+  ship_loss += fighters_absorbed;
 
   char *err = NULL;
   sqlite3_exec(db, "BEGIN IMMEDIATE", NULL, NULL, NULL);

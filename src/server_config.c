@@ -108,6 +108,7 @@ config_set_defaults (void)
   g_cfg.mines.limpet.per_sector_cap = 250;
   g_cfg.mines.limpet.max_per_ship = 1;
   g_cfg.mines.limpet.allow_multi_owner = false;
+  g_cfg.mines.limpet.limpet_ttl_days = 7;
   g_cfg.mines.limpet.scrub_cost = 5000;
   // Death Configuration Defaults (from design brief)
   g_cfg.death.max_per_day = 2;
@@ -598,6 +599,23 @@ apply_db (sqlite3 *db)
       else if (strcmp (key, "neutral_band") == 0)
         {
           cfg_parse_int (val, type, &g_cfg.combat.neutral_band);
+        }
+      /* --- NEW KEYS --- */
+      else if (strcmp (key, "num_sectors") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.num_sectors);
+        }
+      else if (strcmp (key, "planet_treasury_interest_rate_bps") == 0)
+        {
+          cfg_parse_int (val, type, &g_cfg.planet_treasury_interest_rate_bps);
+        }
+      else if (strcmp (key, "bank_min_balance_for_interest") == 0)
+        {
+          cfg_parse_int64 (val, type, &g_cfg.bank_min_balance_for_interest);
+        }
+      else if (strcmp (key, "bank_max_daily_interest_per_account") == 0)
+        {
+          cfg_parse_int64 (val, type, &g_cfg.bank_max_daily_interest_per_account);
         }
       /* Log unknown keys as debug (ignore) */
       else

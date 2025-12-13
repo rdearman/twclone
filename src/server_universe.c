@@ -1220,6 +1220,43 @@ cmd_move_describe_sector (client_ctx_t *ctx, json_t *root)
 }
 
 
+/* Return 1 if interdicted, 0 otherwise */
+static int
+h_check_interdiction (sqlite3 *db, int sector_id, int player_id, int corp_id)
+{
+  sqlite3_stmt *st = NULL;
+  const char *sql = 
+      "SELECT p.owner_id, p.owner_type "
+      "FROM planets p "
+      "JOIN citadels c ON p.id = c.planet_id "
+      "WHERE p.sector = ?1 AND c.level >= 6 AND c.interdictor > 0;";
+  
+  if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK) {
+      LOGE("h_check_interdiction: prepare failed: %s", sqlite3_errmsg(db));
+      return 0; // Fail open
+  }
+
+  sqlite3_bind_int(st, 1, sector_id);
+  int blocked = 0;
+
+  while (sqlite3_step(st) == SQLITE_ROW) {
+      int owner_id = sqlite3_column_int(st, 0);
+      const char *owner_type = (const char*)sqlite3_column_text(st, 1);
+      
+      int p_corp_id = 0;
+      if (owner_type && (strcasecmp(owner_type, "corp") == 0 || strcasecmp(owner_type, "corporation") == 0)) {
+          p_corp_id = owner_id;
+      }
+
+      if (is_asset_hostile(owner_id, p_corp_id, player_id, corp_id)) {
+          blocked = 1;
+          break;
+      }
+  }
+  sqlite3_finalize(st);
+  return blocked;
+}
+
 int
 cmd_move_warp (client_ctx_t *ctx, json_t *root)
 {
@@ -1228,6 +1265,11 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
         ctx->sector_id);
   sqlite3 *db_handle = db_get_handle ();
 
+  // C6 Interdiction Check
+  if (h_check_interdiction(db_handle, ctx->sector_id, ctx->player_id, ctx->corp_id)) {
+      send_enveloped_refused(ctx->fd, root, 1403, "Warp interdicted by hostile planetary defences.", NULL);
+      return 0;
+  }
 
   h_decloak_ship (db_handle,
                   h_get_active_ship_id (db_handle, ctx->player_id));

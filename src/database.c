@@ -161,7 +161,7 @@ db_get_handle (void)
 
   if (rc != SQLITE_OK)
     {
-      // fprintf(stderr, "FATAL: Cannot open database for thread: %s\n", sqlite3_errmsg(tls_db));
+      fprintf(stderr, "FATAL: Cannot open database for thread: %s\n", sqlite3_errmsg(tls_db));
       /* In a real server, you might handle this more gracefully, but for now: */
       if (tls_db)
         {
@@ -459,7 +459,6 @@ const char *create_table_sql[] = {
   "  type TEXT NOT NULL CHECK (type IN ('int', 'bool', 'string', 'double')) "
   " ); ",
   
-
   /* CORPORATIONS + MEMBERS */
   " CREATE TABLE IF NOT EXISTS corporations ( "
   "   id INTEGER PRIMARY KEY,  "
@@ -1505,12 +1504,14 @@ const char *create_table_sql[] = {
   "    last_attempt_at INTEGER NOT NULL,"
   "    was_success  INTEGER NOT NULL"
   ");",
+  
   " CREATE TABLE IF NOT EXISTS currencies (  "
   "   code TEXT PRIMARY KEY,  "
   "   name TEXT NOT NULL,  "
   "   minor_unit INTEGER NOT NULL DEFAULT 1 CHECK (minor_unit > 0),  "
   "   is_default INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0,1))  "
-  " );  "
+  " );  ",
+  
   " INSERT OR IGNORE INTO currencies(code, name, minor_unit, is_default)  "
   " VALUES ('CRD','Galactic Credits',1,1);  "
   " CREATE TABLE IF NOT EXISTS commodities (  "
@@ -1520,7 +1521,7 @@ const char *create_table_sql[] = {
   "   illegal INTEGER NOT NULL DEFAULT 0,  "
   "   base_price INTEGER NOT NULL DEFAULT 0 CHECK (base_price >= 0),  "
   "   volatility INTEGER NOT NULL DEFAULT 0 CHECK (volatility >= 0)  "
-  " );  "
+  " );  ",
   " INSERT OR IGNORE INTO commodities (code, name, base_price, volatility)  "
   " VALUES  "
   "   ('ORE', 'Ore', 100, 20),  "
@@ -1531,6 +1532,7 @@ const char *create_table_sql[] = {
   "   ('SLV', 'Slaves', 1000, 50, 1),  "
   "   ('WPN', 'Weapons', 750, 40, 1),  "
   "   ('DRG', 'Drugs', 500, 60, 1);  "
+  
   " CREATE TABLE IF NOT EXISTS commodity_orders (  "
   "   id INTEGER PRIMARY KEY,  "
   "   actor_type TEXT NOT NULL CHECK (actor_type IN ('player','corp','npc_planet','port')),  "
@@ -1540,9 +1542,11 @@ const char *create_table_sql[] = {
   "   commodity_id INTEGER NOT NULL REFERENCES commodities(id) ON DELETE CASCADE,  "
   "   side TEXT NOT NULL CHECK (side IN ('buy','sell')),  "
   "   quantity INTEGER NOT NULL CHECK (quantity > 0),  "
+  "   filled_quantity INTEGER NOT NULL DEFAULT 0 CHECK (filled_quantity >= 0),  "
   "   price INTEGER NOT NULL CHECK (price >= 0),  "
   "   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','filled','cancelled','expired')),  "
-  "   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))  "
+  "   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
+  "   expires_at INTEGER  " 
   " );  "
   " CREATE INDEX IF NOT EXISTS idx_commodity_orders_comm ON commodity_orders(commodity_id, status);  "
   " CREATE TABLE IF NOT EXISTS commodity_trades (  "
@@ -1592,6 +1596,18 @@ const char *create_table_sql[] = {
   "    FOREIGN KEY (planet_type_id) REFERENCES planettypes(id),  "
   "    FOREIGN KEY (commodity_code) REFERENCES commodities(code)  "
   " );  ",
+  " CREATE TABLE IF NOT EXISTS traps ( "
+  "   id INTEGER PRIMARY KEY, "
+  "   sector_id INTEGER NOT NULL, "
+  "   owner_player_id INTEGER, "
+  "   kind TEXT NOT NULL, "
+  "   armed INTEGER NOT NULL DEFAULT 0, "
+  "   arming_at INTEGER NOT NULL, "
+  "   expires_at INTEGER, "
+  "   trigger_at INTEGER, "
+  "   payload TEXT "
+  " ); ",
+  " CREATE INDEX IF NOT EXISTS idx_traps_trigger ON traps(armed, trigger_at); ",
   " CREATE TABLE IF NOT EXISTS bank_accounts (  "
   "   id INTEGER PRIMARY KEY,  "
   "   owner_type TEXT NOT NULL,  "
@@ -1636,13 +1652,6 @@ const char *create_table_sql[] = {
   " CREATE INDEX IF NOT EXISTS idx_bank_transactions_account_ts ON bank_transactions(account_id, ts DESC);  "
   " CREATE INDEX IF NOT EXISTS idx_bank_transactions_tx_group ON bank_transactions(tx_group_id);  "
   " CREATE UNIQUE INDEX IF NOT EXISTS idx_bank_transactions_idem ON bank_transactions(account_id, idempotency_key) WHERE idempotency_key IS NOT NULL;  "
-  " CREATE TRIGGER IF NOT EXISTS trg_bank_transactions_balance_after  "
-  " AFTER INSERT ON bank_transactions  "
-  " FOR EACH ROW  "
-  " BEGIN  "
-  "   UPDATE bank_transactions  "
-  "   SET balance_after = (SELECT balance FROM bank_accounts WHERE id = NEW.account_id)  "
-  "   WHERE id = NEW.id;  " " END; ",
   " CREATE TABLE IF NOT EXISTS bank_fee_schedules (  "
   "   id INTEGER PRIMARY KEY,  "
   "   tx_type TEXT NOT NULL,  "
@@ -1663,10 +1672,12 @@ const char *create_table_sql[] = {
   "   min_balance INTEGER NOT NULL DEFAULT 0 CHECK (min_balance >= 0),  "
   "   max_balance INTEGER NOT NULL DEFAULT 9223372036854775807,  "
   "   last_run_at TEXT,  "
+  "   compounding TEXT NOT NULL DEFAULT 'none', "  
   "   currency TEXT NOT NULL DEFAULT 'CRD' REFERENCES currencies(code)  "
   " );  "
-  " INSERT OR IGNORE INTO bank_interest_policy (id, apr_bps, min_balance, max_balance, last_run_at, currency)  "
-  " VALUES (1, 0, 0, 9223372036854775807, NULL, 'CRD');  "
+  " INSERT OR IGNORE INTO bank_interest_policy (id, apr_bps, compounding, last_run_at, currency)  "
+  " VALUES (1, 0, 'none', NULL, 'CRD');  ",
+
   " CREATE TABLE IF NOT EXISTS bank_orders (  "
   "   id INTEGER PRIMARY KEY,  "
   "   player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,  "
@@ -1680,6 +1691,7 @@ const char *create_table_sql[] = {
   "   to_id INTEGER NOT NULL,  "
   "   memo TEXT  "
   " );  "
+
   " CREATE TABLE IF NOT EXISTS bank_flags (  "
   "   player_id INTEGER PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE,  "
   "   is_frozen INTEGER NOT NULL DEFAULT 0 CHECK (is_frozen IN (0,1)),  "
@@ -1940,31 +1952,6 @@ const char *create_table_sql[] = {
   "   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
   "   amount INTEGER NOT NULL CHECK (amount >= 0),  "
   "   bank_tx_id INTEGER  "
-  " );  "
-  " CREATE TABLE IF NOT EXISTS commodity_orders (  "
-  "   id INTEGER PRIMARY KEY,  "
-  "   actor_type TEXT NOT NULL CHECK (actor_type IN ('player','corp','npc','port')),  "
-  "   actor_id INTEGER NOT NULL,  "
-  "   commodity_id INTEGER NOT NULL REFERENCES commodities(id) ON DELETE CASCADE,  "
-  "   side TEXT NOT NULL CHECK (side IN ('buy','sell')),  "
-  "   quantity INTEGER NOT NULL CHECK (quantity > 0),  "
-  "   price INTEGER NOT NULL CHECK (price >= 0),  "
-  "   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','filled','cancelled','expired')),  "
-  "   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))  "
-  " );  "
-  " CREATE INDEX IF NOT EXISTS idx_commodity_orders_comm ON commodity_orders(commodity_id, status);  "
-  " CREATE TABLE IF NOT EXISTS commodity_trades (  "
-  "   id INTEGER PRIMARY KEY,  "
-  "   commodity_id INTEGER NOT NULL REFERENCES commodities(id) ON DELETE CASCADE,  "
-  "   buyer_type TEXT NOT NULL CHECK (buyer_type IN ('player','corp','npc','port')),  "
-  "   buyer_id INTEGER NOT NULL,  "
-  "   seller_type TEXT NOT NULL CHECK (seller_type IN ('player','corp','npc','port')),  "
-  "   seller_id INTEGER NOT NULL,  "
-  "   quantity INTEGER NOT NULL CHECK (quantity > 0),  "
-  "   price INTEGER NOT NULL CHECK (price >= 0),  "
-  "   ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),  "
-  "   settlement_tx_buy INTEGER,  "
-  "   settlement_tx_sell INTEGER  "
   " );  "
   " CREATE TABLE IF NOT EXISTS futures_contracts (  "
   "   id INTEGER PRIMARY KEY,  "
@@ -2235,50 +2222,6 @@ const char *create_table_sql[] = {
 };
 const char *insert_default_sql[] = {
   /* Config defaults - Key-Value-Type Schema */
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('turnsperday', '125', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('maxwarps_per_sector', '6', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('startingcredits', '10000000', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('startingfighters', '10', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('startingholds', '20', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('processinterval', '1', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('autosave', '5', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_ports', '200', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_planets_per_sector', '6', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_total_planets', '300', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_citadel_level', '6', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('number_of_planet_types', '8', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_ship_name_length', '50', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('ship_type_count', '8', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('hash_length', '128', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('default_nodes', '500', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('buff_size', '1024', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_name_length', '50', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('planet_type_count', '8', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('server_port', '1234', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('s2s_port', '4321', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('bank_alert_threshold_player', '1000000', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('bank_alert_threshold_corp', '5000000', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_enabled', '1', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_block_at_cap', '0', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_navhaz_delta', '0', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_M', '10', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_K', '10', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_O', '10', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_L', '10', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_C', '10', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_H', '10', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_U', '5', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_enabled', '1', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_trade_in_factor_bp', '5000', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_require_cargo_fit', '1', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_require_fighters_fit', '1', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_require_shields_fit', '1', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_require_hardware_compat', '1', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_tax_bp', '1000', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('illegal_allowed_neutral', '0', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_cloak_duration', '24', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('neutral_band', '125', 'int');",
-  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('corporation_creation_fee', '1000', 'int');",
   "INSERT OR IGNORE INTO law_enforcement (id) VALUES (1);",
 /* Shiptypes: name, basecost, required_alignment, required_commission, required_experience, maxattack, initialholds, maxholds, maxfighters, turns, maxmines, maxlimpets, maxgenesis, max_detonators, max_probes, can_transwarp, transportrange, maxshields, offense, defense, maxbeacons, can_long_range_scan, can_planet_scan, maxphotons, max_cloaks, can_purchase, enabled */
 /* Initial Ship Types (First Block) */
@@ -3097,6 +3040,76 @@ done:
 }
 
 
+const char *config_defaults_sql[] = {
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('num_sectors', '500', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('planet_treasury_interest_rate_bps', '100', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('turnsperday', '125', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('maxwarps_per_sector', '6', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('startingcredits', '10000000', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('startingfighters', '10', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('startingholds', '20', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('processinterval', '1', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('autosave', '5', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_ports', '200', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_planets_per_sector', '6', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_total_planets', '300', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_citadel_level', '6', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('number_of_planet_types', '8', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_ship_name_length', '50', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('ship_type_count', '8', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('hash_length', '128', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('default_nodes', '500', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('buff_size', '1024', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_name_length', '50', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('planet_type_count', '8', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('server_port', '1234', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('s2s_port', '4321', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('bank_alert_threshold_player', '1000000', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('bank_alert_threshold_corp', '5000000', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_enabled', '1', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_block_at_cap', '0', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_navhaz_delta', '0', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_M', '10', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_K', '10', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_O', '10', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_L', '10', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_C', '10', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_H', '10', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('genesis_class_weight_U', '5', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_enabled', '1', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_trade_in_factor_bp', '5000', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_require_cargo_fit', '1', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_require_fighters_fit', '1', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_require_shields_fit', '1', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_require_hardware_compat', '1', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('shipyard_tax_bp', '1000', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('illegal_allowed_neutral', '0', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('max_cloak_duration', '24', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('neutral_band', '125', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('corporation_creation_fee', '1000', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('limpet_ttl_days', '7', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('bank_min_balance_for_interest', '0', 'int');",
+  "INSERT OR IGNORE INTO config (key, value, type) VALUES ('bank_max_daily_interest_per_account', '9223372036854775807', 'int');"
+};
+
+static const size_t config_defaults_count = sizeof(config_defaults_sql) / sizeof(config_defaults_sql[0]);
+
+static int
+db_seed_config_unlocked (void)
+{
+  sqlite3 *db = db_get_handle ();
+  if (!db) return -1;
+  char *errmsg = NULL;
+  for (size_t i = 0; i < config_defaults_count; i++) {
+    if (sqlite3_exec(db, config_defaults_sql[i], NULL, NULL, &errmsg) != SQLITE_OK) {
+      LOGE("Config seed error at %zu: %s", i, errmsg);
+      sqlite3_free(errmsg);
+      return -1;
+    }
+  }
+  return 0;
+}
+
 int
 db_init (void)
 {
@@ -3159,6 +3172,7 @@ db_init (void)
           goto cleanup;
         }
     }
+
   /* Step 3: if no config table, create schema + defaults */
   if (!table_exists)
     {
@@ -3185,6 +3199,12 @@ db_init (void)
     {
       // Schema exists logic (currently empty/commented out in original)
     }
+  
+  // Ensure config defaults are seeded (safe to run on existing DB)
+  if (db_seed_config_unlocked() != 0) {
+      LOGE("Failed to seed configuration defaults");
+  }
+
   if (!db_engine_bootstrap ())
     {
       LOGE ("PROBLEM WITH ENGINE CREATION");

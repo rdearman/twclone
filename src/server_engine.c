@@ -1420,7 +1420,7 @@ h_daily_bank_interest_tick (sqlite3 *db, int64_t now_s)
                                9223372036854775807LL);
 
 
-  while (sqlite3_step (st) == SQLITE_ROW)
+  while ((rc = sqlite3_step (st)) == SQLITE_ROW)
     {
       int account_id = sqlite3_column_int (st, 0);
       const char *owner_type = (const char *) sqlite3_column_text (st, 1);

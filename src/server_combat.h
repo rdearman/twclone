@@ -25,6 +25,7 @@ void apply_armid_damage_to_ship (ship_t *ship, int total_damage,
 int apply_armid_mines_on_entry (client_ctx_t *ctx, int new_sector_id,
                                 armid_encounter_t *out_enc);
 int h_handle_sector_entry_hazards(sqlite3 *db, client_ctx_t *ctx, int sector_id);
+int h_trigger_atmosphere_quasar(sqlite3 *db, client_ctx_t *ctx, int planet_id);
 typedef struct
 {
   int total_mines;              // all mine types

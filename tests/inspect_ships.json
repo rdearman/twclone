@@ -1,0 +1,1 @@
+{"command": "sys.raw_sql_exec", "data": {"sql": "PRAGMA table_info(ships);"}, "auth": {"session": "@admin_session"}}

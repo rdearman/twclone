@@ -26,6 +26,8 @@ int db_insert_commodity_order(
     sqlite3 *db,
     const char *actor_type,
     int actor_id,
+    const char *location_type,
+    int location_id,
     int commodity_id,
     const char *side,
     int quantity,

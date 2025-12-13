@@ -44,6 +44,7 @@
 #include "server_stardock.h"    // Include for hardware commands
 #include "server_corporation.h"
 #include "server_bank.h"        // Added missing include
+#include "server_cron.h"
 
 #ifndef streq
 #define streq(a,b) (strcasecmp (json_string_value ((a)), (b)) == 0)
@@ -314,6 +315,7 @@ static const command_entry_t k_command_registry[] = {
     {"sys.econ.port_status", cmd_sys_econ_port_status, "Economy port status"},
     {"sys.notice.create", cmd_sys_notice_create, "Sysop command to create a notice"},
     {"sys.npc.ferengi_tick_once", cmd_sys_npc_ferengi_tick_once, "Tick Ferengi"},
+    {"sys.cron.planet_tick_once", cmd_sys_cron_planet_tick_once, "Force a planet cron tick (production, market)", CMD_FLAG_DEBUG_ONLY},
     {"sys.raw_sql_exec", cmd_sys_raw_sql_exec, "Sysop command to execute raw SQL", CMD_FLAG_DEBUG_ONLY},
     {"sys.test_news_cron", cmd_sys_test_news_cron, "Sysop command to test news cron"},
     {"system.capabilities", cmd_system_capabilities, "Feature flags, schemas, counts"},

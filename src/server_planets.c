@@ -10,11 +10,73 @@
 #include <stdlib.h>             // For strdup, free
 #include "server_cmds.h"        // For send_error_response, send_json_response
 #include "server_corporation.h"
-#include "server_ports.h"       // For h_update_entity_stock
+#include "server_ports.h"       // For h_update_entity_stock, commodity_to_code
 #include "database_market.h"    // For commodity_order_t, db_insert_commodity_order
 #include "server_players.h"     // For h_get_player_petty_cash, h_add_player_petty_cash
+#include "server_combat.h"      // For h_trigger_atmosphere_quasar
+#include "server_ships.h"       // For h_update_ship_cargo, h_get_ship_cargo_and_holds, h_get_active_ship_id
+#include "database_cmd.h"       // For h_get_cluster_alignment_band, db_alignment_band_for_value, db_player_get_alignment
+#include "server_config.h"      // For db_get_config_int, db_get_config_bool
+
 // Forward declaration
 void send_enveloped_error (int fd, json_t *root, int code, const char *msg);
+
+// Helper to check if a commodity is illegal
+static bool
+h_is_illegal_commodity (sqlite3 *db, const char *commodity_code)
+{
+  if (!commodity_code) return false;
+  sqlite3_stmt *stmt;
+  bool illegal = false;
+  const char *sql = "SELECT illegal FROM commodities WHERE code = ? LIMIT 1";
+  if (sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_text (stmt, 1, commodity_code, -1, SQLITE_STATIC);
+      if (sqlite3_step (stmt) == SQLITE_ROW)
+        {
+          illegal = (sqlite3_column_int (stmt, 0) != 0);
+        }
+      sqlite3_finalize (stmt);
+    }
+  return illegal;
+}
+
+// Helper to check trade legality (Planet version)
+static bool
+h_planet_check_trade_legality (sqlite3 *db, int planet_id, int player_id, const char *commodity_code)
+{
+  if (!h_is_illegal_commodity(db, commodity_code)) return true;
+
+  // 1. Get Sector ID
+  int sector_id = 0;
+  sqlite3_stmt *st = NULL;
+  if (sqlite3_prepare_v2(db, "SELECT sector FROM planets WHERE id = ?1", -1, &st, NULL) == SQLITE_OK) {
+      sqlite3_bind_int(st, 1, planet_id);
+      if (sqlite3_step(st) == SQLITE_ROW) sector_id = sqlite3_column_int(st, 0);
+      sqlite3_finalize(st);
+  }
+  if (sector_id <= 0) return false;
+
+  // 2. Check Cluster Alignment
+  int cluster_band = 0;
+  h_get_cluster_alignment_band(db, sector_id, &cluster_band);
+  int cluster_good = 0;
+  db_alignment_band_for_value(db, cluster_band, NULL, NULL, NULL, &cluster_good, NULL, NULL, NULL);
+  if (cluster_good) return false; // Good clusters ban illegal trade
+
+  // 3. Check Player Alignment
+  int p_align = 0;
+  db_player_get_alignment(db, player_id, &p_align);
+  int neutral_band = db_get_config_int(db, "neutral_band", 75);
+  if (p_align > neutral_band) return false; // Good players banned
+
+  // 4. Check Neutral Config
+  int p_evil = 0;
+  db_alignment_band_for_value(db, p_align, NULL, NULL, NULL, NULL, &p_evil, NULL, NULL);
+  if (!p_evil && !db_get_config_bool(db, "illegal_allowed_neutral", true)) return false;
+
+  return true;
+}
 
 
 /**
@@ -230,6 +292,16 @@ cmd_planet_land (client_ctx_t *ctx, json_t *root)
                             "You do not have permission to land on this planet.");
       return 0;
     }
+
+  // Atmosphere Quasar Check (C3)
+  if (planet_id != 1) { // Skip Terra
+      if (h_trigger_atmosphere_quasar(db, ctx, planet_id)) {
+          // Ship destroyed
+          send_enveloped_error(ctx->fd, root, 403, "Ship destroyed by planetary defences.");
+          return 0;
+      }
+  }
+
   if (db_player_land_on_planet (db, ctx->player_id, planet_id) != SQLITE_OK)
     {
       send_enveloped_error (ctx->fd, root, ERR_SERVER_ERROR,
@@ -1246,6 +1318,13 @@ cmd_planet_market_sell (client_ctx_t *ctx, json_t *root)
         return 0;
     }
 
+    // PE2-B Check Legality
+    if (!h_planet_check_trade_legality(db, planet_id, ctx->player_id, commodity_code)) {
+        free(commodity_code);
+        send_enveloped_refused(ctx->fd, root, 1403, "Illegal trade refused by port authority (alignment/cluster rules).", NULL);
+        return 0;
+    }
+
     // Check stock
     int current_stock = 0;
     sqlite3_stmt *st = NULL;
@@ -1313,6 +1392,26 @@ cmd_planet_market_sell (client_ctx_t *ctx, json_t *root)
     return 0;
 }
 
+static int
+h_get_entity_stock_quantity(sqlite3 *db, const char *entity_type, int entity_id, const char *commodity_code, int *qty_out) {
+    sqlite3_stmt *st = NULL;
+    const char *sql = "SELECT quantity FROM entity_stock WHERE entity_type=?1 AND entity_id=?2 AND commodity_code=?3;";
+    int rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc != SQLITE_OK) return rc;
+    sqlite3_bind_text(st, 1, entity_type, -1, SQLITE_STATIC);
+    sqlite3_bind_int(st, 2, entity_id);
+    sqlite3_bind_text(st, 3, commodity_code, -1, SQLITE_STATIC);
+    if (sqlite3_step(st) == SQLITE_ROW) {
+        *qty_out = sqlite3_column_int(st, 0);
+        rc = SQLITE_OK;
+    } else {
+        *qty_out = 0;
+        rc = SQLITE_NOTFOUND; 
+    }
+    sqlite3_finalize(st);
+    return rc;
+}
+
 int
 cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
 {
@@ -1375,10 +1474,85 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
         return 0;
     }
     
+    // PE2-B Check Legality
+    if (!h_planet_check_trade_legality(db, planet_id, ctx->player_id, commodity_code)) {
+        free(commodity_code);
+        send_enveloped_refused(ctx->fd, root, 1403, "Illegal trade refused by port authority (alignment/cluster rules).", NULL);
+        return 0;
+    }
+
     int commodity_id = h_get_commodity_id_by_code(db, commodity_code);
     if (commodity_id <= 0) {
         free(commodity_code);
         send_enveloped_error(ctx->fd, root, 500, "Commodity ID lookup failed.");
+        return 0;
+    }
+
+    // PE2-C: Illegal Goods Private Trade (Immediate execution)
+    bool is_illegal = h_is_illegal_commodity(db, commodity_code);
+    if (is_illegal) {
+        // 1. Check Planet Stock
+        int stock = 0;
+        if (h_get_entity_stock_quantity(db, ENTITY_TYPE_PLANET, planet_id, commodity_code, &stock) != SQLITE_OK || stock < quantity_total) {
+            free(commodity_code);
+            send_enveloped_refused(ctx->fd, root, 1402, "Insufficient stock for immediate illegal purchase.", NULL);
+            return 0;
+        }
+
+        // 2. Check Player Credits
+        long long player_credits = 0;
+        if (h_get_player_petty_cash(db, ctx->player_id, &player_credits) != SQLITE_OK) {
+            free(commodity_code);
+            send_enveloped_error(ctx->fd, root, 500, "Credit check failed.");
+            return 0;
+        }
+        
+        long long cost = (long long)quantity_total * max_price; // Using max_price as immediate price
+        if (player_credits < cost) {
+            free(commodity_code);
+            send_enveloped_refused(ctx->fd, root, 1402, "Insufficient credits.", NULL);
+            return 0;
+        }
+
+        // 3. Check Ship Capacity
+        int ship_id = h_get_active_ship_id(db, ctx->player_id);
+        int free_holds = 0;
+        if (h_get_ship_cargo_and_holds(db, ship_id, NULL, NULL, NULL, NULL, &free_holds, NULL, NULL, NULL) != SQLITE_OK || free_holds < quantity_total) {
+            free(commodity_code);
+            send_enveloped_refused(ctx->fd, root, 1402, "Insufficient cargo space.", NULL);
+            return 0;
+        }
+
+        // 4. Execute Trade (Atomicish)
+        sqlite3_exec(db, "BEGIN IMMEDIATE", NULL, NULL, NULL);
+        
+        // Deduct Planet Stock
+        h_update_entity_stock(db, ENTITY_TYPE_PLANET, planet_id, commodity_code, -quantity_total, NULL);
+        
+        // Add to Ship
+        h_update_ship_cargo(db, ship_id, commodity_code, quantity_total);
+        
+        // Deduct Player Credits
+        h_deduct_player_petty_cash_unlocked(db, ctx->player_id, cost, NULL);
+        
+        // Add to Planet Treasury (assuming citadel exists if planet owned by player)
+        sqlite3_stmt *upd_st = NULL;
+        if (sqlite3_prepare_v2(db, "UPDATE citadels SET treasury = treasury + ?1 WHERE planet_id = ?2", -1, &upd_st, NULL) == SQLITE_OK) {
+            sqlite3_bind_int64(upd_st, 1, cost);
+            sqlite3_bind_int(upd_st, 2, planet_id);
+            sqlite3_step(upd_st);
+            sqlite3_finalize(upd_st);
+        }
+
+        sqlite3_exec(db, "COMMIT", NULL, NULL, NULL);
+
+        json_t *resp = json_object();
+        json_object_set_new(resp, "status", json_string("complete"));
+        json_object_set_new(resp, "quantity", json_integer(quantity_total));
+        json_object_set_new(resp, "total_cost", json_integer(cost));
+        send_enveloped_ok(ctx->fd, root, "planet.market.buy.complete", resp);
+        json_decref(resp);
+        free(commodity_code);
         return 0;
     }
 
@@ -1632,7 +1806,119 @@ cmd_planet_colonists_get (client_ctx_t *ctx, json_t *root)
   json_object_set_new(resp, "colonists_mil", json_integer(cur_mil));
   json_object_set_new(resp, "population_total", json_integer(pop_total));
 
-  send_enveloped_ok(ctx->fd, root, "planet.colonists.get", resp);
-  json_decref(resp);
+}
+
+  /* C4 - Planetary Transwarp (Citadel Level >= 4) */
+int
+cmd_planet_transwarp (client_ctx_t *ctx, json_t *root)
+{
+  if (ctx->player_id <= 0)
+    {
+      send_enveloped_refused (ctx->fd, root, ERR_NOT_AUTHENTICATED, "Not authenticated", NULL);
+      return 0;
+    }
+
+  json_t *data = json_object_get (root, "data");
+  if (!data)
+    {
+      send_enveloped_error (ctx->fd, root, ERR_BAD_REQUEST, "Missing data");
+      return 0;
+    }
+
+  int planet_id = 0;
+  int to_sector_id = 0;
+  json_unpack(data, "{s:i, s:i}", "planet_id", &planet_id, "to_sector_id", &to_sector_id);
+
+  if (planet_id <= 1 || to_sector_id <= 1)
+    {
+      send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG, "Invalid planet or restricted sector.");
+      return 0;
+    }
+
+  sqlite3 *db = db_get_handle();
+  planet_t p = {0};
+  if (h_get_planet_owner_info(db, planet_id, &p) != SQLITE_OK)
+    {
+      send_enveloped_error (ctx->fd, root, ERR_NOT_FOUND, "Planet not found.");
+      return 0;
+    }
+
+  // Ownership Check
+  bool allowed = false;
+  if (p.owner_type && strcmp(p.owner_type, "player") == 0 && p.owner_id == ctx->player_id) {
+      allowed = true;
+  } else if (p.owner_type && (strcmp(p.owner_type, "corp") == 0 || strcmp(p.owner_type, "corporation") == 0)) {
+       if (ctx->corp_id > 0 && ctx->corp_id == p.owner_id) {
+           char role[16];
+           h_get_player_corp_role(db, ctx->player_id, ctx->corp_id, role, sizeof(role));
+           if (strcasecmp(role, "Leader") == 0 || strcasecmp(role, "Officer") == 0) {
+               allowed = true;
+           }
+       }
+  }
+  h_free_planet_t(&p);
+
+  if (!allowed)
+    {
+      send_enveloped_refused (ctx->fd, root, 1403, "Permission denied.", NULL);
+      return 0;
+    }
+
+  // Citadel Level Check
+  int level = 0;
+  sqlite3_stmt *st = NULL;
+  if (sqlite3_prepare_v2(db, "SELECT level FROM citadels WHERE planet_id=?1", -1, &st, NULL) == SQLITE_OK) {
+      sqlite3_bind_int(st, 1, planet_id);
+      if (sqlite3_step(st) == SQLITE_ROW) {
+          level = sqlite3_column_int(st, 0);
+      }
+      sqlite3_finalize(st);
+  }
+
+  if (level < 4)
+    {
+      send_enveloped_refused (ctx->fd, root, 1402, "Citadel level too low (requires L4).", NULL);
+      return 0;
+    }
+
+  // Fuel Check (500 FUE)
+  int fue = 0;
+  h_get_entity_stock_quantity(db, "planet", planet_id, "FUE", &fue);
+  if (fue < 500)
+    {
+      send_enveloped_refused (ctx->fd, root, 1402, "Insufficient Fuel Ore (requires 500).", NULL);
+      return 0;
+    }
+
+  // Execute Move
+  sqlite3_exec(db, "BEGIN IMMEDIATE", NULL, NULL, NULL);
+  
+  if (h_update_entity_stock(db, "planet", planet_id, "FUE", -500, NULL) != SQLITE_OK) {
+      sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
+      send_enveloped_error (ctx->fd, root, 500, "Fuel consumption failed.");
+      return 0;
+  }
+
+  if (sqlite3_prepare_v2(db, "UPDATE planets SET sector=?1 WHERE id=?2", -1, &st, NULL) != SQLITE_OK) {
+      sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
+      send_enveloped_error (ctx->fd, root, 500, "DB Error.");
+      return 0;
+  }
+  sqlite3_bind_int(st, 1, to_sector_id);
+  sqlite3_bind_int(st, 2, planet_id);
+  if (sqlite3_step(st) != SQLITE_DONE) {
+      sqlite3_finalize(st);
+      sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
+      send_enveloped_error (ctx->fd, root, 500, "Update failed.");
+      return 0;
+  }
+  sqlite3_finalize(st);
+  sqlite3_exec(db, "COMMIT", NULL, NULL, NULL);
+
+  json_t *res = json_object();
+  json_object_set_new(res, "planet_id", json_integer(planet_id));
+  json_object_set_new(res, "new_sector_id", json_integer(to_sector_id));
+  send_enveloped_ok(ctx->fd, root, "planet.transwarp.success", res);
+  json_decref(res);
   return 0;
 }

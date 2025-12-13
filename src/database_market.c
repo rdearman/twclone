@@ -10,6 +10,8 @@ int db_insert_commodity_order(
     sqlite3 *db,
     const char *actor_type,
     int actor_id,
+    const char *location_type,
+    int location_id,
     int commodity_id,
     const char *side,
     int quantity,
@@ -20,8 +22,8 @@ int db_insert_commodity_order(
     int rc; // Declare rc here
     const char *sql =
         "INSERT INTO commodity_orders ("
-        "actor_type, actor_id, commodity_id, side, quantity, price, ts, expires_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, strftime('%s', 'now'), ?);";
+        "actor_type, actor_id, location_type, location_id, commodity_id, side, quantity, filled_quantity, price, ts, expires_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, strftime('%s', 'now'), ?);";
 
     rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
     if (rc != SQLITE_OK) {
@@ -31,14 +33,16 @@ int db_insert_commodity_order(
 
     sqlite3_bind_text(stmt, 1, actor_type, -1, SQLITE_STATIC);
     sqlite3_bind_int(stmt, 2, actor_id);
-    sqlite3_bind_int(stmt, 3, commodity_id);
-    sqlite3_bind_text(stmt, 4, side, -1, SQLITE_STATIC);
-    sqlite3_bind_int(stmt, 5, quantity);
-    sqlite3_bind_int(stmt, 6, price);
+    sqlite3_bind_text(stmt, 3, location_type, -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 4, location_id);
+    sqlite3_bind_int(stmt, 5, commodity_id);
+    sqlite3_bind_text(stmt, 6, side, -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 7, quantity);
+    sqlite3_bind_int(stmt, 8, price);
     if (expires_at > 0) {
-        sqlite3_bind_int64(stmt, 7, expires_at);
+        sqlite3_bind_int64(stmt, 9, expires_at);
     } else {
-        sqlite3_bind_null(stmt, 7);
+        sqlite3_bind_null(stmt, 9);
     }
 
     rc = sqlite3_step(stmt);
