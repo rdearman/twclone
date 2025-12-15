@@ -1,4 +1,3 @@
-#define _GNU_SOURCE
 #include "sysop_interaction.h"
 #include "server_log.h"
 #include <pthread.h>

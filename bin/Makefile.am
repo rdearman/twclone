@@ -21,7 +21,8 @@
 
 # AM_CFLAGS = -Wall -Wextra -Werror -I../src
 
-AM_CFLAGS = -Wall -Wextra 
+# AM_CFLAGS = -Wall -Wextra
+AM_CFLAGS = -Wall -Wextra  -D_GNU_SOURCE
 
 server_LDADD   	= -ljansson -lsqlite3 -lcrypto -lpthread -lm
 # bigbang_LDADD  = -ljansson -lsqlite3 -lpthread -lm

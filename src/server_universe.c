@@ -1863,6 +1863,7 @@ attach_sector_asset_counts (sqlite3 *db, int sector_id, json_t *data_out)
 void
 cmd_sector_info (client_ctx_t *ctx, int fd, json_t *root, int sector_id, int player_id)
 {
+  (void) fd; 
   sqlite3 *db = db_get_handle ();
   json_t *payload = build_sector_info_json (sector_id);
   if (!payload)

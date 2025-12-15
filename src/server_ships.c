@@ -470,7 +470,10 @@ cmd_ship_repair (client_ctx_t *ctx, json_t *root)
   /* Transaction context is managed by the caller/server loop. DO NOT BEGIN/COMMIT/ROLLBACK here. */
 
   /* 1. Deduct credits */
-  long long new_player_credits = 0;
+  long long new_player_credits;
+  (void) new_player_credits;
+    new_player_credits =0;
+  
   if (sqlite3_prepare_v2(db, "UPDATE players SET credits = credits - ?1 WHERE id = ?2 AND credits >= ?1 RETURNING credits;", -1, &st, NULL) != SQLITE_OK) {
       send_response_error (ctx, root, ERR_DB, "DB Error preparing credit deduction.");
       return 0;

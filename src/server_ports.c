@@ -2390,7 +2390,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
     sqlite3_finalize (st);
   }
   LOGD ("cmd_trade_buy: Idempotency insert successful for key='%s'", key);      // ADDED
-trade_buy_done:
+  //trade_buy_done:
   if (we_started_tx && commit (db) != SQLITE_OK)
     {
       free_trade_lines (trade_lines, n);
@@ -3378,7 +3378,7 @@ idempotency_race:
       rollback(db);
   }
   send_response_error(ctx, root, 500, "Could not resolve idempotency race.");
-refuse_sell: // New label for refused sell operations
+  //refuse_sell: // New label for refused sell operations
   if (we_started_tx)
     {
       LOGD ("cmd_trade_sell: Rolling back transaction (refused).");
