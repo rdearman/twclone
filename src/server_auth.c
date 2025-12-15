@@ -485,7 +485,7 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
               }
           }
           send_response_ok(ctx, root, "auth.session", data);
-          json_decref (data);
+          // json_decref (data); <== oops... crashy!
         }
       else if (rc == AUTH_ERR_INVALID_CRED)
         {
@@ -829,7 +829,7 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
 
 
           send_response_ok(ctx, root, "auth.session", data);
-          json_decref (data);
+          //json_decref (data);
           LOGI ("cmd_auth_register debug: player %d session created and sent",
                 player_id);
         }
@@ -902,7 +902,7 @@ cmd_auth_logout (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "auth.logged_out", data);
-  json_decref (data);
+  //json_decref (data);
   return 0;
 }
 
@@ -937,7 +937,7 @@ cmd_user_create (client_ctx_t *ctx, json_t *root)
 
 
           send_response_ok(ctx, root, "user.created", data);
-          json_decref (data);
+          //json_decref (data);
         }
       else if (rc == AUTH_ERR_NAME_TAKEN)
         {
@@ -1013,7 +1013,7 @@ cmd_auth_refresh (client_ctx_t *ctx, json_t *root)
 
 
           send_response_ok(ctx, root, "auth.session", data);
-          json_decref (data);
+          //json_decref (data);
         }
     }
   else if (tok)
@@ -1045,7 +1045,7 @@ cmd_auth_refresh (client_ctx_t *ctx, json_t *root)
 
 
           send_response_ok(ctx, root, "auth.session", data);
-          json_decref (data);
+          //json_decref (data);
         }
       else
         {
