@@ -788,7 +788,7 @@ cmd_session_hello (client_ctx_t *ctx, json_t *root)
   // Use ONE helper that builds a proper envelope including reply_to + status.
   // If your send_enveloped_ok doesn't add reply_to, fix it (next section).
   send_response_ok (ctx, root, "session.hello", payload);
-  json_decref (payload);
+  //json_decref (payload);
   return 0;                     // IMPORTANT: do not send another frame after this
 }
 
@@ -798,7 +798,7 @@ cmd_session_disconnect (client_ctx_t *ctx, json_t *root)
 {
   json_t *data = json_pack ("{s:s}", "message", "Goodbye");
   send_response_ok(ctx, root, "system.goodbye", data);
-  json_decref (data);
+  //json_decref (data);
   shutdown (ctx->fd, SHUT_RDWR);
   close (ctx->fd);
   return 0;                     /* or break your per-connection loop appropriately */
