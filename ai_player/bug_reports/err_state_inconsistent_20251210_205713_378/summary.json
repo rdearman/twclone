@@ -1,5 +1,0 @@
-{
-    "bug_id": "err_state_inconsistent_20251210_205713_378",
-    "first_seen": "20251210_205713_379",
-    "message": "State inconsistency detected after server response."
-}

@@ -616,18 +616,19 @@ def bootstrap_schemas(game_conn, state_manager, config):
     state_manager.state["pending_schema_requests"]["system.cmd_list"] = request_id
     time.sleep(0.1) # Avoid overwhelming the server
 
-def main(config_path="config.json"):
-    global shutdown_flag
 
+def main():
+    global shutdown_flag
+    
     # Load configuration
     try:
-        with open(config_path, 'r') as f:
+        with open('config.json', 'r') as f:
             config = json.load(f)
     except FileNotFoundError:
-        logger.critical("%s not found. Exiting.", config_path)
+        logger.critical("config.json not found. Exiting.")
         return
     except json.JSONDecodeError:
-        logger.critical("%s is not valid JSON. Exiting.", config_path)
+        logger.critical("config.json is not valid JSON. Exiting.")
         return
     
     # --- Setup Logging from Config ---
@@ -989,6 +990,7 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                 if response_type == "system.cmd_list":
                     commands_to_fetch = [cmd.get("cmd") for cmd in response_data.get("commands", [])]
                     logger.info(f"Received command list from server: {commands_to_fetch}")
+                    state_manager.update_available_commands(commands_to_fetch)
                     
                     commands_to_ignore = [
                         "system.hello", "system.capabilities", "system.describe_schema", "system.cmd_list", "system.schema_list", "player.list_online"
@@ -1143,6 +1145,4 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
 
 
 if __name__ == "__main__":
-    # Allow: python main.py config_bot_001.json
-    cfg = sys.argv[1] if len(sys.argv) > 1 else "config.json"
-    main(cfg)
+    main()
