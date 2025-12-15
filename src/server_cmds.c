@@ -866,7 +866,6 @@ json_object_set_new (item, "target_name",
 
   json_object_set_new (payload, "bounties", arr);
   send_response_ok(ctx, root, "bounty.list.success", payload);
-  //json_decref (payload);
   return 0;
 }
 
@@ -915,7 +914,7 @@ cmd_sys_econ_planet_status (client_ctx_t *ctx, json_t *root)
       sqlite3_finalize(st_planet);
   } else {
       send_response_error(ctx, root, ERR_SERVER_ERROR, "DB error fetching planet info.");
-      //json_decref(response);
+      json_decref(response);
       return 0;
   }
 
@@ -955,7 +954,6 @@ cmd_sys_econ_planet_status (client_ctx_t *ctx, json_t *root)
   json_object_set_new(response, "bank_balance", json_integer(balance));
 
   send_response_ok(ctx, root, "sys.econ.planet_status", response);
-  //json_decref(response);
   return 0;
 }
 
@@ -997,7 +995,7 @@ cmd_sys_econ_port_status (client_ctx_t *ctx, json_t *root)
       sqlite3_finalize(st_port);
   } else {
       send_response_error(ctx, root, ERR_SERVER_ERROR, "DB error fetching port");
-      //json_decref(response);
+      json_decref(response);
       return 0;
   }
 
@@ -1059,7 +1057,6 @@ cmd_sys_econ_orders_summary (client_ctx_t *ctx, json_t *root)
 
   json_t *summary = db_orders_summary(db, commodity_id);
   send_response_ok(ctx, root, "sys.econ.orders_summary", summary);
-  //json_decref(summary);
   return 0;
 }
 

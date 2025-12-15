@@ -764,6 +764,117 @@ cmd_system_capabilities (client_ctx_t *ctx, json_t *root)
 }
 
 
+/* /\* ---------- system.describe_schema (optional) ---------- *\/ */
+
+
+/* int */
+
+
+/* cmd_system_describe_schema (client_ctx_t *ctx, json_t *root) */
+
+
+/* { */
+
+
+/*   json_t *jdata = json_object_get (root, "data"); */
+
+
+/*   const char *key = NULL; */
+
+
+/*   if (json_is_object (jdata)) */
+
+
+/*     { */
+
+
+/*       json_t *jkey = json_object_get (jdata, "key"); */
+
+
+/*       if (json_is_string (jkey)) */
+
+
+/*      key = json_string_value (jkey); */
+
+
+/*     } */
+
+
+/*   if (!key) */
+
+
+/*     { */
+
+
+/*       /\* Return the list of keys we have *\/ */
+
+
+/*       json_t *data = json_pack ("{s:o}", "available", schema_keys ()); */
+
+
+/*       send_response_ok(ctx, root, "system.schema_list", data); */
+
+
+/*       json_decref (data); */
+
+
+/*     } */
+
+
+/*   else */
+
+
+/*     { */
+
+
+/*       json_t *schema = schema_get (key); */
+
+
+/*       if (!schema) */
+
+
+/*      { */
+
+
+/*        send_response_error(ctx, root, ERR_CURSOR_INVALID, "Schema not found"); */
+
+
+/*      } */
+
+
+/*       else */
+
+
+/*      { */
+
+
+/*        json_t *data = */
+
+
+/*          json_pack ("{s:s, s:o}", "key", key, "schema", schema); */
+
+
+/*        send_response_ok(ctx, root, "system.schema", data); */
+
+
+/*        json_decref (schema); */
+
+
+/*        json_decref (data); */
+
+
+/*      } */
+
+
+/*     } */
+
+
+/*   return 0; */
+
+
+/* } */
+
+
 /* ---------- session.ping ---------- */
 int
 cmd_session_ping (client_ctx_t *ctx, json_t *root)
@@ -773,7 +884,6 @@ cmd_session_ping (client_ctx_t *ctx, json_t *root)
   json_t *echo =
     json_is_object (jdata) ? json_incref (jdata) : json_object ();
   send_response_ok(ctx, root, "session.pong", echo);
-  json_decref (echo);
   return 0;
 }
 
@@ -788,8 +898,7 @@ cmd_session_hello (client_ctx_t *ctx, json_t *root)
   // Use ONE helper that builds a proper envelope including reply_to + status.
   // If your send_enveloped_ok doesn't add reply_to, fix it (next section).
   send_response_ok (ctx, root, "session.hello", payload);
-  //json_decref (payload);
-  return 0;                     // IMPORTANT: do not send another frame after this
+  return 0;
 }
 
 
@@ -798,7 +907,6 @@ cmd_session_disconnect (client_ctx_t *ctx, json_t *root)
 {
   json_t *data = json_pack ("{s:s}", "message", "Goodbye");
   send_response_ok(ctx, root, "system.goodbye", data);
-  //json_decref (data);
   shutdown (ctx->fd, SHUT_RDWR);
   close (ctx->fd);
   return 0;                     /* or break your per-connection loop appropriately */

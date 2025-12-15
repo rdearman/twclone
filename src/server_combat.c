@@ -1102,7 +1102,6 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
   json_object_set_new (out, "asset_id", json_integer (asset_id));       // Add asset_id to response
   /* Envelope: echo id/meta from `root`, set type string for this result */
   send_response_ok(ctx, root, "combat.fighters.deployed", out);
-  //json_decref (out);
   return 0;
 }
 
@@ -1111,6 +1110,25 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
 static const char *SQL_SECTOR_MINE_SUM =
   "SELECT COALESCE(SUM(quantity),0) " "FROM sector_assets "
   "WHERE sector=?1 AND asset_type IN (1, 4);";                                                                                                  // 1 for Armid, 4 for Limpet
+
+
+/* static const char *SQL_SHIP_GET_MINE = "SELECT mines FROM ships WHERE id=?1;"; *//* Assuming 'mines' column for total mines */
+
+
+/* static const char *SQL_SHIP_DEC_MINE = */
+
+
+/*   "UPDATE ships SET mines=mines-?1 WHERE id=?2;"; */
+
+
+/* static const char *SQL_ASSET_INSERT_MINES = "INSERT INTO sector_assets(sector, player, corporation, " */
+
+
+/* "                          asset_type, quantity, offensive_setting, deployed_at) " */
+
+
+/* "VALUES (?1, ?2, ?3, ?4, ?5, ?6, strftime('%s','now'));"; *//* ?4 for asset_type (1 or 4) */
+
 
 /* Sum fighters already in the sector. */
 static int
@@ -1628,9 +1646,9 @@ cmd_combat_sweep_mines (client_ctx_t *ctx, json_t *root)
   sqlite3_finalize (stmt_player_ship);
   if (player_current_sector_id != from_sector_id)
     {
-      send_response_refused(ctx, root, REF_NOT_IN_SECTOR, "Ship is not in the specified 'from_sector_id'.",
-                              json_pack ("{s:s}", "reason",
-                                         "not_in_from_sector"));
+      json_t *d = json_pack ("{s:s}", "reason", "not_in_from_sector");
+      send_response_refused(ctx, root, REF_NOT_IN_SECTOR, "Ship is not in the specified 'from_sector_id'.", d);
+      json_decref(d);
       return 0;
     }
   if (fighters_committed > ship_fighters_current)
@@ -1828,7 +1846,7 @@ cmd_combat_sweep_mines (client_ctx_t *ctx, json_t *root)
           sqlite3_free (errmsg);
         }
       send_response_error(ctx, root, ERR_DB, "Could not start transaction");
-      // json_decref (hostile_stacks_json);
+      json_decref (hostile_stacks_json);
       return 0;
     }
   // 8. Apply to stacks (sorted id ASC):
@@ -2105,8 +2123,9 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
   /* 3. Validate sector match */
   if (player_current_sector_id != requested_sector_id)
     {
-      send_response_refused(ctx, root, REF_NOT_IN_SECTOR, "Not in sector", json_pack ("{s:s}", "reason",
-                                                          "not_in_sector"));
+      json_t *d = json_pack ("{s:s}", "reason", "not_in_sector");
+      send_response_refused(ctx, root, REF_NOT_IN_SECTOR, "Not in sector", d);
+      json_decref(d);
       return 0;
     }
   /* 4. Fetch asset and validate existence */
@@ -2159,8 +2178,9 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
     }
   if (!is_owner)
     {
-      send_response_refused(ctx, root, ERR_TARGET_INVALID, "Not owner",
-                              json_pack ("{s:s}", "reason", "not_owner"));
+      json_t *d = json_pack ("{s:s}", "reason", "not_owner");
+      send_response_refused(ctx, root, ERR_TARGET_INVALID, "Not owner", d);
+      json_decref(d);
       return 0;
     }
   /* 6. Compute pickup quantity */
@@ -2171,8 +2191,9 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
 
   if (capacity_left <= 0)
     {
-      send_response_refused(ctx, root, ERR_OUT_OF_RANGE, "No capacity",
-                              json_pack ("{s:s}", "reason", "no_capacity"));
+      json_t *d = json_pack ("{s:s}", "reason", "no_capacity");
+      send_response_refused(ctx, root, ERR_OUT_OF_RANGE, "No capacity", d);
+      json_decref(d);
       return 0;
     }
   take =
@@ -2180,9 +2201,9 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
      capacity_left) ? available_to_recall : capacity_left;
   if (take <= 0)                // Now this check makes sense
     {
-      send_response_refused(ctx, root, ERR_OUT_OF_RANGE, "No fighters to recall or no capacity",
-                              json_pack ("{s:s}", "reason",
-                                         "no_fighters_or_capacity"));
+      json_t *d = json_pack ("{s:s}", "reason", "no_fighters_or_capacity");
+      send_response_refused(ctx, root, ERR_OUT_OF_RANGE, "No fighters to recall or no capacity", d);
+      json_decref(d);
       return 0;
     }
   /* 7. Apply changes (transaction) */
@@ -2317,7 +2338,6 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
   json_object_set_new (out, "remaining_in_sector",
                        json_integer (asset_qty - take));
   send_response_ok(ctx, root, "combat.fighters.deployed", out);
-  //json_decref (out);
   return 0;
 }
 
@@ -2536,7 +2556,6 @@ cmd_combat_scrub_mines (client_ctx_t *ctx, json_t *root)
       json_object_set_new (out, "asset_id", json_integer (asset_id));
     }
   send_response_ok(ctx, root, "combat.mines_scrubbed_v1", out);
-  json_decref (out);
   return 0;
 }
 
@@ -2836,7 +2855,6 @@ cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root)
   json_object_set_new (out, "asset_id", json_integer (asset_id));       // Add asset_id to response
   /* Envelope: echo id/meta from `root`, set type string for this result */
   send_response_ok(ctx, root, "combat.mines.deployed", out);
-  //json_decref (out);
   return 0;
 }
 
@@ -3308,7 +3326,6 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
   json_object_set_new (out, "asset_id", json_integer (asset_id));
   /* Envelope: echo id/meta from `root`, set type string for this result */
   send_response_ok(ctx, root, "combat.mines_laid_v1", out);       // Changed type
-  //json_decref (out);
   return 0;
 }
 
@@ -3518,7 +3535,6 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
   json_object_set_new (out, "remaining_in_sector", json_integer (0));   // All recalled
   json_object_set_new (out, "asset_type", json_integer (asset_type));
   send_response_ok(ctx, root, "combat.mines.recalled", out);
-  //json_decref (out);
   return 0;
 }
 

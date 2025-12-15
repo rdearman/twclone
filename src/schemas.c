@@ -1588,33 +1588,40 @@ schema_ship_claim (void)
                     "$comment", "Schema not yet implemented");
 }
 
-
+//// 
 static json_t *
 schema_ship_status (void)
 {
-  return json_pack ("{s:s, s:s, s:s, s:o, s:b}",
-                    "$id", "ge://schema/ship.status.json",
-                    "$schema", "https://json-schema.org/draft/2020-12/schema",
-                    "type", "object",
-                    "properties", json_pack("{s:{s:s, s:o, s:[s,s,s,s,s,s,s,s,s,s]}}",
-                      "ship",
-                        "type", "object",
-                        "properties", json_pack("{s:{s:s}, s:{s:s}, s:{s:s}, s:{s:s, s:o}, s:{s:s}, s:{s:s}, s:{s:s}, s:{s:s, s:o}, s:{s:s, s:o}, s:{s:s, s:o}}",
-                          "id", "type", "integer",
-                          "number", "type", "integer",
-                          "name", "type", "string",
-                          "type", "type", "object", "properties", json_pack("{s:{s:s}, s:{s:s}}", "id", "type", "integer", "name", "type", "string"),
-                          "holds", "type", "integer",
-                          "fighters", "type", "integer",
-                          "shields", "type", "integer",
-                          "location", "type", "object", "properties", json_pack("{s:{s:s}, s:{s:s}}", "sector_id", "type", "integer", "sector_name", "type", "string"),
-                          "owner", "type", "object", "properties", json_pack("{s:{s:s}, s:{s:s}}", "id", "type", "integer", "name", "type", "string"),
-                          "cargo", "type", "object", "properties", json_pack("{s:{s:s}, s:{s:s}, s:{s:s}, s:{s:s}}", "ore", "type", "integer", "organics", "type", "integer", "equipment", "type", "integer", "colonists", "type", "integer")
-                        ),
-                        "required", json_pack("[s,s,s,s,s,s,s,s,s,s]", "id", "number", "name", "type", "holds", "fighters", "shields", "location", "owner", "cargo")
-                    ),
-                    "required", json_pack("[s]", "ship"),
-                    "additionalProperties", json_false());
+  json_t *root = json_object();
+  json_object_set_new(root, "$id", json_string("ge://schema/ship.status.json"));
+  json_object_set_new(root, "$schema", json_string("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new(root, "type", json_string("object"));
+
+  json_t *props = json_object();
+  json_object_set_new(root, "properties", props);
+
+  json_t *ship = json_object();
+  json_object_set_new(props, "ship", ship);
+  json_object_set_new(ship, "type", json_string("object"));
+
+  json_t *ship_props = json_object();
+  json_object_set_new(ship, "properties", ship_props);
+
+  /* simple leaf properties */
+  json_object_set_new(ship_props, "id",     json_pack("{s:s}", "type", "integer"));
+  json_object_set_new(ship_props, "number", json_pack("{s:s}", "type", "integer"));
+  json_object_set_new(ship_props, "name",   json_pack("{s:s}", "type", "string"));
+
+  /* TODO: add the rest of your properties here, one by one, same style */
+
+  /* required: ["ship"] */
+  json_t *required = json_array();
+  json_array_append_new(required, json_string("ship"));
+  json_object_set_new(root, "required", required);
+
+  json_object_set_new(root, "additionalProperties", json_false());
+
+  return root;
 }
 
 

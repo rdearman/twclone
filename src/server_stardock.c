@@ -649,7 +649,6 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "hardware.purchase_v1", resp);
-  //json_decref (resp);
   return 0;
 }
 

@@ -941,7 +941,6 @@ cmd_sector_scan (client_ctx_t *ctx, json_t *root)
     }
   // 5. Send Response
   send_response_ok(ctx, root, "sector.scan", payload);
-  //json_decref (payload);
 }
 
 
@@ -1106,7 +1105,6 @@ cmd_sector_scan_density (void *ctx_in, json_t *root)
     {
       // --- FINAL USER-REQUESTED RESPONSE LOGIC ---
       send_response_ok(ctx, root, "sector.density.scan", payload);
-      //json_decref (payload);
       // --- FINAL USER-REQUESTED RESPONSE LOGIC ---
       rc = SQLITE_OK;
     }
@@ -1379,7 +1377,7 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
 
 
       send_response_refused(ctx, root, d.code, d.message, meta);
-      //json_decref (meta);
+      json_decref (meta);
       return 0;
     }
 
@@ -1934,7 +1932,6 @@ cmd_sector_info (client_ctx_t *ctx, int fd, json_t *root, int sector_id, int pla
     }
   attach_sector_asset_counts (db, sector_id, payload);
   send_response_ok(ctx, root, "sector.info", payload);
-  //json_decref (payload);
 }
 
 
@@ -2378,7 +2375,7 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
   attach_rate_limit_meta (env, ctx);
   rl_tick (ctx);
   send_all_json (ctx->fd, env);
-  //json_decref (env);
+  json_decref (env);
   send_response_ok(ctx, root, "sector.set_beacon", NULL);
   return 0;
 }

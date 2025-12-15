@@ -337,7 +337,7 @@ handle_turn_consumption_error (client_ctx_t *ctx,
                              ERR_REF_NO_TURNS,
                              get_turn_error_message (consume_result),
                              NULL);
-      //json_decref (meta);
+      json_decref (meta);
     }
   return 0;
 }
@@ -1476,7 +1476,6 @@ cmd_player_my_info (client_ctx_t *ctx, json_t *root)
   int corp_id = sqlite3_column_int (st, 7);
 
 
-  sqlite3_finalize (st);
   /* 2. Build JSON Response */
   json_t *player_obj = json_object ();
 
@@ -1484,6 +1483,7 @@ cmd_player_my_info (client_ctx_t *ctx, json_t *root)
   json_object_set_new (player_obj, "id", json_integer (ctx->player_id));
   json_object_set_new (player_obj, "username",
                        json_string (name ? name : "Unknown"));
+  sqlite3_finalize (st); // Moved here to keep 'name' valid
   /* Format credits as string "1000.00" for compatibility */
   char credits_str[64];
 
@@ -1511,7 +1511,6 @@ cmd_player_my_info (client_ctx_t *ctx, json_t *root)
 
   json_object_set_new (pinfo, "player", player_obj);
   send_response_ok(ctx, root, "player.info", pinfo);
-  //json_decref (pinfo);
   return 0;
 }
 
@@ -1568,7 +1567,6 @@ cmd_player_list_online (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   send_response_ok(ctx, root, "player.list_online.result", resp);
-  //json_decref (resp);
   return 0;
 }
 
@@ -1700,7 +1698,6 @@ cmd_player_rankings (client_ctx_t *ctx, json_t *root)
 
   json_object_set_new (resp, "rankings", rankings);
   send_response_ok(ctx, root, "player.rankings", resp);
-  //json_decref (resp);
   return 0;
 }
 
@@ -1778,7 +1775,6 @@ cmd_player_get_topics (client_ctx_t *ctx, json_t *root)
   json_t *out = json_object ();
   json_object_set_new (out, "topics", topics ? topics : json_array ());
   send_response_ok (ctx, root, "player.subscriptions", out);
-  //json_decref (out);
   return 0;
 }
 
@@ -1810,7 +1806,6 @@ cmd_player_get_bookmarks (client_ctx_t *ctx, json_t *root)
   json_object_set_new (out, "bookmarks",
                        bookmarks ? bookmarks : json_array ());
   send_response_ok (ctx, root, "player.bookmarks", out);
-  //json_decref (out);
   return 0;
 }
 
@@ -1841,7 +1836,6 @@ cmd_player_get_avoids (client_ctx_t *ctx, json_t *root)
   json_t *out = json_object ();
   json_object_set_new (out, "avoid", avoid ? avoid : json_array ());
   send_response_ok(ctx, root, "avoids", out);
-  //json_decref (out);
   return 0;
 }
 
@@ -1853,7 +1847,6 @@ cmd_player_get_notes (client_ctx_t *ctx, json_t *root)
   json_t *out = json_object ();
   json_object_set_new (out, "notes", notes ? notes : json_array ());
   send_response_ok(ctx, root, "player.notes", out);
-  //json_decref (out);
   return 0;
 }
 
@@ -1931,7 +1924,6 @@ cmd_player_set_prefs (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "player.prefs.updated", resp);
-  //json_decref (resp);
   return 0;
 }
 
@@ -1971,7 +1963,6 @@ cmd_nav_bookmark_add (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "nav.bookmark.added", resp);
-  //json_decref (resp);
 }
 
 
@@ -1996,7 +1987,6 @@ cmd_nav_bookmark_remove (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "nav.bookmark.removed", resp);
-  //json_decref (resp);
 }
 
 
@@ -2012,7 +2002,6 @@ cmd_nav_bookmark_list (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "nav.bookmark.list", resp);
-  json_decref (resp);
 }
 
 
@@ -2040,7 +2029,6 @@ cmd_nav_avoid_add (client_ctx_t *ctx, json_t *root)
   json_t *resp = json_pack ("{s:i}", "sector_id", sector_id);
 
   send_response_ok (ctx, root, "nav.avoid.added", resp);
-  json_decref (resp);
 }
 
 void
@@ -2061,7 +2049,6 @@ cmd_nav_avoid_remove (client_ctx_t *ctx, json_t *root)
   json_t *resp = json_pack ("{s:i}", "sector_id", sector_id);
 
   send_response_ok (ctx, root, "nav.avoid.removed", resp);
-  json_decref (resp);
 }
 
 void
@@ -2075,7 +2062,6 @@ cmd_nav_avoid_list (client_ctx_t *ctx, json_t *root)
   json_t *resp = json_pack ("{s:o}", "items", items);
 
   send_response_ok (ctx, root, "nav.avoid.list", resp);
-  json_decref (resp);
 }
 
 
@@ -2112,7 +2098,6 @@ cmd_player_set_trade_account_preference (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "player.prefs.updated", resp);
-  json_decref (resp);
   return 0;
 }
 
@@ -2153,7 +2138,6 @@ cmd_insurance_policies_list (client_ctx_t *ctx, json_t *root)
   json_t *response_data = json_object();
   json_object_set_new(response_data, "policies", policies_array);
   send_response_ok(ctx, root, "insurance.policies.list", response_data);
-  json_decref(response_data);
   return 0;
 }
 
@@ -2239,7 +2223,6 @@ cmd_insurance_policies_buy (client_ctx_t *ctx, json_t *root)
   json_object_set_new(response_data, "premium", json_integer(premium_to_pay));
   json_object_set_new(response_data, "payout", json_integer(payout_amount));
   send_response_ok(ctx, root, "insurance.policies.buy", response_data);
-  json_decref(response_data);
   return 0;
 }
 
@@ -2310,6 +2293,5 @@ cmd_insurance_claim_file (client_ctx_t *ctx, json_t *root)
   json_object_set_new(response_data, "claim_id", json_integer(sqlite3_last_insert_rowid(db)));
   json_object_set_new(response_data, "status", json_string("filed")); // Use 'filed' as per MVP semantics
   send_response_ok(ctx, root, "insurance.claim.file", response_data);
-  json_decref(response_data);
   return 0;
 }

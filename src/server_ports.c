@@ -892,7 +892,6 @@ cmd_trade_quote (client_ctx_t *ctx, json_t *root)
   json_object_set_new (payload, "total_sell_price",
                        json_integer (total_player_sell_price));
   send_response_ok(ctx, root, "trade.quote", payload);
-  //json_decref (payload);
   // Free the commodity_code
   free ((char *) commodity_code);       // Cast to char* because strdup returns char*
   return 0;
@@ -1390,18 +1389,18 @@ cmd_trade_port_info (client_ctx_t *ctx,
         return 0;
       }
   
-    // --- DEBUG: Verify entity_stock visibility ---
-    sqlite3_stmt *debug_st = NULL;
-    int debug_count = 0;
-    const char *debug_sql = "SELECT COUNT(*) FROM entity_stock WHERE entity_type = 'port' AND entity_id = ?1;";
-    if (sqlite3_prepare_v2(db, debug_sql, -1, &debug_st, NULL) == SQLITE_OK) {
-        sqlite3_bind_int(debug_st, 1, port_id_val);
-        if (sqlite3_step(debug_st) == SQLITE_ROW) {
-            debug_count = sqlite3_column_int(debug_st, 0);
-        }
-        sqlite3_finalize(debug_st);
-    }
-    LOGD("cmd_trade_port_info: DEBUG: entity_stock count for port %d: %d rows visible.", port_id_val, debug_count);
+    /* // --- DEBUG: Verify entity_stock visibility --- */
+    /* sqlite3_stmt *debug_st = NULL; */
+    /* int debug_count = 0; */
+    /* const char *debug_sql = "SELECT COUNT(*) FROM entity_stock WHERE entity_type = 'port' AND entity_id = ?1;"; */
+    /* if (sqlite3_prepare_v2(db, debug_sql, -1, &debug_st, NULL) == SQLITE_OK) { */
+    /*     sqlite3_bind_int(debug_st, 1, port_id_val); */
+    /*     if (sqlite3_step(debug_st) == SQLITE_ROW) { */
+    /*         debug_count = sqlite3_column_int(debug_st, 0); */
+    /*     } */
+    /*     sqlite3_finalize(debug_st); */
+    /* } */
+    // LOGD("cmd_trade_port_info: DEBUG: entity_stock count for port %d: %d rows visible.", port_id_val, debug_count);
     // --- END DEBUG ---
   
   
@@ -1840,7 +1839,6 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
                     return -1;
                   }
                 send_response_ok(ctx, root, "trade.buy_receipt_v1", stored_resp);
-                ///json_decref (stored_resp);
                 return 0;
               }
             sqlite3_finalize (st);
@@ -2399,6 +2397,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
     }
   LOGD ("cmd_trade_buy: Transaction committed.");       // ADDED
   send_response_ok(ctx, root, "trade.buy_receipt_v1", receipt);
+  receipt = NULL;
   LOGD ("cmd_trade_buy: Sent enveloped OK response.");  // ADDED
   goto cleanup;
 sql_err:
@@ -2464,7 +2463,6 @@ idempotency_race:
                     goto cleanup;
                   }
                 send_response_ok(ctx, root, "trade.buy_receipt_v1", stored_resp);
-                //json_decref (stored_resp);
                 if (we_started_tx) {
                     LOGD("cmd_trade_buy: Idempotency_race: Rolling back transaction (same request).");
                     rollback(db);
@@ -2728,7 +2726,6 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
                     return -1;
                   }
                 send_response_ok(ctx, root, "trade.sell_receipt_v1", stored_resp);
-                //json_decref (stored_resp);
                 return 0;
               }
             sqlite3_finalize (st);
@@ -3309,6 +3306,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       goto cleanup;
     }
   send_response_ok(ctx, root, "trade.sell_receipt_v1", receipt);
+  receipt = NULL;
   goto cleanup;
 sql_err:
   send_response_error(ctx, root, ERR_SERVER_ERROR, sqlite3_errmsg (db));
@@ -3362,7 +3360,6 @@ idempotency_race:
                     goto cleanup;
                   }
                 send_response_ok(ctx, root, "trade.sell_receipt_v1", stored_resp);
-                json_decref (stored_resp);
                 if (we_started_tx) {
                     LOGD("cmd_trade_sell: Idempotency_race: Rolling back transaction (same request).");
                     rollback(db);
@@ -3593,7 +3590,6 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
     }
   json_object_set_new (payload, "remaining_cargo", remaining_cargo_array);
   send_response_ok(ctx, root, "ship.jettisoned", payload);
-  //json_decref (payload);
   return 0;
 }
 
@@ -4009,7 +4005,6 @@ cmd_port_rob (client_ctx_t *ctx,
 
 
       send_response_ok(ctx, root, "port.rob", resp);
-      //json_decref (resp);
       return 0;
     }
   /* 6. Real Bust Calculation */
@@ -4289,7 +4284,6 @@ cmd_port_rob (client_ctx_t *ctx,
 
 
       send_response_ok(ctx, root, "port.rob", resp);
-      //json_decref (resp);
     }
   else
     {
@@ -4385,7 +4379,6 @@ cmd_port_rob (client_ctx_t *ctx,
 
 
       send_response_ok(ctx, root, "port.rob", resp);
-      //json_decref (resp);
     }
 fail_tx:
   return 0;

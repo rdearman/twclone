@@ -695,7 +695,6 @@ cmd_planet_deposit (client_ctx_t *ctx, json_t *root)
   json_object_set_new(resp, "player_credits", json_integer(new_player_balance));
   
   send_response_ok(ctx, root, "planet.deposit", resp);
-  //json_decref(resp);
   return 0;
 }
 
@@ -818,7 +817,6 @@ cmd_planet_withdraw (client_ctx_t *ctx, json_t *root)
   json_object_set_new(resp, "player_credits", json_integer(new_player_balance));
   
   send_response_ok(ctx, root, "planet.withdraw", resp);
-  //json_decref(resp);
   return 0;
 }
 
@@ -915,7 +913,6 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
               if (prev_payload)
                 {
                   send_response_ok (ctx, root, "planet.genesis_created_v1", prev_payload);
-                  //json_decref(prev_payload);
                   sqlite3_finalize (stmt_idem_check);
                   free (planet_name);
                   return 0;     // Idempotent success
@@ -1273,7 +1270,6 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
 
   // 14. Emit JSON Success Response
   send_response_ok (ctx, root, "planet.genesis_created_v1", response_json);
-  //json_decref(response_json); // clean up the payload object
 
   // 15. Event Logging (System Broadcast)
 
@@ -1560,7 +1556,6 @@ cmd_planet_market_sell (client_ctx_t *ctx, json_t *root)
     json_object_set_new(resp, "total_credits_received", json_integer(total_credits));
     
     send_response_ok(ctx, root, "planet.market.sell", resp);
-    //json_decref(resp);
     free(commodity_code);
     return 0;
 }
@@ -1724,7 +1719,6 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
         json_object_set_new(resp, "quantity", json_integer(quantity_total));
         json_object_set_new(resp, "total_cost", json_integer(cost));
         send_response_ok(ctx, root, "planet.market.buy.complete", resp);
-        //json_decref(resp);
         free(commodity_code);
         return 0;
     }
@@ -1785,7 +1779,6 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
     json_object_set_new(resp, "max_price", json_integer(max_price));
     
     send_response_ok(ctx, root, "planet.market.buy_order", resp);
-    //json_decref(resp);
     free(commodity_code);
     return 0;
 }
@@ -1907,7 +1900,6 @@ cmd_planet_colonists_set (client_ctx_t *ctx, json_t *root)
   json_object_set_new(resp, "population_total", json_integer(pop_total));
 
   send_response_ok(ctx, root, "planet.colonists.set", resp);
-  //json_decref(resp);
   return 0;
 }
 
@@ -2094,6 +2086,5 @@ cmd_planet_transwarp (client_ctx_t *ctx, json_t *root)
   json_object_set_new(res, "planet_id", json_integer(planet_id));
   json_object_set_new(res, "new_sector_id", json_integer(to_sector_id));
   send_response_ok(ctx, root, "planet.transwarp.success", res);
-  //json_decref(res);
   return 0;
 }

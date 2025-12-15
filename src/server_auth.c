@@ -347,7 +347,7 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
 
                   send_response_refused(ctx, root, ERR_REF_BIG_SLEEP, "You are currently in Big Sleep.",
                                           err_data);
-                  //json_decref (err_data);
+                  json_decref (err_data);
                   return 0;     // Disallow login
                 }
               else
@@ -485,7 +485,6 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
               }
           }
           send_response_ok(ctx, root, "auth.session", data);
-          // json_decref (data); <== oops... crashy!
         }
       else if (rc == AUTH_ERR_INVALID_CRED)
         {
@@ -535,19 +534,12 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   // --- Start Transaction for player creation and initial setup ---
-  // --- Start Transaction for player creation and initial setup ---
   rc = user_create (db,
                     name,
                     pass,
                     &player_id);
-  LOGI ("cmd_auth_register debug: user_create returned %d for player %d",
-        rc,
-        player_id);
   if (rc == AUTH_OK)
     {
-      LOGI (
-        "cmd_auth_register debug: user_create returned AUTH_OK for player %d",
-        player_id);
       // --- Configuration Loading ---
       cfg = config_load ();
       if (!cfg)
@@ -564,7 +556,6 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
                                                    cfg->startingcredits,
                                                    &new_account_id);
 
-
       if (create_bank_rc != SQLITE_OK)
         {
           LOGE (
@@ -574,12 +565,6 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
           send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Database error (bank account creation)");
           goto rollback_and_error; // Needs proper rollback of player creation if this fails.
         }
-      LOGI (
-        "cmd_auth_register debug: player %d bank account created with ID %d and starting credits %lld",
-        player_id,
-        new_account_id,
-        (long long)cfg->startingcredits);
-
       // --- Create Turns Entry for the new player ---
       // Use 750 as a default for starting turns.
       sqlite3_stmt *st_turns = NULL;
@@ -618,15 +603,8 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
           send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Database error (prepare turns insert)");
           goto rollback_and_error;
         }
-      LOGI (
-        "cmd_auth_register debug: player %d turns entry created with 750 turns",
-        player_id);
-
       // --- Spawn Location ---
       spawn_sector_id = (rand () % 10) + 1;     // Random sector between 1 and 10
-      LOGI ("cmd_auth_register debug: player %d assigned to spawn_sector_id %d",
-            player_id,
-            spawn_sector_id);
       // --- Ship Creation & Naming ---
       if (!ship_name || !*ship_name)
         {
@@ -634,10 +612,6 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
         }
       new_ship_id =
         db_create_initial_ship (player_id, ship_name, spawn_sector_id);
-      LOGI (
-        "cmd_auth_register debug: db_create_initial_ship returned %d for player %d",
-        new_ship_id,
-        player_id);
       if (new_ship_id == -1)
         {
           LOGE (
@@ -647,17 +621,9 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
           send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Database error (ship creation)");
           goto rollback_and_error;
         }
-      LOGI ("cmd_auth_register debug: player %d assigned ship_id %d",
-            player_id,
-            new_ship_id);
       // --- Update Player's Sector and Ship ---
       int set_sector_rc = db_player_set_sector (player_id, spawn_sector_id);
 
-
-      LOGI (
-        "cmd_auth_register debug: db_player_set_sector returned %d for player %d",
-        set_sector_rc,
-        player_id);
       if (set_sector_rc != SQLITE_OK)
         {
           LOGE (
@@ -681,19 +647,11 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
                                                  -1,
                                                  &st_creds,
                                                  NULL);
-
-
-      LOGI ("cmd_auth_register debug: prepare_creds returned %d",
-            prepare_creds_rc);
       if (prepare_creds_rc == SQLITE_OK)
         {
           sqlite3_bind_int (st_creds, 1, start_creds);
           sqlite3_bind_int (st_creds, 2, player_id);
           int step_creds_rc = sqlite3_step (st_creds);
-
-
-          LOGI ("cmd_auth_register debug: step_creds returned %d",
-                step_creds_rc);
           if (step_creds_rc != SQLITE_DONE)
             {
               LOGE (
@@ -715,18 +673,8 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
           send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Database error (prepare credits)");
           goto rollback_and_error;
         }
-      LOGI (
-        "cmd_auth_register debug: player %d granted %d starting credits (petty cash)",
-        player_id,
-        start_creds);
       // --- Starting Alignment ---
       int set_align_rc = db_player_set_alignment (player_id, 1);
-
-
-      LOGI (
-        "cmd_auth_register debug: db_player_set_alignment returned %d for player %d",
-        set_align_rc,
-        player_id);
       if (set_align_rc != SQLITE_OK)
         {
           LOGE (
@@ -736,7 +684,6 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
           send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Database error (set alignment)");
           goto rollback_and_error;
         }
-      LOGI ("cmd_auth_register debug: player %d alignment set to 1", player_id);
       // --- Automatic Subscriptions ---
       // Already subscribed to system.*
       // Add news.* subscription
@@ -747,24 +694,15 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
                                                 -1,
                                                 &st,
                                                 NULL);
-
-
-      LOGI ("cmd_auth_register debug: prepare_subs returned %d",
-            prepare_subs_rc);
       if (prepare_subs_rc == SQLITE_OK)
         {
           sqlite3_bind_int64 (st, 1, player_id);
           int step_subs_rc = sqlite3_step (st);
-
-
-          LOGI ("cmd_auth_register debug: step_subs returned %d", step_subs_rc);
         }
       if (st)
         {
           sqlite3_finalize (st);
         }
-      LOGI ("cmd_auth_register debug: player %d subscribed to news.*",
-            player_id);
       // --- Player Preferences (Override Defaults) ---
       if (ui_locale)
         {
@@ -772,15 +710,6 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
                                                   "ui.locale",
                                                   PT_STRING,
                                                   ui_locale);
-
-
-          LOGI (
-            "cmd_auth_register debug: db_prefs_set_one (ui.locale) returned %d for player %d",
-            prefs_locale_rc,
-            player_id);
-          LOGI ("cmd_auth_register debug: player %d ui.locale set to %s",
-                player_id,
-                ui_locale);
         }
       if (ui_timezone)
         {
@@ -788,30 +717,15 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
                                                     "ui.timezone",
                                                     PT_STRING,
                                                     ui_timezone);
-
-
-          LOGI (
-            "cmd_auth_register debug: db_prefs_set_one (ui.timezone) returned %d for player %d",
-            prefs_timezone_rc,
-            player_id);
-          LOGI ("cmd_auth_register debug: player %d ui.timezone set to %s",
-                player_id,
-                ui_timezone);
         }
       // --- Welcome Message ---
       h_send_message_to_player (player_id, 0, "Welcome to TWClone!",
                                 get_welcome_message (player_id));
-      LOGI ("cmd_auth_register debug: player %d welcome message sent",
-            player_id);
       // --- Issue Session Token ---
       char tok[65];
       int session_create_rc = db_session_create (player_id, 86400, tok);
 
 
-      LOGI (
-        "cmd_auth_register debug: db_session_create returned %d for player %d",
-        session_create_rc,
-        player_id);
       if (session_create_rc != SQLITE_OK)
         {
           LOGE (
@@ -829,9 +743,6 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
 
 
           send_response_ok(ctx, root, "auth.session", data);
-          //json_decref (data);
-          LOGI ("cmd_auth_register debug: player %d session created and sent",
-                player_id);
         }
     }
   else if (rc == AUTH_ERR_NAME_TAKEN)
@@ -902,7 +813,6 @@ cmd_auth_logout (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "auth.logged_out", data);
-  //json_decref (data);
   return 0;
 }
 
@@ -937,7 +847,6 @@ cmd_user_create (client_ctx_t *ctx, json_t *root)
 
 
           send_response_ok(ctx, root, "user.created", data);
-          //json_decref (data);
         }
       else if (rc == AUTH_ERR_NAME_TAKEN)
         {
@@ -1013,7 +922,6 @@ cmd_auth_refresh (client_ctx_t *ctx, json_t *root)
 
 
           send_response_ok(ctx, root, "auth.session", data);
-          //json_decref (data);
         }
     }
   else if (tok)
@@ -1045,7 +953,6 @@ cmd_auth_refresh (client_ctx_t *ctx, json_t *root)
 
 
           send_response_ok(ctx, root, "auth.session", data);
-          //json_decref (data);
         }
       else
         {

@@ -690,6 +690,8 @@ comm_publish_sector_event (int sector_id, const char *event_name,
 
 
   /* Use DB-based subscription lookup instead of broken g_submaps */
+
+
   /* We pass 'event_name' (e.g. sector.player_entered) as the type for the envelope */
 
 
@@ -698,6 +700,8 @@ comm_publish_sector_event (int sector_id, const char *event_name,
 
 
   /* db_for_each_subscriber finds players subscribed to 'topic' (exact or wildcard) */
+
+
   /* and calls bc_cb for each, which sends the event. */
 
 
@@ -705,8 +709,14 @@ comm_publish_sector_event (int sector_id, const char *event_name,
 
 
   /* data is consumed by bc_cb's json_incref, but we own the original reference?
+
+
      bc_cb does json_incref(bc->data).
+
+
      So we must decref our reference at the end.
+
+
    */
 
 
@@ -878,7 +888,6 @@ cmd_admin_notice_create (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "admin.notice.created_v1", ok);
-  //json_decref (ok);
   return 0;
 }
 
@@ -918,7 +927,6 @@ cmd_notice_dismiss (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "notice.dismissed_v1", ok);
-  //json_decref (ok);
   return 0;
 }
 
@@ -1801,7 +1809,6 @@ cmd_subscribe_add (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "subscribe.added", resp);
-  //json_decref (resp);
   return 0;
 }
 
@@ -1859,7 +1866,6 @@ cmd_subscribe_remove (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "subscribe.removed", resp);
-  //json_decref (resp);
   return 0;
 }
 
@@ -1906,10 +1912,68 @@ cmd_subscribe_list (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "subscribe.list", resp);
-  //json_decref (resp);
   return 0;
 }
 
+
+/* ---- command handlers ---- */
+
+
+/* /\* Guard: refuse removing a locked subscription *\/ */
+
+
+/* static int */
+
+
+/* is_locked_subscription (sqlite3 *db, int player_id, const char *topic) */
+
+
+/* { */
+
+
+/*   static const char *SQL = */
+
+
+/*     "SELECT locked FROM subscriptions WHERE player_id=? AND event_type=? LIMIT 1"; */
+
+
+/*   sqlite3_stmt *st = NULL; */
+
+
+/*   int locked = 0; */
+
+
+/*   if (sqlite3_prepare_v2 (db, SQL, -1, &st, NULL) != SQLITE_OK) */
+
+
+/*     return 0; */
+
+
+/*   sqlite3_bind_int (st, 1, player_id); */
+
+
+/*   sqlite3_bind_text (st, 2, topic, -1, SQLITE_STATIC); */
+
+
+/*   if (sqlite3_step (st) == SQLITE_ROW) */
+
+
+/*     { */
+
+
+/*       locked = sqlite3_column_int (st, 0); */
+
+
+/*     } */
+
+
+/*   sqlite3_finalize (st); */
+
+
+/*   return locked ? 1 : 0; */
+
+
+/* } */
 
 
 /* ================== admin.* =================== */
@@ -2108,7 +2172,6 @@ cmd_subscribe_catalog (client_ctx_t *ctx, json_t *root)
       send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Allocation failure");
     }
   send_response_ok(ctx, root, "subscribe.catalog_v1", data);
-  //json_decref (data);
   return 0;
 }
 

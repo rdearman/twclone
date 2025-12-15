@@ -41,7 +41,7 @@ handle_command_push (s2s_conn_t *c, json_t *env)
 
 
       s2s_send_env (c, err, 2000);
-      //json_decref (err);
+      json_decref (err);
       return 0;
     }
   json_t *ackpl = json_pack ("{s:b,s:b,s:i,s:s,s:i}",
@@ -57,7 +57,7 @@ handle_command_push (s2s_conn_t *c, json_t *env)
   int rcsend = s2s_send_env (c, ack, 2000);
 
 
-  //json_decref (ack);
+  json_decref (ack);
   return rcsend;
 }
 
@@ -78,7 +78,7 @@ handle_broadcast_sweep (s2s_conn_t *c, json_t *env)
   int rc = s2s_send_env (c, ack, 2000);
 
 
-  //json_decref (ack);
+  json_decref (ack);
   return rc;
 }
 
@@ -400,7 +400,6 @@ cmd_s2s_replication_heartbeat (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "s2s.heartbeat", payload);
-  json_decref (payload);
   return 0;
 }
 

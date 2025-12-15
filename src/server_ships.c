@@ -460,7 +460,6 @@ cmd_ship_repair (client_ctx_t *ctx, json_t *root)
       json_t *res =
         json_pack ("{s:b, s:i, s:i}", "repaired", 0, "cost", 0, "hull", 100);
       send_response_ok (ctx, root, "ship.repair", res);
-      //json_decref (res);
       return 0;
     }
 
@@ -531,7 +530,6 @@ cmd_ship_repair (client_ctx_t *ctx, json_t *root)
   json_t *res =
     json_pack ("{s:b, s:i, s:i}", "repaired", 1, "cost", cost, "hull", 100);
   send_response_ok (ctx, root, "ship.repair", res);
-  //json_decref (res);
   return 0;
 }
 
@@ -583,7 +581,6 @@ cmd_ship_inspect (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "ship.inspect", payload);
-  //json_decref (payload);
   return 0;
 }
 
@@ -635,7 +632,6 @@ cmd_ship_rename (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "ship.renamed", payload);
-  //json_decref (payload);
   return 0;
 }
 
@@ -703,7 +699,6 @@ cmd_ship_claim (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "ship.claimed", payload);
-  //json_decref (payload);
   return 0;
 }
 
@@ -741,7 +736,6 @@ cmd_ship_status (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "ship.status", payload);
-  json_decref (payload);
   json_decref (player_info);
   return 0;
 }
@@ -1090,7 +1084,7 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
 int
 h_get_active_ship_id (sqlite3 *db, int player_id)
 {
-  LOGE("DEBUG: h_get_active_ship_id called for player_id=%d", player_id); // NEW
+  // LOGE("DEBUG: h_get_active_ship_id called for player_id=%d", player_id); // NEW
   sqlite3_stmt *stmt = NULL; // Initialize to NULL for safety
   int ship_id = 0;
   const char *sql = "SELECT ship FROM players WHERE id = ?;";

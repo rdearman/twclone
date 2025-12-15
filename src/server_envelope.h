@@ -13,6 +13,7 @@ void send_enveloped_refused (int fd, json_t *req, int code, const char *msg,
                              json_t *data_opt);
 
 /* Context-aware wrappers that support capture/bulk execution */
+/* Note: 'data' is consumed (json_decref called internally). Do not decref 'data' after calling send_response_ok. */
 void send_response_ok (client_ctx_t *ctx, json_t *req, const char *type, json_t *data);
 void send_response_error (client_ctx_t *ctx, json_t *req, int code, const char *msg);
 void send_response_refused (client_ctx_t *ctx, json_t *req, int code, const char *msg, json_t *data_opt);
