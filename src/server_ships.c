@@ -460,7 +460,7 @@ cmd_ship_repair (client_ctx_t *ctx, json_t *root)
       json_t *res =
         json_pack ("{s:b, s:i, s:i}", "repaired", 0, "cost", 0, "hull", 100);
       send_response_ok (ctx, root, "ship.repair", res);
-      json_decref (res);
+      //json_decref (res);
       return 0;
     }
 
@@ -531,7 +531,7 @@ cmd_ship_repair (client_ctx_t *ctx, json_t *root)
   json_t *res =
     json_pack ("{s:b, s:i, s:i}", "repaired", 1, "cost", cost, "hull", 100);
   send_response_ok (ctx, root, "ship.repair", res);
-  json_decref (res);
+  //json_decref (res);
   return 0;
 }
 
@@ -583,7 +583,7 @@ cmd_ship_inspect (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "ship.inspect", payload);
-  json_decref (payload);
+  //json_decref (payload);
   return 0;
 }
 
@@ -635,7 +635,7 @@ cmd_ship_rename (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "ship.renamed", payload);
-  json_decref (payload);
+  //json_decref (payload);
   return 0;
 }
 
@@ -703,7 +703,7 @@ cmd_ship_claim (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "ship.claimed", payload);
-  json_decref (payload);
+  //json_decref (payload);
   return 0;
 }
 

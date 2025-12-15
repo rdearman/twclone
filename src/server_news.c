@@ -176,7 +176,7 @@ cmd_news_get_feed (client_ctx_t *ctx, json_t *root)
 
   json_object_set_new (data, "articles", articles);
   send_response_ok(ctx, root, "news.feed", data);
-  json_decref (data);
+  //json_decref (data);
   return 0;
 }
 

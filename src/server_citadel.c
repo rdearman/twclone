@@ -345,7 +345,7 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
   json_object_set_new (payload, "completion_time", json_integer (end_time));
   json_object_set_new (payload, "days_to_complete", json_integer (r_days));
   send_response_ok (ctx, root, "citadel.upgrade_started", payload);
-  json_decref (payload);
+  //json_decref (payload);
   return 0;
 }
 

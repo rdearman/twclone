@@ -347,7 +347,7 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
 
                   send_response_refused(ctx, root, ERR_REF_BIG_SLEEP, "You are currently in Big Sleep.",
                                           err_data);
-                  json_decref (err_data);
+                  //json_decref (err_data);
                   return 0;     // Disallow login
                 }
               else

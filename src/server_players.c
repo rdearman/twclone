@@ -337,7 +337,7 @@ handle_turn_consumption_error (client_ctx_t *ctx,
                              ERR_REF_NO_TURNS,
                              get_turn_error_message (consume_result),
                              NULL);
-      json_decref (meta);
+      //json_decref (meta);
     }
   return 0;
 }
@@ -1511,7 +1511,7 @@ cmd_player_my_info (client_ctx_t *ctx, json_t *root)
 
   json_object_set_new (pinfo, "player", player_obj);
   send_response_ok(ctx, root, "player.info", pinfo);
-  json_decref (pinfo);
+  //json_decref (pinfo);
   return 0;
 }
 
@@ -1568,7 +1568,7 @@ cmd_player_list_online (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   send_response_ok(ctx, root, "player.list_online.result", resp);
-  json_decref (resp);
+  //json_decref (resp);
   return 0;
 }
 
@@ -1700,7 +1700,7 @@ cmd_player_rankings (client_ctx_t *ctx, json_t *root)
 
   json_object_set_new (resp, "rankings", rankings);
   send_response_ok(ctx, root, "player.rankings", resp);
-  json_decref (resp);
+  //json_decref (resp);
   return 0;
 }
 
@@ -1778,7 +1778,7 @@ cmd_player_get_topics (client_ctx_t *ctx, json_t *root)
   json_t *out = json_object ();
   json_object_set_new (out, "topics", topics ? topics : json_array ());
   send_response_ok (ctx, root, "player.subscriptions", out);
-  json_decref (out);
+  //json_decref (out);
   return 0;
 }
 
@@ -1810,7 +1810,7 @@ cmd_player_get_bookmarks (client_ctx_t *ctx, json_t *root)
   json_object_set_new (out, "bookmarks",
                        bookmarks ? bookmarks : json_array ());
   send_response_ok (ctx, root, "player.bookmarks", out);
-  json_decref (out);
+  //json_decref (out);
   return 0;
 }
 
@@ -1841,7 +1841,7 @@ cmd_player_get_avoids (client_ctx_t *ctx, json_t *root)
   json_t *out = json_object ();
   json_object_set_new (out, "avoid", avoid ? avoid : json_array ());
   send_response_ok(ctx, root, "avoids", out);
-  json_decref (out);
+  //json_decref (out);
   return 0;
 }
 
@@ -1853,7 +1853,7 @@ cmd_player_get_notes (client_ctx_t *ctx, json_t *root)
   json_t *out = json_object ();
   json_object_set_new (out, "notes", notes ? notes : json_array ());
   send_response_ok(ctx, root, "player.notes", out);
-  json_decref (out);
+  //json_decref (out);
   return 0;
 }
 
@@ -1931,7 +1931,7 @@ cmd_player_set_prefs (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "player.prefs.updated", resp);
-  json_decref (resp);
+  //json_decref (resp);
   return 0;
 }
 
@@ -1971,7 +1971,7 @@ cmd_nav_bookmark_add (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "nav.bookmark.added", resp);
-  json_decref (resp);
+  //json_decref (resp);
 }
 
 
@@ -1996,7 +1996,7 @@ cmd_nav_bookmark_remove (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "nav.bookmark.removed", resp);
-  json_decref (resp);
+  //json_decref (resp);
 }
 
 

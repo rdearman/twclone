@@ -94,7 +94,7 @@ cmd_bank_history (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "bank.history.response", payload);
-  json_decref (payload);
+  //json_decref (payload);
   return 0;
 }
 
@@ -158,7 +158,7 @@ cmd_bank_leaderboard (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "bank.leaderboard.response", payload);
-  json_decref (payload);
+  //json_decref (payload);
   return 0;
 }
 
@@ -230,7 +230,7 @@ cmd_bank_deposit (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "bank.deposit.confirmed", payload);
-  json_decref (payload);
+  //json_decref (payload);
   return 0;
 }
 
@@ -314,7 +314,7 @@ cmd_bank_transfer (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "bank.transfer.confirmed", payload);
-  json_decref (payload);
+  //json_decref (payload);
   return 0;
 }
 
@@ -368,7 +368,7 @@ cmd_bank_withdraw (client_ctx_t *ctx, json_t *root)
 
 
   send_response_ok(ctx, root, "bank.withdraw.confirmed", payload); // Assuming type name
-  json_decref (payload);
+  //json_decref (payload);
   return 0;
 }
 
@@ -434,7 +434,7 @@ cmd_fine_list (client_ctx_t *ctx, json_t *root)
   json_t *response_data = json_object();
   json_object_set_new(response_data, "fines", fines_array);
   send_response_ok(ctx, root, "fine.list", response_data);
-  json_decref(response_data);
+  //json_decref(response_data);
   return 0;
 }
 
@@ -544,6 +544,6 @@ cmd_fine_pay (client_ctx_t *ctx, json_t *root)
   json_object_set_new(response_data, "fine_id", json_integer(fine_id));
   json_object_set_new(response_data, "amount_paid", json_integer(amount_to_pay));
   send_response_ok(ctx, root, "fine.pay", response_data);
-  json_decref(response_data);
+  //json_decref(response_data);
   return 0;
 }
