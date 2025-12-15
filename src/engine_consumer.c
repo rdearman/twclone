@@ -268,6 +268,7 @@ handle_ship_self_destruct_initiated (sqlite3 *db, sqlite3_stmt *ev_row)
 static int
 engine_event_handler_player_trade_v1 (sqlite3 *db, sqlite3_stmt *ev_row)
 {
+  (void) db;
   int rc = SQLITE_ERROR;
   const char *payload_str = (const char *) sqlite3_column_text (ev_row, 3); // Payload is the 4th column (index 3)
   json_error_t jerr;

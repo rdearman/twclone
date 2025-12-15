@@ -21,7 +21,7 @@ enum
   AUTH_OK = 0,
   AUTH_ERR_BAD_REQUEST = 1301,          /* Missing required field(s) */
   AUTH_ERR_INVALID_CRED = 1220,         /* Invalid credentials */
-  AUTH_ERR_NAME_TAKEN = 1210,   /* Username already exists */
+  AUTH_ERR_NAME_TAKEN = 1205,   /* Username already exists */
   AUTH_ERR_DB = 1500            /* Database/internal error */
 };
 /* Look up player by name, verify password, return player_id on success. */
@@ -85,5 +85,9 @@ int cmd_sys_econ_port_status (client_ctx_t *ctx, json_t *root);
 int cmd_sys_econ_orders_summary (client_ctx_t *ctx, json_t *root);
 int cmd_sys_econ_planet_status (client_ctx_t *ctx, json_t *root);
 int cmd_sys_npc_ferengi_tick_once (client_ctx_t *ctx, json_t *root);
+int cmd_sys_player_reset (client_ctx_t *ctx, json_t *root);
+
+int send_error_response (client_ctx_t *ctx, json_t *root, int err_code, const char *msg);
+int send_json_response (client_ctx_t *ctx, json_t *root, json_t *response_json);
 
 #endif

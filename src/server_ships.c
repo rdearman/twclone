@@ -379,11 +379,9 @@ handle_escape_pod_spawn (sqlite3 *db, ship_kill_context_t *ctx)
 
 
 void handle_move_pathfind (client_ctx_t *ctx, json_t *root);
-void send_enveloped_ok (int fd, json_t *root, const char *type,
-                        json_t *data);
-void send_enveloped_error (int fd, json_t *root, int code, const char *msg);
-void send_enveloped_refused (int fd, json_t *root, int code, const char *msg,
-                             json_t *data_opt);
+
+
+
 
 
 int
@@ -392,10 +390,7 @@ cmd_ship_transfer_cargo (client_ctx_t *ctx, json_t *root)
   sqlite3 *db_handle = db_get_handle ();
   h_decloak_ship (db_handle,
                   h_get_active_ship_id (db_handle, ctx->player_id));
-  send_enveloped_error (ctx->fd,
-                        root,
-                        1101,
-                        "Not implemented: " "ship.transfer_cargo");
+  send_response_error(ctx, root, ERR_NOT_IMPLEMENTED, "Not implemented: " "ship.transfer_cargo");
   return 0;
 }
 
@@ -403,8 +398,7 @@ cmd_ship_transfer_cargo (client_ctx_t *ctx, json_t *root)
 int
 cmd_ship_upgrade (client_ctx_t *ctx, json_t *root)
 {
-  send_enveloped_error (ctx->fd, root, 1101,
-                        "Not implemented: " "ship.upgrade");
+  send_response_error(ctx, root, ERR_NOT_IMPLEMENTED, "Use hardware.buy for components or shipyard.upgrade for hull exchange.");
   return 0;
 }
 
@@ -412,7 +406,129 @@ cmd_ship_upgrade (client_ctx_t *ctx, json_t *root)
 int
 cmd_ship_repair (client_ctx_t *ctx, json_t *root)
 {
-  send_enveloped_error (ctx->fd, root, 1101, "Not implemented: " "ship.repair");
+  sqlite3 *db = db_get_handle ();
+  if (ctx->player_id <= 0)
+    {
+      send_response_refused (ctx, root, ERR_NOT_AUTHENTICATED, "Auth required", NULL);
+      return 0;
+    }
+
+  int ship_id = h_get_active_ship_id (db, ctx->player_id);
+  if (ship_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_SHIP_NOT_FOUND, "No active ship.");
+      return 0;
+    }
+
+  /* Check Location (Stardock type 9 or Class 0 type 0) */
+  sqlite3_stmt *st = NULL;
+  const char *sql_loc =
+    "SELECT type FROM ports WHERE sector = ? AND (type = 9 OR type = 0);";
+  bool at_shipyard = false;
+  if (sqlite3_prepare_v2 (db, sql_loc, -1, &st, NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_int (st, 1, ctx->sector_id);
+      if (sqlite3_step (st) == SQLITE_ROW)
+        {
+          at_shipyard = true;
+        }
+      sqlite3_finalize (st);
+    }
+
+  if (!at_shipyard)
+    {
+      send_response_refused (ctx, root, ERR_NOT_AT_SHIPYARD,
+                             "Must be at Stardock or Class 0 port.", NULL);
+      return 0;
+    }
+
+  /* Check Hull */
+  int current_hull = 0;
+  if (sqlite3_prepare_v2 (db, "SELECT hull FROM ships WHERE id = ?", -1, &st,
+                          NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_int (st, 1, ship_id);
+      if (sqlite3_step (st) == SQLITE_ROW)
+        {
+          current_hull = sqlite3_column_int (st, 0);
+        }
+      sqlite3_finalize (st);
+    }
+
+  if (current_hull >= 100)
+    {
+      json_t *res =
+        json_pack ("{s:b, s:i, s:i}", "repaired", 0, "cost", 0, "hull", 100);
+      send_response_ok (ctx, root, "ship.repair", res);
+      json_decref (res);
+      return 0;
+    }
+
+  int to_repair = 100 - current_hull;
+  int cost = to_repair * 10;    /* 10 credits per point */
+
+  /* Transaction context is managed by the caller/server loop. DO NOT BEGIN/COMMIT/ROLLBACK here. */
+
+  /* 1. Deduct credits */
+  long long new_player_credits = 0;
+  if (sqlite3_prepare_v2(db, "UPDATE players SET credits = credits - ?1 WHERE id = ?2 AND credits >= ?1 RETURNING credits;", -1, &st, NULL) != SQLITE_OK) {
+      send_response_error (ctx, root, ERR_DB, "DB Error preparing credit deduction.");
+      return 0;
+  }
+  sqlite3_bind_int(st, 1, cost);
+  sqlite3_bind_int(st, 2, ctx->player_id);
+  
+  int step_rc = sqlite3_step(st);
+  
+  if (step_rc == SQLITE_ROW) {
+      new_player_credits = sqlite3_column_int64(st, 0);
+  } else {
+      sqlite3_finalize(st);
+      if (step_rc == SQLITE_DONE) {
+          /* UPDATE executed but no rows returned -> condition failed (insufficient funds) */
+          send_response_refused (ctx, root, ERR_INSUFFICIENT_FUNDS, "Insufficient credits.", NULL);
+      } else {
+          send_response_error (ctx, root, ERR_DB, "Credit update failed.");
+      }
+      return 0;
+  }
+  sqlite3_finalize(st);
+
+  /* 2. Update Hull */
+  if (sqlite3_prepare_v2
+      (db, "UPDATE ships SET hull = 100 WHERE id = ?", -1, &st,
+       NULL) != SQLITE_OK)
+    {
+      /* Refund attempt */
+      h_add_player_petty_cash_unlocked (db, ctx->player_id, cost, NULL);
+      send_response_error (ctx, root, ERR_DB, "DB Error preparing hull update");
+      return 0;
+    }
+  sqlite3_bind_int (st, 1, ship_id);
+  if (sqlite3_step (st) != SQLITE_DONE)
+    {
+      sqlite3_finalize (st);
+      /* Refund attempt */
+      h_add_player_petty_cash_unlocked (db, ctx->player_id, cost, NULL);
+      send_response_error (ctx, root, ERR_DB, "Hull update step failed");
+      return 0;
+    }
+  
+  if (sqlite3_changes(db) == 0) {
+      sqlite3_finalize (st);
+      /* Refund attempt */
+      h_add_player_petty_cash_unlocked (db, ctx->player_id, cost, NULL);
+      send_response_error (ctx, root, ERR_SHIP_NOT_FOUND, "Ship not found or update failed.");
+      return 0;
+  }
+  sqlite3_finalize (st);
+
+  /* No COMMIT */
+
+  json_t *res =
+    json_pack ("{s:b, s:i, s:i}", "repaired", 1, "cost", cost, "hull", 100);
+  send_response_ok (ctx, root, "ship.repair", res);
+  json_decref (res);
   return 0;
 }
 
@@ -426,7 +542,7 @@ cmd_ship_inspect (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id <= 0)
     {
-      send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+      send_response_refused(ctx, root, ERR_SECTOR_NOT_FOUND, "Not authenticated", NULL);
       return 0;
     }
   int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 1;
@@ -456,14 +572,14 @@ cmd_ship_inspect (client_ctx_t *ctx, json_t *root)
 
   if (rc != SQLITE_OK || !ships)
     {
-      send_enveloped_error (ctx->fd, root, 1500, "Database error");
+      send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Database error");
       return 0;
     }
   json_t *payload =
     json_pack ("{s:i s:o}", "sector", sector_id, "ships", ships);
 
 
-  send_enveloped_ok (ctx->fd, root, "ship.inspect", payload);
+  send_response_ok(ctx, root, "ship.inspect", payload);
   json_decref (payload);
   return 0;
 }
@@ -475,7 +591,7 @@ cmd_ship_rename (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id <= 0)
     {
-      send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+      send_response_refused(ctx, root, ERR_SECTOR_NOT_FOUND, "Not authenticated", NULL);
       return 0;
     }
   json_t *data = json_object_get (root, "data");
@@ -483,7 +599,7 @@ cmd_ship_rename (client_ctx_t *ctx, json_t *root)
 
   if (!json_is_object (data))
     {
-      send_enveloped_refused (ctx->fd, root, 1400, "Bad request", NULL);
+      send_response_refused(ctx, root, REF_NOT_IN_SECTOR, "Bad request", NULL);
       return 0;
     }
   json_t *j_ship = json_object_get (data, "ship_id");
@@ -492,8 +608,7 @@ cmd_ship_rename (client_ctx_t *ctx, json_t *root)
 
   if (!json_is_integer (j_ship) || !json_is_string (j_name))
     {
-      send_enveloped_refused (ctx->fd, root, 1400, "Missing ship_id/new_name",
-                              NULL);
+      send_response_refused(ctx, root, REF_NOT_IN_SECTOR, "Missing ship_id/new_name",  NULL);
       return 0;
     }
   int ship_id = (int) json_integer_value (j_ship);
@@ -504,19 +619,19 @@ cmd_ship_rename (client_ctx_t *ctx, json_t *root)
 
   if (rc == SQLITE_CONSTRAINT)
     {
-      send_enveloped_refused (ctx->fd, root, 1403, "Permission denied", NULL);
+      send_response_refused(ctx, root, REF_TURN_COST_EXCEEDS, "Permission denied", NULL);
       return 0;
     }
   if (rc != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, 1500, "Database error");
+      send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Database error");
       return 0;
     }
   json_t *payload =
     json_pack ("{s:i s:s}", "ship_id", ship_id, "name", new_name);
 
 
-  send_enveloped_ok (ctx->fd, root, "ship.renamed", payload);
+  send_response_ok(ctx, root, "ship.renamed", payload);
   json_decref (payload);
   return 0;
 }
@@ -531,7 +646,7 @@ cmd_ship_claim (client_ctx_t *ctx, json_t *root)
                   h_get_active_ship_id (db_handle, ctx->player_id));
   if (ctx->player_id <= 0)
     {
-      send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+      send_response_refused(ctx, root, ERR_SECTOR_NOT_FOUND, "Not authenticated", NULL);
       return 0;
     }
   int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 1;
@@ -569,7 +684,7 @@ cmd_ship_claim (client_ctx_t *ctx, json_t *root)
     }
   if (ship_id <= 0)
     {
-      send_enveloped_refused (ctx->fd, root, 1400, "Missing ship_id", NULL);
+      send_response_refused(ctx, root, REF_NOT_IN_SECTOR, "Missing ship_id", NULL);
       return 0;
     }
   json_t *ship = NULL;
@@ -578,14 +693,13 @@ cmd_ship_claim (client_ctx_t *ctx, json_t *root)
 
   if (rc != SQLITE_OK || !ship)
     {
-      send_enveloped_refused (ctx->fd, root, 1406, "Ship not claimable",
-                              NULL);
+      send_response_refused(ctx, root, REF_SAFE_ZONE_ONLY, "Ship not claimable",  NULL);
       return 0;
     }
   json_t *payload = json_pack ("{s:o}", "ship", ship);
 
 
-  send_enveloped_ok (ctx->fd, root, "ship.claimed", payload);
+  send_response_ok(ctx, root, "ship.claimed", payload);
   json_decref (payload);
   return 0;
 }
@@ -597,7 +711,7 @@ cmd_ship_status (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id <= 0)
     {
-      send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+      send_response_refused(ctx, root, ERR_SECTOR_NOT_FOUND, "Not authenticated", NULL);
       return 0;
     }
   json_t *player_info = NULL;
@@ -606,7 +720,7 @@ cmd_ship_status (client_ctx_t *ctx, json_t *root)
   if (db_player_info_json (ctx->player_id, &player_info) != SQLITE_OK
       || !player_info)
     {
-      send_enveloped_error (ctx->fd, root, 1500, "Database error");
+      send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Database error");
       return 0;
     }
   // Extract ship-only view from player_info (adjust keys to match your schema)
@@ -616,14 +730,14 @@ cmd_ship_status (client_ctx_t *ctx, json_t *root)
   if (!json_is_object (ship))
     {
       json_decref (player_info);
-      send_enveloped_error (ctx->fd, root, 1500, "No ship info");
+      send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "No ship info");
       return 0;
     }
   // Build payload (clone or pack fields as needed)
   json_t *payload = json_pack ("{s:O}", "ship", ship);
 
 
-  send_enveloped_ok (ctx->fd, root, "ship.status", payload);
+  send_response_ok(ctx, root, "ship.status", payload);
   json_decref (payload);
   json_decref (player_info);
   return 0;
@@ -661,18 +775,14 @@ cmd_ship_self_destruct (client_ctx_t *ctx, json_t *root)
   if (!data || json_unpack (data, "{s:i}", "confirmation", &confirmation) != 0
       || confirmation == 0)
     {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              ERR_CONFIRMATION_REQUIRED,
-                              "Self-destruct requires explicit non-zero integer confirmation.",
+      send_response_refused(ctx, root, ERR_CONFIRMATION_REQUIRED, "Self-destruct requires explicit non-zero integer confirmation.",
                               NULL);
       return -1;
     }
   /* 2. Refusal check: Cannot self-destruct in protected zones (FedSpace) */
   if (db_is_sector_fedspace (ctx->sector_id))
     {
-      send_enveloped_refused (ctx->fd, root, ERR_FORBIDDEN_IN_SECTOR,
-                              "Cannot self-destruct in protected FedSpace.",
+      send_response_refused(ctx, root, ERR_FORBIDDEN_IN_SECTOR, "Cannot self-destruct in protected FedSpace.",
                               NULL);
       return -1;
     }
@@ -698,12 +808,11 @@ cmd_ship_self_destruct (client_ctx_t *ctx, json_t *root)
 	 ctx->player_id,
 	 ship_id,
 	 sqlite3_errmsg (db));
-      send_enveloped_error (ctx->fd, root, 1500,
-                            "Failed to process self-destruction.");
+      send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Failed to process self-destruction.");
       return 0;
     }
   /* 4. Response: command acknowledged and processed */
-  send_enveloped_ok (ctx->fd, root, "ship.self_destruct.confirmed", NULL);
+  send_response_ok(ctx, root, "ship.self_destruct.confirmed", NULL);
   return 0;
 }
 
@@ -714,16 +823,13 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
   sqlite3 *db = db_get_handle ();
   if (!db)
     {
-      send_enveloped_error (ctx->fd, root, ERR_DB, "No database handle");
+      send_response_error(ctx, root, ERR_DB, "No database handle");
       return 0;
     }
 
   if (!ctx || ctx->player_id <= 0)
     {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              ERR_NOT_AUTHENTICATED,
-                              "Not authenticated",
+      send_response_refused(ctx, root, ERR_NOT_AUTHENTICATED, "Not authenticated",
                               NULL);
       return 0;
     }
@@ -734,10 +840,7 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
   
   if (player_ship_id <= 0)
     {
-      send_enveloped_refused (ctx->fd,
-			      root,
-			      ERR_NO_ACTIVE_SHIP,
-			      "You do not have an active ship.",
+      send_response_refused(ctx, root, ERR_NO_ACTIVE_SHIP, "You do not have an active ship.",
 			      NULL);
       return 0;
     }
@@ -762,8 +865,7 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
   else
     {
       LOGE ("cmd_ship_tow: DB error checking status: %s", sqlite3_errmsg (db));
-      send_enveloped_error (ctx->fd, root, ERR_DB_QUERY_FAILED,
-                            "Database error");
+      send_response_error(ctx, root, ERR_DB_QUERY_FAILED, "Database error");
       return 0;
     }
 
@@ -831,8 +933,7 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
 
           sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
 
-          send_enveloped_ok (ctx->fd, root, "ship.tow.disengaged",
-                             json_pack ("{s:s,s:i}",
+          send_response_ok(ctx, root, "ship.tow.disengaged", json_pack ("{s:s,s:i}",
                                         "message",
                                         "Tow cable disengaged.",
                                         "towed_ship_id",
@@ -841,10 +942,7 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
         }
       else
         {
-          send_enveloped_refused (ctx->fd,
-                                  root,
-                                  REF_ALREADY_TOWING,
-                                  "You are already towing another ship. Release it first.",
+          send_response_refused(ctx, root, REF_ALREADY_TOWING, "You are already towing another ship. Release it first.",
                                   NULL);
           return 0;
         }
@@ -855,19 +953,13 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
      ----------------------------------------------------------- */
   if (target_ship_id <= 0)
     {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              ERR_MISSING_FIELD,
-                              "Invalid target ship ID.",
+      send_response_refused(ctx, root, ERR_MISSING_FIELD, "Invalid target ship ID.",
                               NULL);
       return 0;
     }
   if (target_ship_id == player_ship_id)
     {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              REF_TARGET_SHIP_INVALID,
-                              "You cannot tow yourself.",
+      send_response_refused(ctx, root, REF_TARGET_SHIP_INVALID, "You cannot tow yourself.",
                               NULL);
       return 0;
     }
@@ -879,10 +971,7 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
 
   if (target_sector <= 0 || target_sector != player_sector)
     {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              REF_TARGET_SHIP_INVALID,
-                              "Target ship not in your sector.",
+      send_response_refused(ctx, root, REF_TARGET_SHIP_INVALID, "Target ship not in your sector.",
                               NULL);
       return 0;
     }
@@ -899,10 +988,7 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
 
   if (!is_mine && !is_corp)
     {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              REF_SHIP_NOT_OWNED_OR_PILOTED,
-                              "You do not own that ship.",
+      send_response_refused(ctx, root, REF_SHIP_NOT_OWNED_OR_PILOTED, "You do not own that ship.",
                               NULL);
       return 0;
     }
@@ -910,10 +996,7 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
   // Unmanned Check
   if (db_is_ship_piloted (db, target_ship_id))
     {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              REF_SHIP_NOT_OWNED_OR_PILOTED,
-                              "Target ship is currently piloted.",
+      send_response_refused(ctx, root, REF_SHIP_NOT_OWNED_OR_PILOTED, "Target ship is currently piloted.",
                               NULL);
       return 0;
     }
@@ -936,10 +1019,7 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
 
   if (is_being_towed != 0)
     {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              REF_ALREADY_BEING_TOWED,
-                              "Target is already under tow.",
+      send_response_refused(ctx, root, REF_ALREADY_BEING_TOWED, "Target is already under tow.",
                               NULL);
       return 0;
     }
@@ -984,8 +1064,7 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
 
   sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
 
-  send_enveloped_ok (ctx->fd, root, "ship.tow.engaged",
-                     json_pack ("{s:s,s:i}",
+  send_response_ok(ctx, root, "ship.tow.engaged", json_pack ("{s:s,s:i}",
                                 "message",
                                 "Tow cable engaged.",
                                 "towed_ship_id",
@@ -999,10 +1078,7 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
     }
   sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
   LOGE ("cmd_ship_tow: DB Transaction failed: %s", sqlite3_errmsg (db));
-  send_enveloped_error (ctx->fd,
-                        root,
-                        ERR_DB_QUERY_FAILED,
-                        "Database transaction error");
+  send_response_error(ctx, root, ERR_DB_QUERY_FAILED, "Database transaction error");
   return 0;
 }
 
@@ -1046,10 +1122,11 @@ h_get_active_ship_id (sqlite3 *db, int player_id)
  * @return SQLITE_OK on success, SQLITE_CONSTRAINT if limits violated, or error code.
  */
 int
-h_update_ship_cargo (sqlite3 *db, int ship_id, const char *commodity_code, int delta)
+h_update_ship_cargo (sqlite3 *db, int ship_id, const char *commodity_code, int delta, int *new_quantity_out)
 {
-  if (!db || ship_id <= 0 || !commodity_code || delta == 0)
+  if (!db || ship_id <= 0 || !commodity_code)
     {
+      if (new_quantity_out) *new_quantity_out = 0; // Indicate no change
       return SQLITE_MISUSE;
     }
 
@@ -1058,82 +1135,121 @@ h_update_ship_cargo (sqlite3 *db, int ship_id, const char *commodity_code, int d
   if (strcasecmp(commodity_code, "ORE") == 0) col_name = "ore";
   else if (strcasecmp(commodity_code, "ORG") == 0) col_name = "organics";
   else if (strcasecmp(commodity_code, "EQU") == 0) col_name = "equipment";
+  else if (strcasecmp(commodity_code, "COLONISTS") == 0) col_name = "colonists";
+  else if (strcasecmp(commodity_code, "SLAVES") == 0) col_name = "slaves";
+  else if (strcasecmp(commodity_code, "WEAPONS") == 0) col_name = "weapons";
+  else if (strcasecmp(commodity_code, "DRUGS") == 0) col_name = "drugs";
   else {
-    LOGE("h_update_ship_cargo: Invalid commodity code %s", commodity_code);
+    LOGE("h_update_ship_cargo: Invalid commodity code %s for ship %d", commodity_code, ship_id);
+    if (new_quantity_out) *new_quantity_out = 0; // Indicate no change
     return SQLITE_MISUSE;
   }
 
   sqlite3_stmt *stmt = NULL;
-  // Check current values and capacity
-  const char *sql_check = "SELECT ore, organics, equipment, holds FROM ships WHERE id = ?;";
+  // Check current values and capacity (including all cargo types)
+  const char *sql_check = "SELECT ore, organics, equipment, colonists, slaves, weapons, drugs, holds FROM ships WHERE id = ?;";
   int rc = sqlite3_prepare_v2(db, sql_check, -1, &stmt, NULL);
-  if (rc != SQLITE_OK) return rc;
+  if (rc != SQLITE_OK) {
+    LOGE("h_update_ship_cargo: Failed to prepare check statement: %s", sqlite3_errmsg(db));
+    if (new_quantity_out) *new_quantity_out = 0;
+    return rc;
+  }
 
   sqlite3_bind_int(stmt, 1, ship_id);
   
-  int ore = 0, org = 0, equ = 0, holds = 0;
+  int ore = 0, org = 0, equ = 0, holds = 0, colonists = 0, slaves = 0, weapons = 0, drugs = 0;
   if (sqlite3_step(stmt) == SQLITE_ROW) {
     ore = sqlite3_column_int(stmt, 0);
     org = sqlite3_column_int(stmt, 1);
     equ = sqlite3_column_int(stmt, 2);
-    holds = sqlite3_column_int(stmt, 3);
+    colonists = sqlite3_column_int(stmt, 3);
+    slaves = sqlite3_column_int(stmt, 4);
+    weapons = sqlite3_column_int(stmt, 5);
+    drugs = sqlite3_column_int(stmt, 6);
+    holds = sqlite3_column_int(stmt, 7);
   } else {
     sqlite3_finalize(stmt);
+    LOGE("h_update_ship_cargo: Ship %d not found for cargo update.", ship_id);
+    if (new_quantity_out) *new_quantity_out = 0;
     return SQLITE_NOTFOUND;
   }
-  sqlite3_finalize(stmt);
+  sqlite3_finalize(stmt); // Finalize the SELECT statement
 
-  // Calculate new totals
-  int current_qty = 0;
-  if (strcmp(col_name, "ore") == 0) current_qty = ore;
-  else if (strcmp(col_name, "organics") == 0) current_qty = org;
-  else if (strcmp(col_name, "equipment") == 0) current_qty = equ;
+  int current_qty_for_commodity = 0;
+  if (strcasecmp(commodity_code, "ORE") == 0) current_qty_for_commodity = ore;
+  else if (strcasecmp(commodity_code, "ORG") == 0) current_qty_for_commodity = org;
+  else if (strcasecmp(commodity_code, "EQU") == 0) current_qty_for_commodity = equ;
+  else if (strcasecmp(commodity_code, "COLONISTS") == 0) current_qty_for_commodity = colonists;
+  else if (strcasecmp(commodity_code, "SLAVES") == 0) current_qty_for_commodity = slaves;
+  else if (strcasecmp(commodity_code, "WEAPONS") == 0) current_qty_for_commodity = weapons;
+  else if (strcasecmp(commodity_code, "DRUGS") == 0) current_qty_for_commodity = drugs;
+  // Note: An invalid commodity code would have returned SQLITE_MISUSE earlier.
 
-  int new_qty = current_qty + delta;
+  int new_qty_for_commodity = current_qty_for_commodity + delta;
   
-  // Invariant 1: No negative quantities
-  if (new_qty < 0) {
-    LOGE("h_update_ship_cargo: Resulting quantity negative for %s (curr=%d, delta=%d)", commodity_code, current_qty, delta);
-    return SQLITE_CONSTRAINT;
+  // Calculate current total cargo load from all relevant commodities
+  int current_total_load = ore + org + equ + colonists + slaves + weapons + drugs;
+  // Calculate new total cargo load assuming the change goes through
+  int new_total_load = current_total_load - current_qty_for_commodity + new_qty_for_commodity;
+
+  // Invariant 1: No negative quantities for any specific commodity
+  if (new_qty_for_commodity < 0) {
+    LOGW("h_update_ship_cargo: Resulting quantity negative for ship %d, commodity %s (curr=%d, delta=%d)", 
+         ship_id, commodity_code, current_qty_for_commodity, delta);
+    if (new_quantity_out) *new_quantity_out = current_qty_for_commodity; // Return current_qty if clamped
+    return SQLITE_CONSTRAINT; // Indicate violation
   }
 
-  // Invariant 2: Total cargo <= holds
-  int total_cargo = ore + org + equ; // Current total
-  int total_new = total_cargo + delta; // New total (assuming one commodity changes)
-  
-  if (total_new > holds) {
-    LOGE("h_update_ship_cargo: Resulting total %d exceeds holds %d", total_new, holds);
-    return SQLITE_CONSTRAINT;
+  // Invariant 2: Total cargo <= holds (max capacity)
+  if (new_total_load > holds) {
+    LOGW("h_update_ship_cargo: Ship %d cargo capacity exceeded (holds=%d, new_total_load=%d)", ship_id, holds, new_total_load);
+    if (new_quantity_out) *new_quantity_out = current_qty_for_commodity; // Return current_qty if clamped
+    return SQLITE_CONSTRAINT; // Indicate violation
   }
 
   // Perform Update
-  char sql_update[256];
-  snprintf(sql_update, sizeof(sql_update), "UPDATE ships SET %s = ? WHERE id = ?;", col_name);
+  char dynamic_sql[512]; // Increased size for longer column names
+  snprintf(dynamic_sql, sizeof(dynamic_sql), 
+           "UPDATE ships SET %s = ? WHERE id = ?;", col_name);
   
-  rc = sqlite3_prepare_v2(db, sql_update, -1, &stmt, NULL);
-  if (rc != SQLITE_OK) return rc;
+  rc = sqlite3_prepare_v2(db, dynamic_sql, -1, &stmt, NULL);
+  if (rc != SQLITE_OK) {
+    LOGE("h_update_ship_cargo: Failed to prepare update statement: %s", sqlite3_errmsg(db));
+    if (new_quantity_out) *new_quantity_out = current_qty_for_commodity;
+    return rc;
+  }
 
-  sqlite3_bind_int(stmt, 1, new_qty);
+  sqlite3_bind_int(stmt, 1, new_qty_for_commodity);
   sqlite3_bind_int(stmt, 2, ship_id);
   
   rc = sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
+  sqlite3_finalize(stmt); // Finalize the UPDATE statement
   
-  return (rc == SQLITE_DONE) ? SQLITE_OK : rc;
+  if (rc != SQLITE_DONE) {
+    LOGE("h_update_ship_cargo: Update failed for ship %d, commodity %s: %s", ship_id, commodity_code, sqlite3_errmsg(db));
+    if (new_quantity_out) *new_quantity_out = current_qty_for_commodity;
+    return SQLITE_ERROR; // Indicate update failure
+  }
+
+  if (new_quantity_out) {
+    *new_quantity_out = new_qty_for_commodity;
+  }
+
+  return SQLITE_OK;
 }
 
 
 
 int h_get_ship_cargo_and_holds(sqlite3 *db, int ship_id, 
-                               int *ore, int *organics, int *equipment, int *holds,
-                               int *free_holds, int *max_holds, 
-                               int *cargo_capacity_used, int *cargo_capacity_max) {
+                               int *ore, int *organics, int *equipment, 
+                               int *colonists, int *slaves, int *weapons, int *drugs,
+                               int *holds) {
   if (!db || ship_id <= 0) {
     return SQLITE_MISUSE;
   }
 
   sqlite3_stmt *stmt = NULL;
-  const char *sql = "SELECT ore, organics, equipment, holds, shiptypes.maxholds FROM ships JOIN shiptypes ON ships.type_id = shiptypes.id WHERE ships.id = ?;";
+  const char *sql = "SELECT ore, organics, equipment, colonists, slaves, weapons, drugs, holds FROM ships WHERE id = ?;";
   int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
   if (rc != SQLITE_OK) {
     LOGE("h_get_ship_cargo_and_holds: Failed to prepare statement: %s", sqlite3_errmsg(db));
@@ -1146,20 +1262,11 @@ int h_get_ship_cargo_and_holds(sqlite3 *db, int ship_id,
     if (ore) *ore = sqlite3_column_int(stmt, 0);
     if (organics) *organics = sqlite3_column_int(stmt, 1);
     if (equipment) *equipment = sqlite3_column_int(stmt, 2);
-    if (holds) *holds = sqlite3_column_int(stmt, 3); // Current holds on ship (can be upgraded)
-    if (max_holds) *max_holds = sqlite3_column_int(stmt, 4); // Base holds from shiptype
-
-    int current_total_cargo = 0;
-    if (ore) current_total_cargo += *ore;
-    if (organics) current_total_cargo += *organics;
-    if (equipment) current_total_cargo += *equipment;
-
-    int current_holds_val = (holds) ? *holds : 0; // Use the value if holds ptr was provided
-
-    if (free_holds) *free_holds = current_holds_val - current_total_cargo;
-    if (cargo_capacity_used) *cargo_capacity_used = current_total_cargo;
-    if (cargo_capacity_max) *cargo_capacity_max = current_holds_val; // Max capacity is current holds
-
+    if (colonists) *colonists = sqlite3_column_int(stmt, 3);
+    if (slaves) *slaves = sqlite3_column_int(stmt, 4);
+    if (weapons) *weapons = sqlite3_column_int(stmt, 5);
+    if (drugs) *drugs = sqlite3_column_int(stmt, 6);
+    if (holds) *holds = sqlite3_column_int(stmt, 7);
   } else {
     LOGW("h_get_ship_cargo_and_holds: Ship ID %d not found.", ship_id);
     rc = SQLITE_NOTFOUND;

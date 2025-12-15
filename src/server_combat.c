@@ -78,7 +78,7 @@ require_auth (client_ctx_t *ctx, json_t *root)
     {
       return 1;
     }
-  send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+    send_response_refused(ctx, root, ERR_SECTOR_NOT_FOUND, "Not authenticated", NULL);
   return 0;
 }
 
@@ -86,8 +86,9 @@ require_auth (client_ctx_t *ctx, json_t *root)
 static inline int
 niy (client_ctx_t *ctx, json_t *root, const char *which)
 {
-  (void) which;
-  send_enveloped_error (ctx->fd, root, 1101, "Not implemented");
+  char buf[256];
+  snprintf (buf, sizeof (buf), "Not implemented: %s", which);
+  send_response_error (ctx, root, ERR_NOT_IMPLEMENTED, buf);
   return 0;
 }
 
@@ -132,16 +133,14 @@ cmd_combat_attack (client_ctx_t *ctx, json_t *root)
   sqlite3 *db = db_get_handle ();
   if (!db)
     {
-      send_enveloped_error (ctx->fd, root, ERR_SERVICE_UNAVAILABLE,
-                            "Database unavailable");
+      send_response_error(ctx, root, ERR_SERVICE_UNAVAILABLE, "Database unavailable");
       return 0;
     }
 
   json_t *data = json_object_get (root, "data");
   if (!data || !json_is_object (data))
     {
-      send_enveloped_error (ctx->fd, root, ERR_MISSING_FIELD,
-                            "Missing required field: data");
+      send_response_error(ctx, root, ERR_MISSING_FIELD, "Missing required field: data");
       return 0;
     }
 
@@ -557,8 +556,7 @@ cmd_deploy_assets_list_internal (client_ctx_t *ctx,
 
   if (!db)
     {
-      send_enveloped_error (ctx->fd, root, 500,
-                            "Database handle not available.");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Database handle not available.");
       return 0;
     }
   int self_player_id = ctx->player_id;
@@ -573,7 +571,7 @@ cmd_deploy_assets_list_internal (client_ctx_t *ctx,
   if (rc != SQLITE_OK)
     {
       db_mutex_unlock ();
-      send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
+      send_response_error(ctx, root, ERR_SERVER_ERROR, sqlite3_errmsg (db));
       return 0;
     }
   // --- 3. Bind Parameters ---
@@ -633,8 +631,7 @@ cmd_deploy_assets_list_internal (client_ctx_t *ctx,
   if (rc != SQLITE_DONE)
     {
       json_decref (entries);    // Clean up on error
-      send_enveloped_error (ctx->fd, root, 500,
-                            "Error processing asset list.");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Error processing asset list.");
       return 0;
     }
   // --- 6. Build Final Payload and Send Response ---
@@ -643,7 +640,7 @@ cmd_deploy_assets_list_internal (client_ctx_t *ctx,
 
   json_object_set_new (jdata_payload, "total", json_integer (total_count));
   json_object_set_new (jdata_payload, "entries", entries);      // Add the array
-  send_enveloped_ok (ctx->fd, root, list_type, jdata_payload);
+  send_response_ok(ctx, root, list_type, jdata_payload);
   return 0;
 }
 
@@ -728,7 +725,7 @@ handle_combat_flee (client_ctx_t *ctx, json_t *root)
   sqlite3 *db = db_get_handle ();
   int ship_id = h_get_active_ship_id (db, ctx->player_id);
   if (ship_id <= 0) {
-      send_enveloped_error(ctx->fd, root, ERR_SHIP_NOT_FOUND, "No active ship");
+      send_response_error(ctx, root, ERR_SHIP_NOT_FOUND, "No active ship");
       return 0;
   }
 
@@ -794,7 +791,7 @@ handle_combat_flee (client_ctx_t *ctx, json_t *root)
           json_t *res = json_object();
           json_object_set_new(res, "success", json_true());
           json_object_set_new(res, "to_sector", json_integer(dest));
-          send_enveloped_ok(ctx->fd, root, "combat.flee", res);
+          send_response_ok(ctx, root, "combat.flee", res);
           return 0;
       }
   }
@@ -802,7 +799,7 @@ handle_combat_flee (client_ctx_t *ctx, json_t *root)
   // Failure
   json_t *res = json_object();
   json_object_set_new(res, "success", json_false());
-  send_enveloped_ok(ctx->fd, root, "combat.flee", res);
+  send_response_ok(ctx, root, "combat.flee", res);
   return 0;
 }
 
@@ -833,8 +830,7 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
 
   if (!db)
     {
-      send_enveloped_error (ctx->fd, root, ERR_SERVICE_UNAVAILABLE,
-                            "Database unavailable");
+      send_response_error(ctx, root, ERR_SERVICE_UNAVAILABLE, "Database unavailable");
       return 0;
     }
   bool in_fed = false;
@@ -845,8 +841,7 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
 
   if (!data || !json_is_object (data))
     {
-      send_enveloped_error (ctx->fd, root, ERR_MISSING_FIELD,
-                            "Missing required field: data");
+      send_response_error(ctx, root, ERR_MISSING_FIELD, "Missing required field: data");
       return 0;
     }
   json_t *j_amount = json_object_get (data, "amount");
@@ -857,10 +852,7 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
   if (!j_amount || !json_is_integer (j_amount) ||
       !j_offense || !json_is_integer (j_offense))
     {
-      send_enveloped_error (ctx->fd,
-                            root,
-                            ERR_CURSOR_INVALID,
-                            "Missing required field or invalid type: amount/offense");
+      send_response_error(ctx, root, ERR_CURSOR_INVALID, "Missing required field or invalid type: amount/offense");
       return 0;
     }
   int amount = (int) json_integer_value (j_amount);
@@ -869,14 +861,12 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
 
   if (amount <= 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_NOT_FOUND,
-                            "amount must be > 0");
+      send_response_error(ctx, root, ERR_NOT_FOUND, "amount must be > 0");
       return 0;
     }
   if (offense < OFFENSE_TOLL || offense > OFFENSE_ATTACK)
     {
-      send_enveloped_error (ctx->fd, root, ERR_CURSOR_INVALID,
-                            "offense must be one of {1=TOLL,2=DEFEND,3=ATTACK}");
+      send_response_error(ctx, root, ERR_CURSOR_INVALID, "offense must be one of {1=TOLL,2=DEFEND,3=ATTACK}");
       return 0;
     }
   /* Resolve active ship + sector */
@@ -885,8 +875,7 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
 
   if (ship_id <= 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_SHIP_NOT_FOUND,
-                            "No active ship");
+      send_response_error(ctx, root, ERR_SHIP_NOT_FOUND, "No active ship");
       return 0;
     }
   /* Decloak: visible hostile/defensive action */
@@ -910,7 +899,7 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
         char *shperror = error_buffer;
 
 
-        send_enveloped_error (ctx->fd, root, ERR_SECTOR_NOT_FOUND, shperror);
+        send_response_error(ctx, root, ERR_SECTOR_NOT_FOUND, shperror);
         return 0;
       }
     sqlite3_bind_int (st, 1, ship_id);
@@ -931,7 +920,7 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
         char *scterror = error_buffer;
 
 
-        send_enveloped_error (ctx->fd, root, ERR_SECTOR_NOT_FOUND, scterror);
+        send_response_error(ctx, root, ERR_SECTOR_NOT_FOUND, scterror);
         return 0;
       }
   }
@@ -945,8 +934,7 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
         {
           sqlite3_free (errmsg);
         }
-      send_enveloped_error (ctx->fd, root, ERR_DB,
-                            "Could not start transaction");
+      send_response_error(ctx, root, ERR_DB, "Could not start transaction");
       return 0;
     }
 
@@ -957,15 +945,13 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
   if (sum_sector_fighters (db, sector_id, &sector_total) != SQLITE_OK)
     {
       db_safe_rollback (db, "Safe rollback");
-      send_enveloped_error (ctx->fd, root, REF_NOT_IN_SECTOR,
-                            "Failed to read sector fighters");
+      send_response_error(ctx, root, REF_NOT_IN_SECTOR, "Failed to read sector fighters");
       return 0;
     }
   if (sector_total + amount > SECTOR_FIGHTER_CAP)
     {
       db_safe_rollback (db, "Safe rollback");
-      send_enveloped_error (ctx->fd, root, ERR_SECTOR_OVERCROWDED,
-                            "Sector fighter limit exceeded (50,000)");
+      send_response_error(ctx, root, ERR_SECTOR_OVERCROWDED, "Sector fighter limit exceeded (50,000)");
       return 0;
     }
 
@@ -975,15 +961,13 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
   if (rc == SQLITE_TOOBIG)
     {
       db_safe_rollback (db, "Safe rollback");
-      send_enveloped_error (ctx->fd, root, REF_AMMO_DEPLETED,
-                            "Insufficient fighters on ship");
+      send_response_error(ctx, root, REF_AMMO_DEPLETED, "Insufficient fighters on ship");
       return 0;
     }
   if (rc != SQLITE_OK)
     {
       db_safe_rollback (db, "Safe rollback");
-      send_enveloped_error (ctx->fd, root, REF_AMMO_DEPLETED,
-                            "Failed to update ship fighters");
+      send_response_error(ctx, root, REF_AMMO_DEPLETED, "Failed to update ship fighters");
       return 0;
     }
   rc =
@@ -992,8 +976,7 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
   if (rc != SQLITE_OK)
     {
       db_safe_rollback (db, "Safe rollback");
-      send_enveloped_error (ctx->fd, root, SECTOR_ERR,
-                            "Failed to create sector assets record");
+      send_response_error(ctx, root, SECTOR_ERR, "Failed to create sector assets record");
       return 0;
     }
   int asset_id = (int) sqlite3_last_insert_rowid (db);  // Capture the newly created asset_id
@@ -1005,7 +988,7 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
         {
           sqlite3_free (errmsg);
         }
-      send_enveloped_error (ctx->fd, root, ERR_DB, "Commit failed");
+      send_response_error(ctx, root, ERR_DB, "Commit failed");
       return 0;
     }
   /* Fedspace/Stardock → summon ISS + warn player */
@@ -1118,7 +1101,7 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
                        json_integer (sector_total));
   json_object_set_new (out, "asset_id", json_integer (asset_id));       // Add asset_id to response
   /* Envelope: echo id/meta from `root`, set type string for this result */
-  send_enveloped_ok (ctx->fd, root, "combat.fighters.deployed", out);
+  send_response_ok(ctx, root, "combat.fighters.deployed", out);
   json_decref (out);
   return 0;
 }
@@ -1560,8 +1543,7 @@ cmd_combat_sweep_mines (client_ctx_t *ctx, json_t *root)
 
   if (!db)
     {
-      send_enveloped_error (ctx->fd, root, ERR_SERVICE_UNAVAILABLE,
-                            "Database unavailable");
+      send_response_error(ctx, root, ERR_SERVICE_UNAVAILABLE, "Database unavailable");
       return 0;
     }
   // 1. Validation
@@ -1570,8 +1552,7 @@ cmd_combat_sweep_mines (client_ctx_t *ctx, json_t *root)
 
   if (!data || !json_is_object (data))
     {
-      send_enveloped_error (ctx->fd, root, ERR_MISSING_FIELD,
-                            "Missing required field: data");
+      send_response_error(ctx, root, ERR_MISSING_FIELD, "Missing required field: data");
       return 0;
     }
   json_t *j_from_sector_id = json_object_get (data, "from_sector_id");
@@ -1585,10 +1566,7 @@ cmd_combat_sweep_mines (client_ctx_t *ctx, json_t *root)
       !j_fighters_committed || !json_is_integer (j_fighters_committed) ||
       !j_mine_type_str || !json_is_string (j_mine_type_str))                                                                                                                                                                                                    // Added mine_type validation
     {
-      send_enveloped_error (ctx->fd,
-                            root,
-                            ERR_CURSOR_INVALID,
-                            "Missing required field or invalid type: from_sector_id/target_sector_id/fighters_committed/mine_type");
+      send_response_error(ctx, root, ERR_CURSOR_INVALID, "Missing required field or invalid type: from_sector_id/target_sector_id/fighters_committed/mine_type");
       return 0;
     }
   int from_sector_id = (int) json_integer_value (j_from_sector_id);
@@ -1608,14 +1586,12 @@ cmd_combat_sweep_mines (client_ctx_t *ctx, json_t *root)
     }
   else
     {
-      send_enveloped_error (ctx->fd, root, ERR_CURSOR_INVALID,
-                            "Invalid mine_type. Must be 'armid' or 'limpet'.");
+      send_response_error(ctx, root, ERR_CURSOR_INVALID, "Invalid mine_type. Must be 'armid' or 'limpet'.");
       return 0;
     }
   if (fighters_committed <= 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG,
-                            "Fighters committed must be greater than 0.");
+      send_response_error(ctx, root, ERR_INVALID_ARG, "Fighters committed must be greater than 0.");
       return 0;
     }
   // Limpet-specific feature gates and validation
@@ -1623,23 +1599,18 @@ cmd_combat_sweep_mines (client_ctx_t *ctx, json_t *root)
     {
       if (!g_cfg.mines.limpet.enabled)
         {
-          send_enveloped_refused (ctx->fd, root, ERR_LIMPETS_DISABLED,
-                                  "Limpet mine operations are disabled.",
+          send_response_refused(ctx, root, ERR_LIMPETS_DISABLED, "Limpet mine operations are disabled.",
                                   NULL);
           return 0;
         }
       if (!g_cfg.mines.limpet.sweep_enabled)
         {
-          send_enveloped_refused (ctx->fd, root, ERR_LIMPET_SWEEP_DISABLED,
-                                  "Limpet mine sweeping is disabled.", NULL);
+          send_response_refused(ctx, root, ERR_LIMPET_SWEEP_DISABLED, "Limpet mine sweeping is disabled.", NULL);
           return 0;
         }
       if (from_sector_id != target_sector_id)
         {
-          send_enveloped_error (ctx->fd,
-                                root,
-                                ERR_INVALID_ARG,
-                                "Limpet sweeping must occur in the current sector.");
+          send_response_error(ctx, root, ERR_INVALID_ARG, "Limpet sweeping must occur in the current sector.");
           return 0;
         }
     }
@@ -1649,8 +1620,7 @@ cmd_combat_sweep_mines (client_ctx_t *ctx, json_t *root)
 
   if (ship_id <= 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_SHIP_NOT_FOUND,
-                            "No active ship found for player.");
+      send_response_error(ctx, root, ERR_SHIP_NOT_FOUND, "No active ship found for player.");
       return 0;
     }
   int player_current_sector_id = -1;
@@ -1664,8 +1634,7 @@ cmd_combat_sweep_mines (client_ctx_t *ctx, json_t *root)
   if (sqlite3_prepare_v2 (db, sql_player_ship, -1, &stmt_player_ship, NULL) !=
       SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, ERR_DB,
-                            "Failed to prepare player ship query.");
+      send_response_error(ctx, root, ERR_DB, "Failed to prepare player ship query.");
       return 0;
     }
   sqlite3_bind_int (stmt_player_ship, 1, ship_id);
@@ -1678,29 +1647,25 @@ cmd_combat_sweep_mines (client_ctx_t *ctx, json_t *root)
   sqlite3_finalize (stmt_player_ship);
   if (player_current_sector_id != from_sector_id)
     {
-      send_enveloped_refused (ctx->fd, root, REF_NOT_IN_SECTOR,
-                              "Ship is not in the specified 'from_sector_id'.",
+      send_response_refused(ctx, root, REF_NOT_IN_SECTOR, "Ship is not in the specified 'from_sector_id'.",
                               json_pack ("{s:s}", "reason",
                                          "not_in_from_sector"));
       return 0;
     }
   if (fighters_committed > ship_fighters_current)
     {
-      send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG,
-                            "Not enough fighters on ship to commit.");
+      send_response_error(ctx, root, ERR_INVALID_ARG, "Not enough fighters on ship to commit.");
       return 0;
     }
   // Check for warp existence (from_sector_id to target_sector_id)
   if (!h_warp_exists (db, from_sector_id, target_sector_id))
     {
-      send_enveloped_error (ctx->fd, root, ERR_TARGET_INVALID,
-                            "No warp exists between specified sectors.");
+      send_response_error(ctx, root, ERR_TARGET_INVALID, "No warp exists between specified sectors.");
       return 0;
     }
   if (!g_armid_config.sweep.enabled)
     {
-      send_enveloped_error (ctx->fd, root, ERR_CAPABILITY_DISABLED,
-                            "Mine sweeping is currently disabled.");
+      send_response_error(ctx, root, ERR_CAPABILITY_DISABLED, "Mine sweeping is currently disabled.");
       return 0;
     }
   // 2. Load hostile Armid stacks in target_sector_id
@@ -1794,7 +1759,7 @@ cmd_combat_sweep_mines (client_ctx_t *ctx, json_t *root)
       json_object_set_new (out, "armid_removed", json_integer (0));
       json_object_set_new (out, "armid_remaining", json_integer (0));
       json_object_set_new (out, "success", json_boolean (false));
-      send_enveloped_ok (ctx->fd, root, "combat.mines_swept_v1", out);
+      send_response_ok(ctx, root, "combat.mines_swept_v1", out);
       json_decref (hostile_stacks_json);
       return 0;
     }
@@ -1881,8 +1846,7 @@ cmd_combat_sweep_mines (client_ctx_t *ctx, json_t *root)
         {
           sqlite3_free (errmsg);
         }
-      send_enveloped_error (ctx->fd, root, ERR_DB,
-                            "Could not start transaction");
+      send_response_error(ctx, root, ERR_DB, "Could not start transaction");
       json_decref (hostile_stacks_json);
       return 0;
     }
@@ -2006,7 +1970,7 @@ cmd_combat_sweep_mines (client_ctx_t *ctx, json_t *root)
         {
           sqlite3_free (errmsg);
         }
-      send_enveloped_error (ctx->fd, root, ERR_DB, "Commit failed");
+      send_response_error(ctx, root, ERR_DB, "Commit failed");
       json_decref (hostile_stacks_json);
       return 0;
     }
@@ -2051,7 +2015,7 @@ cmd_combat_sweep_mines (client_ctx_t *ctx, json_t *root)
                        json_integer (mines_remaining_after_sweep));                             // Renamed
   json_object_set_new (out, "mine_type", json_string (mine_type_name)); // Added
   json_object_set_new (out, "success", json_boolean (armid_removed > 0));
-  send_enveloped_ok (ctx->fd, root, "combat.mines_swept_v1", out);
+  send_response_ok(ctx, root, "combat.mines_swept_v1", out);
   // Optional broadcast:
   if (armid_removed > 0)
     {
@@ -2091,8 +2055,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
 
   if (!db)
     {
-      send_enveloped_error (ctx->fd, root, ERR_SERVICE_UNAVAILABLE,
-                            "Database unavailable");
+      send_response_error(ctx, root, ERR_SERVICE_UNAVAILABLE, "Database unavailable");
       return 0;
     }
   /* 1. Parse input */
@@ -2101,8 +2064,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
 
   if (!data || !json_is_object (data))
     {
-      send_enveloped_error (ctx->fd, root, ERR_MISSING_FIELD,
-                            "Missing required field: data");
+      send_response_error(ctx, root, ERR_MISSING_FIELD, "Missing required field: data");
       return 0;
     }
   json_t *j_sector_id = json_object_get (data, "sector_id");
@@ -2112,10 +2074,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
   if (!j_sector_id || !json_is_integer (j_sector_id) ||
       !j_asset_id || !json_is_integer (j_asset_id))
     {
-      send_enveloped_error (ctx->fd,
-                            root,
-                            ERR_CURSOR_INVALID,
-                            "Missing required field or invalid type: sector_id/asset_id");
+      send_response_error(ctx, root, ERR_CURSOR_INVALID, "Missing required field or invalid type: sector_id/asset_id");
       return 0;
     }
   int requested_sector_id = (int) json_integer_value (j_sector_id);
@@ -2126,8 +2085,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
 
   if (player_ship_id <= 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_SHIP_NOT_FOUND,
-                            "No active ship found for player.");
+      send_response_error(ctx, root, ERR_SHIP_NOT_FOUND, "No active ship found for player.");
       return 0;
     }
   int player_current_sector_id = -1;
@@ -2145,8 +2103,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
   if (sqlite3_prepare_v2 (db, sql_player_ship, -1, &stmt_player_ship, NULL) !=
       SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, ERR_DB,
-                            "Failed to prepare player ship query.");
+      send_response_error(ctx, root, ERR_DB, "Failed to prepare player ship query.");
       return 0;
     }
   sqlite3_bind_int (stmt_player_ship, 1, ctx->player_id);
@@ -2161,15 +2118,13 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
   sqlite3_finalize (stmt_player_ship);
   if (player_current_sector_id <= 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_SECTOR_NOT_FOUND,
-                            "Could not determine player's current sector.");
+      send_response_error(ctx, root, ERR_SECTOR_NOT_FOUND, "Could not determine player's current sector.");
       return 0;
     }
   /* 3. Validate sector match */
   if (player_current_sector_id != requested_sector_id)
     {
-      send_enveloped_refused (ctx->fd, root, REF_NOT_IN_SECTOR,
-                              "Not in sector", json_pack ("{s:s}", "reason",
+      send_response_refused(ctx, root, REF_NOT_IN_SECTOR, "Not in sector", json_pack ("{s:s}", "reason",
                                                           "not_in_sector"));
       return 0;
     }
@@ -2182,8 +2137,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
 
   if (sqlite3_prepare_v2 (db, sql_asset, -1, &stmt_asset, NULL) != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, ERR_DB,
-                            "Failed to prepare asset query.");
+      send_response_error(ctx, root, ERR_DB, "Failed to prepare asset query.");
       return 0;
     }
   sqlite3_bind_int (stmt_asset, 1, asset_id);
@@ -2204,8 +2158,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
   sqlite3_finalize (stmt_asset);
   if (asset_qty <= 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_SHIP_NOT_FOUND,
-                            "Asset not found");
+      send_response_error(ctx, root, ERR_SHIP_NOT_FOUND, "Asset not found");
       return 0;
     }
   /* 5. Validate ownership */
@@ -2225,7 +2178,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
     }
   if (!is_owner)
     {
-      send_enveloped_refused (ctx->fd, root, ERR_TARGET_INVALID, "Not owner",
+      send_response_refused(ctx, root, ERR_TARGET_INVALID, "Not owner",
                               json_pack ("{s:s}", "reason", "not_owner"));
       return 0;
     }
@@ -2237,7 +2190,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
 
   if (capacity_left <= 0)
     {
-      send_enveloped_refused (ctx->fd, root, ERR_OUT_OF_RANGE, "No capacity",
+      send_response_refused(ctx, root, ERR_OUT_OF_RANGE, "No capacity",
                               json_pack ("{s:s}", "reason", "no_capacity"));
       return 0;
     }
@@ -2246,8 +2199,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
      capacity_left) ? available_to_recall : capacity_left;
   if (take <= 0)                // Now this check makes sense
     {
-      send_enveloped_refused (ctx->fd, root, ERR_OUT_OF_RANGE,
-                              "No fighters to recall or no capacity",
+      send_response_refused(ctx, root, ERR_OUT_OF_RANGE, "No fighters to recall or no capacity",
                               json_pack ("{s:s}", "reason",
                                          "no_fighters_or_capacity"));
       return 0;
@@ -2262,8 +2214,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
         {
           sqlite3_free (errmsg);
         }
-      send_enveloped_error (ctx->fd, root, ERR_DB,
-                            "Could not start transaction");
+      send_response_error(ctx, root, ERR_DB, "Could not start transaction");
       return 0;
     }
   /* Increment ship fighters */
@@ -2276,8 +2227,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
       SQLITE_OK)
     {
       db_safe_rollback (db, "Safe rollback");
-      send_enveloped_error (ctx->fd, root, ERR_DB,
-                            "Failed to prepare ship update.");
+      send_response_error(ctx, root, ERR_DB, "Failed to prepare ship update.");
       return 0;
     }
   sqlite3_bind_int (stmt_update_ship, 1, take);
@@ -2285,8 +2235,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
   if (sqlite3_step (stmt_update_ship) != SQLITE_DONE)
     {
       db_safe_rollback (db, "Safe rollback");
-      send_enveloped_error (ctx->fd, root, ERR_DB,
-                            "Failed to update ship fighters.");
+      send_response_error(ctx, root, ERR_DB, "Failed to update ship fighters.");
       return 0;
     }
   sqlite3_finalize (stmt_update_ship);
@@ -2302,16 +2251,14 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
             (db, sql_delete_asset, -1, &stmt_delete_asset, NULL) != SQLITE_OK)
         {
           db_safe_rollback (db, "Safe rollback");
-          send_enveloped_error (ctx->fd, root, ERR_DB,
-                                "Failed to prepare asset delete.");
+          send_response_error(ctx, root, ERR_DB, "Failed to prepare asset delete.");
           return 0;
         }
       sqlite3_bind_int (stmt_delete_asset, 1, asset_id);
       if (sqlite3_step (stmt_delete_asset) != SQLITE_DONE)
         {
           db_safe_rollback (db, "Safe rollback");
-          send_enveloped_error (ctx->fd, root, ERR_DB,
-                                "Failed to delete asset record.");
+          send_response_error(ctx, root, ERR_DB, "Failed to delete asset record.");
           return 0;
         }
       sqlite3_finalize (stmt_delete_asset);
@@ -2327,8 +2274,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
             (db, sql_update_asset, -1, &stmt_update_asset, NULL) != SQLITE_OK)
         {
           db_safe_rollback (db, "Safe rollback");
-          send_enveloped_error (ctx->fd, root, ERR_DB,
-                                "Failed to prepare asset update.");
+          send_response_error(ctx, root, ERR_DB, "Failed to prepare asset update.");
           return 0;
         }
       sqlite3_bind_int (stmt_update_asset, 1, take);
@@ -2336,8 +2282,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
       if (sqlite3_step (stmt_update_asset) != SQLITE_DONE)
         {
           db_safe_rollback (db, "Safe rollback");
-          send_enveloped_error (ctx->fd, root, ERR_DB,
-                                "Failed to update asset quantity.");
+          send_response_error(ctx, root, ERR_DB, "Failed to update asset quantity.");
           return 0;
         }
       sqlite3_finalize (stmt_update_asset);
@@ -2348,7 +2293,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
         {
           sqlite3_free (errmsg);
         }
-      send_enveloped_error (ctx->fd, root, ERR_DB, "Commit failed");
+      send_response_error(ctx, root, ERR_DB, "Commit failed");
       return 0;
     }
   /* 8. Emit engine event */
@@ -2390,7 +2335,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
   json_object_set_new (out, "recalled", json_integer (take));
   json_object_set_new (out, "remaining_in_sector",
                        json_integer (asset_qty - take));
-  send_enveloped_ok (ctx->fd, root, "combat.fighters.deployed", out);
+  send_response_ok(ctx, root, "combat.fighters.deployed", out);
   json_decref (out);
   return 0;
 }
@@ -2409,8 +2354,7 @@ cmd_combat_scrub_mines (client_ctx_t *ctx, json_t *root)
 
   if (!db)
     {
-      send_enveloped_error (ctx->fd, root, ERR_SERVICE_UNAVAILABLE,
-                            "Database unavailable");
+      send_response_error(ctx, root, ERR_SERVICE_UNAVAILABLE, "Database unavailable");
       return 0;
     }
   /* 1. Input Parsing */
@@ -2419,8 +2363,7 @@ cmd_combat_scrub_mines (client_ctx_t *ctx, json_t *root)
 
   if (!data || !json_is_object (data))
     {
-      send_enveloped_error (ctx->fd, root, ERR_MISSING_FIELD,
-                            "Missing required field: data");
+      send_response_error(ctx, root, ERR_MISSING_FIELD, "Missing required field: data");
       return 0;
     }
   json_t *j_sector_id = json_object_get (data, "sector_id");
@@ -2431,10 +2374,7 @@ cmd_combat_scrub_mines (client_ctx_t *ctx, json_t *root)
   if (!j_sector_id || !json_is_integer (j_sector_id) ||
       !j_mine_type_str || !json_is_string (j_mine_type_str))
     {
-      send_enveloped_error (ctx->fd,
-                            root,
-                            ERR_CURSOR_INVALID,
-                            "Missing required field or invalid type: sector_id/mine_type");
+      send_response_error(ctx, root, ERR_CURSOR_INVALID, "Missing required field or invalid type: sector_id/mine_type");
       return 0;
     }
   int sector_id = (int) json_integer_value (j_sector_id);
@@ -2449,15 +2389,13 @@ cmd_combat_scrub_mines (client_ctx_t *ctx, json_t *root)
   // Only Limpet mines can be scrubbed
   if (strcasecmp (mine_type_name, "limpet") != 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG,
-                            "Only 'limpet' mine_type can be scrubbed.");
+      send_response_error(ctx, root, ERR_INVALID_ARG, "Only 'limpet' mine_type can be scrubbed.");
       return 0;
     }
   /* 2. Feature Gate */
   if (!g_cfg.mines.limpet.enabled)
     {
-      send_enveloped_refused (ctx->fd, root, ERR_LIMPETS_DISABLED,
-                              "Limpet mine operations are disabled.", NULL);
+      send_response_refused(ctx, root, ERR_LIMPETS_DISABLED, "Limpet mine operations are disabled.", NULL);
       return 0;
     }
   /* 3. Cost Check */
@@ -2473,14 +2411,12 @@ cmd_combat_scrub_mines (client_ctx_t *ctx, json_t *root)
       if (h_get_player_petty_cash (db, ctx->player_id, &player_credits) !=
           SQLITE_OK)
         {
-          send_enveloped_error (ctx->fd, root, ERR_DB,
-                                "Failed to retrieve player credits.");
+          send_response_error(ctx, root, ERR_DB, "Failed to retrieve player credits.");
           return 0;
         }
       if (player_credits < scrub_cost)
         {
-          send_enveloped_refused (ctx->fd, root, ERR_INSUFFICIENT_FUNDS,
-                                  "Insufficient credits to scrub mines.",
+          send_response_refused(ctx, root, ERR_INSUFFICIENT_FUNDS, "Insufficient credits to scrub mines.",
                                   NULL);
           return 0;
         }
@@ -2496,8 +2432,7 @@ cmd_combat_scrub_mines (client_ctx_t *ctx, json_t *root)
         {
           sqlite3_free (errmsg);
         }
-      send_enveloped_error (ctx->fd, root, ERR_DB,
-                            "Could not start transaction");
+      send_response_error(ctx, root, ERR_DB, "Could not start transaction");
       return 0;
     }
   // SQL for scrubbing
@@ -2518,8 +2453,7 @@ cmd_combat_scrub_mines (client_ctx_t *ctx, json_t *root)
           LOGE ("Failed to prepare specific scrub statement: %s",
                 sqlite3_errmsg (db));
           db_safe_rollback (db, "Safe rollback");
-          send_enveloped_error (ctx->fd, root, ERR_DB,
-                                "Failed to prepare scrub operation.");
+          send_response_error(ctx, root, ERR_DB, "Failed to prepare scrub operation.");
           return 0;
         }
       sqlite3_bind_int (scrub_st, 1, asset_id);
@@ -2540,8 +2474,7 @@ cmd_combat_scrub_mines (client_ctx_t *ctx, json_t *root)
           LOGE ("Failed to prepare all scrub statement: %s",
                 sqlite3_errmsg (db));
           db_safe_rollback (db, "Safe rollback");
-          send_enveloped_error (ctx->fd, root, ERR_DB,
-                                "Failed to prepare scrub operation.");
+          send_response_error(ctx, root, ERR_DB, "Failed to prepare scrub operation.");
           return 0;
         }
       sqlite3_bind_int (scrub_st, 1, sector_id);
@@ -2554,8 +2487,7 @@ cmd_combat_scrub_mines (client_ctx_t *ctx, json_t *root)
     {
       LOGE ("Scrub mines step failed: %s", sqlite3_errmsg (db));
       db_safe_rollback (db, "Safe rollback");
-      send_enveloped_error (ctx->fd, root, ERR_DB,
-                            "Failed to execute scrub operation.");
+      send_response_error(ctx, root, ERR_DB, "Failed to execute scrub operation.");
       sqlite3_finalize (scrub_st);
       return 0;
     }
@@ -2564,8 +2496,7 @@ cmd_combat_scrub_mines (client_ctx_t *ctx, json_t *root)
   if (total_scrubbed == 0)
     {
       db_safe_rollback (db, "Safe rollback");
-      send_enveloped_refused (ctx->fd, root, ERR_NOT_FOUND,
-                              "No Limpet mines found to scrub.", NULL);
+      send_response_refused(ctx, root, ERR_NOT_FOUND, "No Limpet mines found to scrub.", NULL);
       return 0;
     }
   /* 5. Debit Credits (if applicable) */
@@ -2582,8 +2513,7 @@ cmd_combat_scrub_mines (client_ctx_t *ctx, json_t *root)
           LOGE ("Failed to debit credits for scrubbing: %s",
                 sqlite3_errmsg (db));
           db_safe_rollback (db, "Safe rollback");
-          send_enveloped_error (ctx->fd, root, ERR_DB,
-                                "Failed to debit credits.");
+          send_response_error(ctx, root, ERR_DB, "Failed to debit credits.");
           return 0;
         }
     }
@@ -2593,7 +2523,7 @@ cmd_combat_scrub_mines (client_ctx_t *ctx, json_t *root)
         {
           sqlite3_free (errmsg);
         }
-      send_enveloped_error (ctx->fd, root, ERR_DB, "Commit failed");
+      send_response_error(ctx, root, ERR_DB, "Commit failed");
       return 0;
     }
   /* 6. Emit engine event */
@@ -2624,7 +2554,7 @@ cmd_combat_scrub_mines (client_ctx_t *ctx, json_t *root)
     {
       json_object_set_new (out, "asset_id", json_integer (asset_id));
     }
-  send_enveloped_ok (ctx->fd, root, "combat.mines_scrubbed_v1", out);
+  send_response_ok(ctx, root, "combat.mines_scrubbed_v1", out);
   json_decref (out);
   return 0;
 }
@@ -2643,8 +2573,7 @@ cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root)
 
   if (!db)
     {
-      send_enveloped_error (ctx->fd, root, ERR_SERVICE_UNAVAILABLE,
-                            "Database unavailable");
+      send_response_error(ctx, root, ERR_SERVICE_UNAVAILABLE, "Database unavailable");
       return 0;
     }
   bool in_fed = false;
@@ -2655,8 +2584,7 @@ cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root)
 
   if (!data || !json_is_object (data))
     {
-      send_enveloped_error (ctx->fd, root, ERR_MISSING_FIELD,
-                            "Missing required field: data");
+      send_response_error(ctx, root, ERR_MISSING_FIELD, "Missing required field: data");
       return 0;
     }
   json_t *j_amount = json_object_get (data, "amount");
@@ -2668,10 +2596,7 @@ cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root)
   if (!j_amount || !json_is_integer (j_amount) ||
       !j_offense || !json_is_integer (j_offense))
     {
-      send_enveloped_error (ctx->fd,
-                            root,
-                            ERR_CURSOR_INVALID,
-                            "Missing required field or invalid type: amount/offense");
+      send_response_error(ctx, root, ERR_CURSOR_INVALID, "Missing required field or invalid type: amount/offense");
       return 0;
     }
   int amount = (int) json_integer_value (j_amount);
@@ -2684,23 +2609,18 @@ cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root)
       mine_type = (int) json_integer_value (j_mine_type);
       if (mine_type != 1 && mine_type != 4)
         {                       // Validate mine type
-          send_enveloped_error (ctx->fd,
-                                root,
-                                ERR_CURSOR_INVALID,
-                                "Invalid mine_type. Must be 1 (Armid) or 4 (Limpet).");
+          send_response_error(ctx, root, ERR_CURSOR_INVALID, "Invalid mine_type. Must be 1 (Armid) or 4 (Limpet).");
           return 0;
         }
     }
   if (amount <= 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_NOT_FOUND,
-                            "amount must be > 0");
+      send_response_error(ctx, root, ERR_NOT_FOUND, "amount must be > 0");
       return 0;
     }
   if (offense < OFFENSE_TOLL || offense > OFFENSE_ATTACK)
     {
-      send_enveloped_error (ctx->fd, root, ERR_CURSOR_INVALID,
-                            "offense must be one of {1=TOLL,2=DEFEND,3=ATTACK}");
+      send_response_error(ctx, root, ERR_CURSOR_INVALID, "offense must be one of {1=TOLL,2=DEFEND,3=ATTACK}");
       return 0;
     }
   /* Resolve active ship + sector */
@@ -2709,8 +2629,7 @@ cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root)
 
   if (ship_id <= 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_SHIP_NOT_FOUND,
-                            "No active ship");
+      send_response_error(ctx, root, ERR_SHIP_NOT_FOUND, "No active ship");
       return 0;
     }
   /* Decloak: visible hostile/defensive action */
@@ -2734,7 +2653,7 @@ cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root)
         char *shperror = error_buffer;
 
 
-        send_enveloped_error (ctx->fd, root, ERR_SECTOR_NOT_FOUND, shperror);
+        send_response_error(ctx, root, ERR_SECTOR_NOT_FOUND, shperror);
         return 0;
       }
     sqlite3_bind_int (st, 1, ship_id);
@@ -2755,7 +2674,7 @@ cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root)
         char *scterror = error_buffer;
 
 
-        send_enveloped_error (ctx->fd, root, ERR_SECTOR_NOT_FOUND, scterror);
+        send_response_error(ctx, root, ERR_SECTOR_NOT_FOUND, scterror);
         return 0;
       }
   }
@@ -2765,14 +2684,12 @@ cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root)
 
   if (sum_sector_mines (db, sector_id, &sector_total) != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, REF_NOT_IN_SECTOR,
-                            "Failed to read sector mines");
+      send_response_error(ctx, root, REF_NOT_IN_SECTOR, "Failed to read sector mines");
       return 0;
     }
   if (sector_total + amount > SECTOR_MINE_CAP)
     {                           // Assuming SECTOR_MINE_CAP is defined
-      send_enveloped_error (ctx->fd, root, ERR_SECTOR_OVERCROWDED,
-                            "Sector mine limit exceeded (50,000)");
+      send_response_error(ctx, root, ERR_SECTOR_OVERCROWDED, "Sector mine limit exceeded (50,000)");
       return 0;
     }
   /* Transaction: debit ship, credit sector */
@@ -2785,8 +2702,7 @@ cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root)
         {
           sqlite3_free (errmsg);
         }
-      send_enveloped_error (ctx->fd, root, ERR_DB,
-                            "Could not start transaction");
+      send_response_error(ctx, root, ERR_DB, "Could not start transaction");
       return 0;
     }
   int rc = ship_consume_mines (db, ship_id, mine_type, amount);
@@ -2795,15 +2711,13 @@ cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root)
   if (rc == SQLITE_TOOBIG)
     {
       db_safe_rollback (db, "Safe rollback");
-      send_enveloped_error (ctx->fd, root, REF_AMMO_DEPLETED,
-                            "Insufficient mines on ship");
+      send_response_error(ctx, root, REF_AMMO_DEPLETED, "Insufficient mines on ship");
       return 0;
     }
   if (rc != SQLITE_OK)
     {
       db_safe_rollback (db, "Safe rollback");
-      send_enveloped_error (ctx->fd, root, REF_AMMO_DEPLETED,
-                            "Failed to update ship mines");
+      send_response_error(ctx, root, REF_AMMO_DEPLETED, "Failed to update ship mines");
       return 0;
     }
   rc =
@@ -2812,8 +2726,7 @@ cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root)
   if (rc != SQLITE_OK)
     {
       db_safe_rollback (db, "Safe rollback");
-      send_enveloped_error (ctx->fd, root, SECTOR_ERR,
-                            "Failed to create sector assets record");
+      send_response_error(ctx, root, SECTOR_ERR, "Failed to create sector assets record");
       return 0;
     }
   int asset_id = (int) sqlite3_last_insert_rowid (db);  // Capture the newly created asset_id
@@ -2825,7 +2738,7 @@ cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root)
         {
           sqlite3_free (errmsg);
         }
-      send_enveloped_error (ctx->fd, root, ERR_DB, "Commit failed");
+      send_response_error(ctx, root, ERR_DB, "Commit failed");
       return 0;
     }
   /* Fedspace/Stardock → summon ISS + warn player */
@@ -2941,7 +2854,7 @@ cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root)
                        json_integer (sector_total));
   json_object_set_new (out, "asset_id", json_integer (asset_id));       // Add asset_id to response
   /* Envelope: echo id/meta from `root`, set type string for this result */
-  send_enveloped_ok (ctx->fd, root, "combat.mines.deployed", out);
+  send_response_ok(ctx, root, "combat.mines.deployed", out);
   json_decref (out);
   return 0;
 }
@@ -2960,8 +2873,7 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
 
   if (!db)
     {
-      send_enveloped_error (ctx->fd, root, ERR_SERVICE_UNAVAILABLE,
-                            "Database unavailable");
+      send_response_error(ctx, root, ERR_SERVICE_UNAVAILABLE, "Database unavailable");
       return 0;
     }
   bool in_fed = false;
@@ -2972,8 +2884,7 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
 
   if (!data || !json_is_object (data))
     {
-      send_enveloped_error (ctx->fd, root, ERR_MISSING_FIELD,
-                            "Missing required field: data");
+      send_response_error(ctx, root, ERR_MISSING_FIELD, "Missing required field: data");
       return 0;
     }
   json_t *j_amount = json_object_get (data, "count");   // Changed to 'count' as per brief
@@ -2987,10 +2898,7 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
       !j_owner_mode || !json_is_string (j_owner_mode) ||
       !j_mine_type_str || !json_is_string (j_mine_type_str))
     {
-      send_enveloped_error (ctx->fd,
-                            root,
-                            ERR_CURSOR_INVALID,
-                            "Missing required field or invalid type: count/offense_mode/owner_mode/mine_type");
+      send_response_error(ctx, root, ERR_CURSOR_INVALID, "Missing required field or invalid type: count/offense_mode/owner_mode/mine_type");
       return 0;
     }
   int amount = (int) json_integer_value (j_amount);
@@ -3010,29 +2918,23 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
     }
   else
     {
-      send_enveloped_error (ctx->fd, root, ERR_CURSOR_INVALID,
-                            "Invalid mine_type. Must be 'armid' or 'limpet'.");
+      send_response_error(ctx, root, ERR_CURSOR_INVALID, "Invalid mine_type. Must be 'armid' or 'limpet'.");
       return 0;
     }
   if (amount <= 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG,
-                            "Count must be > 0");
+      send_response_error(ctx, root, ERR_INVALID_ARG, "Count must be > 0");
       return 0;
     }
   if (offense < OFFENSE_TOLL || offense > OFFENSE_ATTACK)
     {
-      send_enveloped_error (ctx->fd,
-                            root,
-                            ERR_CURSOR_INVALID,
-                            "offense_mode must be one of {1=TOLL,2=DEFEND,3=ATTACK}");
+      send_response_error(ctx, root, ERR_CURSOR_INVALID, "offense_mode must be one of {1=TOLL,2=DEFEND,3=ATTACK}");
       return 0;
     }
   if (strcasecmp (owner_mode_str, "personal") != 0
       && strcasecmp (owner_mode_str, "corp") != 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_CURSOR_INVALID,
-                            "Invalid owner_mode. Must be 'personal' or 'corp'.");
+      send_response_error(ctx, root, ERR_CURSOR_INVALID, "Invalid owner_mode. Must be 'personal' or 'corp'.");
       return 0;
     }
   // Determine the corporation ID for deployment
@@ -3046,18 +2948,14 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
       deploy_corp_id = ctx->corp_id;    // Use player's current corporate id
       if (deploy_corp_id == 0)
         {
-          send_enveloped_error (ctx->fd,
-                                root,
-                                ERR_NOT_IN_CORP,
-                                "Cannot deploy as corp: player not in a corporation.");
+          send_response_error(ctx, root, ERR_NOT_IN_CORP, "Cannot deploy as corp: player not in a corporation.");
           return 0;
         }
     }
   /* Feature Gate for Limpet Mines */
   if (mine_type == ASSET_LIMPET_MINE && !g_cfg.mines.limpet.enabled)
     {
-      send_enveloped_refused (ctx->fd, root, ERR_LIMPETS_DISABLED,
-                              "Limpet mine deployment is disabled.", NULL);
+      send_response_refused(ctx, root, ERR_LIMPETS_DISABLED, "Limpet mine deployment is disabled.", NULL);
       return 0;
     }
   /* Resolve active ship + sector */
@@ -3066,8 +2964,7 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
 
   if (ship_id <= 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_SHIP_NOT_FOUND,
-                            "No active ship");
+      send_response_error(ctx, root, ERR_SHIP_NOT_FOUND, "No active ship");
       return 0;
     }
   /* Decloak: visible hostile/defensive action */
@@ -3091,7 +2988,7 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
         char *shperror = error_buffer;
 
 
-        send_enveloped_error (ctx->fd, root, ERR_SECTOR_NOT_FOUND, shperror);
+        send_response_error(ctx, root, ERR_SECTOR_NOT_FOUND, shperror);
         return 0;
       }
     sqlite3_bind_int (st, 1, ship_id);
@@ -3112,7 +3009,7 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
         char *scterror = error_buffer;
 
 
-        send_enveloped_error (ctx->fd, root, ERR_SECTOR_NOT_FOUND, scterror);
+        send_response_error(ctx, root, ERR_SECTOR_NOT_FOUND, scterror);
         return 0;
       }
   }
@@ -3124,19 +3021,13 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
       if (!g_cfg.mines.limpet.fedspace_allowed
           && is_fedspace_sector (sector_id))
         {
-          send_enveloped_refused (ctx->fd,
-                                  root,
-                                  REF_TERRITORY_UNSAFE,
-                                  "Cannot deploy Limpet mines in Federation space.",
+          send_response_refused(ctx, root, REF_TERRITORY_UNSAFE, "Cannot deploy Limpet mines in Federation space.",
                                   NULL);
           return 0;
         }
       if (!g_cfg.mines.limpet.msl_allowed && is_msl_sector (db, sector_id))
         {
-          send_enveloped_refused (ctx->fd,
-                                  root,
-                                  REF_TERRITORY_UNSAFE,
-                                  "Cannot deploy Limpet mines in Major Space Lanes.",
+          send_response_refused(ctx, root, REF_TERRITORY_UNSAFE, "Cannot deploy Limpet mines in Major Space Lanes.",
                                   NULL);
           return 0;
         }
@@ -3155,8 +3046,7 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
     {
       LOGE ("Failed to prepare foreign limpet check statement: %s",
             sqlite3_errmsg (db));
-      send_enveloped_error (ctx->fd, root, ERR_DB,
-                            "Failed to check for foreign limpets.");
+      send_response_error(ctx, root, ERR_DB, "Failed to check for foreign limpets.");
       return 0;
     }
   sqlite3_bind_int (foreign_limpet_st, 1, sector_id);
@@ -3166,10 +3056,7 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
   if (sqlite3_step (foreign_limpet_st) == SQLITE_ROW)
     {
       sqlite3_finalize (foreign_limpet_st);
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              ERR_FOREIGN_LIMPETS_PRESENT,
-                              "Cannot deploy mines: foreign Limpet mines are present in this sector.",
+      send_response_refused(ctx, root, ERR_FOREIGN_LIMPETS_PRESENT, "Cannot deploy mines: foreign Limpet mines are present in this sector.",
                               NULL);
       return 0;
     }
@@ -3194,16 +3081,14 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
     }
   else
     {
-      send_enveloped_error (ctx->fd, root, ERR_DB,
-                            "Failed to query ship's mine count.");
+      send_response_error(ctx, root, ERR_DB, "Failed to query ship's mine count.");
       return 0;
     }
   if (mine_type == ASSET_MINE)
     {
       if (ship_mines < amount)
         {
-          send_enveloped_error (ctx->fd, root, REF_AMMO_DEPLETED,
-                                "Insufficient Armid mines on ship.");
+          send_response_error(ctx, root, REF_AMMO_DEPLETED, "Insufficient Armid mines on ship.");
           return 0;
         }
     }
@@ -3211,8 +3096,7 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
     {
       if (ship_limpets < amount)
         {
-          send_enveloped_error (ctx->fd, root, REF_AMMO_DEPLETED,
-                                "Insufficient Limpet mines on ship.");
+          send_response_error(ctx, root, REF_AMMO_DEPLETED, "Insufficient Limpet mines on ship.");
           return 0;
         }
     }
@@ -3222,17 +3106,13 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
 
   if (get_sector_mine_counts (sector_id, &counts) != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, ERR_DB,
-                            "Failed to retrieve sector mine counts.");
+      send_response_error(ctx, root, ERR_DB, "Failed to retrieve sector mine counts.");
       return 0;
     }
   // Combined Cap (Armid + Limpet)
   if (counts.total_mines + amount > SECTOR_MINE_CAP)
     {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              ERR_SECTOR_OVERCROWDED,
-                              "Sector total mine limit exceeded (50,000).",
+      send_response_refused(ctx, root, ERR_SECTOR_OVERCROWDED, "Sector total mine limit exceeded (50,000).",
                               NULL);                                                                                            // Using macro for now
       return 0;
     }
@@ -3242,8 +3122,7 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
       // Armid-specific cap (using existing MINE_SECTOR_CAP_PER_TYPE for now, or define a new one)
       if (counts.armid_mines + amount > MINE_SECTOR_CAP_PER_TYPE)
         {
-          send_enveloped_refused (ctx->fd, root, ERR_SECTOR_OVERCROWDED,
-                                  "Sector Armid mine limit exceeded (100).",
+          send_response_refused(ctx, root, ERR_SECTOR_OVERCROWDED, "Sector Armid mine limit exceeded (100).",
                                   NULL);
           return 0;
         }
@@ -3256,8 +3135,7 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
                                         g_cfg.mines.limpet.per_sector_cap);
 
 
-          send_enveloped_refused (ctx->fd, root, ERR_SECTOR_OVERCROWDED,
-                                  "Sector Limpet mine limit exceeded.",
+          send_response_refused(ctx, root, ERR_SECTOR_OVERCROWDED, "Sector Limpet mine limit exceeded.",
                                   data_opt);
           json_decref (data_opt);
           return 0;
@@ -3273,8 +3151,7 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
         {
           sqlite3_free (errmsg);
         }
-      send_enveloped_error (ctx->fd, root, ERR_DB,
-                            "Could not start transaction");
+      send_response_error(ctx, root, ERR_DB, "Could not start transaction");
       return 0;
     }
   int rc;
@@ -3293,13 +3170,11 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
       db_safe_rollback (db, "Safe rollback");
       if (mine_type == ASSET_MINE)
         {
-          send_enveloped_error (ctx->fd, root, REF_AMMO_DEPLETED,
-                                "Insufficient Armid mines on ship");
+          send_response_error(ctx, root, REF_AMMO_DEPLETED, "Insufficient Armid mines on ship");
         }
       else
         {
-          send_enveloped_error (ctx->fd, root, REF_AMMO_DEPLETED,
-                                "Insufficient Limpet mines on ship");
+          send_response_error(ctx, root, REF_AMMO_DEPLETED, "Insufficient Limpet mines on ship");
         }
       return 0;
     }
@@ -3308,13 +3183,11 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
       db_safe_rollback (db, "Safe rollback");
       if (mine_type == ASSET_MINE)
         {
-          send_enveloped_error (ctx->fd, root, REF_AMMO_DEPLETED,
-                                "Failed to update ship Armid mines");
+          send_response_error(ctx, root, REF_AMMO_DEPLETED, "Failed to update ship Armid mines");
         }
       else
         {
-          send_enveloped_error (ctx->fd, root, REF_AMMO_DEPLETED,
-                                "Failed to update ship Limpet mines");
+          send_response_error(ctx, root, REF_AMMO_DEPLETED, "Failed to update ship Limpet mines");
         }
       return 0;
     }
@@ -3331,8 +3204,7 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
   if (rc != SQLITE_OK)
     {
       db_safe_rollback (db, "Safe rollback");
-      send_enveloped_error (ctx->fd, root, SECTOR_ERR,
-                            "Failed to create sector assets record");
+      send_response_error(ctx, root, SECTOR_ERR, "Failed to create sector assets record");
       return 0;
     }
   int asset_id = (int) sqlite3_last_insert_rowid (db);  // Capture the newly created asset_id
@@ -3344,7 +3216,7 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
         {
           sqlite3_free (errmsg);
         }
-      send_enveloped_error (ctx->fd, root, ERR_DB, "Commit failed");
+      send_response_error(ctx, root, ERR_DB, "Commit failed");
       return 0;
     }
   /* Fedspace/Stardock → summon ISS + warn player (Armid mines only for now) */
@@ -3454,7 +3326,7 @@ cmd_combat_lay_mines (client_ctx_t *ctx, json_t *root)
                        json_integer (new_counts.total_mines));
   json_object_set_new (out, "asset_id", json_integer (asset_id));
   /* Envelope: echo id/meta from `root`, set type string for this result */
-  send_enveloped_ok (ctx->fd, root, "combat.mines_laid_v1", out);       // Changed type
+  send_response_ok(ctx, root, "combat.mines_laid_v1", out);       // Changed type
   json_decref (out);
   return 0;
 }
@@ -3472,8 +3344,7 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
 
   if (!db)
     {
-      send_enveloped_error (ctx->fd, root, ERR_SERVICE_UNAVAILABLE,
-                            "Database unavailable");
+      send_response_error(ctx, root, ERR_SERVICE_UNAVAILABLE, "Database unavailable");
       return 0;
     }
   /* 1. Parse input */
@@ -3482,8 +3353,7 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
 
   if (!data || !json_is_object (data))
     {
-      send_enveloped_error (ctx->fd, root, ERR_MISSING_FIELD,
-                            "Missing required field: data");
+      send_response_error(ctx, root, ERR_MISSING_FIELD, "Missing required field: data");
       return 0;
     }
   json_t *j_sector_id = json_object_get (data, "sector_id");
@@ -3493,10 +3363,7 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
   if (!j_sector_id || !json_is_integer (j_sector_id) ||
       !j_asset_id || !json_is_integer (j_asset_id))
     {
-      send_enveloped_error (ctx->fd,
-                            root,
-                            ERR_CURSOR_INVALID,
-                            "Missing required field or invalid type: sector_id/asset_id");
+      send_response_error(ctx, root, ERR_CURSOR_INVALID, "Missing required field or invalid type: sector_id/asset_id");
       return 0;
     }
   int requested_sector_id = (int) json_integer_value (j_sector_id);
@@ -3507,8 +3374,7 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
 
   if (player_ship_id <= 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_SHIP_NOT_FOUND,
-                            "No active ship found for player.");
+      send_response_error(ctx, root, ERR_SHIP_NOT_FOUND, "No active ship found for player.");
       return 0;
     }
   int player_current_sector_id = -1;
@@ -3524,8 +3390,7 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
   if (sqlite3_prepare_v2 (db, sql_player_ship, -1, &stmt_player_ship, NULL) !=
       SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, ERR_DB,
-                            "Failed to prepare player ship query.");
+      send_response_error(ctx, root, ERR_DB, "Failed to prepare player ship query.");
       return 0;
     }
   sqlite3_bind_int (stmt_player_ship, 1, player_ship_id);
@@ -3538,8 +3403,7 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
   sqlite3_finalize (stmt_player_ship);
   if (player_current_sector_id <= 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_SECTOR_NOT_FOUND,
-                            "Could not determine player's current sector.");
+      send_response_error(ctx, root, ERR_SECTOR_NOT_FOUND, "Could not determine player's current sector.");
       return 0;
     }
   /* 3. Verify asset belongs to player and is in current sector */
@@ -3551,8 +3415,7 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
 
   if (sqlite3_prepare_v2 (db, sql_asset, -1, &stmt_asset, NULL) != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, ERR_DB,
-                            "Failed to prepare asset query.");
+      send_response_error(ctx, root, ERR_DB, "Failed to prepare asset query.");
       return 0;
     }
   sqlite3_bind_int (stmt_asset, 1, asset_id);
@@ -3570,17 +3433,13 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
   sqlite3_finalize (stmt_asset);
   if (asset_quantity <= 0)
     {
-      send_enveloped_error (ctx->fd,
-                            root,
-                            ERR_NOT_FOUND,
-                            "Mine asset not found or does not belong to you in this sector.");
+      send_response_error(ctx, root, ERR_NOT_FOUND, "Mine asset not found or does not belong to you in this sector.");
       return 0;
     }
   /* 4. Check if ship has capacity for recalled mines */
   if (ship_mines_current + asset_quantity > ship_mines_max)
     {
-      send_enveloped_refused (ctx->fd, root, REF_INSUFFICIENT_CAPACITY,
-                              "Insufficient ship capacity to recall all mines.",
+      send_response_refused(ctx, root, REF_INSUFFICIENT_CAPACITY, "Insufficient ship capacity to recall all mines.",
                               json_pack ("{s:s}", "reason",
                                          "insufficient_mine_capacity"));
       return 0;
@@ -3595,8 +3454,7 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
         {
           sqlite3_free (errmsg);
         }
-      send_enveloped_error (ctx->fd, root, ERR_DB,
-                            "Could not start transaction");
+      send_response_error(ctx, root, ERR_DB, "Could not start transaction");
       return 0;
     }
   // Delete the asset from sector_assets
@@ -3608,16 +3466,14 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
       SQLITE_OK)
     {
       db_safe_rollback (db, "Safe rollback");
-      send_enveloped_error (ctx->fd, root, ERR_DB,
-                            "Failed to prepare delete asset query.");
+      send_response_error(ctx, root, ERR_DB, "Failed to prepare delete asset query.");
       return 0;
     }
   sqlite3_bind_int (stmt_delete, 1, asset_id);
   if (sqlite3_step (stmt_delete) != SQLITE_DONE)
     {
       db_safe_rollback (db, "Safe rollback");
-      send_enveloped_error (ctx->fd, root, ERR_DB,
-                            "Failed to delete asset from sector.");
+      send_response_error(ctx, root, ERR_DB, "Failed to delete asset from sector.");
       sqlite3_finalize (stmt_delete);
       return 0;
     }
@@ -3632,8 +3488,7 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
       SQLITE_OK)
     {
       db_safe_rollback (db, "Safe rollback");
-      send_enveloped_error (ctx->fd, root, ERR_DB,
-                            "Failed to prepare credit ship query.");
+      send_response_error(ctx, root, ERR_DB, "Failed to prepare credit ship query.");
       return 0;
     }
   sqlite3_bind_int (stmt_credit, 1, asset_quantity);
@@ -3641,8 +3496,7 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
   if (sqlite3_step (stmt_credit) != SQLITE_DONE)
     {
       db_safe_rollback (db, "Safe rollback");
-      send_enveloped_error (ctx->fd, root, ERR_DB,
-                            "Failed to credit mines to ship.");
+      send_response_error(ctx, root, ERR_DB, "Failed to credit mines to ship.");
       sqlite3_finalize (stmt_credit);
       return 0;
     }
@@ -3653,7 +3507,7 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
         {
           sqlite3_free (errmsg);
         }
-      send_enveloped_error (ctx->fd, root, ERR_DB, "Commit failed");
+      send_response_error(ctx, root, ERR_DB, "Commit failed");
       return 0;
     }
   /* 6. Emit engine_event via h_log_engine_event */
@@ -3682,7 +3536,7 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
   json_object_set_new (out, "recalled", json_integer (asset_quantity));
   json_object_set_new (out, "remaining_in_sector", json_integer (0));   // All recalled
   json_object_set_new (out, "asset_type", json_integer (asset_type));
-  send_enveloped_ok (ctx->fd, root, "combat.mines.recalled", out);
+  send_response_ok(ctx, root, "combat.mines.recalled", out);
   json_decref (out);
   return 0;
 }
@@ -3762,7 +3616,7 @@ int handle_ship_attack(client_ctx_t *ctx, json_t *root, json_t *data, sqlite3 *d
 {
   int target_ship_id = 0;
   if (!json_get_int_flexible(data, "target_ship_id", &target_ship_id) || target_ship_id <= 0) {
-    send_enveloped_error(ctx->fd, root, ERR_MISSING_FIELD, "Missing or invalid target_ship_id");
+    send_response_error(ctx, root, ERR_MISSING_FIELD, "Missing or invalid target_ship_id");
     return 0;
   }
     
@@ -3774,7 +3628,7 @@ int handle_ship_attack(client_ctx_t *ctx, json_t *root, json_t *data, sqlite3 *d
 
   int attacker_ship_id = h_get_active_ship_id(db, ctx->player_id);
   if (attacker_ship_id <= 0) {
-    send_enveloped_error(ctx->fd, root, ERR_SHIP_NOT_FOUND, "No active ship");
+    send_response_error(ctx, root, ERR_SHIP_NOT_FOUND, "No active ship");
     return 0;
   }
 
@@ -3782,11 +3636,11 @@ int handle_ship_attack(client_ctx_t *ctx, json_t *root, json_t *data, sqlite3 *d
   combat_ship_t attacker = {0};
   combat_ship_t defender = {0};
   if (load_ship_combat_stats(db, attacker_ship_id, &attacker) != 0) {
-    send_enveloped_error(ctx->fd, root, ERR_SHIP_NOT_FOUND, "Attacker ship not found");
+    send_response_error(ctx, root, ERR_SHIP_NOT_FOUND, "Attacker ship not found");
     return 0;
   }
   if (load_ship_combat_stats(db, target_ship_id, &defender) != 0) {
-    send_enveloped_error(ctx->fd, root, ERR_SHIP_NOT_FOUND, "Target ship not found");
+    send_response_error(ctx, root, ERR_SHIP_NOT_FOUND, "Target ship not found");
     return 0;
   }
 
@@ -3795,7 +3649,7 @@ int handle_ship_attack(client_ctx_t *ctx, json_t *root, json_t *data, sqlite3 *d
   int def_sector = defender.sector;
   LOGI("DEBUG: handle_ship_attack: attacker %d sector %d, defender %d sector %d", attacker.id, att_sector, defender.id, def_sector);
   if (att_sector != def_sector || att_sector <= 0) {
-    send_enveloped_error(ctx->fd, root, ERR_TARGET_INVALID, "Target not in same sector");
+    send_response_error(ctx, root, ERR_TARGET_INVALID, "Target not in same sector");
     return 0;
   }
 
@@ -3880,7 +3734,7 @@ int handle_ship_attack(client_ctx_t *ctx, json_t *root, json_t *data, sqlite3 *d
   json_object_set_new(resp, "defender_destroyed", json_boolean(defender_destroyed));
   json_object_set_new(resp, "attacker_destroyed", json_boolean(attacker_destroyed));
     
-  send_enveloped_ok(ctx->fd, root, "combat.attack.result", resp);
+  send_response_ok(ctx, root, "combat.attack.result", resp);
   return 0;
 }
 
@@ -3891,13 +3745,13 @@ int cmd_combat_status(client_ctx_t *ctx, json_t *root) {
     
   int ship_id = h_get_active_ship_id(db, ctx->player_id);
   if (ship_id <= 0) {
-    send_enveloped_error(ctx->fd, root, ERR_SHIP_NOT_FOUND, "No active ship");
+    send_response_error(ctx, root, ERR_SHIP_NOT_FOUND, "No active ship");
     return 0;
   }
     
   combat_ship_t ship = {0};
   if (load_ship_combat_stats(db, ship_id, &ship) != 0) {
-    send_enveloped_error(ctx->fd, root, ERR_DB, "Failed to load ship stats");
+    send_response_error(ctx, root, ERR_DB, "Failed to load ship stats");
     return 0;
   }
     
@@ -3909,7 +3763,7 @@ int cmd_combat_status(client_ctx_t *ctx, json_t *root) {
   json_object_set_new(res, "defense_power", json_integer(ship.defense_power));
   json_object_set_new(res, "max_attack", json_integer(ship.max_attack));
     
-  send_enveloped_ok(ctx->fd, root, "combat.status", res);
+  send_response_ok(ctx, root, "combat.status", res);
   return 0;
 }
 
@@ -4289,19 +4143,19 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
   
   sqlite3 *db = db_get_handle ();
   if (!db) {
-      send_enveloped_error (ctx->fd, root, ERR_SERVICE_UNAVAILABLE, "Database unavailable");
+      send_response_error(ctx, root, ERR_SERVICE_UNAVAILABLE, "Database unavailable");
       return 0;
   }
 
   json_t *data = json_object_get (root, "data");
   if (!data) {
-      send_enveloped_error (ctx->fd, root, ERR_MISSING_FIELD, "Missing data");
+      send_response_error(ctx, root, ERR_MISSING_FIELD, "Missing data");
       return 0;
   }
 
   json_t *j_pid = json_object_get (data, "planet_id");
   if (!j_pid || !json_is_integer (j_pid)) {
-      send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG, "Missing planet_id");
+      send_response_error(ctx, root, ERR_INVALID_ARG, "Missing planet_id");
       return 0;
   }
   int planet_id = (int)json_integer_value(j_pid);
@@ -4309,7 +4163,7 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
   // 1. Get Ship
   int ship_id = h_get_active_ship_id (db, ctx->player_id);
   if (ship_id <= 0) {
-      send_enveloped_error (ctx->fd, root, ERR_SHIP_NOT_FOUND, "No active ship");
+      send_response_error(ctx, root, ERR_SHIP_NOT_FOUND, "No active ship");
       return 0;
   }
   
@@ -4342,12 +4196,12 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
   }
 
   if (!p_exists) {
-      send_enveloped_error (ctx->fd, root, ERR_NOT_FOUND, "Planet not found");
+      send_response_error(ctx, root, ERR_NOT_FOUND, "Planet not found");
       return 0;
   }
 
   if (p_sector != current_sector) {
-      send_enveloped_error (ctx->fd, root, REF_NOT_IN_SECTOR, "Planet not in current sector");
+      send_response_error(ctx, root, REF_NOT_IN_SECTOR, "Planet not in current sector");
       return 0;
   }
 
@@ -4361,7 +4215,7 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
       json_object_set_new(evt, "sanctioned", json_true());
       db_log_engine_event((long long)time(NULL), "player.terra_attack_sanction.v1", "player", ctx->player_id, current_sector, evt, NULL);
 
-      send_enveloped_error(ctx->fd, root, 403, "You have attacked Terra! Federation forces have destroyed your ship and seized your assets.");
+      send_response_error(ctx, root, 403, "You have attacked Terra! Federation forces have destroyed your ship and seized your assets.");
       return 0;
   }
 
@@ -4374,7 +4228,7 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
   }
 
   if (s_fighters <= 0) {
-      send_enveloped_error(ctx->fd, root, 400, "You have no fighters to attack with.");
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "You have no fighters to attack with.");
       return 0;
   }
 
@@ -4492,6 +4346,6 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
   json_object_set_new(res, "defender_remaining_fighters", json_integer(p_fighters - planet_loss));
   json_object_set_new(res, "captured", json_boolean(captured));
   
-  send_enveloped_ok(ctx->fd, root, "combat.attack_planet", res);
+  send_response_ok(ctx, root, "combat.attack_planet", res);
   return 0;
 }

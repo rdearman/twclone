@@ -15,6 +15,7 @@
 #include "config.h"
 #include "server_envelope.h"
 #include "server_cmds.h"
+#include "server_ships.h"
 #include "server_players.h"
 #include "server_cron.h"
 #include "server_log.h"
@@ -22,6 +23,8 @@
 #include "server_universe.h"
 #include "db_player_settings.h"
 #include "server_clusters.h"
+
+
 #ifndef UNUSED
 #define UNUSED(x) (void)(x)
 #endif
@@ -30,20 +33,19 @@ void iso8601_utc (char out[32]);
 /* Forward declarations for static helper functions */
 int h_calculate_port_buy_price (sqlite3 *db, int port_id,
                                 const char *commodity);
-#define RULE_REFUSE(_code,_msg,_hint_json) do { send_enveloped_refused (ctx->fd, \
+#define RULE_REFUSE(_code,_msg,_hint_json) do { send_response_refused (ctx, \
                                                                         root, \
                                                                         (_code), \
                                                                         (_msg), \
-                                                                        ( \
-                                                                          _hint_json)); \
-                                                goto trade_buy_done; } while (0)
+                                                                          (_hint_json)); \
+                                                goto refuse_buy; } while (0)
 #define RULE_REFUSE_SELL(_code,_msg, \
-                         _hint_json) do { send_enveloped_refused (ctx->fd, \
+                         _hint_json) do { send_response_refused (ctx, \
                                                                   root, \
                                                                   (_code), \
                                                                   (_msg), \
                                                                   (_hint_json)); \
-                                          goto trade_sell_done; } while (0)
+                                          goto refuse_sell; } while (0)
 
 
 /* Helpers */
@@ -106,9 +108,8 @@ commodity_to_code (const char *commodity)
 int
 cmd_trade_offer (client_ctx_t *ctx, json_t *root)
 {
-  // NOTE: This command is not defined in PROTOCOL.v2.0.
-  // It might have been intended for a player-to-player trade offer system.
-  send_enveloped_error (ctx->fd, root, 1101, "Not implemented: " "trade.offer");
+  // Option A: Hide/Refuse for v1.0
+  send_response_error(ctx, root, ERR_NOT_IMPLEMENTED, "Trading handshake disabled in v1.0");
   return 0;
 }
 
@@ -116,10 +117,8 @@ cmd_trade_offer (client_ctx_t *ctx, json_t *root)
 int
 cmd_trade_accept (client_ctx_t *ctx, json_t *root)
 {
-  // NOTE: This command is not defined in PROTOCOL.v2.0.
-  // It might have been intended for a player-to-player trade offer system.
-  send_enveloped_error (ctx->fd, root, 1101,
-                        "Not implemented: " "trade.accept");
+  // Option A: Hide/Refuse for v1.0
+  send_response_error(ctx, root, ERR_NOT_IMPLEMENTED, "Trading handshake disabled in v1.0");
   return 0;
 }
 
@@ -127,10 +126,8 @@ cmd_trade_accept (client_ctx_t *ctx, json_t *root)
 int
 cmd_trade_cancel (client_ctx_t *ctx, json_t *root)
 {
-  // NOTE: This command is not defined in PROTOCOL.v2.0.
-  // It might have been intended for a player-to-player trade offer system.
-  send_enveloped_error (ctx->fd, root, 1101,
-                        "Not implemented: " "trade.cancel");
+  // Option A: Hide/Refuse for v1.0
+  send_response_error(ctx, root, ERR_NOT_IMPLEMENTED, "Trading handshake disabled in v1.0");
   return 0;
 }
 
@@ -827,12 +824,12 @@ cmd_trade_quote (client_ctx_t *ctx, json_t *root)
   int quantity = 0;
   if (ctx->player_id <= 0)
     {
-      send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+      send_response_refused(ctx, root, ERR_SECTOR_NOT_FOUND, "Not authenticated", NULL);
       return 0;
     }
   if (!json_is_object (data))
     {
-      send_enveloped_error (ctx->fd, root, 400, "Missing data object.");
+      send_response_error(ctx, root, 400, "Missing data object.");
       return 0;
     }
   json_t *jport_id = json_object_get (data, "port_id");
@@ -858,8 +855,7 @@ cmd_trade_quote (client_ctx_t *ctx, json_t *root)
     }
   if (port_id <= 0 || !commodity || quantity <= 0)
     {
-      send_enveloped_error (ctx->fd, root, 400,
-                            "port_id, commodity, and quantity are required.");
+      send_response_error(ctx, root, 400, "port_id, commodity, and quantity are required.");
       return 0;
     }
   // Validate commodity using commodity_to_code
@@ -868,7 +864,7 @@ cmd_trade_quote (client_ctx_t *ctx, json_t *root)
 
   if (!commodity_code)
     {
-      send_enveloped_error (ctx->fd, root, 400, "Invalid commodity.");
+      send_response_error(ctx, root, 400, "Invalid commodity.");
       return 0;
     }
   // Calculate the price the port will CHARGE the player (player's buy price)
@@ -895,7 +891,7 @@ cmd_trade_quote (client_ctx_t *ctx, json_t *root)
                        json_integer (total_player_buy_price));
   json_object_set_new (payload, "total_sell_price",
                        json_integer (total_player_sell_price));
-  send_enveloped_ok (ctx->fd, root, "trade.quote", payload);
+  send_response_ok(ctx, root, "trade.quote", payload);
   json_decref (payload);
   // Free the commodity_code
   free ((char *) commodity_code);       // Cast to char* because strdup returns char*
@@ -911,7 +907,7 @@ cmd_trade_history (client_ctx_t *ctx, json_t *root)
   json_t *data = json_object_get (root, "data");
   if (ctx->player_id <= 0)
     {
-      send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+      send_response_refused(ctx, root, ERR_SECTOR_NOT_FOUND, "Not authenticated", NULL);
       return 0;
     }
   // 1. Get parameters
@@ -966,7 +962,7 @@ cmd_trade_history (client_ctx_t *ctx, json_t *root)
   if (rc != SQLITE_OK)
     {
       LOGE ("trade.history prepare error: %s", sqlite3_errmsg (db));
-      send_enveloped_error (ctx->fd, root, 1500, "Database error");
+      send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Database error");
       return 0;
     }
   sqlite3_bind_int (stmt, 1, ctx->player_id);
@@ -1025,7 +1021,7 @@ cmd_trade_history (client_ctx_t *ctx, json_t *root)
                 last_id);
       json_object_set_new (payload, "next_cursor", json_string (next_cursor));
     }
-  send_enveloped_ok (ctx->fd, root, "trade.history", payload);
+  send_response_ok(ctx, root, "trade.history", payload);
   return 0;
 }
 
@@ -1048,20 +1044,18 @@ cmd_dock_status (client_ctx_t *ctx, json_t *root)
   db = db_get_handle ();
   if (!db)
     {
-      send_enveloped_error (ctx->fd, root, 500, "No database handle.");
+      send_response_error(ctx, root, 500, "No database handle.");
       return -1;
     }
   if (ctx->player_id <= 0)
     {
-      send_enveloped_refused (ctx->fd, root, ERR_NOT_AUTHENTICATED,
-                              "Not authenticated", NULL);
+      send_response_refused(ctx, root, ERR_NOT_AUTHENTICATED, "Not authenticated", NULL);
       return 0;
     }
   player_ship_id = h_get_active_ship_id (db, ctx->player_id);
   if (player_ship_id <= 0)
     {
-      send_enveloped_refused (ctx->fd, root, ERR_NO_ACTIVE_SHIP,
-                              "No active ship found.", NULL);
+      send_response_refused(ctx, root, ERR_NO_ACTIVE_SHIP, "No active ship found.", NULL);
       return 0;
     }
   // Resolve port ID in current sector
@@ -1102,10 +1096,7 @@ cmd_dock_status (client_ctx_t *ctx, json_t *root)
                                                        ctx->sector_id,
                                                        ctx->player_id))
         {
-          send_enveloped_refused (ctx->fd,
-                                  root,
-                                  1403,
-                                  "Port refuses docking: You are banned in this cluster.",
+          send_response_refused(ctx, root, REF_TURN_COST_EXCEEDS, "Port refuses docking: You are banned in this cluster.",
                                   NULL);
           return 0;
         }
@@ -1122,7 +1113,7 @@ cmd_dock_status (client_ctx_t *ctx, json_t *root)
             LOGE (
               "cmd_dock_status: Failed to prepare update ported statement: %s",
               sqlite3_errmsg (db));
-            send_enveloped_error (ctx->fd, root, ERR_DB, "Database error.");
+            send_response_error(ctx, root, ERR_DB, "Database error.");
             return -1;
           }
         sqlite3_bind_int (st, 1, new_ported_status);
@@ -1132,7 +1123,7 @@ cmd_dock_status (client_ctx_t *ctx, json_t *root)
             LOGE ("cmd_dock_status: Failed to update ships.ported: %s",
                   sqlite3_errmsg (db));
             sqlite3_finalize (st);
-            send_enveloped_error (ctx->fd, root, ERR_DB, "Database error.");
+            send_response_error(ctx, root, ERR_DB, "Database error.");
             return -1;
           }
         sqlite3_finalize (st);
@@ -1186,13 +1177,13 @@ cmd_dock_status (client_ctx_t *ctx, json_t *root)
   payload = json_object ();
   if (!payload)
     {
-      send_enveloped_error (ctx->fd, root, ERR_SERVER_ERROR, "Out of memory.");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Out of memory.");
       goto cleanup;
     }
   json_object_set_new (payload, "port_id", json_integer (resolved_port_id));
   json_object_set_new (payload, "sector_id", json_integer (ctx->sector_id));
   json_object_set_new (payload, "docked", json_boolean (resolved_port_id > 0));
-  send_enveloped_ok (ctx->fd, root, "dock.status_v1", payload);
+  send_response_ok(ctx, root, "dock.status_v1", payload);
   payload = NULL; /* Ownership transferred to send_enveloped_ok */
 cleanup:
   if (player_name)
@@ -1386,10 +1377,7 @@ cmd_trade_port_info (client_ctx_t *ctx,
   int port_id_val = 0;
   if (!ctx || ctx->player_id <= 0)
     {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              ERR_NOT_AUTHENTICATED,
-                              "Not authenticated",
+      send_response_refused(ctx, root, ERR_NOT_AUTHENTICATED, "Not authenticated",
                               NULL);
       return 0;
     }
@@ -1398,7 +1386,7 @@ cmd_trade_port_info (client_ctx_t *ctx,
   
     if (!db)
       {
-        send_enveloped_error (ctx->fd, root, ERR_DB, "No database handle");
+        send_response_error(ctx, root, ERR_DB, "No database handle");
         return 0;
       }
   
@@ -1458,8 +1446,7 @@ cmd_trade_port_info (client_ctx_t *ctx,
       }
     else
       {
-        send_enveloped_refused (ctx->fd, root, ERR_MISSING_FIELD,
-                                "Missing port_id or sector_id", NULL);
+        send_response_refused(ctx, root, ERR_MISSING_FIELD, "Missing port_id or sector_id", NULL);
         return 0;
       }
     rc = sqlite3_prepare_v2 (db, sql_port_info, -1, &st, NULL);
@@ -1467,7 +1454,7 @@ cmd_trade_port_info (client_ctx_t *ctx,
       {
         LOGE ("cmd_trade_port_info: port prepare failed: %s",
               sqlite3_errmsg (db));
-        send_enveloped_error (ctx->fd, root, ERR_DB, "Database error.");
+        send_response_error(ctx, root, ERR_DB, "Database error.");
         return -1;
       }
     if (requested_port_id > 0)
@@ -1524,10 +1511,7 @@ cmd_trade_port_info (client_ctx_t *ctx,
         LOGW ("cmd_trade_port_info: No port found for id=%d or sector=%d",
               requested_port_id,
               sector_id);
-        send_enveloped_refused (ctx->fd,
-                                root,
-                                ERR_PORT_NOT_FOUND,
-                                "No port found.",
+        send_response_refused(ctx, root, ERR_PORT_NOT_FOUND, "No port found.",
                                 NULL);
         rc = SQLITE_NOTFOUND;
         goto cleanup;
@@ -1549,7 +1533,7 @@ cmd_trade_port_info (client_ctx_t *ctx,
       {
         LOGE ("cmd_trade_port_info: commodities prepare failed: %s (rc=%d, errmsg=%s)",
               sqlite3_errmsg (db), rc, sqlite3_errmsg(db));
-        send_enveloped_error (ctx->fd, root, ERR_DB, "Database error.");
+        send_response_error(ctx, root, ERR_DB, "Database error.");
         goto cleanup;
       }
     sqlite3_bind_int (commodity_st, 1, port_id_val);
@@ -1617,7 +1601,7 @@ cmd_trade_port_info (client_ctx_t *ctx,
     }
   json_object_set_new (payload, "port", port);
   port = NULL; // Ownership transferred to payload object
-  send_enveloped_ok (ctx->fd, root, "trade.port_info", payload);
+  send_response_ok(ctx, root, "trade.port_info", payload);
   payload = NULL; // Ownership transferred to send_enveloped_ok
   rc = SQLITE_OK;
 cleanup:
@@ -1682,12 +1666,12 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
   db = db_get_handle ();
   if (!db)
     {
-      send_enveloped_error (ctx->fd, root, 500, "No database handle.");
+      send_response_error(ctx, root, 500, "No database handle.");
       return -1;
     }
   if (ctx->player_id <= 0)
     {
-      send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+      send_response_refused(ctx, root, ERR_SECTOR_NOT_FOUND, "Not authenticated", NULL);
       LOGD ("cmd_trade_buy: Not authenticated for player_id=%d",
             ctx->player_id);                                                            // ADDED
       return 0;
@@ -1710,7 +1694,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
   data = json_object_get (root, "data");
   if (!json_is_object (data))
     {
-      send_enveloped_error (ctx->fd, root, 400, "Missing data object.");
+      send_response_error(ctx, root, 400, "Missing data object.");
       LOGD ("cmd_trade_buy: Missing data object for player_id=%d",
             ctx->player_id);                                                            // ADDED
       return -1;
@@ -1728,10 +1712,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
 
       if (requested_account_type != 0 && requested_account_type != 1)
         {
-          send_enveloped_error (ctx->fd,
-                                root,
-                                400,
-                                "Invalid account type. Must be 0 (petty cash) or 1 (bank).");
+          send_response_error(ctx, root, 400, "Invalid account type. Must be 0 (petty cash) or 1 (bank).");
           return -1;
         }
       account_type = requested_account_type;    // Override with explicit request
@@ -1748,7 +1729,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
     }
   if (sector_id <= 0)
     {
-      send_enveloped_error (ctx->fd, root, 400, "Invalid sector_id.");
+      send_response_error(ctx, root, 400, "Invalid sector_id.");
       LOGD ("cmd_trade_buy: Invalid sector_id=%d for player_id=%d",
             sector_id,
             ctx->player_id);                                                                    // ADDED
@@ -1759,10 +1740,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
         ctx->player_id);                                                                        // ADDED
   if (!cluster_can_trade (db, sector_id, ctx->player_id))
     {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              1403,
-                              "Port refuses to trade: You are banned in this cluster.",
+      send_response_refused(ctx, root, REF_TURN_COST_EXCEEDS, "Port refuses to trade: You are banned in this cluster.",
                               NULL);
       return 0;
     }
@@ -1779,7 +1757,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
   jitems = json_object_get (data, "items");
   if (!json_is_array (jitems) || json_array_size (jitems) == 0)
     {
-      send_enveloped_error (ctx->fd, root, 400, "items[] required.");
+      send_response_error(ctx, root, 400, "items[] required.");
       LOGD ("cmd_trade_buy: Missing or empty items array for player_id=%d",
             ctx->player_id);                                                                    // ADDED
       return -1;
@@ -1794,11 +1772,18 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
   key = json_is_string (jkey) ? json_string_value (jkey) : NULL;
   if (!key || !*key)
     {
-      send_enveloped_error (ctx->fd, root, 400, "idempotency_key required.");
+      send_response_error(ctx, root, 400, "idempotency_key required.");
       LOGD ("cmd_trade_buy: Missing idempotency_key for player_id=%d",
             ctx->player_id);                                                            // ADDED
       return -1;
     }
+  char actual_key[UUID_STR_LEN];
+  if (strcmp(key, "*generate*") == 0) {
+      h_generate_hex_uuid(actual_key, sizeof(actual_key));
+      key = actual_key;
+      LOGD("cmd_trade_buy: Generated idempotency key '%s' for player_id=%d", key, ctx->player_id);
+  }
+
   LOGD ("cmd_trade_buy: Idempotency key='%s' for player_id=%d",
         key,
         ctx->player_id);                                                                // ADDED
@@ -1851,20 +1836,15 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
                 sqlite3_finalize (st);
                 if (!stored_resp)
                   {
-                    send_enveloped_error (ctx->fd, root, 500,
-                                          "Stored response unreadable.");
+                    send_response_error(ctx, root, 500, "Stored response unreadable.");
                     return -1;
                   }
-                send_enveloped_ok (ctx->fd, root, "trade.buy_receipt_v1",
-                                   stored_resp);
+                send_response_ok(ctx, root, "trade.buy_receipt_v1", stored_resp);
                 json_decref (stored_resp);
                 return 0;
               }
             sqlite3_finalize (st);
-            send_enveloped_error (ctx->fd,
-                                  root,
-                                  1105,
-                                  "Same idempotency_key used with different request.");
+            send_response_error(ctx, root, ERR_DUPLICATE_REQUEST, "Same idempotency_key used with different request.");
             LOGD (
               "cmd_trade_buy: Idempotency fast-path: key='%s' used with different request",
               key);                                                                                     // ADDED
@@ -1891,7 +1871,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
 
       if (sqlite3_prepare_v2 (db, SQL_BY_ID, -1, &st, NULL) != SQLITE_OK)
         {
-          send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
+          send_response_error(ctx, root, ERR_SERVER_ERROR, sqlite3_errmsg (db));
           return -1;
         }
       sqlite3_bind_int (st, 1, requested_port_id);
@@ -1903,7 +1883,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       sqlite3_finalize (st);
       if (port_id <= 0)
         {
-          send_enveloped_error (ctx->fd, root, 1404, "No such port_id.");
+          send_response_error(ctx, root, REF_AUTOPILOT_RUNNING, "No such port_id.");
           LOGD ("cmd_trade_buy: No such port_id=%d", requested_port_id);        // ADDED
           return -1;
         }
@@ -1917,7 +1897,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
 
       if (sqlite3_prepare_v2 (db, SQL_BY_SECTOR, -1, &st, NULL) != SQLITE_OK)
         {
-          send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
+          send_response_error(ctx, root, ERR_SERVER_ERROR, sqlite3_errmsg (db));
           return -1;
         }
       sqlite3_bind_int (st, 1, sector_id);
@@ -1929,8 +1909,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       sqlite3_finalize (st);
       if (port_id <= 0)
         {
-          send_enveloped_error (ctx->fd, root, 1404,
-                                "No port in this sector.");
+          send_response_error(ctx, root, REF_AUTOPILOT_RUNNING, "No port in this sector.");
           LOGD ("cmd_trade_buy: No port in sector_id=%d", sector_id);   // ADDED
           return -1;
         }
@@ -1955,8 +1934,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       if (h_get_player_petty_cash (db, ctx->player_id, &current_credits) !=
           SQLITE_OK)
         {
-          send_enveloped_error (ctx->fd, root, 500,
-                                "Could not read player petty cash.");
+          send_response_error(ctx, root, 500, "Could not read player petty cash.");
           return -1;
         }
     }
@@ -1968,8 +1946,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       if (h_get_credits (db, "player", ctx->player_id, &credits_i) !=
           SQLITE_OK)
         {
-          send_enveloped_error (ctx->fd, root, 500,
-                                "Could not read player bank credits.");
+          send_response_error(ctx, root, 500, "Could not read player bank credits.");
           return -1;
         }
       current_credits = (long long) credits_i;
@@ -1978,22 +1955,19 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
         account_type,
         current_credits,
         ctx->player_id);                                                                                                                // ADDED
-  int cur_ore, cur_org, cur_eq, cur_holds, cur_colonists, cur_slaves,
-      cur_weapons, cur_drugs;                                                                 // Declare for new cargo types
-
-
-  if (h_get_ship_cargo_and_holds (db,
-                                  player_ship_id,
-                                  &cur_ore,
-                                  &cur_org,
-                                  &cur_eq,
-                                  &cur_holds,
-                                  &cur_colonists,
-                                  &cur_slaves,
-                                  &cur_weapons,
-                                  &cur_drugs) != SQLITE_OK)                                            // Pass new cargo types
+    int cur_ore=0, cur_org=0, cur_eq=0, cur_colonists=0, cur_slaves=0, cur_weapons=0, cur_drugs=0, cur_holds=0; // Initialize to 0
+    if (h_get_ship_cargo_and_holds (db,
+                                    player_ship_id,
+                                    &cur_ore,
+                                    &cur_org,
+                                    &cur_eq,
+                                    &cur_colonists,
+                                    &cur_slaves,
+                                    &cur_weapons,
+                                    &cur_drugs,
+                                    &cur_holds) != SQLITE_OK)                                            // Pass new cargo types
     {
-      send_enveloped_error (ctx->fd, root, 500, "Could not read ship cargo.");
+      send_response_error(ctx, root, 500, "Could not read ship cargo.");
       return -1;
     }
   int current_load = cur_ore + cur_org + cur_eq + cur_colonists + cur_slaves +
@@ -2012,7 +1986,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
   trade_lines = calloc (n, sizeof (*trade_lines));
   if (!trade_lines)
     {
-      send_enveloped_error (ctx->fd, root, 500, "Memory allocation error.");
+      send_response_error(ctx, root, 500, "Memory allocation error.");
       return -1;
     }
   LOGD ("cmd_trade_buy: Allocated trade_lines for %zu items", n);       // ADDED
@@ -2033,8 +2007,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       if (!raw_commodity || amount <= 0)
         {
           free_trade_lines (trade_lines, n); // Free trade_lines on error
-          send_enveloped_error (ctx->fd, root, 400,
-                                "items[] must contain {commodity, quantity>0}.");
+          send_response_error(ctx, root, 400, "items[] must contain {commodity, quantity>0}.");
           LOGD
             ("cmd_trade_buy: Invalid item %zu: raw_commodity='%s', amount=%d",
             i, raw_commodity, amount);
@@ -2046,8 +2019,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       if (!canonical_commodity)
         {
           free_trade_lines (trade_lines, n); // Free trade_lines on error
-          send_enveloped_refused (ctx->fd, root, 1405,
-                                  "Invalid or unsupported commodity.", NULL);
+          send_response_refused(ctx, root, ERR_AUTOPILOT_PATH_INVALID, "Invalid or unsupported commodity.", NULL);
           LOGD ("cmd_trade_buy: Invalid or unsupported commodity '%s'",
                 raw_commodity);
           goto cleanup;
@@ -2064,10 +2036,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       if (!h_port_sells_commodity (db, port_id, trade_lines[i].commodity))
         {
           free_trade_lines (trade_lines, n); // Free trade_lines on error
-          send_enveloped_refused (ctx->fd,
-                                  root,
-                                  1405,
-                                  "Port is not selling this commodity right now.",
+          send_response_refused(ctx, root, ERR_AUTOPILOT_PATH_INVALID, "Port is not selling this commodity right now.",
                                   NULL);
           LOGD ("cmd_trade_buy: Port %d not selling commodity '%s'", port_id,
                 trade_lines[i].commodity);
@@ -2082,10 +2051,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       if (unit_price <= 0)
         {
           free_trade_lines (trade_lines, n); // Free trade_lines on error
-          send_enveloped_refused (ctx->fd,
-                                  root,
-                                  1405,
-                                  "Port is not selling this commodity right now.",
+          send_response_refused(ctx, root, ERR_AUTOPILOT_PATH_INVALID, "Port is not selling this commodity right now.",
                                   NULL);
           // LOGD("cmd_trade_buy: Port %d sell price <= 0 for commodity '%s'", port_id, commodity); // ADDED
           return 0;
@@ -2200,10 +2166,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
         {
           if (rc == SQLITE_CONSTRAINT)
             {
-              send_enveloped_refused (ctx->fd,
-                                      root,
-                                      1403,
-                                      "Insufficient cargo space (atomic check).",
+              send_response_refused(ctx, root, REF_TURN_COST_EXCEEDS, "Insufficient cargo space (atomic check).",
                                       NULL);
               LOGD (
                 "cmd_trade_buy: Refused: Insufficient cargo space for item %zu",
@@ -2247,8 +2210,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
         {
           if (rc == SQLITE_CONSTRAINT)
             {
-              send_enveloped_refused (ctx->fd, root, 1403,
-                                      "Port is out of stock (atomic check).",
+              send_response_refused(ctx, root, REF_TURN_COST_EXCEEDS, "Port is out of stock (atomic check).",
                                       NULL);
               LOGD ("cmd_trade_buy: Refused: Port out of stock for item %zu",
                     i);                                                                 // ADDED
@@ -2318,8 +2280,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       {
         if (rc == SQLITE_CONSTRAINT)
           {
-            send_enveloped_refused (ctx->fd, root, 1402,
-                                    "Insufficient credits (atomic check).",
+            send_response_refused(ctx, root, REF_NO_WARP_LINK, "Insufficient credits (atomic check).",
                                     NULL);
             LOGD ("cmd_trade_buy: Refused: Insufficient credits during debit.");        // ADDED
           }
@@ -2423,9 +2384,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
     if (sqlite3_step (st) != SQLITE_DONE)
       {
         sqlite3_finalize (st);
-        LOGD (
-          "cmd_trade_buy: Idempotency insert failed, going to idempotency_race. rc=%d",
-          sqlite3_step (st));                                                                                   // ADDED
+        LOGD ("cmd_trade_buy: Idempotency insert failed, going to idempotency_race. rc=%d", rc);                                                                                   // ADDED
         goto idempotency_race;
       }
     sqlite3_finalize (st);
@@ -2435,15 +2394,15 @@ trade_buy_done:
   if (we_started_tx && commit (db) != SQLITE_OK)
     {
       free_trade_lines (trade_lines, n);
-      send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
+      send_response_error(ctx, root, ERR_SERVER_ERROR, sqlite3_errmsg (db));
       goto cleanup;
     }
   LOGD ("cmd_trade_buy: Transaction committed.");       // ADDED
-  send_enveloped_ok (ctx->fd, root, "trade.buy_receipt_v1", receipt);
+  send_response_ok(ctx, root, "trade.buy_receipt_v1", receipt);
   LOGD ("cmd_trade_buy: Sent enveloped OK response.");  // ADDED
   goto cleanup;
 sql_err:
-  send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
+  send_response_error(ctx, root, ERR_SERVER_ERROR, sqlite3_errmsg (db));
 fail_tx:
   if (we_started_tx)
     {
@@ -2501,13 +2460,15 @@ idempotency_race:
                 sqlite3_finalize (st);
                 if (!stored_resp)
                   {
-                    send_enveloped_error (ctx->fd, root, 500,
-                                          "Stored response unreadable.");
+                    send_response_error(ctx, root, 500, "Stored response unreadable.");
                     goto cleanup;
                   }
-                send_enveloped_ok (ctx->fd, root, "trade.buy_receipt_v1",
-                                   stored_resp);
+                send_response_ok(ctx, root, "trade.buy_receipt_v1", stored_resp);
                 json_decref (stored_resp);
+                if (we_started_tx) {
+                    LOGD("cmd_trade_buy: Idempotency_race: Rolling back transaction (same request).");
+                    rollback(db);
+                }
                 goto cleanup;
               }
             LOGD ("cmd_trade_buy: Idempotency_race: Request mismatch.");        // ADDED
@@ -2524,9 +2485,22 @@ idempotency_race:
       }
   }
   // This line is reached if the idempotency race could not be resolved (no matching row, or error)
-  send_enveloped_error (ctx->fd, root, 500,
-                        "Could not resolve idempotency race.");
+  if (we_started_tx) {
+      LOGD("cmd_trade_buy: Idempotency_race: Rolling back transaction (cannot resolve).");
+      rollback(db);
+  }
+  send_response_error(ctx, root, 500, "Could not resolve idempotency race.");
   LOGD ("cmd_trade_buy: Idempotency_race: Could not resolve, sending error.");  // ADDED
+  goto cleanup;
+refuse_buy: // New label for refused buy operations
+  if (we_started_tx)
+    {
+      LOGD ("cmd_trade_buy: Rolling back transaction (refused).");
+      rollback (db);
+    }
+  // No explicit send_response_refused here, as it's handled by the macro argument.
+  // The macro performs send_response_refused, then goto refuse_buy.
+  // So, just clean up.
   goto cleanup;
 cleanup:
   if (trade_lines)
@@ -2586,12 +2560,12 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
   db = db_get_handle ();
   if (!db)
     {
-      send_enveloped_error (ctx->fd, root, 500, "No database handle.");
+      send_response_error(ctx, root, 500, "No database handle.");
       return -1;
     }
   if (ctx->player_id <= 0)
     {
-      send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+      send_response_refused(ctx, root, ERR_SECTOR_NOT_FOUND, "Not authenticated", NULL);
       LOGD ("cmd_trade_sell: Not authenticated for player_id=%d",
             ctx->player_id);                                                            // ADDED
       return 0;
@@ -2620,7 +2594,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
   data = json_object_get (root, "data");
   if (!json_is_object (data))
     {
-      send_enveloped_error (ctx->fd, root, 400, "Missing data object.");
+      send_response_error(ctx, root, 400, "Missing data object.");
       LOGD ("cmd_trade_sell: Missing data object for player_id=%d",
             ctx->player_id);                                                            // ADDED
       return -1;
@@ -2638,10 +2612,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 
       if (requested_account_type != 0 && requested_account_type != 1)
         {
-          send_enveloped_error (ctx->fd,
-                                root,
-                                400,
-                                "Invalid account type. Must be 0 (petty cash) or 1 (bank).");
+          send_response_error(ctx, root, 400, "Invalid account type. Must be 0 (petty cash) or 1 (bank).");
           return -1;
         }
       account_type = requested_account_type;    // Override with explicit request
@@ -2658,7 +2629,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
     }
   if (sector_id <= 0)
     {
-      send_enveloped_error (ctx->fd, root, 400, "Invalid sector_id.");
+      send_response_error(ctx, root, 400, "Invalid sector_id.");
       LOGD ("cmd_trade_sell: Invalid sector_id=%d for player_id=%d",
             sector_id,
             ctx->player_id);                                                                            // ADDED
@@ -2669,17 +2640,14 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
         ctx->player_id);                                                                        // ADDED
   if (!cluster_can_trade (db, sector_id, ctx->player_id))
     {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              1403,
-                              "Port refuses to trade: You are banned in this cluster.",
+      send_response_refused(ctx, root, REF_TURN_COST_EXCEEDS, "Port refuses to trade: You are banned in this cluster.",
                               NULL);
       return -1;
     }
   jitems = json_object_get (data, "items");
   if (!json_is_array (jitems) || json_array_size (jitems) == 0)
     {
-      send_enveloped_error (ctx->fd, root, 400, "items[] required.");
+      send_response_error(ctx, root, 400, "items[] required.");
       LOGD ("cmd_trade_sell: Missing or empty items array for player_id=%d",
             ctx->player_id);                                                                    // ADDED
       return -1;
@@ -2694,11 +2662,17 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
   key = json_is_string (jkey) ? json_string_value (jkey) : NULL;
   if (!key || !*key)
     {
-      send_enveloped_error (ctx->fd, root, 400, "idempotency_key required.");
+      send_response_error(ctx, root, 400, "idempotency_key required.");
       LOGD ("cmd_trade_sell: Missing idempotency_key for player_id=%d",
             ctx->player_id);                                                                    // ADDED
       return -1;
     }
+  char actual_key[UUID_STR_LEN];
+  if (strcmp(key, "*generate*") == 0) {
+      h_generate_hex_uuid(actual_key, sizeof(actual_key));
+      key = actual_key;
+      LOGD("cmd_trade_sell: Generated idempotency key '%s' for player_id=%d", key, ctx->player_id);
+  }
   LOGD ("cmd_trade_sell: Idempotency key='%s' for player_id=%d",
         key,
         ctx->player_id);                                                                // ADDED
@@ -2750,20 +2724,15 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
                 sqlite3_finalize (st);
                 if (!stored_resp)
                   {
-                    send_enveloped_error (ctx->fd, root, 500,
-                                          "Stored response unreadable.");
+                    send_response_error(ctx, root, 500, "Stored response unreadable.");
                     return -1;
                   }
-                send_enveloped_ok (ctx->fd, root, "trade.sell_receipt_v1",
-                                   stored_resp);
+                send_response_ok(ctx, root, "trade.sell_receipt_v1", stored_resp);
                 json_decref (stored_resp);
                 return 0;
               }
             sqlite3_finalize (st);
-            send_enveloped_error (ctx->fd,
-                                  root,
-                                  1105,
-                                  "Same idempotency_key used with different request.");
+            send_response_error(ctx, root, ERR_DUPLICATE_REQUEST, "Same idempotency_key used with different request.");
             LOGD (
               "cmd_trade_sell: Idempotency fast-path: key='%s' used with different request",
               key);                                                                                     // ADDED
@@ -2788,7 +2757,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 
       if (sqlite3_prepare_v2 (db, SQL_BY_ID, -1, &st, NULL) != SQLITE_OK)
         {
-          send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
+          send_response_error(ctx, root, ERR_SERVER_ERROR, sqlite3_errmsg (db));
           return -1;
         }
       sqlite3_bind_int (st, 1, requested_port_id);
@@ -2800,7 +2769,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       sqlite3_finalize (st);
       if (port_id <= 0)
         {
-          send_enveloped_error (ctx->fd, root, 1404, "No such port_id.");
+          send_response_error(ctx, root, REF_AUTOPILOT_RUNNING, "No such port_id.");
           LOGD ("cmd_trade_sell: No such port_id=%d", requested_port_id);       // ADDED
           return -1;
         }
@@ -2814,7 +2783,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 
       if (sqlite3_prepare_v2 (db, SQL_BY_SECTOR, -1, &st, NULL) != SQLITE_OK)
         {
-          send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
+          send_response_error(ctx, root, ERR_SERVER_ERROR, sqlite3_errmsg (db));
           return -1;
         }
       sqlite3_bind_int (st, 1, sector_id);
@@ -2826,8 +2795,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       sqlite3_finalize (st);
       if (port_id <= 0)
         {
-          send_enveloped_refused (ctx->fd, root, 1404,
-                                  "No port in this sector.", NULL);
+          send_response_refused(ctx, root, REF_AUTOPILOT_RUNNING, "No port in this sector.", NULL);
           LOGD ("cmd_trade_sell: No port in sector_id=%d", sector_id);  // ADDED
           return -1;
         }
@@ -2850,8 +2818,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       if (h_get_player_petty_cash (db, ctx->player_id, &current_credits) !=
           SQLITE_OK)
         {
-          send_enveloped_error (ctx->fd, root, 500,
-                                "Could not read player petty cash.");
+          send_response_error(ctx, root, 500, "Could not read player petty cash.");
           return -1;
         }
     }
@@ -2863,8 +2830,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       if (h_get_credits (db, "player", ctx->player_id, &credits_i) !=
           SQLITE_OK)
         {
-          send_enveloped_error (ctx->fd, root, 500,
-                                "Could not read player bank credits.");
+          send_response_error(ctx, root, 500, "Could not read player bank credits.");
           return -1;
         }
       current_credits = (long long) credits_i;
@@ -2874,22 +2840,12 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
     account_type,
     current_credits,
     ctx->player_id);                                                                                                                    // ADDED
-  int cur_ore, cur_org, cur_eq, cur_holds, cur_colonists, cur_slaves,
-      cur_weapons, cur_drugs;                                                                 // Declare for new cargo types
-
-
-  if (h_get_ship_cargo_and_holds (db,
-                                  player_ship_id,
-                                  &cur_ore,
-                                  &cur_org,
-                                  &cur_eq,
-                                  &cur_holds,
-                                  &cur_colonists,
-                                  &cur_slaves,
-                                  &cur_weapons,
-                                  &cur_drugs) != SQLITE_OK)                                            // Pass new cargo types
+    int cur_ore=0, cur_org=0, cur_eq=0, cur_colonists=0, cur_slaves=0, cur_weapons=0, cur_drugs=0, cur_holds=0; // Initialize to 0
+    if (h_get_ship_cargo_and_holds (db, player_ship_id,
+                                        &cur_ore, &cur_org, &cur_eq, &cur_colonists,
+                                        &cur_slaves, &cur_weapons, &cur_drugs, &cur_holds) != SQLITE_OK)                                            // Pass new cargo types
     {
-      send_enveloped_error (ctx->fd, root, 500, "Could not read ship cargo.");
+      send_response_error(ctx, root, 500, "Could not read ship cargo.");
       return -1;
     }
   int current_load = cur_ore + cur_org + cur_eq + cur_colonists + cur_slaves +
@@ -2908,7 +2864,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
   trade_lines = calloc (n, sizeof (*trade_lines));
   if (!trade_lines)
     {
-      send_enveloped_error (ctx->fd, root, 500, "Memory allocation error.");
+      send_response_error(ctx, root, 500, "Memory allocation error.");
       return -1;
     }
   LOGD ("cmd_trade_sell: Allocated trade_lines for %zu items", n);      // ADDED
@@ -2929,8 +2885,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       if (!raw_commodity || amount <= 0)
         {
           free_trade_lines (trade_lines, n);
-          send_enveloped_error (ctx->fd, root, 400,
-                                "items[] must contain {commodity, quantity>0}.");
+          send_response_error(ctx, root, 400, "items[] must contain {commodity, quantity>0}.");
           LOGD
             ("cmd_trade_sell: Invalid item %zu: raw_commodity='%s', amount=%d",
             i, raw_commodity, amount);
@@ -2943,8 +2898,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       if (!canonical_commodity_code)
         {
           free_trade_lines (trade_lines, n);
-          send_enveloped_refused (ctx->fd, root, 1405,
-                                  "Invalid or unsupported commodity.", NULL);
+          send_response_refused(ctx, root, ERR_AUTOPILOT_PATH_INVALID, "Invalid or unsupported commodity.", NULL);
           LOGD ("cmd_trade_sell: Invalid or unsupported commodity '%s'",
                 raw_commodity);
           goto cleanup;
@@ -2952,10 +2906,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       if (!h_port_buys_commodity (db, port_id, canonical_commodity_code))
         {
           free_trade_lines (trade_lines, n);
-          send_enveloped_refused (ctx->fd,
-                                  root,
-                                  1405,
-                                  "Port is not buying this commodity right now.",
+          send_response_refused(ctx, root, ERR_AUTOPILOT_PATH_INVALID, "Port is not buying this commodity right now.",
                                   NULL);
           LOGD ("cmd_trade_sell: Port %d not buying commodity '%s'", port_id,
                 canonical_commodity_code);
@@ -2968,10 +2919,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       if (buy_price <= 0)
         {
           free_trade_lines (trade_lines, n);
-          send_enveloped_refused (ctx->fd,
-                                  root,
-                                  1405,
-                                  "Port is not buying this commodity right now.",
+          send_response_refused(ctx, root, ERR_AUTOPILOT_PATH_INVALID, "Port is not buying this commodity right now.",
                                   NULL);
           // LOGD("cmd_trade_sell: Port %d buy price <= 0 for commodity '%s'", port_id, canonical_commodity_code); // ADDED
           return 0;
@@ -2986,8 +2934,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
                                       &slaves, &weapons, &drugs) != SQLITE_OK) // Pass new cargo types
         {
           free_trade_lines (trade_lines, n);
-          send_enveloped_error (ctx->fd, root, 500,
-                                "Could not read ship cargo.");
+          send_response_error(ctx, root, 500, "Could not read ship cargo.");
           return -1;
         }
       /* int have = 0; */
@@ -3002,10 +2949,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       /* else if (!h_can_trade_commodity (db, port_id, ctx->player_id, canonical_commodity_code)) // Check illegal trade for sell */
       /*        { */
       /*          free_trade_lines (trade_lines, n); */
-      /*          send_enveloped_refused (ctx->fd, root, 1406, */
-      /*                                  "Forbidden: Illegal trade not permitted for this player or port.", */
-      /*                                  NULL); */
-      /*        } */
+
       /* else if (strcasecmp (canonical_commodity_code, "SLV") == 0) // ADDED */
       /*        have = slaves; */
       /* else if (strcasecmp (canonical_commodity_code, "WPN") == 0) // ADDED */
@@ -3015,11 +2959,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       /* if (have < amount) */
       /*        { */
       /*          free_trade_lines (trade_lines, n); */
-      /*          send_enveloped_refused (ctx->fd, root, 1402, */
-      /*                                  "You do not carry enough of that commodity.", */
-      /*                                  NULL); */
-      /*          return 0; */
-      /*        } */
+
       int have = 0;
 
 
@@ -3050,10 +2990,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
                                       canonical_commodity_code))
             {
               free_trade_lines (trade_lines, n);
-              send_enveloped_refused (ctx->fd,
-                                      root,
-                                      1406,
-                                      "Forbidden: Illegal trade not permitted for this player or port.",
+              send_response_refused(ctx, root, REF_SAFE_ZONE_ONLY, "Forbidden: Illegal trade not permitted for this player or port.",
                                       NULL);
               return 0;  /* IMPORTANT: stop here */
             }
@@ -3074,16 +3011,14 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
         {
           /* Unknown / unsupported commodity code */
           free_trade_lines (trade_lines, n);
-          send_enveloped_refused (ctx->fd, root, 1401,
-                                  "Unknown commodity code.",
+          send_response_refused(ctx, root, ERR_SECTOR_NOT_FOUND, "Unknown commodity code.",
                                   NULL);
           return 0;
         }
       if (have < amount)
         {
           free_trade_lines (trade_lines, n);
-          send_enveloped_refused (ctx->fd, root, 1402,
-                                  "You do not carry enough of that commodity.",
+          send_response_refused(ctx, root, REF_NO_WARP_LINK, "You do not carry enough of that commodity.",
                                   NULL);
           return 0;
         }
@@ -3105,10 +3040,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
   if (total_credits_after_fees < 0)
     {
       free_trade_lines (trade_lines, n);
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              1402,
-                              "Selling this would result in negative credits after fees.",
+      send_response_refused(ctx, root, REF_NO_WARP_LINK, "Selling this would result in negative credits after fees.",
                               NULL);
       return 0;
     }
@@ -3118,7 +3050,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       if (begin (db) != SQLITE_OK)
         {
           free_trade_lines (trade_lines, n);
-          send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
+          send_response_error(ctx, root, ERR_SERVER_ERROR, sqlite3_errmsg (db));
           return -1;
         }
       we_started_tx = 1;
@@ -3180,14 +3112,12 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
           {
             if (rc == SQLITE_CONSTRAINT)
               {
-                send_enveloped_refused (ctx->fd,
-                                        root,
-                                        1402,
-                                        "You do not carry enough of that commodity (atomic check).",
+                send_response_refused(ctx, root, REF_NO_WARP_LINK, "You do not carry enough of that commodity (atomic check).",
                                         NULL);
               }
             goto fail_tx;
           }
+        LOGD ("cmd_trade_sell: Ship cargo updated. new_qty=%d", new_ship_qty);
       }
       /* update port stock (+amount) */
       {
@@ -3200,10 +3130,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
           {
             if (rc == SQLITE_CONSTRAINT)
               {
-                send_enveloped_refused (ctx->fd,
-                                        root,
-                                        1403,
-                                        "Port cannot accept that much cargo (atomic check).",
+                send_response_refused(ctx, root, REF_TURN_COST_EXCEEDS, "Port cannot accept that much cargo (atomic check).",
                                         NULL);
               }
             goto fail_tx;
@@ -3264,7 +3191,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       }
     if (rc != SQLITE_OK)
       {
-        send_enveloped_error (ctx->fd, root, 500, "Failed to credit player.");
+        send_response_error(ctx, root, 500, "Failed to credit player.");
         goto fail_tx;
       }
     json_object_set_new (receipt, "credits_remaining",
@@ -3378,13 +3305,13 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
   if (we_started_tx && commit (db) != SQLITE_OK)
     {
       free_trade_lines (trade_lines, n);
-      send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
+      send_response_error(ctx, root, ERR_SERVER_ERROR, sqlite3_errmsg (db));
       goto cleanup;
     }
-  send_enveloped_ok (ctx->fd, root, "trade.sell_receipt_v1", receipt);
+  send_response_ok(ctx, root, "trade.sell_receipt_v1", receipt);
   goto cleanup;
 sql_err:
-  send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
+  send_response_error(ctx, root, ERR_SERVER_ERROR, sqlite3_errmsg (db));
 fail_tx:
   if (we_started_tx)
     {
@@ -3431,21 +3358,36 @@ idempotency_race:
                 sqlite3_finalize (st);
                 if (!stored_resp)
                   {
-                    send_enveloped_error (ctx->fd, root, 500,
-                                          "Stored response unreadable.");
+                    send_response_error(ctx, root, 500, "Stored response unreadable.");
                     goto cleanup;
                   }
-                send_enveloped_ok (ctx->fd, root, "trade.sell_receipt_v1",
-                                   stored_resp);
+                send_response_ok(ctx, root, "trade.sell_receipt_v1", stored_resp);
                 json_decref (stored_resp);
+                if (we_started_tx) {
+                    LOGD("cmd_trade_sell: Idempotency_race: Rolling back transaction (same request).");
+                    rollback(db);
+                }
                 goto cleanup;
               }
           }
         sqlite3_finalize (st);
       }
   }
-  send_enveloped_error (ctx->fd, root, 500,
-                        "Could not resolve idempotency race.");
+  if (we_started_tx) {
+      LOGD("cmd_trade_sell: Idempotency_race: Rolling back transaction (cannot resolve).");
+      rollback(db);
+  }
+  send_response_error(ctx, root, 500, "Could not resolve idempotency race.");
+refuse_sell: // New label for refused sell operations
+  if (we_started_tx)
+    {
+      LOGD ("cmd_trade_sell: Rolling back transaction (refused).");
+      rollback (db);
+    }
+  // No explicit send_response_refused here, as it's handled by the macro argument.
+  // The macro performs send_response_refused, then goto refuse_sell.
+  // So, just clean up.
+  goto cleanup;
 cleanup:
   if (trade_lines)
     {
@@ -3479,13 +3421,13 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
   int rc = 0;
   if (ctx->player_id <= 0)
     {
-      send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+      send_response_refused(ctx, root, ERR_SECTOR_NOT_FOUND, "Not authenticated", NULL);
       return 0;
     }
   player_ship_id = h_get_active_ship_id (db, ctx->player_id);
   if (player_ship_id <= 0)
     {
-      send_enveloped_refused (ctx->fd, root, 1404, "No active ship found.",
+      send_response_refused(ctx, root, REF_AUTOPILOT_RUNNING, "No active ship found.",
                               NULL);
       return 0;
     }
@@ -3500,7 +3442,7 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
     }
   if (!json_is_object (data))
     {
-      send_enveloped_error (ctx->fd, root, 400, "Missing data object.");
+      send_response_error(ctx, root, 400, "Missing data object.");
       return 0;
     }
   json_t *jcommodity = json_object_get (data, "commodity");
@@ -3519,10 +3461,7 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
     }
   if (!commodity || quantity <= 0)
     {
-      send_enveloped_error (ctx->fd,
-                            root,
-                            400,
-                            "commodity and quantity are required, and quantity must be positive.");
+      send_response_error(ctx, root, 400, "commodity and quantity are required, and quantity must be positive.");
       return 0;
     }
   // Check current cargo
@@ -3536,7 +3475,7 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
                                   &cur_slaves, &cur_weapons,
                                   &cur_drugs) != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, 500, "Could not read ship cargo.");
+      send_response_error(ctx, root, 500, "Could not read ship cargo.");
       return 0;
     }
   int have = 0;
@@ -3572,16 +3511,13 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
     }
   else
     {
-      send_enveloped_refused (ctx->fd, root, 1405, "Unknown commodity.",
+      send_response_refused(ctx, root, ERR_AUTOPILOT_PATH_INVALID, "Unknown commodity.",
                               NULL);
       return 0;
     }
   if (have < quantity)
     {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              1402,
-                              "You do not carry enough of that commodity to jettison.",
+      send_response_refused(ctx, root, REF_NO_WARP_LINK, "You do not carry enough of that commodity to jettison.",
                               NULL);
       return 0;
     }
@@ -3591,10 +3527,10 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
 
   rc =
     h_update_ship_cargo (db, ctx->player_id, commodity, -quantity, &new_qty);
+  LOGD ("cmd_trade_jettison: Ship cargo updated. new_qty=%d", new_qty);
   if (rc != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, 500,
-                            "Failed to update ship cargo.");
+      send_response_error(ctx, root, 500, "Failed to update ship cargo.");
       return 0;
     }
   // Construct response with remaining cargo
@@ -3656,7 +3592,7 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
         }
     }
   json_object_set_new (payload, "remaining_cargo", remaining_cargo_array);
-  send_enveloped_ok (ctx->fd, root, "ship.jettisoned", payload);
+  send_response_ok(ctx, root, "ship.jettisoned", payload);
   json_decref (payload);
   return 0;
 }
@@ -3787,7 +3723,7 @@ cmd_port_rob (client_ctx_t *ctx,
 {
   if (ctx->player_id <= 0)
     {
-      send_enveloped_error (ctx->fd, root, 1401, "Not authenticated.");
+      send_response_error(ctx, root, ERR_SECTOR_NOT_FOUND, "Not authenticated.");
       return 0;
     }
   sqlite3 *db = db_get_handle ();
@@ -3796,7 +3732,7 @@ cmd_port_rob (client_ctx_t *ctx,
 
   if (!json_is_object (data))
     {
-      send_enveloped_error (ctx->fd, root, 400, "Missing data.");
+      send_response_error(ctx, root, 400, "Missing data.");
       return 0;
     }
   /* 1. Parse Inputs */
@@ -3812,14 +3748,14 @@ cmd_port_rob (client_ctx_t *ctx,
 
   if (sector_id <= 0 || port_id <= 0 || !mode)
     {
-      send_enveloped_error (ctx->fd, root, 400, "Invalid parameters.");
+      send_response_error(ctx, root, 400, "Invalid parameters.");
       return 0;
     }
   /* 2. Pre-Checks (No Turn Cost) */
   /* Location Check */
   if (h_get_player_sector (ctx->player_id) != sector_id)
     {
-      send_enveloped_error (ctx->fd, root, 1403, "You are not in that sector.");
+      send_response_error(ctx, root, REF_TURN_COST_EXCEEDS, "You are not in that sector.");
       return 0;
     }
   int port_real_sector = db_get_port_sector (db, port_id);
@@ -3827,7 +3763,7 @@ cmd_port_rob (client_ctx_t *ctx,
 
   if (port_real_sector != sector_id)
     {
-      send_enveloped_error (ctx->fd, root, 1404, "Port not found in sector.");
+      send_response_error(ctx, root, REF_AUTOPILOT_RUNNING, "Port not found in sector.");
       return 0;
     }
   /* Active Bust Check */
@@ -3846,10 +3782,7 @@ cmd_port_rob (client_ctx_t *ctx,
         if (sqlite3_step (st) == SQLITE_ROW)
           {
             sqlite3_finalize (st);
-            send_enveloped_refused (ctx->fd,
-                                    root,
-                                    1403,
-                                    "You are already wanted at this port.",
+            send_response_refused(ctx, root, REF_TURN_COST_EXCEEDS, "You are already wanted at this port.",
                                     NULL);
             return 0;
           }
@@ -3895,10 +3828,7 @@ cmd_port_rob (client_ctx_t *ctx,
                                                                      0) == 1)
             {
               sqlite3_finalize (st);
-              send_enveloped_refused (ctx->fd,
-                                      root,
-                                      1403,
-                                      "Cluster authorities have banned you.",
+              send_response_refused(ctx, root, REF_TURN_COST_EXCEEDS, "Cluster authorities have banned you.",
                                       NULL);
               return 0;
             }
@@ -3910,20 +3840,14 @@ cmd_port_rob (client_ctx_t *ctx,
     {
       if (!commodity)
         {
-          send_enveloped_error (ctx->fd,
-                                root,
-                                400,
-                                "Commodity required for goods mode.");
+          send_response_error(ctx, root, 400, "Commodity required for goods mode.");
           return 0;
         }
       if (h_is_illegal_commodity (db, commodity))
         {
           if (!h_can_trade_commodity (db, port_id, ctx->player_id, commodity))
             {
-              send_enveloped_refused (ctx->fd,
-                                      root,
-                                      1406,
-                                      "Illegal trade restrictions apply to robbery targets too.",
+              send_response_refused(ctx, root, REF_SAFE_ZONE_ONLY, "Illegal trade restrictions apply to robbery targets too.",
                                       NULL);
               return 0;
             }
@@ -3992,10 +3916,7 @@ cmd_port_rob (client_ctx_t *ctx,
                                &can_rob_ports_flag);
   if (can_rob_ports_flag == 0)
     {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              1403,
-                              "You are not allowed to rob ports with your current alignment.",
+      send_response_refused(ctx, root, REF_TURN_COST_EXCEEDS, "You are not allowed to rob ports with your current alignment.",
                               NULL);
       return 0;
     }
@@ -4087,7 +4008,7 @@ cmd_port_rob (client_ctx_t *ctx,
                                 "The port authorities were waiting for you. You got away, but empty-handed.");
 
 
-      send_enveloped_ok (ctx->fd, root, "port.rob", resp);
+      send_response_ok(ctx, root, "port.rob", resp);
       json_decref (resp);
       return 0;
     }
@@ -4160,10 +4081,7 @@ cmd_port_rob (client_ctx_t *ctx,
           if (!commodity)
             {
               // This check should already be done earlier but as a safeguard
-              send_enveloped_error (ctx->fd,
-                                    root,
-                                    400,
-                                    "Commodity required for goods mode.");
+              send_response_error(ctx, root, 400, "Commodity required for goods mode.");
               goto fail_tx;
             }
           char *canonical_commodity_code =
@@ -4172,10 +4090,7 @@ cmd_port_rob (client_ctx_t *ctx,
 
           if (!canonical_commodity_code)
             {
-              send_enveloped_refused (ctx->fd,
-                                      root,
-                                      1405,
-                                      "Invalid or unsupported commodity.",
+              send_response_refused(ctx, root, ERR_AUTOPILOT_PATH_INVALID, "Invalid or unsupported commodity.",
                                       NULL);
               goto fail_tx;
             }
@@ -4201,19 +4116,13 @@ cmd_port_rob (client_ctx_t *ctx,
                     port_id,
                     canonical_commodity_code,
                     rc_get_port_stock);
-              send_enveloped_error (ctx->fd,
-                                    root,
-                                    500,
-                                    "Database error getting port stock.");
+              send_response_error(ctx, root, 500, "Database error getting port stock.");
               free (canonical_commodity_code);
               goto fail_tx;
             }
           if (port_stock < amount_to_steal)
             {
-              send_enveloped_refused (ctx->fd,
-                                      root,
-                                      1405,
-                                      "Port does not have enough of that commodity.",
+              send_response_refused(ctx, root, ERR_AUTOPILOT_PATH_INVALID, "Port does not have enough of that commodity.",
                                       NULL);
               free (canonical_commodity_code);
               goto fail_tx;
@@ -4224,10 +4133,7 @@ cmd_port_rob (client_ctx_t *ctx,
 
           if (ship_id <= 0)
             {
-              send_enveloped_error (ctx->fd,
-                                    root,
-                                    500,
-                                    "No active ship found to store stolen goods.");
+              send_response_error(ctx, root, 500, "No active ship found to store stolen goods.");
               free (canonical_commodity_code);
               goto fail_tx;
             }
@@ -4237,10 +4143,7 @@ cmd_port_rob (client_ctx_t *ctx,
           h_get_cargo_space_free (db, ctx->player_id, &free_space); // Uses corrected helper from server_players.c
           if (free_space < amount_to_steal)
             {
-              send_enveloped_refused (ctx->fd,
-                                      root,
-                                      1403,
-                                      "Insufficient cargo space to store stolen goods.",
+              send_response_refused(ctx, root, REF_TURN_COST_EXCEEDS, "Insufficient cargo space to store stolen goods.",
                                       NULL);
               free (canonical_commodity_code);
               goto fail_tx;
@@ -4260,10 +4163,7 @@ cmd_port_rob (client_ctx_t *ctx,
                 port_id,
                 canonical_commodity_code,
                 rc_port_deduct);
-              send_enveloped_error (ctx->fd,
-                                    root,
-                                    500,
-                                    "Database error deducting from port stock.");
+              send_response_error(ctx, root, 500, "Database error deducting from port stock.");
               free (canonical_commodity_code);
               goto fail_tx;
             }
@@ -4272,6 +4172,8 @@ cmd_port_rob (client_ctx_t *ctx,
                                                  canonical_commodity_code,
                                                  amount_to_steal,
                                                  NULL);
+          LOGD ("cmd_port_rob: Ship cargo updated for player_id=%d, commodity=%s, amount_to_steal=%d. rc_ship_add=%d",
+                ctx->player_id, canonical_commodity_code, amount_to_steal, rc_ship_add);
 
 
           if (rc_ship_add != SQLITE_OK)
@@ -4281,10 +4183,7 @@ cmd_port_rob (client_ctx_t *ctx,
                 ctx->player_id,
                 canonical_commodity_code,
                 rc_ship_add);
-              send_enveloped_error (ctx->fd,
-                                    root,
-                                    500,
-                                    "Database error adding to ship cargo.");
+              send_response_error(ctx, root, 500, "Database error adding to ship cargo.");
               free (canonical_commodity_code);
               goto fail_tx;
             }
@@ -4389,7 +4288,7 @@ cmd_port_rob (client_ctx_t *ctx,
                                 loot_credits);
 
 
-      send_enveloped_ok (ctx->fd, root, "port.rob", resp);
+      send_response_ok(ctx, root, "port.rob", resp);
       json_decref (resp);
     }
   else
@@ -4485,7 +4384,7 @@ cmd_port_rob (client_ctx_t *ctx,
                                 "You were caught! The authorities have flagged you.");
 
 
-      send_enveloped_ok (ctx->fd, root, "port.rob", resp);
+      send_response_ok(ctx, root, "port.rob", resp);
       json_decref (resp);
     }
 fail_tx:

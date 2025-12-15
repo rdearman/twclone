@@ -184,6 +184,7 @@ clamp (double value, double min_val, double max_val)
 void
 doprocess ()
 {
+  /* intentionally unused in v1.0 */
   // Placeholder for a function that handles processing.
 }
 

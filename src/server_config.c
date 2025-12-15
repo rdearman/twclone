@@ -28,7 +28,7 @@
 #include "server_log.h"
 #include "globals.h" // Include globals.h for xp_align_config_t and g_xp_align declaration
 server_config_t g_cfg;
-json_t *g_capabilities = NULL;
+json_t *g_capabilities;
 xp_align_config_t g_xp_align; // Define the global instance of xp_align_config_t
 /* Provided by your DB module; MUST be defined there (no 'static') */
 sqlite3 *g_db = NULL;
@@ -651,7 +651,9 @@ apply_db (sqlite3 *db)
 
 static void
 apply_env (void)
-{                               /* same names as before: TW_ENGINE_TICK_MS, etc. */
+{
+  /* intentionally unused in v1.0 */
+  /* same names as before: TW_ENGINE_TICK_MS, etc. */
 }
 
 
@@ -674,8 +676,7 @@ load_eng_config (void)
 }
 
 
-void send_enveloped_ok (int fd, json_t *root, const char *type,
-                        json_t *data);
+
 // exported by server_loop.c
 void loop_get_supported_commands (const cmd_desc_t **out_tbl, size_t *out_n);
 
@@ -758,8 +759,7 @@ cmd_system_hello (client_ctx_t *ctx, json_t *root)
 int
 cmd_system_capabilities (client_ctx_t *ctx, json_t *root)
 {
-  send_enveloped_ok (ctx->fd, root, "system.capabilities",
-                     json_incref (g_capabilities));
+  send_response_ok(ctx, root, "system.capabilities", json_incref (g_capabilities));
   return 0;
 }
 
@@ -812,7 +812,7 @@ cmd_system_capabilities (client_ctx_t *ctx, json_t *root)
 /*       json_t *data = json_pack ("{s:o}", "available", schema_keys ()); */
 
 
-/*       send_enveloped_ok (ctx->fd, root, "system.schema_list", data); */
+/*       send_response_ok(ctx, root, "system.schema_list", data); */
 
 
 /*       json_decref (data); */
@@ -836,7 +836,7 @@ cmd_system_capabilities (client_ctx_t *ctx, json_t *root)
 /*      { */
 
 
-/*        send_enveloped_error (ctx->fd, root, 1306, "Schema not found"); */
+/*        send_response_error(ctx, root, ERR_CURSOR_INVALID, "Schema not found"); */
 
 
 /*      } */
@@ -854,7 +854,7 @@ cmd_system_capabilities (client_ctx_t *ctx, json_t *root)
 /*          json_pack ("{s:s, s:o}", "key", key, "schema", schema); */
 
 
-/*        send_enveloped_ok (ctx->fd, root, "system.schema", data); */
+/*        send_response_ok(ctx, root, "system.schema", data); */
 
 
 /*        json_decref (schema); */
@@ -883,7 +883,7 @@ cmd_session_ping (client_ctx_t *ctx, json_t *root)
   json_t *jdata = json_object_get (root, "data");
   json_t *echo =
     json_is_object (jdata) ? json_incref (jdata) : json_object ();
-  send_enveloped_ok (ctx->fd, root, "session.pong", echo);
+  send_response_ok(ctx, root, "session.pong", echo);
   json_decref (echo);
   return 0;
 }
@@ -898,7 +898,7 @@ cmd_session_hello (client_ctx_t *ctx, json_t *root)
                                                 ctx->sector_id);
   // Use ONE helper that builds a proper envelope including reply_to + status.
   // If your send_enveloped_ok doesn't add reply_to, fix it (next section).
-  send_enveloped_ok (ctx->fd, root, "session.hello", payload);
+  send_response_ok (ctx, root, "session.hello", payload);
   json_decref (payload);
   return 0;                     // IMPORTANT: do not send another frame after this
 }
@@ -908,7 +908,7 @@ int
 cmd_session_disconnect (client_ctx_t *ctx, json_t *root)
 {
   json_t *data = json_pack ("{s:s}", "message", "Goodbye");
-  send_enveloped_ok (ctx->fd, root, "system.goodbye", data);
+  send_response_ok(ctx, root, "system.goodbye", data);
   json_decref (data);
   shutdown (ctx->fd, SHUT_RDWR);
   close (ctx->fd);

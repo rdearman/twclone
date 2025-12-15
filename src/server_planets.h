@@ -27,7 +27,7 @@ typedef struct
 
 bool planet_is_npc (const planet_t *p);
 
-int cmd_planet_genesis (client_ctx_t *ctx, json_t *root);
+
 int cmd_planet_info (client_ctx_t *ctx, json_t *root);
 int cmd_planet_rename (client_ctx_t *ctx, json_t *root);
 int cmd_planet_land (client_ctx_t *ctx, json_t *root);

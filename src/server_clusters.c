@@ -558,7 +558,7 @@ cluster_on_crime (sqlite3 *db,
       return;
     }
   // Upsert row
-  sqlite3_stmt *stmt;
+  sqlite3_stmt *stmt = NULL;
   int susp_inc = success ? 2 : 0;
 
 
@@ -712,6 +712,8 @@ clusters_seed_illegal_goods (sqlite3 *db)
 int
 cluster_black_market_step (sqlite3 *db, int64_t now_s)
 {
+  (void) db;
+  (void) now_s;
   // Placeholder logic until you implement the black market
   // return cluster_economy_step(db, now_s); // Or just return 0
   return 0;

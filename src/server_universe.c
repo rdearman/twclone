@@ -19,7 +19,6 @@
 #include "server_rules.h"
 #include "server_bigbang.h"
 #include "server_news.h"
-#include "common.h"
 #include "server_envelope.h"
 #include "server_loop.h"
 #include "server_communication.h"
@@ -35,6 +34,8 @@
 #include "server_corporation.h"
 #include "database_market.h"
 #include "server_ports.h"
+
+
 
 typedef enum
 {
@@ -129,6 +130,72 @@ static int ori_home_sector_id = -1;
 
 /* Private function to move all Orion ships */
 static void ori_move_all_ships (void);
+
+int no_zero_ship (sqlite3 *db, int set_sector, int ship_id)
+{
+    // --- 1. HANDLE SPECIFIC SHIP UPDATE (set_sector and ship_id are provided) ---
+    // Assuming ship_id > 0 means a specific ship is targeted, and set_sector > 0 is a valid destination sector.
+    if (set_sector > 0 && ship_id > 0)
+    {
+        sqlite3_stmt *stmt = NULL;
+        const char *no_zero_sql = "UPDATE ships SET sector = ?1 WHERE id = ?2;";
+        int rc;
+
+        // 1. Prepare the statement
+        rc = sqlite3_prepare_v2(db, no_zero_sql, -1, &stmt, NULL);
+        if (rc != SQLITE_OK)
+        {
+            // LOGE is placeholder for robust logging
+	  LOGE( "no_zero_ship: Prepare failed (ID update): %s\n", sqlite3_errmsg(db));
+	  return rc;
+        }
+
+        // 2. Bind the parameters
+        sqlite3_bind_int(stmt, 1, set_sector); // Bind ?1 to set_sector value
+        sqlite3_bind_int(stmt, 2, ship_id);    // Bind ?2 to ship_id value
+
+        // 3. Execute the statement
+        rc = sqlite3_step(stmt);
+        if (rc != SQLITE_DONE)
+        {
+            // The execution failed (e.g., database lock, syntax error)
+	  LOGE("no_zero_ship: Execute failed (ID update): %s\n", sqlite3_errmsg(db));
+            sqlite3_finalize(stmt);
+            return rc;
+        }
+
+        // 4. Finalize the statement
+        sqlite3_finalize(stmt);
+        return SQLITE_OK;
+    }
+    // --- 2. HANDLE MASS SECTOR 0 UPDATE (if the specific IDs are NOT provided) ---
+    else
+    {
+        // The SQL command to move ships from sector 0 to a random sector [11, 100]
+        const char *no_zero_sql = "UPDATE ships SET sector = ABS(RANDOM() % 90) + 11 WHERE sector = 0;";
+
+        char *err_msg = NULL;
+        int rc = sqlite3_exec(db, no_zero_sql, 0, 0, &err_msg);
+
+        if (rc != SQLITE_OK)
+        {
+            // Error handling for sqlite3_exec
+	  LOGE( "no_zero_ship: SQL error (Mass update, %d): %s\n", rc, err_msg);
+            sqlite3_free(err_msg);
+            return rc;
+        }
+        else
+        {
+            // Success: Optionally log how many rows were affected
+            int rows_affected = sqlite3_changes(db);
+	    if (rows_affected > 0)
+	      {
+		LOGI("no_zero_ship: Successfully moved %d ships out of sector 0.\n", rows_affected);
+	      }
+            return SQLITE_OK;
+        }
+    }
+}
 
 
 /* Helper to execute a single SELECT query and return an int value */
@@ -544,7 +611,7 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
   if (prc != 0)
     {
       free (q);
-      send_enveloped_error (ctx->fd, root, 400, "Expected data { ... }");
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Expected data { ... }");
       return 0;
     }
   sqlite3 *db = db_get_handle ();
@@ -553,7 +620,7 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
   if (!db)
     {
       free (q);
-      send_enveloped_error (ctx->fd, root, 500, "No database handle.");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "No database handle.");
       return 0;
     }
   char likepat[512];
@@ -603,7 +670,7 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
   if (rc != SQLITE_OK)
     {
       free (q);
-      send_enveloped_error (ctx->fd, root, 500, sqlite3_errmsg (db));
+      send_response_error(ctx, root, ERR_SERVER_ERROR, sqlite3_errmsg (db));
       return 0;
     }
   // Bind parameters
@@ -659,7 +726,7 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
     {
       json_object_set_new (jdata, "next_cursor", json_null ());
     }
-  send_enveloped_ok (ctx->fd, root, "sector.search_results_v1", jdata);
+  send_response_ok(ctx, root, "sector.search_results_v1", jdata);
   return 0;
 }
 
@@ -845,16 +912,14 @@ cmd_sector_scan (client_ctx_t *ctx, json_t *root)
   // 1. Basic Checks
   if (ship_id <= 0)
     {
-      send_enveloped_error (ctx->fd, root, 1501,
-                            "You must be in a ship to perform a sector scan.");
+      send_response_error(ctx, root, REF_NOT_PLANET_OWNER, "You must be in a ship to perform a sector scan.");
       return;
     }
   // 2. Get Sector ID
   sector_id = db_get_ship_sector_id (db, ship_id);
   if (sector_id <= 0)
     {
-      send_enveloped_error (ctx->fd, root, 1502,
-                            "Could not determine your current sector.");
+      send_response_error(ctx, root, REF_LANDING_REFUSED, "Could not determine your current sector.");
       return;
     }
   // 3. Holo-Scanner Capability Check
@@ -871,12 +936,11 @@ cmd_sector_scan (client_ctx_t *ctx, json_t *root)
 
   if (!payload)
     {
-      send_enveloped_error (ctx->fd, root, 1503,
-                            "Out of memory building sector scan info");
+      send_response_error(ctx, root, ERR_CITADEL_REQUIRED, "Out of memory building sector scan info");
       return;
     }
   // 5. Send Response
-  send_enveloped_ok (ctx->fd, root, "sector.scan", payload);
+  send_response_ok(ctx, root, "sector.scan", payload);
   json_decref (payload);
 }
 
@@ -1041,7 +1105,7 @@ cmd_sector_scan_density (void *ctx_in, json_t *root)
   if (rc == SQLITE_DONE)
     {
       // --- FINAL USER-REQUESTED RESPONSE LOGIC ---
-      send_enveloped_ok (ctx->fd, root, "sector.density.scan", payload);
+      send_response_ok(ctx, root, "sector.density.scan", payload);
       json_decref (payload);
       // --- FINAL USER-REQUESTED RESPONSE LOGIC ---
       rc = SQLITE_OK;
@@ -1067,8 +1131,8 @@ done:
   // Handle errors if the final RC is not OK
   if (rc != SQLITE_OK && rc != SQLITE_DONE)
     {
-      // Assuming ERR_DB and send_enveloped_error are defined
-      send_enveloped_error (ctx->fd, root, ERR_DB, sqlite3_errstr (rc));
+
+      send_response_error(ctx, root, ERR_DB, sqlite3_errstr (rc));
     }
 }
 
@@ -1134,6 +1198,7 @@ universe_init (void)
 void
 universe_shutdown (void)
 {
+  /* intentionally unused in v1.0 */
   /* At present nothing to do, placeholder for later */
 }
 
@@ -1215,7 +1280,7 @@ cmd_move_describe_sector (client_ctx_t *ctx, json_t *root)
     {
       sector_id = 1;
     }
-  (void) cmd_sector_info (ctx->fd, root, sector_id, ctx->player_id);
+  (void) cmd_sector_info (ctx, ctx->fd, root, sector_id, ctx->player_id);
   return 0;
 }
 
@@ -1267,7 +1332,7 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
 
   // C6 Interdiction Check
   if (h_check_interdiction(db_handle, ctx->sector_id, ctx->player_id, ctx->corp_id)) {
-      send_enveloped_refused(ctx->fd, root, 1403, "Warp interdicted by hostile planetary defences.", NULL);
+      send_response_refused(ctx, root, REF_TURN_COST_EXCEEDS, "Warp interdicted by hostile planetary defences.", NULL);
       return 0;
   }
 
@@ -1299,7 +1364,7 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
 
   if (d.status == DEC_ERROR)
     {
-      send_enveloped_error (ctx->fd, root, d.code, d.message);
+      send_response_error(ctx, root, d.code, d.message);
       return 0;
     }
   if (d.status == DEC_REFUSED)
@@ -1313,7 +1378,7 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
                                  "refused"));
 
 
-      send_enveloped_refused (ctx->fd, root, d.code, d.message, meta);
+      send_response_refused(ctx, root, d.code, d.message, meta);
       json_decref (meta);
       return 0;
     }
@@ -1329,7 +1394,7 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
         {
           sqlite3_free (errmsg);
         }
-      send_enveloped_error (ctx->fd, root, 1500, "DB Transaction Error");
+      send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "DB Transaction Error");
       return 0;
     }
 
@@ -1370,7 +1435,7 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
       if (d2.status != DEC_OK)
         {
           sqlite3_exec (db_handle, "ROLLBACK;", NULL, NULL, NULL);
-          send_enveloped_error (ctx->fd, root, d2.code, d2.message);
+          send_response_error(ctx, root, d2.code, d2.message);
           return 0;
         }
     }
@@ -1395,8 +1460,7 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
         h_get_active_ship_id (db_handle, ctx->player_id),
         to,
         prc);
-      send_enveloped_error (ctx->fd, root, 1502,
-                            "Failed to persist player sector");
+      send_response_error(ctx, root, REF_LANDING_REFUSED, "Failed to persist player sector");
       return 0;
     }
   LOGI
@@ -1428,7 +1492,7 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
   json_object_set_new (resp, "to_sector_id", json_integer (to));
   json_object_set_new (resp, "turns_spent", json_integer (turns_spent));
 
-  send_enveloped_ok (ctx->fd, root, "move.result", resp);
+  send_response_ok(ctx, root, "move.result", resp);
   /* 2) Broadcast LEFT (from) then ENTERED (to) to subscribers */
   /* LEFT event: sector = 'from' */
   json_t *left = json_object ();
@@ -1497,8 +1561,7 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
     }
   if (to <= 0)
     {
-      send_enveloped_error (ctx->fd, root, 1401,
-                            "Target sector not specified");
+      send_response_error(ctx, root, ERR_SECTOR_NOT_FOUND, "Target sector not specified");
       return 1;
     }
   db_mutex_lock ();
@@ -1515,13 +1578,13 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
   db_mutex_unlock ();
   if (max_id <= 0)
     {
-      send_enveloped_error (ctx->fd, root, 1401, "No sectors");
+      send_response_error(ctx, root, ERR_SECTOR_NOT_FOUND, "No sectors");
       return 1;
     }
   /* Clamp from/to to valid range quickly */
   if (from <= 0 || from > max_id || to > max_id)
     {
-      send_enveloped_error (ctx->fd, root, 1401, "Sector not found");
+      send_response_error(ctx, root, ERR_SECTOR_NOT_FOUND, "Sector not found");
       return 1;
     }
   /* allocate simple arrays sized max_id+1 */
@@ -1538,7 +1601,7 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
       free (prev);
       free (seen);
       free (queue);
-      send_enveloped_error (ctx->fd, root, 1500, "Out of memory");
+      send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Out of memory");
       return 1;
     }
   /* Fill avoid */
@@ -1577,7 +1640,7 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
       free (prev);
       free (seen);
       free (queue);
-      send_enveloped_error (ctx->fd, root, 1406, "Path not found");
+      send_response_error(ctx, root, REF_SAFE_ZONE_ONLY, "Path not found");
       return 1;
     }
   /* Trivial path */
@@ -1592,7 +1655,7 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
 
       json_object_set_new (out, "steps", steps);
       json_object_set_new (out, "total_cost", json_integer (0));
-      send_enveloped_ok (ctx->fd, root, "move.path_v1", out);
+      send_response_ok(ctx, root, "move.path_v1", out);
       free (avoid);
       free (prev);
       free (seen);
@@ -1615,7 +1678,7 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
       free (prev);
       free (seen);
       free (queue);
-      send_enveloped_error (ctx->fd, root, 1500, "Pathfind init failed");
+      send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Pathfind init failed");
       return 1;
     }
   /* BFS */
@@ -1680,7 +1743,7 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
       free (prev);
       free (seen);
       free (queue);
-      send_enveloped_error (ctx->fd, root, 1406, "Path not found");
+      send_response_error(ctx, root, REF_SAFE_ZONE_ONLY, "Path not found");
       return 1;
     }
   /* Reconstruct path */
@@ -1697,7 +1760,7 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
       free (prev);
       free (seen);
       free (queue);
-      send_enveloped_error (ctx->fd, root, 1500, "Out of memory");
+      send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Out of memory");
       return 1;
     }
   int sp = 0;
@@ -1720,7 +1783,7 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
       free (prev);
       free (seen);
       free (queue);
-      send_enveloped_error (ctx->fd, root, 1406, "Path not found");
+      send_response_error(ctx, root, REF_SAFE_ZONE_ONLY, "Path not found");
       return 1;
     }
   /* reverse into JSON steps: from .. to */
@@ -1736,7 +1799,7 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
 
   json_object_set_new (out, "steps", steps);
   json_object_set_new (out, "total_cost", json_integer (hops));
-  send_enveloped_ok (ctx->fd, root, "move.path_v1", out);
+  send_response_ok(ctx, root, "move.path_v1", out);
   free (avoid);
   free (prev);
   free (seen);
@@ -1798,14 +1861,13 @@ attach_sector_asset_counts (sqlite3 *db, int sector_id, json_t *data_out)
 
 
 void
-cmd_sector_info (int fd, json_t *root, int sector_id, int player_id)
+cmd_sector_info (client_ctx_t *ctx, int fd, json_t *root, int sector_id, int player_id)
 {
   sqlite3 *db = db_get_handle ();
   json_t *payload = build_sector_info_json (sector_id);
   if (!payload)
     {
-      send_enveloped_error (fd, root, 1500,
-                            "Out of memory building sector info");
+      send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Out of memory building sector info");
       return;
     }
   // Add beacon info
@@ -1870,7 +1932,7 @@ cmd_sector_info (int fd, json_t *root, int sector_id, int player_id)
                            json_integer (json_array_size (players)));
     }
   attach_sector_asset_counts (db, sector_id, payload);
-  send_enveloped_ok (fd, root, "sector.info", payload);
+  send_response_ok(ctx, root, "sector.info", payload);
   json_decref (payload);
 }
 
@@ -2037,7 +2099,7 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
 
   if (db_sector_scan_core (sector_id, &core) != SQLITE_OK || !core)
     {
-      send_enveloped_error (ctx->fd, root, 1401, "Sector not found");
+      send_response_error(ctx, root, ERR_SECTOR_NOT_FOUND, "Sector not found");
       return 0;
     }
   /* 2) Adjacent IDs (array) */
@@ -2058,7 +2120,7 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
     {
       json_decref (core);
       json_decref (adj);
-      send_enveloped_error (ctx->fd, root, 1500, "OOM");
+      send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "OOM");
       return 0;
     }
   json_object_set_new (security, "fedspace", json_boolean (in_fed));
@@ -2076,7 +2138,7 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
       json_decref (core);
       json_decref (adj);
       json_decref (security);
-      send_enveloped_error (ctx->fd, root, 1500, "OOM");
+      send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "OOM");
       return 0;
     }
   json_object_set_new (port, "present", json_boolean (port_cnt > 0));
@@ -2094,7 +2156,7 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
       json_decref (adj);
       json_decref (security);
       json_decref (port);
-      send_enveloped_error (ctx->fd, root, 1500, "OOM");
+      send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "OOM");
       return 0;
     }
   json_object_set_new (counts, "ships", json_integer (ships));
@@ -2128,7 +2190,7 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
         {
           json_decref (beacon);
         }
-      send_enveloped_error (ctx->fd, root, 1500, "OOM");
+      send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "OOM");
       return 0;
     }
   json_object_set_new (data, "sector_id", json_integer (sector_id));
@@ -2142,7 +2204,7 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
   LOGD ("[move.scan] built data=%p (sector_id=%d)\n",
         (void *) data, sector_id);
   /* 9) Send envelope (your send_enveloped_ok steals the 'data' ref via _set_new) */
-  send_enveloped_ok (ctx->fd, root, "sector.scan_v1", data);
+  send_response_ok(ctx, root, "sector.scan_v1", data);
   /* 10) Clean up */
   json_decref (core);
   /* 'data' members already owned by 'data' -> envelope stole 'data' */
@@ -2170,7 +2232,7 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
   /* Guard 0: schema */
   if (!json_is_integer (jsector_id) || !json_is_string (jtext))
     {
-      send_enveloped_error (ctx->fd, root, 1300, "Invalid request schema");
+      send_response_error(ctx, root, ERR_INVALID_SCHEMA, "Invalid request schema");
       return 1;
     }
   /* Guard 1: player must be in that sector */
@@ -2179,22 +2241,19 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
 
   if (ctx->sector_id != req_sector_id)
     {
-      send_enveloped_error (ctx->fd, root, 1400,
-                            "Player is not in the specified sector.");
+      send_response_error(ctx, root, REF_NOT_IN_SECTOR, "Player is not in the specified sector.");
       return 1;
     }
   /* Guard 2: FedSpace 1–10 is forbidden */
   if (req_sector_id >= 1 && req_sector_id <= 10)
     {
-      send_enveloped_error (ctx->fd, root, 1403,
-                            "Cannot set a beacon in FedSpace.");
+      send_response_error(ctx, root, REF_TURN_COST_EXCEEDS, "Cannot set a beacon in FedSpace.");
       return 1;
     }
   /* Guard 3: player must have a beacon on the ship */
   if (!db_player_has_beacon_on_ship (ctx->player_id))
     {
-      send_enveloped_error (ctx->fd, root, 1401,
-                            "Player does not have a beacon on their ship.");
+      send_response_error(ctx, root, ERR_SECTOR_NOT_FOUND, "Player does not have a beacon on their ship.");
       return 1;
     }
 
@@ -2211,8 +2270,7 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
     }
   if ((int) strlen (beacon_text) > 80)
     {
-      send_enveloped_error (ctx->fd, root, 1400,
-                            "Beacon text is too long (max 80 characters).");
+      send_response_error(ctx, root, REF_NOT_IN_SECTOR, "Beacon text is too long (max 80 characters).");
       return 1;
     }
 
@@ -2224,8 +2282,7 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
 
   if (rc != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, 1500,
-                            "Database error updating beacon.");
+      send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Database error updating beacon.");
       return 1;
     }
   /* Consume the player's beacon (canon: you used it either way) */
@@ -2236,8 +2293,7 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
 
   if (!payload)
     {
-      send_enveloped_error (ctx->fd, root, 1500,
-                            "Out of memory building sector info");
+      send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Out of memory building sector info");
       return 1;
     }
   /* Beacon text */
@@ -2322,7 +2378,7 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
   rl_tick (ctx);
   send_all_json (ctx->fd, env);
   json_decref (env);
-  send_enveloped_ok (ctx->fd, root, "sector.set_beacon", NULL);
+  send_response_ok(ctx, root, "sector.set_beacon", NULL);
   return 0;
 }
 
@@ -3002,8 +3058,9 @@ fer_tick (int64_t now_ms)
         }
     }
 
-  sqlite3 *db = g_fer_db; // Use the attached DB handle
 
+  sqlite3 *db = g_fer_db; // Use the attached DB handle
+  (void) no_zero_ship (db,0, 0); // no ships in limbo      	  
   for (int i = 0; i < FER_TRADER_COUNT; ++i)
     {
       fer_trader_t *t = &g_fer[i];
@@ -3012,15 +3069,19 @@ fer_tick (int64_t now_ms)
         {
           continue; // Skip if no home sector or ship assigned
         }
-      
       // Update the trader's current sector from DB (authoritative)
       int current_db_sector = db_get_ship_sector_id(db, t->ship_id);
-      if (current_db_sector > 0) {
+      if (current_db_sector > 0)
+	{
           t->sector = current_db_sector;
-      } else {
-          LOGW("Ferengi Trader %d (ship %d) has invalid sector in DB. Skipping.", t->id, t->ship_id);
+	}
+      else
+	{
+	  (void) no_zero_ship (db,t->ship_id,t->home_sector); // no ships in limbo      	  
+	  t->sector = t->home_sector;
+          LOGW("Ferengi Trader %d (ship %d) has invalid sector in DB. Set to home sector (%d)", t->id, t->ship_id, t->home_sector );
           continue;
-      }
+	}
 
       /* choose goal: roam to random port, or return home */
       int goal = (t->state == FER_STATE_RETURNING) ? t->home_sector : 0;
@@ -3172,7 +3233,7 @@ int ferengi_trade_at_port(sqlite3 *db, fer_trader_t *trader, int port_id) {
             long long total_credits = (long long)qty_to_trade * price_per_unit;
             rc = h_bank_transfer_unlocked(db, "port", port_id, "corp", g_fer_corp_id, total_credits, "TRADE_SELL", tx_group_id);
             if (rc == SQLITE_OK) {
-                rc = h_update_ship_cargo(db, trader->ship_id, commodity, -qty_to_trade);
+                rc = h_update_ship_cargo(db, trader->ship_id, commodity, -qty_to_trade, NULL);
                 if (rc == SQLITE_OK) {
                     rc = h_market_move_port_stock(db, port_id, commodity, qty_to_trade);
                 }
@@ -3203,7 +3264,7 @@ int ferengi_trade_at_port(sqlite3 *db, fer_trader_t *trader, int port_id) {
             // Corp buys from Port
             rc = h_bank_transfer_unlocked(db, "corp", g_fer_corp_id, "port", port_id, total_credits, "TRADE_BUY", tx_group_id);
             if (rc == SQLITE_OK) {
-                rc = h_update_ship_cargo(db, trader->ship_id, commodity, qty_to_trade);
+                rc = h_update_ship_cargo(db, trader->ship_id, commodity, qty_to_trade, NULL);
                 if (rc == SQLITE_OK) {
                     rc = h_market_move_port_stock(db, port_id, commodity, -qty_to_trade);
                 }
@@ -3236,16 +3297,13 @@ int ferengi_trade_at_port(sqlite3 *db, fer_trader_t *trader, int port_id) {
 
    if (!db_handle)
      {
-       send_enveloped_error (ctx->fd, root, ERR_DB, "No database handle");
+       send_response_error(ctx, root, ERR_DB, "No database handle");
        return 0;
      }
 
    if (!ctx || ctx->player_id <= 0)
      {
-       send_enveloped_refused (ctx->fd,
-			       root,
-			       ERR_NOT_AUTHENTICATED,
-			       "Not authenticated",
+       send_response_refused(ctx, root, ERR_NOT_AUTHENTICATED, "Not authenticated",
 			       NULL);
        return 0;
      }
@@ -3264,10 +3322,7 @@ int ferengi_trade_at_port(sqlite3 *db, fer_trader_t *trader, int port_id) {
 
    if (to_sector_id <= 0)
      {
-       send_enveloped_refused (ctx->fd,
-			       root,
-			       ERR_INVALID_ARG,
-			       "Target sector not specified",
+       send_response_refused(ctx, root, ERR_INVALID_ARG, "Target sector not specified",
 			       NULL);
        return 0;
      }
@@ -3278,10 +3333,7 @@ int ferengi_trade_at_port(sqlite3 *db, fer_trader_t *trader, int port_id) {
 
    if (ship_id <= 0)
      {
-       send_enveloped_refused (ctx->fd,
-			       root,
-			       ERR_NO_ACTIVE_SHIP,
-			       "No active ship found.",
+       send_response_refused(ctx, root, ERR_NO_ACTIVE_SHIP, "No active ship found.",
 			       NULL);
        return 0;
      }
@@ -3311,17 +3363,13 @@ int ferengi_trade_at_port(sqlite3 *db, fer_trader_t *trader, int port_id) {
      {
        LOGE ("cmd_move_transwarp: Failed to prepare towing status check: %s",
 	     sqlite3_errmsg (db_handle));
-       send_enveloped_error (ctx->fd, root, ERR_DB_QUERY_FAILED,
-			     "Database error");
+       send_response_error(ctx, root, ERR_DB_QUERY_FAILED, "Database error");
        return 0;
      }
 
    if (towing_ship_id != 0)
      {
-       send_enveloped_refused (ctx->fd,
-			       root,
-			       REF_CANNOT_TRANSWARP_WHILE_TOWING,
-			       "Cannot TransWarp while towing another ship.",
+       send_response_refused(ctx, root, REF_CANNOT_TRANSWARP_WHILE_TOWING, "Cannot TransWarp while towing another ship.",
 			       NULL);
        return 0;
      }
@@ -3351,17 +3399,13 @@ int ferengi_trade_at_port(sqlite3 *db, fer_trader_t *trader, int port_id) {
        LOGE (
 	     "cmd_move_transwarp: Failed to prepare transwarp check statement: %s",
 	     sqlite3_errmsg (db_handle));
-       send_enveloped_error (ctx->fd, root, ERR_DB_QUERY_FAILED,
-			     "Database error");
+       send_response_error(ctx, root, ERR_DB_QUERY_FAILED, "Database error");
        return 0;
      }
 
    if (has_transwarp == 0)
      {
-       send_enveloped_refused (ctx->fd,
-			       root,
-			       REF_TRANSWARP_UNAVAILABLE,
-			       "You do not have a TransWarp drive.",
+       send_response_refused(ctx, root, REF_TRANSWARP_UNAVAILABLE, "You do not have a TransWarp drive.",
 			       NULL);
        return 0;
      }
@@ -3388,25 +3432,20 @@ int ferengi_trade_at_port(sqlite3 *db, fer_trader_t *trader, int port_id) {
      {
        LOGE ("cmd_move_transwarp: Failed to prepare max sector check: %s",
 	     sqlite3_errmsg (db_handle));
-       send_enveloped_error (ctx->fd, root, ERR_DB_QUERY_FAILED,
-			     "Database error");
+       send_response_error(ctx, root, ERR_DB_QUERY_FAILED, "Database error");
        return 0;
      }
 
    if (to_sector_id <= 0 || to_sector_id > max_sector_id)
      {
-       send_enveloped_refused (ctx->fd,
-			       root,
-			       ERR_INVALID_ARG,
-			       "Invalid TransWarp coordinates: Sector does not exist.",
+       send_response_refused(ctx, root, ERR_INVALID_ARG, "Invalid TransWarp coordinates: Sector does not exist.",
 			       NULL);
        return 0;
      }
 
    if (to_sector_id == ctx->sector_id)
      {
-       send_enveloped_ok (ctx->fd, root, "move.transwarp.result",
-			  json_pack ("{s:s}",
+       send_response_ok(ctx, root, "move.transwarp.result", json_pack ("{s:s}",
 				     "message",
 				     "You transwarp to your current sector. Nothing happens."));
        return 0;
@@ -3442,8 +3481,7 @@ int ferengi_trade_at_port(sqlite3 *db, fer_trader_t *trader, int port_id) {
 	  h_get_active_ship_id (db_handle, ctx->player_id),
 	  to_sector_id,
 	  prc);
-       send_enveloped_error (ctx->fd, root, 1502,
-			     "Failed to persist player sector");
+       send_response_error(ctx, root, REF_LANDING_REFUSED, "Failed to persist player sector");
        return 0;
      }
 
@@ -3561,7 +3599,7 @@ int ferengi_trade_at_port(sqlite3 *db, fer_trader_t *trader, int port_id) {
        json_object_set_new (encounter_obj, "damage", damage_obj);
        json_object_set_new (resp, "encounter", encounter_obj);
      }
-   send_enveloped_ok (ctx->fd, root, "move.transwarp.result", resp);
+   send_response_ok(ctx, root, "move.transwarp.result", resp);
 
    // 2) Broadcast LEFT (from) then ENTERED (to) to subscribers
    json_t *left = json_object ();
@@ -3585,3 +3623,29 @@ int ferengi_trade_at_port(sqlite3 *db, fer_trader_t *trader, int port_id) {
 
    return 0;
  }
+
+// Helper to handle NPC encounters after player movement
+void h_handle_npc_encounters(sqlite3 *db, client_ctx_t *ctx, int new_sector_id) {
+    if (!db || !ctx || new_sector_id <= 0) {
+        LOGE("h_handle_npc_encounters: Invalid input.");
+        return;
+    }
+
+    // Example: 10% chance of a generic NPC encounter
+    // For a real implementation, this would involve more sophisticated logic
+    // based on sector properties, player alignment, NPC faction presence, etc.
+    if (rand() % 10 == 0) {
+        json_t *payload = json_object();
+        if (!payload) {
+            LOGE("h_handle_npc_encounters: Out of memory for event payload.");
+            return;
+        }
+        json_object_set_new(payload, "player_id", json_integer(ctx->player_id));
+        json_object_set_new(payload, "sector_id", json_integer(new_sector_id));
+        json_object_set_new(payload, "npc_type", json_string("Generic NPC"));
+        json_object_set_new(payload, "message", json_string("A generic NPC has been encountered!"));
+
+        db_log_engine_event(time(NULL), "npc.encounter", "player", ctx->player_id, new_sector_id, payload, NULL);
+        LOGI("h_handle_npc_encounters: Generic NPC encounter logged for player %d in sector %d.", ctx->player_id, new_sector_id);
+    }
+}

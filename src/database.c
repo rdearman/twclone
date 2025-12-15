@@ -124,6 +124,7 @@ db_handle_close_and_reset (void)
 void
 db_mutex_lock (void)
 {
+  /* intentionally unused in v1.0 */
   /* NO-OP: Global locking is disabled in favor of per-thread connections. */
   //db_mutex_lock();
 }
@@ -132,6 +133,7 @@ db_mutex_lock (void)
 void
 db_mutex_unlock (void)
 {
+  /* intentionally unused in v1.0 */
   /* NO-OP: Global locking is disabled in favor of per-thread connections. */
   // db_mutex_unlock();
 }

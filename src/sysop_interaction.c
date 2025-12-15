@@ -91,20 +91,13 @@ reply_refused (int code, const char *msg)
 }
 
 
+/*
 static void
 reply_error (const char *msg)
 {
-  char ts[32];
-  ts_utc (ts, sizeof ts);
-  printf
-  (
-    "{\"id\":\"srv-%d\",\"reply_to\":null,\"ts\":\"%s\",\"status\":\"error\",\"type\":null,"
-    "\"data\":{},\"error\":{\"code\":1503,\"message\":\"%s\"}}\n",
-    next_id (),
-    ts,
-    msg ? msg : "Error");
-  fflush (stdout);
+  (void)msg;
 }
+*/
 
 
 /* ================== handlers (MVP) ================== */

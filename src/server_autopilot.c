@@ -3,6 +3,8 @@
 #include <sqlite3.h>
 //local includes
 #include "server_autopilot.h"
+#include "server_config.h"
+#include "server_envelope.h"
 #include "server_universe.h"
 #include "database.h"
 
@@ -50,8 +52,7 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
     }
   if (to <= 0)
     {
-      send_enveloped_error (ctx->fd, root, 1401,
-                            "Target sector not specified");
+      send_response_error(ctx, root, ERR_SECTOR_NOT_FOUND, "Target sector not specified");
       return 1;
     }
   /* Get Max Sector ID to size arrays */
@@ -69,13 +70,13 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
   db_mutex_unlock ();
   if (max_id <= 0)
     {
-      send_enveloped_error (ctx->fd, root, 1401, "No sectors");
+      send_response_error(ctx, root, ERR_SECTOR_NOT_FOUND, "No sectors");
       return 1;
     }
   /* Clamp from/to to valid range quickly */
   if (from <= 0 || from > max_id || to > max_id)
     {
-      send_enveloped_error (ctx->fd, root, 1401, "Sector not found");
+      send_response_error(ctx, root, ERR_SECTOR_NOT_FOUND, "Sector not found");
       return 1;
     }
   /* allocate simple arrays sized max_id+1 */
@@ -92,7 +93,7 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
       free (prev);
       free (seen);
       free (queue);
-      send_enveloped_error (ctx->fd, root, 1500, "Out of memory");
+      send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Out of memory");
       return 1;
     }
   /* Fill avoid */
@@ -131,7 +132,7 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
       free (prev);
       free (seen);
       free (queue);
-      send_enveloped_error (ctx->fd, root, 1406, "Path not found");
+      send_response_error(ctx, root, REF_SAFE_ZONE_ONLY, "Path not found");
       return 1;
     }
   /* Trivial path */
@@ -148,7 +149,7 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
       json_object_set_new (out, "to_sector_id", json_integer (to));
       json_object_set_new (out, "path", steps);
       json_object_set_new (out, "hops", json_integer (0));
-      send_enveloped_ok (ctx->fd, root, "move.autopilot.route_v1", out);
+      send_response_ok(ctx, root, "move.autopilot.route_v1", out);
       free (avoid);
       free (prev);
       free (seen);
@@ -171,7 +172,7 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
       free (prev);
       free (seen);
       free (queue);
-      send_enveloped_error (ctx->fd, root, 1500, "Pathfind init failed");
+      send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Pathfind init failed");
       return 1;
     }
   /* BFS */
@@ -235,7 +236,7 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
       free (prev);
       free (seen);
       free (queue);
-      send_enveloped_error (ctx->fd, root, 1406, "Path not found");
+      send_response_error(ctx, root, REF_SAFE_ZONE_ONLY, "Path not found");
       return 1;
     }
   /* Reconstruct path */
@@ -252,7 +253,7 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
       free (prev);
       free (seen);
       free (queue);
-      send_enveloped_error (ctx->fd, root, 1500, "Out of memory");
+      send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Out of memory");
       return 1;
     }
   int sp = 0;
@@ -275,7 +276,7 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
       free (prev);
       free (seen);
       free (queue);
-      send_enveloped_error (ctx->fd, root, 1406, "Path not found");
+      send_response_error(ctx, root, REF_SAFE_ZONE_ONLY, "Path not found");
       return 1;
     }
   /* reverse into JSON steps: from .. to */
@@ -293,7 +294,7 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
   json_object_set_new (out, "to_sector_id", json_integer (to));
   json_object_set_new (out, "path", steps);
   json_object_set_new (out, "hops", json_integer (hops));
-  send_enveloped_ok (ctx->fd, root, "move.autopilot.route_v1", out);
+  send_response_ok(ctx, root, "move.autopilot.route_v1", out);
   free (avoid);
   free (prev);
   free (seen);
@@ -321,7 +322,7 @@ cmd_move_autopilot_status (client_ctx_t *ctx, json_t *root)
   json_object_set_new (out, "state", json_string ("ready"));
   json_object_set_new (out, "current_sector_id", json_integer (ctx->sector_id));
   json_object_set_new (out, "reason", json_null ());
-  send_enveloped_ok (ctx->fd, root, "move.autopilot.status_v1", out);
+  send_response_ok(ctx, root, "move.autopilot.status_v1", out);
   return 0;
 }
 
@@ -342,7 +343,7 @@ cmd_move_autopilot_stop (client_ctx_t *ctx, json_t *root)
 
 
   json_object_set_new (out, "state", json_string ("idle"));
-  send_enveloped_ok (ctx->fd, root, "move.autopilot.stopped_v1", out);
+  send_response_ok(ctx, root, "move.autopilot.stopped_v1", out);
   return 0;
 }
 

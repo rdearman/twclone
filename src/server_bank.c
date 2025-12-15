@@ -31,10 +31,7 @@ cmd_bank_history (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id <= 0)
     {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              ERR_NOT_AUTHENTICATED,
-                              "Not authenticated",
+      send_response_refused(ctx, root, ERR_NOT_AUTHENTICATED, "Not authenticated",
                               NULL);
       return 0;
     }
@@ -43,10 +40,7 @@ cmd_bank_history (client_ctx_t *ctx, json_t *root)
 
   if (!json_is_object (data))
     {
-      send_enveloped_error (ctx->fd,
-                            root,
-                            ERR_INVALID_SCHEMA,
-                            "data must be object");
+      send_response_error(ctx, root, ERR_INVALID_SCHEMA, "data must be object");
       return 0;
     }
   int limit = 20;
@@ -85,10 +79,7 @@ cmd_bank_history (client_ctx_t *ctx, json_t *root)
 
   if (rc != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd,
-                            root,
-                            ERR_DB_QUERY_FAILED,
-                            "Failed to retrieve history.");
+      send_response_error(ctx, root, ERR_DB_QUERY_FAILED, "Failed to retrieve history.");
       if (transactions_array)
         {
           json_decref (transactions_array);
@@ -102,7 +93,7 @@ cmd_bank_history (client_ctx_t *ctx, json_t *root)
                                json_false ());
 
 
-  send_enveloped_ok (ctx->fd, root, "bank.history.response", payload);
+  send_response_ok(ctx, root, "bank.history.response", payload);
   json_decref (payload);
   return 0;
 }
@@ -114,10 +105,7 @@ cmd_bank_leaderboard (client_ctx_t *ctx, json_t *root)
   sqlite3 *db = db_get_handle ();
   if (ctx->player_id <= 0)
     {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              ERR_NOT_AUTHENTICATED,
-                              "Not authenticated",
+      send_response_refused(ctx, root, ERR_NOT_AUTHENTICATED, "Not authenticated",
                               NULL);
       return 0;
     }
@@ -146,7 +134,7 @@ cmd_bank_leaderboard (client_ctx_t *ctx, json_t *root)
 
   if (sqlite3_prepare_v2 (db, sql_query, -1, &stmt, NULL) != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, 500, "Database error.");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Database error.");
       return 0;
     }
   sqlite3_bind_int (stmt, 1, limit);
@@ -169,7 +157,7 @@ cmd_bank_leaderboard (client_ctx_t *ctx, json_t *root)
   json_t *payload = json_pack ("{s:o}", "leaderboard", leaderboard_array);
 
 
-  send_enveloped_ok (ctx->fd, root, "bank.leaderboard.response", payload);
+  send_response_ok(ctx, root, "bank.leaderboard.response", payload);
   json_decref (payload);
   return 0;
 }
@@ -180,7 +168,7 @@ cmd_bank_deposit (client_ctx_t *ctx, json_t *root)
 {
   if (!ctx || ctx->player_id <= 0)
     {
-      send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+      send_response_refused(ctx, root, ERR_SECTOR_NOT_FOUND, "Not authenticated", NULL);
       return 0;
     }
   json_t *data = json_object_get (root, "data");
@@ -189,7 +177,7 @@ cmd_bank_deposit (client_ctx_t *ctx, json_t *root)
 
   if (!json_is_integer (j_amount) || json_integer_value (j_amount) <= 0)
     {
-      send_enveloped_error (ctx->fd, root, 400, "Invalid amount.");
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Invalid amount.");
       return 0;
     }
   long long amount = json_integer_value (j_amount);
@@ -200,15 +188,12 @@ cmd_bank_deposit (client_ctx_t *ctx, json_t *root)
   if (h_get_player_petty_cash (db, ctx->player_id,
                                &player_petty_cash) != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, 500, "Failed to retrieve balance.");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Failed to retrieve balance.");
       return 0;
     }
   if (player_petty_cash < amount)
     {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              ERR_INSUFFICIENT_FUNDS,
-                              "Insufficient petty cash.",
+      send_response_refused(ctx, root, ERR_INSUFFICIENT_FUNDS, "Insufficient petty cash.",
                               NULL);
       return 0;
     }
@@ -217,10 +202,7 @@ cmd_bank_deposit (client_ctx_t *ctx, json_t *root)
                                   NULL) != SQLITE_OK)
     {
       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              ERR_INSUFFICIENT_FUNDS,
-                              "Insufficient funds.",
+      send_response_refused(ctx, root, ERR_INSUFFICIENT_FUNDS, "Insufficient funds.",
                               NULL);
       return 0;
     }
@@ -236,7 +218,7 @@ cmd_bank_deposit (client_ctx_t *ctx, json_t *root)
                      &new_bank_balance) != SQLITE_OK)
     {
       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      send_enveloped_error (ctx->fd, root, 500, "Bank error.");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Bank error.");
       return 0;
     }
   sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
@@ -247,7 +229,7 @@ cmd_bank_deposit (client_ctx_t *ctx, json_t *root)
                                new_bank_balance);
 
 
-  send_enveloped_ok (ctx->fd, root, "bank.deposit.confirmed", payload);
+  send_response_ok(ctx, root, "bank.deposit.confirmed", payload);
   json_decref (payload);
   return 0;
 }
@@ -258,10 +240,7 @@ cmd_bank_transfer (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id <= 0)
     {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              ERR_NOT_AUTHENTICATED,
-                              "Not authenticated",
+      send_response_refused(ctx, root, ERR_NOT_AUTHENTICATED, "Not authenticated",
                               NULL);
       return 0;
     }
@@ -272,10 +251,7 @@ cmd_bank_transfer (client_ctx_t *ctx, json_t *root)
 
   if (!json_is_integer (j_to) || !json_is_integer (j_amt))
     {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              ERR_INVALID_ARG,
-                              "Invalid arguments",
+      send_response_refused(ctx, root, ERR_INVALID_ARG, "Invalid arguments",
                               NULL);
       return 0;
     }
@@ -285,10 +261,7 @@ cmd_bank_transfer (client_ctx_t *ctx, json_t *root)
 
   if (amount <= 0 || to_id == ctx->player_id)
     {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              ERR_INVALID_ARG,
-                              "Invalid amount or recipient",
+      send_response_refused(ctx, root, ERR_INVALID_ARG, "Invalid amount or recipient",
                               NULL);
       return 0;
     }
@@ -301,10 +274,7 @@ cmd_bank_transfer (client_ctx_t *ctx, json_t *root)
                      &from_bal) != SQLITE_OK || from_bal < amount)
     {
       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              ERR_INSUFFICIENT_FUNDS,
-                              "Insufficient funds",
+      send_response_refused(ctx, root, ERR_INSUFFICIENT_FUNDS, "Insufficient funds",
                               NULL);
       return 0;
     }
@@ -321,14 +291,14 @@ cmd_bank_transfer (client_ctx_t *ctx, json_t *root)
                         &from_bal) != SQLITE_OK)
     {
       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      send_enveloped_error (ctx->fd, root, ERR_UNKNOWN, "Deduct failed");
+      send_response_error(ctx, root, ERR_UNKNOWN, "Deduct failed");
       return 0;
     }
   if (h_add_credits (db, "player", to_id, amount, "TRANSFER", tx_grp,
                      &to_bal) != SQLITE_OK)
     {
       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      send_enveloped_error (ctx->fd, root, ERR_UNKNOWN, "Add failed");
+      send_response_error(ctx, root, ERR_UNKNOWN, "Add failed");
       return 0;
     }
   sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
@@ -343,7 +313,7 @@ cmd_bank_transfer (client_ctx_t *ctx, json_t *root)
                                to_bal);
 
 
-  send_enveloped_ok (ctx->fd, root, "bank.transfer.confirmed", payload);
+  send_response_ok(ctx, root, "bank.transfer.confirmed", payload);
   json_decref (payload);
   return 0;
 }
@@ -354,10 +324,7 @@ cmd_bank_withdraw (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id <= 0)
     {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              ERR_NOT_AUTHENTICATED,
-                              "Not authenticated",
+      send_response_refused(ctx, root, ERR_NOT_AUTHENTICATED, "Not authenticated",
                               NULL);
       return 0;
     }
@@ -367,10 +334,7 @@ cmd_bank_withdraw (client_ctx_t *ctx, json_t *root)
 
   if (!json_is_integer (j_amt) || json_integer_value (j_amt) <= 0)
     {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              ERR_INVALID_ARG,
-                              "Invalid amount",
+      send_response_refused(ctx, root, ERR_INVALID_ARG, "Invalid amount",
                               NULL);
       return 0;
     }
@@ -389,27 +353,21 @@ cmd_bank_withdraw (client_ctx_t *ctx, json_t *root)
                         &new_balance) != SQLITE_OK)
     {
       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              ERR_INSUFFICIENT_FUNDS,
-                              "Insufficient funds",
+      send_response_refused(ctx, root, ERR_INSUFFICIENT_FUNDS, "Insufficient funds",
                               NULL);
       return 0;
     }
   if (h_add_player_petty_cash (db, ctx->player_id, amount, NULL) != SQLITE_OK)
     {
       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      send_enveloped_error (ctx->fd,
-                            root,
-                            ERR_UNKNOWN,
-                            "Petty cash update failed");
+      send_response_error(ctx, root, ERR_UNKNOWN, "Petty cash update failed");
       return 0;
     }
   sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
   json_t *payload = json_pack ("{s:I}", "new_balance", new_balance);
 
 
-  send_enveloped_ok (ctx->fd, root, "bank.withdraw.confirmed", payload); // Assuming type name
+  send_response_ok(ctx, root, "bank.withdraw.confirmed", payload); // Assuming type name
   json_decref (payload);
   return 0;
 }
@@ -420,7 +378,7 @@ cmd_bank_balance (client_ctx_t *ctx, json_t *root)
 {
   if (!ctx || ctx->player_id <= 0)
     {
-      send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+      send_response_refused(ctx, root, ERR_SECTOR_NOT_FOUND, "Not authenticated", NULL);
       return 0;
     }
   long long balance = 0;
@@ -428,14 +386,164 @@ cmd_bank_balance (client_ctx_t *ctx, json_t *root)
 
   if (db_get_player_bank_balance (ctx->player_id, &balance) != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, 500, "Error retrieving balance.");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Error retrieving balance.");
       return 0;
     }
   json_t *payload = json_object ();
 
 
   json_object_set_new (payload, "balance", json_integer (balance));
-  send_enveloped_ok (ctx->fd, root, "bank.balance", payload);
+  send_response_ok(ctx, root, "bank.balance", payload);
   return 0;
 }
 
+
+int
+cmd_fine_list (client_ctx_t *ctx, json_t *root)
+{
+  if (ctx->player_id <= 0)
+    {
+      send_response_refused(ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required", NULL);
+      return 0;
+    }
+
+  sqlite3 *db = db_get_handle ();
+  json_t *fines_array = json_array();
+  sqlite3_stmt *st = NULL;
+
+  // Corrected SQL query to use 'issued_ts' and reflect available columns
+  const char *sql = "SELECT id, reason, amount, issued_ts, status FROM fines WHERE recipient_type = 'player' AND recipient_id = ?1 AND status != 'paid';";
+
+  if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK) {
+      send_response_error(ctx, root, ERR_DB_QUERY_FAILED, "Database error preparing query.");
+      return 0;
+  }
+  sqlite3_bind_int(st, 1, ctx->player_id);
+
+  while (sqlite3_step(st) == SQLITE_ROW) {
+      json_t *fine = json_object();
+      json_object_set_new(fine, "id", json_integer(sqlite3_column_int(st, 0)));
+      json_object_set_new(fine, "reason", json_string((const char*)sqlite3_column_text(st, 1)));
+      json_object_set_new(fine, "amount", json_integer(sqlite3_column_int64(st, 2)));
+      json_object_set_new(fine, "issued_ts", json_string((const char*)sqlite3_column_text(st, 3))); // Corrected to issued_ts and read as TEXT
+      json_object_set_new(fine, "status", json_string((const char*)sqlite3_column_text(st, 4)));
+      json_array_append_new(fines_array, fine);
+  }
+  sqlite3_finalize(st);
+
+  json_t *response_data = json_object();
+  json_object_set_new(response_data, "fines", fines_array);
+  send_response_ok(ctx, root, "fine.list", response_data);
+  json_decref(response_data);
+  return 0;
+}
+
+
+int
+cmd_fine_pay (client_ctx_t *ctx, json_t *root)
+{
+  if (ctx->player_id <= 0)
+    {
+      send_response_refused(ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required", NULL);
+      return 0;
+    }
+
+  sqlite3 *db = db_get_handle ();
+  json_t *data = json_object_get(root, "data");
+
+  if (!json_is_object(data)) {
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing data payload.");
+      return 0;
+  }
+
+  int fine_id = json_integer_value(json_object_get(data, "fine_id"));
+  long long amount_to_pay = json_integer_value(json_object_get(data, "amount")); // Optional, if 0, pay full
+
+  if (fine_id <= 0) {
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing or invalid fine_id.");
+      return 0;
+  }
+
+  // Retrieve fine details
+  sqlite3_stmt *st_fine = NULL;
+  const char *sql_select_fine = "SELECT amount, recipient_id, status, recipient_type FROM fines WHERE id = ?1;";
+  if (sqlite3_prepare_v2(db, sql_select_fine, -1, &st_fine, NULL) != SQLITE_OK) {
+      send_response_error(ctx, root, ERR_DB_QUERY_FAILED, "Database error retrieving fine.");
+      return 0;
+  }
+  sqlite3_bind_int(st_fine, 1, fine_id);
+
+  if (sqlite3_step(st_fine) != SQLITE_ROW) {
+      sqlite3_finalize(st_fine);
+      send_response_refused(ctx, root, ERR_NOT_FOUND, "Fine not found.", NULL);
+      return 0;
+  }
+
+  long long fine_amount = sqlite3_column_int64(st_fine, 0);
+  int fine_recipient_id = sqlite3_column_int(st_fine, 1);
+  const char *fine_status = (const char*)sqlite3_column_text(st_fine, 2);
+  const char *fine_recipient_type = (const char*)sqlite3_column_text(st_fine, 3);
+  sqlite3_finalize(st_fine);
+
+  if (fine_recipient_id != ctx->player_id || strcasecmp(fine_recipient_type, "player") != 0) {
+      send_response_refused(ctx, root, ERR_PERMISSION_DENIED, "Fine does not belong to this player.", NULL);
+      return 0;
+  }
+  if (strcasecmp(fine_status, "paid") == 0) {
+      send_response_refused(ctx, root, ERR_INVALID_ARG, "Fine already paid.", NULL);
+      return 0;
+  }
+
+  if (amount_to_pay <= 0 || amount_to_pay > fine_amount) {
+      amount_to_pay = fine_amount; // Pay full amount if not specified or invalid
+  }
+
+  // Check player credits
+  long long player_credits = 0;
+  if (h_get_player_petty_cash(db, ctx->player_id, &player_credits) != SQLITE_OK) {
+      send_response_error(ctx, root, ERR_DB_QUERY_FAILED, "Failed to retrieve player credits.");
+      return 0;
+  }
+  if (player_credits < amount_to_pay) {
+      send_response_refused(ctx, root, ERR_INSUFFICIENT_FUNDS, "Insufficient credits to pay fine.", NULL);
+      return 0;
+  }
+
+  // Deduct credits and update fine status
+  if (h_deduct_player_petty_cash_unlocked(db, ctx->player_id, amount_to_pay, NULL) != SQLITE_OK) {
+      send_response_error(ctx, root, ERR_DB, "Failed to deduct credits for fine payment.");
+      return 0;
+  }
+
+  // Update fine status
+  sqlite3_stmt *st_update = NULL;
+  const char *new_status = (amount_to_pay == fine_amount) ? "paid" : "unpaid"; // Use 'unpaid' if partially paid
+  const char *sql_update_fine = "UPDATE fines SET status = ?, amount = amount - ? WHERE id = ?;"; // Reduce amount in DB
+
+  if (sqlite3_prepare_v2(db, sql_update_fine, -1, &st_update, NULL) != SQLITE_OK) {
+      send_response_error(ctx, root, ERR_DB_QUERY_FAILED, "Database error preparing fine update.");
+      // Refund credits if update fails
+      h_add_player_petty_cash_unlocked(db, ctx->player_id, amount_to_pay, NULL);
+      return 0;
+  }
+
+  sqlite3_bind_text(st_update, 1, new_status, -1, SQLITE_STATIC);
+  sqlite3_bind_int64(st_update, 2, amount_to_pay);
+  sqlite3_bind_int(st_update, 3, fine_id);
+
+  if (sqlite3_step(st_update) != SQLITE_DONE) {
+      send_response_error(ctx, root, ERR_DB, "Failed to update fine status.");
+      h_add_player_petty_cash_unlocked(db, ctx->player_id, amount_to_pay, NULL); // Refund
+      sqlite3_finalize(st_update);
+      return 0;
+  }
+  sqlite3_finalize(st_update);
+
+  json_t *response_data = json_object();
+  json_object_set_new(response_data, "message", json_string("Fine paid successfully."));
+  json_object_set_new(response_data, "fine_id", json_integer(fine_id));
+  json_object_set_new(response_data, "amount_paid", json_integer(amount_to_pay));
+  send_response_ok(ctx, root, "fine.pay", response_data);
+  json_decref(response_data);
+  return 0;
+}

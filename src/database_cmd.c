@@ -1156,16 +1156,7 @@ db_commodity_get_trades (const char *commodity_code, int limit,
 }
 
 
-/* ----------------------------------------------------------------------
- * Ports: goods on hand
- *
- * NOTE: The provided schema excerpt shows planet_goods but does not
- * show a dedicated port_goods table. Without the exact port stock
 
-
-   /* ----------------------------------------------------------------------
- * Planets: goods on hand (planet_goods)
- * ---------------------------------------------------------------------- */
 int
 db_planet_get_goods_on_hand (int planet_id, const char *commodity_code,
                              int *out_quantity)
@@ -4341,7 +4332,7 @@ db_is_ship_piloted (sqlite3 *db, int ship_id)
 {
   sqlite3_stmt *st = NULL;
   bool piloted = false;
-  int rc;
+  // int rc;
   db_mutex_lock ();
   const char *sql = "SELECT 1 FROM players WHERE ship = ? AND loggedin = 1;"; // Assuming 'loggedin' indicates active player
 
@@ -5220,10 +5211,9 @@ cleanup:
 
 
 /*
- * =================================================================================
+ * 
  * GENERIC BANK BALANCE FUNCTIONS
- * =================================================================================
- *
+ * 
  * This section provides a generic way to retrieve bank balances for different
  * entity types (player, corp, npc, port, planet).
  *
@@ -5231,185 +5221,181 @@ cleanup:
  * the database query, and then exposes public wrapper functions for each
  * entity type.
  *
- */
-
-
-/**
  * @brief Generic helper to get a bank balance for any owner type.
  * @param owner_type The type of the owner (e.g., "player", "corp").
  * @param owner_id The ID of the owner.
+ */
 
 
+/* int */
+/* db_fighters_at_sector_json (int sector_id, json_t **out_array) */
+/* { */
+/*   sqlite3 *db = db_get_handle (); */
+/*   sqlite3_stmt *st = NULL; */
+/*   json_t *arr = NULL; */
+/*   int rc = SQLITE_ERROR; */
+/*   db_mutex_lock (); */
+/*   if (!out_array) */
+/*     { */
+/*       goto cleanup; */
+/*     } */
+/*   out_array = NULL; */
+/*   arr = json_array (); */
+/*   if (!arr) */
+/*     { */
+/*       rc = SQLITE_NOMEM; */
+/*       goto cleanup; */
+/*     } */
+/*   const char *sql = */
+/*     "SELECT player, corporation, quantity " */
+/*     "FROM sector_assets WHERE sector = ? AND asset_type = ?;"; */
+/*   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL); */
+/*   if (rc != SQLITE_OK) */
+/*     { */
+/*       goto cleanup; */
+/*     } */
+/*   sqlite3_bind_int (st, 1, sector_id); */
+/*   sqlite3_bind_int (st, 2, ASSET_FIGHTER); */
+/*   while ((rc = sqlite3_step (st)) == SQLITE_ROW) */
+/*     { */
+/*       int player_id = sqlite3_column_int (st, 0); */
+/*       int corporation_id = sqlite3_column_int (st, 1); */
+/*       int quantity = sqlite3_column_int (st, 2); */
+/*       json_t *obj = json_object (); */
+/*       if (!obj) */
+/*         { */
+/*           rc = SQLITE_NOMEM; */
+/*           goto cleanup; */
+/*         } */
+/*       if (corporation_id > 0) */
+/*         { */
+/*           json_object_set_new (obj, "owner_type", json_string ("corporation")); */
+/*           json_object_set_new (obj, "owner_id", json_integer (corporation_id)); */
+/*         } */
+/*       else if (player_id > 0) */
+/*         { */
+/*           json_object_set_new (obj, "owner_type", json_string ("player")); */
+/*           json_object_set_new (obj, "owner_id", json_integer (player_id)); */
+/*         } */
+/*       else */
+/*         { */
+/*           // Should not happen if asset has an owner */
+/*           json_object_set_new (obj, "owner_type", json_string ("unknown")); */
+/*           json_object_set_new (obj, "owner_id", json_integer (0)); */
+/*         } */
+/*       json_object_set_new (obj, "quantity", json_integer (quantity)); */
+/*       json_array_append_new (arr, obj); */
+/*     } */
+/*   if (rc == SQLITE_DONE) */
+/*     { */
+/*       out_array = arr; */
+/*       rc = SQLITE_OK; */
+/*       arr = NULL; // Transfer ownership */
+/*     } */
+/*   else */
+/*     { */
+/*       // Error in sqlite3_step */
+/*       rc = SQLITE_ERROR; */
+/*     } */
+/*  cleanup: */
+/*   if (st) */
+/*     { */
+/*       sqlite3_finalize (st); */
+/*     } */
+/*   if (arr) */
+/*     { */
+/*       json_decref (arr); */
+/*     } */
+/*   db_mutex_unlock (); */
+/*   return rc; */
+/* } */
 
-   int
-   db_fighters_at_sector_json (int sector_id, json_t **out_array)
-   {
-   sqlite3 *db = db_get_handle ();
-   sqlite3_stmt *st = NULL;
-   json_t *arr = NULL;
-   int rc = SQLITE_ERROR;
-   db_mutex_lock ();
-   if (!out_array)
-    {
-      goto cleanup;
-    }
- * out_array = NULL;
-   arr = json_array ();
-   if (!arr)
-    {
-      rc = SQLITE_NOMEM;
-      goto cleanup;
-    }
-   const char *sql =
-    "SELECT player, corporation, quantity "
-    "FROM sector_assets WHERE sector = ? AND asset_type = ?;";
-   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
-   if (rc != SQLITE_OK)
-    {
-      goto cleanup;
-    }
-   sqlite3_bind_int (st, 1, sector_id);
-   sqlite3_bind_int (st, 2, ASSET_FIGHTER);
-   while ((rc = sqlite3_step (st)) == SQLITE_ROW)
-    {
-      int player_id = sqlite3_column_int (st, 0);
-      int corporation_id = sqlite3_column_int (st, 1);
-      int quantity = sqlite3_column_int (st, 2);
-      json_t *obj = json_object ();
-      if (!obj)
-        {
-          rc = SQLITE_NOMEM;
-          goto cleanup;
-        }
-      if (corporation_id > 0)
-        {
-          json_object_set_new (obj, "owner_type", json_string ("corporation"));
-          json_object_set_new (obj, "owner_id", json_integer (corporation_id));
-        }
-      else if (player_id > 0)
-        {
-          json_object_set_new (obj, "owner_type", json_string ("player"));
-          json_object_set_new (obj, "owner_id", json_integer (player_id));
-        }
-      else
-        {
-          // Should not happen if asset has an owner
-          json_object_set_new (obj, "owner_type", json_string ("unknown"));
-          json_object_set_new (obj, "owner_id", json_integer (0));
-        }
-      json_object_set_new (obj, "quantity", json_integer (quantity));
-      json_array_append_new (arr, obj);
-    }
-   if (rc == SQLITE_DONE)
-    {
- * out_array = arr;
-      rc = SQLITE_OK;
-      arr = NULL; // Transfer ownership
-    }
-   else
-    {
-      // Error in sqlite3_step
-      rc = SQLITE_ERROR;
-    }
-   cleanup:
-   if (st)
-    {
-      sqlite3_finalize (st);
-    }
-   if (arr)
-    {
-      json_decref (arr);
-    }
-   db_mutex_unlock ();
-   return rc;
-   }
 
-
-   int
-   db_mines_at_sector_json (int sector_id, json_t **out_array)
-   {
-   sqlite3 *db = db_get_handle ();
-   sqlite3_stmt *st = NULL;
-   json_t *arr = NULL;
-   int rc = SQLITE_ERROR;
-   db_mutex_lock ();
-   if (!out_array)
-    {
-      goto cleanup;
-    }
- * out_array = NULL;
-   arr = json_array ();
-   if (!arr)
-    {
-      rc = SQLITE_NOMEM;
-      goto cleanup;
-    }
-   const char *sql =
-    "SELECT player, corporation, quantity, asset_type "
-    "FROM sector_assets WHERE sector = ? AND asset_type IN (?, ?);";
-   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
-   if (rc != SQLITE_OK)
-    {
-      goto cleanup;
-    }
-   sqlite3_bind_int (st, 1, sector_id);
-   sqlite3_bind_int (st, 2, ASSET_MINE);
-   sqlite3_bind_int (st, 3, ASSET_LIMPET_MINE);
-   while ((rc = sqlite3_step (st)) == SQLITE_ROW)
-    {
-      int player_id = sqlite3_column_int (st, 0);
-      int corporation_id = sqlite3_column_int (st, 1);
-      int quantity = sqlite3_column_int (st, 2);
-      int asset_type = sqlite3_column_int (st, 3);
-      json_t *obj = json_object ();
-      if (!obj)
-        {
-          rc = SQLITE_NOMEM;
-          goto cleanup;
-        }
-      if (corporation_id > 0)
-        {
-          json_object_set_new (obj, "owner_type", json_string ("corporation"));
-          json_object_set_new (obj, "owner_id", json_integer (corporation_id));
-        }
-      else if (player_id > 0)
-        {
-          json_object_set_new (obj, "owner_type", json_string ("player"));
-          json_object_set_new (obj, "owner_id", json_integer (player_id));
-        }
-      else
-        {
-          // Should not happen if asset has an owner
-          json_object_set_new (obj, "owner_type", json_string ("unknown"));
-          json_object_set_new (obj, "owner_id", json_integer (0));
-        }
-      json_object_set_new (obj, "quantity", json_integer (quantity));
-      json_object_set_new (obj, "mine_type", json_integer (asset_type)); // Add mine type
-      json_array_append_new (arr, obj);
-    }
-   if (rc == SQLITE_DONE)
-    {
- * out_array = arr;
-      rc = SQLITE_OK;
-      arr = NULL; // Transfer ownership
-    }
-   else
-    {
-      // Error in sqlite3_step
-      rc = SQLITE_ERROR;
-    }
-   cleanup:
-   if (st)
-    {
-      sqlite3_finalize (st);
-    }
-   if (arr)
-    {
-      json_decref (arr);
-    }
-   db_mutex_unlock ();
-   return rc;
-   }
+/* int */
+/* db_mines_at_sector_json (int sector_id, json_t **out_array) */
+/* { */
+/*   sqlite3 *db = db_get_handle (); */
+/*   sqlite3_stmt *st = NULL; */
+/*   json_t *arr = NULL; */
+/*   int rc = SQLITE_ERROR; */
+/*   db_mutex_lock (); */
+/*   if (!out_array) */
+/*     { */
+/*       goto cleanup; */
+/*     } */
+/*   * out_array = NULL; */
+/*   arr = json_array (); */
+/*   if (!arr) */
+/*     { */
+/*       rc = SQLITE_NOMEM; */
+/*       goto cleanup; */
+/*     } */
+/*   const char *sql = */
+/*     "SELECT player, corporation, quantity, asset_type " */
+/*     "FROM sector_assets WHERE sector = ? AND asset_type IN (?, ?);"; */
+/*   rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL); */
+/*   if (rc != SQLITE_OK) */
+/*     { */
+/*       goto cleanup; */
+/*     } */
+/*   sqlite3_bind_int (st, 1, sector_id); */
+/*   sqlite3_bind_int (st, 2, ASSET_MINE); */
+/*   sqlite3_bind_int (st, 3, ASSET_LIMPET_MINE); */
+/*   while ((rc = sqlite3_step (st)) == SQLITE_ROW) */
+/*     { */
+/*       int player_id = sqlite3_column_int (st, 0); */
+/*       int corporation_id = sqlite3_column_int (st, 1); */
+/*       int quantity = sqlite3_column_int (st, 2); */
+/*       int asset_type = sqlite3_column_int (st, 3); */
+/*       json_t *obj = json_object (); */
+/*       if (!obj) */
+/*         { */
+/*           rc = SQLITE_NOMEM; */
+/*           goto cleanup; */
+/*         } */
+/*       if (corporation_id > 0) */
+/*         { */
+/*           json_object_set_new (obj, "owner_type", json_string ("corporation")); */
+/*           json_object_set_new (obj, "owner_id", json_integer (corporation_id)); */
+/*         } */
+/*       else if (player_id > 0) */
+/*         { */
+/*           json_object_set_new (obj, "owner_type", json_string ("player")); */
+/*           json_object_set_new (obj, "owner_id", json_integer (player_id)); */
+/*         } */
+/*       else */
+/*         { */
+/*           // Should not happen if asset has an owner */
+/*           json_object_set_new (obj, "owner_type", json_string ("unknown")); */
+/*           json_object_set_new (obj, "owner_id", json_integer (0)); */
+/*         } */
+/*       json_object_set_new (obj, "quantity", json_integer (quantity)); */
+/*       json_object_set_new (obj, "mine_type", json_integer (asset_type)); // Add mine type */
+/*       json_array_append_new (arr, obj); */
+/*     } */
+/*   if (rc == SQLITE_DONE) */
+/*     { */
+/*       * out_array = arr; */
+/*       rc = SQLITE_OK; */
+/*       arr = NULL; // Transfer ownership */
+/*     } */
+/*   else */
+/*     { */
+/*       // Error in sqlite3_step */
+/*       rc = SQLITE_ERROR; */
+/*     } */
+/*  cleanup: */
+/*   if (st) */
+/*     { */
+/*       sqlite3_finalize (st); */
+/*     } */
+/*   if (arr) */
+/*     { */
+/*       json_decref (arr); */
+/*     } */
+/*   db_mutex_unlock (); */
+/*   return rc; */
+/* } */
 
 
    /*
@@ -6016,7 +6002,7 @@ db_player_info_json (int player_id, json_t **out)
                     " own.player_id AS owner_id, " // (12)
                     " COALESCE( (SELECT name FROM players WHERE id=own.player_id), 'derelict') AS owner_name, "
                     // (13)
-                    " s.ore, s.organics, s.equipment, s.colonists " // (14, 15, 16, 17)
+                    " s.ore, s.organics, s.equipment, s.colonists, s.shields " // (14, 15, 16, 17, 18)
                     "FROM players p " "LEFT JOIN ships s      ON s.id = p.ship "
                     "LEFT JOIN shiptypes st ON st.id = s.type_id "
                     "LEFT JOIN sectors sec  ON sec.id = s.sector "                                                                                              // Join on ship's sector
@@ -6085,6 +6071,8 @@ db_player_info_json (int player_id, json_t **out)
 
       json_object_set_new (ship_obj, "holds", json_integer (s_holds));
       json_object_set_new (ship_obj, "fighters", json_integer (s_fighters));
+      int s_shields = sqlite3_column_int (st, 18);
+      json_object_set_new (ship_obj, "shields", json_integer (s_shields));
       json_t *location_obj = json_object ();
       int loc_sector_id = sqlite3_column_int (st, 10);
       const char *loc_sector_name =

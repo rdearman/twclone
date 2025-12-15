@@ -332,11 +332,11 @@ handle_turn_consumption_error (client_ctx_t *ctx,
     {
       json_object_set_new (meta, "reason", json_string (reason_str));
       json_object_set_new (meta, "command", json_string (cmd));
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              ERR_REF_NO_TURNS,
-                              get_turn_error_message (consume_result),
-                              NULL);
+      send_response_refused (ctx,
+                             root,
+                             ERR_REF_NO_TURNS,
+                             get_turn_error_message (consume_result),
+                             NULL);
       json_decref (meta);
     }
   return 0;
@@ -1113,15 +1113,209 @@ destroy_ship_and_handle_side_effects (client_ctx_t *ctx,
 
 
 /* ==================================================================== */
+static int
+h_set_prefs (client_ctx_t *ctx, json_t *prefs)
+{
+  if (!json_is_object (prefs))
+    {
+      return -1;
+    }
+  void *it = json_object_iter (prefs);
+  while (it)
+    {
+      const char *key = json_object_iter_key (it);
+      json_t *val = json_object_iter_value (it);
+      char buf[512] = { 0 };
+      const char *sval = "";
+
+      if (!is_valid_key (key, 64))
+        {
+          it = json_object_iter_next (prefs, it);
+          continue;
+        }
+
+      if (json_is_string (val))
+        {
+          sval = json_string_value (val);
+        }
+      else if (json_is_integer (val))
+        {
+          snprintf (buf, sizeof (buf), "%lld",
+                    (long long) json_integer_value (val));
+          sval = buf;
+        }
+      else if (json_is_boolean (val))
+        {
+          sval = json_is_true (val) ? "1" : "0";
+        }
+      else
+        {
+          it = json_object_iter_next (prefs, it);
+          continue;
+        }
+
+      db_prefs_set_one (ctx->player_id, key, PT_STRING, sval);
+      it = json_object_iter_next (prefs, it);
+    }
+  return 0;
+}
+
+static int
+h_set_bookmarks (client_ctx_t *ctx, json_t *list)
+{
+  if (!json_is_array (list))
+    {
+      return -1;
+    }
+
+  /* 1. Remove all existing */
+  json_t *curr = bookmarks_as_array (ctx->player_id);
+  size_t idx;
+  json_t *val;
+  json_array_foreach (curr, idx, val)
+  {
+    const char *name = json_string_value (json_object_get (val, "name"));
+    if (name)
+      {
+        db_bookmark_remove (ctx->player_id, name);
+      }
+  }
+  json_decref (curr);
+
+  /* 2. Add new */
+  json_array_foreach (list, idx, val)
+  {
+    const char *name = json_string_value (json_object_get (val, "name"));
+    int sector_id = json_integer_value (json_object_get (val, "sector_id"));
+    if (name && sector_id > 0)
+      {
+        db_bookmark_upsert (ctx->player_id, name, sector_id);
+      }
+  }
+  return 0;
+}
+
+static int
+h_set_avoids (client_ctx_t *ctx, json_t *list)
+{
+  if (!json_is_array (list))
+    {
+      return -1;
+    }
+
+  /* 1. Remove all */
+  json_t *curr = avoid_as_array (ctx->player_id);
+  size_t idx;
+  json_t *val;
+  json_array_foreach (curr, idx, val)
+  {
+    if (json_is_integer (val))
+      {
+        db_avoid_remove (ctx->player_id, json_integer_value (val));
+      }
+  }
+  json_decref (curr);
+
+  /* 2. Add new */
+  json_array_foreach (list, idx, val)
+  {
+    if (json_is_integer (val))
+      {
+        db_avoid_add (ctx->player_id, json_integer_value (val));
+      }
+  }
+  return 0;
+}
+
+static int
+h_set_subscriptions (client_ctx_t *ctx, json_t *list)
+{
+  if (!json_is_array (list))
+    {
+      return -1;
+    }
+
+  /* 1. Disable all existing */
+  json_t *curr = subscriptions_as_array (ctx->player_id);
+  size_t idx;
+  json_t *val;
+  json_array_foreach (curr, idx, val)
+  {
+    const char *topic = json_string_value (json_object_get (val, "topic"));
+    if (topic)
+      {
+        db_subscribe_disable (ctx->player_id, topic, NULL);
+      }
+  }
+  json_decref (curr);
+
+  /* 2. Enable/Add new */
+  json_array_foreach (list, idx, val)
+  {
+    if (json_is_string (val))
+      {
+        db_subscribe_upsert (ctx->player_id, json_string_value (val), NULL,
+                             0);
+      }
+    else if (json_is_object (val))
+      {
+        const char *topic = json_string_value (json_object_get (val, "topic"));
+        if (topic)
+          {
+            db_subscribe_upsert (ctx->player_id, topic, NULL, 0);
+          }
+      }
+  }
+  return 0;
+}
+
 int
 cmd_player_set_settings (client_ctx_t *ctx, json_t *root)
 {
-  send_enveloped_error (ctx->fd,
-                        root,
-                        1101,
-                        "Not implemented: " "player.set_settings");
-  return 0;
-  return 0;
+  if (ctx->player_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_NOT_AUTHENTICATED, "Auth required");
+      return 0;
+    }
+  json_t *data = json_object_get (root, "data");
+  if (!json_is_object (data))
+    {
+      send_response_error (ctx, root, ERR_INVALID_SCHEMA,
+                           "data must be object");
+      return 0;
+    }
+
+  json_t *prefs = json_object_get (data, "prefs");
+  if (prefs)
+    {
+      h_set_prefs (ctx, prefs);
+    }
+
+  json_t *bookmarks = json_object_get (data, "bookmarks");
+  if (bookmarks)
+    {
+      h_set_bookmarks (ctx, bookmarks);
+    }
+
+  json_t *avoid = json_object_get (data, "avoid");
+  if (avoid)
+    {
+      h_set_avoids (ctx, avoid);
+    }
+
+  json_t *subs = json_object_get (data, "subscriptions");
+  if (subs)
+    {
+      h_set_subscriptions (ctx, subs);
+    }
+
+  json_t *topics = json_object_get (data, "topics");
+  if (topics)
+    {
+      h_set_subscriptions (ctx, topics);
+    }
+
+  return cmd_player_get_settings (ctx, root);
 }
 
 
@@ -1239,7 +1433,7 @@ cmd_player_my_info (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id <= 0)
     {
-      send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+      send_response_refused(ctx, root, ERR_SECTOR_NOT_FOUND, "Not authenticated", NULL);
       return 0;
     }
   sqlite3 *db = db_get_handle ();
@@ -1247,7 +1441,7 @@ cmd_player_my_info (client_ctx_t *ctx, json_t *root)
 
   if (!db)
     {
-      send_enveloped_error (ctx->fd, root, 1503, "Database unavailable");
+      send_response_error(ctx, root, ERR_CITADEL_REQUIRED, "Database unavailable");
       return 0;
     }
   /* 1. Fetch Basic Player Data directly (Bypass db_player_info_json) */
@@ -1258,10 +1452,7 @@ cmd_player_my_info (client_ctx_t *ctx, json_t *root)
 
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd,
-                            root,
-                            1503,
-                            "DB Error preparing player info");
+      send_response_error(ctx, root, ERR_CITADEL_REQUIRED, "DB Error preparing player info");
       return 0;
     }
   sqlite3_bind_int (st, 1, ctx->player_id);
@@ -1271,7 +1462,7 @@ cmd_player_my_info (client_ctx_t *ctx, json_t *root)
   if (rc != SQLITE_ROW)
     {
       sqlite3_finalize (st);
-      send_enveloped_error (ctx->fd, root, 1404, "Player not found");
+      send_response_error(ctx, root, REF_AUTOPILOT_RUNNING, "Player not found");
       return 0;
     }
   /* Extract columns */
@@ -1319,7 +1510,7 @@ cmd_player_my_info (client_ctx_t *ctx, json_t *root)
 
 
   json_object_set_new (pinfo, "player", player_obj);
-  send_enveloped_ok (ctx->fd, root, "player.info", pinfo);
+  send_response_ok(ctx, root, "player.info", pinfo);
   json_decref (pinfo);
   return 0;
 }
@@ -1330,10 +1521,7 @@ cmd_player_list_online (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id <= 0)
     {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              ERR_NOT_AUTHENTICATED,
-                              "Not authenticated",
+      send_response_refused(ctx, root, ERR_NOT_AUTHENTICATED, "Not authenticated",
                               NULL);
       return 0;
     }
@@ -1376,13 +1564,10 @@ cmd_player_list_online (client_ctx_t *ctx, json_t *root)
 
   if (!resp)
     {
-      send_enveloped_error (ctx->fd,
-                            root,
-                            ERR_UNKNOWN,
-                            "Failed to retrieve list.");
+      send_response_error(ctx, root, ERR_UNKNOWN, "Failed to retrieve list.");
       return 0;
     }
-  send_enveloped_ok (ctx->fd, root, "player.list_online.result", resp);
+  send_response_ok(ctx, root, "player.list_online.result", resp);
   json_decref (resp);
   return 0;
 }
@@ -1393,10 +1578,7 @@ cmd_player_rankings (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id <= 0)
     {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              ERR_NOT_AUTHENTICATED,
-                              "Authentication required.",
+      send_response_refused(ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required.",
                               NULL);
       return 0;
     }
@@ -1423,10 +1605,7 @@ cmd_player_rankings (client_ctx_t *ctx, json_t *root)
             }
           else
             {
-              send_enveloped_refused (ctx->fd,
-                                      root,
-                                      ERR_INVALID_ARG,
-                                      "Invalid criterion",
+              send_response_refused(ctx, root, ERR_INVALID_ARG, "Invalid criterion",
                                       NULL);
               return 0;
             }
@@ -1478,10 +1657,7 @@ cmd_player_rankings (client_ctx_t *ctx, json_t *root)
 
   if (rc != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd,
-                            root,
-                            ERR_DB,
-                            "Database error retrieving rankings.");
+      send_response_error(ctx, root, ERR_DB, "Database error retrieving rankings.");
       return 0;
     }
   int rank_num = offset + 1;
@@ -1523,7 +1699,7 @@ cmd_player_rankings (client_ctx_t *ctx, json_t *root)
 
 
   json_object_set_new (resp, "rankings", rankings);
-  send_enveloped_ok (ctx->fd, root, "player.rankings", resp);
+  send_response_ok(ctx, root, "player.rankings", resp);
   json_decref (resp);
   return 0;
 }
@@ -1535,10 +1711,7 @@ cmd_player_get_settings (client_ctx_t *ctx, json_t *root)
 {
   if (!ctx || ctx->player_id <= 0)
     {
-      send_enveloped_error (ctx ? ctx->fd : -1,
-                            root,
-                            ERR_NOT_AUTHENTICATED,
-                            "Authentication required");
+      send_response_error(ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required");
       return 0;
     }
   json_t *prefs = prefs_as_array (ctx->player_id);
@@ -1552,7 +1725,7 @@ cmd_player_get_settings (client_ctx_t *ctx, json_t *root)
                             "subscriptions", subs);
 
 
-  send_enveloped_ok (ctx->fd, root, "player.settings_v1", data);
+  send_response_ok(ctx, root, "player.settings_v1", data);
   return 0;
 }
 
@@ -1562,7 +1735,7 @@ cmd_player_get_prefs (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id <= 0)
     {
-      send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+      send_response_refused(ctx, root, ERR_SECTOR_NOT_FOUND, "Not authenticated", NULL);
       return 0;
     }
   json_t *prefs = prefs_as_array (ctx->player_id);
@@ -1570,7 +1743,7 @@ cmd_player_get_prefs (client_ctx_t *ctx, json_t *root)
 
 
   json_object_set_new (data, "prefs", prefs);
-  send_enveloped_ok (ctx->fd, root, "player.prefs_v1", data);
+  send_response_ok(ctx, root, "player.prefs_v1", data);
   return 0;
 }
 
@@ -1578,14 +1751,25 @@ cmd_player_get_prefs (client_ctx_t *ctx, json_t *root)
 int
 cmd_player_set_topics (client_ctx_t *ctx, json_t *root)
 {
-  send_enveloped_error (ctx->fd,
-                        root,
-                        1101,
-                        "Not implemented: " "player.set_topics");
-  return 0;
-  return 0;
-}
+  if (ctx->player_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_NOT_AUTHENTICATED, "Auth required");
+      return 0;
+    }
+  json_t *data = json_object_get (root, "data");
+  json_t *topics = json_object_get (data, "topics");
+  if (!topics)
+    {
+      topics = json_object_get (data, "subscriptions");
+    }
 
+  if (h_set_subscriptions (ctx, topics) != 0)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG, "Invalid topics list");
+      return 0;
+    }
+  return cmd_player_get_topics (ctx, root);
+}
 
 int
 cmd_player_get_topics (client_ctx_t *ctx, json_t *root)
@@ -1593,45 +1777,60 @@ cmd_player_get_topics (client_ctx_t *ctx, json_t *root)
   json_t *topics = players_get_subscriptions (ctx);
   json_t *out = json_object ();
   json_object_set_new (out, "topics", topics ? topics : json_array ());
-  send_enveloped_ok (ctx->fd, root, "player.subscriptions", out);
+  send_response_ok (ctx, root, "player.subscriptions", out);
   json_decref (out);
   return 0;
 }
 
-
 int
 cmd_player_set_bookmarks (client_ctx_t *ctx, json_t *root)
 {
-  send_enveloped_error (ctx->fd,
-                        root,
-                        1101,
-                        "Not implemented: " "player.set_bookmarks");
-  return 0;
-  return 0;
-}
+  if (ctx->player_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_NOT_AUTHENTICATED, "Auth required");
+      return 0;
+    }
+  json_t *data = json_object_get (root, "data");
+  json_t *bm = json_object_get (data, "bookmarks");
 
+  if (h_set_bookmarks (ctx, bm) != 0)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "Invalid bookmarks list");
+      return 0;
+    }
+  return cmd_player_get_bookmarks (ctx, root);
+}
 
 int
 cmd_player_get_bookmarks (client_ctx_t *ctx, json_t *root)
 {
   json_t *bookmarks = players_list_bookmarks (ctx);
   json_t *out = json_object ();
-  json_object_set_new (out, "bookmarks", bookmarks ? bookmarks : json_array ());
-  send_enveloped_ok (ctx->fd, root, "player.bookmarks", out);
+  json_object_set_new (out, "bookmarks",
+                       bookmarks ? bookmarks : json_array ());
+  send_response_ok (ctx, root, "player.bookmarks", out);
   json_decref (out);
   return 0;
 }
 
-
 int
 cmd_player_set_avoids (client_ctx_t *ctx, json_t *root)
 {
-  send_enveloped_error (ctx->fd,
-                        root,
-                        1101,
-                        "Not implemented: " "player.set_avoids");
-  return 0;
-  return 0;
+  if (ctx->player_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_NOT_AUTHENTICATED, "Auth required");
+      return 0;
+    }
+  json_t *data = json_object_get (root, "data");
+  json_t *av = json_object_get (data, "avoid");
+
+  if (h_set_avoids (ctx, av) != 0)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG, "Invalid avoid list");
+      return 0;
+    }
+  return cmd_player_get_avoids (ctx, root);
 }
 
 
@@ -1641,7 +1840,7 @@ cmd_player_get_avoids (client_ctx_t *ctx, json_t *root)
   json_t *avoid = players_list_avoid (ctx);
   json_t *out = json_object ();
   json_object_set_new (out, "avoid", avoid ? avoid : json_array ());
-  send_enveloped_ok (ctx->fd, root, "avoids", out);
+  send_response_ok(ctx, root, "avoids", out);
   json_decref (out);
   return 0;
 }
@@ -1653,7 +1852,7 @@ cmd_player_get_notes (client_ctx_t *ctx, json_t *root)
   json_t *notes = players_list_notes (ctx, root);
   json_t *out = json_object ();
   json_object_set_new (out, "notes", notes ? notes : json_array ());
-  send_enveloped_ok (ctx->fd, root, "player.notes", out);
+  send_response_ok(ctx, root, "player.notes", out);
   json_decref (out);
   return 0;
 }
@@ -1664,10 +1863,7 @@ cmd_player_set_prefs (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id <= 0)
     {
-      send_enveloped_error (ctx->fd,
-                            root,
-                            ERR_NOT_AUTHENTICATED,
-                            "auth required");
+      send_response_error(ctx, root, ERR_NOT_AUTHENTICATED, "auth required");
       return -1;
     }
   json_t *data = json_object_get (root, "data");
@@ -1675,10 +1871,7 @@ cmd_player_set_prefs (client_ctx_t *ctx, json_t *root)
 
   if (!json_is_object (data))
     {
-      send_enveloped_error (ctx->fd,
-                            root,
-                            ERR_INVALID_SCHEMA,
-                            "data must be object");
+      send_response_error(ctx, root, ERR_INVALID_SCHEMA, "data must be object");
       return -1;
     }
   json_t *patch = json_object_get (data, "patch");
@@ -1694,7 +1887,7 @@ cmd_player_set_prefs (client_ctx_t *ctx, json_t *root)
 
       if (!is_valid_key (key, 64))
         {
-          send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG, "invalid key");
+          send_response_error(ctx, root, ERR_INVALID_ARG, "invalid key");
           return -1;
         }
       const char *sval = "";
@@ -1706,10 +1899,7 @@ cmd_player_set_prefs (client_ctx_t *ctx, json_t *root)
           sval = json_string_value (val);
           if (!is_ascii_printable (sval) || strlen (sval) > 256)
             {
-              send_enveloped_error (ctx->fd,
-                                    root,
-                                    ERR_INVALID_ARG,
-                                    "string invalid");
+              send_response_error(ctx, root, ERR_INVALID_ARG, "string invalid");
               return -1;
             }
         }
@@ -1727,15 +1917,12 @@ cmd_player_set_prefs (client_ctx_t *ctx, json_t *root)
         }
       else
         {
-          send_enveloped_error (ctx->fd,
-                                root,
-                                ERR_INVALID_ARG,
-                                "unsupported type");
+          send_response_error(ctx, root, ERR_INVALID_ARG, "unsupported type");
           return -1;
         }
       if (db_prefs_set_one (ctx->player_id, key, PT_STRING, sval) != 0)
         {
-          send_enveloped_error (ctx->fd, root, ERR_UNKNOWN, "db error");
+          send_response_error(ctx, root, ERR_UNKNOWN, "db error");
           return -1;
         }
       it = json_object_iter_next (prefs, it);
@@ -1743,7 +1930,7 @@ cmd_player_set_prefs (client_ctx_t *ctx, json_t *root)
   json_t *resp = json_pack ("{s:b}", "ok", 1);
 
 
-  send_enveloped_ok (ctx->fd, root, "player.prefs.updated", resp);
+  send_response_ok(ctx, root, "player.prefs.updated", resp);
   json_decref (resp);
   return 0;
 }
@@ -1754,10 +1941,7 @@ cmd_nav_bookmark_add (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id <= 0)
     {
-      send_enveloped_error (ctx->fd,
-                            root,
-                            ERR_NOT_AUTHENTICATED,
-                            "auth required");
+      send_response_error(ctx, root, ERR_NOT_AUTHENTICATED, "auth required");
       return;
     }
   json_t *data = json_object_get (root, "data");
@@ -1767,12 +1951,12 @@ cmd_nav_bookmark_add (client_ctx_t *ctx, json_t *root)
 
   if (!name || !is_ascii_printable (name) || !len_leq (name, MAX_BM_NAME))
     {
-      send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG, "invalid name");
+      send_response_error(ctx, root, ERR_INVALID_ARG, "invalid name");
       return;
     }
   if (sector_id <= 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG, "invalid sector");
+      send_response_error(ctx, root, ERR_INVALID_ARG, "invalid sector");
       return;
     }
   int rc = db_bookmark_upsert (ctx->player_id, name, sector_id);
@@ -1780,13 +1964,13 @@ cmd_nav_bookmark_add (client_ctx_t *ctx, json_t *root)
 
   if (rc != 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_UNKNOWN, "db error");
+      send_response_error(ctx, root, ERR_UNKNOWN, "db error");
       return;
     }
   json_t *resp = json_pack ("{s:s,s:i}", "name", name, "sector_id", sector_id);
 
 
-  send_enveloped_ok (ctx->fd, root, "nav.bookmark.added", resp);
+  send_response_ok(ctx, root, "nav.bookmark.added", resp);
   json_decref (resp);
 }
 
@@ -1805,13 +1989,13 @@ cmd_nav_bookmark_remove (client_ctx_t *ctx, json_t *root)
 
   if (db_bookmark_remove (ctx->player_id, name) != 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_NOT_FOUND, "not found");
+      send_response_error(ctx, root, ERR_NOT_FOUND, "not found");
       return;
     }
   json_t *resp = json_pack ("{s:s}", "name", name);
 
 
-  send_enveloped_ok (ctx->fd, root, "nav.bookmark.removed", resp);
+  send_response_ok(ctx, root, "nav.bookmark.removed", resp);
   json_decref (resp);
 }
 
@@ -1827,32 +2011,71 @@ cmd_nav_bookmark_list (client_ctx_t *ctx, json_t *root)
   json_t *resp = json_pack ("{s:o}", "items", items);
 
 
-  send_enveloped_ok (ctx->fd, root, "nav.bookmark.list", resp);
+  send_response_ok(ctx, root, "nav.bookmark.list", resp);
   json_decref (resp);
 }
 
 
 void
-cmd_nav_avoid_add (client_ctx_t *c, json_t *r)
+cmd_nav_avoid_add (client_ctx_t *ctx, json_t *root)
 {
-  send_enveloped_error (c->fd, r, 1101, "Not implemented: " "nav.avoid.add");
-  return ;
+  if (ctx->player_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_NOT_AUTHENTICATED, "auth required");
+      return;
+    }
+  json_t *data = json_object_get (root, "data");
+  int sector_id = json_integer_value (json_object_get (data, "sector_id"));
+
+  if (sector_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG, "invalid sector");
+      return;
+    }
+  if (db_avoid_add (ctx->player_id, sector_id) != 0)
+    {
+      send_response_error (ctx, root, ERR_UNKNOWN, "db error");
+      return;
+    }
+  json_t *resp = json_pack ("{s:i}", "sector_id", sector_id);
+
+  send_response_ok (ctx, root, "nav.avoid.added", resp);
+  json_decref (resp);
 }
 
-
 void
-cmd_nav_avoid_remove (client_ctx_t *c, json_t *r)
+cmd_nav_avoid_remove (client_ctx_t *ctx, json_t *root)
 {
-  send_enveloped_error (c->fd, r, 1101, "Not implemented: " "nav.avoid.remove");
-  return ;
+  if (ctx->player_id <= 0)
+    {
+      return;
+    }
+  json_t *data = json_object_get (root, "data");
+  int sector_id = json_integer_value (json_object_get (data, "sector_id"));
+
+  if (db_avoid_remove (ctx->player_id, sector_id) != 0)
+    {
+      send_response_error (ctx, root, ERR_NOT_FOUND, "not found");
+      return;
+    }
+  json_t *resp = json_pack ("{s:i}", "sector_id", sector_id);
+
+  send_response_ok (ctx, root, "nav.avoid.removed", resp);
+  json_decref (resp);
 }
 
-
 void
-cmd_nav_avoid_list (client_ctx_t *c, json_t *r)
+cmd_nav_avoid_list (client_ctx_t *ctx, json_t *root)
 {
-  send_enveloped_error (c->fd, r, 1101, "Not implemented: " "nav.avoid.list");
-  return ;
+  if (ctx->player_id <= 0)
+    {
+      return;
+    }
+  json_t *items = players_list_avoid (ctx);
+  json_t *resp = json_pack ("{s:o}", "items", items);
+
+  send_response_ok (ctx, root, "nav.avoid.list", resp);
+  json_decref (resp);
 }
 
 
@@ -1861,10 +2084,7 @@ cmd_player_set_trade_account_preference (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id <= 0)
     {
-      send_enveloped_refused (ctx->fd,
-                              root,
-                              ERR_NOT_AUTHENTICATED,
-                              "Auth required",
+      send_response_refused(ctx, root, ERR_NOT_AUTHENTICATED, "Auth required",
                               NULL);
       return 0;
     }
@@ -1874,10 +2094,7 @@ cmd_player_set_trade_account_preference (client_ctx_t *ctx, json_t *root)
 
   if (!json_is_boolean (pref))
     {
-      send_enveloped_error (ctx->fd,
-                            root,
-                            ERR_INVALID_ARG,
-                            "prefer_bank must be bool");
+      send_response_error(ctx, root, ERR_INVALID_ARG, "prefer_bank must be bool");
       return 0;
     }
   int val = json_is_true (pref) ? 1 : 0;
@@ -1888,14 +2105,211 @@ cmd_player_set_trade_account_preference (client_ctx_t *ctx, json_t *root)
                         PT_BOOL,
                         val ? "1" : "0") != 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_UNKNOWN, "db error");
+      send_response_error(ctx, root, ERR_UNKNOWN, "db error");
       return 0;
     }
   json_t *resp = json_pack ("{s:b}", "ok", 1);
 
 
-  send_enveloped_ok (ctx->fd, root, "player.prefs.updated", resp);
+  send_response_ok(ctx, root, "player.prefs.updated", resp);
   json_decref (resp);
   return 0;
 }
 
+int
+cmd_insurance_policies_list (client_ctx_t *ctx, json_t *root)
+{
+  if (ctx->player_id <= 0)
+    {
+      send_response_refused(ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required", NULL);
+      return 0;
+    }
+
+  sqlite3 *db = db_get_handle ();
+  json_t *policies_array = json_array();
+  sqlite3_stmt *st = NULL;
+
+  const char *sql = "SELECT id, subject_type, subject_id, start_ts, expiry_ts, premium, payout FROM insurance_policies WHERE holder_type = 'player' AND holder_id = ?1;";
+
+  if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK) {
+      send_response_error(ctx, root, ERR_DB_QUERY_FAILED, "Database error preparing query.");
+      return 0;
+  }
+  sqlite3_bind_int(st, 1, ctx->player_id);
+
+  while (sqlite3_step(st) == SQLITE_ROW) {
+      json_t *policy = json_object();
+      json_object_set_new(policy, "id", json_integer(sqlite3_column_int(st, 0)));
+      json_object_set_new(policy, "subject_type", json_string((const char*)sqlite3_column_text(st, 1)));
+      json_object_set_new(policy, "subject_id", json_integer(sqlite3_column_int(st, 2)));
+      json_object_set_new(policy, "start_ts", json_string((const char*)sqlite3_column_text(st, 3))); // Stored as TEXT
+      json_object_set_new(policy, "expiry_ts", json_string((const char*)sqlite3_column_text(st, 4))); // Stored as TEXT
+      json_object_set_new(policy, "premium", json_integer(sqlite3_column_int64(st, 5)));
+      json_object_set_new(policy, "payout", json_integer(sqlite3_column_int64(st, 6)));
+      json_array_append_new(policies_array, policy);
+  }
+  sqlite3_finalize(st);
+
+  json_t *response_data = json_object();
+  json_object_set_new(response_data, "policies", policies_array);
+  send_response_ok(ctx, root, "insurance.policies.list", response_data);
+  json_decref(response_data);
+  return 0;
+}
+
+
+int
+cmd_insurance_policies_buy (client_ctx_t *ctx, json_t *root)
+{
+  if (ctx->player_id <= 0)
+    {
+      send_response_refused(ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required", NULL);
+      return 0;
+    }
+
+  sqlite3 *db = db_get_handle ();
+  json_t *data = json_object_get(root, "data");
+
+  if (!json_is_object(data)) {
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing data payload.");
+      return 0;
+  }
+
+  const char *subject_type = json_string_value(json_object_get(data, "subject_type"));
+  int subject_id = json_integer_value(json_object_get(data, "subject_id"));
+  int duration = json_integer_value(json_object_get(data, "duration")); // This comes from JSON
+  long long premium_to_pay = json_integer_value(json_object_get(data, "premium"));
+
+  if (!subject_type || subject_id <= 0 || duration <= 0 || premium_to_pay <= 0) {
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing or invalid subject_type, subject_id, duration, or premium.");
+      return 0;
+  }
+
+  // MVP: Hardcode payout for simplicity, or calculate based on premium
+  long long payout_amount = premium_to_pay * 10; // Simple 10x payout
+
+  // Check player credits
+  long long player_credits = 0;
+  if (h_get_player_petty_cash(db, ctx->player_id, &player_credits) != SQLITE_OK) {
+      send_response_error(ctx, root, ERR_DB_QUERY_FAILED, "Failed to retrieve player credits.");
+      return 0;
+  }
+
+  if (player_credits < premium_to_pay) {
+      send_response_refused(ctx, root, ERR_INSUFFICIENT_FUNDS, "Insufficient credits to buy policy.", NULL);
+      return 0;
+  }
+
+  // Deduct premium
+  if (h_deduct_player_petty_cash_unlocked(db, ctx->player_id, premium_to_pay, NULL) != SQLITE_OK) {
+      send_response_error(ctx, root, ERR_DB, "Failed to deduct premium from player credits.");
+      return 0;
+  }
+
+  // Insert policy row
+  sqlite3_stmt *st = NULL;
+  const char *sql = "INSERT INTO insurance_policies (holder_type, holder_id, subject_type, subject_id, start_ts, expiry_ts, premium, payout, active) VALUES ('player', ?1, ?2, ?3, strftime('%Y-%m-%dT%H:%M:%SZ','now'), strftime('%Y-%m-%dT%H:%M:%SZ','now', '+' || ?4 || ' days'), ?5, ?6, 1);";
+
+  if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK) {
+      send_response_error(ctx, root, ERR_DB_QUERY_FAILED, "Database error preparing policy insert.");
+      // Refund credits
+      h_add_player_petty_cash_unlocked(db, ctx->player_id, premium_to_pay, NULL);
+      return 0;
+  }
+
+  sqlite3_bind_int(st, 1, ctx->player_id);
+  sqlite3_bind_text(st, 2, subject_type, -1, SQLITE_STATIC);
+  sqlite3_bind_int(st, 3, subject_id);
+  sqlite3_bind_int(st, 4, duration); // binds to ?4, used in strftime
+  sqlite3_bind_int64(st, 5, premium_to_pay);
+  sqlite3_bind_int64(st, 6, payout_amount);
+
+  if (sqlite3_step(st) != SQLITE_DONE) {
+      send_response_error(ctx, root, ERR_DB, "Failed to insert insurance policy.");
+      // Refund credits
+      h_add_player_petty_cash_unlocked(db, ctx->player_id, premium_to_pay, NULL);
+      sqlite3_finalize(st);
+      return 0;
+  }
+  sqlite3_finalize(st);
+
+  json_t *response_data = json_object();
+  json_object_set_new(response_data, "message", json_string("Insurance policy purchased successfully."));
+  json_object_set_new(response_data, "policy_id", json_integer(sqlite3_last_insert_rowid(db)));
+  json_object_set_new(response_data, "premium", json_integer(premium_to_pay));
+  json_object_set_new(response_data, "payout", json_integer(payout_amount));
+  send_response_ok(ctx, root, "insurance.policies.buy", response_data);
+  json_decref(response_data);
+  return 0;
+}
+
+
+int
+cmd_insurance_claim_file (client_ctx_t *ctx, json_t *root)
+{
+  if (ctx->player_id <= 0)
+    {
+      send_response_refused(ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required", NULL);
+      return 0;
+    }
+
+  sqlite3 *db = db_get_handle ();
+  json_t *data = json_object_get(root, "data");
+
+  if (!json_is_object(data)) {
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing data payload.");
+      return 0;
+  }
+
+  int policy_id = json_integer_value(json_object_get(data, "policy_id"));
+  const char *incident_description = json_string_value(json_object_get(data, "incident_description"));
+
+  if (policy_id <= 0) {
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing or invalid policy_id.");
+      return 0;
+  }
+
+  // Validate policy ownership and existence
+  sqlite3_stmt *st_check = NULL;
+  const char *sql_check_policy = "SELECT id FROM insurance_policies WHERE id = ?1 AND holder_type = 'player' AND holder_id = ?2 AND active = 1 AND expiry_ts > strftime('%Y-%m-%dT%H:%M:%SZ','now');";
+  if (sqlite3_prepare_v2(db, sql_check_policy, -1, &st_check, NULL) != SQLITE_OK) {
+      send_response_error(ctx, root, ERR_DB_QUERY_FAILED, "Database error checking policy.");
+      return 0;
+  }
+  sqlite3_bind_int(st_check, 1, policy_id);
+  sqlite3_bind_int(st_check, 2, ctx->player_id);
+  if (sqlite3_step(st_check) != SQLITE_ROW) {
+      sqlite3_finalize(st_check);
+      send_response_refused(ctx, root, ERR_NOT_FOUND, "Active policy not found or does not belong to player.", NULL);
+      return 0;
+  }
+  sqlite3_finalize(st_check);
+
+  // Insert claim row
+  sqlite3_stmt *st = NULL;
+  // Use event_id and ts from schema. Use incident_description for event_id.
+  const char *sql = "INSERT INTO insurance_claims (policy_id, event_id, amount, status, ts) VALUES (?1, ?2, 0, 'open', strftime('%Y-%m-%dT%H:%M:%SZ','now'));";
+
+  if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK) {
+      send_response_error(ctx, root, ERR_DB_QUERY_FAILED, "Database error preparing claim insert.");
+      return 0;
+  }
+
+  sqlite3_bind_int(st, 1, policy_id);
+  sqlite3_bind_text(st, 2, incident_description, -1, SQLITE_STATIC); // Use incident_description for event_id
+
+  if (sqlite3_step(st) != SQLITE_DONE) {
+      send_response_error(ctx, root, ERR_DB, "Failed to insert insurance claim.");
+      sqlite3_finalize(st);
+      return 0;
+  }
+  sqlite3_finalize(st);
+
+  json_t *response_data = json_object();
+  json_object_set_new(response_data, "message", json_string("Insurance claim filed successfully."));
+  json_object_set_new(response_data, "claim_id", json_integer(sqlite3_last_insert_rowid(db)));
+  json_object_set_new(response_data, "status", json_string("filed")); // Use 'filed' as per MVP semantics
+  send_response_ok(ctx, root, "insurance.claim.file", response_data);
+  json_decref(response_data);
+  return 0;
+}

@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include "server_communication.h"       /* brings in client_ctx_t and json_t */
 /* --- Ferringhi traders (NPC) --- */
+int no_zero_ship (sqlite3 *db, int ship_id, int set_sector);
 int fer_init_once (void);       /* returns 1 if homeworld found, else 0 */
 void fer_tick (int64_t now_ms); /* drive traders on a schedule */
 void fer_attach_db (sqlite3 *db);
@@ -34,7 +35,7 @@ int cmd_sector_search (client_ctx_t *ctx, json_t *root);
 int cmd_move_describe_sector (client_ctx_t *ctx, json_t *root);
 int cmd_move_scan (client_ctx_t *ctx, json_t *root);
 int cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root);
-void cmd_sector_info (int fd, json_t *root, int sector_id, int player_id);
+void cmd_sector_info (client_ctx_t *ctx, int fd, json_t *root, int sector_id, int player_id);
 void cmd_sector_scan_density (void *ctx_in, json_t *root);
 void cmd_sector_scan (client_ctx_t *ctx, json_t *root);
 // Helper function to check if a warp exists between two sectors
@@ -64,6 +65,9 @@ struct planetType_struct
   float breeding;
 };
 
+
+// Helper to handle NPC encounters after player movement
+void h_handle_npc_encounters(sqlite3 *db, client_ctx_t *ctx, int new_sector_id);
 
 typedef struct planetType_struct planetClass;
 #endif /* SERVER_UNIVERSE_H */

@@ -42,6 +42,7 @@
 #include "server_clusters.h"
 #include "globals.h"        // For g_xp_align config
 #include "database_cmd.h"   // For h_player_apply_progress, db_player_get_alignment, h_get_cluster_alignment_band
+#include "server_stardock.h"
 
 
 
@@ -878,6 +879,12 @@ engine_main_loop (int shutdown_fd)
       LOGE ("[engine] FATAL: Failed to load engine configuration.\n");
       return 1;
     }
+  // Initialize tavern settings (load from DB) for engine cron jobs
+  if (tavern_settings_load () != 0)
+    {
+      LOGW ("[engine] Failed to load tavern settings. Using defaults.");
+    }
+
   int server_port_unused = 0; // Not needed by engine, but db_load_ports requires it
   int s2s_port = 0;
 

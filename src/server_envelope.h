@@ -11,6 +11,12 @@ void send_enveloped_ok (int fd, json_t *req, const char *type,
 void send_enveloped_error (int fd, json_t *req, int code, const char *msg);
 void send_enveloped_refused (int fd, json_t *req, int code, const char *msg,
                              json_t *data_opt);
+
+/* Context-aware wrappers that support capture/bulk execution */
+void send_response_ok (client_ctx_t *ctx, json_t *req, const char *type, json_t *data);
+void send_response_error (client_ctx_t *ctx, json_t *req, int code, const char *msg);
+void send_response_refused (client_ctx_t *ctx, json_t *req, int code, const char *msg, json_t *data_opt);
+
 json_t *s2s_make_env (const char *type, const char *src, const char *dst,
                       json_t *payload);
 json_t *s2s_make_ack (const char *src, const char *dst, const char *ack_of,

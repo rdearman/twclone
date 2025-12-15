@@ -10,6 +10,7 @@
 #include "errors.h"
 #include "server_players.h"     // Include for banking functions
 #include "server_cron.h"        // Include for cron job functions
+#include <time.h> // For time(NULL)
 #include "server_log.h"
 #include "server_clusters.h" // NEW
 #include "database_market.h"   // NEW
@@ -20,35 +21,35 @@ int
 cmd_sys_cluster_init (client_ctx_t *ctx, json_t *root)
 {
 #ifdef BUILD_PRODUCTION
-  send_enveloped_error(ctx->fd, root, 1403, "Command disabled in production");
+  send_response_error(ctx, root, REF_TURN_COST_EXCEEDS, "Command disabled in production");
   return 0;
 #else
   sqlite3 *db = db_get_handle ();
   int rc = 0;
   if (ctx->player_id <= 0)   // Very basic auth check, really should be admin
     {
-      send_enveloped_error (ctx->fd, root, 1401, "Auth required");
+      send_response_error(ctx, root, ERR_SECTOR_NOT_FOUND, "Auth required");
       return 0;
     }
   // Ensure player is an admin/sysop.
   if (auth_player_get_type (ctx->player_id) != PLAYER_TYPE_SYSOP)
     {
-      send_enveloped_error (ctx->fd, root, 403, "Forbidden: Must be SysOp");
+      send_response_error(ctx, root, 403, "Forbidden: Must be SysOp");
       return 0;
     }
   rc = clusters_init (db);
   if (rc != 0)
     {
-      send_enveloped_error (ctx->fd, root, 500, "clusters_init failed");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "clusters_init failed");
       return 0;
     }
   rc = clusters_seed_illegal_goods (db);
   if (rc != 0)
     {
-      send_enveloped_error (ctx->fd, root, 500, "seed failed");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "seed failed");
       return 0;
     }
-  send_enveloped_ok (ctx->fd, root, "sys.cluster.init.ok", NULL);
+  send_response_ok(ctx, root, "sys.cluster.init.ok", NULL);
   return 0;
 #endif
 }
@@ -58,29 +59,29 @@ int
 cmd_sys_cluster_seed_illegal_goods (client_ctx_t *ctx, json_t *root)
 {
 #ifdef BUILD_PRODUCTION
-  send_enveloped_error(ctx->fd, root, 1403, "Command disabled in production");
+  send_response_error(ctx, root, REF_TURN_COST_EXCEEDS, "Command disabled in production");
   return 0;
 #else
   sqlite3 *db = db_get_handle ();
   int rc = 0;
   if (ctx->player_id <= 0)   // Very basic auth check, really should be admin
     {
-      send_enveloped_error (ctx->fd, root, 1401, "Auth required");
+      send_response_error(ctx, root, ERR_SECTOR_NOT_FOUND, "Auth required");
       return 0;
     }
   // Ensure player is an admin/sysop.
   if (auth_player_get_type (ctx->player_id) != PLAYER_TYPE_SYSOP)
     {
-      send_enveloped_error (ctx->fd, root, 403, "Forbidden: Must be SysOp");
+      send_response_error(ctx, root, 403, "Forbidden: Must be SysOp");
       return 0;
     }
   rc = clusters_seed_illegal_goods (db);
   if (rc != 0)
     {
-      send_enveloped_error (ctx->fd, root, 500, "seed failed");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "seed failed");
       return 0;
     }
-  send_enveloped_ok (ctx->fd, root, "sys.cluster.seed_illegal_goods.ok", NULL);
+  send_response_ok(ctx, root, "sys.cluster.seed_illegal_goods.ok", NULL);
   return 0;
 #endif
 }
@@ -233,7 +234,7 @@ user_create (sqlite3 *db,
   rc_prepared = sqlite3_prepare_v2 (db, ins_players, -1, &stmt, NULL);
   if (rc_prepared != SQLITE_OK)
     {
-      LOGE ("user_create: Failed to prepare players insert: %s",
+      LOGE ("user_create: Failed to prepare players insert (prepare): %s",
             sqlite3_errmsg (db));
       if (stmt)
         {
@@ -257,7 +258,7 @@ user_create (sqlite3 *db,
           sqlite3_finalize (stmt);
           return ERR_NAME_TAKEN;
         }
-      LOGE ("user_create: Failed to insert into players: rc=%d, err=%s",
+      LOGE ("user_create: Failed to insert into players (step): rc=%d, err=%s",
             rc, sqlite3_errmsg (db));
       sqlite3_finalize (stmt);
       return AUTH_ERR_DB;
@@ -274,8 +275,8 @@ user_create (sqlite3 *db,
   rc_prepared = sqlite3_prepare_v2 (db, ins_turns, -1, &stmt, NULL);
   if (rc_prepared != SQLITE_OK)
     {
-      LOGE ("user_create: Failed to prepare turns upsert for player %d: %s",
-            player_id, sqlite3_errmsg (db));
+      LOGE ("user_create: Failed to prepare turns upsert (prepare): %s",
+            sqlite3_errmsg (db)); // Corrected LOGE: no player_id here
       if (stmt)
         {
           sqlite3_finalize (stmt);
@@ -287,7 +288,7 @@ user_create (sqlite3 *db,
   if (rc != SQLITE_DONE)
     {
       LOGE (
-        "user_create: Failed to upsert into turns table for player %d: rc=%d, err=%s",
+        "user_create: Failed to upsert into turns table (step) for player %d: rc=%d, err=%s",
         player_id,
         rc,
         sqlite3_errmsg (db));
@@ -299,8 +300,8 @@ user_create (sqlite3 *db,
   /* Create default bank account for this player */
   if (db_bank_account_create_default_for_player (db, player_id) != 0)
     {
-      LOGE ("user_create: Failed to create default bank account for player %d",
-            player_id);
+      LOGE ("user_create: Failed to create default bank account: player %d",
+            player_id); // Corrected LOGE: added player_id
       return AUTH_ERR_DB;     // Or a more specific error
     }
 
@@ -317,7 +318,7 @@ cmd_sys_test_news_cron (client_ctx_t *ctx, json_t *root)
   int rc = 0;
   if (!json_is_object (data))
     {
-      send_enveloped_error (ctx->fd, root, 400, "Missing data object.");
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing data object.");
       return 0;
     }
   json_t *j_subcommand = json_object_get (data, "subcommand");
@@ -329,8 +330,7 @@ cmd_sys_test_news_cron (client_ctx_t *ctx, json_t *root)
     }
   else
     {
-      send_enveloped_error (ctx->fd, root, 400,
-                            "Missing or invalid 'subcommand'.");
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing or invalid 'subcommand'.");
       return 0;
     }
   if (strcasecmp (subcommand, "generate_event") == 0)
@@ -348,8 +348,7 @@ cmd_sys_test_news_cron (client_ctx_t *ctx, json_t *root)
         }
       else
         {
-          send_enveloped_error (ctx->fd, root, 400,
-                                "Missing or invalid 'event_type'.");
+          send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing or invalid 'event_type'.");
           return 0;
         }
       json_t *j_actor_player_id = json_object_get (data, "actor_player_id");
@@ -382,13 +381,11 @@ cmd_sys_test_news_cron (client_ctx_t *ctx, json_t *root)
                              actor_player_id, sector_id, payload, NULL);
       if (rc == SQLITE_OK)
         {
-          send_enveloped_ok (ctx->fd, root,
-                             "sys.test_news_cron.event_generated", NULL);
+          send_response_ok(ctx, root, "sys.test_news_cron.event_generated", NULL);
         }
       else
         {
-          send_enveloped_error (ctx->fd, root, 500,
-                                "Failed to generate engine event.");
+          send_response_error(ctx, root, ERR_SERVER_ERROR, "Failed to generate engine event.");
         }
     }
   else if (strcasecmp (subcommand, "run_compiler") == 0)
@@ -396,13 +393,11 @@ cmd_sys_test_news_cron (client_ctx_t *ctx, json_t *root)
       rc = h_daily_news_compiler (db, (long long) time (NULL));
       if (rc == SQLITE_OK)
         {
-          send_enveloped_ok (ctx->fd, root, "sys.test_news_cron.compiler_ran",
-                             NULL);
+          send_response_ok(ctx, root, "sys.test_news_cron.compiler_ran", NULL);
         }
       else
         {
-          send_enveloped_error (ctx->fd, root, 500,
-                                "Failed to run news compiler.");
+          send_response_error(ctx, root, ERR_SERVER_ERROR, "Failed to run news compiler.");
         }
     }
   else if (strcasecmp (subcommand, "run_cleanup") == 0)
@@ -410,18 +405,16 @@ cmd_sys_test_news_cron (client_ctx_t *ctx, json_t *root)
       rc = h_cleanup_old_news (db, (long long) time (NULL));
       if (rc == SQLITE_OK)
         {
-          send_enveloped_ok (ctx->fd, root, "sys.test_news_cron.cleanup_ran",
-                             NULL);
+          send_response_ok(ctx, root, "sys.test_news_cron.cleanup_ran", NULL);
         }
       else
         {
-          send_enveloped_error (ctx->fd, root, 500,
-                                "Failed to run news cleanup.");
+          send_response_error(ctx, root, ERR_SERVER_ERROR, "Failed to run news cleanup.");
         }
     }
   else
     {
-      send_enveloped_error (ctx->fd, root, 400, "Unknown subcommand.");
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Unknown subcommand.");
     }
   return 0;
 }
@@ -431,7 +424,7 @@ int
 cmd_sys_raw_sql_exec (client_ctx_t *ctx, json_t *root)
 {
 #ifdef BUILD_PRODUCTION
-  send_enveloped_error(ctx->fd, root, 1403, "Command disabled in production");
+  send_response_error(ctx, root, REF_TURN_COST_EXCEEDS, "Command disabled in production");
   return 0;
 #else
   json_t *jdata = json_object_get (root, "data");
@@ -442,7 +435,7 @@ cmd_sys_raw_sql_exec (client_ctx_t *ctx, json_t *root)
     }
   if (!sql)
     {
-      send_enveloped_error (ctx->fd, root, 1301, "Missing sql");
+      send_response_error(ctx, root, ERR_MISSING_FIELD, "Missing sql");
       return 0;
     }
   sqlite3 *db = db_get_handle ();
@@ -450,56 +443,18 @@ cmd_sys_raw_sql_exec (client_ctx_t *ctx, json_t *root)
   int rc = sqlite3_exec (db, sql, NULL, NULL, &err);
   if (rc != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, 1500, err ? err : "SQL error");
+      send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, err ? err : "SQL error");
       if (err)
         sqlite3_free (err);
     }
   else
     {
-      send_enveloped_ok (ctx->fd, root, "sys.raw_sql_exec",
-                         json_string ("Executed"));
+      send_response_ok(ctx, root, "sys.raw_sql_exec", json_string ("Executed"));
     }
   return 0;
 #endif
 }
 
-
-// General JSON response helpers
-int
-send_error_response (client_ctx_t *ctx, json_t *root, int err_code,
-                     const char *msg)
-{
-  // server_envelope.h's send_enveloped_error expects the original root message for id/cmd matching.
-  // The err_code and msg are passed directly.
-  send_enveloped_error (ctx->fd, root, err_code, msg);
-  return 0;                     // Or -1 depending on desired return behavior
-}
-
-
-int
-send_json_response (client_ctx_t *ctx, json_t *response_json)
-{
-  // server_envelope.h's send_enveloped_ok expects the original root and a data object.
-  // Here, response_json *is* the data object we want to send.
-  // We create a temporary object to hold the response_json under a "data" key,
-  // or you might adjust send_enveloped_ok to directly accept the data.
-  // For now, let's assume response_json contains the actual data to be sent.
-  // If response_json needs to be wrapped in a "data" field, we'd do:
-  // json_t *wrapper = json_object();
-  // json_object_set_new(wrapper, "data", response_json);
-  // send_enveloped_ok(ctx->fd, root, "ok", wrapper);
-  // json_decref(wrapper); // assuming send_enveloped_ok takes ownership or copies.
-  // A more direct approach if send_enveloped_ok just sends "ok" and an arbitrary json_t
-  // For now, mimicking existing pattern where "data" is often implicitly handled,
-  // or the `response_json` is the actual payload.
-  // Looking at `send_enveloped_ok` in `server_envelope.h`... it takes `json_t *data`.
-  // So, we just pass the `response_json` directly as data.
-  // If `response_json` should be nested under a specific key, that logic would be here.
-  // Given the prototype: `send_enveloped_ok(int fd, json_t *original_request_root, const char *command_name, json_t *data)`
-  // `response_json` should likely be the `data` parameter.
-  send_enveloped_ok (ctx->fd, NULL, "ok", response_json);       // original_request_root is not needed here
-  return 0;
-}
 
 
 /* --- Bounty Commands --- */
@@ -552,7 +507,7 @@ cmd_bounty_post_federation (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id <= 0)
     {
-      send_enveloped_error (ctx->fd, root, 1401, "Authentication required.");
+      send_response_error(ctx, root, ERR_SECTOR_NOT_FOUND, "Authentication required.");
       return 0;
     }
   sqlite3 *db = db_get_handle ();
@@ -561,7 +516,7 @@ cmd_bounty_post_federation (client_ctx_t *ctx, json_t *root)
 
   if (!json_is_object (data))
     {
-      send_enveloped_error (ctx->fd, root, 400, "Missing data object.");
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing data object.");
       return 0;
     }
   int target_player_id = 0;
@@ -598,7 +553,7 @@ cmd_bounty_post_federation (client_ctx_t *ctx, json_t *root)
     {
       LOGE ("cmd_bounty_post_federation: Invalid target_player_id received: %d",
             target_player_id);
-      send_enveloped_error (ctx->fd, root, 400, "Invalid target_player_id.");
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Invalid target_player_id.");
       return 0;
     }
   long long amount;
@@ -606,7 +561,7 @@ cmd_bounty_post_federation (client_ctx_t *ctx, json_t *root)
 
   if (!json_get_int64_flexible (data, "amount", &amount) || amount <= 0)
     {
-      send_enveloped_error (ctx->fd, root, 400, "Invalid amount.");
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Invalid amount.");
       return 0;
     }
   const char *desc = json_string_value (json_object_get (data, "description"));
@@ -622,10 +577,7 @@ cmd_bounty_post_federation (client_ctx_t *ctx, json_t *root)
   db_player_get_sector (ctx->player_id, &sector);
   if (!is_fedspace_sector (sector))
     {
-      send_enveloped_error (ctx->fd,
-                            root,
-                            1403,
-                            "Must be in FedSpace to post a Federation bounty.");
+      send_response_error(ctx, root, REF_TURN_COST_EXCEEDS, "Must be in FedSpace to post a Federation bounty.");
       return 0;
     }
   int issuer_alignment = 0;
@@ -634,10 +586,7 @@ cmd_bounty_post_federation (client_ctx_t *ctx, json_t *root)
   db_player_get_alignment (db, ctx->player_id, &issuer_alignment);
   if (issuer_alignment < 0)
     {
-      send_enveloped_error (ctx->fd,
-                            root,
-                            1403,
-                            "Evil players cannot post Federation bounties.");
+      send_response_error(ctx, root, REF_TURN_COST_EXCEEDS, "Evil players cannot post Federation bounties.");
       return 0;
     }
   int target_alignment = 0;
@@ -646,23 +595,17 @@ cmd_bounty_post_federation (client_ctx_t *ctx, json_t *root)
   if (db_player_get_alignment (db, target_player_id,
                                &target_alignment) != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, 404, "Target player not found.");
+      send_response_error(ctx, root, 404, "Target player not found.");
       return 0;
     }
   if (target_alignment >= 0)
     {
-      send_enveloped_error (ctx->fd,
-                            root,
-                            1403,
-                            "Target must be an evil player.");
+      send_response_error(ctx, root, REF_TURN_COST_EXCEEDS, "Target must be an evil player.");
       return 0;
     }
   if (target_player_id == ctx->player_id)
     {
-      send_enveloped_error (ctx->fd,
-                            root,
-                            400,
-                            "Cannot post bounty on yourself.");
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Cannot post bounty on yourself.");
       return 0;
     }
   long long new_balance = 0;
@@ -676,7 +619,7 @@ cmd_bounty_post_federation (client_ctx_t *ctx, json_t *root)
                         NULL,
                         &new_balance) != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, 1402, "Insufficient funds.");
+      send_response_error(ctx, root, REF_NO_WARP_LINK, "Insufficient funds.");
       return 0;
     }
   if (db_bounty_create (db,
@@ -694,13 +637,10 @@ cmd_bounty_post_federation (client_ctx_t *ctx, json_t *root)
                      "DEPOSIT",
                      NULL,
                      &new_balance);
-      send_enveloped_error (ctx->fd,
-                            root,
-                            500,
-                            "Database error creating bounty.");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Database error creating bounty.");
       return 0;
     }
-  send_enveloped_ok (ctx->fd, root, "bounty.post_federation.confirmed", NULL);
+  send_response_ok(ctx, root, "bounty.post_federation.confirmed", NULL);
   return 0;
 }
 
@@ -710,7 +650,7 @@ cmd_bounty_post_hitlist (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id <= 0)
     {
-      send_enveloped_error (ctx->fd, root, 1401, "Authentication required.");
+      send_response_error(ctx, root, ERR_SECTOR_NOT_FOUND, "Authentication required.");
       return 0;
     }
   sqlite3 *db = db_get_handle ();
@@ -719,7 +659,7 @@ cmd_bounty_post_hitlist (client_ctx_t *ctx, json_t *root)
 
   if (!json_is_object (data))
     {
-      send_enveloped_error (ctx->fd, root, 400, "Missing data object.");
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing data object.");
       return 0;
     }
   int target_player_id = 0;
@@ -755,7 +695,7 @@ cmd_bounty_post_hitlist (client_ctx_t *ctx, json_t *root)
     {
       LOGE ("cmd_bounty_post_hitlist: Invalid target_player_id received: %d",
             target_player_id);
-      send_enveloped_error (ctx->fd, root, 400, "Invalid target_player_id.");
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Invalid target_player_id.");
       return 0;
     }
   long long amount;
@@ -763,7 +703,7 @@ cmd_bounty_post_hitlist (client_ctx_t *ctx, json_t *root)
 
   if (!json_get_int64_flexible (data, "amount", &amount) || amount <= 0)
     {
-      send_enveloped_error (ctx->fd, root, 400, "Invalid amount.");
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Invalid amount.");
       return 0;
     }
   const char *desc = json_string_value (json_object_get (data, "description"));
@@ -782,10 +722,7 @@ cmd_bounty_post_hitlist (client_ctx_t *ctx, json_t *root)
 
   if (port_id <= 0 || !is_black_market_port (db, port_id))
     {
-      send_enveloped_error (ctx->fd,
-                            root,
-                            1403,
-                            "Must be at a Black Market port to post a Hit List contract.");
+      send_response_error(ctx, root, REF_TURN_COST_EXCEEDS, "Must be at a Black Market port to post a Hit List contract.");
       return 0;
     }
   int issuer_alignment = 0;
@@ -796,10 +733,7 @@ cmd_bounty_post_hitlist (client_ctx_t *ctx, json_t *root)
                            &issuer_alignment);
   if (issuer_alignment > 0)
     {
-      send_enveloped_error (ctx->fd,
-                            root,
-                            1403,
-                            "Good players cannot post Hit List contracts.");
+      send_response_error(ctx, root, REF_TURN_COST_EXCEEDS, "Good players cannot post Hit List contracts.");
       return 0;
     }
   int target_alignment = 0;
@@ -808,19 +742,17 @@ cmd_bounty_post_hitlist (client_ctx_t *ctx, json_t *root)
   if (db_player_get_alignment (db, target_player_id,
                                &target_alignment) != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, 404, "Target player not found.");
+      send_response_error(ctx, root, 404, "Target player not found.");
       return 0;
     }
   if (target_alignment <= 0)
     {
-      send_enveloped_error (ctx->fd, root, 1403,
-                            "Target must be a good player.");
+      send_response_error(ctx, root, REF_TURN_COST_EXCEEDS, "Target must be a good player.");
       return 0;
     }
   if (target_player_id == ctx->player_id)
     {
-      send_enveloped_error (ctx->fd, root, 400,
-                            "Cannot put a hit on yourself.");
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Cannot put a hit on yourself.");
       return 0;
     }
   long long new_balance = 0;
@@ -834,7 +766,7 @@ cmd_bounty_post_hitlist (client_ctx_t *ctx, json_t *root)
                         NULL,
                         &new_balance) != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, 1402, "Insufficient funds.");
+      send_response_error(ctx, root, REF_NO_WARP_LINK, "Insufficient funds.");
       return 0;
     }
   if (db_bounty_create (db,
@@ -852,13 +784,10 @@ cmd_bounty_post_hitlist (client_ctx_t *ctx, json_t *root)
                      "DEPOSIT",
                      NULL,
                      &new_balance);
-      send_enveloped_error (ctx->fd,
-                            root,
-                            500,
-                            "Database error creating bounty.");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Database error creating bounty.");
       return 0;
     }
-  send_enveloped_ok (ctx->fd, root, "bounty.post_hitlist.confirmed", NULL);
+  send_response_ok(ctx, root, "bounty.post_hitlist.confirmed", NULL);
   return 0;
 }
 
@@ -868,7 +797,7 @@ cmd_bounty_list (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id <= 0)
     {
-      send_enveloped_error (ctx->fd, root, 1401, "Authentication required.");
+      send_response_error(ctx, root, ERR_SECTOR_NOT_FOUND, "Authentication required.");
       return 0;
     }
   sqlite3 *db = db_get_handle ();
@@ -905,10 +834,7 @@ cmd_bounty_list (client_ctx_t *ctx, json_t *root)
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
       sqlite3_free (sql);
-      send_enveloped_error (ctx->fd,
-                            root,
-                            500,
-                            "Database error listing bounties.");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Database error listing bounties.");
       return 0;
     }
   sqlite3_free (sql);
@@ -927,11 +853,11 @@ cmd_bounty_list (client_ctx_t *ctx, json_t *root)
                            json_integer (sqlite3_column_int (st,
                                                              1)));
 json_object_set_new (item, "target_name",
-                           json_string (sqlite3_column_text (st, 2)));
+                            json_string ((const char *) sqlite3_column_text (st, 2)));
       json_object_set_new (item, "reward",
-                           json_integer (sqlite3_column_int (st, 3)));
-      json_object_set_new (item, "posted_by_type",
-                           json_string (sqlite3_column_text (st, 4)));
+                           json_integer (sqlite3_column_int64 (st, 3)));
+      json_object_set_new (item, "target_name",
+                           json_string ((const char *) sqlite3_column_text (st, 4)));
       json_array_append_new (arr, item);
     }
   sqlite3_finalize (st);
@@ -939,7 +865,7 @@ json_object_set_new (item, "target_name",
 
 
   json_object_set_new (payload, "bounties", arr);
-  send_enveloped_ok (ctx->fd, root, "bounty.list.success", payload);
+  send_response_ok(ctx, root, "bounty.list.success", payload);
   json_decref (payload);
   return 0;
 }
@@ -951,19 +877,19 @@ cmd_sys_econ_planet_status (client_ctx_t *ctx, json_t *root)
   sqlite3 *db = db_get_handle ();
   if (ctx->player_id <= 0 || auth_player_get_type (ctx->player_id) != PLAYER_TYPE_SYSOP)
     {
-      send_enveloped_error (ctx->fd, root, 403, "Forbidden: Must be SysOp");
+      send_response_error(ctx, root, 403, "Forbidden: Must be SysOp");
       return 0;
     }
 
   json_t *data = json_object_get (root, "data");
   if (!data) {
-      send_enveloped_error (ctx->fd, root, 400, "Missing data object.");
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing data object.");
       return 0;
   }
 
   int planet_id = json_integer_value(json_object_get(data, "planet_id"));
   if (planet_id <= 0) {
-      send_enveloped_error (ctx->fd, root, 400, "Invalid or missing planet_id.");
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Invalid or missing planet_id.");
       return 0;
   }
 
@@ -981,14 +907,14 @@ cmd_sys_econ_planet_status (client_ctx_t *ctx, json_t *root)
           json_object_set_new(response, "owner_id", json_integer(sqlite3_column_int(st_planet, 3)));
           json_object_set_new(response, "owner_type", json_string((const char*)sqlite3_column_text(st_planet, 4)));
       } else {
-        send_enveloped_error (ctx->fd, root, 404, "Planet not found.");
+        send_response_error(ctx, root, 404, "Planet not found.");
         sqlite3_finalize(st_planet);
         json_decref(response);
         return 0;
       }
       sqlite3_finalize(st_planet);
   } else {
-      send_enveloped_error (ctx->fd, root, 500, "DB error fetching planet info.");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "DB error fetching planet info.");
       json_decref(response);
       return 0;
   }
@@ -1028,7 +954,7 @@ cmd_sys_econ_planet_status (client_ctx_t *ctx, json_t *root)
   db_get_planet_bank_balance(planet_id, &balance); // Assuming this helper exists
   json_object_set_new(response, "bank_balance", json_integer(balance));
 
-  send_enveloped_ok (ctx->fd, root, "sys.econ.planet_status", response);
+  send_response_ok(ctx, root, "sys.econ.planet_status", response);
   json_decref(response);
   return 0;
 }
@@ -1040,19 +966,19 @@ cmd_sys_econ_port_status (client_ctx_t *ctx, json_t *root)
   sqlite3 *db = db_get_handle ();
   if (ctx->player_id <= 0 || auth_player_get_type (ctx->player_id) != PLAYER_TYPE_SYSOP)
     {
-      send_enveloped_error (ctx->fd, root, 403, "Forbidden: Must be SysOp");
+      send_response_error(ctx, root, 403, "Forbidden: Must be SysOp");
       return 0;
     }
 
   json_t *data = json_object_get (root, "data");
   if (!data) {
-      send_enveloped_error (ctx->fd, root, 400, "Missing data object");
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing data object");
       return 0;
   }
 
   int port_id = json_integer_value(json_object_get(data, "port_id"));
   if (port_id <= 0) {
-      send_enveloped_error (ctx->fd, root, 400, "Invalid or missing port_id");
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Invalid or missing port_id");
       return 0;
   }
 
@@ -1070,7 +996,7 @@ cmd_sys_econ_port_status (client_ctx_t *ctx, json_t *root)
       }
       sqlite3_finalize(st_port);
   } else {
-      send_enveloped_error (ctx->fd, root, 500, "DB error fetching port");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "DB error fetching port");
       json_decref(response);
       return 0;
   }
@@ -1104,7 +1030,7 @@ cmd_sys_econ_port_status (client_ctx_t *ctx, json_t *root)
   json_t *orders = db_list_port_orders(db, port_id);
   json_object_set_new(response, "orders", orders);
 
-  send_enveloped_ok (ctx->fd, root, "sys.econ.port_status", response);
+  send_response_ok(ctx, root, "sys.econ.port_status", response);
   // json_decref(response); // send_enveloped_ok might assume ownership or not? 
   // Usually send_enveloped_ok copies or takes. Looking at other cmds...
   // Other cmds do json_decref(payload) after send. So I should too.
@@ -1118,7 +1044,7 @@ cmd_sys_econ_orders_summary (client_ctx_t *ctx, json_t *root)
   sqlite3 *db = db_get_handle ();
   if (ctx->player_id <= 0 || auth_player_get_type (ctx->player_id) != PLAYER_TYPE_SYSOP)
     {
-      send_enveloped_error (ctx->fd, root, 403, "Forbidden: Must be SysOp");
+      send_response_error(ctx, root, 403, "Forbidden: Must be SysOp");
       return 0;
     }
 
@@ -1132,7 +1058,7 @@ cmd_sys_econ_orders_summary (client_ctx_t *ctx, json_t *root)
   }
 
   json_t *summary = db_orders_summary(db, commodity_id);
-  send_enveloped_ok (ctx->fd, root, "sys.econ.orders_summary", summary);
+  send_response_ok(ctx, root, "sys.econ.orders_summary", summary);
   json_decref(summary);
   return 0;
 }
@@ -1143,7 +1069,7 @@ cmd_sys_npc_ferengi_tick_once (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id <= 0 || auth_player_get_type (ctx->player_id) != PLAYER_TYPE_SYSOP)
     {
-      send_enveloped_error (ctx->fd, root, 403, "Forbidden: Must be SysOp");
+      send_response_error(ctx, root, 403, "Forbidden: Must be SysOp");
       return 0;
     }
 
@@ -1151,6 +1077,47 @@ cmd_sys_npc_ferengi_tick_once (client_ctx_t *ctx, json_t *root)
   // Passing 0 as now_ms as it's reserved/unused for rate limiting in the current implementation
   fer_tick(0);
 
-  send_enveloped_ok (ctx->fd, root, "sys.npc.ferengi_tick_once", NULL);
+  send_response_ok(ctx, root, "sys.npc.ferengi_tick_once", NULL);
   return 0;
 }
+
+// Debug command to manually trigger fedspace cleanup for testing
+int
+cmd_debug_run_fedspace_cleanup (client_ctx_t *ctx, json_t *root)
+{
+  if (ctx->player_id <= 0)
+    {
+      send_response_refused (ctx, root, ERR_NOT_AUTHENTICATED,
+                             "Authentication required.", NULL);
+      return 0;
+    }
+  sqlite3 *db = db_get_handle ();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_DB, "Database unavailable.");
+      return 0;
+    }
+  // Ensure player is an admin/sysop.
+  if (auth_player_get_type (ctx->player_id) != PLAYER_TYPE_SYSOP)
+    {
+      send_response_refused(ctx, root, ERR_PERMISSION_DENIED, "Forbidden: Must be SysOp", NULL);
+      return 0;
+    }
+  // Pass current time to h_fedspace_cleanup
+  h_fedspace_cleanup (db, time (NULL));
+  send_response_ok (ctx, root, "debug.fedspace_cleanup_run", NULL);
+  return 0;
+}
+
+int send_error_response (client_ctx_t *ctx, json_t *root, int err_code, const char *msg)
+{
+  send_response_error(ctx, root, err_code, msg);
+  return 0; // Assuming it returns 0 on success
+}
+
+int send_json_response (client_ctx_t *ctx, json_t *root, json_t *response_json)
+{
+  send_response_ok(ctx, root, "ok", response_json); // Using "ok" as the type for generic success
+  return 0; // Assuming it returns 0 on success
+}
+

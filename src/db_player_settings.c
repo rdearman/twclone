@@ -23,6 +23,23 @@ db_player_settings_init (sqlite3 *db)
   return (g_db_ps ? 0 : -1);
 }
 
+static const char *
+type_to_s (pref_type t)
+{
+  switch (t)
+    {
+      case PT_BOOL:
+        return "bool";
+      case PT_INT:
+        return "int";
+      case PT_STRING:
+        return "string";
+      case PT_JSON:
+        return "json";
+    }
+  return "string";
+}
+
 
 /* ---------- Prefs ---------- */
 
@@ -37,10 +54,7 @@ db_prefs_set_one (int64_t pid, const char *key, pref_type t,
       return SQLITE_MISUSE;
     }
   /* map enum to on-disk textual type */
-  const char *type_str =
-    (t == PT_BOOL) ? "bool" :
-    (t == PT_INT) ? "int" :
-    (t == PT_STRING) ? "string" : (t == PT_JSON) ? "json" : "string";
+  const char *type_str = type_to_s(t);
   static const char *SQL =
     "INSERT INTO player_prefs(player_id,key,type,value,updated_at) "
     "VALUES(?1,?2,?3,?4,strftime('%s','now')) "
@@ -168,22 +182,6 @@ db_get_player_pref_string (int player_id, const char *key,
 }
 
 
-static const char *
-type_to_s (pref_type t)
-{
-  switch (t)
-    {
-      case PT_BOOL:
-        return "bool";
-      case PT_INT:
-        return "int";
-      case PT_STRING:
-        return "string";
-      case PT_JSON:
-        return "json";
-    }
-  return "string";
-}
 
 
 /* ---------- Subscriptions ---------- */

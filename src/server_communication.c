@@ -120,8 +120,7 @@ cmd_sys_notice_create (client_ctx_t *ctx, json_t *root)
   json_t *exp = json_object_get (data, "expires_at");
   if (!title || !body)
     {
-      send_enveloped_error (ctx->fd, root, 400,
-                            "title and body are required");
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "title and body are required");
       return 0;
     }
   if (!sev
@@ -185,7 +184,7 @@ cmd_sys_notice_create (client_ctx_t *ctx, json_t *root)
     {
       json_object_set (resp, "expires_at", exp);
     }
-  send_enveloped_ok (ctx->fd, root, "announce.created", resp);
+  send_response_ok(ctx, root, "announce.created", resp);
   return 0;
 sql_err:
   if (st)
@@ -193,7 +192,7 @@ sql_err:
       sqlite3_finalize (st);
     }
   LOGE ("sys.notice.create SQL error: %s", sqlite3_errmsg (db));
-  send_enveloped_error (ctx->fd, root, 500, "db error");
+  send_response_error(ctx, root, ERR_SERVER_ERROR, "db error");
   return 1;
 }
 
@@ -237,7 +236,7 @@ cmd_notice_list (client_ctx_t *ctx, json_t *root)
         {
           sqlite3_finalize (st);
         }
-      send_enveloped_error (ctx->fd, root, 500, "db error");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "db error");
       return 0;
     }
   sqlite3_bind_int64 (st, 1, (sqlite3_int64) ctx->player_id);
@@ -283,7 +282,7 @@ cmd_notice_list (client_ctx_t *ctx, json_t *root)
   json_t *resp = json_pack ("{s:o}", "items", items);
 
 
-  send_enveloped_ok (ctx->fd, root, "notice.list_v1", resp);
+  send_response_ok(ctx, root, "notice.list_v1", resp);
   return 0;
 }
 
@@ -299,7 +298,7 @@ cmd_notice_ack (client_ctx_t *ctx, json_t *root)
   int id = (int) json_integer_value (json_object_get (data, "id"));
   if (id <= 0)
     {
-      send_enveloped_error (ctx->fd, root, 400, "id required");
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "id required");
       return 1;
     }
   sqlite3 *db = db_get_handle ();
@@ -319,7 +318,7 @@ cmd_notice_ack (client_ctx_t *ctx, json_t *root)
         {
           sqlite3_finalize (st);
         }
-      send_enveloped_error (ctx->fd, root, 500, "db error");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "db error");
       return 1;
     }
   sqlite3_bind_int (st, 1, id);
@@ -331,7 +330,7 @@ cmd_notice_ack (client_ctx_t *ctx, json_t *root)
   sqlite3_finalize (st);
   if (rc != SQLITE_DONE)
     {
-      send_enveloped_error (ctx->fd, root, 500, "db error");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "db error");
       return 1;
     }
   /* Optional: return the updated row */
@@ -339,7 +338,7 @@ cmd_notice_ack (client_ctx_t *ctx, json_t *root)
     json_pack ("{s:i, s:I}", "id", id, "seen_at", (json_int_t) now);
 
 
-  send_enveloped_ok (ctx->fd, root, "notice.acknowledged", resp);
+  send_response_ok(ctx, root, "notice.acknowledged", resp);
   return 0;
 }
 
@@ -855,7 +854,7 @@ cmd_admin_notice_create (client_ctx_t *ctx, json_t *root)
   json_t *data = json_object_get (root, "data");
   if (!json_is_object (data))
     {
-      send_enveloped_error (ctx->fd, root, 1400, "Bad request");
+      send_response_error(ctx, root, REF_NOT_IN_SECTOR, "Bad request");
       return 1;
     }
   const char *title = json_string_value (json_object_get (data, "title"));
@@ -867,7 +866,7 @@ cmd_admin_notice_create (client_ctx_t *ctx, json_t *root)
 
   if (!title || !body)
     {
-      send_enveloped_error (ctx->fd, root, 1400, "Missing title/body");
+      send_response_error(ctx, root, REF_NOT_IN_SECTOR, "Missing title/body");
       return 1;
     }
   int id =
@@ -876,7 +875,7 @@ cmd_admin_notice_create (client_ctx_t *ctx, json_t *root)
 
   if (id < 0)
     {
-      send_enveloped_error (ctx->fd, root, 1500, "DB error");
+      send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "DB error");
       return 1;
     }
   /* Broadcast to all online sessions */
@@ -888,7 +887,7 @@ cmd_admin_notice_create (client_ctx_t *ctx, json_t *root)
   json_t *ok = json_pack ("{s:i}", "notice_id", id);
 
 
-  send_enveloped_ok (ctx->fd, root, "admin.notice.created_v1", ok);
+  send_response_ok(ctx, root, "admin.notice.created_v1", ok);
   json_decref (ok);
   return 0;
 }
@@ -900,7 +899,7 @@ cmd_notice_dismiss (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id <= 0)
     {
-      send_enveloped_refused (ctx->fd, root, 1101, "Auth required", NULL);
+      send_response_refused(ctx, root, ERR_NOT_IMPLEMENTED, "Auth required", NULL);
       return 1;
     }
   json_t *data = json_object_get (root, "data");
@@ -908,7 +907,7 @@ cmd_notice_dismiss (client_ctx_t *ctx, json_t *root)
 
   if (!json_is_object (data))
     {
-      send_enveloped_error (ctx->fd, root, 1400, "Bad request");
+      send_response_error(ctx, root, REF_NOT_IN_SECTOR, "Bad request");
       return 1;
     }
   int notice_id =
@@ -917,18 +916,18 @@ cmd_notice_dismiss (client_ctx_t *ctx, json_t *root)
 
   if (notice_id <= 0)
     {
-      send_enveloped_error (ctx->fd, root, 1400, "Missing notice_id");
+      send_response_error(ctx, root, REF_NOT_IN_SECTOR, "Missing notice_id");
       return 1;
     }
   if (db_notice_mark_seen (notice_id, ctx->player_id) != 0)
     {
-      send_enveloped_error (ctx->fd, root, 1500, "DB error");
+      send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "DB error");
       return 1;
     }
   json_t *ok = json_pack ("{s:i}", "notice_id", notice_id);
 
 
-  send_enveloped_ok (ctx->fd, root, "notice.dismissed_v1", ok);
+  send_response_ok(ctx, root, "notice.dismissed_v1", ok);
   json_decref (ok);
   return 0;
 }
@@ -945,7 +944,7 @@ require_auth (client_ctx_t *ctx, json_t *root)
     {
       return 1;
     }
-  send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+  send_response_refused(ctx, root, ERR_SECTOR_NOT_FOUND, "Not authenticated", NULL);
   return 0;
 }
 
@@ -953,8 +952,9 @@ require_auth (client_ctx_t *ctx, json_t *root)
 static inline int
 niy (client_ctx_t *ctx, json_t *root, const char *which)
 {
-  (void) which;                 // keep for future logging if desired
-  send_enveloped_error (ctx->fd, root, 1101, "Not implemented");
+  char buf[256];
+  snprintf (buf, sizeof (buf), "Not implemented: %s", which);
+  send_response_error (ctx, root, ERR_NOT_IMPLEMENTED, buf);
   return 0;
 }
 
@@ -1010,7 +1010,7 @@ cmd_mail_send (client_ctx_t *ctx, json_t *root)
 
   if (!data)
     {
-      send_enveloped_error (ctx->fd, root, 1300, "Invalid request schema");
+      send_response_error(ctx, root, ERR_INVALID_SCHEMA, "Invalid request schema");
       return 0;
     }                           /* 1300 */
   /* Parse inputs */
@@ -1054,10 +1054,7 @@ cmd_mail_send (client_ctx_t *ctx, json_t *root)
   /* Basic validation */
   if ((!to_name && to_id <= 0) || !body)
     {
-      send_enveloped_error (ctx->fd,
-                            root,
-                            1301,
-                            "Missing required field: to/to_id and body");                       /* 1301 */
+      send_response_error(ctx, root, ERR_MISSING_FIELD, "Missing required field: to/to_id and body");                       /* 1301 */
       return 0;
     }
   /* Resolve recipient by name if needed (players.name exists) */
@@ -1075,7 +1072,7 @@ cmd_mail_send (client_ctx_t *ctx, json_t *root)
             {
               sqlite3_finalize (st);
             }
-          send_enveloped_error (ctx->fd, root, 500, "db error");
+          send_response_error(ctx, root, ERR_SERVER_ERROR, "db error");
           return 0;
         }
       sqlite3_bind_text (st, 1, to_name, -1, SQLITE_TRANSIENT);
@@ -1086,7 +1083,7 @@ cmd_mail_send (client_ctx_t *ctx, json_t *root)
       sqlite3_finalize (st);
       if (to_id <= 0)
         {
-          send_enveloped_error (ctx->fd, root, 1900, "Recipient not found");
+          send_response_error(ctx, root, 1900, "Recipient not found");
           return 0;
         }                       /* 1900 */
     }
@@ -1105,7 +1102,7 @@ cmd_mail_send (client_ctx_t *ctx, json_t *root)
           {
             sqlite3_finalize (st);
           }
-        send_enveloped_error (ctx->fd, root, 500, "db error");
+        send_response_error(ctx, root, ERR_SERVER_ERROR, "db error");
         return 0;
       }
     sqlite3_bind_int (st, 1, to_id);
@@ -1116,7 +1113,7 @@ cmd_mail_send (client_ctx_t *ctx, json_t *root)
     sqlite3_finalize (st);
     if (blocked)
       {
-        send_enveloped_error (ctx->fd, root, 1901, "Muted or blocked");
+        send_response_error(ctx, root, ERR_HARDWARE_NOT_AVAILABLE, "Muted or blocked");
         return 0;
       }                         /* 1901 */
   }
@@ -1164,7 +1161,7 @@ cmd_mail_send (client_ctx_t *ctx, json_t *root)
             {
               sqlite3_finalize (ins);
             }
-          send_enveloped_error (ctx->fd, root, 500, "db error");
+          send_response_error(ctx, root, ERR_SERVER_ERROR, "db error");
           return 0;
         }
       sqlite3_bind_int (ins, 1, ctx->player_id);
@@ -1216,7 +1213,7 @@ cmd_mail_send (client_ctx_t *ctx, json_t *root)
             }
           if (mail_id == 0)
             {
-              send_enveloped_error (ctx->fd, root, 500, "db error");
+              send_response_error(ctx, root, ERR_SERVER_ERROR, "db error");
               return 0;
             }
         }
@@ -1230,7 +1227,7 @@ cmd_mail_send (client_ctx_t *ctx, json_t *root)
   json_t *resp = json_pack ("{s:i}", "id", mail_id);
 
 
-  send_enveloped_ok (ctx->fd, root, "mail.sent", resp);
+  send_response_ok(ctx, root, "mail.sent", resp);
   return 0;
 }
 
@@ -1283,7 +1280,7 @@ cmd_mail_inbox (client_ctx_t *ctx, json_t *root)
         {
           sqlite3_finalize (st);
         }
-      send_enveloped_error (ctx->fd, root, 500, "db error");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "db error");
       return 0;
     }
   sqlite3_bind_int64 (st, 1, (sqlite3_int64) ctx->player_id);
@@ -1336,7 +1333,7 @@ cmd_mail_inbox (client_ctx_t *ctx, json_t *root)
     {
       json_object_set_new (resp, "next_after_id", json_integer (last_id));
     }
-  send_enveloped_ok (ctx->fd, root, "mail.inbox_v1", resp);
+  send_response_ok(ctx, root, "mail.inbox_v1", resp);
   return 0;
 }
 
@@ -1355,7 +1352,7 @@ cmd_mail_read (client_ctx_t *ctx, json_t *root)
   json_t *data = json_object_get (root, "data");
   if (!data)
     {
-      send_enveloped_error (ctx->fd, root, 1300, "Invalid request schema");
+      send_response_error(ctx, root, ERR_INVALID_SCHEMA, "Invalid request schema");
       return 0;
     }
   int id = (int) json_integer_value (json_object_get (data, "id"));
@@ -1363,8 +1360,7 @@ cmd_mail_read (client_ctx_t *ctx, json_t *root)
 
   if (id <= 0)
     {
-      send_enveloped_error (ctx->fd, root, 1301,
-                            "Missing required field: id");
+      send_response_error(ctx, root, ERR_MISSING_FIELD, "Missing required field: id");
       return 0;
     }
   LOGI ("cmd_mail_read: reading mail id %d for player %d", id,
@@ -1383,7 +1379,7 @@ cmd_mail_read (client_ctx_t *ctx, json_t *root)
         {
           sqlite3_finalize (st);
         }
-      send_enveloped_error (ctx->fd, root, 500, "db error");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "db error");
       return 0;
     }
   sqlite3_bind_int (st, 1, id);
@@ -1392,8 +1388,7 @@ cmd_mail_read (client_ctx_t *ctx, json_t *root)
     {
       LOGI ("cmd_mail_read: mail not found or not owner");
       sqlite3_finalize (st);
-      send_enveloped_error (ctx->fd, root, 1900,
-                            "Recipient not found or message not yours");
+      send_response_error(ctx, root, 1900, "Recipient not found or message not yours");
       return 0;
     }
   LOGI ("cmd_mail_read: mail found, processing...");
@@ -1457,7 +1452,7 @@ cmd_mail_read (client_ctx_t *ctx, json_t *root)
       strftime (iso, sizeof iso, "%Y-%m-%dT%H:%M:%SZ", gmtime (&now));
       json_object_set_new (resp, "read_at", json_string (iso));
     }
-  send_enveloped_ok (ctx->fd, root, "mail.read_v1", resp);
+  send_response_ok(ctx, root, "mail.read_v1", resp);
   free (sender_name);
   free (subject);
   free (body);
@@ -1482,10 +1477,7 @@ cmd_mail_delete (client_ctx_t *ctx, json_t *root)
   json_t *ids = data ? json_object_get (data, "ids") : NULL;
   if (!ids || !json_is_array (ids))
     {
-      send_enveloped_error (ctx->fd,
-                            root,
-                            1300,
-                            "Invalid request schema: ids[] required");                          /* :contentReference[oaicite:5]{index=5} */
+      send_response_error(ctx, root, ERR_INVALID_SCHEMA, "Invalid request schema: ids[] required");                          /* :contentReference[oaicite:5]{index=5} */
       return 0;
     }
   /* Build a parameterised IN (...) safely (<= 200 ids) */
@@ -1494,12 +1486,11 @@ cmd_mail_delete (client_ctx_t *ctx, json_t *root)
 
   if (n == 0)
     {
-      send_enveloped_ok (ctx->fd, root, "mail.deleted",
-                         json_pack ("{s:i}", "count", 0));
+      send_response_ok(ctx, root, "mail.deleted", json_pack ("{s:i}", "count", 0));
     }
   if (n > 200)
     {
-      send_enveloped_error (ctx->fd, root, 1305, "Too many bulk items"); /* 1305 *//* :contentReference[oaicite:6]{index=6} */
+      send_response_error(ctx, root, ERR_TOO_MANY_BULK_ITEMS, "Too many bulk items"); /* 1305 *//* :contentReference[oaicite:6]{index=6} */
     }
   /* Create: UPDATE mail SET deleted=1 WHERE recipient_id=? AND id IN (?,?,...) */
   char sql[1024];
@@ -1525,7 +1516,7 @@ cmd_mail_delete (client_ctx_t *ctx, json_t *root)
         {
           sqlite3_finalize (st);
         }
-      send_enveloped_error (ctx->fd, root, 500, "db error");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "db error");
       return 0;
     }
   sqlite3_bind_int64 (st, 1, (sqlite3_int64) ctx->player_id);
@@ -1541,13 +1532,13 @@ cmd_mail_delete (client_ctx_t *ctx, json_t *root)
   sqlite3_finalize (st);
   if (rc != SQLITE_DONE)
     {
-      send_enveloped_error (ctx->fd, root, 500, "db error");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "db error");
       return 0;
     }
   json_t *resp = json_pack ("{s:i}", "count", changes);
 
 
-  send_enveloped_ok (ctx->fd, root, "mail.deleted", resp);
+  send_response_ok(ctx, root, "mail.deleted", resp);
   return 0;
 }
 
@@ -1722,8 +1713,7 @@ cmd_subscribe_add (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id <= 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_NOT_AUTHENTICATED,
-                            "auth required");
+      send_response_error(ctx, root, ERR_NOT_AUTHENTICATED, "auth required");
       return -1;
     }
   json_t *data = json_object_get (root, "data");
@@ -1731,8 +1721,7 @@ cmd_subscribe_add (client_ctx_t *ctx, json_t *root)
 
   if (!json_is_object (data))
     {
-      send_enveloped_error (ctx->fd, root, ERR_INVALID_SCHEMA,
-                            "data must be object");
+      send_response_error(ctx, root, ERR_INVALID_SCHEMA, "data must be object");
       return -1;
     }
   json_t *v = json_object_get (data, "topic");
@@ -1740,8 +1729,7 @@ cmd_subscribe_add (client_ctx_t *ctx, json_t *root)
 
   if (!json_is_string (v))
     {
-      send_enveloped_error (ctx->fd, root, ERR_MISSING_FIELD,
-                            "missing field: topic");
+      send_response_error(ctx, root, ERR_MISSING_FIELD, "missing field: topic");
       return -1;
     }
   const char *topic = json_string_value (v);
@@ -1750,8 +1738,7 @@ cmd_subscribe_add (client_ctx_t *ctx, json_t *root)
   if (!is_ascii_printable (topic) || !len_leq (topic, 64)
       || !is_allowed_topic (topic))
     {
-      send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG,
-                            "invalid topic");
+      send_response_error(ctx, root, ERR_INVALID_ARG, "invalid topic");
       return -1;
     }
   const char *filter_json = NULL;
@@ -1762,8 +1749,7 @@ cmd_subscribe_add (client_ctx_t *ctx, json_t *root)
     {
       if (!json_is_string (v))
         {
-          send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG,
-                                "filter_json must be string");
+          send_response_error(ctx, root, ERR_INVALID_ARG, "filter_json must be string");
           return -1;
         }
       filter_json = json_string_value (v);
@@ -1774,8 +1760,7 @@ cmd_subscribe_add (client_ctx_t *ctx, json_t *root)
 
       if (!probe)
         {
-          send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG,
-                                "filter_json is not valid JSON");
+          send_response_error(ctx, root, ERR_INVALID_ARG, "filter_json is not valid JSON");
           return -1;
         }
       json_decref (probe);
@@ -1790,7 +1775,7 @@ cmd_subscribe_add (client_ctx_t *ctx, json_t *root)
         "SELECT COUNT(*) FROM subscriptions WHERE player_id=?1 AND enabled=1;",
         -1, &st, NULL) != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, ERR_UNKNOWN, "db error");
+      send_response_error(ctx, root, ERR_UNKNOWN, "db error");
       return -1;
     }
   sqlite3_bind_int64 (st, 1, ctx->player_id);
@@ -1809,8 +1794,7 @@ cmd_subscribe_add (client_ctx_t *ctx, json_t *root)
                    have);
 
 
-      send_enveloped_refused (ctx->fd, root, ERR_LIMIT_EXCEEDED,
-                              "too many subscriptions", meta);
+      send_response_refused(ctx, root, ERR_LIMIT_EXCEEDED, "too many subscriptions", meta);
       return -1;
     }
   /* Upsert subscription */
@@ -1820,13 +1804,13 @@ cmd_subscribe_add (client_ctx_t *ctx, json_t *root)
 
   if (rc != 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_UNKNOWN, "db error");
+      send_response_error(ctx, root, ERR_UNKNOWN, "db error");
       return -1;
     }
   json_t *resp = json_pack ("{s:s}", "topic", topic);
 
 
-  send_enveloped_ok (ctx->fd, root, "subscribe.added", resp);
+  send_response_ok(ctx, root, "subscribe.added", resp);
   json_decref (resp);
   return 0;
 }
@@ -1837,8 +1821,7 @@ cmd_subscribe_remove (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id <= 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_NOT_AUTHENTICATED,
-                            "auth required");
+      send_response_error(ctx, root, ERR_NOT_AUTHENTICATED, "auth required");
       return -1;
     }
   json_t *data = json_object_get (root, "data");
@@ -1846,8 +1829,7 @@ cmd_subscribe_remove (client_ctx_t *ctx, json_t *root)
 
   if (!json_is_object (data))
     {
-      send_enveloped_error (ctx->fd, root, ERR_INVALID_SCHEMA,
-                            "data must be object");
+      send_response_error(ctx, root, ERR_INVALID_SCHEMA, "data must be object");
       return -1;
     }
   json_t *v = json_object_get (data, "topic");
@@ -1855,8 +1837,7 @@ cmd_subscribe_remove (client_ctx_t *ctx, json_t *root)
 
   if (!json_is_string (v))
     {
-      send_enveloped_error (ctx->fd, root, ERR_MISSING_FIELD,
-                            "missing field: topic");
+      send_response_error(ctx, root, ERR_MISSING_FIELD, "missing field: topic");
       return -1;
     }
   const char *topic = json_string_value (v);
@@ -1865,8 +1846,7 @@ cmd_subscribe_remove (client_ctx_t *ctx, json_t *root)
   if (!is_ascii_printable (topic) || !len_leq (topic, 64)
       || !is_allowed_topic (topic))
     {
-      send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG,
-                            "invalid topic");
+      send_response_error(ctx, root, ERR_INVALID_ARG, "invalid topic");
       return -1;
     }
   int was_locked = 0;
@@ -1875,21 +1855,20 @@ cmd_subscribe_remove (client_ctx_t *ctx, json_t *root)
 
   if (rc == +1 || was_locked)
     {
-      send_enveloped_refused (ctx->fd, root, REF_SAFE_ZONE_ONLY
-                              /* or REF_LOCKED if you prefer */,
-                              "subscription locked by policy", NULL);
+      send_response_refused (ctx, root, REF_SAFE_ZONE_ONLY
+                             /* or REF_LOCKED if you prefer */,
+                             "subscription locked by policy", NULL);
       return -1;
     }
   if (rc != 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_USER_NOT_FOUND,
-                            "subscription not found");
+      send_response_error(ctx, root, ERR_USER_NOT_FOUND, "subscription not found");
       return -1;
     }
   json_t *resp = json_pack ("{s:s}", "topic", topic);
 
 
-  send_enveloped_ok (ctx->fd, root, "subscribe.removed", resp);
+  send_response_ok(ctx, root, "subscribe.removed", resp);
   json_decref (resp);
   return 0;
 }
@@ -1900,8 +1879,7 @@ cmd_subscribe_list (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id <= 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_NOT_AUTHENTICATED,
-                            "auth required");
+      send_response_error(ctx, root, ERR_NOT_AUTHENTICATED, "auth required");
       return -1;
     }
   sqlite3_stmt *it = NULL;
@@ -1909,7 +1887,7 @@ cmd_subscribe_list (client_ctx_t *ctx, json_t *root)
 
   if (db_subscribe_list (ctx->player_id, &it) != 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_UNKNOWN, "db error");
+      send_response_error(ctx, root, ERR_UNKNOWN, "db error");
       return -1;
     }
   json_t *items = json_array ();
@@ -1937,7 +1915,7 @@ cmd_subscribe_list (client_ctx_t *ctx, json_t *root)
   json_t *resp = json_pack ("{s:O}", "items", items);
 
 
-  send_enveloped_ok (ctx->fd, root, "subscribe.list", resp);
+  send_response_ok(ctx, root, "subscribe.list", resp);
   json_decref (resp);
   return 0;
 }
@@ -2012,7 +1990,7 @@ require_admin (client_ctx_t *ctx, json_t *root)
     {
       return 1;
     }
-  send_enveloped_refused (ctx->fd, root, 1401, "Not authenticated", NULL);
+  send_response_refused(ctx, root, ERR_SECTOR_NOT_FOUND, "Not authenticated", NULL);
   return 0;
 }
 
@@ -2024,7 +2002,32 @@ cmd_admin_notice (client_ctx_t *ctx, json_t *root)
     {
       return 0;
     }
-  send_enveloped_error (ctx->fd, root, 1101, "Not implemented: admin.notice");
+
+  json_t *data = json_object_get (root, "data");
+  if (!data || !json_is_object (data))
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG, "Missing or invalid data for admin.notice");
+      return 0;
+    }
+
+  const char *title = json_string_value (json_object_get (data, "title"));
+  const char *body = json_string_value (json_object_get (data, "body"));
+  const char *severity = json_string_value (json_object_get (data, "severity"));
+  json_int_t ttl_seconds_json = 0;
+  json_t *ttl_json = json_object_get (data, "ttl_seconds");
+  if (ttl_json && json_is_integer (ttl_json))
+    {
+      ttl_seconds_json = json_integer_value (ttl_json);
+    }
+  
+  if (!title || !body)
+    {
+      send_response_error (ctx, root, ERR_MISSING_FIELD, "Title and body are required for admin.notice");
+      return 0;
+    }
+
+  broadcast_system_notice (0, title, body, severity ? severity : "info", time(NULL), ttl_seconds_json);
+  send_response_ok (ctx, root, "admin.notice", NULL);
   return 0;
 }
 
@@ -2036,8 +2039,31 @@ cmd_admin_shutdown_warning (client_ctx_t *ctx, json_t *root)
     {
       return 0;
     }
-  send_enveloped_error (ctx->fd, root, 1101,
-                        "Not implemented: admin.shutdown_warning");
+
+  json_t *data = json_object_get (root, "data");
+  if (!data || !json_is_object (data))
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG, "Missing or invalid data for admin.shutdown_warning");
+      return 0;
+    }
+
+  const char *body = json_string_value (json_object_get (data, "body"));
+  json_int_t countdown_seconds_json = 0;
+  json_t *countdown_json = json_object_get (data, "countdown_seconds");
+  if (countdown_json && json_is_integer (countdown_json))
+    {
+      countdown_seconds_json = json_integer_value (countdown_json);
+    }
+
+  if (!body || countdown_seconds_json <= 0)
+    {
+      send_response_error (ctx, root, ERR_MISSING_FIELD, "Body and countdown_seconds (positive integer) are required for admin.shutdown_warning");
+      return 0;
+    }
+  
+  // Use a fixed title and critical severity for shutdown warnings
+  broadcast_system_notice (0, "SERVER SHUTDOWN IMMINENT", body, "critical", time(NULL), countdown_seconds_json);
+  send_response_ok (ctx, root, "admin.shutdown_warning", NULL);
   return 0;
 }
 
@@ -2140,7 +2166,7 @@ cmd_subscribe_catalog (client_ctx_t *ctx, json_t *root)
 
   if (!topics)
     {
-      send_enveloped_error (ctx->fd, root, 1500, "Allocation failure");
+      send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Allocation failure");
     }
   json_t *data = json_pack ("{s:O}", "topics", topics);
 
@@ -2148,9 +2174,9 @@ cmd_subscribe_catalog (client_ctx_t *ctx, json_t *root)
   if (!data)
     {
       json_decref (topics);
-      send_enveloped_error (ctx->fd, root, 1500, "Allocation failure");
+      send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Allocation failure");
     }
-  send_enveloped_ok (ctx->fd, root, "subscribe.catalog_v1", data);
+  send_response_ok(ctx, root, "subscribe.catalog_v1", data);
   json_decref (data);
   return 0;
 }

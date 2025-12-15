@@ -26,6 +26,8 @@
 #include "server_corporation.h" // For corporation cron jobs
 #include "server_clusters.h"    // Cluster Economy & Law
 #include <math.h> // For MAX, MIN, etc.
+
+
 #define INITIAL_QUEUE_CAPACITY 64
 #define FEDSPACE_SECTOR_START 1
 #define FEDSPACE_SECTOR_END 10
@@ -75,6 +77,7 @@ get_random_sector (sqlite3 *db)
 
   return random_sector;
 }
+
 
 
 int
@@ -137,7 +140,6 @@ tow_ship (sqlite3 *db, int ship_id, int new_sector_id, int admin_id,
         break;
     }
   const char *sql_update_ship = "UPDATE ships SET sector = ? WHERE id = ?;";
-
 
   if (sqlite3_prepare_v2 (db, sql_update_ship, -1, &stmt, NULL) != SQLITE_OK)
     {
@@ -966,7 +968,11 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
                 NULL);
   sqlite3_exec (db, "DELETE FROM eligible_tows", NULL, NULL, NULL);
   const char *sql_insert_eligible =
-    "INSERT INTO eligible_tows (ship_id, sector_id, owner_id, fighters, alignment, experience) SELECT T1.id, T1.sector, T2.id, T1.fighters, COALESCE(T2.alignment, 0), COALESCE(T2.experience, 0) FROM ships T1 LEFT JOIN players T2 ON T1.id = T2.ship WHERE T1.sector BETWEEN ?1 AND ?2 AND (T2.loggedin = 0 OR T2.id IS NULL) ORDER BY T1.id ASC;";
+    "INSERT INTO eligible_tows (ship_id, sector_id, owner_id, fighters, alignment, experience) "
+    "SELECT T1.id, T1.sector, T2.id, T1.fighters, COALESCE(T2.alignment, 0), COALESCE(T2.experience, 0) "
+    "FROM ships T1 LEFT JOIN players T2 ON T1.id = T2.ship "
+    "WHERE T1.sector BETWEEN ?1 AND ?2 AND (T2.id IS NULL OR (T2.loggedin = 0 AND (?3 - T2.last_login > ?4))) "
+    "ORDER BY T1.id ASC;";
 
 
   if (sqlite3_prepare_v2 (db, sql_insert_eligible, -1, &select_stmt,
@@ -974,6 +980,8 @@ h_fedspace_cleanup (sqlite3 *db, int64_t now_s)
     {
       sqlite3_bind_int (select_stmt, 1, FEDSPACE_SECTOR_START);
       sqlite3_bind_int (select_stmt, 2, FEDSPACE_SECTOR_END);
+      sqlite3_bind_int64 (select_stmt, 3, now_s);    /* now_s */
+      sqlite3_bind_int (select_stmt, 4, 12 * 60 * 60);  /* 12 hours in seconds */
       sqlite3_step (select_stmt);
       sqlite3_finalize (select_stmt);
     }
@@ -1135,6 +1143,11 @@ get_utc_epoch_day (int64_t unix_timestamp)
 int
 h_dividend_payout (sqlite3 *db, int64_t now_s)
 {
+  LOGI("BANK0: Dividend Payout cron disabled for v1.0.");
+  (void)db; // Suppress unused parameter warning
+  (void)now_s; // Suppress unused parameter warning
+  return 0; // Do nothing, cleanly exit
+
   if (!try_lock (db, "h_dividend_payout", now_s))
     {
       return 0;
@@ -1611,6 +1624,11 @@ h_planet_population_tick (sqlite3 *db, int64_t now_s)
 int
 h_planet_treasury_interest_tick (sqlite3 *db, int64_t now_s)
 {
+  LOGI("BANK0: Planet Treasury Interest cron disabled for v1.0.");
+  (void)db; // Suppress unused parameter warning
+  (void)now_s; // Suppress unused parameter warning
+  return 0; // Do nothing, cleanly exit
+
   (void)now_s;
   
   int rate_bps = 0; // Basis points for interest rate
@@ -2099,7 +2117,7 @@ cmd_sys_cron_planet_tick_once (client_ctx_t *ctx, json_t *root)
     {
 
 
-      send_enveloped_refused (ctx->fd, root, 1403, "Permission denied", NULL);
+      send_response_refused(ctx, root, REF_TURN_COST_EXCEEDS, "Permission denied", NULL);
 
 
       return 0;
@@ -2117,7 +2135,7 @@ cmd_sys_cron_planet_tick_once (client_ctx_t *ctx, json_t *root)
     {
 
 
-      send_enveloped_error (ctx->fd, root, 500, "Database unavailable");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Database unavailable");
 
 
       return 0;
@@ -2138,7 +2156,7 @@ cmd_sys_cron_planet_tick_once (client_ctx_t *ctx, json_t *root)
     {
 
 
-      send_enveloped_error (ctx->fd, root, 500, "Planet cron tick failed.");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Planet cron tick failed.");
 
 
       return 0;
@@ -2147,7 +2165,7 @@ cmd_sys_cron_planet_tick_once (client_ctx_t *ctx, json_t *root)
     }
 
 
-  send_enveloped_ok (ctx->fd, root, "sys.cron.planet_tick_once.success", NULL);
+  send_response_ok(ctx, root, "sys.cron.planet_tick_once.success", NULL);
 
 
   return 0;
@@ -4369,6 +4387,11 @@ rollback_and_unlock:
 int
 h_loan_shark_interest_cron (sqlite3 *db, int64_t now_s)
 {
+  LOGI("BANK0: Loan Shark Interest cron disabled for v1.0.");
+  (void)db; // Suppress unused parameter warning
+  (void)now_s; // Suppress unused parameter warning
+  return 0; // Do nothing, cleanly exit
+
   if (!try_lock (db, "loan_shark_interest_cron", now_s))
     {
       return 0;
@@ -4610,6 +4633,11 @@ rollback_and_unlock_stock_price:
 int
 h_daily_corp_tax (sqlite3 *db, int64_t now_s)
 {
+  LOGI("BANK0: Daily Corporate Tax cron disabled for v1.0.");
+  (void)db; // Suppress unused parameter warning
+  (void)now_s; // Suppress unused parameter warning
+  return 0; // Do nothing, cleanly exit
+
   if (!try_lock (db, "daily_corp_tax", now_s))
     {
       return 0;
@@ -4708,108 +4736,53 @@ rollback_and_unlock_tax:
 }
 
 
-/* cron adapter: called by engine via cron_handler_fn, loads JSON payload and
- * then calls h_shield_regen(db, payload).
- */
+// Function to handle shield regeneration tick
 int
 h_shield_regen_tick (sqlite3 *db, int64_t now_s)
 {
-  /* Lock so only one engine instance runs shield_regen at a time */
   if (!try_lock (db, "shield_regen", now_s))
     {
-      /* Someone else holds the lock; treat as no-op. */
       return 0;
     }
-
-  sqlite3_stmt *st = NULL;
-  json_t *payload = NULL;
-  int rc;
-
-  const char *SQL =
-    "SELECT payload FROM cron_tasks WHERE name = 'shield_regen' LIMIT 1;";
-
-  rc = sqlite3_prepare_v2 (db, SQL, -1, &st, NULL);
+  // LOGI ("h_shield_regen_tick: Starting shield regeneration.");
+  int rc = begin (db);
   if (rc != SQLITE_OK)
     {
-      LOGE ("h_shield_regen_tick: prepare failed: %s", sqlite3_errmsg (db));
+      LOGE ("h_shield_regen_tick: Failed to start transaction: %s", sqlite3_errmsg (db));
       unlock (db, "shield_regen");
       return rc;
     }
 
-  if (sqlite3_step (st) == SQLITE_ROW)
-    {
-      const unsigned char *txt = sqlite3_column_text (st, 0);
-      if (txt && txt[0])
-        {
-          json_error_t jerr;
-          payload = json_loads ((const char *) txt, 0, &jerr);
-          if (!payload)
-            {
-              LOGE (
-                "h_shield_regen_tick: invalid JSON payload '%s': %s (line %d)",
-                (const char *) txt,
-                jerr.text,
-                jerr.line);
-            }
-        }
-      else
-        {
-          LOGI ("h_shield_regen_tick: NULL/empty payload, will use default.");
-        }
-    }
-  sqlite3_finalize (st);
-  st = NULL;
+  // Use config value directly
+  int regen_percent = 5; // Default
+  // If you have g_cfg.regen.shield_rate_pct_per_tick (double 0.05), you can use it:
+  // regen_percent = (int)(g_cfg.regen.shield_rate_pct_per_tick * 100);
+  
+  if (regen_percent <= 0) regen_percent = 5;
 
-  /* Fallback if payload missing/bad: either config or a hard-coded default */
-  if (!payload)
+  const char *sql =
+      "UPDATE ships "
+      "SET shields = MIN(installed_shields, "
+      "                   shields + ((installed_shields * ?1) / 100)) "
+      "WHERE destroyed = 0 "
+      "  AND installed_shields > 0 "
+      "  AND shields < installed_shields;";
+
+  sqlite3_stmt *stmt = NULL;
+  rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+  if (rc != SQLITE_OK)
     {
-      payload = json_object ();
-      /* Either use config, or fixed 5%.  Example with config: */
-      /* json_object_set_new(payload, "regen_percent",
-           json_integer(g_cfg.regen.shield_rate_pct_per_tick)); */
-      json_object_set_new (payload, "regen_percent", json_integer (5));
+      LOGE ("h_shield_regen_tick: SQL Error: %s", sqlite3_errmsg (db));
+      rollback(db);
+      unlock (db, "shield_regen");
+      return rc;
     }
 
-  h_shield_regen (db, payload);
+  sqlite3_bind_int(stmt, 1, regen_percent);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
 
-  json_decref (payload);
+  rc = commit (db);
   unlock (db, "shield_regen");
-
-  return 0;   /* 0 = success */
-}
-
-
-void
-h_shield_regen(sqlite3 *db, const json_t *payload)
-{
-
-  json_t *val = json_object_get(payload, "regen_percent");
-    if (!json_is_integer(val)) {
-        return; /* or default to 5 */
-    }
-    int regen_percent = (int) json_integer_value(val);
-    if (regen_percent <= 0) {
-        return;
-    }
-    // LOGI ("h_shield_regen: regen at: %d percent",regen_percent);
-    const char *sql =
-        "UPDATE ships "
-        "SET shields = MIN(installed_shields, "
-        "                   shields + ((installed_shields * ?1) / 100)) "
-        "WHERE destroyed = 0 "
-        "  AND installed_shields > 0;";
-
-    sqlite3_stmt *stmt = NULL;
-    int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK)
-      {
-        /* log error */
-	LOGI ("h_shield_regen: SQL Error: %s",sqlite3_errmsg (db));		
-        return;
-    }
-
-    sqlite3_bind_int(stmt, 1, regen_percent);
-    rc = sqlite3_step(stmt);
-    /* optionally check rc == SQLITE_DONE */
-    sqlite3_finalize(stmt);
+  return rc;
 }

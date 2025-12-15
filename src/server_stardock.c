@@ -17,6 +17,7 @@
 #include "server_loop.h"        // For idemp_fingerprint_json
 #include "server_config.h"
 #include "server_log.h"         // For LOGE
+#include "server_cron.h"         // For LOGE
 #include "server_communication.h"       // For server_broadcast_to_sector
 struct tavern_settings g_tavern_cfg;
 
@@ -47,15 +48,13 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
   // 1. Authenticate player and get ship/sector context
   if (player_id <= 0)
     {
-      send_enveloped_refused (ctx->fd, root, ERR_NOT_AUTHENTICATED,
-                              "Authentication required.", NULL);
+      send_response_refused(ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required.", NULL);
       return 0;
     }
   ship_id = h_get_active_ship_id (db, player_id);
   if (ship_id <= 0)
     {
-      send_enveloped_refused (ctx->fd, root, ERR_SHIP_NOT_FOUND,
-                              "No active ship found.", NULL);
+      send_response_refused(ctx, root, ERR_SHIP_NOT_FOUND, "No active ship found.", NULL);
       return 0;
     }
   sector_id = ctx->sector_id;   // Get current sector from context
@@ -90,8 +89,7 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
     }
   if (port_id == 0)
     {                           // No Stardock or Class-0 port in this sector
-      send_enveloped_ok (ctx->fd, root, "hardware.list_v1",
-                         json_pack ("{s:i, s:s, s:o}", "sector_id", sector_id,
+      send_response_ok(ctx, root, "hardware.list_v1", json_pack ("{s:i, s:s, s:o}", "sector_id", sector_id,
                                     "location_type", location_type, "items",
                                     json_array ()));
       return 0;
@@ -112,8 +110,7 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
   rc = sqlite3_prepare_v2 (db, sql_ship_state, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, ERR_DB_QUERY_FAILED,
-                            "Failed to get ship state.");
+      send_response_error(ctx, root, ERR_DB_QUERY_FAILED, "Failed to get ship state.");
       return 0;
     }
   sqlite3_bind_int (stmt, 1, ship_id);
@@ -151,8 +148,7 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
   rc = sqlite3_prepare_v2 (db, sql_hardware, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, ERR_DB_QUERY_FAILED,
-                            "Failed to get hardware items.");
+      send_response_error(ctx, root, ERR_DB_QUERY_FAILED, "Failed to get hardware items.");
       return 0;
     }
   sqlite3_bind_text (stmt, 1, location_type, -1, SQLITE_STATIC);
@@ -281,8 +277,7 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
         }
     }
   sqlite3_finalize (stmt);
-  send_enveloped_ok (ctx->fd, root, "hardware.list_v1",
-                     json_pack ("{s:i, s:s, s:o}", "sector_id", sector_id,
+  send_response_ok(ctx, root, "hardware.list_v1", json_pack ("{s:i, s:s, s:o}", "sector_id", sector_id,
                                 "location_type", location_type, "items",
                                 items_array));
   return 0;
@@ -653,7 +648,7 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
                             "ship", ship_obj);
 
 
-  send_enveloped_ok (ctx->fd, root, "hardware.purchase_v1", resp);
+  send_response_ok(ctx, root, "hardware.purchase_v1", resp);
   json_decref (resp);
   return 0;
 }
@@ -933,7 +928,7 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
     }
   sqlite3_finalize (stmt);
   json_object_set_new (response_data, "available", available_array);
-  send_enveloped_ok (ctx->fd, root, "shipyard.list_v1", response_data);
+  send_response_ok(ctx, root, "shipyard.list_v1", response_data);
   free (cfg);
   return 0;
 }
@@ -975,7 +970,7 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
     }
   // FIX: Declare variables here
   sqlite3_stmt *stmt = NULL;
-  int port_id = 0;
+  // int port_id = 0; // Unused
   // FIX: Define the missing SQL query string
   const char *sql_loc = "SELECT p.id FROM ports p "
                         "JOIN ships s ON s.ported = p.id "
@@ -1010,7 +1005,7 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
       return send_error_response (ctx, root, ERR_NOT_AT_SHIPYARD,
                                   "You are not docked at a shipyard.");
     }
-  port_id = sqlite3_column_int (stmt, 0);
+  // port_id = sqlite3_column_int (stmt, 0); // Unused
   sqlite3_finalize (stmt);
   stmt = NULL;
   struct twconfig *cfg = config_load ();
@@ -1712,8 +1707,7 @@ cmd_tavern_lottery_buy_ticket (client_ctx_t *ctx, json_t *root)
                "ticket_number", ticket_number, "draw_date", draw_date_str);
 
 
-  send_enveloped_ok (ctx->fd, root, "tavern.lottery.buy_ticket_v1",
-                     response_data);
+  send_response_ok(ctx, root, "tavern.lottery.buy_ticket_v1", response_data);
   return 0;
 }
 
@@ -1808,8 +1802,7 @@ cmd_tavern_lottery_status (client_ctx_t *ctx, json_t *root)
     }
   sqlite3_finalize (stmt);
   json_object_set_new (response_data, "player_tickets", player_tickets_array);
-  send_enveloped_ok (ctx->fd, root, "tavern.lottery.status_v1",
-                     response_data);
+  send_response_ok(ctx, root, "tavern.lottery.status_v1", response_data);
   return 0;
 }
 
@@ -1954,8 +1947,7 @@ cmd_tavern_deadpool_place_bet (client_ctx_t *ctx,
                odds_bp);
 
 
-  send_enveloped_ok (ctx->fd, root, "tavern.deadpool.place_bet_v1",
-                     response_data);
+  send_response_ok(ctx, root, "tavern.deadpool.place_bet_v1", response_data);
   return 0;
 }
 
@@ -2074,7 +2066,7 @@ cmd_tavern_dice_play (client_ctx_t *ctx,
                                      "player_credits", current_credits);
 
 
-  send_enveloped_ok (ctx->fd, root, "tavern.dice.play_v1", response_data);
+  send_response_ok(ctx, root, "tavern.dice.play_v1", response_data);
   return 0;
 }
 
@@ -2231,8 +2223,7 @@ cmd_tavern_highstakes_play (client_ctx_t *ctx,
                                      player_credits_after_game);
 
 
-  send_enveloped_ok (ctx->fd, root, "tavern.highstakes.play_v1",
-                     response_data);
+  send_response_ok(ctx, root, "tavern.highstakes.play_v1", response_data);
   return 0;
 }
 
@@ -2296,10 +2287,9 @@ cmd_tavern_raffle_buy_ticket (client_ctx_t *ctx, json_t *root)
                                   "Failed to deduct credits for raffle ticket.");
     }
   long long current_pot = 0;
-  // FIX: Declare missing variables
-  int last_winner_id = 0;
-  long long last_payout = 0;
-  int last_win_ts = 0;
+  // int last_win_ts = 0;
+  // long long last_payout = 0;
+  // int last_winner_id = 0;
   // Get and update raffle state
   sqlite3_stmt *stmt = NULL;
   const char *sql_get_raffle =
@@ -2311,9 +2301,9 @@ cmd_tavern_raffle_buy_ticket (client_ctx_t *ctx, json_t *root)
       if (sqlite3_step (stmt) == SQLITE_ROW)
         {
           current_pot = sqlite3_column_int64 (stmt, 0);
-          last_winner_id = sqlite3_column_int (stmt, 1);
-          last_payout = sqlite3_column_int64 (stmt, 2);
-          last_win_ts = sqlite3_column_int (stmt, 3);
+          // last_winner_id = sqlite3_column_int (stmt, 1);
+          // last_payout = sqlite3_column_int64 (stmt, 2);
+          // last_win_ts = sqlite3_column_int (stmt, 3);
         }
       sqlite3_finalize (stmt);
     }
@@ -2422,8 +2412,7 @@ cmd_tavern_raffle_buy_ticket (client_ctx_t *ctx, json_t *root)
                                      player_credits_after_game);
 
 
-  send_enveloped_ok (ctx->fd, root, "tavern.raffle.buy_ticket_v1",
-                     response_data);
+  send_response_ok(ctx, root, "tavern.raffle.buy_ticket_v1", response_data);
   return 0;
 }
 
@@ -2529,8 +2518,7 @@ cmd_tavern_trader_buy_password (client_ctx_t *ctx, json_t *root)
                                      "cost", password_price);
 
 
-  send_enveloped_ok (ctx->fd, root, "tavern.trader.buy_password_v1",
-                     response_data);
+  send_response_ok(ctx, root, "tavern.trader.buy_password_v1", response_data);
   return 0;
 }
 
@@ -2642,7 +2630,7 @@ cmd_tavern_graffiti_post (client_ctx_t *ctx, json_t *root)
                "text", post_text, "created_at", (long long) now);
 
 
-  send_enveloped_ok (ctx->fd, root, "tavern.graffiti.post_v1", response_data);
+  send_response_ok(ctx, root, "tavern.graffiti.post_v1", response_data);
   return 0;
 }
 
@@ -2749,7 +2737,7 @@ cmd_tavern_round_buy (client_ctx_t *ctx, json_t *root)
                "cost", cost, "alignment_gain", alignment_gain);
 
 
-  send_enveloped_ok (ctx->fd, root, "tavern.round.buy_v1", response_data);
+  send_response_ok(ctx, root, "tavern.round.buy_v1", response_data);
   return 0;
 }
 
@@ -2844,7 +2832,7 @@ cmd_tavern_loan_take (client_ctx_t *ctx, json_t *root)
                                      "due_date", (long long) due_date);
 
 
-  send_enveloped_ok (ctx->fd, root, "tavern.loan.take_v1", response_data);
+  send_response_ok(ctx, root, "tavern.loan.take_v1", response_data);
   return 0;
 }
 
@@ -2973,7 +2961,7 @@ cmd_tavern_loan_pay (client_ctx_t *ctx,
                                      "remaining_principal", new_principal);
 
 
-  send_enveloped_ok (ctx->fd, root, "tavern.loan.pay_v1", response_data);
+  send_response_ok(ctx, root, "tavern.loan.pay_v1", response_data);
   return 0;
 }
 
@@ -3051,8 +3039,7 @@ cmd_tavern_rumour_get_hint (client_ctx_t *ctx, json_t *root)
                random_hint, "cost", hint_cost);
 
 
-  send_enveloped_ok (ctx->fd, root, "tavern.rumour.get_hint_v1",
-                     response_data);
+  send_response_ok(ctx, root, "tavern.rumour.get_hint_v1", response_data);
   return 0;
 }
 
@@ -3157,8 +3144,7 @@ cmd_tavern_barcharts_get_prices_summary (client_ctx_t *ctx, json_t *root)
                "prices", prices_array, "cost", summary_cost);
 
 
-  send_enveloped_ok (ctx->fd, root, "tavern.barcharts.get_prices_summary_v1",
-                     response_data);
+  send_response_ok(ctx, root, "tavern.barcharts.get_prices_summary_v1", response_data);
   return 0;
 }
 

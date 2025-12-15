@@ -15,5 +15,7 @@ int cmd_bank_withdraw (client_ctx_t *ctx, json_t *root);
 int cmd_bank_history (client_ctx_t *ctx, json_t *root);
 int cmd_bank_leaderboard (client_ctx_t *ctx, json_t *root);
 
+int cmd_fine_list (client_ctx_t *ctx, json_t *root);
+int cmd_fine_pay (client_ctx_t *ctx, json_t *root);
 
 #endif

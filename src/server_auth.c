@@ -281,8 +281,7 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
     }
   if (!name || !pass)
     {
-      send_enveloped_error (ctx->fd, root, AUTH_ERR_BAD_REQUEST,
-                            "Missing required field");
+      send_response_error(ctx, root, AUTH_ERR_BAD_REQUEST, "Missing required field");
     }
   else
     {
@@ -299,8 +298,7 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
 
           if (h_player_is_npc (dbh_npc, player_id))
             {
-              send_enveloped_error (ctx->fd, root, ERR_IS_NPC,
-                                    "NPC login is not allowed");
+              send_response_error(ctx, root, ERR_IS_NPC, "NPC login is not allowed");
               return 0;
             }
           /* check podded */
@@ -347,8 +345,7 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
                                "big_sleep_until", big_sleep_until);
 
 
-                  send_enveloped_refused (ctx->fd, root, ERR_REF_BIG_SLEEP,
-                                          "You are currently in Big Sleep.",
+                  send_response_refused(ctx, root, ERR_REF_BIG_SLEEP, "You are currently in Big Sleep.",
                                           err_data);
                   json_decref (err_data);
                   return 0;     // Disallow login
@@ -373,8 +370,7 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
                         "cmd_auth_login: Failed to spawn starter ship for player %d after Big Sleep: %s",
                         player_id,
                         sqlite3_errmsg (dbh));
-                      send_enveloped_error (ctx->fd, root, 1500,
-                                            "Database error during respawn.");
+                      send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Database error during respawn.");
                       return 0;
                     }
                   // Emit event player.big_sleep_ended
@@ -412,8 +408,7 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
 
           if (subs_rc != SQLITE_OK)
             {
-              send_enveloped_error (ctx->fd, root, 1503,
-                                    "Database error (subs upsert)");
+              send_response_error(ctx, root, ERR_CITADEL_REQUIRED, "Database error (subs upsert)");
               return 0;
             }
           /* Reply with session info, including current_sector */
@@ -438,8 +433,7 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
           if (db_session_create (player_id, 86400, session_token) !=
               SQLITE_OK)
             {
-              send_enveloped_error (ctx->fd, root, 1500,
-                                    "Database error (session creation)");
+              send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Database error (session creation)");
               return 1;
             }
           json_t *data = json_pack ("{s:i, s:i, s:i, s:s}",
@@ -451,7 +445,7 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
 
           if (!data)
             {
-              send_enveloped_error (ctx->fd, root, 1500, "Out of memory");
+              send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Out of memory");
               return 1;
             }
           /* Auto-subscribe this player to system.* on login (best-effort). */
@@ -490,17 +484,16 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
                 free (cur);
               }
           }
-          send_enveloped_ok (ctx->fd, root, "auth.session", data);
+          send_response_ok(ctx, root, "auth.session", data);
           json_decref (data);
         }
       else if (rc == AUTH_ERR_INVALID_CRED)
         {
-          send_enveloped_error (ctx->fd, root, AUTH_ERR_INVALID_CRED,
-                                "Invalid credentials");
+          send_response_error(ctx, root, AUTH_ERR_INVALID_CRED, "Invalid credentials");
         }
       else
         {
-          send_enveloped_error (ctx->fd, root, AUTH_ERR_DB, "Database error");
+          send_response_error(ctx, root, AUTH_ERR_DB, "Database error");
         }
     }
   hydrate_player_defaults (ctx->player_id);
@@ -538,7 +531,7 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
     }
   if (!name || !pass)
     {
-      send_enveloped_error (ctx->fd, root, 1301, "Missing required field");
+      send_response_error(ctx, root, ERR_MISSING_FIELD, "Missing required field");
       return 0;
     }
   // --- Start Transaction for player creation and initial setup ---
@@ -561,8 +554,7 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
         {
           LOGE ("cmd_auth_register debug: config_load failed for player %d",
                 player_id);
-          send_enveloped_error (ctx->fd, root, 1500,
-                                "Database error (config_load)");
+          send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Database error (config_load)");
           goto rollback_and_error;
         }
       // --- Create Bank Account for the new player ---
@@ -579,10 +571,7 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
             "cmd_auth_register debug: Failed to create bank account for player %d: %s",
             player_id,
             sqlite3_errmsg (db));                                                                                          // db is still available for logging error messages
-          send_enveloped_error (ctx->fd,
-                                root,
-                                1500,
-                                "Database error (bank account creation)");
+          send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Database error (bank account creation)");
           goto rollback_and_error; // Needs proper rollback of player creation if this fails.
         }
       LOGI (
@@ -615,10 +604,7 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
                 player_id,
                 sqlite3_errmsg (db));
               sqlite3_finalize (st_turns);
-              send_enveloped_error (ctx->fd,
-                                    root,
-                                    1500,
-                                    "Database error (turns entry creation)");
+              send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Database error (turns entry creation)");
               goto rollback_and_error;
             }
           sqlite3_finalize (st_turns);
@@ -629,10 +615,7 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
             "cmd_auth_register debug: Failed to prepare turns insert for player %d: %s",
             player_id,
             sqlite3_errmsg (db));
-          send_enveloped_error (ctx->fd,
-                                root,
-                                1500,
-                                "Database error (prepare turns insert)");
+          send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Database error (prepare turns insert)");
           goto rollback_and_error;
         }
       LOGI (
@@ -661,8 +644,7 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
             "cmd_auth_register debug: db_create_initial_ship failed for player %d: %s",
             player_id,
             sqlite3_errmsg (db));
-          send_enveloped_error (ctx->fd, root, 1500,
-                                "Database error (ship creation)");
+          send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Database error (ship creation)");
           goto rollback_and_error;
         }
       LOGI ("cmd_auth_register debug: player %d assigned ship_id %d",
@@ -682,8 +664,7 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
             "cmd_auth_register debug: db_player_set_sector failed for player %d: %s",
             player_id,
             sqlite3_errmsg (db));
-          send_enveloped_error (ctx->fd, root, 1500,
-                                "Database error (set player sector)");
+          send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Database error (set player sector)");
           goto rollback_and_error;
         }
       // db_ship_claim already updates players.ship, but ensure ctx is updated
@@ -720,10 +701,7 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
                 player_id,
                 sqlite3_errmsg (db));
               sqlite3_finalize (st_creds);
-              send_enveloped_error (ctx->fd,
-                                    root,
-                                    1500,
-                                    "Database error (set credits)");
+              send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Database error (set credits)");
               goto rollback_and_error;
             }
           sqlite3_finalize (st_creds);
@@ -734,10 +712,7 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
             "cmd_auth_register debug: Failed to prepare credits update for player %d: %s",
             player_id,
             sqlite3_errmsg (db));
-          send_enveloped_error (ctx->fd,
-                                root,
-                                1500,
-                                "Database error (prepare credits)");
+          send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Database error (prepare credits)");
           goto rollback_and_error;
         }
       LOGI (
@@ -758,8 +733,7 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
             "cmd_auth_register debug: db_player_set_alignment failed for player %d: %s",
             player_id,
             sqlite3_errmsg (db));
-          send_enveloped_error (ctx->fd, root, 1500,
-                                "Database error (set alignment)");
+          send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Database error (set alignment)");
           goto rollback_and_error;
         }
       LOGI ("cmd_auth_register debug: player %d alignment set to 1", player_id);
@@ -844,8 +818,7 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
             "cmd_auth_register debug: db_session_create failed for player %d: %s",
             player_id,
             sqlite3_errmsg (db));
-          send_enveloped_error (ctx->fd, root, 1500,
-                                "Database error (session token)");
+          send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Database error (session token)");
           goto rollback_and_error;
         }
       else
@@ -855,7 +828,7 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
                                     "session_token", tok);
 
 
-          send_enveloped_ok (ctx->fd, root, "auth.session", data);
+          send_response_ok(ctx, root, "auth.session", data);
           json_decref (data);
           LOGI ("cmd_auth_register debug: player %d session created and sent",
                 player_id);
@@ -864,9 +837,9 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
   else if (rc == AUTH_ERR_NAME_TAKEN)
     {
       LOGW ("cmd_auth_register debug: Username '%s' already taken", name);
-      send_enveloped_error (ctx->fd, root, AUTH_ERR_NAME_TAKEN,
-                            "Username already exists");
-      goto rollback_and_error;
+      send_response_refused(ctx, root, AUTH_ERR_NAME_TAKEN, "Username already exists", NULL); // Change to send_response_refused
+      if (cfg) free(cfg); // Free config if allocated
+      return 0; // Exit successfully after sending refused response
     }
   else
     {
@@ -875,7 +848,7 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
         name,
         rc,
         sqlite3_errmsg (db));
-      send_enveloped_error (ctx->fd, root, AUTH_ERR_DB, "Database error");
+      send_response_error(ctx, root, AUTH_ERR_DB, "Database error");
       goto rollback_and_error;
     }
   if (cfg)
@@ -928,7 +901,7 @@ cmd_auth_logout (client_ctx_t *ctx, json_t *root)
   json_t *data = json_pack ("{s:s}", "message", "Logged out");
 
 
-  send_enveloped_ok (ctx->fd, root, "auth.logged_out", data);
+  send_response_ok(ctx, root, "auth.logged_out", data);
   json_decref (data);
   return 0;
 }
@@ -950,8 +923,7 @@ cmd_user_create (client_ctx_t *ctx, json_t *root)
     }
   if (!name || !pass)
     {
-      send_enveloped_error (ctx->fd, root, AUTH_ERR_BAD_REQUEST,
-                            "Missing required field");
+      send_response_error(ctx, root, AUTH_ERR_BAD_REQUEST, "Missing required field");
     }
   else
     {
@@ -964,17 +936,16 @@ cmd_user_create (client_ctx_t *ctx, json_t *root)
           json_t *data = json_pack ("{s:i}", "player_id", player_id);
 
 
-          send_enveloped_ok (ctx->fd, root, "user.created", data);
+          send_response_ok(ctx, root, "user.created", data);
           json_decref (data);
         }
       else if (rc == AUTH_ERR_NAME_TAKEN)
         {
-          send_enveloped_error (ctx->fd, root, AUTH_ERR_NAME_TAKEN,
-                                "Username already exists");
+          send_response_error(ctx, root, AUTH_ERR_NAME_TAKEN, "Username already exists");
         }
       else
         {
-          send_enveloped_error (ctx->fd, root, AUTH_ERR_DB, "Database error");
+          send_response_error(ctx, root, AUTH_ERR_DB, "Database error");
         }
     }
   return 0;
@@ -1025,8 +996,7 @@ cmd_auth_refresh (client_ctx_t *ctx, json_t *root)
 
       if (rc != SQLITE_OK)
         {
-          send_enveloped_error (ctx->fd, root, 1503,
-                                "Database error (subs upsert)");
+          send_response_error(ctx, root, ERR_CITADEL_REQUIRED, "Database error (subs upsert)");
           return 0;
         }
       char newtok[65];
@@ -1034,7 +1004,7 @@ cmd_auth_refresh (client_ctx_t *ctx, json_t *root)
 
       if (db_session_create (ctx->player_id, 86400, newtok) != SQLITE_OK)
         {
-          send_enveloped_error (ctx->fd, root, 1500, "Database error");
+          send_response_error(ctx, root, ERR_PLANET_NOT_FOUND, "Database error");
         }
       else
         {
@@ -1042,7 +1012,7 @@ cmd_auth_refresh (client_ctx_t *ctx, json_t *root)
                                     "session_token", newtok);
 
 
-          send_enveloped_ok (ctx->fd, root, "auth.session", data);
+          send_response_ok(ctx, root, "auth.session", data);
           json_decref (data);
         }
     }
@@ -1054,8 +1024,7 @@ cmd_auth_refresh (client_ctx_t *ctx, json_t *root)
 
       if (subs_upsert_locked_defaults (dbh, pid, is_sysop) != SQLITE_OK)
         {
-          send_enveloped_error (ctx->fd, root, 1503,
-                                "Database error (subs upsert)");
+          send_response_error(ctx, root, ERR_CITADEL_REQUIRED, "Database error (subs upsert)");
           return 0;
         }
       /* Rotate provided token */
@@ -1075,19 +1044,18 @@ cmd_auth_refresh (client_ctx_t *ctx, json_t *root)
                        newtok);
 
 
-          send_enveloped_ok (ctx->fd, root, "auth.session", data);
+          send_response_ok(ctx, root, "auth.session", data);
           json_decref (data);
         }
       else
         {
-          send_enveloped_error (ctx->fd, root, 1401,
-                                "Invalid or expired session");
+          send_response_error(ctx, root, ERR_SECTOR_NOT_FOUND, "Invalid or expired session");
         }
     }
   else
     {
       /* Not logged in and no token supplied */
-      send_enveloped_error (ctx->fd, root, 1301, "Missing required field");
+      send_response_error(ctx, root, ERR_MISSING_FIELD, "Missing required field");
     }
   return 0;
 }
@@ -1100,8 +1068,7 @@ cmd_auth_mfa_totp_verify (client_ctx_t *ctx, json_t *root)
   // json_t *data = json_object_get(root, "data");
   // const char *code = data && json_is_string(json_object_get(data, "code"))
   //     ? json_string_value(json_object_get(data, "code")) : NULL;
-  send_enveloped_error (ctx->fd, root, 1101,
-                        "Not implemented: auth.mfa.totp.verify");
+  send_response_refused(ctx, root, ERR_CAPABILITY_DISABLED, "MFA is not enabled on this server", NULL);
   return 0;
 }
 

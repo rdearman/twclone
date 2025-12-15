@@ -37,7 +37,7 @@ cmd_news_get_feed (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id == 0)
     {
-      send_enveloped_error (ctx->fd, root, 1401, "Authentication required.");
+      send_response_error(ctx, root, ERR_SECTOR_NOT_FOUND, "Authentication required.");
       return 0;
     }
   sqlite3 *db = db_get_handle ();
@@ -45,7 +45,7 @@ cmd_news_get_feed (client_ctx_t *ctx, json_t *root)
 
   if (!db)
     {
-      send_enveloped_error (ctx->fd, root, 1301, "Database unavailable.");
+      send_response_error(ctx, root, ERR_MISSING_FIELD, "Database unavailable.");
       return 0;
     }
   // 1. Fetch player preferences
@@ -88,7 +88,7 @@ cmd_news_get_feed (client_ctx_t *ctx, json_t *root)
     {
       LOGE ("cmd_news_get_feed: Failed to prepare statement: %s",
             sqlite3_errmsg (db));
-      send_enveloped_error (ctx->fd, root, 1301, "Database query error.");
+      send_response_error(ctx, root, ERR_MISSING_FIELD, "Database query error.");
       return 0;
     }
   // 3. Fetch results and filter by category
@@ -175,7 +175,7 @@ cmd_news_get_feed (client_ctx_t *ctx, json_t *root)
 
 
   json_object_set_new (data, "articles", articles);
-  send_enveloped_ok (ctx->fd, root, "news.feed", data);
+  send_response_ok(ctx, root, "news.feed", data);
   json_decref (data);
   return 0;
 }
@@ -187,7 +187,7 @@ cmd_news_mark_feed_read (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id == 0)
     {
-      send_enveloped_error (ctx->fd, root, 1401, "Authentication required.");
+      send_response_error(ctx, root, ERR_SECTOR_NOT_FOUND, "Authentication required.");
       return 0;
     }
   sqlite3 *db = db_get_handle ();
@@ -195,7 +195,7 @@ cmd_news_mark_feed_read (client_ctx_t *ctx, json_t *root)
 
   if (!db)
     {
-      send_enveloped_error (ctx->fd, root, 1301, "Database unavailable.");
+      send_response_error(ctx, root, ERR_MISSING_FIELD, "Database unavailable.");
       return 0;
     }
   sqlite3_stmt *stmt = NULL;
@@ -208,7 +208,7 @@ cmd_news_mark_feed_read (client_ctx_t *ctx, json_t *root)
     {
       LOGE ("cmd_news_mark_feed_read: Failed to prepare statement: %s",
             sqlite3_errmsg (db));
-      send_enveloped_error (ctx->fd, root, 1301, "Database error.");
+      send_response_error(ctx, root, ERR_MISSING_FIELD, "Database error.");
       return 0;
     }
   sqlite3_bind_int (stmt, 1, ctx->player_id);
@@ -221,14 +221,13 @@ cmd_news_mark_feed_read (client_ctx_t *ctx, json_t *root)
         "cmd_news_mark_feed_read: Failed to execute statement for player %d: %s",
         ctx->player_id,
         sqlite3_errmsg (db));
-      send_enveloped_error (ctx->fd, root, 1301,
-                            "Database error during update.");
+      send_response_error(ctx, root, ERR_MISSING_FIELD, "Database error during update.");
       return 0;
     }
   LOGI
     ("cmd_news_mark_feed_read: Updated last_news_read_timestamp for player %d.",
     ctx->player_id);
-  send_enveloped_ok (ctx->fd, root, "news.marked_read", NULL);
+  send_response_ok(ctx, root, "news.marked_read", NULL);
   return 0;
 }
 
@@ -267,3 +266,10 @@ news_post (const char *body, const char *category, int author_id)
   return (rc == SQLITE_DONE) ? SQLITE_OK : rc;
 }
 
+
+int
+cmd_news_read (client_ctx_t *ctx, json_t *root)
+{
+  // Minimal compat wrapper: alias to news.get_feed
+  return cmd_news_get_feed(ctx, root);
+}

@@ -19,7 +19,7 @@
 #include "server_config.h"      // For db_get_config_int, db_get_config_bool
 
 // Forward declaration
-void send_enveloped_error (int fd, json_t *root, int code, const char *msg);
+
 
 // Helper to check if a commodity is illegal
 static bool
@@ -152,21 +152,88 @@ static void h_free_planet_t(planet_t *p) {
 }
 
 
-int
-cmd_planet_genesis (client_ctx_t *ctx, json_t *root)
-{
-  send_enveloped_error (ctx->fd,
-                        root,
-                        1101,
-                        "Not implemented: " "planet.genesis");
-  return 0;
-}
+
 
 
 int
 cmd_planet_info (client_ctx_t *ctx, json_t *root)
 {
-  send_enveloped_error (ctx->fd, root, 1101, "Not implemented: " "planet.info");
+  if (ctx->player_id <= 0)
+    {
+      send_response_refused(ctx, root, ERR_NOT_AUTHENTICATED, "Not authenticated", NULL);
+      return 0;
+    }
+
+  json_t *data = json_object_get (root, "data");
+  int planet_id = 0;
+  if (!json_get_int_flexible (data, "planet_id", &planet_id) || planet_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG, "Missing or invalid 'planet_id'.");
+      return 0;
+    }
+
+  sqlite3 *db = db_get_handle ();
+  sqlite3_stmt *st = NULL;
+  const char *sql = "SELECT id, sector, name, type, owner_id, owner_type FROM planets WHERE id = ?1;";
+  
+  if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
+    {
+      send_response_error (ctx, root, ERR_DB_QUERY_FAILED, "Database error.");
+      return 0;
+    }
+  
+  sqlite3_bind_int (st, 1, planet_id);
+  
+  if (sqlite3_step (st) != SQLITE_ROW)
+    {
+      sqlite3_finalize (st);
+      send_response_error (ctx, root, ERR_NOT_FOUND, "Planet not found.");
+      return 0;
+    }
+    
+  json_t *planet_obj = json_object ();
+  json_object_set_new (planet_obj, "id", json_integer (sqlite3_column_int (st, 0)));
+  json_object_set_new (planet_obj, "sector_id", json_integer (sqlite3_column_int (st, 1)));
+  json_object_set_new (planet_obj, "name", json_string ((const char *) sqlite3_column_text (st, 2)));
+  json_object_set_new (planet_obj, "type", json_integer (sqlite3_column_int (st, 3)));
+  
+  int owner_id = sqlite3_column_int (st, 4);
+  const char *owner_type = (const char *) sqlite3_column_text (st, 5);
+  
+  json_object_set_new (planet_obj, "owner_id", json_integer (owner_id));
+  json_object_set_new (planet_obj, "owner_type", json_string (owner_type ? owner_type : "system"));
+  
+  sqlite3_finalize (st);
+  
+  const char *sql_res = "SELECT commodity_code, quantity FROM entity_stock WHERE entity_type='planet' AND entity_id=?1;";
+  if (sqlite3_prepare_v2 (db, sql_res, -1, &st, NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_int (st, 1, planet_id);
+      json_t *resources = json_object();
+      while (sqlite3_step (st) == SQLITE_ROW)
+        {
+           const char *code = (const char *) sqlite3_column_text(st, 0);
+           int qty = sqlite3_column_int(st, 1);
+           json_object_set_new(resources, code, json_integer(qty));
+        }
+      json_object_set_new(planet_obj, "resources", resources);
+      sqlite3_finalize(st);
+    }
+
+  const char *sql_cit = "SELECT level, treasury FROM citadels WHERE planet_id=?1;";
+  if (sqlite3_prepare_v2 (db, sql_cit, -1, &st, NULL) == SQLITE_OK)
+    {
+      sqlite3_bind_int(st, 1, planet_id);
+      if (sqlite3_step(st) == SQLITE_ROW) {
+          json_object_set_new(planet_obj, "citadel_level", json_integer(sqlite3_column_int(st, 0)));
+          json_object_set_new(planet_obj, "treasury", json_integer(sqlite3_column_int64(st, 1)));
+      } else {
+          json_object_set_new(planet_obj, "citadel_level", json_integer(0));
+      }
+      sqlite3_finalize(st);
+    }
+
+  send_response_ok (ctx, root, "planet.info", planet_obj);
   return 0;
 }
 
@@ -175,8 +242,67 @@ int
 cmd_planet_rename (client_ctx_t *ctx,
                    json_t *root)
 {
-  send_enveloped_error (ctx->fd, root, 1101,
-                        "Not implemented: " "planet.rename");
+  if (ctx->player_id <= 0)
+    {
+      send_response_refused(ctx, root, ERR_NOT_AUTHENTICATED, "Not authenticated", NULL);
+      return 0;
+    }
+
+  json_t *data = json_object_get (root, "data");
+  int planet_id = 0;
+  const char *new_name = NULL;
+  
+  if (!json_get_int_flexible (data, "planet_id", &planet_id) || planet_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG, "Missing or invalid 'planet_id'.");
+      return 0;
+    }
+  new_name = json_get_string_or_null (data, "new_name");
+  if (!new_name || strlen(new_name) < 3 || strlen(new_name) > 32)
+    {
+       send_response_error (ctx, root, ERR_INVALID_ARG, "Name must be between 3 and 32 characters.");
+       return 0;
+    }
+
+  sqlite3 *db = db_get_handle ();
+  
+  planet_t p = {0};
+  if (h_get_planet_owner_info(db, planet_id, &p) != SQLITE_OK) {
+      send_response_error(ctx, root, ERR_NOT_FOUND, "Planet not found.");
+      return 0;
+  }
+
+  bool allowed = false;
+  if (p.owner_type && strcmp(p.owner_type, "player") == 0 && p.owner_id == ctx->player_id) {
+      allowed = true;
+  } else if (p.owner_type && (strcmp(p.owner_type, "corp") == 0 || strcmp(p.owner_type, "corporation") == 0)) {
+       if (ctx->corp_id > 0 && ctx->corp_id == p.owner_id) {
+           allowed = true; 
+       }
+  }
+  h_free_planet_t(&p);
+
+  if (!allowed) {
+      send_response_refused(ctx, root, REF_NOT_PLANET_OWNER, "You do not own this planet.", NULL);
+      return 0;
+  }
+
+  sqlite3_stmt *st = NULL;
+  if (sqlite3_prepare_v2(db, "UPDATE planets SET name = ?1 WHERE id = ?2;", -1, &st, NULL) != SQLITE_OK) {
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Database error.");
+      return 0;
+  }
+  sqlite3_bind_text(st, 1, new_name, -1, SQLITE_STATIC);
+  sqlite3_bind_int(st, 2, planet_id);
+  
+  if (sqlite3_step(st) != SQLITE_DONE) {
+      sqlite3_finalize(st);
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Update failed.");
+      return 0;
+  }
+  sqlite3_finalize(st);
+
+  send_response_ok(ctx, root, "planet.rename.success", NULL);
   return 0;
 }
 
@@ -186,8 +312,7 @@ cmd_planet_land (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id == 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_NOT_AUTHENTICATED,
-                            "Authentication required.");
+      send_response_error(ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required.");
       return -1;
     }
   sqlite3 *db = db_get_handle ();
@@ -206,8 +331,7 @@ cmd_planet_land (client_ctx_t *ctx, json_t *root)
 
   if (!data)
     {
-      send_enveloped_error (ctx->fd, root, ERR_BAD_REQUEST,
-                            "Missing data payload.");
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing data payload.");
       return 0;
     }
   int planet_id = 0;
@@ -216,8 +340,7 @@ cmd_planet_land (client_ctx_t *ctx, json_t *root)
   json_unpack (data, "{s:i}", "planet_id", &planet_id);
   if (planet_id <= 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_MISSING_FIELD,
-                            "Missing or invalid 'planet_id'.");
+      send_response_error(ctx, root, ERR_MISSING_FIELD, "Missing or invalid 'planet_id'.");
       return 0;
     }
   // Check if player is in the same sector as the planet
@@ -232,8 +355,7 @@ cmd_planet_land (client_ctx_t *ctx, json_t *root)
 
   if (sqlite3_prepare_v2 (db, sql_planet_info, -1, &st, NULL) != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, ERR_DB_QUERY_FAILED,
-                            "Failed to get planet info.");
+      send_response_error(ctx, root, ERR_DB_QUERY_FAILED, "Failed to get planet info.");
       return 0;
     }
   sqlite3_bind_int (st, 1, planet_id);
@@ -251,15 +373,13 @@ cmd_planet_land (client_ctx_t *ctx, json_t *root)
   else
     {
       sqlite3_finalize (st);
-      send_enveloped_error (ctx->fd, root, ERR_NOT_FOUND,
-                            "Planet not found.");
+      send_response_error(ctx, root, ERR_NOT_FOUND, "Planet not found.");
       return 0;
     }
   sqlite3_finalize (st);
   if (player_sector != planet_sector)
     {
-      send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG,
-                            "You are not in the same sector as the planet.");
+      send_response_error(ctx, root, ERR_INVALID_ARG, "You are not in the same sector as the planet.");
       return 0;
     }
   bool can_land = false;
@@ -288,8 +408,7 @@ cmd_planet_land (client_ctx_t *ctx, json_t *root)
     }
   if (!can_land)
     {
-      send_enveloped_error (ctx->fd, root, ERR_PERMISSION_DENIED,
-                            "You do not have permission to land on this planet.");
+      send_response_error(ctx, root, ERR_PERMISSION_DENIED, "You do not have permission to land on this planet.");
       return 0;
     }
 
@@ -297,15 +416,14 @@ cmd_planet_land (client_ctx_t *ctx, json_t *root)
   if (planet_id != 1) { // Skip Terra
       if (h_trigger_atmosphere_quasar(db, ctx, planet_id)) {
           // Ship destroyed
-          send_enveloped_error(ctx->fd, root, 403, "Ship destroyed by planetary defences.");
+          send_response_error(ctx, root, 403, "Ship destroyed by planetary defences.");
           return 0;
       }
   }
 
   if (db_player_land_on_planet (db, ctx->player_id, planet_id) != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, ERR_SERVER_ERROR,
-                            "Failed to land on planet.");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Failed to land on planet.");
       return 0;
     }
   // Update context
@@ -316,10 +434,7 @@ cmd_planet_land (client_ctx_t *ctx, json_t *root)
   json_object_set_new (response_data, "message",
                        json_string ("Landed successfully."));
   json_object_set_new (response_data, "planet_id", json_integer (planet_id));
-  send_enveloped_ok (ctx->fd,
-                     root,
-                     "planet.land.success",
-                     response_data);
+  send_response_ok(ctx, root, "planet.land.success", response_data);
   return 0;
 }
 
@@ -329,8 +444,7 @@ cmd_planet_launch (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id == 0)
     {
-      send_enveloped_error (ctx->fd, root, ERR_NOT_AUTHENTICATED,
-                            "Authentication required.");
+      send_response_error(ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required.");
       return -1;
     }
   sqlite3 *db = db_get_handle ();
@@ -340,8 +454,7 @@ cmd_planet_launch (client_ctx_t *ctx, json_t *root)
   if (db_player_launch_from_planet (db, ctx->player_id,
                                     &sector_id) != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, ERR_SERVER_ERROR,
-                            "Failed to launch from planet. Are you on a planet?");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Failed to launch from planet. Are you on a planet?");
       return 0;
     }
   // Update context
@@ -352,7 +465,7 @@ cmd_planet_launch (client_ctx_t *ctx, json_t *root)
   json_object_set_new (response_data, "message",
                        json_string ("Launched successfully."));
   json_object_set_new (response_data, "sector_id", json_integer (sector_id));
-  send_enveloped_ok (ctx->fd, root, "planet.launch.success", response_data);
+  send_response_ok(ctx, root, "planet.launch.success", response_data);
   return 0;
 }
 
@@ -360,10 +473,99 @@ cmd_planet_launch (client_ctx_t *ctx, json_t *root)
 int
 cmd_planet_transfer_ownership (client_ctx_t *ctx, json_t *root)
 {
-  send_enveloped_error (ctx->fd,
-                        root,
-                        1101,
-                        "Not implemented: " "planet.transfer_ownership");
+  if (ctx->player_id <= 0)
+    {
+      send_response_refused(ctx, root, ERR_NOT_AUTHENTICATED, "Not authenticated", NULL);
+      return 0;
+    }
+
+  json_t *data = json_object_get (root, "data");
+  int planet_id = 0;
+  int target_id = 0;
+  const char *target_type = NULL;
+
+  if (!data) {
+      send_response_error (ctx, root, ERR_BAD_REQUEST, "Missing data payload.");
+      return 0;
+  }
+
+  if (!json_get_int_flexible(data, "planet_id", &planet_id) || planet_id <= 0) {
+      send_response_error(ctx, root, ERR_INVALID_ARG, "Missing or invalid 'planet_id'.");
+      return 0;
+  }
+  if (!json_get_int_flexible(data, "target_id", &target_id) || target_id <= 0) {
+      send_response_error(ctx, root, ERR_INVALID_ARG, "Missing or invalid 'target_id'.");
+      return 0;
+  }
+  target_type = json_string_value(json_object_get(data, "target_type"));
+  
+  if (!target_type) {
+      send_response_error (ctx, root, ERR_INVALID_ARG, "Missing or invalid 'target_type'.");
+      return 0;
+  }
+
+  if (strcmp(target_type, "player") != 0 && strcmp(target_type, "corp") != 0 && strcmp(target_type, "corporation") != 0)
+    {
+       send_response_error (ctx, root, ERR_INVALID_ARG, "target_type must be 'player' or 'corp'.");
+       return 0;
+    }
+  // Normalize 'corporation' to 'corp' if needed, or handle both. 
+  // The DB usually expects 'corp' or 'corporation' consistently. Let's assume 'corp' is safer or check schema.
+  // Existing code uses "corp" mostly.
+
+  sqlite3 *db = db_get_handle ();
+  
+  planet_t p = {0};
+  if (h_get_planet_owner_info(db, planet_id, &p) != SQLITE_OK) {
+      send_response_error(ctx, root, ERR_NOT_FOUND, "Planet not found.");
+      return 0;
+  }
+
+  bool allowed = false;
+  if (p.owner_type && strcmp(p.owner_type, "player") == 0 && p.owner_id == ctx->player_id) {
+      allowed = true;
+  } else if (p.owner_type && (strcmp(p.owner_type, "corp") == 0 || strcmp(p.owner_type, "corporation") == 0)) {
+       if (ctx->corp_id > 0 && ctx->corp_id == p.owner_id) {
+           allowed = true; 
+       }
+  }
+  h_free_planet_t(&p);
+
+  if (!allowed) {
+      send_response_refused(ctx, root, REF_NOT_PLANET_OWNER, "You do not own this planet.", NULL);
+      return 0;
+  }
+
+  sqlite3_stmt *st = NULL;
+  const char *sql_check = (strcmp(target_type, "player") == 0) ? "SELECT id FROM players WHERE id=?1" : "SELECT id FROM corporations WHERE id=?1";
+  if (sqlite3_prepare_v2(db, sql_check, -1, &st, NULL) != SQLITE_OK) {
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Database error.");
+      return 0;
+  }
+  sqlite3_bind_int(st, 1, target_id);
+  if (sqlite3_step(st) != SQLITE_ROW) {
+      sqlite3_finalize(st);
+      send_response_error(ctx, root, ERR_NOT_FOUND, "Target entity not found.");
+      return 0;
+  }
+  sqlite3_finalize(st);
+
+  if (sqlite3_prepare_v2(db, "UPDATE planets SET owner_id = ?1, owner_type = ?2 WHERE id = ?3;", -1, &st, NULL) != SQLITE_OK) {
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Database error.");
+      return 0;
+  }
+  sqlite3_bind_int(st, 1, target_id);
+  sqlite3_bind_text(st, 2, target_type, -1, SQLITE_STATIC);
+  sqlite3_bind_int(st, 3, planet_id);
+  
+  if (sqlite3_step(st) != SQLITE_DONE) {
+      sqlite3_finalize(st);
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Update failed.");
+      return 0;
+  }
+  sqlite3_finalize(st);
+
+  send_response_ok(ctx, root, "planet.transfer_ownership.success", NULL);
   return 0;
 }
 
@@ -371,10 +573,7 @@ cmd_planet_transfer_ownership (client_ctx_t *ctx, json_t *root)
 int
 cmd_planet_harvest (client_ctx_t *ctx, json_t *root)
 {
-  send_enveloped_error (ctx->fd,
-                        root,
-                        1101,
-                        "Not implemented: " "planet.harvest");
+  send_response_error(ctx, root, ERR_NOT_IMPLEMENTED, "Not implemented: " "planet.harvest");
   return 0;
 }
 
@@ -384,13 +583,13 @@ cmd_planet_deposit (client_ctx_t *ctx, json_t *root)
 {
   sqlite3 *db = db_get_handle();
   if (!ctx || ctx->player_id <= 0) {
-      send_enveloped_refused(ctx->fd, root, ERR_NOT_AUTHENTICATED, "Not authenticated", NULL);
+      send_response_refused(ctx, root, ERR_NOT_AUTHENTICATED, "Not authenticated", NULL);
       return 0;
   }
 
   json_t *data = json_object_get(root, "data");
   if (!data) {
-      send_enveloped_error(ctx->fd, root, ERR_BAD_REQUEST, "Missing data payload.");
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing data payload.");
       return 0;
   }
 
@@ -399,13 +598,13 @@ cmd_planet_deposit (client_ctx_t *ctx, json_t *root)
   json_unpack(data, "{s:i, s:i}", "planet_id", &planet_id, "amount", &amount);
 
   if (planet_id <= 0 || amount <= 0) {
-      send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "Invalid planet_id or amount.");
+      send_response_error(ctx, root, ERR_INVALID_ARG, "Invalid planet_id or amount.");
       return 0;
   }
 
   planet_t p = {0};
   if (h_get_planet_owner_info(db, planet_id, &p) != SQLITE_OK) {
-      send_enveloped_error(ctx->fd, root, ERR_NOT_FOUND, "Planet not found.");
+      send_response_error(ctx, root, ERR_NOT_FOUND, "Planet not found.");
       return 0;
   }
 
@@ -422,8 +621,8 @@ cmd_planet_deposit (client_ctx_t *ctx, json_t *root)
   h_free_planet_t(&p);
 
   if (!allowed) {
-      send_enveloped_refused(ctx->fd, root, 1403, "You do not control this planet.", NULL);
-      return 0;
+    send_response_refused(ctx, root, REF_TURN_COST_EXCEEDS, "You do not control this planet.", NULL);
+    return 0;
   }
 
   // Check citadel level
@@ -439,13 +638,13 @@ cmd_planet_deposit (client_ctx_t *ctx, json_t *root)
   }
 
   if (citadel_level < 1) {
-      send_enveloped_refused(ctx->fd, root, 1403, "No citadel or insufficient level for treasury.", NULL);
+    send_response_refused(ctx, root, REF_TURN_COST_EXCEEDS, "No citadel or insufficient level for treasury.",NULL);
       return 0;
   }
 
   // Transaction
   if (sqlite3_exec(db, "BEGIN IMMEDIATE;", NULL, NULL, NULL) != SQLITE_OK) {
-      send_enveloped_error(ctx->fd, root, 500, "Database busy.");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Database busy.");
       return 0;
   }
 
@@ -453,14 +652,14 @@ cmd_planet_deposit (client_ctx_t *ctx, json_t *root)
   long long new_player_balance = 0;
   if (h_deduct_player_petty_cash_unlocked(db, ctx->player_id, amount, &new_player_balance) != SQLITE_OK) {
       sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
-      send_enveloped_refused(ctx->fd, root, 1402, "Insufficient credits.", NULL);
+      send_response_refused(ctx, root, REF_NO_WARP_LINK, "Insufficient credits.", NULL);
       return 0;
   }
 
   // Add to treasury
   if (sqlite3_prepare_v2(db, "UPDATE citadels SET treasury = treasury + ?1 WHERE planet_id = ?2;", -1, &st, NULL) != SQLITE_OK) {
       sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
-      send_enveloped_error(ctx->fd, root, 500, "Database error.");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Database error.");
       return 0;
   }
   sqlite3_bind_int(st, 1, amount);
@@ -468,7 +667,7 @@ cmd_planet_deposit (client_ctx_t *ctx, json_t *root)
   if (sqlite3_step(st) != SQLITE_DONE) {
       sqlite3_finalize(st);
       sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
-      send_enveloped_error(ctx->fd, root, 500, "Database update failed.");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Database update failed.");
       return 0;
   }
   sqlite3_finalize(st);
@@ -476,7 +675,7 @@ cmd_planet_deposit (client_ctx_t *ctx, json_t *root)
   // Commit
   if (sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL) != SQLITE_OK) {
       sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
-      send_enveloped_error(ctx->fd, root, 500, "Transaction commit failed.");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Transaction commit failed.");
       return 0;
   }
 
@@ -495,7 +694,7 @@ cmd_planet_deposit (client_ctx_t *ctx, json_t *root)
   json_object_set_new(resp, "planet_treasury_balance", json_integer(new_treasury));
   json_object_set_new(resp, "player_credits", json_integer(new_player_balance));
   
-  send_enveloped_ok(ctx->fd, root, "planet.deposit", resp);
+  send_response_ok(ctx, root, "planet.deposit", resp);
   json_decref(resp);
   return 0;
 }
@@ -506,13 +705,13 @@ cmd_planet_withdraw (client_ctx_t *ctx, json_t *root)
 {
   sqlite3 *db = db_get_handle();
   if (!ctx || ctx->player_id <= 0) {
-      send_enveloped_refused(ctx->fd, root, ERR_NOT_AUTHENTICATED, "Not authenticated", NULL);
+      send_response_refused(ctx, root, ERR_NOT_AUTHENTICATED, "Not authenticated", NULL);
       return 0;
   }
 
   json_t *data = json_object_get(root, "data");
   if (!data) {
-      send_enveloped_error(ctx->fd, root, ERR_BAD_REQUEST, "Missing data payload.");
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing data payload.");
       return 0;
   }
 
@@ -521,13 +720,13 @@ cmd_planet_withdraw (client_ctx_t *ctx, json_t *root)
   json_unpack(data, "{s:i, s:i}", "planet_id", &planet_id, "amount", &amount);
 
   if (planet_id <= 0 || amount <= 0) {
-      send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "Invalid planet_id or amount.");
+      send_response_error(ctx, root, ERR_INVALID_ARG, "Invalid planet_id or amount.");
       return 0;
   }
 
   planet_t p = {0};
   if (h_get_planet_owner_info(db, planet_id, &p) != SQLITE_OK) {
-      send_enveloped_error(ctx->fd, root, ERR_NOT_FOUND, "Planet not found.");
+      send_response_error(ctx, root, ERR_NOT_FOUND, "Planet not found.");
       return 0;
   }
 
@@ -548,7 +747,7 @@ cmd_planet_withdraw (client_ctx_t *ctx, json_t *root)
   h_free_planet_t(&p);
 
   if (!allowed) {
-      send_enveloped_refused(ctx->fd, root, 1403, "You do not control this planet or lack permissions.", NULL);
+    send_response_refused(ctx, root, REF_TURN_COST_EXCEEDS, "You do not control this planet or lack permissions.", NULL);
       return 0;
   }
 
@@ -567,25 +766,25 @@ cmd_planet_withdraw (client_ctx_t *ctx, json_t *root)
   }
 
   if (citadel_level < 1) {
-      send_enveloped_refused(ctx->fd, root, 1403, "No citadel or insufficient level for treasury.", NULL);
+    send_response_refused(ctx, root, REF_TURN_COST_EXCEEDS, "No citadel or insufficient level for treasury.", NULL);
       return 0;
   }
 
   if (current_treasury < amount) {
-      send_enveloped_refused(ctx->fd, root, 1402, "Insufficient treasury funds.", NULL);
+      send_response_refused(ctx, root, REF_NO_WARP_LINK, "Insufficient treasury funds.", NULL);
       return 0;
   }
 
   // Transaction
   if (sqlite3_exec(db, "BEGIN IMMEDIATE;", NULL, NULL, NULL) != SQLITE_OK) {
-      send_enveloped_error(ctx->fd, root, 500, "Database busy.");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Database busy.");
       return 0;
   }
 
   // Deduct from treasury
   if (sqlite3_prepare_v2(db, "UPDATE citadels SET treasury = treasury - ?1 WHERE planet_id = ?2;", -1, &st, NULL) != SQLITE_OK) {
       sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
-      send_enveloped_error(ctx->fd, root, 500, "Database error.");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Database error.");
       return 0;
   }
   sqlite3_bind_int(st, 1, amount);
@@ -593,7 +792,7 @@ cmd_planet_withdraw (client_ctx_t *ctx, json_t *root)
   if (sqlite3_step(st) != SQLITE_DONE) {
       sqlite3_finalize(st);
       sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
-      send_enveloped_error(ctx->fd, root, 500, "Database update failed.");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Database update failed.");
       return 0;
   }
   sqlite3_finalize(st);
@@ -602,14 +801,14 @@ cmd_planet_withdraw (client_ctx_t *ctx, json_t *root)
   long long new_player_balance = 0;
   if (h_add_player_petty_cash_unlocked(db, ctx->player_id, amount, &new_player_balance) != SQLITE_OK) {
       sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
-      send_enveloped_error(ctx->fd, root, 500, "Failed to credit player.");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Failed to credit player.");
       return 0;
   }
 
   // Commit
   if (sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL) != SQLITE_OK) {
       sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
-      send_enveloped_error(ctx->fd, root, 500, "Transaction commit failed.");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Transaction commit failed.");
       return 0;
   }
 
@@ -618,7 +817,7 @@ cmd_planet_withdraw (client_ctx_t *ctx, json_t *root)
   json_object_set_new(resp, "planet_treasury_balance", json_integer(current_treasury - amount));
   json_object_set_new(resp, "player_credits", json_integer(new_player_balance));
   
-  send_enveloped_ok(ctx->fd, root, "planet.withdraw", resp);
+  send_response_ok(ctx, root, "planet.withdraw", resp);
   json_decref(resp);
   return 0;
 }
@@ -702,25 +901,21 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
       const char *sql_check_idem =
         "SELECT response FROM idempotency WHERE key = ? AND cmd = 'planet.genesis_create';";
 
-
       sqlite3_prepare_v2 (db, sql_check_idem, -1, &stmt_idem_check, NULL);
-      sqlite3_bind_text (stmt_idem_check, 1, idempotency_key, -1,
-                         SQLITE_STATIC);
+      sqlite3_bind_text (stmt_idem_check, 1, idempotency_key, -1, SQLITE_STATIC);
+      
       if (sqlite3_step (stmt_idem_check) == SQLITE_ROW)
         {
-          const char *prev_response_json =
-            (const char *) sqlite3_column_text (stmt_idem_check, 0);
+          const char *prev_payload_json = (const char *) sqlite3_column_text (stmt_idem_check, 0);
 
-
-          if (prev_response_json)
+          if (prev_payload_json)
             {
-              json_t *prev_response =
-                json_loads (prev_response_json, 0, NULL);
+              json_t *prev_payload = json_loads (prev_payload_json, 0, NULL);
 
-
-              if (prev_response)
+              if (prev_payload)
                 {
-                  send_json_response (ctx, prev_response);      // Assumes send_json_response handles decref
+                  send_response_ok (ctx, root, "planet.genesis_created_v1", prev_payload);
+                  json_decref(prev_payload);
                   sqlite3_finalize (stmt_idem_check);
                   free (planet_name);
                   return 0;     // Idempotent success
@@ -945,8 +1140,7 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
   sqlite3_stmt *stmt_insert_planet;
   const char *sql_insert_planet =
     "INSERT INTO planets (num, sector, name, owner_id, owner_type, class, population, type, creator, colonist, fighters, created_at, created_by, genesis_flag, citadel_level, ore_on_hand, organics_on_hand, equipment_on_hand) "
-    "VALUES (NULL, ?, ?, ?, ?, 0, ?, '', 0, 0, ?, ?, 1, 0, 0, 0, 0);";                                                                                                                                                                                                                                                                  // Populate initial fields
-
+    "VALUES (NULL, ?, ?, ?, ?, ?, 0, ?, 0, 0, 0, ?, ?, 1, 0, 0, 0, 0);";
 
   sqlite3_prepare_v2 (db, sql_insert_planet, -1, &stmt_insert_planet, NULL);
   sqlite3_bind_int (stmt_insert_planet, 1, target_sector_id);
@@ -1044,66 +1238,45 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
         ("NavHaz adjustment (delta %d) for sector %d applied (or attempted).",
         navhaz_delta, target_sector_id);
     }
+
+  response_json = json_pack ("{s:i, s:i, s:s, s:s, s:s, s:i, s:b, s:i}",
+                                   "sector_id", target_sector_id, "planet_id",
+                                   (int) new_planet_id, "class",
+                                   planet_class_str, "name", planet_name,
+                                   "owner_type", owner_entity_type, "owner_id",
+                                   owner_id, "over_cap", over_cap_flag,
+                                   "navhaz_delta", navhaz_delta);
+
   // 13. Idempotency Recording
   if (idempotency_key)
     {
-      response_json = json_pack ("{s:s, s:s, s:o}",
-                                 "status", "ok",
-                                 "type", "planet.genesis_created_v1",
-                                 "data",
-                                 json_pack
-                                   ("{s:i, s:i, s:s, s:s, s:s, s:i, s:b, s:i}",
-                                   "sector_id", target_sector_id, "planet_id",
-                                   (int) new_planet_id, "class",
-                                   planet_class_str, "name", planet_name,
-                                   "owner_type", owner_entity_type, "owner_id",
-                                   owner_id, "over_cap", over_cap_flag,
-                                   "navhaz_delta", navhaz_delta));
-      char *success_response_str = json_dumps (response_json, 0);
+      char *payload_str = json_dumps(response_json, 0); // response_json is just the data payload now
       sqlite3_stmt *stmt_idem_record;
       const char *sql_record_idem =
         "INSERT INTO idempotency (key, cmd, req_fp, response, created_at, updated_at) "
-        "VALUES (?, 'planet.genesis_create', ?, ?, ?, ?);";                                                                                                             // req_fp is hash of original request
-
+        "VALUES (?, 'planet.genesis_create', ?, ?, ?, ?);";
 
       sqlite3_prepare_v2 (db, sql_record_idem, -1, &stmt_idem_record, NULL);
-      sqlite3_bind_text (stmt_idem_record, 1, idempotency_key, -1,
-                         SQLITE_STATIC);
-      // TODO: Replace with actual hash of original request for req_fp
-      sqlite3_bind_text (stmt_idem_record, 2, "placeholder_req_fp", -1,
-                         SQLITE_STATIC);
-      sqlite3_bind_text (stmt_idem_record, 3, success_response_str, -1,
-                         SQLITE_TRANSIENT);
+      sqlite3_bind_text (stmt_idem_record, 1, idempotency_key, -1, SQLITE_STATIC);
+      sqlite3_bind_text (stmt_idem_record, 2, "placeholder_req_fp", -1, SQLITE_STATIC);
+      sqlite3_bind_text (stmt_idem_record, 3, payload_str, -1, SQLITE_TRANSIENT);
       sqlite3_bind_int (stmt_idem_record, 4, current_unix_ts);
       sqlite3_bind_int (stmt_idem_record, 5, current_unix_ts);
+      
       if (sqlite3_step (stmt_idem_record) != SQLITE_DONE)
         {
-          LOGE ("Failed to record idempotency for key %s: %s",
-                idempotency_key, sqlite3_errmsg (db));
+          LOGE ("Failed to record idempotency for key %s: %s", idempotency_key, sqlite3_errmsg (db));
         }
       sqlite3_finalize (stmt_idem_record);
-      free (success_response_str);
-      // response_json will be decreffed by send_json_response
+      free (payload_str);
     }
-  // 14. Emit JSON Success Response (if not handled by idempotency already)
-  // If response_json was already created for idempotency, reuse it.
-  if (!response_json)
-    {
-      response_json = json_pack ("{s:s, s:s, s:o}",
-                                 "status", "ok",
-                                 "type", "planet.genesis_created_v1",
-                                 "data",
-                                 json_pack
-                                   ("{s:i, s:i, s:s, s:s, s:s, s:i, s:b, s:i}",
-                                   "sector_id", target_sector_id, "planet_id",
-                                   (int) new_planet_id, "class",
-                                   planet_class_str, "name", planet_name,
-                                   "owner_type", owner_entity_type, "owner_id",
-                                   owner_id, "over_cap", over_cap_flag,
-                                   "navhaz_delta", navhaz_delta));
-    }
-  send_json_response (ctx, response_json);      // Assumes this sends and decrefs
+
+  // 14. Emit JSON Success Response
+  send_response_ok (ctx, root, "planet.genesis_created_v1", response_json);
+  json_decref(response_json); // clean up the payload object
+
   // 15. Event Logging (System Broadcast)
+
   json_t *event_payload = json_pack ("{s:i, s:s, s:s, s:i, s:b, s:i}",
                                      "planet_id", (int) new_planet_id,
                                      "class", planet_class_str,
@@ -1262,13 +1435,13 @@ cmd_planet_market_sell (client_ctx_t *ctx, json_t *root)
 {
     sqlite3 *db = db_get_handle();
     if (!ctx || ctx->player_id <= 0) {
-        send_enveloped_refused(ctx->fd, root, ERR_NOT_AUTHENTICATED, "Not authenticated", NULL);
+        send_response_refused(ctx, root, ERR_NOT_AUTHENTICATED, "Not authenticated", NULL);
         return 0;
     }
 
     json_t *data = json_object_get(root, "data");
     if (!data) {
-        send_enveloped_error(ctx->fd, root, ERR_BAD_REQUEST, "Missing data payload.");
+        send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing data payload.");
         return 0;
     }
 
@@ -1279,19 +1452,19 @@ cmd_planet_market_sell (client_ctx_t *ctx, json_t *root)
     json_unpack(data, "{s:i}", "quantity", &quantity);
 
     if (planet_id <= 0 || !raw_commodity || quantity <= 0) {
-        send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "Invalid planet_id, commodity, or quantity.");
+        send_response_error(ctx, root, ERR_INVALID_ARG, "Invalid planet_id, commodity, or quantity.");
         return 0;
     }
 
     planet_t p = {0};
     if (h_get_planet_owner_info(db, planet_id, &p) != SQLITE_OK) {
-        send_enveloped_error(ctx->fd, root, ERR_NOT_FOUND, "Planet not found.");
+        send_response_error(ctx, root, ERR_NOT_FOUND, "Planet not found.");
         return 0;
     }
 
     if (planet_is_npc(&p)) {
         h_free_planet_t(&p);
-        send_enveloped_refused(ctx->fd, root, 1403, "Cannot manually trade with NPC planets.", NULL);
+        send_response_refused(ctx, root, REF_TURN_COST_EXCEEDS, "Cannot manually trade with NPC planets.", NULL);
         return 0;
     }
 
@@ -1308,20 +1481,20 @@ cmd_planet_market_sell (client_ctx_t *ctx, json_t *root)
     h_free_planet_t(&p);
 
     if (!allowed) {
-        send_enveloped_refused(ctx->fd, root, 1403, "You do not control this planet.", NULL);
+      send_response_refused(ctx, root, REF_TURN_COST_EXCEEDS, "You do not control this planet.", NULL);
         return 0;
     }
 
     char *commodity_code = (char*)commodity_to_code(raw_commodity);
     if (!commodity_code) {
-        send_enveloped_refused(ctx->fd, root, 1405, "Invalid commodity.", NULL);
+      send_response_refused(ctx, root, ERR_AUTOPILOT_PATH_INVALID, "Invalid commodity.", NULL);
         return 0;
     }
 
     // PE2-B Check Legality
     if (!h_planet_check_trade_legality(db, planet_id, ctx->player_id, commodity_code)) {
         free(commodity_code);
-        send_enveloped_refused(ctx->fd, root, 1403, "Illegal trade refused by port authority (alignment/cluster rules).", NULL);
+        send_response_refused(ctx, root, REF_TURN_COST_EXCEEDS, "Illegal trade refused by port authority (alignment/cluster rules).", NULL);
         return 0;
     }
 
@@ -1339,7 +1512,7 @@ cmd_planet_market_sell (client_ctx_t *ctx, json_t *root)
 
     if (current_stock < quantity) {
         free(commodity_code);
-        send_enveloped_refused(ctx->fd, root, 1402, "Insufficient stock on planet.", NULL);
+        send_response_refused(ctx, root, REF_NO_WARP_LINK, "Insufficient stock on planet.", NULL);
         return 0;
     }
 
@@ -1359,7 +1532,7 @@ cmd_planet_market_sell (client_ctx_t *ctx, json_t *root)
     
     if (unit_price <= 0) {
         free(commodity_code);
-        send_enveloped_error(ctx->fd, root, 500, "Could not determine commodity price.");
+        send_response_error(ctx, root, ERR_SERVER_ERROR, "Could not determine commodity price.");
         return 0;
     }
 
@@ -1369,7 +1542,7 @@ cmd_planet_market_sell (client_ctx_t *ctx, json_t *root)
     // 1. Update Stock
     if (h_update_entity_stock(db, ENTITY_TYPE_PLANET, planet_id, commodity_code, -quantity, NULL) != SQLITE_OK) {
         free(commodity_code);
-        send_enveloped_error(ctx->fd, root, 500, "Failed to update planet stock.");
+        send_response_error(ctx, root, ERR_SERVER_ERROR, "Failed to update planet stock.");
         return 0;
     }
 
@@ -1386,7 +1559,7 @@ cmd_planet_market_sell (client_ctx_t *ctx, json_t *root)
     json_object_set_new(resp, "quantity_sold", json_integer(quantity));
     json_object_set_new(resp, "total_credits_received", json_integer(total_credits));
     
-    send_enveloped_ok(ctx->fd, root, "planet.market.sell", resp);
+    send_response_ok(ctx, root, "planet.market.sell", resp);
     json_decref(resp);
     free(commodity_code);
     return 0;
@@ -1417,13 +1590,13 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
 {
     sqlite3 *db = db_get_handle();
     if (!ctx || ctx->player_id <= 0) {
-        send_enveloped_refused(ctx->fd, root, ERR_NOT_AUTHENTICATED, "Not authenticated", NULL);
+        send_response_refused(ctx, root, ERR_NOT_AUTHENTICATED, "Not authenticated", NULL);
         return 0;
     }
 
     json_t *data = json_object_get(root, "data");
     if (!data) {
-        send_enveloped_error(ctx->fd, root, ERR_BAD_REQUEST, "Missing data payload.");
+        send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing data payload.");
         return 0;
     }
 
@@ -1436,19 +1609,19 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
     json_unpack(data, "{s:i}", "max_price", &max_price);
 
     if (planet_id <= 0 || !raw_commodity || quantity_total <= 0 || max_price <= 0) {
-        send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "Invalid parameters.");
+        send_response_error(ctx, root, ERR_INVALID_ARG, "Invalid parameters.");
         return 0;
     }
 
     planet_t p = {0};
     if (h_get_planet_owner_info(db, planet_id, &p) != SQLITE_OK) {
-        send_enveloped_error(ctx->fd, root, ERR_NOT_FOUND, "Planet not found.");
+        send_response_error(ctx, root, ERR_NOT_FOUND, "Planet not found.");
         return 0;
     }
 
     if (planet_is_npc(&p)) {
         h_free_planet_t(&p);
-        send_enveloped_refused(ctx->fd, root, 1403, "Cannot manually trade with NPC planets.", NULL);
+        send_response_refused(ctx, root, REF_TURN_COST_EXCEEDS, "Cannot manually trade with NPC planets.", NULL);
         return 0;
     }
 
@@ -1464,27 +1637,27 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
     h_free_planet_t(&p);
 
     if (!allowed) {
-        send_enveloped_refused(ctx->fd, root, 1403, "You do not control this planet.", NULL);
+        send_response_refused(ctx, root, REF_TURN_COST_EXCEEDS, "You do not control this planet.", NULL);
         return 0;
     }
 
     char *commodity_code = (char*)commodity_to_code(raw_commodity);
     if (!commodity_code) {
-        send_enveloped_refused(ctx->fd, root, 1405, "Invalid commodity.", NULL);
+        send_response_refused(ctx, root, ERR_AUTOPILOT_PATH_INVALID, "Invalid commodity.", NULL);
         return 0;
     }
     
     // PE2-B Check Legality
     if (!h_planet_check_trade_legality(db, planet_id, ctx->player_id, commodity_code)) {
         free(commodity_code);
-        send_enveloped_refused(ctx->fd, root, 1403, "Illegal trade refused by port authority (alignment/cluster rules).", NULL);
+        send_response_refused(ctx, root, REF_TURN_COST_EXCEEDS, "Illegal trade refused by port authority (alignment/cluster rules).", NULL);
         return 0;
     }
 
     int commodity_id = h_get_commodity_id_by_code(db, commodity_code);
     if (commodity_id <= 0) {
         free(commodity_code);
-        send_enveloped_error(ctx->fd, root, 500, "Commodity ID lookup failed.");
+        send_response_error(ctx, root, ERR_SERVER_ERROR, "Commodity ID lookup failed.");
         return 0;
     }
 
@@ -1495,7 +1668,7 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
         int stock = 0;
         if (h_get_entity_stock_quantity(db, ENTITY_TYPE_PLANET, planet_id, commodity_code, &stock) != SQLITE_OK || stock < quantity_total) {
             free(commodity_code);
-            send_enveloped_refused(ctx->fd, root, 1402, "Insufficient stock for immediate illegal purchase.", NULL);
+            send_response_refused(ctx, root, REF_NO_WARP_LINK, "Insufficient stock for immediate illegal purchase.", NULL);
             return 0;
         }
 
@@ -1503,14 +1676,14 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
         long long player_credits = 0;
         if (h_get_player_petty_cash(db, ctx->player_id, &player_credits) != SQLITE_OK) {
             free(commodity_code);
-            send_enveloped_error(ctx->fd, root, 500, "Credit check failed.");
+            send_response_error(ctx, root, ERR_SERVER_ERROR, "Credit check failed.");
             return 0;
         }
         
         long long cost = (long long)quantity_total * max_price; // Using max_price as immediate price
         if (player_credits < cost) {
             free(commodity_code);
-            send_enveloped_refused(ctx->fd, root, 1402, "Insufficient credits.", NULL);
+            send_response_refused(ctx, root, REF_NO_WARP_LINK, "Insufficient credits.", NULL);
             return 0;
         }
 
@@ -1519,7 +1692,7 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
         int free_holds = 0;
         if (h_get_ship_cargo_and_holds(db, ship_id, NULL, NULL, NULL, NULL, &free_holds, NULL, NULL, NULL) != SQLITE_OK || free_holds < quantity_total) {
             free(commodity_code);
-            send_enveloped_refused(ctx->fd, root, 1402, "Insufficient cargo space.", NULL);
+            send_response_refused(ctx, root, REF_NO_WARP_LINK, "Insufficient cargo space.", NULL);
             return 0;
         }
 
@@ -1530,7 +1703,7 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
         h_update_entity_stock(db, ENTITY_TYPE_PLANET, planet_id, commodity_code, -quantity_total, NULL);
         
         // Add to Ship
-        h_update_ship_cargo(db, ship_id, commodity_code, quantity_total);
+        h_update_ship_cargo(db, ship_id, commodity_code, quantity_total, NULL);
         
         // Deduct Player Credits
         h_deduct_player_petty_cash_unlocked(db, ctx->player_id, cost, NULL);
@@ -1550,7 +1723,7 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
         json_object_set_new(resp, "status", json_string("complete"));
         json_object_set_new(resp, "quantity", json_integer(quantity_total));
         json_object_set_new(resp, "total_cost", json_integer(cost));
-        send_enveloped_ok(ctx->fd, root, "planet.market.buy.complete", resp);
+        send_response_ok(ctx, root, "planet.market.buy.complete", resp);
         json_decref(resp);
         free(commodity_code);
         return 0;
@@ -1561,13 +1734,13 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
     long long player_cash = 0;
     if (h_get_player_petty_cash(db, ctx->player_id, &player_cash) != SQLITE_OK) {
         free(commodity_code);
-        send_enveloped_error(ctx->fd, root, 500, "Failed to check credits.");
+        send_response_error(ctx, root, ERR_SERVER_ERROR, "Failed to check credits.");
         return 0;
     }
 
     if (player_cash < worst_case_cost) {
         free(commodity_code);
-        send_enveloped_refused(ctx->fd, root, 1402, "Insufficient credits for max cost.", NULL);
+        send_response_refused(ctx, root, REF_NO_WARP_LINK, "Insufficient credits for max cost.", NULL);
         return 0;
     }
 
@@ -1581,7 +1754,7 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
     int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
     if (rc != SQLITE_OK) {
         free(commodity_code);
-        send_enveloped_error(ctx->fd, root, 500, "DB Error preparing order.");
+        send_response_error(ctx, root, ERR_SERVER_ERROR, "DB Error preparing order.");
         return 0;
     }
     
@@ -1596,7 +1769,7 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
     if (sqlite3_step(stmt) != SQLITE_DONE) {
         sqlite3_finalize(stmt);
         free(commodity_code);
-        send_enveloped_error(ctx->fd, root, 500, "DB Error inserting order.");
+        send_response_error(ctx, root, ERR_SERVER_ERROR, "DB Error inserting order.");
         return 0;
     }
     
@@ -1611,7 +1784,7 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
     json_object_set_new(resp, "quantity_total", json_integer(quantity_total));
     json_object_set_new(resp, "max_price", json_integer(max_price));
     
-    send_enveloped_ok(ctx->fd, root, "planet.market.buy_order", resp);
+    send_response_ok(ctx, root, "planet.market.buy_order", resp);
     json_decref(resp);
     free(commodity_code);
     return 0;
@@ -1635,13 +1808,13 @@ cmd_planet_colonists_set (client_ctx_t *ctx, json_t *root)
 {
   sqlite3 *db = db_get_handle();
   if (!ctx || ctx->player_id <= 0) {
-      send_enveloped_refused(ctx->fd, root, ERR_NOT_AUTHENTICATED, "Not authenticated", NULL);
+      send_response_refused(ctx, root, ERR_NOT_AUTHENTICATED, "Not authenticated", NULL);
       return 0;
   }
 
   json_t *data = json_object_get(root, "data");
   if (!data) {
-      send_enveloped_error(ctx->fd, root, ERR_BAD_REQUEST, "Missing data payload.");
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing data payload.");
       return 0;
   }
 
@@ -1649,13 +1822,13 @@ cmd_planet_colonists_set (client_ctx_t *ctx, json_t *root)
   json_unpack(data, "{s:i}", "planet_id", &planet_id);
   
   if (planet_id <= 0) {
-      send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "Invalid planet_id.");
+      send_response_error(ctx, root, ERR_INVALID_ARG, "Invalid planet_id.");
       return 0;
   }
 
   planet_t p = {0};
   if (h_get_planet_owner_info(db, planet_id, &p) != SQLITE_OK) {
-      send_enveloped_error(ctx->fd, root, ERR_NOT_FOUND, "Planet not found.");
+      send_response_error(ctx, root, ERR_NOT_FOUND, "Planet not found.");
       return 0;
   }
 
@@ -1671,7 +1844,7 @@ cmd_planet_colonists_set (client_ctx_t *ctx, json_t *root)
   h_free_planet_t(&p);
 
   if (!allowed) {
-      send_enveloped_refused(ctx->fd, root, 1403, "You do not control this planet.", NULL);
+      send_response_refused(ctx, root, REF_TURN_COST_EXCEEDS, "You do not control this planet.", NULL);
       return 0;
   }
 
@@ -1712,12 +1885,12 @@ cmd_planet_colonists_set (client_ctx_t *ctx, json_t *root)
   int new_mil = j_mil ? json_integer_value(j_mil) : cur_mil;
 
   if (new_ore < 0 || new_org < 0 || new_eq < 0 || new_mil < 0) {
-      send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "Colonist counts must be non-negative.");
+      send_response_error(ctx, root, ERR_INVALID_ARG, "Colonist counts must be non-negative.");
       return 0;
   }
 
   if ((long long)new_ore + new_org + new_eq + new_mil > pop_total) {
-      send_enveloped_error(ctx->fd, root, 1406, "Total allocation exceeds population.");
+      send_response_error(ctx, root, REF_SAFE_ZONE_ONLY, "Total allocation exceeds population.");
       return 0;
   }
 
@@ -1733,7 +1906,7 @@ cmd_planet_colonists_set (client_ctx_t *ctx, json_t *root)
   json_object_set_new(resp, "colonists_mil", json_integer(new_mil));
   json_object_set_new(resp, "population_total", json_integer(pop_total));
 
-  send_enveloped_ok(ctx->fd, root, "planet.colonists.set", resp);
+  send_response_ok(ctx, root, "planet.colonists.set", resp);
   json_decref(resp);
   return 0;
 }
@@ -1743,13 +1916,13 @@ cmd_planet_colonists_get (client_ctx_t *ctx, json_t *root)
 {
   sqlite3 *db = db_get_handle();
   if (!ctx || ctx->player_id <= 0) {
-      send_enveloped_refused(ctx->fd, root, ERR_NOT_AUTHENTICATED, "Not authenticated", NULL);
+      send_response_refused(ctx, root, ERR_NOT_AUTHENTICATED, "Not authenticated", NULL);
       return 0;
   }
 
   json_t *data = json_object_get(root, "data");
   if (!data) {
-      send_enveloped_error(ctx->fd, root, ERR_BAD_REQUEST, "Missing data payload.");
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing data payload.");
       return 0;
   }
 
@@ -1757,13 +1930,13 @@ cmd_planet_colonists_get (client_ctx_t *ctx, json_t *root)
   json_unpack(data, "{s:i}", "planet_id", &planet_id);
   
   if (planet_id <= 0) {
-      send_enveloped_error(ctx->fd, root, ERR_INVALID_ARG, "Invalid planet_id.");
+      send_response_error(ctx, root, ERR_INVALID_ARG, "Invalid planet_id.");
       return 0;
   }
 
   planet_t p = {0};
   if (h_get_planet_owner_info(db, planet_id, &p) != SQLITE_OK) {
-      send_enveloped_error(ctx->fd, root, ERR_NOT_FOUND, "Planet not found.");
+      send_response_error(ctx, root, ERR_NOT_FOUND, "Planet not found.");
       return 0;
   }
 
@@ -1779,7 +1952,7 @@ cmd_planet_colonists_get (client_ctx_t *ctx, json_t *root)
   h_free_planet_t(&p);
 
   if (!allowed) {
-      send_enveloped_refused(ctx->fd, root, 1403, "You do not control this planet.", NULL);
+      send_response_refused(ctx, root, REF_TURN_COST_EXCEEDS, "You do not control this planet.", NULL);
       return 0;
   }
 
@@ -1806,6 +1979,8 @@ cmd_planet_colonists_get (client_ctx_t *ctx, json_t *root)
   json_object_set_new(resp, "colonists_mil", json_integer(cur_mil));
   json_object_set_new(resp, "population_total", json_integer(pop_total));
 
+  send_response_ok(ctx, root, "planet.colonists.get", resp);
+  return 0;
 }
 
   /* C4 - Planetary Transwarp (Citadel Level >= 4) */
@@ -1814,14 +1989,14 @@ cmd_planet_transwarp (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id <= 0)
     {
-      send_enveloped_refused (ctx->fd, root, ERR_NOT_AUTHENTICATED, "Not authenticated", NULL);
+      send_response_refused(ctx, root, ERR_NOT_AUTHENTICATED, "Not authenticated", NULL);
       return 0;
     }
 
   json_t *data = json_object_get (root, "data");
   if (!data)
     {
-      send_enveloped_error (ctx->fd, root, ERR_BAD_REQUEST, "Missing data");
+      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing data");
       return 0;
     }
 
@@ -1831,7 +2006,7 @@ cmd_planet_transwarp (client_ctx_t *ctx, json_t *root)
 
   if (planet_id <= 1 || to_sector_id <= 1)
     {
-      send_enveloped_error (ctx->fd, root, ERR_INVALID_ARG, "Invalid planet or restricted sector.");
+      send_response_error(ctx, root, ERR_INVALID_ARG, "Invalid planet or restricted sector.");
       return 0;
     }
 
@@ -1839,7 +2014,7 @@ cmd_planet_transwarp (client_ctx_t *ctx, json_t *root)
   planet_t p = {0};
   if (h_get_planet_owner_info(db, planet_id, &p) != SQLITE_OK)
     {
-      send_enveloped_error (ctx->fd, root, ERR_NOT_FOUND, "Planet not found.");
+      send_response_error(ctx, root, ERR_NOT_FOUND, "Planet not found.");
       return 0;
     }
 
@@ -1860,7 +2035,7 @@ cmd_planet_transwarp (client_ctx_t *ctx, json_t *root)
 
   if (!allowed)
     {
-      send_enveloped_refused (ctx->fd, root, 1403, "Permission denied.", NULL);
+      send_response_refused(ctx, root, REF_TURN_COST_EXCEEDS, "Permission denied.", NULL);
       return 0;
     }
 
@@ -1877,7 +2052,7 @@ cmd_planet_transwarp (client_ctx_t *ctx, json_t *root)
 
   if (level < 4)
     {
-      send_enveloped_refused (ctx->fd, root, 1402, "Citadel level too low (requires L4).", NULL);
+      send_response_refused(ctx, root, REF_NO_WARP_LINK, "Citadel level too low (requires L4).", NULL);
       return 0;
     }
 
@@ -1886,7 +2061,7 @@ cmd_planet_transwarp (client_ctx_t *ctx, json_t *root)
   h_get_entity_stock_quantity(db, "planet", planet_id, "FUE", &fue);
   if (fue < 500)
     {
-      send_enveloped_refused (ctx->fd, root, 1402, "Insufficient Fuel Ore (requires 500).", NULL);
+      send_response_refused(ctx, root, REF_NO_WARP_LINK, "Insufficient Fuel Ore (requires 500).", NULL);
       return 0;
     }
 
@@ -1895,13 +2070,13 @@ cmd_planet_transwarp (client_ctx_t *ctx, json_t *root)
   
   if (h_update_entity_stock(db, "planet", planet_id, "FUE", -500, NULL) != SQLITE_OK) {
       sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
-      send_enveloped_error (ctx->fd, root, 500, "Fuel consumption failed.");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Fuel consumption failed.");
       return 0;
   }
 
   if (sqlite3_prepare_v2(db, "UPDATE planets SET sector=?1 WHERE id=?2", -1, &st, NULL) != SQLITE_OK) {
       sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
-      send_enveloped_error (ctx->fd, root, 500, "DB Error.");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "DB Error.");
       return 0;
   }
   sqlite3_bind_int(st, 1, to_sector_id);
@@ -1909,7 +2084,7 @@ cmd_planet_transwarp (client_ctx_t *ctx, json_t *root)
   if (sqlite3_step(st) != SQLITE_DONE) {
       sqlite3_finalize(st);
       sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
-      send_enveloped_error (ctx->fd, root, 500, "Update failed.");
+      send_response_error(ctx, root, ERR_SERVER_ERROR, "Update failed.");
       return 0;
   }
   sqlite3_finalize(st);
@@ -1918,7 +2093,7 @@ cmd_planet_transwarp (client_ctx_t *ctx, json_t *root)
   json_t *res = json_object();
   json_object_set_new(res, "planet_id", json_integer(planet_id));
   json_object_set_new(res, "new_sector_id", json_integer(to_sector_id));
-  send_enveloped_ok(ctx->fd, root, "planet.transwarp.success", res);
+  send_response_ok(ctx, root, "planet.transwarp.success", res);
   json_decref(res);
   return 0;
 }

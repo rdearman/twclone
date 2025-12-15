@@ -277,8 +277,9 @@ require_s2s (json_t *root, const char **why_out)
 static inline int
 niy (client_ctx_t *ctx, json_t *root, const char *which)
 {
-  (void) which;
-  send_enveloped_error (ctx->fd, root, 1101, "Not implemented");
+  char buf[256];
+  snprintf (buf, sizeof (buf), "Not implemented: %s", which);
+  send_response_error (ctx, root, ERR_NOT_IMPLEMENTED, buf);
   return 0;
 }
 
@@ -287,15 +288,19 @@ niy (client_ctx_t *ctx, json_t *root, const char *which)
 int
 cmd_s2s_planet_genesis (client_ctx_t *ctx, json_t *root)
 {
+  /* Original: return niy (ctx, root, "s2s.planet.genesis"); */
+  send_response_refused(ctx, root, ERR_CAPABILITY_DISABLED, "S2S command disabled for v1.0", NULL);
+  return 0;
+
   const char *why = NULL;
   if (!require_s2s (root, &why))
     {
-      send_enveloped_refused (ctx->fd, root, 1401, why ? why : "Unauthorized",
-                              NULL);
+      send_response_refused (ctx, root, ERR_NOT_AUTHENTICATED, why ? why : "Unauthorized",
+                             NULL);
       return 0;
     }
   // TODO: parse sector_id, seed, owner, call DB, broadcast
-  return niy (ctx, root, "s2s.planet.genesis");
+  // return niy (ctx, root, "s2s.planet.genesis"); // Old niy call, now unreachable
 }
 
 
@@ -303,15 +308,19 @@ cmd_s2s_planet_genesis (client_ctx_t *ctx, json_t *root)
 int
 cmd_s2s_planet_transfer (client_ctx_t *ctx, json_t *root)
 {
+  /* Original: return niy (ctx, root, "s2s.planet.transfer"); */
+  send_response_refused(ctx, root, ERR_CAPABILITY_DISABLED, "S2S command disabled for v1.0", NULL);
+  return 0;
+
   const char *why = NULL;
   if (!require_s2s (root, &why))
     {
-      send_enveloped_refused (ctx->fd, root, 1401, why ? why : "Unauthorized",
-                              NULL);
+      send_response_refused (ctx, root, ERR_NOT_AUTHENTICATED, why ? why : "Unauthorized",
+                             NULL);
       return 0;
     }
   // TODO: parse planet_id, from_server, to_server, handoff metadata
-  return niy (ctx, root, "s2s.planet.transfer");
+  // return niy (ctx, root, "s2s.planet.transfer"); // Old niy call, now unreachable
 }
 
 
@@ -319,15 +328,19 @@ cmd_s2s_planet_transfer (client_ctx_t *ctx, json_t *root)
 int
 cmd_s2s_player_migrate (client_ctx_t *ctx, json_t *root)
 {
+  /* Original: return niy (ctx, root, "s2s.player.migrate"); */
+  send_response_refused(ctx, root, ERR_CAPABILITY_DISABLED, "S2S command disabled for v1.0", NULL);
+  return 0;
+
   const char *why = NULL;
   if (!require_s2s (root, &why))
     {
-      send_enveloped_refused (ctx->fd, root, 1401, why ? why : "Unauthorized",
-                              NULL);
+      send_response_refused (ctx, root, ERR_NOT_AUTHENTICATED, why ? why : "Unauthorized",
+                             NULL);
       return 0;
     }
   // TODO: parse player_id, snapshot blob, import/export
-  return niy (ctx, root, "s2s.player.migrate");
+  // return niy (ctx, root, "s2s.player.migrate"); // Old niy call, now unreachable
 }
 
 
@@ -335,15 +348,19 @@ cmd_s2s_player_migrate (client_ctx_t *ctx, json_t *root)
 int
 cmd_s2s_port_restock (client_ctx_t *ctx, json_t *root)
 {
+  /* Original: return niy (ctx, root, "s2s.port.restock"); */
+  send_response_refused(ctx, root, ERR_CAPABILITY_DISABLED, "S2S command disabled for v1.0", NULL);
+  return 0;
+
   const char *why = NULL;
   if (!require_s2s (root, &why))
     {
-      send_enveloped_refused (ctx->fd, root, 1401, why ? why : "Unauthorized",
-                              NULL);
+      send_response_refused (ctx, root, ERR_NOT_AUTHENTICATED, why ? why : "Unauthorized",
+                             NULL);
       return 0;
     }
   // TODO: parse sector_id/port_id, quantities, pricing policy
-  return niy (ctx, root, "s2s.port.restock");
+  // return niy (ctx, root, "s2s.port.restock"); // Old niy call, now unreachable
 }
 
 
@@ -351,15 +368,19 @@ cmd_s2s_port_restock (client_ctx_t *ctx, json_t *root)
 int
 cmd_s2s_event_relay (client_ctx_t *ctx, json_t *root)
 {
+  /* Original: return niy (ctx, root, "s2s.event.relay"); */
+  send_response_refused(ctx, root, ERR_CAPABILITY_DISABLED, "S2S command disabled for v1.0", NULL);
+  return 0;
+
   const char *why = NULL;
   if (!require_s2s (root, &why))
     {
-      send_enveloped_refused (ctx->fd, root, 1401, why ? why : "Unauthorized",
-                              NULL);
+      send_response_refused (ctx, root, ERR_NOT_AUTHENTICATED, why ? why : "Unauthorized",
+                             NULL);
       return 0;
     }
   // TODO: parse event type/payload, fanout to connected players/servers
-  return niy (ctx, root, "s2s.event.relay");
+  // return niy (ctx, root, "s2s.event.relay"); // Old niy call, now unreachable
 }
 
 
@@ -370,15 +391,15 @@ cmd_s2s_replication_heartbeat (client_ctx_t *ctx, json_t *root)
   const char *why = NULL;
   if (!require_s2s (root, &why))
     {
-      send_enveloped_refused (ctx->fd, root, 1401, why ? why : "Unauthorized",
-                              NULL);
+      send_response_refused (ctx, root, ERR_NOT_AUTHENTICATED, why ? why : "Unauthorized",
+                             NULL);
       return 0;
     }
   // TODO: update replication status; reply with ack + version/lsn
   json_t *payload = json_pack ("{s:s}", "status", "ok");
 
 
-  send_enveloped_ok (ctx->fd, root, "s2s.heartbeat", payload);
+  send_response_ok(ctx, root, "s2s.heartbeat", payload);
   json_decref (payload);
   return 0;
 }

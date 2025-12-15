@@ -53,4 +53,6 @@ void db_close (void);
 // Bank accounts
 int db_bank_account_create_default_for_player (sqlite3 *db, int player_id);
 
+int db_seed_cron_tasks (sqlite3 *db);
+
 #endif /* DATABASE_H */

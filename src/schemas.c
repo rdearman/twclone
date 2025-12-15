@@ -22,6 +22,9 @@ static json_t *schema_auth_register (void);
 static json_t *schema_auth_logout (void);
 static json_t *schema_auth_refresh (void);
 static json_t *schema_auth_mfa_totp_verify (void);
+/* --- Admin --- */
+static json_t *schema_admin_notice (void);
+static json_t *schema_admin_shutdown_warning (void);
 /* --- System --- */
 static json_t *schema_system_capabilities (void);
 static json_t *schema_system_describe_schema (void);
@@ -255,10 +258,23 @@ static json_t *schema_mail_send (void);
 static json_t *schema_mail_inbox (void);
 static json_t *schema_mail_read (void);
 static json_t *schema_mail_delete (void);
+
+
 /* --- Notice --- */
 static json_t *schema_sys_notice_create (void);
 static json_t *schema_notice_list (void);
 static json_t *schema_notice_ack (void);
+/* --- Insurance --- */
+static json_t *schema_insurance_policies_list (void);
+static json_t *schema_insurance_policies_buy (void);
+static json_t *schema_insurance_claim_file (void);
+/* --- Fines --- */
+static json_t *schema_fine_list (void);
+static json_t *schema_fine_pay (void);
+
+
+
+
 /* --- News --- */
 static json_t *schema_news_read (void);
 /* --- Subscribe --- */
@@ -347,6 +363,15 @@ schema_get (const char *key)
   else if (strcasecmp (key, "auth.mfa.totp.verify") == 0)
     {
       return schema_auth_mfa_totp_verify ();
+    }
+  /* Admin */
+  else if (strcasecmp (key, "admin.notice") == 0)
+    {
+      return schema_admin_notice ();
+    }
+  else if (strcasecmp (key, "admin.shutdown_warning") == 0)
+    {
+      return schema_admin_shutdown_warning ();
     }
   /* System */
   else if (strcasecmp (key, "system.capabilities") == 0)
@@ -690,6 +715,7 @@ schema_get (const char *key)
     {
       return schema_mail_delete ();
     }
+
   /* Notice */
   else if (strcasecmp (key, "sys.notice.create") == 0)
     {
@@ -703,11 +729,35 @@ schema_get (const char *key)
     {
       return schema_notice_ack ();
     }
+  /* Insurance */
+  else if (strcasecmp (key, "insurance.policies.list") == 0)
+    {
+      return schema_insurance_policies_list ();
+    }
+  else if (strcasecmp (key, "insurance.policies.buy") == 0)
+    {
+      return schema_insurance_policies_buy ();
+    }
+  else if (strcasecmp (key, "insurance.claim.file") == 0)
+    {
+      return schema_insurance_claim_file ();
+    }
+  /* Fines */
+  else if (strcasecmp (key, "fine.list") == 0)
+    {
+      return schema_fine_list ();
+    }
+  else if (strcasecmp (key, "fine.pay") == 0)
+    {
+      return schema_fine_pay ();
+    }
   /* News */
   else if (strcasecmp (key, "news.read") == 0)
     {
       return schema_news_read ();
     }
+
+  
   /* Subscribe */
   else if (strcasecmp (key, "subscribe.add") == 0)
     {
@@ -843,10 +893,18 @@ schema_keys (void)
   json_array_append_new (keys, json_string ("mail.inbox"));
   json_array_append_new (keys, json_string ("mail.read"));
   json_array_append_new (keys, json_string ("mail.delete"));
+
   /* Notice */
   json_array_append_new (keys, json_string ("sys.notice.create"));
   json_array_append_new (keys, json_string ("notice.list"));
   json_array_append_new (keys, json_string ("notice.ack"));
+  /* Insurance */
+  json_array_append_new (keys, json_string ("insurance.policies.list"));
+  json_array_append_new (keys, json_string ("insurance.policies.buy"));
+  json_array_append_new (keys, json_string ("insurance.claim.file"));
+  /* Fines */
+  json_array_append_new (keys, json_string ("fine.list"));
+  json_array_append_new (keys, json_string ("fine.pay"));
   /* News */
   json_array_append_new (keys, json_string ("news.read"));
   /* Subscribe */
@@ -1317,6 +1375,24 @@ schema_auth_mfa_totp_verify (void)
                     "$comment", "Schema not yet implemented");
 }
 
+static json_t *
+schema_admin_notice (void)
+{
+  return json_pack ("{s:s, s:s, s:s}",
+                    "$id", "ge://schema/admin.notice.json",
+                    "$schema", "https://json-schema.org/draft/2020-12/schema",
+                    "type", "object");
+}
+
+static json_t *
+schema_admin_shutdown_warning (void)
+{
+  return json_pack ("{s:s, s:s, s:s}",
+                    "$id", "ge://schema/admin.shutdown_warning.json",
+                    "$schema", "https://json-schema.org/draft/2020-12/schema",
+                    "type", "object");
+}
+
 
 /* --- System --- */
 static json_t *
@@ -1516,29 +1592,38 @@ schema_ship_claim (void)
 static json_t *
 schema_ship_status (void)
 {
-  /* TODO: Implement this schema */
-  return json_pack ("{s:s, s:s}",
+  return json_pack ("{s:s, s:s, s:s, s:o, s:b}",
                     "$id", "ge://schema/ship.status.json",
-                    "$comment", "Schema not yet implemented");
+                    "$schema", "https://json-schema.org/draft/2020-12/schema",
+                    "type", "object",
+                    "properties", json_pack("{s:{s:s, s:o, s:[s,s,s,s,s,s,s,s,s,s]}}",
+                      "ship",
+                        "type", "object",
+                        "properties", json_pack("{s:{s:s}, s:{s:s}, s:{s:s}, s:{s:s, s:o}, s:{s:s}, s:{s:s}, s:{s:s}, s:{s:s, s:o}, s:{s:s, s:o}, s:{s:s, s:o}}",
+                          "id", "type", "integer",
+                          "number", "type", "integer",
+                          "name", "type", "string",
+                          "type", "type", "object", "properties", json_pack("{s:{s:s}, s:{s:s}}", "id", "type", "integer", "name", "type", "string"),
+                          "holds", "type", "integer",
+                          "fighters", "type", "integer",
+                          "shields", "type", "integer",
+                          "location", "type", "object", "properties", json_pack("{s:{s:s}, s:{s:s}}", "sector_id", "type", "integer", "sector_name", "type", "string"),
+                          "owner", "type", "object", "properties", json_pack("{s:{s:s}, s:{s:s}}", "id", "type", "integer", "name", "type", "string"),
+                          "cargo", "type", "object", "properties", json_pack("{s:{s:s}, s:{s:s}, s:{s:s}, s:{s:s}}", "ore", "type", "integer", "organics", "type", "integer", "equipment", "type", "integer", "colonists", "type", "integer")
+                        ),
+                        "required", json_pack("[s,s,s,s,s,s,s,s,s,s]", "id", "number", "name", "type", "holds", "fighters", "shields", "location", "owner", "cargo")
+                    ),
+                    "required", json_pack("[s]", "ship"),
+                    "additionalProperties", json_false());
 }
 
 
 static json_t *
 schema_ship_info (void)
 {
-  json_t *data_schema = json_pack ("{s:s, s:s, s:s, s:o, s:b}",
-                                   "$id",
-                                   "ge://schema/ship.info.json",
-                                   "$schema",
-                                   "https://json-schema.org/draft/2020-12/schema",
-                                   "type",
-                                   "object",
-                                   "properties",
-                                   json_object (),
-                                   // Empty properties object
-                                   "additionalProperties",
-                                   json_false ());
-  return data_schema;
+  json_t *s = schema_ship_status();
+  json_object_set_new(s, "$id", json_string("ge://schema/ship.info.json"));
+  return s;
 }
 
 
@@ -2618,6 +2703,87 @@ schema_notice_ack (void)
                                    json_false ());
   return data_schema;
 }
+
+
+
+/* --- Insurance --- */
+static json_t *
+schema_insurance_policies_list (void)
+{
+  json_t *data_schema = json_pack ("{s:s, s:s, s:s, s:o, s:o, s:b}",
+                                   "$id", "ge://schema/insurance.policies.list.json",
+                                   "$schema", "https://json-schema.org/draft/2020-12/schema",
+                                   "type", "object",
+                                   "properties", json_object(),
+                                   "required", json_array(),
+                                   "additionalProperties", json_false());
+  return data_schema;
+}
+
+static json_t *
+schema_insurance_policies_buy (void)
+{
+  json_t *data_properties = json_pack ("{s:o, s:o, s:o, s:o}",
+                                       "subject_type", json_pack ("{s:s, s:o}", "type", "string", "enum", json_pack("[s,s,s]", "ship", "cargo", "planet")),
+                                       "subject_id", json_pack ("{s:s}", "type", "integer"),
+                                       "duration", json_pack ("{s:s}", "type", "integer"),
+                                       "premium", json_pack ("{s:s}", "type", "integer"));
+  json_t *data_schema = json_pack ("{s:s, s:s, s:s, s:o, s:[s,s,s,s], s:b}",
+                                   "$id", "ge://schema/insurance.policies.buy.json",
+                                   "$schema", "https://json-schema.org/draft/2020-12/schema",
+                                   "type", "object",
+                                   "properties", data_properties,
+                                   "required", "subject_type", "subject_id", "duration", "premium",
+                                   "additionalProperties", json_false());
+  return data_schema;
+}
+
+static json_t *
+schema_insurance_claim_file (void)
+{
+  json_t *data_properties = json_pack ("{s:o, s:o}",
+                                       "policy_id", json_pack ("{s:s}", "type", "integer"),
+                                       "incident_description", json_pack ("{s:s}", "type", "string")); // maps to event_id
+  json_t *data_schema = json_pack ("{s:s, s:s, s:s, s:o, s:[s,s], s:b}",
+                                   "$id", "ge://schema/insurance.claim.file.json",
+                                   "$schema", "https://json-schema.org/draft/2020-12/schema",
+                                   "type", "object",
+                                   "properties", data_properties,
+                                   "required", "policy_id", "incident_description",
+                                   "additionalProperties", json_false());
+  return data_schema;
+}
+
+/* --- Fines --- */
+static json_t *
+schema_fine_list (void)
+{
+  json_t *data_schema = json_pack ("{s:s, s:s, s:s, s:o, s:o, s:b}",
+                                   "$id", "ge://schema/fine.list.json",
+                                   "$schema", "https://json-schema.org/draft/2020-12/schema",
+                                   "type", "object",
+                                   "properties", json_object(),
+                                   "required", json_array(),
+                                   "additionalProperties", json_false());
+  return data_schema;
+}
+
+static json_t *
+schema_fine_pay (void)
+{
+  json_t *data_properties = json_pack ("{s:o, s:o}",
+                                       "fine_id", json_pack ("{s:s}", "type", "integer"),
+                                       "amount", json_pack ("{s:s}", "type", "integer"));
+  json_t *data_schema = json_pack ("{s:s, s:s, s:s, s:o, s:[s], s:b}",
+                                   "$id", "ge://schema/fine.pay.json",
+                                   "$schema", "https://json-schema.org/draft/2020-12/schema",
+                                   "type", "object",
+                                   "properties", data_properties,
+                                   "required", json_pack("[s]", "fine_id"), // amount is optional for full payment
+                                   "additionalProperties", json_false());
+  return data_schema;
+}
+
 
 
 /* --- News --- */

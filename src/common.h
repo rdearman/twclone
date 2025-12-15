@@ -47,6 +47,9 @@ typedef struct
   int rl_count;
   int rl_limit;
   int rl_window_sec;
+  
+  /* --- bulk execution capture --- */
+  json_t *captured_envelopes; // If non-NULL, responses are appended here instead of sent
 } client_ctx_t;
 // Structure to represent a commodity's essential data
 typedef struct

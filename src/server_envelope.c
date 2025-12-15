@@ -202,7 +202,7 @@ cmd_system_cmd_list (client_ctx_t *ctx, json_t *root)
   json_t *data = json_pack ("{s:o, s:i}", "commands", arr, "count", (int) n);
 
 
-  send_enveloped_ok (ctx->fd, root, "system.cmd_list", data);
+  send_response_ok (ctx, root, "system.cmd_list", data);
   return 0;
 }
 
@@ -221,14 +221,13 @@ cmd_system_describe_schema (client_ctx_t *ctx, json_t *root)
     }
   if (!name || !*name)
     {
-      send_enveloped_error (ctx->fd, root, 1103,
-                            "Missing 'name' in data payload");
+      send_response_error(ctx, root, ERR_MAINTENANCE_MODE, "Missing 'name' in data payload");
       return 0;
     }
   // NEW: Check if command exists before trying to get schema
   if (!have_cmd (name))
     {
-      send_enveloped_error (ctx->fd, root, 1400, "Unknown command");
+      send_response_error(ctx, root, REF_NOT_IN_SECTOR, "Unknown command");
       return 0;
     }
   // Default to "command" if type is not provided or recognized
@@ -245,8 +244,7 @@ cmd_system_describe_schema (client_ctx_t *ctx, json_t *root)
   if (!schema_obj)
     {
       // If schema_get returns NULL, it means the schema is not found/implemented
-      send_enveloped_error (ctx->fd, root, 1104,
-                            "Schema not found or not implemented");
+      send_response_error(ctx, root, ERR_TIMEOUT, "Schema not found or not implemented");
       return 0;
     }
   // 2. Construct the correct 'data' payload for the response
@@ -257,7 +255,7 @@ cmd_system_describe_schema (client_ctx_t *ctx, json_t *root)
   json_object_set_new (response_data, "type", json_string (schema_type));
   json_object_set_new (response_data, "schema", schema_obj);    // schema_obj is a new reference from schema_get()
   // 3. Send with correct type "system.schema"
-  send_enveloped_ok (ctx->fd, root, "system.schema", response_data);
+  send_response_ok(ctx, root, "system.schema", response_data);
   // response_data now owns schema_obj, so no separate decref for schema_obj here.
   // send_enveloped_ok will decref response_data (and thus schema_obj)
   return 0;
@@ -270,7 +268,7 @@ cmd_system_schema_list (client_ctx_t *ctx, json_t *root)
 {
   json_t *arr = collect_schema_names ();
   json_t *data = json_pack ("{s:o}", "available", arr);
-  send_enveloped_ok (ctx->fd, root, "system.schema_list", data);
+  send_response_ok(ctx, root, "system.schema_list", data);
   return 0;
 }
 
@@ -640,6 +638,119 @@ send_enveloped_refused (int fd, json_t *req, int code, const char *msg,
   json_decref (resp);
 }
 
+
+/* -------------------- Context-Aware Wrappers -------------------- */
+
+void
+send_response_ok (client_ctx_t *ctx, json_t *req, const char *type, json_t *data)
+{
+  if (ctx && ctx->captured_envelopes)
+    {
+      json_t *resp = json_object ();
+      json_object_set_new (resp, "id", json_string ("srv-ok"));
+      const char *req_id = NULL;
+      if (req && json_is_object (req))
+        {
+          json_t *jid = json_object_get (req, "id");
+          if (json_is_string (jid))
+            req_id = json_string_value (jid);
+        }
+      if (req_id)
+        json_object_set_new (resp, "reply_to", json_string (req_id));
+      char tsbuf[32];
+      iso8601_utc (tsbuf);
+      json_object_set_new (resp, "ts", json_string (tsbuf));
+      json_object_set_new (resp, "status", json_string ("ok"));
+      json_object_set_new (resp, "type", json_string (type ? type : "ok"));
+      if (data)
+        json_object_set_new (resp, "data", data);
+      else
+        json_object_set_new (resp, "data", json_null ());
+      json_object_set_new (resp, "error", json_null ());
+      json_object_set_new (resp, "meta", make_default_meta ());
+      if (type && strcmp (type, "system.schema") != 0)
+        sanitize_json_strings (resp);
+      
+      json_array_append_new (ctx->captured_envelopes, resp);
+    }
+  else
+    {
+      send_enveloped_ok (ctx->fd, req, type, data);
+    }
+}
+
+void
+send_response_error (client_ctx_t *ctx, json_t *req, int code, const char *msg)
+{
+  if (ctx && ctx->captured_envelopes)
+    {
+      json_t *resp = json_object ();
+      json_object_set_new (resp, "id", json_string ("srv-error"));
+      const char *req_id = NULL;
+      if (req && json_is_object (req))
+        {
+          json_t *jid = json_object_get (req, "id");
+          if (json_is_string (jid))
+            req_id = json_string_value (jid);
+        }
+      if (req_id)
+        json_object_set_new (resp, "reply_to", json_string (req_id));
+      char tsbuf[32];
+      iso8601_utc (tsbuf);
+      json_object_set_new (resp, "ts", json_string (tsbuf));
+      json_object_set_new (resp, "status", json_string ("error"));
+      json_object_set_new (resp, "type", json_string ("error"));
+      json_t *err = json_pack ("{s:i, s:s}", "code", code, "message", msg ? msg : "");
+      json_object_set_new (resp, "error", err);
+      json_object_set_new (resp, "data", json_null ());
+      json_object_set_new (resp, "meta", make_default_meta ());
+      sanitize_json_strings (resp);
+      json_array_append_new (ctx->captured_envelopes, resp);
+    }
+  else
+    {
+      send_enveloped_error (ctx->fd, req, code, msg);
+    }
+}
+
+void
+send_response_refused (client_ctx_t *ctx, json_t *req, int code, const char *msg, json_t *data_opt)
+{
+  if (ctx && ctx->captured_envelopes)
+    {
+      json_t *resp = json_object ();
+      json_object_set_new (resp, "id", json_string ("srv-refused"));
+      const char *req_id = NULL;
+      if (req && json_is_object (req))
+        {
+          json_t *jid = json_object_get (req, "id");
+          if (json_is_string (jid))
+            req_id = json_string_value (jid);
+        }
+      if (req_id)
+        json_object_set_new (resp, "reply_to", json_string (req_id));
+      char tsbuf[32];
+      iso8601_utc (tsbuf);
+      json_object_set_new (resp, "ts", json_string (tsbuf));
+      json_object_set_new (resp, "status", json_string ("refused"));
+      json_object_set_new (resp, "type", json_string ("error"));
+      json_t *err = json_pack ("{s:i, s:s}", "code", code, "message", msg ? msg : "");
+      if (data_opt)
+        json_object_set (err, "data", data_opt);
+      json_object_set_new (resp, "error", err);
+      json_object_set_new (resp, "data", json_null ());
+      json_object_set_new (resp, "meta", make_default_meta ());
+      sanitize_json_strings (resp);
+      json_array_append_new (ctx->captured_envelopes, resp);
+      // data_opt is borrowed in send_enveloped_refused if passed? No, check implementation.
+      // In send_enveloped_refused: json_object_set(err, "data", data_opt); // borrow
+      // So caller owns data_opt. We should respect that.
+    }
+  else
+    {
+      send_enveloped_refused (ctx->fd, req, code, msg, data_opt);
+    }
+}
 
 ////////////////////////   S2S SECTION //////////////////////////////
 

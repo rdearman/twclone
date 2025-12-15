@@ -100,7 +100,10 @@ int h_player_build_title_payload (sqlite3 *db,
 int h_get_cargo_space_free (sqlite3 *db, int player_id, int *free_out);
 int h_player_is_npc (sqlite3 *db, int player_id);
 
-
+int cmd_insurance_policies_list (client_ctx_t *ctx, json_t *root);
+int cmd_insurance_policies_buy (client_ctx_t *ctx, json_t *root);
+int cmd_insurance_claim_file (client_ctx_t *ctx, json_t *root);
+  
 #ifdef __cplusplus
 }
 #endif
