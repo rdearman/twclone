@@ -647,7 +647,8 @@ send_response_ok (client_ctx_t *ctx, json_t *req, const char *type, json_t *data
   if (ctx && ctx->captured_envelopes)
     {
       json_t *resp = json_object ();
-      json_object_set_new (resp, "id", json_string ("srv-ok"));
+      // json_object_set_new (resp, "id", json_string ("srv-ok"));
+      json_object_set (resp, "data", data);   /* increments refcount */
       const char *req_id = NULL;
       if (req && json_is_object (req))
         {

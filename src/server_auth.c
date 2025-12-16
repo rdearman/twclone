@@ -978,4 +978,3 @@ cmd_auth_mfa_totp_verify (client_ctx_t *ctx, json_t *root)
   send_response_refused(ctx, root, ERR_CAPABILITY_DISABLED, "MFA is not enabled on this server", NULL);
   return 0;
 }
-
