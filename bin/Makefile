@@ -347,7 +347,9 @@ target_alias =
 top_build_prefix = ../
 top_builddir = ..
 top_srcdir = ..
-AM_CFLAGS = -Wall -Wextra 
+
+# AM_CFLAGS = -Wall -Wextra
+AM_CFLAGS = -Wall -Wextra  -D_GNU_SOURCE
 server_LDADD = -ljansson -lsqlite3 -lcrypto -lpthread -lm
 # bigbang_LDADD  = -ljansson -lsqlite3 -lpthread -lm
 # client_LDADD   = -ljansson -lsqlite3 -lpthread -lm
