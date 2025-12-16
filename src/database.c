@@ -148,18 +148,18 @@ db_get_handle (void)
       return tls_db;
     }
 
-  /* * Open a new connection for this thread.
-   * flags:
-   * - READWRITE | CREATE: Standard file modes.
-   * - NOMUTEX: We are guaranteeing single-thread access, so SQLite
-   * doesn't need internal mutexes.
-   * - URI: Allows using URI filenames if config requires it.
-   */
-  int rc = sqlite3_open_v2 (DEFAULT_DB_NAME, &tls_db,
-                            SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE |
-                            SQLITE_OPEN_NOMUTEX | SQLITE_OPEN_URI,
-                            NULL);
 
+  int rc = sqlite3_open_v2(
+			   DEFAULT_DB_NAME,
+			   &tls_db,
+			   SQLITE_OPEN_READWRITE |
+			   SQLITE_OPEN_CREATE |
+			   SQLITE_OPEN_FULLMUTEX |
+			   SQLITE_OPEN_URI,
+			   NULL
+			   );
+
+  sqlite3_busy_timeout(tls_db, 5000);
 
   if (rc != SQLITE_OK)
     {

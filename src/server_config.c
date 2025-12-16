@@ -898,6 +898,7 @@ cmd_session_hello (client_ctx_t *ctx, json_t *root)
   // Use ONE helper that builds a proper envelope including reply_to + status.
   // If your send_enveloped_ok doesn't add reply_to, fix it (next section).
   send_response_ok (ctx, root, "session.hello", payload);
+  payload = NULL;
   return 0;
 }
 

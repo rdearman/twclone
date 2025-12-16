@@ -462,82 +462,85 @@ server_broadcast_to_all_online (json_t *data)
 }
 
 
-/* Sector-scoped, ephemeral event to subscribers of sector.* / sector.{id}.
-   NOTE: comm_publish_sector_event STEALS a ref to 'data'. */
-
-
-/*
-   static void
-   server_broadcast_to_sector (int sector_id, const char *event_type,
-                            json_t *data)
-   {
-   comm_publish_sector_event (sector_id, event_type, data); // steals 'data'
-   }
- */
 static int
-broadcast_sweep_once (sqlite3 *db, int max_rows)
+broadcast_sweep_once(sqlite3 *db, int max_rows)
 {
-  static const char *SQL_SEL =
-    "SELECT id, created_at, title, body, severity, expires_at "
-    "FROM system_notice "
-    "WHERE id NOT IN (SELECT DISTINCT notice_id FROM notice_seen WHERE player_id=0) "
-    "ORDER BY created_at ASC, id ASC LIMIT ?1;";
-  sqlite3_stmt *st = NULL;
-  int processed = 0;
-  if (max_rows <= 0 || max_rows > 1000)
-    {
-      max_rows = 64;
+    sqlite3_stmt *st = NULL;
+    int rc;
+    int rows = 0;
+
+    static const char *sql =
+        "SELECT id, created_at, title, body, severity, expires_at "
+        "FROM system_notice "
+        "WHERE id NOT IN ("
+        "    SELECT notice_id FROM notice_seen WHERE player_id = 0"
+        ") "
+        "ORDER BY created_at ASC, id ASC "
+        "LIMIT ?1;";
+
+    /* Begin a read transaction.
+     * IMMEDIATE prevents us from starting if a writer already holds the lock.
+     */
+    rc = sqlite3_exec(db, "BEGIN IMMEDIATE;", NULL, NULL, NULL);
+    if (rc == SQLITE_BUSY || rc == SQLITE_LOCKED) {
+        /* DB under pressure — skip this sweep */
+        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+        return 0;
     }
-  if (sqlite3_prepare_v2 (db, SQL_SEL, -1, &st, NULL) != SQLITE_OK)
-    {
-      return 0;
+    if (rc != SQLITE_OK) {
+        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+        return -1;
     }
-  sqlite3_bind_int (st, 1, max_rows);
-  while (sqlite3_step (st) == SQLITE_ROW)
-    {
-      int id = sqlite3_column_int (st, 0);
-      int created_at = sqlite3_column_int (st, 1);
-      const char *title = (const char *) sqlite3_column_text (st, 2);
-      const char *body = (const char *) sqlite3_column_text (st, 3);
-      const char *severity = (const char *) sqlite3_column_text (st, 4);
-      int expires_at =
-        (sqlite3_column_type (st, 5) ==
-         SQLITE_NULL) ? 0 : sqlite3_column_int (st, 5);
-      json_t *data = json_pack ("{s:i, s:i, s:s, s:s, s:s, s:O}",
-                                "id", id,
-                                "ts", created_at,
-                                "title", title ? title : "",
-                                "body", body ? body : "",
-                                "severity", severity ? severity : "info",
-                                "expires_at",
-                                expires_at ? json_integer (expires_at) :
-                                json_null ());
 
+    rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
+    if (rc == SQLITE_BUSY || rc == SQLITE_LOCKED) {
+        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+        return 0;
+    }
+    if (rc != SQLITE_OK) {
+        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+        return -1;
+    }
 
-      server_broadcast_to_all_online (json_incref (data));      /* fan-out live */
-      json_decref (data);
-      /* mark-as-published sentinel (player_id=0) to avoid re-sending */
-      sqlite3_stmt *st2 = NULL;
+    sqlite3_bind_int(st, 1, max_rows);
 
+    while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
+        /* Extract fields */
+        int notice_id = sqlite3_column_int(st, 0);
 
-      if (sqlite3_prepare_v2 (db,
-                              "INSERT OR IGNORE INTO notice_seen(notice_id, player_id, seen_at) "
-                              "VALUES(?1, 0, strftime('%s','now'));",
-                              -1,
-                              &st2,
-                              NULL) == SQLITE_OK)
-        {
-          sqlite3_bind_int (st2, 1, id);
-          (void) sqlite3_step (st2);
+        /* Broadcast notice to clients */
+        //broadcast_notice_row(st);
+
+        /* Mark as seen for system player (player_id = 0) */
+        rc = db_notice_mark_seen(notice_id, 0);
+        if (rc == SQLITE_BUSY || rc == SQLITE_LOCKED) {
+            sqlite3_finalize(st);
+            sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+            return 0;
         }
-      if (st2)
-        {
-          sqlite3_finalize (st2);
+        if (rc != SQLITE_OK) {
+            sqlite3_finalize(st);
+            sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+            return -1;
         }
-      processed++;
+
+        rows++;
     }
-  sqlite3_finalize (st);
-  return processed;
+
+    sqlite3_finalize(st);
+
+    if (rc != SQLITE_DONE) {
+        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+        return -1;
+    }
+
+    rc = sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL);
+    if (rc != SQLITE_OK) {
+        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+        return -1;
+    }
+
+    return rows;
 }
 
 
