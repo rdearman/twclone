@@ -83,22 +83,12 @@ class Planner:
                 # 0. Missing Adjacency Data -> Fetch it
                 if not adjacent_sectors:
                     logger.info(f"Goto goal but no adjacency data for sector {current_sector}. Requesting sector.info.")
-                    cmd_dict = {"command": "sector.info", "data": {"sector_id": int(current_sector)}}
-                    if self.state_manager.is_command_available(cmd_dict["command"]):
-                        return cmd_dict
-                    else:
-                        logger.warning(f"Command '{cmd_dict['command']}' not available for goal '{goal_str}'.")
-                        return None
+                    return {"command": "sector.info", "data": {"sector_id": int(current_sector)}}
 
                 # 1. If adjacent, just warp
                 if target_sector in adjacent_sectors:
                     if self._is_command_ready("move.warp", current_state.get("command_retry_info", {})):
-                        cmd_dict = {"command": "move.warp", "data": {"to_sector_id": target_sector}}
-                        if self.state_manager.is_command_available(cmd_dict["command"]):
-                            return cmd_dict
-                        else:
-                            logger.warning(f"Command '{cmd_dict['command']}' not available for goal '{goal_str}'.")
-                            return None
+                        return {"command": "move.warp", "data": {"to_sector_id": target_sector}}
                     else:
                         logger.warning(f"Goal 'goto: {target_sector}' wants move.warp, but it's on cooldown/blacklisted.")
                         return None
@@ -109,12 +99,7 @@ class Planner:
                     next_hop = local_path[1]
                     logger.info(f"Local path found to {target_sector}: {local_path}. Next hop: {next_hop}")
                     if self._is_command_ready("move.warp", current_state.get("command_retry_info", {})):
-                        cmd_dict = {"command": "move.warp", "data": {"to_sector_id": next_hop}}
-                        if self.state_manager.is_command_available(cmd_dict["command"]):
-                            return cmd_dict
-                        else:
-                            logger.warning(f"Command '{cmd_dict['command']}' not available for goal '{goal_str}'.")
-                            return None
+                        return {"command": "move.warp", "data": {"to_sector_id": next_hop}}
                     else:
                         logger.warning(f"Warp to {next_hop} on cooldown.")
                         return None
@@ -127,23 +112,15 @@ class Planner:
                     next_hop = server_path[1]
                     logger.info(f"Using cached server path to {target_sector}. Next hop: {next_hop}")
                     if self._is_command_ready("move.warp", current_state.get("command_retry_info", {})):
-                        cmd_dict = {"command": "move.warp", "data": {"to_sector_id": next_hop}}
-                        if self.state_manager.is_command_available(cmd_dict["command"]):
-                            return cmd_dict
-                        else:
-                            logger.warning(f"Command '{cmd_dict['command']}' not available for goal '{goal_str}'.")
-                            return None
+                        return {"command": "move.warp", "data": {"to_sector_id": next_hop}}
+                    else:
+                        return None
 
                 # 4. Request Server Path (if acceptable)
                 # Only ask if we haven't asked recently
                 if self._is_command_ready("move.pathfind", current_state.get("command_retry_info", {})):
                     logger.info(f"Requesting server path to {target_sector}...")
-                    cmd_dict = {"command": "move.pathfind", "data": {"to_sector_id": target_sector}}
-                    if self.state_manager.is_command_available(cmd_dict["command"]):
-                        return cmd_dict
-                    else:
-                        logger.warning(f"Command '{cmd_dict['command']}' not available for goal '{goal_str}'.")
-                        return None
+                    return {"command": "move.pathfind", "data": {"to_sector_id": target_sector}}
 
                 # 5. Fallback: Explore Random Adjacent (Step toward unknown)
                 # If we can't pathfind, just move somewhere to expand the map
@@ -153,12 +130,7 @@ class Planner:
                 if candidates and self._is_command_ready("move.warp", current_state.get("command_retry_info", {})):
                     chosen = random.choice(candidates)
                     logger.info(f"Goto {target_sector} path unknown; exploring via warp to {chosen}.")
-                    cmd_dict = {"command": "move.warp", "data": {"to_sector_id": chosen}}
-                    if self.state_manager.is_command_available(cmd_dict["command"]):
-                        return cmd_dict
-                    else:
-                        logger.warning(f"Command '{cmd_dict['command']}' not available for goal '{goal_str}'.")
-                        return None
+                    return {"command": "move.warp", "data": {"to_sector_id": chosen}}
                 
                 return None
 
@@ -174,15 +146,19 @@ class Planner:
                 commodity_to_sell = goal_target.upper() 
 
                 # --- NEW: Filter illegal commodities early ---
-                LEGAL_COMMODITIES = {"ORE", "ORGANICS", "EQUIPMENT", "COLONISTS"} # Define legal commodities
+                LEGAL_COMMODITIES = {"ORE", "ORG", "EQU", "COLONISTS"} # Define legal commodities
                 if commodity_to_sell not in LEGAL_COMMODITIES:
                     logger.warning(f"Rejecting sell goal for illegal commodity '{commodity_to_sell}'.")
                     return None
                 # ---------------------------------------------
                 
                 # Validation: Check if port actually trades this commodity
+                #port_info = current_state.get("port_info_by_sector", {}).get(str(current_sector), {})
+                #traded_commodities = [c.get("symbol") for c in port_info.get("commodities", [])]
+                current_sector = current_state.get("player_location_sector")  # <-- add this line
                 port_info = current_state.get("port_info_by_sector", {}).get(str(current_sector), {})
-                traded_commodities = [c.get("symbol") for c in port_info.get("commodities", [])]
+                traded_commodities = [c.get("commodity") for c in port_info.get("commodities", [])]  # <-- symbol -> commodity
+
                 if traded_commodities and commodity_to_sell not in traded_commodities:
                      logger.warning(f"Goal 'sell' failed: Port {port_id} does not trade {commodity_to_sell}.")
                      return None
@@ -192,12 +168,7 @@ class Planner:
 
                 if sell_price is None:
                     logger.info(f"Sell price for {commodity_to_sell} missing. Requesting trade.quote first.")
-                    cmd_dict = {"command": "trade.quote", "data": {"port_id": port_id, "commodity": commodity_to_sell, "quantity": 1}}
-                    if self.state_manager.is_command_available(cmd_dict["command"]):
-                        return cmd_dict
-                    else:
-                        logger.warning(f"Command '{cmd_dict['command']}' not available for goal '{goal_str}'.")
-                        return None
+                    return {"command": "trade.quote", "data": {"port_id": port_id, "commodity": commodity_to_sell, "quantity": 1}}
 
                 cargo = current_state.get("ship_info", {}).get("cargo", {})
                 # Cargo is a list of dicts: [{"commodity": "ORE", "quantity": 10, "purchase_price": 50}]
@@ -208,15 +179,10 @@ class Planner:
                     logger.warning(f"Goal 'sell' failed: no '{commodity_to_sell}' in cargo.")
                     return None 
 
-                cmd_dict = {"command": "trade.sell", "data": {
+                return {"command": "trade.sell", "data": {
                     "port_id": port_id,
                     "items": [{"commodity": commodity_to_sell, "quantity": int(quantity)}]
                 }}
-                if self.state_manager.is_command_available(cmd_dict["command"]):
-                    return cmd_dict
-                else:
-                    logger.warning(f"Command '{cmd_dict['command']}' not available for goal '{goal_str}'.")
-                    return None
 
             elif goal_type == "buy":
                 port_id = self._find_port_in_sector(current_state, current_state.get("player_location_sector"))
@@ -230,15 +196,19 @@ class Planner:
                 commodity_to_buy = goal_target.upper() 
 
                 # --- NEW: Filter illegal commodities early ---
-                LEGAL_COMMODITIES = {"ORE", "ORGANICS", "EQUIPMENT", "COLONISTS"} # Define legal commodities
+                LEGAL_COMMODITIES = {"ORE", "ORG", "EQU", "COLONISTS"} # Define legal commodities
                 if commodity_to_buy not in LEGAL_COMMODITIES:
                     logger.warning(f"Rejecting buy goal for illegal commodity '{commodity_to_buy}'.")
                     return None
                 # ---------------------------------------------
                 
                 # Validation: Check if port actually trades this commodity
+                #port_info = current_state.get("port_info_by_sector", {}).get(str(current_sector), {})
+                #traded_commodities = [c.get("symbol") for c in port_info.get("commodities", [])]
+                current_sector = current_state.get("player_location_sector")
                 port_info = current_state.get("port_info_by_sector", {}).get(str(current_sector), {})
-                traded_commodities = [c.get("symbol") for c in port_info.get("commodities", [])]
+                traded_commodities = [c.get("commodity") for c in port_info.get("commodities", [])]
+                
                 if traded_commodities and commodity_to_buy not in traded_commodities:
                      logger.warning(f"Goal 'buy' failed: Port {port_id} does not trade {commodity_to_buy}.")
                      return None
@@ -249,12 +219,7 @@ class Planner:
                 if buy_price is None:
                     # If price is missing, issue a trade.quote first
                     logger.info(f"Buy price for {commodity_to_buy} missing. Requesting trade.quote first.")
-                    cmd_dict = {"command": "trade.quote", "data": {"port_id": port_id, "commodity": commodity_to_buy, "quantity": 1}}
-                    if self.state_manager.is_command_available(cmd_dict["command"]):
-                        return cmd_dict
-                    else:
-                        logger.warning(f"Command '{cmd_dict['command']}' not available for goal '{goal_str}'.")
-                        return None
+                    return {"command": "trade.quote", "data": {"port_id": port_id, "commodity": commodity_to_buy, "quantity": 1}}
 
                 free_holds = self._get_free_holds(current_state)
                 if free_holds <= 0:
@@ -280,15 +245,10 @@ class Planner:
 
                 if quantity > 0:
                     logger.info(f"Preparing to BUY {quantity} of {commodity_to_buy} at port {port_id}. Price: {buy_price}.")
-                    cmd_dict = {"command": "trade.buy", "data": {
+                    return {"command": "trade.buy", "data": {
                         "port_id": port_id,
                         "items": [{"commodity": commodity_to_buy, "quantity": quantity}]
                     }}
-                    if self.state_manager.is_command_available(cmd_dict["command"]):
-                        return cmd_dict
-                    else:
-                        logger.warning(f"Command '{cmd_dict['command']}' not available for goal '{goal_str}'.")
-                        return None
 
             elif goal_type == "survey" and goal_target == "port":
                 if not self._at_port(current_state):
@@ -306,7 +266,8 @@ class Planner:
                     return None
                 
                 port_info = current_state.get("port_info_by_sector", {}).get(str(current_sector), {})
-                port_commodities = [c.get("symbol") for c in port_info.get("commodities", [])]
+                # port_commodities = [c.get("symbol") for c in port_info.get("commodities", [])]
+                port_commodities = [c.get("commodity") for c in port_info.get("commodities", [])]
                 
                 price_cache = current_state.get("price_cache", {}).get(str(port_id), {"buy": {}, "sell": {}})
 
@@ -314,30 +275,15 @@ class Planner:
                     if not (price_cache["buy"].get(commodity_symbol) is not None and
                             price_cache["sell"].get(commodity_symbol) is not None):
                         logger.info(f"Calling trade.quote for unquoted commodity: {commodity_symbol}")
-                        cmd_dict = {"command": "trade.quote", "data": {"port_id": port_id, "commodity": commodity_symbol, "quantity": 1}}
-                        if self.state_manager.is_command_available(cmd_dict["command"]):
-                            return cmd_dict
-                        else:
-                            logger.warning(f"Command '{cmd_dict['command']}' not available for goal '{goal_str}'.")
-                            return None
+                        return {"command": "trade.quote", "data": {"port_id": port_id, "commodity": commodity_symbol, "quantity": 1}}
                 
                 # If we reach here, all commodities are quoted, but _survey_complete returned False
                 # This should ideally not happen if _survey_complete is correct.
                 logger.warning("Survey: port logic reached end without quoting all commodities, but none found unquoted.")
-                cmd_dict = {"command": "trade.port_info", "data": {}}
-                if self.state_manager.is_command_available(cmd_dict["command"]):
-                    return cmd_dict
-                else:
-                    logger.warning(f"Command '{cmd_dict['command']}' not available for goal '{goal_str}'.")
-                    return None
+                return {"command": "trade.port_info", "data": {}} # Fallback to ensure port info is fresh
             
             elif goal_type == "scan" and goal_target == "density":
-                cmd_dict = {"command": "sector.scan.density", "data": {}}
-                if self.state_manager.is_command_available(cmd_dict["command"]):
-                    return cmd_dict
-                else:
-                    logger.warning(f"Command '{cmd_dict['command']}' not available for goal '{goal_str}'.")
-                    return None
+                return {"command": "sector.scan.density", "data": {}}
 
         except Exception as e:
             logger.error(f"Error in _achieve_goal for '{goal_str}': {e}", exc_info=True)
@@ -356,23 +302,13 @@ class Planner:
         # 1. Player Info
         if not current_state.get("player_info"):
             logger.info("Bootstrap: Fetching player info.")
-            cmd_dict = {"command": "player.my_info", "data": {}}
-            if self.state_manager.is_command_available(cmd_dict["command"]):
-                return cmd_dict
-            else:
-                logger.warning(f"Bootstrap command '{cmd_dict['command']}' not available.")
-                return None
+            return {"command": "player.my_info", "data": {}}
 
         # 2. Ship Info
         ship_info = current_state.get("ship_info")
         if not ship_info or not ship_info.get("id"):
             logger.info("Bootstrap: Fetching ship info.")
-            cmd_dict = {"command": "ship.info", "data": {}}
-            if self.state_manager.is_command_available(cmd_dict["command"]):
-                return cmd_dict
-            else:
-                logger.warning(f"Bootstrap command '{cmd_dict['command']}' not available.")
-                return None
+            return {"command": "ship.info", "data": {}}
 
         # 3. Sector Info & Adjacency
         current_sector = current_state.get("player_location_sector")
@@ -386,12 +322,10 @@ class Planner:
             # If we don't have sector data, OR we don't have adjacency info
             if not sector_data or not sector_data.get("adjacent"):
                 logger.info(f"Bootstrap: Fetching sector info for {current_sector} to build map.")
-                cmd_dict = {"command": "sector.info", "data": {"sector_id": int(current_sector)}}
-                if self.state_manager.is_command_available(cmd_dict["command"]):
-                    return cmd_dict
-                else:
-                    logger.warning(f"Bootstrap command '{cmd_dict['command']}' not available.")
-                    return None
+                return {"command": "sector.info", "data": {"sector_id": int(current_sector)}}
+            
+            # Optional: If we have sector info but no adjacency (rare but possible), maybe scan?
+            # For now, sector.info should be enough for adjacency.
 
         # If we reached here, we have the basics.
         logger.info("Bootstrap complete: World state is ready.")
@@ -510,19 +444,9 @@ class Planner:
     def _check_invariants(self, current_state):
         """Checks for critical missing state and returns a command to fix it."""
         if not current_state.get("player_info"):
-            cmd_dict = {"command": "player.my_info", "data": {}}
-            if self.state_manager.is_command_available(cmd_dict["command"]):
-                return cmd_dict
-            else:
-                logger.warning(f"Invariant command '{cmd_dict['command']}' not available.")
-                return None
+            return {"command": "player.my_info", "data": {}}
         if not current_state.get("ship_info"):
-            cmd_dict = {"command": "ship.info", "data": {}}
-            if self.state_manager.is_command_available(cmd_dict["command"]):
-                return cmd_dict
-            else:
-                logger.warning(f"Invariant command '{cmd_dict['command']}' not available.")
-                return None
+            return {"command": "ship.info", "data": {}}
         
         current_sector_id = current_state.get("player_location_sector")
         if current_sector_id is not None and str(current_sector_id) != "None":
@@ -532,36 +456,21 @@ class Planner:
             # We need to know adjacency AND if there is a port
             if not current_sector_data or "adjacent" not in current_sector_data or "has_port" not in current_sector_data:
                 logger.info(f"Invariant check: Incomplete sector_data (adjacent/has_port) for current sector {current_sector_id}. Fetching.")
-                cmd_dict = {"command": "sector.info", "data": {"sector_id": int(current_sector_id)}, "is_invariant": True}
-                if self.state_manager.is_command_available(cmd_dict["command"]):
-                    return cmd_dict
-                else:
-                    logger.warning(f"Invariant command '{cmd_dict['command']}' not available.")
-                    return None
+                return {"command": "sector.info", "data": {"sector_id": int(current_sector_id)}, "is_invariant": True}
             
             # If we are at a port, ensure we have port details (commodities, etc.)
             if current_sector_data.get("has_port"):
                 port_info = current_state.get("port_info_by_sector", {}).get(str(current_sector_id))
                 if not port_info:
                     logger.info(f"Invariant check: At port in sector {current_sector_id} but missing port info. Fetching.")
-                    cmd_dict = {"command": "trade.port_info", "data": {}, "is_invariant": True}
-                    if self.state_manager.is_command_available(cmd_dict["command"]):
-                        return cmd_dict
-                    else:
-                        logger.warning(f"Invariant command '{cmd_dict['command']}' not available.")
-                        return None
+                    return {"command": "trade.port_info", "data": {}, "is_invariant": True}
 
             # Check for missing schema for sector.scan.density if we have the scanner
             if (current_state.get("has_density_scanner") and 
                 "sector.scan.density" not in self.state_manager.get("schema_blacklist", []) and # Check blacklist
                 not self.state_manager.get_schema("sector.scan.density")):
                 logger.info("Invariant check: Missing schema for sector.scan.density. Fetching.")
-                cmd_dict = {"command": "system.describe_schema", "data": {"name": "sector.scan.density"}, "is_invariant": True}
-                if self.state_manager.is_command_available(cmd_dict["command"]):
-                    return cmd_dict
-                else:
-                    logger.warning(f"Invariant command '{cmd_dict['command']}' not available.")
-                    return None
+                return {"command": "system.describe_schema", "data": {"name": "sector.scan.density"}, "is_invariant": True}
             
             # Check for density scan if we have the module and adjacent sectors are not fully known
             if current_state.get("has_density_scanner"):
@@ -575,12 +484,9 @@ class Planner:
                 
                 if needs_scan:
                     logger.info("Invariant check: Density scanner available and adjacent sectors need more info. Performing scan.")
-                    cmd_dict = {"command": "sector.scan.density", "data": {}, "is_invariant": True}
-                    if self.state_manager.is_command_available(cmd_dict["command"]):
-                        return cmd_dict
-                    else:
-                        logger.warning(f"Invariant command '{cmd_dict['command']}' not available.")
-                        return None
+                    return {"command": "sector.scan.density", "data": {}, "is_invariant": True}
+            
+        return None
         
     def _ensure_sufficient_credits(self, current_state, required_amount):
         """
@@ -686,10 +592,9 @@ class Planner:
             if player_credits < 500 and bank_balance > 0: # If player credits are low, consider withdrawing
                 actions.append("bank.withdraw")
             
-            return [cmd for cmd in actions if self.state_manager.is_command_available(cmd)]
+            return actions
         
-        # Default actions, also filtered by availability
-        return [cmd for cmd in ["bank.balance"] if self.state_manager.is_command_available(cmd)]
+        return ["bank.balance"] # Default
 
     # --- Action Filtering ---
     
@@ -966,7 +871,7 @@ class Planner:
         if field_name == "commodity":
             if command_name == "trade.quote":
                 # Cycle through commodities to get quotes for all
-                all_commodities = ["ORE", "EQUIPMENT", "ORGANICS"]
+                all_commodities = ["ORE", "EQU", "ORG"]
                 # A simple way to cycle: use the current turn number
                 turns = current_state.get("player_info", {}).get("player", {}).get("turns_remaining", 0)
                 if turns is None:

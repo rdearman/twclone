@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 # You might want to move these to your config.json eventually
 OLLAMA_API_URL = "http://localhost:11434/api/generate"
 DEFAULT_MODEL = "llama3.1"
-REQUEST_TIMEOUT = 120  # 2 minutes
+REQUEST_TIMEOUT = 600  # 2 minutes
 
 def get_ollama_response(game_state, model=None, prompt_key=None, override_prompt=None):
     """

@@ -34,7 +34,6 @@ class StateManager:
             "warp_blacklist": [],       # NEW: List of sectors that are unreachable via warp
             "current_path": [],         # NEW: Stores the server-provided path for navigation
             "last_action_result": None, # NEW: Feedback loop for LLM
-            "available_commands": [],   # NEW: List of commands advertised by server
         }
         self.load_state()
 
@@ -54,7 +53,6 @@ class StateManager:
                     self.state["command_retry_info"] = {} 
                     self.state["session_id"] = None # Always force re-login
                     self.state["command_schemas"] = {} # Always force schema refetch
-                    self.state["available_commands"] = [] # Force re-fetch of command list
                     self.state["schema_blacklist"] = [] # NEW: Clear schema blacklist on load
                     self.state["pending_schema_requests"] = {} # NEW: Clear pending schema requests on load
                     self.state["recent_sectors"] = [] # NEW: Clear recent sectors on load
@@ -221,11 +219,11 @@ class StateManager:
         if "ore_on_hand" in port_data:
             commodities.append({"commodity": "ORE", "supply": port_data["ore_on_hand"]})
         if "organics_on_hand" in port_data:
-            commodities.append({"commodity": "ORGANICS", "supply": port_data["organics_on_hand"]})
+            commodities.append({"commodity": "ORG", "supply": port_data["organics_on_hand"]})
         if "equipment_on_hand" in port_data:
-            commodities.append({"commodity": "EQUIPMENT", "supply": port_data["equipment_on_hand"]})
+            commodities.append({"commodity": "EQU", "supply": port_data["equipment_on_hand"]})
         if "fuel_on_hand" in port_data: # Assuming fuel might be there or added later
-             commodities.append({"commodity": "FUEL", "supply": port_data["fuel_on_hand"]})
+             commodities.append({"commodity": "ORE", "supply": port_data["fuel_on_hand"]})
         
         # We only care about one port per sector for this bot
         self.state['port_info_by_sector'][str(sector_id)] = {
@@ -245,10 +243,21 @@ class StateManager:
         if port_id not in self.state["price_cache"]:
             self.state["price_cache"][port_id] = {"buy": {}, "sell": {}}
             
+        # commodity = quote_data.get("commodity")
+        # if not commodity:
+        #     return
         commodity = quote_data.get("commodity")
         if not commodity:
             return
-            
+
+        # NORMALISE commodity keys (server uses ORE/ORG/EQU)
+        commodity = str(commodity).upper()
+        if commodity == "ORGANICS":
+            commodity = "ORG"
+        elif commodity == "EQUIPMENT":
+            commodity = "EQU"
+
+        
         # Update price for the specific commodity
         self.state["price_cache"][port_id]["buy"][commodity] = quote_data.get("buy_price")
         self.state["price_cache"][port_id]["sell"][commodity] = quote_data.get("sell_price")
@@ -397,43 +406,6 @@ class StateManager:
             self.state["schema_blacklist"].append(command_name)
             logger.info(f"Added '{command_name}' to schema blacklist.")
             self.save_state()
-
-    def update_available_commands(self, commands_list):
-        """Updates the list of commands advertised by the server."""
-        self.state["available_commands"] = commands_list
-        logger.info(f"Updated available commands list ({len(commands_list)} commands).")
-        self.save_state()
-
-    def is_command_available(self, command_name):
-        """
-        Checks if a command is:
-        1. In the server's advertised list (available_commands)
-        2. Has a loaded schema
-        3. Is not in the schema blacklist
-        """
-        # Always allow fundamental commands if lists are empty (bootstrapping edge case)
-        if not self.state.get("available_commands") and command_name in ["system.cmd_list", "system.describe_schema", "player.ping"]:
-            return True
-
-        # Check advertised list
-        if command_name not in self.state.get("available_commands", []):
-            return False
-        
-        # Check blacklist
-        if command_name in self.state.get("schema_blacklist", []):
-            return False
-            
-        # Check schema existence (unless it's a known schema-less command? 
-        # Actually G2 requirements say "name in capabilities AND name in schema_backed_commands")
-        # system.cmd_list and system.describe_schema might not have schemas loaded yet when we use them to fetch schemas.
-        # But for strategy actions, we need schemas.
-        if command_name in ["system.cmd_list", "system.describe_schema", "player.ping"]:
-             return True
-
-        if not self.get_schema(command_name):
-            return False
-            
-        return True
 
     # --- Pending Command and Blacklist Management ---
 

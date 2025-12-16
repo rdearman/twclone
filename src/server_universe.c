@@ -749,7 +749,7 @@ build_sector_scan_json (int sector_id, int player_id,
     {
       json_object_set_new (root, "sector_id", json_integer (sector_id));
       json_object_set_new (root, "name", json_object_get (basic, "name"));
-      json_decref (basic);
+      // json_decref (basic);
     }
   else
     {

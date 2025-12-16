@@ -101,6 +101,29 @@ monotonic_millis (void)
   return (uint64_t) ts.tv_sec * 1000ULL + (uint64_t) ts.tv_nsec / 1000000ULL;
 }
 
+/* void server_unregister_client(client_ctx_t *ctx) */
+/* { */
+/*   pthread_mutex_lock(&g_clients_mu); */
+
+/*   client_node_t **pp = &g_clients; */
+/*   while (*pp) */
+/*     { */
+/*       if ((*pp)->ctx == ctx) */
+/*         { */
+/*           client_node_t *dead = *pp; */
+/*           *pp = dead->next; */
+/*           free(dead); */
+/*           break; */
+/*         } */
+/*       pp = &(*pp)->next; */
+/*     } */
+
+/*   pthread_mutex_unlock(&g_clients_mu); */
+/* } */
+
+
+
+
 /* --------------------------------------------------------------------------
    Command Registry & Dispatch
    -------------------------------------------------------------------------- */
@@ -1001,10 +1024,14 @@ connection_thread (void *arg)
     }
   /* Per-thread teardown */
   /* FIX: Explicitly close the thread-local database connection */
-  db_close_thread ();
-  close (fd);
-  free (ctx);
+
+  db_close_thread();
+  close(fd);
+
+  server_unregister_client(ctx);   /* MUST happen before free(ctx) */
+  free(ctx);
   return NULL;
+
 }
 
 
