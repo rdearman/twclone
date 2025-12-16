@@ -5,11 +5,12 @@ import os
 import socket
 import subprocess
 import time
+import random
 import uuid
 from pathlib import Path
 
 from datetime import datetime, timezone
-DEFAULT_TIMEOUT = 5.0
+DEFAULT_TIMEOUT = 10.0
 
 
 def send_command(sock, cmd):
@@ -79,7 +80,8 @@ def ensure_account(host, port, username, password, client_version):
     send(login_cmd)
 
     # give server a moment
-    time.sleep(0.2)
+    #time.sleep(0.2)
+    time.sleep(0.15 + random.random() * 0.25)
     for resp in recv_all():
         if resp.get("reply_to") == login_id and resp.get("status") == "ok":
             sock.close()
@@ -107,21 +109,25 @@ def ensure_account(host, port, username, password, client_version):
     }
 
     send(register_cmd)
-    time.sleep(0.2)
-    responses = recv_all()
+
+    deadline = time.time() + DEFAULT_TIMEOUT
+    got_reply = False
+
+    while time.time() < deadline:
+        for resp in recv_all():
+            if resp.get("reply_to") == reg_id:
+                got_reply = True
+                sock.close()
+                if resp.get("status") == "ok":
+                    return
+                else:
+                    raise RuntimeError(
+                        f"auth.register failed for {username}: {resp}"
+                    )
+        time.sleep(0.05)  # small poll delay
+
     sock.close()
-
-    # look for reply
-    for resp in responses:
-        if resp.get("reply_to") == reg_id:
-            if resp.get("status") == "ok":
-                return
-            else:
-                raise RuntimeError(
-                    f"auth.register failed for {username}: {resp}"
-                )
-
-    raise RuntimeError(f"No response to auth.register for {username}")
+    raise RuntimeError(f"No response to auth.register for {username} within timeout")
 
 
 def make_bot_config(base_cfg, idx, username, password, out_path: Path):
