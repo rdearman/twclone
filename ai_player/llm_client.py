@@ -101,7 +101,7 @@ if __name__ == "__main__":
     Based on the current game state, provide a high-level strategic plan.
     Return your plan as a JSON list of simple goal strings.
     Example response:
-    ["goto: 127", "sell: ORGANICS", "buy: ORE", "goto: 271", "sell: ORE"]
+    ["goto: 127", "sell: ORG", "buy: ORE", "goto: 271", "sell: ORE"]
     Current state:
     {game_state}
     What is your plan?

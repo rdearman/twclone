@@ -1,4 +1,4 @@
-#include <openssl/evp.h>        // EVP_DecodeBlock
+#include <openssl/evp.h>	// EVP_DecodeBlock
 #include <ctype.h>
 #include <string.h>
 #include <stdio.h>
@@ -14,7 +14,7 @@
  */
 int
 s2s_keyring_generate_key (sqlite3 *db, const char *key_id_in,
-                          const char *key_b64_in)
+			  const char *key_b64_in)
 {
   const char *SQL_INSERT =
     "INSERT INTO s2s_keys (key_id, key_b64, active, created_ts, is_default_tx) "
@@ -23,8 +23,7 @@ s2s_keyring_generate_key (sqlite3 *db, const char *key_id_in,
   int rc = sqlite3_prepare_v2 (db, SQL_INSERT, -1, &st, NULL);
   if (rc != SQLITE_OK)
     {
-      LOGE ( "S2S_GEN: Failed to prepare insert: %s\n",
-             sqlite3_errmsg (db));
+      LOGE ("S2S_GEN: Failed to prepare insert: %s\n", sqlite3_errmsg (db));
       return -1;
     }
   // Bind parameters for the new key
@@ -33,13 +32,12 @@ s2s_keyring_generate_key (sqlite3 *db, const char *key_id_in,
   rc = sqlite3_step (st);
   if (rc != SQLITE_DONE)
     {
-      LOGE ( "S2S_GEN: Failed to execute insert: %s\n",
-             sqlite3_errmsg (db));
+      LOGE ("S2S_GEN: Failed to execute insert: %s\n", sqlite3_errmsg (db));
       sqlite3_finalize (st);
       return -1;
     }
   sqlite3_finalize (st);
-  return 0;                     // Success
+  return 0;			// Success
 }
 
 
@@ -50,9 +48,9 @@ b64_compact (const char *in, char *out, size_t out_cap)
   for (const char *p = in; *p && w + 1 < out_cap; ++p)
     {
       if (!isspace ((unsigned char) *p))
-        {
-          out[w++] = *p;
-        }
+	{
+	  out[w++] = *p;
+	}
     }
   out[w] = '\0';
 }
@@ -60,7 +58,7 @@ b64_compact (const char *in, char *out, size_t out_cap)
 
 static int
 b64_decode_strict (const char *in, unsigned char *out, size_t out_cap,
-                   size_t *out_len)
+		   size_t *out_len)
 {
   char tmp[512];
   b64_compact (in, tmp, sizeof (tmp));
@@ -81,8 +79,8 @@ b64_decode_strict (const char *in, unsigned char *out, size_t out_cap,
       return -1;
     }
   size_t pad = (in_len >= 1 && tmp[in_len - 1] == '=') + (in_len >= 2
-                                                          && tmp[in_len -
-                                                                 2] == '=');
+							  && tmp[in_len -
+								 2] == '=');
   size_t actual = (size_t) wrote - pad;
 
 
@@ -115,17 +113,17 @@ s2s_load_default_key (sqlite3 *db, s2s_key_t *out_key)
       // fprintf (stderr, "[s2s] DEBUG: Using S2S key from environment variable.\n");
       memset (out_key, 0, sizeof (*out_key));
       strncpy (out_key->key_id, env_id
-               && *env_id ? env_id : "env0", sizeof (out_key->key_id) - 1);
+	       && *env_id ? env_id : "env0", sizeof (out_key->key_id) - 1);
       size_t key_len = 0;
 
 
       if (b64_decode_strict
-            (env_b64, out_key->key, sizeof (out_key->key), &key_len) != 0
-          || key_len == 0)
-        {
-          // fprintf (stderr, "[s2s] ENV base64 decode failed\n");
-          return -1;
-        }
+	  (env_b64, out_key->key, sizeof (out_key->key), &key_len) != 0
+	  || key_len == 0)
+	{
+	  // fprintf (stderr, "[s2s] ENV base64 decode failed\n");
+	  return -1;
+	}
       out_key->key_len = key_len;
       return 0;
     }
@@ -149,31 +147,31 @@ s2s_load_default_key (sqlite3 *db, s2s_key_t *out_key)
     {
       // Key found, proceed to extract it
     }
-  else if (rc == SQLITE_DONE) // No row found
+  else if (rc == SQLITE_DONE)	// No row found
     {
       // fprintf (stderr, "[s2s] no active key in s2s_keys. Attempting generation...\n");
-      sqlite3_finalize (st);    // Finalize the statement before attempting generation
+      sqlite3_finalize (st);	// Finalize the statement before attempting generation
       // --- ADDED KEY GENERATION/RECOVERY LOGIC ---
       /* NOTE: Placeholder Key. Use crypto functions (like OpenSSL) to generate this in a real system. */
       const char *new_key_id = "default_auto_gen_1";
-      const char *new_key_b64 = "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI="; // 32 bytes '123...' base64
+      const char *new_key_b64 = "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI=";	// 32 bytes '123...' base64
 
 
       // Try to generate and insert the new key
       if (s2s_keyring_generate_key (db, new_key_id, new_key_b64) == 0)
-        {
-          LOGE (
-            "[s2s] successfully generated and inserted new key. Retrying load.\n");
-          // Retry the key lookup recursively
-          return s2s_load_default_key (db, out_key);
-        }
+	{
+	  LOGE
+	    ("[s2s] successfully generated and inserted new key. Retrying load.\n");
+	  // Retry the key lookup recursively
+	  return s2s_load_default_key (db, out_key);
+	}
       else
-        {
-          LOGE ( "[s2s] FATAL: S2S key generation failed. Cannot proceed.\n");
-          return -1;
-        }
+	{
+	  LOGE ("[s2s] FATAL: S2S key generation failed. Cannot proceed.\n");
+	  return -1;
+	}
     }
-  else // An actual SQL error occurred
+  else				// An actual SQL error occurred
     {
       // fprintf (stderr, "[s2s] key database lookup failed: %s\n", sqlite3_errmsg (db));
       sqlite3_finalize (st);
@@ -195,11 +193,10 @@ s2s_load_default_key (sqlite3 *db, s2s_key_t *out_key)
 
 
   if (b64_decode_strict
-        ((const char *) kb64, out_key->key, sizeof (out_key->key),
-        &key_len) != 0 || key_len == 0)
+      ((const char *) kb64, out_key->key, sizeof (out_key->key),
+       &key_len) != 0 || key_len == 0)
     {
-      LOGE ("[s2s] base64 decode failed for key_id='%s'\n",
-            out_key->key_id);
+      LOGE ("[s2s] base64 decode failed for key_id='%s'\n", out_key->key_id);
       sqlite3_finalize (st);
       return -1;
     }
@@ -220,4 +217,3 @@ s2s_install_default_key (sqlite3 *db)
   s2s_set_keyring (&k, 1);
   return 0;
 }
-

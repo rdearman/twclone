@@ -17,8 +17,8 @@ trim (char *s)
 {
   size_t n = strlen (s);
   while (n
-         && (s[n - 1] == '\n' || s[n - 1] == '\r'
-             || isspace ((unsigned char) s[n - 1])))
+	 && (s[n - 1] == '\n' || s[n - 1] == '\r'
+	     || isspace ((unsigned char) s[n - 1])))
     {
       s[--n] = 0;
     }
@@ -63,12 +63,8 @@ reply_ok (const char *type, const char *fmt_data_json)
   char ts[32];
   ts_utc (ts, sizeof ts);
   printf
-  (
-    "{\"id\":\"srv-%d\",\"reply_to\":null,\"ts\":\"%s\",\"status\":\"ok\",\"type\":\"%s\",\"data\":%s,\"error\":null}\n",
-    next_id (),
-    ts,
-    type,
-    fmt_data_json ? fmt_data_json : "{}");
+    ("{\"id\":\"srv-%d\",\"reply_to\":null,\"ts\":\"%s\",\"status\":\"ok\",\"type\":\"%s\",\"data\":%s,\"error\":null}\n",
+     next_id (), ts, type, fmt_data_json ? fmt_data_json : "{}");
   fflush (stdout);
 }
 
@@ -79,24 +75,20 @@ reply_refused (int code, const char *msg)
   char ts[32];
   ts_utc (ts, sizeof ts);
   printf
-  (
-    "{\"id\":\"srv-%d\",\"reply_to\":null,\"ts\":\"%s\",\"status\":\"refused\",\"type\":null,"
-    "\"data\":{},\"error\":{\"code\":%d,\"message\":\"%s\"}}\n",
-    next_id (),
-    ts,
-    code,
-    msg ? msg : "Refused");
+    ("{\"id\":\"srv-%d\",\"reply_to\":null,\"ts\":\"%s\",\"status\":\"refused\",\"type\":null,"
+     "\"data\":{},\"error\":{\"code\":%d,\"message\":\"%s\"}}\n",
+     next_id (), ts, code, msg ? msg : "Refused");
   fflush (stdout);
 }
 
 
 /*
-static void
-reply_error (const char *msg)
-{
-  (void)msg;
-}
-*/
+   static void
+   reply_error (const char *msg)
+   {
+   (void)msg;
+   }
+ */
 
 
 /* ================== handlers (MVP) ================== */
@@ -107,11 +99,11 @@ static void
 h_dashboard_get (void)
 {
   reply_ok ("sysop.dashboard_v1",
-            "{\"server\":{\"version\":\"dev\",\"time\":\"\",\"uptime_s\":0},"
-            "\"links\":{\"engine\":{\"status\":\"up\",\"last_hello\":null,"
-            "\"counters\":{\"sent\":0,\"recv\":0,\"auth_fail\":0,\"too_big\":0}}},"
-            "\"rates\":{\"rpc_per_min\":0,\"refusals_per_min\":0,\"errors_per_min\":0},"
-            "\"notices\":[],\"audit_tail\":[]}");
+	    "{\"server\":{\"version\":\"dev\",\"time\":\"\",\"uptime_s\":0},"
+	    "\"links\":{\"engine\":{\"status\":\"up\",\"last_hello\":null,"
+	    "\"counters\":{\"sent\":0,\"recv\":0,\"auth_fail\":0,\"too_big\":0}}},"
+	    "\"rates\":{\"rpc_per_min\":0,\"refusals_per_min\":0,\"errors_per_min\":0},"
+	    "\"notices\":[],\"audit_tail\":[]}");
 }
 
 
@@ -121,7 +113,7 @@ h_players_search (const char *q)
 {
   (void) q;
   reply_ok ("sysop.players_v1",
-            "{\"items\":[],\"page\":1,\"page_size\":20,\"total\":0}");
+	    "{\"items\":[],\"page\":1,\"page_size\":20,\"total\":0}");
 }
 
 
@@ -130,8 +122,8 @@ static void
 h_universe_summary (void)
 {
   reply_ok ("sysop.universe.summary_v1",
-            "{\"world\":{\"sectors\":0,\"warps\":0,\"ports\":0,\"planets\":0,\"players\":0,\"ships\":0},"
-            "\"stardock\":null,\"hotspots\":{}}");
+	    "{\"world\":{\"sectors\":0,\"warps\":0,\"ports\":0,\"planets\":0,\"players\":0,\"ships\":0},"
+	    "\"stardock\":null,\"hotspots\":{}}");
 }
 
 
@@ -140,8 +132,8 @@ static void
 h_engine_status (void)
 {
   reply_ok ("sysop.engine_status_v1",
-            "{\"link\":{\"status\":\"up\",\"last_hello\":null},"
-            "\"counters\":{\"sent\":0,\"recv\":0,\"auth_fail\":0,\"too_big\":0}}");
+	    "{\"link\":{\"status\":\"up\",\"last_hello\":null},"
+	    "\"counters\":{\"sent\":0,\"recv\":0,\"auth_fail\":0,\"too_big\":0}}");
 }
 
 
@@ -158,13 +150,13 @@ static void
 h_help (void)
 {
   puts ("Commands:\n"
-        "  dashboard               -> sysop.dashboard.get\n"
-        "  players search <q>      -> sysop.players.search\n"
-        "  universe summary        -> sysop.universe.summary\n"
-        "  engine status           -> sysop.engine_status.get\n"
-        "  logs tail               -> sysop.logs.tail\n"
-        "  level <ERR|INFO|DEBUG>\n"
-        "  quit\n" "Shortcuts: g d/p/u/e/l, ?, :, /");
+	"  dashboard               -> sysop.dashboard.get\n"
+	"  players search <q>      -> sysop.players.search\n"
+	"  universe summary        -> sysop.universe.summary\n"
+	"  engine status           -> sysop.engine_status.get\n"
+	"  logs tail               -> sysop.logs.tail\n"
+	"  level <ERR|INFO|DEBUG>\n"
+	"  quit\n" "Shortcuts: g d/p/u/e/l, ?, :, /");
   fflush (stdout);
 }
 
@@ -256,9 +248,9 @@ sysop_dispatch_line (char *line)
 
 
       while (*s && isspace ((unsigned char) *s))
-        {
-          s++;
-        }
+	{
+	  s++;
+	}
       h_players_search (*s ? s : NULL);
       return;
     }
@@ -268,9 +260,9 @@ sysop_dispatch_line (char *line)
 
 
       while (*s && isspace ((unsigned char) *s))
-        {
-          s++;
-        }
+	{
+	  s++;
+	}
       h_level (*s ? s : NULL);
       return;
     }
@@ -315,9 +307,9 @@ repl (void *arg)
 
 
       if (n < 0)
-        {
-          break;
-        }
+	{
+	  break;
+	}
       sysop_dispatch_line (line);
     }
   free (line);
@@ -339,4 +331,3 @@ sysop_stop (void)
 {
   g_run = 0;
 }
-

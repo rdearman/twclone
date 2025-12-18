@@ -5,7 +5,7 @@
 #include <time.h>
 #include <strings.h>
 #include <pthread.h>
-#include <ctype.h>              // Required for isalnum and isupper
+#include <ctype.h>		// Required for isalnum and isupper
 #include "server_corporation.h"
 #include "server_config.h"
 #include "database.h"
@@ -20,7 +20,7 @@ extern pthread_mutex_t db_mutex;
 
 int
 h_get_player_corp_role (sqlite3 *db, int player_id, int corp_id,
-                        char *role_buffer, size_t buffer_size)
+			char *role_buffer, size_t buffer_size)
 {
   sqlite3_stmt *st = NULL;
   const char *sql =
@@ -28,7 +28,7 @@ h_get_player_corp_role (sqlite3 *db, int player_id, int corp_id,
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
       LOGE ("h_get_player_corp_role: Failed to prepare statement: %s",
-            sqlite3_errmsg (db));
+	    sqlite3_errmsg (db));
       return SQLITE_ERROR;
     }
   sqlite3_bind_int (st, 1, player_id);
@@ -42,14 +42,14 @@ h_get_player_corp_role (sqlite3 *db, int player_id, int corp_id,
 
 
       if (role)
-        {
-          strncpy (role_buffer, role, buffer_size - 1);
-          role_buffer[buffer_size - 1] = '\0';
-        }
+	{
+	  strncpy (role_buffer, role, buffer_size - 1);
+	  role_buffer[buffer_size - 1] = '\0';
+	}
       else
-        {
-          role_buffer[0] = '\0';
-        }
+	{
+	  role_buffer[0] = '\0';
+	}
       rc = SQLITE_OK;
     }
   else
@@ -89,9 +89,9 @@ h_is_player_corp_ceo (sqlite3 *db, int player_id, int *out_corp_id)
 
 
       if (out_corp_id)
-        {
-          *out_corp_id = corp_id;
-        }
+	{
+	  *out_corp_id = corp_id;
+	}
       found = 1;
     }
   sqlite3_finalize (stmt);
@@ -108,7 +108,7 @@ h_get_player_corp_id (sqlite3 *db, int player_id)
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
       LOGE ("h_get_player_corp_id: Failed to prepare statement: %s",
-            sqlite3_errmsg (db));
+	    sqlite3_errmsg (db));
       return 0;
     }
   sqlite3_bind_int (st, 1, player_id);
@@ -131,7 +131,7 @@ h_get_corp_bank_account_id (sqlite3 *db, int corp_id)
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
       LOGE ("h_get_corp_bank_account_id: Failed to prepare statement: %s",
-            sqlite3_errmsg (db));
+	    sqlite3_errmsg (db));
       return -1;
     }
   sqlite3_bind_int (st, 1, corp_id);
@@ -153,24 +153,24 @@ h_get_corp_credit_rating (sqlite3 *db, int corp_id, int *rating)
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
       LOGE ("h_get_corp_credit_rating: Failed to prepare statement: %s",
-            sqlite3_errmsg (db));
+	    sqlite3_errmsg (db));
       return SQLITE_ERROR;
     }
   sqlite3_bind_int (st, 1, corp_id);
   if (sqlite3_step (st) == SQLITE_ROW)
     {
       if (rating)
-        {
-          *rating = sqlite3_column_int (st, 0);
-        }
+	{
+	  *rating = sqlite3_column_int (st, 0);
+	}
       rc = SQLITE_OK;
     }
   else
     {
       if (rating)
-        {
-          *rating = 0;          // Or some default value indicating not found
-        }
+	{
+	  *rating = 0;		// Or some default value indicating not found
+	}
       rc = SQLITE_NOTFOUND;
     }
   sqlite3_finalize (st);
@@ -187,24 +187,24 @@ h_get_corp_stock_id (sqlite3 *db, int corp_id, int *out_stock_id)
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
       LOGE ("h_get_corp_stock_id: Failed to prepare statement: %s",
-            sqlite3_errmsg (db));
+	    sqlite3_errmsg (db));
       return SQLITE_ERROR;
     }
   sqlite3_bind_int (st, 1, corp_id);
   if (sqlite3_step (st) == SQLITE_ROW)
     {
       if (out_stock_id)
-        {
-          *out_stock_id = sqlite3_column_int (st, 0);
-        }
+	{
+	  *out_stock_id = sqlite3_column_int (st, 0);
+	}
       rc = SQLITE_OK;
     }
   else
     {
       if (out_stock_id)
-        {
-          *out_stock_id = 0;
-        }
+	{
+	  *out_stock_id = 0;
+	}
       rc = SQLITE_NOTFOUND;
     }
   sqlite3_finalize (st);
@@ -214,9 +214,9 @@ h_get_corp_stock_id (sqlite3 *db, int corp_id, int *out_stock_id)
 
 int
 h_get_stock_info (sqlite3 *db, int stock_id, char **out_ticker,
-                  int *out_corp_id, int *out_total_shares,
-                  int *out_par_value, int *out_current_price,
-                  long long *out_last_dividend_ts)
+		  int *out_corp_id, int *out_total_shares,
+		  int *out_par_value, int *out_current_price,
+		  long long *out_last_dividend_ts)
 {
   sqlite3_stmt *st = NULL;
   const char *sql =
@@ -225,36 +225,36 @@ h_get_stock_info (sqlite3 *db, int stock_id, char **out_ticker,
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
       LOGE ("h_get_stock_info: Failed to prepare statement: %s",
-            sqlite3_errmsg (db));
+	    sqlite3_errmsg (db));
       return SQLITE_ERROR;
     }
   sqlite3_bind_int (st, 1, stock_id);
   if (sqlite3_step (st) == SQLITE_ROW)
     {
       if (out_ticker)
-        {
-          *out_ticker = strdup ((const char *) sqlite3_column_text (st, 0));
-        }
+	{
+	  *out_ticker = strdup ((const char *) sqlite3_column_text (st, 0));
+	}
       if (out_corp_id)
-        {
-          *out_corp_id = sqlite3_column_int (st, 1);
-        }
+	{
+	  *out_corp_id = sqlite3_column_int (st, 1);
+	}
       if (out_total_shares)
-        {
-          *out_total_shares = sqlite3_column_int (st, 2);
-        }
+	{
+	  *out_total_shares = sqlite3_column_int (st, 2);
+	}
       if (out_par_value)
-        {
-          *out_par_value = sqlite3_column_int (st, 3);
-        }
+	{
+	  *out_par_value = sqlite3_column_int (st, 3);
+	}
       if (out_current_price)
-        {
-          *out_current_price = sqlite3_column_int (st, 4);
-        }
+	{
+	  *out_current_price = sqlite3_column_int (st, 4);
+	}
       if (out_last_dividend_ts)
-        {
-          *out_last_dividend_ts = sqlite3_column_int64 (st, 5);
-        }
+	{
+	  *out_last_dividend_ts = sqlite3_column_int64 (st, 5);
+	}
       rc = SQLITE_OK;
     }
   sqlite3_finalize (st);
@@ -264,32 +264,31 @@ h_get_stock_info (sqlite3 *db, int stock_id, char **out_ticker,
 
 int
 h_update_player_shares (sqlite3 *db, int player_id, int stock_id,
-                        int quantity_change)
+			int quantity_change)
 {
   sqlite3_stmt *st = NULL;
   int rc;
   if (quantity_change == 0)
     {
-      return SQLITE_OK;         // No change needed
+      return SQLITE_OK;		// No change needed
     }
   if (quantity_change > 0)
     {
       // Add shares, or insert if not exists
       const char *sql_add =
-        "INSERT INTO corp_shareholders (player_id, corp_id, shares) "
-        "VALUES (?, (SELECT corp_id FROM stocks WHERE id = ?), ?) "
-        "ON CONFLICT(player_id, corp_id) DO UPDATE SET shares = shares + excluded.shares;";
+	"INSERT INTO corp_shareholders (player_id, corp_id, shares) "
+	"VALUES (?, (SELECT corp_id FROM stocks WHERE id = ?), ?) "
+	"ON CONFLICT(player_id, corp_id) DO UPDATE SET shares = shares + excluded.shares;";
 
 
       rc = sqlite3_prepare_v2 (db, sql_add, -1, &st, NULL);
       if (rc != SQLITE_OK)
-        {
-          LOGE
-          (
-            "h_update_player_shares: Failed to prepare add shares statement: %s",
-            sqlite3_errmsg (db));
-          return SQLITE_ERROR;
-        }
+	{
+	  LOGE
+	    ("h_update_player_shares: Failed to prepare add shares statement: %s",
+	     sqlite3_errmsg (db));
+	  return SQLITE_ERROR;
+	}
       sqlite3_bind_int (st, 1, player_id);
       sqlite3_bind_int (st, 2, stock_id);
       sqlite3_bind_int (st, 3, quantity_change);
@@ -298,20 +297,19 @@ h_update_player_shares (sqlite3 *db, int player_id, int stock_id,
     {
       // Deduct shares, ensure not negative
       const char *sql_deduct =
-        "UPDATE corp_shareholders SET shares = shares + ? "
-        "WHERE player_id = ? AND corp_id = (SELECT corp_id FROM stocks WHERE id = ?) AND (shares + ?) >= 0;";
+	"UPDATE corp_shareholders SET shares = shares + ? "
+	"WHERE player_id = ? AND corp_id = (SELECT corp_id FROM stocks WHERE id = ?) AND (shares + ?) >= 0;";
 
 
       rc = sqlite3_prepare_v2 (db, sql_deduct, -1, &st, NULL);
       if (rc != SQLITE_OK)
-        {
-          LOGE
-          (
-            "h_update_player_shares: Failed to prepare deduct shares statement: %s",
-            sqlite3_errmsg (db));
-          return SQLITE_ERROR;
-        }
-      sqlite3_bind_int (st, 1, quantity_change);        // quantity_change is negative
+	{
+	  LOGE
+	    ("h_update_player_shares: Failed to prepare deduct shares statement: %s",
+	     sqlite3_errmsg (db));
+	  return SQLITE_ERROR;
+	}
+      sqlite3_bind_int (st, 1, quantity_change);	// quantity_change is negative
       sqlite3_bind_int (st, 2, player_id);
       sqlite3_bind_int (st, 3, stock_id);
       sqlite3_bind_int (st, 4, quantity_change);
@@ -320,7 +318,7 @@ h_update_player_shares (sqlite3 *db, int player_id, int stock_id,
   if (rc != SQLITE_DONE)
     {
       LOGE ("h_update_player_shares: Failed to execute statement: %s",
-            sqlite3_errmsg (db));
+	    sqlite3_errmsg (db));
       sqlite3_finalize (st);
       return SQLITE_ERROR;
     }
@@ -328,13 +326,10 @@ h_update_player_shares (sqlite3 *db, int player_id, int stock_id,
     {
       // If no rows were updated for a deduction, it means insufficient shares
       LOGW
-      (
-        "h_update_player_shares: Player %d has insufficient shares for stock %d to deduct %d.",
-        player_id,
-        stock_id,
-        -quantity_change);
+	("h_update_player_shares: Player %d has insufficient shares for stock %d to deduct %d.",
+	 player_id, stock_id, -quantity_change);
       sqlite3_finalize (st);
-      return SQLITE_CONSTRAINT; // Indicate insufficient shares
+      return SQLITE_CONSTRAINT;	// Indicate insufficient shares
     }
   sqlite3_finalize (st);
   // Clean up 0-share entries
@@ -351,7 +346,9 @@ cmd_corp_transfer_ceo (client_ctx_t *ctx, json_t *root)
 {
   if (!ctx || ctx->player_id <= 0)
     {
-      send_response_error(ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required.");
+      send_response_error (ctx,
+			   root,
+			   ERR_NOT_AUTHENTICATED, "Authentication required.");
       return -1;
     }
   sqlite3 *db = db_get_handle ();
@@ -360,7 +357,8 @@ cmd_corp_transfer_ceo (client_ctx_t *ctx, json_t *root)
 
   if (!data)
     {
-      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing data payload.");
+      send_response_error (ctx, root, ERR_BAD_REQUEST,
+			   "Missing data payload.");
       return 0;
     }
   int target_player_id = 0;
@@ -369,12 +367,18 @@ cmd_corp_transfer_ceo (client_ctx_t *ctx, json_t *root)
   if (!json_get_int_flexible (data, "target_player_id", &target_player_id) ||
       target_player_id <= 0)
     {
-      send_response_error(ctx, root, ERR_MISSING_FIELD, "Missing or invalid 'target_player_id'.");
+      send_response_error (ctx,
+			   root,
+			   ERR_MISSING_FIELD,
+			   "Missing or invalid 'target_player_id'.");
       return 0;
     }
   if (target_player_id == ctx->player_id)
     {
-      send_response_error(ctx, root, ERR_INVALID_ARG, "Cannot transfer CEO role to yourself.");
+      send_response_error (ctx,
+			   root,
+			   ERR_INVALID_ARG,
+			   "Cannot transfer CEO role to yourself.");
       return 0;
     }
   /* Ensure caller is an active CEO and grab corp_id */
@@ -383,7 +387,10 @@ cmd_corp_transfer_ceo (client_ctx_t *ctx, json_t *root)
 
   if (!h_is_player_corp_ceo (db, ctx->player_id, &corp_id) || corp_id <= 0)
     {
-      send_response_error(ctx, root, ERR_PERMISSION_DENIED, "Only active corporation CEOs may transfer leadership.");
+      send_response_error (ctx,
+			   root,
+			   ERR_PERMISSION_DENIED,
+			   "Only active corporation CEOs may transfer leadership.");
       return 0;
     }
   /* Ensure target is a member of the same corp */
@@ -395,7 +402,10 @@ cmd_corp_transfer_ceo (client_ctx_t *ctx, json_t *root)
 
   if (rc != SQLITE_OK)
     {
-      send_response_error(ctx, root, ERR_DB_QUERY_FAILED, "Failed to check membership.");
+      send_response_error (ctx,
+			   root,
+			   ERR_DB_QUERY_FAILED,
+			   "Failed to check membership.");
       return 0;
     }
   sqlite3_bind_int (stmt, 1, corp_id);
@@ -408,13 +418,17 @@ cmd_corp_transfer_ceo (client_ctx_t *ctx, json_t *root)
     {
       target_role = (const char *) sqlite3_column_text (stmt, 0);
     }
-  sqlite3_finalize (stmt);
-  stmt = NULL;
   if (!target_role)
     {
-      send_response_error(ctx, root, ERR_INVALID_ARG, "Target player is not a member of your corporation.");
+      sqlite3_finalize (stmt);
+      send_response_error (ctx,
+			   root,
+			   ERR_INVALID_ARG,
+			   "Target player is not a member of your corporation.");
       return 0;
     }
+  sqlite3_finalize (stmt);
+  stmt = NULL;
   /* Guard: current CEO must NOT be flying the Corporate Flagship */
   const char *sql_flagship_check =
     "SELECT st.name "
@@ -426,7 +440,10 @@ cmd_corp_transfer_ceo (client_ctx_t *ctx, json_t *root)
   rc = sqlite3_prepare_v2 (db, sql_flagship_check, -1, &stmt, NULL);
   if (rc != SQLITE_OK)
     {
-      send_response_error(ctx, root, ERR_DB_QUERY_FAILED, "Failed to check current ship type.");
+      send_response_error (ctx,
+			   root,
+			   ERR_DB_QUERY_FAILED,
+			   "Failed to check current ship type.");
       return 0;
     }
   sqlite3_bind_int (stmt, 1, ctx->player_id);
@@ -437,11 +454,14 @@ cmd_corp_transfer_ceo (client_ctx_t *ctx, json_t *root)
 
 
       if (ship_name && !strcasecmp (ship_name, "Corporate Flagship"))
-        {
-          sqlite3_finalize (stmt);
-          send_response_error(ctx, root, ERR_INVALID_CORP_STATE, "You cannot transfer CEO while piloting the Corporate Flagship.");
-          return 0;
-        }
+	{
+	  sqlite3_finalize (stmt);
+	  send_response_error (ctx,
+			       root,
+			       ERR_INVALID_CORP_STATE,
+			       "You cannot transfer CEO while piloting the Corporate Flagship.");
+	  return 0;
+	}
     }
   sqlite3_finalize (stmt);
   stmt = NULL;
@@ -449,7 +469,7 @@ cmd_corp_transfer_ceo (client_ctx_t *ctx, json_t *root)
   rc = sqlite3_exec (db, "BEGIN IMMEDIATE TRANSACTION;", NULL, NULL, NULL);
   if (rc != SQLITE_OK)
     {
-      send_response_error(ctx, root, ERR_DB, "Failed to start transaction.");
+      send_response_error (ctx, root, ERR_DB, "Failed to start transaction.");
       return 0;
     }
   int ok = 1;
@@ -459,16 +479,16 @@ cmd_corp_transfer_ceo (client_ctx_t *ctx, json_t *root)
   if (ok)
     {
       const char *sql_demote =
-        "UPDATE corp_members "
-        "SET role = 'Officer' "
-        "WHERE corp_id = ? AND player_id = ? AND role = 'Leader';";
+	"UPDATE corp_members "
+	"SET role = 'Officer' "
+	"WHERE corp_id = ? AND player_id = ? AND role = 'Leader';";
 
 
       rc = sqlite3_prepare_v2 (db, sql_demote, -1, &stmt, NULL);
       if (rc != SQLITE_OK)
-        {
-          ok = 0;
-        }
+	{
+	  ok = 0;
+	}
     }
   if (ok)
     {
@@ -476,9 +496,9 @@ cmd_corp_transfer_ceo (client_ctx_t *ctx, json_t *root)
       sqlite3_bind_int (stmt, 2, ctx->player_id);
       rc = sqlite3_step (stmt);
       if (rc != SQLITE_DONE)
-        {
-          ok = 0;
-        }
+	{
+	  ok = 0;
+	}
     }
   if (stmt)
     {
@@ -489,92 +509,92 @@ cmd_corp_transfer_ceo (client_ctx_t *ctx, json_t *root)
   if (ok)
     {
       const char *sql_insert_member =
-        "INSERT OR IGNORE INTO corp_members (corp_id, player_id, role) "
-        "VALUES (?, ?, 'Member');";
+	"INSERT OR IGNORE INTO corp_members (corp_id, player_id, role) "
+	"VALUES (?, ?, 'Member');";
 
 
       rc = sqlite3_prepare_v2 (db, sql_insert_member, -1, &stmt, NULL);
       if (rc != SQLITE_OK)
-        {
-          ok = 0;
-        }
+	{
+	  ok = 0;
+	}
       if (ok)
-        {
-          sqlite3_bind_int (stmt, 1, corp_id);
-          sqlite3_bind_int (stmt, 2, target_player_id);
-          rc = sqlite3_step (stmt);
-          if (rc != SQLITE_DONE)
-            {
-              ok = 0;
-            }
-        }
+	{
+	  sqlite3_bind_int (stmt, 1, corp_id);
+	  sqlite3_bind_int (stmt, 2, target_player_id);
+	  rc = sqlite3_step (stmt);
+	  if (rc != SQLITE_DONE)
+	    {
+	      ok = 0;
+	    }
+	}
       if (stmt)
-        {
-          sqlite3_finalize (stmt);
-          stmt = NULL;
-        }
+	{
+	  sqlite3_finalize (stmt);
+	  stmt = NULL;
+	}
     }
   /* Promote target to Leader */
   if (ok)
     {
       const char *sql_promote =
-        "UPDATE corp_members "
-        "SET role = 'Leader' " "WHERE corp_id = ? AND player_id = ?;";
+	"UPDATE corp_members "
+	"SET role = 'Leader' " "WHERE corp_id = ? AND player_id = ?;";
 
 
       rc = sqlite3_prepare_v2 (db, sql_promote, -1, &stmt, NULL);
       if (rc != SQLITE_OK)
-        {
-          ok = 0;
-        }
+	{
+	  ok = 0;
+	}
       if (ok)
-        {
-          sqlite3_bind_int (stmt, 1, corp_id);
-          sqlite3_bind_int (stmt, 2, target_player_id);
-          rc = sqlite3_step (stmt);
-          if (rc != SQLITE_DONE)
-            {
-              ok = 0;
-            }
-        }
+	{
+	  sqlite3_bind_int (stmt, 1, corp_id);
+	  sqlite3_bind_int (stmt, 2, target_player_id);
+	  rc = sqlite3_step (stmt);
+	  if (rc != SQLITE_DONE)
+	    {
+	      ok = 0;
+	    }
+	}
       if (stmt)
-        {
-          sqlite3_finalize (stmt);
-          stmt = NULL;
-        }
+	{
+	  sqlite3_finalize (stmt);
+	  stmt = NULL;
+	}
     }
   /* Update corporations.owner_id */
   if (ok)
     {
       const char *sql_update_owner =
-        "UPDATE corporations SET owner_id = ? WHERE id = ?;";
+	"UPDATE corporations SET owner_id = ? WHERE id = ?;";
 
 
       rc = sqlite3_prepare_v2 (db, sql_update_owner, -1, &stmt, NULL);
       if (rc != SQLITE_OK)
-        {
-          ok = 0;
-        }
+	{
+	  ok = 0;
+	}
       if (ok)
-        {
-          sqlite3_bind_int (stmt, 1, target_player_id);
-          sqlite3_bind_int (stmt, 2, corp_id);
-          rc = sqlite3_step (stmt);
-          if (rc != SQLITE_DONE)
-            {
-              ok = 0;
-            }
-        }
+	{
+	  sqlite3_bind_int (stmt, 1, target_player_id);
+	  sqlite3_bind_int (stmt, 2, corp_id);
+	  rc = sqlite3_step (stmt);
+	  if (rc != SQLITE_DONE)
+	    {
+	      ok = 0;
+	    }
+	}
       if (stmt)
-        {
-          sqlite3_finalize (stmt);
-          stmt = NULL;
-        }
+	{
+	  sqlite3_finalize (stmt);
+	  stmt = NULL;
+	}
     }
   if (!ok)
     {
       db_safe_rollback (db, "Safe rollback");
-      send_response_error(ctx, root, ERR_DB, "Failed to transfer CEO role.");
+      send_response_error (ctx, root, ERR_DB, "Failed to transfer CEO role.");
       return 0;
     }
   sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
@@ -584,8 +604,8 @@ cmd_corp_transfer_ceo (client_ctx_t *ctx, json_t *root)
 
   json_object_set_new (resp, "corp_id", json_integer (corp_id));
   json_object_set_new (resp, "new_ceo_player_id",
-                       json_integer (target_player_id));
-  send_response_ok(ctx, root, "corp.transfer_ceo.success", resp);
+		       json_integer (target_player_id));
+  send_response_ok_take (ctx, root, "corp.transfer_ceo.success", &resp);
   return 0;
 }
 
@@ -595,7 +615,9 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id == 0)
     {
-      send_response_error(ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required.");
+      send_response_error (ctx,
+			   root,
+			   ERR_NOT_AUTHENTICATED, "Authentication required.");
       return -1;
     }
   sqlite3 *db = db_get_handle ();
@@ -604,58 +626,63 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
 
   if (!json_is_object (data))
     {
-      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing data object.");
+      send_response_error (ctx, root, ERR_BAD_REQUEST,
+			   "Missing data object.");
       return 0;
     }
   const char *name;
   json_t *j_name = json_object_get (data,
-                                    "name");
+				    "name");
 
 
   if (!json_is_string (j_name) || (name = json_string_value (j_name)) == NULL
       || name[0] == '\0')
     {
-      send_response_refused(ctx, root, ERR_BAD_REQUEST, "Missing or invalid corporation name.", NULL); // Fixed send_enveloped_refused
+      send_response_refused_steal (ctx, root, ERR_BAD_REQUEST, "Missing or invalid corporation name.", NULL);	// Fixed send_enveloped_refused
       return 0;
     }
   // Use ctx->player_id for player_id
   if (h_get_player_corp_id (db, ctx->player_id) > 0)
     {
-      send_response_refused(ctx, root, ERR_INVALID_ARG, "You are already a member of a corporation.",
-                              NULL);                                             // Fixed send_enveloped_refused
+      send_response_refused_steal (ctx, root, ERR_INVALID_ARG, "You are already a member of a corporation.", NULL);	// Fixed send_enveloped_refused
       return 0;
     }
   // Start a transaction for atomicity
-  int rc = sqlite3_exec (db, "BEGIN IMMEDIATE TRANSACTION;", NULL, NULL, NULL);
+  int rc =
+    sqlite3_exec (db, "BEGIN IMMEDIATE TRANSACTION;", NULL, NULL, NULL);
 
 
   if (rc != SQLITE_OK)
     {
       LOGE ("cmd_corp_create: Failed to start transaction: %s",
-            sqlite3_errmsg (db));
-      send_response_error(ctx, root, ERR_DB, "Database error starting transaction.");
+	    sqlite3_errmsg (db));
+      send_response_error (ctx,
+			   root,
+			   ERR_DB, "Database error starting transaction.");
       return 0;
     }
   long long creation_fee = g_cfg.corporation_creation_fee;
   long long player_new_balance;
   int player_bank_account_id = h_get_player_bank_account_id (db,
-                                                             ctx->player_id);
+							     ctx->player_id);
 
 
   if (player_bank_account_id <= 0)
     {
       db_safe_rollback (db, "Safe rollback");
-      send_response_error(ctx, root, ERR_DB, "Could not retrieve player bank account for deduction.");
+      send_response_error (ctx,
+			   root,
+			   ERR_DB,
+			   "Could not retrieve player bank account for deduction.");
       return 0;
     }
   // Use h_deduct_credits_unlocked as we are inside a transaction
   if (h_deduct_credits_unlocked
-        (db, player_bank_account_id, creation_fee, "CORP_CREATION_FEE", NULL,
-        &player_new_balance) != SQLITE_OK)
+      (db, player_bank_account_id, creation_fee, "CORP_CREATION_FEE", NULL,
+       &player_new_balance) != SQLITE_OK)
     {
       db_safe_rollback (db, "Safe rollback");
-      send_response_refused(ctx, root, ERR_INSUFFICIENT_FUNDS, "Insufficient funds to create a corporation.",
-                              NULL);                                              // Fixed send_enveloped_refused
+      send_response_refused_steal (ctx, root, ERR_INSUFFICIENT_FUNDS, "Insufficient funds to create a corporation.", NULL);	// Fixed send_enveloped_refused
       return 0;
     }
   sqlite3_stmt *st = NULL;
@@ -666,36 +693,41 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
   if (sqlite3_prepare_v2 (db, sql_insert_corp, -1, &st, NULL) != SQLITE_OK)
     {
       LOGE ("cmd_corp_create: Failed to prepare corp insert: %s",
-            sqlite3_errmsg (db));
+	    sqlite3_errmsg (db));
       db_safe_rollback (db, "Safe rollback");
       // Refund credits if preparation failed
       h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
-                              "CORP_FEE_REFUND", NULL, &player_new_balance);
-      send_response_error(ctx, root, ERR_DB, "Database error during corporation creation preparation.");
+			      "CORP_FEE_REFUND", NULL, &player_new_balance);
+      send_response_error (ctx,
+			   root,
+			   ERR_DB,
+			   "Database error during corporation creation preparation.");
       return 0;
     }
   sqlite3_bind_text (st, 1, name, -1, SQLITE_STATIC);
-  sqlite3_bind_int (st, 2, ctx->player_id); // Changed from ctx->player->id
+  sqlite3_bind_int (st, 2, ctx->player_id);	// Changed from ctx->player->id
   rc = sqlite3_step (st);
   sqlite3_finalize (st);
-  st = NULL;                    // Reset st after finalize
+  st = NULL;			// Reset st after finalize
   if (rc != SQLITE_DONE)
     {
       LOGE ("cmd_corp_create: Failed to insert corporation: %s",
-            sqlite3_errmsg (db));
+	    sqlite3_errmsg (db));
       db_safe_rollback (db, "Safe rollback");
       // Refund credits
       h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
-                              "CORP_FEE_REFUND", NULL, &player_new_balance);
+			      "CORP_FEE_REFUND", NULL, &player_new_balance);
       if (sqlite3_errcode (db) == SQLITE_CONSTRAINT)
-        {
-          send_response_refused(ctx, root, ERR_NAME_TAKEN, "A corporation with that name already exists.",
-                                  NULL);                                               // Fixed send_enveloped_refused
-        }
+	{
+	  send_response_refused_steal (ctx, root, ERR_NAME_TAKEN, "A corporation with that name already exists.", NULL);	// Fixed send_enveloped_refused
+	}
       else
-        {
-          send_response_error(ctx, root, ERR_DB, "Database error inserting corporation.");
-        }
+	{
+	  send_response_error (ctx,
+			       root,
+			       ERR_DB,
+			       "Database error inserting corporation.");
+	}
       return 0;
     }
   int corp_id = (int) sqlite3_last_insert_rowid (db);
@@ -707,39 +739,38 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
   if (sqlite3_prepare_v2 (db, sql_insert_member, -1, &st, NULL) == SQLITE_OK)
     {
       sqlite3_bind_int (st, 1, corp_id);
-      sqlite3_bind_int (st, 2, ctx->player_id); // Changed from ctx->player->id
+      sqlite3_bind_int (st, 2, ctx->player_id);	// Changed from ctx->player->id
       if (sqlite3_step (st) != SQLITE_DONE)
-        {
-          LOGE
-          (
-            "cmd_corp_create: Failed to insert player %d into corp_members for corp %d: %s",
-            ctx->player_id,
-            // Changed from ctx->player->id
-            corp_id,
-            sqlite3_errmsg (db));
-          sqlite3_finalize (st);
-          db_safe_rollback (db, "Safe rollback");
-          h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
-                                  "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
-          send_response_error(ctx, root, ERR_DB, "Database error adding CEO to corporation.");
-          return 0;
-        }
+	{
+	  LOGE
+	    ("cmd_corp_create: Failed to insert player %d into corp_members for corp %d: %s",
+	     ctx->player_id,
+	     // Changed from ctx->player->id
+	     corp_id, sqlite3_errmsg (db));
+	  sqlite3_finalize (st);
+	  db_safe_rollback (db, "Safe rollback");
+	  h_add_credits_unlocked (db, player_bank_account_id, creation_fee, "CORP_FEE_REFUND", NULL, &player_new_balance);	// Fixed args
+	  send_response_error (ctx,
+			       root,
+			       ERR_DB,
+			       "Database error adding CEO to corporation.");
+	  return 0;
+	}
       sqlite3_finalize (st);
       st = NULL;
     }
   else
     {
       LOGE
-      (
-        "cmd_corp_create: Failed to prepare member insert for player %d into corp %d: %s",
-        ctx->player_id,
-        // Changed from ctx->player->id
-        corp_id,
-        sqlite3_errmsg (db));
+	("cmd_corp_create: Failed to prepare member insert for player %d into corp %d: %s",
+	 ctx->player_id,
+	 // Changed from ctx->player->id
+	 corp_id, sqlite3_errmsg (db));
       db_safe_rollback (db, "Safe rollback");
-      h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
-                              "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
-      send_response_error(ctx, root, ERR_DB, "Database error preparing CEO addition.");
+      h_add_credits_unlocked (db, player_bank_account_id, creation_fee, "CORP_FEE_REFUND", NULL, &player_new_balance);	// Fixed args
+      send_response_error (ctx,
+			   root,
+			   ERR_DB, "Database error preparing CEO addition.");
       return 0;
     }
   const char *sql_create_bank =
@@ -750,32 +781,33 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
     {
       sqlite3_bind_int (st, 1, corp_id);
       if (sqlite3_step (st) != SQLITE_DONE)
-        {
-          LOGE (
-            "cmd_corp_create: Failed to insert bank account for corp %d: %s",
-            corp_id,
-            sqlite3_errmsg (db));
-          sqlite3_finalize (st);
-          db_safe_rollback (db, "Safe rollback");
-          h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
-                                  "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
-          send_response_error(ctx, root, ERR_DB, "Database error creating bank account for corporation.");
-          return 0;
-        }
+	{
+	  LOGE
+	    ("cmd_corp_create: Failed to insert bank account for corp %d: %s",
+	     corp_id, sqlite3_errmsg (db));
+	  sqlite3_finalize (st);
+	  db_safe_rollback (db, "Safe rollback");
+	  h_add_credits_unlocked (db, player_bank_account_id, creation_fee, "CORP_FEE_REFUND", NULL, &player_new_balance);	// Fixed args
+	  send_response_error (ctx,
+			       root,
+			       ERR_DB,
+			       "Database error creating bank account for corporation.");
+	  return 0;
+	}
       sqlite3_finalize (st);
       st = NULL;
     }
   else
     {
       LOGE
-      (
-        "cmd_corp_create: Failed to prepare bank account creation for corp %d: %s",
-        corp_id,
-        sqlite3_errmsg (db));
+	("cmd_corp_create: Failed to prepare bank account creation for corp %d: %s",
+	 corp_id, sqlite3_errmsg (db));
       db_safe_rollback (db, "Safe rollback");
-      h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
-                              "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
-      send_response_error(ctx, root, ERR_DB, "Database error preparing bank account creation.");
+      h_add_credits_unlocked (db, player_bank_account_id, creation_fee, "CORP_FEE_REFUND", NULL, &player_new_balance);	// Fixed args
+      send_response_error (ctx,
+			   root,
+			   ERR_DB,
+			   "Database error preparing bank account creation.");
       return 0;
     }
   const char *sql_convert_planets =
@@ -786,37 +818,39 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
       SQLITE_OK)
     {
       sqlite3_bind_int (st, 1, corp_id);
-      sqlite3_bind_int (st, 2, ctx->player_id); // Changed from ctx->player->id
+      sqlite3_bind_int (st, 2, ctx->player_id);	// Changed from ctx->player->id
       if (sqlite3_step (st) != SQLITE_DONE)
-        {
-          LOGE
-          (
-            "cmd_corp_create: Failed to update planet ownership for player %d: %s",
-            ctx->player_id,
-            // Changed from ctx->player->id
-            sqlite3_errmsg (db));
-          sqlite3_finalize (st);
-          db_safe_rollback (db, "Safe rollback");
-          h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
-                                  "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
-          send_response_error(ctx, root, ERR_DB, "Database error updating planet ownership.");
-          return 0;
-        }
+	{
+	  LOGE
+	    ("cmd_corp_create: Failed to update planet ownership for player %d: %s",
+	     ctx->player_id,
+	     // Changed from ctx->player->id
+	     sqlite3_errmsg (db));
+	  sqlite3_finalize (st);
+	  db_safe_rollback (db, "Safe rollback");
+	  h_add_credits_unlocked (db, player_bank_account_id, creation_fee, "CORP_FEE_REFUND", NULL, &player_new_balance);	// Fixed args
+	  send_response_error (ctx,
+			       root,
+			       ERR_DB,
+			       "Database error updating planet ownership.");
+	  return 0;
+	}
       sqlite3_finalize (st);
       st = NULL;
     }
   else
     {
       LOGE
-      (
-        "cmd_corp_create: Failed to prepare planet conversion for player %d: %s",
-        ctx->player_id,
-        // Changed from ctx->player->id
-        sqlite3_errmsg (db));
+	("cmd_corp_create: Failed to prepare planet conversion for player %d: %s",
+	 ctx->player_id,
+	 // Changed from ctx->player->id
+	 sqlite3_errmsg (db));
       db_safe_rollback (db, "Safe rollback");
-      h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
-                              "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
-      send_response_error(ctx, root, ERR_DB, "Database error preparing planet ownership update.");
+      h_add_credits_unlocked (db, player_bank_account_id, creation_fee, "CORP_FEE_REFUND", NULL, &player_new_balance);	// Fixed args
+      send_response_error (ctx,
+			   root,
+			   ERR_DB,
+			   "Database error preparing planet ownership update.");
       return 0;
     }
   // If all steps succeeded, commit the transaction
@@ -824,11 +858,12 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
   if (rc != SQLITE_OK)
     {
       LOGE ("cmd_corp_create: Failed to commit transaction: %s",
-            sqlite3_errmsg (db));
-      db_safe_rollback (db, "Safe rollback"); // Attempt rollback on commit failure
-      h_add_credits_unlocked (db, player_bank_account_id, creation_fee,
-                              "CORP_FEE_REFUND", NULL, &player_new_balance); // Fixed args
-      send_response_error(ctx, root, ERR_DB, "Database error committing transaction.");
+	    sqlite3_errmsg (db));
+      db_safe_rollback (db, "Safe rollback");	// Attempt rollback on commit failure
+      h_add_credits_unlocked (db, player_bank_account_id, creation_fee, "CORP_FEE_REFUND", NULL, &player_new_balance);	// Fixed args
+      send_response_error (ctx,
+			   root,
+			   ERR_DB, "Database error committing transaction.");
       return 0;
     }
   // Only update ctx->corp_id AFTER successful commit
@@ -839,8 +874,8 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
   json_object_set_new (response_data, "corp_id", json_integer (corp_id));
   json_object_set_new (response_data, "name", json_string (name));
   json_object_set_new (response_data, "message",
-                       json_string ("Corporation created successfully."));
-  send_response_ok(ctx, root, "corp.create.success", response_data);
+		       json_string ("Corporation created successfully."));
+  send_response_ok_take (ctx, root, "corp.create.success", &response_data);
   return 0;
 }
 
@@ -862,9 +897,12 @@ cmd_corp_list (client_ctx_t *ctx, json_t *root)
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
       LOGE ("cmd_corp_list: Failed to prepare statement: %s",
-            sqlite3_errmsg (db));
+	    sqlite3_errmsg (db));
       json_decref (corp_array);
-      send_response_error(ctx, root, ERR_SERVER_ERROR, "Database error while fetching corporation list.");
+      send_response_error (ctx,
+			   root,
+			   ERR_SERVER_ERROR,
+			   "Database error while fetching corporation list.");
       return 0;
     }
   while (sqlite3_step (st) == SQLITE_ROW)
@@ -873,28 +911,28 @@ cmd_corp_list (client_ctx_t *ctx, json_t *root)
 
 
       json_object_set_new (corp_obj, "corp_id",
-                           json_integer (sqlite3_column_int (st, 0)));
+			   json_integer (sqlite3_column_int (st, 0)));
       json_object_set_new (corp_obj, "name",
-                           json_string ((const char *)
-                                        sqlite3_column_text (st, 1)));
+			   json_string ((const char *)
+					sqlite3_column_text (st, 1)));
       const char *tag = (const char *) sqlite3_column_text (st, 2);
 
 
       if (tag)
-        {
-          json_object_set_new (corp_obj, "tag", json_string (tag));
-        }
+	{
+	  json_object_set_new (corp_obj, "tag", json_string (tag));
+	}
       json_object_set_new (corp_obj, "ceo_id",
-                           json_integer (sqlite3_column_int (st, 3)));
+			   json_integer (sqlite3_column_int (st, 3)));
       const char *ceo_name = (const char *) sqlite3_column_text (st, 4);
 
 
       if (ceo_name)
-        {
-          json_object_set_new (corp_obj, "ceo_name", json_string (ceo_name));
-        }
+	{
+	  json_object_set_new (corp_obj, "ceo_name", json_string (ceo_name));
+	}
       json_object_set_new (corp_obj, "member_count",
-                           json_integer (sqlite3_column_int (st, 5)));
+			   json_integer (sqlite3_column_int (st, 5)));
       json_array_append_new (corp_array, corp_obj);
     }
   sqlite3_finalize (st);
@@ -902,7 +940,7 @@ cmd_corp_list (client_ctx_t *ctx, json_t *root)
 
 
   json_object_set_new (response_data, "corporations", corp_array);
-  send_response_ok(ctx, root, "corp.list.success", response_data);
+  send_response_ok_take (ctx, root, "corp.list.success", &response_data);
   return 0;
 }
 
@@ -918,7 +956,8 @@ cmd_corp_roster (client_ctx_t *ctx, json_t *root)
 
   if (!json_is_object (data))
     {
-      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing data object.");
+      send_response_error (ctx, root, ERR_BAD_REQUEST,
+			   "Missing data object.");
       return 0;
     }
   int corp_id;
@@ -927,7 +966,9 @@ cmd_corp_roster (client_ctx_t *ctx, json_t *root)
 
   if (!json_is_integer (j_corp_id))
     {
-      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing or invalid 'corp_id'.");
+      send_response_error (ctx,
+			   root,
+			   ERR_BAD_REQUEST, "Missing or invalid 'corp_id'.");
       return 0;
     }
   corp_id = json_integer_value (j_corp_id);
@@ -941,9 +982,12 @@ cmd_corp_roster (client_ctx_t *ctx, json_t *root)
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
       LOGE ("cmd_corp_roster: Failed to prepare statement: %s",
-            sqlite3_errmsg (db));
+	    sqlite3_errmsg (db));
       json_decref (roster_array);
-      send_response_error(ctx, root, ERR_SERVER_ERROR, "Database error while fetching roster.");
+      send_response_error (ctx,
+			   root,
+			   ERR_SERVER_ERROR,
+			   "Database error while fetching roster.");
       return 0;
     }
   sqlite3_bind_int (st, 1, corp_id);
@@ -953,13 +997,13 @@ cmd_corp_roster (client_ctx_t *ctx, json_t *root)
 
 
       json_object_set_new (member_obj, "player_id",
-                           json_integer (sqlite3_column_int (st, 0)));
+			   json_integer (sqlite3_column_int (st, 0)));
       json_object_set_new (member_obj, "name",
-                           json_string ((const char *)
-                                        sqlite3_column_text (st, 1)));
+			   json_string ((const char *)
+					sqlite3_column_text (st, 1)));
       json_object_set_new (member_obj, "role",
-                           json_string ((const char *)
-                                        sqlite3_column_text (st, 2)));
+			   json_string ((const char *)
+					sqlite3_column_text (st, 2)));
       json_array_append_new (roster_array, member_obj);
     }
   sqlite3_finalize (st);
@@ -968,7 +1012,7 @@ cmd_corp_roster (client_ctx_t *ctx, json_t *root)
 
   json_object_set_new (response_data, "corp_id", json_integer (corp_id));
   json_object_set_new (response_data, "roster", roster_array);
-  send_response_ok(ctx, root, "corp.roster.success", response_data);
+  send_response_ok_take (ctx, root, "corp.roster.success", &response_data);
   return 0;
 }
 
@@ -978,7 +1022,9 @@ cmd_corp_leave (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id == 0)
     {
-      send_response_error(ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required.");
+      send_response_error (ctx,
+			   root,
+			   ERR_NOT_AUTHENTICATED, "Authentication required.");
       return -1;
     }
   sqlite3 *db = db_get_handle ();
@@ -988,7 +1034,9 @@ cmd_corp_leave (client_ctx_t *ctx, json_t *root)
 
   if (corp_id == 0)
     {
-      send_response_error(ctx, root, ERR_INVALID_ARG, "You are not in a corporation.");
+      send_response_error (ctx,
+			   root,
+			   ERR_INVALID_ARG, "You are not in a corporation.");
       return 0;
     }
   char role[16];
@@ -999,62 +1047,65 @@ cmd_corp_leave (client_ctx_t *ctx, json_t *root)
     {
       int member_count = 0;
       const char *sql_count =
-        "SELECT COUNT(*) FROM corp_members WHERE corp_id = ?;";
+	"SELECT COUNT(*) FROM corp_members WHERE corp_id = ?;";
 
 
       if (sqlite3_prepare_v2 (db, sql_count, -1, &st, NULL) == SQLITE_OK)
-        {
-          sqlite3_bind_int (st, 1, corp_id);
-          if (sqlite3_step (st) == SQLITE_ROW)
-            {
-              member_count = sqlite3_column_int (st, 0);
-            }
-          sqlite3_finalize (st);
-        }
+	{
+	  sqlite3_bind_int (st, 1, corp_id);
+	  if (sqlite3_step (st) == SQLITE_ROW)
+	    {
+	      member_count = sqlite3_column_int (st, 0);
+	    }
+	  sqlite3_finalize (st);
+	}
       if (member_count > 1)
-        {
-          send_response_error(ctx, root, ERR_INVALID_ARG, "You must transfer leadership before leaving the corporation.");
-          return 0;
-        }
+	{
+	  send_response_error (ctx,
+			       root,
+			       ERR_INVALID_ARG,
+			       "You must transfer leadership before leaving the corporation.");
+	  return 0;
+	}
       const char *sql_delete_corp = "DELETE FROM corporations WHERE id = ?;";
 
 
       if (sqlite3_prepare_v2 (db, sql_delete_corp, -1, &st, NULL) ==
-          SQLITE_OK)
-        {
-          sqlite3_bind_int (st, 1, corp_id);
-          sqlite3_step (st);
-          sqlite3_finalize (st);
-        }
+	  SQLITE_OK)
+	{
+	  sqlite3_bind_int (st, 1, corp_id);
+	  sqlite3_step (st);
+	  sqlite3_finalize (st);
+	}
       json_t *response_data = json_object ();
 
 
       json_object_set_new (response_data, "message",
-                           json_string
-                           (
-                             "You were the last member. The corporation has been dissolved."));
-      send_response_ok(ctx, root, "corp.leave.dissolved", response_data);
+			   json_string
+			   ("You were the last member. The corporation has been dissolved."));
+      send_response_ok_take (ctx, root, "corp.leave.dissolved",
+			     &response_data);
     }
   else
     {
       const char *sql_delete_member =
-        "DELETE FROM corp_members WHERE corp_id = ? AND player_id = ?;";
+	"DELETE FROM corp_members WHERE corp_id = ? AND player_id = ?;";
 
 
       if (sqlite3_prepare_v2 (db, sql_delete_member, -1, &st, NULL) ==
-          SQLITE_OK)
-        {
-          sqlite3_bind_int (st, 1, corp_id);
-          sqlite3_bind_int (st, 2, ctx->player_id);
-          sqlite3_step (st);
-          sqlite3_finalize (st);
-        }
+	  SQLITE_OK)
+	{
+	  sqlite3_bind_int (st, 1, corp_id);
+	  sqlite3_bind_int (st, 2, ctx->player_id);
+	  sqlite3_step (st);
+	  sqlite3_finalize (st);
+	}
       json_t *response_data = json_object ();
 
 
       json_object_set_new (response_data, "message",
-                           json_string ("You have left the corporation."));
-      send_response_ok(ctx, root, "corp.leave.success", response_data);
+			   json_string ("You have left the corporation."));
+      send_response_ok_take (ctx, root, "corp.leave.success", &response_data);
     }
   ctx->corp_id = 0;
   return 0;
@@ -1066,7 +1117,9 @@ cmd_corp_invite (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id == 0)
     {
-      send_response_error(ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required.");
+      send_response_error (ctx,
+			   root,
+			   ERR_NOT_AUTHENTICATED, "Authentication required.");
       return -1;
     }
   sqlite3 *db = db_get_handle ();
@@ -1075,7 +1128,8 @@ cmd_corp_invite (client_ctx_t *ctx, json_t *root)
 
   if (!json_is_object (data))
     {
-      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing data object.");
+      send_response_error (ctx, root, ERR_BAD_REQUEST,
+			   "Missing data object.");
       return 0;
     }
   int target_player_id;
@@ -1084,13 +1138,18 @@ cmd_corp_invite (client_ctx_t *ctx, json_t *root)
 
   if (!json_is_integer (j_target_id))
     {
-      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing or invalid 'target_player_id'.");
+      send_response_error (ctx,
+			   root,
+			   ERR_BAD_REQUEST,
+			   "Missing or invalid 'target_player_id'.");
       return 0;
     }
   target_player_id = json_integer_value (j_target_id);
   if (ctx->player_id == target_player_id)
     {
-      send_response_error(ctx, root, ERR_INVALID_ARG, "You cannot invite yourself.");
+      send_response_error (ctx,
+			   root,
+			   ERR_INVALID_ARG, "You cannot invite yourself.");
       return 0;
     }
   int inviter_corp_id = h_get_player_corp_id (db, ctx->player_id);
@@ -1098,26 +1157,34 @@ cmd_corp_invite (client_ctx_t *ctx, json_t *root)
 
   if (inviter_corp_id == 0)
     {
-      send_response_error(ctx, root, ERR_INVALID_ARG, "You must be in a corporation to send invites.");
+      send_response_error (ctx,
+			   root,
+			   ERR_INVALID_ARG,
+			   "You must be in a corporation to send invites.");
       return 0;
     }
   char inviter_role[16];
 
 
   h_get_player_corp_role (db,
-                          ctx->player_id,
-                          inviter_corp_id,
-                          inviter_role,
-                          sizeof (inviter_role));
+			  ctx->player_id,
+			  inviter_corp_id,
+			  inviter_role, sizeof (inviter_role));
   if (strcasecmp (inviter_role, "Leader") != 0
       && strcasecmp (inviter_role, "Officer") != 0)
     {
-      send_response_error(ctx, root, ERR_PERMISSION_DENIED, "You must be a Leader or Officer to invite players.");
+      send_response_error (ctx,
+			   root,
+			   ERR_PERMISSION_DENIED,
+			   "You must be a Leader or Officer to invite players.");
       return 0;
     }
   if (h_get_player_corp_id (db, target_player_id) > 0)
     {
-      send_response_error(ctx, root, ERR_INVALID_ARG, "The player you are trying to invite is already in a corporation.");
+      send_response_error (ctx,
+			   root,
+			   ERR_INVALID_ARG,
+			   "The player you are trying to invite is already in a corporation.");
       return 0;
     }
   long long expires_at = (long long) time (NULL) + 86400;
@@ -1137,20 +1204,23 @@ cmd_corp_invite (client_ctx_t *ctx, json_t *root)
   else
     {
       LOGE ("cmd_corp_invite: Failed to prepare invite insert: %s",
-            sqlite3_errmsg (db));
-      send_response_error(ctx, root, ERR_SERVER_ERROR, "Database error while sending invitation.");
+	    sqlite3_errmsg (db));
+      send_response_error (ctx,
+			   root,
+			   ERR_SERVER_ERROR,
+			   "Database error while sending invitation.");
       return 0;
     }
   json_t *response_data = json_object ();
 
 
   json_object_set_new (response_data, "message",
-                       json_string ("Invitation sent successfully."));
+		       json_string ("Invitation sent successfully."));
   json_object_set_new (response_data, "corp_id",
-                       json_integer (inviter_corp_id));
+		       json_integer (inviter_corp_id));
   json_object_set_new (response_data, "target_player_id",
-                       json_integer (target_player_id));
-  send_response_ok(ctx, root, "corp.invite.success", response_data);
+		       json_integer (target_player_id));
+  send_response_ok_take (ctx, root, "corp.invite.success", &response_data);
   return 0;
 }
 
@@ -1160,7 +1230,9 @@ cmd_corp_join (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id == 0)
     {
-      send_response_error(ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required.");
+      send_response_error (ctx,
+			   root,
+			   ERR_NOT_AUTHENTICATED, "Authentication required.");
       return -1;
     }
   sqlite3 *db = db_get_handle ();
@@ -1170,7 +1242,8 @@ cmd_corp_join (client_ctx_t *ctx, json_t *root)
 
   if (!json_is_object (data))
     {
-      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing data object.");
+      send_response_error (ctx, root, ERR_BAD_REQUEST,
+			   "Missing data object.");
       return 0;
     }
   int corp_id;
@@ -1179,13 +1252,18 @@ cmd_corp_join (client_ctx_t *ctx, json_t *root)
 
   if (!json_is_integer (j_corp_id))
     {
-      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing or invalid 'corp_id'.");
+      send_response_error (ctx,
+			   root,
+			   ERR_BAD_REQUEST, "Missing or invalid 'corp_id'.");
       return 0;
     }
   corp_id = json_integer_value (j_corp_id);
   if (h_get_player_corp_id (db, ctx->player_id) > 0)
     {
-      send_response_error(ctx, root, ERR_INVALID_ARG, "You are already in a corporation.");
+      send_response_error (ctx,
+			   root,
+			   ERR_INVALID_ARG,
+			   "You are already in a corporation.");
       return 0;
     }
   long long expires_at = 0;
@@ -1198,14 +1276,17 @@ cmd_corp_join (client_ctx_t *ctx, json_t *root)
       sqlite3_bind_int (st, 1, corp_id);
       sqlite3_bind_int (st, 2, ctx->player_id);
       if (sqlite3_step (st) == SQLITE_ROW)
-        {
-          expires_at = sqlite3_column_int64 (st, 0);
-        }
+	{
+	  expires_at = sqlite3_column_int64 (st, 0);
+	}
       sqlite3_finalize (st);
     }
   if (expires_at == 0 || expires_at < (long long) time (NULL))
     {
-      send_response_error(ctx, root, ERR_PERMISSION_DENIED, "You do not have a valid invitation to join this corporation.");
+      send_response_error (ctx,
+			   root,
+			   ERR_PERMISSION_DENIED,
+			   "You do not have a valid invitation to join this corporation.");
       return 0;
     }
   const char *sql_insert_member =
@@ -1217,19 +1298,25 @@ cmd_corp_join (client_ctx_t *ctx, json_t *root)
       sqlite3_bind_int (st, 1, corp_id);
       sqlite3_bind_int (st, 2, ctx->player_id);
       if (sqlite3_step (st) != SQLITE_DONE)
-        {
-          LOGE ("cmd_corp_join: Failed to insert new member: %s",
-                sqlite3_errmsg (db));
-          send_response_error(ctx, root, ERR_SERVER_ERROR, "Database error while joining corporation.");
-          return 0;
-        }
+	{
+	  LOGE ("cmd_corp_join: Failed to insert new member: %s",
+		sqlite3_errmsg (db));
+	  send_response_error (ctx,
+			       root,
+			       ERR_SERVER_ERROR,
+			       "Database error while joining corporation.");
+	  return 0;
+	}
       sqlite3_finalize (st);
     }
   else
     {
       LOGE ("cmd_corp_join: Failed to prepare member insert: %s",
-            sqlite3_errmsg (db));
-      send_response_error(ctx, root, ERR_SERVER_ERROR, "Database error while joining corporation.");
+	    sqlite3_errmsg (db));
+      send_response_error (ctx,
+			   root,
+			   ERR_SERVER_ERROR,
+			   "Database error while joining corporation.");
       return 0;
     }
   const char *sql_delete_invite =
@@ -1247,9 +1334,9 @@ cmd_corp_join (client_ctx_t *ctx, json_t *root)
 
 
   json_object_set_new (response_data, "message",
-                       json_string ("Successfully joined the corporation."));
+		       json_string ("Successfully joined the corporation."));
   json_object_set_new (response_data, "corp_id", json_integer (corp_id));
-  send_response_ok(ctx, root, "corp.join.success", response_data);
+  send_response_ok_take (ctx, root, "corp.join.success", &response_data);
   ctx->corp_id = corp_id;
   return 0;
 }
@@ -1260,7 +1347,9 @@ cmd_corp_kick (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id == 0)
     {
-      send_response_error(ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required.");
+      send_response_error (ctx,
+			   root,
+			   ERR_NOT_AUTHENTICATED, "Authentication required.");
       return -1;
     }
   sqlite3 *db = db_get_handle ();
@@ -1269,7 +1358,8 @@ cmd_corp_kick (client_ctx_t *ctx, json_t *root)
 
   if (!json_is_object (data))
     {
-      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing data object.");
+      send_response_error (ctx, root, ERR_BAD_REQUEST,
+			   "Missing data object.");
       return 0;
     }
   int target_player_id;
@@ -1278,13 +1368,18 @@ cmd_corp_kick (client_ctx_t *ctx, json_t *root)
 
   if (!json_is_integer (j_target_id))
     {
-      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing or invalid 'target_player_id'.");
+      send_response_error (ctx,
+			   root,
+			   ERR_BAD_REQUEST,
+			   "Missing or invalid 'target_player_id'.");
       return 0;
     }
   target_player_id = json_integer_value (j_target_id);
   if (ctx->player_id == target_player_id)
     {
-      send_response_error(ctx, root, ERR_INVALID_ARG, "You cannot kick yourself.");
+      send_response_error (ctx,
+			   root,
+			   ERR_INVALID_ARG, "You cannot kick yourself.");
       return 0;
     }
   int kicker_corp_id = h_get_player_corp_id (db, ctx->player_id);
@@ -1292,7 +1387,9 @@ cmd_corp_kick (client_ctx_t *ctx, json_t *root)
 
   if (kicker_corp_id == 0)
     {
-      send_response_error(ctx, root, ERR_INVALID_ARG, "You are not in a corporation.");
+      send_response_error (ctx,
+			   root,
+			   ERR_INVALID_ARG, "You are not in a corporation.");
       return 0;
     }
   int target_corp_id = h_get_player_corp_id (db, target_player_id);
@@ -1300,7 +1397,10 @@ cmd_corp_kick (client_ctx_t *ctx, json_t *root)
 
   if (target_corp_id != kicker_corp_id)
     {
-      send_response_error(ctx, root, ERR_INVALID_ARG, "Target player is not in your corporation.");
+      send_response_error (ctx,
+			   root,
+			   ERR_INVALID_ARG,
+			   "Target player is not in your corporation.");
       return 0;
     }
   char kicker_role[16];
@@ -1308,26 +1408,29 @@ cmd_corp_kick (client_ctx_t *ctx, json_t *root)
 
 
   h_get_player_corp_role (db, ctx->player_id, kicker_corp_id, kicker_role,
-                          sizeof (kicker_role));
+			  sizeof (kicker_role));
   h_get_player_corp_role (db, target_player_id, target_corp_id, target_role,
-                          sizeof (target_role));
+			  sizeof (target_role));
   bool can_kick = false;
 
 
   if (strcasecmp (kicker_role, "Leader") == 0
       && (strcasecmp (target_role, "Officer") == 0
-          || strcasecmp (target_role, "Member") == 0))
+	  || strcasecmp (target_role, "Member") == 0))
     {
       can_kick = true;
     }
   else if (strcasecmp (kicker_role, "Officer") == 0
-           && strcasecmp (target_role, "Member") == 0)
+	   && strcasecmp (target_role, "Member") == 0)
     {
       can_kick = true;
     }
   if (!can_kick)
     {
-      send_response_error(ctx, root, ERR_PERMISSION_DENIED, "Your rank is not high enough to kick this member.");
+      send_response_error (ctx,
+			   root,
+			   ERR_PERMISSION_DENIED,
+			   "Your rank is not high enough to kick this member.");
       return 0;
     }
   const char *sql_delete_member =
@@ -1345,19 +1448,22 @@ cmd_corp_kick (client_ctx_t *ctx, json_t *root)
   else
     {
       LOGE ("cmd_corp_kick: Failed to prepare delete statement: %s",
-            sqlite3_errmsg (db));
-      send_response_error(ctx, root, ERR_SERVER_ERROR, "Database error while kicking member.");
+	    sqlite3_errmsg (db));
+      send_response_error (ctx,
+			   root,
+			   ERR_SERVER_ERROR,
+			   "Database error while kicking member.");
       return 0;
     }
   json_t *response_data = json_object ();
 
 
   json_object_set_new (response_data, "message",
-                       json_string
-                         ("Player successfully kicked from the corporation."));
+		       json_string
+		       ("Player successfully kicked from the corporation."));
   json_object_set_new (response_data, "kicked_player_id",
-                       json_integer (target_player_id));
-  send_response_ok(ctx, root, "corp.kick.success", response_data);
+		       json_integer (target_player_id));
+  send_response_ok_take (ctx, root, "corp.kick.success", &response_data);
   return 0;
 }
 
@@ -1367,7 +1473,9 @@ cmd_corp_dissolve (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id == 0)
     {
-      send_response_error(ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required.");
+      send_response_error (ctx,
+			   root,
+			   ERR_NOT_AUTHENTICATED, "Authentication required.");
       return -1;
     }
   sqlite3 *db = db_get_handle ();
@@ -1377,7 +1485,9 @@ cmd_corp_dissolve (client_ctx_t *ctx, json_t *root)
 
   if (corp_id == 0)
     {
-      send_response_error(ctx, root, ERR_INVALID_ARG, "You are not in a corporation.");
+      send_response_error (ctx,
+			   root,
+			   ERR_INVALID_ARG, "You are not in a corporation.");
       return 0;
     }
   char role[16];
@@ -1386,7 +1496,10 @@ cmd_corp_dissolve (client_ctx_t *ctx, json_t *root)
   h_get_player_corp_role (db, ctx->player_id, corp_id, role, sizeof (role));
   if (strcasecmp (role, "Leader") != 0)
     {
-      send_response_error(ctx, root, ERR_PERMISSION_DENIED, "Only the corporation's leader can dissolve it.");
+      send_response_error (ctx,
+			   root,
+			   ERR_PERMISSION_DENIED,
+			   "Only the corporation's leader can dissolve it.");
       return 0;
     }
   const char *sql_update_planets =
@@ -1397,53 +1510,55 @@ cmd_corp_dissolve (client_ctx_t *ctx, json_t *root)
     {
       sqlite3_bind_int (st, 1, corp_id);
       if (sqlite3_step (st) != SQLITE_DONE)
-        {
-          LOGE
-          (
-            "cmd_corp_dissolve: Failed to update planet ownership for corp %d: %s",
-            corp_id,
-            sqlite3_errmsg (db));
-        }
+	{
+	  LOGE
+	    ("cmd_corp_dissolve: Failed to update planet ownership for corp %d: %s",
+	     corp_id, sqlite3_errmsg (db));
+	}
       sqlite3_finalize (st);
     }
   else
     {
       LOGE
-        ("cmd_corp_dissolve: Failed to prepare planet update statement: %s",
-        sqlite3_errmsg (db));
+	("cmd_corp_dissolve: Failed to prepare planet update statement: %s",
+	 sqlite3_errmsg (db));
     }
   const char *sql_delete_corp = "DELETE FROM corporations WHERE id = ?;";
 
 
   if (sqlite3_prepare_v2 (db, sql_delete_corp, -1, &st, NULL) == SQLITE_OK)
     {
-      sqlite3_bind_int (st,
-                        1,
-                        corp_id);
+      sqlite3_bind_int (st, 1, corp_id);
       if (sqlite3_step (st) != SQLITE_DONE)
-        {
-          LOGE ("cmd_corp_dissolve: Failed to delete corporation %d: %s",
-                corp_id, sqlite3_errmsg (db));
-          send_response_error(ctx, root, ERR_SERVER_ERROR, "Database error during corporation dissolution.");
-          return 0;
-        }
+	{
+	  LOGE ("cmd_corp_dissolve: Failed to delete corporation %d: %s",
+		corp_id, sqlite3_errmsg (db));
+	  send_response_error (ctx,
+			       root,
+			       ERR_SERVER_ERROR,
+			       "Database error during corporation dissolution.");
+	  return 0;
+	}
       sqlite3_finalize (st);
     }
   else
     {
       LOGE ("cmd_corp_dissolve: Failed to prepare corp delete statement: %s",
-            sqlite3_errmsg (db));
-      send_response_error(ctx, root, ERR_SERVER_ERROR, "Database error during corporation dissolution.");
+	    sqlite3_errmsg (db));
+      send_response_error (ctx,
+			   root,
+			   ERR_SERVER_ERROR,
+			   "Database error during corporation dissolution.");
       return 0;
     }
   json_t *response_data = json_object ();
 
 
   json_object_set_new (response_data, "message",
-                       json_string ("Corporation has been dissolved."));
+		       json_string ("Corporation has been dissolved."));
   json_object_set_new (response_data, "dissolved_corp_id",
-                       json_integer (corp_id));
-  send_response_ok(ctx, root, "corp.dissolve.success", response_data);
+		       json_integer (corp_id));
+  send_response_ok_take (ctx, root, "corp.dissolve.success", &response_data);
   ctx->corp_id = 0;
   return 0;
 }
@@ -1454,7 +1569,9 @@ cmd_corp_balance (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id == 0)
     {
-      send_response_error(ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required.");
+      send_response_error (ctx,
+			   root,
+			   ERR_NOT_AUTHENTICATED, "Authentication required.");
       return -1;
     }
   sqlite3 *db = db_get_handle ();
@@ -1463,7 +1580,9 @@ cmd_corp_balance (client_ctx_t *ctx, json_t *root)
 
   if (corp_id == 0)
     {
-      send_response_error(ctx, root, ERR_INVALID_ARG, "You are not in a corporation.");
+      send_response_error (ctx,
+			   root,
+			   ERR_INVALID_ARG, "You are not in a corporation.");
       return 0;
     }
   long long balance;
@@ -1471,7 +1590,10 @@ cmd_corp_balance (client_ctx_t *ctx, json_t *root)
 
   if (db_get_corp_bank_balance (corp_id, &balance) != SQLITE_OK)
     {
-      send_response_error(ctx, root, ERR_SERVER_ERROR, "Failed to retrieve corporation balance.");
+      send_response_error (ctx,
+			   root,
+			   ERR_SERVER_ERROR,
+			   "Failed to retrieve corporation balance.");
       return 0;
     }
   json_t *response_data = json_object ();
@@ -1479,7 +1601,7 @@ cmd_corp_balance (client_ctx_t *ctx, json_t *root)
 
   json_object_set_new (response_data, "corp_id", json_integer (corp_id));
   json_object_set_new (response_data, "balance", json_integer (balance));
-  send_response_ok(ctx, root, "corp.balance.success", response_data);
+  send_response_ok_take (ctx, root, "corp.balance.success", &response_data);
   return 0;
 }
 
@@ -1489,7 +1611,9 @@ cmd_corp_deposit (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id == 0)
     {
-      send_response_error(ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required.");
+      send_response_error (ctx,
+			   root,
+			   ERR_NOT_AUTHENTICATED, "Authentication required.");
       return -1;
     }
   sqlite3 *db = db_get_handle ();
@@ -1498,7 +1622,8 @@ cmd_corp_deposit (client_ctx_t *ctx, json_t *root)
 
   if (!data)
     {
-      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing data payload.");
+      send_response_error (ctx, root, ERR_BAD_REQUEST,
+			   "Missing data payload.");
       return 0;
     }
   long long amount = 0;
@@ -1511,7 +1636,9 @@ cmd_corp_deposit (client_ctx_t *ctx, json_t *root)
     }
   if (amount <= 0)
     {
-      send_response_error(ctx, root, ERR_MISSING_FIELD, "Missing or invalid 'amount'.");
+      send_response_error (ctx,
+			   root,
+			   ERR_MISSING_FIELD, "Missing or invalid 'amount'.");
       return 0;
     }
   int corp_id = h_get_player_corp_id (db, ctx->player_id);
@@ -1519,22 +1646,27 @@ cmd_corp_deposit (client_ctx_t *ctx, json_t *root)
 
   if (corp_id == 0)
     {
-      send_response_error(ctx, root, ERR_INVALID_ARG, "You are not in a corporation.");
+      send_response_error (ctx,
+			   root,
+			   ERR_INVALID_ARG, "You are not in a corporation.");
       return 0;
     }
   if (db_bank_transfer ("player", ctx->player_id, "corp", corp_id, amount) !=
       SQLITE_OK)
     {
-      send_response_error(ctx, root, ERR_INSUFFICIENT_FUNDS, "Transfer failed. Check your balance.");
+      send_response_error (ctx,
+			   root,
+			   ERR_INSUFFICIENT_FUNDS,
+			   "Transfer failed. Check your balance.");
       return 0;
     }
   json_t *response_data = json_object ();
 
 
   json_object_set_new (response_data, "message",
-                       json_string ("Deposit successful."));
+		       json_string ("Deposit successful."));
   json_object_set_new (response_data, "amount", json_integer (amount));
-  send_response_ok(ctx, root, "corp.deposit.success", response_data);
+  send_response_ok_take (ctx, root, "corp.deposit.success", &response_data);
   return 0;
 }
 
@@ -1544,7 +1676,9 @@ cmd_corp_withdraw (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id == 0)
     {
-      send_response_error(ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required.");
+      send_response_error (ctx,
+			   root,
+			   ERR_NOT_AUTHENTICATED, "Authentication required.");
       return -1;
     }
   sqlite3 *db = db_get_handle ();
@@ -1553,7 +1687,8 @@ cmd_corp_withdraw (client_ctx_t *ctx, json_t *root)
 
   if (!data)
     {
-      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing data payload.");
+      send_response_error (ctx, root, ERR_BAD_REQUEST,
+			   "Missing data payload.");
       return 0;
     }
   long long amount = 0;
@@ -1566,7 +1701,9 @@ cmd_corp_withdraw (client_ctx_t *ctx, json_t *root)
     }
   if (amount <= 0)
     {
-      send_response_error(ctx, root, ERR_MISSING_FIELD, "Missing or invalid 'amount'.");
+      send_response_error (ctx,
+			   root,
+			   ERR_MISSING_FIELD, "Missing or invalid 'amount'.");
       return 0;
     }
   int corp_id = h_get_player_corp_id (db, ctx->player_id);
@@ -1574,7 +1711,9 @@ cmd_corp_withdraw (client_ctx_t *ctx, json_t *root)
 
   if (corp_id == 0)
     {
-      send_response_error(ctx, root, ERR_INVALID_ARG, "You are not in a corporation.");
+      send_response_error (ctx,
+			   root,
+			   ERR_INVALID_ARG, "You are not in a corporation.");
       return 0;
     }
   char role[16];
@@ -1583,22 +1722,28 @@ cmd_corp_withdraw (client_ctx_t *ctx, json_t *root)
   h_get_player_corp_role (db, ctx->player_id, corp_id, role, sizeof (role));
   if (strcasecmp (role, "Leader") != 0 && strcasecmp (role, "Officer") != 0)
     {
-      send_response_error(ctx, root, ERR_PERMISSION_DENIED, "You do not have permission to withdraw funds.");
+      send_response_error (ctx,
+			   root,
+			   ERR_PERMISSION_DENIED,
+			   "You do not have permission to withdraw funds.");
       return 0;
     }
   if (db_bank_transfer ("corp", corp_id, "player", ctx->player_id, amount) !=
       SQLITE_OK)
     {
-      send_response_error(ctx, root, ERR_INSUFFICIENT_FUNDS, "Transfer failed. Check corporation balance.");
+      send_response_error (ctx,
+			   root,
+			   ERR_INSUFFICIENT_FUNDS,
+			   "Transfer failed. Check corporation balance.");
       return 0;
     }
   json_t *response_data = json_object ();
 
 
   json_object_set_new (response_data, "message",
-                       json_string ("Withdrawal successful."));
+		       json_string ("Withdrawal successful."));
   json_object_set_new (response_data, "amount", json_integer (amount));
-  send_response_ok(ctx, root, "corp.withdraw.success", response_data);
+  send_response_ok_take (ctx, root, "corp.withdraw.success", &response_data);
   return 0;
 }
 
@@ -1608,12 +1753,14 @@ cmd_corp_statement (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id == 0)
     {
-      send_response_error(ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required.");
+      send_response_error (ctx,
+			   root,
+			   ERR_NOT_AUTHENTICATED, "Authentication required.");
       return -1;
     }
   sqlite3 *db = db_get_handle ();
   json_t *data = json_object_get (root, "data");
-  int limit = 20;               // default limit
+  int limit = 20;		// default limit
 
 
   if (data)
@@ -1622,31 +1769,35 @@ cmd_corp_statement (client_ctx_t *ctx, json_t *root)
 
 
       if (json_is_integer (j_limit))
-        {
-          limit = (int) json_integer_value (j_limit);
-        }
+	{
+	  limit = (int) json_integer_value (j_limit);
+	}
     }
   int corp_id = h_get_player_corp_id (db, ctx->player_id);
 
 
   if (corp_id == 0)
     {
-      send_response_error(ctx, root, ERR_INVALID_ARG, "You are not in a corporation.");
+      send_response_error (ctx,
+			   root,
+			   ERR_INVALID_ARG, "You are not in a corporation.");
       return 0;
     }
   json_t *transactions = NULL;
 
 
-  if (db_bank_get_transactions ("corp", corp_id, limit,
-                                NULL, 0, 0, // tx_type_filter, start_date, end_date
-                                0, 0,      // min_amount, max_amount
-                                &transactions) != SQLITE_OK)
+  if (db_bank_get_transactions ("corp", corp_id, limit, NULL, 0, 0,	// tx_type_filter, start_date, end_date
+				0, 0,	// min_amount, max_amount
+				&transactions) != SQLITE_OK)
     {
-      send_response_error(ctx, root, ERR_SERVER_ERROR, "Failed to retrieve corporation transactions.");
+      send_response_error (ctx,
+			   root,
+			   ERR_SERVER_ERROR,
+			   "Failed to retrieve corporation transactions.");
       if (transactions)
-        {
-          json_decref (transactions);
-        }
+	{
+	  json_decref (transactions);
+	}
       return 0;
     }
   json_t *response_data = json_object ();
@@ -1654,7 +1805,7 @@ cmd_corp_statement (client_ctx_t *ctx, json_t *root)
 
   json_object_set_new (response_data, "corp_id", json_integer (corp_id));
   json_object_set_new (response_data, "transactions", transactions);
-  send_response_ok(ctx, root, "corp.statement.success", response_data);
+  send_response_ok_take (ctx, root, "corp.statement.success", &response_data);
   return 0;
 }
 
@@ -1664,7 +1815,9 @@ cmd_corp_status (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id == 0)
     {
-      send_response_error(ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required.");
+      send_response_error (ctx,
+			   root,
+			   ERR_NOT_AUTHENTICATED, "Authentication required.");
       return -1;
     }
   sqlite3 *db = db_get_handle ();
@@ -1673,7 +1826,9 @@ cmd_corp_status (client_ctx_t *ctx, json_t *root)
 
   if (corp_id == 0)
     {
-      send_response_error(ctx, root, ERR_INVALID_ARG, "You are not in a corporation.");
+      send_response_error (ctx,
+			   root,
+			   ERR_INVALID_ARG, "You are not in a corporation.");
       return 0;
     }
   sqlite3_stmt *st = NULL;
@@ -1683,7 +1838,7 @@ cmd_corp_status (client_ctx_t *ctx, json_t *root)
 
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
-      send_response_error(ctx, root, ERR_SERVER_ERROR, "Database error.");
+      send_response_error (ctx, root, ERR_SERVER_ERROR, "Database error.");
       return 0;
     }
   sqlite3_bind_int (st, 1, corp_id);
@@ -1694,19 +1849,19 @@ cmd_corp_status (client_ctx_t *ctx, json_t *root)
     {
       json_object_set_new (response_data, "corp_id", json_integer (corp_id));
       json_object_set_new (response_data, "name",
-                           json_string ((const char *)
-                                        sqlite3_column_text (st, 0)));
+			   json_string ((const char *)
+					sqlite3_column_text (st, 0)));
       const char *tag = (const char *) sqlite3_column_text (st, 1);
 
 
       if (tag)
-        {
-          json_object_set_new (response_data, "tag", json_string (tag));
-        }
+	{
+	  json_object_set_new (response_data, "tag", json_string (tag));
+	}
       json_object_set_new (response_data, "created_at",
-                           json_integer (sqlite3_column_int (st, 2)));
+			   json_integer (sqlite3_column_int (st, 2)));
       json_object_set_new (response_data, "ceo_id",
-                           json_integer (sqlite3_column_int (st, 3)));
+			   json_integer (sqlite3_column_int (st, 3)));
     }
   sqlite3_finalize (st);
   st = NULL;
@@ -1715,10 +1870,10 @@ cmd_corp_status (client_ctx_t *ctx, json_t *root)
     {
       sqlite3_bind_int (st, 1, corp_id);
       if (sqlite3_step (st) == SQLITE_ROW)
-        {
-          json_object_set_new (response_data, "member_count",
-                               json_integer (sqlite3_column_int (st, 0)));
-        }
+	{
+	  json_object_set_new (response_data, "member_count",
+			       json_integer (sqlite3_column_int (st, 0)));
+	}
       sqlite3_finalize (st);
     }
   char role[16];
@@ -1726,7 +1881,7 @@ cmd_corp_status (client_ctx_t *ctx, json_t *root)
 
   h_get_player_corp_role (db, ctx->player_id, corp_id, role, sizeof (role));
   json_object_set_new (response_data, "your_role", json_string (role));
-  send_response_ok(ctx, root, "corp.status.success", response_data);
+  send_response_ok_take (ctx, root, "corp.status.success", &response_data);
   return 0;
 }
 
@@ -1736,17 +1891,20 @@ cmd_stock_ipo_register (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id == 0)
     {
-      send_response_error(ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required.");
+      send_response_error (ctx,
+			   root,
+			   ERR_NOT_AUTHENTICATED, "Authentication required.");
       return -1;
     }
   sqlite3 *db = db_get_handle ();
   json_t *data = json_object_get (root,
-                                  "data");
+				  "data");
 
 
   if (!json_is_object (data))
     {
-      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing data object.");
+      send_response_error (ctx, root, ERR_BAD_REQUEST,
+			   "Missing data object.");
       return 0;
     }
   /* Ensure caller is an active CEO and grab corp_id */
@@ -1755,7 +1913,10 @@ cmd_stock_ipo_register (client_ctx_t *ctx, json_t *root)
 
   if (!h_is_player_corp_ceo (db, ctx->player_id, &corp_id) || corp_id <= 0)
     {
-      send_response_error(ctx, root, ERR_PERMISSION_DENIED, "Only corporation CEOs can register for IPO.");
+      send_response_error (ctx,
+			   root,
+			   ERR_PERMISSION_DENIED,
+			   "Only corporation CEOs can register for IPO.");
       return 0;
     }
   /* Check if already publicly traded */
@@ -1764,7 +1925,10 @@ cmd_stock_ipo_register (client_ctx_t *ctx, json_t *root)
 
   if (h_get_corp_stock_id (db, corp_id, &stock_id) == SQLITE_OK)
     {
-      send_response_error(ctx, root, ERR_INVALID_ARG, "Your corporation is already publicly traded.");
+      send_response_error (ctx,
+			   root,
+			   ERR_INVALID_ARG,
+			   "Your corporation is already publicly traded.");
       return 0;
     }
   /* Check credit rating */
@@ -1773,8 +1937,11 @@ cmd_stock_ipo_register (client_ctx_t *ctx, json_t *root)
 
   if (h_get_corp_credit_rating (db, corp_id, &credit_rating) != SQLITE_OK
       || credit_rating < 400)
-    {                           // Assuming 400 is a "Default" threshold
-      send_response_error(ctx, root, ERR_INVALID_CORP_STATE, "Corporation credit rating is too low to go public.");
+    {				// Assuming 400 is a "Default" threshold
+      send_response_error (ctx,
+			   root,
+			   ERR_INVALID_CORP_STATE,
+			   "Corporation credit rating is too low to go public.");
       return 0;
     }
   const char *ticker;
@@ -1784,23 +1951,31 @@ cmd_stock_ipo_register (client_ctx_t *ctx, json_t *root)
   if (!json_is_string (j_ticker)
       || (ticker = json_string_value (j_ticker)) == NULL)
     {
-      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing or invalid 'ticker'.");
+      send_response_error (ctx,
+			   root,
+			   ERR_BAD_REQUEST, "Missing or invalid 'ticker'.");
       return 0;
     }
   // Basic ticker validation: 3-5 uppercase alphanumeric characters
   if (strlen (ticker) < 3 || strlen (ticker) > 5)
     {
-      send_response_error(ctx, root, ERR_INVALID_ARG, "Ticker must be 3-5 characters long.");
+      send_response_error (ctx,
+			   root,
+			   ERR_INVALID_ARG,
+			   "Ticker must be 3-5 characters long.");
       return 0;
     }
   for (size_t i = 0; i < strlen (ticker); i++)
     {
       if (!isalnum ((unsigned char) ticker[i])
-          || !isupper ((unsigned char) ticker[i]))
-        {
-          send_response_error(ctx, root, ERR_INVALID_ARG, "Ticker must be uppercase alphanumeric characters.");
-          return 0;
-        }
+	  || !isupper ((unsigned char) ticker[i]))
+	{
+	  send_response_error (ctx,
+			       root,
+			       ERR_INVALID_ARG,
+			       "Ticker must be uppercase alphanumeric characters.");
+	  return 0;
+	}
     }
   int total_shares;
 
@@ -1808,7 +1983,10 @@ cmd_stock_ipo_register (client_ctx_t *ctx, json_t *root)
   if (!json_get_int_flexible (data, "total_shares", &total_shares)
       || total_shares <= 0)
     {
-      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing or invalid 'total_shares'.");
+      send_response_error (ctx,
+			   root,
+			   ERR_BAD_REQUEST,
+			   "Missing or invalid 'total_shares'.");
       return 0;
     }
   int par_value;
@@ -1816,7 +1994,10 @@ cmd_stock_ipo_register (client_ctx_t *ctx, json_t *root)
 
   if (!json_get_int_flexible (data, "par_value", &par_value) || par_value < 0)
     {
-      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing or invalid 'par_value'.");
+      send_response_error (ctx,
+			   root,
+			   ERR_BAD_REQUEST,
+			   "Missing or invalid 'par_value'.");
       return 0;
     }
   sqlite3_stmt *st = NULL;
@@ -1828,64 +2009,74 @@ cmd_stock_ipo_register (client_ctx_t *ctx, json_t *root)
   if (rc != SQLITE_OK)
     {
       LOGE ("cmd_stock_ipo_register: Failed to prepare stock insert: %s",
-            sqlite3_errmsg (db));
-      send_response_error(ctx, root, ERR_SERVER_ERROR, "Database error during IPO registration.");
+	    sqlite3_errmsg (db));
+      send_response_error (ctx,
+			   root,
+			   ERR_SERVER_ERROR,
+			   "Database error during IPO registration.");
       return 0;
     }
   sqlite3_bind_int (st, 1, corp_id);
   sqlite3_bind_text (st, 2, ticker, -1, SQLITE_STATIC);
   sqlite3_bind_int (st, 3, total_shares);
   sqlite3_bind_int (st, 4, par_value);
-  sqlite3_bind_int (st, 5, par_value);  // Current price initially set to par value
+  sqlite3_bind_int (st, 5, par_value);	// Current price initially set to par value
   rc = sqlite3_step (st);
   sqlite3_finalize (st);
   if (rc != SQLITE_DONE)
     {
       LOGE ("cmd_stock_ipo_register: Failed to insert stock: %s",
-            sqlite3_errmsg (db));
+	    sqlite3_errmsg (db));
       if (sqlite3_errcode (db) == SQLITE_CONSTRAINT)
-        {
-          send_response_error(ctx, root, ERR_NAME_TAKEN, "A stock with that ticker already exists.");
-        }
+	{
+	  send_response_error (ctx,
+			       root,
+			       ERR_NAME_TAKEN,
+			       "A stock with that ticker already exists.");
+	}
       else
-        {
-          send_response_error(ctx, root, ERR_SERVER_ERROR, "Database error during IPO registration.");
-        }
+	{
+	  send_response_error (ctx,
+			       root,
+			       ERR_SERVER_ERROR,
+			       "Database error during IPO registration.");
+	}
       return 0;
     }
   int new_stock_id = (int) sqlite3_last_insert_rowid (db);
 
 
   // Distribute initial shares to the corporation itself (as a shareholder)
-  rc = h_update_player_shares (db, 0, new_stock_id, total_shares);      // player_id 0 for corporation
+  rc = h_update_player_shares (db, 0, new_stock_id, total_shares);	// player_id 0 for corporation
   if (rc != SQLITE_OK)
     {
       LOGE
-      (
-        "cmd_stock_ipo_register: Failed to distribute initial shares to corp %d for stock %d: %s",
-        corp_id,
-        new_stock_id,
-        sqlite3_errmsg (db));
+	("cmd_stock_ipo_register: Failed to distribute initial shares to corp %d for stock %d: %s",
+	 corp_id, new_stock_id, sqlite3_errmsg (db));
       // This is a critical error, consider rolling back or marking stock invalid
     }
   json_t *response_data = json_object ();
 
 
   json_object_set_new (response_data, "message",
-                       json_string
-                         ("Corporation successfully registered for IPO."));
+		       json_string
+		       ("Corporation successfully registered for IPO."));
   json_object_set_new (response_data, "corp_id", json_integer (corp_id));
   json_object_set_new (response_data, "stock_id",
-                       json_integer (new_stock_id));
+		       json_integer (new_stock_id));
   json_object_set_new (response_data, "ticker", json_string (ticker));
-  send_response_ok(ctx, root, "stock.ipo.register.success", response_data);
-  json_t *payload =
-    json_pack ("{s:i, s:i, s:s}", "corp_id", corp_id, "stock_id",
-               new_stock_id, "ticker", ticker);
+  send_response_ok_take (ctx, root, "stock.ipo.register.success",
+			 &response_data);
+  json_t *payload = json_object ();
+
+
+  json_object_set_new (payload, "corp_id", json_integer (corp_id));
+  json_object_set_new (payload, "stock_id", json_integer (new_stock_id));
+  json_object_set_new (payload, "ticker", json_string (ticker));
 
 
   db_log_engine_event (time (NULL), "stock.ipo.registered", "corp", corp_id,
-                       0, payload, NULL);
+		       0, payload, NULL);
   json_decref (payload);
   return 0;
 }
@@ -1896,7 +2087,9 @@ cmd_stock_buy (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id == 0)
     {
-      send_response_error(ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required.");
+      send_response_error (ctx,
+			   root,
+			   ERR_NOT_AUTHENTICATED, "Authentication required.");
       return -1;
     }
   sqlite3 *db = db_get_handle ();
@@ -1905,7 +2098,8 @@ cmd_stock_buy (client_ctx_t *ctx, json_t *root)
 
   if (!json_is_object (data))
     {
-      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing data object.");
+      send_response_error (ctx, root, ERR_BAD_REQUEST,
+			   "Missing data object.");
       return 0;
     }
   int stock_id;
@@ -1913,7 +2107,9 @@ cmd_stock_buy (client_ctx_t *ctx, json_t *root)
 
   if (!json_get_int_flexible (data, "stock_id", &stock_id) || stock_id <= 0)
     {
-      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing or invalid 'stock_id'.");
+      send_response_error (ctx,
+			   root,
+			   ERR_BAD_REQUEST, "Missing or invalid 'stock_id'.");
       return 0;
     }
   int quantity;
@@ -1921,7 +2117,9 @@ cmd_stock_buy (client_ctx_t *ctx, json_t *root)
 
   if (!json_get_int_flexible (data, "quantity", &quantity) || quantity <= 0)
     {
-      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing or invalid 'quantity'.");
+      send_response_error (ctx,
+			   root,
+			   ERR_BAD_REQUEST, "Missing or invalid 'quantity'.");
       return 0;
     }
   char *ticker = NULL;
@@ -1931,12 +2129,12 @@ cmd_stock_buy (client_ctx_t *ctx, json_t *root)
   int current_price = 0;
   long long last_dividend_ts = 0;
   int rc = h_get_stock_info (db, stock_id, &ticker, &corp_id, &total_shares,
-                             &par_value, &current_price, &last_dividend_ts);
+			     &par_value, &current_price, &last_dividend_ts);
 
 
   if (rc != SQLITE_OK)
     {
-      send_response_error(ctx, root, ERR_INVALID_ARG, "Stock not found.");
+      send_response_error (ctx, root, ERR_INVALID_ARG, "Stock not found.");
       free (ticker);
       return 0;
     }
@@ -1948,7 +2146,10 @@ cmd_stock_buy (client_ctx_t *ctx, json_t *root)
   if (db_get_player_bank_balance (ctx->player_id, &player_balance) !=
       SQLITE_OK || player_balance < total_cost)
     {
-      send_response_error(ctx, root, ERR_INSUFFICIENT_FUNDS, "Insufficient funds to purchase shares.");
+      send_response_error (ctx,
+			   root,
+			   ERR_INSUFFICIENT_FUNDS,
+			   "Insufficient funds to purchase shares.");
       free (ticker);
       return 0;
     }
@@ -1958,8 +2159,11 @@ cmd_stock_buy (client_ctx_t *ctx, json_t *root)
   if (rc != SQLITE_OK)
     {
       LOGE ("cmd_stock_buy: Bank transfer failed for player %d, stock %d: %s",
-            ctx->player_id, stock_id, sqlite3_errstr (rc));
-      send_response_error(ctx, root, ERR_SERVER_ERROR, "Failed to complete share purchase due to banking error.");
+	    ctx->player_id, stock_id, sqlite3_errstr (rc));
+      send_response_error (ctx,
+			   root,
+			   ERR_SERVER_ERROR,
+			   "Failed to complete share purchase due to banking error.");
       free (ticker);
       return 0;
     }
@@ -1968,13 +2172,13 @@ cmd_stock_buy (client_ctx_t *ctx, json_t *root)
   if (rc != SQLITE_OK)
     {
       LOGE
-      (
-        "cmd_stock_buy: Failed to update player shares for player %d, stock %d: %s",
-        ctx->player_id,
-        stock_id,
-        sqlite3_errstr (rc));
+	("cmd_stock_buy: Failed to update player shares for player %d, stock %d: %s",
+	 ctx->player_id, stock_id, sqlite3_errstr (rc));
       // Critical error: funds transferred, but shares not updated. Manual intervention needed or complex rollback.
-      send_response_error(ctx, root, ERR_SERVER_ERROR, "Failed to update player shares after purchase.");
+      send_response_error (ctx,
+			   root,
+			   ERR_SERVER_ERROR,
+			   "Failed to update player shares after purchase.");
       free (ticker);
       return 0;
     }
@@ -1982,21 +2186,24 @@ cmd_stock_buy (client_ctx_t *ctx, json_t *root)
 
 
   json_object_set_new (response_data, "message",
-                       json_string ("Shares purchased successfully."));
+		       json_string ("Shares purchased successfully."));
   json_object_set_new (response_data, "stock_id", json_integer (stock_id));
   json_object_set_new (response_data, "ticker", json_string (ticker));
   json_object_set_new (response_data, "quantity", json_integer (quantity));
   json_object_set_new (response_data, "total_cost",
-                       json_integer (total_cost));
-  send_response_ok(ctx, root, "stock.buy.success", response_data);
-  json_t *payload =
-    json_pack ("{s:i, s:i, s:I, s:I}", "player_id", ctx->player_id,
-               "stock_id", stock_id, "quantity", quantity, "cost",
-               total_cost);
+		       json_integer (total_cost));
+  send_response_ok_take (ctx, root, "stock.buy.success", &response_data);
+  json_t *payload = json_object ();
+
+
+  json_object_set_new (payload, "player_id", json_integer (ctx->player_id));
+  json_object_set_new (payload, "stock_id", json_integer (stock_id));
+  json_object_set_new (payload, "quantity", json_integer (quantity));
+  json_object_set_new (payload, "cost", json_integer (total_cost));
 
 
   db_log_engine_event (time (NULL), "stock.buy", "player", ctx->player_id, 0,
-                       payload, NULL);
+		       payload, NULL);
   json_decref (payload);
   free (ticker);
   return 0;
@@ -2008,7 +2215,9 @@ cmd_stock_dividend_set (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id == 0)
     {
-      send_response_error(ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required.");
+      send_response_error (ctx,
+			   root,
+			   ERR_NOT_AUTHENTICATED, "Authentication required.");
       return -1;
     }
   sqlite3 *db = db_get_handle ();
@@ -2017,7 +2226,8 @@ cmd_stock_dividend_set (client_ctx_t *ctx, json_t *root)
 
   if (!json_is_object (data))
     {
-      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing data object.");
+      send_response_error (ctx, root, ERR_BAD_REQUEST,
+			   "Missing data object.");
       return 0;
     }
   /* Ensure caller is an active CEO and grab corp_id */
@@ -2026,7 +2236,10 @@ cmd_stock_dividend_set (client_ctx_t *ctx, json_t *root)
 
   if (!h_is_player_corp_ceo (db, ctx->player_id, &corp_id) || corp_id <= 0)
     {
-      send_response_error(ctx, root, ERR_PERMISSION_DENIED, "Only corporation CEOs can set dividends.");
+      send_response_error (ctx,
+			   root,
+			   ERR_PERMISSION_DENIED,
+			   "Only corporation CEOs can set dividends.");
       return 0;
     }
   int stock_id = 0;
@@ -2034,7 +2247,10 @@ cmd_stock_dividend_set (client_ctx_t *ctx, json_t *root)
 
   if (h_get_corp_stock_id (db, corp_id, &stock_id) != SQLITE_OK)
     {
-      send_response_error(ctx, root, ERR_INVALID_ARG, "Your corporation is not publicly traded.");
+      send_response_error (ctx,
+			   root,
+			   ERR_INVALID_ARG,
+			   "Your corporation is not publicly traded.");
       return 0;
     }
   int amount_per_share;
@@ -2043,18 +2259,24 @@ cmd_stock_dividend_set (client_ctx_t *ctx, json_t *root)
   if (!json_get_int_flexible (data, "amount_per_share", &amount_per_share)
       || amount_per_share < 0)
     {
-      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing or invalid 'amount_per_share'.");
+      send_response_error (ctx,
+			   root,
+			   ERR_BAD_REQUEST,
+			   "Missing or invalid 'amount_per_share'.");
       return 0;
     }
   // Get total shares to calculate total dividend payout
   int total_shares = 0;
   int rc = h_get_stock_info (db, stock_id, NULL, NULL, &total_shares,
-                             NULL, NULL, NULL);
+			     NULL, NULL, NULL);
 
 
   if (rc != SQLITE_OK)
     {
-      send_response_error(ctx, root, ERR_SERVER_ERROR, "Failed to retrieve stock information.");
+      send_response_error (ctx,
+			   root,
+			   ERR_SERVER_ERROR,
+			   "Failed to retrieve stock information.");
       return 0;
     }
   long long total_payout = (long long) amount_per_share * total_shares;
@@ -2065,7 +2287,10 @@ cmd_stock_dividend_set (client_ctx_t *ctx, json_t *root)
   if (db_get_corp_bank_balance (corp_id, &corp_balance) != SQLITE_OK
       || corp_balance < total_payout)
     {
-      send_response_error(ctx, root, ERR_INSUFFICIENT_FUNDS, "Corporation has insufficient funds to declare this dividend.");
+      send_response_error (ctx,
+			   root,
+			   ERR_INSUFFICIENT_FUNDS,
+			   "Corporation has insufficient funds to declare this dividend.");
       return 0;
     }
   sqlite3_stmt *st = NULL;
@@ -2077,8 +2302,11 @@ cmd_stock_dividend_set (client_ctx_t *ctx, json_t *root)
   if (rc != SQLITE_OK)
     {
       LOGE ("cmd_stock_dividend_set: Failed to prepare insert statement: %s",
-            sqlite3_errmsg (db));
-      send_response_error(ctx, root, ERR_SERVER_ERROR, "Database error declaring dividend.");
+	    sqlite3_errmsg (db));
+      send_response_error (ctx,
+			   root,
+			   ERR_SERVER_ERROR,
+			   "Database error declaring dividend.");
       return 0;
     }
   sqlite3_bind_int (st, 1, stock_id);
@@ -2089,29 +2317,37 @@ cmd_stock_dividend_set (client_ctx_t *ctx, json_t *root)
   if (rc != SQLITE_DONE)
     {
       LOGE ("cmd_stock_dividend_set: Failed to insert dividend: %s",
-            sqlite3_errmsg (db));
-      send_response_error(ctx, root, ERR_SERVER_ERROR, "Database error declaring dividend.");
+	    sqlite3_errmsg (db));
+      send_response_error (ctx,
+			   root,
+			   ERR_SERVER_ERROR,
+			   "Database error declaring dividend.");
       return 0;
     }
   json_t *response_data = json_object ();
 
 
   json_object_set_new (response_data, "message",
-                       json_string ("Dividend declared successfully."));
+		       json_string ("Dividend declared successfully."));
   json_object_set_new (response_data, "stock_id", json_integer (stock_id));
   json_object_set_new (response_data, "amount_per_share",
-                       json_integer (amount_per_share));
+		       json_integer (amount_per_share));
   json_object_set_new (response_data, "total_payout",
-                       json_integer (total_payout));
-  send_response_ok(ctx, root, "stock.dividend.set.success", response_data);
-  json_t *payload =
-    json_pack ("{s:i, s:i, s:I, s:I}", "corp_id", corp_id, "stock_id",
-               stock_id, "amount_per_share", amount_per_share, "total_payout",
-               total_payout);
+		       json_integer (total_payout));
+  send_response_ok_take (ctx, root, "stock.dividend.set.success",
+			 &response_data);
+  json_t *payload = json_object ();
+
+
+  json_object_set_new (payload, "corp_id", json_integer (corp_id));
+  json_object_set_new (payload, "stock_id", json_integer (stock_id));
+  json_object_set_new (payload, "amount_per_share",
+		       json_integer (amount_per_share));
+  json_object_set_new (payload, "total_payout", json_integer (total_payout));
 
 
   db_log_engine_event (time (NULL), "stock.dividend.declared", "corp",
-                       corp_id, 0, payload, NULL);
+		       corp_id, 0, payload, NULL);
   json_decref (payload);
   return 0;
 }
@@ -2123,7 +2359,8 @@ cmd_stock (client_ctx_t *ctx, json_t *root)
   json_t *data = json_object_get (root, "data");
   if (!json_is_object (data))
     {
-      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing data object.");
+      send_response_error (ctx, root, ERR_BAD_REQUEST,
+			   "Missing data object.");
       return 0;
     }
   const char *subcommand =
@@ -2132,7 +2369,9 @@ cmd_stock (client_ctx_t *ctx, json_t *root)
 
   if (!subcommand)
     {
-      send_response_error(ctx, root, ERR_BAD_REQUEST, "Missing 'subcommand' in data.");
+      send_response_error (ctx,
+			   root,
+			   ERR_BAD_REQUEST, "Missing 'subcommand' in data.");
       return 0;
     }
   if (strcasecmp (subcommand, "ipo.register") == 0)
@@ -2149,8 +2388,10 @@ cmd_stock (client_ctx_t *ctx, json_t *root)
     }
   else
     {
-      send_response_error(ctx, root, ERR_NOT_IMPLEMENTED, "Stock subcommand not implemented.");
+      send_response_error (ctx,
+			   root,
+			   ERR_NOT_IMPLEMENTED,
+			   "Stock subcommand not implemented.");
       return 0;
     }
 }
-

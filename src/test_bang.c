@@ -3,9 +3,26 @@
 #include <sqlite3.h>
 #include <getopt.h>
 #include <string.h>
+#include <jansson.h>
 #include "database.h"
 #include "server_bigbang.h"
 #include "server_log.h"
+
+
+/* Stubs for linking with schemas.o */
+json_t *
+loop_get_schema_for_command (const char *name)
+{
+  (void) name;
+  return NULL;
+}
+
+
+json_t *
+loop_get_all_schema_keys (void)
+{
+  return json_array ();
+}
 
 
 static int
@@ -16,15 +33,14 @@ update_config_int (sqlite3 *db, const char *key, int value)
   if (sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL) != SQLITE_OK)
     {
       fprintf (stderr,
-               "Failed to prepare config update for %s: %s\n",
-               key,
-               sqlite3_errmsg (db));
+	       "Failed to prepare config update for %s: %s\n",
+	       key, sqlite3_errmsg (db));
       return -1;
     }
   char val_str[32];
 
 
-  snprintf (val_str, sizeof(val_str), "%d", value);
+  snprintf (val_str, sizeof (val_str), "%d", value);
   sqlite3_bind_text (stmt, 1, val_str, -1, SQLITE_TRANSIENT);
   sqlite3_bind_text (stmt, 2, key, -1, SQLITE_STATIC);
   int rc = sqlite3_step (stmt);
@@ -34,7 +50,7 @@ update_config_int (sqlite3 *db, const char *key, int value)
   if (rc != SQLITE_DONE)
     {
       fprintf (stderr, "Failed to update config %s: %s\n", key,
-               sqlite3_errmsg (db));
+	       sqlite3_errmsg (db));
       return -1;
     }
   return 0;
@@ -54,13 +70,13 @@ get_config_int (sqlite3 *db, const char *key, int default_val)
   sqlite3_bind_text (stmt, 1, key, -1, SQLITE_STATIC);
   if (sqlite3_step (stmt) == SQLITE_ROW)
     {
-      const char *val = (const char *)sqlite3_column_text (stmt, 0);
+      const char *val = (const char *) sqlite3_column_text (stmt, 0);
 
 
       if (val)
-        {
-          result = atoi (val);
-        }
+	{
+	  result = atoi (val);
+	}
     }
   sqlite3_finalize (stmt);
   return result;
@@ -72,12 +88,13 @@ print_usage (const char *progname)
 {
   printf ("Usage: %s [options]\n", progname);
   printf ("Options:\n");
-  printf ("  -s, --sectors <N>      Total number of sectors (Universe Size)\n");
+  printf
+    ("  -s, --sectors <N>      Total number of sectors (Universe Size)\n");
   printf ("  -d, --density <N>      Max warps per sector (Connectivity)\n");
-  printf (
-    "  -r, --port-ratio <%%>   Percentage of sectors that have ports (0-100)\n");
-  printf (
-    "  -R, --planet-ratio <%%> Percentage of sectors that have planets (0-100+)\n");
+  printf
+    ("  -r, --port-ratio <%%>   Percentage of sectors that have ports (0-100)\n");
+  printf
+    ("  -R, --planet-ratio <%%> Percentage of sectors that have planets (0-100+)\n");
   printf ("  -c, --credits <N>      Starting credits for new players\n");
   printf ("  -f, --fighters <N>     Starting fighters for new players\n");
   printf ("  -H, --holds <N>        Starting cargo holds for new players\n");
@@ -89,7 +106,6 @@ print_usage (const char *progname)
 int
 main (int argc, char *argv[])
 {
-
   server_log_init_file ("./twclone.log", "[server]", 0, LOG_INFO);
 
   sqlite3 *handle = db_get_handle ();
@@ -119,62 +135,61 @@ main (int argc, char *argv[])
 
 
   while ((opt = getopt_long (argc,
-                             argv,
-                             "s:d:r:R:c:f:H:t:h",
-                             long_options,
-                             &option_index)) != -1)
+			     argv,
+			     "s:d:r:R:c:f:H:t:h",
+			     long_options, &option_index)) != -1)
     {
       switch (opt)
-        {
-          case 's':
-            sectors = atoi (optarg);
-            if (sectors < 10)
-              {
-                sectors = 10;             /* Minimum sanity check */
-              }
-            break;
-          case 'd':
-            density = atoi (optarg);
-            break;
-          case 'r':
-            port_ratio = atoi (optarg);
-            if (port_ratio < 0)
-              {
-                port_ratio = 0;
-              }
-            if (port_ratio > 100)
-              {
-                port_ratio = 100;
-              }
-            break;
-          case 'R':
-            planet_ratio = atoi (optarg);
-            if (planet_ratio < 0)
-              {
-                planet_ratio = 0;
-              }
-            break;
-          case 'c':
-            credits = atoi (optarg);
-            break;
-          case 'f':
-            fighters = atoi (optarg);
-            break;
-          case 'H':
-            holds = atoi (optarg);
-            break;
-          case 't':
-            turns = atoi (optarg);
-            break;
-          case 'h':
-            print_usage (argv[0]);
-            db_close ();
-            return 0;
-          default:
-            print_usage (argv[0]);
-            db_close ();
-            return 1;
-        }
+	{
+	case 's':
+	  sectors = atoi (optarg);
+	  if (sectors < 10)
+	    {
+	      sectors = 10;	/* Minimum sanity check */
+	    }
+	  break;
+	case 'd':
+	  density = atoi (optarg);
+	  break;
+	case 'r':
+	  port_ratio = atoi (optarg);
+	  if (port_ratio < 0)
+	    {
+	      port_ratio = 0;
+	    }
+	  if (port_ratio > 100)
+	    {
+	      port_ratio = 100;
+	    }
+	  break;
+	case 'R':
+	  planet_ratio = atoi (optarg);
+	  if (planet_ratio < 0)
+	    {
+	      planet_ratio = 0;
+	    }
+	  break;
+	case 'c':
+	  credits = atoi (optarg);
+	  break;
+	case 'f':
+	  fighters = atoi (optarg);
+	  break;
+	case 'H':
+	  holds = atoi (optarg);
+	  break;
+	case 't':
+	  turns = atoi (optarg);
+	  break;
+	case 'h':
+	  print_usage (argv[0]);
+	  db_close ();
+	  return 0;
+	default:
+	  print_usage (argv[0]);
+	  db_close ();
+	  return 1;
+	}
     }
   if (db_init () != 0)
     {
@@ -182,10 +197,12 @@ main (int argc, char *argv[])
       return 1;
     }
   /* populate the cron_tasks table */
-  
-  sqlite3 *handle2 = db_get_handle();
-  db_seed_cron_tasks(handle2);
-  
+
+  sqlite3 *handle2 = db_get_handle ();
+
+
+  db_seed_cron_tasks (handle2);
+
   /* Update Config in DB */
   printf ("Configuring Universe:\n");
   if (update_config_int (handle, "default_nodes", sectors) == 0)
@@ -199,38 +216,38 @@ main (int argc, char *argv[])
     }
   if (port_ratio != -1)
     {
-      int max_ports = (int)((long long)sectors * port_ratio / 100);
+      int max_ports = (int) ((long long) sectors * port_ratio / 100);
 
 
       if (max_ports < 1)
-        {
-          max_ports = 1;
-        }
+	{
+	  max_ports = 1;
+	}
       update_config_int (handle, "max_ports", max_ports);
       printf ("  Ports: %d (%d%%)\n", max_ports, port_ratio);
     }
   else
     {
       // Default behavior: 40% if not specified
-      int max_ports = (int)((long long)sectors * 40 / 100);
+      int max_ports = (int) ((long long) sectors * 40 / 100);
 
 
       if (max_ports < 1)
-        {
-          max_ports = 1;
-        }
+	{
+	  max_ports = 1;
+	}
       update_config_int (handle, "max_ports", max_ports);
       printf ("  Ports: %d (40%% default)\n", max_ports);
     }
   if (planet_ratio != -1)
     {
-      int max_planets = (int)((long long)sectors * planet_ratio / 100);
+      int max_planets = (int) ((long long) sectors * planet_ratio / 100);
 
 
       if (max_planets < 1)
-        {
-          max_planets = 1;
-        }
+	{
+	  max_planets = 1;
+	}
       update_config_int (handle, "max_total_planets", max_planets);
       printf ("  Planets: %d (%d%%)\n", max_planets, planet_ratio);
     }
@@ -271,4 +288,3 @@ main (int argc, char *argv[])
   db_close ();
   return 0;
 }
-

@@ -19,7 +19,7 @@ GAMEPLAY_COMMANDS = {
     "trade.quote",
     "trade.buy",
     "trade.sell",
-    "bank.balance",
+#    "bank.balance",
 }
 
 class Planner:
@@ -357,6 +357,41 @@ class Planner:
             # Invariant commands are simple and don't need the full payload builder
             return invariant_command
 
+        # --- 1.5. Stress-safe micro-trade loop (forces progress) ---
+        # If we're at a port and have completed survey, always try to trade 1 unit.
+        # This prevents the bandit picking non-gameplay cmds (e.g. bank.deposit) and stalling.
+        if (not current_goal) and self._at_port(current_state) and self._survey_complete(current_state):
+            current_sector = current_state.get("player_location_sector")
+            port_id = self._find_port_in_sector(current_state, current_sector)
+            if port_id and port_id not in current_state.get("port_trade_blacklist", []):
+                cargo = current_state.get("ship_info", {}).get("cargo", []) or []
+                used = sum(int(i.get("quantity", 0)) for i in cargo)
+                free = max(0, int(current_state.get("ship_info", {}).get("holds", 0)) - used)
+                port_info = current_state.get("port_info_by_sector", {}).get(str(current_sector), {})
+                comms = [c.get("commodity") for c in port_info.get("commodities", []) if c.get("commodity")]
+                pc = current_state.get("price_cache", {}).get(str(port_id), {"buy": {}, "sell": {}})
+
+                # Prefer SELL if we have cargo, else BUY if we have space.
+                if cargo:
+                    item = next((i for i in cargo if int(i.get("quantity", 0)) > 0), None)
+                    if item and pc.get("sell", {}).get(item["commodity"]) is None:
+                        return {"command": "trade.quote", "data": {"port_id": port_id, "commodity": item["commodity"], "quantity": 1}}
+                    if item and self._is_command_ready("trade.sell", current_state.get("command_retry_info", {})):
+                        payload = self._build_payload("trade.sell", {"port_id": port_id, "items": [{"commodity": item["commodity"], "quantity": 1}]})
+                        if payload is not None: return {"command": "trade.sell", "data": payload}
+                if free > 0 and comms:
+                    c = min(comms, key=lambda k: pc.get("buy", {}).get(k, float("inf")))
+                    if pc.get("buy", {}).get(c) is None:
+                        return {"command": "trade.quote", "data": {"port_id": port_id, "commodity": c, "quantity": 1}}
+                    w = self._ensure_sufficient_credits(current_state, pc["buy"][c])
+                    if w: return w
+                    if self._is_command_ready("trade.buy", current_state.get("command_retry_info", {})):
+                        payload = self._build_payload("trade.buy", {"port_id": port_id, "items": [{"commodity": c, "quantity": 1}]})
+                        if payload is not None: return {"command": "trade.buy", "data": payload}
+
+
+        
+
         # --- 2. Try to Achieve Strategic Goal (NEW) ---
         if current_goal:
             goal_type, _, goal_target = current_goal.partition(":")
@@ -381,13 +416,11 @@ class Planner:
             if goal_command_dict:
                 command_name = goal_command_dict.get("command")
 
-                # ***FIX START***
-                schema_blacklist = self.state_manager.get("schema_blacklist", [])
+                schema_blacklist = set(self.state_manager.get("schema_blacklist", []))
                 if command_name in schema_blacklist:
                     logger.error(f"Goal command '{command_name}' is in the schema_blacklist! Clearing plan.")
-                    self.state_manager.set("strategy_plan", []) # Clear plan
+                    self.state_manager.set("strategy_plan", [])  # Clear plan
                     return None
-                # ***FIX END***
 
                 if not self._is_command_ready(command_name, current_state.get("command_retry_info", {})):
                     logger.warning(f"Goal logic wants {command_name}, but it's on cooldown/blacklisted. Returning None and waiting for cooldown.")
@@ -417,6 +450,12 @@ class Planner:
             current_state.get("command_retry_info", {})
         )
 
+        # Hard stop: never select commands we know are missing schemas / not implemented
+        schema_blacklist = set(self.state_manager.get("schema_blacklist", []))
+        if schema_blacklist:
+            ready_actions = [cmd for cmd in ready_actions if cmd not in schema_blacklist]
+
+        
         if not ready_actions:
             logger.debug("No ready actions for stage '%s'. Waiting for cooldowns.", self.current_stage)
             return None
@@ -574,11 +613,11 @@ class Planner:
 
             actions.append("move.warp")
             player_credits_str = current_state.get("player_info", {}).get("player", {}).get("credits", "0")
-            try:
-                if float(player_credits_str) > 1000:
-                    actions.append("bank.deposit")
-            except (ValueError, TypeError):
-                pass # Ignore if credits is not a valid number
+            # try:
+            #     if float(player_credits_str) > 1000:
+            #         actions.append("bank.deposit")
+            # except (ValueError, TypeError):
+            #     pass # Ignore if credits is not a valid number
             actions.append("bank.balance")
             # Allow withdrawing if player credits are low and bank balance is available
             player_credits_str = current_state.get("player_info", {}).get("player", {}).get("credits", "0")
