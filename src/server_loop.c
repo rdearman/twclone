@@ -14,7 +14,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <jansson.h>		/* -ljansson */
+#include <jansson.h>            /* -ljansson */
 #include <stdbool.h>
 #include <sqlite3.h>
 /* local includes */
@@ -27,7 +27,7 @@
 #include "common.h"
 #include "server_envelope.h"
 #include "server_players.h"
-#include "server_ports.h"	// at top of server_loop.c
+#include "server_ports.h"       // at top of server_loop.c
 #include "server_auth.h"
 #include "server_s2s.h"
 #include "server_universe.h"
@@ -41,9 +41,9 @@
 #include "server_bulk.h"
 #include "server_news.h"
 #include "server_log.h"
-#include "server_stardock.h"	// Include for hardware commands
+#include "server_stardock.h"    // Include for hardware commands
 #include "server_corporation.h"
-#include "server_bank.h"	// Added missing include
+#include "server_bank.h"        // Added missing include
 #include "server_cron.h"
 
 #ifndef streq
@@ -65,35 +65,35 @@ static __thread client_ctx_t *g_ctx_for_send = NULL;
 
 
 /* forward declaration to avoid implicit extern */
-void send_all_json (int fd, json_t * obj);
-int db_player_info_json (int player_id, json_t ** out);
+void send_all_json (int fd, json_t *obj);
+int db_player_info_json (int player_id, json_t **out);
 /* rate-limit helper prototypes (defined later) */
-void attach_rate_limit_meta (json_t * env, client_ctx_t * ctx);
-void rl_tick (client_ctx_t * ctx);
-int db_sector_basic_json (int sector_id, json_t ** out_obj);
-int db_adjacent_sectors_json (int sector_id, json_t ** out_array);
-int db_ports_at_sector_json (int sector_id, json_t ** out_array);
-int db_sector_scan_core (int sector_id, json_t ** out_obj);
-int db_players_at_sector_json (int sector_id, json_t ** out_array);
-int db_beacons_at_sector_json (int sector_id, json_t ** out_array);
-int db_planets_at_sector_json (int sector_id, json_t ** out_array);
+void attach_rate_limit_meta (json_t *env, client_ctx_t *ctx);
+void rl_tick (client_ctx_t *ctx);
+int db_sector_basic_json (int sector_id, json_t **out_obj);
+int db_adjacent_sectors_json (int sector_id, json_t **out_array);
+int db_ports_at_sector_json (int sector_id, json_t **out_array);
+int db_sector_scan_core (int sector_id, json_t **out_obj);
+int db_players_at_sector_json (int sector_id, json_t **out_array);
+int db_beacons_at_sector_json (int sector_id, json_t **out_array);
+int db_planets_at_sector_json (int sector_id, json_t **out_array);
 int db_player_set_sector (int player_id, int sector_id);
 int db_player_get_sector (int player_id, int *out_sector);
-void handle_sector_info (int fd, json_t * root, int sector_id, int player_id);
-void handle_sector_set_beacon (client_ctx_t * ctx, json_t * root);
+void handle_sector_info (int fd, json_t *root, int sector_id, int player_id);
+void handle_sector_set_beacon (client_ctx_t *ctx, json_t *root);
 /* Fast sector scan handler (IDs+counts only) */
-void handle_move_scan (client_ctx_t * ctx, json_t * root);
-void handle_move_pathfind (client_ctx_t * ctx, json_t * root);
+void handle_move_scan (client_ctx_t *ctx, json_t *root);
+void handle_move_pathfind (client_ctx_t *ctx, json_t *root);
 
 json_t *build_sector_info_json (int sector_id);
 
 /* Missing declarations for commands found in .c files but not headers */
-extern int cmd_bounty_list (client_ctx_t * ctx, json_t * root);
-extern int cmd_bounty_post_federation (client_ctx_t * ctx, json_t * root);
-extern int cmd_bounty_post_hitlist (client_ctx_t * ctx, json_t * root);
-extern int cmd_player_set_trade_account_preference (client_ctx_t * ctx,
-						    json_t * root);
-extern int cmd_move_transwarp (client_ctx_t * ctx, json_t * root);
+extern int cmd_bounty_list (client_ctx_t *ctx, json_t *root);
+extern int cmd_bounty_post_federation (client_ctx_t *ctx, json_t *root);
+extern int cmd_bounty_post_hitlist (client_ctx_t *ctx, json_t *root);
+extern int cmd_player_set_trade_account_preference (client_ctx_t *ctx,
+                                                    json_t *root);
+extern int cmd_move_transwarp (client_ctx_t *ctx, json_t *root);
 
 
 static inline uint64_t
@@ -130,13 +130,12 @@ monotonic_millis (void)
    Command Registry & Dispatch
    -------------------------------------------------------------------------- */
 
-typedef int (*command_handler_fn) (client_ctx_t * ctx, json_t * root);
+typedef int (*command_handler_fn)(client_ctx_t *ctx, json_t *root);
 
 #define CMD_FLAG_DEBUG_ONLY 1
 #define CMD_FLAG_HIDDEN 2
 
-typedef struct
-{
+typedef struct {
   const char *name;
   command_handler_fn handler;
   const char *summary;
@@ -149,40 +148,35 @@ typedef struct
 static int
 w_nav_avoid_add (client_ctx_t *ctx, json_t *root)
 {
-  cmd_nav_avoid_add (ctx, root);
-  return 0;
+  cmd_nav_avoid_add (ctx, root); return 0;
 }
 
 
 static int
 w_nav_avoid_remove (client_ctx_t *ctx, json_t *root)
 {
-  cmd_nav_avoid_remove (ctx, root);
-  return 0;
+  cmd_nav_avoid_remove (ctx, root); return 0;
 }
 
 
 static int
 w_nav_avoid_list (client_ctx_t *ctx, json_t *root)
 {
-  cmd_nav_avoid_list (ctx, root);
-  return 0;
+  cmd_nav_avoid_list (ctx, root); return 0;
 }
 
 
 static int
 w_sector_scan (client_ctx_t *ctx, json_t *root)
 {
-  cmd_sector_scan (ctx, root);
-  return 0;
+  cmd_sector_scan (ctx, root); return 0;
 }
 
 
 static int
 w_sector_scan_density (client_ctx_t *ctx, json_t *root)
 {
-  cmd_sector_scan_density ((void *) ctx, root);
-  return 0;
+  cmd_sector_scan_density ((void *)ctx, root); return 0;
 }
 
 
@@ -253,8 +247,7 @@ static const command_entry_t k_command_registry[] = {
    "List player insurance policies", schema_insurance_policies_list, 0},
   {"insurance.policies.buy", cmd_insurance_policies_buy,
    "Buy an insurance policy", schema_insurance_policies_buy, 0},
-  {"insurance.claim.file", cmd_insurance_claim_file,
-   "File an insurance claim",
+  {"insurance.claim.file", cmd_insurance_claim_file, "File an insurance claim",
    schema_insurance_claim_file, 0},
 
   /* Chat */
@@ -264,15 +257,13 @@ static const command_entry_t k_command_registry[] = {
   {"chat.send", cmd_chat_send, "Send a chat message", schema_chat_send, 0},
 
   /* Citadel */
-  {"citadel.build", cmd_citadel_build, "Build a citadel",
-   schema_citadel_build,
+  {"citadel.build", cmd_citadel_build, "Build a citadel", schema_citadel_build,
    0},
   {"citadel.upgrade", cmd_citadel_upgrade, "Upgrade a citadel",
    schema_citadel_upgrade, 0},
 
   /* Combat */
-  {"combat.attack", cmd_combat_attack, "Attack a target",
-   schema_combat_attack,
+  {"combat.attack", cmd_combat_attack, "Attack a target", schema_combat_attack,
    0},
   {"combat.attack_planet", cmd_combat_attack_planet, "Attack a planet",
    schema_placeholder, 0},
@@ -312,17 +303,14 @@ static const command_entry_t k_command_registry[] = {
    schema_placeholder, 0},
   {"corp.leave", cmd_corp_leave, "Leave current corporation",
    schema_placeholder, 0},
-  {"corp.list", cmd_corp_list, "List all corporations", schema_placeholder,
-   0},
+  {"corp.list", cmd_corp_list, "List all corporations", schema_placeholder, 0},
   {"corp.roster", cmd_corp_roster, "List corporation members",
    schema_placeholder, 0},
   {"corp.statement", cmd_corp_statement, "Get corporation statement",
    schema_placeholder, 0},
-  {"corp.status", cmd_corp_status, "Get corporation status",
-   schema_placeholder,
+  {"corp.status", cmd_corp_status, "Get corporation status", schema_placeholder,
    0},
-  {"corp.transfer_ceo", cmd_corp_transfer_ceo,
-   "Transfer corporation CEO role",
+  {"corp.transfer_ceo", cmd_corp_transfer_ceo, "Transfer corporation CEO role",
    schema_placeholder, 0},
   {"corp.withdraw", cmd_corp_withdraw, "Withdraw from corporation",
    schema_placeholder, 0},
@@ -388,8 +376,7 @@ static const command_entry_t k_command_registry[] = {
   {"notes.list", cmd_player_get_notes, "List notes", schema_placeholder, 0},
 
   /* Notice */
-  {"notice.ack", cmd_notice_ack, "Acknowledge a notice", schema_notice_ack,
-   0},
+  {"notice.ack", cmd_notice_ack, "Acknowledge a notice", schema_notice_ack, 0},
   {"notice.list", cmd_notice_list, "List notices", schema_notice_list, 0},
 
   /* Planet */
@@ -403,8 +390,7 @@ static const command_entry_t k_command_registry[] = {
    "Create a genesis planet", schema_planet_genesis_create, 0},
   {"planet.harvest", cmd_planet_harvest, "Harvest from a planet",
    schema_planet_harvest, 0},
-  {"planet.info", cmd_planet_info, "Planet information", schema_planet_info,
-   0},
+  {"planet.info", cmd_planet_info, "Planet information", schema_planet_info, 0},
   {"planet.land", cmd_planet_land, "Land on a planet", schema_planet_land, 0},
   {"planet.launch", cmd_planet_launch, "Launch from a planet",
    schema_planet_launch, 0},
@@ -412,8 +398,7 @@ static const command_entry_t k_command_registry[] = {
    "Create planet market buy order", schema_placeholder, 0},
   {"planet.market.sell", cmd_planet_market_sell, "Sell to planet market",
    schema_placeholder, 0},
-  {"planet.rename", cmd_planet_rename, "Rename a planet",
-   schema_planet_rename,
+  {"planet.rename", cmd_planet_rename, "Rename a planet", schema_planet_rename,
    0},
   {"planet.transfer_ownership", cmd_planet_transfer_ownership,
    "Transfer planet ownership", schema_planet_transfer_ownership, 0},
@@ -485,8 +470,7 @@ static const command_entry_t k_command_registry[] = {
   {"sector.scan", w_sector_scan, "Scan a sector", schema_sector_scan, 0},
   {"sector.scan.density", w_sector_scan_density, "Scan sector density",
    schema_sector_scan_density, 0},
-  {"sector.search", cmd_sector_search, "Search a sector",
-   schema_sector_search,
+  {"sector.search", cmd_sector_search, "Search a sector", schema_sector_search,
    0},
   {"sector.set_beacon", cmd_sector_set_beacon, "Set or clear sector beacon",
    schema_sector_set_beacon, 0},
@@ -494,13 +478,11 @@ static const command_entry_t k_command_registry[] = {
   /* Session / System */
   {"session.disconnect", cmd_session_disconnect, "Disconnect",
    schema_session_disconnect, 0},
-  {"session.hello", cmd_system_hello, "Handshake / hello",
-   schema_session_hello,
+  {"session.hello", cmd_system_hello, "Handshake / hello", schema_session_hello,
    0},
   {"session.ping", cmd_system_hello, "Ping", schema_session_ping, 0},
   {"player.ping", cmd_system_hello, "Ping", schema_session_ping, 0},
-  {"sys.cluster.init", cmd_sys_cluster_init, "Cluster init",
-   schema_placeholder,
+  {"sys.cluster.init", cmd_sys_cluster_init, "Cluster init", schema_placeholder,
    CMD_FLAG_DEBUG_ONLY | CMD_FLAG_HIDDEN},
   {"sys.cluster.seed_illegal_goods", cmd_sys_cluster_seed_illegal_goods,
    "Seed illegal goods", schema_placeholder,
@@ -518,8 +500,7 @@ static const command_entry_t k_command_registry[] = {
   {"sys.cron.planet_tick_once", cmd_sys_cron_planet_tick_once,
    "Force a planet cron tick (production, market)", schema_placeholder,
    CMD_FLAG_DEBUG_ONLY | CMD_FLAG_HIDDEN},
-  {"sys.raw_sql_exec", cmd_sys_raw_sql_exec,
-   "Sysop command to execute raw SQL",
+  {"sys.raw_sql_exec", cmd_sys_raw_sql_exec, "Sysop command to execute raw SQL",
    schema_placeholder, CMD_FLAG_DEBUG_ONLY | CMD_FLAG_HIDDEN},
   {"sys.test_news_cron", cmd_sys_test_news_cron,
    "Sysop command to test news cron", schema_placeholder, CMD_FLAG_HIDDEN},
@@ -538,12 +519,9 @@ static const command_entry_t k_command_registry[] = {
 
   /* Ship */
   {"ship.claim", cmd_ship_claim, "Claim a ship", schema_ship_claim, 0},
-  {"ship.info", cmd_ship_info_compat, "Ship information", schema_ship_info,
-   0},
-  {"ship.inspect", cmd_ship_inspect, "Inspect a ship", schema_ship_inspect,
-   0},
-  {"ship.jettison", cmd_trade_jettison, "Jettison cargo",
-   schema_ship_jettison,
+  {"ship.info", cmd_ship_info_compat, "Ship information", schema_ship_info, 0},
+  {"ship.inspect", cmd_ship_inspect, "Inspect a ship", schema_ship_inspect, 0},
+  {"ship.jettison", cmd_trade_jettison, "Jettison cargo", schema_ship_jettison,
    0},
   {"ship.rename", cmd_ship_rename, "Rename a ship", schema_ship_rename, 0},
   {"ship.repair", cmd_ship_repair, "Repair a ship", schema_ship_repair, 0},
@@ -554,8 +532,7 @@ static const command_entry_t k_command_registry[] = {
   {"ship.status", cmd_ship_status, "Ship status", schema_ship_status, 0},
   {"ship.transfer_cargo", cmd_ship_transfer_cargo, "Transfer cargo",
    schema_ship_transfer_cargo, 0},
-  {"ship.upgrade", cmd_ship_upgrade, "Upgrade a ship", schema_ship_upgrade,
-   0},
+  {"ship.upgrade", cmd_ship_upgrade, "Upgrade a ship", schema_ship_upgrade, 0},
 
   /* Shipyard */
   {"shipyard.list", cmd_shipyard_list, "List available ship hulls",
@@ -591,8 +568,7 @@ static const command_entry_t k_command_registry[] = {
 
   /* Tavern */
   {"tavern.barcharts.get_prices_summary",
-   cmd_tavern_barcharts_get_prices_summary,
-   "Get a summary of commodity prices",
+   cmd_tavern_barcharts_get_prices_summary, "Get a summary of commodity prices",
    schema_placeholder, 0},
   {"tavern.deadpool.place_bet", cmd_tavern_deadpool_place_bet,
    "Place a bet on a player's destruction", schema_placeholder, 0},
@@ -604,8 +580,7 @@ static const command_entry_t k_command_registry[] = {
    "Play at the high-stakes table", schema_placeholder, 0},
   {"tavern.loan.pay", cmd_tavern_loan_pay, "Repay a loan from the loan shark",
    schema_placeholder, 0},
-  {"tavern.loan.take", cmd_tavern_loan_take,
-   "Take a loan from the loan shark",
+  {"tavern.loan.take", cmd_tavern_loan_take, "Take a loan from the loan shark",
    schema_placeholder, 0},
   {"tavern.lottery.buy_ticket", cmd_tavern_lottery_buy_ticket,
    "Buy a lottery ticket", schema_placeholder, 0},
@@ -618,14 +593,12 @@ static const command_entry_t k_command_registry[] = {
   {"tavern.rumour.get_hint", cmd_tavern_rumour_get_hint,
    "Get a hint from the rumour mill", schema_placeholder, 0},
   {"tavern.trader.buy_password", cmd_tavern_trader_buy_password,
-   "Buy an underground password from the grimy trader", schema_placeholder,
-   0},
+   "Buy an underground password from the grimy trader", schema_placeholder, 0},
 
   /* Trade */
   {"trade.accept", cmd_trade_accept, "Accept a private trade offer",
    schema_trade_accept, 0},
-  {"trade.buy", cmd_trade_buy, "Buy commodity from port", schema_trade_buy,
-   0},
+  {"trade.buy", cmd_trade_buy, "Buy commodity from port", schema_trade_buy, 0},
   {"trade.cancel", cmd_trade_cancel, "Cancel a pending trade offer",
    schema_trade_cancel, 0},
   {"trade.history", cmd_trade_history, "View recent trade transactions",
@@ -641,7 +614,7 @@ static const command_entry_t k_command_registry[] = {
   {"trade.sell", cmd_trade_sell, "Sell commodity to port", schema_trade_sell,
    0},
 
-  {NULL, NULL, NULL, NULL, 0}	/* Sentinel */
+  {NULL, NULL, NULL, NULL, 0}   /* Sentinel */
 };
 
 
@@ -660,56 +633,56 @@ loop_get_supported_commands (const cmd_desc_t **out_tbl, size_t *out_n)
 
 
       while (k_command_registry[n].name)
-	{
-	  /* Skip debug only if production */
+        {
+          /* Skip debug only if production */
 #ifdef BUILD_PRODUCTION
-	  if (k_command_registry[n].flags & CMD_FLAG_DEBUG_ONLY)
-	    {
-	      n++;
-	      continue;
-	    }
+          if (k_command_registry[n].flags & CMD_FLAG_DEBUG_ONLY)
+            {
+              n++;
+              continue;
+            }
 #endif
-	  /* Skip hidden commands */
-	  if (k_command_registry[n].flags & CMD_FLAG_HIDDEN)
-	    {
-	      n++;
-	      continue;
-	    }
+          /* Skip hidden commands */
+          if (k_command_registry[n].flags & CMD_FLAG_HIDDEN)
+            {
+              n++;
+              continue;
+            }
 
-	  n++;
-	  count++;
-	}
+          n++;
+          count++;
+        }
 
       /* Allocate static array once */
-      s_descs = calloc (count, sizeof (cmd_desc_t));
+      s_descs = calloc (count, sizeof(cmd_desc_t));
       if (s_descs)
-	{
-	  size_t j = 0;
-	  size_t i = 0;
+        {
+          size_t j = 0;
+          size_t i = 0;
 
 
-	  while (k_command_registry[i].name)
-	    {
+          while (k_command_registry[i].name)
+            {
 #ifdef BUILD_PRODUCTION
-	      if (k_command_registry[i].flags & CMD_FLAG_DEBUG_ONLY)
-		{
-		  i++;
-		  continue;
-		}
+              if (k_command_registry[i].flags & CMD_FLAG_DEBUG_ONLY)
+                {
+                  i++;
+                  continue;
+                }
 #endif
-	      if (k_command_registry[i].flags & CMD_FLAG_HIDDEN)
-		{
-		  i++;
-		  continue;
-		}
+              if (k_command_registry[i].flags & CMD_FLAG_HIDDEN)
+                {
+                  i++;
+                  continue;
+                }
 
-	      s_descs[j].name = k_command_registry[i].name;
-	      s_descs[j].summary = k_command_registry[i].summary;
-	      j++;
-	      i++;
-	    }
-	  s_count = count;
-	}
+              s_descs[j].name = k_command_registry[i].name;
+              s_descs[j].summary = k_command_registry[i].summary;
+              j++;
+              i++;
+            }
+          s_count = count;
+        }
     }
 
   if (out_tbl)
@@ -733,16 +706,16 @@ loop_get_schema_for_command (const char *name)
   for (int i = 0; k_command_registry[i].name != NULL; i++)
     {
       if (strcasecmp (name, k_command_registry[i].name) == 0)
-	{
-	  if (k_command_registry[i].schema)
-	    {
-	      return k_command_registry[i].schema ();
-	    }
-	  else
-	    {
-	      return NULL;
-	    }
-	}
+        {
+          if (k_command_registry[i].schema)
+            {
+              return k_command_registry[i].schema ();
+            }
+          else
+            {
+              return NULL;
+            }
+        }
     }
   return NULL;
 }
@@ -758,14 +731,14 @@ loop_get_all_schema_keys (void)
   for (int i = 0; k_command_registry[i].name != NULL; i++)
     {
       if (k_command_registry[i].flags & CMD_FLAG_HIDDEN)
-	{
-	  continue;
-	}
+        {
+          continue;
+        }
 #ifdef BUILD_PRODUCTION
       if (k_command_registry[i].flags & CMD_FLAG_DEBUG_ONLY)
-	{
-	  continue;
-	}
+        {
+          continue;
+        }
 #endif
       json_array_append_new (keys, json_string (k_command_registry[i].name));
     }
@@ -800,7 +773,9 @@ broadcast_sweep_once (sqlite3 *db, int max_rows)
     "FROM system_notice "
     "WHERE id NOT IN ("
     "    SELECT notice_id FROM notice_seen WHERE player_id = 0"
-    ") " "ORDER BY created_at ASC, id ASC " "LIMIT ?1;";
+    ") "
+    "ORDER BY created_at ASC, id ASC "
+    "LIMIT ?1;";
 
   /* Begin a read transaction.
    * IMMEDIATE prevents us from starting if a writer already holds the lock.
@@ -844,17 +819,17 @@ broadcast_sweep_once (sqlite3 *db, int max_rows)
       /* Mark as seen for system player (player_id = 0) */
       rc = db_notice_mark_seen (notice_id, 0);
       if (rc == SQLITE_BUSY || rc == SQLITE_LOCKED)
-	{
-	  sqlite3_finalize (st);
-	  sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-	  return 0;
-	}
+        {
+          sqlite3_finalize (st);
+          sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+          return 0;
+        }
       if (rc != SQLITE_OK)
-	{
-	  sqlite3_finalize (st);
-	  sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-	  return -1;
-	}
+        {
+          sqlite3_finalize (st);
+          sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+          return -1;
+        }
 
       rows++;
     }
@@ -910,14 +885,14 @@ server_unregister_client (client_ctx_t *ctx)
   while (*pp)
     {
       if ((*pp)->ctx == ctx)
-	{
-	  client_node_t *dead = *pp;
+        {
+          client_node_t *dead = *pp;
 
 
-	  *pp = (*pp)->next;
-	  free (dead);
-	  break;
-	}
+          *pp = (*pp)->next;
+          free (dead);
+          break;
+        }
       pp = &((*pp)->next);
     }
   pthread_mutex_unlock (&g_clients_mu);
@@ -930,24 +905,24 @@ server_deliver_to_player (int player_id, const char *event_type, json_t *data)
 {
   int delivered = 0;
   pthread_mutex_lock (&g_clients_mu);
-  for (client_node_t * n = g_clients; n; n = n->next)
+  for (client_node_t *n = g_clients; n; n = n->next)
     {
       client_ctx_t *c = n->ctx;
 
 
       if (!c)
-	{
-	  continue;
-	}
+        {
+          continue;
+        }
       if (c->player_id == player_id && c->fd >= 0)
-	{
-	  /* send_enveloped_ok does its own timestamp/meta/sanitize. */
-	  json_t *tmp = json_incref (data);
+        {
+          /* send_enveloped_ok does its own timestamp/meta/sanitize. */
+          json_t *tmp = json_incref (data);
 
 
-	  send_response_ok_take (c, NULL, event_type, &tmp);
-	  delivered++;
-	}
+          send_response_ok_take (c, NULL, event_type, &tmp);
+          delivered++;
+        }
     }
   pthread_mutex_unlock (&g_clients_mu);
   return (delivered > 0) ? 0 : -1;
@@ -1063,7 +1038,7 @@ rl_tick (client_ctx_t *ctx)
   if (ctx->rl_limit <= 0)
     {
       ctx->rl_limit = 60;
-    }				/* safety */
+    }                           /* safety */
   if (ctx->rl_window_sec <= 0)
     {
       ctx->rl_window_sec = 60;
@@ -1101,8 +1076,6 @@ rl_build_meta (const client_ctx_t *ctx)
       remaining = 0;
     }
   json_t *root = json_object ();
-
-
   json_object_set_new (root, "limit", json_integer (ctx->rl_limit));
   json_object_set_new (root, "remaining", json_integer (remaining));
   json_object_set_new (root, "reset", json_integer (reset));
@@ -1148,15 +1121,15 @@ server_dispatch_command (client_ctx_t *ctx, json_t *root)
   for (int i = 0; k_command_registry[i].name != NULL; i++)
     {
       if (strcasecmp (c, k_command_registry[i].name) == 0)
-	{
+        {
 #ifdef BUILD_PRODUCTION
-	  if (k_command_registry[i].flags & CMD_FLAG_DEBUG_ONLY)
-	    {
-	      return -1;
-	    }
+          if (k_command_registry[i].flags & CMD_FLAG_DEBUG_ONLY)
+            {
+              return -1;
+            }
 #endif
-	  return k_command_registry[i].handler (ctx, root);
-	}
+          return k_command_registry[i].handler (ctx, root);
+        }
     }
   return -1;
 }
@@ -1167,12 +1140,13 @@ process_message (client_ctx_t *ctx, json_t *root)
 {
   //LOGE("DEBUG: process_message entered for fd=%d, ctx->player_id=%d", ctx->fd, ctx->player_id);
   // db_close_thread ();                   /* Ensure a fresh DB connection */
-  sqlite3 *db = db_get_handle ();	/* Re-open (or get) fresh DB conn */
-  if (!db)			/* Handle case where we can't get a connection */
+  sqlite3 *db = db_get_handle ();       /* Re-open (or get) fresh DB conn */
+  if (!db)                              /* Handle case where we can't get a connection */
     {
       send_response_error (ctx,
-			   root,
-			   ERR_PLANET_NOT_FOUND, "Database connection error");
+                           root,
+                           ERR_PLANET_NOT_FOUND,
+                           "Database connection error");
       return;
     }
 
@@ -1192,9 +1166,9 @@ process_message (client_ctx_t *ctx, json_t *root)
 
 
       if (json_is_string (jtok))
-	{
-	  session_token = json_string_value (jtok);
-	}
+        {
+          session_token = json_string_value (jtok);
+        }
     }
   if (session_token == NULL && json_is_object (jauth))
     {
@@ -1202,9 +1176,9 @@ process_message (client_ctx_t *ctx, json_t *root)
 
 
       if (json_is_string (jtok))
-	{
-	  session_token = json_string_value (jtok);
-	}
+        {
+          session_token = json_string_value (jtok);
+        }
     }
   if (session_token)
     {
@@ -1214,22 +1188,22 @@ process_message (client_ctx_t *ctx, json_t *root)
 
 
       if (rc == SQLITE_OK && pid > 0)
-	{
-	  ctx->player_id = pid;
-	  ctx->corp_id = h_get_player_corp_id (db_get_handle (), pid);
-	  ctx->ship_id = h_get_active_ship_id (db_get_handle (), pid);
-	  int db_sector = h_get_player_sector (pid);
+        {
+          ctx->player_id = pid;
+          ctx->corp_id = h_get_player_corp_id (db_get_handle (), pid);
+          ctx->ship_id = h_get_active_ship_id (db_get_handle (), pid);
+          int db_sector = h_get_player_sector (pid);
 
 
-	  if (db_sector > 0)
-	    {
-	      ctx->sector_id = db_sector;
-	    }
-	  if (ctx->sector_id <= 0)
-	    {
-	      ctx->sector_id = 1;	/* or load from DB */
-	    }
-	}
+          if (db_sector > 0)
+            {
+              ctx->sector_id = db_sector;
+            }
+          if (ctx->sector_id <= 0)
+            {
+              ctx->sector_id = 1; /* or load from DB */
+            }
+        }
       /* If invalid/expired, we silently ignore; individual commands can refuse with 1401 */
     }
   if (ctx->player_id == 0 && ctx->sector_id <= 0)
@@ -1239,15 +1213,17 @@ process_message (client_ctx_t *ctx, json_t *root)
   if (!(cmd && json_is_string (cmd)) && !(evt && json_is_string (evt)))
     {
       send_response_error (ctx,
-			   root,
-			   ERR_INVALID_SCHEMA, "Invalid request schema");
+                           root,
+                           ERR_INVALID_SCHEMA,
+                           "Invalid request schema");
       return;
     }
   if (evt && json_is_string (evt))
     {
       send_response_error (ctx,
-			   root,
-			   ERR_INVALID_SCHEMA, "Invalid request schema");
+                           root,
+                           ERR_INVALID_SCHEMA,
+                           "Invalid request schema");
       return;
     }
   /* Rate-limit defaults: 60 responses / 60 seconds */
@@ -1281,83 +1257,83 @@ connection_thread (void *arg)
   for (;;)
     {
       if (!*ctx->running)
-	{
-	  break;
-	}
+        {
+          break;
+        }
       ssize_t n = recv (fd, buf + have, sizeof (buf) - have, 0);
 
 
       if (n > 0)
-	{
-	  have += (size_t) n;
-	  /* Process complete lines (newline-terminated frames) */
-	  size_t start = 0;
+        {
+          have += (size_t) n;
+          /* Process complete lines (newline-terminated frames) */
+          size_t start = 0;
 
 
-	  for (size_t i = 0; i < have; ++i)
-	    {
-	      if (buf[i] == '\n')
-		{
-		  /* Trim optional CR */
-		  size_t linelen = i - start;
-		  const char *line = buf + start;
+          for (size_t i = 0; i < have; ++i)
+            {
+              if (buf[i] == '\n')
+                {
+                  /* Trim optional CR */
+                  size_t linelen = i - start;
+                  const char *line = buf + start;
 
 
-		  while (linelen && line[linelen - 1] == '\r')
-		    {
-		      linelen--;
-		    }
-		  /* Parse and dispatch */
-		  //LOGI ("CORE DUMP DEBUG: Received from client: %.*s\n",
-		  //    (int) linelen, line);
-		  json_error_t jerr;
-		  json_t *root = json_loadb (line, linelen, 0, &jerr);
+                  while (linelen && line[linelen - 1] == '\r')
+                    {
+                      linelen--;
+                    }
+                  /* Parse and dispatch */
+                  //LOGI ("CORE DUMP DEBUG: Received from client: %.*s\n",
+                  //    (int) linelen, line);
+                  json_error_t jerr;
+                  json_t *root = json_loadb (line, linelen, 0, &jerr);
 
 
-		  if (!root || !json_is_object (root))
-		    {
-		      send_response_error (NULL, NULL, ERR_SERVER_ERROR,
-					   "Protocol Error: Malformed JSON");
-		      if (root)
-			{
-			  json_decref (root);
-			}
-		    }
-		  else
-		    {
-		      process_message (ctx, root);
-		      json_decref (root);
-		    }
-		  start = i + 1;
-		}
-	    }
-	  /* Shift any partial line to front */
-	  if (start > 0)
-	    {
-	      memmove (buf, buf + start, have - start);
-	      have -= start;
-	    }
-	  /* Overflow without newline → guard & reset */
-	  if (have == sizeof (buf))
-	    {
-	      send_error_json (fd, 1300, "invalid request schema");
-	      have = 0;
-	    }
-	}
+                  if (!root || !json_is_object (root))
+                    {
+                      send_response_error (ctx, NULL, ERR_SERVER_ERROR,
+                                           "Protocol Error: Malformed JSON");
+                      if (root)
+                        {
+                          json_decref (root);
+                        }
+                    }
+                  else
+                    {
+                      process_message (ctx, root);
+                      json_decref (root);
+                    }
+                  start = i + 1;
+                }
+            }
+          /* Shift any partial line to front */
+          if (start > 0)
+            {
+              memmove (buf, buf + start, have - start);
+              have -= start;
+            }
+          /* Overflow without newline → guard & reset */
+          if (have == sizeof (buf))
+            {
+              send_error_json (fd, 1300, "invalid request schema");
+              have = 0;
+            }
+        }
       else if (n == 0)
-	{
-	  /* peer closed */
-	  break;
-	}
+        {
+          /* peer closed */
+          break;
+        }
       else
-	{
-	  if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
-	    {
-	      continue;
-	    }
-	  /* hard error */
-	  break;
-	}
+        {
+          if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
+            {
+              continue;
+            }
+          /* hard error */
+          break;
+        }
     }
   /* Per-thread teardown */
   /* FIX: Explicitly close the thread-local database connection */
@@ -1365,7 +1341,7 @@ connection_thread (void *arg)
   db_close_thread ();
   close (fd);
 
-  server_unregister_client (ctx);	/* MUST happen before free(ctx) */
+  server_unregister_client (ctx);   /* MUST happen before free(ctx) */
   free (ctx);
   return NULL;
 }
@@ -1377,7 +1353,7 @@ server_loop (volatile sig_atomic_t *running)
   LOGI ("Server loop starting...\n");
   //  LOGE( "Server loop starting...\n");
 #ifdef SIGPIPE
-  signal (SIGPIPE, SIG_IGN);	/* don’t die on write to closed socket */
+  signal (SIGPIPE, SIG_IGN);    /* don’t die on write to closed socket */
 #endif
   int listen_fd = make_listen_socket (g_cfg.server_port);
 
@@ -1398,102 +1374,102 @@ server_loop (volatile sig_atomic_t *running)
   pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED);
   while (*running)
     {
-      g_server_tick++;		/* Increment server tick */
-      int rc = poll (&pfd, 1, 100);	/* was 1000; 100ms gives us a ~10Hz tick */
+      g_server_tick++;          /* Increment server tick */
+      int rc = poll (&pfd, 1, 100);     /* was 1000; 100ms gives us a ~10Hz tick */
       // int rc = poll (&pfd, 1, 1000); /* 1s tick re-checks *running */
       /* === Broadcast pump tick (every ~500ms) === */
       {
-	static uint64_t last_broadcast_ms = 0;
-	uint64_t now_ms = monotonic_millis ();
+        static uint64_t last_broadcast_ms = 0;
+        uint64_t now_ms = monotonic_millis ();
 
 
-	if (now_ms - last_broadcast_ms >= 500)
-	  {
-	    (void) broadcast_sweep_once (db_get_handle (), 64);
-	    last_broadcast_ms = now_ms;
-	  }
+        if (now_ms - last_broadcast_ms >= 500)
+          {
+            (void) broadcast_sweep_once (db_get_handle (), 64);
+            last_broadcast_ms = now_ms;
+          }
       }
 
 
       if (rc < 0)
-	{
-	  if (errno == EINTR)
-	    {
-	      continue;
-	    }
-	  perror ("poll");
-	  break;
-	}
+        {
+          if (errno == EINTR)
+            {
+              continue;
+            }
+          perror ("poll");
+          break;
+        }
       if (rc == 0)
-	{
-	  /* timeout only: we still ran the pump above; just loop again */
-	  continue;
-	}
+        {
+          /* timeout only: we still ran the pump above; just loop again */
+          continue;
+        }
       if (pfd.revents & POLLIN)
-	{
-	  client_ctx_t *ctx = calloc (1, sizeof (*ctx));
+        {
+          client_ctx_t *ctx = calloc (1, sizeof (*ctx));
 
 
-	  if (!ctx)
-	    {
-	      LOGE ("malloc failed\n");
-	      //              LOGE( "malloc failed\n");
-	      continue;
-	    }
-	  socklen_t sl = sizeof (ctx->peer);
-	  int cfd = accept (listen_fd, (struct sockaddr *) &ctx->peer, &sl);
+          if (!ctx)
+            {
+              LOGE ("malloc failed\n");
+              //              LOGE( "malloc failed\n");
+              continue;
+            }
+          socklen_t sl = sizeof (ctx->peer);
+          int cfd = accept (listen_fd, (struct sockaddr *) &ctx->peer, &sl);
 
 
-	  if (cfd < 0)
-	    {
-	      free (ctx);
-	      if (errno == EINTR)
-		{
-		  continue;
-		}
-	      if (errno == EAGAIN || errno == EWOULDBLOCK)
-		{
-		  continue;
-		}
-	      perror ("accept");
-	      continue;
-	    }
+          if (cfd < 0)
+            {
+              free (ctx);
+              if (errno == EINTR)
+                {
+                  continue;
+                }
+              if (errno == EAGAIN || errno == EWOULDBLOCK)
+                {
+                  continue;
+                }
+              perror ("accept");
+              continue;
+            }
 
-	  /* Only register after successful accept */
-	  server_register_client (ctx);
+          /* Only register after successful accept */
+          server_register_client (ctx);
 
-	  ctx->fd = cfd;
-	  ctx->running = running;
-	  char ip[INET_ADDRSTRLEN];
-
-
-	  inet_ntop (AF_INET, &ctx->peer.sin_addr, ip, sizeof (ip));
-	  LOGI ("Client connected: %s:%u (fd=%d)\n",
-		ip, (unsigned) ntohs (ctx->peer.sin_port), cfd);
-	  //      LOGE( "Client connected: %s:%u (fd=%d)\n",
-	  //       ip, (unsigned) ntohs (ctx->peer.sin_port), cfd);
-	  // after filling ctx->fd, ctx->running, ctx->peer, and assigning ctx->cid
-	  pthread_t th;
-	  int prc = pthread_create (&th, &attr, connection_thread, ctx);
+          ctx->fd = cfd;
+          ctx->running = running;
+          char ip[INET_ADDRSTRLEN];
 
 
-	  if (prc == 0)
-	    {
-	      LOGI ("[cid=%" PRIu64 "] thread created (pthread=%lu)\n",
-		    ctx->cid, (unsigned long) th);
-	      //              LOGE(
-	      //       "[cid=%%" PRIu64 "] thread created (pthread=%%lu)\n",
-	      //       ctx->cid, (unsigned long) th);
-	    }
-	  else
-	    {
-	      LOGE ("pthread_create: %s\n", strerror (prc));
-	      /* Unregister before freeing if thread creation failed */
-	      server_unregister_client (ctx);
-	      close (cfd);
-	      free (ctx);
-	    }
-	}
+          inet_ntop (AF_INET, &ctx->peer.sin_addr, ip, sizeof (ip));
+          LOGI ("Client connected: %s:%u (fd=%d)\n",
+                ip, (unsigned) ntohs (ctx->peer.sin_port), cfd);
+          //      LOGE( "Client connected: %s:%u (fd=%d)\n",
+          //       ip, (unsigned) ntohs (ctx->peer.sin_port), cfd);
+          // after filling ctx->fd, ctx->running, ctx->peer, and assigning ctx->cid
+          pthread_t th;
+          int prc = pthread_create (&th, &attr, connection_thread, ctx);
+
+
+          if (prc == 0)
+            {
+              LOGI ("[cid=%" PRIu64 "] thread created (pthread=%lu)\n",
+                    ctx->cid, (unsigned long) th);
+              //              LOGE(
+              //       "[cid=%%" PRIu64 "] thread created (pthread=%%lu)\n",
+              //       ctx->cid, (unsigned long) th);
+            }
+          else
+            {
+              LOGE ("pthread_create: %s\n", strerror (prc));
+              /* Unregister before freeing if thread creation failed */
+              server_unregister_client (ctx);
+              close (cfd);
+              free (ctx);
+            }
+        }
     }
   // server_unregister_client(ctx);
   pthread_attr_destroy (&attr);
@@ -1502,3 +1478,4 @@ server_loop (volatile sig_atomic_t *running)
   //  LOGE( "Server loop exiting...\n");
   return 0;
 }
+
