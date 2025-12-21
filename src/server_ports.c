@@ -2219,7 +2219,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
 
 
       rc =
-	h_update_ship_cargo (db, ctx->player_id, trade_lines[i].commodity,
+	h_update_ship_cargo (db, ctx->ship_id, trade_lines[i].commodity,
 			     amount, &dummy_qty);
       if (rc != SQLITE_OK)
 	{
@@ -3194,7 +3194,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 
 
 	rc =
-	  h_update_ship_cargo (db, ctx->player_id, commodity,
+	  h_update_ship_cargo (db, ctx->ship_id, commodity,
 			       -amount, &new_ship_qty);
 	if (rc != SQLITE_OK)
 	  {
@@ -3636,7 +3636,7 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
 
 
   rc =
-    h_update_ship_cargo (db, ctx->player_id, commodity, -quantity, &new_qty);
+    h_update_ship_cargo (db, ctx->ship_id, commodity, -quantity, &new_qty);
   LOGD ("cmd_trade_jettison: Ship cargo updated. new_qty=%d", new_qty);
   if (rc != SQLITE_OK)
     {
@@ -4303,7 +4303,7 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
 	      goto fail_tx;
 	    }
 	  int rc_ship_add = h_update_ship_cargo (db,
-						 ctx->player_id,
+						 ctx->ship_id,
 						 canonical_commodity_code,
 						 amount_to_steal,
 						 NULL);

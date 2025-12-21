@@ -14,16 +14,18 @@
 #include "server_config.h"
 #include "server_log.h"
 #include "s2s_transport.h"
-#include "common.h"		/* now_iso8601, strip_ansi */
+#include "common.h"             /* now_iso8601, strip_ansi */
 int toss;
 
 
 void
 send_response_ok_borrow (client_ctx_t *ctx,
-			 json_t *req, const char *type, const json_t *data)
+                         json_t *req,
+                         const char *type,
+                         const json_t *data)
 {
   /* Borrow contract: callee will take its own ref if it needs one */
-  json_t *payload = data ? json_incref ((json_t *) data) : NULL;
+  json_t *payload = data ? json_incref ((json_t *)data) : NULL;
   /* Reuse the take API so there is one implementation */
   send_response_ok_take (ctx, req, type, &payload);
   /* payload is NULL now */
@@ -32,7 +34,9 @@ send_response_ok_borrow (client_ctx_t *ctx,
 
 void
 send_response_ok_take (client_ctx_t *ctx,
-		       json_t *req, const char *type, json_t **pdata)
+                       json_t *req,
+                       const char *type,
+                       json_t **pdata)
 {
   json_t *data = (pdata ? *pdata : NULL);
   if (pdata)
@@ -48,13 +52,13 @@ send_response_ok_take (client_ctx_t *ctx,
       /* ... build envelope ... */
 
       if (data)
-	{
-	  json_object_set_new (resp, "data", data);	/* steal */
-	}
+        {
+          json_object_set_new (resp, "data", data); /* steal */
+        }
       else
-	{
-	  json_object_set_new (resp, "data", json_null ());
-	}
+        {
+          json_object_set_new (resp, "data", json_null ());
+        }
 
       /* ... */
       json_array_append_new (ctx->captured_envelopes, resp);
@@ -65,8 +69,9 @@ send_response_ok_take (client_ctx_t *ctx,
   send_enveloped_ok (ctx->fd, req, type, data);
   if (data)
     {
-      json_decref (data);	/* FIX: Manually fulfill the "steal" contract */
+      json_decref (data); /* FIX: Manually fulfill the "steal" contract */
     }
+  
 }
 
 
@@ -84,23 +89,22 @@ sanitize_json_strings (json_t *node)
 
 
       if (!s)
-	{
-	  return;
-	}
+        {
+          return;
+        }
       char buf[4096];
 
 
       strip_ansi (buf, s, sizeof (buf));
       if (strcmp (buf, s) != 0)
-	{
-	  (void) json_string_set (node, buf);
-	}
+        {
+          (void) json_string_set (node, buf);
+        }
       return;
     }
   if (json_is_array (node))
     {
-      size_t i;
-      json_t *it;
+      size_t i; json_t *it;
 
 
       json_array_foreach (node, i, it) sanitize_json_strings (it);
@@ -112,18 +116,18 @@ sanitize_json_strings (json_t *node)
 
 
       while (iter)
-	{
-	  sanitize_json_strings (json_object_iter_value (iter));
-	  iter = json_object_iter_next (node, iter);
-	}
+        {
+          sanitize_json_strings (json_object_iter_value (iter));
+          iter = json_object_iter_next (node, iter);
+        }
       return;
     }
 }
 
 
 // Provided by server_loop.c
-extern void loop_get_supported_commands (const cmd_desc_t ** out_tbl,
-					 size_t *out_n);
+extern void loop_get_supported_commands (const cmd_desc_t **out_tbl,
+                                         size_t *out_n);
 
 
 static void
@@ -142,9 +146,9 @@ have_cmd (const char *needle)
   for (size_t i = 0; i < n; i++)
     {
       if (tbl[i].name && strcmp (tbl[i].name, needle) == 0)
-	{
-	  return 1;
-	}
+        {
+          return 1;
+        }
     }
   return 0;
 }
@@ -165,24 +169,24 @@ collect_schema_names (void)
 
 
       if (!cmd)
-	{
-	  continue;
-	}
+        {
+          continue;
+        }
       const char *dot = strchr (cmd, '.');
 
 
       if (!dot || dot == cmd)
-	{
-	  continue;
-	}
+        {
+          continue;
+        }
       size_t len = (size_t) (dot - cmd);
       char buf[64];
 
 
       if (len >= sizeof (buf))
-	{
-	  len = sizeof (buf) - 1;
-	}
+        {
+          len = sizeof (buf) - 1;
+        }
       memcpy (buf, cmd, len);
       buf[len] = '\0';
       json_object_set_new (set, buf, json_true ());
@@ -213,24 +217,22 @@ cmd_system_cmd_list (client_ctx_t *ctx, json_t *root)
   for (size_t i = 0; i < n; i++)
     {
       if (!tbl[i].name)
-	{
-	  continue;
-	}
+        {
+          continue;
+        }
       json_t *o = json_object ();
 
 
       json_object_set_new (o, "cmd", json_string (tbl[i].name));
       if (tbl[i].summary && tbl[i].summary[0])
-	{
-	  json_object_set_new (o, "summary", json_string (tbl[i].summary));
-	}
+        {
+          json_object_set_new (o, "summary", json_string (tbl[i].summary));
+        }
       json_array_append_new (arr, o);
     }
 
   json_t *data = json_object ();
-
-
-  json_object_set_new (data, "commands", arr);	/* FIX: Use _new to steal ownership */
+  json_object_set_new (data, "commands", arr); /* FIX: Use _new to steal ownership */
   json_object_set_new (data, "count", json_integer ((int) n));
 
   send_response_ok_take (ctx, root, "system.cmd_list", &data);
@@ -260,14 +262,14 @@ cmd_system_describe_schema (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   if (!schema_type || (strcasecmp (schema_type,
-				   "command") != 0 && strcasecmp (schema_type,
-								  "event") !=
-		       0))
+                                   "command") != 0 && strcasecmp (schema_type,
+                                                                  "event") !=
+                       0))
     {
       schema_type = "command";
     }
 
-  LOGI ("Debug: Fetching schema for '%s'", name);
+  //LOGD ("Debug: Fetching schema for '%s'", name);
   JSON_AUTO schema_obj = schema_get (name);
 
 
@@ -308,13 +310,13 @@ send_all (int fd, const char *buf, size_t len)
 
 
       if (n < 0)
-	{
-	  if (errno == EINTR)
-	    {
-	      continue;
-	    }
-	  return -1;
-	}
+        {
+          if (errno == EINTR)
+            {
+              continue;
+            }
+          return -1;
+        }
       off += (size_t) n;
     }
   return 0;
@@ -345,8 +347,7 @@ iso8601_utc (char out[32])
 json_t *
 make_base_envelope (json_t *req, const char *type)
 {
-  char ts[32];
-  iso8601_utc (ts);
+  char ts[32]; iso8601_utc (ts);
   json_t *meta = json_object ();
   json_object_set_new (meta, "id", json_string (next_msg_id ()));
   json_object_set_new (meta, "ts", json_string (ts));
@@ -361,16 +362,16 @@ make_base_envelope (json_t *req, const char *type)
 
 
       if (json_is_object (m))
-	{
-	  json_t *rid = json_object_get (m, "id");
+        {
+          json_t *rid = json_object_get (m, "id");
 
 
-	  if (json_is_string (rid))
-	    {
-	      json_object_set_new (env, "in_reply_to",
-				   json_string (json_string_value (rid)));
-	    }
-	}
+          if (json_is_string (rid))
+            {
+              json_object_set_new (env, "in_reply_to",
+                                   json_string (json_string_value (rid)));
+            }
+        }
     }
   return env;
 }
@@ -382,8 +383,7 @@ send_all_json (int fd, json_t *obj)
   char *s = json_dumps (obj, JSON_COMPACT);
   if (s)
     {
-      (void) send_all (fd, s, strlen (s));
-      (void) send_all (fd, "\n", 1);
+      (void) send_all (fd, s, strlen (s)); (void) send_all (fd, "\n", 1);
       free (s);
     }
 }
@@ -424,7 +424,6 @@ make_default_meta (void)
   json_object_set_new (rate, "reset", json_integer (60));
   json_t *meta = json_object ();
 
-
   json_object_set_new (meta, "rate_limit", rate);
   return meta;
 }
@@ -442,13 +441,12 @@ send_enveloped_ok (int fd, json_t *req, const char *type, json_t *data)
 
 
       if (json_is_string (jid))
-	{
-	  json_object_set_new (resp, "reply_to",
-			       json_string (json_string_value (jid)));
-	}
+        {
+          json_object_set_new (resp, "reply_to",
+                               json_string (json_string_value (jid)));
+        }
     }
-  char tsbuf[32];
-  iso8601_utc (tsbuf);
+  char tsbuf[32]; iso8601_utc (tsbuf);
 
 
   json_object_set_new (resp, "ts", json_string (tsbuf));
@@ -473,8 +471,7 @@ send_enveloped_ok (int fd, json_t *req, const char *type, json_t *data)
 
   if (s)
     {
-      send (fd, s, strlen (s), MSG_NOSIGNAL);
-      send (fd, "\n", 1, MSG_NOSIGNAL);
+      send (fd, s, strlen (s), MSG_NOSIGNAL); send (fd, "\n", 1, MSG_NOSIGNAL);
       free (s);
     }
   json_decref (resp);
@@ -482,7 +479,10 @@ send_enveloped_ok (int fd, json_t *req, const char *type, json_t *data)
 
 
 void
-send_enveloped_error (int fd, json_t *req, int code, const char *message)
+send_enveloped_error (int fd,
+                      json_t *req,
+                      int code,
+                      const char *message)
 {
   json_t *resp = json_object ();
   json_object_set_new (resp, "id", json_string ("srv-err"));
@@ -492,13 +492,12 @@ send_enveloped_error (int fd, json_t *req, int code, const char *message)
 
 
       if (json_is_string (jid))
-	{
-	  json_object_set_new (resp, "reply_to",
-			       json_string (json_string_value (jid)));
-	}
+        {
+          json_object_set_new (resp, "reply_to",
+                               json_string (json_string_value (jid)));
+        }
     }
-  char tsbuf[32];
-  iso8601_utc (tsbuf);
+  char tsbuf[32]; iso8601_utc (tsbuf);
 
 
   json_object_set_new (resp, "ts", json_string (tsbuf));
@@ -509,7 +508,7 @@ send_enveloped_error (int fd, json_t *req, int code, const char *message)
 
   json_object_set_new (err, "code", json_integer (code));
   json_object_set_new (err, "message",
-		       json_string (message ? message : "Error"));
+                       json_string (message ? message : "Error"));
   json_object_set_new (resp, "error", err);
   json_object_set_new (resp, "data", json_null ());
   json_object_set_new (resp, "meta", make_default_meta ());
@@ -519,8 +518,7 @@ send_enveloped_error (int fd, json_t *req, int code, const char *message)
 
   if (s)
     {
-      send (fd, s, strlen (s), MSG_NOSIGNAL);
-      send (fd, "\n", 1, MSG_NOSIGNAL);
+      send (fd, s, strlen (s), MSG_NOSIGNAL); send (fd, "\n", 1, MSG_NOSIGNAL);
       free (s);
     }
   json_decref (resp);
@@ -529,8 +527,10 @@ send_enveloped_error (int fd, json_t *req, int code, const char *message)
 
 void
 send_enveloped_refused (int fd,
-			json_t *req,
-			int code, const char *msg, json_t *data_opt)
+                        json_t *req,
+                        int code,
+                        const char *msg,
+                        json_t *data_opt)
 {
   json_t *resp = json_object ();
   json_object_set_new (resp, "id", json_string ("srv-refuse"));
@@ -540,21 +540,18 @@ send_enveloped_refused (int fd,
 
 
       if (json_is_string (jid))
-	{
-	  json_object_set_new (resp, "reply_to",
-			       json_string (json_string_value (jid)));
-	}
+        {
+          json_object_set_new (resp, "reply_to",
+                               json_string (json_string_value (jid)));
+        }
     }
-  char tsbuf[32];
-  iso8601_utc (tsbuf);
+  char tsbuf[32]; iso8601_utc (tsbuf);
 
 
   json_object_set_new (resp, "ts", json_string (tsbuf));
   json_object_set_new (resp, "status", json_string ("refused"));
   json_object_set_new (resp, "type", json_string ("error"));
   json_t *err = json_object ();
-
-
   json_object_set_new (err, "code", json_integer (code));
   json_object_set_new (err, "message", json_string (msg ? msg : ""));
 
@@ -572,8 +569,7 @@ send_enveloped_refused (int fd,
 
   if (s)
     {
-      send (fd, s, strlen (s), MSG_NOSIGNAL);
-      send (fd, "\n", 1, MSG_NOSIGNAL);
+      send (fd, s, strlen (s), MSG_NOSIGNAL); send (fd, "\n", 1, MSG_NOSIGNAL);
       free (s);
     }
   json_decref (resp);
@@ -582,7 +578,7 @@ send_enveloped_refused (int fd,
 
 void
 send_response_ok (client_ctx_t *ctx, json_t *req, const char *type,
-		  json_t *data)
+                  json_t *data)
 {
   if (ctx && ctx->captured_envelopes)
     {
@@ -590,26 +586,25 @@ send_response_ok (client_ctx_t *ctx, json_t *req, const char *type,
 
 
       if (data)
-	{
-	  json_object_set (resp, "data", data);
-	}
+        {
+          json_object_set (resp, "data", data);
+        }
       else
-	{
-	  json_object_set_new (resp, "data", json_null ());
-	}
+        {
+          json_object_set_new (resp, "data", json_null ());
+        }
       if (req && json_is_object (req))
-	{
-	  json_t *jid = json_object_get (req, "id");
+        {
+          json_t *jid = json_object_get (req, "id");
 
 
-	  if (json_is_string (jid))
-	    {
-	      json_object_set_new (resp, "reply_to",
-				   json_string (json_string_value (jid)));
-	    }
-	}
-      char tsbuf[32];
-      iso8601_utc (tsbuf);
+          if (json_is_string (jid))
+            {
+              json_object_set_new (resp, "reply_to",
+                                   json_string (json_string_value (jid)));
+            }
+        }
+      char tsbuf[32]; iso8601_utc (tsbuf);
 
 
       json_object_set_new (resp, "ts", json_string (tsbuf));
@@ -618,9 +613,9 @@ send_response_ok (client_ctx_t *ctx, json_t *req, const char *type,
       json_object_set_new (resp, "error", json_null ());
       json_object_set_new (resp, "meta", make_default_meta ());
       if (type && strcmp (type, "system.schema") != 0)
-	{
-	  sanitize_json_strings (resp);
-	}
+        {
+          sanitize_json_strings (resp);
+        }
       json_array_append_new (ctx->captured_envelopes, resp);
     }
   else
@@ -631,8 +626,7 @@ send_response_ok (client_ctx_t *ctx, json_t *req, const char *type,
 
 
 void
-send_response_error (client_ctx_t *ctx, json_t *req, int code,
-		     const char *msg)
+send_response_error (client_ctx_t *ctx, json_t *req, int code, const char *msg)
 {
   if (ctx && ctx->captured_envelopes)
     {
@@ -640,26 +634,23 @@ send_response_error (client_ctx_t *ctx, json_t *req, int code,
 
 
       if (req && json_is_object (req))
-	{
-	  json_t *jid = json_object_get (req, "id");
+        {
+          json_t *jid = json_object_get (req, "id");
 
 
-	  if (json_is_string (jid))
-	    {
-	      json_object_set_new (resp, "reply_to",
-				   json_string (json_string_value (jid)));
-	    }
-	}
-      char tsbuf[32];
-      iso8601_utc (tsbuf);
+          if (json_is_string (jid))
+            {
+              json_object_set_new (resp, "reply_to",
+                                   json_string (json_string_value (jid)));
+            }
+        }
+      char tsbuf[32]; iso8601_utc (tsbuf);
 
 
       json_object_set_new (resp, "ts", json_string (tsbuf));
       json_object_set_new (resp, "status", json_string ("error"));
       json_object_set_new (resp, "type", json_string ("error"));
       json_t *err = json_object ();
-
-
       json_object_set_new (err, "code", json_integer (code));
       json_object_set_new (err, "message", json_string (msg ? msg : ""));
 
@@ -679,8 +670,10 @@ send_response_error (client_ctx_t *ctx, json_t *req, int code,
 
 void
 send_response_refused (client_ctx_t *ctx,
-		       json_t *req,
-		       int code, const char *msg, json_t *data_opt)
+                       json_t *req,
+                       int code,
+                       const char *msg,
+                       json_t *data_opt)
 {
   if (ctx && ctx->captured_envelopes)
     {
@@ -688,34 +681,31 @@ send_response_refused (client_ctx_t *ctx,
 
 
       if (req && json_is_object (req))
-	{
-	  json_t *jid = json_object_get (req, "id");
+        {
+          json_t *jid = json_object_get (req, "id");
 
 
-	  if (json_is_string (jid))
-	    {
-	      json_object_set_new (resp, "reply_to",
-				   json_string (json_string_value (jid)));
-	    }
-	}
-      char tsbuf[32];
-      iso8601_utc (tsbuf);
+          if (json_is_string (jid))
+            {
+              json_object_set_new (resp, "reply_to",
+                                   json_string (json_string_value (jid)));
+            }
+        }
+      char tsbuf[32]; iso8601_utc (tsbuf);
 
 
       json_object_set_new (resp, "ts", json_string (tsbuf));
       json_object_set_new (resp, "status", json_string ("refused"));
       json_object_set_new (resp, "type", json_string ("error"));
       json_t *err = json_object ();
-
-
       json_object_set_new (err, "code", json_integer (code));
       json_object_set_new (err, "message", json_string (msg ? msg : ""));
 
 
       if (data_opt)
-	{
-	  json_object_set (err, "data", data_opt);
-	}
+        {
+          json_object_set (err, "data", data_opt);
+        }
       json_object_set_new (resp, "error", err);
       json_object_set_new (resp, "data", json_null ());
       json_object_set_new (resp, "meta", make_default_meta ());
@@ -753,10 +743,10 @@ urand_bytes (void *buf, size_t n)
 
 
       if (r <= 0)
-	{
-	  close (fd);
-	  return -1;
-	}
+        {
+          close (fd);
+          return -1;
+        }
       off += (size_t) r;
     }
   close (fd);
@@ -792,9 +782,9 @@ gen_uuid_v4 (void)
       s[p++] = hex[(b[i] >> 4) & 0xF];
       s[p++] = hex[b[i] & 0xF];
       if (i == 3 || i == 5 || i == 7 || i == 9)
-	{
-	  s[p++] = '-';
-	}
+        {
+          s[p++] = '-';
+        }
     }
   s[p] = '\0';
   return s;
@@ -817,7 +807,7 @@ borrow_or_empty_obj (json_t *maybe_obj)
 /* ---------- envelope builders (public) ---------- */
 json_t *
 s2s_make_env (const char *type, const char *src, const char *dst,
-	      json_t *payload)
+              json_t *payload)
 {
   if (!type || !*type || !src || !*src || !dst || !*dst)
     {
@@ -834,8 +824,6 @@ s2s_make_env (const char *type, const char *src, const char *dst,
   json_t *pl = borrow_or_empty_obj (payload);
   /* NOTE: No "auth" here. Transport layer will add it before sending. */
   json_t *env = json_object ();
-
-
   json_object_set_new (env, "v", json_integer (1));
   json_object_set_new (env, "type", json_string (type));
   json_object_set_new (env, "id", json_string (id));
@@ -847,13 +835,13 @@ s2s_make_env (const char *type, const char *src, const char *dst,
 
   json_decref (pl);
   free (id);
-  return env;			/* caller must json_decref */
+  return env;                   /* caller must json_decref */
 }
 
 
 json_t *
 s2s_make_ack (const char *src, const char *dst, const char *ack_of,
-	      json_t *payload)
+              json_t *payload)
 {
   if (!src || !*src || !dst || !*dst || !ack_of || !*ack_of)
     {
@@ -869,8 +857,6 @@ s2s_make_ack (const char *src, const char *dst, const char *ack_of,
   time_t now = time (NULL);
   json_t *pl = borrow_or_empty_obj (payload);
   json_t *env = json_object ();
-
-
   json_object_set_new (env, "v", json_integer (1));
   json_object_set_new (env, "type", json_string ("s2s.ack"));
   json_object_set_new (env, "id", json_string (id));
@@ -889,8 +875,8 @@ s2s_make_ack (const char *src, const char *dst, const char *ack_of,
 
 json_t *
 s2s_make_error (const char *src, const char *dst,
-		const char *ack_of, const char *code,
-		const char *message, json_t *details /* NULL ok */ )
+                const char *ack_of, const char *code,
+                const char *message, json_t *details /* NULL ok */ )
 {
   if (!src || !*src || !dst || !*dst || !ack_of || !*ack_of || !code
       || !*code)
@@ -907,8 +893,6 @@ s2s_make_error (const char *src, const char *dst,
   time_t now = time (NULL);
   json_t *det = details ? json_incref (details), details : json_object ();
   json_t *err = json_object ();
-
-
   json_object_set_new (err, "code", json_string (code));
   json_object_set_new (err, "message", json_string (message ? message : ""));
   json_object_set (err, "details", det);
@@ -916,8 +900,6 @@ s2s_make_error (const char *src, const char *dst,
 
   json_decref (det);
   json_t *env = json_object ();
-
-
   json_object_set_new (env, "v", json_integer (1));
   json_object_set_new (env, "type", json_string ("s2s.error"));
   json_object_set_new (env, "id", json_string (id));
@@ -926,7 +908,7 @@ s2s_make_error (const char *src, const char *dst,
   json_object_set_new (env, "dst", json_string (dst));
   json_object_set_new (env, "ack_of", json_string (ack_of));
   json_object_set (env, "error", err);
-  json_object_set_new (env, "payload", json_object ());	/* keep payload an object for uniformity */
+  json_object_set_new (env, "payload", json_object ());    /* keep payload an object for uniformity */
 
 
   json_decref (err);
@@ -989,9 +971,9 @@ s2s_env_validate_min (json_t *env, char **why)
   if (!env || !json_is_object (env))
     {
       if (why)
-	{
-	  *why = dupmsg ("envelope not an object");
-	}
+        {
+          *why = dupmsg ("envelope not an object");
+        }
       return -1;
     }
   json_t *v = json_object_get (env, "v");
@@ -1006,57 +988,57 @@ s2s_env_validate_min (json_t *env, char **why)
   if (!json_is_integer (v) || json_integer_value (v) != 1)
     {
       if (why)
-	{
-	  *why = dupmsg ("v!=1");
-	}
+        {
+          *why = dupmsg ("v!=1");
+        }
       return -2;
     }
   if (!json_is_string (ty) || json_string_length (ty) == 0)
     {
       if (why)
-	{
-	  *why = dupmsg ("type missing");
-	}
+        {
+          *why = dupmsg ("type missing");
+        }
       return -3;
     }
   if (!json_is_string (id) || json_string_length (id) == 0)
     {
       if (why)
-	{
-	  *why = dupmsg ("id missing");
-	}
+        {
+          *why = dupmsg ("id missing");
+        }
       return -4;
     }
   if (!json_is_integer (ts) || json_integer_value (ts) <= 0)
     {
       if (why)
-	{
-	  *why = dupmsg ("ts invalid");
-	}
+        {
+          *why = dupmsg ("ts invalid");
+        }
       return -5;
     }
   if (!json_is_string (src) || json_string_length (src) == 0)
     {
       if (why)
-	{
-	  *why = dupmsg ("src missing");
-	}
+        {
+          *why = dupmsg ("src missing");
+        }
       return -6;
     }
   if (!json_is_string (dst) || json_string_length (dst) == 0)
     {
       if (why)
-	{
-	  *why = dupmsg ("dst missing");
-	}
+        {
+          *why = dupmsg ("dst missing");
+        }
       return -7;
     }
   if (!json_is_object (pl))
     {
       if (why)
-	{
-	  *why = dupmsg ("payload not object");
-	}
+        {
+          *why = dupmsg ("payload not object");
+        }
       return -8;
     }
   return 0;
@@ -1094,10 +1076,10 @@ s2s_recv_env (s2s_conn_t *c, json_t **out_env, int timeout_ms)
   if (vrc != 0)
     {
       if (why)
-	{
-	  //fprintf (stderr, "[s2s] envelope min-validate failed: %s\n", why);
-	  free (why);
-	}
+        {
+          //fprintf (stderr, "[s2s] envelope min-validate failed: %s\n", why);
+          free (why);
+        }
       json_decref (root);
       return -1;
     }
@@ -1128,7 +1110,7 @@ j_get_integer (json_t *root, const char *path, int *result)
 {
   if (!root || !path || !result || *path == '\0')
     {
-      LOGE ("j_get_integer: Invalid input parameters.\n");
+      LOGE ( "j_get_integer: Invalid input parameters.\n");
       return -1;
     }
   // Make a mutable copy of the path for strtok_r to work on.
@@ -1138,7 +1120,7 @@ j_get_integer (json_t *root, const char *path, int *result)
   if (!path_copy)
     {
       perror ("j_get_integer: strdup failed");
-      return -1;		// Allocation failure
+      return -1;                // Allocation failure
     }
   char *saveptr;
   char *token;
@@ -1151,48 +1133,50 @@ j_get_integer (json_t *root, const char *path, int *result)
     {
       // 1. Ensure the current node is a JSON object before looking up a key
       if (!current || !json_is_object (current))
-	{
-	  LOGE
-	    ("j_get_integer: Path segment '%s' expected an object, but found something else or NULL.\n",
-	     token);
-	  free (path_copy);
-	  return -1;
-	}
+        {
+          LOGE (
+            "j_get_integer: Path segment '%s' expected an object, but found something else or NULL.\n",
+            token);
+          free (path_copy);
+          return -1;
+        }
       // 2. Find the child node for the current token
       json_t *next = json_object_get (current, token);
 
 
       if (!next)
-	{
-	  LOGD ("j_get_integer: Key '%s' not found at this level.\n", token);
-	  free (path_copy);
-	  return -1;
-	}
+        {
+          LOGD ( "j_get_integer: Key '%s' not found at this level.\n",
+                 token);
+          free (path_copy);
+          return -1;
+        }
       // 3. Check if this is the final token in the path
       if (saveptr == NULL || *saveptr == '\0')
-	{
-	  // We are on the final key: check type and extract value
-	  if (json_is_integer (next))
-	    {
-	      *result = (int) json_integer_value (next);
-	      free (path_copy);
-	      return 0;		// Success!
-	    }
-	  else
-	    {
-	      LOGE
-		("j_get_integer: Final key '%s' found, but value is not an integer.\n",
-		 token);
-	      free (path_copy);
-	      return -1;	// Wrong type
-	    }
-	}
+        {
+          // We are on the final key: check type and extract value
+          if (json_is_integer (next))
+            {
+              *result = (int) json_integer_value (next);
+              free (path_copy);
+              return 0;         // Success!
+            }
+          else
+            {
+              LOGE (
+                "j_get_integer: Final key '%s' found, but value is not an integer.\n",
+                token);
+              free (path_copy);
+              return -1;        // Wrong type
+            }
+        }
       // 4. Not the final token, move to the next level for traversal
       current = next;
     }
   // Should only be reached if the path was malformed (e.g., ended in a dot)
   free (path_copy);
-  LOGE
-    ("j_get_integer: Path traversal completed without finding a final value.\n");
+  LOGE (
+    "j_get_integer: Path traversal completed without finding a final value.\n");
   return -1;
 }
+
