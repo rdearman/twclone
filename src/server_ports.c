@@ -2175,6 +2175,15 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
   json_object_set_new (receipt, "port_id", json_integer (port_id));
   json_object_set_new (receipt, "player_id", json_integer (ctx->player_id));
   json_object_set_new (receipt, "lines", lines);
+
+  /* START TRANSACTION */
+  if (sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, NULL) != SQLITE_OK)
+    {
+      send_response_error (ctx, root, ERR_SERVER_ERROR, "Database busy (tx).");
+      goto cleanup;
+    }
+  we_started_tx = 1;
+
   /* apply trades */
   LOGD ("cmd_trade_buy: Starting trade application loop");	// ADDED
   for (size_t i = 0; i < n; i++)
@@ -2234,6 +2243,8 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
 	    }
 	  else
 	    {
+	      send_response_error(ctx, root, ERR_SERVER_ERROR, "Trade failed: Storage update error.");
+	      LOGE("cmd_trade_buy: h_update_ship_cargo failed for item %zu with rc=%d: %s", i, rc, sqlite3_errmsg(db));
 	    }
 	  goto fail_tx;
 	}
