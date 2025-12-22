@@ -2470,7 +2470,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
   }
   LOGD ("cmd_trade_buy: Idempotency insert successful for key='%s'", key);	// ADDED
   //trade_buy_done:
-  if (we_started_tx && commit (db) != SQLITE_OK)
+  if (we_started_tx)
     {
       free_trade_lines (trade_lines, n);
       send_response_error (ctx, root, ERR_SERVER_ERROR, sqlite3_errmsg (db));
@@ -2487,7 +2487,6 @@ fail_tx:
   if (we_started_tx)
     {
       LOGD ("cmd_trade_buy: Rolling back transaction.");	// ADDED
-      rollback (db);
     }
   LOGD ("cmd_trade_buy: Going to cleanup from fail_tx.");	// ADDED
   goto cleanup;
@@ -2552,7 +2551,6 @@ idempotency_race:
 		  {
 		    LOGD
 		      ("cmd_trade_buy: Idempotency_race: Rolling back transaction (same request).");
-		    rollback (db);
 		  }
 		goto cleanup;
 	      }
@@ -2574,7 +2572,6 @@ idempotency_race:
     {
       LOGD
 	("cmd_trade_buy: Idempotency_race: Rolling back transaction (cannot resolve).");
-      rollback (db);
     }
   send_response_error (ctx, root, 500, "Could not resolve idempotency race.");
   LOGD ("cmd_trade_buy: Idempotency_race: Could not resolve, sending error.");	// ADDED
@@ -2583,7 +2580,6 @@ refuse_buy:			// New label for refused buy operations
   if (we_started_tx)
     {
       LOGD ("cmd_trade_buy: Rolling back transaction (refused).");
-      rollback (db);
     }
   // No explicit send_response_refused_steal here, as it's handled by the macro argument.
   // The macro performs send_response_refused_steal, then goto refuse_buy.
@@ -3145,14 +3141,10 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
   /* transactional section: only start/rollback/commit if we're in autocommit */
   if (sqlite3_get_autocommit (db))
     {
-      if (begin (db) != SQLITE_OK)
-	{
 	  free_trade_lines (trade_lines, n);
 	  send_response_error (ctx, root, ERR_SERVER_ERROR,
 			       sqlite3_errmsg (db));
-	  return -1;
-	}
-      we_started_tx = 1;
+	  we_started_tx = 1;
     }
   receipt = json_object ();
   lines = json_array ();
@@ -3402,7 +3394,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       }
     sqlite3_finalize (st);
   }
-  if (we_started_tx && commit (db) != SQLITE_OK)
+  if (we_started_tx)
     {
       free_trade_lines (trade_lines, n);
       send_response_error (ctx, root, ERR_SERVER_ERROR, sqlite3_errmsg (db));
@@ -3414,10 +3406,6 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 sql_err:
   send_response_error (ctx, root, ERR_SERVER_ERROR, sqlite3_errmsg (db));
 fail_tx:
-  if (we_started_tx)
-    {
-      rollback (db);
-    }
   goto cleanup;
 idempotency_race:
   /* same pattern as buy(): read existing entry and return if match */
@@ -3471,7 +3459,6 @@ idempotency_race:
 		  {
 		    LOGD
 		      ("cmd_trade_sell: Idempotency_race: Rolling back transaction (same request).");
-		    rollback (db);
 		  }
 		goto cleanup;
 	      }
@@ -3483,14 +3470,12 @@ idempotency_race:
     {
       LOGD
 	("cmd_trade_sell: Idempotency_race: Rolling back transaction (cannot resolve).");
-      rollback (db);
     }
   send_response_error (ctx, root, 500, "Could not resolve idempotency race.");
   //refuse_sell: // New label for refused sell operations
   if (we_started_tx)
     {
       LOGD ("cmd_trade_sell: Rolling back transaction (refused).");
-      rollback (db);
     }
   // No explicit send_response_refused_steal here, as it's handled by the macro argument.
   // The macro performs send_response_refused_steal, then goto refuse_sell.

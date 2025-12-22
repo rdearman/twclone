@@ -16,9 +16,9 @@
  * Tunables
  * ---------------------------------------------------- */
 /* Define constants for tunnel creation */
-#define MIN_TUNNELS_TARGET          15	/* minimum tunnels you want */
-#define MIN_TUNNEL_LEN              4	/* count tubes of length >= this */
-#define TUNNEL_REFILL_MAX_ATTEMPTS  60	/* stop trying after this many passes */
+#define MIN_TUNNELS_TARGET          15  /* minimum tunnels you want */
+#define MIN_TUNNEL_LEN              4   /* count tubes of length >= this */
+#define TUNNEL_REFILL_MAX_ATTEMPTS  60  /* stop trying after this many passes */
 
 /* --- constants for default port stock/capacity --- */
 #define DEF_PORT_SIZE          5
@@ -52,27 +52,28 @@ struct ImperialStats
 
 /* forward decls */
 static int create_derelicts (void);
-static int fix_traps_with_pathcheck (sqlite3 * db, int fedspace_max);
-static int ensure_fedspace_exit (sqlite3 * db, int outer_min, int outer_max,
-				 int add_return_edge);
-static int insert_warp_unique (sqlite3 * db, int from, int to);
-static int create_random_warps (sqlite3 * db, int numSectors, int maxWarps);
+static int fix_traps_with_pathcheck (sqlite3 *db, int fedspace_max);
+static int ensure_fedspace_exit (sqlite3 *db, int outer_min, int outer_max,
+                                 int add_return_edge);
+static int insert_warp_unique (sqlite3 *db, int from, int to);
+static int create_random_warps (sqlite3 *db, int numSectors, int maxWarps);
 int create_imperial (void);
-static int ensure_all_sectors_have_exits (sqlite3 * db);
+static int ensure_all_sectors_have_exits (sqlite3 *db);
 int create_ownership (void);
-static bool has_column (sqlite3 * db, const char *table, const char *column);
-static int create_stardock_port (sqlite3 * db, int numSectors);
+static bool has_column (sqlite3 *db, const char *table, const char *column);
+static int create_stardock_port (sqlite3 *db, int numSectors);
 
 struct twconfig *
+
+
 config_load (void)
 {
   const char *sql = "SELECT key, value FROM config;";
   sqlite3_stmt *stmt;
-  if (sqlite3_prepare_v2 (db_get_handle (), sql, -1, &stmt, NULL) !=
-      SQLITE_OK)
+  if (sqlite3_prepare_v2 (db_get_handle (), sql, -1, &stmt, NULL) != SQLITE_OK)
     {
       fprintf (stderr, "config_load prepare error: %s\n",
-	       sqlite3_errmsg (db_get_handle ()));
+               sqlite3_errmsg (db_get_handle ()));
       return NULL;
     }
   struct twconfig *cfg = calloc (1, sizeof (struct twconfig));
@@ -90,113 +91,113 @@ config_load (void)
 
 
       if (!key || !val)
-	{
-	  continue;
-	}
+        {
+          continue;
+        }
       if (strcmp (key, "turnsperday") == 0)
-	{
-	  cfg->turnsperday = atoi (val);
-	}
+        {
+          cfg->turnsperday = atoi (val);
+        }
       else if (strcmp (key, "maxwarps_per_sector") == 0)
-	{
-	  cfg->maxwarps_per_sector = atoi (val);
-	}
+        {
+          cfg->maxwarps_per_sector = atoi (val);
+        }
       else if (strcmp (key, "startingcredits") == 0)
-	{
-	  cfg->startingcredits = atoi (val);
-	}
+        {
+          cfg->startingcredits = atoi (val);
+        }
       else if (strcmp (key, "startingfighters") == 0)
-	{
-	  cfg->startingfighters = atoi (val);
-	}
+        {
+          cfg->startingfighters = atoi (val);
+        }
       else if (strcmp (key, "startingholds") == 0)
-	{
-	  cfg->startingholds = atoi (val);
-	}
+        {
+          cfg->startingholds = atoi (val);
+        }
       else if (strcmp (key, "processinterval") == 0)
-	{
-	  cfg->processinterval = atoi (val);
-	}
+        {
+          cfg->processinterval = atoi (val);
+        }
       else if (strcmp (key, "autosave") == 0)
-	{
-	  cfg->autosave = atoi (val);
-	}
+        {
+          cfg->autosave = atoi (val);
+        }
       else if (strcmp (key, "max_ports") == 0)
-	{
-	  cfg->max_ports = atoi (val);
-	}
+        {
+          cfg->max_ports = atoi (val);
+        }
       else if (strcmp (key, "max_planets_per_sector") == 0)
-	{
-	  cfg->max_planets_per_sector = atoi (val);
-	}
+        {
+          cfg->max_planets_per_sector = atoi (val);
+        }
       else if (strcmp (key, "max_total_planets") == 0)
-	{
-	  cfg->max_total_planets = atoi (val);
-	}
+        {
+          cfg->max_total_planets = atoi (val);
+        }
       else if (strcmp (key, "max_citadel_level") == 0)
-	{
-	  cfg->max_citadel_level = atoi (val);
-	}
+        {
+          cfg->max_citadel_level = atoi (val);
+        }
       else if (strcmp (key, "number_of_planet_types") == 0)
-	{
-	  cfg->number_of_planet_types = atoi (val);
-	}
+        {
+          cfg->number_of_planet_types = atoi (val);
+        }
       else if (strcmp (key, "max_ship_name_length") == 0)
-	{
-	  cfg->max_ship_name_length = atoi (val);
-	}
+        {
+          cfg->max_ship_name_length = atoi (val);
+        }
       else if (strcmp (key, "ship_type_count") == 0)
-	{
-	  cfg->ship_type_count = atoi (val);
-	}
+        {
+          cfg->ship_type_count = atoi (val);
+        }
       else if (strcmp (key, "hash_length") == 0)
-	{
-	  cfg->hash_length = atoi (val);
-	}
+        {
+          cfg->hash_length = atoi (val);
+        }
       else if (strcmp (key, "default_nodes") == 0)
-	{
-	  cfg->default_nodes = atoi (val);
-	}
+        {
+          cfg->default_nodes = atoi (val);
+        }
       else if (strcmp (key, "buff_size") == 0)
-	{
-	  cfg->buff_size = atoi (val);
-	}
+        {
+          cfg->buff_size = atoi (val);
+        }
       else if (strcmp (key, "max_name_length") == 0)
-	{
-	  cfg->max_name_length = atoi (val);
-	}
+        {
+          cfg->max_name_length = atoi (val);
+        }
       else if (strcmp (key, "planet_type_count") == 0)
-	{
-	  cfg->planet_type_count = atoi (val);
-	}
+        {
+          cfg->planet_type_count = atoi (val);
+        }
       else if (strcmp (key, "shipyard_enabled") == 0)
-	{
-	  cfg->shipyard_enabled = atoi (val);
-	}
+        {
+          cfg->shipyard_enabled = atoi (val);
+        }
       else if (strcmp (key, "shipyard_trade_in_factor_bp") == 0)
-	{
-	  cfg->shipyard_trade_in_factor_bp = atoi (val);
-	}
+        {
+          cfg->shipyard_trade_in_factor_bp = atoi (val);
+        }
       else if (strcmp (key, "shipyard_require_cargo_fit") == 0)
-	{
-	  cfg->shipyard_require_cargo_fit = atoi (val);
-	}
+        {
+          cfg->shipyard_require_cargo_fit = atoi (val);
+        }
       else if (strcmp (key, "shipyard_require_fighters_fit") == 0)
-	{
-	  cfg->shipyard_require_fighters_fit = atoi (val);
-	}
+        {
+          cfg->shipyard_require_fighters_fit = atoi (val);
+        }
       else if (strcmp (key, "shipyard_require_shields_fit") == 0)
-	{
-	  cfg->shipyard_require_shields_fit = atoi (val);
-	}
+        {
+          cfg->shipyard_require_shields_fit = atoi (val);
+        }
       else if (strcmp (key, "shipyard_require_hardware_compat") == 0)
-	{
-	  cfg->shipyard_require_hardware_compat = atoi (val);
-	}
+        {
+          cfg->shipyard_require_hardware_compat = atoi (val);
+        }
       else if (strcmp (key, "shipyard_tax_bp") == 0)
-	{
-	  cfg->shipyard_tax_bp = atoi (val);
-	}
+        {
+          cfg->shipyard_tax_bp = atoi (val);
+        }
     }
   sqlite3_finalize (stmt);
   return cfg;
@@ -219,16 +220,16 @@ prune_tunnel_edges (sqlite3 *db)
 {
   /* Remove edges from tunnels to non-tunnel nodes */
   sqlite3_exec (db,
-		"DELETE FROM sector_warps "
-		"WHERE from_sector IN (SELECT used FROM used_sectors) "
-		"  AND to_sector   NOT IN (SELECT used FROM used_sectors);",
-		NULL, NULL, NULL);
+                "DELETE FROM sector_warps "
+                "WHERE from_sector IN (SELECT used FROM used_sectors) "
+                "  AND to_sector   NOT IN (SELECT used FROM used_sectors);",
+                NULL, NULL, NULL);
   /* And the reverse direction */
   sqlite3_exec (db,
-		"DELETE FROM sector_warps "
-		"WHERE to_sector   IN (SELECT used FROM used_sectors) "
-		"  AND from_sector NOT IN (SELECT used FROM used_sectors);",
-		NULL, NULL, NULL);
+                "DELETE FROM sector_warps "
+                "WHERE to_sector   IN (SELECT used FROM used_sectors) "
+                "  AND from_sector NOT IN (SELECT used FROM used_sectors);",
+                NULL, NULL, NULL);
 }
 
 
@@ -237,10 +238,10 @@ insert_warp_unique (sqlite3 *db, int from, int to)
 {
   sqlite3_stmt *chk = NULL, *ins = NULL;
   int rc = sqlite3_prepare_v2 (db,
-			       "SELECT 1 FROM sector_warps WHERE from_sector=? AND to_sector=? LIMIT 1;",
-			       -1,
-			       &chk,
-			       NULL);
+                               "SELECT 1 FROM sector_warps WHERE from_sector=? AND to_sector=? LIMIT 1;",
+                               -1,
+                               &chk,
+                               NULL);
   if (rc != SQLITE_OK)
     {
       return -1;
@@ -251,11 +252,13 @@ insert_warp_unique (sqlite3 *db, int from, int to)
   sqlite3_finalize (chk);
   if (rc == SQLITE_ROW)
     {
-      return 0;			/* exists */
+      return 0;                 /* exists */
     }
   rc = sqlite3_prepare_v2 (db,
-			   "INSERT INTO sector_warps(from_sector,to_sector) VALUES(?,?);",
-			   -1, &ins, NULL);
+                           "INSERT INTO sector_warps(from_sector,to_sector) VALUES(?,?);",
+                           -1,
+                           &ins,
+                           NULL);
   if (rc != SQLITE_OK)
     {
       return -1;
@@ -277,10 +280,10 @@ sector_degree (sqlite3 *db, int s)
 {
   sqlite3_stmt *st = NULL;
   int rc = sqlite3_prepare_v2 (db,
-			       "SELECT COUNT(*) FROM sector_warps WHERE from_sector=?;",
-			       -1,
-			       &st,
-			       NULL);
+                               "SELECT COUNT(*) FROM sector_warps WHERE from_sector=?;",
+                               -1,
+                               &st,
+                               NULL);
   if (rc != SQLITE_OK)
     {
       return -1;
@@ -327,14 +330,14 @@ is_sector_used (sqlite3 *db, int sector_id)
   sqlite3_stmt *st = NULL;
   int used = 0;
   if (sqlite3_prepare_v2
-      (db, "SELECT 1 FROM used_sectors WHERE used=? LIMIT 1;", -1, &st,
-       NULL) == SQLITE_OK)
+        (db, "SELECT 1 FROM used_sectors WHERE used=? LIMIT 1;", -1, &st,
+        NULL) == SQLITE_OK)
     {
       sqlite3_bind_int (st, 1, sector_id);
       if (sqlite3_step (st) == SQLITE_ROW)
-	{
-	  used = 1;
-	}
+        {
+          used = 1;
+        }
       sqlite3_finalize (st);
     }
   return used;
@@ -352,67 +355,67 @@ create_random_warps (sqlite3 *db, int numSectors, int maxWarps)
     {
       fprintf (stderr, "create_random_warps: BEGIN failed: %s\n", errmsg);
       if (errmsg)
-	{
-	  sqlite3_free (errmsg);
-	}
+        {
+          sqlite3_free (errmsg);
+        }
       return -1;
     }
   for (int s = 11; s <= numSectors; s++)
     {
       if (is_sector_used (db, s))
-	{
-	  continue;		/* don't touch tunnels */
-	}
+        {
+          continue;             /* don't touch tunnels */
+        }
       if ((rand () % 100) < DEFAULT_PERCENT_DEADEND)
-	{
-	  continue;		/* skip dead-ends */
-	}
+        {
+          continue;             /* skip dead-ends */
+        }
       int targetWarps = 1 + (rand () % maxWarps);
       int deg = sector_degree (db, s);
 
 
       if (deg < 0)
-	{
-	  goto fail;
-	}
+        {
+          goto fail;
+        }
       int attempts = 0;
 
 
       while (deg < targetWarps && attempts < 200)
-	{
-	  int t = 11 + (rand () % (numSectors - 10));
+        {
+          int t = 11 + (rand () % (numSectors - 10));
 
 
-	  if (t == s || is_sector_used (db, t))
-	    {
-	      attempts++;
-	      continue;
-	    }
-	  int ins = insert_warp_unique (db, s, t);
+          if (t == s || is_sector_used (db, t))
+            {
+              attempts++;
+              continue;
+            }
+          int ins = insert_warp_unique (db, s, t);
 
 
-	  if (ins < 0)
-	    {
-	      goto fail;
-	    }
-	  if (ins == 1)
-	    {
-	      if ((rand () % 100) >= DEFAULT_PERCENT_ONEWAY)
-		{
-		  insert_warp_unique (db, t, s);
-		}
-	      deg++;
-	    }
-	  attempts++;
-	}
+          if (ins < 0)
+            {
+              goto fail;
+            }
+          if (ins == 1)
+            {
+              if ((rand () % 100) >= DEFAULT_PERCENT_ONEWAY)
+                {
+                  insert_warp_unique (db, t, s);
+                }
+              deg++;
+            }
+          attempts++;
+        }
     }
   if (sqlite3_exec (db, "COMMIT;", NULL, NULL, &errmsg) != SQLITE_OK)
     {
       fprintf (stderr, "create_random_warps: COMMIT failed: %s\n", errmsg);
       if (errmsg)
-	{
-	  sqlite3_free (errmsg);
-	}
+        {
+          sqlite3_free (errmsg);
+        }
       return -1;
     }
   if (errmsg)
@@ -442,10 +445,10 @@ ensure_sector_exits (sqlite3 *db, int numSectors)
     }
   sqlite3_stmt *q_count = NULL, *q_in = NULL, *ins = NULL;
   int rc = sqlite3_prepare_v2 (db,
-			       "SELECT COUNT(1) FROM sector_warps WHERE from_sector=?",
-			       -1,
-			       &q_count,
-			       NULL);
+                               "SELECT COUNT(1) FROM sector_warps WHERE from_sector=?",
+                               -1,
+                               &q_count,
+                               NULL);
 
 
   if (rc != SQLITE_OK)
@@ -453,15 +456,19 @@ ensure_sector_exits (sqlite3 *db, int numSectors)
       goto done;
     }
   rc = sqlite3_prepare_v2 (db,
-			   "SELECT from_sector FROM sector_warps WHERE to_sector=? ORDER BY RANDOM() LIMIT 1;",
-			   -1, &q_in, NULL);
+                           "SELECT from_sector FROM sector_warps WHERE to_sector=? ORDER BY RANDOM() LIMIT 1;",
+                           -1,
+                           &q_in,
+                           NULL);
   if (rc != SQLITE_OK)
     {
       goto done;
     }
   rc = sqlite3_prepare_v2 (db,
-			   "INSERT OR IGNORE INTO sector_warps(from_sector,to_sector) VALUES(?,?);",
-			   -1, &ins, NULL);
+                           "INSERT OR IGNORE INTO sector_warps(from_sector,to_sector) VALUES(?,?);",
+                           -1,
+                           &ins,
+                           NULL);
   if (rc != SQLITE_OK)
     {
       goto done;
@@ -469,51 +476,51 @@ ensure_sector_exits (sqlite3 *db, int numSectors)
   for (int s = 11; s <= numSectors; s++)
     {
       if (is_sector_used (db, s))
-	{
-	  continue;		/* don't add exits FROM tunnel nodes */
-	}
+        {
+          continue;             /* don't add exits FROM tunnel nodes */
+        }
       sqlite3_reset (q_count);
       sqlite3_clear_bindings (q_count);
       sqlite3_bind_int (q_count, 1, s);
       rc = sqlite3_step (q_count);
       if (rc != SQLITE_ROW)
-	{
-	  rc = SQLITE_ERROR;
-	  break;
-	}
+        {
+          rc = SQLITE_ERROR;
+          break;
+        }
       int outc = sqlite3_column_int (q_count, 0);
 
 
       if (outc > 0)
-	{
-	  continue;
-	}
+        {
+          continue;
+        }
       int to = 0;
 
 
       if ((rand () % 100) < 80)
-	{
-	  sqlite3_reset (q_in);
-	  sqlite3_clear_bindings (q_in);
-	  sqlite3_bind_int (q_in, 1, s);
-	  rc = sqlite3_step (q_in);
-	  if (rc == SQLITE_ROW)
-	    {
-	      to = sqlite3_column_int (q_in, 0);
-	      if (to == s || is_sector_used (db, to))
-		{
-		  to = 0;
-		}
-	    }
-	}
+        {
+          sqlite3_reset (q_in);
+          sqlite3_clear_bindings (q_in);
+          sqlite3_bind_int (q_in, 1, s);
+          rc = sqlite3_step (q_in);
+          if (rc == SQLITE_ROW)
+            {
+              to = sqlite3_column_int (q_in, 0);
+              if (to == s || is_sector_used (db, to))
+                {
+                  to = 0;
+                }
+            }
+        }
       if (to <= 0 || to == s)
-	{
-	  do
-	    {
-	      to = 11 + (rand () % (numSectors - 10));
-	    }
-	  while (to == s || is_sector_used (db, to));
-	}
+        {
+          do
+            {
+              to = 11 + (rand () % (numSectors - 10));
+            }
+          while (to == s || is_sector_used (db, to));
+        }
       sqlite3_reset (ins);
       sqlite3_clear_bindings (ins);
       sqlite3_bind_int (ins, 1, s);
@@ -563,9 +570,9 @@ bigbang_create_tunnels (void)
     {
       fprintf (stderr, "BIGBANG: tunnels BEGIN failed: %s\n", errmsg);
       if (errmsg)
-	{
-	  sqlite3_free (errmsg);
-	}
+        {
+          sqlite3_free (errmsg);
+        }
       return -1;
     }
   /* Fresh run: clear used_sectors */
@@ -581,99 +588,99 @@ bigbang_create_tunnels (void)
 
   while (added_tunnels < 15 && attempts < 60)
     {
-      int path_len = 4 + (rand () % 5);	/* 4..8 */
+      int path_len = 4 + (rand () % 5); /* 4..8 */
       int nodes[12];
       int n = 0;
 
 
       /* choose distinct nodes, avoiding already-used tunnel nodes */
       while (n < path_len)
-	{
-	  int s = 11 + (rand () % (sector_count - 10));
-	  int dup = 0;
+        {
+          int s = 11 + (rand () % (sector_count - 10));
+          int dup = 0;
 
 
-	  for (int i = 0; i < n; i++)
-	    {
-	      if (nodes[i] == s)
-		{
-		  dup = 1;
-		  break;
-		}
-	    }
-	  if (dup || is_sector_used (db, s))
-	    {
-	      continue;
-	    }
-	  nodes[n++] = s;
-	}
+          for (int i = 0; i < n; i++)
+            {
+              if (nodes[i] == s)
+                {
+                  dup = 1;
+                  break;
+                }
+            }
+          if (dup || is_sector_used (db, s))
+            {
+              continue;
+            }
+          nodes[n++] = s;
+        }
       sqlite3_exec (db, "SAVEPOINT tunnel;", NULL, NULL, NULL);
       int failed = 0;
 
 
       for (int i = 0; i < path_len - 1; i++)
-	{
-	  int a = nodes[i], b = nodes[i + 1];
+        {
+          int a = nodes[i], b = nodes[i + 1];
 
 
-	  if (sqlite3_prepare_v2 (db, SQL_INSERT_WARP, -1, &st_warp, NULL) !=
-	      SQLITE_OK)
-	    {
-	      failed = 1;
-	      break;
-	    }
-	  sqlite3_bind_int (st_warp, 1, a);
-	  sqlite3_bind_int (st_warp, 2, b);
-	  if (sqlite3_step (st_warp) != SQLITE_DONE)
-	    {
-	      failed = 1;
-	      sqlite3_finalize (st_warp);
-	      break;
-	    }
-	  sqlite3_finalize (st_warp);
-	  st_warp = NULL;
-	  if (sqlite3_prepare_v2 (db, SQL_INSERT_WARP, -1, &st_warp, NULL) !=
-	      SQLITE_OK)
-	    {
-	      failed = 1;
-	      break;
-	    }
-	  sqlite3_bind_int (st_warp, 1, b);
-	  sqlite3_bind_int (st_warp, 2, a);
-	  if (sqlite3_step (st_warp) != SQLITE_DONE)
-	    {
-	      failed = 1;
-	      sqlite3_finalize (st_warp);
-	      break;
-	    }
-	  sqlite3_finalize (st_warp);
-	  st_warp = NULL;
-	}
+          if (sqlite3_prepare_v2 (db, SQL_INSERT_WARP, -1, &st_warp, NULL) !=
+              SQLITE_OK)
+            {
+              failed = 1;
+              break;
+            }
+          sqlite3_bind_int (st_warp, 1, a);
+          sqlite3_bind_int (st_warp, 2, b);
+          if (sqlite3_step (st_warp) != SQLITE_DONE)
+            {
+              failed = 1;
+              sqlite3_finalize (st_warp);
+              break;
+            }
+          sqlite3_finalize (st_warp);
+          st_warp = NULL;
+          if (sqlite3_prepare_v2 (db, SQL_INSERT_WARP, -1, &st_warp, NULL) !=
+              SQLITE_OK)
+            {
+              failed = 1;
+              break;
+            }
+          sqlite3_bind_int (st_warp, 1, b);
+          sqlite3_bind_int (st_warp, 2, a);
+          if (sqlite3_step (st_warp) != SQLITE_DONE)
+            {
+              failed = 1;
+              sqlite3_finalize (st_warp);
+              break;
+            }
+          sqlite3_finalize (st_warp);
+          st_warp = NULL;
+        }
       if (failed)
-	{
-	  sqlite3_exec (db, "ROLLBACK TO tunnel; RELEASE SAVEPOINT tunnel;",
-			NULL, NULL, NULL);
-	  attempts++;
-	  continue;
-	}
+        {
+          sqlite3_exec (db, "ROLLBACK TO tunnel; RELEASE SAVEPOINT tunnel;",
+                        NULL, NULL, NULL);
+          attempts++;
+          continue;
+        }
       sqlite3_exec (db, "RELEASE SAVEPOINT tunnel;", NULL, NULL, NULL);
       for (int i = 0; i < path_len; i++)
-	{
-	  if (sqlite3_prepare_v2 (db, SQL_INSERT_USED, -1, &st_used, NULL) ==
-	      SQLITE_OK)
-	    {
-	      sqlite3_bind_int (st_used, 1, nodes[i]);
-	      sqlite3_step (st_used);
-	      sqlite3_finalize (st_used);
-	      st_used = NULL;
-	    }
-	}
+        {
+          if (sqlite3_prepare_v2 (db, SQL_INSERT_USED, -1, &st_used, NULL) ==
+              SQLITE_OK)
+            {
+              sqlite3_bind_int (st_used, 1, nodes[i]);
+              sqlite3_step (st_used);
+              sqlite3_finalize (st_used);
+              st_used = NULL;
+            }
+        }
       added_tunnels++;
       attempts++;
     }
   sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
   fprintf (stderr, "BIGBANG: Added %d tunnels in %d attempts.\n",
-	   added_tunnels, attempts);
+           added_tunnels, attempts);
   return 0;
 }
 
@@ -707,23 +714,23 @@ create_sectors (void)
   if (cfg->default_nodes <= 0)
     {
       fprintf (stderr, "BIGBANG: num_sectors is invalid: %d\n",
-	       cfg->default_nodes);
+               cfg->default_nodes);
       free (cfg);
       return -1;
     }
   printf ("BIGBANG: Creating %d sectors...\n", cfg->default_nodes);
   char *errmsg = NULL;
   // Begin transaction for performance
-  int rc = sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg);
+  int rc = db_begin_transaction (db);
 
 
   if (rc != SQLITE_OK)
     {
       fprintf (stderr, "BIGBANG: BEGIN failed: %s\n", errmsg);
       if (errmsg)
-	{
-	  sqlite3_free (errmsg);
-	}
+        {
+          sqlite3_free (errmsg);
+        }
       free (cfg);
       return -1;
     }
@@ -737,7 +744,7 @@ create_sectors (void)
   if (rc != SQLITE_OK)
     {
       fprintf (stderr, "BIGBANG: Failed to prepare statement: %s\n",
-	       sqlite3_errmsg (db));
+               sqlite3_errmsg (db));
       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
       free (cfg);
       return -1;
@@ -752,24 +759,24 @@ create_sectors (void)
       consellationName (neb);
       sqlite3_bind_text (stmt, 1, name, -1, SQLITE_STATIC);
       if ((i % 64) == 0)
-	{
-	  sqlite3_bind_text (stmt, 2, "Barreik was here!", -1, SQLITE_STATIC);
-	}
+        {
+          sqlite3_bind_text (stmt, 2, "Barreik was here!", -1, SQLITE_STATIC);
+        }
       else
-	{
-	  sqlite3_bind_text (stmt, 2, "", -1, SQLITE_STATIC);
-	}
+        {
+          sqlite3_bind_text (stmt, 2, "", -1, SQLITE_STATIC);
+        }
       sqlite3_bind_text (stmt, 3, neb, -1, SQLITE_STATIC);
       rc = sqlite3_step (stmt);
       if (rc != SQLITE_DONE)
-	{
-	  fprintf (stderr, "BIGBANG: Failed to insert sector %d: %s\n", i,
-		   sqlite3_errmsg (db));
-	  sqlite3_finalize (stmt);
-	  sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-	  free (cfg);
-	  return -1;
-	}
+        {
+          fprintf (stderr, "BIGBANG: Failed to insert sector %d: %s\n", i,
+                   sqlite3_errmsg (db));
+          sqlite3_finalize (stmt);
+          sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+          free (cfg);
+          return -1;
+        }
       sqlite3_reset (stmt);
     }
   sqlite3_finalize (stmt);
@@ -778,9 +785,9 @@ create_sectors (void)
     {
       fprintf (stderr, "BIGBANG: COMMIT failed: %s\n", errmsg);
       if (errmsg)
-	{
-	  sqlite3_free (errmsg);
-	}
+        {
+          sqlite3_free (errmsg);
+        }
       free (cfg);
       return -1;
     }
@@ -874,7 +881,7 @@ bigbang (void)
   if (rc != SQLITE_OK)
     {
       fprintf (stderr, "error ensuring all sectors have exits: %s\n",
-	       sqlite3_errmsg (db));
+               sqlite3_errmsg (db));
       return rc;
     }
   printf ("BIGBANG: Chaining isolated sectors and bridges...\n");
@@ -883,10 +890,10 @@ bigbang (void)
   if (rc != SQLITE_OK)
     {
       fprintf (stderr, "fix_traps_with_pathcheck failed: %s\n",
-	       sqlite3_errmsg (db));
+               sqlite3_errmsg (db));
     }
   // After all sectors/warps are generated:
-  int ferringhi = db_chain_traps_and_bridge (10);	// 1..10 are FedSpace by convention
+  int ferringhi = db_chain_traps_and_bridge (10);       // 1..10 are FedSpace by convention
 
 
   fprintf (stderr, "BIGBANG: Creating Stardock...\n");
@@ -940,9 +947,9 @@ has_warp (const Warp *warps, int warp_count, int from, int to)
   for (int i = 0; i < warp_count; ++i)
     {
       if (warps[i].from == from && warps[i].to == to)
-	{
-	  return 1;
-	}
+        {
+          return 1;
+        }
     }
   return 0;
 }
@@ -956,9 +963,9 @@ sector_degree_in_memory (const Warp *warps, int warp_count, int sector_id)
   for (int i = 0; i < warp_count; ++i)
     {
       if (warps[i].from == sector_id || warps[i].to == sector_id)
-	{
-	  degree++;
-	}
+        {
+          degree++;
+        }
     }
   return degree;
 }
@@ -977,15 +984,15 @@ count_edges ()
   sqlite3_stmt *stmt;
   int rc =
     sqlite3_prepare_v2 (handle, "SELECT count(*) FROM sector_warps;", -1,
-			&stmt, NULL);
+                        &stmt, NULL);
 
 
   if (rc == SQLITE_OK)
     {
       if (sqlite3_step (stmt) == SQLITE_ROW)
-	{
-	  count = sqlite3_column_int (stmt, 0);
-	}
+        {
+          count = sqlite3_column_int (stmt, 0);
+        }
     }
   sqlite3_finalize (stmt);
   return count;
@@ -1006,9 +1013,9 @@ get_sector_degree_count (int sector_id)
       sqlite3_bind_int (stmt, 1, sector_id);
       sqlite3_bind_int (stmt, 2, sector_id);
       if (sqlite3_step (stmt) == SQLITE_ROW)
-	{
-	  degree = sqlite3_column_int (stmt, 0);
-	}
+        {
+          degree = sqlite3_column_int (stmt, 0);
+        }
       sqlite3_finalize (stmt);
     }
   return degree;
@@ -1054,7 +1061,7 @@ get_npc_shiptype_id_by_name (sqlite3 *db, const char *name)
   if (sqlite3_prepare_v2 (db, q, -1, &st, NULL) != SQLITE_OK)
     {
       fprintf (stderr, "get_npc_shiptype_id_by_name prepare failed: %s\n",
-	       sqlite3_errmsg (db));
+               sqlite3_errmsg (db));
       return -1;
     }
   sqlite3_bind_text (st, 1, name, -1, SQLITE_STATIC);
@@ -1065,8 +1072,8 @@ get_npc_shiptype_id_by_name (sqlite3 *db, const char *name)
   else
     {
       fprintf (stderr,
-	       "get_npc_shiptype_id_by_name: NPC Shiptype '%s' not found.\n",
-	       name);
+               "get_npc_shiptype_id_by_name: NPC Shiptype '%s' not found.\n",
+               name);
     }
   sqlite3_finalize (st);
   return id;
@@ -1084,8 +1091,8 @@ get_purchasable_shiptype_id_by_name (sqlite3 *db, const char *name)
   if (sqlite3_prepare_v2 (db, q, -1, &st, NULL) != SQLITE_OK)
     {
       fprintf (stderr,
-	       "get_purchasable_shiptype_id_by_name prepare failed: %s\n",
-	       sqlite3_errmsg (db));
+               "get_purchasable_shiptype_id_by_name prepare failed: %s\n",
+               sqlite3_errmsg (db));
       return -1;
     }
   sqlite3_bind_text (st, 1, name, -1, SQLITE_STATIC);
@@ -1096,8 +1103,8 @@ get_purchasable_shiptype_id_by_name (sqlite3 *db, const char *name)
   else
     {
       fprintf (stderr,
-	       "get_purchasable_shiptype_id_by_name: Purchasable Shiptype '%s' not found.\n",
-	       name);
+               "get_purchasable_shiptype_id_by_name: Purchasable Shiptype '%s' not found.\n",
+               name);
     }
   sqlite3_finalize (st);
   return id;
@@ -1116,16 +1123,15 @@ create_planets (void)
       return -1;
     }
   fprintf (stderr,
-	   "BIGBANG: Ensuring core planets (Terra, Ferringhi, Orion) exist...\n");
+           "BIGBANG: Ensuring core planets (Terra, Ferringhi, Orion) exist...\n");
   char *errmsg = NULL;
 
 
-  if (sqlite3_exec (db, "BEGIN TRANSACTION;", NULL, NULL, &errmsg) !=
-      SQLITE_OK)
+  if (db_begin_transaction (db) != SQLITE_OK)
     {
       fprintf (stderr,
-	       "create_planets: BEGIN failed: %s\n",
-	       errmsg ? errmsg : sqlite3_errmsg (db));
+               "create_planets: BEGIN failed: %s\n",
+               errmsg ? errmsg : sqlite3_errmsg (db));
       sqlite3_free (errmsg);
       return -1;
     }
@@ -1140,7 +1146,7 @@ create_planets (void)
   if (sqlite3_prepare_v2 (db, sql_fixed, -1, &ins_fixed, NULL) != SQLITE_OK)
     {
       fprintf (stderr, "create_planets prepare fixed failed: %s\n",
-	       sqlite3_errmsg (db));
+               sqlite3_errmsg (db));
       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
       return -1;
     }
@@ -1152,8 +1158,8 @@ create_planets (void)
   if (sqlite3_prepare_v2 (db, sql_stock, -1, &ins_stock, NULL) != SQLITE_OK)
     {
       fprintf (stderr,
-	       "create_planets prepare stock failed: %s\n",
-	       sqlite3_errmsg (db));
+               "create_planets prepare stock failed: %s\n",
+               sqlite3_errmsg (db));
       sqlite3_finalize (ins_fixed);
       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
       return -1;
@@ -1167,25 +1173,31 @@ create_planets (void)
   if (sqlite3_step (ins_fixed) != SQLITE_DONE)
     {
       fprintf (stderr,
-	       "create_planets: Failed to insert Terra: %s\n",
-	       sqlite3_errmsg (db));
+               "create_planets: Failed to insert Terra: %s\n",
+               sqlite3_errmsg (db));
     }
   sqlite3_reset (ins_fixed);
   // Stock for Terra
-  sqlite3_bind_int (ins_stock, 1, 1);
-  sqlite3_bind_text (ins_stock, 2, "ORE", -1, SQLITE_STATIC);
-  sqlite3_bind_int (ins_stock, 3, 0);
-  sqlite3_step (ins_stock);
+  sqlite3_bind_int (ins_stock, 1, 1); sqlite3_bind_text (ins_stock,
+                                                         2,
+                                                         "ORE",
+                                                         -1,
+                                                         SQLITE_STATIC);
+  sqlite3_bind_int (ins_stock, 3, 0); sqlite3_step (ins_stock);
   sqlite3_reset (ins_stock);
-  sqlite3_bind_int (ins_stock, 1, 1);
-  sqlite3_bind_text (ins_stock, 2, "ORG", -1, SQLITE_STATIC);
-  sqlite3_bind_int (ins_stock, 3, 0);
-  sqlite3_step (ins_stock);
+  sqlite3_bind_int (ins_stock, 1, 1); sqlite3_bind_text (ins_stock,
+                                                         2,
+                                                         "ORG",
+                                                         -1,
+                                                         SQLITE_STATIC);
+  sqlite3_bind_int (ins_stock, 3, 0); sqlite3_step (ins_stock);
   sqlite3_reset (ins_stock);
-  sqlite3_bind_int (ins_stock, 1, 1);
-  sqlite3_bind_text (ins_stock, 2, "EQU", -1, SQLITE_STATIC);
-  sqlite3_bind_int (ins_stock, 3, 0);
-  sqlite3_step (ins_stock);
+  sqlite3_bind_int (ins_stock, 1, 1); sqlite3_bind_text (ins_stock,
+                                                         2,
+                                                         "EQU",
+                                                         -1,
+                                                         SQLITE_STATIC);
+  sqlite3_bind_int (ins_stock, 3, 0); sqlite3_step (ins_stock);
   sqlite3_reset (ins_stock);
 
   /* Ferringhi Homeworld (ID 2) - Sector 0 (Placeholder), Type 3 */
@@ -1196,25 +1208,31 @@ create_planets (void)
   if (sqlite3_step (ins_fixed) != SQLITE_DONE)
     {
       fprintf (stderr,
-	       "create_planets: Failed to insert Ferringhi: %s\n",
-	       sqlite3_errmsg (db));
+               "create_planets: Failed to insert Ferringhi: %s\n",
+               sqlite3_errmsg (db));
     }
   sqlite3_reset (ins_fixed);
   // Stock for Ferringhi
-  sqlite3_bind_int (ins_stock, 1, 2);
-  sqlite3_bind_text (ins_stock, 2, "ORE", -1, SQLITE_STATIC);
-  sqlite3_bind_int (ins_stock, 3, 0);
-  sqlite3_step (ins_stock);
+  sqlite3_bind_int (ins_stock, 1, 2); sqlite3_bind_text (ins_stock,
+                                                         2,
+                                                         "ORE",
+                                                         -1,
+                                                         SQLITE_STATIC);
+  sqlite3_bind_int (ins_stock, 3, 0); sqlite3_step (ins_stock);
   sqlite3_reset (ins_stock);
-  sqlite3_bind_int (ins_stock, 1, 2);
-  sqlite3_bind_text (ins_stock, 2, "ORG", -1, SQLITE_STATIC);
-  sqlite3_bind_int (ins_stock, 3, 0);
-  sqlite3_step (ins_stock);
+  sqlite3_bind_int (ins_stock, 1, 2); sqlite3_bind_text (ins_stock,
+                                                         2,
+                                                         "ORG",
+                                                         -1,
+                                                         SQLITE_STATIC);
+  sqlite3_bind_int (ins_stock, 3, 0); sqlite3_step (ins_stock);
   sqlite3_reset (ins_stock);
-  sqlite3_bind_int (ins_stock, 1, 2);
-  sqlite3_bind_text (ins_stock, 2, "EQU", -1, SQLITE_STATIC);
-  sqlite3_bind_int (ins_stock, 3, 0);
-  sqlite3_step (ins_stock);
+  sqlite3_bind_int (ins_stock, 1, 2); sqlite3_bind_text (ins_stock,
+                                                         2,
+                                                         "EQU",
+                                                         -1,
+                                                         SQLITE_STATIC);
+  sqlite3_bind_int (ins_stock, 3, 0); sqlite3_step (ins_stock);
   sqlite3_reset (ins_stock);
 
   /* Orion Hideout (ID 3) - Sector 0 (Placeholder), Type 5 */
@@ -1225,26 +1243,32 @@ create_planets (void)
   if (sqlite3_step (ins_fixed) != SQLITE_DONE)
     {
       fprintf (stderr,
-	       "create_planets: Failed to insert Orion: %s\n",
-	       sqlite3_errmsg (db));
+               "create_planets: Failed to insert Orion: %s\n",
+               sqlite3_errmsg (db));
     }
   sqlite3_finalize (ins_fixed);
 
   // Stock for Orion
-  sqlite3_bind_int (ins_stock, 1, 3);
-  sqlite3_bind_text (ins_stock, 2, "ORE", -1, SQLITE_STATIC);
-  sqlite3_bind_int (ins_stock, 3, 0);
-  sqlite3_step (ins_stock);
+  sqlite3_bind_int (ins_stock, 1, 3); sqlite3_bind_text (ins_stock,
+                                                         2,
+                                                         "ORE",
+                                                         -1,
+                                                         SQLITE_STATIC);
+  sqlite3_bind_int (ins_stock, 3, 0); sqlite3_step (ins_stock);
   sqlite3_reset (ins_stock);
-  sqlite3_bind_int (ins_stock, 1, 3);
-  sqlite3_bind_text (ins_stock, 2, "ORG", -1, SQLITE_STATIC);
-  sqlite3_bind_int (ins_stock, 3, 0);
-  sqlite3_step (ins_stock);
+  sqlite3_bind_int (ins_stock, 1, 3); sqlite3_bind_text (ins_stock,
+                                                         2,
+                                                         "ORG",
+                                                         -1,
+                                                         SQLITE_STATIC);
+  sqlite3_bind_int (ins_stock, 3, 0); sqlite3_step (ins_stock);
   sqlite3_reset (ins_stock);
-  sqlite3_bind_int (ins_stock, 1, 3);
-  sqlite3_bind_text (ins_stock, 2, "EQU", -1, SQLITE_STATIC);
-  sqlite3_bind_int (ins_stock, 3, 0);
-  sqlite3_step (ins_stock);
+  sqlite3_bind_int (ins_stock, 1, 3); sqlite3_bind_text (ins_stock,
+                                                         2,
+                                                         "EQU",
+                                                         -1,
+                                                         SQLITE_STATIC);
+  sqlite3_bind_int (ins_stock, 3, 0); sqlite3_step (ins_stock);
   sqlite3_reset (ins_stock);
   sqlite3_finalize (ins_stock);
 
@@ -1255,8 +1279,8 @@ create_planets (void)
   if (sqlite3_exec (db, "COMMIT;", NULL, NULL, &errmsg) != SQLITE_OK)
     {
       fprintf (stderr,
-	       "create_planets: COMMIT failed: %s\n",
-	       errmsg ? errmsg : sqlite3_errmsg (db));
+               "create_planets: COMMIT failed: %s\n",
+               errmsg ? errmsg : sqlite3_errmsg (db));
       sqlite3_free (errmsg);
       return -1;
     }
@@ -1273,7 +1297,7 @@ create_planets (void)
  */
 int
 create_full_port (sqlite3 *db, int sector, int port_number,
-		  const char *base_name, int type_id, int *port_id_out)
+                  const char *base_name, int type_id, int *port_id_out)
 {
   sqlite3_stmt *port_stmt = NULL;
   sqlite3_stmt *trade_stmt = NULL;
@@ -1287,10 +1311,10 @@ create_full_port (sqlite3 *db, int sector, int port_number,
   int equipment_on_hand_val = 0;
 
   /* Default port stats */
-  int port_size = 5 + (rand () % 5);	/* Random size 5-9 */
-  int port_tech = 1 + (rand () % 5);	/* Random tech 1-5 */
+  int port_size = 5 + (rand () % 5);    /* Random size 5-9 */
+  int port_tech = 1 + (rand () % 5);    /* Random tech 1-5 */
   int port_credits = 100000;
-  int petty_cash_val = 0;	// Default petty cash
+  int petty_cash_val = 0;       // Default petty cash
 
   /*
    * ===================================================================
@@ -1299,50 +1323,50 @@ create_full_port (sqlite3 *db, int sector, int port_number,
    */
   switch (type_id)
     {
-    case 1:			/* Sells Equipment */
-    case 2:			/* Sells Equipment */
-      ore_on_hand_val = DEF_PORT_PROD_ORE;
-      organics_on_hand_val = DEF_PORT_MAX_ORG / 2;
-      equipment_on_hand_val = DEF_PORT_PROD_EQU;
-      break;
-    case 3:			/* Buys Equipment */
-    case 4:			/* Buys Equipment */
-      ore_on_hand_val = DEF_PORT_PROD_ORE;
-      organics_on_hand_val = DEF_PORT_MAX_ORG / 2;
-      equipment_on_hand_val = DEF_PORT_MAX_EQU / 4;
-      break;
-    case 5:			/* Sells Organics */
-    case 6:			/* Sells Organics */
-      ore_on_hand_val = DEF_PORT_PROD_ORE;
-      organics_on_hand_val = DEF_PORT_PROD_ORG;
-      equipment_on_hand_val = DEF_PORT_MAX_EQU / 2;
-      break;
-    case 7:			/* Buys Organics */
-    case 8:			/* Buys Organics */
-      ore_on_hand_val = DEF_PORT_PROD_ORE;
-      organics_on_hand_val = DEF_PORT_MAX_ORG / 4;
-      equipment_on_hand_val = DEF_PORT_MAX_EQU / 2;
-      break;
-    case 9:			/* Stardock - Buys/Sells all, high stock */
-      ore_on_hand_val = DEF_PORT_MAX_ORE;
-      organics_on_hand_val = DEF_PORT_MAX_ORG;
-      equipment_on_hand_val = DEF_PORT_MAX_EQU;
-      port_credits = 1000000;	// Stardock has more credits
-      port_size = 10;
-      port_tech = 10;
-      break;
-    case 10:			/* Orion Black Market - Special case */
-      ore_on_hand_val = DEF_PORT_MAX_ORE * 2;
-      organics_on_hand_val = DEF_PORT_MAX_ORG / 10;
-      equipment_on_hand_val = DEF_PORT_MAX_EQU * 2;
-      port_credits = 2000000;	// More credits for black market
-      petty_cash_val = 100000;	// Significant petty cash
-      port_size = 8;
-      port_tech = 8;
-      break;
-    default:
-      fprintf (stderr, "create_full_port: Invalid type_id %d\n", type_id);
-      return SQLITE_MISUSE;
+      case 1:                   /* Sells Equipment */
+      case 2:                   /* Sells Equipment */
+        ore_on_hand_val = DEF_PORT_PROD_ORE;
+        organics_on_hand_val = DEF_PORT_MAX_ORG / 2;
+        equipment_on_hand_val = DEF_PORT_PROD_EQU;
+        break;
+      case 3:                   /* Buys Equipment */
+      case 4:                   /* Buys Equipment */
+        ore_on_hand_val = DEF_PORT_PROD_ORE;
+        organics_on_hand_val = DEF_PORT_MAX_ORG / 2;
+        equipment_on_hand_val = DEF_PORT_MAX_EQU / 4;
+        break;
+      case 5:                   /* Sells Organics */
+      case 6:                   /* Sells Organics */
+        ore_on_hand_val = DEF_PORT_PROD_ORE;
+        organics_on_hand_val = DEF_PORT_PROD_ORG;
+        equipment_on_hand_val = DEF_PORT_MAX_EQU / 2;
+        break;
+      case 7:                   /* Buys Organics */
+      case 8:                   /* Buys Organics */
+        ore_on_hand_val = DEF_PORT_PROD_ORE;
+        organics_on_hand_val = DEF_PORT_MAX_ORG / 4;
+        equipment_on_hand_val = DEF_PORT_MAX_EQU / 2;
+        break;
+      case 9:                   /* Stardock - Buys/Sells all, high stock */
+        ore_on_hand_val = DEF_PORT_MAX_ORE;
+        organics_on_hand_val = DEF_PORT_MAX_ORG;
+        equipment_on_hand_val = DEF_PORT_MAX_EQU;
+        port_credits = 1000000; // Stardock has more credits
+        port_size = 10;
+        port_tech = 10;
+        break;
+      case 10:                  /* Orion Black Market - Special case */
+        ore_on_hand_val = DEF_PORT_MAX_ORE * 2;
+        organics_on_hand_val = DEF_PORT_MAX_ORG / 10;
+        equipment_on_hand_val = DEF_PORT_MAX_EQU * 2;
+        port_credits = 2000000; // More credits for black market
+        petty_cash_val = 100000; // Significant petty cash
+        port_size = 8;
+        port_tech = 8;
+        break;
+      default:
+        fprintf (stderr, "create_full_port: Invalid type_id %d\n", type_id);
+        return SQLITE_MISUSE;
     }
 
   /*
@@ -1354,7 +1378,7 @@ create_full_port (sqlite3 *db, int sector, int port_number,
   if (rc != SQLITE_OK)
     {
       fprintf (stderr, "create_full_port: BEGIN transaction failed: %s\n",
-	       sqlite3_errmsg (db));
+               sqlite3_errmsg (db));
       return rc;
     }
 
@@ -1366,13 +1390,15 @@ create_full_port (sqlite3 *db, int sector, int port_number,
   const char *port_sql =
     "INSERT INTO ports ("
     "  number, name, sector, size, techlevel, type, invisible, economy_curve_id "
-    ") VALUES (" "  ?1, ?2, ?3, ?4, ?5, ?6, 0, ?7 " ");";
+    ") VALUES ("
+    "  ?1, ?2, ?3, ?4, ?5, ?6, 0, ?7 "
+    ");";
 
 
   if (sqlite3_prepare_v2 (db, port_sql, -1, &port_stmt, NULL) != SQLITE_OK)
     {
       fprintf (stderr, "create_full_port: ports prepare failed: %s\n",
-	       sqlite3_errmsg (db));
+               sqlite3_errmsg (db));
       rc = sqlite3_errcode (db);
       goto rollback;
     }
@@ -1384,12 +1410,12 @@ create_full_port (sqlite3 *db, int sector, int port_number,
   sqlite3_bind_int (port_stmt, 4, port_size);
   sqlite3_bind_int (port_stmt, 5, port_tech);
   sqlite3_bind_int (port_stmt, 6, type_id);
-  sqlite3_bind_int (port_stmt, 7, 1);	/* Default economy curve ID */
+  sqlite3_bind_int (port_stmt, 7, 1); /* Default economy curve ID */
 
   if (sqlite3_step (port_stmt) != SQLITE_DONE)
     {
       fprintf (stderr, "create_full_port: ports insert failed: %s\n",
-	       sqlite3_errmsg (db));
+               sqlite3_errmsg (db));
       rc = sqlite3_errcode (db);
       goto rollback;
     }
@@ -1407,50 +1433,62 @@ create_full_port (sqlite3 *db, int sector, int port_number,
 
 
   if (sqlite3_prepare_v2 (db, entity_stock_sql, -1, &entity_stock_stmt,
-			  NULL) != SQLITE_OK)
+                          NULL) != SQLITE_OK)
     {
       rc = sqlite3_errcode (db);
       goto rollback;
     }
 
   // Insert ORE
-  sqlite3_bind_int (entity_stock_stmt, 1, (int) port_id);
+  sqlite3_bind_int (entity_stock_stmt, 1, (int)port_id);
   sqlite3_bind_text (entity_stock_stmt, 2, "ORE", -1, SQLITE_STATIC);
   sqlite3_bind_int (entity_stock_stmt, 3, ore_on_hand_val);
   sqlite3_step (entity_stock_stmt);
   sqlite3_reset (entity_stock_stmt);
 
   // Insert ORG
-  sqlite3_bind_int (entity_stock_stmt, 1, (int) port_id);
+  sqlite3_bind_int (entity_stock_stmt, 1, (int)port_id);
   sqlite3_bind_text (entity_stock_stmt, 2, "ORG", -1, SQLITE_STATIC);
   sqlite3_bind_int (entity_stock_stmt, 3, organics_on_hand_val);
   sqlite3_step (entity_stock_stmt);
   sqlite3_reset (entity_stock_stmt);
 
   // Insert EQU
-  sqlite3_bind_int (entity_stock_stmt, 1, (int) port_id);
+  sqlite3_bind_int (entity_stock_stmt, 1, (int)port_id);
   sqlite3_bind_text (entity_stock_stmt, 2, "EQU", -1, SQLITE_STATIC);
   sqlite3_bind_int (entity_stock_stmt, 3, equipment_on_hand_val);
   sqlite3_step (entity_stock_stmt);
   sqlite3_reset (entity_stock_stmt);
 
-  if (type_id == 10)		// Special items for Black Market
+  if (type_id == 10)   // Special items for Black Market
     {
-      sqlite3_bind_int (entity_stock_stmt, 1, (int) port_id);
-      sqlite3_bind_text (entity_stock_stmt, 2, "SLV", -1, SQLITE_STATIC);
-      sqlite3_bind_int (entity_stock_stmt, 3, 1000);
-      sqlite3_step (entity_stock_stmt);
-      sqlite3_reset (entity_stock_stmt);
-      sqlite3_bind_int (entity_stock_stmt, 1, (int) port_id);
-      sqlite3_bind_text (entity_stock_stmt, 2, "WPN", -1, SQLITE_STATIC);
-      sqlite3_bind_int (entity_stock_stmt, 3, 1000);
-      sqlite3_step (entity_stock_stmt);
-      sqlite3_reset (entity_stock_stmt);
-      sqlite3_bind_int (entity_stock_stmt, 1, (int) port_id);
-      sqlite3_bind_text (entity_stock_stmt, 2, "DRG", -1, SQLITE_STATIC);
-      sqlite3_bind_int (entity_stock_stmt, 3, 1000);
-      sqlite3_step (entity_stock_stmt);
-      sqlite3_reset (entity_stock_stmt);
+      sqlite3_bind_int (entity_stock_stmt, 1, (int)port_id);
+      sqlite3_bind_text (entity_stock_stmt,
+                         2,
+                         "SLV",
+                         -1,
+                         SQLITE_STATIC); sqlite3_bind_int (entity_stock_stmt,
+                                                           3,
+                                                           1000);
+      sqlite3_step (entity_stock_stmt); sqlite3_reset (entity_stock_stmt);
+      sqlite3_bind_int (entity_stock_stmt, 1, (int)port_id);
+      sqlite3_bind_text (entity_stock_stmt,
+                         2,
+                         "WPN",
+                         -1,
+                         SQLITE_STATIC); sqlite3_bind_int (entity_stock_stmt,
+                                                           3,
+                                                           1000);
+      sqlite3_step (entity_stock_stmt); sqlite3_reset (entity_stock_stmt);
+      sqlite3_bind_int (entity_stock_stmt, 1, (int)port_id);
+      sqlite3_bind_text (entity_stock_stmt,
+                         2,
+                         "DRG",
+                         -1,
+                         SQLITE_STATIC); sqlite3_bind_int (entity_stock_stmt,
+                                                           3,
+                                                           1000);
+      sqlite3_step (entity_stock_stmt); sqlite3_reset (entity_stock_stmt);
     }
   sqlite3_finalize (entity_stock_stmt);
   entity_stock_stmt = NULL;
@@ -1475,7 +1513,7 @@ create_full_port (sqlite3 *db, int sector, int port_number,
     }
 
   // Helper to add trade row
-#define ADD_TRADE(comm, mode, max) do { \
+  #define ADD_TRADE(comm, mode, max) do { \
               sqlite3_bind_int (trade_stmt, 1, (int)port_id); \
               sqlite3_bind_text (trade_stmt, 2, comm, -1, SQLITE_STATIC); \
               sqlite3_bind_text (trade_stmt, 3, mode, -1, SQLITE_STATIC); \
@@ -1489,12 +1527,13 @@ create_full_port (sqlite3 *db, int sector, int port_number,
 
   if (type_id == 9 || type_id == 10)
     {
-      ADD_TRADE ("ore", "buy", max_prod);
-      ADD_TRADE ("ore", "sell", max_prod);
-      ADD_TRADE ("organics", "buy", max_prod);
-      ADD_TRADE ("organics", "sell", max_prod);
-      ADD_TRADE ("equipment", "buy", max_prod);
-      ADD_TRADE ("equipment", "sell", max_prod);
+      ADD_TRADE ("ore", "buy", max_prod); ADD_TRADE ("ore", "sell", max_prod);
+      ADD_TRADE ("organics", "buy", max_prod); ADD_TRADE ("organics",
+                                                          "sell",
+                                                          max_prod);
+      ADD_TRADE ("equipment", "buy", max_prod); ADD_TRADE ("equipment",
+                                                           "sell",
+                                                           max_prod);
     }
   else
     {
@@ -1502,38 +1541,45 @@ create_full_port (sqlite3 *db, int sector, int port_number,
       // Type 1, 2: Sell Equ (Buy Ore/Org implied by high capacity? usually ports buy what they don't sell)
       // Simplistic mapping:
       if (type_id == 1 || type_id == 2)
-	{
-	  ADD_TRADE ("equipment", "sell", max_prod);
-	  ADD_TRADE ("ore", "buy", max_prod);
-	  ADD_TRADE ("organics", "buy", max_prod);
-	}
+        {
+          ADD_TRADE ("equipment", "sell", max_prod); ADD_TRADE ("ore",
+                                                                "buy",
+                                                                max_prod);
+          ADD_TRADE ("organics", "buy", max_prod);
+        }
       if (type_id == 3 || type_id == 4)
-	{
-	  ADD_TRADE ("equipment", "buy", max_prod);
-	  ADD_TRADE ("ore", "sell", max_prod);
-	  ADD_TRADE ("organics", "sell", max_prod);
-	}
+        {
+          ADD_TRADE ("equipment", "buy", max_prod); ADD_TRADE ("ore",
+                                                               "sell",
+                                                               max_prod);
+          ADD_TRADE ("organics", "sell", max_prod);
+        }
       if (type_id == 5 || type_id == 6)
-	{
-	  ADD_TRADE ("organics", "sell", max_prod);
-	  ADD_TRADE ("ore", "buy", max_prod);
-	  ADD_TRADE ("equipment", "buy", max_prod);
-	}
+        {
+          ADD_TRADE ("organics", "sell", max_prod); ADD_TRADE ("ore",
+                                                               "buy",
+                                                               max_prod);
+          ADD_TRADE ("equipment", "buy", max_prod);
+        }
       if (type_id == 7 || type_id == 8)
-	{
-	  ADD_TRADE ("organics", "buy", max_prod);
-	  ADD_TRADE ("ore", "sell", max_prod);
-	  ADD_TRADE ("equipment", "sell", max_prod);
-	}
+        {
+          ADD_TRADE ("organics", "buy", max_prod); ADD_TRADE ("ore",
+                                                              "sell",
+                                                              max_prod);
+          ADD_TRADE ("equipment", "sell", max_prod);
+        }
     }
   sqlite3_finalize (trade_stmt);
   trade_stmt = NULL;
 
   // Create a bank account for the new port (Correction III.4)
   h_add_credits (db,
-		 "port",
-		 (int) port_id,
-		 port_credits + petty_cash_val, "DEPOSIT", NULL, NULL);
+                 "port",
+                 (int) port_id,
+                 port_credits + petty_cash_val,
+                 "DEPOSIT",
+                 NULL,
+                 NULL);
 
   /*
    * ===================================================================
@@ -1544,7 +1590,7 @@ create_full_port (sqlite3 *db, int sector, int port_number,
   if (rc != SQLITE_OK)
     {
       fprintf (stderr, "create_full_port: COMMIT failed: %s\n",
-	       sqlite3_errmsg (db));
+               sqlite3_errmsg (db));
       goto rollback;
     }
   if (port_id_out)
@@ -1578,7 +1624,7 @@ create_ferringhi (int ferringhi_sector)
   if (ferringhi_sector == 0)
     {
       ferringhi_sector = 20;
-    }				// just make it a default value
+    }                           // just make it a default value
   sqlite3 *db = db_get_handle ();
 
 
@@ -1597,7 +1643,7 @@ create_ferringhi (int ferringhi_sector)
   if (merchant_freighter_id == -1 || ferengi_warship_id == -1)
     {
       fprintf (stderr,
-	       "create_ferringhi: Failed to get required shiptype IDs.\n");
+               "create_ferringhi: Failed to get required shiptype IDs.\n");
       return -1;
     }
   // Create the view to find the longest tunnels
@@ -1608,8 +1654,8 @@ create_ferringhi (int ferringhi_sector)
   if (sqlite3_exec (db, create_view_sql, NULL, NULL, NULL) != SQLITE_OK)
     {
       fprintf (stderr,
-	       "create_ferringhi: Failed to create longest_tunnels view: %s\n",
-	       sqlite3_errmsg (db));
+               "create_ferringhi: Failed to create longest_tunnels view: %s\n",
+               sqlite3_errmsg (db));
       return -1;
     }
   int longest_tunnel_sector = 0;
@@ -1620,7 +1666,7 @@ create_ferringhi (int ferringhi_sector)
   if (sqlite3_prepare_v2 (db, q, -1, &st, NULL) != SQLITE_OK)
     {
       fprintf (stderr, "create_ferringhi prepare failed: %s\n",
-	       sqlite3_errmsg (db));
+               sqlite3_errmsg (db));
       return -1;
     }
   if (sqlite3_step (st) == SQLITE_ROW)
@@ -1640,9 +1686,9 @@ create_ferringhi (int ferringhi_sector)
 
 
   snprintf (planet_sector,
-	    sizeof (planet_sector),
-	    "UPDATE planets SET sector=%d WHERE id=2;",
-	    longest_tunnel_sector);
+            sizeof (planet_sector),
+            "UPDATE planets SET sector=%d WHERE id=2;",
+            longest_tunnel_sector);
   // Execute the variable that actually holds the SQL string: 'planet_sector'
   if (sqlite3_exec (db, planet_sector, NULL, NULL, NULL) != SQLITE_OK)
     {
@@ -1655,17 +1701,19 @@ create_ferringhi (int ferringhi_sector)
 
 
   snprintf (sql_citadel,
-	    sizeof (sql_citadel),
-	    "INSERT INTO citadels (planet_id, level, shields, treasury, military) "
-	    "VALUES (%d, %d, %d, %d, 1);", 2, (rand () % 2) + 2,
-	    // Citadel Level (2-3)
-	    (rand () % 1001) + 1000,
-	    // Shields (1k-2k)
-	    (rand () % 5000001) + 1000000);	// Credits (1M-6M)
+            sizeof (sql_citadel),
+            "INSERT INTO citadels (planet_id, level, shields, treasury, military) "
+            "VALUES (%d, %d, %d, %d, 1);",
+            2,
+            (rand () % 2) + 2,
+            // Citadel Level (2-3)
+            (rand () % 1001) + 1000,
+            // Shields (1k-2k)
+            (rand () % 5000001) + 1000000);     // Credits (1M-6M)
   if (sqlite3_exec (db, sql_citadel, NULL, NULL, NULL) != SQLITE_OK)
     {
       fprintf (stderr, "create_ferringhi failed to create citadel: %s\n",
-	       sqlite3_errmsg (db));
+               sqlite3_errmsg (db));
       return -1;
     }
   // Dynamically build the INSERT statement for the player
@@ -1676,27 +1724,27 @@ create_ferringhi (int ferringhi_sector)
 
   // Add the core columns
   strncat (player_cols, "name, passwd, credits, sector",
-	   sizeof (player_cols) - strlen (player_cols) - 1);
+           sizeof (player_cols) - strlen (player_cols) - 1);
   strncat (player_vals, "?, ?, ?, ?",
-	   sizeof (player_vals) - strlen (player_vals) - 1);
+           sizeof (player_vals) - strlen (player_vals) - 1);
   // Add the 'type' and 'ship' columns if they exist in the schema
   if (has_column (db, "players", "type"))
     {
       strncat (player_cols, ", type",
-	       sizeof (player_cols) - strlen (player_cols) - 1);
+               sizeof (player_cols) - strlen (player_cols) - 1);
       strncat (player_vals, ", ?",
-	       sizeof (player_vals) - strlen (player_vals) - 1);
+               sizeof (player_vals) - strlen (player_vals) - 1);
     }
   if (has_column (db, "players", "ship"))
     {
       strncat (player_cols, ", ship",
-	       sizeof (player_cols) - strlen (player_cols) - 1);
+               sizeof (player_cols) - strlen (player_cols) - 1);
       strncat (player_vals, ", ?",
-	       sizeof (player_vals) - strlen (player_vals) - 1);
+               sizeof (player_vals) - strlen (player_vals) - 1);
     }
   snprintf (player_insert_sql, sizeof (player_insert_sql),
-	    "INSERT INTO players (%s) VALUES (%s);", player_cols,
-	    player_vals);
+            "INSERT INTO players (%s) VALUES (%s);", player_cols,
+            player_vals);
   sqlite3_stmt *player_ins = NULL;
   int rc_player_prepare =
     sqlite3_prepare_v2 (db, player_insert_sql, -1, &player_ins, NULL);
@@ -1705,7 +1753,7 @@ create_ferringhi (int ferringhi_sector)
   if (rc_player_prepare != SQLITE_OK)
     {
       fprintf (stderr, "create_ferringhi prepare player insert failed: %s\n",
-	       sqlite3_errmsg (db));
+               sqlite3_errmsg (db));
       return -1;
     }
   // Prepare the player update statement outside the loop for efficiency
@@ -1716,17 +1764,17 @@ create_ferringhi (int ferringhi_sector)
     {
       const char *update_sql = "UPDATE players SET ship = ? WHERE id = ?;";
       int rc_update_prepare =
-	sqlite3_prepare_v2 (db, update_sql, -1, &player_update, NULL);
+        sqlite3_prepare_v2 (db, update_sql, -1, &player_update, NULL);
 
 
       if (rc_update_prepare != SQLITE_OK)
-	{
-	  fprintf (stderr,
-		   "create_ferringhi prepare player update failed: %s\n",
-		   sqlite3_errmsg (db));
-	  sqlite3_finalize (player_ins);
-	  return -1;
-	}
+        {
+          fprintf (stderr,
+                   "create_ferringhi prepare player update failed: %s\n",
+                   sqlite3_errmsg (db));
+          sqlite3_finalize (player_ins);
+          return -1;
+        }
     }
   // Seed 5 Ferrengi traders as both players and ships
   for (int i = 0; i < 5; i++)
@@ -1736,42 +1784,43 @@ create_ferringhi (int ferringhi_sector)
 
 
       snprintf (player_name, sizeof (player_name), "Ferrengi Trader %d",
-		i + 1);
+                i + 1);
       int b_player = 1;
 
 
       sqlite3_bind_text (player_ins, b_player++, player_name, -1,
-			 SQLITE_STATIC);
+                         SQLITE_STATIC);
       sqlite3_bind_text (player_ins, b_player++, "BOT", -1, SQLITE_STATIC);
       sqlite3_bind_int (player_ins, b_player++, player_credits);
       sqlite3_bind_int (player_ins, b_player++, longest_tunnel_sector);
       // Bind the type if the column exists
       if (has_column (db, "players", "type"))
-	{
-	  sqlite3_bind_int (player_ins, b_player++, 1);
-	}
+        {
+          sqlite3_bind_int (player_ins, b_player++, 1);
+        }
       // Bind the ship ID, initially as 0, to be updated later
       if (has_column (db, "players", "ship"))
-	{
-	  sqlite3_bind_int (player_ins, b_player++, 0);	// Placeholder
-	}
+        {
+          sqlite3_bind_int (player_ins, b_player++, 0); // Placeholder
+        }
       if (sqlite3_step (player_ins) != SQLITE_DONE)
-	{
-	  fprintf (stderr,
-		   "create_ferringhi failed to create player %d: %s\n", i,
-		   sqlite3_errmsg (db));
-	  sqlite3_finalize (player_ins);
-	  sqlite3_finalize (player_update);
-	  return -1;
-	}
+        {
+          fprintf (stderr,
+                   "create_ferringhi failed to create player %d: %s\n", i,
+                   sqlite3_errmsg (db));
+          sqlite3_finalize (player_ins);
+          sqlite3_finalize (player_update);
+          return -1;
+        }
       sqlite3_reset (player_ins);
       // Get the ID of the new player
       sqlite3_int64 player_id = sqlite3_last_insert_rowid (db);
       // Randomly choose between a trader and a warship type
-      int ship_type = (rand () % 100) < 80 ? merchant_freighter_id : ferengi_warship_id;	// Use the dynamic IDs here
-      int ship_fighters = (rand () % 1501) + 500;	// 500-2000 fighters
-      int ship_shields = (rand () % 4001) + 1000;	// 1000-5000 shields
-      int ship_holds = (rand () % 801) + 200;	// 200-1000 holds
+      int ship_type = (rand () % 100) <
+                      80 ? merchant_freighter_id : ferengi_warship_id;                          // Use the dynamic IDs here
+      int ship_fighters = (rand () % 1501) + 500;       // 500-2000 fighters
+      int ship_shields = (rand () % 4001) + 1000;       // 1000-5000 shields
+      int ship_holds = (rand () % 801) + 200;   // 200-1000 holds
       int mines_to_add = 5;
       int beacons_to_add = 4;
       int photons_to_add = 1;
@@ -1783,20 +1832,20 @@ create_ferringhi (int ferringhi_sector)
 
 
       for (int h = 0; h < holds_to_fill; h++)
-	{
-	  switch (rand () % 3)
-	    {
-	    case 0:
-	      ore++;
-	      break;
-	    case 1:
-	      organics++;
-	      break;
-	    case 2:
-	      equipment++;
-	      break;
-	    }
-	}
+        {
+          switch (rand () % 3)
+            {
+              case 0:
+                ore++;
+                break;
+              case 1:
+                organics++;
+                break;
+              case 2:
+                equipment++;
+                break;
+            }
+        }
       // Dynamically build the INSERT statement for the ship
       char insert_sql[2048];
       char cols[512] = "";
@@ -1809,65 +1858,65 @@ create_ferringhi (int ferringhi_sector)
       // We are also adding 'limpets', 'genesis', 'colonists', 'flags', 'ported', 'onplanet',
       // and the cloaking columns, providing default values where necessary.
       strncat (cols,
-	       "name, type_id, sector, fighters, shields, holds, ore, organics, equipment, limpets, genesis, colonists, flags, ported, onplanet",
-	       sizeof (cols) - strlen (cols) - 1);
+               "name, type_id, sector, fighters, shields, holds, ore, organics, equipment, limpets, genesis, colonists, flags, ported, onplanet",
+               sizeof (cols) - strlen (cols) - 1);
       strncat (vals, "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?",
-	       sizeof (vals) - strlen (vals) - 1);
+               sizeof (vals) - strlen (vals) - 1);
       // NOTE: We now explicitly check and bind the `attack`, `mines`, `beacons`, and `photons`
       // as they are optional / conditional.
       if (has_column (db, "ships", "attack"))
-	{
-	  strncat (cols, ", attack", sizeof (cols) - strlen (cols) - 1);
-	  strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
-	}
+        {
+          strncat (cols, ", attack", sizeof (cols) - strlen (cols) - 1);
+          strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
+        }
       if (has_column (db, "ships", "mines"))
-	{
-	  strncat (cols, ", mines", sizeof (cols) - strlen (cols) - 1);
-	  strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
-	}
+        {
+          strncat (cols, ", mines", sizeof (cols) - strlen (cols) - 1);
+          strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
+        }
       if (has_column (db, "ships", "beacons"))
-	{
-	  strncat (cols, ", beacons", sizeof (cols) - strlen (cols) - 1);
-	  strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
-	}
+        {
+          strncat (cols, ", beacons", sizeof (cols) - strlen (cols) - 1);
+          strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
+        }
       if (has_column (db, "ships", "photons"))
-	{
-	  strncat (cols, ", photons", sizeof (cols) - strlen (cols) - 1);
-	  strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
-	}
+        {
+          strncat (cols, ", photons", sizeof (cols) - strlen (cols) - 1);
+          strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
+        }
       // Add the cloaking fields if they exist, to ensure proper schema upgrade compatibility.
       // If you are certain these columns exist, you can add them to the core list above.
       if (has_column (db, "ships", "cloaking_devices"))
-	{
-	  strncat (cols, ", cloaking_devices",
-		   sizeof (cols) - strlen (cols) - 1);
-	  strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
-	}
+        {
+          strncat (cols, ", cloaking_devices",
+                   sizeof (cols) - strlen (cols) - 1);
+          strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
+        }
       if (has_column (db, "ships", "cloaked"))
-	{
-	  strncat (cols, ", cloaked", sizeof (cols) - strlen (cols) - 1);
-	  strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
-	}
+        {
+          strncat (cols, ", cloaked", sizeof (cols) - strlen (cols) - 1);
+          strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
+        }
       snprintf (insert_sql, sizeof (insert_sql),
-		"INSERT INTO ships (%s) VALUES (%s);", cols, vals);
+                "INSERT INTO ships (%s) VALUES (%s);", cols, vals);
       sqlite3_stmt *ins = NULL;
       int rc = sqlite3_prepare_v2 (db, insert_sql, -1, &ins, NULL);
 
 
       if (rc != SQLITE_OK)
-	{
-	  fprintf (stderr, "create_ferringhi prepare insert failed: %s\n",
-		   sqlite3_errmsg (db));
-	  sqlite3_finalize (player_ins);
-	  sqlite3_finalize (player_update);
-	  return -1;
-	}
+        {
+          fprintf (stderr, "create_ferringhi prepare insert failed: %s\n",
+                   sqlite3_errmsg (db));
+          sqlite3_finalize (player_ins);
+          sqlite3_finalize (player_update);
+          return -1;
+        }
       int b = 1;
 
 
       // 1. Core Columns (15 parameters)
       sqlite3_bind_text (ins, b++, "Ferrengi Trader", -1, SQLITE_STATIC);
-      sqlite3_bind_int (ins, b++, ship_type);	// Renamed 'type' to 'type_id'
+      sqlite3_bind_int (ins, b++, ship_type);   // Renamed 'type' to 'type_id'
       sqlite3_bind_int (ins, b++, longest_tunnel_sector);
       sqlite3_bind_int (ins, b++, ship_fighters);
       sqlite3_bind_int (ins, b++, ship_shields);
@@ -1875,51 +1924,51 @@ create_ferringhi (int ferringhi_sector)
       // The ship should begin with 0 current cargo, but needs max holds for player to see capacity.
       // Since Ferengi Trader will likely start with 0 cargo, we should bind 0 to holds.
       // Assuming 'holds_to_fill' is the number of cargo holds the ship starts with (0 in most cases).
-      sqlite3_bind_int (ins, b++, holds_to_fill);	// This should be 0 for a new ship (holds)
-      sqlite3_bind_int (ins, b++, 0);	// Cargo begins here
+      sqlite3_bind_int (ins, b++, holds_to_fill);       // This should be 0 for a new ship (holds)
+      sqlite3_bind_int (ins, b++, 0);   // Cargo begins here
       sqlite3_bind_int (ins, b++, 0);
-      sqlite3_bind_int (ins, b++, 0);	// Cargo ends here
-      sqlite3_bind_int (ins, b++, 0);	// limpets (New, default 0)
-      sqlite3_bind_int (ins, b++, 0);	// genesis (New, default 0)
-      sqlite3_bind_int (ins, b++, 0);	// colonists (New, default 0)
-      sqlite3_bind_int (ins, b++, 777);	// flags (New, default 777 for claimable derelicts)
-      sqlite3_bind_int (ins, b++, 0);	// ported (New, default 0)
-      sqlite3_bind_int (ins, b++, 1);	// onplanet (Always 1 for new ship on starting planet)
+      sqlite3_bind_int (ins, b++, 0);   // Cargo ends here
+      sqlite3_bind_int (ins, b++, 0);   // limpets (New, default 0)
+      sqlite3_bind_int (ins, b++, 0);   // genesis (New, default 0)
+      sqlite3_bind_int (ins, b++, 0);   // colonists (New, default 0)
+      sqlite3_bind_int (ins, b++, 777); // flags (New, default 777 for claimable derelicts)
+      sqlite3_bind_int (ins, b++, 0);   // ported (New, default 0)
+      sqlite3_bind_int (ins, b++, 1);   // onplanet (Always 1 for new ship on starting planet)
       // 2. Conditional Columns
       if (has_column (db, "ships", "attack"))
-	{
-	  sqlite3_bind_int (ins, b++, ship_attack);	// Changed to bind ship_attack
-	}
+        {
+          sqlite3_bind_int (ins, b++, ship_attack);     // Changed to bind ship_attack
+        }
       if (has_column (db, "ships", "mines"))
-	{
-	  sqlite3_bind_int (ins, b++, mines_to_add);
-	}
+        {
+          sqlite3_bind_int (ins, b++, mines_to_add);
+        }
       if (has_column (db, "ships", "beacons"))
-	{
-	  sqlite3_bind_int (ins, b++, beacons_to_add);
-	}
+        {
+          sqlite3_bind_int (ins, b++, beacons_to_add);
+        }
       if (has_column (db, "ships", "photons"))
-	{
-	  sqlite3_bind_int (ins, b++, photons_to_add);
-	}
+        {
+          sqlite3_bind_int (ins, b++, photons_to_add);
+        }
       // 3. Cloaking Columns
       if (has_column (db, "ships", "cloaking_devices"))
-	{
-	  sqlite3_bind_int (ins, b++, 0);	// New, default 0
-	}
+        {
+          sqlite3_bind_int (ins, b++, 0); // New, default 0
+        }
       if (has_column (db, "ships", "cloaked"))
-	{
-	  sqlite3_bind_null (ins, b++);	// New, default NULL
-	}
+        {
+          sqlite3_bind_null (ins, b++); // New, default NULL
+        }
       if (sqlite3_step (ins) != SQLITE_DONE)
-	{
-	  fprintf (stderr, "create_ferringhi failed to create ship %d: %s\n",
-		   i, sqlite3_errmsg (db));
-	  sqlite3_finalize (ins);
-	  sqlite3_finalize (player_ins);
-	  sqlite3_finalize (player_update);
-	  return -1;
-	}
+        {
+          fprintf (stderr, "create_ferringhi failed to create ship %d: %s\n",
+                   i, sqlite3_errmsg (db));
+          sqlite3_finalize (ins);
+          sqlite3_finalize (player_ins);
+          sqlite3_finalize (player_update);
+          return -1;
+        }
       sqlite3_finalize (ins);
       // Get the ID of the newly created ship
       sqlite3_int64 ship_id = sqlite3_last_insert_rowid (db);
@@ -1927,20 +1976,22 @@ create_ferringhi (int ferringhi_sector)
 
       // Update the player with their new ship ID
       if (player_update)
-	{
-	  sqlite3_bind_int (player_update, 1, ship_id);
-	  sqlite3_bind_int (player_update, 2, player_id);
-	  if (sqlite3_step (player_update) != SQLITE_DONE)
-	    {
-	      fprintf (stderr,
-		       "create_ferringhi failed to link player %lld with ship %lld: %s\n",
-		       player_id, ship_id, sqlite3_errmsg (db));
-	      sqlite3_finalize (player_ins);
-	      sqlite3_finalize (player_update);
-	      return -1;
-	    }
-	  sqlite3_reset (player_update);
-	}
+        {
+          sqlite3_bind_int (player_update, 1, ship_id);
+          sqlite3_bind_int (player_update, 2, player_id);
+          if (sqlite3_step (player_update) != SQLITE_DONE)
+            {
+              fprintf (stderr,
+                       "create_ferringhi failed to link player %lld with ship %lld: %s\n",
+                       player_id,
+                       ship_id,
+                       sqlite3_errmsg (db));
+              sqlite3_finalize (player_ins);
+              sqlite3_finalize (player_update);
+              return -1;
+            }
+          sqlite3_reset (player_update);
+        }
     }
   sqlite3_finalize (player_ins);
   sqlite3_finalize (player_update);
@@ -1949,27 +2000,27 @@ create_ferringhi (int ferringhi_sector)
   const char *oso =
     "SELECT exit_sector FROM longest_tunnels LIMIT 1 OFFSET 2;";
   sqlite3_stmt *stoso = NULL;
-  int rc = 0;			// Variable to capture return code
+  int rc = 0;                   // Variable to capture return code
 
 
-  if (sqlite3_prepare_v2 (db, oso, -1, &stoso, NULL) != SQLITE_OK)	// <-- FIXED: Changed 'q' to 'oso'
+  if (sqlite3_prepare_v2 (db, oso, -1, &stoso, NULL) != SQLITE_OK)      // <-- FIXED: Changed 'q' to 'oso'
     {
       fprintf (stderr, " Orion Syndicate prepare failed: %s\n",
-	       sqlite3_errmsg (db));
+               sqlite3_errmsg (db));
       // Do not return -1 here; let it fall through and use the default sector 22.
     }
   else
     {
-      rc = sqlite3_step (stoso);	// Only call step once
+      rc = sqlite3_step (stoso);        // Only call step once
       if (rc == SQLITE_ROW)
-	{
-	  oso_tunnel = sqlite3_column_int (stoso, 0);
-	}
+        {
+          oso_tunnel = sqlite3_column_int (stoso, 0);
+        }
       else if (rc != SQLITE_DONE)
-	{
-	  fprintf (stderr, " Orion Syndicate step failed: %s\n",
-		   sqlite3_errmsg (db));
-	}
+        {
+          fprintf (stderr, " Orion Syndicate step failed: %s\n",
+                   sqlite3_errmsg (db));
+        }
       sqlite3_finalize (stoso);
     }
 
@@ -1984,14 +2035,15 @@ create_ferringhi (int ferringhi_sector)
 
 
   snprintf (planet_sector_sql,
-	    sizeof (planet_sector_sql),
-	    "UPDATE planets SET sector=%d WHERE id=2; "
-	    "INSERT INTO sector_assets (sector, player, offensive_setting, asset_type, corporation, quantity, deployed_at) "
-	    "VALUES (%d, 0, 3, 2, 2, 50000, CAST(strftime('%%s','now') AS INTEGER)); "
-	    "INSERT INTO sector_assets (sector, player, asset_type, corporation, quantity, deployed_at) "
-	    "VALUES (%d, 0, 1, 2, 250,   CAST(strftime('%%s','now') AS INTEGER));",
-	    longest_tunnel_sector,
-	    longest_tunnel_sector, longest_tunnel_sector);
+            sizeof (planet_sector_sql),
+            "UPDATE planets SET sector=%d WHERE id=2; "
+            "INSERT INTO sector_assets (sector, player, offensive_setting, asset_type, corporation, quantity, deployed_at) "
+            "VALUES (%d, 0, 3, 2, 2, 50000, CAST(strftime('%%s','now') AS INTEGER)); "
+            "INSERT INTO sector_assets (sector, player, asset_type, corporation, quantity, deployed_at) "
+            "VALUES (%d, 0, 1, 2, 250,   CAST(strftime('%%s','now') AS INTEGER));",
+            longest_tunnel_sector,
+            longest_tunnel_sector,
+            longest_tunnel_sector);
   if (sqlite3_exec (db, planet_sector_sql, NULL, NULL, NULL) != SQLITE_OK)
     {
       LOGE ("Ferringhi DB Issue: %s", sqlite3_errmsg (db));
@@ -2003,17 +2055,19 @@ create_ferringhi (int ferringhi_sector)
 
 
   snprintf (oso_planet_sector,
-	    sizeof (oso_planet_sector),
-	    "UPDATE planets SET sector=%d WHERE id=3; "
-	    "INSERT INTO sector_assets (sector, player,offensive_setting, asset_type, corporation, quantity, deployed_at) "
-	    "VALUES (%d, 4, 2, 2, 1, 50000, CAST(strftime('%%s','now') AS INTEGER)); "
-	    "INSERT INTO sector_assets (sector, player, asset_type, corporation, quantity, deployed_at) "
-	    "VALUES (%d, 4, 1, 1, 250,   CAST(strftime('%%s','now') AS INTEGER));",
-	    oso_tunnel, oso_tunnel, oso_tunnel);
+            sizeof (oso_planet_sector),
+            "UPDATE planets SET sector=%d WHERE id=3; "
+            "INSERT INTO sector_assets (sector, player,offensive_setting, asset_type, corporation, quantity, deployed_at) "
+            "VALUES (%d, 4, 2, 2, 1, 50000, CAST(strftime('%%s','now') AS INTEGER)); "
+            "INSERT INTO sector_assets (sector, player, asset_type, corporation, quantity, deployed_at) "
+            "VALUES (%d, 4, 1, 1, 250,   CAST(strftime('%%s','now') AS INTEGER));",
+            oso_tunnel,
+            oso_tunnel,
+            oso_tunnel);
   if (sqlite3_exec (db, oso_planet_sector, NULL, NULL, NULL) != SQLITE_OK)
     {
       fprintf (stderr, "create Orion Syndicate failed: %s\n",
-	       sqlite3_errmsg (db));
+               sqlite3_errmsg (db));
       return -1;
     }
 
@@ -2021,14 +2075,14 @@ create_ferringhi (int ferringhi_sector)
 
 
   snprintf (oso_player_sector,
-	    sizeof (oso_player_sector),
-	    "UPDATE players set sector=%d where name like '%%Captain';",
-	    oso_tunnel);
+            sizeof (oso_player_sector),
+            "UPDATE players set sector=%d where name like '%%Captain';",
+            oso_tunnel);
 
-  if (sqlite3_exec (db, oso_player_sector, NULL, NULL, NULL) != SQLITE_OK)
+  if (sqlite3_exec (db, oso_player_sector, NULL, NULL, NULL ) != SQLITE_OK)
     {
       fprintf (stderr, "Orion Syndicate Player Sector Update failed: %s\n",
-	       sqlite3_errmsg (db));
+               sqlite3_errmsg (db));
       return -1;
     }
 
@@ -2039,20 +2093,22 @@ create_ferringhi (int ferringhi_sector)
 
 
   if (create_full_port (db,
-			oso_tunnel,
-			9998,
-			"Orion Black Market",
-			10, &orion_port_id) != SQLITE_OK)
+                        oso_tunnel,
+                        9998,
+                        "Orion Black Market",
+                        10,
+                        &orion_port_id) != SQLITE_OK)
     {
       fprintf (stderr,
-	       "create Orion Syndicate port failed: %s\n",
-	       sqlite3_errmsg (db));
+               "create Orion Syndicate port failed: %s\n",
+               sqlite3_errmsg (db));
       return -1;
     }
 
   fprintf (stderr,
-	   "BIGBANG: Placed Ferringhi at sector %d (end of a long tunnel).\nBIGBANG: Placed Orion Syndicate at sector %d (end of a long tunnel).\n",
-	   longest_tunnel_sector, oso_tunnel);
+           "BIGBANG: Placed Ferringhi at sector %d (end of a long tunnel).\nBIGBANG: Placed Orion Syndicate at sector %d (end of a long tunnel).\n",
+           longest_tunnel_sector,
+           oso_tunnel);
   return 0;
 }
 
@@ -2088,7 +2144,7 @@ create_imperial (void)
   if (imperial_starship_id == -1)
     {
       fprintf (stderr,
-	       "create_imperial: Failed to get required NPC shiptype ID.\n");
+               "create_imperial: Failed to get required NPC shiptype ID.\n");
       free (cfg);
       db_mutex_unlock ();
       return -1;
@@ -2103,14 +2159,14 @@ create_imperial (void)
 
 
   snprintf (sql_player,
-	    sizeof (sql_player),
-	    "INSERT INTO players (name, passwd, credits, type) VALUES ('Imperial Starship', 'BOT', \
+            sizeof (sql_player),
+            "INSERT INTO players (name, passwd, credits, type) VALUES ('Imperial Starship', 'BOT', \
 10000000, 1);");
   // Large credits and high alignment
   if (sqlite3_exec (db, sql_player, NULL, NULL, NULL) != SQLITE_OK)
     {
       fprintf (stderr, "create_imperial failed to create player: %s\n",
-	       sqlite3_errmsg (db));
+               sqlite3_errmsg (db));
       db_mutex_unlock ();
       return -1;
     }
@@ -2128,7 +2184,7 @@ create_imperial (void)
   if (rc != SQLITE_OK)
     {
       fprintf (stderr, "create_imperial: Failed to prepare ship INSERT: %s\n",
-	       sqlite3_errmsg (db));
+               sqlite3_errmsg (db));
       db_mutex_unlock ();
       return -1;
     }
@@ -2157,7 +2213,7 @@ create_imperial (void)
   if (rc != SQLITE_DONE)
     {
       fprintf (stderr, "create_imperial failed to create ship: %s\n",
-	       sqlite3_errmsg (db));
+               sqlite3_errmsg (db));
       sqlite3_finalize (ins);
       db_mutex_unlock ();
       return -1;
@@ -2165,18 +2221,18 @@ create_imperial (void)
   sqlite3_int64 imperial_ship_id = sqlite3_last_insert_rowid (db);
 
 
-  sqlite3_finalize (ins);	// Clean up the prepared statement
+  sqlite3_finalize (ins);       // Clean up the prepared statement
   // --- 3. Link the ship ID back to the player entry AND create ownership ---
   char sql_update[512];
 
 
   snprintf (sql_update, sizeof (sql_update),
-	    "UPDATE players SET ship=%lld WHERE id=%lld;",
-	    (long long) imperial_ship_id, (long long) imperial_player_id);
+            "UPDATE players SET ship=%lld WHERE id=%lld;",
+            (long long) imperial_ship_id, (long long) imperial_player_id);
   if (sqlite3_exec (db, sql_update, NULL, NULL, NULL) != SQLITE_OK)
     {
       fprintf (stderr, "create_imperial failed to update player ship: %s\n",
-	       sqlite3_errmsg (db));
+               sqlite3_errmsg (db));
       db_mutex_unlock ();
       return -1;
     }
@@ -2185,19 +2241,20 @@ create_imperial (void)
 
 
   snprintf (sql_own,
-	    sizeof (sql_own),
-	    "INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary) VALUES (%lld, %lld, 1, 1);",
-	    (long long) imperial_ship_id, (long long) imperial_player_id);
+            sizeof (sql_own),
+            "INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary) VALUES (%lld, %lld, 1, 1);",
+            (long long) imperial_ship_id,
+            (long long) imperial_player_id);
   if (sqlite3_exec (db, sql_own, NULL, NULL, NULL) != SQLITE_OK)
     {
       fprintf (stderr,
-	       "create_imperial failed to insert ownership: %s\n",
-	       sqlite3_errmsg (db));
+               "create_imperial failed to insert ownership: %s\n",
+               sqlite3_errmsg (db));
       // non-fatal, but bad
     }
   fprintf (stderr,
-	   "BIGBANG: Imperial Starship placed at sector %d.\n",
-	   imperial_sector);
+           "BIGBANG: Imperial Starship placed at sector %d.\n",
+           imperial_sector);
   db_mutex_unlock ();
   return 0;
 }
@@ -2210,14 +2267,14 @@ create_imperial (void)
    If fewer exist, create more (and optionally the return edge). */
 static int
 ensure_fedspace_exit (sqlite3 *db, int outer_min, int outer_max,
-		      int add_return_edge)
+                      int add_return_edge)
 {
   if (!db)
     {
       return SQLITE_ERROR;
     }
-  const int required_exits = 3;	/* <- change this if you want a different minimum */
-  const int max_attempts = 100;	/* avoid infinite loops on tiny maps */
+  const int required_exits = 3; /* <- change this if you want a different minimum */
+  const int max_attempts = 100; /* avoid infinite loops on tiny maps */
   int rc = SQLITE_OK;
   sqlite3_stmt *st_count = NULL;
   sqlite3_stmt *st_ins = NULL;
@@ -2225,11 +2282,11 @@ ensure_fedspace_exit (sqlite3 *db, int outer_min, int outer_max,
 
   /* Prepare COUNT(*) of existing exits 2..10 -> [outer_min..outer_max] */
   rc = sqlite3_prepare_v2 (db,
-			   "SELECT COUNT(*) "
-			   "FROM sector_warps "
-			   "WHERE from_sector BETWEEN 2 AND 10 "
-			   "  AND to_sector   BETWEEN ?1 AND ?2;",
-			   -1, &st_count, NULL);
+                           "SELECT COUNT(*) "
+                           "FROM sector_warps "
+                           "WHERE from_sector BETWEEN 2 AND 10 "
+                           "  AND to_sector   BETWEEN ?1 AND ?2;",
+                           -1, &st_count, NULL);
   if (rc != SQLITE_OK)
     {
       goto done;
@@ -2248,8 +2305,10 @@ ensure_fedspace_exit (sqlite3 *db, int outer_min, int outer_max,
     }
   /* Prepare INSERT (idempotent) */
   rc = sqlite3_prepare_v2 (db,
-			   "INSERT OR IGNORE INTO sector_warps(from_sector,to_sector) VALUES(?,?);",
-			   -1, &st_ins, NULL);
+                           "INSERT OR IGNORE INTO sector_warps(from_sector,to_sector) VALUES(?,?);",
+                           -1,
+                           &st_ins,
+                           NULL);
   if (rc != SQLITE_OK)
     {
       goto done;
@@ -2262,15 +2321,15 @@ ensure_fedspace_exit (sqlite3 *db, int outer_min, int outer_max,
     {
       ++attempts;
       /* Pick random FedSpace source 2..10 and random outer destination [outer_min..outer_max] */
-      int from = 2 + (rand () % 9);	/* 2..10 inclusive */
+      int from = 2 + (rand () % 9);     /* 2..10 inclusive */
       int span = (outer_max >= outer_min) ? (outer_max - outer_min + 1) : 1;
       int to = outer_min + (rand () % span);
 
 
       if (to == from)
-	{
-	  to = (to < outer_max) ? (to + 1) : outer_min;	/* avoid self-edge */
-	}
+        {
+          to = (to < outer_max) ? (to + 1) : outer_min; /* avoid self-edge */
+        }
       /* Insert forward edge */
       sqlite3_clear_bindings (st_ins);
       sqlite3_bind_int (st_ins, 1, from);
@@ -2280,17 +2339,17 @@ ensure_fedspace_exit (sqlite3 *db, int outer_min, int outer_max,
 
       sqlite3_reset (st_ins);
       if (rc1)
-	{
-	}			//stop the compiler complaining
+        {
+        }                       //stop the compiler complaining
       /* Optional return edge (keeps it safe from one-way pruning) */
       if (add_return_edge)
-	{
-	  sqlite3_clear_bindings (st_ins);
-	  sqlite3_bind_int (st_ins, 1, to);
-	  sqlite3_bind_int (st_ins, 2, from);
-	  (void) sqlite3_step (st_ins);
-	  sqlite3_reset (st_ins);
-	}
+        {
+          sqlite3_clear_bindings (st_ins);
+          sqlite3_bind_int (st_ins, 1, to);
+          sqlite3_bind_int (st_ins, 2, from);
+          (void) sqlite3_step (st_ins);
+          sqlite3_reset (st_ins);
+        }
       /* Re-count to see if we actually increased the number of exits */
       sqlite3_reset (st_count);
       // Correction VIII: Syntax fixed in sql param
@@ -2302,13 +2361,13 @@ ensure_fedspace_exit (sqlite3 *db, int outer_min, int outer_max,
   if (have < required_exits)
     {
       fprintf (stderr,
-	       "BIGBANG: only %d/%d exits created after %d attempts\n", have,
-	       required_exits, attempts);
+               "BIGBANG: only %d/%d exits created after %d attempts\n", have,
+               required_exits, attempts);
     }
   else
     {
       fprintf (stderr, "BIGBANG: ensured %d exits from 2..10 to [%d..%d]\n",
-	       have, outer_min, outer_max);
+               have, outer_min, outer_max);
     }
   rc = SQLITE_OK;
 done:
@@ -2343,10 +2402,10 @@ has_column (sqlite3 *db, const char *table, const char *column)
   while (sqlite3_step (st) == SQLITE_ROW)
     {
       if (strcmp ((const char *) sqlite3_column_text (st, 1), column) == 0)
-	{
-	  found = true;
-	  break;
-	}
+        {
+          found = true;
+          break;
+        }
     }
   sqlite3_finalize (st);
   return found;
@@ -2385,8 +2444,8 @@ create_derelicts (void)
   if (rc != SQLITE_OK)
     {
       fprintf (stderr,
-	       "[create_derelicts] shiptypes SELECT prepare failed: %s\n",
-	       sqlite3_errmsg (db));
+               "[create_derelicts] shiptypes SELECT prepare failed: %s\n",
+               sqlite3_errmsg (db));
       return 1;
     }
   /* Dynamically build the INSERT statement based on existing columns in your schema */
@@ -2476,7 +2535,7 @@ create_derelicts (void)
     }
   // Add columns with a fixed default value (flags, ported, onplanet are present in new schema)
   strncat (cols, ", flags, ported, onplanet",
-	   sizeof (cols) - strlen (cols) - 1);
+           sizeof (cols) - strlen (cols) - 1);
   strncat (vals, ", ?, ?, ?", sizeof (vals) - strlen (vals) - 1);
   // cloaking_devices and cloaked are also new in the schema
   if (has_column (db, "ships", "cloaking_devices"))
@@ -2495,7 +2554,7 @@ create_derelicts (void)
       strncat (vals, ", ?", sizeof (vals) - strlen (vals) - 1);
     }
   snprintf (insert_sql, sizeof (insert_sql),
-	    "INSERT INTO ships (%s) VALUES (%s);", cols, vals);
+            "INSERT INTO ships (%s) VALUES (%s);", cols, vals);
   sqlite3_stmt *ins = NULL;
 
 
@@ -2503,7 +2562,7 @@ create_derelicts (void)
   if (rc != SQLITE_OK)
     {
       fprintf (stderr, "[create_derelicts] insert prepare failed: %s\n",
-	       sqlite3_errmsg (db));
+               sqlite3_errmsg (db));
       sqlite3_finalize (sel);
       return 1;
     }
@@ -2511,7 +2570,7 @@ create_derelicts (void)
   if (rc != SQLITE_OK)
     {
       fprintf (stderr, "[create_derelicts] begin transaction failed: %s\n",
-	       errmsg ? errmsg : "(unknown)");
+               errmsg ? errmsg : "(unknown)");
       sqlite3_free (errmsg);
       sqlite3_finalize (ins);
       sqlite3_finalize (sel);
@@ -2523,24 +2582,24 @@ create_derelicts (void)
       int st_id = sqlite3_column_int (sel, 0);
       const unsigned char *stype_name_uc = sqlite3_column_text (sel, 1);
       const char *stype_name =
-	(const char *) (stype_name_uc ? (const char *) stype_name_uc : "");
+        (const char *) (stype_name_uc ? (const char *) stype_name_uc : "");
       /* Build display name */
       char dname[128];
       char rnd[128];
 
 
       if (db_rand_npc_shipname (rnd, sizeof rnd) == SQLITE_OK && rnd[0])
-	{
-	  snprintf (dname, sizeof dname, "%s", rnd);
-	}
+        {
+          snprintf (dname, sizeof dname, "%s", rnd);
+        }
       else if (stype_name && stype_name[0] != '\0')
-	{
-	  snprintf (dname, sizeof dname, "Derelict %s", stype_name);
-	}
+        {
+          snprintf (dname, sizeof dname, "Derelict %s", stype_name);
+        }
       else
-	{
-	  snprintf (dname, sizeof dname, "Derelict Type %d", st_id);
-	}
+        {
+          snprintf (dname, sizeof dname, "Derelict Type %d", st_id);
+        }
       /* Pick a random sector in the range 11..500 */
       int sector = 11 + (rand () % 490);
       /* Capacities from shiptypes */
@@ -2550,14 +2609,14 @@ create_derelicts (void)
       int max_mines = sqlite3_column_int (sel, 5);
       int max_photons = sqlite3_column_int (sel, 6);
       int max_beacons = sqlite3_column_int (sel, 7);
-      int max_attack = sqlite3_column_int (sel, 8);	// NEW: maxattack
-      int max_limpets = sqlite3_column_int (sel, 9);	// NEW: maxlimpets
-      int max_genesis = sqlite3_column_int (sel, 10);	// NEW: maxgenesis
+      int max_attack = sqlite3_column_int (sel, 8);     // NEW: maxattack
+      int max_limpets = sqlite3_column_int (sel, 9);    // NEW: maxlimpets
+      int max_genesis = sqlite3_column_int (sel, 10);   // NEW: maxgenesis
       /* Random fill percentage for “used” fields */
 #define MIN_FILL_PCT 25
 #define MAX_FILL_PCT 75
       int fill_pct =
-	MIN_FILL_PCT + (rand () % (MAX_FILL_PCT - MIN_FILL_PCT + 1));
+        MIN_FILL_PCT + (rand () % (MAX_FILL_PCT - MIN_FILL_PCT + 1));
       int holds = (int) (max_holds * ((float) fill_pct / 100.0));
       int shields_to_add = (int) (max_shields * ((float) fill_pct / 100.0));
       int fighters_to_add = (int) (max_fighters * ((float) fill_pct / 100.0));
@@ -2574,94 +2633,97 @@ create_derelicts (void)
 
       // 1. Core columns
       sqlite3_bind_text (ins, b++, dname, -1, SQLITE_TRANSIENT);
-      sqlite3_bind_int (ins, b++, st_id);	// FIX: Bind to type_id
+      sqlite3_bind_int (ins, b++, st_id);       // FIX: Bind to type_id
       // 2. Dynamic bindings that were added to cols/vals
       if (has_column (db, "ships", "attack"))
-	{
-	  sqlite3_bind_int (ins, b++, attack_to_add);	// NEW: Use calculated attack
-	}
+        {
+          sqlite3_bind_int (ins, b++, attack_to_add);   // NEW: Use calculated attack
+        }
       if (has_column (db, "ships", "sector"))
-	{
-	  sqlite3_bind_int (ins, b++, sector);
-	}
+        {
+          sqlite3_bind_int (ins, b++, sector);
+        }
       if (has_column (db, "ships", "holds"))
-	{
-	  sqlite3_bind_int (ins, b++, holds);
-	}
+        {
+          sqlite3_bind_int (ins, b++, holds);
+        }
       if (has_column (db, "ships", "shields"))
-	{
-	  sqlite3_bind_int (ins, b++, shields_to_add);
-	}
+        {
+          sqlite3_bind_int (ins, b++, shields_to_add);
+        }
       if (has_column (db, "ships", "fighters"))
-	{
-	  sqlite3_bind_int (ins, b++, fighters_to_add);
-	}
+        {
+          sqlite3_bind_int (ins, b++, fighters_to_add);
+        }
       if (has_column (db, "ships", "organics"))
-	{
-	  sqlite3_bind_int (ins, b++, 0);	// No organics in derelict
-	}
+        {
+          sqlite3_bind_int (ins, b++, 0); // No organics in derelict
+        }
       if (has_column (db, "ships", "equipment"))
-	{
-	  sqlite3_bind_int (ins, b++, 0);	// No equipment in derelict
-	}
+        {
+          sqlite3_bind_int (ins, b++, 0); // No equipment in derelict
+        }
       if (has_column (db, "ships", "ore"))
-	{
-	  sqlite3_bind_int (ins, b++, 0);	// No ore in derelict
-	}
+        {
+          sqlite3_bind_int (ins, b++, 0); // No ore in derelict
+        }
       if (has_column (db, "ships", "colonists"))
-	{
-	  sqlite3_bind_int (ins, b++, 0);	// No colonists in derelict
-	}
+        {
+          sqlite3_bind_int (ins, b++, 0); // No colonists in derelict
+        }
       if (has_column (db, "ships", "limpets"))
-	{
-	  sqlite3_bind_int (ins, b++, limpets_to_add);	// NEW: Bind limpets
-	}
+        {
+          sqlite3_bind_int (ins, b++, limpets_to_add);  // NEW: Bind limpets
+        }
       if (has_column (db, "ships", "mines"))
-	{
-	  sqlite3_bind_int (ins, b++, mines_to_add);
-	}
+        {
+          sqlite3_bind_int (ins, b++, mines_to_add);
+        }
       if (has_column (db, "ships", "genesis"))
-	{
-	  sqlite3_bind_int (ins, b++, genesis_to_add);	// FIX: Use calculated genesis
-	}
+        {
+          sqlite3_bind_int (ins, b++, genesis_to_add);  // FIX: Use calculated genesis
+        }
       if (has_column (db, "ships", "photons"))
-	{
-	  sqlite3_bind_int (ins, b++, photons_to_add);
-	}
+        {
+          sqlite3_bind_int (ins, b++, photons_to_add);
+        }
       if (has_column (db, "ships", "beacons"))
-	{
-	  sqlite3_bind_int (ins, b++, beacons_to_add);
-	}
+        {
+          sqlite3_bind_int (ins, b++, beacons_to_add);
+        }
       if (has_column (db, "ships", "perms"))
-	{
-	  sqlite3_bind_int (ins, b++, 777);
-	}
+        {
+          sqlite3_bind_int (ins, b++, 777);
+        }
       // 3. Fixed value columns
-      sqlite3_bind_int (ins, b++, 0);	/* flags (NPC derelict) */
-      sqlite3_bind_int (ins, b++, 0);	/* ported (not ported) */
-      sqlite3_bind_int (ins, b++, 0);	/* onplanet (not on planet) */
+      sqlite3_bind_int (ins, b++, 0);   /* flags (NPC derelict) */
+      sqlite3_bind_int (ins, b++, 0);   /* ported (not ported) */
+      sqlite3_bind_int (ins, b++, 0);   /* onplanet (not on planet) */
       // 4. Cloaking columns
       if (has_column (db, "ships", "cloaking_devices"))
-	{
-	  sqlite3_bind_int (ins, b++, 0);	// No cloaking devices on derelict
-	}
+        {
+          sqlite3_bind_int (ins, b++, 0); // No cloaking devices on derelict
+        }
       if (has_column (db, "ships", "cloaked"))
-	{
-	  sqlite3_bind_int (ins, b++, 0);	// Not cloaked
-	}
+        {
+          sqlite3_bind_int (ins, b++, 0); // Not cloaked
+        }
       int irc = sqlite3_step (ins);
 
 
       if (irc != SQLITE_DONE)
-	{
-	  fprintf (stderr,
-		   "[create_derelicts] insert failed for shiptype %d (%s) into sector %d: %s\n",
-		   st_id, dname, sector, sqlite3_errmsg (db));
-	  sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-	  sqlite3_finalize (ins);
-	  sqlite3_finalize (sel);
-	  return 1;
-	}
+        {
+          fprintf (stderr,
+                   "[create_derelicts] insert failed for shiptype %d (%s) into sector %d: %s\n",
+                   st_id,
+                   dname,
+                   sector,
+                   sqlite3_errmsg (db));
+          sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+          sqlite3_finalize (ins);
+          sqlite3_finalize (sel);
+          return 1;
+        }
       sqlite3_reset (ins);
     }
   /* Normalise loop exit */
@@ -2672,7 +2734,7 @@ create_derelicts (void)
   if (rc != SQLITE_OK)
     {
       fprintf (stderr, "[create_derelicts] shiptypes SELECT failed: %s\n",
-	       sqlite3_errmsg (db));
+               sqlite3_errmsg (db));
       sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
       sqlite3_finalize (ins);
       sqlite3_finalize (sel);
@@ -2682,17 +2744,17 @@ create_derelicts (void)
   {
     sqlite3_stmt *st = NULL;
     int urc = sqlite3_prepare_v2 (db,
-				  "UPDATE ships SET name=? WHERE type_id=?;",
-				  -1,
-				  &st,
-				  NULL);	// FIX: Changed type to type_id
+                                  "UPDATE ships SET name=? WHERE type_id=?;",
+                                  -1,
+                                  &st,
+                                  NULL);                                                                // FIX: Changed type to type_id
 
 
     if (urc == SQLITE_OK)
       {
-	sqlite3_bind_text (st, 1, "Mary Celeste", -1, SQLITE_STATIC);
-	sqlite3_bind_int (st, 2, 18);
-	(void) sqlite3_step (st);
+        sqlite3_bind_text (st, 1, "Mary Celeste", -1, SQLITE_STATIC);
+        sqlite3_bind_int (st, 2, 18);
+        (void) sqlite3_step (st);
       }
     sqlite3_finalize (st);
   }
@@ -2701,7 +2763,7 @@ create_derelicts (void)
   if (rc != SQLITE_OK)
     {
       fprintf (stderr, "[create_derelicts] COMMIT failed: %s\n",
-	       errmsg ? errmsg : "(unknown)");
+               errmsg ? errmsg : "(unknown)");
       sqlite3_free (errmsg);
       sqlite3_finalize (ins);
       sqlite3_finalize (sel);
@@ -2719,7 +2781,8 @@ ensure_all_sectors_have_exits (sqlite3 *db)
   const char *sql_select_all = "SELECT id FROM sectors;";
   const char *sql_select_outgoing =
     "SELECT COUNT(*) FROM sector_warps WHERE from_sector=?;";
-  const char *sql_select_incoming = "SELECT from_sector FROM sector_warps WHERE to_sector=?;";	// This line was the problem
+  const char *sql_select_incoming =
+    "SELECT from_sector FROM sector_warps WHERE to_sector=?;";                                  // This line was the problem
   const char *sql_insert_warp =
     "INSERT INTO sector_warps (from_sector, to_sector) VALUES (?, ?);";
   sqlite3_stmt *stmt_all = NULL;
@@ -2728,7 +2791,7 @@ ensure_all_sectors_have_exits (sqlite3 *db)
   sqlite3_stmt *stmt_insert = NULL;
   int rc;
   int sectors_fixed = 0;
-  sqlite3_exec (db, "BEGIN TRANSACTION;", NULL, NULL, NULL);
+  db_begin_transaction (db);
   rc = sqlite3_prepare_v2 (db, sql_select_all, -1, &stmt_all, NULL);
   if (rc != SQLITE_OK)
     {
@@ -2768,28 +2831,28 @@ ensure_all_sectors_have_exits (sqlite3 *db)
 
       sqlite3_reset (stmt_outgoing);
       if (outgoing_count == 0)
-	{
-	  // This is a one-way trap. Find a sector that warps here.
-	  int from_sector_id = -1;
+        {
+          // This is a one-way trap. Find a sector that warps here.
+          int from_sector_id = -1;
 
 
-	  sqlite3_bind_int (stmt_incoming, 1, sector_id);
-	  if (sqlite3_step (stmt_incoming) == SQLITE_ROW)
-	    {
-	      from_sector_id = sqlite3_column_int (stmt_incoming, 0);
-	    }
-	  sqlite3_reset (stmt_incoming);
-	  if (from_sector_id != -1)
-	    {
-	      // Create a return warp back to the originating sector
-	      //  printf("Sector %d is a one-way trap. Adding a return warp to sector %d.\n", sector_id, from_sector_id);
-	      sqlite3_bind_int (stmt_insert, 1, sector_id);
-	      sqlite3_bind_int (stmt_insert, 2, from_sector_id);
-	      sqlite3_step (stmt_insert);
-	      sqlite3_reset (stmt_insert);
-	      sectors_fixed++;
-	    }
-	}
+          sqlite3_bind_int (stmt_incoming, 1, sector_id);
+          if (sqlite3_step (stmt_incoming) == SQLITE_ROW)
+            {
+              from_sector_id = sqlite3_column_int (stmt_incoming, 0);
+            }
+          sqlite3_reset (stmt_incoming);
+          if (from_sector_id != -1)
+            {
+              // Create a return warp back to the originating sector
+              //  printf("Sector %d is a one-way trap. Adding a return warp to sector %d.\n", sector_id, from_sector_id);
+              sqlite3_bind_int (stmt_insert, 1, sector_id);
+              sqlite3_bind_int (stmt_insert, 2, from_sector_id);
+              sqlite3_step (stmt_insert);
+              sqlite3_reset (stmt_insert);
+              sectors_fixed++;
+            }
+        }
     }
   sqlite3_finalize (stmt_all);
   sqlite3_finalize (stmt_outgoing);
@@ -2811,7 +2874,7 @@ ensure_all_sectors_have_exits (sqlite3 *db)
 int
 create_ownership (void)
 {
-  sqlite3 *handle = db_get_handle ();	// Assuming db_get_handle() is available
+  sqlite3 *handle = db_get_handle ();   // Assuming db_get_handle() is available
   sqlite3_stmt *select_stmt = NULL;
   sqlite3_stmt *insert_stmt = NULL;
   int rc;
@@ -2823,8 +2886,8 @@ create_ownership (void)
       SQLITE_OK)
     {
       fprintf (stderr,
-	       "BIGBANG ERROR: Failed to prepare SELECT beacon query: %s\n",
-	       sqlite3_errmsg (handle));
+               "BIGBANG ERROR: Failed to prepare SELECT beacon query: %s\n",
+               sqlite3_errmsg (handle));
       return -1;
     }
   // --- 2. Prepare INSERT statement: Insert into sector_assets (OWNERSHIP ONLY)
@@ -2838,8 +2901,8 @@ create_ownership (void)
       SQLITE_OK)
     {
       fprintf (stderr,
-	       "BIGBANG ERROR: Failed to prepare INSERT asset query: %s\n",
-	       sqlite3_errmsg (handle));
+               "BIGBANG ERROR: Failed to prepare INSERT asset query: %s\n",
+               sqlite3_errmsg (handle));
       sqlite3_finalize (select_stmt);
       return -1;
     }
@@ -2858,21 +2921,22 @@ create_ownership (void)
       // No need to bind beacon text since we are not storing it in sector_assets
       // Execute the INSERT
       if (sqlite3_step (insert_stmt) != SQLITE_DONE)
-	{
-	  fprintf (stderr,
-		   "BIGBANG ERROR: Failed to insert asset ownership for sector %d: %s\n",
-		   sector_id, sqlite3_errmsg (handle));
-	  sqlite3_finalize (select_stmt);
-	  sqlite3_finalize (insert_stmt);
-	  return -1;
-	}
+        {
+          fprintf (stderr,
+                   "BIGBANG ERROR: Failed to insert asset ownership for sector %d: %s\n",
+                   sector_id,
+                   sqlite3_errmsg (handle));
+          sqlite3_finalize (select_stmt);
+          sqlite3_finalize (insert_stmt);
+          return -1;
+        }
       total_beacons++;
     }
   // Check for error in sqlite3_step (not an end of row condition)
   if (rc != SQLITE_DONE)
     {
       fprintf (stderr, "BIGBANG ERROR: SELECT processing failed: %s\n",
-	       sqlite3_errmsg (handle));
+               sqlite3_errmsg (handle));
       sqlite3_finalize (select_stmt);
       sqlite3_finalize (insert_stmt);
       return -1;
@@ -2883,8 +2947,8 @@ create_ownership (void)
   // NOTE: We DO NOT clear the 'sectors.beacon' column here, as existing functions
   // depend on the text remaining there. We only inserted the ownership metadata.
   fprintf (stderr,
-	   "BIGBANG: Migrated ownership for %d system beacons successfully.\n",
-	   total_beacons);
+           "BIGBANG: Migrated ownership for %d system beacons successfully.\n",
+           total_beacons);
   return 0;
 }
 
@@ -2923,60 +2987,61 @@ create_ports (void)
   {
     for (int i = 2; i <= maxPorts; i++)
       {
-	/* pick a sector that is not in the first 10 */
+        /* pick a sector that is not in the first 10 */
 
-	/* Note: Stardock sector check removed as we don't know it here easily,
-	   but collisions are rare and acceptable for generic ports */
-	int sector = 11 + (rand () % (numSectors - 10));
+        /* Note: Stardock sector check removed as we don't know it here easily,
+           but collisions are rare and acceptable for generic ports */
+        int sector = 11 + (rand () % (numSectors - 10));
 
-	/* pick random non-Stardock type 1..8 */
-	int type_id = random_port_type_1_to_8 ();
-
-
-	/* name: use your generator, special-case Ferrengi home */
-	randomname (name_buffer);
-	if (i == 7)
-	  {
-	    snprintf (name_buffer, sizeof (name_buffer), "Ferrengi Home");
-	  }
-
-	int port_id = 0;
-	int rc = create_full_port (db, sector, /*port number */ i,
-				   /*base name */ name_buffer,
-				   /*type */ type_id,
-				   &port_id);
+        /* pick random non-Stardock type 1..8 */
+        int type_id = random_port_type_1_to_8 ();
 
 
-	if (rc != SQLITE_OK)
-	  {
-	    fprintf (stderr,
-		     "create_ports failed at %d (create_full_port rc=%d)\n",
-		     i, rc);
-	    return -1;
-	  }
+        /* name: use your generator, special-case Ferrengi home */
+        randomname (name_buffer);
+        if (i == 7)
+          {
+            snprintf (name_buffer, sizeof (name_buffer), "Ferrengi Home");
+          }
 
-	/* optional: tweak Ferrengi Home stats after insert to match your old special-case */
-	if (i == 7)
-	  {
-	    sqlite3_stmt *adj = NULL;
-	    const char *sql =
-	      "UPDATE ports SET size=?, techlevel=? WHERE id=?";
+        int port_id = 0;
+        int rc = create_full_port (db, sector, /*port number */ i,
+                                   /*base name */ name_buffer,
+                                   /*type */ type_id,
+                                   &port_id);
 
 
-	    if (sqlite3_prepare_v2 (db, sql, -1, &adj, NULL) == SQLITE_OK)
-	      {
-		sqlite3_bind_int (adj, 1, 10);	/* size */
-		sqlite3_bind_int (adj, 2, 5);	/* techlevel */
-		sqlite3_bind_int (adj, 3, port_id);
-		(void) sqlite3_step (adj);
-	      }
-	    sqlite3_finalize (adj);
-	  }
+        if (rc != SQLITE_OK)
+          {
+            fprintf (stderr,
+                     "create_ports failed at %d (create_full_port rc=%d)\n",
+                     i, rc);
+            return -1;
+          }
+
+        /* optional: tweak Ferrengi Home stats after insert to match your old special-case */
+        if (i == 7)
+          {
+            sqlite3_stmt *adj = NULL;
+            const char *sql =
+              "UPDATE ports SET size=?, techlevel=? WHERE id=?";
+
+
+            if (sqlite3_prepare_v2 (db, sql, -1, &adj, NULL) == SQLITE_OK)
+              {
+                sqlite3_bind_int (adj, 1, 10);  /* size */
+                sqlite3_bind_int (adj, 2, 5);   /* techlevel */
+                sqlite3_bind_int (adj, 3, port_id);
+                (void) sqlite3_step (adj);
+              }
+            sqlite3_finalize (adj);
+          }
       }
   }
 
 
-  fprintf (stderr, "BIGBANG: Created %d normal ports\n", maxPorts - 1);
+  fprintf (stderr,
+           "BIGBANG: Created %d normal ports\n", maxPorts - 1);
   return 0;
 }
 
@@ -3003,8 +3068,10 @@ fix_traps_with_pathcheck (sqlite3 *db, int fedspace_max)
     }
   /* Pre-prepare insert for escape warps */
   rc = sqlite3_prepare_v2 (db,
-			   "INSERT OR IGNORE INTO sector_warps(from_sector,to_sector) VALUES(?1,?2)",
-			   -1, &st, NULL);
+                           "INSERT OR IGNORE INTO sector_warps(from_sector,to_sector) VALUES(?1,?2)",
+                           -1,
+                           &st,
+                           NULL);
   if (rc != SQLITE_OK)
     {
       return rc;
@@ -3016,22 +3083,22 @@ fix_traps_with_pathcheck (sqlite3 *db, int fedspace_max)
 
 
       if (has_path < 0)
-	{
-	  sqlite3_finalize (st);
-	  return SQLITE_ERROR;
-	}
+        {
+          sqlite3_finalize (st);
+          return SQLITE_ERROR;
+        }
       if (!has_path)
-	{
-	  /* No path home: add an escape warp back into FedSpace */
-	  int escape = 1 + (rand () % fedspace_max);
+        {
+          /* No path home: add an escape warp back into FedSpace */
+          int escape = 1 + (rand () % fedspace_max);
 
 
-	  sqlite3_reset (st);
-	  sqlite3_clear_bindings (st);
-	  sqlite3_bind_int (st, 1, s);
-	  sqlite3_bind_int (st, 2, escape);
-	  sqlite3_step (st);
-	}
+          sqlite3_reset (st);
+          sqlite3_clear_bindings (st);
+          sqlite3_bind_int (st, 1, s);
+          sqlite3_bind_int (st, 2, escape);
+          sqlite3_step (st);
+        }
     }
   sqlite3_finalize (st);
   return SQLITE_OK;
@@ -3059,12 +3126,14 @@ create_stardock_port (sqlite3 *db, int numSectors)
   if (rc != SQLITE_OK)
     {
       fprintf (stderr, "create_stardock_port failed: %s\n",
-	       sqlite3_errmsg (db));
+               sqlite3_errmsg (db));
       return -1;
     }
 
   fprintf (stderr,
-	   "BIGBANG: Stardock created at sector %d (Port ID %d)\n",
-	   stardock_sector, port_id);
+           "BIGBANG: Stardock created at sector %d (Port ID %d)\n",
+           stardock_sector,
+           port_id);
   return 0;
 }
+
