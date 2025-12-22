@@ -1,0 +1,45 @@
+{
+  "tests": [
+    {
+      "name": "Register New User (Success)",
+      "setup": "macro_auth_user",
+      "username": "auth_test_user_1",
+      "password": "password123"
+    },
+    {
+      "name": "Register Duplicate User (Fail)",
+      "command": "auth.register",
+      "data": { "username": "auth_test_user_1", "passwd": "password123" },
+      "expect": { 
+          "status": "refused", 
+          "error": { "code": 1210 }
+      }
+    },
+    {
+      "name": "MFA Verify (Refusal - No MFA Setup)",
+      "command": "auth.mfa.totp.verify",
+      "data": { "code": "123456" },
+      "user": "auth_test_user_1",
+      "expect": { "status": "refused", "error": { "code": 2204 } }
+    },
+    {
+      "name": "Set Player Preferences",
+      "command": "player.set_settings",
+      "data": {
+        "prefs": { "theme": "dark", "notifications": false }
+      },
+      "user": "auth_test_user_1",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Get Player Settings",
+      "command": "player.get_settings",
+      "user": "auth_test_user_1",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.prefs.*[key=theme].value", "op": "==", "value": "dark" },
+        { "path": "data.prefs.*[key=notifications].value", "op": "==", "value": "false" }
+      ]
+    }
+  ]
+}

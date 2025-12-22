@@ -1,0 +1,91 @@
+{
+  "name": "Tavern Extras Regression",
+  "version": "2.0.0",
+  "protocol_category": "28_Tavern",
+  "description": "Coverage for tavern gambling and extra features",
+  "tests": [
+    {
+      "name": "Setup: User at Tavern",
+      "setup": "macro_auth_user",
+      "user": "tavern_reg",
+      "passwd": "password"
+    },
+    {
+      "name": "Setup: Fund User",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET credits = 100000 WHERE id = @tavern_reg_player_id;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Place User in Tavern Sector",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT OR REPLACE INTO ports (id, sector, type, name) VALUES (1, 1, 10, 'Tavern'); UPDATE players SET sector = 1 WHERE id = @tavern_reg_player_id;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Tavern Barcharts",
+      "command": "tavern.barcharts.get_prices_summary",
+      "user": "tavern_reg",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Tavern Rumour",
+      "command": "tavern.rumour.get_hint",
+      "user": "tavern_reg",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Tavern Round Buy",
+      "command": "tavern.round.buy",
+      "user": "tavern_reg",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Tavern Graffiti",
+      "command": "tavern.graffiti.post",
+      "data": { "message": "I was here" },
+      "user": "tavern_reg",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Tavern Lottery Buy",
+      "command": "tavern.lottery.buy_ticket",
+      "user": "tavern_reg",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Tavern Lottery Status",
+      "command": "tavern.lottery.status",
+      "user": "tavern_reg",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Tavern Raffle Buy",
+      "command": "tavern.raffle.buy_ticket",
+      "user": "tavern_reg",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Tavern Highstakes",
+      "command": "tavern.highstakes.play",
+      "data": { "amount": 100, "rounds": 1 },
+      "user": "tavern_reg",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Tavern Deadpool (Fail - Self)",
+      "command": "tavern.deadpool.place_bet",
+      "data": { "target_id": "@tavern_reg_player_id", "amount": 100 },
+      "user": "tavern_reg",
+      "expect": { "error_code": 400 }
+    },
+    {
+      "name": "Tavern Trader (Fail - No Intel)",
+      "command": "tavern.trader.buy_password",
+      "user": "tavern_reg",
+      "expect": { "error_code": 404 }
+    }
+  ]
+}

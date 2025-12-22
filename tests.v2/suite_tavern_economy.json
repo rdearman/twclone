@@ -1,0 +1,104 @@
+{
+  "test_suite_name": "Tavern Economy & Integrity",
+  "description": "Validates tavern gambling mechanics and loan shark financial integrity",
+  "tests": [
+    {
+      "name": "Setup: Create and authenticate Tavern User",
+      "setup": "macro_auth_user",
+      "user": "tavern_gambler",
+      "passwd": "password"
+    },
+    {
+      "name": "Setup: Fund User",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET credits = 50000 WHERE id = @tavern_gambler_player_id;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Create Tavern Environment (Stardock)",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT OR REPLACE INTO ports (id, sector, type, name) VALUES (1, 1, 10, 'Tavern Dock');"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Ensure User at Tavern",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector = 1 WHERE id = @tavern_gambler_player_id;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Tavern: Play Dice (Win/Loss Structure Check)",
+      "command": "tavern.dice.play",
+      "user": "tavern_gambler",
+      "data": { "amount": 100 },
+      "expect": {
+        "status": "ok",
+        "die1": { "type": "integer" },
+        "die2": { "type": "integer" },
+        "total": { "type": "integer" },
+        "win": { "type": "boolean" },
+        "winnings": { "type": "integer" },
+        "player_credits": { "type": "integer" }
+      }
+    },
+    {
+      "name": "Tavern: Take Loan",
+      "command": "tavern.loan.take",
+      "user": "tavern_gambler",
+      "data": { "amount": 1000 },
+      "expect": {
+        "status": "ok",
+        "amount": 1000
+      }
+    },
+    {
+      "name": "Tavern: Fail Second Loan",
+      "command": "tavern.loan.take",
+      "user": "tavern_gambler",
+      "data": { "amount": 1000 },
+      "expect": {
+        "error_code": 701,
+        "message": "You already have an outstanding loan."
+      }
+    },
+    {
+      "name": "Tavern: Partial Repayment",
+      "command": "tavern.loan.pay",
+      "user": "tavern_gambler",
+      "data": { "amount": 500 },
+      "expect": {
+        "status": "ok",
+        "remaining_principal": 500
+      }
+    },
+    {
+      "name": "Tavern: Full Repayment",
+      "command": "tavern.loan.pay",
+      "user": "tavern_gambler",
+      "data": { "amount": 500 },
+      "expect": {
+        "status": "ok",
+        "remaining_principal": 0
+      }
+    },
+    {
+      "name": "Tavern: Repay No Loan",
+      "command": "tavern.loan.pay",
+      "user": "tavern_gambler",
+      "data": { "amount": 100 },
+      "expect": {
+        "error_code": 703,
+        "message": "You do not have an outstanding loan."
+      }
+    }
+  ]
+}

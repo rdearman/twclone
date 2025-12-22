@@ -1,0 +1,57 @@
+{
+  "name": "S2S Blocked Regression",
+  "version": "2.0.0",
+  "protocol_category": "07_S2S",
+  "description": "Coverage for blocked S2S commands",
+  "tests": [
+    {
+      "name": "Setup: User",
+      "setup": "macro_auth_user",
+      "user": "s2s_tester",
+      "passwd": "password"
+    },
+    {
+      "name": "S2S Event Relay (Blocked)",
+      "command": "s2s.event.relay",
+      "user": "s2s_tester",
+      "expect": { "error_code": 2204, "message": "S2S command disabled for v1.0" }
+    },
+    {
+      "name": "S2S Planet Genesis (Blocked)",
+      "command": "s2s.planet.genesis",
+      "user": "s2s_tester",
+      "expect": { "error_code": 2204, "message": "S2S command disabled for v1.0" }
+    },
+    {
+      "name": "S2S Planet Transfer (Blocked)",
+      "command": "s2s.planet.transfer",
+      "user": "s2s_tester",
+      "expect": { "error_code": 2204, "message": "S2S command disabled for v1.0" }
+    },
+    {
+      "name": "S2S Player Migrate (Blocked)",
+      "command": "s2s.player.migrate",
+      "user": "s2s_tester",
+      "expect": { "error_code": 2204, "message": "S2S command disabled for v1.0" }
+    },
+    {
+      "name": "S2S Port Restock (Blocked)",
+      "command": "s2s.port.restock",
+      "user": "s2s_tester",
+      "expect": { "error_code": 2204, "message": "S2S command disabled for v1.0" }
+    },
+    {
+      "name": "S2S Replication Heartbeat (Blocked)",
+      "command": "s2s.replication.heartbeat",
+      "user": "s2s_tester",
+      "expect": { "error_code": 2204, "message": "S2S command disabled for v1.0" }
+    },
+    {
+      "name": "Bulk Execute",
+      "command": "bulk.execute",
+      "data": { "commands": [] },
+      "user": "s2s_tester",
+      "expect": { "status": "ok" }
+    }
+  ]
+}

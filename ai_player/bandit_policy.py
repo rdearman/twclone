@@ -117,7 +117,11 @@ def make_context_key(state: dict, config: dict) -> str:
     ship_info = state.get("ship_info", {})
     holds = ship_info.get("holds", 0)
     cargo_list = ship_info.get("cargo", [])
-    cargo_total = sum(item.get("quantity", 0) for item in cargo_list) if cargo_list else 0
+    # FIX: Robustly calculate cargo total, ignoring malformed string entries
+    if cargo_list:
+        cargo_total = sum(item.get("quantity", 0) for item in cargo_list if isinstance(item, dict))
+    else:
+        cargo_total = 0
     holds_full = "full" if cargo_total >= holds and holds > 0 else "not_full"
 
     credits = state.get("current_credits", 0)
@@ -150,7 +154,7 @@ def _can_sell_any(state: dict, config: dict) -> bool:
     cargo_list = ship_info.get("cargo", [])
     if not isinstance(cargo_list, list):
         return False  # Should be a list
-    return any(item.get("quantity", 0) > 0 for item in cargo_list)
+    return any(item.get("quantity", 0) > 0 for item in cargo_list if isinstance(item, dict))
 
 def _can_buy_any(state: dict, config: dict) -> bool:
     ship_info = state.get("ship_info")
@@ -160,7 +164,7 @@ def _can_buy_any(state: dict, config: dict) -> bool:
     cargo_list = ship_info.get("cargo", [])
     if not isinstance(cargo_list, list):
         return False  # should be a list
-    current_cargo = sum(item.get("quantity", 0) for item in cargo_list)
+    current_cargo = sum(item.get("quantity", 0) for item in cargo_list if isinstance(item, dict))
     free_holds = holds - current_cargo
     if free_holds <= 0:
         return False

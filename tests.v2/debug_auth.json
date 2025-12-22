@@ -1,0 +1,24 @@
+{
+  "name": "Auth Debug Test",
+  "version": "1.0.0",
+  "description": "Debugs macro_auth_user and auth.login issues",
+  "tests": [
+    {
+      "name": "Setup: Test User",
+      "setup": "macro_auth_user",
+      "username": "debug_user",
+      "password": "password"
+    },
+    {
+      "name": "Verify Login",
+      "command": "player.my_info",
+      "user": "debug_user",
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        { "path": "data.player.username", "op": "==", "value": "debug_user" }
+      ]
+    }
+  ]
+}

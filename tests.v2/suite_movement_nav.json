@@ -1,0 +1,102 @@
+{
+  "name": "Movement & Nav Regression",
+  "version": "2.0.0",
+  "protocol_category": "21_Sector",
+  "description": "Coverage for sector info, scanning, and navigation",
+  "tests": [
+    {
+      "name": "Setup: User in Sector",
+      "setup": "macro_user_in_sector",
+      "user": "nav_explorer",
+      "passwd": "password"
+    },
+    {
+      "name": "Sector Info",
+      "command": "sector.info",
+      "user": "nav_explorer",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Move Describe Sector",
+      "command": "move.describe_sector",
+      "user": "nav_explorer",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Move Scan",
+      "command": "move.scan",
+      "user": "nav_explorer",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Sector Scan",
+      "command": "sector.scan",
+      "user": "nav_explorer",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Sector Scan Density",
+      "command": "sector.scan.density",
+      "user": "nav_explorer",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Sector Search",
+      "command": "sector.search",
+      "data": { "query": "Sol" },
+      "user": "nav_explorer",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Sector Set Beacon",
+      "command": "sector.set_beacon",
+      "data": { "sector_id": 1, "message": "Hello" },
+      "user": "nav_explorer",
+      "expect": { "error_code": 1300, "message": "Invalid request schema" }
+    },
+    {
+      "name": "Nav Bookmark Add",
+      "command": "nav.bookmark.add",
+      "data": { "bookmarks": [{"sector_id": 1, "name": "Home"}] },
+      "user": "nav_explorer",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Nav Bookmark List",
+      "command": "nav.bookmark.list",
+      "user": "nav_explorer",
+      "expect": {
+        "status": "ok",
+        "items": { "type": "array" }
+      }
+    },
+    {
+      "name": "Nav Bookmark Remove",
+      "command": "nav.bookmark.remove",
+      "data": { "name": "Home" },
+      "user": "nav_explorer",
+      "expect": { "status": "nav.bookmark.removed" }
+    },
+    {
+      "name": "Nav Bookmark Set",
+      "command": "nav.bookmark.set",
+      "data": { "bookmarks": [{"sector_id": 1, "name": "Home"}] },
+      "user": "nav_explorer",
+      "expect": { "status": "nav.bookmark.set" }
+    },
+    {
+      "name": "Nav Avoid Set",
+      "command": "nav.avoid.set",
+      "data": { "avoids": [666] },
+      "user": "nav_explorer",
+      "expect": { "status": "nav.avoid.set" }
+    },
+    {
+      "name": "Move Transwarp (Fail - No Equipment)",
+      "command": "move.transwarp",
+      "data": { "sector_id": 50 },
+      "user": "nav_explorer",
+      "expect": { "error_code": 1502 }
+    }
+  ]
+}

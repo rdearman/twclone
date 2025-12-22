@@ -1,0 +1,118 @@
+{
+  "name": "Combat Advanced Regression",
+  "version": "2.0.0",
+  "protocol_category": "23_Combat",
+  "description": "Coverage for advanced combat mechanics",
+  "tests": [
+    {
+      "name": "Setup: User in Ship",
+      "setup": "macro_user_in_sector",
+      "user": "combat_ace",
+      "passwd": "password"
+    },
+    {
+      "name": "Setup: Fund & Equip",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET credits = 1000000, alignment = -100 WHERE id=(SELECT id FROM players WHERE name='combat_ace'); UPDATE ships SET fighters = 100, mines = 10, holds = 100 WHERE id=(SELECT ship FROM players WHERE name='combat_ace');" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Target Planet",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT OR REPLACE INTO planets (id, sector, name, owner_id, owner_type, created_by, created_at) VALUES (900, 1, 'Target', (SELECT id FROM players WHERE name='combat_ace'), 'player', (SELECT id FROM players WHERE name='combat_ace'), strftime('%s','now'));" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Rob-able Port",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT OR REPLACE INTO ports (id, sector, name, petty_cash, type) VALUES (1, 1, 'Robbable Port', 1000, 1);" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Combat Status",
+      "command": "combat.status",
+      "user": "combat_ace",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Deploy Fighters",
+      "command": "combat.deploy_fighters",
+      "data": { "amount": 10, "offense": 3 },
+      "user": "combat_ace",
+      "expect": { "status": "ok" },
+      "save": { "fighter_asset_id": "data.asset_id" }
+    },
+    {
+      "name": "List Deployed Fighters (Verify Deploy)",
+      "command": "deploy.fighters.list",
+      "data": { "sector_id": 1 },
+      "user": "combat_ace",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.items.*.quantity", "op": "==", "value": 10 }
+      ]
+    },
+    {
+      "name": "Recall Fighters",
+      "command": "fighters.recall",
+      "data": { "asset_id": "@fighter_asset_id" },
+      "user": "combat_ace",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "List Deployed Fighters (Verify Recall)",
+      "command": "deploy.fighters.list",
+      "data": { "sector_id": 1 },
+      "user": "combat_ace",
+      "expect": { "status": "ok", "items": [] }
+    },
+    {
+      "name": "Deploy Mines",
+      "command": "combat.deploy_mines",
+      "data": { "amount": 5 },
+      "user": "combat_ace",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "List Deployed Mines (Verify Deploy)",
+      "command": "deploy.mines.list",
+      "data": { "sector_id": 1 },
+      "user": "combat_ace",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.items.*.quantity", "op": "==", "value": 5 }
+      ]
+    },
+    {
+      "name": "Recall Mines",
+      "command": "mines.recall",
+      "data": { "sector_id": 1 },
+      "user": "combat_ace",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "List Deployed Mines (Verify Recall)",
+      "command": "deploy.mines.list",
+      "data": { "sector_id": 1 },
+      "user": "combat_ace",
+      "expect": { "status": "ok", "items": [] }
+    },
+    {
+      "name": "Attack Planet",
+      "command": "combat.attack_planet",
+      "data": { "planet_id": 900 },
+      "user": "combat_ace",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Port Rob (Success)",
+      "command": "port.rob",
+      "data": { "port_id": 1 },
+      "user": "combat_ace",
+      "expect": { "status": "ok" }
+    }
+  ]
+}

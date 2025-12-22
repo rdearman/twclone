@@ -1,0 +1,109 @@
+{
+  "tests": [
+    {
+      "setup": "macro_user_in_sector",
+      "username": "mine_tester",
+      "password": "password"
+    },
+    {
+      "name": "Setup: Grant Resources and Move",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET credits=100000, sector=200 WHERE id=@mine_tester_player_id; UPDATE ships SET sector=200, mines=1000, fighters=500 WHERE id=@mine_tester_player_id; INSERT OR IGNORE INTO sectors (id, name) VALUES (200, 'Minefield Alpha'); DELETE FROM sector_assets WHERE sector=200;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Action: Lay Armid Mines",
+      "command": "combat.lay_mines",
+      "data": {
+        "count": 50,
+        "offense_mode": 3,
+        "owner_mode": "personal",
+        "mine_type": "armid"
+      },
+      "user": "mine_tester",
+      "expect": {
+        "status": "ok",
+        "data": {
+          "count_added": 50,
+          "total_now": 50
+        }
+      }
+    },
+    {
+      "name": "Verify: Inventory Decreased",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT mines FROM ships WHERE id=@mine_tester_player_id;" },
+      "user": "admin",
+      "expect": { "status": "ok", "data": { "rows": [[950]] } }
+    },
+    {
+      "name": "Verify: Sector Asset Created",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT quantity FROM sector_assets WHERE sector=200 AND player=@mine_tester_player_id AND asset_type=1;" },
+      "user": "admin",
+      "expect": { "status": "ok", "data": { "rows": [[50]] } }
+    },
+    {
+      "name": "Action: Lay Negative Amount (Invalid Input)",
+      "command": "combat.lay_mines",
+      "data": { "count": -10, "offense_mode": 3, "owner_mode": "personal", "mine_type": "armid" },
+      "user": "mine_tester",
+      "expect": { "status": "error", "error": { "code": 1302 } } 
+    },
+    {
+      "name": "Setup: Fill Sector to Cap",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO sector_assets (sector, player, asset_type, quantity, offensive_setting, deployed_at) VALUES (200, 0, 1, 49950, 3, 0);" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Action: Lay Mines Exceeding Cap",
+      "command": "combat.lay_mines",
+      "data": { "count": 100, "offense_mode": 3, "owner_mode": "personal", "mine_type": "armid" },
+      "user": "mine_tester",
+      "expect": { "status": "refused", "error": { "code": 2301 } }
+    },
+    {
+      "name": "Setup: Reset for Sweep",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "DELETE FROM sector_assets WHERE sector=200; INSERT INTO sector_assets (sector, player, asset_type, quantity, offensive_setting, deployed_at) VALUES (200, 0, 1, 50, 3, 0); UPDATE ships SET fighters=1000 WHERE id=@mine_tester_player_id;" }, 
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Action: Sweep Mines",
+      "command": "combat.sweep_mines",
+      "data": {
+        "from_sector_id": 200,
+        "target_sector_id": 200,
+        "fighters_committed": 100,
+        "mine_type": "armid"
+      },
+      "user": "mine_tester",
+      "expect": { "status": "ok", "data": { "success": true } }
+    },
+    {
+      "name": "Setup: FedSpace (Sector 1)",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET sector=1 WHERE id=@mine_tester_player_id; UPDATE ships SET sector=1 WHERE id=@mine_tester_player_id;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Action: Lay Mines in FedSpace (Warning Check)",
+      "command": "combat.lay_mines",
+      "data": { "count": 10, "offense_mode": 3, "owner_mode": "personal", "mine_type": "armid" },
+      "user": "mine_tester",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Verify: Federation Warning Received",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT COUNT(*) FROM system_notice WHERE body LIKE '%Federation Warning%' AND title = 'Federation Warning';" },
+      "user": "admin",
+      "expect": { "status": "ok", "data": { "rows": [[1]] } }
+    }
+  ]
+}

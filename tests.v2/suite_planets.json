@@ -1,0 +1,104 @@
+{
+  "tests": [
+    {
+      "setup": "macro_auth_user",
+      "username": "planet_tester_1",
+      "password": "password"
+    },
+    {
+      "name": "Give Credits",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET credits = 1000000 WHERE id = @planet_tester_1_player_id;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Delete and Recreate Ship with Genesis Torpedo",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "DELETE FROM ships WHERE id = @planet_tester_1_player_id; INSERT INTO ships (id, type_id, name, holds, sector, ported, genesis) VALUES (@planet_tester_1_player_id, 1, 'PlanetTestShip', 100, 1, 0, 1); UPDATE players SET ship = @planet_tester_1_player_id, sector = 1 WHERE id = @planet_tester_1_player_id; INSERT OR IGNORE INTO ship_ownership (ship_id, player_id, is_primary) VALUES (@planet_tester_1_player_id, @planet_tester_1_player_id, 1);" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Refresh Player Info after ship update",
+      "command": "player.my_info",
+      "user": "planet_tester_1",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "DEBUG: Check Genesis Torpedoes",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT genesis FROM ships WHERE id = @planet_tester_1_player_id;" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": 1 } ]
+    },
+    {
+      "name": "Create Planet (T2-01)",
+      "command": "planet.genesis_create",
+      "data": { "sector_id": 500, "name": "T201_Planet", "owner_entity_type": "player" },
+      "user": "planet_tester_1",
+      "save": { "t201_planet_id": "data.planet_id" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Insert Citadel (T2-01)",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO citadels (planet_id, level, treasury, owner_id) VALUES (@t201_planet_id, 1, 0, @planet_tester_1_player_id);" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Deposit Funds (T2-01)",
+      "command": "planet.deposit",
+      "data": { "planet_id": "@t201_planet_id", "amount": 10000 },
+      "user": "planet_tester_1",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Set Citadel Level 0 (T2-01)",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE citadels SET level = 0 WHERE planet_id = @t201_planet_id;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "DEBUG: Check Genesis Config",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT OR REPLACE INTO config (key, value, type) VALUES ('genesis_enabled', '1', 'int'); INSERT OR IGNORE INTO sectors (id, name) VALUES (500, 'Genesis Sector'); UPDATE planettypes SET genesis_weight = 100 WHERE id = 1; UPDATE ships SET sector = 500 WHERE id = @planet_tester_1_player_id; UPDATE players SET sector = 500 WHERE id = @planet_tester_1_player_id;"},
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Verify Treasury No Interest (T2-01)",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT treasury FROM citadels WHERE planet_id = @t201_planet_id;" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": 10000 } ]
+    },
+    
+    {
+      "name": "Set Citadel Level 1 (T2-02)",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE citadels SET level = 1 WHERE planet_id = @t201_planet_id;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Set Interest Rate (T2-02)",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT OR REPLACE INTO config (key, value, type) VALUES ('planet_treasury_interest_rate_bps', '100', 'int');" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Verify Treasury With Interest (T2-02)",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT treasury FROM citadels WHERE planet_id = @t201_planet_id;" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": 10100 } ]
+    }
+  ]
+}

@@ -1,0 +1,209 @@
+{
+  "name": "Economy Misc Regression",
+  "version": "2.0.0",
+  "protocol_category": "26_Banking",
+  "description": "Coverage for fines, insurance, stock, trade, and bounties",
+  "tests": [
+    {
+      "name": "Setup: User A (Trader)",
+      "setup": "macro_user_in_sector",
+      "user": "econ_trader",
+      "passwd": "password"
+    },
+    {
+      "name": "Setup: User B (Target)",
+      "setup": "macro_auth_user",
+      "user": "econ_target",
+      "passwd": "password"
+    },
+    {
+      "name": "Setup: Fund Trader",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET credits = 100000 WHERE id = @econ_trader_player_id;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Create Fine",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO fines (recipient_type, recipient_id, amount, status) VALUES ('player', @econ_trader_player_id, 100, 'unpaid');" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Fine List",
+      "command": "fine.list",
+      "user": "econ_trader",
+      "expect": { "status": "ok" },
+      "save": { "fine_id": "data.fines[0].id" }
+    },
+    {
+      "name": "Fine Pay",
+      "command": "fine.pay",
+      "data": { "fine_id": "@fine_id" },
+      "user": "econ_trader",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Insurance Buy",
+      "command": "insurance.policies.buy",
+      "data": { "subject_type": "ship", "subject_id": "@econ_trader_player_id", "premium": 100, "duration": 30 },
+      "user": "econ_trader",
+      "expect": { "status": "ok" },
+      "save": { "policy_id": "data.policy_id" }
+    },
+    {
+      "name": "Insurance List",
+      "command": "insurance.policies.list",
+      "user": "econ_trader",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.policies.*.premium", "op": "==", "value": 100 }
+      ]
+    },
+    {
+      "name": "Insurance Claim",
+      "command": "insurance.claim.file",
+      "data": { "policy_id": "@policy_id", "incident_description": "Crash" },
+      "user": "econ_trader",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Promote Trader to CEO",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET type = 1 WHERE id = @econ_trader_player_id;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Corp & CEO (Trader)",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO corporations (id, name, owner_id, owner_type) VALUES (800, 'EconCorp', @econ_trader_player_id, 'player');" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Stock IPO Register (Success)",
+      "command": "stock.ipo.register",
+      "data": { "corp_id": 800, "ticker": "ECN", "total_shares": 1000, "par_value": 10, "current_price": 10 },
+      "user": "econ_trader",
+      "expect": { "status": "ok" },
+      "save": { "stock_id": "data.stock_id" }
+    },
+    {
+      "name": "Stock IPO Register (Fail - Duplicate)",
+      "command": "stock.ipo.register",
+      "data": { "corp_id": 800, "ticker": "ECN", "total_shares": 1000, "par_value": 10, "current_price": 10 },
+      "user": "econ_trader",
+      "expect": { "error_code": 409 }
+    },
+    {
+      "name": "Stock List Exchange",
+      "command": "stock.exchange.list_stocks",
+      "data": { "subcommand": "exchange.list_stocks" },
+      "user": "econ_trader",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.stocks.*.ticker", "op": "==", "value": "ECN" }
+      ]
+    },
+    {
+      "name": "Stock Create Order",
+      "command": "stock.exchange.orders.create",
+      "data": { "stock_id": "@stock_id", "type": "buy", "quantity": 10, "price": 10, "subcommand": "exchange.orders.create" },
+      "user": "econ_trader",
+      "expect": { "status": "ok" },
+      "save": { "order_id": "data.order_id" }
+    },
+    {
+      "name": "Stock Cancel Order",
+      "command": "stock.exchange.orders.cancel",
+      "data": { "order_id": "@order_id", "subcommand": "exchange.orders.cancel" },
+      "user": "econ_trader",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Stock Portfolio",
+      "command": "stock.portfolio.list",
+      "data": { "subcommand": "portfolio.list" },
+      "user": "econ_trader",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Trade Quote",
+      "command": "trade.quote",
+      "data": { "port_id": 1, "commodity": "ore", "quantity": 10 },
+      "user": "econ_trader",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.price_per_unit", "op": "type", "value": "integer" }
+      ]
+    },
+    {
+      "name": "Setup: Ship with Cargo for Jettison",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE ships SET ore = 5 WHERE id=(SELECT ship FROM players WHERE name='econ_trader');" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Trade Jettison (Success)",
+      "command": "trade.jettison",
+      "data": { "items": [{"commodity": "ore", "quantity": 1}] },
+      "user": "econ_trader",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Trade Jettison (Fail - No Cargo)",
+      "command": "trade.jettison",
+      "data": { "items": [{"commodity": "gold", "quantity": 1}] },
+      "user": "econ_trader",
+      "expect": { "error_code": 1702 }
+    },
+    {
+      "name": "Trade Offer (Fail - Not Implemented)",
+      "command": "trade.offer",
+      "data": {
+        "recipient_id": "@econ_target_player_id",
+        "items": [{"commodity": "ore", "quantity": 1}],
+        "price": 1
+      },
+      "user": "econ_trader",
+      "expect": { "error_code": 1101, "message": "Trading handshake disabled in v1.0" }
+    },
+    {
+      "name": "Trade History (Trader)",
+      "command": "trade.history",
+      "user": "econ_trader",
+      "expect": { "status": "ok", "type": "trade.history_v1" }
+    },
+    {
+      "name": "Trade Accept (Fail - Not Implemented)",
+      "command": "trade.accept",
+      "data": { "offer_id": 1 },
+      "user": "econ_target",
+      "expect": { "error_code": 1101, "message": "Trading handshake disabled in v1.0" }
+    },
+    {
+      "name": "Trade Cancel (Fail - Not Implemented)",
+      "command": "trade.cancel",
+      "data": { "offer_id": 1 },
+      "user": "econ_trader",
+      "expect": { "error_code": 1101, "message": "Trading handshake disabled in v1.0" }
+    },
+    {
+      "name": "Bounty Post Hitlist (Success)",
+      "command": "bounty.post_hitlist",
+      "data": { "target_player_id": "@econ_target_player_id", "amount": 100, "description": "Hit on good player" },
+      "user": "econ_trader",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Bounty Post Hitlist (Fail - Insufficient Funds)",
+      "command": "bounty.post_hitlist",
+      "data": { "target_player_id": "@econ_target_player_id", "amount": 100000000, "description": "Too expensive" },
+      "user": "econ_trader",
+      "expect": { "error_code": 402 }
+    }
+  ]
+}

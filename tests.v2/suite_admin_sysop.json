@@ -1,0 +1,65 @@
+{
+  "tests": [
+    {
+      "name": "Setup: Auth Admin (Privileged User)",
+      "setup": "macro_sysop",
+      "username": "sysop_admin_1",
+      "password": "password"
+    },
+    {
+      "name": "Setup: Auth Normie (Standard User)",
+      "setup": "macro_auth_user",
+      "username": "sysop_normie_1",
+      "password": "password"
+    },
+    {
+        "name": "DEBUG: Check Normie Type",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "SELECT type FROM players WHERE id = @sysop_normie_1_player_id;" },
+        "user": "sysop_admin_1",
+        "expect": { "status": "ok", "data": { "rows": [[0]] } }
+    },
+    {
+      "name": "Admin Notice (Sysop Success)",
+      "command": "admin.notice",
+      "data": { "title": "System Update", "body": "Maintenance soon.", "severity": "info", "ttl_seconds": 60 },
+      "user": "sysop_admin_1",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Admin Notice (Normal Fail)",
+      "command": "admin.notice",
+      "data": { "title": "Fail", "body": "Should not work" },
+      "user": "sysop_normie_1",
+      "expect": { "status": "refused", "error_code": 1111, "message": "Permission denied" }
+    },
+    {
+      "name": "Shutdown Warning (Sysop Success)",
+      "command": "admin.shutdown_warning",
+      "data": { "body": "Server restarting in 5 minutes.", "countdown_seconds": 300 },
+      "user": "sysop_admin_1",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Shutdown Warning (Normal Fail)",
+      "command": "admin.shutdown_warning",
+      "data": { "body": "Panic!", "countdown_seconds": 60 },
+      "user": "sysop_normie_1",
+      "expect": { "status": "refused", "error_code": 1111, "message": "Permission denied" }
+    },
+    {
+        "name": "Raw SQL Select (Sysop Success)",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "SELECT 1;" },
+        "user": "sysop_admin_1",
+        "expect": { "status": "ok" }
+    },
+    {
+        "name": "Raw SQL Select (Normal Fail)",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "SELECT 1;" },
+        "user": "sysop_normie_1",
+        "expect": { "status": "refused", "error_code": 1111, "message": "Permission denied" }
+    }
+  ]
+}

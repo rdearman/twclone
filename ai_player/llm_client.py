@@ -1,6 +1,7 @@
 import httpx
 import json
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -9,6 +10,37 @@ logger = logging.getLogger(__name__)
 OLLAMA_API_URL = "http://localhost:11434/api/generate"
 DEFAULT_MODEL = "llama3.1"
 REQUEST_TIMEOUT = 600  # 2 minutes
+
+def parse_llm_json(response_text):
+    """
+    Extracts a JSON object or list from a verbose LLM response.
+    """
+    if not response_text:
+        return None
+
+    try:
+        # 1. Try strict parsing first (fastest)
+        return json.loads(response_text)
+    except json.JSONDecodeError:
+        pass
+
+    # 2. Pattern matching: Find the first '{' or '[' and the last '}' or ']'
+    # This ignores "Here is your plan:" at the start and explanations at the end.
+    try:
+        # Search for array or object
+        match = re.search(r'(\{|\[).*(\}|\])', response_text, re.DOTALL)
+        if match:
+            json_str = match.group(0)
+            return json.loads(json_str)
+    except Exception as e:
+        pass
+        
+    # 3. Last resort: specific cleanup for common markdown issues
+    try:
+        clean_text = response_text.replace("```json", "").replace("```", "").strip()
+        return json.loads(clean_text)
+    except Exception:
+        return None
 
 def get_ollama_response(game_state, model=None, prompt_key=None, override_prompt=None):
     """

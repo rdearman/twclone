@@ -11,9 +11,10 @@ from datetime import datetime
 from bug_reporter import BugReporter
 from planner import Planner
 from state_manager import StateManager
-from llm_client import get_ollama_response
+from llm_client import get_ollama_response, parse_llm_json
 from bandit_policy import BanditPolicy, make_context_key 
 from typing import Optional
+from helpers import canon_commodity
 
 # --- Standard Logging Setup ---
 logger = logging.getLogger()
@@ -216,6 +217,13 @@ def _get_filtered_game_state_for_llm(game_state, state_manager):
             pass
     filtered_state["all_known_sectors"] = sorted(list(all_known_sectors))
 
+    # Create a list of "Interesting Locations" to help the LLM navigate
+    known_ports = []
+    for sector_id, port_data in all_port_info.items():
+        known_ports.append(int(sector_id))
+    
+    filtered_state["known_port_sectors"] = sorted(known_ports)
+
     # Bootstrap check
     if not all_known_sectors:
          filtered_state["bootstrap_mode"] = True
@@ -224,7 +232,18 @@ def _get_filtered_game_state_for_llm(game_state, state_manager):
 
     # --- Feedback Loop ---
     filtered_state["last_action_result"] = game_state.get("last_action_result")
-    # ---------------------
+    
+    # --- NEW: Check if we just scanned this sector ---
+    last_result = game_state.get("last_action_result", {})
+    # Default to False
+    filtered_state["scanned_current_sector"] = False
+    
+    if last_result and last_result.get("status") == "ok":
+        # Check if the last success was a density scan
+        if last_result.get("response_type") == "sector.density.scan":
+            # We assume the scan was for the current location (since we can only scan where we are)
+            filtered_state["scanned_current_sector"] = True
+    # -------------------------------------------------
 
     if current_sector_details:
         filtered_state["current_sector_info"] = {
@@ -244,7 +263,9 @@ def _get_filtered_game_state_for_llm(game_state, state_manager):
 
                 commodities_list = []
                 for c in current_port_data.get("commodities", []):
-                    comm_name = c.get("commodity")
+                    comm_name = canon_commodity(c.get("commodity"))
+                    if not comm_name: continue
+                    
                     # Get price from cache, or default to Unknown
                     buy_price = buy_cache.get(comm_name, "Unknown")
                     sell_price = sell_cache.get(comm_name, "Unknown")
@@ -287,30 +308,30 @@ GAME STATE (JSON INPUT)
 
 ## ALLOWED ACTIONS (YOU MAY ONLY USE THESE)
 
-You may output a plan consisting only of the following four goal types:
+You may output a plan consisting only of the following goal types:
 
 1. "goto: <sector_id>"
-     - Move the ship to an adjacent sector.
-     - You may ONLY use sector IDs from the list `valid_goto_sectors` unless exploring.
-
+     - Move the ship to a target sector.
 2. "scan: density"
-     - Perform a density scan in the current sector.
-
-3. "buy: <COMMODITY>"
-4. "sell: <COMMODITY>"
-     - Commodities must be taken ONLY from `valid_commodity_names`.
-     - You may ONLY propose buy/sell actions if `can_trade_at_current_location` is true.
-     - Do NOT propose buy/sell unless the current sector has a port.
+     - Perform a density scan.
+3. "buy: <COMMODITY>" / "sell: <COMMODITY>"
+     - Trade at a port.
+4. "combat: attack"
+     - Attack a target ship in the current sector.
+5. "planet: land"
+     - Land on a planet in the current sector.
+6. "planet: info"
+     - Scan the planet in the current sector.
 
 ## HARD RULES (MUST FOLLOW)
 
-- You MUST select destinations for "goto:" ONLY from `valid_goto_sectors`.
+- If `scanned_current_sector` is true, you MUST NOT propose "scan: density". You MUST propose "goto:".
+- You may select ANY known sector for "goto:", not just adjacent ones.
 - You MUST select commodities ONLY from `valid_commodity_names`.
 - Do NOT trade SLAVES, WEAPONS, or DRUGS unless your alignment is Evil (check player_info).
 - If `can_trade_at_current_location` is false, you MUST NOT propose any "buy:" or "sell:" actions.
-- You MUST NOT propose commands like "land", "planet.land", "combat.*", "move_to_safe_location",
-  "negotiate", or ANY action not listed in the ALLOWED ACTIONS above.
-- If there are no valid goto targets, you may still output ["scan: density"].
+- Only propose combat/planet actions if the game state shows ships/planets are present.
+- If `sector_data` for the current sector shows no ports, planets, or other ships, or if you have already performed a scan here, you MUST move to a different sector using "goto:".
 - If the port or warp action previously failed, the field `last_action_result` will contain an
   error. Avoid repeating actions that will logically fail again.
 
@@ -338,8 +359,12 @@ Rules:
     - "scan: density"
     - "buy: <COMMODITY_CODE>"
     - "sell: <COMMODITY_CODE>"
+    - "combat: attack"
+    - "planet: land"
+    - "planet: info"
 - Do NOT include any other top-level keys.
 - Do NOT include natural language explanation.
+- IMPORTANT: Output ONLY the JSON object. Do not include any explanations, preambles, or markdown formatting (like ```json).
 
 ### VALID EXAMPLES:
 {{ "plan": ["scan: density"] }}
@@ -363,7 +388,7 @@ PROMPT_STRATEGY = """You are a master space trader. Your goal is to make profit.
 
 PROMPT_QA_OBJECTIVE = """You are a QA testing bot for a space game. Your current high-level objective is to "{qa_objective}".
 Based on this objective, provide a detailed strategic plan.
-""" + PROMPT_CONTRACT_BLOCK
+"""
 
 QA_OBJECTIVES = [
     "test basic trading",
@@ -410,22 +435,32 @@ def get_strategy_from_llm(game_state, model, stage, state_manager, qa_objective:
 
         raw_plan = []
 
-        # 1) Strict JSON parsing
-        try:
-            json_response = json.loads(response_text)
-            
+        # 1) Robust JSON parsing
+        json_response = parse_llm_json(response_text)
+        
+        if json_response:
             if isinstance(json_response, list):
                 for item in json_response:
                     if isinstance(item, str):
                         raw_plan.append(item.strip())
+                    elif isinstance(item, list):
+                        # Flatten nested list
+                        for sub_item in item:
+                            if isinstance(sub_item, str):
+                                raw_plan.append(sub_item.strip())
                     else:
-                        logger.warning(f"Invalid item type in plan list: {type(item)}. Expected string.")
+                        logger.warning(f"Invalid item type in plan list: {type(item)}. Expected string or list.")
             elif isinstance(json_response, dict):
                  # Primary Contract: {"plan": ["goal1", "goal2"]}
                  if "plan" in json_response and isinstance(json_response["plan"], list):
                      for item in json_response["plan"]:
                          if isinstance(item, str):
                              raw_plan.append(item.strip())
+                         elif isinstance(item, list):
+                             # Flatten nested list
+                             for sub_item in item:
+                                 if isinstance(sub_item, str):
+                                     raw_plan.append(sub_item.strip())
                          elif isinstance(item, dict) and "goal" in item: # Support rich objects {goal: "...", reason: "..."}
                              raw_plan.append(str(item["goal"]).strip())
                  
@@ -451,8 +486,7 @@ def get_strategy_from_llm(game_state, model, stage, state_manager, qa_objective:
                                 raw_plan.append(v.strip())
             else:
                 logger.warning(f"LLM returned JSON of type {type(json_response)}, expected list or dict. Raw: {response_text}")
-
-        except json.JSONDecodeError:
+        else:
             logger.warning("LLM returned invalid JSON. Attempting to recover text lines.")
             # Fallback: Try to extract lines that look like goals
             lines = response_text.strip().split('\n')
@@ -527,6 +561,31 @@ def get_strategy_from_llm(game_state, model, stage, state_manager, qa_objective:
                 final_plan.append(g)
 
         if final_plan:
+            # --- BOREDOM FILTER: Override LLM if it hallucinates a loop ---
+            # 1. Check if we just scanned successfully
+            last_result = game_state.get("last_action_result", {})
+            just_scanned = (last_result and last_result.get("status") == "ok" and 
+                            last_result.get("response_type") == "sector.density.scan")
+
+            # 2. Check if the new plan is just "scan again"
+            if final_plan[0] == "scan: density" and just_scanned:
+                logger.warning("BOREDOM FILTER: LLM tried to scan twice. Forcing a move!")
+                
+                # 3. Pick a random neighbor to warp to
+                current_sector_id = str(game_state.get("player_location_sector"))
+                sector_data = game_state.get("sector_data", {}).get(current_sector_id, {})
+                adjacent = sector_data.get("adjacent", [])
+                
+                if adjacent:
+                    # Pick a random neighbor
+                    random_dest = random.choice(adjacent)
+                    return [f"goto: {random_dest}"]
+                else:
+                    # If no map data, warp blindly to a random sector (Emergency Jump)
+                    random_dest = random.randint(1, 1000) # Assuming 1000 sectors
+                    return [f"goto: {random_dest}"]
+            # ---------------------------------------------------------------
+
             logger.info(f"LLM provided valid plan: {final_plan}")
             return final_plan
         
@@ -569,15 +628,28 @@ def is_goal_complete(goal_str, game_state, response_data, response_type):
             return any(l.get("commodity", "").lower() == goal_target for l in response_data.get("lines", []))
 
         elif goal_type == "survey" and goal_target == "port":
-            if response_type == "port.info":
-                # Goal is complete if we have received port info with commodities.
-                return bool(response_data.get("port", {}).get("commodities"))
-            # Fallback check on the state, in case the response was processed before the goal check.
+            # Check if survey is STRICTLY complete (all commodities quoted)
+            # We mirror the planner's strict logic here to avoid premature popping.
             current_sector_id = str(game_state.get("player_location_sector"))
             port_info = game_state.get("port_info_by_sector", {}).get(current_sector_id)
-            if port_info and port_info.get("commodities"):
-                return True
-            return False
+            
+            if not port_info or not port_info.get("commodities"):
+                return False # Don't even have the list yet
+            
+            port_id_str = str(port_info.get("port_id"))
+            price_cache = game_state.get("price_cache", {}).get(port_id_str, {})
+            
+            for c in port_info.get("commodities", []):
+                c_code = canon_commodity(c.get("commodity"))
+                if not c_code: continue
+                
+                has_buy = price_cache.get("buy", {}).get(c_code) is not None
+                has_sell = price_cache.get("sell", {}).get(c_code) is not None
+                
+                if not (has_buy or has_sell):
+                    return False # Found a commodity with no price data
+            
+            return True # All commodities have at least one price
 
         elif goal_type == "scan" and goal_target == "density":
             return response_type == "sector.density.scan"
@@ -594,14 +666,16 @@ def is_goal_complete(goal_str, game_state, response_data, response_type):
 
 # --- Main Game Loop ---
 
+
 def bootstrap_schemas(game_conn, state_manager, config):
     """
     Fetches all command schemas from the server on startup.
     """
     logger.info("Bootstrapping command schemas...")
-    
+
     idempotency_key = str(uuid.uuid4())
     request_id = f"c-{idempotency_key[:8]}"
+
     schema_request = {
         "id": request_id,
         "command": "system.cmd_list",
@@ -611,10 +685,17 @@ def bootstrap_schemas(game_conn, state_manager, config):
             "idempotency_key": idempotency_key
         }
     }
+
     logger.info("Requesting command list from server...")
     game_conn.send_command(schema_request)
+
+    # Ensure dict exists
+    state_manager.state.setdefault("pending_schema_requests", {})
     state_manager.state["pending_schema_requests"]["system.cmd_list"] = request_id
-    time.sleep(0.1) # Avoid overwhelming the server
+
+    time.sleep(0.1)  # Avoid overwhelming the server
+
+
 
 def main(config_path="config.json"):
     global shutdown_flag
@@ -709,7 +790,7 @@ def main(config_path="config.json"):
             responses = game_conn.receive_responses()
             if responses:
                 # --- FIX: Pass config object to fix NameError ---
-                process_responses(responses, game_conn, state_manager, bug_reporter, bandit_policy, config)
+                process_responses(responses, game_conn, state_manager, bug_reporter, bandit_policy, config, planner)
                 game_state = state_manager.get_all() # Re-fetch state after processing responses
                 last_heartbeat = time.time()
             
@@ -837,11 +918,19 @@ def main(config_path="config.json"):
                 command_name = next_command_dict.get("command")
                 idempotency_key = str(uuid.uuid4())
                 
+                # IMPORTANT: trade.buy/trade.sell require idempotency_key INSIDE data (server handler reads data.idempotency_key)
+                # planner.py now adds this, but we ensure it here just in case logic was bypassed
+                data_payload = dict(next_command_dict.get("data", {}) or {})
+                if command_name in ("trade.buy", "trade.sell") and "idempotency_key" not in data_payload:
+                     # This should be redundant if planner is working, but safe
+                     data_payload["idempotency_key"] = idempotency_key
+
+                
                 # Build the full command packet
                 full_command = {
                     "id": f"c-{idempotency_key[:8]}",
                     "command": command_name,
-                    "data": next_command_dict.get("data", {}),
+                    "data": data_payload,
                     "meta": {
                         "client_version": config.get("client_version"),
                         # --- THIS IS THE FIX for 1306 ERROR ---
@@ -918,7 +1007,7 @@ SHIP_TYPE_HOLDS_MAP = {
     # Add other ship types as needed if similar discrepancies are found
 }
 
-def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_policy, config):
+def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_policy, config, planner=None):
     """
     Processes a list of responses from the server, updates state,
     and checks for goal completion.
@@ -942,6 +1031,10 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
         
         if config.get("qa_mode"):
             bug_reporter.log_response(response)
+
+        # Diagnostic log for trade results
+        if planner and command_name in ("trade.buy", "trade.sell"):
+             planner.handle_trade_response(command_name, response)
 
         if request_id:
             state_manager.remove_pending_command(request_id)
@@ -978,6 +1071,24 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                         state_manager.update_cargo_after_buy(bought_items, port_id)
                     state_manager.set("trade_successful", True)
                     logger.info("Ship cargo state updated after successful trade.buy.")
+                    
+                    # --- Deterministic Rule: Immediate Sell ---
+                    if planner:
+                        next_cmd = planner.on_buy_ok(response)
+                        if next_cmd:
+                            idempotency_key = next_cmd["data"]["idempotency_key"]
+                            full_command = {
+                                "id": f"c-{idempotency_key[:8]}",
+                                "command": next_cmd["command"],
+                                "data": next_cmd["data"],
+                                "meta": {
+                                    "client_version": config.get("client_version"),
+                                    "idempotency_key": idempotency_key
+                                }
+                            }
+                            logger.info(f"Deterministic Rule Trigger: Sending {next_cmd['command']}")
+                            if game_conn.send_command(full_command):
+                                state_manager.add_pending_command(full_command['id'], full_command)
                 
                 # Give feedback for the last action that led to this success
                 if last_action and last_context:
@@ -1046,12 +1157,13 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                 sent_cmd = state_manager.get_pending_command(request_id)
                 if sent_cmd and sent_cmd.get("command") == "move.pathfind":
                     if response.get("status") == "ok":
-                        path = response_data.get("path", [])
-                        if path:
-                            state_manager.set("current_path", path)
-                            logger.info(f"Received path from server: {path}")
+                        # FIX: Protocol returns 'steps', not 'path'
+                        steps = response_data.get("steps", [])
+                        if steps:
+                            state_manager.set("current_path", steps)
+                            logger.info(f"Received path (steps) from server: {steps}")
                         else:
-                            logger.warning("Server returned OK for move.pathfind but path is empty.")
+                            logger.warning("Server returned OK for move.pathfind but steps is empty.")
                     else:
                         logger.warning(f"move.pathfind failed: {response.get('error')}")
                 # -------------------------------------
@@ -1076,6 +1188,24 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                 
                 elif response_type == "trade.quote":
                     state_manager.update_price_cache(response_data)
+                    
+                    # --- Deterministic Rule: Immediate Buy ---
+                    if planner:
+                        next_cmd = planner.on_quote_ok(response)
+                        if next_cmd:
+                            idempotency_key = next_cmd["data"]["idempotency_key"]
+                            full_command = {
+                                "id": f"c-{idempotency_key[:8]}",
+                                "command": next_cmd["command"],
+                                "data": next_cmd["data"],
+                                "meta": {
+                                    "client_version": config.get("client_version"),
+                                    "idempotency_key": idempotency_key
+                                }
+                            }
+                            logger.info(f"Deterministic Rule Trigger: Sending {next_cmd['command']}")
+                            if game_conn.send_command(full_command):
+                                state_manager.add_pending_command(full_command['id'], full_command)
                 
                 elif response_type == "bank.balance":
                     state_manager.set("bank_balance", response_data.get("balance", 0))
@@ -1127,8 +1257,13 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                 if sent_command and command_name == "move.warp" and error_code == 1402:
                     to_sector_id = sent_command.get("data", {}).get("to_sector_id")
                     if to_sector_id is not None:
-                        logger.warning(f"Move.warp to sector {to_sector_id} failed with 'No warp link'. Blacklisting for future attempts.")
-                        state_manager.add_to_warp_blacklist(to_sector_id)
+                        logger.warning(f"Move.warp to sector {to_sector_id} failed with 'No warp link'. RE-SYNCING location.")
+                        # state_manager.add_to_warp_blacklist(to_sector_id) # Don't blacklist yet, location might just be wrong
+                        
+                        # FORCE RE-SYNC: Clear cached location and fetch fresh info
+                        state_manager.set("player_location_sector", None)
+                        game_conn.send_command("player.my_info", {})
+                        game_conn.send_command("ship.info", {})
 
                 if sent_command and command_name == "move.warp":
                     to_sector_id = sent_command.get("data", {}).get("to_sector_id")

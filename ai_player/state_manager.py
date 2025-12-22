@@ -2,6 +2,7 @@ import json
 import os
 import time
 import logging
+from helpers import canon_commodity
 
 
 logger = logging.getLogger(__name__)
@@ -13,7 +14,7 @@ class StateManager:
         self.state = {
             "session_id": None,
             "player_info": None,
-            "ship_info": {"cargo": []},
+            "ship_info": None,
             "player_location_sector": None,
             "sector_data": {},          # Caches for sector.info
             "universe_map": {},         # NEW: For systematic exploration
@@ -34,6 +35,7 @@ class StateManager:
             "warp_blacklist": [],       # NEW: List of sectors that are unreachable via warp
             "current_path": [],         # NEW: Stores the server-provided path for navigation
             "last_action_result": None, # NEW: Feedback loop for LLM
+            "last_quotes": {},          # NEW: Deterministic trade rule support
         }
         self.load_state()
 
@@ -70,7 +72,7 @@ class StateManager:
                     
                     # Force re-fetch of player state
                     self.state["player_info"] = None
-                    self.state["ship_info"] = {"cargo": []}
+                    self.state["ship_info"] = None
                     self.state["player_location_sector"] = None
                     self.state["needs_bootstrap"] = True
                     # --- END FIX ---
@@ -113,6 +115,20 @@ class StateManager:
     def set_last_action_result(self, result_dict):
         """Updates the result of the last attempted action for LLM feedback."""
         self.state["last_action_result"] = result_dict
+        self.save_state()
+
+    def update_last_quote(self, port_id, commodity, price, timestamp):
+        """Stores the most recent successful quote details."""
+        if "last_quotes" not in self.state:
+            self.state["last_quotes"] = {}
+        
+        key = f"{port_id}_{commodity}"
+        self.state["last_quotes"][key] = {
+            "port_id": port_id,
+            "commodity": commodity,
+            "unit_price": price,
+            "timestamp": timestamp
+        }
         self.save_state()
 
     # --- Command Retry & Cooldown Logic ---
@@ -222,8 +238,22 @@ class StateManager:
             commodities.append({"commodity": "ORG", "supply": port_data["organics_on_hand"]})
         if "equipment_on_hand" in port_data:
             commodities.append({"commodity": "EQU", "supply": port_data["equipment_on_hand"]})
-        if "fuel_on_hand" in port_data: # Assuming fuel might be there or added later
-             commodities.append({"commodity": "ORE", "supply": port_data["fuel_on_hand"]})
+        
+        # Also handle generic 'commodities' list if provided by server in that format
+        if "commodities" in port_data:
+            for c in port_data["commodities"]:
+                # If it's a dict like {"commodity": "ore", ...}
+                if isinstance(c, dict):
+                    c_code = canon_commodity(c.get("commodity") or c.get("symbol") or c.get("code"))
+                    if c_code:
+                        # Update or append
+                        existing = next((x for x in commodities if x["commodity"] == c_code), None)
+                        if existing:
+                            existing.update(c)
+                            existing["commodity"] = c_code # Ensure canonical
+                        else:
+                            c["commodity"] = c_code
+                            commodities.append(c)
         
         # We only care about one port per sector for this bot
         self.state['port_info_by_sector'][str(sector_id)] = {
@@ -243,20 +273,15 @@ class StateManager:
         if port_id not in self.state["price_cache"]:
             self.state["price_cache"][port_id] = {"buy": {}, "sell": {}}
             
-        # commodity = quote_data.get("commodity")
-        # if not commodity:
-        #     return
-        commodity = quote_data.get("commodity")
-        if not commodity:
+        raw_commodity = quote_data.get("commodity")
+        if not raw_commodity:
             return
 
         # NORMALISE commodity keys (server uses ORE/ORG/EQU)
-        commodity = str(commodity).upper()
-        if commodity == "ORGANICS":
-            commodity = "ORG"
-        elif commodity == "EQUIPMENT":
-            commodity = "EQU"
-
+        commodity = canon_commodity(raw_commodity)
+        if not commodity:
+            logger.warning(f"Ignoring quote for unknown commodity: {raw_commodity}")
+            return
         
         # Update price for the specific commodity
         self.state["price_cache"][port_id]["buy"][commodity] = quote_data.get("buy_price")
@@ -272,10 +297,11 @@ class StateManager:
         if 'cargo' not in self.state['ship_info'] or not isinstance(self.state['ship_info']['cargo'], list):
             self.state['ship_info']['cargo'] = []
 
-        price_info = self.state.get("price_cache", {}).get(str(port_id), {}).get("buy", {})
+        # We don't need to look up price cache for unit_price if it is in items_bought
+        # But we might want to normalize keys if we did.
         
         for item in items_bought:
-            commodity = item.get("commodity")
+            commodity = canon_commodity(item.get("commodity"))
             quantity = item.get("quantity")
             purchase_price = item.get("unit_price") # GET UNIT_PRICE FROM THE RECEIPT ITEM DIRECTLY!
 
@@ -302,14 +328,14 @@ class StateManager:
 
     def update_cargo_after_sell(self, items_sold, port_id):
         """Updates cargo list after a successful sell and returns total profit."""
-        if 'ship_info' not in self.state or 'cargo' not in self.state['ship_info']:
+        if 'ship_info' not in self.state or self.state['ship_info'] is None or 'cargo' not in self.state['ship_info']:
             return 0
 
         total_profit = 0
         port_sell_prices = self.state.get("price_cache", {}).get(str(port_id), {}).get("sell", {})
 
         for item_sold in items_sold:
-            commodity_sold = item_sold.get("commodity")
+            commodity_sold = canon_commodity(item_sold.get("commodity"))
             quantity_sold = item_sold.get("quantity")
             sell_price = port_sell_prices.get(commodity_sold)
 
@@ -362,9 +388,14 @@ class StateManager:
             # Update location from player info
             if 'sector' in player_data['player']:
                 new_sector = player_data['player']['sector']
-                self.state['player_location_sector'] = new_sector
-                self.state['recent_sectors'] = (self.state.get('recent_sectors', []) + [new_sector])[-10:]
-                logger.info(f"Player location updated to sector {new_sector} (from player_info)")
+                # FIX: Only update if we don't have a location yet. 
+                # Ship location is authoritative; Player location might be stale/home.
+                if self.state['player_location_sector'] is None:
+                    self.state['player_location_sector'] = new_sector
+                    self.state['recent_sectors'] = (self.state.get('recent_sectors', []) + [new_sector])[-10:]
+                    logger.info(f"Player location initialized to sector {new_sector} (from player_info)")
+                elif self.state['player_location_sector'] != new_sector:
+                    logger.debug(f"Ignoring player_info sector {new_sector} as we are already at {self.state['player_location_sector']}")
 
             logger.info(f"Player info updated. Turns remaining: {player_data['player'].get('turns_remaining')}")
 
@@ -372,19 +403,29 @@ class StateManager:
             if self.state.get('ship_info') is None:
                 self.state['ship_info'] = {}
 
-            # Preserve the new cargo structure
-            existing_cargo = self.state['ship_info'].get('cargo', [])
+            # CRITICAL FIX: Trust server cargo if provided, otherwise preserve local
+            server_cargo = player_data['ship'].get('cargo')
+            local_cargo = (self.state.get('ship_info') or {}).get('cargo', [])
             
-            # Update ship_info with new data, then restore cargo
             self.state['ship_info'] = player_data['ship']
-            self.state['ship_info']['cargo'] = existing_cargo
+            
+            if server_cargo is not None:
+                # FIX: Verify server_cargo is valid (list of dicts). 
+                # If server sends ["ORE"] (strings), IGNORE IT to prevent corruption.
+                if server_cargo and isinstance(server_cargo, list) and len(server_cargo) > 0 and isinstance(server_cargo[0], str):
+                    logger.warning("Ignored simplified cargo list (strings) from server. Preserving local state.")
+                    self.state['ship_info']['cargo'] = local_cargo
+                else:
+                    self.state['ship_info']['cargo'] = server_cargo
+            else:
+                self.state['ship_info']['cargo'] = local_cargo
 
-            # Update location from ship info (authoritative)
+            # Update location from ship info (authoritative GPS)
             if 'location' in player_data['ship'] and 'sector_id' in player_data['ship']['location']:
                 new_sector = player_data['ship']['location']['sector_id']
                 self.state['player_location_sector'] = new_sector
                 self.state['recent_sectors'] = (self.state.get('recent_sectors', []) + [new_sector])[-10:]
-                logger.info(f"Player location updated to sector {new_sector} (from ship_info)")
+                logger.info(f"Location updated to sector {new_sector} (Ship GPS)")
 
         self.save_state()
 

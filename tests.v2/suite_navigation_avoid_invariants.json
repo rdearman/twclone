@@ -1,0 +1,60 @@
+{
+  "test_suite_name": "Navigation Avoidance Invariants",
+  "description": "Validates API behavior for managing navigation avoid lists",
+  "tests": [
+    {
+      "name": "Setup: Auth Navigator",
+      "setup": "macro_auth_user",
+      "user": "navigator_prime",
+      "passwd": "password"
+    },
+    {
+      "name": "Nav: Add Avoid",
+      "command": "nav.avoid.add",
+      "user": "navigator_prime",
+      "data": { "sector_id": 666 },
+      "expect": {
+        "status": "nav.avoid.added",
+        "sector_id": 666
+      }
+    },
+    {
+      "name": "Nav: List Avoid (Verify Add)",
+      "command": "nav.avoid.list",
+      "user": "navigator_prime",
+      "expect": {
+        "status": "nav.avoid.list",
+        "items": [ 666 ]
+      }
+    },
+    {
+      "name": "Nav: Remove Avoid",
+      "command": "nav.avoid.remove",
+      "user": "navigator_prime",
+      "data": { "sector_id": 666 },
+      "expect": {
+        "status": "nav.avoid.removed",
+        "sector_id": 666
+      }
+    },
+    {
+      "name": "Nav: List Avoid (Verify Remove)",
+      "command": "nav.avoid.list",
+      "user": "navigator_prime",
+      "expect": {
+        "status": "nav.avoid.list",
+        "items": []
+      }
+    },
+    {
+      "name": "Nav: Add Invalid (Fail)",
+      "command": "nav.avoid.add",
+      "user": "navigator_prime",
+      "data": { "sector_id": -1 },
+      "expect": {
+        "error_code": 400,
+        "message": "invalid sector"
+      }
+    }
+  ]
+}

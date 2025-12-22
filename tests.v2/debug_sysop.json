@@ -1,0 +1,43 @@
+{
+  "name": "Auth and Sysop Debug Test",
+  "version": "1.0.0",
+  "description": "Debugs macro_sysop and related auth/db issues",
+  "tests": [
+    {
+      "name": "Setup: Admin User",
+      "setup": "macro_auth_user",
+      "username": "debug_sysop_admin",
+      "password": "password"
+    },
+    {
+      "name": "Verify Admin User Login",
+      "command": "player.my_info",
+      "user": "debug_sysop_admin",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.player.username", "op": "==", "value": "debug_sysop_admin" }
+      ]
+    },
+    {
+      "name": "Promote Admin User to SysOp",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET type = 1 WHERE id = @debug_sysop_admin_player_id;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Verify Admin User Type",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT type FROM players WHERE id = @debug_sysop_admin_player_id;" },
+      "user": "admin",
+      "expect": { "status": "ok", "data": { "rows": [[1]] } }
+    },
+    {
+      "name": "Try Admin Command as SysOp",
+      "command": "admin.notice",
+      "data": { "title": "Test", "body": "This should work", "severity": "info" },
+      "user": "debug_sysop_admin",
+      "expect": { "status": "ok" }
+    }
+  ]
+}

@@ -1,0 +1,110 @@
+{
+  "name": "SysAdmin Security Boundaries",
+  "version": "2.0.0",
+  "protocol_category": "05_Authentication",
+  "description": "Verifies that privileged commands are inaccessible to standard users",
+  "tests": [
+    {
+      "name": "Setup: Auth Hacker (Standard User)",
+      "setup": "macro_auth_user",
+      "username": "sys_hacker",
+      "password": "password"
+    },
+    {
+      "name": "Setup: Auth Admin (Privileged User)",
+      "setup": "macro_auth_user",
+      "username": "sys_admin",
+      "password": "password"
+    },
+    {
+      "name": "Setup: Elevate Runner Admin",
+      "command": "sys.raw_sql_exec",
+      "data": {
+        "sql": "UPDATE players SET type = 3 WHERE name = 'admin';"
+      },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "register_if_missing": true
+    },
+    {
+      "name": "Setup: Promote Admin",
+      "command": "sys.raw_sql_exec",
+      "data": {
+        "sql": "UPDATE players SET type = 3 WHERE name = 'sys_admin';"
+      },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Boundary: admin.notice (Deny)",
+      "command": "admin.notice",
+      "user": "sys_hacker",
+      "data": { "title": "Test Notice", "body": "This should fail", "severity": "info" },
+      "expect": { "status": "refused", "error_code": 1111, "message": "Permission denied" }
+    },
+    {
+      "name": "Boundary: admin.shutdown_warning (Deny)",
+      "command": "admin.shutdown_warning",
+      "user": "sys_hacker",
+      "data": { "body": "System shutting down", "countdown_seconds": 60 },
+      "expect": { "status": "refused", "error_code": 1111, "message": "Permission denied" }
+    },
+    {
+      "name": "Boundary: sys.cluster.init (Deny)",
+      "command": "sys.cluster.init",
+      "user": "sys_hacker",
+      "expect": { "status": "refused", "error_code": 1111, "message": "Permission denied" }
+    },
+    {
+      "name": "Boundary: sys.raw_sql_exec (Deny)",
+      "command": "sys.raw_sql_exec",
+      "user": "sys_hacker",
+      "data": { "sql": "SELECT 1;" },
+      "expect": { "status": "refused", "error_code": 1111, "message": "Permission denied" }
+    },
+    {
+      "name": "Boundary: sys.econ.planet_status (Deny)",
+      "command": "sys.econ.planet_status",
+      "user": "sys_hacker",
+      "expect": { "status": "refused", "error_code": 1111, "message": "Permission denied" }
+    },
+    {
+      "name": "Boundary: sys.econ.port_status (Deny)",
+      "command": "sys.econ.port_status",
+      "user": "sys_hacker",
+      "expect": { "status": "refused", "error_code": 1111, "message": "Permission denied" }
+    },
+    {
+      "name": "Boundary: sys.notice.create (Deny)",
+      "command": "sys.notice.create",
+      "user": "sys_hacker",
+      "data": { "title": "Test", "body": "Test" },
+      "expect": { "status": "refused", "error_code": 1111, "message": "Permission denied" }
+    },
+    {
+      "name": "Boundary: sys.npc.ferengi_tick_once (Deny)",
+      "command": "sys.npc.ferengi_tick_once",
+      "user": "sys_hacker",
+      "expect": { "status": "refused", "error_code": 1111, "message": "Permission denied" }
+    },
+    {
+      "name": "Boundary: sys.cron.planet_tick_once (Deny)",
+      "command": "sys.cron.planet_tick_once",
+      "user": "sys_hacker",
+      "expect": { "status": "refused", "error_code": 1111, "message": "Permission denied" }
+    },
+    {
+      "name": "Boundary: sys.test_news_cron (Deny)",
+      "command": "sys.test_news_cron",
+      "user": "sys_hacker",
+      "expect": { "status": "refused", "error_code": 1111, "message": "Permission denied" }
+    },
+    {
+      "name": "Admin: admin.notice (Allow)",
+      "command": "admin.notice",
+      "user": "sys_admin",
+      "data": { "title": "Admin Notice", "body": "System Maintenance Imminent", "severity": "info" },
+      "expect": { "status": "ok" }
+    }
+  ]
+}

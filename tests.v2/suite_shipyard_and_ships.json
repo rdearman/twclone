@@ -1,0 +1,108 @@
+{
+  "tests": [
+    {
+      "setup": "macro_auth_user",
+      "username": "shipyard_tester",
+      "password": "password"
+    },
+    {
+      "name": "Give Credits",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET credits = 1000000 WHERE id = @shipyard_tester_player_id;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Ensure 'Scout Marauder' shiptype exists",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT OR IGNORE INTO shiptypes (id, name, basecost, maxholds, maxfighters, maxshields, maxgenesis, max_detonators, max_probes, can_transwarp, can_planet_scan, can_long_range_scan, max_cloaks) VALUES (1, 'Scout Marauder', 1000, 100, 1000, 500, 5, 5, 5, 1, 1, 1, 1);" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Ensure 'Corporate Flagship' shiptype exists",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT OR IGNORE INTO shiptypes (id, name, basecost, maxholds, maxfighters, maxshields, maxgenesis, max_detonators, max_probes, can_transwarp, can_planet_scan, can_long_range_scan, max_cloaks) VALUES (2, 'Corporate Flagship', 1000000, 1000, 100, 100, 0, 0, 0, 0, 0, 0, 0);" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Delete and Recreate Ship for Shipyard Tester",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "DELETE FROM ships WHERE id = @shipyard_tester_player_id; INSERT INTO ships (id, type_id, name, holds, sector, ported) VALUES (@shipyard_tester_player_id, 1, 'ShipyardTestShip', 100, 1, 0); UPDATE players SET ship = @shipyard_tester_player_id, sector = 1 WHERE id = @shipyard_tester_player_id; INSERT OR IGNORE INTO ship_ownership (ship_id, player_id, is_primary) VALUES (@shipyard_tester_player_id, @shipyard_tester_player_id, 1);" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Refresh Player Info after ship update",
+      "command": "player.my_info",
+      "user": "shipyard_tester",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Ensure Stardock Port Exists",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT OR IGNORE INTO ports (id, name, sector, type) VALUES (9, 'Stardock', 1, 9);" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Ensure Shipyard Inventory Exists for Type 2",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT OR IGNORE INTO shipyard_inventory (port_id, ship_type_id, enabled) VALUES (9, 2, 1);" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Move Player to Stardock Sector",
+      "command": "move.warp",
+      "data": { "to_sector_id": 1 },
+      "user": "shipyard_tester",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Force Player Ship Docked (bypassing broken port.dock)",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE ships SET ported = 9 WHERE id = @shipyard_tester_player_id;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test: shipyard.list at Stardock",
+      "command": "shipyard.list",
+      "user": "shipyard_tester",
+      "expect": {
+        "status": "ok",
+        "type": "shipyard.list_v1"
+      },
+      "asserts": [
+          {"path": "data.available", "op": "*array"}
+      ]
+    },
+    {
+      "name": "Test: Successful Upgrade",
+      "command": "shipyard.upgrade",
+      "data": {
+        "new_type_id": 2,
+        "new_ship_name": "Upgraded Scout"
+      },
+      "user": "shipyard_tester",
+      "expect": {
+        "status": "ok",
+        "type": "shipyard.upgrade.success"
+      }
+    },
+    {
+      "name": "Test: Verify Upgrade",
+      "command": "player.my_info",
+      "user": "shipyard_tester",
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {"path": "data.player.ship.type_id", "op": "==", "value": 2},
+        {"path": "data.player.ship.name", "op": "==", "value": "Upgraded Scout"}
+      ]
+    }
+  ]
+}

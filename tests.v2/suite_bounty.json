@@ -1,0 +1,105 @@
+{
+  "test_suite_name": "Bounty System",
+  "description": "Validates Federation bounty posting, listing, and validation logic",
+  "tests": [
+    {
+      "name": "Setup: Auth Bounty Hunter",
+      "setup": "macro_auth_user",
+      "user": "bounty_hunter",
+      "passwd": "password"
+    },
+    {
+      "name": "Setup: Fund Hunter",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET credits = 50000, alignment = 100, sector = 1 WHERE id = (SELECT id FROM players WHERE name = 'bounty_hunter');"
+      },
+      "expect": { "success": true }
+    },
+    {
+      "name": "Setup: Auth Criminal",
+      "setup": "macro_auth_user",
+      "user": "wanted_criminal",
+      "passwd": "password"
+    },
+    {
+      "name": "Setup: Vilify Criminal",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET alignment = -100 WHERE id = (SELECT id FROM players WHERE name = 'wanted_criminal');"
+      },
+      "expect": { "success": true }
+    },
+    {
+      "name": "Bounty: Post Federation",
+      "command": "bounty.post_federation",
+      "user": "bounty_hunter",
+      "data": {
+        "target_player_id": { "sql_int": "SELECT id FROM players WHERE name = 'wanted_criminal'" },
+        "amount": 1000,
+        "description": "Public Enemy No. 1"
+      },
+      "expect": {
+        "status": "bounty.post_federation.confirmed"
+      },
+      "save": { "bounty_id": "data.bounty_id" }
+    },
+    {
+      "name": "Bounty: List Verification",
+      "command": "bounty.list",
+      "user": "bounty_hunter",
+      "expect": {
+        "status": "ok",
+        "bounties": [
+          {
+            "target_id": { "sql_int": "SELECT id FROM players WHERE name = 'wanted_criminal'" },
+            "amount": 1000,
+            "posted_by": { "sql_int": "SELECT id FROM players WHERE name = 'bounty_hunter'" },
+            "description": "Public Enemy No. 1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Bounty: Fail (Self)",
+      "command": "bounty.post_federation",
+      "user": "bounty_hunter",
+      "data": {
+        "target_player_id": { "sql_int": "SELECT id FROM players WHERE name = 'bounty_hunter'" },
+        "amount": 1000
+      },
+      "expect": {
+        "error_code": 400,
+        "message": "Cannot post bounty on yourself."
+      }
+    },
+    {
+      "name": "Bounty: Fail (Target Good)",
+      "command": "bounty.post_federation",
+      "user": "bounty_hunter",
+      "data": {
+        "target_player_id": { "sql_int": "SELECT id FROM players WHERE name = 'bounty_hunter'" },
+        "amount": 1000
+      },
+      "expect": {
+        "error_code": 707,
+        "message": "Target must be an evil player."
+      }
+    },
+    {
+      "name": "Bounty: Fail (Insufficient Funds)",
+      "command": "bounty.post_federation",
+      "user": "bounty_hunter",
+      "data": {
+        "target_player_id": { "sql_int": "SELECT id FROM players WHERE name = 'wanted_criminal'" },
+        "amount": 1000000
+      },
+      "expect": {
+        "error_code": 402,
+        "message": "Insufficient funds."
+      }
+    }
+  ]
+}

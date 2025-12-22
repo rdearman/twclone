@@ -1,0 +1,81 @@
+{
+  "macro_bootstrap_admin": [
+    {
+      "command": "auth.register",
+      "data": { "username": "admin", "passwd": "password" },
+      "register_if_missing": true
+    },
+    {
+      "command": "auth.login",
+      "data": { "username": "admin", "passwd": "password" },
+      "user": "admin",
+      "save": { "session": "data.session", "admin_player_id": "data.player_id" },
+      "stop_on_fail": true
+    }
+  ],
+  "macro_auth_user": [
+    {
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+      "command": "auth.register",
+      "data": { "username": "@username", "passwd": "@password" },
+      "register_if_missing": true
+    },
+    {
+      "command": "auth.login",
+      "data": { "username": "@username", "passwd": "@password" },
+      "user": "@username",
+      "save": { "session": "data.session", "@username_player_id": "data.player_id" },
+      "stop_on_fail": true
+    }
+  ],
+  "macro_sysop": [
+    {
+      "setup": "macro_auth_user",
+      "username": "@username",
+      "password": "@password"
+    },
+    {
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET type = 1 WHERE id = (SELECT id FROM players WHERE name = '@username');" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "stop_on_fail": true
+    }
+  ],
+  "macro_rich_user": [
+    {
+      "setup": "macro_auth_user",
+      "username": "@username",
+      "password": "@password"
+    },
+    {
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET credits = @credits WHERE id = (SELECT id FROM players WHERE name = '@username');" },
+      "user": "admin",
+      "stop_on_fail": true
+    },
+    {
+      "command": "bank.deposit",
+      "data": { "amount": "@deposit_amount" },
+      "user": "@username",
+      "expect": { "status": "ok" },
+      "stop_on_fail": true
+    }
+  ],
+  "macro_user_in_sector": [
+    {
+      "setup": "macro_auth_user",
+      "username": "@username",
+      "password": "@password"
+    },
+    {
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "INSERT OR IGNORE INTO shiptypes (id, name, basecost, maxholds) VALUES (1, 'Scout', 1000, 100); INSERT OR IGNORE INTO ships (id, type_id, name, holds, sector, ported) VALUES ((SELECT id FROM players WHERE name = '@username'), 1, 'TestShip', 100, 1, 0); UPDATE players SET ship = (SELECT id FROM players WHERE name = '@username'), sector = 1 WHERE id = (SELECT id FROM players WHERE name = '@username'); INSERT OR IGNORE INTO ship_ownership (ship_id, player_id, is_primary) VALUES ((SELECT id FROM players WHERE name = '@username'), (SELECT id FROM players WHERE name = '@username'), 1);" },
+        "user": "admin",
+        "expect": { "status": "ok" },
+        "stop_on_fail": true
+    }
+  ]
+}

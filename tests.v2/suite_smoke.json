@@ -1,0 +1,20 @@
+{
+  "tests": [
+    {
+      "setup": "macro_auth_user",
+      "user": "smoke_user",
+      "passwd": "password"
+    },
+    {
+      "name": "System Hello",
+      "command": "system.hello",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "My Info",
+      "command": "player.my_info",
+      "user": "smoke_user",
+      "expect": { "status": "ok" }
+    }
+  ]
+}
