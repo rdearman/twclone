@@ -394,6 +394,7 @@ top_srcdir = ..
 # AM_CFLAGS = -Wall -Wextra
 AM_CFLAGS = -Wall -Wextra -D_GNU_SOURCE -I../src
 server_LDADD = -ljansson -lsqlite3 -lcrypto -lpthread -lm
+AUTOMAKE_OPTIONS = subdir-objects
 #bigbang_SOURCES = \
 #	../src/database.c \
 #        ../src/database_cmd.c \
@@ -417,7 +418,6 @@ bigbang_SOURCES = \
 
 #bigbang_LDADD = -ljansson -lsqlite3 -lcrypto -lpthread -lm
 bigbang_LDADD = -ljansson -lpq -lcrypto -lpthread -lm
-AUTOMAKE_OPTIONS = subdir-objects
 server_SOURCES = ../src/common.c ../src/database.c \
 	../src/database_cmd.c ../src/database_market.c \
 	../src/db_player_settings.c ../src/engine_consumer.c \

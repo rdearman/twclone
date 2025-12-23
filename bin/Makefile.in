@@ -394,6 +394,7 @@ top_srcdir = @top_srcdir@
 # AM_CFLAGS = -Wall -Wextra
 AM_CFLAGS = -Wall -Wextra -D_GNU_SOURCE -I../src
 server_LDADD = -ljansson -lsqlite3 -lcrypto -lpthread -lm
+AUTOMAKE_OPTIONS = subdir-objects
 @ENABLE_POSTGRES_FALSE@bigbang_SOURCES = \
 @ENABLE_POSTGRES_FALSE@	../src/database.c \
 @ENABLE_POSTGRES_FALSE@        ../src/database_cmd.c \
@@ -417,7 +418,6 @@ server_LDADD = -ljansson -lsqlite3 -lcrypto -lpthread -lm
 
 @ENABLE_POSTGRES_FALSE@bigbang_LDADD = -ljansson -lsqlite3 -lcrypto -lpthread -lm
 @ENABLE_POSTGRES_TRUE@bigbang_LDADD = -ljansson -lpq -lcrypto -lpthread -lm
-AUTOMAKE_OPTIONS = subdir-objects
 server_SOURCES = ../src/common.c ../src/database.c \
 	../src/database_cmd.c ../src/database_market.c \
 	../src/db_player_settings.c ../src/engine_consumer.c \

@@ -25,6 +25,12 @@
 AM_CFLAGS = -Wall -Wextra -D_GNU_SOURCE -I../src
 
 server_LDADD   	= -ljansson -lsqlite3 -lcrypto -lpthread -lm
+AUTOMAKE_OPTIONS = subdir-objects
+
+bin_PROGRAMS = \
+	server \
+	bigbang
+
 
 if ENABLE_POSTGRES
 bigbang_SOURCES = \
@@ -51,11 +57,6 @@ bigbang_SOURCES = \
 bigbang_LDADD = -ljansson -lsqlite3 -lcrypto -lpthread -lm
 endif
 
-AUTOMAKE_OPTIONS = subdir-objects
-
-bin_PROGRAMS = \
-	server \
-	bigbang
 
 server_SOURCES = \
 	../src/common.c \

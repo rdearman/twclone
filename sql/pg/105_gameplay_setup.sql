@@ -53,7 +53,7 @@ BEGIN
   -- Create 5 Traders
   FOR v_i IN 1..5 LOOP
     INSERT INTO players (name, passwd, credits, sector, type, is_npc, loggedin, commission)
-    VALUES (format('Ferrengi Trader %s', v_i), 'BOT', 5000, v_sector, 1, 1, 1, 1)
+    VALUES (format('Ferrengi Trader %s', v_i), 'BOT', 5000, v_sector, 1, TRUE, now(), 1)
     RETURNING id INTO v_player_id;
 
     INSERT INTO ships (name, type_id, sector, fighters, shields, holds, onplanet, perms)
@@ -61,11 +61,18 @@ BEGIN
     RETURNING id INTO v_ship_id;
 
     UPDATE players SET ship = v_ship_id WHERE id = v_player_id;
-    INSERT INTO ship_ownership (player_id, ship_id, is_primary, role_id) VALUES (v_player_id, v_ship_id, 1, 1);
+    INSERT INTO ship_ownership (player_id, ship_id, is_primary, role_id) VALUES (v_player_id, v_ship_id, TRUE, 1);
     
     -- Link to Corp
     INSERT INTO corp_members (corp_id, player_id, role) VALUES (v_corp_id, v_player_id, 'Member');
   END LOOP;
+
+  -- Deploy Sector Assets (Mines & Fighters) for Ferringhi
+  -- Owner: System (1), Corp: Ferringhi
+  INSERT INTO sector_assets (sector, player, corporation, asset_type, quantity, offensive_setting)
+  VALUES 
+    (v_sector, 1, v_corp_id, 1, 250, 0),   -- Mines
+    (v_sector, 1, v_corp_id, 2, 50000, 1); -- Fighters
 END;
 $$;
 
@@ -86,7 +93,7 @@ BEGIN
 
   -- Zydras (Leader)
   INSERT INTO players (name, passwd, credits, sector, type, is_npc, loggedin, experience, alignment, commission)
-  VALUES ('Zydras, Syndicate Leader', 'BOT', 10000, v_sector, 1, 1, 1, 500000, -10000, 32)
+  VALUES ('Zydras, Syndicate Leader', 'BOT', 10000, v_sector, 1, TRUE, now(), 500000, -10000, 32)
   RETURNING id INTO v_player_id;
 
   SELECT id INTO v_ship_type_id FROM shiptypes WHERE name = 'Orion Heavy Fighter Patrol';
@@ -96,9 +103,15 @@ BEGIN
   RETURNING id INTO v_ship_id;
 
   UPDATE players SET ship = v_ship_id WHERE id = v_player_id;
-  INSERT INTO ship_ownership (player_id, ship_id, is_primary, role_id) VALUES (v_player_id, v_ship_id, 1, 1);
+  INSERT INTO ship_ownership (player_id, ship_id, is_primary, role_id) VALUES (v_player_id, v_ship_id, TRUE, 1);
   UPDATE corporations SET owner_id = v_player_id WHERE id = v_corp_id;
-  INSERT INTO corp_members (corp_id, player_id, role) VALUES (v_corp_id, v_player_id, 'Leader');
+
+  -- Deploy Sector Assets (Mines & Fighters) for Orion
+  -- Owner: Zydras, Corp: Orion
+  INSERT INTO sector_assets (sector, player, corporation, asset_type, quantity, offensive_setting)
+  VALUES 
+    (v_sector, v_player_id, v_corp_id, 1, 250, 0),   -- Mines
+    (v_sector, v_player_id, v_corp_id, 2, 50000, 1); -- Fighters
 END;
 $$;
 
@@ -125,11 +138,29 @@ BEGIN
   -- 2. Spawn 50 Derelicts
   FOR v_shipname IN SELECT name FROM npc_shipnames LOOP
     v_sector := 11 + floor(random() * (v_max_sectors - 10));
-    SELECT id INTO v_st_id FROM shiptypes WHERE can_purchase = 1 ORDER BY random() LIMIT 1;
+    SELECT id INTO v_st_id FROM shiptypes WHERE can_purchase = TRUE ORDER BY random() LIMIT 1;
     
     INSERT INTO ships (name, type_id, sector, fighters, shields, holds, perms)
     VALUES (v_shipname, v_st_id, v_sector, 100, 100, 20, 777);
   END LOOP;
+END;
+$$;
+
+-- -----------------------------------------------------------------------------
+-- 5) Game Defaults (Turns, etc)
+-- -----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION apply_game_defaults()
+RETURNS void LANGUAGE plpgsql AS $$
+DECLARE
+  v_turns int;
+BEGIN
+  SELECT value::int INTO v_turns FROM config WHERE key = 'turnsperday';
+  IF v_turns IS NULL THEN v_turns := 500; END IF;
+
+  INSERT INTO turns (player, turns_remaining, last_update)
+  SELECT id, v_turns, now()
+  FROM players
+  ON CONFLICT (player) DO UPDATE SET turns_remaining = EXCLUDED.turns_remaining;
 END;
 $$;
 

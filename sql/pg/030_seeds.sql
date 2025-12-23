@@ -328,37 +328,6 @@ ON CONFLICT  (id) DO NOTHING;
 INSERT INTO ship_ownership (player_id, ship_id, is_primary, role_id)  VALUES  (1, 1, TRUE, 1)
 ON CONFLICT  DO NOTHING;
 
--- 18. Earth Port
-INSERT INTO ports (number, name, sector, size, techlevel, invisible, economy_curve_id) 
- VALUES  (1, 'Earth Port', 1, 10, 10, FALSE, 1)
-ON CONFLICT  DO NOTHING;
-
-INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity)  VALUES  ('port', 1, 'ORE', 10000),
-  ('port', 1, 'ORG', 10000),
-  ('port', 1, 'EQU', 10000)
-ON CONFLICT  DO NOTHING;
-
--- 20. Initial Ships & Ownership
-INSERT INTO ships (id, name, type_id, attack, holds, mines, limpets, fighters, genesis, photons, sector, shields, beacons, colonists, equipment, organics, ore, flags, cloaking_devices, cloaked, ported, onplanet) 
- VALUES  (1, 'Bit Banger', (SELECT id FROM shiptypes WHERE name='Merchant Cruiser'), 110, 20, 25, 5, 2300, 5, 1, 1, 400, 10, 5, 5, 5, 5, 0, 5, NULL, 1, 1)
-ON CONFLICT  (id) DO NOTHING;
-
-INSERT INTO ship_ownership (player_id, ship_id, is_primary, role_id)  VALUES  (1, 1, TRUE, 1)
-ON CONFLICT  DO NOTHING;
-
--- 21. Economy & Interest Policies
-INSERT INTO economy_curve (id, curve_name, base_restock_rate, price_elasticity, target_stock, volatility_factor) 
- VALUES  (1, 'default', 0.1, 0.5, 10000, 0.2)
-ON CONFLICT  (id) DO NOTHING;
-
-INSERT INTO bank_interest_policy (id, apr_bps, compounding, last_run_at, currency)
- VALUES  (1, 0, 'none', NULL, 'CRD')
-ON CONFLICT  (id) DO NOTHING;
-
-INSERT INTO corp_interest_policy (id, apr_bps, compounding, last_run_at, currency)
- VALUES  (1, 0, 'none', CURRENT_TIMESTAMP, 'CRD')
-ON CONFLICT  (id) DO NOTHING;
-
 -- 22. S2S Keys
 -- KEEPING EXTRACT(EPOCH) because s2s_keys.created_ts is BIGINT in your schema
 INSERT INTO s2s_keys(key_id, key_b64, is_default_tx, active, created_ts)
@@ -395,5 +364,11 @@ ON CONFLICT  (name) DO NOTHING;
 -- Engine Offset
 INSERT INTO engine_offset(key, last_event_id, last_event_ts)  VALUES  ('events', 0, 0)
 ON CONFLICT  (key) DO NOTHING;
+
+-- Reset sequences for tables with explicit ID inserts
+SELECT setval('ships_id_seq', (SELECT MAX(id) FROM ships));
+SELECT setval('planets_id_seq', (SELECT MAX(id) FROM planets));
+SELECT setval('ports_id_seq', (SELECT MAX(id) FROM ports));
+SELECT setval('players_id_seq', (SELECT MAX(id) FROM players));
 
 COMMIT;

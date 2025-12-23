@@ -28,6 +28,11 @@ DECLARE
     current_count BIGINT;
     max_allowed BIGINT;
 BEGIN
+    -- Allow System (0) to bypass cap during generation
+    IF NEW.created_by = 0 THEN
+        RETURN NEW;
+    END IF;
+
     SELECT count(*) INTO current_count FROM planets;
     SELECT CAST(value AS BIGINT) INTO max_allowed FROM config WHERE key = 'max_total_planets';
     

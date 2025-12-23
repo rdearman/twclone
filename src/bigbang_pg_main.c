@@ -10,6 +10,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <getopt.h>
+#include <jansson.h>
 
 #include "db/db_api.h"
 #include "server_log.h"
@@ -84,6 +85,49 @@ static char *slurp_file(const char *path) {
   if (rd != (size_t)n) { free(buf); return NULL; }
   buf[n] = 0;
   return buf;
+}
+
+static int sync_config_to_db(PGconn *c, json_t *jcfg) {
+    const char *key;
+    json_t *val;
+    printf("BIGBANG: Syncing config to database...\n");
+    
+    json_object_foreach(jcfg, key, val) {
+        // Skip meta-config keys used only by bigbang
+        if (strcmp(key, "admin") == 0 || strcmp(key, "db") == 0 || 
+            strcmp(key, "app") == 0 || strcmp(key, "sql_dir") == 0) continue;
+
+        const char *type = "string";
+        char buf[256];
+        
+        if (json_is_integer(val)) {
+            type = "int";
+            snprintf(buf, sizeof(buf), "%lld", (long long)json_integer_value(val));
+        } else if (json_is_boolean(val)) {
+            type = "bool";
+            snprintf(buf, sizeof(buf), "%s", json_is_true(val) ? "1" : "0");
+        } else if (json_is_real(val)) {
+            type = "double";
+            snprintf(buf, sizeof(buf), "%f", json_real_value(val));
+        } else if (json_is_string(val)) {
+            type = "string";
+            strncpy(buf, json_string_value(val), sizeof(buf));
+        } else {
+            continue; // Skip complex types
+        }
+
+        const char *paramValues[3] = { key, buf, type };
+        PGresult *r = PQexecParams(c, 
+            "INSERT INTO config (key, value, type) VALUES ($1, $2, $3) "
+            "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, type = EXCLUDED.type",
+            3, NULL, paramValues, NULL, NULL, 0);
+        
+        if (!r || PQresultStatus(r) != PGRES_COMMAND_OK) {
+            fprintf(stderr, "WARNING: Failed to sync config key '%s': %s\n", key, PQerrorMessage(c));
+        }
+        PQclear(r);
+    }
+    return 0;
 }
 
 static int apply_file(PGconn *c, const char *path) {
@@ -171,15 +215,15 @@ static int create_random_warps(PGconn *c, int numSectors, int maxWarps) {
   return 0;
 }
 
-static int bigbang_create_tunnels(PGconn *c, int sector_count) {
+static int bigbang_create_tunnels(PGconn *c, int sector_count, int min_tunnels, int min_tunnel_len) {
   exec_sql(c, "BEGIN", "BEGIN tunnels");
   exec_sql(c, "DELETE FROM used_sectors", "clear used_sectors");
   
   int added_tunnels = 0;
   int attempts = 0;
 
-  while (added_tunnels < 15 && attempts < 60) {
-    int path_len = 4 + (rand() % 5);
+  while (added_tunnels < min_tunnels && attempts < 60) {
+    int path_len = min_tunnel_len + (rand() % 5);
     int nodes[12];
     int n = 0;
 
@@ -249,17 +293,9 @@ static int ensure_fedspace_exit(PGconn *c, int outer_min, int outer_max) {
  * Main
  * ----------------------------------------------------------------------------- */
 static void usage(const char *argv0) {
-  fprintf(stderr, "Usage: %s [options]\n", argv0);
-  fprintf(stderr, "DB Options:\n");
-  fprintf(stderr, "  --admin <cs>    Admin connection string (default: dbname=postgres)\n");
-  fprintf(stderr, "  --db <name>     Target database name (default: twclone)\n");
-  fprintf(stderr, "  --app <tmpl>    App connection template (%%DB%% replaced by db name)\n");
-  fprintf(stderr, "  --sql-dir <dir> Path to sql/pg directory\n");
-  fprintf(stderr, "Game Options:\n");
-  fprintf(stderr, "  -s, --sectors <N>      Total sectors (default: 500)\n");
-  fprintf(stderr, "  -d, --density <N>      Max warps per sector\n");
-  fprintf(stderr, "  -r, --port-ratio <%%>   Port density (0-100)\n");
-  fprintf(stderr, "  -R, --planet-ratio <%%> Planet density\n");
+  fprintf(stderr, "Usage: %s\n", argv0);
+  fprintf(stderr, "Configuration is primarily read from bigbang.json in the current directory.\n");
+  fprintf(stderr, "Please edit bigbang.json to configure database and game options.\n");
   exit(1);
 }
 
@@ -273,6 +309,11 @@ int main(int argc, char **argv) {
   int density = 4;
   int port_ratio = 40;
   int planet_ratio = 30;
+  int port_size = 0;
+  int tech_level = 0;
+  int port_credits = 0;
+  int min_tunnels = 15;
+  int min_tunnel_len = 4;
 
   static struct option long_options[] = {
     {"admin", required_argument, 0, 1001},
@@ -285,6 +326,31 @@ int main(int argc, char **argv) {
     {"planet-ratio", required_argument, 0, 'R'},
     {0, 0, 0, 0}
   };
+
+  /* Try loading config from bigbang.json */
+  json_error_t jerr;
+  json_t *jcfg = json_load_file("bigbang.json", 0, &jerr);
+  if (jcfg) {
+    printf("BIGBANG: Loading config from bigbang.json...\n");
+    json_t *j;
+    const char *s;
+    if ((j = json_object_get(jcfg, "admin")) && (s = json_string_value(j))) admin_cs = strdup(s);
+    if ((j = json_object_get(jcfg, "db")) && (s = json_string_value(j))) db_name = strdup(s);
+    if ((j = json_object_get(jcfg, "app")) && (s = json_string_value(j))) app_cs_tmpl = strdup(s);
+    if ((j = json_object_get(jcfg, "sql_dir")) && (s = json_string_value(j))) sql_dir = strdup(s);
+    if ((j = json_object_get(jcfg, "sectors")) && json_is_integer(j)) sectors = (int)json_integer_value(j);
+    if ((j = json_object_get(jcfg, "density")) && json_is_integer(j)) density = (int)json_integer_value(j);
+    if ((j = json_object_get(jcfg, "port_ratio")) && json_is_integer(j)) port_ratio = (int)json_integer_value(j);
+    if ((j = json_object_get(jcfg, "planet_ratio")) && json_is_integer(j)) planet_ratio = (int)json_integer_value(j);
+    if ((j = json_object_get(jcfg, "port_size")) && json_is_integer(j)) port_size = (int)json_integer_value(j);
+    if ((j = json_object_get(jcfg, "tech_level")) && json_is_integer(j)) tech_level = (int)json_integer_value(j);
+    if ((j = json_object_get(jcfg, "port_credits")) && json_is_integer(j)) port_credits = (int)json_integer_value(j);
+    if ((j = json_object_get(jcfg, "min_tunnels")) && json_is_integer(j)) min_tunnels = (int)json_integer_value(j);
+    if ((j = json_object_get(jcfg, "min_tunnel_len")) && json_is_integer(j)) min_tunnel_len = (int)json_integer_value(j);
+    // json_decref(jcfg); // Removed: Keep jcfg alive for sync_config_to_db
+  } else if (access("bigbang.json", F_OK) == 0) {
+    fprintf(stderr, "WARNING: bigbang.json exists but failed to parse: %s\n", jerr.text);
+  }
 
   int opt, idx = 0;
   while ((opt = getopt_long(argc, argv, "s:d:r:R:", long_options, &idx)) != -1) {
@@ -322,6 +388,40 @@ int main(int argc, char **argv) {
   PGconn *app = PQconnectdb(app_cs);
   if (PQstatus(app) != CONNECTION_OK) die_conn(app, "connect app");
 
+  // Check for existing tables
+  PGresult *r_check = PQexec(app, "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'");
+  int table_count = 0;
+  if (r_check && PQresultStatus(r_check) == PGRES_TUPLES_OK) {
+      table_count = atoi(PQgetvalue(r_check, 0, 0));
+  }
+  PQclear(r_check);
+
+  if (table_count > 0) {
+      printf("WARNING: The database '%s' contains %d tables.\n", db_name, table_count);
+      printf("Running Big Bang will COMPLETELY DESTROY the existing universe.\n");
+      printf("Are you sure you want to proceed? [y/N] ");
+      
+      char resp[16];
+      if (fgets(resp, sizeof(resp), stdin)) {
+          if (resp[0] != 'y' && resp[0] != 'Y') {
+              printf("Aborted.\n");
+              PQfinish(app);
+              exit(1);
+          }
+      } else {
+          // If stdin is closed/empty (e.g. non-interactive script), fail safe
+          printf("\nNo input. Aborted.\n");
+          PQfinish(app);
+          exit(1);
+      }
+  }
+
+  // 2.5) Clean Database (Big Bang requires a fresh universe)
+  printf("BIGBANG: Cleaning existing universe (DROP SCHEMA public CASCADE)...\n");
+  if (exec_sql(app, "DROP SCHEMA public CASCADE; CREATE SCHEMA public;", "clean_universe") != 0) {
+      die("failed to clean universe");
+  }
+
   // 3) Apply Schema
   const char *scripts[] = {
     "000_tables.sql", "005_namegen.sql", "010_indexes.sql", 
@@ -334,6 +434,9 @@ int main(int argc, char **argv) {
     if (apply_file(app, path) != 0) die("schema apply failed");
   }
 
+  // 3.5) Sync Config to DB
+  sync_config_to_db(app, jcfg);
+
   // 4) Execute Stored Procedures
   printf("BIGBANG: Running stored procedures...\n");
   char buf[1024];
@@ -343,24 +446,58 @@ int main(int argc, char **argv) {
   int max_ports = (sectors * port_ratio) / 100;
   snprintf(buf, sizeof(buf), "SELECT generate_ports(%d)", sectors); // wait, current SP takes target_sectors
   exec_sql(app, buf, "generate_ports");
-  // TODO: Adjust SPs to match max_ports if needed, but current generate_ports does one per sector if requested.
+  
+  exec_sql(app, "SELECT generate_stardock()", "generate_stardock");
+
+  if (port_size > 0 || tech_level > 0 || port_credits > 0) {
+      char updates[512] = "UPDATE ports SET ";
+      int needs_comma = 0;
+      if (port_size > 0) {
+          char tmp[64];
+          snprintf(tmp, sizeof(tmp), "size = %d", port_size);
+          strcat(updates, tmp);
+          needs_comma = 1;
+      }
+      if (tech_level > 0) {
+          if (needs_comma) strcat(updates, ", ");
+          char tmp[64];
+          snprintf(tmp, sizeof(tmp), "techlevel = %d", tech_level);
+          strcat(updates, tmp);
+          needs_comma = 1;
+      }
+      if (port_credits > 0) {
+          if (needs_comma) strcat(updates, ", ");
+          char tmp[64];
+          snprintf(tmp, sizeof(tmp), "petty_cash = %d", port_credits);
+          strcat(updates, tmp);
+      }
+      if (needs_comma) {
+          // Only update standard ports (1-8), leave Stardock (9) alone
+          strcat(updates, " WHERE type BETWEEN 1 AND 8"); 
+          printf("BIGBANG: Applying port defaults from config...\n");
+          exec_sql(app, updates, "apply_port_defaults");
+      }
+  }
 
   int max_planets = (sectors * planet_ratio) / 100;
   snprintf(buf, sizeof(buf), "SELECT generate_planets(%d)", max_planets);
   exec_sql(app, buf, "generate_planets");
 
+  exec_sql(app, "SELECT generate_clusters(10)", "generate_clusters");
   exec_sql(app, "SELECT setup_npc_homeworlds()", "setup_homeworlds");
   exec_sql(app, "SELECT setup_ferringhi_alliance()", "setup_ferringhi");
   exec_sql(app, "SELECT setup_orion_syndicate()", "setup_orion");
   exec_sql(app, "SELECT spawn_initial_fleet()", "spawn_fleet");
+  exec_sql(app, "SELECT apply_game_defaults()", "apply_game_defaults");
 
   // 5) Graph Brain
   printf("BIGBANG: Generating topology...\n");
   create_random_warps(app, sectors, density);
   ensure_fedspace_exit(app, 11, sectors);
-  bigbang_create_tunnels(app, sectors);
+  bigbang_create_tunnels(app, sectors, min_tunnels, min_tunnel_len);
 
   PQfinish(app);
+  if (jcfg) json_decref(jcfg);
   printf("OK: Big Bang Complete.\n");
   return 0;
 }
