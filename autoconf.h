@@ -1,6 +1,9 @@
 /* autoconf.h.  Generated from autoconf.h.in by configure.  */
 /* autoconf.h.in.  Generated from configure.ac by autoheader.  */
 
+/* Define to enable PostgreSQL backend */
+#define DB_BACKEND_PG 1
+
 /* Define to 1 if you have the <ctype.h> header file. */
 #define HAVE_CTYPE_H 1
 
@@ -12,6 +15,9 @@
 
 /* Define to 1 if you have the 'm' library (-lm). */
 #define HAVE_LIBM 1
+
+/* Define to 1 if you have the 'pq' library (-lpq). */
+#define HAVE_LIBPQ 1
 
 /* Define to 1 if you have the 'pthread' library (-lpthread). */
 #define HAVE_LIBPTHREAD 1

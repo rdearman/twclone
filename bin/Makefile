@@ -112,6 +112,7 @@ POST_UNINSTALL = :
 build_triplet = x86_64-pc-linux-gnu
 host_triplet = x86_64-pc-linux-gnu
 bin_PROGRAMS = server$(EXEEXT) bigbang$(EXEEXT)
+am__append_1 = ../src/db/db_pg.c
 subdir = bin
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/configure.ac
@@ -124,16 +125,54 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
+am__bigbang_SOURCES_DIST = ../src/database.c ../src/database_cmd.c \
+	../src/schemas.c ../src/namegen.c ../src/server_bigbang.c \
+	../src/server_warp_post_processing.c ../src/globals.c \
+	../src/common.c ../src/server_log.c ../src/test_bang.c \
+	../src/server_clusters.c ../src/bigbang_pg_main.c \
+	../src/db/db_api.c ../src/db/db_pg.c
 am__dirstamp = $(am__leading_dot)dirstamp
-am_bigbang_OBJECTS = ../src/database.$(OBJEXT) \
-	../src/database_cmd.$(OBJEXT) ../src/schemas.$(OBJEXT) \
-	../src/namegen.$(OBJEXT) ../src/server_bigbang.$(OBJEXT) \
-	../src/server_warp_post_processing.$(OBJEXT) \
-	../src/globals.$(OBJEXT) ../src/common.$(OBJEXT) \
-	../src/server_log.$(OBJEXT) ../src/test_bang.$(OBJEXT) \
-	../src/server_clusters.$(OBJEXT)
+#am_bigbang_OBJECTS = ../src/database.$(OBJEXT) \
+#	../src/database_cmd.$(OBJEXT) \
+#	../src/schemas.$(OBJEXT) \
+#	../src/namegen.$(OBJEXT) \
+#	../src/server_bigbang.$(OBJEXT) \
+#	../src/server_warp_post_processing.$(OBJEXT) \
+#	../src/globals.$(OBJEXT) \
+#	../src/common.$(OBJEXT) \
+#	../src/server_log.$(OBJEXT) \
+#	../src/test_bang.$(OBJEXT) \
+#	../src/server_clusters.$(OBJEXT)
+am_bigbang_OBJECTS =  \
+	../src/bigbang_pg_main.$(OBJEXT) \
+	../src/db/db_api.$(OBJEXT) \
+	../src/db/db_pg.$(OBJEXT) \
+	../src/common.$(OBJEXT) \
+	../src/server_log.$(OBJEXT) \
+	../src/globals.$(OBJEXT)
 bigbang_OBJECTS = $(am_bigbang_OBJECTS)
 bigbang_DEPENDENCIES =
+am__server_SOURCES_DIST = ../src/common.c ../src/database.c \
+	../src/database_cmd.c ../src/database_market.c \
+	../src/db_player_settings.c ../src/engine_consumer.c \
+	../src/globals.c ../src/namegen.c ../src/s2s_keyring.c \
+	../src/s2s_transport.c ../src/schemas.c ../src/server_auth.c \
+	../src/server_autopilot.c ../src/server_bank.c \
+	../src/server_bigbang.c ../src/server_bulk.c \
+	../src/server_citadel.c ../src/server_clusters.c \
+	../src/server_cmds.c ../src/server_combat.c \
+	../src/server_communication.c ../src/server_config.c \
+	../src/server_corporation.c ../src/server_cron.c \
+	../src/server_engine.c ../src/server_envelope.c \
+	../src/server_log.c ../src/server_loop.c ../src/server_main.c \
+	../src/server_news.c ../src/server_planets.c \
+	../src/server_players.c ../src/server_ports.c \
+	../src/server_s2s.c ../src/server_ships.c \
+	../src/server_stardock.c ../src/server_universe.c \
+	../src/server_warp_post_processing.c \
+	../src/sysop_interaction.c ../src/db/db_api.c \
+	../src/db/db_pg.c
+am__objects_1 = ../src/db/db_pg.$(OBJEXT)
 am_server_OBJECTS = ../src/common.$(OBJEXT) ../src/database.$(OBJEXT) \
 	../src/database_cmd.$(OBJEXT) ../src/database_market.$(OBJEXT) \
 	../src/db_player_settings.$(OBJEXT) \
@@ -157,7 +196,8 @@ am_server_OBJECTS = ../src/common.$(OBJEXT) ../src/database.$(OBJEXT) \
 	../src/server_stardock.$(OBJEXT) \
 	../src/server_universe.$(OBJEXT) \
 	../src/server_warp_post_processing.$(OBJEXT) \
-	../src/sysop_interaction.$(OBJEXT)
+	../src/sysop_interaction.$(OBJEXT) ../src/db/db_api.$(OBJEXT) \
+	$(am__objects_1)
 server_OBJECTS = $(am_server_OBJECTS)
 server_DEPENDENCIES =
 AM_V_P = $(am__v_P_$(V))
@@ -175,8 +215,9 @@ am__v_at_1 =
 DEFAULT_INCLUDES = -I. -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__maybe_remake_depfiles = depfiles
-am__depfiles_remade = ../src/$(DEPDIR)/common.Po \
-	../src/$(DEPDIR)/database.Po ../src/$(DEPDIR)/database_cmd.Po \
+am__depfiles_remade = ../src/$(DEPDIR)/bigbang_pg_main.Po \
+	../src/$(DEPDIR)/common.Po ../src/$(DEPDIR)/database.Po \
+	../src/$(DEPDIR)/database_cmd.Po \
 	../src/$(DEPDIR)/database_market.Po \
 	../src/$(DEPDIR)/db_player_settings.Po \
 	../src/$(DEPDIR)/engine_consumer.Po \
@@ -210,7 +251,8 @@ am__depfiles_remade = ../src/$(DEPDIR)/common.Po \
 	../src/$(DEPDIR)/server_universe.Po \
 	../src/$(DEPDIR)/server_warp_post_processing.Po \
 	../src/$(DEPDIR)/sysop_interaction.Po \
-	../src/$(DEPDIR)/test_bang.Po
+	../src/$(DEPDIR)/test_bang.Po ../src/db/$(DEPDIR)/db_api.Po \
+	../src/db/$(DEPDIR)/db_pg.Po
 am__mv = mv -f
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
@@ -225,7 +267,7 @@ am__v_CCLD_ = $(am__v_CCLD_$(AM_DEFAULT_VERBOSITY))
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
 SOURCES = $(bigbang_SOURCES) $(server_SOURCES)
-DIST_SOURCES = $(bigbang_SOURCES) $(server_SOURCES)
+DIST_SOURCES = $(am__bigbang_SOURCES_DIST) $(am__server_SOURCES_DIST)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -250,16 +292,16 @@ am__define_uniq_tagged_files = \
   done | $(am__uniquify_input)`
 am__DIST_COMMON = $(srcdir)/Makefile.in $(top_srcdir)/depcomp
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
-ACLOCAL = ${SHELL} '/home/rick/twclone/missing' aclocal-1.16
+ACLOCAL = ${SHELL} '/home/rick/twdbfork/missing' aclocal-1.16
 AMTAR = $${TAR-tar}
 AM_DEFAULT_VERBOSITY = 1
-AUTOCONF = ${SHELL} '/home/rick/twclone/missing' autoconf
-AUTOHEADER = ${SHELL} '/home/rick/twclone/missing' autoheader
-AUTOMAKE = ${SHELL} '/home/rick/twclone/missing' automake-1.16
+AUTOCONF = ${SHELL} '/home/rick/twdbfork/missing' autoconf
+AUTOHEADER = ${SHELL} '/home/rick/twdbfork/missing' autoheader
+AUTOMAKE = ${SHELL} '/home/rick/twdbfork/missing' automake-1.16
 AWK = gawk
 CC = gcc
 CCDEPMODE = depmode=gcc3
-CFLAGS = -g -O2
+CFLAGS = -g -O2 -I/usr/include/postgresql
 CPPFLAGS = 
 CSCOPE = cscope
 CTAGS = ctags
@@ -276,12 +318,12 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-ISODATE = 2025-12-09
-LDFLAGS = 
+ISODATE = 2025-12-22
+LDFLAGS =  -L/usr/lib/x86_64-linux-gnu
 LIBOBJS = 
-LIBS = -lpthread -lm 
+LIBS = -lpq -lpthread -lm 
 LTLIBOBJS = 
-MAKEINFO = ${SHELL} '/home/rick/twclone/missing' makeinfo
+MAKEINFO = ${SHELL} '/home/rick/twdbfork/missing' makeinfo
 MKDIR_P = /usr/bin/mkdir -p
 OBJEXT = o
 PACKAGE = twclone
@@ -292,14 +334,15 @@ PACKAGE_TARNAME = twclone
 PACKAGE_URL = 
 PACKAGE_VERSION = 0.0.2
 PATH_SEPARATOR = :
+PG_CONFIG = /usr/bin/pg_config
 SET_MAKE = 
 SHELL = /bin/bash
 STRIP = 
 VERSION = 0.0.2
-abs_builddir = /home/rick/twclone/bin
-abs_srcdir = /home/rick/twclone/bin
-abs_top_builddir = /home/rick/twclone
-abs_top_srcdir = /home/rick/twclone
+abs_builddir = /home/rick/twdbfork/bin
+abs_srcdir = /home/rick/twdbfork/bin
+abs_top_builddir = /home/rick/twdbfork
+abs_top_srcdir = /home/rick/twdbfork
 ac_ct_CC = gcc
 am__include = include
 am__leading_dot = .
@@ -326,7 +369,7 @@ host_vendor = pc
 htmldir = ${docdir}
 includedir = ${prefix}/include
 infodir = ${datarootdir}/info
-install_sh = ${SHELL} /home/rick/twclone/install-sh
+install_sh = ${SHELL} /home/rick/twdbfork/install-sh
 libdir = ${exec_prefix}/lib
 libexecdir = ${exec_prefix}/libexec
 localedir = ${datarootdir}/locale
@@ -349,66 +392,51 @@ top_builddir = ..
 top_srcdir = ..
 
 # AM_CFLAGS = -Wall -Wextra
-AM_CFLAGS = -Wall -Wextra  -D_GNU_SOURCE
+AM_CFLAGS = -Wall -Wextra -D_GNU_SOURCE -I../src
 server_LDADD = -ljansson -lsqlite3 -lcrypto -lpthread -lm
-# bigbang_LDADD  = -ljansson -lsqlite3 -lpthread -lm
-# client_LDADD   = -ljansson -lsqlite3 -lpthread -lm
-bigbang_LDADD = -ljansson -lsqlite3 -lcrypto -lpthread -lm
-AUTOMAKE_OPTIONS = subdir-objects
-server_SOURCES = \
-	../src/common.c \
-	../src/database.c \
-	../src/database_cmd.c \
-	../src/database_market.c \
-	../src/db_player_settings.c \
-	../src/engine_consumer.c \
-	../src/globals.c \
-	../src/namegen.c \
-	../src/s2s_keyring.c \
-	../src/s2s_transport.c \
-	../src/schemas.c \
-	../src/server_auth.c \
-	../src/server_autopilot.c \
-	../src/server_bank.c \
-	../src/server_bigbang.c \
-	../src/server_bulk.c \
-	../src/server_citadel.c \
-	../src/server_clusters.c \
-	../src/server_cmds.c \
-	../src/server_combat.c  \
-	../src/server_communication.c \
-	../src/server_config.c \
-	../src/server_corporation.c \
-	../src/server_cron.c \
-	../src/server_engine.c \
-	../src/server_envelope.c \
-	../src/server_log.c \
-	../src/server_loop.c \
-	../src/server_main.c \
-	../src/server_news.c \
-	../src/server_planets.c \
-	../src/server_players.c \
-	../src/server_ports.c \
-	../src/server_s2s.c \
-	../src/server_ships.c \
-	../src/server_stardock.c \
-	../src/server_universe.c \
-	../src/server_warp_post_processing.c \
-	../src/sysop_interaction.c
+#bigbang_SOURCES = \
+#	../src/database.c \
+#        ../src/database_cmd.c \
+#	../src/schemas.c \
+#	../src/namegen.c \
+#	../src/server_bigbang.c \
+#	../src/server_warp_post_processing.c \
+#	../src/globals.c \
+#	../src/common.c \
+#	../src/server_log.c \
+#	../src/test_bang.c \
+#	../src/server_clusters.c
 
 bigbang_SOURCES = \
-	../src/database.c \
-        ../src/database_cmd.c \
-	../src/schemas.c \
-	../src/namegen.c \
-	../src/server_bigbang.c \
-	../src/server_warp_post_processing.c \
-	../src/globals.c \
+	../src/bigbang_pg_main.c \
+	../src/db/db_api.c \
+	../src/db/db_pg.c \
 	../src/common.c \
 	../src/server_log.c \
-	../src/test_bang.c \
-	../src/server_clusters.c
+	../src/globals.c
 
+#bigbang_LDADD = -ljansson -lsqlite3 -lcrypto -lpthread -lm
+bigbang_LDADD = -ljansson -lpq -lcrypto -lpthread -lm
+AUTOMAKE_OPTIONS = subdir-objects
+server_SOURCES = ../src/common.c ../src/database.c \
+	../src/database_cmd.c ../src/database_market.c \
+	../src/db_player_settings.c ../src/engine_consumer.c \
+	../src/globals.c ../src/namegen.c ../src/s2s_keyring.c \
+	../src/s2s_transport.c ../src/schemas.c ../src/server_auth.c \
+	../src/server_autopilot.c ../src/server_bank.c \
+	../src/server_bigbang.c ../src/server_bulk.c \
+	../src/server_citadel.c ../src/server_clusters.c \
+	../src/server_cmds.c ../src/server_combat.c \
+	../src/server_communication.c ../src/server_config.c \
+	../src/server_corporation.c ../src/server_cron.c \
+	../src/server_engine.c ../src/server_envelope.c \
+	../src/server_log.c ../src/server_loop.c ../src/server_main.c \
+	../src/server_news.c ../src/server_planets.c \
+	../src/server_players.c ../src/server_ports.c \
+	../src/server_s2s.c ../src/server_ships.c \
+	../src/server_stardock.c ../src/server_universe.c \
+	../src/server_warp_post_processing.c \
+	../src/sysop_interaction.c ../src/db/db_api.c $(am__append_1)
 all: all-am
 
 .SUFFIXES:
@@ -512,6 +540,18 @@ clean-binPROGRAMS:
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_clusters.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
+../src/bigbang_pg_main.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
+../src/db/$(am__dirstamp):
+	@$(MKDIR_P) ../src/db
+	@: > ../src/db/$(am__dirstamp)
+../src/db/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) ../src/db/$(DEPDIR)
+	@: > ../src/db/$(DEPDIR)/$(am__dirstamp)
+../src/db/db_api.$(OBJEXT): ../src/db/$(am__dirstamp) \
+	../src/db/$(DEPDIR)/$(am__dirstamp)
+../src/db/db_pg.$(OBJEXT): ../src/db/$(am__dirstamp) \
+	../src/db/$(DEPDIR)/$(am__dirstamp)
 
 bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEPENDENCIES) 
 	@rm -f bigbang$(EXEEXT)
@@ -582,10 +622,12 @@ server$(EXEEXT): $(server_OBJECTS) $(server_DEPENDENCIES) $(EXTRA_server_DEPENDE
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 	-rm -f ../src/*.$(OBJEXT)
+	-rm -f ../src/db/*.$(OBJEXT)
 
 distclean-compile:
 	-rm -f *.tab.c
 
+include ../src/$(DEPDIR)/bigbang_pg_main.Po # am--include-marker
 include ../src/$(DEPDIR)/common.Po # am--include-marker
 include ../src/$(DEPDIR)/database.Po # am--include-marker
 include ../src/$(DEPDIR)/database_cmd.Po # am--include-marker
@@ -626,6 +668,8 @@ include ../src/$(DEPDIR)/server_universe.Po # am--include-marker
 include ../src/$(DEPDIR)/server_warp_post_processing.Po # am--include-marker
 include ../src/$(DEPDIR)/sysop_interaction.Po # am--include-marker
 include ../src/$(DEPDIR)/test_bang.Po # am--include-marker
+include ../src/db/$(DEPDIR)/db_api.Po # am--include-marker
+include ../src/db/$(DEPDIR)/db_pg.Po # am--include-marker
 
 $(am__depfiles_remade):
 	@$(MKDIR_P) $(@D)
@@ -768,6 +812,8 @@ distclean-generic:
 	-test . = "$(srcdir)" || test -z "$(CONFIG_CLEAN_VPATH_FILES)" || rm -f $(CONFIG_CLEAN_VPATH_FILES)
 	-rm -f ../src/$(DEPDIR)/$(am__dirstamp)
 	-rm -f ../src/$(am__dirstamp)
+	-rm -f ../src/db/$(DEPDIR)/$(am__dirstamp)
+	-rm -f ../src/db/$(am__dirstamp)
 
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
@@ -777,7 +823,8 @@ clean: clean-am
 clean-am: clean-binPROGRAMS clean-generic mostlyclean-am
 
 distclean: distclean-am
-		-rm -f ../src/$(DEPDIR)/common.Po
+		-rm -f ../src/$(DEPDIR)/bigbang_pg_main.Po
+	-rm -f ../src/$(DEPDIR)/common.Po
 	-rm -f ../src/$(DEPDIR)/database.Po
 	-rm -f ../src/$(DEPDIR)/database_cmd.Po
 	-rm -f ../src/$(DEPDIR)/database_market.Po
@@ -817,6 +864,8 @@ distclean: distclean-am
 	-rm -f ../src/$(DEPDIR)/server_warp_post_processing.Po
 	-rm -f ../src/$(DEPDIR)/sysop_interaction.Po
 	-rm -f ../src/$(DEPDIR)/test_bang.Po
+	-rm -f ../src/db/$(DEPDIR)/db_api.Po
+	-rm -f ../src/db/$(DEPDIR)/db_pg.Po
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -862,7 +911,8 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
-		-rm -f ../src/$(DEPDIR)/common.Po
+		-rm -f ../src/$(DEPDIR)/bigbang_pg_main.Po
+	-rm -f ../src/$(DEPDIR)/common.Po
 	-rm -f ../src/$(DEPDIR)/database.Po
 	-rm -f ../src/$(DEPDIR)/database_cmd.Po
 	-rm -f ../src/$(DEPDIR)/database_market.Po
@@ -902,6 +952,8 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/$(DEPDIR)/server_warp_post_processing.Po
 	-rm -f ../src/$(DEPDIR)/sysop_interaction.Po
 	-rm -f ../src/$(DEPDIR)/test_bang.Po
+	-rm -f ../src/db/$(DEPDIR)/db_api.Po
+	-rm -f ../src/db/$(DEPDIR)/db_pg.Po
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 

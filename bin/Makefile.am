@@ -22,12 +22,34 @@
 # AM_CFLAGS = -Wall -Wextra -Werror -I../src
 
 # AM_CFLAGS = -Wall -Wextra
-AM_CFLAGS = -Wall -Wextra  -D_GNU_SOURCE
+AM_CFLAGS = -Wall -Wextra -D_GNU_SOURCE -I../src
 
 server_LDADD   	= -ljansson -lsqlite3 -lcrypto -lpthread -lm
-# bigbang_LDADD  = -ljansson -lsqlite3 -lpthread -lm
-# client_LDADD   = -ljansson -lsqlite3 -lpthread -lm
-bigbang_LDADD 	= -ljansson -lsqlite3 -lcrypto -lpthread -lm
+
+if ENABLE_POSTGRES
+bigbang_SOURCES = \
+	../src/bigbang_pg_main.c \
+	../src/db/db_api.c \
+	../src/db/db_pg.c \
+	../src/common.c \
+	../src/server_log.c \
+	../src/globals.c
+bigbang_LDADD = -ljansson -lpq -lcrypto -lpthread -lm
+else
+bigbang_SOURCES = \
+	../src/database.c \
+        ../src/database_cmd.c \
+	../src/schemas.c \
+	../src/namegen.c \
+	../src/server_bigbang.c \
+	../src/server_warp_post_processing.c \
+	../src/globals.c \
+	../src/common.c \
+	../src/server_log.c \
+	../src/test_bang.c \
+	../src/server_clusters.c
+bigbang_LDADD = -ljansson -lsqlite3 -lcrypto -lpthread -lm
+endif
 
 AUTOMAKE_OPTIONS = subdir-objects
 
@@ -74,17 +96,9 @@ server_SOURCES = \
 	../src/server_stardock.c \
 	../src/server_universe.c \
 	../src/server_warp_post_processing.c \
-	../src/sysop_interaction.c
+	../src/sysop_interaction.c \
+	../src/db/db_api.c
 
-bigbang_SOURCES = \
-	../src/database.c \
-        ../src/database_cmd.c \
-	../src/schemas.c \
-	../src/namegen.c \
-	../src/server_bigbang.c \
-	../src/server_warp_post_processing.c \
-	../src/globals.c \
-	../src/common.c \
-	../src/server_log.c \
-	../src/test_bang.c \
-	../src/server_clusters.c
+if ENABLE_POSTGRES
+server_SOURCES += ../src/db/db_pg.c
+endif
