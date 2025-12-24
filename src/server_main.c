@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
-#include <pthread.h>		/* for pthread_mutex_t */
-#include <sqlite3.h>
+#include <pthread.h>            /* for pthread_mutex_t */
+// #include <sqlite3.h> // Replaced with generic DBAL
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/socket.h>
@@ -20,12 +20,13 @@
 #include "s2s_transport.h"
 #include "server_engine.h"
 #include "server_s2s.h"
-#include "config.h"
-#include "database.h"
+// #include "config.h" // No longer used, replaced by game_db config loading
+// #include "database.h" // Temporary, will be replaced with game_db.h for specific calls
+#include "game_db.h"  // Include the new game_db header
 #include "server_bigbang.h"
 #include "db_player_settings.h"
-#include "server_log.h"
-#include "sysop_interaction.h"
+#include "server_log.h" // Explicitly include server_log.h
+#include "sysop_interaction.h" // Explicitly include sysop_interaction.h
 #include "server_cron.h"
 static pid_t g_engine_pid = -1;
 static int g_engine_shutdown_fd = -1;
@@ -35,7 +36,7 @@ static int s2s_listen_fd = -1;
 static s2s_conn_t *g_s2s_conn = NULL;
 static pthread_t g_s2s_thr;
 static volatile int g_s2s_run = 0;
-volatile sig_atomic_t g_running = 1;	// global stop flag the loop can read
+volatile sig_atomic_t g_running = 1;    // global stop flag the loop can read
 static volatile sig_atomic_t g_saw_signal = 0;
 
 
@@ -44,7 +45,7 @@ on_signal (int sig)
 {
   (void) sig;
   g_saw_signal = 1;
-  g_running = 0;		// tell server_loop to exit
+  g_running = 0;                // tell server_loop to exit
 }
 
 
@@ -55,7 +56,7 @@ install_signal_handlers (void)
   memset (&sa, 0, sizeof (sa));
   sa.sa_handler = on_signal;
   sigemptyset (&sa.sa_mask);
-  sa.sa_flags = 0;		// no SA_RESTART -> poll/select will EINTR
+  sa.sa_flags = 0;              // no SA_RESTART -> poll/select will EINTR
   sigaction (SIGINT, &sa, NULL);
   sigaction (SIGTERM, &sa, NULL);
   signal (SIGPIPE, SIG_IGN);
@@ -88,7 +89,7 @@ build_capabilities (void)
   json_object_set_new (features, "server_autopilot", json_false ());
   json_object_set_new (g_capabilities, "features", features);
   json_object_set_new (g_capabilities, "version",
-		       json_string ("1.0.0-alpha"));
+                       json_string ("1.0.0-alpha"));
 }
 
 
@@ -115,68 +116,68 @@ s2s_control_thread (void *arg)
   while (g_s2s_run)
     {
       json_t *msg = NULL;
-      int rc = s2s_recv_json (g_s2s_conn, &msg, 1000);	// 1s tick; lets us notice shutdowns
+      int rc = s2s_recv_json (g_s2s_conn, &msg, 1000);  // 1s tick; lets us notice shutdowns
 
 
       if (rc == S2S_OK && msg)
-	{
-	  const char *type =
-	    json_string_value (json_object_get (msg, "type"));
+        {
+          const char *type =
+            json_string_value (json_object_get (msg, "type"));
 
 
-	  if (type && strcasecmp (type, "s2s.health.ack") == 0)
-	    {
-	      // optional: read payload, surface metrics
-	    }
-	  else if (type && strcasecmp (type, "s2s.error") == 0)
-	    {
-	      json_t *pl = json_object_get (msg, "payload");
-	      const char *reason =
-		pl ? json_string_value (json_object_get (pl, "reason")) :
-		NULL;
+          if (type && strcasecmp (type, "s2s.health.ack") == 0)
+            {
+              // optional: read payload, surface metrics
+            }
+          else if (type && strcasecmp (type, "s2s.error") == 0)
+            {
+              json_t *pl = json_object_get (msg, "payload");
+              const char *reason =
+                pl ? json_string_value (json_object_get (pl, "reason")) :
+                NULL;
 
 
-	      LOGE ("s2s.error%s%s\n", reason ? ": " : "",
-		    reason ? reason : "");
-	      //              LOGE( "[server] s2s.error%s%s\n", reason ? ": " : "",
-	      //       reason ? reason : "");
-	    }
-	  else
-	    {
-	      LOGE (" s2s: unknown type '%s'\n", type ? type : "(null)");
-	      //              LOGE( "[server] s2s: unknown type '%s'\n",
-	      //       type ? type : "(null)");
-	    }
-	  json_decref (msg);
-	  continue;
-	}
+              LOGE ("s2s.error%s%s\n", reason ? ": " : "",
+                    reason ? reason : "");
+              //              LOGE( "[server] s2s.error%s%s\n", reason ? ": " : "",
+              //       reason ? reason : "");
+            }
+          else
+            {
+              LOGE (" s2s: unknown type '%s'\n", type ? type : "(null)");
+              //              LOGE( "[server] s2s: unknown type '%s'\n",
+              //       type ? type : "(null)");
+            }
+          json_decref (msg);
+          continue;
+        }
       // errors / idle
       if (rc == S2S_E_TIMEOUT)
-	{
-	  continue;		// benign idle
-	}
+        {
+          continue;             // benign idle
+        }
       if (rc == S2S_E_CLOSED)
-	{
-	  break;		// peer closed
-	}
+        {
+          break;                // peer closed
+        }
       if (rc == S2S_E_AUTH_BAD || rc == S2S_E_AUTH_REQUIRED)
-	{
-	  LOGE ("s2s auth failure; closing\n");
-	  //      LOGE( "[server] s2s auth failure; closing\n");
-	  break;
-	}
+        {
+          LOGE ("s2s auth failure; closing\n");
+          //      LOGE( "[server] s2s auth failure; closing\n");
+          break;
+        }
       if (rc == S2S_E_TOOLARGE)
-	{
-	  LOGE ("s2s oversized frame; closing\n");
-	  //      LOGE( "[server] s2s oversized frame; closing\n");
-	  break;
-	}
+        {
+          LOGE ("s2s oversized frame; closing\n");
+          //      LOGE( "[server] s2s oversized frame; closing\n");
+          break;
+        }
       if (rc == S2S_E_IO)
-	{
-	  LOGE ("s2s IO error; closing\n");
-	  //      LOGE( "[server] s2s IO error; closing\n");
-	  break;
-	}
+        {
+          LOGE ("s2s IO error; closing\n");
+          //      LOGE( "[server] s2s IO error; closing\n");
+          break;
+        }
     }
   return NULL;
 }
@@ -284,7 +285,7 @@ static volatile sig_atomic_t running = 1;
 
 
 /* forward decl: your bigbang entry point (adjust name/signature if different) */
-int bigbang (void);		/* if your function is named differently, change this */
+int bigbang (void);             /* if your function is named differently, change this */
 
 
 /*-------------------  Bigbang ---------------------------------*/
@@ -323,7 +324,7 @@ needs_bigbang (void)
   int uv = get_scalar_int ("PRAGMA user_version");
   if (uv > 0)
     {
-      return 0;			// already seeded
+      return 0;                 // already seeded
     }
   // Belt-and-braces: look at contents in case user_version wasn't set
   int sectors = get_scalar_int ("SELECT COUNT(*) FROM sectors");
@@ -333,7 +334,7 @@ needs_bigbang (void)
 
   if (sectors <= 10)
     {
-      return 1;			// only the 10 Fedspace rows exist
+      return 1;                 // only the 10 Fedspace rows exist
     }
   if (warps == 0)
     {
@@ -348,40 +349,40 @@ needs_bigbang (void)
 
 
 // Run bigbang once; mark DB as seeded so we never do it again
-static int
-run_bigbang_if_needed (void)
-{
-  if (!needs_bigbang ())
-    {
-      return 0;
-    }
-  sqlite3 *dbh = db_get_handle ();
+// static int
+// run_bigbang_if_needed (void)
+// {
+//   if (!needs_bigbang ())
+//     {
+//       return 0;
+//     }
+//   sqlite3 *dbh = db_get_handle ();
 
 
-  if (!dbh)
-    {
-      LOGE ("BIGBANG: DB handle unavailable.\n");
-      //      LOGE( "BIGBANG: DB handle unavailable.\n");
-      return -1;
-    }
-  LOGW ("BIGBANG: Universe appears empty — seeding now...\n");
-  //  LOGE( "BIGBANG: Universe appears empty — seeding now...\n");
-  if (bigbang () != 0)
-    {
-      LOGE ("BIGBANG: Failed.\n");
-      //      LOGE( "BIGBANG: Failed.\n");
-      return -1;
-    }
-  return 0;
-}
+//   if (!dbh)
+//     {
+//       LOGE ("BIGBANG: DB handle unavailable.\n");
+//       //      LOGE( "BIGBANG: DB handle unavailable.\n");
+//       return -1;
+//     }
+//   LOGW ("BIGBANG: Universe appears empty — seeding now...\n");
+//   //  LOGE( "BIGBANG: Universe appears empty — seeding now...\n");
+//   if (bigbang () != 0)
+//     {
+//       LOGE ("BIGBANG: Failed.\n");
+//       //      LOGE( "BIGBANG: Failed.\n");
+//       return -1;
+//     }
+//   return 0;
+// }
 
 
 //////////////////////////////////////////////////
 int
 main (void)
 {
-  srand ((unsigned) time (NULL));	// Seed random number generator once at program start
-  int rc = 1;			// Initialize rc to 1 (failure)
+  srand ((unsigned) time (NULL));       // Seed random number generator once at program start
+  int rc = 1;                   // Initialize rc to 1 (failure)
 
 
   g_running = 1;
@@ -389,53 +390,46 @@ main (void)
   LOGI ("starting up");
   sysop_start ();
   /* 0) DB: open (create schema/defaults if missing) */
-  if (db_init () != 0)
+  if (game_db_init () != 0)
     {
       LOGW ("Failed to init DB.\n");
       //      LOGE( "Failed to init DB.\n");
       return EXIT_FAILURE;
     }
   /* Optional: keep a sanity check/log, but don't gate db_init() on it. */
-  (void) load_config ();
-  if (universe_init () != 0)
+  // (void) load_config (); // This function is being removed
+  if (universe_init () != 0) // This still calls original SQLite db funcs
     {
-      LOGW ("Failed to init universe.\n");
-      //      LOGE( "Failed to init universe.\n");
-      db_close ();
-      return EXIT_FAILURE;
-    }
-  if (run_bigbang_if_needed () != 0)
-    {
-      return EXIT_FAILURE;	// or your project’s error path
+      return EXIT_FAILURE;      // or your project’s error path
     }
   // normal startup
-  if (!load_eng_config ())
+  if (!load_eng_config ()) // This still calls original SQLite db funcs
     {
       return 2;
     }
   // Load ports from DB, with fallback to defaults
-  int server_port = 0;
-  int s2s_port = 0;
+  // int server_port = 0; // Removed: db_load_ports is removed
+  // int s2s_port = 0; // Removed: db_load_ports is removed
 
 
-  if (db_load_ports (&server_port, &s2s_port) == 0)
-    {
-      g_cfg.server_port = server_port;
-      g_cfg.s2s.tcp_port = s2s_port;
-      LOGI ("Loaded ports from database: server=%d, s2s=%d",
-	    g_cfg.server_port, g_cfg.s2s.tcp_port);
-    }
-  else
-    {
-      LOGW ("Could not load ports from database, using defaults.");
-    }
+  // if (db_load_ports (&server_port, &s2s_port) == 0) // This still calls original SQLite db funcs
+  //   {
+  //     g_cfg.server_port = server_port;
+  //     g_cfg.s2s.tcp_port = s2s_port;
+  //     LOGI ("Loaded ports from database: server=%d, s2s=%d",
+  //        g_cfg.server_port, g_cfg.s2s.tcp_port);
+  //   }
+  // else
+  //   {
+  //     LOGW ("Could not load ports from database, using defaults.");
+  //   }
   // initalise the player settings if all the other DB stuff is done.
   db_player_settings_init (db_get_handle ());
   cron_register_builtins ();
   /* 0.1) Capabilities (restored) */
-  build_capabilities ();	/* rebuilds g_capabilities */
+  build_capabilities ();        /* rebuilds g_capabilities */
   /* 0.2) Signals (restored) */
-  install_signal_handlers ();	/* restores Ctrl-C / SIGTERM behavior */
+  install_signal_handlers ();   /* restores Ctrl-C / SIGTERM behavior */
   atexit (schema_shutdown);
   /* 1) S2S keyring (must be before we bring up TCP) */
   LOGI ("loading s2s key ...\n");
@@ -501,46 +495,46 @@ main (void)
 
 
       if (type && strcasecmp (type, "s2s.health.hello") == 0)
-	{
-	  LOGW (" accepted hello\n");
-	  //      LOGE( " accepted hello\n");
-	  time_t now = time (NULL);
-	  json_t *ack = json_object ();
+        {
+          LOGW (" accepted hello\n");
+          //      LOGE( " accepted hello\n");
+          time_t now = time (NULL);
+          json_t *ack = json_object ();
 
 
-	  json_object_set_new (ack, "v", json_integer (1));
-	  json_object_set_new (ack, "type", json_string ("s2s.health.ack"));
-	  json_object_set_new (ack, "id", json_string ("boot-ack"));
-	  json_object_set_new (ack, "ts", json_integer ((json_int_t) now));
+          json_object_set_new (ack, "v", json_integer (1));
+          json_object_set_new (ack, "type", json_string ("s2s.health.ack"));
+          json_object_set_new (ack, "id", json_string ("boot-ack"));
+          json_object_set_new (ack, "ts", json_integer ((json_int_t) now));
 
 
-	  json_t *payload = json_object ();
+          json_t *payload = json_object ();
 
 
-	  json_object_set_new (payload, "status", json_string ("ok"));
-	  json_object_set_new (ack, "payload", payload);
-	  int rc2 = s2s_send_json (conn, ack, 5000);
+          json_object_set_new (payload, "status", json_string ("ok"));
+          json_object_set_new (ack, "payload", payload);
+          int rc2 = s2s_send_json (conn, ack, 5000);
 
 
-	  LOGW (" ack send rc=%d\n", rc2);
-	  //      LOGE( " ack send rc=%d\n", rc2);
-	  json_decref (ack);
-	  LOGW (" Return Ping\n");
-	  //      LOGE( " Return Ping\n");
-	  if (server_s2s_start (conn, &g_s2s_thr, &g_running) != 0)
-	    {
-	      LOGW (" failed to start s2s control thread\n");
-	      //LOGE(
-	      //               " failed to start s2s control thread\n");
-	    }
-	}
+          LOGW (" ack send rc=%d\n", rc2);
+          //      LOGE( " ack send rc=%d\n", rc2);
+          json_decref (ack);
+          LOGW (" Return Ping\n");
+          //      LOGE( " Return Ping\n");
+          if (server_s2s_start (conn, &g_s2s_thr, &g_running) != 0)
+            {
+              LOGW (" failed to start s2s control thread\n");
+              //LOGE(
+              //               " failed to start s2s control thread\n");
+            }
+        }
       else
-	{
-	  LOGW (" unexpected type on first frame: %s\n",
-		type ? type : "(null)");
-	  //      LOGE( " unexpected type on first frame: %s\n",
-	  //       type ? type : "(null)");
-	}
+        {
+          LOGW (" unexpected type on first frame: %s\n",
+                type ? type : "(null)");
+          //      LOGE( " unexpected type on first frame: %s\n",
+          //       type ? type : "(null)");
+        }
       json_decref (msg);
     }
   else
@@ -572,7 +566,7 @@ main (void)
     {
       s2s_close (g_s2s_conn);
       g_s2s_conn = NULL;
-    }				// unblocks thread
+    }                           // unblocks thread
   pthread_join (g_s2s_thr, NULL);
   if (s2s_listen_fd >= 0)
     {
@@ -583,7 +577,7 @@ shutdown_and_exit:
   /* 1. Request Graceful Shutdown via Pipe */
   if (g_engine_shutdown_fd >= 0)
     {
-      engine_request_shutdown (g_engine_shutdown_fd);	/* close pipe -> child POLLIN/EOF */
+      engine_request_shutdown (g_engine_shutdown_fd);   /* close pipe -> child POLLIN/EOF */
       g_engine_shutdown_fd = -1;
     }
   /* 2. Wait for Engine to Exit, escalating to SIGKILL if stuck */
@@ -597,45 +591,45 @@ shutdown_and_exit:
 
       // Wait up to 2 seconds (20 * 100ms)
       while (loops < 20)
-	{
-	  pid_t r = waitpid (g_engine_pid, &status, WNOHANG);
+        {
+          pid_t r = waitpid (g_engine_pid, &status, WNOHANG);
 
 
-	  if (r == g_engine_pid)
-	    {
-	      reaped = 1;
-	      break;
-	    }
-	  usleep (100000);	// 100ms
-	  loops++;
-	}
+          if (r == g_engine_pid)
+            {
+              reaped = 1;
+              break;
+            }
+          usleep (100000);      // 100ms
+          loops++;
+        }
       // If not reaped, send SIGTERM
       if (!reaped)
-	{
-	  LOGW ("Engine unresponsive. Sending SIGTERM.\n");
-	  kill (g_engine_pid, SIGTERM);
-	  loops = 0;
-	  while (loops < 10)	// Wait another 1 second
-	    {
-	      pid_t r = waitpid (g_engine_pid, &status, WNOHANG);
+        {
+          LOGW ("Engine unresponsive. Sending SIGTERM.\n");
+          kill (g_engine_pid, SIGTERM);
+          loops = 0;
+          while (loops < 10)    // Wait another 1 second
+            {
+              pid_t r = waitpid (g_engine_pid, &status, WNOHANG);
 
 
-	      if (r == g_engine_pid)
-		{
-		  reaped = 1;
-		  break;
-		}
-	      usleep (100000);
-	      loops++;
-	    }
-	}
+              if (r == g_engine_pid)
+                {
+                  reaped = 1;
+                  break;
+                }
+              usleep (100000);
+              loops++;
+            }
+        }
       // If STILL not reaped, send SIGKILL (Nuclear option)
       if (!reaped)
-	{
-	  LOGW ("Engine stuck. Sending SIGKILL.\n");
-	  kill (g_engine_pid, SIGKILL);
-	  waitpid (g_engine_pid, &status, 0);	// Blocking wait for SIGKILL result
-	}
+        {
+          LOGW ("Engine stuck. Sending SIGKILL.\n");
+          kill (g_engine_pid, SIGKILL);
+          waitpid (g_engine_pid, &status, 0);   // Blocking wait for SIGKILL result
+        }
       LOGW ("Engine reaped.\n");
       g_engine_pid = -1;
     }
@@ -647,7 +641,7 @@ shutdown_and_exit:
     }
   sysop_stop ();
   /* 4. FIX: Close Main Thread DB Connection */
-  db_close_thread ();
+  game_db_close ();
   server_log_close ();
   return (rc == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
@@ -665,9 +659,9 @@ load_config (void)
     {
       /* fprintf(stderr, "sqlite3_open: %s\n", sqlite3_errmsg(db)); */
       if (db)
-	{
-	  sqlite3_close (db);
-	}
+        {
+          sqlite3_close (db);
+        }
       return 0;
     }
   rc =
@@ -687,3 +681,4 @@ load_config (void)
   sqlite3_close (db);
   return ok;
 }
+

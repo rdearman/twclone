@@ -30,10 +30,10 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
 
 
       if (json_get_int_flexible (data, "from", &tmp) ||
-	  json_get_int_flexible (data, "from_sector_id", &tmp))
-	{
-	  from = tmp;
-	}
+          json_get_int_flexible (data, "from_sector_id", &tmp))
+        {
+          from = tmp;
+        }
     }
   // to = required
   int to = -1;
@@ -45,17 +45,17 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
 
 
       if (json_get_int_flexible (data, "to", &tmp) ||
-	  json_get_int_flexible (data, "to_sector_id", &tmp))
-	{
-	  to = tmp;
-	}
+          json_get_int_flexible (data, "to_sector_id", &tmp))
+        {
+          to = tmp;
+        }
     }
   if (to <= 0)
     {
       send_response_error (ctx,
-			   root,
-			   ERR_SECTOR_NOT_FOUND,
-			   "Target sector not specified");
+                           root,
+                           ERR_SECTOR_NOT_FOUND,
+                           "Target sector not specified");
       return 1;
     }
   /* Get Max Sector ID to size arrays */
@@ -80,7 +80,7 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
   if (from <= 0 || from > max_id || to > max_id)
     {
       send_response_error (ctx, root, ERR_SECTOR_NOT_FOUND,
-			   "Sector not found");
+                           "Sector not found");
       return 1;
     }
   /* allocate simple arrays sized max_id+1 */
@@ -107,27 +107,27 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
 
 
       if (javoid && json_is_array (javoid))
-	{
-	  size_t i, len = json_array_size (javoid);
+        {
+          size_t i, len = json_array_size (javoid);
 
 
-	  for (i = 0; i < len; ++i)
-	    {
-	      json_t *v = json_array_get (javoid, i);
+          for (i = 0; i < len; ++i)
+            {
+              json_t *v = json_array_get (javoid, i);
 
 
-	      if (json_is_integer (v))
-		{
-		  int sid = (int) json_integer_value (v);
+              if (json_is_integer (v))
+                {
+                  int sid = (int) json_integer_value (v);
 
 
-		  if (sid > 0 && sid <= max_id)
-		    {
-		      avoid[sid] = 1;
-		    }
-		}
-	    }
-	}
+                  if (sid > 0 && sid <= max_id)
+                    {
+                      avoid[sid] = 1;
+                    }
+                }
+            }
+        }
     }
   /* If target or source is avoided, unreachable */
   if (avoid[to] || avoid[from])
@@ -163,10 +163,10 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
   /* Prepare neighbor query once */
   db_mutex_lock ();
   int rc = sqlite3_prepare_v2 (db,
-			       "SELECT to_sector FROM sector_warps WHERE from_sector = ?1",
-			       -1,
-			       &st,
-			       NULL);
+                               "SELECT to_sector FROM sector_warps WHERE from_sector = ?1",
+                               -1,
+                               &st,
+                               NULL);
 
 
   db_mutex_unlock ();
@@ -177,8 +177,8 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
       free (seen);
       free (queue);
       send_response_error (ctx,
-			   root,
-			   ERR_PLANET_NOT_FOUND, "Pathfind init failed");
+                           root,
+                           ERR_PLANET_NOT_FOUND, "Pathfind init failed");
       return 1;
     }
   /* BFS */
@@ -205,32 +205,32 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
       sqlite3_clear_bindings (st);
       sqlite3_bind_int (st, 1, u);
       while ((rc = sqlite3_step (st)) == SQLITE_ROW)
-	{
-	  int v = sqlite3_column_int (st, 0);
+        {
+          int v = sqlite3_column_int (st, 0);
 
 
-	  if (v <= 0 || v > max_id)
-	    {
-	      continue;
-	    }
-	  if (avoid[v] || seen[v])
-	    {
-	      continue;
-	    }
-	  seen[v] = 1;
-	  prev[v] = u;
-	  queue[qt++] = v;
-	  if (v == to)
-	    {
-	      found = 1;
-	      /* still finish stepping rows to keep stmt sane, or break after unlock */
-	    }
-	}
+          if (v <= 0 || v > max_id)
+            {
+              continue;
+            }
+          if (avoid[v] || seen[v])
+            {
+              continue;
+            }
+          seen[v] = 1;
+          prev[v] = u;
+          queue[qt++] = v;
+          if (v == to)
+            {
+              found = 1;
+              /* still finish stepping rows to keep stmt sane, or break after unlock */
+            }
+        }
       db_mutex_unlock ();
       if (found)
-	{
-	  break;
-	}
+        {
+          break;
+        }
     }
   /* finalize stmt */
   db_mutex_lock ();
@@ -269,9 +269,9 @@ cmd_move_autopilot_start (client_ctx_t *ctx, json_t *root)
     {
       stack[sp++] = cur;
       if (cur == from)
-	{
-	  break;
-	}
+        {
+          break;
+        }
       cur = prev[cur];
     }
   /* If we didn’t reach 'from', something’s off */
@@ -320,7 +320,7 @@ cmd_move_autopilot_status (client_ctx_t *ctx, json_t *root)
 
 
   json_object_set_new (out, "current_sector_id",
-		       json_integer (ctx->sector_id));
+                       json_integer (ctx->sector_id));
   json_object_set_new (out, "last_error", json_string (""));
   send_response_ok_take (ctx, root, "move.autopilot.status_v1", &out);
   return 0;
@@ -343,9 +343,10 @@ cmd_move_autopilot_stop (client_ctx_t *ctx, json_t *root)
 
 
   json_object_set_new (out, "current_sector_id",
-		       json_integer (ctx->sector_id));
+                       json_integer (ctx->sector_id));
   json_object_set_new (out, "stopped_at",
-		       json_integer ((json_int_t) time (NULL)));
+                       json_integer ((json_int_t) time (NULL)));
   send_response_ok_take (ctx, root, "move.autopilot.stopped_v1", &out);
   return 0;
 }
+

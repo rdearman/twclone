@@ -1,0 +1,46 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#include <jansson.h>
+#include "common.h"
+#include "server_combat.h"
+#include "server_players.h"
+#include "server_ships.h"
+#include "server_universe.h"
+#include "server_log.h"
+#include "server_envelope.h"
+#include "errors.h"
+#include "game_db.h"
+#include "database_cmd.h"
+#include "server_config.h"
+
+// Re-defining constants for internal logic
+#define OFFENSE_SCALE 0.05
+#define DEFENSE_SCALE 0.05
+#define DAMAGE_PER_FIGHTER 1
+
+// Internal Helper functions refactored to db_t
+static bool is_msl_sector (db_t *db, int sector_id) {
+  db_res_t *res = NULL;
+  db_error_t err;
+  db_error_clear(&err);
+  const char *sql = "SELECT 1 FROM msl_sectors WHERE sector_id = $1 LIMIT 1;";
+  db_bind_t params[] = { db_bind_i32(sector_id) };
+  if (!db_query(db, sql, params, 1, &res, &err)) return false;
+  bool found = db_res_step(res, &err);
+  db_res_finalize(res);
+  return found;
+}
+
+// ... more helpers ...
+
+int cmd_combat_attack (client_ctx_t *ctx, json_t *root) {
+    db_t *db = game_db_get_handle();
+    if (!db) { send_response_error(ctx, root, ERR_DB_UNAVAILABLE, "DB unavailable"); return 0; }
+    // ... logic ...
+    return 1;
+}
+
+// [THIS FILE NEEDS TO BE FULLY RESTORED AND REFACTORED PROPERLY]
+// I will perform a fresh read of the git version or previous clean state if possible.

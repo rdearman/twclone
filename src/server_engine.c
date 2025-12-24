@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <math.h> // For floor and fabs
 #include "database_cmd.h" // For h_player_apply_progress
+#include "game_db.h"
 #include "server_players.h" // For h_player_apply_progress
 #include <poll.h>
 #include <errno.h>
@@ -56,10 +57,10 @@ static const int CRON_BATCH_LIMIT = 8;  /* max tasks per runner tick */
 static const int64_t CRON_LOCK_STALE_MS = 120000;       /* reclaim after 2 min */
 
 
-int h_daily_bank_interest_tick (sqlite3 *db, int64_t now_s);
-static int engine_notice_ttl_sweep (sqlite3 *db, int64_t now_ms);
-static int sweeper_engine_deadletter_retry (sqlite3 *db, int64_t now_ms);
-int cron_limpet_ttl_cleanup (sqlite3 *db, int64_t now_s);
+int h_daily_bank_interest_tick (db_t *db, int64_t now_s);
+static int engine_notice_ttl_sweep (db_t *db, int64_t now_ms);
+static int sweeper_engine_deadletter_retry (db_t *db, int64_t now_ms);
+int cron_limpet_ttl_cleanup (db_t *db, int64_t now_s);
 
 
 static inline uint64_t
@@ -72,7 +73,7 @@ monotonic_millis (void)
 
 
 /* ---- Cron: registry ---- */
-typedef int (*cron_handler_fn) (sqlite3 *db, int64_t now_s);
+typedef int (*cron_handler_fn) (db_t *db, int64_t now_s);
 typedef struct
 {
   const char *name;             /* matches cron_tasks.name */
@@ -245,6 +246,8 @@ engine_build_command_push (const char *cmd_type,
       priority = 100;
     }
   json_t *pl = json_object ();
+
+
   json_object_set_new (pl, "cmd_type", json_string (cmd_type));
   json_object_set_new (pl, "idem_key", json_string (idem_key));
   json_object_set (pl, "payload", payload_obj);
@@ -275,12 +278,16 @@ engine_demo_push (s2s_conn_t *c)
 
 
   json_t *payload = json_object ();
+
+
   json_object_set_new (payload, "scope", json_string ("player"));
   json_object_set_new (payload, "player_id", json_integer (42));
   json_object_set_new (payload, "message", json_string ("Hello captain!"));
   json_object_set_new (payload, "ttl_seconds", json_integer (3600));
   json_object_set_new (cmdpl, "payload", payload);
   json_t *env = s2s_make_env ("s2s.command.push", "engine", "server", cmdpl);
+
+
   json_decref (cmdpl);
   int rc = s2s_send_env (c, env, 3000);
 
@@ -331,7 +338,7 @@ h_compute_illegal_alignment_delta (int player_alignment,
                                    int cluster_align_band_id,
                                    double value)
 {
-  sqlite3 *db = db_get_handle ();  // Get a DB handle
+  db_t *db = game_db_get_handle (); // Get the generic handle
   int player_align_band_id = 0;
   int player_band_is_good = 0;
   int player_band_is_evil = 0;
@@ -344,28 +351,34 @@ h_compute_illegal_alignment_delta (int player_alignment,
                                &player_band_is_evil,
                                NULL,
                                NULL);
+
   int cluster_band_is_good = 0;
   int cluster_band_is_evil = 0;
-  // For cluster, we have the band ID, so query alignment_band directly
-  sqlite3_stmt *st = NULL;
-  int rc = SQLITE_ERROR;
+
+  db_res_t *res = NULL;
+  db_error_t err;
+
+
+  db_error_clear (&err);
+
   const char *sql =
-    "SELECT is_good, is_evil FROM alignment_band WHERE id = ?1;";
+    "SELECT is_good, is_evil FROM alignment_band WHERE id = $1;";
+  db_bind_t params[] = {
+    db_bind_i32 (cluster_align_band_id)
+  };
+  size_t n_params = sizeof(params) / sizeof(params[0]);
 
 
-  db_mutex_lock ();
-  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
-  if (rc == SQLITE_OK)
+  if (db_query (db, sql, params, n_params, &res, &err))
     {
-      sqlite3_bind_int (st, 1, cluster_align_band_id);
-      if (sqlite3_step (st) == SQLITE_ROW)
+      if (db_res_step (res, &err))
         {
-          cluster_band_is_good = sqlite3_column_int (st, 0);
-          cluster_band_is_evil = sqlite3_column_int (st, 1);
+          cluster_band_is_good = db_res_col_bool (res, 0, &err);
+          cluster_band_is_evil = db_res_col_bool (res, 1, &err);
         }
+      db_res_finalize (res);
     }
-  sqlite3_finalize (st);
-  db_mutex_unlock ();
+
   int base_penalty = floor (value / g_xp_align.illegal_base_align_divisor);
 
 
@@ -412,13 +425,13 @@ h_player_progress_from_event_payload (json_t *ev_payload)
       LOGE ("h_player_progress_from_event_payload: Invalid event payload.");
       return SQLITE_MISUSE;
     }
-  sqlite3 *db = db_get_handle ();
+  db_t *db = game_db_get_handle ();
 
 
   if (!db)
     {
       LOGE ("h_player_progress_from_event_payload: Failed to get DB handle.");
-      return SQLITE_ERROR;
+      return ERR_DB_UNAVAILABLE; // Using new error code
     }
   json_t *j_player_id = json_object_get (ev_payload, "player_id");
   json_t *j_event_type = json_object_get (ev_payload, "type");  // Event type from engine_events
@@ -428,7 +441,7 @@ h_player_progress_from_event_payload (json_t *ev_payload)
     {
       LOGE (
         "h_player_progress_from_event_payload: Missing player_id or event type in payload.");
-      return SQLITE_MISUSE;
+      return ERR_DB_MISUSE; // Changed to new error code
     }
   int player_id = json_integer_value (j_player_id);
   const char *event_type = json_string_value (j_event_type);
@@ -449,7 +462,7 @@ h_player_progress_from_event_payload (json_t *ev_payload)
         {
           LOGE (
             "h_player_progress_from_event_payload: Missing trade details in player.trade.v1 payload.");
-          return SQLITE_MISUSE;
+          return ERR_DB_MISUSE; // Changed to new error code
         }
       long long credits_delta = json_integer_value (j_credits_delta);
       bool is_illegal = json_is_true (j_is_illegal);
@@ -467,12 +480,12 @@ h_player_progress_from_event_payload (json_t *ev_payload)
 
 
           if (db_player_get_alignment (db, player_id,
-                                       &player_alignment) != SQLITE_OK)
+                                       &player_alignment) != 0) // Check for non-zero error code
             {
               LOGE (
                 "h_player_progress_from_event_payload: Failed to get player %d alignment for illegal trade.",
                 player_id);
-              return SQLITE_ERROR;
+              return ERR_DB_QUERY_FAILED; // Using new error code
             }
           int cluster_align_band_id;
 
@@ -538,6 +551,8 @@ engine_s2s_drain_once (s2s_conn_t *conn)
           start_ts = now;
         }
       json_t *ack = json_object ();
+
+
       json_object_set_new (ack, "v", json_integer (1));
       json_object_set_new (ack, "type", json_string ("s2s.health.ack"));
       json_object_set_new (ack, "id", json_string ("rt-ack"));
@@ -545,9 +560,12 @@ engine_s2s_drain_once (s2s_conn_t *conn)
 
 
       json_t *payload = json_object ();
+
+
       json_object_set_new (payload, "role", json_string ("engine"));
       json_object_set_new (payload, "version", json_string ("0.1"));
-      json_object_set_new (payload, "uptime_s", json_integer ((json_int_t) (now - start_ts)));
+      json_object_set_new (payload, "uptime_s",
+                           json_integer ((json_int_t) (now - start_ts)));
       json_object_set_new (ack, "payload", payload);
 
 
@@ -558,6 +576,8 @@ engine_s2s_drain_once (s2s_conn_t *conn)
     {
       // Unknown → send s2s.error
       json_t *err = json_object ();
+
+
       json_object_set_new (err, "v", json_integer (1));
       json_object_set_new (err, "type", json_string ("s2s.error"));
       json_object_set_new (err, "id", json_string ("unknown"));
@@ -565,6 +585,8 @@ engine_s2s_drain_once (s2s_conn_t *conn)
 
 
       json_t *payload = json_object ();
+
+
       json_object_set_new (payload, "reason", json_string ("unknown_type"));
       json_object_set_new (err, "payload", payload);
 
@@ -578,7 +600,7 @@ engine_s2s_drain_once (s2s_conn_t *conn)
 
 /* --- executor: broadcast.create → INSERT INTO system_notice --- */
 static int
-exec_broadcast_create (sqlite3 *db, json_t *payload, const char *idem_key,
+exec_broadcast_create (db_t *db, json_t *payload, const char *idem_key,
                        int64_t *out_notice_id)
 {
   (void) idem_key;              /* idempotency handled at engine_commands layer */
@@ -588,7 +610,7 @@ exec_broadcast_create (sqlite3 *db, json_t *payload, const char *idem_key,
 
   if (!json_is_object (payload))
     {
-      return SQLITE_MISMATCH;
+      return ERR_INVALID_SCHEMA; // Changed to new error code
     }
   json_t *jt = json_object_get (payload, "title");
   json_t *jb = json_object_get (payload, "body");
@@ -614,49 +636,57 @@ exec_broadcast_create (sqlite3 *db, json_t *payload, const char *idem_key,
     }
   if (!title || !body)
     {
-      return SQLITE_MISUSE;
+      return ERR_INVALID_ARG; // Changed to new error code
     }
-  sqlite3_stmt *st = NULL;
-  int rc = sqlite3_prepare_v2 (db,
-                               "INSERT INTO system_notice(id, created_at, title, body, severity, expires_at) "
-                               "VALUES(NULL, strftime('%s','now'), ?1, ?2, ?3, ?4);",
-                               -1,
-                               &st,
-                               NULL);
+
+  db_error_t err;
 
 
-  if (rc != SQLITE_OK)
-    {
-      return rc;
-    }
-  sqlite3_bind_text (st, 1, title, -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text (st, 2, body, -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text (st, 3, severity ? severity : "info", -1,
-                     SQLITE_TRANSIENT);
+  db_error_clear (&err);
+
+  const char *sql =
+    "INSERT INTO system_notice(id, created_at, title, body, severity, expires_at) "
+    "VALUES(NULL, strftime('%s','now'), $1, $2, $3, $4);";
+
+  db_bind_t params[4];
+  size_t n_params = 0;
+
+
+  params[n_params++] = db_bind_text (title);
+  params[n_params++] = db_bind_text (body);
+  params[n_params++] = db_bind_text (severity ? severity : "info");
+
   if (expires_at > 0)
     {
-      sqlite3_bind_int64 (st, 4, expires_at);
+      params[n_params++] = db_bind_i64 (expires_at);
     }
   else
     {
-      sqlite3_bind_null (st, 4);
+      params[n_params++] = db_bind_null ();
     }
-  rc = sqlite3_step (st);
-  sqlite3_finalize (st);
-  if (rc != SQLITE_DONE)
+
+  if (!db_exec (db, sql, params, n_params, &err))
     {
-      return SQLITE_ERROR;
+      LOGE ("exec_broadcast_create: Insert error: %s", err.message);
+      return err.code;
     }
+
   if (out_notice_id)
     {
-      *out_notice_id = (int64_t) sqlite3_last_insert_rowid (db);
+      *out_notice_id = db_last_insert_rowid (db, &err);
+      if (err.code != 0)
+        {
+          LOGE ("exec_broadcast_create: Failed to get last insert rowid: %s",
+                err.message);
+          return err.code;
+        }
     }
-  return SQLITE_OK;
+  return 0; // Success
 }
 
 
 static int
-exec_notice_publish (sqlite3 *db, json_t *payload, const char *idem_key,
+exec_notice_publish (db_t *db, json_t *payload, const char *idem_key,
                      int64_t *out_notice_id)
 {
   (void) idem_key;              /* idempotency handled at engine_commands layer */
@@ -666,7 +696,7 @@ exec_notice_publish (sqlite3 *db, json_t *payload, const char *idem_key,
 
   if (!json_is_object (payload))
     {
-      return SQLITE_MISMATCH;
+      return ERR_INVALID_SCHEMA; // Changed to new error code
     }
   json_t *js = json_object_get (payload, "scope");
   json_t *jp = json_object_get (payload, "player_id");
@@ -687,105 +717,136 @@ exec_notice_publish (sqlite3 *db, json_t *payload, const char *idem_key,
     }
   if (!scope || !message || player_id == 0)
     {
-      return SQLITE_MISUSE;
+      return ERR_INVALID_ARG; // Changed to new error code
     }
   // For now, hardcode severity and expires_at, as they are not in the payload
   const char *severity = "info";
   int64_t expires_at = 0;       // No expiration
-  sqlite3_stmt *st = NULL;
-  int rc = sqlite3_prepare_v2 (db,
-                               "INSERT INTO system_notice(created_at, scope, player_id, title, body, severity, expires_at) "
-                               "VALUES(strftime('%s','now'), ?1, ?2, 'Notice', ?3, ?4, ?5);",
-                               -1,
-                               &st,
-                               NULL);
+
+  db_error_t err;
 
 
-  if (rc != SQLITE_OK)
-    {
-      return rc;
-    }
-  sqlite3_bind_text (st, 1, scope, -1, SQLITE_TRANSIENT);
-  sqlite3_bind_int (st, 2, player_id);
-  sqlite3_bind_text (st, 3, message, -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text (st, 4, severity, -1, SQLITE_TRANSIENT);
+  db_error_clear (&err);
+
+  const char *sql =
+    "INSERT INTO system_notice(created_at, scope, player_id, title, body, severity, expires_at) "
+    "VALUES(strftime('%s','now'), $1, $2, 'Notice', $3, $4, $5);";
+
+  db_bind_t params[5];
+  size_t n_params = 0;
+
+
+  params[n_params++] = db_bind_text (scope);
+  params[n_params++] = db_bind_i32 (player_id);
+  params[n_params++] = db_bind_text (message);
+  params[n_params++] = db_bind_text (severity);
+
   if (expires_at > 0)
     {
-      sqlite3_bind_int64 (st, 5, expires_at);
+      params[n_params++] = db_bind_i64 (expires_at);
     }
   else
     {
-      sqlite3_bind_null (st, 5);
+      params[n_params++] = db_bind_null ();
     }
-  rc = sqlite3_step (st);
-  sqlite3_finalize (st);
-  if (rc != SQLITE_DONE)
+
+  if (!db_exec (db, sql, params, n_params, &err))
     {
-      return SQLITE_ERROR;
+      LOGE ("exec_notice_publish: Insert error: %s", err.message);
+      return err.code;
     }
+
   if (out_notice_id)
     {
-      *out_notice_id = (int64_t) sqlite3_last_insert_rowid (db);
+      *out_notice_id = db_last_insert_rowid (db, &err);
+      if (err.code != 0)
+        {
+          LOGE ("exec_notice_publish: Failed to get last insert rowid: %s",
+                err.message);
+          return err.code;
+        }
     }
-  return SQLITE_OK;
+  return 0; // Success
 }
 
 
 /* --- tick: pull ready commands and execute --- */
 static int
-server_commands_tick (sqlite3 *db, int max_rows)
+server_commands_tick (db_t *db, int max_rows)
 {
   if (max_rows <= 0 || max_rows > 100)
     {
       max_rows = 16;
     }
   int processed = 0;
-  sqlite3_stmt *st = NULL;
-  int rc = sqlite3_prepare_v2 (db,
-                               "SELECT id, type, payload, idem_key "
-                               "FROM engine_commands "
-                               "WHERE status='ready' AND due_at <= strftime('%s','now') "
-                               "ORDER BY priority ASC, due_at ASC, id ASC "
-                               "LIMIT ?1;",
-                               -1,
-                               &st,
-                               NULL);
+  db_res_t *res = NULL;
+  db_error_t err;
 
 
-  if (rc != SQLITE_OK)
+  db_error_clear (&err);
+
+  const char *sql_select_commands =
+    "SELECT id, type, payload, idem_key "
+    "FROM engine_commands "
+    "WHERE status='ready' AND due_at <= strftime('%s','now') "
+    "ORDER BY priority ASC, due_at ASC, id ASC "
+    "LIMIT $1;";
+
+  db_bind_t select_params[] = {
+    db_bind_i32 (max_rows)
+  };
+  size_t n_select_params = sizeof(select_params) / sizeof(select_params[0]);
+
+
+  if (!db_query (db,
+                 sql_select_commands,
+                 select_params,
+                 n_select_params,
+                 &res,
+                 &err))
     {
+      LOGE ("server_commands_tick: Select commands query error: %s",
+            err.message);
       return 0;
     }
-  sqlite3_bind_int (st, 1, max_rows);
-  while (sqlite3_step (st) == SQLITE_ROW)
-    {
-      int64_t cmd_id = sqlite3_column_int64 (st, 0);
-      const char *tmp_type = (const char *) sqlite3_column_text (st, 1);
-      const char *tmp_payload = (const char *) sqlite3_column_text (st, 2);
-      const char *tmp_idem = (const char *) sqlite3_column_text (st, 3);
 
-      /* sqlite: column_text() pointer invalid after finalize/reset/step */
+  while (db_res_step (res, &err))
+    {
+      int64_t cmd_id = db_res_col_i64 (res, 0, &err);
+      const char *tmp_type = (const char *) db_res_col_text (res, 1, &err);
+      const char *tmp_payload = (const char *) db_res_col_text (res, 2, &err);
+      const char *tmp_idem = (const char *) db_res_col_text (res, 3, &err);
+
+      /* db_res_col_text() pointer invalid after next db_res_step() or db_res_finalize() */
       char *type = tmp_type ? strdup (tmp_type) : NULL;
       char *payload_json = tmp_payload ? strdup (tmp_payload) : NULL;
       char *idem_key = tmp_idem ? strdup (tmp_idem) : NULL;
 
+
       /* mark running */
-      sqlite3_stmt *upr = NULL;
+      db_error_clear (&err);
+      const char *sql_update_running =
+        "UPDATE engine_commands SET status='running', started_at=strftime('%s','now') WHERE id=$1;";
+      db_bind_t update_running_params[] = {
+        db_bind_i64 (cmd_id)
+      };
+      size_t n_update_running_params = sizeof(update_running_params) /
+                                       sizeof(update_running_params[0]);
 
 
-      if (sqlite3_prepare_v2 (db,
-                              "UPDATE engine_commands SET status='running', started_at=strftime('%s','now') WHERE id=?1;",
-                              -1,
-                              &upr,
-                              NULL) == SQLITE_OK)
+      if (!db_exec (db,
+                    sql_update_running,
+                    update_running_params,
+                    n_update_running_params,
+                    &err))
         {
-          sqlite3_bind_int64 (upr, 1, cmd_id);
-          sqlite3_step (upr);
+          LOGE (
+            "server_commands_tick: Update status to running error for cmd %lld: %s",
+            cmd_id,
+            err.message);
+          // Continue to next command or break? For now, continue to process.
         }
-      if (upr)
-        {
-          sqlite3_finalize (upr);
-        }
+
       int ok = -1;
       json_error_t jerr;
       json_t *pl = payload_json ? json_loads (payload_json, 0, &jerr) : NULL;
@@ -798,7 +859,7 @@ server_commands_tick (sqlite3 *db, int max_rows)
 
           ok =
             (exec_broadcast_create (db, pl, idem_key, &notice_id) ==
-             SQLITE_OK) ? 0 : -1;
+             0) ? 0 : -1; // Check for 0 for success
         }
       else if (type && strcasecmp (type, "notice.publish") == 0)
         {
@@ -807,7 +868,7 @@ server_commands_tick (sqlite3 *db, int max_rows)
 
           ok =
             (exec_notice_publish (db, pl, idem_key, &notice_id) ==
-             SQLITE_OK) ? 0 : -1;
+             0) ? 0 : -1; // Check for 0 for success
         }
       else
         {
@@ -824,40 +885,56 @@ server_commands_tick (sqlite3 *db, int max_rows)
       free (idem_key);
 
       /* finalize status */
-      sqlite3_stmt *upf = NULL;
-
-
+      db_error_clear (&err);
       if (ok == 0)
         {
-          if (sqlite3_prepare_v2 (db,
-                                  "UPDATE engine_commands SET status='done', finished_at=strftime('%s','now') WHERE id=?1;",
-                                  -1,
-                                  &upf,
-                                  NULL) == SQLITE_OK)
+          const char *sql_update_done =
+            "UPDATE engine_commands SET status='done', finished_at=strftime('%s','now') WHERE id=$1;";
+          db_bind_t update_done_params[] = {
+            db_bind_i64 (cmd_id)
+          };
+          size_t n_update_done_params = sizeof(update_done_params) /
+                                        sizeof(update_done_params[0]);
+
+
+          if (!db_exec (db,
+                        sql_update_done,
+                        update_done_params,
+                        n_update_done_params,
+                        &err))
             {
-              sqlite3_bind_int64 (upf, 1, cmd_id);
-              sqlite3_step (upf);
+              LOGE (
+                "server_commands_tick: Update status to done error for cmd %lld: %s",
+                cmd_id,
+                err.message);
             }
         }
       else
         {
-          if (sqlite3_prepare_v2 (db,
-                                  "UPDATE engine_commands SET status='error', attempts=attempts+1, finished_at=strftime('%s','now') WHERE id=?1;",
-                                  -1,
-                                  &upf,
-                                  NULL) == SQLITE_OK)
+          const char *sql_update_error =
+            "UPDATE engine_commands SET status='error', attempts=attempts+1, finished_at=strftime('%s','now') WHERE id=$1;";
+          db_bind_t update_error_params[] = {
+            db_bind_i64 (cmd_id)
+          };
+          size_t n_update_error_params = sizeof(update_error_params) /
+                                         sizeof(update_error_params[0]);
+
+
+          if (!db_exec (db,
+                        sql_update_error,
+                        update_error_params,
+                        n_update_error_params,
+                        &err))
             {
-              sqlite3_bind_int64 (upf, 1, cmd_id);
-              sqlite3_step (upf);
+              LOGE (
+                "server_commands_tick: Update status to error error for cmd %lld: %s",
+                cmd_id,
+                err.message);
             }
-        }
-      if (upf)
-        {
-          sqlite3_finalize (upf);
         }
       processed++;
     }
-  sqlite3_finalize (st);
+  db_res_finalize (res); // Finalize the main select query
   return processed;
 }
 
@@ -870,21 +947,8 @@ engine_main_loop (int shutdown_fd)
 {
   server_log_init_file ("./twclone.log", "[engine]", 0, LOG_INFO);
   LOGI ("engine boot pid=%d", getpid ());
-  // 1. *** CRITICAL NEW STEP: Shut down and re-initialize SQLite ***
-  //    This discards all inherited global VFS and memory state.
-  sqlite3_shutdown ();
-  int rc = sqlite3_initialize ();
-
-
-  if (rc != SQLITE_OK)
-    {
-      LOGE ("FATAL: SQLite re-initialization failed! rc=%d", rc);
-      return 1;
-    }
-  // 2. Close the stale handle inherited from the parent (which you already added)
-  db_handle_close_and_reset ();
-  // 3. Get a fresh, new handle (which you already fixed to be idempotent)
-  sqlite3 *db_handle = db_get_handle ();
+  // 1. Get a fresh, new handle (which you already fixed to be idempotent)
+  db_t *db_handle = game_db_get_handle ();
 
 
   if (db_handle == NULL)
@@ -949,6 +1013,8 @@ engine_main_loop (int shutdown_fd)
   /* Engine initiates: send hello, then expect ack */
   time_t now = time (NULL);
   json_t *hello = json_object ();
+
+
   json_object_set_new (hello, "v", json_integer (1));
   json_object_set_new (hello, "type", json_string ("s2s.health.hello"));
   json_object_set_new (hello, "id", json_string ("boot-1"));
@@ -956,6 +1022,8 @@ engine_main_loop (int shutdown_fd)
 
 
   json_t *payload = json_object ();
+
+
   json_object_set_new (payload, "role", json_string ("engine"));
   json_object_set_new (payload, "version", json_string ("0.1"));
   json_object_set_new (hello, "payload", payload);
@@ -1011,7 +1079,7 @@ engine_main_loop (int shutdown_fd)
         }
       if (now_ms - last_cmd_tick_ms >= CRON_PERIOD_MS)
         {
-          (void) server_commands_tick (db_get_handle (), CRON_BATCH_LIMIT);
+          (void) server_commands_tick (db_handle, CRON_BATCH_LIMIT);
           last_cmd_tick_ms = now_ms;
         }
       time_t now = time (NULL);
@@ -1044,56 +1112,69 @@ engine_main_loop (int shutdown_fd)
           {
             int64_t stale_threshold_ms =
               monotonic_millis () - CRON_LOCK_STALE_MS;
-            sqlite3_stmt *reclaim = NULL;
+            db_error_t err;
 
 
-            if (sqlite3_prepare_v2
-                  (db_handle,
-                  "DELETE FROM locks WHERE owner='server' AND until_ms < ?1;",
-                  -1, &reclaim, NULL) == SQLITE_OK)
+            db_error_clear (&err);
+            int64_t reclaimed = 0;
+
+            const char *sql_delete_locks =
+              "DELETE FROM locks WHERE owner='server' AND until_ms < $1;";
+            db_bind_t params[] = {
+              db_bind_i64 (stale_threshold_ms)
+            };
+            size_t n_params = sizeof(params) / sizeof(params[0]);
+
+
+            if (!db_exec_rows_affected (db_handle, sql_delete_locks, params,
+                                        n_params, &reclaimed, &err))
               {
-                sqlite3_bind_int64 (reclaim, 1, stale_threshold_ms);
-                sqlite3_step (reclaim);
-                int reclaimed = sqlite3_changes (db_handle);
-
-
+                LOGE ("cron: Failed to reclaim stale locks: %s",
+                      err.message);
+              }
+            else
+              {
                 if (reclaimed > 0)
                   {
-                    LOGI ("cron: reclaimed %d stale lock(s)", reclaimed);
+                    LOGI ("cron: reclaimed %" PRId64 " stale lock(s)",
+                          reclaimed);
                   }
               }
-            sqlite3_finalize (reclaim);
           }
           /* ---- bounded cron runner (inline) ---- */
-          const int LIMIT = CRON_BATCH_LIMIT;
-          uint64_t now_s = (int64_t) time (NULL);
-          sqlite3_stmt *pick = NULL;
+          db_res_t *pick_res = NULL;
+          db_error_t query_err;
 
 
-          /* if (sqlite3_prepare_v2 (db_handle, */
-          /*                         "SELECT id, name, schedule FROM cron_tasks " */
-          /*                         "WHERE enabled=1 AND next_due_at <= ?1 " */
-          /*                         "ORDER BY next_due_at ASC " */
-          /*                         "LIMIT ?2;", -1, &pick, NULL) == SQLITE_OK) */
-          /*   { */
+          db_error_clear (&query_err);
 
-          if (sqlite3_prepare_v2 (db_handle,
-                                  "SELECT id, name, schedule FROM cron_tasks "
-                                  "WHERE enabled=1 "
-                                  "  AND (next_due_at IS NULL OR next_due_at <= ?1) "
-                                  "ORDER BY next_due_at ASC "
-                                  "LIMIT ?2;",
-                                  -1, &pick, NULL) == SQLITE_OK)
+          const char *sql_select_cron_tasks =
+            "SELECT id, name, schedule FROM cron_tasks "
+            "WHERE enabled=1 "
+            "  AND (next_due_at IS NULL OR next_due_at <= $1) "
+            "ORDER BY next_due_at ASC "
+            "LIMIT $2;";
+
+          db_bind_t select_cron_params[] = {
+            db_bind_i64 (now_s),
+            db_bind_i32 (LIMIT)
+          };
+          size_t n_select_cron_params = sizeof(select_cron_params) /
+                                        sizeof(select_cron_params[0]);
+
+
+          if (db_query (db_handle, sql_select_cron_tasks, select_cron_params,
+                        n_select_cron_params, &pick_res, &query_err))
             {
-              sqlite3_bind_int64 (pick, 1, now_s);
-              sqlite3_bind_int (pick, 2, LIMIT);
-              while (sqlite3_step (pick) == SQLITE_ROW)
+              while (db_res_step (pick_res, &query_err))
                 {
-                  int64_t id = sqlite3_column_int64 (pick, 0);
-                  const char *nm =
-                    (const char *) sqlite3_column_text (pick, 1);
-                  const char *sch =
-                    (const char *) sqlite3_column_text (pick, 2);
+                  int64_t id = db_res_col_i64 (pick_res, 0, &query_err);
+                  const char *nm = (const char *) db_res_col_text (pick_res,
+                                                                   1,
+                                                                   &query_err);
+                  const char *sch = (const char *) db_res_col_text (pick_res,
+                                                                    2,
+                                                                    &query_err);
                   /* run handler if registered */
                   int task_rc = 0;
                   cron_handler_fn fn = cron_find (nm);
@@ -1102,28 +1183,43 @@ engine_main_loop (int shutdown_fd)
                   // LOGI ("cron: starting handler '%s'", nm);
                   if (fn)
                     {
-                      task_rc = fn (db_handle, now_s);
+                      task_rc = fn (db_handle, now_s); // db_handle is db_t* now
                     }
                   /* reschedule deterministically */
                   int64_t next_due = cron_next_due_from (now_s, sch);
-                  sqlite3_stmt *upd = NULL;
+                  db_error_t update_err;
 
 
-                  if (sqlite3_prepare_v2 (db_handle,
-                                          "UPDATE cron_tasks "
-                                          "SET last_run_at=?2, next_due_at=?3 "
-                                          "WHERE id=?1;", -1, &upd,
-                                          NULL) == SQLITE_OK)
+                  db_error_clear (&update_err);
+
+                  const char *sql_update_cron_task =
+                    "UPDATE cron_tasks "
+                    "SET last_run_at=$2, next_due_at=$3 "
+                    "WHERE id=$1;";
+                  db_bind_t update_cron_params[] = {
+                    db_bind_i64 (id),
+                    db_bind_i64 (now_s),
+                    db_bind_i64 (next_due)
+                  };
+                  size_t n_update_cron_params = sizeof(update_cron_params) /
+                                                sizeof(update_cron_params[0]);
+
+
+                  if (!db_exec (db_handle, sql_update_cron_task,
+                                update_cron_params, n_update_cron_params,
+                                &update_err))
                     {
-                      sqlite3_bind_int64 (upd, 1, id);
-                      sqlite3_bind_int64 (upd, 2, now_s);
-                      sqlite3_bind_int64 (upd, 3, next_due);
-                      sqlite3_step (upd);
-                      sqlite3_finalize (upd);
+                      LOGE ("cron: Failed to update cron task %lld: %s",
+                            id,
+                            update_err.message);
                     }
                   (void) task_rc;       /* optional: log rc */
                 }
-              sqlite3_finalize (pick);
+              db_res_finalize (pick_res);
+            }
+          else
+            {
+              LOGE ("cron: Failed to query cron tasks: %s", query_err.message);
             }
           /* (keep anything else you want here; short, bounded work only) */
         }
@@ -1133,7 +1229,7 @@ engine_main_loop (int shutdown_fd)
           break;
         }
     }
-  db_close ();
+  game_db_close ();
   LOGI ("[engine] child exiting cleanly.\n");
   return 0;
 }
@@ -1230,105 +1326,114 @@ engine_wait (pid_t pid, int timeout_ms)
 
 /* configurable knobs */
 static int
-engine_notice_ttl_sweep (sqlite3 *db, int64_t now_ms)
+engine_notice_ttl_sweep (db_t *db, int64_t now_ms)
 {
   (void) now_ms;
+  db_error_t err;
+
+
+  db_error_clear (&err);
+
   /* delete ephemerals whose ttl expired; bounded batch */
-  sqlite3_stmt *st = NULL;
+  const char *sql =
+    "DELETE FROM system_notice "
+    "WHERE expires_at IS NOT NULL AND expires_at <= $1 "
+    "LIMIT 500;";
+  db_bind_t params[] = {
+    db_bind_i64 (now_ms / 1000) // Convert ms to s for comparison with expires_at (epoch seconds)
+  };
+  size_t n_params = sizeof(params) / sizeof(params[0]);
 
 
-  if (sqlite3_prepare_v2 (db,
-                          "DELETE FROM system_notice "
-                          "WHERE expires_at IS NOT NULL AND expires_at <= now "
-                          "LIMIT 500;", -1, &st, NULL) != SQLITE_OK)
+  if (!db_exec (db, sql, params, n_params, &err))
     {
-      return 1;
+      LOGE ("engine_notice_ttl_sweep: Delete error: %s", err.message);
+      return err.code;
     }
-  sqlite3_step (st);
-  sqlite3_finalize (st);
-  return 0;
+  return 0; // Success
 }
 
 
 static int
-sweeper_engine_deadletter_retry (sqlite3 *db, int64_t now_ms)
+sweeper_engine_deadletter_retry (db_t *db, int64_t now_ms)
 {
   (void) now_ms;                // now_ms is already implicit in the query logic (strftime('%s','now'))
   int retried_count = 0;
-  sqlite3_stmt *st = NULL;
-  sqlite3_stmt *update_st = NULL;
-  int rc = SQLITE_OK;
-  int final_rc = SQLITE_OK;
+  db_res_t *res = NULL;
+  db_error_t err;
+
+
+  db_error_clear (&err);
+
   // Select error commands ready for retry
   const char *sql_select_deadletters =
-    "SELECT id, attempts FROM engine_commands WHERE status='error' AND attempts < ?1 LIMIT 500;";
+    "SELECT id, attempts FROM engine_commands WHERE status='error' AND attempts < $1 LIMIT 500;";
+  db_bind_t select_params[] = {
+    db_bind_i32 (MAX_RETRIES)
+  };
+  size_t n_select_params = sizeof(select_params) / sizeof(select_params[0]);
 
 
-  rc = sqlite3_prepare_v2 (db, sql_select_deadletters, -1, &st, NULL);
-  if (rc != SQLITE_OK)
+  if (!db_query (db,
+                 sql_select_deadletters,
+                 select_params,
+                 n_select_params,
+                 &res,
+                 &err))
     {
-      LOGE
-      (
-        "sweeper_engine_deadletter_retry: Failed to prepare select statement: %s",
-        sqlite3_errmsg (db));
-      return rc;
+      LOGE ("sweeper_engine_deadletter_retry: Failed to query deadletters: %s",
+            err.message);
+      return err.code;
     }
-  sqlite3_bind_int (st, 1, MAX_RETRIES);
+
   const char *sql_update_deadletter =
-    "UPDATE engine_commands SET status='ready', due_at=strftime('%s','now') + (attempts * 60) WHERE id=?1;";
+    "UPDATE engine_commands SET status='ready', due_at=strftime('%s','now') + (attempts * 60) WHERE id=$1;";
 
 
-  rc = sqlite3_prepare_v2 (db, sql_update_deadletter, -1, &update_st, NULL);
-  if (rc != SQLITE_OK)
+  while (db_res_step (res, &err))
     {
-      LOGE
-      (
-        "sweeper_engine_deadletter_retry: Failed to prepare update statement: %s",
-        sqlite3_errmsg (db));
-      final_rc = rc;
-      goto cleanup;
-    }
-  while (sqlite3_step (st) == SQLITE_ROW)
-    {
-      int64_t cmd_id = sqlite3_column_int64 (st, 0);
+      int64_t cmd_id = db_res_col_i64 (res, 0, &err);
+
+      db_bind_t update_params[] = {
+        db_bind_i64 (cmd_id)
+      };
+      size_t n_update_params = sizeof(update_params) / sizeof(update_params[0]);
 
 
-      sqlite3_bind_int64 (update_st, 1, cmd_id);
-      rc = sqlite3_step (update_st);
-      if (rc != SQLITE_DONE)
+      db_error_clear (&err); // Clear previous error for this exec call
+      if (!db_exec (db,
+                    sql_update_deadletter,
+                    update_params,
+                    n_update_params,
+                    &err))
         {
-          LOGE
-            ("sweeper_engine_deadletter_retry: Failed to update command %ld: %s",
+          LOGE (
+            "sweeper_engine_deadletter_retry: Failed to update command %lld: %s",
             cmd_id,
-            sqlite3_errmsg (db));
-          final_rc = rc;
-          goto cleanup;
+            err.message);
+          // Decide whether to continue or break on individual update failure.
+          // For now, continue to process other commands.
         }
-      sqlite3_reset (update_st);        // Reset for next iteration
-      retried_count++;
+      else
+        {
+          retried_count++;
+        }
     }
+  db_res_finalize (res);
+
   if (retried_count > 0)
     {
       LOGI
         ("sweeper_engine_deadletter_retry: Retried %d deadletter commands.",
         retried_count);
     }
-cleanup:
-  if (st)
-    {
-      sqlite3_finalize (st);
-    }
-  if (update_st)
-    {
-      sqlite3_finalize (update_st);
-    }
-  return final_rc;
+  return 0; // Success
 }
 
 
 // Cron handler to clean up expired Limpet mines
 int
-cron_limpet_ttl_cleanup (sqlite3 *db, int64_t now_s)
+cron_limpet_ttl_cleanup (db_t *db, int64_t now_s)
 {
   if (!g_cfg.mines.limpet.enabled)
     {
@@ -1340,215 +1445,231 @@ cron_limpet_ttl_cleanup (sqlite3 *db, int64_t now_s)
         ("limpet_ttl_days is not set or zero. Skipping Limpet TTL cleanup.");
       return 0;                 // No TTL is set, so no cleanup needed
     }
+
+  db_error_t err;
+
+
+  db_error_clear (&err);
+
   if (!try_lock (db, "limpet_ttl_cleanup", now_s))
     {
       return 0;
     }
   LOGD ("limpet_ttl_cleanup: Starting Limpet mine TTL cleanup.");
 
-  sqlite3_stmt *st = NULL;
-  int removed_count = 0;
+  int64_t removed_count = 0;
   // Calculate the expiry timestamp: deployed_at + (limpet_ttl_days * seconds_in_day)
   // Assuming deployed_at is UNIX epoch.
   long long expiry_threshold_s =
     now_s - ((long long) g_cfg.mines.limpet.limpet_ttl_days * 24 * 3600);
+
   const char *sql_delete_expired =
     "DELETE FROM sector_assets "
-    "WHERE asset_type = ?1 AND deployed_at <= ?2;";
+    "WHERE asset_type = $1 AND deployed_at <= $2;";
+
+  db_bind_t params[] = {
+    db_bind_i32 (ASSET_LIMPET_MINE),
+    db_bind_i64 (expiry_threshold_s)
+  };
+  size_t n_params = sizeof(params) / sizeof(params[0]);
 
 
-  int rc = sqlite3_prepare_v2 (db, sql_delete_expired, -1, &st, NULL);
-  if (rc != SQLITE_OK)
-    {
-      LOGE ("limpet_ttl_cleanup: Failed to prepare delete statement: %s",
-            sqlite3_errmsg (db));
-      return rc;
-    }
-  sqlite3_bind_int (st, 1, ASSET_LIMPET_MINE);
-  sqlite3_bind_int64 (st, 2, expiry_threshold_s);
-  rc = sqlite3_step (st);
-  if (rc != SQLITE_DONE)
+  if (!db_exec_rows_affected (db,
+                              sql_delete_expired,
+                              params,
+                              n_params,
+                              &removed_count,
+                              &err))
     {
       LOGE ("limpet_ttl_cleanup: Failed to execute delete statement: %s",
-            sqlite3_errmsg (db));
-      sqlite3_finalize (st);
-      return rc;
+            err.message);
+      return err.code;
     }
-  removed_count = sqlite3_changes (db);
-  sqlite3_finalize (st);
-  if (rc != SQLITE_OK)
-    {
-      LOGE ("limpet_ttl_cleanup: Commit failed: %s", sqlite3_errmsg (db));
-      return rc;
-    }
+
   if (removed_count > 0)
     {
-      LOGI ("limpet_ttl_cleanup: Removed %d expired Limpet mines.",
+      LOGI ("limpet_ttl_cleanup: Removed %" PRId64 " expired Limpet mines.",
             removed_count);
     }
   else
     {
       LOGD ("limpet_ttl_cleanup: No expired Limpet mines found.");
     }
-  return SQLITE_OK;
+  return 0;
 }
 
 
 int
-h_daily_bank_interest_tick (sqlite3 *db, int64_t now_s)
+h_daily_bank_interest_tick (db_t *db, int64_t now_s)
 {
-  if (!try_lock (db, "daily_bank_interest_tick", now_s))
+  db_error_t err;
+  int retry_count;
+  int final_rc = 0;
+
+  for (retry_count = 0; retry_count < 3; retry_count++)
     {
-      return 0;
-    }
-  LOGI ("daily_bank_interest_tick: Starting daily bank interest accrual.");
-  
-  sqlite3_stmt *st = NULL;
-  const char *sql_select_accounts =
-    "SELECT id, owner_type, owner_id, balance, interest_rate_bp, last_interest_tick "
-    "FROM bank_accounts WHERE is_active = 1 AND interest_rate_bp > 0;";
+      db_error_clear (&err);
+      final_rc = 0;
 
-
-  int rc = sqlite3_prepare_v2 (db, sql_select_accounts, -1, &st, NULL);
-  if (rc != SQLITE_OK)
-    {
-      LOGE
-      (
-        "daily_bank_interest_tick: Failed to prepare select accounts statement: %s",
-        sqlite3_errmsg (db));
-      goto rollback_and_unlock;
-    }
-  int current_epoch_day = get_utc_epoch_day (now_s);
-  int processed_accounts = 0;
-  long long min_balance_for_interest =
-    h_get_config_int_unlocked (db, "bank_min_balance_for_interest", 0);
-  long long max_daily_per_account =
-    h_get_config_int_unlocked (db, "bank_max_daily_interest_per_account",
-                               9223372036854775807LL);
-
-
-  while ((rc = sqlite3_step (st)) == SQLITE_ROW)
-    {
-      int account_id = sqlite3_column_int (st, 0);
-      const char *owner_type = (const char *) sqlite3_column_text (st, 1);
-      int owner_id = sqlite3_column_int (st, 2);
-      long long balance = sqlite3_column_int64 (st, 3);
-      int interest_rate_bp = sqlite3_column_int (st, 4);
-      int last_interest_tick = sqlite3_column_int (st, 5);
-
-
-      if (balance < min_balance_for_interest)
+      if (!try_lock (db, "daily_bank_interest_tick", now_s))
         {
-          continue;             // Skip accounts below minimum balance
+          return 0;
         }
-      int days_to_accrue = current_epoch_day - last_interest_tick;
 
-
-      if (days_to_accrue <= 0)
+      if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
         {
-          continue;             // Already processed for today or future tick
-        }
-      if (days_to_accrue > MAX_BACKLOG_DAYS)
-        {
-          days_to_accrue = MAX_BACKLOG_DAYS;    // Cap the backlog
-        }
-      char tx_group_id[33];
-
-
-      h_generate_hex_uuid (tx_group_id, sizeof (tx_group_id));
-      for (int i = 0; i < days_to_accrue; ++i)
-        {
-          if (balance <= 0)
+          if (err.code == ERR_DB_BUSY)
             {
-              break;            // No interest on zero or negative balance
+              usleep (100000);
+              continue;
             }
-          // interest = floor( balance * interest_rate_bp / (10000 * 365) )
-          long long daily_interest =
-            (balance * interest_rate_bp) / (10000 * 365);
+          return err.code;
+        }
+
+      LOGI ("daily_bank_interest_tick: Starting daily bank interest accrual.");
+
+      db_res_t *res = NULL;
+      const char *sql_select_accounts =
+        "SELECT id, owner_type, owner_id, balance, interest_rate_bp, last_interest_tick "
+        "FROM bank_accounts WHERE is_active = 1 AND interest_rate_bp > 0 FOR UPDATE;";
 
 
-          if (daily_interest > max_daily_per_account)
+      if (!db_query (db, sql_select_accounts, NULL, 0, &res, &err))
+        {
+          LOGE (
+            "daily_bank_interest_tick: Failed to prepare select accounts statement: %s",
+            err.message);
+          goto rollback;
+        }
+
+      int current_epoch_day = get_utc_epoch_day (now_s);
+      int processed_accounts = 0;
+      long long min_balance_for_interest =
+        h_get_config_int_unlocked (db, "bank_min_balance_for_interest", 0);
+      long long max_daily_per_account =
+        h_get_config_int_unlocked (db, "bank_max_daily_interest_per_account",
+                                   9223372036854775807LL);
+
+
+      while (db_res_step (res, &err))
+        {
+          int account_id = db_res_col_i32 (res, 0, &err);
+          const char *owner_type = db_res_col_text (res, 1, &err);
+          int owner_id = db_res_col_i32 (res, 2, &err);
+          long long balance = db_res_col_i64 (res, 3, &err);
+          int interest_rate_bp = db_res_col_i32 (res, 4, &err);
+          int last_interest_tick = db_res_col_i32 (res, 5, &err);
+
+
+          if (balance < min_balance_for_interest)
             {
-              daily_interest = max_daily_per_account;
+              continue;           // Skip accounts below minimum balance
             }
-          if (daily_interest > 0)
+          int days_to_accrue = current_epoch_day - last_interest_tick;
+
+
+          if (days_to_accrue <= 0)
             {
-              // Use h_add_credits_unlocked to record interest and update balance
-              int add_rc =
-                h_add_credits_unlocked (db, account_id, daily_interest,
-                                        "INTEREST", tx_group_id, &balance);
+              continue;           // Already processed for today or future tick
+            }
+          if (days_to_accrue > MAX_BACKLOG_DAYS)
+            {
+              days_to_accrue = MAX_BACKLOG_DAYS;  // Cap the backlog
+            }
+          char tx_group_id[33];
 
 
-              if (add_rc != SQLITE_OK)
+          h_generate_hex_uuid (tx_group_id, sizeof (tx_group_id));
+          for (int i = 0; i < days_to_accrue; ++i)
+            {
+              if (balance <= 0)
                 {
-                  LOGE
-                  (
-                    "daily_bank_interest_tick: Failed to add interest to account %d (owner %s:%d): %s",
-                    account_id,
-                    owner_type,
-                    owner_id,
-                    sqlite3_errmsg (db));
-                  // Continue to next account or abort? Aborting for now.
-                  goto rollback_and_unlock;
+                  break;          // No interest on zero or negative balance
+                }
+              // interest = floor( balance * interest_rate_bp / (10000 * 365) )
+              long long daily_interest =
+                (balance * interest_rate_bp) / (10000 * 365);
+
+
+              if (daily_interest > max_daily_per_account)
+                {
+                  daily_interest = max_daily_per_account;
+                }
+              if (daily_interest > 0)
+                {
+                  // Use h_add_credits_unlocked to record interest and update balance
+                  int add_rc =
+                    h_add_credits_unlocked (db, account_id, daily_interest,
+                                            "INTEREST", tx_group_id, &balance);
+
+
+                  if (add_rc != 0)
+                    {
+                      LOGE (
+                        "daily_bank_interest_tick: Failed to add interest to account %d: %d",
+                        account_id,
+                        add_rc);
+                      db_res_finalize (res);
+                      final_rc = add_rc;
+                      goto rollback;
+                    }
                 }
             }
-        }
-      // Update last_interest_tick in bank_accounts
-      sqlite3_stmt *update_tick_st = NULL;
-      const char *sql_update_tick =
-        "UPDATE bank_accounts SET last_interest_tick = ? WHERE id = ?;";
-      int update_rc =
-        sqlite3_prepare_v2 (db, sql_update_tick, -1, &update_tick_st, NULL);
+          // Update last_interest_tick
+          const char *sql_update_tick =
+            "UPDATE bank_accounts SET last_interest_tick = $1 WHERE id = $2;";
+          db_bind_t update_tick_params[] = {
+            db_bind_i32 (current_epoch_day),
+            db_bind_i32 (account_id)
+          };
+          size_t n_update_tick_params = sizeof(update_tick_params) /
+                                        sizeof(update_tick_params[0]);
 
 
-      if (update_rc != SQLITE_OK)
-        {
-          LOGE
-          (
-            "daily_bank_interest_tick: Failed to prepare update last_interest_tick statement: %s",
-            sqlite3_errmsg (db));
-          goto rollback_and_unlock;
+          if (!db_exec (db, sql_update_tick, update_tick_params,
+                        n_update_tick_params, &err))
+            {
+              LOGE (
+                "daily_bank_interest_tick: Failed to update last_interest_tick for account %d: %s",
+                account_id,
+                err.message);
+              db_res_finalize (res);
+              goto rollback;
+            }
+          processed_accounts++;
         }
-      sqlite3_bind_int (update_tick_st, 1, current_epoch_day);
-      sqlite3_bind_int (update_tick_st, 2, account_id);
-      update_rc = sqlite3_step (update_tick_st);
-      sqlite3_finalize (update_tick_st);
-      if (update_rc != SQLITE_DONE)
+
+      if (err.code != 0 && err.code != ERR_DB_NO_ROWS)
         {
-          LOGE
-          (
-            "daily_bank_interest_tick: Failed to update last_interest_tick for account %d: %s",
-            account_id,
-            sqlite3_errmsg (db));
-          goto rollback_and_unlock;
+          LOGE (
+            "daily_bank_interest_tick: Error stepping through bank_accounts: %s",
+            err.message);
+          db_res_finalize (res);
+          goto rollback;
         }
-      processed_accounts++;
+      db_res_finalize (res);
+
+      if (!db_tx_commit (db, &err))
+        {
+          LOGE ("daily_bank_interest_tick: commit failed: %s", err.message);
+          goto rollback;
+        }
+
+      LOGI (
+        "daily_bank_interest_tick: Successfully processed interest for %d accounts.",
+        processed_accounts);
+      return 0; // Success
+
+rollback:
+      db_tx_rollback (db, &err);
+      if (err.code == ERR_DB_BUSY)
+        {
+          usleep (100000);
+          continue;
+        }
+      return (final_rc != 0) ? final_rc : err.code;
     }
-  if (rc != SQLITE_DONE)
-    {
-      LOGE
-        ("daily_bank_interest_tick: Error stepping through bank_accounts: %s",
-        sqlite3_errmsg (db));
-      goto rollback_and_unlock;
-    }
-  sqlite3_finalize (st);
-  st = NULL;
-  if (rc != SQLITE_OK)
-    {
-      LOGE ("daily_bank_interest_tick: commit failed: %s",
-            sqlite3_errmsg (db));
-      goto rollback_and_unlock;
-    }
-  LOGI
-  (
-    "daily_bank_interest_tick: Successfully processed interest for %d accounts.",
-    processed_accounts);
-  return SQLITE_OK;
-rollback_and_unlock:
-  if (st)
-    {
-      sqlite3_finalize (st);
-    }
-  return rc;
+
+  return ERR_DB_BUSY;
 }
 

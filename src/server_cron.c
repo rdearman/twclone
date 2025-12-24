@@ -96,6 +96,8 @@ tow_ship (sqlite3 *db, int ship_id, int new_sector_id, int admin_id,
 
   const char *sql_select_ship_info =
     "SELECT T1.sector, T2.id FROM ships T1 LEFT JOIN players T2 ON T1.id = T2.ship WHERE T1.id = ?;";
+
+
   if (sqlite3_prepare_v2 (db, sql_select_ship_info, -1, &stmt, NULL) !=
       SQLITE_OK)
     {
@@ -676,99 +678,129 @@ h_reset_turns_for_player (sqlite3 *db, int64_t now_s)
 
 
 int
-try_lock (sqlite3 *db, const char *name, int64_t now_s)
+try_lock (db_t *db, const char *name, int64_t now_s)
 {
-  sqlite3_stmt *st = NULL;
-  int rc;
+  db_error_t err;
+  db_error_clear (&err);
+
   int64_t now_ms = now_s * 1000;
   const int LOCK_DURATION_S = 60;
   int64_t until_ms = now_ms + (LOCK_DURATION_S * 1000);
-  rc =
-    sqlite3_prepare_v2 (db,
-                        "DELETE FROM locks WHERE lock_name=?1 AND until_ms < ?2;",
-                        -1,
-                        &st,
-                        NULL);
-  if (rc == SQLITE_OK)
+
+  // 1. DELETE expired locks
+  const char *sql_delete_locks =
+    "DELETE FROM locks WHERE lock_name=$1 AND until_ms < $2;";
+  db_bind_t delete_params[] = {
+    db_bind_text (name),
+    db_bind_i64 (now_ms)
+  };
+  size_t n_delete_params = sizeof(delete_params) / sizeof(delete_params[0]);
+
+
+  if (!db_exec (db, sql_delete_locks, delete_params, n_delete_params, &err))
     {
-      sqlite3_bind_text (st, 1, name, -1, SQLITE_STATIC);
-      sqlite3_bind_int64 (st, 2, now_ms);
-      sqlite3_step (st);
+      LOGE ("try_lock: Delete expired locks error: %s", err.message);
+      return 0; // Failure to delete old locks shouldn't prevent trying to get new one
     }
-  sqlite3_finalize (st);
-  if (rc != SQLITE_OK)
+
+  // 2. INSERT new lock or DO NOTHING on conflict
+  const char *sql_insert_lock =
+    "INSERT INTO locks(lock_name, owner, until_ms) VALUES($1, 'server', $2) ON CONFLICT(lock_name) DO NOTHING;";
+  db_bind_t insert_params[] = {
+    db_bind_text (name),
+    db_bind_i64 (until_ms)
+  };
+  size_t n_insert_params = sizeof(insert_params) / sizeof(insert_params[0]);
+
+
+  if (!db_exec (db, sql_insert_lock, insert_params, n_insert_params, &err))
     {
+      LOGE ("try_lock: Insert new lock error: %s", err.message);
       return 0;
     }
-  rc =
-    sqlite3_prepare_v2 (db,
-                        "INSERT INTO locks(lock_name, owner, until_ms) VALUES(?1, 'server', ?2) ON CONFLICT(lock_name) DO NOTHING;",
-                        -1,
-                        &st,
-                        NULL);
-  if (rc != SQLITE_OK)
+
+  // 3. SELECT lock owner to verify ownership
+  db_res_t *res = NULL;
+  const char *sql_select_owner = "SELECT owner FROM locks WHERE lock_name=$1;";
+  db_bind_t select_params[] = {
+    db_bind_text (name)
+  };
+  size_t n_select_params = sizeof(select_params) / sizeof(select_params[0]);
+
+
+  if (!db_query (db,
+                 sql_select_owner,
+                 select_params,
+                 n_select_params,
+                 &res,
+                 &err))
     {
+      LOGE ("try_lock: Select lock owner error: %s", err.message);
       return 0;
     }
-  sqlite3_bind_text (st, 1, name, -1, SQLITE_STATIC);
-  sqlite3_bind_int64 (st, 2, until_ms);
-  sqlite3_step (st);
-  sqlite3_finalize (st);
-  rc =
-    sqlite3_prepare_v2 (db, "SELECT owner FROM locks WHERE lock_name=?1;", -1,
-                        &st, NULL);
-  if (rc != SQLITE_OK)
-    {
-      return 0;
-    }
-  sqlite3_bind_text (st, 1, name, -1, SQLITE_STATIC);
+
   int ok = 0;
 
 
-  if (sqlite3_step (st) == SQLITE_ROW)
+  if (db_res_step (res, &err))
     {
-      const unsigned char *o = sqlite3_column_text (st, 0);
+      const char *owner = db_res_col_text (res, 0, &err);
 
 
-      ok = (o && strcmp ((const char *) o, "server") == 0);
+      ok = (owner && strcmp (owner, "server") == 0);
     }
-  sqlite3_finalize (st);
+  db_res_finalize (res);
+
   return ok;
 }
 
 
 int64_t
-db_lock_status (sqlite3 *db, const char *name)
+db_lock_status (db_t *db, const char *name)
 {
-  const char *SQL = "SELECT until_ms FROM locks WHERE lock_name = ?1;";
-  sqlite3_stmt *st = NULL;
+  const char *sql = "SELECT until_ms FROM locks WHERE lock_name = $1;";
+  db_res_t *res = NULL;
+  db_error_t err;
+  db_error_clear (&err);
   int64_t until_ms = 0;
-  if (sqlite3_prepare_v2 (db, SQL, -1, &st, NULL) == SQLITE_OK)
+
+  db_bind_t params[] = {
+    db_bind_text (name)
+  };
+  size_t n_params = sizeof(params) / sizeof(params[0]);
+
+
+  if (db_query (db, sql, params, n_params, &res, &err))
     {
-      sqlite3_bind_text (st, 1, name, -1, SQLITE_STATIC);
-      if (sqlite3_step (st) == SQLITE_ROW)
+      if (db_res_step (res, &err))
         {
-          until_ms = sqlite3_column_int64 (st, 0);
+          until_ms = db_res_col_i64 (res, 0, &err);
         }
-      sqlite3_finalize (st);
+      db_res_finalize (res);
     }
   return until_ms;
 }
 
 
 int
-unlock (sqlite3 *db, const char *name)
+unlock (db_t *db, const char *name)
 {
-  sqlite3_stmt *st = NULL;
-  if (sqlite3_prepare_v2
-        (db, "DELETE FROM locks WHERE lock_name=?1 AND owner='server';", -1,
-        &st, NULL) == SQLITE_OK)
+  db_error_t err;
+  db_error_clear (&err);
+
+  const char *sql = "DELETE FROM locks WHERE lock_name=$1 AND owner='server';";
+  db_bind_t params[] = {
+    db_bind_text (name)
+  };
+  size_t n_params = sizeof(params) / sizeof(params[0]);
+
+
+  if (!db_exec (db, sql, params, n_params, &err))
     {
-      sqlite3_bind_text (st, 1, name, -1, SQLITE_STATIC);
-      sqlite3_step (st);
-      sqlite3_finalize (st);
+      LOGE ("unlock: Failed to release lock '%s': %s", name, err.message);
+      return -1;
     }
-  return 0;                     // Return 0 for success
+  return 0;
 }
 
 
@@ -777,7 +809,6 @@ cron_register_builtins (void)
 {
   g_reg_inited = 1;
 }
-
 
 
 const char *
@@ -1156,7 +1187,8 @@ h_dividend_payout (sqlite3 *db, int64_t now_s)
     {
       int dividend_id = sqlite3_column_int (select_dividends_st, 0);
       int stock_id = sqlite3_column_int (select_dividends_st, 1);
-      int amount_per_share = sqlite3_column_int (select_dividends_st, 2);
+      int amount_per_share = sqlite3_column_int (select_dividends_st,
+                                                 2);
       // long long declared_ts = sqlite3_column_int64 (select_dividends_st, 3);
       // Get stock and corp info
       // char *ticker = NULL;
@@ -1200,11 +1232,16 @@ h_dividend_payout (sqlite3 *db, int64_t now_s)
             total_payout,
             corp_balance);
           json_t *payload = json_object ();
+
+
           json_object_set_new (payload, "corp_id", json_integer (corp_id));
           json_object_set_new (payload, "stock_id", json_integer (stock_id));
-          json_object_set_new (payload, "required", json_integer (total_payout));
-          json_object_set_new (payload, "available", json_integer (corp_balance));
-          json_object_set_new (payload, "status", json_string ("failed_insufficient_funds"));
+          json_object_set_new (payload, "required",
+                               json_integer (total_payout));
+          json_object_set_new (payload, "available",
+                               json_integer (corp_balance));
+          json_object_set_new (payload, "status",
+                               json_string ("failed_insufficient_funds"));
 
 
           db_log_engine_event (now_s, "stock.dividend.payout_failed", "corp",
@@ -1309,10 +1346,13 @@ h_dividend_payout (sqlite3 *db, int64_t now_s)
         stock_id,
         corp_id);
       json_t *payload = json_object ();
+
+
       json_object_set_new (payload, "corp_id", json_integer (corp_id));
       json_object_set_new (payload, "stock_id", json_integer (stock_id));
       json_object_set_new (payload, "dividend_id", json_integer (dividend_id));
-      json_object_set_new (payload, "actual_payout", json_integer (actual_payout_sum));
+      json_object_set_new (payload, "actual_payout",
+                           json_integer (actual_payout_sum));
 
 
       db_log_engine_event (now_s, "stock.dividend.payout_completed", "corp",
@@ -1394,7 +1434,7 @@ h_daily_turn_reset (sqlite3 *db, int64_t now_s)
       return 0;
     }
   LOGI ("daily_turn_reset: starting daily turn reset.");
-  int rc =0;
+  int rc = 0;
 
 
   if (rc)
@@ -1783,7 +1823,6 @@ h_planet_growth (sqlite3 *db, int64_t now_s)
   rc = sqlite3_step (stmt);
   if (rc != SQLITE_DONE)
     {
-
       LOGE ("planet_growth (commodities step) rc=%d: %s",
             rc,
             sqlite3_errmsg (db));
@@ -2055,7 +2094,7 @@ h_traps_process (sqlite3 *db, int64_t now_s)
     {
       return 0;
     }
-  int rc =0;
+  int rc = 0;
 
   sqlite3_stmt *stmt = NULL;
   const char *sql_insert =
@@ -2232,11 +2271,11 @@ cmd_sys_cron_planet_tick_once (client_ctx_t *ctx, json_t *root)
 
 
 int
-h_port_economy_tick (sqlite3 *db, int64_t now_s)
+h_port_economy_tick (sqlite3 *db,
+                     int64_t now_s)
 {
   if (!try_lock (db, "port_economy_tick", now_s))
     {
-
       LOGE ("port_economy_tick: Failed to start transaction: %s",
             sqlite3_errmsg (db));
       return 0;
@@ -2257,7 +2296,10 @@ h_port_economy_tick (sqlite3 *db, int64_t now_s)
     "JOIN commodities c ON es.commodity_code = c.code;";
 
 
-  int rc = sqlite3_prepare_v2 (db, sql_select_ports_commodities, -1, &stmt, NULL);
+  int rc = sqlite3_prepare_v2 (db, sql_select_ports_commodities, -1, &stmt,
+                               NULL);
+
+
   if (rc != SQLITE_OK)
     {
       LOGE ("port_economy_tick: Failed to prepare select statement: %s",
@@ -2415,7 +2457,6 @@ h_port_economy_tick (sqlite3 *db, int64_t now_s)
   if (rc != SQLITE_OK)
     {
       LOGE ("port_economy_tick: Commit failed: %s", sqlite3_errmsg (db));
-
     }
 
 
@@ -2440,10 +2481,12 @@ h_daily_market_settlement (sqlite3 *db, int64_t now_s)
 
 
   int rc = sqlite3_prepare_v2 (db,
-                           "SELECT id, code FROM commodities;",
-                           -1,
-                           &stmt_comm,
-                           NULL);
+                               "SELECT id, code FROM commodities;",
+                               -1,
+                               &stmt_comm,
+                               NULL);
+
+
   if (rc != SQLITE_OK)
     {
       LOGE (
@@ -2456,7 +2499,7 @@ h_daily_market_settlement (sqlite3 *db, int64_t now_s)
     {
       int commodity_id = sqlite3_column_int (stmt_comm, 0);
       const char *tmp_comm = (const char *)sqlite3_column_text (stmt_comm,
-                                                                      1);
+                                                                1);
       /* sqlite: column_text() pointer invalid after finalize/reset/step */
       char *commodity_code = tmp_comm ? strdup (tmp_comm) : NULL;
 
@@ -4038,6 +4081,8 @@ h_daily_lottery_draw (sqlite3 *db, int64_t now_s)
 
 
   int rc = sqlite3_prepare_v2 (db, sql_check, -1, &st_check, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       LOGE ("daily_lottery_draw: Failed to prepare check statement: %s",
@@ -4267,6 +4312,8 @@ h_deadpool_resolution_cron (sqlite3 *db, int64_t now_s)
 
 
   int rc = sqlite3_prepare_v2 (db, sql_expire, -1, &st_expire, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       LOGE
@@ -4478,6 +4525,8 @@ h_tavern_notice_expiry_cron (sqlite3 *db, int64_t now_s)
 
 
   int rc = sqlite3_prepare_v2 (db, sql_delete_notices, -1, &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       LOGE
@@ -4573,6 +4622,8 @@ h_loan_shark_interest_cron (sqlite3 *db, int64_t now_s)
 
 
   int rc = sqlite3_prepare_v2 (db, sql_select_loans, -1, &st, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       LOGE
@@ -4656,6 +4707,8 @@ h_daily_stock_price_recalculation (sqlite3 *db,
 
 
   int rc = sqlite3_prepare_v2 (db, sql_select_stocks, -1, &st_stocks, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       LOGE
@@ -4746,7 +4799,7 @@ h_daily_stock_price_recalculation (sqlite3 *db,
         }
     }
   sqlite3_finalize (st_stocks);
-  
+
   if (rc != SQLITE_OK)
     {
       LOGE ("h_daily_stock_price_recalculation: commit failed: %s",
@@ -4786,6 +4839,8 @@ h_daily_corp_tax (sqlite3 *db, int64_t now_s)
 
 
   int rc = sqlite3_prepare_v2 (db, sql_select_corps, -1, &st_corps, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       LOGE
@@ -4895,10 +4950,12 @@ h_shield_regen_tick (sqlite3 *db, int64_t now_s)
 
 
   int rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
+
+
   if (rc != SQLITE_OK)
     {
       LOGE ("h_shield_regen_tick: SQL Error: %s", sqlite3_errmsg (db));
-      
+
       unlock (db, "shield_regen");
       return rc;
     }

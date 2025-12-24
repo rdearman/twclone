@@ -1,24 +1,24 @@
 #include "database_market.h"
-#include "database.h"		// For db_get_handle, db_begin, db_commit, db_rollback
-#include "server_log.h"		// For LOGE, LOGI
-#include <string.h>		// For strncpy, strcmp
-#include <stdlib.h>		// For malloc, free
+#include "database.h"           // For db_get_handle, db_begin, db_commit, db_rollback
+#include "server_log.h"         // For LOGE, LOGI
+#include <string.h>             // For strncpy, strcmp
+#include <stdlib.h>             // For malloc, free
 
 
 // Helper to insert a new commodity order
 // Returns the new order's ID on success, or -1 on failure.
 int
 db_insert_commodity_order (sqlite3 *db,
-			   const char *actor_type,
-			   int actor_id,
-			   const char *location_type,
-			   int location_id,
-			   int commodity_id,
-			   const char *side,
-			   int quantity, int price, long long expires_at)
+                           const char *actor_type,
+                           int actor_id,
+                           const char *location_type,
+                           int location_id,
+                           int commodity_id,
+                           const char *side,
+                           int quantity, int price, long long expires_at)
 {
   sqlite3_stmt *stmt;
-  int rc;			// Declare rc here
+  int rc;                       // Declare rc here
   const char *sql =
     "INSERT INTO commodity_orders ("
     "actor_type, actor_id, location_type, location_id, commodity_id, side, quantity, filled_quantity, price, ts, expires_at) "
@@ -28,7 +28,7 @@ db_insert_commodity_order (sqlite3 *db,
   if (rc != SQLITE_OK)
     {
       LOGE ("db_insert_commodity_order: Failed to prepare statement: %s",
-	    sqlite3_errmsg (db));
+            sqlite3_errmsg (db));
       return -1;
     }
 
@@ -53,7 +53,7 @@ db_insert_commodity_order (sqlite3 *db,
   if (rc != SQLITE_DONE)
     {
       LOGE ("db_insert_commodity_order: Failed to execute statement: %s",
-	    sqlite3_errmsg (db));
+            sqlite3_errmsg (db));
       sqlite3_finalize (stmt);
       return -1;
     }
@@ -70,9 +70,9 @@ db_insert_commodity_order (sqlite3 *db,
 // Returns SQLITE_OK on success.
 int
 db_update_commodity_order (sqlite3 *db,
-			   int order_id,
-			   int new_quantity,
-			   int new_filled_quantity, const char *new_status)
+                           int order_id,
+                           int new_quantity,
+                           int new_filled_quantity, const char *new_status)
 {
   sqlite3_stmt *stmt;
   const char *sql =
@@ -83,7 +83,7 @@ db_update_commodity_order (sqlite3 *db,
   if (rc != SQLITE_OK)
     {
       LOGE ("db_update_commodity_order: Failed to prepare statement: %s",
-	    sqlite3_errmsg (db));
+            sqlite3_errmsg (db));
       return rc;
     }
 
@@ -96,7 +96,7 @@ db_update_commodity_order (sqlite3 *db,
   if (rc != SQLITE_DONE)
     {
       LOGE ("db_update_commodity_order: Failed to execute statement: %s",
-	    sqlite3_errmsg (db));
+            sqlite3_errmsg (db));
       sqlite3_finalize (stmt);
       return rc;
     }
@@ -110,10 +110,10 @@ db_update_commodity_order (sqlite3 *db,
 // Returns SQLITE_OK on success.
 int
 db_cancel_commodity_orders_for_actor_and_commodity (sqlite3 *db,
-						    const char *actor_type,
-						    int actor_id,
-						    int commodity_id,
-						    const char *side)
+                                                    const char *actor_type,
+                                                    int actor_id,
+                                                    int commodity_id,
+                                                    const char *side)
 {
   sqlite3_stmt *stmt;
   const char *sql =
@@ -124,8 +124,9 @@ db_cancel_commodity_orders_for_actor_and_commodity (sqlite3 *db,
   if (rc != SQLITE_OK)
     {
       LOGE
-	("db_cancel_commodity_orders_for_actor_and_commodity: Failed to prepare statement: %s",
-	 sqlite3_errmsg (db));
+      (
+        "db_cancel_commodity_orders_for_actor_and_commodity: Failed to prepare statement: %s",
+        sqlite3_errmsg (db));
       return rc;
     }
 
@@ -138,8 +139,9 @@ db_cancel_commodity_orders_for_actor_and_commodity (sqlite3 *db,
   if (rc != SQLITE_DONE)
     {
       LOGE
-	("db_cancel_commodity_orders_for_actor_and_commodity: Failed to execute statement: %s",
-	 sqlite3_errmsg (db));
+      (
+        "db_cancel_commodity_orders_for_actor_and_commodity: Failed to execute statement: %s",
+        sqlite3_errmsg (db));
       sqlite3_finalize (stmt);
       return rc;
     }
@@ -153,15 +155,15 @@ db_cancel_commodity_orders_for_actor_and_commodity (sqlite3 *db,
 // Returns SQLITE_OK on success.
 int
 db_cancel_commodity_orders_for_port_and_commodity (sqlite3 *db,
-						   int port_id,
-						   int commodity_id,
-						   const char *side)
+                                                   int port_id,
+                                                   int commodity_id,
+                                                   const char *side)
 {
   return db_cancel_commodity_orders_for_actor_and_commodity (db,
-							     "port",
-							     port_id,
-							     commodity_id,
-							     side);
+                                                             "port",
+                                                             port_id,
+                                                             commodity_id,
+                                                             side);
 }
 
 
@@ -169,10 +171,10 @@ db_cancel_commodity_orders_for_port_and_commodity (sqlite3 *db,
 // Returns a dynamically allocated array of commodity_order_t structs.
 int
 db_get_open_order (sqlite3 *db,
-		   const char *actor_type,
-		   int actor_id,
-		   int commodity_id,
-		   const char *side, commodity_order_t *out_order)
+                   const char *actor_type,
+                   int actor_id,
+                   int commodity_id,
+                   const char *side, commodity_order_t *out_order)
 {
   if (!out_order || !actor_type)
     {
@@ -192,7 +194,7 @@ db_get_open_order (sqlite3 *db,
   if (rc != SQLITE_OK)
     {
       LOGE ("db_get_open_order: Failed to prepare statement: %s",
-	    sqlite3_errmsg (db));
+            sqlite3_errmsg (db));
       return rc;
     }
 
@@ -206,26 +208,26 @@ db_get_open_order (sqlite3 *db,
     {
       out_order->id = sqlite3_column_int (stmt, 0);
       strncpy (out_order->actor_type,
-	       (const char *) sqlite3_column_text (stmt, 1),
-	       sizeof (out_order->actor_type) - 1);
+               (const char *) sqlite3_column_text (stmt, 1),
+               sizeof (out_order->actor_type) - 1);
       out_order->actor_type[sizeof (out_order->actor_type) - 1] = '\0';
       out_order->actor_id = sqlite3_column_int (stmt, 2);
       out_order->commodity_id = sqlite3_column_int (stmt, 3);
       strncpy (out_order->side,
-	       (const char *) sqlite3_column_text (stmt, 4),
-	       sizeof (out_order->side) - 1);
+               (const char *) sqlite3_column_text (stmt, 4),
+               sizeof (out_order->side) - 1);
       out_order->side[sizeof (out_order->side) - 1] = '\0';
       out_order->quantity = sqlite3_column_int (stmt, 5);
       out_order->price = sqlite3_column_int (stmt, 6);
       strncpy (out_order->status,
-	       (const char *) sqlite3_column_text (stmt, 7),
-	       sizeof (out_order->status) - 1);
+               (const char *) sqlite3_column_text (stmt, 7),
+               sizeof (out_order->status) - 1);
       out_order->status[sizeof (out_order->status) - 1] = '\0';
       out_order->ts = sqlite3_column_int64 (stmt, 8);
       out_order->expires_at = sqlite3_column_int64 (stmt, 9);
       out_order->filled_quantity = sqlite3_column_int (stmt, 10);
       out_order->remaining_quantity = out_order->quantity -
-	out_order->filled_quantity;
+                                      out_order->filled_quantity;
       rc = SQLITE_OK;
     }
   else if (rc == SQLITE_DONE)
@@ -235,7 +237,7 @@ db_get_open_order (sqlite3 *db,
   else
     {
       LOGE ("db_get_open_order: Failed to step statement: %s",
-	    sqlite3_errmsg (db));
+            sqlite3_errmsg (db));
     }
 
   sqlite3_finalize (stmt);
@@ -247,12 +249,12 @@ db_get_open_order (sqlite3 *db,
 // Returns SQLITE_OK if found (populating out_order), SQLITE_NOTFOUND if not found, or error code.
 int
 db_get_open_order_for_port (sqlite3 *db,
-			    int port_id,
-			    int commodity_id,
-			    const char *side, commodity_order_t *out_order)
+                            int port_id,
+                            int commodity_id,
+                            const char *side, commodity_order_t *out_order)
 {
   return db_get_open_order (db, "port", port_id, commodity_id, side,
-			    out_order);
+                            out_order);
 }
 
 
@@ -262,8 +264,8 @@ db_get_open_order_for_port (sqlite3 *db,
 // The 'count' parameter will be set to the number of orders loaded.
 commodity_order_t *
 db_load_open_orders_for_commodity (sqlite3 *db,
-				   int commodity_id,
-				   const char *side, int *count)
+                                   int commodity_id,
+                                   const char *side, int *count)
 {
   *count = 0;
   sqlite3_stmt *stmt;
@@ -274,20 +276,22 @@ db_load_open_orders_for_commodity (sqlite3 *db,
   if (strcmp (side, "buy") == 0)
     {
       sql =
-	sqlite3_mprintf
-	("SELECT id, actor_type, actor_id, commodity_id, side, quantity, price, status, ts, expires_at, filled_quantity "
-	 "FROM commodity_orders "
-	 "WHERE commodity_id = ? AND side = ? AND status = 'open' "
-	 "ORDER BY price DESC, ts ASC;");
+        sqlite3_mprintf
+        (
+          "SELECT id, actor_type, actor_id, commodity_id, side, quantity, price, status, ts, expires_at, filled_quantity "
+          "FROM commodity_orders "
+          "WHERE commodity_id = ? AND side = ? AND status = 'open' "
+          "ORDER BY price DESC, ts ASC;");
     }
   else if (strcmp (side, "sell") == 0)
     {
       sql =
-	sqlite3_mprintf
-	("SELECT id, actor_type, actor_id, commodity_id, side, quantity, price, status, ts, expires_at, filled_quantity "
-	 "FROM commodity_orders "
-	 "WHERE commodity_id = ? AND side = ? AND status = 'open' "
-	 "ORDER BY price ASC, ts ASC;");
+        sqlite3_mprintf
+        (
+          "SELECT id, actor_type, actor_id, commodity_id, side, quantity, price, status, ts, expires_at, filled_quantity "
+          "FROM commodity_orders "
+          "WHERE commodity_id = ? AND side = ? AND status = 'open' "
+          "ORDER BY price ASC, ts ASC;");
     }
   else
     {
@@ -304,12 +308,12 @@ db_load_open_orders_for_commodity (sqlite3 *db,
   int rc = sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL);
 
 
-  sqlite3_free (sql);		// Free the SQL string after preparation
+  sqlite3_free (sql);           // Free the SQL string after preparation
   if (rc != SQLITE_OK)
     {
       LOGE
-	("db_load_open_orders_for_commodity: Failed to prepare statement: %s",
-	 sqlite3_errmsg (db));
+        ("db_load_open_orders_for_commodity: Failed to prepare statement: %s",
+        sqlite3_errmsg (db));
       return NULL;
     }
 
@@ -324,7 +328,7 @@ db_load_open_orders_for_commodity (sqlite3 *db,
     {
       num_rows++;
     }
-  sqlite3_reset (stmt);		// Reset to re-read from the beginning
+  sqlite3_reset (stmt);         // Reset to re-read from the beginning
 
   if (num_rows == 0)
     {
@@ -339,7 +343,8 @@ db_load_open_orders_for_commodity (sqlite3 *db,
   if (!orders)
     {
       LOGE
-	("db_load_open_orders_for_commodity: Failed to allocate memory for orders.");
+      (
+        "db_load_open_orders_for_commodity: Failed to allocate memory for orders.");
       sqlite3_finalize (stmt);
       return NULL;
     }
@@ -351,26 +356,26 @@ db_load_open_orders_for_commodity (sqlite3 *db,
     {
       orders[i].id = sqlite3_column_int (stmt, 0);
       strncpy (orders[i].actor_type,
-	       (const char *) sqlite3_column_text (stmt, 1),
-	       sizeof (orders[i].actor_type) - 1);
+               (const char *) sqlite3_column_text (stmt, 1),
+               sizeof (orders[i].actor_type) - 1);
       orders[i].actor_type[sizeof (orders[i].actor_type) - 1] = '\0';
       orders[i].actor_id = sqlite3_column_int (stmt, 2);
       orders[i].commodity_id = sqlite3_column_int (stmt, 3);
       strncpy (orders[i].side,
-	       (const char *) sqlite3_column_text (stmt, 4),
-	       sizeof (orders[i].side) - 1);
+               (const char *) sqlite3_column_text (stmt, 4),
+               sizeof (orders[i].side) - 1);
       orders[i].side[sizeof (orders[i].side) - 1] = '\0';
       orders[i].quantity = sqlite3_column_int (stmt, 5);
       orders[i].price = sqlite3_column_int (stmt, 6);
       strncpy (orders[i].status,
-	       (const char *) sqlite3_column_text (stmt, 7),
-	       sizeof (orders[i].status) - 1);
+               (const char *) sqlite3_column_text (stmt, 7),
+               sizeof (orders[i].status) - 1);
       orders[i].status[sizeof (orders[i].status) - 1] = '\0';
       orders[i].ts = sqlite3_column_int64 (stmt, 8);
       orders[i].expires_at = sqlite3_column_int64 (stmt, 9);
       orders[i].filled_quantity = sqlite3_column_int (stmt, 10);
       orders[i].remaining_quantity = orders[i].quantity -
-	orders[i].filled_quantity;
+                                     orders[i].filled_quantity;
       i++;
     }
   sqlite3_finalize (stmt);
@@ -382,9 +387,19 @@ db_load_open_orders_for_commodity (sqlite3 *db,
 // Helper to insert a new commodity trade.
 // Returns the new trade's ID on success, or -1 on failure.
 int
-db_insert_commodity_trade (sqlite3 *db, int buy_order_id, int sell_order_id, int quantity, int price, const char *buyer_actor_type, int buyer_actor_id, const char *seller_actor_type, int seller_actor_id, int settlement_tx_buy,	// bank_tx.id
-			   int settlement_tx_sell	// bank_tx.id
-  )
+db_insert_commodity_trade (sqlite3 *db,
+                           int buy_order_id,
+                           int sell_order_id,
+                           int quantity,
+                           int price,
+                           const char *buyer_actor_type,
+                           int buyer_actor_id,
+                           const char *seller_actor_type,
+                           int seller_actor_id,
+                           int settlement_tx_buy,
+                           // bank_tx.id
+                           int settlement_tx_sell       // bank_tx.id
+                           )
 {
   sqlite3_stmt *stmt;
   const char *sql =
@@ -398,7 +413,7 @@ db_insert_commodity_trade (sqlite3 *db, int buy_order_id, int sell_order_id, int
   if (rc != SQLITE_OK)
     {
       LOGE ("db_insert_commodity_trade: Failed to prepare statement: %s",
-	    sqlite3_errmsg (db));
+            sqlite3_errmsg (db));
       return -1;
     }
 
@@ -417,7 +432,7 @@ db_insert_commodity_trade (sqlite3 *db, int buy_order_id, int sell_order_id, int
   if (rc != SQLITE_DONE)
     {
       LOGE ("db_insert_commodity_trade: Failed to execute statement: %s",
-	    sqlite3_errmsg (db));
+            sqlite3_errmsg (db));
       sqlite3_finalize (stmt);
       return -1;
     }
@@ -445,7 +460,7 @@ db_list_actor_orders (sqlite3 *db, const char *actor_type, int actor_id)
   if (sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL) != SQLITE_OK)
     {
       LOGE ("db_list_actor_orders: Prepare failed: %s", sqlite3_errmsg (db));
-      return orders;		// Return empty array on error
+      return orders;            // Return empty array on error
     }
 
   sqlite3_bind_text (stmt, 1, actor_type, -1, SQLITE_STATIC);
@@ -461,7 +476,7 @@ db_list_actor_orders (sqlite3 *db, const char *actor_type, int actor_id)
       int price = sqlite3_column_int (stmt, 5);
       const char *status = (const char *) sqlite3_column_text (stmt, 6);
       long long ts_val = sqlite3_column_int64 (stmt, 7);
-      long long expires = sqlite3_column_int64 (stmt, 8);	// Can be NULL, but will be 0
+      long long expires = sqlite3_column_int64 (stmt, 8);       // Can be NULL, but will be 0
 
       json_t *obj = json_object ();
 
@@ -471,7 +486,7 @@ db_list_actor_orders (sqlite3 *db, const char *actor_type, int actor_id)
       json_object_set_new (obj, "commodity_id", json_integer (comm_id));
       json_object_set_new (obj, "quantity", json_integer (qty));
       json_object_set_new (obj,
-			   "remaining_quantity", json_integer (qty - filled));
+                           "remaining_quantity", json_integer (qty - filled));
       json_object_set_new (obj, "price", json_integer (price));
       json_object_set_new (obj, "status", json_string (status ? status : ""));
       json_object_set_new (obj, "ts", json_integer (ts_val));
@@ -539,25 +554,26 @@ db_orders_summary (sqlite3 *db, int filter_commodity_id)
 
 
       if (!comm_obj)
-	{
-	  comm_obj = json_object ();
-	  json_object_set_new (summary, key, comm_obj);
-	}
+        {
+          comm_obj = json_object ();
+          json_object_set_new (summary, key, comm_obj);
+        }
 
       if (side && strcmp (side, "buy") == 0)
-	{
-	  json_object_set_new (comm_obj, "count_buy", json_integer (count));
-	  json_object_set_new (comm_obj, "total_qty_buy",
-			       json_integer (total_qty));
-	}
+        {
+          json_object_set_new (comm_obj, "count_buy", json_integer (count));
+          json_object_set_new (comm_obj, "total_qty_buy",
+                               json_integer (total_qty));
+        }
       else if (side && strcmp (side, "sell") == 0)
-	{
-	  json_object_set_new (comm_obj, "count_sell", json_integer (count));
-	  json_object_set_new (comm_obj, "total_qty_sell",
-			       json_integer (total_qty));
-	}
+        {
+          json_object_set_new (comm_obj, "count_sell", json_integer (count));
+          json_object_set_new (comm_obj, "total_qty_sell",
+                               json_integer (total_qty));
+        }
     }
 
   sqlite3_finalize (stmt);
   return summary;
 }
+

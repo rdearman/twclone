@@ -14,13 +14,13 @@ typedef enum
 { BACKEND_NONE = 0, BACKEND_FILE, BACKEND_SYSLOG } backend_t;
 static backend_t g_backend = BACKEND_NONE;
 // static int g_level_max = LOG_INFO;   /* LOG_DEBUG .. LOG_EMERG */
-static int g_level_max = LOG_ERR;	/* LOG_DEBUG .. LOG_EMERG */
+static int g_level_max = LOG_ERR;       /* LOG_DEBUG .. LOG_EMERG */
 static char g_prefix[32] = "";
-static int g_echo_stderr = 0;	/* 0/1 */
+static int g_echo_stderr = 0;   /* 0/1 */
 static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
 /* FILE backend state */
-static int g_fd = -1;		/* open file descriptor */
-static char g_path[512] = "";	/* remembered for reopen() */
+static int g_fd = -1;           /* open file descriptor */
+static char g_path[512] = "";   /* remembered for reopen() */
 
 
 /* ---- helpers ---- */
@@ -42,14 +42,14 @@ write_all (int fd, const char *buf, size_t len)
 
 
       if (w > 0)
-	{
-	  off += (size_t) w;
-	  continue;
-	}
+        {
+          off += (size_t) w;
+          continue;
+        }
       if (w < 0 && errno == EINTR)
-	{
-	  continue;
-	}
+        {
+          continue;
+        }
       return -1;
     }
   return 0;
@@ -107,7 +107,7 @@ server_log_set_prefix (const char *prefix)
 /* FILE backend */
 void
 server_log_init_file (const char *filepath,
-		      const char *prefix, int echo_stderr, int max_level)
+                      const char *prefix, int echo_stderr, int max_level)
 {
   pthread_mutex_lock (&g_lock);
   if (g_fd != -1)
@@ -118,7 +118,7 @@ server_log_init_file (const char *filepath,
   g_backend = BACKEND_FILE;
   g_echo_stderr = echo_stderr ? 1 : 0;
   g_level_max = (max_level < LOG_EMERG) ? LOG_EMERG :
-    (max_level > LOG_DEBUG) ? LOG_DEBUG : max_level;
+                (max_level > LOG_DEBUG) ? LOG_DEBUG : max_level;
   if (prefix && *prefix)
     {
       snprintf (g_prefix, sizeof g_prefix, "%s", prefix);
@@ -145,7 +145,7 @@ server_log_init_file (const char *filepath,
     {
       /* fall back to stderr-only if the path is not writable */
       g_fd = -1;
-      g_backend = BACKEND_NONE;	/* so we don't pretend we have a file */
+      g_backend = BACKEND_NONE; /* so we don't pretend we have a file */
     }
   else
     {
@@ -161,14 +161,14 @@ server_log_init_file (const char *filepath,
 
 void
 server_log_init (const char *prog_tag,
-		 const char *prefix,
-		 int facility, int echo_stderr, int max_level)
+                 const char *prefix,
+                 int facility, int echo_stderr, int max_level)
 {
   pthread_mutex_lock (&g_lock);
   g_backend = BACKEND_SYSLOG;
   g_echo_stderr = echo_stderr ? 1 : 0;
   g_level_max = (max_level < LOG_EMERG) ? LOG_EMERG :
-    (max_level > LOG_DEBUG) ? LOG_DEBUG : max_level;
+                (max_level > LOG_DEBUG) ? LOG_DEBUG : max_level;
   if (prefix && *prefix)
     {
       snprintf (g_prefix, sizeof g_prefix, "%s", prefix);
@@ -208,13 +208,13 @@ server_log_reopen (void)
 
 
       if (fd >= 0)
-	{
-	  if (g_fd != -1)
-	    {
-	      close (g_fd);
-	    }
-	  g_fd = fd;
-	}
+        {
+          if (g_fd != -1)
+            {
+              close (g_fd);
+            }
+          g_fd = fd;
+        }
     }
   pthread_mutex_unlock (&g_lock);
 }
@@ -271,7 +271,7 @@ server_log_vprintf (int priority, const char *fmt, va_list ap)
   vsnprintf (msgbuf, sizeof msgbuf, fmt ? fmt : "", ap);
   char line[1600];
   int n = snprintf (line, sizeof line, "%s %s%s",
-		    when, prefix, msgbuf);
+                    when, prefix, msgbuf);
 
 
   if (n < 0)
@@ -286,10 +286,10 @@ server_log_vprintf (int priority, const char *fmt, va_list ap)
   if (n == 0 || line[n - 1] != '\n')
     {
       if (n < (int) sizeof (line) - 1)
-	{
-	  line[n++] = '\n';
-	  line[n] = 0;
-	}
+        {
+          line[n++] = '\n';
+          line[n] = 0;
+        }
     }
   if (be == BACKEND_FILE && fd >= 0)
     {
@@ -315,3 +315,4 @@ server_log_printf (int priority, const char *fmt, ...)
   server_log_vprintf (priority, fmt, ap);
   va_end (ap);
 }
+

@@ -15,12 +15,12 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <jansson.h>		/* -ljansson */
+#include <jansson.h>            /* -ljansson */
 #include <stdbool.h>
 #include <sqlite3.h>
 #include <netinet/in.h>
 /* local includes */
-#include "database.h"
+
 #include "schemas.h"
 #include "errors.h"
 #include "config.h"
@@ -41,7 +41,7 @@ typedef struct
   int player_id;
   int ship_id;
   int sector_id;
-  int corp_id;			// Added for corporation ID
+  int corp_id;                  // Added for corporation ID
   /* --- rate limit hints --- */
   time_t rl_window_start;
   int rl_count;
@@ -49,7 +49,7 @@ typedef struct
   int rl_window_sec;
 
   /* --- bulk execution capture --- */
-  json_t *captured_envelopes;	// If non-NULL, responses are appended here instead of sent
+  json_t *captured_envelopes;   // If non-NULL, responses are appended here instead of sent
 } client_ctx_t;
 // Structure to represent a commodity's essential data
 typedef struct
@@ -57,7 +57,7 @@ typedef struct
   int id;
   const char *code;
   const char *name;
-  bool is_illegal;		// From commodities.illegal
+  bool is_illegal;              // From commodities.illegal
   // Add other relevant commodity fields if needed, e.g., base_price, volatility
 } commodity_t;
 // A simple structure to represent the result of the comsume player turn function
@@ -164,10 +164,10 @@ enum porttype
 extern int *usedNames;
 extern time_t *timeptr;
 /* ships.flags bitmask */
-#define SHIPF_FOR_SALE   0x0001	/* Owner intends to sell at Stardock */
-#define SHIPF_LOCKED     0x0002	/* Cannot be claimed (admin/quest/Fed/NPC protected) */
-#define SHIPF_NO_TRADE   0x0004	/* Cannot be traded/sold at any port */
-#define SHIPF_NPC        0x0008	/* Piloted by NPC subsystem when assigned */
+#define SHIPF_FOR_SALE   0x0001 /* Owner intends to sell at Stardock */
+#define SHIPF_LOCKED     0x0002 /* Cannot be claimed (admin/quest/Fed/NPC protected) */
+#define SHIPF_NO_TRADE   0x0004 /* Cannot be traded/sold at any port */
+#define SHIPF_NPC        0x0008 /* Piloted by NPC subsystem when assigned */
 
 
 /* Bit helpers */
@@ -223,7 +223,7 @@ typedef struct
   int asset_type;
   int offensive_setting;
   int quantity;
-  time_t ttl;			// Using time_t for UNIX epoch expiry
+  time_t ttl;                   // Using time_t for UNIX epoch expiry
   time_t deployed_at;
 } sector_asset_t;
 // Structure to represent a ship's combat-relevant stats for damage application
@@ -244,16 +244,16 @@ typedef struct
 typedef struct
 {
   int sector_id;
-  int armid_triggered;		/* total exploded */
-  int armid_remaining;		/* sum of remaining hostile mines after updates */
-  int limpet_triggered;		/* total limpets triggered */
-  int limpet_remaining;		/* sum of remaining limpets after updates */
+  int armid_triggered;          /* total exploded */
+  int armid_remaining;          /* sum of remaining hostile mines after updates */
+  int limpet_triggered;         /* total limpets triggered */
+  int limpet_remaining;         /* sum of remaining limpets after updates */
   int shields_lost;
   int fighters_lost;
   int hull_lost;
   bool destroyed;
 } armid_encounter_t;
-void now_iso8601 (char out[25]);	/* "YYYY-MM-DDTHH:MM:SSZ" */
+void now_iso8601 (char out[25]);        /* "YYYY-MM-DDTHH:MM:SSZ" */
 /* Remove ANSI escape sequences from src into dst (cap bytes incl NUL). */
 void strip_ansi (char *dst, const char *src, size_t cap);
 const char *get_tow_reason_string (int reason_code);
@@ -263,8 +263,8 @@ double rand_range (double min, double max);
 double clamp (double value, double min, double max);
 int get_random_int (int min, int max);
 // JSON helper functions (prototypes)
-bool json_get_int_flexible (json_t * data_obj, const char *key, int *out_val);
-const char *json_get_string_or_null (json_t * data_obj, const char *key);
+bool json_get_int_flexible (json_t *data_obj, const char *key, int *out_val);
+const char *json_get_string_or_null (json_t *data_obj, const char *key);
 
 // Global Atomic Counters
 extern atomic_int_fast64_t g_trades_executed;

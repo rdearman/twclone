@@ -51,7 +51,7 @@ int db_session_lookup (const char *token,
                        int *out_player_id,
                        long long *out_expires);
 /* Cleanup */
-void db_close (void);
+// void db_close (void); // Moved to db_api.h
 // Bank accounts
 int db_bank_account_create_default_for_player (sqlite3 *db, int player_id);
 

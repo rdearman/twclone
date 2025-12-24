@@ -89,7 +89,8 @@ db_begin_transaction (sqlite3 *db)
           return SQLITE_OK;
         }
 
-      if (rc == SQLITE_BUSY || rc == SQLITE_LOCKED || rc == 5 /* SQLITE_BUSY_SNAPSHOT */)
+      if (rc == SQLITE_BUSY || rc == SQLITE_LOCKED ||
+          rc == 5 /* SQLITE_BUSY_SNAPSHOT */)
         {
           // jitter 10–50ms
           usleep ((10 + (rand () % 41)) * 1000);
@@ -3320,12 +3321,15 @@ db_get_int_config (sqlite3 *db, const char *key, int *out)
     {
       const char *val_str = (const char *)sqlite3_column_text (stmt, 0);
 
+
       if (val_str)
         {
           char *endptr;
 
+
           errno = 0;
           long val = strtol (val_str, &endptr, 10);
+
 
           if (errno == 0 && endptr != val_str && *endptr == '\0')
             {

@@ -1,66 +1,66 @@
 #ifndef SERVER_COMMUNICATION_H
 #define SERVER_COMMUNICATION_H
 #include <jansson.h>
-#include "common.h"		// client_ctx_t
+#include "common.h"             // client_ctx_t
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 /* ---- system notices (persistent) ---- */
-  int cmd_sys_notice_create (client_ctx_t * ctx, json_t * root);	// "sys.notice.create"
-  int cmd_notice_list (client_ctx_t * ctx, json_t * root);	// "notice.list"
-  int cmd_notice_ack (client_ctx_t * ctx, json_t * root);	// "notice.ack"
+int cmd_sys_notice_create (client_ctx_t *ctx, json_t *root);            // "sys.notice.create"
+int cmd_notice_list (client_ctx_t *ctx, json_t *root);          // "notice.list"
+int cmd_notice_ack (client_ctx_t *ctx, json_t *root);           // "notice.ack"
 /* ---- chat.* ---- */
-  int cmd_chat_send (client_ctx_t * ctx, json_t * root);	// "chat.send"
-  int cmd_chat_broadcast (client_ctx_t * ctx, json_t * root);	// "chat.broadcast"
-  int cmd_chat_history (client_ctx_t * ctx, json_t * root);	// "chat.history"
+int cmd_chat_send (client_ctx_t *ctx, json_t *root);            // "chat.send"
+int cmd_chat_broadcast (client_ctx_t *ctx, json_t *root);       // "chat.broadcast"
+int cmd_chat_history (client_ctx_t *ctx, json_t *root);         // "chat.history"
 /* ---- mail.* ---- */
-  int cmd_mail_send (client_ctx_t * ctx, json_t * root);	// "mail.send"
-  int cmd_mail_inbox (client_ctx_t * ctx, json_t * root);	// "mail.inbox"
-  int cmd_mail_read (client_ctx_t * ctx, json_t * root);	// "mail.read"
-  int cmd_mail_delete (client_ctx_t * ctx, json_t * root);	// "mail.delete"
+int cmd_mail_send (client_ctx_t *ctx, json_t *root);            // "mail.send"
+int cmd_mail_inbox (client_ctx_t *ctx, json_t *root);           // "mail.inbox"
+int cmd_mail_read (client_ctx_t *ctx, json_t *root);            // "mail.read"
+int cmd_mail_delete (client_ctx_t *ctx, json_t *root);          // "mail.delete"
 /* ---- subscribe.* ---- */
-  int cmd_subscribe_add (client_ctx_t * ctx, json_t * root);	// "subscribe.add"
-  int cmd_subscribe_remove (client_ctx_t * ctx, json_t * root);	// "subscribe.remove"
-  int cmd_subscribe_list (client_ctx_t * ctx, json_t * root);	// "subscribe.list"
-  int cmd_subscribe_catalog (client_ctx_t * ctx, json_t * root);
+int cmd_subscribe_add (client_ctx_t *ctx, json_t *root);        // "subscribe.add"
+int cmd_subscribe_remove (client_ctx_t *ctx, json_t *root);     // "subscribe.remove"
+int cmd_subscribe_list (client_ctx_t *ctx, json_t *root);       // "subscribe.list"
+int cmd_subscribe_catalog (client_ctx_t *ctx, json_t *root);
 /*admin */
-  int cmd_admin_notice (client_ctx_t * ctx, json_t * root);
-  int cmd_admin_shutdown_warning (client_ctx_t * ctx, json_t * root);
+int cmd_admin_notice (client_ctx_t *ctx, json_t *root);
+int cmd_admin_shutdown_warning (client_ctx_t *ctx, json_t *root);
 /* Optional: free subs for a disconnected client; call from your disconnect path */
-  void comm_clear_subscriptions (client_ctx_t * ctx);
+void comm_clear_subscriptions (client_ctx_t *ctx);
 
 /* Publish an event to subscribers of sector.* and sector.{sector_id}.
    Ownership: this function steals a ref to 'data' (it will json_decref it). */
-  void comm_publish_sector_event (int sector_id, const char *event_name,
-				  json_t * data);
-  void comm_publish_sector_event (int sector_id, const char *event_name,
-				  json_t * data);
+void comm_publish_sector_event (int sector_id, const char *event_name,
+                                json_t *data);
+void comm_publish_sector_event (int sector_id, const char *event_name,
+                                json_t *data);
 /* ---- Ephemeral gameplay/admin broadcast ---- */
-  typedef enum
-  {
-    COMM_SCOPE_GLOBAL = 0,	/* topic: broadcast.global */
-    COMM_SCOPE_SECTOR,		/* topic: sector.{id}     */
-    COMM_SCOPE_CORP,		/* topic: corp.{id}       */
-    COMM_SCOPE_PLAYER		/* topic: player.{id}     */
-  } comm_scope_t;
+typedef enum
+{
+  COMM_SCOPE_GLOBAL = 0,        /* topic: broadcast.global */
+  COMM_SCOPE_SECTOR,            /* topic: sector.{id}     */
+  COMM_SCOPE_CORP,              /* topic: corp.{id}       */
+  COMM_SCOPE_PLAYER             /* topic: player.{id}     */
+} comm_scope_t;
 
 /* Sends a transient broadcast to subscribed clients only.
    - message: short, human-readable string (required)
    - extra: optional JSON payload to attach (steals a ref; pass NULL if none)
    Envelope: { status:"ok", type:"broadcast.message_v1", data:{...}, meta:{topic}}
  */
-  void comm_broadcast_message (comm_scope_t scope, long long scope_id,
-			       const char *message, json_t * extra);
-  void push_unseen_notices_for_player (client_ctx_t * ctx, int player_id);
+void comm_broadcast_message (comm_scope_t scope, long long scope_id,
+                             const char *message, json_t *extra);
+void push_unseen_notices_for_player (client_ctx_t *ctx, int player_id);
 // Broadcast an event (type + payload) to all currently-connected players
 // who are subscribed (exact or domain.*). Data is borrowed (not stolen).
-  int server_broadcast_event (const char *event_type, json_t * data);
+int server_broadcast_event (const char *event_type, json_t *data);
 // Broadcast an event (type + payload) to all currently-connected players
 // in a specific sector. Payload is borrowed (not stolen).
-  int server_broadcast_to_sector (int sector_id, const char *event_name,
-				  json_t * payload);
+int server_broadcast_to_sector (int sector_id, const char *event_name,
+                                json_t *payload);
 #ifdef __cplusplus
 }
 #endif
-#endif				/* SERVER_COMMUNICATION_H */
+#endif                          /* SERVER_COMMUNICATION_H */

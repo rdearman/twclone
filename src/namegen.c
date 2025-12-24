@@ -39,3 +39,4 @@ consellationName (char *name)
   sprintf (name, "%s", nameCollection[randIndex]);
   return name;
 }
+

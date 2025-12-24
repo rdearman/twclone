@@ -24,7 +24,7 @@
 # AM_CFLAGS = -Wall -Wextra
 AM_CFLAGS = -Wall -Wextra -D_GNU_SOURCE -I../src
 
-server_LDADD   	= -ljansson -lsqlite3 -lcrypto -lpthread -lm
+server_LDADD   	= -ljansson -lcrypto -lpthread -lm
 AUTOMAKE_OPTIONS = subdir-objects
 
 bin_PROGRAMS = \
@@ -32,11 +32,12 @@ bin_PROGRAMS = \
 	bigbang
 
 
+# BigBang sources (remains unchanged for now)
 if ENABLE_POSTGRES
 bigbang_SOURCES = \
 	../src/bigbang_pg_main.c \
 	../src/db/db_api.c \
-	../src/db/db_pg.c \
+	../src/db/pg/db_pg.c \
 	../src/common.c \
 	../src/server_log.c \
 	../src/globals.c
@@ -58,12 +59,11 @@ bigbang_LDADD = -ljansson -lsqlite3 -lcrypto -lpthread -lm
 endif
 
 
-server_SOURCES = \
+# Server sources (now with DB abstraction)
+server_abstracted_core_SOURCES = \
 	../src/common.c \
-	../src/database.c \
-	../src/database_cmd.c \
-	../src/database_market.c \
-	../src/db_player_settings.c \
+	../src/db/db_api.c \
+	../src/game_db.c \
 	../src/engine_consumer.c \
 	../src/globals.c \
 	../src/namegen.c \
@@ -86,7 +86,7 @@ server_SOURCES = \
 	../src/server_engine.c \
 	../src/server_envelope.c \
 	../src/server_log.c \
-	../src/server_loop.c \
+  ../src/server_loop.c \
 	../src/server_main.c \
 	../src/server_news.c \
 	../src/server_planets.c \
@@ -97,9 +97,17 @@ server_SOURCES = \
 	../src/server_stardock.c \
 	../src/server_universe.c \
 	../src/server_warp_post_processing.c \
-	../src/sysop_interaction.c \
-	../src/db/db_api.c
+	../src/sysop_interaction.c
 
 if ENABLE_POSTGRES
-server_SOURCES += ../src/db/db_pg.c
+server_SOURCES = $(server_abstracted_core_SOURCES) ../src/db/pg/db_pg.c
+server_LDADD += -lpq
+else
+server_SOURCES = $(server_abstracted_core_SOURCES) \
+	../src/db/sqlite/db_sqlite.c \
+	../src/database.c \
+	../src/database_cmd.c \
+	../src/database_market.c \
+	../src/db_player_settings.c
+server_LDADD += -lsqlite3
 endif

@@ -292,7 +292,62 @@ END;
 $$;
 
 -- -----------------------------------------------------------------------------
--- 4) Bank batch jobs (interest / order processing)
+-- 4) Ship Cargo Management
+-- -----------------------------------------------------------------------------
+
+-- ship_update_cargo(ship_id, commodity_col, delta)
+-- Atomically updates a cargo column and ensures (total cargo <= holds).
+CREATE OR REPLACE FUNCTION ship_update_cargo(p_ship_id bigint, p_commodity text, p_delta bigint)
+RETURNS db_result
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_current_load bigint;
+  v_holds        bigint;
+  v_new_qty      bigint;
+  v_total_new    bigint;
+BEGIN
+  -- Validate commodity column name to prevent injection
+  IF p_commodity NOT IN ('ore','organics','equipment','colonists','slaves','weapons','drugs') THEN
+    RETURN (400, 'invalid commodity', NULL);
+  END IF;
+
+  -- Lock and fetch
+  SELECT (ore + organics + equipment + colonists + slaves + weapons + drugs), holds
+  INTO v_current_load, v_holds
+  FROM ships
+  WHERE id = p_ship_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN (404, 'ship not found', NULL);
+  END IF;
+
+  -- Get current qty of target
+  EXECUTE format('SELECT %I FROM ships WHERE id = $1', p_commodity)
+  INTO v_new_qty
+  USING p_ship_id;
+
+  v_new_qty := v_new_qty + p_delta;
+  v_total_new := v_current_load + p_delta;
+
+  IF v_new_qty < 0 THEN
+    RETURN (412, 'negative quantity', NULL);
+  END IF;
+
+  IF v_total_new > v_holds THEN
+    RETURN (409, 'holds full', NULL);
+  END IF;
+
+  EXECUTE format('UPDATE ships SET %I = $1 WHERE id = $2', p_commodity)
+  USING v_new_qty, p_ship_id;
+
+  RETURN (0, 'ok', v_new_qty);
+END;
+$$;
+
+-- -----------------------------------------------------------------------------
+-- 5) Bank batch jobs (interest / order processing)
 -- -----------------------------------------------------------------------------
 
 -- bank_apply_interest()

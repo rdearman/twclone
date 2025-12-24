@@ -113,11 +113,14 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
   char *owner_type = NULL;
   long long p_colonists = 0, p_ore = 0, p_org = 0, p_equip = 0;
 
+
   if (sqlite3_step (planet_st) == SQLITE_ROW)
     {
       planet_type = sqlite3_column_int (planet_st, 0);
       owner_id = sqlite3_column_int (planet_st, 1);
       const char *tmp = (const char *) sqlite3_column_text (planet_st, 2);
+
+
       /* sqlite: column_text() pointer invalid after finalize/reset/step */
       owner_type = tmp ? strdup (tmp) : NULL;
       p_colonists = sqlite3_column_int64 (planet_st, 3);
@@ -127,6 +130,7 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
     }
   sqlite3_finalize (planet_st);
   bool can_build = false;
+
 
   if (owner_type && strcmp (owner_type, "player") == 0)
     {
@@ -138,6 +142,7 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
   else if (owner_type && strcmp (owner_type, "corp") == 0)
     {
       int player_corp_id = h_get_player_corp_id (db, ctx->player_id);
+
 
       if (player_corp_id > 0 && player_corp_id == owner_id)
         {
@@ -161,6 +166,7 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
   int current_level = 0;
   char *construction_status = NULL;
 
+
   if (sqlite3_prepare_v2 (db, sql_citadel, -1, &citadel_st, NULL) ==
       SQLITE_OK)
     {
@@ -169,6 +175,8 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
         {
           current_level = sqlite3_column_int (citadel_st, 0);
           const char *tmp = (const char *) sqlite3_column_text (citadel_st, 1);
+
+
           /* sqlite: column_text() pointer invalid after finalize/reset/step */
           construction_status = tmp ? strdup (tmp) : NULL;
         }
@@ -272,8 +280,11 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
   // 5. Execute Upgrade
   if (db_begin_transaction (db) != SQLITE_OK)
     {
-       send_response_error (ctx, root, ERR_SERVER_ERROR, "Database busy (upgrade)");
-       return 0;
+      send_response_error (ctx,
+                           root,
+                           ERR_SERVER_ERROR,
+                           "Database busy (upgrade)");
+      return 0;
     }
 
   // Deduct resources

@@ -3,8 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "database.h"		// db_get_handle()
-#include "db_player_settings.h"	// our prototypes
+#include "database.h"           // db_get_handle()
+#include "db_player_settings.h" // our prototypes
 static sqlite3 *g_db_ps = NULL;
 
 
@@ -29,14 +29,14 @@ type_to_s (pref_type t)
 {
   switch (t)
     {
-    case PT_BOOL:
-      return "bool";
-    case PT_INT:
-      return "int";
-    case PT_STRING:
-      return "string";
-    case PT_JSON:
-      return "json";
+      case PT_BOOL:
+        return "bool";
+      case PT_INT:
+        return "int";
+      case PT_STRING:
+        return "string";
+      case PT_JSON:
+        return "json";
     }
   return "string";
 }
@@ -48,7 +48,7 @@ type_to_s (pref_type t)
 /* Upsert a single preference (typed) */
 int
 db_prefs_set_one (int64_t pid, const char *key, pref_type t,
-		  const char *value)
+                  const char *value)
 {
   if (!key || !value)
     {
@@ -96,8 +96,8 @@ db_prefs_get_one (int64_t player_id, const char *key, char **out_value)
 
 
   if (prep (g_db_ps,
-	    &st,
-	    "SELECT value FROM player_prefs WHERE player_id=?1 AND key=?2 LIMIT 1;")
+            &st,
+            "SELECT value FROM player_prefs WHERE player_id=?1 AND key=?2 LIMIT 1;")
       != SQLITE_OK)
     {
       return -1;
@@ -113,14 +113,14 @@ db_prefs_get_one (int64_t player_id, const char *key, char **out_value)
 
 
       if (txt)
-	{
-	  *out_value = strdup ((const char *) txt);	// caller frees
-	}
+        {
+          *out_value = strdup ((const char *) txt);     // caller frees
+        }
       rc = SQLITE_OK;
     }
   else if (rc == SQLITE_DONE)
     {
-      rc = SQLITE_OK;		// not found → *out_value stays NULL
+      rc = SQLITE_OK;           // not found → *out_value stays NULL
     }
   sqlite3_finalize (st);
   return rc;
@@ -159,21 +159,21 @@ db_get_player_pref_int (int player_id, const char *key, int default_value)
 
 int
 db_get_player_pref_string (int player_id, const char *key,
-			   const char *default_value, char *out_buffer,
-			   size_t buffer_size)
+                           const char *default_value, char *out_buffer,
+                           size_t buffer_size)
 {
   char *value_str = NULL;
   if (db_prefs_get_one (player_id, key, &value_str) != 0 || !value_str)
     {
       if (default_value)
-	{
-	  strncpy (out_buffer, default_value, buffer_size - 1);
-	  out_buffer[buffer_size - 1] = '\0';
-	}
+        {
+          strncpy (out_buffer, default_value, buffer_size - 1);
+          out_buffer[buffer_size - 1] = '\0';
+        }
       else
-	{
-	  out_buffer[0] = '\0';
-	}
+        {
+          out_buffer[0] = '\0';
+        }
       return 0;
     }
   strncpy (out_buffer, value_str, buffer_size - 1);
@@ -186,7 +186,7 @@ db_get_player_pref_string (int player_id, const char *key,
 /* ---------- Subscriptions ---------- */
 int
 db_subscribe_upsert (int64_t pid, const char *topic, const char *filter_json,
-		     int locked)
+                     int locked)
 {
   static const char *SQL =
     "INSERT INTO subscriptions(player_id,event_type,delivery,filter_json,locked,enabled)"
@@ -246,7 +246,7 @@ db_subscribe_disable (int64_t pid, const char *topic, int *was_locked)
     }
   if (locked)
     {
-      return +1;		/* signal LOCKED to caller */
+      return +1;                /* signal LOCKED to caller */
     }
   if (prep (g_db_ps, &st, SQL_DISABLE) != SQLITE_OK)
     {
@@ -391,7 +391,7 @@ db_avoid_list (int64_t pid, sqlite3_stmt **it)
 /* ---------- Notes ---------- */
 int
 db_note_set (int64_t pid, const char *scope, const char *key,
-	     const char *note)
+             const char *note)
 {
   static const char *SQL =
     "INSERT INTO player_notes(player_id,scope,key,note,updated_at)"
@@ -441,26 +441,26 @@ db_note_list (int64_t pid, const char *scope, sqlite3_stmt **it)
   if (scope)
     {
       static const char *SQL =
-	"SELECT scope,key,note FROM player_notes WHERE player_id=?1 AND scope=?2 ORDER BY key;";
+        "SELECT scope,key,note FROM player_notes WHERE player_id=?1 AND scope=?2 ORDER BY key;";
 
 
       if (prep (g_db_ps, it, SQL) != SQLITE_OK)
-	{
-	  return -1;
-	}
+        {
+          return -1;
+        }
       sqlite3_bind_int64 (*it, 1, pid);
       sqlite3_bind_text (*it, 2, scope, -1, SQLITE_TRANSIENT);
     }
   else
     {
       static const char *SQL =
-	"SELECT scope,key,note FROM player_notes WHERE player_id=?1 ORDER BY scope,key;";
+        "SELECT scope,key,note FROM player_notes WHERE player_id=?1 ORDER BY scope,key;";
 
 
       if (prep (g_db_ps, it, SQL) != SQLITE_OK)
-	{
-	  return -1;
-	}
+        {
+          return -1;
+        }
       sqlite3_bind_int64 (*it, 1, pid);
     }
   return 0;
@@ -469,7 +469,7 @@ db_note_list (int64_t pid, const char *scope, sqlite3_stmt **it)
 
 int
 db_for_each_subscriber (sqlite3 *db, const char *event_type, player_id_cb cb,
-			void *arg)
+                        void *arg)
 {
   if (!db || !event_type || !cb)
     {
@@ -518,9 +518,9 @@ db_for_each_subscriber (sqlite3 *db, const char *event_type, player_id_cb cb,
 
 
       if (cb (player_id, arg) != 0)
-	{			// cb can stop early by returning non-zero
-	  break;
-	}
+        {                       // cb can stop early by returning non-zero
+          break;
+        }
     }
   int ok = (rc == SQLITE_ROW || rc == SQLITE_DONE) ? 0 : -1;
 
@@ -528,3 +528,4 @@ db_for_each_subscriber (sqlite3 *db, const char *event_type, player_id_cb cb,
   sqlite3_finalize (st);
   return ok;
 }
+

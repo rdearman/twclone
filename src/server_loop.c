@@ -16,7 +16,7 @@
 #include <arpa/inet.h>
 #include <jansson.h>            /* -ljansson */
 #include <stdbool.h>
-#include <sqlite3.h>
+
 /* local includes */
 #include "database.h"
 #include "schemas.h"
@@ -762,90 +762,120 @@ server_broadcast_to_all_online (json_t *data)
 
 
 static int
-broadcast_sweep_once (sqlite3 *db, int max_rows)
+broadcast_sweep_once (db_t *db, int max_rows)
 {
-  sqlite3_stmt *st = NULL;
-  int rc;
+  db_res_t *res = NULL; // Changed from sqlite3_stmt
   int rows = 0;
+  db_error_t err;
+  db_error_clear (&err);
 
   static const char *sql =
     "SELECT id, created_at, title, body, severity, expires_at "
     "FROM system_notice "
     "WHERE id NOT IN ("
-    "    SELECT notice_id FROM notice_seen WHERE player_id = 0"
+    "    SELECT notice_id FROM notice_seen WHERE player_id = $1" // Changed to $1
     ") "
     "ORDER BY created_at ASC, id ASC "
-    "LIMIT ?1;";
+    "LIMIT $2;"; // Changed to $2
+
 
   /* Begin a read transaction.
    * IMMEDIATE prevents us from starting if a writer already holds the lock.
    */
-  rc = sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, NULL);
-  if (rc == SQLITE_BUSY || rc == SQLITE_LOCKED)
+  if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
     {
-      /* DB under pressure — skip this sweep */
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      return 0;
-    }
-  if (rc != SQLITE_OK)
-    {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      if (err.code == ERR_DB_BUSY || err.code == ERR_DB_LOCKED)
+        {
+          /* DB under pressure — skip this sweep */
+          db_tx_rollback (db, &err); // Rollback to release any partial locks
+          return 0;
+        }
+      // TODO: Proper logging for other errors
+      db_tx_rollback (db, &err);
       return -1;
     }
 
-  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
-  if (rc == SQLITE_BUSY || rc == SQLITE_LOCKED)
+  db_bind_t params[] = {
+    db_bind_i32 (0), // Corresponds to $1 in the SQL query: player_id = 0
+    db_bind_i32 (max_rows) // Corresponds to $2 in the SQL query: LIMIT max_rows
+  };
+  size_t n_params = sizeof(params) / sizeof(params[0]);
+
+
+  if (!db_query (db, sql, params, n_params, &res, &err))
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      return 0;
-    }
-  if (rc != SQLITE_OK)
-    {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      if (err.code == ERR_DB_BUSY || err.code == ERR_DB_LOCKED)
+        {
+          db_tx_rollback (db, &err);
+          return 0;
+        }
+      // TODO: Proper logging for other errors
+      db_tx_rollback (db, &err);
       return -1;
     }
 
-  sqlite3_bind_int (st, 1, max_rows);
-
-  while ((rc = sqlite3_step (st)) == SQLITE_ROW)
+  while (db_res_step (res, &err))
     {
       /* Extract fields */
-      int notice_id = sqlite3_column_int (st, 0);
+      int notice_id = db_res_col_i32 (res, 0, &err); // Column 0 is 'id'
 
+
+      // Check for error during column extraction
+      if (err.code != 0)
+        {
+          // TODO: Proper logging for error
+          db_res_finalize (res);
+          db_tx_rollback (db, &err);
+          return -1;
+        }
 
       /* Broadcast notice to clients */
       //broadcast_notice_row(st);
 
       /* Mark as seen for system player (player_id = 0) */
-      rc = db_notice_mark_seen (notice_id, 0);
-      if (rc == SQLITE_BUSY || rc == SQLITE_LOCKED)
+      int rc_mark_seen = db_notice_mark_seen (db, notice_id, 0); // This still assumes an int return.
+
+
+      // This function will need to be refactored next.
+      if (rc_mark_seen == SQLITE_BUSY || rc_mark_seen == SQLITE_LOCKED)
         {
-          sqlite3_finalize (st);
-          sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+          db_res_finalize (res);
+          db_tx_rollback (db, &err);
           return 0;
         }
-      if (rc != SQLITE_OK)
+      if (rc_mark_seen != SQLITE_OK) // Keep original check for now
         {
-          sqlite3_finalize (st);
-          sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+          db_res_finalize (res);
+          db_tx_rollback (db, &err);
           return -1;
         }
 
       rows++;
     }
 
-  sqlite3_finalize (st);
+  db_res_finalize (res);
 
-  if (rc != SQLITE_DONE)
+  // Check if db_res_step exited due to an error, not just end of rows
+  if (err.code != 0 && err.code != ERR_DB_NO_ROWS)   // ERR_DB_NO_ROWS means end of data, not an error
+  // TODO: Proper logging for error
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_tx_rollback (db, &err);
       return -1;
     }
 
-  rc = sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
-  if (rc != SQLITE_OK)
+  // Check if db_res_step exited due to an error, not just end of rows
+  if (err.code != 0 && err.code != ERR_DB_NO_ROWS)   // ERR_DB_NO_ROWS means end of data, not an error
+  // TODO: Proper logging for error
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_tx_rollback (db, &err);
+      return -1;
+    }
+
+  // Now handle commit/rollback
+  if (!db_tx_commit (db, &err))
+    {
+      // TODO: Proper logging for error
+      db_tx_rollback (db, &err);
       return -1;
     }
 
@@ -1076,6 +1106,8 @@ rl_build_meta (const client_ctx_t *ctx)
       remaining = 0;
     }
   json_t *root = json_object ();
+
+
   json_object_set_new (root, "limit", json_integer (ctx->rl_limit));
   json_object_set_new (root, "remaining", json_integer (remaining));
   json_object_set_new (root, "reset", json_integer (reset));

@@ -71,7 +71,6 @@ send_response_ok_take (client_ctx_t *ctx,
     {
       json_decref (data); /* FIX: Manually fulfill the "steal" contract */
     }
-  
 }
 
 
@@ -232,6 +231,8 @@ cmd_system_cmd_list (client_ctx_t *ctx, json_t *root)
     }
 
   json_t *data = json_object ();
+
+
   json_object_set_new (data, "commands", arr); /* FIX: Use _new to steal ownership */
   json_object_set_new (data, "count", json_integer ((int) n));
 
@@ -424,6 +425,7 @@ make_default_meta (void)
   json_object_set_new (rate, "reset", json_integer (60));
   json_t *meta = json_object ();
 
+
   json_object_set_new (meta, "rate_limit", rate);
   return meta;
 }
@@ -552,6 +554,8 @@ send_enveloped_refused (int fd,
   json_object_set_new (resp, "status", json_string ("refused"));
   json_object_set_new (resp, "type", json_string ("error"));
   json_t *err = json_object ();
+
+
   json_object_set_new (err, "code", json_integer (code));
   json_object_set_new (err, "message", json_string (msg ? msg : ""));
 
@@ -651,6 +655,8 @@ send_response_error (client_ctx_t *ctx, json_t *req, int code, const char *msg)
       json_object_set_new (resp, "status", json_string ("error"));
       json_object_set_new (resp, "type", json_string ("error"));
       json_t *err = json_object ();
+
+
       json_object_set_new (err, "code", json_integer (code));
       json_object_set_new (err, "message", json_string (msg ? msg : ""));
 
@@ -698,6 +704,8 @@ send_response_refused (client_ctx_t *ctx,
       json_object_set_new (resp, "status", json_string ("refused"));
       json_object_set_new (resp, "type", json_string ("error"));
       json_t *err = json_object ();
+
+
       json_object_set_new (err, "code", json_integer (code));
       json_object_set_new (err, "message", json_string (msg ? msg : ""));
 
@@ -824,6 +832,8 @@ s2s_make_env (const char *type, const char *src, const char *dst,
   json_t *pl = borrow_or_empty_obj (payload);
   /* NOTE: No "auth" here. Transport layer will add it before sending. */
   json_t *env = json_object ();
+
+
   json_object_set_new (env, "v", json_integer (1));
   json_object_set_new (env, "type", json_string (type));
   json_object_set_new (env, "id", json_string (id));
@@ -857,6 +867,8 @@ s2s_make_ack (const char *src, const char *dst, const char *ack_of,
   time_t now = time (NULL);
   json_t *pl = borrow_or_empty_obj (payload);
   json_t *env = json_object ();
+
+
   json_object_set_new (env, "v", json_integer (1));
   json_object_set_new (env, "type", json_string ("s2s.ack"));
   json_object_set_new (env, "id", json_string (id));
@@ -893,6 +905,8 @@ s2s_make_error (const char *src, const char *dst,
   time_t now = time (NULL);
   json_t *det = details ? json_incref (details), details : json_object ();
   json_t *err = json_object ();
+
+
   json_object_set_new (err, "code", json_string (code));
   json_object_set_new (err, "message", json_string (message ? message : ""));
   json_object_set (err, "details", det);
@@ -900,6 +914,8 @@ s2s_make_error (const char *src, const char *dst,
 
   json_decref (det);
   json_t *env = json_object ();
+
+
   json_object_set_new (env, "v", json_integer (1));
   json_object_set_new (env, "type", json_string ("s2s.error"));
   json_object_set_new (env, "id", json_string (id));

@@ -59,11 +59,11 @@ int
 h_player_is_npc (sqlite3 *db, int player_id)
 {
   sqlite3_stmt *stmt = NULL;
-  int is_npc = 0;		// Default to 0 (false) if player not found or error
+  int is_npc = 0;               // Default to 0 (false) if player not found or error
 
   if (sqlite3_prepare_v2 (db,
-			  "SELECT is_npc FROM players WHERE id = ?",
-			  -1, &stmt, NULL) != SQLITE_OK)
+                          "SELECT is_npc FROM players WHERE id = ?",
+                          -1, &stmt, NULL) != SQLITE_OK)
     {
       return 0;
     }
@@ -90,9 +90,9 @@ is_ascii_printable (const char *s)
   for (const unsigned char *p = (const unsigned char *)s; *p; ++p)
     {
       if (*p < 0x20 || *p > 0x7E)
-	{
-	  return 0;
-	}
+        {
+          return 0;
+        }
     }
   return 1;
 }
@@ -125,10 +125,10 @@ is_valid_key (const char *s, size_t max)
 
 
       if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' ||
-	    c == '_' || c == '-'))
-	{
-	  return 0;
-	}
+            c == '_' || c == '-'))
+        {
+          return 0;
+        }
     }
   return 1;
 }
@@ -171,8 +171,10 @@ bookmarks_as_array (int64_t pid)
   sqlite3 *db = db_get_handle ();
   sqlite3_stmt *st = NULL;
   if (sqlite3_prepare_v2 (db,
-			  "SELECT name, sector_id FROM player_bookmarks WHERE player_id=?1 ORDER BY name",
-			  -1, &st, NULL) != SQLITE_OK)
+                          "SELECT name, sector_id FROM player_bookmarks WHERE player_id=?1 ORDER BY name",
+                          -1,
+                          &st,
+                          NULL) != SQLITE_OK)
     {
       return json_array ();
     }
@@ -189,7 +191,7 @@ bookmarks_as_array (int64_t pid)
 
       json_object_set_new (bm_obj, "name", json_string (name ? name : ""));
       json_object_set_new (bm_obj, "sector_id",
-			   json_integer (sqlite3_column_int (st, 1)));
+                           json_integer (sqlite3_column_int (st, 1)));
       json_array_append_new (arr, bm_obj);
     }
   sqlite3_finalize (st);
@@ -203,8 +205,10 @@ avoid_as_array (int64_t pid)
   sqlite3 *db = db_get_handle ();
   sqlite3_stmt *st = NULL;
   if (sqlite3_prepare_v2 (db,
-			  "SELECT sector_id FROM player_avoid WHERE player_id=?1 ORDER BY sector_id",
-			  -1, &st, NULL) != SQLITE_OK)
+                          "SELECT sector_id FROM player_avoid WHERE player_id=?1 ORDER BY sector_id",
+                          -1,
+                          &st,
+                          NULL) != SQLITE_OK)
     {
       return json_array ();
     }
@@ -252,13 +256,13 @@ subscriptions_as_array (int64_t pid)
       json_object_set_new (one, "locked", json_boolean (locked ? 1 : 0));
       json_object_set_new (one, "enabled", json_boolean (enabled ? 1 : 0));
       json_object_set_new (one, "delivery",
-			   json_string (delivery ? delivery : "push"));
+                           json_string (delivery ? delivery : "push"));
 
 
       if (filter)
-	{
-	  json_object_set_new (one, "filter", json_string (filter));
-	}
+        {
+          json_object_set_new (one, "filter", json_string (filter));
+        }
       json_array_append_new (arr, one);
       free (topic);
       free (delivery);
@@ -295,7 +299,7 @@ players_list_notes (client_ctx_t *ctx, json_t *req)
 {
   (void) ctx;
   (void) req;
-  return json_array ();		/* Placeholder */
+  return json_array ();         /* Placeholder */
 }
 
 
@@ -311,41 +315,41 @@ get_turn_error_message (TurnConsumeResult result)
 {
   switch (result)
     {
-    case TURN_CONSUME_SUCCESS:
-      return "Turn consumed successfully.";
-    case TURN_CONSUME_ERROR_DB_FAIL:
-      return "Database failure prevented turn consumption.";
-    case TURN_CONSUME_ERROR_PLAYER_NOT_FOUND:
-      return "Player entity not found in turn registry.";
-    case TURN_CONSUME_ERROR_NO_TURNS:
-      return "You have run out of turns.";
-    default:
-      return "An unknown error occurred during turn consumption.";
+      case TURN_CONSUME_SUCCESS:
+        return "Turn consumed successfully.";
+      case TURN_CONSUME_ERROR_DB_FAIL:
+        return "Database failure prevented turn consumption.";
+      case TURN_CONSUME_ERROR_PLAYER_NOT_FOUND:
+        return "Player entity not found in turn registry.";
+      case TURN_CONSUME_ERROR_NO_TURNS:
+        return "You have run out of turns.";
+      default:
+        return "An unknown error occurred during turn consumption.";
     }
 }
 
 
 int
 handle_turn_consumption_error (client_ctx_t *ctx,
-			       TurnConsumeResult consume_result,
-			       const char *cmd, json_t *root,
-			       json_t *meta_data)
+                               TurnConsumeResult consume_result,
+                               const char *cmd, json_t *root,
+                               json_t *meta_data)
 {
   const char *reason_str = NULL;
   switch (consume_result)
     {
-    case TURN_CONSUME_ERROR_DB_FAIL:
-      reason_str = "db_failure";
-      break;
-    case TURN_CONSUME_ERROR_PLAYER_NOT_FOUND:
-      reason_str = "player_not_found";
-      break;
-    case TURN_CONSUME_ERROR_NO_TURNS:
-      reason_str = "no_turns_remaining";
-      break;
-    default:
-      reason_str = "unknown_error";
-      break;
+      case TURN_CONSUME_ERROR_DB_FAIL:
+        reason_str = "db_failure";
+        break;
+      case TURN_CONSUME_ERROR_PLAYER_NOT_FOUND:
+        reason_str = "player_not_found";
+        break;
+      case TURN_CONSUME_ERROR_NO_TURNS:
+        reason_str = "no_turns_remaining";
+        break;
+      default:
+        reason_str = "unknown_error";
+        break;
     }
   json_t *meta = meta_data ? json_copy (meta_data) : json_object ();
 
@@ -355,10 +359,10 @@ handle_turn_consumption_error (client_ctx_t *ctx,
       json_object_set_new (meta, "reason", json_string (reason_str));
       json_object_set_new (meta, "command", json_string (cmd));
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_REF_NO_TURNS,
-				   get_turn_error_message (consume_result),
-				   NULL);
+                                   root,
+                                   ERR_REF_NO_TURNS,
+                                   get_turn_error_message (consume_result),
+                                   NULL);
       json_decref (meta);
     }
   return 0;
@@ -367,7 +371,7 @@ handle_turn_consumption_error (client_ctx_t *ctx,
 
 TurnConsumeResult
 h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
-		       int turns_to_consume)
+                       int turns_to_consume)
 {
   sqlite3_stmt *stmt = NULL;
   int player_id = ctx->player_id;
@@ -404,7 +408,9 @@ h_consume_player_turn (sqlite3 *db_conn, client_ctx_t *ctx,
       return TURN_CONSUME_ERROR_NO_TURNS;
     }
 
-  const char *sql_update = "UPDATE turns SET turns_remaining = turns_remaining - ?, last_update = strftime('%s', 'now') " "WHERE player = ? AND turns_remaining >= ?;";	// Ensure turns don't go negative on concurrent access
+  const char *sql_update =
+    "UPDATE turns SET turns_remaining = turns_remaining - ?, last_update = strftime('%s', 'now') "
+    "WHERE player = ? AND turns_remaining >= ?;";                                                                                                                       // Ensure turns don't go negative on concurrent access
 
 
   rc = sqlite3_prepare_v2 (db_conn, sql_update, -1, &stmt, NULL);
@@ -447,7 +453,7 @@ h_get_player_bank_account_id (sqlite3 *db, int player_id)
 
 int
 h_get_credits (sqlite3 *db, const char *owner_type, int owner_id,
-	       long long *credits_out)
+               long long *credits_out)
 {
   sqlite3_stmt *st = NULL;
   const char *SQL_ENSURE =
@@ -532,7 +538,7 @@ player_credits (client_ctx_t *ctx)
 
 
   if (h_get_credits (db_get_handle (), "player", ctx->player_id,
-		     &c) != SQLITE_OK)
+                     &c) != SQLITE_OK)
     {
       return 0;
     }
@@ -545,7 +551,7 @@ cargo_space_free (client_ctx_t *ctx)
 {
   int f = 0;
   if (h_get_cargo_space_free (db_get_handle (), ctx->player_id,
-			      &f) != SQLITE_OK)
+                              &f) != SQLITE_OK)
     {
       return 0;
     }
@@ -555,16 +561,16 @@ cargo_space_free (client_ctx_t *ctx)
 
 int
 h_deduct_ship_credits (sqlite3 *db, int player_id, int amount,
-		       int *new_balance)
+                       int *new_balance)
 {
   long long new_balance_ll = 0;
   int rc = h_deduct_credits (db,
-			     "player",
-			     player_id,
-			     amount,
-			     "WITHDRAWAL",
-			     NULL,
-			     &new_balance_ll);
+                             "player",
+                             player_id,
+                             amount,
+                             "WITHDRAWAL",
+                             NULL,
+                             &new_balance_ll);
   if (rc == SQLITE_OK && new_balance)
     {
       *new_balance = (int) new_balance_ll;
@@ -579,8 +585,8 @@ h_get_player_sector (int player_id)
   sqlite3 *db = db_get_handle ();
   sqlite3_stmt *st = NULL;
   if (sqlite3_prepare_v2 (db,
-			  "SELECT COALESCE(sector, 0) FROM players WHERE id=?",
-			  -1, &st, NULL) != SQLITE_OK)
+                          "SELECT COALESCE(sector, 0) FROM players WHERE id=?",
+                          -1, &st, NULL) != SQLITE_OK)
     {
       return 0;
     }
@@ -592,9 +598,9 @@ h_get_player_sector (int player_id)
     {
       sector = sqlite3_column_int (st, 0);
       if (sector < 0)
-	{
-	  sector = 0;
-	}
+        {
+          sector = 0;
+        }
     }
   sqlite3_finalize (st);
   return sector;
@@ -602,119 +608,181 @@ h_get_player_sector (int player_id)
 
 
 int
-h_decloak_ship (sqlite3 *db, int ship_id)
+h_decloak_ship (db_t *db, int ship_id)
 {
+  if (!db || ship_id <= 0) return ERR_DB_MISUSE;
+
+  db_error_t err;
+  db_error_clear(&err);
+
   int player_id = 0;
-  sqlite3_stmt *st = NULL;
-  if (sqlite3_prepare_v2 (db,
-			  "SELECT player_id FROM ship_ownership WHERE ship_id=? AND is_primary=1",
-			  -1, &st, NULL) == SQLITE_OK)
-    {
-      sqlite3_bind_int (st, 1, ship_id);
-      if (sqlite3_step (st) == SQLITE_ROW)
-	{
-	  player_id = sqlite3_column_int (st, 0);
-	}
-      sqlite3_finalize (st);
-    }
-  int rc = SQLITE_ERROR;
+  const char *sql_sel = "SELECT player_id FROM ship_ownership WHERE ship_id=$1 AND is_primary=1";
+  db_bind_t p_sel[] = { db_bind_i32(ship_id) };
+  db_res_t *res_sel = NULL;
 
+  if (db_query(db, sql_sel, p_sel, 1, &res_sel, &err)) {
+      if (db_res_step(res_sel, &err)) {
+          player_id = db_res_col_i32(res_sel, 0, &err);
+      }
+      db_res_finalize(res_sel);
+  }
 
-  if (sqlite3_prepare_v2 (db,
-			  "UPDATE ships SET cloaked = NULL WHERE id = ? AND cloaked IS NOT NULL",
-			  -1, &st, NULL) == SQLITE_OK)
-    {
-      sqlite3_bind_int (st, 1, ship_id);
-      if (sqlite3_step (st) == SQLITE_DONE)
-	{
-	  if (sqlite3_changes (db) > 0 && player_id > 0)
-	    {
-	      h_send_message_to_player (player_id,
-					1,
-					"Uncloaking",
-					"Your ship's cloaking device has been deactivated.");
-	    }
-	  rc = SQLITE_OK;
-	}
-      sqlite3_finalize (st);
-    }
-  return (rc == SQLITE_OK) ? 0 : rc;
+  const char *sql_upd = "UPDATE ships SET cloaked = NULL WHERE id = $1 AND cloaked IS NOT NULL";
+  db_bind_t p_upd[] = { db_bind_i32(ship_id) };
+  
+  if (db_exec(db, sql_upd, p_upd, 1, &err)) {
+      if (db_exec_rows_affected(db) > 0 && player_id > 0) {
+          json_t *payload = json_object();
+          json_object_set_new(payload, "ship_id", json_integer(ship_id));
+          db_log_engine_event(time(NULL), "ship.decloak", "player", player_id, 0, payload, NULL);
+      }
+      return 0;
+  }
+
+  return err.code;
 }
 
 
 int
-h_player_apply_progress (sqlite3 *db,
-			 int player_id,
-			 long long delta_xp,
-			 int delta_align, const char *reason)
+h_player_apply_progress (db_t *db,
+                         int player_id,
+                         long long delta_xp,
+                         int delta_align, const char *reason)
 {
   if (!db || player_id <= 0)
     {
-      return SQLITE_MISUSE;
+      return ERR_DB_MISUSE;
     }
-  sqlite3_stmt *st = NULL;
-  int cur_align = 0;
-  long long cur_xp = 0;
+
+  db_error_t err;
+  int retry_count;
+  int rc = 0;
 
 
-  if (sqlite3_prepare_v2 (db,
-			  "SELECT alignment, experience FROM players WHERE id=?",
-			  -1, &st, NULL) != SQLITE_OK)
+  for (retry_count = 0; retry_count < 3; retry_count++)
     {
-      return SQLITE_ERROR;
-    }
-  sqlite3_bind_int (st, 1, player_id);
-  if (sqlite3_step (st) == SQLITE_ROW)
-    {
-      cur_align = sqlite3_column_int (st, 0);
-      cur_xp = sqlite3_column_int64 (st, 1);
-    }
-  else
-    {
-      sqlite3_finalize (st);
-      return SQLITE_NOTFOUND;
-    }
-  sqlite3_finalize (st);
-  long long new_xp = cur_xp + delta_xp;
+      db_error_clear (&err);
+      rc = 0;
+
+      if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
+        {
+          if (err.code == ERR_DB_BUSY)
+            {
+              usleep (100000);
+              continue;
+            }
+          return err.code;
+        }
+
+      db_res_t *res = NULL;
+      int cur_align = 0;
+      long long cur_xp = 0;
+
+      const char *sql_select =
+        "SELECT alignment, experience FROM players WHERE id=$1 FOR UPDATE";
+      db_bind_t select_params[] = {
+        db_bind_i32 (player_id)
+      };
+      size_t n_select_params = sizeof(select_params) / sizeof(select_params[0]);
 
 
-  if (new_xp < 0)
-    {
-      new_xp = 0;
-    }
-  int new_align = cur_align + delta_align;
+      if (!db_query (db, sql_select, select_params, n_select_params, &res,
+                     &err))
+        {
+          LOGE ("h_player_apply_progress: Select query error: %s", err.message);
+          goto rollback;
+        }
+
+      if (db_res_step (res, &err))
+        {
+          cur_align = db_res_col_i32 (res, 0, &err);
+          cur_xp = db_res_col_i64 (res, 1, &err);
+        }
+      else
+        {
+          db_res_finalize (res);
+          if (err.code == ERR_DB_NO_ROWS)
+            {
+              rc = ERR_NOT_FOUND;
+            }
+          else
+            {
+              LOGE ("h_player_apply_progress: Player select fetch error: %s",
+                    err.message);
+            }
+          goto rollback;
+        }
+      db_res_finalize (res);
+
+      long long new_xp = cur_xp + delta_xp;
 
 
-  if (new_align > 2000)
-    {
-      new_align = 2000;
+      if (new_xp < 0)
+        {
+          new_xp = 0;
+        }
+      int new_align = cur_align + delta_align;
+
+
+      if (new_align > 2000)
+        {
+          new_align = 2000;
+        }
+      if (new_align < -2000)
+        {
+          new_align = -2000;
+        }
+
+      const char *sql_update =
+        "UPDATE players SET experience=$1, alignment=$2 WHERE id=$3";
+      db_bind_t update_params[] = {
+        db_bind_i64 (new_xp),
+        db_bind_i32 (new_align),
+        db_bind_i32 (player_id)
+      };
+      size_t n_update_params = sizeof(update_params) / sizeof(update_params[0]);
+
+
+      if (!db_exec (db, sql_update, update_params, n_update_params, &err))
+        {
+          LOGE ("h_player_apply_progress: Update query error: %s", err.message);
+          goto rollback;
+        }
+
+      rc = db_player_update_commission (db, player_id);
+      if (rc != 0)
+        {
+          goto rollback;
+        }
+
+      if (!db_tx_commit (db, &err))
+        {
+          LOGE ("h_player_apply_progress: Commit error: %s", err.message);
+          goto rollback;
+        }
+
+      LOGD ("Player %d progress updated. Reason: %s", player_id,
+            reason ? reason : "N/A");
+      return 0; // Success
+
+rollback:
+      db_tx_rollback (db, &err);
+      if (err.code == ERR_DB_BUSY)
+        {
+          usleep (100000);
+          continue;
+        }
+      return (rc != 0) ? rc : err.code;
     }
-  if (new_align < -2000)
-    {
-      new_align = -2000;
-    }
-  if (sqlite3_prepare_v2 (db,
-			  "UPDATE players SET experience=?, alignment=? WHERE id=?",
-			  -1, &st, NULL) != SQLITE_OK)
-    {
-      return SQLITE_ERROR;
-    }
-  sqlite3_bind_int64 (st, 1, new_xp);
-  sqlite3_bind_int (st, 2, new_align);
-  sqlite3_bind_int (st, 3, player_id);
-  sqlite3_step (st);
-  sqlite3_finalize (st);
-  db_player_update_commission (db, player_id);
-  LOGD ("Player %d progress updated. Reason: %s", player_id,
-	reason ? reason : "N/A");
-  return SQLITE_OK;
+
+  return ERR_DB_BUSY;
 }
 
 
 int
 h_deduct_player_petty_cash (sqlite3 *db,
-			    int player_id,
-			    long long amount, long long *new_balance_out)
+                            int player_id,
+                            long long amount, long long *new_balance_out)
 {
   if (amount < 0)
     {
@@ -737,9 +805,9 @@ h_deduct_player_petty_cash (sqlite3 *db,
   if (rc == SQLITE_ROW)
     {
       if (new_balance_out)
-	{
-	  *new_balance_out = sqlite3_column_int64 (st, 0);
-	}
+        {
+          *new_balance_out = sqlite3_column_int64 (st, 0);
+        }
       rc = SQLITE_OK;
     }
   else if (rc == SQLITE_DONE)
@@ -753,8 +821,8 @@ h_deduct_player_petty_cash (sqlite3 *db,
 
 int
 h_add_player_petty_cash (sqlite3 *db,
-			 int player_id,
-			 long long amount, long long *new_balance_out)
+                         int player_id,
+                         long long amount, long long *new_balance_out)
 {
   if (amount < 0)
     {
@@ -777,9 +845,9 @@ h_add_player_petty_cash (sqlite3 *db,
   if (rc == SQLITE_ROW)
     {
       if (new_balance_out)
-	{
-	  *new_balance_out = sqlite3_column_int64 (st, 0);
-	}
+        {
+          *new_balance_out = sqlite3_column_int64 (st, 0);
+        }
       rc = SQLITE_OK;
     }
   sqlite3_finalize (st);
@@ -789,8 +857,8 @@ h_add_player_petty_cash (sqlite3 *db,
 
 int
 h_add_player_petty_cash_unlocked (sqlite3 *db,
-				  int player_id,
-				  long long amount, long long *out)
+                                  int player_id,
+                                  long long amount, long long *out)
 {
   return h_add_player_petty_cash (db, player_id, amount, out);
 }
@@ -798,8 +866,8 @@ h_add_player_petty_cash_unlocked (sqlite3 *db,
 
 int
 h_deduct_player_petty_cash_unlocked (sqlite3 *db,
-				     int player_id,
-				     long long amount, long long *out)
+                                     int player_id,
+                                     long long amount, long long *out)
 {
   return h_deduct_player_petty_cash (db, player_id, amount, out);
 }
@@ -812,14 +880,14 @@ auth_player_get_type (int player_id)
   sqlite3_stmt *st = NULL;
   int type = 0;
   if (sqlite3_prepare_v2 (db,
-			  "SELECT type FROM players WHERE id=?",
-			  -1, &st, NULL) == SQLITE_OK)
+                          "SELECT type FROM players WHERE id=?",
+                          -1, &st, NULL) == SQLITE_OK)
     {
       sqlite3_bind_int (st, 1, player_id);
       if (sqlite3_step (st) == SQLITE_ROW)
-	{
-	  type = sqlite3_column_int (st, 0);
-	}
+        {
+          type = sqlite3_column_int (st, 0);
+        }
       sqlite3_finalize (st);
     }
   return type;
@@ -827,33 +895,30 @@ auth_player_get_type (int player_id)
 
 
 int
-h_get_player_petty_cash (sqlite3 *db, int player_id, long long *credits_out)
+h_get_player_petty_cash (db_t *db, int player_id, long long *credits_out)
 {
   if (!db || player_id <= 0 || !credits_out)
     {
-      return SQLITE_MISUSE;
+      return ERR_DB_MISUSE;
     }
-  sqlite3_stmt *st = NULL;
-  int rc = SQLITE_ERROR;
+  
+  db_error_t err;
+  db_error_clear(&err);
+  
+  const char *sql = "SELECT credits FROM players WHERE id=$1";
+  db_bind_t params[] = { db_bind_i32(player_id) };
+  db_res_t *res = NULL;
 
-
-  if (sqlite3_prepare_v2 (db,
-			  "SELECT credits FROM players WHERE id=?",
-			  -1, &st, NULL) == SQLITE_OK)
-    {
-      sqlite3_bind_int (st, 1, player_id);
-      if (sqlite3_step (st) == SQLITE_ROW)
-	{
-	  *credits_out = sqlite3_column_int64 (st, 0);
-	  rc = SQLITE_OK;
-	}
-      else
-	{
-	  rc = SQLITE_NOTFOUND;
-	}
-      sqlite3_finalize (st);
-    }
-  return rc;
+  if (db_query(db, sql, params, 1, &res, &err)) {
+      if (db_res_step(res, &err)) {
+          *credits_out = db_res_col_i64(res, 0, &err);
+          db_res_finalize(res);
+          return 0;
+      }
+      db_res_finalize(res);
+      return ERR_NOT_FOUND;
+  }
+  return err.code;
 }
 
 
@@ -870,8 +935,10 @@ h_player_build_title_payload (sqlite3 *db, int player_id, json_t **out_json)
 
 
   if (sqlite3_prepare_v2 (db,
-			  "SELECT alignment, experience, commission FROM players WHERE id=?",
-			  -1, &st, NULL) != SQLITE_OK)
+                          "SELECT alignment, experience, commission FROM players WHERE id=?",
+                          -1,
+                          &st,
+                          NULL) != SQLITE_OK)
     {
       return SQLITE_ERROR;
     }
@@ -893,18 +960,18 @@ h_player_build_title_payload (sqlite3 *db, int player_id, json_t **out_json)
 
 
   db_alignment_band_for_value (db,
-			       align,
-			       NULL,
-			       &band_code,
-			       &band_name,
-			       &is_good, &is_evil, &can_iss, &can_rob);
+                               align,
+                               NULL,
+                               &band_code,
+                               &band_name,
+                               &is_good, &is_evil, &can_iss, &can_rob);
   int det_comm_id = 0, comm_is_evil = 0;
   char *comm_title = NULL;
 
 
   db_commission_for_player (db,
-			    is_evil,
-			    exp, &det_comm_id, &comm_title, &comm_is_evil);
+                            is_evil,
+                            exp, &det_comm_id, &comm_title, &comm_is_evil);
   if (comm_id != det_comm_id)
     {
       db_player_update_commission (db, player_id);
@@ -914,7 +981,7 @@ h_player_build_title_payload (sqlite3 *db, int player_id, json_t **out_json)
 
 
   json_object_set_new (obj, "title",
-		       json_string (comm_title ? comm_title : "Unknown"));
+                       json_string (comm_title ? comm_title : "Unknown"));
   json_object_set_new (obj, "commission", json_integer (comm_id));
   json_object_set_new (obj, "alignment", json_integer (align));
   json_object_set_new (obj, "experience", json_integer (exp));
@@ -922,9 +989,9 @@ h_player_build_title_payload (sqlite3 *db, int player_id, json_t **out_json)
 
 
   json_object_set_new (band, "code",
-		       json_string (band_code ? band_code : "UNKNOWN"));
+                       json_string (band_code ? band_code : "UNKNOWN"));
   json_object_set_new (band, "name",
-		       json_string (band_name ? band_name : "Unknown"));
+                       json_string (band_name ? band_name : "Unknown"));
   json_object_set_new (band, "is_good", json_boolean (is_good));
   json_object_set_new (band, "is_evil", json_boolean (is_evil));
   json_object_set_new (band, "can_buy_iss", json_boolean (can_iss));
@@ -949,13 +1016,15 @@ h_player_build_title_payload (sqlite3 *db, int player_id, json_t **out_json)
 
 int
 h_send_message_to_player (int player_id, int sender_id, const char *subject,
-			  const char *message)
+                          const char *message)
 {
   sqlite3 *db = db_get_handle ();
   sqlite3_stmt *st = NULL;
   if (sqlite3_prepare_v2 (db,
-			  "INSERT INTO mail (sender_id, recipient_id, subject, body) VALUES (?, ?, ?, ?)",
-			  -1, &st, NULL) == SQLITE_OK)
+                          "INSERT INTO mail (sender_id, recipient_id, subject, body) VALUES (?, ?, ?, ?)",
+                          -1,
+                          &st,
+                          NULL) == SQLITE_OK)
     {
       sqlite3_bind_int (st, 1, sender_id);
       sqlite3_bind_int (st, 2, player_id);
@@ -975,8 +1044,10 @@ spawn_starter_ship (sqlite3 *db, int player_id, int sector_id)
   sqlite3_stmt *st = NULL;
   int ship_type_id = 0, holds = 0, fighters = 0, shields = 0;
   if (sqlite3_prepare_v2 (db,
-			  "SELECT id, initialholds, maxfighters, maxshields FROM shiptypes WHERE name='Scout Marauder'",
-			  -1, &st, NULL) != SQLITE_OK)
+                          "SELECT id, initialholds, maxfighters, maxshields FROM shiptypes WHERE name='Scout Marauder'",
+                          -1,
+                          &st,
+                          NULL) != SQLITE_OK)
     {
       return SQLITE_ERROR;
     }
@@ -1017,8 +1088,10 @@ spawn_starter_ship (sqlite3 *db, int player_id, int sector_id)
   sqlite3_finalize (st);
   /* Ownership */
   if (sqlite3_prepare_v2 (db,
-			  "INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary) VALUES (?, ?, 1, 1)",
-			  -1, &st, NULL) == SQLITE_OK)
+                          "INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary) VALUES (?, ?, 1, 1)",
+                          -1,
+                          &st,
+                          NULL) == SQLITE_OK)
     {
       sqlite3_bind_int (st, 1, ship_id);
       sqlite3_bind_int (st, 2, player_id);
@@ -1027,8 +1100,8 @@ spawn_starter_ship (sqlite3 *db, int player_id, int sector_id)
     }
   /* Update Player */
   if (sqlite3_prepare_v2 (db,
-			  "UPDATE players SET ship=?, sector=? WHERE id=?",
-			  -1, &st, NULL) == SQLITE_OK)
+                          "UPDATE players SET ship=?, sector=? WHERE id=?",
+                          -1, &st, NULL) == SQLITE_OK)
     {
       sqlite3_bind_int (st, 1, ship_id);
       sqlite3_bind_int (st, 2, sector_id);
@@ -1038,8 +1111,8 @@ spawn_starter_ship (sqlite3 *db, int player_id, int sector_id)
     }
   /* Update Podded */
   sqlite3_exec (db,
-		"UPDATE podded_status SET status='alive' WHERE player_id=?",
-		NULL, NULL, NULL);
+                "UPDATE podded_status SET status='alive' WHERE player_id=?",
+                NULL, NULL, NULL);
   return SQLITE_OK;
 }
 
@@ -1071,14 +1144,14 @@ destroy_ship_and_handle_side_effects (client_ctx_t *ctx, int player_id)
   sqlite3_step (st);
   sqlite3_finalize (st);
   sqlite3_prepare_v2 (db,
-		      "UPDATE players SET ship=NULL WHERE id=?",
-		      -1, &st, NULL);
+                      "UPDATE players SET ship=NULL WHERE id=?",
+                      -1, &st, NULL);
   sqlite3_bind_int (st, 1, player_id);
   sqlite3_step (st);
   sqlite3_finalize (st);
   sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
   h_send_message_to_player (player_id,
-			    0, "Ship Destroyed", "Your ship was destroyed.");
+                            0, "Ship Destroyed", "Your ship was destroyed.");
   return 0;
 }
 
@@ -1109,30 +1182,30 @@ h_set_prefs (client_ctx_t *ctx, json_t *prefs)
 
 
       if (!is_valid_key (key, 64))
-	{
-	  it = json_object_iter_next (prefs, it);
-	  continue;
-	}
+        {
+          it = json_object_iter_next (prefs, it);
+          continue;
+        }
 
       if (json_is_string (val))
-	{
-	  sval = json_string_value (val);
-	}
+        {
+          sval = json_string_value (val);
+        }
       else if (json_is_integer (val))
-	{
-	  snprintf (buf, sizeof (buf), "%lld",
-		    (long long) json_integer_value (val));
-	  sval = buf;
-	}
+        {
+          snprintf (buf, sizeof (buf), "%lld",
+                    (long long) json_integer_value (val));
+          sval = buf;
+        }
       else if (json_is_boolean (val))
-	{
-	  sval = json_is_true (val) ? "1" : "0";
-	}
+        {
+          sval = json_is_true (val) ? "1" : "0";
+        }
       else
-	{
-	  it = json_object_iter_next (prefs, it);
-	  continue;
-	}
+        {
+          it = json_object_iter_next (prefs, it);
+          continue;
+        }
 
       db_prefs_set_one (ctx->player_id, key, PT_STRING, sval);
       it = json_object_iter_next (prefs, it);
@@ -1160,7 +1233,7 @@ h_set_bookmarks (client_ctx_t *ctx, json_t *list)
     const char *name = json_string_value (json_object_get (val, "name"));
     if (name)
       {
-	db_bookmark_remove (ctx->player_id, name);
+        db_bookmark_remove (ctx->player_id, name);
       }
   }
   json_decref (curr);
@@ -1172,7 +1245,7 @@ h_set_bookmarks (client_ctx_t *ctx, json_t *list)
     int sector_id = json_integer_value (json_object_get (val, "sector_id"));
     if (name && sector_id > 0)
       {
-	db_bookmark_upsert (ctx->player_id, name, sector_id);
+        db_bookmark_upsert (ctx->player_id, name, sector_id);
       }
   }
   return 0;
@@ -1197,7 +1270,7 @@ h_set_avoids (client_ctx_t *ctx, json_t *list)
   {
     if (json_is_integer (val))
       {
-	db_avoid_remove (ctx->player_id, json_integer_value (val));
+        db_avoid_remove (ctx->player_id, json_integer_value (val));
       }
   }
   json_decref (curr);
@@ -1207,7 +1280,7 @@ h_set_avoids (client_ctx_t *ctx, json_t *list)
   {
     if (json_is_integer (val))
       {
-	db_avoid_add (ctx->player_id, json_integer_value (val));
+        db_avoid_add (ctx->player_id, json_integer_value (val));
       }
   }
   return 0;
@@ -1233,7 +1306,7 @@ h_set_subscriptions (client_ctx_t *ctx, json_t *list)
     const char *topic = json_string_value (json_object_get (val, "topic"));
     if (topic)
       {
-	db_subscribe_disable (ctx->player_id, topic, NULL);
+        db_subscribe_disable (ctx->player_id, topic, NULL);
       }
   }
   json_decref (curr);
@@ -1243,19 +1316,19 @@ h_set_subscriptions (client_ctx_t *ctx, json_t *list)
   {
     if (json_is_string (val))
       {
-	db_subscribe_upsert (ctx->player_id, json_string_value (val), NULL,
-			     0);
+        db_subscribe_upsert (ctx->player_id, json_string_value (val), NULL,
+                             0);
       }
     else if (json_is_object (val))
       {
-	const char *topic =
-	  json_string_value (json_object_get (val, "topic"));
+        const char *topic =
+          json_string_value (json_object_get (val, "topic"));
 
 
-	if (topic)
-	  {
-	    db_subscribe_upsert (ctx->player_id, topic, NULL, 0);
-	  }
+        if (topic)
+          {
+            db_subscribe_upsert (ctx->player_id, topic, NULL, 0);
+          }
       }
   }
   return 0;
@@ -1276,7 +1349,7 @@ cmd_player_set_settings (client_ctx_t *ctx, json_t *root)
   if (!json_is_object (data))
     {
       send_response_error (ctx, root, ERR_INVALID_SCHEMA,
-			   "data must be object");
+                           "data must be object");
       return 0;
     }
 
@@ -1326,7 +1399,7 @@ cmd_player_set_settings (client_ctx_t *ctx, json_t *root)
 
 static json_t *
 get_online_players_json_array (int offset, int limit,
-			       const json_t *fields_array)
+                               const json_t *fields_array)
 {
   json_t *players_list = json_array ();
   int *online_player_ids = NULL;
@@ -1338,29 +1411,29 @@ get_online_players_json_array (int offset, int limit,
   while (n)
     {
       if (n->ctx && n->ctx->player_id > 0)
-	{
-	  total_online++;
-	}
+        {
+          total_online++;
+        }
       n = n->next;
     }
   if (total_online > 0)
     {
       online_player_ids = (int *) malloc (sizeof (int) * total_online);
       if (online_player_ids)
-	{
-	  int i = 0;
+        {
+          int i = 0;
 
 
-	  n = g_clients;
-	  while (n && i < total_online)
-	    {
-	      if (n->ctx && n->ctx->player_id > 0)
-		{
-		  online_player_ids[i++] = n->ctx->player_id;
-		}
-	      n = n->next;
-	    }
-	}
+          n = g_clients;
+          while (n && i < total_online)
+            {
+              if (n->ctx && n->ctx->player_id > 0)
+                {
+                  online_player_ids[i++] = n->ctx->player_id;
+                }
+              n = n->next;
+            }
+        }
     }
   pthread_mutex_unlock (&g_clients_mu);
   int start_idx = offset;
@@ -1389,27 +1462,27 @@ get_online_players_json_array (int offset, int limit,
     {
       effective_fields = json_array ();
       for (int f = 0; DEFAULT_PLAYER_FIELDS[f] != NULL; f++)
-	{
-	  json_array_append_new (effective_fields,
-				 json_string (DEFAULT_PLAYER_FIELDS[f]));
-	}
+        {
+          json_array_append_new (effective_fields,
+                                 json_string (DEFAULT_PLAYER_FIELDS[f]));
+        }
       using_defaults = true;
     }
   for (int i = start_idx; i < end_idx; i++)
     {
       if (!online_player_ids)
-	{
-	  break;
-	}
+        {
+          break;
+        }
       int player_id = online_player_ids[i];
       json_t *info = NULL;
 
 
       if (db_player_info_selected_fields (player_id, effective_fields,
-					  &info) == SQLITE_OK && info)
-	{
-	  json_array_append_new (players_list, info);
-	}
+                                          &info) == SQLITE_OK && info)
+        {
+          json_array_append_new (players_list, info);
+        }
     }
   if (online_player_ids)
     {
@@ -1424,7 +1497,7 @@ get_online_players_json_array (int offset, int limit,
 
   json_object_set_new (response, "total_online", json_integer (total_online));
   json_object_set_new (response, "returned_count",
-		       json_integer (json_array_size (players_list)));
+                       json_integer (json_array_size (players_list)));
   json_object_set_new (response, "offset", json_integer (offset));
   json_object_set_new (response, "limit", json_integer (limit));
   json_object_set_new (response, "players", players_list);
@@ -1439,9 +1512,9 @@ cmd_player_my_info (client_ctx_t *ctx, json_t *root)
   if (ctx->player_id <= 0)
     {
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_SECTOR_NOT_FOUND,
-				   "Not authenticated", NULL);
+                                   root,
+                                   ERR_SECTOR_NOT_FOUND,
+                                   "Not authenticated", NULL);
       return 0;
     }
   sqlite3 *db = db_get_handle ();
@@ -1450,8 +1523,8 @@ cmd_player_my_info (client_ctx_t *ctx, json_t *root)
   if (!db)
     {
       send_response_error (ctx,
-			   root,
-			   ERR_CITADEL_REQUIRED, "Database unavailable");
+                           root,
+                           ERR_CITADEL_REQUIRED, "Database unavailable");
       return 0;
     }
   /* 1. Fetch Basic Player Data directly (Bypass db_player_info_json) */
@@ -1463,9 +1536,9 @@ cmd_player_my_info (client_ctx_t *ctx, json_t *root)
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
       send_response_error (ctx,
-			   root,
-			   ERR_CITADEL_REQUIRED,
-			   "DB Error preparing player info");
+                           root,
+                           ERR_CITADEL_REQUIRED,
+                           "DB Error preparing player info");
       return 0;
     }
   sqlite3_bind_int (st, 1, ctx->player_id);
@@ -1476,7 +1549,7 @@ cmd_player_my_info (client_ctx_t *ctx, json_t *root)
     {
       sqlite3_finalize (st);
       send_response_error (ctx, root, REF_AUTOPILOT_RUNNING,
-			   "Player not found");
+                           "Player not found");
       return 0;
     }
   /* Extract columns */
@@ -1496,8 +1569,8 @@ cmd_player_my_info (client_ctx_t *ctx, json_t *root)
 
   json_object_set_new (player_obj, "id", json_integer (ctx->player_id));
   json_object_set_new (player_obj, "username",
-		       json_string (name ? name : "Unknown"));
-  sqlite3_finalize (st);	// Moved here to keep 'name' valid
+                       json_string (name ? name : "Unknown"));
+  sqlite3_finalize (st);        // Moved here to keep 'name' valid
   /* Format credits as string "1000.00" for compatibility */
   char credits_str[64];
 
@@ -1515,7 +1588,7 @@ cmd_player_my_info (client_ctx_t *ctx, json_t *root)
 
 
   if (h_player_build_title_payload (db, ctx->player_id,
-				    &title_info) == SQLITE_OK && title_info)
+                                    &title_info) == SQLITE_OK && title_info)
     {
       json_object_set_new (player_obj, "title_info", title_info);
     }
@@ -1535,9 +1608,9 @@ cmd_player_list_online (client_ctx_t *ctx, json_t *root)
   if (ctx->player_id <= 0)
     {
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_NOT_AUTHENTICATED,
-				   "Not authenticated", NULL);
+                                   root,
+                                   ERR_NOT_AUTHENTICATED,
+                                   "Not authenticated", NULL);
       return 0;
     }
   json_t *data = json_object_get (root, "data");
@@ -1580,7 +1653,7 @@ cmd_player_list_online (client_ctx_t *ctx, json_t *root)
   if (!resp)
     {
       send_response_error (ctx, root, ERR_UNKNOWN,
-			   "Failed to retrieve list.");
+                           "Failed to retrieve list.");
       return 0;
     }
   send_response_ok_take (ctx, root, "player.list_online.result", &resp);
@@ -1594,9 +1667,9 @@ cmd_player_rankings (client_ctx_t *ctx, json_t *root)
   if (ctx->player_id <= 0)
     {
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_NOT_AUTHENTICATED,
-				   "Authentication required.", NULL);
+                                   root,
+                                   ERR_NOT_AUTHENTICATED,
+                                   "Authentication required.", NULL);
       return 0;
     }
   sqlite3 *db = db_get_handle ();
@@ -1612,42 +1685,42 @@ cmd_player_rankings (client_ctx_t *ctx, json_t *root)
 
 
       if (json_is_string (by))
-	{
-	  const char *req = json_string_value (by);
+        {
+          const char *req = json_string_value (by);
 
 
-	  if (strcmp (req, "experience") == 0
-	      || strcmp (req, "net_worth") == 0)
-	    {
-	      order_by = req;
-	    }
-	  else
-	    {
-	      send_response_refused_steal (ctx,
-					   root,
-					   ERR_INVALID_ARG,
-					   "Invalid criterion", NULL);
-	      return 0;
-	    }
-	}
+          if (strcmp (req, "experience") == 0
+              || strcmp (req, "net_worth") == 0)
+            {
+              order_by = req;
+            }
+          else
+            {
+              send_response_refused_steal (ctx,
+                                           root,
+                                           ERR_INVALID_ARG,
+                                           "Invalid criterion", NULL);
+              return 0;
+            }
+        }
       json_t *j_lim = json_object_get (data, "limit");
 
 
       if (json_is_integer (j_lim))
-	{
-	  limit = json_integer_value (j_lim);
-	}
+        {
+          limit = json_integer_value (j_lim);
+        }
       if (limit > 100)
-	{
-	  limit = 100;
-	}
+        {
+          limit = 100;
+        }
       json_t *j_off = json_object_get (data, "offset");
 
 
       if (json_is_integer (j_off))
-	{
-	  offset = json_integer_value (j_off);
-	}
+        {
+          offset = json_integer_value (j_off);
+        }
     }
   json_t *rankings = json_array ();
   sqlite3_stmt *st = NULL;
@@ -1657,17 +1730,20 @@ cmd_player_rankings (client_ctx_t *ctx, json_t *root)
   if (strcmp (order_by, "experience") == 0)
     {
       snprintf (sql,
-		sizeof (sql),
-		"SELECT id, name, alignment, experience FROM players ORDER BY experience DESC LIMIT %d OFFSET %d;",
-		limit, offset);
+                sizeof (sql),
+                "SELECT id, name, alignment, experience FROM players ORDER BY experience DESC LIMIT %d OFFSET %d;",
+                limit,
+                offset);
     }
   else
     {
       snprintf (sql,
-		sizeof (sql),
-		"SELECT p.id, p.name, p.alignment, p.experience, COALESCE(ba.balance, 0) as net_worth "
-		"FROM players p LEFT JOIN bank_accounts ba ON p.id = ba.owner_id AND ba.owner_type = 'player' "
-		"ORDER BY net_worth DESC LIMIT %d OFFSET %d;", limit, offset);
+                sizeof (sql),
+                "SELECT p.id, p.name, p.alignment, p.experience, COALESCE(ba.balance, 0) as net_worth "
+                "FROM players p LEFT JOIN bank_accounts ba ON p.id = ba.owner_id AND ba.owner_type = 'player' "
+                "ORDER BY net_worth DESC LIMIT %d OFFSET %d;",
+                limit,
+                offset);
     }
   int rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
 
@@ -1675,8 +1751,8 @@ cmd_player_rankings (client_ctx_t *ctx, json_t *root)
   if (rc != SQLITE_OK)
     {
       send_response_error (ctx,
-			   root,
-			   ERR_DB, "Database error retrieving rankings.");
+                           root,
+                           ERR_DB, "Database error retrieving rankings.");
       return 0;
     }
   int rank_num = offset + 1;
@@ -1698,22 +1774,24 @@ cmd_player_rankings (client_ctx_t *ctx, json_t *root)
       json_object_set_new (entry, "alignment", json_integer (align));
       json_object_set_new (entry, "experience", json_integer (exp));
       if (strcmp (order_by, "net_worth") == 0)
-	{
-	  long long nw = sqlite3_column_int64 (st, 4);
-	  char buf[32];
-	  snprintf (buf, sizeof (buf), "%lld.00", nw);
+        {
+          long long nw = sqlite3_column_int64 (st, 4);
+          char buf[32];
 
 
-	  json_object_set_new (entry, "net_worth", json_string (buf));
-	}
+          snprintf (buf, sizeof (buf), "%lld.00", nw);
+
+
+          json_object_set_new (entry, "net_worth", json_string (buf));
+        }
       json_t *title = NULL;
 
 
       if (h_player_build_title_payload (db, pid, &title) == SQLITE_OK
-	  && title)
-	{
-	  json_object_set_new (entry, "title_info", title);
-	}
+          && title)
+        {
+          json_object_set_new (entry, "title_info", title);
+        }
       json_array_append_new (rankings, entry);
     }
   sqlite3_finalize (st);
@@ -1733,8 +1811,8 @@ cmd_player_get_settings (client_ctx_t *ctx, json_t *root)
   if (!ctx || ctx->player_id <= 0)
     {
       send_response_error (ctx,
-			   root,
-			   ERR_NOT_AUTHENTICATED, "Authentication required");
+                           root,
+                           ERR_NOT_AUTHENTICATED, "Authentication required");
       return 0;
     }
   json_t *prefs = prefs_as_array (ctx->player_id);
@@ -1761,9 +1839,9 @@ cmd_player_get_prefs (client_ctx_t *ctx, json_t *root)
   if (ctx->player_id <= 0)
     {
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_SECTOR_NOT_FOUND,
-				   "Not authenticated", NULL);
+                                   root,
+                                   ERR_SECTOR_NOT_FOUND,
+                                   "Not authenticated", NULL);
       return 0;
     }
   json_t *prefs = prefs_as_array (ctx->player_id);
@@ -1828,7 +1906,7 @@ cmd_player_set_bookmarks (client_ctx_t *ctx, json_t *root)
   if (h_set_bookmarks (ctx, bm) != 0)
     {
       send_response_error (ctx, root, ERR_INVALID_ARG,
-			   "Invalid bookmarks list");
+                           "Invalid bookmarks list");
       return 0;
     }
   return cmd_player_get_bookmarks (ctx, root);
@@ -1841,7 +1919,7 @@ cmd_player_get_bookmarks (client_ctx_t *ctx, json_t *root)
   json_t *bookmarks = players_list_bookmarks (ctx);
   json_t *out = json_object ();
   json_object_set_new (out, "bookmarks",
-		       bookmarks ? bookmarks : json_array ());
+                       bookmarks ? bookmarks : json_array ());
   send_response_ok_take (ctx, root, "player.bookmarks", &out);
   return 0;
 }
@@ -1904,7 +1982,7 @@ cmd_player_set_prefs (client_ctx_t *ctx, json_t *root)
   if (!json_is_object (data))
     {
       send_response_error (ctx, root, ERR_INVALID_SCHEMA,
-			   "data must be object");
+                           "data must be object");
       return -1;
     }
   json_t *patch = json_object_get (data, "patch");
@@ -1919,46 +1997,46 @@ cmd_player_set_prefs (client_ctx_t *ctx, json_t *root)
 
 
       if (!is_valid_key (key, 64))
-	{
-	  send_response_error (ctx, root, ERR_INVALID_ARG, "invalid key");
-	  return -1;
-	}
+        {
+          send_response_error (ctx, root, ERR_INVALID_ARG, "invalid key");
+          return -1;
+        }
       const char *sval = "";
       char buf[512] = { 0 };
 
 
       if (json_is_string (val))
-	{
-	  sval = json_string_value (val);
-	  if (!is_ascii_printable (sval) || strlen (sval) > 256)
-	    {
-	      send_response_error (ctx, root, ERR_INVALID_ARG,
-				   "string invalid");
-	      return -1;
-	    }
-	}
+        {
+          sval = json_string_value (val);
+          if (!is_ascii_printable (sval) || strlen (sval) > 256)
+            {
+              send_response_error (ctx, root, ERR_INVALID_ARG,
+                                   "string invalid");
+              return -1;
+            }
+        }
       else if (json_is_integer (val))
-	{
-	  snprintf (buf,
-		    sizeof (buf),
-		    "%lld", (long long) json_integer_value (val));
-	  sval = buf;
-	}
+        {
+          snprintf (buf,
+                    sizeof (buf),
+                    "%lld", (long long) json_integer_value (val));
+          sval = buf;
+        }
       else if (json_is_boolean (val))
-	{
-	  sval = json_is_true (val) ? "1" : "0";
-	}
+        {
+          sval = json_is_true (val) ? "1" : "0";
+        }
       else
-	{
-	  send_response_error (ctx, root, ERR_INVALID_ARG,
-			       "unsupported type");
-	  return -1;
-	}
+        {
+          send_response_error (ctx, root, ERR_INVALID_ARG,
+                               "unsupported type");
+          return -1;
+        }
       if (db_prefs_set_one (ctx->player_id, key, PT_STRING, sval) != 0)
-	{
-	  send_response_error (ctx, root, ERR_UNKNOWN, "db error");
-	  return -1;
-	}
+        {
+          send_response_error (ctx, root, ERR_UNKNOWN, "db error");
+          return -1;
+        }
       it = json_object_iter_next (prefs, it);
     }
   json_t *resp = json_object ();
@@ -2023,8 +2101,8 @@ cmd_nav_bookmark_remove (client_ctx_t *ctx, json_t *root)
     }
   const char *name =
     json_string_value (json_object_get (json_object_get (root,
-							 "data"),
-					"name"));
+                                                         "data"),
+                                        "name"));
 
 
   if (db_bookmark_remove (ctx->player_id, name) != 0)
@@ -2142,9 +2220,9 @@ cmd_player_set_trade_account_preference (client_ctx_t *ctx, json_t *root)
   if (ctx->player_id <= 0)
     {
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_NOT_AUTHENTICATED,
-				   "Auth required", NULL);
+                                   root,
+                                   ERR_NOT_AUTHENTICATED,
+                                   "Auth required", NULL);
       return 0;
     }
   json_t *data = json_object_get (root, "data");
@@ -2154,14 +2232,14 @@ cmd_player_set_trade_account_preference (client_ctx_t *ctx, json_t *root)
   if (!json_is_boolean (pref))
     {
       send_response_error (ctx,
-			   root, ERR_INVALID_ARG, "prefer_bank must be bool");
+                           root, ERR_INVALID_ARG, "prefer_bank must be bool");
       return 0;
     }
   int val = json_is_true (pref) ? 1 : 0;
 
 
   if (db_prefs_set_one (ctx->player_id,
-			"trade.prefer_bank", PT_BOOL, val ? "1" : "0") != 0)
+                        "trade.prefer_bank", PT_BOOL, val ? "1" : "0") != 0)
     {
       send_response_error (ctx, root, ERR_UNKNOWN, "db error");
       return 0;
@@ -2183,9 +2261,9 @@ cmd_insurance_policies_list (client_ctx_t *ctx, json_t *root)
   if (ctx->player_id <= 0)
     {
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_NOT_AUTHENTICATED,
-				   "Authentication required", NULL);
+                                   root,
+                                   ERR_NOT_AUTHENTICATED,
+                                   "Authentication required", NULL);
       return 0;
     }
 
@@ -2200,9 +2278,9 @@ cmd_insurance_policies_list (client_ctx_t *ctx, json_t *root)
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
       send_response_error (ctx,
-			   root,
-			   ERR_DB_QUERY_FAILED,
-			   "Database error preparing query.");
+                           root,
+                           ERR_DB_QUERY_FAILED,
+                           "Database error preparing query.");
       return 0;
     }
   sqlite3_bind_int (st, 1, ctx->player_id);
@@ -2215,7 +2293,7 @@ cmd_insurance_policies_list (client_ctx_t *ctx, json_t *root)
       int id = sqlite3_column_int (st, 0);
 
       const char *tmp_subject_type =
-	(const char *) sqlite3_column_text (st, 1);
+        (const char *) sqlite3_column_text (st, 1);
 
       const char *tmp_start_ts = (const char *) sqlite3_column_text (st, 3);
 
@@ -2227,24 +2305,24 @@ cmd_insurance_policies_list (client_ctx_t *ctx, json_t *root)
       json_object_set_new (policy, "id", json_integer (id));
 
       json_object_set_new (policy,
-			   "subject_type",
-			   json_string (tmp_subject_type ? tmp_subject_type :
-					""));
+                           "subject_type",
+                           json_string (tmp_subject_type ? tmp_subject_type :
+                                        ""));
 
       json_object_set_new (policy, "subject_id",
-			   json_integer (sqlite3_column_int (st, 2)));
+                           json_integer (sqlite3_column_int (st, 2)));
 
       json_object_set_new (policy, "start_ts",
-			   json_string (tmp_start_ts ? tmp_start_ts : ""));
+                           json_string (tmp_start_ts ? tmp_start_ts : ""));
 
       json_object_set_new (policy, "expiry_ts",
-			   json_string (tmp_expiry_ts ? tmp_expiry_ts : ""));
+                           json_string (tmp_expiry_ts ? tmp_expiry_ts : ""));
 
       json_object_set_new (policy, "premium",
-			   json_integer (sqlite3_column_int64 (st, 5)));
+                           json_integer (sqlite3_column_int64 (st, 5)));
 
       json_object_set_new (policy, "payout",
-			   json_integer (sqlite3_column_int64 (st, 6)));
+                           json_integer (sqlite3_column_int64 (st, 6)));
 
       json_array_append_new (policies_array, policy);
     }
@@ -2255,20 +2333,21 @@ cmd_insurance_policies_list (client_ctx_t *ctx, json_t *root)
 
   json_object_set_new (response_data, "policies", policies_array);
   send_response_ok_take (ctx, root, "insurance.policies.list",
-			 &response_data);
+                         &response_data);
   return 0;
 }
 
 
 int
-cmd_insurance_policies_buy (client_ctx_t *ctx, json_t *root)
+cmd_insurance_policies_buy (client_ctx_t *ctx,
+                            json_t *root)
 {
   if (ctx->player_id <= 0)
     {
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_NOT_AUTHENTICATED,
-				   "Authentication required", NULL);
+                                   root,
+                                   ERR_NOT_AUTHENTICATED,
+                                   "Authentication required", NULL);
       return 0;
     }
 
@@ -2279,64 +2358,64 @@ cmd_insurance_policies_buy (client_ctx_t *ctx, json_t *root)
   if (!json_is_object (data))
     {
       send_response_error (ctx, root, ERR_BAD_REQUEST,
-			   "Missing data payload.");
+                           "Missing data payload.");
       return 0;
     }
 
   const char *subject_type = json_string_value (json_object_get (data,
-								 "subject_type"));
+                                                                 "subject_type"));
   int subject_id = json_integer_value (json_object_get (data, "subject_id"));
-  int duration = json_integer_value (json_object_get (data, "duration"));	// This comes from JSON
+  int duration = json_integer_value (json_object_get (data, "duration"));       // This comes from JSON
   long long premium_to_pay = json_integer_value (json_object_get (data,
-								  "premium"));
+                                                                  "premium"));
 
 
   if (!subject_type || subject_id <= 0 || duration <= 0
       || premium_to_pay <= 0)
     {
       send_response_error (ctx,
-			   root,
-			   ERR_BAD_REQUEST,
-			   "Missing or invalid subject_type, subject_id, duration, or premium.");
+                           root,
+                           ERR_BAD_REQUEST,
+                           "Missing or invalid subject_type, subject_id, duration, or premium.");
       return 0;
     }
 
   // MVP: Hardcode payout for simplicity, or calculate based on premium
-  long long payout_amount = premium_to_pay * 10;	// Simple 10x payout
+  long long payout_amount = premium_to_pay * 10;        // Simple 10x payout
 
   // Check player credits
   long long player_credits = 0;
 
 
   if (h_get_player_petty_cash (db, ctx->player_id,
-			       &player_credits) != SQLITE_OK)
+                               &player_credits) != SQLITE_OK)
     {
       send_response_error (ctx,
-			   root,
-			   ERR_DB_QUERY_FAILED,
-			   "Failed to retrieve player credits.");
+                           root,
+                           ERR_DB_QUERY_FAILED,
+                           "Failed to retrieve player credits.");
       return 0;
     }
 
   if (player_credits < premium_to_pay)
     {
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_INSUFFICIENT_FUNDS,
-				   "Insufficient credits to buy policy.",
-				   NULL);
+                                   root,
+                                   ERR_INSUFFICIENT_FUNDS,
+                                   "Insufficient credits to buy policy.",
+                                   NULL);
       return 0;
     }
 
   // Deduct premium
   if (h_deduct_player_petty_cash_unlocked (db,
-					   ctx->player_id,
-					   premium_to_pay, NULL) != SQLITE_OK)
+                                           ctx->player_id,
+                                           premium_to_pay, NULL) != SQLITE_OK)
     {
       send_response_error (ctx,
-			   root,
-			   ERR_DB,
-			   "Failed to deduct premium from player credits.");
+                           root,
+                           ERR_DB,
+                           "Failed to deduct premium from player credits.");
       return 0;
     }
 
@@ -2349,30 +2428,30 @@ cmd_insurance_policies_buy (client_ctx_t *ctx, json_t *root)
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
       send_response_error (ctx,
-			   root,
-			   ERR_DB_QUERY_FAILED,
-			   "Database error preparing policy insert.");
+                           root,
+                           ERR_DB_QUERY_FAILED,
+                           "Database error preparing policy insert.");
       // Refund credits
       h_add_player_petty_cash_unlocked (db, ctx->player_id, premium_to_pay,
-					NULL);
+                                        NULL);
       return 0;
     }
 
   sqlite3_bind_int (st, 1, ctx->player_id);
   sqlite3_bind_text (st, 2, subject_type, -1, SQLITE_STATIC);
   sqlite3_bind_int (st, 3, subject_id);
-  sqlite3_bind_int (st, 4, duration);	// binds to ?4, used in strftime
+  sqlite3_bind_int (st, 4, duration);   // binds to ?4, used in strftime
   sqlite3_bind_int64 (st, 5, premium_to_pay);
   sqlite3_bind_int64 (st, 6, payout_amount);
 
   if (sqlite3_step (st) != SQLITE_DONE)
     {
       send_response_error (ctx,
-			   root,
-			   ERR_DB, "Failed to insert insurance policy.");
+                           root,
+                           ERR_DB, "Failed to insert insurance policy.");
       // Refund credits
       h_add_player_petty_cash_unlocked (db, ctx->player_id, premium_to_pay,
-					NULL);
+                                        NULL);
       sqlite3_finalize (st);
       return 0;
     }
@@ -2382,12 +2461,12 @@ cmd_insurance_policies_buy (client_ctx_t *ctx, json_t *root)
 
 
   json_object_set_new (response_data, "message",
-		       json_string
-		       ("Insurance policy purchased successfully."));
+                       json_string
+                         ("Insurance policy purchased successfully."));
   json_object_set_new (response_data, "policy_id",
-		       json_integer (sqlite3_last_insert_rowid (db)));
+                       json_integer (sqlite3_last_insert_rowid (db)));
   json_object_set_new (response_data, "premium",
-		       json_integer (premium_to_pay));
+                       json_integer (premium_to_pay));
   json_object_set_new (response_data, "payout", json_integer (payout_amount));
   send_response_ok_take (ctx, root, "insurance.policies.buy", &response_data);
   return 0;
@@ -2400,9 +2479,9 @@ cmd_insurance_claim_file (client_ctx_t *ctx, json_t *root)
   if (ctx->player_id <= 0)
     {
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_NOT_AUTHENTICATED,
-				   "Authentication required", NULL);
+                                   root,
+                                   ERR_NOT_AUTHENTICATED,
+                                   "Authentication required", NULL);
       return 0;
     }
 
@@ -2413,20 +2492,20 @@ cmd_insurance_claim_file (client_ctx_t *ctx, json_t *root)
   if (!json_is_object (data))
     {
       send_response_error (ctx, root, ERR_BAD_REQUEST,
-			   "Missing data payload.");
+                           "Missing data payload.");
       return 0;
     }
 
   int policy_id = json_integer_value (json_object_get (data, "policy_id"));
   const char *incident_description = json_string_value (json_object_get (data,
-									 "incident_description"));
+                                                                         "incident_description"));
 
 
   if (policy_id <= 0)
     {
       send_response_error (ctx,
-			   root,
-			   ERR_BAD_REQUEST, "Missing or invalid policy_id.");
+                           root,
+                           ERR_BAD_REQUEST, "Missing or invalid policy_id.");
       return 0;
     }
 
@@ -2437,12 +2516,12 @@ cmd_insurance_claim_file (client_ctx_t *ctx, json_t *root)
 
 
   if (sqlite3_prepare_v2 (db, sql_check_policy, -1, &st_check,
-			  NULL) != SQLITE_OK)
+                          NULL) != SQLITE_OK)
     {
       send_response_error (ctx,
-			   root,
-			   ERR_DB_QUERY_FAILED,
-			   "Database error checking policy.");
+                           root,
+                           ERR_DB_QUERY_FAILED,
+                           "Database error checking policy.");
       return 0;
     }
   sqlite3_bind_int (st_check, 1, policy_id);
@@ -2451,10 +2530,10 @@ cmd_insurance_claim_file (client_ctx_t *ctx, json_t *root)
     {
       sqlite3_finalize (st_check);
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_NOT_FOUND,
-				   "Active policy not found or does not belong to player.",
-				   NULL);
+                                   root,
+                                   ERR_NOT_FOUND,
+                                   "Active policy not found or does not belong to player.",
+                                   NULL);
       return 0;
     }
   sqlite3_finalize (st_check);
@@ -2469,19 +2548,19 @@ cmd_insurance_claim_file (client_ctx_t *ctx, json_t *root)
   if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
     {
       send_response_error (ctx,
-			   root,
-			   ERR_DB_QUERY_FAILED,
-			   "Database error preparing claim insert.");
+                           root,
+                           ERR_DB_QUERY_FAILED,
+                           "Database error preparing claim insert.");
       return 0;
     }
 
   sqlite3_bind_int (st, 1, policy_id);
-  sqlite3_bind_text (st, 2, incident_description, -1, SQLITE_STATIC);	// Use incident_description for event_id
+  sqlite3_bind_text (st, 2, incident_description, -1, SQLITE_STATIC);   // Use incident_description for event_id
 
   if (sqlite3_step (st) != SQLITE_DONE)
     {
       send_response_error (ctx,
-			   root, ERR_DB, "Failed to insert insurance claim.");
+                           root, ERR_DB, "Failed to insert insurance claim.");
       sqlite3_finalize (st);
       return 0;
     }
@@ -2491,10 +2570,11 @@ cmd_insurance_claim_file (client_ctx_t *ctx, json_t *root)
 
 
   json_object_set_new (response_data, "message",
-		       json_string ("Insurance claim filed successfully."));
+                       json_string ("Insurance claim filed successfully."));
   json_object_set_new (response_data, "claim_id",
-		       json_integer (sqlite3_last_insert_rowid (db)));
-  json_object_set_new (response_data, "status", json_string ("filed"));	// Use 'filed' as per MVP semantics
+                       json_integer (sqlite3_last_insert_rowid (db)));
+  json_object_set_new (response_data, "status", json_string ("filed")); // Use 'filed' as per MVP semantics
   send_response_ok_take (ctx, root, "insurance.claim.file", &response_data);
   return 0;
 }
+
