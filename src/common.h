@@ -17,7 +17,6 @@
 #include <arpa/inet.h>
 #include <jansson.h>            /* -ljansson */
 #include <stdbool.h>
-#include <sqlite3.h>
 #include <netinet/in.h>
 /* local includes */
 
@@ -272,5 +271,9 @@ extern atomic_int_fast64_t g_warps_performed;
 extern atomic_int_fast64_t g_combat_rounds;
 extern atomic_int_fast64_t g_failed_operations;
 extern atomic_int_fast64_t g_server_tick;
+
+void h_copy_cstr(char *dst, size_t dst_sz, const char *src);
+
+
 
 #endif // COMMON_H

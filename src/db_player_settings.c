@@ -1,531 +1,146 @@
+/* src/db_player_settings.c */
 #include "db_player_settings.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include "database.h"           // db_get_handle()
-#include "db_player_settings.h" // our prototypes
-static sqlite3 *g_db_ps = NULL;
+#include <time.h>
+#include <limits.h>
+#include "database.h"
+#include "game_db.h"
+#include "db/db_api.h"
+#include "common.h"
 
+int db_player_settings_init (db_t *db) { (void)db; return 0; }
 
-/* Prepared statements (kept simple; one-shot prepare each call to avoid lifetime headaches) */
-static int
-prep (sqlite3 *db, sqlite3_stmt **st, const char *sql)
+int db_subscribe_upsert (db_t *db, int64_t pid, const char *topic, const char *filter, int locked)
 {
-  return sqlite3_prepare_v2 (db, sql, -1, st, NULL);
-}
-
-
-int
-db_player_settings_init (sqlite3 *db)
-{
-  g_db_ps = db;
-  return (g_db_ps ? 0 : -1);
-}
-
-
-static const char *
-type_to_s (pref_type t)
-{
-  switch (t)
-    {
-      case PT_BOOL:
-        return "bool";
-      case PT_INT:
-        return "int";
-      case PT_STRING:
-        return "string";
-      case PT_JSON:
-        return "json";
-    }
-  return "string";
-}
-
-
-/* ---------- Prefs ---------- */
-
-
-/* Upsert a single preference (typed) */
-int
-db_prefs_set_one (int64_t pid, const char *key, pref_type t,
-                  const char *value)
-{
-  if (!key || !value)
-    {
-      return SQLITE_MISUSE;
-    }
-  /* map enum to on-disk textual type */
-  const char *type_str = type_to_s (t);
-  static const char *SQL =
-    "INSERT INTO player_prefs(player_id,key,type,value,updated_at) "
-    "VALUES(?1,?2,?3,?4,strftime('%s','now')) "
-    "ON CONFLICT(player_id,key) DO UPDATE SET "
-    "  type=excluded.type,"
-    "  value=excluded.value," "  updated_at=excluded.updated_at;";
-  sqlite3_stmt *st = NULL;
-
-
-  if (prep (g_db_ps, &st, SQL) != SQLITE_OK)
-    {
-      return -1;
-    }
-  sqlite3_bind_int64 (st, 1, pid);
-  sqlite3_bind_text (st, 2, key, -1, SQLITE_STATIC);
-  sqlite3_bind_text (st, 3, type_str, -1, SQLITE_STATIC);
-  sqlite3_bind_text (st, 4, value, -1, SQLITE_TRANSIENT);
-  int rc = sqlite3_step (st);
-
-
-  sqlite3_finalize (st);
-  return (rc == SQLITE_DONE) ? 0 : -1;
-}
-
-
-int
-db_prefs_get_one (int64_t player_id, const char *key, char **out_value)
-{
-  if (out_value)
-    {
-      *out_value = NULL;
-    }
-  if (!key || !out_value)
-    {
-      return SQLITE_MISUSE;
-    }
-  sqlite3_stmt *st = NULL;
-
-
-  if (prep (g_db_ps,
-            &st,
-            "SELECT value FROM player_prefs WHERE player_id=?1 AND key=?2 LIMIT 1;")
-      != SQLITE_OK)
-    {
-      return -1;
-    }
-  sqlite3_bind_int64 (st, 1, player_id);
-  sqlite3_bind_text (st, 2, key, -1, SQLITE_STATIC);
-  int rc = sqlite3_step (st);
-
-
-  if (rc == SQLITE_ROW)
-    {
-      const unsigned char *txt = sqlite3_column_text (st, 0);
-
-
-      if (txt)
-        {
-          *out_value = strdup ((const char *) txt);     // caller frees
-        }
-      rc = SQLITE_OK;
-    }
-  else if (rc == SQLITE_DONE)
-    {
-      rc = SQLITE_OK;           // not found → *out_value stays NULL
-    }
-  sqlite3_finalize (st);
-  return rc;
-}
-
-
-int
-db_prefs_get_all (int64_t pid, sqlite3_stmt **it)
-{
-  static const char *SQL =
-    "SELECT key, type, value FROM player_prefs WHERE player_id=?1;";
-  if (prep (g_db_ps, it, SQL) != SQLITE_OK)
-    {
-      return -1;
-    }
-  sqlite3_bind_int64 (*it, 1, pid);
+  db_error_t err; if (!db) return -1;
+  const char *sql = "INSERT INTO subscriptions (player_id, event_type, filter_json, locked, enabled) VALUES ($1, $2, $3, $4, 1) "
+                    "ON CONFLICT(player_id, event_type) DO UPDATE SET filter_json = $3, locked = $4, enabled = 1;";
+  if (!db_exec(db, sql, (db_bind_t[]){db_bind_i64(pid), db_bind_text(topic), db_bind_text(filter), db_bind_i32(locked)}, 4, &err)) return -1;
   return 0;
 }
 
-
-int
-db_get_player_pref_int (int player_id, const char *key, int default_value)
+int db_subscribe_disable (db_t *db, int64_t pid, const char *topic, int *locked_out)
 {
-  char *value_str = NULL;
-  if (db_prefs_get_one (player_id, key, &value_str) != 0 || !value_str)
-    {
-      return default_value;
-    }
-  int value = atoi (value_str);
-
-
-  free (value_str);
-  return value;
+  db_error_t err; if (!db) return -1;
+  if (!db_exec(db, "UPDATE subscriptions SET enabled = 0 WHERE player_id = $1 AND event_type = $2 AND locked = 0;", (db_bind_t[]){db_bind_i64(pid), db_bind_text(topic)}, 2, &err)) return -1;
+  if (locked_out) *locked_out = 0; return 0;
 }
 
-
-int
-db_get_player_pref_string (int player_id, const char *key,
-                           const char *default_value, char *out_buffer,
-                           size_t buffer_size)
+int db_bookmark_upsert (db_t *db, int64_t pid, const char *name, int64_t sid)
 {
-  char *value_str = NULL;
-  if (db_prefs_get_one (player_id, key, &value_str) != 0 || !value_str)
-    {
-      if (default_value)
-        {
-          strncpy (out_buffer, default_value, buffer_size - 1);
-          out_buffer[buffer_size - 1] = '\0';
-        }
-      else
-        {
-          out_buffer[0] = '\0';
-        }
-      return 0;
-    }
-  strncpy (out_buffer, value_str, buffer_size - 1);
-  out_buffer[buffer_size - 1] = '\0';
-  free (value_str);
+  db_error_t err; if (!db) return -1;
+  const char *sql = "INSERT INTO player_bookmarks (player_id, name, sector_id) VALUES ($1, $2, $3) "
+                    "ON CONFLICT(player_id, name) DO UPDATE SET sector_id = $3;";
+  if (!db_exec(db, sql, (db_bind_t[]){db_bind_i64(pid), db_bind_text(name), db_bind_i64(sid)}, 3, &err)) return -1;
   return 0;
 }
 
-
-/* ---------- Subscriptions ---------- */
-int
-db_subscribe_upsert (int64_t pid, const char *topic, const char *filter_json,
-                     int locked)
+int db_bookmark_list (db_t *db, int64_t pid, db_res_t **it)
 {
-  static const char *SQL =
-    "INSERT INTO subscriptions(player_id,event_type,delivery,filter_json,locked,enabled)"
-    "VALUES(?1,?2,'push',?3,?4,1) "
-    "ON CONFLICT(player_id,event_type) DO UPDATE SET "
-    " enabled=1, locked=MAX(subscriptions.locked,excluded.locked), filter_json=excluded.filter_json;";
-  sqlite3_stmt *st = NULL;
-  if (prep (g_db_ps, &st, SQL) != SQLITE_OK)
-    {
-      return -1;
-    }
-  sqlite3_bind_int64 (st, 1, pid);
-  sqlite3_bind_text (st, 2, topic, -1, SQLITE_TRANSIENT);
-  if (filter_json)
-    {
-      sqlite3_bind_text (st, 3, filter_json, -1, SQLITE_TRANSIENT);
-    }
-  else
-    {
-      sqlite3_bind_null (st, 3);
-    }
-  sqlite3_bind_int (st, 4, locked ? 1 : 0);
-  int rc = sqlite3_step (st);
-
-
-  sqlite3_finalize (st);
-  return (rc == SQLITE_DONE) ? 0 : -1;
-}
-
-
-int
-db_subscribe_disable (int64_t pid, const char *topic, int *was_locked)
-{
-  static const char *SQL_LOCK =
-    "SELECT locked FROM subscriptions WHERE player_id=?1 AND event_type=?2;";
-  static const char *SQL_DISABLE =
-    "UPDATE subscriptions SET enabled=0 WHERE player_id=?1 AND event_type=?2 AND locked=0;";
-  sqlite3_stmt *st = NULL;
-  if (prep (g_db_ps, &st, SQL_LOCK) != SQLITE_OK)
-    {
-      return -1;
-    }
-  sqlite3_bind_int64 (st, 1, pid);
-  sqlite3_bind_text (st, 2, topic, -1, SQLITE_TRANSIENT);
-  int rc = sqlite3_step (st);
-  int locked = 0;
-
-
-  if (rc == SQLITE_ROW)
-    {
-      locked = sqlite3_column_int (st, 0);
-    }
-  sqlite3_finalize (st);
-  if (was_locked)
-    {
-      *was_locked = locked;
-    }
-  if (locked)
-    {
-      return +1;                /* signal LOCKED to caller */
-    }
-  if (prep (g_db_ps, &st, SQL_DISABLE) != SQLITE_OK)
-    {
-      return -1;
-    }
-  sqlite3_bind_int64 (st, 1, pid);
-  sqlite3_bind_text (st, 2, topic, -1, SQLITE_TRANSIENT);
-  rc = sqlite3_step (st);
-  sqlite3_finalize (st);
-  return (rc == SQLITE_DONE) ? 0 : -1;
-}
-
-
-int
-db_subscribe_list (int64_t pid, sqlite3_stmt **it)
-{
-  static const char *SQL =
-    "SELECT event_type AS topic, locked, enabled, delivery, filter_json "
-    "FROM subscriptions WHERE player_id=?1 ORDER BY locked DESC, event_type;";
-  if (prep (g_db_ps, it, SQL) != SQLITE_OK)
-    {
-      return -1;
-    }
-  sqlite3_bind_int64 (*it, 1, pid);
+  db_error_t err; if (!db || !it) return -1;
+  if (!db_query(db, "SELECT name, sector_id FROM player_bookmarks WHERE player_id = $1 ORDER BY name;", (db_bind_t[]){db_bind_i64(pid)}, 1, it, &err)) return -1;
   return 0;
 }
 
-
-/* ---------- Bookmarks ---------- */
-int
-db_bookmark_upsert (int64_t pid, const char *name, int64_t sector_id)
+int db_bookmark_remove (db_t *db, int64_t pid, const char *name)
 {
-  static const char *SQL =
-    "INSERT INTO player_bookmarks(player_id,name,sector_id,updated_at)"
-    "VALUES(?1,?2,?3,strftime('%s','now')) "
-    "ON CONFLICT(player_id,name) DO UPDATE SET sector_id=excluded.sector_id,updated_at=excluded.updated_at;";
-  sqlite3_stmt *st = NULL;
-  if (prep (g_db_ps, &st, SQL) != SQLITE_OK)
-    {
-      return -1;
-    }
-  sqlite3_bind_int64 (st, 1, pid);
-  sqlite3_bind_text (st, 2, name, -1, SQLITE_TRANSIENT);
-  sqlite3_bind_int64 (st, 3, sector_id);
-  int rc = sqlite3_step (st);
-
-
-  sqlite3_finalize (st);
-  return (rc == SQLITE_DONE) ? 0 : -1;
-}
-
-
-int
-db_bookmark_remove (int64_t pid, const char *name)
-{
-  static const char *SQL =
-    "DELETE FROM player_bookmarks WHERE player_id=?1 AND name=?2;";
-  sqlite3_stmt *st = NULL;
-  if (prep (g_db_ps, &st, SQL) != SQLITE_OK)
-    {
-      return -1;
-    }
-  sqlite3_bind_int64 (st, 1, pid);
-  sqlite3_bind_text (st, 2, name, -1, SQLITE_TRANSIENT);
-  int rc = sqlite3_step (st);
-
-
-  sqlite3_finalize (st);
-  return (rc == SQLITE_DONE) ? 0 : -1;
-}
-
-
-int
-db_bookmark_list (int64_t pid, sqlite3_stmt **it)
-{
-  static const char *SQL =
-    "SELECT name, sector_id FROM player_bookmarks WHERE player_id=?1 ORDER BY name;";
-  if (prep (g_db_ps, it, SQL) != SQLITE_OK)
-    {
-      return -1;
-    }
-  sqlite3_bind_int64 (*it, 1, pid);
+  db_error_t err; if (!db) return -1;
+  if (!db_exec(db, "DELETE FROM player_bookmarks WHERE player_id = $1 AND name = $2;", (db_bind_t[]){db_bind_i64(pid), db_bind_text(name)}, 2, &err)) return -1;
   return 0;
 }
 
-
-/* ---------- Avoid ---------- */
-int
-db_avoid_add (int64_t pid, int64_t sector_id)
+int db_avoid_add (db_t *db, int64_t pid, int64_t sid)
 {
-  static const char *SQL =
-    "INSERT OR IGNORE INTO player_avoid(player_id,sector_id) VALUES(?1,?2);";
-  sqlite3_stmt *st = NULL;
-  if (prep (g_db_ps, &st, SQL) != SQLITE_OK)
-    {
-      return -1;
-    }
-  sqlite3_bind_int64 (st, 1, pid);
-  sqlite3_bind_int64 (st, 2, sector_id);
-  int rc = sqlite3_step (st);
-
-
-  sqlite3_finalize (st);
-  return (rc == SQLITE_DONE) ? 0 : -1;
-}
-
-
-int
-db_avoid_remove (int64_t pid, int64_t sector_id)
-{
-  static const char *SQL =
-    "DELETE FROM player_avoid WHERE player_id=?1 AND sector_id=?2;";
-  sqlite3_stmt *st = NULL;
-  if (prep (g_db_ps, &st, SQL) != SQLITE_OK)
-    {
-      return -1;
-    }
-  sqlite3_bind_int64 (st, 1, pid);
-  sqlite3_bind_int64 (st, 2, sector_id);
-  int rc = sqlite3_step (st);
-
-
-  sqlite3_finalize (st);
-  return (rc == SQLITE_DONE) ? 0 : -1;
-}
-
-
-int
-db_avoid_list (int64_t pid, sqlite3_stmt **it)
-{
-  static const char *SQL =
-    "SELECT sector_id FROM player_avoid WHERE player_id=?1 ORDER BY sector_id;";
-  if (prep (g_db_ps, it, SQL) != SQLITE_OK)
-    {
-      return -1;
-    }
-  sqlite3_bind_int64 (*it, 1, pid);
+  db_error_t err; if (!db) return -1;
+  if (!db_exec(db, "INSERT INTO player_avoid (player_id, sector_id) VALUES ($1, $2) ON CONFLICT DO NOTHING;", (db_bind_t[]){db_bind_i64(pid), db_bind_i64(sid)}, 2, &err)) return -1;
   return 0;
 }
 
-
-/* ---------- Notes ---------- */
-int
-db_note_set (int64_t pid, const char *scope, const char *key,
-             const char *note)
+int db_avoid_list (db_t *db, int64_t pid, db_res_t **it)
 {
-  static const char *SQL =
-    "INSERT INTO player_notes(player_id,scope,key,note,updated_at)"
-    "VALUES(?1,?2,?3,?4,strftime('%s','now')) "
-    "ON CONFLICT(player_id,scope,key) DO UPDATE SET note=excluded.note,updated_at=excluded.updated_at;";
-  sqlite3_stmt *st = NULL;
-  if (prep (g_db_ps, &st, SQL) != SQLITE_OK)
-    {
-      return -1;
-    }
-  sqlite3_bind_int64 (st, 1, pid);
-  sqlite3_bind_text (st, 2, scope, -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text (st, 3, key, -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text (st, 4, note, -1, SQLITE_TRANSIENT);
-  int rc = sqlite3_step (st);
-
-
-  sqlite3_finalize (st);
-  return (rc == SQLITE_DONE) ? 0 : -1;
-}
-
-
-int
-db_note_delete (int64_t pid, const char *scope, const char *key)
-{
-  static const char *SQL =
-    "DELETE FROM player_notes WHERE player_id=?1 AND scope=?2 AND key=?3;";
-  sqlite3_stmt *st = NULL;
-  if (prep (g_db_ps, &st, SQL) != SQLITE_OK)
-    {
-      return -1;
-    }
-  sqlite3_bind_int64 (st, 1, pid);
-  sqlite3_bind_text (st, 2, scope, -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text (st, 3, key, -1, SQLITE_TRANSIENT);
-  int rc = sqlite3_step (st);
-
-
-  sqlite3_finalize (st);
-  return (rc == SQLITE_DONE) ? 0 : -1;
-}
-
-
-int
-db_note_list (int64_t pid, const char *scope, sqlite3_stmt **it)
-{
-  if (scope)
-    {
-      static const char *SQL =
-        "SELECT scope,key,note FROM player_notes WHERE player_id=?1 AND scope=?2 ORDER BY key;";
-
-
-      if (prep (g_db_ps, it, SQL) != SQLITE_OK)
-        {
-          return -1;
-        }
-      sqlite3_bind_int64 (*it, 1, pid);
-      sqlite3_bind_text (*it, 2, scope, -1, SQLITE_TRANSIENT);
-    }
-  else
-    {
-      static const char *SQL =
-        "SELECT scope,key,note FROM player_notes WHERE player_id=?1 ORDER BY scope,key;";
-
-
-      if (prep (g_db_ps, it, SQL) != SQLITE_OK)
-        {
-          return -1;
-        }
-      sqlite3_bind_int64 (*it, 1, pid);
-    }
+  db_error_t err; if (!db || !it) return -1;
+  if (!db_query(db, "SELECT sector_id FROM player_avoid WHERE player_id = $1 ORDER BY sector_id;", (db_bind_t[]){db_bind_i64(pid)}, 1, it, &err)) return -1;
   return 0;
 }
 
-
-int
-db_for_each_subscriber (sqlite3 *db, const char *event_type, player_id_cb cb,
-                        void *arg)
+int db_avoid_remove (db_t *db, int64_t pid, int64_t sid)
 {
-  if (!db || !event_type || !cb)
-    {
-      return -1;
-    }
-  // Compute domain and domain.* for the SQL fast-path
-  // We support: exact match and single-level wildcard "domain.*"
-  const char *dot = strchr (event_type, '.');
-  char domain[64] = { 0 };
-  char domain_star[70] = { 0 };
-
-
-  if (dot && (size_t) (dot - event_type) < sizeof (domain))
-    {
-      size_t n = (size_t) (dot - event_type);
-
-
-      memcpy (domain, event_type, n);
-      domain[n] = '\0';
-      snprintf (domain_star, sizeof (domain_star), "%s.*", domain);
-    }
-  else
-    {
-      // No dot? Then only exact match makes sense; domain_star becomes "*"
-      strncpy (domain_star, "*", sizeof (domain_star) - 1);
-    }
-  // We purposely avoid LIKE/GLOB for predictable perf and semantics.
-  // Unique(player_id, event_type) is already enforced; DISTINCT is for safety.
-  const char *SQL =
-    "SELECT DISTINCT player_id "
-    "FROM subscriptions "
-    "WHERE enabled=1 " "  AND (event_type = ?1 OR event_type = ?2)";
-  sqlite3_stmt *st = NULL;
-  int rc = sqlite3_prepare_v2 (db, SQL, -1, &st, NULL);
-
-
-  if (rc != SQLITE_OK)
-    {
-      return -1;
-    }
-  sqlite3_bind_text (st, 1, event_type, -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text (st, 2, domain_star, -1, SQLITE_TRANSIENT);
-  while ((rc = sqlite3_step (st)) == SQLITE_ROW)
-    {
-      int player_id = sqlite3_column_int (st, 0);
-
-
-      if (cb (player_id, arg) != 0)
-        {                       // cb can stop early by returning non-zero
-          break;
-        }
-    }
-  int ok = (rc == SQLITE_ROW || rc == SQLITE_DONE) ? 0 : -1;
-
-
-  sqlite3_finalize (st);
-  return ok;
+  db_error_t err; if (!db) return -1;
+  if (!db_exec(db, "DELETE FROM player_avoid WHERE player_id = $1 AND sector_id = $2;", (db_bind_t[]){db_bind_i64(pid), db_bind_i64(sid)}, 2, &err)) return -1;
+  return 0;
 }
 
+int db_note_set (db_t *db, int64_t pid, const char *scope, const char *key, const char *note)
+{
+  db_error_t err; if (!db) return -1;
+  const char *sql = "INSERT INTO player_notes (player_id, scope, key, note) VALUES ($1, $2, $3, $4) "
+                    "ON CONFLICT(player_id, scope, key) DO UPDATE SET note = $4;";
+  if (!db_exec(db, sql, (db_bind_t[]){db_bind_i64(pid), db_bind_text(scope), db_bind_text(key), db_bind_text(note)}, 4, &err)) return -1;
+  return 0;
+}
+
+int db_note_delete (db_t *db, int64_t pid, const char *scope, const char *key)
+{
+  db_error_t err; if (!db) return -1;
+  if (!db_exec(db, "DELETE FROM player_notes WHERE player_id = $1 AND scope = $2 AND key = $3;", (db_bind_t[]){db_bind_i64(pid), db_bind_text(scope), db_bind_text(key)}, 3, &err)) return -1;
+  return 0;
+}
+
+int db_note_list (db_t *db, int64_t pid, const char *scope, db_res_t **it)
+{
+  db_error_t err; if (!db || !it) return -1;
+  const char *sql = scope ? "SELECT scope, key, note FROM player_notes WHERE player_id = $1 AND scope = $2 ORDER BY key;"
+                          : "SELECT scope, key, note FROM player_notes WHERE player_id = $1 ORDER BY scope, key;";
+  db_bind_t params[2]; params[0] = db_bind_i64(pid); if (scope) params[1] = db_bind_text(scope);
+  if (!db_query(db, sql, params, scope ? 2 : 1, it, &err)) return -1;
+  return 0;
+}
+
+int db_for_each_subscriber (db_t *db, const char *event, player_id_cb cb, void *arg)
+{
+  db_res_t *res = NULL; db_error_t err; if (!db || !event || !cb) return -1;
+  if (db_query(db, "SELECT DISTINCT player_id FROM subscriptions WHERE event_type = $1 AND enabled = 1;", (db_bind_t[]){db_bind_text(event)}, 1, &res, &err)) {
+      while (db_res_step(res, &err)) if (cb(db_res_col_i32(res, 0, &err), arg) != 0) break;
+      db_res_finalize(res); return 0;
+  }
+  return -1;
+}
+
+int db_prefs_get_all (db_t *db, int64_t pid, db_res_t **it)
+{
+  db_error_t err; if (!db || !it) return -1;
+  if (!db_query(db, "SELECT key, value FROM player_prefs WHERE player_id = $1;", (db_bind_t[]){db_bind_i64(pid)}, 1, it, &err)) return -1;
+  return 0;
+}
+
+int db_prefs_get_one (db_t *db, int64_t pid, const char *key, char **out)
+{
+  db_res_t *res = NULL; db_error_t err; if (!db || !key || !out) return -1;
+  if (db_query(db, "SELECT value FROM player_prefs WHERE player_id = $1 AND key = $2 LIMIT 1;", (db_bind_t[]){db_bind_i64(pid), db_bind_text(key)}, 2, &res, &err)) {
+      if (db_res_step(res, &err)) *out = strdup(db_res_col_text(res, 0, &err) ?: "");
+      db_res_finalize(res); return 0;
+  }
+  return -1;
+}
+
+int db_prefs_set_one (db_t *db, int64_t pid, const char *key, pref_type t, const char *val)
+{
+  db_error_t err; if (!db || !key) return -1;
+  const char *sql = "INSERT INTO player_prefs (player_id, key, value) VALUES ($1, $2, $3) ON CONFLICT(player_id, key) DO UPDATE SET value = $3;";
+  if (!db_exec(db, sql, (db_bind_t[]){db_bind_i64(pid), db_bind_text(key), db_bind_text(val)}, 3, &err)) return -1;
+  (void)t; return 0;
+}
+
+int db_get_player_pref_int (db_t *db, int pid, const char *key, int def)
+{
+  char *s = NULL; if (db_prefs_get_one(db, pid, key, &s) == 0 && s) { int v = atoi(s); free(s); return v; }
+  return def;
+}
+
+int db_get_player_pref_string (db_t *db, int pid, const char *key, const char *def, char *buf, size_t sz)
+{
+  char *s = NULL; if (db_prefs_get_one(db, pid, key, &s) == 0 && s) { strncpy(buf, s, sz-1); buf[sz-1] = '\0'; free(s); return 0; }
+  if (def) { strncpy(buf, def, sz-1); buf[sz-1] = '\0'; } return 0;
+}

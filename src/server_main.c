@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <pthread.h>            /* for pthread_mutex_t */
-// #include <sqlite3.h> // Replaced with generic DBAL
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/socket.h>
@@ -295,23 +294,22 @@ int bigbang (void);             /* if your function is named differently, change
 static int
 get_scalar_int (const char *sql)
 {
-  sqlite3 *dbh = db_get_handle ();
-  if (!dbh)
+  db_t *db = game_db_get_handle ();
+  if (!db)
     {
       return -1;
     }
-  sqlite3_stmt *st = NULL;
+  
+  db_res_t *res = NULL;
+  db_error_t err;
+  int v = -1;
 
-
-  if (sqlite3_prepare_v2 (dbh, sql, -1, &st, NULL) != SQLITE_OK)
-    {
-      return -1;
-    }
-  int rc = sqlite3_step (st);
-  int v = (rc == SQLITE_ROW) ? sqlite3_column_int (st, 0) : -1;
-
-
-  sqlite3_finalize (st);
+  if (db_query(db, sql, NULL, 0, &res, &err)) {
+      if (db_res_step(res, &err)) {
+          v = db_res_col_i32(res, 0, &err);
+      }
+      db_res_finalize(res);
+  }
   return v;
 }
 
@@ -320,13 +318,17 @@ get_scalar_int (const char *sql)
 static int
 needs_bigbang (void)
 {
-  // Primary flag: PRAGMA user_version
-  int uv = get_scalar_int ("PRAGMA user_version");
-  if (uv > 0)
-    {
-      return 0;                 // already seeded
-    }
-  // Belt-and-braces: look at contents in case user_version wasn't set
+  db_t *db = game_db_get_handle();
+  if (db_backend(db) == DB_BACKEND_SQLITE) {
+      // Primary flag: PRAGMA user_version (SQLite only)
+      int uv = get_scalar_int ("PRAGMA user_version");
+      if (uv > 0)
+        {
+          return 0;                 // already seeded
+        }
+  }
+  
+  // Belt-and-braces: look at contents in case user_version wasn't set (or for Postgres)
   int sectors = get_scalar_int ("SELECT COUNT(*) FROM sectors");
   int warps = get_scalar_int ("SELECT COUNT(*) FROM sector_warps");
   int ports = get_scalar_int ("SELECT COUNT(*) FROM ports");
@@ -348,35 +350,6 @@ needs_bigbang (void)
 }
 
 
-// Run bigbang once; mark DB as seeded so we never do it again
-// static int
-// run_bigbang_if_needed (void)
-// {
-//   if (!needs_bigbang ())
-//     {
-//       return 0;
-//     }
-//   sqlite3 *dbh = db_get_handle ();
-
-
-//   if (!dbh)
-//     {
-//       LOGE ("BIGBANG: DB handle unavailable.\n");
-//       //      LOGE( "BIGBANG: DB handle unavailable.\n");
-//       return -1;
-//     }
-//   LOGW ("BIGBANG: Universe appears empty — seeding now...\n");
-//   //  LOGE( "BIGBANG: Universe appears empty — seeding now...\n");
-//   if (bigbang () != 0)
-//     {
-//       LOGE ("BIGBANG: Failed.\n");
-//       //      LOGE( "BIGBANG: Failed.\n");
-//       return -1;
-//     }
-//   return 0;
-// }
-
-
 //////////////////////////////////////////////////
 int
 main (void)
@@ -396,35 +369,27 @@ main (void)
       //      LOGE( "Failed to init DB.\n");
       return EXIT_FAILURE;
     }
-  /* Optional: keep a sanity check/log, but don't gate db_init() on it. */
-  // (void) load_config (); // This function is being removed
-  if (universe_init () != 0) // This still calls original SQLite db funcs
-    {
-      return EXIT_FAILURE;      // or your project’s error path
-    }
+  
+  if (needs_bigbang ()) {
+      LOGW ("Universe appears empty - running Big Bang...");
+      // Big Bang might still use raw SQLite internally in server_bigbang.c
+      // We haven't refactored server_bigbang.c yet, so we assume it handles itself
+      // or we accept that it might fail if we are strictly on Postgres right now.
+      // But server_bigbang.c is next in the list.
+      if (universe_init () != 0)
+        {
+          return EXIT_FAILURE;
+        }
+  }
+
   // normal startup
   if (!load_eng_config ()) // This still calls original SQLite db funcs
     {
       return 2;
     }
-  // Load ports from DB, with fallback to defaults
-  // int server_port = 0; // Removed: db_load_ports is removed
-  // int s2s_port = 0; // Removed: db_load_ports is removed
-
-
-  // if (db_load_ports (&server_port, &s2s_port) == 0) // This still calls original SQLite db funcs
-  //   {
-  //     g_cfg.server_port = server_port;
-  //     g_cfg.s2s.tcp_port = s2s_port;
-  //     LOGI ("Loaded ports from database: server=%d, s2s=%d",
-  //        g_cfg.server_port, g_cfg.s2s.tcp_port);
-  //   }
-  // else
-  //   {
-  //     LOGW ("Could not load ports from database, using defaults.");
-  //   }
+  
   // initalise the player settings if all the other DB stuff is done.
-  db_player_settings_init (db_get_handle ());
+  db_player_settings_init (game_db_get_handle ());
   cron_register_builtins ();
   /* 0.1) Capabilities (restored) */
   build_capabilities ();        /* rebuilds g_capabilities */
@@ -434,7 +399,7 @@ main (void)
   /* 1) S2S keyring (must be before we bring up TCP) */
   LOGI ("loading s2s key ...\n");
   //  LOGE( " loading s2s key ...\n");
-  if (s2s_install_default_key (db_get_handle ()) != 0)
+  if (s2s_install_default_key (game_db_get_handle ()) != 0)
     {
       LOGW (" FATAL: S2S key missing/invalid\n");
       //  LOGE( " FATAL: S2S key missing/invalid\n");
@@ -644,41 +609,5 @@ shutdown_and_exit:
   game_db_close ();
   server_log_close ();
   return (rc == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
-}
-
-
-/* Returns 1 if we can open twconfig.db and read at least one row from config; else 0. */
-int
-load_config (void)
-{
-  sqlite3 *db = NULL;
-  sqlite3_stmt *stmt = NULL;
-  int rc;
-  rc = sqlite3_open (DEFAULT_DB_NAME, &db);
-  if (rc != SQLITE_OK)
-    {
-      /* fprintf(stderr, "sqlite3_open: %s\n", sqlite3_errmsg(db)); */
-      if (db)
-        {
-          sqlite3_close (db);
-        }
-      return 0;
-    }
-  rc =
-    sqlite3_prepare_v2 (db, "SELECT 1 FROM config LIMIT 1;", -1, &stmt, NULL);
-  if (rc != SQLITE_OK)
-    {
-      /* fprintf(stderr, "sqlite3_prepare_v2: %s\n", sqlite3_errmsg(db)); */
-      sqlite3_close (db);
-      return 0;
-    }
-  rc = sqlite3_step (stmt);
-  /* SQLITE_ROW means at least one row exists */
-  int ok = (rc == SQLITE_ROW) ? 1 : 0;
-
-
-  sqlite3_finalize (stmt);
-  sqlite3_close (db);
-  return ok;
 }
 

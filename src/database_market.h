@@ -1,7 +1,7 @@
 #ifndef DATABASE_MARKET_H
 #define DATABASE_MARKET_H
 
-#include <sqlite3.h>
+#include "db/db_api.h"
 #include <jansson.h>
 
 // Struct to represent a commodity order
@@ -23,7 +23,7 @@ typedef struct
 
 // Helper to insert a new commodity order
 // Returns the new order's ID on success, or -1 on failure.
-int db_insert_commodity_order (sqlite3 *db,
+int db_insert_commodity_order (db_t *db,
                                const char *actor_type,
                                int actor_id,
                                const char *location_type,
@@ -33,21 +33,21 @@ int db_insert_commodity_order (sqlite3 *db,
                                int quantity, int price, long long expires_at);
 
 // Helper to update an existing commodity order's quantity, status, and filled_quantity.
-// Returns SQLITE_OK on success.
-int db_update_commodity_order (sqlite3 *db, int order_id, int new_quantity,     // Total quantity of the order (can be less than original if partially filled)
+// Returns 0 on success.
+int db_update_commodity_order (db_t *db, int order_id, int new_quantity,     // Total quantity of the order (can be less than original if partially filled)
                                int new_filled_quantity,
                                const char *new_status);
 
 // Helper to cancel open commodity orders for a given port and commodity on a specific side.
-// Returns SQLITE_OK on success.
-int db_cancel_commodity_orders_for_port_and_commodity (sqlite3 *db,
+// Returns 0 on success.
+int db_cancel_commodity_orders_for_port_and_commodity (db_t *db,
                                                        int port_id,
                                                        int commodity_id,
                                                        const char *side);
 
 // Helper to cancel open commodity orders for a given actor and commodity on a specific side.
-// Returns SQLITE_OK on success.
-int db_cancel_commodity_orders_for_actor_and_commodity (sqlite3 *db,
+// Returns 0 on success.
+int db_cancel_commodity_orders_for_actor_and_commodity (db_t *db,
                                                         const char
                                                         *actor_type,
                                                         int actor_id,
@@ -58,22 +58,22 @@ int db_cancel_commodity_orders_for_actor_and_commodity (sqlite3 *db,
 // Returns a dynamically allocated array of commodity_order_t structs.
 // The caller is responsible for freeing the returned array.
 // The 'count' parameter will be set to the number of orders loaded.
-commodity_order_t *db_load_open_orders_for_commodity (sqlite3 *db,
+commodity_order_t *db_load_open_orders_for_commodity (db_t *db,
                                                       int commodity_id,
                                                       const char *side,
                                                       int *count);
 
 // Helper to get a specific open order for a port.
-// Returns SQLITE_OK if found (populating out_order), SQLITE_NOTFOUND if not found, or error code.
-int db_get_open_order_for_port (sqlite3 *db,
+// Returns 0 if found (populating out_order), non-zero if not found or error.
+int db_get_open_order_for_port (db_t *db,
                                 int port_id,
                                 int commodity_id,
                                 const char *side,
                                 commodity_order_t *out_order);
 
 // Helper to get a specific open order for any actor type.
-// Returns SQLITE_OK if found (populating out_order), SQLITE_NOTFOUND if not found, or error code.
-int db_get_open_order (sqlite3 *db,
+// Returns 0 if found (populating out_order), non-zero if not found or error.
+int db_get_open_order (db_t *db,
                        const char *actor_type,
                        int actor_id,
                        int commodity_id,
@@ -81,7 +81,7 @@ int db_get_open_order (sqlite3 *db,
 
 // Helper to insert a new commodity trade.
 // Returns the new trade's ID on success, or -1 on failure.
-int db_insert_commodity_trade (sqlite3 *db,
+int db_insert_commodity_trade (db_t *db,
                                int buy_order_id,
                                int sell_order_id,
                                int quantity,
@@ -97,15 +97,15 @@ int db_insert_commodity_trade (sqlite3 *db,
 
 // Helper to list open orders for a specific port (read-only, for diagnostics)
 // Returns a JSON array of order objects (caller owns reference)
-json_t *db_list_port_orders (sqlite3 *db, int port_id);
+json_t *db_list_port_orders (db_t *db, int port_id);
 
 // Helper to list orders for a specific actor (read-only, for diagnostics)
 // Returns a JSON array of order objects (caller owns reference)
-json_t *db_list_actor_orders (sqlite3 *db, const char *actor_type,
+json_t *db_list_actor_orders (db_t *db, const char *actor_type,
                               int actor_id);
 
 // Helper to summarize orders by commodity (read-only, for diagnostics)
 // Returns a JSON object (caller owns reference)
-json_t *db_orders_summary (sqlite3 *db, int filter_commodity_id);
+json_t *db_orders_summary (db_t *db, int filter_commodity_id);
 
 #endif // DATABASE_MARKET_H

@@ -15,7 +15,7 @@
 #include <ctype.h>
 #include <string.h>
 #include <jansson.h>
-#include <sqlite3.h>
+// #include <sqlite3.h> // Removed
 /* local inlcudes */
 #include "server_config.h"
 #include "database.h"
@@ -27,11 +27,14 @@
 #include "server_config.h"
 #include "server_log.h"
 #include "globals.h"            // Include globals.h for xp_align_config_t and g_xp_align declaration
+#include "game_db.h"            // Include game_db.h
+#include "db/db_api.h"          // Include generic DB API
+
 server_config_t g_cfg;
 json_t *g_capabilities;
 xp_align_config_t g_xp_align;   // Define the global instance of xp_align_config_t
 /* Provided by your DB module; MUST be defined there (no 'static') */
-sqlite3 *g_db = NULL;
+// sqlite3 *g_db = NULL; // Removed global raw handle
 
 
 /* --------- static helpers (not visible to linker) --------- */
@@ -344,7 +347,7 @@ print_effective_config_redacted (void)
 
 
 int
-xp_align_config_reload (sqlite3 *db)
+xp_align_config_reload (db_t *db)
 {
   (void) db;                    // Unused now as we are using defaults until schema supports XP config
   // Set sensible defaults directly since config table doesn't have these keys
@@ -367,296 +370,286 @@ xp_align_config_reload (sqlite3 *db)
 
 
 static void
-apply_db (sqlite3 *db)
+apply_db (db_t *db)
 {
-  sqlite3_stmt *st = NULL;
+  db_res_t *res = NULL;
+  db_error_t err;
   /* New Key-Value-Type Query */
   const char *sql = "SELECT key, value, type FROM config;";
-  if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
-    {
-      LOGW ("[config] Failed to prepare config query: %s",
-            sqlite3_errmsg (db));
-      return;
-    }
-  while (sqlite3_step (st) == SQLITE_ROW)
-    {
-      const char *key = (const char *) sqlite3_column_text (st, 0);
-      const char *val = (const char *) sqlite3_column_text (st, 1);
-      const char *type = (const char *) sqlite3_column_text (st,
-                                                             2);
+  
+  if (db_query(db, sql, NULL, 0, &res, &err)) {
+      while (db_res_step (res, &err))
+        {
+          const char *key = db_res_col_text(res, 0, &err);
+          const char *val = db_res_col_text(res, 1, &err);
+          const char *type = db_res_col_text(res, 2, &err);
 
-
-      if (!key || !val || !type)
-        {
-          continue;
-        }
-      /* --- Map keys to g_cfg fields --- */
-      /* Integers */
-      if (strcmp (key, "turnsperday") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.turnsperday);
-        }
-      else if (strcmp (key, "combat.turn_cost") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.combat.turn_cost);
-        }
-      else if (strcmp (key, "combat.base_hit") == 0)
-        {
-          cfg_parse_double (val, type, &g_cfg.combat.base_hit);
-        }
-      else if (strcmp (key, "combat.offense_coeff") == 0)
-        {
-          cfg_parse_double (val, type, &g_cfg.combat.offense_coeff);
-        }
-      else if (strcmp (key, "combat.defense_coeff") == 0)
-        {
-          cfg_parse_double (val, type, &g_cfg.combat.defense_coeff);
-        }
-      else if (strcmp (key, "combat.flee.engine_weight") == 0)
-        {
-          cfg_parse_double (val, type, &g_cfg.combat.flee.engine_weight);
-        }
-      else if (strcmp (key, "combat.flee.mass_weight") == 0)
-        {
-          cfg_parse_double (val, type, &g_cfg.combat.flee.mass_weight);
-        }
-      else if (strcmp (key, "regen.enabled") == 0)
-        {
-          int tmp;
-
-
-          if (cfg_parse_int (val, type, &tmp) == 0)
+          if (!key || !val || !type)
             {
-              g_cfg.regen.enabled = tmp;
+              continue;
+            }
+          /* --- Map keys to g_cfg fields --- */
+          /* Integers */
+          if (strcmp (key, "turnsperday") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.turnsperday);
+            }
+          else if (strcmp (key, "combat.turn_cost") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.combat.turn_cost);
+            }
+          else if (strcmp (key, "combat.base_hit") == 0)
+            {
+              cfg_parse_double (val, type, &g_cfg.combat.base_hit);
+            }
+          else if (strcmp (key, "combat.offense_coeff") == 0)
+            {
+              cfg_parse_double (val, type, &g_cfg.combat.offense_coeff);
+            }
+          else if (strcmp (key, "combat.defense_coeff") == 0)
+            {
+              cfg_parse_double (val, type, &g_cfg.combat.defense_coeff);
+            }
+          else if (strcmp (key, "combat.flee.engine_weight") == 0)
+            {
+              cfg_parse_double (val, type, &g_cfg.combat.flee.engine_weight);
+            }
+          else if (strcmp (key, "combat.flee.mass_weight") == 0)
+            {
+              cfg_parse_double (val, type, &g_cfg.combat.flee.mass_weight);
+            }
+          else if (strcmp (key, "regen.enabled") == 0)
+            {
+              int tmp;
+
+
+              if (cfg_parse_int (val, type, &tmp) == 0)
+                {
+                  g_cfg.regen.enabled = tmp;
+                }
+            }
+          else if (strcmp (key, "regen.shield_rate_pct_per_tick") == 0)
+            {
+              cfg_parse_double (val, type, &g_cfg.regen.shield_rate_pct_per_tick);
+            }
+          else if (strcmp (key, "regen.tick_seconds") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.regen.tick_seconds);
+            }
+          else if (strcmp (key, "maxwarps_per_sector") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.maxwarps_per_sector);
+            }
+          else if (strcmp (key, "startingcredits") == 0)
+            {
+              cfg_parse_int64 (val, type, &g_cfg.startingcredits);  /* int64 */
+            }
+          else if (strcmp (key, "startingfighters") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.startingfighters);
+            }
+          else if (strcmp (key, "startingholds") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.startingholds);
+            }
+          else if (strcmp (key, "processinterval") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.engine.processinterval);
+            }
+          else if (strcmp (key, "autosave") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.autosave);
+            }
+          else if (strcmp (key, "max_ports") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.max_ports);
+            }
+          else if (strcmp (key, "max_planets_per_sector") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.max_planets_per_sector);
+            }
+          else if (strcmp (key, "max_total_planets") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.max_total_planets);
+            }
+          else if (strcmp (key, "max_citadel_level") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.max_citadel_level);
+            }
+          else if (strcmp (key, "number_of_planet_types") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.number_of_planet_types);
+            }
+          else if (strcmp (key, "max_ship_name_length") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.max_ship_name_length);
+            }
+          else if (strcmp (key, "ship_type_count") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.ship_type_count);
+            }
+          else if (strcmp (key, "hash_length") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.hash_length);
+            }
+          else if (strcmp (key, "default_nodes") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.default_nodes);
+            }
+          else if (strcmp (key, "buff_size") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.buff_size);
+            }
+          else if (strcmp (key, "max_name_length") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.max_name_length);
+            }
+          else if (strcmp (key, "planet_type_count") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.planet_type_count);
+            }
+          else if (strcmp (key, "server_port") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.server_port);
+            }
+          else if (strcmp (key, "s2s_port") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.s2s.tcp_port);
+            }
+          else if (strcmp (key, "bank_alert_threshold_player") == 0)
+            {
+              cfg_parse_int64 (val, type, &g_cfg.bank_alert_threshold_player);      /* int64 */
+            }
+          else if (strcmp (key, "bank_alert_threshold_corp") == 0)
+            {
+              cfg_parse_int64 (val, type, &g_cfg.bank_alert_threshold_corp);        /* int64 */
+            }
+          else if (strcmp (key, "corporation_creation_fee") == 0)
+            {
+              cfg_parse_int64 (val, type, &g_cfg.corporation_creation_fee); /* int64 */
+            }
+          /* Genesis */
+          else if (strcmp (key, "genesis_enabled") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.genesis_enabled);
+            }
+          else if (strcmp (key, "genesis_block_at_cap") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.genesis_block_at_cap);
+            }
+          else if (strcmp (key, "genesis_navhaz_delta") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.genesis_navhaz_delta);
+            }
+          else if (strcmp (key, "genesis_class_weight_M") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.genesis_class_weight_M);
+            }
+          else if (strcmp (key, "genesis_class_weight_K") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.genesis_class_weight_K);
+            }
+          else if (strcmp (key, "genesis_class_weight_O") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.genesis_class_weight_O);
+            }
+          else if (strcmp (key, "genesis_class_weight_L") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.genesis_class_weight_L);
+            }
+          else if (strcmp (key, "genesis_class_weight_C") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.genesis_class_weight_C);
+            }
+          else if (strcmp (key, "genesis_class_weight_H") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.genesis_class_weight_H);
+            }
+          else if (strcmp (key, "genesis_class_weight_U") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.genesis_class_weight_U);
+            }
+          /* Shipyard */
+          else if (strcmp (key, "shipyard_enabled") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.shipyard_enabled);
+            }
+          else if (strcmp (key, "shipyard_trade_in_factor_bp") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.shipyard_trade_in_factor_bp);
+            }
+          else if (strcmp (key, "shipyard_require_cargo_fit") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.shipyard_require_cargo_fit);
+            }
+          else if (strcmp (key, "shipyard_require_fighters_fit") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.shipyard_require_fighters_fit);
+            }
+          else if (strcmp (key, "shipyard_require_shields_fit") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.shipyard_require_shields_fit);
+            }
+          else if (strcmp (key, "shipyard_require_hardware_compat") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.shipyard_require_hardware_compat);
+            }
+          else if (strcmp (key, "shipyard_tax_bp") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.shipyard_tax_bp);
+            }
+          else if (strcmp (key, "illegal_allowed_neutral") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.illegal_allowed_neutral);
+            }
+          else if (strcmp (key, "max_cloak_duration") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.death.max_cloak_duration);
+            }
+          else if (strcmp (key, "neutral_band") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.combat.neutral_band);
+            }
+          /* --- NEW KEYS --- */
+          else if (strcmp (key, "num_sectors") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.num_sectors);
+            }
+          else if (strcmp (key, "planet_treasury_interest_rate_bps") == 0)
+            {
+              cfg_parse_int (val, type, &g_cfg.planet_treasury_interest_rate_bps);
+            }
+          else if (strcmp (key, "bank_min_balance_for_interest") == 0)
+            {
+              cfg_parse_int64 (val, type, &g_cfg.bank_min_balance_for_interest);
+            }
+          else if (strcmp (key, "bank_max_daily_interest_per_account") == 0)
+            {
+              cfg_parse_int64 (val, type,
+                               &g_cfg.bank_max_daily_interest_per_account);
+            }
+          /* Log unknown keys as debug (ignore) */
+          else
+            {
+              LOGD ("[config] Unknown key in DB: '%s' (type=%s, val=%s)",
+                    key, type, val);
             }
         }
-      else if (strcmp (key, "regen.shield_rate_pct_per_tick") == 0)
-        {
-          cfg_parse_double (val, type, &g_cfg.regen.shield_rate_pct_per_tick);
-        }
-      else if (strcmp (key, "regen.tick_seconds") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.regen.tick_seconds);
-        }
-      else if (strcmp (key, "maxwarps_per_sector") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.maxwarps_per_sector);
-        }
-      else if (strcmp (key, "startingcredits") == 0)
-        {
-          cfg_parse_int64 (val, type, &g_cfg.startingcredits);  /* int64 */
-        }
-      else if (strcmp (key, "startingfighters") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.startingfighters);
-        }
-      else if (strcmp (key, "startingholds") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.startingholds);
-        }
-      else if (strcmp (key, "processinterval") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.engine.processinterval);
-        }
-      else if (strcmp (key, "autosave") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.autosave);
-        }
-      else if (strcmp (key, "max_ports") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.max_ports);
-        }
-      else if (strcmp (key, "max_planets_per_sector") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.max_planets_per_sector);
-        }
-      else if (strcmp (key, "max_total_planets") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.max_total_planets);
-        }
-      else if (strcmp (key, "max_citadel_level") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.max_citadel_level);
-        }
-      else if (strcmp (key, "number_of_planet_types") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.number_of_planet_types);
-        }
-      else if (strcmp (key, "max_ship_name_length") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.max_ship_name_length);
-        }
-      else if (strcmp (key, "ship_type_count") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.ship_type_count);
-        }
-      else if (strcmp (key, "hash_length") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.hash_length);
-        }
-      else if (strcmp (key, "default_nodes") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.default_nodes);
-        }
-      else if (strcmp (key, "buff_size") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.buff_size);
-        }
-      else if (strcmp (key, "max_name_length") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.max_name_length);
-        }
-      else if (strcmp (key, "planet_type_count") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.planet_type_count);
-        }
-      else if (strcmp (key, "server_port") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.server_port);
-        }
-      else if (strcmp (key, "s2s_port") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.s2s.tcp_port);
-        }
-      else if (strcmp (key, "bank_alert_threshold_player") == 0)
-        {
-          cfg_parse_int64 (val, type, &g_cfg.bank_alert_threshold_player);      /* int64 */
-        }
-      else if (strcmp (key, "bank_alert_threshold_corp") == 0)
-        {
-          cfg_parse_int64 (val, type, &g_cfg.bank_alert_threshold_corp);        /* int64 */
-        }
-      else if (strcmp (key, "corporation_creation_fee") == 0)
-        {
-          cfg_parse_int64 (val, type, &g_cfg.corporation_creation_fee); /* int64 */
-        }
-      /* Genesis */
-      else if (strcmp (key, "genesis_enabled") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.genesis_enabled);
-        }
-      else if (strcmp (key, "genesis_block_at_cap") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.genesis_block_at_cap);
-        }
-      else if (strcmp (key, "genesis_navhaz_delta") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.genesis_navhaz_delta);
-        }
-      else if (strcmp (key, "genesis_class_weight_M") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.genesis_class_weight_M);
-        }
-      else if (strcmp (key, "genesis_class_weight_K") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.genesis_class_weight_K);
-        }
-      else if (strcmp (key, "genesis_class_weight_O") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.genesis_class_weight_O);
-        }
-      else if (strcmp (key, "genesis_class_weight_L") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.genesis_class_weight_L);
-        }
-      else if (strcmp (key, "genesis_class_weight_C") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.genesis_class_weight_C);
-        }
-      else if (strcmp (key, "genesis_class_weight_H") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.genesis_class_weight_H);
-        }
-      else if (strcmp (key, "genesis_class_weight_U") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.genesis_class_weight_U);
-        }
-      /* Shipyard */
-      else if (strcmp (key, "shipyard_enabled") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.shipyard_enabled);
-        }
-      else if (strcmp (key, "shipyard_trade_in_factor_bp") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.shipyard_trade_in_factor_bp);
-        }
-      else if (strcmp (key, "shipyard_require_cargo_fit") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.shipyard_require_cargo_fit);
-        }
-      else if (strcmp (key, "shipyard_require_fighters_fit") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.shipyard_require_fighters_fit);
-        }
-      else if (strcmp (key, "shipyard_require_shields_fit") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.shipyard_require_shields_fit);
-        }
-      else if (strcmp (key, "shipyard_require_hardware_compat") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.shipyard_require_hardware_compat);
-        }
-      else if (strcmp (key, "shipyard_tax_bp") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.shipyard_tax_bp);
-        }
-      else if (strcmp (key, "illegal_allowed_neutral") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.illegal_allowed_neutral);
-        }
-      else if (strcmp (key, "max_cloak_duration") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.death.max_cloak_duration);
-        }
-      else if (strcmp (key, "neutral_band") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.combat.neutral_band);
-        }
-      /* --- NEW KEYS --- */
-      else if (strcmp (key, "num_sectors") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.num_sectors);
-        }
-      else if (strcmp (key, "planet_treasury_interest_rate_bps") == 0)
-        {
-          cfg_parse_int (val, type, &g_cfg.planet_treasury_interest_rate_bps);
-        }
-      else if (strcmp (key, "bank_min_balance_for_interest") == 0)
-        {
-          cfg_parse_int64 (val, type, &g_cfg.bank_min_balance_for_interest);
-        }
-      else if (strcmp (key, "bank_max_daily_interest_per_account") == 0)
-        {
-          cfg_parse_int64 (val, type,
-                           &g_cfg.bank_max_daily_interest_per_account);
-        }
-      /* Log unknown keys as debug (ignore) */
-      else
-        {
-          LOGD ("[config] Unknown key in DB: '%s' (type=%s, val=%s)",
-                key, type, val);
-        }
-    }
-  sqlite3_finalize (st);
-  LOGI ("[config] Configuration loaded from Key-Value-Type table.");
-  // Secrets loading (unchanged)
-  sqlite3_stmt *ks = NULL;
+      db_res_finalize(res);
+      LOGI ("[config] Configuration loaded from Key-Value-Type table.");
+  } else {
+      LOGW ("[config] Failed to prepare config query: %s", err.message);
+  }
 
-
-  if (sqlite3_prepare_v2 (db,
-                          "SELECT key_id,key_b64 FROM s2s_keys WHERE active=1 AND is_default_tx=1 LIMIT 1",
-                          -1,
-                          &ks,
-                          NULL) == SQLITE_OK
-      && sqlite3_step (ks) == SQLITE_ROW)
-    {
-      const char *kid = (const char *) sqlite3_column_text (ks, 0);
-
-
-      snprintf (g_cfg.secrets.key_id, sizeof g_cfg.secrets.key_id, "%s",
-                kid ? kid : "");
-    }
-  sqlite3_finalize (ks);
+  // Secrets loading
+  const char *sql_keys = "SELECT key_id,key_b64 FROM s2s_keys WHERE active=1 AND is_default_tx=1 LIMIT 1";
+  if (db_query(db, sql_keys, NULL, 0, &res, &err)) {
+      if (db_res_step(res, &err)) {
+          const char *kid = db_res_col_text(res, 0, &err);
+          snprintf (g_cfg.secrets.key_id, sizeof g_cfg.secrets.key_id, "%s", kid ? kid : "");
+      }
+      db_res_finalize(res);
+  }
 }
 
 
@@ -672,15 +665,11 @@ int
 load_eng_config (void)
 {
   config_set_defaults ();
-  // ensure DB is open/initialised here (you already do schema creation)
-  extern sqlite3 *g_db;
-
-
-  g_db = db_get_handle ();      // Initialize g_db with the correct handle
-  if (g_db)
+  db_t *db = game_db_get_handle ();      // Initialize g_db with the correct handle
+  if (db)
     {
-      apply_db (g_db);
-      xp_align_config_reload (g_db);    // Call to load XP/Alignment specific config
+      apply_db (db);
+      xp_align_config_reload (db);    // Call to load XP/Alignment specific config
     }
   apply_env ();                 // ENV overrides DB
   return validate_cfg ();

@@ -1,4 +1,4 @@
-#include <sqlite3.h>
+
 #include <stdio.h>
 #include <stdint.h>
 #include <jansson.h>
@@ -10,6 +10,7 @@
 /* local includes */
 #include "server_players.h"
 #include "database.h"
+#include "game_db.h"
 #include "database_cmd.h"
 #include "errors.h"
 #include "config.h"
@@ -69,7 +70,14 @@ cmd_bank_history (client_ctx_t *ctx, json_t *root)
   long long start_date = 0, end_date = 0;
   long long min_amount = 0, max_amount = 0;
   json_t *transactions_array = NULL;
-  int rc = db_bank_get_transactions ("player",
+  
+  db_t *db = game_db_get_handle();
+  if (!db) {
+      send_response_error(ctx, root, ERR_DB, "No database handle");
+      return 0;
+  }
+
+  int rc = db_bank_get_transactions (db, "player",
                                      ctx->player_id,
                                      limit,
                                      tx_type_filter,
@@ -80,7 +88,7 @@ cmd_bank_history (client_ctx_t *ctx, json_t *root)
                                      &transactions_array);
 
 
-  if (rc != SQLITE_OK)
+  if (rc != 0)
     {
       send_response_error (ctx,
                            root,
@@ -107,7 +115,11 @@ cmd_bank_history (client_ctx_t *ctx, json_t *root)
 int
 cmd_bank_leaderboard (client_ctx_t *ctx, json_t *root)
 {
-  sqlite3 *db = db_get_handle ();
+  db_t *db = game_db_get_handle ();
+  if (!db) {
+      send_response_error (ctx, root, ERR_DB, "No database handle");
+      return 0;
+  }
   if (ctx->player_id <= 0)
     {
       send_response_refused_steal (ctx,
@@ -135,37 +147,29 @@ cmd_bank_leaderboard (client_ctx_t *ctx, json_t *root)
       limit = 20;
     }
   const char *sql_query =
-    "SELECT P.name, BA.balance FROM bank_accounts BA JOIN players P ON P.id = BA.owner_id WHERE BA.owner_type = 'player' ORDER BY BA.balance DESC LIMIT ?1;";
-  sqlite3_stmt *stmt = NULL;
-
-
-  if (sqlite3_prepare_v2 (db, sql_query, -1, &stmt, NULL) != SQLITE_OK)
-    {
-      send_response_error (ctx, root, ERR_SERVER_ERROR, "Database error.");
-      return 0;
-    }
-  sqlite3_bind_int (stmt, 1, limit);
+    "SELECT P.name, BA.balance FROM bank_accounts BA JOIN players P ON P.id = BA.owner_id WHERE BA.owner_type = 'player' ORDER BY BA.balance DESC LIMIT $1;";
+  db_bind_t params[] = { db_bind_i32(limit) };
+  db_res_t *res = NULL;
+  db_error_t err;
   json_t *leaderboard_array = json_array ();
 
-
-  while (sqlite3_step (stmt) == SQLITE_ROW)
-    {
-      json_t *entry = json_object ();
-
-
-      json_object_set_new (entry, "player_name",
-                           json_string ((const char *)
-                                        sqlite3_column_text (stmt, 0)));
-      json_object_set_new (entry, "balance",
-                           json_integer (sqlite3_column_int64 (stmt, 1)));
-      json_array_append_new (leaderboard_array, entry);
-    }
-  sqlite3_finalize (stmt);
+  if (db_query(db, sql_query, params, 1, &res, &err)) {
+      while (db_res_step(res, &err)) {
+          json_t *entry = json_object ();
+          json_object_set_new (entry, "player_name", json_string (db_res_col_text(res, 0, &err)));
+          json_object_set_new (entry, "balance", json_integer (db_res_col_i64(res, 1, &err)));
+          json_array_append_new (leaderboard_array, entry);
+      }
+      db_res_finalize(res);
+  } else {
+      LOGE ("cmd_bank_leaderboard: query failed: %s", err.message);
+      send_response_error (ctx, root, ERR_DB, "Database error.");
+      json_decref(leaderboard_array);
+      return 0;
+  }
+  
   json_t *payload = json_object ();
-
-
   json_object_set (payload, "leaderboard", leaderboard_array);
-
 
   send_response_ok_take (ctx, root, "bank.leaderboard.response", &payload);
   return 0;
@@ -179,10 +183,15 @@ cmd_bank_deposit (client_ctx_t *ctx, json_t *root)
     {
       send_response_refused_steal (ctx,
                                    root,
-                                   ERR_SECTOR_NOT_FOUND,
+                                   ERR_NOT_AUTHENTICATED,
                                    "Not authenticated", NULL);
       return 0;
     }
+  db_t *db = game_db_get_handle ();
+  if (!db) {
+      send_response_error (ctx, root, ERR_DB, "No database handle");
+      return 0;
+  }
   json_t *data = json_object_get (root, "data");
   json_t *j_amount = json_object_get (data, "amount");
 
@@ -193,12 +202,11 @@ cmd_bank_deposit (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   long long amount = json_integer_value (j_amount);
-  sqlite3 *db = db_get_handle ();
   long long player_petty_cash = 0;
 
 
   if (h_get_player_petty_cash (db, ctx->player_id,
-                               &player_petty_cash) != SQLITE_OK)
+                               &player_petty_cash) != 0)
     {
       send_response_error (ctx,
                            root,
@@ -213,11 +221,16 @@ cmd_bank_deposit (client_ctx_t *ctx, json_t *root)
                                    "Insufficient petty cash.", NULL);
       return 0;
     }
-  sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, NULL);
-  if (h_deduct_player_petty_cash (db, ctx->player_id, amount,
-                                  NULL) != SQLITE_OK)
+  
+  db_error_t err;
+  if (!db_tx_begin(db, DB_TX_IMMEDIATE, &err)) {
+      send_response_error (ctx, root, err.code, "Database busy.");
+      return 0;
+  }
+
+  if (h_deduct_player_petty_cash_unlocked (db, ctx->player_id, amount, NULL) != 0)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_tx_rollback (db, NULL);
       send_response_refused_steal (ctx,
                                    root,
                                    ERR_INSUFFICIENT_FUNDS,
@@ -227,16 +240,28 @@ cmd_bank_deposit (client_ctx_t *ctx, json_t *root)
   long long new_bank_balance = 0;
 
 
-  if (h_add_credits (db,
-                     "player",
-                     ctx->player_id,
-                     amount, "DEPOSIT", NULL, &new_bank_balance) != SQLITE_OK)
+  int account_id = 0;
+  if (h_get_account_id_unlocked(db, "player", ctx->player_id, &account_id) != 0 || account_id <= 0)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_SERVER_ERROR, "Account not found.");
+      return 0;
+    }
+
+  if (h_add_credits_unlocked (db,
+                     account_id,
+                     amount, "DEPOSIT", NULL, &new_bank_balance) != 0)
+    {
+      db_tx_rollback (db, NULL);
       send_response_error (ctx, root, ERR_SERVER_ERROR, "Bank error.");
       return 0;
     }
-  sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
+  
+  if (!db_tx_commit(db, &err)) {
+      send_response_error (ctx, root, err.code, "Commit failed.");
+      return 0;
+  }
+
   json_t *payload = json_object ();
 
 
@@ -261,6 +286,11 @@ cmd_bank_transfer (client_ctx_t *ctx, json_t *root)
                                    "Not authenticated", NULL);
       return 0;
     }
+  db_t *db = game_db_get_handle ();
+  if (!db) {
+      send_response_error (ctx, root, ERR_DB, "No database handle");
+      return 0;
+  }
   json_t *data = json_object_get (root, "data");
   json_t *j_to = json_object_get (data, "to_player_id");
   json_t *j_amt = json_object_get (data, "amount");
@@ -286,15 +316,18 @@ cmd_bank_transfer (client_ctx_t *ctx, json_t *root)
                                    "Invalid amount or recipient", NULL);
       return 0;
     }
-  sqlite3 *db = db_get_handle ();
   long long from_bal = 0, to_bal = 0;
 
+  db_error_t err;
+  if (!db_tx_begin(db, DB_TX_IMMEDIATE, &err)) {
+      send_response_refused_steal (ctx, root, err.code, "Database busy.", NULL);
+      return 0;
+  }
 
-  sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, NULL);
   if (h_get_credits (db, "player", ctx->player_id,
-                     &from_bal) != SQLITE_OK || from_bal < amount)
+                     &from_bal) != 0 || from_bal < amount)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_tx_rollback (db, NULL);
       send_response_refused_steal (ctx,
                                    root,
                                    ERR_INSUFFICIENT_FUNDS,
@@ -308,20 +341,23 @@ cmd_bank_transfer (client_ctx_t *ctx, json_t *root)
   if (h_deduct_credits (db,
                         "player",
                         ctx->player_id,
-                        amount, "TRANSFER", tx_grp, &from_bal) != SQLITE_OK)
+                        amount, "TRANSFER", tx_grp, &from_bal) != 0)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_tx_rollback (db, NULL);
       send_response_error (ctx, root, ERR_UNKNOWN, "Deduct failed");
       return 0;
     }
   if (h_add_credits (db, "player", to_id, amount, "TRANSFER", tx_grp,
-                     &to_bal) != SQLITE_OK)
+                     &to_bal) != 0)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_tx_rollback (db, NULL);
       send_response_error (ctx, root, ERR_UNKNOWN, "Add failed");
       return 0;
     }
-  sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
+  if (!db_tx_commit(db, &err)) {
+      send_response_error (ctx, root, err.code, "Commit failed.");
+      return 0;
+  }
   json_t *payload = json_object ();
 
 
@@ -348,50 +384,82 @@ cmd_bank_withdraw (client_ctx_t *ctx, json_t *root)
                                    "Not authenticated", NULL);
       return 0;
     }
+  db_t *db = game_db_get_handle ();
+  if (!db) {
+      send_response_error (ctx, root, ERR_DB, "No database handle");
+      return 0;
+  }
   json_t *data = json_object_get (root, "data");
-  json_t *j_amt = json_object_get (data, "amount");
 
 
-  if (!json_is_integer (j_amt) || json_integer_value (j_amt) <= 0)
+  if (!json_is_object (data))
     {
-      send_response_refused_steal (ctx, root, ERR_INVALID_ARG,
-                                   "Invalid amount", NULL);
+      send_response_error (ctx, root, ERR_BAD_REQUEST,
+                           "Missing data payload.");
       return 0;
     }
-  long long amount = json_integer_value (j_amt);
-  sqlite3 *db = db_get_handle ();
+  long long amount = 0;
+  json_t *j_amount = json_object_get (data, "amount");
+
+
+  if (json_is_integer (j_amount))
+    {
+      amount = json_integer_value (j_amount);
+    }
+  if (amount <= 0)
+    {
+      send_response_error (ctx,
+                           root,
+                           ERR_MISSING_FIELD, "Missing or invalid 'amount'.");
+      return 0;
+    }
   long long new_balance = 0;
 
+  db_error_t err;
+  if (!db_tx_begin(db, DB_TX_IMMEDIATE, &err)) {
+      send_response_refused_steal (ctx, root, err.code, "Database busy.", NULL);
+      return 0;
+  }
 
-  sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, NULL);
-  if (h_deduct_credits (db,
-                        "player",
-                        ctx->player_id,
-                        amount,
-                        "WITHDRAWAL", NULL, &new_balance) != SQLITE_OK)
+  int account_id = 0;
+  if (h_get_account_id_unlocked(db, "player", ctx->player_id, &account_id) != 0 || account_id <= 0)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_SERVER_ERROR, "Account not found.");
+      return 0;
+    }
+
+  if (h_deduct_credits_unlocked (db,
+                        account_id,
+                        amount,
+                        "WITHDRAWAL", NULL, &new_balance) != 0)
+    {
+      db_tx_rollback (db, NULL);
       send_response_refused_steal (ctx,
                                    root,
                                    ERR_INSUFFICIENT_FUNDS,
                                    "Insufficient funds", NULL);
       return 0;
     }
-  if (h_add_player_petty_cash (db, ctx->player_id, amount, NULL) != SQLITE_OK)
+  if (h_add_player_petty_cash (db, ctx->player_id, amount, NULL) != 0)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_tx_rollback (db, NULL);
       send_response_error (ctx, root, ERR_UNKNOWN,
                            "Petty cash update failed");
       return 0;
     }
-  sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
+  
+  if (!db_tx_commit(db, &err)) {
+      send_response_error (ctx, root, err.code, "Commit failed.");
+      return 0;
+  }
   json_t *payload = json_object ();
 
 
   json_object_set_new (payload, "new_balance", json_integer (new_balance));
 
 
-  send_response_ok_take (ctx, root, "bank.withdraw.confirmed", &payload);       // Assuming type name
+  send_response_ok_take (ctx, root, "bank.withdraw.confirmed", &payload);
   return 0;
 }
 
@@ -403,14 +471,18 @@ cmd_bank_balance (client_ctx_t *ctx, json_t *root)
     {
       send_response_refused_steal (ctx,
                                    root,
-                                   ERR_SECTOR_NOT_FOUND,
+                                   ERR_NOT_AUTHENTICATED,
                                    "Not authenticated", NULL);
       return 0;
     }
-  long long balance = 0;
+  long long p_balance = 0;
+  db_t *db = game_db_get_handle ();
+  if (!db) {
+      send_response_error (ctx, root, ERR_DB, "No database handle");
+      return 0;
+  }
 
-
-  if (db_get_player_bank_balance (ctx->player_id, &balance) != SQLITE_OK)
+  if (db_get_player_bank_balance (db, ctx->player_id, &p_balance) != 0)
     {
       send_response_error (ctx,
                            root,
@@ -420,7 +492,7 @@ cmd_bank_balance (client_ctx_t *ctx, json_t *root)
   json_t *payload = json_object ();
 
 
-  json_object_set_new (payload, "balance", json_integer (balance));
+  json_object_set_new (payload, "balance", json_integer (p_balance));
   send_response_ok_take (ctx, root, "bank.balance", &payload);
   return 0;
 }
@@ -438,50 +510,38 @@ cmd_fine_list (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  sqlite3 *db = db_get_handle ();
-  json_t *fines_array = json_array ();
-  sqlite3_stmt *st = NULL;
-
-  // Corrected SQL query to use 'issued_ts' and reflect available columns
-  const char *sql =
-    "SELECT id, reason, amount, issued_ts, status FROM fines WHERE recipient_type = 'player' AND recipient_id = ?1 AND status != 'paid';";
-
-
-  if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
-    {
-      send_response_error (ctx,
-                           root,
-                           ERR_DB_QUERY_FAILED,
-                           "Database error preparing query.");
+  db_t *db = game_db_get_handle ();
+  if (!db) {
+      send_response_error (ctx, root, ERR_DB, "No database handle");
       return 0;
-    }
-  sqlite3_bind_int (st, 1, ctx->player_id);
+  }
+  json_t *fines_array = json_array ();
+  db_error_t err;
 
-  while (sqlite3_step (st) == SQLITE_ROW)
-    {
-      json_t *fine = json_object ();
+  const char *sql =
+    "SELECT id, reason, amount, issued_ts, status FROM fines WHERE recipient_type = 'player' AND recipient_id = $1 AND status != 'paid';";
+  db_bind_t params[] = { db_bind_i32(ctx->player_id) };
+  db_res_t *res = NULL;
 
-
-      json_object_set_new (fine, "id",
-                           json_integer (sqlite3_column_int (st, 0)));
-      json_object_set_new (fine, "reason",
-                           json_string ((const char *)
-                                        sqlite3_column_text (st, 1)));
-      json_object_set_new (fine, "amount",
-                           json_integer (sqlite3_column_int64 (st, 2)));
-      json_object_set_new (fine, "issued_ts",
-                           json_string ((const char *) sqlite3_column_text (st,
-                                                                            3)));
-      // Corrected to issued_ts and read as TEXT
-      json_object_set_new (fine, "status",
-                           json_string ((const char *)
-                                        sqlite3_column_text (st, 4)));
-      json_array_append_new (fines_array, fine);
-    }
-  sqlite3_finalize (st);
-
+  if (db_query(db, sql, params, 1, &res, &err)) {
+      while (db_res_step(res, &err)) {
+          json_t *fine = json_object ();
+          json_object_set_new (fine, "id", json_integer (db_res_col_i32(res, 0, &err)));
+          json_object_set_new (fine, "reason", json_string (db_res_col_text(res, 1, &err)));
+          json_object_set_new (fine, "amount", json_integer (db_res_col_i64(res, 2, &err)));
+          json_object_set_new (fine, "issued_ts", json_string (db_res_col_text(res, 3, &err)));
+          json_object_set_new (fine, "status", json_string (db_res_col_text(res, 4, &err)));
+          json_array_append_new (fines_array, fine);
+      }
+      db_res_finalize(res);
+  } else {
+      LOGE ("cmd_fine_list: query failed: %s", err.message);
+      send_response_error (ctx, root, ERR_DB, "Database error.");
+      json_decref(fines_array);
+      return 0;
+  }
+  
   json_t *response_data = json_object ();
-
 
   json_object_set_new (response_data, "fines", fines_array);
   send_response_ok_take (ctx, root, "fine.list", &response_data);
@@ -501,7 +561,11 @@ cmd_fine_pay (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  sqlite3 *db = db_get_handle ();
+  db_t *db = game_db_get_handle ();
+  if (!db) {
+      send_response_error (ctx, root, ERR_DB, "No database handle");
+      return 0;
+  }
   json_t *data = json_object_get (root, "data");
 
 
@@ -526,42 +590,29 @@ cmd_fine_pay (client_ctx_t *ctx, json_t *root)
     }
 
   // Retrieve fine details
-  sqlite3_stmt *st_fine = NULL;
-  const char *sql_select_fine =
-    "SELECT amount, recipient_id, status, recipient_type FROM fines WHERE id = ?1;";
+  long long fine_amount = 0;
+  int fine_recipient_id = 0;
+  const char *fine_status = NULL;
+  const char *fine_recipient_type = NULL;
 
+  db_error_t err;
+  const char *sql_select_fine = "SELECT amount, recipient_id, status, recipient_type FROM fines WHERE id = $1;";
+  db_bind_t params_fine[] = { db_bind_i32(fine_id) };
+  db_res_t *res_fine = NULL;
 
-  if (sqlite3_prepare_v2 (db, sql_select_fine, -1, &st_fine, NULL) !=
-      SQLITE_OK)
-    {
-      send_response_error (ctx,
-                           root,
-                           ERR_DB_QUERY_FAILED,
-                           "Database error retrieving fine.");
+  if (db_query(db, sql_select_fine, params_fine, 1, &res_fine, &err)) {
+      if (db_res_step(res_fine, &err)) {
+          fine_amount = db_res_col_i64(res_fine, 0, &err);
+          fine_recipient_id = db_res_col_i32(res_fine, 1, &err);
+          fine_status = db_res_col_text(res_fine, 2, &err);
+          fine_recipient_type = db_res_col_text(res_fine, 3, &err);
+      }
+      db_res_finalize(res_fine);
+  } else {
+      send_response_error (ctx, root, ERR_DB, "Database error retrieving fine.");
       return 0;
-    }
-  sqlite3_bind_int (st_fine, 1, fine_id);
-
-  if (sqlite3_step (st_fine) != SQLITE_ROW)
-    {
-      sqlite3_finalize (st_fine);
-      send_response_refused_steal (ctx,
-                                   root,
-                                   ERR_NOT_FOUND, "Fine not found.", NULL);
-      return 0;
-    }
-
-  long long fine_amount = sqlite3_column_int64 (st_fine, 0);
-  int fine_recipient_id = sqlite3_column_int (st_fine, 1);
-  const char *tmp_status = (const char *) sqlite3_column_text (st_fine, 2);
-  const char *tmp_type = (const char *) sqlite3_column_text (st_fine, 3);
-  /* sqlite: column_text() pointer invalid after finalize/reset/step */
-  char *fine_status = tmp_status ? strdup (tmp_status) : NULL;
-  char *fine_recipient_type = tmp_type ? strdup (tmp_type) : NULL;
-
-
-  sqlite3_finalize (st_fine);
-
+  }
+  
   if (fine_recipient_id != ctx->player_id ||
       (fine_recipient_type && strcasecmp (fine_recipient_type,
                                           "player") != 0))
@@ -571,8 +622,6 @@ cmd_fine_pay (client_ctx_t *ctx, json_t *root)
                                    ERR_PERMISSION_DENIED,
                                    "Fine does not belong to this player.",
                                    NULL);
-      free (fine_status);
-      free (fine_recipient_type);
       return 0;
     }
   if (fine_status && strcasecmp (fine_status, "paid") == 0)
@@ -581,12 +630,8 @@ cmd_fine_pay (client_ctx_t *ctx, json_t *root)
                                    root,
                                    ERR_INVALID_ARG,
                                    "Fine already paid.", NULL);
-      free (fine_status);
-      free (fine_recipient_type);
       return 0;
     }
-  free (fine_status);
-  free (fine_recipient_type);
 
   if (amount_to_pay <= 0 || amount_to_pay > fine_amount)
     {
@@ -596,13 +641,12 @@ cmd_fine_pay (client_ctx_t *ctx, json_t *root)
   // Check player credits
   long long player_credits = 0;
 
-
   if (h_get_player_petty_cash (db, ctx->player_id,
-                               &player_credits) != SQLITE_OK)
+                               &player_credits) != 0)
     {
       send_response_error (ctx,
                            root,
-                           ERR_DB_QUERY_FAILED,
+                           ERR_DB,
                            "Failed to retrieve player credits.");
       return 0;
     }
@@ -618,7 +662,7 @@ cmd_fine_pay (client_ctx_t *ctx, json_t *root)
   // Deduct credits and update fine status
   if (h_deduct_player_petty_cash_unlocked (db,
                                            ctx->player_id,
-                                           amount_to_pay, NULL) != SQLITE_OK)
+                                           amount_to_pay, NULL) != 0)
     {
       send_response_error (ctx,
                            root,
@@ -628,49 +672,25 @@ cmd_fine_pay (client_ctx_t *ctx, json_t *root)
     }
 
   // Update fine status
-  sqlite3_stmt *st_update = NULL;
-  const char *new_status = (amount_to_pay == fine_amount) ? "paid" : "unpaid";  // Use 'unpaid' if partially paid
+  const char *new_status = (amount_to_pay == fine_amount) ? "paid" : "unpaid";
   const char *sql_update_fine =
-    "UPDATE fines SET status = ?, amount = amount - ? WHERE id = ?;";                                   // Reduce amount in DB
+    "UPDATE fines SET status = $1, amount = amount - $2 WHERE id = $3;";
+  db_bind_t params_update[] = { db_bind_text(new_status), db_bind_i64(amount_to_pay), db_bind_i32(fine_id) };
 
-
-  if (sqlite3_prepare_v2 (db, sql_update_fine, -1, &st_update,
-                          NULL) != SQLITE_OK)
-    {
-      send_response_error (ctx,
-                           root,
-                           ERR_DB_QUERY_FAILED,
-                           "Database error preparing fine update.");
-      // Refund credits if update fails
-      h_add_player_petty_cash_unlocked (db, ctx->player_id, amount_to_pay,
-                                        NULL);
+  if (!db_exec(db, sql_update_fine, params_update, 3, &err)) {
+      send_response_error (ctx, root, ERR_DB, "Database error preparing fine update.");
+      h_add_player_petty_cash_unlocked (db, ctx->player_id, amount_to_pay, NULL); // Refund
       return 0;
-    }
-
-  sqlite3_bind_text (st_update, 1, new_status, -1, SQLITE_STATIC);
-  sqlite3_bind_int64 (st_update, 2, amount_to_pay);
-  sqlite3_bind_int (st_update, 3, fine_id);
-
-  if (sqlite3_step (st_update) != SQLITE_DONE)
-    {
-      send_response_error (ctx, root, ERR_DB,
-                           "Failed to update fine status.");
-      h_add_player_petty_cash_unlocked (db, ctx->player_id, amount_to_pay,
-                                        NULL);                                          // Refund
-      sqlite3_finalize (st_update);
-      return 0;
-    }
-  sqlite3_finalize (st_update);
-
+  }
+  
   json_t *response_data = json_object ();
-
 
   json_object_set_new (response_data, "message",
                        json_string ("Fine paid successfully."));
   json_object_set_new (response_data, "fine_id", json_integer (fine_id));
-  json_object_set_new (response_data,
-                       "amount_paid", json_integer (amount_to_pay));
-  send_response_ok_take (ctx, root, "fine.pay", &response_data);
+  json_object_set_new (response_data, "amount_paid",
+                       json_integer (amount_to_pay));
+  send_response_ok_take (ctx, root, "fine.pay.success", &response_data);
   return 0;
 }
 

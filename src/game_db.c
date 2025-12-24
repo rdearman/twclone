@@ -117,7 +117,7 @@ game_db_get_handle (void)
  *     int rc = -1; // Default to not found
  *     if (db_res_step(res, &err)) {
  *         *out_xp = db_res_col_i32(res, 0, &err);
- *         if (err.code == DB_OK) {
+ *         if (err.code == 0) {
  *             rc = 0; // Success
  *         }
  *     }

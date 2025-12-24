@@ -5,7 +5,6 @@
 #include "globals.h"
 #include <jansson.h>            /* -ljansson */
 #include <stdbool.h>
-#include <sqlite3.h>
 
 
 int cmd_bank_balance (client_ctx_t *ctx, json_t *root);

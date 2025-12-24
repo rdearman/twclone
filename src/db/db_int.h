@@ -27,13 +27,17 @@ typedef struct db_vt_s {
     // Execution (no rows)
     bool (*exec)(db_t *db, const char *sql, const db_bind_t *params, size_t n_params, db_error_t *err);
     bool (*exec_rows_affected)(db_t *db, const char *sql, const db_bind_t *params, size_t n_params, int64_t *out_rows, db_error_t *err);
+  bool (*exec_insert_id)(db_t *db, const char *sql, const db_bind_t *params, size_t n_params,  int64_t *out_id,	 db_error_t *err);
 
     // Query (rows)
     bool (*query)(db_t *db, const char *sql, const db_bind_t *params, size_t n_params, db_res_t **out_res, db_error_t *err);
 
     // Result Set Navigation
     bool (*res_step)(db_res_t *res, db_error_t *err);
+    void (*res_cancel)(db_res_t *res);
     int  (*res_col_count)(const db_res_t *res);
+    const char* (*res_col_name)(const db_res_t *res, int col_idx);
+    db_col_type_t (*res_col_type)(const db_res_t *res, int col_idx);
     bool (*res_col_is_null)(const db_res_t *res, int col_idx);
 
     // Column Accessors

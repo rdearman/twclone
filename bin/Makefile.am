@@ -86,7 +86,7 @@ server_abstracted_core_SOURCES = \
 	../src/server_engine.c \
 	../src/server_envelope.c \
 	../src/server_log.c \
-  ../src/server_loop.c \
+	../src/server_loop.c \
 	../src/server_main.c \
 	../src/server_news.c \
 	../src/server_planets.c \

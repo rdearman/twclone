@@ -69,9 +69,9 @@ extern struct tavern_settings g_tavern_cfg;
 
 int tavern_settings_load (void);
 // Helper function declarations
-bool get_player_loan (sqlite3 *db, int player_id, long long *principal,
+bool get_player_loan (db_t *db, int player_id, long long *principal,
                       int *interest_rate, int *due_date, int *is_defaulted);
-int apply_loan_interest (sqlite3 *db, int player_id,
+int apply_loan_interest (db_t *db, int player_id,
                          long long current_principal, int interest_rate_bp);
-bool check_loan_default (sqlite3 *db, int player_id, int current_time);
+bool check_loan_default (db_t *db, int player_id, int current_time);
 #endif // SERVER_STARDOCK_H

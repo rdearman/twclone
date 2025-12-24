@@ -20,6 +20,18 @@ monotonic_millis (void)
 }
 
 
+void
+h_copy_cstr(char *dst, size_t dst_sz, const char *src)
+{
+    if (!dst || dst_sz == 0) return;
+    if (!src) { dst[0] = '\0'; return; }
+
+    /* strncpy, but guaranteed NUL */
+    strncpy(dst, src, dst_sz - 1);
+    dst[dst_sz - 1] = '\0';
+}
+
+
 /*
    init_sockaddr
 
@@ -341,17 +353,8 @@ get_tow_reason_string (int reason_code)
       case ERR_MISSING_FIELD:
         return "Missing required field.";
       case ERR_INVALID_ARG:
-        return "Invalid argument provided.";
-      case ERR_OUT_OF_RANGE:
-        return "Value out of allowed range.";
-      case ERR_LIMIT_EXCEEDED:
-        return "Limit exceeded.";
-      case ERR_TOO_MANY_BULK_ITEMS:
-        return "Too many items in bulk request.";
-      case ERR_CURSOR_INVALID:
-        return "Invalid cursor for pagination.";
       case ERR_BAD_REQUEST:
-        return "Bad request.";
+        return "Invalid argument or bad request.";
       case ERR_REF_NO_TURNS:
         return "No turns remaining to perform action.";
       case ERR_CONFIRMATION_REQUIRED:

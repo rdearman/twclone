@@ -43,7 +43,7 @@ static inline void
 db_error_clear (db_error_t *e)
 {
   if (!e) return;
-  e->code = 0; // Use 0 for DB_OK
+  e->code = 0; // Use 0 for 0
   e->backend_code = 0;
   e->message[0] = '\0';
 }
@@ -285,15 +285,40 @@ bool db_query (db_t *db,
                db_res_t **out_res,
                db_error_t *err);
 
+// -----------------------------------------------------------------------------
+// Result Set Inspection
+// -----------------------------------------------------------------------------
+
+typedef enum
+{
+  DB_TYPE_UNKNOWN = 0,
+  DB_TYPE_INTEGER,
+  DB_TYPE_FLOAT,
+  DB_TYPE_TEXT,
+  DB_TYPE_BLOB,
+  DB_TYPE_NULL
+} db_col_type_t;
+
 /**
  * @brief Advances the result set cursor to the next row.
- * @param res The result set handle.
- * @param err Pointer to an error structure to fill if an error occurs.
- * @return true if a row is available (column getters are valid).
- *         false if no more rows OR an error occurred. Check err->code.
- *         If err->code is DB_OK, it means end-of-rows.
+...
  */
 bool db_res_step (db_res_t *res, db_error_t *err);
+
+/**
+ * @brief Returns the name of the specified column.
+ */
+const char * db_res_col_name (const db_res_t *res, int col_idx);
+
+/**
+ * @brief Returns the generic type of the specified column.
+ */
+db_col_type_t db_res_col_type (const db_res_t *res, int col_idx);
+
+/**
+ * @brief Cancels further processing of the result set.
+ */
+void db_res_cancel (db_res_t *res);
 
 /**
  * @brief Returns the number of columns in the current result set.
@@ -413,7 +438,7 @@ struct bank_tx_info_s; // Example
 typedef struct
 {
     // Example: Retrieve player data (optimised for backend)
-    // Returns DB_OK on success (player_s filled), DB_ERR_NOT_FOUND, or other error.
+    // Returns 0 on success (player_s filled), DB_ERR_NOT_FOUND, or other error.
     int (*player_get_by_id)(db_t *db, int64_t player_id, struct player_s *out_player, db_error_t *err);
     
     // Example: Atomically post a group of bank transactions
@@ -429,6 +454,19 @@ typedef struct
  */
 const db_ops_vtable_t* db_get_ops(db_t *db);
 
+
+/* Execute an INSERT and return the generated primary key.
+ * Contract: sql must be the INSERT statement for the target table.
+ * Drivers implement the backend-specific way of retrieving the key.
+ */
+bool db_exec_insert_id(db_t *db,
+                       const char *sql,
+                       const db_bind_t *params,
+                       size_t n_params,
+                       int64_t *out_id,
+                       db_error_t *err);
+
+  
 #ifdef __cplusplus
 }
 #endif

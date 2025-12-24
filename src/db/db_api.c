@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "../errors.h" // Force include at the top
 #include "db_api.h"
@@ -11,6 +12,28 @@
 
 // The actual definitions for struct db_s and struct db_res_s are in db_int.h
 // These are not needed here again.
+
+
+
+bool
+db_exec_insert_id(db_t *db,
+                  const char *sql,
+                  const db_bind_t *params,
+                  size_t n_params,
+                  int64_t *out_id,
+                  db_error_t *err)
+{
+    if (!db || !db->vt || !db->vt->exec_insert_id) {
+        if (err) {
+            err->code = ERR_DB_INTERNAL;
+            snprintf(err->message, sizeof(err->message),
+                     "exec_insert_id not implemented by backend");
+        }
+        return false;
+    }
+
+    return db->vt->exec_insert_id(db, sql, params, n_params, out_id, err);
+}
 
 
 db_t *db_open(const db_config_t *cfg, db_error_t *err) {
@@ -168,6 +191,27 @@ bool db_res_step(db_res_t *res, db_error_t *err) {
         return false;
     }
     return res->db->vt->res_step(res, err);
+}
+
+const char * db_res_col_name(const db_res_t *res, int col_idx) {
+    if (!res || !res->db || !res->db->vt || !res->db->vt->res_col_name) {
+        return NULL;
+    }
+    return res->db->vt->res_col_name(res, col_idx);
+}
+
+db_col_type_t db_res_col_type(const db_res_t *res, int col_idx) {
+    if (!res || !res->db || !res->db->vt || !res->db->vt->res_col_type) {
+        return DB_TYPE_UNKNOWN;
+    }
+    return res->db->vt->res_col_type(res, col_idx);
+}
+
+void db_res_cancel(db_res_t *res) {
+    if (!res || !res->db || !res->db->vt || !res->db->vt->res_cancel) {
+        return;
+    }
+    res->db->vt->res_cancel(res);
 }
 
 int db_res_col_count(const db_res_t *res) {

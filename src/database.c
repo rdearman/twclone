@@ -18,6 +18,8 @@
 #include "server_log.h"
 #include "server_cron.h"
 
+
+
 /* * CHANGE 1: Replace the global static handle with Thread Local Storage (TLS).
  * "static __thread" ensures every thread has its own pointer initialized to NULL.
  */
