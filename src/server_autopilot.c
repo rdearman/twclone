@@ -25,9 +25,12 @@ cmd_move_autopilot_start (db_t *db, client_ctx_t *ctx, json_t *root)
   /* default from = current sector */
   int from = (ctx->sector_id > 0) ? ctx->sector_id : 1;
 
+
   if (data)
     {
       int tmp;
+
+
       if (json_get_int_flexible (data, "from", &tmp)
           || json_get_int_flexible (data, "from_sector_id", &tmp))
         {
@@ -37,9 +40,13 @@ cmd_move_autopilot_start (db_t *db, client_ctx_t *ctx, json_t *root)
 
   /* to = required */
   int to = -1;
+
+
   if (data)
     {
       int tmp;
+
+
       if (json_get_int_flexible (data, "to", &tmp)
           || json_get_int_flexible (data, "to_sector_id", &tmp))
         {
@@ -58,13 +65,20 @@ cmd_move_autopilot_start (db_t *db, client_ctx_t *ctx, json_t *root)
   int max_id = 0;
   {
     db_error_t err;
+
+
     db_error_clear (&err);
 
     db_res_t *res = NULL;
+
+
     if (!db_query (db, "SELECT MAX(id) FROM sectors;", NULL, 0, &res, &err))
       {
-        LOGE ("cmd_move_autopilot_start: MAX(sectors.id) failed: %s (code=%d backend=%d)",
-              err.message, err.code, err.backend_code);
+        LOGE (
+          "cmd_move_autopilot_start: MAX(sectors.id) failed: %s (code=%d backend=%d)",
+          err.message,
+          err.code,
+          err.backend_code);
         send_response_error (ctx, root, ERR_SECTOR_NOT_FOUND, "No sectors");
         return 1;
       }
@@ -83,6 +97,7 @@ cmd_move_autopilot_start (db_t *db, client_ctx_t *ctx, json_t *root)
       }
   }
 
+
   /* Clamp from/to */
   if (from <= 0 || from > max_id || to <= 0 || to > max_id)
     {
@@ -93,9 +108,10 @@ cmd_move_autopilot_start (db_t *db, client_ctx_t *ctx, json_t *root)
   /* allocate arrays sized max_id+1 */
   size_t N = (size_t) max_id + 1;
   unsigned char *avoid = (unsigned char *) calloc (N, 1);
-  unsigned char *seen  = (unsigned char *) calloc (N, 1);
-  int *prev            = (int *) malloc (N * sizeof (int));
-  int *queue           = (int *) malloc (N * sizeof (int));
+  unsigned char *seen = (unsigned char *) calloc (N, 1);
+  int *prev = (int *) malloc (N * sizeof (int));
+  int *queue = (int *) malloc (N * sizeof (int));
+
 
   if (!avoid || !seen || !prev || !queue)
     {
@@ -116,15 +132,23 @@ cmd_move_autopilot_start (db_t *db, client_ctx_t *ctx, json_t *root)
   if (data)
     {
       json_t *javoid = json_object_get (data, "avoid");
+
+
       if (javoid && json_is_array (javoid))
         {
           size_t i, len = json_array_size (javoid);
+
+
           for (i = 0; i < len; ++i)
             {
               json_t *v = json_array_get (javoid, i);
+
+
               if (json_is_integer (v))
                 {
                   int sid = (int) json_integer_value (v);
+
+
                   if (sid > 0 && sid <= max_id)
                     {
                       avoid[sid] = 1;
@@ -147,9 +171,13 @@ cmd_move_autopilot_start (db_t *db, client_ctx_t *ctx, json_t *root)
   if (from == to)
     {
       json_t *steps = json_array ();
+
+
       json_array_append_new (steps, json_integer (from));
 
       json_t *out = json_object ();
+
+
       json_object_set_new (out, "from_sector_id", json_integer (from));
       json_object_set_new (out, "to_sector_id", json_integer (to));
       json_object_set_new (out, "path", steps);
@@ -170,6 +198,7 @@ cmd_move_autopilot_start (db_t *db, client_ctx_t *ctx, json_t *root)
   int *next = NULL;
   int edges = 0;
 
+
   head = (int *) malloc (N * sizeof (int));
   if (!head)
     {
@@ -177,20 +206,33 @@ cmd_move_autopilot_start (db_t *db, client_ctx_t *ctx, json_t *root)
       send_response_error (ctx, root, ERR_PLANET_NOT_FOUND, "Out of memory");
       return 1;
     }
-  for (int i = 0; i <= max_id; ++i) head[i] = -1;
+  for (int i = 0; i <= max_id; ++i)
+    {
+      head[i] = -1;
+    }
 
   /* pass 1: count edges */
   {
     db_error_t err;
+
+
     db_error_clear (&err);
     db_res_t *res = NULL;
 
-    if (!db_query (db, "SELECT COUNT(*) FROM sector_warps;", NULL, 0, &res, &err))
+
+    if (!db_query (db, "SELECT COUNT(*) FROM sector_warps;", NULL, 0, &res,
+                   &err))
       {
-        LOGE ("cmd_move_autopilot_start: COUNT(sector_warps) failed: %s (code=%d backend=%d)",
-              err.message, err.code, err.backend_code);
+        LOGE (
+          "cmd_move_autopilot_start: COUNT(sector_warps) failed: %s (code=%d backend=%d)",
+          err.message,
+          err.code,
+          err.backend_code);
         free (head); free (avoid); free (seen); free (prev); free (queue);
-        send_response_error (ctx, root, ERR_PLANET_NOT_FOUND, "Pathfind init failed");
+        send_response_error (ctx,
+                             root,
+                             ERR_PLANET_NOT_FOUND,
+                             "Pathfind init failed");
         return 1;
       }
 
@@ -203,7 +245,10 @@ cmd_move_autopilot_start (db_t *db, client_ctx_t *ctx, json_t *root)
     if (err.code != 0 || edges < 0)
       {
         free (head); free (avoid); free (seen); free (prev); free (queue);
-        send_response_error (ctx, root, ERR_PLANET_NOT_FOUND, "Pathfind init failed");
+        send_response_error (ctx,
+                             root,
+                             ERR_PLANET_NOT_FOUND,
+                             "Pathfind init failed");
         return 1;
       }
   }
@@ -221,27 +266,50 @@ cmd_move_autopilot_start (db_t *db, client_ctx_t *ctx, json_t *root)
   /* pass 2: read edges and build adjacency */
   {
     db_error_t err;
+
+
     db_error_clear (&err);
     db_res_t *res = NULL;
 
-    if (!db_query (db, "SELECT from_sector, to_sector FROM sector_warps;", NULL, 0, &res, &err))
+
+    if (!db_query (db,
+                   "SELECT from_sector, to_sector FROM sector_warps;",
+                   NULL,
+                   0,
+                   &res,
+                   &err))
       {
-        LOGE ("cmd_move_autopilot_start: sector_warps read failed: %s (code=%d backend=%d)",
-              err.message, err.code, err.backend_code);
+        LOGE (
+          "cmd_move_autopilot_start: sector_warps read failed: %s (code=%d backend=%d)",
+          err.message,
+          err.code,
+          err.backend_code);
         free (to_v); free (next); free (head);
         free (avoid); free (seen); free (prev); free (queue);
-        send_response_error (ctx, root, ERR_PLANET_NOT_FOUND, "Pathfind init failed");
+        send_response_error (ctx,
+                             root,
+                             ERR_PLANET_NOT_FOUND,
+                             "Pathfind init failed");
         return 1;
       }
 
     int e = 0;
+
+
     while (db_res_step (res, &err))
       {
         int u = (int) db_res_col_i64 (res, 0, &err);
         int v = (int) db_res_col_i64 (res, 1, &err);
 
-        if (e >= edges) break; /* safety if count lied */
-        if (u <= 0 || u > max_id || v <= 0 || v > max_id) continue;
+
+        if (e >= edges)
+          {
+            break;             /* safety if count lied */
+          }
+        if (u <= 0 || u > max_id || v <= 0 || v > max_id)
+          {
+            continue;
+          }
 
         to_v[e] = v;
         next[e] = head[u];
@@ -255,7 +323,10 @@ cmd_move_autopilot_start (db_t *db, client_ctx_t *ctx, json_t *root)
       {
         free (to_v); free (next); free (head);
         free (avoid); free (seen); free (prev); free (queue);
-        send_response_error (ctx, root, ERR_PLANET_NOT_FOUND, "Pathfind init failed");
+        send_response_error (ctx,
+                             root,
+                             ERR_PLANET_NOT_FOUND,
+                             "Pathfind init failed");
         return 1;
       }
 
@@ -265,20 +336,28 @@ cmd_move_autopilot_start (db_t *db, client_ctx_t *ctx, json_t *root)
 
   /* --- BFS on in-memory adjacency --- */
   int qh = 0, qt = 0;
+
+
   queue[qt++] = from;
   seen[from] = 1;
 
   int found = 0;
 
+
   while (qh < qt)
     {
       int u = queue[qh++];
+
 
       for (int ei = head[u]; ei != -1; ei = next[ei])
         {
           int v = to_v[ei];
 
-          if (avoid[v] || seen[v]) continue;
+
+          if (avoid[v] || seen[v])
+            {
+              continue;
+            }
 
           seen[v] = 1;
           prev[v] = u;
@@ -291,7 +370,10 @@ cmd_move_autopilot_start (db_t *db, client_ctx_t *ctx, json_t *root)
             }
         }
 
-      if (found) break;
+      if (found)
+        {
+          break;
+        }
     }
 
   free (to_v);
@@ -307,6 +389,8 @@ cmd_move_autopilot_start (db_t *db, client_ctx_t *ctx, json_t *root)
 
   /* reconstruct path */
   int *stack = (int *) malloc (N * sizeof (int));
+
+
   if (!stack)
     {
       free (avoid); free (seen); free (prev); free (queue);
@@ -316,10 +400,15 @@ cmd_move_autopilot_start (db_t *db, client_ctx_t *ctx, json_t *root)
 
   int sp = 0;
   int cur = to;
+
+
   while (cur != -1)
     {
       stack[sp++] = cur;
-      if (cur == from) break;
+      if (cur == from)
+        {
+          break;
+        }
       cur = prev[cur];
     }
 
@@ -332,12 +421,15 @@ cmd_move_autopilot_start (db_t *db, client_ctx_t *ctx, json_t *root)
     }
 
   json_t *steps = json_array ();
+
+
   for (int i = sp - 1; i >= 0; --i)
     {
       json_array_append_new (steps, json_integer (stack[i]));
     }
 
   int hops = sp - 1;
+
 
   free (stack);
   free (avoid);
@@ -346,6 +438,8 @@ cmd_move_autopilot_start (db_t *db, client_ctx_t *ctx, json_t *root)
   free (queue);
 
   json_t *out = json_object ();
+
+
   json_object_set_new (out, "to_sector_id", json_integer (to));
   json_object_set_new (out, "path", steps);
   json_object_set_new (out, "hops", json_integer (hops));
@@ -353,7 +447,6 @@ cmd_move_autopilot_start (db_t *db, client_ctx_t *ctx, json_t *root)
   send_response_ok_take (ctx, root, "move.autopilot.route_v1", &out);
   return 0;
 }
-
 
 
 /*

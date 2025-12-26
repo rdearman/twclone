@@ -229,3 +229,225 @@ CREATE TRIGGER trg_corp_tx_after_insert
 AFTER INSERT ON corp_tx
 FOR EACH ROW
 EXECUTE FUNCTION fn_corp_tx_after_insert();
+-- 11. Ship Destruction
+
+CREATE OR REPLACE FUNCTION public.handle_ship_destruction(
+    p_victim_player_id      bigint,
+    p_victim_ship_id        bigint,
+    p_killer_player_id      bigint,
+    p_cause                 text,      -- 'combat'|'mines'|'quasar'|'navhaz'|'self_destruct'|'other'
+    p_sector_id             bigint,
+
+    -- config-driven inputs from the server (or you can fetch from config inside DB too)
+    p_xp_loss_flat          bigint,
+    p_xp_loss_percent       numeric,   -- e.g. 5.0
+    p_max_pods_per_day      bigint,
+
+    -- Big sleep duration; set 0 if you just want status without timer
+    p_big_sleep_seconds     bigint DEFAULT 0,
+
+    -- allow deterministic tests
+    p_now_ts                bigint DEFAULT (extract(epoch from now())::bigint),
+
+    -- ship_ownership role id for "owner" (set to your canonical value)
+    p_owner_role_id         bigint DEFAULT 1
+)
+RETURNS TABLE (
+    result_code       integer,
+    decision          text,      -- 'podded' | 'big_sleep'
+    new_experience    bigint,
+    xp_lost           bigint,
+    escape_pod_ship_id bigint,   -- NULL unless podded and spawned
+    engine_event_id   bigint
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_current_xp            bigint;
+    v_new_xp                bigint;
+    v_xp_loss               bigint;
+
+    v_shiptype_id           bigint;
+    v_has_escape_pod         boolean;
+
+    v_podded_count_today    bigint;
+    v_podded_last_reset     bigint;
+
+    v_escape_pod_shiptype_id bigint;
+    v_cfg_val               text;
+
+    v_payload               text;
+BEGIN
+    /*
+      Concurrency / correctness:
+      - lock victim player row (FOR UPDATE)
+      - lock victim ship row (FOR UPDATE)
+      - lock podded_status row (FOR UPDATE)
+    */
+
+    -- 0) Lock and read player XP
+    SELECT experience
+      INTO v_current_xp
+      FROM public.players
+     WHERE id = p_victim_player_id
+     FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'handle_ship_destruction: victim player % not found', p_victim_player_id
+            USING ERRCODE = 'NO_DATA_FOUND';
+    END IF;
+
+    -- 1) Lock ship, read its type_id (for eligibility), then mark destroyed
+    SELECT type_id
+      INTO v_shiptype_id
+      FROM public.ships
+     WHERE id = p_victim_ship_id
+     FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'handle_ship_destruction: victim ship % not found', p_victim_ship_id
+            USING ERRCODE = 'NO_DATA_FOUND';
+    END IF;
+
+    -- eligibility from shiptypes.has_escape_pod (NULL shiptype => treat as false)
+    SELECT COALESCE(st.has_escape_pod, FALSE)
+      INTO v_has_escape_pod
+      FROM public.shiptypes st
+     WHERE st.id = v_shiptype_id;
+
+    -- mark destroyed
+    UPDATE public.ships
+       SET destroyed = 1
+     WHERE id = p_victim_ship_id;
+
+    -- detach ship from player active ship slot (only if currently set to this ship)
+    UPDATE public.players
+       SET ship = NULL
+     WHERE id = p_victim_player_id
+       AND ship = p_victim_ship_id;
+
+    -- 2) increment times_blown_up (now a real column)
+    UPDATE public.players
+       SET times_blown_up = COALESCE(times_blown_up, 0) + 1
+     WHERE id = p_victim_player_id;
+
+    -- 3) apply XP penalty
+    v_xp_loss :=
+        p_xp_loss_flat
+        + floor(v_current_xp * (p_xp_loss_percent / 100.0))::bigint;
+
+    v_new_xp := v_current_xp - v_xp_loss;
+    IF v_new_xp < 0 THEN
+        v_new_xp := 0;
+    END IF;
+
+    UPDATE public.players
+       SET experience = v_new_xp
+     WHERE id = p_victim_player_id;
+
+    -- 4) podded_status row ensure + lock
+    INSERT INTO public.podded_status (player_id, status, podded_count_today, podded_last_reset)
+    VALUES (p_victim_player_id, 'active', 0, p_now_ts)
+    ON CONFLICT (player_id) DO NOTHING;
+
+    SELECT podded_count_today, podded_last_reset
+      INTO v_podded_count_today, v_podded_last_reset
+      FROM public.podded_status
+     WHERE player_id = p_victim_player_id
+     FOR UPDATE;
+
+    -- reset daily pod counter if older than 24h or NULL
+    IF v_podded_last_reset IS NULL OR (p_now_ts - v_podded_last_reset) >= 86400 THEN
+        v_podded_count_today := 0;
+        v_podded_last_reset := p_now_ts;
+
+        UPDATE public.podded_status
+           SET podded_count_today = 0,
+               podded_last_reset  = p_now_ts
+         WHERE player_id = p_victim_player_id;
+    END IF;
+
+    -- 5) decide pod vs big sleep
+    escape_pod_ship_id := NULL;
+
+    IF v_has_escape_pod AND v_podded_count_today < p_max_pods_per_day THEN
+        decision := 'podded';
+
+        -- load escape pod shiptype id from config
+        SELECT value
+          INTO v_cfg_val
+          FROM public.config
+         WHERE key = 'death.escape_pod_shiptype_id'
+           AND type = 'int';
+
+        IF v_cfg_val IS NULL THEN
+            -- hard fail: you asked for pod spawn, but config missing => safer to big sleep
+            decision := 'big_sleep';
+        ELSE
+            v_escape_pod_shiptype_id := v_cfg_val::bigint;
+
+            -- spawn escape pod ship (keep this INSERT minimal; relies on defaults / nullable cols)
+	    INSERT INTO public.ships (name, type_id, sector, destroyed)
+	    VALUES ('Escape Pod', v_escape_pod_shiptype_id, 1, 0)
+	    RETURNING id INTO escape_pod_ship_id;
+
+            -- assign as active ship
+	    UPDATE public.players
+	       SET ship = escape_pod_ship_id
+	        WHERE id = p_victim_player_id;
+
+            -- ownership (role_id is your canonical "owner" role)
+            INSERT INTO public.ship_ownership (ship_id, player_id, role_id, is_primary)
+            VALUES (escape_pod_ship_id, p_victim_player_id, p_owner_role_id, TRUE)
+            ON CONFLICT (ship_id, player_id, role_id) DO UPDATE
+              SET is_primary = EXCLUDED.is_primary;
+
+            -- update podded status + increment daily pod count
+            UPDATE public.podded_status
+               SET status             = 'podded',
+                   big_sleep_until    = NULL,
+                   reason             = NULL,
+                   podded_count_today = v_podded_count_today + 1,
+                   podded_last_reset  = v_podded_last_reset
+             WHERE player_id = p_victim_player_id;
+        END IF;
+    END IF;
+
+    IF decision IS DISTINCT FROM 'podded' THEN
+        decision := 'big_sleep';
+
+        UPDATE public.podded_status
+           SET status          = 'big_sleep',
+               big_sleep_until = CASE
+                                   WHEN p_big_sleep_seconds > 0 THEN p_now_ts + p_big_sleep_seconds
+                                   ELSE NULL
+                                 END,
+               reason          = COALESCE(p_cause, 'other')
+         WHERE player_id = p_victim_player_id;
+    END IF;
+
+    -- 6) log engine event (ship.destroyed)
+    v_payload := json_build_object(
+    'victim_ship_id',     p_victim_ship_id,
+    'victim_player_id',   p_victim_player_id,
+    'killer_player_id',   p_killer_player_id,
+    'cause',              COALESCE(p_cause, 'other'),
+    'sector_id',          p_sector_id,
+    'decision',           decision,
+    'pod_sector_id',      CASE WHEN decision = 'podded' THEN 1 ELSE NULL END,
+    'escape_pod_ship_id', escape_pod_ship_id,
+    'xp_lost',            v_xp_loss,
+    'new_xp',             v_new_xp
+    )::text;
+
+    INSERT INTO public.engine_events (ts, type, actor_player_id, sector_id, payload, idem_key)
+    VALUES (p_now_ts, 'ship.destroyed', NULL, p_sector_id, v_payload, NULL)
+    RETURNING id INTO engine_event_id;
+
+    -- outputs
+    result_code    := 0;
+    new_experience := v_new_xp;
+    xp_lost        := v_xp_loss;
+    RETURN NEXT;
+END;
+$$;

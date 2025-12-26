@@ -29,7 +29,10 @@ int cmd_sys_econ_orders_summary (client_ctx_t *ctx, json_t *root);
 int cmd_sys_npc_ferengi_tick_once (client_ctx_t *ctx, json_t *root);
 int cmd_debug_run_fedspace_cleanup (client_ctx_t *ctx, json_t *root);
 
-int send_error_response (client_ctx_t *ctx, json_t *root, int code, const char *msg);
+int send_error_response (client_ctx_t *ctx,
+                         json_t *root,
+                         int code,
+                         const char *msg);
 int send_json_response (client_ctx_t *ctx, json_t *root, json_t *json);
 
 #endif

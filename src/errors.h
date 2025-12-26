@@ -17,6 +17,7 @@
 #define ERR_DB_TX               1012
 #define ERR_DB_CONNECT          1013
 #define ERR_DB_NOMEM            1014
+#define ERR_DB_NO_ROWS          1015
 
 /* Authentication Errors (1100-1199) */
 #define AUTH_ERR_INVALID_CRED   1101
@@ -112,7 +113,8 @@
 #define REF_MINE_LIMIT_EXCEEDED 1486
 #define REF_DESTROYED_TERMINAL  1487
 #define REF_NOT_ENOUGH_HOLDS    1488
-#define ERR_INSUFFICIENT_TURNS	1489
+#define ERR_INSUFFICIENT_TURNS      1489
+#define ERR_REF_NO_TURNS            1489
 /* Location Errors (1500-1599) */
 #define ERR_CITADEL_REQUIRED    1501
 #define ERR_CITADEL_MAX_LEVEL   1502

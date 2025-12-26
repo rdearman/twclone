@@ -1,12 +1,14 @@
-#include "db_pg.h"
-#include "../db_api.h"
-#include "../db_int.h"
-#include "../../server_log.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <libpq-fe.h>
+// local includes
+#include "db_pg.h"
+#include "../db_api.h"
+#include "../db_int.h"
+#include "../../server_log.h"
+#include "../../errors.h"
+
 
 typedef struct db_pg_impl_s {
   PGconn *conn;
@@ -16,6 +18,7 @@ typedef struct db_pg_impl_s {
 typedef struct db_pg_res_impl_s {
     PGresult *pg_res;
 } db_pg_res_impl_t;
+
 
 static void pg_map_error(PGresult *pg_res, PGconn *conn, db_error_t *err) {
     if (!err) return;
@@ -76,7 +79,9 @@ static bool pg_exec_internal(db_t *db, const char *sql, const db_bind_t *params,
     char **values = calloc(n_params, sizeof(char*));
     for (size_t i = 0; i < n_params; i++) values[i] = pg_bind_param_to_string(&params[i]);
     PGresult *res = PQexecParams(impl->conn, sql, n_params, NULL, (const char* const*)values, NULL, NULL, 0);
-    for (size_t i = 0; i < n_params; i++) free(values[i]); free(values);
+    for (size_t i = 0; i < n_params; i++)
+      free(values[i]);
+    free(values);
     if (PQresultStatus(res) != PGRES_COMMAND_OK && PQresultStatus(res) != PGRES_TUPLES_OK) { pg_map_error(res, impl->conn, err); PQclear(res); return false; }
     if (out_rows) *out_rows = atoll(PQcmdTuples(res));
     PQclear(res); return true;
@@ -96,7 +101,9 @@ static bool pg_exec_insert_id_impl(db_t *db, const char *sql, const db_bind_t *p
     char **values = calloc(n_params, sizeof(char*));
     for (size_t i = 0; i < n_params; i++) values[i] = pg_bind_param_to_string(&params[i]);
     PGresult *res = PQexecParams(impl->conn, sql2, n_params, NULL, (const char* const*)values, NULL, NULL, 0);
-    for (size_t i = 0; i < n_params; i++) free(values[i]); free(values);
+    for (size_t i = 0; i < n_params; i++)
+      free(values[i]);
+    free(values);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) { pg_map_error(res, impl->conn, err); PQclear(res); return false; }
     if (out_id) *out_id = atoll(PQgetvalue(res, 0, 0));
     PQclear(res); return true;
@@ -107,7 +114,9 @@ static bool pg_query_impl(db_t *db, const char *sql, const db_bind_t *params, si
     char **values = calloc(n_params, sizeof(char*));
     for (size_t i = 0; i < n_params; i++) values[i] = pg_bind_param_to_string(&params[i]);
     PGresult *pg_res = PQexecParams(impl->conn, sql, n_params, NULL, (const char* const*)values, NULL, NULL, 0);
-    for (size_t i = 0; i < n_params; i++) free(values[i]); free(values);
+    for (size_t i = 0; i < n_params; i++)
+      free(values[i]);
+    free(values);
     if (PQresultStatus(pg_res) != PGRES_TUPLES_OK) { pg_map_error(pg_res, impl->conn, err); PQclear(pg_res); return false; }
     db_pg_res_impl_t *res_impl = calloc(1, sizeof(db_pg_res_impl_t));
     res_impl->pg_res = pg_res;
@@ -162,6 +171,87 @@ static const char* pg_res_col_text_impl(const db_res_t *res, int col_idx, db_err
     (void)err; return PQgetvalue(((db_pg_res_impl_t*)res->impl)->pg_res, res->current_row, col_idx);
 }
 
+
+static bool
+pg_ship_repair_atomic(db_t *db,
+                      int player_id,
+                      int ship_id,
+                      int cost,
+                      int64_t *out_new_credits,
+                      db_error_t *err)
+{
+  if (err) db_error_clear(err);
+
+  db_pg_impl_t *impl = (db_pg_impl_t*)db->impl;
+  PGconn *conn = impl ? impl->conn : NULL;
+
+  if (!conn || PQstatus(conn) != CONNECTION_OK)
+    {
+      if (err) err->code = ERR_DB_CONNECT;
+      return false;
+    }
+
+  const char *sql =
+    "WITH player AS ( "
+    "  UPDATE players "
+    "     SET credits = credits - $1 "
+    "   WHERE id = $2 "
+    "     AND credits >= $1 "
+    "   RETURNING credits "
+    "), ship AS ( "
+    "  UPDATE ships "
+    "     SET hull = 100 "
+    "   WHERE id = $3 "
+    "     AND EXISTS (SELECT 1 FROM player) "
+    "   RETURNING id "
+    ") "
+    "SELECT (SELECT credits FROM player) AS new_credits, "
+    "       (SELECT id FROM ship)        AS ship_id;";
+
+  char p1[32], p2[32], p3[32];
+  snprintf(p1, sizeof p1, "%d", cost);
+  snprintf(p2, sizeof p2, "%d", player_id);
+  snprintf(p3, sizeof p3, "%d", ship_id);
+  const char *params[3] = { p1, p2, p3 };
+
+  PGresult *res = PQexecParams(conn, sql, 3, NULL, params, NULL, NULL, 0);
+  if (!res)
+    {
+      if (err) err->code = ERR_DB_INTERNAL;
+      return false;
+    }
+
+  if (PQresultStatus(res) != PGRES_TUPLES_OK || PQntuples(res) != 1)
+    {
+      pg_map_error(res, conn, err);
+      PQclear(res);
+      return false;
+    }
+
+  const bool credits_null = PQgetisnull(res, 0, 0);
+  const bool ship_null    = PQgetisnull(res, 0, 1);
+
+  if (credits_null)
+    {
+      if (err) err->code = ERR_INSUFFICIENT_FUNDS;
+      PQclear(res);
+      return false;
+    }
+  if (ship_null)
+    {
+      if (err) err->code = ERR_SHIP_NOT_FOUND;
+      PQclear(res);
+      return false;
+    }
+
+  if (out_new_credits)
+    *out_new_credits = strtoll(PQgetvalue(res, 0, 0), NULL, 10);
+
+  PQclear(res);
+  return true;
+}
+
+
 static const db_vt_t pg_vt = {
     .close = pg_close_impl,
     .tx_begin = pg_tx_begin_impl, .tx_commit = pg_tx_commit_impl, .tx_rollback = pg_tx_rollback_impl,
@@ -172,6 +262,7 @@ static const db_vt_t pg_vt = {
     .res_col_is_null = pg_res_col_is_null_impl,
     .res_col_i64 = pg_res_col_i64_impl, .res_col_i32 = pg_res_col_i32_impl,
     .res_col_double = pg_res_col_double_impl, .res_col_text = pg_res_col_text_impl,
+    .ship_repair_atomic = pg_ship_repair_atomic,	
 };
 
 void* db_pg_open_internal(db_t *parent_db, const db_config_t *cfg, db_error_t *err) {
@@ -182,3 +273,5 @@ void* db_pg_open_internal(db_t *parent_db, const db_config_t *cfg, db_error_t *e
     parent_db->vt = &pg_vt;
     return impl;
 }
+
+

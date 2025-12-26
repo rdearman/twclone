@@ -26,23 +26,135 @@
 #include "server_communication.h"
 #include "db/db_api.h"
 
-int cmd_hardware_list (client_ctx_t *ctx, json_t *root) { (void)ctx; (void)root; return 0; }
-int cmd_hardware_buy (client_ctx_t *ctx, json_t *root) { (void)ctx; (void)root; return 0; }
-int cmd_shipyard_list (client_ctx_t *ctx, json_t *root) { (void)ctx; (void)root; return 0; }
-int cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root) { (void)ctx; (void)root; return 0; }
-int tavern_settings_load (void) { return 0; }
-int cmd_tavern_lottery_buy_ticket (client_ctx_t *ctx, json_t *root) { (void)ctx; (void)root; return 0; }
-int cmd_tavern_lottery_status (client_ctx_t *ctx, json_t *root) { (void)ctx; (void)root; return 0; }
-int cmd_tavern_deadpool_place_bet (client_ctx_t *ctx, json_t *root) { (void)ctx; (void)root; return 0; }
-int cmd_tavern_dice_play (client_ctx_t *ctx, json_t *root) { (void)ctx; (void)root; return 0; }
-int cmd_tavern_graffiti_post (client_ctx_t *ctx, json_t *root) { (void)ctx; (void)root; return 0; }
-int cmd_tavern_highstakes_play (client_ctx_t *ctx, json_t *root) { (void)ctx; (void)root; return 0; }
-int cmd_tavern_loan_pay (client_ctx_t *ctx, json_t *root) { (void)ctx; (void)root; return 0; }
-int cmd_tavern_loan_take (client_ctx_t *ctx, json_t *root) { (void)ctx; (void)root; return 0; }
-int cmd_tavern_raffle_buy_ticket (client_ctx_t *ctx, json_t *root) { (void)ctx; (void)root; return 0; }
-int cmd_tavern_round_buy (client_ctx_t *ctx, json_t *root) { (void)ctx; (void)root; return 0; }
-int cmd_tavern_rumour_get_hint (client_ctx_t *ctx, json_t *root) { (void)ctx; (void)root; return 0; }
-int cmd_tavern_trader_buy_password (client_ctx_t *ctx, json_t *root) { (void)ctx; (void)root; return 0; }
-int cmd_tavern_barcharts_get_prices_summary (client_ctx_t *ctx, json_t *root) { (void)ctx; (void)root; return 0; }
-int cmd_sys_cron_planet_tick_once (client_ctx_t *ctx, json_t *root) { (void)ctx; (void)root; return 0; }
-int cmd_stock (client_ctx_t *ctx, json_t *root) { (void)ctx; (void)root; return 0; }
+
+int
+cmd_hardware_list (client_ctx_t *ctx, json_t *root)
+{
+  (void)ctx; (void)root; return 0;
+}
+
+
+int
+cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
+{
+  (void)ctx; (void)root; return 0;
+}
+
+
+int
+cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
+{
+  (void)ctx; (void)root; return 0;
+}
+
+
+int
+cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
+{
+  (void)ctx; (void)root; return 0;
+}
+
+
+int
+tavern_settings_load (void)
+{
+  return 0;
+}
+
+
+int
+cmd_tavern_lottery_buy_ticket (client_ctx_t *ctx, json_t *root)
+{
+  (void)ctx; (void)root; return 0;
+}
+
+
+int
+cmd_tavern_lottery_status (client_ctx_t *ctx, json_t *root)
+{
+  (void)ctx; (void)root; return 0;
+}
+
+
+int
+cmd_tavern_deadpool_place_bet (client_ctx_t *ctx, json_t *root)
+{
+  (void)ctx; (void)root; return 0;
+}
+
+
+int
+cmd_tavern_dice_play (client_ctx_t *ctx, json_t *root)
+{
+  (void)ctx; (void)root; return 0;
+}
+
+
+int
+cmd_tavern_graffiti_post (client_ctx_t *ctx, json_t *root)
+{
+  (void)ctx; (void)root; return 0;
+}
+
+
+int
+cmd_tavern_highstakes_play (client_ctx_t *ctx, json_t *root)
+{
+  (void)ctx; (void)root; return 0;
+}
+
+
+int
+cmd_tavern_loan_pay (client_ctx_t *ctx, json_t *root)
+{
+  (void)ctx; (void)root; return 0;
+}
+
+
+int
+cmd_tavern_loan_take (client_ctx_t *ctx, json_t *root)
+{
+  (void)ctx; (void)root; return 0;
+}
+
+
+int
+cmd_tavern_raffle_buy_ticket (client_ctx_t *ctx, json_t *root)
+{
+  (void)ctx; (void)root; return 0;
+}
+
+
+int
+cmd_tavern_round_buy (client_ctx_t *ctx, json_t *root)
+{
+  (void)ctx; (void)root; return 0;
+}
+
+
+int
+cmd_tavern_rumour_get_hint (client_ctx_t *ctx, json_t *root)
+{
+  (void)ctx; (void)root; return 0;
+}
+
+
+int
+cmd_tavern_trader_buy_password (client_ctx_t *ctx, json_t *root)
+{
+  (void)ctx; (void)root; return 0;
+}
+
+
+int
+cmd_tavern_barcharts_get_prices_summary (client_ctx_t *ctx, json_t *root)
+{
+  (void)ctx; (void)root; return 0;
+}
+
+
+int
+cmd_sys_cron_planet_tick_once (client_ctx_t *ctx, json_t *root)
+{
+  (void)ctx; (void)root; return 0;
+}

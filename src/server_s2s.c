@@ -17,6 +17,7 @@
 #include "s2s_transport.h"
 #include "schemas.h"
 #include "server_log.h"
+#include "game_db.h" // Include game_db.h
 
 
 static int
@@ -29,8 +30,12 @@ handle_command_push (s2s_conn_t *c, json_t *env)
   /* now it's safe to log */
   LOGE ("[server] handle_command_push: %s %s\n",
         cmd_type ? cmd_type : "(null)", idem_key ? idem_key : "(null)");
-  int cmd_id = 0, duplicate = 0, due_at = (int) time (NULL);
-  int rcdb = db_commands_accept (cmd_type, idem_key, cmd_payload,
+  int due_at = 0;
+  int cmd_id = 0;
+  int duplicate = 0;
+  db_t *db = game_db_get_handle (); // Get global DB handle
+
+  int rcdb = db_commands_accept (db, cmd_type, idem_key, cmd_payload,
                                  &cmd_id, &duplicate, &due_at);
 
 

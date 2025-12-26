@@ -1,0 +1,499 @@
+{
+  "summary": {
+    "found": 11,
+    "renamed": 0,
+    "missing": 30
+  },
+  "results": [
+    {
+      "name": "player_is_sysop",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [],
+      "notes": ""
+    },
+    {
+      "name": "cmd_auth_session",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [],
+      "notes": ""
+    },
+    {
+      "name": "cmd_auth_mfa_totp_setup",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [],
+      "notes": ""
+    },
+    {
+      "name": "cmd_auth_mfa_totp_verify",
+      "status": "FOUND",
+      "definition": {
+        "file": "src/server_auth.c",
+        "line_start": 68,
+        "static": false,
+        "signature": "int cmd_auth_mfa_totp_verify ("
+      },
+      "rename": {},
+      "references": [],
+      "notes": ""
+    },
+    {
+      "name": "cmd_auth_check_username",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [],
+      "notes": ""
+    },
+    {
+      "name": "cmd_auth_reset_password",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [],
+      "notes": ""
+    },
+    {
+      "name": "is_category_in_filter",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [],
+      "notes": ""
+    },
+    {
+      "name": "news_post",
+      "status": "FOUND",
+      "definition": {
+        "file": "src/server_news.c",
+        "line_start": 33,
+        "static": false,
+        "signature": "int news_post ("
+      },
+      "rename": {},
+      "references": [],
+      "notes": ""
+    },
+    {
+      "name": "h_handle_npc_encounters",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [],
+      "notes": ""
+    },
+    {
+      "name": "fer_init",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [
+        {
+          "file": "src/server_universe.h",
+          "line": 13,
+          "context": "int fer_init_once (void);"
+        },
+        {
+          "file": "src/server_universe.c",
+          "line": 158,
+          "context": "int fer_init_once (void) { return 0; }"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "name": "fer_tick",
+      "status": "FOUND",
+      "definition": {
+        "file": "src/server_universe.c",
+        "line_start": 158,
+        "static": false,
+        "signature": "void fer_tick ("
+      },
+      "rename": {},
+      "references": [],
+      "notes": ""
+    },
+    {
+      "name": "fer_create_new",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [],
+      "notes": ""
+    },
+    {
+      "name": "parse_neighbors_csv",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [
+        {
+          "file": "src/database_cmd.h",
+          "line": 15,
+          "context": "json_t *parse_neighbors_csv (const unsigned char *txt);"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "name": "db_bank_apply_interest",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [
+        {
+          "file": "src/database_cmd.h",
+          "line": 95,
+          "context": "int db_bank_apply_interest (db_t *db);"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "name": "db_bank_process_orders",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [
+        {
+          "file": "src/database_cmd.h",
+          "line": 96,
+          "context": "int db_bank_process_orders (db_t *db);"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "name": "h_get_system_account_id_unlocked",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [
+        {
+          "file": "src/database_cmd.h",
+          "line": 75,
+          "context": "int h_get_system_account_id_unlocked (db_t *db, const char *system_owner_type, int system_owner_id, "
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "name": "h_get_account_id_unlocked",
+      "status": "FOUND",
+      "definition": {
+        "file": "src/server_bank.c",
+        "line_start": 34,
+        "static": false,
+        "signature": "int h_get_account_id_unlocked("
+      },
+      "rename": {},
+      "references": [],
+      "notes": ""
+    },
+    {
+      "name": "h_create_bank_account_unlocked",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [
+        {
+          "file": "src/database_cmd.h",
+          "line": 74,
+          "context": "int h_create_bank_account_unlocked (db_t *db, const char *owner_type, int owner_id, long long initia"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "name": "h_get_config_int_unlocked",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [
+        {
+          "file": "src/database_cmd.h",
+          "line": 78,
+          "context": "long long h_get_config_int_unlocked (db_t *db, const char *key, long long default_value);"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "name": "h_get_account_alert_threshold_unlocked",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [],
+      "notes": ""
+    },
+    {
+      "name": "h_add_credits_unlocked",
+      "status": "FOUND",
+      "definition": {
+        "file": "src/server_bank.c",
+        "line_start": 154,
+        "static": false,
+        "signature": "int h_add_credits_unlocked("
+      },
+      "rename": {},
+      "references": [],
+      "notes": ""
+    },
+    {
+      "name": "h_deduct_credits_unlocked",
+      "status": "FOUND",
+      "definition": {
+        "file": "src/server_bank.c",
+        "line_start": 171,
+        "static": false,
+        "signature": "int h_deduct_credits_unlocked("
+      },
+      "rename": {},
+      "references": [],
+      "notes": ""
+    },
+    {
+      "name": "h_add_credits",
+      "status": "FOUND",
+      "definition": {
+        "file": "src/server_bank.c",
+        "line_start": 141,
+        "static": false,
+        "signature": "int h_add_credits("
+      },
+      "rename": {},
+      "references": [],
+      "notes": ""
+    },
+    {
+      "name": "h_deduct_credits",
+      "status": "FOUND",
+      "definition": {
+        "file": "src/server_bank.c",
+        "line_start": 162,
+        "static": false,
+        "signature": "int h_deduct_credits("
+      },
+      "rename": {},
+      "references": [],
+      "notes": ""
+    },
+    {
+      "name": "calculate_fees",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [
+        {
+          "file": "src/database_cmd.h",
+          "line": 80,
+          "context": "int calculate_fees (db_t *db, const char *tx_type, long long base_amount, const char *owner_type, fe"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "name": "h_update_planet_stock",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [
+        {
+          "file": "src/database_cmd.h",
+          "line": 81,
+          "context": "int h_update_planet_stock (db_t *db, int planet_id, const char *commodity_code, int quantity_change,"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "name": "h_get_bank_balance",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [],
+      "notes": ""
+    },
+    {
+      "name": "db_get_player_bank_balance",
+      "status": "FOUND",
+      "definition": {
+        "file": "src/server_bank.c",
+        "line_start": 55,
+        "static": false,
+        "signature": "int db_get_player_bank_balance("
+      },
+      "rename": {},
+      "references": [],
+      "notes": ""
+    },
+    {
+      "name": "db_get_corp_bank_balance",
+      "status": "FOUND",
+      "definition": {
+        "file": "src/server_bank.c",
+        "line_start": 75,
+        "static": false,
+        "signature": "int db_get_corp_bank_balance("
+      },
+      "rename": {},
+      "references": [],
+      "notes": ""
+    },
+    {
+      "name": "db_get_npc_bank_balance",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [
+        {
+          "file": "src/database_cmd.h",
+          "line": 85,
+          "context": "int db_get_npc_bank_balance (db_t *db, int npc_id, long long *out_balance);"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "name": "db_get_port_bank_balance",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [
+        {
+          "file": "src/database_cmd.h",
+          "line": 86,
+          "context": "int db_get_port_bank_balance (db_t *db, int port_id, long long *out_balance);"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "name": "db_get_planet_bank_balance",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [
+        {
+          "file": "src/database_cmd.h",
+          "line": 87,
+          "context": "int db_get_planet_bank_balance (db_t *db, int planet_id, long long *out_balance);"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "name": "db_bank_account_exists",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [
+        {
+          "file": "src/database_cmd.h",
+          "line": 88,
+          "context": "int db_bank_account_exists (db_t *db, const char *owner_type, int owner_id);"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "name": "db_bank_create_account",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [
+        {
+          "file": "src/database_cmd.h",
+          "line": 89,
+          "context": "int db_bank_create_account (db_t *db, const char *owner_type, int owner_id, long long initial_balanc"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "name": "db_bank_deposit",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [
+        {
+          "file": "src/database_cmd.h",
+          "line": 90,
+          "context": "int db_bank_deposit (db_t *db, const char *owner_type, int owner_id, long long amount);"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "name": "db_bank_withdraw",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [
+        {
+          "file": "src/database_cmd.h",
+          "line": 91,
+          "context": "int db_bank_withdraw (db_t *db, const char *owner_type, int owner_id, long long amount);"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "name": "db_bank_transfer",
+      "status": "FOUND",
+      "definition": {
+        "file": "src/server_bank.c",
+        "line_start": 179,
+        "static": false,
+        "signature": "int db_bank_transfer("
+      },
+      "rename": {},
+      "references": [],
+      "notes": ""
+    },
+    {
+      "name": "db_port_get_active_busts",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [],
+      "notes": ""
+    },
+    {
+      "name": "h_create_personal_bank_alert_notice",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [],
+      "notes": ""
+    },
+    {
+      "name": "h_bank_transfer_unlocked",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [
+        {
+          "file": "src/database_cmd.h",
+          "line": 93,
+          "context": "int h_bank_transfer_unlocked (db_t *db, const char *from_owner_type, int from_owner_id, const char *"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "name": "db_apply_lock_policy_for_pilot",
+      "status": "MISSING",
+      "definition": {},
+      "rename": {},
+      "references": [],
+      "notes": ""
+    }
+  ]
+}

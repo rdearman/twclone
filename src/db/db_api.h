@@ -466,6 +466,22 @@ bool db_exec_insert_id(db_t *db,
                        int64_t *out_id,
                        db_error_t *err);
 
+
+/* Returns true if sector has a shipyard port (type 9 or 0) */
+int db_port_is_shipyard (db_t *db, int sector_id, bool *out_is_shipyard);
+
+/* Get ship hull (0..100). Returns ERR_SHIP_NOT_FOUND if ship missing. */
+int db_ship_get_hull (db_t *db, int ship_id, int *out_hull);
+
+
+
+bool db_ship_repair_atomic(db_t *db,
+                           int player_id,
+                           int ship_id,
+                           int cost,
+                           int64_t *out_new_credits,
+                           db_error_t *err);
+  
   
 #ifdef __cplusplus
 }

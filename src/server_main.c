@@ -19,10 +19,8 @@
 #include "s2s_transport.h"
 #include "server_engine.h"
 #include "server_s2s.h"
-// #include "config.h" // No longer used, replaced by game_db config loading
-// #include "database.h" // Temporary, will be replaced with game_db.h for specific calls
+
 #include "game_db.h"  // Include the new game_db header
-#include "server_bigbang.h"
 #include "db_player_settings.h"
 #include "server_log.h" // Explicitly include server_log.h
 #include "sysop_interaction.h" // Explicitly include sysop_interaction.h
@@ -30,8 +28,7 @@
 static pid_t g_engine_pid = -1;
 static int g_engine_shutdown_fd = -1;
 static int s2s_listen_fd = -1;
-// static int s2s_conn_fd = -1;
-///
+
 static s2s_conn_t *g_s2s_conn = NULL;
 static pthread_t g_s2s_thr;
 static volatile int g_s2s_run = 0;
@@ -299,17 +296,20 @@ get_scalar_int (const char *sql)
     {
       return -1;
     }
-  
+
   db_res_t *res = NULL;
   db_error_t err;
   int v = -1;
 
-  if (db_query(db, sql, NULL, 0, &res, &err)) {
-      if (db_res_step(res, &err)) {
-          v = db_res_col_i32(res, 0, &err);
-      }
-      db_res_finalize(res);
-  }
+
+  if (db_query (db, sql, NULL, 0, &res, &err))
+    {
+      if (db_res_step (res, &err))
+        {
+          v = db_res_col_i32 (res, 0, &err);
+        }
+      db_res_finalize (res);
+    }
   return v;
 }
 
@@ -318,16 +318,19 @@ get_scalar_int (const char *sql)
 static int
 needs_bigbang (void)
 {
-  db_t *db = game_db_get_handle();
-  if (db_backend(db) == DB_BACKEND_SQLITE) {
+  db_t *db = game_db_get_handle ();
+  if (db_backend (db) == DB_BACKEND_SQLITE)
+    {
       // Primary flag: PRAGMA user_version (SQLite only)
       int uv = get_scalar_int ("PRAGMA user_version");
+
+
       if (uv > 0)
         {
           return 0;                 // already seeded
         }
-  }
-  
+    }
+
   // Belt-and-braces: look at contents in case user_version wasn't set (or for Postgres)
   int sectors = get_scalar_int ("SELECT COUNT(*) FROM sectors");
   int warps = get_scalar_int ("SELECT COUNT(*) FROM sector_warps");
@@ -362,6 +365,18 @@ main (void)
   server_log_init_file ("./twclone.log", "[server]", 0, LOG_DEBUG);
   LOGI ("starting up");
   sysop_start ();
+
+  /* 0.0) Bootstrap Config (DB Connection) */
+  if (load_bootstrap_config ("bigbang.json") != 0)
+    {
+      // Try looking in bin/ just in case we are at root
+      if (load_bootstrap_config ("bin/bigbang.json") != 0)
+        {
+          LOGW (
+            "Failed to load bigbang.json (bootstrap config). Using defaults/ENV if available.");
+        }
+    }
+
   /* 0) DB: open (create schema/defaults if missing) */
   if (game_db_init () != 0)
     {
@@ -369,8 +384,9 @@ main (void)
       //      LOGE( "Failed to init DB.\n");
       return EXIT_FAILURE;
     }
-  
-  if (needs_bigbang ()) {
+
+  if (needs_bigbang ())
+    {
       LOGW ("Universe appears empty - running Big Bang...");
       // Big Bang might still use raw SQLite internally in server_bigbang.c
       // We haven't refactored server_bigbang.c yet, so we assume it handles itself
@@ -380,14 +396,14 @@ main (void)
         {
           return EXIT_FAILURE;
         }
-  }
+    }
 
   // normal startup
   if (!load_eng_config ()) // This still calls original SQLite db funcs
     {
       return 2;
     }
-  
+
   // initalise the player settings if all the other DB stuff is done.
   db_player_settings_init (game_db_get_handle ());
   cron_register_builtins ();

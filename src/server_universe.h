@@ -31,12 +31,19 @@ int cmd_move_scan (client_ctx_t *ctx, json_t *root);
 int cmd_move_transwarp (client_ctx_t *ctx, json_t *root);
 void cmd_sector_scan (client_ctx_t *ctx, json_t *root);
 void cmd_sector_scan_density (void *ctx_in, json_t *root);
-void cmd_sector_info (client_ctx_t *ctx, int fd, json_t *root, int sector_id, int player_id);
+void cmd_sector_info (client_ctx_t *ctx,
+                      int fd,
+                      json_t *root,
+                      int sector_id,
+                      int player_id);
 int cmd_sector_search (client_ctx_t *ctx, json_t *root);
 int cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root);
 
 json_t *build_sector_info_json (db_t *db, int sector_id);
-json_t *build_sector_scan_json (db_t *db, int sector_id, int player_id, bool holo_scanner_active);
+json_t *build_sector_scan_json (db_t *db,
+                                int sector_id,
+                                int player_id,
+                                bool holo_scanner_active);
 json_t *make_player_object (int64_t player_id);
 
 #endif

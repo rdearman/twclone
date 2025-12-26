@@ -38,9 +38,15 @@ int db_avoid_list (db_t *db, int64_t player_id, /*out */ db_res_t **it);
 int db_avoid_remove (db_t *db, int64_t player_id, int64_t sector_id);
 
 /* ---- Notes ---- */
-int db_note_set (db_t *db, int64_t player_id, const char *scope, const char *key,
+int db_note_set (db_t *db,
+                 int64_t player_id,
+                 const char *scope,
+                 const char *key,
                  const char *note);
-int db_note_delete (db_t *db, int64_t player_id, const char *scope, const char *key);
+int db_note_delete (db_t *db,
+                    int64_t player_id,
+                    const char *scope,
+                    const char *key);
 int db_note_list (db_t *db, int64_t player_id, const char *scope_or_null,
                   /*out */ db_res_t **it);
 
@@ -51,7 +57,10 @@ int db_for_each_subscriber (db_t *db,  const char *event_type,
                             player_id_cb cb, void *arg);
 
 int db_prefs_get_all (db_t *db, int64_t player_id, /*out */ db_res_t **it);
-int db_prefs_get_one (db_t *db, int64_t player_id,  const char *key,  char **out_value);
+int db_prefs_get_one (db_t *db,
+                      int64_t player_id,
+                      const char *key,
+                      char **out_value);
 int db_prefs_set_one (db_t *db, int64_t player_id, const char *key, pref_type t,
                       const char *value);
 

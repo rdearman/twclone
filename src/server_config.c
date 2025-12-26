@@ -32,7 +32,9 @@
 
 server_config_t g_cfg;
 json_t *g_capabilities;
-xp_align_config_t g_xp_align;   // Define the global instance of xp_align_config_t
+
+
+// xp_align_config_t g_xp_align;   // REMOVED: Defined in globals.c
 /* Provided by your DB module; MUST be defined there (no 'static') */
 // sqlite3 *g_db = NULL; // Removed global raw handle
 
@@ -376,13 +378,17 @@ apply_db (db_t *db)
   db_error_t err;
   /* New Key-Value-Type Query */
   const char *sql = "SELECT key, value, type FROM config;";
-  
-  if (db_query(db, sql, NULL, 0, &res, &err)) {
+
+  if (db_query (db, sql, NULL, 0, &res, &err))
+    {
       while (db_res_step (res, &err))
         {
-          const char *key = db_res_col_text(res, 0, &err);
-          const char *val = db_res_col_text(res, 1, &err);
-          const char *type = db_res_col_text(res, 2, &err);
+          const char *key = db_res_col_text (res, 0, &err);
+          const char *val = db_res_col_text (res, 1, &err);
+          const char *type = db_res_col_text (res,
+                                              2,
+                                              &err);
+
 
           if (!key || !val || !type)
             {
@@ -430,7 +436,8 @@ apply_db (db_t *db)
             }
           else if (strcmp (key, "regen.shield_rate_pct_per_tick") == 0)
             {
-              cfg_parse_double (val, type, &g_cfg.regen.shield_rate_pct_per_tick);
+              cfg_parse_double (val, type,
+                                &g_cfg.regen.shield_rate_pct_per_tick);
             }
           else if (strcmp (key, "regen.tick_seconds") == 0)
             {
@@ -592,7 +599,8 @@ apply_db (db_t *db)
             }
           else if (strcmp (key, "shipyard_require_hardware_compat") == 0)
             {
-              cfg_parse_int (val, type, &g_cfg.shipyard_require_hardware_compat);
+              cfg_parse_int (val, type,
+                             &g_cfg.shipyard_require_hardware_compat);
             }
           else if (strcmp (key, "shipyard_tax_bp") == 0)
             {
@@ -617,7 +625,8 @@ apply_db (db_t *db)
             }
           else if (strcmp (key, "planet_treasury_interest_rate_bps") == 0)
             {
-              cfg_parse_int (val, type, &g_cfg.planet_treasury_interest_rate_bps);
+              cfg_parse_int (val, type,
+                             &g_cfg.planet_treasury_interest_rate_bps);
             }
           else if (strcmp (key, "bank_min_balance_for_interest") == 0)
             {
@@ -635,21 +644,33 @@ apply_db (db_t *db)
                     key, type, val);
             }
         }
-      db_res_finalize(res);
+      db_res_finalize (res);
       LOGI ("[config] Configuration loaded from Key-Value-Type table.");
-  } else {
+    }
+  else
+    {
       LOGW ("[config] Failed to prepare config query: %s", err.message);
-  }
+    }
 
   // Secrets loading
-  const char *sql_keys = "SELECT key_id,key_b64 FROM s2s_keys WHERE active=1 AND is_default_tx=1 LIMIT 1";
-  if (db_query(db, sql_keys, NULL, 0, &res, &err)) {
-      if (db_res_step(res, &err)) {
-          const char *kid = db_res_col_text(res, 0, &err);
-          snprintf (g_cfg.secrets.key_id, sizeof g_cfg.secrets.key_id, "%s", kid ? kid : "");
-      }
-      db_res_finalize(res);
-  }
+  const char *sql_keys =
+    "SELECT key_id,key_b64 FROM s2s_keys WHERE active=1 AND is_default_tx=1 LIMIT 1";
+
+
+  if (db_query (db, sql_keys, NULL, 0, &res, &err))
+    {
+      if (db_res_step (res, &err))
+        {
+          const char *kid = db_res_col_text (res, 0, &err);
+
+
+          snprintf (g_cfg.secrets.key_id,
+                    sizeof g_cfg.secrets.key_id,
+                    "%s",
+                    kid ? kid : "");
+        }
+      db_res_finalize (res);
+    }
 }
 
 
@@ -662,10 +683,80 @@ apply_env (void)
 
 
 int
+load_bootstrap_config (const char *filename)
+{
+  json_error_t error;
+  json_t *root = json_load_file (filename, 0, &error);
+  if (!root)
+    {
+      LOGE ("Failed to load bootstrap config '%s': %s (line %d)",
+            filename,
+            error.text,
+            error.line);
+      return -1;
+    }
+
+  const char *app_conn_tmpl = json_string_value (json_object_get (root, "app"));
+  const char *db_name = json_string_value (json_object_get (root, "db"));
+
+
+  if (!app_conn_tmpl)
+    {
+      LOGE ("Bootstrap config missing 'app' connection string.");
+      json_decref (root);
+      return -1;
+    }
+
+  if (!db_name)
+    {
+      db_name = "twclone"; // Default
+    }
+
+  // Perform simple replacement of %DB% with db_name
+  // We assume the string is roughly "dbname=%DB% ..."
+  const char *marker = "%DB%";
+  const char *found = strstr (app_conn_tmpl, marker);
+
+
+  if (found)
+    {
+      size_t prefix_len = found - app_conn_tmpl;
+      size_t suffix_len = strlen (found + strlen (marker));
+      size_t db_len = strlen (db_name);
+
+
+      if (prefix_len + db_len + suffix_len + 1 > sizeof (g_cfg.pg_conn_str))
+        {
+          LOGE ("Connection string too long.");
+          json_decref (root);
+          return -1;
+        }
+
+      strncpy (g_cfg.pg_conn_str, app_conn_tmpl, prefix_len);
+      strcpy (g_cfg.pg_conn_str + prefix_len, db_name);
+      strcpy (g_cfg.pg_conn_str + prefix_len + db_len, found + strlen (marker));
+    }
+  else
+    {
+      snprintf (g_cfg.pg_conn_str,
+                sizeof (g_cfg.pg_conn_str),
+                "%s",
+                app_conn_tmpl);
+    }
+
+  LOGI ("Loaded bootstrap DB config: %s (redacted)", "********"); // Do not log credentials
+  json_decref (root);
+  return 0;
+}
+
+
+int
 load_eng_config (void)
 {
   config_set_defaults ();
   db_t *db = game_db_get_handle ();      // Initialize g_db with the correct handle
+
+
   if (db)
     {
       apply_db (db);

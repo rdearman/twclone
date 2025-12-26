@@ -22,9 +22,9 @@
 # AM_CFLAGS = -Wall -Wextra -Werror -I../src
 
 # AM_CFLAGS = -Wall -Wextra
-AM_CFLAGS = -Wall -Wextra -D_GNU_SOURCE -I../src
+AM_CFLAGS = -Wall -Wextra -D_GNU_SOURCE -I../src -DDB_BACKEND_PG
 
-server_LDADD   	= -ljansson -lcrypto -lpthread -lm
+server_LDADD   	= -ljansson -lcrypto -lpthread -lm -lpq
 AUTOMAKE_OPTIONS = subdir-objects
 
 bin_PROGRAMS = \
@@ -32,8 +32,7 @@ bin_PROGRAMS = \
 	bigbang
 
 
-# BigBang sources (remains unchanged for now)
-if ENABLE_POSTGRES
+# BigBang sources (PostgreSQL Only)
 bigbang_SOURCES = \
 	../src/bigbang_pg_main.c \
 	../src/db/db_api.c \
@@ -42,38 +41,25 @@ bigbang_SOURCES = \
 	../src/server_log.c \
 	../src/globals.c
 bigbang_LDADD = -ljansson -lpq -lcrypto -lpthread -lm
-else
-bigbang_SOURCES = \
-	../src/database.c \
-        ../src/database_cmd.c \
-	../src/schemas.c \
-	../src/namegen.c \
-	../src/server_bigbang.c \
-	../src/server_warp_post_processing.c \
-	../src/globals.c \
-	../src/common.c \
-	../src/server_log.c \
-	../src/test_bang.c \
-	../src/server_clusters.c
-bigbang_LDADD = -ljansson -lsqlite3 -lcrypto -lpthread -lm
-endif
 
 
 # Server sources (now with DB abstraction)
-server_abstracted_core_SOURCES = \
+server_SOURCES = \
 	../src/common.c \
 	../src/db/db_api.c \
+	../src/db/pg/db_pg.c \
 	../src/game_db.c \
+	../src/database_cmd.c \
+	../src/database_market.c \
+	../src/db_player_settings.c \
 	../src/engine_consumer.c \
 	../src/globals.c \
-	../src/namegen.c \
 	../src/s2s_keyring.c \
 	../src/s2s_transport.c \
 	../src/schemas.c \
 	../src/server_auth.c \
 	../src/server_autopilot.c \
 	../src/server_bank.c \
-	../src/server_bigbang.c \
 	../src/server_bulk.c \
 	../src/server_citadel.c \
 	../src/server_clusters.c \
@@ -98,16 +84,3 @@ server_abstracted_core_SOURCES = \
 	../src/server_universe.c \
 	../src/server_warp_post_processing.c \
 	../src/sysop_interaction.c
-
-if ENABLE_POSTGRES
-server_SOURCES = $(server_abstracted_core_SOURCES) ../src/db/pg/db_pg.c
-server_LDADD += -lpq
-else
-server_SOURCES = $(server_abstracted_core_SOURCES) \
-	../src/db/sqlite/db_sqlite.c \
-	../src/database.c \
-	../src/database_cmd.c \
-	../src/database_market.c \
-	../src/db_player_settings.c
-server_LDADD += -lsqlite3
-endif

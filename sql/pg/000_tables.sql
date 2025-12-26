@@ -29,6 +29,7 @@ CREATE TABLE players (
     flags BIGINT,
     login_time TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_update TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    times_blown_up BIGINT NOT NULL DEFAULT 0,
     intransit BOOLEAN,
     beginmove BIGINT,
     movingto BIGINT,
@@ -149,6 +150,7 @@ can_planet_scan BOOLEAN DEFAULT FALSE,
 maxphotons BIGINT,
 max_cloaks BIGINT NOT NULL DEFAULT 0,
 can_purchase BOOLEAN DEFAULT TRUE,
+has_escape_pod BOOLEAN NOT NULL DEFAULT FALSE,
 enabled BOOLEAN DEFAULT TRUE, FOREIGN KEY (required_commission) REFERENCES commission(id) );
 
 CREATE TABLE ships ( id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, type_id BIGINT, attack BIGINT, holds BIGINT DEFAULT 1, mines BIGINT, limpets BIGINT, fighters BIGINT DEFAULT 1, genesis BIGINT, detonators BIGINT NOT NULL DEFAULT 0, probes BIGINT NOT NULL DEFAULT 0, photons BIGINT, sector BIGINT, shields BIGINT DEFAULT 1, installed_shields BIGINT DEFAULT 1, beacons BIGINT, colonists BIGINT, equipment BIGINT, organics BIGINT, ore BIGINT, slaves BIGINT DEFAULT 0, weapons BIGINT DEFAULT 0, drugs BIGINT DEFAULT 0, flags BIGINT, cloaking_devices BIGINT, has_transwarp BIGINT NOT NULL DEFAULT 0, has_planet_scanner BIGINT NOT NULL DEFAULT 0, has_long_range_scanner BIGINT NOT NULL DEFAULT 0, cloaked TIMESTAMP, ported BIGINT, onplanet BIGINT, destroyed BIGINT DEFAULT 0, hull BIGINT NOT NULL DEFAULT 100, perms BIGINT NOT NULL DEFAULT 731, CONSTRAINT check_current_cargo_limit CHECK ( (colonists + equipment + organics + ore) <= holds ), FOREIGN KEY(type_id) REFERENCES shiptypes(id), FOREIGN KEY(sector) REFERENCES sectors(id) );

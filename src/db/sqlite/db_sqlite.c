@@ -209,15 +209,15 @@ static const char* sqlite_res_col_text_impl(const db_res_t *res, int col_idx, db
 }
 
 static const db_vt_t sqlite_vt = {
-    .close = sqlite_close_impl,
-    .tx_begin = sqlite_tx_begin_impl, .tx_commit = sqlite_tx_commit_impl, .tx_rollback = sqlite_tx_rollback_impl,
-    .exec = sqlite_exec_impl, .exec_rows_affected = sqlite_exec_rows_affected_impl, .exec_insert_id = sqlite_exec_insert_id_impl,
-    .query = sqlite_query_impl,
-    .res_step = sqlite_res_step_impl, .res_finalize = sqlite_res_finalize_impl, .res_cancel = sqlite_res_cancel_impl,
-    .res_col_count = sqlite_res_col_count_impl, .res_col_name = sqlite_res_col_name_impl, .res_col_type = sqlite_res_col_type_impl,
-    .res_col_is_null = sqlite_res_col_is_null_impl,
-    .res_col_i64 = sqlite_res_col_i64_impl, .res_col_i32 = sqlite_res_col_i32_impl,
-    .res_col_double = sqlite_res_col_double_impl, .res_col_text = sqlite_res_col_text_impl,
+    /* .close = sqlite_close_impl, */
+    /* .tx_begin = sqlite_tx_begin_impl, .tx_commit = sqlite_tx_commit_impl, .tx_rollback = sqlite_tx_rollback_impl, */
+    /* .exec = sqlite_exec_impl, .exec_rows_affected = sqlite_exec_rows_affected_impl, .exec_insert_id = sqlite_exec_insert_id_impl, */
+    /* .query = sqlite_query_impl, */
+    /* .res_step = sqlite_res_step_impl, .res_finalize = sqlite_res_finalize_impl, .res_cancel = sqlite_res_cancel_impl, */
+    /* .res_col_count = sqlite_res_col_count_impl, .res_col_name = sqlite_res_col_name_impl, .res_col_type = sqlite_res_col_type_impl, */
+    /* .res_col_is_null = sqlite_res_col_is_null_impl, */
+    /* .res_col_i64 = sqlite_res_col_i64_impl, .res_col_i32 = sqlite_res_col_i32_impl, */
+    /* .res_col_double = sqlite_res_col_double_impl, .res_col_text = sqlite_res_col_text_impl, */
 };
 
 void* db_sqlite_open_internal(db_t *parent_db, const db_config_t *cfg, db_error_t *err) {

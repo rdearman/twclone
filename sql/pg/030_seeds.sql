@@ -371,4 +371,29 @@ SELECT setval('planets_id_seq', (SELECT MAX(id) FROM planets));
 SELECT setval('ports_id_seq', (SELECT MAX(id) FROM ports));
 SELECT setval('players_id_seq', (SELECT MAX(id) FROM players));
 
+
+INSERT INTO config (key, value, type)
+VALUES ('death.escape_pod_shiptype_id', '<<ID>>', 'int')
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, type = EXCLUDED.type;
+
+
+
+INSERT INTO shiptypes (
+  name, basecost, required_alignment, required_commission, required_experience,
+  maxattack, initialholds, maxholds, maxfighters, turns,
+  maxmines, maxlimpets, maxgenesis, maxshields, offense, defense,
+  can_purchase, enabled, has_escape_pod
+) VALUES (
+  'Escape Pod',
+  0,
+  NULL,         -- required_alignment
+  NULL,         -- required_commission  << THIS FIX
+  0,
+  0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0,
+  FALSE, TRUE, FALSE
+);
+
+
+
 COMMIT;

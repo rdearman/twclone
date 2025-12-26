@@ -307,3 +307,33 @@ const db_ops_vtable_t* db_get_ops(db_t *db) {
     if (!db) return NULL;
     return db->ops_vt;
 }
+
+
+bool
+db_ship_repair_atomic(db_t *db,
+                      int player_id,
+                      int ship_id,
+                      int cost,
+                      int64_t *out_new_credits,
+                      db_error_t *err)
+{
+  if (err) db_error_clear(err);
+
+  if (!db || !db->vt || !db->vt->ship_repair_atomic)
+    {
+      if (err)
+        {
+          err->code = ERR_DB;
+          err->backend_code = 0;
+          err->message[0] = '\0';
+        }
+      return false;
+    }
+
+  return db->vt->ship_repair_atomic(db,
+                                    player_id,
+                                    ship_id,
+                                    cost,
+                                    out_new_credits,
+                                    err);
+}

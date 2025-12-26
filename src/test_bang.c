@@ -33,10 +33,11 @@ update_config_int (db_t *db, const char *key, int value)
   const char *sql = "UPDATE config SET value = $1 WHERE key = $2;";
   char val_str[32];
   snprintf (val_str, sizeof (val_str), "%d", value);
-  
-  db_bind_t params[] = { db_bind_text(val_str), db_bind_text(key) };
 
-  if (!db_exec(db, sql, params, 2, &err))
+  db_bind_t params[] = { db_bind_text (val_str), db_bind_text (key) };
+
+
+  if (!db_exec (db, sql, params, 2, &err))
     {
       fprintf (stderr,
                "Failed to update config %s: %s\n",
@@ -54,19 +55,21 @@ get_config_int (db_t *db, const char *key, int default_val)
   int result = default_val;
   db_res_t *res = NULL;
   db_error_t err;
-  db_bind_t params[] = { db_bind_text(key) };
+  db_bind_t params[] = { db_bind_text (key) };
 
-  if (db_query(db, sql, params, 1, &res, &err))
+  if (db_query (db, sql, params, 1, &res, &err))
     {
-      if (db_res_step(res, &err))
+      if (db_res_step (res, &err))
         {
-          const char *val = db_res_col_text(res, 0, &err);
+          const char *val = db_res_col_text (res, 0, &err);
+
+
           if (val)
             {
               result = atoi (val);
             }
         }
-      db_res_finalize(res);
+      db_res_finalize (res);
     }
   return result;
 }
@@ -98,10 +101,11 @@ main (int argc, char *argv[])
 {
   server_log_init_file ("./twclone.log", "[server]", 0, LOG_INFO);
 
-  if (game_db_init() != 0) {
-      fprintf(stderr, "game_db_init failed\n");
+  if (game_db_init () != 0)
+    {
+      fprintf (stderr, "game_db_init failed\n");
       return 1;
-  }
+    }
 
   db_t *handle = game_db_get_handle ();
   /* Default values loaded from DB (so we honor defaults if arguments aren't provided) */

@@ -65,19 +65,23 @@ load_watermark (db_t *db, const char *key, long long *last_id,
     "SELECT last_event_id, last_event_ts FROM engine_offset WHERE key=$1;";
   db_res_t *res = NULL;
   db_error_t err;
-  db_bind_t params[] = { db_bind_text(key) };
-  
-  if (db_query(db, sql, params, 1, &res, &err)) {
-      if (db_res_step(res, &err)) {
-          *last_id = db_res_col_i64(res, 0, &err);
-          *last_ts = db_res_col_i64(res, 1, &err);
-      } else {
+  db_bind_t params[] = { db_bind_text (key) };
+
+  if (db_query (db, sql, params, 1, &res, &err))
+    {
+      if (db_res_step (res, &err))
+        {
+          *last_id = db_res_col_i64 (res, 0, &err);
+          *last_ts = db_res_col_i64 (res, 1, &err);
+        }
+      else
+        {
           *last_id = 0;
           *last_ts = 0;
-      }
-      db_res_finalize(res);
+        }
+      db_res_finalize (res);
       return 0;
-  }
+    }
   return err.code;
 }
 
@@ -90,13 +94,15 @@ save_watermark (db_t *db, const char *key, long long last_id,
     "INSERT INTO engine_offset(key,last_event_id,last_event_ts) "
     "VALUES($1,$2,$3) "
     "ON CONFLICT(key) DO UPDATE SET last_event_id=excluded.last_event_id, last_event_ts=excluded.last_event_ts;";
-  
-  db_bind_t params[] = { db_bind_text(key), db_bind_i64(last_id), db_bind_i64(last_ts) };
+
+  db_bind_t params[] = { db_bind_text (key), db_bind_i64 (last_id),
+                         db_bind_i64 (last_ts) };
   db_error_t err;
-  
-  if (!db_exec(db, up, params, 3, &err)) {
+
+  if (!db_exec (db, up, params, 3, &err))
+    {
       return err.code;
-  }
+    }
   return 0;
 }
 
@@ -107,14 +113,16 @@ fetch_max_event_id (db_t *db, long long *max_id)
   const char *sql = "SELECT COALESCE(MAX(id),0) FROM engine_events;";
   db_res_t *res = NULL;
   db_error_t err;
-  
-  if (db_query(db, sql, NULL, 0, &res, &err)) {
-      if (db_res_step(res, &err)) {
-          *max_id = db_res_col_i64(res, 0, &err);
-      }
-      db_res_finalize(res);
+
+  if (db_query (db, sql, NULL, 0, &res, &err))
+    {
+      if (db_res_step (res, &err))
+        {
+          *max_id = db_res_col_i64 (res, 0, &err);
+        }
+      db_res_finalize (res);
       return 0;
-  }
+    }
   return err.code;
 }
 
@@ -122,30 +130,31 @@ fetch_max_event_id (db_t *db, long long *max_id)
 static int
 quarantine (db_t *db, db_res_t *row, const char *err_msg)
 {
-  /* row columns: id, ts, type, payload */
+  /* row columns: id, ts, type, actor_player_id, sector_id, payload */
   const char *sql =
     "INSERT INTO engine_events_deadletter(id,ts,type,payload,error,moved_at) "
     "VALUES($1,$2,$3,$4,$5,$6) "
     "ON CONFLICT(id) DO UPDATE SET error=excluded.error, moved_at=excluded.moved_at;";
-  
+
   db_error_t err;
-  int64_t id = db_res_col_i64(row, 0, &err);
-  int64_t ts = db_res_col_i64(row, 1, &err);
-  const char *type = db_res_col_text(row, 2, &err);
-  const char *payload = db_res_col_text(row, 3, &err);
-  
+  int64_t id = db_res_col_i64 (row, 0, &err);
+  int64_t ts = db_res_col_i64 (row, 1, &err);
+  const char *type = db_res_col_text (row, 2, &err);
+  const char *payload = db_res_col_text (row, 5, &err);
+
   db_bind_t params[] = {
-      db_bind_i64(id),
-      db_bind_i64(ts),
-      db_bind_text(type ? type : ""),
-      db_bind_text(payload ? payload : ""),
-      db_bind_text(err_msg ? err_msg : "unknown error"),
-      db_bind_i32(get_now_epoch())
+    db_bind_i64 (id),
+    db_bind_i64 (ts),
+    db_bind_text (type ? type : ""),
+    db_bind_text (payload ? payload : ""),
+    db_bind_text (err_msg ? err_msg : "unknown error"),
+    db_bind_i32 (get_now_epoch ())
   };
 
-  if (!db_exec(db, sql, params, 6, &err)) {
+  if (!db_exec (db, sql, params, 6, &err))
+    {
       return err.code;
-  }
+    }
   return 0;
 }
 
@@ -192,23 +201,23 @@ handle_ship_self_destruct_initiated (db_t *db, db_res_t *ev_row)
   // And player_id/sector_id must be extracted from the payload JSON if they are not in the SELECT.
   // BUT, engine_events table has actor_player_id and sector_id columns.
   // To be safe, I should add them to BASE_SELECT.
-  
+
   // Let's redefine BASE_SELECT to include these columns to match the handler's expectation if it used to grab them from cols 3 and 4.
   // Wait, in the file:
   // int player_id = sqlite3_column_int (ev_row, 3);
   // int sector_id = sqlite3_column_int (ev_row, 4);
   // const char *payload_str = (const char *) sqlite3_column_text (ev_row, 5);
-  
+
   // If I change BASE_SELECT to: SELECT id, ts, type, actor_player_id, sector_id, payload ...
   // Then: 0=id, 1=ts, 2=type, 3=actor, 4=sector, 5=payload.
   // This matches the indices!
-  
+
   // So I will update BASE_SELECT strings below.
 
-  int player_id = db_res_col_i32(ev_row, 3, &err);
-  int sector_id = db_res_col_i32(ev_row, 4, &err);
-  const char *payload_str = db_res_col_text(ev_row, 5, &err);
-  
+  int player_id = db_res_col_i32 (ev_row, 3, &err);
+  int sector_id = db_res_col_i32 (ev_row, 4, &err);
+  const char *payload_str = db_res_col_text (ev_row, 5, &err);
+
   json_error_t jerr;
   json_t *payload = json_loads (payload_str, 0, &jerr);
   if (!payload)
@@ -221,15 +230,16 @@ handle_ship_self_destruct_initiated (db_t *db, db_res_t *ev_row)
   {
     db_res_t *st_ship = NULL;
     const char *sql_get_ship_id = "SELECT ship FROM players WHERE id = $1;";
-    db_bind_t params[] = { db_bind_i32(player_id) };
+    db_bind_t params[] = { db_bind_i32 (player_id) };
 
-    if (db_query(db, sql_get_ship_id, params, 1, &st_ship, &err))
+
+    if (db_query (db, sql_get_ship_id, params, 1, &st_ship, &err))
       {
-        if (db_res_step(st_ship, &err))
+        if (db_res_step (st_ship, &err))
           {
-            ship_id = db_res_col_i32(st_ship, 0, &err);
+            ship_id = db_res_col_i32 (st_ship, 0, &err);
           }
-        db_res_finalize(st_ship);
+        db_res_finalize (st_ship);
       }
   }
 
@@ -246,25 +256,36 @@ handle_ship_self_destruct_initiated (db_t *db, db_res_t *ev_row)
   {
     db_res_t *st_name = NULL;
     const char *sql_get_ship_name = "SELECT name FROM ships WHERE id = $1;";
-    db_bind_t params[] = { db_bind_i32(ship_id) };
+    db_bind_t params[] = { db_bind_i32 (ship_id) };
 
-    if (db_query(db, sql_get_ship_name, params, 1, &st_name, &err))
+
+    if (db_query (db, sql_get_ship_name, params, 1, &st_name, &err))
       {
-        if (db_res_step(st_name, &err))
+        if (db_res_step (st_name, &err))
           {
-            const char *name = db_res_col_text(st_name, 0, &err);
-            if (name) strncpy (ship_name, name, sizeof (ship_name) - 1);
+            const char *name = db_res_col_text (st_name, 0, &err);
+
+
+            if (name)
+              {
+                strncpy (ship_name, name, sizeof (ship_name) - 1);
+              }
           }
-        db_res_finalize(st_name);
+        db_res_finalize (st_name);
       }
   }
 
 
   // Perform ship destruction
-  int rc = db_destroy_ship (db, player_id, ship_id);
+  int rc = db_destroy_ship (db,
+                            player_id,
+                            ship_id);
+
+
   if (rc != 0)
     {
-      LOGE ("Error destroying ship %d for player %d: %d", ship_id, player_id, rc);
+      LOGE ("Error destroying ship %d for player %d: %d", ship_id, player_id,
+            rc);
       json_decref (payload);
       return 1;                 // Quarantine
     }
@@ -299,7 +320,7 @@ engine_event_handler_player_trade_v1 (db_t *db, db_res_t *ev_row)
   (void) db;
   db_error_t err;
   // Payload is the 6th column (index 5) in the new expanded SELECT
-  const char *payload_str = db_res_col_text(ev_row, 5, &err);
+  const char *payload_str = db_res_col_text (ev_row, 5, &err);
   json_error_t jerr;
   json_t *payload = json_loads (payload_str, 0, &jerr);
 
@@ -312,6 +333,8 @@ engine_event_handler_player_trade_v1 (db_t *db, db_res_t *ev_row)
       return 1;                 // Quarantine
     }
   int rc = h_player_progress_from_event_payload (payload);
+
+
   json_decref (payload);
   return rc;
 }
@@ -369,31 +392,38 @@ engine_consume_tick (db_t *db,
                     out->lag >= (cfg->backlog_prio_threshold >
                                  0 ? cfg->backlog_prio_threshold : 0));
 
-  const char *base_select_sql = (db_backend(db) == DB_BACKEND_POSTGRES) 
-                                ? BASE_SELECT_PG 
+  const char *base_select_sql = (db_backend (db) == DB_BACKEND_POSTGRES)
+                                ? BASE_SELECT_PG
                                 : BASE_SELECT_SQLITE;
-  
+
   // Expanded SELECT to include actor and sector cols
   // Original was: SELECT id, ts, type, payload
   // New must be: SELECT id, ts, type, actor_player_id, sector_id, payload
   // I need to update the constant strings to match this.
-  
+
   char expanded_sql[1024];
-  if (db_backend(db) == DB_BACKEND_POSTGRES) {
-      snprintf(expanded_sql, sizeof(expanded_sql), 
-        "SELECT id, ts, type, actor_player_id, sector_id, payload "
-        "FROM engine_events "
-        "WHERE id > $1 "
-        "  AND ($2 = 0 OR type IN (SELECT trim(value) FROM json_array_elements_text($3::json))) "
-        "ORDER BY id ASC LIMIT $4;");
-  } else {
-      snprintf(expanded_sql, sizeof(expanded_sql),
-        "SELECT id, ts, type, actor_player_id, sector_id, payload "
-        "FROM engine_events "
-        "WHERE id > $1 "
-        "  AND ($2 = 0 OR type IN (SELECT trim(value) FROM json_each($3))) "
-        "ORDER BY id ASC LIMIT $4;");
-  }
+
+
+  if (db_backend (db) == DB_BACKEND_POSTGRES)
+    {
+      snprintf (expanded_sql,
+                sizeof(expanded_sql),
+                "SELECT id, ts, type, actor_player_id, sector_id, payload "
+                "FROM engine_events "
+                "WHERE id > $1 "
+                "  AND ($2 = 0 OR type IN (SELECT trim(value) FROM json_array_elements_text($3::json))) "
+                "ORDER BY id ASC LIMIT $4;");
+    }
+  else
+    {
+      snprintf (expanded_sql,
+                sizeof(expanded_sql),
+                "SELECT id, ts, type, actor_player_id, sector_id, payload "
+                "FROM engine_events "
+                "WHERE id > $1 "
+                "  AND ($2 = 0 OR type IN (SELECT trim(value) FROM json_each($3))) "
+                "ORDER BY id ASC LIMIT $4;");
+    }
 
 
   /* We may run up to two passes: priority-only, then non-priority. */
@@ -425,22 +455,23 @@ engine_consume_tick (db_t *db,
         {
           db_res_t *st = NULL;
           db_error_t err;
-          
+
           db_bind_t params[] = {
-              db_bind_i64(last_id),
-              db_bind_i32(priority_only ? 1 : 0),
-              db_bind_text(prio_json),
-              db_bind_i32(remaining)
+            db_bind_i64 (last_id),
+            db_bind_i32 (priority_only ? 1 : 0),
+            db_bind_text (prio_json),
+            db_bind_i32 (remaining)
           };
 
-          if (db_query(db, expanded_sql, params, 4, &st, &err) != true)
+
+          if (db_query (db, expanded_sql, params, 4, &st, &err) != true)
             {
               return err.code;
             }
 
           /* Wrap one pass in a transaction so the watermark is advanced atomically per pass. */
-          db_tx_begin(db, DB_TX_IMMEDIATE, NULL);
-          
+          db_tx_begin (db, DB_TX_IMMEDIATE, NULL);
+
           long long batch_max_id = last_id;
           long long batch_max_ts = last_ts;
           int processed_this_stmt = 0;
@@ -448,10 +479,10 @@ engine_consume_tick (db_t *db,
 
           while (db_res_step (st, &err))
             {
-              long long ev_id = db_res_col_i64(st, 0, &err);
-              long long ev_ts = db_res_col_i64(st, 1, &err);
-              const char *tmp_ev_type = db_res_col_text(st, 2, &err);
-              
+              long long ev_id = db_res_col_i64 (st, 0, &err);
+              long long ev_ts = db_res_col_i64 (st, 1, &err);
+              const char *tmp_ev_type = db_res_col_text (st, 2, &err);
+
               char *ev_type = tmp_ev_type ? strdup (tmp_ev_type) : NULL;
 
 
@@ -462,7 +493,7 @@ engine_consume_tick (db_t *db,
                   free (ev_type);
                   continue;     /* Leave for next tick; preserves per-pass order. */
                 }
-              
+
               int hrc = handle_event (ev_type, db, st);
 
 
@@ -494,11 +525,11 @@ engine_consume_tick (db_t *db,
                   break;
                 }
             }
-          db_res_finalize(st);
+          db_res_finalize (st);
           /* If we fetched none, end this pass */
           if (processed_this_stmt == 0)
             {
-              db_tx_rollback(db, NULL);
+              db_tx_rollback (db, NULL);
               break;
             }
           /* Persist watermark AFTER the pass */
@@ -507,10 +538,10 @@ engine_consume_tick (db_t *db,
                             batch_max_ts);
           if (rc != 0)
             {
-              db_tx_rollback(db, NULL);
+              db_tx_rollback (db, NULL);
               return rc;
             }
-          db_tx_commit(db, NULL);
+          db_tx_commit (db, NULL);
           last_id = batch_max_id;
           last_ts = batch_max_ts;
           out->last_event_id = last_id;

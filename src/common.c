@@ -21,14 +21,20 @@ monotonic_millis (void)
 
 
 void
-h_copy_cstr(char *dst, size_t dst_sz, const char *src)
+h_copy_cstr (char *dst, size_t dst_sz, const char *src)
 {
-    if (!dst || dst_sz == 0) return;
-    if (!src) { dst[0] = '\0'; return; }
+  if (!dst || dst_sz == 0)
+    {
+      return;
+    }
+  if (!src)
+    {
+      dst[0] = '\0'; return;
+    }
 
-    /* strncpy, but guaranteed NUL */
-    strncpy(dst, src, dst_sz - 1);
-    dst[dst_sz - 1] = '\0';
+  /* strncpy, but guaranteed NUL */
+  strncpy (dst, src, dst_sz - 1);
+  dst[dst_sz - 1] = '\0';
 }
 
 
@@ -352,11 +358,10 @@ get_tow_reason_string (int reason_code)
         return "Invalid request schema.";
       case ERR_MISSING_FIELD:
         return "Missing required field.";
+      case ERR_CURSOR_INVALID:
+        return "Invalid cursor for pagination.";
       case ERR_INVALID_ARG:
-      case ERR_BAD_REQUEST:
         return "Invalid argument or bad request.";
-      case ERR_REF_NO_TURNS:
-        return "No turns remaining to perform action.";
       case ERR_CONFIRMATION_REQUIRED:
         return "Confirmation required for this action.";
       case REF_INSUFFICIENT_CAPACITY:

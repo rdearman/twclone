@@ -2,7 +2,7 @@
 /* autoconf.h.in.  Generated from configure.ac by autoheader.  */
 
 /* Define to enable PostgreSQL backend */
-#define DB_BACKEND_PG 1
+/* #undef DB_BACKEND_PG */
 
 /* Define to 1 if you have the <ctype.h> header file. */
 #define HAVE_CTYPE_H 1
@@ -11,13 +11,13 @@
 #define HAVE_ERRNO_H 1
 
 /* Define to 1 if you have the <inttypes.h> header file. */
-#define HAVE_INTTYPES_H 1
+/* #undef HAVE_INTTYPES_H */
 
 /* Define to 1 if you have the 'm' library (-lm). */
 #define HAVE_LIBM 1
 
 /* Define to 1 if you have the 'pq' library (-lpq). */
-#define HAVE_LIBPQ 1
+/* #undef HAVE_LIBPQ */
 
 /* Define to 1 if you have the 'pthread' library (-lpthread). */
 #define HAVE_LIBPTHREAD 1
@@ -35,7 +35,7 @@
 #define HAVE_PTHREAD_H 1
 
 /* Define to 1 if you have the <stdint.h> header file. */
-#define HAVE_STDINT_H 1
+/* #undef HAVE_STDINT_H */
 
 /* Define to 1 if you have the <stdio.h> header file. */
 #define HAVE_STDIO_H 1
@@ -44,7 +44,7 @@
 #define HAVE_STDLIB_H 1
 
 /* Define to 1 if you have the <strings.h> header file. */
-#define HAVE_STRINGS_H 1
+/* #undef HAVE_STRINGS_H */
 
 /* Define to 1 if you have the <string.h> header file. */
 #define HAVE_STRING_H 1
@@ -62,7 +62,7 @@
 #define HAVE_SYS_SOCKET_H 1
 
 /* Define to 1 if you have the <sys/stat.h> header file. */
-#define HAVE_SYS_STAT_H 1
+/* #undef HAVE_SYS_STAT_H */
 
 /* Define to 1 if you have the <sys/time.h> header file. */
 #define HAVE_SYS_TIME_H 1
@@ -103,7 +103,7 @@
 /* Define to 1 if all of the C89 standard headers exist (not just the ones
    required in a freestanding environment). This macro is provided for
    backward compatibility; new code need not use it. */
-#define STDC_HEADERS 1
+/* #undef STDC_HEADERS */
 
 /* Version number of package */
 #define VERSION "0.0.2"

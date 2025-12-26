@@ -12,6 +12,7 @@ extern int shutdown_flag;
 extern time_t next_process;
 extern armid_mine_config_t g_armid_config;
 
+
 typedef struct
 {
   int trade_xp_ratio;

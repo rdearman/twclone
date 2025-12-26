@@ -52,7 +52,15 @@ typedef struct db_vt_s {
 
     // Finalize result set
     void (*res_finalize)(db_res_t *res);
+    /* ---- Domain helpers (temporary until full SQL->SP migration) ---- */
+  bool (*ship_repair_atomic)(db_t *db,
+                           int player_id,
+                           int ship_id,
+                           int cost,
+                           int64_t *out_new_credits,
+                           db_error_t *err);
 
+  
 } db_vt_t;
 
 
@@ -74,5 +82,7 @@ struct db_res_s {
     int num_rows;                   // Total number of rows in the result set
     int num_cols;                   // Total number of columns in the result set
 };
+
+
 
 #endif // DB_INT_H

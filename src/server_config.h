@@ -86,6 +86,7 @@ typedef struct
   int max_name_length;
   int planet_type_count;
   int server_port;
+  char pg_conn_str[512];
 
 
   struct
@@ -218,6 +219,7 @@ extern server_config_t g_cfg;
 
 /* Loader name (you said load_config() conflicted elsewhere) */
 int load_eng_config (void);
+int load_bootstrap_config (const char *filename);
 void print_effective_config_redacted (void);
 int cmd_system_capabilities (client_ctx_t *ctx, json_t *root);
 int cmd_system_describe_schema (client_ctx_t *ctx, json_t *root);       // optional, if you expose it

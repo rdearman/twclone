@@ -21,17 +21,20 @@ get_player_planet (db_t *db, int player_id)
       return 0;
     }
   const char *sql = "SELECT onplanet FROM ships WHERE id = $1;";
-  db_bind_t params[] = { db_bind_i32(ship_id) };
+  db_bind_t params[] = { db_bind_i32 (ship_id) };
   db_res_t *res = NULL;
   db_error_t err;
   int planet_id = 0;
 
-  if (db_query(db, sql, params, 1, &res, &err)) {
-      if (db_res_step(res, &err)) {
-          planet_id = db_res_col_i32(res, 0, &err);
-      }
-      db_res_finalize(res);
-  }
+
+  if (db_query (db, sql, params, 1, &res, &err))
+    {
+      if (db_res_step (res, &err))
+        {
+          planet_id = db_res_col_i32 (res, 0, &err);
+        }
+      db_res_finalize (res);
+    }
   return planet_id;
 }
 
@@ -69,6 +72,8 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   db_t *db = game_db_get_handle ();
+
+
   if (!db)
     {
       send_response_error (ctx, root, ERR_DB, "Database unavailable.");
@@ -76,6 +81,7 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
     }
   // 1. Get Player Location & Planet Info
   int planet_id = get_player_planet (db, ctx->player_id);
+
 
   if (planet_id <= 0)
     {
@@ -89,7 +95,7 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
 
   const char *sql_planet =
     "SELECT type, owner_id, owner_type, colonist, ore_on_hand, organics_on_hand, equipment_on_hand FROM planets WHERE id = $1;";
-  db_bind_t p_params[] = { db_bind_i32(planet_id) };
+  db_bind_t p_params[] = { db_bind_i32 (planet_id) };
   db_res_t *p_res = NULL;
   db_error_t err;
 
@@ -98,28 +104,43 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
   char *owner_type = NULL;
   long long p_colonists = 0, p_ore = 0, p_org = 0, p_equip = 0;
 
-  if (db_query(db, sql_planet, p_params, 1, &p_res, &err)) {
-      if (db_res_step(p_res, &err)) {
-          planet_type = db_res_col_i32(p_res, 0, &err);
-          owner_id = db_res_col_i32(p_res, 1, &err);
-          owner_type_db = db_res_col_text(p_res, 2, &err);
-          owner_type = owner_type_db ? strdup(owner_type_db) : NULL;
-          p_colonists = db_res_col_i64(p_res, 3, &err);
-          p_ore = db_res_col_i64(p_res, 4, &err);
-          p_org = db_res_col_i64(p_res, 5, &err);
-          p_equip = db_res_col_i64(p_res, 6, &err);
-      } else {
-          db_res_finalize(p_res);
-          send_response_error (ctx, root, ERR_DB, "Failed to query planet data.");
+
+  if (db_query (db,
+                sql_planet,
+                p_params,
+                1,
+                &p_res,
+                &err))
+    {
+      if (db_res_step (p_res, &err))
+        {
+          planet_type = db_res_col_i32 (p_res, 0, &err);
+          owner_id = db_res_col_i32 (p_res, 1, &err);
+          owner_type_db = db_res_col_text (p_res, 2, &err);
+          owner_type = owner_type_db ? strdup (owner_type_db) : NULL;
+          p_colonists = db_res_col_i64 (p_res, 3, &err);
+          p_ore = db_res_col_i64 (p_res, 4, &err);
+          p_org = db_res_col_i64 (p_res, 5, &err);
+          p_equip = db_res_col_i64 (p_res, 6, &err);
+        }
+      else
+        {
+          db_res_finalize (p_res);
+          send_response_error (ctx, root, ERR_DB,
+                               "Failed to query planet data.");
           return 0;
-      }
-      db_res_finalize(p_res);
-  } else {
+        }
+      db_res_finalize (p_res);
+    }
+  else
+    {
       send_response_error (ctx, root, err.code, "Failed to query planet data.");
       return 0;
-  }
+    }
 
   bool can_build = false;
+
+
   if (owner_type && strcmp (owner_type, "player") == 0)
     {
       if (owner_id == ctx->player_id)
@@ -130,6 +151,8 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
   else if (owner_type && strcmp (owner_type, "corp") == 0)
     {
       int player_corp_id = h_get_player_corp_id (db, ctx->player_id);
+
+
       if (player_corp_id > 0 && player_corp_id == owner_id)
         {
           can_build = true;
@@ -146,20 +169,25 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   // 2. Get Citadel State
-  const char *sql_citadel = "SELECT level, construction_status FROM citadels WHERE planet_id = $1;";
+  const char *sql_citadel =
+    "SELECT level, construction_status FROM citadels WHERE planet_id = $1;";
   int current_level = 0;
   const char *construction_status_db = NULL;
   char *construction_status = NULL;
   db_res_t *c_res = NULL;
 
-  if (db_query(db, sql_citadel, p_params, 1, &c_res, &err)) {
-      if (db_res_step(c_res, &err)) {
-          current_level = db_res_col_i32(c_res, 0, &err);
-          construction_status_db = db_res_col_text(c_res, 1, &err);
-          construction_status = construction_status_db ? strdup(construction_status_db) : NULL;
-      }
-      db_res_finalize(c_res);
-  }
+
+  if (db_query (db, sql_citadel, p_params, 1, &c_res, &err))
+    {
+      if (db_res_step (c_res, &err))
+        {
+          current_level = db_res_col_i32 (c_res, 0, &err);
+          construction_status_db = db_res_col_text (c_res, 1, &err);
+          construction_status =
+            construction_status_db ? strdup (construction_status_db) : NULL;
+        }
+      db_res_finalize (c_res);
+    }
   if (!construction_status)
     {
       construction_status = strdup ("idle");
@@ -183,25 +211,35 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
   int target_level = current_level + 1;
   // 3. Get Upgrade Requirements
   char sql_req[256];
-  snprintf(sql_req, sizeof(sql_req),
-      "SELECT citadelUpgradeColonist_lvl%d, citadelUpgradeOre_lvl%d, citadelUpgradeOrganics_lvl%d, "
-      "citadelUpgradeEquipment_lvl%d, citadelUpgradeTime_lvl%d FROM planettypes WHERE id = $1;",
-      target_level, target_level, target_level, target_level, target_level);
+
+
+  snprintf (sql_req,
+            sizeof(sql_req),
+            "SELECT citadelUpgradeColonist_lvl%d, citadelUpgradeOre_lvl%d, citadelUpgradeOrganics_lvl%d, "
+            "citadelUpgradeEquipment_lvl%d, citadelUpgradeTime_lvl%d FROM planettypes WHERE id = $1;",
+            target_level,
+            target_level,
+            target_level,
+            target_level,
+            target_level);
 
   long long r_colonists = 0, r_ore = 0, r_org = 0, r_equip = 0;
   int r_days = 0;
   db_res_t *r_res = NULL;
 
-  if (db_query(db, sql_req, p_params, 1, &r_res, &err)) {
-      if (db_res_step(r_res, &err)) {
-          r_colonists = db_res_col_i64(r_res, 0, &err);
-          r_ore = db_res_col_i64(r_res, 1, &err);
-          r_org = db_res_col_i64(r_res, 2, &err);
-          r_equip = db_res_col_i64(r_res, 3, &err);
-          r_days = db_res_col_i32(r_res, 4, &err);
-      }
-      db_res_finalize(r_res);
-  }
+
+  if (db_query (db, sql_req, p_params, 1, &r_res, &err))
+    {
+      if (db_res_step (r_res, &err))
+        {
+          r_colonists = db_res_col_i64 (r_res, 0, &err);
+          r_ore = db_res_col_i64 (r_res, 1, &err);
+          r_org = db_res_col_i64 (r_res, 2, &err);
+          r_equip = db_res_col_i64 (r_res, 3, &err);
+          r_days = db_res_col_i32 (r_res, 4, &err);
+        }
+      db_res_finalize (r_res);
+    }
 
   if (r_days <= 0)
     {
@@ -216,6 +254,7 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
       || p_equip < r_equip)
     {
       json_t *missing = json_object ();
+
 
       if (p_colonists < r_colonists)
         {
@@ -238,6 +277,7 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
         }
       json_t *meta = json_object ();
 
+
       json_object_set_new (meta, "missing", missing);
       send_response_refused_steal (ctx,
                                    root,
@@ -247,7 +287,7 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   // 5. Execute Upgrade
-  if (!db_tx_begin(db, DB_TX_IMMEDIATE, &err))
+  if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
     {
       send_response_error (ctx,
                            root,
@@ -259,11 +299,13 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
   // Deduct resources
   const char *sql_update_planet =
     "UPDATE planets SET ore_on_hand = ore_on_hand - $1, organics_on_hand = organics_on_hand - $2, equipment_on_hand = equipment_on_hand - $3 WHERE id = $4;";
-  db_bind_t upd_p_params[] = { db_bind_i64(r_ore), db_bind_i64(r_org), db_bind_i64(r_equip), db_bind_i32(planet_id) };
+  db_bind_t upd_p_params[] = { db_bind_i64 (r_ore), db_bind_i64 (r_org),
+                               db_bind_i64 (r_equip), db_bind_i32 (planet_id) };
 
-  if (!db_exec(db, sql_update_planet, upd_p_params, 4, &err))
+
+  if (!db_exec (db, sql_update_planet, upd_p_params, 4, &err))
     {
-      db_tx_rollback(db, NULL);
+      db_tx_rollback (db, NULL);
       send_response_error (ctx, root, err.code, "Failed to deduct resources.");
       return 0;
     }
@@ -275,22 +317,26 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
   long long end_time = start_time + (r_days * 86400);
 
   db_bind_t upd_c_params[] = {
-      db_bind_i32(planet_id),
-      db_bind_i32(current_level),
-      db_bind_i32(ctx->player_id),
-      db_bind_i32(target_level),
-      db_bind_i64(start_time),
-      db_bind_i64(end_time)
+    db_bind_i32 (planet_id),
+    db_bind_i32 (current_level),
+    db_bind_i32 (ctx->player_id),
+    db_bind_i32 (target_level),
+    db_bind_i64 (start_time),
+    db_bind_i64 (end_time)
   };
 
-  if (!db_exec(db, sql_update_citadel, upd_c_params, 6, &err))
+
+  if (!db_exec (db, sql_update_citadel, upd_c_params, 6, &err))
     {
-      db_tx_rollback(db, NULL);
-      send_response_error (ctx, root, err.code, "Failed to start citadel construction.");
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx,
+                           root,
+                           err.code,
+                           "Failed to start citadel construction.");
       return 0;
     }
 
-  if (!db_tx_commit(db, &err))
+  if (!db_tx_commit (db, &err))
     {
       send_response_error (ctx, root, err.code, "Commit failed.");
       return 0;
@@ -298,6 +344,7 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
 
   // Log the event for news generation
   json_t *event_payload = json_object ();
+
 
   json_object_set_new (event_payload, "planet_id", json_integer (planet_id));
   json_object_set_new (event_payload, "current_level",
@@ -311,6 +358,7 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
   // 6. Send Response
   json_t *payload_pl = json_object ();
 
+
   json_object_set_new (payload_pl, "planet_id", json_integer (planet_id));
   json_object_set_new (payload_pl, "target_level", json_integer (target_level));
   json_object_set_new (payload_pl, "completion_time", json_integer (end_time));
@@ -318,5 +366,4 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
   send_response_ok_take (ctx, root, "citadel.upgrade_started", &payload_pl);
   return 0;
 }
-
 

@@ -1,7 +1,12 @@
 #ifndef SERVER_STARDOCK_H
 #define SERVER_STARDOCK_H
+#include <stdbool.h>
 #include <jansson.h>
-#include "common.h"             // For client_ctx_t
+#include "common.h"
+#include "db/db_api.h"
+
+// Command handlers
+int cmd_stardock_info (client_ctx_t *ctx, json_t *root);
 // Location Types
 #define LOCATION_STARDOCK "STARDOCK"
 #define LOCATION_CLASS0 "CLASS0"

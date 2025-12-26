@@ -7,10 +7,10 @@
 #include "db/db_api.h"
 
 typedef struct {
-    int id;
-    int owner_id;
-    int owner_type_is_corp;
-    char *owner_type;
+  int id;
+  int owner_id;
+  int owner_type_is_corp;
+  char *owner_type;
 } planet_t;
 
 int cmd_planet_info (client_ctx_t *ctx, json_t *root);
@@ -28,7 +28,11 @@ int cmd_planet_transwarp (client_ctx_t *ctx, json_t *root);
 int cmd_planet_colonists_set (client_ctx_t *ctx, json_t *root);
 int cmd_planet_colonists_get (client_ctx_t *ctx, json_t *root);
 
-int h_planet_check_trade_legality (db_t *db, int pid, int player_id, const char *code, bool buy);
+int h_planet_check_trade_legality (db_t *db,
+                                   int pid,
+                                   int player_id,
+                                   const char *code,
+                                   bool buy);
 int h_get_planet_owner_info (db_t *db, int pid, planet_t *p);
 int h_market_move_planet_stock (db_t *db, int pid, const char *code, int delta);
 

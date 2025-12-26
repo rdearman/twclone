@@ -63,9 +63,12 @@ typedef struct
 typedef enum
 {
   TURN_CONSUME_SUCCESS = 0,
-  TURN_CONSUME_ERROR_DB_FAIL,
-  TURN_CONSUME_ERROR_PLAYER_NOT_FOUND,
-  TURN_CONSUME_ERROR_NO_TURNS
+  TURN_CONSUME_ERROR_GENERIC = 1,
+  TURN_CONSUME_ERROR_NO_TURNS = -1,
+  TURN_CONSUME_ERROR_INVALID_AMOUNT = -2,
+  TURN_CONSUME_ERROR_DB = -3,
+  TURN_CONSUME_ERROR_DB_FAIL = -3,
+  TURN_CONSUME_ERROR_PLAYER_NOT_FOUND = -4
 } TurnConsumeResult;
 #ifndef ASSET_TYPE_T_DEFINED
 #define ASSET_TYPE_T_DEFINED
@@ -272,8 +275,8 @@ extern atomic_int_fast64_t g_combat_rounds;
 extern atomic_int_fast64_t g_failed_operations;
 extern atomic_int_fast64_t g_server_tick;
 
-void h_copy_cstr(char *dst, size_t dst_sz, const char *src);
 
+void h_copy_cstr (char *dst, size_t dst_sz, const char *src);
 
 
 #endif // COMMON_H
