@@ -898,8 +898,7 @@ engine_main_loop (int shutdown_fd)
   server_log_init_file ("./twclone.log", "[engine]", 0, LOG_INFO);
   LOGI ("engine boot pid=%d", getpid ());
 
-  // 1. Close the stale handle inherited from the parent
-  db_handle_close_and_reset ();
+  // 1. Fork safety is now handled by game_db_after_fork_child().
 
   // 2. Get a fresh, new handle (idempotent open)
   db_t *db_handle = game_db_get_handle ();
@@ -1198,6 +1197,7 @@ engine_spawn (pid_t *out_pid, int *out_shutdown_fd)
   if (pid == 0)
     {
       /* --- CHILD PROCESS: engine --- */
+      game_db_after_fork_child(); // GOAL B: Close inherited parent DB handles
       /* Close the write end; child only reads shutdown pipe */
       close (pipefd[1]);
       /* Run the engine and exit the process (never return to server main) */

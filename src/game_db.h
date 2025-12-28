@@ -1,54 +1,48 @@
+/**
+ * @file game_db.h
+ * @brief Manages the application's database connections.
+ *
+ * This module transitions away from a single global DB handle to a per-thread
+ * connection model to ensure thread safety and proper behavior after a fork.
+ *
+ * - A thread-local storage (TLS) key is used to store a db_t* for each thread.
+ * - game_db_get_handle() is the sole access point. It returns the handle for
+ *   the calling thread, creating and connecting it on first use.
+ * - game_db_init() caches the connection configuration but does not create a
+ *   global connection.
+ * - Connections are automatically closed on thread exit via a TLS destructor.
+ */
 #ifndef GAME_DB_H
 #define GAME_DB_H
 
-#include <stdbool.h>
-#include "db/db_api.h" // Include for db_t
+#include "db/db_api.h"
 
 /**
- * @file game_db.h
- * @brief Public game database API. This is the single header that server logic
- *        should include for all database operations.
- */
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-// -----------------------------------------------------------------------------
-// Lifecycle
-// -----------------------------------------------------------------------------
-
-/**
- * @brief Initializes the global database connection based on server config.
+ * @brief Initializes the database layer.
+ * Caches the connection configuration needed for subsequent per-thread connections.
+ * Must be called once at server startup.
  * @return 0 on success, -1 on failure.
  */
-int game_db_init (void);
+int game_db_init(void);
 
 /**
- * @brief Closes the global database connection.
+ * @brief Closes the database layer and cleans up resources.
+ * Note: This is for overall shutdown. Per-thread handles are managed automatically.
  */
-void game_db_close (void);
+void game_db_close(void);
 
 /**
- * @brief Gets the global, shared database handle.
- * @return A pointer to the db_t handle, or NULL if not initialized.
+ * @brief Gets the database handle for the current thread.
+ * If a handle does not exist for the thread, a new connection is established.
+ * @return A pointer to the db_t handle, or NULL on connection failure.
  */
-db_t * game_db_get_handle (void);
+db_t* game_db_get_handle(void);
 
+/**
+ * @brief Cleans up database state in a child process after a fork.
+ * This should be called immediately in the child process to prevent using
+ * inherited file descriptors.
+ */
+void game_db_after_fork_child(void);
 
-// -----------------------------------------------------------------------------
-// High-Level Game Operations (Examples to be migrated)
-// -----------------------------------------------------------------------------
-
-// Example player function
-// int game_db_get_player_xp(int player_id, int *out_xp);
-
-// Example ship function
-// int game_db_mark_ship_destroyed(int ship_id);
-
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif // GAME_DB_H
+#endif /* GAME_DB_H */

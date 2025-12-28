@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <libpq-fe.h>
+#include <pthread.h>
+
 // local includes
 #include "db_pg.h"
 #include "../db_api.h"
@@ -9,6 +11,8 @@
 #include "../../server_log.h"
 #include "../../errors.h"
 
+// GOAL C: Temporary serialization of DB calls with a mutex
+static pthread_mutex_t g_pg_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 typedef struct db_pg_impl_s {
   PGconn *conn;
@@ -20,19 +24,41 @@ typedef struct db_pg_res_impl_s {
 } db_pg_res_impl_t;
 
 
-static void pg_map_error(PGresult *pg_res, PGconn *conn, db_error_t *err) {
+// GOAL D: Improve error mapping
+static void pg_map_error(PGconn *conn, PGresult *pg_res, db_error_t *err) {
     if (!err) return;
     db_error_clear(err);
+
     if (pg_res) {
         err->backend_code = PQresultStatus(pg_res);
+        const char* sqlstate = PQresultErrorField(pg_res, PG_DIAG_SQLSTATE);
+        if (sqlstate) {
+            // Use SQLSTATE for more specific error code if available
+            err->code = atoi(sqlstate);
+        } else {
+            err->code = ERR_DB_INTERNAL;
+        }
         const char *msg = PQresultErrorMessage(pg_res);
-        if (msg) strlcpy(err->message, msg, sizeof(err->message));
-        err->code = ERR_DB_INTERNAL; 
+        if (msg && *msg) {
+            strlcpy(err->message, msg, sizeof(err->message));
+        } else {
+            strlcpy(err->message, "PostgreSQL query failed without a message.", sizeof(err->message));
+        }
     } else if (conn) {
+        err->backend_code = PQstatus(conn);
         err->code = ERR_DB_CONNECT;
-        strlcpy(err->message, PQerrorMessage(conn), sizeof(err->message));
+        const char* msg = PQerrorMessage(conn);
+        if (msg && *msg) {
+            strlcpy(err->message, msg, sizeof(err->message));
+        } else {
+            strlcpy(err->message, "PostgreSQL connection failed without a message.", sizeof(err->message));
+        }
+    } else {
+        err->code = ERR_UNKNOWN;
+        strlcpy(err->message, "An unknown database error occurred.", sizeof(err->message));
     }
 }
+
 
 static char* pg_bind_param_to_string(const db_bind_t *param) {
     char *buf = NULL;
@@ -49,28 +75,41 @@ static char* pg_bind_param_to_string(const db_bind_t *param) {
 
 static void pg_close_impl(db_t *db) {
     db_pg_impl_t *impl = (db_pg_impl_t*)db->impl;
-    if (impl) { if (impl->conn) PQfinish(impl->conn); free(impl); }
+    if (impl) {
+        if (impl->conn) {
+            pthread_mutex_lock(&g_pg_mutex);
+            PQfinish(impl->conn);
+            pthread_mutex_unlock(&g_pg_mutex);
+        }
+        free(impl);
+    }
 }
 
 static bool pg_tx_begin_impl(db_t *db, db_tx_flags_t flags, db_error_t *err) {
     db_pg_impl_t *impl = (db_pg_impl_t*)db->impl;
     (void)flags;
+    pthread_mutex_lock(&g_pg_mutex);
     PGresult *res = PQexec(impl->conn, "BEGIN");
-    if (PQresultStatus(res) != PGRES_COMMAND_OK) { pg_map_error(res, impl->conn, err); PQclear(res); return false; }
+    pthread_mutex_unlock(&g_pg_mutex);
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) { pg_map_error(impl->conn, res, err); PQclear(res); return false; }
     PQclear(res); impl->in_tx = true; return true;
 }
 
 static bool pg_tx_commit_impl(db_t *db, db_error_t *err) {
     db_pg_impl_t *impl = (db_pg_impl_t*)db->impl;
+    pthread_mutex_lock(&g_pg_mutex);
     PGresult *res = PQexec(impl->conn, "COMMIT");
-    if (PQresultStatus(res) != PGRES_COMMAND_OK) { pg_map_error(res, impl->conn, err); PQclear(res); return false; }
+    pthread_mutex_unlock(&g_pg_mutex);
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) { pg_map_error(impl->conn, res, err); PQclear(res); return false; }
     PQclear(res); impl->in_tx = false; return true;
 }
 
 static bool pg_tx_rollback_impl(db_t *db, db_error_t *err) {
     db_pg_impl_t *impl = (db_pg_impl_t*)db->impl;
+    pthread_mutex_lock(&g_pg_mutex);
     PGresult *res = PQexec(impl->conn, "ROLLBACK");
-    if (PQresultStatus(res) != PGRES_COMMAND_OK) { pg_map_error(res, impl->conn, err); PQclear(res); return false; }
+    pthread_mutex_unlock(&g_pg_mutex);
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) { pg_map_error(impl->conn, res, err); PQclear(res); return false; }
     PQclear(res); impl->in_tx = false; return true;
 }
 
@@ -78,11 +117,13 @@ static bool pg_exec_internal(db_t *db, const char *sql, const db_bind_t *params,
     db_pg_impl_t *impl = (db_pg_impl_t*)db->impl;
     char **values = calloc(n_params, sizeof(char*));
     for (size_t i = 0; i < n_params; i++) values[i] = pg_bind_param_to_string(&params[i]);
+    pthread_mutex_lock(&g_pg_mutex);
     PGresult *res = PQexecParams(impl->conn, sql, n_params, NULL, (const char* const*)values, NULL, NULL, 0);
+    pthread_mutex_unlock(&g_pg_mutex);
     for (size_t i = 0; i < n_params; i++)
       free(values[i]);
     free(values);
-    if (PQresultStatus(res) != PGRES_COMMAND_OK && PQresultStatus(res) != PGRES_TUPLES_OK) { pg_map_error(res, impl->conn, err); PQclear(res); return false; }
+    if (PQresultStatus(res) != PGRES_COMMAND_OK && PQresultStatus(res) != PGRES_TUPLES_OK) { pg_map_error(impl->conn, res, err); PQclear(res); return false; }
     if (out_rows) *out_rows = atoll(PQcmdTuples(res));
     PQclear(res); return true;
 }
@@ -100,11 +141,13 @@ static bool pg_exec_insert_id_impl(db_t *db, const char *sql, const db_bind_t *p
     char sql2[2048]; snprintf(sql2, sizeof(sql2), "%s RETURNING id", sql);
     char **values = calloc(n_params, sizeof(char*));
     for (size_t i = 0; i < n_params; i++) values[i] = pg_bind_param_to_string(&params[i]);
+    pthread_mutex_lock(&g_pg_mutex);
     PGresult *res = PQexecParams(impl->conn, sql2, n_params, NULL, (const char* const*)values, NULL, NULL, 0);
+    pthread_mutex_unlock(&g_pg_mutex);
     for (size_t i = 0; i < n_params; i++)
       free(values[i]);
     free(values);
-    if (PQresultStatus(res) != PGRES_TUPLES_OK) { pg_map_error(res, impl->conn, err); PQclear(res); return false; }
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) { pg_map_error(impl->conn, res, err); PQclear(res); return false; }
     if (out_id) *out_id = atoll(PQgetvalue(res, 0, 0));
     PQclear(res); return true;
 }
@@ -113,11 +156,13 @@ static bool pg_query_impl(db_t *db, const char *sql, const db_bind_t *params, si
     db_pg_impl_t *impl = (db_pg_impl_t*)db->impl;
     char **values = calloc(n_params, sizeof(char*));
     for (size_t i = 0; i < n_params; i++) values[i] = pg_bind_param_to_string(&params[i]);
+    pthread_mutex_lock(&g_pg_mutex);
     PGresult *pg_res = PQexecParams(impl->conn, sql, n_params, NULL, (const char* const*)values, NULL, NULL, 0);
+    pthread_mutex_unlock(&g_pg_mutex);
     for (size_t i = 0; i < n_params; i++)
       free(values[i]);
     free(values);
-    if (PQresultStatus(pg_res) != PGRES_TUPLES_OK) { pg_map_error(pg_res, impl->conn, err); PQclear(pg_res); return false; }
+    if (PQresultStatus(pg_res) != PGRES_TUPLES_OK) { pg_map_error(impl->conn, pg_res, err); PQclear(pg_res); return false; }
     db_pg_res_impl_t *res_impl = calloc(1, sizeof(db_pg_res_impl_t));
     res_impl->pg_res = pg_res;
     db_res_t *res = calloc(1, sizeof(db_res_t));
@@ -171,7 +216,6 @@ static const char* pg_res_col_text_impl(const db_res_t *res, int col_idx, db_err
     (void)err; return PQgetvalue(((db_pg_res_impl_t*)res->impl)->pg_res, res->current_row, col_idx);
 }
 
-
 static bool
 pg_ship_repair_atomic(db_t *db,
                       int player_id,
@@ -185,9 +229,21 @@ pg_ship_repair_atomic(db_t *db,
   db_pg_impl_t *impl = (db_pg_impl_t*)db->impl;
   PGconn *conn = impl ? impl->conn : NULL;
 
-  if (!conn || PQstatus(conn) != CONNECTION_OK)
+  if (!conn) {
+      if (err) {
+          err->code = ERR_DB_CONNECT;
+
+          strlcpy(err->message, "No database connection.", sizeof(err->message));
+      }
+      return false;
+  }
+  pthread_mutex_lock(&g_pg_mutex);
+  if (PQstatus(conn) != CONNECTION_OK)
     {
-      if (err) err->code = ERR_DB_CONNECT;
+      pthread_mutex_unlock(&g_pg_mutex);
+      if (err) {
+        pg_map_error(conn, NULL, err);
+      }
       return false;
     }
 
@@ -215,16 +271,11 @@ pg_ship_repair_atomic(db_t *db,
   const char *params[3] = { p1, p2, p3 };
 
   PGresult *res = PQexecParams(conn, sql, 3, NULL, params, NULL, NULL, 0);
-  if (!res)
+  pthread_mutex_unlock(&g_pg_mutex);
+  if (!res || (PQresultStatus(res) != PGRES_TUPLES_OK || PQntuples(res) != 1))
     {
-      if (err) err->code = ERR_DB_INTERNAL;
-      return false;
-    }
-
-  if (PQresultStatus(res) != PGRES_TUPLES_OK || PQntuples(res) != 1)
-    {
-      pg_map_error(res, conn, err);
-      PQclear(res);
+      pg_map_error(conn, res, err);
+      if (res) PQclear(res);
       return false;
     }
 
@@ -233,13 +284,21 @@ pg_ship_repair_atomic(db_t *db,
 
   if (credits_null)
     {
-      if (err) err->code = ERR_INSUFFICIENT_FUNDS;
+      if (err) {
+          err->code = ERR_INSUFFICIENT_FUNDS;
+
+          strlcpy(err->message, "Insufficient credits for repair.", sizeof(err->message));
+      }
       PQclear(res);
       return false;
     }
   if (ship_null)
     {
-      if (err) err->code = ERR_SHIP_NOT_FOUND;
+      if (err) {
+          err->code = ERR_SHIP_NOT_FOUND;
+
+          strlcpy(err->message, "Ship not found or could not be repaired.", sizeof(err->message));
+      }
       PQclear(res);
       return false;
     }
@@ -266,8 +325,10 @@ static const db_vt_t pg_vt = {
 };
 
 void* db_pg_open_internal(db_t *parent_db, const db_config_t *cfg, db_error_t *err) {
+    pthread_mutex_lock(&g_pg_mutex);
     PGconn *conn = PQconnectdb(cfg->pg_conninfo);
-    if (PQstatus(conn) != CONNECTION_OK) { pg_map_error(NULL, conn, err); return NULL; }
+    pthread_mutex_unlock(&g_pg_mutex);
+    if (PQstatus(conn) != CONNECTION_OK) { pg_map_error(conn, NULL, err); if (conn) PQfinish(conn); return NULL; }
     db_pg_impl_t *impl = calloc(1, sizeof(db_pg_impl_t));
     impl->conn = conn;
     parent_db->vt = &pg_vt;
