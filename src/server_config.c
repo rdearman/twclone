@@ -97,7 +97,7 @@ config_set_defaults (void)
   g_cfg.priorities.default_event_weight = 100;
   snprintf (g_cfg.s2s.transport, sizeof g_cfg.s2s.transport, "tcp");
   snprintf (g_cfg.s2s.tcp_host, sizeof g_cfg.s2s.tcp_host, "127.0.0.1");
-  g_cfg.s2s.frame_size_limit = 2 * 1024 * 1024;
+  g_cfg.s2s.frame_size_limit = 8 * 1024 * 1024;
   g_cfg.safety.connect_ms = 1500;
   g_cfg.safety.handshake_ms = 1500;
   g_cfg.safety.rpc_ms = 5000;
@@ -893,3 +893,18 @@ cmd_session_disconnect (client_ctx_t *ctx, json_t *root)
   return 0;                     /* or break your per-connection loop appropriately */
 }
 
+
+struct twconfig *
+config_load (void)
+{
+  struct twconfig *c = calloc(1, sizeof(struct twconfig));
+  if (!c) return NULL;
+  
+  c->turnsperday = g_cfg.turnsperday;
+  c->startingcredits = (int)g_cfg.startingcredits;
+  c->startingfighters = g_cfg.startingfighters;
+  c->startingholds = g_cfg.startingholds;
+  c->max_players = 200;
+  c->max_ships = 1000;
+  return c;
+}

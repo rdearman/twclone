@@ -385,6 +385,8 @@ main (void)
       return EXIT_FAILURE;
     }
 
+
+
   if (needs_bigbang ())
     {
       LOGW ("Universe appears empty - running Big Bang...");
@@ -403,6 +405,7 @@ main (void)
     {
       return 2;
     }
+  LOGD("[server_main] g_cfg.s2s.frame_size_limit: %d", g_cfg.s2s.frame_size_limit);
 
   // initalise the player settings if all the other DB stuff is done.
   db_player_settings_init (game_db_get_handle ());

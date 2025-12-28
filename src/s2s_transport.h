@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <jansson.h>
 /* --- Config constants --- */
-#define S2S_MAX_FRAME          (64 * 1024)      /* 64 KiB hard cap */
+
 #define S2S_DEFAULT_TIMEOUT_MS 3000
 #define S2S_BACKOFF_MIN_MS     100
 #define S2S_BACKOFF_MAX_MS     5000

@@ -261,7 +261,7 @@ bookmarks_as_array (int64_t pid)
 
           json_object_set_new (bm_obj, "name", json_string (name ? name : ""));
           json_object_set_new (bm_obj, "sector_id",
-                               json_integer (db_res_col_int (res, 1, &err)));
+                               json_integer (db_res_col_i32 (res, 1, &err)));
           json_array_append_new (arr, bm_obj);
         }
       db_res_finalize (res);
@@ -285,7 +285,7 @@ avoid_as_array (int64_t pid)
       while (db_res_step (res, &err))
         {
           json_array_append_new (arr,
-                                 json_integer (db_res_col_int (res, 0, &err)));
+                                 json_integer (db_res_col_i32 (res, 0, &err)));
         }
       db_res_finalize (res);
     }
@@ -900,3 +900,16 @@ cmd_player_set_trade_account_preference (client_ctx_t *ctx, json_t *root)
   return 0;
 }
 
+
+int h_player_is_npc (db_t *db, int player_id) { (void)db; (void)player_id; return 0; }
+int spawn_starter_ship (db_t *db, int player_id, int sector_id) { (void)db; (void)player_id; (void)sector_id; return 0; }
+int h_send_message_to_player (db_t *db, int recipient_id, int sender_id, const char *subject, const char *body) { (void)db; (void)recipient_id; (void)sender_id; (void)subject; (void)body; return 0; }
+int h_get_player_petty_cash(db_t *db, int player_id, long long *bal) { if (bal) *bal = 0; (void)db; (void)player_id; return 0; }
+int h_deduct_player_petty_cash_unlocked(db_t *db, int player_id, long long amount, long long *new_balance_out) { (void)db; (void)player_id; (void)amount; (void)new_balance_out; return 0; }
+int h_add_player_petty_cash(db_t *db, int player_id, long long amount, long long *new_balance_out) { (void)db; (void)player_id; (void)amount; (void)new_balance_out; return 0; }
+TurnConsumeResult h_consume_player_turn(db_t *db, client_ctx_t *ctx, int turns) { (void)db; (void)ctx; (void)turns; return TURN_CONSUME_SUCCESS; }
+int handle_turn_consumption_error(client_ctx_t *ctx, TurnConsumeResult res, const char *cmd, json_t *root, json_t *meta) { (void)ctx; (void)res; (void)cmd; (void)root; (void)meta; return 0; }
+int h_player_apply_progress(db_t *db, int player_id, long long delta_xp, int delta_align, const char *reason) { (void)db; (void)player_id; (void)delta_xp; (void)delta_align; (void)reason; return 0; }
+int h_get_player_sector(db_t *db, int player_id) { (void)db; (void)player_id; return 1; }
+
+int h_add_player_petty_cash_unlocked(db_t *db, int player_id, long long amount, long long *new_balance_out) {     if (new_balance_out) *new_balance_out = 0;     const char *sql = "UPDATE players SET credits = credits +  WHERE id =  RETURNING credits;";     db_res_t *res = NULL; db_error_t err;     if (db_query(db, sql, (db_bind_t[]){db_bind_i64(amount), db_bind_i32(player_id)}, 2, &res, &err)) {         if (db_res_step(res, &err)) {             if (new_balance_out) *new_balance_out = db_res_col_i64(res, 0, &err);         }         db_res_finalize(res);         return 0;     }     return -1; }

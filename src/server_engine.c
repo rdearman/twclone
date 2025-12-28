@@ -9,6 +9,7 @@
 #include <math.h> // For floor and fabs
 #include "database_cmd.h" // For h_player_apply_progress
 #include "server_players.h" // For h_player_apply_progress
+#include "game_db.h"
 #include <poll.h>
 #include <errno.h>
 #include <string.h>
@@ -27,6 +28,12 @@
 #include "s2s_keyring.h"
 #include "s2s_transport.h"
 #include "database.h"
+
+static inline int
+get_utc_epoch_day (int64_t ts)
+{
+  return (int) (ts / 86400);
+}
 #include "server_envelope.h"
 #include "s2s_transport.h"
 #include "engine_consumer.h"
@@ -336,7 +343,7 @@ h_compute_illegal_alignment_delta (int player_alignment,
                                    int cluster_align_band_id,
                                    double value)
 {
-  db_t *db = db_get_handle ();  // Get a DB handle
+  db_t *db = game_db_get_handle ();  // Get a DB handle
   int player_align_band_id = 0;
   int player_band_is_good = 0;
   int player_band_is_evil = 0;
@@ -419,7 +426,7 @@ h_player_progress_from_event_payload (json_t *ev_payload)
       LOGE ("h_player_progress_from_event_payload: Invalid event payload.");
       return -1;
     }
-  db_t *db = db_get_handle ();
+  db_t *db = game_db_get_handle ();
 
 
   if (!db)
@@ -895,7 +902,7 @@ engine_main_loop (int shutdown_fd)
   db_handle_close_and_reset ();
 
   // 2. Get a fresh, new handle (idempotent open)
-  db_t *db_handle = db_get_handle ();
+  db_t *db_handle = game_db_get_handle ();
 
 
   if (db_handle == NULL)
@@ -909,6 +916,7 @@ engine_main_loop (int shutdown_fd)
       LOGE ("[engine] FATAL: Failed to load engine configuration.\n");
       return 1;
     }
+  LOGD("[engine] g_cfg.s2s.frame_size_limit: %d", g_cfg.s2s.frame_size_limit);
   // Initialize tavern settings (load from DB) for engine cron jobs
   if (tavern_settings_load () != 0)
     {
@@ -1022,7 +1030,7 @@ engine_main_loop (int shutdown_fd)
 
       if (iss_ok)
         {
-          iss_tick (now_ms);
+          iss_tick (db_handle, now_ms);
         }
       if (fer_ok)
         {
@@ -1030,7 +1038,7 @@ engine_main_loop (int shutdown_fd)
         }
       if (now_ms - last_cmd_tick_ms >= CRON_PERIOD_MS)
         {
-          (void) server_commands_tick (db_get_handle (), CRON_BATCH_LIMIT);
+          (void) server_commands_tick (game_db_get_handle (), CRON_BATCH_LIMIT);
           last_cmd_tick_ms = now_ms;
         }
       time_t now = time (NULL);
@@ -1162,7 +1170,7 @@ engine_main_loop (int shutdown_fd)
           break;
         }
     }
-  db_close ();
+  game_db_close ();
   LOGI ("[engine] child exiting cleanly.\n");
   return 0;
 }

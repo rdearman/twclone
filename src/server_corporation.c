@@ -619,8 +619,12 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
 
   long long creation_fee = g_cfg.corporation_creation_fee;
   long long player_new_balance;
-  int player_bank_account_id = h_get_player_bank_account_id (db,
-                                                             ctx->player_id);
+  int player_bank_account_id = 0;
+  
+  if (h_get_account_id_unlocked (db, "player", ctx->player_id, &player_bank_account_id) != 0)
+    {
+      player_bank_account_id = 0; // Ensure 0 on failure
+    }
 
 
   if (player_bank_account_id <= 0)

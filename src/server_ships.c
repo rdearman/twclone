@@ -23,7 +23,9 @@
 #include "server_cmds.h"
 #include "server_loop.h"
 #include "server_ships.h"
-#include "database.h"
+#include "game_db.h"
+#include "server_config.h"
+#include "database_cmd.h"
 #include "errors.h"
 #include "config.h"
 #include "common.h"
@@ -32,7 +34,6 @@
 #include "server_players.h"
 #include "server_log.h"
 #include "server_ports.h"
-#include "db/db_pg.h"   /* your PG connection wrapper */
 
 
 #define UUID_STR_LEN 37         // 36 chars + null terminator
@@ -89,106 +90,59 @@ kill_cause_to_text (ship_kill_cause_t cause)
 int
 handle_ship_destruction (db_t *db, ship_kill_context_t *ctx)
 {
-  (void) db; /* db_t kept for ABI compatibility */
-
-  if (!ctx)
+  if (!db || !ctx)
     {
-      return -1;
-    }
-
-  PGconn *conn = db_pg_get_conn ();
-
-
-  if (!conn || PQstatus (conn) != CONNECTION_OK)
-    {
-      LOGE ("handle_ship_destruction(pg): no database connection");
       return -1;
     }
 
   const long long now_ts = (long long) time (NULL);
 
-
-  LOGI ("handle_ship_destruction(pg): victim_player=%d ship=%d cause=%d",
+  LOGI ("handle_ship_destruction: victim_player=%d ship=%d cause=%d",
         ctx->victim_player_id,
         ctx->victim_ship_id,
         ctx->cause);
 
-  /* Parameters ($1..$11) must match stored function */
-  char p1[32], p2[32], p3[32], p5[32], p6[32], p7[64], p8[32], p9[32], p10[32],
-       p11[32];
-
-
-  snprintf (p1, sizeof p1, "%d", ctx->victim_player_id);
-  snprintf (p2, sizeof p2, "%d", ctx->victim_ship_id);
-  snprintf (p3, sizeof p3, "%d", ctx->killer_player_id);
-  const char *p4 = kill_cause_to_text (ctx->cause);
-
-
-  snprintf (p5, sizeof p5, "%d", ctx->sector_id);
-
-  /* pulled from server config (same values you used in SQLite path) */
-  snprintf (p6, sizeof p6, "%lld", (long long) g_cfg.death.xp_loss_flat);
-  snprintf (p7, sizeof p7, "%.6f", g_cfg.death.xp_loss_percent);
-  snprintf (p8, sizeof p8, "%lld", (long long) g_cfg.death.max_per_day);
-  snprintf (p9, sizeof p9, "%lld", (long long) g_cfg.death.big_sleep_seconds);
-  snprintf (p10, sizeof p10, "%lld", now_ts);
-  snprintf (p11, sizeof p11, "%lld", (long long) g_cfg.death.owner_role_id);
-
-  const char *params[11] =
-  { p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11 };
-
-  static const char *sql =
+  const char *cause_text = kill_cause_to_text (ctx->cause);
+  
+  const char *sql =
     "SELECT result_code "
     "FROM public.handle_ship_destruction("
-    "$1::bigint,$2::bigint,$3::bigint,$4::text,$5::bigint,"
-    "$6::bigint,$7::numeric,$8::bigint,$9::bigint,$10::bigint,$11::bigint"
+    "$1,$2,$3,$4,$5,"
+    "$6,$7,$8,$9,$10,$11"
     ");";
 
-  PGresult *res = PQexecParams (conn,
-                                sql,
-                                11,
-                                NULL,
-                                params,
-                                NULL,
-                                NULL,
-                                0);
-
-
-  if (!res)
-    {
-      LOGE ("handle_ship_destruction(pg): PQexecParams returned NULL");
+  db_bind_t params[] = {
+      db_bind_i64(ctx->victim_player_id),
+      db_bind_i64(ctx->victim_ship_id),
+      db_bind_i64(ctx->killer_player_id),
+      db_bind_text(cause_text),
+      db_bind_i64(ctx->sector_id),
+      db_bind_i64(g_cfg.death.xp_loss_flat),
+      db_bind_i64(g_cfg.death.xp_loss_percent),
+      db_bind_i64(g_cfg.death.max_per_day),
+      db_bind_i64(g_cfg.death.big_sleep_duration_seconds),
+      db_bind_i64(now_ts),
+      db_bind_i64(0)
+  };
+  
+  db_res_t *res = NULL;
+  db_error_t err;
+  
+  if (!db_query(db, sql, params, 11, &res, &err)) {
+      LOGE ("handle_ship_destruction: SQL error: %s", err.message);
       return -1;
-    }
-
-  if (PQresultStatus (res) != PGRES_TUPLES_OK)
-    {
-      LOGE ("handle_ship_destruction(pg): SQL error: %s",
-            PQerrorMessage (conn));
-      PQclear (res);
-      return -1;
-    }
-
-  if (PQntuples (res) != 1)
-    {
-      LOGE ("handle_ship_destruction(pg): unexpected row count %d",
-            PQntuples (res));
-      PQclear (res);
-      return -1;
-    }
-
-  int rc = atoi (PQgetvalue (res, 0, 0));
-
-
-  PQclear (res);
-
-  if (rc != 0)
-    {
-      LOGE ("handle_ship_destruction(pg): DB returned error code %d", rc);
-      return rc;
-    }
-
-  LOGD ("handle_ship_destruction(pg): completed successfully");
-  return 0;
+  }
+  
+  int rc = -1;
+  if (db_res_step(res, &err)) {
+      rc = (int)db_res_col_i32(res, 0, &err);
+  }
+  db_res_finalize(res);
+  
+  if (rc != 0) {
+      LOGE ("handle_ship_destruction: DB returned error code %d", rc);
+  }
+  return rc;
 }
 
 
@@ -198,7 +152,7 @@ handle_ship_destruction (db_t *db, ship_kill_context_t *ctx)
 int
 cmd_ship_transfer_cargo (client_ctx_t *ctx, json_t *root)
 {
-  db_t *db_handle = db_get_handle ();
+  db_t *db_handle = game_db_get_handle ();
   h_decloak_ship (db_handle,
                   h_get_active_ship_id (db_handle, ctx->player_id));
   send_response_error (ctx,
@@ -223,7 +177,7 @@ cmd_ship_upgrade (client_ctx_t *ctx, json_t *root)
 int
 cmd_ship_repair (client_ctx_t *ctx, json_t *root)
 {
-  db_t *db = db_get_handle ();
+  db_t *db = game_db_get_handle ();
 
   if (ctx->player_id <= 0)
     {
@@ -289,28 +243,29 @@ cmd_ship_repair (client_ctx_t *ctx, json_t *root)
   int cost = to_repair * 10;
 
   long long new_player_credits = 0;
+  db_error_t err;
 
-
-  rc = db_ship_repair_atomic (db,
+  bool ok = db_ship_repair_atomic (db,
                               ctx->player_id,
                               ship_id,
                               cost,
-                              &new_player_credits);
+                              (int64_t *) &new_player_credits,
+                              &err);
 
-  if (rc == ERR_INSUFFICIENT_FUNDS)
+  if (!ok)
     {
-      send_response_refused_steal (ctx, root, ERR_INSUFFICIENT_FUNDS,
-                                   "Insufficient credits.", NULL);
-      return 0;
-    }
-  if (rc == ERR_SHIP_NOT_FOUND)
-    {
-      send_response_error (ctx, root, ERR_SHIP_NOT_FOUND,
-                           "Ship not found or update failed.");
-      return 0;
-    }
-  if (rc != 0)
-    {
+      if (err.code == ERR_INSUFFICIENT_FUNDS)
+        {
+          send_response_refused_steal (ctx, root, ERR_INSUFFICIENT_FUNDS,
+                                       "Insufficient credits.", NULL);
+          return 0;
+        }
+      if (err.code == ERR_SHIP_NOT_FOUND)
+        {
+          send_response_error (ctx, root, ERR_SHIP_NOT_FOUND,
+                               "Ship not found or update failed.");
+          return 0;
+        }
       send_response_error (ctx, root, ERR_DB, "Repair failed.");
       return 0;
     }
@@ -357,6 +312,7 @@ h_get_active_ship_id (db_t *db, int player_id)
 int
 cmd_ship_self_destruct (client_ctx_t *ctx, json_t *root)
 {
+  db_t *db = game_db_get_handle ();
   int confirmation = 0;
   json_t *data = json_object_get (root, "data");
   if (!data || json_unpack (data, "{s:i}", "confirmation", &confirmation) != 0
@@ -370,7 +326,7 @@ cmd_ship_self_destruct (client_ctx_t *ctx, json_t *root)
       return -1;
     }
   /* 2. Refusal check: Cannot self-destruct in protected zones (FedSpace) */
-  if (db_is_sector_fedspace (ctx->sector_id))
+  if (db_is_sector_fedspace (db, ctx->sector_id))
     {
       send_response_refused_steal (ctx,
                                    root,
@@ -380,12 +336,11 @@ cmd_ship_self_destruct (client_ctx_t *ctx, json_t *root)
       return -1;
     }
   /* 3. Invoke handle_ship_destruction for self-destruct logic */
-  db_t *db = db_get_handle ();
   int ship_id = h_get_active_ship_id (db, ctx->player_id);
   int ship_sector = 0;
 
 
-  db_get_ship_sector_id (db, ship_id, &ship_sector);
+  ship_sector = db_get_ship_sector_id (db, ship_id);
 
   ship_kill_context_t kill_ctx = {
     .victim_player_id = ctx->player_id,
@@ -417,8 +372,9 @@ cmd_ship_self_destruct (client_ctx_t *ctx, json_t *root)
 
 
 int
-cmd_ship_inspect (db_t *db, client_ctx_t *ctx, json_t *root)
+cmd_ship_inspect (client_ctx_t *ctx, json_t *root)
 {
+  db_t *db = game_db_get_handle ();
   if (ctx->player_id <= 0)
     {
       send_response_refused_steal (ctx,
@@ -515,7 +471,7 @@ cmd_ship_rename (client_ctx_t *ctx, json_t *root)
     }
   int ship_id = (int) json_integer_value (j_ship);
   const char *new_name = json_string_value (j_name);
-  db_t *db = db_get_handle ();
+  db_t *db = game_db_get_handle ();
   int rc = db_ship_rename_if_owner (db, ctx->player_id, ship_id, new_name);
 
 
@@ -549,7 +505,7 @@ cmd_ship_rename (client_ctx_t *ctx, json_t *root)
 int
 cmd_ship_claim (client_ctx_t *ctx, json_t *root)
 {
-  db_t *db_handle = db_get_handle ();
+  db_t *db_handle = game_db_get_handle ();
   h_decloak_ship (db_handle,
                   h_get_active_ship_id (db_handle, ctx->player_id));
   if (ctx->player_id <= 0)
@@ -631,6 +587,7 @@ cmd_ship_claim (client_ctx_t *ctx, json_t *root)
 int
 cmd_ship_status (client_ctx_t *ctx, json_t *root)
 {
+  db_t *db = game_db_get_handle ();
   if (ctx->player_id <= 0)
     {
       send_response_refused_steal (ctx,
@@ -643,7 +600,7 @@ cmd_ship_status (client_ctx_t *ctx, json_t *root)
   json_t *player_info = NULL;
 
 
-  if (db_player_info_json (ctx->player_id, &player_info) != SQLITE_OK
+  if (db_player_info_json (db, ctx->player_id, &player_info) != 0
       || !player_info)
     {
       send_response_error (ctx, root, ERR_PLANET_NOT_FOUND, "Database error");
@@ -687,7 +644,7 @@ cmd_ship_info_compat (client_ctx_t *ctx, json_t *root)
 int
 cmd_ship_tow (client_ctx_t *ctx, json_t *root)
 {
-  db_t *db = db_get_handle ();
+  db_t *db = game_db_get_handle ();
   if (!db)
     {
       send_response_error (ctx, root, ERR_DB, "No database handle");
@@ -840,11 +797,11 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
   int target_sector = 0;
 
 
-  db_get_ship_sector_id (db, target_ship_id, &target_sector);
+  target_sector = db_get_ship_sector_id (db, target_ship_id);
   int player_sector = 0;
 
 
-  db_get_ship_sector_id (db, player_ship_id, &player_sector);
+  player_sector = db_get_ship_sector_id (db, player_ship_id);
 
 
   if (target_sector <= 0 || target_sector != player_sector)

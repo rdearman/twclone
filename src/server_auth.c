@@ -207,6 +207,7 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
   db_t *db = game_db_get_handle ();
   if (!db)
     {
+      LOGD("[auth.login] DB handle is NULL. Returning -1.");
       return -1;
     }
 
@@ -214,6 +215,7 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
                                    "data");
   const char *name = NULL, *pass = NULL;
 
+  LOGD("[auth.login] Received login attempt.");
 
   if (json_is_object (jdata))
     {
@@ -237,14 +239,19 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
 
   if (!name || !pass)
     {
+      LOGD("[auth.login] Missing username or password in request.");
       send_response_error (ctx, root, AUTH_ERR_BAD_REQUEST, "Missing fields");
       return 0;
     }
 
+  LOGD("[auth.login] Attempting login for user: %s", name); // Do not log password
   int pid = 0;
 
 
-  if (play_login (name, pass, &pid) == AUTH_OK)
+  int auth_rc = play_login (name, pass, &pid);
+  LOGD("[auth.login] play_login returned: %d, pid: %d", auth_rc, pid);
+
+  if (auth_rc == AUTH_OK)
     {
       if (h_player_is_npc (db, pid))
         {
@@ -362,9 +369,9 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
         }
 
       char tok[65];
+      h_generate_hex_uuid (tok, sizeof (tok));
 
-
-      db_session_create (pid, 86400, tok);
+      db_session_create (pid, tok, (long long)time(NULL) + 86400);
 
       json_t *resp = json_object ();
 
@@ -385,9 +392,9 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
       char *cur_locale = NULL;
 
 
-      if (db_prefs_get_one (pid, "ui.locale", &cur_locale) != 0 || !cur_locale)
+      if (db_prefs_get_one (db, pid, "ui.locale", &cur_locale) != 0 || !cur_locale)
         {
-          db_prefs_set_one (pid, "ui.locale", PT_STRING, "en-GB");
+          db_prefs_set_one (db, pid, "ui.locale", PT_STRING, "en-GB");
         }
       if (cur_locale)
         {
@@ -456,7 +463,7 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
       int new_acc_id = -1;
 
 
-      db_bank_create_account ("player", pid, cfg->startingcredits, &new_acc_id);
+      db_bank_create_account (db, "player", pid, cfg->startingcredits, &new_acc_id);
 
       db_error_t err;
       const char *sql_turns =
@@ -473,7 +480,7 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
           ship_name = "Used Scout Marauder";
         }
 
-      db_create_initial_ship (pid, ship_name, spawn_sid);
+      db_create_initial_ship (db, pid, ship_name, spawn_sid);
       db_player_set_sector (pid, spawn_sid);
       ctx->sector_id = spawn_sid;
 
@@ -487,7 +494,7 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
                2,
                &err);
 
-      db_player_set_alignment (pid, 1);
+      db_player_set_alignment (db, pid, 1);
 
       const char *sql_news_sub =
         "INSERT INTO subscriptions(player_id,event_type,delivery,enabled) "
@@ -498,14 +505,14 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
 
       if (ui_locale)
         {
-          db_prefs_set_one (pid, "ui.locale", PT_STRING, ui_locale);
+          db_prefs_set_one (db, pid, "ui.locale", PT_STRING, ui_locale);
         }
       if (ui_timezone)
         {
-          db_prefs_set_one (pid, "ui.timezone", PT_STRING, ui_timezone);
+          db_prefs_set_one (db, pid, "ui.timezone", PT_STRING, ui_timezone);
         }
 
-      h_send_message_to_player (pid,
+      h_send_message_to_player (db, pid,
                                 0,
                                 "Welcome to TWClone!",
                                 get_welcome_message (pid));
@@ -514,7 +521,7 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
 
 
       h_generate_hex_uuid (tok, sizeof (tok));
-      if (db_session_create (pid, 86400, tok) != 0)
+      if (db_session_create (pid, tok, (long long)time(NULL) + 86400) != 0)
         {
           send_response_error (ctx,
                                root,
@@ -642,7 +649,7 @@ cmd_auth_refresh (client_ctx_t *ctx, json_t *root)
 
       h_generate_hex_uuid (newtok,
                            sizeof (newtok));
-      if (db_session_create (ctx->player_id, 86400, newtok) != 0)
+      if (db_session_create (ctx->player_id, newtok, (long long)time(NULL) + 86400) != 0)
         {
           send_response_error (ctx, root, ERR_PLANET_NOT_FOUND,
                                "Database error");
@@ -803,3 +810,7 @@ get_welcome_message (int pid)
   (void)pid; return "Hello Player";
 }
 
+
+int auth_player_get_type(int player_id) {
+    return 0; // Stub
+}

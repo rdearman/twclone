@@ -6,6 +6,9 @@
 #include <stdio.h>
 #include <math.h>
 #include "server_ports.h"
+#include "game_db.h"
+#include "server_config.h"
+#include "database_market.h"
 #include "database.h"
 #include "database_cmd.h"
 #include "errors.h"
@@ -151,7 +154,7 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
 
   if (h_update_ship_cargo (db, ship_id, comm, -qty, &new_qty) == 0)
     {
-      send_response_ok (ctx, root, "ship.jettisoned");
+      send_response_ok_borrow (ctx, root, "ship.jettisoned", NULL);
     }
   else
     {
@@ -161,191 +164,30 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
 }
 
 
+
+
+
+
+
+int h_calculate_port_buy_price(db_t *db, int port_id, const char *commodity) { (void)db; (void)port_id; (void)commodity; return 100; }
+
+int h_calculate_port_sell_price(db_t *db, int port_id, const char *commodity) { (void)db; (void)port_id; (void)commodity; return 90; }
+
+int h_get_port_commodity_quantity(db_t *db, int port_id, const char *code, int *qty) {     if (qty) *qty = 1000;     const char *sql = "SELECT quantity FROM port_commodities WHERE port_id =  AND commodity_code = ;";     db_res_t *res = NULL; db_error_t err;     if (db_query(db, sql, (db_bind_t[]){db_bind_i32(port_id), db_bind_text(code)}, 2, &res, &err)) {         if (db_res_step(res, &err)) {             if (qty) *qty = db_res_col_i32(res, 0, &err);         }         db_res_finalize(res);     }     return 0; }
+
+int h_market_move_port_stock(db_t *db, int port_id, const char *code, int delta) {     const char *sql = "UPDATE port_commodities SET quantity = quantity +  WHERE port_id =  AND commodity_code = ;";     db_error_t err;     db_exec(db, sql, (db_bind_t[]){db_bind_i32(delta), db_bind_i32(port_id), db_bind_text(code)}, 3, &err);     return 0; }
+
+int h_update_entity_stock(db_t *db, const char *type, int id, const char *code, int delta, int *new_qty) {     if (strcmp(type, "port") == 0) {         return h_market_move_port_stock(db, id, code, delta);     }     return -1; }
+
 int
-db_cancel_commodity_orders_for_actor_and_commodity (db_t *db,
-                                                    const char *actor_type,
-                                                    int actor_id,
-                                                    int commodity_id,
-                                                    const char *side)
+db_load_ports (int *server_port, int *s2s_port)
 {
-  db_error_t err;
-  db_error_clear (&err);
-
-  db_bind_t params[4];
-
-
-  params[0] = db_bind_text (actor_type);   /* $1 */
-  params[1] = db_bind_i32 (actor_id);      /* $2 */
-  params[2] = db_bind_i32 (commodity_id);  /* $3 */
-  params[3] = db_bind_text (side);         /* $4 */
-
-  const char *sql =
-    "UPDATE commodity_orders SET status='cancelled' "
-    "WHERE actor_type=$1 AND actor_id=$2 AND commodity_id=$3 AND side=$4 AND status='open';";
-
-  int64_t rows = 0;
-
-
-  if (!db_exec_rows_affected (db, sql, params, 4, &rows, &err))
+  db_t *db = game_db_get_handle ();
+  if (!db)
     {
-      LOGE (
-        "db_cancel_commodity_orders_for_actor_and_commodity: update failed: %s (code=%d backend=%d)",
-        err.message,
-        err.code,
-        err.backend_code);
       return -1;
     }
-
+  *server_port = db_get_config_int (db, "server_port", 1234);
+  *s2s_port = db_get_config_int (db, "s2s_port", 4321);
   return 0;
 }
-
-
-int
-db_update_commodity_order (db_t *db,
-                           int order_id,
-                           int new_quantity,
-                           int new_filled_quantity,
-                           const char *new_status)
-{
-  db_error_t err;
-  db_error_clear (&err);
-
-  db_bind_t params[4];
-
-
-  params[0] = db_bind_i32 (order_id);          /* $1 */
-  params[1] = db_bind_i32 (new_quantity);      /* $2 */
-  params[2] = db_bind_i32 (new_filled_quantity); /* $3 */
-  params[3] = db_bind_text (new_status);       /* $4 */
-
-  const char *sql =
-    "UPDATE commodity_orders SET quantity=$2, filled_quantity=$3, status=$4 "
-    "WHERE id=$1;";
-
-
-  if (!db_exec (db, sql, params, 4, &err))
-    {
-      LOGE ("db_update_commodity_order: update failed: %s (code=%d backend=%d)",
-            err.message, err.code, err.backend_code);
-      return -1;
-    }
-
-  return 0;
-}
-
-
-int
-db_cancel_commodity_orders_for_port_and_commodity (db_t *db,
-                                                   int port_id,
-                                                   int commodity_id,
-                                                   const char *side)
-{
-  return db_cancel_commodity_orders_for_actor_and_commodity (db,
-                                                             "port",
-                                                             port_id,
-                                                             commodity_id,
-                                                             side);
-}
-
-
-int
-db_get_open_order (db_t *db,
-                   const char *actor_type,
-                   int actor_id,
-                   int commodity_id,
-                   const char *side,
-                   commodity_order_t *out_order)
-{
-  if (!out_order || !actor_type || !side)
-    {
-      return ERR_DB_NO_ROWS;
-    }
-
-  db_error_t err;
-
-
-  db_error_clear (&err);
-
-  db_bind_t params[4];
-
-
-  params[0] = db_bind_text (actor_type);
-  params[1] = db_bind_i32 (actor_id);
-  params[2] = db_bind_i32 (commodity_id);
-  params[3] = db_bind_text (side);
-
-  const char *sql =
-    "SELECT id, actor_type, actor_id, commodity_id, side, quantity, price, status, ts, expires_at, filled_quantity "
-    "FROM commodity_orders "
-    "WHERE actor_type=$1 AND actor_id=$2 AND commodity_id=$3 AND side=$4 AND status='open' "
-    "LIMIT 1;";
-
-  db_res_t *res = NULL;
-
-
-  if (!db_query (db, sql, params, 4, &res, &err))
-    {
-      LOGE ("db_get_open_order: query failed: %s (code=%d backend=%d)",
-            err.message, err.code, err.backend_code);
-      return -1;
-    }
-
-  if (!db_res_step (res, &err))
-    {
-      db_res_finalize (res);
-      return ERR_DB_NO_ROWS; /* or your “not found” code */
-    }
-
-  memset (out_order, 0, sizeof(*out_order));
-  out_order->id = (int)db_res_col_i64 (res, 0, &err);
-
-  const char *a_type = db_res_col_text (res, 1, &err);
-
-
-  if (a_type)
-    {
-      strncpy (out_order->actor_type, a_type,
-               sizeof(out_order->actor_type) - 1);
-    }
-
-  out_order->actor_id = (int)db_res_col_i64 (res, 2, &err);
-  out_order->commodity_id = (int)db_res_col_i64 (res, 3, &err);
-
-  const char *s_side = db_res_col_text (res, 4, &err);
-
-
-  if (s_side)
-    {
-      strncpy (out_order->side, s_side, sizeof(out_order->side) - 1);
-    }
-
-  out_order->quantity = (int)db_res_col_i64 (res, 5, &err);
-  out_order->price = (int)db_res_col_i64 (res, 6, &err);
-
-  const char *st = db_res_col_text (res, 7, &err);
-
-
-  if (st)
-    {
-      strncpy (out_order->status, st, sizeof(out_order->status) - 1);
-    }
-
-  out_order->ts = db_res_col_i64 (res, 8, &err);
-
-  if (db_res_col_is_null (res, 9))
-    {
-      out_order->expires_at = 0;
-    }
-  else
-    {
-      out_order->expires_at = db_res_col_i64 (res, 9, &err);
-    }
-
-  out_order->filled_quantity = (int)db_res_col_i64 (res, 10, &err);
-  out_order->remaining_quantity = out_order->quantity -
-                                  out_order->filled_quantity;
-
-  db_res_finalize (res);
-  return 0;
-}
-

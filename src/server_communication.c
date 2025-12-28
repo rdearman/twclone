@@ -101,10 +101,19 @@ is_allowed_topic (const char *t)
 extern void attach_rate_limit_meta (json_t *env, client_ctx_t *ctx);
 extern void rl_tick (client_ctx_t *ctx);
 extern void send_all_json (int fd, json_t *obj);
-extern json_t *db_notice_list_unseen_for_player (int player_id);
-extern int db_notice_mark_seen (int notice_id, int player_id);
-extern int db_notice_create (const char *title, const char *body,
-                             const char *severity, time_t expires_at);
+
+typedef struct sub_node
+{
+  char *topic;
+  struct sub_node *next;
+} sub_node_t;
+typedef struct sub_map
+{
+  client_ctx_t *ctx;
+  sub_node_t *head;
+  struct sub_map *next;
+} sub_map_t;
+static sub_map_t *g_submaps = NULL;
 
 
 static void
@@ -511,18 +520,7 @@ server_broadcast_to_sector (int sid, const char *name, json_t *payload)
 }
 
 
-typedef struct sub_node
-{
-  char *topic;
-  struct sub_node *next;
-} sub_node_t;
-typedef struct sub_map
-{
-  client_ctx_t *ctx;
-  sub_node_t *head;
-  struct sub_map *next;
-} sub_map_t;
-static sub_map_t *g_submaps = NULL;
+
 
 
 void
@@ -699,7 +697,12 @@ comm_publish_sector_event (int sid, const char *name, json_t *data)
 void
 push_unseen_notices_for_player (client_ctx_t *ctx, int pid)
 {
-  json_t *arr = db_notice_list_unseen_for_player (pid);
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      return;
+    }
+  json_t *arr = db_notice_list_unseen_for_player (db, pid);
   if (!arr)
     {
       return;
@@ -791,8 +794,14 @@ cmd_admin_notice_create (client_ctx_t *ctx, json_t *root)
                            "Missing title/body");
       return 1;
     }
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_PLANET_NOT_FOUND, "DB unavailable");
+      return 1;
+    }
   int id =
-    db_notice_create (title, body, sev ? sev : "info", (time_t) expires_at);
+    db_notice_create (db, title, body, sev ? sev : "info", (time_t) expires_at);
 
 
   if (id < 0)
@@ -845,7 +854,13 @@ cmd_notice_dismiss (client_ctx_t *ctx, json_t *root)
       send_response_error (ctx, root, REF_NOT_IN_SECTOR, "Missing notice_id");
       return 1;
     }
-  if (db_notice_mark_seen (notice_id, ctx->player_id) != 0)
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_PLANET_NOT_FOUND, "DB unavailable");
+      return 1;
+    }
+  if (db_notice_mark_seen (db, notice_id, ctx->player_id) != 0)
     {
       send_response_error (ctx, root, ERR_PLANET_NOT_FOUND, "DB error");
       return 1;

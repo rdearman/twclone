@@ -127,10 +127,12 @@ PROGRAMS = $(bin_PROGRAMS)
 am__dirstamp = $(am__leading_dot)dirstamp
 am_bigbang_OBJECTS = ../src/bigbang_pg_main.$(OBJEXT) \
 	../src/db/db_api.$(OBJEXT) ../src/db/pg/db_pg.$(OBJEXT) \
-	../src/common.$(OBJEXT) ../src/server_log.$(OBJEXT) \
-	../src/globals.$(OBJEXT)
+	../src/common.$(OBJEXT) ../src/server_log.$(OBJEXT)
 bigbang_OBJECTS = $(am_bigbang_OBJECTS)
-bigbang_DEPENDENCIES =
+am__DEPENDENCIES_1 =
+bigbang_DEPENDENCIES = $(am__DEPENDENCIES_1)
+bigbang_LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(bigbang_LDFLAGS) \
+	$(LDFLAGS) -o $@
 am_server_OBJECTS = ../src/common.$(OBJEXT) ../src/db/db_api.$(OBJEXT) \
 	../src/db/pg/db_pg.$(OBJEXT) ../src/game_db.$(OBJEXT) \
 	../src/database_cmd.$(OBJEXT) ../src/database_market.$(OBJEXT) \
@@ -346,20 +348,20 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 
 # AM_CFLAGS = -Wall -Wextra
-AM_CFLAGS = -Wall -Wextra -D_GNU_SOURCE -I../src -DDB_BACKEND_PG
+AM_CFLAGS = -Wall -Wextra -D_GNU_SOURCE -I../src -DDB_BACKEND_PG -ljansson -lpq
 server_LDADD = -ljansson -lcrypto -lpthread -lm -lpq
 AUTOMAKE_OPTIONS = subdir-objects
 
 # BigBang sources (PostgreSQL Only)
 bigbang_SOURCES = \
-	../src/bigbang_pg_main.c \
-	../src/db/db_api.c \
-	../src/db/pg/db_pg.c \
-	../src/common.c \
-	../src/server_log.c \
-	../src/globals.c
+        ../src/bigbang_pg_main.c \
+        ../src/db/db_api.c \
+        ../src/db/pg/db_pg.c \
+        ../src/common.c \
+        ../src/server_log.c
 
-bigbang_LDADD = -ljansson -lpq -lcrypto -lpthread -lm
+bigbang_LDFLAGS = -ljansson -lpq
+bigbang_LDADD = -ljansson -lpq -lcrypto -lpthread -lm $(server_LDADD)
 
 # Server sources (now with DB abstraction)
 server_SOURCES = \
@@ -506,12 +508,10 @@ clean-binPROGRAMS:
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_log.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/globals.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
 
 bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEPENDENCIES) 
 	@rm -f bigbang$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(bigbang_OBJECTS) $(bigbang_LDADD) $(LIBS)
+	$(AM_V_CCLD)$(bigbang_LINK) $(bigbang_OBJECTS) $(bigbang_LDADD) $(LIBS)
 ../src/game_db.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/database_cmd.$(OBJEXT): ../src/$(am__dirstamp) \
@@ -521,6 +521,8 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 ../src/db_player_settings.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/engine_consumer.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
+../src/globals.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/s2s_keyring.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)

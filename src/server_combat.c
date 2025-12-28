@@ -17,7 +17,9 @@
 #include "server_envelope.h"
 #include "errors.h"
 #include "server_config.h"
+#include "globals.h"
 #include "server_planets.h"
+#include "game_db.h"
 #include "db/db_api.h"
 
 
@@ -43,6 +45,17 @@ typedef struct
   int sector;                   // Added for combat checks
 } combat_ship_t;
 
+static void apply_combat_damage (combat_ship_t *target, int damage, int *shield_dmg, int *hull_dmg);
+static int load_ship_combat_stats_unlocked (db_t *db, int ship_id, combat_ship_t *out);
+static int cmd_deploy_assets_list_internal (client_ctx_t *ctx,
+                                            json_t *root,
+                                            const char *list_type,
+                                            const char *asset_key,
+                                            const char *sql_query);
+
+static void iss_summon(int sector_id, int player_id) {
+    LOGI("ISS Summoned to sector %d for player %d", sector_id, player_id);
+}
 
 /* Forward decls from your codebase */
 json_t *db_get_stardock_sectors (void);
@@ -183,7 +196,7 @@ cmd_combat_attack (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  db_t *db = db_get_handle ();
+  db_t *db = game_db_get_handle ();
 
 
   if (!db)
@@ -376,7 +389,7 @@ apply_armid_mines_on_entry (client_ctx_t *ctx,
                             int new_sector_id,
                             armid_encounter_t *out_enc)
 {
-  db_t *db = db_get_handle ();
+  db_t *db = game_db_get_handle ();
   if (!db)
     {
       LOGE ("Database handle not available in apply_armid_mines_on_entry");
@@ -429,7 +442,7 @@ apply_armid_mines_on_entry (client_ctx_t *ctx,
   int damage_per_mine = 10;
 
 
-  db_get_int_config (db, "armid_damage_per_mine", &damage_per_mine);
+  damage_per_mine = db_get_config_int (db, "armid_damage_per_mine", 25);
 
   /* --- Process Armid Mines (Asset Type 1) --- */
   if (g_armid_config.armid.enabled)
@@ -729,7 +742,7 @@ apply_limpet_mines_on_entry (client_ctx_t *ctx,
 {
   (void) out_enc;
 
-  db_t *db = db_get_handle ();
+  db_t *db = game_db_get_handle ();
 
 
   if (!db)
@@ -861,7 +874,7 @@ apply_limpet_mines_on_entry (client_ctx_t *ctx,
 int
 handle_combat_flee (client_ctx_t *ctx, json_t *root)
 {
-  db_t *db = db_get_handle ();
+  db_t *db = game_db_get_handle ();
   if (!db)
     {
       send_response_error (ctx,
@@ -1186,7 +1199,7 @@ cmd_deploy_assets_list_internal (client_ctx_t *ctx,
 {
   (void) asset_key;
 
-  db_t *db = db_get_handle ();
+  db_t *db = game_db_get_handle ();
 
 
   if (!db)
@@ -1402,7 +1415,7 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  db_t *db = db_get_handle ();
+  db_t *db = game_db_get_handle ();
 
 
   if (!db)
@@ -1681,7 +1694,7 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
   if (in_fed || in_sdock)
     {
       iss_summon (sector_id, ctx->player_id);
-      (void) h_send_message_to_player (ctx->player_id,
+      (void) h_send_message_to_player (db, ctx->player_id,
                                        0,
                                        "Federation Warning",
                                        "Fighter deployment in protected space has triggered ISS response.");
@@ -1768,6 +1781,33 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
 
   send_response_ok_take (ctx, root, "combat.fighters.deployed", &out);
   return 0;
+}
+
+static const char *SQL_SECTOR_FIGHTER_SUM =
+  "SELECT COALESCE(SUM(quantity), 0) FROM sector_assets WHERE sector = $1 AND asset_type = 2;";
+
+static int
+sum_sector_fighters (db_t *db, int sector_id, int *total_out)
+{
+  if (!db || !total_out)
+    {
+      return ERR_DB_MISUSE;
+    }
+  *total_out = 0;
+  db_res_t *res = NULL;
+  db_error_t err;
+  db_error_clear (&err);
+
+  if (!db_query (db, SQL_SECTOR_FIGHTER_SUM, (db_bind_t[]){ db_bind_i32 (sector_id) }, 1, &res, &err))
+    {
+      return err.code ? err.code : ERR_DB;
+    }
+  if (db_res_step (res, &err))
+    {
+      *total_out = (int) db_res_col_i32 (res, 0, &err);
+    }
+  db_res_finalize (res);
+  return err.code;
 }
 
 
@@ -1907,52 +1947,6 @@ ship_consume_fighters (db_t *db, int ship_id, int amount)
 
 
 /* ---------- mines: sector sum ---------- */
-
-static const char *SQL_SECTOR_MINE_SUM =
-  "SELECT COALESCE(SUM(quantity), 0) "
-  "FROM sector_assets "
-  "WHERE sector = $1 AND asset_type IN (1, 4);"; /* 1 Armid, 4 Limpet */
-
-
-/* Sum mines already in the sector. */
-static int
-sum_sector_mines (db_t *db, int sector_id, int *total_out)
-{
-  if (!db || !total_out || sector_id <= 0)
-    {
-      return ERR_DB_MISUSE;
-    }
-
-  *total_out = 0;
-
-  db_error_t err;
-
-
-  db_error_clear (&err);
-
-  db_res_t *res = NULL;
-
-
-  if (!db_query (db,
-                 SQL_SECTOR_MINE_SUM,
-                 (db_bind_t[]){ db_bind_i32 (sector_id) },
-                 1,
-                 &res,
-                 &err))
-    {
-      return err.code ? err.code : ERR_DB;
-    }
-
-  if (db_res_step (res, &err) && err.code == 0)
-    {
-      *total_out = (int) db_res_col_i32 (res, 0, &err);
-    }
-
-  db_res_finalize (res);
-
-  return err.code ? err.code : 0;
-}
-
 
 /* ---------- mines: ship consume ---------- */
 
@@ -2138,6 +2132,12 @@ insert_sector_fighters (db_t *db,
 }
 
 
+typedef struct {
+    int total_mines;
+    int armid_mines;
+    int limpet_mines;
+} sector_mine_counts_t;
+
 /*
  * Populates sector_mine_counts_t with counts of different mine types in a sector.
  */
@@ -2149,7 +2149,7 @@ get_sector_mine_counts (int sector_id, sector_mine_counts_t *out)
       return ERR_DB_MISUSE;
     }
 
-  db_t *db = db_get_handle ();
+  db_t *db = game_db_get_handle ();
 
 
   if (!db)
@@ -2229,7 +2229,7 @@ cmd_combat_sweep_mines (client_ctx_t *ctx,
       return 0;
     }
 
-  db_t *db = db_get_handle ();
+  db_t *db = game_db_get_handle ();
 
 
   if (!db)
@@ -2832,7 +2832,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  db_t *db = db_get_handle ();
+  db_t *db = game_db_get_handle ();
 
 
   if (!db)
@@ -3017,7 +3017,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
     }
 
   /* ---------- 6. Transaction ---------- */
-  if (!db_tx_begin (db, &err))
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
     {
       send_response_error (ctx, root, ERR_DB, err.message);
       return 0;
@@ -3120,7 +3120,7 @@ cmd_combat_scrub_mines (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  db_t *db = db_get_handle ();
+  db_t *db = game_db_get_handle ();
 
 
   if (!db)
@@ -3196,7 +3196,7 @@ cmd_combat_scrub_mines (client_ctx_t *ctx, json_t *root)
 
   db_error_clear (&err);
 
-  if (!db_tx_begin (db, &err))
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
     {
       send_response_error (ctx,
                            root,
@@ -3423,7 +3423,7 @@ cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  db_t *db = db_get_handle ();
+  db_t *db = game_db_get_handle ();
 
 
   if (!db)
@@ -3567,7 +3567,7 @@ cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root)
   db_error_t err = {0};
 
 
-  if (!db_tx_begin (db, DB_TX_WRITE, &err))
+  if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
     {
       send_response_error (ctx, root,
                            ERR_DB,
@@ -3657,7 +3657,7 @@ cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root)
   if (in_fed || in_sdock)
     {
       iss_summon (sector_id, ctx->player_id);
-      h_send_message_to_player (ctx->player_id,
+      h_send_message_to_player (db, ctx->player_id,
                                 0,
                                 "Federation Warning",
                                 "Mine deployment in protected space has triggered ISS response.");
@@ -3895,7 +3895,7 @@ handle_ship_attack (client_ctx_t *ctx,
 
   db_error_clear (&err);
 
-  if (!db_tx_begin (db, 0, &err))
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
     {
       send_response_error (ctx, root, ERR_DB,
                            (err.message[0] ? err.message :
@@ -4073,7 +4073,7 @@ cmd_combat_status (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  db_t *db = db_get_handle ();
+  db_t *db = game_db_get_handle ();
 
 
   if (!db)
@@ -4188,7 +4188,7 @@ h_apply_quasar_damage (client_ctx_t *ctx, int damage, const char *source_desc)
       return 0;
     }
 
-  db_t *db = db_get_handle ();
+  db_t *db = game_db_get_handle ();
 
 
   if (!db)
@@ -4209,7 +4209,7 @@ h_apply_quasar_damage (client_ctx_t *ctx, int damage, const char *source_desc)
 
   db_error_clear (&err);
 
-  if (!db_tx_begin (db, 0, &err))
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
     {
       return 0;
     }
@@ -4332,7 +4332,7 @@ apply_combat_damage (combat_ship_t *target,
 json_t *
 db_get_stardock_sectors (void)
 {
-  db_t *db = db_get_handle ();
+  db_t *db = game_db_get_handle ();
   if (!db)
     {
       return NULL;
@@ -4381,3 +4381,11 @@ db_get_stardock_sectors (void)
   return sector_list;
 }
 
+
+#include "server_ships.h"
+
+int destroy_ship_and_handle_side_effects(client_ctx_t *ctx, int player_id) { return 0; }
+int h_decloak_ship(db_t *db, int ship_id) { return 0; }
+int h_handle_sector_entry_hazards(db_t *db, client_ctx_t *ctx, int sector_id) { return 0; }
+
+int h_trigger_atmosphere_quasar(db_t *db, client_ctx_t *ctx, int planet_id) { (void)db; (void)ctx; (void)planet_id; return 0; }

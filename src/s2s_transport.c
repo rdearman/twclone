@@ -18,6 +18,7 @@
 #include <inttypes.h>
 #include "s2s_transport.h"
 #include "server_log.h"
+#include "server_config.h"
 #ifdef TCP_NODELAY
 
 
@@ -514,7 +515,7 @@ s2s_send_json (s2s_conn_t *c, json_t *obj, int timeout_ms)
   size_t len = strlen (payload);
 
 
-  if (len > S2S_MAX_FRAME)
+  if (len > g_cfg.s2s.frame_size_limit)
     {
       free (payload);
       g_ctr.toolarge++;
@@ -560,7 +561,7 @@ s2s_recv_json (s2s_conn_t *c, json_t **out, int timeout_ms)
   uint32_t len = ntohl (be);
 
 
-  if (len == 0 || len > S2S_MAX_FRAME)
+  if (len == 0 || len > g_cfg.s2s.frame_size_limit)
     {
       g_ctr.toolarge++;
       return S2S_E_TOOLARGE;

@@ -344,6 +344,10 @@ bool db_res_col_is_null (const db_res_t *res, int col_idx);
  */
 int64_t     db_res_col_i64  (const db_res_t *res, int col_idx, db_error_t *err);
 
+static inline int db_res_col_int(db_res_t *res, int col, db_error_t *err) {
+    return (int)db_res_col_i64(res, col, err);
+}
+
 /**
  * @brief Retrieves the value of a column as a 64-bit unsigned integer.
  * @param res The result set handle.

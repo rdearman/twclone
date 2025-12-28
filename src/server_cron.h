@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include "db/db_api.h"
 
+typedef int (*cron_handler_fn)(db_t *, int64_t);
+
 int h_traps_process (db_t *db, int64_t now_s);
 int h_npc_step (db_t *db, int64_t now_s);
 int h_autouncloak_sweeper (db_t *db, int64_t now_s);
@@ -26,6 +28,8 @@ int h_daily_stock_price_recalculation (db_t *db, int64_t now_s);
 int h_port_economy_tick (db_t *db, int64_t now_s);
 int h_planet_market_tick (db_t *db, int64_t now_s);
 int h_reset_turns_for_player (db_t *db, int64_t now_s);
+int h_daily_corp_tax (db_t *db, int64_t now_s);
+int h_dividend_payout (db_t *db, int64_t now_s);
 
 int cron_register_builtins (void);
 

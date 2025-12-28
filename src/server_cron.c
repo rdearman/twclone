@@ -16,7 +16,7 @@
 #include "server_universe.h"
 #include "server_ports.h"
 #include "server_planets.h"
-#include "database.h"
+#include "game_db.h"
 #include "server_config.h"
 #include "database_market.h" // For market order helpers
 #include "database_cmd.h"    // For bank helpers
@@ -25,7 +25,7 @@
 #include "server_clusters.h"    // Cluster Economy & Law
 #include "db/db_api.h"
 
-
+int iss_init_once(void);
 #define INITIAL_QUEUE_CAPACITY 64
 #define FEDSPACE_SECTOR_START 1
 #define FEDSPACE_SECTOR_END 10
@@ -192,7 +192,7 @@ tow_ship (db_t *db, int ship_id, int new_sector_id, int admin_id,
                 old_sector_id,
                 new_sector_id,
                 reason_str);
-      h_send_message_to_player (admin_id, owner_id, subject_str,
+      h_send_message_to_player (db, admin_id, owner_id, subject_str,
                                 message_buffer);
     }
 
@@ -849,7 +849,7 @@ db_lock_status (db_t *db, const char *name)
 }
 
 
-int
+void
 unlock (db_t *db, const char *name)
 {
   db_error_t err;
@@ -860,14 +860,14 @@ unlock (db_t *db, const char *name)
   /* Ignoring return code as per original logic which didn't check return of step, only prepare */
   db_exec (db, SQL, (db_bind_t[]){ db_bind_text (name) }, 1, &err);
 
-  return 0;                     // Return 0 for success
+  return;                     // Return 0 for success
 }
 
 
-void
+int
 cron_register_builtins (void)
 {
-  g_reg_inited = 1;
+  return 0;
 }
 
 
@@ -978,7 +978,7 @@ h_fedspace_cleanup (db_t *db, int64_t now_s)
                     quantity,
                     get_asset_name (asset_type),
                     sector_id);
-          h_send_message_to_player (player_id,
+          h_send_message_to_player (db, player_id,
                                     fedadmin,
                                     "WARNING: MSL Violation",
                                     message);
@@ -1185,255 +1185,7 @@ get_utc_epoch_day (int64_t unix_timestamp)
 }
 
 
-int
-h_dividend_payout (db_t *db, int64_t now_s)
-{
-  LOGI ("BANK0: Dividend Payout cron disabled for v1.0.");
-  (void)db; // Suppress unused parameter warning
-  (void)now_s; // Suppress unused parameter warning
-  return 0; // Do nothing, cleanly exit
 
-  if (!try_lock (db, "h_dividend_payout", now_s))
-    {
-      return 0;
-    }
-  LOGI ("h_dividend_payout: Starting dividend payout cron job.");
-
-  db_error_t err;
-
-
-  db_error_clear (&err);
-
-  if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
-    {
-      LOGE ("h_dividend_payout: Failed to start transaction: %s", err.message);
-      unlock (db, "h_dividend_payout");
-      return -1;
-    }
-
-  const char *sql_select_dividends =
-    "SELECT id, stock_id, amount_per_share, declared_ts "
-    "FROM stock_dividends WHERE paid_ts IS NULL;";
-
-  db_res_t *div_res = NULL;
-
-
-  if (!db_query (db, sql_select_dividends, NULL, 0, &div_res, &err))
-    {
-      LOGE ("h_dividend_payout: Failed to select dividends: %s", err.message);
-      db_tx_rollback (db, &err);
-      unlock (db, "h_dividend_payout");
-      return -1;
-    }
-
-  int processed_dividends = 0;
-
-
-  while (db_res_step (div_res, &err))
-    {
-      int dividend_id = (int) db_res_col_i32 (div_res, 0, &err);
-      int stock_id = (int) db_res_col_i32 (div_res, 1, &err);
-      int amount_per_share = (int) db_res_col_i32 (div_res,
-                                                   2,
-                                                   &err);
-      // long long declared_ts = db_res_col_i64 (div_res, 3, &err);
-
-      int corp_id = 0;
-      int total_shares = 0;
-
-
-      // Use h_get_stock_info from server_corporation.h
-      // Assuming h_get_stock_info updated to take db_t or generic
-      if (h_get_stock_info
-            (db, stock_id, NULL, &corp_id, &total_shares, NULL, NULL,
-            NULL) != 0) // Assuming 0 is success in new API
-        {
-          LOGE
-          (
-            "h_dividend_payout: Failed to get stock info for stock %d via helper. Skipping this dividend.",
-            stock_id);
-          continue;             // Skip this dividend if we can't get stock info
-        }
-      if (corp_id == 0)
-        {
-          LOGW
-          (
-            "h_dividend_payout: Stock ID %d not linked to a corporation. Skipping.",
-            stock_id);
-          continue;
-        }
-      long long total_payout = (long long) amount_per_share * total_shares;
-      // Check if corporation has enough funds
-      long long corp_balance;
-
-
-      // db_get_corp_bank_balance usually takes just corp_id?
-      // If it takes db, we pass db. If not, we hope it works or we should have refactored it.
-      // Assuming existing signature: int db_get_corp_bank_balance(int corp_id, long long *balance);
-      if (db_get_corp_bank_balance (corp_id, &corp_balance) != 0 // SQLITE_OK is 0
-          || corp_balance < total_payout)
-        {
-          LOGW
-          (
-            "h_dividend_payout: Corp %d (stock %d) has insufficient funds for dividend %d. Required: %lld, Has: %lld. Skipping payout.",
-            corp_id,
-            stock_id,
-            dividend_id,
-            total_payout,
-            corp_balance);
-          json_t *payload = json_object ();
-
-
-          json_object_set_new (payload, "corp_id", json_integer (corp_id));
-          json_object_set_new (payload, "stock_id", json_integer (stock_id));
-          json_object_set_new (payload, "required",
-                               json_integer (total_payout));
-          json_object_set_new (payload, "available",
-                               json_integer (corp_balance));
-          json_object_set_new (payload, "status",
-                               json_string ("failed_insufficient_funds"));
-
-
-          db_log_engine_event (now_s, "stock.dividend.payout_failed", "corp",
-                               corp_id, 0, payload, NULL);
-          json_decref (payload);
-          continue;
-        }
-      // Iterate through shareholders and pay out
-      const char *sql_select_shareholders =
-        "SELECT player_id, shares FROM corp_shareholders WHERE corp_id = $1;";
-
-      db_res_t *share_res = NULL;
-      db_bind_t share_params[1] = { db_bind_i32 (corp_id) };
-
-
-      if (db_query (db,
-                    sql_select_shareholders,
-                    share_params,
-                    1,
-                    &share_res,
-                    &err))
-        {
-          long long actual_payout_sum = 0;
-
-
-          while (db_res_step (share_res, &err))
-            {
-              int player_id = (int) db_res_col_i32 (share_res, 0, &err);
-              int shares = (int) db_res_col_i32 (share_res, 1, &err);
-
-
-              if (player_id == 0)
-                {
-                  continue;         // Skip the corporation's own holdings in a direct payout
-                }
-              long long player_dividend = (long long) shares * amount_per_share;
-              char idempotency_key[UUID_STR_LEN];
-
-
-              h_generate_hex_uuid (idempotency_key, sizeof (idempotency_key));
-
-              // h_bank_transfer_unlocked refactor status unknown. Passing db if signature matches or just args.
-              // Original: h_bank_transfer_unlocked (db, "corp", ...);
-              // We pass db (db_t*).
-              int transfer_rc = h_bank_transfer_unlocked (db, "corp", corp_id,
-                                                          "player", player_id,
-                                                          player_dividend,
-                                                          "DIVIDEND",
-                                                          idempotency_key);
-
-
-              if (transfer_rc != 0) // SQLITE_OK is 0
-                {
-                  LOGE
-                  (
-                    "h_dividend_payout: Failed to pay dividend to player %d from corp %d for stock %d. Amount: %lld.",
-                    player_id,
-                    corp_id,
-                    stock_id,
-                    player_dividend);
-                  // Continue to next shareholder
-                }
-              else
-                {
-                  actual_payout_sum += player_dividend;
-                }
-            }
-          db_res_finalize (share_res);
-
-          // Mark dividend as paid
-          const char *sql_update_dividend =
-            "UPDATE stock_dividends SET paid_ts = $1 WHERE id = $2;";
-
-          db_bind_t update_params[2] = {
-            db_bind_i64 (now_s),
-            db_bind_i32 (dividend_id)
-          };
-
-
-          if (!db_exec (db, sql_update_dividend, update_params, 2, &err))
-            {
-              LOGE ("h_dividend_payout: Failed to mark dividend %d as paid: %s",
-                    dividend_id, err.message);
-              // Logic says goto rollback_and_unlock.
-              // We need to clean up and exit.
-              // We are inside the outer loop.
-              // div_res is active.
-              db_res_finalize (div_res);
-              db_tx_rollback (db, &err);
-              unlock (db, "h_dividend_payout");
-              return -1;
-            }
-
-          LOGI
-          (
-            "h_dividend_payout: Payout of %lld credits completed for dividend %d (stock %d, corp %d).",
-            actual_payout_sum,
-            dividend_id,
-            stock_id,
-            corp_id);
-          json_t *payload = json_object ();
-
-
-          json_object_set_new (payload, "corp_id", json_integer (corp_id));
-          json_object_set_new (payload, "stock_id", json_integer (stock_id));
-          json_object_set_new (payload,
-                               "dividend_id",
-                               json_integer (dividend_id));
-          json_object_set_new (payload, "actual_payout",
-                               json_integer (actual_payout_sum));
-
-          db_log_engine_event (now_s, "stock.dividend.payout_completed", "corp",
-                               corp_id, 0, payload, NULL);
-          json_decref (payload);
-          processed_dividends++;
-        }
-      else
-        {
-          LOGE ("h_dividend_payout: Failed select shareholders: %s",
-                err.message);
-          db_res_finalize (div_res);
-          db_tx_rollback (db, &err);
-          unlock (db, "h_dividend_payout");
-          return -1;
-        }
-    }
-
-  db_res_finalize (div_res);
-
-  if (!db_tx_commit (db, &err))
-    {
-      LOGE ("h_dividend_payout: Commit failed: %s", err.message);
-      db_tx_rollback (db, &err); // Redundant?
-      unlock (db, "h_dividend_payout");
-      return -1;
-    }
-
-  LOGI ("h_dividend_payout: Successfully processed %d dividends.",
-        processed_dividends);
-  unlock (db, "h_dividend_payout");
-  return 0; // SQLITE_OK
-}
 
 
 int
@@ -2207,7 +1959,7 @@ h_npc_step (db_t *db, int64_t now_s)
 
   if (iss_init_once () == 1)
     {
-      iss_tick (now_ms);
+      iss_tick (db, now_ms);
     }
 
   if (fer_init_once () == 1)
@@ -2240,7 +1992,7 @@ cmd_sys_cron_planet_tick_once (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  db_t *db = db_get_handle ();
+  db_t *db = game_db_get_handle ();
 
 
   if (!db)
@@ -2567,7 +2319,7 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
               long long buyer_credits = 0;
 
 
-              db_get_port_bank_balance (buy->actor_id, &buyer_credits);
+              db_get_port_bank_balance (db, buy->actor_id, &buyer_credits);
 
               int max_affordable = 0;
 
@@ -4584,9 +4336,8 @@ h_tavern_notice_expiry_cron (db_t *db, int64_t now_s)
   const char *sql_delete_notices =
 
 
-    "DELETE FROM tavern_notices WHERE expires_at <= 
-
-;";
+    "DELETE FROM tavern_notices WHERE expires_at <= "
+    "CAST(strftime('%s', 'now') AS INTEGER);";
 
 
   db_bind_t params[1] = { db_bind_i32 ((int)now_s) };
@@ -4613,9 +4364,8 @@ h_tavern_notice_expiry_cron (db_t *db, int64_t now_s)
   const char *sql_delete_corp_recruiting =
 
 
-    "DELETE FROM corp_recruiting WHERE expires_at <= 
-
-;";
+    "DELETE FROM corp_recruiting WHERE expires_at <= "
+    "CAST(strftime('%s', 'now') AS INTEGER);";
 
 
   if (!db_exec (db, sql_delete_corp_recruiting, params, 1, &err))
@@ -4797,7 +4547,7 @@ h_daily_stock_price_recalculation (db_t *db,
 
 
       // Get corp bank balance
-      db_get_corp_bank_balance (corp_id, &bank_balance);
+      db_get_corp_bank_balance (db, corp_id, &bank_balance);
       net_asset_value += bank_balance;
 
       // Get planet assets value for the corporation
@@ -4849,121 +4599,7 @@ h_daily_stock_price_recalculation (db_t *db,
 }
 
 
-int
-h_daily_corp_tax (db_t *db, int64_t now_s)
-{
-  LOGI ("BANK0: Daily Corporate Tax cron disabled for v1.0.");
-  (void)db; // Suppress unused parameter warning
-  (void)now_s; // Suppress unused parameter warning
-  return 0; // Do nothing, cleanly exit
 
-  if (!try_lock (db, "daily_corp_tax", now_s))
-    {
-      return 0;
-    }
-  LOGI ("h_daily_corp_tax: Starting daily corporation tax collection.");
-
-  db_error_t err;
-
-
-  db_error_clear (&err);
-
-  int *corps = NULL;
-  size_t corps_count = 0;
-  size_t corps_cap = 0;
-
-  const char *sql_select_corps = "SELECT id FROM corporations WHERE id > 0;";
-
-  db_res_t *res = NULL;
-
-
-  if (db_query (db, sql_select_corps, NULL, 0, &res, &err))
-    {
-      while (db_res_step (res, &err))
-        {
-          if (corps_count >= corps_cap)
-            {
-              size_t new_cap = (corps_cap == 0) ? 16 : corps_cap * 2;
-              int *new_c = realloc (corps, new_cap * sizeof(int));
-
-
-              if (!new_c)
-                {
-                  free (corps); db_res_finalize (res); unlock (db,
-                                                               "daily_corp_tax");
-                  return -1;
-                }
-              corps = new_c;
-              corps_cap = new_cap;
-            }
-          corps[corps_count++] = (int) db_res_col_i32 (res, 0, &err);
-        }
-      db_res_finalize (res);
-    }
-
-  for (size_t i = 0; i < corps_count; i++)
-    {
-      int corp_id = corps[i];
-      long long total_assets = 0;
-      long long bank_balance = 0;
-
-
-      // Get corp bank balance
-      db_get_corp_bank_balance (corp_id, &bank_balance);
-      total_assets += bank_balance;
-
-      // Get planet assets
-      const char *sql_select_planets =
-        "SELECT ore_on_hand, organics_on_hand, equipment_on_hand FROM planets WHERE owner_id = $1 AND owner_type = 'corp';";
-
-      db_res_t *p_res = NULL;
-
-
-      if (db_query (db, sql_select_planets,
-                    (db_bind_t[]){ db_bind_i32 (corp_id) }, 1, &p_res, &err))
-        {
-          while (db_res_step (p_res, &err))
-            {
-              total_assets += db_res_col_i64 (p_res, 0, &err) * 100;       // price of ore
-              total_assets += db_res_col_i64 (p_res, 1, &err) * 150;       // price of organics
-              total_assets += db_res_col_i64 (p_res, 2, &err) * 200;       // price of equipment
-            }
-          db_res_finalize (p_res);
-        }
-
-      long long tax_amount = (total_assets * CORP_TAX_RATE_BP) / 10000;
-
-
-      if (tax_amount <= 0)
-        {
-          continue;
-        }
-
-      if (db_bank_withdraw ("corp", corp_id, tax_amount) != 0) // SQLITE_OK is 0
-        {
-          // Failed to pay tax
-          const char *sql_update_corp =
-            "UPDATE corporations SET tax_arrears = tax_arrears + $1, credit_rating = credit_rating - 1 WHERE id = $2;";
-
-          db_bind_t up_params[2] = { db_bind_i64 (tax_amount),
-                                     db_bind_i32 (corp_id) };
-
-
-          db_exec (db, sql_update_corp, up_params, 2, &err);
-        }
-    }
-
-  free (corps);
-
-  if (!db_tx_commit (db, &err))
-    {
-      LOGE ("h_daily_corp_tax: commit failed: %s", err.message);
-      return -1;
-    }
-
-  unlock (db, "daily_corp_tax");
-  return 0;
-}
 
 
 // Function to handle shield regeneration tick

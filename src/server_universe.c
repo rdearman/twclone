@@ -408,3 +408,9 @@ db_pick_adjacent (db_t *db, int sid)
   (void)db; (void)sid; return 0;
 }
 
+
+int
+iss_init_once (void)
+{
+  return 1;
+}

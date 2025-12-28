@@ -22,7 +22,7 @@
 # AM_CFLAGS = -Wall -Wextra -Werror -I../src
 
 # AM_CFLAGS = -Wall -Wextra
-AM_CFLAGS = -Wall -Wextra -D_GNU_SOURCE -I../src -DDB_BACKEND_PG
+AM_CFLAGS = -Wall -Wextra -D_GNU_SOURCE -I../src -DDB_BACKEND_PG -ljansson -lpq
 
 server_LDADD   	= -ljansson -lcrypto -lpthread -lm -lpq
 AUTOMAKE_OPTIONS = subdir-objects
@@ -34,13 +34,13 @@ bin_PROGRAMS = \
 
 # BigBang sources (PostgreSQL Only)
 bigbang_SOURCES = \
-	../src/bigbang_pg_main.c \
-	../src/db/db_api.c \
-	../src/db/pg/db_pg.c \
-	../src/common.c \
-	../src/server_log.c \
-	../src/globals.c
-bigbang_LDADD = -ljansson -lpq -lcrypto -lpthread -lm
+        ../src/bigbang_pg_main.c \
+        ../src/db/db_api.c \
+        ../src/db/pg/db_pg.c \
+        ../src/common.c \
+        ../src/server_log.c
+bigbang_LDFLAGS = -ljansson -lpq
+bigbang_LDADD = -ljansson -lpq -lcrypto -lpthread -lm $(server_LDADD)
 
 
 # Server sources (now with DB abstraction)

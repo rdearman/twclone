@@ -137,12 +137,7 @@ s2s_load_default_key (db_t *db, s2s_key_t *out_key)
     }
 
   /* DB lookup */
-  static const char *SQL =
-    "SELECT key_id, key_b64 "
-    "FROM s2s_keys "
-    "WHERE active = 1 "
-    "ORDER BY is_default_tx DESC, created_ts ASC "
-    "LIMIT 1;";
+  const char *sql = "SELECT key_id, key_b64 FROM s2s_keys WHERE active = TRUE ORDER BY created_ts DESC LIMIT 1";
 
 
   for (int attempt = 0; attempt < 2; attempt++)
@@ -155,7 +150,7 @@ s2s_load_default_key (db_t *db, s2s_key_t *out_key)
       db_res_t *res = NULL;
 
 
-      if (!db_query (db, SQL, NULL, 0, &res, &err))
+      if (!db_query (db, sql, NULL, 0, &res, &err))
         {
           LOGE ("s2s_load_default_key: query failed: %s (code=%d backend=%d)",
                 err.message, err.code, err.backend_code);

@@ -8,7 +8,9 @@
 
 // Include specific backend open functions
 #include "pg/db_pg.h"
+#ifdef DB_BACKEND_SQLITE
 #include "sqlite/db_sqlite.h" // Include for SQLite backend
+#endif
 
 // The actual definitions for struct db_s and struct db_res_s are in db_int.h
 // These are not needed here again.
@@ -65,6 +67,7 @@ db_t *db_open(const db_config_t *cfg, db_error_t *err) {
             }
             db->impl = db_pg_open_internal(db, cfg, err); // Pass db_t for internal setup
             break;
+#ifdef DB_BACKEND_SQLITE
         case DB_BACKEND_SQLITE:
             if (!cfg->sqlite_path) {
                 err->code = ERR_DB_CONFIG;
@@ -74,6 +77,7 @@ db_t *db_open(const db_config_t *cfg, db_error_t *err) {
             }
             db->impl = db_sqlite_open_internal(db, cfg, err);
             break;
+#endif
         case DB_BACKEND_UNKNOWN:
         default:
             err->code = ERR_DB_CONFIG;
@@ -337,3 +341,5 @@ db_ship_repair_atomic(db_t *db,
                                     out_new_credits,
                                     err);
 }
+
+

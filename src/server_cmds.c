@@ -5,24 +5,63 @@
 #include <time.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdbool.h> // For bool type
 
 /* local includes */
 #include "database.h"
 #include "game_db.h"
 #include "server_cmds.h"
 #include "server_auth.h"
+#include "errors.h" // Include errors.h for ERR_IS_NPC etc.
+#include "server_players.h" // Include for PLAYER_TYPE_SYSOP
 #include "server_envelope.h"
 #include "db_player_settings.h"
-#include "errors.h"
-#include "server_players.h"
 #include "server_cron.h"
-#include "server_log.h"
+#include "server_log.h" // Include server_log.h for LOGD
 #include "server_clusters.h"
 #include "database_market.h"
 #include "server_ports.h"
 #include "server_universe.h"
 #include "database_cmd.h"
 #include "db/db_api.h"
+
+/* --- Bounty Helpers --- */
+
+
+// Helper: Check if sector is FedSpace
+static bool
+is_fedspace_sector (int sector_id)
+{
+  return (sector_id >= 1 && sector_id <= 10);
+}
+
+
+// Helper: Check if port is Black Market
+static bool
+is_black_market_port (db_t *db, int port_id)
+{
+  db_res_t *res = NULL;
+  db_error_t err;
+  const char *sql = "SELECT name FROM ports WHERE id = $1;";
+  bool is_bm = false;
+
+
+  if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (port_id) }, 1, &res, &err))
+    {
+      if (db_res_step (res, &err))
+        {
+          const char *name = db_res_col_text (res, 0, &err);
+
+
+          if (name && strstr (name, "Black Market"))
+            {
+              is_bm = true;
+            }
+        }
+      db_res_finalize (res);
+    }
+  return is_bm;
+}
 
 
 int
@@ -148,51 +187,69 @@ ct_str_eq (const char *a, const char *b)
 int
 play_login (const char *user, const char *pass, int *pid)
 {
+  LOGD("[play_login] Attempting login for user: %s", user);
   if (!user || !pass)
     {
+      LOGD("[play_login] Missing user or pass. Returning AUTH_ERR_BAD_REQUEST.");
       return AUTH_ERR_BAD_REQUEST;
     }
   db_t *db = game_db_get_handle (); if (!db)
     {
+      LOGD("[play_login] DB handle is NULL. Returning AUTH_ERR_DB.");
       return AUTH_ERR_DB;
     }
   db_res_t *res = NULL; db_error_t err;
-  const char *sql = "SELECT id, passwd, type FROM players WHERE name = $1;";
+    const char *sql = "SELECT id, passwd, is_npc FROM players WHERE name = $1;";
 
+    LOGD("[play_login] Executing query: %s for user: %s", sql, user);
+  
+    if (db_query (db, sql, (db_bind_t[]){db_bind_text (user)}, 1, &res, &err))
+      {
+        if (db_res_step (res, &err))
+          {
+            int player_id = db_res_col_i32 (res, 0, &err);
+            const char *db_pass = db_res_col_text (res, 1, &err);
+            bool is_npc_flag = (bool)db_res_col_i32 (res, 2, &err); // Get is_npc boolean
+  
+            LOGD("[play_login] Found user: %s (pid: %d, is_npc: %d). DB hashed pass: %s", user, player_id, is_npc_flag, db_pass);
 
-  if (db_query (db, sql, (db_bind_t[]){db_bind_text (user)}, 1, &res, &err))
-    {
-      if (db_res_step (res, &err))
-        {
-          int player_id = db_res_col_i32 (res, 0, &err);
-          const char *db_pass = db_res_col_text (res, 1, &err);
-          int player_type = db_res_col_i32 (res, 2, &err);
+            if (is_npc_flag)
+              {
+                LOGD("[play_login] User %s is an NPC. Returning ERR_IS_NPC.", user);
+                db_res_finalize(res);
+                return ERR_IS_NPC; // Use ERR_IS_NPC from errors.h
+              }
 
+          // TODO: Before comparing, hash the provided 'pass' using the same algorithm as 'db_pass'
+          int cmp_result = ct_str_eq (db_pass, pass);
+          LOGD("[play_login] Comparing DB pass with provided pass (result: %d). Client pass (plain): %s", cmp_result, pass);
 
-          /* Block NPC logins */
-          if (player_type == 1)
+          if (cmp_result)
             {
-              db_res_finalize (res);
-              return ERR_IS_NPC;
-            }
-
-          int ok = (db_pass != NULL) && ct_str_eq (pass,
-                                                   db_pass);
-
-
-          if (ok)
-            {
-              if (pid)
-                {
-                  *pid = player_id;
-                }
-              db_res_finalize (res);
+              *pid = player_id;
+              db_res_finalize(res);
+              LOGD("[play_login] Authentication successful for user %s. Returning AUTH_OK.", user);
               return AUTH_OK;
             }
+          else
+            {
+              db_res_finalize(res);
+              LOGD("[play_login] Password mismatch for user %s. Returning AUTH_ERR_INVALID_CRED.", user);
+              return AUTH_ERR_INVALID_CRED;
+            }
         }
-      db_res_finalize (res);
+      else
+        {
+          db_res_finalize(res);
+          LOGD("[play_login] No user found with name %s. Returning AUTH_ERR_INVALID_CRED.", user);
+          return AUTH_ERR_INVALID_CRED;
+        }
     }
-  return AUTH_ERR_INVALID_CRED;
+  else
+    {
+      LOGE("[play_login] DB query failed for user %s: %s (code=%d backend=%d)", user, err.message, err.code, err.backend_code);
+      return AUTH_ERR_DB;
+    }
 }
 
 
@@ -468,43 +525,6 @@ cmd_sys_raw_sql_exec (client_ctx_t *ctx, json_t *root)
 }
 
 
-/* --- Bounty Helpers --- */
-
-
-// Helper: Check if sector is FedSpace
-static bool
-is_fedspace_sector (int sector_id)
-{
-  return (sector_id >= 1 && sector_id <= 10);
-}
-
-
-// Helper: Check if port is Black Market
-static bool
-is_black_market_port (db_t *db, int port_id)
-{
-  db_res_t *res = NULL;
-  db_error_t err;
-  const char *sql = "SELECT name FROM ports WHERE id = $1;";
-  bool is_bm = false;
-
-
-  if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (port_id) }, 1, &res, &err))
-    {
-      if (db_res_step (res, &err))
-        {
-          const char *name = db_res_col_text (res, 0, &err);
-
-
-          if (name && strstr (name, "Black Market"))
-            {
-              is_bm = true;
-            }
-        }
-      db_res_finalize (res);
-    }
-  return is_bm;
-}
 
 
 int
@@ -1246,16 +1266,4 @@ cmd_debug_run_fedspace_cleanup (client_ctx_t *ctx, json_t *root)
 }
 
 
-int
-send_error_response (client_ctx_t *ctx, json_t *root, int code, const char *msg)
-{
-  send_response_error (ctx, root, code, msg); return 0;
-}
-
-
-int
-send_json_response (client_ctx_t *ctx, json_t *root, json_t *json)
-{
-  send_response_ok_take (ctx, root, "ok", &json); return 0;
-}
 

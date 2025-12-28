@@ -1295,9 +1295,9 @@ def has_tow_target(ships, my_ship_id=None) -> bool:
             return True
     return False
 
-def compute_flags(ctx: Context) -> Dict[str, bool]:
-    d = ctx.last_sector_desc or {}
-    ships = d.get("ships") or []
+def _get_menu_flags(ctx: Context) -> dict:
+    d = ctx.state.get("sector_info", {})
+    ships = d.get("ships", [])
     my_ship_id = get_my_ship_id(ctx.conn)
     my_name = get_my_player_name(ctx.conn)
     # keep beacon count handy for label interpolation
@@ -1317,12 +1317,6 @@ def compute_flags(ctx: Context) -> Dict[str, bool]:
         "can_autopilot": bool(ctx.state.get("ap_route_plotted")),
         "has_exchange_access": ctx.state.get("has_exchange_access", False),
         "has_insurance_access": ctx.state.get("has_insurance_access", False),
-        "has_tavern_access": ctx.state.get("has_tavern_access", False),
-        "has_hardware_access": ctx.state.get("has_hardware_access", False),
-    }
-    return flags
-
-
         "has_tavern_access": ctx.state.get("has_tavern_access", False),
         "has_hardware_access": ctx.state.get("has_hardware_access", False),
         "in_corporation": ctx.state.get("in_corporation", False),
@@ -3862,10 +3856,7 @@ def main():
             except Exception:
                 pass
 
-            login = conn.rpc("auth.login", {"user_name": user, "password": passwd})
-            if login.get("status") in ("error","refused"):
-                fb = conn.rpc("auth.login", {"player_name": user, "password": passwd})
-                login = fb
+            login = conn.rpc("auth.login", {"username": user, "passwd": passwd})
 
             if login.get("status") in ("error","refused"):
                 print("Login failed.");

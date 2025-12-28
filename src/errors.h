@@ -17,7 +17,7 @@
 #define ERR_DB_TX               1012
 #define ERR_DB_CONNECT          1013
 #define ERR_DB_NOMEM            1014
-#define ERR_DB_NO_ROWS          1015
+#define ERR_DB_NO_ROWS 		1015
 
 /* Authentication Errors (1100-1199) */
 #define AUTH_ERR_INVALID_CRED   1101
@@ -130,6 +130,7 @@
 /* Ship Errors (1600-1699) */
 #define ERR_SHIP_NOT_FOUND      1600
 #define ERR_NO_ACTIVE_SHIP      1601
+#define ERR_HOLD_FULL           1605
 
 /* Sector Errors (1700-1799) */
 #define ERR_SECTOR_NOT_FOUND    1700
@@ -160,6 +161,10 @@
 #define ERR_TAVERN_DYNAMIC_WAGER_EXCEEDED 1823
 #define ERR_TAVERN_BET_ON_SELF  1824
 #define ERR_TAVERN_PLAYER_NOT_FOUND 1825
+#define ERR_TAVERN_LOAN_SHARK_DISABLED 1830
+#define ERR_TAVERN_NO_LOAN 1831
+#define ERR_TAVERN_LOAN_OUTSTANDING 1832
+#define ERR_TAVERN_TOO_HONORABLE 1833
 
 /* Target/Recipient Errors (1900-1999) */
 #define ERR_TARGET_INVALID      1900

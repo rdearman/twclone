@@ -19,6 +19,7 @@ void ori_tick (int64_t now_ms);
 
 void iss_init (db_t *db);
 void iss_tick (db_t *db, int64_t now_ms);
+int iss_init_once(void);
 
 int no_zero_ship (db_t *db, int set_sector, int ship_id);
 int h_warp_exists (db_t *db, int from, int to);

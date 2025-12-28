@@ -1358,3 +1358,17 @@ server_loop (volatile sig_atomic_t *running)
   return 0;
 }
 
+
+int cmd_insurance_policies_list(client_ctx_t *ctx, json_t *root) { return 0; }
+int cmd_insurance_policies_buy(client_ctx_t *ctx, json_t *root) { return 0; }
+int cmd_insurance_claim_file(client_ctx_t *ctx, json_t *root) { return 0; }
+int cmd_combat_attack_planet(client_ctx_t *ctx, json_t *root) { return 0; }
+int cmd_mines_recall(client_ctx_t *ctx, json_t *root) { return 0; }
+int cmd_dock_status(client_ctx_t *ctx, json_t *root) { return 0; }
+int cmd_player_list_online(client_ctx_t *ctx, json_t *root) { return 0; }
+int cmd_player_rankings(client_ctx_t *ctx, json_t *root) { return 0; }
+int cmd_trade_port_info(client_ctx_t *ctx, json_t *root) { return 0; }
+int cmd_trade_buy(client_ctx_t *ctx, json_t *root) { return 0; }
+int cmd_trade_history(client_ctx_t *ctx, json_t *root) { return 0; }
+int cmd_trade_quote(client_ctx_t *ctx, json_t *root) { return 0; }
+int cmd_trade_sell(client_ctx_t *ctx, json_t *root) { return 0; }

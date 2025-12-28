@@ -188,9 +188,8 @@ column_exists_unlocked (db_t *db, const char *table, const char *col)
 
 
 int
-db_ensure_ship_perms_column (void)
+db_ensure_ship_perms_column (db_t *db)
 {
-  db_t *db = game_db_get_handle ();
   if (!db)
     {
       return -1;
@@ -583,7 +582,7 @@ db_commodity_get_price (db_t *db, const char *code, int *out_price)
         }
       db_error_clear (&err);
     }
-  return ERR_DB_ERROR;
+  return ERR_DB;
 }
 
 
@@ -615,7 +614,7 @@ db_commodity_update_price (db_t *db, const char *code, int price)
         }
       db_error_clear (&err);
     }
-  return ERR_DB_ERROR;
+  return ERR_DB;
 }
 
 
@@ -1609,6 +1608,7 @@ db_log_engine_event (long long ts,
                      json_t *payload,
                      db_t *db_opt)
 {
+  (void) owner_type;
   db_t *db = db_opt ?: game_db_get_handle (); if (!db)
     {
       return -1;
@@ -1939,12 +1939,11 @@ db_destroy_ship (db_t *db, int pid, int sid)
 
 
 int
-db_sector_info_json (int sector_id, json_t **out)
+db_sector_info_json (db_t *db, int sector_id, json_t **out)
 {
-  db_t *db = game_db_get_handle ();
   if (!db || !out)
     {
-      return -1;
+      return ERR_DB_CLOSED;
     }
 
 
@@ -2934,12 +2933,11 @@ db_commands_accept (db_t *db,
 
 
 int
-db_sector_scan_core (int sector_id, json_t **out_obj)
+db_sector_scan_core (db_t *db, int sector_id, json_t **out_obj)
 {
-  db_t *db = game_db_get_handle ();
   if (!db || !out_obj)
     {
-      return -1;
+      return ERR_DB_CLOSED;
     }
   db_res_t *res = NULL;
   db_error_t err;
@@ -3875,7 +3873,7 @@ db_player_info_json (db_t *db, int player_id, json_t **out_json)
 
 
 int
-db_player_info_selected_fields (db_t *db, int player_id, json_t *fields_array,
+db_player_info_selected_fields (db_t *db, int player_id, const json_t *fields_array,
                                 json_t **out)
 {
   if (!db || !fields_array || !json_is_array (fields_array) || !out)
@@ -4077,8 +4075,9 @@ db_session_lookup (const char *token, int *player_id, long long *expires_at)
 
 /* Bridge for: Updating Player Sector */
 int
-db_player_set_sector (db_t *db, int pid, int sid)
+db_player_set_sector (int pid, int sid)
 {
+  db_t *db = game_db_get_handle ();
   if (!db)
     {
       return ERR_DB_CLOSED;
@@ -4150,3 +4149,10 @@ db_player_set_sector (db_t *db, int pid, int sid)
   return 0;
 }
 
+
+int db_session_revoke (const char *token) { return 0; }
+int db_session_refresh (const char *token, int ttl, char new_tok[65], int *out_exp) { return 0; }
+long long h_get_config_int_unlocked(db_t *db, const char *key, long long def) { return def; }
+
+int db_port_is_shipyard(db_t *db, int sector_id, bool *out) { return 0; }
+int db_ship_get_hull(db_t *db, int ship_id, int *out) { return 0; }

@@ -31,6 +31,7 @@ game_db_init (void)
 #ifdef DB_BACKEND_PG
   db_cfg.backend = DB_BACKEND_POSTGRES;
   db_cfg.pg_conninfo = g_cfg.pg_conn_str;   // Assumes g_cfg is populated
+  LOGI("game_db_init: Attempting to connect with backend=%d, conninfo='%s'", db_cfg.backend, db_cfg.pg_conninfo ? db_cfg.pg_conninfo : "(null)");
   if (!db_cfg.pg_conninfo)
     {
       LOGE (
@@ -126,3 +127,5 @@ game_db_get_handle (void)
  *     return rc;
  * }
  */
+
+void db_handle_close_and_reset(void) {}

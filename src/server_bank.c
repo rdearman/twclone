@@ -185,7 +185,7 @@ h_get_system_account_id_unlocked (db_t *db, const char *system_owner_type,
       /* Create the system account if it doesn't exist */
       rc =
         h_create_bank_account_unlocked (db, system_owner_type,
-                                        system_owner_id, 0);
+                                        system_owner_id, 0, NULL);
       if (rc == 0)
         {
           rc = h_get_account_id_unlocked (db,
@@ -215,33 +215,25 @@ h_create_personal_bank_alert_notice (db_t *db, int player_id, const char *msg)
 }
 
 
-static int
+int
 calculate_fees (db_t *db,
-                long long amount,
                 const char *tx_type,
-                long long *out_fee)
+                long long base_amount,
+                const char *owner_type,
+                fee_result_t *out)
 {
-  db_res_t *res = NULL;
-  db_error_t err;
-  const char *sql = "SELECT value FROM config WHERE key = $1;";
-  int value = def;
+  (void) db;
+  (void) tx_type;
+  (void) base_amount;
+  (void) owner_type;
 
-
-  if (db_query (db, sql, (db_bind_t[]){ db_bind_text (key) }, 1, &res, &err))
+  if (out)
     {
-      if (db_res_step (res, &err))
-        {
-          const char *txt = db_res_col_text (res, 0, &err);
-
-
-          if (txt)
-            {
-              value = atoi (txt);
-            }
-        }
-      db_res_finalize (res);
+      out->fee_total = 0;
+      out->fee_to_bank = 0;
+      out->tax_to_system = 0;
     }
-  return value;
+  return 0;
 }
 
 
@@ -296,7 +288,7 @@ db_get_planet_bank_balance (db_t *db, int planet_id, long long *balance_out)
 }
 
 
-static int
+int
 h_add_credits_unlocked (db_t *db,
                         int account_id,
                         long long amount,
@@ -356,7 +348,7 @@ h_add_credits_unlocked (db_t *db,
 }
 
 
-static int
+int
 h_deduct_credits_unlocked (db_t *db,
                            int account_id,
                            long long amount,
@@ -416,11 +408,12 @@ h_deduct_credits_unlocked (db_t *db,
 }
 
 
-static int
+int
 h_create_bank_account_unlocked (db_t *db,
                                 const char *owner_type,
                                 int owner_id,
-                                int interest_rate_bp)
+                                long long initial_balance,
+                                int *account_id_out)
 {
   if (!db || !owner_type)
     {
@@ -428,14 +421,19 @@ h_create_bank_account_unlocked (db_t *db,
     }
   db_error_t err;
   const char *sql =
-    "INSERT INTO bank_accounts (owner_type, owner_id, balance, interest_rate_bp, is_active) VALUES ($1, $2, 0, $3, 1) ON CONFLICT DO NOTHING;";
+    "INSERT INTO bank_accounts (owner_type, owner_id, balance, interest_rate_bp, is_active) VALUES ($1, $2, $3, 0, 1) ON CONFLICT DO NOTHING;";
   db_bind_t params[] = { db_bind_text (owner_type), db_bind_i32 (owner_id),
-                         db_bind_i32 (interest_rate_bp) };
+                         db_bind_i64 (initial_balance) };
 
 
   if (!db_exec (db, sql, params, 3, &err))
     {
       return err.code;
+    }
+  
+  if (account_id_out)
+    {
+      return h_get_account_id_unlocked (db, owner_type, owner_id, account_id_out);
     }
   return 0;
 }
@@ -460,7 +458,7 @@ h_add_credits (db_t *db,
 
   if (rc == ERR_NOT_FOUND)
     {
-      rc = h_create_bank_account_unlocked (db, owner_type, owner_id, 0);
+      rc = h_create_bank_account_unlocked (db, owner_type, owner_id, 0, NULL);
       if (rc != 0)
         {
           return rc;
@@ -567,9 +565,8 @@ h_get_credits (db_t *db,
 
 
 int
-db_bank_account_exists (const char *owner_type, int owner_id)
+db_bank_account_exists (db_t *db, const char *owner_type, int owner_id)
 {
-  db_t *db = game_db_get_handle ();
   if (!db)
     {
       return 0;
@@ -586,11 +583,12 @@ db_bank_account_exists (const char *owner_type, int owner_id)
 
 
 int
-db_bank_create_account (const char *owner_type,
+db_bank_create_account (db_t *db,
+                        const char *owner_type,
                         int owner_id,
-                        int interest_rate_bp)
+                        long long initial_balance,
+                        int *account_id_out)
 {
-  db_t *db = game_db_get_handle ();
   if (!db)
     {
       return -1;
@@ -598,18 +596,17 @@ db_bank_create_account (const char *owner_type,
   return h_create_bank_account_unlocked (db,
                                          owner_type,
                                          owner_id,
-                                         interest_rate_bp);
+                                         initial_balance,
+                                         account_id_out);
 }
 
 
 int
-db_bank_deposit (const char *owner_type,
+db_bank_deposit (db_t *db,
+                 const char *owner_type,
                  int owner_id,
-                 long long amount,
-                 const char *tx_type,
-                 const char *tx_group_id)
+                 long long amount)
 {
-  db_t *db = game_db_get_handle ();
   if (!db)
     {
       return -1;
@@ -625,8 +622,8 @@ db_bank_deposit (const char *owner_type,
                           owner_type,
                           owner_id,
                           amount,
-                          tx_type,
-                          tx_group_id,
+                          "deposit",
+                          NULL,
                           NULL);
 
 
@@ -643,13 +640,11 @@ db_bank_deposit (const char *owner_type,
 
 
 int
-db_bank_withdraw (const char *owner_type,
+db_bank_withdraw (db_t *db,
+                  const char *owner_type,
                   int owner_id,
-                  long long amount,
-                  const char *tx_type,
-                  const char *tx_group_id)
+                  long long amount)
 {
-  db_t *db = game_db_get_handle ();
   if (!db)
     {
       return -1;
@@ -665,8 +660,8 @@ db_bank_withdraw (const char *owner_type,
                              owner_type,
                              owner_id,
                              amount,
-                             tx_type,
-                             tx_group_id,
+                             "withdrawal",
+                             NULL,
                              NULL);
 
 
@@ -875,9 +870,12 @@ db_bank_get_frozen_status (db_t *db,
 
 /* Transfer: Debit Sender -> Credit Receiver */
 int
-db_bank_transfer (db_t *db, const char *from_type, int from_id,
-                  const char *to_type, int to_id, long long amount,
-                  const char *tx_type, const char *tx_group_id)
+db_bank_transfer (db_t *db,
+                  const char *from_type,
+                  int from_id,
+                  const char *to_type,
+                  int to_id,
+                  long long amount)
 {
   if (amount <= 0)
     {
@@ -896,8 +894,8 @@ db_bank_transfer (db_t *db, const char *from_type, int from_id,
                              from_type,
                              from_id,
                              amount,
-                             tx_type ? tx_type : "TRANSFER",
-                             tx_group_id,
+                             "TRANSFER",
+                             NULL,
                              NULL);
 
 
@@ -911,8 +909,8 @@ db_bank_transfer (db_t *db, const char *from_type, int from_id,
                       to_type,
                       to_id,
                       amount,
-                      tx_type ? tx_type : "TRANSFER",
-                      tx_group_id,
+                      "TRANSFER",
+                      NULL,
                       NULL);
   if (rc != 0)
     {

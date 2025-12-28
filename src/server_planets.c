@@ -22,6 +22,17 @@
 #include "server_ships.h"
 #include "database_cmd.h"
 #include "server_config.h"
+#include "server_combat.h"
+
+#ifndef GENESIS_ENABLED
+#define GENESIS_ENABLED 1
+#endif
+#ifndef GENESIS_BLOCK_AT_CAP
+#define GENESIS_BLOCK_AT_CAP 1
+#endif
+#ifndef GENESIS_NAVHAZ_DELTA
+#define GENESIS_NAVHAZ_DELTA 5
+#endif
 
 
 // Helper to check if a commodity is illegal
@@ -1582,7 +1593,7 @@ cmd_planet_market_sell (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  const char *commodity_code = commodity_to_code (raw_commodity);
+  const char *commodity_code = raw_commodity;
 
 
   if (!commodity_code)
@@ -1796,7 +1807,7 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  const char *commodity_code = commodity_to_code (raw_commodity);
+  const char *commodity_code = raw_commodity;
 
 
   if (!commodity_code)
