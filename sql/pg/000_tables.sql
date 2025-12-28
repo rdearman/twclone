@@ -252,7 +252,7 @@ CREATE TABLE podded_status ( player_id BIGSERIAL PRIMARY KEY REFERENCES players(
 
 CREATE TABLE planet_goods ( planet_id BIGINT NOT NULL, commodity TEXT NOT NULL CHECK(commodity IN ('ore', 'organics', 'equipment', 'food', 'fuel')), quantity BIGINT NOT NULL DEFAULT 0, max_capacity BIGINT NOT NULL, production_rate BIGINT NOT NULL, PRIMARY KEY (planet_id, commodity), FOREIGN KEY (planet_id) REFERENCES planets(id));
 
-CREATE TABLE clusters ( id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, role TEXT NOT NULL, kind TEXT NOT NULL, center_sector BIGINT, law_severity BIGINT NOT NULL DEFAULT 1, alignment BIGINT NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE clusters ( id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL UNIQUE, role TEXT NOT NULL, kind TEXT NOT NULL, center_sector BIGINT, law_severity BIGINT NOT NULL DEFAULT 1, alignment BIGINT NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
 
 CREATE TABLE cluster_sectors ( cluster_id BIGINT NOT NULL, sector_id BIGINT NOT NULL, PRIMARY KEY (cluster_id, sector_id), FOREIGN KEY (cluster_id) REFERENCES clusters(id), FOREIGN KEY (sector_id) REFERENCES sectors(id));
 

@@ -49,6 +49,7 @@ typedef struct
 
   /* --- bulk execution capture --- */
   json_t *captured_envelopes;   // If non-NULL, responses are appended here instead of sent
+  int responses_sent; // Hardening: ensure every request gets a reply
 } client_ctx_t;
 // Structure to represent a commodity's essential data
 typedef struct

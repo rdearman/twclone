@@ -772,7 +772,7 @@ class Conn:
                 continue
 
             # 5) Unknown frame: ignore but keep the RPC wait alive
-            print(f"[WARN] Ignoring frame id={resp.get('id')} reply_to={resp.get('reply_to')}")
+            # print(f"[WARN] Ignoring frame id={resp.get('id')} reply_to={resp.get('reply_to')}")
             # loop continues
 
 
@@ -808,6 +808,43 @@ class Context:
 # ---------------------------
 # Flags & helpers
 # ---------------------------
+
+def compute_flags(ctx: Context) -> dict:
+    """
+    Compute state flags based on current sector info, player info, etc.
+    These flags drive conditional menu item visibility.
+    """
+    d = ctx.last_sector_desc or {}
+    ships = d.get("ships", [])
+    my_ship_id = get_my_ship_id(ctx.conn)
+    my_name = get_my_player_name(ctx.conn)
+    # keep beacon count handy for label interpolation
+    ctx.state["beacon_count"] = get_my_beacon_count(ctx.conn)
+
+    flags = {
+        "has_port": bool(d.get("port")),
+        "is_stardock": ctx.state.get("is_stardock", False),
+        "is_shipyard_port": ctx.state.get("is_shipyard_port", False),
+        "has_planet": bool(d.get("planets")),
+        "can_set_beacon": (d.get("beacon") in (None, "")),
+        "has_boardable": has_boardable_ship(ships, my_ship_id=my_ship_id, my_name=my_name),
+        "has_tow_target": has_tow_target(ships, my_ship_id=my_ship_id),
+        "on_planet": bool(ctx.state.get("on_planet")),
+        "planet_has_products": bool(ctx.state.get("planet_products_available")),
+        "is_corp_member": bool(ctx.player_info.get("corp_id")),
+        "can_autopilot": bool(ctx.state.get("ap_route_plotted")),
+        "has_exchange_access": ctx.state.get("has_exchange_access", False),
+        "has_insurance_access": ctx.state.get("has_insurance_access", False),
+        "has_tavern_access": ctx.state.get("has_tavern_access", False),
+        "has_hardware_access": ctx.state.get("has_hardware_access", False),
+        "in_corporation": ctx.state.get("in_corporation", False),
+        "is_ceo": ctx.state.get("is_ceo", False),
+        "is_ceo_or_officer": ctx.state.get("is_ceo_or_officer", False),
+        "not_in_corporation": not ctx.state.get("in_corporation", False),
+        "corp_not_public": not ctx.state.get("corp_is_public", False),
+        "corp_is_public": ctx.state.get("corp_is_public", False)
+    }
+    return flags
 
 @register("sector_density_scan_flow")
 def sector_density_scan_flow(ctx: Context):

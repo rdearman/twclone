@@ -1,7 +1,10 @@
 #ifndef DATABASE_MARKET_H
 #define DATABASE_MARKET_H
 
+#include <jansson.h>
+#include "common.h"
 #include "db/db_api.h"
+
 #include <jansson.h>
 
 // Struct to represent a commodity order
@@ -106,6 +109,6 @@ json_t *db_list_actor_orders (db_t *db, const char *actor_type,
 
 // Helper to summarize orders by commodity (read-only, for diagnostics)
 // Returns a JSON object (caller owns reference)
-json_t *db_orders_summary (db_t *db, int filter_commodity_id);
+json_t * db_orders_summary (db_t *db, int filter_commodity_id);
 
 #endif // DATABASE_MARKET_H

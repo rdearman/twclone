@@ -247,7 +247,41 @@ universe_shutdown (void)
 int
 cmd_move_describe_sector (client_ctx_t *ctx, json_t *root)
 {
-  (void)ctx; (void)root; return 0;
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_DB, "Database connection failed");
+      return 0;
+    }
+
+  /* Default: caller's current sector */
+  int sector_id = ctx->sector_id;
+
+  json_t *data = json_object_get (root, "data");
+  if (data && json_is_object (data))
+    {
+      json_t *j_sid = json_object_get (data, "sector_id");
+      if (j_sid && json_is_integer (j_sid))
+        sector_id = (int) json_integer_value (j_sid);
+    }
+
+  if (sector_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_INVALID_SCHEMA, "Invalid sector_id");
+      return 0;
+    }
+
+  /* Helper already exists; use it. */
+  json_t *payload = build_sector_scan_json (db, sector_id, ctx->player_id, false);
+  if (!payload)
+    {
+      /* This covers: sector not found, DB error, allocation failure. */
+      send_response_error (ctx, root, ERR_NOT_FOUND, "Sector not found or could not be described");
+      return 0;
+    }
+
+  send_response_ok_take (ctx, root, "sector.info", &payload);
+  return 0;
 }
 
 
@@ -285,8 +319,178 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
 int
 cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
 {
-  (void)ctx; (void)root; return 0;
+  db_t *db = game_db_get_handle();
+  if (!db) {
+    send_response_error(ctx, root, ERR_DB, "Database connection failed");
+    return 0;
+  }
+
+  json_t *data = json_object_get(root, "data");
+  int from = ctx->sector_id;
+  int to = -1;
+
+  if (data) {
+    json_get_int_flexible(data, "from", &from);
+    json_get_int_flexible(data, "to", &to);
+  }
+
+  if (to <= 0) {
+    send_response_error(ctx, root, ERR_INVALID_SCHEMA, "Target sector 'to' not specified");
+    return 0;
+  }
+
+  int max_id = 0;
+  db_error_t err;
+  db_res_t *res = NULL;
+  if (!db_query(db, "SELECT MAX(id) FROM sectors;", NULL, 0, &res, &err)) {
+    send_response_error(ctx, root, ERR_DB, "Failed to query universe size");
+    return 0;
+  }
+  if (db_res_step(res, &err)) {
+    max_id = (int)db_res_col_i64(res, 0, &err);
+  }
+  db_res_finalize(res);
+
+  if (max_id <= 0) {
+    send_response_error(ctx, root, ERR_NOT_FOUND, "No sectors in universe");
+    return 0;
+  }
+
+  if (from <= 0 || from > max_id || to <= 0 || to > max_id) {
+    send_response_error(ctx, root, ERR_SECTOR_NOT_FOUND, "Sector not found");
+    return 0;
+  }
+
+  size_t N = (size_t)max_id + 1;
+  unsigned char *avoid = calloc(N, 1);
+  unsigned char *seen = calloc(N, 1);
+  int *prev = malloc(N * sizeof(int));
+  int *queue = malloc(N * sizeof(int));
+
+  if (!avoid || !seen || !prev || !queue) {
+    free(avoid); free(seen); free(prev); free(queue);
+    send_response_error(ctx, root, ERR_NOMEM, "Out of memory");
+    return 0;
+  }
+  for (size_t i = 0; i < N; ++i) prev[i] = -1;
+
+  if (from == to) {
+    json_t *steps = json_array();
+    json_array_append_new(steps, json_integer(from));
+    json_t *out = json_object();
+    json_object_set_new(out, "path", steps);
+    json_object_set_new(out, "hops", json_integer(0));
+    send_response_ok_take(ctx, root, "move.pathfind", &out);
+    free(avoid); free(seen); free(prev); free(queue);
+    return 0;
+  }
+
+  int *head = malloc(N * sizeof(int));
+  int *to_v = NULL;
+  int *next = NULL;
+  int edges = 0;
+
+  for (size_t i = 0; i < N; i++) head[i] = -1;
+  
+  if (!db_query(db, "SELECT COUNT(*) FROM sector_warps;", NULL, 0, &res, &err)) {
+    // Memory cleanup
+    free(head); free(avoid); free(seen); free(prev); free(queue);
+    send_response_error(ctx, root, ERR_DB, "Pathfind init failed (edge count)");
+    return 0;
+  }
+  if (db_res_step(res, &err)) {
+      edges = (int)db_res_col_i64(res, 0, &err);
+  }
+  db_res_finalize(res);
+
+  if (edges > 0) {
+      to_v = malloc((size_t)edges * sizeof(int));
+      next = malloc((size_t)edges * sizeof(int));
+      if (!to_v || !next) {
+          free(to_v); free(next); free(head);
+          free(avoid); free(seen); free(prev); free(queue);
+          send_response_error(ctx, root, ERR_NOMEM, "Out of memory");
+          return 0;
+      }
+
+      if (!db_query(db, "SELECT from_sector, to_sector FROM sector_warps;", NULL, 0, &res, &err)) {
+          free(to_v); free(next); free(head);
+          free(avoid); free(seen); free(prev); free(queue);
+          send_response_error(ctx, root, ERR_DB, "Pathfind init failed (edge read)");
+          return 0;
+      }
+      int e = 0;
+      while (db_res_step(res, &err)) {
+          if (e >= edges) break;
+          int u = (int)db_res_col_i64(res, 0, &err);
+          int v = (int)db_res_col_i64(res, 1, &err);
+          if (u > 0 && u <= max_id && v > 0 && v <= max_id) {
+              to_v[e] = v;
+              next[e] = head[u];
+              head[u] = e++;
+          }
+      }
+      db_res_finalize(res);
+  }
+
+  int qh = 0, qt = 0;
+  queue[qt++] = from;
+  seen[from] = 1;
+  int found = 0;
+
+  while (qh < qt) {
+    int u = queue[qh++];
+    for (int ei = head[u]; ei != -1; ei = next[ei]) {
+        int v = to_v[ei];
+        if (avoid[v] || seen[v]) continue;
+        seen[v] = 1;
+        prev[v] = u;
+        queue[qt++] = v;
+        if (v == to) {
+            found = 1;
+            break;
+        }
+    }
+    if (found) break;
+  }
+
+  free(to_v); free(next); free(head);
+  
+  if (!found) {
+    free(avoid); free(seen); free(prev); free(queue);
+    send_response_error(ctx, root, ERR_NOT_FOUND, "Path not found");
+    return 0;
+  }
+
+  int *stack = malloc(N * sizeof(int));
+  int sp = 0;
+  int cur = to;
+  while (cur != -1) {
+    stack[sp++] = cur;
+    if (cur == from) break;
+    cur = prev[cur];
+  }
+
+  if (sp <= 0 || stack[sp - 1] != from) {
+    free(stack); free(avoid); free(seen); free(prev); free(queue);
+    send_response_error(ctx, root, ERR_SERVER_ERROR, "Path reconstruction failed");
+    return 0;
+  }
+
+  json_t *steps = json_array();
+  for (int i = sp - 1; i >= 0; --i) {
+    json_array_append_new(steps, json_integer(stack[i]));
+  }
+  
+  json_t *out = json_object();
+  json_object_set_new(out, "path", steps);
+  json_object_set_new(out, "hops", json_integer(sp - 1));
+  send_response_ok_take(ctx, root, "move.pathfind", &out);
+
+  free(stack); free(avoid); free(seen); free(prev); free(queue);
+  return 0;
 }
+
 
 
 static void

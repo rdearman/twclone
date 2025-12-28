@@ -381,6 +381,9 @@ make_base_envelope (json_t *req, const char *type)
 void
 send_all_json (int fd, json_t *obj)
 {
+  if (g_ctx_for_send) {
+    g_ctx_for_send->responses_sent++;
+  }
   char *s = json_dumps (obj, JSON_COMPACT);
   if (s)
     {

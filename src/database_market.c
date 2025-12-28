@@ -6,6 +6,9 @@
 #include "server_log.h"         // For LOGE, LOGI
 #include "db/db_api.h"
 #include "common.h"
+#include "game_db.h"
+#include "server_envelope.h"
+#include "server_ports.h"
 
 
 // Helper to insert a new commodity order
@@ -691,4 +694,3 @@ db_orders_summary (db_t *db, int filter_commodity_id)
   db_res_finalize (res);
   return summary;
 }
-

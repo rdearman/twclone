@@ -169,15 +169,137 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
 
 
 
-int h_calculate_port_buy_price(db_t *db, int port_id, const char *commodity) { (void)db; (void)port_id; (void)commodity; return 100; }
+int h_calculate_port_buy_price(db_t *db, int port_id, const char *commodity) {
+    if (!db || !commodity) return 0; // Return 0 on error
+    db_res_t *res = NULL;
+    db_error_t err;
+    const char *sql = "SELECT pc.buy_price FROM port_commodities pc JOIN commodities c ON pc.commodity_id = c.id WHERE pc.port_id = $1 AND c.code = $2;";
+    int price = 0;
+    if (db_query(db, sql, (db_bind_t[]){db_bind_i32(port_id), db_bind_text(commodity)}, 2, &res, &err)) {
+        if (db_res_step(res, &err)) {
+            price = db_res_col_i32(res, 0, &err);
+        }
+        db_res_finalize(res);
+    }
+    return price;
+}
 
-int h_calculate_port_sell_price(db_t *db, int port_id, const char *commodity) { (void)db; (void)port_id; (void)commodity; return 90; }
+int h_calculate_port_sell_price(db_t *db, int port_id, const char *commodity) {
+    if (!db || !commodity) return 0; // Return 0 on error
+    db_res_t *res = NULL;
+    db_error_t err;
+    const char *sql = "SELECT pc.sell_price FROM port_commodities pc JOIN commodities c ON pc.commodity_id = c.id WHERE pc.port_id = $1 AND c.code = $2;";
+    int price = 0;
+    if (db_query(db, sql, (db_bind_t[]){db_bind_i32(port_id), db_bind_text(commodity)}, 2, &res, &err)) {
+        if (db_res_step(res, &err)) {
+            price = db_res_col_i32(res, 0, &err);
+        }
+        db_res_finalize(res);
+    }
+    return price;
+}
 
 int h_get_port_commodity_quantity(db_t *db, int port_id, const char *code, int *qty) {     if (qty) *qty = 1000;     const char *sql = "SELECT quantity FROM port_commodities WHERE port_id =  AND commodity_code = ;";     db_res_t *res = NULL; db_error_t err;     if (db_query(db, sql, (db_bind_t[]){db_bind_i32(port_id), db_bind_text(code)}, 2, &res, &err)) {         if (db_res_step(res, &err)) {             if (qty) *qty = db_res_col_i32(res, 0, &err);         }         db_res_finalize(res);     }     return 0; }
 
 int h_market_move_port_stock(db_t *db, int port_id, const char *code, int delta) {     const char *sql = "UPDATE port_commodities SET quantity = quantity +  WHERE port_id =  AND commodity_code = ;";     db_error_t err;     db_exec(db, sql, (db_bind_t[]){db_bind_i32(delta), db_bind_i32(port_id), db_bind_text(code)}, 3, &err);     return 0; }
 
 int h_update_entity_stock(db_t *db, const char *type, int id, const char *code, int delta, int *new_qty) {     if (strcmp(type, "port") == 0) {         return h_market_move_port_stock(db, id, code, delta);     }     return -1; }
+
+int h_get_port_id_in_sector(db_t *db, int sector_id, int *out_port_id) {
+    if (!db || !out_port_id) return -1;
+    db_res_t *res = NULL;
+    db_error_t err;
+    const char *sql = "SELECT id FROM ports WHERE sector = $1 LIMIT 1;";
+    if (!db_query(db, sql, (db_bind_t[]){db_bind_i32(sector_id)}, 1, &res, &err)) {
+        LOGE("h_get_port_id_in_sector: Query failed for sector %d: %s", sector_id, err.message);
+        return -1;
+    }
+    int rc = ERR_DB_NO_ROWS;
+    if (db_res_step(res, &err)) {
+        *out_port_id = db_res_col_i32(res, 0, &err);
+        rc = 0;
+    }
+    db_res_finalize(res);
+    return rc;
+}
+
+int
+cmd_trade_quote (client_ctx_t *ctx, json_t *root)
+{
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_DB, "Database connection failed");
+      return 0;
+    }
+
+  int port_id = 0;
+  if (h_get_port_id_in_sector(db, ctx->sector_id, &port_id) != 0 || port_id <= 0) {
+      send_response_error(ctx, root, ERR_PORT_NOT_FOUND, "You are not at a port.");
+      return 0;
+  }
+
+  json_t *data = json_object_get(root, "data");
+  const char *commodity_code = json_get_string_or_null(data, "commodity");
+  int quantity = 0;
+  json_get_int_flexible(data, "quantity", &quantity);
+
+  if (!commodity_code || quantity <= 0) {
+      send_response_error(ctx, root, ERR_INVALID_SCHEMA, "Missing or invalid 'commodity' or 'quantity'.");
+      return 0;
+  }
+
+  // Check if the port even trades this commodity
+  char *buy_mode = NULL;
+  char *sell_mode = NULL;
+  db_error_t err;
+  db_res_t *res = NULL;
+  const char *sql_trade = "SELECT mode FROM port_trade WHERE port_id = $1 AND commodity = $2;";
+  if(db_query(db, sql_trade, (db_bind_t[]){db_bind_i32(port_id), db_bind_text(commodity_code)}, 2, &res, &err)) {
+      while(db_res_step(res, &err)) {
+          const char* mode = db_res_col_text(res, 0, &err);
+          if (strcasecmp(mode, "buy") == 0) buy_mode = "buy";
+          if (strcasecmp(mode, "sell") == 0) sell_mode = "sell";
+      }
+      db_res_finalize(res);
+  }
+
+  if (!buy_mode && !sell_mode) {
+    send_response_error(ctx, root, ERR_NOT_FOUND, "Commodity not traded at this port.");
+    return 0;
+  }
+  
+  // Get prices from entity_stock
+  int buy_price = 0; // Price port BUYS FROM player (player's sell price)
+  int sell_price = 0; // Price port SELLS TO player (player's buy price)
+  
+  const char *sql_stock = "SELECT price FROM entity_stock WHERE entity_type='port' AND entity_id = $1 AND commodity_code = $2;";
+  if(db_query(db, sql_stock, (db_bind_t[]){db_bind_i32(port_id), db_bind_text(commodity_code)}, 2, &res, &err)) {
+      if(db_res_step(res, &err)) {
+          int price = db_res_col_i32(res, 0, &err);
+          // This is a simplification; a real economy would have different buy/sell prices.
+          // For now, we assume the stored price is the base, and we derive buy/sell from it.
+          if (buy_mode) sell_price = price * 0.9; // Port buys from player for less
+          if (sell_mode) buy_price = price * 1.1; // Port sells to player for more
+      }
+      db_res_finalize(res);
+  }
+
+  long long total_player_buy_price = (long long)buy_price * quantity;
+  long long total_player_sell_price = (long long)sell_price * quantity;
+
+  json_t *payload = json_object();
+  json_object_set_new(payload, "port_id", json_integer(port_id));
+  json_object_set_new(payload, "commodity", json_string(commodity_code));
+  json_object_set_new(payload, "quantity", json_integer(quantity));
+  json_object_set_new(payload, "buy_price", json_integer(buy_price));
+  json_object_set_new(payload, "sell_price", json_integer(sell_price));
+  json_object_set_new(payload, "total_buy_price", json_integer(total_player_buy_price));
+  json_object_set_new(payload, "total_sell_price", json_integer(total_player_sell_price));
+
+  send_response_ok_take(ctx, root, "trade.quote", &payload);
+  return 0;
+}
 
 int
 db_load_ports (int *server_port, int *s2s_port)
@@ -191,3 +313,4 @@ db_load_ports (int *server_port, int *s2s_port)
   *s2s_port = db_get_config_int (db, "s2s_port", 4321);
   return 0;
 }
+

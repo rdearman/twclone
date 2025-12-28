@@ -3,6 +3,12 @@
 #define SERVER_ENVELOPE_H
 #include <jansson.h>
 
+#include "common.h" // For client_ctx_t
+
+// Defined in server_loop.c, used by send functions to access thread's context
+extern __thread client_ctx_t *g_ctx_for_send;
+
+
 
 static inline void
 jsonp_cleanup (json_t **p)

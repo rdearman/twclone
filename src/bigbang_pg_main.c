@@ -775,6 +775,8 @@ main (int argc, char **argv)
   snprintf (buf, sizeof(buf), "SELECT generate_sectors(%d)", sectors);
   exec_sql (app, buf, "generate_sectors");
 
+  exec_sql (app, "SELECT generate_clusters(10)", "generate_clusters");
+
   int max_ports = (sectors * port_ratio) / 100;
 
 
@@ -782,6 +784,7 @@ main (int argc, char **argv)
   exec_sql (app, buf, "generate_ports");
 
   exec_sql (app, "SELECT generate_stardock()", "generate_stardock");
+  exec_sql (app, "SELECT generate_taverns(20)", "generate_taverns");
 
   if (port_size > 0 || tech_level > 0 || port_credits > 0)
     {
@@ -838,7 +841,6 @@ main (int argc, char **argv)
   snprintf (buf, sizeof(buf), "SELECT generate_planets(%d)", max_planets);
   exec_sql (app, buf, "generate_planets");
 
-  exec_sql (app, "SELECT generate_clusters(10)", "generate_clusters");
   exec_sql (app, "SELECT setup_npc_homeworlds()", "setup_homeworlds");
   exec_sql (app, "SELECT setup_ferringhi_alliance()", "setup_ferringhi");
   exec_sql (app, "SELECT setup_orion_syndicate()", "setup_orion");

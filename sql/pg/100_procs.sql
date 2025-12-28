@@ -94,8 +94,20 @@ DECLARE
   v_added bigint := 0;
   v_lock_key bigint := 72002002;
   v_target int;
+  v_port_ratio int;
+  v_port_rec record;
+  v_commodity_id int;
+  v_base_price int;
+  v_code text;
+  v_cluster_alignment int;
 BEGIN
   PERFORM bigbang_lock(v_lock_key);
+
+  -- Get config value for port_ratio, default to 40 if not set
+  SELECT value::int INTO v_port_ratio FROM config WHERE key = 'port_ratio';
+  IF v_port_ratio IS NULL OR v_port_ratio > 100 OR v_port_ratio < 0 THEN
+    v_port_ratio := 40;
+  END IF;
 
   IF target_sectors IS NULL THEN
     SELECT COALESCE(MAX(id),0)::int INTO v_target FROM sectors;
@@ -109,17 +121,80 @@ BEGIN
 
   PERFORM generate_sectors(v_target);
 
-  INSERT INTO ports (number, name, sector, type)
-  SELECT
-    s.id AS number,
-    format('Port %s', s.id) AS name,
-    s.id AS sector,
-    floor(random() * 8 + 1)::int AS type
-  FROM sectors s
-  WHERE s.id <= v_target
-    AND NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector = s.id);
+  -- Create a temporary table to hold newly created port IDs and types
+  CREATE TEMP TABLE new_ports (id int, type int, sector int) ON COMMIT DROP;
 
+  -- Insert ports respecting the port_ratio, and capture their IDs and types
+  WITH inserted_ports AS (
+    INSERT INTO ports (number, name, sector, type)
+    SELECT
+      s.id AS number,
+      randomname() AS name,
+      s.id AS sector,
+      floor(random() * 8 + 1)::int AS type
+    FROM sectors s
+    WHERE s.id > 10 -- Don't create ports in Fedspace core
+      AND s.id <= v_target
+      AND NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector = s.id)
+      AND random() <= (v_port_ratio / 100.0)
+    RETURNING id, type, sector
+  )
+  INSERT INTO new_ports SELECT id, type, sector FROM inserted_ports;
+  
   GET DIAGNOSTICS v_added = ROW_COUNT;
+
+  -- Now, seed commodities for the new ports
+  FOR v_port_rec IN SELECT id, type, sector FROM new_ports LOOP
+    -- SBB (Sell Ore, Buy Organics/Equipment)
+    IF v_port_rec.type = 1 THEN 
+      INSERT INTO port_trade (port_id, commodity, mode) VALUES (v_port_rec.id, 'organics', 'buy'), (v_port_rec.id, 'equipment', 'buy'), (v_port_rec.id, 'ore', 'sell');
+    -- SSB
+    ELSIF v_port_rec.type = 2 THEN 
+      INSERT INTO port_trade (port_id, commodity, mode) VALUES (v_port_rec.id, 'ore', 'sell'), (v_port_rec.id, 'organics', 'sell'), (v_port_rec.id, 'equipment', 'buy');
+    -- BSS
+    ELSIF v_port_rec.type = 3 THEN
+      INSERT INTO port_trade (port_id, commodity, mode) VALUES (v_port_rec.id, 'ore', 'buy'), (v_port_rec.id, 'organics', 'sell'), (v_port_rec.id, 'equipment', 'sell');
+    -- BSB
+    ELSIF v_port_rec.type = 4 THEN
+      INSERT INTO port_trade (port_id, commodity, mode) VALUES (v_port_rec.id, 'ore', 'buy'), (v_port_rec.id, 'organics', 'sell'), (v_port_rec.id, 'equipment', 'buy');
+    -- BBS
+    ELSIF v_port_rec.type = 5 THEN
+      INSERT INTO port_trade (port_id, commodity, mode) VALUES (v_port_rec.id, 'ore', 'buy'), (v_port_rec.id, 'organics', 'buy'), (v_port_rec.id, 'equipment', 'sell');
+    -- SBS
+    ELSIF v_port_rec.type = 6 THEN
+      INSERT INTO port_trade (port_id, commodity, mode) VALUES (v_port_rec.id, 'ore', 'sell'), (v_port_rec.id, 'organics', 'buy'), (v_port_rec.id, 'equipment', 'sell');
+    -- BBB (Specialty Port)
+    ELSIF v_port_rec.type = 7 THEN
+      INSERT INTO port_trade (port_id, commodity, mode) VALUES (v_port_rec.id, 'ore', 'buy'), (v_port_rec.id, 'organics', 'buy'), (v_port_rec.id, 'equipment', 'buy');
+    -- SSS (Specialty Port)
+    ELSIF v_port_rec.type = 8 THEN
+      INSERT INTO port_trade (port_id, commodity, mode) VALUES (v_port_rec.id, 'ore', 'sell'), (v_port_rec.id, 'organics', 'sell'), (v_port_rec.id, 'equipment', 'sell');
+    END IF;
+
+    -- Seed initial stock for all commodities at the new port
+    FOR v_commodity_id, v_code, v_base_price IN SELECT id, code, base_price FROM commodities WHERE illegal = 0 LOOP
+        INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price)
+        VALUES ('port', v_port_rec.id, v_code, 10000, v_base_price)
+        ON CONFLICT DO NOTHING;
+    END LOOP;
+
+    -- Check cluster alignment for illegal goods
+    v_cluster_alignment := 0; -- Default to neutral
+    SELECT cl.alignment INTO v_cluster_alignment
+    FROM clusters cl JOIN cluster_sectors cs ON cs.cluster_id = cl.id
+    WHERE cs.sector_id = v_port_rec.sector
+    LIMIT 1;
+
+    IF v_cluster_alignment < 0 THEN
+        -- Seed illegal goods for evil clusters
+        FOR v_commodity_id, v_code, v_base_price IN SELECT id, code, base_price FROM commodities WHERE illegal = 1 LOOP
+            INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price)
+            VALUES ('port', v_port_rec.id, v_code, 500, v_base_price)
+            ON CONFLICT DO NOTHING;
+        END LOOP;
+    END IF;
+
+  END LOOP;
 
   PERFORM bigbang_unlock(v_lock_key);
   RETURN v_added;
@@ -138,6 +213,7 @@ DECLARE
   v_max_sector int;
   v_lock_key bigint := 72002006;
   v_exists boolean;
+  v_port_id int;
 BEGIN
   PERFORM bigbang_lock(v_lock_key);
 
@@ -160,7 +236,22 @@ BEGIN
       type = EXCLUDED.type, 
       size = EXCLUDED.size, 
       techlevel = EXCLUDED.techlevel, 
-      petty_cash = EXCLUDED.petty_cash;
+      petty_cash = EXCLUDED.petty_cash
+  RETURNING id INTO v_port_id;
+
+  -- Seed Stardock Assets
+  IF v_port_id IS NOT NULL THEN
+    INSERT INTO stardock_assets (sector_id, owner_id, fighters, defenses, ship_capacity)
+    VALUES (v_sector, 1, 10000, 500, 100) -- Assuming owner_id 1 is System/Fed
+    ON CONFLICT (sector_id) DO NOTHING;
+
+    -- Seed Shipyard with all purchasable ships
+    INSERT INTO shipyard_inventory (port_id, ship_type_id, enabled)
+    SELECT v_port_id, id, 1
+    FROM shiptypes
+    WHERE can_purchase = TRUE
+    ON CONFLICT (port_id, ship_type_id) DO NOTHING;
+  END IF;
 
   PERFORM bigbang_unlock(v_lock_key);
   RETURN 1;
@@ -284,9 +375,13 @@ DECLARE
   v_center int;
   v_name text;
   v_align int;
+  v_cluster_id int;
 BEGIN
   PERFORM bigbang_lock(v_lock_key);
   
+  -- Truncate for idempotency
+  TRUNCATE cluster_sectors;
+
   SELECT MAX(id) INTO v_max_sector FROM sectors;
   IF v_max_sector IS NULL THEN 
     PERFORM bigbang_unlock(v_lock_key);
@@ -296,7 +391,7 @@ BEGIN
   -- 1. Federation Core (Fixed)
   INSERT INTO clusters (name, role, kind, center_sector, law_severity, alignment)
   VALUES ('Federation Core', 'FED', 'FACTION', 1, 3, 100)
-  ON CONFLICT DO NOTHING;
+  ON CONFLICT (name) DO UPDATE SET role = EXCLUDED.role, kind = EXCLUDED.kind, center_sector = EXCLUDED.center_sector, law_severity = EXCLUDED.law_severity, alignment = EXCLUDED.alignment;
   
   -- 2. Random Clusters
   FOR i IN 1..(target_count - 1) LOOP
@@ -305,13 +400,55 @@ BEGIN
     v_align := floor(random() * 200) - 100; -- -100 to 100
     
     INSERT INTO clusters (name, role, kind, center_sector, law_severity, alignment)
-    VALUES (v_name, 'RANDOM', 'RANDOM', v_center, 1, v_align);
+    VALUES (v_name, 'RANDOM', 'RANDOM', v_center, 1, v_align)
+    ON CONFLICT (name) DO UPDATE SET role = EXCLUDED.role, kind = EXCLUDED.kind, center_sector = EXCLUDED.center_sector, law_severity = EXCLUDED.law_severity, alignment = EXCLUDED.alignment;
+  END LOOP;
+  
+  -- 3. Populate cluster_sectors table
+  FOR v_cluster_id, v_center IN SELECT id, center_sector FROM clusters LOOP
+      -- Add center sector
+      INSERT INTO cluster_sectors (cluster_id, sector_id) VALUES (v_cluster_id, v_center) ON CONFLICT DO NOTHING;
+      -- Add adjacent sectors
+      INSERT INTO cluster_sectors (cluster_id, sector_id)
+      SELECT v_cluster_id, to_sector FROM sector_warps WHERE from_sector = v_center
+      ON CONFLICT DO NOTHING;
   END LOOP;
 
-  GET DIAGNOSTICS v_added = ROW_COUNT; -- counts the loop inserts (actually logic is slightly off for row_count of loop, but acceptable for now)
+  GET DIAGNOSTICS v_added = ROW_COUNT;
   
   PERFORM bigbang_unlock(v_lock_key);
-  RETURN v_added; -- This will be small, technically loop doesn't aggregate row_count this way in plpgsql easily without var
+  RETURN v_added;
+END;
+$$;
+
+
+-- ---------------------------------------------------------------------------
+-- 6) Taverns
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION generate_taverns(p_ratio_pct int DEFAULT 20)
+RETURNS bigint
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_added bigint := 0;
+  v_lock_key bigint := 72002007;
+  v_ratio numeric := p_ratio_pct / 100.0;
+BEGIN
+  PERFORM bigbang_lock(v_lock_key);
+
+  INSERT INTO taverns (sector_id, name_id)
+  SELECT 
+    s.id,
+    (SELECT id FROM tavern_names ORDER BY random() LIMIT 1)
+  FROM sectors s
+  WHERE s.id > 10 -- No taverns in Fedspace core
+    AND NOT EXISTS (SELECT 1 FROM taverns t WHERE t.sector_id = s.id)
+    AND random() < v_ratio;
+
+  GET DIAGNOSTICS v_added = ROW_COUNT;
+
+  PERFORM bigbang_unlock(v_lock_key);
+  RETURN v_added;
 END;
 $$;
 

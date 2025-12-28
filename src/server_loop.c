@@ -54,7 +54,7 @@
 #endif
 #define BUF_SIZE    8192
 
-static __thread client_ctx_t *g_ctx_for_send = NULL;
+__thread client_ctx_t *g_ctx_for_send = NULL;
 
 
 /* forward declaration to avoid implicit extern */
@@ -1149,10 +1149,15 @@ process_message (client_ctx_t *ctx, json_t *root)
   ctx->rl_window_start = time (NULL);
   ctx->rl_count = 0;
 
+  int responses_before = ctx->responses_sent;
   if (server_dispatch_command (ctx, root) == -1)
     {
       send_response_error (ctx, root, ERR_INVALID_SCHEMA, "Unknown command");
     }
+
+  if (ctx->responses_sent == responses_before) {
+      send_response_error(ctx, root, 500, "Handler produced no response");
+  }
 }
 
 
@@ -1370,5 +1375,4 @@ int cmd_player_rankings(client_ctx_t *ctx, json_t *root) { return 0; }
 int cmd_trade_port_info(client_ctx_t *ctx, json_t *root) { return 0; }
 int cmd_trade_buy(client_ctx_t *ctx, json_t *root) { return 0; }
 int cmd_trade_history(client_ctx_t *ctx, json_t *root) { return 0; }
-int cmd_trade_quote(client_ctx_t *ctx, json_t *root) { return 0; }
 int cmd_trade_sell(client_ctx_t *ctx, json_t *root) { return 0; }
