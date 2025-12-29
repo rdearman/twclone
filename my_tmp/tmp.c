@@ -1,361 +1,363 @@
-int h_player_is_npc (db_t *db, int player_id) {
-  if (!db) return 0;
-  
-  const char *sql = "SELECT is_npc FROM players WHERE id = $1;";
-  db_res_t *res = NULL;
-  db_error_t err;
-  db_error_clear(&err);
-  
-  db_bind_t params[] = { db_bind_i32(player_id) };
-  if (!db_query(db, sql, params, 1, &res, &err)) {
-    return 0;
-  }
-  
-  int is_npc = 0;
-  if (db_res_step(res, &err)) {
-    is_npc = (int)db_res_col_i32(res, 0, &err);
-  }
-  
-  db_res_finalize(res);
-  return is_npc;
-}
-int spawn_starter_ship (db_t *db, int player_id, int sector_id) {
-  if (!db) return -1;
-  
-  // Get ship type
-  const char *sql_type = "SELECT id, initialholds, maxfighters, maxshields FROM shiptypes WHERE name = $1;";
-  db_res_t *res = NULL;
-  db_error_t err;
-  db_error_clear(&err);
-  
-  db_bind_t type_params[] = { db_bind_text("Scout Marauder") };
-  if (!db_query(db, sql_type, type_params, 1, &res, &err)) {
-    return -1;
-  }
-  
-  int ship_type_id = 0, holds = 0, fighters = 0, shields = 0;
-  if (db_res_step(res, &err)) {
-    ship_type_id = (int)db_res_col_i32(res, 0, &err);
-    holds = (int)db_res_col_i32(res, 1, &err);
-    fighters = (int)db_res_col_i32(res, 2, &err);
-    shields = (int)db_res_col_i32(res, 3, &err);
-  }
-  db_res_finalize(res);
-  
-  if (ship_type_id == 0) return -1;
-  
-  // Insert ship with RETURNING to get ID
-  const char *sql_ins = "INSERT INTO ships (name, type_id, holds, fighters, shields, sector) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id;";
-  db_bind_t ins_params[] = {
-    db_bind_text("Starter Ship"),
-    db_bind_i32(ship_type_id),
-    db_bind_i32(holds),
-    db_bind_i32(fighters),
-    db_bind_i32(shields),
-    db_bind_i32(sector_id)
-  };
-  
-  res = NULL;
-  db_error_clear(&err);
-  
-  if (!db_query(db, sql_ins, ins_params, 6, &res, &err)) {
-    return -1;
-  }
-  
-  int ship_id = 0;
-  if (db_res_step(res, &err)) {
-    ship_id = (int)db_res_col_i32(res, 0, &err);
-  }
-  db_res_finalize(res);
-  
-  if (ship_id == 0) return -1;
-  
-  // Set ownership
-  const char *sql_own = "INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary) VALUES ($1, $2, 1, 1);";
-  db_bind_t own_params[] = {
-    db_bind_i32(ship_id),
-    db_bind_i32(player_id)
-  };
-  
-  db_error_clear(&err);
-  db_exec(db, sql_own, own_params, 2, &err);
-  
-  // Update player
-  const char *sql_upd = "UPDATE players SET ship = $1, sector = $2 WHERE id = $3;";
-  db_bind_t upd_params[] = {
-    db_bind_i32(ship_id),
-    db_bind_i32(sector_id),
-    db_bind_i32(player_id)
-  };
-  
-  db_error_clear(&err);
-  db_exec(db, sql_upd, upd_params, 3, &err);
-  
-  // Update podded status
-  const char *sql_pod = "UPDATE podded_status SET status = $1 WHERE player_id = $2;";
-  db_bind_t pod_params[] = {
-    db_bind_text("alive"),
-    db_bind_i32(player_id)
-  };
-  
-  db_error_clear(&err);
-  db_exec(db, sql_pod, pod_params, 2, &err);
-  
-  return 0;
-}
-int h_get_player_petty_cash(db_t *db, int player_id, long long *bal) {
-  if (!db || player_id <= 0 || !bal) return -1;
-  
-  const char *sql = "SELECT credits FROM players WHERE id = $1;";
-  db_res_t *res = NULL;
-  db_error_t err;
-  db_error_clear(&err);
-  
-  db_bind_t params[] = { db_bind_i32(player_id) };
-  if (!db_query(db, sql, params, 1, &res, &err)) {
-    return -1;
-  }
-  
-  int rc = -1;
-  if (db_res_step(res, &err)) {
-    *bal = db_res_col_i64(res, 0, &err);
-    rc = 0;
-  }
-  
-  db_res_finalize(res);
-  return rc;
-}
-int h_deduct_player_petty_cash_unlocked(db_t *db, int player_id, long long amount, long long *new_balance_out) {
-  if (!db || amount < 0) return -1;
-  if (new_balance_out) *new_balance_out = 0;
-  
-  const char *sql = "UPDATE players SET credits = credits - $1 WHERE id = $2 AND credits >= $1 RETURNING credits;";
-  db_bind_t params[] = {
-    db_bind_i64(amount),
-    db_bind_i32(player_id)
-  };
-  
-  db_res_t *res = NULL;
-  db_error_t err;
-  db_error_clear(&err);
-  
-  if (!db_query(db, sql, params, 2, &res, &err)) {
-    return -1;
-  }
-  
-  if (db_res_step(res, &err)) {
-    if (new_balance_out) {
-      *new_balance_out = db_res_col_i64(res, 0, &err);
+                                                                                                                                                                                                                                              
+int
+db_load_ports (int *server_port, int *s2s_port)
+{
+  int ret_code = 0;
+  if (!server_port || !s2s_port)
+    {
+      return -1;
     }
-    db_res_finalize(res);
-    return 0;
-  }
-  
-  db_res_finalize(res);
-  return -1;
-}
-int h_add_player_petty_cash(db_t *db, int player_id, long long amount, long long *new_balance_out) {
-  if (!db || amount < 0) return -1;
-  if (new_balance_out) *new_balance_out = 0;
-  
-  const char *sql = "UPDATE players SET credits = credits + $1 WHERE id = $2 RETURNING credits;";
-  db_bind_t params[] = {
-    db_bind_i64(amount),
-    db_bind_i32(player_id)
-  };
-  
-  db_res_t *res = NULL;
-  db_error_t err;
-  db_error_clear(&err);
-  
-  if (!db_query(db, sql, params, 2, &res, &err)) {
-    return -1;
-  }
-  
-  if (db_res_step(res, &err)) {
-    if (new_balance_out) {
-      *new_balance_out = db_res_col_i64(res, 0, &err);
+  db_t *db = game_db_get_handle ();
+
+  if (!db)
+    {
+      return -1;
     }
-    db_res_finalize(res);
-    return 0;
+
+  /* Try to load server_port */
+  {
+    const char *sql = "SELECT value FROM config WHERE key = $1 AND type = 'int' LIMIT 1;";
+    db_res_t *res = NULL;
+    db_error_t err;
+    memset (&err, 0, sizeof (err));
+
+    if (db_query (db, sql, (db_bind_t[]){ db_bind_text ("server_port") }, 1, &res, &err))
+      {
+        if (db_res_step (res, &err))
+          {
+            *server_port = db_res_col_i32 (res, 0, &err);
+          }
+        else
+          {
+            LOGW ("[config] 'server_port' missing or invalid in DB, using default: %d", *server_port);
+          }
+        db_res_finalize (res);
+      }
+    else
+      {
+        LOGW ("[config] 'server_port' missing or invalid in DB, using default: %d", *server_port);
+      }
   }
-  
-  db_res_finalize(res);
-  return -1;
-}
-TurnConsumeResult h_consume_player_turn(db_t *db, client_ctx_t *ctx, int turns) {
-  if (!db || !ctx || turns <= 0) {
-    return TURN_CONSUME_ERROR_INVALID_AMOUNT;
+
+  /* Try to load s2s_port */
+  {
+    const char *sql = "SELECT value FROM config WHERE key = $1 AND type = 'int' LIMIT 1;";
+    db_res_t *res = NULL;
+    db_error_t err;
+    memset (&err, 0, sizeof (err));
+
+    if (db_query (db, sql, (db_bind_t[]){ db_bind_text ("s2s_port") }, 1, &res, &err))
+      {
+        if (db_res_step (res, &err))
+          {
+            *s2s_port = db_res_col_i32 (res, 0, &err);
+          }
+        else
+          {
+            LOGW ("[config] 's2s_port' missing or invalid in DB, using default: %d", *s2s_port);
+          }
+        db_res_finalize (res);
+      }
+    else
+      {
+        LOGW ("[config] 's2s_port' missing or invalid in DB, using default: %d", *s2s_port);
+      }
   }
-  
-  int player_id = ctx->player_id;
-  
-  // Check if player has enough turns
-  const char *sql_check = "SELECT turns_remaining FROM turns WHERE player = $1;";
-  db_res_t *res = NULL;
-  db_error_t err;
-  db_error_clear(&err);
-  
-  db_bind_t check_params[] = { db_bind_i32(player_id) };
-  if (!db_query(db, sql_check, check_params, 1, &res, &err)) {
-    return TURN_CONSUME_ERROR_DB_FAIL;
-  }
-  
-  int turns_remaining = 0;
-  if (db_res_step(res, &err)) {
-    turns_remaining = (int)db_res_col_i32(res, 0, &err);
-  }
-  db_res_finalize(res);
-  
-  if (turns_remaining < turns) {
-    return TURN_CONSUME_ERROR_NO_TURNS;
-  }
-  
-  // Update turns with EXTRACT(EPOCH FROM NOW()) for PostgreSQL compatibility
-  const char *sql_update = "UPDATE turns SET turns_remaining = turns_remaining - $1, last_update = EXTRACT(EPOCH FROM NOW())::int WHERE player = $2 AND turns_remaining >= $1;";
-  db_bind_t upd_params[] = {
-    db_bind_i32(turns),
-    db_bind_i32(player_id)
-  };
-  
-  db_error_clear(&err);
-  if (!db_exec(db, sql_update, upd_params, 2, &err)) {
-    return TURN_CONSUME_ERROR_DB_FAIL;
-  }
-  
-  return TURN_CONSUME_SUCCESS;
-}
-int handle_turn_consumption_error(client_ctx_t *ctx, TurnConsumeResult res, const char *cmd, json_t *root, json_t *meta) {
-  const char *reason_str = NULL;
-  switch (res) {
-    case TURN_CONSUME_ERROR_DB_FAIL:
-      reason_str = "db_failure";
-      break;
-    case TURN_CONSUME_ERROR_PLAYER_NOT_FOUND:
-      reason_str = "player_not_found";
-      break;
-    case TURN_CONSUME_ERROR_NO_TURNS:
-      reason_str = "no_turns_remaining";
-      break;
-    case TURN_CONSUME_ERROR_INVALID_AMOUNT:
-      reason_str = "invalid_amount";
-      break;
-    default:
-      reason_str = "unknown_error";
-      break;
-  }
-  
-  json_t *meta_obj = meta ? json_copy(meta) : json_object();
-  if (meta_obj) {
-    json_object_set_new(meta_obj, "reason", json_string(reason_str));
-    json_object_set_new(meta_obj, "command", json_string(cmd ? cmd : "unknown"));
-    send_response_refused_steal(ctx, root, ERR_REF_NO_TURNS, "Insufficient turns.", NULL);
-    json_decref(meta_obj);
-  }
-  return 0;
-}
-int h_player_apply_progress(db_t *db, int player_id, long long delta_xp, int delta_align, const char *reason) {
-  if (!db || player_id <= 0) return -1;
-  
-  // Get current alignment and experience
-  const char *sql_get = "SELECT alignment, experience FROM players WHERE id = $1;";
-  db_res_t *res = NULL;
-  db_error_t err;
-  db_error_clear(&err);
-  
-  db_bind_t get_params[] = { db_bind_i32(player_id) };
-  if (!db_query(db, sql_get, get_params, 1, &res, &err)) {
-    return -1;
-  }
-  
-  int cur_align = 0;
-  long long cur_xp = 0;
-  if (db_res_step(res, &err)) {
-    cur_align = (int)db_res_col_i32(res, 0, &err);
-    cur_xp = db_res_col_i64(res, 1, &err);
-  } else {
-    db_res_finalize(res);
-    return -1;
-  }
-  db_res_finalize(res);
-  
-  // Calculate new values
-  long long new_xp = cur_xp + delta_xp;
-  if (new_xp < 0) new_xp = 0;
-  
-  int new_align = cur_align + delta_align;
-  if (new_align > 2000) new_align = 2000;
-  if (new_align < -2000) new_align = -2000;
-  
-  // Update player
-  const char *sql_upd = "UPDATE players SET experience = $1, alignment = $2 WHERE id = $3;";
-  db_bind_t upd_params[] = {
-    db_bind_i64(new_xp),
-    db_bind_i32(new_align),
-    db_bind_i32(player_id)
-  };
-  
-  db_error_clear(&err);
-  if (!db_exec(db, sql_upd, upd_params, 3, &err)) {
-    return -1;
-  }
-  
-  // Update commission (call the DB function)
-  db_player_update_commission(db, player_id);
-  
-  LOGD("Player %d progress updated. Reason: %s", player_id, reason ? reason : "N/A");
-  return 0;
-}
-int h_get_player_sector(db_t *db, int player_id) {
-  if (!db) return 0;
-  
-  const char *sql = "SELECT COALESCE(sector, 0) FROM players WHERE id = $1;";
-  db_res_t *res = NULL;
-  db_error_t err;
-  db_error_clear(&err);
-  
-  db_bind_t params[] = { db_bind_i32(player_id) };
-  if (!db_query(db, sql, params, 1, &res, &err)) {
-    return 0;
-  }
-  
-  int sector = 0;
-  if (db_res_step(res, &err)) {
-    sector = (int)db_res_col_i32(res, 0, &err);
-    if (sector < 0) sector = 0;
-  }
-  
-  db_res_finalize(res);
-  return sector;
+
+  return ret_code;
 }
 
-int h_add_player_petty_cash_unlocked(db_t *db, int player_id, long long amount, long long *new_balance_out) {
-  if (!db || amount < 0) return -1;
-  if (new_balance_out) *new_balance_out = 0;
-  
-  const char *sql = "UPDATE players SET credits = credits + $1 WHERE id = $2 RETURNING credits;";
-  db_bind_t params[] = {
-    db_bind_i64(amount),
-    db_bind_i32(player_id)
-  };
-  
-  db_res_t *res = NULL;
-  db_error_t err;
-  db_error_clear(&err);
-  
-  if (!db_query(db, sql, params, 2, &res, &err)) {
-    return -1;
-  }
-  
-  if (db_res_step(res, &err)) {
-    if (new_balance_out) {
-      *new_balance_out = db_res_col_i64(res, 0, &err);
+int
+cmd_mines_recall (client_ctx_t *ctx, json_t *root)
+{
+  if (!require_auth (ctx, root))
+    {
+      return 0;
     }
-    db_res_finalize(res);
-    return 0;
+  sqlite3 *db = db_get_handle ();
+
+
+  if (!db)
+    {
+      send_response_error (ctx,
+			   root,
+			   ERR_SERVICE_UNAVAILABLE, "Database unavailable");
+      return 0;
+    }
+  /* 1. Parse input */
+  json_t *data = json_object_get (root, "data");
+
+
+  if (!data || !json_is_object (data))
+    {
+      send_response_error (ctx,
+			   root,
+			   ERR_MISSING_FIELD, "Missing required field: data");
+      return 0;
+    }
+  json_t *j_sector_id = json_object_get (data, "sector_id");
+  json_t *j_asset_id = json_object_get (data, "asset_id");
+
+
+  if (!j_sector_id || !json_is_integer (j_sector_id) ||
+      !j_asset_id || !json_is_integer (j_asset_id))
+    {
+      send_response_error (ctx,
+			   root,
+			   ERR_CURSOR_INVALID,
+			   "Missing required field or invalid type: sector_id/asset_id");
+      return 0;
+    }
+  int requested_sector_id = (int) json_integer_value (j_sector_id);
+  int asset_id = (int) json_integer_value (j_asset_id);
+  /* 2. Load player, ship, current_sector_id */
+  int player_ship_id = h_get_active_ship_id (db, ctx->player_id);
+
+
+  if (player_ship_id <= 0)
+    {
+      send_response_error (ctx,
+			   root,
+			   ERR_SHIP_NOT_FOUND,
+			   "No active ship found for player.");
+      return 0;
+    }
+  int player_current_sector_id = -1;
+  int ship_mines_current = 0;
+  int ship_mines_max = 0;
+  sqlite3_stmt *stmt_player_ship = NULL;
+  const char *sql_player_ship =
+    "SELECT s.sector, s.mines, st.maxmines "
+    "FROM ships s "
+    "JOIN shiptypes st ON s.type_id = st.id " "WHERE s.id = ?1;";
+
+
+  if (sqlite3_prepare_v2 (db, sql_player_ship, -1, &stmt_player_ship, NULL) !=
+      SQLITE_OK)
+    {
+      send_response_error (ctx,
+			   root,
+			   ERR_DB, "Failed to prepare player ship query.");
+      return 0;
+    }
+  sqlite3_bind_int (stmt_player_ship, 1, player_ship_id);
+  if (sqlite3_step (stmt_player_ship) == SQLITE_ROW)
+    {
+      player_current_sector_id = sqlite3_column_int (stmt_player_ship, 0);
+      ship_mines_current = sqlite3_column_int (stmt_player_ship, 1);
+      ship_mines_max = sqlite3_column_int (stmt_player_ship, 2);
+    }
+  sqlite3_finalize (stmt_player_ship);
+  if (player_current_sector_id <= 0)
+    {
+      send_response_error (ctx,
+			   root,
+			   ERR_SECTOR_NOT_FOUND,
+			   "Could not determine player's current sector.");
+      return 0;
+    }
+  /* 3. Verify asset belongs to player and is in current sector */
+  sqlite3_stmt *stmt_asset = NULL;
+  const char *sql_asset = "SELECT quantity, asset_type FROM sector_assets " "WHERE id = ?1 AND player = ?2 AND sector = ?3 AND asset_type IN (1, 4);";	// Mines only
+
+
+  if (sqlite3_prepare_v2 (db, sql_asset, -1, &stmt_asset, NULL) != SQLITE_OK)
+    {
+      send_response_error (ctx, root, ERR_DB,
+			   "Failed to prepare asset query.");
+      return 0;
+    }
+  sqlite3_bind_int (stmt_asset, 1, asset_id);
+  sqlite3_bind_int (stmt_asset, 2, ctx->player_id);
+  sqlite3_bind_int (stmt_asset, 3, requested_sector_id);
+  int asset_quantity = 0;
+  int asset_type = 0;
+
+
+  if (sqlite3_step (stmt_asset) == SQLITE_ROW)
+    {
+      asset_quantity = sqlite3_column_int (stmt_asset, 0);
+      asset_type = sqlite3_column_int (stmt_asset, 1);
+    }
+  sqlite3_finalize (stmt_asset);
+  if (asset_quantity <= 0)
+    {
+      send_response_error (ctx,
+			   root,
+			   ERR_NOT_FOUND,
+			   "Mine asset not found or does not belong to you in this sector.");
+      return 0;
+    }
+  /* 4. Check if ship has capacity for recalled mines */
+  if (ship_mines_current + asset_quantity > ship_mines_max)
+    {
+      json_t *data_opt = json_object ();
+
+
+      json_object_set_new (data_opt, "reason",
+			   json_string ("insufficient_mine_capacity"));
+      send_response_refused_steal (ctx,
+				   root,
+				   REF_INSUFFICIENT_CAPACITY,
+				   "Insufficient ship capacity to recall all mines.",
+				   data_opt);
+      return 0;
+    }
+  /* 5. Transaction: delete asset, credit ship */
+  char *errmsg = NULL;
+
+
+  if (sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, &errmsg) != SQLITE_OK)
+    {
+      if (errmsg)
+	{
+	  sqlite3_free (errmsg);
+	}
+      send_response_error (ctx, root, ERR_DB, "Could not start transaction");
+      return 0;
+    }
+  // Delete the asset from sector_assets
+  sqlite3_stmt *stmt_delete = NULL;
+  const char *sql_delete = "DELETE FROM sector_assets WHERE id = ?1;";
+
+
+  if (sqlite3_prepare_v2 (db, sql_delete, -1, &stmt_delete, NULL) !=
+      SQLITE_OK)
+    {
+      db_safe_rollback (db, "Safe rollback");
+      send_response_error (ctx,
+			   root,
+			   ERR_DB, "Failed to prepare delete asset query.");
+      return 0;
+    }
+  sqlite3_bind_int (stmt_delete, 1, asset_id);
+  if (sqlite3_step (stmt_delete) != SQLITE_DONE)
+    {
+      db_safe_rollback (db, "Safe rollback");
+      send_response_error (ctx,
+			   root,
+			   ERR_DB, "Failed to delete asset from sector.");
+      sqlite3_finalize (stmt_delete);
+      return 0;
+    }
+  sqlite3_finalize (stmt_delete);
+  // Credit mines to ship
+  sqlite3_stmt *stmt_credit = NULL;
+  const char *sql_credit =
+    "UPDATE ships SET mines = mines + ?1 WHERE id = ?2;";
+
+
+  if (sqlite3_prepare_v2 (db, sql_credit, -1, &stmt_credit, NULL) !=
+      SQLITE_OK)
+    {
+      db_safe_rollback (db, "Safe rollback");
+      send_response_error (ctx,
+			   root,
+			   ERR_DB, "Failed to prepare credit ship query.");
+      return 0;
+    }
+  sqlite3_bind_int (stmt_credit, 1, asset_quantity);
+  sqlite3_bind_int (stmt_credit, 2, player_ship_id);
+  if (sqlite3_step (stmt_credit) != SQLITE_DONE)
+    {
+      db_safe_rollback (db, "Safe rollback");
+      send_response_error (ctx, root, ERR_DB,
+			   "Failed to credit mines to ship.");
+      sqlite3_finalize (stmt_credit);
+      return 0;
+    }
+  sqlite3_finalize (stmt_credit);
+  if (sqlite3_exec (db, "COMMIT;", NULL, NULL, &errmsg) != SQLITE_OK)
+    {
+      if (errmsg)
+	{
+	  sqlite3_free (errmsg);
+	}
+      send_response_error (ctx, root, ERR_DB, "Commit failed");
+      return 0;
+    }
+  /* 6. Emit engine_event via h_log_engine_event */
+  {
+    json_t *evt = json_object ();
+
+
+    json_object_set_new (evt, "sector_id",
+			 json_integer (requested_sector_id));
+    json_object_set_new (evt, "player_id", json_integer (ctx->player_id));
+    json_object_set_new (evt, "asset_id", json_integer (asset_id));
+    json_object_set_new (evt, "amount", json_integer (asset_quantity));
+    json_object_set_new (evt, "asset_type", json_integer (asset_type));
+    json_object_set_new (evt, "event_ts",
+			 json_integer ((json_int_t) time (NULL)));
+    (void) db_log_engine_event ((long long) time (NULL), "mines.recalled",
+				NULL, ctx->player_id, requested_sector_id,
+				evt, NULL);
   }
-  
-  db_res_finalize(res);
-  return -1;
+  /* 7. Send enveloped_ok response */
+  json_t *out = json_object ();
+
+
+  json_object_set_new (out, "sector_id", json_integer (requested_sector_id));
+  json_object_set_new (out, "asset_id", json_integer (asset_id));
+  json_object_set_new (out, "recalled", json_integer (asset_quantity));
+  json_object_set_new (out, "remaining_in_sector", json_integer (0));	// All recalled
+  json_object_set_new (out, "asset_type", json_integer (asset_type));
+  send_response_ok_take (ctx, root, "combat.mines.recalled", &out);
+  return 0;
 }
 
+
+int
+h_update_entity_stock (sqlite3 *db,
+		       const char *entity_type,
+		       int entity_id,
+		       const char *commodity_code,
+		       int quantity_delta, int *new_quantity_out)
+{
+  int current_quantity = 0;
+  // Get current quantity (ignore error if not found, assume 0)
+  h_get_entity_stock_quantity (db,
+			       entity_type,
+			       entity_id, commodity_code, &current_quantity);
+
+  int new_quantity = current_quantity + quantity_delta;
+
+
+  if (new_quantity < 0)
+    {
+      new_quantity = 0;		// Prevent negative stock
+    }
+  sqlite3_stmt *stmt = NULL;
+  const char *sql_upsert =
+    "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) "
+    "VALUES (?1, ?2, ?3, ?4, 0, strftime('%s','now')) "
+    "ON CONFLICT(entity_type, entity_id, commodity_code) DO UPDATE SET quantity = ?4, last_updated_ts = strftime('%s','now');";
+
+  int rc = sqlite3_prepare_v2 (db, sql_upsert, -1, &stmt, NULL);
+
+
+  if (rc != SQLITE_OK)
+    {
+      LOGE ("h_update_entity_stock: prepare failed: %s", sqlite3_errmsg (db));
+      return rc;
+    }
+  sqlite3_bind_text (stmt, 1, entity_type, -1, SQLITE_STATIC);
+  sqlite3_bind_int (stmt, 2, entity_id);
+  sqlite3_bind_text (stmt, 3, commodity_code, -1, SQLITE_STATIC);
+  sqlite3_bind_int (stmt, 4, new_quantity);
+
+  rc = sqlite3_step (stmt);
+  if (rc != SQLITE_DONE)
+    {
+      LOGE ("h_update_entity_stock: upsert failed: %s", sqlite3_errmsg (db));
+      sqlite3_finalize (stmt);
+      return SQLITE_ERROR;
+    }
+  sqlite3_finalize (stmt);
+
+  if (new_quantity_out)
+    {
+      *new_quantity_out = new_quantity;
+    }
+  return SQLITE_OK;
+}

@@ -895,11 +895,16 @@ cmd_session_disconnect (client_ctx_t *ctx, json_t *root)
 
 
 struct twconfig *
+
+
 config_load (void)
 {
-  struct twconfig *c = calloc(1, sizeof(struct twconfig));
-  if (!c) return NULL;
-  
+  struct twconfig *c = calloc (1, sizeof(struct twconfig));
+  if (!c)
+    {
+      return NULL;
+    }
+
   c->turnsperday = g_cfg.turnsperday;
   c->startingcredits = (int)g_cfg.startingcredits;
   c->startingfighters = g_cfg.startingfighters;
@@ -908,3 +913,4 @@ config_load (void)
   c->max_ships = 1000;
   return c;
 }
+

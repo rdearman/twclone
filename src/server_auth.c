@@ -207,7 +207,7 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
   db_t *db = game_db_get_handle ();
   if (!db)
     {
-      LOGD("[auth.login] DB handle is NULL. Returning -1.");
+      LOGD ("[auth.login] DB handle is NULL. Returning -1.");
       return -1;
     }
 
@@ -215,7 +215,8 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
                                    "data");
   const char *name = NULL, *pass = NULL;
 
-  LOGD("[auth.login] Received login attempt.");
+
+  LOGD ("[auth.login] Received login attempt.");
 
   if (json_is_object (jdata))
     {
@@ -239,17 +240,19 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
 
   if (!name || !pass)
     {
-      LOGD("[auth.login] Missing username or password in request.");
+      LOGD ("[auth.login] Missing username or password in request.");
       send_response_error (ctx, root, AUTH_ERR_BAD_REQUEST, "Missing fields");
       return 0;
     }
 
-  LOGD("[auth.login] Attempting login for user: %s", name); // Do not log password
+  LOGD ("[auth.login] Attempting login for user: %s", name); // Do not log password
   int pid = 0;
 
 
   int auth_rc = play_login (name, pass, &pid);
-  LOGD("[auth.login] play_login returned: %d, pid: %d", auth_rc, pid);
+
+
+  LOGD ("[auth.login] play_login returned: %d, pid: %d", auth_rc, pid);
 
   if (auth_rc == AUTH_OK)
     {
@@ -369,9 +372,11 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
         }
 
       char tok[65];
+
+
       h_generate_hex_uuid (tok, sizeof (tok));
 
-      db_session_create (pid, tok, (long long)time(NULL) + 86400);
+      db_session_create (pid, tok, (long long)time (NULL) + 86400);
 
       json_t *resp = json_object ();
 
@@ -392,7 +397,8 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
       char *cur_locale = NULL;
 
 
-      if (db_prefs_get_one (db, pid, "ui.locale", &cur_locale) != 0 || !cur_locale)
+      if (db_prefs_get_one (db, pid, "ui.locale",
+                            &cur_locale) != 0 || !cur_locale)
         {
           db_prefs_set_one (db, pid, "ui.locale", PT_STRING, "en-GB");
         }
@@ -463,7 +469,11 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
       int new_acc_id = -1;
 
 
-      db_bank_create_account (db, "player", pid, cfg->startingcredits, &new_acc_id);
+      db_bank_create_account (db,
+                              "player",
+                              pid,
+                              cfg->startingcredits,
+                              &new_acc_id);
 
       db_error_t err;
       const char *sql_turns =
@@ -521,7 +531,7 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
 
 
       h_generate_hex_uuid (tok, sizeof (tok));
-      if (db_session_create (pid, tok, (long long)time(NULL) + 86400) != 0)
+      if (db_session_create (pid, tok, (long long)time (NULL) + 86400) != 0)
         {
           send_response_error (ctx,
                                root,
@@ -649,7 +659,9 @@ cmd_auth_refresh (client_ctx_t *ctx, json_t *root)
 
       h_generate_hex_uuid (newtok,
                            sizeof (newtok));
-      if (db_session_create (ctx->player_id, newtok, (long long)time(NULL) + 86400) != 0)
+      if (db_session_create (ctx->player_id,
+                             newtok,
+                             (long long)time (NULL) + 86400) != 0)
         {
           send_response_error (ctx, root, ERR_PLANET_NOT_FOUND,
                                "Database error");
@@ -811,6 +823,9 @@ get_welcome_message (int pid)
 }
 
 
-int auth_player_get_type(int player_id) {
-    return 0; // Stub
+int
+auth_player_get_type (int player_id)
+{
+  return 0;   // Stub
 }
+

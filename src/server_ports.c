@@ -2,10 +2,10 @@
 #include <jansson.h>
 #include <stdlib.h>
 #include <time.h>
-#include <stdio.h>		// For snprintf
-#include <string.h>		// For strcasecmp, strdup etc.
-#include <math.h>		// For pow() function
-#include <stddef.h>		// For size_t
+#include <stdio.h>              // For snprintf
+#include <string.h>             // For strcasecmp, strdup etc.
+#include <math.h>               // For pow() function
+#include <stddef.h>             // For size_t
 /* local includes */
 #include "server_ports.h"
 #include "database.h"
@@ -19,6 +19,7 @@
 #include "server_cron.h"
 #include "server_log.h"
 #include "common.h"
+#include "globals.h"
 #include "server_universe.h"
 #include "db_player_settings.h"
 #include "server_clusters.h"
@@ -29,19 +30,12 @@
 #ifndef UNUSED
 #define UNUSED(x) (void)(x)
 #endif
-void idemp_fingerprint_json (json_t * obj, char out[17]);
+void idemp_fingerprint_json (json_t *obj, char out[17]);
 void iso8601_utc (char out[32]);
 /* Forward declarations for static helper functions */
-typedef struct {
-    char *commodity;
-    int amount;        /* used by sell */
-    int quantity;      /* used by buy */
-    int unit_price;
-    long long line_cost;
-} TradeLine;
 
 int h_calculate_port_buy_price (db_t *db, int port_id,
-				const char *commodity);
+                                const char *commodity);
 #define RULE_REFUSE(_code,_msg, \
                     _hint_json) do { send_response_refused_steal (ctx, \
                                                                   root, \
@@ -61,19 +55,325 @@ int h_calculate_port_buy_price (db_t *db, int port_id,
                                                                          _hint_json)); \
                                           goto refuse_sell; } while (0)
 
+const char * commodity_to_code (db_t *db, const char *commodity);
+
 
 /* Helpers */
 
-const char *
-commodity_to_code (const char *commodity)
+#include <jansson.h>
+#include <stdlib.h>
+
+int
+parse_trade_lines (json_t *jitems, TradeLine **out_lines, size_t *out_n)
 {
-  if (!commodity || !*commodity)
+  if (!out_lines || !out_n)
     {
-      return NULL;
+      return -1;
     }
 
-  db_t *db = db_get_handle ();
-  if (!db)
+  *out_lines = NULL;
+  *out_n = 0;
+
+  if (!jitems || !json_is_array (jitems))
+    {
+      return -1;
+    }
+
+  size_t n = json_array_size (jitems);
+  if (n == 0)
+    {
+      return -1;
+    }
+
+  TradeLine *lines = calloc (n, sizeof (*lines));
+  if (!lines)
+    {
+      return -1;
+    }
+
+  for (size_t i = 0; i < n; i++)
+    {
+      json_t *it = json_array_get (jitems, i);
+      if (!it || !json_is_object (it))
+        {
+          free_trade_lines (lines, i);
+          return -1;
+        }
+
+      json_t *jcom = json_object_get (it, "commodity");
+      if (!jcom || !json_is_string (jcom))
+        {
+          free_trade_lines (lines, i);
+          return -1;
+        }
+
+      const char *com = json_string_value (jcom);
+      if (!com || !*com)
+        {
+          free_trade_lines (lines, i);
+          return -1;
+        }
+
+      /* quantity (buy) or amount (sell) */
+      int qty = 0;
+      json_t *jq = json_object_get (it, "quantity");
+      if (jq && json_is_integer (jq))
+        {
+          qty = (int) json_integer_value (jq);
+          lines[i].quantity = qty;
+          lines[i].amount = 0;
+        }
+      else
+        {
+          json_t *ja = json_object_get (it, "amount");
+          if (ja && json_is_integer (ja))
+            {
+              qty = (int) json_integer_value (ja);
+              lines[i].amount = qty;
+              lines[i].quantity = 0;
+            }
+          else
+            {
+              free_trade_lines (lines, i);
+              return -1;
+            }
+        }
+
+      if (qty <= 0)
+        {
+          free_trade_lines (lines, i);
+          return -1;
+        }
+
+      /* optional */
+      lines[i].unit_price = 0;
+      {
+        json_t *jup = json_object_get (it, "unit_price");
+        if (jup && json_is_integer (jup))
+          {
+            int up = (int) json_integer_value (jup);
+            if (up < 0)
+              {
+                free_trade_lines (lines, i);
+                return -1;
+              }
+            lines[i].unit_price = up;
+          }
+      }
+
+      lines[i].line_cost = 0;
+
+      lines[i].commodity = strdup (com);
+      if (!lines[i].commodity)
+        {
+          free_trade_lines (lines, i);
+          return -1;
+        }
+    }
+
+  *out_lines = lines;
+  *out_n = n;
+  return 0;
+}
+
+
+
+int
+h_update_entity_stock (db_t *db,
+                       const char *entity_type,
+                       int entity_id,
+                       const char *commodity_code,
+                       int quantity_delta, int *new_quantity_out)
+{
+  int current_quantity = 0;
+  /* Get current quantity (ignore error if not found, assume 0) */
+  h_get_entity_stock_quantity (db, entity_type, entity_id, commodity_code, &current_quantity);
+
+  int new_quantity = current_quantity + quantity_delta;
+  if (new_quantity < 0)
+    new_quantity = 0;
+
+  const char *sql_upsert =
+    "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) "
+    "VALUES ($1, $2, $3, $4, 0, $5) "
+    "ON CONFLICT(entity_type, entity_id, commodity_code) DO UPDATE SET quantity = $4, last_updated_ts = $5;";
+
+  db_error_t err;
+  memset (&err, 0, sizeof (err));
+  int64_t now = (int64_t) time (NULL);
+  db_bind_t params[] = { db_bind_text (entity_type), db_bind_i32 (entity_id), db_bind_text (commodity_code), db_bind_i32 (new_quantity), db_bind_i64 (now) };
+
+  if (!db_exec (db, sql_upsert, params, 5, &err))
+    {
+      LOGE ("h_update_entity_stock: upsert failed: %s", err.message);
+      return -1;
+    }
+
+  if (new_quantity_out)
+    *new_quantity_out = new_quantity;
+  return 0;
+}
+
+
+static int
+h_port_buys_commodity (db_t *db, int port_id, const char *commodity)
+{
+  if (!db || port_id <= 0 || !commodity || !*commodity)
+    {
+      return 0;
+    }
+
+  char *canonical_commodity_code = (char *) commodity_to_code (db, commodity);
+
+
+  if (!canonical_commodity_code)
+    {
+      return 0; /* Invalid or unsupported commodity */
+    }
+
+  const char *sql =
+    "SELECT es.quantity, p.size * 1000 AS max_capacity "
+    "FROM ports p JOIN entity_stock es ON p.id = es.entity_id "
+    "WHERE es.entity_type = 'port' AND es.commodity_code = $2 AND p.id = $1 LIMIT 1;";
+
+  db_res_t *res = NULL;
+  db_error_t err;
+
+
+  db_error_clear (&err);
+
+  db_bind_t params[] = {
+    db_bind_i32 (port_id),
+    db_bind_text (canonical_commodity_code)
+  };
+
+
+  if (!db_query (db,
+                 sql,
+                 params,
+                 sizeof (params) / sizeof (params[0]),
+                 &res,
+                 &err))
+    {
+      LOGE ("h_port_buys_commodity: query failed: %s",
+            err.message[0] ? err.message : "database error");
+      free (canonical_commodity_code);
+      return 0;
+    }
+
+  int buys = 0;
+
+
+  db_error_clear (&err);
+  if (db_res_step (res, &err))
+    {
+      int current_quantity = db_res_col_int (res, 0, &err);
+      int max_capacity = db_res_col_int (res, 1, &err);
+
+
+      /* If a conversion error occurred, preserve conservative behaviour: buys remains 0 */
+      if (!err.code && current_quantity < max_capacity)
+        {
+          buys = 1;
+        }
+    }
+  else
+    {
+      if (err.code)
+        {
+          /* Step error: preserve conservative behaviour (buys=0), but log */
+          LOGE ("h_port_buys_commodity: step failed: %s",
+                err.message[0] ? err.message : "database error");
+        }
+      else
+        {
+          /* No entry => assume port doesn't trade this commodity or is full */
+          LOGD (
+            "h_port_buys_commodity: No entity_stock entry for port %d, commodity %s",
+            port_id,
+            canonical_commodity_code);
+        }
+    }
+
+  db_res_finalize (res);
+  free (canonical_commodity_code);
+  return buys;
+}
+
+
+// Helper to get entity stock quantity (generic)
+int
+h_get_entity_stock_quantity (db_t *db,
+                             const char *entity_type,
+                             int entity_id,
+                             const char *commodity_code,
+                             int *qty_out)
+{
+  if (!db || !entity_type || !*entity_type || !commodity_code ||
+      !*commodity_code || !qty_out)
+    {
+      return ERR_DB_MISUSE;
+    }
+
+  const char *sql =
+    "SELECT quantity "
+    "FROM entity_stock "
+    "WHERE entity_type = $1 AND entity_id = $2 AND commodity_code = $3;";
+
+  db_res_t *res = NULL;
+  db_error_t err;
+
+
+  db_error_clear (&err);
+
+  db_bind_t params[] = {
+    db_bind_text (entity_type),
+    db_bind_i32 (entity_id),
+    db_bind_text (commodity_code)
+  };
+
+
+  if (!db_query (db,
+                 sql,
+                 params,
+                 sizeof (params) / sizeof (params[0]),
+                 &res,
+                 &err))
+    {
+      return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    }
+
+  int rc;
+
+
+  db_error_clear (&err);
+  if (db_res_step (res, &err))
+    {
+      *qty_out = db_res_col_int (res, 0, &err);
+      rc = err.code ? err.code : 0; /* keep “0 means OK” shape */
+    }
+  else
+    {
+      if (err.code)
+        {
+          rc = err.code;
+        }
+      else
+        {
+          *qty_out = 0;
+          rc = ERR_DB_NOT_FOUND;
+        }
+    }
+
+  db_res_finalize (res);
+  return rc;
+}
+
+
+const char *
+commodity_to_code (db_t *db, const char *commodity)
+{
+  if (!commodity || !*commodity)
     {
       return NULL;
     }
@@ -83,13 +383,21 @@ commodity_to_code (const char *commodity)
 
   db_res_t *res = NULL;
   db_error_t err;
+
+
   db_error_clear (&err);
 
   db_bind_t params[] = {
     db_bind_text (commodity)
   };
 
-  if (!db_query (db, sql, params, sizeof (params) / sizeof (params[0]), &res, &err))
+
+  if (!db_query (db,
+                 sql,
+                 params,
+                 sizeof (params) / sizeof (params[0]),
+                 &res,
+                 &err))
     {
       LOGE ("commodity_to_code: query failed: %s",
             err.message[0] ? err.message : "database error");
@@ -98,10 +406,13 @@ commodity_to_code (const char *commodity)
 
   char *result = NULL;
 
+
   db_error_clear (&err);
   if (db_res_step (res, &err))
     {
       const char *canonical_code = db_res_col_text (res, 0, &err);
+
+
       if (!err.code && canonical_code && *canonical_code)
         {
           result = strdup (canonical_code);
@@ -128,9 +439,9 @@ cmd_trade_offer (client_ctx_t *ctx, json_t *root)
 {
   // Option A: Hide/Refuse for v1.0
   send_response_error (ctx,
-		       root,
-		       ERR_NOT_IMPLEMENTED,
-		       "Trading handshake disabled in v1.0");
+                       root,
+                       ERR_NOT_IMPLEMENTED,
+                       "Trading handshake disabled in v1.0");
   return 0;
 }
 
@@ -140,9 +451,9 @@ cmd_trade_accept (client_ctx_t *ctx, json_t *root)
 {
   // Option A: Hide/Refuse for v1.0
   send_response_error (ctx,
-		       root,
-		       ERR_NOT_IMPLEMENTED,
-		       "Trading handshake disabled in v1.0");
+                       root,
+                       ERR_NOT_IMPLEMENTED,
+                       "Trading handshake disabled in v1.0");
   return 0;
 }
 
@@ -152,9 +463,9 @@ cmd_trade_cancel (client_ctx_t *ctx, json_t *root)
 {
   // Option A: Hide/Refuse for v1.0
   send_response_error (ctx,
-		       root,
-		       ERR_NOT_IMPLEMENTED,
-		       "Trading handshake disabled in v1.0");
+                       root,
+                       ERR_NOT_IMPLEMENTED,
+                       "Trading handshake disabled in v1.0");
   return 0;
 }
 
@@ -175,180 +486,85 @@ json_equal_strict (json_t *a, json_t *b)
 
 
 //// FIND ALL CALLING SITES and modify to:
+
+
 /* const char *sql = */
+
+
 /*   "SELECT ... WHERE a = $1 AND b = $2 AND c = $3;"; */
 
+
 /* db_bind_t binds[] = { */
+
+
 /*   DB_P_INT(a), */
+
+
 /*   DB_P_INT(b), */
+
+
 /*   cursor ? DB_P_TEXT(cursor) : DB_P_NULL() */
+
+
 /* }; */
+
 
 /* if (db_query(db, &res, sql, binds, DB_NBINDS(binds), &err) != 0) { ... } */
 
+
 /* static int */
+
+
 /* bind_text_or_null (sqlite3_stmt *st, int idx, const char *s) */
+
+
 /* { */
+
+
 /*   if (s) */
+
+
 /*     { */
+
+
 /*       return sqlite3_bind_text (st, idx, s, -1, SQLITE_TRANSIENT); */
+
+
 /*     } */
+
+
 /*   return sqlite3_bind_null (st, idx); */
+
+
 /* } */
 
-static int
-h_port_buys_commodity (db_t *db, int port_id, const char *commodity)
-{
-  if (!db || port_id <= 0 || !commodity || !*commodity)
-    {
-      return 0;
-    }
 
-  char *canonical_commodity_code = (char *) commodity_to_code (commodity);
-  if (!canonical_commodity_code)
-    {
-      return 0; /* Invalid or unsupported commodity */
-    }
-
-  const char *sql =
-    "SELECT es.quantity, p.size * 1000 AS max_capacity "
-    "FROM ports p JOIN entity_stock es ON p.id = es.entity_id "
-    "WHERE es.entity_type = 'port' AND es.commodity_code = $2 AND p.id = $1 LIMIT 1;";
-
-  db_res_t *res = NULL;
-  db_error_t err;
-  db_error_clear (&err);
-
-  db_bind_t params[] = {
-    db_bind_i32  (port_id),
-    db_bind_text (canonical_commodity_code)
-  };
-
-  if (!db_query (db, sql, params, sizeof (params) / sizeof (params[0]), &res, &err))
-    {
-      LOGE ("h_port_buys_commodity: query failed: %s",
-            err.message[0] ? err.message : "database error");
-      free (canonical_commodity_code);
-      return 0;
-    }
-
-  int buys = 0;
-
-  db_error_clear (&err);
-  if (db_res_step (res, &err))
-    {
-      int current_quantity = db_res_col_int (res, 0, &err);
-      int max_capacity     = db_res_col_int (res, 1, &err);
-
-      /* If a conversion error occurred, preserve conservative behaviour: buys remains 0 */
-      if (!err.code && current_quantity < max_capacity)
-        {
-          buys = 1;
-        }
-    }
-  else
-    {
-      if (err.code)
-        {
-          /* Step error: preserve conservative behaviour (buys=0), but log */
-          LOGE ("h_port_buys_commodity: step failed: %s",
-                err.message[0] ? err.message : "database error");
-        }
-      else
-        {
-          /* No entry => assume port doesn't trade this commodity or is full */
-          LOGD ("h_port_buys_commodity: No entity_stock entry for port %d, commodity %s",
-                port_id, canonical_commodity_code);
-        }
-    }
-
-  db_res_finalize (res);
-  free (canonical_commodity_code);
-  return buys;
-}
-
-// Helper to get entity stock quantity (generic)
-static int
-h_get_entity_stock_quantity (db_t *db,
-                             const char *entity_type,
-                             int entity_id,
-                             const char *commodity_code,
-                             int *qty_out)
-{
-  if (!db || !entity_type || !*entity_type || !commodity_code || !*commodity_code || !qty_out)
-    {
-      return ERR_DB_MISUSE;
-    }
-
-  const char *sql =
-    "SELECT quantity "
-    "FROM entity_stock "
-    "WHERE entity_type = $1 AND entity_id = $2 AND commodity_code = $3;";
-
-  db_res_t *res = NULL;
-  db_error_t err;
-  db_error_clear (&err);
-
-  db_bind_t params[] = {
-    db_bind_text (entity_type),
-    db_bind_i32  (entity_id),
-    db_bind_text (commodity_code)
-  };
-
-  if (!db_query (db, sql, params, sizeof (params) / sizeof (params[0]), &res, &err))
-    {
-      return err.code ? err.code : ERR_DB_QUERY_FAILED;
-    }
-
-  int rc;
-
-  db_error_clear (&err);
-  if (db_res_step (res, &err))
-    {
-      *qty_out = db_res_col_int (res, 0, &err);
-      rc = err.code ? err.code : 0; /* keep “0 means OK” shape */
-    }
-  else
-    {
-      if (err.code)
-        {
-          rc = err.code;
-        }
-      else
-        {
-          *qty_out = 0;
-          rc = ERR_DB_NOT_FOUND;
-        }
-    }
-
-  db_res_finalize (res);
-  return rc;
-}
 
 int
 h_entity_calculate_sell_price (db_t *db,
-			       const char *entity_type,
-			       int entity_id, const char *commodity)
+                               const char *entity_type,
+                               int entity_id, const char *commodity)
 {
   if (strcmp (entity_type, ENTITY_TYPE_PORT) == 0)
     {
       return h_calculate_port_sell_price (db, entity_id, commodity);
     }
-  return 0;			// Unknown entity
+  return 0;                     // Unknown entity
 }
 
 
 int
 h_entity_calculate_buy_price (db_t *db,
-			      const char *entity_type,
-			      int entity_id, const char *commodity)
+                              const char *entity_type,
+                              int entity_id, const char *commodity)
 {
   if (strcmp (entity_type, ENTITY_TYPE_PORT) == 0)
     {
       return h_calculate_port_buy_price (db, entity_id, commodity);
     }
-  return 0;			// Unknown entity
+  return 0;                     // Unknown entity
 }
+
 
 int
 h_calculate_port_sell_price (db_t *db, int port_id, const char *commodity)
@@ -357,8 +573,11 @@ h_calculate_port_sell_price (db_t *db, int port_id, const char *commodity)
   if (!db || port_id <= 0 || !commodity || !*commodity)
     {
       LOGW
-        ("h_calculate_port_sell_price: Invalid input: db=%p, port_id=%d, commodity=%s",
-         db, port_id, commodity);
+      (
+        "h_calculate_port_sell_price: Invalid input: db=%p, port_id=%d, commodity=%s",
+        db,
+        port_id,
+        commodity);
       return 0;
     }
 
@@ -380,14 +599,22 @@ h_calculate_port_sell_price (db_t *db, int port_id, const char *commodity)
 
   db_res_t *res = NULL;
   db_error_t err;
+
+
   db_error_clear (&err);
 
   db_bind_t params[] = {
-    db_bind_i32  (port_id),
+    db_bind_i32 (port_id),
     db_bind_text (canonical_commodity)
   };
 
-  if (!db_query (db, sql, params, sizeof (params) / sizeof (params[0]), &res, &err))
+
+  if (!db_query (db,
+                 sql,
+                 params,
+                 sizeof (params) / sizeof (params[0]),
+                 &res,
+                 &err))
     {
       /* Old code logged "prepare failed" with rc; we no longer have prepare/bind rc here. */
       LOGE ("h_calculate_port_sell_price: prepare failed: %s (rc=%d)",
@@ -403,23 +630,25 @@ h_calculate_port_sell_price (db_t *db, int port_id, const char *commodity)
   double price_elasticity = 0.0;
   double volatility_factor = 0.0;
 
+
   db_error_clear (&err);
   if (db_res_step (res, &err))
     {
-      base_price        = db_res_col_int    (res, 0, &err);
+      base_price = db_res_col_int (res, 0, &err);
       /* volatility col 1 exists but intentionally unused */
-      quantity          = db_res_col_int    (res, 2, &err);
-      max_capacity      = db_res_col_int    (res, 3, &err);
-      techlevel         = db_res_col_int    (res, 4, &err);
-      price_elasticity  = db_res_col_double (res, 5, &err);
+      quantity = db_res_col_int (res, 2, &err);
+      max_capacity = db_res_col_int (res, 3, &err);
+      techlevel = db_res_col_int (res, 4, &err);
+      price_elasticity = db_res_col_double (res, 5, &err);
       volatility_factor = db_res_col_double (res, 6, &err);
 
       if (err.code)
         {
           /* Conversion/type error; conservative behaviour: return 0 */
-          LOGE ("h_calculate_port_sell_price: column conversion failed: %s (rc=%d)",
-                err.message[0] ? err.message : "database error",
-                err.code);
+          LOGE (
+            "h_calculate_port_sell_price: column conversion failed: %s (rc=%d)",
+            err.message[0] ? err.message : "database error",
+            err.code);
           db_res_finalize (res);
           return 0;
         }
@@ -428,11 +657,13 @@ h_calculate_port_sell_price (db_t *db, int port_id, const char *commodity)
     {
       /* No row OR step error. Old code treated non-ROW as "no data found". */
       LOGW
-        ("h_calculate_port_sell_price: No data found for canonical_commodity %s at port %d (rc_step=%d, errmsg=%s)",
-         canonical_commodity,
-         port_id,
-         err.code, /* best available analogue for rc_step */
-         err.message[0] ? err.message : "database error");
+      (
+        "h_calculate_port_sell_price: No data found for canonical_commodity %s at port %d (rc_step=%d, errmsg=%s)",
+        canonical_commodity,
+        port_id,
+        err.code,
+        /* best available analogue for rc_step */
+        err.message[0] ? err.message : "database error");
 
       db_res_finalize (res);
       return 0; /* Port not selling this commodity or no stock info */
@@ -443,26 +674,30 @@ h_calculate_port_sell_price (db_t *db, int port_id, const char *commodity)
   if (base_price <= 0)
     {
       LOGW
-        ("h_calculate_port_sell_price: Base price is zero or less for canonical_commodity %s at port %d",
-         canonical_commodity, port_id);
+      (
+        "h_calculate_port_sell_price: Base price is zero or less for canonical_commodity %s at port %d",
+        canonical_commodity,
+        port_id);
       return 0;
     }
 
   double price_multiplier = 1.0;
 
+
   if (max_capacity > 0)
     {
       double fill_ratio = (double) quantity / max_capacity;
 
+
       if (fill_ratio < 0.5)
         {
           price_multiplier = 1.0 + (1.0 - fill_ratio) * price_elasticity *
-            volatility_factor;
+                             volatility_factor;
         }
       else
         {
           price_multiplier = 1.0 - (fill_ratio - 0.5) * price_elasticity *
-            volatility_factor;
+                             volatility_factor;
         }
     }
 
@@ -471,6 +706,7 @@ h_calculate_port_sell_price (db_t *db, int port_id, const char *commodity)
 
   return (int) ceil (base_price * price_multiplier);
 }
+
 
 /**
  * @brief Checks if a port is selling a specific commodity.
@@ -503,6 +739,7 @@ h_port_sells_commodity (db_t *db, int port_id, const char *commodity)
 
 /* New Helpers for Illegal Goods and Cluster Alignment */
 
+
 /**
  * @brief Checks if a commodity is marked as illegal in the commodities table.
  * @param db The database handle.
@@ -521,13 +758,21 @@ h_is_illegal_commodity (db_t *db, const char *commodity_code)
 
   db_res_t *res = NULL;
   db_error_t err;
+
+
   db_error_clear (&err);
 
   db_bind_t params[] = {
     db_bind_text (commodity_code)
   };
 
-  if (!db_query (db, sql, params, sizeof (params) / sizeof (params[0]), &res, &err))
+
+  if (!db_query (db,
+                 sql,
+                 params,
+                 sizeof (params) / sizeof (params[0]),
+                 &res,
+                 &err))
     {
       LOGE ("h_is_illegal_commodity: Failed to query: %s",
             err.message[0] ? err.message : "database error");
@@ -536,10 +781,13 @@ h_is_illegal_commodity (db_t *db, const char *commodity_code)
 
   bool illegal = false;
 
+
   db_error_clear (&err);
   if (db_res_step (res, &err))
     {
       int v = db_res_col_int (res, 0, &err);
+
+
       if (!err.code)
         {
           illegal = (v != 0);
@@ -574,12 +822,16 @@ h_can_trade_commodity (db_t *db,
                                                   commodity_code,
                                                   &dummy_qty);
 
+
   /* Refactor: replace SQLITE_OK / SQLITE_NOTFOUND with DB-layer equivalents */
   if (rc_get_qty != 0 && rc_get_qty != ERR_DB_NOT_FOUND)
     {
       LOGE
-        ("h_can_trade_commodity: Error checking commodity existence for port %d, commodity %s (rc=%d)",
-         port_id, commodity_code, rc_get_qty);
+      (
+        "h_can_trade_commodity: Error checking commodity existence for port %d, commodity %s (rc=%d)",
+        port_id,
+        commodity_code,
+        rc_get_qty);
       return false;             // Error reading DB
     }
 
@@ -591,9 +843,14 @@ h_can_trade_commodity (db_t *db,
 
   bool illegal_commodity_status = h_is_illegal_commodity (db, commodity_code);
 
+
   LOGD
-    ("h_can_trade_commodity: Port %d, Player %d, Cmd %s: illegal_commodity_status=%d",
-     port_id, player_id, commodity_code, illegal_commodity_status);
+  (
+    "h_can_trade_commodity: Port %d, Player %d, Cmd %s: illegal_commodity_status=%d",
+    port_id,
+    player_id,
+    commodity_code,
+    illegal_commodity_status);
 
   // 2. If commodity is not illegal, allow (subject to existing rules)
   if (!illegal_commodity_status)
@@ -608,6 +865,8 @@ h_can_trade_commodity (db_t *db,
   {
     db_res_t *res = NULL;
     db_error_t err;
+
+
     db_error_clear (&err);
 
     const char *sql = "SELECT sector FROM ports WHERE id = $1 LIMIT 1";
@@ -616,8 +875,14 @@ h_can_trade_commodity (db_t *db,
       db_bind_i32 (port_id)
     };
 
+
     /* Preserve old behaviour: if query fails, we just fall through with sector_id == 0 */
-    if (db_query (db, sql, params, sizeof (params) / sizeof (params[0]), &res, &err))
+    if (db_query (db,
+                  sql,
+                  params,
+                  sizeof (params) / sizeof (params[0]),
+                  &res,
+                  &err))
       {
         db_error_clear (&err);
         if (db_res_step (res, &err))
@@ -632,6 +897,7 @@ h_can_trade_commodity (db_t *db,
       }
   }
 
+
   if (sector_id == 0)
     {
       LOGD ("h_can_trade_commodity: Port %d not linked to a sector.",
@@ -641,9 +907,11 @@ h_can_trade_commodity (db_t *db,
 
   int cluster_align_band_id = 0;
 
+
   h_get_cluster_alignment_band (db, sector_id, &cluster_align_band_id);
   int cluster_is_evil = 0;
   int cluster_is_good = 0;
+
 
   db_alignment_band_for_value (db,
                                cluster_align_band_id,
@@ -654,26 +922,34 @@ h_can_trade_commodity (db_t *db,
                                &cluster_is_evil, NULL, NULL);
 
   LOGD
-    ("h_can_trade_commodity: Port %d, Sector %d (Cluster Band %d): cluster_is_good=%d, cluster_is_evil=%d",
-     port_id, sector_id, cluster_align_band_id, cluster_is_good,
-     cluster_is_evil);
+  (
+    "h_can_trade_commodity: Port %d, Sector %d (Cluster Band %d): cluster_is_good=%d, cluster_is_evil=%d",
+    port_id,
+    sector_id,
+    cluster_align_band_id,
+    cluster_is_good,
+    cluster_is_evil);
 
   // 4. Check cluster alignment for illegal trade
   if (cluster_is_good)
     {
       // Good cluster – no illegal trade
       LOGD
-        ("h_can_trade_commodity: Port %d, Cmd %s: Refused because cluster is good.",
-         port_id, commodity_code);
+      (
+        "h_can_trade_commodity: Port %d, Cmd %s: Refused because cluster is good.",
+        port_id,
+        commodity_code);
       return false;
     }
 
   // 5. Check player alignment band properties
   int player_alignment = 0;     // Declare player_alignment
 
+
   db_player_get_alignment (db, player_id, &player_alignment);  // Retrieve player's raw alignment score
   int player_align_band_id = 0;
   int player_is_evil = 0;
+
 
   db_alignment_band_for_value (db,
                                player_alignment,
@@ -681,17 +957,27 @@ h_can_trade_commodity (db_t *db,
                                NULL, NULL, NULL, &player_is_evil, NULL, NULL);
   int neutral_band_value = db_get_config_int (db, "neutral_band", 75); // Get neutral_band from config
 
+
   LOGD
-    ("h_can_trade_commodity: Port %d, Player %d (Alignment %d, Band %d): player_is_evil=%d, neutral_band_value=%d",
-     port_id, player_id, player_alignment, player_align_band_id,
-     player_is_evil, neutral_band_value);
+  (
+    "h_can_trade_commodity: Port %d, Player %d (Alignment %d, Band %d): player_is_evil=%d, neutral_band_value=%d",
+    port_id,
+    player_id,
+    player_alignment,
+    player_align_band_id,
+    player_is_evil,
+    neutral_band_value);
 
   // If player is Good (alignment > neutral_band), refuse illegal trade.
   if (player_alignment > neutral_band_value)
     {
       LOGI
-        ("h_can_trade_commodity: Port %d, Player %d, Cmd %s: Player alignment is too good (%d). Refused illegal trade.",
-         port_id, player_id, commodity_code, player_alignment);
+      (
+        "h_can_trade_commodity: Port %d, Player %d, Cmd %s: Player alignment is too good (%d). Refused illegal trade.",
+        port_id,
+        player_id,
+        commodity_code,
+        player_alignment);
       return false;
     }
 
@@ -701,17 +987,24 @@ h_can_trade_commodity (db_t *db,
       if (!db_get_config_bool (db, "illegal_allowed_neutral", true))
         {
           LOGI
-            ("h_can_trade_commodity: Port %d, Player %d, Cmd %s: Player alignment is neutral, and neutral illegal trade is disallowed. Refused.",
-             port_id, player_id, commodity_code);
+          (
+            "h_can_trade_commodity: Port %d, Player %d, Cmd %s: Player alignment is neutral, and neutral illegal trade is disallowed. Refused.",
+            port_id,
+            player_id,
+            commodity_code);
           return false;
         }
     }
 
   LOGI
-    ("h_can_trade_commodity: Port %d, Player %d, Cmd %s: All conditions met. Allowed.",
-     port_id, player_id, commodity_code);
+  (
+    "h_can_trade_commodity: Port %d, Player %d, Cmd %s: All conditions met. Allowed.",
+    port_id,
+    player_id,
+    commodity_code);
   return true;                 // Evil player in an evil cluster, trading illegal goods is permitted
 }
+
 
 /**
  * @brief Updates the quantity of a commodity in entity_stock for a given port.
@@ -724,15 +1017,13 @@ h_can_trade_commodity (db_t *db,
  */
 int
 h_update_port_stock (db_t *db,
-		     int port_id,
-		     const char *commodity_code, int delta, int *new_qty_out)
+                     int port_id,
+                     const char *commodity_code, int delta, int *new_qty_out)
 {
   return h_update_entity_stock (db,
-				ENTITY_TYPE_PORT,
-				port_id, commodity_code, delta, new_qty_out);
+                                ENTITY_TYPE_PORT,
+                                port_id, commodity_code, delta, new_qty_out);
 }
-
-
 
 
 /**
@@ -766,6 +1057,8 @@ h_market_move_port_stock (db_t *db,
   /* 1. Get current quantity and port size (for max capacity) */
   db_res_t *res = NULL;
   db_error_t err;
+
+
   db_error_clear (&err);
 
   const char *sql_info =
@@ -778,9 +1071,10 @@ h_market_move_port_stock (db_t *db,
     "WHERE p.id = $1;";
 
   db_bind_t params[] = {
-    db_bind_i32  (port_id),
+    db_bind_i32 (port_id),
     db_bind_text (commodity_code)
   };
+
 
   if (!db_query (db, sql_info, params, sizeof (params) / sizeof (params[0]),
                  &res, &err))
@@ -792,6 +1086,7 @@ h_market_move_port_stock (db_t *db,
 
   int current_quantity = 0;
   int max_capacity = 0;
+
 
   db_error_clear (&err);
   if (db_res_step (res, &err))
@@ -832,6 +1127,7 @@ h_market_move_port_stock (db_t *db,
   /* 2. Calculate new quantity with bounds checking */
   int new_quantity = current_quantity + quantity_delta;
 
+
   new_quantity = (new_quantity < 0) ? 0 : new_quantity;
   new_quantity = (new_quantity > max_capacity) ? max_capacity : new_quantity;
 
@@ -844,6 +1140,7 @@ h_market_move_port_stock (db_t *db,
                                 NULL);
 }
 
+
 void
 free_trade_lines (TradeLine *lines, size_t n)
 {
@@ -854,18 +1151,18 @@ free_trade_lines (TradeLine *lines, size_t n)
   for (size_t i = 0; i < n; i++)
     {
       if (lines[i].commodity)
-	{
-	  free (lines[i].commodity);
-	  lines[i].commodity = NULL;	// <--- CRITICAL FIX
-	}
+        {
+          free (lines[i].commodity);
+          lines[i].commodity = NULL;    // <--- CRITICAL FIX
+        }
     }
   //  free (lines);
 }
 
+
 int
-cmd_trade_quote (client_ctx_t *ctx, json_t *root)
+cmd_trade_quote (db_t *db, client_ctx_t *ctx, json_t *root)
 {
-  db_t *db = db_get_handle ();
   json_t *data = json_object_get (root, "data");
   json_t *payload = NULL;
   const char *commodity = NULL;
@@ -887,18 +1184,24 @@ cmd_trade_quote (client_ctx_t *ctx, json_t *root)
     }
 
   json_t *jport_id = json_object_get (data, "port_id");
+
+
   if (json_is_integer (jport_id))
     {
       port_id = (int) json_integer_value (jport_id);
     }
 
   json_t *jcommodity = json_object_get (data, "commodity");
+
+
   if (json_is_string (jcommodity))
     {
       commodity = json_string_value (jcommodity);
     }
 
   json_t *jquantity = json_object_get (data, "quantity");
+
+
   if (json_is_integer (jquantity))
     {
       quantity = (int) json_integer_value (jquantity);
@@ -912,7 +1215,7 @@ cmd_trade_quote (client_ctx_t *ctx, json_t *root)
     }
 
   /* Validate commodity using commodity_to_code (returns strdup()’d string) */
-  commodity_code = (char *) commodity_to_code (commodity);
+  commodity_code = (char *) commodity_to_code (db, commodity);
   if (!commodity_code)
     {
       send_response_error (ctx, root, 400, "Invalid commodity.");
@@ -931,6 +1234,7 @@ cmd_trade_quote (client_ctx_t *ctx, json_t *root)
                                   commodity_code);
   long long total_player_sell_price =
     (long long) player_sell_price_per_unit * quantity;
+
 
   payload = json_object ();
   json_object_set_new (payload, "port_id", json_integer (port_id));
@@ -951,10 +1255,10 @@ cmd_trade_quote (client_ctx_t *ctx, json_t *root)
   return 0;
 }
 
+
 int
-cmd_trade_history (client_ctx_t *ctx, json_t *root)
+cmd_trade_history (db_t *db, client_ctx_t *ctx, json_t *root)
 {
-  db_t *db = db_get_handle ();
   json_t *data = json_object_get (root, "data");
 
   if (ctx->player_id <= 0)
@@ -970,15 +1274,20 @@ cmd_trade_history (client_ctx_t *ctx, json_t *root)
   const char *cursor = NULL;
   int limit = 0;
 
+
   if (json_is_object (data))
     {
       json_t *jcursor = json_object_get (data, "cursor");
+
+
       if (json_is_string (jcursor))
         {
           cursor = json_string_value (jcursor);
         }
 
       json_t *jlimit = json_object_get (data, "limit");
+
+
       if (json_is_integer (jlimit))
         {
           limit = (int) json_integer_value (jlimit);
@@ -994,16 +1303,20 @@ cmd_trade_history (client_ctx_t *ctx, json_t *root)
   long long cursor_ts = 0;
   long long cursor_id = 0;
 
+
   /* Parse cursor safely: expected format "<ts>_<id>" */
   if (cursor && cursor[0])
     {
       char buf[128];
       size_t n = strlen (cursor);
 
+
       if (n < sizeof (buf))
         {
           memcpy (buf, cursor, n + 1);
           char *sep = strchr (buf, '_');
+
+
           if (sep)
             {
               *sep = '\0';
@@ -1029,10 +1342,13 @@ cmd_trade_history (client_ctx_t *ctx, json_t *root)
 
   db_res_t *res = NULL;
   db_error_t err;
+
+
   db_error_clear (&err);
 
   /* LIMIT + 1 to detect next page (preserve behaviour) */
   int fetch_n = limit + 1;
+
 
   if (!use_cursor)
     {
@@ -1041,11 +1357,18 @@ cmd_trade_history (client_ctx_t *ctx, json_t *root)
         db_bind_i32 (fetch_n)
       };
 
-      if (!db_query (db, sql, params, sizeof (params) / sizeof (params[0]), &res, &err))
+
+      if (!db_query (db,
+                     sql,
+                     params,
+                     sizeof (params) / sizeof (params[0]),
+                     &res,
+                     &err))
         {
           LOGE ("trade.history prepare error: %s",
                 err.message[0] ? err.message : "database error");
-          send_response_error (ctx, root, ERR_PLANET_NOT_FOUND, "Database error");
+          send_response_error (ctx, root, ERR_PLANET_NOT_FOUND,
+                               "Database error");
           return 0;
         }
     }
@@ -1058,11 +1381,18 @@ cmd_trade_history (client_ctx_t *ctx, json_t *root)
         db_bind_i64 (cursor_id)
       };
 
-      if (!db_query (db, sql, params, sizeof (params) / sizeof (params[0]), &res, &err))
+
+      if (!db_query (db,
+                     sql,
+                     params,
+                     sizeof (params) / sizeof (params[0]),
+                     &res,
+                     &err))
         {
           LOGE ("trade.history prepare error: %s",
                 err.message[0] ? err.message : "database error");
-          send_response_error (ctx, root, ERR_PLANET_NOT_FOUND, "Database error");
+          send_response_error (ctx, root, ERR_PLANET_NOT_FOUND,
+                               "Database error");
           return 0;
         }
     }
@@ -1072,6 +1402,7 @@ cmd_trade_history (client_ctx_t *ctx, json_t *root)
   int count = 0;
   long long last_ts = 0;
   long long last_id = 0;
+
 
   for (;;)
     {
@@ -1095,6 +1426,7 @@ cmd_trade_history (client_ctx_t *ctx, json_t *root)
           double ppu = db_res_col_double (res, 5, &err);
           const char *action = db_res_col_text (res, 6, &err);
 
+
           /* If any conversion fails, treat as DB error (conservative) */
           if (err.code)
             {
@@ -1104,10 +1436,12 @@ cmd_trade_history (client_ctx_t *ctx, json_t *root)
           json_object_set_new (hist_row, "timestamp", json_integer (ts));
           json_object_set_new (hist_row, "id", json_integer (id));
           json_object_set_new (hist_row, "port_id", json_integer (port_id));
-          json_object_set_new (hist_row, "commodity", json_string (cmdty ? cmdty : ""));
+          json_object_set_new (hist_row, "commodity",
+                               json_string (cmdty ? cmdty : ""));
           json_object_set_new (hist_row, "units", json_integer (units));
           json_object_set_new (hist_row, "price_per_unit", json_real (ppu));
-          json_object_set_new (hist_row, "action", json_string (action ? action : ""));
+          json_object_set_new (hist_row, "action",
+                               json_string (action ? action : ""));
 
           json_array_append_new (history_array, hist_row);
 
@@ -1136,12 +1470,19 @@ cmd_trade_history (client_ctx_t *ctx, json_t *root)
 
   /* 5. Build and send response */
   json_t *payload = json_object ();
-  json_object_set_new (payload, "history", history_array);
+
+
+  json_object_set_new (payload,
+                       "history",
+                       history_array);
 
   if (count == limit && last_id > 0)
     {
       char next_cursor[64];
-      snprintf (next_cursor, sizeof (next_cursor), "%lld_%lld", last_ts, last_id);
+
+
+      snprintf (next_cursor, sizeof (next_cursor), "%lld_%lld", last_ts,
+                last_id);
       json_object_set_new (payload, "next_cursor", json_string (next_cursor));
     }
 
@@ -1149,11 +1490,10 @@ cmd_trade_history (client_ctx_t *ctx, json_t *root)
   return 0;
 }
 
+
 int
-cmd_dock_status (client_ctx_t *ctx, json_t *root)
+cmd_dock_status (db_t *db,client_ctx_t *ctx, json_t *root)
 {
-  db_t *db = NULL;
-  int rc = 0;
   int player_ship_id = 0;
   int resolved_port_id = 0;
   char *player_name = NULL;
@@ -1166,7 +1506,7 @@ cmd_dock_status (client_ctx_t *ctx, json_t *root)
       return -1;
     }
 
-  db = db_get_handle ();
+
   if (!db)
     {
       send_response_error (ctx, root, 500, "No database handle.");
@@ -1199,12 +1539,14 @@ cmd_dock_status (client_ctx_t *ctx, json_t *root)
   json_t *j_action =
     json_object_get (json_object_get (root, "data"), "action");
 
+
   if (json_is_string (j_action))
     {
       action = json_string_value (j_action);
     }
 
   int new_ported_status = resolved_port_id;
+
 
   if (action && strcasecmp (action, "undock") == 0)
     {
@@ -1236,6 +1578,8 @@ cmd_dock_status (client_ctx_t *ctx, json_t *root)
       /* Update ships.ported status (and clear onplanet) */
       {
         db_error_t err;
+
+
         db_error_clear (&err);
 
         const char *sql_update_ported =
@@ -1245,6 +1589,7 @@ cmd_dock_status (client_ctx_t *ctx, json_t *root)
           db_bind_i32 (new_ported_status),
           db_bind_i32 (player_ship_id)
         };
+
 
         if (!db_exec (db, sql_update_ported,
                       params, sizeof (params) / sizeof (params[0]),
@@ -1265,6 +1610,8 @@ cmd_dock_status (client_ctx_t *ctx, json_t *root)
           db_player_name (db, ctx->player_id, &player_name);
 
           char notice_body[512];
+
+
           snprintf (notice_body,
                     sizeof (notice_body),
                     "Player %s (ID: %d)'s ship '%s' (ID: %d) docked at port '%s' (ID: %d) in Sector %d.",
@@ -1273,7 +1620,8 @@ cmd_dock_status (client_ctx_t *ctx, json_t *root)
                     ship_name ? ship_name : "Unknown",
                     player_ship_id,
                     port_name ? port_name : "Unknown",
-                    new_ported_status, ctx->sector_id);
+                    new_ported_status,
+                    ctx->sector_id);
 
           db_notice_create (db, "Docking Log", notice_body, "info",
                             time (NULL) + (86400 * 7));
@@ -1287,6 +1635,8 @@ cmd_dock_status (client_ctx_t *ctx, json_t *root)
       /* Status check only - fetch actual status from DB */
       db_res_t *res = NULL;
       db_error_t err;
+
+
       db_error_clear (&err);
 
       const char *sql_check = "SELECT ported FROM ships WHERE id = $1";
@@ -1294,6 +1644,7 @@ cmd_dock_status (client_ctx_t *ctx, json_t *root)
       db_bind_t params[] = {
         db_bind_i32 (player_ship_id)
       };
+
 
       if (db_query (db, sql_check,
                     params, sizeof (params) / sizeof (params[0]),
@@ -1303,6 +1654,8 @@ cmd_dock_status (client_ctx_t *ctx, json_t *root)
           if (db_res_step (res, &err))
             {
               int v = (int) db_res_col_i32 (res, 0, &err);
+
+
               if (!err.code)
                 {
                   resolved_port_id = v;
@@ -1347,6 +1700,7 @@ cleanup:
   return 0;
 }
 
+
 int
 h_calculate_port_buy_price (db_t *db, int port_id, const char *commodity)
 {
@@ -1354,8 +1708,11 @@ h_calculate_port_buy_price (db_t *db, int port_id, const char *commodity)
   if (!db || port_id <= 0 || !commodity || !*commodity)
     {
       LOGW
-        ("h_calculate_port_buy_price: Invalid input: db=%p, port_id=%d, commodity=%s",
-         db, port_id, commodity);
+      (
+        "h_calculate_port_buy_price: Invalid input: db=%p, port_id=%d, commodity=%s",
+        db,
+        port_id,
+        commodity);
       return 0;
     }
 
@@ -1377,14 +1734,22 @@ h_calculate_port_buy_price (db_t *db, int port_id, const char *commodity)
 
   db_res_t *res = NULL;
   db_error_t err;
+
+
   db_error_clear (&err);
 
   db_bind_t params[] = {
-    db_bind_i32  (port_id),
+    db_bind_i32 (port_id),
     db_bind_text (canonical_commodity)
   };
 
-  if (!db_query (db, sql, params, sizeof (params) / sizeof (params[0]), &res, &err))
+
+  if (!db_query (db,
+                 sql,
+                 params,
+                 sizeof (params) / sizeof (params[0]),
+                 &res,
+                 &err))
     {
       LOGE ("h_calculate_port_buy_price: prepare failed: %s (rc=%d)",
             err.message[0] ? err.message : "database error",
@@ -1399,22 +1764,24 @@ h_calculate_port_buy_price (db_t *db, int port_id, const char *commodity)
   double price_elasticity = 0.0;
   double volatility_factor = 0.0;
 
+
   db_error_clear (&err);
   if (db_res_step (res, &err))
     {
-      base_price        = db_res_col_int    (res, 0, &err);
+      base_price = db_res_col_int (res, 0, &err);
       /* volatility col 1 exists but intentionally unused */
-      quantity          = db_res_col_int    (res, 2, &err);
-      max_capacity      = db_res_col_int    (res, 3, &err);
-      techlevel         = db_res_col_int    (res, 4, &err);
-      price_elasticity  = db_res_col_double (res, 5, &err);
+      quantity = db_res_col_int (res, 2, &err);
+      max_capacity = db_res_col_int (res, 3, &err);
+      techlevel = db_res_col_int (res, 4, &err);
+      price_elasticity = db_res_col_double (res, 5, &err);
       volatility_factor = db_res_col_double (res, 6, &err);
 
       if (err.code)
         {
-          LOGE ("h_calculate_port_buy_price: column conversion failed: %s (rc=%d)",
-                err.message[0] ? err.message : "database error",
-                err.code);
+          LOGE (
+            "h_calculate_port_buy_price: column conversion failed: %s (rc=%d)",
+            err.message[0] ? err.message : "database error",
+            err.code);
           db_res_finalize (res);
           return 0;
         }
@@ -1422,11 +1789,12 @@ h_calculate_port_buy_price (db_t *db, int port_id, const char *commodity)
   else
     {
       LOGW
-        ("h_calculate_port_buy_price: No data found for canonical_commodity %s at port %d (rc_step=%d, errmsg=%s)",
-         canonical_commodity,
-         port_id,
-         err.code,
-         err.message[0] ? err.message : "database error");
+      (
+        "h_calculate_port_buy_price: No data found for canonical_commodity %s at port %d (rc_step=%d, errmsg=%s)",
+        canonical_commodity,
+        port_id,
+        err.code,
+        err.message[0] ? err.message : "database error");
       db_res_finalize (res);
       return 0;                 // Port not buying this commodity or no stock info
     }
@@ -1441,27 +1809,31 @@ h_calculate_port_buy_price (db_t *db, int port_id, const char *commodity)
   if (base_price <= 0)
     {
       LOGW
-        ("h_calculate_port_buy_price: Base price is zero or less for canonical_commodity %s at port %d",
-         canonical_commodity, port_id);
+      (
+        "h_calculate_port_buy_price: Base price is zero or less for canonical_commodity %s at port %d",
+        canonical_commodity,
+        port_id);
       return 0;
     }
 
   double price_multiplier = 1.0;
 
+
   if (max_capacity > 0)
     {
       double fill_ratio = (double) quantity / max_capacity;
+
 
       // Port buys (player sells): price is lower when supply is high
       if (fill_ratio > 0.5)
         {
           price_multiplier = 1.0 - (fill_ratio - 0.5) * price_elasticity *
-            volatility_factor;
+                             volatility_factor;
         }
       else
         {
           price_multiplier = 1.0 + (0.5 - fill_ratio) * price_elasticity *
-            volatility_factor;
+                             volatility_factor;
         }
     }
 
@@ -1469,6 +1841,7 @@ h_calculate_port_buy_price (db_t *db, int port_id, const char *commodity)
   price_multiplier *= (1.0 - (techlevel - 1) * 0.02);  // Port wants to buy low
 
   long long price = (long long) (base_price * price_multiplier + 0.999999); /* ceil */
+
 
   if (price < 1)
     {
@@ -1481,8 +1854,9 @@ h_calculate_port_buy_price (db_t *db, int port_id, const char *commodity)
   return (int) price;
 }
 
+
 int
-cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
+cmd_trade_port_info (db_t *db, client_ctx_t *ctx, json_t *root)
 {
   json_t *port = NULL;
   json_t *payload = NULL;
@@ -1503,7 +1877,7 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  db_t *db = db_get_handle ();
+
   if (!db)
     {
       send_response_error (ctx, root, ERR_DB, "No database handle");
@@ -1513,15 +1887,21 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
   sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 0;
 
   json_t *data = json_object_get (root, "data");
+
+
   if (json_is_object (data))
     {
       json_t *jport_id = json_object_get (data, "port_id");
+
+
       if (json_is_integer (jport_id))
         {
           requested_port_id = (int) json_integer_value (jport_id);
         }
 
       json_t *jsec = json_object_get (data, "sector_id");
+
+
       if (json_is_integer (jsec))
         {
           sector_id = (int) json_integer_value (jsec);
@@ -1531,6 +1911,7 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
   /* Resolve by port_id if supplied */
   const char *sql_port_info = NULL;
   bool by_port_id = false;
+
 
   if (requested_port_id > 0)
     {
@@ -1560,11 +1941,14 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
   {
     db_res_t *res = NULL;
     db_error_t err;
+
+
     db_error_clear (&err);
 
     db_bind_t params[] = {
       db_bind_i32 (by_port_id ? requested_port_id : sector_id)
     };
+
 
     if (!db_query (db, sql_port_info,
                    params, sizeof (params) / sizeof (params[0]),
@@ -1615,14 +1999,17 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
     db_error_clear (&err);
 
     int col_idx = 0;
+
+
     port_id_val = (int) db_res_col_i32 (res, col_idx++, &err);
-    int number  = (int) db_res_col_i32 (res, col_idx++, &err);
+    int number = (int) db_res_col_i32 (res, col_idx++, &err);
     const char *name = db_res_col_text (res, col_idx++, &err);
     int p_sector = (int) db_res_col_i32 (res, col_idx++, &err);
-    int size     = (int) db_res_col_i32 (res, col_idx++, &err);
-    int tech     = (int) db_res_col_i32 (res, col_idx++, &err);
-    int petty    = (int) db_res_col_i32 (res, col_idx++, &err);
-    int type     = (int) db_res_col_i32 (res, col_idx++, &err);
+    int size = (int) db_res_col_i32 (res, col_idx++, &err);
+    int tech = (int) db_res_col_i32 (res, col_idx++, &err);
+    int petty = (int) db_res_col_i32 (res, col_idx++, &err);
+    int type = (int) db_res_col_i32 (res, col_idx++, &err);
+
 
     if (err.code)
       {
@@ -1652,27 +2039,32 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
       "FROM entity_stock es JOIN commodities c ON es.commodity_code = c.code "
       "WHERE es.entity_type = 'port' AND es.entity_id = $1;";
 
+
     LOGD
       ("cmd_trade_port_info: Executing SQL_COMMODITIES for port_id_val=%d: %s",
-       port_id_val, sql_commodities);
+      port_id_val, sql_commodities);
 
     db_res_t *res = NULL;
     db_error_t err;
+
+
     db_error_clear (&err);
 
     db_bind_t params[] = {
       db_bind_i32 (port_id_val)
     };
 
+
     if (!db_query (db, sql_commodities,
                    params, sizeof (params) / sizeof (params[0]),
                    &res, &err))
       {
         LOGE
-          ("cmd_trade_port_info: commodities prepare failed: %s (rc=%d, errmsg=%s)",
-           err.message[0] ? err.message : "database error",
-           err.code,
-           err.message[0] ? err.message : "database error");
+        (
+          "cmd_trade_port_info: commodities prepare failed: %s (rc=%d, errmsg=%s)",
+          err.message[0] ? err.message : "database error",
+          err.code,
+          err.message[0] ? err.message : "database error");
         send_response_error (ctx, root, ERR_DB, "Database error.");
         ok = -1;
         goto cleanup;
@@ -1689,6 +2081,7 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
 
     int row_count = 0;
 
+
     for (;;)
       {
         db_error_clear (&err);
@@ -1703,8 +2096,9 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
         db_error_clear (&err);
         const char *commodity_code = db_res_col_text (res, 0, &err);
         int quantity = (int) db_res_col_i32 (res, 1, &err);
-        int price    = (int) db_res_col_i32 (res, 2, &err);
-        int illegal  = (int) db_res_col_i32 (res, 3, &err);
+        int price = (int) db_res_col_i32 (res, 2, &err);
+        int illegal = (int) db_res_col_i32 (res, 3, &err);
+
 
         if (err.code)
           {
@@ -1717,6 +2111,8 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
           }
 
         json_t *commodity_obj = json_object ();
+
+
         if (!commodity_obj)
           {
             LOGE ("cmd_trade_port_info: Out of memory for commodity object.");
@@ -1726,14 +2122,19 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
           }
 
         json_object_set_new (commodity_obj, "code",
-                             json_string (commodity_code ? commodity_code : ""));
-        json_object_set_new (commodity_obj, "quantity", json_integer (quantity));
+                             json_string (commodity_code ? commodity_code :
+                                          ""));
+        json_object_set_new (commodity_obj, "quantity",
+                             json_integer (quantity));
         json_object_set_new (commodity_obj, "price", json_integer (price));
         json_object_set_new (commodity_obj, "illegal", json_boolean (illegal));
 
         LOGD
-          ("cmd_trade_port_info: Processing commodity: code=%s, quantity=%d, illegal=%d",
-           commodity_code ? commodity_code : "NULL", quantity, illegal);
+        (
+          "cmd_trade_port_info: Processing commodity: code=%s, quantity=%d, illegal=%d",
+          commodity_code ? commodity_code : "NULL",
+          quantity,
+          illegal);
 
         /* Apply h_can_trade_commodity rules for visibility of illegal goods */
         if (illegal && !h_can_trade_commodity (db,
@@ -1742,8 +2143,11 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
                                                commodity_code))
           {
             LOGD
-              ("cmd_trade_port_info: Commodity %s filtered for player %d (illegal=%d)",
-               commodity_code ? commodity_code : "NULL", ctx->player_id, illegal);
+            (
+              "cmd_trade_port_info: Commodity %s filtered for player %d (illegal=%d)",
+              commodity_code ? commodity_code : "NULL",
+              ctx->player_id,
+              illegal);
             json_decref (commodity_obj);
             continue;
           }
@@ -1802,9 +2206,8 @@ cleanup:
 
 
 int
-cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
+cmd_trade_jettison (db_t *db, client_ctx_t *ctx, json_t *root)
 {
-  db_t *db = db_get_handle ();
   json_t *data = json_object_get (root, "data");
   json_t *payload = NULL;
   const char *commodity = NULL;
@@ -1834,6 +2237,7 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
   h_decloak_ship (db, player_ship_id);
   TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);
 
+
   if (tc != TURN_CONSUME_SUCCESS)
     {
       return handle_turn_consumption_error (ctx, tc, "ship.jettison", root,
@@ -1847,12 +2251,16 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
     }
 
   json_t *jcommodity = json_object_get (data, "commodity");
+
+
   if (json_is_string (jcommodity))
     {
       commodity = json_string_value (jcommodity);
     }
 
   json_t *jquantity = json_object_get (data, "quantity");
+
+
   if (json_is_integer (jquantity))
     {
       quantity = (int) json_integer_value (jquantity);
@@ -1871,6 +2279,7 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
   int cur_ore, cur_org, cur_eq, cur_holds, cur_colonists;
   int cur_slaves, cur_weapons, cur_drugs;
 
+
   if (h_get_ship_cargo_and_holds (db, player_ship_id,
                                   &cur_ore, &cur_org, &cur_eq, &cur_holds,
                                   &cur_colonists,
@@ -1882,6 +2291,7 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
     }
 
   int have = 0;
+
 
   if (strcasecmp (commodity, "ore") == 0)
     {
@@ -1933,6 +2343,7 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
   /* Update ship cargo (jettisoning means negative delta) */
   int new_qty = 0;
 
+
   rc =
     h_update_ship_cargo (db, ctx->ship_id, commodity, -quantity, &new_qty);
 
@@ -1948,6 +2359,7 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
   payload = json_object ();
   json_t *remaining_cargo_array = json_array ();
 
+
   /* Re-fetch current cargo to ensure accurate remaining_cargo */
   if (h_get_ship_cargo_and_holds (db, player_ship_id,
                                   &cur_ore, &cur_org, &cur_eq, &cur_holds,
@@ -1958,6 +2370,8 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
       if (cur_ore > 0)
         {
           json_t *it = json_object ();
+
+
           json_object_set_new (it, "commodity", json_string ("ore"));
           json_object_set_new (it, "quantity", json_integer (cur_ore));
           json_array_append_new (remaining_cargo_array, it);
@@ -1965,6 +2379,8 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
       if (cur_org > 0)
         {
           json_t *it = json_object ();
+
+
           json_object_set_new (it, "commodity", json_string ("organics"));
           json_object_set_new (it, "quantity", json_integer (cur_org));
           json_array_append_new (remaining_cargo_array, it);
@@ -1972,6 +2388,8 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
       if (cur_eq > 0)
         {
           json_t *it = json_object ();
+
+
           json_object_set_new (it, "commodity", json_string ("equipment"));
           json_object_set_new (it, "quantity", json_integer (cur_eq));
           json_array_append_new (remaining_cargo_array, it);
@@ -1979,6 +2397,8 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
       if (cur_colonists > 0)
         {
           json_t *it = json_object ();
+
+
           json_object_set_new (it, "commodity", json_string ("colonists"));
           json_object_set_new (it, "quantity", json_integer (cur_colonists));
           json_array_append_new (remaining_cargo_array, it);
@@ -1986,6 +2406,8 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
       if (cur_slaves > 0)
         {
           json_t *it = json_object ();
+
+
           json_object_set_new (it, "commodity", json_string ("slaves"));
           json_object_set_new (it, "quantity", json_integer (cur_slaves));
           json_array_append_new (remaining_cargo_array, it);
@@ -1993,6 +2415,8 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
       if (cur_weapons > 0)
         {
           json_t *it = json_object ();
+
+
           json_object_set_new (it, "commodity", json_string ("weapons"));
           json_object_set_new (it, "quantity", json_integer (cur_weapons));
           json_array_append_new (remaining_cargo_array, it);
@@ -2000,6 +2424,8 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
       if (cur_drugs > 0)
         {
           json_t *it = json_object ();
+
+
           json_object_set_new (it, "commodity", json_string ("drugs"));
           json_object_set_new (it, "quantity", json_integer (cur_drugs));
           json_array_append_new (remaining_cargo_array, it);
@@ -2012,19 +2438,18 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
 }
 
 
-
 /* --- Port Robbery --- */
 static int
 h_robbery_get_config (db_t *db,
-		      int *threshold,
-		      int *xp_per_hold,
-		      int *cred_per_xp,
-		      double *chance_base,
-		      int *turn_cost,
-		      double *good_bonus,
-		      double *pro_delta,
-		      double *evil_cluster_bonus,
-		      double *good_penalty_mult, int *ttl_days)
+                      int *threshold,
+                      int *xp_per_hold,
+                      int *cred_per_xp,
+                      double *chance_base,
+                      int *turn_cost,
+                      double *good_bonus,
+                      double *pro_delta,
+                      double *evil_cluster_bonus,
+                      double *good_penalty_mult, int *ttl_days)
 {
   static const char *SQL =
     "SELECT robbery_evil_threshold, robbery_xp_per_hold, robbery_credits_per_xp, "
@@ -2039,51 +2464,51 @@ h_robbery_get_config (db_t *db,
   if (db_query (db, SQL, NULL, 0, &res, &dberr))
     {
       if (db_res_step (res, &dberr))
-	{
-	  if (threshold)
-	    {
-	      *threshold = (int) db_res_col_i64 (res, 0, &dberr);
-	    }
-	  if (xp_per_hold)
-	    {
-	      *xp_per_hold = (int) db_res_col_i64 (res, 1, &dberr);
-	    }
-	  if (cred_per_xp)
-	    {
-	      *cred_per_xp = (int) db_res_col_i64 (res, 2, &dberr);
-	    }
-	  if (chance_base)
-	    {
-	      *chance_base = db_res_col_double (res, 3, &dberr);
-	    }
-	  if (turn_cost)
-	    {
-	      *turn_cost = (int) db_res_col_i64 (res, 4, &dberr);
-	    }
-	  if (good_bonus)
-	    {
-	      *good_bonus = db_res_col_double (res, 5, &dberr);
-	    }
-	  if (pro_delta)
-	    {
-	      *pro_delta = db_res_col_double (res, 6, &dberr);
-	    }
-	  if (evil_cluster_bonus)
-	    {
-	      *evil_cluster_bonus = db_res_col_double (res, 7, &dberr);
-	    }
-	  if (good_penalty_mult)
-	    {
-	      *good_penalty_mult = db_res_col_double (res, 8, &dberr);
-	    }
-	  if (ttl_days)
-	    {
-	      *ttl_days = (int) db_res_col_i64 (res, 9, &dberr);
-	    }
+        {
+          if (threshold)
+            {
+              *threshold = (int) db_res_col_i64 (res, 0, &dberr);
+            }
+          if (xp_per_hold)
+            {
+              *xp_per_hold = (int) db_res_col_i64 (res, 1, &dberr);
+            }
+          if (cred_per_xp)
+            {
+              *cred_per_xp = (int) db_res_col_i64 (res, 2, &dberr);
+            }
+          if (chance_base)
+            {
+              *chance_base = db_res_col_double (res, 3, &dberr);
+            }
+          if (turn_cost)
+            {
+              *turn_cost = (int) db_res_col_i64 (res, 4, &dberr);
+            }
+          if (good_bonus)
+            {
+              *good_bonus = db_res_col_double (res, 5, &dberr);
+            }
+          if (pro_delta)
+            {
+              *pro_delta = db_res_col_double (res, 6, &dberr);
+            }
+          if (evil_cluster_bonus)
+            {
+              *evil_cluster_bonus = db_res_col_double (res, 7, &dberr);
+            }
+          if (good_penalty_mult)
+            {
+              *good_penalty_mult = db_res_col_double (res, 8, &dberr);
+            }
+          if (ttl_days)
+            {
+              *ttl_days = (int) db_res_col_i64 (res, 9, &dberr);
+            }
 
-	  db_res_finalize (res);
-	  return 0;		/* SQLITE_OK */
-	}
+          db_res_finalize (res);
+          return 0;             /* SQLITE_OK */
+        }
       db_res_finalize (res);
     }
 
@@ -2129,23 +2554,22 @@ h_robbery_get_config (db_t *db,
       *ttl_days = 7;
     }
 
-  return 0;			/* SQLITE_OK */
+  return 0;                     /* SQLITE_OK */
 }
 
 
-
-
-
 int
-cmd_port_rob (client_ctx_t *ctx, json_t *root)
+cmd_port_rob (db_t *db,
+              client_ctx_t *ctx,
+              json_t *root)
 {
   if (ctx->player_id <= 0)
     {
       send_response_error (ctx, root, ERR_SECTOR_NOT_FOUND,
-			   "Not authenticated.");
+                           "Not authenticated.");
       return 0;
     }
-  db_t *db = db_get_handle ();
+
   json_t *data = json_object_get (root, "data");
 
 
@@ -2155,10 +2579,13 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   /* 1. Parse Inputs */
-  int sector_id = (int) json_integer_value (json_object_get (data, "sector_id"));
+  int sector_id = (int) json_integer_value (json_object_get (data,
+                                                             "sector_id"));
   int port_id = (int) json_integer_value (json_object_get (data, "port_id"));
   const char *mode = json_string_value (json_object_get (data, "mode"));
-  const char *commodity = json_string_value (json_object_get (data, "commodity"));
+  const char *commodity = json_string_value (json_object_get (data,
+                                                              "commodity"));
+
 
   if (sector_id <= 0 || port_id <= 0 || !mode)
     {
@@ -2170,19 +2597,20 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
   if (h_get_player_sector (db, ctx->player_id) != sector_id)
     {
       send_response_error (ctx,
-			   root,
-			   REF_TURN_COST_EXCEEDS,
-			   "You are not in that sector.");
+                           root,
+                           REF_TURN_COST_EXCEEDS,
+                           "You are not in that sector.");
       return 0;
     }
   int port_real_sector = db_get_port_sector (db, port_id);
 
+
   if (port_real_sector != sector_id)
     {
       send_response_error (ctx,
-			   root,
-			   REF_AUTOPILOT_RUNNING,
-			   "Port not found in sector.");
+                           root,
+                           REF_AUTOPILOT_RUNNING,
+                           "Port not found in sector.");
       return 0;
     }
   /* Active Bust Check */
@@ -2191,24 +2619,28 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
       "SELECT 1 FROM port_busts WHERE port_id=$1 AND player_id=$2 AND active=1";
     db_res_t *res = NULL;
     db_error_t dberr;
+
+
     memset (&dberr, 0, sizeof (dberr));
     db_bind_t params[2];
+
+
     params[0] = db_bind_i64 (port_id);
     params[1] = db_bind_i64 (ctx->player_id);
 
     if (db_query (db, SQL, params, 2, &res, &dberr))
       {
-	if (db_res_step (res, &dberr))
-	  {
-	    db_res_finalize (res);
-	    send_response_refused_steal (ctx,
-					 root,
-					 REF_TURN_COST_EXCEEDS,
-					 "You are already wanted at this port.",
-					 NULL);
-	    return 0;
-	  }
-	db_res_finalize (res);
+        if (db_res_step (res, &dberr))
+          {
+            db_res_finalize (res);
+            send_response_refused_steal (ctx,
+                                         root,
+                                         REF_TURN_COST_EXCEEDS,
+                                         "You are already wanted at this port.",
+                                         NULL);
+            return 0;
+          }
+        db_res_finalize (res);
       }
   }
   /* Cluster Ban Check */
@@ -2218,71 +2650,80 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
       "SELECT cluster_id FROM cluster_sectors WHERE sector_id=$1";
     db_res_t *res = NULL;
     db_error_t dberr;
+
+
     memset (&dberr, 0, sizeof (dberr));
     db_bind_t params[1];
+
+
     params[0] = db_bind_i64 (sector_id);
 
     if (db_query (db, SQL, params, 1, &res, &dberr))
       {
-	if (db_res_step (res, &dberr))
-	  {
-	    cluster_id = (int) db_res_col_i64 (res, 0, &dberr);
-	  }
-	db_res_finalize (res);
+        if (db_res_step (res, &dberr))
+          {
+            cluster_id = (int) db_res_col_i64 (res, 0, &dberr);
+          }
+        db_res_finalize (res);
       }
   }
+
 
   if (cluster_id > 0)
     {
       static const char *SQL =
-	"SELECT banned FROM cluster_player_status WHERE cluster_id=$1 AND player_id=$2";
+        "SELECT banned FROM cluster_player_status WHERE cluster_id=$1 AND player_id=$2";
       db_res_t *res = NULL;
       db_error_t dberr;
+
+
       memset (&dberr, 0, sizeof (dberr));
       db_bind_t params[2];
+
+
       params[0] = db_bind_i64 (cluster_id);
       params[1] = db_bind_i64 (ctx->player_id);
 
       if (db_query (db, SQL, params, 2, &res, &dberr))
-	{
-	  if (db_res_step (res, &dberr))
-	    {
-	      if (db_res_col_i64 (res, 0, &dberr) == 1)
-		{
-		  db_res_finalize (res);
-		  send_response_refused_steal (ctx,
-					       root,
-					       REF_TURN_COST_EXCEEDS,
-					       "Cluster authorities have banned you.",
-					       NULL);
-		  return 0;
-		}
-	    }
-	  db_res_finalize (res);
-	}
+        {
+          if (db_res_step (res, &dberr))
+            {
+              if (db_res_col_i64 (res, 0, &dberr) == 1)
+                {
+                  db_res_finalize (res);
+                  send_response_refused_steal (ctx,
+                                               root,
+                                               REF_TURN_COST_EXCEEDS,
+                                               "Cluster authorities have banned you.",
+                                               NULL);
+                  return 0;
+                }
+            }
+          db_res_finalize (res);
+        }
     }
   /* Illegal Goods Check */
   if (strcmp (mode, "goods") == 0)
     {
       if (!commodity)
-	{
-	  send_response_error (ctx,
-			       root,
-			       400, "Commodity required for goods mode.");
-	  return 0;
-	}
+        {
+          send_response_error (ctx,
+                               root,
+                               400, "Commodity required for goods mode.");
+          return 0;
+        }
       if (h_is_illegal_commodity (db, commodity))
-	{
-	  if (!h_can_trade_commodity (db, port_id, ctx->player_id, commodity))
-	    {
-	      send_response_refused_steal (ctx,
-					   root,
-					   REF_SAFE_ZONE_ONLY,
-					   "Illegal trade restrictions apply to robbery targets too.",
-					   NULL);
-	      return 0;
-	    }
-	}
+        {
+          if (!h_can_trade_commodity (db, port_id, ctx->player_id, commodity))
+            {
+              send_response_refused_steal (ctx,
+                                           root,
+                                           REF_SAFE_ZONE_ONLY,
+                                           "Illegal trade restrictions apply to robbery targets too.",
+                                           NULL);
+              return 0;
+            }
+        }
     }
   /* 3. Turn Consumption */
   TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);
@@ -2295,69 +2736,77 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
   /* 4. Config & Variables */
   int cfg_thresh = 0, cfg_xp_hold = 0, cfg_cred_xp = 0, cfg_turn = 0;
   double cfg_base = 0.0, cfg_good_bonus = 0.0, cfg_pro_delta = 0.0,
-    cfg_evil_bonus = 0.0, cfg_good_mult = 0.0;
+         cfg_evil_bonus = 0.0, cfg_good_mult = 0.0;
 
 
   h_robbery_get_config (db,
-			&cfg_thresh,
-			&cfg_xp_hold,
-			&cfg_cred_xp,
-			&cfg_base,
-			&cfg_turn,
-			&cfg_good_bonus,
-			&cfg_pro_delta,
-			&cfg_evil_bonus, &cfg_good_mult, NULL);
+                        &cfg_thresh,
+                        &cfg_xp_hold,
+                        &cfg_cred_xp,
+                        &cfg_base,
+                        &cfg_turn,
+                        &cfg_good_bonus,
+                        &cfg_pro_delta,
+                        &cfg_evil_bonus, &cfg_good_mult, NULL);
   int p_align = 0, p_xp = 0;
+
 
   db_player_get_alignment (db, ctx->player_id, &p_align);
   {
     static const char *SQL = "SELECT experience FROM players WHERE id=$1";
     db_res_t *res = NULL;
     db_error_t dberr;
+
+
     memset (&dberr, 0, sizeof (dberr));
     db_bind_t params[1];
+
+
     params[0] = db_bind_i64 (ctx->player_id);
 
     if (db_query (db, SQL, params, 1, &res, &dberr))
       {
-	if (db_res_step (res, &dberr))
-	  {
-	    p_xp = (int) db_res_col_i64 (res, 0, &dberr);
-	  }
-	db_res_finalize (res);
+        if (db_res_step (res, &dberr))
+          {
+            p_xp = (int) db_res_col_i64 (res, 0, &dberr);
+          }
+        db_res_finalize (res);
       }
   }
   int player_align_band_id = 0;
-  int can_rob_ports_flag = 0;	// Flag to check if player's alignment allows robbing
+  int can_rob_ports_flag = 0;   // Flag to check if player's alignment allows robbing
+
 
   // Get player's alignment band properties
   db_alignment_band_for_value (db,
-			       p_align,
-			       &player_align_band_id,
-			       NULL,
-			       NULL, NULL, NULL, NULL, &can_rob_ports_flag);
+                               p_align,
+                               &player_align_band_id,
+                               NULL,
+                               NULL, NULL, NULL, NULL, &can_rob_ports_flag);
   if (can_rob_ports_flag == 0)
     {
       send_response_refused_steal (ctx,
-				   root,
-				   REF_TURN_COST_EXCEEDS,
-				   "You are not allowed to rob ports with your current alignment.",
-				   NULL);
+                                   root,
+                                   REF_TURN_COST_EXCEEDS,
+                                   "You are not allowed to rob ports with your current alignment.",
+                                   NULL);
       return 0;
     }
   int cluster_align_band_id = 0;
+
 
   h_get_cluster_alignment_band (db, sector_id, &cluster_align_band_id);
   int cluster_is_evil = 0;
   int cluster_is_good = 0;
 
+
   db_alignment_band_for_value (db,
-			       cluster_align_band_id,
-			       NULL,
-			       NULL,
-			       NULL,
-			       &cluster_is_good,
-			       &cluster_is_evil, NULL, NULL);
+                               cluster_align_band_id,
+                               NULL,
+                               NULL,
+                               NULL,
+                               &cluster_is_good,
+                               &cluster_is_evil, NULL, NULL);
   int is_good_cluster = cluster_is_good;
   int is_evil_cluster = cluster_is_evil;
   int is_good_player = (p_align > cfg_thresh);
@@ -2368,84 +2817,99 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
       "SELECT port_id, last_attempt_at, was_success FROM player_last_rob WHERE player_id=$1";
     db_res_t *res = NULL;
     db_error_t dberr;
+
+
     memset (&dberr, 0, sizeof (dberr));
     db_bind_t params[1];
+
+
     params[0] = db_bind_i64 (ctx->player_id);
 
     if (db_query (db, SQL, params, 1, &res, &dberr))
       {
-	if (db_res_step (res, &dberr))
-	  {
-	    int last_port = (int) db_res_col_i64 (res, 0, &dberr);
-	    int last_ts = (int) db_res_col_i64 (res, 1, &dberr);
-	    int success = (int) db_res_col_i64 (res, 2, &dberr);
+        if (db_res_step (res, &dberr))
+          {
+            int last_port = (int) db_res_col_i64 (res, 0, &dberr);
+            int last_ts = (int) db_res_col_i64 (res, 1, &dberr);
+            int success = (int) db_res_col_i64 (res, 2, &dberr);
 
-	    if (last_port == port_id && success &&
-		(time (NULL) - last_ts < 900))
-	      {
-		fake_bust = 1;
-	      }
-	  }
-	db_res_finalize (res);
+
+            if (last_port == port_id && success &&
+                (time (NULL) - last_ts < 900))
+              {
+                fake_bust = 1;
+              }
+          }
+        db_res_finalize (res);
       }
   }
+
 
   if (fake_bust)
     {
       /* Execute Fake Bust Writes */
       db_error_t dberr;
+
+
       memset (&dberr, 0, sizeof (dberr));
       if (!db_tx_begin (db, DB_TX_IMMEDIATE, &dberr))
-	{
-	  send_response_error (ctx, root, ERR_DB_BUSY, "Database busy.");
-	  return 0;
-	}
+        {
+          send_response_error (ctx, root, ERR_DB_BUSY, "Database busy.");
+          return 0;
+        }
 
       static const char *SQL_BUST =
-	"INSERT INTO port_busts (port_id, player_id, last_bust_at, bust_type, active) "
-	"VALUES ($1, $2, strftime('%s','now'), 'fake', 1) "
-	"ON CONFLICT(port_id, player_id) DO UPDATE SET "
-	"last_bust_at=strftime('%s','now'), bust_type='fake', active=1";
+        "INSERT INTO port_busts (port_id, player_id, last_bust_at, bust_type, active) "
+        "VALUES ($1, $2, strftime('%s','now'), 'fake', 1) "
+        "ON CONFLICT(port_id, player_id) DO UPDATE SET "
+        "last_bust_at=strftime('%s','now'), bust_type='fake', active=1";
 
       static const char *SQL_LAST =
-	"INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) "
-	"VALUES ($1, $2, strftime('%s','now'), 0) "
-	"ON CONFLICT(player_id) DO UPDATE SET "
-	"port_id=EXCLUDED.port_id, last_attempt_at=strftime('%s','now'), was_success=0";
+        "INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) "
+        "VALUES ($1, $2, strftime('%s','now'), 0) "
+        "ON CONFLICT(player_id) DO UPDATE SET "
+        "port_id=EXCLUDED.port_id, last_attempt_at=strftime('%s','now'), was_success=0";
 
       db_bind_t params[2];
+
+
       params[0] = db_bind_i64 (port_id);
       params[1] = db_bind_i64 (ctx->player_id);
 
       if (!db_exec (db, SQL_BUST, params, 2, &dberr))
-	{
-	  db_tx_rollback (db, NULL);
-	  send_response_error (ctx, root, ERR_DB, "Database error.");
-	  return 0;
-	}
+        {
+          db_tx_rollback (db, NULL);
+          send_response_error (ctx, root, ERR_DB, "Database error.");
+          return 0;
+        }
 
       db_bind_t params2[2];
+
+
       params2[0] = db_bind_i64 (ctx->player_id);
       params2[1] = db_bind_i64 (port_id);
 
       if (!db_exec (db, SQL_LAST, params2, 2, &dberr))
-	{
-	  db_tx_rollback (db, NULL);
-	  send_response_error (ctx, root, ERR_DB, "Database error.");
-	  return 0;
-	}
+        {
+          db_tx_rollback (db, NULL);
+          send_response_error (ctx, root, ERR_DB, "Database error.");
+          return 0;
+        }
 
       if (!db_tx_commit (db, &dberr))
-	{
-	  send_response_error (ctx, root, ERR_DB, "Database error.");
-	  return 0;
-	}
+        {
+          send_response_error (ctx, root, ERR_DB, "Database error.");
+          return 0;
+        }
 
       json_t *fresp = json_object ();
+
+
       json_object_set_new (fresp, "rob_result", json_string ("fake_bust"));
       json_object_set_new (fresp, "message",
-			   json_string
-			   ("The port authorities were waiting for you. You got away, but empty-handed."));
+                           json_string
+                           (
+                             "The port authorities were waiting for you. You got away, but empty-handed."));
 
       send_response_ok_take (ctx, root, "port.rob", &fresp);
       return 0;
@@ -2455,6 +2919,7 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
   double p_player = is_good_player ? cfg_good_bonus : cfg_pro_delta;
   double p_cluster = is_evil_cluster ? cfg_evil_bonus : 0.0;
   double chance = p_base + p_player + p_cluster;
+
 
   if (chance < 0.01)
     {
@@ -2470,11 +2935,16 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
   /* 7. Execution */
   int we_started_tx = 0;
   db_error_t dberr;
+
+
   memset (&dberr, 0, sizeof (dberr));
 
   if (!db_tx_begin (db, DB_TX_IMMEDIATE, &dberr))
     {
-      send_response_error (ctx, root, ERR_DB_BUSY, "Database busy.");
+      send_response_error (ctx,
+                           root,
+                           ERR_DB_BUSY,
+                           "Database busy.");
       return 0;
     }
   we_started_tx = 1;
@@ -2482,176 +2952,249 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
   long long loot_credits = 0;
   json_t *res_data = json_object ();
 
+
   if (!is_real_bust)
     {
       /* SUCCESS */
       if (strcmp (mode, "credits") == 0)
-	{
-	  long long max_xp = (long long) p_xp * cfg_cred_xp;
-	  long long port_cash = 0;
+        {
+          long long max_xp = (long long) p_xp * cfg_cred_xp;
+          long long port_cash = 0;
 
-	  static const char *SQL_GET_CASH = "SELECT petty_cash FROM ports WHERE id=$1";
-	  db_res_t *res = NULL;
-	  db_bind_t params[1];
-	  params[0] = db_bind_i64 (port_id);
+          static const char *SQL_GET_CASH =
+            "SELECT petty_cash FROM ports WHERE id=$1";
+          db_res_t *res = NULL;
+          db_bind_t params[1];
 
-	  if (db_query (db, SQL_GET_CASH, params, 1, &res, &dberr))
-	    {
-	      if (db_res_step (res, &dberr))
-		{
-		  port_cash = db_res_col_i64 (res, 0, &dberr);
-		}
-	      db_res_finalize (res);
-	    }
 
-	  loot_credits = (max_xp < port_cash) ? max_xp : port_cash;
-	  if (loot_credits > 0)
-	    {
-	      static const char *SQL_UPD_PORT = "UPDATE ports SET petty_cash = petty_cash - $1 WHERE id=$2";
-	      db_bind_t uparams[2];
-	      uparams[0] = db_bind_i64 (loot_credits);
-	      uparams[1] = db_bind_i64 (port_id);
+          params[0] = db_bind_i64 (port_id);
 
-	      if (!db_exec (db, SQL_UPD_PORT, uparams, 2, &dberr))
-		{
-		  goto fail_tx;
-		}
+          if (db_query (db, SQL_GET_CASH, params, 1, &res, &dberr))
+            {
+              if (db_res_step (res, &dberr))
+                {
+                  port_cash = db_res_col_i64 (res, 0, &dberr);
+                }
+              db_res_finalize (res);
+            }
 
-	      if (h_add_player_petty_cash_unlocked (db, ctx->player_id, loot_credits, NULL) != SQLITE_OK)
-		{
-		  goto fail_tx;
-		}
-	    }
-	}
-      else			// mode == "goods"
-	{
-	  if (!commodity)
-	    {
-	      send_response_error (ctx, root, 400, "Commodity required for goods mode.");
-	      goto fail_tx;
-	    }
-	  char *canonical_commodity_code = (char *) commodity_to_code (commodity);
-	  if (!canonical_commodity_code)
-	    {
-	      send_response_refused_steal (ctx, root, ERR_AUTOPILOT_PATH_INVALID, "Invalid or unsupported commodity.", NULL);
-	      goto fail_tx;
-	    }
+          loot_credits = (max_xp < port_cash) ? max_xp : port_cash;
+          if (loot_credits > 0)
+            {
+              static const char *SQL_UPD_PORT =
+                "UPDATE ports SET petty_cash = petty_cash - $1 WHERE id=$2";
+              db_bind_t uparams[2];
 
-	  int amount_to_steal = 10;
-	  int port_stock = 0;
-	  if (db_port_get_goods_on_hand (db, port_id, canonical_commodity_code, &port_stock) != SQLITE_OK)
-	    {
-	      send_response_error (ctx, root, 500, "Database error getting port stock.");
-	      free (canonical_commodity_code);
-	      goto fail_tx;
-	    }
-	  if (port_stock < amount_to_steal)
-	    {
-	      send_response_refused_steal (ctx, root, ERR_AUTOPILOT_PATH_INVALID, "Port does not have enough of that commodity.", NULL);
-	      free (canonical_commodity_code);
-	      goto fail_tx;
-	    }
 
-	  int ship_id = h_get_active_ship_id (db, ctx->player_id);
-	  if (ship_id <= 0)
-	    {
-	      send_response_error (ctx, root, 500, "No active ship found.");
-	      free (canonical_commodity_code);
-	      goto fail_tx;
-	    }
-	  int free_space = 0;
-	  h_get_cargo_space_free (db, ctx->player_id, &free_space);
-	  if (free_space < amount_to_steal)
-	    {
-	      send_response_refused_steal (ctx, root, REF_TURN_COST_EXCEEDS, "Insufficient cargo space.", NULL);
-	      free (canonical_commodity_code);
-	      goto fail_tx;
-	    }
+              uparams[0] = db_bind_i64 (loot_credits);
+              uparams[1] = db_bind_i64 (port_id);
 
-	  if (h_update_port_stock (db, port_id, canonical_commodity_code, -amount_to_steal, NULL) != SQLITE_OK)
-	    {
-	      send_response_error (ctx, root, 500, "Database error.");
-	      free (canonical_commodity_code);
-	      goto fail_tx;
-	    }
-	  if (h_update_ship_cargo (db, ctx->ship_id, canonical_commodity_code, amount_to_steal, NULL) != SQLITE_OK)
-	    {
-	      send_response_error (ctx, root, 500, "Database error.");
-	      free (canonical_commodity_code);
-	      goto fail_tx;
-	    }
+              if (!db_exec (db, SQL_UPD_PORT, uparams, 2, &dberr))
+                {
+                  goto fail_tx;
+                }
 
-	  json_t *goods_stolen = json_object ();
-	  json_object_set_new (goods_stolen, "commodity", json_string (canonical_commodity_code));
-	  json_object_set_new (goods_stolen, "quantity", json_integer (amount_to_steal));
-	  json_object_set_new (res_data, "goods_stolen", goods_stolen);
+              if (h_add_player_petty_cash_unlocked (db,
+                                                    ctx->player_id,
+                                                    loot_credits,
+                                                    NULL) != SQLITE_OK)
+                {
+                  goto fail_tx;
+                }
+            }
+        }
+      else                      // mode == "goods"
+        {
+          if (!commodity)
+            {
+              send_response_error (ctx,
+                                   root,
+                                   400,
+                                   "Commodity required for goods mode.");
+              goto fail_tx;
+            }
+          char *canonical_commodity_code = (char *) commodity_to_code (db,
+                                                                       commodity);
 
-	  bool stolen_item_is_illegal = h_is_illegal_commodity (db, canonical_commodity_code);
-	  json_object_set_new (res_data, "stolen_item_is_illegal_tmp", json_boolean (stolen_item_is_illegal));
-	  free (canonical_commodity_code);
-	}
+
+          if (!canonical_commodity_code)
+            {
+              send_response_refused_steal (ctx,
+                                           root,
+                                           ERR_AUTOPILOT_PATH_INVALID,
+                                           "Invalid or unsupported commodity.",
+                                           NULL);
+              goto fail_tx;
+            }
+
+          int amount_to_steal = 10;
+          int port_stock = 0;
+
+
+          if (db_port_get_goods_on_hand (db,
+                                         port_id,
+                                         canonical_commodity_code,
+                                         &port_stock) != SQLITE_OK)
+            {
+              send_response_error (ctx,
+                                   root,
+                                   500,
+                                   "Database error getting port stock.");
+              free (canonical_commodity_code);
+              goto fail_tx;
+            }
+          if (port_stock < amount_to_steal)
+            {
+              send_response_refused_steal (ctx,
+                                           root,
+                                           ERR_AUTOPILOT_PATH_INVALID,
+                                           "Port does not have enough of that commodity.",
+                                           NULL);
+              free (canonical_commodity_code);
+              goto fail_tx;
+            }
+
+          int ship_id = h_get_active_ship_id (db, ctx->player_id);
+
+
+          if (ship_id <= 0)
+            {
+              send_response_error (ctx, root, 500, "No active ship found.");
+              free (canonical_commodity_code);
+              goto fail_tx;
+            }
+          int free_space = 0;
+
+
+          h_get_cargo_space_free (db, ctx->player_id, &free_space);
+          if (free_space < amount_to_steal)
+            {
+              send_response_refused_steal (ctx,
+                                           root,
+                                           REF_TURN_COST_EXCEEDS,
+                                           "Insufficient cargo space.",
+                                           NULL);
+              free (canonical_commodity_code);
+              goto fail_tx;
+            }
+
+          if (h_update_port_stock (db,
+                                   port_id,
+                                   canonical_commodity_code,
+                                   -amount_to_steal,
+                                   NULL) != SQLITE_OK)
+            {
+              send_response_error (ctx, root, 500, "Database error.");
+              free (canonical_commodity_code);
+              goto fail_tx;
+            }
+          if (h_update_ship_cargo (db,
+                                   ctx->ship_id,
+                                   canonical_commodity_code,
+                                   amount_to_steal,
+                                   NULL) != SQLITE_OK)
+            {
+              send_response_error (ctx, root, 500, "Database error.");
+              free (canonical_commodity_code);
+              goto fail_tx;
+            }
+
+          json_t *goods_stolen = json_object ();
+
+
+          json_object_set_new (goods_stolen, "commodity",
+                               json_string (canonical_commodity_code));
+          json_object_set_new (goods_stolen, "quantity",
+                               json_integer (amount_to_steal));
+          json_object_set_new (res_data, "goods_stolen", goods_stolen);
+
+          bool stolen_item_is_illegal = h_is_illegal_commodity (db,
+                                                                canonical_commodity_code);
+
+
+          json_object_set_new (res_data,
+                               "stolen_item_is_illegal_tmp",
+                               json_boolean (stolen_item_is_illegal));
+          free (canonical_commodity_code);
+        }
 
       long long xp_gain = 0;
       int align_change_success = 0;
 
-      if (strcmp (mode, "credits") == 0)
-	{
-	  xp_gain = (long long) floor ((double) loot_credits / g_xp_align.trade_xp_ratio);
-	  align_change_success = -10;
-	}
-      else
-	{
-	  xp_gain = (long long) floor (10.0 * 0.5);	// Fixed amount 10 used for goods
-	  bool stolen_item_is_illegal = false;
-	  json_t *j_tmp = json_object_get (res_data, "stolen_item_is_illegal_tmp");
-	  if (j_tmp && json_is_true (j_tmp))
-	    {
-	      stolen_item_is_illegal = true;
-	    }
-	  json_object_del (res_data, "stolen_item_is_illegal_tmp");
-	  align_change_success = stolen_item_is_illegal ? -20 : -10;
-	}
 
-      h_player_apply_progress (db, ctx->player_id, xp_gain, align_change_success, "port.rob.success");
+      if (strcmp (mode, "credits") == 0)
+        {
+          xp_gain = (long long) floor ((double) loot_credits /
+                                       g_xp_align.trade_xp_ratio);
+          align_change_success = -10;
+        }
+      else
+        {
+          xp_gain = (long long) floor (10.0 * 0.5);     // Fixed amount 10 used for goods
+          bool stolen_item_is_illegal = false;
+          json_t *j_tmp = json_object_get (res_data,
+                                           "stolen_item_is_illegal_tmp");
+
+
+          if (j_tmp && json_is_true (j_tmp))
+            {
+              stolen_item_is_illegal = true;
+            }
+          json_object_del (res_data, "stolen_item_is_illegal_tmp");
+          align_change_success = stolen_item_is_illegal ? -20 : -10;
+        }
+
+      h_player_apply_progress (db,
+                               ctx->player_id,
+                               xp_gain,
+                               align_change_success,
+                               "port.rob.success");
 
       int susp_inc = is_evil_cluster ? 1 : 2;
+
+
       if (cluster_id > 0)
-	{
-	  static const char *SQL_SUSP =
-	    "INSERT INTO cluster_player_status (cluster_id, player_id, suspicion) VALUES ($1, $2, $3) "
-	    "ON CONFLICT(cluster_id, player_id) DO UPDATE SET suspicion = suspicion + $4";
-	  db_bind_t params[4];
-	  params[0] = db_bind_i64 (cluster_id);
-	  params[1] = db_bind_i64 (ctx->player_id);
-	  params[2] = db_bind_i64 (susp_inc);
-	  params[3] = db_bind_i64 (susp_inc);
-	  if (!db_exec (db, SQL_SUSP, params, 4, &dberr))
-	    {
-	      goto fail_tx;
-	    }
-	}
+        {
+          static const char *SQL_SUSP =
+            "INSERT INTO cluster_player_status (cluster_id, player_id, suspicion) VALUES ($1, $2, $3) "
+            "ON CONFLICT(cluster_id, player_id) DO UPDATE SET suspicion = suspicion + $4";
+          db_bind_t params[4];
+
+
+          params[0] = db_bind_i64 (cluster_id);
+          params[1] = db_bind_i64 (ctx->player_id);
+          params[2] = db_bind_i64 (susp_inc);
+          params[3] = db_bind_i64 (susp_inc);
+          if (!db_exec (db, SQL_SUSP, params, 4, &dberr))
+            {
+              goto fail_tx;
+            }
+        }
 
       static const char *SQL_LAST_SUCCESS =
-	"INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) "
-	"VALUES ($1, $2, strftime('%s','now'), 1) "
-	"ON CONFLICT(player_id) DO UPDATE SET port_id=EXCLUDED.port_id, "
-	"last_attempt_at=strftime('%s','now'), was_success=1";
+        "INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) "
+        "VALUES ($1, $2, strftime('%s','now'), 1) "
+        "ON CONFLICT(player_id) DO UPDATE SET port_id=EXCLUDED.port_id, "
+        "last_attempt_at=strftime('%s','now'), was_success=1";
       db_bind_t lparams[2];
+
+
       lparams[0] = db_bind_i64 (ctx->player_id);
       lparams[1] = db_bind_i64 (port_id);
       if (!db_exec (db, SQL_LAST_SUCCESS, lparams, 2, &dberr))
-	{
-	  goto fail_tx;
-	}
+        {
+          goto fail_tx;
+        }
 
       if (!db_tx_commit (db, &dberr))
-	{
-	  goto fail_tx;
-	}
+        {
+          goto fail_tx;
+        }
       we_started_tx = 0;
 
       json_object_set_new (res_data, "rob_result", json_string ("success"));
-      json_object_set_new (res_data, "credits_stolen", json_integer (loot_credits));
+      json_object_set_new (res_data, "credits_stolen",
+                           json_integer (loot_credits));
       send_response_ok_take (ctx, root, "port.rob", &res_data);
     }
   else
@@ -2660,79 +3203,106 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
       long long xp_loss = (long long) (p_xp * 0.05);
       int align_change_bust = 15;
 
-      h_player_apply_progress (db, ctx->player_id, -xp_loss, align_change_bust, "port.rob.bust");
+
+      h_player_apply_progress (db,
+                               ctx->player_id,
+                               -xp_loss,
+                               align_change_bust,
+                               "port.rob.bust");
 
       static const char *SQL_BUST_REAL =
-	"INSERT INTO port_busts (port_id, player_id, last_bust_at, bust_type, active) "
-	"VALUES ($1, $2, strftime('%s','now'), 'real', 1) "
-	"ON CONFLICT(port_id, player_id) DO UPDATE SET "
-	"last_bust_at=strftime('%s','now'), bust_type='real', active=1";
+        "INSERT INTO port_busts (port_id, player_id, last_bust_at, bust_type, active) "
+        "VALUES ($1, $2, strftime('%s','now'), 'real', 1) "
+        "ON CONFLICT(port_id, player_id) DO UPDATE SET "
+        "last_bust_at=strftime('%s','now'), bust_type='real', active=1";
       db_bind_t bparams[2];
+
+
       bparams[0] = db_bind_i64 (port_id);
       bparams[1] = db_bind_i64 (ctx->player_id);
       if (!db_exec (db, SQL_BUST_REAL, bparams, 2, &dberr))
-	{
-	  goto fail_tx;
-	}
+        {
+          goto fail_tx;
+        }
 
       int susp_inc = is_good_cluster ? 10 : 5;
-      if (cluster_id > 0)
-	{
-	  static const char *SQL_CLUST_UPD =
-	    "INSERT INTO cluster_player_status (cluster_id, player_id, suspicion, bust_count, last_bust_at) "
-	    "VALUES ($1, $2, $3, 1, strftime('%s','now')) "
-	    "ON CONFLICT(cluster_id, player_id) DO UPDATE SET "
-	    "suspicion = suspicion + $4, bust_count = bust_count + 1, last_bust_at = strftime('%s','now')";
-	  db_bind_t cparams[4];
-	  cparams[0] = db_bind_i64 (cluster_id);
-	  cparams[1] = db_bind_i64 (ctx->player_id);
-	  cparams[2] = db_bind_i64 (susp_inc);
-	  cparams[3] = db_bind_i64 (susp_inc);
-	  if (!db_exec (db, SQL_CLUST_UPD, cparams, 4, &dberr))
-	    {
-	      goto fail_tx;
-	    }
 
-	  static const char *SQL_BAN =
-	    "UPDATE cluster_player_status SET banned=1 WHERE cluster_id=$1 AND player_id=$2 AND wanted_level >= 3";
-	  db_bind_t banparams[2];
-	  banparams[0] = db_bind_i64 (cluster_id);
-	  banparams[1] = db_bind_i64 (ctx->player_id);
-	  if (!db_exec (db, SQL_BAN, banparams, 2, &dberr))
-	    {
-	      goto fail_tx;
-	    }
-	}
+
+      if (cluster_id > 0)
+        {
+          static const char *SQL_CLUST_UPD =
+            "INSERT INTO cluster_player_status (cluster_id, player_id, suspicion, bust_count, last_bust_at) "
+            "VALUES ($1, $2, $3, 1, strftime('%s','now')) "
+            "ON CONFLICT(cluster_id, player_id) DO UPDATE SET "
+            "suspicion = suspicion + $4, bust_count = bust_count + 1, last_bust_at = strftime('%s','now')";
+          db_bind_t cparams[4];
+
+
+          cparams[0] = db_bind_i64 (cluster_id);
+          cparams[1] = db_bind_i64 (ctx->player_id);
+          cparams[2] = db_bind_i64 (susp_inc);
+          cparams[3] = db_bind_i64 (susp_inc);
+          if (!db_exec (db, SQL_CLUST_UPD, cparams, 4, &dberr))
+            {
+              goto fail_tx;
+            }
+
+          static const char *SQL_BAN =
+            "UPDATE cluster_player_status SET banned=1 WHERE cluster_id=$1 AND player_id=$2 AND wanted_level >= 3";
+          db_bind_t banparams[2];
+
+
+          banparams[0] = db_bind_i64 (cluster_id);
+          banparams[1] = db_bind_i64 (ctx->player_id);
+          if (!db_exec (db, SQL_BAN, banparams, 2, &dberr))
+            {
+              goto fail_tx;
+            }
+        }
 
       static const char *SQL_LAST_FAIL =
-	"INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) "
-	"VALUES ($1, $2, strftime('%s','now'), 0) "
-	"ON CONFLICT(player_id) DO UPDATE SET port_id=EXCLUDED.port_id, "
-	"last_attempt_at=strftime('%s','now'), was_success=0";
+        "INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) "
+        "VALUES ($1, $2, strftime('%s','now'), 0) "
+        "ON CONFLICT(player_id) DO UPDATE SET port_id=EXCLUDED.port_id, "
+        "last_attempt_at=strftime('%s','now'), was_success=0";
       db_bind_t lparams[2];
+
+
       lparams[0] = db_bind_i64 (ctx->player_id);
       lparams[1] = db_bind_i64 (port_id);
       if (!db_exec (db, SQL_LAST_FAIL, lparams, 2, &dberr))
-	{
-	  goto fail_tx;
-	}
+        {
+          goto fail_tx;
+        }
 
       json_t *news_pl = json_object ();
+
+
       json_object_set_new (news_pl, "port_id", json_integer (port_id));
       json_object_set_new (news_pl, "sector_id", json_integer (sector_id));
 
-      db_log_engine_event (time (NULL), "port.bust", "player", ctx->player_id, sector_id, news_pl, NULL);
+      db_log_engine_event (time (NULL),
+                           "port.bust",
+                           "player",
+                           ctx->player_id,
+                           sector_id,
+                           news_pl,
+                           NULL);
       json_decref (news_pl);
 
       if (!db_tx_commit (db, &dberr))
-	{
-	  goto fail_tx;
-	}
+        {
+          goto fail_tx;
+        }
       we_started_tx = 0;
 
       json_t *bresp = json_object ();
+
+
       json_object_set_new (bresp, "rob_result", json_string ("real_bust"));
-      json_object_set_new (bresp, "message", json_string ("You were caught! The authorities have flagged you."));
+      json_object_set_new (bresp, "message",
+                           json_string (
+                             "You were caught! The authorities have flagged you."));
       send_response_ok_take (ctx, root, "port.rob", &bresp);
     }
 
@@ -2755,13 +3325,10 @@ fail_tx:
 }
 
 
-
-
 int
-cmd_trade_sell (client_ctx_t *ctx, json_t *root)
+cmd_trade_sell (db_t *db, client_ctx_t *ctx, json_t *root)
 {
-  LOGD ("cmd_trade_sell: entered for player_id=%d", ctx->player_id);	// ADDED
-  db_t *db = NULL;
+  LOGD ("cmd_trade_sell: entered for player_id=%d", ctx->player_id);    // ADDED
   json_t *receipt = NULL;
   json_t *lines = NULL;
   json_t *data = NULL;
@@ -2773,8 +3340,8 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
   const char *key = NULL;
   int port_id = 0;
   int requested_port_id = 0;
-  long long total_item_value = 0;	// Value of items sold
-  long long total_credits_after_fees = 0;	// Credits player actually receives
+  long long total_item_value = 0;       // Value of items sold
+  long long total_credits_after_fees = 0;       // Credits player actually receives
   fee_result_t charges = { 0 };
   long long new_balance = 0;
   char tx_group_id[UUID_STR_LEN];
@@ -2790,7 +3357,6 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
     {
       return -1;
     }
-  db = db_get_handle ();
   if (!db)
     {
       send_response_error (ctx, root, 500, "No database handle.");
@@ -2799,10 +3365,11 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
   if (ctx->player_id <= 0)
     {
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_SECTOR_NOT_FOUND,
-				   "Not authenticated", NULL);
-      LOGD ("cmd_trade_sell: Not authenticated for player_id=%d", ctx->player_id);	// ADDED
+                                   root,
+                                   ERR_SECTOR_NOT_FOUND,
+                                   "Not authenticated", NULL);
+      LOGD ("cmd_trade_sell: Not authenticated for player_id=%d",
+            ctx->player_id);                                                            // ADDED
       return 0;
     }
   /* consume turn (may open a transaction) */
@@ -2811,27 +3378,32 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 
   if (tc != TURN_CONSUME_SUCCESS)
     {
-      LOGD ("cmd_trade_sell: Turn consumption failed for player_id=%d, result=%d", ctx->player_id, tc);	// ADDED
+      LOGD (
+        "cmd_trade_sell: Turn consumption failed for player_id=%d, result=%d",
+        ctx->player_id,
+        tc);                                                                                            // ADDED
       return handle_turn_consumption_error (ctx, tc, "trade.sell", root,
-					    NULL);
+                                            NULL);
     }
-  LOGD ("cmd_trade_sell: Turn consumed successfully for player_id=%d", ctx->player_id);	// ADDED
+  LOGD ("cmd_trade_sell: Turn consumed successfully for player_id=%d",
+        ctx->player_id);                                                                // ADDED
   /* decloak */
   int player_ship_id = h_get_active_ship_id (db, ctx->player_id);
 
 
   h_decloak_ship (db, player_ship_id);
-  LOGD ("cmd_trade_sell: Ship decloaked for ship_id=%d", player_ship_id);	// ADDED
+  LOGD ("cmd_trade_sell: Ship decloaked for ship_id=%d", player_ship_id);       // ADDED
   data = json_object_get (root, "data");
   if (!json_is_object (data))
     {
       send_response_error (ctx, root, 400, "Missing data object.");
-      LOGD ("cmd_trade_sell: Missing data object for player_id=%d", ctx->player_id);	// ADDED
+      LOGD ("cmd_trade_sell: Missing data object for player_id=%d",
+            ctx->player_id);                                                            // ADDED
       return -1;
     }
-  int account_type = db_get_player_pref_int (ctx->player_id,
-					     "trade.default_account",
-					     0);	// Default to petty cash (0)
+  int account_type = db_get_player_pref_int (db, ctx->player_id,
+                                             "trade.default_account",
+                                             0);        // Default to petty cash (0)
   json_t *jaccount = json_object_get (data, "account");
 
 
@@ -2841,17 +3413,17 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 
 
       if (requested_account_type != 0 && requested_account_type != 1)
-	{
-	  send_response_error (ctx,
-			       root,
-			       400,
-			       "Invalid account type. Must be 0 (petty cash) or 1 (bank).");
-	  return -1;
-	}
-      account_type = requested_account_type;	// Override with explicit request
+        {
+          send_response_error (ctx,
+                               root,
+                               400,
+                               "Invalid account type. Must be 0 (petty cash) or 1 (bank).");
+          return -1;
+        }
+      account_type = requested_account_type;    // Override with explicit request
     }
   LOGD ("cmd_trade_sell: Account type for player_id=%d is %d", ctx->player_id,
-	account_type);
+        account_type);
   sector_id = ctx->sector_id;
   json_t *jsec = json_object_get (data, "sector_id");
 
@@ -2863,28 +3435,35 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
   if (sector_id <= 0)
     {
       send_response_error (ctx, root, 400, "Invalid sector_id.");
-      LOGD ("cmd_trade_sell: Invalid sector_id=%d for player_id=%d", sector_id, ctx->player_id);	// ADDED
+      LOGD ("cmd_trade_sell: Invalid sector_id=%d for player_id=%d",
+            sector_id,
+            ctx->player_id);                                                                            // ADDED
       return -1;
     }
-  LOGD ("cmd_trade_sell: Resolved sector_id=%d for player_id=%d", sector_id, ctx->player_id);	// ADDED
+  LOGD ("cmd_trade_sell: Resolved sector_id=%d for player_id=%d",
+        sector_id,
+        ctx->player_id);                                                                        // ADDED
   if (!cluster_can_trade (db, sector_id, ctx->player_id))
     {
       send_response_refused_steal (ctx,
-				   root,
-				   REF_TURN_COST_EXCEEDS,
-				   "Port refuses to trade: You are banned in this cluster.",
-				   NULL);
+                                   root,
+                                   REF_TURN_COST_EXCEEDS,
+                                   "Port refuses to trade: You are banned in this cluster.",
+                                   NULL);
       return -1;
     }
   jitems = json_object_get (data, "items");
   if (!json_is_array (jitems) || json_array_size (jitems) == 0)
     {
       send_response_error (ctx, root, 400, "items[] required.");
-      LOGD ("cmd_trade_sell: Missing or empty items array for player_id=%d", ctx->player_id);	// ADDED
+      LOGD ("cmd_trade_sell: Missing or empty items array for player_id=%d",
+            ctx->player_id);                                                                    // ADDED
       return -1;
     }
   n = json_array_size (jitems);
-  LOGD ("cmd_trade_sell: Items array present, size=%zu for player_id=%d", n, ctx->player_id);	// ADDED
+  LOGD ("cmd_trade_sell: Items array present, size=%zu for player_id=%d",
+        n,
+        ctx->player_id);                                                                        // ADDED
   json_t *jkey = json_object_get (data, "idempotency_key");
 
 
@@ -2892,7 +3471,8 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
   if (!key || !*key)
     {
       send_response_error (ctx, root, 400, "idempotency_key required.");
-      LOGD ("cmd_trade_sell: Missing idempotency_key for player_id=%d", ctx->player_id);	// ADDED
+      LOGD ("cmd_trade_sell: Missing idempotency_key for player_id=%d",
+            ctx->player_id);                                                                    // ADDED
       return -1;
     }
   char actual_key[UUID_STR_LEN];
@@ -2903,11 +3483,13 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       h_generate_hex_uuid (actual_key, sizeof (actual_key));
       key = actual_key;
       LOGD ("cmd_trade_sell: Generated idempotency key '%s' for player_id=%d",
-	    key, ctx->player_id);
+            key, ctx->player_id);
     }
-  LOGD ("cmd_trade_sell: Idempotency key='%s' for player_id=%d", key, ctx->player_id);	// ADDED
+  LOGD ("cmd_trade_sell: Idempotency key='%s' for player_id=%d",
+        key,
+        ctx->player_id);                                                                // ADDED
   /* idempotency fast-path */
-  LOGD ("cmd_trade_sell: Checking idempotency fast-path for key='%s'", key);	// ADDED
+  LOGD ("cmd_trade_sell: Checking idempotency fast-path for key='%s'", key);    // ADDED
   {
     static const char *SQL_GET =
       "SELECT request_json, response_json "
@@ -2916,9 +3498,13 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 
     db_res_t *res = NULL;
     db_error_t dberr;
+
+
     memset (&dberr, 0, sizeof (dberr));
 
     db_bind_t params[3];
+
+
     params[0] = db_bind_text (key);
     params[1] = db_bind_i64 ((int64_t) ctx->player_id);
     params[2] = db_bind_i64 ((int64_t) sector_id);
@@ -2927,7 +3513,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       {
         if (db_res_step (res, &dberr))
           {
-            const char *req_s_stored  = db_res_col_text (res, 0, &dberr);
+            const char *req_s_stored = db_res_col_text (res, 0, &dberr);
             const char *resp_s_stored = db_res_col_text (res, 1, &dberr);
 
             json_error_t jerr;
@@ -2935,28 +3521,41 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
               req_s_stored ? json_loads (req_s_stored, 0, &jerr) : NULL;
 
             json_t *incoming_req = json_incref (data);
-            int same = (stored_req && json_equal_strict (stored_req, incoming_req));
+            int same = (stored_req && json_equal_strict (stored_req,
+                                                         incoming_req));
+
 
             json_decref (incoming_req);
             if (stored_req)
-              json_decref (stored_req);
+              {
+                json_decref (stored_req);
+              }
 
             if (same)
               {
-                LOGD ("cmd_trade_sell: Idempotency fast-path: request matches, replaying response for key='%s'", key);
+                LOGD (
+                  "cmd_trade_sell: Idempotency fast-path: request matches, replaying response for key='%s'",
+                  key);
 
                 json_t *stored_resp =
                   resp_s_stored ? json_loads (resp_s_stored, 0, &jerr) : NULL;
+
 
                 db_res_finalize (res);
 
                 if (!stored_resp)
                   {
-                    send_response_error (ctx, root, 500, "Stored response unreadable.");
+                    send_response_error (ctx,
+                                         root,
+                                         500,
+                                         "Stored response unreadable.");
                     return -1;
                   }
 
-                send_response_ok_take (ctx, root, "trade.sell_receipt_v1", &stored_resp);
+                send_response_ok_take (ctx,
+                                       root,
+                                       "trade.sell_receipt_v1",
+                                       &stored_resp);
                 /* send_response_ok_take steals payload */
                 LOGD ("cmd_trade_sell: Replayed stored response, returning.");
                 goto cleanup;
@@ -2968,13 +3567,19 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
     else
       {
         /* Non-fatal: idempotency miss or transient error should not break trading */
-        LOGD ("cmd_trade_sell: Idempotency fast-path lookup failed: %s (code=%d)",
-              dberr.message[0] ? dberr.message : "database error", dberr.code);
+        LOGD (
+          "cmd_trade_sell: Idempotency fast-path lookup failed: %s (code=%d)",
+          dberr.message[0] ? dberr.message : "database error",
+          dberr.code);
       }
   }
-  LOGD ("cmd_trade_sell: Idempotency fast-path: no existing record or no match for key='%s'", key);	// ADDED
+  LOGD (
+    "cmd_trade_sell: Idempotency fast-path: no existing record or no match for key='%s'",
+    key);                                                                                               // ADDED
   /* resolve port from sector */
-  LOGD ("cmd_trade_sell: Resolving port_id for player_id=%d, sector_id=%d", ctx->player_id, sector_id);	// ADDED
+  LOGD ("cmd_trade_sell: Resolving port_id for player_id=%d, sector_id=%d",
+        ctx->player_id,
+        sector_id);                                                                                     // ADDED
   if (requested_port_id > 0)
     {
       static const char *SQL_BY_ID =
@@ -2982,9 +3587,13 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 
       db_res_t *res = NULL;
       db_error_t dberr;
+
+
       memset (&dberr, 0, sizeof (dberr));
 
       db_bind_t params[1];
+
+
       params[0] = db_bind_i64 ((int64_t) requested_port_id);
 
       if (!db_query (db, SQL_BY_ID, params, 1, &res, &dberr))
@@ -3014,9 +3623,13 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 
       db_res_t *res = NULL;
       db_error_t dberr;
+
+
       memset (&dberr, 0, sizeof (dberr));
 
       db_bind_t params[1];
+
+
       params[0] = db_bind_i64 ((int64_t) sector_id);
 
       if (!db_query (db, SQL_BY_SECTOR, params, 1, &res, &dberr))
@@ -3038,54 +3651,80 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       port_id = (int) db_res_col_i64 (res, 0, &dberr);
       db_res_finalize (res);
     }
-  LOGD ("cmd_trade_sell: Resolved port_id=%d for player_id=%d", port_id, ctx->player_id);	// ADDED
+  LOGD ("cmd_trade_sell: Resolved port_id=%d for player_id=%d",
+        port_id,
+        ctx->player_id);                                                                        // ADDED
   player_ship_id = h_get_active_ship_id (db, ctx->player_id);
-  LOGD ("cmd_trade_sell: Player ship_id=%d for player_id=%d", player_ship_id, ctx->player_id);	// ADDED
+  LOGD ("cmd_trade_sell: Player ship_id=%d for player_id=%d",
+        player_ship_id,
+        ctx->player_id);                                                                        // ADDED
   h_decloak_ship (db, player_ship_id);
-  LOGD ("cmd_trade_sell: Ship decloaked for ship_id=%d", player_ship_id);	// ADDED
+  LOGD ("cmd_trade_sell: Ship decloaked for ship_id=%d", player_ship_id);       // ADDED
   /* pre-load credits & cargo (outside tx is fine; final checks are atomic) */
   long long current_credits = 0;
 
 
   if (account_type == 0)
-    {				// Petty cash
+    {                           // Petty cash
       if (h_get_player_petty_cash (db, ctx->player_id, &current_credits) !=
-	  SQLITE_OK)
-	{
-	  send_response_error (ctx,
-			       root,
-			       500, "Could not read player petty cash.");
-	  return -1;
-	}
+          SQLITE_OK)
+        {
+          send_response_error (ctx,
+                               root,
+                               500, "Could not read player petty cash.");
+          return -1;
+        }
     }
   else
-    {				// Bank account
+    {                           // Bank account
       long long credits_i = 0;
 
 
       if (h_get_credits (db, "player", ctx->player_id, &credits_i) !=
-	  SQLITE_OK)
-	{
-	  send_response_error (ctx,
-			       root,
-			       500, "Could not read player bank credits.");
-	  return -1;
-	}
+          SQLITE_OK)
+        {
+          send_response_error (ctx,
+                               root,
+                               500, "Could not read player bank credits.");
+          return -1;
+        }
       current_credits = (long long) credits_i;
     }
-  LOGD ("cmd_trade_sell: Player credits (account_type=%d)=%lld for player_id=%d", account_type, current_credits, ctx->player_id);	// ADDED
-  int cur_ore = 0, cur_org = 0, cur_eq = 0, cur_colonists = 0, cur_slaves = 0, cur_weapons = 0, cur_drugs = 0, cur_holds = 0;	// Initialize to 0
+  LOGD (
+    "cmd_trade_sell: Player credits (account_type=%d)=%lld for player_id=%d",
+    account_type,
+    current_credits,
+    ctx->player_id);                                                                                                                    // ADDED
+  int cur_ore = 0, cur_org = 0, cur_eq = 0, cur_colonists = 0, cur_slaves = 0,
+      cur_weapons = 0, cur_drugs = 0, cur_holds = 0;                                                                            // Initialize to 0
 
 
-  if (h_get_ship_cargo_and_holds (db, player_ship_id, &cur_ore, &cur_org, &cur_eq, &cur_colonists, &cur_slaves, &cur_weapons, &cur_drugs, &cur_holds) != SQLITE_OK)	// Pass new cargo types
+  if (h_get_ship_cargo_and_holds (db,
+                                  player_ship_id,
+                                  &cur_ore,
+                                  &cur_org,
+                                  &cur_eq,
+                                  &cur_colonists,
+                                  &cur_slaves,
+                                  &cur_weapons,
+                                  &cur_drugs,
+                                  &cur_holds) != SQLITE_OK)                                                                                                             // Pass new cargo types
     {
       send_response_error (ctx, root, 500, "Could not read ship cargo.");
       return -1;
     }
-  int current_load = cur_ore + cur_org + cur_eq + cur_colonists + cur_slaves + cur_weapons + cur_drugs;	// Update current_load calculation
+  int current_load = cur_ore + cur_org + cur_eq + cur_colonists + cur_slaves +
+                     cur_weapons + cur_drugs;                                                           // Update current_load calculation
 
 
-  LOGD ("cmd_trade_sell: Ship cargo: ore=%d, organics=%d, equipment=%d, holds=%d, current_load=%d for ship_id=%d", cur_ore, cur_org, cur_eq, cur_holds, current_load, player_ship_id);	// ADDED
+  LOGD (
+    "cmd_trade_sell: Ship cargo: ore=%d, organics=%d, equipment=%d, holds=%d, current_load=%d for ship_id=%d",
+    cur_ore,
+    cur_org,
+    cur_eq,
+    cur_holds,
+    current_load,
+    player_ship_id);                                                                                                                                                                    // ADDED
   n = json_array_size (jitems);
   trade_lines = calloc (n, sizeof (*trade_lines));
   if (!trade_lines)
@@ -3093,160 +3732,162 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       send_response_error (ctx, root, 500, "Memory allocation error.");
       return -1;
     }
-  LOGD ("cmd_trade_sell: Allocated trade_lines for %zu items", n);	// ADDED
+  LOGD ("cmd_trade_sell: Allocated trade_lines for %zu items", n);      // ADDED
   /* validate each line & compute totals */
-  LOGD ("cmd_trade_sell: Starting trade line validation loop");	// ADDED
+  LOGD ("cmd_trade_sell: Starting trade line validation loop"); // ADDED
   for (size_t i = 0; i < n; i++)
     {
       json_t *it = json_array_get (jitems, i);
       const char *raw_commodity =
-	json_string_value (json_object_get (it, "commodity"));
+        json_string_value (json_object_get (it, "commodity"));
       int amount =
-	(int) json_integer_value (json_object_get (it, "quantity"));
+        (int) json_integer_value (json_object_get (it, "quantity"));
 
 
       LOGD
-	("cmd_trade_sell: Validating item %zu: raw_commodity='%s', amount=%d",
-	 i, raw_commodity, amount);
+        ("cmd_trade_sell: Validating item %zu: raw_commodity='%s', amount=%d",
+        i, raw_commodity, amount);
       if (!raw_commodity || amount <= 0)
-	{
-	  free_trade_lines (trade_lines, n);
-	  send_response_error (ctx,
-			       root,
-			       400,
-			       "items[] must contain {commodity, quantity>0}.");
-	  LOGD
-	    ("cmd_trade_sell: Invalid item %zu: raw_commodity='%s', amount=%d",
-	     i, raw_commodity, amount);
-	  return -1;
-	}
+        {
+          free_trade_lines (trade_lines, n);
+          send_response_error (ctx,
+                               root,
+                               400,
+                               "items[] must contain {commodity, quantity>0}.");
+          LOGD
+            ("cmd_trade_sell: Invalid item %zu: raw_commodity='%s', amount=%d",
+            i, raw_commodity, amount);
+          return -1;
+        }
       char *canonical_commodity_code =
-	(char *) commodity_to_code (raw_commodity);
+        (char *) commodity_to_code (db, raw_commodity);
 
 
       if (!canonical_commodity_code)
-	{
-	  free_trade_lines (trade_lines, n);
-	  send_response_refused_steal (ctx,
-				       root,
-				       ERR_AUTOPILOT_PATH_INVALID,
-				       "Invalid or unsupported commodity.",
-				       NULL);
-	  LOGD ("cmd_trade_sell: Invalid or unsupported commodity '%s'",
-		raw_commodity);
-	  goto cleanup;
-	}
+        {
+          free_trade_lines (trade_lines, n);
+          send_response_refused_steal (ctx,
+                                       root,
+                                       ERR_AUTOPILOT_PATH_INVALID,
+                                       "Invalid or unsupported commodity.",
+                                       NULL);
+          LOGD ("cmd_trade_sell: Invalid or unsupported commodity '%s'",
+                raw_commodity);
+          goto cleanup;
+        }
       if (!h_port_buys_commodity (db, port_id, canonical_commodity_code))
-	{
-	  free_trade_lines (trade_lines, n);
-	  send_response_refused_steal (ctx,
-				       root,
-				       ERR_AUTOPILOT_PATH_INVALID,
-				       "Port is not buying this commodity right now.",
-				       NULL);
-	  LOGD ("cmd_trade_sell: Port %d not buying commodity '%s'", port_id,
-		canonical_commodity_code);
-	  goto cleanup;
-	}
+        {
+          free_trade_lines (trade_lines, n);
+          send_response_refused_steal (ctx,
+                                       root,
+                                       ERR_AUTOPILOT_PATH_INVALID,
+                                       "Port is not buying this commodity right now.",
+                                       NULL);
+          LOGD ("cmd_trade_sell: Port %d not buying commodity '%s'", port_id,
+                canonical_commodity_code);
+          goto cleanup;
+        }
       int buy_price = h_entity_calculate_buy_price (db,
-						    ENTITY_TYPE_PORT,
-						    port_id,
-						    canonical_commodity_code);
+                                                    ENTITY_TYPE_PORT,
+                                                    port_id,
+                                                    canonical_commodity_code);
 
 
       if (buy_price <= 0)
-	{
-	  free_trade_lines (trade_lines, n);
-	  send_response_refused_steal (ctx,
-				       root,
-				       ERR_AUTOPILOT_PATH_INVALID,
-				       "Port is not buying this commodity right now.",
-				       NULL);
-	  // LOGD("cmd_trade_sell: Port %d buy price <= 0 for commodity '%s'", port_id, canonical_commodity_code); // ADDED
-	  return 0;
-	}
+        {
+          free_trade_lines (trade_lines, n);
+          send_response_refused_steal (ctx,
+                                       root,
+                                       ERR_AUTOPILOT_PATH_INVALID,
+                                       "Port is not buying this commodity right now.",
+                                       NULL);
+          // LOGD("cmd_trade_sell: Port %d buy price <= 0 for commodity '%s'", port_id, canonical_commodity_code); // ADDED
+          return 0;
+        }
       // LOGD("cmd_trade_sell: Unit price for '%s' at port %d is %d", raw_commodity, port_id, buy_price); // ADDED
       /* check cargo */
-      int ore, org, eq, holds, colonists, slaves, weapons, drugs;	// Declare for new cargo types
+      int ore, org, eq, holds, colonists, slaves, weapons, drugs;       // Declare for new cargo types
 
 
-      if (h_get_ship_cargo_and_holds (db, player_ship_id, &ore, &org, &eq, &holds, &colonists, &slaves, &weapons, &drugs) != SQLITE_OK)	// Pass new cargo types
-	{
-	  free_trade_lines (trade_lines, n);
-	  send_response_error (ctx, root, 500, "Could not read ship cargo.");
-	  return -1;
-	}
+      if (h_get_ship_cargo_and_holds (db, player_ship_id, &ore, &org, &eq,
+                                      &holds, &colonists, &slaves, &weapons,
+                                      &drugs) != SQLITE_OK)                                                                             // Pass new cargo types
+        {
+          free_trade_lines (trade_lines, n);
+          send_response_error (ctx, root, 500, "Could not read ship cargo.");
+          return -1;
+        }
 
       int have = 0;
 
 
       /* Map canonical commodity code to what the player is actually carrying */
       if (strcasecmp (canonical_commodity_code, "ore") == 0)
-	{
-	  have = ore;
-	}
+        {
+          have = ore;
+        }
       else if (strcasecmp (canonical_commodity_code, "organics") == 0)
-	{
-	  have = org;
-	}
+        {
+          have = org;
+        }
       else if (strcasecmp (canonical_commodity_code, "equipment") == 0)
-	{
-	  have = eq;
-	}
+        {
+          have = eq;
+        }
       else if (strcasecmp (canonical_commodity_code, "colonists") == 0)
-	{
-	  have = colonists;
-	}
+        {
+          have = colonists;
+        }
       /* Illegal / special commodities: check permission first, then map */
       else if (strcasecmp (canonical_commodity_code, "SLV") == 0 ||
-	       strcasecmp (canonical_commodity_code, "WPN") == 0 ||
-	       strcasecmp (canonical_commodity_code, "DRG") == 0)
-	{
-	  /* Check illegal trade for sell */
-	  if (!h_can_trade_commodity (db, port_id, ctx->player_id,
-				      canonical_commodity_code))
-	    {
-	      free_trade_lines (trade_lines, n);
-	      send_response_refused_steal (ctx,
-					   root,
-					   REF_SAFE_ZONE_ONLY,
-					   "Forbidden: Illegal trade not permitted for this player or port.",
-					   NULL);
-	      return 0;		/* IMPORTANT: stop here */
-	    }
-	  if (strcasecmp (canonical_commodity_code, "SLV") == 0)
-	    {
-	      have = slaves;
-	    }
-	  else if (strcasecmp (canonical_commodity_code, "WPN") == 0)
-	    {
-	      have = weapons;
-	    }
-	  else			/* DRG */
-	    {
-	      have = drugs;
-	    }
-	}
+               strcasecmp (canonical_commodity_code, "WPN") == 0 ||
+               strcasecmp (canonical_commodity_code, "DRG") == 0)
+        {
+          /* Check illegal trade for sell */
+          if (!h_can_trade_commodity (db, port_id, ctx->player_id,
+                                      canonical_commodity_code))
+            {
+              free_trade_lines (trade_lines, n);
+              send_response_refused_steal (ctx,
+                                           root,
+                                           REF_SAFE_ZONE_ONLY,
+                                           "Forbidden: Illegal trade not permitted for this player or port.",
+                                           NULL);
+              return 0;         /* IMPORTANT: stop here */
+            }
+          if (strcasecmp (canonical_commodity_code, "SLV") == 0)
+            {
+              have = slaves;
+            }
+          else if (strcasecmp (canonical_commodity_code, "WPN") == 0)
+            {
+              have = weapons;
+            }
+          else                  /* DRG */
+            {
+              have = drugs;
+            }
+        }
       else
-	{
-	  /* Unknown / unsupported commodity code */
-	  free_trade_lines (trade_lines, n);
-	  send_response_refused_steal (ctx,
-				       root,
-				       ERR_SECTOR_NOT_FOUND,
-				       "Unknown commodity code.", NULL);
-	  return 0;
-	}
+        {
+          /* Unknown / unsupported commodity code */
+          free_trade_lines (trade_lines, n);
+          send_response_refused_steal (ctx,
+                                       root,
+                                       ERR_SECTOR_NOT_FOUND,
+                                       "Unknown commodity code.", NULL);
+          return 0;
+        }
       if (have < amount)
-	{
-	  free_trade_lines (trade_lines, n);
-	  send_response_refused_steal (ctx,
-				       root,
-				       REF_NO_WARP_LINK,
-				       "You do not carry enough of that commodity.",
-				       NULL);
-	  return 0;
-	}
+        {
+          free_trade_lines (trade_lines, n);
+          send_response_refused_steal (ctx,
+                                       root,
+                                       REF_NO_WARP_LINK,
+                                       "You do not carry enough of that commodity.",
+                                       NULL);
+          return 0;
+        }
       long long line_credits = (long long) amount * buy_price;
 
 
@@ -3256,24 +3897,27 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       trade_lines[i].line_cost = line_credits;
       total_item_value += line_credits;
     }
-  LOGD ("cmd_trade_sell: Finished trade line validation. Total item value=%lld", total_item_value);	// ADDED
+  LOGD ("cmd_trade_sell: Finished trade line validation. Total item value=%lld",
+        total_item_value);                                                                              // ADDED
   rc =
     calculate_fees (db, TX_TYPE_TRADE_SELL, total_item_value, "player",
-		    &charges);
+                    &charges);
   total_credits_after_fees = total_item_value - charges.fee_total;
   if (total_credits_after_fees < 0)
     {
       free_trade_lines (trade_lines, n);
       send_response_refused_steal (ctx,
-				   root,
-				   REF_NO_WARP_LINK,
-				   "Selling this would result in negative credits after fees.",
-				   NULL);
+                                   root,
+                                   REF_NO_WARP_LINK,
+                                   "Selling this would result in negative credits after fees.",
+                                   NULL);
       return 0;
     }
   /* START TRANSACTION */
   {
     db_error_t dberr;
+
+
     memset (&dberr, 0, sizeof (dberr));
 
     if (!db_tx_begin (db, DB_TX_IMMEDIATE, &dberr))
@@ -3307,71 +3951,74 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       sqlite3_stmt *st = NULL;
       /* log row */
       {
-	static const char *LOG_SQL =
-	  "INSERT INTO trade_log "
-	  "(player_id, port_id, sector_id, commodity, units, price_per_unit, action, timestamp) "
-	  "VALUES ($1, $2, $3, $4, $5, $6, 'sell', $7);";
+        static const char *LOG_SQL =
+          "INSERT INTO trade_log "
+          "(player_id, port_id, sector_id, commodity, units, price_per_unit, action, timestamp) "
+          "VALUES ($1, $2, $3, $4, $5, $6, 'sell', $7);";
 
-	db_bind_t log_params[] = {
-	  db_bind_int(ctx->player_id),
-	  db_bind_int(port_id),
-	  db_bind_int(sector_id),
-	  db_bind_text(commodity),
-	  db_bind_int(amount),
-	  db_bind_int(buy_price),
-	  db_bind_int64((long long)time(NULL))
-	};
+        db_bind_t log_params[] = {
+          db_bind_i32 (ctx->player_id),
+          db_bind_i32 (port_id),
+          db_bind_i32 (sector_id),
+          db_bind_text (commodity),
+          db_bind_i32 (amount),
+          db_bind_i32 (buy_price),
+          db_bind_i64 ((long long)time (NULL))
+        };
 
-	db_res_t *log_res = NULL;
-	db_error_t log_err;
-	db_error_clear(&log_err);
+        db_res_t *log_res = NULL;
+        db_error_t log_err;
 
-	if (!db_exec(db, LOG_SQL, log_params, sizeof(log_params) / sizeof(log_params[0]), &log_err))
-	  {
-	    goto sql_err;
-	  }
+
+        db_error_clear (&log_err);
+
+        if (!db_exec (db, LOG_SQL, log_params,
+                      sizeof(log_params) / sizeof(log_params[0]), &log_err))
+          {
+            goto sql_err;
+          }
       }
       /* update ship cargo (−amount) */
       {
-	int new_ship_qty = 0;
+        int new_ship_qty = 0;
 
 
-	rc =
-	  h_update_ship_cargo (db, ctx->ship_id, commodity,
-			       -amount, &new_ship_qty);
-	if (rc != SQLITE_OK)
-	  {
-	    if (rc == SQLITE_CONSTRAINT)
-	      {
-		send_response_refused_steal (ctx,
-					     root,
-					     REF_NO_WARP_LINK,
-					     "You do not carry enough of that commodity (atomic check).",
-					     NULL);
-	      }
-	    goto fail_tx;
-	  }
-	LOGD ("cmd_trade_sell: Ship cargo updated. new_qty=%d", new_ship_qty);
+        rc =
+          h_update_ship_cargo (db, ctx->ship_id, commodity,
+                               -amount, &new_ship_qty);
+        if (rc != SQLITE_OK)
+          {
+            if (rc == SQLITE_CONSTRAINT)
+              {
+                send_response_refused_steal (ctx,
+                                             root,
+                                             REF_NO_WARP_LINK,
+                                             "You do not carry enough of that commodity (atomic check).",
+                                             NULL);
+              }
+            goto fail_tx;
+          }
+        LOGD ("cmd_trade_sell: Ship cargo updated. new_qty=%d", new_ship_qty);
       }
       /* update port stock (+amount) */
       {
-	int new_port_qty = 0;
+        int new_port_qty = 0;
 
 
-	rc =
-	  h_update_port_stock (db, port_id, commodity, amount, &new_port_qty);
-	if (rc != SQLITE_OK)
-	  {
-	    if (rc == SQLITE_CONSTRAINT)
-	      {
-		send_response_refused_steal (ctx,
-					     root,
-					     REF_TURN_COST_EXCEEDS,
-					     "Port cannot accept that much cargo (atomic check).",
-					     NULL);
-	      }
-	    goto fail_tx;
-	  }
+        rc =
+          h_update_port_stock (db, port_id, commodity, amount, &new_port_qty);
+        if (rc != SQLITE_OK)
+          {
+            if (rc == SQLITE_CONSTRAINT)
+              {
+                send_response_refused_steal (ctx,
+                                             root,
+                                             REF_TURN_COST_EXCEEDS,
+                                             "Port cannot accept that much cargo (atomic check).",
+                                             NULL);
+              }
+            goto fail_tx;
+          }
       }
       json_t *jline = json_object ();
 
@@ -3385,55 +4032,57 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
   /* credit player (atomic helper) */
   {
     if (account_type == 0)
-      {				// Petty cash
-	if (we_started_tx)
-	  {
-	    rc =
-	      h_add_player_petty_cash_unlocked (db, ctx->player_id,
-						total_credits_after_fees,
-						&new_balance);
-	  }
-	else
-	  {
-	    rc =
-	      h_add_player_petty_cash (db, ctx->player_id,
-				       total_credits_after_fees,
-				       &new_balance);
-	  }
+      {                         // Petty cash
+        if (we_started_tx)
+          {
+            rc =
+              h_add_player_petty_cash_unlocked (db, ctx->player_id,
+                                                total_credits_after_fees,
+                                                &new_balance);
+          }
+        else
+          {
+            rc =
+              h_add_player_petty_cash (db, ctx->player_id,
+                                       total_credits_after_fees,
+                                       &new_balance);
+          }
       }
     else
-      {				// Bank account
-	int player_bank_account_id = -1;
-	int get_account_rc =
-	  h_get_account_id_unlocked (db, "player", ctx->player_id,
-				     &player_bank_account_id);
+      {                         // Bank account
+        int player_bank_account_id = -1;
+        int get_account_rc =
+          h_get_account_id_unlocked (db, "player", ctx->player_id,
+                                     &player_bank_account_id);
 
 
-	if (get_account_rc != SQLITE_OK)
-	  {
-	    LOGE
-	      ("cmd_trade_sell: Failed to get player bank account ID for player %d (rc=%d)",
-	       ctx->player_id, get_account_rc);
-	    rc = get_account_rc;
-	  }
-	else
-	  {
-	    rc =
-	      h_add_credits_unlocked (db, player_bank_account_id,
-				      total_credits_after_fees, "TRADE_SELL",
-				      tx_group_id, &new_balance);
-	  }
+        if (get_account_rc != SQLITE_OK)
+          {
+            LOGE
+            (
+              "cmd_trade_sell: Failed to get player bank account ID for player %d (rc=%d)",
+              ctx->player_id,
+              get_account_rc);
+            rc = get_account_rc;
+          }
+        else
+          {
+            rc =
+              h_add_credits_unlocked (db, player_bank_account_id,
+                                      total_credits_after_fees, "TRADE_SELL",
+                                      tx_group_id, &new_balance);
+          }
       }
     if (rc != SQLITE_OK)
       {
-	send_response_error (ctx, root, 500, "Failed to credit player.");
-	goto fail_tx;
+        send_response_error (ctx, root, 500, "Failed to credit player.");
+        goto fail_tx;
       }
     json_object_set_new (receipt, "credits_remaining",
-			 json_integer (new_balance));
+                         json_integer (new_balance));
   }
   LOGD ("cmd_trade_sell: Player credits credited. New balance=%lld",
-	json_integer_value (json_object_get (receipt, "credits_remaining")));
+        json_integer_value (json_object_get (receipt, "credits_remaining")));
   // Deduct total_item_value from port's bank account
   {
     long long new_port_balance = 0;
@@ -3444,67 +4093,72 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 
     if (get_account_rc != SQLITE_OK)
       {
-	LOGE
-	  ("cmd_trade_sell: Failed to get port bank account ID for port %d (rc=%d)",
-	   port_id, get_account_rc);
-	rc = get_account_rc;
-	goto fail_tx;
+        LOGE
+        (
+          "cmd_trade_sell: Failed to get port bank account ID for port %d (rc=%d)",
+          port_id,
+          get_account_rc);
+        rc = get_account_rc;
+        goto fail_tx;
       }
     else
       {
-	rc =
-	  h_deduct_credits_unlocked (db, port_bank_account_id,
-				     total_item_value, "TRADE_SELL",
-				     tx_group_id, &new_port_balance);
+        rc =
+          h_deduct_credits_unlocked (db, port_bank_account_id,
+                                     total_item_value, "TRADE_SELL",
+                                     tx_group_id, &new_port_balance);
       }
     if (rc != SQLITE_OK)
       {
-	LOGE ("cmd_trade_sell: Failed to deduct credits from port %d: %s",
-	      port_id, "database error");
-	goto fail_tx;
+        LOGE ("cmd_trade_sell: Failed to deduct credits from port %d: %s",
+              port_id, "database error");
+        goto fail_tx;
       }
     LOGD
       ("cmd_trade_sell: Deducted %lld credits from port %d. New balance=%lld",
-       total_item_value, port_id, new_port_balance);
+      total_item_value, port_id, new_port_balance);
   }
   // Add fees to system bank account
   if (charges.fee_to_bank > 0)
     {
       long long new_system_balance = 0;
       int system_bank_account_id = -1;
-      int get_account_rc = h_get_system_account_id_unlocked (db, "SYSTEM", 0,
-							     &system_bank_account_id);
+      int get_account_rc = h_get_system_account_id_unlocked (db,
+                                                             "SYSTEM",
+                                                             0,
+                                                             &
+                                                             system_bank_account_id);
 
 
       if (get_account_rc != SQLITE_OK)
-	{
-	  LOGE
-	    ("cmd_trade_sell: Failed to get system bank account ID (rc=%d)",
-	     get_account_rc);
-	  rc = get_account_rc;
-	  goto fail_tx;
-	}
+        {
+          LOGE
+            ("cmd_trade_sell: Failed to get system bank account ID (rc=%d)",
+            get_account_rc);
+          rc = get_account_rc;
+          goto fail_tx;
+        }
       else
-	{
-	  rc =
-	    h_add_credits_unlocked (db, system_bank_account_id,
-				    charges.fee_to_bank, "TRADE_SELL_FEE",
-				    tx_group_id, &new_system_balance);
-	}
+        {
+          rc =
+            h_add_credits_unlocked (db, system_bank_account_id,
+                                    charges.fee_to_bank, "TRADE_SELL_FEE",
+                                    tx_group_id, &new_system_balance);
+        }
       if (rc != SQLITE_OK)
-	{
-	  LOGE ("cmd_trade_sell: Failed to add fees to system bank: %s",
-		"database error");
-	  goto fail_tx;
-	}
+        {
+          LOGE ("cmd_trade_sell: Failed to add fees to system bank: %s",
+                "database error");
+          goto fail_tx;
+        }
       LOGD
-	("cmd_trade_sell: Added %lld fees to system bank. New balance=%lld",
-	 charges.fee_to_bank, new_system_balance);
+        ("cmd_trade_sell: Added %lld fees to system bank. New balance=%lld",
+        charges.fee_to_bank, new_system_balance);
     }
   json_object_set_new (receipt, "total_item_value",
-		       json_integer (total_item_value));
+                       json_integer (total_item_value));
   json_object_set_new (receipt, "total_credits_after_fees",
-		       json_integer (total_credits_after_fees));
+                       json_integer (total_credits_after_fees));
   json_object_set_new (receipt, "fees", json_integer (charges.fee_to_bank));
   /* idempotency insert */
   LOGD ("cmd_trade_sell: Attempting idempotency insert for key='%s'", key);
@@ -3518,9 +4172,13 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       "VALUES ($1, $2, $3, $4, $5, $6);";
 
     db_error_t dberr;
+
+
     memset (&dberr, 0, sizeof (dberr));
 
     db_bind_t params[6];
+
+
     params[0] = db_bind_text (key);
     params[1] = db_bind_i64 ((int64_t) ctx->player_id);
     params[2] = db_bind_i64 ((int64_t) sector_id);
@@ -3530,13 +4188,17 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 
     if (!db_exec (db, SQL_PUT, params, 6, &dberr))
       {
-        LOGD ("cmd_trade_sell: Idempotency insert failed, going to idempotency_race. code=%d msg=%s",
-              dberr.code, dberr.message[0] ? dberr.message : "database error");
+        LOGD (
+          "cmd_trade_sell: Idempotency insert failed, going to idempotency_race. code=%d msg=%s",
+          dberr.code,
+          dberr.message[0] ? dberr.message : "database error");
 
         /* On insert failure, rollback the gameplay transaction we started */
         if (we_started_tx)
           {
             db_error_t rberr;
+
+
             memset (&rberr, 0, sizeof (rberr));
             (void) db_tx_rollback (db, &rberr);
             we_started_tx = 0;
@@ -3549,6 +4211,8 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
   if (we_started_tx)
     {
       db_error_t cberr;
+
+
       memset (&cberr, 0, sizeof (cberr));
 
       if (!db_tx_commit (db, &cberr))
@@ -3567,6 +4231,8 @@ fail_tx:
   if (we_started_tx)
     {
       db_error_t rberr;
+
+
       memset (&rberr, 0, sizeof (rberr));
       (void) db_tx_rollback (db, &rberr);
       we_started_tx = 0;
@@ -3585,9 +4251,13 @@ idempotency_race:
 
     db_res_t *res = NULL;
     db_error_t dberr;
+
+
     memset (&dberr, 0, sizeof (dberr));
 
     db_bind_t params[3];
+
+
     params[0] = db_bind_text (key);
     params[1] = db_bind_i64 ((int64_t) ctx->player_id);
     params[2] = db_bind_i64 ((int64_t) sector_id);
@@ -3598,7 +4268,7 @@ idempotency_race:
           {
             LOGD ("cmd_trade_sell: Idempotency_race: Found existing record.");
 
-            const char *req_s_stored  = db_res_col_text (res, 0, &dberr);
+            const char *req_s_stored = db_res_col_text (res, 0, &dberr);
             const char *resp_s_stored = db_res_col_text (res, 1, &dberr);
 
             json_error_t jerr;
@@ -3607,25 +4277,36 @@ idempotency_race:
 
             int same = (stored_req && json_equal_strict (stored_req, data));
 
+
             if (stored_req)
-              json_decref (stored_req);
+              {
+                json_decref (stored_req);
+              }
 
             if (same)
               {
-                LOGD ("cmd_trade_sell: Idempotency_race: Request matches, replaying response.");
+                LOGD (
+                  "cmd_trade_sell: Idempotency_race: Request matches, replaying response.");
 
                 json_t *stored_resp =
                   resp_s_stored ? json_loads (resp_s_stored, 0, &jerr) : NULL;
+
 
                 db_res_finalize (res);
 
                 if (!stored_resp)
                   {
-                    send_response_error (ctx, root, 500, "Stored response unreadable.");
+                    send_response_error (ctx,
+                                         root,
+                                         500,
+                                         "Stored response unreadable.");
                     goto cleanup;
                   }
 
-                send_response_ok_take (ctx, root, "trade.sell_receipt_v1", &stored_resp);
+                send_response_ok_take (ctx,
+                                       root,
+                                       "trade.sell_receipt_v1",
+                                       &stored_resp);
                 /* send_response_ok_take steals payload */
                 goto cleanup;
               }
@@ -3640,7 +4321,7 @@ idempotency_race:
 cleanup:
   if (trade_lines)
     {
-      free_trade_lines (trade_lines, n);	// Ensure freeing here
+      free_trade_lines (trade_lines, n);        // Ensure freeing here
     }
   if (receipt)
     {
@@ -3659,11 +4340,9 @@ cleanup:
 
 
 int
-cmd_trade_buy (client_ctx_t *ctx, json_t *root)
+cmd_trade_buy (db_t *db, client_ctx_t *ctx, json_t *root)
 {
   LOGD ("cmd_trade_buy: entered for player_id=%d", ctx->player_id);
-
-  db_t *db = NULL;
   json_t *receipt = NULL;
   json_t *lines = NULL;
   json_t *data = NULL;
@@ -3682,6 +4361,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
   long long new_balance = 0;
   char tx_group_id[UUID_STR_LEN];
 
+
   h_generate_hex_uuid (tx_group_id, sizeof (tx_group_id));
 
   TradeLine *trade_lines = NULL;
@@ -3689,6 +4369,8 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
   int we_started_tx = 0;
 
   db_error_t dberr;
+
+
   db_error_clear (&dberr);
 
   if (!ctx || !root)
@@ -3696,7 +4378,6 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       return -1;
     }
 
-  db = db_get_handle ();
   if (!db)
     {
       send_response_error (ctx, root, 500, "No database handle.");
@@ -3706,54 +4387,70 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
   if (ctx->player_id <= 0)
     {
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_SECTOR_NOT_FOUND,
-				   "Not authenticated", NULL);
-      LOGD ("cmd_trade_buy: Not authenticated for player_id=%d", ctx->player_id);
+                                   root,
+                                   ERR_SECTOR_NOT_FOUND,
+                                   "Not authenticated", NULL);
+      LOGD ("cmd_trade_buy: Not authenticated for player_id=%d",
+            ctx->player_id);
       return 0;
     }
 
   /* consume turn (may open a transaction) */
   TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);
+
+
   if (tc != TURN_CONSUME_SUCCESS)
     {
-      LOGD ("cmd_trade_buy: Turn consumption failed for player_id=%d, result=%d",
-	    ctx->player_id, tc);
+      LOGD (
+        "cmd_trade_buy: Turn consumption failed for player_id=%d, result=%d",
+        ctx->player_id,
+        tc);
       return handle_turn_consumption_error (ctx, tc, "trade.buy", root, NULL);
     }
-  LOGD ("cmd_trade_buy: Turn consumed successfully for player_id=%d", ctx->player_id);
+  LOGD ("cmd_trade_buy: Turn consumed successfully for player_id=%d",
+        ctx->player_id);
 
   /* input */
   data = json_object_get (root, "data");
   if (!json_is_object (data))
     {
       send_response_error (ctx, root, 400, "Missing data object.");
-      LOGD ("cmd_trade_buy: Missing data object for player_id=%d", ctx->player_id);
+      LOGD ("cmd_trade_buy: Missing data object for player_id=%d",
+            ctx->player_id);
       return -1;
     }
 
-  int account_type = db_get_player_pref_int (ctx->player_id,
-					     "trade.default_account",
-					     0);
+  int account_type = db_get_player_pref_int (db, ctx->player_id,
+                                             "trade.default_account",
+                                             0);
 
   json_t *jaccount = json_object_get (data, "account");
+
+
   if (json_is_integer (jaccount))
     {
       int requested_account_type = (int) json_integer_value (jaccount);
+
+
       if (requested_account_type != 0 && requested_account_type != 1)
-	{
-	  send_response_error (ctx, root, 400, "Invalid account type. Must be 0 (petty_cash) or 1 (bank).");
-	  return 0;
-	}
+        {
+          send_response_error (ctx,
+                               root,
+                               400,
+                               "Invalid account type. Must be 0 (petty_cash) or 1 (bank).");
+          return 0;
+        }
       account_type = requested_account_type;
     }
 
   /* idempotency key */
   {
     json_t *jid = json_object_get (root, "idempotency_key");
+
+
     if (json_is_string (jid))
       {
-	key = json_string_value (jid);
+        key = json_string_value (jid);
       }
   }
 
@@ -3761,6 +4458,8 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
   sector_id = ctx->sector_id;
 
   json_t *jport = json_object_get (data, "port_id");
+
+
   if (json_is_integer (jport))
     {
       requested_port_id = (int) json_integer_value (jport);
@@ -3778,139 +4477,176 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
   if (key && *key)
     {
       static const char *SQL_GET =
-	"SELECT request_json, response_json "
-	"FROM trade_idempotency "
-	"WHERE key = $1 AND player_id = $2 AND sector_id = $3;";
+        "SELECT request_json, response_json "
+        "FROM trade_idempotency "
+        "WHERE key = $1 AND player_id = $2 AND sector_id = $3;";
 
       db_res_t *res = NULL;
+
+
       db_error_clear (&dberr);
 
       db_bind_t binds[] = {
-	db_bind_text (key),
-	db_bind_i32 (ctx->player_id),
-	db_bind_i32 (sector_id)
+        db_bind_text (key),
+        db_bind_i32 (ctx->player_id),
+        db_bind_i32 (sector_id)
       };
 
+
       if (!db_query (db,
-		     SQL_GET,
-		     binds,
-		     sizeof (binds) / sizeof (binds[0]),
-		     &res,
-		     &dberr))
-	{
-	  /* Non-fatal: treat as cache miss; continue with normal execution */
-	  LOGE ("cmd_trade_buy: Idempotency lookup failed: %s",
-		dberr.message[0] ? dberr.message : "database error");
-	}
+                     SQL_GET,
+                     binds,
+                     sizeof (binds) / sizeof (binds[0]),
+                     &res,
+                     &dberr))
+        {
+          /* Non-fatal: treat as cache miss; continue with normal execution */
+          LOGE ("cmd_trade_buy: Idempotency lookup failed: %s",
+                dberr.message[0] ? dberr.message : "database error");
+        }
       else
-	{
-	  db_error_t step_err;
-	  db_error_clear (&step_err);
+        {
+          db_error_t step_err;
 
-	  if (db_res_step (res, &step_err))
-	    {
-	      const char *req_s_stored = db_res_col_text (res, 0, &step_err);
-	      const char *resp_s_stored = db_res_col_text (res, 1, &step_err);
 
-	      json_error_t jerr;
-	      json_t *stored_req =
-		req_s_stored ? json_loads (req_s_stored, 0, &jerr) : NULL;
+          db_error_clear (&step_err);
 
-	      int same = (stored_req && json_equal_strict (stored_req, data));
-	      if (stored_req)
-		{
-		  json_decref (stored_req);
-		}
+          if (db_res_step (res, &step_err))
+            {
+              const char *req_s_stored = db_res_col_text (res, 0, &step_err);
+              const char *resp_s_stored = db_res_col_text (res, 1, &step_err);
 
-	      if (same)
-		{
-		  json_t *stored_resp =
-		    resp_s_stored ? json_loads (resp_s_stored, 0, &jerr) : NULL;
+              json_error_t jerr;
+              json_t *stored_req =
+                req_s_stored ? json_loads (req_s_stored, 0, &jerr) : NULL;
 
-		  db_res_finalize (res);
+              int same = (stored_req && json_equal_strict (stored_req, data));
 
-		  if (!stored_resp)
-		    {
-		      send_response_error (ctx, root, 500, "Stored response unreadable.");
-		      goto cleanup;
-		    }
 
-		  send_response_ok_take (ctx,
-					 root,
-					 "trade.buy_receipt_v1", &stored_resp);
-		  goto cleanup;
-		}
-	    }
-	  db_res_finalize (res);
-	}
+              if (stored_req)
+                {
+                  json_decref (stored_req);
+                }
+
+              if (same)
+                {
+                  json_t *stored_resp =
+                    resp_s_stored ? json_loads (resp_s_stored, 0, &jerr) : NULL;
+
+
+                  db_res_finalize (res);
+
+                  if (!stored_resp)
+                    {
+                      send_response_error (ctx,
+                                           root,
+                                           500,
+                                           "Stored response unreadable.");
+                      goto cleanup;
+                    }
+
+                  send_response_ok_take (ctx,
+                                         root,
+                                         "trade.buy_receipt_v1", &stored_resp);
+                  goto cleanup;
+                }
+            }
+          db_res_finalize (res);
+        }
     }
 
   /* resolve port_id (if requested_port_id provided) */
   if (requested_port_id > 0)
     {
-      static const char *SQL_BY_ID = "SELECT id FROM ports WHERE id = $1 LIMIT 1;";
+      static const char *SQL_BY_ID =
+        "SELECT id FROM ports WHERE id = $1 LIMIT 1;";
       db_res_t *res = NULL;
+
+
       db_error_clear (&dberr);
 
       db_bind_t binds[] = {
-	db_bind_i32 (requested_port_id)
+        db_bind_i32 (requested_port_id)
       };
 
+
       if (!db_query (db, SQL_BY_ID, binds, 1, &res, &dberr))
-	{
-	  send_response_error (ctx, root, ERR_SERVER_ERROR,
-			       dberr.message[0] ? dberr.message : "Database error");
-	  goto cleanup;
-	}
+        {
+          send_response_error (ctx,
+                               root,
+                               ERR_SERVER_ERROR,
+                               dberr.message[0] ? dberr.message :
+                               "Database error");
+          goto cleanup;
+        }
 
       db_error_t step_err;
+
+
       db_error_clear (&step_err);
 
       if (db_res_step (res, &step_err))
-	{
-	  port_id = (int) db_res_col_i64 (res, 0, &step_err);
-	}
+        {
+          port_id = (int) db_res_col_i64 (res, 0, &step_err);
+        }
 
       db_res_finalize (res);
 
       if (port_id <= 0)
-	{
-	  send_response_refused_steal (ctx, root, ERR_PORT_NOT_FOUND, "Port not found.", NULL);
-	  goto cleanup;
-	}
+        {
+          send_response_refused_steal (ctx,
+                                       root,
+                                       ERR_PORT_NOT_FOUND,
+                                       "Port not found.",
+                                       NULL);
+          goto cleanup;
+        }
     }
   else
     {
-      static const char *SQL_BY_SECTOR = "SELECT id FROM ports WHERE sector = $1 LIMIT 1;";
+      static const char *SQL_BY_SECTOR =
+        "SELECT id FROM ports WHERE sector = $1 LIMIT 1;";
       db_res_t *res = NULL;
+
+
       db_error_clear (&dberr);
 
       db_bind_t binds[] = {
-	db_bind_i32 (sector_id)
+        db_bind_i32 (sector_id)
       };
 
+
       if (!db_query (db, SQL_BY_SECTOR, binds, 1, &res, &dberr))
-	{
-	  send_response_error (ctx, root, ERR_SERVER_ERROR,
-			       dberr.message[0] ? dberr.message : "Database error");
-	  goto cleanup;
-	}
+        {
+          send_response_error (ctx,
+                               root,
+                               ERR_SERVER_ERROR,
+                               dberr.message[0] ? dberr.message :
+                               "Database error");
+          goto cleanup;
+        }
 
       db_error_t step_err;
+
+
       db_error_clear (&step_err);
 
       if (db_res_step (res, &step_err))
-	{
-	  port_id = (int) db_res_col_i64 (res, 0, &step_err);
-	}
+        {
+          port_id = (int) db_res_col_i64 (res, 0, &step_err);
+        }
 
       db_res_finalize (res);
 
       if (port_id <= 0)
-	{
-	  send_response_refused_steal (ctx, root, ERR_PORT_NOT_FOUND, "No port in this sector.", NULL);
-	  goto cleanup;
-	}
+        {
+          send_response_refused_steal (ctx,
+                                       root,
+                                       ERR_PORT_NOT_FOUND,
+                                       "No port in this sector.",
+                                       NULL);
+          goto cleanup;
+        }
     }
 
   /* Parse trade lines */
@@ -3929,33 +4665,50 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
     }
 
   int player_ship_id = h_get_active_ship_id (db, ctx->player_id);
+
+
   if (player_ship_id <= 0)
     {
-      send_response_refused_steal (ctx, root, ERR_NO_ACTIVE_SHIP, "No active ship found.", NULL);
+      send_response_refused_steal (ctx,
+                                   root,
+                                   ERR_NO_ACTIVE_SHIP,
+                                   "No active ship found.",
+                                   NULL);
       goto cleanup;
     }
 
-  int cur_ore = 0, cur_org = 0, cur_eq = 0, cur_colonists = 0, cur_slaves = 0, cur_weapons = 0, cur_drugs = 0;
+  int cur_ore = 0, cur_org = 0, cur_eq = 0, cur_colonists = 0, cur_slaves = 0,
+      cur_weapons = 0, cur_drugs = 0;
   int cur_holds = 0;
 
-  if (h_get_ship_cargo_and_holds (db, player_ship_id, &cur_ore, &cur_org, &cur_eq,
-				  &cur_colonists, &cur_slaves, &cur_weapons, &cur_drugs,
-				  &cur_holds) != 0)
+
+  if (h_get_ship_cargo_and_holds (db,
+                                  player_ship_id,
+                                  &cur_ore,
+                                  &cur_org,
+                                  &cur_eq,
+                                  &cur_colonists,
+                                  &cur_slaves,
+                                  &cur_weapons,
+                                  &cur_drugs,
+                                  &cur_holds) != 0)
     {
       send_response_error (ctx, root, ERR_DB, "Failed to read ship cargo.");
       goto cleanup;
     }
 
-  int used_holds = cur_ore + cur_org + cur_eq + cur_colonists + cur_slaves + cur_weapons + cur_drugs;
+  int used_holds = cur_ore + cur_org + cur_eq + cur_colonists + cur_slaves +
+                   cur_weapons + cur_drugs;
   int free_holds = cur_holds - used_holds;
+
 
   if (total_cargo_space_needed > free_holds)
     {
       send_response_refused_steal (ctx,
-				   root,
-				   REF_NOT_ENOUGH_HOLDS,
-				   "Not enough free cargo holds.",
-				   NULL);
+                                   root,
+                                   REF_NOT_ENOUGH_HOLDS,
+                                   "Not enough free cargo holds.",
+                                   NULL);
       goto cleanup;
     }
 
@@ -3966,61 +4719,99 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       const char *commodity = trade_lines[i].commodity;
       int qty = trade_lines[i].quantity;
 
+
       if (!commodity || !*commodity || qty <= 0)
-	{
-	  send_response_error (ctx, root, 400, "Invalid trade line.");
-	  goto cleanup;
-	}
+        {
+          send_response_error (ctx, root, 400, "Invalid trade line.");
+          goto cleanup;
+        }
 
       /* Port must sell this commodity */
       if (!h_port_sells_commodity (db, port_id, commodity))
-	{
-	  send_response_refused_steal (ctx, root, REF_PORT_OUT_OF_STOCK, "Port does not sell this commodity.", NULL);
-	  goto cleanup;
-	}
+        {
+          send_response_refused_steal (ctx,
+                                       root,
+                                       REF_PORT_OUT_OF_STOCK,
+                                       "Port does not sell this commodity.",
+                                       NULL);
+          goto cleanup;
+        }
 
       /* Enforce illegal goods visibility/rules */
       if (!h_can_trade_commodity (db, port_id, ctx->player_id, commodity))
-	{
-	  send_response_refused_steal (ctx, root, ERR_ALIGNMENT_RESTRICTED, "You cannot trade this commodity here.", NULL);
-	  goto cleanup;
-	}
+        {
+          send_response_refused_steal (ctx,
+                                       root,
+                                       ERR_ALIGNMENT_RESTRICTED,
+                                       "You cannot trade this commodity here.",
+                                       NULL);
+          goto cleanup;
+        }
 
-      int unit_price = h_entity_calculate_sell_price (db, ENTITY_TYPE_PORT, port_id, commodity);
+      int unit_price = h_entity_calculate_sell_price (db,
+                                                      ENTITY_TYPE_PORT,
+                                                      port_id,
+                                                      commodity);
+
+
       if (unit_price <= 0)
-	{
-	  send_response_refused_steal (ctx, root, REF_PORT_OUT_OF_STOCK, "Commodity not for sale.", NULL);
-	  goto cleanup;
-	}
+        {
+          send_response_refused_steal (ctx,
+                                       root,
+                                       REF_PORT_OUT_OF_STOCK,
+                                       "Commodity not for sale.",
+                                       NULL);
+          goto cleanup;
+        }
 
       long long line_cost = (long long) unit_price * (long long) qty;
+
+
       total_item_cost += line_cost;
     }
 
   /* fees */
-  charges = h_calculate_fees (ctx->player_id, "trade.buy", total_item_cost);
-  total_cost_with_fees = total_item_cost + charges.total_fees;
+  /* charges = (fee_result_t) h_calculate_fees (ctx->player_id, "trade.buy", total_item_cost); */
+  /* total_cost_with_fees = total_item_cost + charges.total_fees; */
+
+  rc = calculate_fees (db,
+                       TX_TYPE_TRADE_BUY,
+                       total_item_cost,
+                       "player",
+                       &charges);
+  total_cost_with_fees = total_item_cost + charges.fee_total;
+
 
   /* Ensure balance is sufficient */
   int get_account_rc = 0;
+
+
   if (account_type == 0)
     {
-      get_account_rc = h_get_player_petty_cash (db, ctx->player_id, &new_balance);
+      get_account_rc = h_get_player_petty_cash (db, ctx->player_id,
+                                                &new_balance);
     }
   else
     {
-      get_account_rc = h_get_player_bank_balance (db, ctx->player_id, &new_balance);
+      get_account_rc = db_get_player_bank_balance (db,
+                                                   ctx->player_id,
+                                                   &new_balance);
     }
 
   if (get_account_rc != 0)
     {
-      send_response_error (ctx, root, ERR_DB, "Could not read account balance.");
+      send_response_error (ctx, root, ERR_DB,
+                           "Could not read account balance.");
       goto cleanup;
     }
 
   if (new_balance < total_cost_with_fees)
     {
-      send_response_refused_steal (ctx, root, ERR_INSUFFICIENT_FUNDS, "Insufficient funds.", NULL);
+      send_response_refused_steal (ctx,
+                                   root,
+                                   ERR_INSUFFICIENT_FUNDS,
+                                   "Insufficient funds.",
+                                   NULL);
       goto cleanup;
     }
 
@@ -4035,9 +4826,14 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
 
   json_object_set_new (receipt, "port_id", json_integer (port_id));
   json_object_set_new (receipt, "sector_id", json_integer (sector_id));
-  json_object_set_new (receipt, "total_item_cost", json_integer (total_item_cost));
-  json_object_set_new (receipt, "total_fees", json_integer (charges.total_fees));
-  json_object_set_new (receipt, "total_cost", json_integer (total_cost_with_fees));
+  json_object_set_new (receipt,
+                       "total_item_cost",
+                       json_integer (total_item_cost));
+  json_object_set_new (receipt, "total_fees",
+                       json_integer (charges.total_fees));
+  json_object_set_new (receipt,
+                       "total_cost",
+                       json_integer (total_cost_with_fees));
   json_object_set_new (receipt, "tx_group_id", json_string (tx_group_id));
   json_object_set_new (receipt, "lines", lines);
 
@@ -4045,8 +4841,11 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
   db_error_clear (&dberr);
   if (!db_tx_begin (db, DB_TX_IMMEDIATE, &dberr))
     {
-      send_response_error (ctx, root, ERR_SERVER_ERROR,
-			   dberr.message[0] ? dberr.message : "Could not begin transaction.");
+      send_response_error (ctx,
+                           root,
+                           ERR_SERVER_ERROR,
+                           dberr.message[0] ? dberr.message :
+                           "Could not begin transaction.");
       goto cleanup;
     }
   we_started_tx = 1;
@@ -4057,63 +4856,92 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       const char *commodity = trade_lines[i].commodity;
       int qty = trade_lines[i].quantity;
 
-      int unit_price = h_entity_calculate_sell_price (db, ENTITY_TYPE_PORT, port_id, commodity);
+      int unit_price = h_entity_calculate_sell_price (db,
+                                                      ENTITY_TYPE_PORT,
+                                                      port_id,
+                                                      commodity);
       int amount = qty;
 
+
       /* stock move: port sells -> subtract stock */
-      rc = h_market_move_port_stock (db, port_id, commodity, -amount);
+      rc = h_market_move_port_stock (db,
+                                     port_id,
+                                     commodity,
+                                     -amount);
       if (rc != 0)
-	{
-	  send_response_error (ctx, root, ERR_DB, "Failed to update port stock.");
-	  goto fail_tx;
-	}
+        {
+          send_response_error (ctx, root, ERR_DB,
+                               "Failed to update port stock.");
+          goto fail_tx;
+        }
+
+      int new_qty = 0;
+
 
       /* ship cargo update */
-      rc = h_update_ship_cargo (db, player_ship_id, commodity, amount);
+      rc = h_update_ship_cargo (db,
+                                player_ship_id,
+                                commodity,
+                                amount,
+                                &new_qty);
       if (rc != 0)
-	{
-	  LOGE ("cmd_trade_buy: h_update_ship_cargo failed for item %zu with rc=%d", i, rc);
-	  send_response_error (ctx, root, ERR_DB, "Failed to update ship cargo.");
-	  goto fail_tx;
-	}
+        {
+          LOGE (
+            "cmd_trade_buy: h_update_ship_cargo failed for item %zu with rc=%d",
+            i,
+            rc);
+          send_response_error (ctx, root, ERR_DB,
+                               "Failed to update ship cargo.");
+          goto fail_tx;
+        }
 
       /* trade log */
       {
-	static const char *LOG_SQL =
-	  "INSERT INTO trade_log (player_id, port_id, sector_id, commodity, units, price_per_unit, action, timestamp) "
-	  "VALUES ($1,$2,$3,$4,$5,$6,'buy',$7);";
+        static const char *LOG_SQL =
+          "INSERT INTO trade_log (player_id, port_id, sector_id, commodity, units, price_per_unit, action, timestamp) "
+          "VALUES ($1,$2,$3,$4,$5,$6,'buy',$7);";
 
-	db_error_t e;
-	db_error_clear (&e);
+        db_error_t e;
 
-	db_bind_t binds[] = {
-	  db_bind_i32 (ctx->player_id),
-	  db_bind_i32 (port_id),
-	  db_bind_i32 (sector_id),
-	  db_bind_text (commodity),
-	  db_bind_i32 (amount),
-	  db_bind_i32 (unit_price),
-	  db_bind_i64 ((int64_t) time (NULL))
-	};
 
-	if (!db_exec (db, LOG_SQL, binds, sizeof (binds) / sizeof (binds[0]), &e))
-	  {
-	    /* keep existing behaviour: treat constraint as special (idempotency/race), else error */
-	    if (e.code == ERR_DB_CONSTRAINT)
-	      {
-		LOGW ("cmd_trade_buy: trade_log constraint hit; proceeding (likely duplicate).");
-	      }
-	    else
-	      {
-		LOGE ("cmd_trade_buy: trade_log insert failed: %s", e.message);
-		send_response_error (ctx, root, ERR_DB, "Failed to write trade log.");
-		goto fail_tx;
-	      }
-	  }
+        db_error_clear (&e);
+
+        db_bind_t binds[] = {
+          db_bind_i32 (ctx->player_id),
+          db_bind_i32 (port_id),
+          db_bind_i32 (sector_id),
+          db_bind_text (commodity),
+          db_bind_i32 (amount),
+          db_bind_i32 (unit_price),
+          db_bind_i64 ((int64_t) time (NULL))
+        };
+
+
+        if (!db_exec (db, LOG_SQL, binds, sizeof (binds) / sizeof (binds[0]),
+                      &e))
+          {
+            /* keep existing behaviour: treat constraint as special (idempotency/race), else error */
+            if (e.code == ERR_DB_CONSTRAINT)
+              {
+                LOGW (
+                  "cmd_trade_buy: trade_log constraint hit; proceeding (likely duplicate).");
+              }
+            else
+              {
+                LOGE ("cmd_trade_buy: trade_log insert failed: %s", e.message);
+                send_response_error (ctx,
+                                     root,
+                                     ERR_DB,
+                                     "Failed to write trade log.");
+                goto fail_tx;
+              }
+          }
       }
 
       /* receipt line */
       json_t *line = json_object ();
+
+
       json_object_set_new (line, "commodity", json_string (commodity));
       json_object_set_new (line, "units", json_integer (amount));
       json_object_set_new (line, "price_per_unit", json_integer (unit_price));
@@ -4123,52 +4951,68 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
   /* 2) Deduct funds + fees */
   {
     int debit_rc = 0;
+
+
     if (account_type == 0)
       {
-	debit_rc = h_player_petty_cash_add (db, ctx->player_id, -(long long) total_cost_with_fees, &new_balance);
+        debit_rc = h_player_petty_cash_add (db,
+                                            ctx->player_id,
+                                            -(long long) total_cost_with_fees,
+                                            &new_balance);
       }
     else
       {
-	debit_rc = h_player_bank_balance_add (db, ctx->player_id, -(long long) total_cost_with_fees, &new_balance);
+        debit_rc = h_player_bank_balance_add (db,
+                                              ctx->player_id,
+                                              -(long long) total_cost_with_fees,
+                                              &new_balance);
       }
 
     if (debit_rc != 0)
       {
-	send_response_error (ctx, root, ERR_DB, "Failed to apply payment.");
-	goto fail_tx;
+        send_response_error (ctx, root, ERR_DB, "Failed to apply payment.");
+        goto fail_tx;
       }
   }
 
   /* 3) Optional alignment hit if buying illegal */
   {
     int any_illegal = 0;
+
+
     for (size_t i = 0; i < n; i++)
       {
-	if (h_is_illegal_commodity (db, trade_lines[i].commodity))
-	  {
-	    any_illegal = 1;
-	    break;
-	  }
+        if (h_is_illegal_commodity (db, trade_lines[i].commodity))
+          {
+            any_illegal = 1;
+            break;
+          }
       }
 
     if (any_illegal)
       {
-	static const char *SQL_ALIGN =
-	  "UPDATE players SET alignment = alignment - 10 WHERE id = $1;";
+        static const char *SQL_ALIGN =
+          "UPDATE players SET alignment = alignment - 10 WHERE id = $1;";
 
-	db_error_t e;
-	db_error_clear (&e);
+        db_error_t e;
 
-	db_bind_t binds[] = {
-	  db_bind_i32 (ctx->player_id)
-	};
 
-	if (!db_exec (db, SQL_ALIGN, binds, 1, &e))
-	  {
-	    LOGE ("cmd_trade_buy: alignment update failed: %s", e.message);
-	    send_response_error (ctx, root, ERR_DB, "Failed to update alignment.");
-	    goto fail_tx;
-	  }
+        db_error_clear (&e);
+
+        db_bind_t binds[] = {
+          db_bind_i32 (ctx->player_id)
+        };
+
+
+        if (!db_exec (db, SQL_ALIGN, binds, 1, &e))
+          {
+            LOGE ("cmd_trade_buy: alignment update failed: %s", e.message);
+            send_response_error (ctx,
+                                 root,
+                                 ERR_DB,
+                                 "Failed to update alignment.");
+            goto fail_tx;
+          }
       }
   }
 
@@ -4176,115 +5020,151 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
   if (key && *key)
     {
       static const char *SQL_PUT =
-	"INSERT INTO trade_idempotency (key, player_id, sector_id, request_json, response_json, created_at) "
-	"VALUES ($1,$2,$3,$4,$5,$6);";
+        "INSERT INTO trade_idempotency (key, player_id, sector_id, request_json, response_json, created_at) "
+        "VALUES ($1,$2,$3,$4,$5,$6);";
+
 
       req_s = json_dumps (data, JSON_SORT_KEYS);
       resp_s = json_dumps (receipt, JSON_SORT_KEYS);
 
       if (!req_s || !resp_s)
-	{
-	  send_response_error (ctx, root, ERR_SERVER_ERROR, "Out of memory.");
-	  goto fail_tx;
-	}
+        {
+          send_response_error (ctx, root, ERR_SERVER_ERROR, "Out of memory.");
+          goto fail_tx;
+        }
 
       db_error_t e;
+
+
       db_error_clear (&e);
 
       db_bind_t binds[] = {
-	db_bind_text (key),
-	db_bind_i32 (ctx->player_id),
-	db_bind_i32 (sector_id),
-	db_bind_text (req_s),
-	db_bind_text (resp_s),
-	db_bind_i64 ((int64_t) time (NULL))
+        db_bind_text (key),
+        db_bind_i32 (ctx->player_id),
+        db_bind_i32 (sector_id),
+        db_bind_text (req_s),
+        db_bind_text (resp_s),
+        db_bind_i64 ((int64_t) time (NULL))
       };
 
+
       if (!db_exec (db, SQL_PUT, binds, sizeof (binds) / sizeof (binds[0]), &e))
-	{
-	  if (e.code == ERR_DB_CONSTRAINT)
-	    {
-	      /* Idempotency race: someone else inserted. Resolve by read/compare. */
-	      LOGD ("cmd_trade_buy: Idempotency constraint hit; attempting race resolution.");
+        {
+          if (e.code == ERR_DB_CONSTRAINT)
+            {
+              /* Idempotency race: someone else inserted. Resolve by read/compare. */
+              LOGD (
+                "cmd_trade_buy: Idempotency constraint hit; attempting race resolution.");
 
-	      static const char *SQL_GET2 =
-		"SELECT request_json, response_json "
-		"FROM trade_idempotency "
-		"WHERE key = $1 AND player_id = $2 AND sector_id = $3;";
+              static const char *SQL_GET2 =
+                "SELECT request_json, response_json "
+                "FROM trade_idempotency "
+                "WHERE key = $1 AND player_id = $2 AND sector_id = $3;";
 
-	      db_res_t *res = NULL;
-	      db_error_t qerr;
-	      db_error_clear (&qerr);
+              db_res_t *res = NULL;
+              db_error_t qerr;
 
-	      db_bind_t qbinds[] = {
-		db_bind_text (key),
-		db_bind_i32 (ctx->player_id),
-		db_bind_i32 (sector_id)
-	      };
 
-	      if (db_query (db, SQL_GET2, qbinds, sizeof (qbinds) / sizeof (qbinds[0]), &res, &qerr))
-		{
-		  db_error_t step_err;
-		  db_error_clear (&step_err);
+              db_error_clear (&qerr);
 
-		  if (db_res_step (res, &step_err))
-		    {
-		      const char *req_s_stored = db_res_col_text (res, 0, &step_err);
-		      const char *resp_s_stored = db_res_col_text (res, 1, &step_err);
+              db_bind_t qbinds[] = {
+                db_bind_text (key),
+                db_bind_i32 (ctx->player_id),
+                db_bind_i32 (sector_id)
+              };
 
-		      json_error_t jerr;
-		      json_t *stored_req =
-			req_s_stored ? json_loads (req_s_stored, 0, &jerr) : NULL;
 
-		      int same = (stored_req && json_equal_strict (stored_req, data));
+              if (db_query (db, SQL_GET2, qbinds,
+                            sizeof (qbinds) / sizeof (qbinds[0]), &res, &qerr))
+                {
+                  db_error_t step_err;
 
-		      if (stored_req)
-			{
-			  json_decref (stored_req);
-			}
 
-		      if (same)
-			{
-			  json_t *stored_resp =
-			    resp_s_stored ? json_loads (resp_s_stored, 0, &jerr) : NULL;
+                  db_error_clear (&step_err);
 
-			  db_res_finalize (res);
+                  if (db_res_step (res, &step_err))
+                    {
+                      const char *req_s_stored = db_res_col_text (res,
+                                                                  0,
+                                                                  &step_err);
+                      const char *resp_s_stored = db_res_col_text (res,
+                                                                   1,
+                                                                   &step_err);
 
-			  if (!stored_resp)
-			    {
-			      send_response_error (ctx, root, 500, "Stored response unreadable.");
-			      goto fail_tx;
-			    }
+                      json_error_t jerr;
+                      json_t *stored_req =
+                        req_s_stored ? json_loads (req_s_stored, 0,
+                                                   &jerr) : NULL;
 
-			  /* Roll back our tx and replay stored response */
-			  goto replay_after_race;
-			}
-		    }
+                      int same = (stored_req && json_equal_strict (stored_req,
+                                                                   data));
 
-		  db_res_finalize (res);
-		}
 
-	      send_response_error (ctx, root, 500, "Could not resolve idempotency race.");
-	      goto fail_tx;
-	    }
-	  else
-	    {
-	      LOGE ("cmd_trade_buy: idempotency insert failed: %s", e.message);
-	      send_response_error (ctx, root, ERR_SERVER_ERROR, e.message[0] ? e.message : "Database error.");
-	      goto fail_tx;
-	    }
-	}
+                      if (stored_req)
+                        {
+                          json_decref (stored_req);
+                        }
+
+                      if (same)
+                        {
+                          json_t *stored_resp =
+                            resp_s_stored ? json_loads (resp_s_stored, 0,
+                                                        &jerr) : NULL;
+
+
+                          db_res_finalize (res);
+
+                          if (!stored_resp)
+                            {
+                              send_response_error (ctx,
+                                                   root,
+                                                   500,
+                                                   "Stored response unreadable.");
+                              goto fail_tx;
+                            }
+
+                          /* Roll back our tx and replay stored response */
+                          goto replay_after_race;
+                        }
+                    }
+
+                  db_res_finalize (res);
+                }
+
+              send_response_error (ctx,
+                                   root,
+                                   500,
+                                   "Could not resolve idempotency race.");
+              goto fail_tx;
+            }
+          else
+            {
+              LOGE ("cmd_trade_buy: idempotency insert failed: %s", e.message);
+              send_response_error (ctx,
+                                   root,
+                                   ERR_SERVER_ERROR,
+                                   e.message[0] ? e.message :
+                                   "Database error.");
+              goto fail_tx;
+            }
+        }
     }
 
   /* Commit */
   db_error_clear (&dberr);
   if (we_started_tx && !db_tx_commit (db, &dberr))
     {
-      LOGE ("cmd_trade_buy: commit failed: %s", dberr.message[0] ? dberr.message : "database error");
+      LOGE ("cmd_trade_buy: commit failed: %s",
+            dberr.message[0] ? dberr.message : "database error");
       db_error_t rb_err;
+
+
       db_error_clear (&rb_err);
       db_tx_rollback (db, &rb_err);
-      send_response_error (ctx, root, ERR_SERVER_ERROR, "Could not commit transaction.");
+      send_response_error (ctx,
+                           root,
+                           ERR_SERVER_ERROR,
+                           "Could not commit transaction.");
       goto cleanup;
     }
   we_started_tx = 0;
@@ -4299,6 +5179,8 @@ replay_after_race:
   if (we_started_tx)
     {
       db_error_t rb_err;
+
+
       db_error_clear (&rb_err);
       db_tx_rollback (db, &rb_err);
       we_started_tx = 0;
@@ -4312,6 +5194,8 @@ replay_after_race:
 
     db_res_t *res = NULL;
     db_error_t qerr;
+
+
     db_error_clear (&qerr);
 
     db_bind_t qbinds[] = {
@@ -4320,20 +5204,34 @@ replay_after_race:
       db_bind_i32 (sector_id)
     };
 
-    if (!db_query (db, SQL_GET3, qbinds, sizeof (qbinds) / sizeof (qbinds[0]), &res, &qerr))
+
+    if (!db_query (db,
+                   SQL_GET3,
+                   qbinds,
+                   sizeof (qbinds) / sizeof (qbinds[0]),
+                   &res,
+                   &qerr))
       {
-	send_response_error (ctx, root, 500, "Could not resolve idempotency race.");
-	goto cleanup;
+        send_response_error (ctx,
+                             root,
+                             500,
+                             "Could not resolve idempotency race.");
+        goto cleanup;
       }
 
     db_error_t step_err;
+
+
     db_error_clear (&step_err);
 
     if (!db_res_step (res, &step_err))
       {
-	db_res_finalize (res);
-	send_response_error (ctx, root, 500, "Could not resolve idempotency race.");
-	goto cleanup;
+        db_res_finalize (res);
+        send_response_error (ctx,
+                             root,
+                             500,
+                             "Could not resolve idempotency race.");
+        goto cleanup;
       }
 
     const char *resp_s_stored = db_res_col_text (res, 0, &step_err);
@@ -4341,12 +5239,13 @@ replay_after_race:
     json_t *stored_resp =
       resp_s_stored ? json_loads (resp_s_stored, 0, &jerr) : NULL;
 
+
     db_res_finalize (res);
 
     if (!stored_resp)
       {
-	send_response_error (ctx, root, 500, "Stored response unreadable.");
-	goto cleanup;
+        send_response_error (ctx, root, 500, "Stored response unreadable.");
+        goto cleanup;
       }
 
     send_response_ok_take (ctx, root, "trade.buy_receipt_v1", &stored_resp);
@@ -4357,6 +5256,8 @@ fail_tx:
   if (we_started_tx)
     {
       db_error_t rb_err;
+
+
       db_error_clear (&rb_err);
       db_tx_rollback (db, &rb_err);
       we_started_tx = 0;
@@ -4384,6 +5285,7 @@ cleanup:
   return 0;
 }
 
+
 int
 h_get_port_commodity_details (db_t *db,
                               int port_id,
@@ -4394,10 +5296,22 @@ h_get_port_commodity_details (db_t *db,
                               bool *sells_out)
 {
   /* Preserve “always initialise outputs on failure” behaviour */
-  if (quantity_out)      *quantity_out = 0;
-  if (max_capacity_out)  *max_capacity_out = 0;
-  if (buys_out)          *buys_out = false;
-  if (sells_out)         *sells_out = false;
+  if (quantity_out)
+    {
+      *quantity_out = 0;
+    }
+  if (max_capacity_out)
+    {
+      *max_capacity_out = 0;
+    }
+  if (buys_out)
+    {
+      *buys_out = false;
+    }
+  if (sells_out)
+    {
+      *sells_out = false;
+    }
 
   if (!db || port_id <= 0 || !commodity_code)
     {
@@ -4419,6 +5333,8 @@ h_get_port_commodity_details (db_t *db,
 
   db_res_t *res = NULL;
   db_error_t err;
+
+
   db_error_clear (&err);
 
   db_bind_t params[] = {
@@ -4426,8 +5342,13 @@ h_get_port_commodity_details (db_t *db,
     db_bind_text (commodity_code)
   };
 
-  if (!db_query (db, sql, params, (size_t)(sizeof (params) / sizeof (params[0])),
-                 &res, &err))
+
+  if (!db_query (db,
+                 sql,
+                 params,
+                 (size_t)(sizeof (params) / sizeof (params[0])),
+                 &res,
+                 &err))
     {
       LOGE ("h_get_port_commodity_details: query failed: %s",
             err.message[0] ? err.message : "database error");
@@ -4445,25 +5366,38 @@ h_get_port_commodity_details (db_t *db,
   if (quantity_out)
     {
       if (db_res_col_is_null (res, 0))
-        *quantity_out = 0;
+        {
+          *quantity_out = 0;
+        }
       else
-        *quantity_out = db_res_col_int (res, 0, &err);
+        {
+          *quantity_out = db_res_col_int (res, 0, &err);
+        }
     }
 
   if (max_capacity_out)
-    *max_capacity_out = db_res_col_int (res, 1, &err);
+    {
+      *max_capacity_out = db_res_col_int (res, 1, &err);
+    }
 
   if (buys_out)
-    *buys_out = (db_res_col_int (res, 2, &err) != 0);
+    {
+      *buys_out = (db_res_col_int (res, 2, &err) != 0);
+    }
 
   if (sells_out)
-    *sells_out = (db_res_col_int (res, 3, &err) != 0);
+    {
+      *sells_out = (db_res_col_int (res, 3, &err) != 0);
+    }
 
   db_res_finalize (res);
 
   /* If any column read raised an error, return a DB error code (conservative). */
   if (err.code)
-    return err.code;
+    {
+      return err.code;
+    }
 
   return 0;
 }
+

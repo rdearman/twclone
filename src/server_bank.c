@@ -36,6 +36,160 @@
 
 /* ==================================================================== */
 
+int
+h_player_bank_balance_add (db_t *db, int player_id, long long delta,
+                           long long *new_balance_out)
+{
+  if (!db || player_id <= 0 || !new_balance_out)
+    {
+      return ERR_DB_MISUSE;
+    }
+
+  db_error_t err;
+  db_error_clear (&err);
+
+  /*
+   * 1) Try UPDATE with bounds; if no row and delta>=0, INSERT account.
+   * Return: account_id, new_balance
+   */
+  const char *sql =
+    "WITH upd AS ("
+    "  UPDATE bank_accounts "
+    "  SET balance = balance + $2 "
+    "  WHERE owner_type = 'player' AND owner_id = $1 "
+    "    AND currency = 'CRD' AND is_active = 1 "
+    "    AND (balance + $2) >= 0 "
+    "  RETURNING id, balance"
+    "), ins AS ("
+    "  INSERT INTO bank_accounts (owner_type, owner_id, currency, balance, is_active) "
+    "  SELECT 'player', $1, 'CRD', $2, 1 "
+    "  WHERE $2 >= 0 AND NOT EXISTS ("
+    "    SELECT 1 FROM bank_accounts "
+    "    WHERE owner_type = 'player' AND owner_id = $1 "
+    "      AND currency = 'CRD' AND is_active = 1"
+    "  ) "
+    "  RETURNING id, balance"
+    ") "
+    "SELECT id, balance FROM upd "
+    "UNION ALL "
+    "SELECT id, balance FROM ins;";
+
+  db_bind_t params[] = {
+    db_bind_i32 ((int32_t) player_id),
+    db_bind_i64 ((int64_t) delta)
+  };
+
+  db_res_t *res = NULL;
+  if (!db_query (db, sql, params, 2, &res, &err))
+    {
+      return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    }
+
+  bool have_row = db_res_step (res, &err);
+  int64_t account_id = 0;
+  int64_t new_bal = 0;
+
+  if (have_row && !err.code)
+    {
+      account_id = db_res_col_i64 (res, 0, &err);
+      new_bal = db_res_col_i64 (res, 1, &err);
+    }
+
+  db_res_finalize (res);
+
+  if (err.code)
+    {
+      return err.code;
+    }
+
+  if (!have_row)
+    {
+      /*
+       * Either:
+       * - account missing and delta < 0 (cannot create for debit)
+       * - account exists but insufficient funds (UPDATE filtered it out)
+       *
+       * Distinguish with a quick existence check.
+       */
+      db_error_clear (&err);
+      const char *sql_exists =
+        "SELECT 1 FROM bank_accounts "
+        "WHERE owner_type='player' AND owner_id=$1 AND currency='CRD' AND is_active=1 "
+        "LIMIT 1;";
+
+      db_bind_t p2[] = { db_bind_i32 ((int32_t) player_id) };
+      res = NULL;
+
+      if (!db_query (db, sql_exists, p2, 1, &res, &err))
+        {
+          return err.code ? err.code : ERR_DB_QUERY_FAILED;
+        }
+
+      bool exists = db_res_step (res, &err);
+      db_res_finalize (res);
+
+      if (err.code)
+        {
+          return err.code;
+        }
+
+      return exists ? ERR_DB_CONSTRAINT : ERR_DB_NOT_FOUND;
+    }
+
+  /*
+   * 2) Insert minimal ledger row into bank_transactions (best-effort but treated as required).
+   * Schema: (account_id, tx_type, direction, amount, currency, description, ts, balance_after)
+   */
+  {
+    db_error_clear (&err);
+
+    const char *tx_sql =
+      "INSERT INTO bank_transactions "
+      "  (account_id, tx_type, direction, amount, currency, description, ts, balance_after) "
+      "VALUES "
+      "  ($1, $2, $3, $4, 'CRD', $5, $6, $7);";
+
+    const char *direction = (delta >= 0) ? "CREDIT" : "DEBIT";
+    int64_t amount_abs = (delta >= 0) ? (int64_t) delta : (int64_t) (-delta);
+    int64_t ts = (int64_t) time (NULL);
+
+    /* Keep description stable and generic (you can refine later). */
+    const char *desc = "player bank balance adjustment";
+
+    db_bind_t tx_params[] = {
+      db_bind_i64 (account_id),
+      db_bind_text ("ADJUSTMENT"),
+      db_bind_text (direction),
+      db_bind_i64 (amount_abs),
+      db_bind_text (desc),
+      db_bind_i64 (ts),
+      db_bind_i64 (new_bal)
+    };
+
+    db_res_t *tx_res = NULL;
+    if (!db_query (db, tx_sql,
+                   tx_params,
+                   sizeof (tx_params) / sizeof (tx_params[0]),
+                   &tx_res,
+                   &err))
+      {
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+      }
+
+    /* INSERT returns no rows; step isn’t needed. */
+    db_res_finalize (tx_res);
+
+    if (err.code)
+      {
+        return err.code;
+      }
+  }
+
+  *new_balance_out = (long long) new_bal;
+  return 0;
+}
+
+
 
 static int
 stmt_to_json_array (db_res_t *st, json_t **out_array, db_error_t *err)
@@ -430,10 +584,11 @@ h_create_bank_account_unlocked (db_t *db,
     {
       return err.code;
     }
-  
+
   if (account_id_out)
     {
-      return h_get_account_id_unlocked (db, owner_type, owner_id, account_id_out);
+      return h_get_account_id_unlocked (db, owner_type, owner_id,
+                                        account_id_out);
     }
   return 0;
 }

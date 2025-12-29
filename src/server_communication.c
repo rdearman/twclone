@@ -520,9 +520,6 @@ server_broadcast_to_sector (int sid, const char *name, json_t *payload)
 }
 
 
-
-
-
 void
 comm_broadcast_message (comm_scope_t scope,
                         long long id,
@@ -703,6 +700,8 @@ push_unseen_notices_for_player (client_ctx_t *ctx, int pid)
       return;
     }
   json_t *arr = db_notice_list_unseen_for_player (db, pid);
+
+
   if (!arr)
     {
       return;
@@ -795,6 +794,8 @@ cmd_admin_notice_create (client_ctx_t *ctx, json_t *root)
       return 1;
     }
   db_t *db = game_db_get_handle ();
+
+
   if (!db)
     {
       send_response_error (ctx, root, ERR_PLANET_NOT_FOUND, "DB unavailable");
@@ -855,6 +856,8 @@ cmd_notice_dismiss (client_ctx_t *ctx, json_t *root)
       return 1;
     }
   db_t *db = game_db_get_handle ();
+
+
   if (!db)
     {
       send_response_error (ctx, root, ERR_PLANET_NOT_FOUND, "DB unavailable");

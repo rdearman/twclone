@@ -16,5 +16,8 @@ int cmd_bank_leaderboard (client_ctx_t *ctx, json_t *root);
 
 int cmd_fine_list (client_ctx_t *ctx, json_t *root);
 int cmd_fine_pay (client_ctx_t *ctx, json_t *root);
+int h_player_bank_balance_add (db_t *db, int player_id, long long delta,
+			       long long *new_balance_out);
 
+  
 #endif

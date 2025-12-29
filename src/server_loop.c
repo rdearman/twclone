@@ -17,6 +17,10 @@
 #include <arpa/inet.h>
 #include <jansson.h>
 #include <stdbool.h>
+#include <string.h>
+#include <stdlib.h>
+#include <time.h>
+#include <jansson.h>
 
 /* local includes */
 #include "database.h"
@@ -46,8 +50,19 @@
 #include "server_corporation.h"
 #include "server_bank.h"
 #include "server_cron.h"
+#include "server_combat.h"
 #include "database_cmd.h"
 #include "db/db_api.h"
+#include "server_combat.h"
+#include "game_db.h"
+#include "db/db_api.h"
+#include "database_cmd.h"
+#include "server_ships.h"
+#include "server_log.h"
+#include "errors.h"
+#include "server_envelope.h"
+
+
 
 #ifndef streq
 #define streq(a,b) (strcasecmp (json_string_value ((a)), (b)) == 0)
@@ -92,6 +107,45 @@ monotonic_millis (void)
   clock_gettime (CLOCK_MONOTONIC, &ts);
   return (uint64_t) ts.tv_sec * 1000ULL + (uint64_t) ts.tv_nsec / 1000000ULL;
 }
+
+
+/* --------------------------------------------------------------------------
+   Stubs for later work.
+   -------------------------------------------------------------------------- */
+
+
+int
+cmd_insurance_policies_list (client_ctx_t *ctx, json_t *root)
+{
+  send_response_error (ctx,
+                       root,
+                       ERR_NOT_IMPLEMENTED,
+                       "Not implemented: cmd_insurance_policies_list");
+  return 0;
+}
+
+
+int
+cmd_insurance_policies_buy (client_ctx_t *ctx, json_t *root)
+{
+  send_response_error (ctx,
+                       root,
+                       ERR_NOT_IMPLEMENTED,
+                       "Not implemented: cmd_insurance_policies_buy");
+  return 0;
+}
+
+
+int
+cmd_insurance_claim_file (client_ctx_t *ctx, json_t *root)
+{
+  send_response_error (ctx,
+                       root,
+                       ERR_NOT_IMPLEMENTED,
+                       "Not implemented: cmd_insurance_claim_file");
+  return 0;
+}
+
 
 
 /* --------------------------------------------------------------------------
@@ -1150,14 +1204,17 @@ process_message (client_ctx_t *ctx, json_t *root)
   ctx->rl_count = 0;
 
   int responses_before = ctx->responses_sent;
+
+
   if (server_dispatch_command (ctx, root) == -1)
     {
       send_response_error (ctx, root, ERR_INVALID_SCHEMA, "Unknown command");
     }
 
-  if (ctx->responses_sent == responses_before) {
-      send_response_error(ctx, root, 500, "Handler produced no response");
-  }
+  if (ctx->responses_sent == responses_before)
+    {
+      send_response_error (ctx, root, 500, "Handler produced no response");
+    }
 }
 
 
@@ -1363,16 +1420,3 @@ server_loop (volatile sig_atomic_t *running)
   return 0;
 }
 
-
-int cmd_insurance_policies_list(client_ctx_t *ctx, json_t *root) { return 0; }
-int cmd_insurance_policies_buy(client_ctx_t *ctx, json_t *root) { return 0; }
-int cmd_insurance_claim_file(client_ctx_t *ctx, json_t *root) { return 0; }
-int cmd_combat_attack_planet(client_ctx_t *ctx, json_t *root) { return 0; }
-int cmd_mines_recall(client_ctx_t *ctx, json_t *root) { return 0; }
-int cmd_dock_status(client_ctx_t *ctx, json_t *root) { return 0; }
-int cmd_player_list_online(client_ctx_t *ctx, json_t *root) { return 0; }
-int cmd_player_rankings(client_ctx_t *ctx, json_t *root) { return 0; }
-int cmd_trade_port_info(client_ctx_t *ctx, json_t *root) { return 0; }
-int cmd_trade_buy(client_ctx_t *ctx, json_t *root) { return 0; }
-int cmd_trade_history(client_ctx_t *ctx, json_t *root) { return 0; }
-int cmd_trade_sell(client_ctx_t *ctx, json_t *root) { return 0; }

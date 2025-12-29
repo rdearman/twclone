@@ -499,8 +499,6 @@ json_t *
 db_list_actor_orders (db_t *db, const char *actor_type, int actor_id)
 {
   json_t *orders = json_array ();
-
-  int64_t now = time (NULL);
   db_error_t err;
   db_error_clear (&err);
 
@@ -694,3 +692,4 @@ db_orders_summary (db_t *db, int filter_commodity_id)
   db_res_finalize (res);
   return summary;
 }
+

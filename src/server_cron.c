@@ -25,7 +25,7 @@
 #include "server_clusters.h"    // Cluster Economy & Law
 #include "db/db_api.h"
 
-int iss_init_once(void);
+int iss_init_once (void);
 #define INITIAL_QUEUE_CAPACITY 64
 #define FEDSPACE_SECTOR_START 1
 #define FEDSPACE_SECTOR_END 10
@@ -61,7 +61,7 @@ typedef struct
   cron_handler_fn fn;
 } entry_t;
 int cron_limpet_ttl_cleanup (db_t *db, int64_t now_s);       // Forward declaration
-static int g_reg_inited = 0;
+// static int g_reg_inited = 0;
 
 
 int
@@ -1183,9 +1183,6 @@ get_utc_epoch_day (int64_t unix_timestamp)
   return (info->tm_year + 1900) * 10000 + (info->tm_mon + 1) * 100 +
          info->tm_mday;
 }
-
-
-
 
 
 int
@@ -2550,7 +2547,7 @@ h_daily_news_compiler (db_t *db, int64_t now_s)
 
   while (db_res_step (st, &err))
     {
-      int64_t event_id = db_res_col_i64 (st, 0, &err); // Using col index 0
+      // int64_t event_id = db_res_col_i64 (st, 0, &err); // Using col index 0
       int64_t event_ts = db_res_col_i64 (st, 1, &err);
       const char *event_type = db_res_col_text (st, 2, &err);
       int actor_player_id = (int) db_res_col_i32 (st, 3, &err);
@@ -4597,9 +4594,6 @@ h_daily_stock_price_recalculation (db_t *db,
   unlock (db, "daily_stock_price_recalculation");
   return 0;
 }
-
-
-
 
 
 // Function to handle shield regeneration tick

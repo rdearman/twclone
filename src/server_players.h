@@ -91,6 +91,11 @@ int handle_turn_consumption_error (client_ctx_t *ctx,
                                    json_t *root,
                                    json_t *meta_data);
 
+int h_player_petty_cash_add (db_t *db, int player_id, long long delta,
+			     long long *new_balance_out);
+
+
+
 #define PLAYER_TYPE_NPC     1
 #define PLAYER_TYPE_HUMAN   2
 #define PLAYER_TYPE_SYSOP   3

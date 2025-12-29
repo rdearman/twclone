@@ -17,6 +17,20 @@
 #include "common.h"             /* now_iso8601, strip_ansi */
 int toss;
 
+static inline int
+ctx_ptr_sane (const client_ctx_t *ctx)
+{
+  if (!ctx)
+    return 0;
+  uintptr_t p = (uintptr_t) ctx;
+  /* reject small/null pointers and kernel-space addresses */
+  if (p < 0x10000UL)
+    return 0;
+  if (p >= 0x00007ffffffff000UL)
+    return 0;
+  return 1;
+}
+
 
 void
 send_response_ok_borrow (client_ctx_t *ctx,
@@ -43,8 +57,7 @@ send_response_ok_take (client_ctx_t *ctx,
     {
       *pdata = NULL;
     }
-
-  if (ctx && ctx->captured_envelopes)
+  if (ctx && ctx == g_ctx_for_send && ctx->captured_envelopes_valid && ctx->captured_envelopes)
     {
       json_t *resp = json_object ();
 
@@ -381,10 +394,13 @@ make_base_envelope (json_t *req, const char *type)
 void
 send_all_json (int fd, json_t *obj)
 {
-  if (g_ctx_for_send) {
-    g_ctx_for_send->responses_sent++;
-  }
+  if (g_ctx_for_send)
+    {
+      g_ctx_for_send->responses_sent++;
+    }
   char *s = json_dumps (obj, JSON_COMPACT);
+
+
   if (s)
     {
       (void) send_all (fd, s, strlen (s)); (void) send_all (fd, "\n", 1);
@@ -587,7 +603,7 @@ void
 send_response_ok (client_ctx_t *ctx, json_t *req, const char *type,
                   json_t *data)
 {
-  if (ctx && ctx->captured_envelopes)
+  if (ctx && ctx == g_ctx_for_send && ctx->captured_envelopes_valid && ctx->captured_envelopes)
     {
       json_t *resp = json_object ();
 
@@ -635,7 +651,7 @@ send_response_ok (client_ctx_t *ctx, json_t *req, const char *type,
 void
 send_response_error (client_ctx_t *ctx, json_t *req, int code, const char *msg)
 {
-  if (ctx && ctx->captured_envelopes)
+  if (ctx && ctx == g_ctx_for_send && ctx->captured_envelopes_valid && ctx->captured_envelopes)
     {
       json_t *resp = json_object ();
 
@@ -684,7 +700,7 @@ send_response_refused (client_ctx_t *ctx,
                        const char *msg,
                        json_t *data_opt)
 {
-  if (ctx && ctx->captured_envelopes)
+  if (ctx && ctx == g_ctx_for_send && ctx->captured_envelopes_valid && ctx->captured_envelopes)
     {
       json_t *resp = json_object ();
 

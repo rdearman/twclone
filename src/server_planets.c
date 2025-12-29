@@ -23,6 +23,7 @@
 #include "database_cmd.h"
 #include "server_config.h"
 #include "server_combat.h"
+#include "server_ports.h"
 
 #ifndef GENESIS_ENABLED
 #define GENESIS_ENABLED 1
@@ -33,6 +34,24 @@
 #ifndef GENESIS_NAVHAZ_DELTA
 #define GENESIS_NAVHAZ_DELTA 5
 #endif
+
+
+
+
+
+int
+cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
+{
+  send_response_error (ctx,
+                       root,
+                       ERR_NOT_IMPLEMENTED,
+                       "Not implemented: cmd_combat_attack_planet");
+  return 0;
+}
+
+
+
+
 
 
 // Helper to check if a commodity is illegal

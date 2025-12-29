@@ -10,6 +10,7 @@ typedef struct
   long long fee_total;
   long long fee_to_bank;
   long long tax_to_system;
+  long long total_fees;
 } fee_result_t;
 
 json_t *parse_neighbors_csv (const char *txt);

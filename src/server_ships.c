@@ -97,13 +97,14 @@ handle_ship_destruction (db_t *db, ship_kill_context_t *ctx)
 
   const long long now_ts = (long long) time (NULL);
 
+
   LOGI ("handle_ship_destruction: victim_player=%d ship=%d cause=%d",
         ctx->victim_player_id,
         ctx->victim_ship_id,
         ctx->cause);
 
   const char *cause_text = kill_cause_to_text (ctx->cause);
-  
+
   const char *sql =
     "SELECT result_code "
     "FROM public.handle_ship_destruction("
@@ -112,41 +113,44 @@ handle_ship_destruction (db_t *db, ship_kill_context_t *ctx)
     ");";
 
   db_bind_t params[] = {
-      db_bind_i64(ctx->victim_player_id),
-      db_bind_i64(ctx->victim_ship_id),
-      db_bind_i64(ctx->killer_player_id),
-      db_bind_text(cause_text),
-      db_bind_i64(ctx->sector_id),
-      db_bind_i64(g_cfg.death.xp_loss_flat),
-      db_bind_i64(g_cfg.death.xp_loss_percent),
-      db_bind_i64(g_cfg.death.max_per_day),
-      db_bind_i64(g_cfg.death.big_sleep_duration_seconds),
-      db_bind_i64(now_ts),
-      db_bind_i64(0)
+    db_bind_i64 (ctx->victim_player_id),
+    db_bind_i64 (ctx->victim_ship_id),
+    db_bind_i64 (ctx->killer_player_id),
+    db_bind_text (cause_text),
+    db_bind_i64 (ctx->sector_id),
+    db_bind_i64 (g_cfg.death.xp_loss_flat),
+    db_bind_i64 (g_cfg.death.xp_loss_percent),
+    db_bind_i64 (g_cfg.death.max_per_day),
+    db_bind_i64 (g_cfg.death.big_sleep_duration_seconds),
+    db_bind_i64 (now_ts),
+    db_bind_i64 (0)
   };
-  
+
   db_res_t *res = NULL;
   db_error_t err;
-  
-  if (!db_query(db, sql, params, 11, &res, &err)) {
+
+
+  if (!db_query (db, sql, params, 11, &res, &err))
+    {
       LOGE ("handle_ship_destruction: SQL error: %s", err.message);
       return -1;
-  }
-  
+    }
+
   int rc = -1;
-  if (db_res_step(res, &err)) {
-      rc = (int)db_res_col_i32(res, 0, &err);
-  }
-  db_res_finalize(res);
-  
-  if (rc != 0) {
+
+
+  if (db_res_step (res, &err))
+    {
+      rc = (int)db_res_col_i32 (res, 0, &err);
+    }
+  db_res_finalize (res);
+
+  if (rc != 0)
+    {
       LOGE ("handle_ship_destruction: DB returned error code %d", rc);
-  }
+    }
   return rc;
 }
-
-
-
 
 
 int
@@ -246,11 +250,12 @@ cmd_ship_repair (client_ctx_t *ctx, json_t *root)
   db_error_t err;
 
   bool ok = db_ship_repair_atomic (db,
-                              ctx->player_id,
-                              ship_id,
-                              cost,
-                              (int64_t *) &new_player_credits,
-                              &err);
+                                   ctx->player_id,
+                                   ship_id,
+                                   cost,
+                                   (int64_t *) &new_player_credits,
+                                   &err);
+
 
   if (!ok)
     {

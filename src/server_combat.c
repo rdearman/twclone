@@ -45,17 +45,26 @@ typedef struct
   int sector;                   // Added for combat checks
 } combat_ship_t;
 
-static void apply_combat_damage (combat_ship_t *target, int damage, int *shield_dmg, int *hull_dmg);
-static int load_ship_combat_stats_unlocked (db_t *db, int ship_id, combat_ship_t *out);
+static void apply_combat_damage (combat_ship_t *target,
+                                 int damage,
+                                 int *shield_dmg,
+                                 int *hull_dmg);
+static int load_ship_combat_stats_unlocked (db_t *db,
+                                            int ship_id,
+                                            combat_ship_t *out);
 static int cmd_deploy_assets_list_internal (client_ctx_t *ctx,
                                             json_t *root,
                                             const char *list_type,
                                             const char *asset_key,
                                             const char *sql_query);
 
-static void iss_summon(int sector_id, int player_id) {
-    LOGI("ISS Summoned to sector %d for player %d", sector_id, player_id);
+
+static void
+iss_summon (int sector_id, int player_id)
+{
+  LOGI ("ISS Summoned to sector %d for player %d", sector_id, player_id);
 }
+
 
 /* Forward decls from your codebase */
 json_t *db_get_stardock_sectors (void);
@@ -1694,7 +1703,8 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
   if (in_fed || in_sdock)
     {
       iss_summon (sector_id, ctx->player_id);
-      (void) h_send_message_to_player (db, ctx->player_id,
+      (void) h_send_message_to_player (db,
+                                       ctx->player_id,
                                        0,
                                        "Federation Warning",
                                        "Fighter deployment in protected space has triggered ISS response.");
@@ -1783,8 +1793,10 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
   return 0;
 }
 
+
 static const char *SQL_SECTOR_FIGHTER_SUM =
   "SELECT COALESCE(SUM(quantity), 0) FROM sector_assets WHERE sector = $1 AND asset_type = 2;";
+
 
 static int
 sum_sector_fighters (db_t *db, int sector_id, int *total_out)
@@ -1796,9 +1808,12 @@ sum_sector_fighters (db_t *db, int sector_id, int *total_out)
   *total_out = 0;
   db_res_t *res = NULL;
   db_error_t err;
+
+
   db_error_clear (&err);
 
-  if (!db_query (db, SQL_SECTOR_FIGHTER_SUM, (db_bind_t[]){ db_bind_i32 (sector_id) }, 1, &res, &err))
+  if (!db_query (db, SQL_SECTOR_FIGHTER_SUM,
+                 (db_bind_t[]){ db_bind_i32 (sector_id) }, 1, &res, &err))
     {
       return err.code ? err.code : ERR_DB;
     }
@@ -2133,10 +2148,11 @@ insert_sector_fighters (db_t *db,
 
 
 typedef struct {
-    int total_mines;
-    int armid_mines;
-    int limpet_mines;
+  int total_mines;
+  int armid_mines;
+  int limpet_mines;
 } sector_mine_counts_t;
+
 
 /*
  * Populates sector_mine_counts_t with counts of different mine types in a sector.
@@ -3657,7 +3673,8 @@ cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root)
   if (in_fed || in_sdock)
     {
       iss_summon (sector_id, ctx->player_id);
-      h_send_message_to_player (db, ctx->player_id,
+      h_send_message_to_player (db,
+                                ctx->player_id,
                                 0,
                                 "Federation Warning",
                                 "Mine deployment in protected space has triggered ISS response.");
@@ -4384,8 +4401,194 @@ db_get_stardock_sectors (void)
 
 #include "server_ships.h"
 
-int destroy_ship_and_handle_side_effects(client_ctx_t *ctx, int player_id) { return 0; }
-int h_decloak_ship(db_t *db, int ship_id) { return 0; }
-int h_handle_sector_entry_hazards(db_t *db, client_ctx_t *ctx, int sector_id) { return 0; }
 
-int h_trigger_atmosphere_quasar(db_t *db, client_ctx_t *ctx, int planet_id) { (void)db; (void)ctx; (void)planet_id; return 0; }
+int
+destroy_ship_and_handle_side_effects (client_ctx_t *ctx, int player_id)
+{
+  return 0;
+}
+
+
+int
+h_decloak_ship (db_t *db, int ship_id)
+{
+  return 0;
+}
+
+
+int
+h_handle_sector_entry_hazards (db_t *db, client_ctx_t *ctx, int sector_id)
+{
+  return 0;
+}
+
+
+int
+h_trigger_atmosphere_quasar (db_t *db, client_ctx_t *ctx, int planet_id)
+{
+  (void)db; (void)ctx; (void)planet_id; return 0;
+}
+
+int
+cmd_mines_recall (client_ctx_t *ctx, json_t *root)
+{
+  if (!require_auth (ctx, root))
+    return 0;
+
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_SERVICE_UNAVAILABLE, "Database unavailable");
+      return 0;
+    }
+
+  /* 1. Parse input */
+  json_t *data = json_object_get (root, "data");
+  if (!data || !json_is_object (data))
+    {
+      send_response_error (ctx, root, ERR_MISSING_FIELD, "Missing required field: data");
+      return 0;
+    }
+  json_t *j_sector_id = json_object_get (data, "sector_id");
+  json_t *j_asset_id = json_object_get (data, "asset_id");
+  if (!j_sector_id || !json_is_integer (j_sector_id) || !j_asset_id || !json_is_integer (j_asset_id))
+    {
+      send_response_error (ctx, root, ERR_CURSOR_INVALID, "Missing required field or invalid type: sector_id/asset_id");
+      return 0;
+    }
+
+  int requested_sector_id = (int) json_integer_value (j_sector_id);
+  int asset_id = (int) json_integer_value (j_asset_id);
+
+  /* 2. Load player, ship, current_sector_id */
+  int player_ship_id = h_get_active_ship_id (db, ctx->player_id);
+  if (player_ship_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_SHIP_NOT_FOUND, "No active ship found for player.");
+      return 0;
+    }
+
+  int player_current_sector_id = -1;
+  int ship_mines_current = 0;
+  int ship_mines_max = 0;
+
+  {
+    const char *sql_player_ship =
+      "SELECT s.sector, s.mines, st.maxmines FROM ships s JOIN shiptypes st ON s.type_id = st.id WHERE s.id = $1;";
+    db_res_t *res = NULL;
+    db_error_t err;
+    memset (&err, 0, sizeof (err));
+
+    if (db_query (db, sql_player_ship, (db_bind_t[]){ db_bind_i32 (player_ship_id) }, 1, &res, &err))
+      {
+        if (db_res_step (res, &err))
+          {
+            player_current_sector_id = db_res_col_i32 (res, 0, &err);
+            ship_mines_current = db_res_col_i32 (res, 1, &err);
+            ship_mines_max = db_res_col_i32 (res, 2, &err);
+          }
+        db_res_finalize (res);
+      }
+
+    if (player_current_sector_id <= 0)
+      {
+        send_response_error (ctx, root, ERR_SECTOR_NOT_FOUND, "Could not determine player's current sector.");
+        return 0;
+      }
+  }
+
+  /* 3. Verify asset belongs to player and is in current sector */
+  int asset_quantity = 0;
+  int asset_type = 0;
+  {
+    const char *sql_asset = "SELECT quantity, asset_type FROM sector_assets WHERE id = $1 AND player = $2 AND sector = $3 AND asset_type IN (1, 4);";
+    db_res_t *res = NULL;
+    db_error_t err;
+    memset (&err, 0, sizeof (err));
+
+    db_bind_t params[] = { db_bind_i32 (asset_id), db_bind_i32 (ctx->player_id), db_bind_i32 (requested_sector_id) };
+    if (db_query (db, sql_asset, params, 3, &res, &err))
+      {
+        if (db_res_step (res, &err))
+          {
+            asset_quantity = db_res_col_i32 (res, 0, &err);
+            asset_type = db_res_col_i32 (res, 1, &err);
+          }
+        db_res_finalize (res);
+      }
+
+    if (asset_quantity <= 0)
+      {
+        send_response_error (ctx, root, ERR_NOT_FOUND, "Mine asset not found or does not belong to you in this sector.");
+        return 0;
+      }
+  }
+
+  /* 4. Check if ship has capacity for recalled mines */
+  if (ship_mines_current + asset_quantity > ship_mines_max)
+    {
+      json_t *data_opt = json_object ();
+      json_object_set_new (data_opt, "reason", json_string ("insufficient_mine_capacity"));
+      send_response_refused_steal (ctx, root, REF_INSUFFICIENT_CAPACITY, "Insufficient ship capacity to recall all mines.", data_opt);
+      return 0;
+    }
+
+  /* 5. Transaction: delete asset, credit ship */
+  {
+    db_error_t dberr;
+    memset (&dberr, 0, sizeof (dberr));
+
+    if (!db_tx_begin (db, DB_TX_IMMEDIATE, &dberr))
+      {
+        send_response_error (ctx, root, ERR_DB, "Could not start transaction");
+        return 0;
+      }
+
+    const char *sql_delete = "DELETE FROM sector_assets WHERE id = $1;";
+    db_bind_t del_params[] = { db_bind_i32 (asset_id) };
+    if (!db_exec (db, sql_delete, del_params, 1, &dberr))
+      {
+        (void) db_tx_rollback (db, &dberr);
+        send_response_error (ctx, root, ERR_DB, "Failed to delete asset from sector.");
+        return 0;
+      }
+
+    const char *sql_credit = "UPDATE ships SET mines = mines + $1 WHERE id = $2;";
+    db_bind_t credit_params[] = { db_bind_i32 (asset_quantity), db_bind_i32 (player_ship_id) };
+    if (!db_exec (db, sql_credit, credit_params, 2, &dberr))
+      {
+        (void) db_tx_rollback (db, &dberr);
+        send_response_error (ctx, root, ERR_DB, "Failed to credit mines to ship.");
+        return 0;
+      }
+
+    if (!db_tx_commit (db, &dberr))
+      {
+        (void) db_tx_rollback (db, &dberr);
+        send_response_error (ctx, root, ERR_DB, "Commit failed");
+        return 0;
+      }
+  }
+
+  /* 6. Emit engine_event via db_log_engine_event */
+  {
+    json_t *evt = json_object ();
+    json_object_set_new (evt, "sector_id", json_integer (requested_sector_id));
+    json_object_set_new (evt, "player_id", json_integer (ctx->player_id));
+    json_object_set_new (evt, "asset_id", json_integer (asset_id));
+    json_object_set_new (evt, "amount", json_integer (asset_quantity));
+    json_object_set_new (evt, "asset_type", json_integer (asset_type));
+    json_object_set_new (evt, "event_ts", json_integer ((json_int_t) time (NULL)));
+    (void) db_log_engine_event ((long long) time (NULL), "mines.recalled", NULL, ctx->player_id, requested_sector_id, evt, NULL);
+  }
+
+  /* 7. Send enveloped_ok response */
+  json_t *out = json_object ();
+  json_object_set_new (out, "sector_id", json_integer (requested_sector_id));
+  json_object_set_new (out, "asset_id", json_integer (asset_id));
+  json_object_set_new (out, "recalled", json_integer (asset_quantity));
+  json_object_set_new (out, "remaining_in_sector", json_integer (0));
+  json_object_set_new (out, "asset_type", json_integer (asset_type));
+  send_response_ok_take (ctx, root, "combat.mines.recalled", &out);
+  return 0;
+}

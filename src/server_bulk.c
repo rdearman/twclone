@@ -68,8 +68,10 @@ cmd_bulk_execute (client_ctx_t *ctx, json_t *root)
 
   // 3. Prepare for capturing responses
   ctx->captured_envelopes = json_array ();
+  ctx->captured_envelopes_valid = 1;
   if (!ctx->captured_envelopes)
     {
+      ctx->captured_envelopes_valid = 0;
       send_response_error (ctx,
                            root,
                            1500,
@@ -118,11 +120,12 @@ cmd_bulk_execute (client_ctx_t *ctx, json_t *root)
   if (!response_data)
     {
       json_decref (ctx->captured_envelopes);
+      ctx->captured_envelopes = NULL;
+      ctx->captured_envelopes_valid = 0;
       send_response_error (ctx,
                            root,
                            1500,
                            "Memory allocation error for bulk response.");
-      ctx->captured_envelopes = NULL;
       return 0;
     }
   json_object_set_new (response_data, "envelopes", ctx->captured_envelopes);    // steals ref
@@ -130,6 +133,7 @@ cmd_bulk_execute (client_ctx_t *ctx, json_t *root)
 
   // Cleanup
   ctx->captured_envelopes = NULL;       // Ref stolen by response_data, so set to NULL.
+  ctx->captured_envelopes_valid = 0;
   return 0;
 }
 

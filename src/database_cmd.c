@@ -18,8 +18,13 @@
 
 
 /* ==================================================================== */
+
+
 /* STATIC HELPER DEFINITIONS                                            */
+
+
 /* ==================================================================== */
+
 
 int
 h_get_port_commodity_quantity (db_t *db,
@@ -40,12 +45,15 @@ h_get_port_commodity_quantity (db_t *db,
 
   db_res_t *res = NULL;
   db_error_t err;
+
+
   memset (&err, 0, sizeof (err));
 
   db_bind_t binds[] = {
     db_bind_i32 (port_id),
     db_bind_text (commodity_code)
   };
+
 
   if (!db_query (db, sql, binds, 2, &res, &err))
     {
@@ -54,6 +62,8 @@ h_get_port_commodity_quantity (db_t *db,
     }
 
   int rc = ERR_DB_NOT_FOUND;
+
+
   *qty_out = 0;
 
   if (db_res_step (res, &err))
@@ -1665,6 +1675,8 @@ db_log_engine_event (long long ts,
                      (db_bind_t[]){db_bind_i64 (ts), db_bind_text (type),
                                    db_bind_i32 (pid), db_bind_i32 (sid),
                                    db_bind_text (pstr)}, 5, &err);
+
+
   free (pstr); return ok ? 0 : err.code;
 }
 
@@ -3914,7 +3926,9 @@ db_player_info_json (db_t *db, int player_id, json_t **out_json)
 
 
 int
-db_player_info_selected_fields (db_t *db, int player_id, const json_t *fields_array,
+db_player_info_selected_fields (db_t *db,
+                                int player_id,
+                                const json_t *fields_array,
                                 json_t **out)
 {
   if (!db || !fields_array || !json_is_array (fields_array) || !out)
@@ -4191,9 +4205,37 @@ db_player_set_sector (int pid, int sid)
 }
 
 
-int db_session_revoke (const char *token) { return 0; }
-int db_session_refresh (const char *token, int ttl, char new_tok[65], int *out_exp) { return 0; }
-long long h_get_config_int_unlocked(db_t *db, const char *key, long long def) { return def; }
+int
+db_session_revoke (const char *token)
+{
+  return 0;
+}
 
-int db_port_is_shipyard(db_t *db, int sector_id, bool *out) { return 0; }
-int db_ship_get_hull(db_t *db, int ship_id, int *out) { return 0; }
+
+int
+db_session_refresh (const char *token, int ttl, char new_tok[65], int *out_exp)
+{
+  return 0;
+}
+
+
+long long
+h_get_config_int_unlocked (db_t *db, const char *key, long long def)
+{
+  return def;
+}
+
+
+int
+db_port_is_shipyard (db_t *db, int sector_id, bool *out)
+{
+  return 0;
+}
+
+
+int
+db_ship_get_hull (db_t *db, int ship_id, int *out)
+{
+  return 0;
+}
+

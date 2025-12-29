@@ -23,26 +23,26 @@
  * Must be called once at server startup.
  * @return 0 on success, -1 on failure.
  */
-int game_db_init(void);
+int game_db_init (void);
 
 /**
  * @brief Closes the database layer and cleans up resources.
  * Note: This is for overall shutdown. Per-thread handles are managed automatically.
  */
-void game_db_close(void);
+void game_db_close (void);
 
 /**
  * @brief Gets the database handle for the current thread.
  * If a handle does not exist for the thread, a new connection is established.
  * @return A pointer to the db_t handle, or NULL on connection failure.
  */
-db_t* game_db_get_handle(void);
+db_t * game_db_get_handle (void);
 
 /**
  * @brief Cleans up database state in a child process after a fork.
  * This should be called immediately in the child process to prevent using
  * inherited file descriptors.
  */
-void game_db_after_fork_child(void);
+void game_db_after_fork_child (void);
 
 #endif /* GAME_DB_H */

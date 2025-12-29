@@ -9,7 +9,6 @@
 extern __thread client_ctx_t *g_ctx_for_send;
 
 
-
 static inline void
 jsonp_cleanup (json_t **p)
 {

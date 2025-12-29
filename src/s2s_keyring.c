@@ -137,7 +137,8 @@ s2s_load_default_key (db_t *db, s2s_key_t *out_key)
     }
 
   /* DB lookup */
-  const char *sql = "SELECT key_id, key_b64 FROM s2s_keys WHERE active = TRUE ORDER BY created_ts DESC LIMIT 1";
+  const char *sql =
+    "SELECT key_id, key_b64 FROM s2s_keys WHERE active = TRUE ORDER BY created_ts DESC LIMIT 1";
 
 
   for (int attempt = 0; attempt < 2; attempt++)

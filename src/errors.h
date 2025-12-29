@@ -1,7 +1,7 @@
 #ifndef ERRORS_H
 #define ERRORS_H
 
-#define AUTH_OK 		0
+#define AUTH_OK                 0
 
 /* General Gameplay Errors (400-599) */
 #define ERR_INVALID_ARG         400
@@ -10,7 +10,7 @@
 #define ERR_NOT_FOUND           403
 #define ERR_SERVER_ERROR        404
 #define ERR_BAD_REQUEST         405
-#define ERR_RATE_LIMITED	406
+#define ERR_RATE_LIMITED        406
 #define ERR_BAD_STATE           407
 #define ERR_UNKNOWN             501
 #define ERR_NOT_IMPLEMENTED     502
@@ -39,7 +39,7 @@
 #define ERR_DB_TX               1012
 #define ERR_DB_CONNECT          1013
 #define ERR_DB_NOMEM            1014
-#define ERR_DB_NO_ROWS 		1015
+#define ERR_DB_NO_ROWS          1015
 
 /* Authentication Errors (1100-1199) */
 #define AUTH_ERR_INVALID_CRED   1101
@@ -73,7 +73,6 @@
 #define ERR_TOKEN_EXPIRED       1308
 #define ERR_SESSION_REVOKED     1309
 #define ERR_LIMIT_EXCEEDED      1310
-
 
 
 /* Refusal Codes (1400-1499) */
@@ -120,11 +119,11 @@
 #define REF_NOT_ENOUGH_HOLDS    1488
 #define ERR_INSUFFICIENT_TURNS  1489
 #define ERR_REF_NO_TURNS        1489
-#define REASON_EVIL_ALIGN	1490
-#define REASON_EXCESS_FIGHTERS	1491
-#define REASON_HIGH_EXP 	1492
-#define REASON_NO_OWNER		1493
-#define REASON_OVERCROWDING	1494
+#define REASON_EVIL_ALIGN       1490
+#define REASON_EXCESS_FIGHTERS  1491
+#define REASON_HIGH_EXP         1492
+#define REASON_NO_OWNER         1493
+#define REASON_OVERCROWDING     1494
 
 
 /* Location Errors (1500-1599) */
@@ -201,13 +200,12 @@
    These symbols were referenced in older code/tests and were missing
    from this consolidated header. Numeric values are preserved.
    ------------------------------------------------------------------ */
-#define ERR_INVALID_CRED			1214
-#define ERR_SECTOR_FIGHTER_CAP			1418
-#define ERR_TRADE_ILLEGAL_GOODS			1709
-#define ERR_SHIPYARD_CAPACITY_MISMATCH		1913
-#define ERR_INVALID_CRED			1214
-#define ERR_TRADE_ILLEGAL_GOODS			1709
-
+#define ERR_INVALID_CRED                        1214
+#define ERR_SECTOR_FIGHTER_CAP                  1418
+#define ERR_TRADE_ILLEGAL_GOODS                 1709
+#define ERR_SHIPYARD_CAPACITY_MISMATCH          1913
+#define ERR_INVALID_CRED                        1214
+#define ERR_TRADE_ILLEGAL_GOODS                 1709
 
 
 #endif

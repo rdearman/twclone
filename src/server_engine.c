@@ -29,11 +29,14 @@
 #include "s2s_transport.h"
 #include "database.h"
 
+
 static inline int
 get_utc_epoch_day (int64_t ts)
 {
   return (int) (ts / 86400);
 }
+
+
 #include "server_envelope.h"
 #include "s2s_transport.h"
 #include "engine_consumer.h"
@@ -42,6 +45,7 @@ get_utc_epoch_day (int64_t ts)
 #include "server_loop.h"        // Assuming this contains functions to communicate with clients
 #include "server_universe.h"
 #include "server_log.h"
+#include "server_ports.h"
 #include "server_cron.h"
 #include "common.h"
 #include "server_config.h"
@@ -133,6 +137,76 @@ cron_find (const char *name)
 
 /* ---- Cron framework (schema: cron_tasks uses schedule + next_due_at) ---- */
 /* Schema: cron_tasks(id, name, schedule, last_run_at, next_due_at, enabled, payload) */
+
+
+
+int
+db_load_ports (int *server_port, int *s2s_port)
+{
+  int ret_code = 0;
+  if (!server_port || !s2s_port)
+    {
+      return -1;
+    }
+
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      return -1;
+    }
+
+  /* Try to load server_port */
+  {
+    const char *sql = "SELECT value FROM config WHERE key = $1 AND type = 'int' LIMIT 1;";
+    db_res_t *res = NULL;
+    db_error_t err;
+    memset (&err, 0, sizeof (err));
+
+    if (db_query (db, sql, (db_bind_t[]){ db_bind_text ("server_port") }, 1, &res, &err))
+      {
+        if (db_res_step (res, &err))
+          {
+            *server_port = db_res_col_i32 (res, 0, &err);
+          }
+        else
+          {
+            LOGW ("[config] 'server_port' missing or invalid in DB, using default: %d", *server_port);
+          }
+        db_res_finalize (res);
+      }
+    else
+      {
+        LOGW ("[config] 'server_port' missing or invalid in DB, using default: %d", *server_port);
+      }
+  }
+
+  /* Try to load s2s_port */
+  {
+    const char *sql = "SELECT value FROM config WHERE key = $1 AND type = 'int' LIMIT 1;";
+    db_res_t *res = NULL;
+    db_error_t err;
+    memset (&err, 0, sizeof (err));
+
+    if (db_query (db, sql, (db_bind_t[]){ db_bind_text ("s2s_port") }, 1, &res, &err))
+      {
+        if (db_res_step (res, &err))
+          {
+            *s2s_port = db_res_col_i32 (res, 0, &err);
+          }
+        else
+          {
+            LOGW ("[config] 's2s_port' missing or invalid in DB, using default: %d", *s2s_port);
+          }
+        db_res_finalize (res);
+      }
+    else
+      {
+        LOGW ("[config] 's2s_port' missing or invalid in DB, using default: %d", *s2s_port);
+      }
+  }
+
+  return ret_code;
+}
 
 
 /* Parse schedule -> next due (seconds since epoch)
@@ -915,7 +989,7 @@ engine_main_loop (int shutdown_fd)
       LOGE ("[engine] FATAL: Failed to load engine configuration.\n");
       return 1;
     }
-  LOGD("[engine] g_cfg.s2s.frame_size_limit: %d", g_cfg.s2s.frame_size_limit);
+  LOGD ("[engine] g_cfg.s2s.frame_size_limit: %d", g_cfg.s2s.frame_size_limit);
   // Initialize tavern settings (load from DB) for engine cron jobs
   if (tavern_settings_load () != 0)
     {
@@ -1197,7 +1271,7 @@ engine_spawn (pid_t *out_pid, int *out_shutdown_fd)
   if (pid == 0)
     {
       /* --- CHILD PROCESS: engine --- */
-      game_db_after_fork_child(); // GOAL B: Close inherited parent DB handles
+      game_db_after_fork_child (); // GOAL B: Close inherited parent DB handles
       /* Close the write end; child only reads shutdown pipe */
       close (pipefd[1]);
       /* Run the engine and exit the process (never return to server main) */
