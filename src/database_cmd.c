@@ -18,12 +18,53 @@
 
 
 /* ==================================================================== */
-
-
 /* STATIC HELPER DEFINITIONS                                            */
-
-
 /* ==================================================================== */
+
+int
+h_get_port_commodity_quantity (db_t *db,
+                               int port_id,
+                               const char *commodity_code,
+                               int *qty_out)
+{
+  if (!db || port_id <= 0 || !commodity_code || !*commodity_code || !qty_out)
+    {
+      return ERR_DB_MISUSE;
+    }
+
+  const char *sql =
+    "SELECT quantity "
+    "FROM entity_stock "
+    "WHERE entity_type = 'port' AND entity_id = $1 AND commodity_code = $2 "
+    "LIMIT 1;";
+
+  db_res_t *res = NULL;
+  db_error_t err;
+  memset (&err, 0, sizeof (err));
+
+  db_bind_t binds[] = {
+    db_bind_i32 (port_id),
+    db_bind_text (commodity_code)
+  };
+
+  if (!db_query (db, sql, binds, 2, &res, &err))
+    {
+      /* keep behaviour: propagate as DB error */
+      return err.code ? err.code : ERR_DB;
+    }
+
+  int rc = ERR_DB_NOT_FOUND;
+  *qty_out = 0;
+
+  if (db_res_step (res, &err))
+    {
+      *qty_out = db_res_col_int (res, 0, &err);
+      rc = 0;
+    }
+
+  db_res_finalize (res);
+  return rc;
+}
 
 
 static int

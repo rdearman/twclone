@@ -1,0 +1,94 @@
+================================================================================
+                         STUB FUNCTIONS AUDIT
+================================================================================
+
+FILE: tmp.c (New file provided for audit)
+
+CONTENTS: 10 functions that are currently STUBS
+
+STATUS: All functions are stubs (return 0 or dummy values)
+
+================================================================================
+                         STUB FUNCTIONS LIST
+================================================================================
+
+1. h_player_is_npc(db_t *db, int player_id)
+   Status: STUB (returns 0)
+   
+2. spawn_starter_ship(db_t *db, int player_id, int sector_id)
+   Status: STUB (returns 0)
+   
+3. h_get_player_petty_cash(db_t *db, int player_id, long long *bal)
+   Status: STUB (sets bal=0, returns 0)
+   
+4. h_deduct_player_petty_cash_unlocked(db_t *db, int player_id, long long amount, ...)
+   Status: STUB (returns 0)
+   
+5. h_add_player_petty_cash(db_t *db, int player_id, long long amount, ...)
+   Status: STUB (returns 0)
+   
+6. h_consume_player_turn(db_t *db, client_ctx_t *ctx, int turns)
+   Status: STUB (returns TURN_CONSUME_SUCCESS)
+   
+7. handle_turn_consumption_error(client_ctx_t *ctx, TurnConsumeResult res, ...)
+   Status: STUB (returns 0)
+   
+8. h_player_apply_progress(db_t *db, int player_id, long long delta_xp, ...)
+   Status: STUB (returns 0)
+   
+9. h_get_player_sector(db_t *db, int player_id)
+   Status: STUB (returns 1)
+   
+10. h_add_player_petty_cash_unlocked(db_t *db, int player_id, long long amount, ...)
+    Status: PARTIALLY REFACTORED (has some DB API code but incomplete SQL)
+
+================================================================================
+                         MIGRATION STATUS
+================================================================================
+
+Found in src/ codebase:
+  ✗ None - all functions are stubs only
+
+Found in audit trail (previously analyzed):
+  ✓ YES - These are the 10 functions we already refactored in the earlier session!
+
+They appear to have been reverted to stubs or the refactored versions weren't saved.
+
+================================================================================
+                    THESE ARE FUNCTIONS WE ALREADY REFACTORED!
+================================================================================
+
+In the earlier session, we completed refactoring of these functions:
+  ✓ h_player_is_npc
+  ✓ spawn_starter_ship
+  ✓ h_get_player_petty_cash
+  ✓ h_deduct_player_petty_cash_unlocked
+  ✓ h_add_player_petty_cash
+  ✓ h_consume_player_turn
+  ✓ handle_turn_consumption_error
+  ✓ h_player_apply_progress
+  ✓ h_get_player_sector
+  ✓ h_add_player_petty_cash_unlocked
+
+STATUS: Those refactored implementations exist in the work we did earlier,
+        but they are NOT currently in the tmp.c file.
+
+ACTION NEEDED: These functions need to be refactored again from their 
+               stub state.
+
+================================================================================
+                         RECOMMENDATION
+================================================================================
+
+These 10 functions should be refactored using the same patterns we used
+for the previous 4 critical functions:
+
+  ✓ Use db_query() / db_exec() instead of sqlite3_prepare_v2()
+  ✓ Convert ? placeholders to $1, $2...
+  ✓ Use db_res_t for result sets
+  ✓ Use 0/-1 return codes instead of SQLITE_* codes
+  ✓ Preserve all logic and side-effects
+
+Reference implementations from earlier session are available in the audit trail.
+
+================================================================================

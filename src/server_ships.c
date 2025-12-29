@@ -411,7 +411,7 @@ cmd_ship_inspect (client_ctx_t *ctx, json_t *root)
     db_ships_inspectable_at_sector_json (db, ctx->player_id, sector_id, &ships);
 
 
-  if (rc != SQLITE_OK || !ships)
+  if (!rc || !ships)
     {
       send_response_error (ctx, root, ERR_PLANET_NOT_FOUND, "Database error");
       return 0;
@@ -475,7 +475,7 @@ cmd_ship_rename (client_ctx_t *ctx, json_t *root)
   int rc = db_ship_rename_if_owner (db, ctx->player_id, ship_id, new_name);
 
 
-  if (rc == SQLITE_CONSTRAINT)
+  if (rc == -1)
     {
       send_response_refused_steal (ctx,
                                    root,
@@ -484,7 +484,7 @@ cmd_ship_rename (client_ctx_t *ctx, json_t *root)
                                    NULL);
       return 0;
     }
-  if (rc != SQLITE_OK)
+  if (rc != 0)
     {
       send_response_error (ctx, root, ERR_PLANET_NOT_FOUND, "Database error");
       return 0;
@@ -563,7 +563,7 @@ cmd_ship_claim (client_ctx_t *ctx, json_t *root)
   int rc = db_ship_claim (db_handle, ctx->player_id, sector_id, ship_id, &ship);
 
 
-  if (rc != SQLITE_OK || !ship)
+  if (!rc || !ship)
     {
       send_response_refused_steal (ctx,
                                    root,

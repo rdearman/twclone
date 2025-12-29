@@ -536,7 +536,7 @@ main (int argc, char **argv)
   int sectors = 500;
   int density = 4;
   int port_ratio = 40;
-  int planet_ratio = 30;
+  double planet_ratio = 30.0;
   int port_size = 0;
   int tech_level = 0;
   int port_credits = 0;
@@ -594,9 +594,9 @@ main (int argc, char **argv)
         {
           port_ratio = (int)json_integer_value (j);
         }
-      if ((j = json_object_get (jcfg, "planet_ratio")) && json_is_integer (j))
+      if ((j = json_object_get (jcfg, "planet_ratio")) && json_is_number (j))
         {
-          planet_ratio = (int)json_integer_value (j);
+          planet_ratio = json_number_value (j);
         }
       if ((j = json_object_get (jcfg, "port_size")) && json_is_integer (j))
         {
@@ -641,7 +641,7 @@ main (int argc, char **argv)
           case 's': sectors = atoi (optarg); break;
           case 'd': density = atoi (optarg); break;
           case 'r': port_ratio = atoi (optarg); break;
-          case 'R': planet_ratio = atoi (optarg); break;
+          case 'R': planet_ratio = atof (optarg); break;
           default: usage (argv[0]);
         }
     }
@@ -835,7 +835,7 @@ main (int argc, char **argv)
         }
     }
 
-  int max_planets = (sectors * planet_ratio) / 100;
+  int max_planets = (int)((sectors * planet_ratio) / 100.0);
 
 
   snprintf (buf, sizeof(buf), "SELECT generate_planets(%d)", max_planets);

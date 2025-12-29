@@ -1,6 +1,28 @@
 #ifndef ERRORS_H
 #define ERRORS_H
 
+#define AUTH_OK 		0
+
+/* General Gameplay Errors (400-599) */
+#define ERR_INVALID_ARG         400
+#define ERR_NOT_AUTHENTICATED   401
+#define ERR_PERMISSION_DENIED   402
+#define ERR_NOT_FOUND           403
+#define ERR_SERVER_ERROR        404
+#define ERR_BAD_REQUEST         405
+#define ERR_RATE_LIMITED	406
+#define ERR_BAD_STATE           407
+#define ERR_UNKNOWN             501
+#define ERR_NOT_IMPLEMENTED     502
+#define ERR_SERVICE_UNAVAILABLE 503
+#define ERR_MAINTENANCE_MODE    504
+#define ERR_TIMEOUT             505
+#define ERR_SERIALIZATION       506
+#define ERR_OOM                 507
+#define ERROR_INTERNAL          500
+#define ERR_MEMORY              508
+#define ERR_CONFIRMATION_REQUIRED 509
+
 /* Database Errors (1000-1099) */
 #define ERR_DB                  1000
 #define ERR_DB_CLOSED           1001
@@ -50,30 +72,13 @@
 #define ERR_INVALID_TOKEN       1307
 #define ERR_TOKEN_EXPIRED       1308
 #define ERR_SESSION_REVOKED     1309
-
-/* General Gameplay Errors (400-599) */
-#define ERR_INVALID_ARG         400
-#define ERR_NOT_AUTHENTICATED   401
-#define ERR_PERMISSION_DENIED   403
-#define ERR_NOT_FOUND           404
-#define ERR_SERVER_ERROR        500
-#define ERR_BAD_REQUEST         400
-#define ERR_BAD_STATE           501
-#define ERR_INSUFFICIENT_FUNDS  1403
-#define ERR_OUT_OF_RANGE        1404
-#define ERR_UNKNOWN             999
-#define ERR_NOT_IMPLEMENTED     502
-#define ERR_SERVICE_UNAVAILABLE 503
-#define ERR_MAINTENANCE_MODE    504
-#define ERR_TIMEOUT             505
-#define ERR_SERIALIZATION       506
-#define ERR_OOM                 507
-#define ERROR_INTERNAL          500
-#define ERR_MEMORY              508
-#define ERR_CONFIRMATION_REQUIRED 509
 #define ERR_LIMIT_EXCEEDED      1310
 
-/* Refusal Codes (1450-1499) */
+
+
+/* Refusal Codes (1400-1499) */
+#define ERR_INSUFFICIENT_FUNDS  1403
+#define ERR_OUT_OF_RANGE        1404
 #define ERR_REF_BIG_SLEEP       1450
 #define REF_INSUFFICIENT_CAPACITY 1451
 #define REF_NOT_IN_SECTOR       1452
@@ -113,8 +118,15 @@
 #define REF_MINE_LIMIT_EXCEEDED 1486
 #define REF_DESTROYED_TERMINAL  1487
 #define REF_NOT_ENOUGH_HOLDS    1488
-#define ERR_INSUFFICIENT_TURNS      1489
-#define ERR_REF_NO_TURNS            1489
+#define ERR_INSUFFICIENT_TURNS  1489
+#define ERR_REF_NO_TURNS        1489
+#define REASON_EVIL_ALIGN	1490
+#define REASON_EXCESS_FIGHTERS	1491
+#define REASON_HIGH_EXP 	1492
+#define REASON_NO_OWNER		1493
+#define REASON_OVERCROWDING	1494
+
+
 /* Location Errors (1500-1599) */
 #define ERR_CITADEL_REQUIRED    1501
 #define ERR_CITADEL_MAX_LEVEL   1502
@@ -184,19 +196,18 @@
 #define ERR_LIMPET_ATTACK_DISABLED 2103
 #define ERR_FOREIGN_LIMPETS_PRESENT 2104
 
-/* Tow Reasons (not errors, but constants) */
-#define REASON_EVIL_ALIGN       1
-#define REASON_EXCESS_FIGHTERS  2
-#define REASON_HIGH_EXP         3
-#define REASON_NO_OWNER         4
-#define REASON_OVERCROWDING     5
+/* ------------------------------------------------------------------
+   Legacy compatibility (from org_errors.h)
+   These symbols were referenced in older code/tests and were missing
+   from this consolidated header. Numeric values are preserved.
+   ------------------------------------------------------------------ */
+#define ERR_INVALID_CRED			1214
+#define ERR_SECTOR_FIGHTER_CAP			1418
+#define ERR_TRADE_ILLEGAL_GOODS			1709
+#define ERR_SHIPYARD_CAPACITY_MISMATCH		1913
+#define ERR_INVALID_CRED			1214
+#define ERR_TRADE_ILLEGAL_GOODS			1709
 
-/* Rate Limit */
-#define ERR_RATE_LIMITED        429
 
-/* Authentication Success */
-#ifndef AUTH_OK
-#define AUTH_OK 0
-#endif
 
 #endif
