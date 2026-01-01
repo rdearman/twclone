@@ -5,39 +5,51 @@
     {
       "name": "Setup: Auth Bounty Hunter",
       "setup": "macro_auth_user",
-      "user": "bounty_hunter",
-      "passwd": "password"
+      "username": "bounty_hunter",
+      "password": "password"
     },
     {
       "name": "Setup: Fund Hunter",
+      "setup": "macro_fund_player",
+      "username": "bounty_hunter",
+      "amount": 50000
+    },
+    {
+      "name": "Setup: Align Hunter",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE players SET credits = 50000, alignment = 100, sector = 1 WHERE id = (SELECT id FROM players WHERE name = 'bounty_hunter');"
+        "sql": "UPDATE players SET alignment = 100, sector = 1 WHERE id = @bounty_hunter_player_id;"
       },
-      "expect": { "success": true }
+      "expect": { "status": "ok" }
     },
     {
       "name": "Setup: Auth Criminal",
       "setup": "macro_auth_user",
-      "user": "wanted_criminal",
-      "passwd": "password"
+      "username": "wanted_criminal",
+      "password": "password"
     },
     {
       "name": "Setup: Vilify Criminal",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE players SET alignment = -100 WHERE id = (SELECT id FROM players WHERE name = 'wanted_criminal');"
+        "sql": "UPDATE players SET alignment = -100 WHERE id = @wanted_criminal_player_id;"
       },
-      "expect": { "success": true }
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Auth Neutral",
+      "setup": "macro_auth_user",
+      "username": "neutral_citizen",
+      "password": "password"
     },
     {
       "name": "Bounty: Post Federation",
       "command": "bounty.post_federation",
       "user": "bounty_hunter",
       "data": {
-        "target_player_id": { "sql_int": "SELECT id FROM players WHERE name = 'wanted_criminal'" },
+        "target_player_id": "@wanted_criminal_player_id",
         "amount": 1000,
         "description": "Public Enemy No. 1"
       },
@@ -54,9 +66,9 @@
         "status": "ok",
         "bounties": [
           {
-            "target_id": { "sql_int": "SELECT id FROM players WHERE name = 'wanted_criminal'" },
+            "target_id": "@wanted_criminal_player_id",
             "amount": 1000,
-            "posted_by": { "sql_int": "SELECT id FROM players WHERE name = 'bounty_hunter'" },
+            "posted_by": "@bounty_hunter_player_id",
             "description": "Public Enemy No. 1"
           }
         ]
@@ -67,7 +79,7 @@
       "command": "bounty.post_federation",
       "user": "bounty_hunter",
       "data": {
-        "target_player_id": { "sql_int": "SELECT id FROM players WHERE name = 'bounty_hunter'" },
+        "target_player_id": "@bounty_hunter_player_id",
         "amount": 1000
       },
       "expect": {
@@ -80,11 +92,11 @@
       "command": "bounty.post_federation",
       "user": "bounty_hunter",
       "data": {
-        "target_player_id": { "sql_int": "SELECT id FROM players WHERE name = 'bounty_hunter'" },
+        "target_player_id": "@neutral_citizen_player_id",
         "amount": 1000
       },
       "expect": {
-        "error_code": 707,
+        "error_code": 1454,
         "message": "Target must be an evil player."
       }
     },
@@ -93,11 +105,11 @@
       "command": "bounty.post_federation",
       "user": "bounty_hunter",
       "data": {
-        "target_player_id": { "sql_int": "SELECT id FROM players WHERE name = 'wanted_criminal'" },
+        "target_player_id": "@wanted_criminal_player_id",
         "amount": 1000000
       },
       "expect": {
-        "error_code": 402,
+        "error_code": 1453,
         "message": "Insufficient funds."
       }
     }

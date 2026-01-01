@@ -11,23 +11,30 @@
       "passwd": "password"
     },
     {
-      "name": "Setup: Fund & Equip",
+      "name": "Setup: Fund User",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE players SET credits = 1000000, alignment = -100 WHERE id=(SELECT id FROM players WHERE name='combat_ace'); UPDATE ships SET fighters = 100, mines = 10, holds = 100 WHERE id=(SELECT ship FROM players WHERE name='combat_ace');" },
+      "data": { "sql": "UPDATE players SET credits = 1000000, alignment = -100 WHERE id=@combat_ace_player_id;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Equip Ship",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE ships SET fighters = 100, mines = 10, holds = 100 WHERE id=@combat_ace_player_id;" },
       "user": "admin",
       "expect": { "status": "ok" }
     },
     {
       "name": "Setup: Target Planet",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT OR REPLACE INTO planets (id, sector, name, owner_id, owner_type, created_by, created_at) VALUES (900, 1, 'Target', (SELECT id FROM players WHERE name='combat_ace'), 'player', (SELECT id FROM players WHERE name='combat_ace'), strftime('%s','now'));" },
+      "data": { "sql": "INSERT INTO planets (id, sector, name, owner_id, created_by, created_at) VALUES (900, 1, 'Target', @combat_ace_player_id, @combat_ace_player_id, now()) ON CONFLICT (id) DO NOTHING;" },
       "user": "admin",
       "expect": { "status": "ok" }
     },
     {
       "name": "Setup: Rob-able Port",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT OR REPLACE INTO ports (id, sector, name, petty_cash, type) VALUES (1, 1, 'Robbable Port', 1000, 1);" },
+      "data": { "sql": "INSERT INTO ports (id, sector, name, petty_cash, type) VALUES (1, 1, 'Robbable Port', 1000, 1) ON CONFLICT (id) DO NOTHING;" },
       "user": "admin",
       "expect": { "status": "ok" }
     },

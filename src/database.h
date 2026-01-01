@@ -43,7 +43,7 @@ void db_mutex_lock (void);
 void db_mutex_unlock (void);
 void db_close_thread (void);
 /* Session management functions */
-int db_session_create (int player_id, int ttl_seconds, char token_out[65]);
+int db_session_create (int player_id, const char *token, long long expires_at);
 int db_session_revoke (const char *token);
 int db_session_refresh (const char *token, int ttl_seconds,
                         char new_token_out[65], int *out_player_id);
@@ -51,7 +51,7 @@ int db_session_lookup (const char *token,
                        int *out_player_id,
                        long long *out_expires);
 /* Cleanup */
-void db_close (void);
+// void db_close (void); // Moved to db_api.h
 // Bank accounts
 int db_bank_account_create_default_for_player (sqlite3 *db, int player_id);
 

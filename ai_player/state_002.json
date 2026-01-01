@@ -1,0 +1,1738 @@
+{
+    "session_id": "dcf04ed36cffab13da3ef1c836a02c1f",
+    "player_info": {
+        "player": {
+            "id": 18,
+            "username": "qa_test_co_002",
+            "credits": "5000.00",
+            "turns_remaining": 500,
+            "sector": 5,
+            "ship_id": 111,
+            "corp_id": 0,
+            "alignment": 1,
+            "experience": 0
+        }
+    },
+    "ship_info": {
+        "id": 111,
+        "name": "qa_test_co_002's ship",
+        "type_id": 2,
+        "holds": 10,
+        "fighters": 1,
+        "shields": 1,
+        "onplanet": 0,
+        "ported": 0,
+        "cargo": []
+    },
+    "player_location_sector": 5,
+    "sector_data": {
+        "5": {
+            "server_tick": 433,
+            "sector_id": 5,
+            "adjacent": [
+                {
+                    "to_sector": 1
+                },
+                {
+                    "to_sector": 4
+                },
+                {
+                    "to_sector": 6
+                }
+            ],
+            "ships": [
+                {
+                    "id": 111,
+                    "name": "qa_test_co_002's ship"
+                }
+            ],
+            "ports": [],
+            "planets": [
+                {
+                    "id": 8,
+                    "name": "Planet 8"
+                }
+            ],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "has_port": false
+        }
+    },
+    "universe_map": {
+        "5": {
+            "is_explored": true,
+            "has_port": false
+        }
+    },
+    "port_info_by_sector": {},
+    "price_cache": {},
+    "bank_balance": 0,
+    "command_retry_info": {
+        "player.my_info": {
+            "next_retry_time": 1767179013.898232
+        },
+        "ship.info": {
+            "next_retry_time": 1767179015.1881309
+        },
+        "sector.info": {
+            "next_retry_time": 1767179016.2009034
+        },
+        "sector.scan.density": {
+            "next_retry_time": 1767180946.9425774,
+            "failures": 3
+        },
+        "move.pathfind": {
+            "next_retry_time": 1767180428.3787248
+        }
+    },
+    "strategy_plan": [],
+    "trade_successful": false,
+    "q_table": {},
+    "n_table": {},
+    "command_schemas": {
+        "admin.notice": {
+            "$id": "ge://schema/admin.notice.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object"
+        },
+        "admin.shutdown_warning": {
+            "$id": "ge://schema/admin.shutdown_warning.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object"
+        },
+        "auth.login": {
+            "$id": "ge://schema/auth.login.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "username": {
+                    "type": "string"
+                },
+                "passwd": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "username",
+                "passwd"
+            ],
+            "additionalProperties": false
+        },
+        "auth.logout": {
+            "$id": "ge://schema/auth.logout.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "auth.mfa.totp.verify": {
+            "$id": "ge://schema/auth.mfa.totp.verify.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "auth.register": {
+            "$id": "ge://schema/auth.register.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "required": [
+                "username",
+                "passwd"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "username": {
+                    "type": "string"
+                },
+                "passwd": {
+                    "type": "string"
+                },
+                "ship_name": {
+                    "type": "string"
+                },
+                "ui_locale": {
+                    "type": "string"
+                },
+                "ui_timezone": {
+                    "type": "string"
+                }
+            }
+        },
+        "auth.refresh": {
+            "$id": "ge://schema/auth.refresh.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "bank.balance": {
+            "$id": "ge://schema/bank.balance.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "bank.deposit": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "bank.history": {
+            "$id": "ge://schema/bank.history.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "required": [],
+            "additionalProperties": false,
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50
+                },
+                "cursor": {
+                    "type": "string"
+                },
+                "tx_type": {
+                    "type": "string",
+                    "enum": [
+                        "DEPOSIT",
+                        "WITHDRAWAL",
+                        "TRANSFER",
+                        "INTEREST",
+                        "FEE",
+                        "WIRE",
+                        "TAX",
+                        "TRADE_BUY_FEE",
+                        "TRADE_SELL_FEE",
+                        "WITHDRAWAL_FEE",
+                        "ADJUSTMENT"
+                    ]
+                },
+                "start_date": {
+                    "type": "integer"
+                },
+                "end_date": {
+                    "type": "integer"
+                },
+                "min_amount": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "max_amount": {
+                    "type": "integer",
+                    "minimum": 0
+                }
+            }
+        },
+        "bank.leaderboard": {
+            "$id": "ge://schema/bank.leaderboard.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100
+                }
+            },
+            "required": [],
+            "additionalProperties": false
+        },
+        "bank.transfer": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "bank.withdraw": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "bounty.list": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "bounty.post_federation": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "bounty.post_hitlist": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "bulk.execute": {
+            "$id": "ge://schema/bulk.execute.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "fine.list": {
+            "$id": "ge://schema/fine.list.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "fine.pay": {
+            "$id": "ge://schema/fine.pay.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "fine_id": {
+                    "type": "integer"
+                },
+                "amount": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "fine_id"
+            ],
+            "additionalProperties": false
+        },
+        "insurance.policies.list": {
+            "$id": "ge://schema/insurance.policies.list.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "insurance.policies.buy": {
+            "$id": "ge://schema/insurance.policies.buy.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "subject_type": {
+                    "type": "string",
+                    "enum": [
+                        "ship",
+                        "cargo",
+                        "planet"
+                    ]
+                },
+                "subject_id": {
+                    "type": "integer"
+                },
+                "duration": {
+                    "type": "integer"
+                },
+                "premium": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "subject_type",
+                "subject_id",
+                "duration",
+                "premium"
+            ],
+            "additionalProperties": false
+        },
+        "insurance.claim.file": {
+            "$id": "ge://schema/insurance.claim.file.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "policy_id": {
+                    "type": "integer"
+                },
+                "incident_description": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "policy_id",
+                "incident_description"
+            ],
+            "additionalProperties": false
+        },
+        "chat.broadcast": {
+            "$id": "ge://schema/chat.broadcast.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "chat.history": {
+            "$id": "ge://schema/chat.history.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "chat.send": {
+            "$id": "ge://schema/chat.send.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "citadel.build": {
+            "$id": "ge://schema/citadel.build.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "citadel.upgrade": {
+            "$id": "ge://schema/citadel.upgrade.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "combat.attack": {
+            "$id": "ge://schema/combat.attack.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "combat.attack_planet": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "combat.deploy_fighters": {
+            "$id": "ge://schema/combat.deploy_fighters.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "required": [
+                "amount",
+                "offense"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "amount": {
+                    "type": "integer"
+                },
+                "offense": {
+                    "type": "integer"
+                },
+                "corporation_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "combat.deploy_mines": {
+            "$id": "ge://schema/combat.deploy_mines.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "required": [
+                "amount",
+                "offense"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "amount": {
+                    "type": "integer"
+                },
+                "offense": {
+                    "type": "integer"
+                },
+                "corporation_id": {
+                    "type": "integer"
+                },
+                "mine_type": {
+                    "type": "integer"
+                }
+            }
+        },
+        "combat.lay_mines": {
+            "$id": "ge://schema/combat.lay_mines.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "combat.status": {
+            "$id": "ge://schema/combat.status.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "combat.sweep_mines": {
+            "$id": "ge://schema/combat.sweep_mines.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "deploy.fighters.list": {
+            "$id": "ge://schema/deploy.fighters.list.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "deploy.mines.list": {
+            "$id": "ge://schema/deploy.mines.list.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "fighters.recall": {
+            "$id": "ge://schema/fighters.recall.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "required": [
+                "sector_id",
+                "asset_id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "asset_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "mines.recall": {
+            "$id": "ge://schema/mines.recall.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "required": [
+                "sector_id",
+                "asset_id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "asset_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "corp.balance": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "corp.create": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "corp.deposit": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "corp.dissolve": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "corp.invite": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "corp.join": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "corp.kick": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "corp.leave": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "corp.list": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "corp.roster": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "corp.statement": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "corp.status": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "corp.transfer_ceo": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "corp.withdraw": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "dock.status": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "hardware.buy": {
+            "$id": "ge://schema/hardware.buy.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "idempotency_key": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "code",
+                "quantity"
+            ],
+            "additionalProperties": false
+        },
+        "hardware.list": {
+            "$id": "ge://schema/hardware.list.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "mail.delete": {
+            "$id": "ge://schema/mail.delete.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "mail.inbox": {
+            "$id": "ge://schema/mail.inbox.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "mail.read": {
+            "$id": "ge://schema/mail.read.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "required": [
+                "mail_id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "mail_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "mail.send": {
+            "$id": "ge://schema/mail.send.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "to_player_name": {
+                    "type": "string"
+                },
+                "subject": {
+                    "type": "string"
+                },
+                "body": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "to_player_name",
+                "subject",
+                "body"
+            ],
+            "additionalProperties": false
+        },
+        "move.autopilot.start": {
+            "$id": "ge://schema/move.autopilot.start.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "move.autopilot.status": {
+            "$id": "ge://schema/move.autopilot.status.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "move.autopilot.stop": {
+            "$id": "ge://schema/move.autopilot.stop.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "move.describe_sector": {
+            "$id": "ge://schema/move.describe_sector.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "move.pathfind": {
+            "$id": "ge://schema/move.pathfind.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "move.scan": {
+            "$id": "ge://schema/move.scan.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {}
+        },
+        "move.transwarp": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "move.warp": {
+            "$id": "ge://schema/move_warp.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "to_sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "to_sector_id"
+            ],
+            "additionalProperties": false
+        },
+        "nav.avoid.add": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "nav.avoid.list": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "nav.avoid.remove": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "nav.avoid.set": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "nav.bookmark.add": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "nav.bookmark.list": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "nav.bookmark.remove": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "nav.bookmark.set": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "news.get_feed": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "news.mark_feed_read": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "news.read": {
+            "$id": "ge://schema/news.read.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "notes.list": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "notice.ack": {
+            "$id": "ge://schema/notice.ack.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "notice_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "notice_id"
+            ],
+            "additionalProperties": false
+        },
+        "notice.list": {
+            "$id": "ge://schema/notice.list.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "planet.create": {
+            "$id": "ge://schema/planet.genesis_create.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "owner_entity_type": {
+                    "type": "string",
+                    "enum": [
+                        "player",
+                        "corporation"
+                    ]
+                },
+                "idempotency_key": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "sector_id",
+                "name",
+                "owner_entity_type"
+            ],
+            "additionalProperties": false
+        },
+        "planet.deposit": {
+            "$id": "ge://schema/planet.deposit.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "planet.genesis": {
+            "$id": "ge://schema/planet.genesis.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "planet.genesis_create": {
+            "$id": "ge://schema/planet.genesis_create.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "owner_entity_type": {
+                    "type": "string",
+                    "enum": [
+                        "player",
+                        "corporation"
+                    ]
+                },
+                "idempotency_key": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "sector_id",
+                "name",
+                "owner_entity_type"
+            ],
+            "additionalProperties": false
+        },
+        "planet.harvest": {
+            "$id": "ge://schema/planet.harvest.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "planet.info": {
+            "$id": "ge://schema/planet.info.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "planet.land": {
+            "$id": "ge://schema/planet.land.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "planet.launch": {
+            "$id": "ge://schema/planet.launch.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "planet.market.buy_order": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "planet.market.sell": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "planet.rename": {
+            "$id": "ge://schema/planet.rename.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "planet.transfer_ownership": {
+            "$id": "ge://schema/planet.transfer_ownership.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "planet.withdraw": {
+            "$id": "ge://schema/planet.withdraw.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "player.get_avoids": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "player.get_bookmarks": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "player.get_notes": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "player.get_prefs": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "player.get_settings": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "player.get_subscriptions": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "player.get_topics": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "player.my_info": {
+            "$id": "ge://schema/player.my_info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "player.rankings": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "player.set_avoids": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "player.set_bookmarks": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "player.set_prefs": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "player.set_settings": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "player.set_subscriptions": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "player.set_topics": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "player.set_trade_account_preference": {
+            "$id": "ge://schema/player.set_trade_account_preference.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "preference": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ]
+                }
+            },
+            "required": [
+                "preference"
+            ],
+            "additionalProperties": false
+        },
+        "port.describe": {
+            "$id": "ge://schema/port.describe.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "port_id": {
+                    "type": "integer"
+                },
+                "sector_id": {
+                    "type": "integer"
+                }
+            },
+            "anyOf": [
+                {
+                    "required": [
+                        "port_id"
+                    ]
+                },
+                {
+                    "required": [
+                        "sector_id"
+                    ]
+                }
+            ],
+            "additionalProperties": false
+        },
+        "port.info": {
+            "$id": "ge://schema/port.info.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "port.rob": {
+            "$id": "ge://schema/port.rob.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "port_id": {
+                    "type": "integer"
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": [
+                        "credits",
+                        "goods"
+                    ]
+                },
+                "commodity": {
+                    "type": "string"
+                },
+                "amount": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "idempotency_key": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "sector_id",
+                "port_id",
+                "mode",
+                "idempotency_key"
+            ],
+            "additionalProperties": false
+        },
+        "port.status": {
+            "$id": "ge://schema/port.status.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "port_id": {
+                    "type": "integer"
+                },
+                "sector_id": {
+                    "type": "integer"
+                }
+            },
+            "anyOf": [
+                {
+                    "required": [
+                        "port_id"
+                    ]
+                },
+                {
+                    "required": [
+                        "sector_id"
+                    ]
+                }
+            ],
+            "additionalProperties": false
+        },
+        "sector.info": {
+            "$id": "ge://schema/sector.info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [],
+            "additionalProperties": false
+        },
+        "sector.scan": {
+            "$id": "ge://schema/sector.scan.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "sector.scan.density": {
+            "$id": "ge://schema/sector.scan.density.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "sector.search": {
+            "$id": "ge://schema/sector.search.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "sector.set_beacon": {
+            "$id": "ge://schema/sector.set_beacon.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "text": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "sector_id",
+                "text"
+            ],
+            "additionalProperties": false
+        },
+        "session.disconnect": {
+            "$id": "ge://schema/session.disconnect.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "session.hello": {
+            "$id": "ge://schema/session.hello.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "session.ping": {
+            "$id": "ge://schema/session.ping.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "player.ping": {
+            "$id": "ge://schema/session.ping.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "sys.notice.create": {
+            "$id": "ge://schema/sys.notice.create.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string"
+                },
+                "body": {
+                    "type": "string"
+                },
+                "severity": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "title",
+                "body"
+            ],
+            "additionalProperties": false
+        },
+        "system.disconnect": {
+            "$id": "ge://schema/system.disconnect.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "ship.claim": {
+            "$id": "ge://schema/ship.claim.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "ship.info": {
+            "$id": "ge://schema/ship.info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "ship": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": "integer"
+                        },
+                        "number": {
+                            "type": "integer"
+                        },
+                        "name": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "required": [
+                "ship"
+            ]
+        },
+        "ship.inspect": {
+            "$id": "ge://schema/ship.inspect.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "ship.jettison": {
+            "$id": "ge://schema/ship.jettison.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "ship.rename": {
+            "$id": "ge://schema/ship.rename.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "ship.repair": {
+            "$id": "ge://schema/ship.repair.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "ship.reregister": {
+            "$id": "ge://schema/ship.reregister.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "ship.self_destruct": {
+            "$id": "ge://schema/ship.self_destruct.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "ship.status": {
+            "$id": "ge://schema/ship.status.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "ship": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": "integer"
+                        },
+                        "number": {
+                            "type": "integer"
+                        },
+                        "name": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "required": [
+                "ship"
+            ]
+        },
+        "ship.transfer_cargo": {
+            "$id": "ge://schema/ship.transfer_cargo.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "ship.upgrade": {
+            "$id": "ge://schema/ship.upgrade.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "shipyard.list": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "shipyard.upgrade": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "stock.buy": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "stock.dividend.set": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "stock.exchange.list_stocks": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "stock.exchange.orders.cancel": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "stock.exchange.orders.create": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "stock.ipo.register": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "stock.portfolio.list": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "subscribe.add": {
+            "$id": "ge://schema/subscribe.add.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "subscribe.catalog": {
+            "$id": "ge://schema/subscribe.catalog.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "subscribe.list": {
+            "$id": "ge://schema/subscribe.list.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "subscribe.remove": {
+            "$id": "ge://schema/subscribe.remove.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "tavern.barcharts.get_prices_summary": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "tavern.deadpool.place_bet": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "tavern.dice.play": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "tavern.graffiti.post": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "tavern.highstakes.play": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "tavern.loan.pay": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "tavern.loan.take": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "tavern.lottery.buy_ticket": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "tavern.lottery.status": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "tavern.raffle.buy_ticket": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "tavern.round.buy": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "tavern.rumour.get_hint": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "tavern.trader.buy_password": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "trade.accept": {
+            "$id": "ge://schema/trade.accept.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.buy": {
+            "$id": "ge://schema/trade.buy.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "required": [
+                "port_id",
+                "items",
+                "idempotency_key",
+                "account",
+                "sector_id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "port_id": {
+                    "type": "integer"
+                },
+                "idempotency_key": {
+                    "type": "string"
+                },
+                "account": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ]
+                },
+                "sector_id": {
+                    "type": "integer"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": [
+                            "commodity",
+                            "quantity"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                            "commodity": {
+                                "type": "string"
+                            },
+                            "quantity": {
+                                "type": "integer"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "trade.cancel": {
+            "$id": "ge://schema/trade.cancel.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.history": {
+            "$id": "ge://schema/trade.history.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "required": [],
+            "additionalProperties": false,
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50
+                },
+                "cursor": {
+                    "type": "string"
+                }
+            }
+        },
+        "trade.jettison": {
+            "$id": "ge://schema/trade.jettison.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.offer": {
+            "$id": "ge://schema/trade.offer.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.port_info": {
+            "$id": "ge://schema/trade.port_info.json",
+            "$comment": "Schema not yet implemented"
+        },
+        "trade.quote": {
+            "$id": "ge://schema/trade.quote.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "port_id": {
+                    "type": "integer"
+                },
+                "commodity": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "port_id",
+                "commodity",
+                "quantity"
+            ],
+            "additionalProperties": false
+        },
+        "trade.sell": {
+            "$id": "ge://schema/trade.sell.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "required": [
+                "sector_id",
+                "port_id",
+                "items",
+                "idempotency_key",
+                "account"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "port_id": {
+                    "type": "integer"
+                },
+                "idempotency_key": {
+                    "type": "string"
+                },
+                "account": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ]
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": [
+                            "commodity",
+                            "quantity"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                            "commodity": {
+                                "type": "string"
+                            },
+                            "quantity": {
+                                "type": "integer"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "schema_blacklist": [],
+    "pending_schema_requests": {
+        "system.cmd_list": "c-91fcaba9",
+        "admin.notice": "c-c1be1e93",
+        "admin.shutdown_warning": "c-67327bb9",
+        "auth.login": "c-5ea309d0",
+        "auth.logout": "c-c07247e4",
+        "auth.mfa.totp.verify": "c-8272cd96",
+        "auth.register": "c-e2d2bc61",
+        "auth.refresh": "c-bc375539",
+        "bank.balance": "c-c27d77bf",
+        "bank.deposit": "c-c036cec1",
+        "bank.history": "c-2b74b73d",
+        "bank.leaderboard": "c-8af53e64",
+        "bank.transfer": "c-f2255071",
+        "bank.withdraw": "c-e045de7a",
+        "bounty.list": "c-a3943e66",
+        "bounty.post_federation": "c-c71352a5",
+        "bounty.post_hitlist": "c-029575e5",
+        "bulk.execute": "c-b3ebd6d7",
+        "fine.list": "c-b36be05d",
+        "fine.pay": "c-53e7f87f",
+        "insurance.policies.list": "c-29ef5b28",
+        "insurance.policies.buy": "c-b76ea10c",
+        "insurance.claim.file": "c-9a3db2e8",
+        "chat.broadcast": "c-dd485954",
+        "chat.history": "c-90575541",
+        "chat.send": "c-383ed859",
+        "citadel.build": "c-823ef785",
+        "citadel.upgrade": "c-ee245833",
+        "combat.attack": "c-e4b0ef69",
+        "combat.attack_planet": "c-b6e41ddc",
+        "combat.deploy_fighters": "c-a6b9d800",
+        "combat.deploy_mines": "c-719fcad1",
+        "combat.lay_mines": "c-25d5f464",
+        "combat.status": "c-0309a8e6",
+        "combat.sweep_mines": "c-a7e0d7fb",
+        "deploy.fighters.list": "c-5ba4f292",
+        "deploy.mines.list": "c-1c056e28",
+        "fighters.recall": "c-615c0247",
+        "mines.recall": "c-f986a580",
+        "corp.balance": "c-7de2dfd7",
+        "corp.create": "c-e684ca57",
+        "corp.deposit": "c-19407899",
+        "corp.dissolve": "c-5f4da224",
+        "corp.invite": "c-991c10d3",
+        "corp.join": "c-215ed386",
+        "corp.kick": "c-89de6751",
+        "corp.leave": "c-9eee2c4d",
+        "corp.list": "c-0f9fe9b1",
+        "corp.roster": "c-5642ad60",
+        "corp.statement": "c-e196ec35",
+        "corp.status": "c-114190a8",
+        "corp.transfer_ceo": "c-9dd90f17",
+        "corp.withdraw": "c-7022207f",
+        "dock.status": "c-7d5c6cae",
+        "hardware.buy": "c-420bccd2",
+        "hardware.list": "c-91732189",
+        "mail.delete": "c-c4cfe44e",
+        "mail.inbox": "c-29fb0fdf",
+        "mail.read": "c-35eb1ad9",
+        "mail.send": "c-28a0f449",
+        "move.autopilot.start": "c-84f40339",
+        "move.autopilot.status": "c-5938bf45",
+        "move.autopilot.stop": "c-038dd2ee",
+        "move.describe_sector": "c-183b01b6",
+        "move.pathfind": "c-28a542e0",
+        "move.scan": "c-ce6b9783",
+        "move.transwarp": "c-0c395358",
+        "move.warp": "c-7ef83a64",
+        "nav.avoid.add": "c-c067b3d8",
+        "nav.avoid.list": "c-d04c4334",
+        "nav.avoid.remove": "c-e68c07a2",
+        "nav.avoid.set": "c-5bb1e157",
+        "nav.bookmark.add": "c-d32443bb",
+        "nav.bookmark.list": "c-224007b6",
+        "nav.bookmark.remove": "c-b09c5612",
+        "nav.bookmark.set": "c-0b45738b",
+        "news.get_feed": "c-fa2d41e0",
+        "news.mark_feed_read": "c-2e1dc887",
+        "news.read": "c-5448e1fc",
+        "notes.list": "c-b0f83adc",
+        "notice.ack": "c-53ec3038",
+        "notice.list": "c-88704e0d",
+        "planet.create": "c-1c6705dd",
+        "planet.deposit": "c-fb947417",
+        "planet.genesis": "c-30b2a4ac",
+        "planet.genesis_create": "c-5bf61c79",
+        "planet.harvest": "c-161cb9e9",
+        "planet.info": "c-42507745",
+        "planet.land": "c-7a0c6ea3",
+        "planet.launch": "c-9b2f2cc3",
+        "planet.market.buy_order": "c-cb86217f",
+        "planet.market.sell": "c-1da6c444",
+        "planet.rename": "c-0b359b71",
+        "planet.transfer_ownership": "c-dd2cc17f",
+        "planet.withdraw": "c-c65b5da0",
+        "player.get_avoids": "c-45af8ab5",
+        "player.get_bookmarks": "c-b76848d1",
+        "player.get_notes": "c-c04ff5c6",
+        "player.get_prefs": "c-68c939f5",
+        "player.get_settings": "c-ee936d1d",
+        "player.get_subscriptions": "c-7841ad5f",
+        "player.get_topics": "c-4aea2eea",
+        "player.my_info": "c-b63094b7",
+        "player.rankings": "c-a3783ead",
+        "player.set_avoids": "c-b30319d0",
+        "player.set_bookmarks": "c-787e6d53",
+        "player.set_prefs": "c-9a5143fd",
+        "player.set_settings": "c-c21dd2fc",
+        "player.set_subscriptions": "c-5640b22c",
+        "player.set_topics": "c-fc215d54",
+        "player.set_trade_account_preference": "c-075d3eb7",
+        "port.describe": "c-2e2099e6",
+        "port.info": "c-60e6672e",
+        "port.rob": "c-2b9e3a34",
+        "port.status": "c-14b9643b",
+        "sector.info": "c-dbf744c1",
+        "sector.scan": "c-52dc2ca1",
+        "sector.scan.density": "c-6711995a",
+        "sector.search": "c-192a2d53",
+        "sector.set_beacon": "c-e98b8f30",
+        "session.disconnect": "c-07ca8cd3",
+        "session.hello": "c-8134d5ef",
+        "session.ping": "c-ea0cadd8",
+        "player.ping": "c-256ee75d",
+        "sys.notice.create": "c-8dc69cb4",
+        "system.disconnect": "c-4823fd1e",
+        "ship.claim": "c-8118664e",
+        "ship.info": "c-c16cb102",
+        "ship.inspect": "c-3abf7e5b",
+        "ship.jettison": "c-030f3051",
+        "ship.rename": "c-9d904891",
+        "ship.repair": "c-ea4f3b5d",
+        "ship.reregister": "c-854d7676",
+        "ship.self_destruct": "c-db746373",
+        "ship.status": "c-908cb55e",
+        "ship.transfer_cargo": "c-1eb9b8c9",
+        "ship.upgrade": "c-e7bf6116",
+        "shipyard.list": "c-aaee8459",
+        "shipyard.upgrade": "c-925cade2",
+        "stock.buy": "c-e2928160",
+        "stock.dividend.set": "c-ee9a66bd",
+        "stock.exchange.list_stocks": "c-70748e97",
+        "stock.exchange.orders.cancel": "c-0d8a5ad6",
+        "stock.exchange.orders.create": "c-b0fb1c89",
+        "stock.ipo.register": "c-46ade33e",
+        "stock.portfolio.list": "c-bd6a48d5",
+        "subscribe.add": "c-9b4e2379",
+        "subscribe.catalog": "c-ae2892fd",
+        "subscribe.list": "c-b76ce273",
+        "subscribe.remove": "c-dc7fbf4a",
+        "tavern.barcharts.get_prices_summary": "c-efd3dd74",
+        "tavern.deadpool.place_bet": "c-16c8a396",
+        "tavern.dice.play": "c-1f61a5db",
+        "tavern.graffiti.post": "c-980e7183",
+        "tavern.highstakes.play": "c-1bb69802",
+        "tavern.loan.pay": "c-3e3ef465",
+        "tavern.loan.take": "c-a0241ce5",
+        "tavern.lottery.buy_ticket": "c-736d5cfb",
+        "tavern.lottery.status": "c-7233da89",
+        "tavern.raffle.buy_ticket": "c-1ecbbfbd",
+        "tavern.round.buy": "c-242d7434",
+        "tavern.rumour.get_hint": "c-5163ff4f",
+        "tavern.trader.buy_password": "c-00f3dea1",
+        "trade.accept": "c-dd7281e2",
+        "trade.buy": "c-55ee204b",
+        "trade.cancel": "c-939cd58c",
+        "trade.history": "c-77282f0e",
+        "trade.jettison": "c-aa0cdff0",
+        "trade.offer": "c-6cc7d5b0",
+        "trade.port_info": "c-01c764f4",
+        "trade.quote": "c-9c3ef5dd",
+        "trade.sell": "c-b90377a7"
+    },
+    "recent_sectors": [
+        5
+    ],
+    "pending_commands": {},
+    "port_trade_blacklist": [],
+    "warp_blacklist": [],
+    "current_path": [],
+    "last_action_result": {
+        "status": "error",
+        "command": "sector.scan.density",
+        "error_code": 500,
+        "error_msg": "Handler produced no response",
+        "sector_id": 5,
+        "sent_command": {
+            "id": "c-1a525191",
+            "command": "sector.scan.density",
+            "data": {},
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "1a525191-dc7b-4882-88c5-e498060bf80a"
+            }
+        }
+    },
+    "last_quotes": {},
+    "current_qa_objective": null,
+    "needs_bootstrap": false
+}

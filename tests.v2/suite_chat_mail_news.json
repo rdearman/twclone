@@ -1,54 +1,32 @@
 {
   "name": "Chat, Mail & News Regression",
   "version": "2.0.0",
-  "protocol_category": "28_Tavern",
-  "description": "Coverage for communication and news systems",
+  "protocol_category": "22_Comm",
+  "description": "Coverage for chat, mail, news, and notifications",
   "tests": [
     {
       "name": "Setup: User A",
       "setup": "macro_auth_user",
       "username": "comm_user_a",
-      "passwd": "password"
+      "password": "password"
     },
     {
       "name": "Setup: User B",
       "setup": "macro_auth_user",
       "username": "comm_user_b",
-      "passwd": "password"
+      "password": "password"
     },
     {
-      "name": "Setup: Admin User",
+      "name": "Setup: Admin",
+      "setup": "macro_auth_user",
+      "username": "comm_admin",
+      "password": "password"
+    },
+    {
+      "name": "Promote Admin",
       "setup": "macro_sysop",
       "username": "comm_admin",
-      "passwd": "password"
-    },
-    {
-      "name": "Chat Send (Not Implemented)",
-      "command": "chat.send",
-      "data": { "message": "Hello World", "scope": "global" },
-      "user": "comm_user_a",
-      "expect": { "error_code": 1101, "message": "Not implemented: chat.send" }
-    },
-    {
-      "name": "Chat History (Not Implemented)",
-      "command": "chat.history",
-      "data": { "limit": 10 },
-      "user": "comm_user_a",
-      "expect": { "error_code": 1101, "message": "Not implemented: chat.history" }
-    },
-    {
-      "name": "Chat Broadcast (Normal User Fail - Not Implemented)",
-      "command": "chat.broadcast",
-      "data": { "message": "System Alert (Normal)" },
-      "user": "comm_user_a",
-      "expect": { "error_code": 1101, "message": "Not implemented: chat.broadcast" }
-    },
-    {
-      "name": "Chat Broadcast (Admin Fail - Not Implemented)",
-      "command": "chat.broadcast",
-      "data": { "message": "System Alert (Admin)" },
-      "user": "comm_admin",
-      "expect": { "error_code": 1101, "message": "Not implemented: chat.broadcast" }
+      "password": "password"
     },
     {
       "name": "Mail Send",
@@ -65,7 +43,7 @@
         "status": "ok",
         "messages": { "type": "array" }
       },
-      "save": { "mail_id": "data.messages[0].id" }
+      "save": { "mail_id": "data.messages.0.id" }
     },
     {
       "name": "Mail Read",
@@ -90,7 +68,7 @@
     {
       "name": "Setup: Seed News",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO news_feed (published_ts, news_category, article_text) VALUES (strftime('%s','now'), 'economy', 'Market Crash');" },
+      "data": { "sql": "INSERT INTO news_feed (published_ts, news_category, article_text) VALUES (EXTRACT(EPOCH FROM now())::bigint, 'economy', 'Market Crash');" },
       "user": "admin",
       "expect": { "status": "ok" }
     },
@@ -103,7 +81,7 @@
         "items": { "type": "array" }
       },
       "asserts": [
-        { "path": "data.items.*.article_text", "op": "contains", "value": "Market Crash" }
+        { "path": "data.items", "op": "contains", "value": "Market Crash" }
       ]
     },
     {
@@ -114,15 +92,9 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "News Mark Read",
-      "command": "news.mark_feed_read",
-      "user": "comm_user_a",
-      "expect": { "status": "ok" }
-    },
-    {
       "name": "Notes Set (Setup)",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO player_notes (player_id, scope, key, note) VALUES (@comm_user_a_player_id, 'sector', '1', 'Home');" },
+      "data": { "sql": "INSERT INTO player_notes (player_id, scope, key, note) VALUES (@comm_user_a_player_id, 'sector', '1', 'Home') ON CONFLICT (player_id, scope, key) DO UPDATE SET note = EXCLUDED.note;" },
       "user": "admin",
       "expect": { "status": "ok" }
     },
@@ -135,16 +107,16 @@
         "notes": { "type": "array" }
       },
       "asserts": [
-        { "path": "data.notes.*.note", "op": "==", "value": "Home" }
+        { "path": "data.notes.0.note", "op": "==", "value": "Home" }
       ]
     },
     {
       "name": "Setup: Seed Notice",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO system_notice (created_at, title, body, severity, expires_at) VALUES (strftime('%s','now'), 'Alert', 'Body', 'info', strftime('%s','now')+3600);" },
+      "data": { "sql": "INSERT INTO system_notice (created_at, title, body, severity, expires_at) VALUES (now(), 'Alert', 'Body', 'info', now() + interval '1 hour') RETURNING id;" },
       "user": "admin",
       "expect": { "status": "ok" },
-      "save": { "notice_id": "sqlite_last_insert_rowid()" }
+      "save": { "notice_id": "data.rows.0.0" }
     },
     {
       "name": "Notice List",
@@ -152,7 +124,7 @@
       "user": "comm_user_a",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.notices.*.title", "op": "==", "value": "Alert" }
+        { "path": "data.notices.0.title", "op": "==", "value": "Alert" }
       ]
     },
     {

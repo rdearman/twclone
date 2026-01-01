@@ -772,7 +772,7 @@ class Conn:
                 continue
 
             # 5) Unknown frame: ignore but keep the RPC wait alive
-            print(f"[WARN] Ignoring frame id={resp.get('id')} reply_to={resp.get('reply_to')}")
+            # print(f"[WARN] Ignoring frame id={resp.get('id')} reply_to={resp.get('reply_to')}")
             # loop continues
 
 
@@ -808,6 +808,43 @@ class Context:
 # ---------------------------
 # Flags & helpers
 # ---------------------------
+
+def compute_flags(ctx: Context) -> dict:
+    """
+    Compute state flags based on current sector info, player info, etc.
+    These flags drive conditional menu item visibility.
+    """
+    d = ctx.last_sector_desc or {}
+    ships = d.get("ships", [])
+    my_ship_id = get_my_ship_id(ctx.conn)
+    my_name = get_my_player_name(ctx.conn)
+    # keep beacon count handy for label interpolation
+    ctx.state["beacon_count"] = get_my_beacon_count(ctx.conn)
+
+    flags = {
+        "has_port": bool(d.get("port")),
+        "is_stardock": ctx.state.get("is_stardock", False),
+        "is_shipyard_port": ctx.state.get("is_shipyard_port", False),
+        "has_planet": bool(d.get("planets")),
+        "can_set_beacon": (d.get("beacon") in (None, "")),
+        "has_boardable": has_boardable_ship(ships, my_ship_id=my_ship_id, my_name=my_name),
+        "has_tow_target": has_tow_target(ships, my_ship_id=my_ship_id),
+        "on_planet": bool(ctx.state.get("on_planet")),
+        "planet_has_products": bool(ctx.state.get("planet_products_available")),
+        "is_corp_member": bool(ctx.player_info.get("corp_id")),
+        "can_autopilot": bool(ctx.state.get("ap_route_plotted")),
+        "has_exchange_access": ctx.state.get("has_exchange_access", False),
+        "has_insurance_access": ctx.state.get("has_insurance_access", False),
+        "has_tavern_access": ctx.state.get("has_tavern_access", False),
+        "has_hardware_access": ctx.state.get("has_hardware_access", False),
+        "in_corporation": ctx.state.get("in_corporation", False),
+        "is_ceo": ctx.state.get("is_ceo", False),
+        "is_ceo_or_officer": ctx.state.get("is_ceo_or_officer", False),
+        "not_in_corporation": not ctx.state.get("in_corporation", False),
+        "corp_not_public": not ctx.state.get("corp_is_public", False),
+        "corp_is_public": ctx.state.get("corp_is_public", False)
+    }
+    return flags
 
 @register("sector_density_scan_flow")
 def sector_density_scan_flow(ctx: Context):
@@ -1295,9 +1332,9 @@ def has_tow_target(ships, my_ship_id=None) -> bool:
             return True
     return False
 
-def compute_flags(ctx: Context) -> Dict[str, bool]:
-    d = ctx.last_sector_desc or {}
-    ships = d.get("ships") or []
+def _get_menu_flags(ctx: Context) -> dict:
+    d = ctx.state.get("sector_info", {})
+    ships = d.get("ships", [])
     my_ship_id = get_my_ship_id(ctx.conn)
     my_name = get_my_player_name(ctx.conn)
     # keep beacon count handy for label interpolation
@@ -1317,12 +1354,6 @@ def compute_flags(ctx: Context) -> Dict[str, bool]:
         "can_autopilot": bool(ctx.state.get("ap_route_plotted")),
         "has_exchange_access": ctx.state.get("has_exchange_access", False),
         "has_insurance_access": ctx.state.get("has_insurance_access", False),
-        "has_tavern_access": ctx.state.get("has_tavern_access", False),
-        "has_hardware_access": ctx.state.get("has_hardware_access", False),
-    }
-    return flags
-
-
         "has_tavern_access": ctx.state.get("has_tavern_access", False),
         "has_hardware_access": ctx.state.get("has_hardware_access", False),
         "in_corporation": ctx.state.get("in_corporation", False),
@@ -2450,10 +2481,21 @@ def resolve_value(val: Any, ctx: Context) -> Any:
             typ, msg = m.group(1), (m.group(2) or "Enter value")
             raw = input(f"{msg}: ").strip()
             try:
-                return int(raw) if typ == "int" else (float(raw) if typ == "float" else raw)
+                val = int(raw) if typ == "int" else (float(raw) if typ == "float" else raw)
             except Exception:
                 print(f"Invalid {typ}.")
                 return None
+            # Convenience: if prompting for commodity, accept short codes (ORE, ORG, EQU)
+            if typ == 'str' and 'commodity' in (msg or '').lower():
+                if isinstance(val, str):
+                    v = val.strip().lower()
+                    if v in ('ore', 'o'):
+                        return 'ore'
+                    if v in ('org', 'orgs', 'organ', 'organics', 'organi'):
+                        return 'organics'
+                    if v in ('equ', 'equip', 'equipment', 'e'):
+                        return 'equipment'
+            return val
         c = CTX_RE.match(val)
         if c:
             path = c.group(1).split(".")
@@ -3862,10 +3904,7 @@ def main():
             except Exception:
                 pass
 
-            login = conn.rpc("auth.login", {"user_name": user, "password": passwd})
-            if login.get("status") in ("error","refused"):
-                fb = conn.rpc("auth.login", {"player_name": user, "password": passwd})
-                login = fb
+            login = conn.rpc("auth.login", {"username": user, "passwd": passwd})
 
             if login.get("status") in ("error","refused"):
                 print("Login failed.");

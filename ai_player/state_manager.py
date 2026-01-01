@@ -170,7 +170,9 @@ class StateManager:
         adj = sector_data.get("adjacent", []) or []
         warp_blacklist = set(self.state.get("warp_blacklist", []))
         
-        return [s for s in adj if s not in warp_blacklist]
+        # adj contains dicts like {"to_sector": 2}, extract the sector IDs
+        adjacent_sectors = [s["to_sector"] if isinstance(s, dict) else s for s in adj]
+        return [s for s in adjacent_sectors if s not in warp_blacklist]
 
     def find_path(self, from_sector, to_sector):
         """
@@ -211,7 +213,12 @@ class StateManager:
         """Updates the cache for a specific sector and marks it as explored in the universe_map."""
         if 'sector_data' not in self.state:
             self.state['sector_data'] = {}
-        self.state['sector_data'][str(sector_id)] = data
+        
+        enriched_data = dict(data)
+        if 'has_port' not in enriched_data and 'ports' in enriched_data:
+            enriched_data['has_port'] = len(enriched_data['ports']) > 0
+        
+        self.state['sector_data'][str(sector_id)] = enriched_data
 
         if 'universe_map' not in self.state:
             self.state['universe_map'] = {}
@@ -220,8 +227,7 @@ class StateManager:
             self.state['universe_map'][str(sector_id)] = {}
         
         self.state['universe_map'][str(sector_id)]['is_explored'] = True
-        self.state['universe_map'][str(sector_id)]['has_port'] = data.get('has_port', False)
-        # We can add more cached info here later if needed
+        self.state['universe_map'][str(sector_id)]['has_port'] = enriched_data.get('has_port', False)
 
         self.save_state()
 

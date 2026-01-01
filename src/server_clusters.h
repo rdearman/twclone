@@ -1,6 +1,6 @@
 #ifndef SERVER_CLUSTERS_H
 #define SERVER_CLUSTERS_H
-#include <sqlite3.h>
+#include "db/db_api.h"
 /* Constants */
 #define CLUSTER_PRICE_ALPHA 0.1
 #define CLUSTER_BAN_THRESHOLD 2
@@ -18,13 +18,12 @@ typedef struct
   int wanted_level;
   int banned;
 } cluster_status_t;
-int clusters_init (sqlite3 * db);
-int cluster_economy_step (sqlite3 * db, int64_t now_s);
-double cluster_get_bust_modifier (sqlite3 * db, int sector_id, int player_id);
-void cluster_on_crime (sqlite3 * db,
-		       int sector_id, int player_id, int success, int busted);
-int clusters_seed_illegal_goods (sqlite3 * db);
-int cluster_black_market_step (sqlite3 * db, int64_t now_s);
-int cluster_economy_step (sqlite3 * db, int64_t now_s);
-int cluster_can_trade (sqlite3 * db, int sector_id, int player_id);
+int clusters_init (db_t *db);
+int cluster_economy_step (db_t *db, int64_t now_s);
+double cluster_get_bust_modifier (db_t *db, int sector_id, int player_id);
+void cluster_on_crime (db_t *db,
+                       int sector_id, int player_id, int success, int busted);
+int clusters_seed_illegal_goods (db_t *db);
+int cluster_black_market_step (db_t *db, int64_t now_s);
+int cluster_can_trade (db_t *db, int sector_id, int player_id);
 #endif /* SERVER_CLUSTERS_H */

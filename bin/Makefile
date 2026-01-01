@@ -14,28 +14,8 @@
 
 
 
-# -*- makefile -*-
-# $Id: Makefile.am,v 1.5 2004/01/21 04:00:53 eryndil Exp $
-# Copyright (C) 2002, Nathan Paul Simons (npsimons@hardcorehackers.com)
-#
-# This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License for published by
-# the Free Software Foundation; either version 2 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
-#
-# Alternatively, the GPL can be found at
-# http://www.gnu.org/copyleft/gpl.html
-
-# AM_CFLAGS = -Wall -Wextra -Werror -I../src
+# AM_CFLAGS = -Wall -Wextra
+# AM_CFLAGS = -Wall -Wextra -D_GNU_SOURCE -I../src -DDB_BACKEND_PG -ljansson -lpq
 
 
 am__is_gnu_make = { \
@@ -125,23 +105,22 @@ CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
 am__dirstamp = $(am__leading_dot)dirstamp
-am_bigbang_OBJECTS = ../src/database.$(OBJEXT) \
-	../src/database_cmd.$(OBJEXT) ../src/schemas.$(OBJEXT) \
-	../src/namegen.$(OBJEXT) ../src/server_bigbang.$(OBJEXT) \
-	../src/server_warp_post_processing.$(OBJEXT) \
-	../src/globals.$(OBJEXT) ../src/common.$(OBJEXT) \
-	../src/server_log.$(OBJEXT) ../src/test_bang.$(OBJEXT) \
-	../src/server_clusters.$(OBJEXT)
+am_bigbang_OBJECTS = ../src/bigbang_pg_main.$(OBJEXT) \
+	../src/db/db_api.$(OBJEXT) ../src/db/pg/db_pg.$(OBJEXT) \
+	../src/common.$(OBJEXT) ../src/server_log.$(OBJEXT)
 bigbang_OBJECTS = $(am_bigbang_OBJECTS)
-bigbang_DEPENDENCIES =
-am_server_OBJECTS = ../src/common.$(OBJEXT) ../src/database.$(OBJEXT) \
+am__DEPENDENCIES_1 =
+bigbang_DEPENDENCIES = $(am__DEPENDENCIES_1)
+bigbang_LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(bigbang_LDFLAGS) \
+	$(LDFLAGS) -o $@
+am_server_OBJECTS = ../src/common.$(OBJEXT) ../src/db/db_api.$(OBJEXT) \
+	../src/db/pg/db_pg.$(OBJEXT) ../src/game_db.$(OBJEXT) \
 	../src/database_cmd.$(OBJEXT) ../src/database_market.$(OBJEXT) \
 	../src/db_player_settings.$(OBJEXT) \
 	../src/engine_consumer.$(OBJEXT) ../src/globals.$(OBJEXT) \
-	../src/namegen.$(OBJEXT) ../src/s2s_keyring.$(OBJEXT) \
-	../src/s2s_transport.$(OBJEXT) ../src/schemas.$(OBJEXT) \
-	../src/server_auth.$(OBJEXT) ../src/server_autopilot.$(OBJEXT) \
-	../src/server_bank.$(OBJEXT) ../src/server_bigbang.$(OBJEXT) \
+	../src/s2s_keyring.$(OBJEXT) ../src/s2s_transport.$(OBJEXT) \
+	../src/schemas.$(OBJEXT) ../src/server_auth.$(OBJEXT) \
+	../src/server_autopilot.$(OBJEXT) ../src/server_bank.$(OBJEXT) \
 	../src/server_bulk.$(OBJEXT) ../src/server_citadel.$(OBJEXT) \
 	../src/server_clusters.$(OBJEXT) ../src/server_cmds.$(OBJEXT) \
 	../src/server_combat.$(OBJEXT) \
@@ -175,18 +154,17 @@ am__v_at_1 =
 DEFAULT_INCLUDES = -I. -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__maybe_remake_depfiles = depfiles
-am__depfiles_remade = ../src/$(DEPDIR)/common.Po \
-	../src/$(DEPDIR)/database.Po ../src/$(DEPDIR)/database_cmd.Po \
+am__depfiles_remade = ../src/$(DEPDIR)/bigbang_pg_main.Po \
+	../src/$(DEPDIR)/common.Po ../src/$(DEPDIR)/database_cmd.Po \
 	../src/$(DEPDIR)/database_market.Po \
 	../src/$(DEPDIR)/db_player_settings.Po \
 	../src/$(DEPDIR)/engine_consumer.Po \
-	../src/$(DEPDIR)/globals.Po ../src/$(DEPDIR)/namegen.Po \
+	../src/$(DEPDIR)/game_db.Po ../src/$(DEPDIR)/globals.Po \
 	../src/$(DEPDIR)/s2s_keyring.Po \
 	../src/$(DEPDIR)/s2s_transport.Po ../src/$(DEPDIR)/schemas.Po \
 	../src/$(DEPDIR)/server_auth.Po \
 	../src/$(DEPDIR)/server_autopilot.Po \
 	../src/$(DEPDIR)/server_bank.Po \
-	../src/$(DEPDIR)/server_bigbang.Po \
 	../src/$(DEPDIR)/server_bulk.Po \
 	../src/$(DEPDIR)/server_citadel.Po \
 	../src/$(DEPDIR)/server_clusters.Po \
@@ -210,7 +188,7 @@ am__depfiles_remade = ../src/$(DEPDIR)/common.Po \
 	../src/$(DEPDIR)/server_universe.Po \
 	../src/$(DEPDIR)/server_warp_post_processing.Po \
 	../src/$(DEPDIR)/sysop_interaction.Po \
-	../src/$(DEPDIR)/test_bang.Po
+	../src/db/$(DEPDIR)/db_api.Po ../src/db/pg/$(DEPDIR)/db_pg.Po
 am__mv = mv -f
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
@@ -250,12 +228,12 @@ am__define_uniq_tagged_files = \
   done | $(am__uniquify_input)`
 am__DIST_COMMON = $(srcdir)/Makefile.in $(top_srcdir)/depcomp
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
-ACLOCAL = ${SHELL} '/home/rick/twclone/missing' aclocal-1.16
+ACLOCAL = ${SHELL} '/home/rick/twdbfork/missing' aclocal-1.16
 AMTAR = $${TAR-tar}
 AM_DEFAULT_VERBOSITY = 1
-AUTOCONF = ${SHELL} '/home/rick/twclone/missing' autoconf
-AUTOHEADER = ${SHELL} '/home/rick/twclone/missing' autoheader
-AUTOMAKE = ${SHELL} '/home/rick/twclone/missing' automake-1.16
+AUTOCONF = ${SHELL} '/home/rick/twdbfork/missing' autoconf
+AUTOHEADER = ${SHELL} '/home/rick/twdbfork/missing' autoheader
+AUTOMAKE = ${SHELL} '/home/rick/twdbfork/missing' automake-1.16
 AWK = gawk
 CC = gcc
 CCDEPMODE = depmode=gcc3
@@ -276,12 +254,12 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-ISODATE = 2025-12-09
+ISODATE = 2025-12-29
 LDFLAGS = 
 LIBOBJS = 
 LIBS = -lpthread -lm 
 LTLIBOBJS = 
-MAKEINFO = ${SHELL} '/home/rick/twclone/missing' makeinfo
+MAKEINFO = ${SHELL} '/home/rick/twdbfork/missing' makeinfo
 MKDIR_P = /usr/bin/mkdir -p
 OBJEXT = o
 PACKAGE = twclone
@@ -292,14 +270,15 @@ PACKAGE_TARNAME = twclone
 PACKAGE_URL = 
 PACKAGE_VERSION = 0.0.2
 PATH_SEPARATOR = :
+PG_CONFIG = 
 SET_MAKE = 
 SHELL = /bin/bash
 STRIP = 
 VERSION = 0.0.2
-abs_builddir = /home/rick/twclone/bin
-abs_srcdir = /home/rick/twclone/bin
-abs_top_builddir = /home/rick/twclone
-abs_top_srcdir = /home/rick/twclone
+abs_builddir = /home/rick/twdbfork/bin
+abs_srcdir = /home/rick/twdbfork/bin
+abs_top_builddir = /home/rick/twdbfork
+abs_top_srcdir = /home/rick/twdbfork
 ac_ct_CC = gcc
 am__include = include
 am__leading_dot = .
@@ -326,7 +305,7 @@ host_vendor = pc
 htmldir = ${docdir}
 includedir = ${prefix}/include
 infodir = ${datarootdir}/info
-install_sh = ${SHELL} /home/rick/twclone/install-sh
+install_sh = ${SHELL} /home/rick/twdbfork/install-sh
 libdir = ${exec_prefix}/lib
 libexecdir = ${exec_prefix}/libexec
 localedir = ${datarootdir}/locale
@@ -348,29 +327,50 @@ top_build_prefix = ../
 top_builddir = ..
 top_srcdir = ..
 
-# AM_CFLAGS = -Wall -Wextra
-AM_CFLAGS = -Wall -Wextra  -D_GNU_SOURCE
-server_LDADD = -ljansson -lsqlite3 -lcrypto -lpthread -lm
-# bigbang_LDADD  = -ljansson -lsqlite3 -lpthread -lm
-# client_LDADD   = -ljansson -lsqlite3 -lpthread -lm
-bigbang_LDADD = -ljansson -lsqlite3 -lcrypto -lpthread -lm
+# 1. Define Sanitizer Flags
+SANITIZE_FLAGS = -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer -g
+
+# 2. Add the PostgreSQL include path explicitly
+# Replace /usr/include/postgresql with the result of 'pg_config --includedir' if different
+PG_INC = -I/usr/include/postgresql
+
+# 3. Update AM_CFLAGS
+# added $(PG_INC) here
+AM_CFLAGS = -Wall -Wextra -D_GNU_SOURCE -I../src $(PG_INC) -DDB_BACKEND_PG -ljansson -lpq $(SANITIZE_FLAGS)
+
+# 4. Linker flags
+AM_LDFLAGS = $(SANITIZE_FLAGS)
+server_LDADD = -ljansson -lcrypto -lpthread -lm -lpq
 AUTOMAKE_OPTIONS = subdir-objects
+
+# BigBang sources (PostgreSQL Only)
+bigbang_SOURCES = \
+        ../src/bigbang_pg_main.c \
+        ../src/db/db_api.c \
+        ../src/db/pg/db_pg.c \
+        ../src/common.c \
+        ../src/server_log.c
+
+bigbang_LDFLAGS = -ljansson -lpq
+bigbang_LDADD = -ljansson -lpq -lcrypto -lpthread -lm $(server_LDADD)
+
+# Server sources (now with DB abstraction)
 server_SOURCES = \
 	../src/common.c \
-	../src/database.c \
+	../src/db/db_api.c \
+	../src/db/pg/db_pg.c \
+	../src/game_db.c \
 	../src/database_cmd.c \
 	../src/database_market.c \
 	../src/db_player_settings.c \
 	../src/engine_consumer.c \
 	../src/globals.c \
-	../src/namegen.c \
 	../src/s2s_keyring.c \
 	../src/s2s_transport.c \
 	../src/schemas.c \
 	../src/server_auth.c \
 	../src/server_autopilot.c \
 	../src/server_bank.c \
-	../src/server_bigbang.c \
 	../src/server_bulk.c \
 	../src/server_citadel.c \
 	../src/server_clusters.c \
@@ -395,19 +395,6 @@ server_SOURCES = \
 	../src/server_universe.c \
 	../src/server_warp_post_processing.c \
 	../src/sysop_interaction.c
-
-bigbang_SOURCES = \
-	../src/database.c \
-        ../src/database_cmd.c \
-	../src/schemas.c \
-	../src/namegen.c \
-	../src/server_bigbang.c \
-	../src/server_warp_post_processing.c \
-	../src/globals.c \
-	../src/common.c \
-	../src/server_log.c \
-	../src/test_bang.c \
-	../src/server_clusters.c
 
 all: all-am
 
@@ -490,41 +477,49 @@ clean-binPROGRAMS:
 ../src/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) ../src/$(DEPDIR)
 	@: > ../src/$(DEPDIR)/$(am__dirstamp)
-../src/database.$(OBJEXT): ../src/$(am__dirstamp) \
+../src/bigbang_pg_main.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/database_cmd.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/schemas.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/namegen.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/server_bigbang.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/server_warp_post_processing.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/globals.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
+../src/db/$(am__dirstamp):
+	@$(MKDIR_P) ../src/db
+	@: > ../src/db/$(am__dirstamp)
+../src/db/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) ../src/db/$(DEPDIR)
+	@: > ../src/db/$(DEPDIR)/$(am__dirstamp)
+../src/db/db_api.$(OBJEXT): ../src/db/$(am__dirstamp) \
+	../src/db/$(DEPDIR)/$(am__dirstamp)
+../src/db/pg/$(am__dirstamp):
+	@$(MKDIR_P) ../src/db/pg
+	@: > ../src/db/pg/$(am__dirstamp)
+../src/db/pg/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) ../src/db/pg/$(DEPDIR)
+	@: > ../src/db/pg/$(DEPDIR)/$(am__dirstamp)
+../src/db/pg/db_pg.$(OBJEXT): ../src/db/pg/$(am__dirstamp) \
+	../src/db/pg/$(DEPDIR)/$(am__dirstamp)
 ../src/common.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_log.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/test_bang.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/server_clusters.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
 
 bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEPENDENCIES) 
 	@rm -f bigbang$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(bigbang_OBJECTS) $(bigbang_LDADD) $(LIBS)
+	$(AM_V_CCLD)$(bigbang_LINK) $(bigbang_OBJECTS) $(bigbang_LDADD) $(LIBS)
+../src/game_db.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
+../src/database_cmd.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/database_market.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/db_player_settings.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/engine_consumer.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
+../src/globals.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/s2s_keyring.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/s2s_transport.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
+../src/schemas.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_auth.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
@@ -535,6 +530,8 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 ../src/server_bulk.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_citadel.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_clusters.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_cmds.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
@@ -572,6 +569,8 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_universe.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_warp_post_processing.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/sysop_interaction.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 
@@ -582,25 +581,26 @@ server$(EXEEXT): $(server_OBJECTS) $(server_DEPENDENCIES) $(EXTRA_server_DEPENDE
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 	-rm -f ../src/*.$(OBJEXT)
+	-rm -f ../src/db/*.$(OBJEXT)
+	-rm -f ../src/db/pg/*.$(OBJEXT)
 
 distclean-compile:
 	-rm -f *.tab.c
 
+include ../src/$(DEPDIR)/bigbang_pg_main.Po # am--include-marker
 include ../src/$(DEPDIR)/common.Po # am--include-marker
-include ../src/$(DEPDIR)/database.Po # am--include-marker
 include ../src/$(DEPDIR)/database_cmd.Po # am--include-marker
 include ../src/$(DEPDIR)/database_market.Po # am--include-marker
 include ../src/$(DEPDIR)/db_player_settings.Po # am--include-marker
 include ../src/$(DEPDIR)/engine_consumer.Po # am--include-marker
+include ../src/$(DEPDIR)/game_db.Po # am--include-marker
 include ../src/$(DEPDIR)/globals.Po # am--include-marker
-include ../src/$(DEPDIR)/namegen.Po # am--include-marker
 include ../src/$(DEPDIR)/s2s_keyring.Po # am--include-marker
 include ../src/$(DEPDIR)/s2s_transport.Po # am--include-marker
 include ../src/$(DEPDIR)/schemas.Po # am--include-marker
 include ../src/$(DEPDIR)/server_auth.Po # am--include-marker
 include ../src/$(DEPDIR)/server_autopilot.Po # am--include-marker
 include ../src/$(DEPDIR)/server_bank.Po # am--include-marker
-include ../src/$(DEPDIR)/server_bigbang.Po # am--include-marker
 include ../src/$(DEPDIR)/server_bulk.Po # am--include-marker
 include ../src/$(DEPDIR)/server_citadel.Po # am--include-marker
 include ../src/$(DEPDIR)/server_clusters.Po # am--include-marker
@@ -625,7 +625,8 @@ include ../src/$(DEPDIR)/server_stardock.Po # am--include-marker
 include ../src/$(DEPDIR)/server_universe.Po # am--include-marker
 include ../src/$(DEPDIR)/server_warp_post_processing.Po # am--include-marker
 include ../src/$(DEPDIR)/sysop_interaction.Po # am--include-marker
-include ../src/$(DEPDIR)/test_bang.Po # am--include-marker
+include ../src/db/$(DEPDIR)/db_api.Po # am--include-marker
+include ../src/db/pg/$(DEPDIR)/db_pg.Po # am--include-marker
 
 $(am__depfiles_remade):
 	@$(MKDIR_P) $(@D)
@@ -768,6 +769,10 @@ distclean-generic:
 	-test . = "$(srcdir)" || test -z "$(CONFIG_CLEAN_VPATH_FILES)" || rm -f $(CONFIG_CLEAN_VPATH_FILES)
 	-rm -f ../src/$(DEPDIR)/$(am__dirstamp)
 	-rm -f ../src/$(am__dirstamp)
+	-rm -f ../src/db/$(DEPDIR)/$(am__dirstamp)
+	-rm -f ../src/db/$(am__dirstamp)
+	-rm -f ../src/db/pg/$(DEPDIR)/$(am__dirstamp)
+	-rm -f ../src/db/pg/$(am__dirstamp)
 
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
@@ -777,21 +782,20 @@ clean: clean-am
 clean-am: clean-binPROGRAMS clean-generic mostlyclean-am
 
 distclean: distclean-am
-		-rm -f ../src/$(DEPDIR)/common.Po
-	-rm -f ../src/$(DEPDIR)/database.Po
+		-rm -f ../src/$(DEPDIR)/bigbang_pg_main.Po
+	-rm -f ../src/$(DEPDIR)/common.Po
 	-rm -f ../src/$(DEPDIR)/database_cmd.Po
 	-rm -f ../src/$(DEPDIR)/database_market.Po
 	-rm -f ../src/$(DEPDIR)/db_player_settings.Po
 	-rm -f ../src/$(DEPDIR)/engine_consumer.Po
+	-rm -f ../src/$(DEPDIR)/game_db.Po
 	-rm -f ../src/$(DEPDIR)/globals.Po
-	-rm -f ../src/$(DEPDIR)/namegen.Po
 	-rm -f ../src/$(DEPDIR)/s2s_keyring.Po
 	-rm -f ../src/$(DEPDIR)/s2s_transport.Po
 	-rm -f ../src/$(DEPDIR)/schemas.Po
 	-rm -f ../src/$(DEPDIR)/server_auth.Po
 	-rm -f ../src/$(DEPDIR)/server_autopilot.Po
 	-rm -f ../src/$(DEPDIR)/server_bank.Po
-	-rm -f ../src/$(DEPDIR)/server_bigbang.Po
 	-rm -f ../src/$(DEPDIR)/server_bulk.Po
 	-rm -f ../src/$(DEPDIR)/server_citadel.Po
 	-rm -f ../src/$(DEPDIR)/server_clusters.Po
@@ -816,7 +820,8 @@ distclean: distclean-am
 	-rm -f ../src/$(DEPDIR)/server_universe.Po
 	-rm -f ../src/$(DEPDIR)/server_warp_post_processing.Po
 	-rm -f ../src/$(DEPDIR)/sysop_interaction.Po
-	-rm -f ../src/$(DEPDIR)/test_bang.Po
+	-rm -f ../src/db/$(DEPDIR)/db_api.Po
+	-rm -f ../src/db/pg/$(DEPDIR)/db_pg.Po
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -862,21 +867,20 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
-		-rm -f ../src/$(DEPDIR)/common.Po
-	-rm -f ../src/$(DEPDIR)/database.Po
+		-rm -f ../src/$(DEPDIR)/bigbang_pg_main.Po
+	-rm -f ../src/$(DEPDIR)/common.Po
 	-rm -f ../src/$(DEPDIR)/database_cmd.Po
 	-rm -f ../src/$(DEPDIR)/database_market.Po
 	-rm -f ../src/$(DEPDIR)/db_player_settings.Po
 	-rm -f ../src/$(DEPDIR)/engine_consumer.Po
+	-rm -f ../src/$(DEPDIR)/game_db.Po
 	-rm -f ../src/$(DEPDIR)/globals.Po
-	-rm -f ../src/$(DEPDIR)/namegen.Po
 	-rm -f ../src/$(DEPDIR)/s2s_keyring.Po
 	-rm -f ../src/$(DEPDIR)/s2s_transport.Po
 	-rm -f ../src/$(DEPDIR)/schemas.Po
 	-rm -f ../src/$(DEPDIR)/server_auth.Po
 	-rm -f ../src/$(DEPDIR)/server_autopilot.Po
 	-rm -f ../src/$(DEPDIR)/server_bank.Po
-	-rm -f ../src/$(DEPDIR)/server_bigbang.Po
 	-rm -f ../src/$(DEPDIR)/server_bulk.Po
 	-rm -f ../src/$(DEPDIR)/server_citadel.Po
 	-rm -f ../src/$(DEPDIR)/server_clusters.Po
@@ -901,7 +905,8 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/$(DEPDIR)/server_universe.Po
 	-rm -f ../src/$(DEPDIR)/server_warp_post_processing.Po
 	-rm -f ../src/$(DEPDIR)/sysop_interaction.Po
-	-rm -f ../src/$(DEPDIR)/test_bang.Po
+	-rm -f ../src/db/$(DEPDIR)/db_api.Po
+	-rm -f ../src/db/pg/$(DEPDIR)/db_pg.Po
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 

@@ -136,9 +136,8 @@
  /usr/include/x86_64-linux-gnu/bits/pthread_stack_min-dynamic.h \
  /usr/include/arpa/inet.h /usr/include/jansson.h \
  /usr/include/jansson_config.h \
- /usr/lib/gcc/x86_64-linux-gnu/13/include/stdbool.h \
- /usr/include/sqlite3.h ../src/database.h ../src/database_cmd.h \
- ../src/schemas.h ../src/errors.h ../config.h
+ /usr/lib/gcc/x86_64-linux-gnu/13/include/stdbool.h ../src/schemas.h \
+ ../src/errors.h ../config.h
 /usr/include/stdc-predef.h:
 /usr/include/stdio.h:
 /usr/include/x86_64-linux-gnu/bits/libc-header-start.h:
@@ -298,9 +297,6 @@
 /usr/include/jansson.h:
 /usr/include/jansson_config.h:
 /usr/lib/gcc/x86_64-linux-gnu/13/include/stdbool.h:
-/usr/include/sqlite3.h:
-../src/database.h:
-../src/database_cmd.h:
 ../src/schemas.h:
 ../src/errors.h:
 ../config.h:

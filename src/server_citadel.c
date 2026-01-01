@@ -5,40 +5,36 @@
 #include "server_players.h"
 #include "server_log.h"
 #include <jansson.h>
-#include <sqlite3.h>
-#include <time.h>
-#include <string.h>
 #include <strings.h>
 #include "server_corporation.h"
+#include "game_db.h"
 
 
 // Helper to get the player's current planet_id from their active ship.
 // Returns planet_id > 0 on success, 0 if not on a planet or error.
 static int
-get_player_planet (sqlite3 *db, int player_id)
+get_player_planet (db_t *db, int player_id)
 {
   int ship_id = h_get_active_ship_id (db, player_id);
   if (ship_id <= 0)
     {
       return 0;
     }
-  sqlite3_stmt *st = NULL;
-  const char *sql = "SELECT onplanet FROM ships WHERE id = ?1;";
-
-
-  if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
-    {
-      return 0;
-    }
-  sqlite3_bind_int (st, 1, ship_id);
+  const char *sql = "SELECT onplanet FROM ships WHERE ship_id = $1;";
+  db_bind_t params[] = { db_bind_i32 (ship_id) };
+  db_res_t *res = NULL;
+  db_error_t err;
   int planet_id = 0;
 
 
-  if (sqlite3_step (st) == SQLITE_ROW)
+  if (db_query (db, sql, params, 1, &res, &err))
     {
-      planet_id = sqlite3_column_int (st, 0);
+      if (db_res_step (res, &err))
+        {
+          planet_id = db_res_col_i32 (res, 0, &err);
+        }
+      db_res_finalize (res);
     }
-  sqlite3_finalize (st);
   return planet_id;
 }
 
@@ -75,13 +71,12 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
     {
       return 0;
     }
-  sqlite3 *db = db_get_handle ();
+  db_t *db = game_db_get_handle ();
 
 
   if (!db)
     {
-      send_response_error (ctx, root, ERR_SERVER_ERROR,
-                           "Database unavailable.");
+      send_response_error (ctx, root, ERR_DB, "Database unavailable.");
       return 0;
     }
   // 1. Get Player Location & Planet Info
@@ -97,36 +92,54 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
                                    NULL);
       return 0;
     }
-  sqlite3_stmt *planet_st = NULL;
+
   const char *sql_planet =
-    "SELECT type, owner_id, owner_type, colonist, ore_on_hand, organics_on_hand, equipment_on_hand FROM planets WHERE id = ?1;";
+    "SELECT type, owner_id, owner_type, colonist, ore_on_hand, organics_on_hand, equipment_on_hand FROM planets WHERE planet_id = $1;";
+  db_bind_t p_params[] = { db_bind_i32 (planet_id) };
+  db_res_t *p_res = NULL;
+  db_error_t err;
 
-
-  if (sqlite3_prepare_v2 (db, sql_planet, -1, &planet_st, NULL) != SQLITE_OK)
-    {
-      send_response_error (ctx, root, ERR_SERVER_ERROR,
-                           "Failed to query planet data.");
-      return 0;
-    }
-  sqlite3_bind_int (planet_st, 1, planet_id);
   int planet_type = 0, owner_id = 0;
+  const char *owner_type_db = NULL;
   char *owner_type = NULL;
   long long p_colonists = 0, p_ore = 0, p_org = 0, p_equip = 0;
 
-  if (sqlite3_step (planet_st) == SQLITE_ROW)
+
+  if (db_query (db,
+                sql_planet,
+                p_params,
+                1,
+                &p_res,
+                &err))
     {
-      planet_type = sqlite3_column_int (planet_st, 0);
-      owner_id = sqlite3_column_int (planet_st, 1);
-      const char *tmp = (const char *) sqlite3_column_text (planet_st, 2);
-      /* sqlite: column_text() pointer invalid after finalize/reset/step */
-      owner_type = tmp ? strdup (tmp) : NULL;
-      p_colonists = sqlite3_column_int64 (planet_st, 3);
-      p_ore = sqlite3_column_int64 (planet_st, 4);
-      p_org = sqlite3_column_int64 (planet_st, 5);
-      p_equip = sqlite3_column_int64 (planet_st, 6);
+      if (db_res_step (p_res, &err))
+        {
+          planet_type = db_res_col_i32 (p_res, 0, &err);
+          owner_id = db_res_col_i32 (p_res, 1, &err);
+          owner_type_db = db_res_col_text (p_res, 2, &err);
+          owner_type = owner_type_db ? strdup (owner_type_db) : NULL;
+          p_colonists = db_res_col_i64 (p_res, 3, &err);
+          p_ore = db_res_col_i64 (p_res, 4, &err);
+          p_org = db_res_col_i64 (p_res, 5, &err);
+          p_equip = db_res_col_i64 (p_res, 6, &err);
+        }
+      else
+        {
+          db_res_finalize (p_res);
+          send_response_error (ctx, root, ERR_DB,
+                               "Failed to query planet data.");
+          return 0;
+        }
+      db_res_finalize (p_res);
     }
-  sqlite3_finalize (planet_st);
+  else
+    {
+      send_response_error (ctx, root, err.code, "Failed to query planet data.");
+      return 0;
+    }
+
   bool can_build = false;
+
 
   if (owner_type && strcmp (owner_type, "player") == 0)
     {
@@ -138,6 +151,7 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
   else if (owner_type && strcmp (owner_type, "corp") == 0)
     {
       int player_corp_id = h_get_player_corp_id (db, ctx->player_id);
+
 
       if (player_corp_id > 0 && player_corp_id == owner_id)
         {
@@ -155,31 +169,31 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   // 2. Get Citadel State
-  sqlite3_stmt *citadel_st = NULL;
   const char *sql_citadel =
-    "SELECT level, construction_status FROM citadels WHERE planet_id = ?1;";
+    "SELECT level, construction_status FROM citadels WHERE planet_id = $1;";
   int current_level = 0;
+  const char *construction_status_db = NULL;
   char *construction_status = NULL;
+  db_res_t *c_res = NULL;
 
-  if (sqlite3_prepare_v2 (db, sql_citadel, -1, &citadel_st, NULL) ==
-      SQLITE_OK)
+
+  if (db_query (db, sql_citadel, p_params, 1, &c_res, &err))
     {
-      sqlite3_bind_int (citadel_st, 1, planet_id);
-      if (sqlite3_step (citadel_st) == SQLITE_ROW)
+      if (db_res_step (c_res, &err))
         {
-          current_level = sqlite3_column_int (citadel_st, 0);
-          const char *tmp = (const char *) sqlite3_column_text (citadel_st, 1);
-          /* sqlite: column_text() pointer invalid after finalize/reset/step */
-          construction_status = tmp ? strdup (tmp) : NULL;
+          current_level = db_res_col_i32 (c_res, 0, &err);
+          construction_status_db = db_res_col_text (c_res, 1, &err);
+          construction_status =
+            construction_status_db ? strdup (construction_status_db) : NULL;
         }
-      sqlite3_finalize (citadel_st);
+      db_res_finalize (c_res);
     }
   if (!construction_status)
     {
       construction_status = strdup ("idle");
     }
 
-  if (strcasecmp (construction_status, "idle") != 0)
+  if (construction_status && strcasecmp (construction_status, "idle") != 0)
     {
       send_response_refused_steal (ctx, root, ERR_SERIALIZATION,
                                    "An upgrade is already in progress.", NULL);
@@ -196,34 +210,37 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
     }
   int target_level = current_level + 1;
   // 3. Get Upgrade Requirements
-  char *sql_req_query =
-    sqlite3_mprintf
-    (
-      "SELECT citadelUpgradeColonist_lvl%d, citadelUpgradeOre_lvl%d, citadelUpgradeOrganics_lvl%d, citadelUpgradeEquipment_lvl%d, citadelUpgradeTime_lvl%d FROM planettypes WHERE id = %d;",
-      target_level,
-      target_level,
-      target_level,
-      target_level,
-      target_level,
-      planet_type);
-  sqlite3_stmt *req_st = NULL;
+  char sql_req[256];
+
+
+  snprintf (sql_req,
+            sizeof(sql_req),
+            "SELECT citadelUpgradeColonist_lvl%d, citadelUpgradeOre_lvl%d, citadelUpgradeOrganics_lvl%d, "
+            "citadelUpgradeEquipment_lvl%d, citadelUpgradeTime_lvl%d FROM planettypes WHERE planettypes_id = $1;",
+            target_level,
+            target_level,
+            target_level,
+            target_level,
+            target_level);
+
   long long r_colonists = 0, r_ore = 0, r_org = 0, r_equip = 0;
   int r_days = 0;
+  db_res_t *r_res = NULL;
 
 
-  if (sqlite3_prepare_v2 (db, sql_req_query, -1, &req_st, NULL) == SQLITE_OK)
+  if (db_query (db, sql_req, p_params, 1, &r_res, &err))
     {
-      if (sqlite3_step (req_st) == SQLITE_ROW)
+      if (db_res_step (r_res, &err))
         {
-          r_colonists = sqlite3_column_int64 (req_st, 0);
-          r_ore = sqlite3_column_int64 (req_st, 1);
-          r_org = sqlite3_column_int64 (req_st, 2);
-          r_equip = sqlite3_column_int64 (req_st, 3);
-          r_days = sqlite3_column_int (req_st, 4);
+          r_colonists = db_res_col_i64 (r_res, 0, &err);
+          r_ore = db_res_col_i64 (r_res, 1, &err);
+          r_org = db_res_col_i64 (r_res, 2, &err);
+          r_equip = db_res_col_i64 (r_res, 3, &err);
+          r_days = db_res_col_i32 (r_res, 4, &err);
         }
-      sqlite3_finalize (req_st);
+      db_res_finalize (r_res);
     }
-  sqlite3_free (sql_req_query);
+
   if (r_days <= 0)
     {
       send_response_error (ctx,
@@ -270,77 +287,61 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   // 5. Execute Upgrade
-  if (db_begin_transaction (db) != SQLITE_OK)
+  if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
     {
-       send_response_error (ctx, root, ERR_SERVER_ERROR, "Database busy (upgrade)");
-       return 0;
+      send_response_error (ctx,
+                           root,
+                           err.code,
+                           "Database busy (upgrade)");
+      return 0;
     }
 
   // Deduct resources
-  sqlite3_stmt *update_planet_st = NULL;
   const char *sql_update_planet =
-    "UPDATE planets SET ore_on_hand = ore_on_hand - ?1, organics_on_hand = organics_on_hand - ?2, equipment_on_hand = equipment_on_hand - ?3 WHERE id = ?4;";
+    "UPDATE planets SET ore_on_hand = ore_on_hand - $1, organics_on_hand = organics_on_hand - $2, equipment_on_hand = equipment_on_hand - $3 WHERE planet_id = $4;";
+  db_bind_t upd_p_params[] = { db_bind_i64 (r_ore), db_bind_i64 (r_org),
+                               db_bind_i64 (r_equip), db_bind_i32 (planet_id) };
 
 
-  if (sqlite3_prepare_v2 (db, sql_update_planet, -1, &update_planet_st, NULL)
-      == SQLITE_OK)
+  if (!db_exec (db, sql_update_planet, upd_p_params, 4, &err))
     {
-      sqlite3_bind_int64 (update_planet_st, 1, r_ore);
-      sqlite3_bind_int64 (update_planet_st, 2, r_org);
-      sqlite3_bind_int64 (update_planet_st, 3, r_equip);
-      sqlite3_bind_int (update_planet_st, 4, planet_id);
-      if (sqlite3_step (update_planet_st) != SQLITE_DONE)
-        {
-          db_safe_rollback (db, "citadel_upgrade");
-          send_response_error (ctx, root, ERR_SERVER_ERROR,
-                               "Failed to deduct resources.");
-          sqlite3_finalize (update_planet_st);
-          return 0;
-        }
-      sqlite3_finalize (update_planet_st);
-    }
-  else
-    {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      send_response_error (ctx, root, ERR_SERVER_ERROR,
-                           "Database error during resource deduction.");
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, err.code, "Failed to deduct resources.");
       return 0;
     }
+
   // Start construction
-  sqlite3_stmt *update_citadel_st = NULL;
   const char *sql_update_citadel =
-    "INSERT INTO citadels (planet_id, level, owner, construction_status, target_level, construction_start_time, construction_end_time) VALUES (?1, ?2, ?3, 'upgrading', ?4, ?5, ?6) ON CONFLICT(planet_id) DO UPDATE SET construction_status='upgrading', target_level=?4, construction_start_time=?5, construction_end_time=?6;";
+    "INSERT INTO citadels (planet_id, level, owner_id, construction_status, target_level, construction_start_time, construction_end_time) VALUES ($1, $2, $3, 'upgrading', $4, $5, $6) ON CONFLICT(planet_id) DO UPDATE SET construction_status='upgrading', target_level=$4, construction_start_time=$5, construction_end_time=$6;";
   long long start_time = time (NULL);
-  long long end_time = start_time + (r_days * 86400);   // Assuming 1 day = 86400 seconds
+  long long end_time = start_time + (r_days * 86400);
+
+  db_bind_t upd_c_params[] = {
+    db_bind_i32 (planet_id),
+    db_bind_i32 (current_level),
+    db_bind_i32 (ctx->player_id),
+    db_bind_i32 (target_level),
+    db_bind_i64 (start_time),
+    db_bind_i64 (end_time)
+  };
 
 
-  if (sqlite3_prepare_v2
-        (db, sql_update_citadel, -1, &update_citadel_st, NULL) == SQLITE_OK)
+  if (!db_exec (db, sql_update_citadel, upd_c_params, 6, &err))
     {
-      sqlite3_bind_int (update_citadel_st, 1, planet_id);
-      sqlite3_bind_int (update_citadel_st, 2, current_level);
-      sqlite3_bind_int (update_citadel_st, 3, ctx->player_id);
-      sqlite3_bind_int (update_citadel_st, 4, target_level);
-      sqlite3_bind_int64 (update_citadel_st, 5, start_time);
-      sqlite3_bind_int64 (update_citadel_st, 6, end_time);
-      if (sqlite3_step (update_citadel_st) != SQLITE_DONE)
-        {
-          sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-          send_response_error (ctx, root, ERR_SERVER_ERROR,
-                               "Failed to start citadel construction.");
-          sqlite3_finalize (update_citadel_st);
-          return 0;
-        }
-      sqlite3_finalize (update_citadel_st);
-    }
-  else
-    {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      send_response_error (ctx, root, ERR_SERVER_ERROR,
-                           "Database error during construction start.");
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx,
+                           root,
+                           err.code,
+                           "Failed to start citadel construction.");
       return 0;
     }
-  db_commit (db);
+
+  if (!db_tx_commit (db, &err))
+    {
+      send_response_error (ctx, root, err.code, "Commit failed.");
+      return 0;
+    }
+
   // Log the event for news generation
   json_t *event_payload = json_object ();
 
@@ -355,14 +356,14 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
   db_log_engine_event ((long long) time (NULL), "citadel.upgrade_started",
                        "player", ctx->player_id, 0, event_payload, NULL);
   // 6. Send Response
-  json_t *payload = json_object ();
+  json_t *payload_pl = json_object ();
 
 
-  json_object_set_new (payload, "planet_id", json_integer (planet_id));
-  json_object_set_new (payload, "target_level", json_integer (target_level));
-  json_object_set_new (payload, "completion_time", json_integer (end_time));
-  json_object_set_new (payload, "days_to_complete", json_integer (r_days));
-  send_response_ok_take (ctx, root, "citadel.upgrade_started", &payload);
+  json_object_set_new (payload_pl, "planet_id", json_integer (planet_id));
+  json_object_set_new (payload_pl, "target_level", json_integer (target_level));
+  json_object_set_new (payload_pl, "completion_time", json_integer (end_time));
+  json_object_set_new (payload_pl, "days_to_complete", json_integer (r_days));
+  send_response_ok_take (ctx, root, "citadel.upgrade_started", &payload_pl);
   return 0;
 }
 

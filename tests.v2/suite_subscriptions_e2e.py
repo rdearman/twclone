@@ -12,11 +12,11 @@ PORT = int(os.getenv("PORT", 1234))
 # Helper to give a ship to a player, needs admin client
 def give_ship_to_player(admin_client: TWClient, player_id: int, sector: int, username: str):
     sql = f"""
-        INSERT OR IGNORE INTO shiptypes (id, name, basecost, maxholds) VALUES (1, 'Scout', 1000, 100);
+        INSERT INTO shiptypes (id, name, basecost, maxholds) VALUES (1, 'Scout', 1000, 100) ON CONFLICT (id) DO NOTHING ON CONFLICT DO NOTHING;
         DELETE FROM ships WHERE id = {player_id};
         INSERT INTO ships (id, type_id, name, holds, sector, ported) VALUES ({player_id}, 1, '{username}Ship', 100, {sector}, 0);
         UPDATE players SET ship = {player_id}, sector = {sector} WHERE id = {player_id};
-        INSERT OR IGNORE INTO ship_ownership (ship_id, player_id, is_primary) VALUES ({player_id}, {player_id}, 1);
+        INSERT INTO ship_ownership (ship_id, player_id, is_primary) VALUES ({player_id}, {player_id}, 1) ON CONFLICT DO NOTHING;
     """
     admin_client.send_json({"command": "sys.raw_sql_exec", "data": {"sql": sql}})
     resp = admin_client.recv_next_non_notice()
@@ -97,7 +97,7 @@ def test_subscriptions():
         obs_client.login(obs_user, "pass") # Re-login to refresh ship state
 
         # Ensure sectors 1 and 2 exist
-        admin_client.send_json({"command": "sys.raw_sql_exec", "data": {"sql": "INSERT OR IGNORE INTO sectors (id, name) VALUES (1, 'Sector 1'); INSERT OR IGNORE INTO sectors (id, name) VALUES (2, 'Sector 2');"}})
+        admin_client.send_json({"command": "sys.raw_sql_exec", "data": {"sql": "INSERT INTO sectors (id, name) VALUES (1, 'Sector 1') ON CONFLICT DO NOTHING; INSERT INTO sectors (id, name) VALUES (2, 'Sector 2') ON CONFLICT DO NOTHING;"}})
         admin_client.recv_next_non_notice()
         
         # Warp observer to Sector 1

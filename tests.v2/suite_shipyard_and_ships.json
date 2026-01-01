@@ -15,21 +15,42 @@
     {
       "name": "Ensure 'Scout Marauder' shiptype exists",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT OR IGNORE INTO shiptypes (id, name, basecost, maxholds, maxfighters, maxshields, maxgenesis, max_detonators, max_probes, can_transwarp, can_planet_scan, can_long_range_scan, max_cloaks) VALUES (1, 'Scout Marauder', 1000, 100, 1000, 500, 5, 5, 5, 1, 1, 1, 1);" },
+      "data": { "sql": "INSERT INTO shiptypes (id, name, basecost, maxholds, maxfighters, maxshields, maxgenesis, max_detonators, max_probes, can_transwarp, can_planet_scan, can_long_range_scan, max_cloaks) VALUES (1, 'Scout Marauder', 1000, 100, 1000, 500, 5, 5, 5, true, true, true, 1) ON CONFLICT (id) DO NOTHING;" },
       "user": "admin",
       "expect": { "status": "ok" }
     },
     {
       "name": "Ensure 'Corporate Flagship' shiptype exists",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT OR IGNORE INTO shiptypes (id, name, basecost, maxholds, maxfighters, maxshields, maxgenesis, max_detonators, max_probes, can_transwarp, can_planet_scan, can_long_range_scan, max_cloaks) VALUES (2, 'Corporate Flagship', 1000000, 1000, 100, 100, 0, 0, 0, 0, 0, 0, 0);" },
+      "data": { "sql": "INSERT INTO shiptypes (id, name, basecost, maxholds, maxfighters, maxshields, maxgenesis, max_detonators, max_probes, can_transwarp, can_planet_scan, can_long_range_scan, max_cloaks) VALUES (2, 'Corporate Flagship', 1000000, 1000, 100, 100, 0, 0, 0, false, false, false, 0) ON CONFLICT (id) DO NOTHING;" },
       "user": "admin",
       "expect": { "status": "ok" }
     },
     {
-      "name": "Delete and Recreate Ship for Shipyard Tester",
+      "name": "Delete Old Ship",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "DELETE FROM ships WHERE id = @shipyard_tester_player_id; INSERT INTO ships (id, type_id, name, holds, sector, ported) VALUES (@shipyard_tester_player_id, 1, 'ShipyardTestShip', 100, 1, 0); UPDATE players SET ship = @shipyard_tester_player_id, sector = 1 WHERE id = @shipyard_tester_player_id; INSERT OR IGNORE INTO ship_ownership (ship_id, player_id, is_primary) VALUES (@shipyard_tester_player_id, @shipyard_tester_player_id, 1);" },
+      "data": { "sql": "DELETE FROM ships WHERE id = @shipyard_tester_player_id;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Create Ship for Shipyard Tester",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO ships (id, type_id, name, holds, sector, ported) VALUES (@shipyard_tester_player_id, 1, 'ShipyardTestShip', 100, 1, 0) ON CONFLICT (id) DO NOTHING;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Assign Ship to Shipyard Tester",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET ship = @shipyard_tester_player_id, sector = 1 WHERE id = @shipyard_tester_player_id;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Assign Ownership",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO ship_ownership (ship_id, player_id, is_primary) VALUES (@shipyard_tester_player_id, @shipyard_tester_player_id, true) ON CONFLICT (ship_id, player_id, role_id) DO NOTHING;" },
       "user": "admin",
       "expect": { "status": "ok" }
     },
@@ -42,14 +63,14 @@
     {
       "name": "Ensure Stardock Port Exists",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT OR IGNORE INTO ports (id, name, sector, type) VALUES (9, 'Stardock', 1, 9);" },
+      "data": { "sql": "INSERT INTO ports (id, name, sector, type) VALUES (9, 'Stardock', 1, 9) ON CONFLICT (id) DO NOTHING;" },
       "user": "admin",
       "expect": { "status": "ok" }
     },
     {
       "name": "Ensure Shipyard Inventory Exists for Type 2",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT OR IGNORE INTO shipyard_inventory (port_id, ship_type_id, enabled) VALUES (9, 2, 1);" },
+      "data": { "sql": "INSERT INTO shipyard_inventory (port_id, ship_type_id, enabled) VALUES (9, 2, true) ON CONFLICT (port_id, ship_type_id) DO NOTHING;" },
       "user": "admin",
       "expect": { "status": "ok" }
     },
@@ -76,7 +97,7 @@
         "type": "shipyard.list_v1"
       },
       "asserts": [
-          {"path": "data.available", "op": "*array"}
+          {"path": "data.available", "op": "type", "value": "array"}
       ]
     },
     {

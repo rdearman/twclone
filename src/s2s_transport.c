@@ -18,6 +18,7 @@
 #include <inttypes.h>
 #include "s2s_transport.h"
 #include "server_log.h"
+#include "server_config.h"
 #ifdef TCP_NODELAY
 
 
@@ -105,8 +106,8 @@ s2s_debug_dump_conn (const char *who, s2s_conn_t *c)
   inet_ntop (AF_INET, &la.sin_addr, lip, sizeof (lip));
   inet_ntop (AF_INET, &ra.sin_addr, rip, sizeof (rip));
   LOGI ("[%s] fd=%d local=%s:%u peer=%s:%u\n", who, c->fd,
-	lip, (unsigned) ntohs (la.sin_port), rip,
-	(unsigned) ntohs (ra.sin_port));
+        lip, (unsigned) ntohs (la.sin_port), rip,
+        (unsigned) ntohs (ra.sin_port));
   //  // fprintf (stderr, "[%s] fd=%d local=%s:%u peer=%s:%u\n", who, c->fd,
   //       lip, (unsigned) ntohs (la.sin_port), rip,
   //       (unsigned) ntohs (ra.sin_port));
@@ -136,9 +137,9 @@ find_key (const char *key_id)
   for (size_t i = 0; i < g_key_count; i++)
     {
       if (strncmp (g_keys[i].key_id, key_id, sizeof (g_keys[i].key_id)) == 0)
-	{
-	  return &g_keys[i];
-	}
+        {
+          return &g_keys[i];
+        }
     }
   return NULL;
 }
@@ -165,25 +166,25 @@ poll_wait (int fd, short events, int timeout_ms)
 
 
       if (rc == 0)
-	{
-	  return S2S_E_TIMEOUT;
-	}
+        {
+          return S2S_E_TIMEOUT;
+        }
       if (rc < 0)
-	{
-	  if (errno == EINTR)
-	    {
-	      continue;
-	    }
-	  return S2S_E_IO;
-	}
+        {
+          if (errno == EINTR)
+            {
+              continue;
+            }
+          return S2S_E_IO;
+        }
       if (p.revents & (POLLERR | POLLHUP | POLLNVAL))
-	{
-	  return S2S_E_CLOSED;
-	}
+        {
+          return S2S_E_CLOSED;
+        }
       if (p.revents & events)
-	{
-	  return S2S_OK;
-	}
+        {
+          return S2S_OK;
+        }
     }
 }
 
@@ -199,24 +200,24 @@ read_n (int fd, void *buf, size_t n, int timeout_ms)
 
 
       if (rc != S2S_OK)
-	{
-	  return rc;
-	}
+        {
+          return rc;
+        }
       ssize_t k = recv (fd, p + off, n - off, 0);
 
 
       if (k == 0)
-	{
-	  return S2S_E_CLOSED;
-	}
+        {
+          return S2S_E_CLOSED;
+        }
       if (k < 0)
-	{
-	  if (errno == EINTR)
-	    {
-	      continue;
-	    }
-	  return S2S_E_IO;
-	}
+        {
+          if (errno == EINTR)
+            {
+              continue;
+            }
+          return S2S_E_IO;
+        }
       off += (size_t) k;
     }
   return S2S_OK;
@@ -234,20 +235,20 @@ write_n (int fd, const void *buf, size_t n, int timeout_ms)
 
 
       if (rc != S2S_OK)
-	{
-	  return rc;
-	}
+        {
+          return rc;
+        }
       ssize_t k = send (fd, p + off, n - off, 0);
 
 
       if (k <= 0)
-	{
-	  if (errno == EINTR)
-	    {
-	      continue;
-	    }
-	  return S2S_E_IO;
-	}
+        {
+          if (errno == EINTR)
+            {
+              continue;
+            }
+          return S2S_E_IO;
+        }
       off += (size_t) k;
     }
   return S2S_OK;
@@ -257,7 +258,7 @@ write_n (int fd, const void *buf, size_t n, int timeout_ms)
 /* --- HMAC helpers (SHA-256, hex) --- */
 static int
 hmac_sha256_hex (const uint8_t *key, size_t keylen,
-		 const uint8_t *msg, size_t msglen, char out_hex[65])
+                 const uint8_t *msg, size_t msglen, char out_hex[65])
 {
   unsigned int maclen = 0;
   unsigned char mac[EVP_MAX_MD_SIZE];
@@ -362,19 +363,19 @@ s2s_tcp_client_connect (const char *host, uint16_t port, int total_timeout_ms)
   while (elapsed < total_timeout_ms)
     {
       if (connect (fd, (struct sockaddr *) &a, sizeof (a)) == 0)
-	{
-	  set_nodelay (fd);
-	  s2s_conn_t *c = calloc (1, sizeof (*c));
+        {
+          set_nodelay (fd);
+          s2s_conn_t *c = calloc (1, sizeof (*c));
 
 
-	  c->fd = fd;
-	  c->role = S2S_ROLE_CLIENT;
-	  return c;
-	}
+          c->fd = fd;
+          c->role = S2S_ROLE_CLIENT;
+          return c;
+        }
       usleep (backoff * 1000);
       elapsed += backoff;
       backoff =
-	(backoff * 2 > S2S_BACKOFF_MAX_MS) ? S2S_BACKOFF_MAX_MS : backoff * 2;
+        (backoff * 2 > S2S_BACKOFF_MAX_MS) ? S2S_BACKOFF_MAX_MS : backoff * 2;
     }
   close (fd);
   return NULL;
@@ -405,7 +406,7 @@ ensure_hmac_on_send (json_t *obj)
     {
       return S2S_E_AUTH_REQUIRED;
     }
-  const s2s_key_t *k = &g_keys[0];	/* single-key for now; extend to choose by key_id */
+  const s2s_key_t *k = &g_keys[0];      /* single-key for now; extend to choose by key_id */
   /* Serialize without auth fields first */
   json_t *copy = json_deep_copy (obj);
 
@@ -424,7 +425,7 @@ ensure_hmac_on_send (json_t *obj)
 
 
   if (hmac_sha256_hex
-      (k->key, k->key_len, (uint8_t *) payload, strlen (payload), hex) < 0)
+        (k->key, k->key_len, (uint8_t *) payload, strlen (payload), hex) < 0)
     {
       free (payload);
       return S2S_E_IO;
@@ -479,7 +480,7 @@ verify_hmac_on_recv (json_t *obj)
 
 
   if (hmac_sha256_hex
-      (k->key, k->key_len, (uint8_t *) payload, strlen (payload), hex) >= 0)
+        (k->key, k->key_len, (uint8_t *) payload, strlen (payload), hex) >= 0)
     {
       ok = (strncmp (hex, sig_hex, 64) == 0);
     }
@@ -514,8 +515,11 @@ s2s_send_json (s2s_conn_t *c, json_t *obj, int timeout_ms)
   size_t len = strlen (payload);
 
 
-  if (len > S2S_MAX_FRAME)
+  if (len > g_cfg.s2s.frame_size_limit)
     {
+      LOGE ("s2s_send_json: frame too large (%zu > %d)",
+            len,
+            g_cfg.s2s.frame_size_limit);
       free (payload);
       g_ctr.toolarge++;
       return S2S_E_TOOLARGE;
@@ -525,12 +529,12 @@ s2s_send_json (s2s_conn_t *c, json_t *obj, int timeout_ms)
 
   rc =
     write_n (c->fd, &be, sizeof (be),
-	     timeout_ms > 0 ? timeout_ms : S2S_DEFAULT_TIMEOUT_MS);
+             timeout_ms > 0 ? timeout_ms : S2S_DEFAULT_TIMEOUT_MS);
   if (rc == S2S_OK)
     {
       rc =
-	write_n (c->fd, payload, len,
-		 timeout_ms > 0 ? timeout_ms : S2S_DEFAULT_TIMEOUT_MS);
+        write_n (c->fd, payload, len,
+                 timeout_ms > 0 ? timeout_ms : S2S_DEFAULT_TIMEOUT_MS);
     }
   free (payload);
   if (rc == S2S_OK)
@@ -550,7 +554,7 @@ s2s_recv_json (s2s_conn_t *c, json_t **out, int timeout_ms)
     }
   uint32_t be = 0;
   int rc = read_n (c->fd, &be, sizeof (be),
-		   timeout_ms > 0 ? timeout_ms : S2S_DEFAULT_TIMEOUT_MS);
+                   timeout_ms > 0 ? timeout_ms : S2S_DEFAULT_TIMEOUT_MS);
 
 
   if (rc != S2S_OK)
@@ -560,8 +564,11 @@ s2s_recv_json (s2s_conn_t *c, json_t **out, int timeout_ms)
   uint32_t len = ntohl (be);
 
 
-  if (len == 0 || len > S2S_MAX_FRAME)
+  if (len == 0 || len > g_cfg.s2s.frame_size_limit)
     {
+      LOGE ("s2s_recv_json: invalid/large frame length (%u, limit=%d)",
+            len,
+            g_cfg.s2s.frame_size_limit);
       g_ctr.toolarge++;
       return S2S_E_TOOLARGE;
     }
@@ -574,7 +581,7 @@ s2s_recv_json (s2s_conn_t *c, json_t **out, int timeout_ms)
     }
   rc =
     read_n (c->fd, buf, len,
-	    timeout_ms > 0 ? timeout_ms : S2S_DEFAULT_TIMEOUT_MS);
+            timeout_ms > 0 ? timeout_ms : S2S_DEFAULT_TIMEOUT_MS);
   if (rc != S2S_OK)
     {
       free (buf);
@@ -601,3 +608,4 @@ s2s_recv_json (s2s_conn_t *c, json_t **out, int timeout_ms)
   g_ctr.recv_ok++;
   return S2S_OK;
 }
+

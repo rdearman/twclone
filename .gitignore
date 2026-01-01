@@ -10,6 +10,8 @@
 *.exe
 *.out
 twconfig.db
+bigbang.json
+
 
 # Libraries
 .libs/
@@ -75,3 +77,4 @@ __pycache__
 ai_player/bugs
 temp_parser_test.err
 temp_parser_test.py
+.aider*

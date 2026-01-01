@@ -1,4 +1,4 @@
-#include <sqlite3.h>
+/* src/server_bank.c */
 #include <stdio.h>
 #include <stdint.h>
 #include <jansson.h>
@@ -7,9 +7,11 @@
 #include <stdlib.h>
 #include <time.h>
 #include <errno.h>
+
 /* local includes */
 #include "server_players.h"
 #include "database.h"
+#include "game_db.h"
 #include "database_cmd.h"
 #include "errors.h"
 #include "config.h"
@@ -23,18 +25,1103 @@
 #include "server_ships.h"
 #include "server_loop.h"
 #include "server_bank.h"
+#include "db/db_api.h"
 
 
-/* Bank Commands */
+/* ==================================================================== */
+
+
+/* STATIC HELPER DEFINITIONS                                            */
+
+
+/* ==================================================================== */
+
+
+int
+h_player_bank_balance_add (db_t *db, int player_id, long long delta,
+                           long long *new_balance_out)
+{
+  if (!db || player_id <= 0 || !new_balance_out)
+    {
+      return ERR_DB_MISUSE;
+    }
+
+  db_error_t err;
+
+
+  db_error_clear (&err);
+
+  /*
+   * 1) Try UPDATE with bounds; if no row and delta>=0, INSERT account.
+   * Return: account_id, new_balance
+   */
+  const char *sql =
+    "WITH upd AS ("
+    "  UPDATE bank_accounts "
+    "  SET balance = balance + $2 "
+    "  WHERE owner_type = 'player' AND owner_id = $1 "
+    "    AND currency = 'CRD' AND is_active = 1 "
+    "    AND (balance + $2) >= 0 "
+    "  RETURNING id, balance"
+    "), ins AS ("
+    "  INSERT INTO bank_accounts (owner_type, owner_id, currency, balance, is_active) "
+    "  SELECT 'player', $1, 'CRD', $2, 1 "
+    "  WHERE $2 >= 0 AND NOT EXISTS ("
+    "    SELECT 1 FROM bank_accounts "
+    "    WHERE owner_type = 'player' AND owner_id = $1 "
+    "      AND currency = 'CRD' AND is_active = 1"
+    "  ) "
+    "  RETURNING id, balance"
+    ") "
+    "SELECT id, balance FROM upd "
+    "UNION ALL "
+    "SELECT id, balance FROM ins;";
+
+  db_bind_t params[] = {
+    db_bind_i32 ((int32_t) player_id),
+    db_bind_i64 ((int64_t) delta)
+  };
+
+  db_res_t *res = NULL;
+
+
+  if (!db_query (db, sql, params, 2, &res, &err))
+    {
+      return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    }
+
+  bool have_row = db_res_step (res, &err);
+  int64_t account_id = 0;
+  int64_t new_bal = 0;
+
+
+  if (have_row && !err.code)
+    {
+      account_id = db_res_col_i64 (res, 0, &err);
+      new_bal = db_res_col_i64 (res, 1, &err);
+    }
+
+  db_res_finalize (res);
+
+  if (err.code)
+    {
+      return err.code;
+    }
+
+  if (!have_row)
+    {
+      /*
+       * Either:
+       * - account missing and delta < 0 (cannot create for debit)
+       * - account exists but insufficient funds (UPDATE filtered it out)
+       *
+       * Distinguish with a quick existence check.
+       */
+      db_error_clear (&err);
+      const char *sql_exists =
+        "SELECT 1 FROM bank_accounts "
+        "WHERE owner_type='player' AND owner_id=$1 AND currency='CRD' AND is_active=1 "
+        "LIMIT 1;";
+
+      db_bind_t p2[] = { db_bind_i32 ((int32_t) player_id) };
+
+
+      res = NULL;
+
+      if (!db_query (db, sql_exists, p2, 1, &res, &err))
+        {
+          return err.code ? err.code : ERR_DB_QUERY_FAILED;
+        }
+
+      bool exists = db_res_step (res, &err);
+
+
+      db_res_finalize (res);
+
+      if (err.code)
+        {
+          return err.code;
+        }
+
+      return exists ? ERR_DB_CONSTRAINT : ERR_DB_NOT_FOUND;
+    }
+
+  /*
+   * 2) Insert minimal ledger row into bank_transactions (best-effort but treated as required).
+   * Schema: (account_id, tx_type, direction, amount, currency, description, ts, balance_after)
+   */
+  {
+    db_error_clear (&err);
+
+    const char *tx_sql =
+      "INSERT INTO bank_transactions "
+      "  (account_id, tx_type, direction, amount, currency, description, ts, balance_after) "
+      "VALUES "
+      "  ($1, $2, $3, $4, 'CRD', $5, $6, $7);";
+
+    const char *direction = (delta >= 0) ? "CREDIT" : "DEBIT";
+    int64_t amount_abs = (delta >= 0) ? (int64_t) delta : (int64_t) (-delta);
+    int64_t ts = (int64_t) time (NULL);
+
+    /* Keep description stable and generic (you can refine later). */
+    const char *desc = "player bank balance adjustment";
+
+    db_bind_t tx_params[] = {
+      db_bind_i64 (account_id),
+      db_bind_text ("ADJUSTMENT"),
+      db_bind_text (direction),
+      db_bind_i64 (amount_abs),
+      db_bind_text (desc),
+      db_bind_i64 (ts),
+      db_bind_i64 (new_bal)
+    };
+
+    db_res_t *tx_res = NULL;
+
+
+    if (!db_query (db, tx_sql,
+                   tx_params,
+                   sizeof (tx_params) / sizeof (tx_params[0]),
+                   &tx_res,
+                   &err))
+      {
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+      }
+
+    /* INSERT returns no rows; step isn’t needed. */
+    db_res_finalize (tx_res);
+
+    if (err.code)
+      {
+        return err.code;
+      }
+  }
+
+  *new_balance_out = (long long) new_bal;
+  return 0;
+}
+
+
+static int
+stmt_to_json_array (db_res_t *st, json_t **out_array, db_error_t *err)
+{
+  if (!out_array)
+    {
+      while (db_res_step (st, err))
+        {
+        }
+      return 0;
+    }
+  json_t *arr = json_array ();
+
+
+  if (!arr)
+    {
+      return ERR_NOMEM;
+    }
+
+  while (db_res_step (st, err))
+    {
+      int cols = db_res_col_count (st);
+      json_t *obj = json_object ();
+
+
+      if (!obj)
+        {
+          db_res_cancel (st); json_decref (arr); return ERR_NOMEM;
+        }
+      for (int i = 0; i < cols; i++)
+        {
+          const char *col_name = db_res_col_name (st, i);
+          db_col_type_t col_type = db_res_col_type (st, i);
+          json_t *val = NULL;
+
+
+          switch (col_type)
+            {
+              case DB_TYPE_INTEGER: val = json_integer (db_res_col_i64 (st,
+                                                                        i,
+                                                                        err));
+                break;
+              case DB_TYPE_FLOAT: val = json_real (db_res_col_double (st, i,
+                                                                      err));
+                break;
+              case DB_TYPE_TEXT: val = json_string (db_res_col_text (st, i,
+                                                                     err) ?:
+                                                    ""); break;
+              case DB_TYPE_NULL: val = json_null (); break;
+              default: val = json_null (); break;
+            }
+          json_object_set_new (obj, col_name, val ?: json_null ());
+        }
+      json_array_append_new (arr, obj);
+    }
+  *out_array = arr;
+  return 0;
+}
+
+
+/* ==================================================================== */
+
+
+/* HELPER FUNCTIONS (Restored)                                         */
+
+
+/* ==================================================================== */
+
+
+static int
+h_get_bank_balance (db_t *db,
+                    const char *owner_type,
+                    int owner_id,
+                    long long *out_balance)
+{
+  if (!db || !owner_type || !out_balance)
+    {
+      return ERR_DB_MISUSE;
+    }
+  db_res_t *res = NULL;
+  db_error_t err;
+  const char *sql =
+    "SELECT balance FROM bank_accounts WHERE owner_type = $1 AND owner_id = $2 AND is_active = 1;";
+  db_bind_t params[] = { db_bind_text (owner_type), db_bind_i32 (owner_id) };
+
+
+  if (db_query (db, sql, params, 2, &res, &err))
+    {
+      if (db_res_step (res, &err))
+        {
+          *out_balance = db_res_col_i64 (res, 0, &err);
+          db_res_finalize (res);
+          return 0;
+        }
+      db_res_finalize (res);
+      return ERR_NOT_FOUND;
+    }
+  return err.code;
+}
+
+
+/* Helper: Resolve owner_type/id to a bank_accounts.id */
+int
+h_get_account_id_unlocked (db_t *db,
+                           const char *owner_type,
+                           int owner_id,
+                           int *account_id_out)
+{
+  if (!db || !owner_type || !account_id_out)
+    {
+      return ERR_INVALID_ARG;
+    }
+
+  const char *sql =
+    "SELECT id FROM bank_accounts WHERE owner_type = $1 AND owner_id = $2";
+  db_bind_t params[] = { db_bind_text (owner_type), db_bind_i32 (owner_id) };
+  db_res_t *res = NULL;
+  db_error_t err;
+
+
+  if (!db_query (db, sql, params, 2, &res, &err))
+    {
+      return err.code;
+    }
+
+  int rc = ERR_NOT_FOUND;
+
+
+  if (db_res_step (res, &err))
+    {
+      *account_id_out = db_res_col_i32 (res, 0, &err);
+      rc = 0;
+    }
+  db_res_finalize (res);
+  return rc;
+}
+
+
+int
+h_get_system_account_id_unlocked (db_t *db, const char *system_owner_type,
+                                  int system_owner_id, int *account_id_out)
+{
+  int rc = h_get_account_id_unlocked (db, system_owner_type, system_owner_id,
+                                      account_id_out);
+  if (rc == ERR_NOT_FOUND)
+    {
+      /* Create the system account if it doesn't exist */
+      rc =
+        h_create_bank_account_unlocked (db, system_owner_type,
+                                        system_owner_id, 0, NULL);
+      if (rc == 0)
+        {
+          rc = h_get_account_id_unlocked (db,
+                                          system_owner_type,
+                                          system_owner_id,
+                                          account_id_out);
+        }
+    }
+  return rc;
+}
+
+
+static int
+h_create_personal_bank_alert_notice (db_t *db, int player_id, const char *msg)
+{
+  db_error_t err;
+  const char *sql =
+    "INSERT INTO system_notice (created_at, scope, player_id, title, body, severity) VALUES (EXTRACT(EPOCH FROM now()), 'player', $1, 'Bank Alert', $2, 'info');";
+  db_bind_t params[] = { db_bind_i32 (player_id), db_bind_text (msg) };
+
+
+  if (!db_exec (db, sql, params, 2, &err))
+    {
+      return err.code;
+    }
+  return 0;
+}
+
+
+int
+calculate_fees (db_t *db,
+                const char *tx_type,
+                long long base_amount,
+                const char *owner_type,
+                fee_result_t *out)
+{
+  (void) db;
+  (void) tx_type;
+  (void) base_amount;
+  (void) owner_type;
+
+  if (out)
+    {
+      out->fee_total = 0;
+      out->fee_to_bank = 0;
+      out->tax_to_system = 0;
+    }
+  return 0;
+}
+
+
+static long long
+h_get_account_alert_threshold_unlocked (db_t *db,
+                                        int account_id,
+                                        const char *owner_type)
+{
+  (void) account_id;
+  if (strcmp (owner_type, "player") == 0)
+    {
+      return (long long) h_get_config_int_unlocked (db,
+                                                    "bank_player_alert_threshold",
+                                                    1000000);
+    }
+  return 9223372036854775807LL; // Max for others
+}
+
+
+int
+db_get_player_bank_balance (db_t *db, int player_id, long long *balance_out)
+{
+  return h_get_bank_balance (db, "player", player_id, balance_out);
+}
+
+
+int
+db_get_corp_bank_balance (db_t *db, int corp_id, long long *balance_out)
+{
+  return h_get_bank_balance (db, "corp", corp_id, balance_out);
+}
+
+
+int
+db_get_npc_bank_balance (db_t *db, int npc_id, long long *balance_out)
+{
+  return h_get_bank_balance (db, "npc", npc_id, balance_out);
+}
+
+
+int
+db_get_port_bank_balance (db_t *db, int port_id, long long *balance_out)
+{
+  return h_get_bank_balance (db, "port", port_id, balance_out);
+}
+
+
+int
+db_get_planet_bank_balance (db_t *db, int planet_id, long long *balance_out)
+{
+  return h_get_bank_balance (db, "planet", planet_id, balance_out);
+}
+
+
+int
+h_add_credits_unlocked (db_t *db,
+                        int account_id,
+                        long long amount,
+                        const char *tx_type,
+                        const char *tx_group_id,
+                        long long *out_new_balance)
+{
+  if (!db || account_id <= 0 || amount < 0 || !tx_type)
+    {
+      return ERR_DB_MISUSE;
+    }
+  db_error_t err;
+  const char *sql_upd =
+    "UPDATE bank_accounts SET balance = balance + $1 WHERE id = $2 RETURNING balance;";
+  db_bind_t params[] = { db_bind_i64 (amount), db_bind_i32 (account_id) };
+  db_res_t *res = NULL;
+
+
+  if (!db_query (db, sql_upd, params, 2, &res, &err))
+    {
+      return err.code;
+    }
+  long long new_balance = 0;
+
+
+  if (db_res_step (res, &err))
+    {
+      new_balance = db_res_col_i64 (res, 0, &err);
+    }
+  else
+    {
+      db_res_finalize (res);
+      return ERR_NOT_FOUND;
+    }
+  db_res_finalize (res);
+
+
+  const char *sql_tx =
+    "INSERT INTO bank_transactions (account_id, tx_type, direction, amount, currency, balance_after, tx_group_id, ts) "
+    "VALUES ($1, $2, 'CREDIT', $3, 'CRD', $4, $5, EXTRACT(EPOCH FROM now())::bigint);";
+  db_bind_t tx_params[] = {
+    db_bind_i32 (account_id), db_bind_text (tx_type), db_bind_i64 (amount),
+    db_bind_i64 (new_balance), db_bind_text (tx_group_id ? tx_group_id : "")
+  };
+
+
+  if (!db_exec (db, sql_tx, tx_params, 5, &err))
+    {
+      return err.code;
+    }
+
+
+  if (out_new_balance)
+    {
+      *out_new_balance = new_balance;
+    }
+  return 0;
+}
+
+
+int
+h_deduct_credits_unlocked (db_t *db,
+                           int account_id,
+                           long long amount,
+                           const char *tx_type,
+                           const char *tx_group_id,
+                           long long *out_new_balance)
+{
+  if (!db || account_id <= 0 || amount < 0 || !tx_type)
+    {
+      return ERR_DB_MISUSE;
+    }
+  db_error_t err;
+  const char *sql_upd =
+    "UPDATE bank_accounts SET balance = balance - $1 WHERE id = $2 AND balance >= $1 RETURNING balance;";
+  db_bind_t params[] = { db_bind_i64 (amount), db_bind_i32 (account_id) };
+  db_res_t *res = NULL;
+
+
+  if (!db_query (db, sql_upd, params, 2, &res, &err))
+    {
+      return err.code;
+    }
+  long long new_balance = 0;
+
+
+  if (db_res_step (res, &err))
+    {
+      new_balance = db_res_col_i64 (res, 0, &err);
+    }
+  else
+    {
+      db_res_finalize (res);
+      return ERR_INSUFFICIENT_FUNDS;
+    }
+  db_res_finalize (res);
+
+
+  const char *sql_tx =
+    "INSERT INTO bank_transactions (account_id, tx_type, direction, amount, currency, balance_after, tx_group_id, ts) "
+    "VALUES ($1, $2, 'DEBIT', $3, 'CRD', $4, $5, EXTRACT(EPOCH FROM now())::bigint);";
+  db_bind_t tx_params[] = {
+    db_bind_i32 (account_id), db_bind_text (tx_type), db_bind_i64 (amount),
+    db_bind_i64 (new_balance), db_bind_text (tx_group_id ? tx_group_id : "")
+  };
+
+
+  if (!db_exec (db, sql_tx, tx_params, 5, &err))
+    {
+      return err.code;
+    }
+
+
+  if (out_new_balance)
+    {
+      *out_new_balance = new_balance;
+    }
+  return 0;
+}
+
+
+int
+h_create_bank_account_unlocked (db_t *db,
+                                const char *owner_type,
+                                int owner_id,
+                                long long initial_balance,
+                                int *account_id_out)
+{
+  if (!db || !owner_type)
+    {
+      return ERR_DB_MISUSE;
+    }
+  db_error_t err;
+  const char *sql =
+    "INSERT INTO bank_accounts (owner_type, owner_id, balance, interest_rate_bp, is_active) VALUES ($1, $2, $3, 0, 1) ON CONFLICT DO NOTHING;";
+  db_bind_t params[] = { db_bind_text (owner_type), db_bind_i32 (owner_id),
+                         db_bind_i64 (initial_balance) };
+
+
+  if (!db_exec (db, sql, params, 3, &err))
+    {
+      return err.code;
+    }
+
+  if (account_id_out)
+    {
+      return h_get_account_id_unlocked (db, owner_type, owner_id,
+                                        account_id_out);
+    }
+  return 0;
+}
+
+
+int
+h_add_credits (db_t *db,
+               const char *owner_type,
+               int owner_id,
+               long long amount,
+               const char *tx_type,
+               const char *tx_group_id,
+               long long *out_new_balance)
+{
+  if (!db || !owner_type || amount < 0 || !tx_type)
+    {
+      return ERR_DB_MISUSE;
+    }
+  int account_id = 0;
+  int rc = h_get_account_id_unlocked (db, owner_type, owner_id, &account_id);
+
+
+  if (rc == ERR_NOT_FOUND)
+    {
+      rc = h_create_bank_account_unlocked (db, owner_type, owner_id, 0, NULL);
+      if (rc != 0)
+        {
+          return rc;
+        }
+      rc = h_get_account_id_unlocked (db, owner_type, owner_id, &account_id);
+    }
+  if (rc != 0)
+    {
+      return rc;
+    }
+
+
+  rc = h_add_credits_unlocked (db,
+                               account_id,
+                               amount,
+                               tx_type,
+                               tx_group_id,
+                               out_new_balance);
+  if (rc == 0 && strcmp (owner_type, "player") == 0)
+    {
+      long long threshold = h_get_account_alert_threshold_unlocked (db,
+                                                                    account_id,
+                                                                    owner_type);
+
+
+      if (amount >= threshold)
+        {
+          char msg[256];
+
+
+          snprintf (msg,
+                    sizeof (msg),
+                    "Deposit of %lld credits received. New balance: %lld.",
+                    amount,
+                    out_new_balance ? *out_new_balance : 0);
+          h_create_personal_bank_alert_notice (db, owner_id, msg);
+        }
+    }
+  return rc;
+}
+
+
+int
+h_deduct_credits (db_t *db,
+                  const char *owner_type,
+                  int owner_id,
+                  long long amount,
+                  const char *tx_type,
+                  const char *tx_group_id,
+                  long long *out_new_balance)
+{
+  if (!db || !owner_type || amount < 0 || !tx_type)
+    {
+      return ERR_DB_MISUSE;
+    }
+  int account_id = 0;
+  int rc = h_get_account_id_unlocked (db, owner_type, owner_id, &account_id);
+
+
+  if (rc != 0)
+    {
+      LOGE ("h_deduct_credits: Account not found for %s %d", owner_type,
+            owner_id);
+      return rc;
+    }
+
+
+  rc = h_deduct_credits_unlocked (db,
+                                  account_id,
+                                  amount,
+                                  tx_type,
+                                  tx_group_id,
+                                  out_new_balance);
+  if (rc != 0)
+    {
+      LOGE (
+        "h_deduct_credits: Deduction failed for account %d, amount %lld, rc %d",
+        account_id,
+        amount,
+        rc);
+    }
+  if (rc == 0 && strcmp (owner_type, "player") == 0)
+    {
+      long long threshold = h_get_account_alert_threshold_unlocked (db,
+                                                                    account_id,
+                                                                    owner_type);
+
+
+      if (amount >= threshold)
+        {
+          char msg[256];
+
+
+          snprintf (msg,
+                    sizeof (msg),
+                    "Withdrawal of %lld credits processed. New balance: %lld.",
+                    amount,
+                    out_new_balance ? *out_new_balance : 0);
+          h_create_personal_bank_alert_notice (db, owner_id, msg);
+        }
+    }
+  return rc;
+}
+
+
+int
+h_get_credits (db_t *db,
+               const char *owner_type,
+               int owner_id,
+               long long *out_balance)
+{
+  return h_get_bank_balance (db, owner_type, owner_id, out_balance);
+}
+
+
+int
+db_bank_account_exists (db_t *db, const char *owner_type, int owner_id)
+{
+  if (!db)
+    {
+      return 0;
+    }
+  int acc_id = 0;
+
+
+  if (h_get_account_id_unlocked (db, owner_type, owner_id, &acc_id) == 0)
+    {
+      return 1;
+    }
+  return 0;
+}
+
+
+int
+db_bank_create_account (db_t *db,
+                        const char *owner_type,
+                        int owner_id,
+                        long long initial_balance,
+                        int *account_id_out)
+{
+  if (!db)
+    {
+      return -1;
+    }
+  return h_create_bank_account_unlocked (db,
+                                         owner_type,
+                                         owner_id,
+                                         initial_balance,
+                                         account_id_out);
+}
+
+
+int
+db_bank_deposit (db_t *db,
+                 const char *owner_type,
+                 int owner_id,
+                 long long amount)
+{
+  if (!db)
+    {
+      return -1;
+    }
+  db_error_t err;
+
+
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
+    {
+      return err.code;
+    }
+  int rc = h_add_credits (db,
+                          owner_type,
+                          owner_id,
+                          amount,
+                          "deposit",
+                          NULL,
+                          NULL);
+
+
+  if (rc == 0)
+    {
+      db_tx_commit (db, &err);
+    }
+  else
+    {
+      db_tx_rollback (db, NULL);
+    }
+  return rc;
+}
+
+
+int
+db_bank_withdraw (db_t *db,
+                  const char *owner_type,
+                  int owner_id,
+                  long long amount)
+{
+  if (!db)
+    {
+      return -1;
+    }
+  db_error_t err;
+
+
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
+    {
+      return err.code;
+    }
+  int rc = h_deduct_credits (db,
+                             owner_type,
+                             owner_id,
+                             amount,
+                             "withdrawal",
+                             NULL,
+                             NULL);
+
+
+  if (rc == 0)
+    {
+      db_tx_commit (db, &err);
+    }
+  else
+    {
+      db_tx_rollback (db, NULL);
+    }
+  return rc;
+}
+
+
+int
+db_bank_get_transactions (db_t *db,
+                          const char *owner_type,
+                          int owner_id,
+                          int limit,
+                          const char *filter,
+                          long long start,
+                          long long end,
+                          long long min,
+                          long long max,
+                          json_t **out)
+{
+  if (!db)
+    {
+      return ERR_DB_CLOSED;
+    }
+  db_error_t err; char sql[2048];
+
+
+  snprintf (sql,
+            sizeof(sql),
+            "SELECT ts, account_id, tx_type, amount, balance_after, description, tx_group_id FROM bank_transactions "
+            "WHERE account_id = (SELECT id FROM bank_accounts WHERE owner_type = $1 AND owner_id = $2) ");
+
+  db_bind_t params[12]; int idx = 0;
+
+
+  params[idx++] = db_bind_text (owner_type);
+  params[idx++] = db_bind_i32 (owner_id);
+
+  if (filter && *filter)
+    {
+      char buf[32]; snprintf (buf, sizeof(buf), "AND tx_type = $%d ", idx + 1);
+
+
+      strncat (sql, buf, sizeof(sql) - strlen (sql) - 1);
+      params[idx++] = db_bind_text (filter);
+    }
+
+  if (start > 0)
+    {
+      char buf[32]; snprintf (buf, sizeof(buf), "AND ts >= $%d ", idx + 1);
+
+
+      strncat (sql, buf, sizeof(sql) - strlen (sql) - 1);
+      params[idx++] = db_bind_i64 (start);
+    }
+
+  if (end > 0)
+    {
+      char buf[32]; snprintf (buf, sizeof(buf), "AND ts <= $%d ", idx + 1);
+
+
+      strncat (sql, buf, sizeof(sql) - strlen (sql) - 1);
+      params[idx++] = db_bind_i64 (end);
+    }
+
+  if (min > 0)
+    {
+      char buf[32]; snprintf (buf,
+                              sizeof(buf),
+                              "AND ABS(amount) >= $%d ",
+                              idx + 1);
+
+
+      strncat (sql, buf, sizeof(sql) - strlen (sql) - 1);
+      params[idx++] = db_bind_i64 (min);
+    }
+
+  if (max > 0)
+    {
+      char buf[32]; snprintf (buf,
+                              sizeof(buf),
+                              "AND ABS(amount) <= $%d ",
+                              idx + 1);
+
+
+      strncat (sql, buf, sizeof(sql) - strlen (sql) - 1);
+      params[idx++] = db_bind_i64 (max);
+    }
+
+  strncat (sql,
+           "ORDER BY ts DESC, id DESC LIMIT ",
+           sizeof(sql) - strlen (sql) - 1);
+  char buf[16]; snprintf (buf, sizeof(buf), "$%d;", idx + 1);
+
+
+  strncat (sql, buf, sizeof(sql) - strlen (sql) - 1);
+
+  params[idx++] = db_bind_i32 (limit);
+
+  db_res_t *res = NULL; int rc = 0;
+
+
+  if (db_query (db, sql, params, idx, &res, &err))
+    {
+      rc = stmt_to_json_array (res, out, &err); db_res_finalize (res);
+    }
+  else
+    {
+      rc = err.code;
+    }
+  return rc;
+}
+
+
+int
+db_bank_apply_interest (db_t *db)
+{
+  if (!db)
+    {
+      return ERR_DB_CLOSED;
+    }
+  /* TODO: implement based on full bank_interest_policy / bank_accounts schema */
+  return 0;
+}
+
+
+int
+db_bank_process_orders (db_t *db)
+{
+  if (!db)
+    {
+      return ERR_DB_CLOSED;
+    }
+  /* TODO: implement processing of bank_orders into bank_transactions */
+  return 0;
+}
+
+
+int
+db_bank_set_frozen_status (db_t *db,
+                           const char *owner_type,
+                           int owner_id,
+                           int is_frozen)
+{
+  if (!db || strcmp (owner_type, "player") != 0)
+    {
+      return ERR_DB_MISUSE;
+    }
+  const char *sql =
+    "INSERT INTO bank_flags (player_id, is_frozen) VALUES ($1, $2) ON CONFLICT(player_id) DO UPDATE SET is_frozen = excluded.is_frozen;";
+  db_error_t err;
+  db_bind_t params[] = { db_bind_i32 (owner_id), db_bind_i32 (is_frozen) };
+
+
+  if (!db_exec (db, sql, params, 2, &err))
+    {
+      return err.code;
+    }
+  return 0;
+}
+
+
+int
+db_bank_get_frozen_status (db_t *db,
+                           const char *owner_type,
+                           int owner_id,
+                           int *out_frozen)
+{
+  if (!db || !out_frozen || strcmp (owner_type, "player") != 0)
+    {
+      return ERR_DB_MISUSE;
+    }
+  db_res_t *res = NULL; db_error_t err;
+  db_bind_t params[] = { db_bind_i32 (owner_id) };
+
+
+  if (db_query (db,
+                "SELECT is_frozen FROM bank_flags WHERE player_id = $1;",
+                params,
+                1,
+                &res,
+                &err))
+    {
+      if (db_res_step (res, &err))
+        {
+          *out_frozen = db_res_col_i32 (res,
+                                        0,
+                                        &err);
+        }
+      else
+        {
+          *out_frozen = 0;
+        }
+      db_res_finalize (res); return 0;
+    }
+  return err.code;
+}
+
+
+/* Transfer: Debit Sender -> Credit Receiver */
+int
+db_bank_transfer (db_t *db,
+                  const char *from_type,
+                  int from_id,
+                  const char *to_type,
+                  int to_id,
+                  long long amount)
+{
+  if (amount <= 0)
+    {
+      return ERR_INVALID_ARG;
+    }
+
+  db_error_t err;
+
+
+  if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
+    {
+      return err.code;
+    }
+
+  int rc = h_deduct_credits (db,
+                             from_type,
+                             from_id,
+                             amount,
+                             "TRANSFER",
+                             NULL,
+                             NULL);
+
+
+  if (rc != 0)
+    {
+      db_tx_rollback (db, NULL);
+      return rc;
+    }
+
+  rc = h_add_credits (db,
+                      to_type,
+                      to_id,
+                      amount,
+                      "TRANSFER",
+                      NULL,
+                      NULL);
+  if (rc != 0)
+    {
+      db_tx_rollback (db, NULL);
+      return rc;
+    }
+
+  if (!db_tx_commit (db, &err))
+    {
+      return err.code;
+    }
+  return 0;
+}
+
+
+/* ==================================================================== */
+
+
+/* COMMAND HANDLERS                                                    */
+
+
+/* ==================================================================== */
+
+
 int
 cmd_bank_history (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id <= 0)
     {
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_NOT_AUTHENTICATED,
-				   "Not authenticated", NULL);
+                                   root,
+                                   ERR_NOT_AUTHENTICATED,
+                                   "Not authenticated", NULL);
       return 0;
     }
   json_t *data = json_object_get (root, "data");
@@ -43,7 +1130,7 @@ cmd_bank_history (client_ctx_t *ctx, json_t *root)
   if (!json_is_object (data))
     {
       send_response_error (ctx, root, ERR_INVALID_SCHEMA,
-			   "data must be object");
+                           "data must be object");
       return 0;
     }
   int limit = 20;
@@ -58,6 +1145,7 @@ cmd_bank_history (client_ctx_t *ctx, json_t *root)
     {
       limit = 20;
     }
+
   const char *tx_type_filter = NULL;
   json_t *j_tx_type = json_object_get (data, "tx_type");
 
@@ -66,30 +1154,75 @@ cmd_bank_history (client_ctx_t *ctx, json_t *root)
     {
       tx_type_filter = json_string_value (j_tx_type);
     }
-  long long start_date = 0, end_date = 0;
-  long long min_amount = 0, max_amount = 0;
+
+  long long start_date = 0;
+  json_t *j_start = json_object_get (data, "start_date");
+
+
+  if (json_is_integer (j_start))
+    {
+      start_date = json_integer_value (j_start);
+    }
+
+  long long end_date = 0;
+  json_t *j_end = json_object_get (data, "end_date");
+
+
+  if (json_is_integer (j_end))
+    {
+      end_date = json_integer_value (j_end);
+    }
+
+  long long min_amount = 0;
+  json_t *j_min = json_object_get (data, "min_amount");
+
+
+  if (json_is_integer (j_min))
+    {
+      min_amount = json_integer_value (j_min);
+    }
+
+  long long max_amount = 0;
+  json_t *j_max = json_object_get (data, "max_amount");
+
+
+  if (json_is_integer (j_max))
+    {
+      max_amount = json_integer_value (j_max);
+    }
+
   json_t *transactions_array = NULL;
-  int rc = db_bank_get_transactions ("player",
-				     ctx->player_id,
-				     limit,
-				     tx_type_filter,
-				     start_date,
-				     end_date,
-				     min_amount,
-				     max_amount,
-				     &transactions_array);
+  db_t *db = game_db_get_handle ();
 
 
-  if (rc != SQLITE_OK)
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_DB, "No database handle");
+      return 0;
+    }
+
+  int rc = db_bank_get_transactions (db,
+                                     "player",
+                                     ctx->player_id,
+                                     limit,
+                                     tx_type_filter,
+                                     start_date,
+                                     end_date,
+                                     min_amount,
+                                     max_amount,
+                                     &transactions_array);
+
+
+  if (rc != 0)
     {
       send_response_error (ctx,
-			   root,
-			   ERR_DB_QUERY_FAILED,
-			   "Failed to retrieve history.");
+                           root,
+                           ERR_DB_QUERY_FAILED,
+                           "Failed to retrieve history.");
       if (transactions_array)
-	{
-	  json_decref (transactions_array);
-	}
+        {
+          json_decref (transactions_array);
+        }
       return 0;
     }
   json_t *payload = json_object ();
@@ -97,7 +1230,6 @@ cmd_bank_history (client_ctx_t *ctx, json_t *root)
 
   json_object_set (payload, "history", transactions_array);
   json_object_set_new (payload, "has_next_page", json_false ());
-
 
   send_response_ok_take (ctx, root, "bank.history.response", &payload);
   return 0;
@@ -107,13 +1239,19 @@ cmd_bank_history (client_ctx_t *ctx, json_t *root)
 int
 cmd_bank_leaderboard (client_ctx_t *ctx, json_t *root)
 {
-  sqlite3 *db = db_get_handle ();
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_DB, "No database handle");
+      return 0;
+    }
   if (ctx->player_id <= 0)
     {
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_NOT_AUTHENTICATED,
-				   "Not authenticated", NULL);
+                                   root,
+                                   ERR_NOT_AUTHENTICATED,
+                                   "Not authenticated",
+                                   NULL);
       return 0;
     }
   json_t *data = json_object_get (root, "data");
@@ -126,47 +1264,53 @@ cmd_bank_leaderboard (client_ctx_t *ctx, json_t *root)
 
 
       if (json_is_integer (j_limit))
-	{
-	  limit = (int) json_integer_value (j_limit);
-	}
+        {
+          limit = (int) json_integer_value (j_limit);
+        }
     }
   if (limit <= 0 || limit > 100)
     {
       limit = 20;
     }
+
   const char *sql_query =
-    "SELECT P.name, BA.balance FROM bank_accounts BA JOIN players P ON P.id = BA.owner_id WHERE BA.owner_type = 'player' ORDER BY BA.balance DESC LIMIT ?1;";
-  sqlite3_stmt *stmt = NULL;
-
-
-  if (sqlite3_prepare_v2 (db, sql_query, -1, &stmt, NULL) != SQLITE_OK)
-    {
-      send_response_error (ctx, root, ERR_SERVER_ERROR, "Database error.");
-      return 0;
-    }
-  sqlite3_bind_int (stmt, 1, limit);
+    "SELECT P.name, BA.balance FROM bank_accounts BA JOIN players P ON P.player_id = BA.owner_id "
+    "WHERE BA.owner_type = 'player' ORDER BY BA.balance DESC LIMIT $1;";
+  db_bind_t params[] = { db_bind_i32 (limit) };
+  db_res_t *res = NULL;
+  db_error_t err;
   json_t *leaderboard_array = json_array ();
 
 
-  while (sqlite3_step (stmt) == SQLITE_ROW)
+  if (db_query (db, sql_query, params, 1, &res, &err))
     {
-      json_t *entry = json_object ();
+      while (db_res_step (res, &err))
+        {
+          json_t *entry = json_object ();
 
 
-      json_object_set_new (entry, "player_name",
-			   json_string ((const char *)
-					sqlite3_column_text (stmt, 0)));
-      json_object_set_new (entry, "balance",
-			   json_integer (sqlite3_column_int64 (stmt, 1)));
-      json_array_append_new (leaderboard_array, entry);
+          json_object_set_new (entry, "player_name",
+                               json_string (db_res_col_text (res, 0, &err)));
+          json_object_set_new (entry, "balance",
+                               json_integer (db_res_col_i64 (res,
+                                                             1,
+                                                             &err)));
+          json_array_append_new (leaderboard_array, entry);
+        }
+      db_res_finalize (res);
     }
-  sqlite3_finalize (stmt);
+  else
+    {
+      LOGE ("cmd_bank_leaderboard: query failed: %s", err.message);
+      send_response_error (ctx, root, ERR_DB, "Database error.");
+      json_decref (leaderboard_array);
+      return 0;
+    }
+
   json_t *payload = json_object ();
 
 
-  json_object_set (payload, "leaderboard", leaderboard_array);
-
-
+  json_object_set_new (payload, "leaderboard", leaderboard_array);
   send_response_ok_take (ctx, root, "bank.leaderboard.response", &payload);
   return 0;
 }
@@ -178,9 +1322,18 @@ cmd_bank_deposit (client_ctx_t *ctx, json_t *root)
   if (!ctx || ctx->player_id <= 0)
     {
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_SECTOR_NOT_FOUND,
-				   "Not authenticated", NULL);
+                                   root,
+                                   ERR_NOT_AUTHENTICATED,
+                                   "Not authenticated",
+                                   NULL);
+      return 0;
+    }
+  db_t *db = game_db_get_handle ();
+
+
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_DB, "No database handle");
       return 0;
     }
   json_t *data = json_object_get (root, "data");
@@ -193,58 +1346,82 @@ cmd_bank_deposit (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   long long amount = json_integer_value (j_amount);
-  sqlite3 *db = db_get_handle ();
   long long player_petty_cash = 0;
 
 
-  if (h_get_player_petty_cash (db, ctx->player_id,
-			       &player_petty_cash) != SQLITE_OK)
+  if (h_get_player_petty_cash (db, ctx->player_id, &player_petty_cash) != 0)
     {
       send_response_error (ctx,
-			   root,
-			   ERR_SERVER_ERROR, "Failed to retrieve balance.");
+                           root,
+                           ERR_SERVER_ERROR,
+                           "Failed to retrieve balance.");
       return 0;
     }
   if (player_petty_cash < amount)
     {
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_INSUFFICIENT_FUNDS,
-				   "Insufficient petty cash.", NULL);
+                                   root,
+                                   ERR_INSUFFICIENT_FUNDS,
+                                   "Insufficient petty cash.",
+                                   NULL);
       return 0;
     }
-  sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, NULL);
-  if (h_deduct_player_petty_cash (db, ctx->player_id, amount,
-				  NULL) != SQLITE_OK)
+
+  db_error_t err;
+
+
+  if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      send_response_error (ctx, root, err.code, "Database busy.");
+      return 0;
+    }
+
+  if (h_deduct_player_petty_cash_unlocked (db, ctx->player_id, amount,
+                                           NULL) != 0)
+    {
+      db_tx_rollback (db, NULL);
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_INSUFFICIENT_FUNDS,
-				   "Insufficient funds.", NULL);
+                                   root,
+                                   ERR_INSUFFICIENT_FUNDS,
+                                   "Insufficient funds.",
+                                   NULL);
       return 0;
     }
   long long new_bank_balance = 0;
+  int account_id = 0;
 
 
-  if (h_add_credits (db,
-		     "player",
-		     ctx->player_id,
-		     amount, "DEPOSIT", NULL, &new_bank_balance) != SQLITE_OK)
+  if (h_get_account_id_unlocked (db, "player", ctx->player_id,
+                                 &account_id) != 0 || account_id <= 0)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_SERVER_ERROR, "Account not found.");
+      return 0;
+    }
+
+  if (h_add_credits_unlocked (db,
+                              account_id,
+                              amount,
+                              "DEPOSIT",
+                              "",
+                              &new_bank_balance) != 0)
+    {
+      db_tx_rollback (db, NULL);
       send_response_error (ctx, root, ERR_SERVER_ERROR, "Bank error.");
       return 0;
     }
-  sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
+
+  if (!db_tx_commit (db, &err))
+    {
+      send_response_error (ctx, root, err.code, "Commit failed.");
+      return 0;
+    }
+
   json_t *payload = json_object ();
 
 
   json_object_set_new (payload, "player_id", json_integer (ctx->player_id));
-  json_object_set_new (payload, "new_balance",
-		       json_integer (new_bank_balance));
-
-
+  json_object_set_new (payload, "new_balance", json_integer (new_bank_balance));
   send_response_ok_take (ctx, root, "bank.deposit.confirmed", &payload);
   return 0;
 }
@@ -256,9 +1433,18 @@ cmd_bank_transfer (client_ctx_t *ctx, json_t *root)
   if (ctx->player_id <= 0)
     {
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_NOT_AUTHENTICATED,
-				   "Not authenticated", NULL);
+                                   root,
+                                   ERR_NOT_AUTHENTICATED,
+                                   "Not authenticated",
+                                   NULL);
+      return 0;
+    }
+  db_t *db = game_db_get_handle ();
+
+
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_DB, "No database handle");
       return 0;
     }
   json_t *data = json_object_get (root, "data");
@@ -269,9 +1455,10 @@ cmd_bank_transfer (client_ctx_t *ctx, json_t *root)
   if (!json_is_integer (j_to) || !json_is_integer (j_amt))
     {
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_INVALID_ARG,
-				   "Invalid arguments", NULL);
+                                   root,
+                                   ERR_INVALID_ARG,
+                                   "Invalid arguments",
+                                   NULL);
       return 0;
     }
   int to_id = json_integer_value (j_to);
@@ -281,57 +1468,76 @@ cmd_bank_transfer (client_ctx_t *ctx, json_t *root)
   if (amount <= 0 || to_id == ctx->player_id)
     {
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_INVALID_ARG,
-				   "Invalid amount or recipient", NULL);
+                                   root,
+                                   ERR_INVALID_ARG,
+                                   "Invalid amount or recipient",
+                                   NULL);
       return 0;
     }
-  sqlite3 *db = db_get_handle ();
+
   long long from_bal = 0, to_bal = 0;
 
 
-  sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, NULL);
   if (h_get_credits (db, "player", ctx->player_id,
-		     &from_bal) != SQLITE_OK || from_bal < amount)
+                     &from_bal) != 0 || from_bal < amount)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_INSUFFICIENT_FUNDS,
-				   "Insufficient funds", NULL);
+                                   root,
+                                   ERR_INSUFFICIENT_FUNDS,
+                                   "Insufficient funds",
+                                   NULL);
       return 0;
     }
-  char tx_grp[UUID_STR_LEN];
+
+  char tx_grp[65];
 
 
   h_generate_hex_uuid (tx_grp, sizeof (tx_grp));
+
+  db_error_t err;
+
+
+  if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
+    {
+      send_response_error (ctx, root, err.code, "Database busy.");
+      return 0;
+    }
+
   if (h_deduct_credits (db,
-			"player",
-			ctx->player_id,
-			amount, "TRANSFER", tx_grp, &from_bal) != SQLITE_OK)
+                        "player",
+                        ctx->player_id,
+                        amount,
+                        "TRANSFER",
+                        tx_grp,
+                        &from_bal) != 0)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      send_response_error (ctx, root, ERR_UNKNOWN, "Deduct failed");
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_UNKNOWN, "Transfer failed (deduct)");
       return 0;
     }
+
   if (h_add_credits (db, "player", to_id, amount, "TRANSFER", tx_grp,
-		     &to_bal) != SQLITE_OK)
+                     &to_bal) != 0)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      send_response_error (ctx, root, ERR_UNKNOWN, "Add failed");
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_UNKNOWN, "Transfer failed (add)");
       return 0;
     }
-  sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
+
+  if (!db_tx_commit (db, &err))
+    {
+      send_response_error (ctx, root, err.code, "Commit failed.");
+      return 0;
+    }
+
   json_t *payload = json_object ();
 
 
   json_object_set_new (payload, "from_player_id",
-		       json_integer (ctx->player_id));
+                       json_integer (ctx->player_id));
   json_object_set_new (payload, "to_player_id", json_integer (to_id));
   json_object_set_new (payload, "from_balance", json_integer (from_bal));
   json_object_set_new (payload, "to_balance", json_integer (to_bal));
-
-
   send_response_ok_take (ctx, root, "bank.transfer.confirmed", &payload);
   return 0;
 }
@@ -343,55 +1549,94 @@ cmd_bank_withdraw (client_ctx_t *ctx, json_t *root)
   if (ctx->player_id <= 0)
     {
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_NOT_AUTHENTICATED,
-				   "Not authenticated", NULL);
+                                   root,
+                                   ERR_NOT_AUTHENTICATED,
+                                   "Not authenticated",
+                                   NULL);
+      return 0;
+    }
+  db_t *db = game_db_get_handle ();
+
+
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_DB, "No database handle");
       return 0;
     }
   json_t *data = json_object_get (root, "data");
-  json_t *j_amt = json_object_get (data, "amount");
 
 
-  if (!json_is_integer (j_amt) || json_integer_value (j_amt) <= 0)
+  if (!json_is_object (data))
     {
-      send_response_refused_steal (ctx, root, ERR_INVALID_ARG,
-				   "Invalid amount", NULL);
+      send_response_error (ctx, root, ERR_BAD_REQUEST, "Missing payload.");
       return 0;
     }
-  long long amount = json_integer_value (j_amt);
-  sqlite3 *db = db_get_handle ();
+
+  json_t *j_amount = json_object_get (data, "amount");
+  long long amount =
+    json_is_integer (j_amount) ? json_integer_value (j_amount) : 0;
+
+
+  if (amount <= 0)
+    {
+      send_response_error (ctx, root, ERR_MISSING_FIELD, "Invalid amount.");
+      return 0;
+    }
+
   long long new_balance = 0;
+  db_error_t err;
 
 
-  sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, NULL);
-  if (h_deduct_credits (db,
-			"player",
-			ctx->player_id,
-			amount,
-			"WITHDRAWAL", NULL, &new_balance) != SQLITE_OK)
+  if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      send_response_refused_steal (ctx, root, err.code, "Database busy.", NULL);
+      return 0;
+    }
+
+  int account_id = 0;
+
+
+  if (h_get_account_id_unlocked (db, "player", ctx->player_id,
+                                 &account_id) != 0 || account_id <= 0)
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_SERVER_ERROR, "Account not found.");
+      return 0;
+    }
+
+  if (h_deduct_credits_unlocked (db,
+                                 account_id,
+                                 amount,
+                                 "WITHDRAWAL",
+                                 "",
+                                 &new_balance) != 0)
+    {
+      db_tx_rollback (db, NULL);
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_INSUFFICIENT_FUNDS,
-				   "Insufficient funds", NULL);
+                                   root,
+                                   ERR_INSUFFICIENT_FUNDS,
+                                   "Insufficient funds",
+                                   NULL);
       return 0;
     }
-  if (h_add_player_petty_cash (db, ctx->player_id, amount, NULL) != SQLITE_OK)
+  if (h_add_player_petty_cash (db, ctx->player_id, amount, NULL) != 0)
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      send_response_error (ctx, root, ERR_UNKNOWN,
-			   "Petty cash update failed");
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_UNKNOWN, "Petty cash update failed");
       return 0;
     }
-  sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
+
+  if (!db_tx_commit (db, &err))
+    {
+      send_response_error (ctx, root, err.code, "Commit failed.");
+      return 0;
+    }
+
   json_t *payload = json_object ();
 
 
   json_object_set_new (payload, "new_balance", json_integer (new_balance));
-
-
-  send_response_ok_take (ctx, root, "bank.withdraw.confirmed", &payload);	// Assuming type name
+  send_response_ok_take (ctx, root, "bank.withdraw.confirmed", &payload);
   return 0;
 }
 
@@ -402,25 +1647,32 @@ cmd_bank_balance (client_ctx_t *ctx, json_t *root)
   if (!ctx || ctx->player_id <= 0)
     {
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_SECTOR_NOT_FOUND,
-				   "Not authenticated", NULL);
-      return 0;
+                                   root,
+                                   ERR_NOT_AUTHENTICATED,
+                                   "Not authenticated",
+                                   NULL); return 0;
     }
-  long long balance = 0;
+  long long p_balance = 0;
+  db_t *db = game_db_get_handle ();
 
 
-  if (db_get_player_bank_balance (ctx->player_id, &balance) != SQLITE_OK)
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_DB, "No database handle"); return 0;
+    }
+
+  if (db_get_player_bank_balance (db, ctx->player_id, &p_balance) != 0)
     {
       send_response_error (ctx,
-			   root,
-			   ERR_SERVER_ERROR, "Error retrieving balance.");
+                           root,
+                           ERR_SERVER_ERROR,
+                           "Error retrieving balance.");
       return 0;
     }
   json_t *payload = json_object ();
 
 
-  json_object_set_new (payload, "balance", json_integer (balance));
+  json_object_set_new (payload, "balance", json_integer (p_balance));
   send_response_ok_take (ctx, root, "bank.balance", &payload);
   return 0;
 }
@@ -432,50 +1684,64 @@ cmd_fine_list (client_ctx_t *ctx, json_t *root)
   if (ctx->player_id <= 0)
     {
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_NOT_AUTHENTICATED,
-				   "Authentication required", NULL);
-      return 0;
+                                   root,
+                                   ERR_NOT_AUTHENTICATED,
+                                   "Authentication required",
+                                   NULL); return 0;
+    }
+  db_t *db = game_db_get_handle ();
+
+
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_DB, "No database handle"); return 0;
     }
 
-  sqlite3 *db = db_get_handle ();
   json_t *fines_array = json_array ();
-  sqlite3_stmt *st = NULL;
-
-  // Corrected SQL query to use 'issued_ts' and reflect available columns
+  db_error_t err;
   const char *sql =
-    "SELECT id, reason, amount, issued_ts, status FROM fines WHERE recipient_type = 'player' AND recipient_id = ?1 AND status != 'paid';";
+    "SELECT fines_id as id, reason, amount, issued_ts, status FROM fines WHERE recipient_type = 'player' AND recipient_id = $1 AND status != 'paid';";
+  db_bind_t params[] = { db_bind_i32 (ctx->player_id) };
+  db_res_t *res = NULL;
 
 
-  if (sqlite3_prepare_v2 (db, sql, -1, &st, NULL) != SQLITE_OK)
+  if (db_query (db, sql, params, 1, &res, &err))
     {
-      send_response_error (ctx,
-			   root,
-			   ERR_DB_QUERY_FAILED,
-			   "Database error preparing query.");
+      while (db_res_step (res, &err))
+        {
+          json_t *fine = json_object ();
+
+
+          json_object_set_new (fine, "id", json_integer (db_res_col_i32 (res,
+                                                                         0,
+                                                                         &err)));
+          json_object_set_new (fine, "reason",
+                               json_string (db_res_col_text (res,
+                                                             1,
+                                                             &err)));
+          json_object_set_new (fine, "amount",
+                               json_integer (db_res_col_i64 (res,
+                                                             2,
+                                                             &err)));
+          json_object_set_new (fine, "issued_ts",
+                               json_string (db_res_col_text (res,
+                                                             3,
+                                                             &err)));
+          json_object_set_new (fine, "status",
+                               json_string (db_res_col_text (res,
+                                                             4,
+                                                             &err)));
+          json_array_append_new (fines_array, fine);
+        }
+      db_res_finalize (res);
+    }
+  else
+    {
+      LOGE ("cmd_fine_list: query failed: %s", err.message);
+      send_response_error (ctx, root, ERR_DB, "Database error.");
+      json_decref (fines_array);
       return 0;
     }
-  sqlite3_bind_int (st, 1, ctx->player_id);
-
-  while (sqlite3_step (st) == SQLITE_ROW)
-    {
-      json_t *fine = json_object ();
-
-
-      json_object_set_new (fine, "id",
-			   json_integer (sqlite3_column_int (st, 0)));
-      json_object_set_new (fine, "reason",
-			   json_string ((const char *)
-					sqlite3_column_text (st, 1)));
-      json_object_set_new (fine, "amount",
-			   json_integer (sqlite3_column_int64 (st, 2)));
-      json_object_set_new (fine, "issued_ts", json_string ((const char *) sqlite3_column_text (st, 3)));	// Corrected to issued_ts and read as TEXT
-      json_object_set_new (fine, "status",
-			   json_string ((const char *)
-					sqlite3_column_text (st, 4)));
-      json_array_append_new (fines_array, fine);
-    }
-  sqlite3_finalize (st);
 
   json_t *response_data = json_object ();
 
@@ -487,184 +1753,161 @@ cmd_fine_list (client_ctx_t *ctx, json_t *root)
 
 
 int
-cmd_fine_pay (client_ctx_t *ctx, json_t *root)
+cmd_fine_pay (client_ctx_t *ctx,
+              json_t *root)
 {
   if (ctx->player_id <= 0)
     {
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_NOT_AUTHENTICATED,
-				   "Authentication required", NULL);
-      return 0;
+                                   root,
+                                   ERR_NOT_AUTHENTICATED,
+                                   "Authentication required",
+                                   NULL); return 0;
+    }
+  db_t *db = game_db_get_handle ();
+
+
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_DB, "No database handle"); return 0;
     }
 
-  sqlite3 *db = db_get_handle ();
   json_t *data = json_object_get (root, "data");
 
 
   if (!json_is_object (data))
     {
-      send_response_error (ctx, root, ERR_BAD_REQUEST,
-			   "Missing data payload.");
+      send_response_error (ctx, root, ERR_BAD_REQUEST, "Missing data payload.");
       return 0;
     }
 
   int fine_id = json_integer_value (json_object_get (data, "fine_id"));
   long long amount_to_pay = json_integer_value (json_object_get (data,
-								 "amount"));	// Optional, if 0, pay full
+                                                                 "amount"));
 
 
   if (fine_id <= 0)
     {
       send_response_error (ctx,
-			   root,
-			   ERR_BAD_REQUEST, "Missing or invalid fine_id.");
-      return 0;
+                           root,
+                           ERR_BAD_REQUEST,
+                           "Missing or invalid fine_id."); return 0;
     }
 
-  // Retrieve fine details
-  sqlite3_stmt *st_fine = NULL;
+  long long fine_amount = 0;
+  int fine_recipient_id = 0;
+  const char *fine_status = NULL;
+  const char *fine_recipient_type = NULL;
+
+  db_error_t err;
   const char *sql_select_fine =
-    "SELECT amount, recipient_id, status, recipient_type FROM fines WHERE id = ?1;";
+    "SELECT amount, recipient_id, status, recipient_type FROM fines WHERE fines_id = $1;";
+  db_bind_t params_fine[] = { db_bind_i32 (fine_id) };
+  db_res_t *res_fine = NULL;
 
 
-  if (sqlite3_prepare_v2 (db, sql_select_fine, -1, &st_fine, NULL) !=
-      SQLITE_OK)
+  if (db_query (db, sql_select_fine, params_fine, 1, &res_fine, &err))
     {
-      send_response_error (ctx,
-			   root,
-			   ERR_DB_QUERY_FAILED,
-			   "Database error retrieving fine.");
+      if (db_res_step (res_fine, &err))
+        {
+          fine_amount = db_res_col_i64 (res_fine, 0, &err);
+          fine_recipient_id = db_res_col_i32 (res_fine, 1, &err);
+          fine_status = db_res_col_text (res_fine, 2, &err);
+          fine_recipient_type = db_res_col_text (res_fine, 3, &err);
+        }
+      db_res_finalize (res_fine);
+    }
+  else
+    {
+      send_response_error (ctx, root, ERR_DB,
+                           "Database error retrieving fine.");
       return 0;
     }
-  sqlite3_bind_int (st_fine, 1, fine_id);
-
-  if (sqlite3_step (st_fine) != SQLITE_ROW)
-    {
-      sqlite3_finalize (st_fine);
-      send_response_refused_steal (ctx,
-				   root,
-				   ERR_NOT_FOUND, "Fine not found.", NULL);
-      return 0;
-    }
-
-  long long fine_amount = sqlite3_column_int64 (st_fine, 0);
-  int fine_recipient_id = sqlite3_column_int (st_fine, 1);
-  const char *tmp_status = (const char *) sqlite3_column_text (st_fine, 2);
-  const char *tmp_type = (const char *) sqlite3_column_text (st_fine, 3);
-  /* sqlite: column_text() pointer invalid after finalize/reset/step */
-  char *fine_status = tmp_status ? strdup (tmp_status) : NULL;
-  char *fine_recipient_type = tmp_type ? strdup (tmp_type) : NULL;
-
-
-  sqlite3_finalize (st_fine);
 
   if (fine_recipient_id != ctx->player_id ||
-      (fine_recipient_type && strcasecmp (fine_recipient_type,
-					  "player") != 0))
+      (fine_recipient_type && strcasecmp (fine_recipient_type, "player") != 0))
     {
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_PERMISSION_DENIED,
-				   "Fine does not belong to this player.",
-				   NULL);
-      free (fine_status);
-      free (fine_recipient_type);
+                                   root,
+                                   ERR_PERMISSION_DENIED,
+                                   "Fine does not belong to this player.",
+                                   NULL);
       return 0;
     }
   if (fine_status && strcasecmp (fine_status, "paid") == 0)
     {
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_INVALID_ARG,
-				   "Fine already paid.", NULL);
-      free (fine_status);
-      free (fine_recipient_type);
+                                   root,
+                                   ERR_INVALID_ARG,
+                                   "Fine already paid.",
+                                   NULL);
       return 0;
     }
-  free (fine_status);
-  free (fine_recipient_type);
 
   if (amount_to_pay <= 0 || amount_to_pay > fine_amount)
     {
-      amount_to_pay = fine_amount;	// Pay full amount if not specified or invalid
+      amount_to_pay = fine_amount;
     }
 
-  // Check player credits
   long long player_credits = 0;
 
 
-  if (h_get_player_petty_cash (db, ctx->player_id,
-			       &player_credits) != SQLITE_OK)
+  if (h_get_player_petty_cash (db, ctx->player_id, &player_credits) != 0)
     {
       send_response_error (ctx,
-			   root,
-			   ERR_DB_QUERY_FAILED,
-			   "Failed to retrieve player credits.");
+                           root,
+                           ERR_DB,
+                           "Failed to retrieve player credits.");
       return 0;
     }
   if (player_credits < amount_to_pay)
     {
       send_response_refused_steal (ctx,
-				   root,
-				   ERR_INSUFFICIENT_FUNDS,
-				   "Insufficient credits to pay fine.", NULL);
+                                   root,
+                                   ERR_INSUFFICIENT_FUNDS,
+                                   "Insufficient credits to pay fine.",
+                                   NULL);
       return 0;
     }
 
-  // Deduct credits and update fine status
   if (h_deduct_player_petty_cash_unlocked (db,
-					   ctx->player_id,
-					   amount_to_pay, NULL) != SQLITE_OK)
+                                           ctx->player_id,
+                                           amount_to_pay,
+                                           NULL) != 0)
     {
-      send_response_error (ctx,
-			   root,
-			   ERR_DB,
-			   "Failed to deduct credits for fine payment.");
+      send_response_error (ctx, root, ERR_DB, "Failed to deduct credits.");
       return 0;
     }
 
-  // Update fine status
-  sqlite3_stmt *st_update = NULL;
-  const char *new_status = (amount_to_pay == fine_amount) ? "paid" : "unpaid";	// Use 'unpaid' if partially paid
-  const char *sql_update_fine = "UPDATE fines SET status = ?, amount = amount - ? WHERE id = ?;";	// Reduce amount in DB
+  const char *new_status = (amount_to_pay == fine_amount) ? "paid" : "unpaid";
+  const char *sql_update_fine =
+    "UPDATE fines SET status = $1, amount = amount - $2 WHERE fines_id = $3;";
+  db_bind_t params_update[] = { db_bind_text (new_status),
+                                db_bind_i64 (amount_to_pay),
+                                db_bind_i32 (fine_id) };
 
 
-  if (sqlite3_prepare_v2 (db, sql_update_fine, -1, &st_update,
-			  NULL) != SQLITE_OK)
+  if (!db_exec (db, sql_update_fine, params_update, 3, &err))
     {
       send_response_error (ctx,
-			   root,
-			   ERR_DB_QUERY_FAILED,
-			   "Database error preparing fine update.");
-      // Refund credits if update fails
+                           root,
+                           ERR_DB,
+                           "Database error preparing fine update.");
       h_add_player_petty_cash_unlocked (db, ctx->player_id, amount_to_pay,
-					NULL);
+                                        NULL);                                    // Refund
       return 0;
     }
-
-  sqlite3_bind_text (st_update, 1, new_status, -1, SQLITE_STATIC);
-  sqlite3_bind_int64 (st_update, 2, amount_to_pay);
-  sqlite3_bind_int (st_update, 3, fine_id);
-
-  if (sqlite3_step (st_update) != SQLITE_DONE)
-    {
-      send_response_error (ctx, root, ERR_DB,
-			   "Failed to update fine status.");
-      h_add_player_petty_cash_unlocked (db, ctx->player_id, amount_to_pay, NULL);	// Refund
-      sqlite3_finalize (st_update);
-      return 0;
-    }
-  sqlite3_finalize (st_update);
 
   json_t *response_data = json_object ();
 
 
   json_object_set_new (response_data, "message",
-		       json_string ("Fine paid successfully."));
+                       json_string ("Fine paid successfully."));
   json_object_set_new (response_data, "fine_id", json_integer (fine_id));
   json_object_set_new (response_data,
-		       "amount_paid", json_integer (amount_to_pay));
-  send_response_ok_take (ctx, root, "fine.pay", &response_data);
+                       "amount_paid",
+                       json_integer (amount_to_pay));
+  send_response_ok_take (ctx, root, "fine.pay.success", &response_data);
   return 0;
 }
+

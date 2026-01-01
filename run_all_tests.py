@@ -4,8 +4,8 @@ import subprocess
 import glob
 import signal
 
-TEST_DIR = "tests"
-EXCLUDE = ["not_covered.json", "tests_tdb.json"]
+TEST_DIR = "tests.v2"
+EXCLUDE = ["not_covered.json", "tests_tdb.json", "macros.json", "debug_auth.json", "debug_sysop.json", "json_runner.py", "run_suites.py", "run_suites_all.py"]
 SERVER_BIN = "./bin/server"
 SERVER_LOG = "server.log"
 
@@ -22,7 +22,7 @@ def run_tests():
         try:
             # Run Test
             result = subprocess.run(
-                ["python3", "tests/server_tests.py", "--register-if-missing", test_file],
+                ["python3", "tests.v2/json_runner.py", test_file],
                 capture_output=True,
                 text=True
             )

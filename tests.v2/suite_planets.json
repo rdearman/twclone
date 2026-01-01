@@ -1,6 +1,7 @@
 {
   "tests": [
     {
+      "name": "Unnamed",
       "setup": "macro_auth_user",
       "username": "planet_tester_1",
       "password": "password"
@@ -13,9 +14,44 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Delete and Recreate Ship with Genesis Torpedo",
+      "name": "Setup: Genesis Enabled",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "DELETE FROM ships WHERE id = @planet_tester_1_player_id; INSERT INTO ships (id, type_id, name, holds, sector, ported, genesis) VALUES (@planet_tester_1_player_id, 1, 'PlanetTestShip', 100, 1, 0, 1); UPDATE players SET ship = @planet_tester_1_player_id, sector = 1 WHERE id = @planet_tester_1_player_id; INSERT OR IGNORE INTO ship_ownership (ship_id, player_id, is_primary) VALUES (@planet_tester_1_player_id, @planet_tester_1_player_id, 1);" },
+      "data": { "sql": "INSERT INTO config (key, value, type) VALUES ('genesis_enabled', '1', 'int') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Genesis Weight",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE planettypes SET genesis_weight = 100 WHERE id = 1;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Genesis Sector",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO sectors (id, name) VALUES (500, 'Genesis Sector') ON CONFLICT (id) DO NOTHING;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Delete Old Ship",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "DELETE FROM ships WHERE id = @planet_tester_1_player_id;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Create Ship with Genesis",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO ships (id, type_id, name, holds, sector, ported, genesis) VALUES (@planet_tester_1_player_id, 1, 'PlanetTestShip', 100, 1, 0, 1) ON CONFLICT (id) DO NOTHING;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Assign Ship to Player",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET ship = @planet_tester_1_player_id, sector = 1 WHERE id = @planet_tester_1_player_id;" },
       "user": "admin",
       "expect": { "status": "ok" }
     },
@@ -44,7 +80,7 @@
     {
       "name": "Insert Citadel (T2-01)",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO citadels (planet_id, level, treasury, owner_id) VALUES (@t201_planet_id, 1, 0, @planet_tester_1_player_id);" },
+      "data": { "sql": "INSERT INTO citadels (planet_id, level, treasury, owner) VALUES (@t201_planet_id, 1, 0, @planet_tester_1_player_id) ON CONFLICT DO NOTHING;" },
       "user": "admin",
       "expect": { "status": "ok" }
     },
@@ -59,13 +95,6 @@
       "name": "Set Citadel Level 0 (T2-01)",
       "command": "sys.raw_sql_exec",
       "data": { "sql": "UPDATE citadels SET level = 0 WHERE planet_id = @t201_planet_id;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "DEBUG: Check Genesis Config",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT OR REPLACE INTO config (key, value, type) VALUES ('genesis_enabled', '1', 'int'); INSERT OR IGNORE INTO sectors (id, name) VALUES (500, 'Genesis Sector'); UPDATE planettypes SET genesis_weight = 100 WHERE id = 1; UPDATE ships SET sector = 500 WHERE id = @planet_tester_1_player_id; UPDATE players SET sector = 500 WHERE id = @planet_tester_1_player_id;"},
       "user": "admin",
       "expect": { "status": "ok" }
     },
@@ -88,7 +117,7 @@
     {
       "name": "Set Interest Rate (T2-02)",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT OR REPLACE INTO config (key, value, type) VALUES ('planet_treasury_interest_rate_bps', '100', 'int');" },
+      "data": { "sql": "INSERT INTO config (key, value, type) VALUES ('planet_treasury_interest_rate_bps', '100', 'int') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;" },
       "user": "admin",
       "expect": { "status": "ok" }
     },

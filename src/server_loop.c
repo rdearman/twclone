@@ -1,3 +1,4 @@
+/* src/server_loop.c */
 #include <stdatomic.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -14,11 +15,16 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <jansson.h>            /* -ljansson */
+#include <jansson.h>
 #include <stdbool.h>
-#include <sqlite3.h>
+#include <string.h>
+#include <stdlib.h>
+#include <time.h>
+#include <jansson.h>
+
 /* local includes */
 #include "database.h"
+#include "game_db.h"
 #include "schemas.h"
 #include "errors.h"
 #include "config.h"
@@ -27,73 +33,70 @@
 #include "common.h"
 #include "server_envelope.h"
 #include "server_players.h"
-#include "server_ports.h"       // at top of server_loop.c
+#include "server_ports.h"
 #include "server_auth.h"
 #include "server_s2s.h"
 #include "server_universe.h"
 #include "server_autopilot.h"
 #include "server_config.h"
 #include "server_communication.h"
-#include "server_players.h"
 #include "server_planets.h"
 #include "server_citadel.h"
 #include "server_combat.h"
 #include "server_bulk.h"
 #include "server_news.h"
 #include "server_log.h"
-#include "server_stardock.h"    // Include for hardware commands
+#include "server_stardock.h"
 #include "server_corporation.h"
-#include "server_bank.h"        // Added missing include
+#include "server_bank.h"
 #include "server_cron.h"
+#include "server_combat.h"
+#include "database_cmd.h"
+#include "db/db_api.h"
+#include "server_combat.h"
+#include "game_db.h"
+#include "db/db_api.h"
+#include "database_cmd.h"
+#include "server_ships.h"
+#include "server_log.h"
+#include "errors.h"
+#include "server_envelope.h"
+
 
 #ifndef streq
 #define streq(a,b) (strcasecmp (json_string_value ((a)), (b)) == 0)
 #endif
 #define BUF_SIZE    8192
-#define RULE_REFUSE(_code,_msg,_hint_json) \
-        do { send_response_refused_steal (ctx, \
-                                          root, \
-                                          (_code), \
-                                          (_msg), \
-                                          (_hint_json)); \
-             goto trade_buy_done; } while (0)
-#define RULE_ERROR(_code,_msg) \
-        do { send_response_error (ctx, root, (_code), (_msg)); \
-             goto trade_buy_done; } while (0)
 
-static __thread client_ctx_t *g_ctx_for_send = NULL;
+__thread client_ctx_t *g_ctx_for_send = NULL;
 
 
 /* forward declaration to avoid implicit extern */
 void send_all_json (int fd, json_t *obj);
-int db_player_info_json (int player_id, json_t **out);
+
 /* rate-limit helper prototypes (defined later) */
 void attach_rate_limit_meta (json_t *env, client_ctx_t *ctx);
 void rl_tick (client_ctx_t *ctx);
-int db_sector_basic_json (int sector_id, json_t **out_obj);
-int db_adjacent_sectors_json (int sector_id, json_t **out_array);
-int db_ports_at_sector_json (int sector_id, json_t **out_array);
-int db_sector_scan_core (int sector_id, json_t **out_obj);
-int db_players_at_sector_json (int sector_id, json_t **out_array);
-int db_beacons_at_sector_json (int sector_id, json_t **out_array);
-int db_planets_at_sector_json (int sector_id, json_t **out_array);
-int db_player_set_sector (int player_id, int sector_id);
-int db_player_get_sector (int player_id, int *out_sector);
-void handle_sector_info (int fd, json_t *root, int sector_id, int player_id);
-void handle_sector_set_beacon (client_ctx_t *ctx, json_t *root);
-/* Fast sector scan handler (IDs+counts only) */
-void handle_move_scan (client_ctx_t *ctx, json_t *root);
-void handle_move_pathfind (client_ctx_t *ctx, json_t *root);
 
-json_t *build_sector_info_json (int sector_id);
-
-/* Missing declarations for commands found in .c files but not headers */
+/* EXTERN FIXES: Added missing externs and corrected signatures */
 extern int cmd_bounty_list (client_ctx_t *ctx, json_t *root);
 extern int cmd_bounty_post_federation (client_ctx_t *ctx, json_t *root);
 extern int cmd_bounty_post_hitlist (client_ctx_t *ctx, json_t *root);
 extern int cmd_player_set_trade_account_preference (client_ctx_t *ctx,
                                                     json_t *root);
 extern int cmd_move_transwarp (client_ctx_t *ctx, json_t *root);
+extern int cmd_insurance_policies_list (client_ctx_t *ctx, json_t *root);
+extern int cmd_insurance_policies_buy (client_ctx_t *ctx, json_t *root);
+extern int cmd_insurance_claim_file (client_ctx_t *ctx, json_t *root);
+extern int cmd_player_get_topics (client_ctx_t *ctx, json_t *root);
+extern int cmd_player_set_topics (client_ctx_t *ctx, json_t *root);
+extern int cmd_sys_cron_planet_tick_once (client_ctx_t *ctx, json_t *root);
+extern int cmd_trade_accept (client_ctx_t *ctx, json_t *root);
+extern int cmd_trade_cancel (client_ctx_t *ctx, json_t *root);
+extern int cmd_trade_offer (client_ctx_t *ctx, json_t *root);
+
+/* UPDATED SIGNATURE: passing db_t* as first arg */
+extern int cmd_move_autopilot_start (db_t *db, client_ctx_t *ctx, json_t *root);
 
 
 static inline uint64_t
@@ -105,25 +108,42 @@ monotonic_millis (void)
 }
 
 
-/* void server_unregister_client(client_ctx_t *ctx) */
-/* { */
-/*   pthread_mutex_lock(&g_clients_mu); */
+/* --------------------------------------------------------------------------
+   Stubs for later work.
+   -------------------------------------------------------------------------- */
 
-/*   client_node_t **pp = &g_clients; */
-/*   while (*pp) */
-/*     { */
-/*       if ((*pp)->ctx == ctx) */
-/*         { */
-/*           client_node_t *dead = *pp; */
-/*           *pp = dead->next; */
-/*           free(dead); */
-/*           break; */
-/*         } */
-/*       pp = &(*pp)->next; */
-/*     } */
 
-/*   pthread_mutex_unlock(&g_clients_mu); */
-/* } */
+int
+cmd_insurance_policies_list (client_ctx_t *ctx, json_t *root)
+{
+  send_response_error (ctx,
+                       root,
+                       ERR_NOT_IMPLEMENTED,
+                       "Not implemented: cmd_insurance_policies_list");
+  return 0;
+}
+
+
+int
+cmd_insurance_policies_buy (client_ctx_t *ctx, json_t *root)
+{
+  send_response_error (ctx,
+                       root,
+                       ERR_NOT_IMPLEMENTED,
+                       "Not implemented: cmd_insurance_policies_buy");
+  return 0;
+}
+
+
+int
+cmd_insurance_claim_file (client_ctx_t *ctx, json_t *root)
+{
+  send_response_error (ctx,
+                       root,
+                       ERR_NOT_IMPLEMENTED,
+                       "Not implemented: cmd_insurance_claim_file");
+  return 0;
+}
 
 
 /* --------------------------------------------------------------------------
@@ -187,12 +207,18 @@ w_auth_login (client_ctx_t *ctx, json_t *root)
   int rc = cmd_auth_login (ctx, root);
   if (rc)
     {
-      /* Matches original process_message logic:
-         if (rc) { push_unseen_notices_for_player (ctx, ctx->player_id); }
-         (Logic seems questionable if rc=0 is success, but preserving as-is) */
       push_unseen_notices_for_player (ctx, ctx->player_id);
     }
   return rc;
+}
+
+
+/* WRAPPER: Pass the DB handle to autopilot start */
+static int
+w_move_autopilot_start (client_ctx_t *ctx, json_t *root)
+{
+  db_t *db = game_db_get_handle ();
+  return cmd_move_autopilot_start (db, ctx, root);
 }
 
 
@@ -332,7 +358,7 @@ static const command_entry_t k_command_registry[] = {
   {"mail.send", cmd_mail_send, "Send mail", schema_mail_send, 0},
 
   /* Move */
-  {"move.autopilot.start", cmd_move_autopilot_start, "Start autopilot",
+  {"move.autopilot.start", w_move_autopilot_start, "Start autopilot",
    schema_move_autopilot_start, 0},
   {"move.autopilot.status", cmd_move_autopilot_status, "Autopilot status",
    schema_move_autopilot_status, 0},
@@ -596,20 +622,20 @@ static const command_entry_t k_command_registry[] = {
    "Buy an underground password from the grimy trader", schema_placeholder, 0},
 
   /* Trade */
-  {"trade.accept", cmd_trade_accept, "Accept a private trade offer",
+  {"trade.accept", cmd_trade_accept, "Accept a trade offer",
    schema_trade_accept, 0},
   {"trade.buy", cmd_trade_buy, "Buy commodity from port", schema_trade_buy, 0},
-  {"trade.cancel", cmd_trade_cancel, "Cancel a pending trade offer",
+  {"trade.cancel", cmd_trade_cancel, "Cancel a trade offer",
    schema_trade_cancel, 0},
   {"trade.history", cmd_trade_history, "View recent trade transactions",
    schema_trade_history, 0},
   {"trade.jettison", cmd_trade_jettison, "Dump cargo into space",
    schema_trade_jettison, 0},
-  {"trade.offer", cmd_trade_offer,
-   "Create a private player-to-player trade offer", schema_trade_offer, 0},
+  {"trade.offer", cmd_trade_offer, "Create a trade offer to another player",
+   schema_trade_offer, 0},
   {"trade.port_info", cmd_trade_port_info, "Port prices/stock in sector",
    schema_trade_port_info, 0},
-  {"trade.quote", cmd_trade_quote, "Get a quote for a trade action",
+  {"trade.quote", cmd_trade_quote, "Get a price quote from a port",
    schema_trade_quote, 0},
   {"trade.sell", cmd_trade_sell, "Sell commodity to port", schema_trade_sell,
    0},
@@ -627,38 +653,28 @@ loop_get_supported_commands (const cmd_desc_t **out_tbl, size_t *out_n)
 
   if (!s_descs)
     {
-      /* Count entries */
       size_t n = 0;
       size_t count = 0;
 
 
       while (k_command_registry[n].name)
         {
-          /* Skip debug only if production */
 #ifdef BUILD_PRODUCTION
           if (k_command_registry[n].flags & CMD_FLAG_DEBUG_ONLY)
             {
-              n++;
-              continue;
+              n++; continue;
             }
 #endif
-          /* Skip hidden commands */
           if (k_command_registry[n].flags & CMD_FLAG_HIDDEN)
             {
-              n++;
-              continue;
+              n++; continue;
             }
-
-          n++;
-          count++;
+          n++; count++;
         }
-
-      /* Allocate static array once */
       s_descs = calloc (count, sizeof(cmd_desc_t));
       if (s_descs)
         {
-          size_t j = 0;
-          size_t i = 0;
+          size_t j = 0; size_t i = 0;
 
 
           while (k_command_registry[i].name)
@@ -666,25 +682,20 @@ loop_get_supported_commands (const cmd_desc_t **out_tbl, size_t *out_n)
 #ifdef BUILD_PRODUCTION
               if (k_command_registry[i].flags & CMD_FLAG_DEBUG_ONLY)
                 {
-                  i++;
-                  continue;
+                  i++; continue;
                 }
 #endif
               if (k_command_registry[i].flags & CMD_FLAG_HIDDEN)
                 {
-                  i++;
-                  continue;
+                  i++; continue;
                 }
-
               s_descs[j].name = k_command_registry[i].name;
               s_descs[j].summary = k_command_registry[i].summary;
-              j++;
-              i++;
+              j++; i++;
             }
           s_count = count;
         }
     }
-
   if (out_tbl)
     {
       *out_tbl = s_descs;
@@ -725,9 +736,7 @@ json_t *
 loop_get_all_schema_keys (void)
 {
   json_t *keys = json_array ();
-  /* envelope is special */
   json_array_append_new (keys, json_string ("envelope"));
-
   for (int i = 0; k_command_registry[i].name != NULL; i++)
     {
       if (k_command_registry[i].flags & CMD_FLAG_HIDDEN)
@@ -751,8 +760,6 @@ loop_get_all_schema_keys (void)
    -------------------------------------------------------------------------- */
 
 
-/* Broadcast a system.notice to everyone (uses subscription infra).
-   Data is BORROWED here; we incref for the call. */
 static void
 server_broadcast_to_all_online (json_t *data)
 {
@@ -762,10 +769,14 @@ server_broadcast_to_all_online (json_t *data)
 
 
 static int
-broadcast_sweep_once (sqlite3 *db, int max_rows)
+broadcast_sweep_once (db_t *db, int max_rows)
 {
-  sqlite3_stmt *st = NULL;
-  int rc;
+  if (!db)
+    {
+      return -1;
+    }
+  db_error_t err;
+  db_res_t *res = NULL;
   int rows = 0;
 
   static const char *sql =
@@ -775,77 +786,69 @@ broadcast_sweep_once (sqlite3 *db, int max_rows)
     "    SELECT notice_id FROM notice_seen WHERE player_id = 0"
     ") "
     "ORDER BY created_at ASC, id ASC "
-    "LIMIT ?1;";
+    "LIMIT $1;";
 
-  /* Begin a read transaction.
-   * IMMEDIATE prevents us from starting if a writer already holds the lock.
-   */
-  rc = sqlite3_exec (db, "BEGIN IMMEDIATE;", NULL, NULL, NULL);
-  if (rc == SQLITE_BUSY || rc == SQLITE_LOCKED)
+
+  if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
     {
-      /* DB under pressure — skip this sweep */
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      return 0;
-    }
-  if (rc != SQLITE_OK)
-    {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      return -1;
-    }
-
-  rc = sqlite3_prepare_v2 (db, sql, -1, &st, NULL);
-  if (rc == SQLITE_BUSY || rc == SQLITE_LOCKED)
-    {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      return 0;
-    }
-  if (rc != SQLITE_OK)
-    {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      return -1;
-    }
-
-  sqlite3_bind_int (st, 1, max_rows);
-
-  while ((rc = sqlite3_step (st)) == SQLITE_ROW)
-    {
-      /* Extract fields */
-      int notice_id = sqlite3_column_int (st, 0);
-
-
-      /* Broadcast notice to clients */
-      //broadcast_notice_row(st);
-
-      /* Mark as seen for system player (player_id = 0) */
-      rc = db_notice_mark_seen (notice_id, 0);
-      if (rc == SQLITE_BUSY || rc == SQLITE_LOCKED)
+      if (err.code == ERR_DB_BUSY || err.code == ERR_DB_LOCKED)
         {
-          sqlite3_finalize (st);
-          sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
           return 0;
         }
-      if (rc != SQLITE_OK)
+      return -1;
+    }
+
+  db_bind_t params[] = { db_bind_i32 (max_rows) };
+
+
+  if (!db_query (db, sql, params, 1, &res, &err))
+    {
+      db_tx_rollback (db, NULL);
+      return -1;
+    }
+
+  while (db_res_step (res, &err))
+    {
+      int notice_id = db_res_col_i32 (res, 0, &err);
+      int64_t created_at = db_res_col_i64 (res, 1, &err);
+      const char *title = db_res_col_text (res, 2, &err);
+      const char *body = db_res_col_text (res, 3, &err);
+      const char *severity = db_res_col_text (res, 4, &err);
+      int64_t expires_at =
+        db_res_col_is_null (res, 5) ? 0 : db_res_col_i64 (res, 5, &err);
+
+      /* Broadcast notice to clients */
+      json_t *data = json_object ();
+
+
+      json_object_set_new (data, "id", json_integer (notice_id));
+      json_object_set_new (data, "created_at", json_integer (created_at));
+      json_object_set_new (data, "title", json_string (title ? title : ""));
+      json_object_set_new (data, "body", json_string (body ? body : ""));
+      json_object_set_new (data, "severity",
+                           json_string (severity ? severity : "info"));
+      if (expires_at > 0)
         {
-          sqlite3_finalize (st);
-          sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-          return -1;
+          json_object_set_new (data, "expires_at", json_integer (expires_at));
         }
 
+      server_broadcast_to_all_online (data);
+
+      /* Mark as seen for system player (player_id = 0) */
+      if (db_notice_mark_seen (db, notice_id, 0) != 0)
+        {
+          db_res_finalize (res);
+          db_tx_rollback (db, NULL);
+          return -1;
+        }
       rows++;
     }
 
-  sqlite3_finalize (st);
+  db_res_finalize (res);
 
-  if (rc != SQLITE_DONE)
+  if (!db_tx_commit (db, &err))
     {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
-      return -1;
-    }
-
-  rc = sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
-  if (rc != SQLITE_OK)
-    {
-      sqlite3_exec (db, "ROLLBACK;", NULL, NULL, NULL);
+      db_tx_rollback (db, NULL);
       return -1;
     }
 
@@ -853,7 +856,6 @@ broadcast_sweep_once (sqlite3 *db, int max_rows)
 }
 
 
-/* ===== Client registry for broadcasts (#195) ===== */
 client_node_t *g_clients = NULL;
 pthread_mutex_t g_clients_mu = PTHREAD_MUTEX_INITIALIZER;
 
@@ -867,9 +869,7 @@ server_register_client (client_ctx_t *ctx)
 
   if (n)
     {
-      n->ctx = ctx;
-      n->next = g_clients;
-      g_clients = n;
+      n->ctx = ctx; n->next = g_clients; g_clients = n;
     }
   pthread_mutex_unlock (&g_clients_mu);
 }
@@ -886,12 +886,7 @@ server_unregister_client (client_ctx_t *ctx)
     {
       if ((*pp)->ctx == ctx)
         {
-          client_node_t *dead = *pp;
-
-
-          *pp = (*pp)->next;
-          free (dead);
-          break;
+          client_node_t *dead = *pp; *pp = (*pp)->next; free (dead); break;
         }
       pp = &((*pp)->next);
     }
@@ -899,7 +894,6 @@ server_unregister_client (client_ctx_t *ctx)
 }
 
 
-/* Deliver an envelope (type+data) to any online socket for player_id. */
 int
 server_deliver_to_player (int player_id, const char *event_type, json_t *data)
 {
@@ -916,7 +910,6 @@ server_deliver_to_player (int player_id, const char *event_type, json_t *data)
         }
       if (c->player_id == player_id && c->fd >= 0)
         {
-          /* send_enveloped_ok does its own timestamp/meta/sanitize. */
           json_t *tmp = json_incref (data);
 
 
@@ -930,17 +923,13 @@ server_deliver_to_player (int player_id, const char *event_type, json_t *data)
 
 
 /* ------------------------ idempotency helpers  ------------------------ */
-
-
-/* FNV-1a 64-bit */
 static uint64_t
 fnv1a64 (const unsigned char *s, size_t n)
 {
   uint64_t h = 1469598103934665603ULL;
   for (size_t i = 0; i < n; ++i)
     {
-      h ^= (uint64_t) s[i];
-      h *= 1099511628211ULL;
+      h ^= (uint64_t) s[i]; h *= 1099511628211ULL;
     }
   return h;
 }
@@ -952,22 +941,19 @@ hex64 (uint64_t v, char out[17])
   static const char hexd[] = "0123456789abcdef";
   for (int i = 15; i >= 0; --i)
     {
-      out[i] = hexd[v & 0xF];
-      v >>= 4;
+      out[i] = hexd[v & 0xF]; v >>= 4;
     }
   out[16] = '\0';
 }
 
 
-/* Canonicalize a JSON object (sorted keys, compact) then FNV-1a */
 void
 idemp_fingerprint_json (json_t *obj, char out[17])
 {
   char *s = json_dumps (obj, JSON_COMPACT | JSON_SORT_KEYS);
   if (!s)
     {
-      strcpy (out, "0");
-      return;
+      strcpy (out, "0"); return;
     }
   uint64_t h = fnv1a64 ((const unsigned char *) s, strlen (s));
 
@@ -992,14 +978,11 @@ make_listen_socket (uint16_t port)
   int fd = socket (AF_INET, SOCK_STREAM, 0);
   if (fd < 0)
     {
-      perror ("socket");
-      return -1;
+      perror ("socket"); return -1;
     }
   if (set_reuseaddr (fd) < 0)
     {
-      perror ("setsockopt(SO_REUSEADDR)");
-      close (fd);
-      return -1;
+      perror ("setsockopt(SO_REUSEADDR)"); close (fd); return -1;
     }
   struct sockaddr_in sa;
 
@@ -1010,21 +993,16 @@ make_listen_socket (uint16_t port)
   sa.sin_port = htons (port);
   if (bind (fd, (struct sockaddr *) &sa, sizeof (sa)) < 0)
     {
-      perror ("bind");
-      close (fd);
-      return -1;
+      perror ("bind"); close (fd); return -1;
     }
   if (listen (fd, 128) < 0)
     {
-      perror ("listen");
-      close (fd);
-      return -1;
+      perror ("listen"); close (fd); return -1;
     }
   return fd;
 }
 
 
-/* Roll the window and increment count for this response */
 void
 rl_tick (client_ctx_t *ctx)
 {
@@ -1038,7 +1016,7 @@ rl_tick (client_ctx_t *ctx)
   if (ctx->rl_limit <= 0)
     {
       ctx->rl_limit = 60;
-    }                           /* safety */
+    }
   if (ctx->rl_window_sec <= 0)
     {
       ctx->rl_window_sec = 60;
@@ -1052,7 +1030,6 @@ rl_tick (client_ctx_t *ctx)
 }
 
 
-/* Build {limit, remaining, reset} */
 static json_t *
 rl_build_meta (const client_ctx_t *ctx)
 {
@@ -1076,6 +1053,8 @@ rl_build_meta (const client_ctx_t *ctx)
       remaining = 0;
     }
   json_t *root = json_object ();
+
+
   json_object_set_new (root, "limit", json_integer (ctx->rl_limit));
   json_object_set_new (root, "remaining", json_integer (remaining));
   json_object_set_new (root, "reset", json_integer (reset));
@@ -1083,7 +1062,6 @@ rl_build_meta (const client_ctx_t *ctx)
 }
 
 
-/* Ensure env.meta exists and add meta.rate_limit */
 void
 attach_rate_limit_meta (json_t *env, client_ctx_t *ctx)
 {
@@ -1106,7 +1084,6 @@ attach_rate_limit_meta (json_t *env, client_ctx_t *ctx)
 }
 
 
-/* Public dispatch helper */
 int
 server_dispatch_command (client_ctx_t *ctx, json_t *root)
 {
@@ -1138,23 +1115,17 @@ server_dispatch_command (client_ctx_t *ctx, json_t *root)
 static void
 process_message (client_ctx_t *ctx, json_t *root)
 {
-  //LOGE("DEBUG: process_message entered for fd=%d, ctx->player_id=%d", ctx->fd, ctx->player_id);
-  // db_close_thread ();                   /* Ensure a fresh DB connection */
-  sqlite3 *db = db_get_handle ();       /* Re-open (or get) fresh DB conn */
-  if (!db)                              /* Handle case where we can't get a connection */
+  db_t *db = game_db_get_handle ();
+  if (!db)
     {
       send_response_error (ctx,
                            root,
                            ERR_PLANET_NOT_FOUND,
-                           "Database connection error");
-      return;
+                           "Database connection error"); return;
     }
-
-  /* Make ctx visible to send helpers for rate-limit meta */
   g_ctx_for_send = ctx;
   json_t *cmd = json_object_get (root, "command");
   json_t *evt = json_object_get (root, "event");
-  /* Auto-auth from meta.session_token (transport-agnostic clients) */
   json_t *jmeta = json_object_get (root, "meta");
   json_t *jauth = json_object_get (root, "auth");
   const char *session_token = NULL;
@@ -1187,12 +1158,12 @@ process_message (client_ctx_t *ctx, json_t *root)
       int rc = db_session_lookup (session_token, &pid, &exp);
 
 
-      if (rc == SQLITE_OK && pid > 0)
+      if (rc == 0 && pid > 0)
         {
           ctx->player_id = pid;
-          ctx->corp_id = h_get_player_corp_id (db_get_handle (), pid);
-          ctx->ship_id = h_get_active_ship_id (db_get_handle (), pid);
-          int db_sector = h_get_player_sector (pid);
+          ctx->corp_id = h_get_player_corp_id (db, pid);
+          ctx->ship_id = h_get_active_ship_id (db, pid);
+          int db_sector = h_get_player_sector (db, pid);
 
 
           if (db_sector > 0)
@@ -1201,10 +1172,9 @@ process_message (client_ctx_t *ctx, json_t *root)
             }
           if (ctx->sector_id <= 0)
             {
-              ctx->sector_id = 1; /* or load from DB */
+              ctx->sector_id = 1;
             }
         }
-      /* If invalid/expired, we silently ignore; individual commands can refuse with 1401 */
     }
   if (ctx->player_id == 0 && ctx->sector_id <= 0)
     {
@@ -1226,28 +1196,31 @@ process_message (client_ctx_t *ctx, json_t *root)
                            "Invalid request schema");
       return;
     }
-  /* Rate-limit defaults: 60 responses / 60 seconds */
   ctx->rl_limit = 60;
   ctx->rl_window_sec = 60;
   ctx->rl_window_start = time (NULL);
   ctx->rl_count = 0;
 
+  int responses_before = ctx->responses_sent;
+
+
   if (server_dispatch_command (ctx, root) == -1)
     {
       send_response_error (ctx, root, ERR_INVALID_SCHEMA, "Unknown command");
     }
+
+  if (ctx->responses_sent == responses_before)
+    {
+      send_response_error (ctx, root, 500, "Handler produced no response");
+    }
 }
 
 
-/* src/server_loop.c */
 static void *
 connection_thread (void *arg)
 {
   client_ctx_t *ctx = (client_ctx_t *) arg;
   int fd = ctx->fd;
-  /* Per-thread initialisation (DB/session/etc.) goes here */
-  /* Note: db_get_handle() called inside cmd_* functions handles init implicitly */
-  /* Make recv interruptible via timeout so we can stop promptly */
   struct timeval tv = {.tv_sec = 1,.tv_usec = 0 };
   setsockopt (fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof (tv));
   char buf[BUF_SIZE];
@@ -1266,7 +1239,6 @@ connection_thread (void *arg)
       if (n > 0)
         {
           have += (size_t) n;
-          /* Process complete lines (newline-terminated frames) */
           size_t start = 0;
 
 
@@ -1274,7 +1246,6 @@ connection_thread (void *arg)
             {
               if (buf[i] == '\n')
                 {
-                  /* Trim optional CR */
                   size_t linelen = i - start;
                   const char *line = buf + start;
 
@@ -1283,16 +1254,15 @@ connection_thread (void *arg)
                     {
                       linelen--;
                     }
-                  /* Parse and dispatch */
-                  //LOGI ("CORE DUMP DEBUG: Received from client: %.*s\n",
-                  //    (int) linelen, line);
                   json_error_t jerr;
                   json_t *root = json_loadb (line, linelen, 0, &jerr);
 
 
                   if (!root || !json_is_object (root))
                     {
-                      send_response_error (ctx, NULL, ERR_SERVER_ERROR,
+                      send_response_error (ctx,
+                                           NULL,
+                                           ERR_SERVER_ERROR,
                                            "Protocol Error: Malformed JSON");
                       if (root)
                         {
@@ -1307,13 +1277,11 @@ connection_thread (void *arg)
                   start = i + 1;
                 }
             }
-          /* Shift any partial line to front */
           if (start > 0)
             {
               memmove (buf, buf + start, have - start);
               have -= start;
             }
-          /* Overflow without newline → guard & reset */
           if (have == sizeof (buf))
             {
               send_error_json (fd, 1300, "invalid request schema");
@@ -1322,7 +1290,6 @@ connection_thread (void *arg)
         }
       else if (n == 0)
         {
-          /* peer closed */
           break;
         }
       else
@@ -1331,17 +1298,12 @@ connection_thread (void *arg)
             {
               continue;
             }
-          /* hard error */
           break;
         }
     }
-  /* Per-thread teardown */
-  /* FIX: Explicitly close the thread-local database connection */
-
   db_close_thread ();
   close (fd);
-
-  server_unregister_client (ctx);   /* MUST happen before free(ctx) */
+  server_unregister_client (ctx);
   free (ctx);
   return NULL;
 }
@@ -1351,33 +1313,28 @@ int
 server_loop (volatile sig_atomic_t *running)
 {
   LOGI ("Server loop starting...\n");
-  //  LOGE( "Server loop starting...\n");
 #ifdef SIGPIPE
-  signal (SIGPIPE, SIG_IGN);    /* don’t die on write to closed socket */
+  signal (SIGPIPE, SIG_IGN);
 #endif
   int listen_fd = make_listen_socket (g_cfg.server_port);
 
 
   if (listen_fd < 0)
     {
-      LOGE ("Server loop exiting due to listen socket error.\n");
-      //      LOGE( "Server loop exiting due to listen socket error.\n");
-      return -1;
+      LOGE ("Server loop exiting due to listen socket error.\n"); return -1;
     }
   LOGI ("Listening on 0.0.0.0:%d\n", g_cfg.server_port);
-  //  LOGE( "Listening on 0.0.0.0:%d\n", LISTEN_PORT);
   struct pollfd pfd = {.fd = listen_fd,.events = POLLIN,.revents = 0 };
   pthread_attr_t attr;
 
 
   pthread_attr_init (&attr);
   pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED);
+
   while (*running)
     {
-      g_server_tick++;          /* Increment server tick */
-      int rc = poll (&pfd, 1, 100);     /* was 1000; 100ms gives us a ~10Hz tick */
-      // int rc = poll (&pfd, 1, 1000); /* 1s tick re-checks *running */
-      /* === Broadcast pump tick (every ~500ms) === */
+      g_server_tick++;
+      int rc = poll (&pfd, 1, 100);
       {
         static uint64_t last_broadcast_ms = 0;
         uint64_t now_ms = monotonic_millis ();
@@ -1385,7 +1342,7 @@ server_loop (volatile sig_atomic_t *running)
 
         if (now_ms - last_broadcast_ms >= 500)
           {
-            (void) broadcast_sweep_once (db_get_handle (), 64);
+            (void) broadcast_sweep_once (game_db_get_handle (), 64);
             last_broadcast_ms = now_ms;
           }
       }
@@ -1402,7 +1359,6 @@ server_loop (volatile sig_atomic_t *running)
         }
       if (rc == 0)
         {
-          /* timeout only: we still ran the pump above; just loop again */
           continue;
         }
       if (pfd.revents & POLLIN)
@@ -1412,9 +1368,7 @@ server_loop (volatile sig_atomic_t *running)
 
           if (!ctx)
             {
-              LOGE ("malloc failed\n");
-              //              LOGE( "malloc failed\n");
-              continue;
+              LOGE ("malloc failed\n"); continue;
             }
           socklen_t sl = sizeof (ctx->peer);
           int cfd = accept (listen_fd, (struct sockaddr *) &ctx->peer, &sl);
@@ -1423,32 +1377,22 @@ server_loop (volatile sig_atomic_t *running)
           if (cfd < 0)
             {
               free (ctx);
-              if (errno == EINTR)
-                {
-                  continue;
-                }
-              if (errno == EAGAIN || errno == EWOULDBLOCK)
+              if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
                 {
                   continue;
                 }
               perror ("accept");
               continue;
             }
-
-          /* Only register after successful accept */
           server_register_client (ctx);
-
           ctx->fd = cfd;
           ctx->running = running;
           char ip[INET_ADDRSTRLEN];
 
 
           inet_ntop (AF_INET, &ctx->peer.sin_addr, ip, sizeof (ip));
-          LOGI ("Client connected: %s:%u (fd=%d)\n",
-                ip, (unsigned) ntohs (ctx->peer.sin_port), cfd);
-          //      LOGE( "Client connected: %s:%u (fd=%d)\n",
-          //       ip, (unsigned) ntohs (ctx->peer.sin_port), cfd);
-          // after filling ctx->fd, ctx->running, ctx->peer, and assigning ctx->cid
+          LOGI ("Client connected: %s:%u (fd=%d)\n", ip,
+                (unsigned) ntohs (ctx->peer.sin_port), cfd);
           pthread_t th;
           int prc = pthread_create (&th, &attr, connection_thread, ctx);
 
@@ -1456,26 +1400,21 @@ server_loop (volatile sig_atomic_t *running)
           if (prc == 0)
             {
               LOGI ("[cid=%" PRIu64 "] thread created (pthread=%lu)\n",
-                    ctx->cid, (unsigned long) th);
-              //              LOGE(
-              //       "[cid=%%" PRIu64 "] thread created (pthread=%%lu)\n",
-              //       ctx->cid, (unsigned long) th);
+                    ctx->cid,
+                    (unsigned long) th);
             }
           else
             {
               LOGE ("pthread_create: %s\n", strerror (prc));
-              /* Unregister before freeing if thread creation failed */
               server_unregister_client (ctx);
               close (cfd);
               free (ctx);
             }
         }
     }
-  // server_unregister_client(ctx);
   pthread_attr_destroy (&attr);
   close (listen_fd);
   LOGI ("Server loop exiting...\n");
-  //  LOGE( "Server loop exiting...\n");
   return 0;
 }
 

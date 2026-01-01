@@ -19,7 +19,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "INSERT OR REPLACE INTO planets (id, sector, name, owner_id, owner_type, created_by, created_at) VALUES (200, 1, 'Dune', @planet_lord_player_id, 'player', @planet_lord_player_id, strftime('%s','now'));"
+        "sql": "INSERT INTO planets (id, sector, name, owner_id, owner_type, created_by, created_at) VALUES (200, 1, 'Dune', @planet_lord_player_id, 'player', @planet_lord_player_id, now()) ON CONFLICT (id) DO UPDATE SET owner_id = EXCLUDED.owner_id, owner_type = EXCLUDED.owner_type;"
       },
       "expect": { "status": "ok" }
     },

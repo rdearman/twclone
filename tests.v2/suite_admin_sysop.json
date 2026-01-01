@@ -1,17 +1,38 @@
 {
   "tests": [
     {
-      "name": "Setup: Auth Admin (Privileged User)",
-      "setup": "macro_sysop",
+      "name": "Setup: Register Admin (Privileged User)",
+      "setup": "macro_auth_user",
       "username": "sysop_admin_1",
       "password": "password"
     },
     {
-      "name": "Setup: Auth Normie (Standard User)",
+      "name": "Login Admin (Privileged User)",
+      "command": "auth.login",
+      "data": { "username": "sysop_admin_1", "passwd": "password" },
+      "user": "sysop_admin_1",
+      "save": { "session": "data.session", "sysop_admin_1_player_id": "data.player_id" }
+    },
+    {
+      "name": "Promote Admin to Sysop",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET type = 1 WHERE name = 'sysop_admin_1';" },
+      "user": "sysop_admin_1"
+    },
+    {
+      "name": "Setup: Register Normie (Standard User)",
       "setup": "macro_auth_user",
       "username": "sysop_normie_1",
       "password": "password"
     },
+    {
+      "name": "Login Normie (Standard User)",
+      "command": "auth.login",
+      "data": { "username": "sysop_normie_1", "passwd": "password" },
+      "user": "sysop_normie_1",
+      "save": { "session": "data.session", "sysop_normie_1_player_id": "data.player_id" }
+    }
+,
     {
         "name": "DEBUG: Check Normie Type",
         "command": "sys.raw_sql_exec",
@@ -31,7 +52,7 @@
       "command": "admin.notice",
       "data": { "title": "Fail", "body": "Should not work" },
       "user": "sysop_normie_1",
-      "expect": { "status": "refused", "error_code": 1111, "message": "Permission denied" }
+      "expect": { "status": "refused", "error_code": 402, "message": "Permission denied" }
     },
     {
       "name": "Shutdown Warning (Sysop Success)",
@@ -45,7 +66,7 @@
       "command": "admin.shutdown_warning",
       "data": { "body": "Panic!", "countdown_seconds": 60 },
       "user": "sysop_normie_1",
-      "expect": { "status": "refused", "error_code": 1111, "message": "Permission denied" }
+      "expect": { "status": "refused", "error_code": 402, "message": "Permission denied" }
     },
     {
         "name": "Raw SQL Select (Sysop Success)",
@@ -59,7 +80,8 @@
         "command": "sys.raw_sql_exec",
         "data": { "sql": "SELECT 1;" },
         "user": "sysop_normie_1",
-        "expect": { "status": "refused", "error_code": 1111, "message": "Permission denied" }
+        "user": "sysop_normie_1",
+        "expect": { "status": "refused", "error_code": 402, "message": "Permission denied" }
     }
   ]
 }

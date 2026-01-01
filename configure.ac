@@ -38,6 +38,27 @@ dnl Checks for libraries.
 AC_CHECK_LIB(m, pow, , AC_MSG_ERROR("I need a math library."))
 AC_CHECK_LIB(pthread, pthread_create, , AC_MSG_ERROR("I need a pthread library."))
 
+dnl PostgreSQL Backend
+AC_ARG_ENABLE([postgres],
+    [AS_HELP_STRING([--enable-postgres], [Enable PostgreSQL backend])],
+    [enable_postgres=$enableval],
+    [enable_postgres=no])
+
+if test "x$enable_postgres" = "xyes"; then
+    AC_PATH_TOOL([PG_CONFIG], [pg_config])
+    if test -n "$PG_CONFIG"; then
+        POSTGRES_CFLAGS="-I`$PG_CONFIG --includedir`"
+        POSTGRES_LDFLAGS="-L`$PG_CONFIG --libdir`"
+        CFLAGS="$CFLAGS $POSTGRES_CFLAGS"
+        LDFLAGS="$LDFLAGS $POSTGRES_LDFLAGS"
+    fi
+    AC_CHECK_LIB(pq, PQconnectdb, [], [AC_MSG_ERROR([libpq not found])])
+    AC_CHECK_HEADER([libpq-fe.h], [], [AC_MSG_ERROR([libpq-fe.h not found])])
+    AC_DEFINE([DB_BACKEND_PG], [1], [Define to enable PostgreSQL backend])
+fi
+
+AM_CONDITIONAL([ENABLE_POSTGRES], [test "x$enable_postgres" = "xyes"])
+
 dnl Checks for header files.
 AC_CHECK_HEADERS(ctype.h errno.h math.h netdb.h netinet/in.h pthread.h stdio.h stdlib.h string.h sys/ipc.h sys/msg.h sys/poll.h sys/socket.h sys/time.h sys/types.h termios.h time.h unistd.h, , AC_MSG_ERROR("Missing essential header!"))
 

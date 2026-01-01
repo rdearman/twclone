@@ -18,6 +18,29 @@
 int toss;
 
 
+static inline int
+ctx_ptr_sane (const client_ctx_t *ctx)
+{
+  if (!ctx)
+    {
+      return 0;
+    }
+  uintptr_t p = (uintptr_t) ctx;
+
+
+  /* reject small/null pointers and kernel-space addresses */
+  if (p < 0x10000UL)
+    {
+      return 0;
+    }
+  if (p >= 0x00007ffffffff000UL)
+    {
+      return 0;
+    }
+  return 1;
+}
+
+
 void
 send_response_ok_borrow (client_ctx_t *ctx,
                          json_t *req,
@@ -43,8 +66,8 @@ send_response_ok_take (client_ctx_t *ctx,
     {
       *pdata = NULL;
     }
-
-  if (ctx && ctx->captured_envelopes)
+  if (ctx && ctx == g_ctx_for_send && ctx->captured_envelopes_valid &&
+      ctx->captured_envelopes)
     {
       json_t *resp = json_object ();
 
@@ -65,13 +88,12 @@ send_response_ok_take (client_ctx_t *ctx,
       return;
     }
 
-  /* send_enveloped_ok must follow the same rule: it STEALS 'data' if non-NULL */
+  /* send_enveloped_ok follows the same rule: it BORROWS 'data' */
   send_enveloped_ok (ctx->fd, req, type, data);
   if (data)
     {
-      json_decref (data); /* FIX: Manually fulfill the "steal" contract */
+      json_decref (data); /* Consume the 'taken' reference */
     }
-  
 }
 
 
@@ -232,6 +254,8 @@ cmd_system_cmd_list (client_ctx_t *ctx, json_t *root)
     }
 
   json_t *data = json_object ();
+
+
   json_object_set_new (data, "commands", arr); /* FIX: Use _new to steal ownership */
   json_object_set_new (data, "count", json_integer ((int) n));
 
@@ -380,7 +404,13 @@ make_base_envelope (json_t *req, const char *type)
 void
 send_all_json (int fd, json_t *obj)
 {
+  if (g_ctx_for_send)
+    {
+      g_ctx_for_send->responses_sent++;
+    }
   char *s = json_dumps (obj, JSON_COMPACT);
+
+
   if (s)
     {
       (void) send_all (fd, s, strlen (s)); (void) send_all (fd, "\n", 1);
@@ -424,6 +454,7 @@ make_default_meta (void)
   json_object_set_new (rate, "reset", json_integer (60));
   json_t *meta = json_object ();
 
+
   json_object_set_new (meta, "rate_limit", rate);
   return meta;
 }
@@ -466,14 +497,7 @@ send_enveloped_ok (int fd, json_t *req, const char *type, json_t *data)
     {
       sanitize_json_strings (resp);
     }
-  char *s = json_dumps (resp, JSON_COMPACT);
-
-
-  if (s)
-    {
-      send (fd, s, strlen (s), MSG_NOSIGNAL); send (fd, "\n", 1, MSG_NOSIGNAL);
-      free (s);
-    }
+  send_all_json (fd, resp);
   json_decref (resp);
 }
 
@@ -513,14 +537,7 @@ send_enveloped_error (int fd,
   json_object_set_new (resp, "data", json_null ());
   json_object_set_new (resp, "meta", make_default_meta ());
   sanitize_json_strings (resp);
-  char *s = json_dumps (resp, JSON_COMPACT);
-
-
-  if (s)
-    {
-      send (fd, s, strlen (s), MSG_NOSIGNAL); send (fd, "\n", 1, MSG_NOSIGNAL);
-      free (s);
-    }
+  send_all_json (fd, resp);
   json_decref (resp);
 }
 
@@ -552,6 +569,8 @@ send_enveloped_refused (int fd,
   json_object_set_new (resp, "status", json_string ("refused"));
   json_object_set_new (resp, "type", json_string ("error"));
   json_t *err = json_object ();
+
+
   json_object_set_new (err, "code", json_integer (code));
   json_object_set_new (err, "message", json_string (msg ? msg : ""));
 
@@ -564,14 +583,7 @@ send_enveloped_refused (int fd,
   json_object_set_new (resp, "data", json_null ());
   json_object_set_new (resp, "meta", make_default_meta ());
   sanitize_json_strings (resp);
-  char *s = json_dumps (resp, JSON_COMPACT);
-
-
-  if (s)
-    {
-      send (fd, s, strlen (s), MSG_NOSIGNAL); send (fd, "\n", 1, MSG_NOSIGNAL);
-      free (s);
-    }
+  send_all_json (fd, resp);
   json_decref (resp);
 }
 
@@ -580,7 +592,8 @@ void
 send_response_ok (client_ctx_t *ctx, json_t *req, const char *type,
                   json_t *data)
 {
-  if (ctx && ctx->captured_envelopes)
+  if (ctx && ctx == g_ctx_for_send && ctx->captured_envelopes_valid &&
+      ctx->captured_envelopes)
     {
       json_t *resp = json_object ();
 
@@ -628,7 +641,8 @@ send_response_ok (client_ctx_t *ctx, json_t *req, const char *type,
 void
 send_response_error (client_ctx_t *ctx, json_t *req, int code, const char *msg)
 {
-  if (ctx && ctx->captured_envelopes)
+  if (ctx && ctx == g_ctx_for_send && ctx->captured_envelopes_valid &&
+      ctx->captured_envelopes)
     {
       json_t *resp = json_object ();
 
@@ -651,6 +665,8 @@ send_response_error (client_ctx_t *ctx, json_t *req, int code, const char *msg)
       json_object_set_new (resp, "status", json_string ("error"));
       json_object_set_new (resp, "type", json_string ("error"));
       json_t *err = json_object ();
+
+
       json_object_set_new (err, "code", json_integer (code));
       json_object_set_new (err, "message", json_string (msg ? msg : ""));
 
@@ -675,7 +691,8 @@ send_response_refused (client_ctx_t *ctx,
                        const char *msg,
                        json_t *data_opt)
 {
-  if (ctx && ctx->captured_envelopes)
+  if (ctx && ctx == g_ctx_for_send && ctx->captured_envelopes_valid &&
+      ctx->captured_envelopes)
     {
       json_t *resp = json_object ();
 
@@ -698,6 +715,8 @@ send_response_refused (client_ctx_t *ctx,
       json_object_set_new (resp, "status", json_string ("refused"));
       json_object_set_new (resp, "type", json_string ("error"));
       json_t *err = json_object ();
+
+
       json_object_set_new (err, "code", json_integer (code));
       json_object_set_new (err, "message", json_string (msg ? msg : ""));
 
@@ -824,6 +843,8 @@ s2s_make_env (const char *type, const char *src, const char *dst,
   json_t *pl = borrow_or_empty_obj (payload);
   /* NOTE: No "auth" here. Transport layer will add it before sending. */
   json_t *env = json_object ();
+
+
   json_object_set_new (env, "v", json_integer (1));
   json_object_set_new (env, "type", json_string (type));
   json_object_set_new (env, "id", json_string (id));
@@ -857,6 +878,8 @@ s2s_make_ack (const char *src, const char *dst, const char *ack_of,
   time_t now = time (NULL);
   json_t *pl = borrow_or_empty_obj (payload);
   json_t *env = json_object ();
+
+
   json_object_set_new (env, "v", json_integer (1));
   json_object_set_new (env, "type", json_string ("s2s.ack"));
   json_object_set_new (env, "id", json_string (id));
@@ -893,6 +916,8 @@ s2s_make_error (const char *src, const char *dst,
   time_t now = time (NULL);
   json_t *det = details ? json_incref (details), details : json_object ();
   json_t *err = json_object ();
+
+
   json_object_set_new (err, "code", json_string (code));
   json_object_set_new (err, "message", json_string (message ? message : ""));
   json_object_set (err, "details", det);
@@ -900,6 +925,8 @@ s2s_make_error (const char *src, const char *dst,
 
   json_decref (det);
   json_t *env = json_object ();
+
+
   json_object_set_new (env, "v", json_integer (1));
   json_object_set_new (env, "type", json_string ("s2s.error"));
   json_object_set_new (env, "id", json_string (id));
