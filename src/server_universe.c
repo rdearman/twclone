@@ -721,7 +721,23 @@ attach_sector_asset_counts (db_t *db, int sid, json_t *out)
 void
 cmd_sector_info (client_ctx_t *ctx, int fd, json_t *root, int sid, int pid)
 {
-  (void)ctx; (void)fd; (void)root; (void)sid; (void)pid;
+  (void)fd;
+  db_t *db = game_db_get_handle();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_DB_CLOSED, "Database connection failed");
+      return;
+    }
+
+  json_t *payload = build_sector_info_json (db, sid);
+  if (!payload)
+    {
+      send_response_error (ctx, root, ERR_PLANET_NOT_FOUND,
+                           "Out of memory building sector info");
+      return;
+    }
+
+  send_response_ok_take (ctx, root, "sector.info", &payload);
 }
 
 
@@ -735,21 +751,214 @@ build_sector_info_json (db_t *db, int sid)
 int
 cmd_move_scan (client_ctx_t *ctx, json_t *root)
 {
-  (void)ctx; (void)root; return 0;
+  if (!ctx)
+    {
+      return 1;
+    }
+  db_t *db = game_db_get_handle();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_DB_CLOSED, "Database connection failed");
+      return 0;
+    }
+
+  h_decloak_ship (db, h_get_active_ship_id (db, ctx->player_id));
+  TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);
+
+  if (tc != TURN_CONSUME_SUCCESS)
+    {
+      return handle_turn_consumption_error (ctx, tc, "move.scan", root, NULL);
+    }
+
+  int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 1;
+  LOGI ("[move.scan] sector_id=%d\n", sector_id);
+
+  json_t *payload = build_sector_scan_json (db, sector_id, ctx->player_id, false);
+  if (!payload)
+    {
+      send_response_error (ctx, root, ERR_SECTOR_NOT_FOUND, "Sector not found");
+      return 0;
+    }
+
+  send_response_ok_take (ctx, root, "sector.scan", &payload);
+  return 0;
 }
 
 
 int
 cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
 {
-  (void)ctx; (void)root; return 0;
+  if (!ctx || !root)
+    {
+      return 1;
+    }
+  
+  db_t *db = game_db_get_handle();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_DB_CLOSED, "Database connection failed");
+      return 1;
+    }
+
+  h_decloak_ship (db, h_get_active_ship_id (db, ctx->player_id));
+  
+  json_t *jdata = json_object_get (root, "data");
+  json_t *jsector_id = json_object_get (jdata, "sector_id");
+  json_t *jtext = json_object_get (jdata, "text");
+
+  if (!json_is_integer (jsector_id) || !json_is_string (jtext))
+    {
+      send_response_error (ctx, root, ERR_INVALID_SCHEMA, "Invalid request schema");
+      return 1;
+    }
+
+  int req_sector_id = (int) json_integer_value (jsector_id);
+
+  if (ctx->sector_id != req_sector_id)
+    {
+      send_response_error (ctx, root, REF_NOT_IN_SECTOR,
+                           "Player is not in the specified sector.");
+      return 1;
+    }
+
+  if (req_sector_id >= 1 && req_sector_id <= 10)
+    {
+      send_response_error (ctx, root, REF_TURN_COST_EXCEEDS,
+                           "Cannot set a beacon in FedSpace.");
+      return 1;
+    }
+
+  const char *beacon_text = json_string_value (jtext);
+  if (!beacon_text)
+    {
+      beacon_text = "";
+    }
+  
+  if ((int) strlen (beacon_text) > 80)
+    {
+      send_response_error (ctx, root, REF_NOT_IN_SECTOR,
+                           "Beacon text is too long (max 80 characters).");
+      return 1;
+    }
+
+  /* Update beacon */
+  db_error_t err;
+  const char *sql = "UPDATE sectors SET beacon_text = $1, beacon_owner_id = $2 WHERE sector_id = $3;";
+  db_bind_t binds[] = {
+    db_bind_text(beacon_text),
+    db_bind_i32(ctx->player_id),
+    db_bind_i32(req_sector_id)
+  };
+  
+  if (!db_exec (db, sql, binds, 3, &err))
+    {
+      send_response_error (ctx, root, ERR_DB, "Database error updating beacon.");
+      return 1;
+    }
+
+  json_t *payload = build_sector_info_json (db, req_sector_id);
+  if (!payload)
+    {
+      send_response_error (ctx, root, ERR_PLANET_NOT_FOUND,
+                           "Out of memory building sector info");
+      return 1;
+    }
+
+  send_response_ok_take (ctx, root, "sector.beacon_set", &payload);
+  return 0;
 }
 
 
 int
 cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
 {
-  (void)ctx; (void)root; return 0;
+  db_t *db = game_db_get_handle();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_DB_CLOSED, "No database handle");
+      return 0;
+    }
+
+  if (!ctx || ctx->player_id <= 0)
+    {
+      send_response_refused_steal (ctx, root, ERR_NOT_AUTHENTICATED,
+                                   "Not authenticated", NULL);
+      return 0;
+    }
+
+  json_t *jdata = json_object_get (root, "data");
+  int to_sector_id = 0;
+
+  if (json_is_object (jdata))
+    {
+      json_t *jto = json_object_get (jdata, "to_sector_id");
+      if (json_is_integer (jto))
+        {
+          to_sector_id = (int) json_integer_value (jto);
+        }
+    }
+
+  if (to_sector_id <= 0)
+    {
+      send_response_refused_steal (ctx, root, ERR_INVALID_ARG,
+                                   "Target sector not specified", NULL);
+      return 0;
+    }
+
+  int ship_id = h_get_active_ship_id (db, ctx->player_id);
+  if (ship_id <= 0)
+    {
+      send_response_refused_steal (ctx, root, ERR_NO_ACTIVE_SHIP,
+                                   "No active ship found.", NULL);
+      return 0;
+    }
+
+  /* Check transwarp capability */
+  db_error_t err;
+  db_res_t *res = NULL;
+  const char *sql = "SELECT 1 FROM ships WHERE ship_id = $1 AND transwarp_enabled = true LIMIT 1;";
+  
+  int has_transwarp = 0;
+  if (db_query (db, sql, (db_bind_t[]){db_bind_i32(ship_id)}, 1, &res, &err))
+    {
+      if (res && db_res_step(res, &err))
+        {
+          has_transwarp = 1;
+        }
+      if (res) db_res_finalize(res);
+    }
+
+  if (!has_transwarp)
+    {
+      send_response_refused_steal (ctx, root, 1453,
+                                   "Ship does not have transwarp capability.", NULL);
+      return 0;
+    }
+
+  /* Try to perform transwarp */
+  TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);
+  if (tc != TURN_CONSUME_SUCCESS)
+    {
+      return handle_turn_consumption_error (ctx, tc, "move.transwarp", root, NULL);
+    }
+
+  /* Update player sector */
+  sql = "UPDATE players SET sector_id = $1 WHERE player_id = $2;";
+  if (!db_exec (db, sql, (db_bind_t[]){db_bind_i32(to_sector_id), 
+                                        db_bind_i32(ctx->player_id)}, 2, &err))
+    {
+      send_response_error (ctx, root, ERR_DB, "Database error during transwarp");
+      return 0;
+    }
+
+  ctx->sector_id = to_sector_id;
+  
+  json_t *data = json_object();
+  json_object_set_new(data, "sector_id", json_integer(to_sector_id));
+  json_object_set_new(data, "status", json_string("transwarp_complete"));
+
+  send_response_ok_take (ctx, root, "move.transwarp", &data);
+  return 0;
 }
 
 
@@ -791,7 +1000,33 @@ iss_tick (db_t *db, int64_t now_ms)
 int
 db_pick_adjacent (db_t *db, int sid)
 {
-  (void)db; (void)sid; return 0;
+  if (!db || sid <= 0)
+    {
+      return 0;
+    }
+
+  db_error_t err;
+  db_res_t *res = NULL;
+  const char *sql = "SELECT to_sector_id FROM wormholes WHERE from_sector_id = $1 ORDER BY RANDOM() LIMIT 1;";
+  
+  if (!db_query (db, sql, (db_bind_t[]){db_bind_i32(sid)}, 1, &res, &err))
+    {
+      return 0;
+    }
+
+  if (!res)
+    {
+      return 0;
+    }
+
+  int adjacent_id = 0;
+  if (db_res_step(res, &err))
+    {
+      adjacent_id = (int) db_res_col_i32(res, 0, &err);
+    }
+  
+  db_res_finalize(res);
+  return adjacent_id;
 }
 
 

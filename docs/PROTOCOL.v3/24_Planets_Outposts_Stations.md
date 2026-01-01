@@ -2,6 +2,64 @@
 
 ## 1. Planet Interaction
 
+### `planet.land`
+Land on a planet (if within range).
+**Args**: `{ "planet_id": 123 }`
+**Response**: `{ "status": "landed", "planet_id": 123 }`
+
+### `planet.launch`
+Launch from a planet.
+**Response**: `{ "status": "launched", "in_space": true }`
+
+### `planet.info`
+Get information about a planet (visible from space or while landed).
+**Args**: `{ "planet_id": 123 }`
+**Response**:
+```json
+{
+  "planet_id": 123,
+  "name": "Terra II",
+  "sector_id": 10,
+  "class": "M",
+  "owner_id": 42,
+  "owner_type": "player"
+}
+```
+
+### `planet.view` [NYI]
+View detailed planet information after landing (includes colonists, production, citadel status, treasury).
+**Availability**: After successful `planet.land`
+**Response**:
+```json
+{
+  "planet_id": 123,
+  "name": "Terra II",
+  "class": "M",
+  "colonists": 5000,
+  "morale": 85,
+  "production": {
+    "ore": 100,
+    "equipment": 50,
+    "fighters": 10
+  },
+  "storage": {
+    "ore": 5000,
+    "equipment": 2000,
+    "fighters": 50
+  },
+  "citadel": {
+    "level": 3,
+    "status": "operational",
+    "defenses": {
+      "qCannonSector": 50,
+      "qCannonAtmosphere": 40,
+      "militaryReactionLevel": 1
+    }
+  },
+  "treasury": 100000
+}
+```
+
 ### `planet.deposit` / `planet.withdraw`
 Transfer cargo/colonists between ship and planet.
 **Events**: Emits `player.planet_transfer.v1`.
