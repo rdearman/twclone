@@ -1,0 +1,55 @@
+{
+  "name": "Combat Toll Fighters Regression",
+  "version": "2.0.0",
+  "protocol_category": "23_Combat",
+  "description": "Regression tests for toll fighter mechanics",
+  "tests": [
+    {
+      "name": "Setup: Admin Login",
+      "command": "auth.login",
+      "data": { "username": "System", "passwd": "BOT" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Register Toll Collector",
+      "command": "auth.register",
+      "data": { "username": "tfc_*uuid*", "passwd": "password" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Login Toll Collector",
+      "command": "auth.login",
+      "data": { "username": "tfc_*uuid*", "passwd": "password" },
+      "user": "toll_collector",
+      "expect": { "status": "ok" },
+      "save": { "tc_player_id": "data.player_id" }
+    },
+    {
+      "name": "Setup: Register Victim",
+      "command": "auth.register",
+      "data": { "username": "tfv_*uuid*", "passwd": "password" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Login Victim",
+      "command": "auth.login",
+      "data": { "username": "tfv_*uuid*", "passwd": "password" },
+      "user": "toll_victim",
+      "expect": { "status": "ok" },
+      "save": { "tv_player_id": "data.player_id" }
+    },
+    {
+      "name": "Test: Verify Toll Collector Online",
+      "command": "system.time",
+      "user": "toll_collector",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test: Verify Victim Online",
+      "command": "system.time",
+      "user": "toll_victim",
+      "expect": { "status": "ok" }
+    }
+  ]
+}

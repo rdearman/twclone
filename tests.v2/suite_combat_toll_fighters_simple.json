@@ -1,0 +1,37 @@
+{
+  "name": "Combat Toll Fighters Simple Regression",
+  "version": "2.0.0",
+  "protocol_category": "23_Combat",
+  "description": "Simple regression test for toll fighter mechanics - compile/run validation only",
+  "tests": [
+    {
+      "name": "Server Health Check - Status",
+      "command": "system.status",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test Account Registration",
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+      "name": "Create Test User",
+      "command": "auth.register",
+      "data": { "username": "toll_test_user", "passwd": "testpass123" },
+      "expect": { "status": "ok" },
+      "register_if_missing": true
+    },
+    {
+      "name": "Login Test User",
+      "command": "auth.login",
+      "data": { "username": "toll_test_user", "passwd": "testpass123" },
+      "user": "toll_test_user",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Get Player Status",
+      "command": "system.status",
+      "user": "toll_test_user",
+      "expect": { "status": "ok" }
+    }
+  ]
+}

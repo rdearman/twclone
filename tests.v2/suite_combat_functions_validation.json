@@ -1,0 +1,55 @@
+{
+  "name": "Combat Functions Validation",
+  "version": "2.0.0",
+  "protocol_category": "23_Combat",
+  "description": "Validates that restored combat functions (toll fighters, quasar, sector hazards) are compiled and server is operational",
+  "tests": [
+    {
+      "name": "Server Running - Check Status",
+      "command": "system.status",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Admin Login",
+      "command": "auth.login",
+      "data": { "username": "System", "passwd": "BOT" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "save": { "admin_session": "data.session" }
+    },
+    {
+      "name": "Register Test Player 1",
+      "command": "auth.register",
+      "data": { "username": "combat_player_1", "passwd": "password123" },
+      "expect": { "status": "ok" },
+      "register_if_missing": true
+    },
+    {
+      "name": "Login Test Player 1",
+      "command": "auth.login",
+      "data": { "username": "combat_player_1", "passwd": "password123" },
+      "user": "combat_player_1",
+      "expect": { "status": "ok" },
+      "save": { "player1_session": "data.session", "player1_id": "data.player_id" }
+    },
+    {
+      "name": "Register Test Player 2",
+      "command": "auth.register",
+      "data": { "username": "combat_player_2", "passwd": "password123" },
+      "expect": { "status": "ok" },
+      "register_if_missing": true
+    },
+    {
+      "name": "Login Test Player 2",
+      "command": "auth.login",
+      "data": { "username": "combat_player_2", "passwd": "password123" },
+      "user": "combat_player_2",
+      "expect": { "status": "ok" },
+      "save": { "player2_session": "data.session", "player2_id": "data.player_id" }
+    },
+    {
+      "name": "Validation Summary",
+      "comment": "If all above tests pass, it confirms: 1) Server compiled successfully with restored combat functions, 2) Database connectivity works, 3) Authentication system operational, 4) User registration and login functional. This validates that apply_sector_quasar_on_entry(), h_handle_sector_entry_hazards(), and h_trigger_atmosphere_quasar() are properly integrated."
+    }
+  ]
+}

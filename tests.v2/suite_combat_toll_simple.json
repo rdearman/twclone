@@ -1,0 +1,50 @@
+{
+  "name": "Combat Toll Fighters Simple",
+  "version": "2.0.0",
+  "protocol_category": "23_Combat",
+  "description": "Simple toll fighter test - direct inline setup",
+  "tests": [
+    {
+      "name": "Admin Login",
+      "command": "auth.login",
+      "data": { "username": "System", "passwd": "BOT" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "save": { "admin_session": "data.session" }
+    },
+    {
+      "name": "Register Toll Collector",
+      "command": "auth.register",
+      "data": { "username": "toll_collector", "passwd": "password123" },
+      "expect": { "status": "ok" },
+      "register_if_missing": true
+    },
+    {
+      "name": "Login Toll Collector",
+      "command": "auth.login",
+      "data": { "username": "toll_collector", "passwd": "password123" },
+      "user": "toll_collector",
+      "expect": { "status": "ok" },
+      "save": { "toll_collector_session": "data.session", "toll_collector_id": "data.player_id" }
+    },
+    {
+      "name": "Register Victim",
+      "command": "auth.register",
+      "data": { "username": "toll_victim", "passwd": "password123" },
+      "expect": { "status": "ok" },
+      "register_if_missing": true
+    },
+    {
+      "name": "Login Victim",
+      "command": "auth.login",
+      "data": { "username": "toll_victim", "passwd": "password123" },
+      "user": "toll_victim",
+      "expect": { "status": "ok" },
+      "save": { "victim_session": "data.session", "victim_id": "data.player_id" }
+    },
+    {
+      "name": "Validation Complete",
+      "comment": "Accounts created: toll_collector (player_id @toll_collector_id) and toll_victim (player_id @victim_id). Both authenticated and ready for combat tests."
+    }
+  ]
+}

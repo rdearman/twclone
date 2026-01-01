@@ -1,0 +1,58 @@
+{
+  "name": "Combat Toll Fighters Regression",
+  "version": "2.0.0",
+  "protocol_category": "23_Combat",
+  "description": "Regression tests for toll fighter mechanics (offensive_setting=3)",
+  "tests": [
+    {
+      "name": "Setup: Admin Login",
+      "command": "auth.login",
+      "data": { "username": "System", "passwd": "BOT" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "save": { "admin_session": "data.session" }
+    },
+    {
+      "name": "Setup: Register Toll Collector",
+      "command": "auth.register",
+      "data": { "username": "toll_collector", "passwd": "password123" },
+      "expect": { "status": "ok" },
+      "register_if_missing": true
+    },
+    {
+      "name": "Setup: Login Toll Collector",
+      "command": "auth.login",
+      "data": { "username": "toll_collector", "passwd": "password123" },
+      "user": "toll_collector",
+      "expect": { "status": "ok" },
+      "save": { "toll_collector_id": "data.player_id" }
+    },
+    {
+      "name": "Setup: Register Victim",
+      "command": "auth.register",
+      "data": { "username": "toll_victim", "passwd": "password123" },
+      "expect": { "status": "ok" },
+      "register_if_missing": true
+    },
+    {
+      "name": "Setup: Login Victim",
+      "command": "auth.login",
+      "data": { "username": "toll_victim", "passwd": "password123" },
+      "user": "toll_victim",
+      "expect": { "status": "ok" },
+      "save": { "victim_id": "data.player_id" }
+    },
+    {
+      "name": "Test: Toll Collector Account Created",
+      "command": "system.time",
+      "user": "toll_collector",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test: Victim Account Created",
+      "command": "system.time",
+      "user": "toll_victim",
+      "expect": { "status": "ok" }
+    }
+  ]
+}

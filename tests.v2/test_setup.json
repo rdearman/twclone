@@ -1,0 +1,145 @@
+{
+  "test_players": [
+    {
+      "username": "toll_collector",
+      "password": "password123",
+      "type": 2,
+      "credits": 1000000,
+      "ships": [
+        {
+          "name": "TollCollectorShip",
+          "type_id": 1,
+          "sector_id": 2,
+          "fighters": 50,
+          "shields": 100,
+          "hull": 100,
+          "mines": 0
+        }
+      ],
+      "deployed_assets": [
+        {
+          "sector_id": 2,
+          "asset_type": 2,
+          "quantity": 30,
+          "offensive_setting": 3,
+          "description": "Toll collector fighters (mode 3)"
+        }
+      ]
+    },
+    {
+      "username": "toll_victim",
+      "password": "password123",
+      "type": 2,
+      "credits": 100000,
+      "ships": [
+        {
+          "name": "VictimShip",
+          "type_id": 1,
+          "sector_id": 1,
+          "fighters": 20,
+          "shields": 80,
+          "hull": 100,
+          "mines": 0
+        }
+      ]
+    },
+    {
+      "username": "quasar_target",
+      "password": "password123",
+      "type": 2,
+      "credits": 200000,
+      "ships": [
+        {
+          "name": "QuasarTargetShip",
+          "type_id": 1,
+          "sector_id": 1,
+          "fighters": 50,
+          "shields": 80,
+          "hull": 100,
+          "mines": 0
+        }
+      ]
+    },
+    {
+      "username": "hazard_master",
+      "password": "password123",
+      "type": 2,
+      "credits": 2000000,
+      "ships": [
+        {
+          "name": "HazardMasterShip",
+          "type_id": 1,
+          "sector_id": 5555,
+          "fighters": 200,
+          "shields": 100,
+          "hull": 100,
+          "mines": 50
+        }
+      ],
+      "deployed_assets": [
+        {
+          "sector_id": 5555,
+          "asset_type": 2,
+          "quantity": 40,
+          "offensive_setting": 1,
+          "description": "Offensive fighters in hazard sector"
+        },
+        {
+          "sector_id": 5555,
+          "asset_type": 2,
+          "quantity": 20,
+          "offensive_setting": 3,
+          "description": "Toll fighters in hazard sector"
+        },
+        {
+          "sector_id": 5555,
+          "asset_type": 1,
+          "quantity": 15,
+          "offensive_setting": 0,
+          "description": "Armid mines in hazard sector"
+        }
+      ]
+    }
+  ],
+  "test_planets": [
+    {
+      "planet_id": 8001,
+      "num": 1,
+      "sector_id": 3,
+      "name": "Quasar Test Planet",
+      "owner_id": 1,
+      "owner_type": "player",
+      "class": "M",
+      "created_by": 1,
+      "citadel": {
+        "level": 5,
+        "qCannonSector": 75,
+        "qCannonAtmosphere": 60,
+        "militaryReactionLevel": 1
+      }
+    },
+    {
+      "planet_id": 9001,
+      "num": 1,
+      "sector_id": 5555,
+      "name": "Multi-Hazard Planet",
+      "owner_id": 1,
+      "owner_type": "player",
+      "class": "M",
+      "created_by": 1,
+      "citadel": {
+        "level": 5,
+        "qCannonSector": 75,
+        "qCannonAtmosphere": 60,
+        "militaryReactionLevel": 2
+      }
+    }
+  ],
+  "test_sectors": [
+    {
+      "sector_id": 5555,
+      "name": "Hazard Zone",
+      "description": "Test sector for multi-hazard scenarios"
+    }
+  ]
+}

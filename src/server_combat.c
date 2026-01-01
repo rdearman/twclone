@@ -57,6 +57,8 @@ static int cmd_deploy_assets_list_internal (client_ctx_t *ctx,
                                             const char *list_type,
                                             const char *asset_key,
                                             const char *sql_query);
+static int h_apply_quasar_damage (client_ctx_t *ctx, int damage,
+                                  const char *source_desc);
 
 
 static void
@@ -390,6 +392,82 @@ db_sector_asset_delete (db_t *db,
                   (db_bind_t[]){ db_bind_i32 (asset_id) },
                   1,
                   err);
+}
+
+
+int
+apply_sector_quasar_on_entry (client_ctx_t *ctx, int sector_id)
+{
+  if (sector_id == 1)
+    {
+      return 0;  /* Terra/FedSpace is safe */
+    }
+
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    return 0;
+
+  db_error_t err = {0};
+
+  /* Find planets in sector with quasar cannons (citadel level >= 3) */
+  const char *sql =
+    "SELECT p.planet_id, p.owner_id, p.owner_type, c.level, c.qCannonSector, c.militaryReactionLevel "
+    "FROM planets p "
+    "LEFT JOIN citadels c ON p.planet_id = c.planet_id "
+    "WHERE p.sector_id = $1 AND c.level >= 3 AND c.qCannonSector > 0 "
+    "FOR UPDATE SKIP LOCKED;";
+
+  db_res_t *res = NULL;
+  if (!db_query (db, sql, (db_bind_t[]){ db_bind_i32 (sector_id) }, 1, &res, &err))
+    return 0;
+
+  int shot_fired = 0;
+  while (db_res_step (res, &err))
+    {
+      int planet_id = (int)db_res_col_i32 (res, 0, &err);
+      int owner_id = (int)db_res_col_i32 (res, 1, &err);
+      const char *owner_type = db_res_col_text (res, 2, &err);
+      int base_strength = (int)db_res_col_i32 (res, 4, &err);
+      int reaction = (int)db_res_col_i32 (res, 5, &err);
+
+      /* Resolve corp ID for hostility check */
+      int p_corp_id = 0;
+      if (owner_type && (strcasecmp (owner_type, "corp") == 0 ||
+                         strcasecmp (owner_type, "corporation") == 0))
+        {
+          p_corp_id = owner_id;
+        }
+
+      /* Check if player is hostile to planet owner */
+      if (is_asset_hostile (owner_id, p_corp_id, ctx->player_id, ctx->corp_id))
+        {
+          /* Calculate damage based on reaction level */
+          int pct = 100;
+          if (reaction == 1)
+            pct = 125;
+          else if (reaction >= 2)
+            pct = 150;
+
+          int damage = (int)floor ((double)base_strength * (double)pct / 100.0);
+
+          char source_desc[64];
+          snprintf (source_desc, sizeof (source_desc),
+                    "Quasar Sector Shot (Planet %d)", planet_id);
+
+          if (h_apply_quasar_damage (ctx, damage, source_desc))
+            {
+              shot_fired = 1;  /* Destroyed */
+            }
+          else
+            {
+              shot_fired = 2;  /* Damaged */
+            }
+          break;  /* Single shot per sector entry */
+        }
+    }
+
+  db_res_finalize (res);
+  return (shot_fired == 1);  /* Return 1 if destroyed */
 }
 
 
@@ -4420,14 +4498,212 @@ h_decloak_ship (db_t *db, int ship_id)
 int
 h_handle_sector_entry_hazards (db_t *db, client_ctx_t *ctx, int sector_id)
 {
-  return 0;
+  if (!db || !ctx || sector_id <= 0)
+    return 0;
+
+  db_error_t err = {0};
+  int ship_id = h_get_active_ship_id (db, ctx->player_id);
+  if (ship_id <= 0)
+    return 0;
+
+  /* Config: toll and damage per unit of fighters */
+  long long toll_per_unit = 5;
+  long long damage_per_unit = 10;
+
+  /* Query fighters in sector (asset_type=2) */
+  const char *sql_ftr =
+    "SELECT sector_assets_id as id, quantity, offensive_setting, owner_id as player, "
+    "       corporation_id as corporation "
+    "FROM sector_assets "
+    "WHERE sector_id = $1 AND asset_type = 2 AND quantity > 0 "
+    "FOR UPDATE SKIP LOCKED;";
+
+  db_res_t *res = NULL;
+  if (!db_query (db, sql_ftr, (db_bind_t[]){ db_bind_i32 (sector_id) }, 1, &res, &err))
+    {
+      return 0;
+    }
+
+  int result = 0;
+  while (db_res_step (res, &err))
+    {
+      int asset_id = (int)db_res_col_i32 (res, 0, &err);
+      int quantity = (int)db_res_col_i32 (res, 1, &err);
+      int mode = (int)db_res_col_i32 (res, 2, &err);  /* 1=offensive, 2=defensive, 3=toll */
+      int owner_id = (int)db_res_col_i32 (res, 3, &err);
+      int corp_id = (int)db_res_col_i32 (res, 4, &err);
+
+      /* Check if fighters are hostile to player */
+      if (!is_asset_hostile (owner_id, corp_id, ctx->player_id, ctx->corp_id))
+        continue;
+
+      bool attack = true;
+
+      /* Toll Mode (mode == 3) */
+      if (mode == 3)
+        {
+          long long toll_cost = (long long)quantity * toll_per_unit;
+          long long player_creds = 0;
+
+          h_get_player_petty_cash (db, ctx->player_id, &player_creds);
+
+          if (player_creds >= toll_cost)
+            {
+              /* Auto-pay toll */
+              int dest_id = (corp_id > 0 && owner_id == 0) ? corp_id : owner_id;
+              const char *dest_type = (corp_id > 0 && owner_id == 0) ? "corp" : "player";
+
+              int transfer_rc = db_bank_transfer (db,
+                                                   "player",
+                                                   ctx->player_id,
+                                                   dest_type,
+                                                   dest_id,
+                                                   toll_cost);
+
+              if (transfer_rc == 0)
+                {
+                  attack = false;
+
+                  /* Log toll payment */
+                  json_t *evt = json_object ();
+                  json_object_set_new (evt, "amount", json_integer (toll_cost));
+                  json_object_set_new (evt, "fighters", json_integer (quantity));
+                  db_log_engine_event ((long long)time (NULL),
+                                       "combat.toll.paid",
+                                       "player",
+                                       ctx->player_id, sector_id, evt, NULL);
+                  json_decref (evt);
+                }
+            }
+        }
+
+      /* Attack if not paid toll or mode != 3 */
+      if (attack)
+        {
+          /* Load player ship stats */
+          ship_t ship = {0};
+          const char *sql_ship =
+            "SELECT hull, fighters, shields FROM ships WHERE ship_id = $1;";
+          db_res_t *ship_res = NULL;
+
+          if (db_query (db, sql_ship, (db_bind_t[]){ db_bind_i32 (ship_id) }, 1, &ship_res, &err))
+            {
+              if (db_res_step (ship_res, &err))
+                {
+                  ship.hull = (int)db_res_col_i32 (ship_res, 0, &err);
+                  ship.fighters = (int)db_res_col_i32 (ship_res, 1, &err);
+                  ship.shields = (int)db_res_col_i32 (ship_res, 2, &err);
+                }
+              db_res_finalize (ship_res);
+            }
+
+          /* Apply damage: fighters -> shields -> hull */
+          int damage = quantity * damage_per_unit;
+          armid_damage_breakdown_t breakdown = {0};
+          apply_armid_damage_to_ship (&ship, damage, &breakdown);
+
+          /* Update ship in DB */
+          const char *sql_upd =
+            "UPDATE ships SET hull = $1, fighters = $2, shields = $3 WHERE ship_id = $4;";
+          db_exec (db,
+                   sql_upd,
+                   (db_bind_t[]){ db_bind_i32 (ship.hull),
+                                  db_bind_i32 (ship.fighters),
+                                  db_bind_i32 (ship.shields),
+                                  db_bind_i32 (ship_id) },
+                   4,
+                   &err);
+
+          /* Delete fighter asset (one-time attack) */
+          const char *sql_del =
+            "DELETE FROM sector_assets WHERE sector_assets_id = $1;";
+          db_exec (db, sql_del, (db_bind_t[]){ db_bind_i32 (asset_id) }, 1, &err);
+
+          /* Log attack */
+          json_t *evt = json_object ();
+          json_object_set_new (evt, "damage", json_integer (damage));
+          json_object_set_new (evt, "fighters_engaged", json_integer (quantity));
+          json_object_set_new (evt, "hull_remaining", json_integer (ship.hull));
+          db_log_engine_event ((long long)time (NULL),
+                               "combat.hit.fighters",
+                               "player",
+                               ctx->player_id, sector_id, evt, NULL);
+          json_decref (evt);
+
+          /* Check if ship destroyed */
+          if (ship.hull <= 0)
+            {
+              db_res_finalize (res);
+              destroy_ship_and_handle_side_effects (ctx, ctx->player_id);
+              return 1;  /* Destroyed */
+            }
+        }
+    }
+
+  db_res_finalize (res);
+  return result;
 }
 
 
 int
 h_trigger_atmosphere_quasar (db_t *db, client_ctx_t *ctx, int planet_id)
 {
-  (void)db; (void)ctx; (void)planet_id; return 0;
+  if (!db || !ctx || planet_id <= 0)
+    return 0;
+
+  db_error_t err = {0};
+
+  /* Get planet and citadel info (for atmosphere quasar) */
+  const char *sql =
+    "SELECT p.owner_id, p.owner_type, c.level, c.qCannonAtmosphere, c.militaryReactionLevel "
+    "FROM planets p "
+    "LEFT JOIN citadels c ON p.planet_id = c.planet_id "
+    "WHERE p.planet_id = $1 AND c.level >= 3 AND c.qCannonAtmosphere > 0;";
+
+  db_res_t *res = NULL;
+  if (!db_query (db, sql, (db_bind_t[]){ db_bind_i32 (planet_id) }, 1, &res, &err))
+    return 0;
+
+  int result = 0;
+  if (db_res_step (res, &err))
+    {
+      int owner_id = (int)db_res_col_i32 (res, 0, &err);
+      const char *owner_type = db_res_col_text (res, 1, &err);
+      int base_strength = (int)db_res_col_i32 (res, 3, &err);
+      int reaction = (int)db_res_col_i32 (res, 4, &err);
+
+      int p_corp_id = 0;
+      if (owner_type && (strcasecmp (owner_type, "corp") == 0 ||
+                         strcasecmp (owner_type, "corporation") == 0))
+        {
+          p_corp_id = owner_id;
+        }
+
+      /* Check if player is hostile to planet owner */
+      if (is_asset_hostile (owner_id, p_corp_id, ctx->player_id, ctx->corp_id))
+        {
+          /* Reaction modifies damage */
+          int pct = 100;
+          if (reaction == 1)
+            pct = 125;
+          else if (reaction >= 2)
+            pct = 150;
+
+          int damage = (int)floor ((double)base_strength * (double)pct / 100.0);
+
+          char source_desc[64];
+          snprintf (source_desc, sizeof (source_desc),
+                    "Quasar Atmosphere Shot (Planet %d)", planet_id);
+
+          if (h_apply_quasar_damage (ctx, damage, source_desc))
+            {
+              result = 1;  /* Destroyed */
+            }
+        }
+    }
+
+  db_res_finalize (res);
+  return result;
 }
 
 

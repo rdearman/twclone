@@ -3,7 +3,7 @@
     {
       "name": "Macro: Bootstrap Admin",
       "command": "auth.login",
-      "data": { "username": "Federation Administrator", "passwd": "BOT" },
+      "data": { "username": "System", "passwd": "BOT" },
       "user": "admin",
       "save": { "session": "data.session", "admin_player_id": "data.player_id" },
       "stop_on_fail": true
@@ -20,10 +20,11 @@
       "register_if_missing": true
     },
     {
+      "name": "Macro: Login User",
       "command": "auth.login",
       "data": { "username": "@username", "passwd": "@password" },
       "user": "@username",
-      "save": { "session": "data.session" },
+      "save": { "session": "data.session", "@username_player_id": "data.player_id" },
       "stop_on_fail": true
     }
   ],
@@ -75,16 +76,30 @@
         "password": "@password"
       },
       {
-        "name": "Macro: Create Ship for User",
+        "name": "Macro: Ensure Shiptype Exists",
         "command": "sys.raw_sql_exec",
-        "data": { "sql": "INSERT INTO ships (type_id, name, holds, sector, ported) SELECT 1, 'TestShip', 100, 1, 0 FROM players WHERE name = '@username' ON CONFLICT DO NOTHING;" },
+        "data": { "sql": "INSERT INTO shiptypes (shiptypes_id, name, basecost, maxholds) VALUES (1, 'Scout', 1000, 100) ON CONFLICT (shiptypes_id) DO NOTHING;" },
         "user": "admin",
         "expect": { "status": "ok" }
       },
       {
-        "name": "Macro: Assign Ship to User",
+        "name": "Macro: Create Ship for User",
         "command": "sys.raw_sql_exec",
-        "data": { "sql": "UPDATE players SET sector = 1 WHERE name = '@username';" },
+        "data": { "sql": "INSERT INTO ships (type_id, name, sector_id, holds) SELECT 1, 'TestShip', 1, 100 WHERE NOT EXISTS (SELECT 1 FROM ships WHERE owner_id = (SELECT player_id FROM players WHERE name = '@username') LIMIT 1) RETURNING ship_id;" },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Macro: Link Ship to Player",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "INSERT INTO ship_ownership (ship_id, player_id, is_primary) SELECT (SELECT MAX(ship_id) FROM ships), player_id, TRUE FROM players WHERE name = '@username' ON CONFLICT DO NOTHING;" },
+        "user": "admin",
+        "expect": { "status": "ok" }
+      },
+      {
+        "name": "Macro: Update Player Sector",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "UPDATE players SET sector_id = 1 WHERE name = '@username';" },
         "user": "admin",
         "expect": { "status": "ok" },
         "stop_on_fail": true
