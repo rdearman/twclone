@@ -1,15 +1,18 @@
 
 # twclone
 
-A modern, C-based recreation of classic BBS-era space-trading gameplay (in the spirit of TradeWars 2002). **twclone** provides a headless server, a terminal client, and a deterministic “Big Bang” universe generator—now backed by **SQLite** with a **JSON** protocol that makes writing clients (or AI bots) straightforward.
+A modern, C-based recreation of classic BBS-era space-trading gameplay (in the spirit of TradeWars 2002). **twclone** provides a headless server, a terminal client, and a deterministic “Big Bang” universe generator—now backed by **PostgreSQL** (with support for MySQL and other database engines) with a **JSON** protocol that makes writing clients (or AI bots) straightforward.
 
 > **What’s new (2025):**
 >
-> * Full **SQLite** data model (no flat files)
+> * Full **PostgreSQL** data model with multi-database support (MySQL, etc.)
 > * **JSON** protocol for client & bot compatibility
 > * A separate **Game Engine** process (forked) that runs clocks, economy, maintenance, NPC stubs, and enforcement via **durable DB rails** and a **TCP S2S** control channel
 > * **DB-backed configuration** & secrets with live reload
 > * Cleaner broadcast pipeline to players
+> * **Massive concurrent player support:** PostgreSQL supports 100+ connections out-of-box; see **[`docs/PGBOUNCER_DEPLOYMENT.md`](./docs/PGBOUNCER_DEPLOYMENT.md)** for unlimited connections via connection pooling
+
+**Migration from SQLite (2025):** Early builds used SQLite for simplicity, but single-writer limitations proved problematic for scaling concurrent players. PostgreSQL removes this blocker and supports 100+ connections natively; see **[`docs/PGBOUNCER_DEPLOYMENT.md`](./docs/PGBOUNCER_DEPLOYMENT.md)** for unlimited scaling via connection pooling. Stress tests confirmed this change enables massive concurrent player counts.
 
 If you’re here from SourceForge: welcome back! The original code (largely GPL-era) is still available there; this repo is a ground-up rewrite focused on DB storage and JSON I/O. Portions I authored are now under **MIT**. Big thanks to the original collaborators; see **Credits** at the end.
 
@@ -55,26 +58,30 @@ twclone/
 # 1) Build
 make clean && make -j
 
-# 2) Create a fresh universe (SQLite DB will be created/seeded on first run)
-rm -f twclone.db
+# 2) Configure PostgreSQL (or MySQL/other DB)
+# See docs/PGBOUNCER_DEPLOYMENT.md for production pooling setup
 
-# 3) Start the server
-./bin/server --host 0.0.0.0 --port 1234
+# 3) Build the Universe
+    ./bin/bigbang.json 
+    a) (copy the sample.bigbang.json to bigbang.json and edit the file to show your db connection string, your desired universe size, etc.)
+    ./bigbang
+    b) run executable which will read the bigbang.json file and create your universe
 
-# 4) (Optional) Start the engine if not auto-forked by the server in your build
-# See docs/ENGINE.md for lifecycle; some builds fork the engine automatically.
+# 4) Start the server
+./server
 
 # 5) Connect with the client (renders from menus.json)
 ./bin/client --host localhost --port 1234 --menus ./data/menus.json
+
 ```
 
-> Tip: Deleting `twclone.db` resets the universe. Some older builds used `twconfig.db`; remove whichever DB file your build created.
+> **DB Setup:** See **[`docs/PGBOUNCER_DEPLOYMENT.md`](./docs/PGBOUNCER_DEPLOYMENT.md)** for PostgreSQL + PgBouncer configuration that unlocks unlimited concurrent connections.
 
 ---
 
 ## Build from source
 
-**Prereqs:** GCC/Clang, GNU make, SQLite3 (lib & CLI), POSIX (Linux/WSL/macOS).
+**Prereqs:** GCC/Clang, GNU make, PostgreSQL dev libraries (or MySQL), POSIX (Linux/WSL/macOS).
 **Build:**
 
 ```bash
@@ -102,6 +109,7 @@ make V=1
 Typical logs:
 
 ```
+tail -f bin/twclone.log
 server: starting…
 server: listening on 0.0.0.0:1234
 ```
@@ -125,7 +133,7 @@ If you place `menus.json` at `./data/menus.json`, you can usually just run `./bi
 Create/seed a fresh universe:
 
 ```bash
-./bin/test_bang
+./bin/bigbang
 ```
 
 Typical log:
@@ -159,7 +167,7 @@ The **engine** is a separate process responsible for clocks, economy, maintenanc
 
 ## Configuration (DB-backed)
 
-All configuration lives in the database:
+All configuration lives in the database, and the inital configuration is copied from the bigbang.json file at creation. You can modify turnsperday and other config uration items by logging into the db and doing update on the config table. 
 
 * `config` (typed key/values by scope), `config_version` (live reload), `config_audit` (history), and `s2s_keys` (HMAC secrets).
 * The server/engine load config at startup, validate types/ranges, and can **live-reload** after a version bump.
@@ -182,39 +190,43 @@ All client↔server interactions use JSON. The engine↔server (S2S) control cha
 
 ## Database
 
-* **Engine:** SQLite single-file DB (`./twclone.db` by default).
+* **Engine:** PostgreSQL (primary), with MySQL and other database support.
+* **Scaling:** 100+ concurrent connections out-of-box; unlimited via **[PgBouncer connection pooling](./docs/PGBOUNCER_DEPLOYMENT.md)**.
 * **Schema:** created/verified at first run (or by `test_bang`).
-* **Reset:** delete `twclone.db` and re-run `test_bang` (or start the server to re-seed essentials).
+* **Reset:** drop and recreate the database, then re-run `test_bang` (or start the server to re-seed essentials).
 
-Handy CLI:
+Handy CLI (PostgreSQL):
 
 ```bash
-sqlite3 twclone.db ".schema"
-sqlite3 twclone.db "SELECT * FROM sectors LIMIT 10;"
+psql -U twclone_user -d twclone_db -c "\d"
+psql -U twclone_user -d twclone_db -c "SELECT * FROM sectors LIMIT 10;"
 ```
 
 ---
 
 ## Security
 
-**Now:** LAN-friendly for development.
+**Now:** LAN-friendly for development. Game is playable and functional.
 **Target hardening:**
 
 * Store **password hashes** (e.g., Argon2id) instead of plaintext.
 * Gate brute force with rate limits/lockouts.
-* Add transport encryption (TLS terminator or built-in TLS).
+* Add **TLS encryption** (currently uses plaintext telnet-style connections; Docker deployment can wrap with TLS).
 * Keep **HMAC keys** for S2S in `s2s_keys` (DB), never in logs.
 
 ---
 
 ## Roadmap
 
+* [x] **PostgreSQL migration** (multi-writer, massive concurrency support)
 * [ ] Finish parity with legacy client features.
 * [ ] Economy loops (ports, stock/price updates), Terra/planet growth.
 * [ ] NPC scaffold (Ferrengi/Imperials) + encounter hooks.
 * [ ] Imperial enforcement (warn/dispatch/destroy) golden path end-to-end.
 * [ ] Broadcast pump & ephemeral TTLs.
-* [ ] Robust auth (Argon2id, TLS), admin/sysop ops.
+* [ ] **TLS/SSL transport encryption** (or Docker + reverse proxy for now).
+* [ ] Robust auth (Argon2id, rate-limiting), admin/sysop ops.
+* [ ] Resolve open GitHub issues.
 * [ ] Tests (idempotency, crash-resume, load/priority).
 * [ ] CI build & lint.
 
@@ -243,7 +255,7 @@ For deep technical detail and task breakdowns, see **ENGINE.md** and GitHub Issu
 
 **MIT**
 
-* Historic SourceForge material contained GPL’d portions; this rewrite replaces those systems with a DB-backed, JSON-speaking implementation. Newly authored code in this repo is under **MIT**.
+* Historic SourceForge material contained GPL’d portions; this rewrite replaces those systems with a DB-backed, JSON-speaking implementation. Newly authored code in this repo is under **MIT**. ALL the code in the system has now been redone and therefore all if MIT license. 
 
 ---
 
@@ -256,4 +268,5 @@ Huge thanks to the original contributors and community that kept the TW flame al
 * © 2002 Ryan Glasnapp ([rglasnap@nmt.edu](mailto:rglasnap@nmt.edu))
 
 This GitHub edition is an independent rewrite with modern plumbing (SQLite + JSON + engine/server split). Shout-out to the original team—your work inspired this revival.
+
 
